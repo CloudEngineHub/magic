@@ -17,6 +17,25 @@ export const VERSION_TOOL_DEFINITIONS: ElementToolDefinition[] = versionToolIds.
 	return {
 		id,
 		scope: "version-set",
+		effect:
+			id === ElementToolTypeEnum.VersionCount
+				? "display"
+				: id === ElementToolTypeEnum.VersionPrevious ||
+					  id === ElementToolTypeEnum.VersionNext
+					? "session"
+					: id === ElementToolTypeEnum.VersionDelete
+						? "destructive"
+						: "document",
+		requiredCapability:
+			id === ElementToolTypeEnum.VersionCount
+				? "document.read"
+				: id === ElementToolTypeEnum.VersionPrevious ||
+					  id === ElementToolTypeEnum.VersionNext
+					? "interaction.switchContent"
+					: id === ElementToolTypeEnum.VersionDelete
+						? "document.delete"
+						: "document.write",
+		commandRoute: id === ElementToolTypeEnum.VersionCount ? "registered" : "version",
 		execution: id === ElementToolTypeEnum.VersionCount ? "display-only" : "command",
 		surfaces: { bottom: presentation },
 		isApplicable: (context) =>

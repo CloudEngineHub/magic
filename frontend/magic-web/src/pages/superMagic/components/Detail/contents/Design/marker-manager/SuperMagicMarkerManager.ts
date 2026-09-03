@@ -83,16 +83,25 @@ function findImageElementById(
 		children?: unknown[]
 	}>,
 	elementId: string,
+	preferredContentId?: string,
 ): ImageElement | undefined {
 	for (const el of elements) {
 		if (el.id === elementId && el.type === ElementTypeEnum.Image) {
 			const image = el as ImageElement
-			const active = getActiveImageContent(image)
-			if (!active.src) return undefined
-			return image
+			const active = preferredContentId
+				? image.contents.find((content) => content.contentId === preferredContentId)
+				: getActiveImageContent(image)
+			if (!active?.src) return undefined
+			return active.contentId === image.activeContentId
+				? image
+				: ({ ...image, activeContentId: active.contentId } as ImageElement)
 		}
 		if (Array.isArray(el.children)) {
-			const found = findImageElementById(el.children as typeof elements, elementId)
+			const found = findImageElementById(
+				el.children as typeof elements,
+				elementId,
+				preferredContentId,
+			)
 			if (found) return found
 		}
 	}
@@ -537,6 +546,7 @@ export class SuperMagicMarkerManager {
 					children?: unknown[]
 				}[],
 				marker.elementId,
+				marker.contentId,
 			)
 		}
 		if (!element) return
@@ -696,6 +706,7 @@ export class SuperMagicMarkerManager {
 				children?: unknown[]
 			}[],
 			marker.elementId,
+			marker.contentId,
 		) as ImageElement | undefined
 		if (!element) return null
 		const activeContent = getActiveImageContent(element)

@@ -185,6 +185,7 @@ export class ExtendManager {
 	}
 
 	public enterExtendMode(elementId: string, contentId?: string): void {
+		if (!this.canvas.permissionManager.can("document.write")) return
 		if (this.extendingElementId === elementId) return
 
 		const elementData = this.canvas.elementManager.getElementData(elementId)

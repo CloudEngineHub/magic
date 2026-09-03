@@ -13,9 +13,11 @@ import MediaResourceFullscreenPreview, {
 } from "../../fullscreen/media-resource/index"
 import { getActiveContent, getActiveImageContent } from "../../../runtime/document/elementContent"
 import { useFloatingUI } from "../../../app/providers/FloatingUIProvider"
+import { useCanvas } from "../../../app/providers/CanvasProvider"
 
 export default function MessageHistory() {
 	const { messageHistoryElementId } = useCanvasPanelUI()
+	const { canvas } = useCanvas()
 	const { activateFloatingComponent } = useFloatingUI()
 	const [previewingMediaResource, setPreviewingMediaResource] =
 		useState<MediaResourceFullscreenPreviewItem | null>(null)
@@ -60,7 +62,11 @@ export default function MessageHistory() {
 		if (
 			element.type === ElementTypeEnum.Image &&
 			(generationRuntime?.generateImageRequest ||
-				getActiveImageContent(element).generateImageRequest)
+				(
+					(canvas?.getEffectiveContent(element.id) as
+						| ReturnType<typeof getActiveImageContent>
+						| undefined) ?? getActiveImageContent(element)
+				).generateImageRequest)
 		) {
 			return (
 				<ImageMessageHistoryRender
@@ -74,7 +80,11 @@ export default function MessageHistory() {
 		if (
 			element.type === ElementTypeEnum.Video &&
 			(generationRuntime?.generateVideoRequest ||
-				getActiveContent(element)?.generateVideoRequest)
+				(
+					(canvas?.getEffectiveContent(element.id) as
+						| ReturnType<typeof getActiveContent>
+						| undefined) ?? getActiveContent(element)
+				)?.generateVideoRequest)
 		) {
 			return (
 				<VideoMessageHistoryRender
@@ -86,7 +96,7 @@ export default function MessageHistory() {
 		}
 
 		return null
-	}, [messageHistoryElementId, element, generationRuntime, handlePreviewMediaResource])
+	}, [canvas, messageHistoryElementId, element, generationRuntime, handlePreviewMediaResource])
 
 	if (!panel) return null
 

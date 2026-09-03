@@ -22,6 +22,8 @@ export interface CanvasProjectPathRepairOptions {
 	attachments: AttachmentItem[]
 	flatAttachments?: AttachmentItem[]
 	attachmentIndex?: AttachmentIndex
+	/** Whether the supplied attachment snapshot is known to contain the complete project tree. */
+	attachmentSnapshotComplete?: boolean
 	fileIds?: string[]
 	items?: AttachmentItem[]
 	operation: CanvasProjectPathRepairOperation
@@ -51,9 +53,14 @@ export interface CanvasProjectPathRepairResult {
 		projectName: string
 	}>
 	failures: CanvasProjectPathRepairFailure[]
+	warnings?: CanvasProjectPathRepairFailure[]
+	saveFailures: CanvasProjectPathRepairFailure[]
 	hasFailures: boolean
+	hasWarnings?: boolean
+	hasSaveFailures: boolean
 	/** Whether the caller should ask before continuing the pending file operation. */
 	requiresConfirmation: boolean
+	pendingFileSaves?: CanvasProjectPathRepairPendingFileSave[]
 }
 
 export interface CanvasProjectNameSyncOptions {
@@ -79,12 +86,20 @@ interface CanvasProjectInfo {
 	sidecars: AttachmentItem[]
 }
 
-interface PendingFileSave {
+export interface CanvasProjectPathRepairPendingFileSave {
 	fileId: string
 	fileName: string
 	content: string
 	projectName: string
 	projectRootPath: string
+}
+
+type PendingFileSave = CanvasProjectPathRepairPendingFileSave
+
+interface ResourcePathIssues {
+	missingPaths: Set<string>
+	ambiguousPaths: Set<string>
+	unverifiedPaths: Set<string>
 }
 
 type AttachmentCollectionOptions = Pick<
@@ -106,10 +121,15 @@ interface ProjectCheckState {
 }
 
 interface ResourceLookup {
+	isComplete: boolean
 	allFilePaths: Set<string>
 	uniqueFilePaths: Map<string, string>
 	allDirectoryPaths: Set<string>
 	uniqueDirectoryPaths: Map<string, string>
+	allWorkspaceFilePaths: Set<string>
+	uniqueWorkspaceFilePaths: Map<string, string>
+	allWorkspaceDirectoryPaths: Set<string>
+	uniqueWorkspaceDirectoryPaths: Map<string, string>
 	ambiguousBareFilePaths: Set<string>
 	ambiguousBareDirectoryPaths: Set<string>
 }
@@ -353,7 +373,11 @@ function resourceRelativePath(rootPath: string, workspacePath: string): string |
 	return relative
 }
 
-function buildResourceLookup(items: AttachmentItem[], rootPath: string): ResourceLookup {
+function buildResourceLookup(
+	items: AttachmentItem[],
+	rootPath: string,
+	isComplete: boolean,
+): ResourceLookup {
 	const fileIdsByPath = new Map<string, Set<string>>()
 	const directoryIdsByPath = new Map<string, Set<string>>()
 	const workspaceFileIdsByPath = new Map<string, Set<string>>()
@@ -383,11 +407,21 @@ function buildResourceLookup(items: AttachmentItem[], rootPath: string): Resourc
 		}
 		return unique
 	}
+	const toUniqueWorkspacePaths = (paths: Map<string, Set<string>>) => {
+		const unique = new Map<string, string>()
+		for (const [workspacePath, ids] of paths) {
+			if (ids.size === 1) unique.set(workspacePath, `/${workspacePath}`)
+		}
+		return unique
+	}
 	const collectAmbiguousBarePaths = (
 		canvasPaths: Map<string, Set<string>>,
 		workspacePaths: Map<string, Set<string>>,
 	) => {
 		const ambiguous = new Set<string>()
+		for (const [workspacePath, ids] of workspacePaths) {
+			if (ids.size > 1) ambiguous.add(workspacePath)
+		}
 		for (const [relative, canvasIds] of canvasPaths) {
 			const workspaceIds = workspacePaths.get(relative)
 			if (!workspaceIds) continue
@@ -396,10 +430,15 @@ function buildResourceLookup(items: AttachmentItem[], rootPath: string): Resourc
 		return ambiguous
 	}
 	return {
+		isComplete,
 		allFilePaths: new Set(fileIdsByPath.keys()),
 		uniqueFilePaths: toUniquePaths(fileIdsByPath),
 		allDirectoryPaths: new Set(directoryIdsByPath.keys()),
 		uniqueDirectoryPaths: toUniquePaths(directoryIdsByPath),
+		allWorkspaceFilePaths: new Set(workspaceFileIdsByPath.keys()),
+		uniqueWorkspaceFilePaths: toUniqueWorkspacePaths(workspaceFileIdsByPath),
+		allWorkspaceDirectoryPaths: new Set(workspaceDirectoryIdsByPath.keys()),
+		uniqueWorkspaceDirectoryPaths: toUniqueWorkspacePaths(workspaceDirectoryIdsByPath),
 		ambiguousBareFilePaths: collectAmbiguousBarePaths(fileIdsByPath, workspaceFileIdsByPath),
 		ambiguousBareDirectoryPaths: collectAmbiguousBarePaths(
 			directoryIdsByPath,
@@ -412,7 +451,7 @@ function resolveCanvasRelativePath(
 	value: string,
 	rootPath: string,
 	resourceLookup: ResourceLookup,
-	unresolvedPaths: Set<string>,
+	issues: ResourcePathIssues,
 	options?: { allowDirectory?: boolean },
 ): string {
 	if (isRemoteOrSpecialPath(value)) return value
@@ -422,7 +461,7 @@ function resolveCanvasRelativePath(
 	const withoutCurrentDirectory = normalized
 	const trimmed = value.trim().replace(/\\/g, "/")
 	let explicitCanvasReference = trimmed.startsWith("./")
-	const isBareCanvasReference =
+	const isBareResourceReference =
 		!trimmed.startsWith("/") &&
 		!trimmed.startsWith("./") &&
 		(withoutCurrentDirectory.startsWith("images/") ||
@@ -453,21 +492,42 @@ function resolveCanvasRelativePath(
 		? resourceLookup.ambiguousBareDirectoryPaths
 		: resourceLookup.ambiguousBareFilePaths
 	if (
-		isBareCanvasReference &&
+		isBareResourceReference &&
 		[...candidates].some((candidate) => ambiguousBarePaths.has(candidate))
 	) {
-		unresolvedPaths.add(value)
+		issues.ambiguousPaths.add(value)
 		return value
 	}
 	if (
 		!options?.allowDirectory &&
 		[...candidates].some(
 			(candidate) =>
-				resourceLookup.allDirectoryPaths.has(candidate) &&
-				!resourceLookup.allFilePaths.has(candidate),
+				(resourceLookup.allDirectoryPaths.has(candidate) ||
+					resourceLookup.allWorkspaceDirectoryPaths.has(candidate)) &&
+				!resourceLookup.allFilePaths.has(candidate) &&
+				!resourceLookup.allWorkspaceFilePaths.has(candidate),
 		)
 	)
 		return value
+	if (isBareResourceReference) {
+		if (!resourceLookup.isComplete) {
+			issues.unverifiedPaths.add(value)
+			return value
+		}
+		for (const candidate of candidates) {
+			const resolved =
+				resourceLookup.uniqueFilePaths.get(candidate) ??
+				(options?.allowDirectory
+					? resourceLookup.uniqueDirectoryPaths.get(candidate)
+					: undefined) ??
+				resourceLookup.uniqueWorkspaceFilePaths.get(candidate) ??
+				(options?.allowDirectory
+					? resourceLookup.uniqueWorkspaceDirectoryPaths.get(candidate)
+					: undefined)
+			if (resolved) return resolved
+		}
+		return value
+	}
 	for (const candidate of candidates) {
 		const resolved =
 			resourceLookup.uniqueFilePaths.get(candidate) ??
@@ -494,8 +554,9 @@ function resolveCanvasRelativePath(
 				(options?.allowDirectory && resourceLookup.uniqueDirectoryPaths.has(candidate)),
 		)
 	)
-		unresolvedPaths.add(value)
-	else if ([...candidates].some(allKnownPaths)) unresolvedPaths.add(value)
+		if (resourceLookup.isComplete) issues.missingPaths.add(value)
+		else issues.unverifiedPaths.add(value)
+	else if ([...candidates].some(allKnownPaths)) issues.ambiguousPaths.add(value)
 	return value
 }
 
@@ -503,7 +564,7 @@ function rewriteKnownPathFields(
 	value: unknown,
 	rootPath: string,
 	resourceLookup: ResourceLookup,
-	unresolvedPaths: Set<string>,
+	issues: ResourcePathIssues,
 	allowArrayStrings = false,
 ): boolean {
 	if (!value || typeof value !== "object") return false
@@ -512,26 +573,19 @@ function rewriteKnownPathFields(
 		for (let index = 0; index < value.length; index += 1) {
 			const entry = value[index]
 			if (allowArrayStrings && typeof entry === "string") {
-				const next = resolveCanvasRelativePath(
-					entry,
-					rootPath,
-					resourceLookup,
-					unresolvedPaths,
-				)
+				const next = resolveCanvasRelativePath(entry, rootPath, resourceLookup, issues)
 				if (next !== entry) {
 					value[index] = next
 					changed = true
 				}
-			} else if (
-				rewriteKnownPathFields(entry, rootPath, resourceLookup, unresolvedPaths, false)
-			)
+			} else if (rewriteKnownPathFields(entry, rootPath, resourceLookup, issues, false))
 				changed = true
 		}
 		return changed
 	}
 	for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
 		if (DIRECT_PATH_KEYS.has(key) && typeof raw === "string") {
-			const next = resolveCanvasRelativePath(raw, rootPath, resourceLookup, unresolvedPaths, {
+			const next = resolveCanvasRelativePath(raw, rootPath, resourceLookup, issues, {
 				allowDirectory: key === "file_dir",
 			})
 			if (next !== raw) {
@@ -541,8 +595,7 @@ function rewriteKnownPathFields(
 			continue
 		}
 		if (PATH_ARRAY_KEYS.has(key) && Array.isArray(raw)) {
-			if (rewriteKnownPathFields(raw, rootPath, resourceLookup, unresolvedPaths, true))
-				changed = true
+			if (rewriteKnownPathFields(raw, rootPath, resourceLookup, issues, true)) changed = true
 			continue
 		}
 		if (key === "reference_image_options" && Array.isArray(raw)) {
@@ -550,12 +603,7 @@ function rewriteKnownPathFields(
 				if (!option || typeof option !== "object") continue
 				const path = (option as Record<string, unknown>).path
 				if (typeof path !== "string") continue
-				const next = resolveCanvasRelativePath(
-					path,
-					rootPath,
-					resourceLookup,
-					unresolvedPaths,
-				)
+				const next = resolveCanvasRelativePath(path, rootPath, resourceLookup, issues)
 				if (next !== path) {
 					;(option as Record<string, unknown>).path = next
 					changed = true
@@ -566,7 +614,7 @@ function rewriteKnownPathFields(
 		if (
 			raw &&
 			typeof raw === "object" &&
-			rewriteKnownPathFields(raw, rootPath, resourceLookup, unresolvedPaths, false)
+			rewriteKnownPathFields(raw, rootPath, resourceLookup, issues, false)
 		)
 			changed = true
 	}
@@ -581,7 +629,14 @@ function rewriteMainFile(
 	content: string,
 	project: CanvasProjectInfo,
 	resourceLookup: ResourceLookup,
-): { content: string; changed: boolean; version: string; unresolvedPaths: string[] } {
+): {
+	content: string
+	changed: boolean
+	version: string
+	missingPaths: string[]
+	ambiguousPaths: string[]
+	unverifiedPaths: string[]
+} {
 	const config = parseMagicProjectConfigContent(content) as Record<string, unknown> | null
 	if (!config || typeof config !== "object") throw new Error("invalid-project-config")
 	const version = typeof config.version === "string" ? config.version : ""
@@ -613,7 +668,11 @@ function rewriteMainFile(
 				: `unsupported-project-version: ${version || "missing"}`,
 		)
 	}
-	const unresolvedPaths = new Set<string>()
+	const issues: ResourcePathIssues = {
+		missingPaths: new Set<string>(),
+		ambiguousPaths: new Set<string>(),
+		unverifiedPaths: new Set<string>(),
+	}
 	let changed = false
 	if (Array.isArray((canvasObject as { elements?: unknown }).elements)) {
 		rewriteLayerElementsPathsForMagicProjectSave(
@@ -625,7 +684,7 @@ function rewriteMainFile(
 						path,
 						project.rootPath,
 						resourceLookup,
-						unresolvedPaths,
+						issues,
 					)
 					if (next !== path) changed = true
 					return next
@@ -634,15 +693,24 @@ function rewriteMainFile(
 		)
 	}
 	changed =
-		rewriteKnownPathFields(canvasObject, project.rootPath, resourceLookup, unresolvedPaths) ||
-		changed
-	if (!changed) return { content, changed: false, version, unresolvedPaths: [...unresolvedPaths] }
+		rewriteKnownPathFields(canvasObject, project.rootPath, resourceLookup, issues) || changed
+	if (!changed)
+		return {
+			content,
+			changed: false,
+			version,
+			missingPaths: [...issues.missingPaths],
+			ambiguousPaths: [...issues.ambiguousPaths],
+			unverifiedPaths: [...issues.unverifiedPaths],
+		}
 	config.canvas = compressed ? compressCanvasData(canvasObject) : canvasObject
 	return {
 		content: serializeConfig(config),
 		changed: true,
 		version,
-		unresolvedPaths: [...unresolvedPaths],
+		missingPaths: [...issues.missingPaths],
+		ambiguousPaths: [...issues.ambiguousPaths],
+		unverifiedPaths: [...issues.unverifiedPaths],
 	}
 }
 
@@ -661,50 +729,92 @@ function rewriteSidecar(
 	content: string,
 	rootPath: string,
 	resourceLookup: ResourceLookup,
-): { content: string; changed: boolean; unresolvedPaths: string[] } {
+): {
+	content: string
+	changed: boolean
+	missingPaths: string[]
+	ambiguousPaths: string[]
+	unverifiedPaths: string[]
+} {
 	const value = JSON.parse(content) as unknown
 	if (!value || typeof value !== "object" || Array.isArray(value))
 		throw new Error("invalid-sidecar")
-	const unresolvedPaths = new Set<string>()
-	const changed = rewriteKnownPathFields(value, rootPath, resourceLookup, unresolvedPaths)
+	const issues: ResourcePathIssues = {
+		missingPaths: new Set<string>(),
+		ambiguousPaths: new Set<string>(),
+		unverifiedPaths: new Set<string>(),
+	}
+	const changed = rewriteKnownPathFields(value, rootPath, resourceLookup, issues)
 	return {
 		content: changed ? JSON.stringify(value, null, 2) : content,
 		changed,
-		unresolvedPaths: [...unresolvedPaths],
+		missingPaths: [...issues.missingPaths],
+		ambiguousPaths: [...issues.ambiguousPaths],
+		unverifiedPaths: [...issues.unverifiedPaths],
 	}
 }
 
+function emptyPathRepairResult(): CanvasProjectPathRepairResult {
+	return {
+		affectedProjects: [],
+		repairedFileIds: [],
+		repairedFiles: [],
+		failures: [],
+		warnings: [],
+		saveFailures: [],
+		hasFailures: false,
+		hasWarnings: false,
+		hasSaveFailures: false,
+		requiresConfirmation: false,
+		pendingFileSaves: [],
+	}
+}
+
+function addPathWarnings(
+	warnings: CanvasProjectPathRepairFailure[],
+	projectName: string,
+	fileName: string,
+	missingPaths: string[],
+	ambiguousPaths: string[],
+	unverifiedPaths: string[],
+): void {
+	if (missingPaths.length > 0)
+		warnings.push({
+			projectName,
+			fileName,
+			message: `missing resource paths: ${missingPaths.join(", ")}`,
+		})
+	if (ambiguousPaths.length > 0)
+		warnings.push({
+			projectName,
+			fileName,
+			message: `ambiguous resource paths: ${ambiguousPaths.join(", ")}`,
+		})
+	if (unverifiedPaths.length > 0)
+		warnings.push({
+			projectName,
+			fileName,
+			message: `unverified resource paths: ${unverifiedPaths.join(", ")}`,
+		})
+}
+
 /**
- * 在画布根目录或其父级目录重命名/同项目移动前，把受影响画布中的已确认画布资源收口为 `./...`。
- * 该流程只解析和保存原始 v1/v2 文件，不进入 Canvas runtime，也不触发版本升级。
+ * 在画布根目录或其父级目录重命名/同项目移动前，生成受影响画布的路径修复计划。
+ * 该流程只解析原始 v1/v2/v3 文件，不进入 Canvas runtime，也不触发版本升级。
  */
-export async function repairCanvasProjectsBeforeFileOperation(
+export async function planCanvasProjectsBeforeFileOperation(
 	options: CanvasProjectPathRepairOptions,
 ): Promise<CanvasProjectPathRepairResult> {
 	const flatItems = resolveFlatAttachmentItems(options)
 	const selectedItems = selectedOperationItems(options, flatItems)
 	if (selectedItems.length === 0) {
-		return {
-			affectedProjects: [],
-			repairedFileIds: [],
-			repairedFiles: [],
-			failures: [],
-			hasFailures: false,
-			requiresConfirmation: false,
-		}
+		return emptyPathRepairResult()
 	}
 	const projects = collectCanvasProjects(flatItems, options.projectId).filter((project) =>
 		isAffectedProject(project, selectedItems, flatItems),
 	)
 	if (projects.length === 0) {
-		return {
-			affectedProjects: [],
-			repairedFileIds: [],
-			repairedFiles: [],
-			failures: [],
-			hasFailures: false,
-			requiresConfirmation: false,
-		}
+		return emptyPathRepairResult()
 	}
 
 	const mainFileIds = projects.map((project) => String(project.mainFile.file_id))
@@ -712,7 +822,11 @@ export async function repairCanvasProjectsBeforeFileOperation(
 
 	const checkedProjects: ProjectCheckState[] = projects.map((project) => ({
 		project,
-		resourceLookup: buildResourceLookup(flatItems, project.rootPath),
+		resourceLookup: buildResourceLookup(
+			flatItems,
+			project.rootPath,
+			options.attachmentSnapshotComplete === true,
+		),
 		projectResult: {
 			projectName: project.projectName,
 			rootPath: project.rootPath,
@@ -723,6 +837,7 @@ export async function repairCanvasProjectsBeforeFileOperation(
 		projectFailures: [],
 		projectSaves: [],
 	}))
+	const warnings: CanvasProjectPathRepairFailure[] = []
 	const sidecarReads: Array<{ state: ProjectCheckState; sidecar: AttachmentItem }> = []
 
 	for (const state of checkedProjects) {
@@ -740,12 +855,14 @@ export async function repairCanvasProjectsBeforeFileOperation(
 
 		try {
 			const rewritten = rewriteMainFile(mainContent, project, resourceLookup)
-			if (rewritten.unresolvedPaths.length > 0)
-				projectFailures.push({
-					projectName: project.projectName,
-					fileName: MAGIC_PROJECT_FILE_NAME,
-					message: `unresolved resource paths: ${rewritten.unresolvedPaths.join(", ")}`,
-				})
+			addPathWarnings(
+				warnings,
+				project.projectName,
+				MAGIC_PROJECT_FILE_NAME,
+				rewritten.missingPaths,
+				rewritten.ambiguousPaths,
+				rewritten.unverifiedPaths,
+			)
 			projectResult.hasRepairablePaths = rewritten.changed
 			if (rewritten.changed)
 				projectSaves.push({
@@ -798,12 +915,14 @@ export async function repairCanvasProjectsBeforeFileOperation(
 				project.rootPath,
 				resourceLookup,
 			)
-			if (rewrittenSidecar.unresolvedPaths.length > 0)
-				projectFailures.push({
-					projectName: project.projectName,
-					fileName: itemName(sidecar),
-					message: `unresolved resource paths: ${rewrittenSidecar.unresolvedPaths.join(", ")}`,
-				})
+			addPathWarnings(
+				warnings,
+				project.projectName,
+				itemName(sidecar),
+				rewrittenSidecar.missingPaths,
+				rewrittenSidecar.ambiguousPaths,
+				rewrittenSidecar.unverifiedPaths,
+			)
 			if (rewrittenSidecar.changed) projectResult.hasRepairablePaths = true
 			if (rewrittenSidecar.changed)
 				projectSaves.push({
@@ -832,10 +951,36 @@ export async function repairCanvasProjectsBeforeFileOperation(
 	const pendingSaves = checkedProjects.flatMap((checked) => checked.projectSaves)
 	const projectResults = checkedProjects.map((checked) => checked.projectResult)
 
-	// Read checks above remain parallel, but all changed files can be persisted
-	// in one batch to avoid a request per main/sidecar file.
+	return {
+		affectedProjects: projectResults,
+		repairedFileIds: [],
+		repairedFiles: [],
+		failures,
+		warnings,
+		saveFailures: [],
+		hasFailures: failures.length > 0,
+		hasWarnings: warnings.length > 0,
+		hasSaveFailures: false,
+		requiresConfirmation: failures.length > 0,
+		pendingFileSaves: pendingSaves,
+	}
+}
+
+/**
+ * @deprecated Use planCanvasProjectsBeforeFileOperation followed by
+ * commitCanvasProjectPathRepair after the operation confirmation.
+ */
+export async function repairCanvasProjectsBeforeFileOperation(
+	options: CanvasProjectPathRepairOptions,
+): Promise<CanvasProjectPathRepairResult> {
+	return commitCanvasProjectPathRepair(await planCanvasProjectsBeforeFileOperation(options))
+}
+
+export async function commitCanvasProjectPathRepair(
+	plan: CanvasProjectPathRepairResult,
+): Promise<CanvasProjectPathRepairResult> {
+	const pendingSaves = plan.pendingFileSaves ?? []
 	const saveResult = await persistPendingFileSaves(pendingSaves)
-	failures.push(...saveResult.failures)
 	const repairedFileIds = saveResult.successfulFiles.map((file) => file.fileId)
 	const repairedFiles: CanvasProjectPathRepairResult["repairedFiles"] =
 		saveResult.successfulFiles.map((file) => ({
@@ -844,26 +989,32 @@ export async function repairCanvasProjectsBeforeFileOperation(
 			projectName: file.projectName,
 		}))
 	const successfulFileIds = new Set(repairedFileIds)
-	for (const project of projectResults) {
-		project.changedFileIds = project.changedFileIds.filter((id) => successfulFileIds.has(id))
-	}
-	for (const project of projectResults) project.changed = project.changedFileIds.length > 0
-
+	const affectedProjects = plan.affectedProjects.map((project) => {
+		const changedFileIds = project.changedFileIds.filter((id) => successfulFileIds.has(id))
+		return {
+			...project,
+			changedFileIds,
+			changed: changedFileIds.length > 0,
+		}
+	})
 	return {
-		affectedProjects: projectResults,
+		...plan,
+		affectedProjects,
 		repairedFileIds,
 		repairedFiles,
-		failures,
-		hasFailures: failures.length > 0,
-		requiresConfirmation: failures.length > 0,
+		failures: [...plan.failures, ...saveResult.failures],
+		saveFailures: saveResult.failures,
+		hasFailures: plan.hasFailures || saveResult.failures.length > 0,
+		hasSaveFailures: saveResult.failures.length > 0,
+		requiresConfirmation: plan.hasFailures || saveResult.failures.length > 0,
+		pendingFileSaves: [],
 	}
 }
 
 /**
  * 在画布根目录重命名成功后，同步 magic.project.js 中的画布名称。
  *
- * 该步骤必须发生在真正的目录 rename 成功之后；路径修复仍由
- * repairCanvasProjectsBeforeFileOperation 在操作前完成，以保证取消或失败时
+ * 该步骤必须发生在真正的目录 rename 成功之后；路径修复采用计划/提交两阶段流程，以保证取消或失败时
  * 不会提前持久化新的画布名称。
  */
 export async function syncCanvasProjectNameAfterFileOperation(

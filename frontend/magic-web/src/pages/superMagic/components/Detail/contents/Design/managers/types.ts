@@ -10,6 +10,7 @@ import type { FileItem } from "@/pages/superMagic/components/Detail/components/F
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import type { DesignLoadIssue, DesignSidecarStatus } from "../utils/designDataLoader"
+import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
 
 export type DesignRemoteUpdateListenerMode = "message" | "file-change"
 
@@ -90,6 +91,10 @@ export interface DesignProjectManagerOptions {
 	isPlaybackMode: boolean
 	isShareRoute: boolean
 	isMobile: boolean
+	/** Unified access mode consumed by the Design lifecycle and Canvas runtime. */
+	accessMode?: CanvasAccessMode
+	/** Runtime environment constraint used when deriving the initial mode. */
+	isOffline?: boolean
 	designProjectId?: string
 	designProjectName?: string
 	/** 扁平附件索引：远端同步 / 路径解析等链路复用，避免重复 O(N) 扫描 */
@@ -107,6 +112,38 @@ export interface DesignProjectManagerOptions {
 	getT?: () => (key: string) => string
 }
 
+/**
+ * Resolve the host lifecycle mode at the integration boundary. Once resolved,
+ * downstream managers must consume accessMode instead of re-evaluating the
+ * legacy boolean flags independently.
+ */
+export function resolveDesignAccessMode(
+	options: Pick<
+		DesignProjectManagerOptions,
+		"allowEdit" | "isPlaybackMode" | "isShareRoute" | "isMobile" | "accessMode" | "isOffline"
+	>,
+): CanvasAccessMode {
+	if (options.accessMode) return options.accessMode
+	if (options.isShareRoute) return "share"
+	if (options.isPlaybackMode) return "history"
+	if (!options.allowEdit || options.isMobile || options.isOffline) return "readonly"
+	return "edit"
+}
+
+/**
+ * Read the mode selected by the Design state owner. The legacy flag resolver
+ * is retained only for older direct manager/test construction that omits the
+ * normalized accessMode field.
+ */
+export function getDesignBaseAccessMode(
+	options: Pick<
+		DesignProjectManagerOptions,
+		"allowEdit" | "isPlaybackMode" | "isShareRoute" | "isMobile" | "accessMode" | "isOffline"
+	>,
+): CanvasAccessMode {
+	return options.accessMode ?? resolveDesignAccessMode(options)
+}
+
 export interface DesignProjectStateBagSetters {
 	setMagicProjectJsFileId: (v: string | null) => void
 	setDesignData: (data: DesignData) => void
@@ -116,7 +153,7 @@ export interface DesignProjectStateBagSetters {
 	setSidecarStatus?: (status: DesignSidecarStatus) => void
 	setIsInitialLoading: (v: boolean) => void
 	setIsSaving: (v: boolean) => void
-	setIsReadOnly: (v: boolean) => void
+	setAccessMode: (v: CanvasAccessMode) => void
 	setFileVersionsList: (v: FileHistoryVersion[]) => void
 	setFileVersion: (v: number | undefined) => void
 	setIsProcessingRevoke: (v: boolean) => void
@@ -137,7 +174,7 @@ export interface DesignProjectStateBag {
 	/** 空字符串表示尚未建立基线（等价于旧逻辑的「空字符串」） */
 	getPrevDesignDataFingerprint: () => string
 	setPrevDesignDataFingerprint: (v: string) => void
-	getIsReadOnly: () => boolean
+	getAccessMode: () => CanvasAccessMode
 	setters: DesignProjectStateBagSetters
 }
 

@@ -161,7 +161,7 @@ export default function useUploadMentionFlow({
 				}
 			}
 
-			if (file.saveResult?.file_id) {
+			if (file.saveResult?.file_id && !file.isCanvasClipboard) {
 				return {
 					type: MentionItemType.PROJECT_FILE,
 					data: {
@@ -187,6 +187,7 @@ export default function useUploadMentionFlow({
 					upload_status: file.status,
 					upload_error: file.error,
 					file_path: file.reportResult?.file_key ?? file.result?.key ?? "",
+					is_canvas_clipboard: file.isCanvasClipboard,
 				},
 			}
 		},

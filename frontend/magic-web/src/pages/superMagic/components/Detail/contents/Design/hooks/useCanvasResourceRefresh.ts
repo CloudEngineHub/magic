@@ -3,6 +3,7 @@ import type {
 	CanvasDesignRef,
 	CanvasResourceRefreshItem,
 } from "@/components/CanvasDesign/public/props"
+import type { Canvas } from "@/components/CanvasDesign/runtime/core/Canvas"
 import {
 	ElementTypeEnum,
 	type AudioElement,
@@ -51,8 +52,10 @@ export function useCanvasResourceRefresh(options: UseCanvasResourceRefreshOption
 	const resourceSnapshotRef = useRef<CanvasResourceSnapshotState | null>(null)
 
 	useEffect(() => {
+		const canvasInstance = canvasDesignRef.current?.getCanvasInstance() ?? undefined
 		const nextSnapshot = buildCanvasResourceSnapshot({
 			canvas,
+			canvasInstance,
 			flatAttachments,
 			attachmentsReady,
 			attachmentIndex,
@@ -92,8 +95,16 @@ export function useCanvasResourceRefresh(options: UseCanvasResourceRefreshOption
 			if (!Array.isArray(messageData.changes) || messageData.changes.length === 0) return
 			if (!isNewestVersion || isPlaybackMode) return
 
-			const snapshot = resourceSnapshotRef.current
-			if (!snapshot?.items.size) return
+			const snapshot = buildCanvasResourceSnapshot({
+				canvas,
+				canvasInstance: canvasDesignRef.current?.getCanvasInstance() ?? undefined,
+				flatAttachments,
+				attachmentsReady,
+				attachmentIndex,
+				designProjectBasePath,
+			})
+			resourceSnapshotRef.current = snapshot
+			if (!snapshot.items.size) return
 
 			const changedResources = getChangedCanvasResourcesFromFileChanges(
 				messageData.changes,
@@ -120,23 +131,41 @@ export function useCanvasResourceRefresh(options: UseCanvasResourceRefreshOption
 				handleFileChangeIntermediate,
 			)
 		}
-	}, [canvasDesignRef, isNewestVersion, isPlaybackMode, projectId])
+	}, [
+		canvas,
+		canvasDesignRef,
+		flatAttachments,
+		attachmentsReady,
+		attachmentIndex,
+		designProjectBasePath,
+		isNewestVersion,
+		isPlaybackMode,
+		projectId,
+	])
 }
 
 export function buildCanvasResourceSnapshot(params: {
 	canvas?: CanvasDocument
+	canvasInstance?: Canvas
 	flatAttachments?: FileItem[]
 	attachmentsReady?: boolean
 	attachmentIndex?: DesignAttachmentIndex | null
 	designProjectBasePath?: string
 }): CanvasResourceSnapshotState {
-	const { canvas, flatAttachments, attachmentsReady, attachmentIndex, designProjectBasePath } =
-		params
+	const {
+		canvas,
+		canvasInstance,
+		flatAttachments,
+		attachmentsReady,
+		attachmentIndex,
+		designProjectBasePath,
+	} = params
 	const items = new Map<string, CanvasResourceSnapshot>()
 	const itemsByReference = new Map<string, CanvasResourceSnapshot>()
 
 	collectCanvasResourceSnapshots({
 		elements: canvas?.elements,
+		canvasInstance,
 		flatAttachments,
 		attachmentsReady,
 		attachmentIndex,
@@ -154,6 +183,7 @@ export function buildCanvasResourceSnapshot(params: {
 
 function collectCanvasResourceSnapshots(params: {
 	elements?: LayerElement[]
+	canvasInstance?: Canvas
 	flatAttachments?: FileItem[]
 	attachmentsReady?: boolean
 	attachmentIndex?: DesignAttachmentIndex | null
@@ -163,6 +193,7 @@ function collectCanvasResourceSnapshots(params: {
 }): void {
 	const {
 		elements,
+		canvasInstance,
 		flatAttachments,
 		attachmentsReady,
 		attachmentIndex,
@@ -175,7 +206,12 @@ function collectCanvasResourceSnapshots(params: {
 	for (const element of elements) {
 		if (element.type === ElementTypeEnum.Image) {
 			addCanvasResourceSnapshot({
-				src: getActiveImageContent(element as ImageElement).src,
+				src:
+					(
+						canvasInstance?.getEffectiveContent(element.id) as
+							| { src?: string }
+							| undefined
+					)?.src ?? getActiveImageContent(element as ImageElement).src,
 				mediaType: "image",
 				flatAttachments,
 				attachmentsReady,
@@ -188,7 +224,12 @@ function collectCanvasResourceSnapshots(params: {
 
 		if (element.type === ElementTypeEnum.Video) {
 			addCanvasResourceSnapshot({
-				src: getActiveContent(element as VideoElement)?.src,
+				src:
+					(
+						canvasInstance?.getEffectiveContent(element.id) as
+							| { src?: string }
+							| undefined
+					)?.src ?? getActiveContent(element as VideoElement)?.src,
 				mediaType: "video",
 				flatAttachments,
 				attachmentsReady,
@@ -201,7 +242,12 @@ function collectCanvasResourceSnapshots(params: {
 
 		if (element.type === ElementTypeEnum.Audio) {
 			addCanvasResourceSnapshot({
-				src: getActiveContent(element as AudioElement)?.src,
+				src:
+					(
+						canvasInstance?.getEffectiveContent(element.id) as
+							| { src?: string }
+							| undefined
+					)?.src ?? getActiveContent(element as AudioElement)?.src,
 				mediaType: "audio",
 				flatAttachments,
 				attachmentsReady,
@@ -215,6 +261,7 @@ function collectCanvasResourceSnapshots(params: {
 		if ("children" in element) {
 			collectCanvasResourceSnapshots({
 				elements: element.children,
+				canvasInstance,
 				flatAttachments,
 				attachmentsReady,
 				attachmentIndex,

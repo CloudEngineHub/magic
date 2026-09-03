@@ -1,8 +1,18 @@
-import { createContext, useContext, useState, useMemo, useCallback, type ReactNode } from "react"
+import {
+	createContext,
+	useContext,
+	useState,
+	useMemo,
+	useCallback,
+	useEffect,
+	useReducer,
+	type ReactNode,
+} from "react"
+import { useUpdateEffect } from "ahooks"
 import type { CropConfig, LayerElement } from "../../runtime/document/types"
 import { useCanvasEvent } from "../hooks/canvas/useCanvasEvent"
 import { useCanvasElements } from "../hooks/canvas/useCanvasElement"
-import { useUpdateEffect } from "ahooks"
+import { useCanvas } from "./CanvasProvider"
 import type { ElementToolSession } from "../../runtime/element-tools"
 
 export interface FullscreenMediaElement {
@@ -65,9 +75,6 @@ interface CanvasUIContextValue {
 	// 当前工具会话
 	activeToolSession: ElementToolSession | null
 	setActiveToolSession: (session: ElementToolSession | null) => void
-
-	// 画布是否处于只读模式
-	readonly?: boolean
 }
 
 interface CanvasRenameUIContextValue {
@@ -104,7 +111,6 @@ interface CanvasModeUIContextValue {
 	setErasingElementId: (id: string | null) => void
 	editingElementId: string | null
 	setEditingElementId: (id: string | null) => void
-	readonly?: boolean
 }
 
 const CanvasRenameUIContext = createContext<CanvasRenameUIContextValue | undefined>(undefined)
@@ -113,11 +119,14 @@ const CanvasPanelUIContext = createContext<CanvasPanelUIContextValue | undefined
 const CanvasModeUIContext = createContext<CanvasModeUIContextValue | undefined>(undefined)
 
 interface CanvasUIProviderProps {
-	readonly?: boolean
 	children: ReactNode
 }
 
-export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) {
+export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
+	const { canvas } = useCanvas()
+	const [, forceAccessUpdate] = useReducer((value: number) => value + 1, 0)
+	const canWrite = canvas?.permissionManager?.can("document.write") ?? false
+	const canGenerate = canvas?.permissionManager?.can("sideEffect.generate") ?? false
 	const [layerRenamingElementId, setLayerRenamingElementId] = useState<string | null>(null)
 	const [canvasRenamingElementId, setCanvasRenamingElementId] = useState<string | null>(null)
 
@@ -223,6 +232,9 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 		"element:media:replaceStateChanged",
 		({ data }) => {
 			if (data.status !== "uploading" && data.status !== "applying") return
+			setActiveToolSession((current) =>
+				current?.elementId === data.elementId ? null : current,
+			)
 			setMessageHistoryElementId((current) => (current === data.elementId ? null : current))
 			setFullscreenMediaElement((current) =>
 				current?.elementId === data.elementId ? null : current,
@@ -269,11 +281,22 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 		}
 	}, [selectedElementIds])
 
-	useUpdateEffect(() => {
-		if (!readonly) return
+	useEffect(() => {
+		if (canWrite && canGenerate) return
 		setLayerRenamingElementId(null)
 		setCanvasRenamingElementId(null)
-	}, [readonly])
+		setActiveToolSession(null)
+		setEditingElementId(null)
+		if (!canWrite) {
+			setCroppingElementId(null)
+		}
+		if (!canGenerate) {
+			setExtendingElementId(null)
+			setErasingElementId(null)
+		}
+	}, [canGenerate, canWrite])
+
+	useCanvasEvent("permission:changed", () => forceAccessUpdate(), [])
 
 	// 获取选中的元素列表
 	const selectedElements = useCanvasElements(selectedElementIds)
@@ -319,9 +342,8 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 			setErasingElementId,
 			editingElementId,
 			setEditingElementId,
-			readonly,
 		}
-	}, [croppingElementId, extendingElementId, erasingElementId, editingElementId, readonly])
+	}, [croppingElementId, extendingElementId, erasingElementId, editingElementId])
 
 	return (
 		<CanvasRenameUIContext.Provider value={renameValue}>

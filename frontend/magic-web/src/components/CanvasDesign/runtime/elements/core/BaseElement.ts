@@ -131,9 +131,12 @@ export abstract class BaseElement<T extends LayerElement = LayerElement> {
 
 	/** 当前节点的 active Content；所有媒体/编辑字段都应从这里读取。 */
 	protected getActiveContent<TContent extends ElementContentBase>(): TContent | undefined {
-		return isContentElement(this.data)
-			? (getElementActiveContent(this.data) as TContent | undefined)
-			: undefined
+		if (!isContentElement(this.data)) return undefined
+		// Older host/test doubles may not expose the preview-content resolver yet;
+		// preserve the document active-content behavior in that case.
+		const effectiveContentId = this.canvas?.getEffectiveContentId?.(this.data.id)
+		return (this.data.contents.find((content) => content.contentId === effectiveContentId) ??
+			getElementActiveContent(this.data)) as TContent | undefined
 	}
 
 	/** 当前节点的 main Content；连接、导出和下游输入使用该稳定内容。 */
@@ -405,7 +408,7 @@ export abstract class BaseElement<T extends LayerElement = LayerElement> {
 	 *
 	 * 未声明 Transformer 约束时使用默认的全部尺寸锚点；显式声明空锚点
 	 * 则表示元素不支持尺寸编辑。这个能力只描述元素自身的尺寸交互能力，
-	 * 不包含画布 readonly 或元素 locked 等运行态权限限制。
+	 * 不包含画布访问能力或元素 locked 等运行态权限限制。
 	 */
 	public supportsSizeEditing(): boolean {
 		const enabledAnchors = this.getTransformConstraints()?.enabledAnchors

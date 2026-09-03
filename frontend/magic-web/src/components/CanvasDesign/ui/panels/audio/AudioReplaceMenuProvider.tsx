@@ -27,7 +27,7 @@ export function AudioReplaceMenuProvider({ children }: PropsWithChildren<unknown
 		"element:audio:replaceClick",
 		useCallback(
 			({ data }) => {
-				if (!canvas || canvas.readonly) return
+				if (!canvas || !canvas.permissionManager.can("document.write")) return
 				const bounds = canvas.container.getBoundingClientRect()
 				setMenu({
 					elementId: data.elementId,

@@ -16,7 +16,8 @@ vi.mock("../../../../../../app/hooks/canvas", () => ({
 vi.mock("../../../../../../app/providers/CanvasProvider", () => ({
 	useCanvas: () => ({
 		canvas: {
-			readonly: false,
+			can: vi.fn(() => true),
+			permissionManager: { can: vi.fn(() => true) },
 			eventEmitter: { emit: mocks.emit },
 			mediaReplaceController: {
 				getReplacingElementId: () => mocks.replacingElementId,

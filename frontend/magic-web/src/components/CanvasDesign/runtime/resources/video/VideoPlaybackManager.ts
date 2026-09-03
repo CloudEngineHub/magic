@@ -1,6 +1,10 @@
 import type { Canvas } from "../../core/Canvas"
 import { isOssExpired } from "../offline-cache/ossExpiryUtils"
 import { getCanvasHostResourceReferenceIdentity } from "../../shared/path/canvasResourcePath"
+import {
+	buildFullscreenVideoPlaybackConsumerId,
+	buildInlineVideoPlaybackConsumerId,
+} from "./videoPlaybackConsumerIds"
 
 /** 播放会话归属（由 consumerId 前缀推断） */
 export type VideoPlaybackOwnerKind = "inline" | "fullscreen" | "unknown"
@@ -143,6 +147,9 @@ export class VideoPlaybackManager {
 		if (this.destroyed) {
 			return null
 		}
+		if (options?.autoPlay && !this.canPlayback()) {
+			return null
+		}
 		const resourceIdentity = getCanvasHostResourceReferenceIdentity(this.canvas, path)
 		const existing = this.sessionsByConsumer.get(consumerId)
 		if (existing && existing.resourceIdentity === resourceIdentity) {
@@ -155,7 +162,7 @@ export class VideoPlaybackManager {
 			}
 			this.applyPlaybackOptions(existing.video, options)
 			this.syncSessionActiveState(existing, !existing.video.paused && !existing.video.ended)
-			if (options?.autoPlay) {
+			if (options?.autoPlay && this.canPlayback()) {
 				await existing.video.play().catch(() => undefined)
 			}
 			return existing
@@ -243,7 +250,7 @@ export class VideoPlaybackManager {
 					this.syncSessionActiveState(session, session.isActive)
 					this.scheduleSessionRefresh(session)
 
-					if (options?.autoPlay) {
+					if (options?.autoPlay && this.canPlayback()) {
 						await video.play().catch(() => undefined)
 					}
 
@@ -329,6 +336,16 @@ export class VideoPlaybackManager {
 		this.clearScheduledSessionRefresh(session)
 		this.disposeVideo(session.video)
 		this.emitConsumerState(consumerId)
+	}
+
+	/** 暂停所有播放会话；资源和静态预览仍保留，便于能力恢复后继续复用。 */
+	public pauseAll(exceptElementId?: string): void {
+		this.sessionsByConsumer.forEach((session) => {
+			if (exceptElementId && this.isOwnedByElement(session.consumerId, exceptElementId)) {
+				return
+			}
+			session.video.pause()
+		})
 	}
 
 	public destroy(): void {
@@ -620,6 +637,17 @@ export class VideoPlaybackManager {
 		return this.sessionsByConsumer.get(session.consumerId) === session
 	}
 
+	private canPlayback(): boolean {
+		return this.canvas.permissionManager?.can?.("interaction.playback") ?? true
+	}
+
+	private isOwnedByElement(consumerId: string, elementId: string): boolean {
+		return (
+			consumerId === buildInlineVideoPlaybackConsumerId(elementId) ||
+			consumerId === buildFullscreenVideoPlaybackConsumerId(elementId)
+		)
+	}
+
 	private async refreshSessionPlayback(
 		session: InternalVideoPlaybackSession,
 		reason: VideoPlaybackIssueReason,
@@ -686,7 +714,7 @@ export class VideoPlaybackManager {
 			}
 
 			this.applyPlaybackOptions(video, playbackOptions)
-			if (shouldResume) {
+			if (shouldResume && this.canPlayback()) {
 				await video.play().catch(() => undefined)
 			}
 			return true

@@ -208,7 +208,7 @@ export class ConnectionHandleOverlayManager {
 			this.canvas.eventEmitter.on("viewport:pan", this.handleViewportPan),
 			this.canvas.eventEmitter.on("document:loaded", resetAndReconcile),
 			this.canvas.eventEmitter.on("document:restored", resetAndReconcile),
-			this.canvas.eventEmitter.on("canvas:readonly", reconcile),
+			this.canvas.eventEmitter.on("permission:changed", reconcile),
 			this.canvas.eventEmitter.on("canvas:devicechange", reconcile),
 			this.canvas.eventEmitter.on("tool:change", reconcile),
 			this.canvas.eventEmitter.on("crop:exit", () => {
@@ -535,7 +535,8 @@ export class ConnectionHandleOverlayManager {
 		const interactionBlocker = this.interactionBlockers.values().next().value
 		if (interactionBlocker) return interactionBlocker
 		if (this.canvas.stage.isDragging()) return "stage-dragging"
-		if (this.canvas.readonly) return "readonly"
+		if (!this.canvas.permissionManager.can("document.write"))
+			return "document-write-unavailable"
 		if (this.canvas.connectionDragManager?.isDraggingConnection?.())
 			return "connection-dragging"
 		if (!this.canvas.permissionManager.canUseSelectionToolAffordance()) {

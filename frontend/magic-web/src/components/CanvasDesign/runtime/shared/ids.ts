@@ -13,8 +13,15 @@ import { ElementTypeEnum } from "../document/types"
 import type { Canvas } from "../core/Canvas"
 import { ImageElement as ImageElementClass } from "../elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../elements/video/VideoElement"
-import { getActiveContent, getActiveImageContent } from "../document/elementContent"
+import { getActiveContent } from "../document/elementContent"
 import { resolveGridPlacements, resolveHorizontalPlacements } from "./placement/placementMath"
+
+function getEffectiveContentForRead(canvas: Canvas, element: LayerElement) {
+	if (typeof canvas.getEffectiveContent === "function") {
+		return canvas.getEffectiveContent(element.id) as { src?: string } | undefined
+	}
+	return getActiveContent(element) as { src?: string } | undefined
+}
 
 /**
  * 矩形边界
@@ -1078,8 +1085,8 @@ export function getLoadedImageElements(canvas: Canvas): ImageElement[] {
 
 		const imageElement = elementData as ImageElement
 
-		// 从 ImageElement 实例判断图片是否已加载
-		if (getActiveImageContent(imageElement).src) {
+		// 从 effective Content 和 ImageElement 实例判断图片是否已加载
+		if (getEffectiveContentForRead(canvas, imageElement)?.src) {
 			const elementInstance = canvas.elementManager.getElementInstance(id)
 			if (
 				elementInstance &&
@@ -1103,11 +1110,10 @@ export function getLoadedVideoElements(canvas: Canvas): CanvasFileElement[] {
 
 	for (const id of selectedIds) {
 		const elementData = canvas.elementManager.getElementData(id)
-		if (
-			!elementData ||
-			elementData.type !== ElementTypeEnum.Video ||
-			!getActiveContent(elementData)?.src
-		)
+		const effectiveContent = elementData
+			? getEffectiveContentForRead(canvas, elementData)
+			: undefined
+		if (!elementData || elementData.type !== ElementTypeEnum.Video || !effectiveContent?.src)
 			continue
 
 		const elementInstance = canvas.elementManager.getElementInstance(id)

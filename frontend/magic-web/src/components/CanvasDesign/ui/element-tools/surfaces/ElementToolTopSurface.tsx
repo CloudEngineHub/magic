@@ -9,7 +9,12 @@ import { useElementTools } from "../model/useElementTools"
 
 /** 顶部工具栏只是统一 Resolver 的 top surface 适配器。 */
 export default function ElementTools() {
-	const { methods, convertHightConfig, aiAbilityAvailability } = useMagic()
+	const {
+		convertHightConfig,
+		aiAbilityAvailability,
+		hasAiAbilityAvailabilityProvider,
+		isAiAbilityAvailabilityReady,
+	} = useMagic()
 	const { canvas } = useCanvas()
 	const { selectedElements, isDragging, isSelecting, activeToolSession } = useCanvasSelectionUI()
 	const [replacingMediaElementId, setReplacingMediaElementId] = useState<string | null>(
@@ -35,8 +40,8 @@ export default function ElementTools() {
 
 	const [firstSelectedElement] = selectedElements
 	const availability = aiAbilityAvailability?.abilities
-	const hasAvailability = Boolean(availability)
-	const hasAvailabilityProvider = Boolean(methods?.getAiAbilityAvailability)
+	const hasAvailability =
+		hasAiAbilityAvailabilityProvider && isAiAbilityAvailabilityReady && Boolean(availability)
 	const tools = useElementTools(firstSelectedElement?.id ?? null, "top", {
 		selectedElements,
 		isDragging,
@@ -47,22 +52,22 @@ export default function ElementTools() {
 		),
 		convertHightSupported: hasAvailability
 			? Boolean(availability?.image_convert_high?.enabled)
-			: hasAvailabilityProvider
+			: hasAiAbilityAvailabilityProvider
 				? false
 				: Boolean(convertHightConfig?.enabled),
 		removeBackgroundSupported: hasAvailability
 			? Boolean(availability?.image_remove_background?.enabled)
-			: hasAvailabilityProvider
+			: hasAiAbilityAvailabilityProvider
 				? false
 				: undefined,
 		eraserSupported: hasAvailability
 			? Boolean(availability?.image_eraser?.enabled)
-			: hasAvailabilityProvider
+			: hasAiAbilityAvailabilityProvider
 				? false
 				: undefined,
 		expandSupported: hasAvailability
 			? Boolean(availability?.image_expand?.enabled)
-			: hasAvailabilityProvider
+			: hasAiAbilityAvailabilityProvider
 				? false
 				: undefined,
 		isStoryboardOutputFrame: Boolean(

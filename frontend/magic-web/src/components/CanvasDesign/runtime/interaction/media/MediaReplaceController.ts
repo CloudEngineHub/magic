@@ -74,10 +74,26 @@ export class MediaReplaceController {
 		return contentId === undefined || state.contentId === contentId
 	}
 
+	/**
+	 * 结束当前替换会话。上传请求本身由宿主负责取消或继续；完成回调会因
+	 * operationId 已失效而被忽略，真正的文档写入仍由 UploadManager 再次鉴权。
+	 */
+	public cancel(): boolean {
+		const state = this.replacementState
+		if (!state) return false
+		this.replacementState = null
+		if (this.input) this.input.value = ""
+		this.emitState(state, "idle")
+		return true
+	}
+
 	public destroy(): void {
 		if (this.destroyed) return
 		this.destroyed = true
 		this.eventUnsubscribers.forEach((unsubscribe) => unsubscribe())
+		// Teardown is silent: the Canvas event emitter is about to be removed and
+		// React consumers may already be unmounting. Access changes use cancel()
+		// above when a visible state transition is required.
 		this.replacementState = null
 		if (this.input) {
 			this.input.removeEventListener("change", this.handleInputChange)
@@ -87,7 +103,12 @@ export class MediaReplaceController {
 	}
 
 	public openLocalFilePicker(target: MediaReplacementTarget): void {
-		if (this.destroyed || this.canvas.readonly || this.replacementState) return
+		if (
+			this.destroyed ||
+			!this.canvas.permissionManager.can("document.write") ||
+			this.replacementState
+		)
+			return
 		const capturedTarget = this.captureTarget(target)
 		if (!capturedTarget) return
 		const input = this.ensureInput()
@@ -159,7 +180,12 @@ export class MediaReplaceController {
 		source: MediaReplacementSource,
 		replace: (operationId: string) => boolean | Promise<boolean>,
 	): Promise<boolean> {
-		if (this.destroyed || this.canvas.readonly || this.replacementState) return false
+		if (
+			this.destroyed ||
+			!this.canvas.permissionManager.can("document.write") ||
+			this.replacementState
+		)
+			return false
 
 		const operationId = `${target.elementId}:${++this.nextOperationSequence}`
 		const phase: MediaReplacementPhase = source === "local-upload" ? "uploading" : "applying"
@@ -228,7 +254,8 @@ export class MediaReplaceController {
 		}
 		if (target.mediaType !== ElementTypeEnum.Video) return
 		const element = this.canvas.elementManager?.getElementInstance?.(target.elementId) as
-			{ pauseForReplacement?: () => void } | undefined
+			| { pauseForReplacement?: () => void }
+			| undefined
 		element?.pauseForReplacement?.()
 	}
 
