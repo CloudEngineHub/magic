@@ -3,11 +3,17 @@ import type { StoredAudioChunk, UploadStatus } from "../MediaRecorderService/Aud
 import type { RecordingBatchSaveReporter } from "../RecordingBatchSaveReporter"
 import { ChunkUploader } from "../ChunkUploader"
 
+type PendingUpload = {
+	success: (path?: string) => void
+	fail: (error?: Error) => void
+}
+
 const testState = vi.hoisted(() => ({
 	chunks: new Map<string, StoredAudioChunk>(),
 	uploadBehaviors: [] as Array<"success" | "fail" | "hang">,
 	uploadCalls: [] as Array<{ name: string; size: number; type: string }>,
 	uploadCancels: [] as Array<ReturnType<typeof vi.fn>>,
+	pendingUploads: [] as Array<PendingUpload | null>,
 	uploadFailureError: null as unknown,
 }))
 
@@ -29,9 +35,27 @@ vi.mock("@dtyq/upload-sdk", () => ({
 			const behavior = testState.uploadBehaviors.shift() ?? "success"
 			const cancel = vi.fn()
 			testState.uploadCancels.push(cancel)
+			let successCallback: ((response: { data: { path: string } }) => void) | undefined
+			let failCallback: ((error: Error) => void) | undefined
+			const pendingUpload: PendingUpload = {
+				success: (path) => {
+					successCallback?.({
+						data: { path: path ?? `uploaded/${testState.uploadCalls.length}` },
+					})
+				},
+				fail: (error) => {
+					failCallback?.(
+						error ??
+							(testState.uploadFailureError as Error | null) ??
+							new Error("upload failed"),
+					)
+				},
+			}
+			testState.pendingUploads.push(behavior === "hang" ? pendingUpload : null)
 			return {
 				cancel,
 				success: (callback: (response: { data: { path: string } }) => void) => {
+					successCallback = callback
 					if (behavior === "success") {
 						queueMicrotask(() =>
 							callback({
@@ -41,6 +65,7 @@ vi.mock("@dtyq/upload-sdk", () => ({
 					}
 				},
 				fail: (callback: (error: Error) => void) => {
+					failCallback = callback
 					if (behavior === "fail") {
 						queueMicrotask(() =>
 							callback(
@@ -151,6 +176,7 @@ describe("ChunkUploader", () => {
 		testState.uploadBehaviors.length = 0
 		testState.uploadCalls.length = 0
 		testState.uploadCancels.length = 0
+		testState.pendingUploads.length = 0
 		testState.uploadFailureError = null
 	})
 
@@ -322,6 +348,7 @@ describe("ChunkUploader", () => {
 		const internalUploader = uploader as unknown as {
 			audioChunkDB: { get: (id: string) => Promise<StoredAudioChunk | undefined> }
 			activeUploads: Map<string, StoredAudioChunk>
+			activeUploadAttempts: Map<string, string>
 			sessionActiveUploads: Map<string, string>
 		}
 		const originalGet = internalUploader.audioChunkDB.get.bind(internalUploader.audioChunkDB)
@@ -345,7 +372,36 @@ describe("ChunkUploader", () => {
 		await Promise.resolve()
 
 		expect(internalUploader.activeUploads.has(chunk.id)).toBe(false)
+		expect(internalUploader.activeUploadAttempts.has(chunk.id)).toBe(false)
 		expect(internalUploader.sessionActiveUploads.has("session-1")).toBe(false)
+	})
+
+	it("clears leftover upload attempts when a missing chunk has no active session", async () => {
+		const chunk = createChunk(0)
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+				maxRetryCount: 1,
+			},
+			createBatchSaveReporter(),
+		)
+		const internalUploader = uploader as unknown as {
+			handleUploadError: (chunkId: string, error: Error) => Promise<void>
+			activeUploadAttempts: Map<string, string>
+			activeUploads: Map<string, StoredAudioChunk>
+			activeUploadIds: Set<string>
+		}
+		internalUploader.activeUploadAttempts.set(chunk.id, "stale-attempt")
+		internalUploader.activeUploadIds.add(chunk.id)
+
+		await internalUploader.handleUploadError(chunk.id, new Error("upload failed"))
+
+		expect(internalUploader.activeUploadAttempts.has(chunk.id)).toBe(false)
+		expect(internalUploader.activeUploads.has(chunk.id)).toBe(false)
+		expect(internalUploader.activeUploadIds.has(chunk.id)).toBe(false)
 	})
 
 	it("preserves SDK status and request identifiers on upload failures", async () => {
@@ -775,5 +831,88 @@ describe("ChunkUploader", () => {
 			reason: "healthy",
 			uploading: 1,
 		})
+	})
+
+	it("ignores a late success callback from a cancelled upload after force resume", async () => {
+		const chunk = createChunk(0)
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("hang", "success")
+		const batchSaveReporter = createBatchSaveReporter()
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+				maxRetryCount: 3,
+			},
+			batchSaveReporter,
+		)
+
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(1))
+
+		await uploader.resumeStalledSessionUploads("session-1", "topic-1", "project-1", {
+			force: true,
+		})
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(2))
+
+		testState.pendingUploads[0]?.success("uploaded/stale")
+		await vi.runAllTicks()
+		await Promise.resolve()
+		await Promise.resolve()
+
+		await vi.waitFor(() =>
+			expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("uploaded"),
+		)
+
+		expect(testState.uploadCancels[0]).toHaveBeenCalledTimes(1)
+		expect(batchSaveReporter.reportUploadedFileStrict).toHaveBeenCalledTimes(1)
+		expect(batchSaveReporter.reportUploadedFileStrict).toHaveBeenCalledWith(
+			expect.objectContaining({
+				fileKey: "uploaded/2",
+			}),
+		)
+	})
+
+	it("ignores a late failure callback from a cancelled upload after force resume", async () => {
+		const chunk = createChunk(0)
+		testState.chunks.set(chunk.id, chunk)
+		testState.uploadBehaviors.push("hang", "hang")
+
+		const uploader = new ChunkUploader(
+			{
+				chunkSizeThreshold: 1,
+				timeThreshold: 1,
+				chunkCountThreshold: 1,
+				maxConcurrentUploads: 1,
+				maxRetryCount: 3,
+			},
+			createBatchSaveReporter(),
+		)
+		const internalUploader = uploader as unknown as {
+			chunkRetries: Map<string, number>
+			sessionQueues: Map<string, string[]>
+			sessionActiveUploads: Map<string, string | null>
+		}
+
+		await uploader.uploadSession("session-1", "topic-1", "project-1")
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(1))
+
+		await uploader.resumeStalledSessionUploads("session-1", "topic-1", "project-1", {
+			force: true,
+		})
+		await vi.waitFor(() => expect(testState.uploadCalls).toHaveLength(2))
+
+		testState.pendingUploads[0]?.fail(new Error("stale cancelled upload"))
+		await vi.runAllTicks()
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(internalUploader.chunkRetries.get(chunk.id) ?? 0).toBe(0)
+		expect(testState.chunks.get(chunk.id)?.uploadStatus).toBe("pending")
+		expect(internalUploader.sessionActiveUploads.get("session-1")).toBe(chunk.id)
+		expect(internalUploader.sessionQueues.get("session-1") ?? []).not.toContain(chunk.id)
 	})
 })
