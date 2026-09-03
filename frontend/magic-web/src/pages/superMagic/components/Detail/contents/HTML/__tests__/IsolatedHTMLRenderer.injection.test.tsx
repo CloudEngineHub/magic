@@ -428,6 +428,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		})
 		vi.useRealTimers()
 		vi.restoreAllMocks()
+		delete (window as Window & { project_id?: string }).project_id
 	})
 
 	it("enables presentation and low-risk media capabilities for HTML previews", async () => {
@@ -533,6 +534,25 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 			"project-from-preview",
 			undefined,
 			defaultProps.selectedProject,
+		)
+	})
+
+	it("does not read window.project_id when host props omit projectId", async () => {
+		;(window as Window & { project_id?: string }).project_id = "share-window-project"
+
+		render(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				selectedProject={undefined}
+				projectId={undefined}
+			/>,
+		)
+		await flushReactEffects()
+
+		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
+			undefined,
+			undefined,
+			undefined,
 		)
 	})
 

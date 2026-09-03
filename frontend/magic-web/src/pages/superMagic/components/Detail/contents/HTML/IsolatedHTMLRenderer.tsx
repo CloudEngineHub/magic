@@ -178,7 +178,7 @@ interface IsolatedHTMLRendererProps {
 	htmlRelativeFolderPath?: string
 	openNewTab: (fileId: string, path: string, autoEdit?: boolean) => void
 	selectedProject?: any
-	/** 微应用预览显式注入的项目 ID；分享页不传入项目上下文。 */
+	/** Host project ID passed by preview or share pages. */
 	projectId?: string
 	/** 微应用编辑页的独立话题 store；未传时回退到全局 store。 */
 	topicStore?: TopicStore
@@ -424,6 +424,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			enableInlineInspectorFallback = false,
 			permissionController,
 		} = props
+		// Share pages inject project_id on window when props omit it.
 		const runtimeProjectId = projectId ?? selectedProject?.id
 		const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
 		const htmlSandboxShellUrl = useMemo(
