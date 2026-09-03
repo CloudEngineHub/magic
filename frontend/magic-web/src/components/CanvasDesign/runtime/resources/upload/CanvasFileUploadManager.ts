@@ -697,7 +697,7 @@ export class CanvasFileUploadManager {
 		if (!resolver) return
 
 		const changedIdentities =
-			changedWorkspacePaths === undefined
+			changedWorkspacePaths === undefined || changedWorkspacePaths.length === 0
 				? undefined
 				: new Set(
 						changedWorkspacePaths.map((path) =>

@@ -488,6 +488,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 										src: item.data.file_path,
 										fileName: item.data.file_name,
 									},
+									{ retainReferenceSlot: true },
 								)
 							} else {
 								editorRef.current?.insertMentionItems([item])

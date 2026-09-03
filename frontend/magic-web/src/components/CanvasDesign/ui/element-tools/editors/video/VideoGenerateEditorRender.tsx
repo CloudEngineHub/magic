@@ -1031,11 +1031,14 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 							)
 							const selected = selectedSlot
 							if (selected) {
-								clipboardHandlersRef.current.replaceSelectedResource({
-									path: item.data.file_path,
-									src: item.data.file_path,
-									fileName: item.data.file_name,
-								})
+								clipboardHandlersRef.current.replaceSelectedResource(
+									{
+										path: item.data.file_path,
+										src: item.data.file_path,
+										fileName: item.data.file_name,
+									},
+									{ retainResourceSlot: true },
+								)
 							} else {
 								editorRef.current?.insertMentionItems([item])
 							}

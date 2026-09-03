@@ -253,7 +253,10 @@ export interface VideoEditorConfig {
 				mentionPlacement?: "cursor" | "documentEnd"
 			},
 		) => void
-		replaceSelectedResource: (fileInfo: UploadFileResponse) => void
+		replaceSelectedResource: (
+			fileInfo: UploadFileResponse,
+			options?: { retainResourceSlot?: boolean },
+		) => void
 		handleReferenceImageRemove: (path: string) => void
 		handleFrameImageRemove: (slotIndex: number) => void
 		/** 本地上传进行中：取消并忽略后续上传完成回调 */

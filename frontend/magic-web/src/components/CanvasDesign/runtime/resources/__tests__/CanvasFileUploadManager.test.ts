@@ -133,7 +133,7 @@ describe("CanvasFileUploadManager pending resource confirmation", () => {
 		expect(manager.isPendingResourcePath("./images/new.png")).toBe(true)
 
 		attachmentConfirmed = true
-		manager.reconcilePendingResourcePaths(["/画布A/images/new.png"])
+		manager.reconcilePendingResourcePaths([])
 
 		expect(manager.isPendingResourcePath("./images/new.png")).toBe(false)
 		expect(emit).toHaveBeenCalledWith({

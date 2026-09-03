@@ -1703,6 +1703,7 @@ export interface CanvasDesignMethods {
 		resourceIdentity?: string
 		sourcePath?: string
 		projectPath?: string
+		fileName?: string
 		targetProjectId?: string
 		targetCanvasId?: string
 		target: "canvas-editor" | "message-editor"

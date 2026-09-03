@@ -1159,14 +1159,14 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	)
 
 	const replaceSelectedResource = useCallback(
-		(fileInfo: UploadFileResponse) => {
+		(fileInfo: UploadFileResponse, options?: { retainResourceSlot?: boolean }) => {
 			const selectedSlot = selectedResourceSlotRef.current
 			if (!selectedSlot) return
 			if (selectedSlot.inputTab === "frame") {
-				replaceFrameImageAt(selectedSlot.slotIndex, fileInfo)
+				replaceFrameImageAt(selectedSlot.slotIndex, fileInfo, options)
 				return
 			}
-			replaceReferenceImageAt(selectedSlot.slotIndex, fileInfo)
+			replaceReferenceImageAt(selectedSlot.slotIndex, fileInfo, options)
 		},
 		[replaceFrameImageAt, replaceReferenceImageAt],
 	)
