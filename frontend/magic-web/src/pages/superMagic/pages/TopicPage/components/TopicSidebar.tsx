@@ -44,6 +44,7 @@ function TopicSidebar({
 	const audioController = useAudioProjectSidebarController({
 		selectedProject,
 		attachments: topicFilesProps.attachments ?? [],
+		isReadOnly,
 	})
 	const {
 		isAudioProject,
@@ -140,6 +141,7 @@ function TopicSidebar({
 					canMoveToGroup={canManageAudioProject}
 					canDelete={canManageAudioProject && Boolean(projectItem)}
 					canGenerateSummary={canManageAudioProject && actions.canGenerateSummary}
+					canShare={canManageAudioProject}
 					summaryMode={summaryMode}
 					summarySubmitting={actions.summarySubmitting}
 					renaming={actions.renaming}

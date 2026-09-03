@@ -29,6 +29,7 @@ interface AudioProjectHeaderProps {
 	canMoveToGroup: boolean
 	canGenerateSummary: boolean
 	canDelete: boolean
+	canShare: boolean
 	summaryMode?: "generate" | "regenerate"
 	summarySubmitting: boolean
 	deleting?: boolean
@@ -50,6 +51,7 @@ export default function AudioProjectHeader({
 	canMoveToGroup,
 	canGenerateSummary,
 	canDelete,
+	canShare,
 	summaryMode = "regenerate",
 	summarySubmitting,
 	deleting = false,
@@ -128,16 +130,18 @@ export default function AudioProjectHeader({
 						</h1>
 					)}
 				</div>
-				<Button
-					variant="outline"
-					size="icon"
-					className="h-7 w-7 shrink-0 shadow-xs"
-					onClick={onShare}
-					aria-label={t("detail.share")}
-					data-testid="audio-project-header-share"
-				>
-					<IconShare3 size={16} className="text-foreground" />
-				</Button>
+				{canShare ? (
+					<Button
+						variant="outline"
+						size="icon"
+						className="h-7 w-7 shrink-0 shadow-xs"
+						onClick={onShare}
+						aria-label={t("detail.share")}
+						data-testid="audio-project-header-share"
+					>
+						<IconShare3 size={16} className="text-foreground" />
+					</Button>
+				) : null}
 				{hasMoreActions ? (
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>

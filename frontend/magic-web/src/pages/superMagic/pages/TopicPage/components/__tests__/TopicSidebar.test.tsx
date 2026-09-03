@@ -51,9 +51,9 @@ vi.mock("@/enhance/tabler/icons-react/icons/iconShareCog", () => ({
 const controllerState = vi.hoisted(() => ({ isAudioProject: false }))
 
 vi.mock("../hooks/useAudioProjectSidebarController", () => ({
-	useAudioProjectSidebarController: () => ({
+	useAudioProjectSidebarController: ({ isReadOnly }: { isReadOnly: boolean }) => ({
 		isAudioProject: controllerState.isAudioProject,
-		canManageAudioProject: controllerState.isAudioProject,
+		canManageAudioProject: controllerState.isAudioProject && !isReadOnly,
 		projectItem: controllerState.isAudioProject
 			? {
 					id: "mock-audio-project",
@@ -165,5 +165,19 @@ describe("TopicSidebar", () => {
 		expect(screen.queryByTestId("project-sider-item-task")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("project-sider-item-longMemory")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("project-sider-item-share")).not.toBeInTheDocument()
+	})
+
+	it("hides recording management actions for read-only projects", () => {
+		controllerState.isAudioProject = true
+		render(
+			<TopicSidebar
+				{...baseProps}
+				isReadOnly
+				topicFilesProps={{ attachments: [{ file_id: "mock-file" }] }}
+			/>,
+		)
+
+		expect(screen.getByTestId("audio-project-header")).toBeInTheDocument()
+		expect(screen.queryByTestId("audio-project-header-share")).not.toBeInTheDocument()
 	})
 })

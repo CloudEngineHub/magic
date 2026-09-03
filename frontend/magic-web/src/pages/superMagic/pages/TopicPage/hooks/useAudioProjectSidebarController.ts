@@ -19,6 +19,7 @@ import { useAudioRecordingCopyToProject } from "../../AudioRecordings/hooks/useA
 interface UseAudioProjectSidebarControllerInput {
 	selectedProject: ProjectListItem | null
 	attachments: AttachmentItem[]
+	isReadOnly: boolean
 	onBack?: () => void
 }
 
@@ -26,6 +27,7 @@ interface UseAudioProjectSidebarControllerInput {
 export function useAudioProjectSidebarController({
 	selectedProject,
 	attachments,
+	isReadOnly,
 	onBack,
 }: UseAudioProjectSidebarControllerInput) {
 	const navigate = useNavigate()
@@ -73,7 +75,7 @@ export function useAudioProjectSidebarController({
 	}, [loadProjectItem, shouldLoadAudioProject])
 
 	const isAudioProject = shouldLoadAudioProject || Boolean(projectItem)
-	const canManageAudioProject = isAudioProject
+	const canManageAudioProject = isAudioProject && !isReadOnly
 
 	const refreshProject = useCallback(async () => {
 		// Refreshes the header row after a successful recording mutation.

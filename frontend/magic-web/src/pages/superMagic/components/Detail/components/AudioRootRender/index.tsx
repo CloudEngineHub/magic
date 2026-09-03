@@ -39,7 +39,14 @@ interface AudioRootRenderProps {
 
 /** Renders only the recording content workbench for an audio folder or its legacy HTML entry. */
 export default function AudioRootRender(props: AudioRootRenderProps) {
-	const { data, attachments = [], attachmentList = [], projectId = "", isFileShare } = props
+	const {
+		data,
+		attachments = [],
+		attachmentList = [],
+		projectId = "",
+		isFileShare,
+		allowEdit = true,
+	} = props
 	const shareRoute = useShareRoute()
 	const isMobile = useIsMobile()
 	const isReadonlyShare = Boolean(isFileShare || shareRoute.isShareRoute)
@@ -52,7 +59,11 @@ export default function AudioRootRender(props: AudioRootRenderProps) {
 	})
 	const capabilities = isReadonlyShare
 		? SHARE_RECORDING_DETAIL_CAPABILITIES
-		: FOLDER_RECORDING_DETAIL_CAPABILITIES
+		: {
+				...FOLDER_RECORDING_DETAIL_CAPABILITIES,
+				// Speaker metadata is a project file mutation and follows the project edit gate.
+				canEditSpeakers: allowEdit,
+			}
 	const fallbackHtml = useMemo(
 		() => resolveFallbackHtml(data, attachments, attachmentList),
 		[data, attachments, attachmentList],

@@ -38,6 +38,7 @@ function renderHeader() {
 			canMoveToGroup
 			canGenerateSummary
 			canDelete
+			canShare
 			summaryMode="regenerate"
 			summarySubmitting={false}
 			onBack={vi.fn()}
@@ -59,6 +60,30 @@ describe("AudioProjectHeader", () => {
 		expect(screen.getByRole("heading", { name: "Mock recording" })).toBeInTheDocument()
 		expect(screen.getByTestId("audio-project-header-back")).toBeInTheDocument()
 		expect(screen.getByTestId("audio-project-header-share")).toBeInTheDocument()
+	})
+
+	it("hides sharing for read-only headers", () => {
+		render(
+			<AudioProjectHeader
+				title="Mock recording"
+				canCopyToProject={false}
+				canRename={false}
+				canMoveToGroup={false}
+				canGenerateSummary={false}
+				canDelete={false}
+				canShare={false}
+				summarySubmitting={false}
+				onBack={vi.fn()}
+				onRename={vi.fn(async () => true)}
+				onMoveToGroup={vi.fn()}
+				onCopyToProject={vi.fn()}
+				onGenerateSummary={vi.fn()}
+				onShare={vi.fn()}
+				onDelete={vi.fn()}
+			/>,
+		)
+
+		expect(screen.queryByTestId("audio-project-header-share")).not.toBeInTheDocument()
 	})
 
 	it("exposes recording actions without executing deletion", () => {
