@@ -23,6 +23,7 @@ import {
 	HistoryActions,
 	FontFamilySelector,
 	FontSizeSelector,
+	LineHeightSelector,
 	FontSizeAdjuster,
 	TextFormatTools,
 	TextAlignTools,
@@ -124,8 +125,12 @@ export const StylePanel = observer(function StylePanel({
 
 	// Local state for quick access
 	const [fontSize, setFontSize] = useState("16")
+	const [lineHeight, setLineHeight] = useState("normal")
 	const [fontFamily, setFontFamily] = useState("sans-serif")
 	const [textContent, setTextContent] = useState("")
+	// Computed styles normalize unitless line-height to pixels, so keep the
+	// user's notation while the same element remains selected.
+	const lineHeightDisplayRef = useRef<{ selector: string; value: string } | null>(null)
 
 	const showButtonLabel = useShowButtonText(800)
 
@@ -176,8 +181,11 @@ export const StylePanel = observer(function StylePanel({
 		// In multi-select mode, we show mixed/default values
 		if (selectedElement?.computedStyles) {
 			setTextContent(selectedElement.textContent ?? "")
-			const { fontSize: computedFontSize, fontFamily: computedFontFamily } =
-				selectedElement.computedStyles
+			const {
+				fontSize: computedFontSize,
+				fontFamily: computedFontFamily,
+				lineHeight: computedLineHeight,
+			} = selectedElement.computedStyles
 
 			// Extract font size number from "16px" format
 			// Show actual DOM size (element's true font-size property)
@@ -194,13 +202,23 @@ export const StylePanel = observer(function StylePanel({
 				const firstFont = computedFontFamily.split(",")[0].trim().replace(/['"]/g, "")
 				setFontFamily(firstFont)
 			}
+			const preservedLineHeight =
+				lineHeightDisplayRef.current?.selector === selectedElement.selector
+					? lineHeightDisplayRef.current.value
+					: null
+			if (!preservedLineHeight) lineHeightDisplayRef.current = null
+			setLineHeight(preservedLineHeight || computedLineHeight || "normal")
 		} else if (stylePanelStore.selectedElements.length > 0) {
+			lineHeightDisplayRef.current = null
 			setTextContent("")
 			// Multi-select mode: use first element's styles as default
 			const firstElement = stylePanelStore.selectedElements[0]
 			if (firstElement?.computedStyles) {
-				const { fontSize: computedFontSize, fontFamily: computedFontFamily } =
-					firstElement.computedStyles
+				const {
+					fontSize: computedFontSize,
+					fontFamily: computedFontFamily,
+					lineHeight: computedLineHeight,
+				} = firstElement.computedStyles
 
 				if (computedFontSize) {
 					const sizeMatch = computedFontSize.match(/(\d+)/)
@@ -214,8 +232,10 @@ export const StylePanel = observer(function StylePanel({
 					const firstFont = computedFontFamily.split(",")[0].trim().replace(/['"]/g, "")
 					setFontFamily(firstFont)
 				}
+				setLineHeight(computedLineHeight || "normal")
 			}
 		} else {
+			lineHeightDisplayRef.current = null
 			setTextContent("")
 		}
 	}, [selectedElement, stylePanelStore, stylePanelStore.selectedElements])
@@ -300,6 +320,23 @@ export const StylePanel = observer(function StylePanel({
 			handleStyleChange("fontSize", `${fontSize}px`)
 		},
 		[handleStyleChange],
+	)
+
+	/** Apply the compact line-height value to the selected element(s). */
+	const handleLineHeightApply = useCallback(
+		(value: string) => {
+			const normalizedValue = value.trim()
+			if (!normalizedValue) return
+			if (selectedElement?.selector) {
+				lineHeightDisplayRef.current = {
+					selector: selectedElement.selector,
+					value: normalizedValue,
+				}
+			}
+			setLineHeight(normalizedValue)
+			handleStyleChange("lineHeight", normalizedValue)
+		},
+		[handleStyleChange, selectedElement?.selector],
 	)
 
 	/**
@@ -557,7 +594,7 @@ export const StylePanel = observer(function StylePanel({
 													disabled={isDisabled}
 													className={
 														variant === "context"
-															? "w-20 shrink-0"
+															? "max-w-[220px] shrink-0"
 															: undefined
 													}
 												/>,
@@ -575,6 +612,23 @@ export const StylePanel = observer(function StylePanel({
 									}
 								/>
 							) : null}
+
+							{capabilities.showTypography
+								? renderContextToolbarItem(
+										<LineHeightSelector
+											value={lineHeight}
+											fontSize={fontSize}
+											onChange={setLineHeight}
+											onApply={handleLineHeightApply}
+											disabled={isDisabled}
+											className={
+												variant === "context"
+													? "max-w-[220px] shrink-0"
+													: undefined
+											}
+										/>,
+									)
+								: null}
 
 							{variant !== "context" ||
 							capabilities.showTypography ||

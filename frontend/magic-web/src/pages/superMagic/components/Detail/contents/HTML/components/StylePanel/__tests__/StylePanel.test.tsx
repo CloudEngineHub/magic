@@ -89,6 +89,23 @@ vi.mock("../controls", () => ({
 	HistoryActions: () => <div data-testid="history-actions" />,
 	FontFamilySelector: () => <div data-testid="font-family-selector" />,
 	FontSizeSelector: () => <div data-testid="font-size-selector" />,
+	LineHeightSelector: ({
+		value,
+		fontSize,
+		onApply,
+	}: {
+		value?: string
+		fontSize?: string
+		onApply?: (value: string) => void
+	}) => (
+		<button
+			type="button"
+			data-testid="line-height-selector"
+			data-value={value}
+			data-font-size={fontSize}
+			onClick={() => onApply?.("1.2")}
+		/>
+	),
 	FontSizeAdjuster: () => <div data-testid="font-size-adjuster" />,
 	TextFormatTools: () => <div data-testid="text-format-tools" />,
 	TextAlignTools: ({
@@ -255,6 +272,7 @@ describe("StylePanel", () => {
 				fontStyle: "normal",
 				textDecoration: "none",
 				textAlign: "left",
+				lineHeight: "24px",
 				color: "#000000",
 				width: "320px",
 				height: "40px",
@@ -265,6 +283,7 @@ describe("StylePanel", () => {
 
 		expect(screen.queryByTestId("font-family-selector")).not.toBeInTheDocument()
 		expect(screen.getByTestId("font-size-selector")).toBeInTheDocument()
+		expect(screen.getByTestId("line-height-selector")).toHaveAttribute("data-value", "24px")
 		expect(screen.getByTestId("text-format-tools")).toBeInTheDocument()
 		expect(screen.getByTestId("text-align-tools")).toBeInTheDocument()
 		const colorPicker = screen.getByTestId("color-picker")
@@ -277,6 +296,50 @@ describe("StylePanel", () => {
 		fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
 		expect(screen.getByTestId("font-family-selector")).toBeInTheDocument()
 		expect(document.querySelectorAll('[data-slot="separator"]')).toHaveLength(5)
+	})
+
+	it("preserves a selected ratio when computed line-height refreshes to pixels", async () => {
+		mockSelectedElement.current = {
+			selector: "p.copy",
+			tagName: "p",
+			isTextElement: true,
+			hasDirectTextContent: true,
+			computedStyles: {
+				fontSize: "100px",
+				lineHeight: "120px",
+				fontWeight: "400",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "left",
+				color: "#000000",
+				width: "320px",
+				height: "120px",
+			},
+		}
+		const { rerender } = render(<StylePanel editorRef={{ current: null }} variant="context" />)
+
+		const lineHeightSelector = screen.getByTestId("line-height-selector")
+		expect(lineHeightSelector).toHaveAttribute("data-value", "120px")
+		expect(lineHeightSelector).toHaveAttribute("data-font-size", "100")
+
+		fireEvent.click(lineHeightSelector)
+		await waitFor(() => {
+			expect(mockUpdateStyle).toHaveBeenCalledWith("lineHeight", "1.2")
+			expect(lineHeightSelector).toHaveAttribute("data-value", "1.2")
+		})
+
+		mockSelectedElement.current = {
+			...mockSelectedElement.current,
+			computedStyles: {
+				...mockSelectedElement.current.computedStyles,
+				lineHeight: "120px",
+			},
+		}
+		rerender(<StylePanel editorRef={{ current: null }} variant="context" />)
+
+		await waitFor(() =>
+			expect(screen.getByTestId("line-height-selector")).toHaveAttribute("data-value", "1.2"),
+		)
 	})
 
 	it("should animate element actions with the context toolbar open state", async () => {

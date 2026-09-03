@@ -6240,6 +6240,7 @@
 		"lineHeight": "行高",
 		"lineHeightHint": "可以是数字（如 1.5）、长度值（如 24px）或 normal",
 		"lineHeightPlaceholder": "normal、1.5、24px",
+		"lineHeightSwitchUnit": "切换单位",
 		"linearGradient": "线性渐变",
 		"linkAdvanced": "高级链接配置",
 		"linkAll": "关联所有边",

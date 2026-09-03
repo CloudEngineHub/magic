@@ -6238,6 +6238,7 @@
 		"lineHeight": "Line Height",
 		"lineHeightHint": "Use a number (such as 1.5), a length (such as 24px), or normal",
 		"lineHeightPlaceholder": "normal, 1.5, 24px",
+		"lineHeightSwitchUnit": "Switch unit",
 		"linearGradient": "Linear Gradient",
 		"linkAdvanced": "Advanced link settings",
 		"linkAll": "Link All Sides",

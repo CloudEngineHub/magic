@@ -4,6 +4,11 @@ import { NumericDragInput } from "./NumericDragInput"
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
 import { cn } from "@/utils/cn"
 import { EditorSelectContent } from "../../EditorFloating"
+import {
+	getMetricControlWidth,
+	getMetricInputWidth,
+	METRIC_CONTROL_MAX_WIDTH,
+} from "./metricControlWidth"
 
 const FONT_SIZES = ["12", "14", "16", "18", "20", "24", "28", "32", "36", "48", "64", "72"]
 
@@ -71,8 +76,12 @@ export function FontSizeSelector({
 	return (
 		<div
 			data-testid="html-editor-font-size-control"
+			style={{
+				width: getMetricControlWidth(value),
+				maxWidth: `${METRIC_CONTROL_MAX_WIDTH}px`,
+			}}
 			className={cn(
-				"flex h-7 min-w-0 items-center gap-0.5 overflow-hidden rounded-md border border-border/70 bg-background/70 pl-2 shadow-none transition-[background-color,border-color,box-shadow] duration-150 focus-within:border-primary/70 focus-within:ring-2 focus-within:ring-primary/20 hover:border-primary/45 hover:bg-primary/5",
+				"flex h-7 min-w-0 shrink-0 items-center gap-0.5 overflow-hidden rounded-md border border-border/70 bg-background/70 pl-2 shadow-none transition-[background-color,border-color,box-shadow] duration-150 focus-within:border-primary/70 focus-within:ring-2 focus-within:ring-primary/20 hover:border-primary/45 hover:bg-primary/5",
 				className,
 			)}
 		>
@@ -88,7 +97,8 @@ export function FontSizeSelector({
 					onBlur={handleBlur}
 					onKeyDown={handleKeyDown}
 					disabled={disabled}
-					className="h-full w-[50px] border-0 bg-transparent pl-0 pr-6 text-center text-xs shadow-none hover:bg-transparent focus-visible:ring-0 disabled:opacity-50"
+					style={{ width: getMetricInputWidth(value) }}
+					className="h-full flex-none border-0 bg-transparent pl-0 pr-6 text-center text-xs shadow-none hover:bg-transparent focus-visible:ring-0 disabled:opacity-50"
 					placeholder="16"
 					title={t("stylePanel.fontSize")}
 					min={1}
