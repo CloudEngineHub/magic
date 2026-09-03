@@ -11,11 +11,18 @@ use App\Domain\SuperMagic\Common\Event\DeleteEventSource;
 use App\Domain\SuperMagic\Common\RecycleBin\Enum\RecycleBinResourceType;
 use App\Domain\SuperMagic\Common\RecycleBin\Service\RecycleBinDomainService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Enum\FileDeletionPolicy;
 use App\Domain\SuperMagic\File\Event\DirectoryDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FileDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FilesBatchDeletedEvent;
+use App\Domain\SuperMagic\File\Service\FileDeletionPolicyContext;
+use App\Domain\SuperMagic\File\Service\FileDeletionPolicyResolver;
+use App\Domain\SuperMagic\File\Service\TaskFileCleanupRecordService;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Task\Repository\Facade\TaskRepositoryInterface;
+use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
+use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\Domain\SuperMagic\Workspace\Service\WorkspaceDomainService;
 use App\Infrastructure\SuperMagic\Utils\RelativeFilePathUtil;
 use Hyperf\Event\Annotation\Listener;
@@ -37,6 +44,10 @@ class FileRecycleBinSubscriber implements ListenerInterface
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly ProjectDomainService $projectDomainService,
         private readonly WorkspaceDomainService $workspaceDomainService,
+        private readonly FileDeletionPolicyResolver $deletionPolicyResolver,
+        private readonly TaskFileCleanupRecordService $cleanupRecordService,
+        private readonly TopicDomainService $topicDomainService,
+        private readonly TaskRepositoryInterface $taskRepository,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(self::class);
@@ -54,6 +65,24 @@ class FileRecycleBinSubscriber implements ListenerInterface
     public function process(object $event): void
     {
         try {
+            $source = match (true) {
+                $event instanceof FileDeletedEvent => $event->getSource(),
+                $event instanceof DirectoryDeletedEvent => $event->getSource(),
+                $event instanceof FilesBatchDeletedEvent => $event->getSource(),
+                default => null,
+            };
+
+            if ($source === null || ! $this->shouldRecordSource($source)) {
+                return;
+            }
+
+            if ($event instanceof FileDeletedEvent && ! $event->getFileEntity()->isProjectFile()) {
+                return;
+            }
+            if ($event instanceof DirectoryDeletedEvent && ! $event->getDirectoryEntity()->isProjectFile()) {
+                return;
+            }
+
             match (true) {
                 $event instanceof FileDeletedEvent => $this->handleFileDeleted($event),
                 $event instanceof DirectoryDeletedEvent => $this->handleDirectoryDeleted($event),
@@ -61,8 +90,9 @@ class FileRecycleBinSubscriber implements ListenerInterface
                 default => null,
             };
         } catch (Throwable $e) {
-            $this->logger->error('写入文件回收站失败', [
+            $this->logger->error('文件删除策略处理失败', [
                 'event' => $event::class,
+                'event_id' => (string) $event->getEventId(),
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -71,12 +101,21 @@ class FileRecycleBinSubscriber implements ListenerInterface
 
     private function handleFileDeleted(FileDeletedEvent $event): void
     {
-        if (! $this->taskFileDomainService->shouldEnterRecycleBin($event->getFileEntity(), $event->getSource())) {
+        $entity = $event->getFileEntity();
+        $context = $this->buildPolicyContext([$entity], $event->getSource());
+        if ($this->deletionPolicyResolver->resolve($entity, $event->getSource(), $context) === FileDeletionPolicy::PhysicalDelete) {
+            $this->cleanupRecordService->enqueue(
+                $entity,
+                (string) $event->getEventId(),
+                $event->getSource(),
+                'deletion_policy',
+                $event->getUserId()
+            );
             return;
         }
 
         $this->recordFileDeletion(
-            $event->getFileEntity(),
+            $entity,
             $event->getUserId(),
             $event->getSource()
         );
@@ -84,12 +123,21 @@ class FileRecycleBinSubscriber implements ListenerInterface
 
     private function handleDirectoryDeleted(DirectoryDeletedEvent $event): void
     {
-        if (! $this->taskFileDomainService->shouldEnterRecycleBin($event->getDirectoryEntity(), $event->getSource())) {
+        $entity = $event->getDirectoryEntity();
+        $context = $this->buildPolicyContext([$entity], $event->getSource());
+        if ($this->deletionPolicyResolver->resolve($entity, $event->getSource(), $context) === FileDeletionPolicy::PhysicalDelete) {
+            $this->cleanupRecordService->enqueue(
+                $entity,
+                (string) $event->getEventId(),
+                $event->getSource(),
+                'deletion_policy',
+                $event->getUserAuthorization()->getId()
+            );
             return;
         }
 
         $this->recordFileDeletion(
-            $event->getDirectoryEntity(),
+            $entity,
             $event->getUserAuthorization()->getId(),
             $event->getSource()
         );
@@ -98,23 +146,85 @@ class FileRecycleBinSubscriber implements ListenerInterface
     private function handleFilesBatchDeleted(FilesBatchDeletedEvent $event): void
     {
         $fileEntities = array_values(array_filter(
-            $this->taskFileDomainService->filterProjectSpaceFiles($event->getAllEntities()),
-            fn (TaskFileEntity $fileEntity): bool => $this->taskFileDomainService->shouldEnterRecycleBin($fileEntity, $event->getSource())
+            $event->getAllEntities(),
+            static fn (TaskFileEntity $entity): bool => $entity->isProjectFile()
         ));
-        if (empty($fileEntities)) {
+        if ($fileEntities === []) {
             return;
         }
 
+        $context = $this->buildPolicyContext($fileEntities, $event->getSource());
         $relativePathMap = $this->buildRelativePathMap($fileEntities, $event->getProjectId());
 
         foreach ($fileEntities as $fileEntity) {
-            $this->recordFileDeletion(
-                $fileEntity,
-                $event->getUserId(),
-                $event->getSource(),
-                $relativePathMap[$fileEntity->getFileId()] ?? null
-            );
+            try {
+                if ($this->deletionPolicyResolver->resolve($fileEntity, $event->getSource(), $context) === FileDeletionPolicy::PhysicalDelete) {
+                    $this->cleanupRecordService->enqueue(
+                        $fileEntity,
+                        (string) $event->getEventId(),
+                        $event->getSource(),
+                        'deletion_policy',
+                        $event->getUserId()
+                    );
+                    continue;
+                }
+                $this->recordFileDeletion(
+                    $fileEntity,
+                    $event->getUserId(),
+                    $event->getSource(),
+                    $relativePathMap[$fileEntity->getFileId()] ?? null
+                );
+            } catch (Throwable $e) {
+                $this->logger->error('单个文件删除策略处理失败，继续处理批次', [
+                    'event_id' => (string) $event->getEventId(),
+                    'file_id' => $fileEntity->getFileId(),
+                    'project_id' => $fileEntity->getProjectId(),
+                    'topic_id' => $fileEntity->getTopicId(),
+                    'task_id' => $fileEntity->getTaskId(),
+                    'source' => $event->getSource()->value,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
+    }
+
+    private function shouldRecordSource(DeleteEventSource $source): bool
+    {
+        return in_array($source, [DeleteEventSource::User, DeleteEventSource::Agent], true);
+    }
+
+    /** @param TaskFileEntity[] $entities */
+    private function buildPolicyContext(array $entities, DeleteEventSource $source): FileDeletionPolicyContext
+    {
+        if (in_array($source, [DeleteEventSource::InternalOverwrite, DeleteEventSource::SystemSync], true)) {
+            return new FileDeletionPolicyContext();
+        }
+
+        $taskIds = [];
+        $topicIds = [];
+        foreach ($entities as $entity) {
+            if ($entity->getTaskId() > 0) {
+                $taskIds[$entity->getTaskId()] = $entity->getTaskId();
+            }
+            if ($entity->getTopicId() > 0) {
+                $topicIds[$entity->getTopicId()] = $entity->getTopicId();
+            }
+        }
+
+        return new FileDeletionPolicyContext(
+            $this->taskRepository->getTasksByIds(array_values($taskIds)),
+            $this->indexTopics($this->topicDomainService->getTopicsByIds(array_values($topicIds)))
+        );
+    }
+
+    /** @param array<int, TopicEntity> $topics */
+    private function indexTopics(array $topics): array
+    {
+        $indexed = [];
+        foreach ($topics as $topic) {
+            $indexed[$topic->getId()] = $topic;
+        }
+        return $indexed;
     }
 
     private function recordFileDeletion(

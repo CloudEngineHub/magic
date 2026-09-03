@@ -15,16 +15,21 @@ from uuid import uuid4
 
 from loguru import logger
 
-from app.service.asr.asr_file_detector import AsrFileDetector
-from app.service.asr.asr_time_config import asr_time_config
-from app.service.asr.asr_size_config import asr_size_config
 from app.service.asr.asr_base import AsrServiceBase
+from app.service.asr.asr_file_detector import AsrFileDetector
 from app.service.asr.asr_local_proxy import AsrLocalWorkspaceProxy
 from app.service.asr.asr_merge_task_manager import AsrMergeTaskManager
+from app.service.asr.asr_size_config import asr_size_config
+from app.service.asr.asr_time_config import asr_time_config
+from app.service.asr.asr_utils import normalize_audio_format, resolve_audio_format_from_directory
 
 
-class AsrMergeOperations(AsrServiceBase):
-    """ASR 合并操作类 - 简化版,只支持 WAV 格式"""
+class AsrWavMergeOperations(AsrServiceBase):
+    """WAV 合并操作类。
+
+    该类只负责 WAV 的录音中增量合并。Opus finish 后的一次性全量合并
+    由 :class:`AsrOpusMergeOperations` 独立负责，避免两种格式的策略互相污染。
+    """
 
     def __init__(self, file_detector: AsrFileDetector):
         """
@@ -59,9 +64,9 @@ class AsrMergeOperations(AsrServiceBase):
             dispatcher = AgentDispatcher.get_instance()
             if dispatcher and dispatcher.agent_context:
                 dispatcher.agent_context.update_activity_time()
-                logger.debug(f"{AsrMergeOperations.LOG_PREFIX} 已重置 agent idle 时间 - {operation}")
+                logger.debug(f"{AsrWavMergeOperations.LOG_PREFIX} 已重置 agent idle 时间 - {operation}")
         except Exception as e:
-            logger.warning(f"{AsrMergeOperations.LOG_PREFIX} ⚠️ 更新 agent 活动时间失败: {e}")
+            logger.warning(f"{AsrWavMergeOperations.LOG_PREFIX} ⚠️ 更新 agent 活动时间失败: {e}")
 
     async def safe_rename_file(
         self, source: Path, target: Path, operation_name: str = "重命名", max_retries: int = 2
@@ -113,7 +118,7 @@ class AsrMergeOperations(AsrServiceBase):
     async def concat_group_files(
         self, task_key: str, group_files: List[Path], output_path: Path, operation_name: str = "合并"
     ) -> bool:
-        """使用ffmpeg concat合并多个 WAV 文件"""
+        """使用 FFmpeg concat 增量合并多个 WAV 音频文件。"""
         async with self.get_concat_lock(task_key):
             return await self._run_concat_task(task_key, group_files, output_path, operation_name)
 
@@ -170,7 +175,10 @@ class AsrMergeOperations(AsrServiceBase):
 
         try:
             # 1. 验证文件
-            valid_files, expected_size = await self._validate_source_files(task_key, group_files, operation_name)
+            expected_format = output_path.suffix.lower().lstrip(".")
+            valid_files, expected_size = await self._validate_source_files(
+                task_key, group_files, operation_name, expected_format
+            )
             if not valid_files:
                 return False
 
@@ -200,7 +208,7 @@ class AsrMergeOperations(AsrServiceBase):
             await asyncio.to_thread(concat_list_file.unlink, missing_ok=True)
 
     async def _validate_source_files(
-        self, task_key: str, group_files: List[Path], operation_name: str
+        self, task_key: str, group_files: List[Path], operation_name: str, expected_format: str | None = None
     ) -> tuple[List[Path], int]:
         """验证并过滤有效的源文件，返回有效文件列表和预期总大小"""
         valid_files = []
@@ -218,6 +226,10 @@ class AsrMergeOperations(AsrServiceBase):
                     wait_interval=asr_time_config.FILE_READY_WAIT_INTERVAL,
                     timeout=asr_time_config.FILE_READY_TIMEOUT,
                 )
+                if is_ready and expected_format == "wav":
+                    is_valid_format, format_reason = await self.file_detector.validate_audio_file(f, expected_format)
+                    if not is_valid_format:
+                        return f, False, format_reason
                 return f, is_ready, reason
 
         results = await asyncio.gather(*[check_file(f) for f in group_files])
@@ -271,27 +283,7 @@ class AsrMergeOperations(AsrServiceBase):
 
     async def _run_ffmpeg_process(self, list_file: Path, temp_output: Path, operation_name: str) -> bool:
         """执行 FFmpeg 进程"""
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-loglevel",
-            "error",
-            "-fflags",
-            "+genpts",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            str(list_file),
-            "-c",
-            "copy",
-            "-avoid_negative_ts",
-            "make_zero",
-            "-reset_timestamps",
-            "1",
-            str(temp_output),
-        ]
+        cmd = self._build_ffmpeg_concat_command(list_file, temp_output)
 
         process = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -310,6 +302,27 @@ class AsrMergeOperations(AsrServiceBase):
             return False
 
         return True
+
+    @staticmethod
+    def _build_ffmpeg_concat_command(list_file: Path, temp_output: Path) -> list[str]:
+        """Build the WAV concat command, preserving the existing copy strategy."""
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-fflags",
+            "+genpts",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(list_file),
+        ]
+        cmd.extend(["-c", "copy"])
+        cmd.extend(["-avoid_negative_ts", "make_zero", "-reset_timestamps", "1", str(temp_output)])
+        return cmd
 
     def _kill_process(self, process):
         try:
@@ -330,10 +343,11 @@ class AsrMergeOperations(AsrServiceBase):
             return False
 
         # 1. 验证临时输出文件
+        size_expectation = self._size_expectation_for_output(output_path, expected_size)
         is_ready, reason = await self.wait_for_file_ready(
             temp_output,
             min_size=asr_size_config.MERGED_OUTPUT_MIN_SIZE,
-            expected_size=expected_size or None,
+            expected_size=size_expectation,
             retries=asr_time_config.MERGED_FILE_READY_RETRIES,
             wait_interval=asr_time_config.FILE_READY_WAIT_INTERVAL,
             timeout=asr_time_config.FILE_READY_TIMEOUT,
@@ -353,7 +367,11 @@ class AsrMergeOperations(AsrServiceBase):
         await asyncio.sleep(asr_time_config.OPERATION_RETRY_WAIT)
 
         # 4. 验证目标文件
-        return await self._verify_final_output(output_path, operation_name, source_count, expected_size)
+        return await self._verify_final_output(output_path, operation_name, source_count, size_expectation or 0)
+
+    @staticmethod
+    def _size_expectation_for_output(output_path: Path, expected_size: int) -> int | None:
+        return expected_size or None
 
     async def _verify_final_output(
         self, output_path: Path, operation_name: str, source_count: int, expected_size: int
@@ -383,7 +401,7 @@ class AsrMergeOperations(AsrServiceBase):
         cleanup_patterns = [
             f".remux_*.{audio_format}",
             f".consolidate_temp.{audio_format}",
-            f".concat_temp_*",
+            ".concat_temp_*",
             ".concat_list_*.txt",
         ]
 
@@ -482,13 +500,13 @@ class AsrMergeOperations(AsrServiceBase):
         return 0
 
     async def prepare_merge_files(
-        self, task_key: str, source_dir: Path, all_files: list, is_first_run: bool = False
+        self, task_key: str, source_dir: Path, all_files: list, is_first_run: bool = False, audio_format: str = None
     ) -> tuple[list[Path], Path | None, bool]:
         """
         准备合并所需的文件
 
         策略（以 Remote 为准，优先复用本地缓存）：
-        1. 验证并同步 Remote 的检查点（merged.wav + metadata.json）
+        1. 验证并同步 Remote 的检查点（merged.{ext} + metadata.json）
         2. 根据检查点有效性决定增量或全量
         3. 同步需要的源文件
         4. 准备合并输入
@@ -498,12 +516,14 @@ class AsrMergeOperations(AsrServiceBase):
             source_dir: 源目录路径
             all_files: 所有文件列表 [(index, path), ...]
             is_first_run: 是否首次运行
+            audio_format: 任务音频格式（wav/opus），None 回退 wav 兼容历史任务
 
         Returns:
             tuple: (本地文件路径列表, 临时合并输入文件, 是否增量合并)
         """
-        proxy = AsrLocalWorkspaceProxy(task_key, source_dir)
-        local_merged_path = proxy.get_local_path(self.MERGED_WAV_FILENAME)
+        effective_format = resolve_audio_format_from_directory(source_dir, audio_format)
+        proxy = AsrLocalWorkspaceProxy(task_key, source_dir, audio_format=effective_format or audio_format)
+        local_merged_path = proxy.get_local_path(proxy.merged_filename)
 
         # 1. 验证并同步检查点
         checkpoint_valid, last_merged_index = await proxy.validate_and_sync_checkpoint(is_first_run=is_first_run)
@@ -569,7 +589,9 @@ class AsrMergeOperations(AsrServiceBase):
                 use_incremental = True
                 logger.info(f"{self.LOG_PREFIX} 🚀 task_key={task_key} 采用增量合并 (Base Index: {last_merged_index})")
 
-                local_merged_temp_input = proxy.get_local_path(f".merged_input_{uuid4().hex}.wav")
+                local_merged_temp_input = proxy.get_local_path(
+                    f".merged_input_{uuid4().hex}.{normalize_audio_format(effective_format or audio_format)}"
+                )
                 try:
                     await asyncio.to_thread(local_merged_path.rename, local_merged_temp_input)
                     local_file_paths.append(local_merged_temp_input)
@@ -612,6 +634,7 @@ class AsrMergeOperations(AsrServiceBase):
         use_incremental: bool,
         current_indices: set,
         total_files_count: int,
+        audio_format: str = None,
     ) -> bool:
         """
         执行合并、同步及后续处理
@@ -624,12 +647,14 @@ class AsrMergeOperations(AsrServiceBase):
             use_incremental: 是否使用增量合并
             current_indices: 当前索引集合
             total_files_count: 总文件数
+            audio_format: 任务音频格式（wav/opus），None 回退 wav 兼容历史任务
 
         Returns:
             bool: 是否完成任务（触发了任务完成流程）
         """
-        proxy = AsrLocalWorkspaceProxy(task_key, source_dir)
-        local_merged_path = proxy.get_local_path(self.MERGED_WAV_FILENAME)
+        effective_format = resolve_audio_format_from_directory(source_dir, audio_format)
+        proxy = AsrLocalWorkspaceProxy(task_key, source_dir, audio_format=effective_format or audio_format)
+        local_merged_path = proxy.get_local_path(proxy.merged_filename)
 
         success = await self.concat_group_files(
             task_key, local_file_paths, local_merged_path, f"{'增量' if use_incremental else '全量'}合并(Local)"
@@ -639,15 +664,15 @@ class AsrMergeOperations(AsrServiceBase):
             # 合并失败恢复
             if local_merged_temp_input and await asyncio.to_thread(local_merged_temp_input.exists):
                 await asyncio.to_thread(local_merged_temp_input.rename, local_merged_path)
-                logger.warning(f"{self.LOG_PREFIX} ⚠️ 合并失败，已恢复本地 {self.MERGED_WAV_FILENAME}")
+                logger.warning(f"{self.LOG_PREFIX} ⚠️ 合并失败，已恢复本地 {proxy.merged_filename}")
             return False
 
         # 合并成功，同步回 Remote
         # 大文件采用单次写回，减少网络挂载盘的双重写入开销（非原子，但失败会清理远端残留）
-        sync_success = await proxy.sync_local_to_remote_single_pass(self.MERGED_WAV_FILENAME)
+        sync_success = await proxy.sync_local_to_remote_single_pass(proxy.merged_filename)
 
         if not sync_success:
-            logger.error(f"{self.LOG_PREFIX} ❌ 同步 {self.MERGED_WAV_FILENAME} 到远程失败")
+            logger.error(f"{self.LOG_PREFIX} ❌ 同步 {proxy.merged_filename} 到远程失败")
             return False
 
         # 同步成功，保存元数据并清理
