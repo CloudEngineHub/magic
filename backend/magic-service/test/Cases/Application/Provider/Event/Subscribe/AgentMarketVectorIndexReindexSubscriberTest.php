@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\Provider\Event\Subscribe;
 
-use App\Application\Provider\Event\Subscribe\AgentMarketVectorIndexReindexSubscriber;
+use App\Application\SuperMagic\Agent\Event\Subscribe\AgentMarketVectorIndexReindexSubscriber;
 use App\Application\SuperMagic\Agent\Service\AdminSuperMagicAgentAppService;
 use App\Domain\Provider\Entity\AiAbilityEntity;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
