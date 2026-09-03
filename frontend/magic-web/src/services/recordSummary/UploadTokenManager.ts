@@ -193,7 +193,8 @@ export class UploadTokenManager {
 				message: "Token请求失败",
 				context: { sessionId },
 			})
-			throw isTaskEndError(error) ? error : toSafeTokenError(error)
+			// Always sanitize; task-end code/sessionId stay on the safe error
+			throw toSafeTokenError(error)
 		} finally {
 			this.refreshPromises.delete(cacheKey)
 		}
@@ -454,7 +455,8 @@ export class UploadTokenManager {
 				message: "强制刷新Token失败",
 				context: { sessionId },
 			})
-			throw isTaskEndError(error) ? error : toSafeTokenError(error)
+			// Always sanitize; task-end code/sessionId stay on the safe error
+			throw toSafeTokenError(error)
 		}
 	}
 

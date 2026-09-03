@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
+import { createTaskEndError, isTaskEndError, type TaskEndError } from "../RecordingErrorManager"
 import { UploadTokenManager } from "../UploadTokenManager"
 
 vi.mock("@/services/recordSummary/utils/RecordingLogger", () => {
@@ -16,7 +17,7 @@ vi.mock("@/services/recordSummary/utils/RecordingLogger", () => {
 vi.mock("../RecordingErrorManager", () => ({
 	isTaskEndError: vi.fn(() => false),
 	createTaskEndError: vi.fn(),
-	defaultErrorManager: { handleTaskEnd: vi.fn() },
+	defaultErrorManager: { handleTaskEnd: vi.fn().mockResolvedValue(undefined) },
 }))
 
 vi.mock("@/apis", () => ({
@@ -24,6 +25,8 @@ vi.mock("@/apis", () => ({
 		getRecordingSummaryUploadToken: vi.fn(),
 	},
 }))
+
+const TASK_END_CODE = 43200
 
 const SECRET_ERRORS = {
 	authorization: new Error("authorization: Bearer secret-authorization-value"),
@@ -34,6 +37,41 @@ const SECRET_ERRORS = {
 	jsonBodyToken: new Error(
 		'API rejected {"token":"secret-json-token","access_token":"secret-access","refresh_token":"secret-refresh"}',
 	),
+}
+
+function expectNoSecretLeak(message: string) {
+	expect(message).not.toContain("secret-authorization-value")
+	expect(message).not.toContain("test-upload-bearer-credential")
+	expect(message).not.toContain("secret-query-token")
+	expect(message).not.toContain("secret-json-token")
+	expect(message).not.toContain("secret-access")
+	expect(message).not.toContain("secret-refresh")
+	expect(message).not.toMatch(/Bearer\s+eyJ/)
+	expect(message).not.toContain("https://oss.example.com")
+}
+
+function asTaskEndError(apiError: Error): TaskEndError {
+	const error = new Error(apiError.message) as TaskEndError
+	error.code = TASK_END_CODE
+	error.sessionId = "session-1"
+	return error
+}
+
+function mockLeakyTaskEndError(originalMessage: string) {
+	vi.mocked(isTaskEndError).mockImplementation(
+		(error): error is TaskEndError =>
+			error !== null &&
+			typeof error === "object" &&
+			"code" in error &&
+			(error as { code: number }).code === TASK_END_CODE,
+	)
+	// Preserve the original secret-bearing message to exercise the rethrow path
+	vi.mocked(createTaskEndError).mockImplementation((sessionId, code) => {
+		const error = new Error(originalMessage) as TaskEndError
+		error.code = code ?? TASK_END_CODE
+		error.sessionId = sessionId
+		return error
+	})
 }
 
 describe("UploadTokenManager", () => {
@@ -54,14 +92,56 @@ describe("UploadTokenManager", () => {
 			expect(error).toBeInstanceOf(Error)
 			const message = (error as Error).message
 			expect(message).toMatch(/Failed to fetch token after 0 retries/)
-			expect(message).not.toContain("secret-authorization-value")
-			expect(message).not.toContain("test-upload-bearer-credential")
-			expect(message).not.toContain("secret-query-token")
-			expect(message).not.toContain("secret-json-token")
-			expect(message).not.toContain("secret-access")
-			expect(message).not.toContain("secret-refresh")
-			expect(message).not.toMatch(/Bearer\s+eyJ/)
-			expect(message).not.toContain("https://oss.example.com")
+			expectNoSecretLeak(message)
+		},
+	)
+
+	it.each(Object.entries(SECRET_ERRORS))(
+		"does not leak %s secrets when getToken hits a task-end error",
+		async (_name, apiError) => {
+			const taskEndError = asTaskEndError(apiError)
+			mockLeakyTaskEndError(taskEndError.message)
+			vi.mocked(SuperMagicApi.getRecordingSummaryUploadToken).mockRejectedValue(taskEndError)
+
+			const manager = new UploadTokenManager({
+				maxRetries: 0,
+				retryInterval: 0,
+			})
+			const error = await manager.getToken("session-1", "topic-1").catch((err) => err)
+
+			expect(error).toBeInstanceOf(Error)
+			expect((error as TaskEndError).code).toBe(TASK_END_CODE)
+			expect((error as TaskEndError).sessionId).toBe("session-1")
+			expect(isTaskEndError(error)).toBe(true)
+			expectNoSecretLeak((error as Error).message)
+		},
+	)
+
+	it.each(Object.entries(SECRET_ERRORS))(
+		"does not leak %s secrets when forceRefreshToken hits a task-end error",
+		async (_name, apiError) => {
+			vi.mocked(SuperMagicApi.getRecordingSummaryUploadToken).mockResolvedValueOnce({
+				sts_token: { token: "cached-token" },
+				expires_in: 3600,
+			} as never)
+
+			const manager = new UploadTokenManager({
+				maxRetries: 0,
+				retryInterval: 0,
+			})
+			await manager.getToken("session-1", "topic-1")
+
+			const taskEndError = asTaskEndError(apiError)
+			mockLeakyTaskEndError(taskEndError.message)
+			vi.mocked(SuperMagicApi.getRecordingSummaryUploadToken).mockRejectedValue(taskEndError)
+
+			const error = await manager.forceRefreshToken("session-1").catch((err) => err)
+
+			expect(error).toBeInstanceOf(Error)
+			expect((error as TaskEndError).code).toBe(TASK_END_CODE)
+			expect((error as TaskEndError).sessionId).toBe("session-1")
+			expect(isTaskEndError(error)).toBe(true)
+			expectNoSecretLeak((error as Error).message)
 		},
 	)
 })
