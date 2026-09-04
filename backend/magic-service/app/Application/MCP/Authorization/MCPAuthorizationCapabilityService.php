@@ -51,7 +51,8 @@ class MCPAuthorizationCapabilityService
         }
 
         try {
-            $serviceConfig->validate();
+            // 能力探测需要继续访问远端，以便把模式必填字段结构化返回给前端。
+            $serviceConfig->validate(false);
             $resource = $authorizationConfig->getResource() ?: $serviceConfig->getUrl();
             if ($resource === '' || str_contains($resource, '${')) {
                 throw new RuntimeException('MCP Authorization Resource 必须是完整 URL');

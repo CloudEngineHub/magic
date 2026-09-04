@@ -208,8 +208,10 @@ class MCPAuthorizationConfig extends AbstractValueObject
 
     /**
      * 验证新模式配置的静态约束。
+     *
+     * @param bool $validateRequiredFields 是否校验注册模式的条件必填字段
      */
-    public function validate(): void
+    public function validate(bool $validateRequiredFields = true): void
     {
         if (! in_array($this->registrationMode, ['auto', 'pre_registered', 'cimd', 'dcr'], true)) {
             ExceptionBuilder::throw(MCPErrorCode::ValidateFailed, 'common.invalid', ['label' => 'mcp.fields.registration_mode']);
@@ -217,10 +219,10 @@ class MCPAuthorizationConfig extends AbstractValueObject
         if ($this->tokenEndpointAuthMethod !== '' && ! in_array($this->tokenEndpointAuthMethod, ['none', 'client_secret_basic', 'client_secret_post'], true)) {
             ExceptionBuilder::throw(MCPErrorCode::ValidateFailed, 'common.invalid', ['label' => 'mcp.fields.token_endpoint_auth_method']);
         }
-        if ($this->registrationMode === 'pre_registered' && empty($this->clientId)) {
+        if ($validateRequiredFields && $this->registrationMode === 'pre_registered' && empty($this->clientId)) {
             ExceptionBuilder::throw(MCPErrorCode::ValidateFailed, 'common.empty', ['label' => 'mcp.fields.client_id']);
         }
-        if ($this->registrationMode === 'cimd' && ! filter_var($this->clientMetadataUrl, FILTER_VALIDATE_URL)) {
+        if ($validateRequiredFields && $this->registrationMode === 'cimd' && ! filter_var($this->clientMetadataUrl, FILTER_VALIDATE_URL)) {
             ExceptionBuilder::throw(MCPErrorCode::ValidateFailed, 'common.invalid', ['label' => 'mcp.fields.client_metadata_url']);
         }
         foreach (['resource_metadata_url' => $this->resourceMetadataUrl, 'authorization_server_url' => $this->authorizationServerUrl, 'authorization_endpoint' => $this->authorizationEndpoint, 'token_endpoint' => $this->tokenEndpoint, 'registration_endpoint' => $this->registrationEndpoint, 'redirect_uri' => $this->redirectUri] as $field => $url) {

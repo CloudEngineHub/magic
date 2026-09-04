@@ -87,6 +87,33 @@ class MCPAuthorizationPreflightServiceTest extends TestCase
         $this->assertContains('client_secret', $result['required_fields']);
     }
 
+    public function testReportsClientIdAsRequiredForPreRegisteredClient(): void
+    {
+        $mock = new MockHandler([
+            new Response(401),
+        ]);
+        $client = new Client(['handler' => HandlerStack::create($mock)]);
+        $authorizationConfig = new MCPAuthorizationConfig();
+        $authorizationConfig->setAuthorizationEndpoint('https://auth.example.com/authorize');
+        $authorizationConfig->setTokenEndpoint('https://auth.example.com/token');
+        $authorizationConfig->setRegistrationMode('pre_registered');
+
+        $serviceConfig = new ExternalSSEServiceConfig();
+        $serviceConfig->setUrl('https://mcp.example.com/mcp');
+        $serviceConfig->setAuthType(ServiceConfigAuthType::MCP_AUTHORIZATION);
+        $serviceConfig->setMcpAuthorizationConfig($authorizationConfig);
+
+        $server = new MCPServerEntity();
+        $server->setServiceConfig($serviceConfig);
+        $result = (new MCPAuthorizationCapabilityService(
+            $client,
+            new MCPAuthorizationDiscoveryClient($client)
+        ))->analyze($server);
+
+        $this->assertSame('needs_configuration', $result['status']);
+        $this->assertContains('client_id', $result['required_fields']);
+    }
+
     public function testAcceptsUnauthenticatedButReachableMcpResource(): void
     {
         $mock = new MockHandler([

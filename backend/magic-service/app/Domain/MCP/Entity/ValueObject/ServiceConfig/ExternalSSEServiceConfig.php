@@ -109,7 +109,12 @@ class ExternalSSEServiceConfig extends AbstractServiceConfig
         $this->mcpAuthorizationConfig = $config;
     }
 
-    public function validate(): void
+    /**
+     * 校验外部 MCP 服务配置。
+     *
+     * @param bool $validateAuthorizationRequiredFields 是否校验 MCP Authorization 模式的条件必填字段
+     */
+    public function validate(bool $validateAuthorizationRequiredFields = true): void
     {
         // Validate URL
         if (empty(trim($this->url))) {
@@ -137,7 +142,7 @@ class ExternalSSEServiceConfig extends AbstractServiceConfig
             $this->oauth2Config?->validate();
         }
         if ($this->authType === ServiceConfigAuthType::MCP_AUTHORIZATION) {
-            $this->mcpAuthorizationConfig?->validate();
+            $this->mcpAuthorizationConfig?->validate($validateAuthorizationRequiredFields);
         }
     }
 
