@@ -185,7 +185,11 @@ export class ExtendManager {
 	}
 
 	public enterExtendMode(elementId: string, contentId?: string): void {
-		if (!this.canvas.permissionManager.can("document.write")) return
+		if (
+			!this.canvas.permissionManager.can("document.write") ||
+			!this.canvas.permissionManager.can("sideEffect.generate")
+		)
+			return
 		if (this.extendingElementId === elementId) return
 
 		const elementData = this.canvas.elementManager.getElementData(elementId)
@@ -290,6 +294,13 @@ export class ExtendManager {
 
 	public confirmExtend(): void {
 		if (!this.extendingElementId || !this.tempSession) return
+		if (
+			!this.canvas.permissionManager.can("document.write") ||
+			!this.canvas.permissionManager.can("sideEffect.generate")
+		) {
+			this.cancelExtend()
+			return
+		}
 		const element = this.canvas.elementManager.getElementData(this.extendingElementId)
 		if (
 			!element ||

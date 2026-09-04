@@ -531,6 +531,32 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
 	})
 
+	it("reports a missing bare resource path in a complete snapshot", async () => {
+		const tree = attachments().filter((item: any) => item.file_id !== "image")
+		vi.mocked(getFileContentById).mockResolvedValue(
+			projectContent("1.0.0", {
+				elements: [{ type: "image", contents: [{ src: "images/a.png" }] }],
+			}) as never,
+		)
+
+		const result = await repairCanvasProjectsBeforeFileOperation({
+			attachments: tree,
+			items: [tree[0]],
+			operation: "move",
+			attachmentSnapshotComplete: true,
+		})
+
+		expect(result.hasWarnings).toBe(true)
+		expect(result.warnings).toEqual([
+			{
+				projectName: "Canvas",
+				fileName: "magic.project.js",
+				message: "missing resource paths: images/a.png",
+			},
+		])
+		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
+	})
+
 	it("rewrites a unique bare current-canvas resource path to a canvas relative path", async () => {
 		vi.mocked(getFileContentById).mockResolvedValue(
 			projectContent("1.0.0", {

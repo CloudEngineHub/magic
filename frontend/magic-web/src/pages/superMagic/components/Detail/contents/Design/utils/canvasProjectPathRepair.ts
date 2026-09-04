@@ -526,6 +526,7 @@ function resolveCanvasRelativePath(
 					: undefined)
 			if (resolved) return resolved
 		}
+		issues.missingPaths.add(value)
 		return value
 	}
 	for (const candidate of candidates) {

@@ -1004,7 +1004,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 						}
 			let pastedAssetIndex = 0
 
-			void getCanvasClipboardPasteController().paste(
+			void getCanvasClipboardPasteController(
+				canvas?.magicConfigManager.config?.methods,
+			).paste(
 				nativeEvent,
 				{
 					control: "video-editor",

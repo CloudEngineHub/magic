@@ -364,7 +364,11 @@ export class EraserManager {
 	}
 
 	public enterEraserMode(elementId: string, contentId?: string): void {
-		if (!this.canvas.permissionManager.can("document.write")) return
+		if (
+			!this.canvas.permissionManager.can("document.write") ||
+			!this.canvas.permissionManager.can("sideEffect.generate")
+		)
+			return
 		if (this.erasingElementId === elementId) return
 
 		const elementData = this.canvas.elementManager.getElementData(elementId)
@@ -548,6 +552,13 @@ export class EraserManager {
 
 	public confirmEraser(): void {
 		if (!this.erasingElementId) {
+			return
+		}
+		if (
+			!this.canvas.permissionManager.can("document.write") ||
+			!this.canvas.permissionManager.can("sideEffect.generate")
+		) {
+			this.cancelEraser()
 			return
 		}
 		const element = this.canvas.elementManager.getElementData(this.erasingElementId)
