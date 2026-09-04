@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useMemoizedFn, useDebounceFn } from "ahooks"
 import ModelSwitchContainer from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/ModelSwitchContainer"
 import { useMessageEditorStore } from "@/pages/superMagic/components/MessageEditor/stores"
@@ -31,6 +31,10 @@ import {
 	SUPER_MAGIC_INTERRUPT_DEBOUNCE_MS,
 } from "@/pages/superMagic/services/sendSuperMagicInterruptMessage"
 import { userStore } from "@/models/user"
+import {
+	runForceRecordingOverride,
+	type ForceRecordingSource,
+} from "@/components/business/RecordingSummary/utils/force-recording-override"
 
 type SaveSuperMagicTopicModel = RecordSummaryEditorPanelRef["saveSuperMagicTopicModel"]
 
@@ -92,6 +96,8 @@ export function useRecordSummaryEditorPanelController({
 	const [uploadFileId, setUploadFileId] = useState<string | null>(null)
 	const [uploadProgress, setUploadProgress] = useState(0)
 	const [selectedAudioSource, setSelectedAudioSource] = useState<AudioSourceType>("microphone")
+	const [isForceStartingRecording, setIsForceStartingRecording] = useState(false)
+	const forceStartInFlightRef = useRef(false)
 
 	const {
 		uploading,
@@ -257,6 +263,32 @@ export function useRecordSummaryEditorPanelController({
 		})
 	})
 
+	const handleForceStartRecording = useMemoizedFn(async () => {
+		if (forceStartInFlightRef.current) return
+		forceStartInFlightRef.current = true
+		setIsForceStartingRecording(true)
+		try {
+			const source: ForceRecordingSource = recordSummaryStore.isOtherTabRecording
+				? "otherTab"
+				: "currentTab"
+			const prepared = await runForceRecordingOverride(
+				{
+					duration:
+						source === "otherTab"
+							? recordSummaryStore.multiTabState.activeTabData.duration
+							: recordSummaryStore.duration,
+					source,
+					status: recordSummaryStore.isPaused ? "paused" : "recording",
+				},
+				() => recordSummaryService.prepareRecordingOverride(),
+			)
+			if (prepared) await handleStartRecording("new")
+		} finally {
+			forceStartInFlightRef.current = false
+			setIsForceStartingRecording(false)
+		}
+	})
+
 	const handleCancelUpload = useMemoizedFn(() => {
 		if (uploadFileId) {
 			removeFile(uploadFileId)
@@ -352,6 +384,7 @@ export function useRecordSummaryEditorPanelController({
 		handleCancelUpload,
 		handleCompleteRecordingWithSummary,
 		handleOpenCurrentRecording,
+		handleForceStartRecording,
 		handleStartRecording,
 		handleUploadFile,
 		isCurrentRecording,
@@ -363,6 +396,7 @@ export function useRecordSummaryEditorPanelController({
 		isSmall,
 		isMobile,
 		isStartingRecord: runtime.state.isStartingRecord,
+		isForceStartingRecording,
 		isTaskRunning,
 		isWaitingSummarize: recordSummaryStore.isWaitingSummarize,
 		leftToolbar,

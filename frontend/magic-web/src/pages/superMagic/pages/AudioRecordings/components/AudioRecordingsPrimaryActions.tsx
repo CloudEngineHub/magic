@@ -8,6 +8,8 @@ interface AudioRecordingsPrimaryActionsProps {
 	onOpenSettings: () => void
 	onImportFiles?: (files: FileList) => void
 	onStartRecording?: () => void
+	onForceStartRecording?: () => void
+	canForceStartRecording?: boolean
 	isStartingRecording?: boolean
 }
 
@@ -16,6 +18,8 @@ export function AudioRecordingsPrimaryActions({
 	onOpenSettings,
 	onImportFiles,
 	onStartRecording,
+	onForceStartRecording,
+	canForceStartRecording = false,
 	isStartingRecording = false,
 }: AudioRecordingsPrimaryActionsProps) {
 	const { t } = useTranslation("audioRecordings")
@@ -49,6 +53,21 @@ export function AudioRecordingsPrimaryActions({
 				<Mic className="size-4" aria-hidden />
 				<span>{t("actions.startRecording")}</span>
 			</Button>
+
+			{canForceStartRecording && onForceStartRecording ? (
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					className="h-9 shrink-0 gap-1.5 rounded-lg border-destructive/40 bg-background px-3 text-destructive shadow-xs hover:bg-destructive/5"
+					disabled={isStartingRecording}
+					onClick={onForceStartRecording}
+					data-testid="audio-recordings-force-start-recording-button"
+				>
+					<Mic className="size-4" aria-hidden />
+					<span>{t("actions.forceStartRecording")}</span>
+				</Button>
+			) : null}
 
 			{onImportFiles ? (
 				<Button

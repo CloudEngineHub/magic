@@ -94,6 +94,8 @@ export interface TabMessage {
 		| "RECORDING_STATUS_UPDATE"
 		| "TAB_HEARTBEAT"
 		| "RECORDING_DATA_SYNC"
+		| "RECORDING_OVERRIDE_REQUEST"
+		| "RECORDING_OVERRIDE_RESULT"
 		| "REQUEST_ACTIVE_TAB_FOCUS"
 		| "RECORD_SUMMARY_NOTIFICATION_CLOSE"
 	tabId: string
@@ -124,8 +126,18 @@ export interface RecordingDataSyncData {
 	sessionId?: string
 }
 
+export interface RecordingOverrideRequestData {
+	requestId: string
+	sessionId?: string
+}
+
+export interface RecordingOverrideResultData {
+	requestId: string
+	accepted: boolean
+}
+
 export type TabStatus = "active" | "inactive" | "pending" | "disconnected"
-export type TabLockReleaseType = "finish" | "closeTab" | "reset"
+export type TabLockReleaseType = "finish" | "closeTab" | "reset" | "force_override"
 
 export const enum TAB_COORDINATOR_EVENTS {
 	/**
@@ -159,6 +171,7 @@ export interface TabCoordinatorCallbacks {
 	onLockAcquired?: () => void
 	onLockReleased?: (data?: TabLockReleaseData) => void
 	onSendReleased?: () => void
+	onForceOverrideRequest?: (data: RecordingOverrideRequestData) => Promise<boolean> | boolean
 	/** Called when the user explicitly chooses to discard the historical recording */
 	onDiscardHistoricalRecording?: () => void
 	/** Called when the user explicitly chooses to summarize (finish) the historical recording */
@@ -179,6 +192,12 @@ interface PendingLockRequest {
 	priority: number
 }
 
+interface PendingOverrideRequest {
+	requestId: string
+	resolve: (value: boolean) => void
+	timeoutId: ReturnType<typeof setTimeout>
+}
+
 /**
  * TabCoordinator - Manages recording permissions across multiple tabs
  */
@@ -194,6 +213,7 @@ export class TabCoordinator {
 	private currentLockHolder: string | null = null
 	/** Replaces the old lockRequestPending boolean — carries resolve + priority */
 	private pendingLockRequest: PendingLockRequest | null = null
+	private pendingOverrideRequest: PendingOverrideRequest | null = null
 	/** Intent set by the handoff modal before requesting the lock */
 	private lockAcquireIntent: LockAcquireIntent = "restore"
 	private lastUserActivity = Date.now()
@@ -281,6 +301,12 @@ export class TabCoordinator {
 				break
 			case "RECORDING_DATA_SYNC":
 				this.handleDataSync(message)
+				break
+			case "RECORDING_OVERRIDE_REQUEST":
+				this.handleOverrideRequest(message)
+				break
+			case "RECORDING_OVERRIDE_RESULT":
+				this.handleOverrideResult(message)
 				break
 			case "TAB_HEARTBEAT":
 				this.handleHeartbeat(message)
@@ -488,6 +514,53 @@ export class TabCoordinator {
 			this.callbacks.onRecordingDataSync?.(syncData, message.tabId === this.tabId)
 			// logger.log("Synced recording data from active tab", syncData)
 		}
+	}
+
+	private handleOverrideRequest(message: TabMessage) {
+		const data = message.data as RecordingOverrideRequestData | undefined
+		if (!data?.requestId) return
+
+		const respond = (accepted: boolean) => {
+			this.sendMessage({
+				type: "RECORDING_OVERRIDE_RESULT",
+				tabId: this.tabId,
+				timestamp: Date.now(),
+				data: { requestId: data.requestId, accepted },
+			})
+		}
+
+		if (this.status !== "active") {
+			respond(false)
+			return
+		}
+
+		Promise.resolve(this.callbacks.onForceOverrideRequest?.(data) ?? false)
+			.then(respond)
+			.catch((error) => {
+				logger.error({
+					eventKey: "force_override_request_failed",
+					errorKind: "unknown",
+					error,
+					message: "Failed to handle recording override request",
+				})
+				respond(false)
+			})
+	}
+
+	private handleOverrideResult(message: TabMessage) {
+		const data = message.data as RecordingOverrideResultData | undefined
+		if (
+			!data?.requestId ||
+			!this.pendingOverrideRequest ||
+			data.requestId !== this.pendingOverrideRequest.requestId
+		) {
+			return
+		}
+
+		clearTimeout(this.pendingOverrideRequest.timeoutId)
+		const resolve = this.pendingOverrideRequest.resolve
+		this.pendingOverrideRequest = null
+		resolve(data.accepted)
 	}
 
 	private handleHeartbeat(message: TabMessage) {
@@ -852,6 +925,41 @@ export class TabCoordinator {
 	}
 
 	/**
+	 * Ask the active tab to stop immediately while preserving its local session data.
+	 * A missing response is treated as failure so a new recording is never started
+	 * while ownership of the microphone is ambiguous.
+	 */
+	requestRecordingOverride(sessionId?: string, timeoutMs = 8000): Promise<boolean> {
+		if (!this.currentLockHolder || this.currentLockHolder === this.tabId) {
+			return Promise.resolve(true)
+		}
+
+		if (this.pendingOverrideRequest) {
+			clearTimeout(this.pendingOverrideRequest.timeoutId)
+			this.pendingOverrideRequest.resolve(false)
+			this.pendingOverrideRequest = null
+		}
+
+		const requestId = `${this.tabId}_${Date.now()}_${Math.random().toString(36).slice(2)}`
+		return new Promise((resolve) => {
+			const timeoutId = setTimeout(() => {
+				if (!this.pendingOverrideRequest) return
+				this.pendingOverrideRequest = null
+				logger.warn("Recording override request timed out", { requestId })
+				resolve(false)
+			}, timeoutMs)
+
+			this.pendingOverrideRequest = { requestId, resolve, timeoutId }
+			this.sendMessage({
+				type: "RECORDING_OVERRIDE_REQUEST",
+				tabId: this.tabId,
+				timestamp: Date.now(),
+				data: { requestId, sessionId },
+			})
+		})
+	}
+
+	/**
 	 * Broadcast recording status update
 	 */
 	broadcastRecordingStatus(data: RecordingStatusData) {
@@ -939,6 +1047,11 @@ export class TabCoordinator {
 
 		// Settle any pending lock request so callers are not left hanging
 		this.cancelPendingLockRequest(false)
+		if (this.pendingOverrideRequest) {
+			clearTimeout(this.pendingOverrideRequest.timeoutId)
+			this.pendingOverrideRequest.resolve(false)
+			this.pendingOverrideRequest = null
+		}
 
 		document.removeEventListener("visibilitychange", this.handleVisibilityChange)
 		window.removeEventListener("unload", this.handleTabClose)

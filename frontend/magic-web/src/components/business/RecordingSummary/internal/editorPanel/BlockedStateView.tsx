@@ -29,6 +29,8 @@ interface BlockedStateViewProps {
 	onCancelUpload: () => void
 	onUploadFile: (fileList: FileList) => Promise<void>
 	onOpenCurrentRecording: () => void
+	onForceStartRecording?: () => void
+	isForceStartingRecording?: boolean
 }
 
 export function BlockedStateView({
@@ -49,11 +51,17 @@ export function BlockedStateView({
 	onCancelUpload,
 	onUploadFile,
 	onOpenCurrentRecording,
+	onForceStartRecording,
+	isForceStartingRecording = false,
 }: BlockedStateViewProps) {
 	const { t } = useTranslation("super")
 	const recordingWarningText = isOtherTabRecording
 		? t("recordingSummary.superEditorPanel.warning.recordingInProgressOtherTab")
 		: t("recordingSummary.superEditorPanel.warning.recordingInProgress")
+	const canForceStartRecording =
+		!isMediaRecorderNotSupported &&
+		Boolean(onForceStartRecording) &&
+		(isOtherTabRecording || ((isRecording || isPaused) && !isCurrentRecording))
 
 	return (
 		<div
@@ -93,7 +101,7 @@ export function BlockedStateView({
 						onFileChange={onUploadFile}
 					/>
 				)}
-				<div className="text-[10px] leading-[13px] text-[rgba(28,29,35,0.55)]">
+				<div className="flex flex-col items-center gap-1 text-[10px] leading-[13px] text-[rgba(28,29,35,0.55)]">
 					{isMediaRecorderNotSupported ? (
 						t("recordingSummary.superEditorPanel.warning.mediaRecorderNotSupported")
 					) : (
@@ -102,6 +110,17 @@ export function BlockedStateView({
 							{recordingWarningText}
 						</div>
 					)}
+					{canForceStartRecording ? (
+						<button
+							type="button"
+							className="cursor-pointer border-none bg-transparent p-0 text-[10px] font-medium text-foreground underline-offset-2 hover:underline"
+							disabled={isForceStartingRecording}
+							onClick={onForceStartRecording}
+							data-testid="recording-panel-force-start-button"
+						>
+							{t("recordingSummary.forceOverride.continue")}
+						</button>
+					) : null}
 				</div>
 			</div>
 

@@ -4832,6 +4832,23 @@
 			"useMerge": "Use Merged Content",
 			"useServer": "Use Latest Content"
 		},
+		"forceOverride": {
+			"cancel": "Cancel",
+			"confirm": "Stop and Start New Recording",
+			"continue": "Start Anyway",
+			"description": "The previous recording will stop and be kept. A new recording starts after cleanup is confirmed.",
+			"duration": "Duration",
+			"failed": "The previous recording could not be confirmed as stopped. The new recording has not started.",
+			"retry": "Try Again",
+			"retryTitle": "The previous recording is still active",
+			"source": "Recording source",
+			"sourceCurrentTab": "Current tab",
+			"sourceOtherTab": "Another tab",
+			"status": "Current status",
+			"statusPaused": "Paused",
+			"statusRecording": "Recording",
+			"title": "Start a new recording?"
+		},
 		"message": {
 			"completing": "Completing summary...",
 			"continueSummary": "Continue summary",

@@ -1,5 +1,5 @@
 import type { ComponentType } from "react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import i18next from "i18next"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -36,6 +36,10 @@ import type { VoiceResultUtterance } from "@/components/business/VoiceInput/serv
 import { buildOptimisticRecordingItem } from "../utils/build-optimistic-recording-item"
 import { resolveCardStatusFromListItem } from "../utils/normalize-audio-project-item"
 import { readAudioRecordingsFilterSession } from "../utils/audio-recordings-filter-session"
+import {
+	runForceRecordingOverride,
+	type ForceRecordingSource,
+} from "@/components/business/RecordingSummary/utils/force-recording-override"
 
 export type EntryPresentation = "list" | "recording"
 export type RecordingStartupState = "idle" | "starting" | "error"
@@ -200,6 +204,7 @@ export interface UseRecordingEntryFacadeResult {
 	startupState: RecordingStartupState
 	startupErrorMessage: string
 	startupErrorDetail: string
+	isForceStartingRecording: boolean
 	duration: string
 	recordingTitle: string
 	transcriptMessages: TranscriptMessage[]
@@ -209,6 +214,7 @@ export interface UseRecordingEntryFacadeResult {
 	optimisticItems: AudioProjectListItem[]
 	refreshToken: number
 	startRecording: () => Promise<void>
+	forceStartRecording: () => Promise<void>
 	showRecording: () => void
 	showList: () => void
 	pauseRecording: () => Promise<void>
@@ -266,6 +272,8 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	const [startupState, setStartupState] = useState<RecordingStartupState>("idle")
 	const [startupErrorMessage, setStartupErrorMessage] = useState("")
 	const [startupErrorDetail, setStartupErrorDetail] = useState("")
+	const [isForceStartingRecording, setIsForceStartingRecording] = useState(false)
+	const forceStartInFlightRef = useRef(false)
 	const [transcriptionEnabled, setTranscriptionEnabled] = useState(
 		recordSummaryStore.businessData.transcriptionEnabled,
 	)
@@ -436,7 +444,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			return
 		}
 
-		if (isSessionActive) {
+		if (recordSummaryStore.status !== "init") {
 			if (!isMobile) {
 				expandDesktopRecordingFloatPanel()
 				return
@@ -548,13 +556,38 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		}
 	}, [
 		isMobile,
-		isSessionActive,
 		createAudioProjectContext,
 		resolveRecordingModel,
 		runtime.actions,
 		runtime.state.isRecording,
 		t,
 	])
+
+	const forceStartRecording = useCallback(async () => {
+		if (forceStartInFlightRef.current) return
+		forceStartInFlightRef.current = true
+		setIsForceStartingRecording(true)
+		try {
+			const source: ForceRecordingSource = recordSummaryStore.isOtherTabRecording
+				? "otherTab"
+				: "currentTab"
+			const prepared = await runForceRecordingOverride(
+				{
+					duration:
+						source === "otherTab"
+							? recordSummaryStore.multiTabState.activeTabData.duration
+							: recordSummaryStore.duration,
+					source,
+					status: recordSummaryStore.isPaused ? "paused" : "recording",
+				},
+				() => recordSummaryService.prepareRecordingOverride(),
+			)
+			if (prepared) await startRecording()
+		} finally {
+			forceStartInFlightRef.current = false
+			setIsForceStartingRecording(false)
+		}
+	}, [recordSummaryService, startRecording])
 
 	/**
 	 * Pauses the shared recording session.
@@ -811,6 +844,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		startupState,
 		startupErrorMessage,
 		startupErrorDetail,
+		isForceStartingRecording,
 		duration: runtime.state.duration,
 		recordingTitle:
 			recordSummaryStore.businessData.project?.project_name ||
@@ -823,6 +857,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		optimisticItems,
 		refreshToken,
 		startRecording,
+		forceStartRecording,
 		showRecording,
 		showList,
 		pauseRecording,

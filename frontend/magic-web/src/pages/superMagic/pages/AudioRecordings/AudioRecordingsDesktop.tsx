@@ -42,6 +42,7 @@ import {
 	resolveAvailableAudioRecordingGroupId,
 } from "./utils/audio-recordings-filter-session"
 import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToProject"
+import recordSummaryStore from "@/stores/recordingSummary"
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -380,7 +381,14 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 					onOpenSettings={() => setIsSettingsOpen(true)}
 					onImportFiles={(files) => void facade.importAudioFiles(files)}
 					onStartRecording={() => void facade.startRecording()}
-					isStartingRecording={facade.startupState === "starting"}
+					onForceStartRecording={() => void facade.forceStartRecording()}
+					canForceStartRecording={
+						!recordSummaryStore.isMediaRecorderNotSupported &&
+						(facade.isRecording || facade.isPaused || facade.isOtherTabRecording)
+					}
+					isStartingRecording={
+						facade.startupState === "starting" || facade.isForceStartingRecording
+					}
 				/>
 			</div>
 

@@ -288,6 +288,52 @@ describe("TabCoordinator — LockAcquireIntent", () => {
 	})
 })
 
+describe("TabCoordinator — recording override", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+		MockBroadcastChannel.reset()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+		MockBroadcastChannel.reset()
+	})
+
+	it("asks the active tab to stop before taking over", async () => {
+		const onForceOverrideRequest = vi.fn(() => true)
+		const activeTab = makeCoordinator({ onForceOverrideRequest })
+		const requestingTab = makeCoordinator()
+
+		activeTab.acquireLock()
+		const resultPromise = requestingTab.requestRecordingOverride("session-1")
+		const result = await resultPromise
+
+		expect(result).toBe(true)
+		expect(onForceOverrideRequest).toHaveBeenCalledWith({
+			requestId: expect.any(String),
+			sessionId: "session-1",
+		})
+
+		activeTab.cleanup()
+		requestingTab.cleanup()
+	})
+
+	it("fails closed when the active tab does not respond", async () => {
+		const activeTab = makeCoordinator({
+			onForceOverrideRequest: () => new Promise<boolean>(() => undefined),
+		})
+		const requestingTab = makeCoordinator()
+		activeTab.acquireLock()
+
+		const resultPromise = requestingTab.requestRecordingOverride(undefined, 1000)
+		await vi.advanceTimersByTimeAsync(1000)
+
+		expect(await resultPromise).toBe(false)
+		activeTab.cleanup()
+		requestingTab.cleanup()
+	})
+})
+
 describe("TabCoordinator — LOCK_PRIORITY constants", () => {
 	it("LOCK_PRIORITY_USER > LOCK_PRIORITY_BACKGROUND", () => {
 		expect(LOCK_PRIORITY_USER).toBeGreaterThan(LOCK_PRIORITY_BACKGROUND)

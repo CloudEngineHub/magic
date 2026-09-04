@@ -66,4 +66,27 @@ describe("RecordingSessionManager server cancellation", () => {
 			}),
 		)
 	})
+
+	it("marks an explicitly overridden session as export-only", () => {
+		const manager = new RecordingSessionManager(
+			{ autoRestore: true, confirmRestore: false, clearOnRestore: false },
+			historyDB as never,
+		)
+		manager.createSession({
+			workspace: null,
+			model: null,
+			userId: "user-1",
+			project: null,
+			sessionId: "session-override",
+		})
+
+		const overridden = manager.markForceOverriddenSession()
+
+		expect(overridden).toMatchObject({
+			id: "session-override",
+			status: "server_cancelled",
+			termination: { source: "force_override" },
+		})
+		expect(manager.getCurrentSession()).toBeNull()
+	})
 })

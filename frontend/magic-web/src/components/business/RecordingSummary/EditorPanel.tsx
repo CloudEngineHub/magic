@@ -48,6 +48,8 @@ export const RecordSummaryEditorPanel = forwardRef<
 		handleCancelUpload,
 		handleCompleteRecordingWithSummary,
 		handleOpenCurrentRecording,
+		handleForceStartRecording,
+		isForceStartingRecording,
 		handleStartRecording,
 		handleUploadFile,
 		isCurrentRecording,
@@ -116,6 +118,8 @@ export const RecordSummaryEditorPanel = forwardRef<
 				onCancelUpload={handleCancelUpload}
 				onUploadFile={handleUploadFile}
 				onOpenCurrentRecording={handleOpenCurrentRecording}
+				onForceStartRecording={() => void handleForceStartRecording()}
+				isForceStartingRecording={isForceStartingRecording}
 			/>
 		) : (
 			<IdleStateView
