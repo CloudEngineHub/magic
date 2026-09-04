@@ -19,7 +19,7 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ReferenceMediaPayload;
 use InvalidArgumentException;
 
-final class GeminiOmniVideoAdapter implements VideoGenerationConnectivityTestableInterface
+final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityTestableInterface
 {
     private const string CONNECTIVITY_SUCCESS_MESSAGE = 'Video response format duration must be positive';
 

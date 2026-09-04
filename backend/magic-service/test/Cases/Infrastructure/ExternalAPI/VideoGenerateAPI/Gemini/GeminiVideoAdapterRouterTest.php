@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini;
 
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiOmniVideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiOmni1FlashVideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Capability\GeminiOmniGenerationCapabilityProvider;
 use PHPUnit\Framework\TestCase;
@@ -17,7 +17,7 @@ final class GeminiVideoAdapterRouterTest extends TestCase
 {
     public function testUnknownModelThrowsRuntimeException(): void
     {
-        $router = new GeminiVideoAdapterRouter(new GeminiOmniVideoAdapter(new GeminiOmniGenerationCapabilityProvider(), new GeminiFakeTransport()));
+        $router = new GeminiVideoAdapterRouter(new GeminiOmni1FlashVideoAdapter(new GeminiOmniGenerationCapabilityProvider(), new GeminiFakeTransport()));
         self::assertFalse($router->supportsModel('unknown', ''));
     }
 }

@@ -23,7 +23,7 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\DashScopeV
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\Wan30VideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Capability\Wan30GenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\DashScopeTransportInterface;
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiOmniVideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiOmni1FlashVideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Capability\GeminiOmniGenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportInterface;
@@ -328,7 +328,7 @@ class VideoGenerationConfigDomainServiceTest extends TestCase
                     new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
                 ),
                 new GeminiVideoAdapterRouter(
-                    new GeminiOmniVideoAdapter(
+                    new GeminiOmni1FlashVideoAdapter(
                         new GeminiOmniGenerationCapabilityProvider(),
                         $this->createMock(GeminiTransportInterface::class),
                     ),

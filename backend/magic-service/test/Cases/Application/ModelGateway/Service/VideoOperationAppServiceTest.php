@@ -60,7 +60,10 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\DashScopeV
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\Wan30VideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Capability\Wan30GenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\DashScopeTransportInterface;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiOmni1FlashVideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiVideoAdapterRouter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Capability\GeminiOmniGenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportInterface;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Adapter\KelingOmniVideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Adapter\KelingVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Capability\KelingOmniGenerationCapabilityProvider;
@@ -2643,6 +2646,16 @@ class VideoOperationAppServiceTest extends TestCase
                 ),
                 $this->createMock(GeminiVideoAdapterRouter::class),
             )
+        );
+    }
+
+    private function createGeminiVideoAdapterRouter(): GeminiVideoAdapterRouter
+    {
+        return new GeminiVideoAdapterRouter(
+            new GeminiOmni1FlashVideoAdapter(
+                new GeminiOmniGenerationCapabilityProvider(),
+                $this->createMock(GeminiTransportInterface::class),
+            ),
         );
     }
 }

@@ -12,7 +12,7 @@ use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoOperationStatus;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\ErrorCode\VideoGenerateErrorCode;
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiOmniVideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiOmni1FlashVideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Capability\GeminiOmniGenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportInterface;
@@ -29,7 +29,7 @@ use RuntimeException;
 use Throwable;
 
 /** @internal */
-final class GeminiOmniVideoAdapterTest extends TestCase
+final class GeminiOmni1FlashVideoAdapterTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -312,9 +312,9 @@ final class GeminiOmniVideoAdapterTest extends TestCase
         ]));
     }
 
-    private function adapter(?GeminiTransportInterface $transport = null): GeminiOmniVideoAdapter
+    private function adapter(?GeminiTransportInterface $transport = null): GeminiOmni1FlashVideoAdapter
     {
-        return new GeminiOmniVideoAdapter(new GeminiOmniGenerationCapabilityProvider(), $transport ?? new GeminiFakeTransport());
+        return new GeminiOmni1FlashVideoAdapter(new GeminiOmniGenerationCapabilityProvider(), $transport ?? new GeminiFakeTransport());
     }
 
     private function operation(array $request, string $model = 'gemini-omni-1.1-flash', string $providerModelId = ''): VideoQueueOperationEntity

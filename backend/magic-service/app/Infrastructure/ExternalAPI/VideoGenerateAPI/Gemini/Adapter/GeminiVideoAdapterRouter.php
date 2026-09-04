@@ -16,7 +16,7 @@ use RuntimeException;
 
 readonly class GeminiVideoAdapterRouter implements VideoGenerationConnectivityTestableInterface
 {
-    public function __construct(private GeminiOmniVideoAdapter $geminiOmniVideoAdapter)
+    public function __construct(private GeminiOmni1FlashVideoAdapter $geminiOmniVideoAdapter)
     {
     }
 
