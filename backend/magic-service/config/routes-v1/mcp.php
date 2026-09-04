@@ -4,7 +4,6 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-use App\Interfaces\MCP\Facade\Admin\MCPAuthorizationApi;
 use App\Interfaces\MCP\Facade\Admin\MCPOAuth2BindingApi;
 use App\Interfaces\MCP\Facade\Admin\MCPServerAdminApi;
 use App\Interfaces\MCP\Facade\Admin\MCPServerToolAdminApi;
@@ -46,8 +45,6 @@ Router::addGroup('/api/v1/mcp', static function () {
     });
 
     Router::addGroup('/authorization', static function () {
-        Router::post('/bind', [MCPAuthorizationApi::class, 'bind']);
-        Router::post('/unbind', [MCPAuthorizationApi::class, 'unbind']);
         // 授权服务器回调不携带 Magic 登录态，由 state 恢复用户和组织上下文。
         Router::get('/callback', [MCPAuthorizationCallbackPublicApi::class, 'callback']);
     });

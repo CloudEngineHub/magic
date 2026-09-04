@@ -46,24 +46,6 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
     }
 
     /**
-     * 消费回调参数并保存新模式凭据。
-     *
-     * @return array<string, mixed>
-     */
-    public function bind(Authenticatable $authorization, string $code, string $state, ?string $iss = null, ?string $error = null): array
-    {
-        $stateData = $this->consumeState($code, $state, $iss, $error);
-        if ((string) ($stateData['user_id'] ?? '') !== (string) $authorization->getId()) {
-            ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
-        }
-        $dataIsolation = $this->createMCPDataIsolation($authorization);
-        if ($dataIsolation->getCurrentOrganizationCode() !== (string) ($stateData['organization_code'] ?? '')) {
-            ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
-        }
-        return $this->completeBinding($stateData, $code);
-    }
-
-    /**
      * 处理不携带 Magic 登录态的公开回调。
      *
      * 回调身份由一次性 state 绑定的用户和组织决定，成功后只返回授权结果摘要。
@@ -126,7 +108,8 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
         if ($mcpServerCode === '') {
             ExceptionBuilder::throw(MCPErrorCode::ValidateFailed, 'common.empty', ['label' => 'mcp_server_code']);
         }
-        $dataIsolation = $this->createMCPDataIsolation($authorization);
+        // 解绑需要兼容官方组织中的 MCP Server，因此不限制当前组织。
+        $dataIsolation = $this->createMCPDataIsolation($authorization)->disabled();
         $deleted = $issuer !== null && $issuer !== ''
             ? $this->credentialDomainService->deleteByIssuer($dataIsolation, $authorization->getId(), $mcpServerCode, $issuer)
             : $this->credentialDomainService->deleteByServer($dataIsolation, $authorization->getId(), $mcpServerCode);
