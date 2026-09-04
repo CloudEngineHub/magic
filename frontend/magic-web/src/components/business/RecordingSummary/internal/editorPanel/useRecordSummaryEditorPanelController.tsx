@@ -94,8 +94,8 @@ export function useRecordSummaryEditorPanelController({
 	const [uploadFileId, setUploadFileId] = useState<string | null>(null)
 	const [uploadProgress, setUploadProgress] = useState(0)
 	const [selectedAudioSource, setSelectedAudioSource] = useState<AudioSourceType>("microphone")
-	const [isForceStartingRecording, setIsForceStartingRecording] = useState(false)
-	const forceStartInFlightRef = useRef(false)
+	const [isPreparingRecordingStart, setIsPreparingRecordingStart] = useState(false)
+	const startRecordingInFlightRef = useRef(false)
 
 	const {
 		uploading,
@@ -256,10 +256,6 @@ export function useRecordSummaryEditorPanelController({
 		},
 	)
 
-	const handleStartRecording = useMemoizedFn((mode: "new" | "current" = "new") =>
-		startNewRecording(mode),
-	)
-
 	const handleCompleteRecordingWithSummary = useMemoizedFn(() => {
 		runtime.actions.finishRecording({
 			onSuccess: (result) => {
@@ -272,13 +268,16 @@ export function useRecordSummaryEditorPanelController({
 		})
 	})
 
-	const handleForceStartRecording = useMemoizedFn(async () => {
-		if (forceStartInFlightRef.current) return
-		forceStartInFlightRef.current = true
-		setIsForceStartingRecording(true)
+	const handleStartRecording = useMemoizedFn(async (mode: "new" | "current" = "new") => {
+		if (startRecordingInFlightRef.current) return
+		startRecordingInFlightRef.current = true
+		setIsPreparingRecordingStart(true)
 		try {
 			const overrideContext = await recordSummaryService.getRecordingOverrideContext()
-			if (!overrideContext) return
+			if (!overrideContext) {
+				await startNewRecording(mode)
+				return
+			}
 
 			// Capture the target context before completing the old session because
 			// completion resets the shared recording store.
@@ -301,10 +300,18 @@ export function useRecordSummaryEditorPanelController({
 			const prepared = await runForceRecordingOverride(overrideContext, () =>
 				recordSummaryService.prepareRecordingOverride(overrideContext.sessionId),
 			)
-			if (prepared) await startNewRecording("new", startContext)
+			if (!prepared) return
+
+			// Keep the existing project-selection behavior when that explicit entry
+			// was chosen; otherwise reuse the captured context cleared by completion.
+			if (mode === "current") {
+				await startNewRecording("current")
+				return
+			}
+			await startNewRecording("new", startContext)
 		} finally {
-			forceStartInFlightRef.current = false
-			setIsForceStartingRecording(false)
+			startRecordingInFlightRef.current = false
+			setIsPreparingRecordingStart(false)
 		}
 	})
 
@@ -338,10 +345,6 @@ export function useRecordSummaryEditorPanelController({
 
 	const handleAudioSourceChange = useMemoizedFn((audioSource: AudioSourceType) => {
 		setSelectedAudioSource(audioSource)
-	})
-
-	const handleOpenCurrentRecording = useMemoizedFn(() => {
-		runtime.actions.openCurrentRecording()
 	})
 
 	useEffect(() => {
@@ -379,7 +382,7 @@ export function useRecordSummaryEditorPanelController({
 			value={selectedAudioSource}
 			onChange={handleAudioSourceChange}
 			size={size}
-			disabled={runtime.state.isStartingRecord || uploading}
+			disabled={runtime.state.isStartingRecord || isPreparingRecordingStart || uploading}
 		/>
 	) : null
 
@@ -402,11 +405,8 @@ export function useRecordSummaryEditorPanelController({
 		editorModeSwitch,
 		handleCancelUpload,
 		handleCompleteRecordingWithSummary,
-		handleOpenCurrentRecording,
-		handleForceStartRecording,
 		handleStartRecording,
 		handleUploadFile,
-		isCurrentRecording,
 		isMediaRecorderNotSupported: recordSummaryStore.isMediaRecorderNotSupported,
 		isModelReady,
 		isOtherTabRecording: recordSummaryStore.isOtherTabRecording,
@@ -414,8 +414,7 @@ export function useRecordSummaryEditorPanelController({
 		isRecording: runtime.state.isRecording,
 		isSmall,
 		isMobile,
-		isStartingRecord: runtime.state.isStartingRecord || isForceStartingRecording,
-		isForceStartingRecording,
+		isStartingRecord: runtime.state.isStartingRecord || isPreparingRecordingStart,
 		isTaskRunning,
 		isWaitingSummarize: recordSummaryStore.isWaitingSummarize,
 		leftToolbar,

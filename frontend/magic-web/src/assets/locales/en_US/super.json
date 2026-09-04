@@ -5002,7 +5002,9 @@
 				"duringRecording": "Please do not close this page, as closing may result in loss of recording content",
 				"mediaRecorderNotSupported": "Your browser does not support recording. You can upload existing audio files for summary.",
 				"recordingInProgress": "Recording is in progress. You cannot start a new recording at this time. You can upload existing audio files for summary.",
-				"recordingInProgressOtherTab": "Another tab is recording. You cannot start a new recording at this time. You can upload existing audio files for summary."
+				"recordingInProgressOtherTab": "Another tab is recording. You cannot start a new recording at this time. You can upload existing audio files for summary.",
+				"recordingOverride": "A recording is already in progress. Select Start Recording to confirm ending it and starting a new one.",
+				"recordingOverrideOtherTab": "Another tab is recording. Select Start Recording to confirm ending it and starting a new one."
 			}
 		},
 		"ui": {

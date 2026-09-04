@@ -201,7 +201,7 @@ export interface UseRecordingEntryFacadeResult {
 	startupState: RecordingStartupState
 	startupErrorMessage: string
 	startupErrorDetail: string
-	isForceStartingRecording: boolean
+	isPreparingRecordingStart: boolean
 	duration: string
 	recordingTitle: string
 	transcriptMessages: TranscriptMessage[]
@@ -211,7 +211,6 @@ export interface UseRecordingEntryFacadeResult {
 	optimisticItems: AudioProjectListItem[]
 	refreshToken: number
 	startRecording: () => Promise<void>
-	forceStartRecording: () => Promise<void>
 	showRecording: () => void
 	showList: () => void
 	pauseRecording: () => Promise<void>
@@ -269,8 +268,8 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	const [startupState, setStartupState] = useState<RecordingStartupState>("idle")
 	const [startupErrorMessage, setStartupErrorMessage] = useState("")
 	const [startupErrorDetail, setStartupErrorDetail] = useState("")
-	const [isForceStartingRecording, setIsForceStartingRecording] = useState(false)
-	const forceStartInFlightRef = useRef(false)
+	const [isPreparingRecordingStart, setIsPreparingRecordingStart] = useState(false)
+	const startRecordingInFlightRef = useRef(false)
 	const [transcriptionEnabled, setTranscriptionEnabled] = useState(
 		recordSummaryStore.businessData.transcriptionEnabled,
 	)
@@ -547,40 +546,47 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	])
 
 	const startRecording = useCallback(async () => {
-		if (recordSummaryStore.isOtherTabRecording) {
-			toast.error(t("recordingSummary.superEditorPanel.warning.recordingInProgressOtherTab"))
-			return
-		}
-
-		if (recordSummaryStore.status !== "init") {
-			if (!isMobile) {
-				expandDesktopRecordingFloatPanel()
-				return
-			}
-			setPresentation("recording")
-			return
-		}
-
-		await startNewRecording()
-	}, [isMobile, startNewRecording, t])
-
-	const forceStartRecording = useCallback(async () => {
-		if (forceStartInFlightRef.current) return
-		forceStartInFlightRef.current = true
-		setIsForceStartingRecording(true)
+		if (startRecordingInFlightRef.current) return
+		startRecordingInFlightRef.current = true
+		setIsPreparingRecordingStart(true)
 		try {
 			const overrideContext = await recordSummaryService.getRecordingOverrideContext()
-			if (!overrideContext) return
+			if (overrideContext) {
+				const prepared = await runForceRecordingOverride(overrideContext, () =>
+					recordSummaryService.prepareRecordingOverride(overrideContext.sessionId),
+				)
+				if (!prepared) return
 
-			const prepared = await runForceRecordingOverride(overrideContext, () =>
-				recordSummaryService.prepareRecordingOverride(overrideContext.sessionId),
-			)
-			if (prepared) await startNewRecording()
+				await startNewRecording()
+				return
+			}
+
+			// Preserve the previous fallback when the shared store changes between
+			// conflict detection and startup, instead of creating a second session.
+			if (recordSummaryStore.isOtherTabRecording) {
+				toast.error(
+					t("recordingSummary.superEditorPanel.warning.recordingInProgressOtherTab"),
+				)
+				return
+			}
+
+			if (recordSummaryStore.status !== "init") {
+				if (!isMobile) {
+					expandDesktopRecordingFloatPanel()
+					return
+				}
+				setPresentation("recording")
+				return
+			}
+
+			await startNewRecording()
+		} catch {
+			toast.error(t("recordingSummary.recordErrorModal.title"))
 		} finally {
-			forceStartInFlightRef.current = false
-			setIsForceStartingRecording(false)
+			startRecordingInFlightRef.current = false
+			setIsPreparingRecordingStart(false)
 		}
-	}, [recordSummaryService, startNewRecording])
+	}, [isMobile, recordSummaryService, startNewRecording, t])
 
 	/**
 	 * Pauses the shared recording session.
@@ -837,7 +843,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		startupState,
 		startupErrorMessage,
 		startupErrorDetail,
-		isForceStartingRecording,
+		isPreparingRecordingStart,
 		duration: runtime.state.duration,
 		recordingTitle:
 			recordSummaryStore.businessData.project?.project_name ||
@@ -850,7 +856,6 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		optimisticItems,
 		refreshToken,
 		startRecording,
-		forceStartRecording,
 		showRecording,
 		showList,
 		pauseRecording,

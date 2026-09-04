@@ -7,7 +7,6 @@
 		"deleteFailed": "Failed to delete. Please try again later.",
 		"deleteSuccess": "Deleted successfully",
 		"deleteTitle": "Delete",
-		"forceStartRecording": "Force Start New Recording",
 		"renameFailed": "Failed to rename. Please try again later.",
 		"renameLabel": "Recording name",
 		"renamePlaceholder": "Enter recording title",

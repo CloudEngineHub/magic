@@ -5,6 +5,7 @@ import { InterruptButton } from "@/pages/superMagic/components/MessageEditor/com
 import { cn } from "@/utils/cn"
 import AudioUploadAction from "@/components/business/RecordingSummary/AudioUploadAction"
 import LoadingIcon from "@/components/business/RecordingSummary/components/LoadingIcon"
+import RecordingIndicator from "@/components/business/RecordingSummary/components/RecordingIndicator"
 import StartRecordingButton from "@/components/business/RecordingSummary/components/StartRecordingButton"
 import { StartRecordingReminderPopup } from "@/components/business/RecordingSummary/internal/editorPanel/StartRecordingReminderPopup"
 import { shouldShowStartRecordingReminder } from "@/components/business/RecordingSummary/internal/editorPanel/shouldShowStartRecordingReminder"
@@ -24,6 +25,9 @@ interface IdleStateViewProps {
 	selectedProjectId?: string
 	isStartingRecord: boolean
 	isModelReady: boolean
+	isRecordingBlocked?: boolean
+	isMediaRecorderNotSupported?: boolean
+	isOtherTabRecording?: boolean
 	uploading: boolean
 	uploadProgress: number
 	leftToolbar: ReactNode
@@ -34,7 +38,7 @@ interface IdleStateViewProps {
 	onStartRecording: (mode: "new" | "current") => Promise<void>
 	onCancelUpload: () => void
 	onUploadFile: (fileList: FileList) => Promise<void>
-	/** Expand the idle recording surface to the height negotiated by the conversation layout. */
+	/** Expand the non-recording start surface to the height negotiated by the conversation layout. */
 	fillHeight?: boolean
 }
 
@@ -45,6 +49,9 @@ export function IdleStateView({
 	selectedProjectId,
 	isStartingRecord,
 	isModelReady,
+	isRecordingBlocked = false,
+	isMediaRecorderNotSupported = false,
+	isOtherTabRecording = false,
 	uploading,
 	uploadProgress,
 	leftToolbar,
@@ -109,7 +116,7 @@ export function IdleStateView({
 	}
 
 	async function handleStartRecording(mode: "new" | "current") {
-		if (!shouldShowStartRecordingReminder({ size, mode })) {
+		if (isRecordingBlocked || !shouldShowStartRecordingReminder({ size, mode })) {
 			await startRecordingWithPermissionCheck(mode)
 			return
 		}
@@ -117,6 +124,19 @@ export function IdleStateView({
 		setPendingMode(mode)
 		setIsReminderOpen(true)
 	}
+
+	const isStartDisabled =
+		isStartingRecord ||
+		uploading ||
+		isMediaRecorderNotSupported ||
+		(!isModelReady && !isRecordingBlocked)
+	const warningText = isMediaRecorderNotSupported
+		? t("recordingSummary.superEditorPanel.warning.mediaRecorderNotSupported")
+		: isOtherTabRecording
+			? t("recordingSummary.superEditorPanel.warning.recordingOverrideOtherTab")
+			: isRecordingBlocked
+				? t("recordingSummary.superEditorPanel.warning.recordingOverride")
+				: t("recordingSummary.superEditorPanel.warning.beforeRecording")
 
 	return (
 		<>
@@ -127,6 +147,7 @@ export function IdleStateView({
 					fillHeight && "min-h-0 flex-1",
 				)}
 				data-testid="recording-editor-initial-state"
+				data-mode={isRecordingBlocked ? "blocked" : "idle"}
 			>
 				<div
 					className="flex w-full flex-1 flex-col items-center justify-center gap-2 rounded-lg bg-accent"
@@ -134,15 +155,18 @@ export function IdleStateView({
 				>
 					<StartRecordingButton
 						isLoading={isStartingRecord}
-						disabled={isStartingRecord || uploading || !isModelReady}
+						disabled={isStartDisabled}
 						allowSelectProject={!selectedProjectId}
 						onClick={handleStartRecording}
 					/>
 					<div
-						className="text-[10px] leading-[13px] text-[rgba(28,29,35,0.55)]"
+						className="flex items-center justify-center gap-1 text-center text-[10px] leading-[13px] text-[rgba(28,29,35,0.55)]"
 						data-testid="recording-editor-warning-text"
 					>
-						{t("recordingSummary.superEditorPanel.warning.beforeRecording")}
+						{isRecordingBlocked && !isMediaRecorderNotSupported ? (
+							<RecordingIndicator />
+						) : null}
+						<span>{warningText}</span>
 					</div>
 				</div>
 

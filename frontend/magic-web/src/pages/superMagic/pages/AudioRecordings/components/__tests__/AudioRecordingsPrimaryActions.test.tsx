@@ -10,7 +10,6 @@ vi.mock("react-i18next", () => ({
 		t: (key: string) => {
 			const labels: Record<string, string> = {
 				"actions.startRecording": "Start Recording",
-				"actions.forceStartRecording": "Force Start New Recording",
 				"card.sourceImported": "Imported audio",
 				"super:mobile.recordingEntry.settings.title": "Recording Settings",
 			}
@@ -107,32 +106,17 @@ describe("AudioRecordingsPrimaryActions", () => {
 		expect(handlers.onStartRecording).toHaveBeenCalledTimes(1)
 	})
 
-	it("renders and forwards the separate force-start action only when enabled", () => {
-		const onForceStartRecording = vi.fn()
-		renderPrimaryActions({ onForceStartRecording, canForceStartRecording: true })
-
-		const button = screen.getByTestId("audio-recordings-force-start-recording-button")
-		expect(button).toHaveTextContent("Force Start New Recording")
-		fireEvent.click(button)
-		expect(onForceStartRecording).toHaveBeenCalledTimes(1)
-	})
-
-	it("does not render the force-start action when no recording is blocked", () => {
-		renderPrimaryActions({ onForceStartRecording: vi.fn() })
+	it("does not render a separate force-start action", () => {
+		renderPrimaryActions()
 		expect(
 			screen.queryByTestId("audio-recordings-force-start-recording-button"),
 		).not.toBeInTheDocument()
 	})
 
 	it("disables the recording action while start preparation is running", () => {
-		renderPrimaryActions({
-			onForceStartRecording: vi.fn(),
-			canForceStartRecording: true,
-			isStartingRecording: true,
-		})
+		renderPrimaryActions({ isStartingRecording: true })
 
 		expect(screen.getByTestId("audio-recordings-start-recording-button")).toBeDisabled()
-		expect(screen.getByTestId("audio-recordings-force-start-recording-button")).toBeDisabled()
 	})
 
 	it("opens the stable file picker when clicking the import audio button", () => {
