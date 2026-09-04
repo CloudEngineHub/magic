@@ -7,17 +7,17 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter;
 
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use RuntimeException;
 
-readonly class DashScopeVideoAdapterRouter implements VideoGenerationProviderAdapterInterface
+readonly class DashScopeVideoAdapterRouter implements VideoGenerationConnectivityTestableInterface
 {
     public function __construct(
-        private Wan27VideoAdapter $wan27VideoAdapter,
-        private ?Wan30VideoAdapter $wan30VideoAdapter = null,
+        private Wan30VideoAdapter $wan30VideoAdapter,
     ) {
     }
 
@@ -51,6 +51,16 @@ readonly class DashScopeVideoAdapterRouter implements VideoGenerationProviderAda
         return $this->resolveOperationAdapter($operation)->query($operation, $config, $providerTaskId);
     }
 
+    public function testConnection(QueueExecutorConfig $config, string $modelVersion): bool
+    {
+        $adapter = $this->resolveAdapter($modelVersion, '');
+        if ($adapter instanceof VideoGenerationConnectivityTestableInterface) {
+            return $adapter->testConnection($config, $modelVersion);
+        }
+
+        throw new RuntimeException(sprintf('unsupported DashScope video model: %s', $modelVersion));
+    }
+
     private function resolveOperationAdapter(VideoQueueOperationEntity $operation): VideoGenerationProviderAdapterInterface
     {
         $adapter = $this->resolveAdapter($operation->getModelVersion(), $operation->getModel());
@@ -67,12 +77,8 @@ readonly class DashScopeVideoAdapterRouter implements VideoGenerationProviderAda
 
     private function resolveAdapter(string $modelVersion, string $modelId): ?VideoGenerationProviderAdapterInterface
     {
-        foreach ([$this->wan27VideoAdapter, $this->wan30VideoAdapter] as $adapter) {
-            if ($adapter?->supportsModel($modelVersion, $modelId) === true) {
-                return $adapter;
-            }
-        }
-
-        return null;
+        return $this->wan30VideoAdapter->supportsModel($modelVersion, $modelId)
+            ? $this->wan30VideoAdapter
+            : null;
     }
 }

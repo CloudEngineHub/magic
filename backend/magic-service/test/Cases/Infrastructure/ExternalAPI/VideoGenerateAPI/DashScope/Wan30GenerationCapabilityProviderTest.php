@@ -73,7 +73,7 @@ final class Wan30GenerationCapabilityProviderTest extends TestCase
     {
         $provider = new Wan30GenerationCapabilityProvider();
 
-        self::assertFalse($provider->supportsModel('wan2.7', 'wan3.1-video'));
+        self::assertFalse($provider->supportsModel('wan3.1-video', 'wan3.1-video'));
         self::assertFalse($provider->supportsModel('wan3.0-video', 'unknown'));
         self::assertFalse($provider->supportsModel('wan3.0-video', 'wan3.0-video-prime'));
         self::assertNull($provider->resolveGenerationConfig('', 'unknown'));

@@ -369,6 +369,44 @@ final class Wan30VideoAdapterTest extends TestCase
         self::assertSame((string) VideoGenerateErrorCode::MISSING_VIDEO_DATA->value, $missingOutput['error']['code']);
     }
 
+    public function testConnectivityChecksSubmittedTaskByQueryingIt(): void
+    {
+        $transport = new Wan30FakeDashScopeTransport(
+            ['output' => ['task_id' => 'connectivity-task']],
+            ['output' => [
+                'task_status' => 'FAILED',
+                'code' => 'InvalidParameter',
+                'message' => 'duration must be -1 or in [2,30]',
+            ]],
+        );
+
+        self::assertTrue($this->adapter($transport)->testConnection($this->config(), 'wan3.0-video'));
+        self::assertSame('connectivity-task', $transport->queriedTaskId);
+    }
+
+    public function testConnectivityRetriesQueryUntilProviderRejectsInvalidDuration(): void
+    {
+        $transport = new Wan30FakeDashScopeTransport(
+            ['output' => ['task_id' => 'connectivity-task']],
+            ['output' => ['task_status' => 'RUNNING']],
+        );
+        $transport->queryResponses = [
+            ['output' => ['task_status' => 'RUNNING']],
+            ['output' => [
+                'code' => 'InvalidParameter',
+                'message' => 'duration must be -1 or in [2,30]',
+            ]],
+        ];
+
+        self::assertTrue($this->adapter($transport)->testConnection($this->config(), 'wan3.0-video'));
+        self::assertSame(2, $transport->queryCount);
+    }
+
+    public function testIsSelfContained(): void
+    {
+        self::assertFalse(get_parent_class(Wan30VideoAdapter::class));
+    }
+
     private function adapter(?DashScopeTransportInterface $transport = null, ?Wan30GenerationCapabilityProvider $capabilityProvider = null): Wan30VideoAdapter
     {
         return new Wan30VideoAdapter($capabilityProvider ?? new Wan30GenerationCapabilityProvider(), $transport ?? new Wan30FakeDashScopeTransport());
@@ -403,6 +441,12 @@ final class Wan30FakeDashScopeTransport implements DashScopeTransportInterface
 {
     public array $queryResponse = [];
 
+    public array $queryResponses = [];
+
+    public int $queryCount = 0;
+
+    public ?string $queriedTaskId = null;
+
     public function __construct(private array $submitResponse = [], array $queryResponse = [])
     {
         $this->queryResponse = $queryResponse;
@@ -415,6 +459,11 @@ final class Wan30FakeDashScopeTransport implements DashScopeTransportInterface
 
     public function queryTask(QueueExecutorConfig $config, string $taskId, array $logContext = []): array
     {
+        ++$this->queryCount;
+        $this->queriedTaskId = $taskId;
+        if ($this->queryResponses !== []) {
+            return array_shift($this->queryResponses);
+        }
         return $this->queryResponse;
     }
 }

@@ -7,11 +7,12 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope;
 
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
+use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoOperationStatus;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\DashScopeVideoAdapterRouter;
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\Wan27VideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\Wan30VideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Capability\Wan30GenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\DashScopeTransportInterface;
@@ -70,47 +71,25 @@ class DashScopeVideoAdapterRouterTest extends TestCase
         );
     }
 
-    public function testSupportsModelDelegatesToWan27Adapter(): void
+    public function testSupportsConnectivityTest(): void
     {
-        $wan27VideoAdapter = $this->createMock(Wan27VideoAdapter::class);
-        $wan27VideoAdapter->method('supportsModel')->willReturn(true);
-        $wan27VideoAdapter->expects($this->once())
-            ->method('supportsModel')
-            ->with('wan2.7-t2v', 'wan2.7')
-            ->willReturn(true);
+        $transport = $this->createMock(DashScopeTransportInterface::class);
+        $transport->expects($this->once())->method('submitVideo')->willReturn(['output' => ['task_id' => 'connectivity-task']]);
+        $transport->expects($this->once())->method('queryTask')->willReturn(['output' => [
+            'code' => 'InvalidParameter',
+            'message' => 'duration must be -1 or in [2,30]',
+        ]]);
+        $wan30VideoAdapter = new Wan30VideoAdapter(new Wan30GenerationCapabilityProvider(), $transport);
 
-        $router = new DashScopeVideoAdapterRouter($wan27VideoAdapter, $this->wan30Adapter());
+        $router = new DashScopeVideoAdapterRouter($wan30VideoAdapter);
 
-        $this->assertTrue($router->supportsModel('wan2.7-t2v', 'wan2.7'));
-    }
-
-    public function testBuildProviderPayloadDelegatesToWan27Adapter(): void
-    {
-        $operation = $this->createOperation();
-        $expectedPayload = [
-            'model' => 'wan2.7',
-            'input' => [
-                'prompt' => '生成一段视频',
-            ],
-        ];
-
-        $wan27VideoAdapter = $this->createMock(Wan27VideoAdapter::class);
-        $wan27VideoAdapter->method('supportsModel')->willReturn(true);
-        $wan27VideoAdapter->expects($this->once())
-            ->method('buildProviderPayload')
-            ->with($operation)
-            ->willReturn($expectedPayload);
-
-        $router = new DashScopeVideoAdapterRouter($wan27VideoAdapter, $this->wan30Adapter());
-
-        $this->assertSame($expectedPayload, $router->buildProviderPayload($operation));
+        self::assertInstanceOf(VideoGenerationConnectivityTestableInterface::class, $router);
+        self::assertTrue($router->testConnection($this->config(), 'wan3.0-video'));
     }
 
     public function testBuildProviderPayloadDispatchesWan30Adapter(): void
     {
-        $wan27VideoAdapter = $this->createMock(Wan27VideoAdapter::class);
-        $wan27VideoAdapter->expects($this->never())->method('buildProviderPayload');
-        $router = new DashScopeVideoAdapterRouter($wan27VideoAdapter, $this->wan30Adapter());
+        $router = new DashScopeVideoAdapterRouter($this->wan30Adapter());
 
         $operation = $this->createWan30Operation();
         $payload = $router->buildProviderPayload($operation);
@@ -121,7 +100,6 @@ class DashScopeVideoAdapterRouterTest extends TestCase
     public function testUnknownModelThrowsRuntimeExceptionWhenRoutingOperation(): void
     {
         $router = new DashScopeVideoAdapterRouter(
-            $this->createMock(Wan27VideoAdapter::class),
             $this->wan30Adapter(),
         );
 
@@ -159,11 +137,11 @@ class DashScopeVideoAdapterRouterTest extends TestCase
         );
     }
 
-    private function createOperation(string $model = 'wan2.7', string $modelVersion = 'wan2.7-t2v'): VideoQueueOperationEntity
+    private function createOperation(string $model = 'unknown-model', string $modelVersion = 'unknown-model'): VideoQueueOperationEntity
     {
         return new VideoQueueOperationEntity(
             id: 'op-dashscope-router-1',
-            endpoint: 'video:wan2.7',
+            endpoint: 'video:unknown',
             model: $model,
             modelVersion: $modelVersion,
             providerModelId: 'provider-model',
@@ -177,5 +155,10 @@ class DashScopeVideoAdapterRouterTest extends TestCase
             createdAt: date(DATE_ATOM),
             heartbeatAt: date(DATE_ATOM),
         );
+    }
+
+    private function config(): QueueExecutorConfig
+    {
+        return new QueueExecutorConfig('https://dashscope.example', 'secret', 3, 20);
     }
 }

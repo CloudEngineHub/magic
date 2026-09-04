@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter;
 
-use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterInterface;
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
@@ -20,7 +20,7 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ReferenceMediaPayload;
 use InvalidArgumentException;
 
-final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
+final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInterface
 {
     private const array MEDIA_FIELDS = ['frames', 'reference_images', 'reference_videos', 'reference_audios'];
 
@@ -109,7 +109,7 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
 
     public function submit(VideoQueueOperationEntity $operation, QueueExecutorConfig $config): string
     {
-        $response = $this->transport->submitVideo($config, $operation->getProviderPayload(), $this->logContext($operation));
+        $response = $this->transport->submitVideo($config, $operation->getProviderPayload(), $this->buildLogContext($operation));
         $taskId = $this->firstString($response['output']['task_id'] ?? null, $response['task_id'] ?? null);
         if ($taskId === null) {
             throw ProviderVideoException::nonRetriable('dashscope submit succeeded but task id missing');
@@ -117,9 +117,38 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         return $taskId;
     }
 
+    public function testConnection(QueueExecutorConfig $config, string $modelVersion): bool
+    {
+        $response = $this->transport->submitVideo($config, [
+            'model' => $this->capabilityProvider->resolveProviderModelName($modelVersion),
+            'input' => ['prompt' => 'connectivity-test'],
+            'parameters' => ['resolution' => '720P', 'duration' => 0],
+        ], ['connectivity_test' => true]);
+        $taskId = $this->firstString($response['output']['task_id'] ?? null, $response['task_id'] ?? null);
+        if ($taskId === null) {
+            throw ProviderVideoException::nonRetriable('Wan connectivity test task id missing');
+        }
+
+        $message = 'Wan connectivity test failed';
+        for ($attempt = 0; $attempt < 20; ++$attempt) {
+            $detail = $this->transport->queryTask($config, $taskId, ['connectivity_test' => true, 'provider_task_id' => $taskId]);
+            $output = is_array($detail['output'] ?? null) ? $detail['output'] : [];
+            $code = (string) ($output['code'] ?? $detail['code'] ?? '');
+            $message = (string) ($output['message'] ?? $detail['message'] ?? $message);
+            if ($code === 'InvalidParameter' && str_contains($message, 'duration must be')) {
+                return true;
+            }
+            if ($attempt < 19) {
+                sleep(3);
+            }
+        }
+
+        throw ProviderVideoException::nonRetriable($message);
+    }
+
     public function query(VideoQueueOperationEntity $operation, QueueExecutorConfig $config, string $providerTaskId): array
     {
-        $detail = $this->transport->queryTask($config, $providerTaskId, $this->logContext($operation, $providerTaskId));
+        $detail = $this->transport->queryTask($config, $providerTaskId, $this->buildLogContext($operation, $providerTaskId));
         $output = is_array($detail['output'] ?? null) ? $detail['output'] : [];
         $providerStatus = strtoupper(trim((string) ($output['task_status'] ?? 'PENDING')));
         $status = match ($providerStatus) {
@@ -160,6 +189,28 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         ];
     }
 
+    private function buildLogContext(VideoQueueOperationEntity $operation, ?string $providerTaskId = null): array
+    {
+        return array_filter([
+            'video_id' => $operation->getVideoId(),
+            'operation_id' => $operation->getId(),
+            'provider_task_id' => $providerTaskId,
+            'model' => $operation->getModelVersion(),
+            'endpoint' => $operation->getEndpoint(),
+        ], static fn (mixed $value): bool => $value !== null && $value !== '');
+    }
+
+    private function firstString(mixed ...$values): ?string
+    {
+        foreach ($values as $value) {
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Maps request generation options to DashScope parameters and records unsupported options.
      *
@@ -193,8 +244,7 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
             if (! array_key_exists($requestField, $generation)) {
                 continue;
             }
-            $supportFlag = $supportFlags[$requestField] ?? null;
-            if ($supportFlag !== null && ! $generationConfig[$supportFlag]) {
+            if (isset($supportFlags[$requestField]) && ! $generationConfig[$supportFlags[$requestField]]) {
                 $ignoredParams[] = 'generation.' . $requestField;
                 continue;
             }
@@ -215,6 +265,21 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
         }
 
         return $parameters;
+    }
+
+    private function failedQueryResult(array $detail, VideoGenerateErrorCode $errorCode, string $providerTaskId): array
+    {
+        return [
+            'status' => 'failed',
+            'provider_result' => $detail,
+            'output' => [],
+            'error' => [
+                'code' => (string) $errorCode->value,
+                'message' => ProviderVideoErrorMapper::message($errorCode),
+                'provider_code' => null,
+                'provider_task_id' => $providerTaskId,
+            ],
+        ];
     }
 
     /**
@@ -246,21 +311,6 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
                 $ignoredParams[] = 'inputs.' . $field;
             }
         }
-    }
-
-    private function failedQueryResult(array $detail, VideoGenerateErrorCode $errorCode, string $providerTaskId): array
-    {
-        return [
-            'status' => 'failed',
-            'provider_result' => $detail,
-            'output' => [],
-            'error' => [
-                'code' => (string) $errorCode->value,
-                'message' => ProviderVideoErrorMapper::message($errorCode),
-                'provider_code' => null,
-                'provider_task_id' => $providerTaskId,
-            ],
-        ];
     }
 
     private function resolveOperationModels(VideoQueueOperationEntity $operation): array
@@ -506,26 +556,5 @@ final class Wan30VideoAdapter implements VideoGenerationProviderAdapterInterface
     private function normalizeResolution(mixed $value): string
     {
         return strtolower(trim((string) ($value ?? '720p')));
-    }
-
-    private function firstString(mixed ...$values): ?string
-    {
-        foreach ($values as $value) {
-            if (is_string($value) && trim($value) !== '') {
-                return trim($value);
-            }
-        }
-        return null;
-    }
-
-    private function logContext(VideoQueueOperationEntity $operation, ?string $providerTaskId = null): array
-    {
-        return array_filter([
-            'video_id' => $operation->getVideoId(),
-            'operation_id' => $operation->getId(),
-            'provider_task_id' => $providerTaskId,
-            'model' => $operation->getModelVersion(),
-            'endpoint' => $operation->getEndpoint(),
-        ], static fn (mixed $value): bool => $value !== null && $value !== '');
     }
 }

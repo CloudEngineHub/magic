@@ -34,13 +34,13 @@ readonly class ApiKeyDashScopeTransport implements DashScopeTransportInterface
         return $this->client->get(
             $config->getBaseUrl(),
             $config->getApiKey(),
-            '/api/v1/tasks/' . rawurlencode($taskId),
+            '/tasks/' . rawurlencode($taskId),
             $logContext,
         );
     }
 
     private function buildVideoSynthesisPath(): string
     {
-        return '/api/v1/services/aigc/video-generation/video-synthesis';
+        return '/services/aigc/video-generation/video-synthesis';
     }
 }

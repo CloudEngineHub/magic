@@ -57,7 +57,7 @@ class ApiKeyDashScopeTransportTest extends TestCase
         $transport = new ApiKeyDashScopeTransport(new DashScopeVideoClient($clientFactory, $loggerFactory));
         $transport->submitVideo(
             new QueueExecutorConfig(
-                'https://localhost',
+                'https://localhost/api/v1',
                 'secret',
                 3,
                 20,
@@ -104,7 +104,7 @@ class ApiKeyDashScopeTransportTest extends TestCase
         $transport = new ApiKeyDashScopeTransport(new DashScopeVideoClient($clientFactory, $loggerFactory));
         $transport->queryTask(
             new QueueExecutorConfig(
-                'https://localhost',
+                'https://localhost/api/v1',
                 'secret',
                 3,
                 20,
