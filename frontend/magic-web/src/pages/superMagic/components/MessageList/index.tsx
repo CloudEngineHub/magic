@@ -904,7 +904,7 @@ const MessageList = observer(
 							 */}
 							<div
 								className={cn(
-									"mx-auto block min-w-[unset] max-w-3xl pb-2",
+									"mx-auto block min-w-[unset] max-w-3xl pb-2 h-full",
 									isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[50px]",
 								)}
 							>

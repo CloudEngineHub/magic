@@ -735,7 +735,7 @@ function VirtualMessageListInner({
 	])
 
 	return (
-		<div ref={canvasRef} data-testid="virtual-message-canvas" className="relative w-full" style={{height: "100px"}}>
+		<div ref={canvasRef} data-testid="virtual-message-canvas" className="relative w-full h-full">
 			{viewport ? (
 				<StickyIndexContext.Provider value={activeStickyIndex}>
 					<Virtualizer
