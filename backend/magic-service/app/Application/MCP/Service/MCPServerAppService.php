@@ -191,15 +191,15 @@ class MCPServerAppService extends AbstractMCPAppService
     {
         $dataIsolation = $this->createMCPDataIsolation($authorization);
 
-        if ($entity->shouldCreate() && $this->shouldPreflightMcpAuthorization($entity)) {
-            $this->mcpAuthorizationAppService->preflight($entity);
-        }
-
         if (! $entity->shouldCreate()) {
             $operation = $this->getMCPServerOperation($dataIsolation, $entity->getCode());
             $operation->validate('w', $entity->getCode());
         } else {
             $operation = Operation::Owner;
+        }
+
+        if ($this->shouldPreflightMcpAuthorization($entity)) {
+            $this->mcpAuthorizationAppService->preflight($entity);
         }
 
         $entity = $this->mcpServerDomainService->save(
