@@ -7,38 +7,43 @@ Checkpoint底层存储操作
 - 检查checkpoint是否存在
 - 管理checkpoint相关的文件路径
 
-目录契约（与 magicfs checkpoint hook 共享）：
+目录契约（与 agfs checkpoint hook 共享）：
 
     <checkpoints_dir>/checkpoint_manifest.json            共享清单
     <checkpoints_dir>/<id>/checkpoint_info.json           Python 簿记（id/created_time）
-    <checkpoints_dir>/<id>/<space>/operations.json        magicfs 操作流水
+    <checkpoints_dir>/<id>/<space>/operations.json        agfs 操作流水
     <checkpoints_dir>/<id>/<space>/file_snapshots/<fid>/  内容帧
 
 `checkpoint_info.json` 与 `operations.json` 是两个所有物：前者只由
-Python 写（创建时一次、之后只读），后者只由 magicfs 写。
+Python 写（创建时一次、之后只读），后者只由 agfs 侧 hook 写。
 
-聊天历史（运行期在本地 `.chat_history/`，不在 magicfs 挂载内，无帧
-可记）由 Python 侧整目录快照补充：
+空间分区（<space> = 配置的 space_type，清单与分类见空间注册表）：
+- project / topic：magicfs 插件（元数据服务 + S3）。
+- chat_history：localfs 插件（agfs-server 容器本地盘，无元数据/S3）。
+  运行期聊天历史 `.chat_history/` 即该空间的挂载（symlink 指向
+  /mnt/agfs/localfs/chat_history），每次保存由 hook 以 per-file 帧增量
+  记账，Python 不做整目录快照。
 
-    <checkpoints_dir>/<id>/initial_chat_history_snapshots/   checkpoint 创建时整目录快照
-    <checkpoints_dir>/<id>/latest_chat_history_snapshots/    每次聊天记录保存时整目录快照
-
-这两个目录同样只由 Python 写、随 checkpoint 目录懒创建（目录存在即
-有快照），远端归档与按需拉取把它们当作 checkpoint 目录的普通内容。
+历史遗留：升级前旧 checkpoint 的远端归档中可能仍存在
+initial/latest_chat_history_snapshots 整目录快照目录；读侧已删除，
+不再读取，回滚到旧 checkpoint 时聊天历史由 zip 启动恢复兜底。
 """
 
 from pathlib import Path
 from typing import Optional
 
+from app.core.entity.checkpoint import INTERNAL_SPACES, PROJECT_SPACE, WORKSPACE_SPACES
 from app.path_manager import PathManager
 from app.utils.async_file_utils import async_mkdir, async_rmtree, async_exists, async_write_json
 from agentlang.logger import get_logger
 
 logger = get_logger(__name__)
 
-# 当前协议中存在挂载分区的空间集合。magicfs 按空间的挂载配置把流水分别
-# 落到各自子目录；Python 读数据时按此清单聚合。
-KNOWN_SPACES = ("project", "topic")
+# 当前协议中存在挂载分区的空间集合。agfs 侧按空间的挂载配置把流水分别
+# 落到各自子目录；Python 读数据时按此清单聚合。空间清单与分类策略
+# （工作区 / 内部状态）以 entity/checkpoint.py 的空间注册表为单一事实
+# 来源，此处仅做派生聚合。
+KNOWN_SPACES = WORKSPACE_SPACES + INTERNAL_SPACES
 
 
 class CheckpointStorage:
@@ -109,14 +114,6 @@ class CheckpointStorage:
         """获取checkpoint清单文件路径"""
         return self.checkpoint_root / "checkpoint_manifest.json"
 
-    def get_initial_chat_history_snapshots_dir(self, checkpoint_id: str) -> Path:
-        """获取 checkpoint 创建时保存的聊天历史整目录快照（undo 恢复源）"""
-        return PathManager.get_checkpoint_dir(checkpoint_id) / "initial_chat_history_snapshots"
-
-    def get_latest_chat_history_snapshots_dir(self, checkpoint_id: str) -> Path:
-        """获取 checkpoint 内最后一次保存的聊天历史整目录快照（redo 恢复源）"""
-        return PathManager.get_checkpoint_dir(checkpoint_id) / "latest_chat_history_snapshots"
-
     def get_space_initial_content_file_path(self, checkpoint_id: str, file_id: str, space: str) -> Path:
         """获取某空间内文件快照的初始内容帧路径"""
         return self.get_space_dir(checkpoint_id, space) / "file_snapshots" / file_id / "initial_content"
@@ -131,9 +128,9 @@ class CheckpointStorage:
         Args:
             checkpoint_id: checkpoint ID
             file_id: 文件稳定 ID（Snowflake），快照目录以 file_id 为名
-            space: 流水条目记录的空间；None 时按 project 解析
+            space: 流水条目记录的空间；None/空串视为旧格式条目，按工作区空间解析
         """
-        resolved_space = space if space else KNOWN_SPACES[0]
+        resolved_space = space or PROJECT_SPACE
         return self.get_space_initial_content_file_path(checkpoint_id, file_id, resolved_space)
 
     def get_latest_content_file_path(self, checkpoint_id: str, file_id: str, space: Optional[str] = None) -> Path:
@@ -142,8 +139,8 @@ class CheckpointStorage:
         Args:
             checkpoint_id: checkpoint ID
             file_id: 文件稳定 ID（Snowflake），快照目录以 file_id 为名
-            space: 流水条目记录的空间；None 时按 project 解析
+            space: 流水条目记录的空间；None/空串视为旧格式条目，按工作区空间解析
         """
-        resolved_space = space if space else KNOWN_SPACES[0]
+        resolved_space = space or PROJECT_SPACE
         return self.get_space_latest_content_file_path(checkpoint_id, file_id, resolved_space)
 

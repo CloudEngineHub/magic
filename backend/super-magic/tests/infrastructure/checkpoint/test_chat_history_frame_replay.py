@@ -17,14 +17,21 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.core.entity.checkpoint import FileOperation, FileSnapshot, FileType
-from app.infrastructure.checkpoint.chat_history_snapshot_manager import ChatHistorySnapshotManager
-from app.infrastructure.checkpoint.rollback_executor import RollbackExecutor, TOPIC_SPACE
+from app.core.entity.checkpoint import (
+    CHAT_HISTORY_SPACE,
+    FileOperation,
+    FileSnapshot,
+    FileType,
+    PROJECT_SPACE,
+    TOPIC_SPACE,
+)
+from app.infrastructure.checkpoint.rollback_executor import RollbackExecutor
 from app.path_manager import PathManager
 
 
 PROJECT_ROOT_PREFIX = "/mnt/agfs/magicfs/project"
 TOPIC_ROOT_PREFIX = "/mnt/agfs/magicfs/topic"
+CHAT_HISTORY_ROOT_PREFIX = "/mnt/agfs/localfs/chat_history"
 
 
 def _make_snapshot(
@@ -34,7 +41,7 @@ def _make_snapshot(
     *,
     old_file_path: str | None = None,
     file_type: FileType = FileType.FILE,
-    space: str = "project",
+    space: str = PROJECT_SPACE,
 ) -> FileSnapshot:
     return FileSnapshot(
         file_id=file_id,
@@ -56,6 +63,7 @@ class FrameWorld:
         self.checkpoints_root = tmp_path / "checkpoints"
         self.project_root = tmp_path / "mounts" / "project"
         self.topic_root = tmp_path / "mounts" / "topic"
+        self.chat_history_root = tmp_path / "mounts" / "chat_history"
         self.infos: dict[str, list[FileSnapshot]] = {}
 
     def add_frames(self, checkpoint_id: str, snapshots: list[FileSnapshot]) -> None:
@@ -70,10 +78,10 @@ class FrameWorld:
         if space is None:
             for snapshot in self.infos.get(checkpoint_id, []):
                 if snapshot.file_id == file_id:
-                    space = snapshot.space or "project"
+                    space = snapshot.space or PROJECT_SPACE
                     break
             else:
-                space = "project"
+                space = PROJECT_SPACE
         frame_dir = self.checkpoints_root / checkpoint_id / space / "file_snapshots" / file_id
         frame_dir.mkdir(parents=True, exist_ok=True)
         if initial is not None:
@@ -83,9 +91,9 @@ class FrameWorld:
 
     def build_executor(self, direction: str, checkpoint_ids: list[str]) -> RollbackExecutor:
         all_checkpoint_ids = list(self.infos) + [c for c in checkpoint_ids if c not in self.infos]
-        # 与真实 storage 口径一致：空/None 的 space 回落到 project 分区
+        # 与真实 storage 口径一致：空/None 的 space 回落到工作区分区
         def _partition(space: str | None) -> str:
-            return space or "project"
+            return space or PROJECT_SPACE
 
         storage = SimpleNamespace(
             get_initial_content_file_path=lambda cid, fid, space=None: (
@@ -93,12 +101,6 @@ class FrameWorld:
             ),
             get_latest_content_file_path=lambda cid, fid, space=None: (
                 self.checkpoints_root / cid / _partition(space) / "file_snapshots" / fid / "latest_content"
-            ),
-            get_initial_chat_history_snapshots_dir=lambda cid: (
-                self.checkpoints_root / cid / "initial_chat_history_snapshots"
-            ),
-            get_latest_chat_history_snapshots_dir=lambda cid: (
-                self.checkpoints_root / cid / "latest_chat_history_snapshots"
             ),
         )
         metadata_manager = SimpleNamespace(
@@ -111,11 +113,15 @@ class FrameWorld:
         executor = RollbackExecutor.__new__(RollbackExecutor)
         executor.storage = storage
         executor.metadata_manager = metadata_manager
-        executor.chat_history_snapshot_manager = ChatHistorySnapshotManager()
         return executor
 
     def mount_file(self, prefix: str, rel: str) -> Path:
-        return (self.project_root if prefix == PROJECT_ROOT_PREFIX else self.topic_root) / rel
+        base = {
+            PROJECT_ROOT_PREFIX: self.project_root,
+            TOPIC_ROOT_PREFIX: self.topic_root,
+            CHAT_HISTORY_ROOT_PREFIX: self.chat_history_root,
+        }[prefix]
+        return base / rel
 
 
 @pytest.fixture
@@ -132,6 +138,9 @@ def world(tmp_path, monkeypatch):
             parts = p.relative_to("/mnt/agfs/magicfs").parts
             base = w.project_root if parts[0] == "project" else w.topic_root
             return base.joinpath(*parts[1:])
+        if p.is_absolute() and str(p).startswith("/mnt/agfs/localfs/"):
+            parts = p.relative_to("/mnt/agfs/localfs").parts
+            return w.chat_history_root.joinpath(*parts[1:])
         return real_resolve(self, file_path)
 
     monkeypatch.setattr(RollbackExecutor, "_resolve_restore_path", fake_resolve)
@@ -191,7 +200,7 @@ async def test_workspace_rollback_ignores_topic_entries(world: FrameWorld):
     world.add_frames("C2", [
         _make_snapshot("1001", f"{TOPIC_ROOT_PREFIX}/chat_history/main<1>.json",
                        FileOperation.UPDATED, space=TOPIC_SPACE),
-        _make_snapshot("3333", project_file, FileOperation.UPDATED, space="project"),
+        _make_snapshot("3333", project_file, FileOperation.UPDATED, space=PROJECT_SPACE),
     ])
     world.write_frame("C2", "1001", initial=b"old main", latest=b"new main")
     world.write_frame("C2", "3333", initial=b"old a", latest=b"new a")
@@ -232,30 +241,6 @@ async def test_missing_topic_frames_skips_gracefully(world: FrameWorld):
     assert success is True
 
 
-async def test_start_rollback_restores_local_chat_history_dir(world: FrameWorld, tmp_path, monkeypatch):
-    """端到端：start_rollback 在帧重放之外，还应恢复本地 .chat_history 整目录快照。"""
-    chat_history_dir = tmp_path / ".chat_history"
-    monkeypatch.setattr(
-        PathManager, "get_chat_history_dir", classmethod(lambda cls: chat_history_dir), raising=True,
-    )
-
-    # current=C2 回滚到 target=C1 时，反向范围是 [C2]，取 C2 的 initial
-    # 快照（= C2 回合开始前 = C1 回合结束后的状态）
-    initial_dir = world.checkpoints_root / "C2" / "initial_chat_history_snapshots"
-    initial_dir.mkdir(parents=True)
-    (initial_dir / "main<1>.json").write_text("dir snapshot", encoding="utf-8")
-
-    chat_history_dir.mkdir(parents=True)
-    (chat_history_dir / "main<1>.json").write_text("stale", encoding="utf-8")
-
-    world.add_frames("C1", [])
-    world.add_frames("C2", [])
-
-    executor = world.build_executor("backward", ["C2"])
-    success, _ = await executor.start_rollback("C1")
-    assert success is True
-    assert (chat_history_dir / "main<1>.json").read_text(encoding="utf-8") == "dir snapshot"
-
 
 async def test_relative_path_entry_resolves_to_workspace(world: FrameWorld, monkeypatch, tmp_path):
     """相对路径条目（space 为空串）按 project 分区解析帧、按 workspace 根解析恢复目标。"""
@@ -267,7 +252,7 @@ async def test_relative_path_entry_resolves_to_workspace(world: FrameWorld, monk
     world.add_frames("C2", [
         _make_snapshot("5555", "legacy.txt", FileOperation.UPDATED, space=""),
     ])
-    world.write_frame("C2", "5555", initial=b"legacy old", latest=b"legacy new", space="project")
+    world.write_frame("C2", "5555", initial=b"legacy old", latest=b"legacy new", space=PROJECT_SPACE)
 
     executor = world.build_executor("backward", ["C2"])
     success, _ = await executor.start_rollback("C1")
@@ -275,12 +260,60 @@ async def test_relative_path_entry_resolves_to_workspace(world: FrameWorld, monk
     assert (workspace_root / "legacy.txt").read_bytes() == b"legacy old"
 
 
-def test_checkpoint_listener_snapshots_chat_history_again():
-    """回归：聊天历史回到本地目录后，监听器恢复整目录快照链路。
+async def test_chat_history_space_frames_replay_like_topic(world: FrameWorld):
+    """chat_history（localfs 空间）帧与 topic 帧走同一条尽力而为重放路径。"""
+    main_path = f"{CHAT_HISTORY_ROOT_PREFIX}/magic<main>.json"
+    world.add_frames("C1", [])
+    world.add_frames("C2", [
+        _make_snapshot("888", main_path, FileOperation.UPDATED, space=CHAT_HISTORY_SPACE),
+        _make_snapshot("889", f"{CHAT_HISTORY_ROOT_PREFIX}/subagents/explore<e1>/explore<e1>.json",
+                       FileOperation.CREATED, space=CHAT_HISTORY_SPACE),
+    ])
+    world.write_frame("C2", "888", initial=b"old main history", latest=b"new main history")
+    world.write_frame("C2", "889", latest=b"subagent state")
 
-    运行期聊天历史在本地 .chat_history/，不在 magicfs 挂载内、无帧可记，
-    由监听器在 checkpoint 创建时拍 initial 快照、每次保存时拍 latest 快照，
-    回滚时由 RollbackExecutor 按方向恢复。
+    main_live = world.mount_file(CHAT_HISTORY_ROOT_PREFIX, "magic<main>.json")
+    main_live.parent.mkdir(parents=True, exist_ok=True)
+    main_live.write_bytes(b"new main history")
+    subagent_file = world.mount_file(CHAT_HISTORY_ROOT_PREFIX, "subagents/explore<e1>/explore<e1>.json")
+    subagent_file.parent.mkdir(parents=True, exist_ok=True)
+    subagent_file.write_bytes(b"subagent state")
+
+    executor = world.build_executor("backward", ["C2"])
+    success, _ = await executor.start_rollback("C1")
+    assert success is True
+
+    # updated 反向写回 initial 帧；created 反向删除
+    assert world.mount_file(CHAT_HISTORY_ROOT_PREFIX, "magic<main>.json").read_bytes() == b"old main history"
+    assert not subagent_file.exists()
+
+
+async def test_chat_history_entries_never_create_file_versions(world: FrameWorld):
+    """chat_history 条目属于内部状态空间，不进入文件版本创建链路。"""
+    world.add_frames("C1", [])
+    world.add_frames("C2", [
+        _make_snapshot("990", f"{CHAT_HISTORY_ROOT_PREFIX}/magic<main>.json",
+                       FileOperation.UPDATED, space=CHAT_HISTORY_SPACE),
+    ])
+    world.write_frame("C2", "990", initial=b"old", latest=b"new")
+    main_live = world.mount_file(CHAT_HISTORY_ROOT_PREFIX, "magic<main>.json")
+    main_live.parent.mkdir(parents=True, exist_ok=True)
+    main_live.write_bytes(b"new")
+
+    executor = world.build_executor("forward", ["C2"])
+    # undo_rollback 内部走同一份合并流水做版本创建；这里直接验证
+    # start_rollback 全程成功即代表 chat 条目未触发版本链路（版本创建
+    # 依赖 magicfs xattr，本地目录必然失败，能成功即说明被过滤）。
+    success, _ = await executor.start_rollback("C1")
+    assert success is True
+    assert world.mount_file(CHAT_HISTORY_ROOT_PREFIX, "magic<main>.json").read_bytes() == b"new"
+
+
+def test_checkpoint_listener_no_longer_snapshots_chat_history():
+    """回归：全量复制链路已删除，监听器只负责登记 checkpoint。
+
+    运行期聊天历史由 localfs 空间的 checkpoint hook 增量记账，监听器
+    不再注册 CHAT_HISTORY_CHANGED、不再做整目录快照。
 
     该模块所在包的 __init__ 会拉起重依赖（wecom SDK 等），本地单测环境
     无法直接 import；因此对源码做静态断言。
@@ -290,7 +323,7 @@ def test_checkpoint_listener_snapshots_chat_history_again():
         / "app/service/agent_event/checkpoint_listener_service.py"
     ).read_text(encoding="utf-8")
 
-    assert "CHAT_HISTORY_CHANGED" in source
-    assert "ChatHistorySnapshotManager" in source
-    assert "_save_initial_chat_history_snapshot" in source
     assert "BEFORE_MAIN_AGENT_RUN" in source
+    assert "CHAT_HISTORY_CHANGED" not in source
+    assert "ChatHistorySnapshotManager" not in source
+    assert "_save_initial_chat_history_snapshot" not in source

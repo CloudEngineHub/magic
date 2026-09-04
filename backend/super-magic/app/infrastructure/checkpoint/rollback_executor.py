@@ -2,22 +2,27 @@
 """
 回滚执行器 - 基础设施层
 
-统一处理checkpoint的完整回滚，包括：
-- 工作区文件回滚（重放 magicfs checkpoint hook 记录的 project/topic 空间帧）
-- 聊天历史回滚（恢复 checkpoint 里的整目录快照）
+统一处理checkpoint的完整回滚，全部通过帧重放完成。重放策略由空间
+注册表（entity/checkpoint.py）按条目决定：
+- 工作区空间（project）：失败即中止整体回滚，构建受影响文件、创建
+  文件版本；
+- 内部状态空间（topic / chat_history，以及未来新增）：尽力而为——
+  失败仅告警跳过，不做文件版本创建、不产生变更附件。
 
-magicfs 把所有挂载的变更记入同一份操作流水，file_path 是 agent 可见
+agfs 侧把所有挂载的变更记入同一份操作流水，file_path 是 agent 可见
 绝对路径（挂载配置下发 path_prefix），space 字段标记来源空间。重放时
-直接按记录路径恢复，无需按子树猜测根目录；文件版本创建只针对非 topic
-条目。聊天历史运行期在本地普通目录（.chat_history/），不在挂载内、
-无帧可重放，改由 checkpoint 里的 initial/latest 整目录快照按回滚方向
-恢复，尽力而为、失败不阻塞工作区回滚结果。
+直接按记录路径恢复，无需按子树猜测根目录。新增需要回滚的空间时，在
+空间注册表登记一行即可，本模块无需改动。
 """
 
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from app.core.entity.checkpoint import FileSnapshot, FileOperation, FileType
-from app.infrastructure.checkpoint.chat_history_snapshot_manager import ChatHistorySnapshotManager
+from app.core.entity.checkpoint import (
+    FileSnapshot,
+    FileOperation,
+    FileType,
+    is_internal_space,
+)
 from app.infrastructure.checkpoint.metadata_manager import CheckpointMetadataManager
 from app.infrastructure.checkpoint.storage import CheckpointStorage
 from app.utils.async_file_utils import (
@@ -31,35 +36,29 @@ from agentlang.logger import get_logger
 
 logger = get_logger(__name__)
 
-# topic 空间条目的 space 标记（由 magicfs checkpoint hook 按挂载配置盖章）。
-# chat history 属于话题内部状态：随 checkpoint 重放恢复，但不进入
-# 用户文件版本链路。
-TOPIC_SPACE = "topic"
 
+def _is_internal_space_entry(file_snapshot: FileSnapshot) -> bool:
+    """判断流水条目是否属于内部状态空间（依据空间注册表）。
 
-def _is_topic_entry(file_snapshot: FileSnapshot) -> bool:
-    """判断流水条目是否来自 topic 挂载。
-
-    magicfs 从挂载配置把 space_type 盖章进每条流水；空 space 视为旧数据
+    agfs 侧从挂载配置把 space_type 盖章进每条流水；空 space 视为旧数据
     的工作区条目（历史行为：仅工作区有帧）。
     """
-    return file_snapshot.space == TOPIC_SPACE
+    return is_internal_space(file_snapshot.space)
 
 
 class RollbackExecutor:
     """回滚执行器 - 处理工作区文件回滚
 
-    挂载内文件与工作区共用同一套重放链路：magicfs 记录的 file_path 是
+    挂载内文件与工作区共用同一套重放链路：agfs 侧记录的 file_path 是
     agent 可见绝对路径（网关为每个挂载下发 path_prefix），恢复目标就是
-    路径本身，不需要按子树猜测根目录；两者只差 policy——文件版本创建
-    仅针对非 topic 条目。聊天历史不在挂载内，走整目录快照恢复。
+    路径本身，不需要按子树猜测根目录；两者只差 policy——严格性与版本/
+    附件均由空间注册表的空间分类决定。
     """
 
     def __init__(self):
         """初始化回滚执行器（启用文件快照合并优化）"""
         self.metadata_manager = CheckpointMetadataManager()
         self.storage = CheckpointStorage()
-        self.chat_history_snapshot_manager = ChatHistorySnapshotManager()
 
         logger.info("RollbackExecutor初始化完成，合并优化已启用")
 
@@ -67,10 +66,10 @@ class RollbackExecutor:
         """
         开始回滚操作，只恢复文件状态
 
-        聊天历史与工作区共用同一份 magicfs 操作流水：这里只查询一次
-        回滚范围、合并一次操作流，然后按 space 切分为两个分区重放。
-        工作区失败会中止整体回滚；聊天历史失败仅告警继续（产品语义：
-        不阻塞用户继续会话）。
+        所有空间共用同一份操作流水：这里只查询一次回滚范围、合并一次
+        操作流，然后交由单一重放循环完成——每条的重放策略由空间注册表
+        按条目决定。工作区条目失败会中止整体回滚；内部状态空间条目失败
+        仅告警继续（产品语义：不阻塞用户继续会话）。
 
         Args:
             target_checkpoint_id: 目标检查点ID，不能为None
@@ -113,32 +112,15 @@ class RollbackExecutor:
                 checkpoints_to_process, is_forward=is_forward,
             )
 
-            # 按 space 一次切分；两分区路径互不相交，跨分区顺序无语义
-            topic_entries = [entry for entry in merged_operations if _is_topic_entry(entry[1])]
-            workspace_entries = [entry for entry in merged_operations if not _is_topic_entry(entry[1])]
-
-            # 工作区重放：任何一条失败即中止整体回滚
-            workspace_ok, affected_files = await self._replay_file_operations(
-                workspace_entries, is_forward=is_forward, collect_affected=True,
+            # 一次重放完成全部空间的回滚：每条的重放策略（失败是否中止、
+            # 是否构建受影响文件）由空间注册表按条目决定，新增空间无需
+            # 改动本方法。
+            ok, affected_files = await self._replay_file_operations(
+                merged_operations, is_forward=is_forward,
             )
-            if not workspace_ok:
+            if not ok:
                 logger.error("工作区文件回滚失败")
                 return False, []
-
-            # topic（聊天历史）重放：尽力而为。空分区是旧版本沙箱创建的
-            # checkpoint（没有 topic 帧），跳过即可。
-            if not topic_entries:
-                logger.warning("checkpoint 范围内没有 topic 帧，跳过挂载内 topic 文件恢复（可能由旧版本沙箱创建）")
-            else:
-                topic_ok, _ = await self._replay_file_operations(topic_entries, is_forward=is_forward)
-                if not topic_ok:
-                    logger.error("topic 文件回滚失败，但工作区回滚已成功")
-                    logger.warning("继续完成回滚，但 topic 挂载内文件可能不一致")
-
-            # 聊天历史（.chat_history 本地目录）回滚：同样尽力而为。它不在
-            # magicfs 挂载内、没有帧可重放，用 checkpoint 里的整目录快照
-            # 按回滚方向恢复；快照缺失（旧版本 checkpoint）时跳过。
-            await self._execute_chat_history_rollback(direction, checkpoints_to_process)
 
             # 更新当前checkpoint状态
             await self.metadata_manager.update_current_checkpoint(target_checkpoint_id)
@@ -336,119 +318,57 @@ class RollbackExecutor:
         entries: List[Tuple[str, FileSnapshot]],
         *,
         is_forward: bool,
-        collect_affected: bool = False,
     ) -> Tuple[bool, List[Dict[str, str]]]:
         """重放引擎：按 operation 语义逐条恢复合并后的文件操作。
 
+        每条的重放策略由空间注册表按条目自行决定，单一循环、无分区特判：
+
+        - 工作区空间条目：失败即中止整体回滚（返回 False）；成功后经
+          xattr 构建受影响文件（供文件版本创建）。
+        - 内部状态空间条目：尽力而为——失败仅告警并继续，不构建受影响
+          文件。
+
         Args:
-            entries: [(checkpoint_id, file_snapshot), ...]，已由调用方过滤分区
+            entries: [(checkpoint_id, file_snapshot), ...]，合并后的操作流
             is_forward: True=正向回滚(应用 latest), False=反向回滚(撤销到 initial)
-            collect_affected: True 时读取 xattr 构建受影响文件列表（工作区分区用）
 
         Returns:
-            Tuple[bool, List[Dict[str, str]]]: 重放是否全部成功、受影响文件列表
+            Tuple[bool, List[Dict[str, str]]]: 重放是否成功、受影响文件列表。
+            注意失败返回 False 时重放是部分完成的，已恢复的条目不回退
+            （current_checkpoint_id 未推进，可重试整次回滚）。
         """
+        # 工作区条目整体在前、内部状态空间条目在后（各自保持合并顺序）：
+        # 跨空间路径互不相交，此排序只为保留"工作区先完整尝试"的既有
+        # 语义——工作区失败时内部状态空间条目尚未开始重放。
+        ordered = (
+            [entry for entry in entries if not _is_internal_space_entry(entry[1])]
+            + [entry for entry in entries if _is_internal_space_entry(entry[1])]
+        )
+
         success_count = 0
         affected_files: Dict[str, Dict[str, str]] = {}
-        for checkpoint_id, file_snapshot in entries:
+        for checkpoint_id, file_snapshot in ordered:
+            internal = _is_internal_space_entry(file_snapshot)
             success = await self._restore_file_by_operation(
                 checkpoint_id, file_snapshot, is_forward=is_forward,
             )
             if not success:
+                if internal:
+                    logger.warning(
+                        "内部状态空间帧重放失败，跳过继续（尽力而为）: %s",
+                        file_snapshot.file_path,
+                    )
+                    continue
                 logger.error(f"帧重放失败: {file_snapshot.file_path}")
                 return False, []
             success_count += 1
-            if collect_affected:
+            if not internal:
                 affected_file = await self._build_affected_file(file_snapshot, is_forward)
                 if affected_file is not None:
                     self._merge_affected_file(affected_files, affected_file)
 
-        logger.info(f"帧重放完成，成功处理了{success_count}/{len(entries)}个文件操作")
+        logger.info(f"帧重放完成，成功处理了{success_count}/{len(ordered)}个文件操作")
         return True, list(affected_files.values())
-
-    async def _execute_chat_history_rollback(self, direction: str, checkpoints_to_process: List[str]) -> bool:
-        """执行聊天历史回滚：按回滚方向恢复 checkpoint 里的整目录快照。
-
-        与帧重放共用同一次查询得到的回滚方向和 checkpoint 范围：
-        - backward: checkpoints_to_process[0] 的 initial 快照（代表 target
-          执行后的状态）
-        - forward: checkpoints_to_process[-1] 的 latest 快照（就是 target
-          最后一次保存后的状态）
-
-        尽力而为：快照缺失（旧版本 checkpoint）或恢复失败只记日志，
-        不改变工作区回滚的结果。
-        """
-        try:
-            logger.info(f"聊天历史回滚方向: {direction}, 需要处理的checkpoint: {checkpoints_to_process}")
-
-            if direction == "none":
-                logger.info("当前checkpoint与目标checkpoint相同，无需回滚聊天历史")
-                return True
-            elif direction == "backward":
-                return await self._execute_backward_chat_history_rollback(checkpoints_to_process)
-            elif direction == "forward":
-                return await self._execute_forward_chat_history_rollback(checkpoints_to_process)
-            else:
-                logger.error(f"未知的回滚方向: {direction}")
-                return False
-
-        except Exception as e:
-            logger.error(f"执行聊天历史回滚失败: {e}", exc_info=True)
-            return False
-
-    async def _execute_backward_chat_history_rollback(self, checkpoints_to_process: List[str]) -> bool:
-        """反向回滚聊天历史：恢复 checkpoints_to_process[0] 的 initial 快照。"""
-        try:
-            if not checkpoints_to_process:
-                logger.warning("没有需要处理的checkpoint，跳过聊天历史回滚")
-                return True
-
-            first_checkpoint_id = checkpoints_to_process[0]
-            logger.info(f"执行反向聊天历史回滚，使用 checkpoint {first_checkpoint_id} 的 initial 快照")
-
-            snapshot_dir = self.storage.get_initial_chat_history_snapshots_dir(first_checkpoint_id)
-
-            if not await async_exists(snapshot_dir):
-                logger.warning(f"checkpoint {first_checkpoint_id} 没有 initial 聊天历史快照，跳过历史回滚")
-                return True
-
-            success = await self.chat_history_snapshot_manager.restore_from_initial_chat_history(snapshot_dir)
-            if success:
-                logger.info(f"反向聊天历史回滚成功，已恢复到 checkpoint {first_checkpoint_id} 的 initial 状态")
-            else:
-                logger.error(f"反向聊天历史回滚失败: {first_checkpoint_id}")
-            return success
-
-        except Exception as e:
-            logger.error(f"反向聊天历史回滚失败: {e}")
-            return False
-
-    async def _execute_forward_chat_history_rollback(self, checkpoints_to_process: List[str]) -> bool:
-        """正向回滚聊天历史：恢复 checkpoints_to_process[-1] 的 latest 快照。"""
-        try:
-            if not checkpoints_to_process:
-                logger.warning("没有需要处理的checkpoint，跳过聊天历史回滚")
-                return True
-
-            last_checkpoint_id = checkpoints_to_process[-1]
-            logger.info(f"执行正向聊天历史回滚，使用 checkpoint {last_checkpoint_id} 的 latest 快照")
-
-            snapshot_dir = self.storage.get_latest_chat_history_snapshots_dir(last_checkpoint_id)
-
-            if not await async_exists(snapshot_dir):
-                logger.warning(f"checkpoint {last_checkpoint_id} 没有 latest 聊天历史快照，跳过历史回滚")
-                return True
-
-            success = await self.chat_history_snapshot_manager.restore_from_latest_chat_history(snapshot_dir)
-            if success:
-                logger.info(f"正向聊天历史回滚成功，已恢复到 checkpoint {last_checkpoint_id} 的 latest 状态")
-            else:
-                logger.error(f"正向聊天历史回滚失败: {last_checkpoint_id}")
-            return success
-
-        except Exception as e:
-            logger.error(f"正向聊天历史回滚失败: {e}")
-            return False
 
     async def undo_rollback(self, latest_checkpoint_id: str) -> Tuple[bool, List[Dict[str, str]]]:
         """
@@ -861,10 +781,10 @@ class RollbackExecutor:
             )
 
             # 根据回滚方向和操作类型过滤文件
-            # 文件版本只针对用户可见的项目文件；topic 空间（聊天历史）
-            # 条目随 checkpoint 恢复，不进入版本链路。
+            # 文件版本只针对用户可见的项目文件；topic / chat_history
+            # 空间（Agent 内部状态）条目随 checkpoint 恢复，不进入版本链路。
             merged_operations = [
-                entry for entry in merged_operations if not _is_topic_entry(entry[1])
+                entry for entry in merged_operations if not _is_internal_space_entry(entry[1])
             ]
             files_for_version = []
             for checkpoint_id, file_snapshot in merged_operations:
