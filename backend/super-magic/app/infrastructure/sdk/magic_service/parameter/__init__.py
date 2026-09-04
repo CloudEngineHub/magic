@@ -10,6 +10,7 @@ from .ai_ability_runtime_config_parameter import AiAbilityRuntimeConfigParameter
 from .get_agent_details_parameter import GetAgentDetailsParameter
 from .message_schedule_parameter import MessageScheduleParameter, TimeConfig
 from .oauth2_callback_relay_parameter import OAuth2CallbackRelayParameter
+from .mcp_authorization_credential_parameter import MCPAuthorizationCredentialParameter
 from .get_agent_openapi_parameter import GetAgentOpenApiParameter
 from .update_agent_parameter import UpdateAgentParameter
 from .get_skill_file_urls_parameter import GetSkillFileUrlsParameter
@@ -50,6 +51,7 @@ __all__ = [  # noqa: RUF022 - 保留既有分组和导出顺序
     'MessageScheduleParameter',
     'TimeConfig',
     'OAuth2CallbackRelayParameter',
+    'MCPAuthorizationCredentialParameter',
     'GetAgentOpenApiParameter',
     'UpdateAgentParameter',
     'GetSkillFileUrlsParameter',

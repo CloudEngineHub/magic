@@ -11,12 +11,14 @@ use App\Application\Kernel\AbstractKernelAppService;
 use App\Application\MCP\Authorization\Discovery\MCPAuthorizationDiscoveryClient;
 use App\Application\MCP\Authorization\Flow\MCPAuthorizationTokenClient;
 use App\Application\MCP\Authorization\State\MCPAuthorizationStateStore;
+use App\Domain\MCP\Constant\ServiceConfigAuthType;
 use App\Domain\MCP\Entity\MCPAuthorizationCredentialEntity;
 use App\Domain\MCP\Entity\MCPServerEntity;
 use App\Domain\MCP\Entity\ValueObject\Authorization\MCPAuthorizationConfig;
 use App\Domain\MCP\Entity\ValueObject\MCPDataIsolation;
 use App\Domain\MCP\Entity\ValueObject\ServiceConfig\ExternalSSEServiceConfig;
 use App\Domain\MCP\Service\MCPAuthorizationCredentialDomainService;
+use App\Domain\MCP\Service\MCPServerDomainService;
 use App\ErrorCode\MCPErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use GuzzleHttp\Client;
@@ -46,6 +48,7 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
         private readonly MCPAuthorizationCredentialDomainService $credentialDomainService,
         private readonly MCPAuthorizationStateStore $stateStore,
         private readonly MCPAuthorizationSecretCipher $secretCipher,
+        private readonly MCPServerDomainService $mcpServerDomainService,
         private readonly ConfigInterface $config,
         LoggerFactory $loggerFactory
     ) {
@@ -274,7 +277,7 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
     /**
      * 为 Super Magic 任务解析新模式的运行时访问令牌。
      *
-     * 返回值仅供当前请求构建 MCP HTTP header，不会写入配置或 API 响应。
+     * 返回值仅供当前运行时凭据解析使用，不写入 MCP Server 配置。
      */
     public function getRuntimeAccessToken(MCPDataIsolation $dataIsolation, MCPServerEntity $mcpServer): ?string
     {
@@ -315,6 +318,43 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
             ]);
             return null;
         }
+    }
+
+    /**
+     * 为 Super Magic 提供一次性的 MCP Authorization 运行时凭据。
+     *
+     * 凭据只通过内部服务间接口返回，不写入 MCP Server 配置或用户设置。
+     * access token 是否过期、是否需要 refresh 均由本服务内部处理。
+     *
+     * @return array{status: string, access_token?: string, token_type?: string}
+     */
+    public function getRuntimeCredential(MCPDataIsolation $dataIsolation, string $mcpServerCode): array
+    {
+        $mcpServer = $this->mcpServerDomainService->getByCode($dataIsolation, $mcpServerCode);
+        if (! $mcpServer || ! $mcpServer->isEnabled()) {
+            return ['status' => 'authorization_required'];
+        }
+
+        $serviceConfig = $mcpServer->getServiceConfig();
+        if (! $serviceConfig instanceof ExternalSSEServiceConfig || $serviceConfig->getAuthType() !== ServiceConfigAuthType::MCP_AUTHORIZATION) {
+            return ['status' => 'unsupported'];
+        }
+
+        $accessToken = $this->getRuntimeAccessToken($dataIsolation, $mcpServer);
+        if ($accessToken === null) {
+            $this->logger->notice('MCPAuthorizationRuntimeCredentialUnavailable', [
+                'mcp_server_code' => $mcpServerCode,
+                'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+                'user_id' => $dataIsolation->getCurrentUserId(),
+            ]);
+            return ['status' => 'authorization_required'];
+        }
+
+        return [
+            'status' => 'authorized',
+            'access_token' => $accessToken,
+            'token_type' => 'Bearer',
+        ];
     }
 
     /**

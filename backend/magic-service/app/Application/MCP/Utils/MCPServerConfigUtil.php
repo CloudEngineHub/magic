@@ -145,17 +145,13 @@ class MCPServerConfigUtil
             $serviceConfig = $entity->getServiceConfig();
             $requiredFields = $serviceConfig->getRequireFields();
 
-            // Add OAuth2 authentication if available
-            if ($serviceConfig instanceof ExternalSSEServiceConfig && $userSetting?->getOauth2AuthResult()?->isValid()) {
+            // 仅兼容旧 OAuth2 模式；MCP Authorization 凭据由 Super Magic 建连时按引用获取。
+            if (
+                $serviceConfig instanceof ExternalSSEServiceConfig
+                && $serviceConfig->getAuthType() === ServiceConfigAuthType::OAUTH2
+                && $userSetting?->getOauth2AuthResult()?->isValid()
+            ) {
                 $serviceConfig->addHeader(HeaderConfig::create('Authorization', 'Bearer ' . $userSetting->getOauth2AuthResult()->getAccessToken()));
-            }
-
-            // Add MCP 2026-07-28 Authorization token without touching the legacy OAuth2 result.
-            if ($serviceConfig instanceof ExternalSSEServiceConfig && $serviceConfig->getAuthType() === ServiceConfigAuthType::MCP_AUTHORIZATION) {
-                $token = di(MCPAuthorizationCredentialResolver::class)->resolveAccessToken($mcpDataIsolation, $entity);
-                if ($token !== null) {
-                    $serviceConfig->addHeader(HeaderConfig::create('Authorization', 'Bearer ' . $token));
-                }
             }
 
             if (empty($requiredFields)) {
