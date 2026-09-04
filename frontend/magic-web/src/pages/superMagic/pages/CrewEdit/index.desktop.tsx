@@ -22,6 +22,7 @@ import { loadProjectAttachments } from "@/pages/superMagic/services"
 import {
 	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
+	resolveAttachmentsRefreshWaitersForProject,
 	type SuperMagicUpdateAttachmentsRequest,
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
@@ -203,6 +204,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 	const [userSelectDetail, setUserSelectDetail] = useState<unknown>()
 	const [isDetailPanelFullscreen, setIsDetailPanelFullscreen] = useState(false)
 	const [isInitialAttachmentsLoaded, setIsInitialAttachmentsLoaded] = useState(false)
+	const [isInitialAttachmentsLoadFailed, setIsInitialAttachmentsLoadFailed] = useState(false)
 	const selectedProject = conversation.selectedProject
 	const isViewer = isReadOnlyProject(selectedProject?.user_role)
 	const selectedTopic = conversation.topicStore.selectedTopic
@@ -265,6 +267,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 			if (!projectId) {
 				store.projectFilesStore.setWorkspaceFileTree([])
 				releaseAttachmentsRefreshWaitersWithoutFetch()
+				setIsInitialAttachmentsLoadFailed(false)
 				callback?.(false)
 				return
 			}
@@ -283,13 +286,20 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 					.then((res) => {
 						store.projectFilesStore.setWorkspaceFileTree(res.tree)
 						store.mentionPanelStore.finishLoadAttachmentsPromise(projectId)
+						if (selectedProject?.id === projectId) {
+							setIsInitialAttachmentsLoadFailed(false)
+						}
 						didLoad = true
 					})
 					.catch((error) => {
 						console.error("Failed to fetch crew attachments:", error)
 						store.projectFilesStore.setWorkspaceFileTree([])
+						if (selectedProject?.id === projectId) {
+							setIsInitialAttachmentsLoadFailed(true)
+						}
 					})
 					.finally(() => {
+						resolveAttachmentsRefreshWaitersForProject(projectId, didLoad)
 						pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
 						callback?.(didLoad)
 					}),
@@ -433,6 +443,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
 				const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
 				store.projectFilesStore.setWorkspaceFileTree(processedData.tree)
+				setIsInitialAttachmentsLoadFailed(false)
 				setIsInitialAttachmentsLoaded(true)
 			},
 			[store.projectFilesStore],
@@ -445,11 +456,10 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 	useProjectAttachmentsChangeRealtime({
 		projectId: selectedProject?.id,
 		store: store.projectFilesStore,
-		onAttachmentsChange: useCallback(() => {
-			setIsInitialAttachmentsLoaded(true)
-		}, []),
+		onAttachmentsChange: undefined,
 		onFallbackError: useMemoizedFn((error: unknown) => {
 			console.error("Failed to refresh realtime crew attachments:", error)
+			setIsInitialAttachmentsLoadFailed(true)
 		}),
 	})
 
@@ -457,15 +467,18 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 		const projectId = selectedProject?.id
 		if (!projectId) {
 			setIsInitialAttachmentsLoaded(false)
+			setIsInitialAttachmentsLoadFailed(false)
 			return
 		}
 
 		let isActive = true
 		setIsInitialAttachmentsLoaded(false)
+		setIsInitialAttachmentsLoadFailed(false)
 
 		store.mentionPanelStore.initLoadAttachments(projectId)
 		updateAttachments(projectId, (didLoad) => {
 			if (!isActive || !didLoad) return
+			setIsInitialAttachmentsLoadFailed(false)
 			setIsInitialAttachmentsLoaded(true)
 		})
 
@@ -621,6 +634,8 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 					sidebar={
 						<ConfigStepsPanel
 							onBack={handleBack}
+							isAttachmentsLoaded={isInitialAttachmentsLoaded}
+							isAttachmentsLoadFailed={isInitialAttachmentsLoadFailed}
 							filesContent={
 								<TopicFilesButton
 									{...topicFilesPropsWithPanel}

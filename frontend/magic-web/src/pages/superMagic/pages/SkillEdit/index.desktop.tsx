@@ -35,6 +35,7 @@ import { loadProjectAttachments } from "@/pages/superMagic/services"
 import {
 	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
+	resolveAttachmentsRefreshWaitersForProject,
 	type SuperMagicUpdateAttachmentsRequest,
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
@@ -63,9 +64,14 @@ import EditSkillDialog from "@/pages/superMagic/pages/MySkillsPage/components/Ed
 import { convertSearchParams } from "@/routes/history/helpers"
 import type { PublishDraft } from "@/pages/superMagic/components/PublishPanel"
 import type { SkillEditSkillInfo } from "./store/types"
-import { buildDefaultSlotUpdateParams } from "./utils/skill-workspace-manifest"
+import {
+	buildDefaultSlotUpdateParams,
+	findAttachmentByRelativePath,
+	SKILL_CONFIG_RELATIVE_PATH,
+} from "./utils/skill-workspace-manifest"
 import { ensureSkillConfigYamlForPublish } from "./utils/ensureSkillConfigYaml"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
+import { usePublishScopeNotice } from "@/pages/superMagic/hooks/usePublishScopeNotice"
 
 const SKILL_EDIT_PANEL_QUERY_KEY = "panel"
 const SKILL_EDIT_PUBLISH_VIEW_QUERY_KEY = "publishView"
@@ -157,6 +163,8 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false)
 	const [skillVersions, setSkillVersions] = useState<SkillVersionItem[]>([])
 	const [isPublishPrepareLoading, setIsPublishPrepareLoading] = useState(false)
+	const [isInitialAttachmentsLoaded, setIsInitialAttachmentsLoaded] = useState(false)
+	const [isInitialAttachmentsLoadFailed, setIsInitialAttachmentsLoadFailed] = useState(false)
 	const { isAllowed: canCreateSkill } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.SkillCreate,
 	)
@@ -293,17 +301,19 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	}, [store.loading, loadedSkillCode, refreshSkillVersions])
 
 	const updateAttachments = useDebounceFn(
-		(projectId?: string, callback?: () => void) => {
+		(projectId?: string, callback?: (didLoad: boolean) => void) => {
 			if (!projectId) {
 				store.projectFilesStore.setWorkspaceFileTree([])
 				releaseAttachmentsRefreshWaitersWithoutFetch()
-				callback?.()
+				setIsInitialAttachmentsLoaded(false)
+				callback?.(false)
 				return
 			}
 
 			const temporaryToken =
 				(window as Window & { temporary_token?: string }).temporary_token || ""
 
+			let didLoad = false
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 			withAttachmentsRefreshWaitersResolved(
 				projectId,
@@ -314,14 +324,22 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 					.then((res) => {
 						store.projectFilesStore.setWorkspaceFileTree(res.tree)
 						store.mentionPanelStore.finishLoadAttachmentsPromise(projectId)
+						didLoad = true
+						if (store.project?.id === projectId) {
+							setIsInitialAttachmentsLoadFailed(false)
+						}
 					})
 					.catch((error) => {
 						console.error("Failed to fetch attachments:", error)
 						store.projectFilesStore.setWorkspaceFileTree([])
+						if (store.project?.id === projectId) {
+							setIsInitialAttachmentsLoadFailed(true)
+						}
 					})
 					.finally(() => {
+						resolveAttachmentsRefreshWaitersForProject(projectId, didLoad)
 						pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
-						callback?.()
+						callback?.(didLoad)
 					}),
 			)
 		},
@@ -329,6 +347,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	).run
 
 	useEffect(() => {
+		setIsInitialAttachmentsLoaded(false)
 		void store.initFromSkillCode(skillCode)
 	}, [skillCode, store])
 
@@ -362,6 +381,8 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
 				const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
 				store.projectFilesStore.setWorkspaceFileTree(processedData.tree)
+				setIsInitialAttachmentsLoadFailed(false)
+				setIsInitialAttachmentsLoaded(true)
 			},
 			[store.projectFilesStore],
 		),
@@ -373,19 +394,36 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	useProjectAttachmentsChangeRealtime({
 		projectId: store.project?.id,
 		store: store.projectFilesStore,
+		onAttachmentsChange: undefined,
 		onFallbackError: useMemoizedFn((error: unknown) => {
 			console.error("Failed to refresh realtime skill attachments:", error)
+			setIsInitialAttachmentsLoadFailed(true)
 		}),
 	})
 
 	useDeepCompareEffect(() => {
 		const projectId = store.project?.id
-		if (!projectId) return
+		if (!projectId) {
+			setIsInitialAttachmentsLoaded(false)
+			setIsInitialAttachmentsLoadFailed(false)
+			return
+		}
+
+		let isActive = true
+		setIsInitialAttachmentsLoaded(false)
+		setIsInitialAttachmentsLoadFailed(false)
 
 		store.mentionPanelStore.initLoadAttachments(projectId)
-		updateAttachments(projectId)
+		updateAttachments(projectId, (didLoad) => {
+			if (!isActive) return
+			if (didLoad) {
+				setIsInitialAttachmentsLoadFailed(false)
+				setIsInitialAttachmentsLoaded(true)
+			}
+		})
 
 		return () => {
+			isActive = false
 			store.mentionPanelStore.clearInitLoadAttachmentsPromise(projectId)
 		}
 	}, [store.project?.id])
@@ -513,6 +551,40 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		}
 	})
 
+	const skillPublishPath = useMemo(
+		() =>
+			store.skillWorkspaceDir
+				? `.magic/skills/${store.skillWorkspaceDir}`
+				: ".magic/skills/<skill.dir>",
+		[store.skillWorkspaceDir],
+	)
+	const prepareSkillPublishScope = useMemoizedFn(async () => {
+		const configItem = findAttachmentByRelativePath(
+			store.projectFilesStore.workspaceFilesList,
+			SKILL_CONFIG_RELATIVE_PATH,
+		)
+		if (!configItem?.file_id) return true
+
+		await store.syncSkillWorkspaceManifest({ syncDefaultSlot: false })
+		if (store.skillWorkspaceDir) return true
+		magicToast.error(t("skillEditPage.publishPanel.toast.noValidSkillForPublish"))
+		return false
+	})
+	const { checkBeforeContinue, noticeDialog } = usePublishScopeNotice({
+		projectId: store.project?.id,
+		getAttachmentsStatus: () => ({
+			isLoaded: isInitialAttachmentsLoaded,
+			hasError: isInitialAttachmentsLoadFailed,
+		}),
+		getAttachments: () => store.projectFilesStore.workspaceFilesList,
+		publishPath: () =>
+			store.skillWorkspaceDir ? `.magic/skills/${store.skillWorkspaceDir}` : skillPublishPath,
+		prepareBeforeCheck: prepareSkillPublishScope,
+	})
+	const openPublishPanelWithNotice = useMemoizedFn(async () => {
+		await checkBeforeContinue(openPublishPanel)
+	})
+
 	const {
 		isPublishIdentityDialogOpen,
 		isEnsuringSkillConfigForPublish,
@@ -522,7 +594,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	} = useSkillPublishGuard({
 		store,
 		t,
-		onPublishReady: openPublishPanel,
+		onPublishReady: openPublishPanelWithNotice,
 	})
 
 	useEffect(() => {
@@ -824,6 +896,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 					isPrePublishMode={isPublishIdentityDialogOpen}
 					defaultNameRequiredMessage={t("skillEditPage.publishNameDialog.required")}
 				/>
+				{noticeDialog}
 			</>
 		</FileActionVisibilityProvider>
 	)
