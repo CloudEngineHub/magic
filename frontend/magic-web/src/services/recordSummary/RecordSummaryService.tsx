@@ -67,6 +67,7 @@ import { DurationTracker } from "./DurationTracker"
 import { getSummaryMessageService, SummaryStage } from "./SummaryMessageService"
 import { UploadQueueWatchdog } from "./uploadQueueWatchdog"
 import { runTaskEndCleanup } from "./taskEndCleanup"
+import { runForceOverrideFinalization } from "./recordingOverrideLifecycle"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Button } from "@/components/shadcn-ui/button"
 import type { RecordingEncodingSnapshot } from "./MediaRecorderService/types/RecorderTypes"
@@ -89,9 +90,12 @@ interface EnsureUploadOptions {
 	topicId?: string
 	projectId?: string
 	allowUserDecision?: boolean
+	maxWaitTimeouts?: number
 }
 
 const MAX_UPLOAD_WAIT_TIMEOUTS = 3
+const FORCE_OVERRIDE_MAX_UPLOAD_WAIT_TIMEOUTS = 1
+const FORCE_OVERRIDE_REQUEST_TIMEOUT_MS = 130_000
 
 class RecordSummaryService {
 	// Duration tracking (using reliable AudioContext-based tracker)
@@ -1817,8 +1821,8 @@ class RecordSummaryService {
 	}
 
 	/**
-	 * Stop the active recorder for an explicit override while keeping its session
-	 * metadata and IndexedDB chunks available for audit/export.
+	 * Stop the active recorder for an explicit override, summarize the session,
+	 * then release it while keeping its IndexedDB chunks available for audit/export.
 	 */
 	forceStopRecordingForOverride = async (expectedSessionId?: string): Promise<boolean> => {
 		const activeSession = this.sessionManager.getCurrentSession()
@@ -1840,74 +1844,88 @@ class RecordSummaryService {
 			},
 		})
 
-		this.stopUploadQueueWatchdog()
 		this.stopChunkProductionWatchdog()
 		this.recordStatusChecker.stop()
+
+		let overrideSummaryResult: GetRecordingSummaryResultResponse | null = null
 		try {
-			this.statusReporter.reportStatus({
-				task_key: activeSession.id,
-				status: RecordingSummaryStatus.Canceled,
-				model_id: activeSession.model?.model_id || "",
-				file_shard_count: activeSession.currentChunkIndex,
-				note: recordSummaryStore.note,
-				asr_stream_content: this.getLatestAsrContent(),
+			await runForceOverrideFinalization({
+				stopRecordingServices: () =>
+					this.stopRecordingServices("force_override", {
+						throwOnMediaRecorderError: true,
+					}),
+				flushSessionUploads: () => this.flushSessionUploadsBeforeOverride(activeSession),
+				summarizeSession: async () => {
+					this.statusReporter.stopPeriodicReport()
+					this.stopUploadQueueWatchdog()
+
+					const { project, topic } = await this.ensureProjectAndTopic(activeSession)
+					overrideSummaryResult = await this.processSummaryForSession(
+						activeSession,
+						project.id,
+						topic.id,
+						{
+							note: activeSession.note ?? recordSummaryStore.note,
+							asr_stream_content: this.getLatestAsrContent(),
+						},
+					)
+				},
+				completeSession: () => {
+					// Summary has been accepted by the server; complete only the old local
+					// session and leave its IndexedDB audio chunks available for audit/export.
+					this.cleanupAfterSessionComplete()
+					this.recordingPersistence.deleteSession(activeSession.id)
+					this.emit(RECORD_SUMMARY_EVENTS.UPDATE_EMPTY_WORKSPACE_PANEL_PROJECTS, {
+						topicId: activeSession.topic?.id || "",
+						projectId: activeSession.project?.id || "",
+						workspaceId: activeSession.workspace?.id || "",
+					})
+					this.emit(RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE, { session: activeSession })
+					logger.report("强制发起前上一段录音总结已触发", {
+						sessionId: activeSession.id,
+						taskKey: overrideSummaryResult?.task_key,
+					})
+				},
 			})
 		} catch (error) {
-			logger.warn("强制发起时上报上一段录音取消状态失败", { error })
-		}
-		this.statusReporter.stopPeriodicReport()
-		try {
-			await this.stopRecordingServices("force_override", { throwOnMediaRecorderError: true })
-		} catch (error) {
+			this.statusReporter.stopPeriodicReport()
+			this.stopUploadQueueWatchdog()
 			logger.error({
-				eventKey: "force_override_stop_failed",
+				eventKey: "force_override_summary_failed",
 				errorKind: "unknown",
 				error,
-				message: "强制发起时停止录音失败，保留原录音锁",
+				message: "强制发起时上一段录音总结失败，保留原录音锁",
 				context: { sessionId: activeSession.id },
 			})
 			return false
 		}
-		this.durationTracker.stop()
-		await this.wakeLockManager.releaseWakeLock().catch((error) => {
-			logger.warn("强制发起时释放唤醒锁失败", { error })
-		})
-		this.wakeLockManager.removeVisibilityChangeListener()
-		this.removeBeforeUnloadListener()
+		return true
+	}
 
-		let overriddenSession: RecordingSession | null = null
-		try {
-			overriddenSession = this.sessionManager.markForceOverriddenSession()
-		} catch (error) {
-			logger.error({
-				eventKey: "force_override_session_archive_failed",
-				errorKind: "storage",
-				error,
-				message: "归档被覆盖的录音会话失败",
-				context: { sessionId: activeSession.id },
-			})
-		}
-		if (overriddenSession) {
-			try {
-				this.recordingPersistence.saveSession(overriddenSession)
-			} catch (error) {
-				logger.warn("归档录音会话写入当前存储失败，历史分片仍保留", { error })
-			}
+	private flushSessionUploadsBeforeOverride = async (
+		session: RecordingSession,
+	): Promise<void> => {
+		const topicId = session.topic?.id || ""
+		const projectId = session.project?.id || ""
+		const progress = await this.chunkUploader.getSessionUploadProgress(session.id)
+
+		if (progress.failed > 0) {
+			await this.chunkUploader.retryFailedChunks(session.id, topicId, projectId)
 		}
 
-		// Reset only the live UI snapshot; persistence and chunk storage are kept.
-		recordSummaryStore.reset()
-		this.tabCoordinator.releaseLock({
-			type: "force_override",
-			data: {
-				message: [],
-				duration: "00:00:00",
-				isRecording: false,
-				sessionId: activeSession.id,
-			},
+		this.startUploadQueueWatchdog(session.id, topicId, projectId)
+		await this.chunkUploader.uploadSession(session.id, topicId, projectId)
+		await this.ensureSessionUploadComplete(session, {
+			topicId,
+			projectId,
+			allowUserDecision: false,
+			maxWaitTimeouts: FORCE_OVERRIDE_MAX_UPLOAD_WAIT_TIMEOUTS,
 		})
 
-		return Boolean(overriddenSession)
+		logger.report("强制发起前上一段录音分片已全部上传", {
+			sessionId: session.id,
+			chunkCount: session.currentChunkIndex,
+		})
 	}
 
 	/** Prepare a new recording after explicitly taking over an existing session. */
@@ -1937,6 +1955,7 @@ class RecordSummaryService {
 
 		const overridden = await this.tabCoordinator.requestRecordingOverride(
 			recordSummaryStore.multiTabState.activeTabData.sessionId,
+			FORCE_OVERRIDE_REQUEST_TIMEOUT_MS,
 		)
 		if (!overridden) {
 			logger.warn("未能确认其他标签已停止录音", { source: "force_override" })
@@ -4386,7 +4405,11 @@ class RecordSummaryService {
 							queueReason: health.reason,
 						})
 
-						if (stalledTimeouts >= MAX_UPLOAD_WAIT_TIMEOUTS) throw error
+						if (
+							stalledTimeouts >= (options.maxWaitTimeouts ?? MAX_UPLOAD_WAIT_TIMEOUTS)
+						) {
+							throw error
+						}
 						if (health.stalled) {
 							await this.chunkUploader.resumeStalledSessionUploads(
 								session.id,

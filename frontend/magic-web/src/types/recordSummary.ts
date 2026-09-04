@@ -15,7 +15,7 @@ import type {
 // 录制状态枚举
 export type RecordingStatus = "init" | "recording" | "paused" | "server_cancelled"
 
-export type ServerTerminationSource = "server_auto_summary" | "server_task_ended" | "force_override"
+export type ServerTerminationSource = "server_auto_summary" | "server_task_ended"
 
 // 分片状态枚举
 export type ChunkStatus = "pending" | "uploading" | "uploaded" | "failed"

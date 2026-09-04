@@ -137,7 +137,7 @@ export interface RecordingOverrideResultData {
 }
 
 export type TabStatus = "active" | "inactive" | "pending" | "disconnected"
-export type TabLockReleaseType = "finish" | "closeTab" | "reset" | "force_override"
+export type TabLockReleaseType = "finish" | "closeTab" | "reset"
 
 export const enum TAB_COORDINATOR_EVENTS {
 	/**
@@ -925,7 +925,7 @@ export class TabCoordinator {
 	}
 
 	/**
-	 * Ask the active tab to stop immediately while preserving its local session data.
+	 * Ask the active tab to finish and summarize its current recording.
 	 * A missing response is treated as failure so a new recording is never started
 	 * while ownership of the microphone is ambiguous.
 	 */

@@ -419,15 +419,6 @@ export class RecordingSessionManager {
 	}
 
 	/**
-	 * Preserve a locally captured session when a user explicitly starts a new one.
-	 * The status remains export-only while the termination source explains why it
-	 * was stopped; audio chunks are intentionally left in IndexedDB.
-	 */
-	markForceOverriddenSession(): RecordingSession | null {
-		return this.markServerCancelledSession(undefined, "force_override")
-	}
-
-	/**
 	 * Pause current session
 	 * 暂停当前会话
 	 */
