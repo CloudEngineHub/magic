@@ -104,6 +104,23 @@ return [
         'not_configured' => 'MCP standard authorization is not configured',
     ],
 
+    // MCP authorization callback page
+    'authorization_callback' => [
+        'title' => [
+            'success' => 'Authorization completed',
+            'failure' => 'Authorization failed',
+        ],
+        'message' => [
+            'success' => 'MCP authorization is complete. You can close this page.',
+            'failure' => 'The MCP authorization callback failed. Return to the original page and try again.',
+        ],
+        'description' => [
+            'success' => 'This page will close automatically in 10 seconds. You can also return to the original page to continue.',
+            'failure' => 'Check that the authorization server is configured correctly, or start the authorization flow again.',
+        ],
+        'countdown' => ' seconds until this page closes automatically',
+    ],
+
     // Command validation errors
     'command' => [
         'not_allowed' => 'Unsupported command ":command", currently only supports: :allowed_commands',

@@ -18,6 +18,7 @@ use App\Domain\MCP\Entity\ValueObject\ServiceConfig\ExternalSSEServiceConfig;
 use App\Domain\MCP\Service\MCPAuthorizationCredentialDomainService;
 use App\ErrorCode\MCPErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Util\Context\CoContext;
 use GuzzleHttp\Client;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Logger\LoggerFactory;
@@ -126,6 +127,7 @@ class MCPAuthorizationAppService
                 'token_endpoint_auth_method' => $registration['token_endpoint_auth_method'],
                 'registration_mode' => $this->resolveRegistrationMode($config),
                 'metadata' => $metadata,
+                'language' => CoContext::getLanguageOrNull(),
                 'created_at' => time(),
             ]);
 

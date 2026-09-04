@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\MCP\Facade\Public;
 
 use App\Application\MCP\Authorization\MCPAuthorizationBindingService;
+use Hyperf\Contract\TranslatorInterface;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use Hyperf\HttpServer\Contract\ResponseInterface as HttpResponse;
 use Psr\Http\Message\ResponseInterface;
@@ -21,7 +22,8 @@ class MCPAuthorizationCallbackPublicApi
     public function __construct(
         private readonly RequestInterface $request,
         private readonly HttpResponse $response,
-        private readonly MCPAuthorizationBindingService $bindingService
+        private readonly MCPAuthorizationBindingService $bindingService,
+        private readonly TranslatorInterface $translator
     ) {
     }
 
@@ -30,6 +32,16 @@ class MCPAuthorizationCallbackPublicApi
      */
     public function callback(): ResponseInterface
     {
+        $locale = 'en_US';
+        try {
+            $locale = $this->resolveLocale($this->bindingService->getPublicCallbackLanguage(
+                (string) $this->request->input('state', '')
+            ));
+        } catch (Throwable) {
+            // state 读取失败时使用英文页面，不能影响回调错误页的输出。
+        }
+        $this->translator->setLocale($locale);
+
         try {
             $this->bindingService->bindPublic(
                 (string) $this->request->input('code', ''),
@@ -39,30 +51,53 @@ class MCPAuthorizationCallbackPublicApi
             );
         } catch (Throwable) {
             return $this->response->html($this->renderPage(
-                '授权处理失败',
-                'MCP 授权回调处理失败，请返回原页面重试。',
-                '请确认授权服务器配置正确，或重新发起授权。',
+                $locale,
+                $this->translator->trans('mcp.authorization_callback.title.failure'),
+                $this->translator->trans('mcp.authorization_callback.message.failure'),
+                $this->translator->trans('mcp.authorization_callback.description.failure'),
                 false
             ));
         }
 
         return $this->response->html($this->renderPage(
-            '授权已完成',
-            'MCP 授权已完成，可以关闭此页面。',
-            '页面将在 10 秒后自动关闭，你也可以回到原页面继续操作。',
+            $locale,
+            $this->translator->trans('mcp.authorization_callback.title.success'),
+            $this->translator->trans('mcp.authorization_callback.message.success'),
+            $this->translator->trans('mcp.authorization_callback.description.success'),
             true
         ));
     }
 
     /**
+     * 将 state 中的语种规范化为当前支持的翻译 locale。
+     */
+    private function resolveLocale(?string $language): string
+    {
+        $language = str_replace('-', '_', trim((string) $language));
+        return match ($language) {
+            'zh', 'zh_CN' => 'zh_CN',
+            'en', 'en_US' => 'en_US',
+            'th', 'th_TH' => 'th_TH',
+            'ms', 'ms_MY' => 'ms_MY',
+            'vi', 'vi_VN' => 'vi_VN',
+            default => 'en_US',
+        };
+    }
+
+    /**
      * 渲染授权回调结果页面。
      */
-    private function renderPage(string $title, string $message, string $description, bool $autoClose): string
+    private function renderPage(string $locale, string $title, string $message, string $description, bool $autoClose): string
     {
         $safeTitle = htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $safeMessage = htmlspecialchars($message, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $safeDescription = htmlspecialchars($description, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $countdownHtml = $autoClose ? '<p class="countdown"><span id="countdown">10</span> 秒后自动关闭</p>' : '';
+        $countdownText = htmlspecialchars(
+            $this->translator->trans('mcp.authorization_callback.countdown'),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+        $countdownHtml = $autoClose ? '<p class="countdown"><span id="countdown">10</span>' . $countdownText . '</p>' : '';
         $scriptHtml = $autoClose ? <<<'HTML'
 <script>
     let seconds = 10;
@@ -82,7 +117,7 @@ HTML : '';
 
         return <<<HTML
 <!doctype html>
-<html lang="zh-CN">
+<html lang="{$this->toHtmlLanguage($locale)}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -136,5 +171,13 @@ HTML : '';
 </body>
 </html>
 HTML;
+    }
+
+    /**
+     * 将翻译 locale 转换为 HTML lang 属性格式。
+     */
+    private function toHtmlLanguage(string $locale): string
+    {
+        return htmlspecialchars(str_replace('_', '-', $locale), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 }

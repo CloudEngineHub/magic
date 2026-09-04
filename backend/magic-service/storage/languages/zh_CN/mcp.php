@@ -104,6 +104,23 @@ return [
         'not_configured' => 'MCP标准授权未配置',
     ],
 
+    // MCP 授权回调页面
+    'authorization_callback' => [
+        'title' => [
+            'success' => '授权已完成',
+            'failure' => '授权处理失败',
+        ],
+        'message' => [
+            'success' => 'MCP 授权已完成，可以关闭此页面。',
+            'failure' => 'MCP 授权回调处理失败，请返回原页面重试。',
+        ],
+        'description' => [
+            'success' => '页面将在 10 秒后自动关闭，你也可以回到原页面继续操作。',
+            'failure' => '请确认授权服务器配置正确，或重新发起授权。',
+        ],
+        'countdown' => ' 秒后自动关闭',
+    ],
+
     // 命令验证错误
     'command' => [
         'not_allowed' => '不支持的命令 ":command"，当前仅支持: :allowed_commands',

@@ -67,6 +67,16 @@ class MCPAuthorizationBindingService
     }
 
     /**
+     * 获取公开回调页面使用的 state 语种，不消费一次性 state。
+     */
+    public function getPublicCallbackLanguage(string $state): ?string
+    {
+        $stateData = $this->stateStore->get($state);
+        $language = $stateData['language'] ?? null;
+        return is_string($language) && $language !== '' ? $language : null;
+    }
+
+    /**
      * 校验并消费授权回调 state。
      *
      * @return array<string, mixed>
