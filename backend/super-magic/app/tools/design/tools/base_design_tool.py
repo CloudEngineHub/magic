@@ -417,7 +417,13 @@ class BaseDesignTool(AbstractFileTool[T], WorkspaceTool[T], Generic[T]):
         # Windows: < > : " / \ | ? *
         # Unix: /
         # 同时移除控制字符
-        sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name)
+        sanitized = re.sub(
+            r'(?:\[(?:图片|视频|音频|image|video|audio)\s*\d+\]|\{\{(?:image|video|audio)_\d+\}\}|@(?:图片|视频|音频|image|video|audio)\s*\d+)',
+            '',
+            name,
+            flags=re.IGNORECASE,
+        )
+        sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', sanitized)
 
         # 移除首尾空格和点（避免隐藏文件或路径问题）
         sanitized = sanitized.strip('. ')
