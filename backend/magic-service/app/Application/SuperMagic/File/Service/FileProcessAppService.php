@@ -559,12 +559,14 @@ class FileProcessAppService extends AbstractAppService
             $userAuthorization->setOrganizationCode($requestDTO->getOrganizationCode());
 
             // Use unified FileAppService to get STS Token (with dual endpoint)
+            // 与沙箱初始化保持一致：凭证需同时含上传与删除权限（如 checkpoint 清理）
             return $this->fileAppService->getDualEndpointStsCredentialV2(
                 $projectEntity->getUserOrganizationCode(),
                 $storageType,
                 $projectDir,
                 $expires,
-                false
+                false,
+                ['sts_type' => 'upload_objects|del_objects']
             );
         } catch (Throwable $e) {
             $this->logger->error(sprintf(
