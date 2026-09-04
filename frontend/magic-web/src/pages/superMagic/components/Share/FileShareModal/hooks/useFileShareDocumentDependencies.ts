@@ -75,9 +75,15 @@ export function useFileShareDocumentDependencies({
 		fileIds: analysisFileId ? [analysisFileId] : [],
 		attachments,
 	})
+	// Static dependency analysis is valid only after a recording bundle has a stable root path.
+	// Until then, sharing the currently available recording file must remain available.
+	const multiDocumentAnalysisEnabled =
+		analyzeSelectedDocuments &&
+		autoIncludeDocumentDependencies &&
+		Boolean(dependencyBundleRootPath)
 
 	useEffect(() => {
-		if (!analyzeSelectedDocuments || !autoIncludeDocumentDependencies || shareProject) {
+		if (!multiDocumentAnalysisEnabled || shareProject) {
 			setMultiDocumentDependencyFileIds([])
 			setMultiDocumentDependencyAnalysisError(null)
 			setIsMultiDocumentAnalysisLoading(false)
@@ -90,7 +96,7 @@ export function useFileShareDocumentDependencies({
 			selectedFileIds,
 			attachments: dependencyAttachments,
 			bundleRootPath: dependencyBundleRootPath,
-			requireBundleRootPath: analyzeSelectedDocuments && autoIncludeDocumentDependencies,
+			requireBundleRootPath: multiDocumentAnalysisEnabled,
 		})
 			.then((result) => {
 				if (cancelled) return
@@ -117,8 +123,7 @@ export function useFileShareDocumentDependencies({
 			cancelled = true
 		}
 	}, [
-		analyzeSelectedDocuments,
-		autoIncludeDocumentDependencies,
+		multiDocumentAnalysisEnabled,
 		dependencyAttachments,
 		dependencyBundleRootPath,
 		selectedFileIds,
@@ -200,7 +205,7 @@ export function useFileShareDocumentDependencies({
 		? selectedFileIds
 		: selectedFileIds.filter((fileId) => !autoSelectedFileIdSet.has(fileId))
 	const fileIdsForSubmission = useMemo(() => {
-		if (analyzeSelectedDocuments && autoIncludeDocumentDependencies) {
+		if (multiDocumentAnalysisEnabled) {
 			return mergeStaticDependencyFileIds(
 				selectedFileIds,
 				multiDocumentDependencyFileIds,
@@ -214,8 +219,7 @@ export function useFileShareDocumentDependencies({
 			shouldIncludeDependencies,
 		)
 	}, [
-		analyzeSelectedDocuments,
-		autoIncludeDocumentDependencies,
+		multiDocumentAnalysisEnabled,
 		multiDocumentDependencyFileIds,
 		selectedFileIds,
 		selectedFileIdsForSubmission,
@@ -234,10 +238,9 @@ export function useFileShareDocumentDependencies({
 		fileIdsForSubmission,
 		handleFileIdsChange,
 		includeDocumentDependencies,
-		isAnalyzing:
-			analyzeSelectedDocuments && autoIncludeDocumentDependencies
-				? isMultiDocumentAnalysisLoading
-				: Boolean(analysisFileId) && staticDependencies.isLoading,
+		isAnalyzing: multiDocumentAnalysisEnabled
+			? isMultiDocumentAnalysisLoading
+			: Boolean(analysisFileId) && staticDependencies.isLoading,
 		showDependencyOption:
 			!analyzeSelectedDocuments && Boolean(analysisFileId) && hasResolvedDependencies,
 		setIncludeDocumentDependencies,
