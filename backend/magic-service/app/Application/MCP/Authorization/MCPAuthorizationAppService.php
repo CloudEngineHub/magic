@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\MCP\Authorization;
 
+use App\Application\Kernel\AbstractKernelAppService;
 use App\Application\MCP\Authorization\Discovery\MCPAuthorizationDiscoveryClient;
 use App\Application\MCP\Authorization\Flow\MCPAuthorizationTokenClient;
 use App\Application\MCP\Authorization\State\MCPAuthorizationStateStore;
@@ -30,7 +31,7 @@ use Throwable;
 /**
  * MCP 2026-07-28 Authorization 应用服务。
  */
-class MCPAuthorizationAppService
+class MCPAuthorizationAppService extends AbstractKernelAppService
 {
     private LoggerInterface $logger;
 

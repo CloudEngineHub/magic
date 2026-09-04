@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\MCP\Authorization;
 
+use App\Application\Kernel\AbstractKernelAppService;
 use App\Application\MCP\Authorization\Flow\MCPAuthorizationTokenClient;
 use App\Application\MCP\Authorization\State\MCPAuthorizationStateStore;
 use App\Domain\MCP\Entity\MCPAuthorizationCredentialEntity;
@@ -15,7 +16,6 @@ use App\Domain\MCP\Service\MCPAuthorizationCredentialDomainService;
 use App\Domain\MCP\Service\MCPServerDomainService;
 use App\ErrorCode\MCPErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
-use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use GuzzleHttp\Client;
 use Qbhy\HyperfAuth\Authenticatable;
 use RuntimeException;
@@ -23,7 +23,7 @@ use RuntimeException;
 /**
  * MCP Authorization 回调绑定服务。
  */
-class MCPAuthorizationBindingService
+class MCPAuthorizationBindingService extends AbstractKernelAppService
 {
     private MCPAuthorizationTokenClient $tokenClient;
 
@@ -48,7 +48,7 @@ class MCPAuthorizationBindingService
         if ((string) ($stateData['user_id'] ?? '') !== (string) $authorization->getId()) {
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
         }
-        $dataIsolation = $this->createDataIsolation($authorization);
+        $dataIsolation = $this->createMCPDataIsolation($authorization);
         if ($dataIsolation->getCurrentOrganizationCode() !== (string) ($stateData['organization_code'] ?? '')) {
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
         }
@@ -175,21 +175,11 @@ class MCPAuthorizationBindingService
         if ($mcpServerCode === '') {
             ExceptionBuilder::throw(MCPErrorCode::ValidateFailed, 'common.empty', ['label' => 'mcp_server_code']);
         }
-        $dataIsolation = $this->createDataIsolation($authorization);
+        $dataIsolation = $this->createMCPDataIsolation($authorization);
         $deleted = $issuer !== null && $issuer !== ''
             ? $this->credentialDomainService->deleteByIssuer($dataIsolation, $authorization->getId(), $mcpServerCode, $issuer)
             : $this->credentialDomainService->deleteByServer($dataIsolation, $authorization->getId(), $mcpServerCode);
         return ['success' => true, 'data' => ['deleted' => $deleted]];
     }
 
-    /**
-     * 根据 Web 鉴权对象构造 MCP 数据隔离。
-     */
-    private function createDataIsolation(Authenticatable $authorization): MCPDataIsolation
-    {
-        if (! $authorization instanceof MagicUserAuthorization) {
-            throw new RuntimeException('MCP authorization requires web user authentication');
-        }
-        return MCPDataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
-    }
 }
