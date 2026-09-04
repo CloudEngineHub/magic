@@ -85,6 +85,32 @@ return [
         ],
     ],
 
+    // การตรวจสอบความสามารถของ MCP Authorization
+    'authorization_capability' => [
+        'unsupported' => 'บริการนี้ไม่ได้เลือกการอนุญาตมาตรฐาน MCP',
+        'not_configured' => 'ไม่มีการกำหนดค่าการอนุญาตมาตรฐาน MCP',
+        'resource_url_required' => 'MCP Resource ต้องเป็น URL แบบเต็ม',
+        'invalid_server_metadata' => 'ข้อมูลเมตาของเซิร์ฟเวอร์การอนุญาตไม่ถูกต้อง',
+        'missing_server_endpoints' => 'ข้อมูลเมตาของเซิร์ฟเวอร์การอนุญาตขาด endpoint ที่จำเป็น',
+        'probe_failed' => 'การตรวจสอบความสามารถของ MCP Authorization ล้มเหลว',
+        'registration' => [
+            'pre_registered' => 'ผู้ดูแลระบบต้องลงทะเบียนไคลเอนต์ล่วงหน้า',
+            'cimd_supported' => 'เซิร์ฟเวอร์การอนุญาตประกาศว่ารองรับ CIMD',
+            'cimd_unsupported' => 'เซิร์ฟเวอร์การอนุญาตไม่ได้ประกาศว่ารองรับ CIMD',
+            'dcr_found' => 'พบ endpoint สำหรับลงทะเบียนไคลเอนต์แบบไดนามิก',
+            'dcr_missing' => 'ไม่พบ endpoint สำหรับลงทะเบียนไคลเอนต์แบบไดนามิก',
+        ],
+        'warnings' => [
+            'dcr_recommended' => 'แนะนำการลงทะเบียนไคลเอนต์แบบไดนามิก การอนุญาตครั้งแรกอาจสร้างไคลเอนต์ระยะไกล',
+            'cimd_not_advertised' => 'มีการกำหนดค่า URL CIMD แต่เซิร์ฟเวอร์การอนุญาตไม่ได้ประกาศการรองรับ CIMD อย่างชัดเจน',
+            'token_auth_not_advertised' => 'เซิร์ฟเวอร์การอนุญาตไม่ได้ประกาศวิธีการยืนยันตัวตนของ token endpoint จึงแนะนำ none',
+        ],
+        'failure_reason' => [
+            'remote_request' => 'คำขอระยะไกลล้มเหลว',
+            'configuration_or_discovery' => 'การตรวจสอบการกำหนดค่าหรือการค้นพบการอนุญาตล้มเหลว',
+        ],
+    ],
+
     // ข้อผิดพลาดในการตรวจสอบคำสั่ง
     'command' => [
         'not_allowed' => 'คำสั่งที่ไม่รองรับ ":command" ปัจจุบันรองรับเฉพาะ: :allowed_commands',

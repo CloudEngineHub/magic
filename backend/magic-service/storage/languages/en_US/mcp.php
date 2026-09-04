@@ -104,6 +104,32 @@ return [
         'not_configured' => 'MCP standard authorization is not configured',
     ],
 
+    // MCP authorization capability probe
+    'authorization_capability' => [
+        'unsupported' => 'MCP standard authorization is not selected for this service',
+        'not_configured' => 'MCP standard authorization configuration is missing',
+        'resource_url_required' => 'The MCP Resource must be a complete URL',
+        'invalid_server_metadata' => 'Invalid authorization server metadata',
+        'missing_server_endpoints' => 'Authorization server metadata is missing required endpoints',
+        'probe_failed' => 'MCP authorization capability probe failed',
+        'registration' => [
+            'pre_registered' => 'An administrator must pre-register the client',
+            'cimd_supported' => 'The authorization server declares CIMD support',
+            'cimd_unsupported' => 'The authorization server does not declare CIMD support',
+            'dcr_found' => 'A dynamic client registration endpoint was discovered',
+            'dcr_missing' => 'No dynamic client registration endpoint was discovered',
+        ],
+        'warnings' => [
+            'dcr_recommended' => 'Dynamic client registration is recommended; the first authorization may create a remote client.',
+            'cimd_not_advertised' => 'A CIMD URL is configured, but the authorization server does not explicitly advertise CIMD support.',
+            'token_auth_not_advertised' => 'The authorization server does not advertise a token endpoint authentication method; none is recommended.',
+        ],
+        'failure_reason' => [
+            'remote_request' => 'The remote request failed',
+            'configuration_or_discovery' => 'Configuration validation or authorization discovery failed',
+        ],
+    ],
+
     // MCP authorization callback page
     'authorization_callback' => [
         'title' => [

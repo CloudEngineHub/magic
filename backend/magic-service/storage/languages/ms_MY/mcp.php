@@ -85,6 +85,32 @@ return [
         ],
     ],
 
+    // Pemeriksaan keupayaan MCP Authorization
+    'authorization_capability' => [
+        'unsupported' => 'Kebenaran standard MCP tidak dipilih untuk perkhidmatan ini',
+        'not_configured' => 'Konfigurasi kebenaran standard MCP tiada',
+        'resource_url_required' => 'MCP Resource mesti merupakan URL lengkap',
+        'invalid_server_metadata' => 'Metadata pelayan kebenaran tidak sah',
+        'missing_server_endpoints' => 'Metadata pelayan kebenaran tiada endpoint yang diperlukan',
+        'probe_failed' => 'Pemeriksaan keupayaan MCP Authorization gagal',
+        'registration' => [
+            'pre_registered' => 'Pentadbir mesti mendaftarkan klien terlebih dahulu',
+            'cimd_supported' => 'Pelayan kebenaran mengisytiharkan sokongan CIMD',
+            'cimd_unsupported' => 'Pelayan kebenaran tidak mengisytiharkan sokongan CIMD',
+            'dcr_found' => 'Endpoint pendaftaran klien dinamik ditemui',
+            'dcr_missing' => 'Endpoint pendaftaran klien dinamik tidak ditemui',
+        ],
+        'warnings' => [
+            'dcr_recommended' => 'Pendaftaran klien dinamik disyorkan; kebenaran pertama mungkin mencipta klien jauh.',
+            'cimd_not_advertised' => 'URL CIMD dikonfigurasikan, tetapi pelayan kebenaran tidak mengiklankan sokongan CIMD secara jelas.',
+            'token_auth_not_advertised' => 'Pelayan kebenaran tidak mengiklankan kaedah pengesahan token endpoint; none disyorkan.',
+        ],
+        'failure_reason' => [
+            'remote_request' => 'Permintaan jauh gagal',
+            'configuration_or_discovery' => 'Pengesahan konfigurasi atau penemuan kebenaran gagal',
+        ],
+    ],
+
     // Ralat pengesahan arahan
     'command' => [
         'not_allowed' => 'Arahan tidak disokong ":command", pada masa ini hanya menyokong: :allowed_commands',

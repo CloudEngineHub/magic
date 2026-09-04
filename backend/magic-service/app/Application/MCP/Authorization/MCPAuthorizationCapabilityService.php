@@ -40,12 +40,12 @@ class MCPAuthorizationCapabilityService
     {
         $serviceConfig = $mcpServer->getServiceConfig();
         if (! $serviceConfig instanceof ExternalSSEServiceConfig || $serviceConfig->getAuthType() !== ServiceConfigAuthType::MCP_AUTHORIZATION) {
-            return $this->buildFailureResult('unsupported', 'MCP Server 未选择 MCP Authorization 鉴权方式');
+            return $this->buildFailureResult('unsupported', trans('mcp.authorization_capability.unsupported'));
         }
 
         $authorizationConfig = $serviceConfig->getMcpAuthorizationConfig();
         if ($authorizationConfig === null) {
-            return $this->buildFailureResult('invalid', 'MCP Authorization 配置不存在', [
+            return $this->buildFailureResult('invalid', trans('mcp.authorization_capability.not_configured'), [
                 'error_code' => 'MCPAuthorizationNotConfigured',
             ]);
         }
@@ -55,20 +55,20 @@ class MCPAuthorizationCapabilityService
             $serviceConfig->validate(false);
             $resource = $authorizationConfig->getResource() ?: $serviceConfig->getUrl();
             if ($resource === '' || str_contains($resource, '${')) {
-                throw new RuntimeException('MCP Authorization Resource 必须是完整 URL');
+                throw new RuntimeException(trans('mcp.authorization_capability.resource_url_required'));
             }
 
             $probe = $this->probeResource($resource, $serviceConfig->getHeadersArray());
             $metadata = $this->resolveMetadata($resource, $authorizationConfig);
             $authorizationServer = $metadata['authorization_server'] ?? null;
             if (! is_array($authorizationServer)) {
-                throw new RuntimeException('授权服务器元数据无效');
+                throw new RuntimeException(trans('mcp.authorization_capability.invalid_server_metadata'));
             }
 
             $authorizationEndpoint = $this->getStringValue($authorizationServer, 'authorization_endpoint');
             $tokenEndpoint = $this->getStringValue($authorizationServer, 'token_endpoint');
             if ($authorizationEndpoint === '' || $tokenEndpoint === '') {
-                throw new RuntimeException('授权服务器元数据缺少必要端点');
+                throw new RuntimeException(trans('mcp.authorization_capability.missing_server_endpoints'));
             }
 
             $registration = $this->analyzeRegistration(
@@ -120,7 +120,7 @@ class MCPAuthorizationCapabilityService
                 'warnings' => $warnings,
             ];
         } catch (Throwable $throwable) {
-            return $this->buildFailureResult('unavailable', 'MCP Authorization 能力探测失败', [
+            return $this->buildFailureResult('unavailable', trans('mcp.authorization_capability.probe_failed'), [
                 'reason' => $this->normalizeFailureReason($throwable),
             ]);
         }
@@ -220,18 +220,22 @@ class MCPAuthorizationCapabilityService
             'pre_registered' => [
                 'available' => $preRegisteredRequiredFields === [],
                 'required_fields' => $preRegisteredRequiredFields,
-                'reason' => '需要管理员预先注册客户端',
+                'reason' => trans('mcp.authorization_capability.registration.pre_registered'),
             ],
             'cimd' => [
                 'available' => $cimdSupported && $cimdRequiredFields === [],
                 'advertised' => $cimdSupported,
                 'required_fields' => $cimdRequiredFields,
-                'reason' => $cimdSupported ? '授权服务器声明支持 CIMD' : '授权服务器未声明支持 CIMD',
+                'reason' => $cimdSupported
+                    ? trans('mcp.authorization_capability.registration.cimd_supported')
+                    : trans('mcp.authorization_capability.registration.cimd_unsupported'),
             ],
             'dcr' => [
                 'available' => $registrationEndpoint !== '',
                 'required_fields' => $dcrRequiredFields,
-                'reason' => $registrationEndpoint !== '' ? '发现动态客户端注册端点' : '未发现动态客户端注册端点',
+                'reason' => $registrationEndpoint !== ''
+                    ? trans('mcp.authorization_capability.registration.dcr_found')
+                    : trans('mcp.authorization_capability.registration.dcr_missing'),
             ],
         ];
 
@@ -372,13 +376,13 @@ class MCPAuthorizationCapabilityService
     {
         $warnings = [];
         if (($registration['recommended'] ?? null) === 'dcr') {
-            $warnings[] = '当前推荐动态客户端注册，首次授权可能会创建远端客户端。';
+            $warnings[] = trans('mcp.authorization_capability.warnings.dcr_recommended');
         }
         if (($registration['recommended'] ?? null) === 'cimd' && empty($registration['candidates']['cimd']['advertised'])) {
-            $warnings[] = '当前配置提供了 CIMD 地址，但授权服务器没有明确声明支持 CIMD。';
+            $warnings[] = trans('mcp.authorization_capability.warnings.cimd_not_advertised');
         }
         if (($tokenEndpointAuth['recommended'] ?? '') === 'none' && empty($tokenEndpointAuth['supported'])) {
-            $warnings[] = '授权服务器未声明 Token 端点认证方式，当前按 none 生成建议。';
+            $warnings[] = trans('mcp.authorization_capability.warnings.token_auth_not_advertised');
         }
         return $warnings;
     }
@@ -433,8 +437,8 @@ class MCPAuthorizationCapabilityService
     private function normalizeFailureReason(Throwable $throwable): string
     {
         return match (true) {
-            $throwable instanceof GuzzleException => '远端请求失败',
-            default => '配置校验或授权发现失败',
+            $throwable instanceof GuzzleException => trans('mcp.authorization_capability.failure_reason.remote_request'),
+            default => trans('mcp.authorization_capability.failure_reason.configuration_or_discovery'),
         };
     }
 }

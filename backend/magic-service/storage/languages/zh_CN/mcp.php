@@ -104,6 +104,32 @@ return [
         'not_configured' => 'MCP标准授权未配置',
     ],
 
+    // MCP 授权能力探测
+    'authorization_capability' => [
+        'unsupported' => 'MCP 服务未选择 MCP 标准授权方式',
+        'not_configured' => 'MCP 标准授权配置不存在',
+        'resource_url_required' => 'MCP Resource 必须是完整 URL',
+        'invalid_server_metadata' => '授权服务器元数据无效',
+        'missing_server_endpoints' => '授权服务器元数据缺少必要端点',
+        'probe_failed' => 'MCP 授权能力探测失败',
+        'registration' => [
+            'pre_registered' => '需要管理员预先注册客户端',
+            'cimd_supported' => '授权服务器声明支持 CIMD',
+            'cimd_unsupported' => '授权服务器未声明支持 CIMD',
+            'dcr_found' => '发现动态客户端注册端点',
+            'dcr_missing' => '未发现动态客户端注册端点',
+        ],
+        'warnings' => [
+            'dcr_recommended' => '当前推荐动态客户端注册，首次授权可能会创建远端客户端。',
+            'cimd_not_advertised' => '当前配置提供了 CIMD 地址，但授权服务器没有明确声明支持 CIMD。',
+            'token_auth_not_advertised' => '授权服务器未声明 Token 端点认证方式，当前按 none 生成建议。',
+        ],
+        'failure_reason' => [
+            'remote_request' => '远端请求失败',
+            'configuration_or_discovery' => '配置校验或授权发现失败',
+        ],
+    ],
+
     // MCP 授权回调页面
     'authorization_callback' => [
         'title' => [
