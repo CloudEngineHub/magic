@@ -15,7 +15,7 @@ return new class extends Migration {
     public function up(): void
     {
         Schema::create('magic_mcp_authorization_credentials', function (Blueprint $table) {
-            $table->bigIncrements('id');
+            $table->unsignedBigInteger('id')->primary();
             $table->string('organization_code', 32)->default('')->comment('组织编码');
             $table->string('user_id', 64)->comment('用户ID');
             $table->string('mcp_server_id', 80)->comment('MCP服务ID');
