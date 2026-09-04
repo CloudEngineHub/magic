@@ -12,6 +12,8 @@ const Navigate = lazy(() => import("@/routes/components/Navigate"))
 const CrewMarketPage = lazy(() => import("@/pages/superMagic/pages/CrewMarket"))
 /** Skill Market - 技能市场 */
 const SkillMarketPage = lazy(() => import("@/pages/superMagic/pages/SkillMarket"))
+/** Connector Market - 连接器市场 */
+const ConnectorMarketPage = lazy(() => import("@/pages/superMagic/pages/ConnectorMarket"))
 /** Crew Edit - 编辑 Crew */
 const CrewEditPage = lazy(() => import("@/pages/superMagic/pages/CrewEdit/index.desktop"))
 /** My Skills - 我的技能 */
@@ -43,6 +45,14 @@ export const superMagicCrewRoutes = [
 		element: <SkillMarketPage />,
 		meta: {
 			title: "routes.skillsLibrary",
+		},
+	},
+	{
+		name: RouteName.CrewMarketMcp,
+		path: `/:clusterCode${RoutePath.CrewMarketMcp}`,
+		element: <ConnectorMarketPage />,
+		meta: {
+			title: "routes.connectors",
 		},
 	},
 	{

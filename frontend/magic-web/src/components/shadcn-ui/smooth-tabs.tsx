@@ -148,7 +148,7 @@ function SmoothTabsComponent<T = string>({
 					{/* 悬停背景 */}
 					{!isActive && variant === "background" && (
 						<motion.div
-							className="absolute inset-0 rounded-lg bg-white/50 dark:bg-gray-700/50"
+							className="absolute inset-0 rounded-full bg-white/50 dark:bg-gray-700/50"
 							initial={{ opacity: 0 }}
 							animate={{
 								opacity: isHovered ? 1 : 0,

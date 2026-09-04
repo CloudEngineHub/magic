@@ -294,7 +294,7 @@ const MentionPanelMobile = observer(
 		})
 
 		const ensureMcpItemReadyForPending = useMemoizedFn((item: MentionItem) =>
-			prepareMentionItemForPending(item, resolvedRuntime.dataService),
+			prepareMentionItemForPending(item),
 		)
 
 		// Keep MCP validation and duplicate removal in one path for row and checkbox toggles.

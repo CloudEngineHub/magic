@@ -6,12 +6,7 @@ import {
 } from "@/infrastructure/editors/tiptap/suggestion"
 
 // Types
-import {
-	McpMentionData,
-	MentionItemType,
-	type MentionItem,
-	type MentionSelectContext,
-} from "../types"
+import type { MentionItem, MentionSelectContext } from "../types"
 import type {
 	MentionPanelPluginOptions,
 	MentionPanelRendererProps,
@@ -20,10 +15,6 @@ import type {
 
 // Components
 import MentionPanelRenderer from "./MentionPanelRenderer"
-import {
-	checkMCPOAuth,
-	MCPOAuthType,
-} from "@/components/Agent/MCP/AgentSettings/AgentPanel/MCPPanel/helpers"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 
 // 仅在用户刚输入 "@" 的短时间窗口内，允许空查询触发面板
@@ -171,48 +162,6 @@ export function createMentionPanelSuggestion(
 					shouldSuppressLifecycleExit = true
 				}
 				if (!editor || !range) return
-
-				if (item.type === MentionItemType.MCP && !context?.mcpValidated) {
-					// 先 blur 一下，避免在 OAuth 过程中，键盘还能输入
-					runActiveEditor(editor, (activeEditor) => {
-						activeEditor.chain().blur().run()
-					})
-
-					// Temporarily disable keyboard shortcuts during OAuth
-					if (component) {
-						component.updateProps({
-							...component.props,
-							disableKeyboardShortcuts: true,
-						})
-					}
-
-					try {
-						const res = await checkMCPOAuth(item.data as McpMentionData)
-
-						if (res === MCPOAuthType.validationFailed) {
-							// Remove the @ character and query text when validation fails
-							runActiveEditor(editor, (activeEditor) => {
-								activeEditor.chain().focus().deleteRange(range).run()
-							})
-							// Close the panel
-							handleExit?.()
-							return
-						}
-						// 如果验证成功，则让 store 内部刷新 MCP 列表
-						void dataService?.dispatch({
-							kind: "effect",
-							effect: "refresh-mcp",
-						})
-					} finally {
-						// Re-enable keyboard shortcuts after OAuth
-						if (component) {
-							component.updateProps({
-								...component.props,
-								disableKeyboardShortcuts: false,
-							})
-						}
-					}
-				}
 
 				const insertContent = getInsertedContent(item)
 				const inserted = runActiveEditor(

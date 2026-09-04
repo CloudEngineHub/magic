@@ -79,12 +79,9 @@ function SkillCard({
 		: isAdded
 			? t("skillsLibrary.added")
 			: t("skillsLibrary.addToMySkills")
-	const updatedAtLabel = useMemo(
-		() =>
-			t("skillsLibrary.updatedAt", {
-				dateTime: formatSkillUpdatedDateTime(skill.updatedAt, i18n.language),
-			}),
-		[skill.updatedAt, t, i18n.language],
+	const updatedAtValue = useMemo(
+		() => formatSkillUpdatedDateTime(skill.updatedAt, i18n.language),
+		[skill.updatedAt, i18n.language],
 	)
 	const installCount = formatSkillInstallCount(skill.installCount, i18n.language)
 	const showInstallCount = skill.publisherType !== "OFFICIAL_BUILTIN"
@@ -161,25 +158,33 @@ function SkillCard({
 					{skill.description}
 				</SmartTooltip>
 
-				<div className="mt-auto flex min-w-0 items-center justify-between gap-2">
+				<div className="mt-auto flex min-w-0 items-center justify-between gap-4">
 					{showInstallCount && installCount ? (
-						<span
-							className="min-w-0 truncate text-[11px] text-muted-foreground/80"
+						<div
+							className="flex min-h-7 min-w-0 flex-col justify-center gap-0.5 leading-tight"
 							data-testid="skill-card-install-count"
 						>
-							{t("skillsLibrary.installCount", {
-								formattedCount: installCount,
-							})}
-						</span>
+							<span className="text-[10px] text-muted-foreground/60">
+								{t("skillsLibrary.installCountLabel")}
+							</span>
+							<span className="text-[11px] text-muted-foreground/80">
+								{installCount}
+							</span>
+						</div>
 					) : (
 						<span aria-hidden="true" />
 					)}
-					<span
-						className="min-w-0 truncate text-right text-[11px] text-muted-foreground/70"
+					<div
+						className="flex min-h-7 min-w-0 flex-col items-end justify-center gap-0.5 text-right leading-tight"
 						data-testid="skill-card-updated-at"
 					>
-						{updatedAtLabel}
-					</span>
+						<span className="text-[10px] text-muted-foreground/60">
+							{t("skillsLibrary.updatedAtLabel")}
+						</span>
+						<span className="truncate text-[11px] text-muted-foreground/80">
+							{updatedAtValue}
+						</span>
+					</div>
 				</div>
 			</div>
 

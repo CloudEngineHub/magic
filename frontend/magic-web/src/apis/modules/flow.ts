@@ -674,7 +674,12 @@ export const generateFlowApi = (fetch: HttpClient) => ({
 	},
 
 	/** 获取可用 MCP 列表 */
-	getUseableMCPList(params?: { office?: boolean; name?: string }) {
+	getUseableMCPList(params?: {
+		office?: boolean
+		name?: string
+		page?: number
+		page_size?: number
+	}) {
 		return fetch.post<WithPage<Flow.Mcp.ListItem[]>>(
 			genRequestUrl("/api/v1/flows/queries/mcp-list"),
 			params,

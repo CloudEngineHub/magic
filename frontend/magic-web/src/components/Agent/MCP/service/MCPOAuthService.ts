@@ -48,11 +48,11 @@ export class MCPOAuthService {
 	/**
 	 * 开始二维码流程
 	 */
-	async start(id: string) {
+	async start(id: string, initialStatus?: MCPOAuthStatus) {
 		if (this.isDestroyed) return
 
 		try {
-			this.startPolling(id)
+			this.startPolling(id, initialStatus)
 		} catch (error) {
 			this.callbacks.onError?.(error)
 		}
@@ -62,19 +62,21 @@ export class MCPOAuthService {
 	 * 开始轮询授权状态
 	 * @param id MCP id
 	 */
-	private async startPolling(id: string) {
+	private async startPolling(id: string, initialStatus?: MCPOAuthStatus) {
 		if (this.isDestroyed) return
 
 		try {
-			const result = await this.api.getMCPUserSettings(
-				{
-					code: id,
-					redirectUrl: generateCallbackUrl(),
-				},
-				{
-					signal: this.abortController.signal,
-				},
-			)
+			const result =
+				initialStatus ??
+				(await this.api.getMCPUserSettings(
+					{
+						code: id,
+						redirectUrl: generateCallbackUrl(),
+					},
+					{
+						signal: this.abortController.signal,
+					},
+				))
 
 			this.callbacks.onStatusUpdate?.(result)
 
@@ -121,10 +123,10 @@ export class MCPOAuthService {
 	/**
 	 * 重新开始整个流程
 	 */
-	restart(id: string) {
+	restart(id: string, initialStatus?: MCPOAuthStatus) {
 		this.destroy()
 		this.abortController = new AbortController()
 		this.isDestroyed = false
-		this.start(id)
+		this.start(id, initialStatus)
 	}
 }

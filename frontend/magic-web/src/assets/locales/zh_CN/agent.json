@@ -44,6 +44,7 @@
 				"createAt": "发布于",
 				"groupTitle": "包含 {{count}} 个工具",
 				"noQuote": "未被引用",
+				"remove": "移除",
 				"toolsCount": "{{count}} 个工具"
 			},
 			"confirm": "确认",
@@ -89,9 +90,12 @@
 	},
 	"mcp": {
 		"button": {
+			"addMoreConnectors": "添加更多连接器",
+			"addedConnectors": "已添加的连接器",
 			"create": "添加 MCP",
-			"text": "插件",
-			"title": "已加载的插件"
+			"text": "连接器",
+			"title": "已加载的连接器",
+			"toggleConnector": "启用 {{name}}"
 		},
 		"card": {
 			"creatAt": "创建于",
@@ -117,8 +121,12 @@
 			"argsPlaceholder": "请输入 Args，如 -y @modelcontextprotocol/server-sequential-thinking",
 			"auth": "账号授权",
 			"authMethod": "授权方式",
-			"authToFail": "需进行账号授权，点击授权",
-			"authToSuccess": "已完成账号授权，点击取消",
+			"authToFail": "需进行账号授权\n点击授权",
+			"authToFailAction": "去连接",
+			"authToFailTitle": "需进行账号授权",
+			"authToSuccess": "已完成账号授权\n点击取消",
+			"authToSuccessAction": "取消连接",
+			"authToSuccessTitle": "已完成账号授权",
 			"cancel": "取消",
 			"command": "Command",
 			"commandPlaceholder": "请输入 Command，如 npx",
@@ -128,6 +136,7 @@
 			"desc": "描述",
 			"env": "Env",
 			"headers": "请求头",
+			"icon": "图标",
 			"import": "导入",
 			"importTool": "导入已有工具",
 			"map": "自定义参数",
@@ -189,6 +198,7 @@
 			"desc": "使用模型上下文协议 (MCP 插件) 扩展$t(common:platform.name)的能力",
 			"editTitle": "修改 MCP 插件",
 			"empty": "暂无插件",
+			"manageAuth": "管理权限",
 			"noAuth": "无需授权",
 			"official": "官方插件",
 			"openForm": "创建 MCP 插件",
@@ -198,8 +208,7 @@
 			"status": "查询 MCP 插件 状态",
 			"title": "MCP 插件",
 			"tool": "载入工具",
-			"url": "修改 MCP 插件 信息",
-			"manageAuth": "管理权限"
+			"url": "修改 MCP 插件 信息"
 		}
 	}
 }

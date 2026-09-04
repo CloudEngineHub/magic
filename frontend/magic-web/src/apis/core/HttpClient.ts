@@ -1,6 +1,13 @@
 import { isFunction, pick } from "lodash-es"
 import { UrlUtils } from "../utils"
 
+function isAbortError(error: unknown) {
+	return (
+		(error as { name?: string } | null | undefined)?.name === "AbortError" ||
+		(error as { code?: string } | null | undefined)?.code === "ERR_CANCELED"
+	)
+}
+
 /** Request Context */
 interface RequestContext {
 	/** Base URL */
@@ -237,7 +244,7 @@ export class HttpClient {
 
 			return response
 		} catch (error) {
-			console.error("Request failed:", error)
+			if (!isAbortError(error)) console.error("Request failed:", error)
 			return this.runErrorInterceptors(error)
 		}
 	}

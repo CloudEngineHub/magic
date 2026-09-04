@@ -170,11 +170,12 @@ export class MentionPanelStore {
 
 	initData(
 		agents: Bot.UserAvailableAgentInfo[],
-		mcpList: McpMentionData[],
+		_mcpList: McpMentionData[],
 		toolItems: UseableToolSet.Item[],
 	) {
 		this.agentsStore.setItems(agents)
-		this.mcpStore.setItems(mcpList)
+		// MCP mentions intentionally come from the user's added-connector
+		// storage (__added__), not from the global available MCP preload.
 		this.toolsStore.setItems(toolItems)
 	}
 
@@ -348,7 +349,6 @@ export class MentionPanelStore {
 			pluginHost: this.getPluginHost(),
 		})
 		if (scopeFolderId?.trim()) return builtinItems
-
 		return [
 			...this.canvasElementsStore.searchItems(query, undefined, this.matchesQuery),
 			...builtinItems,

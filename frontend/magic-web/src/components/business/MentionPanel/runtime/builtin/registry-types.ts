@@ -12,7 +12,7 @@ import type { MentionPanelWorkspaceFilesStore } from "./domains/workspace-files/
 interface MentionPanelCatalogPluginHost {
 	agentsStore: Pick<MentionPanelAgentsStore, "getItems">
 	historyStore: Pick<MentionPanelHistoryStore, "getAllHistoryItems">
-	mcpStore: Pick<MentionPanelMcpStore, "getItems">
+	mcpStore: Pick<MentionPanelMcpStore, "getItems" | "fetchItems">
 	skillsStore: Pick<MentionPanelSkillsStore, "getItems" | "refreshItems">
 	tabsStore: Pick<MentionPanelTabsStore, "getCurrentTabs">
 	toolsStore: Pick<MentionPanelToolsStore, "getItems">

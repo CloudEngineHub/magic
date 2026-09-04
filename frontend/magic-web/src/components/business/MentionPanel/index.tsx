@@ -371,10 +371,7 @@ const MentionPanel = observer(
 					return true
 				}
 
-				const pendingPreparation = await prepareMentionItemForPending(
-					item,
-					resolvedRuntime.dataService,
-				)
+				const pendingPreparation = await prepareMentionItemForPending(item)
 				if (!pendingPreparation.canSelect) return true
 
 				const sourceRootId = getPendingSourceRootId(state.navigationStack, item)

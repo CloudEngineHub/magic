@@ -6,6 +6,8 @@ export interface IMCPItem {
 	name: string
 	enabled: boolean
 	description: string
+	type?: string
+	updated_at?: string
 	user_operation: OperationTypes
 	require_fields?: Array<{ field_name?: string; field_value?: string }>
 }

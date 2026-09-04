@@ -8,6 +8,13 @@ import { StringUtils } from "../utils"
 import { createWaitForAppInitRequestInterceptor } from "./await-app-init"
 import { swCacheRequestInterceptor } from "./interceptor/sw-cache"
 
+function isAbortError(error: unknown) {
+	return (
+		(error as { name?: string } | null | undefined)?.name === "AbortError" ||
+		(error as { code?: string } | null | undefined)?.code === "ERR_CANCELED"
+	)
+}
+
 export class MagicHttpClient extends HttpClient {
 	constructor(props: HttpClientParams) {
 		super(props)
@@ -46,7 +53,7 @@ export class MagicHttpClient extends HttpClient {
 
 		// 错误拦截器
 		this.addErrorInterceptor(function errHandler(error) {
-			console.error("Request failed:", error)
+			if (!isAbortError(error)) console.error("Request failed:", error)
 			return Promise.reject(error)
 		})
 	}
