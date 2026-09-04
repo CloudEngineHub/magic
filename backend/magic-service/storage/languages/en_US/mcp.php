@@ -119,6 +119,8 @@ return [
             'failure' => 'Check that the authorization server is configured correctly, or start the authorization flow again.',
         ],
         'countdown' => ' seconds until this page closes automatically',
+        'manual_close' => 'The browser did not allow this page to close automatically. Please close it manually.',
+        'close_button' => 'Close page',
     ],
 
     // Command validation errors

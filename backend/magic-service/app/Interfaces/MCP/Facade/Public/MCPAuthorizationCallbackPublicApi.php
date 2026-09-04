@@ -110,11 +110,31 @@ class MCPAuthorizationCallbackPublicApi
             ENT_QUOTES | ENT_SUBSTITUTE,
             'UTF-8'
         );
-        $countdownHtml = $autoClose ? '<p class="countdown"><span id="countdown">10</span>' . $countdownText . '</p>' : '';
+        $manualCloseText = htmlspecialchars(
+            $this->translator->trans('mcp.authorization_callback.manual_close'),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+        $closeButtonText = htmlspecialchars(
+            $this->translator->trans('mcp.authorization_callback.close_button'),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+        $countdownHtml = $autoClose
+            ? '<p id="countdown-container" class="countdown"><span id="countdown">10</span>' . $countdownText . '</p>'
+                . '<p id="manual-close" hidden>' . $manualCloseText . '</p>'
+                . '<button id="close-page" type="button" hidden>' . $closeButtonText . '</button>'
+            : '';
         $scriptHtml = $autoClose ? <<<'HTML'
 <script>
     let seconds = 10;
     const countdown = document.getElementById('countdown');
+    const countdownContainer = document.getElementById('countdown-container');
+    const manualClose = document.getElementById('manual-close');
+    const closePage = document.getElementById('close-page');
+    if (closePage) {
+        closePage.addEventListener('click', () => window.close());
+    }
     const timer = window.setInterval(() => {
         seconds -= 1;
         if (countdown) {
@@ -123,6 +143,17 @@ class MCPAuthorizationCallbackPublicApi
         if (seconds <= 0) {
             window.clearInterval(timer);
             window.close();
+            window.setTimeout(() => {
+                if (countdownContainer) {
+                    countdownContainer.hidden = true;
+                }
+                if (manualClose) {
+                    manualClose.hidden = false;
+                }
+                if (closePage) {
+                    closePage.hidden = false;
+                }
+            }, 100);
         }
     }, 1000);
 </script>
@@ -170,6 +201,15 @@ HTML : '';
             margin-top: 16px;
             color: #1f2329;
             font-weight: 500;
+        }
+        button {
+            margin-top: 16px;
+            padding: 8px 16px;
+            border: 0;
+            border-radius: 6px;
+            background: #3370ff;
+            color: #ffffff;
+            cursor: pointer;
         }
     </style>
 </head>
