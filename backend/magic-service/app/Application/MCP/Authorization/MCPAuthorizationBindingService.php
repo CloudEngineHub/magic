@@ -125,10 +125,7 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
      */
     private function consumeState(string $code, string $state, ?string $iss, ?string $error): array
     {
-        if ($error !== null && $error !== '') {
-            throw new RuntimeException('MCP authorization was denied: ' . $error);
-        }
-        if ($code === '' || $state === '') {
+        if ($state === '') {
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
         }
 
@@ -136,9 +133,21 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
         if (! $stateData) {
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
         }
+        $this->stateStore->clearPending(
+            (string) ($stateData['organization_code'] ?? ''),
+            (string) ($stateData['user_id'] ?? ''),
+            (string) ($stateData['mcp_server_code'] ?? ''),
+            $state
+        );
         $issuer = (string) ($stateData['issuer'] ?? '');
         if ($iss !== null && $iss !== '' && $iss !== $issuer) {
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationIssuerMismatch);
+        }
+        if ($error !== null && $error !== '') {
+            throw new RuntimeException('MCP authorization was denied: ' . $error);
+        }
+        if ($code === '') {
+            ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
         }
         return $stateData;
     }

@@ -88,6 +88,20 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
         }
 
         try {
+            $pendingState = $this->stateStore->getPending(
+                $dataIsolation->getCurrentOrganizationCode(),
+                (string) $userId,
+                $mcpServer->getCode()
+            );
+            if ($pendingState !== null) {
+                $this->logger->info('MCPAuthorizationPendingStateReused', [
+                    'mcp_server_code' => $mcpServer->getCode(),
+                    'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+                    'user_id' => $userId,
+                ]);
+                return $this->buildPendingAuthConfig($pendingState, $resource);
+            }
+
             if ($credential && $credential->getRefreshTokenCiphertext() !== null) {
                 try {
                     $refreshed = $this->refreshCredential($dataIsolation, $credential, $config);
@@ -119,22 +133,6 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
             $codeVerifier = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
 
             $issuer = (string) ($metadata['issuer'] ?? '');
-            $this->stateStore->put($state, [
-                'user_id' => $userId,
-                'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
-                'mcp_server_code' => $mcpServer->getCode(),
-                'resource' => $resource,
-                'issuer' => $issuer,
-                'redirect_uri' => $redirectUri,
-                'code_verifier' => $codeVerifier,
-                'client_id' => $clientId,
-                'client_secret_ciphertext' => $registration['client_secret'] !== '' ? $this->secretCipher->encrypt($registration['client_secret']) : null,
-                'token_endpoint_auth_method' => $registration['token_endpoint_auth_method'],
-                'registration_mode' => $this->resolveRegistrationMode($config),
-                'metadata' => $metadata,
-                'language' => CoContext::getLanguageOrNull(),
-                'created_at' => time(),
-            ]);
 
             $authorizationEndpoint = (string) ($metadata['authorization_server']['authorization_endpoint'] ?? $config->getAuthorizationEndpoint());
             if ($authorizationEndpoint === '') {
@@ -154,12 +152,55 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
             }
             $url = $authorizationEndpoint . (str_contains($authorizationEndpoint, '?') ? '&' : '?') . http_build_query($query);
 
+            $stateTtl = (int) $this->config->get('mcp_authorization.state_ttl', 600);
+            $this->stateStore->put($state, [
+                'user_id' => $userId,
+                'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+                'mcp_server_code' => $mcpServer->getCode(),
+                'resource' => $resource,
+                'issuer' => $issuer,
+                'redirect_uri' => $redirectUri,
+                'code_verifier' => $codeVerifier,
+                'client_id' => $clientId,
+                'client_secret_ciphertext' => $registration['client_secret'] !== '' ? $this->secretCipher->encrypt($registration['client_secret']) : null,
+                'token_endpoint_auth_method' => $registration['token_endpoint_auth_method'],
+                'registration_mode' => $this->resolveRegistrationMode($config),
+                'metadata' => $metadata,
+                'language' => CoContext::getLanguageOrNull(),
+                'authorization_url' => $url,
+                'expires_at' => time() + $stateTtl,
+                'created_at' => time(),
+            ]);
+
+            if (! $this->stateStore->putPending(
+                $dataIsolation->getCurrentOrganizationCode(),
+                (string) $userId,
+                $mcpServer->getCode(),
+                $state
+            )) {
+                $this->stateStore->delete($state);
+                $pendingState = $this->stateStore->getPending(
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    (string) $userId,
+                    $mcpServer->getCode()
+                );
+                if ($pendingState !== null) {
+                    $this->logger->info('MCPAuthorizationPendingStateRaceLost', [
+                        'mcp_server_code' => $mcpServer->getCode(),
+                        'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+                        'user_id' => $userId,
+                    ]);
+                    return $this->buildPendingAuthConfig($pendingState, $resource);
+                }
+                throw new RuntimeException('MCP authorization pending state could not be created');
+            }
+
             return [
                 'is_authenticated' => false,
                 'oauth_url' => $url,
                 'authorization_url' => $url,
                 'state' => $state,
-                'expires_in' => (int) $this->config->get('mcp_authorization.state_ttl', 600),
+                'expires_in' => $stateTtl,
                 'issuer' => $issuer,
                 'resource' => $resource,
             ];
@@ -176,6 +217,26 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
                 'error' => 'MCP authorization is not available',
             ];
         }
+    }
+
+    /**
+     * 将已有 pending state 转换为用户设置接口的授权配置响应。
+     *
+     * @param array<string, mixed> $pendingState
+     * @return array<string, mixed>
+     */
+    private function buildPendingAuthConfig(array $pendingState, string $resource): array
+    {
+        $expiresAt = (int) ($pendingState['expires_at'] ?? 0);
+        return [
+            'is_authenticated' => false,
+            'oauth_url' => (string) ($pendingState['authorization_url'] ?? ''),
+            'authorization_url' => (string) ($pendingState['authorization_url'] ?? ''),
+            'state' => (string) ($pendingState['state'] ?? ''),
+            'expires_in' => max(0, $expiresAt - time()),
+            'issuer' => (string) ($pendingState['issuer'] ?? ''),
+            'resource' => (string) ($pendingState['resource'] ?? $resource),
+        ];
     }
 
     /**
