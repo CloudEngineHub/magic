@@ -53,15 +53,6 @@ class CoContext
     }
 
     /**
-     * 获取当前请求显式设置的语种；未设置时返回 null。
-     */
-    public static function getLanguageOrNull(): ?string
-    {
-        $language = Context::get('language');
-        return is_string($language) && $language !== '' ? $language : null;
-    }
-
-    /**
      * @deprecated
      */
     public static function getSeqId(): string

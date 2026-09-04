@@ -132,7 +132,7 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
                 'token_endpoint_auth_method' => $registration['token_endpoint_auth_method'],
                 'registration_mode' => $this->resolveRegistrationMode($config),
                 'metadata' => $metadata,
-                'language' => CoContext::getLanguageOrNull(),
+                'language' => $dataIsolation->getLanguage(),
                 'created_at' => time(),
             ]);
 
