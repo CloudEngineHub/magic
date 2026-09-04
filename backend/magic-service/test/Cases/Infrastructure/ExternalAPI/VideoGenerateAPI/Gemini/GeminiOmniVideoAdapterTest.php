@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini;
 
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoOperationStatus;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
@@ -15,12 +16,17 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiOmniVid
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Capability\GeminiOmniGenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportInterface;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
+use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Response;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\TranslatorInterface;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use RuntimeException;
+use Throwable;
 
 /** @internal */
 final class GeminiOmniVideoAdapterTest extends TestCase
@@ -273,6 +279,23 @@ final class GeminiOmniVideoAdapterTest extends TestCase
         $router->buildProviderPayload($this->operation([], 'unknown'));
     }
 
+    public function testRouterSupportsConnectivityTest(): void
+    {
+        $transport = new GeminiFakeTransport();
+        $transport->submitException = ProviderVideoException::nonRetriable(
+            'mapped error',
+            new RequestException(
+                'provider request failed',
+                new Request('POST', 'https://gemini.example/v1/interactions'),
+                new Response(400, [], 'Video response format duration must be positive'),
+            ),
+        );
+        $router = new GeminiVideoAdapterRouter($this->adapter($transport));
+
+        self::assertInstanceOf(VideoGenerationConnectivityTestableInterface::class, $router);
+        self::assertTrue($router->testConnection($this->config(), 'gemini-omni-1.1-flash'));
+    }
+
     public function testPrefersValidModelVersionOverNumericProviderModelId(): void
     {
         $operation = $this->operation([], 'gemini-omni-1.1-flash', '12345');
@@ -314,12 +337,18 @@ final class GeminiFakeTransport implements GeminiTransportInterface
     /** @var list<string> */
     public array $downloadedUris = [];
 
+    public ?Throwable $submitException = null;
+
     public function __construct(private array $submitResponse = ['id' => 'interaction-1'])
     {
     }
 
     public function createInteraction(QueueExecutorConfig $config, array $payload, array $logContext = []): array
     {
+        if ($this->submitException !== null) {
+            throw $this->submitException;
+        }
+
         return $this->submitResponse;
     }
 

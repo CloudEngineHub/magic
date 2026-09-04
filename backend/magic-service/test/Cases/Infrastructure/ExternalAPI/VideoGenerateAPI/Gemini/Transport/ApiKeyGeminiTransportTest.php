@@ -39,7 +39,7 @@ final class ApiKeyGeminiTransportTest extends TestCase
         $client = new GeminiVideoClient($clientFactory, $loggerFactory);
 
         $result = (new ApiKeyGeminiTransport($client))->createInteraction(
-            new QueueExecutorConfig('https://gemini.example/v1', 'secret', 3, 20),
+            new QueueExecutorConfig('https://gemini.example/v1/interactions', 'secret', 3, 20),
             ['model' => 'gemini-omni-1.1-flash'],
             ['operation_id' => 'op-1'],
         );
@@ -63,7 +63,7 @@ final class ApiKeyGeminiTransportTest extends TestCase
         $client = new GeminiVideoClient($clientFactory, $loggerFactory);
 
         $result = (new ApiKeyGeminiTransport($client))->getInteraction(
-            new QueueExecutorConfig('https://gemini.example/v1', 'secret', 3, 20),
+            new QueueExecutorConfig('https://gemini.example/v1/interactions', 'secret', 3, 20),
             'interaction/1',
             ['provider_task_id' => 'interaction/1'],
         );
@@ -90,7 +90,7 @@ final class ApiKeyGeminiTransportTest extends TestCase
         $client = new GeminiVideoClient($clientFactory, $loggerFactory);
 
         $result = (new ApiKeyGeminiTransport($client))->downloadMedia(
-            new QueueExecutorConfig('https://gemini.example/v1', 'secret', 3, 20),
+            new QueueExecutorConfig('https://gemini.example/v1/interactions', 'secret', 3, 20),
             'https://example.com/video.mp4',
         );
 

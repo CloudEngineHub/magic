@@ -42,7 +42,32 @@ final class ProviderVideoException extends RuntimeException
 
     public function getHttpStatus(): ?int
     {
-        return $this->httpStatus;
+        return $this->httpStatus ?? $this->getRequestException()?->getResponse()?->getStatusCode();
+    }
+
+    public function getRequestException(): ?RequestException
+    {
+        $previous = $this->getPrevious();
+        return $previous instanceof RequestException ? $previous : null;
+    }
+
+    public function getResponseContent(): ?string
+    {
+        $response = $this->getRequestException()?->getResponse();
+        if ($response === null) {
+            return null;
+        }
+
+        $body = $response->getBody();
+        if ($body->isSeekable()) {
+            $body->rewind();
+        }
+        $content = (string) $body;
+        if ($body->isSeekable()) {
+            $body->rewind();
+        }
+
+        return $content;
     }
 
     public function getErrorCode(): ?string
@@ -52,25 +77,12 @@ final class ProviderVideoException extends RuntimeException
 
     public function getOriginalErrorMessage(): string
     {
-        $previous = $this->getPrevious();
-        $responseBody = $previous instanceof RequestException ? $previous->getResponse()?->getBody() : null;
-        if ($responseBody === null) {
+        $responseContent = $this->getResponseContent();
+        if ($responseContent === null) {
             return '';
         }
 
-        try {
-            if ($responseBody->isSeekable()) {
-                $responseBody->rewind();
-            }
-            $originalErrorMessage = (string) $responseBody;
-            if ($responseBody->isSeekable()) {
-                $responseBody->rewind();
-            }
-        } catch (Throwable) {
-            return '';
-        }
-
-        $sanitizedErrorMessage = preg_replace('/[\x00-\x1F\x7F]+/', ' ', $originalErrorMessage);
+        $sanitizedErrorMessage = preg_replace('/[\x00-\x1F\x7F]+/', ' ', $responseContent);
         if (! is_string($sanitizedErrorMessage)) {
             return '';
         }

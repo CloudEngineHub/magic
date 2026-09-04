@@ -22,7 +22,7 @@ readonly class ApiKeyGeminiTransport implements GeminiTransportInterface
         return $this->client->post(
             $config->getBaseUrl(),
             $config->getApiKey(),
-            '/interactions',
+            '',
             $payload,
             $logContext,
         );
@@ -33,7 +33,7 @@ readonly class ApiKeyGeminiTransport implements GeminiTransportInterface
         return $this->client->get(
             $config->getBaseUrl(),
             $config->getApiKey(),
-            '/interactions/' . rawurlencode($interactionId),
+            '/' . rawurlencode($interactionId),
             $logContext,
         );
     }

@@ -152,6 +152,69 @@ final class GeminiVideoClientTest extends TestCase
         }
     }
 
+    public function testRequestFailureLogsProviderResponseBody(): void
+    {
+        $responseBody = '{"error":{"code":"invalid_request","message":"aspect ratio is not supported"}}';
+        $response = new Response(400, [], $responseBody);
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->method('post')->willThrowException(new RequestException(
+            'provider raw message',
+            new Request('POST', 'https://gemini.example/v1/interactions'),
+            $response,
+        ));
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->method('create')->willReturn($httpClient);
+        $logger = new GeminiRecordingLogger();
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->willReturn($logger);
+
+        try {
+            (new GeminiVideoClient($clientFactory, $loggerFactory))->post(
+                'https://gemini.example/v1',
+                'secret-api-key',
+                '/interactions',
+                [],
+            );
+            self::fail('Expected ProviderVideoException.');
+        } catch (ProviderVideoException) {
+            $errorRecord = array_values(array_filter(
+                $logger->records,
+                static fn (array $record): bool => $record['message'] === 'gemini video request failed',
+            ))[0] ?? [];
+            self::assertSame('gemini video request failed', $errorRecord['message'] ?? null);
+            self::assertSame($responseBody, $errorRecord['context']['response'] ?? null);
+            self::assertSame($responseBody, (string) $response->getBody()->getContents());
+        }
+    }
+
+    public function testConnectivityFailureThrowsRawProviderResponse(): void
+    {
+        $responseBody = '{"error":{"code":"invalid_request","message":"aspect ratio is not supported"}}';
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->method('post')->willThrowException(new RequestException(
+            'provider raw message',
+            new Request('POST', 'https://gemini.example/v1/interactions'),
+            new Response(400, [], $responseBody),
+        ));
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->method('create')->willReturn($httpClient);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->willReturn(new GeminiRecordingLogger());
+
+        try {
+            (new GeminiVideoClient($clientFactory, $loggerFactory))->post(
+                'https://gemini.example/v1',
+                'secret-api-key',
+                '/interactions',
+                [],
+                ['connectivity_test' => true],
+            );
+            self::fail('Expected ProviderVideoException.');
+        } catch (ProviderVideoException $exception) {
+            self::assertSame($responseBody, $exception->getOriginalErrorMessage());
+        }
+    }
+
     public function testInvalidJsonAndEmptyBodyUseRetriableResponseFormatError(): void
     {
         foreach (['not-json', ''] as $body) {

@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter;
 
-use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterInterface;
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
@@ -19,8 +19,10 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ReferenceMediaPayload;
 use InvalidArgumentException;
 
-final class GeminiOmniVideoAdapter implements VideoGenerationProviderAdapterInterface
+final class GeminiOmniVideoAdapter implements VideoGenerationConnectivityTestableInterface
 {
+    private const string CONNECTIVITY_SUCCESS_MESSAGE = 'Video response format duration must be positive';
+
     private const array MEDIA_TYPES = [
         'frames' => 'image',
         'reference_images' => 'image',
@@ -92,6 +94,40 @@ final class GeminiOmniVideoAdapter implements VideoGenerationProviderAdapterInte
             throw ProviderVideoException::nonRetriable('Gemini interaction id missing');
         }
         return $id;
+    }
+
+    public function testConnection(QueueExecutorConfig $config, string $modelVersion): bool
+    {
+        $payload = [
+            'model' => $this->capabilityProvider->resolveProviderModelName($modelVersion),
+            'input' => [['type' => 'text', 'text' => 'connectivity-test']],
+            'background' => true,
+            'response_format' => [
+                'type' => 'video',
+                'delivery' => 'uri',
+                'aspect_ratio' => '16:9',
+                'resolution' => '720p',
+                'duration' => '0s',
+            ],
+        ];
+
+        try {
+            $this->transport->createInteraction($config, $payload, ['connectivity_test' => true]);
+        } catch (ProviderVideoException $exception) {
+            if (str_contains((string) $exception->getResponseContent(), self::CONNECTIVITY_SUCCESS_MESSAGE)) {
+                return true;
+            }
+
+            throw ProviderVideoException::nonRetriable(
+                $exception->getRequestException()?->getMessage() ?? $exception->getMessage(),
+                $exception->getRequestException(),
+                $exception->getHttpStatus(),
+            );
+        }
+
+        throw ProviderVideoException::nonRetriable(
+            'Gemini connectivity test did not receive the expected validation error',
+        );
     }
 
     public function query(VideoQueueOperationEntity $operation, QueueExecutorConfig $config, string $providerTaskId): array

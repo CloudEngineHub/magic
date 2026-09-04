@@ -7,13 +7,14 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter;
 
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use RuntimeException;
 
-readonly class GeminiVideoAdapterRouter implements VideoGenerationProviderAdapterInterface
+readonly class GeminiVideoAdapterRouter implements VideoGenerationConnectivityTestableInterface
 {
     public function __construct(private GeminiOmniVideoAdapter $geminiOmniVideoAdapter)
     {
@@ -47,6 +48,16 @@ readonly class GeminiVideoAdapterRouter implements VideoGenerationProviderAdapte
     public function query(VideoQueueOperationEntity $operation, QueueExecutorConfig $config, string $providerTaskId): array
     {
         return $this->resolveOperationAdapter($operation)->query($operation, $config, $providerTaskId);
+    }
+
+    public function testConnection(QueueExecutorConfig $config, string $modelVersion): bool
+    {
+        $adapter = $this->resolveAdapter($modelVersion, '');
+        if ($adapter instanceof VideoGenerationConnectivityTestableInterface) {
+            return $adapter->testConnection($config, $modelVersion);
+        }
+
+        throw new RuntimeException(sprintf('unsupported Gemini video model: %s', $modelVersion));
     }
 
     private function resolveOperationAdapter(VideoQueueOperationEntity $operation): VideoGenerationProviderAdapterInterface
