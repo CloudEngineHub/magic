@@ -154,20 +154,28 @@ function configToState(raw: Record<string, any>): ConnectorMCPFormState {
 	const config = (name && raw.mcpServers[name]) || raw
 	const serviceConfig = config?.service_config || config?.serviceConfig || {}
 	const rawType = config?.type
+	// MCPType.Tool and the legacy "sse" value are the same string. A JSON MCP
+	// definition with an explicit type of "sse" is an SSE connector, while
+	// imported tool-set records carry tool metadata that lets us identify them.
+	const isImportedToolConfig =
+		rawType === MCPType.Tool &&
+		(Array.isArray(config?.tools) ||
+			config?.source === 1 ||
+			Boolean(config?.rel_info?.tool_set_id))
 
 	next.id = config?.id
 	next.name = config?.name || name || ""
 	next.description = config?.description || ""
 	next.icon = config?.icon || ""
 	next.type =
-		rawType === MCPType.Tool || rawType === "sse"
+		rawType === MCPType.Tool && isImportedToolConfig
 			? MCPType.Tool
 			: rawType === MCPType.HTTP || rawType === "streamable-http" || rawType === "http"
 				? MCPType.HTTP
 				: rawType === MCPType.STDIO || rawType === "stdio"
 					? MCPType.STDIO
 					: MCPType.SSE
-	next.service_config.url = serviceConfig.url || config?.external_sse_url || ""
+	next.service_config.url = serviceConfig.url || config?.url || config?.external_sse_url || ""
 	next.service_config.command = serviceConfig.command || config?.command || "npx"
 	const argumentsValue = serviceConfig.arguments ?? config?.args
 	next.service_config.arguments = Array.isArray(argumentsValue)
@@ -518,6 +526,7 @@ export default function ConnectorMCPForm({
 	const [loadingInitialData, setLoadingInitialData] = useState(Boolean(connector))
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const isJsonEditingRef = useRef(false)
+	const previousJsonImportEnabledRef = useRef<boolean | null>(null)
 	const { uploading, uploadAndGetFileUrl } = useUpload<FileData>({ storageType: "public" })
 	const { runAsync: saveMcp, loading: saving } = useRequest(FlowApi.saveMcp, { manual: true })
 
@@ -553,8 +562,11 @@ export default function ConnectorMCPForm({
 	}, [connector, tMarket])
 
 	useEffect(() => {
+		const shouldValidateOnEnable = previousJsonImportEnabledRef.current === false
+		previousJsonImportEnabledRef.current = jsonImportEnabled
 		if (!jsonImportEnabled) {
 			setJsonValue("")
+			setJsonError("")
 			return
 		}
 		if (isJsonEditingRef.current) {
@@ -563,6 +575,15 @@ export default function ConnectorMCPForm({
 		}
 		const config = stateToJsonConfig(state)
 		setJsonValue(JSON.stringify({ mcpServers: { [state.name || ""]: config } }, null, 2))
+		if (shouldValidateOnEnable) {
+			const nextErrors = getStateValidationErrors(state)
+			setErrors(nextErrors)
+			setJsonError(
+				Object.keys(nextErrors).length > 0
+					? t("common.tool.panel.jsonValidationFailed")
+					: "",
+			)
+		}
 	}, [jsonImportEnabled, state])
 
 	const updateField = (key: keyof ConnectorMCPFormState, value: string | MCPType) =>
@@ -590,36 +611,27 @@ export default function ConnectorMCPForm({
 		setState((current) => ({ ...current, icon: key }))
 	}
 
-	const handleJsonChange = (value: string) => {
-		isJsonEditingRef.current = true
-		setJsonValue(value)
-		try {
-			setState((current) => ({ ...parseJsonValue(value), id: current.id }))
-			setJsonError("")
-		} catch {
-			isJsonEditingRef.current = false
-			setJsonError(t("common.tool.panel.jsonValidationFailed"))
-		}
-	}
-
-	const validate = () => {
+	const getStateValidationErrors = (candidate: ConnectorMCPFormState) => {
 		const nextErrors: Record<string, string> = {}
-		if (!state.name.trim())
+		if (!candidate.name.trim())
 			nextErrors.name = t("mcp.form.required", { name: t("mcp.form.name") })
-		if (!jsonImportEnabled) {
-			if (
-				[MCPType.SSE, MCPType.HTTP].includes(state.type) &&
-				!state.service_config.url.trim()
-			) {
-				nextErrors.url = t("mcp.form.required", {
-					name: tMarket("connectors.createForm.url"),
-				})
-			}
-			if (state.type === MCPType.STDIO && !state.service_config.command.trim()) {
-				nextErrors.command = t("mcp.form.required", { name: t("mcp.form.command") })
-			}
+		if (
+			[MCPType.SSE, MCPType.HTTP].includes(candidate.type) &&
+			!candidate.service_config.url.trim()
+		) {
+			nextErrors.url = t("mcp.form.required", {
+				name: tMarket("connectors.createForm.url"),
+			})
 		}
-		if (state.service_config.auth_type === 1) {
+		if (candidate.type === MCPType.STDIO && !candidate.service_config.command.trim()) {
+			nextErrors.command = t("mcp.form.required", { name: t("mcp.form.command") })
+		}
+		if (candidate.type === MCPType.Tool && candidate.tools.length === 0) {
+			nextErrors.tools = t("mcp.form.required", {
+				name: t("common.tool.importExistingTools"),
+			})
+		}
+		if (candidate.service_config.auth_type === 1) {
 			for (const key of [
 				"client_id",
 				"client_secret",
@@ -629,26 +641,72 @@ export default function ConnectorMCPForm({
 			] as const) {
 				const value =
 					key === "authorization_content_type"
-						? state.authorization_content_type
-						: state.service_config.oauth2_config[key]
+						? candidate.authorization_content_type
+						: candidate.service_config.oauth2_config[key]
 				if (!value.trim())
 					nextErrors[key] = tMarket("connectors.createForm.oauthRequired", { name: key })
 			}
 		}
+		return nextErrors
+	}
+
+	const handleJsonChange = (value: string) => {
+		isJsonEditingRef.current = true
+		setJsonValue(value)
+		try {
+			const parsedState = { ...parseJsonValue(value), id: state.id }
+			setState(parsedState)
+			const nextErrors = getStateValidationErrors(parsedState)
+			setErrors(nextErrors)
+			setJsonError(
+				Object.keys(nextErrors).length > 0
+					? t("common.tool.panel.jsonValidationFailed")
+					: "",
+			)
+		} catch {
+			isJsonEditingRef.current = false
+			// Keep the invalid text visible and make validation block submission
+			// instead of silently submitting the previous parsed state.
+			setJsonError(t("common.tool.panel.jsonValidationFailed"))
+		}
+	}
+
+	const validate = (): ConnectorMCPFormState | null => {
+		let nextState = state
+		if (jsonImportEnabled) {
+			try {
+				nextState = { ...parseJsonValue(jsonValue), id: state.id }
+			} catch {
+				setJsonError(t("common.tool.panel.jsonValidationFailed"))
+				setErrors({})
+				return null
+			}
+		}
+		const nextErrors = getStateValidationErrors(nextState)
 		setErrors(nextErrors)
-		return Object.keys(nextErrors).length === 0
+		if (Object.keys(nextErrors).length > 0) {
+			if (jsonImportEnabled) {
+				setJsonError(t("common.tool.panel.jsonValidationFailed"))
+			}
+			return null
+		}
+		setJsonError("")
+		return nextState
 	}
 
 	const handleSubmit = async () => {
-		if (!validate()) return
+		const validatedState = validate()
+		if (!validatedState) return
 		try {
 			const payload = {
-				...state,
-				name: state.name.trim(),
+				...validatedState,
+				name: validatedState.name.trim(),
 				service_config: {
-					...state.service_config,
-					headers: state.service_config.headers.filter((item) => item.key.trim()),
-					env: state.service_config.env.filter((item) => item.key.trim()),
+					...validatedState.service_config,
+					headers: validatedState.service_config.headers.filter((item) =>
+						item.key.trim(),
+					),
+					env: validatedState.service_config.env.filter((item) => item.key.trim()),
 				},
 			}
 			await saveMcp(payload as unknown as Flow.Mcp.SaveParams)
@@ -888,6 +946,9 @@ export default function ConnectorMCPForm({
 									<div className="rounded-xl bg-white px-3 py-6 text-center text-sm text-muted-foreground">
 										{t("common.tool.panel.emptyState")}
 									</div>
+								)}
+								{errors.tools && (
+									<p className="text-xs text-destructive">{errors.tools}</p>
 								)}
 							</div>
 						) : (
@@ -1166,7 +1227,11 @@ export default function ConnectorMCPForm({
 				<Button type="button" variant="outline" onClick={onClose}>
 					{t("common.tool.form.cancel")}
 				</Button>
-				<Button type="button" disabled={saving} onClick={() => void handleSubmit()}>
+				<Button
+					type="button"
+					disabled={saving || (jsonImportEnabled && Boolean(jsonError))}
+					onClick={() => void handleSubmit()}
+				>
 					{saving
 						? tMarket("connectors.createForm.saving")
 						: t("common.tool.form.create")}
