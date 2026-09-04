@@ -169,9 +169,11 @@ use App\Domain\MagicBase\Repository\Persistence\MagicBaseProjectStorageRouteRepo
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
 use App\Domain\MagicBase\Repository\Persistence\Storage\MongoDB\MagicBaseMongoProjectCleanupRepository;
 use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
+use App\Domain\MCP\Repository\Facade\MCPAuthorizationCredentialRepositoryInterface;
 use App\Domain\MCP\Repository\Facade\MCPServerRepositoryInterface;
 use App\Domain\MCP\Repository\Facade\MCPServerToolRepositoryInterface;
 use App\Domain\MCP\Repository\Facade\MCPUserSettingRepositoryInterface;
+use App\Domain\MCP\Repository\Persistence\MCPAuthorizationCredentialRepository;
 use App\Domain\MCP\Repository\Persistence\MCPServerRepository;
 use App\Domain\MCP\Repository\Persistence\MCPServerToolRepository;
 use App\Domain\MCP\Repository\Persistence\MCPUserSettingRepository;
@@ -464,6 +466,7 @@ $dependencies = [
     MagicBaseProjectStorageRouteRepositoryInterface::class => MagicBaseProjectStorageRouteRepository::class,
     // mcp
     MCPServerRepositoryInterface::class => MCPServerRepository::class,
+    MCPAuthorizationCredentialRepositoryInterface::class => MCPAuthorizationCredentialRepository::class,
     MCPServerToolRepositoryInterface::class => MCPServerToolRepository::class,
     AuthenticatorInterface::class => ApiKeyProviderAuthenticator::class,
     MCPUserSettingRepositoryInterface::class => MCPUserSettingRepository::class,

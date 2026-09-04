@@ -17,6 +17,7 @@ return [
         'headers' => 'Headers',
         'env' => 'Environment Variables',
         'oauth2_config' => 'OAuth2 Configuration',
+        'mcp_authorization_config' => 'MCP Standard Authorization Configuration',
         'client_id' => 'Client ID',
         'client_secret' => 'Client Secret',
         'client_url' => 'Client URL',
@@ -24,6 +25,15 @@ return [
         'authorization_url' => 'Authorization URL',
         'authorization_content_type' => 'Authorization Content Type',
         'issuer_url' => 'Issuer URL',
+        'resource_metadata_url' => 'Resource Metadata URL',
+        'authorization_server_url' => 'Authorization Server URL',
+        'authorization_endpoint' => 'Authorization Endpoint',
+        'token_endpoint' => 'Token Endpoint',
+        'registration_endpoint' => 'Client Registration Endpoint',
+        'registration_mode' => 'Client Registration Mode',
+        'client_metadata_url' => 'Client Metadata URL',
+        'token_endpoint_auth_method' => 'Token Endpoint Authentication Method',
+        'application_type' => 'Application Type',
         'redirect_uri' => 'Redirect URI',
         'use_pkce' => 'Use PKCE',
         'response_type' => 'Response Type',
@@ -35,6 +45,7 @@ return [
     'auth_type' => [
         'none' => 'No Authentication',
         'oauth2' => 'OAuth2 Authentication',
+        'mcp_authorization' => 'MCP standard authorization',
     ],
 
     // Error messages
@@ -83,6 +94,14 @@ return [
             'state_empty' => 'State parameter cannot be empty',
             'mcp_server_code_empty' => 'MCP server code cannot be empty',
         ],
+    ],
+
+    'authorization' => [
+        'discovery_failed' => 'Failed to discover MCP authorization server',
+        'issuer_mismatch' => 'MCP authorization server issuer validation failed',
+        'state_invalid' => 'MCP authorization state is invalid or expired',
+        'token_exchange_failed' => 'Failed to exchange MCP authorization token',
+        'not_configured' => 'MCP standard authorization is not configured',
     ],
 
     // Command validation errors

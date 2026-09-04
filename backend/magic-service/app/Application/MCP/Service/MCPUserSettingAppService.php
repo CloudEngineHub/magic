@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\MCP\Service;
 
+use App\Application\MCP\Authorization\MCPAuthorizationAppService;
 use App\Application\MCP\Service\Oauth2\MCPOAuth2Client;
 use App\Domain\MCP\Constant\ServiceConfigAuthType;
 use App\Domain\MCP\Entity\MCPServerEntity;
@@ -24,6 +25,9 @@ class MCPUserSettingAppService extends AbstractMCPAppService
 {
     #[Inject]
     protected MCPOAuth2Client $oauth2Client;
+
+    #[Inject]
+    protected MCPAuthorizationAppService $mcpAuthorizationAppService;
 
     /**
      * Save user MCP service required fields.
@@ -107,6 +111,19 @@ class MCPUserSettingAppService extends AbstractMCPAppService
         $authType = ServiceConfigAuthType::NONE;
         if ($serviceConfig instanceof ExternalSSEServiceConfig) {
             $authType = $serviceConfig->getAuthType();
+        }
+
+        if ($authType === ServiceConfigAuthType::MCP_AUTHORIZATION && $serviceConfig instanceof ExternalSSEServiceConfig) {
+            return [
+                'require_fields' => $requireFields,
+                'auth_type' => $authType->value,
+                'auth_config' => $this->mcpAuthorizationAppService->getAuthConfig(
+                    $dataIsolation,
+                    $mcpServer,
+                    $authorization,
+                    $redirectUrl
+                ),
+            ];
         }
 
         return [

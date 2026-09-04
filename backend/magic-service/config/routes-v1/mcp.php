@@ -4,6 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
+use App\Interfaces\MCP\Facade\Admin\MCPAuthorizationApi;
 use App\Interfaces\MCP\Facade\Admin\MCPOAuth2BindingApi;
 use App\Interfaces\MCP\Facade\Admin\MCPServerAdminApi;
 use App\Interfaces\MCP\Facade\Admin\MCPServerToolAdminApi;
@@ -41,6 +42,11 @@ Router::addGroup('/api/v1/mcp', static function () {
     Router::addGroup('/oauth2', static function () {
         Router::post('/bind', [MCPOAuth2BindingApi::class, 'bind']);
         Router::post('/unbind', [MCPOAuth2BindingApi::class, 'unbind']);
+    });
+
+    Router::addGroup('/authorization', static function () {
+        Router::post('/bind', [MCPAuthorizationApi::class, 'bind']);
+        Router::post('/unbind', [MCPAuthorizationApi::class, 'unbind']);
     });
 
     Router::addGroup('/sse', static function () {

@@ -17,6 +17,7 @@ return [
         'headers' => '请求头',
         'env' => '环境变量',
         'oauth2_config' => 'OAuth2配置',
+        'mcp_authorization_config' => 'MCP标准授权配置',
         'client_id' => '客户端ID',
         'client_secret' => '客户端密钥',
         'client_url' => '客户端URL',
@@ -24,6 +25,15 @@ return [
         'authorization_url' => '授权URL',
         'authorization_content_type' => '授权内容类型',
         'issuer_url' => '发行方URL',
+        'resource_metadata_url' => '资源元数据URL',
+        'authorization_server_url' => '授权服务器URL',
+        'authorization_endpoint' => '授权端点',
+        'token_endpoint' => '令牌端点',
+        'registration_endpoint' => '客户端注册端点',
+        'registration_mode' => '客户端注册模式',
+        'client_metadata_url' => '客户端元数据URL',
+        'token_endpoint_auth_method' => '令牌端点认证方式',
+        'application_type' => '应用类型',
         'redirect_uri' => '重定向URI',
         'use_pkce' => '使用PKCE',
         'response_type' => '响应类型',
@@ -35,6 +45,7 @@ return [
     'auth_type' => [
         'none' => '无认证',
         'oauth2' => 'OAuth2认证',
+        'mcp_authorization' => 'MCP标准授权',
     ],
 
     // 错误消息
@@ -83,6 +94,14 @@ return [
             'state_empty' => '状态参数不能为空',
             'mcp_server_code_empty' => 'MCP服务代码不能为空',
         ],
+    ],
+
+    'authorization' => [
+        'discovery_failed' => 'MCP授权服务器发现失败',
+        'issuer_mismatch' => 'MCP授权服务器Issuer校验失败',
+        'state_invalid' => 'MCP授权状态无效或已过期',
+        'token_exchange_failed' => 'MCP授权Token交换失败',
+        'not_configured' => 'MCP标准授权未配置',
     ],
 
     // 命令验证错误

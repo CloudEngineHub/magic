@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\MCP\Entity\ValueObject\ServiceConfig;
 
 use App\Domain\MCP\Constant\ServiceConfigAuthType;
+use App\Domain\MCP\Entity\ValueObject\Authorization\MCPAuthorizationConfig;
 use App\ErrorCode\MCPErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\SSRF\SSRFUtil;
@@ -24,6 +25,8 @@ class ExternalSSEServiceConfig extends AbstractServiceConfig
     protected ServiceConfigAuthType $authType = ServiceConfigAuthType::NONE;
 
     protected ?Oauth2Config $oauth2Config = null;
+
+    protected ?MCPAuthorizationConfig $mcpAuthorizationConfig = null;
 
     public function getAuthType(): ServiceConfigAuthType
     {
@@ -93,6 +96,19 @@ class ExternalSSEServiceConfig extends AbstractServiceConfig
         $this->oauth2Config = $oauth2Config;
     }
 
+    public function getMcpAuthorizationConfig(): ?MCPAuthorizationConfig
+    {
+        return $this->mcpAuthorizationConfig;
+    }
+
+    public function setMcpAuthorizationConfig(null|array|MCPAuthorizationConfig $config): void
+    {
+        if (is_array($config)) {
+            $config = MCPAuthorizationConfig::fromArray($config);
+        }
+        $this->mcpAuthorizationConfig = $config;
+    }
+
     public function validate(): void
     {
         // Validate URL
@@ -120,6 +136,9 @@ class ExternalSSEServiceConfig extends AbstractServiceConfig
         if ($this->authType === ServiceConfigAuthType::OAUTH2) {
             $this->oauth2Config?->validate();
         }
+        if ($this->authType === ServiceConfigAuthType::MCP_AUTHORIZATION) {
+            $this->mcpAuthorizationConfig?->validate();
+        }
     }
 
     public function toArray(): array
@@ -129,6 +148,7 @@ class ExternalSSEServiceConfig extends AbstractServiceConfig
             'headers' => array_map(fn (HeaderConfig $header) => $header->toArray(), $this->headers),
             'auth_type' => $this->authType->value,
             'oauth2_config' => $this->oauth2Config?->toArray(),
+            'mcp_authorization_config' => $this->mcpAuthorizationConfig?->toArray(),
         ];
     }
 
@@ -142,6 +162,12 @@ class ExternalSSEServiceConfig extends AbstractServiceConfig
         ));
         $instance->setAuthType($array['auth_type'] ?? 0);
         $instance->setOauth2Config($array['oauth2_config'] ?? $array['oauth2config'] ?? null);
+        $instance->setMcpAuthorizationConfig(
+            $array['mcp_authorization_config']
+            ?? $array['mcpAuthorizationConfig']
+            ?? $array['mcpauthorizationconfig']
+            ?? null
+        );
         return $instance;
     }
 
