@@ -4,12 +4,16 @@ import { CanvasElementClipboard } from "../clipboard/CanvasElementClipboard"
 import type { CanvasFileElement } from "../../document/types"
 import {
 	CanvasClipboardPasteController,
+	configureCanvasClipboardPasteHost,
 	createCanvasClipboardPasteControllerFromMethods,
+	getCanvasClipboardPasteController,
 	hasCanvasClipboardMimeType,
 	hasCanvasClipboardTextOrHtml,
+	releaseCanvasClipboardPasteHost,
 	type CanvasClipboardAsset,
 	type CanvasClipboardTarget,
 } from "../clipboard/CanvasClipboardPasteController"
+import { CanvasClipboardAssetResolver } from "../clipboard/CanvasClipboardAssetResolver"
 
 function createClipboardItem(blob: Blob, ...types: string[]): ClipboardItem {
 	return {
@@ -655,6 +659,35 @@ describe("CanvasClipboardPasteController", () => {
 		expect(second.handled).toBe(true)
 		expect(second.accepted).toBe(first.accepted)
 		expect(secondAssets).toEqual([])
+	})
+
+	it("keeps separately configured hosts isolated across mount and unmount", () => {
+		const methodsA = { clipboard: { read: vi.fn(async () => []) } }
+		const methodsB = { clipboard: { read: vi.fn(async () => []) } }
+		const controllerA = configureCanvasClipboardPasteHost(methodsA)
+		const controllerB = configureCanvasClipboardPasteHost(methodsB)
+
+		expect(getCanvasClipboardPasteController(methodsA)).toBe(controllerA)
+		expect(getCanvasClipboardPasteController(methodsB)).toBe(controllerB)
+
+		releaseCanvasClipboardPasteHost(controllerB)
+		expect(getCanvasClipboardPasteController(methodsA)).toBe(controllerA)
+		releaseCanvasClipboardPasteHost(controllerA)
+	})
+
+	it("does not fetch remote references without host materialization", async () => {
+		const fetchSpy = vi.spyOn(globalThis, "fetch")
+		const resolver = new CanvasClipboardAssetResolver()
+
+		await expect(
+			resolver.materializeAsset({
+				sourceRef: { ossUrl: "https://untrusted.example/asset.png" },
+				fileName: "asset.png",
+				mimeType: "image/png",
+			}),
+		).resolves.toBeNull()
+		expect(fetchSpy).not.toHaveBeenCalled()
+		fetchSpy.mockRestore()
 	})
 
 	it("handles external media returned only by Clipboard API", async () => {

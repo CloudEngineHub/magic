@@ -455,7 +455,9 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			let pastedAssetIndex = 0
 			const pasteSessionId = getClipboardSessionId()
 
-			void getCanvasClipboardPasteController().paste(
+			void getCanvasClipboardPasteController(
+				canvas?.magicConfigManager.config?.methods,
+			).paste(
 				nativeEvent,
 				{
 					control: "image-editor",

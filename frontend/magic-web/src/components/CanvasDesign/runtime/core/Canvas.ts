@@ -1356,17 +1356,21 @@ export class Canvas {
 	public setAccessContext(update: CanvasAccessUpdate): void {
 		const accessChanged = this.permissionManager.setAccessContext(update)
 		if (!accessChanged) return
-		if (this.permissionManager.can("document.write")) this.clearPreviewContent()
+		const canWrite = this.permissionManager.can("document.write")
+		const canGenerate = this.permissionManager.can("sideEffect.generate")
+		if (canWrite) this.clearPreviewContent()
 		if (!this.permissionManager.can("interaction.playback")) {
 			this.mediaPlaybackCoordinator.pauseAll()
 		}
-		if (!this.permissionManager.can("document.write")) {
+		if (!canWrite) {
 			this.cropManager.cancelCrop()
-			this.extendManager.cancelExtend()
-			this.eraserManager.cancelEraser()
 			this.mediaReplaceController.cancel()
 			this.elementRenameManager.cancelRename()
 			this.toolManager.setActiveToolByType(ToolTypeEnum.Select)
+		}
+		if (!canWrite || !canGenerate) {
+			this.extendManager.cancelExtend()
+			this.eraserManager.cancelEraser()
 		}
 		if (!this.permissionManager.can("interaction.select")) {
 			this.selectionManager.deselectAll()

@@ -19,22 +19,16 @@ export type MaterializeCanvasClipboardAsset = (
 
 export interface CanvasClipboardAssetResolverOptions {
 	materialize?: MaterializeCanvasClipboardAsset
+	/** @deprecated Remote URL materialization is host-owned; this is ignored. */
 	getFileInfo?: (
 		path: string,
 		options?: { useImageProcess?: boolean; forceRefresh?: boolean },
 	) => Promise<{ src?: string; fileName?: string; expires_at?: string } | null | undefined>
-	fetchImpl?: typeof fetch
-	/** Guard against accidentally downloading an unbounded clipboard payload. */
+	/** Guard against accidentally accepting an unbounded clipboard payload. */
 	maxBytes?: number
 }
 
 const DEFAULT_MAX_BYTES = 200 * 1024 * 1024
-
-function isExpired(expiresAt?: string): boolean {
-	if (!expiresAt) return false
-	const timestamp = Date.parse(expiresAt)
-	return Number.isFinite(timestamp) && timestamp <= Date.now()
-}
 
 function normalizeMimeType(mimeType: string): string {
 	return mimeType.trim().toLowerCase() || "application/octet-stream"
@@ -116,32 +110,22 @@ function normalizeResourceKey(value: string): string {
 	return trimmed.replace(/\\/g, "/").replace(/\/+/g, "/")
 }
 
-function isHttpUrl(value?: string): value is string {
-	return Boolean(value && /^https?:\/\//i.test(value.trim()))
-}
-
 /**
  * Materializes a canvas clipboard asset into a File.
  *
  * The host callback is authoritative: it can enforce project/workspace
- * permissions and refresh expiring URLs. The browser fetch fallback exists for
- * older hosts and never returns a source URL as the destination attachment.
+ * permissions and refresh expiring URLs. Remote references are rejected when
+ * the host does not provide that callback.
  */
 export class CanvasClipboardAssetResolver {
 	private readonly inFlight = new Map<string, Promise<File | null>>()
 
 	private readonly materialize?: MaterializeCanvasClipboardAsset
 
-	private readonly getFileInfo?: CanvasClipboardAssetResolverOptions["getFileInfo"]
-
-	private readonly fetchImpl?: typeof fetch
-
 	private readonly maxBytes: number
 
 	constructor(options: CanvasClipboardAssetResolverOptions = {}) {
 		this.materialize = options.materialize
-		this.getFileInfo = options.getFileInfo
-		this.fetchImpl = options.fetchImpl ?? (typeof fetch === "function" ? fetch : undefined)
 		this.maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES
 	}
 
@@ -238,49 +222,9 @@ export class CanvasClipboardAssetResolver {
 			}
 		}
 
-		let url =
-			input.sourceRef?.ossUrl ||
-			(isHttpUrl(input.sourceRef?.src)
-				? input.sourceRef.src
-				: isHttpUrl(input.sourcePath)
-					? input.sourcePath
-					: undefined)
-		if (
-			(!url || isExpired(input.sourceRef?.expiresAt)) &&
-			input.sourcePath &&
-			this.getFileInfo
-		) {
-			try {
-				const info = await this.getFileInfo(input.sourcePath, {
-					useImageProcess: false,
-					forceRefresh: Boolean(isExpired(input.sourceRef?.expiresAt)),
-				})
-				url = info?.src || url
-				if (info?.fileName && !input.fileName) input.fileName = info.fileName
-			} catch {
-				return null
-			}
-		}
-
-		if (!url || !this.fetchImpl) return null
-		try {
-			const response = await this.fetchImpl(url, { cache: "default" })
-			if (!response.ok) return null
-			const contentLength = Number(response.headers.get("content-length"))
-			if (Number.isFinite(contentLength) && contentLength > this.maxBytes) return null
-			const blob = await response.blob()
-			if (blob.size === 0 || blob.size > this.maxBytes) return null
-			const finalMimeType = normalizeAttachmentMimeType(blob.type || mimeType, input.fileName)
-			if (
-				!isSupportedMediaMimeType(finalMimeType) ||
-				!hasCompatibleMediaFamily(mimeType, finalMimeType)
-			)
-				return null
-			return new File([blob], input.fileName || "canvas-clipboard-file", {
-				type: finalMimeType,
-			})
-		} catch {
-			return null
-		}
+		// Remote clipboard references must go through the host callback, which is
+		// responsible for authorization, URL refresh, and cross-project transfer.
+		// Never fetch an untrusted URL directly from the browser with ambient state.
+		return null
 	}
 }

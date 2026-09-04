@@ -832,7 +832,6 @@ export function createCanvasClipboardPasteController(
 export function createCanvasClipboardPasteControllerFromMethods(methods?: {
 	clipboard?: { read?: () => Promise<ClipboardItem[]>; readText?: () => Promise<string> }
 	materializeCanvasClipboardAsset?: MaterializeCanvasClipboardAsset
-	getFileInfo?: CanvasClipboardAssetResolverOptions["getFileInfo"]
 	resolveCanvasClipboardReference?: CanvasClipboardHostReferenceResolver
 }): CanvasClipboardPasteController {
 	const hostResolver = methods?.resolveCanvasClipboardReference
@@ -840,7 +839,6 @@ export function createCanvasClipboardPasteControllerFromMethods(methods?: {
 		read: methods?.clipboard?.read,
 		readText: methods?.clipboard?.readText,
 		materialize: methods?.materializeCanvasClipboardAsset,
-		getFileInfo: methods?.getFileInfo,
 		resolveReference: hostResolver
 			? async ({ asset, target }) =>
 					hostResolver({
@@ -862,32 +860,68 @@ export function createCanvasClipboardPasteControllerFromMethods(methods?: {
 	})
 }
 
-let sharedController: CanvasClipboardPasteController | null = null
-
-export function configureCanvasClipboardPasteHost(methods?: {
+type CanvasClipboardPasteHostMethods = {
 	clipboard?: { read?: () => Promise<ClipboardItem[]>; readText?: () => Promise<string> }
 	materializeCanvasClipboardAsset?: MaterializeCanvasClipboardAsset
+	/** @deprecated Remote URL materialization is host-owned; this is ignored. */
 	getFileInfo?: CanvasClipboardAssetResolverOptions["getFileInfo"]
 	resolveCanvasClipboardReference?: CanvasClipboardHostReferenceResolver
-}): CanvasClipboardPasteController {
-	sharedController?.clearCache()
-	sharedController = createCanvasClipboardPasteControllerFromMethods(methods)
-	return sharedController
+}
+
+const defaultHostKey = {}
+const controllersByHost = new WeakMap<object, CanvasClipboardPasteController>()
+const hostRegistrations = new Map<CanvasClipboardPasteController, { key: object; count: number }>()
+let defaultController: CanvasClipboardPasteController | null = null
+
+function getHostKey(methods?: CanvasClipboardPasteHostMethods): object {
+	return methods && typeof methods === "object" ? methods : defaultHostKey
+}
+
+function getOrCreateHostController(
+	methods?: CanvasClipboardPasteHostMethods,
+): CanvasClipboardPasteController {
+	const key = getHostKey(methods)
+	const existing = controllersByHost.get(key)
+	if (existing) return existing
+	const controller = createCanvasClipboardPasteControllerFromMethods(methods)
+	controllersByHost.set(key, controller)
+	hostRegistrations.set(controller, { key, count: 0 })
+	return controller
+}
+
+export function configureCanvasClipboardPasteHost(
+	methods?: CanvasClipboardPasteHostMethods,
+): CanvasClipboardPasteController {
+	const controller = getOrCreateHostController(methods)
+	const registration = hostRegistrations.get(controller)
+	if (registration) registration.count += 1
+	if (!defaultController) defaultController = controller
+	return controller
 }
 
 /** Drop resource materialization promises when the host project/session changes. */
 export function clearCanvasClipboardPasteControllerCache(): void {
-	sharedController?.clearCache()
+	for (const controller of hostRegistrations.keys()) controller.clearCache()
 }
 
 export function releaseCanvasClipboardPasteHost(controller: CanvasClipboardPasteController): void {
-	if (sharedController !== controller) return
+	const registration = hostRegistrations.get(controller)
+	if (!registration) return
+	registration.count = Math.max(0, registration.count - 1)
+	if (registration.count > 0) return
 	controller.clearCache()
-	sharedController = null
+	hostRegistrations.delete(controller)
+	controllersByHost.delete(registration.key)
+	if (defaultController !== controller) return
+	defaultController = hostRegistrations.keys().next().value ?? null
 }
 
-export function getCanvasClipboardPasteController(): CanvasClipboardPasteController {
-	return (sharedController ??= new CanvasClipboardPasteController())
+export function getCanvasClipboardPasteController(
+	methods?: CanvasClipboardPasteHostMethods,
+): CanvasClipboardPasteController {
+	if (methods) return getOrCreateHostController(methods)
+	if (defaultController) return defaultController
+	return getOrCreateHostController()
 }
 
 export type { MaterializeCanvasClipboardAsset }
