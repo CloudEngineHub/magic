@@ -296,5 +296,4 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
                 : null,
         ];
     }
-
 }

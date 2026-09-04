@@ -19,7 +19,6 @@ use App\Domain\MCP\Entity\ValueObject\ServiceConfig\ExternalSSEServiceConfig;
 use App\Domain\MCP\Service\MCPAuthorizationCredentialDomainService;
 use App\ErrorCode\MCPErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
-use App\Infrastructure\Util\Context\CoContext;
 use GuzzleHttp\Client;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Logger\LoggerFactory;
@@ -220,26 +219,6 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
     }
 
     /**
-     * 将已有 pending state 转换为用户设置接口的授权配置响应。
-     *
-     * @param array<string, mixed> $pendingState
-     * @return array<string, mixed>
-     */
-    private function buildPendingAuthConfig(array $pendingState, string $resource): array
-    {
-        $expiresAt = (int) ($pendingState['expires_at'] ?? 0);
-        return [
-            'is_authenticated' => false,
-            'oauth_url' => (string) ($pendingState['authorization_url'] ?? ''),
-            'authorization_url' => (string) ($pendingState['authorization_url'] ?? ''),
-            'state' => (string) ($pendingState['state'] ?? ''),
-            'expires_in' => max(0, $expiresAt - time()),
-            'issuer' => (string) ($pendingState['issuer'] ?? ''),
-            'resource' => (string) ($pendingState['resource'] ?? $resource),
-        ];
-    }
-
-    /**
      * 从 MCP Server 读取新模式配置。
      */
     public function getConfig(MCPServerEntity $mcpServer): MCPAuthorizationConfig
@@ -341,6 +320,26 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
         $credential->setScope(isset($tokens['scope']) ? (string) $tokens['scope'] : $credential->getScope());
         $credential->setExpiresAt(isset($tokens['expires_in']) ? date('Y-m-d H:i:s', time() + (int) $tokens['expires_in']) : null);
         $credential->setRefreshTokenExpiresAt(isset($tokens['refresh_token_expires_in']) ? date('Y-m-d H:i:s', time() + (int) $tokens['refresh_token_expires_in']) : $credential->getRefreshTokenExpiresAt());
+    }
+
+    /**
+     * 将已有 pending state 转换为用户设置接口的授权配置响应。
+     *
+     * @param array<string, mixed> $pendingState
+     * @return array<string, mixed>
+     */
+    private function buildPendingAuthConfig(array $pendingState, string $resource): array
+    {
+        $expiresAt = (int) ($pendingState['expires_at'] ?? 0);
+        return [
+            'is_authenticated' => false,
+            'oauth_url' => (string) ($pendingState['authorization_url'] ?? ''),
+            'authorization_url' => (string) ($pendingState['authorization_url'] ?? ''),
+            'state' => (string) ($pendingState['state'] ?? ''),
+            'expires_in' => max(0, $expiresAt - time()),
+            'issuer' => (string) ($pendingState['issuer'] ?? ''),
+            'resource' => (string) ($pendingState['resource'] ?? $resource),
+        ];
     }
 
     /**
