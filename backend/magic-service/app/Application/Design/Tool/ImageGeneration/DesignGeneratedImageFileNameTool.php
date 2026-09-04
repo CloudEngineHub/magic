@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\ImageGeneration;
 
+use App\Application\Design\Tool\DesignFileNameSanitizer;
 use App\Application\ModelGateway\MicroAgent\MicroAgentFactory;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
@@ -40,6 +41,7 @@ final class DesignGeneratedImageFileNameTool
         ImageGenerationEntity $entity,
         string $prompt,
     ): string {
+        $prompt = DesignFileNameSanitizer::sanitizePrompt($prompt);
         $handler = DesignImageGenerationTaskHandlerFactory::get($entity->getType());
         if ($handler !== null) {
             $ruleBased = $handler->resolveRuleBasedOutputBaseName($entity);
@@ -109,13 +111,6 @@ final class DesignGeneratedImageFileNameTool
      */
     public function sanitizeFileName(string $fileName): string
     {
-        $fileName = preg_replace('/[`\'\"]+/', '', $fileName) ?? '';
-        $fileName = preg_replace('/[\/\\\:*?"<>|]+/', '_', $fileName) ?? '';
-        $fileName = trim($fileName);
-        if (mb_strlen($fileName) > 30) {
-            $fileName = mb_substr($fileName, 0, 30);
-        }
-
-        return $fileName;
+        return DesignFileNameSanitizer::sanitize($fileName);
     }
 }
