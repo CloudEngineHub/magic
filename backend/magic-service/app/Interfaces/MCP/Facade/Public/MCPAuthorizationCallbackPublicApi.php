@@ -11,6 +11,8 @@ use App\Application\MCP\Authorization\MCPAuthorizationBindingService;
 use Hyperf\Contract\TranslatorInterface;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use Hyperf\HttpServer\Contract\ResponseInterface as HttpResponse;
+use Hyperf\Logger\LoggerFactory;
+use Psr\Log\LoggerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Throwable;
 
@@ -19,12 +21,16 @@ use Throwable;
  */
 class MCPAuthorizationCallbackPublicApi
 {
+    private LoggerInterface $logger;
+
     public function __construct(
         private readonly RequestInterface $request,
         private readonly HttpResponse $response,
         private readonly MCPAuthorizationBindingService $bindingService,
-        private readonly TranslatorInterface $translator
+        private readonly TranslatorInterface $translator,
+        LoggerFactory $loggerFactory
     ) {
+        $this->logger = $loggerFactory->get('MCPAuthorizationCallbackPublicApi');
     }
 
     /**
@@ -49,7 +55,14 @@ class MCPAuthorizationCallbackPublicApi
                 $this->request->input('iss'),
                 $this->request->input('error')
             );
-        } catch (Throwable) {
+        } catch (Throwable $throwable) {
+            $this->logger->error('MCPAuthorizationCallbackPageFailed', [
+                'state_hash' => $this->hashValue((string) $this->request->input('state', '')),
+                'error_type' => get_class($throwable),
+                'error' => $throwable->getMessage(),
+                'file' => $throwable->getFile(),
+                'line' => $throwable->getLine(),
+            ]);
             return $this->response->html($this->renderPage(
                 $locale,
                 $this->translator->trans('mcp.authorization_callback.title.failure'),
@@ -179,5 +192,13 @@ HTML;
     private function toHtmlLanguage(string $locale): string
     {
         return htmlspecialchars(str_replace('_', '-', $locale), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+    /**
+     * 对 state 生成不可逆标识，仅用于日志关联。
+     */
+    private function hashValue(string $value): string
+    {
+        return $value === '' ? '' : substr(hash('sha256', $value), 0, 16);
     }
 }
