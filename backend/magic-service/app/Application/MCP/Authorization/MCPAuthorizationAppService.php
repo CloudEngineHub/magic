@@ -70,7 +70,11 @@ class MCPAuthorizationAppService
         $userId = $authorization?->getId() ?: $dataIsolation->getCurrentUserId();
         $credential = $this->credentialDomainService->getByResource($dataIsolation, $userId, $mcpServer->getCode(), $resource);
 
-        if ($credential?->isAccessTokenValid((int) $this->config->get('mcp_authorization.token_expiry_leeway', 30))) {
+        // 密文存在且未过期并不代表当前密钥仍可解密；密钥轮换后必须重新授权。
+        if (
+            $credential?->isAccessTokenValid((int) $this->config->get('mcp_authorization.token_expiry_leeway', 30))
+            && $this->isAccessTokenDecryptable($credential)
+        ) {
             return [
                 'is_authenticated' => true,
                 'oauth_url' => '',
@@ -249,7 +253,15 @@ class MCPAuthorizationAppService
                 return null;
             }
         }
-        return $this->secretCipher->decrypt($credential->getAccessTokenCiphertext()) ?: null;
+        try {
+            return $this->secretCipher->decrypt($credential->getAccessTokenCiphertext()) ?: null;
+        } catch (Throwable $throwable) {
+            $this->logger->warning('MCPAuthorizationRuntimeAccessTokenDecryptFailed', [
+                'mcp_server_code' => $mcpServer->getCode(),
+                'error' => $throwable->getMessage(),
+            ]);
+            return null;
+        }
     }
 
     /**
@@ -410,5 +422,21 @@ class MCPAuthorizationAppService
         $tokens = $this->tokenClient->refresh($tokenEndpoint, $config, $refreshToken, $credential->getResource());
         $this->applyTokenSet($credential, $tokens);
         return $this->credentialDomainService->save($dataIsolation, $credential);
+    }
+
+    /**
+     * 检查访问令牌密文是否能使用当前密钥解密。
+     */
+    private function isAccessTokenDecryptable(MCPAuthorizationCredentialEntity $credential): bool
+    {
+        try {
+            return $this->secretCipher->decrypt($credential->getAccessTokenCiphertext()) !== '';
+        } catch (Throwable $throwable) {
+            $this->logger->warning('MCPAuthorizationAccessTokenDecryptFailed', [
+                'mcp_server_id' => $credential->getMcpServerId(),
+                'error' => $throwable->getMessage(),
+            ]);
+            return false;
+        }
     }
 }
