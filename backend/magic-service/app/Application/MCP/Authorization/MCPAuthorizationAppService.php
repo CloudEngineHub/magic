@@ -40,6 +40,8 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
 
     private MCPAuthorizationPreflightService $preflightService;
 
+    private MCPAuthorizationCapabilityService $capabilityService;
+
     public function __construct(
         private readonly MCPAuthorizationCredentialDomainService $credentialDomainService,
         private readonly MCPAuthorizationStateStore $stateStore,
@@ -51,7 +53,8 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
         $httpClient = new Client();
         $this->discoveryClient = new MCPAuthorizationDiscoveryClient($httpClient);
         $this->tokenClient = new MCPAuthorizationTokenClient($httpClient);
-        $this->preflightService = new MCPAuthorizationPreflightService($httpClient, $this->discoveryClient);
+        $this->capabilityService = new MCPAuthorizationCapabilityService($httpClient, $this->discoveryClient);
+        $this->preflightService = new MCPAuthorizationPreflightService($this->capabilityService);
     }
 
     /**
@@ -235,6 +238,16 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
     public function preflight(MCPServerEntity $mcpServer): void
     {
         $this->preflightService->check($mcpServer);
+    }
+
+    /**
+     * 探测 MCP Server 的 Authorization 能力并生成推荐配置。
+     *
+     * @return array<string, mixed>
+     */
+    public function analyzeCapabilities(MCPServerEntity $mcpServer): array
+    {
+        return $this->capabilityService->analyze($mcpServer);
     }
 
     /**
