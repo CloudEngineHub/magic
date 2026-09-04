@@ -28,6 +28,7 @@
 			"env": "环境变量",
 			"headersLabel": "Headers",
 			"iconHint": "PNG/JPG，建议尺寸 100×100",
+			"importToolsRequired": "导入工具不可为空",
 			"jsonHint": "JSON MCP 配置",
 			"key": "键",
 			"loadFailed": "连接器配置加载失败",

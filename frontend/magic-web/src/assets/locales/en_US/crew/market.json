@@ -28,6 +28,7 @@
 			"env": "Environment variables",
 			"headersLabel": "Headers",
 			"iconHint": "PNG/JPG, recommended size 100×100",
+			"importToolsRequired": "Imported tools cannot be empty",
 			"jsonHint": "JSON MCP configuration",
 			"key": "Key",
 			"loadFailed": "Failed to load connector configuration",

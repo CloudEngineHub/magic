@@ -19,7 +19,7 @@ import MagicImage from "@/components/base/MagicImage"
 import { IconMCP } from "@/enhance/tabler/icons-react"
 import { MCPType, type IMCPItem } from "@/components/Agent/MCP/types"
 import { renderMarkdownLinks } from "@/components/Agent/MCP/renderMarkdownLinks"
-import { hasEditRight } from "@/pages/flow/components/AuthControlButton/types"
+import { hasAdminRight, hasEditRight } from "@/pages/flow/components/AuthControlButton/types"
 import { normalizeLocale } from "@/utils/locale"
 
 interface ConnectorCardMobileProps {
@@ -83,13 +83,17 @@ export default function ConnectorCardMobile({
 	}
 	const canEdit = hasEditRight(connector.user_operation)
 	const menuItems = [
-		{
-			key: "edit",
-			icon: <Pencil className="size-4" />,
-			label: t("connectors.edit"),
-			onClick: () => onEdit?.(connector),
-			"data-testid": "connector-mobile-card-edit",
-		},
+		...(canEdit
+			? [
+					{
+						key: "edit",
+						icon: <Pencil className="size-4" />,
+						label: t("connectors.edit"),
+						onClick: () => onEdit?.(connector),
+						"data-testid": "connector-mobile-card-edit",
+					},
+				]
+			: []),
 		...(canEdit && connector.type === MCPType.Tool
 			? [
 					{
@@ -112,20 +116,32 @@ export default function ConnectorCardMobile({
 					},
 				]
 			: []),
-		{
-			key: "toggle-enabled",
-			icon: connector.enabled ? <Pause className="size-4" /> : <Play className="size-4" />,
-			label: connector.enabled ? t("connectors.disable") : t("connectors.enable"),
-			onClick: () => onToggleEnabled?.(connector),
-			"data-testid": "connector-mobile-card-toggle-enabled",
-		},
-		{
-			key: "delete",
-			icon: <Trash2 className="size-4 text-destructive" />,
-			label: <span className="text-destructive">{t("connectors.delete")}</span>,
-			onClick: () => onDelete?.(connector),
-			"data-testid": "connector-mobile-card-delete",
-		},
+		...(canEdit
+			? [
+					{
+						key: "toggle-enabled",
+						icon: connector.enabled ? (
+							<Pause className="size-4" />
+						) : (
+							<Play className="size-4" />
+						),
+						label: connector.enabled ? t("connectors.disable") : t("connectors.enable"),
+						onClick: () => onToggleEnabled?.(connector),
+						"data-testid": "connector-mobile-card-toggle-enabled",
+					},
+				]
+			: []),
+		...(hasAdminRight(connector.user_operation)
+			? [
+					{
+						key: "delete",
+						icon: <Trash2 className="size-4 text-destructive" />,
+						label: <span className="text-destructive">{t("connectors.delete")}</span>,
+						onClick: () => onDelete?.(connector),
+						"data-testid": "connector-mobile-card-delete",
+					},
+				]
+			: []),
 	]
 
 	return (
@@ -198,7 +214,7 @@ export default function ConnectorCardMobile({
 					) : null}
 				</div>
 			) : null}
-			{showManageMenu ? (
+			{showManageMenu && canEdit ? (
 				<MagicDropdown menu={{ items: menuItems }} placement="bottomRight" model>
 					<Button
 						type="button"

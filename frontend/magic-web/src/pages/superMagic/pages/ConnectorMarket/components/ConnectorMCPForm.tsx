@@ -105,6 +105,10 @@ const createInitialState = (): ConnectorMCPFormState => ({
 	tools: [],
 })
 
+function isInitialCreateState(state: ConnectorMCPFormState) {
+	return JSON.stringify(state) === JSON.stringify(createInitialState())
+}
+
 const inputClassName = "h-9 bg-background"
 const fieldClassName = "flex flex-col gap-1.5"
 
@@ -154,6 +158,10 @@ function configToState(raw: Record<string, any>): ConnectorMCPFormState {
 	const config = (name && raw.mcpServers[name]) || raw
 	const serviceConfig = config?.service_config || config?.serviceConfig || {}
 	const rawType = config?.type
+	const hasCommand =
+		(typeof config?.command === "string" && Boolean(config.command.trim())) ||
+		(Array.isArray(config?.args) && config.args.length > 0)
+	const hasUrl = typeof config?.url === "string" && Boolean(config.url.trim())
 	// MCPType.Tool and the legacy "sse" value are the same string. A JSON MCP
 	// definition with an explicit type of "sse" is an SSE connector, while
 	// imported tool-set records carry tool metadata that lets us identify them.
@@ -174,7 +182,11 @@ function configToState(raw: Record<string, any>): ConnectorMCPFormState {
 				? MCPType.HTTP
 				: rawType === MCPType.STDIO || rawType === "stdio"
 					? MCPType.STDIO
-					: MCPType.SSE
+					: hasCommand
+						? MCPType.STDIO
+						: hasUrl && !rawType
+							? MCPType.HTTP
+							: MCPType.SSE
 	next.service_config.url = serviceConfig.url || config?.url || config?.external_sse_url || ""
 	next.service_config.command = serviceConfig.command || config?.command || "npx"
 	const argumentsValue = serviceConfig.arguments ?? config?.args
@@ -191,6 +203,7 @@ function configToState(raw: Record<string, any>): ConnectorMCPFormState {
 	next.authorization_content_type =
 		serviceConfig.authorization_content_type ||
 		serviceConfig.oauth2_config?.authorization_content_type ||
+		config?.oauth2_config?.authorization_content_type ||
 		config?.authorization_content_type ||
 		"application/json"
 	next.tools = Array.isArray(config?.tools) ? config.tools : []
@@ -199,25 +212,56 @@ function configToState(raw: Record<string, any>): ConnectorMCPFormState {
 
 function stateToJsonConfig(state: ConnectorMCPFormState) {
 	const config = MCPConfigToJson(state as unknown as Record<string, unknown>)
-
-	if (state.type === MCPType.STDIO) {
-		delete config.url
-		delete config.headers
-		config.type = "stdio"
-	} else {
-		delete config.command
-		delete config.args
-		delete config.env
-		if (state.type === MCPType.HTTP) config.type = "streamable-http"
-		else delete config.type
+	const oauthConfig = state.service_config.oauth2_config
+	const nextConfig: Record<string, unknown> = {}
+	const setStringIfFilled = (key: string, value: string) => {
+		if (value.trim()) nextConfig[key] = value
 	}
 
-	return config
+	setStringIfFilled("icon", state.icon)
+	setStringIfFilled("name", state.name)
+	setStringIfFilled("description", state.description)
+
+	if (state.type === MCPType.STDIO) {
+		nextConfig.type = "stdio"
+		setStringIfFilled("command", state.service_config.command)
+		const args = state.service_config.arguments
+			.split(",")
+			.map((item) => item.trim())
+			.filter(Boolean)
+		if (args.length) nextConfig.args = args
+		const env = config.env as Record<string, string> | undefined
+		if (env && Object.keys(env).length) nextConfig.env = env
+		return nextConfig
+	}
+
+	if (state.type === MCPType.HTTP) nextConfig.type = "streamable-http"
+	setStringIfFilled("url", state.service_config.url)
+	const headers = config.headers as Record<string, string> | undefined
+	if (headers && Object.keys(headers).length) nextConfig.headers = headers
+
+	if (state.service_config.auth_type === 1) {
+		nextConfig.auth_type = 1
+		const nextOAuthConfig: Record<string, string> = {}
+		for (const [key, value] of Object.entries({
+			...oauthConfig,
+			authorization_content_type: state.authorization_content_type,
+		})) {
+			if (value.trim()) nextOAuthConfig[key] = value
+		}
+		if (Object.keys(nextOAuthConfig).length) nextConfig.oauth2_config = nextOAuthConfig
+	}
+
+	return nextConfig
 }
 
 function parseJsonValue(raw: string) {
 	const parsed = JSON.parse(raw) as Record<string, any>
-	if (!parsed?.mcpServers || typeof parsed.mcpServers !== "object") {
+	if (
+		!parsed?.mcpServers ||
+		typeof parsed.mcpServers !== "object" ||
+		Array.isArray(parsed.mcpServers)
+	) {
 		throw new Error("Invalid MCP JSON")
 	}
 	return configToState(parsed)
@@ -526,12 +570,12 @@ export default function ConnectorMCPForm({
 	const [loadingInitialData, setLoadingInitialData] = useState(Boolean(connector))
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const isJsonEditingRef = useRef(false)
-	const previousJsonImportEnabledRef = useRef<boolean | null>(null)
 	const { uploading, uploadAndGetFileUrl } = useUpload<FileData>({ storageType: "public" })
 	const { runAsync: saveMcp, loading: saving } = useRequest(FlowApi.saveMcp, { manual: true })
 
 	useEffect(() => {
 		if (!connector) {
+			isJsonEditingRef.current = false
 			setLoadingInitialData(false)
 			setState(createInitialState())
 			setIconPreviewUrl("")
@@ -540,6 +584,7 @@ export default function ConnectorMCPForm({
 		}
 
 		let disposed = false
+		isJsonEditingRef.current = false
 		setLoadingInitialData(true)
 		setErrors({})
 		void FlowApi.getMcp(connector.id)
@@ -562,29 +607,25 @@ export default function ConnectorMCPForm({
 	}, [connector, tMarket])
 
 	useEffect(() => {
-		const shouldValidateOnEnable = previousJsonImportEnabledRef.current === false
-		previousJsonImportEnabledRef.current = jsonImportEnabled
-		if (!jsonImportEnabled) {
+		if (!jsonImportEnabled || state.type === MCPType.Tool) {
+			isJsonEditingRef.current = false
 			setJsonValue("")
 			setJsonError("")
+			setErrors(getStateValidationErrors(state))
 			return
 		}
 		if (isJsonEditingRef.current) {
 			isJsonEditingRef.current = false
 			return
 		}
-		const config = stateToJsonConfig(state)
-		setJsonValue(JSON.stringify({ mcpServers: { [state.name || ""]: config } }, null, 2))
-		if (shouldValidateOnEnable) {
-			const nextErrors = getStateValidationErrors(state)
-			setErrors(nextErrors)
-			setJsonError(
-				Object.keys(nextErrors).length > 0
-					? t("common.tool.panel.jsonValidationFailed")
-					: "",
-			)
-		}
-	}, [jsonImportEnabled, state])
+		const jsonDocument =
+			!connector && isInitialCreateState(state)
+				? { mcpServers: { mcp_name: { url: "" } } }
+				: { mcpServers: { [state.name || "mcp_name"]: stateToJsonConfig(state) } }
+		setJsonValue(JSON.stringify(jsonDocument, null, 2))
+		setErrors({})
+		setJsonError("")
+	}, [connector, jsonImportEnabled, state])
 
 	const updateField = (key: keyof ConnectorMCPFormState, value: string | MCPType) =>
 		setState((current) => ({ ...current, [key]: value }))
@@ -627,9 +668,7 @@ export default function ConnectorMCPForm({
 			nextErrors.command = t("mcp.form.required", { name: t("mcp.form.command") })
 		}
 		if (candidate.type === MCPType.Tool && candidate.tools.length === 0) {
-			nextErrors.tools = t("mcp.form.required", {
-				name: t("common.tool.importExistingTools"),
-			})
+			nextErrors.tools = tMarket("connectors.createForm.importToolsRequired")
 		}
 		if (candidate.service_config.auth_type === 1) {
 			for (const key of [
@@ -650,21 +689,22 @@ export default function ConnectorMCPForm({
 		return nextErrors
 	}
 
+	const currentValidationErrors = getStateValidationErrors(state)
+	const hasBlockingFormErrors =
+		(state.type === MCPType.Tool || !jsonImportEnabled) &&
+		Object.keys(currentValidationErrors).length > 0
+
 	const handleJsonChange = (value: string) => {
 		isJsonEditingRef.current = true
 		setJsonValue(value)
 		try {
 			const parsedState = { ...parseJsonValue(value), id: state.id }
 			setState(parsedState)
-			const nextErrors = getStateValidationErrors(parsedState)
-			setErrors(nextErrors)
-			setJsonError(
-				Object.keys(nextErrors).length > 0
-					? t("common.tool.panel.jsonValidationFailed")
-					: "",
-			)
+			setErrors({})
+			setJsonError("")
 		} catch {
 			isJsonEditingRef.current = false
+			setErrors({})
 			// Keep the invalid text visible and make validation block submission
 			// instead of silently submitting the previous parsed state.
 			setJsonError(t("common.tool.panel.jsonValidationFailed"))
@@ -673,7 +713,7 @@ export default function ConnectorMCPForm({
 
 	const validate = (): ConnectorMCPFormState | null => {
 		let nextState = state
-		if (jsonImportEnabled) {
+		if (jsonImportEnabled && state.type !== MCPType.Tool) {
 			try {
 				nextState = { ...parseJsonValue(jsonValue), id: state.id }
 			} catch {
@@ -681,13 +721,13 @@ export default function ConnectorMCPForm({
 				setErrors({})
 				return null
 			}
+			setErrors({})
+			setJsonError("")
+			return nextState
 		}
 		const nextErrors = getStateValidationErrors(nextState)
 		setErrors(nextErrors)
 		if (Object.keys(nextErrors).length > 0) {
-			if (jsonImportEnabled) {
-				setJsonError(t("common.tool.panel.jsonValidationFailed"))
-			}
 			return null
 		}
 		setJsonError("")
@@ -831,12 +871,14 @@ export default function ConnectorMCPForm({
 
 						<RadioGroup
 							value={state.type === MCPType.Tool ? "tools" : "custom"}
-							onValueChange={(value) =>
-								updateField(
-									MCPFormField.MCPType,
-									value === "tools" ? MCPType.Tool : MCPType.SSE,
-								)
-							}
+							onValueChange={(value) => {
+								const nextType = value === "tools" ? MCPType.Tool : MCPType.SSE
+								if (nextType === MCPType.Tool) {
+									setJsonError("")
+									setErrors({})
+								}
+								updateField(MCPFormField.MCPType, nextType)
+							}}
 							className="grid grid-cols-1 gap-3 sm:grid-cols-2"
 						>
 							<label
@@ -1062,20 +1104,20 @@ export default function ConnectorMCPForm({
 													)
 												}
 											/>
+											{errors[
+												state.type === MCPType.STDIO ? "command" : "url"
+											] && (
+												<p className="text-xs text-destructive">
+													{
+														errors[
+															state.type === MCPType.STDIO
+																? "command"
+																: "url"
+														]
+													}
+												</p>
+											)}
 										</div>
-										{errors[
-											state.type === MCPType.STDIO ? "command" : "url"
-										] && (
-											<p className="text-xs text-destructive">
-												{
-													errors[
-														state.type === MCPType.STDIO
-															? "command"
-															: "url"
-													]
-												}
-											</p>
-										)}
 										{state.type === MCPType.STDIO ? (
 											<>
 												<div className={fieldClassName}>
@@ -1229,7 +1271,11 @@ export default function ConnectorMCPForm({
 				</Button>
 				<Button
 					type="button"
-					disabled={saving || (jsonImportEnabled && Boolean(jsonError))}
+					disabled={
+						saving ||
+						hasBlockingFormErrors ||
+						(state.type !== MCPType.Tool && jsonImportEnabled && Boolean(jsonError))
+					}
 					onClick={() => void handleSubmit()}
 				>
 					{saving
