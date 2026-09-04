@@ -66,6 +66,7 @@ import SilenceDetector from "./SilenceDetector"
 import { DurationTracker } from "./DurationTracker"
 import { getSummaryMessageService, SummaryStage } from "./SummaryMessageService"
 import { UploadQueueWatchdog } from "./uploadQueueWatchdog"
+import { runTaskEndCleanup } from "./taskEndCleanup"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Button } from "@/components/shadcn-ui/button"
 import type { RecordingEncodingSnapshot } from "./MediaRecorderService/types/RecorderTypes"
@@ -1426,7 +1427,7 @@ class RecordSummaryService {
 				if (isTaskEndError(error)) {
 					logger.warn(`恢复录音前检测到任务已结束，停止恢复会话 ${session.id}`)
 					// Handle task end: stop local instances and reset state
-					await this.handleTaskEnd(session.id)
+					await this.handleTaskEnd(session.id, error.code)
 					return
 				}
 				// If it's not a task end error, log but continue with resume
@@ -2961,12 +2962,8 @@ class RecordSummaryService {
 		// Check if error is task end error
 		if (isTaskEndError(error)) {
 			const session = this.sessionManager.getCurrentSession()
-			if (session) {
-				logger.warn(`恢复录音前检测到任务已结束，停止恢复会话 ${session.id}`)
-				// Handle task end: stop local instances and reset state
-				await this.handleTaskEnd(session.id)
-				return
-			}
+			const sessionId = session?.id ?? error.sessionId
+			if (sessionId) await this.handleTaskEnd(sessionId, error.code)
 		}
 	}
 
@@ -3760,7 +3757,7 @@ class RecordSummaryService {
 	 * 处理服务端结束任务事件。
 	 * 服务端状态已经结束，只需要强制停止本地的录制相关实例
 	 */
-	private handleTaskEnd = async (sessionId: string, errorCode?: number) => {
+	private handleTaskEnd = async (sessionId: string, errorCode?: number | string) => {
 		logger.warn(
 			`检测到任务结束（错误码 ${errorCode ?? ERROR_CODE_TASK_ENDED}），停止本地录制会话 ${sessionId}`,
 		)
@@ -3772,61 +3769,81 @@ class RecordSummaryService {
 
 		try {
 			const currentSession = this.sessionManager.getCurrentSession()
-			// Only stop if this is the current active session
-			if (!currentSession || currentSession.id !== sessionId) {
+			// Never stop a different recording session because of a stale event.
+			if (currentSession && currentSession.id !== sessionId) {
 				logger.log(`任务结束事件针对的会话 ${sessionId} 不是当前活跃会话，忽略`)
 				return
 			}
 
-			// Stop recording services (voice and media recorder)
-			// This includes stopping duration timer
-			await this.stopRecordingServices("task_end")
-
-			// Release wake lock
-			this.wakeLockManager.releaseWakeLock()
-			this.wakeLockManager.removeVisibilityChangeListener()
-
-			// Remove before unload listener
-			this.removeBeforeUnloadListener()
-
-			// Stop periodic reporting (server already knows task ended)
-			this.statusReporter.stopPeriodicReport()
-			this.chunkUploader.stopSessionUploads(sessionId, "task_end")
-			this.batchSaveReporter.clearSession(sessionId)
-
-			// 保留本地分片和会话记录。服务端已结束任务，但这里删除数据会让
-			// 上传失败的分片无法导出，也会丢失后续排查所需的本地记录。
+			const numericErrorCode =
+				typeof errorCode === "string" && errorCode.trim() === ""
+					? undefined
+					: Number(errorCode)
+			const normalizedErrorCode = Number.isFinite(numericErrorCode)
+				? numericErrorCode
+				: undefined
 			const terminationSource =
-				errorCode === ERROR_CODES.TASK_IS_SUMMARIZING
+				normalizedErrorCode === ERROR_CODES.TASK_IS_SUMMARIZING
 					? "server_auto_summary"
 					: "server_task_ended"
-			const cancelledSession = this.sessionManager.markServerCancelledSession(
-				errorCode,
-				terminationSource,
-			)
-			if (cancelledSession) {
-				this.recordingPersistence.saveSession(cancelledSession)
-				const queueStatus = await this.chunkUploader.getQueueStatus(sessionId)
-				logger.report("服务端自动总结后保留本地录音数据", {
-					sessionId,
-					errorCode,
-					status: cancelledSession.status,
-					queueStatus,
-					chunkIndex: cancelledSession.currentChunkIndex,
-				})
-			}
 
-			// Reset store state
-			recordSummaryStore.reset()
+			await runTaskEndCleanup({
+				stopRecordingServices: () => this.stopRecordingServices("task_end"),
+				stopSessionUploads: () =>
+					this.chunkUploader.stopSessionUploads(sessionId, "task_end"),
+				stopStatusReporter: () => {
+					this.stopChunkProductionWatchdog()
+					this.stopUploadQueueWatchdog()
+					this.statusReporter.stopPeriodicReport()
+					this.batchSaveReporter.clearSession(sessionId)
+				},
+				stopRecordStatusChecker: () => this.recordStatusChecker.stop(),
+				releaseWakeLock: () => this.wakeLockManager.releaseWakeLock(),
+				removeVisibilityChangeListener: () =>
+					this.wakeLockManager.removeVisibilityChangeListener(),
+				removeBeforeUnloadListener: () => this.removeBeforeUnloadListener(),
+				releaseRecordingLock: () =>
+					this.tabCoordinator.releaseLock({
+						type: "finish",
+						data: {
+							message: [],
+							duration: "00:00:00",
+							isRecording: false,
+							sessionId,
+						},
+					}),
+				preserveSession: async () => {
+					const cancelledSession = this.sessionManager.markServerCancelledSession(
+						normalizedErrorCode,
+						terminationSource,
+					)
+					if (!cancelledSession) return
+
+					this.recordingPersistence.saveSession(cancelledSession)
+					const queueStatus = await this.chunkUploader.getQueueStatus(sessionId)
+					logger.report("服务端自动总结后保留本地录音数据", {
+						sessionId,
+						errorCode: normalizedErrorCode,
+						status: cancelledSession.status,
+						queueStatus,
+						chunkIndex: cancelledSession.currentChunkIndex,
+					})
+				},
+				resetStore: () => {
+					recordSummaryStore.reset()
+				},
+				reportError: (stage, error) => {
+					logger.error({
+						eventKey: "task_end_cleanup_failed",
+						errorKind: "unknown",
+						error,
+						message: `任务结束清理阶段失败：${stage}`,
+						context: { sessionId, errorCode: normalizedErrorCode },
+					})
+				},
+			})
 
 			logger.log(`任务结束，本地录制实例已停止，会话 ${sessionId}，已保留本地数据`)
-		} catch (error) {
-			logger.error({
-				eventKey: "task_end_event_failed",
-				errorKind: "unknown",
-				error: error,
-				message: `处理任务结束事件失败：`,
-			})
 		} finally {
 			this.handlingTaskEndSessions.delete(sessionId)
 		}

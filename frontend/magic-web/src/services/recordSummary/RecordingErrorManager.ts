@@ -78,12 +78,15 @@ export class RecordingErrorManager {
 	 * 检查错误是否为任务结束错误
 	 */
 	isTaskEndError(error: unknown): error is TaskEndError {
-		return (
-			error !== null &&
-			typeof error === "object" &&
-			"code" in error &&
-			TASK_END_CODES.has((error as { code: number }).code)
-		)
+		if (error === null || typeof error !== "object" || !("code" in error)) {
+			return false
+		}
+
+		const rawCode = (error as { code?: unknown }).code
+		const code =
+			typeof rawCode === "string" && rawCode.trim() !== "" ? Number(rawCode) : rawCode
+
+		return typeof code === "number" && Number.isFinite(code) && TASK_END_CODES.has(code)
 	}
 
 	/**
@@ -92,12 +95,16 @@ export class RecordingErrorManager {
 	 */
 	createTaskEndError(
 		sessionId: string,
-		code: number = ERROR_CODES.TASK_ALREADY_COMPLETED,
+		code: number | string = ERROR_CODES.TASK_ALREADY_COMPLETED,
 	): TaskEndError {
+		const numericCode = Number(code)
+		const resolvedCode = Number.isFinite(numericCode)
+			? numericCode
+			: ERROR_CODES.TASK_ALREADY_COMPLETED
 		const error = new Error(
-			`Task ended (error code: ${code}). Recording should be stopped for session ${sessionId}`,
+			`Task ended (error code: ${resolvedCode}). Recording should be stopped for session ${sessionId}`,
 		) as TaskEndError
-		error.code = code
+		error.code = resolvedCode
 		error.sessionId = sessionId
 		return error
 	}
