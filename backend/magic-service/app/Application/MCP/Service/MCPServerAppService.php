@@ -10,8 +10,8 @@ namespace App\Application\MCP\Service;
 use App\Application\MCP\Authorization\MCPAuthorizationAppService;
 use App\Application\MCP\Utils\MCPExecutor\MCPExecutorFactory;
 use App\Application\MCP\Utils\MCPServerConfigUtil;
-use App\Domain\MCP\Constant\ServiceConfigAuthType;
 use App\Domain\Contact\Entity\MagicUserEntity;
+use App\Domain\MCP\Constant\ServiceConfigAuthType;
 use App\Domain\MCP\Entity\MCPServerEntity;
 use App\Domain\MCP\Entity\MCPServerToolEntity;
 use App\Domain\MCP\Entity\ValueObject\MCPDataIsolation;
@@ -217,16 +217,6 @@ class MCPServerAppService extends AbstractMCPAppService
         return $entity;
     }
 
-    /**
-     * 判断新增请求是否需要执行 MCP Authorization 轻量预检。
-     */
-    private function shouldPreflightMcpAuthorization(MCPServerEntity $entity): bool
-    {
-        $serviceConfig = $entity->getServiceConfig();
-        return $serviceConfig instanceof ExternalSSEServiceConfig
-            && $serviceConfig->getAuthType() === ServiceConfigAuthType::MCP_AUTHORIZATION;
-    }
-
     public function destroy(Authenticatable $authorization, string $code): bool
     {
         $dataIsolation = $this->createMCPDataIsolation($authorization);
@@ -343,5 +333,15 @@ class MCPServerAppService extends AbstractMCPAppService
             'tools' => $tools,
             'error' => $error,
         ];
+    }
+
+    /**
+     * 判断新增请求是否需要执行 MCP Authorization 轻量预检。
+     */
+    private function shouldPreflightMcpAuthorization(MCPServerEntity $entity): bool
+    {
+        $serviceConfig = $entity->getServiceConfig();
+        return $serviceConfig instanceof ExternalSSEServiceConfig
+            && $serviceConfig->getAuthType() === ServiceConfigAuthType::MCP_AUTHORIZATION;
     }
 }

@@ -77,6 +77,21 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
     }
 
     /**
+     * 删除新模式凭据，不影响旧 OAuth2 数据。
+     */
+    public function unbind(Authenticatable $authorization, string $mcpServerCode, ?string $issuer = null): array
+    {
+        if ($mcpServerCode === '') {
+            ExceptionBuilder::throw(MCPErrorCode::ValidateFailed, 'common.empty', ['label' => 'mcp_server_code']);
+        }
+        $dataIsolation = $this->createMCPDataIsolation($authorization);
+        $deleted = $issuer !== null && $issuer !== ''
+            ? $this->credentialDomainService->deleteByIssuer($dataIsolation, $authorization->getId(), $mcpServerCode, $issuer)
+            : $this->credentialDomainService->deleteByServer($dataIsolation, $authorization->getId(), $mcpServerCode);
+        return ['success' => true, 'data' => ['deleted' => $deleted]];
+    }
+
+    /**
      * 校验并消费授权回调 state。
      *
      * @return array<string, mixed>
@@ -166,20 +181,4 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
             ],
         ];
     }
-
-    /**
-     * 删除新模式凭据，不影响旧 OAuth2 数据。
-     */
-    public function unbind(Authenticatable $authorization, string $mcpServerCode, ?string $issuer = null): array
-    {
-        if ($mcpServerCode === '') {
-            ExceptionBuilder::throw(MCPErrorCode::ValidateFailed, 'common.empty', ['label' => 'mcp_server_code']);
-        }
-        $dataIsolation = $this->createMCPDataIsolation($authorization);
-        $deleted = $issuer !== null && $issuer !== ''
-            ? $this->credentialDomainService->deleteByIssuer($dataIsolation, $authorization->getId(), $mcpServerCode, $issuer)
-            : $this->credentialDomainService->deleteByServer($dataIsolation, $authorization->getId(), $mcpServerCode);
-        return ['success' => true, 'data' => ['deleted' => $deleted]];
-    }
-
 }

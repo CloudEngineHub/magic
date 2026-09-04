@@ -14,9 +14,9 @@ use App\Domain\MCP\Entity\ValueObject\Authorization\MCPAuthorizationConfig;
 use App\Domain\MCP\Entity\ValueObject\ServiceConfig\ExternalSSEServiceConfig;
 use App\ErrorCode\MCPErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\RequestOptions;
-use GuzzleHttp\ClientInterface;
 use RuntimeException;
 use Throwable;
 
