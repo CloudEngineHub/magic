@@ -115,8 +115,7 @@ class MCPUserSettingAppService extends AbstractMCPAppService
                 'auth_config' => $this->mcpAuthorizationAppService->getAuthConfig(
                     $dataIsolation,
                     $mcpServer,
-                    $authorization,
-                    $redirectUrl
+                    $authorization
                 ),
             ];
         }

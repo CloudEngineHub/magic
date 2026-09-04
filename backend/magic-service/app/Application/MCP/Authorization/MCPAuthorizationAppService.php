@@ -62,8 +62,7 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
     public function getAuthConfig(
         MCPDataIsolation $dataIsolation,
         MCPServerEntity $mcpServer,
-        ?Authenticatable $authorization,
-        string $ignoredRedirectUrl
+        ?Authenticatable $authorization
     ): array {
         $config = $this->getConfig($mcpServer);
         $resource = $config->getResource() ?: $this->getResource($mcpServer);
