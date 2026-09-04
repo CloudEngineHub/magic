@@ -110,6 +110,7 @@ class MCPAuthorizationBindingService
     {
         $organizationCode = (string) ($stateData['organization_code'] ?? '');
         $userId = (string) ($stateData['user_id'] ?? '');
+        $issuer = (string) ($stateData['issuer'] ?? '');
         if ($organizationCode === '' || $userId === '') {
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
         }
