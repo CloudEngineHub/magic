@@ -132,6 +132,13 @@ class AsrApi extends AbstractApi
         $userId = $userAuthorization->getId();
         $summaryRequest = $this->validateAndBuildSummaryRequest($request, $userAuthorization);
 
+        // MQ 只携带任务标识；本次请求补传的 ASR/笔记内容先写入 Redis。
+        $this->asrFileAppService->persistSummaryRequestContext(
+            $summaryRequest,
+            $userId,
+            CoContext::getLanguage()
+        );
+
         // 新客户端可声明最终分片数；保存到任务状态后会同步写入 audio_project.extra
         if (! $summaryRequest->hasFileId() && ! empty($summaryRequest->taskKey)) {
             $taskStatus = $this->asrFileAppService->getTaskStatusFromRedis($summaryRequest->taskKey, $userId);
@@ -814,30 +821,19 @@ class AsrApi extends AbstractApi
         // 处理笔记
         $note = $this->parseNoteData($noteData);
 
-        // 生成标题：优先从 Redis 中复用 upload-tokens 生成的标题
+        // 标题只复用已有结果；新的标题生成下沉到 Consumer。
         $generatedTitle = null;
 
         // 1. 尝试从 Redis 中获取已生成的标题（文件直传场景）
         if (! empty($taskKey)) {
             $taskStatus = $this->asrFileAppService->getTaskStatusFromRedis($taskKey, $userAuthorization->getId());
-            if (! empty($taskStatus->uploadGeneratedTitle) && ! $taskStatus->isEmpty()) {
-                $generatedTitle = $taskStatus->uploadGeneratedTitle;
-                $this->logger->info('复用 upload-tokens 生成的标题', [
+            if (! $taskStatus->isEmpty()) {
+                $generatedTitle = $taskStatus->summaryGeneratedTitle ?: $taskStatus->uploadGeneratedTitle;
+                $this->logger->info('复用已有 ASR 标题', [
                     'task_key' => $taskKey,
                     'title' => $generatedTitle,
                 ]);
             }
-        }
-
-        // 2. 如果没有从 Redis 获取到标题，则重新生成（前端录音或旧逻辑）
-        if (empty($generatedTitle)) {
-            $generatedTitle = $this->titleGeneratorService->generateTitleForScenario(
-                $userAuthorization,
-                $asrStreamContent,
-                $fileId,
-                $note,
-                $taskKey
-            );
         }
 
         return new SummaryRequestDTO($taskKey, $projectId, $topicId, $resolvedModelId, $fileId, $note, $asrStreamContent ?: null, $generatedTitle);
