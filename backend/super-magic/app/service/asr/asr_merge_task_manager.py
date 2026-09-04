@@ -82,6 +82,8 @@ class TaskProgress(BaseModel):
     finish_scan_signature: Optional[str] = None  # finish 阶段最近一次分片集合/文件状态签名
     finish_stable_count: int = 0  # 连续稳定扫描次数
     last_stable_shard_indices: list[int] = Field(default_factory=list)
+    accepted_missing_shard_indices: list[int] = Field(default_factory=list)
+    finish_completion_mode: Optional[str] = None
     opus_merge_status: str = "pending"  # Opus finish 合并状态：pending/merging/completed/failed
     opus_merge_error: Optional[str] = None
     opus_merge_attempt_id: Optional[str] = None
@@ -96,6 +98,29 @@ class TaskState(BaseModel):
 
     task: AsrTaskResult
     progress: TaskProgress
+
+
+def classify_shard_set(
+    indices: list[int], declared_count: int | None, max_tail_missing: int = 3
+) -> tuple[bool, list[int], str]:
+    """判断分片集合是否可以安全收敛，以及缺失原因。"""
+    if not indices:
+        return False, [], "empty"
+    ordered = sorted(indices)
+    if len(set(ordered)) != len(ordered):
+        return False, [], "duplicate"
+    if ordered[0] != 0:
+        return False, [], "not_zero_based"
+    if ordered != list(range(ordered[-1] + 1)):
+        return False, [], "middle_gap"
+    if declared_count is None or declared_count < 0:
+        return True, [], "contiguous"
+    if ordered[-1] >= declared_count:
+        return False, [], "exceeds_declared"
+    missing = list(range(ordered[-1] + 1, declared_count))
+    if len(missing) > max_tail_missing:
+        return False, missing, "too_many_tail_missing"
+    return True, missing, "tail_missing" if missing else "complete"
 
 
 class AsrMergeTaskManager(AsrServiceBase):
@@ -1069,12 +1094,61 @@ class AsrMergeTaskManager(AsrServiceBase):
         if stable_ready:
             return True, False
 
+        if progress.finish_completion_mode == "tail_missing_convergence":
+            accepted_now, missing_now, reason_now = classify_shard_set(
+                indices,
+                expected if expected >= 0 else None,
+                asr_time_config.FINISH_MAX_TAIL_MISSING_SHARDS,
+            )
+            if accepted_now:
+                if missing_now != progress.accepted_missing_shard_indices:
+                    await self._atomic_update_state(
+                        task_key,
+                        lambda current: self._apply_state_updates(
+                            current,
+                            progress_updates={"accepted_missing_shard_indices": missing_now},
+                        ),
+                        "更新尾部分片缺失收敛状态失败",
+                    )
+                return True, False
+            logger.error(
+                f"{self.LOG_PREFIX} ❌ task_key={task_key} 已进入尾部缺片收敛，但当前扫描集合失效: "
+                f"reason={reason_now}, indices={indices}"
+            )
+            await self.fail_task(task_key, f"finish 收敛后分片集合失效: reason={reason_now}, indices={indices}")
+            return False, True
+
         deadline_reached = (
             progress.completion_deadline_at is not None
             and datetime.now().timestamp() >= progress.completion_deadline_at
         )
         if not deadline_reached:
             return False, False
+
+        accepted, missing, reason = classify_shard_set(
+            indices,
+            expected if expected >= 0 else None,
+            asr_time_config.FINISH_MAX_TAIL_MISSING_SHARDS,
+        )
+        if accepted:
+            def accept_tail_missing(current: TaskState) -> TaskState:
+                return self._apply_state_updates(
+                    current,
+                    progress_updates={
+                        "accepted_missing_shard_indices": missing,
+                        "finish_completion_mode": "tail_missing_convergence",
+                    },
+                )
+
+            await self._atomic_update_state(
+                task_key, accept_tail_missing, "记录尾部分片缺失收敛状态失败"
+            )
+            logger.warning(
+                f"{self.LOG_PREFIX} ⚠️ task_key={task_key} finish 超时后允许尾部缺片收敛: "
+                f"declared={expected}, scanned_count={len(indices)}, missing={missing}, "
+                f"completion_mode=tail_missing_convergence"
+            )
+            return True, False
 
         if expected < 0 and progress.last_stable_shard_indices:
             logger.warning(
@@ -1085,7 +1159,7 @@ class AsrMergeTaskManager(AsrServiceBase):
 
         message = (
             f"finish 等待分片超时: declared={expected}, scanned={indices}, "
-            f"stable_count={progress.finish_stable_count}"
+            f"stable_count={progress.finish_stable_count}, reason={reason}"
         )
         await self.fail_task(task_key, message)
         logger.error(f"{self.LOG_PREFIX} ❌ task_key={task_key} {message}")
@@ -1412,7 +1486,9 @@ class AsrMergeTaskManager(AsrServiceBase):
             return False
 
         required_count = (
-            progress.file_shard_count
+            scanned_file_count
+            if progress.finish_completion_mode == "tail_missing_convergence"
+            else progress.file_shard_count
             if progress.file_shard_count >= 0
             else scanned_file_count
         )
@@ -1506,7 +1582,10 @@ class AsrMergeTaskManager(AsrServiceBase):
             )
 
         # 2. 计算“要求数量”：以客户端声明数量和本轮扫描数量中的较大值为准
-        required_file_count = max(scanned_file_count, progress.file_shard_count if progress.file_shard_count >= 0 else 0)
+        if progress.finish_completion_mode == "tail_missing_convergence":
+            required_file_count = scanned_file_count
+        else:
+            required_file_count = max(scanned_file_count, progress.file_shard_count if progress.file_shard_count >= 0 else 0)
 
         # 3. 计算“已处理数量”
         # file_count 来自每次合并后的进度回写；max_processed_index + 1 用于兜底修正
@@ -1525,7 +1604,9 @@ class AsrMergeTaskManager(AsrServiceBase):
             else:
                 logger.debug(f"{AsrMergeTaskManager.LOG_PREFIX} task_key={task_key} merged_metadata.json 不可读")
 
-        # 4. 未达到要求数量时，先看是否已到 deadline；未到则继续等待
+        # 4. 未达到要求数量时，先看是否已到 deadline；未到则继续等待。
+        # 到期本身不能放宽规则，只有 update_finish_shard_stability 已明确记录
+        # tail_missing_convergence 时，才能接受获批的尾部缺片集合。
         reached_deadline = False
         now_ts = datetime.now().timestamp()
         if progress.completion_deadline_at is not None and now_ts >= progress.completion_deadline_at:
@@ -1584,7 +1665,14 @@ class AsrMergeTaskManager(AsrServiceBase):
             )
             return True
 
-        # 到达 deadline 后允许安全收敛（仍要求 merged.wav 有效）
+        if progress.finish_completion_mode != "tail_missing_convergence":
+            logger.warning(
+                f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} 到达 completion_deadline，"
+                "但未获得尾部缺片收敛许可，继续阻止完成"
+            )
+            return False
+
+        # 到达 deadline 后仅允许已明确批准的尾部缺片集合收敛（仍要求 merged.wav 有效）
         logger.warning(
             f"{AsrMergeTaskManager.LOG_PREFIX} ⏰ task_key={task_key} 到达 completion_deadline，执行安全收敛完成: "
             f"processed_file_count={processed_file_count}, required_file_count={required_file_count}, "
