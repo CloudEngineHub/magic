@@ -204,7 +204,7 @@ export class LoginService {
 				teamshareOrganizationCode,
 			} = params
 
-			const magicOrgs = Object.values(magicOrganizationMap)
+			const magicOrgs = Object.values(magicOrganizationMap ?? {})
 
 			const orgCode =
 				teamshareOrganizationCode || magicOrgs?.[0]?.third_platform_organization_code
