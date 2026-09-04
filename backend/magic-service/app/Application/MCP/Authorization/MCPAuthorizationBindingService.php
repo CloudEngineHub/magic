@@ -44,6 +44,35 @@ class MCPAuthorizationBindingService
      */
     public function bind(Authenticatable $authorization, string $code, string $state, ?string $iss = null, ?string $error = null): array
     {
+        $stateData = $this->consumeState($code, $state, $iss, $error);
+        if ((string) ($stateData['user_id'] ?? '') !== (string) $authorization->getId()) {
+            ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
+        }
+        $dataIsolation = $this->createDataIsolation($authorization);
+        if ($dataIsolation->getCurrentOrganizationCode() !== (string) ($stateData['organization_code'] ?? '')) {
+            ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
+        }
+        return $this->completeBinding($stateData, $code);
+    }
+
+    /**
+     * 处理不携带 Magic 登录态的公开回调。
+     *
+     * 回调身份由一次性 state 绑定的用户和组织决定，成功后只返回授权结果摘要。
+     */
+    public function bindPublic(string $code, string $state, ?string $iss = null, ?string $error = null): array
+    {
+        $stateData = $this->consumeState($code, $state, $iss, $error);
+        return $this->completeBinding($stateData, $code);
+    }
+
+    /**
+     * 校验并消费授权回调 state。
+     *
+     * @return array<string, mixed>
+     */
+    private function consumeState(string $code, string $state, ?string $iss, ?string $error): array
+    {
         if ($error !== null && $error !== '') {
             throw new RuntimeException('MCP authorization was denied: ' . $error);
         }
@@ -52,18 +81,30 @@ class MCPAuthorizationBindingService
         }
 
         $stateData = $this->stateStore->consume($state);
-        if (! $stateData || (string) ($stateData['user_id'] ?? '') !== (string) $authorization->getId()) {
+        if (! $stateData) {
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
         }
         $issuer = (string) ($stateData['issuer'] ?? '');
         if ($iss !== null && $iss !== '' && $iss !== $issuer) {
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationIssuerMismatch);
         }
+        return $stateData;
+    }
 
-        $dataIsolation = $this->createDataIsolation($authorization);
-        if ($dataIsolation->getCurrentOrganizationCode() !== (string) ($stateData['organization_code'] ?? '')) {
+    /**
+     * 根据 state 中的用户和组织信息完成 Token 交换与凭据保存。
+     *
+     * @param array<string, mixed> $stateData
+     */
+    private function completeBinding(array $stateData, string $code): array
+    {
+        $organizationCode = (string) ($stateData['organization_code'] ?? '');
+        $userId = (string) ($stateData['user_id'] ?? '');
+        if ($organizationCode === '' || $userId === '') {
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
         }
+
+        $dataIsolation = MCPDataIsolation::create($organizationCode, $userId);
         $serverCode = (string) ($stateData['mcp_server_code'] ?? '');
         $server = $this->mcpServerDomainService->getByCode($dataIsolation, $serverCode);
         if (! $server) {
@@ -89,7 +130,7 @@ class MCPAuthorizationBindingService
 
         $credential = new MCPAuthorizationCredentialEntity();
         $credential->setOrganizationCode($dataIsolation->getCurrentOrganizationCode());
-        $credential->setUserId((string) $stateData['user_id']);
+        $credential->setUserId($userId);
         $credential->setMcpServerId($serverCode);
         $credential->setResource((string) $stateData['resource']);
         $credential->setIssuer($issuer);

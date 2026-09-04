@@ -62,7 +62,7 @@ class MCPAuthorizationAppService
         MCPDataIsolation $dataIsolation,
         MCPServerEntity $mcpServer,
         ?Authenticatable $authorization,
-        string $redirectUrl
+        string $ignoredRedirectUrl
     ): array {
         $config = $this->getConfig($mcpServer);
         $resource = $config->getResource() ?: $this->getResource($mcpServer);
@@ -104,10 +104,8 @@ class MCPAuthorizationAppService
                 }
             }
 
-            $redirectUri = $redirectUrl ?: $config->getRedirectUri();
-            if ($redirectUri === '') {
-                throw new RuntimeException('MCP authorization redirect URI is required');
-            }
+            // MCP Authorization 的回调地址由 magic-service 统一配置，忽略前端传入值和服务级 redirect_uri。
+            $redirectUri = $this->getCallbackUrl();
             $metadata = $this->resolveMetadata($resource, $config);
             $registration = $this->resolveClientRegistration($config, $metadata, $redirectUri);
             $clientId = $registration['client_id'];
@@ -191,6 +189,18 @@ class MCPAuthorizationAppService
     public function preflight(MCPServerEntity $mcpServer): void
     {
         $this->preflightService->check($mcpServer);
+    }
+
+    /**
+     * 获取 magic-service 自己承载的 MCP Authorization 回调地址。
+     */
+    public function getCallbackUrl(): string
+    {
+        $callbackUrl = trim((string) $this->config->get('mcp_authorization.callback_url', ''));
+        if ($callbackUrl === '' || ! filter_var($callbackUrl, FILTER_VALIDATE_URL)) {
+            throw new RuntimeException('MCP authorization callback URL is not configured');
+        }
+        return $callbackUrl;
     }
 
     /**

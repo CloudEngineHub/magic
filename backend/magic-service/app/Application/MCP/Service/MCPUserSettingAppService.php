@@ -77,11 +77,6 @@ class MCPUserSettingAppService extends AbstractMCPAppService
     {
         $dataIsolation = $this->createMCPDataIsolation($authorization);
 
-        // Validate redirect URL is provided
-        if (empty($redirectUrl)) {
-            ExceptionBuilder::throw(MCPErrorCode::ValidateFailed, 'common.empty', ['label' => 'redirect_url']);
-        }
-
         // Validate MCP server exists and user has access
         $allDataIsolation = clone $dataIsolation;
         $allDataIsolation->disabled();
@@ -124,6 +119,11 @@ class MCPUserSettingAppService extends AbstractMCPAppService
                     $redirectUrl
                 ),
             ];
+        }
+
+        // 旧 OAuth2 流程仍由前端提供回调地址，MCP Authorization 不进入此校验。
+        if (empty($redirectUrl)) {
+            ExceptionBuilder::throw(MCPErrorCode::ValidateFailed, 'common.empty', ['label' => 'redirect_url']);
         }
 
         return [
