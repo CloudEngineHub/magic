@@ -243,9 +243,15 @@ class MagicUserContactAppService extends AbstractAppService
     }
 
     /**
-     * 按 用户昵称/真名/手机号/邮箱/部门路径/职位 搜索用户.
+     * 按 用户昵称/真名/手机号/邮箱/部门路径/职位 搜索用户。
+     *
+     * 工号检索和返回仅供开放 API 显式启用，避免改变内部通讯录搜索行为。
      */
-    public function searchDepartmentUser(UserQueryDTO $queryDTO, MagicUserAuthorization $authorization): array
+    public function searchDepartmentUser(
+        UserQueryDTO $queryDTO,
+        MagicUserAuthorization $authorization,
+        bool $includeEmployeeNo = false
+    ): array
     {
         $this->logger->info(sprintf('searchDepartmentUser query:%s', Json::encode($queryDTO->toArray())));
 
@@ -254,19 +260,23 @@ class MagicUserContactAppService extends AbstractAppService
         $usersForQueryDepartmentPath = [];
         $usersForQueryJobTitle = [];
 
-        // 工号是组织用户关系字段，按完整工号精确匹配。
-        $departmentUsers = $this->departmentUserDomainService->searchDepartmentUsersByEmployeeNo(
-            $queryDTO->getQuery(),
-            $dataIsolation
-        );
-        // 部门用户实体不包含 user_type；这里只构造后续候选用户所需的最小字段集。
-        $usersForQueryEmployeeNo = array_map(
-            static fn ($entity): array => [
-                'user_id' => $entity->getUserId(),
-                'user_type' => UserType::Human->value,
-            ],
-            $departmentUsers
-        );
+        if ($includeEmployeeNo) {
+            // 工号是组织用户关系字段，按完整工号精确匹配。
+            $departmentUsers = $this->departmentUserDomainService->searchDepartmentUsersByEmployeeNo(
+                $queryDTO->getQuery(),
+                $dataIsolation
+            );
+            // 部门用户实体不包含 user_type；这里只构造后续候选用户所需的最小字段集。
+            $usersForQueryEmployeeNo = array_map(
+                static fn ($entity): array => [
+                    'user_id' => $entity->getUserId(),
+                    'user_type' => UserType::Human->value,
+                ],
+                $departmentUsers
+            );
+        } else {
+            $usersForQueryEmployeeNo = [];
+        }
 
         // 搜索职位包含搜索词的人
         if ($queryDTO->isQueryByJobTitle()) {
@@ -299,7 +309,9 @@ class MagicUserContactAppService extends AbstractAppService
         $usersForQueryDepartmentPath = $this->getUserDetailByIds($queryDTO, $authorization);
         $usersForQueryDepartmentPath['items'] = $this->filterDepartmentOrUserHidden($usersForQueryDepartmentPath['items']);
 
-        $this->appendEmployeeNo($usersForQueryDepartmentPath['items']);
+        if ($includeEmployeeNo) {
+            $this->appendEmployeeNo($usersForQueryDepartmentPath['items']);
+        }
 
         return $usersForQueryDepartmentPath;
     }
@@ -447,6 +459,9 @@ class MagicUserContactAppService extends AbstractAppService
     {
         $userIds = [];
         foreach ($users as $user) {
+            if (! $user instanceof UserDetailDTO) {
+                continue;
+            }
             $userIds[] = $user->getUserId();
         }
         $userIds = array_values(array_unique($userIds));
@@ -480,6 +495,9 @@ class MagicUserContactAppService extends AbstractAppService
         }
 
         foreach ($users as $user) {
+            if (! $user instanceof UserDetailDTO) {
+                continue;
+            }
             $key = $user->getOrganizationCode() . ':' . $user->getUserId();
             $user->setEmployeeNo($employeeNoMap[$key] ?? '');
         }
