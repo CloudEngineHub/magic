@@ -5,15 +5,7 @@ import {
 	RecordSummaryActionButton,
 	RecordSummaryAlertIcon,
 } from "../components/RecordSummaryAlertCard"
-
-export type ForceRecordingSource = "currentTab" | "otherTab"
-export type ForceRecordingStatus = "recording" | "paused"
-
-export interface ForceRecordingOverrideContext {
-	duration: string
-	source: ForceRecordingSource
-	status: ForceRecordingStatus
-}
+import type { RecordingOverrideContext } from "@/services/recordSummary/recordingOverrideLifecycle"
 
 function renderDescriptionLines(lines: string[]) {
 	return (
@@ -28,9 +20,7 @@ function renderDescriptionLines(lines: string[]) {
 }
 
 /** Opens the same explicit confirmation UI for both recording entry points. */
-export function confirmForceRecordingOverride(
-	context: ForceRecordingOverrideContext,
-): Promise<boolean> {
+export function confirmForceRecordingOverride(context: RecordingOverrideContext): Promise<boolean> {
 	return new Promise((resolve) => {
 		let settled = false
 		const settle = (value: boolean) => {
@@ -39,10 +29,13 @@ export function confirmForceRecordingOverride(
 			resolve(value)
 		}
 
-		const sourceLabel =
-			context.source === "otherTab"
-				? i18next.t("recordingSummary.forceOverride.sourceOtherTab", { ns: "super" })
-				: i18next.t("recordingSummary.forceOverride.sourceCurrentTab", { ns: "super" })
+		const sourceLabel = {
+			currentTab: i18next.t("recordingSummary.forceOverride.sourceCurrentTab", {
+				ns: "super",
+			}),
+			otherTab: i18next.t("recordingSummary.forceOverride.sourceOtherTab", { ns: "super" }),
+			history: i18next.t("recordingSummary.forceOverride.sourceHistory", { ns: "super" }),
+		}[context.source]
 		const statusLabel =
 			context.status === "paused"
 				? i18next.t("recordingSummary.forceOverride.statusPaused", { ns: "super" })
@@ -144,7 +137,7 @@ export function confirmForceRecordingRetry(): Promise<boolean> {
 
 /** Shared confirmation, retry, and failure-close flow for both entry points. */
 export async function runForceRecordingOverride(
-	context: ForceRecordingOverrideContext,
+	context: RecordingOverrideContext,
 	prepare: () => Promise<boolean>,
 ): Promise<boolean> {
 	if (!(await confirmForceRecordingOverride(context))) return false

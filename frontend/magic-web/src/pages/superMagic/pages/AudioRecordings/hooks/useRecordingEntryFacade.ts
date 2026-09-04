@@ -36,10 +36,7 @@ import type { VoiceResultUtterance } from "@/components/business/VoiceInput/serv
 import { buildOptimisticRecordingItem } from "../utils/build-optimistic-recording-item"
 import { resolveCardStatusFromListItem } from "../utils/normalize-audio-project-item"
 import { readAudioRecordingsFilterSession } from "../utils/audio-recordings-filter-session"
-import {
-	runForceRecordingOverride,
-	type ForceRecordingSource,
-} from "@/components/business/RecordingSummary/utils/force-recording-override"
+import { runForceRecordingOverride } from "@/components/business/RecordingSummary/utils/force-recording-override"
 
 export type EntryPresentation = "list" | "recording"
 export type RecordingStartupState = "idle" | "starting" | "error"
@@ -438,21 +435,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	 * Starts a recording with ensured workspace/project/topic context so the
 	 * entry reuses the same backend contract as the legacy expert flow.
 	 */
-	const startRecording = useCallback(async () => {
-		if (recordSummaryStore.isOtherTabRecording) {
-			toast.error(t("recordingSummary.superEditorPanel.warning.recordingInProgressOtherTab"))
-			return
-		}
-
-		if (recordSummaryStore.status !== "init") {
-			if (!isMobile) {
-				expandDesktopRecordingFloatPanel()
-				return
-			}
-			setPresentation("recording")
-			return
-		}
-
+	const startNewRecording = useCallback(async () => {
 		if (isMobile) {
 			setPresentation("recording")
 		}
@@ -563,31 +546,41 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		t,
 	])
 
+	const startRecording = useCallback(async () => {
+		if (recordSummaryStore.isOtherTabRecording) {
+			toast.error(t("recordingSummary.superEditorPanel.warning.recordingInProgressOtherTab"))
+			return
+		}
+
+		if (recordSummaryStore.status !== "init") {
+			if (!isMobile) {
+				expandDesktopRecordingFloatPanel()
+				return
+			}
+			setPresentation("recording")
+			return
+		}
+
+		await startNewRecording()
+	}, [isMobile, startNewRecording, t])
+
 	const forceStartRecording = useCallback(async () => {
 		if (forceStartInFlightRef.current) return
 		forceStartInFlightRef.current = true
 		setIsForceStartingRecording(true)
 		try {
-			const source: ForceRecordingSource = recordSummaryStore.isOtherTabRecording
-				? "otherTab"
-				: "currentTab"
-			const prepared = await runForceRecordingOverride(
-				{
-					duration:
-						source === "otherTab"
-							? recordSummaryStore.multiTabState.activeTabData.duration
-							: recordSummaryStore.duration,
-					source,
-					status: recordSummaryStore.isPaused ? "paused" : "recording",
-				},
-				() => recordSummaryService.prepareRecordingOverride(),
+			const overrideContext = await recordSummaryService.getRecordingOverrideContext()
+			if (!overrideContext) return
+
+			const prepared = await runForceRecordingOverride(overrideContext, () =>
+				recordSummaryService.prepareRecordingOverride(overrideContext.sessionId),
 			)
-			if (prepared) await startRecording()
+			if (prepared) await startNewRecording()
 		} finally {
 			forceStartInFlightRef.current = false
 			setIsForceStartingRecording(false)
 		}
-	}, [recordSummaryService, startRecording])
+	}, [recordSummaryService, startNewRecording])
 
 	/**
 	 * Pauses the shared recording session.

@@ -67,7 +67,10 @@ import { DurationTracker } from "./DurationTracker"
 import { getSummaryMessageService, SummaryStage } from "./SummaryMessageService"
 import { UploadQueueWatchdog } from "./uploadQueueWatchdog"
 import { runTaskEndCleanup } from "./taskEndCleanup"
-import { runForceOverrideFinalization } from "./recordingOverrideLifecycle"
+import {
+	runForceOverrideFinalization,
+	type RecordingOverrideContext,
+} from "./recordingOverrideLifecycle"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Button } from "@/components/shadcn-ui/button"
 import type { RecordingEncodingSnapshot } from "./MediaRecorderService/types/RecorderTypes"
@@ -1928,11 +1931,61 @@ class RecordSummaryService {
 		})
 	}
 
+	/** Describe the recording that must finish before a new one can start. */
+	getRecordingOverrideContext = async (): Promise<RecordingOverrideContext | null> => {
+		const currentSession = this.sessionManager.getCurrentSession()
+		if (currentSession) {
+			return {
+				sessionId: currentSession.id,
+				duration: formatDuration(currentSession.totalDuration || 0),
+				source: "currentTab",
+				status: currentSession.status === "paused" ? "paused" : "recording",
+				startContext: {
+					workspace: currentSession.workspace,
+					project: currentSession.project,
+					topic: currentSession.topic ?? null,
+					model: currentSession.model,
+				},
+			}
+		}
+
+		const hasOtherTabRecording =
+			recordSummaryStore.isOtherTabRecording ||
+			(this.tabCoordinator.isAnyTabRecording() &&
+				!this.tabCoordinator.hasRecordingPermission())
+		if (hasOtherTabRecording) {
+			return {
+				sessionId: recordSummaryStore.multiTabState.activeTabData.sessionId,
+				duration: recordSummaryStore.multiTabState.activeTabData.duration,
+				source: "otherTab",
+				status: "recording",
+			}
+		}
+
+		if (!this.recordingPersistence.hasRecoverableData()) return null
+		const historicalSession = (await this.recordingPersistence.getRestorationData())
+			.currentSession
+		if (!historicalSession) return null
+
+		return {
+			sessionId: historicalSession.id,
+			duration: formatDuration(historicalSession.totalDuration || 0),
+			source: "history",
+			status: historicalSession.status === "paused" ? "paused" : "recording",
+			startContext: {
+				workspace: historicalSession.workspace,
+				project: historicalSession.project,
+				topic: historicalSession.topic ?? null,
+				model: historicalSession.model,
+			},
+		}
+	}
+
 	/** Prepare a new recording after explicitly taking over an existing session. */
-	prepareRecordingOverride = async (): Promise<boolean> => {
+	prepareRecordingOverride = async (expectedSessionId?: string): Promise<boolean> => {
 		if (this.forceOverridePreparation) return this.forceOverridePreparation
 
-		this.forceOverridePreparation = this.prepareRecordingOverrideInternal()
+		this.forceOverridePreparation = this.prepareRecordingOverrideInternal(expectedSessionId)
 		try {
 			return await this.forceOverridePreparation
 		} finally {
@@ -1940,10 +1993,14 @@ class RecordSummaryService {
 		}
 	}
 
-	private prepareRecordingOverrideInternal = async (): Promise<boolean> => {
+	private prepareRecordingOverrideInternal = async (
+		expectedSessionId?: string,
+	): Promise<boolean> => {
 		const currentSession = this.sessionManager.getCurrentSession()
 		if (currentSession) {
-			const stopped = await this.forceStopRecordingForOverride(currentSession.id)
+			const stopped = await this.forceStopRecordingForOverride(
+				expectedSessionId ?? currentSession.id,
+			)
 			if (!stopped) return false
 		}
 
@@ -1951,18 +2008,33 @@ class RecordSummaryService {
 			recordSummaryStore.isOtherTabRecording ||
 			(this.tabCoordinator.isAnyTabRecording() &&
 				!this.tabCoordinator.hasRecordingPermission())
-		if (!hasOtherTabRecording) return true
+		if (hasOtherTabRecording) {
+			const overridden = await this.tabCoordinator.requestRecordingOverride(
+				expectedSessionId ?? recordSummaryStore.multiTabState.activeTabData.sessionId,
+				FORCE_OVERRIDE_REQUEST_TIMEOUT_MS,
+			)
+			if (!overridden) {
+				logger.warn("未能确认其他标签已停止录音", { source: "force_override" })
+				return false
+			}
 
-		const overridden = await this.tabCoordinator.requestRecordingOverride(
-			recordSummaryStore.multiTabState.activeTabData.sessionId,
-			FORCE_OVERRIDE_REQUEST_TIMEOUT_MS,
-		)
-		if (!overridden) {
-			logger.warn("未能确认其他标签已停止录音", { source: "force_override" })
+			return this.tabCoordinator.requestLock()
+		}
+
+		if (!this.recordingPersistence.hasRecoverableData()) return true
+		const historicalSession = (await this.recordingPersistence.getRestorationData())
+			.currentSession
+		if (
+			!historicalSession ||
+			(expectedSessionId && historicalSession.id !== expectedSessionId)
+		) {
 			return false
 		}
 
-		return this.tabCoordinator.requestLock()
+		// Historical sessions have no active recorder, but restoring the session lets
+		// the same upload, summary, completion, and persistence path handle them.
+		if (!this.sessionManager.restoreSession(historicalSession)) return false
+		return this.forceStopRecordingForOverride(historicalSession.id)
 	}
 
 	/**

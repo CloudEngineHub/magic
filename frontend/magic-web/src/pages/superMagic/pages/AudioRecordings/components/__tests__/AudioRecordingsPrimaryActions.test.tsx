@@ -109,10 +109,7 @@ describe("AudioRecordingsPrimaryActions", () => {
 
 	it("renders and forwards the separate force-start action only when enabled", () => {
 		const onForceStartRecording = vi.fn()
-		renderPrimaryActions({
-			onForceStartRecording,
-			canForceStartRecording: true,
-		})
+		renderPrimaryActions({ onForceStartRecording, canForceStartRecording: true })
 
 		const button = screen.getByTestId("audio-recordings-force-start-recording-button")
 		expect(button).toHaveTextContent("Force Start New Recording")
@@ -122,13 +119,12 @@ describe("AudioRecordingsPrimaryActions", () => {
 
 	it("does not render the force-start action when no recording is blocked", () => {
 		renderPrimaryActions({ onForceStartRecording: vi.fn() })
-
 		expect(
 			screen.queryByTestId("audio-recordings-force-start-recording-button"),
 		).not.toBeInTheDocument()
 	})
 
-	it("disables both recording actions while force-start preparation is running", () => {
+	it("disables the recording action while start preparation is running", () => {
 		renderPrimaryActions({
 			onForceStartRecording: vi.fn(),
 			canForceStartRecording: true,

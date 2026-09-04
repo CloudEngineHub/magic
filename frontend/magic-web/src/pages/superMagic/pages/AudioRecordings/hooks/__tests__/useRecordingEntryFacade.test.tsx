@@ -26,6 +26,7 @@ const {
 	summaryModelListMock,
 	superMagicApiMock,
 	audioRecordingsServiceMock,
+	forceOverrideMock,
 	importTestState,
 } = vi.hoisted(() => {
 	const importTestState = {
@@ -59,6 +60,8 @@ const {
 		},
 		recordSummaryServiceMock: {
 			ensureProjectAndTopic: vi.fn(),
+			getRecordingOverrideContext: vi.fn(),
+			prepareRecordingOverride: vi.fn(),
 			pauseRecording: vi.fn(),
 			continueRecording: vi.fn(),
 			updateNote: vi.fn(),
@@ -121,6 +124,9 @@ const {
 		},
 		audioRecordingsServiceMock: {
 			submitSummary: vi.fn(),
+		},
+		forceOverrideMock: {
+			run: vi.fn(),
 		},
 		importTestState,
 	}
@@ -218,6 +224,10 @@ vi.mock("@/services/recordSummary/serviceInstance", () => ({
 	initializeService: () => recordSummaryServiceMock,
 }))
 
+vi.mock("@/components/business/RecordingSummary/utils/force-recording-override", () => ({
+	runForceRecordingOverride: forceOverrideMock.run,
+}))
+
 vi.mock("@/stores/recordingSummary", () => ({
 	default: recordSummaryStoreMock,
 }))
@@ -291,6 +301,10 @@ describe("useRecordingEntryFacade", () => {
 		runtimeMock.actions.startRecording.mockReset()
 		runtimeMock.actions.finishRecording.mockReset()
 		recordSummaryServiceMock.ensureProjectAndTopic.mockReset()
+		recordSummaryServiceMock.getRecordingOverrideContext.mockReset()
+		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue(null)
+		recordSummaryServiceMock.prepareRecordingOverride.mockReset()
+		recordSummaryServiceMock.prepareRecordingOverride.mockResolvedValue(true)
 		recordSummaryServiceMock.pauseRecording.mockReset()
 		recordSummaryServiceMock.continueRecording.mockReset()
 		recordSummaryServiceMock.updateNote.mockReset()
@@ -316,6 +330,10 @@ describe("useRecordingEntryFacade", () => {
 		summaryModelListMock.fetchSummaryModelGroups.mockReset()
 		summaryModelListMock.resolveDefaultSummaryModelId.mockReset()
 		audioRecordingsServiceMock.submitSummary.mockReset()
+		forceOverrideMock.run.mockReset()
+		forceOverrideMock.run.mockImplementation(
+			async (_context: unknown, prepare: () => Promise<boolean>) => prepare(),
+		)
 		superMagicApiMock.getWorkspaces.mockReset()
 		superMagicApiMock.getWorkspaceDetail.mockReset()
 		superMagicApiMock.createProject.mockReset()
@@ -566,22 +584,80 @@ describe("useRecordingEntryFacade", () => {
 		expect(result.current.presentation).toBe("list")
 	})
 
-	it("re-expands the desktop FloatPanel when startRecording is called during an active session", async () => {
-		recordSummaryStoreMock.status = "recording"
-		recordSummaryStoreMock.isVisible = false
-		recordSummaryStoreMock.floatPanel.setExpanded.mockClear()
-		recordSummaryStoreMock.floatPanel.setExpandedAiChat.mockClear()
-
+	it("uses the normal start path directly when no recording needs replacement", async () => {
 		const { result } = renderHook(() => useRecordingEntryFacade())
 
 		await act(async () => {
 			await result.current.startRecording()
 		})
 
-		expect(recordSummaryStoreMock.isVisible).toBe(true)
-		expect(recordSummaryStoreMock.floatPanel.setExpanded).toHaveBeenCalledWith(true)
-		expect(recordSummaryStoreMock.floatPanel.setExpandedAiChat).toHaveBeenCalledWith(true)
-		expect(result.current.presentation).toBe("list")
+		expect(forceOverrideMock.run).not.toHaveBeenCalled()
+		expect(recordSummaryServiceMock.prepareRecordingOverride).not.toHaveBeenCalled()
+		expect(runtimeMock.actions.startRecording).toHaveBeenCalledTimes(1)
+	})
+
+	it("force-start confirms and completes the current session before starting a new recording", async () => {
+		recordSummaryStoreMock.status = "recording"
+		const overrideContext = {
+			sessionId: "current-session",
+			duration: "00:12:34",
+			source: "currentTab",
+			status: "recording",
+		} as const
+		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue(overrideContext)
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.forceStartRecording()
+		})
+
+		expect(forceOverrideMock.run).toHaveBeenCalledWith(overrideContext, expect.any(Function))
+		expect(recordSummaryServiceMock.prepareRecordingOverride).toHaveBeenCalledWith(
+			"current-session",
+		)
+		expect(runtimeMock.actions.startRecording).toHaveBeenCalledTimes(1)
+	})
+
+	it("force-start uses the same override flow for a recoverable historical session", async () => {
+		const overrideContext = {
+			sessionId: "historical-session",
+			duration: "01:02:03",
+			source: "history",
+			status: "paused",
+		} as const
+		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue(overrideContext)
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.forceStartRecording()
+		})
+
+		expect(forceOverrideMock.run).toHaveBeenCalledWith(overrideContext, expect.any(Function))
+		expect(recordSummaryServiceMock.prepareRecordingOverride).toHaveBeenCalledWith(
+			"historical-session",
+		)
+		expect(runtimeMock.actions.startRecording).toHaveBeenCalledTimes(1)
+	})
+
+	it("force-start does not create a new recording when replacement is declined", async () => {
+		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue({
+			sessionId: "current-session",
+			duration: "00:12:34",
+			source: "currentTab",
+			status: "recording",
+		})
+		forceOverrideMock.run.mockResolvedValue(false)
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.forceStartRecording()
+		})
+
+		expect(superMagicApiMock.createAudioProject).not.toHaveBeenCalled()
+		expect(runtimeMock.actions.startRecording).not.toHaveBeenCalled()
 	})
 
 	it("collapses back to list presentation without stopping the shared session", async () => {

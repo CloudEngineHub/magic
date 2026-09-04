@@ -31,10 +31,8 @@ import {
 	SUPER_MAGIC_INTERRUPT_DEBOUNCE_MS,
 } from "@/pages/superMagic/services/sendSuperMagicInterruptMessage"
 import { userStore } from "@/models/user"
-import {
-	runForceRecordingOverride,
-	type ForceRecordingSource,
-} from "@/components/business/RecordingSummary/utils/force-recording-override"
+import { runForceRecordingOverride } from "@/components/business/RecordingSummary/utils/force-recording-override"
+import { resolveRecordingStartContext, type RecordingStartContext } from "./recordingStartContext"
 
 type SaveSuperMagicTopicModel = RecordSummaryEditorPanelRef["saveSuperMagicTopicModel"]
 
@@ -181,75 +179,86 @@ export function useRecordSummaryEditorPanelController({
 		},
 	})
 
-	const handleStartRecording = useMemoizedFn(async (mode: "new" | "current" = "new") => {
-		if (!isModelReady || !selectedWorkspace?.id || !selectedModel?.model_id) {
-			console.error("workspace, topic, project, model not selected")
-			return
-		}
+	const startNewRecording = useMemoizedFn(
+		async (mode: "new" | "current" = "new", startContext?: RecordingStartContext) => {
+			const nextWorkspace = startContext?.workspace ?? selectedWorkspace ?? null
+			const nextProject = startContext?.project ?? selectedProject
+			const nextTopic = startContext?.topic ?? selectedTopic
+			const nextModel = startContext?.model ?? selectedModel
+			const hasValidWorkspaceOrProject = Boolean(nextWorkspace?.id || nextProject?.id)
 
-		let workspace: Workspace | null = selectedWorkspace
-		let project = selectedProject
-		let topic = selectedTopic
-
-		if (mode === "current") {
-			const { project: nextProject, workspace: nextWorkspace } =
-				await openSelectorWithResult()
-			project = nextProject
-			workspace = nextWorkspace
-		}
-
-		if (!workspace) {
-			console.error("workspace not selected")
-			return
-		}
-
-		if (!topic || !project) {
-			const { project: ensuredProject, topic: ensuredTopic } =
-				await recordSummaryService.ensureProjectAndTopic(
-					{
-						workspace,
-						project,
-					},
-					{
-						topicMode: selectedProject
-							? TopicMode.RecordSummary
-							: getFallbackTopicModeIdentifier(),
-					},
-				)
-
-			if (!project) {
-				recordSummaryService.emit(
-					RECORD_SUMMARY_EVENTS.UPDATE_EMPTY_WORKSPACE_PANEL_PROJECTS,
-					{
-						topicId: ensuredTopic?.id,
-						projectId: ensuredProject?.id,
-						workspaceId: workspace.id || "",
-					},
-				)
+			if (
+				(!startContext && !isModelReady) ||
+				!nextModel?.model_id ||
+				!hasValidWorkspaceOrProject
+			) {
+				console.error("workspace, topic, project, model not selected")
+				return
 			}
 
-			project = ensuredProject
-			topic = ensuredTopic
-		}
+			let workspace: Workspace | null = nextWorkspace
+			let project = nextProject
+			let topic = nextTopic
 
-		if (!selectedModel || !project) {
-			console.error("project or model not selected")
-			return
-		}
+			if (mode === "current") {
+				const { project: nextProject, workspace: nextWorkspace } =
+					await openSelectorWithResult()
+				project = nextProject
+				workspace = nextWorkspace
+			}
 
-		await runtime.actions.startRecording({
-			workspace,
-			project,
-			topic,
-			selectedTopic,
-			model: selectedModel,
-			audioSource: selectedAudioSource,
-		})
+			if (!topic || !project) {
+				const { project: ensuredProject, topic: ensuredTopic } =
+					await recordSummaryService.ensureProjectAndTopic(
+						{
+							workspace,
+							project,
+						},
+						{
+							topicMode: nextProject
+								? TopicMode.RecordSummary
+								: getFallbackTopicModeIdentifier(),
+						},
+					)
 
-		if (selectedProjectFromSelector && selectedWorkspaceFromSelector) {
-			clearSelection()
-		}
-	})
+				if (!project) {
+					recordSummaryService.emit(
+						RECORD_SUMMARY_EVENTS.UPDATE_EMPTY_WORKSPACE_PANEL_PROJECTS,
+						{
+							topicId: ensuredTopic?.id,
+							projectId: ensuredProject?.id,
+							workspaceId: workspace?.id || "",
+						},
+					)
+				}
+
+				project = ensuredProject
+				topic = ensuredTopic
+			}
+
+			if (!nextModel || !project) {
+				console.error("project or model not selected")
+				return
+			}
+
+			await runtime.actions.startRecording({
+				workspace,
+				project,
+				topic,
+				selectedTopic,
+				model: nextModel,
+				audioSource: selectedAudioSource,
+			})
+
+			if (selectedProjectFromSelector && selectedWorkspaceFromSelector) {
+				clearSelection()
+			}
+		},
+	)
+
+	const handleStartRecording = useMemoizedFn((mode: "new" | "current" = "new") =>
+		startNewRecording(mode),
+	)
 
 	const handleCompleteRecordingWithSummary = useMemoizedFn(() => {
 		runtime.actions.finishRecording({
@@ -268,21 +277,31 @@ export function useRecordSummaryEditorPanelController({
 		forceStartInFlightRef.current = true
 		setIsForceStartingRecording(true)
 		try {
-			const source: ForceRecordingSource = recordSummaryStore.isOtherTabRecording
-				? "otherTab"
-				: "currentTab"
-			const prepared = await runForceRecordingOverride(
-				{
-					duration:
-						source === "otherTab"
-							? recordSummaryStore.multiTabState.activeTabData.duration
-							: recordSummaryStore.duration,
-					source,
-					status: recordSummaryStore.isPaused ? "paused" : "recording",
-				},
-				() => recordSummaryService.prepareRecordingOverride(),
+			const overrideContext = await recordSummaryService.getRecordingOverrideContext()
+			if (!overrideContext) return
+
+			// Capture the target context before completing the old session because
+			// completion resets the shared recording store.
+			const startContext = resolveRecordingStartContext({
+				selectedWorkspace,
+				selectedProject,
+				selectedTopic,
+				selectedModel,
+				activeWorkspace:
+					overrideContext.startContext?.workspace ??
+					recordSummaryStore.businessData.workspace,
+				activeProject:
+					overrideContext.startContext?.project ??
+					recordSummaryStore.businessData.project,
+				activeTopic:
+					overrideContext.startContext?.topic ?? recordSummaryStore.businessData.topic,
+				activeModel:
+					overrideContext.startContext?.model ?? recordSummaryStore.businessData.model,
+			})
+			const prepared = await runForceRecordingOverride(overrideContext, () =>
+				recordSummaryService.prepareRecordingOverride(overrideContext.sessionId),
 			)
-			if (prepared) await handleStartRecording("new")
+			if (prepared) await startNewRecording("new", startContext)
 		} finally {
 			forceStartInFlightRef.current = false
 			setIsForceStartingRecording(false)
@@ -395,7 +414,7 @@ export function useRecordSummaryEditorPanelController({
 		isRecording: runtime.state.isRecording,
 		isSmall,
 		isMobile,
-		isStartingRecord: runtime.state.isStartingRecord,
+		isStartingRecord: runtime.state.isStartingRecord || isForceStartingRecording,
 		isForceStartingRecording,
 		isTaskRunning,
 		isWaitingSummarize: recordSummaryStore.isWaitingSummarize,
