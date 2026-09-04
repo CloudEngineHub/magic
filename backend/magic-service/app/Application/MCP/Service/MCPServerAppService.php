@@ -7,13 +7,16 @@ declare(strict_types=1);
 
 namespace App\Application\MCP\Service;
 
+use App\Application\MCP\Authorization\MCPAuthorizationAppService;
 use App\Application\MCP\Utils\MCPExecutor\MCPExecutorFactory;
 use App\Application\MCP\Utils\MCPServerConfigUtil;
+use App\Domain\MCP\Constant\ServiceConfigAuthType;
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\MCP\Entity\MCPServerEntity;
 use App\Domain\MCP\Entity\MCPServerToolEntity;
 use App\Domain\MCP\Entity\ValueObject\MCPDataIsolation;
 use App\Domain\MCP\Entity\ValueObject\Query\MCPServerQuery;
+use App\Domain\MCP\Entity\ValueObject\ServiceConfig\ExternalSSEServiceConfig;
 use App\Domain\MCP\Entity\ValueObject\ServiceType;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType;
@@ -23,11 +26,15 @@ use App\Infrastructure\Core\ValueObject\Page;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\PhpMcp\Types\Tools\Tool;
 use Hyperf\DbConnection\Annotation\Transactional;
+use Hyperf\Di\Annotation\Inject;
 use Qbhy\HyperfAuth\Authenticatable;
 use Throwable;
 
 class MCPServerAppService extends AbstractMCPAppService
 {
+    #[Inject]
+    protected MCPAuthorizationAppService $mcpAuthorizationAppService;
+
     /**
      * @return array{mcp_server: MCPServerEntity, tools: ?array<MCPServerToolEntity>}
      */
@@ -184,6 +191,10 @@ class MCPServerAppService extends AbstractMCPAppService
     {
         $dataIsolation = $this->createMCPDataIsolation($authorization);
 
+        if ($entity->shouldCreate() && $this->shouldPreflightMcpAuthorization($entity)) {
+            $this->mcpAuthorizationAppService->preflight($entity);
+        }
+
         if (! $entity->shouldCreate()) {
             $operation = $this->getMCPServerOperation($dataIsolation, $entity->getCode());
             $operation->validate('w', $entity->getCode());
@@ -204,6 +215,16 @@ class MCPServerAppService extends AbstractMCPAppService
         }
 
         return $entity;
+    }
+
+    /**
+     * 判断新增请求是否需要执行 MCP Authorization 轻量预检。
+     */
+    private function shouldPreflightMcpAuthorization(MCPServerEntity $entity): bool
+    {
+        $serviceConfig = $entity->getServiceConfig();
+        return $serviceConfig instanceof ExternalSSEServiceConfig
+            && $serviceConfig->getAuthType() === ServiceConfigAuthType::MCP_AUTHORIZATION;
     }
 
     public function destroy(Authenticatable $authorization, string $code): bool

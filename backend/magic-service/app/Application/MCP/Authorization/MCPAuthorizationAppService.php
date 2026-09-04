@@ -37,6 +37,8 @@ class MCPAuthorizationAppService
 
     private MCPAuthorizationTokenClient $tokenClient;
 
+    private MCPAuthorizationPreflightService $preflightService;
+
     public function __construct(
         private readonly MCPAuthorizationCredentialDomainService $credentialDomainService,
         private readonly MCPAuthorizationStateStore $stateStore,
@@ -48,6 +50,7 @@ class MCPAuthorizationAppService
         $httpClient = new Client();
         $this->discoveryClient = new MCPAuthorizationDiscoveryClient($httpClient);
         $this->tokenClient = new MCPAuthorizationTokenClient($httpClient);
+        $this->preflightService = new MCPAuthorizationPreflightService($httpClient, $this->discoveryClient);
     }
 
     /**
@@ -180,6 +183,14 @@ class MCPAuthorizationAppService
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationNotConfigured);
         }
         return $serviceConfig->getMcpAuthorizationConfig();
+    }
+
+    /**
+     * 检查新增 MCP Server 是否具备进入 Authorization 流程的基础条件。
+     */
+    public function preflight(MCPServerEntity $mcpServer): void
+    {
+        $this->preflightService->check($mcpServer);
     }
 
     /**

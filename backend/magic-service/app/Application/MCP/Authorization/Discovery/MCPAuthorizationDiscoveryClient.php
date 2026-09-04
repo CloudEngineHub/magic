@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\MCP\Authorization\Discovery;
 
-use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\RequestOptions;
 use RuntimeException;
@@ -18,7 +18,7 @@ use RuntimeException;
 class MCPAuthorizationDiscoveryClient
 {
     public function __construct(
-        private readonly Client $httpClient
+        private readonly ClientInterface $httpClient
     ) {
     }
 
