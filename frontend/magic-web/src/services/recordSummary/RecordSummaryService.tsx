@@ -70,6 +70,11 @@ import { runTaskEndCleanup } from "./taskEndCleanup"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Button } from "@/components/shadcn-ui/button"
 import type { RecordingEncodingSnapshot } from "./MediaRecorderService/types/RecorderTypes"
+import {
+	createRecordingEncodingSnapshot,
+	inferLegacyRecordingAudioProfile,
+	normalizeRecordingEncodingSnapshot,
+} from "./MediaRecorderService/utils/RecordingEncodingProfile"
 
 const logger = createRecordingLogger("Main")
 
@@ -135,7 +140,10 @@ class RecordSummaryService {
 	private restoreEncodingSnapshot(session: RecordingSession): void {
 		const persistedSnapshot = session.metadata.recordingEncoding
 		if (persistedSnapshot) {
-			this.mediaRecorderService.setEncodingSnapshot(session.id, { ...persistedSnapshot })
+			this.mediaRecorderService.setEncodingSnapshot(
+				session.id,
+				normalizeRecordingEncodingSnapshot(persistedSnapshot, session.metadata.sampleRate),
+			)
 			return
 		}
 
@@ -145,9 +153,17 @@ class RecordSummaryService {
 			session.metadata.audioFormat === "webm" ? "wav" : session.metadata.audioFormat
 		const supportedFormats: RecordingEncodingSnapshot["format"][] = ["wav", "pcm", "ogg-opus"]
 		if (supportedFormats.includes(format as RecordingEncodingSnapshot["format"])) {
-			this.mediaRecorderService.setEncodingSnapshot(session.id, {
-				format: format as RecordingEncodingSnapshot["format"],
-			})
+			const profile = inferLegacyRecordingAudioProfile(
+				session.metadata.audioFormat,
+				session.metadata.sampleRate,
+			)
+			this.mediaRecorderService.setEncodingSnapshot(
+				session.id,
+				createRecordingEncodingSnapshot(
+					format as RecordingEncodingSnapshot["format"],
+					profile,
+				),
+			)
 		}
 	}
 

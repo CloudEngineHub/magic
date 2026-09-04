@@ -52,6 +52,12 @@ export interface RecordingEncodingPolicy {
 export interface RecordingEncodingSnapshot {
 	format: RecordingEncodingFormat
 	policyVersion?: string
+	/** Output sample rate written into each persisted audio chunk. */
+	sampleRate?: number
+	/** Output channel count written into each persisted audio chunk. */
+	channels?: number
+	/** PCM bits per sample for WAV/PCM output. */
+	bitsPerSample?: number
 }
 
 /**
