@@ -17,8 +17,12 @@ use App\Domain\MCP\Service\MCPServerDomainService;
 use App\ErrorCode\MCPErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\RequestException;
+use Hyperf\Logger\LoggerFactory;
+use Psr\Log\LoggerInterface;
 use Qbhy\HyperfAuth\Authenticatable;
 use RuntimeException;
+use Throwable;
 
 /**
  * MCP Authorization 回调绑定服务。
@@ -27,14 +31,18 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
 {
     private MCPAuthorizationTokenClient $tokenClient;
 
+    private LoggerInterface $logger;
+
     public function __construct(
         private readonly MCPAuthorizationStateStore $stateStore,
         private readonly MCPAuthorizationCredentialDomainService $credentialDomainService,
         private readonly MCPAuthorizationAppService $authorizationAppService,
         private readonly MCPAuthorizationSecretCipher $secretCipher,
-        private readonly MCPServerDomainService $mcpServerDomainService
+        private readonly MCPServerDomainService $mcpServerDomainService,
+        LoggerFactory $loggerFactory
     ) {
         $this->tokenClient = new MCPAuthorizationTokenClient(new Client());
+        $this->logger = $loggerFactory->get('MCPAuthorizationBindingService');
     }
 
     /**
@@ -62,8 +70,42 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
      */
     public function bindPublic(string $code, string $state, ?string $iss = null, ?string $error = null): array
     {
-        $stateData = $this->consumeState($code, $state, $iss, $error);
-        return $this->completeBinding($stateData, $code);
+        $stateHash = $this->hashValue($state);
+        $this->logger->info('MCPAuthorizationPublicCallbackStarted', [
+            'state_hash' => $stateHash,
+            'has_code' => $code !== '',
+            'has_issuer' => $iss !== null && $iss !== '',
+            'has_error' => $error !== null && $error !== '',
+        ]);
+
+        try {
+            $stateData = $this->consumeState($code, $state, $iss, $error);
+            $this->logger->info('MCPAuthorizationStateConsumed', [
+                'state_hash' => $stateHash,
+                'mcp_server_code' => $stateData['mcp_server_code'] ?? '',
+                'organization_code' => $stateData['organization_code'] ?? '',
+                'user_id' => $stateData['user_id'] ?? '',
+            ]);
+
+            $result = $this->completeBinding($stateData, $code);
+            $this->logger->info('MCPAuthorizationPublicCallbackSucceeded', [
+                'state_hash' => $stateHash,
+                'mcp_server_code' => $stateData['mcp_server_code'] ?? '',
+                'organization_code' => $stateData['organization_code'] ?? '',
+                'user_id' => $stateData['user_id'] ?? '',
+            ]);
+            return $result;
+        } catch (Throwable $throwable) {
+            $this->logger->error('MCPAuthorizationPublicCallbackFailed', [
+                'state_hash' => $stateHash,
+                'error_type' => get_class($throwable),
+                'error' => $throwable->getMessage(),
+                'file' => $throwable->getFile(),
+                'line' => $throwable->getLine(),
+                'provider_error' => $this->extractProviderError($throwable),
+            ]);
+            throw $throwable;
+        }
     }
 
     /**
@@ -98,10 +140,7 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
      */
     private function consumeState(string $code, string $state, ?string $iss, ?string $error): array
     {
-        if ($error !== null && $error !== '') {
-            throw new RuntimeException('MCP authorization was denied: ' . $error);
-        }
-        if ($code === '' || $state === '') {
+        if ($state === '') {
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
         }
 
@@ -109,9 +148,21 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
         if (! $stateData) {
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
         }
+        $this->stateStore->clearPending(
+            (string) ($stateData['organization_code'] ?? ''),
+            (string) ($stateData['user_id'] ?? ''),
+            (string) ($stateData['mcp_server_code'] ?? ''),
+            $state
+        );
         $issuer = (string) ($stateData['issuer'] ?? '');
         if ($iss !== null && $iss !== '' && $iss !== $issuer) {
             ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationIssuerMismatch);
+        }
+        if ($error !== null && $error !== '') {
+            throw new RuntimeException('MCP authorization was denied: ' . $error);
+        }
+        if ($code === '') {
+            ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationStateInvalid);
         }
         return $stateData;
     }
@@ -145,6 +196,15 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
         $config->setClientId((string) ($stateData['client_id'] ?? $config->getClientId()));
         $config->setClientSecret($this->secretCipher->decrypt($stateData['client_secret_ciphertext'] ?? null));
         $config->setTokenEndpointAuthMethod((string) ($stateData['token_endpoint_auth_method'] ?? $config->getTokenEndpointAuthMethod()));
+        $this->logger->info('MCPAuthorizationTokenExchangeStarted', [
+            'mcp_server_code' => $serverCode,
+            'organization_code' => $organizationCode,
+            'user_id' => $userId,
+            'issuer' => $issuer,
+            'token_endpoint_host' => parse_url($tokenEndpoint, PHP_URL_HOST) ?: '',
+            'token_endpoint_auth_method' => $config->getTokenEndpointAuthMethod(),
+            'has_client_secret' => $config->getClientSecret() !== '',
+        ]);
         $tokens = $this->tokenClient->exchangeCode(
             $tokenEndpoint,
             $config,
@@ -153,6 +213,15 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
             (string) $stateData['code_verifier'],
             (string) $stateData['resource']
         );
+        $this->logger->info('MCPAuthorizationTokenExchangeSucceeded', [
+            'mcp_server_code' => $serverCode,
+            'organization_code' => $organizationCode,
+            'user_id' => $userId,
+            'has_refresh_token' => ! empty($tokens['refresh_token']),
+            'token_type' => $tokens['token_type'] ?? null,
+            'scope' => $tokens['scope'] ?? null,
+            'expires_in' => $tokens['expires_in'] ?? null,
+        ]);
 
         $credential = new MCPAuthorizationCredentialEntity();
         $credential->setOrganizationCode($dataIsolation->getCurrentOrganizationCode());
@@ -168,6 +237,12 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
         $credential->setClientMetadata(['client_id' => $credential->getClientId(), 'registration_mode' => $credential->getRegistrationMode()]);
         $this->authorizationAppService->applyTokenSet($credential, $tokens);
         $this->credentialDomainService->save($dataIsolation, $credential);
+        $this->logger->info('MCPAuthorizationCredentialSaved', [
+            'mcp_server_code' => $serverCode,
+            'organization_code' => $organizationCode,
+            'user_id' => $userId,
+            'credential_id' => $credential->getId(),
+        ]);
 
         return [
             'success' => true,
@@ -181,4 +256,45 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
             ],
         ];
     }
+
+    /**
+     * 对敏感值生成不可逆标识，仅用于日志关联。
+     */
+    private function hashValue(string $value): string
+    {
+        return $value === '' ? '' : substr(hash('sha256', $value), 0, 16);
+    }
+
+    /**
+     * 从授权服务器 HTTP 异常中提取安全的标准错误字段。
+     *
+     * 不记录响应原文，避免错误响应中意外包含 Token 或其他敏感信息。
+     *
+     * @return null|array{status: int, error: null|string, error_description: null|string}
+     */
+    private function extractProviderError(Throwable $throwable): ?array
+    {
+        if (! $throwable instanceof RequestException || ! $throwable->hasResponse()) {
+            return null;
+        }
+
+        $response = $throwable->getResponse();
+        $payload = json_decode((string) $response->getBody(), true);
+        if (! is_array($payload)) {
+            return [
+                'status' => $response->getStatusCode(),
+                'error' => null,
+                'error_description' => null,
+            ];
+        }
+
+        return [
+            'status' => $response->getStatusCode(),
+            'error' => isset($payload['error']) ? substr((string) $payload['error'], 0, 128) : null,
+            'error_description' => isset($payload['error_description'])
+                ? substr((string) $payload['error_description'], 0, 512)
+                : null,
+        ];
+    }
+
 }
