@@ -28,6 +28,8 @@ import {
 	getClipboardHtml,
 	getClipboardPlainText,
 	getMentionClipboardRepresentation,
+	resolveClipboardContent,
+	resolveMentionForClipboard,
 } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 import {
 	extractWorkspaceMarkdownLinks,
@@ -75,7 +77,10 @@ function collectMentionAttrs(node: ProseMirrorNode, mentions: TiptapMentionAttri
 	node.forEach((child) => collectMentionAttrs(child, mentions))
 }
 
-function hasPortableProjectMention(mentions: TiptapMentionAttributes[]): boolean {
+function hasPortableProjectMention(
+	mentions: TiptapMentionAttributes[],
+	workspaceFiles: AttachmentItem[],
+): boolean {
 	return mentions.some((attrs) => {
 		if (
 			attrs.type !== MentionItemType.PROJECT_FILE &&
@@ -86,7 +91,7 @@ function hasPortableProjectMention(mentions: TiptapMentionAttributes[]): boolean
 		}
 
 		try {
-			return Boolean(getMentionClipboardRepresentation(attrs))
+			return Boolean(getMentionClipboardRepresentation(attrs, workspaceFiles))
 		} catch {
 			return false
 		}
@@ -99,7 +104,10 @@ interface ClipboardPayload {
 	metadata: Record<string, unknown>
 }
 
-function createClipboardPayload(view: EditorView): ClipboardPayload | null {
+function createClipboardPayload(
+	view: EditorView,
+	workspaceFiles: AttachmentItem[],
+): ClipboardPayload | null {
 	const { state } = view
 	const { selection } = state
 	if (selection.empty) return null
@@ -118,20 +126,25 @@ function createClipboardPayload(view: EditorView): ClipboardPayload | null {
 		collectMentionAttrs(node, mentions)
 	})
 
-	if (!hasPortableProjectMention(mentions)) return null
+	if (!hasPortableProjectMention(mentions, workspaceFiles)) return null
+
+	const clipboardContent = resolveClipboardContent(richTextJson, workspaceFiles)
+	const clipboardMentions = mentions.map((attrs) =>
+		resolveMentionForClipboard(attrs, workspaceFiles),
+	)
 
 	const metadata: Record<string, unknown> = {
-		richText: JSON.stringify(richTextJson),
+		richText: JSON.stringify(clipboardContent),
 	}
-	if (mentions.length > 0) {
-		metadata.mentions = mentions.map((attrs) => ({ attrs }))
+	if (clipboardMentions.length > 0) {
+		metadata.mentions = clipboardMentions.map((attrs) => ({ attrs }))
 	}
 
 	const metadataBase64 = btoa(encodeURIComponent(JSON.stringify(metadata)))
-	const htmlContent = getClipboardHtml(tempDiv.innerHTML)
+	const htmlContent = getClipboardHtml(tempDiv.innerHTML, workspaceFiles)
 
 	return {
-		plainText: getClipboardPlainText(richTextJson),
+		plainText: getClipboardPlainText(clipboardContent, workspaceFiles),
 		htmlWithMetadata: `<div data-magic-clipboard="${metadataBase64}">${htmlContent}</div>`,
 		metadata,
 	}
@@ -394,7 +407,8 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 							const clipboardData = clipboardEvent.clipboardData
 							if (!clipboardData) return false
 
-							const payload = createClipboardPayload(view)
+							const workspaceFiles = this.options.getWorkspaceFilesList()
+							const payload = createClipboardPayload(view, workspaceFiles)
 							if (!payload) return false
 
 							clipboardEvent.preventDefault()

@@ -37,6 +37,9 @@ import { logger as Logger } from "@/utils/log"
 import {
 	getClipboardHtml,
 	getClipboardPlainText,
+	getMentionClipboardRepresentation,
+	prependPortableMentions,
+	resolveMentionForClipboard,
 } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 
 const logger = Logger.createLogger("UserCard")
@@ -79,7 +82,9 @@ export function withUserNode<
 			exportModeActive,
 			onExportRequest,
 			onRetryOptimisticMessage,
+			projectFilesStore,
 		} = useMessageListContext()
+		const workspaceFiles = projectFilesStore?.workspaceFilesList ?? []
 		const { openCreateModal, content } = useScheduledTasksModifyModal()
 
 		const [isCheckUndoLoading, setIsCheckUndoLoading] = useState(false)
@@ -197,8 +202,6 @@ export function withUserNode<
 								MentionExtension,
 							],
 						})
-						const contentText = getClipboardPlainText(editor.getJSON())
-						const htmlContent = getClipboardHtml(editor.getHTML())
 
 						// Extract complete marker data from the content.
 						const fullMarkers = extractAllMarkersFromContent(richTextContent)
@@ -212,21 +215,40 @@ export function withUserNode<
 							}),
 						)
 
-						// Get mentions of other types, excluding markers.
+						// Old messages keep attachment mentions outside rich_text; add them to the copied document.
 						const originalMentions = messageNode?.extra?.super_agent?.mentions || []
 						const otherMentionItems: MentionListItem[] = originalMentions.filter(
 							(mention: MentionListItem) =>
 								mention.attrs?.type !== MentionItemType.DESIGN_MARKER,
 						)
+						const portableMentionAttrs = otherMentionItems
+							.map((mention) => mention.attrs)
+							.filter((attrs) =>
+								Boolean(getMentionClipboardRepresentation(attrs, workspaceFiles)),
+							)
+						const clipboardContent = prependPortableMentions(
+							editor.getJSON(),
+							portableMentionAttrs,
+							workspaceFiles,
+						)
+						editor.commands.setContent(clipboardContent, { emitUpdate: false })
+						const contentText = getClipboardPlainText(clipboardContent, workspaceFiles)
+						const htmlContent = getClipboardHtml(editor.getHTML(), workspaceFiles)
 
 						// Merge all mentions, prioritizing complete markers extracted from the content.
-						const allMentions = [...markerMentionItems, ...otherMentionItems]
+						const allMentions = [
+							...markerMentionItems,
+							...otherMentionItems.map((mention) => ({
+								...mention,
+								attrs: resolveMentionForClipboard(mention.attrs, workspaceFiles),
+							})),
+						]
 
 						// Use a mobile-compatible copy method.
 						copyWithMetadata(
 							contentText,
 							{
-								richText: richTextContent,
+								richText: JSON.stringify(clipboardContent),
 								mentions: allMentions,
 								type: messageNode?.type,
 								messageId: messageNode?.id,

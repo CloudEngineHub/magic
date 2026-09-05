@@ -19,6 +19,8 @@ import { useMessageListContext } from "@/pages/superMagic/components/MessageList
 import {
 	getClipboardHtml,
 	getClipboardPlainText,
+	resolveClipboardContent,
+	resolveMentionForClipboard,
 } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 
 // Schedule a callback on the microtask queue. Falls back to Promise.resolve()
@@ -120,7 +122,8 @@ const RichText = memo(
 				// Create a temporary container to get HTML
 				const tempDiv = document.createElement("div")
 				tempDiv.appendChild(dom)
-				const htmlContent = getClipboardHtml(tempDiv.innerHTML)
+				const workspaceFiles = projectFilesStore?.workspaceFilesList ?? []
+				const htmlContent = getClipboardHtml(tempDiv.innerHTML, workspaceFiles)
 
 				// Extract mentions and build rich text JSON from the fragment
 				const mentions: TiptapMentionAttributes[] = []
@@ -140,14 +143,18 @@ const RichText = memo(
 					}
 					collectMentions(node)
 				})
-				const plainText = getClipboardPlainText(richTextJson)
+				const clipboardContent = resolveClipboardContent(richTextJson, workspaceFiles)
+				const clipboardMentions = mentions.map((mention) =>
+					resolveMentionForClipboard(mention, workspaceFiles),
+				)
+				const plainText = getClipboardPlainText(clipboardContent, workspaceFiles)
 
 				// Build magic clipboard metadata
 				const metadata: Record<string, unknown> = {
-					richText: JSON.stringify(richTextJson),
+					richText: JSON.stringify(clipboardContent),
 				}
-				if (mentions.length > 0) {
-					metadata.mentions = mentions.map((m) => ({ attrs: m }))
+				if (clipboardMentions.length > 0) {
+					metadata.mentions = clipboardMentions.map((attrs) => ({ attrs }))
 				}
 				const metadataBase64 = btoa(encodeURIComponent(JSON.stringify(metadata)))
 				const htmlWithMetadata = `<div data-magic-clipboard="${metadataBase64}">${htmlContent}</div>`
