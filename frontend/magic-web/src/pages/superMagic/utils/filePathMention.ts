@@ -1,6 +1,9 @@
+import { env } from "@/utils/env"
+
 export const FILE_PATH_MENTION_PREFIX = "[@file_path:"
 const WORKSPACE_ROOT_PREFIX = ".workspace/"
 const MAGIC_ROOT_PREFIX = ".magic/"
+const DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH = "/mnt/agfs/magicfs/referenced-projects"
 
 export interface FilePathMentionMatch {
 	path: string
@@ -18,6 +21,16 @@ export interface WorkspaceFileReferenceMatch extends FilePathMentionMatch {
 	source: "markdown" | "legacy"
 	label?: string
 	href?: string
+}
+
+export type MarkdownFileTarget =
+	| { scope: "workspace"; relativePath: string }
+	| { scope: "referenced-project"; projectId: string; relativePath: string }
+
+export interface MarkdownFileLinkMatch extends FilePathMentionMatch {
+	label: string
+	href: string
+	target: MarkdownFileTarget
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -49,6 +62,30 @@ function normalizeWorkspacePathSegments(path: string): string | null {
 	}
 
 	return segments.length > 0 ? segments.join("/") : null
+}
+
+function normalizeReferencedProjectMountBasePath(path: string): string | null {
+	const normalized = decodeHtmlEntities(path.trim()).replace(/\\/g, "/").replace(/\/+$/g, "")
+	if (
+		!normalized.startsWith("/") ||
+		normalized.startsWith("//") ||
+		normalized.includes("\0") ||
+		normalized.includes("?") ||
+		normalized.includes("#") ||
+		normalized.split("/").some((segment) => segment === "." || segment === "..")
+	) {
+		return null
+	}
+
+	return normalized
+}
+
+/** 获取与 Agent 跨项目挂载一致的前端运行时路径。 */
+export function getReferencedProjectMountBasePath(): string {
+	const configuredPath = normalizeReferencedProjectMountBasePath(
+		env("AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH", true) || "",
+	)
+	return configuredPath ?? DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH
 }
 
 /** 将内部工作区相对路径规范化为不带 ./ 的比较形式。 */
@@ -142,6 +179,85 @@ export function createCanonicalWorkspaceHref(path: string): string | null {
 	return `./${normalizedPath.split("/").map(encodePathSegment).join("/")}`
 }
 
+export function createReferencedProjectHref(
+	projectId: string,
+	relativePath: string,
+): string | null {
+	const normalizedProjectId = projectId.trim()
+	if (
+		!normalizedProjectId ||
+		normalizedProjectId === "." ||
+		normalizedProjectId === ".." ||
+		/[\\/\0]/.test(normalizedProjectId)
+	) {
+		return null
+	}
+
+	const normalizedRelativePath = normalizeWorkspaceRelativePath(relativePath)
+	if (!normalizedRelativePath) return null
+
+	const encodedBasePath = getReferencedProjectMountBasePath()
+		.split("/")
+		.map(encodePathSegment)
+		.join("/")
+	const encodedProjectId = encodePathSegment(normalizedProjectId)
+	const encodedRelativePath = normalizedRelativePath.split("/").map(encodePathSegment).join("/")
+	return `${encodedBasePath}/${encodedProjectId}/${encodedRelativePath}`
+}
+
+export function parseReferencedProjectHref(
+	href: string,
+): Extract<MarkdownFileTarget, { scope: "referenced-project" }> | null {
+	if (!href) return null
+
+	const rawHref = decodeHtmlEntities(href.trim())
+	if (
+		!rawHref.startsWith("/") ||
+		rawHref.startsWith("//") ||
+		rawHref.includes("?") ||
+		rawHref.includes("#") ||
+		rawHref.includes("\\") ||
+		/%(?:2f|5c)/i.test(rawHref)
+	) {
+		return null
+	}
+
+	const decodedHref = decodeURIComponentOnce(rawHref)
+	if (decodedHref === null) return null
+
+	const pathPrefix = `${getReferencedProjectMountBasePath()}/`
+	if (!decodedHref.startsWith(pathPrefix)) return null
+
+	const mountedPath = decodedHref.slice(pathPrefix.length)
+	const separatorIndex = mountedPath.indexOf("/")
+	if (separatorIndex <= 0) return null
+
+	const projectId = mountedPath.slice(0, separatorIndex)
+	if (projectId === "." || projectId === ".." || projectId.includes("\0")) return null
+
+	const relativePath = normalizeWorkspacePathSegments(mountedPath.slice(separatorIndex + 1))
+	if (!relativePath) return null
+
+	return { scope: "referenced-project", projectId, relativePath }
+}
+
+export function parseMarkdownFileHref(href: string): MarkdownFileTarget | null {
+	const workspacePath = parseCanonicalWorkspaceHref(href)
+	if (workspacePath) return { scope: "workspace", relativePath: workspacePath }
+
+	return parseReferencedProjectHref(href)
+}
+
+export function isReferencedProjectHrefCandidate(href: string): boolean {
+	const rawHref = decodeHtmlEntities(href.trim())
+	const decodedHref = decodeURIComponentOnce(rawHref)
+	return decodedHref?.startsWith(`${getReferencedProjectMountBasePath()}/`) ?? false
+}
+
+export function isMarkdownFileHrefCandidate(href: string): boolean {
+	return isWorkspaceHrefCandidate(href) || isReferencedProjectHrefCandidate(href)
+}
+
 export function escapeMarkdownLinkLabel(label: string): string {
 	return label
 		.replace(/\s+/g, " ")
@@ -166,10 +282,18 @@ function unescapeMarkdownText(value: string): string {
 	return value.replace(/\\([\\[\]()])/g, "$1")
 }
 
-function parseMarkdownLinkAt(
+interface MarkdownLinkSyntaxMatch {
+	label: string
+	href: string
+	startIndex: number
+	endIndex: number
+	fullMatch: string
+}
+
+function parseMarkdownLinkSyntaxAt(
 	content: string,
 	startIndex: number,
-): WorkspaceMarkdownLinkMatch | null {
+): MarkdownLinkSyntaxMatch | null {
 	if (content[startIndex] !== "[" || content[startIndex - 1] === "!") return null
 
 	let index = startIndex + 1
@@ -211,18 +335,36 @@ function parseMarkdownLinkAt(
 		href = content.slice(hrefStart, index).trim()
 	}
 
-	const path = parseCanonicalWorkspaceHref(unescapeMarkdownText(href))
-	if (!path) return null
-
 	const endIndex = index + 1
 	return {
-		path,
 		label: unescapeMarkdownText(content.slice(startIndex + 1, labelEnd)),
-		href,
+		href: unescapeMarkdownText(href),
 		startIndex,
 		endIndex,
 		fullMatch: content.slice(startIndex, endIndex),
 	}
+}
+
+function parseWorkspaceMarkdownLinkAt(
+	content: string,
+	startIndex: number,
+): WorkspaceMarkdownLinkMatch | null {
+	const syntax = parseMarkdownLinkSyntaxAt(content, startIndex)
+	if (!syntax) return null
+
+	const path = parseCanonicalWorkspaceHref(syntax.href)
+	return path ? { ...syntax, path } : null
+}
+
+function parseMarkdownFileLinkAt(
+	content: string,
+	startIndex: number,
+): MarkdownFileLinkMatch | null {
+	const syntax = parseMarkdownLinkSyntaxAt(content, startIndex)
+	if (!syntax) return null
+
+	const target = parseMarkdownFileHref(syntax.href)
+	return target ? { ...syntax, path: target.relativePath, target } : null
 }
 
 function readFenceMarker(
@@ -249,10 +391,13 @@ function readFenceMarker(
 	return { marker: content.slice(cursor, markerEnd), endIndex: markerEnd }
 }
 
-export function extractWorkspaceMarkdownLinks(content: string): WorkspaceMarkdownLinkMatch[] {
+function extractMarkdownLinks<T extends FilePathMentionMatch>(
+	content: string,
+	parseLinkAt: (content: string, startIndex: number) => T | null,
+): T[] {
 	if (!content.includes("](")) return []
 
-	const matches: WorkspaceMarkdownLinkMatch[] = []
+	const matches: T[] = []
 	let index = 0
 	let fenceMarker = ""
 
@@ -283,7 +428,7 @@ export function extractWorkspaceMarkdownLinks(content: string): WorkspaceMarkdow
 		}
 
 		if (content[index] === "[") {
-			const match = parseMarkdownLinkAt(content, index)
+			const match = parseLinkAt(content, index)
 			if (match) {
 				matches.push(match)
 				index = match.endIndex
@@ -295,6 +440,14 @@ export function extractWorkspaceMarkdownLinks(content: string): WorkspaceMarkdow
 	}
 
 	return matches
+}
+
+export function extractWorkspaceMarkdownLinks(content: string): WorkspaceMarkdownLinkMatch[] {
+	return extractMarkdownLinks(content, parseWorkspaceMarkdownLinkAt)
+}
+
+export function extractMarkdownFileLinks(content: string): MarkdownFileLinkMatch[] {
+	return extractMarkdownLinks(content, parseMarkdownFileLinkAt)
 }
 
 function parseQuotedFilePath(

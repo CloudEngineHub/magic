@@ -8,7 +8,7 @@ import type {
 	TiptapMentionAttributes,
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { getMentionUniqueId } from "@/components/business/MentionPanel/tiptap-plugin/types"
-import type { DataService } from "@/components/business/MentionPanel/types"
+import type { DataService, ProjectFileMentionData } from "@/components/business/MentionPanel/types"
 import {
 	extractClipboardMetadata,
 	isMagicClipboard,
@@ -32,20 +32,32 @@ import {
 	resolveMentionForClipboard,
 } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 import {
-	extractWorkspaceMarkdownLinks,
-	parseCanonicalWorkspaceHref,
+	escapeMarkdownLinkLabel,
+	extractMarkdownFileLinks,
+	parseMarkdownFileHref,
+	type MarkdownFileTarget,
 } from "@/pages/superMagic/utils/filePathMention"
+import {
+	resolveReferencedProjectAttachment,
+	type ReferencedProjectAttachment,
+	type ReferencedProjectFileTarget,
+} from "@/pages/superMagic/services/referencedProjectAttachmentResolver"
 
 interface CopyMessageOptions {
 	onMentionsInsert?: (items: TiptapMentionAttributes[]) => void
 	onContentChange?: (content: JSONContent) => void
 	dataService?: DataService | null
 	getWorkspaceFilesList?: () => AttachmentItem[]
+	getCurrentProjectId?: () => string | undefined
 }
 
 type PastePart =
 	| { type: "text"; text: string }
 	| { type: "mention"; attrs: TiptapMentionAttributes }
+
+type ReferencedProjectAttachmentMap = ReadonlyMap<string, ReferencedProjectAttachment | null>
+
+const EMPTY_REFERENCED_PROJECT_ATTACHMENTS: ReferencedProjectAttachmentMap = new Map()
 
 function createWorkspaceMention(
 	attachments: AttachmentItem[],
@@ -67,6 +79,44 @@ function createWorkspaceMention(
 	}
 }
 
+function getReferencedProjectTargetKey(target: ReferencedProjectFileTarget): string {
+	return JSON.stringify([target.projectId, target.relativePath])
+}
+
+function createReferencedProjectMention(
+	target: ReferencedProjectFileTarget,
+	attachments: ReferencedProjectAttachmentMap,
+): TiptapMentionAttributes | null {
+	const file = attachments.get(getReferencedProjectTargetKey(target))
+	if (!file?.file_id) return null
+
+	const data = createProjectFileMentionData(file, {
+		fileId: String(file.file_id),
+		filePath: target.relativePath,
+	})
+	return {
+		type: MentionItemType.PROJECT_FILE,
+		data: {
+			...data,
+			file_path: target.relativePath,
+			relative_file_path: target.relativePath,
+			project_id: target.projectId,
+		},
+	}
+}
+
+function createMentionFromMarkdownTarget(
+	target: MarkdownFileTarget,
+	workspaceAttachments: AttachmentItem[],
+	referencedProjectAttachments: ReferencedProjectAttachmentMap,
+): TiptapMentionAttributes | null {
+	if (target.scope === "workspace") {
+		return createWorkspaceMention(workspaceAttachments, target.relativePath)
+	}
+
+	return createReferencedProjectMention(target, referencedProjectAttachments)
+}
+
 function collectMentionAttrs(node: ProseMirrorNode, mentions: TiptapMentionAttributes[]): void {
 	if (node.type.name === "mention" && node.attrs) {
 		mentions.push(node.attrs as TiptapMentionAttributes)
@@ -80,6 +130,7 @@ function collectMentionAttrs(node: ProseMirrorNode, mentions: TiptapMentionAttri
 function hasPortableProjectMention(
 	mentions: TiptapMentionAttributes[],
 	workspaceFiles: AttachmentItem[],
+	currentProjectId?: string,
 ): boolean {
 	return mentions.some((attrs) => {
 		if (
@@ -91,7 +142,9 @@ function hasPortableProjectMention(
 		}
 
 		try {
-			return Boolean(getMentionClipboardRepresentation(attrs, workspaceFiles))
+			return Boolean(
+				getMentionClipboardRepresentation(attrs, workspaceFiles, currentProjectId),
+			)
 		} catch {
 			return false
 		}
@@ -107,6 +160,7 @@ interface ClipboardPayload {
 function createClipboardPayload(
 	view: EditorView,
 	workspaceFiles: AttachmentItem[],
+	currentProjectId?: string,
 ): ClipboardPayload | null {
 	const { state } = view
 	const { selection } = state
@@ -126,11 +180,11 @@ function createClipboardPayload(
 		collectMentionAttrs(node, mentions)
 	})
 
-	if (!hasPortableProjectMention(mentions, workspaceFiles)) return null
+	if (!hasPortableProjectMention(mentions, workspaceFiles, currentProjectId)) return null
 
-	const clipboardContent = resolveClipboardContent(richTextJson, workspaceFiles)
+	const clipboardContent = resolveClipboardContent(richTextJson, workspaceFiles, currentProjectId)
 	const clipboardMentions = mentions.map((attrs) =>
-		resolveMentionForClipboard(attrs, workspaceFiles),
+		resolveMentionForClipboard(attrs, workspaceFiles, currentProjectId),
 	)
 
 	const metadata: Record<string, unknown> = {
@@ -141,10 +195,10 @@ function createClipboardPayload(
 	}
 
 	const metadataBase64 = btoa(encodeURIComponent(JSON.stringify(metadata)))
-	const htmlContent = getClipboardHtml(tempDiv.innerHTML, workspaceFiles)
+	const htmlContent = getClipboardHtml(tempDiv.innerHTML, workspaceFiles, currentProjectId)
 
 	return {
-		plainText: getClipboardPlainText(clipboardContent, workspaceFiles),
+		plainText: getClipboardPlainText(clipboardContent, workspaceFiles, currentProjectId),
 		htmlWithMetadata: `<div data-magic-clipboard="${metadataBase64}">${htmlContent}</div>`,
 		metadata,
 	}
@@ -160,19 +214,25 @@ function appendText(parts: PastePart[], text: string): void {
 	}
 }
 
-function buildPlainTextPasteParts(text: string, attachments: AttachmentItem[]): PastePart[] | null {
-	const matches = extractWorkspaceMarkdownLinks(text)
+function buildPlainTextPasteParts(
+	text: string,
+	attachments: AttachmentItem[],
+	referencedProjectAttachments: ReferencedProjectAttachmentMap = EMPTY_REFERENCED_PROJECT_ATTACHMENTS,
+): PastePart[] | null {
+	const matches = extractMarkdownFileLinks(text)
 	if (matches.length === 0) return null
 
 	const parts: PastePart[] = []
 	let lastIndex = 0
-	let matchedCount = 0
 	for (const match of matches) {
 		appendText(parts, text.slice(lastIndex, match.startIndex))
-		const attrs = createWorkspaceMention(attachments, match.path)
+		const attrs = createMentionFromMarkdownTarget(
+			match.target,
+			attachments,
+			referencedProjectAttachments,
+		)
 		if (attrs) {
 			parts.push({ type: "mention", attrs })
-			matchedCount++
 		} else {
 			appendText(parts, match.fullMatch)
 		}
@@ -180,7 +240,7 @@ function buildPlainTextPasteParts(text: string, attachments: AttachmentItem[]): 
 	}
 	appendText(parts, text.slice(lastIndex))
 
-	return matchedCount > 0 ? parts : null
+	return parts
 }
 
 function replaceWorkspaceLinksInRichText(
@@ -235,13 +295,22 @@ function deduplicateMentions(items: TiptapMentionAttributes[]): TiptapMentionAtt
 	})
 }
 
-function buildHtmlPasteParts(html: string, attachments: AttachmentItem[]): PastePart[] | null {
+function formatMarkdownLink(label: string, href: string): string {
+	const destination = href.includes(" ") ? `<${href}>` : href
+	return `[${escapeMarkdownLinkLabel(label)}](${destination})`
+}
+
+function buildHtmlPasteParts(
+	html: string,
+	attachments: AttachmentItem[],
+	referencedProjectAttachments: ReferencedProjectAttachmentMap = EMPTY_REFERENCED_PROJECT_ATTACHMENTS,
+): PastePart[] | null {
 	if (!html) return null
 
 	const container = document.createElement("div")
 	container.innerHTML = html
 	const parts: PastePart[] = []
-	let matchedCount = 0
+	let recognizedLinkCount = 0
 	const blockTags = new Set(["DIV", "P", "LI", "SECTION", "ARTICLE", "BLOCKQUOTE", "PRE"])
 
 	const visit = (node: Node) => {
@@ -257,13 +326,23 @@ function buildHtmlPasteParts(html: string, attachments: AttachmentItem[]): Paste
 		}
 
 		if (node.tagName === "A") {
-			const path = parseCanonicalWorkspaceHref(node.getAttribute("href") || "")
-			const attrs = path ? createWorkspaceMention(attachments, path) : null
+			const href = node.getAttribute("href") || ""
+			const target = parseMarkdownFileHref(href)
+			if (!target) {
+				appendText(parts, node.textContent || "")
+				return
+			}
+
+			recognizedLinkCount++
+			const attrs = createMentionFromMarkdownTarget(
+				target,
+				attachments,
+				referencedProjectAttachments,
+			)
 			if (attrs) {
 				parts.push({ type: "mention", attrs })
-				matchedCount++
 			} else {
-				appendText(parts, node.textContent || "")
+				appendText(parts, formatMarkdownLink(node.textContent || href, href))
 			}
 			return
 		}
@@ -284,7 +363,66 @@ function buildHtmlPasteParts(html: string, attachments: AttachmentItem[]): Paste
 	}
 
 	container.childNodes.forEach(visit)
-	return matchedCount > 0 ? parts : null
+	return recognizedLinkCount > 0 ? parts : null
+}
+
+function extractHtmlMarkdownFileTargets(html: string): MarkdownFileTarget[] {
+	if (!html) return []
+
+	const container = document.createElement("div")
+	container.innerHTML = html
+	return Array.from(container.querySelectorAll("a[href]"))
+		.filter((anchor) => !anchor.closest("code, pre"))
+		.map((anchor) => parseMarkdownFileHref(anchor.getAttribute("href") || ""))
+		.filter((target): target is MarkdownFileTarget => Boolean(target))
+}
+
+function getPreferredMarkdownFileTargets(html: string, plainText: string): MarkdownFileTarget[] {
+	const htmlTargets = extractHtmlMarkdownFileTargets(html)
+	if (htmlTargets.length > 0) return htmlTargets
+
+	return extractMarkdownFileLinks(plainText).map((match) => match.target)
+}
+
+async function resolveReferencedProjectTargets(
+	targets: MarkdownFileTarget[],
+): Promise<ReferencedProjectAttachmentMap> {
+	const uniqueTargets = new Map<string, ReferencedProjectFileTarget>()
+	for (const target of targets) {
+		if (target.scope !== "referenced-project") continue
+		uniqueTargets.set(getReferencedProjectTargetKey(target), target)
+	}
+
+	const resolvedEntries = await Promise.all(
+		Array.from(uniqueTargets.entries()).map(async ([key, target]) => {
+			const attachment = await resolveReferencedProjectAttachment(target)
+			return [key, attachment] as const
+		}),
+	)
+	return new Map(resolvedEntries)
+}
+
+function buildClipboardPasteParts(
+	html: string,
+	plainText: string,
+	attachments: AttachmentItem[],
+	referencedProjectAttachments: ReferencedProjectAttachmentMap = EMPTY_REFERENCED_PROJECT_ATTACHMENTS,
+): PastePart[] | null {
+	return (
+		buildHtmlPasteParts(html, attachments, referencedProjectAttachments) ||
+		buildPlainTextPasteParts(plainText, attachments, referencedProjectAttachments)
+	)
+}
+
+function hasMentionPart(parts: PastePart[] | null): parts is PastePart[] {
+	return Boolean(parts?.some((part) => part.type === "mention"))
+}
+
+function getClipboardFallbackText(html: string, plainText: string): string {
+	const htmlParts = buildHtmlPasteParts(html, [], EMPTY_REFERENCED_PROJECT_ATTACHMENTS)
+	if (!htmlParts) return plainText
+
+	return htmlParts.map((part) => (part.type === "text" ? part.text : "")).join("")
 }
 
 function buildPasteContent(parts: PastePart[]): {
@@ -324,7 +462,13 @@ function prepareMentionAttrs(
 	metadata: MagicClipboardMetadata,
 	dataService?: DataService | null,
 ): TiptapMentionAttributes | null {
-	const pendingProjectFileMention = markProjectFileMentionForCopy(attrs, metadata.sourceProjectId)
+	const sourceProjectId =
+		attrs.type === MentionItemType.PROJECT_FILE && metadata.sourceProjectId
+			? (attrs.data as ProjectFileMentionData).source_project_id ||
+				(attrs.data as ProjectFileMentionData).project_id ||
+				metadata.sourceProjectId
+			: metadata.sourceProjectId
+	const pendingProjectFileMention = markProjectFileMentionForCopy(attrs, sourceProjectId)
 	if (pendingProjectFileMention) return pendingProjectFileMention
 
 	if (isAllowedMention(attrs, dataService)) return attrs
@@ -389,6 +533,7 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 			onMentionsInsert: undefined,
 			dataService: null,
 			getWorkspaceFilesList: undefined,
+			getCurrentProjectId: undefined,
 		}
 	},
 
@@ -408,7 +553,11 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 							if (!clipboardData) return false
 
 							const workspaceFiles = this.options.getWorkspaceFilesList()
-							const payload = createClipboardPayload(view, workspaceFiles)
+							const payload = createClipboardPayload(
+								view,
+								workspaceFiles,
+								this.options.getCurrentProjectId?.(),
+							)
 							if (!payload) return false
 
 							clipboardEvent.preventDefault()
@@ -432,38 +581,97 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 							return true
 						},
 					},
-					handlePaste: (_view, event) => {
+					handlePaste: (view, event) => {
 						const clipboardData = event.clipboardData
 						if (!clipboardData) return false
 
 						const isMagic = isMagicClipboard(clipboardData)
 						const attachments = this.options.getWorkspaceFilesList?.() ?? []
 						if (!isMagic) {
-							const htmlParts = buildHtmlPasteParts(
-								clipboardData.getData("text/html"),
-								attachments,
+							const html = clipboardData.getData("text/html")
+							const plainText = clipboardData.getData("text/plain")
+							const targets = getPreferredMarkdownFileTargets(html, plainText)
+							const hasReferencedProjectTarget = targets.some(
+								(target) => target.scope === "referenced-project",
 							)
-							const parts =
-								htmlParts ||
-								buildPlainTextPasteParts(
-									clipboardData.getData("text/plain"),
-									attachments,
-								)
-							if (!parts) return false
 
-							const paste = buildPasteContent(parts)
-							return (
-								runActiveEditor(
-									this.editor,
-									(editor) => {
-										if (!editor.commands.insertContent(paste.content))
-											return false
-										this.options.onMentionsInsert?.(paste.mentions)
-										return true
-									},
-									false,
-								) ?? false
-							)
+							if (!hasReferencedProjectTarget) {
+								const parts = buildClipboardPasteParts(html, plainText, attachments)
+								if (!hasMentionPart(parts)) return false
+
+								const paste = buildPasteContent(parts)
+								return (
+									runActiveEditor(
+										this.editor,
+										(editor) => {
+											if (!editor.commands.insertContent(paste.content))
+												return false
+											this.options.onMentionsInsert?.(paste.mentions)
+											return true
+										},
+										false,
+									) ?? false
+								)
+							}
+
+							event.preventDefault()
+							const initialDoc = view.state.doc
+							const initialSelection = {
+								from: view.state.selection.from,
+								to: view.state.selection.to,
+							}
+							const fallbackPaste = buildPasteContent([
+								{ type: "text", text: getClipboardFallbackText(html, plainText) },
+							])
+
+							void (async () => {
+								let resolvedPaste: ReturnType<typeof buildPasteContent> | null =
+									null
+								try {
+									const referencedProjectAttachments =
+										await resolveReferencedProjectTargets(targets)
+									const parts = buildClipboardPasteParts(
+										html,
+										plainText,
+										attachments,
+										referencedProjectAttachments,
+									)
+									if (parts) resolvedPaste = buildPasteContent(parts)
+								} catch (error) {
+									console.warn(
+										"Referenced project Markdown paste could not be resolved",
+										error,
+									)
+								}
+
+								try {
+									runActiveEditor(this.editor, (editor) => {
+										// 文档内容发生变化时不再按旧位置转换，只在当前光标处插入一次原始 Markdown。
+										const canUseCapturedSelection = initialDoc.eq(
+											editor.state.doc,
+										)
+										const paste = canUseCapturedSelection
+											? resolvedPaste || fallbackPaste
+											: fallbackPaste
+										const inserted = canUseCapturedSelection
+											? editor.commands.insertContentAt(
+													initialSelection,
+													paste.content,
+												)
+											: editor.commands.insertContent(paste.content)
+										if (inserted && paste.mentions.length > 0) {
+											this.options.onMentionsInsert?.(paste.mentions)
+										}
+									})
+								} catch (error) {
+									console.warn(
+										"Referenced project Markdown paste could not be inserted",
+										error,
+									)
+								}
+							})()
+
+							return true
 						}
 
 						// 使用兼容移动端的方式提取元数据

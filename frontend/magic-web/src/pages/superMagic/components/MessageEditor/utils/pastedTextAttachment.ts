@@ -1,6 +1,6 @@
 import {
-	extractWorkspaceMarkdownLinks,
-	parseCanonicalWorkspaceHref,
+	extractMarkdownFileLinks,
+	parseMarkdownFileHref,
 } from "@/pages/superMagic/utils/filePathMention"
 
 export const LONG_PLAIN_TEXT_PASTE_THRESHOLD = 4000
@@ -46,14 +46,14 @@ export function containsCanonicalWorkspaceLink(clipboardData: ClipboardDataLike)
 			Array.from(container.querySelectorAll("a[href]")).some(
 				(anchor) =>
 					!anchor.closest("code, pre") &&
-					Boolean(parseCanonicalWorkspaceHref(anchor.getAttribute("href") || "")),
+					Boolean(parseMarkdownFileHref(anchor.getAttribute("href") || "")),
 			)
 		) {
 			return true
 		}
 	}
 
-	return extractWorkspaceMarkdownLinks(clipboardData.getData("text/plain")).length > 0
+	return extractMarkdownFileLinks(clipboardData.getData("text/plain")).length > 0
 }
 
 export function createPastedTextFile({ text, now = new Date() }: CreatePastedTextFileOptions) {

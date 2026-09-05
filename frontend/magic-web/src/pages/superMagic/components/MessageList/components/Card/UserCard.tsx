@@ -217,6 +217,8 @@ export function withUserNode<
 
 						// Old messages keep attachment mentions outside rich_text; add them to the copied document.
 						const originalMentions = messageNode?.extra?.super_agent?.mentions || []
+						const currentProjectId =
+							superIdState?.projectId ?? projectStore.selectedProject?.id
 						const otherMentionItems: MentionListItem[] = originalMentions.filter(
 							(mention: MentionListItem) =>
 								mention.attrs?.type !== MentionItemType.DESIGN_MARKER,
@@ -224,23 +226,42 @@ export function withUserNode<
 						const portableMentionAttrs = otherMentionItems
 							.map((mention) => mention.attrs)
 							.filter((attrs) =>
-								Boolean(getMentionClipboardRepresentation(attrs, workspaceFiles)),
+								Boolean(
+									getMentionClipboardRepresentation(
+										attrs,
+										workspaceFiles,
+										currentProjectId,
+									),
+								),
 							)
 						const clipboardContent = prependPortableMentions(
 							editor.getJSON(),
 							portableMentionAttrs,
 							workspaceFiles,
+							currentProjectId,
 						)
 						editor.commands.setContent(clipboardContent, { emitUpdate: false })
-						const contentText = getClipboardPlainText(clipboardContent, workspaceFiles)
-						const htmlContent = getClipboardHtml(editor.getHTML(), workspaceFiles)
+						const contentText = getClipboardPlainText(
+							clipboardContent,
+							workspaceFiles,
+							currentProjectId,
+						)
+						const htmlContent = getClipboardHtml(
+							editor.getHTML(),
+							workspaceFiles,
+							currentProjectId,
+						)
 
 						// Merge all mentions, prioritizing complete markers extracted from the content.
 						const allMentions = [
 							...markerMentionItems,
 							...otherMentionItems.map((mention) => ({
 								...mention,
-								attrs: resolveMentionForClipboard(mention.attrs, workspaceFiles),
+								attrs: resolveMentionForClipboard(
+									mention.attrs,
+									workspaceFiles,
+									currentProjectId,
+								),
 							})),
 						]
 
@@ -252,8 +273,7 @@ export function withUserNode<
 								mentions: allMentions,
 								type: messageNode?.type,
 								messageId: messageNode?.id,
-								sourceProjectId:
-									superIdState?.projectId ?? projectStore.selectedProject?.id,
+								sourceProjectId: currentProjectId,
 							},
 							htmlContent,
 						)

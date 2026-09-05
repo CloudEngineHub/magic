@@ -2,6 +2,7 @@ import { useEffect, useRef, type RefObject } from "react"
 import { useMemoizedFn } from "ahooks"
 
 import type { DetailRef } from "@/pages/superMagic/components/Detail"
+import { isStandalonePreviewFile } from "@/pages/superMagic/components/Detail/components/FilesViewer/hooks/previewPolicy"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import type {
 	OpenFileTabRecord,
@@ -45,9 +46,13 @@ export function useMicroAppMessageFileOpen({
 
 	const handleOpenFileTab = useMemoizedFn((payload: SuperMagicOpenFileTabPayload) => {
 		const matchedFile = attachmentList.find((item) => getAttachmentId(item) === payload.fileId)
+		const standaloneFile =
+			payload.fileData && isStandalonePreviewFile(payload.fileData as AttachmentItem)
+				? payload.fileData
+				: undefined
 		pendingFileOpenRef.current = {
-			file: matchedFile ?? payload.fileData ?? { file_id: payload.fileId },
-			locateFileId: matchedFile?.file_id,
+			file: standaloneFile ?? matchedFile ?? payload.fileData ?? { file_id: payload.fileId },
+			locateFileId: standaloneFile ? undefined : matchedFile?.file_id,
 		}
 
 		if (isFilesViewActive && openPendingFile()) return

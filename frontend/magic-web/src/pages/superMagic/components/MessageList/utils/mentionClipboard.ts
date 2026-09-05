@@ -12,6 +12,7 @@ import {
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import {
 	createCanonicalWorkspaceHref,
+	createReferencedProjectHref,
 	escapeHtmlText,
 	escapeMarkdownLinkLabel,
 } from "@/pages/superMagic/utils/filePathMention"
@@ -58,6 +59,28 @@ function isPendingUpload(attrs: TiptapMentionAttributes): boolean {
 	return status === "init" || status === "uploading" || status === "error"
 }
 
+function isWorkspaceFileMention(attrs: TiptapMentionAttributes): boolean {
+	return (
+		attrs.type === MentionItemType.FOLDER ||
+		attrs.type === MentionItemType.PROJECT_FILE ||
+		attrs.type === MentionItemType.UPLOAD_FILE
+	)
+}
+
+function getReferencedProjectId(
+	attrs: TiptapMentionAttributes,
+	currentProjectId?: string,
+): string | null {
+	if (attrs.type !== MentionItemType.PROJECT_FILE) return null
+
+	const data = attrs.data as ProjectFileMentionData
+	const sourceProjectId = String(data.source_project_id || data.project_id || "").trim()
+	if (!sourceProjectId) return null
+	if (currentProjectId && sourceProjectId === String(currentProjectId)) return null
+	if (!currentProjectId && !data.source_project_id) return null
+	return sourceProjectId
+}
+
 /**
  * 历史 Mention 未持久化路径时，从当前工作区文件列表补全路径。
  * 消息渲染也使用这份列表解析文件信息和图标。
@@ -65,6 +88,7 @@ function isPendingUpload(attrs: TiptapMentionAttributes): boolean {
 export function resolveMentionForClipboard(
 	attrs: TiptapMentionAttributes,
 	workspaceFiles: ReadonlyArray<AttachmentItem> = [],
+	currentProjectId?: string,
 ): TiptapMentionAttributes {
 	if (
 		attrs.type !== MentionItemType.FOLDER &&
@@ -74,9 +98,18 @@ export function resolveMentionForClipboard(
 		return attrs
 	}
 
-	const workspaceResource = findWorkspaceResource(attrs, workspaceFiles)
+	const referencedProjectId = getReferencedProjectId(attrs, currentProjectId)
+	const workspaceResource = referencedProjectId
+		? undefined
+		: findWorkspaceResource(attrs, workspaceFiles)
 	const workspacePath = workspaceResource?.relative_file_path || workspaceResource?.path || ""
-	const path = workspacePath || getWorkspaceResourcePath(attrs)
+	const mentionPath =
+		attrs.type === MentionItemType.PROJECT_FILE && referencedProjectId
+			? (attrs.data as ProjectFileMentionData).file_path ||
+				(attrs.data as ProjectFileMentionData).relative_file_path ||
+				""
+			: getWorkspaceResourcePath(attrs)
+	const path = workspacePath || mentionPath
 	if (!path) return attrs
 
 	if (attrs.type === MentionItemType.FOLDER) {
@@ -137,13 +170,14 @@ export function resolveMentionForClipboard(
 export function resolveClipboardContent(
 	content: JSONContent,
 	workspaceFiles: ReadonlyArray<AttachmentItem> = [],
+	currentProjectId?: string,
 ): JSONContent {
 	if (!content) return content
 
 	let resolvedContent = content
 	if (content.type === "mention" && content.attrs) {
 		const attrs = content.attrs as TiptapMentionAttributes
-		const resolvedAttrs = resolveMentionForClipboard(attrs, workspaceFiles)
+		const resolvedAttrs = resolveMentionForClipboard(attrs, workspaceFiles, currentProjectId)
 		if (resolvedAttrs !== attrs) {
 			resolvedContent = { ...resolvedContent, attrs: resolvedAttrs }
 		}
@@ -151,7 +185,7 @@ export function resolveClipboardContent(
 
 	if (content.type === INSPECTOR_DETAIL_TYPE && content.attrs?.fileMention) {
 		const attrs = content.attrs.fileMention as TiptapMentionAttributes
-		const resolvedAttrs = resolveMentionForClipboard(attrs, workspaceFiles)
+		const resolvedAttrs = resolveMentionForClipboard(attrs, workspaceFiles, currentProjectId)
 		if (resolvedAttrs !== attrs) {
 			resolvedContent = {
 				...resolvedContent,
@@ -162,7 +196,7 @@ export function resolveClipboardContent(
 
 	if (Array.isArray(content.content)) {
 		const resolvedChildren = content.content.map((child) =>
-			resolveClipboardContent(child, workspaceFiles),
+			resolveClipboardContent(child, workspaceFiles, currentProjectId),
 		)
 		if (resolvedChildren.some((child, index) => child !== content.content?.[index])) {
 			resolvedContent = { ...resolvedContent, content: resolvedChildren }
@@ -180,10 +214,12 @@ export interface MentionClipboardRepresentation {
 export function getMentionClipboardRepresentation(
 	attrs: TiptapMentionAttributes,
 	workspaceFiles: ReadonlyArray<AttachmentItem> = [],
+	currentProjectId?: string,
 ): MentionClipboardRepresentation | null {
-	const resolvedAttrs = resolveMentionForClipboard(attrs, workspaceFiles)
+	const resolvedAttrs = resolveMentionForClipboard(attrs, workspaceFiles, currentProjectId)
 	let path = ""
 	let label = ""
+	let referencedProjectId: string | null = null
 
 	if (resolvedAttrs.type === MentionItemType.FOLDER) {
 		const data = resolvedAttrs.data as DirectoryMentionData
@@ -196,11 +232,14 @@ export function getMentionClipboardRepresentation(
 		const data = resolvedAttrs.data as ProjectFileMentionData | UploadFileMentionData
 		path = data.relative_file_path || data.file_path || ""
 		label = data.file_name?.trim() || ""
+		referencedProjectId = getReferencedProjectId(resolvedAttrs, currentProjectId)
 	} else {
 		return null
 	}
 
-	const href = createCanonicalWorkspaceHref(path)
+	const href = referencedProjectId
+		? createReferencedProjectHref(referencedProjectId, path)
+		: createCanonicalWorkspaceHref(path)
 	if (!href || !label) return null
 	const markdownDestination = href.includes(" ") ? `<${href}>` : href
 
@@ -227,14 +266,17 @@ export function prependPortableMentions(
 	content: JSONContent,
 	mentionAttrs: TiptapMentionAttributes[],
 	workspaceFiles: ReadonlyArray<AttachmentItem> = [],
+	currentProjectId?: string,
 ): JSONContent {
-	const resolvedContent = resolveClipboardContent(content, workspaceFiles)
+	const resolvedContent = resolveClipboardContent(content, workspaceFiles, currentProjectId)
 	const existingIds = new Set<string>()
 	collectMentionIds(resolvedContent, existingIds)
 
 	const missingMentions = mentionAttrs
-		.map((attrs) => resolveMentionForClipboard(attrs, workspaceFiles))
-		.filter((attrs) => Boolean(getMentionClipboardRepresentation(attrs, workspaceFiles)))
+		.map((attrs) => resolveMentionForClipboard(attrs, workspaceFiles, currentProjectId))
+		.filter((attrs) =>
+			Boolean(getMentionClipboardRepresentation(attrs, workspaceFiles, currentProjectId)),
+		)
 		.filter((attrs) => {
 			const id = getMentionUniqueId(attrs)
 			if (existingIds.has(id)) return false
@@ -259,16 +301,24 @@ export function prependPortableMentions(
 export function getClipboardPlainText(
 	content: JSONContent,
 	workspaceFiles: ReadonlyArray<AttachmentItem> = [],
+	currentProjectId?: string,
 ): string {
 	function serialize(node: JSONContent): string {
 		if (node.type === "text") return node.text || ""
 
 		if (node.type === "mention" && node.attrs) {
 			const attrs = node.attrs as TiptapMentionAttributes
-			const portable = getMentionClipboardRepresentation(attrs, workspaceFiles)
+			const portable = getMentionClipboardRepresentation(
+				attrs,
+				workspaceFiles,
+				currentProjectId,
+			)
 			const displayName = getMentionDisplayName(attrs)
 			const suffix = attrs.type === MentionItemType.FOLDER ? "/" : ""
-			return ` ${portable?.plainText || `@${displayName}${suffix}`} `
+			const fallback = isWorkspaceFileMention(attrs)
+				? `${displayName}${suffix}`
+				: `@${displayName}${suffix}`
+			return ` ${portable?.plainText || fallback} `
 		}
 
 		if (node.type === "super-placeholder") {
@@ -297,6 +347,7 @@ export function getClipboardPlainText(
 export function getClipboardHtml(
 	htmlContent: string,
 	workspaceFiles: ReadonlyArray<AttachmentItem> = [],
+	currentProjectId?: string,
 ): string {
 	const container = document.createElement("div")
 	container.innerHTML = htmlContent
@@ -311,8 +362,17 @@ export function getClipboardHtml(
 				type: type as TiptapMentionAttributes["type"],
 				data: JSON.parse(data) as TiptapMentionAttributes["data"],
 			}
-			const portable = getMentionClipboardRepresentation(attrs, workspaceFiles)
-			if (!portable) return
+			const portable = getMentionClipboardRepresentation(
+				attrs,
+				workspaceFiles,
+				currentProjectId,
+			)
+			if (!portable) {
+				if (isWorkspaceFileMention(attrs)) {
+					element.replaceWith(document.createTextNode(getMentionDisplayName(attrs)))
+				}
+				return
+			}
 
 			const replacement = document.createElement("span")
 			replacement.innerHTML = portable.htmlContent

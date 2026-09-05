@@ -123,7 +123,12 @@ const RichText = memo(
 				const tempDiv = document.createElement("div")
 				tempDiv.appendChild(dom)
 				const workspaceFiles = projectFilesStore?.workspaceFilesList ?? []
-				const htmlContent = getClipboardHtml(tempDiv.innerHTML, workspaceFiles)
+				const currentProjectId = projectFilesStore?.currentSelectedProject?.id
+				const htmlContent = getClipboardHtml(
+					tempDiv.innerHTML,
+					workspaceFiles,
+					currentProjectId,
+				)
 
 				// Extract mentions and build rich text JSON from the fragment
 				const mentions: TiptapMentionAttributes[] = []
@@ -143,11 +148,19 @@ const RichText = memo(
 					}
 					collectMentions(node)
 				})
-				const clipboardContent = resolveClipboardContent(richTextJson, workspaceFiles)
-				const clipboardMentions = mentions.map((mention) =>
-					resolveMentionForClipboard(mention, workspaceFiles),
+				const clipboardContent = resolveClipboardContent(
+					richTextJson,
+					workspaceFiles,
+					currentProjectId,
 				)
-				const plainText = getClipboardPlainText(clipboardContent, workspaceFiles)
+				const clipboardMentions = mentions.map((mention) =>
+					resolveMentionForClipboard(mention, workspaceFiles, currentProjectId),
+				)
+				const plainText = getClipboardPlainText(
+					clipboardContent,
+					workspaceFiles,
+					currentProjectId,
+				)
 
 				// Build magic clipboard metadata
 				const metadata: Record<string, unknown> = {

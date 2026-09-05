@@ -84,6 +84,7 @@ interface UseMessageEditorProps {
 		context?: { deletionInput: MentionDeletionInput },
 	) => boolean
 	getWorkspaceFilesList?: () => AttachmentItem[]
+	getCurrentProjectId?: () => string | undefined
 }
 
 type MentionEditorCommands = {
@@ -158,6 +159,7 @@ export const useMessageEditor = ({
 	shouldSkipRemoveSync,
 	shouldRestoreRemovedMention,
 	getWorkspaceFilesList,
+	getCurrentProjectId,
 }: UseMessageEditorProps) => {
 	const domRef = useRef<HTMLDivElement>(null)
 	const { i18n } = useTranslation()
@@ -317,6 +319,7 @@ export const useMessageEditor = ({
 				onContentChange: onChange,
 				dataService: mentionPanelStore,
 				getWorkspaceFilesList,
+				getCurrentProjectId,
 			}),
 			CodeAwarePasteExtension,
 			SuperPlaceholderExtension.configure({

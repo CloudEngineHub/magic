@@ -330,6 +330,9 @@ export const MessageEditorContainer = observer(
 			const getWorkspaceFilesList = useMemoizedFn(
 				() => projectFilesStore?.workspaceFilesList ?? [],
 			)
+			const getCurrentProjectId = useMemoizedFn(
+				() => selectedTopic?.project_id ?? selectedProject?.id ?? draftKey?.projectId,
+			)
 
 			const { isDragOver, dragEvents } = useDragUpload({
 				enableFileDrop: uploadEnabled,
@@ -416,6 +419,7 @@ export const MessageEditorContainer = observer(
 				isTrustedMention: (attrs) => store.editorStore.isTrustedMention(attrs),
 				shouldRestoreRemovedMention,
 				getWorkspaceFilesList,
+				getCurrentProjectId,
 			})
 			const activeEditorRef = useLatestActiveEditor(tiptapEditor)
 			const canvasSelectionMentionScope = useMemo(

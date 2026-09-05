@@ -1,12 +1,17 @@
 import { observer } from "mobx-react-lite"
-import type { ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 import projectFilesStore from "@/stores/projectFiles"
 import { cn } from "@/utils/cn"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
-	isWorkspaceHrefCandidate,
-	parseCanonicalWorkspaceHref,
+	isMarkdownFileHrefCandidate,
+	parseMarkdownFileHref,
 } from "@/pages/superMagic/utils/filePathMention"
+import {
+	resolveReferencedProjectAttachment,
+	type ReferencedProjectAttachment,
+} from "@/pages/superMagic/services/referencedProjectAttachmentResolver"
 import { findAttachmentByPath } from "./helper"
 import { normalizeInlineStyle } from "../normalizeInlineStyle"
 import { FileReference, getFileExtensionFromPath } from "./FileReference"
@@ -30,8 +35,30 @@ export interface MarkdownLinkProps {
 	domNode?: ParsedDomElement
 }
 
+interface ReferencedProjectResolution {
+	href: string
+	file: ReferencedProjectAttachment | null
+}
+
+function createReferencedProjectPreviewFile(file: ReferencedProjectAttachment) {
+	return {
+		...file,
+		display_config: {
+			...(file.display_config || {}),
+			previewPolicy: {
+				...(file.display_config?.previewPolicy || {}),
+				standalone: true,
+				syncWithAttachments: false,
+				persistTab: false,
+				restoreAsActive: false,
+			},
+		},
+	}
+}
+
 export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	const { children, href, rel, target, title } = props
+	const { t } = useTranslation("super")
 	const normalizedHref = typeof href === "string" ? href : ""
 	const normalizedRel = typeof rel === "string" ? rel : undefined
 	const normalizedTarget = typeof target === "string" ? target : undefined
@@ -48,25 +75,58 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	)
 	const normalizedStyle = normalizeInlineStyle(rawAttributes.style)
 	const attachments = projectFilesStore.workspaceFilesList
-	const workspacePath = parseCanonicalWorkspaceHref(normalizedHref)
+	const fileTarget = parseMarkdownFileHref(normalizedHref)
+	const workspacePath = fileTarget?.scope === "workspace" ? fileTarget.relativePath : null
+	const referencedProjectId =
+		fileTarget?.scope === "referenced-project" ? fileTarget.projectId : null
+	const referencedProjectPath =
+		fileTarget?.scope === "referenced-project" ? fileTarget.relativePath : null
 	const fileInfo = workspacePath ? findAttachmentByPath(attachments, workspacePath) : undefined
+	const [referencedProjectResolution, setReferencedProjectResolution] =
+		useState<ReferencedProjectResolution | null>(null)
+
+	useEffect(() => {
+		if (!referencedProjectId || !referencedProjectPath) return
+
+		let active = true
+		void resolveReferencedProjectAttachment({
+			scope: "referenced-project",
+			projectId: referencedProjectId,
+			relativePath: referencedProjectPath,
+		}).then((file) => {
+			if (active) setReferencedProjectResolution({ href: normalizedHref, file })
+		})
+
+		return () => {
+			active = false
+		}
+	}, [normalizedHref, referencedProjectId, referencedProjectPath])
+
+	const referencedProjectFile =
+		referencedProjectResolution?.href === normalizedHref
+			? referencedProjectResolution.file
+			: null
+	const resolvedFileInfo = fileInfo ?? referencedProjectFile
 
 	const onClick = () => {
-		if (!fileInfo) return
+		if (!resolvedFileInfo?.file_id) return
+
+		const fileData = referencedProjectFile
+			? createReferencedProjectPreviewFile(referencedProjectFile)
+			: resolvedFileInfo
 
 		pubsub.publish(PubSubEvents.Open_File_Tab, {
-			fileId: fileInfo.file_id,
-			fileData: fileInfo,
+			fileId: String(resolvedFileInfo.file_id),
+			fileData,
 		})
 	}
 
-	if (fileInfo) {
+	if (resolvedFileInfo) {
 		return (
 			<FileReference
 				label={children}
 				fileType={
-					fileInfo.file_extension ||
-					getFileExtensionFromPath(workspacePath ?? normalizedHref)
+					resolvedFileInfo.file_extension || getFileExtensionFromPath(normalizedHref)
 				}
 				onClick={onClick}
 				title={typeof children === "string" ? children : normalizedHref}
@@ -74,14 +134,21 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 		)
 	}
 
-	if (isWorkspaceHrefCandidate(normalizedHref)) {
+	if (isMarkdownFileHrefCandidate(normalizedHref)) {
+		const referencedProjectResolved =
+			fileTarget?.scope !== "referenced-project" ||
+			referencedProjectResolution?.href === normalizedHref
 		return (
 			<span {...safeAttributes} style={normalizedStyle}>
 				<FileReference
 					label={children}
 					fileType={getFileExtensionFromPath(normalizedHref)}
 					disabled
-					title={normalizedTitle ?? normalizedHref}
+					title={
+						referencedProjectResolved
+							? t("common.fileNotFoundOrLoadFailed")
+							: (normalizedTitle ?? normalizedHref)
+					}
 				/>
 			</span>
 		)
