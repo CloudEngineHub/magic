@@ -1,4 +1,4 @@
-"""构造会话后记忆文件的超限整理提示。"""
+"""构造会话后记忆整理提示。"""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ class MemoryFileSizeNotice:
 
 
 class MemoryMaintenancePromptBuilder:
-    """检查共享记忆文件大小并生成按文件定位的整理提示。"""
+    """以文件大小作为触发条件，生成按文件定位的记忆整理提示。"""
 
     _DEFAULT_LIMIT_KB = 16
     _CONFIG_KEY = "memory.after_run.memory_file_max_size_kb"
@@ -52,7 +52,7 @@ class MemoryMaintenancePromptBuilder:
         self._limit_kb = self._normalize_limit_kb(limit_kb)
 
     async def build(self, agent_context: "AgentContext") -> str:
-        """返回超限记忆文件的动态整理提示；没有超限文件时返回空字符串。"""
+        """返回需要整理的记忆文件提示；没有触发文件时返回空字符串。"""
         candidates = await AutoReadFileService.resolve_memory_file_candidates(agent_context)
         notices = await self._collect_notices(candidates)
         if not notices:
@@ -113,13 +113,13 @@ class MemoryMaintenancePromptBuilder:
 
     @staticmethod
     def _render_prompt(notices: tuple[MemoryFileSizeNotice, ...]) -> str:
-        """把超限文件渲染为 AfterRun 可直接执行的维护要求。"""
+        """把触发整理的文件渲染为 AfterRun 可直接执行的记忆整理要求。"""
         memory_files = "\n".join(
-            f"- {notice.path} ({notice.size_kb:.1f} KiB; limit {notice.limit_kb} KiB)"
+            f"- {notice.path} (current size: {notice.size_kb:.1f} KiB; suggested target: <= {notice.limit_kb} KiB)"
             for notice in notices
         )
         return get_memory_extraction_prompt(
-            MemoryExtractionPromptName.MEMORY_FILE_SIZE_MAINTENANCE,
+            MemoryExtractionPromptName.MEMORY_MAINTENANCE,
             memory_files=memory_files,
         )
 

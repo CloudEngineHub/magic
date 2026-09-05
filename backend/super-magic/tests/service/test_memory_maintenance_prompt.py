@@ -84,7 +84,8 @@ async def test_memory_maintenance_prompt_only_lists_files_at_or_over_limit(monke
     prompt = await MemoryMaintenancePromptBuilder().build(SimpleNamespace())
 
     assert str(global_path) in prompt
-    assert "16.0 KiB" in prompt
+    assert "current size: 16.0 KiB" in prompt
+    assert "suggested target: <= 16 KiB" in prompt
     assert str(project_path) not in prompt
     assert "notes/" in prompt
 
@@ -126,7 +127,7 @@ async def test_prompt_provider_appends_dynamic_maintenance_prompt():
 def test_memory_extraction_prompt_method_supports_placeholders():
     """公开方法可以使用映射参数和关键字占位符渲染内置模板。"""
     result = get_memory_extraction_prompt(
-        MemoryExtractionPromptName.MEMORY_FILE_SIZE_MAINTENANCE,
+        MemoryExtractionPromptName.MEMORY_MAINTENANCE,
         {"memory_files": "- /tmp/global/MEMORY.md (16.0 KiB; limit 16 KiB)"},
     )
 
@@ -138,7 +139,7 @@ def test_memory_extraction_prompt_method_supports_placeholders():
 def test_memory_extraction_prompt_method_supports_keyword_placeholders():
     """公开方法支持关键字占位符。"""
     result = get_memory_extraction_prompt(
-        MemoryExtractionPromptName.MEMORY_FILE_SIZE_MAINTENANCE,
+        MemoryExtractionPromptName.MEMORY_MAINTENANCE,
         {"prefix": "memory"},
         memory_files="- maintenance",
     )
@@ -150,7 +151,7 @@ def test_memory_extraction_prompt_renderer_reports_missing_placeholder():
     """内置模板缺少占位符时返回可定位的参数错误。"""
     with pytest.raises(ValueError, match="缺少占位符"):
         get_memory_extraction_prompt(
-            MemoryExtractionPromptName.MEMORY_FILE_SIZE_MAINTENANCE,
+            MemoryExtractionPromptName.MEMORY_MAINTENANCE,
         )
 
 
