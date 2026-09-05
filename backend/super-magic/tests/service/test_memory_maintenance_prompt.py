@@ -88,6 +88,8 @@ async def test_memory_maintenance_prompt_only_lists_files_at_or_over_limit(monke
     assert "suggested target: <= 16 KiB" in prompt
     assert str(project_path) not in prompt
     assert "notes/" in prompt
+    assert "Every notes filename must be short" in prompt
+    assert "random IDs" in prompt
 
 
 @pytest.mark.asyncio

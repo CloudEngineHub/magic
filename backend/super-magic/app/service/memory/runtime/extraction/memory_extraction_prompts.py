@@ -23,7 +23,7 @@ _MEMORY_MAINTENANCE_PROMPT = """
 2. 按主题和语义检查现有内容，将每条内容归类为：应保留在 `MEMORY.md` 的核心事实、应整理到主题笔记的长期详细信息、重复或过时内容、临时过程日志、原始工具输出、敏感信息和无法证实的推断。
 3. 重写 `MEMORY.md`，只保留短小、稳定、主体和作用域明确、未来经常需要直接使用的当前事实、约束、偏好和必要索引。不要按原行数机械保留，也不要把时间线、重复检查点、流水账或完整工具结果当作核心记忆。
 4. 检查项目 `MEMORY.md` 中的每条记忆是否“换到完全不同的项目后仍然成立”。如果成立，它就是跨项目记忆：从项目 `MEMORY.md` 移出并写入共享的全局 `MEMORY.md`，先读取并去重全局内容，不要在两个作用域保留重复副本。只有确实限定于当前项目的内容才留在项目记忆中。
-5. 将仍有长期价值但不适合核心记忆的理由、历史、取舍、流程和示例合并到一个或多个清晰命名的主题笔记中。不要把所有剩余内容原样搬进一个巨大的 notes 文件；重复记录应先合并，只有对未来有用的内容才保留。
+5. 将仍有长期价值但不适合核心记忆的理由、历史、取舍、流程和示例合并到一个或多个清晰命名的主题笔记中。每个 notes 文件名必须简短、稳定、可读，并能仅凭名称判断正文主题；可以使用简短中文或英文 kebab-case。不要使用 `notes.md`、`details.md`、`history.md`、`checkpoint-history.md`、纯时间戳或随机 ID 等泛化名称。已有笔记名称过于泛化时，整理时将其改为与内容直接相关的名称，并同步更新 `MEMORY.md` 中的索引。不要把所有剩余内容原样搬进一个巨大的 notes 文件；重复记录应先合并，只有对未来有用的内容才保留。
 6. 删除不符合记忆写入条件的临时状态、无效或重复内容、原始日志、认证数据和模型猜测；建议目标只是参考，不要为了达到数字而删除仍有长期价值的事实。
 7. 仅编辑列出的 `MEMORY.md` 及其同级 `notes/` 文件；如果需要把项目记忆迁移到全局记忆，可同时编辑对应的全局 `MEMORY.md`，但不要重写无关的记忆文件，也不要绕过正常的证据、作用域和去重规则。
 8. 整理完成后检查 `MEMORY.md` 是否结构清晰、可独立理解、适合作为自动加载的核心记忆；检查主题笔记是否可检索、没有重复正文和敏感信息，并确认跨项目事实已归入全局作用域。
@@ -39,7 +39,7 @@ This is not a file-size task, simple compression, or line-based splitting. Maint
 2. Review the existing content by topic and meaning, classifying each item as core fact to keep in `MEMORY.md`, durable detail for a topic note, duplicate or obsolete content, temporary process log, raw tool output, sensitive information, or unsupported inference.
 3. Rewrite `MEMORY.md` to keep only short, stable, attributable, correctly scoped facts, constraints, preferences, and necessary pointers that will be frequently useful directly. Do not preserve lines mechanically, and do not treat timelines, repeated checkpoints, activity logs, or complete tool results as core memory.
 4. For each item in a project `MEMORY.md`, ask whether it would still be true after moving to a completely different project. If yes, it is cross-project memory: remove it from the project `MEMORY.md` and write it to the shared global `MEMORY.md`, reading and deduplicating the global file first. Do not keep duplicate copies in both scopes. Keep an item in project memory only when it is genuinely limited to the current project.
-5. Consolidate durable rationale, history, trade-offs, procedures, and examples that do not belong in core memory into one or more clearly named topic notes. Do not copy all remaining content verbatim into one giant notes file; merge repeated records and keep only detail that will help future work.
+5. Consolidate durable rationale, history, trade-offs, procedures, and examples that do not belong in core memory into one or more clearly named topic notes. Every notes filename must be short, stable, readable, and specific enough to identify the topic from the name alone; use concise Chinese or English kebab-case. Do not use generic names such as `notes.md`, `details.md`, `history.md`, `checkpoint-history.md`, timestamps, or random IDs. If an existing note has an overly generic name, rename it to match its content and update any `MEMORY.md` pointer. Do not copy all remaining content verbatim into one giant notes file; merge repeated records and keep only detail that will help future work.
 6. Remove temporary state, invalid or duplicate content, raw logs, authentication data, and model guesses that fail the memory quality gate. Treat the suggested target as a reference, and do not delete facts that still have durable value merely to reach that number.
 7. Edit only the listed `MEMORY.md` and its sibling `notes/` files; when project memory must be migrated to global memory, you may also edit the corresponding global `MEMORY.md`, but do not rewrite unrelated memory files or bypass the normal evidence, scope, and deduplication rules.
 8. After reorganizing, verify that `MEMORY.md` is clear, self-contained enough to use as automatically loaded core memory, and that topic notes are searchable, non-duplicative, and free of sensitive information; confirm that cross-project facts are stored in the global scope.
@@ -69,7 +69,7 @@ _DEFAULT_MEMORY_EXTRACTION_PROMPT = """
 1. 只使用用户明确陈述的事实、对话中确认的决定，或根据当前权威来源核实过的项目知识。不要把猜测、模型推断、临时工具输出或未经核实的声明写入记忆。
 2. 使用明确主体规范化每一条存储的事实。如果主体或作用域不明确，则不要写入。
 3. 将跨项目事实写入 `global/`；将项目特有事实写入来源项目的 `projects/p_<project_id>/`。如果项目 `MEMORY.md` 中已有一条换到完全不同项目后仍成立的记忆，将它迁移到全局 `MEMORY.md`，先读取并去重全局内容，不要在多个作用域重复保存同一事实。
-4. 保持 `MEMORY.md` 短小、稳定、原子化且经常有用。将关联的理由、历史、取舍、流程、示例和其他持久详细内容写入匹配的 `notes/` 目录下的主题笔记。不要仅因为内容不适合放入 `MEMORY.md` 就丢弃符合条件的详细内容。
+4. 保持 `MEMORY.md` 短小、稳定、原子化且经常有用。将关联的理由、历史、取舍、流程、示例和其他持久详细内容写入匹配的 `notes/` 目录下的主题笔记；主题笔记文件名必须简短、稳定、可读，并能直接体现正文主题，不要使用 `notes.md`、`details.md`、`history.md`、纯时间戳或随机 ID 等泛化名称。不要仅因为内容不适合放入 `MEMORY.md` 就丢弃符合条件的详细内容。
 5. 永远不要保存密码、Token、密钥、认证数据、敏感个人信息、临时任务状态、待处理操作或模型猜测。
 6. 写入前，如果现有上下文缺失、被截断、发生变化或不足以支持精确编辑，则检查当前目标文件和相关笔记。优先合并并去重已有主题，不要追加相互冲突的副本。
 7. 如果来源 Agent 已经成功完成记忆写入、编辑或删除，并且结果已确认，则视为已经处理。不要重复执行或重写格式；只有失败、未完成、被后续修正覆盖或独立符合条件的更新才继续处理。
@@ -96,7 +96,7 @@ First decide whether this conversation produced information worth retaining long
 1. Use only facts explicitly stated by the user, decisions confirmed in the conversation, or project knowledge verified against a current authoritative source. Do not turn guesses, model inferences, temporary tool output, or unverified claims into memory.
 2. Normalize every stored fact with an explicit subject. If the subject or scope is unclear, do not write it.
 3. Put cross-project facts in `global/`; put project-specific facts in the source project's `projects/p_<project_id>/`. If a project `MEMORY.md` already contains a memory that would remain true in a completely different project, migrate it to the global `MEMORY.md`, reading and deduplicating the global content first. Do not duplicate the same fact across scopes.
-4. Keep `MEMORY.md` short, stable, atomic, and frequently useful. Put connected rationale, history, trade-offs, procedures, examples, and other durable detail into a topic-oriented file under the matching `notes/` directory. Do not discard qualifying detail merely because it does not belong in `MEMORY.md`.
+4. Keep `MEMORY.md` short, stable, atomic, and frequently useful. Put connected rationale, history, trade-offs, procedures, examples, and other durable detail into a topic-oriented file under the matching `notes/` directory; the topic filename must be short, stable, readable, and directly describe the note content. Do not use generic names such as `notes.md`, `details.md`, `history.md`, timestamps, or random IDs. Do not discard qualifying detail merely because it does not belong in `MEMORY.md`.
 5. Never store passwords, tokens, keys, authentication data, sensitive personal information, temporary task state, pending operations, or model guesses.
 6. Before writing, inspect the current target file and relevant notes when the existing context is missing, truncated, changed, or insufficient for a precise edit. Merge and deduplicate existing topics instead of appending conflicting copies.
 7. Treat a successful source-Agent memory write, edit, or deletion with a confirmed result as already handled. Do not repeat it or rewrite formatting. Continue only for failed, incomplete, superseded, or independently qualifying updates.
@@ -126,7 +126,7 @@ _CLAW_MEMORY_EXTRACTION_PROMPT = """
 1. 只使用用户明确陈述的事实、对话中确认的决定，或根据当前权威来源核实过的项目知识。不要把猜测、模型推断、临时工具输出或未经核实的声明写入记忆。
 2. 使用明确主体规范化每一条存储的事实。如果主体或作用域不明确，则不要写入。
 3. 将跨项目事实写入 `global/`；将项目特有事实写入来源项目的 `projects/p_<project_id>/`。如果项目 `MEMORY.md` 中已有一条换到完全不同项目后仍成立的记忆，将它迁移到全局 `MEMORY.md`，先读取并去重全局内容，不要在多个作用域重复保存同一事实。
-4. 保持 `MEMORY.md` 短小、稳定、原子化且经常有用。将关联的理由、历史、取舍、流程、示例和其他持久详细内容写入匹配的 `notes/` 目录下的主题笔记。不要仅因为内容不适合放入 `MEMORY.md` 就丢弃符合条件的详细内容。
+4. 保持 `MEMORY.md` 短小、稳定、原子化且经常有用。将关联的理由、历史、取舍、流程、示例和其他持久详细内容写入匹配的 `notes/` 目录下的主题笔记；主题笔记文件名必须简短、稳定、可读，并能直接体现正文主题，不要使用 `notes.md`、`details.md`、`history.md`、纯时间戳或随机 ID 等泛化名称。不要仅因为内容不适合放入 `MEMORY.md` 就丢弃符合条件的详细内容。
 5. 永远不要保存密码、Token、密钥、认证数据、敏感个人信息、临时任务状态、待处理操作或模型猜测。
 6. 写入前，如果现有上下文缺失、被截断、发生变化或不足以支持精确编辑，则检查当前目标文件和相关笔记。优先合并并去重已有主题，不要追加相互冲突的副本。
 7. 如果来源 Agent 已经成功完成记忆写入、编辑或删除，并且结果已确认，则视为已经处理。不要重复执行或重写格式；只有失败、未完成、被后续修正覆盖或独立符合条件的更新才继续处理。
@@ -153,7 +153,7 @@ First decide whether this conversation produced information worth retaining long
 1. Use only facts explicitly stated by the user, decisions confirmed in the conversation, or project knowledge verified against a current authoritative source. Do not turn guesses, model inferences, temporary tool output, or unverified claims into memory.
 2. Normalize every stored fact with an explicit subject. If the subject or scope is unclear, do not write it.
 3. Put cross-project facts in `global/`; put project-specific facts in the source project's `projects/p_<project_id>/`. If a project `MEMORY.md` already contains a memory that would remain true in a completely different project, migrate it to the global `MEMORY.md`, reading and deduplicating the global content first. Do not duplicate the same fact across scopes.
-4. Keep `MEMORY.md` short, stable, atomic, and frequently useful. Put connected rationale, history, trade-offs, procedures, examples, and other durable detail into a topic-oriented file under the matching `notes/` directory. Do not discard qualifying detail merely because it does not belong in `MEMORY.md`.
+4. Keep `MEMORY.md` short, stable, atomic, and frequently useful. Put connected rationale, history, trade-offs, procedures, examples, and other durable detail into a topic-oriented file under the matching `notes/` directory; the topic filename must be short, stable, readable, and directly describe the note content. Do not use generic names such as `notes.md`, `details.md`, `history.md`, timestamps, or random IDs. Do not discard qualifying detail merely because it does not belong in `MEMORY.md`.
 5. Never store passwords, tokens, keys, authentication data, sensitive personal information, temporary task state, pending operations, or model guesses.
 6. Before writing, inspect the current target file and relevant notes when the existing context is missing, truncated, changed, or insufficient for a precise edit. Merge and deduplicate existing topics instead of appending conflicting copies.
 7. Treat a successful source-Agent memory write, edit, or deletion with a confirmed result as already handled. Do not repeat it or rewrite formatting. Continue only for failed, incomplete, superseded, or independently qualifying updates.

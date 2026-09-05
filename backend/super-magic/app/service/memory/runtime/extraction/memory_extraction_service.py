@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import uuid
 from typing import TYPE_CHECKING
 
@@ -19,7 +20,10 @@ logger = get_logger(__name__)
 
 
 class MemoryExtractionService:
-    """为每个已提交回合独立创建后台 fork 记忆提取任务。"""
+    """为符合条件的回合创建后台 fork 记忆提取任务，并保证全局单任务运行。"""
+
+    _run_lock_guard = threading.Lock()
+    _run_lock = threading.Lock()
 
     def __init__(
         self,
@@ -33,20 +37,34 @@ class MemoryExtractionService:
         self,
         agent_context: "AgentContext",
         snapshot: "AgentContextSnapshot",
-    ) -> None:
-        """独立提交当前回合，不等待或检查其他提取任务。"""
+    ) -> bool:
+        """提交当前回合；已有记忆整理任务运行时直接跳过并返回 False。"""
+        if not self._try_acquire_run_lock():
+            source = snapshot.source
+            logger.info(
+                "已有会话后记忆整理任务运行，跳过本次提取: "
+                f"source={source.target.agent_name}<{source.agent_id}>"
+            )
+            return False
+
         generation = uuid.uuid4().hex
-        task = asyncio.create_task(
-            self._run_extraction(agent_context, snapshot, generation),
-            name=f"memory-after-run-{generation}",
-        )
+        try:
+            task = asyncio.create_task(
+                self._run_extraction(agent_context, snapshot, generation),
+                name=f"memory-after-run-{generation}",
+            )
+        except BaseException:
+            self._release_run_lock()
+            raise
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+        task.add_done_callback(self._release_run_lock_callback)
         source = snapshot.source
         logger.info(
             "会话后记忆提取任务已发起: "
             f"source={source.target.agent_name}<{source.agent_id}>, generation={generation}"
         )
+        return True
 
     async def _run_extraction(
         self,
@@ -112,6 +130,24 @@ class MemoryExtractionService:
             raise
         except Exception:
             logger.warning("会话后记忆提取失败，本轮主任务不受影响", exc_info=True)
+
+    @classmethod
+    def _try_acquire_run_lock(cls) -> bool:
+        """以非阻塞方式获取进程内跨实例的记忆整理锁。"""
+        with cls._run_lock_guard:
+            return cls._run_lock.acquire(blocking=False)
+
+    @classmethod
+    def _release_run_lock_callback(cls, _task: "asyncio.Task[None]") -> None:
+        """在记忆整理子 Agent 完成后释放运行时锁。"""
+        cls._release_run_lock()
+
+    @classmethod
+    def _release_run_lock(cls) -> None:
+        """释放当前进程持有的内存记忆整理锁。"""
+        with cls._run_lock_guard:
+            if cls._run_lock.locked():
+                cls._run_lock.release()
 
 
 __all__ = ["MemoryExtractionService"]
