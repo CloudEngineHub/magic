@@ -73,7 +73,10 @@ class MemoryExtractionService:
 
             source = snapshot.source
             agent_id = f"memory-after-run-{generation}"
-            prompt = await self._prompt_provider.load(source.target)
+            prompt = await self._prompt_provider.load(
+                source.target,
+                agent_context=agent_context,
+            )
             runtime_dir = await ensure_runtime_directory(
                 PathManager.get_memory_after_run_dir()
                 / f"{source.target.agent_name}<{agent_id}>"
