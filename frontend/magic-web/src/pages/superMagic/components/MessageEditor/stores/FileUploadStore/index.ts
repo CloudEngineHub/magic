@@ -194,6 +194,9 @@ export class FileUploadStore {
 						file_id: fileId,
 						file_name: fileName,
 						file_path: filePath,
+						relative_file_path:
+							file.saveResult?.relative_file_path || file.defaultRelativePath,
+						is_hidden: file.saveResult?.is_hidden ?? file.isHidden,
 						file_extension: fileExtension,
 						file_size:
 							file.reportResult?.file_size ?? file.result?.size ?? file.file.size,

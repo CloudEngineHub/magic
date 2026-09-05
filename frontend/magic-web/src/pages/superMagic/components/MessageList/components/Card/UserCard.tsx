@@ -16,6 +16,10 @@ import { Document } from "@/infrastructure/editors/tiptap/extension-document"
 import { Paragraph } from "@/infrastructure/editors/tiptap/extension-paragraph"
 import { Text as TiptapText } from "@/infrastructure/editors/tiptap/extension-text"
 import { HardBlock } from "@/pages/superMagic/components/MessageEditor/extensions"
+import {
+	InspectorDetailExtension,
+	transformInspectorContent,
+} from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
 import { copyWithMetadata } from "@/utils/clipboard-helpers"
 import { MessageStatus, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { observer } from "mobx-react-lite"
@@ -37,7 +41,6 @@ import { logger as Logger } from "@/utils/log"
 import {
 	getClipboardHtml,
 	getClipboardPlainText,
-	getMentionClipboardRepresentation,
 	prependPortableMentions,
 	resolveMentionForClipboard,
 } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
@@ -186,20 +189,22 @@ export function withUserNode<
 			},
 		)
 
-		const onMenuClick = useMemoizedFn(({ key }: { key: string }) => {
+		const onMenuClick = useMemoizedFn(async ({ key }: { key: string }) => {
 			switch (key) {
-				case MenuKey.CopyMessage:
+				case MenuKey.CopyMessage: {
+					let editor: Editor | undefined
 					try {
 						const richTextContent =
 							messageNode?.content || messageNode?.rich_text?.content
-						const editor = new Editor({
-							content: JSON.parse(richTextContent),
+						editor = new Editor({
+							content: transformInspectorContent(JSON.parse(richTextContent)),
 							extensions: [
 								Document,
 								Paragraph,
 								TiptapText,
 								HardBlock,
 								MentionExtension,
+								InspectorDetailExtension,
 							],
 						})
 
@@ -223,17 +228,9 @@ export function withUserNode<
 							(mention: MentionListItem) =>
 								mention.attrs?.type !== MentionItemType.DESIGN_MARKER,
 						)
-						const portableMentionAttrs = otherMentionItems
-							.map((mention) => mention.attrs)
-							.filter((attrs) =>
-								Boolean(
-									getMentionClipboardRepresentation(
-										attrs,
-										workspaceFiles,
-										currentProjectId,
-									),
-								),
-							)
+						const portableMentionAttrs = otherMentionItems.map(
+							(mention) => mention.attrs,
+						)
 						const clipboardContent = prependPortableMentions(
 							editor.getJSON(),
 							portableMentionAttrs,
@@ -266,7 +263,7 @@ export function withUserNode<
 						]
 
 						// Use a mobile-compatible copy method.
-						copyWithMetadata(
+						await copyWithMetadata(
 							contentText,
 							{
 								richText: JSON.stringify(clipboardContent),
@@ -282,8 +279,11 @@ export function withUserNode<
 					} catch (error) {
 						console.error("❌ Copy message error:", error)
 						magicToast.error(t("common.copyFailed"))
+					} finally {
+						editor?.destroy()
 					}
 					break
+				}
 				case MenuKey.CreateTask:
 					openCreateModal(onSaveTask, {
 						workspace_id:

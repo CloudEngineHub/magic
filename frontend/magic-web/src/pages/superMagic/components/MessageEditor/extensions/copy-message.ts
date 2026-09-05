@@ -27,7 +27,6 @@ import { findAttachmentByPath } from "@/pages/superMagic/components/MessageList/
 import {
 	getClipboardHtml,
 	getClipboardPlainText,
-	getMentionClipboardRepresentation,
 	resolveClipboardContent,
 	resolveMentionForClipboard,
 } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
@@ -42,6 +41,8 @@ import {
 	type ReferencedProjectAttachment,
 	type ReferencedProjectFileTarget,
 } from "@/pages/superMagic/services/referencedProjectAttachmentResolver"
+import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
+import { collectMentionItemsFromContent } from "../services/uploadMentionService"
 
 interface CopyMessageOptions {
 	onMentionsInsert?: (items: TiptapMentionAttributes[]) => void
@@ -120,35 +121,13 @@ function createMentionFromMarkdownTarget(
 function collectMentionAttrs(node: ProseMirrorNode, mentions: TiptapMentionAttributes[]): void {
 	if (node.type.name === "mention" && node.attrs) {
 		mentions.push(node.attrs as TiptapMentionAttributes)
-	} else if (node.type.name === INSPECTOR_DETAIL_TYPE && node.attrs?.fileMention) {
-		mentions.push(node.attrs.fileMention as TiptapMentionAttributes)
+	} else if (node.type.name === INSPECTOR_DETAIL_TYPE) {
+		for (const key of ["fileMention", "screenshotMention"] as const) {
+			if (node.attrs[key]) mentions.push(node.attrs[key] as TiptapMentionAttributes)
+		}
 	}
 
 	node.forEach((child) => collectMentionAttrs(child, mentions))
-}
-
-function hasPortableProjectMention(
-	mentions: TiptapMentionAttributes[],
-	workspaceFiles: AttachmentItem[],
-	currentProjectId?: string,
-): boolean {
-	return mentions.some((attrs) => {
-		if (
-			attrs.type !== MentionItemType.PROJECT_FILE &&
-			attrs.type !== MentionItemType.UPLOAD_FILE &&
-			attrs.type !== MentionItemType.FOLDER
-		) {
-			return false
-		}
-
-		try {
-			return Boolean(
-				getMentionClipboardRepresentation(attrs, workspaceFiles, currentProjectId),
-			)
-		} catch {
-			return false
-		}
-	})
 }
 
 interface ClipboardPayload {
@@ -180,7 +159,10 @@ function createClipboardPayload(
 		collectMentionAttrs(node, mentions)
 	})
 
-	if (!hasPortableProjectMention(mentions, workspaceFiles, currentProjectId)) return null
+	// 没有文件路径也需要保留 JSON；独立元素标签同样不能退回浏览器的纯文本复制。
+	const containsInspector = (node: JSONContent): boolean =>
+		node.type === INSPECTOR_DETAIL_TYPE || Boolean(node.content?.some(containsInspector))
+	if (mentions.length === 0 && !containsInspector(richTextJson)) return null
 
 	const clipboardContent = resolveClipboardContent(richTextJson, workspaceFiles, currentProjectId)
 	const clipboardMentions = mentions.map((attrs) =>
@@ -189,6 +171,7 @@ function createClipboardPayload(
 
 	const metadata: Record<string, unknown> = {
 		richText: JSON.stringify(clipboardContent),
+		sourceProjectId: currentProjectId,
 	}
 	if (clipboardMentions.length > 0) {
 		metadata.mentions = clipboardMentions.map((attrs) => ({ attrs }))
@@ -508,6 +491,19 @@ function prepareRichTextContent(
 			attrs,
 		}
 	}
+	if (content.type === INSPECTOR_DETAIL_TYPE && content.attrs) {
+		const attrs = { ...content.attrs }
+		for (const key of ["fileMention", "screenshotMention"] as const) {
+			if (attrs[key]) {
+				attrs[key] = prepareMentionAttrs(
+					attrs[key] as TiptapMentionAttributes,
+					metadata,
+					dataService,
+				)
+			}
+		}
+		transformedContent = { ...content, attrs }
+	}
 
 	if (content.content && Array.isArray(content.content)) {
 		const transformedChildren = content.content
@@ -527,6 +523,8 @@ function prepareRichTextContent(
 
 const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 	name: "copyMessage",
+	// Tiptap 会反转同优先级扩展；先恢复资源，再让通用文本插件处理剩余粘贴。
+	priority: 110,
 
 	addOptions() {
 		return {
@@ -594,8 +592,17 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 							const hasReferencedProjectTarget = targets.some(
 								(target) => target.scope === "referenced-project",
 							)
+							const currentProjectId = this.options.getCurrentProjectId?.()
+							const needsWorkspaceLookup = Boolean(
+								currentProjectId &&
+								targets.some(
+									(target) =>
+										target.scope === "workspace" &&
+										!findAttachmentByPath(attachments, target.relativePath),
+								),
+							)
 
-							if (!hasReferencedProjectTarget) {
+							if (!hasReferencedProjectTarget && !needsWorkspaceLookup) {
 								const parts = buildClipboardPasteParts(html, plainText, attachments)
 								if (!hasMentionPart(parts)) return false
 
@@ -604,7 +611,11 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 									runActiveEditor(
 										this.editor,
 										(editor) => {
-											if (!editor.commands.insertContent(paste.content))
+											if (
+												!editor.commands.insertContent(
+													transformInspectorContent(paste.content),
+												)
+											)
 												return false
 											this.options.onMentionsInsert?.(paste.mentions)
 											return true
@@ -628,15 +639,38 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 								let resolvedPaste: ReturnType<typeof buildPasteContent> | null =
 									null
 								try {
-									const referencedProjectAttachments =
-										await resolveReferencedProjectTargets(targets)
+									// 仅在可见列表未命中时查询隐藏文件，不改变文件面板的可见性。
+									const [referencedProjectAttachments, workspaceFiles] =
+										await Promise.all([
+											resolveReferencedProjectTargets(targets),
+											needsWorkspaceLookup && currentProjectId
+												? loadProjectAttachments({
+														projectId: currentProjectId,
+														includeHidden: true,
+														enableErrorMessagePrompt: false,
+													})
+														.then((result) => result.list)
+														.catch((error: unknown) => {
+															console.warn(
+																"Workspace Markdown paste could not be resolved",
+																error,
+															)
+															return attachments
+														})
+												: attachments,
+										])
 									const parts = buildClipboardPasteParts(
 										html,
 										plainText,
-										attachments,
+										workspaceFiles,
 										referencedProjectAttachments,
 									)
-									if (parts) resolvedPaste = buildPasteContent(parts)
+									if (parts) {
+										resolvedPaste = buildPasteContent(parts)
+										resolvedPaste.content = transformInspectorContent(
+											resolvedPaste.content,
+										)
+									}
 								} catch (error) {
 									console.warn(
 										"Referenced project Markdown paste could not be resolved",
@@ -646,6 +680,11 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 
 								try {
 									runActiveEditor(this.editor, (editor) => {
+										if (
+											this.options.getCurrentProjectId?.() !==
+											currentProjectId
+										)
+											return
 										// 文档内容发生变化时不再按旧位置转换，只在当前光标处插入一次原始 Markdown。
 										const canUseCapturedSelection = initialDoc.eq(
 											editor.state.doc,
@@ -676,7 +715,6 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 
 						// 使用兼容移动端的方式提取元数据
 						const metadata = extractClipboardMetadata(clipboardData)
-						console.log("📋 Extracted clipboard metadata:", metadata)
 
 						if (!metadata) {
 							return false
@@ -719,7 +757,11 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 										(editor) => {
 											if (!editor.commands.insertContent(editorContent))
 												return false
-											syncMentions(converted.mentions)
+											syncMentions(
+												collectMentionItemsFromContent(editorContent).map(
+													(item) => item.attrs,
+												),
+											)
 											return true
 										},
 										false,

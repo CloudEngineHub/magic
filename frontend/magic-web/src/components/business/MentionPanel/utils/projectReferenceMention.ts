@@ -394,6 +394,8 @@ export function createProjectFileMentionData(
 		file_id: String(fileId),
 		file_name: fileName,
 		file_path: normalizeProjectReferencePath(filePath),
+		relative_file_path: normalizeProjectReferencePath(filePath),
+		is_hidden: file.is_hidden,
 		file_extension: file.file_extension || "",
 		...(file.project_id ? { project_id: file.project_id } : {}),
 		file_size: file.file_size,

@@ -451,7 +451,10 @@ export function isMagicClipboard(clipboardData: DataTransfer | null): boolean {
 
 	// 检查是否有自定义MIME类型(桌面端)
 	const types = Array.from(clipboardData.types || [])
-	if (types.includes("text/x-magic-message-rich-text")) {
+	if (
+		types.includes("text/x-magic-message-rich-text") ||
+		types.includes("text/x-magic-message-mentions")
+	) {
 		return true
 	}
 

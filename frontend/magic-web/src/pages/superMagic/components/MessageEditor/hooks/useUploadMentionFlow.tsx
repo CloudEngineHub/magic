@@ -168,7 +168,10 @@ export default function useUploadMentionFlow({
 						file_id: file.saveResult.file_id,
 						file_name: file.saveResult.file_name ?? file.name,
 						file_path:
-							file.saveResult.relative_file_path ?? file.saveResult.file_key ?? "",
+							file.saveResult.relative_file_path || file.defaultRelativePath || "",
+						relative_file_path:
+							file.saveResult.relative_file_path || file.defaultRelativePath,
+						is_hidden: file.saveResult.is_hidden ?? file.isHidden,
 						file_extension: file.name.split(".").pop() ?? "",
 						file_size: file.saveResult.file_size ?? file.file.size,
 					},
@@ -187,6 +190,8 @@ export default function useUploadMentionFlow({
 					upload_status: file.status,
 					upload_error: file.error,
 					file_path: file.reportResult?.file_key ?? file.result?.key ?? "",
+					relative_file_path: file.defaultRelativePath,
+					is_hidden: file.isHidden,
 				},
 			}
 		},

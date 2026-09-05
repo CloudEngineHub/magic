@@ -141,8 +141,11 @@ const RichText = memo(
 					const collectMentions = (n: Node) => {
 						if (n.type.name === "mention" && n.attrs) {
 							mentions.push(n.attrs as TiptapMentionAttributes)
-						} else if (n.type.name === INSPECTOR_DETAIL_TYPE && n.attrs.fileMention) {
-							mentions.push(n.attrs.fileMention as TiptapMentionAttributes)
+						} else if (n.type.name === INSPECTOR_DETAIL_TYPE) {
+							for (const key of ["fileMention", "screenshotMention"] as const) {
+								if (n.attrs[key])
+									mentions.push(n.attrs[key] as TiptapMentionAttributes)
+							}
 						}
 						n.forEach((child) => collectMentions(child))
 					}
@@ -165,6 +168,7 @@ const RichText = memo(
 				// Build magic clipboard metadata
 				const metadata: Record<string, unknown> = {
 					richText: JSON.stringify(clipboardContent),
+					sourceProjectId: currentProjectId,
 				}
 				if (clipboardMentions.length > 0) {
 					metadata.mentions = clipboardMentions.map((attrs) => ({ attrs }))

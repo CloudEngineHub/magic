@@ -75,15 +75,17 @@ export function transformUploadFileToProjectFile(
 	uploadFileData: UploadFileMentionData,
 	saveResult: FileData["saveResult"],
 ): ProjectFileMentionData {
+	// 保存接口未返回路径时沿用该次上传已确定的工作区路径，不使用对象存储 key 猜测。
+	const relativePath = saveResult?.relative_file_path || uploadFileData.relative_file_path || ""
 	return {
 		file_id: saveResult?.file_id || "",
-		file_name: saveResult?.file_name || "",
-		file_path: saveResult?.relative_file_path || "",
-		relative_file_path: saveResult?.relative_file_path || "",
+		file_name: saveResult?.file_name || uploadFileData.file_name,
+		file_path: relativePath,
+		relative_file_path: relativePath,
 		file_extension: uploadFileData.file_extension,
 		project_id: saveResult?.project_id,
 		file_size: saveResult?.file_size,
-		is_hidden: saveResult?.is_hidden,
+		is_hidden: saveResult?.is_hidden ?? uploadFileData.is_hidden,
 	}
 }
 

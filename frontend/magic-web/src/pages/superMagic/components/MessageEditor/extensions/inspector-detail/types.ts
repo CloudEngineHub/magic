@@ -27,6 +27,10 @@ export interface InspectorDetailAttrs {
 	selectorMatchCount?: number
 	/** Optional source file mention for the inspected HTML file. */
 	fileMention?: TiptapMentionAttributes | null
+	/** Optional screenshot mention rendered inside the inspector detail card. */
+	screenshotMention?: TiptapMentionAttributes | null
+	/** Unique capture id; also the IndexedDB key for the local screenshot. */
+	captureId?: string | null
 }
 
 export interface InspectorDetailOptions {}

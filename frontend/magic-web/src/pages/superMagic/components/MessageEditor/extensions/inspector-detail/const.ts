@@ -6,3 +6,6 @@ export const INSPECTOR_DETAIL_TYPE = "inspector-detail"
  * blocks in plain-text messages and render them as collapsible panels.
  */
 export const INSPECTOR_DETAIL_MARKER = "\u2063"
+
+/** Invisible suffix used to persist captureId without a visible prompt line. */
+export const INSPECTOR_CAPTURE_ID_MARKER = `${INSPECTOR_DETAIL_MARKER}\u2064`

@@ -1,4 +1,5 @@
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
+import i18next from "i18next"
 import {
 	MentionItemType,
 	type DirectoryMentionData,
@@ -17,6 +18,7 @@ import {
 	escapeMarkdownLinkLabel,
 } from "@/pages/superMagic/utils/filePathMention"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
+import { serializeInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/transform"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 
 function getWorkspaceResourceId(attrs: TiptapMentionAttributes): string | undefined {
@@ -183,13 +185,20 @@ export function resolveClipboardContent(
 		}
 	}
 
-	if (content.type === INSPECTOR_DETAIL_TYPE && content.attrs?.fileMention) {
-		const attrs = content.attrs.fileMention as TiptapMentionAttributes
-		const resolvedAttrs = resolveMentionForClipboard(attrs, workspaceFiles, currentProjectId)
-		if (resolvedAttrs !== attrs) {
-			resolvedContent = {
-				...resolvedContent,
-				attrs: { ...content.attrs, fileMention: resolvedAttrs },
+	if (content.type === INSPECTOR_DETAIL_TYPE && content.attrs) {
+		for (const key of ["fileMention", "screenshotMention"] as const) {
+			const attrs = content.attrs[key] as TiptapMentionAttributes | undefined
+			if (!attrs) continue
+			const resolvedAttrs = resolveMentionForClipboard(
+				attrs,
+				workspaceFiles,
+				currentProjectId,
+			)
+			if (resolvedAttrs !== attrs) {
+				resolvedContent = {
+					...resolvedContent,
+					attrs: { ...resolvedContent.attrs, [key]: resolvedAttrs },
+				}
 			}
 		}
 	}
@@ -254,8 +263,11 @@ function collectMentionIds(content: JSONContent, ids: Set<string>): void {
 		ids.add(getMentionUniqueId(content.attrs as TiptapMentionAttributes))
 	}
 
-	if (content.type === INSPECTOR_DETAIL_TYPE && content.attrs?.fileMention) {
-		ids.add(getMentionUniqueId(content.attrs.fileMention as TiptapMentionAttributes))
+	if (content.type === INSPECTOR_DETAIL_TYPE && content.attrs) {
+		for (const key of ["fileMention", "screenshotMention"] as const) {
+			if (content.attrs[key])
+				ids.add(getMentionUniqueId(content.attrs[key] as TiptapMentionAttributes))
+		}
 	}
 
 	content.content?.forEach((child) => collectMentionIds(child, ids))
@@ -274,9 +286,7 @@ export function prependPortableMentions(
 
 	const missingMentions = mentionAttrs
 		.map((attrs) => resolveMentionForClipboard(attrs, workspaceFiles, currentProjectId))
-		.filter((attrs) =>
-			Boolean(getMentionClipboardRepresentation(attrs, workspaceFiles, currentProjectId)),
-		)
+		.filter(isWorkspaceFileMention)
 		.filter((attrs) => {
 			const id = getMentionUniqueId(attrs)
 			if (existingIds.has(id)) return false
@@ -327,12 +337,7 @@ export function getClipboardPlainText(
 		}
 
 		if (node.type === INSPECTOR_DETAIL_TYPE) {
-			const attrs = node.attrs || {}
-			const lines: string[] = []
-			if (attrs.selector) lines.push(`selector: ${attrs.selector}`)
-			if (attrs.size) lines.push(`size: ${attrs.size}`)
-			if (attrs.textContent) lines.push(`textContent: "${attrs.textContent}"`)
-			return lines.length > 0 ? `${lines.join("\n")}\n` : ""
+			return serialize(serializeClipboardInspectors({ type: "doc", content: [node] }))
 		}
 
 		if (node.type === "hardBreak") return "\n"
@@ -341,7 +346,24 @@ export function getClipboardPlainText(
 		return node.type === "paragraph" ? `${childText}\n` : childText
 	}
 
-	return serialize(content).replace(/\n$/, "")
+	return serialize(serializeClipboardInspectors(content)).replace(/\n$/, "")
+}
+
+/** 复用发送时的完整元素描述；文件节点仍由剪贴板序列化为标准链接。 */
+function serializeClipboardInspectors(content: JSONContent): JSONContent {
+	const t = i18next.getFixedT(i18next.language, "super")
+	return serializeInspectorContent(content, {
+		title: t("stylePanel.inspector.agentPromptTitle"),
+		selector: t("stylePanel.inspector.selector"),
+		size: t("stylePanel.inspector.size"),
+		computedStyles: t("stylePanel.inspector.computedStyles"),
+		textContent: t("stylePanel.inspector.textContent"),
+		elementAttributes: t("stylePanel.inspector.elementAttributes"),
+		resource: t("stylePanel.inspector.resource"),
+		domContext: t("stylePanel.inspector.domContext"),
+		elementHtml: t("stylePanel.inspector.elementHtml"),
+		selectorMatchCount: t("stylePanel.inspector.selectorMatchCount"),
+	})
 }
 
 export function getClipboardHtml(
@@ -351,6 +373,51 @@ export function getClipboardHtml(
 ): string {
 	const container = document.createElement("div")
 	container.innerHTML = htmlContent
+	// HTML 的元素卡片占位文案不能替代详情；外部编辑器也应获得文件链接与完整描述。
+	container
+		.querySelectorAll<HTMLElement>(`[data-type="${INSPECTOR_DETAIL_TYPE}"]`)
+		.forEach((element) => {
+			const attrs: Record<string, unknown> = {}
+			for (const [key, value] of Object.entries(element.dataset)) {
+				if (key === "type") continue
+				if (key === "fileMention" || key === "screenshotMention") {
+					try {
+						attrs[key] = JSON.parse(value || "null")
+					} catch {
+						attrs[key] = null
+					}
+				} else if (key === "selectorMatchCount" || key === "styleCount") {
+					attrs[key] = Number(value)
+				} else {
+					attrs[key] = value
+				}
+			}
+			const details = serializeClipboardInspectors({
+				type: "doc",
+				content: [{ type: INSPECTOR_DETAIL_TYPE, attrs }],
+			})
+			const replacement = document.createElement("span")
+			details.content?.forEach((paragraph) => {
+				paragraph.content?.forEach((node) => {
+					if (node.type === "mention" && node.attrs) {
+						const mention = node.attrs as TiptapMentionAttributes
+						const portable = getMentionClipboardRepresentation(
+							mention,
+							workspaceFiles,
+							currentProjectId,
+						)
+						if (portable)
+							replacement.insertAdjacentHTML("beforeend", portable.htmlContent)
+						else
+							replacement.append(
+								document.createTextNode(getMentionDisplayName(mention)),
+							)
+					} else if (node.text) replacement.append(document.createTextNode(node.text))
+				})
+				replacement.append(document.createElement("br"))
+			})
+			element.replaceWith(replacement)
+		})
 
 	container.querySelectorAll<HTMLElement>("span.magic-mention").forEach((element) => {
 		const type = element.dataset.type
