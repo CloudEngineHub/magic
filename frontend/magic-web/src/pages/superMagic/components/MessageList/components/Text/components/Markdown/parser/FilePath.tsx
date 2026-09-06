@@ -3,6 +3,7 @@ import { decodePathForDisplay, findAttachmentByPath } from "./helper"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import { FileReference, getFileExtensionFromPath } from "./FileReference"
+import { createCanonicalWorkspaceHref } from "@/pages/superMagic/utils/filePathMention"
 
 export const FilePath = observer((props: { path?: unknown }) => {
 	const { path } = props
@@ -29,6 +30,7 @@ export const FilePath = observer((props: { path?: unknown }) => {
 		return (
 			<FileReference
 				label={displayPath}
+				href={createCanonicalWorkspaceHref(normalizedPath) ?? undefined}
 				fileType={fileInfo.file_extension || getFileExtensionFromPath(displayPath)}
 				onClick={onClick}
 				title={displayPath}
@@ -39,6 +41,7 @@ export const FilePath = observer((props: { path?: unknown }) => {
 	return (
 		<FileReference
 			label={displayPath}
+			href={createCanonicalWorkspaceHref(normalizedPath) ?? undefined}
 			fileType={getFileExtensionFromPath(displayPath)}
 			disabled
 			title={`File does not exist: ${displayPath}`}

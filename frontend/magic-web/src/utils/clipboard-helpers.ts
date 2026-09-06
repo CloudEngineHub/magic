@@ -228,6 +228,21 @@ export interface MagicClipboardMetadata {
 	[key: string]: unknown
 }
 
+export interface MagicClipboardContent {
+	plainText: string
+	metadata: MagicClipboardMetadata
+	htmlContent?: string
+}
+
+function embedClipboardMetadata({
+	plainText,
+	metadata,
+	htmlContent,
+}: MagicClipboardContent): string {
+	const encoded = btoa(encodeURIComponent(JSON.stringify(metadata)))
+	return `<div data-magic-clipboard="${encoded}">${htmlContent || escapeHtml(plainText)}</div>`
+}
+
 /**
  * 从剪贴板数据中提取元数据
  * 优先级: HTML data属性 > 自定义MIME类型 > null
@@ -296,7 +311,42 @@ export function copyWithMetadata(
 	plainText: string,
 	metadata: MagicClipboardMetadata,
 	htmlContent?: string,
+): Promise<void>
+export function copyWithMetadata(content: Promise<MagicClipboardContent>): Promise<void>
+export function copyWithMetadata(
+	plainText: string | Promise<MagicClipboardContent>,
+	metadata: MagicClipboardMetadata = {},
+	htmlContent?: string,
 ): Promise<void> {
+	if (typeof plainText !== "string") {
+		const content = plainText
+		// 查询历史附件路径前就发起写入，避免 Safari 在 await 后丢失用户手势授权。
+		if (navigator.clipboard?.write && window.isSecureContext && window.ClipboardItem) {
+			const items = {
+				"text/plain": content.then(
+					(value) => new Blob([value.plainText], { type: "text/plain" }),
+				),
+				"text/html": content.then(
+					(value) => new Blob([embedClipboardMetadata(value)], { type: "text/html" }),
+				),
+			}
+			return navigator.clipboard.write([new ClipboardItem(items)]).catch(async (error) => {
+				const value = await content
+				try {
+					fallbackCopyWithExecCommand(
+						value.plainText,
+						embedClipboardMetadata(value),
+						value.metadata,
+					)
+				} catch {
+					throw error
+				}
+			})
+		}
+		return content.then((value) =>
+			copyWithMetadata(value.plainText, value.metadata, value.htmlContent),
+		)
+	}
 	// 构建包含元数据的HTML
 	const metadataBase64 = btoa(encodeURIComponent(JSON.stringify(metadata)))
 
@@ -307,7 +357,7 @@ export function copyWithMetadata(
 		: `<div data-magic-clipboard="${metadataBase64}">${escapeHtml(plainText)}</div>`
 
 	// 方案1: 尝试使用现代 Clipboard API (iOS 13.4+, Android Chrome 63+)
-	if (navigator.clipboard && window.isSecureContext) {
+	if (navigator.clipboard?.write && window.isSecureContext && window.ClipboardItem) {
 		// 创建 ClipboardItem (支持多种格式)
 		const items: Record<string, Blob> = {
 			"text/plain": new Blob([plainText], { type: "text/plain" }),

@@ -125,6 +125,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 		return (
 			<FileReference
 				label={children}
+				href={normalizedHref}
 				fileType={
 					resolvedFileInfo.file_extension || getFileExtensionFromPath(normalizedHref)
 				}
@@ -142,6 +143,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 			<span {...safeAttributes} style={normalizedStyle}>
 				<FileReference
 					label={children}
+					href={normalizedHref}
 					fileType={getFileExtensionFromPath(normalizedHref)}
 					disabled
 					title={

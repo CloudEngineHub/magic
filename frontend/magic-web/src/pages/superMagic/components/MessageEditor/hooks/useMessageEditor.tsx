@@ -42,6 +42,7 @@ import {
 	tryNavigatePromptCarouselShortcut,
 } from "../utils/promptCarousel"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
+import { getClipboardPlainText } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 
 interface UseMessageEditorProps {
 	value?: JSONContent
@@ -337,6 +338,16 @@ export const useMessageEditor = ({
 				? [
 						MentionExtension.configure({
 							language: i18n.language as Language,
+							// 原生文本序列化也使用文件链接，避免绕过自定义 copy 时退回 @文件名。
+							renderText: ({ node }) =>
+								getClipboardPlainText(
+									{
+										type: "mention",
+										attrs: node.attrs as TiptapMentionAttributes,
+									},
+									getWorkspaceFilesList?.(),
+									getCurrentProjectId?.(),
+								).trim(),
 							getParentContainer: () => document.body,
 							disableKeyboardShortcuts: isOAuthInProgress,
 							onInsert: (item) => {

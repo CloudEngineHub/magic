@@ -42,8 +42,8 @@ import {
 	getClipboardHtml,
 	getClipboardPlainText,
 	prependPortableMentions,
-	resolveMentionForClipboard,
 } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
+import { resolveClipboardFilePaths } from "@/pages/superMagic/components/MessageList/utils/resolveClipboardFilePaths"
 
 const logger = Logger.createLogger("UserCard")
 
@@ -231,49 +231,56 @@ export function withUserNode<
 						const portableMentionAttrs = otherMentionItems.map(
 							(mention) => mention.attrs,
 						)
-						const clipboardContent = prependPortableMentions(
+						const clipboardEditor = editor
+						const preparedContent = resolveClipboardFilePaths(
 							editor.getJSON(),
 							portableMentionAttrs,
 							workspaceFiles,
 							currentProjectId,
-						)
-						editor.commands.setContent(clipboardContent, { emitUpdate: false })
-						const contentText = getClipboardPlainText(
-							clipboardContent,
-							workspaceFiles,
-							currentProjectId,
-						)
-						const htmlContent = getClipboardHtml(
-							editor.getHTML(),
-							workspaceFiles,
-							currentProjectId,
-						)
+						).then(({ content: resolvedContent, mentions: resolvedMentions }) => {
+							const clipboardContent = prependPortableMentions(
+								resolvedContent,
+								resolvedMentions,
+								workspaceFiles,
+								currentProjectId,
+							)
+							clipboardEditor.commands.setContent(clipboardContent, {
+								emitUpdate: false,
+							})
+							const contentText = getClipboardPlainText(
+								clipboardContent,
+								workspaceFiles,
+								currentProjectId,
+							)
+							const htmlContent = getClipboardHtml(
+								clipboardEditor.getHTML(),
+								workspaceFiles,
+								currentProjectId,
+							)
 
-						// Merge all mentions, prioritizing complete markers extracted from the content.
-						const allMentions = [
-							...markerMentionItems,
-							...otherMentionItems.map((mention) => ({
-								...mention,
-								attrs: resolveMentionForClipboard(
-									mention.attrs,
-									workspaceFiles,
-									currentProjectId,
-								),
-							})),
-						]
+							// Merge all mentions, prioritizing complete markers extracted from the content.
+							const allMentions = [
+								...markerMentionItems,
+								...resolvedMentions.map((attrs, index) => ({
+									...otherMentionItems[index],
+									attrs,
+								})),
+							]
 
+							return {
+								plainText: contentText,
+								metadata: {
+									richText: JSON.stringify(clipboardContent),
+									mentions: allMentions,
+									type: messageNode?.type,
+									messageId: messageNode?.id,
+									sourceProjectId: currentProjectId,
+								},
+								htmlContent,
+							}
+						})
 						// Use a mobile-compatible copy method.
-						await copyWithMetadata(
-							contentText,
-							{
-								richText: JSON.stringify(clipboardContent),
-								mentions: allMentions,
-								type: messageNode?.type,
-								messageId: messageNode?.id,
-								sourceProjectId: currentProjectId,
-							},
-							htmlContent,
-						)
+						await copyWithMetadata(preparedContent)
 
 						magicToast.success(t("common.copySuccess"))
 					} catch (error) {
