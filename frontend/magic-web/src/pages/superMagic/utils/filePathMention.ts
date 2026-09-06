@@ -1,9 +1,27 @@
-import { env } from "@/utils/env"
+import MarkdownIt from "markdown-it"
+import {
+	parseCanonicalWorkspaceHref,
+	parseMarkdownFileHref,
+	type MarkdownFileTarget,
+} from "./markdownFileReference"
+
+export {
+	classifyMarkdownFileHref,
+	createCanonicalWorkspaceHref,
+	createReferencedProjectHref,
+	getReferencedProjectMountBasePath,
+	isMarkdownFileHrefCandidate,
+	isReferencedProjectHrefCandidate,
+	isWorkspaceHrefCandidate,
+	normalizeWorkspacePathForComparison,
+	normalizeWorkspaceRelativePath,
+	parseCanonicalWorkspaceHref,
+	parseMarkdownFileHref,
+	parseReferencedProjectHref,
+	type MarkdownFileTarget,
+} from "./markdownFileReference"
 
 export const FILE_PATH_MENTION_PREFIX = "[@file_path:"
-const WORKSPACE_ROOT_PREFIX = ".workspace/"
-const MAGIC_ROOT_PREFIX = ".magic/"
-const DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH = "/mnt/agfs/magicfs/referenced-projects"
 
 export interface FilePathMentionMatch {
 	path: string
@@ -23,239 +41,10 @@ export interface WorkspaceFileReferenceMatch extends FilePathMentionMatch {
 	href?: string
 }
 
-export type MarkdownFileTarget =
-	| { scope: "workspace"; relativePath: string }
-	| { scope: "referenced-project"; projectId: string; relativePath: string }
-
 export interface MarkdownFileLinkMatch extends FilePathMentionMatch {
 	label: string
 	href: string
 	target: MarkdownFileTarget
-}
-
-function decodeHtmlEntities(value: string): string {
-	return value
-		.replace(/&amp;/gi, "&")
-		.replace(/&quot;/gi, '"')
-		.replace(/&#(?:39|x27);/gi, "'")
-		.replace(/&lt;/gi, "<")
-		.replace(/&gt;/gi, ">")
-}
-
-function decodeURIComponentOnce(value: string): string | null {
-	try {
-		return decodeURIComponent(value)
-	} catch {
-		return null
-	}
-}
-
-function normalizeWorkspacePathSegments(path: string): string | null {
-	const normalizedSlashes = path.replace(/\\/g, "/")
-	if (!normalizedSlashes || normalizedSlashes.startsWith("/")) return null
-
-	const segments: string[] = []
-	for (const segment of normalizedSlashes.split("/")) {
-		if (!segment || segment === ".") continue
-		if (segment === ".." || segment.includes("\0")) return null
-		segments.push(segment)
-	}
-
-	return segments.length > 0 ? segments.join("/") : null
-}
-
-function normalizeReferencedProjectMountBasePath(path: string): string | null {
-	const normalized = decodeHtmlEntities(path.trim()).replace(/\\/g, "/").replace(/\/+$/g, "")
-	if (
-		!normalized.startsWith("/") ||
-		normalized.startsWith("//") ||
-		normalized.includes("\0") ||
-		normalized.includes("?") ||
-		normalized.includes("#") ||
-		normalized.split("/").some((segment) => segment === "." || segment === "..")
-	) {
-		return null
-	}
-
-	return normalized
-}
-
-/** 获取与 Agent 跨项目挂载一致的前端运行时路径。 */
-export function getReferencedProjectMountBasePath(): string {
-	const configuredPath = normalizeReferencedProjectMountBasePath(
-		env("AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH", true) || "",
-	)
-	return configuredPath ?? DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH
-}
-
-/** 将内部工作区相对路径规范化为不带 ./ 的比较形式。 */
-export function normalizeWorkspaceRelativePath(path: string): string | null {
-	if (!path) return null
-
-	const normalized = decodeHtmlEntities(path.trim())
-	const withoutPrefix = normalized.startsWith("./") ? normalized.slice(2) : normalized
-	const withoutWorkspaceRoot = withoutPrefix.startsWith(WORKSPACE_ROOT_PREFIX)
-		? withoutPrefix.slice(WORKSPACE_ROOT_PREFIX.length)
-		: withoutPrefix
-	if (
-		!withoutWorkspaceRoot ||
-		/^[a-z][a-z\d+.-]*:/i.test(withoutWorkspaceRoot) ||
-		withoutWorkspaceRoot.startsWith("//")
-	) {
-		return null
-	}
-
-	return normalizeWorkspacePathSegments(withoutWorkspaceRoot)
-}
-
-/** 兼容附件树中以 / 表示工作区根的历史路径，只用于内部精确比较。 */
-export function normalizeWorkspacePathForComparison(path: string): string | null {
-	if (!path) return null
-
-	const normalized = decodeHtmlEntities(path.trim())
-	if (normalized.startsWith("//")) return null
-
-	const withoutRootPrefix = normalized.startsWith("/") ? normalized.slice(1) : normalized
-	return normalizeWorkspaceRelativePath(withoutRootPrefix)
-}
-
-/** 接受规范的 ./ 工作区链接及历史 .workspace/.magic 入口，并且只做一次 URI 解码。 */
-export function parseCanonicalWorkspaceHref(href: string): string | null {
-	if (!href) return null
-
-	const rawHref = decodeHtmlEntities(href.trim())
-	const isCanonicalHref = rawHref.startsWith("./")
-	const isWorkspaceRootPrefixedHref =
-		rawHref.startsWith(WORKSPACE_ROOT_PREFIX) ||
-		rawHref.startsWith(`./${WORKSPACE_ROOT_PREFIX}`)
-	const isBareMagicHref = rawHref.startsWith(MAGIC_ROOT_PREFIX)
-	if (
-		(!isCanonicalHref && !isWorkspaceRootPrefixedHref && !isBareMagicHref) ||
-		rawHref.includes("#") ||
-		rawHref.includes("?")
-	) {
-		return null
-	}
-
-	const decoded = decodeURIComponentOnce(rawHref)
-	if (decoded === null) return null
-	if (isCanonicalHref && !decoded.startsWith("./")) return null
-	if (
-		!isCanonicalHref &&
-		!decoded.startsWith(WORKSPACE_ROOT_PREFIX) &&
-		!decoded.startsWith(MAGIC_ROOT_PREFIX)
-	)
-		return null
-
-	return normalizeWorkspaceRelativePath(isCanonicalHref ? decoded.slice(2) : decoded)
-}
-
-export function isWorkspaceHrefCandidate(href: string): boolean {
-	const normalizedHref = decodeHtmlEntities(href.trim())
-	return (
-		normalizedHref.startsWith("./") ||
-		normalizedHref.startsWith(WORKSPACE_ROOT_PREFIX) ||
-		normalizedHref.startsWith(MAGIC_ROOT_PREFIX)
-	)
-}
-
-function encodePathSegment(segment: string): string {
-	return segment.replace(/[#?%<>]/g, (char) => {
-		const encoded: Record<string, string> = {
-			"#": "%23",
-			"?": "%3F",
-			"%": "%25",
-			"<": "%3C",
-			">": "%3E",
-		}
-		return encoded[char]
-	})
-}
-
-export function createCanonicalWorkspaceHref(path: string): string | null {
-	const normalizedPath = normalizeWorkspaceRelativePath(path)
-	if (!normalizedPath) return null
-
-	return `./${normalizedPath.split("/").map(encodePathSegment).join("/")}`
-}
-
-export function createReferencedProjectHref(
-	projectId: string,
-	relativePath: string,
-): string | null {
-	const normalizedProjectId = projectId.trim()
-	if (
-		!normalizedProjectId ||
-		normalizedProjectId === "." ||
-		normalizedProjectId === ".." ||
-		/[\\/\0]/.test(normalizedProjectId)
-	) {
-		return null
-	}
-
-	const normalizedRelativePath = normalizeWorkspaceRelativePath(relativePath)
-	if (!normalizedRelativePath) return null
-
-	const encodedBasePath = getReferencedProjectMountBasePath()
-		.split("/")
-		.map(encodePathSegment)
-		.join("/")
-	const encodedProjectId = encodePathSegment(normalizedProjectId)
-	const encodedRelativePath = normalizedRelativePath.split("/").map(encodePathSegment).join("/")
-	return `${encodedBasePath}/${encodedProjectId}/${encodedRelativePath}`
-}
-
-export function parseReferencedProjectHref(
-	href: string,
-): Extract<MarkdownFileTarget, { scope: "referenced-project" }> | null {
-	if (!href) return null
-
-	const rawHref = decodeHtmlEntities(href.trim())
-	if (
-		!rawHref.startsWith("/") ||
-		rawHref.startsWith("//") ||
-		rawHref.includes("?") ||
-		rawHref.includes("#") ||
-		rawHref.includes("\\") ||
-		/%(?:2f|5c)/i.test(rawHref)
-	) {
-		return null
-	}
-
-	const decodedHref = decodeURIComponentOnce(rawHref)
-	if (decodedHref === null) return null
-
-	const pathPrefix = `${getReferencedProjectMountBasePath()}/`
-	if (!decodedHref.startsWith(pathPrefix)) return null
-
-	const mountedPath = decodedHref.slice(pathPrefix.length)
-	const separatorIndex = mountedPath.indexOf("/")
-	if (separatorIndex <= 0) return null
-
-	const projectId = mountedPath.slice(0, separatorIndex)
-	if (projectId === "." || projectId === ".." || projectId.includes("\0")) return null
-
-	const relativePath = normalizeWorkspacePathSegments(mountedPath.slice(separatorIndex + 1))
-	if (!relativePath) return null
-
-	return { scope: "referenced-project", projectId, relativePath }
-}
-
-export function parseMarkdownFileHref(href: string): MarkdownFileTarget | null {
-	const workspacePath = parseCanonicalWorkspaceHref(href)
-	if (workspacePath) return { scope: "workspace", relativePath: workspacePath }
-
-	return parseReferencedProjectHref(href)
-}
-
-export function isReferencedProjectHrefCandidate(href: string): boolean {
-	const rawHref = decodeHtmlEntities(href.trim())
-	const decodedHref = decodeURIComponentOnce(rawHref)
-	return decodedHref?.startsWith(`${getReferencedProjectMountBasePath()}/`) ?? false
-}
-
-export function isMarkdownFileHrefCandidate(href: string): boolean {
-	return isWorkspaceHrefCandidate(href) || isReferencedProjectHrefCandidate(href)
 }
 
 export function escapeMarkdownLinkLabel(label: string): string {
@@ -278,9 +67,7 @@ export function escapeHtmlText(value: string): string {
 	})
 }
 
-function unescapeMarkdownText(value: string): string {
-	return value.replace(/\\([\\[\]()])/g, "$1")
-}
+const markdownLinkParser = new MarkdownIt({ html: false, linkify: false })
 
 interface MarkdownLinkSyntaxMatch {
 	label: string
@@ -298,47 +85,48 @@ function parseMarkdownLinkSyntaxAt(
 
 	let index = startIndex + 1
 	let labelEnd = -1
+	let labelDepth = 0
 	while (index < content.length) {
 		if (content[index] === "\\") {
 			index += 2
 			continue
 		}
+		if (content[index] === "[") labelDepth++
 		if (content[index] === "]") {
-			labelEnd = index
-			break
+			if (labelDepth === 0) {
+				labelEnd = index
+				break
+			}
+			labelDepth--
 		}
 		index++
 	}
 	if (labelEnd === -1 || content[labelEnd + 1] !== "(") return null
 
 	index = labelEnd + 2
-	let href = ""
-	if (content[index] === "<") {
-		const hrefStart = ++index
-		while (index < content.length && content[index] !== ">") index++
-		if (content[index] !== ">") return null
-		href = content.slice(hrefStart, index)
-		index++
-		while (content[index] === " " || content[index] === "\t") index++
-		if (content[index] !== ")") return null
-	} else {
-		const hrefStart = index
-		while (index < content.length) {
-			if (content[index] === "\\") {
-				index += 2
-				continue
-			}
-			if (content[index] === ")") break
-			index++
-		}
-		if (content[index] !== ")") return null
-		href = content.slice(hrefStart, index).trim()
+	while (/[ \t\r\n]/.test(content[index] || "")) index++
+	// 复用 Markdown 语法规则，只记录原文区间，不重新序列化正文。
+	const destination = markdownLinkParser.helpers.parseLinkDestination(
+		content,
+		index,
+		content.length,
+	)
+	if (!destination.ok) return null
+	index = destination.pos
+	const destinationEnd = index
+	while (/[ \t\r\n]/.test(content[index] || "")) index++
+	if (index > destinationEnd && content[index] !== ")") {
+		const title = markdownLinkParser.helpers.parseLinkTitle(content, index, content.length)
+		if (!title.ok) return null
+		index = title.pos
+		while (/[ \t\r\n]/.test(content[index] || "")) index++
 	}
+	if (content[index] !== ")") return null
 
 	const endIndex = index + 1
 	return {
-		label: unescapeMarkdownText(content.slice(startIndex + 1, labelEnd)),
-		href: unescapeMarkdownText(href),
+		label: markdownLinkParser.utils.unescapeAll(content.slice(startIndex + 1, labelEnd)),
+		href: destination.str,
 		startIndex,
 		endIndex,
 		fullMatch: content.slice(startIndex, endIndex),
@@ -434,6 +222,10 @@ function extractMarkdownLinks<T extends FilePathMentionMatch>(
 				index = match.endIndex
 				continue
 			}
+		}
+		if (content[index] === "\\") {
+			index += 2
+			continue
 		}
 
 		index++

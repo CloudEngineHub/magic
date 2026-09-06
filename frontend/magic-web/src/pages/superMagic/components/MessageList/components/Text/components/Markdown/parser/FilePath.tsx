@@ -1,9 +1,12 @@
 import { observer } from "mobx-react-lite"
-import { decodePathForDisplay, findAttachmentByPath } from "./helper"
+import { decodePathForDisplay } from "./helper"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import { FileReference, getFileExtensionFromPath } from "./FileReference"
-import { createCanonicalWorkspaceHref } from "@/pages/superMagic/utils/filePathMention"
+import {
+	createCanonicalWorkspaceHref,
+	findLegacyAttachmentByPath,
+} from "@/pages/superMagic/utils/markdownFileReference"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import {
@@ -21,7 +24,10 @@ export const FilePath = observer((props: { path?: unknown }) => {
 	const attachments = projectFilesStore?.workspaceFilesList ?? []
 
 	// 根据相对路径查找文件信息
-	const fileInfo = findAttachmentByPath(attachments, normalizedPath)
+	const fileInfo = findLegacyAttachmentByPath(attachments, normalizedPath)
+	const fileHref = createCanonicalWorkspaceHref(
+		fileInfo?.relative_file_path || fileInfo?.path || normalizedPath,
+	)
 
 	const onClick = () => {
 		if (fileInfo) {
@@ -49,7 +55,7 @@ export const FilePath = observer((props: { path?: unknown }) => {
 			<FileReference
 				label={displayPath}
 				mentionAttrs={mentionAttrs}
-				href={createCanonicalWorkspaceHref(normalizedPath) ?? undefined}
+				href={fileHref ?? undefined}
 				fileType={fileInfo.file_extension || getFileExtensionFromPath(displayPath)}
 				onClick={onClick}
 				title={displayPath}
@@ -60,7 +66,7 @@ export const FilePath = observer((props: { path?: unknown }) => {
 	return (
 		<FileReference
 			label={displayPath}
-			href={createCanonicalWorkspaceHref(normalizedPath) ?? undefined}
+			href={fileHref ?? undefined}
 			fileType={getFileExtensionFromPath(displayPath)}
 			disabled
 			title={`File does not exist: ${displayPath}`}

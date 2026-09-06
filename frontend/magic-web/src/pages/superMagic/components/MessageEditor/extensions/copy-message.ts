@@ -23,7 +23,7 @@ import {
 	createDirectoryMentionData,
 	createProjectFileMentionData,
 } from "@/components/business/MentionPanel/utils/projectReferenceMention"
-import { findAttachmentByPath } from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/helper"
+import { findAttachmentByPath } from "@/pages/superMagic/utils/markdownFileReference"
 import {
 	getClipboardHtml,
 	getClipboardPlainText,

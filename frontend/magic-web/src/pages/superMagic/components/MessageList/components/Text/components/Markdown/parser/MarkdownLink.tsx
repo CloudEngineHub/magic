@@ -5,14 +5,14 @@ import projectFilesStore from "@/stores/projectFiles"
 import { cn } from "@/utils/cn"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
-	isMarkdownFileHrefCandidate,
-	parseMarkdownFileHref,
-} from "@/pages/superMagic/utils/filePathMention"
+	classifyMarkdownFileHref,
+	findAttachmentByPath,
+} from "@/pages/superMagic/utils/markdownFileReference"
 import {
 	resolveReferencedProjectAttachment,
 	type ReferencedProjectAttachment,
 } from "@/pages/superMagic/services/referencedProjectAttachmentResolver"
-import { findAttachmentByPath } from "./helper"
+import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import { normalizeInlineStyle } from "../normalizeInlineStyle"
 import { FileReference, getFileExtensionFromPath } from "./FileReference"
 import { IconExternalLink } from "@tabler/icons-react"
@@ -64,6 +64,8 @@ function createReferencedProjectPreviewFile(file: ReferencedProjectAttachment) {
 
 export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	const { children, href, rel, target, title } = props
+	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
+	const resolvedProjectFilesStore = scopedProjectFilesStore ?? projectFilesStore
 	const { t } = useTranslation("super")
 	const normalizedHref = typeof href === "string" ? href : ""
 	const normalizedRel = typeof rel === "string" ? rel : undefined
@@ -80,8 +82,8 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 		),
 	)
 	const normalizedStyle = normalizeInlineStyle(rawAttributes.style)
-	const attachments = projectFilesStore.workspaceFilesList
-	const fileTarget = parseMarkdownFileHref(normalizedHref)
+	const attachments = resolvedProjectFilesStore.workspaceFilesList
+	const { target: fileTarget, explicitFileReference } = classifyMarkdownFileHref(normalizedHref)
 	const workspacePath = fileTarget?.scope === "workspace" ? fileTarget.relativePath : null
 	const referencedProjectId =
 		fileTarget?.scope === "referenced-project" ? fileTarget.projectId : null
@@ -130,7 +132,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	if (resolvedFileInfo) {
 		// 复用解析结果的真实身份，不能根据展示名称在拖入时重新匹配文件。
 		const projectId =
-			resolvedFileInfo.project_id || projectFilesStore.currentSelectedProject?.id
+			resolvedFileInfo.project_id || resolvedProjectFilesStore.currentSelectedProject?.id
 		const mentionAttrs: TiptapMentionAttributes | undefined = resolvedFileInfo.file_id
 			? resolvedFileInfo.is_directory || resolvedFileInfo.type === "directory"
 				? {
@@ -154,15 +156,18 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 				href={normalizedHref}
 				mentionAttrs={mentionAttrs}
 				fileType={
-					resolvedFileInfo.file_extension || getFileExtensionFromPath(normalizedHref)
+					resolvedFileInfo.file_extension ||
+					getFileExtensionFromPath(fileTarget?.relativePath ?? normalizedHref)
 				}
 				onClick={onClick}
-				title={typeof children === "string" ? children : normalizedHref}
+				title={
+					normalizedTitle ?? (typeof children === "string" ? children : normalizedHref)
+				}
 			/>
 		)
 	}
 
-	if (isMarkdownFileHrefCandidate(normalizedHref)) {
+	if (explicitFileReference) {
 		const referencedProjectResolved =
 			fileTarget?.scope !== "referenced-project" ||
 			referencedProjectResolution?.href === normalizedHref
@@ -171,7 +176,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 				<FileReference
 					label={children}
 					href={normalizedHref}
-					fileType={getFileExtensionFromPath(normalizedHref)}
+					fileType={getFileExtensionFromPath(fileTarget?.relativePath ?? normalizedHref)}
 					disabled
 					title={
 						referencedProjectResolved

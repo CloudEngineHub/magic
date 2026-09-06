@@ -7,8 +7,7 @@ import {
 	getMentionDisplayName,
 	getMentionUniqueId,
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
-import { findAttachmentByPath } from "../components/Text/components/Markdown/parser/helper"
-import { buildFilePathAttachments } from "../utils/attachmentByFilePath"
+import { buildFilePathAttachments, findFilePathAttachment } from "../utils/attachmentByFilePath"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 
 export interface ExportAttachment {
@@ -263,7 +262,7 @@ function pickFilePathAttachments(
 	if (!content) return undefined
 	if (!workspaceFilesList?.length) return undefined
 	const pathAttachments = buildFilePathAttachments(content).filter((attachment) => {
-		const found = findAttachmentByPath(workspaceFilesList, attachment.filePath)
+		const found = findFilePathAttachment(workspaceFilesList, attachment)
 		if (!found) return false
 		if (found.type === "directory" || found.is_directory) return false
 		return true
