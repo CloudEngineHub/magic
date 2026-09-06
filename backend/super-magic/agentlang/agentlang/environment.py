@@ -4,7 +4,12 @@
 管理与环境相关的参数设置
 """
 import os
-from typing import Optional, Any, Type, TypeVar, Union, cast
+from typing import Any, ClassVar, Optional, Type, TypeVar, Union, cast
+
+from agentlang.logger import get_logger
+
+
+logger = get_logger(__name__)
 
 T = TypeVar('T')
 
@@ -14,6 +19,9 @@ class Environment:
     DEFAULT_AGENT_IDLE_TIMEOUT = 3600  # 默认超时时间：1小时
     DEFAULT_IDLE_MONITOR_INTERVAL = 60  # 默认监控间隔：60秒
     DEFAULT_AGENT_IDLE_MONITOR_ENABLED = True
+    DEFAULT_SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS = 25
+    DEFAULT_SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS = 10
+    _reported_invalid_shutdown_configs: ClassVar[set[str]] = set()
     
     @staticmethod
     def get_env(key: str, default: Optional[Any] = None, value_type: Optional[Type[T]] = None) -> Union[Optional[str], T]:
@@ -146,6 +154,95 @@ class Environment:
             pass
             
         return Environment.DEFAULT_IDLE_MONITOR_INTERVAL
+
+    @staticmethod
+    def _parse_positive_int(value: object) -> Optional[int]:
+        """把配置边界值规范化为正整数。"""
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            parsed = value
+        elif isinstance(value, str):
+            try:
+                parsed = int(value.strip())
+            except ValueError:
+                return None
+        else:
+            return None
+        return parsed if parsed > 0 else None
+
+    @classmethod
+    def _report_invalid_shutdown_config_once(cls, reason: str) -> None:
+        if reason in cls._reported_invalid_shutdown_configs:
+            return
+        cls._reported_invalid_shutdown_configs.add(reason)
+        logger.warning(
+            "沙箱关闭超时配置无效，回退到默认值: "
+            f"grace={cls.DEFAULT_SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS}s, "
+            f"uvicorn_drain={cls.DEFAULT_SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS}s, "
+            f"reason={reason}"
+        )
+
+    @classmethod
+    def _resolve_sandbox_shutdown_timeouts(cls) -> tuple[int, int]:
+        """读取并联合校验进程总宽限期和 Uvicorn 排空时间。"""
+        try:
+            from agentlang.config.config import config
+
+            configured_grace: object = config.get(
+                "sandbox.shutdown_grace_period_seconds",
+                cls.DEFAULT_SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS,
+            )
+            configured_drain: object = config.get(
+                "sandbox.uvicorn_drain_timeout_seconds",
+                cls.DEFAULT_SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS,
+            )
+        except (ImportError, AttributeError):
+            configured_grace = cls.DEFAULT_SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS
+            configured_drain = cls.DEFAULT_SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS
+
+        grace_source: object = os.getenv(
+            "SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS",
+            str(configured_grace),
+        )
+        drain_source: object = os.getenv(
+            "SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS",
+            str(configured_drain),
+        )
+        grace_seconds = cls._parse_positive_int(grace_source)
+        drain_seconds = cls._parse_positive_int(drain_source)
+
+        if grace_seconds is None or drain_seconds is None:
+            cls._report_invalid_shutdown_config_once(
+                f"grace={grace_source!r}, uvicorn_drain={drain_source!r}: values must be positive integers"
+            )
+            return (
+                cls.DEFAULT_SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS,
+                cls.DEFAULT_SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS,
+            )
+
+        if drain_seconds >= grace_seconds:
+            cls._report_invalid_shutdown_config_once(
+                f"grace={grace_seconds}, uvicorn_drain={drain_seconds}: drain must be shorter than grace"
+            )
+            return (
+                cls.DEFAULT_SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS,
+                cls.DEFAULT_SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS,
+            )
+
+        return grace_seconds, drain_seconds
+
+    @classmethod
+    def get_sandbox_shutdown_grace_period_seconds(cls) -> int:
+        """获取沙箱 Python 进程的总关闭宽限期。"""
+        grace_seconds, _ = cls._resolve_sandbox_shutdown_timeouts()
+        return grace_seconds
+
+    @classmethod
+    def get_sandbox_uvicorn_drain_timeout_seconds(cls) -> int:
+        """获取 Uvicorn connection 和 ASGI Task 的排空时限。"""
+        _, drain_seconds = cls._resolve_sandbox_shutdown_timeouts()
+        return drain_seconds
     
     @staticmethod
     def is_local() -> bool:
