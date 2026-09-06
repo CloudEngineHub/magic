@@ -394,10 +394,6 @@ class AgentHorizon:
         self._cli_status_current: Optional[str] = None
         self._language_current: Optional[str] = None
 
-        # 初始输出 token 预算（由 agent 在首次 LLM 调用前设置，提限时不更新）
-        # 用于在 initial_context 里给模型写入单次输出的字符量参考，让模型主动控制输出长度
-        self._output_token_budget: Optional[int] = None
-
         # magiclaw 文件驱动启动状态（纯内存，per-context-window，不持久化）
         self._is_magiclaw: bool = False              # 会话是否为 magiclaw 模式
         self._magiclaw_dir: Optional[Path] = None    # .magic 目录，用于重置时重算文件集合
@@ -1083,59 +1079,6 @@ class AgentHorizon:
     # 运行时状态更新
     # ─────────────────────────────────────────────────────────────────────────
 
-    def set_output_token_budget(self, tokens: int) -> None:
-        """设置初始输出 token 预算，只在未设置时生效（提限时不调用，保持原始引导值）。
-
-        max_tokens 提升（finish_reason=length 后的扩容）只是为了让已经超限的内容能顺利输出，
-        而不是授权模型输出更多内容。如果把扩容后的值也注入给模型，模型会认为上限变高了，
-        从而产生更长的输出，反复触发截断——这与提升成功率的初衷相反。
-
-        因此：
-        - 这里只允许设置一次（_output_token_budget is None 时才写入）
-        - initial_context 里注入的字符量引导始终基于初始值，不随提限更新
-        - 扩容后的 max_tokens 不通过 initial_context 或任何 change 事件告知模型
-        """
-        if self._output_token_budget is None:
-            self._output_token_budget = tokens
-
-    @staticmethod
-    def _build_output_size_hint(max_tokens: int) -> str:
-        """根据 max_tokens 换算各语言单次安全字符量，生成写入 initial_context 的提示行。
-
-        只在首次注入（initial_context）时调用，后续不随 max_tokens 变化更新。
-        即使 agent 因 finish_reason=length 扩容了 max_tokens，模型也不会收到新的引导值，
-        原因见 set_output_token_budget 注释。
-
-        换算系数（含 50% 安全裕量，code 额外考虑中文注释混入场景）：
-        - 拉丁字母系（英/德/法/西/葡/意）：4 chars/token × 0.5
-        - 非拉丁密集脚本（俄/阿拉伯/印地语）：2 chars/token × 0.5
-        - 中文：1.5 chars/token × 0.5
-        - 日/韩：1.5 chars/token × 0.5
-        - 代码（含中文注释）：2.5 chars/token × 0.5
-        """
-        def _k(chars: float) -> str:
-            return f"~{int(chars / 1000)}k"
-
-        latin = max_tokens * 4.0 * 0.5   # English, German, French, Spanish, Portuguese, Italian
-        dense = max_tokens * 2.0 * 0.5   # Russian, Arabic, Hindi
-        zh    = max_tokens * 1.5 * 0.5   # Chinese
-        jk    = max_tokens * 1.5 * 0.5   # Japanese, Korean
-        code  = max_tokens * 2.5 * 0.5
-        return (
-            f'<output_size_limit max_tokens="{max_tokens}">'
-            f"Every single response — whether writing/editing a file, filling tool arguments, "
-            f"or producing plain text — is hard-capped at: "
-            f"English/German/French/Spanish/Portuguese/Italian {_k(latin)} chars, "
-            f"Russian/Arabic/Hindi {_k(dense)} chars, "
-            f"Chinese {_k(zh)} chars, Japanese/Korean {_k(jk)} chars, "
-            f"code with inline comments {_k(code)} chars. "
-            f"Exceeding the limit causes the output to be cut off mid-way with no warning. "
-            f"Any content over {_k(zh)}–{_k(latin)} chars (lower end for Chinese, upper for Latin-script) "
-            f"must be broken up: write a skeleton with placeholder anchors first, "
-            f"then fill each section in a separate, focused action."
-            f"</output_size_limit>"
-        )
-
     def update_llm_model(self, model_id: str, model_name: str, description: str = "") -> None:
         """LLM 调用返回后调用，记录运行时模型信息；仅在模型变化时标记需要注入。"""
         if model_id != self._last_llm_model_id or model_name != self._last_llm_model_name:
@@ -1512,10 +1455,6 @@ class AgentHorizon:
 
             if current_super_magic_product_context is not None:
                 init_parts.append(_render_super_magic_product_context(current_super_magic_product_context))
-
-            # 单次输出字符量引导：基于初始 max_tokens 换算，提限时不更新，维持原始约束
-            if self._output_token_budget is not None:
-                init_parts.append(self._build_output_size_hint(self._output_token_budget))
 
             # LLM 模型（首次注入时无论是否"变化"都输出）
             if self._last_llm_model_id:
