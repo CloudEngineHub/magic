@@ -7,6 +7,8 @@ description: "Replace the visual template of an existing HTML slide project whil
 
 Use this skill when the input asks to apply an existing platform template to an existing HTML slide project. The command includes the exact `template_code` and an explicit scope. Whole-deck requests mention the current PPT project; single-slide requests mention only the target slide HTML file. The user may also name a page range such as pages 3-5.
 
+The command is intentionally concise. Apply this skill's defaults even when the message does not repeat them; treat explicit user notes as overrides.
+
 Do not load `slide-template-maker`. This skill only applies an existing platform template.
 
 ## Supported input

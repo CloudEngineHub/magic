@@ -70,10 +70,11 @@ function textNode(text: string): JSONContent {
 	return { type: "text", text }
 }
 
-function appendMentionLine(
+function appendMention(
 	content: JSONContent[],
 	label: string,
 	item: AttachmentItem | undefined,
+	suffix = "",
 ): MentionListItem | undefined {
 	if (!item?.file_id) return undefined
 	const attrs = toMentionAttributes(item)
@@ -81,7 +82,7 @@ function appendMentionLine(
 		type: "mention",
 		attrs,
 	}
-	content.push(textNode(label), mentionNode(attrs), textNode("\n"))
+	content.push(textNode(label), mentionNode(attrs), textNode(suffix))
 	return mention
 }
 
@@ -100,33 +101,28 @@ export function buildSlidesTemplateReplacementPayload({
 	const templateCode = localeTextToDisplayString(template.value)
 	const templateName = localeTextToDisplayString(template.label) || templateCode
 	const content: JSONContent[] = [
-		textNode("请更换现有 HTML PPT 的模板。\n"),
-		textNode(`模板名称：${templateName}\n`),
-		textNode(`template_code：${templateCode}\n`),
+		textNode(
+			target.scope === "slide"
+				? `请将第 ${target.slideIndex + 1} 页应用为「${templateName}」模板（template_code：${templateCode}），目标页：`
+				: `请将当前 PPT 项目应用为「${templateName}」模板（template_code：${templateCode}），当前 PPT：`,
+		),
 	]
 	const mentionItems: SendMessageByContentPayload["mentionItems"] = []
 
 	if (target.scope === "slide") {
-		const slideMention = appendMentionLine(content, "目标页：", targetSlide)
+		const slideMention = appendMention(content, "", targetSlide, "。")
 		if (slideMention) mentionItems.push(slideMention)
-		content.push(
-			textNode(
-				`作用范围：第 ${target.slideIndex + 1} 页。直接修改当前 PPT 的对应页，其他页面保持不变。\n`,
-			),
-		)
 	} else {
-		const mainMention = appendMentionLine(content, "当前 PPT：", mainFile)
+		const mainMention = appendMention(content, "", mainFile)
 		if (mainMention) mentionItems.push(mainMention)
-		const folderMention = appendMentionLine(content, "所属文件夹：", parentFolder)
+		const folderMention = appendMention(
+			content,
+			mainMention ? "，所属文件夹：" : "所属文件夹：",
+			parentFolder,
+			"。",
+		)
 		if (folderMention) mentionItems.push(folderMention)
-		content.push(textNode("作用范围：整本 PPT。\n"))
 	}
-
-	content.push(
-		textNode(
-			"默认只更换样式、布局、主题和视觉资源，不修改原始文本与图片内容；用户后续补充说明优先。",
-		),
-	)
 
 	return {
 		topicMode: TopicMode.PPT,
