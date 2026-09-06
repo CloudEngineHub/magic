@@ -236,6 +236,26 @@ return [
             ],
         ],
         [
+            'code' => BillingType::AliyunWanVideoDurationPricing->value,
+            'label' => '阿里云 Wan 视频计费模板',
+            'category' => Category::VGM->value,
+            'billing_type' => BillingType::AliyunWanVideoDurationPricing->value,
+            'items' => [
+                ['billing_object' => BillingObject::videoDuration('480p')->value, 'label' => '480P 输出视频时长'],
+                ['billing_object' => BillingObject::videoDurationCost('480p')->value, 'label' => '480P 输出视频时长成本'],
+                ['billing_object' => BillingObject::videoReferenceVideoDuration('480p')->value, 'label' => '480P 参考视频时长'],
+                ['billing_object' => BillingObject::videoReferenceVideoDurationCost('480p')->value, 'label' => '480P 参考视频时长成本'],
+                ['billing_object' => BillingObject::videoDuration('720p')->value, 'label' => '720P 输出视频时长'],
+                ['billing_object' => BillingObject::videoDurationCost('720p')->value, 'label' => '720P 输出视频时长成本'],
+                ['billing_object' => BillingObject::videoReferenceVideoDuration('720p')->value, 'label' => '720P 参考视频时长'],
+                ['billing_object' => BillingObject::videoReferenceVideoDurationCost('720p')->value, 'label' => '720P 参考视频时长成本'],
+                ['billing_object' => BillingObject::videoDuration('1080p')->value, 'label' => '1080P 输出视频时长'],
+                ['billing_object' => BillingObject::videoDurationCost('1080p')->value, 'label' => '1080P 输出视频时长成本'],
+                ['billing_object' => BillingObject::videoReferenceVideoDuration('1080p')->value, 'label' => '1080P 参考视频时长'],
+                ['billing_object' => BillingObject::videoReferenceVideoDurationCost('1080p')->value, 'label' => '1080P 参考视频时长成本'],
+            ],
+        ],
+        [
             'code' => BillingType::VideoResolutionReferenceVideoTokens->value,
             'label' => '视频按分辨率与参考视频 Token 计费',
             'category' => Category::VGM->value,
@@ -494,6 +514,7 @@ return [
             'category' => Category::VGM->value,
             'template_codes' => [
                 BillingType::VideoResolutionDuration->value,
+                BillingType::AliyunWanVideoDurationPricing->value,
             ],
         ],
         [
