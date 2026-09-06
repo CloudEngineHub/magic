@@ -19,8 +19,6 @@ tools:
   - generate_images
   - ask_user
 skills:
-  preload:
-    - slide-template-replacement
   system_skills:
     - name: skill-vetter
     - name: download
@@ -28,6 +26,7 @@ skills:
     - name: user-info
     - name: slide-template
     - name: slide-template-maker
+    - slide-template-replacement
     - name: document-converter
   workspace_skills: "*"
 ---
