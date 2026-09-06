@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import { findFilesOutsidePublishRoot, hasFilesOutsidePublishRoot } from "../publish-scope"
+import {
+	findFilesOutsidePublishRoot,
+	findPublishScopeFilesOutsideRoot,
+	hasFilesOutsidePublishRoot,
+} from "../publish-scope"
 
 function file(path: string, extra: Partial<AttachmentItem> = {}): AttachmentItem {
 	return { relative_file_path: path, type: "file", ...extra }
@@ -30,6 +34,20 @@ describe("publish scope", () => {
 		expect(findFilesOutsidePublishRoot([file("README.md"), file("docs/guide.md")])).toEqual([
 			"README.md",
 			"docs/guide.md",
+		])
+	})
+
+	it("orders outside files by latest modification time", () => {
+		expect(
+			findPublishScopeFilesOutsideRoot([
+				file("older.md", { updated_at: "2026-01-01T00:00:00.000Z" }),
+				file("newer.md", { updated_at: "2026-09-01T00:00:00.000Z" }),
+				file("unknown.md"),
+			]),
+		).toEqual([
+			{ path: "newer.md", updatedAt: "2026-09-01T00:00:00.000Z" },
+			{ path: "older.md", updatedAt: "2026-01-01T00:00:00.000Z" },
+			{ path: "unknown.md", updatedAt: undefined },
 		])
 	})
 

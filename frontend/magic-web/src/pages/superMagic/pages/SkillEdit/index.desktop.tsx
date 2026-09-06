@@ -579,6 +579,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		getAttachments: () => store.projectFilesStore.workspaceFilesList,
 		publishPath: () =>
 			store.skillWorkspaceDir ? `.magic/skills/${store.skillWorkspaceDir}` : skillPublishPath,
+		excludedPaths: [SKILL_CONFIG_RELATIVE_PATH],
 		prepareBeforeCheck: prepareSkillPublishScope,
 	})
 	const openPublishPanelWithNotice = useMemoizedFn(async () => {

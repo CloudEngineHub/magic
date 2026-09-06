@@ -5,13 +5,16 @@ import PublishScopeNoticeDialog from "@/pages/superMagic/components/PublishScope
 import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useTranslation } from "react-i18next"
-import { findFilesOutsidePublishRoot } from "../utils/publish-scope"
+import { findPublishScopeFilesOutsideRoot } from "../utils/publish-scope"
 
+// Each editor injects its current attachment state and getter so the check waits for
+// the page's refresh flow instead of treating an incomplete empty list as publishable.
 interface UsePublishScopeNoticeOptions {
 	projectId?: string
 	getAttachmentsStatus: () => { isLoaded: boolean; hasError: boolean }
 	getAttachments: () => AttachmentItem[]
 	publishPath: string | (() => string)
+	excludedPaths?: string[]
 	prepareBeforeCheck?: () => boolean | Promise<boolean>
 }
 
@@ -26,11 +29,11 @@ export function usePublishScopeNotice({
 	getAttachmentsStatus,
 	getAttachments,
 	publishPath,
+	excludedPaths = [],
 	prepareBeforeCheck,
 }: UsePublishScopeNoticeOptions) {
 	const { t } = useTranslation("crew/market")
 	const [isNoticeOpen, setIsNoticeOpen] = useState(false)
-	const [isChecking, setIsChecking] = useState(false)
 	const [outsidePaths, setOutsidePaths] = useState<string[]>([])
 	const pendingContinueRef = useRef<ContinueAction | null>(null)
 	const checkInFlightRef = useRef(false)
@@ -38,7 +41,6 @@ export function usePublishScopeNotice({
 	const checkBeforeContinue = useMemoizedFn(async (continueAction: ContinueAction) => {
 		if (checkInFlightRef.current || isNoticeOpen) return
 		checkInFlightRef.current = true
-		setIsChecking(true)
 
 		try {
 			const initialStatus = getAttachmentsStatus()
@@ -64,10 +66,12 @@ export function usePublishScopeNotice({
 
 			const resolvedPublishPath =
 				typeof publishPath === "function" ? publishPath() : publishPath
-			const nextOutsidePaths = findFilesOutsidePublishRoot(
+			const nextOutsidePaths = findPublishScopeFilesOutsideRoot(
 				getAttachments(),
 				resolvedPublishPath,
 			)
+				.filter(({ path }) => !excludedPaths.includes(path))
+				.map(({ path }) => path)
 			if (nextOutsidePaths.length === 0) {
 				setOutsidePaths([])
 				await continueAction()
@@ -79,7 +83,6 @@ export function usePublishScopeNotice({
 			setIsNoticeOpen(true)
 		} finally {
 			checkInFlightRef.current = false
-			setIsChecking(false)
 		}
 	})
 
@@ -98,7 +101,6 @@ export function usePublishScopeNotice({
 	})
 
 	return {
-		isChecking,
 		checkBeforeContinue,
 		noticeDialog: (
 			<PublishScopeNoticeDialog

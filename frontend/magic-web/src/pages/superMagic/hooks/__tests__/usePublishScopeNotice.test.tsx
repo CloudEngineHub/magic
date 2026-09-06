@@ -1,9 +1,10 @@
-import { act, renderHook } from "@testing-library/react"
+import { act, render, renderHook } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { usePublishScopeNotice } from "../usePublishScopeNotice"
 
 const waitForRefreshMock = vi.hoisted(() => vi.fn())
 const toastErrorMock = vi.hoisted(() => vi.fn())
+const noticeDialogPropsMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@/pages/superMagic/services/attachmentsTopicSync", () => ({
 	waitForNextAttachmentsRefreshForProject: waitForRefreshMock,
@@ -14,7 +15,10 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 }))
 
 vi.mock("@/pages/superMagic/components/PublishScopeNoticeDialog", () => ({
-	default: () => null,
+	default: (props: unknown) => {
+		noticeDialogPropsMock(props)
+		return null
+	},
 }))
 
 vi.mock("react-i18next", () => ({
@@ -25,6 +29,7 @@ describe("usePublishScopeNotice", () => {
 	beforeEach(() => {
 		waitForRefreshMock.mockReset()
 		toastErrorMock.mockReset()
+		noticeDialogPropsMock.mockReset()
 	})
 
 	it("does not continue when attachment refresh fails", async () => {
@@ -112,5 +117,59 @@ describe("usePublishScopeNotice", () => {
 		})
 
 		expect(continueAction).not.toHaveBeenCalled()
+	})
+
+	it("shows the latest modified outside files first", async () => {
+		const continueAction = vi.fn()
+		const { result } = renderHook(() =>
+			usePublishScopeNotice({
+				projectId: undefined,
+				getAttachmentsStatus: () => ({ isLoaded: true, hasError: false }),
+				getAttachments: () =>
+					[
+						{ relative_file_path: "unknown.md" },
+						{
+							relative_file_path: "older.md",
+							updated_at: "2026-01-01T00:00:00.000Z",
+						},
+						{
+							relative_file_path: "newer.md",
+							updated_at: "2026-09-01T00:00:00.000Z",
+						},
+					] as never,
+				publishPath: ".magic",
+			}),
+		)
+
+		await act(async () => {
+			await result.current.checkBeforeContinue(continueAction)
+		})
+		render(result.current.noticeDialog)
+
+		expect(noticeDialogPropsMock).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				outsidePaths: ["newer.md", "older.md", "unknown.md"],
+			}),
+		)
+	})
+
+	it("ignores configured system files when checking the notice", async () => {
+		const continueAction = vi.fn()
+		const { result } = renderHook(() =>
+			usePublishScopeNotice({
+				projectId: undefined,
+				getAttachmentsStatus: () => ({ isLoaded: true, hasError: false }),
+				getAttachments: () =>
+					[{ relative_file_path: ".magic/skills/skill_config.yaml" }] as never,
+				publishPath: ".magic/skills/demo",
+				excludedPaths: [".magic/skills/skill_config.yaml"],
+			}),
+		)
+
+		await act(async () => {
+			await result.current.checkBeforeContinue(continueAction)
+		})
+
+		expect(continueAction).toHaveBeenCalledTimes(1)
 	})
 })

@@ -20,6 +20,8 @@ interface PublishScopeNoticeDialogProps {
 	onCancel: () => void
 }
 
+const MAX_VISIBLE_OUTSIDE_PATHS = 10
+
 export default function PublishScopeNoticeDialog({
 	open,
 	publishPath,
@@ -35,6 +37,9 @@ export default function PublishScopeNoticeDialog({
 		void onContinue()
 	}
 
+	const visibleOutsidePaths = outsidePaths.slice(0, MAX_VISIBLE_OUTSIDE_PATHS)
+	const hiddenOutsidePathCount = outsidePaths.length - visibleOutsidePaths.length
+
 	return (
 		<AlertDialog
 			open={open}
@@ -48,23 +53,24 @@ export default function PublishScopeNoticeDialog({
 				}
 			}}
 		>
+			{/* Keep the dialog inset on narrow screens while bounding its desktop width. */}
 			<AlertDialogContent
 				size="sm"
-				className="!max-w-[440px] gap-0 p-0"
+				className="w-[calc(100vw-32px)] !max-w-[560px] gap-0 p-0"
 				data-testid="publish-scope-notice-dialog"
 			>
 				<AlertDialogHeader className="place-items-start gap-3 p-6 pb-5 text-left sm:text-left">
 					<div className="flex w-full items-start gap-3">
 						<div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-							<Info className="size-[18px]" aria-hidden="true" />
+							<Info className="size-4" aria-hidden="true" />
 						</div>
 						<div className="min-w-0 flex-1 space-y-1">
 							<AlertDialogTitle className="text-base font-semibold leading-6">
 								{t("publishScopeNotice.title")}
 							</AlertDialogTitle>
-							<AlertDialogDescription className="max-w-none text-left text-sm leading-6 text-muted-foreground">
+							<AlertDialogDescription className="min-w-0 max-w-none overflow-hidden text-left text-sm leading-6 text-muted-foreground">
 								<span className="block">{t("publishScopeNotice.intro")}</span>
-								<span className="mt-3 block rounded-lg border border-border/70 bg-muted/40 px-3 py-2.5">
+								<span className="mt-3 block min-w-0 max-w-full overflow-hidden rounded-lg border border-border/70 bg-muted/40 px-3 py-2.5">
 									<span className="block text-xs font-medium text-muted-foreground">
 										{t("publishScopeNotice.scopeLabel")}
 									</span>
@@ -72,31 +78,41 @@ export default function PublishScopeNoticeDialog({
 										{publishPath}
 									</code>
 								</span>
-								<span className="mt-3 block rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
-									<span className="block text-xs font-medium text-amber-700 dark:text-amber-300">
-										{t("publishScopeNotice.outsidePathsLabel")}
+								<span className="mt-3 block min-w-0 max-w-full overflow-hidden rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+									<span className="flex items-center justify-between gap-3">
+										<span className="min-w-0 truncate text-xs font-medium text-amber-700 dark:text-amber-300">
+											{t("publishScopeNotice.outsidePathsLabel")}
+										</span>
+										<span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium tabular-nums text-amber-700 dark:text-amber-300">
+											{outsidePaths.length}
+										</span>
 									</span>
-									<span className="mt-1.5 block space-y-1">
-										{outsidePaths.slice(0, 3).map((path) => (
+									{/* Bound the list so many files scroll inside the card and long paths cannot widen it. */}
+									<span
+										className="mt-2 block max-h-56 w-full max-w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-md border border-amber-500/10 bg-background/70 p-1"
+										role="list"
+									>
+										{visibleOutsidePaths.map((path) => (
 											<span
 												key={path}
-												className="flex min-w-0 items-start gap-2"
+												className="flex w-full min-w-0 max-w-full items-center gap-2 overflow-hidden rounded px-2 py-1 text-xs leading-5 hover:bg-muted/50"
+												role="listitem"
+												title={path}
 											>
 												<span
-													className="mt-2 size-1.5 shrink-0 rounded-full bg-amber-500"
+													className="size-1.5 shrink-0 rounded-full bg-amber-500"
 													aria-hidden="true"
 												/>
-												<code className="min-w-0 break-all font-mono text-xs leading-5 text-foreground/80">
+												<code className="block w-0 min-w-0 max-w-full flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs text-foreground/80">
 													{path}
 												</code>
 											</span>
 										))}
 									</span>
-									{outsidePaths.length > 3 && (
-										<span className="mt-1.5 block text-xs leading-5 text-muted-foreground">
-											…{" "}
+									{hiddenOutsidePathCount > 0 && (
+										<span className="mt-1 block px-2 text-xs leading-5 text-muted-foreground">
 											{t("publishScopeNotice.morePaths", {
-												count: outsidePaths.length - 3,
+												count: hiddenOutsidePathCount,
 											})}
 										</span>
 									)}

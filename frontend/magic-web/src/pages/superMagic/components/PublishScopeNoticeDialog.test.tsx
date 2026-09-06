@@ -17,7 +17,7 @@ describe("PublishScopeNoticeDialog", () => {
 			<PublishScopeNoticeDialog
 				open
 				publishPath=".magic/skills/demo"
-				outsidePaths={["README.md", "src/index.ts", "assets/logo.svg", "docs/guide.md"]}
+				outsidePaths={Array.from({ length: 11 }, (_, index) => `docs/file-${index}.md`)}
 				onContinue={onContinue}
 				onCancel={onCancel}
 			/>,
@@ -29,17 +29,21 @@ describe("PublishScopeNoticeDialog", () => {
 		expect(screen.getByTestId("publish-scope-notice-dialog")).toHaveTextContent(
 			".magic/skills/demo",
 		)
-		expect(screen.getByTestId("publish-scope-notice-dialog")).toHaveTextContent("README.md")
-		expect(screen.getByTestId("publish-scope-notice-dialog")).toHaveTextContent("src/index.ts")
 		expect(screen.getByTestId("publish-scope-notice-dialog")).toHaveTextContent(
-			"assets/logo.svg",
+			"docs/file-0.md",
+		)
+		expect(screen.getByTestId("publish-scope-notice-dialog")).toHaveTextContent(
+			"docs/file-9.md",
 		)
 		expect(screen.getByTestId("publish-scope-notice-dialog")).not.toHaveTextContent(
-			"docs/guide.md",
+			"docs/file-10.md",
 		)
 		expect(screen.getByTestId("publish-scope-notice-dialog")).toHaveTextContent(
 			"publishScopeNotice.morePaths",
 		)
+		expect(screen.getByRole("list")).toHaveAttribute("role", "list")
+		expect(screen.getByRole("list")).toHaveClass("max-h-56", "overflow-y-auto")
+		expect(screen.getAllByRole("listitem")).toHaveLength(10)
 
 		fireEvent.click(screen.getByRole("button", { name: "publishScopeNotice.continue" }))
 		expect(onContinue).toHaveBeenCalledTimes(1)
