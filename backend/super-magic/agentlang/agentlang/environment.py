@@ -19,8 +19,8 @@ class Environment:
     DEFAULT_AGENT_IDLE_TIMEOUT = 3600  # 默认超时时间：1小时
     DEFAULT_IDLE_MONITOR_INTERVAL = 60  # 默认监控间隔：60秒
     DEFAULT_AGENT_IDLE_MONITOR_ENABLED = True
-    DEFAULT_SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS = 25
-    DEFAULT_SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS = 10
+    DEFAULT_SANDBOX_FORCE_SHUTDOWN_TIMEOUT_SECONDS = 25
+    DEFAULT_SANDBOX_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS = 10
     _reported_invalid_shutdown_configs: ClassVar[set[str]] = set()
     
     @staticmethod
@@ -178,71 +178,74 @@ class Environment:
         cls._reported_invalid_shutdown_configs.add(reason)
         logger.warning(
             "沙箱关闭超时配置无效，回退到默认值: "
-            f"grace={cls.DEFAULT_SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS}s, "
-            f"uvicorn_drain={cls.DEFAULT_SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS}s, "
+            f"force_shutdown_timeout={cls.DEFAULT_SANDBOX_FORCE_SHUTDOWN_TIMEOUT_SECONDS}s, "
+            f"graceful_shutdown_timeout={cls.DEFAULT_SANDBOX_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS}s, "
             f"reason={reason}"
         )
 
     @classmethod
     def _resolve_sandbox_shutdown_timeouts(cls) -> tuple[int, int]:
-        """读取并联合校验进程总宽限期和 Uvicorn 排空时间。"""
+        """读取并联合校验进程强制退出超时和服务优雅退出超时。"""
         try:
             from agentlang.config.config import config
 
-            configured_grace: object = config.get(
-                "sandbox.shutdown_grace_period_seconds",
-                cls.DEFAULT_SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS,
+            configured_force: object = config.get(
+                "sandbox.shutdown.force_shutdown_timeout_seconds",
+                cls.DEFAULT_SANDBOX_FORCE_SHUTDOWN_TIMEOUT_SECONDS,
             )
-            configured_drain: object = config.get(
-                "sandbox.uvicorn_drain_timeout_seconds",
-                cls.DEFAULT_SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS,
+            configured_graceful: object = config.get(
+                "sandbox.shutdown.graceful_shutdown_timeout_seconds",
+                cls.DEFAULT_SANDBOX_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS,
             )
         except (ImportError, AttributeError):
-            configured_grace = cls.DEFAULT_SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS
-            configured_drain = cls.DEFAULT_SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS
+            configured_force = cls.DEFAULT_SANDBOX_FORCE_SHUTDOWN_TIMEOUT_SECONDS
+            configured_graceful = cls.DEFAULT_SANDBOX_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS
 
-        grace_source: object = os.getenv(
-            "SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS",
-            str(configured_grace),
+        force_source: object = os.getenv(
+            "SANDBOX_FORCE_SHUTDOWN_TIMEOUT_SECONDS",
+            str(configured_force),
         )
-        drain_source: object = os.getenv(
-            "SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS",
-            str(configured_drain),
+        graceful_source: object = os.getenv(
+            "SANDBOX_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS",
+            str(configured_graceful),
         )
-        grace_seconds = cls._parse_positive_int(grace_source)
-        drain_seconds = cls._parse_positive_int(drain_source)
+        force_seconds = cls._parse_positive_int(force_source)
+        graceful_seconds = cls._parse_positive_int(graceful_source)
 
-        if grace_seconds is None or drain_seconds is None:
+        if force_seconds is None or graceful_seconds is None:
             cls._report_invalid_shutdown_config_once(
-                f"grace={grace_source!r}, uvicorn_drain={drain_source!r}: values must be positive integers"
+                f"force_shutdown_timeout={force_source!r}, "
+                f"graceful_shutdown_timeout={graceful_source!r}: values must be positive integers"
             )
             return (
-                cls.DEFAULT_SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS,
-                cls.DEFAULT_SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS,
+                cls.DEFAULT_SANDBOX_FORCE_SHUTDOWN_TIMEOUT_SECONDS,
+                cls.DEFAULT_SANDBOX_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS,
             )
 
-        if drain_seconds >= grace_seconds:
+        if graceful_seconds >= force_seconds:
             cls._report_invalid_shutdown_config_once(
-                f"grace={grace_seconds}, uvicorn_drain={drain_seconds}: drain must be shorter than grace"
+                f"force_shutdown_timeout={force_seconds}, "
+                f"graceful_shutdown_timeout={graceful_seconds}: "
+                "graceful shutdown timeout must be shorter than force shutdown timeout"
             )
             return (
-                cls.DEFAULT_SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS,
-                cls.DEFAULT_SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS,
+                cls.DEFAULT_SANDBOX_FORCE_SHUTDOWN_TIMEOUT_SECONDS,
+                cls.DEFAULT_SANDBOX_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS,
             )
 
-        return grace_seconds, drain_seconds
+        return force_seconds, graceful_seconds
 
     @classmethod
-    def get_sandbox_shutdown_grace_period_seconds(cls) -> int:
-        """获取沙箱 Python 进程的总关闭宽限期。"""
-        grace_seconds, _ = cls._resolve_sandbox_shutdown_timeouts()
-        return grace_seconds
+    def get_sandbox_force_shutdown_timeout_seconds(cls) -> int:
+        """获取从首次退出请求到强制结束进程的超时时间。"""
+        force_seconds, _ = cls._resolve_sandbox_shutdown_timeouts()
+        return force_seconds
 
     @classmethod
-    def get_sandbox_uvicorn_drain_timeout_seconds(cls) -> int:
-        """获取 Uvicorn connection 和 ASGI Task 的排空时限。"""
-        _, drain_seconds = cls._resolve_sandbox_shutdown_timeouts()
-        return drain_seconds
+    def get_sandbox_graceful_shutdown_timeout_seconds(cls) -> int:
+        """获取服务等待已有连接和请求正常结束的超时时间。"""
+        _, graceful_seconds = cls._resolve_sandbox_shutdown_timeouts()
+        return graceful_seconds
     
     @staticmethod
     def is_local() -> bool:

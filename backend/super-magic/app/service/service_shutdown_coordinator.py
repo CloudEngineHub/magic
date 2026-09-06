@@ -77,19 +77,22 @@ class ServiceShutdownCoordinator:
         self,
         *,
         loop: asyncio.AbstractEventLoop,
-        grace_period_seconds: int,
-        drain_timeout_seconds: int,
+        force_shutdown_timeout_seconds: int,
+        graceful_shutdown_timeout_seconds: int,
         idle_monitor: IdleMonitorService,
         cron_service: CronService,
         process_manager: ProcessManager,
         diagnostics: ShutdownDiagnosticsCollector,
     ) -> None:
-        if not 0 < drain_timeout_seconds < grace_period_seconds:
-            raise ValueError("shutdown timeouts must satisfy 0 < drain < grace")
+        if not 0 < graceful_shutdown_timeout_seconds < force_shutdown_timeout_seconds:
+            raise ValueError(
+                "shutdown timeouts must satisfy "
+                "0 < graceful_shutdown_timeout_seconds < force_shutdown_timeout_seconds"
+            )
 
         self._loop = loop
-        self._grace_period_seconds = grace_period_seconds
-        self._drain_timeout_seconds = drain_timeout_seconds
+        self._force_shutdown_timeout_seconds = force_shutdown_timeout_seconds
+        self._graceful_shutdown_timeout_seconds = graceful_shutdown_timeout_seconds
         self._idle_monitor = idle_monitor
         self._cron_service = cron_service
         self._process_manager = process_manager
@@ -139,7 +142,7 @@ class ServiceShutdownCoordinator:
                     signal_name=signal_name,
                     requested_at_utc=datetime.now(timezone.utc).isoformat(),
                     started_monotonic=started,
-                    deadline_monotonic=started + self._grace_period_seconds,
+                    deadline_monotonic=started + self._force_shutdown_timeout_seconds,
                 )
                 self._phase = ShutdownPhase.SHUTDOWN_REQUESTED
             request = self._request
@@ -403,7 +406,7 @@ class ServiceShutdownCoordinator:
             )
 
     def _diagnostic_main(self, request: ShutdownRequest) -> None:
-        warning_at = request.started_monotonic + self._drain_timeout_seconds
+        warning_at = request.started_monotonic + self._graceful_shutdown_timeout_seconds
         if self._completion_event.wait(timeout=max(0.0, warning_at - time.monotonic())):
             return
         if time.monotonic() < request.deadline_monotonic:
@@ -424,7 +427,7 @@ class ServiceShutdownCoordinator:
             if event == "force_kill":
                 payload["phase"] = ShutdownPhase.FORCE_KILL.value
                 payload["action"] = "SIGKILL"
-                payload["reason"] = "grace_period_exceeded"
+                payload["reason"] = "force_shutdown_timeout_exceeded"
             self._write_stderr_payload(payload)
         except Exception:
             # 名称、栈信息或序列化异常只能丢失诊断，不能影响另一个线程杀进程。

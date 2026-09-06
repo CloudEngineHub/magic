@@ -468,10 +468,11 @@ sandbox:
   idle_monitor_enabled: "${ENABLE_AGENT_IDLE_MONITOR:-true}"
   agent_idle_timeout: "${AGENT_IDLE_TIMEOUT:-1200}"
   idle_monitor_interval: "${IDLE_MONITOR_INTERVAL:-60}"
-  # Python 主进程关闭总宽限期；到期后由独立 watchdog 使用 SIGKILL 终止。
-  shutdown_grace_period_seconds: "${SANDBOX_SHUTDOWN_GRACE_PERIOD_SECONDS:-25}"
-  # Uvicorn 仅用于排空 connection 和 ASGI Task 的时限，必须短于总宽限期。
-  uvicorn_drain_timeout_seconds: "${SANDBOX_UVICORN_DRAIN_TIMEOUT_SECONDS:-10}"
+  shutdown:
+    # 优雅退出超时：关闭服务时，等待已有连接和请求正常结束的最长时间。
+    graceful_shutdown_timeout_seconds: "${SANDBOX_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS:-10}"
+    # 强制退出超时：从首次收到退出请求开始计时，到期仍未退出则强制结束进程。
+    force_shutdown_timeout_seconds: "${SANDBOX_FORCE_SHUTDOWN_TIMEOUT_SECONDS:-25}"
   # 是否将 init_client_message 中的 authorization 转发为额外的 USER-Authorization header
   # true: API Key 使用 config.yaml 的 api_key，额外添加 USER-Authorization header（值为 authorization）
   # false: 标准 LLM 认证流程，只使用 config.yaml 的 api_key，不转发 USER-Authorization header

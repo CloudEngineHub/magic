@@ -504,19 +504,19 @@ def start_ws_server() -> None:
         cron_service = CronService()
         idle_monitor = IdleMonitorService.get_instance()
         loop = asyncio.get_running_loop()
-        shutdown_grace_period_seconds = (
-            Environment.get_sandbox_shutdown_grace_period_seconds()
+        force_shutdown_timeout_seconds = (
+            Environment.get_sandbox_force_shutdown_timeout_seconds()
         )
-        uvicorn_drain_timeout_seconds = (
-            Environment.get_sandbox_uvicorn_drain_timeout_seconds()
+        graceful_shutdown_timeout_seconds = (
+            Environment.get_sandbox_graceful_shutdown_timeout_seconds()
         )
         diagnostics = ShutdownDiagnosticsCollector(
             process_manager=process_manager,
         )
         coordinator = ServiceShutdownCoordinator(
             loop=loop,
-            grace_period_seconds=shutdown_grace_period_seconds,
-            drain_timeout_seconds=uvicorn_drain_timeout_seconds,
+            force_shutdown_timeout_seconds=force_shutdown_timeout_seconds,
+            graceful_shutdown_timeout_seconds=graceful_shutdown_timeout_seconds,
             idle_monitor=idle_monitor,
             cron_service=cron_service,
             process_manager=process_manager,
@@ -543,7 +543,7 @@ def start_ws_server() -> None:
                 log_level="warning",  # 设置为warning级别，避免显示框架启动的INFO日志
                 ws_ping_interval=None,
                 access_log=False,  # 禁用访问日志
-                timeout_graceful_shutdown=uvicorn_drain_timeout_seconds,
+                timeout_graceful_shutdown=graceful_shutdown_timeout_seconds,
             )
 
             global ws_server
