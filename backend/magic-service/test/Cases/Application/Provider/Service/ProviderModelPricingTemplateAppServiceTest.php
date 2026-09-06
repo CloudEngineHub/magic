@@ -94,23 +94,25 @@ class ProviderModelPricingTemplateAppServiceTest extends TestCase
         );
     }
 
-    public function testGeminiVideoUsesResolutionTokenTemplates(): void
+    public function testGeminiOmniUsesDedicatedTokenTemplate(): void
     {
         $config = require dirname(__DIR__, 5) . '/config/autoload/provider_model_pricing_templates.php';
         $service = new ProviderModelPricingTemplateAppService($config);
 
         $templates = $service->queries(Category::VGM, ProviderCode::Gemini, 'gemini-omni-1.1-flash');
 
+        self::assertSame([BillingType::GeminiOmniVideoTokensPricing->value], array_column($templates, 'code'));
+        $billingObjects = array_column($templates[0]['items'], 'billing_object');
         self::assertSame([
-            BillingType::VideoResolutionTokens->value,
-            BillingType::VideoResolutionReferenceVideoTokens->value,
-        ], array_column($templates, 'code'));
-        $billingObjects = array_merge(...array_map(
-            static fn (array $template): array => array_column($template['items'], 'billing_object'),
-            $templates
-        ));
-        self::assertContains(BillingObject::videoToken('720p')->value, $billingObjects);
-        self::assertContains(BillingObject::videoReferenceVideoToken('720p')->value, $billingObjects);
+            BillingObject::INPUT_TOKEN,
+            BillingObject::INPUT_COST,
+            BillingObject::OUTPUT_TOKEN,
+            BillingObject::OUTPUT_COST,
+            BillingObject::THOUGHT_TOKEN,
+            BillingObject::THOUGHT_TOKEN_COST,
+            BillingObject::videoToken('default')->value,
+            BillingObject::videoTokenCost('default')->value,
+        ], $billingObjects);
     }
 
     public function testQueriesFallsBackToCategoryDefaultsWhenProviderTemplateMissing(): void

@@ -272,6 +272,22 @@ return [
             ],
         ],
         [
+            'code' => BillingType::GeminiOmniVideoTokensPricing->value,
+            'label' => 'Gemini Omni 视频 Token 计费模板',
+            'category' => Category::VGM->value,
+            'billing_type' => BillingType::GeminiOmniVideoTokensPricing->value,
+            'items' => [
+                ['billing_object' => BillingObject::INPUT_TOKEN, 'label' => '输入 Token'],
+                ['billing_object' => BillingObject::INPUT_COST, 'label' => '输入 Token 成本'],
+                ['billing_object' => BillingObject::OUTPUT_TOKEN, 'label' => '输出文本 Token'],
+                ['billing_object' => BillingObject::OUTPUT_COST, 'label' => '输出文本 Token 成本'],
+                ['billing_object' => BillingObject::THOUGHT_TOKEN, 'label' => '思考 Token'],
+                ['billing_object' => BillingObject::THOUGHT_TOKEN_COST, 'label' => '思考 Token 成本'],
+                ['billing_object' => BillingObject::videoToken('default')->value, 'label' => '输出视频 Token'],
+                ['billing_object' => BillingObject::videoTokenCost('default')->value, 'label' => '输出视频 Token 成本'],
+            ],
+        ],
+        [
             'code' => BillingType::KelingVideoResolutionMediaConditionDurationPricing->value,
             'label' => '可灵视频按分辨率与输入条件视频时长计费',
             'category' => Category::VGM->value,
@@ -447,6 +463,16 @@ return [
         // 视频模型默认模板
         Category::VGM->value => [
             BillingType::VideoResolutionDuration->value,
+        ],
+    ],
+
+    'model_templates' => [
+        [
+            'provider_code' => ProviderCode::Gemini->value,
+            'category' => Category::VGM->value,
+            'template_codes' => [
+                BillingType::GeminiOmniVideoTokensPricing->value,
+            ],
         ],
     ],
 
