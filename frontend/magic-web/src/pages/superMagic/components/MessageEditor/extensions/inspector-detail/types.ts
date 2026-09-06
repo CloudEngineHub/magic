@@ -1,4 +1,5 @@
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
+import type { MagicNodeDragOptions } from "../node-drag"
 
 export interface InspectorDetailAttrs {
 	/** Title paragraph content (context description shown above detail) */
@@ -33,7 +34,7 @@ export interface InspectorDetailAttrs {
 	captureId?: string | null
 }
 
-export interface InspectorDetailOptions {}
+export type InspectorDetailOptions = MagicNodeDragOptions
 
 declare module "@/infrastructure/editors/tiptap/core" {
 	interface Commands<ReturnType> {

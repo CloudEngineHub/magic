@@ -424,6 +424,26 @@ export function markProjectReferenceMentionForCopy(
 
 export const markProjectFileMentionForCopy = markProjectReferenceMentionForCopy
 
+/** 粘贴与历史消息拖入共用来源处理；只准备引用，不在插入时复制文件内容。 */
+export function prepareCopiedMentionAttrs(
+	attrs: TiptapMentionAttributes,
+	sourceProjectId?: string,
+	dataService?: DataService | null,
+): TiptapMentionAttributes | null {
+	const resolvedSourceProjectId =
+		attrs.type === MentionItemType.PROJECT_FILE && sourceProjectId
+			? (attrs.data as ProjectFileMentionData).source_project_id ||
+				(attrs.data as ProjectFileMentionData).project_id ||
+				sourceProjectId
+			: sourceProjectId
+	const pendingProjectFileMention = markProjectFileMentionForCopy(attrs, resolvedSourceProjectId)
+	if (pendingProjectFileMention) return pendingProjectFileMention
+
+	if (isAllowedMention(attrs, dataService)) return attrs
+
+	return null
+}
+
 export interface CopiedProjectReferenceMentionData {
 	sourceId: string
 	attrs: TiptapMentionAttributes

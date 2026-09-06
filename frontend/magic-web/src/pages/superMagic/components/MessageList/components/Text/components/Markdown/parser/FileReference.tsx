@@ -1,5 +1,6 @@
 import type { ReactNode, MouseEvent } from "react"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 
 export interface FileReferenceProps {
 	label: ReactNode
@@ -7,6 +8,7 @@ export interface FileReferenceProps {
 	fileType?: string
 	title?: string
 	disabled?: boolean
+	mentionAttrs?: TiptapMentionAttributes
 	onClick?: (event: MouseEvent<HTMLSpanElement>) => void
 }
 
@@ -22,11 +24,17 @@ export function FileReference({
 	fileType,
 	title,
 	disabled = false,
+	mentionAttrs,
 	onClick,
 }: FileReferenceProps) {
+	const canDrag = !disabled && Boolean(mentionAttrs)
 	return (
 		<span
 			data-file-reference={href}
+			draggable={false}
+			data-magic-editor-node={canDrag || undefined}
+			data-magic-node-type={canDrag ? "mention" : undefined}
+			data-magic-node-attrs={canDrag ? JSON.stringify(mentionAttrs) : undefined}
 			aria-disabled={disabled || undefined}
 			className={[
 				"inline-flex max-w-full items-center gap-1 overflow-hidden rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 text-[#315cec]",

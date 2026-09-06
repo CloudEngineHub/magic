@@ -2,13 +2,13 @@ import { Extension, type JSONContent } from "@/infrastructure/editors/tiptap/cor
 import { DOMSerializer, type Node as ProseMirrorNode } from "prosemirror-model"
 import { Plugin, PluginKey } from "prosemirror-state"
 import type { EditorView } from "prosemirror-view"
-import { isAllowedMention, markProjectFileMentionForCopy } from "../utils/mention"
+import { prepareCopiedMentionAttrs } from "../utils/mention"
 import type {
 	MentionListItem,
 	TiptapMentionAttributes,
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { getMentionUniqueId } from "@/components/business/MentionPanel/tiptap-plugin/types"
-import type { DataService, ProjectFileMentionData } from "@/components/business/MentionPanel/types"
+import type { DataService } from "@/components/business/MentionPanel/types"
 import {
 	extractClipboardMetadata,
 	isMagicClipboard,
@@ -393,32 +393,15 @@ function buildPasteContent(parts: PastePart[]): {
 	}
 }
 
-function prepareMentionAttrs(
-	attrs: TiptapMentionAttributes,
-	metadata: MagicClipboardMetadata,
-	dataService?: DataService | null,
-): TiptapMentionAttributes | null {
-	const sourceProjectId =
-		attrs.type === MentionItemType.PROJECT_FILE && metadata.sourceProjectId
-			? (attrs.data as ProjectFileMentionData).source_project_id ||
-				(attrs.data as ProjectFileMentionData).project_id ||
-				metadata.sourceProjectId
-			: metadata.sourceProjectId
-	const pendingProjectFileMention = markProjectFileMentionForCopy(attrs, sourceProjectId)
-	if (pendingProjectFileMention) return pendingProjectFileMention
-
-	if (isAllowedMention(attrs, dataService)) return attrs
-
-	return null
-}
-
 function prepareMentionItems(
 	mentions: unknown[],
 	metadata: MagicClipboardMetadata,
 	dataService?: DataService | null,
 ): TiptapMentionAttributes[] {
 	return (mentions as MentionListItem[])
-		.map((mention) => prepareMentionAttrs(mention.attrs, metadata, dataService))
+		.map((mention) =>
+			prepareCopiedMentionAttrs(mention.attrs, metadata.sourceProjectId, dataService),
+		)
 		.filter((mention): mention is TiptapMentionAttributes => Boolean(mention))
 }
 
@@ -432,9 +415,9 @@ function prepareRichTextContent(
 	let transformedContent = content
 
 	if (content.type === "mention" && content.attrs) {
-		const attrs = prepareMentionAttrs(
+		const attrs = prepareCopiedMentionAttrs(
 			content.attrs as TiptapMentionAttributes,
-			metadata,
+			metadata.sourceProjectId,
 			dataService,
 		)
 		if (!attrs) return {}
@@ -448,9 +431,9 @@ function prepareRichTextContent(
 		const attrs = { ...content.attrs }
 		for (const key of ["fileMention", "screenshotMention"] as const) {
 			if (attrs[key]) {
-				attrs[key] = prepareMentionAttrs(
+				attrs[key] = prepareCopiedMentionAttrs(
 					attrs[key] as TiptapMentionAttributes,
-					metadata,
+					metadata.sourceProjectId,
 					dataService,
 				)
 			}

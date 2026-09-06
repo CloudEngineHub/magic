@@ -16,6 +16,12 @@ import { findAttachmentByPath } from "./helper"
 import { normalizeInlineStyle } from "../normalizeInlineStyle"
 import { FileReference, getFileExtensionFromPath } from "./FileReference"
 import { IconExternalLink } from "@tabler/icons-react"
+import { MentionItemType } from "@/components/business/MentionPanel/types"
+import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
+import {
+	createDirectoryMentionData,
+	createProjectFileMentionData,
+} from "@/components/business/MentionPanel/utils/projectReferenceMention"
 
 // 授权链接这类超长 URL 没有空格，nowrap + ellipsis 会把消息气泡撑出去。
 const markdownLinkClassName =
@@ -122,10 +128,31 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	}
 
 	if (resolvedFileInfo) {
+		// 复用解析结果的真实身份，不能根据展示名称在拖入时重新匹配文件。
+		const projectId =
+			resolvedFileInfo.project_id || projectFilesStore.currentSelectedProject?.id
+		const mentionAttrs: TiptapMentionAttributes | undefined = resolvedFileInfo.file_id
+			? resolvedFileInfo.is_directory || resolvedFileInfo.type === "directory"
+				? {
+						type: MentionItemType.FOLDER,
+						data: {
+							...createDirectoryMentionData(resolvedFileInfo),
+							project_id: projectId,
+						},
+					}
+				: {
+						type: MentionItemType.PROJECT_FILE,
+						data: createProjectFileMentionData({
+							...resolvedFileInfo,
+							project_id: projectId,
+						}),
+					}
+			: undefined
 		return (
 			<FileReference
 				label={children}
 				href={normalizedHref}
+				mentionAttrs={mentionAttrs}
 				fileType={
 					resolvedFileInfo.file_extension || getFileExtensionFromPath(normalizedHref)
 				}
