@@ -135,6 +135,16 @@ export default function useUploadMentionFlow({
 		return ""
 	})
 
+	// 粘贴得到的引用不拥有原文件；删除监听和删除处理必须使用同一判定。
+	const isPastedFileReference = useMemoizedFn((attrs: TiptapMentionAttributes) => {
+		if (isPendingProjectFileMention(attrs)) return true
+		if (attrs.type !== MentionItemType.UPLOAD_FILE) return false
+		return Boolean(
+			fileUploadStore.getFileById((attrs.data as UploadFileMentionData).file_id)
+				?.isVirtualReference,
+		)
+	})
+
 	const isAllowedUploadMention = useMemoizedFn((mentionAttrs: TiptapMentionAttributes) => {
 		if (mentionAttrs.type !== MentionItemType.UPLOAD_FILE) return true
 
@@ -361,11 +371,7 @@ export default function useUploadMentionFlow({
 				return
 			}
 
-			if (
-				(mentionAttrs.type === MentionItemType.PROJECT_FILE ||
-					mentionAttrs.type === MentionItemType.FOLDER) &&
-				isPendingProjectFileMention(mentionAttrs)
-			) {
+			if (isPastedFileReference(mentionAttrs)) {
 				removeMentionOnly(mentionAttrs)
 				return
 			}
@@ -417,6 +423,9 @@ export default function useUploadMentionFlow({
 			context?: { deletionInput: MentionDeletionInput },
 		) => {
 			if (stillExists) {
+				return false
+			}
+			if (isPastedFileReference(mentionAttrs)) {
 				return false
 			}
 

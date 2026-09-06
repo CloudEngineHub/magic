@@ -16,6 +16,7 @@ import {
 	createReferencedProjectHref,
 	escapeHtmlText,
 	escapeMarkdownLinkLabel,
+	normalizeWorkspacePathForComparison,
 } from "@/pages/superMagic/utils/filePathMention"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
 import { serializeInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/transform"
@@ -33,11 +34,19 @@ function getWorkspaceResourceId(attrs: TiptapMentionAttributes): string | undefi
 
 function getWorkspaceResourcePath(attrs: TiptapMentionAttributes): string {
 	if (attrs.type === MentionItemType.FOLDER) {
-		return (attrs.data as DirectoryMentionData).directory_path || ""
+		return (
+			normalizeWorkspacePathForComparison(
+				(attrs.data as DirectoryMentionData).directory_path || "",
+			) || ""
+		)
 	}
 	if (attrs.type === MentionItemType.PROJECT_FILE || attrs.type === MentionItemType.UPLOAD_FILE) {
 		const data = attrs.data as ProjectFileMentionData | UploadFileMentionData
-		return data.relative_file_path || data.file_path || ""
+		return (
+			normalizeWorkspacePathForComparison(data.relative_file_path || "") ||
+			data.file_path ||
+			""
+		)
 	}
 	return ""
 }
@@ -104,7 +113,10 @@ export function resolveMentionForClipboard(
 	const workspaceResource = referencedProjectId
 		? undefined
 		: findWorkspaceResource(attrs, workspaceFiles)
-	const workspacePath = workspaceResource?.relative_file_path || workspaceResource?.path || ""
+	// 文件接口中的前导 / 表示项目根，不是沙盒绝对路径。
+	const workspacePath = normalizeWorkspacePathForComparison(
+		workspaceResource?.relative_file_path || workspaceResource?.path || "",
+	)
 	const mentionPath =
 		attrs.type === MentionItemType.PROJECT_FILE && referencedProjectId
 			? (attrs.data as ProjectFileMentionData).file_path ||

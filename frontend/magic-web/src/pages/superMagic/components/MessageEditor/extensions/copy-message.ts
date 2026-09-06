@@ -30,8 +30,8 @@ import {
 	resolveClipboardContent,
 	resolveMentionForClipboard,
 } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
+import { htmlToClipboardMarkdown } from "@/pages/superMagic/components/MessageList/utils/clipboardMarkdown"
 import {
-	escapeMarkdownLinkLabel,
 	extractMarkdownFileLinks,
 	parseMarkdownFileHref,
 	type MarkdownFileTarget,
@@ -278,11 +278,6 @@ function deduplicateMentions(items: TiptapMentionAttributes[]): TiptapMentionAtt
 	})
 }
 
-function formatMarkdownLink(label: string, href: string): string {
-	const destination = href.includes(" ") ? `<${href}>` : href
-	return `[${escapeMarkdownLinkLabel(label)}](${destination})`
-}
-
 function buildHtmlPasteParts(
 	html: string,
 	attachments: AttachmentItem[],
@@ -292,61 +287,19 @@ function buildHtmlPasteParts(
 
 	const container = document.createElement("div")
 	container.innerHTML = html
-	const parts: PastePart[] = []
-	let recognizedLinkCount = 0
-	const blockTags = new Set(["DIV", "P", "LI", "SECTION", "ARTICLE", "BLOCKQUOTE", "PRE"])
+	const hasFileLink = Array.from(container.querySelectorAll("a[href]")).some(
+		(anchor) =>
+			!anchor.closest("code, pre") &&
+			Boolean(parseMarkdownFileHref(anchor.getAttribute("href") || "")),
+	)
+	if (!hasFileLink) return null
 
-	const visit = (node: Node) => {
-		if (node.nodeType === Node.TEXT_NODE) {
-			appendText(parts, node.textContent || "")
-			return
-		}
-		if (!(node instanceof HTMLElement)) return
-
-		if (node.tagName === "BR") {
-			appendText(parts, "\n")
-			return
-		}
-
-		if (node.tagName === "A") {
-			const href = node.getAttribute("href") || ""
-			const target = parseMarkdownFileHref(href)
-			if (!target) {
-				appendText(parts, node.textContent || "")
-				return
-			}
-
-			recognizedLinkCount++
-			const attrs = createMentionFromMarkdownTarget(
-				target,
-				attachments,
-				referencedProjectAttachments,
-			)
-			if (attrs) {
-				parts.push({ type: "mention", attrs })
-			} else {
-				appendText(parts, formatMarkdownLink(node.textContent || href, href))
-			}
-			return
-		}
-
-		if (node.tagName === "CODE" || node.tagName === "PRE") {
-			appendText(parts, node.textContent || "")
-			if (node.tagName === "PRE") appendText(parts, "\n")
-			return
-		}
-
-		node.childNodes.forEach(visit)
-		if (blockTags.has(node.tagName)) {
-			const lastPart = parts[parts.length - 1]
-			if (lastPart?.type !== "text" || !lastPart.text.endsWith("\n")) {
-				appendText(parts, "\n")
-			}
-		}
-	}
-
-	container.childNodes.forEach(visit)
-	return recognizedLinkCount > 0 ? parts : null
+	// 先保留 Markdown 格式，再只替换文件链接；块间排版空白不能当作正文换行。
+	return buildPlainTextPasteParts(
+		htmlToClipboardMarkdown(container),
+		attachments,
+		referencedProjectAttachments,
+	)
 }
 
 function extractHtmlMarkdownFileTargets(html: string): MarkdownFileTarget[] {

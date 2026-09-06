@@ -10,7 +10,7 @@ import type { TiptapMentionAttributes } from "@/components/business/MentionPanel
 import type { FileInfo } from "@/pages/superMagic/pages/Workspace/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
-import { createCanonicalWorkspaceHref } from "@/pages/superMagic/utils/filePathMention"
+import { normalizeWorkspacePathForComparison } from "@/pages/superMagic/utils/filePathMention"
 import { getMentionClipboardRepresentation, resolveMentionForClipboard } from "./mentionClipboard"
 
 interface ResolvedClipboardFiles {
@@ -78,7 +78,8 @@ export async function resolveClipboardFilePaths(
 			requests.set(fileId, request)
 		}
 		const file = await request
-		if (!file?.relative_file_path || !createCanonicalWorkspaceHref(file.relative_file_path)) {
+		const path = normalizeWorkspacePathForComparison(file?.relative_file_path || "")
+		if (!path) {
 			return attrs
 		}
 		return {
@@ -86,10 +87,10 @@ export async function resolveClipboardFilePaths(
 			data: {
 				...data,
 				...(attrs.type === MentionItemType.FOLDER
-					? { directory_path: file.relative_file_path }
+					? { directory_path: path }
 					: {
-							relative_file_path: file.relative_file_path,
-							file_path: file.relative_file_path,
+							relative_file_path: path,
+							file_path: path,
 						}),
 			},
 		}

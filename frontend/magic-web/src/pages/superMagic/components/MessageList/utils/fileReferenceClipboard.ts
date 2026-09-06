@@ -2,43 +2,15 @@ import type { ClipboardEvent } from "react"
 import {
 	createCanonicalWorkspaceHref,
 	createReferencedProjectHref,
-	escapeMarkdownLinkLabel,
 	parseMarkdownFileHref,
 } from "@/pages/superMagic/utils/filePathMention"
+import { htmlToClipboardMarkdown } from "./clipboardMarkdown"
 
 const FILE_REFERENCE_SELECTOR = "[data-file-reference]"
 
 function closestFileReference(node: Node): Element | null {
 	const element = node instanceof Element ? node : node.parentElement
 	return element?.closest(FILE_REFERENCE_SELECTOR) ?? null
-}
-
-/** 保留正文换行；不读取样式或图标，也不尝试重新生成整篇 Markdown。 */
-function getSelectedText(node: Node): string {
-	if (node.nodeType === Node.TEXT_NODE) return node.textContent || ""
-	if (!(node instanceof Element)) return ""
-	if (node.tagName === "BR") return "\n"
-	if (node.tagName === "IMG") return node.getAttribute("alt") || ""
-	if (node.tagName === "SVG" || node.getAttribute("aria-hidden") === "true") return ""
-
-	let text = ""
-	for (const child of node.childNodes) {
-		const childText = getSelectedText(child)
-		const tag = child instanceof Element ? child.tagName : ""
-		const separator = /^(P|H[1-6]|PRE|BLOCKQUOTE)$/.test(tag)
-			? "\n\n"
-			: /^(DIV|UL|OL|LI|TABLE|TR)$/.test(tag)
-				? "\n"
-				: ""
-		if (separator && text && !text.endsWith(separator)) {
-			text += separator.slice(text.endsWith("\n") ? 1 : 0)
-		}
-		text += childText
-		if (separator && !text.endsWith(separator)) {
-			text += separator.slice(text.endsWith("\n") ? 1 : 0)
-		}
-	}
-	return text
 }
 
 export function copySelectedFileReferences(event: ClipboardEvent<HTMLDivElement>): void {
@@ -57,11 +29,30 @@ export function copySelectedFileReferences(event: ClipboardEvent<HTMLDivElement>
 	if (endReference) range.setEndAfter(endReference)
 
 	const container = root.ownerDocument.createElement("div")
-	container.append(range.cloneContents())
+	let fragment: Node = range.cloneContents()
+	let ancestor =
+		range.commonAncestorContainer instanceof Element
+			? range.commonAncestorContainer
+			: range.commonAncestorContainer.parentElement
+	// cloneContents 不含公共祖先；保留其格式和列表上下文，但不复制祖先中的其他正文。
+	while (ancestor && ancestor !== root && root.contains(ancestor)) {
+		const wrapper = ancestor.cloneNode(false) as Element
+		if (ancestor.tagName === "OL") {
+			const index = Array.from(ancestor.children).findIndex((item) =>
+				range.intersectsNode(item),
+			)
+			const start = Number(ancestor.getAttribute("start") || 1)
+			if (index >= 0) wrapper.setAttribute("start", String(start + index))
+		}
+		wrapper.appendChild(fragment)
+		fragment = wrapper
+		ancestor = ancestor.parentElement
+	}
+	container.append(fragment)
 	const references = container.querySelectorAll<HTMLElement>(FILE_REFERENCE_SELECTOR)
 	if (references.length === 0) return
 
-	const links: { anchor: HTMLAnchorElement; markdown: string }[] = []
+	let linkCount = 0
 	for (const reference of references) {
 		const target = parseMarkdownFileHref(reference.dataset.fileReference || "")
 		if (!target) continue
@@ -76,16 +67,12 @@ export function copySelectedFileReferences(event: ClipboardEvent<HTMLDivElement>
 		anchor.setAttribute("href", href)
 		anchor.textContent = label
 		reference.replaceWith(anchor)
-		links.push({
-			anchor,
-			markdown: `[${escapeMarkdownLinkLabel(label)}](${href.includes(" ") ? `<${href}>` : href})`,
-		})
+		linkCount++
 	}
-	if (links.length === 0) return
+	if (linkCount === 0) return
 
 	const html = container.innerHTML
-	for (const { anchor, markdown } of links) anchor.replaceWith(markdown)
-	const text = getSelectedText(container).replace(/^\n+|\n+$/g, "")
+	const text = htmlToClipboardMarkdown(container)
 	event.clipboardData.setData("text/plain", text)
 	event.clipboardData.setData("text/html", html)
 	event.preventDefault()
