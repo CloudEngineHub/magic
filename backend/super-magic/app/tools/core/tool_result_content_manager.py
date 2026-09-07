@@ -10,6 +10,7 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.token_estimator import num_tokens_from_string
+from app.tools.core.base_tool import ToolResultContentMode
 from app.tools.core.tool_result_storage import (
     ToolResultFile,
     ToolResultStorageConfig,
@@ -89,11 +90,11 @@ class ToolResultContentManager:
         self,
         result: ToolResult,
         *,
-        overflow_exempt: bool = False,
+        mode: ToolResultContentMode = ToolResultContentMode.GLOBAL,
         tool_name: str,
         tool_context: ToolContext | None,
     ) -> ToolResult:
-        if result.ok and overflow_exempt:
+        if result.ok and mode in (ToolResultContentMode.SELF_MANAGED, ToolResultContentMode.INSTRUCTION):
             return result
         try:
             settings = _ContentConfig.model_validate(config.get("agent.tool_result", {}))

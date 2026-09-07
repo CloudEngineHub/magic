@@ -26,7 +26,7 @@ from agentlang.utils.parallel import Parallel
 from pydantic import ValidationError
 
 from app.core.context.agent_context import AgentContext
-from app.tools.core.base_tool import ToolForwardRequest
+from app.tools.core.base_tool import ToolForwardRequest, ToolResultContentMode
 from app.tools.core.tool_call_event_manager import ToolCallEventManager
 from app.tools.core.tool_executor import tool_executor
 from app.tools.core.tool_result_content_manager import tool_result_content_manager
@@ -40,7 +40,7 @@ class _ToolCallOutcome:
     result: ToolResult
     tool_name: str
     tool_context: ToolContext | None
-    overflow_exempt: bool = False
+    result_content_mode: ToolResultContentMode = ToolResultContentMode.GLOBAL
     forward_warning: str | None = None
 
 
@@ -158,7 +158,7 @@ class ToolCallExecutor:
             model_result = self._merge_forward_warning(outcome.result, outcome.forward_warning)
             model_result = await tool_result_content_manager.prepare(
                 model_result,
-                overflow_exempt=outcome.overflow_exempt,
+                mode=outcome.result_content_mode,
                 tool_name=outcome.tool_name,
                 tool_context=outcome.tool_context,
             )
@@ -179,7 +179,7 @@ class ToolCallExecutor:
         tool_context = None
         tool_arguments_dict = None
         forward_warning: str | None = None
-        overflow_exempt = False
+        result_content_mode = ToolResultContentMode.GLOBAL
         # 记录工具执行开始时间
         tool_start_time = time.time()
 
@@ -326,7 +326,7 @@ class ToolCallExecutor:
                 # execute_tool_call 按最终名称取得实例；源工具转发声明不能传给目标。
                 executed_tool = tool_executor.get_tool(tool_name)
                 if executed_tool is not None:
-                    overflow_exempt = executed_tool.result_overflow_exempt
+                    result_content_mode = executed_tool.result_content_mode
 
                 # 计算执行时间
                 execution_time = time.time() - tool_start_time
@@ -350,7 +350,7 @@ class ToolCallExecutor:
                     result.execution_time,
                 )
             except Exception as e:
-                overflow_exempt = False
+                result_content_mode = ToolResultContentMode.GLOBAL
                 # 计算执行时间（即使出错）
                 execution_time = (
                     time.time() - tool_start_time if "tool_start_time" in locals() else 0.0
@@ -405,7 +405,7 @@ class ToolCallExecutor:
 
         except AttributeError as attr_err:
             result = None
-            overflow_exempt = False
+            result_content_mode = ToolResultContentMode.GLOBAL
             forward_warning = None
             logger.error(
                 f"处理工具调用对象时访问属性出错: {tool_call}, 错误: {attr_err!r}",
@@ -433,7 +433,7 @@ class ToolCallExecutor:
 
         except Exception as outer_err:
             result = None
-            overflow_exempt = False
+            result_content_mode = ToolResultContentMode.GLOBAL
             forward_warning = None
             # 捕获 tool_call 对象本身处理（如属性访问）或 result 添加过程中的其他异常
             logger.error(
@@ -465,7 +465,7 @@ class ToolCallExecutor:
             result=result,
             tool_name=tool_name,
             tool_context=tool_context,
-            overflow_exempt=overflow_exempt,
+            result_content_mode=result_content_mode,
             forward_warning=forward_warning,
         )
 

@@ -11,6 +11,7 @@ import re
 import difflib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Dict, Generic, Optional, Type, TypeVar, ClassVar, get_args, get_origin, List, Tuple
 
 from pydantic import ConfigDict, ValidationError
@@ -67,6 +68,14 @@ class ToolForwardRequest:
     warning: str
 
 
+class ToolResultContentMode(StrEnum):
+    """模型交付策略；失败结果和框架错误始终使用全局保护。"""
+
+    GLOBAL = "global"
+    SELF_MANAGED = "self_managed"
+    INSTRUCTION = "instruction"
+
+
 class BaseTool(Generic[T], ABC):
     """工具基类
 
@@ -78,7 +87,7 @@ class BaseTool(Generic[T], ABC):
     params_class: ClassVar[Type[T]] = None
     # 实例运行时默认值；工具注册策略由 @tool 写入私有注册元数据。
     code_mode_only: ClassVar[bool] = False
-    result_overflow_exempt: ClassVar[bool] = False
+    result_content_mode: ClassVar[ToolResultContentMode] = ToolResultContentMode.GLOBAL
 
     # 配置项
     model_config = ConfigDict(arbitrary_types_allowed=True)
