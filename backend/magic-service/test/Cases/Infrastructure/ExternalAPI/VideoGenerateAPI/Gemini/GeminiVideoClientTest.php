@@ -285,6 +285,44 @@ final class GeminiVideoClientTest extends TestCase
         self::assertSame(base64_encode('video-bytes'), $result['bytes_base64_encoded']);
     }
 
+    public function testDownloadMediaNeverRestoresApiKeyAfterCrossOriginRedirect(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->expects($this->exactly(4))
+            ->method('get')
+            ->willReturnCallback(function (string $url, array $options) {
+                static $call = 0;
+                ++$call;
+                if ($call === 1) {
+                    self::assertSame('secret-api-key', $options['headers']['x-goog-api-key'] ?? null);
+                    return new Response(302, ['Location' => 'https://www.google.com/video/step-2']);
+                }
+                if ($call === 2) {
+                    self::assertSame('secret-api-key', $options['headers']['x-goog-api-key'] ?? null);
+                    return new Response(302, ['Location' => 'https://www.gstatic.com/video/step-3']);
+                }
+                if ($call === 3) {
+                    self::assertArrayNotHasKey('x-goog-api-key', $options['headers']);
+                    return new Response(302, ['Location' => 'https://www.google.com/video/step-4']);
+                }
+
+                self::assertArrayNotHasKey('x-goog-api-key', $options['headers']);
+                return new Response(200, ['Content-Type' => 'video/mp4'], 'video-bytes');
+            });
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->method('create')->willReturn($httpClient);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->willReturn(new GeminiRecordingLogger());
+
+        $result = (new GeminiVideoClient($clientFactory, $loggerFactory))->downloadMedia(
+            'https://www.google.com/v1',
+            'secret-api-key',
+            '/media/video.mp4',
+        );
+
+        self::assertSame(base64_encode('video-bytes'), $result['bytes_base64_encoded']);
+    }
+
     public function testDownloadMediaRejectsBodyLargerThan100Mb(): void
     {
         $previousMemoryLimit = ini_get('memory_limit');

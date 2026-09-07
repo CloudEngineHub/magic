@@ -57,10 +57,10 @@ readonly class GeminiVideoClient
         try {
             $client = $this->createClient();
             $safeUrl = SSRFUtil::getSafeUrl($url, replaceIp: false, allowRedirect: false);
+            $apiKeyAllowed = $this->sameOrigin($baseUrl, $safeUrl);
             for ($redirect = 0; $redirect <= 3; ++$redirect) {
-                $sameOrigin = $this->sameOrigin($url, $safeUrl);
                 $headers = ['Accept' => '*/*'];
-                if ($sameOrigin) {
+                if ($apiKeyAllowed) {
                     $headers['x-goog-api-key'] = $apiKey;
                 }
                 $response = $client->get($safeUrl, [
@@ -83,7 +83,11 @@ readonly class GeminiVideoClient
                     throw ProviderVideoException::retriable('gemini video media download failed: redirect limit exceeded');
                 }
                 $redirectUrl = (string) UriResolver::resolve(new Uri($safeUrl), new Uri($location));
-                $safeUrl = SSRFUtil::getSafeUrl($redirectUrl, replaceIp: false, allowRedirect: false);
+                $nextSafeUrl = SSRFUtil::getSafeUrl($redirectUrl, replaceIp: false, allowRedirect: false);
+                if (! $this->sameOrigin($safeUrl, $nextSafeUrl)) {
+                    $apiKeyAllowed = false;
+                }
+                $safeUrl = $nextSafeUrl;
             }
         } catch (RequestException $exception) {
             throw ProviderVideoException::retriable('gemini video media download failed', $exception, $exception->getResponse()?->getStatusCode());
