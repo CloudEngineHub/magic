@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
 import PPTRender, { reconcilePPTSlideToolbarModels } from "../index"
+import type { PPTSlideStructureAdapter } from "../types"
 
 const mockState = vi.hoisted(() => ({
 	store: {
@@ -411,6 +412,7 @@ vi.mock("@/components/shadcn-ui/alert-dialog", () => ({
 function renderPPTRender(input?: {
 	onRegisterCheckBeforeClose?: (fileId: string, callback: () => Promise<boolean>) => void
 	onUnregisterCheckBeforeClose?: (fileId: string) => void
+	slideStructureAdapter?: PPTSlideStructureAdapter
 }) {
 	return render(
 		<PPTRender
@@ -421,6 +423,7 @@ function renderPPTRender(input?: {
 			allowEdit={true}
 			onRegisterCheckBeforeClose={input?.onRegisterCheckBeforeClose}
 			onUnregisterCheckBeforeClose={input?.onUnregisterCheckBeforeClose}
+			slideStructureAdapter={input?.slideStructureAdapter}
 		/>,
 	)
 }
@@ -596,6 +599,17 @@ describe("PPTRender", () => {
 		await waitFor(() => {
 			expect(mockState.pptControlBarProps).toHaveBeenCalledWith(
 				expect.objectContaining({ onReplaceTemplate: expect.any(Function) }),
+			)
+		})
+	})
+
+	it("hides template replacement for slide template projects", async () => {
+		mockState.isSlideEditing = false
+		renderPPTRender({ slideStructureAdapter: {} })
+
+		await waitFor(() => {
+			expect(mockState.pptControlBarProps).toHaveBeenCalledWith(
+				expect.objectContaining({ onReplaceTemplate: undefined }),
 			)
 		})
 	})

@@ -489,8 +489,13 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const presentedToolbarModel = scopedPresentedKey
 		? toolbarModels.get(scopedPresentedKey)
 		: undefined
+	// Slide template projects manage their own template manifest and should not
+	// expose the regular PPT template replacement flow.
+	const isSlidesTemplateProject = Boolean(slideStructureAdapter)
 	const canReplaceTemplate =
-		effectiveAllowEdit && (presentedToolbarModel?.props.isNewestVersion ?? true)
+		!isSlidesTemplateProject &&
+		effectiveAllowEdit &&
+		(presentedToolbarModel?.props.isNewestVersion ?? true)
 
 	const handleOpenTemplateReplacement = useMemoizedFn(() => {
 		if (!canReplaceTemplate) return
