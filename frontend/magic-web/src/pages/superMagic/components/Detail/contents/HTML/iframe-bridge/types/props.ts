@@ -227,7 +227,20 @@ export interface HTMLEditorV2Ref {
 	cancelBatchOperation: () => Promise<void>
 
 	/** 临时应用样式（拖动过程中调用，不记录历史） */
-	applyStylesTemporary: (selector: string, styles: Record<string, string>) => Promise<void>
+	applyStylesTemporary: (
+		selector: string,
+		styles: Record<string, string>,
+	) => Promise<{
+		rect?: { top: number; left: number; width: number; height: number }
+		childRects?: Array<{
+			top: number
+			left: number
+			width: number
+			height: number
+			position?: string
+			display?: string
+		}>
+	} | void>
 
 	/** 进入编辑模式 */
 	enterEditMode: () => Promise<void>

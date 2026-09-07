@@ -1,16 +1,18 @@
 import type { ElementRect } from "../types"
 
-export const GAP_HANDLE_MIN_HIT = 8
+export const GAP_HANDLE_MIN_HIT = 16
 export type GapAxis = "row" | "column"
 export type GapChildRect = ElementRect & { position?: string; display?: string }
 
 export interface GapHandleFrame {
+	id: string
 	axis: GapAxis
 	left: number
 	top: number
 	width: number
 	height: number
 	cursor: "col-resize" | "row-resize"
+	valueLabel?: string
 }
 
 const ROW_OVERLAP_RATIO = 0.5
@@ -52,10 +54,6 @@ function shareColumn(a: ElementRect, b: ElementRect): boolean {
 	)
 }
 
-function hitSize(gap: number): number {
-	return Math.max(GAP_HANDLE_MIN_HIT, gap)
-}
-
 export function getGapHandleLayout(
 	containerRect: ElementRect,
 	childRects: GapChildRect[],
@@ -66,69 +64,119 @@ export function getGapHandleLayout(
 	if (children.length < 2) return []
 
 	const frames: GapHandleFrame[] = []
-	const byLeft = [...children].sort((a, b) => a.left - b.left || a.top - b.top)
-	let columnPair: [ElementRect, ElementRect] | null = null
-	for (let i = 0; i < byLeft.length && !columnPair; i++) {
-		for (let j = i + 1; j < byLeft.length; j++) {
-			const leftChild = byLeft[i]
-			const rightChild = byLeft[j]
-			if (
-				shareRow(leftChild, rightChild) &&
-				rightChild.left >= leftChild.left + leftChild.width - 0.5
-			) {
-				columnPair = [leftChild, rightChild]
-				break
-			}
-		}
-	}
-	if (columnPair) {
-		const [leftChild, rightChild] = columnPair
+	for (const leftChild of children) {
+		const rightChild = nearestAlongAxis(leftChild, children, "column")
+		if (!rightChild) continue
 		const gap = Math.max(0, rightChild.left - (leftChild.left + leftChild.width))
-		const width = hitSize(gap)
+		const hit = GAP_HANDLE_MIN_HIT
 		const centerX = leftChild.left + leftChild.width + gap / 2
 		const top = Math.max(leftChild.top, rightChild.top)
 		const bottom = Math.min(
 			leftChild.top + leftChild.height,
 			rightChild.top + rightChild.height,
 		)
+		const centerY = (top + bottom) / 2
 		frames.push({
+			id: `column:${children.indexOf(leftChild)}:${children.indexOf(rightChild)}`,
 			axis: "column",
-			left: centerX - containerRect.left - width / 2,
-			top: top - containerRect.top,
-			width,
-			height: Math.max(GAP_HANDLE_MIN_HIT, bottom - top),
+			left: centerX - containerRect.left - hit / 2,
+			top: centerY - containerRect.top - hit / 2,
+			width: hit,
+			height: hit,
 			cursor: "col-resize",
 		})
 	}
 
-	const byTop = [...children].sort((a, b) => a.top - b.top || a.left - b.left)
-	let rowPair: [ElementRect, ElementRect] | null = null
-	for (let i = 0; i < byTop.length && !rowPair; i++) {
-		for (let j = i + 1; j < byTop.length; j++) {
-			const above = byTop[i]
-			const below = byTop[j]
-			if (shareColumn(above, below) && below.top >= above.top + above.height - 0.5) {
-				rowPair = [above, below]
-				break
-			}
-		}
-	}
-	if (rowPair) {
-		const [above, below] = rowPair
+	for (const above of children) {
+		const below = nearestAlongAxis(above, children, "row")
+		if (!below) continue
 		const gap = Math.max(0, below.top - (above.top + above.height))
-		const height = hitSize(gap)
+		const hit = GAP_HANDLE_MIN_HIT
 		const centerY = above.top + above.height + gap / 2
 		const left = Math.max(above.left, below.left)
 		const right = Math.min(above.left + above.width, below.left + below.width)
+		const centerX = (left + right) / 2
 		frames.push({
+			id: `row:${children.indexOf(above)}:${children.indexOf(below)}`,
 			axis: "row",
-			left: left - containerRect.left,
-			top: centerY - containerRect.top - height / 2,
-			width: Math.max(GAP_HANDLE_MIN_HIT, right - left),
-			height,
+			left: centerX - containerRect.left - hit / 2,
+			top: centerY - containerRect.top - hit / 2,
+			width: hit,
+			height: hit,
 			cursor: "row-resize",
 		})
 	}
 
 	return frames
+}
+
+function nearestAlongAxis(
+	origin: ElementRect,
+	children: ElementRect[],
+	axis: GapAxis,
+): ElementRect | null {
+	let nearest: ElementRect | null = null
+	for (const other of children) {
+		if (other === origin) continue
+		if (axis === "column") {
+			if (!shareRow(origin, other)) continue
+			if (other.left < origin.left + origin.width - 0.5) continue
+			if (!nearest || other.left < nearest.left) nearest = other
+			continue
+		}
+		if (!shareColumn(origin, other)) continue
+		if (other.top < origin.top + origin.height - 0.5) continue
+		if (!nearest || other.top < nearest.top) nearest = other
+	}
+	return nearest
+}
+
+/** Map iframe-space frames into the scaled selection box. */
+export function mapGapHandlesToSelectionBox(
+	frames: GapHandleFrame[],
+	containerRect: Pick<ElementRect, "width" | "height">,
+	scaleRatio: number,
+): GapHandleFrame[] {
+	const scale = scaleRatio > 0 ? scaleRatio : 1
+	const boxWidth = containerRect.width * scale
+	const boxHeight = containerRect.height * scale
+	return frames.map((frame) => {
+		const width = Math.max(8, frame.width * scale)
+		const height = Math.max(8, frame.height * scale)
+		return {
+			...frame,
+			left: Math.min(Math.max(0, frame.left * scale), Math.max(0, boxWidth - width)),
+			top: Math.min(Math.max(0, frame.top * scale), Math.max(0, boxHeight - height)),
+			width,
+			height,
+		}
+	})
+}
+
+/** Shift later siblings so gutter ticks follow a live gap preview. */
+export function applyGapPreviewToChildRects(
+	children: GapChildRect[],
+	axis: GapAxis,
+	extraPx: number,
+	linked = false,
+): GapChildRect[] {
+	if (extraPx === 0) return children
+	const inFlow = getInFlowChildRects(children)
+	return children.map((child) => {
+		if (!inFlow.includes(child)) return child
+		let { left, top } = child
+		if (axis === "column" || linked) {
+			const gutters = inFlow.filter(
+				(other) => shareRow(child, other) && other.left < child.left - 0.5,
+			).length
+			left += extraPx * gutters
+		}
+		if (axis === "row" || linked) {
+			const gutters = inFlow.filter(
+				(other) => shareColumn(child, other) && other.top < child.top - 0.5,
+			).length
+			top += extraPx * gutters
+		}
+		return { ...child, left, top }
+	})
 }

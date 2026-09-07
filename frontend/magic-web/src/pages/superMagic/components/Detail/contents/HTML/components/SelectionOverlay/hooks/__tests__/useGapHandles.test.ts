@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useGapHandles } from "../useGapHandles"
 import type { GapAxis } from "../../utils/gapHandleLayout"
+import { getGapHandleLayout } from "../../utils/gapHandleLayout"
 import type { SelectedInfo } from "../../types"
 
 describe("useGapHandles", () => {
@@ -162,7 +163,7 @@ describe("useGapHandles", () => {
 		})
 	})
 
-	it("writes both axes when gapAxesLinked is true", async () => {
+	it("writes only the dragged axis from the canvas even when linked", async () => {
 		await dragGap({
 			selectedInfo: createFlexSelectedInfo(),
 			axis: "column",
@@ -172,7 +173,6 @@ describe("useGapHandles", () => {
 		})
 
 		expect(mockEditorRef.current.applyStylesTemporary).toHaveBeenCalledWith("div.flex-row", {
-			rowGap: "36px",
 			columnGap: "36px",
 		})
 	})
@@ -218,5 +218,163 @@ describe("useGapHandles", () => {
 		})
 
 		expect(onPreviewStyles).toHaveBeenCalledWith({ columnGap: "36px" })
+	})
+
+	it("labels idle ticks with the computed gap", () => {
+		const { result } = renderHook(() =>
+			useGapHandles({
+				editorRef: mockEditorRef as never,
+				selectedInfo: createFlexSelectedInfo(),
+				gapAxesLinked: false,
+				onPreviewStyles: vi.fn(),
+			}),
+		)
+		expect(result.current.gapHandles[0].valueLabel).toBe("16px")
+	})
+
+	it("updates the value label while dragging", async () => {
+		const { result } = await dragGap({
+			selectedInfo: createFlexSelectedInfo(),
+			axis: "column",
+			gapAxesLinked: false,
+			moveX: 120,
+			moveY: 100,
+			skipPointerUp: true,
+		})
+		expect(result.current.gapHandles[0].valueLabel).toBe("36px")
+	})
+
+	it("prefers measured child rects from applyStylesTemporary", async () => {
+		mockEditorRef.current.applyStylesTemporary.mockResolvedValue({
+			rect: { top: 0, left: 0, width: 220, height: 100 },
+			childRects: [
+				{ top: 10, left: 10, width: 70, height: 80 },
+				{ top: 10, left: 140, width: 70, height: 80 },
+			],
+		})
+		const { result } = await dragGap({
+			selectedInfo: createFlexSelectedInfo(),
+			axis: "column",
+			gapAxesLinked: false,
+			moveX: 120,
+			moveY: 100,
+			skipPointerUp: true,
+		})
+		const handle = result.current.gapHandles[0]
+		expect(handle.left + handle.width / 2).toBeCloseTo(110)
+		expect(handle.width).toBe(16)
+	})
+
+	function createGridSelectedInfo(): SelectedInfo {
+		return {
+			selector: "div.meta-grid",
+			rect: { top: 100, left: 0, width: 220, height: 196 },
+			childRects: [
+				{ top: 100, left: 10, width: 80, height: 80 },
+				{ top: 100, left: 110, width: 80, height: 80 },
+				{ top: 196, left: 10, width: 80, height: 80 },
+				{ top: 196, left: 110, width: 80, height: 80 },
+			],
+			computedStyles: {
+				display: "grid",
+				columnGap: "16px",
+				rowGap: "16px",
+			},
+		}
+	}
+
+	it("does not push row ticks down when live layout is missing", async () => {
+		const selectedInfo = createGridSelectedInfo()
+		const start = getGapHandleLayout(
+			selectedInfo.rect,
+			selectedInfo.childRects ?? [],
+			"grid",
+		).find((frame) => frame.axis === "row")
+		const { result } = await dragGap({
+			selectedInfo,
+			axis: "row",
+			gapAxesLinked: false,
+			moveX: 100,
+			moveY: 140,
+			skipPointerUp: true,
+		})
+		const next = result.current.gapHandles.find((frame) => frame.axis === "row")
+		expect(start).toBeDefined()
+		expect(next).toBeDefined()
+		expect(next!.top + next!.height / 2).toBeCloseTo(start!.top + start!.height / 2)
+	})
+
+	it("follows an upward-growing row gutter from live layout", async () => {
+		mockEditorRef.current.applyStylesTemporary.mockResolvedValue({
+			rect: { top: 80, left: 0, width: 220, height: 216 },
+			childRects: [
+				{ top: 80, left: 10, width: 80, height: 80 },
+				{ top: 80, left: 110, width: 80, height: 80 },
+				{ top: 196, left: 10, width: 80, height: 80 },
+				{ top: 196, left: 110, width: 80, height: 80 },
+			],
+		})
+		const selectedInfo = createGridSelectedInfo()
+		const start = getGapHandleLayout(
+			selectedInfo.rect,
+			selectedInfo.childRects ?? [],
+			"grid",
+		).find((frame) => frame.axis === "row")
+		const { result } = await dragGap({
+			selectedInfo,
+			axis: "row",
+			gapAxesLinked: false,
+			moveX: 100,
+			moveY: 140,
+			skipPointerUp: true,
+		})
+		const next = result.current.gapHandles.find((frame) => frame.axis === "row")
+		expect(start).toBeDefined()
+		expect(next).toBeDefined()
+		const startCenter = selectedInfo.rect.top + start!.top + start!.height / 2
+		const nextCenter = 80 + next!.top + next!.height / 2
+		expect(nextCenter).toBeLessThan(startCenter)
+	})
+
+	it("moves the column tick while dragging", async () => {
+		mockEditorRef.current.applyStylesTemporary.mockResolvedValue({
+			rect: { top: 0, left: 0, width: 240, height: 100 },
+			childRects: [
+				{ top: 10, left: 10, width: 80, height: 80 },
+				{ top: 10, left: 130, width: 80, height: 80 },
+			],
+		})
+		const { result } = await dragGap({
+			selectedInfo: createFlexSelectedInfo(),
+			axis: "column",
+			gapAxesLinked: false,
+			moveX: 120,
+			moveY: 100,
+			skipPointerUp: true,
+		})
+		const start = getGapHandleLayout(
+			createFlexSelectedInfo().rect,
+			createFlexSelectedInfo().childRects ?? [],
+			"flex",
+		)[0]
+		const next = result.current.gapHandles[0]
+		expect(next.left + next.width / 2).toBeGreaterThan(start.left + start.width / 2)
+	})
+
+	it("scales gutter frames into the PPT selection box", () => {
+		const selectedInfo = createFlexSelectedInfo()
+		const { result } = renderHook(() =>
+			useGapHandles({
+				editorRef: mockEditorRef as never,
+				selectedInfo,
+				gapAxesLinked: false,
+				onPreviewStyles: vi.fn(),
+				isPptRender: true,
+				scaleRatio: 0.5,
+			}),
+		)
+		const handle = result.current.gapHandles[0]
+		expect(handle.left + handle.width).toBeLessThanOrEqual(selectedInfo.rect.width * 0.5)
+		expect(handle.left).toBeLessThan(selectedInfo.rect.width * 0.5)
 	})
 })

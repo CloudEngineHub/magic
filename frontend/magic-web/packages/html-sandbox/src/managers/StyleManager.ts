@@ -508,7 +508,7 @@ export class StyleManager {
 	/**
 	 * Apply styles without recording to history (for temporary updates during drag)
 	 */
-	applyStylesTemporary(selector: string, styles: Record<string, string>): void {
+	applyStylesTemporary(selector: string, styles: Record<string, string>) {
 		const element = findElement(selector) as HTMLElement
 
 		// Apply styles without recording
@@ -531,6 +531,8 @@ export class StyleManager {
 				actualInlineLeft: element.style.left,
 			})
 		}
+
+		return this.elementSelector?.getLayoutSnapshot(element)
 	}
 
 	/**

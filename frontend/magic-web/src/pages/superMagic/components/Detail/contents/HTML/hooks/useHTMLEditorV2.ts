@@ -458,7 +458,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 			},
 			applyStylesTemporary: async (selector: string, styles: Record<string, string>) => {
 				if (!messageBridgeRef.current) return
-				await messageBridgeRef.current.sendCommand(
+				return messageBridgeRef.current.sendCommand(
 					EditorMessageType.APPLY_STYLES_TEMPORARY,
 					{ selector, styles },
 					{ description: "临时应用样式", canUndo: false },

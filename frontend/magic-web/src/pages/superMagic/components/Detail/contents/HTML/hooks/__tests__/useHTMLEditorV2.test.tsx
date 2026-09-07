@@ -1,5 +1,6 @@
 import { act, render, waitFor } from "@testing-library/react"
 import { useRef } from "react"
+import type { RefObject } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { EditorMessageType } from "../../iframe-bridge/types/messages"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
@@ -8,6 +9,7 @@ import { useHTMLEditorV2 } from "../useHTMLEditorV2"
 const bridgeState = vi.hoisted(() => ({
 	instances: [] as Array<{
 		request: ReturnType<typeof vi.fn>
+		sendCommand: ReturnType<typeof vi.fn>
 		on: ReturnType<typeof vi.fn>
 		isActive: ReturnType<typeof vi.fn>
 		destroy: ReturnType<typeof vi.fn>
@@ -42,6 +44,7 @@ vi.mock("../../iframe-bridge/bridge/MessageBridge", () => ({
 				bridgeState.requests.push(type)
 				return {}
 			}),
+			sendCommand: vi.fn(async () => undefined),
 			on: vi.fn((type: string, handler: (message: { payload?: unknown }) => void) => {
 				const nextHandlers = handlers.get(type) ?? []
 				nextHandlers.push(handler)
@@ -77,15 +80,21 @@ interface TestHarnessProps {
 	isEditMode: boolean
 	contentInjected?: boolean
 	renderSiteUrl?: string
+	editorRef?: RefObject<HTMLEditorV2Ref | null>
 }
 
-function TestHarness({ isEditMode, contentInjected = true, renderSiteUrl }: TestHarnessProps) {
+function TestHarness({
+	isEditMode,
+	contentInjected = true,
+	renderSiteUrl,
+	editorRef,
+}: TestHarnessProps) {
 	const iframeRef = useRef(createIframeRef().current)
-	const editorRef = useRef<HTMLEditorV2Ref>(null)
+	const localEditorRef = useRef<HTMLEditorV2Ref>(null)
 
 	useHTMLEditorV2({
 		iframeRef,
-		editorRef,
+		editorRef: editorRef ?? localEditorRef,
 		isEditMode,
 		sandboxType: "iframe",
 		iframeLoaded: true,
@@ -219,5 +228,24 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 				EditorMessageType.ENTER_SELECTION_MODE,
 			])
 		})
+	})
+
+	it("returns the iframe layout from applyStylesTemporary", async () => {
+		const editorRef = { current: null } as RefObject<HTMLEditorV2Ref | null>
+		const layout = {
+			rect: { top: 80, left: 0, width: 220, height: 216 },
+			childRects: [
+				{ top: 80, left: 10, width: 80, height: 80 },
+				{ top: 196, left: 10, width: 80, height: 80 },
+			],
+		}
+		render(<TestHarness isEditMode editorRef={editorRef} />)
+		await waitFor(() => expect(bridgeState.instances).toHaveLength(1))
+		bridgeState.instances[0].sendCommand.mockResolvedValue(layout)
+
+		await waitFor(() => expect(editorRef.current?.applyStylesTemporary).toBeTypeOf("function"))
+		await expect(
+			editorRef.current!.applyStylesTemporary("div.meta-grid", { rowGap: "36px" }),
+		).resolves.toEqual(layout)
 	})
 })

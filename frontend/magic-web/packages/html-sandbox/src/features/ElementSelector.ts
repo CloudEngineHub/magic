@@ -654,6 +654,15 @@ export class ElementSelector {
 			})
 	}
 
+	/** Live container + child boxes after a temporary style write. */
+	getLayoutSnapshot(element: HTMLElement) {
+		const { rect } = this.getElementRectWithRotation(element)
+		return {
+			rect,
+			childRects: this.getInFlowChildRects(element),
+		}
+	}
+
 	selectElement(element: HTMLElement, multiSelect = false) {
 		if (!element || element === document.documentElement || element === document.body) {
 			return

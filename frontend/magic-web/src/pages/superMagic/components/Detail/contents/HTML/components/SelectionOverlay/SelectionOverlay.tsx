@@ -52,6 +52,12 @@ export const SelectionOverlay = observer(function SelectionOverlay({
 	const [hoveredRect, setHoveredRect] = useState<ElementRect | null>(null)
 	const [isSelectionMode, setIsSelectionMode] = useState(false)
 	const stylePanelStore = useStylePanelStore()
+	const handlePreviewSize = useCallback(
+		(size: { width: string; height: string }) => {
+			stylePanelStore.updateComputedStyles(size)
+		},
+		[stylePanelStore],
+	)
 	const handlePreviewStyles = useCallback(
 		(styles: Partial<{ rowGap: string; columnGap: string }>) => {
 			stylePanelStore.updateComputedStyles(styles)
@@ -203,6 +209,7 @@ export const SelectionOverlay = observer(function SelectionOverlay({
 		setIsSelectionMode,
 		onMoveStart: onElementMoveStart,
 		onMoveEnd: onElementMoveEnd,
+		onPreviewSize: handlePreviewSize,
 		gapAxesLinked: stylePanelStore.gapAxesLinked,
 		onPreviewStyles: handlePreviewStyles,
 	})

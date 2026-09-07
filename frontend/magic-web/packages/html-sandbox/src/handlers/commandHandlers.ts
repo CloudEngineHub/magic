@@ -102,9 +102,9 @@ export function registerCommandHandlers(config: CommandHandlersConfig): void {
 			selector: string
 			styles: Record<string, string>
 		}
-		styleManager.applyStylesTemporary(selector, styles)
+		const layout = styleManager.applyStylesTemporary(selector, styles)
 		EditorLogger.debug("Apply styles temporarily", { selector, styles })
-		return { success: true }
+		return { success: true, ...layout }
 	})
 
 	// Begin batch operation

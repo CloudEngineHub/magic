@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { RefObject } from "react"
+import type { Dispatch, RefObject, SetStateAction } from "react"
 import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
 import { parseUsedPixelValue } from "../../StylePanel/utils/dimensionValue"
 import type { SelectedInfo } from "../types"
-import { getGapHandleLayout } from "../utils/gapHandleLayout"
+import { getGapHandleLayout, mapGapHandlesToSelectionBox } from "../utils/gapHandleLayout"
 import type { GapAxis, GapHandleFrame } from "../utils/gapHandleLayout"
 
 interface UseGapHandlesOptions {
@@ -11,6 +11,9 @@ interface UseGapHandlesOptions {
 	selectedInfo: SelectedInfo | null
 	gapAxesLinked: boolean
 	onPreviewStyles: (styles: Partial<{ rowGap: string; columnGap: string }>) => void
+	isPptRender?: boolean
+	scaleRatio?: number
+	setSelectedInfo?: Dispatch<SetStateAction<SelectedInfo | null>>
 }
 
 interface PointerCaptureState {
@@ -53,11 +56,25 @@ export function useGapHandles({
 	selectedInfo,
 	gapAxesLinked,
 	onPreviewStyles,
+	isPptRender = false,
+	scaleRatio = 1,
+	setSelectedInfo,
 }: UseGapHandlesOptions) {
 	const [isGapDragging, setIsGapDragging] = useState(false)
+	const [gapPreview, setGapPreview] = useState<{
+		extra: number
+		axis: GapAxis
+		linked: boolean
+		nextPx: number
+	} | null>(null)
+	const [liveLayout, setLiveLayout] = useState<{
+		rect: SelectedInfo["rect"]
+		childRects: NonNullable<SelectedInfo["childRects"]>
+	} | null>(null)
 	const selectedInfoRef = useRef<SelectedInfo | null>(selectedInfo)
 	const gapAxesLinkedRef = useRef(gapAxesLinked)
 	const onPreviewStylesRef = useRef(onPreviewStyles)
+	const overlayScaleRef = useRef(1)
 	const isDraggingRef = useRef(false)
 	const dragStateRef = useRef<GapDragState | null>(null)
 	const gapRafRef = useRef<number | null>(null)
@@ -66,15 +83,35 @@ export function useGapHandles({
 
 	gapAxesLinkedRef.current = gapAxesLinked
 	onPreviewStylesRef.current = onPreviewStyles
+	overlayScaleRef.current = isPptRender && scaleRatio > 0 ? scaleRatio : 1
 
 	const gapHandles = useMemo<GapHandleFrame[]>(() => {
 		if (!selectedInfo) return []
-		return getGapHandleLayout(
-			selectedInfo.rect,
-			selectedInfo.childRects ?? [],
+		const containerRect = liveLayout?.rect ?? selectedInfo.rect
+		const childRects = liveLayout?.childRects ?? selectedInfo.childRects ?? []
+		const columnPx =
+			gapPreview && (gapPreview.linked || gapPreview.axis === "column")
+				? gapPreview.nextPx
+				: (parseUsedPixelValue(
+						selectedInfo.computedStyles.columnGap ?? selectedInfo.computedStyles.gap,
+					) ?? 0)
+		const rowPx =
+			gapPreview && (gapPreview.linked || gapPreview.axis === "row")
+				? gapPreview.nextPx
+				: (parseUsedPixelValue(
+						selectedInfo.computedStyles.rowGap ?? selectedInfo.computedStyles.gap,
+					) ?? 0)
+		const frames = getGapHandleLayout(
+			containerRect,
+			childRects,
 			selectedInfo.computedStyles.display ?? "",
-		)
-	}, [selectedInfo])
+		).map((frame) => ({
+			...frame,
+			valueLabel: `${Math.round(frame.axis === "column" ? columnPx : rowPx)}px`,
+		}))
+		const overlayScale = isPptRender ? scaleRatio : 1
+		return mapGapHandlesToSelectionBox(frames, containerRect, overlayScale)
+	}, [gapPreview, isPptRender, liveLayout, scaleRatio, selectedInfo])
 
 	const scheduleGapUpdate = useCallback(
 		(selector: string, styles: Record<string, string>) => {
@@ -87,12 +124,29 @@ export function useGapHandles({
 				if (!pending || !editorRef?.current) return
 				editorRef.current
 					.applyStylesTemporary(pending.selector, pending.styles)
+					.then((result) => {
+						if (!result?.rect || !result.childRects) return
+						const nextLayout = {
+							rect: result.rect,
+							childRects: result.childRects,
+						}
+						setLiveLayout(nextLayout)
+						setSelectedInfo?.((prev) =>
+							prev
+								? {
+										...prev,
+										rect: nextLayout.rect,
+										childRects: nextLayout.childRects,
+									}
+								: prev,
+						)
+					})
 					.catch((error) => {
 						console.error("[useGapHandles] Temporary gap update failed:", error)
 					})
 			})
 		},
-		[editorRef],
+		[editorRef, setSelectedInfo],
 	)
 
 	const stopGapDrag = useCallback(async () => {
@@ -102,6 +156,8 @@ export function useGapHandles({
 		isDraggingRef.current = false
 		dragStateRef.current = null
 		setIsGapDragging(false)
+		setGapPreview(null)
+		setLiveLayout(null)
 
 		if (pointerCaptureRef.current) {
 			try {
@@ -167,9 +223,15 @@ export function useGapHandles({
 				dragState.axis === "column"
 					? event.clientX - dragState.startX
 					: event.clientY - dragState.startY
-			const next = Math.max(0, dragState.startPx + delta)
-			const styles = buildGapStyles(next, dragState.axis, gapAxesLinkedRef.current)
+			const next = Math.max(0, dragState.startPx + delta / overlayScaleRef.current)
+			const styles = buildGapStyles(next, dragState.axis, false)
 
+			setGapPreview({
+				extra: next - dragState.startPx,
+				axis: dragState.axis,
+				linked: false,
+				nextPx: next,
+			})
 			onPreviewStylesRef.current(styles)
 			scheduleGapUpdate(current.selector, styles)
 		},

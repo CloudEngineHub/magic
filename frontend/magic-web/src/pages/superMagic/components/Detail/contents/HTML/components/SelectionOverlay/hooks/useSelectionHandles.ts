@@ -19,6 +19,7 @@ interface UseSelectionHandlesProps {
 	setIsSelectionMode: React.Dispatch<React.SetStateAction<boolean>>
 	onMoveStart?: () => void
 	onMoveEnd?: () => void
+	onPreviewSize?: (size: { width: string; height: string }) => void
 	gapAxesLinked?: boolean
 	onPreviewStyles?: (styles: Partial<{ rowGap: string; columnGap: string }>) => void
 }
@@ -38,6 +39,7 @@ export function useSelectionHandles({
 	setIsSelectionMode,
 	onMoveStart,
 	onMoveEnd,
+	onPreviewSize,
 	gapAxesLinked = false,
 	onPreviewStyles = NOOP_PREVIEW_STYLES,
 }: UseSelectionHandlesProps) {
@@ -69,6 +71,7 @@ export function useSelectionHandles({
 		setSelectedInfo: createStateAdapter,
 		setHoveredRect,
 		setIsSelectionMode,
+		onPreviewSize,
 	})
 
 	const { onRotateHandleMouseDown, rotation } = useRotateHandle({
@@ -99,6 +102,9 @@ export function useSelectionHandles({
 		selectedInfo,
 		gapAxesLinked,
 		onPreviewStyles,
+		isPptRender,
+		scaleRatio,
+		setSelectedInfo: createStateAdapter,
 	})
 
 	// Refs to prevent duplicate operations
