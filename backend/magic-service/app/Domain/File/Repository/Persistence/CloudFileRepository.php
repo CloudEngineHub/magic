@@ -286,7 +286,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
         $stsType = (string) ($options['sts_type'] ?? '');
         unset($options['sts_type']);
         if ($stsType !== '') {
-            if (str_contains($stsType, '|') && ! method_exists(CredentialPolicy::class, 'addStsType')) {
+            if (str_contains($stsType, '|') && ! in_array('addStsType', get_class_methods(CredentialPolicy::class), true)) {
                 throw new RuntimeException('Combined sts_type requires dtyq/cloudfile >= v0.1.43, please upgrade the dependency');
             }
             $policyConfig['sts_type'] = $stsType;
