@@ -104,7 +104,6 @@ const RichText = memo(
 		const handleCopy = useMemoizedFn((view: EditorView, event: ClipboardEvent) => {
 			const { state } = view
 			const { selection } = state
-
 			if (selection.empty) {
 				return false // No selection, let browser handle default behavior
 			}

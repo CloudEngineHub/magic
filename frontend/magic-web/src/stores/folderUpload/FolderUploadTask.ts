@@ -529,6 +529,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 			this.fileUploadProgress.set(fileId, 0)
 			this.fileCompletionStatus.set(fileId, false)
 			this.fileSizeMap.set(fileId, folderFile.file.size)
+			this.callbacks.onFileProgress?.(this.id, folderFile.file, 0)
 		})
 
 		// 批量获取雪花ID（一次性获取所有文件的ID，避免在每次uploadFiles调用时重复获取）
@@ -548,6 +549,10 @@ export class FolderUploadTask implements IFolderUploadTask {
 				(fileId: string, uploadedBytes: number) => {
 					// 更新单个文件的进度
 					this.fileUploadProgress.set(fileId, uploadedBytes)
+					const fileSize = this.fileSizeMap.get(fileId) || folderFile.file.size
+					const progress =
+						fileSize > 0 ? Math.min(100, (uploadedBytes / fileSize) * 100) : 0
+					this.callbacks.onFileProgress?.(this.id, folderFile.file, progress)
 
 					// 计算并更新总体进度
 					this.updateRealTimeProgress()

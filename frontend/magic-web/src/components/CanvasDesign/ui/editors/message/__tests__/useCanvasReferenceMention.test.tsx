@@ -372,13 +372,34 @@ describe("useCanvasReferenceMention", () => {
 		})
 
 		const catItems = getMention().matchableItems.filter((item) => item.name === "cat.png")
-		expect(catItems.map((item) => item.path)).toEqual(["current/cat.png", "project/cat.png"])
+		expect(catItems.map((item) => item.path)).toEqual(["current/cat.png"])
 
 		const doc = getContentFromString("@cat.png", getMention().matchableItems)
 		const mentionNode = doc.content?.[0]?.content?.[0] as
 			| { attrs?: { data?: { file_path?: string } } }
 			| undefined
 		expect(mentionNode?.attrs?.data?.file_path).toBe("current/cat.png")
+	})
+
+	it("can exclude project-tree candidates for frame-only editors", () => {
+		renderMention({
+			tree: [folderNode("design-a", "Design A", [fileNode("cat.png", "project/cat.png")])],
+			options: {
+				matchableItems: [],
+				includeProjectTreeCandidates: false,
+				mentionEnabledOverride: false,
+				referenceResourceType: "image",
+			},
+		})
+
+		expect(getMention().matchableItems).toEqual([])
+		expect(getMention().mentionEnabled).toBe(false)
+		const doc = getContentFromString("@cat.png", getMention().matchableItems)
+		const paragraphText = (doc.content?.[0]?.content || [])
+			.map((node) => (node.type === "text" ? node.text || "" : ""))
+			.join("")
+		expect(paragraphText).toBe("@cat.png")
+		expect(doc.content?.[0]?.content?.some((node) => node.type === "mention")).toBe(false)
 	})
 
 	it("deduplicates current-canvas absolute and DSL-relative paths by host identity", () => {
@@ -398,7 +419,7 @@ describe("useCanvasReferenceMention", () => {
 		])
 	})
 
-	it("keeps workspace-root and current-canvas resources separate", () => {
+	it("skips project-tree duplicates that share the current reference file name", () => {
 		renderMention({
 			methods: designAMethods,
 			tree: [folderNode("root", "Root", [fileNode("cat.png", "/images/cat.png")])],
@@ -410,7 +431,22 @@ describe("useCanvasReferenceMention", () => {
 
 		expect(getMention().matchableItems.filter((item) => item.name === "cat.png")).toEqual([
 			expect.objectContaining({ path: "./images/cat.png" }),
-			expect.objectContaining({ path: "/images/cat.png" }),
+		])
+	})
+
+	it("keeps distinct project-tree names alongside current references", () => {
+		renderMention({
+			methods: designAMethods,
+			tree: [folderNode("root", "Root", [fileNode("dog.png", "/images/dog.png")])],
+			options: {
+				matchableItems: [{ name: "cat.png", path: "./images/cat.png" }],
+				referenceResourceType: "image",
+			},
+		})
+
+		expect(getMention().matchableItems.map((item) => item.path)).toEqual([
+			"./images/cat.png",
+			"/images/dog.png",
 		])
 	})
 

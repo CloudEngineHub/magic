@@ -136,7 +136,8 @@ function encodePathSegment(segment: string): string {
 }
 
 export function createCanonicalWorkspaceHref(path: string): string | null {
-	const normalizedPath = normalizeWorkspaceRelativePath(path)
+	const normalizedPath =
+		normalizeWorkspacePathForComparison(path) ?? normalizeWorkspaceRelativePath(path)
 	if (!normalizedPath) return null
 
 	return `./${normalizedPath.split("/").map(encodePathSegment).join("/")}`

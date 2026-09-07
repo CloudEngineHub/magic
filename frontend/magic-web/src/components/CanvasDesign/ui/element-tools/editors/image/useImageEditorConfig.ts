@@ -8,6 +8,10 @@ import type { GenerateImageRequest, UploadFileResponse } from "../../../../publi
 import { ImageElement as ImageElementClass } from "../../../../runtime/elements/image/ImageElement"
 import { getActiveImageContent } from "../../../../runtime/document/elementContent"
 import { useFileInput } from "../../../editors/message/useFileInput"
+import {
+	CanvasUploadMentionController,
+	type CanvasUploadMentionHandle,
+} from "../../../editors/message/CanvasUploadMentionController"
 import type { MessageEditorRef } from "../../../editors/message/MessageEditor"
 import { useReferenceImagesState } from "./useReferenceImagesState"
 import type {
@@ -19,7 +23,11 @@ import {
 	encodePromptMentionsToPlaceholders,
 	type PromptPlaceholderReference,
 } from "../../../editors/message/reference-assets/promptPlaceholderCodec"
-import { appendMentionToString } from "../../../editors/message/tiptap/contentUtils"
+import {
+	appendMentionToString,
+	areMentionPathBindingsEqual,
+	type MentionPathBinding,
+} from "../../../editors/message/tiptap/contentUtils"
 import { createReferenceResourcePanelItemFromPath } from "../../../editors/message/reference-assets/createReferenceResourcePanelItem"
 import {
 	decodePromptPlaceholdersWithLabels,
@@ -85,6 +93,8 @@ export interface ImageReferenceSlotInfo {
 
 export interface ImageEditSessionSnapshot {
 	request: Partial<GenerateImageRequest>
+	/** 按 prompt 中 mention 出现顺序保存的结构化路径绑定。 */
+	mentionBindings?: MentionPathBinding[]
 }
 
 export interface ImageEditorConfig {
@@ -99,6 +109,7 @@ export interface ImageEditorConfig {
 	protectedReferencePaths: string[]
 	referenceBindingMode: ReferenceBindingMode
 	referenceFileInfos: ReferenceResourceFileInfo[]
+	mentionBindings: MentionPathBinding[]
 	matchableItems: Array<{ name: string; path?: string; disabled?: boolean }>
 	modelOptions: ImageModelOption[]
 	modelOptionGroups: ImageModelOptionGroup[]
@@ -175,14 +186,19 @@ export interface ImageEditorConfig {
 				ignoreSelectedReferenceSlot?: boolean
 				retainSelectedReferenceSlot?: boolean
 				isCurrent?: () => boolean
+				suppressPromptMention?: boolean
+				pendingMentionHandles?: Array<CanvasUploadMentionHandle | undefined>
 			},
-		) => Promise<void>
+		) => Promise<UploadFileResponse[]>
+		uploadMentionController?: CanvasUploadMentionController
 		handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
 		resetSelectedReferenceSlot: (expectedSlot?: ImageReferenceSlotInfo) => void
 		/** 从 elementInstance 同步参考文件状态到 config，用于 @ 面板添加后的闭环 */
 		syncReferenceFilesFromElement: () => void
 		/** prompt 中一旦出现显式图片绑定，就把对应 legacy 保护引用升级为普通 prompt 绑定。 */
 		handlePromptReferencePathsChange: (paths: string[]) => void
+		/** 更新当前编辑器的有序 mention identity 快照，供跨卸载恢复使用。 */
+		updateMentionBindings: (bindings: MentionPathBinding[]) => void
 	}
 	fileInputRef: React.MutableRefObject<HTMLInputElement | null>
 	editSession: {
@@ -255,6 +271,22 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	const fileUploadSlotRef = useRef<ImageReferenceSlotInfo | null>(null)
 	const retainFileUploadSlotSelectionRef = useRef(false)
 	const fileUploadSessionGuardRef = useRef<(() => boolean) | undefined>(undefined)
+	const suppressPromptMentionRef = useRef(false)
+	const uploadMentionController = useMemo(
+		() => (editorFocusRef ? new CanvasUploadMentionController(editorFocusRef) : undefined),
+		[editorFocusRef],
+	)
+	const latestMentionBindingsRef = useRef<MentionPathBinding[]>([])
+	const sessionRestoreMentionBindingsRef = useRef<MentionPathBinding[] | null>(null)
+	const [mentionBindings, setMentionBindings] = useState<MentionPathBinding[]>([])
+
+	const updateMentionBindings = useCallback((bindings: MentionPathBinding[]) => {
+		const nextBindings = bindings.map((binding) => ({ ...binding }))
+		latestMentionBindingsRef.current = nextBindings
+		setMentionBindings((previous) =>
+			areMentionPathBindingsEqual(previous, nextBindings) ? previous : nextBindings,
+		)
+	}, [])
 
 	const resetSelectedReferenceSlot = useCallback((expectedSlot?: ImageReferenceSlotInfo) => {
 		const currentSlot = selectedReferenceSlotRef.current
@@ -457,8 +489,6 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		[imageModelList],
 	)
 
-	// 跟踪待添加到 prompt 的资源（用于等待 matchableItems 更新）
-	const pendingUploadReferenceRef = useRef<PromptPlaceholderReference | null>(null)
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 	const buildImagePromptPlaceholderToken = useMemo(
 		() =>
@@ -481,13 +511,18 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	)
 
 	const applyBindingStateFromPromptAndReferences = useCallback(
-		(nextPrompt: string, nextReferenceFileInfos: ReferenceResourceFileInfo[]) => {
+		(
+			nextPrompt: string,
+			nextReferenceFileInfos: ReferenceResourceFileInfo[],
+			nextMentionBindings?: MentionPathBinding[],
+		) => {
 			const bindingState = resolveReferenceBindingState({
 				prompt: nextPrompt,
 				referenceFileInfos: nextReferenceFileInfos,
 				tokenConfig: promptPlaceholderTokenConfig,
 				defaultAssetType: "image",
 				resolveResourceReference,
+				mentionBindings: nextMentionBindings,
 			})
 			updateProtectedReferencePaths(bindingState.protectedReferencePaths)
 			return bindingState
@@ -640,6 +675,12 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 					createReferenceResourcePanelItemFromPath(
 						normalizedInfo.path,
 						normalizedInfo.fileName,
+						{
+							fileId: normalizedInfo.file_id,
+							sourceFileId: normalizedInfo.source_file_id,
+							sourceProjectId: normalizedInfo.source_project_id,
+							projectId: normalizedInfo.project_id,
+						},
 					),
 				)
 			}
@@ -687,29 +728,11 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 					replaceReferenceFileAt(selectedUploadSlot.slotIndex, result, {
 						retainReferenceSlot: retainFileUploadSlotSelectionRef.current,
 					})
-					if (!selectedUploadSlot.path) {
-						const fileName = result.fileName || getCanvasResourceFileName(result.path)
-						if (fileName) {
-							pendingUploadReferenceRef.current = {
-								path: result.path,
-								fileName,
-							}
-						}
-					}
 					return
 				}
 
 				const didAppend = appendReferenceFile(result)
 				if (!didAppend) return
-
-				// 记录待添加的文件名，等待 matchableItems 更新后再添加到 prompt
-				const fileName = result.fileName || getCanvasResourceFileName(result.path)
-				if (fileName) {
-					pendingUploadReferenceRef.current = {
-						path: result.path,
-						fileName,
-					}
-				}
 			},
 			[appendReferenceFile, replaceReferenceFileAt],
 		),
@@ -718,6 +741,11 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			retainFileUploadSlotSelectionRef.current = false
 			fileUploadSessionGuardRef.current = undefined
 		}, []),
+		pendingUploadMentionController: uploadMentionController,
+		shouldInsertPendingMention: useCallback(
+			() => !suppressPromptMentionRef.current && !fileUploadSlotRef.current?.path,
+			[],
+		),
 	})
 
 	const triggerFileSelect = useCallback(() => {
@@ -736,6 +764,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 				ignoreSelectedReferenceSlot?: boolean
 				retainSelectedReferenceSlot?: boolean
 				isCurrent?: () => boolean
+				suppressPromptMention?: boolean
+				pendingMentionHandles?: Array<CanvasUploadMentionHandle | undefined>
 			},
 		) => {
 			const selectedSlot = options?.ignoreSelectedReferenceSlot
@@ -744,42 +774,19 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			fileUploadSlotRef.current = selectedSlot
 			retainFileUploadSlotSelectionRef.current = options?.retainSelectedReferenceSlot === true
 			fileUploadSessionGuardRef.current = options?.isCurrent
-			await rawUploadFiles(files, {
-				maxSelectedFiles: selectedSlot?.path ? 1 : files.length,
-				ignoreReferenceFileCapacity: Boolean(selectedSlot?.path),
-			})
+			suppressPromptMentionRef.current = options?.suppressPromptMention === true
+			try {
+				return await rawUploadFiles(files, {
+					maxSelectedFiles: selectedSlot?.path ? 1 : files.length,
+					ignoreReferenceFileCapacity: Boolean(selectedSlot?.path),
+					pendingMentionHandles: options?.pendingMentionHandles,
+				})
+			} finally {
+				suppressPromptMentionRef.current = false
+			}
 		},
 		[rawUploadFiles],
 	)
-
-	// 监听 matchableItems 的变化，当检测到新上传的文件时，自动追加到 prompt
-	useEffect(() => {
-		const pendingReference = pendingUploadReferenceRef.current
-		if (!pendingReference) return
-
-		// 检查 matchableItems 中是否包含待添加的资源，避免按同名文件 suffix 猜测。
-		const matchedItem = matchableItems.find(
-			(item) =>
-				!!item.path &&
-				areCanvasResourceReferencesSame(
-					item.path,
-					pendingReference.path,
-					resolveResourceReference,
-				),
-		)
-
-		if (matchedItem && !matchedItem.disabled) {
-			// matchableItems 已更新，可以安全地添加到 prompt
-			setPrompt((prev) => {
-				const trimmed = prev.trimEnd()
-				return trimmed + (trimmed ? " " : "") + `@${pendingReference.fileName}`
-			})
-			// 清空待添加的文件名
-			pendingUploadReferenceRef.current = null
-			// 延迟一帧聚焦，确保 prompt 更新后编辑器已渲染
-			setTimeout(() => editorFocusRef?.current?.focus(), 0)
-		}
-	}, [editorFocusRef, matchableItems, resolveResourceReference])
 
 	// 处理模型选择变化
 	const handleModelChange = useCallback(
@@ -1087,12 +1094,24 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 				return
 			}
 			if (!canvas || !manageRecoverySession || !recoveryKey) return
+			const capturedMentionBindings =
+				editorFocusRef?.current?.getMentionBindings?.() ?? latestMentionBindingsRef.current
+			updateMentionBindings(capturedMentionBindings)
 			canvas.mediaEditRecoveryManager.saveDraft(recoveryKey, recoverySourceFingerprint, {
 				request,
+				mentionBindings: capturedMentionBindings,
 			})
 			pendingDraftRequestRef.current = null
 		},
-		[canvas, manageRecoverySession, recoveryKey, recoverySourceFingerprint],
+		[
+			canvas,
+			editorFocusRef,
+			latestMentionBindingsRef,
+			manageRecoverySession,
+			recoveryKey,
+			recoverySourceFingerprint,
+			updateMentionBindings,
+		],
 	)
 
 	const cancelPendingDraftPersistence = useCallback(() => {
@@ -1131,6 +1150,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 		cancelPendingDraftPersistence()
 		setPrompt("")
+		updateMentionBindings([])
 
 		if (imageModelList.length === 0) {
 			return
@@ -1205,6 +1225,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		originalImageName,
 		originalImageSrc,
 		updateProtectedReferencePaths,
+		updateMentionBindings,
 	])
 
 	// 恢复配置的辅助函数
@@ -1222,13 +1243,18 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		// 优先恢复外层传入的二次编辑快照，再恢复当前普通生成意图的会话草稿。
 		const sessionRequest = sessionRestoreRequestRef.current
 		sessionRestoreRequestRef.current = null
-		const recoveryRequest =
+		const recoverySnapshot =
 			manageRecoverySession && recoveryKey
 				? canvas.mediaEditRecoveryManager.get<ImageEditSessionSnapshot>(
 						recoveryKey,
 						recoverySourceFingerprint,
-					)?.draft.request
+					)?.draft
 				: undefined
+		const recoveryRequest = recoverySnapshot?.request
+		const restoredMentionBindings =
+			sessionRestoreMentionBindingsRef.current ?? recoverySnapshot?.mentionBindings ?? []
+		sessionRestoreMentionBindingsRef.current = null
+		updateMentionBindings(restoredMentionBindings)
 		const currentRequest = activeImageContent.generateImageRequest
 		const requestToRestore = sessionRequest ?? recoveryRequest ?? currentRequest
 		if (requestToRestore) {
@@ -1278,6 +1304,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 				applyBindingStateFromPromptAndReferences(
 					promptToRestore,
 					restoredReferenceFileInfos,
+					restoredMentionBindings,
 				)
 			} else {
 				elementInstance.clearReferenceImageInfos()
@@ -1416,6 +1443,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		promptPlaceholderTokenConfig,
 		applyBindingStateFromPromptAndReferences,
 		updateProtectedReferencePaths,
+		updateMentionBindings,
 	])
 
 	/** 清除草稿后按已落库的 generateImageRequest 完整回填编辑器（与「快捷编辑」仅恢复模型配置区分） */
@@ -1448,18 +1476,22 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 			cancelPendingDraftPersistence()
 			sessionRestoreRequestRef.current = snapshot.request
+			sessionRestoreMentionBindingsRef.current = snapshot.mentionBindings ?? []
 			hasRestoredRef.current = false
 			if (imageModelList.length > 0) restoreConfig()
 		},
 		[canvas, cancelPendingDraftPersistence, imageModelList.length, restoreConfig],
 	)
 
-	const buildSessionSnapshot = useCallback(
-		(): ImageEditSessionSnapshot => ({
+	const buildSessionSnapshot = useCallback((): ImageEditSessionSnapshot => {
+		const capturedMentionBindings =
+			editorFocusRef?.current?.getMentionBindings?.() ?? latestMentionBindingsRef.current
+		updateMentionBindings(capturedMentionBindings)
+		return {
 			request: buildRequestParams(),
-		}),
-		[buildRequestParams],
-	)
+			mentionBindings: capturedMentionBindings,
+		}
+	}, [buildRequestParams, editorFocusRef, updateMentionBindings])
 
 	// 首次完成初始化后建立普通生成意图的 baseline；已有失败/中断草稿则保留原 baseline。
 	useEffect(() => {
@@ -1551,6 +1583,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		protectedReferencePaths,
 		referenceBindingMode,
 		referenceFileInfos,
+		mentionBindings,
 		matchableItems,
 		modelOptions,
 		modelOptionGroups,
@@ -1596,10 +1629,12 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			replaceReferenceFileAt,
 			triggerFileSelect,
 			uploadFiles,
+			uploadMentionController,
 			handleFileChange,
 			resetSelectedReferenceSlot,
 			syncReferenceFilesFromElement,
 			handlePromptReferencePathsChange,
+			updateMentionBindings,
 		},
 		fileInputRef,
 		editSession: {

@@ -236,10 +236,18 @@ export function extractClipboardMetadata(
 	clipboardData: DataTransfer | null,
 ): MagicClipboardMetadata | null {
 	if (!clipboardData) return null
+	const getDataByType = (type: string) => {
+		const exact = clipboardData.getData(type)
+		if (exact) return exact
+		const matchedType = Array.from(clipboardData.types || []).find(
+			(candidate) => candidate.trim().toLowerCase() === type.toLowerCase(),
+		)
+		return matchedType ? clipboardData.getData(matchedType) : ""
+	}
 
 	try {
 		// 方案1: 从HTML的data属性中提取元数据(移动端兼容方案,优先级最高)
-		const html = clipboardData.getData("text/html")
+		const html = getDataByType("text/html")
 		if (html) {
 			const metadata = extractMetadataFromHTML(html)
 			if (metadata) {
@@ -249,8 +257,8 @@ export function extractClipboardMetadata(
 		}
 
 		// 方案2: 尝试读取自定义MIME类型(桌面端浏览器可能支持)
-		const richTextCustom = clipboardData.getData("text/x-magic-message-rich-text")
-		const mentionsCustom = clipboardData.getData("text/x-magic-message-mentions")
+		const richTextCustom = getDataByType("text/x-magic-message-rich-text")
+		const mentionsCustom = getDataByType("text/x-magic-message-mentions")
 
 		if (richTextCustom || mentionsCustom) {
 			console.log("✅ Extracted metadata from custom MIME types")
@@ -451,7 +459,13 @@ export function isMagicClipboard(clipboardData: DataTransfer | null): boolean {
 
 	// 检查是否有自定义MIME类型(桌面端)
 	const types = Array.from(clipboardData.types || [])
-	if (types.includes("text/x-magic-message-rich-text")) {
+	if (
+		types.some(
+			(type) =>
+				type.trim().toLowerCase() === "text/x-magic-message-rich-text" ||
+				type.trim().toLowerCase() === "text/x-magic-message-mentions",
+		)
+	) {
 		return true
 	}
 

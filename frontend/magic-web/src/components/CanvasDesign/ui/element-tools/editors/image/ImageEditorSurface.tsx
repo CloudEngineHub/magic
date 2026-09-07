@@ -26,6 +26,9 @@ import MessageEditor, {
 	type MessageEditorMentionChangeContext,
 	type MessageEditorRef,
 } from "../../../editors/message/MessageEditor"
+import { applyRichMessageClipboardParts } from "../../../editors/message/applyRichMessageClipboardParts"
+import type { RichMessageClipboardSession } from "../../../editors/message/applyRichMessageClipboardParts"
+import { enrichCanvasMentionForClipboard } from "../../../../runtime/resources/clipboard/enrichCanvasMentionForClipboard"
 import { useCanvasReferenceMention } from "../../../editors/message/useCanvasReferenceMention"
 import { useMentionSync } from "../../../editors/message/useMentionSync"
 import { removeMentionFromString } from "../../../editors/message/tiptap/contentUtils"
@@ -33,6 +36,7 @@ import { ReferenceResourceDropSurface } from "../../../editors/message/reference
 import {
 	createReferenceResourcePanelItemFromDropFile,
 	createReferenceResourcePanelItemFromPath,
+	createUploadFileResponseFromPanelItem,
 } from "../../../editors/message/reference-assets/createReferenceResourcePanelItem"
 import {
 	checkLocalReferenceResourceDrop,
@@ -81,6 +85,7 @@ import {
 	claimCanvasClipboardPasteEvent,
 	getCanvasClipboardPasteController,
 	hasCanvasClipboardMimeType,
+	hasMessageClipboardData,
 	hasCanvasClipboardTextOrHtml,
 	type CanvasClipboardAsset,
 } from "../../../../runtime/resources/clipboard/CanvasClipboardPasteController"
@@ -141,6 +146,11 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	}, [imageElement.id, setEditingElementId])
 	const resolveResourceReference =
 		canvas?.magicConfigManager.config?.methods?.resolveResourceReference
+	const enrichClipboardMentionAttrs = useCallback(
+		(attrs: Parameters<typeof enrichCanvasMentionForClipboard>[0]) =>
+			enrichCanvasMentionForClipboard(attrs, resolveResourceReference),
+		[resolveResourceReference],
+	)
 	const clipboardEpochRef = useRef(0)
 	const clipboardSessionIdRef = useRef("")
 	const getClipboardSessionId = useCallback(
@@ -194,6 +204,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	} = config
 	const clipboardHandlersRef = useRef(handlers)
 	clipboardHandlersRef.current = handlers
+	const richClipboardSessionRef = useRef<RichMessageClipboardSession | null>(null)
 	const linkedMediaPolicy = useMemo<LinkedEditorMediaPolicy>(() => {
 		const maxCount = maxReferenceFiles ?? 0
 		return {
@@ -229,6 +240,8 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		[promptPlaceholderTokenConfig],
 	)
 	const canSendPrompt = Boolean(
+		!config.isUploading &&
+		!editorRef.current?.hasPendingUploadMentions?.() &&
 		composePromptWithLinkedText(linkedEditorInputs.textPrompt, prompt).trim(),
 	)
 	const linkedActiveImagePaths = useMemo(
@@ -423,25 +436,41 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		[editorRef, resolveResourceReference],
 	)
 
+	const handleLocalFilesDrop = useCallback(
+		(files: File[]) => {
+			void handlers.uploadFiles(files)
+		},
+		[handlers],
+	)
+
 	const handlePaste = useCallback(
 		(event: ClipboardEvent<HTMLDivElement>) => {
 			const nativeEvent = event.nativeEvent
 			const files = CanvasDesignClipboard.readEventFilesSnapshot(nativeEvent)
 			const nativeFiles = CanvasDesignClipboard.readAllEventFilesSnapshot(nativeEvent)
 			const hasCanvasMime = hasCanvasClipboardMimeType(nativeEvent)
+			const hasMessageClipboard = hasMessageClipboardData(nativeEvent)
 			const hasTextOrHtml = hasCanvasClipboardTextOrHtml(nativeEvent)
 			// Unsupported native files (for example PDF) must retain the previous
 			// editor/browser behavior. Only media files are owned by this editor.
-			if (!hasCanvasMime && nativeFiles.length > 0 && files.length === 0) return
+			if (!hasCanvasMime && nativeFiles.length > 0 && files.length === 0) {
+				return
+			}
 			if (!hasCanvasMime && files.length > 0) {
-				if (!canAcceptLocalFiles(files).accepted) return
-				if (!claimCanvasClipboardPasteEvent(nativeEvent)) return
+				if (!canAcceptLocalFiles(files).accepted) {
+					return
+				}
+				if (!claimCanvasClipboardPasteEvent(nativeEvent)) {
+					return
+				}
 				event.preventDefault()
 				event.stopPropagation()
 				void clipboardHandlersRef.current.uploadFiles(files)
 				return
 			}
-			if (!hasCanvasMime && files.length === 0 && hasTextOrHtml) return
+			if (!hasCanvasMime && !hasMessageClipboard && files.length === 0 && hasTextOrHtml) {
+				return
+			}
 			const remainingCapacity =
 				maxReferenceFiles === undefined
 					? undefined
@@ -452,6 +481,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 								(config.selectedReferenceSlot?.path ? 1 : 0),
 						)
 			const selectedSlotForPaste = config.selectedReferenceSlot
+			const pasteSelection = editorRef.current?.getSelectionRange?.() ?? undefined
 			let pastedAssetIndex = 0
 			const pasteSessionId = getClipboardSessionId()
 
@@ -462,6 +492,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				{
 					control: "image-editor",
 					acceptedTypes: ["image"],
+					messagePasteMode: "rich-text-with-media",
 					projectId:
 						canvas?.magicConfigManager.config?.methods?.getCanvasClipboardContext?.()
 							.projectId,
@@ -471,6 +502,41 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 					sessionId: pasteSessionId,
 				},
 				{
+					onMessageParts: async (parts) => {
+						const session = await applyRichMessageClipboardParts({
+							parts,
+							editor: editorRef.current,
+							controller: clipboardHandlersRef.current.uploadMentionController,
+							selection: pasteSelection,
+							isSessionCurrent: () =>
+								isMountedRef.current &&
+								pasteSessionId === clipboardSessionIdRef.current,
+							registerPendingResourcePath: (path) => {
+								canvas?.canvasFileUploadManager.registerPendingResourcePath(path)
+							},
+							replaceSelectedSlot: selectedSlotForPaste
+								? (fileInfo, options) => {
+										clipboardHandlersRef.current.replaceReferenceFileAt(
+											selectedSlotForPaste.slotIndex,
+											fileInfo,
+											{ retainReferenceSlot: options?.retainReferenceSlot },
+										)
+									}
+								: undefined,
+							uploadFiles: (files, options) =>
+								clipboardHandlersRef.current.uploadFiles(files, options),
+						})
+						richClipboardSessionRef.current = session
+					},
+					onMessageAssetResolved: async (occurrenceKey, asset) => {
+						const session = richClipboardSessionRef.current
+						if (!session) return
+						if (!asset) {
+							session.failOccurrence(occurrenceKey)
+							return
+						}
+						await session.resolveOccurrence(occurrenceKey, asset)
+					},
 					onAsset: async (asset: CanvasClipboardAsset) => {
 						if (asset.reference?.kind === "current-canvas") {
 							if (asset.reference.awaitingAttachmentConfirmation) {
@@ -481,15 +547,12 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 							const item = createReferenceResourcePanelItemFromPath(
 								asset.reference.path,
 								asset.reference.fileName,
+								{ fileId: asset.reference.fileId },
 							)
 							if (selectedSlotForPaste && pastedAssetIndex === 0) {
 								clipboardHandlersRef.current.replaceReferenceFileAt(
 									selectedSlotForPaste.slotIndex,
-									{
-										path: item.data.file_path,
-										src: item.data.file_path,
-										fileName: item.data.file_name,
-									},
+									createUploadFileResponseFromPanelItem(item),
 									{ retainReferenceSlot: true },
 								)
 							} else {
@@ -530,7 +593,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			config.selectedReferenceSlot,
 			editorRef,
 			maxReferenceFiles,
-			effectiveCurrentReferenceFiles.length,
+			effectiveCurrentReferenceFiles,
 		],
 	)
 
@@ -541,16 +604,18 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		getProjectHoverState: getHoverDropState,
 		getLocalHoverState,
 		onDropProjectFiles: handleProjectFilesDrop,
-		onDropLocalFiles: handlers.uploadFiles,
+		onDropLocalFiles: handleLocalFilesDrop,
 	})
 
 	const handleMentionChange = useCallback(
 		(paths: string[], currentPrompt: string, context: MessageEditorMentionChangeContext) => {
+			const currentMentionBindings = editorRef.current?.getMentionBindings()
+			if (currentMentionBindings) handlers.updateMentionBindings(currentMentionBindings)
 			if (handleAssociationMentionChange(paths, currentPrompt, context)) {
 				syncMentionPaths(paths, currentPrompt, context)
 			}
 		},
-		[handleAssociationMentionChange, syncMentionPaths],
+		[editorRef, handleAssociationMentionChange, handlers, syncMentionPaths],
 	)
 
 	const handleReferenceFileRemoveFromPopover = useCallback(
@@ -659,12 +724,14 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 					onEnter={handleSend}
 					onScrollbarChange={setHasScrollbar}
 					matchableItems={matchableItems}
+					mentionBindings={config.mentionBindings}
 					mentionDataService={mentionDataService}
 					mentionExtension={mentionExtension}
 					mentionItemsReady={Boolean(config.hasRestoredRef.current)}
 					onMentionChange={handleMentionChange}
 					onMentionItemHoverChange={setHoveredMentionPath}
 					mentionEnabled={mentionEnabled}
+					enrichClipboardMentionAttrs={enrichClipboardMentionAttrs}
 					onPasteCapture={handlePaste}
 				/>
 				<ImageEditorControls

@@ -82,9 +82,9 @@ import {
 	claimCanvasClipboardPasteEvent,
 	getCanvasClipboardPasteController,
 	hasCanvasClipboardMimeType,
+	CanvasDesignClipboard,
 	type CanvasClipboardAsset,
-} from "@/components/CanvasDesign/runtime/resources/clipboard/CanvasClipboardPasteController"
-import { CanvasDesignClipboard } from "@/components/CanvasDesign/runtime/resources/clipboard/CanvasDesignClipboard"
+} from "@/components/CanvasDesign/public/clipboard"
 
 export interface SendData {
 	jsonValue: JSONContent | undefined

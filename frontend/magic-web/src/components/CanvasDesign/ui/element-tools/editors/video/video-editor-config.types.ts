@@ -24,7 +24,14 @@ import type {
 } from "../../../editors/message/reference-assets/reference-resource.types"
 import type { ReferenceBindingMode } from "../../../editors/message/reference-assets/referenceBinding"
 import type { ReferenceResourceMetadataCandidate } from "../../../editors/message/reference-assets/referenceResourceDescriptor"
-import type { MatchableMentionItem } from "../../../editors/message/tiptap/contentUtils"
+import type {
+	MatchableMentionItem,
+	MentionPathBinding,
+} from "../../../editors/message/tiptap/contentUtils"
+import type {
+	CanvasUploadMentionController,
+	CanvasUploadMentionHandle,
+} from "../../../editors/message/CanvasUploadMentionController"
 
 /** useVideoEditorConfig 的入参 */
 export interface UseVideoEditorConfigOptions {
@@ -116,7 +123,12 @@ export interface VideoEditorConfig {
 		fileName: string
 		path: string
 		assetType: VideoReferenceAssetKind
+		file_id?: string
+		source_file_id?: string
+		source_project_id?: string
+		project_id?: string
 	}>
+	mentionBindings: MentionPathBinding[]
 	matchableItems: MatchableMentionItem[]
 	modelOptions: VideoModelOption[]
 	modelOptionGroups: VideoModelOptionGroup[]
@@ -252,6 +264,7 @@ export interface VideoEditorConfig {
 			options?: {
 				retainResourceSlot?: boolean
 				mentionPlacement?: "cursor" | "documentEnd"
+				suppressPromptMention?: boolean
 			},
 		) => void
 		replaceSelectedResource: (
@@ -283,10 +296,14 @@ export interface VideoEditorConfig {
 				retainSelectedResourceSlot?: boolean
 				suppressPartialSkippedToast?: boolean
 				isCurrent?: () => boolean
+				suppressPromptMention?: boolean
+				pendingMentionHandles?: Array<CanvasUploadMentionHandle | undefined>
 			},
-		) => Promise<void>
+		) => Promise<UploadFileResponse[]>
+		uploadMentionController?: CanvasUploadMentionController
 		handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
 		syncReferenceImagesFromElement: () => void
+		updateMentionBindings: (bindings: MentionPathBinding[]) => void
 	}
 	fileInputRef: React.MutableRefObject<HTMLInputElement | null>
 }

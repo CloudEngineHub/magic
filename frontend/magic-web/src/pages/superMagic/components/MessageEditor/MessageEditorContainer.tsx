@@ -77,9 +77,9 @@ import {
 	claimCanvasClipboardPasteEvent,
 	getCanvasClipboardPasteController,
 	hasCanvasClipboardMimeType,
+	CanvasDesignClipboard,
 	type CanvasClipboardAsset,
-} from "@/components/CanvasDesign/runtime/resources/clipboard/CanvasClipboardPasteController"
-import { CanvasDesignClipboard } from "@/components/CanvasDesign/runtime/resources/clipboard/CanvasDesignClipboard"
+} from "@/components/CanvasDesign/public/clipboard"
 
 export type MessageEditorRef = MessageEditorRefType & {
 	/**
@@ -339,9 +339,13 @@ export const MessageEditorContainer = observer(
 				}
 			})
 
-			const getWorkspaceFilesList = useMemoizedFn(
-				() => projectFilesStore?.workspaceFilesList ?? [],
-			)
+			const getWorkspaceFilesList = useMemoizedFn(() => {
+				const fromList = projectFilesStore?.workspaceFilesList ?? []
+				if (fromList.length > 0) return fromList
+				const fromTree = projectFilesStore?.workspaceFileTree ?? []
+				if (fromTree.length > 0) return fromTree
+				return attachments ?? []
+			})
 
 			const { isDragOver, dragEvents } = useDragUpload({
 				enableFileDrop: uploadEnabled,
@@ -748,7 +752,6 @@ export const MessageEditorContainer = observer(
 					const nativeEvent = e.nativeEvent
 					const hasCanvasMime = hasCanvasClipboardMimeType(nativeEvent)
 					const nativeFiles = CanvasDesignClipboard.readAllEventFilesSnapshot(nativeEvent)
-
 					if (hasCanvasMime && !uploadEnabled) {
 						if (!claimCanvasClipboardPasteEvent(nativeEvent)) return
 						e.preventDefault()

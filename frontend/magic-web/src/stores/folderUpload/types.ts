@@ -233,6 +233,8 @@ export interface BatchSaveInfo {
 
 export interface TaskCallbacks {
 	onProgress?: (taskId: string, state: FolderUploadState) => void
+	/** 逐文件上传进度，progress 为 0-100。 */
+	onFileProgress?: (taskId: string, file: File, progress: number) => void
 	onComplete?: (taskId: string) => void
 	onError?: (taskId: string, error: Error) => void
 	onBatchUploadComplete?: (batchInfo: BatchUploadInfo) => void

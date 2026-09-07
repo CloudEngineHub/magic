@@ -129,6 +129,26 @@ describe("imageReferenceBinding", () => {
 		).toEqual(["/design/a/cat.png", "/design/b/cat.png"])
 	})
 
+	it("prefers structured mention identity over same-name reference order", () => {
+		const duplicateReferenceInfos = [
+			{ path: "/design/a/cat.png", fileName: "cat.png", src: "/design/a/cat.png" },
+			{ path: "/design/b/cat.png", fileName: "cat.png", src: "/design/b/cat.png" },
+		]
+
+		const binding = resolveReferenceBindingState({
+			prompt: "@cat.png @cat.png",
+			referenceFileInfos: duplicateReferenceInfos,
+			tokenConfig,
+			mentionBindings: [
+				{ fileName: "cat.png", path: "/design/a/cat.png" },
+				{ fileName: "cat.png", path: "/design/a/cat.png" },
+			],
+		})
+
+		expect(binding.explicitPromptReferencePaths).toEqual(["/design/a/cat.png"])
+		expect(binding.protectedReferencePaths).toEqual(["/design/b/cat.png"])
+	})
+
 	it("prunes removed protected references and unprotects prompt-bound legacy references", () => {
 		expect(
 			pruneProtectedReferencePaths(

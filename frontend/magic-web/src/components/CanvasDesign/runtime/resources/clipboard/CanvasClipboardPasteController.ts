@@ -16,6 +16,13 @@ import {
 	type CanvasClipboardAssetSourceRef,
 	type MaterializeCanvasClipboardAsset,
 } from "./CanvasClipboardAssetResolver"
+import {
+	hasMessageClipboardData,
+	hasMessageClipboardMimeType,
+	readMessageClipboardContent,
+	readMessageClipboardAssets,
+	type CanvasClipboardMessagePart,
+} from "./CanvasMessageClipboard"
 
 export type CanvasClipboardMediaType = "image" | "video" | "audio"
 
@@ -34,7 +41,7 @@ export interface CanvasClipboardAsset {
 	sourcePath?: string
 	sourceRef?: CanvasClipboardAssetSourceRef
 	file?: File
-	origin: "canvas-element" | "canvas-export" | "external-file"
+	origin: "canvas-element" | "canvas-export" | "message-reference" | "external-file"
 	/** Resolved target reference; absent means the asset must use `file`. */
 	reference?: CanvasClipboardResolvedReference
 }
@@ -69,6 +76,8 @@ export interface CanvasClipboardTarget {
 	 * second mention without starting another transfer/upload.
 	 */
 	existingResourceKeys?: string[]
+	/** Preserve MessageEditor text and media in the original rich-text order. */
+	messagePasteMode?: "rich-text-with-media" | "media-only"
 	sessionId: string
 }
 
@@ -103,6 +112,16 @@ type CanvasClipboardHostReferenceResolver = (input: {
 
 export interface CanvasClipboardPasteCallbacks {
 	onAsset?: (asset: CanvasClipboardAsset) => void | Promise<void>
+	/**
+	 * Called as soon as rich-text parts are capacity-filtered. Asset parts may still
+	 * lack `file` / `reference` while host resolve/materialize runs in parallel.
+	 */
+	onMessageParts?: (parts: CanvasClipboardMessagePart[]) => void | Promise<void>
+	/** Fired once each unresolved message asset finishes resolve/materialize (or fails). */
+	onMessageAssetResolved?: (
+		occurrenceKey: string,
+		asset: CanvasClipboardAsset | null,
+	) => void | Promise<void>
 	onComplete?: (result: CanvasClipboardPasteResult) => void | Promise<void>
 	/** Always runs after paste processing, including when the session becomes stale. */
 	onSettled?: (result: CanvasClipboardPasteResult) => void | Promise<void>
@@ -245,6 +264,8 @@ export function hasCanvasClipboardMimeType(
 	if (Array.isArray(eventOrTypes)) return hasPrivateMimeType(eventOrTypes)
 	return hasPrivateMimeType(getEventTypes(eventOrTypes as ClipboardEvent))
 }
+
+export { hasMessageClipboardData, hasMessageClipboardMimeType }
 
 function hasTextOrHtml(types: readonly string[]): boolean {
 	return types.some((type) => {
@@ -536,7 +557,9 @@ export class CanvasClipboardPasteController {
 		asset: CanvasClipboardAsset,
 		target: CanvasClipboardTarget,
 	): Promise<CanvasClipboardResolvedReference | null> {
-		if (!this.options.resolveReference) return Promise.resolve(null)
+		if (!this.options.resolveReference) {
+			return Promise.resolve(null)
+		}
 		const identity =
 			asset.resourceIdentity ||
 			asset.sourceFileId ||
@@ -552,7 +575,9 @@ export class CanvasClipboardPasteController {
 			identity,
 		].join("\0")
 		const existing = this.referenceCache.get(key)
-		if (existing) return existing
+		if (existing) {
+			return existing
+		}
 		const promise = this.options
 			.resolveReference({ asset, target })
 			.catch(() => null)
@@ -573,8 +598,12 @@ export class CanvasClipboardPasteController {
 	): Promise<CanvasClipboardPasteResult> {
 		if (event) {
 			const eventTypes = getEventTypes(event)
+			const messageClipboard = hasMessageClipboardData(event)
+			const shouldSynchronouslyHandleMessage =
+				messageClipboard && target.messagePasteMode === "rich-text-with-media"
 			if (
 				!hasPrivateMimeType(eventTypes) &&
+				!messageClipboard &&
 				(hasNativeFileData(event) || hasTextOrHtml(eventTypes))
 			) {
 				return Promise.resolve({ handled: false, accepted: [], skipped: [], failed: [] })
@@ -583,6 +612,10 @@ export class CanvasClipboardPasteController {
 			if (existingPromise) return existingPromise
 			if (!claimCanvasClipboardPasteEvent(event)) {
 				return Promise.resolve({ handled: true, accepted: [], skipped: [], failed: [] })
+			}
+			if (hasPrivateMimeType(eventTypes) || shouldSynchronouslyHandleMessage) {
+				event.preventDefault()
+				event.stopPropagation()
 			}
 		}
 
@@ -601,28 +634,33 @@ export class CanvasClipboardPasteController {
 		const eventFiles = CanvasDesignClipboard.readEventFilesSnapshot(event)
 		const eventTypes = getEventTypes(event)
 		const privateMime = hasPrivateMimeType(eventTypes)
+		const messageMime = hasMessageClipboardMimeType(eventTypes)
+		const messageClipboard = hasMessageClipboardData(event)
+		const messageContent =
+			!privateMime && target.messagePasteMode === "rich-text-with-media"
+				? readMessageClipboardContent(event)
+				: { recognized: false, parts: [] as CanvasClipboardMessagePart[] }
 		const hasFiles = eventFiles.length > 0
 
-		if (!privateMime && hasFiles) {
+		if (!privateMime && !messageClipboard && hasFiles) {
 			return { handled: false, accepted: [], skipped: [], failed: [] }
 		}
 
-		if (!privateMime && hasTextOrHtml(eventTypes)) {
+		if (!privateMime && !messageClipboard && hasTextOrHtml(eventTypes)) {
 			return { handled: false, accepted: [], skipped: [], failed: [] }
-		}
-
-		if (privateMime) {
-			event?.preventDefault()
-			event?.stopPropagation()
 		}
 
 		let items: ClipboardItem[] | null = null
-		if (privateMime || (!hasFiles && !hasTextOrHtml(eventTypes))) {
+		if (
+			privateMime ||
+			(!messageMime && !messageClipboard && !hasFiles && !hasTextOrHtml(eventTypes))
+		) {
 			items = await this.readClipboardItems()
 		}
 
 		let rawAssets: InternalCanvasClipboardAsset[] = []
 		let privatePayloadRecognized = false
+		let messagePayloadRecognized = messageContent.recognized
 		let privateReadError: unknown
 		const skipped: CanvasClipboardPasteResult["skipped"] = []
 		const failed: CanvasClipboardPasteResult["failed"] = []
@@ -681,6 +719,19 @@ export class CanvasClipboardPasteController {
 			privateReadError = error
 		}
 
+		if (!privatePayloadRecognized && !messagePayloadRecognized) {
+			const messagePayload = readMessageClipboardAssets(event)
+			messagePayloadRecognized = messagePayload.recognized
+			rawAssets = messagePayload.assets.map((asset) => ({
+				...asset,
+				key: getSourceKey(asset),
+			}))
+		}
+
+		if (messagePayloadRecognized && target.messagePasteMode === "rich-text-with-media") {
+			return this.processMessageClipboardPaste(target, callbacks, messageContent.parts)
+		}
+
 		// The synchronous paste event is authoritative for native files. Only read
 		// media MIME entries from ClipboardItem when no private payload was parsed;
 		// otherwise generation-resource blobs could be reintroduced as attachments.
@@ -710,7 +761,12 @@ export class CanvasClipboardPasteController {
 		// For a MIME-less clipboard read, defer claiming the browser default until
 		// an actual private payload or external media was found. Unknown/empty
 		// clipboard contents must remain a no-op for the host editor.
-		if (!privateMime && (privatePayloadRecognized || rawAssets.length > 0)) {
+		if (
+			!privateMime &&
+			(privatePayloadRecognized ||
+				(messagePayloadRecognized && rawAssets.length > 0) ||
+				rawAssets.length > 0)
+		) {
 			event?.preventDefault()
 			event?.stopPropagation()
 		}
@@ -728,7 +784,7 @@ export class CanvasClipboardPasteController {
 			}
 			const dedupKeys = getAssetDedupKeys(rawAsset)
 			const isExistingReference =
-				rawAsset.origin === "canvas-element" &&
+				(rawAsset.origin === "canvas-element" || rawAsset.origin === "message-reference") &&
 				(getAssetReferenceKeys(rawAsset).some((key) => existingResourceKeys.has(key)) ||
 					dedupKeys.some((key) =>
 						existingResourceKeys.has(normalizeClipboardSource(key)),
@@ -752,19 +808,24 @@ export class CanvasClipboardPasteController {
 				continue
 			}
 			const reference =
-				rawAsset.origin === "canvas-element"
+				rawAsset.origin === "canvas-element" || rawAsset.origin === "message-reference"
 					? await this.resolveReference(rawAsset, target)
 					: null
 			const file = reference
 				? undefined
-				: await this.resolver.materializeAsset({
-						...rawAsset,
-						mimeType: rawAsset.mimeType?.toLowerCase().startsWith(`${rawAsset.type}/`)
-							? rawAsset.mimeType
-							: rawAsset.file?.type?.toLowerCase().startsWith(`${rawAsset.type}/`)
-								? rawAsset.file.type
-								: `${rawAsset.type}/octet-stream`,
-					})
+				: await (async () => {
+						const materialized = await this.resolver.materializeAsset({
+							...rawAsset,
+							mimeType: rawAsset.mimeType
+								?.toLowerCase()
+								.startsWith(`${rawAsset.type}/`)
+								? rawAsset.mimeType
+								: rawAsset.file?.type?.toLowerCase().startsWith(`${rawAsset.type}/`)
+									? rawAsset.file.type
+									: `${rawAsset.type}/octet-stream`,
+						})
+						return materialized
+					})()
 			if (!file && !reference) {
 				failed.push({ reason: "resource-materialize-failed", fileName: rawAsset.fileName })
 				continue
@@ -801,6 +862,187 @@ export class CanvasClipboardPasteController {
 		}
 		try {
 			if (callbacks.isSessionCurrent?.(target.sessionId) !== false) {
+				await callbacks.onComplete?.(result)
+			}
+		} finally {
+			await callbacks.onSettled?.(result)
+		}
+		return result
+	}
+
+	private async processMessageClipboardPaste(
+		target: CanvasClipboardTarget,
+		callbacks: CanvasClipboardPasteCallbacks,
+		parts: CanvasClipboardMessagePart[],
+	): Promise<CanvasClipboardPasteResult> {
+		const orderedParts: CanvasClipboardMessagePart[] = []
+		const accepted: CanvasClipboardAsset[] = []
+		const skipped: CanvasClipboardPasteResult["skipped"] = []
+		const failed: CanvasClipboardPasteResult["failed"] = []
+		const resourcePromises = new Map<
+			string,
+			Promise<CanvasClipboardResolvedReference | File | null>
+		>()
+		const counts: Partial<Record<CanvasClipboardMediaType, number>> = {}
+		const pendingResolutions: Array<{
+			occurrenceKey: string
+			rawAsset: InternalCanvasClipboardAsset
+			promise: Promise<CanvasClipboardResolvedReference | File | null>
+		}> = []
+
+		for (const part of parts) {
+			if (part.kind === "text") {
+				orderedParts.push(part)
+				continue
+			}
+
+			const rawAsset: InternalCanvasClipboardAsset = {
+				...part.asset,
+				key: `${getSourceKey(part.asset)}\0${part.occurrenceKey}`,
+			}
+			const currentTypeCount = counts[rawAsset.type] ?? 0
+			const typeLimit = target.maxCountByType?.[rawAsset.type]
+			const overTypeLimit = typeLimit !== undefined && currentTypeCount >= typeLimit
+			const overTotalLimit =
+				target.maxCount !== undefined && accepted.length >= target.maxCount
+
+			if (!isMediaType(rawAsset.type) || !target.acceptedTypes.includes(rawAsset.type)) {
+				skipped.push({ reason: "unsupported-type", fileName: rawAsset.fileName })
+				if (part.fallbackText) orderedParts.push({ kind: "text", text: part.fallbackText })
+				continue
+			}
+			if (overTypeLimit || overTotalLimit) {
+				skipped.push({
+					reason: overTypeLimit ? "type-limit" : "total-limit",
+					fileName: rawAsset.fileName,
+				})
+				if (part.fallbackText) orderedParts.push({ kind: "text", text: part.fallbackText })
+				continue
+			}
+
+			// Already-resolved assets (rare) keep their file/reference; otherwise insert
+			// unresolved placeholders immediately and resolve in parallel below.
+			if (rawAsset.file || rawAsset.reference) {
+				orderedParts.push({ ...part, asset: rawAsset })
+				accepted.push(rawAsset)
+				counts[rawAsset.type] = currentTypeCount + 1
+				continue
+			}
+
+			const resourceKey = getSourceKey(rawAsset)
+			let resolvedResource = resourcePromises.get(resourceKey)
+			if (!resolvedResource) {
+				resolvedResource = (async () => {
+					const reference = await this.resolveReference(rawAsset, target)
+					if (reference) return reference
+					const materialized = await this.resolver.materializeAsset({
+						...rawAsset,
+						mimeType: rawAsset.mimeType?.toLowerCase().startsWith(`${rawAsset.type}/`)
+							? rawAsset.mimeType
+							: `${rawAsset.type}/octet-stream`,
+					})
+					return materialized
+				})()
+				resourcePromises.set(resourceKey, resolvedResource)
+			}
+
+			orderedParts.push({ ...part, asset: rawAsset })
+			accepted.push(rawAsset)
+			counts[rawAsset.type] = currentTypeCount + 1
+			pendingResolutions.push({
+				occurrenceKey: part.occurrenceKey,
+				rawAsset,
+				promise: resolvedResource,
+			})
+		}
+
+		const result: CanvasClipboardPasteResult = {
+			handled: true,
+			accepted,
+			skipped,
+			failed,
+		}
+		try {
+			if (callbacks.isSessionCurrent?.(target.sessionId) !== false) {
+				try {
+					if (callbacks.onMessageParts) {
+						await callbacks.onMessageParts(orderedParts)
+						await Promise.all(
+							pendingResolutions.map(async (pending) => {
+								const resolved = await pending.promise
+								if (callbacks.isSessionCurrent?.(target.sessionId) === false) return
+								if (!resolved) {
+									failed.push({
+										reason: "resource-materialize-failed",
+										fileName: pending.rawAsset.fileName,
+									})
+									await callbacks.onMessageAssetResolved?.(
+										pending.occurrenceKey,
+										null,
+									)
+									return
+								}
+								const asset: CanvasClipboardAsset =
+									typeof File !== "undefined" && resolved instanceof File
+										? {
+												...pending.rawAsset,
+												file: resolved,
+												fileName:
+													resolved.name || pending.rawAsset.fileName,
+											}
+										: {
+												...pending.rawAsset,
+												reference: resolved,
+												fileName:
+													resolved.fileName || pending.rawAsset.fileName,
+											}
+								const index = accepted.findIndex(
+									(item) => item.key === pending.rawAsset.key,
+								)
+								if (index >= 0) accepted[index] = asset
+								await callbacks.onMessageAssetResolved?.(
+									pending.occurrenceKey,
+									asset,
+								)
+							}),
+						)
+					} else {
+						// Legacy consumers without onMessageParts still wait for resolve.
+						for (const pending of pendingResolutions) {
+							const resolved = await pending.promise
+							if (!resolved) {
+								failed.push({
+									reason: "resource-materialize-failed",
+									fileName: pending.rawAsset.fileName,
+								})
+								continue
+							}
+							if (callbacks.isSessionCurrent?.(target.sessionId) === false) break
+							const asset: CanvasClipboardAsset =
+								typeof File !== "undefined" && resolved instanceof File
+									? {
+											...pending.rawAsset,
+											file: resolved,
+											fileName: resolved.name || pending.rawAsset.fileName,
+										}
+									: {
+											...pending.rawAsset,
+											reference: resolved,
+											fileName:
+												resolved.fileName || pending.rawAsset.fileName,
+										}
+							const index = accepted.findIndex(
+								(item) => item.key === pending.rawAsset.key,
+							)
+							if (index >= 0) accepted[index] = asset
+							await callbacks.onAsset?.(asset)
+						}
+					}
+				} catch (error) {
+					result.failed.push({
+						reason: error instanceof Error ? error.message : "message-submit-failed",
+					})
+				}
 				await callbacks.onComplete?.(result)
 			}
 		} finally {

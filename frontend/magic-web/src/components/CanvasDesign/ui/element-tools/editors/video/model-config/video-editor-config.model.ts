@@ -3,7 +3,10 @@ import {
 	SUPPORTED_IMAGE_EXTENSIONS,
 	SUPPORTED_VIDEO_EXTENSIONS,
 } from "../../../../../runtime/shared/ids"
-import { getCanvasResourceFileName } from "../../../../../runtime/shared/path/canvasResourcePath"
+import {
+	areCanvasResourceReferencesSame,
+	getCanvasResourceFileName,
+} from "../../../../../runtime/shared/path/canvasResourcePath"
 import type { ResolveCanvasResourceReference } from "../../../../../public/resource-reference"
 import type {
 	DefaultGenerateVideoConfig,
@@ -470,6 +473,10 @@ export function resolveVideoReferenceAssetInfo(options: {
 	path: string
 	src?: string
 	fileName?: string
+	file_id?: string
+	source_file_id?: string
+	source_project_id?: string
+	project_id?: string
 	explicitAssetType?: VideoReferenceAssetKind
 	metadataCandidates?: readonly ReferenceResourceMetadataCandidate[]
 	resolveResourceReference?: ResolveCanvasResourceReference
@@ -484,11 +491,33 @@ export function resolveVideoReferenceAssetInfo(options: {
 		resolveResourceReference: options.resolveResourceReference,
 	})
 	if (!descriptor) return undefined
+	const metadataIdentity = options.metadataCandidates?.find((candidate) =>
+		areCanvasResourceReferencesSame(
+			candidate.path,
+			descriptor.path,
+			options.resolveResourceReference,
+		),
+	) as
+		| (ReferenceResourceMetadataCandidate & {
+				file_id?: string
+				source_file_id?: string
+				source_project_id?: string
+				project_id?: string
+		  })
+		| undefined
+	const fileId = options.file_id || metadataIdentity?.file_id
+	const sourceFileId = options.source_file_id || metadataIdentity?.source_file_id
+	const sourceProjectId = options.source_project_id || metadataIdentity?.source_project_id
+	const projectId = options.project_id || metadataIdentity?.project_id
 	return {
 		path: descriptor.path,
 		src: descriptor.src,
 		fileName: descriptor.fileName,
 		assetType,
+		...(fileId ? { file_id: fileId } : {}),
+		...(sourceFileId ? { source_file_id: sourceFileId } : {}),
+		...(sourceProjectId ? { source_project_id: sourceProjectId } : {}),
+		...(projectId ? { project_id: projectId } : {}),
 	}
 }
 
