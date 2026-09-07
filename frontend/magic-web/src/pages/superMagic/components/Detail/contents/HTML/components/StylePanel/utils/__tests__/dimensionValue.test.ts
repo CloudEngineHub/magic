@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { getDeclaredDimension } from "../dimensionValue"
+import {
+	getDeclaredDimension,
+	getDimensionField,
+	shouldKeepAuthoredDimension,
+} from "../dimensionValue"
 
 describe("getDeclaredDimension", () => {
 	it("prefers the inline unit over the computed pixel value", () => {
@@ -31,13 +35,23 @@ describe("getDeclaredDimension", () => {
 
 	it("follows an external resize that overwrites a percent with px", () => {
 		expect(
-			getDeclaredDimension(
+			getDimensionField(
 				{
 					inlineStyles: { width: "400px" },
 					computedStyles: { width: "400px" },
 				},
 				"width",
 			),
-		).toBe("400px")
+		).toEqual({ value: "400px", fromInline: true })
+	})
+})
+
+describe("shouldKeepAuthoredDimension", () => {
+	it("keeps a percent when a later refresh only has computed px", () => {
+		expect(shouldKeepAuthoredDimension("%", "508px")).toBe(true)
+	})
+
+	it("replaces a percent when the incoming px was written inline", () => {
+		expect(shouldKeepAuthoredDimension("%", "400px", true)).toBe(false)
 	})
 })
