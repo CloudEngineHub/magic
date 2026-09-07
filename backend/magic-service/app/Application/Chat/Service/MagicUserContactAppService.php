@@ -251,8 +251,7 @@ class MagicUserContactAppService extends AbstractAppService
         UserQueryDTO $queryDTO,
         MagicUserAuthorization $authorization,
         bool $includeEmployeeNo = false
-    ): array
-    {
+    ): array {
         $this->logger->info(sprintf('searchDepartmentUser query:%s', Json::encode($queryDTO->toArray())));
 
         $dataIsolation = $this->createDataIsolation($authorization);

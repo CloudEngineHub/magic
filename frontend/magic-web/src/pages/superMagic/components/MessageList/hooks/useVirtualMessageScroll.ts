@@ -21,7 +21,7 @@ import {
 	initialScrollOwnership,
 	type ScrollOwnershipState,
 } from "../scroll-ownership"
-import { useMemoizedFn } from "ahooks";
+import { useMemoizedFn } from "ahooks"
 
 const DEFAULT_MIN_TOP_DISTANCE = 400
 const MIN_BOTTOM_DISTANCE = 50

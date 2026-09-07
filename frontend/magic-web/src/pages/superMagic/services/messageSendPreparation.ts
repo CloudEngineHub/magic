@@ -282,6 +282,8 @@ export async function preparePanelSend({
 			selectedProject: currentProject,
 			selectedTopic: currentTopic,
 			selectedWorkspace: resolvedContext.selectedWorkspace,
+			// Preserve the scoped store so dispatchMessage can update the visible Topic immediately.
+			topicStore: resolvedContext.topicStore,
 			workspaceId: resolvedContext.workspaceId,
 			updateTopicName: resolvedContext.updateTopicName,
 			refreshProjectAfterTopicRename: resolvedContext.refreshProjectAfterTopicRename,

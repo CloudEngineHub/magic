@@ -238,6 +238,36 @@ describe("messageSendPreparation", () => {
 		expect(result?.context.selectedTopic?.id).toBe("topic-target")
 	})
 
+	it("preserves the scoped topic store for the dispatch phase", async () => {
+		const scopedTopicStore = new TopicStore()
+		const selectedProject = {
+			id: "project-1",
+			workspace_id: "workspace-1",
+		} as ProjectListItem
+		const selectedTopic = {
+			id: "topic-1",
+			project_id: "project-1",
+			chat_topic_id: "chat-topic-1",
+			chat_conversation_id: "conversation-1",
+		} as Topic
+
+		const result = await preparePanelSend({
+			params: {
+				value: {
+					type: "doc",
+					content: [{ type: "paragraph", content: [{ type: "text", text: "hello" }] }],
+				},
+				mentionItems: [],
+				topicMode: TopicMode.Chat,
+			},
+			context: { selectedProject, selectedTopic, topicStore: scopedTopicStore },
+			tabPattern: TopicMode.Chat,
+			messagesLength: 1,
+		})
+
+		expect(result?.context.topicStore).toBe(scopedTopicStore)
+	})
+
 	it("sends a configured built-in default as topic_pattern without agent_code", async () => {
 		modeServiceMock.defaultAgentCode = TopicMode.PPT
 		isModeValidMock.mockImplementation((mode) => mode === TopicMode.PPT)
