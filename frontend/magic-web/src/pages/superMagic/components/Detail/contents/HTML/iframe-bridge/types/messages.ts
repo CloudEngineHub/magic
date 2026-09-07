@@ -481,6 +481,14 @@ export interface ElementSelectedPayload {
 		width: number
 		height: number
 	}
+	childRects?: Array<{
+		top: number
+		left: number
+		width: number
+		height: number
+		position?: string
+		display?: string
+	}>
 	/** 元素旋转角度（度数） */
 	rotation?: number
 	/** 是否为文本元素 */

@@ -640,6 +640,20 @@ export class ElementSelector {
 		}
 	}
 
+	private getInFlowChildRects(element: HTMLElement) {
+		return Array.from(element.children)
+			.filter((node): node is HTMLElement => node instanceof HTMLElement)
+			.map((child) => {
+				const style = window.getComputedStyle(child)
+				const { rect } = this.getElementRectWithRotation(child)
+				return {
+					...rect,
+					position: style.position,
+					display: style.display,
+				}
+			})
+	}
+
 	selectElement(element: HTMLElement, multiSelect = false) {
 		if (!element || element === document.documentElement || element === document.body) {
 			return
@@ -781,6 +795,7 @@ export class ElementSelector {
 				computedStyles: styles,
 				inlineStyles,
 				rect,
+				childRects: this.getInFlowChildRects(element),
 				rotation,
 				isTextElement: isText,
 				hasDirectTextContent,

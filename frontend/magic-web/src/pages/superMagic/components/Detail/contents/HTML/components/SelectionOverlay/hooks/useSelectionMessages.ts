@@ -101,6 +101,7 @@ export function useSelectionMessages({
 							{
 								rect,
 								selector,
+								childRects: payload?.childRects,
 								computedStyles,
 								rotation,
 								isImageElement,

@@ -256,6 +256,28 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("includes in-flow child rects for a flex container", () => {
+			container.innerHTML = `
+				<div id="cards" style="display:flex;gap:20px">
+					<div id="a" style="width:80px;height:40px"></div>
+					<div id="b" style="width:80px;height:40px"></div>
+				</div>
+			`
+			selector.selectElement(container.querySelector("#cards") as HTMLElement)
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					childRects: expect.arrayContaining([
+						expect.objectContaining({ width: expect.any(Number), height: expect.any(Number) }),
+					]),
+				}),
+			)
+			const payload = sendEventSpy.mock.calls.find((call) => call[0] === "ELEMENT_SELECTED")?.[1] as {
+				childRects: unknown[]
+			}
+			expect(payload.childRects).toHaveLength(2)
+		})
+
 		it("should detect text elements", () => {
 			container.innerHTML = "<p>Text content</p>"
 			const element = container.querySelector("p") as HTMLElement

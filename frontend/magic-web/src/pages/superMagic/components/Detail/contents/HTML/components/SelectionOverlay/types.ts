@@ -10,6 +10,14 @@ export interface ElementRect {
 export interface SelectedInfo {
 	selector: string
 	rect: ElementRect
+	childRects?: Array<{
+		top: number
+		left: number
+		width: number
+		height: number
+		position?: string
+		display?: string
+	}>
 	computedStyles: Record<string, string>
 	rotation?: number
 	isImageElement?: boolean

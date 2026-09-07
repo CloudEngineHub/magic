@@ -98,4 +98,58 @@ describe("useSelectionMessages", () => {
 			iframe.remove()
 		}
 	})
+
+	it("maps childRects from ELEMENT_SELECTED onto selectedInfoList[0]", async () => {
+		const iframe = document.createElement("iframe")
+		document.body.appendChild(iframe)
+
+		try {
+			const childRects = [
+				{ top: 8, left: 8, width: 80, height: 40, position: "static", display: "block" },
+				{ top: 8, left: 108, width: 80, height: 40, position: "static", display: "block" },
+			]
+			const wrapper = ({ children }: { children: ReactNode }) => (
+				<StylePanelStoreProvider>{children}</StylePanelStoreProvider>
+			)
+			const { result } = renderHook(
+				() => {
+					const [selectedInfoList, setSelectedInfoList] = useState<SelectedInfo[]>([])
+					useSelectionMessages({
+						iframeRef: { current: iframe },
+						selectedInfoList,
+						setSelectedInfoList,
+						setHoveredRect: vi.fn(),
+						setIsSelectionMode: vi.fn(),
+					})
+					return selectedInfoList
+				},
+				{ wrapper },
+			)
+
+			await act(async () => {
+				window.dispatchEvent(
+					new MessageEvent("message", {
+						data: {
+							version: "1.0.0",
+							category: "event",
+							type: "ELEMENT_SELECTED",
+							payload: {
+								selector: "div#cards",
+								tagName: "div",
+								rect: { top: 0, left: 0, width: 200, height: 40 },
+								computedStyles: {},
+								childRects,
+							},
+						},
+						source: iframe.contentWindow,
+					}),
+				)
+				await Promise.resolve()
+			})
+
+			expect(result.current[0]?.childRects).toEqual(childRects)
+		} finally {
+			iframe.remove()
+		}
+	})
 })
