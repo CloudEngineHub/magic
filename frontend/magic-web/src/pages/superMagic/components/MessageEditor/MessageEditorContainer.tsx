@@ -327,8 +327,9 @@ export const MessageEditorContainer = observer(
 				}
 			})
 
+			// 普通话题不一定显式注入文件 Store；Mention Store 已绑定当前作用域的文件列表。
 			const getWorkspaceFilesList = useMemoizedFn(
-				() => projectFilesStore?.workspaceFilesList ?? [],
+				() => projectFilesStore?.workspaceFilesList ?? mentionPanelStore.workspaceFilesList,
 			)
 			const getCurrentProjectId = useMemoizedFn(
 				() => selectedTopic?.project_id ?? selectedProject?.id ?? draftKey?.projectId,
