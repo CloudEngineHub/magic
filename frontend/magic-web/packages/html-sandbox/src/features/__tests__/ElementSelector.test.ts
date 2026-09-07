@@ -174,6 +174,54 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("keeps used offsets for class-positioned absolute elements", () => {
+			const style = document.createElement("style")
+			style.textContent = ".pinned { position: absolute; }"
+			document.head.appendChild(style)
+			container.innerHTML = '<div id="pinned" class="pinned">Content</div>'
+			const element = container.querySelector("#pinned") as HTMLElement
+			const originalGetComputedStyle = window.getComputedStyle
+			const usedOffsets: Record<string, string> = {
+				position: "absolute",
+				top: "48px",
+				left: "24px",
+				right: "16px",
+				bottom: "8px",
+			}
+			window.getComputedStyle = ((target: Element) => {
+				const computed = originalGetComputedStyle(target)
+				if (target !== element) return computed
+				return new Proxy(computed, {
+					get(style, prop) {
+						if (typeof prop === "string" && prop in usedOffsets) {
+							return usedOffsets[prop]
+						}
+						return Reflect.get(style, prop)
+					},
+				})
+			}) as typeof window.getComputedStyle
+
+			try {
+				selector.selectElement(element)
+
+				expect(sendEventSpy).toHaveBeenCalledWith(
+					"ELEMENT_SELECTED",
+					expect.objectContaining({
+						computedStyles: expect.objectContaining({
+							position: "absolute",
+							top: "48px",
+							left: "24px",
+							right: "16px",
+							bottom: "8px",
+						}),
+					}),
+				)
+			} finally {
+				window.getComputedStyle = originalGetComputedStyle
+				style.remove()
+			}
+		})
+
 		it("should keep authored inline width available for the editor", () => {
 			container.innerHTML = '<div id="full-width" style="width: 100%;">Content</div>'
 			const element = container.querySelector("#full-width") as HTMLElement
@@ -268,11 +316,16 @@ describe("ElementSelector", () => {
 				"ELEMENT_SELECTED",
 				expect.objectContaining({
 					childRects: expect.arrayContaining([
-						expect.objectContaining({ width: expect.any(Number), height: expect.any(Number) }),
+						expect.objectContaining({
+							width: expect.any(Number),
+							height: expect.any(Number),
+						}),
 					]),
 				}),
 			)
-			const payload = sendEventSpy.mock.calls.find((call) => call[0] === "ELEMENT_SELECTED")?.[1] as {
+			const payload = sendEventSpy.mock.calls.find(
+				(call) => call[0] === "ELEMENT_SELECTED",
+			)?.[1] as {
 				childRects: unknown[]
 			}
 			expect(payload.childRects).toHaveLength(2)

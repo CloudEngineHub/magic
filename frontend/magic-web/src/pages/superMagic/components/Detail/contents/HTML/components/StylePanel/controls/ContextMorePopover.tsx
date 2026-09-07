@@ -16,6 +16,7 @@ import {
 	getMoreStylesViewport,
 	type MoreStylesPopoverLayout,
 } from "../utils/moreStylesPopoverPosition"
+import { neutralizeParentTransform } from "../utils/parentTransformOverride"
 import BoxModelSection from "../sections/BoxModelSection"
 import FlexGridSection from "../sections/FlexGridSection"
 import ImageSection from "../sections/ImageSection"
@@ -183,14 +184,9 @@ export function ContextMorePopover({
 		if (!open) return
 		let observer: MutationObserver | null = null
 		let raf = 0
-		function neutralizeParentTransform(node: HTMLElement) {
-			const parent = node.parentElement
-			if (!parent || parent === document.body) return
-			if (getComputedStyle(parent).transform === "none") return
-			parent.style.setProperty("transform", "none", "important")
-		}
+		let restoreParentTransform: (() => void) | undefined
 		function applyFixedLayout(node: HTMLElement) {
-			neutralizeParentTransform(node)
+			restoreParentTransform ??= neutralizeParentTransform(node)
 			const next = {
 				position: "fixed",
 				left: `${layout.left}px`,
@@ -241,6 +237,7 @@ export function ContextMorePopover({
 		return () => {
 			cancelAnimationFrame(raf)
 			observer?.disconnect()
+			restoreParentTransform?.()
 		}
 	}, [layout, open])
 

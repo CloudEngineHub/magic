@@ -59,7 +59,14 @@ vi.mock("@/components/shadcn-ui/popover", () => ({
 	}) => {
 		popoverState.open = Boolean(open)
 		popoverState.onOpenChange = onOpenChange
-		return <div>{children}</div>
+		return (
+			<div
+				data-testid="style-panel-more-styles-portal"
+				style={{ transform: "translateX(12px)" }}
+			>
+				{children}
+			</div>
+		)
 	},
 	PopoverTrigger: ({ children }: { children: ReactNode }) => (
 		<span onClick={() => popoverState.onOpenChange?.(!popoverState.open)}>{children}</span>
@@ -371,6 +378,51 @@ describe("ContextMorePopover", () => {
 			expect(Number.parseFloat(content.style.maxHeight)).toBeGreaterThanOrEqual(160)
 		} finally {
 			HTMLElement.prototype.getBoundingClientRect = getRect
+		}
+	})
+
+	it("restores the popover parent transform after close and reopen", () => {
+		const originalGetComputedStyle = window.getComputedStyle
+		window.getComputedStyle = ((element: Element) => {
+			const computed = originalGetComputedStyle(element)
+			if ((element as HTMLElement).dataset.testid !== "style-panel-more-styles-portal") {
+				return computed
+			}
+			const inline = (element as HTMLElement).style.getPropertyValue("transform")
+			return new Proxy(computed, {
+				get(style, prop) {
+					if (prop === "transform") {
+						return inline === "none" ? "none" : "matrix(1, 0, 0, 1, 12, 0)"
+					}
+					return Reflect.get(style, prop)
+				},
+			})
+		}) as typeof window.getComputedStyle
+
+		try {
+			render(
+				<ContextMorePopover
+					{...baseProps}
+					selectionRect={{ left: 80, top: 120, width: 240, height: 160 }}
+				/>,
+			)
+			const parent = screen.getByTestId("style-panel-more-styles-portal")
+			const trigger = screen.getByTestId("style-panel-more-styles-trigger")
+
+			fireEvent.click(trigger)
+			expect(parent.style.getPropertyValue("transform")).toBe("none")
+			expect(parent.style.getPropertyPriority("transform")).toBe("important")
+
+			fireEvent.click(trigger)
+			expect(parent.style.getPropertyValue("transform")).toBe("translateX(12px)")
+			expect(parent.style.getPropertyPriority("transform")).toBe("")
+
+			fireEvent.click(trigger)
+			expect(parent.style.getPropertyValue("transform")).toBe("none")
+			fireEvent.click(trigger)
+			expect(parent.style.getPropertyValue("transform")).toBe("translateX(12px)")
+		} finally {
+			window.getComputedStyle = originalGetComputedStyle
 		}
 	})
 

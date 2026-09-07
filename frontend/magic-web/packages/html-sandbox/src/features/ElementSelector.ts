@@ -270,11 +270,16 @@ export class ElementSelector {
 			styles.parentAlignItems = parentComputed.alignItems
 		}
 
-		// Keep used px for width/height. Prefer authored inline for offsets.
-		const positionProps = ["top", "left", "right", "bottom"]
+		// Inline offsets first. Abs/fixed still need used computed values.
+		const positionProps = ["top", "left", "right", "bottom"] as const
+		const usesOffsetPosition = styles.position === "absolute" || styles.position === "fixed"
 		positionProps.forEach((prop) => {
 			const inlineValue = element.style.getPropertyValue(prop)
-			if (inlineValue) styles[prop] = inlineValue
+			if (inlineValue) {
+				styles[prop] = inlineValue
+				return
+			}
+			if (usesOffsetPosition) styles[prop] = computed[prop]
 		})
 
 		// Debug: Log position values
