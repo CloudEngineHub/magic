@@ -7,6 +7,36 @@ from enum import StrEnum
 from typing import Optional
 
 
+@dataclass(frozen=True)
+class HorizonDisplayBudget:
+    """上下文展示预算；不改变文件扫描、哈希或编辑校验的性能边界。"""
+
+    file_change_max_tokens: int
+    important_file_change_max_tokens: int
+    file_changes_max_tokens: int
+    context_max_tokens: int
+    file_snapshot_max_tokens: int
+    full_read_ratio: float
+
+    @classmethod
+    def from_config(cls) -> "HorizonDisplayBudget":
+        from agentlang.config.config import config
+
+        values: dict[str, int] = {}
+        for key in ("file_change_max_tokens", "important_file_change_max_tokens", "file_changes_max_tokens", "context_max_tokens", "file_snapshot_max_tokens"):
+            raw = config.get(f"horizon.{key}")
+            if isinstance(raw, bool) or not isinstance(raw, (str, int)) or not str(raw).isdecimal() or int(raw) <= 0:
+                raise ValueError(f"horizon.{key} must be a positive integer")
+            values[key] = int(raw)
+        ratio = config.get("horizon.full_read_ratio")
+        if isinstance(ratio, bool) or not isinstance(ratio, (int, float, str)) or not 0 < float(ratio) <= 1:
+            raise ValueError("horizon.full_read_ratio must be in (0, 1]")
+        budget = cls(**values, full_read_ratio=float(ratio))
+        if not budget.file_change_max_tokens <= budget.important_file_change_max_tokens <= budget.file_changes_max_tokens <= budget.context_max_tokens:
+            raise ValueError("Horizon display limits must satisfy ordinary <= important <= files <= context")
+        return budget
+
+
 @dataclass
 class FileContextRecord:
     """Horizon 已记录的文件版本，用于后续变化检测、Diff 生成和编辑校验。"""
@@ -21,6 +51,31 @@ class FileContextRecord:
     # 留档字段：不参与主链路判断，但保留用于排查
     read_at: str = ""                   # ISO 8601 datetime
     read_ranges: list[tuple[int, int]] = field(default_factory=list)  # 当时读取的行号区间
+    # read_ranges 留作观察记录，不作为编辑权限，也不跨版本平移或拼成完整读取的证明。
+    # MOCK DEMO：模型读过 1～10 行后用脚本插入数行，仍可能知道第 11 行的新位置。
+    # 编辑条件继续由文件级校验和工具目标匹配决定，不能因工程记录跟不上而阻止正确编辑。
+
+
+@dataclass(frozen=True)
+class MemoryDirectoryDisplayPolicy:
+    """展示偏好，不是磁盘目录模板；未知布局仍正常扫描。"""
+
+    preferred_paths: tuple[str, ...] = ()
+    timeline_paths: tuple[str, ...] = ()
+
+
+@dataclass
+class MemoryDirectorySnapshot:
+    """有限深度内的目录条目，用于比较增删；不表示模型读过笔记正文。
+
+    展示可以折叠，条目仍完整保留到扫描深度。扫描失败不生成新快照，避免把未读到
+    的成员误报为删除；调整扫描深度时重新展示，不能把缩小范围当成文件消失。
+    """
+
+    root: str
+    scan_depth: int
+    entries: dict[str, str] = field(default_factory=dict)
+    exists: bool = True
 
 
 @dataclass
@@ -243,6 +298,7 @@ class HorizonState:
     user_preferred_language: str = ""
     workspace_files: str = ""      # 上次注入给 LLM 的工作区树形字符串
     workspace_entries: list = field(default_factory=list)  # 上次注入给 LLM 的结构化工作区条目
+    memory_directory: MemoryDirectorySnapshot | None = None  # 当前项目记忆的目录条目，展示可折叠
     client_context: str = ""          # 上次注入给 LLM 的客户端页面上下文
     cli_status: str = ""              # 上次注入给 LLM 的本地已登录 CLI 状态片段
     context_usage_baseline_used: int = 0       # 上次注入给 LLM 的 used tokens

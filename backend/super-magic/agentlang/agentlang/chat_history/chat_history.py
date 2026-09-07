@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Mapping, Optional, Union
 import aiofiles
 
 from agentlang.llms.token_usage.models import TokenUsage
+from agentlang.config.config import config
 from agentlang.utils.token_estimator import num_tokens_from_string
 
 # 从新的模块导入类型和工具
@@ -65,6 +66,7 @@ _HORIZON_DIAGNOSTIC_BLOCK_TAGS = (
     "persistent_memory",
     "user_preferred_language_changed",
     "file_changes",
+    "memory_directory",
     "notifications",
     "magiclaw_startup",
 )
@@ -1082,6 +1084,8 @@ class ChatHistory:
         msg: UserMessage,
         message_index: int,
         content_len: int,
+        limit: int,
+        limit_unit: str,
     ) -> None:
         content = msg.content
         file_count, largest_file_path, largest_file_len = _largest_xml_block(content, "file", "path")
@@ -1096,7 +1100,8 @@ class ChatHistory:
             f"message_index={message_index} "
             f"created_at={getattr(msg, 'created_at', '')!r} "
             f"content_len={content_len:,} "
-            f"limit={_HORIZON_MSG_CONTENT_MAX_CHARS:,} "
+            f"content_tokens={num_tokens_from_string(content):,} "
+            f"limit={limit:,} limit_unit={limit_unit} "
             f"sha256={_sha256_short(content)} "
             f"blocks={_format_horizon_block_lengths(content)} "
             f"file_changes_count={file_count} "
@@ -1116,13 +1121,27 @@ class ChatHistory:
         """
         sanitized_messages: List[ChatMessage] = []
         fixes = 0
+        # 与 Horizon 新内容生成共用应用预算，避免 20K Token 的合法消息重启后被旧 32K
+        # 字符规则删除。Agentlang 独立使用且未配置 Horizon 时，继续原有字符保护。
+        # source 仍为 horizon；不改变其它消息清理、不引入消息版本或新的交付协议。
+        configured_limit = config.get("horizon.context_max_tokens")
+        use_tokens = (
+            not isinstance(configured_limit, bool)
+            and isinstance(configured_limit, (str, int))
+            and str(configured_limit).isdecimal()
+            and int(configured_limit) > 0
+        )
+        horizon_limit = int(configured_limit) if use_tokens else _HORIZON_MSG_CONTENT_MAX_CHARS
         for idx, msg in enumerate(self.messages):
             # 规则 1：超大 horizon user 消息 → 丢弃
             if isinstance(msg, UserMessage) and getattr(msg, "source", None) == "horizon":
                 content_len = len(msg.content)
-                if content_len > _HORIZON_MSG_CONTENT_MAX_CHARS:
+                measured_size = num_tokens_from_string(msg.content) if use_tokens else content_len
+                if measured_size > horizon_limit:
                     fixes += 1
-                    self._log_removed_oversized_horizon_message(msg, idx, content_len)
+                    self._log_removed_oversized_horizon_message(
+                        msg, idx, content_len, horizon_limit, "tokens" if use_tokens else "chars",
+                    )
                     continue
 
             # 规则 2：超大 assistant content → 截断保留头尾

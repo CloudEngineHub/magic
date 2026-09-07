@@ -1,127 +1,52 @@
-"""构造会话后记忆整理提示。"""
+"""构造 after-run 的主文件用量事实；维护策略由 memory Skill 提供。"""
 
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agentlang.config.config import config
-from agentlang.logger import get_logger
-from app.service.auto_read_file_service import AutoReadFileCandidate, AutoReadFileService
-from app.service.memory.runtime.extraction.memory_extraction_prompts import (
-    MemoryExtractionPromptName,
-    get_memory_extraction_prompt,
+from app.service.memory.policies.memory_file_budget import (
+    MemoryFileReadStatus, MemoryFileTokenUsage, MemoryMdBudget, inspect_memory_file,
 )
-from app.utils.async_file_utils import async_stat
+from app.service.memory.policies.memory_scope import MemoryScopeKind, resolve_memory_scopes
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
 
-logger = get_logger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class MemoryFileSizeNotice:
-    """记录一个达到整理阈值的记忆文件。"""
-
-    path: Path
-    size_bytes: int
-    limit_bytes: int
-
-    @property
-    def size_kb(self) -> float:
-        """返回以 KiB 表示的文件大小。"""
-        return self.size_bytes / 1024
-
-    @property
-    def limit_kb(self) -> int:
-        """返回以 KiB 表示的整理阈值。"""
-        return self.limit_bytes // 1024
-
 
 class MemoryMaintenancePromptBuilder:
-    """以文件大小作为触发条件，生成按文件定位的记忆整理提示。"""
+    """并发测量适用的主文件，不读取 notes、不根据数字生成语义整改指令。"""
 
-    _DEFAULT_LIMIT_KB = 16
-    _CONFIG_KEY = "memory.after_run.memory_file_max_size_kb"
-
-    def __init__(self, limit_kb: int | None = None) -> None:
-        """初始化记忆文件大小阈值。"""
-        self._limit_kb = self._normalize_limit_kb(limit_kb)
-
-    async def build(self, agent_context: "AgentContext") -> str:
-        """返回需要整理的记忆文件提示；没有触发文件时返回空字符串。"""
-        candidates = await AutoReadFileService.resolve_memory_file_candidates(agent_context)
-        notices = await self._collect_notices(candidates)
-        if not notices:
-            return ""
-        return self._render_prompt(notices)
-
-    async def _collect_notices(
-        self,
-        candidates: tuple[AutoReadFileCandidate, ...],
-    ) -> tuple[MemoryFileSizeNotice, ...]:
-        """并发读取候选文件大小，并忽略已经消失或无法 stat 的文件。"""
-        results = await asyncio.gather(
-            *(self._inspect_candidate(candidate) for candidate in candidates),
-            return_exceptions=True,
-        )
-        notices: list[MemoryFileSizeNotice] = []
-        for result in results:
-            if isinstance(result, MemoryFileSizeNotice):
-                notices.append(result)
-            elif isinstance(result, Exception):
-                logger.debug("记忆文件超限检查失败，跳过本次提醒", exc_info=result)
-        return tuple(notices)
-
-    async def _inspect_candidate(
-        self,
-        candidate: AutoReadFileCandidate,
-    ) -> MemoryFileSizeNotice | None:
-        """检查单个候选文件，避免文件竞争阻断主任务。"""
-        try:
-            stat = await async_stat(candidate.absolute_path)
-        except (FileNotFoundError, OSError) as error:
-            logger.debug(
-                "记忆文件在超限检查期间不可读取，跳过本次提醒: "
-                f"path={candidate.absolute_path} error={error}"
-            )
-            return None
-
-        if stat.st_size < self._limit_kb * 1024:
-            return None
-        return MemoryFileSizeNotice(
-            path=candidate.absolute_path,
-            size_bytes=stat.st_size,
-            limit_bytes=self._limit_kb * 1024,
-        )
+    async def inspect(self, agent_context: "AgentContext") -> tuple[MemoryFileTokenUsage, ...]:
+        # MOCK DEMO：全局 12K、项目 18K -> 两份分别报告，只有项目触发重组 reference。
+        # Claw 工作区记忆由自身规则管理，不套普通 MEMORY.md 的 10K/16K 预算。
+        scopes = tuple(scope for scope in resolve_memory_scopes(agent_context) if scope.kind != MemoryScopeKind.CLAW_WORKSPACE)
+        usages = await asyncio.gather(*(
+            inspect_memory_file(scope.memory_file, agent_context.get_interruption_event()) for scope in scopes
+        ))
+        # 计数结果仍需属于当前项目；自动开关不参与目录归属判断。
+        current = resolve_memory_scopes(agent_context)
+        return tuple(usage for scope, usage in zip(scopes, usages) if scope in current)
 
     @staticmethod
-    def _normalize_limit_kb(value: int | None) -> int:
-        """读取正整数阈值，非法配置回退到默认值。"""
-        raw_value = value if value is not None else config.get(
-            MemoryMaintenancePromptBuilder._CONFIG_KEY,
-            MemoryMaintenancePromptBuilder._DEFAULT_LIMIT_KB,
-        )
-        try:
-            normalized = int(raw_value)
-        except (TypeError, ValueError):
-            return MemoryMaintenancePromptBuilder._DEFAULT_LIMIT_KB
-        return normalized if normalized > 0 else MemoryMaintenancePromptBuilder._DEFAULT_LIMIT_KB
-
-    @staticmethod
-    def _render_prompt(notices: tuple[MemoryFileSizeNotice, ...]) -> str:
-        """把触发整理的文件渲染为 AfterRun 可直接执行的记忆整理要求。"""
-        memory_files = "\n".join(
-            f"- {notice.path} (current size: {notice.size_kb:.1f} KiB; suggested target: <= {notice.limit_kb} KiB)"
-            for notice in notices
-        )
-        return get_memory_extraction_prompt(
-            MemoryExtractionPromptName.MEMORY_MAINTENANCE,
-            memory_files=memory_files,
-        )
+    def render_usage(usages: tuple[MemoryFileTokenUsage, ...], budget: MemoryMdBudget | None) -> str:
+        lines = ["Initial MEMORY.md usage; counts are estimates, and each file is evaluated separately:"]
+        for usage in usages:
+            if usage.status == MemoryFileReadStatus.MISSING:
+                lines.append(f"- {usage.path}: no file currently exists.")
+            elif usage.status != MemoryFileReadStatus.OK:
+                lines.append(f"- {usage.path}: current count unavailable ({usage.status.value}); preserve existing content until it can be inspected.")
+            else:
+                allowance = (
+                    f"target {budget.target_tokens:,}; maximum {budget.max_tokens:,}; "
+                    f"over maximum: {'yes' if budget.is_over_budget(usage.estimated_tokens) else 'no'}"
+                    if budget is not None and usage.estimated_tokens is not None else "configured budget unavailable"
+                )
+                lines.append(f"- {usage.path}: {usage.estimated_tokens:,} estimated tokens; {usage.size_bytes:,} bytes; {allowance}.")
+        if not usages:
+            lines.append("No user-global or ordinary-project MEMORY.md usage is available in this scope.")
+        lines.append("Reuse these initial counts and subsequent writing-tool feedback; do not recount merely because a write succeeded.")
+        return "\n".join(lines)
 
 
-__all__ = ["MemoryFileSizeNotice", "MemoryMaintenancePromptBuilder"]
+__all__ = ["MemoryMaintenancePromptBuilder"]

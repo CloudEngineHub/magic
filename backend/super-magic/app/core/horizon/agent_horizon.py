@@ -13,7 +13,7 @@ import html
 import re
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Set, Tuple, Union
 from urllib.parse import urldefrag
@@ -24,12 +24,16 @@ if TYPE_CHECKING:
     from app.utils.file_utils import WorkspaceSnapshot
 
 from agentlang.logger import get_logger
+from agentlang.utils.token_estimator import num_tokens_from_string
 from app.core.horizon.diff_builder import detect_file_changes
+from app.core.horizon.memory_directory import render_memory_directory
 from app.core.horizon.models import (
     BrowserPageObservation,
     ContextUsage,
     FileContextRecord,
+    HorizonDisplayBudget,
     HorizonState,
+    MemoryDirectorySnapshot,
     ImageModelState,
     ManualContextWindowState,
     PendingNotification,
@@ -52,10 +56,11 @@ logger = get_logger(__name__)
 # 与原 FileTimestampManager 保持一致
 HASH_DETECTION_THRESHOLD = 5 * 1024 * 1024   # 5 MB
 NETWORK_FS_MTIME_BUFFER = 1.0                  # seconds
+# 线上网络文件系统的元数据可能延迟约 1 秒；这个容差是实际使用形成的保护。
+# MOCK DEMO：刚写入后 path stat 暂时返回较旧时间，不能据此误判为外部变更并阻止下一次编辑。
+# 大于 5 MiB 的文件继续使用 __mtime__ 信号；分段哈希仍会读取全文，不可替换这条快速路径。
 VALIDATION_ERROR_NOT_READ = "File must be read before editing. Please read the file first."
 VALIDATION_ERROR_CHANGED = "File changed since last read. Please read the file again."
-FILE_CONTENT_SNAPSHOT_MAX_BYTES = 64 * 1024   # 64 KB — 整文件快照上限
-HORIZON_CONTEXT_MAX_CHARS = 32 * 1024          # 32 KB — 单条 horizon 注入上限
 HORIZON_CONTEXT_OVERSIZED_NOTICE = (
     "<system_injected_context>\n"
     '<horizon_update_status status="omitted" reason="size_limit_exceeded">\n'
@@ -99,6 +104,7 @@ _DIAGNOSTIC_BLOCK_TAGS = (
     "local_cli_context_changed",
     "user_preferred_language_changed",
     "file_changes",
+    "memory_directory",
     "notifications",
     "resumptions",
     "magiclaw_startup",
@@ -153,9 +159,12 @@ async def _read_file_content_for_snapshot(abs_path: str) -> tuple[str, str, Opti
     from app.utils.async_file_utils import async_read_text, async_stat
     try:
         stat = await async_stat(abs_path)
-        if stat.st_size > FILE_CONTENT_SNAPSHOT_MAX_BYTES:
+        if stat.st_size > HASH_DETECTION_THRESHOLD:
             return "", "metadata_only", "file_too_large"
+        # Token 限制缓存多少正文，5 MiB 保护实际自动读取量；两者不能互相替代。
         content = await async_read_text(abs_path)
+        if num_tokens_from_string(content) > HorizonDisplayBudget.from_config().file_snapshot_max_tokens:
+            return "", "metadata_only", "snapshot_token_limit"
         return content, "full", None
     except Exception as e:
         logger.debug(f"[AgentHorizon] 读取文件快照失败 {abs_path}: {e}")
@@ -390,6 +399,7 @@ class AgentHorizon:
         # 持久化 state.* 则始终表达模型上次已经看到的 baseline。
         self._workspace_files_current: Optional[str] = None
         self._workspace_entries_current: Optional[list] = None
+        self._memory_directory_current: MemoryDirectorySnapshot | None = None
         self._client_context_current: Optional[str] = None
         self._cli_status_current: Optional[str] = None
         self._language_current: Optional[str] = None
@@ -456,6 +466,7 @@ class AgentHorizon:
 
         self._workspace_files_current = None
         self._workspace_entries_current = None
+        self._memory_directory_current = None
         self._client_context_current = None
         self._cli_status_current = None
         self._language_current = None
@@ -648,6 +659,8 @@ class AgentHorizon:
         """
         await self._ensure_loaded()
         self._state.file_records.clear()
+        # 新窗口没有见过目录成员；下次从当前项目根重新生成首次发现信息。
+        self._state.memory_directory = None
         self._state.image_model = ImageModelState()
         self._state.video_model = VideoModelState()
         self._context_used = 0
@@ -688,7 +701,7 @@ class AgentHorizon:
         """read_file 工具成功读取后调用。
 
         Horizon 自主决定是否读取整文件并保存快照：
-        - 小文件（<= FILE_CONTENT_SNAPSHOT_MAX_BYTES）：读整文件存快照
+        - 自动读取范围内（<= 5 MiB）且正文未超 Token 缓存预算：读整文件存快照
         - 大文件或读取失败：file_content 置空，变化时退化为 summary
         """
         await self._ensure_loaded()
@@ -1339,6 +1352,18 @@ class AgentHorizon:
             self._workspace_files_current = snapshot.display
             self._workspace_entries_current = list(snapshot.entries)
 
+    async def set_memory_directory_snapshot(self, snapshot: MemoryDirectorySnapshot | None) -> None:
+        """接收本轮目录快照；扫描失败或没有作用域时不覆盖上次成功结果。"""
+        await self._ensure_loaded()
+        self._memory_directory_current = snapshot
+
+    def _build_memory_directory_context(self, today_date: str) -> str:
+        if self._memory_directory_current is None:
+            return ""
+        return render_memory_directory(
+            self._memory_directory_current, self._state.memory_directory, date.fromisoformat(today_date),
+        )
+
     async def set_client_context(self, content: str) -> None:
         """更新运行时 current 客户端页面上下文，不直接覆盖持久化 baseline。"""
         await self._ensure_loaded()
@@ -1379,7 +1404,8 @@ class AgentHorizon:
             f"injection_point={injection_point} "
             f"horizon_file={getattr(self._store, 'path', 'unknown')} "
             f"content_len={len(content):,} "
-            f"limit={HORIZON_CONTEXT_MAX_CHARS:,} "
+            f"content_tokens={num_tokens_from_string(content):,} "
+            f"limit={HorizonDisplayBudget.from_config().context_max_tokens:,} limit_unit=tokens "
             f"sha256={_sha256_short(content)} "
             f"blocks={_format_context_block_lengths(content)} "
             f"workspace_entries={len(self._get_workspace_entries_current())} "
@@ -1440,8 +1466,13 @@ class AgentHorizon:
             current_hashes[abs_path] = (h, size)
             current_mtimes[abs_path] = mtime_ms
 
-        # 文件变化检测
-        file_blocks = await detect_file_changes(self._state, current_hashes, current_mtimes)
+        # 只替换文件展示策略；前面的并发采集、5 MiB 分界和编辑前校验保持原样。
+        display_budget = HorizonDisplayBudget.from_config()
+        file_changes = await detect_file_changes(
+            self._state, current_hashes, current_mtimes, budget=display_budget,
+            max_read_bytes=HASH_DETECTION_THRESHOLD,
+        )
+        file_blocks = file_changes.blocks
         browser_pages_context, next_browser_pages = await self._build_browser_pages_changed_context()
 
         # 通知块
@@ -1478,6 +1509,9 @@ class AgentHorizon:
         date_changed = today_date != self._state.last_injected_date
         # 同一天内省略周几、第几周、时区，只保留 "YYYY-MM-DD HH:MM:SS"
         time_display = now_str if date_changed else now_str[:19]
+
+        # 目录扫描由 Agent 提前完成；这里只比较并展示，整包超限时仍不推进基准。
+        memory_directory_context = self._build_memory_directory_context(today_date)
 
         current_workspace_files = self._get_workspace_files_current()
         current_workspace_entries = self._get_workspace_entries_current()
@@ -1679,6 +1713,9 @@ class AgentHorizon:
             parts.extend(file_blocks)
             parts.append("</file_changes>")
 
+        if memory_directory_context:
+            parts.append(memory_directory_context)
+
         if browser_pages_context:
             parts.append(browser_pages_context)
 
@@ -1700,7 +1737,7 @@ class AgentHorizon:
         parts.append("</system_injected_context>")
         context_update = "\n".join(parts)
 
-        if len(context_update) > HORIZON_CONTEXT_MAX_CHARS:
+        if num_tokens_from_string(context_update) > display_budget.context_max_tokens:
             self._log_oversized_context_update(context_update, injection_point)
             return HORIZON_CONTEXT_OVERSIZED_NOTICE
 
@@ -1719,6 +1756,9 @@ class AgentHorizon:
 
         # 注入完成后，把 current staging 提交成新的持久化 baseline。
         persistence_changed = False
+        if memory_directory_context:
+            self._state.memory_directory = self._memory_directory_current
+            persistence_changed = True
         if self._state.last_injected_date != today_date:
             self._state.last_injected_date = today_date
             persistence_changed = True
@@ -1768,12 +1808,26 @@ class AgentHorizon:
             persistence_changed = True
 
         state_changed = bool(file_blocks) or bool(self._state.pending_notifications) or persistence_changed
+        displayed_files = {change.path: change for change in file_changes.changes}
         for abs_path, (cur_hash, cur_size) in current_hashes.items():
             rec = self._state.file_records.get(abs_path)
             if rec and cur_hash and rec.file_hash != cur_hash:
                 rec.file_hash = cur_hash
                 rec.file_size_bytes = cur_size
                 rec.file_mtime_ms = current_mtimes.get(abs_path, rec.file_mtime_ms)
+                # 只更新本文件快照，不重构其它动态上下文的提交状态。
+                # 完整 diff／真实全文已展示才缓存新正文；摘要不含新正文，清空旧快照，
+                # 防止下次把旧 A 与新版本 C 的差异误当成 B -> C。文件级编辑校验仍用原 hash/mtime。
+                displayed = displayed_files.get(abs_path)
+                snapshot = displayed.new_snapshot if displayed is not None else None
+                if snapshot is not None and num_tokens_from_string(snapshot) <= display_budget.file_snapshot_max_tokens:
+                    rec.file_content = snapshot
+                    rec.metadata["snapshot_mode"] = "full"
+                    rec.metadata.pop("snapshot_reason", None)
+                else:
+                    rec.file_content = ""
+                    rec.metadata["snapshot_mode"] = "metadata_only"
+                    rec.metadata["snapshot_reason"] = "changed_content_not_cached"
 
         self._state.pending_notifications.clear()
 

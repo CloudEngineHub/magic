@@ -1,0 +1,109 @@
+# Reorganize memory without discarding useful information
+
+The objective is an immediately useful core plus retrievable detail and history. A tiny MEMORY.md, a high compression ratio, or a file within budget is not evidence of successful preservation.
+
+## Work in bounded sections
+
+1. Use the actual paths, scopes, and per-file budgets supplied by the runtime. Inspect the source structure and relevant existing notes. Read large sources in manageable sections; track which sections are read and processed in the current task. Do not assume the whole source fits in one model context.
+2. Account for each processed section's facts, conditions, exceptions, important values, decisions, reasons, source boundaries, and historical relations. Distinguish useful current core, useful recent context, deferred detail, meaningful history, duplicate wording, and information with a clear reason to delete.
+3. Check existing project files before duplicating information. When a reliable, future-accessible source already preserves the details, memory can retain an essential takeaway and a precise retrieval pointer. Preserve useful conversational details that source does not capture. A matching keyword or a temporary local path does not establish preservation.
+4. Merge detail into existing relevant references or dated records before creating a new note. Keep details normally used together in one subject note, with conclusions, conditions, reasons, and sources beside each other. Each reference should answer current content-based questions; each event record should answer ordinary questions about that time. Add events only for independent historical value, using useful short overlap and cross-links instead of full copies or bare-link-only records.
+5. Save destinations and read them back before shortening the corresponding source section. Check that meaningful conditions, exceptions, values, and reasons remain recoverable and that links lead to the actual content. Existing project sources count as destinations only when they are verified to contain the information and remain accessible.
+6. Shorten only processed source content with a confirmed destination or an explicit deletion basis. Keep high-value current constraints directly usable in MEMORY.md and add specific reading triggers for deferred details. Never overwrite an entire source while it still contains unread or unprocessed sections.
+7. Update existing indexes and ancestor pointers only when their summary or route changed. Create an index only when direct entries are dense, not for every new file or date. Use the directory growth guidance and examples below when a dense index, a large mixed note, or extensive history needs further subdivision. Do not rewrite the whole tree for one new entry.
+
+Cold information may move from automatic to deferred loading. Age, infrequent use, or irrelevance to the present task is not a reason to erase useful knowledge. Without actual access records, do not invent recency scores or last-access times. Merge redundant wording while retaining distinct qualifications. Preserve meaningful superseded decisions with their dates and successor links; do not rewrite history to make a later decision appear earlier.
+
+Do not move all detail into another giant dump, count a permanent backup as usable archiving, or create an extra manifest/transaction system. Maintain normal files and actionable indexes. An explicit forget request requires removing the affected information from all relevant permitted views, including history.
+
+## Directory growth and examples
+
+The shared directory tree, file responsibilities, note format, and date rules are in the preloaded main skill. The examples below illustrate when to keep a small core, move related detail together, add an independent event, or split an affected index. They do not define mandatory categories or additional files.
+
+### Start small, expand when useful
+
+```text
+<allowed memory scope>/
+└── MEMORY.md
+```
+
+For example, a user confirms that accommodation should be quiet and convenient for the venue, with cancellable bookings when the itinerary is uncertain. A few useful sentences belong directly in MEMORY.md, together with their source. They do not require a separate note.
+
+Later, several conversations add city-specific choices, exceptional itineraries, transport considerations, and reasons. When those details are substantial and normally used together for travel planning, keep them in one subject note and retain a useful summary and pointer in MEMORY.md:
+
+```text
+<allowed memory scope>/
+├── MEMORY.md
+└── notes/
+    └── references/
+        └── travel-arrangements.md   # The detailed content of this subject
+```
+
+```markdown
+## Travel arrangements
+Prefer quiet accommodation convenient for the venue; choose cancellable bookings while the itinerary is uncertain.
+When selecting accommodation or checking itinerary-specific exceptions, read [travel arrangements](notes/references/travel-arrangements.md) for the confirmed details, conditions, and sources.
+```
+
+The next accommodation request can use this summary and read one relevant subject note. Do not create this structure merely to store the two example sentences. File names come from actual content and use the user's language; the example is not a system file, tool, or mandatory category. The path is the identifier; do not invent additional IDs.
+
+### Keep subject and event records useful
+
+A section within a longer subject note can read as follows. This small excerpt alone would not justify a separate file:
+
+```markdown
+## Accommodation while an itinerary is uncertain
+Prefer a cancellable booking while the itinerary may change, even at a higher price; judge an acceptable difference against the current budget.
+This reduces cancellation losses when plans change. Source: the user's explicit trade-off in the travel-planning discussion.
+```
+
+Keep provenance beside the relevant information, as a sentence or adjacent entry. Do not make the reader open a separate source file or reconstruct attribution from a distant file-wide source section. If a source is unknown, say so; do not invent a conversation, link, or date. New notes use the frontmatter in the preloaded main skill.
+
+Add an event only when it has independent value, such as explaining why a particular itinerary changed. Use its actual source date at notes/timeline/YYYY/MM/YYYY-MM-DD.md; a section could read:
+
+```markdown
+## Accommodation choice for this itinerary
+The itinerary was not final, so a cancellable booking was selected at the price difference confirmed for this trip.
+Source: the user's confirmation in that itinerary discussion. This particular choice does not establish a rule for every future trip.
+General preferences: [travel arrangements](../../../references/travel-arrangements.md).
+```
+
+A reference should normally answer current subject questions on its own; an event should answer common questions about that time on its own. A short repeated conclusion and reason can make both useful. Cross-link for additional detail, not every sentence. For example, the subject note links to ../timeline/YYYY/MM/YYYY-MM-DD.md, while that daily note links back to ../../../references/travel-arrangements.md. Replace date placeholders with verified source dates.
+
+If an existing project specification owns the details, keep a useful takeaway and pointer, plus valuable conversational information absent from that source. A link cannot replace chat-only reasons that need preservation. Do not maintain a third copy of the specification.
+
+### Grow indexes and update links
+
+Each entry includes a reading condition, available information, and exact relative or absolute target. For example:
+
+```markdown
+| When to read | What it contains | File |
+|---|---|---|
+| Planning travel, choosing accommodation, or checking itinerary-specific exceptions | Long-term preferences, conditions, exceptions, and the sources beside each item | [Travel arrangements](travel-arrangements.md) |
+```
+
+Keep each existing parent focused on immediate children and useful summaries. Few direct pointers can stay in MEMORY.md without another index. A timeline month index includes source dates, event summaries, reading triggers, and paths; it should answer a broad question about that month without opening every day. Create year/month/category directories and indexes only as useful content requires them.
+
+When an index exceeds its applicable budget or entries mix several independently useful subjects, split only that part and replace its parent entries with an accurate route. Use content categories for references and year/month/day for timeline. Do not move a useful rule out of the core just to make an index smaller.
+
+Split a note when its subsubjects are independently useful, targeted reading has become difficult, and separation will reduce irrelevant reading. Keep material normally needed together in one file; prefer headings and range reads before permanent fragmentation. Read known targets directly and batch independent known files with read_files when useful. A batch request does not prove full reading: respect actual ranges and truncation markers.
+
+For an oversized daily note containing independent events, keep YYYY-MM-DD.md as the day overview and move event details into the sibling YYYY-MM-DD/ directory. Split by event meaning, not bytes, a fixed number of lines, or midnight within one continuous event. Very tight context on a single read is normally handled by reading ranges, not permanently splitting the file.
+
+Save and check destinations first. Then update known old-path links, direct parent entries, and ancestors whose route or meaning changed before removing the old entry. Only expand the affected branch; do not reorganize unrelated history. Resolve every relative link from its containing file. Project-document links must identify the project/workspace base and be accessible to future relevant Agents.
+
+## Finish from available results or address a specific gap
+
+Use before/after token counts from normal writing-tool results. Consider the task's initial total, the last result, the runtime budget, and the available source together; the last small edit alone may hide a large cumulative reduction. An intentionally unfinished skeleton is not a completed reorganization. If the intended content is saved and no specific omission, failure, or conflict remains, finish without an extra review phase, reread, or counting call.
+
+If the available results reveal an unexpectedly sparse result relative to the source's useful content, use still-available source and targeted destination reads to identify concrete omissions. Make at most one focused supplementation pass across the affected core, notes, and pointers; no omission means zero passes. Prefer precise or batched edits to regenerating everything. This allowance belongs to the whole reorganization, not to each file or each tool call. It is not a fixed limit on the tool calls needed to safely process the original task.
+
+After that pass, stop length-driven revision and report remaining gaps. Do not launch a reviewer Agent, infer semantic omissions from numbers alone, repeatedly request expansion, fill to a target, or perform another counting call when a valid tool result already supplies the same measurement. Use inspect_memory only for requested counts or a missing trustworthy current count that would change the next decision; batch related files. The numeric feedback is a signal for your judgment, not a semantic audit or a guarantee against loss. Preserve the save-and-read-back check before shortening the only source; ordinary successful writes do not imply a full-library reread.
+
+## Completion and interruption
+
+A reorganization is complete when all intended sections are handled, each retained fact is directly useful or reachable from an accurate pointer, current/history relationships and source times remain clear, and the affected core is at or below its maximum. A useful result above the preferred target needs no further shrinking; a genuinely small core needs no filler.
+
+If a section is unread, a destination failed, a source is inaccessible, or another Agent changed the file, preserve the affected source. Re-read current files before merging; do not overwrite another session's edits with an old snapshot. Report partial completion, even if the core temporarily remains over budget. Runtime read truncation is not permission to delete disk content.
+
+On cancellation, stop starting new maintenance operations and retain already completed writes. Do not claim multi-file atomicity or recovery that did not happen. The final task response may briefly describe destinations and unresolved sections; do not write operational status into the memory itself.

@@ -31,9 +31,6 @@ Metadata = message_module.Metadata
 PersonalPreferences = import_module(
     "app.core.entity.message.personal_preferences"
 ).PersonalPreferences
-apply_personal_preferences = import_module(
-    "app.core.prompt.personal_preferences_prompt"
-).apply_personal_preferences
 auto_read_module = import_module("app.service.auto_read_file_service")
 AutoReadFileService = auto_read_module.AutoReadFileService
 AutoReadLoadPolicy = auto_read_module.AutoReadLoadPolicy
@@ -111,30 +108,6 @@ def test_metadata_always_has_default_personal_preferences():
     assert isinstance(metadata.personal_preferences, PersonalPreferences)
     assert metadata.personal_preferences.long_term_memory_enabled is True
     assert "personal_preferences" not in metadata.dict(exclude_unset=True)
-
-
-@pytest.mark.parametrize(
-    ("enabled", "is_magiclaw", "expected_memory_prompt"),
-    [
-        (True, False, True),
-        (False, False, False),
-        (False, True, True),
-    ],
-)
-def test_system_prompt_uses_first_chat_value(
-    enabled: bool,
-    is_magiclaw: bool,
-    expected_memory_prompt: bool,
-):
-    prompt = "before\n<memory_filesystem>memory instructions</memory_filesystem>\nafter"
-
-    result = apply_personal_preferences(
-        prompt,
-        PersonalPreferences(long_term_memory_enabled=enabled),
-        is_magiclaw,
-    )
-
-    assert ("<memory_filesystem>" in result) is expected_memory_prompt
 
 
 def test_chat_runtime_metadata_is_not_persisted_to_init(monkeypatch, tmp_path):
@@ -236,6 +209,7 @@ def test_memory_listener_respects_general_switch_and_preserves_claw(
     context = SimpleNamespace(
         is_main_agent_context=lambda: is_main,
         is_magiclaw=lambda: is_claw,
+        has_skill=lambda name: name == "memory",
         get_personal_preferences=lambda: PersonalPreferences(
             long_term_memory_enabled=enabled,
         ),

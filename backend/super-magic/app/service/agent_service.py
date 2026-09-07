@@ -574,12 +574,6 @@ class AgentService(Base):
             agent.agent_context.horizon,
         )
 
-        # 每次用户消息前刷新工作区文件树，让 horizon 检测用户上传/删除文件等变化
-        try:
-            await agent.refresh_workspace_files()
-        except Exception as _e:
-            logger.warning(f"[AgentService] 刷新工作区文件树失败: {_e}")
-
         await CliStatusFactory.wait_initial(agent_context)
 
         try:

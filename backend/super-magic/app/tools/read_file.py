@@ -254,6 +254,7 @@ class TextReadResult:
     """文本读取结果，包含带行号和不带行号的两个版本"""
     with_line_numbers: str  # 带行号的内容版本（用于AI展示）
     without_line_numbers: str  # 不带行号的原始内容版本（用于工具详情）
+    source_content: str | None = None  # 全文读取时的真实源文本，保留末尾换行供内部 diff 使用
 
 
 class ReadFileParams(BaseToolParams):
@@ -318,7 +319,8 @@ Suggestions:
         self,
         tool_context: ToolContext,
         params: ReadFileParams,
-        raw_mode: bool = False
+        raw_mode: bool = False,
+        max_tokens: int | None = None,
     ) -> ToolResult:
         """
         执行文件读取操作
@@ -333,13 +335,14 @@ Suggestions:
         Returns:
             ToolResult: 包含文件内容或错误信息
         """
-        return await self.execute_purely(params, tool_context, raw_mode)
+        return await self.execute_purely(params, tool_context, raw_mode, max_tokens=max_tokens)
 
     async def execute_purely(
         self,
         params: ReadFileParams,
         tool_context: Optional[ToolContext] = None,
-        raw_mode: bool = False
+        raw_mode: bool = False,
+        max_tokens: int | None = None,
     ) -> ToolResult:
         """
         执行文件读取操作，专注于读取可读文件
@@ -415,7 +418,10 @@ Suggestions:
             # --- 内容读取逻辑结束 ---
 
             # 根据当前上下文剩余量动态决定本次读取上限
-            max_tokens = _compute_max_tokens(tool_context)
+            # 运行时自动读取可指定更小的正文额度；普通工具调用继续使用原动态上限。
+            # 这是内部参数，不扩展模型 schema，也不改变行范围、版本校验或截断算法。
+            dynamic_max_tokens = _compute_max_tokens(tool_context)
+            max_tokens = min(dynamic_max_tokens, max_tokens) if max_tokens is not None else dynamic_max_tokens
             context_remaining = _get_context_remaining(tool_context)
 
             # 计算token数量并处理截断
@@ -488,6 +494,7 @@ Suggestions:
             extra_info = {
                 "raw_content": raw_content,
                 "raw_content_without_line_numbers": raw_content_without_line_numbers,
+                "source_content": text_result.source_content if not content_truncated else None,
                 "original_file_path": str(file_path),
                 "read_path": str(read_path),
                 "read_method": read_method,  # 标识读取方式：统一为 text(纯文本)
@@ -564,7 +571,8 @@ Suggestions:
 
         return TextReadResult(
             with_line_numbers="".join(lines_with_numbers),
-            without_line_numbers="".join(lines_without_numbers)
+            without_line_numbers="".join(lines_without_numbers),
+            source_content=content,
         )
 
     async def _read_text_file_with_range(self, file_path: Path, offset: int, limit: int) -> TextReadResult:

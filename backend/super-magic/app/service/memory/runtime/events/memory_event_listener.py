@@ -8,6 +8,7 @@ from agentlang.event.data import AfterMainAgentRunEventData
 from agentlang.event.event import Event, EventType
 from agentlang.interface.context import AgentContextInterface
 from agentlang.logger import get_logger
+from app.service.memory.policies.memory_skill_policy import is_memory_maintenance_enabled
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
@@ -73,7 +74,4 @@ class MemoryListenerService:
     @staticmethod
     def _is_enabled(agent_context: "AgentContext") -> bool:
         """仅为主 Agent 启用；通用 Agent 尊重开关，Claw 保持原有行为。"""
-        return agent_context.is_main_agent_context() and (
-            agent_context.is_magiclaw()
-            or agent_context.get_personal_preferences().long_term_memory_enabled
-        )
+        return is_memory_maintenance_enabled(agent_context)

@@ -48,6 +48,7 @@ class SkillsConfig:
             not self.system_skills
             and not self.crew_skills
             and not self.workspace_skills
+            and not self.preload
         )
 
     def get_system_skill_names(self) -> List[str]:

@@ -50,6 +50,7 @@ from app.tools.purify import Purify
 # 导出工具类
 from app.tools.read_file import ReadFile
 from app.tools.read_files import ReadFiles
+from app.tools.inspect_memory import InspectMemory
 from app.tools.read_webpages_as_markdown import ReadWebpagesAsMarkdown
 from app.tools.reflection import Reflection
 from app.tools.deep_write import DeepWrite
@@ -357,6 +358,7 @@ __all__ = [
     "SearchKnowledge",
     "InstallSlidesTemplate",
     "ReadFile",
+    "InspectMemory",
     "ReadFiles",
     "ReadWebpagesAsMarkdown",
     "Reflection",

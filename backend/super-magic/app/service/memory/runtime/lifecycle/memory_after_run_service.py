@@ -9,6 +9,7 @@ from agentlang.event.data import AfterMainAgentRunEventData
 from agentlang.event.event import Event
 from app.service.agent_context_snapshot_service import AgentContextSnapshotService
 from app.service.memory.policies.memory_model_input_filter import MemoryModelInputFilter
+from app.service.memory.policies.memory_skill_policy import is_memory_maintenance_enabled
 from app.service.memory.runtime.extraction.memory_extraction_service import MemoryExtractionService
 from app.service.memory.runtime.extraction.memory_extraction_trigger_service import (
     MemoryExtractionTriggerService,
@@ -54,5 +55,8 @@ class MemoryAfterRunService:
 
     async def _submit_extraction(self, agent_context: "AgentContext") -> None:
         """捕获当前完整快照，并提交一次独立的后台记忆提取。"""
+        # 捕获对话、会话配置和 Horizon 的副本；这里只在提交边界判断是否自动运行。
         snapshot = await self._snapshot_service.capture(agent_context)
+        if not is_memory_maintenance_enabled(agent_context):
+            return
         self._extraction_service.submit(agent_context, snapshot)

@@ -15,7 +15,7 @@ import shutil
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, AsyncIterator
 from typing import Any, Callable, Dict, Optional, Union
 
 import aiofiles
@@ -637,6 +637,12 @@ async def async_read_json(file_path: Union[str, Path]) -> Dict[str, Any]:
         raise
 
 
+async def async_append_text(file_path: Union[str, Path], content: str, encoding: str = 'utf-8') -> None:
+    """异步追加文本，保留原文件并沿用追加写语义，不使用临时文件替换。"""
+    async with aiofiles.open(file_path, "a", encoding=encoding) as stream:
+        await stream.write(content)
+
+
 async def async_write_text(file_path: Union[str, Path], content: str, encoding: str = 'utf-8') -> None:
     """
     异步写入文本文件
@@ -949,6 +955,28 @@ async def async_try_count_text_lines(file_path: Union[str, Path], encoding: str 
     except Exception as e:
         logger.error(f"统计文件 {path_obj} 行数失败: {e}")
         return None
+
+
+async def async_realpath(path: Union[str, Path], *, strict: bool = False) -> Path:
+    """异步解析链接，供边界层校验目标仍在允许的目录内。"""
+    return Path(await asyncio.to_thread(os.path.realpath, str(path), strict=strict))
+
+
+async def async_fresh_stat(file_path: str | Path) -> os.stat_result:
+    """打开文件取 fstat，避免仅使用网络挂载的路径元数据缓存。"""
+    async with aiofiles.open(file_path, "rb") as stream:
+        return await asyncio.to_thread(os.fstat, stream.fileno())
+
+
+async def async_read_bytes_iter(file_path: str | Path, *, chunk_size: int = 256 * 1024) -> AsyncIterator[bytes]:
+    """使用单个句柄分段读取，结束或取消时关闭文件。"""
+    # 只降低测量时的峰值内存，不减少总读取量。不得用它替换大文件的 mtime 快速探测。
+    # 调用方提前停止时使用 aclosing，保证异步生成器及时退出文件上下文。
+    if chunk_size <= 0:
+        raise ValueError("Read chunk size must be positive")
+    async with aiofiles.open(file_path, "rb") as stream:
+        while chunk := await stream.read(chunk_size):
+            yield chunk
 
 
 async def async_read_bytes(file_path: Union[str, Path], size: Optional[int] = None, offset: int = 0) -> bytes:

@@ -17,25 +17,24 @@ class DiffGenerator:
 
     @staticmethod
     def generate_summary_diff(
-        old_content: str,
-        new_content: str,
-        file_path: str
+        file_path: str,
+        stats: dict[str, int],
     ) -> str:
         """
         生成用于 LLM 的摘要 diff（简洁统计信息）
 
         Args:
-            old_content: 原始内容
-            new_content: 新内容
             file_path: 文件路径（用于 diff 头部）
+            stats: 已计算的行数和字节统计，与工具的其它反馈共用
 
         Returns:
             简洁的变更摘要
         """
-        if old_content == new_content:
+        if stats['total_changes'] == 0:
             return ""
 
-        stats = DiffGenerator.calculate_change_stats(old_content, new_content)
+        # 旧摘要的总行数、大小和增删改均有独立用途，增加 Token 反馈时不能将它们删掉。
+        # 只展示已有统计；不能为生成另一段摘要再次比较全文或编码统计大小。
 
         return f"""\
 --- a/{file_path}
@@ -156,8 +155,9 @@ Large file change - showing summary:
     @staticmethod
     def calculate_change_stats(
         old_content: str,
-        new_content: str
-    ) -> dict:
+        new_content: str,
+        old_size: Optional[int] = None,
+    ) -> dict[str, int]:
         """
         计算变更统计信息
 
@@ -189,7 +189,8 @@ Large file change - showing summary:
                 modified += max(i2 - i1, j2 - j1)
 
         # 计算文件大小变化
-        old_size = len(old_content.encode('utf-8'))
+        # 例：CRLF 读取后转成 LF，旧大小仍使用快照的原始字节数；新大小按待写文本计算。
+        old_size = len(old_content.encode('utf-8')) if old_size is None else old_size
         new_size = len(new_content.encode('utf-8'))
         size_change = new_size - old_size
 

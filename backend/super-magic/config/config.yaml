@@ -562,15 +562,50 @@ runtime_cleanup:
     max_age_days: 3
     max_directory_count: 16
 
+# Horizon 的展示额度与 5 MiB 文件扫描保护相互独立。
+horizon:
+  file_change_max_tokens: ${HORIZON_FILE_CHANGE_MAX_TOKENS:-4000}
+  important_file_change_max_tokens: ${HORIZON_IMPORTANT_FILE_CHANGE_MAX_TOKENS:-16000}
+  file_changes_max_tokens: ${HORIZON_FILE_CHANGES_MAX_TOKENS:-24000}
+  context_max_tokens: ${HORIZON_CONTEXT_MAX_TOKENS:-32000}
+  file_snapshot_max_tokens: ${HORIZON_FILE_SNAPSHOT_MAX_TOKENS:-128000}
+  # 比较正文，diff 达到全文的此比例时优先真实读取全文；不计算包装的理解成本。
+  full_read_ratio: ${HORIZON_FULL_READ_RATIO:-0.8}
+
+# 默认挂载规则在应用层声明，来源优先级和实际文件读取仍由 Skill 加载器处理。
+skills:
+  runtime:
+    - name: compact-chat-history
+      mount_when: always
+      allow_exclude: false
+      preload_files: []
+      disable_skill_on_preload_failure: false
+    - name: memory
+      mount_when: always
+      allow_exclude: true
+      preload_files: [SKILL.md]
+      # 声明不等于加载成功；必需正文失败时只停用该 Skill，主任务继续。
+      disable_skill_on_preload_failure: true
+
 # 文件记忆运行时配置
 memory:
+  memory_md:
+    # 每份全局／普通项目主文件独立计算；目标不是最低长度，也不单独触发整理。
+    target_tokens: ${MEMORY_MD_TARGET_TOKENS:-10000}
+    # 严格超过才请求整体重组；只限制自动展示，不限制保存用户文件。
+    max_tokens: ${MEMORY_MD_MAX_TOKENS:-16000}
+  file_tree_change_context:
+    # 从记忆根计算：日期文件在第 5 层，按 Skill 拆分的日内事件详情在第 6 层。
+    scan_depth: ${MEMORY_FILE_TREE_SCAN_DEPTH:-6}
+    # 只限制文件树首次发现和变更通知的上下文，不读取 notes 正文，不改变真实目录。
+    max_tokens: ${MEMORY_FILE_TREE_CHANGE_CONTEXT_MAX_TOKENS:-2000}
+    preferred_paths: [MEMORY.md, notes, notes/references, notes/timeline]
+    timeline_paths: [notes/timeline]
   after_run:
     # 累计达到指定数量的有效主任务后触发一次完整 fork 提取
     extraction_task_threshold: ${MEMORY_AFTER_RUN_EXTRACTION_TASK_THRESHOLD:-5}
     # 未达到阈值时，连续 10 分钟无操作后触发一次完整 fork 提取
     extraction_idle_timeout_seconds: ${MEMORY_AFTER_RUN_EXTRACTION_IDLE_TIMEOUT_SECONDS:-600}
-    # MEMORY.md 达到该大小后触发记忆整理提示；该值仅作为建议目标，不是硬性限制
-    memory_file_max_size_kb: ${MEMORY_AFTER_RUN_MEMORY_FILE_MAX_SIZE_KB:-16}
 
 # =====================================================
 # AI Ability Configuration (AI能力配置)

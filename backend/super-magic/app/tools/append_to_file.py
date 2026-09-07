@@ -1,10 +1,8 @@
 from app.i18n import i18n
-import asyncio
 import os
 from pathlib import Path
 from typing import Any, Dict, NamedTuple, Optional
 
-import aiofiles
 from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
@@ -15,6 +13,10 @@ from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
 from agentlang.utils.syntax_checker import SyntaxChecker
+from app.utils.async_file_utils import async_append_text, async_exists, async_mkdir
+from app.tools.utils.file_change_stats import (
+    FileChangeMetrics, FileContentMetrics, FileTextSnapshot, format_file_change_metrics, read_text_snapshot,
+)
 
 logger = get_logger(__name__)
 
@@ -56,9 +58,6 @@ class AppendResult(NamedTuple):
     content: str  # 追加的内容
     is_new_file: bool  # 是否是新文件
     added_lines: int  # 新增行数
-    original_size: int  # 原始文件大小（字节）
-    new_size: int  # 新文件大小（字节）
-    size_change: int  # 文件大小变化（字节）
     original_lines: int  # 原始文件行数
     new_lines: int  # 新文件行数
 
@@ -94,11 +93,11 @@ class AppendToFile(AbstractFileTool[AppendToFileParams], WorkspaceTool[AppendToF
             # 使用父类方法获取安全的文件路径
             file_path = self.resolve_path(params.file_path)
             # 保存原始文件内容（用于统计）
-            file_exists = file_path.exists()
-            original_content = ""
+            file_exists = await async_exists(file_path)
+            original_snapshot = FileTextSnapshot("", FileContentMetrics(0, 0))
             if file_exists:
-                async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
-                    original_content = await f.read()
+                original_snapshot = await read_text_snapshot(file_path, replace_errors=False)
+            original_content = original_snapshot.content
 
             # 创建目录（如果需要）
             await self._create_directories(file_path)
@@ -109,9 +108,8 @@ class AppendToFile(AbstractFileTool[AppendToFileParams], WorkspaceTool[AppendToF
                 await self._append_file(file_path, params.content)
 
             # 在写入成功后读取文件的完整内容
-            final_content = ""
-            async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
-                final_content = await f.read()
+            final_snapshot = await read_text_snapshot(file_path, replace_errors=False)
+            final_content = final_snapshot.content
 
             # 执行语法检查（对最新的完整内容进行检查）
             syntax_result = await SyntaxChecker.check_syntax(str(file_path), final_content)
@@ -132,16 +130,15 @@ class AppendToFile(AbstractFileTool[AppendToFileParams], WorkspaceTool[AppendToF
             )
 
             # 生成格式化的输出
-            file_name = os.path.basename(file_path)
-            action = "追加内容到" if file_exists else "创建并写入"
-
+            # 保留原追加行数和全文总行数；用同一次前后读取取得真实字节和 Token。
+            # Append 仍然使用追加写入，不为了统计改成整文件覆盖。
+            action = "File updated" if file_exists else "File created"
             output = (
-                f"文件{action.replace('追加内容到', '更新').replace('创建并写入', '创建')}: {file_path} | "
-                f"+{append_result.added_lines}新增行 | "
-                f"大小:{'+' if append_result.size_change > 0 else ''}{append_result.size_change}字节"
-                f"({append_result.original_size}→{append_result.new_size}) | "
-                f"行数:{append_result.original_lines}→{append_result.new_lines}"
+                f"{action}: {file_path}\n"
+                f"Lines added: +{append_result.added_lines}\n"
+                f"Lines: {append_result.original_lines} -> {append_result.new_lines}\n"
             )
+            output += format_file_change_metrics(FileChangeMetrics(original_snapshot.metrics, final_snapshot.metrics))
 
             # 添加 AI 警告（如果有）
             if ai_warnings:
@@ -158,8 +155,8 @@ class AppendToFile(AbstractFileTool[AppendToFileParams], WorkspaceTool[AppendToF
         """创建文件所需的目录结构"""
         directory = file_path.parent
 
-        if not directory.exists():
-            await asyncio.to_thread(os.makedirs, directory, exist_ok=True)
+        if not await async_exists(directory):
+            await async_mkdir(directory, parents=True, exist_ok=True)
             logger.info(f"创建目录: {directory}")
 
     async def _append_file(self, file_path: Path, content: str) -> None:
@@ -168,8 +165,7 @@ class AppendToFile(AbstractFileTool[AppendToFileParams], WorkspaceTool[AppendToF
         if not content.endswith("\n"):
             content += "\n"
 
-        async with aiofiles.open(file_path, "a", encoding="utf-8") as f:
-            await f.write(content)
+        await async_append_text(file_path, content)
 
         logger.info(f"文件追加完成: {file_path}")
 
@@ -196,18 +192,11 @@ class AppendToFile(AbstractFileTool[AppendToFileParams], WorkspaceTool[AppendToF
         new_lines = final_content.count('\n') + (0 if final_content.endswith('\n') or not final_content else 1)
         added_lines = normalized_append.count('\n') + (0 if normalized_append.endswith('\n') or not normalized_append else 1)
 
-        # 计算文件大小
-        original_size = len(original_content.encode('utf-8'))
-        new_size = len(final_content.encode('utf-8'))
-        size_change = new_size - original_size
-
+        # 字节与 Token 已由前后快照提供，此处只计算追加与全文行数。
         return AppendResult(
             content=append_content,
             is_new_file=not file_exists,
             added_lines=added_lines,
-            original_size=original_size,
-            new_size=new_size,
-            size_change=size_change,
             original_lines=original_lines,
             new_lines=new_lines
         )
