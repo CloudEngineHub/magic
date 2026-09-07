@@ -151,6 +151,14 @@ return [
             ],
             'tag' => '平台模型',
         ],
+        'platform.ai.model_audit_statistics' => [
+            'path' => [
+                ['key' => 'ai_management', 'label' => 'AI 管理', 'order' => 2],
+                ['key' => 'data_dashboard', 'label' => '数据看板', 'order' => 4],
+                ['key' => 'model_monitoring', 'label' => '大模型日志监控', 'order' => 1],
+            ],
+            'tag' => '数据看板',
+        ],
         'platform.ai.ability' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
@@ -246,5 +254,6 @@ return [
         'workspace.model.video',
         'admin.ai.application.menu',
         'workspace.ai.model_audit_log',
+        'workspace.ai.model_audit_statistics',
     ],
 ];

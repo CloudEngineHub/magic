@@ -67,11 +67,11 @@ return [
         ],
         'platform.ai.model_audit_statistics' => [
             'path' => [
-                ['key' => 'platform_management', 'label' => '平台管理'],
-                ['key' => 'platform_model', 'label' => '平台模型'],
-                ['key' => 'model_audit_statistics', 'label' => '模型调用统计'],
+                ['key' => 'data_security', 'label' => '数据与安全', 'order' => 3],
+                ['key' => 'logs_analytics', 'label' => '日志及分析', 'order' => 2],
+                ['key' => 'model_monitoring', 'label' => '大模型监控', 'order' => 1],
             ],
-            'tag' => '平台模型',
+            'tag' => '日志及分析',
         ],
         'platform.ai.mode_management' => [
             'path' => [
@@ -365,7 +365,6 @@ return [
         'platform.ai.agent_management',
         'platform.ai.skill_management',
         'platform.ai.model_audit_log',
-        'platform.ai.model_audit_statistics',
     ],
 
     /*
@@ -380,6 +379,7 @@ return [
         'workspace.model.text',
         'workspace.model.image',
         'workspace.model.video',
+        'workspace.ai.model_audit_statistics',
     ],
 
     /*
