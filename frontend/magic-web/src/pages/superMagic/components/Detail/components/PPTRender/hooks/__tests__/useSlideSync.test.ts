@@ -43,6 +43,7 @@ describe("useSlideSync", () => {
 		testStore.activeIndex = 1
 		expect(restoreOptions.shouldApply()).toBe(false)
 		testStore.activeIndex = 0
+		const firstDeckRestoreOptions = restoreOptions
 
 		rerender({ slideCount: 2, deckKey: "deck-a", isInitializing: false })
 
@@ -53,9 +54,9 @@ describe("useSlideSync", () => {
 
 		expect(restoreCachedActiveIndex).toHaveBeenCalledTimes(2)
 
-		rerender({ slideCount: 1, deckKey: "deck-b", isInitializing: true })
 		rerender({ slideCount: 1, deckKey: "deck-b", isInitializing: false })
 
 		expect(restoreCachedActiveIndex).toHaveBeenCalledTimes(3)
+		expect(firstDeckRestoreOptions.shouldApply()).toBe(false)
 	})
 })

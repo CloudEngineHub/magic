@@ -21,25 +21,36 @@ export function useSlideSync({
 }: UseSlideSync) {
 	const hasRestoredActiveIndexRef = useRef(false)
 	const previousDeckKeyRef = useRef(deckKey)
+	const latestDeckKeyRef = useRef(deckKey)
+	const restoreGenerationRef = useRef(0)
+	latestDeckKeyRef.current = deckKey
 
 	// 幻灯片初始化完成后恢复缓存的 activeIndex
 	useEffect(() => {
 		if (previousDeckKeyRef.current !== deckKey) {
 			previousDeckKeyRef.current = deckKey
 			hasRestoredActiveIndexRef.current = false
+			restoreGenerationRef.current += 1
 		}
 		if (store.isInitializing || store.slides.length === 0) {
 			hasRestoredActiveIndexRef.current = false
+			restoreGenerationRef.current += 1
 			return
 		}
 		if (hasRestoredActiveIndexRef.current) return
 
 		// Only restore during deck hydration; incremental slide insertion must keep the newly selected page.
+		// The generation also invalidates cache reads that finish after a deck switch.
 		hasRestoredActiveIndexRef.current = true
+		const restoreGeneration = ++restoreGenerationRef.current
 		const activeIndexBeforeRestore = store.activeIndex
 		store.restoreCachedActiveIndex({
 			shouldApply: () =>
-				store.activeIndex === activeIndexBeforeRestore && !store.isInitializing,
+				restoreGenerationRef.current === restoreGeneration &&
+				latestDeckKeyRef.current === deckKey &&
+				previousDeckKeyRef.current === deckKey &&
+				store.activeIndex === activeIndexBeforeRestore &&
+				!store.isInitializing,
 		})
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [deckKey, store.isInitializing, store.slides.length])
