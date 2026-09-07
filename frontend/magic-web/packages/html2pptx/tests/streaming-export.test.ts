@@ -288,6 +288,38 @@ describe("runStreamingExport", () => {
 		})
 	})
 
+	it("keeps unknown-source and aggregate archive capacity flags distinct on the direct path", async () => {
+		const { factory } = createPackagerFactory({
+			finalize: async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 1 }),
+		})
+		const input = createBaseInput({
+			pipeline: {
+				prepareSlideNodes: vi.fn(async () => ({
+					pptNodes: [createShapeNode()],
+					totalWidth: 1280,
+					totalHeight: 720,
+					bodyBackground: null,
+				})),
+				createStreamingPresentationPackager: factory,
+			},
+		})
+
+		await expect(runStreamingExport(input)).resolves.toMatchObject({ pageCount: 1 })
+		const capacityPlan = (
+			factory.mock.calls[0]?.[0] as {
+				plan?: { capacityPlan?: Record<string, unknown> }
+			}
+		)?.plan?.capacityPlan
+		expect(capacityPlan).toMatchObject({
+			confidence: "streaming-unknown",
+			zipMode: "zip64",
+			hasUnknownLengthSource: true,
+			maxEntryBytesMayReachZip32Limit: true,
+			archiveBytesMayReachZip32Limit: false,
+		})
+		expect(capacityPlan?.knownInputBytes).toBe(0n)
+	})
+
 	it("keeps URL media direct only when direct-stream is explicitly requested", async () => {
 		const store = new FakeStagingStore()
 		const source: MediaSourceDescriptor = {

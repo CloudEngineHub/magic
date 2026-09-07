@@ -964,8 +964,11 @@ function createCapacityPlan(
 		maxEntryBytesMayReachZip32Limit:
 			hasUnknownLengthSource ||
 			(maxKnownEntryBytes !== undefined && maxKnownEntryBytes >= ZIP32_SIZE_SENTINEL),
+		// Unknown lengths are represented by hasUnknownLengthSource. Keep this
+		// field tied to the known aggregate/explicit archive estimate so the
+		// snapshot matches PptxGenJS's CapacityPlan contract.
 		archiveBytesMayReachZip32Limit:
-			hasUnknownLengthSource || knownInputBytes >= ZIP32_SIZE_SENTINEL,
+			knownInputBytes >= ZIP32_SIZE_SENTINEL,
 		entryCountMayReachZip32Limit: estimatedEntryCount >= ZIP32_ENTRY_COUNT_SENTINEL,
 		knownInputBytes,
 		maxKnownEntryBytes,
