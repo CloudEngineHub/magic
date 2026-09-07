@@ -260,7 +260,7 @@ describe("StylePanel", () => {
 		expect(screen.getByLabelText("stylePanel.domTree.expandPageStructure")).toBeInTheDocument()
 	})
 
-	it("should keep the context toolbar horizontal and expose one more entry", () => {
+	it("should wrap the context toolbar and expose one more entry", () => {
 		mockSelectedElement.current = {
 			selector: "a.cta",
 			tagName: "a",
@@ -281,6 +281,9 @@ describe("StylePanel", () => {
 
 		render(<StylePanel editorRef={{ current: null }} variant="context" />)
 
+		expect(screen.getByTestId("html-editor-context-style-toolbar").className).toContain(
+			"flex-wrap",
+		)
 		expect(screen.queryByTestId("font-family-selector")).not.toBeInTheDocument()
 		expect(screen.getByTestId("font-size-selector")).toBeInTheDocument()
 		expect(screen.getByTestId("line-height-selector")).toHaveAttribute("data-value", "24px")
@@ -377,7 +380,10 @@ describe("StylePanel", () => {
 		rerender(<StylePanel editorRef={{ current: null }} variant="context" />)
 
 		await waitFor(() =>
-			expect(screen.getByTestId("line-height-selector")).toHaveAttribute("data-value", "24px"),
+			expect(screen.getByTestId("line-height-selector")).toHaveAttribute(
+				"data-value",
+				"24px",
+			),
 		)
 	})
 

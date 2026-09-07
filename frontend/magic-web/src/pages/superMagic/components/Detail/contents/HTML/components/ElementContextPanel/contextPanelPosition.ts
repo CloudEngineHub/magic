@@ -35,6 +35,41 @@ function clamp(value: number, min: number, max: number): number {
 	return Math.min(Math.max(value, min), max)
 }
 
+/** Clip the canvas bounds to the visible browser viewport. */
+export function getContextViewport(
+	boundary?: { left: number; top: number; right?: number; width: number; height: number } | null,
+): { left: number; top: number; width: number; height: number } {
+	if (typeof window === "undefined") return { left: 0, top: 0, width: 0, height: 0 }
+	if (!boundary || boundary.width <= 0 || boundary.height <= 0) {
+		return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
+	}
+	const left = Math.max(0, boundary.left)
+	const top = Math.max(0, boundary.top)
+	const right = Math.min(window.innerWidth, boundary.right ?? boundary.left + boundary.width)
+	const bottom = Math.min(window.innerHeight, boundary.top + boundary.height)
+	return {
+		left,
+		top,
+		width: Math.max(0, right - left),
+		height: Math.max(0, bottom - top),
+	}
+}
+
+/** Ignore the first unmeasured frame so a 0-width box is not treated as 680. */
+export function getMeasuredToolbarSize(
+	panelRect: { width: number; height: number } | null | undefined,
+	maxWidth: number,
+	minHeight: number,
+): { width: number; height: number } | null {
+	const width = panelRect?.width ?? 0
+	const height = panelRect?.height ?? 0
+	if (width <= 0) return null
+	return {
+		width: Math.min(width, maxWidth),
+		height: Math.max(minHeight, height),
+	}
+}
+
 function getOverlapArea(
 	first: { left: number; top: number; width: number; height: number },
 	second: { left: number; top: number; width: number; height: number },

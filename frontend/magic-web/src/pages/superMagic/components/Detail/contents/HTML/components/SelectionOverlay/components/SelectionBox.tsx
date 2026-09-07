@@ -1,5 +1,5 @@
 import { memo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { AnimatePresence } from "framer-motion"
 import type { ElementRect, SelectedInfo, ResizeHandleConfig } from "../types"
 import { HTML_EDITOR_Z_INDEX } from "../../../constants/z-index"
 import { ControlHandles } from "./ControlHandles"
@@ -56,31 +56,19 @@ export const SelectionBox = memo(function SelectionBox({
 
 	return (
 		<>
-			<motion.div
+			<div
 				className="pointer-events-none absolute border-2 border-primary"
-				initial={{ opacity: 0, scale: 0.97 }}
-				animate={{
-					opacity: isMultiSelect ? 0.7 : 1,
-					scale: 1,
-					rotate: transform
-						? parseFloat(transform.match(/rotate\(([^)]+)deg\)/)?.[1] || "0")
-						: 0,
-				}}
-				exit={{ opacity: 0, scale: 0.97 }}
-				transition={{
-					duration: 0.25,
-					ease: [0.22, 1, 0.36, 1],
-				}}
-				layout="position"
 				style={{
 					top: `${transformedRect.top}px`,
 					left: `${transformedRect.left}px`,
 					width: `${transformedRect.width}px`,
 					height: `${transformedRect.height}px`,
+					opacity: isMultiSelect ? 0.7 : 1,
 					boxShadow: isMultiSelect
 						? "0 0 0 2px rgb(var(--primary-rgb) / 0.1)"
 						: "0 0 0 4px rgb(var(--primary-rgb) / 0.1)",
 					zIndex: HTML_EDITOR_Z_INDEX.OVERLAY.SELECTION_HIGHLIGHT,
+					transform,
 					transformOrigin: "center center",
 				}}
 			>
@@ -100,7 +88,7 @@ export const SelectionBox = memo(function SelectionBox({
 						showActionHandles={showActions}
 					/>
 				)}
-			</motion.div>
+			</div>
 
 			{/* Show hint when selection is too small (outside the transformed box) */}
 			<AnimatePresence mode="wait">

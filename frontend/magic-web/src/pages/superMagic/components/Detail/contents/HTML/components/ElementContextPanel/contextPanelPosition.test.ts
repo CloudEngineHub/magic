@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { getContextPanelPosition, getContextToolbarPosition } from "./contextPanelPosition"
+import {
+	getContextPanelPosition,
+	getContextToolbarPosition,
+	getContextViewport,
+	getMeasuredToolbarSize,
+} from "./contextPanelPosition"
 
 describe("getContextPanelPosition", () => {
 	const getOverlapArea = (
@@ -173,5 +178,46 @@ describe("getContextToolbarPosition", () => {
 
 		expect(result.width).toBe(384)
 		expect(result.left).toBe(8)
+	})
+})
+
+describe("getContextViewport", () => {
+	it("falls back to the window when the canvas bounds are missing", () => {
+		expect(getContextViewport(null)).toEqual({
+			left: 0,
+			top: 0,
+			width: window.innerWidth,
+			height: window.innerHeight,
+		})
+	})
+
+	it("clips canvas bounds to the visible window", () => {
+		expect(getContextViewport({ left: -20, top: 40, width: 500, height: 2000 })).toEqual({
+			left: 0,
+			top: 40,
+			width: Math.min(window.innerWidth, 480),
+			height: Math.min(window.innerHeight - 40, 2000),
+		})
+	})
+})
+
+describe("getMeasuredToolbarSize", () => {
+	it("returns null before the toolbar has a real width", () => {
+		expect(getMeasuredToolbarSize({ width: 0, height: 0 }, 680, 48)).toBeNull()
+		expect(getMeasuredToolbarSize(undefined, 680, 48)).toBeNull()
+	})
+
+	it("keeps a short toolbar narrower than the wrap cap", () => {
+		expect(getMeasuredToolbarSize({ width: 320, height: 48 }, 680, 48)).toEqual({
+			width: 320,
+			height: 48,
+		})
+	})
+
+	it("caps a wrapped toolbar and keeps the measured height", () => {
+		expect(getMeasuredToolbarSize({ width: 720, height: 88 }, 680, 48)).toEqual({
+			width: 680,
+			height: 88,
+		})
 	})
 })

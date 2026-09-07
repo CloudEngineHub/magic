@@ -1,4 +1,5 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react"
+import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react"
+import { forwardRef } from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ContextMorePopover } from "../ContextMorePopover"
@@ -29,15 +30,43 @@ vi.mock("../../../../iframe-bridge/contexts/StylePanelContext", () => ({
 }))
 
 vi.mock("@/components/shadcn-ui/button", () => ({
-	Button: ({ children, ...props }: { children: ReactNode }) => (
-		<button {...props}>{children}</button>
-	),
+	Button: forwardRef<HTMLButtonElement, { children: ReactNode }>(function Button(
+		{ children, ...props },
+		ref,
+	) {
+		return (
+			<button ref={ref} {...props}>
+				{children}
+			</button>
+		)
+	}),
+}))
+
+const popoverState = vi.hoisted(() => ({
+	open: false,
+	onOpenChange: undefined as ((open: boolean) => void) | undefined,
 }))
 
 vi.mock("@/components/shadcn-ui/popover", () => ({
-	Popover: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-	PopoverTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
-	PopoverContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+	Popover: ({
+		children,
+		open,
+		onOpenChange,
+	}: {
+		children: ReactNode
+		open?: boolean
+		onOpenChange?: (open: boolean) => void
+	}) => {
+		popoverState.open = Boolean(open)
+		popoverState.onOpenChange = onOpenChange
+		return <div>{children}</div>
+	},
+	PopoverTrigger: ({ children }: { children: ReactNode }) => (
+		<span onClick={() => popoverState.onOpenChange?.(!popoverState.open)}>{children}</span>
+	),
+	PopoverContent: ({ children, ...props }: { children: ReactNode } & Record<string, unknown>) => (
+		<div {...props}>{children}</div>
+	),
 }))
 
 vi.mock("@/components/shadcn-ui/scroll-area", () => ({
@@ -72,8 +101,20 @@ vi.mock("@/components/shadcn-ui/tabs", () => ({
 		tabsContext.value === value ? <div {...props}>{children}</div> : null,
 }))
 
-vi.mock("../../EditorFloating", () => ({
-	EditorPopoverContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+vi.mock("../../../EditorFloating", () => ({
+	EditorPopoverContent: ({
+		children,
+		side,
+		style,
+	}: {
+		children: ReactNode
+		side?: string
+		style?: CSSProperties
+	}) => (
+		<div data-testid="style-panel-more-styles-content" data-side={side} style={style}>
+			{children}
+		</div>
+	),
 }))
 
 vi.mock("../../sections/BackgroundSection", () => ({
@@ -226,5 +267,63 @@ describe("ContextMorePopover", () => {
 
 		expect(screen.getByTestId("background-section")).toBeInTheDocument()
 		expect(screen.queryByTestId("image-section")).not.toBeInTheDocument()
+	})
+
+	it("opens the panel away from the selection beside the trigger", () => {
+		const selectionRect = { left: 160, top: 420, width: 420, height: 240 }
+		const getRect = HTMLElement.prototype.getBoundingClientRect
+		HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect() {
+			if (this.getAttribute("data-testid") === "style-panel-more-styles-trigger") {
+				return {
+					x: 220,
+					y: 360,
+					width: 88,
+					height: 32,
+					top: 360,
+					left: 220,
+					bottom: 392,
+					right: 308,
+					toJSON() {
+						return {}
+					},
+				}
+			}
+			return getRect.call(this)
+		}
+
+		try {
+			render(<ContextMorePopover {...baseProps} selectionRect={selectionRect} />)
+			fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
+
+			expect(screen.getByTestId("style-panel-more-styles-content").dataset.side).toBe("top")
+		} finally {
+			HTMLElement.prototype.getBoundingClientRect = getRect
+		}
+	})
+
+	it("does not listen for scroll until More Styles is open", () => {
+		const addEventListener = vi.spyOn(window, "addEventListener")
+		render(
+			<ContextMorePopover
+				{...baseProps}
+				selectionRect={{ left: 160, top: 420, width: 420, height: 240 }}
+			/>,
+		)
+
+		expect(
+			addEventListener.mock.calls.some(
+				([type, , options]) => type === "scroll" && options === true,
+			),
+		).toBe(false)
+
+		fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
+
+		expect(
+			addEventListener.mock.calls.some(
+				([type, , options]) => type === "scroll" && options === true,
+			),
+		).toBe(true)
+
+		addEventListener.mockRestore()
 	})
 })

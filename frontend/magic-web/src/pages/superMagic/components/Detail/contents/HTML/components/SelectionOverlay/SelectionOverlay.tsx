@@ -4,7 +4,6 @@
  */
 
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { AnimatePresence } from "framer-motion"
 import { cn } from "@/utils/cn"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
 import type { ElementRect, SelectedInfo } from "./types"
@@ -336,32 +335,28 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 			}}
 		>
 			{/* Selected elements highlights */}
-			<AnimatePresence mode="sync">
-				{transformedSelections.map(
-					({ selector, info, viewportRect, transformedRect, transform }) => (
-						<SelectionBox
-							// Keep the single-selection box mounted while switching nodes so
-							// Framer Motion animates new bounds instead of replaying entrance.
-							key={isMultiSelect ? selector : "single-selection"}
-							info={info}
-							transformedRect={transformedRect}
-							viewportRect={viewportRect}
-							isMultiSelect={isMultiSelect}
-							isSelectionMode={isSelectionMode}
-							transform={transform}
-							containerElement={containerElement}
-							isMoving={isMoving}
-							rotation={rotation}
-							resizeHandles={resizeHandles}
-							onMoveHandleMouseDown={onMoveHandleMouseDown}
-							onRotateHandleMouseDown={onRotateHandleMouseDown}
-							onResizeHandleMouseDown={onHandleMouseDown}
-							onDelete={handleDelete}
-							onDuplicate={handleDuplicate}
-						/>
-					),
-				)}
-			</AnimatePresence>
+			{transformedSelections.map(
+				({ selector, info, viewportRect, transformedRect, transform }) => (
+					<SelectionBox
+						key={selector}
+						info={info}
+						transformedRect={transformedRect}
+						viewportRect={viewportRect}
+						isMultiSelect={isMultiSelect}
+						isSelectionMode={isSelectionMode}
+						transform={transform}
+						containerElement={containerElement}
+						isMoving={isMoving}
+						rotation={rotation}
+						resizeHandles={resizeHandles}
+						onMoveHandleMouseDown={onMoveHandleMouseDown}
+						onRotateHandleMouseDown={onRotateHandleMouseDown}
+						onResizeHandleMouseDown={onHandleMouseDown}
+						onDelete={handleDelete}
+						onDuplicate={handleDuplicate}
+					/>
+				),
+			)}
 
 			{/* Hovered element highlight */}
 			{overlayHoveredRect && (

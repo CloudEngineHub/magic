@@ -1,5 +1,6 @@
-import type { ReactNode, Ref } from "react"
+import type { ReactNode, Ref, RefObject } from "react"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
+import type { ElementRect } from "../SelectionOverlay/types"
 
 /**
  * 选中的元素信息
@@ -148,6 +149,10 @@ export interface StylePanelProps {
 	inspectorActive?: boolean
 	/** Controls the staggered enter state when rendered in the floating context toolbar. */
 	contextToolbarOpen?: boolean
+	/** Selected element box used to keep More Styles outside the selection. */
+	selectionRect?: ElementRect | null
+	/** Canvas bounds used to keep floating style popovers in view. */
+	boundaryRef?: RefObject<HTMLElement | null>
 
 	/** Called when user clicks the inspector button to toggle inspector mode */
 	onStartInspector?: () => void
@@ -206,12 +211,7 @@ export type FlexDirection = "row" | "row-reverse" | "column" | "column-reverse"
  * Flex 主轴对齐
  */
 export type JustifyContent =
-	| "flex-start"
-	| "center"
-	| "flex-end"
-	| "space-between"
-	| "space-around"
-	| "space-evenly"
+	"flex-start" | "center" | "flex-end" | "space-between" | "space-around" | "space-evenly"
 
 /**
  * Flex 交叉轴对齐

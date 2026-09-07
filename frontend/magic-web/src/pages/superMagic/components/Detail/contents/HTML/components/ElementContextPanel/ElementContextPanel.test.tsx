@@ -35,11 +35,21 @@ describe("ElementContextPanel", () => {
 		const panel = document.querySelector("[data-html-context-panel]")
 		if (!panel) throw new Error("context panel was not rendered")
 
-		expect(panel).toHaveStyle({ height: "48px" })
-		expect(panel).toHaveClass("flex", "items-center", "rounded-lg")
+		expect(panel).toHaveClass(
+			"flex",
+			"h-auto",
+			"w-fit",
+			"items-start",
+			"overflow-visible",
+			"rounded-lg",
+		)
+		expect(panel.className).not.toMatch(/overflow-x-auto|overflow-y-auto/)
+		expect(panel).toHaveStyle({ maxWidth: "680px" })
+		expect(panel).not.toHaveStyle({ height: "48px" })
 		expect(panel.querySelector('[data-testid="mock-style-panel"]')?.parentElement).toHaveClass(
 			"min-w-0",
-			"w-max",
+			"w-fit",
+			"max-w-full",
 		)
 		expect(panel.querySelector('button[aria-label="stylePanel.closeContextPanel"]')).toBeNull()
 	})

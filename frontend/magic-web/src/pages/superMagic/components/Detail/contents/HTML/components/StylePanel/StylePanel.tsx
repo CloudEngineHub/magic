@@ -118,6 +118,8 @@ export const StylePanel = observer(function StylePanel({
 	domTreeOpen = false,
 	onToggleDomTree,
 	contextToolbarOpen = true,
+	selectionRect,
+	boundaryRef,
 }: StylePanelProps) {
 	const { t } = useTranslation("super")
 	const { selectedElement, updateStyle, updateBatchStyles, updateAttributes } =
@@ -471,7 +473,7 @@ export const StylePanel = observer(function StylePanel({
 	const showElementControls = variant !== "global"
 	const contextClassName =
 		variant === "context"
-			? "w-max min-w-full flex-nowrap gap-1 overflow-visible border-0 bg-transparent px-0 py-0"
+			? "w-fit max-w-full flex-wrap gap-1 overflow-visible border-0 bg-transparent px-0 py-0"
 			: ""
 	const toolbarSeparatorClassName = variant === "context" ? "mx-1 !h-4 bg-border/70" : "mx-1 !h-4"
 	const textContentField = capabilities.showTypography ? (
@@ -515,6 +517,8 @@ export const StylePanel = observer(function StylePanel({
 			onStyleChange={handleStyleChange}
 			onBatchStyleChange={handleBatchStyleChange}
 			onUpdateAttributes={updateAttributes}
+			selectionRect={selectionRect}
+			boundaryRef={boundaryRef}
 		/>
 	)
 	const renderContextToolbarItem = useCallback<ContextToolbarItemMotion>(
@@ -546,7 +550,7 @@ export const StylePanel = observer(function StylePanel({
 					toolbarEndRef
 						? "flex w-full min-w-0 items-center gap-2"
 						: variant === "context"
-							? "flex min-w-0 flex-nowrap items-center gap-1"
+							? "flex w-fit min-w-0 max-w-full flex-wrap items-center gap-1"
 							: "flex flex-wrap items-center gap-1",
 					className,
 				)}
@@ -555,7 +559,7 @@ export const StylePanel = observer(function StylePanel({
 					className={cn(
 						"flex min-w-0 items-center gap-1",
 						variant === "context"
-							? "flex-nowrap"
+							? "w-fit max-w-full flex-wrap [&>*]:shrink-0"
 							: toolbarEndRef
 								? "min-w-0 flex-1 flex-wrap"
 								: "flex-wrap",
