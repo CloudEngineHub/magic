@@ -38,6 +38,18 @@ interface MovePreviousState {
 	html: string
 }
 
+type DomMovePreviewPosition = "before" | "inside" | "after"
+
+interface DomMovePreviewState {
+	nodeId: string
+	element: HTMLElement
+	originalParent: HTMLElement
+	originalParentId: string
+	originalParentSelector: string
+	originalIndex: number
+	originalHtml: string
+}
+
 interface InsertTextPayload {
 	nodeId: string
 	parentId: string
@@ -96,6 +108,7 @@ export class DomStructureManager {
 	private readonly commandHistory: CommandHistory
 	private readonly elementSelector: ElementSelector
 	private clipboard: ClipboardState | null = null
+	private domMovePreview: DomMovePreviewState | null = null
 
 	constructor(commandHistory: CommandHistory, elementSelector: ElementSelector) {
 		this.commandHistory = commandHistory
@@ -232,13 +245,7 @@ export class DomStructureManager {
 		const element = findNodeById(nodeId)
 		const targetParent = findNodeById(targetParentId)
 		ensureEditableNode(element, "移动节点")
-		this.ensureParentNode(targetParent)
-		if (targetParent === element || element.contains(targetParent)) {
-			throw new Error("不能将节点移动到自身或后代节点中")
-		}
-		if (targetParent.tagName.toLowerCase() === "img") {
-			throw new Error("图片不能作为父节点")
-		}
+		this.validateMoveTarget(element, targetParent)
 
 		const parent = element.parentElement
 		if (!parent) throw new Error("节点缺少父节点")
@@ -251,10 +258,8 @@ export class DomStructureManager {
 			html: element.outerHTML,
 		}
 
-		element.remove()
-		const normalizedIndex =
-			parent === targetParent && index < targetIndex ? targetIndex - 1 : targetIndex
-		const finalIndex = insertAtElementIndex(targetParent, element, normalizedIndex)
+		this.moveElement(element, targetParent, targetIndex)
+		const finalIndex = Array.from(targetParent.children).indexOf(element)
 		const payload: MovePayload = {
 			nodeId,
 			targetParentId,
@@ -270,6 +275,134 @@ export class DomStructureManager {
 			metadata: { canUndo: true, description: "调整 DOM 层级" },
 		})
 		this.elementSelector.selectElement(element)
+	}
+
+	beginMovePreview(nodeId: string): void {
+		if (this.domMovePreview) this.cancelMovePreview()
+
+		const element = findNodeById(nodeId)
+		ensureEditableNode(element, "移动节点")
+		const parent = element.parentElement
+		if (!parent) throw new Error("节点缺少父节点")
+
+		this.domMovePreview = {
+			nodeId,
+			element,
+			originalParent: parent,
+			originalParentId: parent.getAttribute(EDITOR_NODE_ID_ATTRIBUTE) || "",
+			originalParentSelector: getElementSelector(parent),
+			originalIndex: Array.from(parent.children).indexOf(element),
+			originalHtml: element.outerHTML,
+		}
+	}
+
+	previewMove(nodeId: string, targetNodeId: string, position: DomMovePreviewPosition): boolean {
+		const preview = this.domMovePreview
+		if (!preview || preview.nodeId !== nodeId) throw new Error("DOM 移动预览未开始")
+
+		const element = findNodeById(nodeId)
+		const target = findNodeById(targetNodeId)
+		if (element === target) return false
+
+		const resolvedTargetParent = position === "inside" ? target : target.parentElement
+		if (!resolvedTargetParent) return false
+		if (resolvedTargetParent === element || element.contains(resolvedTargetParent)) return false
+		try {
+			this.validateMoveTarget(element, resolvedTargetParent)
+		} catch {
+			return false
+		}
+
+		let targetParent: HTMLElement
+		let targetIndex: number
+		if (position === "inside") {
+			targetParent = target
+			targetIndex = targetParent.children.length
+		} else {
+			targetParent = resolvedTargetParent
+			targetIndex = Array.from(targetParent.children).indexOf(target)
+			if (position === "after") targetIndex += 1
+		}
+
+		this.moveElement(element, targetParent, targetIndex)
+		return true
+	}
+
+	commitMovePreview(): void {
+		const preview = this.domMovePreview
+		if (!preview) return
+
+		try {
+			const parent = preview.element.parentElement
+			if (!parent) throw new Error("预览节点缺少父节点")
+			const index = Array.from(parent.children).indexOf(preview.element)
+			const originalLocation =
+				parent === preview.originalParent && index === preview.originalIndex
+
+			if (!originalLocation) {
+				const parentId = parent.getAttribute(EDITOR_NODE_ID_ATTRIBUTE) || ""
+				this.commandHistory.push({
+					commandType: "MOVE_DOM_NODE",
+					payload: {
+						nodeId: preview.nodeId,
+						targetParentId: parentId,
+						targetIndex: index,
+						selector: getElementSelector(preview.element),
+					} satisfies MovePayload,
+					previousState: {
+						nodeId: preview.nodeId,
+						parentId: preview.originalParentId,
+						parentSelector: preview.originalParentSelector,
+						index: preview.originalIndex,
+						html: preview.originalHtml,
+					} satisfies MovePreviousState,
+					timestamp: Date.now(),
+					metadata: { canUndo: true, description: "调整 DOM 层级" },
+				})
+				this.elementSelector.selectElement(preview.element)
+			}
+		} finally {
+			this.domMovePreview = null
+		}
+	}
+
+	cancelMovePreview(): void {
+		const preview = this.domMovePreview
+		if (!preview) return
+
+		try {
+			const originalParent = preview.originalParent.isConnected
+				? preview.originalParent
+				: findElement(preview.originalParentSelector)
+			preview.element.remove()
+			insertAtElementIndex(originalParent, preview.element, preview.originalIndex)
+		} finally {
+			this.domMovePreview = null
+		}
+	}
+
+	private validateMoveTarget(element: HTMLElement, targetParent: HTMLElement | null): void {
+		if (!targetParent) throw new Error("目标节点缺少父节点")
+		this.ensureParentNode(targetParent)
+		if (targetParent === element || element.contains(targetParent)) {
+			throw new Error("不能将节点移动到自身或后代节点中")
+		}
+	}
+
+	private moveElement(
+		element: HTMLElement,
+		targetParent: HTMLElement,
+		targetIndex: number,
+	): void {
+		const currentParent = element.parentElement
+		if (!currentParent) throw new Error("节点缺少父节点")
+		const currentIndex = Array.from(currentParent.children).indexOf(element)
+		element.remove()
+		const normalizedIndex =
+			currentParent === targetParent && currentIndex < targetIndex
+				? targetIndex - 1
+				: targetIndex
+		insertAtElementIndex(targetParent, element, normalizedIndex)
 	}
 
 	async insertTextNode(parentNodeId: string, textContent: string, index?: number): Promise<void> {

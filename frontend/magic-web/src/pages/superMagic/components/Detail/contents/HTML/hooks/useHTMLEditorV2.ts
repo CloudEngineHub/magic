@@ -545,6 +545,43 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 					{ description: "调整 DOM 层级", canUndo: true },
 				)
 			},
+			beginDomMovePreview: async (nodeId: string) => {
+				if (!messageBridgeRef.current) return
+				await messageBridgeRef.current.sendCommand(
+					EditorMessageType.BEGIN_DOM_MOVE_PREVIEW,
+					{ nodeId },
+					{ description: "开始预览 DOM 调整", canUndo: false },
+				)
+			},
+			previewDomMove: async (
+				nodeId: string,
+				targetNodeId: string,
+				position: "before" | "inside" | "after",
+			): Promise<boolean> => {
+				if (!messageBridgeRef.current) return false
+				const result = await messageBridgeRef.current.sendCommand<{ applied?: boolean }>(
+					EditorMessageType.PREVIEW_DOM_MOVE,
+					{ nodeId, targetNodeId, position },
+					{ description: "预览 DOM 调整", canUndo: false },
+				)
+				return result?.applied !== false
+			},
+			commitDomMovePreview: async () => {
+				if (!messageBridgeRef.current) return
+				await messageBridgeRef.current.sendCommand(
+					EditorMessageType.COMMIT_DOM_MOVE_PREVIEW,
+					{},
+					{ description: "调整 DOM 层级", canUndo: true },
+				)
+			},
+			cancelDomMovePreview: async () => {
+				if (!messageBridgeRef.current) return
+				await messageBridgeRef.current.sendCommand(
+					EditorMessageType.CANCEL_DOM_MOVE_PREVIEW,
+					{},
+					{ description: "取消 DOM 调整预览", canUndo: false },
+				)
+			},
 			insertTextNode: async (parentNodeId: string, textContent: string, index?: number) => {
 				if (!messageBridgeRef.current) return
 				await messageBridgeRef.current.sendCommand(

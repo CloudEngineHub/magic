@@ -601,6 +601,294 @@ describe("DOMTreePanel", () => {
 		)
 	})
 
+	it("previews the first drop target even when dragover follows dragstart immediately", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "body",
+				tagName: "body",
+				label: "body",
+				children: [
+					{
+						nodeId: "source",
+						tagName: "section",
+						label: "source",
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					},
+					{
+						nodeId: "target",
+						tagName: "section",
+						label: "target",
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					},
+				],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+		const beginDomMovePreview = vi.fn().mockResolvedValue(undefined)
+		const previewDomMove = vi.fn().mockResolvedValue(undefined)
+		const commitDomMovePreview = vi.fn().mockResolvedValue(undefined)
+		const cancelDomMovePreview = vi.fn().mockResolvedValue(undefined)
+		const dataTransfer = createDataTransfer()
+
+		render(
+			<DOMTreePanel
+				editorRef={
+					{
+						current: {
+							getDomTree,
+							beginDomMovePreview,
+							previewDomMove,
+							commitDomMovePreview,
+							cancelDomMovePreview,
+						},
+					} as never
+				}
+				visible
+			/>,
+		)
+
+		const sourceHandle = await screen.findByTestId("dom-tree-drag-handle-source")
+		const targetRow = screen.getByTestId("dom-tree-node-target")
+		Object.defineProperty(targetRow, "getBoundingClientRect", {
+			configurable: true,
+			value: () => ({ top: 32, height: 32 }),
+		})
+
+		fireEvent.dragStart(sourceHandle, { dataTransfer })
+		fireEvent.dragOver(targetRow, { clientY: 34, dataTransfer })
+
+		await waitFor(() => expect(beginDomMovePreview).toHaveBeenCalledWith("source"))
+		await waitFor(() =>
+			expect(previewDomMove).toHaveBeenCalledWith("source", "target", expect.any(String)),
+		)
+	})
+
+	it("keeps the latest drop target when preview requests overlap", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "body",
+				tagName: "body",
+				label: "body",
+				children: [
+					...["source", "middle", "latest"].map((nodeId) => ({
+						nodeId,
+						tagName: "section",
+						label: nodeId,
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					})),
+				],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+		let resolveFirstPreview!: () => void
+		const firstPreviewStarted = new Promise<void>((resolve) => {
+			resolveFirstPreview = resolve
+		})
+		const previewDomMove = vi
+			.fn()
+			.mockImplementationOnce(() => firstPreviewStarted)
+			.mockResolvedValue(undefined)
+		const dataTransfer = createDataTransfer()
+
+		render(
+			<DOMTreePanel
+				editorRef={
+					{
+						current: {
+							getDomTree,
+							beginDomMovePreview: vi.fn().mockResolvedValue(undefined),
+							previewDomMove,
+							commitDomMovePreview: vi.fn().mockResolvedValue(undefined),
+							cancelDomMovePreview: vi.fn().mockResolvedValue(undefined),
+						},
+					} as never
+				}
+				visible
+			/>,
+		)
+
+		const sourceHandle = await screen.findByTestId("dom-tree-drag-handle-source")
+		const middleRow = screen.getByTestId("dom-tree-node-middle")
+		const latestRow = screen.getByTestId("dom-tree-node-latest")
+		for (const row of [middleRow, latestRow]) {
+			Object.defineProperty(row, "getBoundingClientRect", {
+				configurable: true,
+				value: () => ({ top: 32, height: 32 }),
+			})
+		}
+
+		fireEvent.dragStart(sourceHandle, { dataTransfer })
+		fireEvent.dragOver(middleRow, { clientY: 34, dataTransfer })
+		await waitFor(() =>
+			expect(previewDomMove).toHaveBeenCalledWith("source", "middle", expect.any(String)),
+		)
+		fireEvent.dragOver(latestRow, { clientY: 34, dataTransfer })
+		resolveFirstPreview()
+
+		await waitFor(() =>
+			expect(previewDomMove).toHaveBeenLastCalledWith("source", "latest", expect.any(String)),
+		)
+	})
+
+	it("continues previewing after the runtime rejects a stale target", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "body",
+				tagName: "body",
+				label: "body",
+				children: [
+					...["source", "stale-target", "valid-target"].map((nodeId) => ({
+						nodeId,
+						tagName: "section",
+						label: nodeId,
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					})),
+				],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+		const previewDomMove = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+		const dataTransfer = createDataTransfer()
+
+		render(
+			<DOMTreePanel
+				editorRef={
+					{
+						current: {
+							getDomTree,
+							beginDomMovePreview: vi.fn().mockResolvedValue(undefined),
+							previewDomMove,
+							commitDomMovePreview: vi.fn().mockResolvedValue(undefined),
+							cancelDomMovePreview: vi.fn().mockResolvedValue(undefined),
+						},
+					} as never
+				}
+				visible
+			/>,
+		)
+
+		const sourceHandle = await screen.findByTestId("dom-tree-drag-handle-source")
+		const staleTargetRow = screen.getByTestId("dom-tree-node-stale-target")
+		const validTargetRow = screen.getByTestId("dom-tree-node-valid-target")
+		for (const row of [staleTargetRow, validTargetRow]) {
+			Object.defineProperty(row, "getBoundingClientRect", {
+				configurable: true,
+				value: () => ({ top: 32, height: 32 }),
+			})
+		}
+
+		fireEvent.dragStart(sourceHandle, { dataTransfer })
+		fireEvent.dragOver(staleTargetRow, { clientY: 34, dataTransfer })
+		await waitFor(() => expect(previewDomMove).toHaveBeenCalledTimes(1))
+		fireEvent.dragOver(validTargetRow, { clientY: 34, dataTransfer })
+
+		await waitFor(() =>
+			expect(previewDomMove).toHaveBeenLastCalledWith(
+				"source",
+				"valid-target",
+				expect.any(String),
+			),
+		)
+	})
+
+	it("applies the drop target after a completed preview of a different node", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "body",
+				tagName: "body",
+				label: "body",
+				children: [
+					...["source", "first", "latest"].map((nodeId) => ({
+						nodeId,
+						tagName: "section",
+						label: nodeId,
+						children: [],
+						editable: true,
+						canHaveChildren: true,
+						canDelete: true,
+						canMove: true,
+					})),
+				],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+		const previewDomMove = vi.fn().mockResolvedValue(true)
+		const commitDomMovePreview = vi.fn().mockResolvedValue(undefined)
+		const dataTransfer = createDataTransfer()
+
+		render(
+			<DOMTreePanel
+				editorRef={
+					{
+						current: {
+							getDomTree,
+							beginDomMovePreview: vi.fn().mockResolvedValue(undefined),
+							previewDomMove,
+							commitDomMovePreview,
+							cancelDomMovePreview: vi.fn().mockResolvedValue(undefined),
+						},
+					} as never
+				}
+				visible
+			/>,
+		)
+
+		const sourceHandle = await screen.findByTestId("dom-tree-drag-handle-source")
+		const firstRow = screen.getByTestId("dom-tree-node-first")
+		const latestRow = screen.getByTestId("dom-tree-node-latest")
+		for (const row of [firstRow, latestRow]) {
+			Object.defineProperty(row, "getBoundingClientRect", {
+				configurable: true,
+				value: () => ({ top: 32, height: 32 }),
+			})
+		}
+
+		fireEvent.dragStart(sourceHandle, { dataTransfer })
+		fireEvent.dragOver(firstRow, { clientY: 34, dataTransfer })
+		await waitFor(() =>
+			expect(previewDomMove).toHaveBeenCalledWith("source", "first", expect.any(String)),
+		)
+
+		// Repeat the same target so a skip-only flush can settle and pin flushPromise.
+		fireEvent.dragOver(firstRow, { clientY: 34, dataTransfer })
+		await Promise.resolve()
+		fireEvent.dragOver(latestRow, { clientY: 34, dataTransfer })
+		fireEvent.drop(latestRow, { dataTransfer })
+
+		await waitFor(() => {
+			expect(previewDomMove).toHaveBeenCalledWith("source", "latest", expect.any(String))
+			expect(commitDomMovePreview).toHaveBeenCalled()
+		})
+	})
+
 	it("marks descendants as invalid drop targets", async () => {
 		const getDomTree = vi.fn().mockResolvedValue({
 			root: {

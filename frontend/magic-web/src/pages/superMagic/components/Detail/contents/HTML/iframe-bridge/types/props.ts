@@ -256,6 +256,14 @@ export interface HTMLEditorV2Ref {
 	clearHoveredDomNode: () => Promise<void>
 	scrollToDomNode: (nodeId: string) => Promise<void>
 	moveDomNode: (nodeId: string, targetParentId: string, targetIndex: number) => Promise<void>
+	beginDomMovePreview: (nodeId: string) => Promise<void>
+	previewDomMove: (
+		nodeId: string,
+		targetNodeId: string,
+		position: "before" | "inside" | "after",
+	) => Promise<boolean>
+	commitDomMovePreview: () => Promise<void>
+	cancelDomMovePreview: () => Promise<void>
 	insertTextNode: (parentNodeId: string, textContent: string, index?: number) => Promise<void>
 	insertImageNode: (parentNodeId: string, index?: number) => Promise<void>
 	copyDomNode: (nodeId: string) => Promise<void>

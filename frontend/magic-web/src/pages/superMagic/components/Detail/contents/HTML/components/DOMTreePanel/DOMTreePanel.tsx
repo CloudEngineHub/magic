@@ -67,6 +67,22 @@ const DOM_TREE_FALLBACK_REFRESH_INTERVAL = 10_000
 const DOM_TREE_CONTENT_REFRESH_DELAY = 120
 const DOM_TREE_VIRTUAL_LOG_INTERVAL_MS = 250
 
+interface DomMovePreviewTarget {
+	nodeId: string
+	position: DropPosition
+}
+
+interface DomMovePreviewSession {
+	nodeId: string
+	pendingTarget: DomMovePreviewTarget | null
+	appliedTargetKey: string | null
+	flushPromise: Promise<void> | null
+	started: boolean
+	flushing: boolean
+	cancelled: boolean
+	finalizing: boolean
+}
+
 function createDragPreview(label: string): HTMLElement {
 	const preview = document.createElement("div")
 	preview.textContent = label
@@ -119,6 +135,8 @@ function DOMTreePanelInner({
 		clear_count: number
 		timer: number | null
 	}>({ hover_count: 0, clear_count: 0, timer: null })
+	const draggedNodeIdRef = useRef<string | null>(null)
+	const domMovePreviewRef = useRef<DomMovePreviewSession | null>(null)
 	const recordHoverBridgeCall = useCallback((kind: "hover" | "clear") => {
 		if (!manualPerfLogger.isEnabled()) return
 		const stats = hoverBridgeLogRef.current
@@ -139,8 +157,9 @@ function DOMTreePanelInner({
 		}, DOM_TREE_VIRTUAL_LOG_INTERVAL_MS)
 	}, [])
 	const nodeButtonRefs = useRef(new Map<string, HTMLButtonElement>())
-	const resetDragState = useCallback(() => {
+	const clearDragState = useCallback(() => {
 		interactionLockedRef.current = false
+		draggedNodeIdRef.current = null
 		setDraggedNodeId(null)
 		setDropTarget(null)
 		setInvalidDropTargetId(null)
@@ -150,6 +169,120 @@ function DOMTreePanelInner({
 		}
 		void editorRef.current?.clearHoveredDomNode?.()
 	}, [editorRef])
+	const getDomMovePreviewTargetKey = useCallback((target: DomMovePreviewTarget) => {
+		return `${target.nodeId}:${target.position}`
+	}, [])
+	const flushDomMovePreview = useCallback(
+		async (session: DomMovePreviewSession): Promise<void> => {
+			if (session.flushing) {
+				if (session.flushPromise) await session.flushPromise
+				if (
+					!session.cancelled &&
+					session.pendingTarget &&
+					getDomMovePreviewTargetKey(session.pendingTarget) !== session.appliedTargetKey
+				) {
+					await flushDomMovePreview(session)
+				}
+				return
+			}
+
+			session.flushing = true
+			let releaseFlush = () => {}
+			// Keep this promise pending until work finishes so a sync skip cannot
+			// pin a settled flushPromise and drop later targets.
+			session.flushPromise = new Promise<void>((resolve) => {
+				releaseFlush = resolve
+			})
+			try {
+				if (!session.cancelled && !session.started) {
+					await editorRef.current?.beginDomMovePreview?.(session.nodeId)
+					session.started = true
+				}
+
+				while (!session.cancelled && session.pendingTarget) {
+					const target = session.pendingTarget
+					session.pendingTarget = null
+					const targetKey = getDomMovePreviewTargetKey(target)
+					if (targetKey === session.appliedTargetKey) continue
+
+					const applied = await editorRef.current?.previewDomMove?.(
+						session.nodeId,
+						target.nodeId,
+						target.position,
+					)
+					if (!session.cancelled) {
+						session.appliedTargetKey = targetKey
+						if (applied === false) setInvalidDropTargetId(target.nodeId)
+					}
+				}
+			} finally {
+				session.flushing = false
+				session.flushPromise = null
+				releaseFlush()
+			}
+		},
+		[editorRef, getDomMovePreviewTargetKey],
+	)
+	const queueDomMovePreview = useCallback(
+		(target: DomMovePreviewTarget) => {
+			const session = domMovePreviewRef.current
+			if (!session || session.cancelled || session.finalizing) return
+			session.pendingTarget = target
+			if (session.flushPromise) return
+			void flushDomMovePreview(session).catch((error) => {
+				if (domMovePreviewRef.current !== session) return
+				session.cancelled = true
+				domMovePreviewRef.current = null
+				void editorRef.current?.cancelDomMovePreview?.().catch((cancelError) => {
+					console.warn("恢复 DOM 移动预览失败", cancelError)
+				})
+				console.warn("DOM 移动预览失败", error)
+			})
+		},
+		[editorRef, flushDomMovePreview],
+	)
+	const cancelDomMovePreview = useCallback(async () => {
+		const session = domMovePreviewRef.current
+		if (!session || session.finalizing) return
+		session.cancelled = true
+		domMovePreviewRef.current = null
+		try {
+			if (session.flushPromise) await session.flushPromise
+			await editorRef.current?.cancelDomMovePreview?.()
+		} catch (error) {
+			console.warn("取消 DOM 移动预览失败", error)
+		}
+	}, [editorRef])
+	const finishDomMovePreview = useCallback(
+		async (target: DomMovePreviewTarget): Promise<boolean> => {
+			const session = domMovePreviewRef.current
+			if (!session || session.cancelled) return false
+			session.finalizing = true
+			session.appliedTargetKey = null
+			session.pendingTarget = target
+			try {
+				await flushDomMovePreview(session)
+				await editorRef.current?.commitDomMovePreview?.()
+				return true
+			} catch (error) {
+				console.warn("提交 DOM 移动预览失败", error)
+				session.cancelled = true
+				try {
+					await editorRef.current?.cancelDomMovePreview?.()
+				} catch (cancelError) {
+					console.warn("恢复 DOM 移动预览失败", cancelError)
+				}
+				return false
+			} finally {
+				domMovePreviewRef.current = null
+			}
+		},
+		[editorRef, flushDomMovePreview],
+	)
+	const resetDragState = useCallback(() => {
+		clearDragState()
+		if (!domMovePreviewRef.current?.finalizing) void cancelDomMovePreview()
+	}, [cancelDomMovePreview, clearDragState])
 	const treeIndex = useMemo(() => {
 		const startedAt = manualPerfLogger.isEnabled() ? manualPerfLogger.now() : 0
 		const index = buildDomTreeIndex(tree?.root)
@@ -797,16 +930,18 @@ function DOMTreePanelInner({
 
 	const dropNode = async (event: React.DragEvent, target: DomTreeNode) => {
 		event.preventDefault()
+		const activeDraggedNodeId = draggedNodeIdRef.current ?? draggedNodeId
 		if (
-			!draggedNodeId ||
+			!activeDraggedNodeId ||
 			!dropTarget ||
 			dropTarget.nodeId !== target.nodeId ||
-			isInvalidDrop(draggedNodeId, target.nodeId)
+			isInvalidDrop(activeDraggedNodeId, target.nodeId)
 		) {
 			resetDragState()
 			return
 		}
 		const position = dropTarget.position
+		const previewTarget = { nodeId: target.nodeId, position }
 		if (position === "inside") {
 			if (
 				!target.canHaveChildren ||
@@ -815,14 +950,22 @@ function DOMTreePanelInner({
 				resetDragState()
 				return
 			}
-			await runAction(
-				() =>
-					editorRef.current?.moveDomNode(
-						draggedNodeId,
-						target.nodeId,
-						target.children.length,
-					) ?? Promise.resolve(),
-			)
+			if (domMovePreviewRef.current) {
+				await runAction(async () => {
+					if (!(await finishDomMovePreview(previewTarget))) {
+						throw new Error(t("stylePanel.domTree.actionFailed"))
+					}
+				})
+			} else {
+				await runAction(
+					() =>
+						editorRef.current?.moveDomNode(
+							activeDraggedNodeId,
+							target.nodeId,
+							target.children.length,
+						) ?? Promise.resolve(),
+				)
+			}
 		} else {
 			const parent = parentMap.get(target.nodeId)
 			if (!parent) {
@@ -830,16 +973,24 @@ function DOMTreePanelInner({
 				return
 			}
 			const index = parent.children.findIndex((child) => child.nodeId === target.nodeId)
-			await runAction(
-				() =>
-					editorRef.current?.moveDomNode(
-						draggedNodeId,
-						parent.nodeId,
-						index + (position === "after" ? 1 : 0),
-					) ?? Promise.resolve(),
-			)
+			if (domMovePreviewRef.current) {
+				await runAction(async () => {
+					if (!(await finishDomMovePreview(previewTarget))) {
+						throw new Error(t("stylePanel.domTree.actionFailed"))
+					}
+				})
+			} else {
+				await runAction(
+					() =>
+						editorRef.current?.moveDomNode(
+							activeDraggedNodeId,
+							parent.nodeId,
+							index + (position === "after" ? 1 : 0),
+						) ?? Promise.resolve(),
+				)
+			}
 		}
-		resetDragState()
+		clearDragState()
 	}
 
 	const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -919,14 +1070,15 @@ function DOMTreePanelInner({
 				tree?.root.nodeId === node.nodeId || node.tagName.toLowerCase() === "body"
 			const canInsertInside = node.canHaveChildren && (node.editable || isRootNode)
 			const canInsertSibling = parentMap.has(node.nodeId) && node.editable
+			const activeDraggedNodeId = draggedNodeIdRef.current ?? draggedNodeId
 			const isInvalidTarget =
-				!draggedNodeId ||
-				isInvalidDrop(draggedNodeId, node.nodeId) ||
+				!activeDraggedNodeId ||
+				isInvalidDrop(activeDraggedNodeId, node.nodeId) ||
 				(!node.canHaveChildren && !node.editable)
 			if (isInvalidTarget) {
 				event.dataTransfer.dropEffect = "none"
 				setDropTarget(null)
-				setInvalidDropTargetId(draggedNodeId ? node.nodeId : null)
+				setInvalidDropTargetId(activeDraggedNodeId ? node.nodeId : null)
 				return
 			}
 			const rect = event.currentTarget.getBoundingClientRect()
@@ -953,8 +1105,9 @@ function DOMTreePanelInner({
 					? current
 					: { nodeId: node.nodeId, position },
 			)
+			queueDomMovePreview({ nodeId: node.nodeId, position })
 		},
-		[draggedNodeId, isInvalidDrop, parentMap, scheduleAutoScroll, tree],
+		[draggedNodeId, isInvalidDrop, parentMap, queueDomMovePreview, scheduleAutoScroll, tree],
 	)
 	const handleDragLeave = useCallback(
 		(event: React.DragEvent<HTMLDivElement>, node: DomTreeNode) => {
@@ -978,6 +1131,35 @@ function DOMTreePanelInner({
 			setInvalidDropTargetId(null)
 			setDropTarget(null)
 			setDraggedNodeId(node.nodeId)
+			draggedNodeIdRef.current = node.nodeId
+			const editor = editorRef.current
+			if (
+				editor?.beginDomMovePreview &&
+				editor.previewDomMove &&
+				editor.commitDomMovePreview &&
+				editor.cancelDomMovePreview
+			) {
+				const session: DomMovePreviewSession = {
+					nodeId: node.nodeId,
+					pendingTarget: null,
+					appliedTargetKey: null,
+					flushPromise: null,
+					started: false,
+					flushing: false,
+					cancelled: false,
+					finalizing: false,
+				}
+				domMovePreviewRef.current = session
+				void flushDomMovePreview(session).catch((error) => {
+					if (domMovePreviewRef.current === session) {
+						domMovePreviewRef.current = null
+					}
+					void editorRef.current?.cancelDomMovePreview?.().catch((cancelError) => {
+						console.warn("恢复 DOM 移动预览失败", cancelError)
+					})
+					console.warn("启动 DOM 移动预览失败", error)
+				})
+			}
 			event.dataTransfer.effectAllowed = "move"
 			event.dataTransfer.setData("text/plain", node.nodeId)
 			if (event.dataTransfer.setDragImage) {
@@ -986,7 +1168,7 @@ function DOMTreePanelInner({
 				window.requestAnimationFrame(() => preview.remove())
 			}
 		},
-		[],
+		[editorRef, flushDomMovePreview],
 	)
 	const handleMouseEnter = useCallback(
 		(node: DomTreeNode) => {

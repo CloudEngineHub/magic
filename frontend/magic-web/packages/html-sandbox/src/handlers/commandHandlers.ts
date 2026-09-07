@@ -228,6 +228,32 @@ export function registerCommandHandlers(config: CommandHandlersConfig): void {
 		return { success: true }
 	})
 
+	bridge.onCommand("BEGIN_DOM_MOVE_PREVIEW", async (payload: unknown) => {
+		const { nodeId } = payload as { nodeId: string }
+		domStructureManager.beginMovePreview(nodeId)
+		return { success: true }
+	})
+
+	bridge.onCommand("PREVIEW_DOM_MOVE", async (payload: unknown) => {
+		const { nodeId, targetNodeId, position } = payload as {
+			nodeId: string
+			targetNodeId: string
+			position: "before" | "inside" | "after"
+		}
+		const applied = domStructureManager.previewMove(nodeId, targetNodeId, position)
+		return { success: true, applied }
+	})
+
+	bridge.onCommand("COMMIT_DOM_MOVE_PREVIEW", async () => {
+		domStructureManager.commitMovePreview()
+		return { success: true }
+	})
+
+	bridge.onCommand("CANCEL_DOM_MOVE_PREVIEW", async () => {
+		domStructureManager.cancelMovePreview()
+		return { success: true }
+	})
+
 	bridge.onCommand("CUT_DOM_NODE", async (payload: unknown) => {
 		const { nodeId } = payload as { nodeId: string }
 		await domStructureManager.cutNode(nodeId)
