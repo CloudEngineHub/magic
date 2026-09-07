@@ -541,14 +541,18 @@ export const generateFlowApi = (fetch: HttpClient) => ({
 	 * @param options
 	 */
 	getMCPUserSettings(
-		params: { code: string; redirectUrl: string },
+		params: { code: string; redirectUrl?: string },
 		options?: {
 			signal?: AbortSignal
 			enableErrorMessagePrompt?: boolean
 		},
 	) {
 		return fetch.get<MCPOAuthStatus>(
-			genRequestUrl("/api/v1/mcp/user-setting/${code}?redirect_url=${redirectUrl}", params),
+			genRequestUrl(
+				"/api/v1/mcp/user-setting/${code}",
+				{ code: params.code },
+				params.redirectUrl ? { redirect_url: params.redirectUrl } : undefined,
+			),
 			{
 				enableRequestUnion: true,
 				enableErrorMessagePrompt: options?.enableErrorMessagePrompt,

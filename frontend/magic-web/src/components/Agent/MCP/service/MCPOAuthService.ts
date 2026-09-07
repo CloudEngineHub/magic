@@ -7,8 +7,17 @@ export interface MCPOAuthRequireField {
 }
 
 export interface MCPOAuthStatus {
-	auth_config: { is_authenticated: boolean; oauth_url: string }
-	auth_type: 0 | 1
+	auth_config: {
+		is_authenticated: boolean
+		oauth_url?: string
+		authorization_url?: string
+		issuer?: string
+		resource?: string
+		scope?: string
+		expires_at?: string
+		error?: string
+	}
+	auth_type: 0 | 1 | 2
 	require_fields: Array<MCPOAuthRequireField>
 }
 

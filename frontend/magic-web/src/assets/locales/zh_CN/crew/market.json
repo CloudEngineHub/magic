@@ -34,6 +34,30 @@
 			"loadFailed": "连接器配置加载失败",
 			"loading": "加载中…",
 			"name": "名称",
+			"namePlaceholder": "例如：我的连接器",
+			"mcpAuthorization": "OAuth 2.0（MCP 服务授权）",
+			"mcpAuthorizationLabels": {
+				"additionalParams": "额外授权参数",
+				"applicationType": "应用类型",
+				"authorizationEndpoint": "授权端点（Authorization Endpoint）",
+				"authorizationServerUrl": "授权服务器地址（Authorization Server URL）",
+				"clientId": "Client ID",
+				"clientMetadataUrl": "客户端元数据地址（Client Metadata URL）",
+				"clientSecret": "客户端密钥（Client Secret）",
+				"registrationEndpoint": "客户端注册端点（Registration Endpoint）",
+				"registrationMode": "客户端注册方式",
+				"resource": "受保护资源地址（Resource）",
+				"resourceMetadataUrl": "资源元数据地址（Resource Metadata URL）",
+				"scope": "授权范围（Scope）",
+				"tokenEndpoint": "Token 端点（Token Endpoint）",
+				"tokenEndpointAuthMethod": "Token 端点认证方式"
+			},
+			"registrationModes": {
+				"auto": "自动发现",
+				"pre_registered": "预注册（Pre-registered）",
+				"cimd": "客户端元数据（CIMD）",
+				"dcr": "动态注册（DCR）"
+			},
 			"oauthLabels": {
 				"authorizationContentType": "Authorization Content Type",
 				"authorizationUrl": "Authorization URL",
@@ -46,11 +70,13 @@
 			"removeRow": "移除参数",
 			"saveFailed": "保存失败",
 			"saving": "保存中…",
+			"descriptionPlaceholder": "例如：用于访问外部服务",
 			"title": "创建 MCP 连接器",
 			"type": "类型",
 			"uploadIcon": "上传图标",
 			"uploading": "上传中…",
-			"url": "服务地址(SSE Url)"
+			"url": "服务地址 (URL)",
+			"urlPlaceholder": "例如：https://example.com"
 		},
 		"createSuccess": "创建连接器成功",
 		"delete": "删除",

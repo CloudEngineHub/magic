@@ -52,6 +52,24 @@ interface OAuthConfig {
 	authorization_url: string
 }
 
+interface MCPAuthorizationConfig {
+	resource: string
+	resource_metadata_url: string
+	authorization_server_url: string
+	authorization_endpoint: string
+	token_endpoint: string
+	registration_endpoint: string
+	registration_mode: "auto" | "pre_registered" | "cimd" | "dcr"
+	client_id: string
+	client_secret: string
+	client_metadata_url: string
+	token_endpoint_auth_method: "" | "none" | "client_secret_basic" | "client_secret_post"
+	application_type: "native" | "web"
+	scope: string
+	redirect_uri: string
+	additional_params: KeyValueRow[]
+}
+
 interface ConnectorMCPFormState {
 	id?: string
 	icon: string
@@ -66,6 +84,7 @@ interface ConnectorMCPFormState {
 		env: KeyValueRow[]
 		auth_type: number
 		oauth2_config: OAuthConfig
+		mcp_authorization_config: MCPAuthorizationConfig
 	}
 	authorization_content_type: string
 	tools: Flow.Mcp.ListItem[]
@@ -87,11 +106,29 @@ const emptyOAuthConfig = (): OAuthConfig => ({
 	authorization_url: "",
 })
 
+const emptyMCPAuthorizationConfig = (): MCPAuthorizationConfig => ({
+	resource: "",
+	resource_metadata_url: "",
+	authorization_server_url: "",
+	authorization_endpoint: "",
+	token_endpoint: "",
+	registration_endpoint: "",
+	registration_mode: "auto",
+	client_id: "",
+	client_secret: "",
+	client_metadata_url: "",
+	token_endpoint_auth_method: "",
+	application_type: "native",
+	scope: "",
+	redirect_uri: "",
+	additional_params: [],
+})
+
 const createInitialState = (): ConnectorMCPFormState => ({
 	icon: "",
 	name: "",
 	description: "",
-	type: MCPType.SSE,
+	type: MCPType.HTTP,
 	service_config: {
 		url: "",
 		command: "npx",
@@ -100,6 +137,7 @@ const createInitialState = (): ConnectorMCPFormState => ({
 		env: [],
 		auth_type: 0,
 		oauth2_config: emptyOAuthConfig(),
+		mcp_authorization_config: emptyMCPAuthorizationConfig(),
 	},
 	authorization_content_type: "application/json",
 	tools: [],
@@ -121,13 +159,30 @@ const oauthLabelKeys = {
 	authorization_content_type: "authorizationContentType",
 } as const
 
+const mcpAuthorizationLabelKeys = {
+	resource: "resource",
+	resource_metadata_url: "resourceMetadataUrl",
+	authorization_server_url: "authorizationServerUrl",
+	authorization_endpoint: "authorizationEndpoint",
+	token_endpoint: "tokenEndpoint",
+	registration_endpoint: "registrationEndpoint",
+	registration_mode: "registrationMode",
+	client_id: "clientId",
+	client_secret: "clientSecret",
+	client_metadata_url: "clientMetadataUrl",
+	token_endpoint_auth_method: "tokenEndpointAuthMethod",
+	application_type: "applicationType",
+	scope: "scope",
+	additional_params: "additionalParams",
+} as const
+
 const Editor = ((SimpleCodeEditor as unknown as { default?: typeof SimpleCodeEditor }).default ??
 	SimpleCodeEditor) as typeof SimpleCodeEditor
 
 function updateNestedState(
 	setState: React.Dispatch<React.SetStateAction<ConnectorMCPFormState>>,
 	key: keyof ConnectorMCPFormState["service_config"],
-	value: string | number | KeyValueRow[] | OAuthConfig,
+	value: string | number | KeyValueRow[] | OAuthConfig | MCPAuthorizationConfig,
 ) {
 	setState((current) => ({
 		...current,
@@ -135,21 +190,60 @@ function updateNestedState(
 	}))
 }
 
+function toStringValue(value: unknown) {
+	if (typeof value === "string") return value
+	if (value === null || value === undefined) return ""
+	return String(value)
+}
+
 function toKeyValueRows(value: unknown): KeyValueRow[] {
 	if (Array.isArray(value)) {
 		return value.map((item) => {
 			const row = item as Partial<KeyValueRow>
 			return {
-				key: row.key || "",
-				value: row.value || "",
+				key: toStringValue(row.key),
+				value: toStringValue(row.value),
 				mapper_system_input: row.mapper_system_input,
 			}
 		})
 	}
 	if (value && typeof value === "object") {
-		return importHeaders(value as Record<string, string>) as KeyValueRow[]
+		return importHeaders(value as Record<string, string>) as unknown as KeyValueRow[]
 	}
 	return []
+}
+
+function keyValueRowsToObject(rows: KeyValueRow[]) {
+	return rows.reduce<Record<string, string>>((result, item) => {
+		const key = item.key.trim()
+		if (key) result[key] = item.value
+		return result
+	}, {})
+}
+
+function serializeMCPAuthorizationConfig(config: MCPAuthorizationConfig) {
+	const result: Record<string, unknown> = {}
+	for (const key of [
+		"resource",
+		"resource_metadata_url",
+		"authorization_server_url",
+		"authorization_endpoint",
+		"token_endpoint",
+		"registration_endpoint",
+		"registration_mode",
+		"client_id",
+		"client_secret",
+		"client_metadata_url",
+		"token_endpoint_auth_method",
+		"application_type",
+		"scope",
+	] as const) {
+		const value = config[key]
+		if (typeof value === "string" && value.trim()) result[key] = value
+	}
+	const additionalParams = keyValueRowsToObject(config.additional_params)
+	if (Object.keys(additionalParams).length) result.additional_params = additionalParams
+	return result
 }
 
 function configToState(raw: Record<string, any>): ConnectorMCPFormState {
@@ -172,9 +266,9 @@ function configToState(raw: Record<string, any>): ConnectorMCPFormState {
 			Boolean(config?.rel_info?.tool_set_id))
 
 	next.id = config?.id
-	next.name = config?.name || name || ""
-	next.description = config?.description || ""
-	next.icon = config?.icon || ""
+	next.name = toStringValue(config?.name || name)
+	next.description = toStringValue(config?.description)
+	next.icon = toStringValue(config?.icon)
 	next.type =
 		rawType === MCPType.Tool && isImportedToolConfig
 			? MCPType.Tool
@@ -187,25 +281,62 @@ function configToState(raw: Record<string, any>): ConnectorMCPFormState {
 						: hasUrl && !rawType
 							? MCPType.HTTP
 							: MCPType.SSE
-	next.service_config.url = serviceConfig.url || config?.url || config?.external_sse_url || ""
-	next.service_config.command = serviceConfig.command || config?.command || "npx"
+	next.service_config.url = toStringValue(
+		serviceConfig.url || config?.url || config?.external_sse_url,
+	)
+	next.service_config.command = toStringValue(serviceConfig.command || config?.command || "npx")
 	const argumentsValue = serviceConfig.arguments ?? config?.args
 	next.service_config.arguments = Array.isArray(argumentsValue)
-		? argumentsValue.join(",")
-		: argumentsValue || ""
+		? argumentsValue.map(toStringValue).join(",")
+		: toStringValue(argumentsValue)
 	next.service_config.headers = toKeyValueRows(serviceConfig.headers || config?.headers)
 	next.service_config.env = toKeyValueRows(serviceConfig.env || config?.env)
 	next.service_config.auth_type = Number(serviceConfig.auth_type ?? config?.auth_type ?? 0)
+	const rawOAuthConfig = serviceConfig.oauth2_config || config?.oauth2_config || {}
 	next.service_config.oauth2_config = {
-		...emptyOAuthConfig(),
-		...(serviceConfig.oauth2_config || config?.oauth2_config || {}),
+		client_id: toStringValue(rawOAuthConfig.client_id),
+		client_secret: toStringValue(rawOAuthConfig.client_secret),
+		client_url: toStringValue(rawOAuthConfig.client_url),
+		scope: toStringValue(rawOAuthConfig.scope),
+		authorization_url: toStringValue(rawOAuthConfig.authorization_url),
+	}
+	const rawMCPAuthorizationConfig =
+		serviceConfig.mcp_authorization_config || config?.mcp_authorization_config || {}
+	next.service_config.mcp_authorization_config = {
+		resource: toStringValue(rawMCPAuthorizationConfig.resource),
+		resource_metadata_url: toStringValue(rawMCPAuthorizationConfig.resource_metadata_url),
+		authorization_server_url: toStringValue(
+			rawMCPAuthorizationConfig.authorization_server_url,
+		),
+		authorization_endpoint: toStringValue(rawMCPAuthorizationConfig.authorization_endpoint),
+		token_endpoint: toStringValue(rawMCPAuthorizationConfig.token_endpoint),
+		registration_endpoint: toStringValue(rawMCPAuthorizationConfig.registration_endpoint),
+		registration_mode: ["auto", "pre_registered", "cimd", "dcr"].includes(
+			rawMCPAuthorizationConfig.registration_mode,
+		)
+			? rawMCPAuthorizationConfig.registration_mode
+			: "auto",
+		client_id: toStringValue(rawMCPAuthorizationConfig.client_id),
+		client_secret: toStringValue(rawMCPAuthorizationConfig.client_secret),
+		client_metadata_url: toStringValue(rawMCPAuthorizationConfig.client_metadata_url),
+		token_endpoint_auth_method: ["none", "client_secret_basic", "client_secret_post"].includes(
+			rawMCPAuthorizationConfig.token_endpoint_auth_method,
+		)
+			? rawMCPAuthorizationConfig.token_endpoint_auth_method
+			: "",
+		application_type: rawMCPAuthorizationConfig.application_type === "web" ? "web" : "native",
+		scope: toStringValue(rawMCPAuthorizationConfig.scope),
+		redirect_uri: toStringValue(rawMCPAuthorizationConfig.redirect_uri),
+		additional_params: toKeyValueRows(rawMCPAuthorizationConfig.additional_params),
 	}
 	next.authorization_content_type =
-		serviceConfig.authorization_content_type ||
-		serviceConfig.oauth2_config?.authorization_content_type ||
-		config?.oauth2_config?.authorization_content_type ||
-		config?.authorization_content_type ||
-		"application/json"
+		toStringValue(
+			serviceConfig.authorization_content_type ||
+				serviceConfig.oauth2_config?.authorization_content_type ||
+				config?.oauth2_config?.authorization_content_type ||
+				config?.authorization_content_type ||
+				"application/json",
+		)
 	next.tools = Array.isArray(config?.tools) ? config.tools : []
 	return next
 }
@@ -247,9 +378,18 @@ function stateToJsonConfig(state: ConnectorMCPFormState) {
 			...oauthConfig,
 			authorization_content_type: state.authorization_content_type,
 		})) {
-			if (value.trim()) nextOAuthConfig[key] = value
+			if (typeof value === "string" && value.trim()) nextOAuthConfig[key] = value
 		}
 		if (Object.keys(nextOAuthConfig).length) nextConfig.oauth2_config = nextOAuthConfig
+	}
+
+	if (state.service_config.auth_type === 2) {
+		nextConfig.auth_type = 2
+		const authorizationConfig = serializeMCPAuthorizationConfig(
+			state.service_config.mcp_authorization_config,
+		)
+		if (Object.keys(authorizationConfig).length)
+			nextConfig.mcp_authorization_config = authorizationConfig
 	}
 
 	return nextConfig
@@ -639,6 +779,21 @@ export default function ConnectorMCPForm({
 			},
 		}))
 
+	const updateMCPAuthorization = (
+		key: keyof Omit<MCPAuthorizationConfig, "additional_params">,
+		value: string,
+	) =>
+		setState((current) => ({
+			...current,
+			service_config: {
+				...current.service_config,
+				mcp_authorization_config: {
+					...current.service_config.mcp_authorization_config,
+					[key]: value,
+				},
+			},
+		}))
+
 	const handleIconChange = async (files: FileList | null) => {
 		if (!files?.length) return
 		const newFiles = Array.from(files).map(genFileData)
@@ -684,6 +839,35 @@ export default function ConnectorMCPForm({
 						: candidate.service_config.oauth2_config[key]
 				if (!value.trim())
 					nextErrors[key] = tMarket("connectors.createForm.oauthRequired", { name: key })
+			}
+		}
+		if (candidate.service_config.auth_type === 2) {
+			const authorizationConfig = candidate.service_config.mcp_authorization_config
+			if (
+				authorizationConfig.registration_mode === "pre_registered" &&
+				!authorizationConfig.client_id.trim()
+			) {
+				nextErrors.client_id = tMarket("connectors.createForm.oauthRequired", {
+					name: "Client ID",
+				})
+			}
+			if (
+				authorizationConfig.registration_mode === "cimd" &&
+				!authorizationConfig.client_metadata_url.trim()
+			) {
+				nextErrors.client_metadata_url = tMarket("connectors.createForm.oauthRequired", {
+					name: "Client Metadata URL",
+				})
+			}
+			if (
+				["client_secret_basic", "client_secret_post"].includes(
+					authorizationConfig.token_endpoint_auth_method,
+				) &&
+				!authorizationConfig.client_secret.trim()
+			) {
+				nextErrors.client_secret = tMarket("connectors.createForm.oauthRequired", {
+					name: "Client Secret",
+				})
 			}
 		}
 		return nextErrors
@@ -738,15 +922,30 @@ export default function ConnectorMCPForm({
 		const validatedState = validate()
 		if (!validatedState) return
 		try {
+			const {
+				oauth2_config: oauth2Config,
+				mcp_authorization_config: mcpAuthorizationConfig,
+				...serviceConfig
+			} = validatedState.service_config
 			const payload = {
 				...validatedState,
 				name: validatedState.name.trim(),
 				service_config: {
-					...validatedState.service_config,
+					...serviceConfig,
 					headers: validatedState.service_config.headers.filter((item) =>
 						item.key.trim(),
 					),
 					env: validatedState.service_config.env.filter((item) => item.key.trim()),
+					...(validatedState.service_config.auth_type === 1
+						? { oauth2_config: oauth2Config }
+						: {}),
+					...(validatedState.service_config.auth_type === 2
+						? {
+								mcp_authorization_config: serializeMCPAuthorizationConfig(
+									mcpAuthorizationConfig,
+								),
+							}
+						: {}),
 				},
 			}
 			await saveMcp(payload as unknown as Flow.Mcp.SaveParams)
@@ -845,6 +1044,7 @@ export default function ConnectorMCPForm({
 								<Input
 									id="connector-mcp-name"
 									value={state.name}
+									placeholder={tMarket("connectors.createForm.namePlaceholder")}
 									className={inputClassName}
 									onChange={(event) =>
 										updateField(MCPFormField.Name, event.target.value)
@@ -861,6 +1061,9 @@ export default function ConnectorMCPForm({
 								<Textarea
 									id="connector-mcp-description"
 									value={state.description}
+									placeholder={tMarket(
+										"connectors.createForm.descriptionPlaceholder",
+									)}
 									className="min-h-20 resize-y"
 									onChange={(event) =>
 										updateField(MCPFormField.Description, event.target.value)
@@ -1069,12 +1272,12 @@ export default function ConnectorMCPForm({
 															: undefined
 													}
 												>
-													<SelectItem value={MCPType.SSE}>
-														{t("mcp.form.options.sse")}
-													</SelectItem>
-													<SelectItem value={MCPType.HTTP}>
-														{t("mcp.form.options.http")}
-													</SelectItem>
+															<SelectItem value={MCPType.HTTP}>
+																{t("mcp.form.options.http")}
+															</SelectItem>
+															<SelectItem value={MCPType.SSE}>
+																{t("mcp.form.options.sse")}
+															</SelectItem>
 													<SelectItem value={MCPType.STDIO}>
 														{t("mcp.form.options.stdio")}
 													</SelectItem>
@@ -1087,13 +1290,18 @@ export default function ConnectorMCPForm({
 													? t("mcp.form.command")
 													: tMarket("connectors.createForm.url")}
 											</Label>
-											<Input
-												value={
-													state.type === MCPType.STDIO
-														? state.service_config.command
-														: state.service_config.url
-												}
-												className={inputClassName}
+							<Input
+														value={
+															state.type === MCPType.STDIO
+																? state.service_config.command
+																: state.service_config.url
+														}
+														placeholder={
+																state.type === MCPType.STDIO
+																	? undefined
+																	: tMarket("connectors.createForm.urlPlaceholder")
+														}
+														className={inputClassName}
 												onChange={(event) =>
 													updateNestedState(
 														setState,
@@ -1138,12 +1346,12 @@ export default function ConnectorMCPForm({
 										) : null}
 									</>
 								) : null}
-								<div className="rounded-lg bg-muted/20">
-									<div className="mb-3 text-sm font-medium">
+								<div className="flex flex-col gap-2">
+									<Label>
 										{state.type === MCPType.STDIO
 											? tMarket("connectors.createForm.env")
 											: tMarket("connectors.createForm.headersLabel")}
-									</div>
+									</Label>
 									<KeyValueEditor
 										rows={
 											state.type === MCPType.STDIO
@@ -1189,13 +1397,16 @@ export default function ConnectorMCPForm({
 															: undefined
 													}
 												>
-													<SelectItem value="0">
-														{t("mcp.form.noAuth")}
-													</SelectItem>
-													<SelectItem value="1">OAuth 2.0</SelectItem>
-												</SelectContent>
-											</Select>
-										</div>
+									<SelectItem value="0">
+										{t("mcp.form.noAuth")}
+									</SelectItem>
+									<SelectItem value="1">OAuth 2.0</SelectItem>
+									<SelectItem value="2">
+										{tMarket("connectors.createForm.mcpAuthorization")}
+									</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
 										{state.service_config.auth_type === 1 ? (
 											<div className="rounded-xl bg-muted/60 p-4">
 												<div className="grid grid-cols-1 gap-3">
@@ -1255,9 +1466,261 @@ export default function ConnectorMCPForm({
 														</div>
 													))}
 												</div>
+									</div>
+								) : null}
+								{state.service_config.auth_type === 2 ? (
+									<div className="rounded-xl bg-muted/60 p-4">
+										<div className="grid grid-cols-1 gap-3">
+											<div className={fieldClassName}>
+												<Label>
+													{tMarket(
+														`connectors.createForm.mcpAuthorizationLabels.${mcpAuthorizationLabelKeys.registration_mode}`,
+													)}
+												</Label>
+												<Select
+													value={
+														state.service_config.mcp_authorization_config
+															.registration_mode
+													}
+													onValueChange={(value) =>
+														updateMCPAuthorization(
+															"registration_mode",
+															value,
+														)
+												}
+												>
+													<SelectTrigger>
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent
+														style={
+															nestedLayerZIndex
+															? { zIndex: nestedLayerZIndex }
+															: undefined
+														}
+													>
+														{[
+															"auto",
+															"pre_registered",
+															"cimd",
+															"dcr",
+														].map((value) => (
+															<SelectItem key={value} value={value}>
+																{tMarket(
+																	`connectors.createForm.registrationModes.${value}`,
+																)}
+															</SelectItem>
+														))}
+													</SelectContent>
+															</Select>
+														</div>
+														{state.service_config.mcp_authorization_config.registration_mode !==
+															"auto" ? (
+															<>
+
+														{(
+												[
+													"resource",
+													"resource_metadata_url",
+													"authorization_server_url",
+													"authorization_endpoint",
+													"token_endpoint",
+													"registration_endpoint",
+												] as const
+											).map((key) => (
+												<div className={fieldClassName} key={key}>
+													<Label>
+														{tMarket(
+															`connectors.createForm.mcpAuthorizationLabels.${mcpAuthorizationLabelKeys[key]}`,
+														)}
+													</Label>
+													<Input
+														value={
+															state.service_config.mcp_authorization_config[
+																key
+															]
+														}
+														className={inputClassName}
+														onChange={(event) =>
+															updateMCPAuthorization(key, event.target.value)
+														}
+													/>
+													{errors[key] && (
+														<p className="text-xs text-destructive">{errors[key]}</p>
+													)}
+												</div>
+											))}
+
+											{(
+												[
+													"client_id",
+													"client_secret",
+													"client_metadata_url",
+												] as const
+											).map((key) => (
+												<div className={fieldClassName} key={key}>
+													<Label>
+														{tMarket(
+															`connectors.createForm.mcpAuthorizationLabels.${mcpAuthorizationLabelKeys[key]}`,
+														)}
+														{(
+															key === "client_id" &&
+																state.service_config.mcp_authorization_config
+																	.registration_mode === "pre_registered"
+															) ||
+															(key === "client_metadata_url" &&
+																state.service_config.mcp_authorization_config
+																	.registration_mode === "cimd") ? (
+															<span className="text-destructive"> *</span>
+														) : null}
+													</Label>
+													<Input
+															type={
+															key === "client_secret"
+																? "password"
+															: key === "client_metadata_url"
+																? "url"
+															: "text"
+														}
+														value={
+															state.service_config.mcp_authorization_config[
+																key
+															]
+														}
+														className={inputClassName}
+														onChange={(event) =>
+															updateMCPAuthorization(key, event.target.value)
+														}
+													/>
+													{errors[key] && (
+														<p className="text-xs text-destructive">{errors[key]}</p>
+													)}
+												</div>
+											))}
+
+											<div className={fieldClassName}>
+												<Label>
+													{tMarket(
+														`connectors.createForm.mcpAuthorizationLabels.${mcpAuthorizationLabelKeys.token_endpoint_auth_method}`,
+													)}
+												</Label>
+												<Select
+													value={
+														state.service_config.mcp_authorization_config
+															.token_endpoint_auth_method || "none"
+													}
+													onValueChange={(value) =>
+														updateMCPAuthorization(
+															"token_endpoint_auth_method",
+															value === "none" ? "" : value,
+														)
+												}
+												>
+													<SelectTrigger>
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent
+														style={
+															nestedLayerZIndex
+															? { zIndex: nestedLayerZIndex }
+															: undefined
+														}
+													>
+														<SelectItem value="none">none</SelectItem>
+														<SelectItem value="client_secret_basic">
+															client_secret_basic
+														</SelectItem>
+														<SelectItem value="client_secret_post">
+															client_secret_post
+														</SelectItem>
+													</SelectContent>
+												</Select>
 											</div>
-										) : null}
-									</>
+
+											<div className={fieldClassName}>
+												<Label>
+													{tMarket(
+														`connectors.createForm.mcpAuthorizationLabels.${mcpAuthorizationLabelKeys.application_type}`,
+													)}
+												</Label>
+												<Select
+													value={
+														state.service_config.mcp_authorization_config
+															.application_type
+													}
+													onValueChange={(value) =>
+														updateMCPAuthorization("application_type", value)
+													}
+												>
+													<SelectTrigger>
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent
+														style={
+															nestedLayerZIndex
+															? { zIndex: nestedLayerZIndex }
+															: undefined
+														}
+													>
+														<SelectItem value="native">native</SelectItem>
+														<SelectItem value="web">web</SelectItem>
+													</SelectContent>
+												</Select>
+											</div>
+
+											<div className={fieldClassName}>
+												<Label>
+													{tMarket(
+														`connectors.createForm.mcpAuthorizationLabels.${mcpAuthorizationLabelKeys.scope}`,
+													)}
+												</Label>
+												<Input
+													value={
+														state.service_config.mcp_authorization_config.scope
+													}
+													className={inputClassName}
+													onChange={(event) =>
+														updateMCPAuthorization("scope", event.target.value)
+													}
+												/>
+											</div>
+
+											<div className="flex flex-col gap-2">
+												<Label>
+													{tMarket(
+														`connectors.createForm.mcpAuthorizationLabels.${mcpAuthorizationLabelKeys.additional_params}`,
+													)}
+												</Label>
+												<KeyValueEditor
+													rows={
+														state.service_config.mcp_authorization_config
+															.additional_params
+													}
+													onChange={(rows) =>
+														setState((current) => ({
+															...current,
+															service_config: {
+																...current.service_config,
+																mcp_authorization_config: {
+																	...current.service_config
+																		.mcp_authorization_config,
+																	additional_params: rows,
+																},
+															},
+														}))
+													}
+													placeholder={t("mcp.form.value")}
+													keyLabel={tMarket("connectors.createForm.key")}
+													removeLabel={tMarket("connectors.createForm.removeRow")}
+																	addLabel={tMarket("connectors.createForm.addParameter")}
+																/>
+															</div>
+															</>
+														) : null}
+													</div>
+									</div>
+								) : null}
+								</>
 								) : null}
 							</>
 						)}
@@ -1301,7 +1764,7 @@ export default function ConnectorMCPForm({
 										source: 1,
 										rel_info: { tool_set_id: toolsetId },
 										enabled: true,
-									} as Flow.Mcp.ListItem,
+										} as unknown as Flow.Mcp.ListItem,
 								],
 					}))
 				}

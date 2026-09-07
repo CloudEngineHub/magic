@@ -62,7 +62,7 @@ export default function MCPOAuth(props: MCPEditor) {
 			manual: Boolean(initialUserSettings),
 			onSuccess(data) {
 				setAuth(data?.auth_config?.is_authenticated)
-				setAuthVisible(data?.auth_type === 1)
+				setAuthVisible(data?.auth_type === 1 || data?.auth_type === 2)
 			},
 		},
 	)
@@ -71,7 +71,7 @@ export default function MCPOAuth(props: MCPEditor) {
 	useEffect(() => {
 		if (!initialUserSettings) return
 		setAuth(initialUserSettings.auth_config?.is_authenticated)
-		setAuthVisible(initialUserSettings.auth_type === 1)
+		setAuthVisible(initialUserSettings.auth_type === 1 || initialUserSettings.auth_type === 2)
 	}, [initialUserSettings])
 
 	const { data: fetchedMcpDetails, loading: getAvailableMCPLoading } = useRequest(
@@ -145,8 +145,10 @@ export default function MCPOAuth(props: MCPEditor) {
 	})
 
 	const triggerStartPolling = useMemoizedFn(() => {
-		if (data?.auth_config?.oauth_url) {
-			window.open(data?.auth_config?.oauth_url)
+		const authorizationUrl =
+			data?.auth_config?.authorization_url || data?.auth_config?.oauth_url
+		if (authorizationUrl) {
+			window.open(authorizationUrl)
 			// 这里需要通过新窗口打开授权页面，指定授权成功回调页面
 			service.current?.restart(id, data)
 		}

@@ -34,6 +34,30 @@
 			"loadFailed": "Failed to load connector configuration",
 			"loading": "Loading…",
 			"name": "Name",
+			"namePlaceholder": "e.g., My Connector",
+			"mcpAuthorization": "OAuth 2.0 (MCP Service Authorization)",
+			"mcpAuthorizationLabels": {
+				"additionalParams": "Additional Authorization Parameters",
+				"applicationType": "Application Type",
+				"authorizationEndpoint": "Authorization Endpoint",
+				"authorizationServerUrl": "Authorization Server URL",
+				"clientId": "Client ID",
+				"clientMetadataUrl": "Client Metadata URL",
+				"clientSecret": "Client Secret",
+				"registrationEndpoint": "Client Registration Endpoint",
+				"registrationMode": "Client Registration Mode",
+				"resource": "Protected Resource URL (Resource)",
+				"resourceMetadataUrl": "Resource Metadata URL",
+				"scope": "Authorization Scope (Scope)",
+				"tokenEndpoint": "Token Endpoint",
+				"tokenEndpointAuthMethod": "Token Endpoint Authentication Method"
+			},
+			"registrationModes": {
+				"auto": "Auto Discovery",
+				"pre_registered": "Pre-registered",
+				"cimd": "Client Metadata (CIMD)",
+				"dcr": "Dynamic Registration (DCR)"
+			},
 			"oauthLabels": {
 				"authorizationContentType": "Authorization Content Type",
 				"authorizationUrl": "Authorization URL",
@@ -46,11 +70,13 @@
 			"removeRow": "Remove parameter",
 			"saveFailed": "Failed to save",
 			"saving": "Saving…",
+			"descriptionPlaceholder": "e.g., Access an external service",
 			"title": "Create MCP Connector",
 			"type": "Type",
 			"uploadIcon": "Upload icon",
 			"uploading": "Uploading…",
-			"url": "Service URL (SSE URL)"
+			"url": "Service URL (URL)",
+			"urlPlaceholder": "e.g., https://example.com"
 		},
 		"createSuccess": "Connector created successfully",
 		"delete": "Delete",
