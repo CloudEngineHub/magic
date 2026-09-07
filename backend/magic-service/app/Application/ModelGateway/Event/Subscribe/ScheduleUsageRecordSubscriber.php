@@ -8,9 +8,9 @@ declare(strict_types=1);
 namespace App\Application\ModelGateway\Event\Subscribe;
 
 use App\Application\ModelGateway\Event\ModelUsageEvent;
-use App\Domain\ModelGateway\Event\ImageGeneratedEvent;
 use App\Domain\ModelGateway\Entity\MsgLogEntity;
 use App\Domain\ModelGateway\Entity\ValueObject\LLMDataIsolation;
+use App\Domain\ModelGateway\Event\ImageGeneratedEvent;
 use App\Domain\ModelGateway\Service\MsgLogDomainService;
 use DateTime;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
@@ -100,8 +100,7 @@ class ScheduleUsageRecordSubscriber implements ListenerInterface
         string $userId,
         string $appCode,
         array $businessParams
-    ): void
-    {
+    ): void {
         $msgLog = new MsgLogEntity();
         $msgLog->setUseAmount(0);
         $msgLog->setUseToken($usage->getTotalTokens());

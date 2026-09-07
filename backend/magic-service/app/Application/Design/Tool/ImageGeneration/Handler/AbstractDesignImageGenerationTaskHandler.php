@@ -7,12 +7,12 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\ImageGeneration\Handler;
 
-use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Application\Design\Tool\ImageGeneration\Contract\DesignImageGenerationTaskHandlerInterface;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Entity\Dto\AbstractRequestDTO;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;

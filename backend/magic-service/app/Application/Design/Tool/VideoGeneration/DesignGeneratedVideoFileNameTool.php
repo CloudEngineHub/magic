@@ -7,11 +7,11 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\VideoGeneration;
 
-use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Application\ModelGateway\MicroAgent\MicroAgentFactory;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;

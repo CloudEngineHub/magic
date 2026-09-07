@@ -7,10 +7,10 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Service;
 
-use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Application\ModelGateway\MicroAgent\MicroAgentFactory;
 use App\Domain\Design\Entity\ValueObject\ImageMarkIdentifyType;
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;

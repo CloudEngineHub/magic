@@ -8,7 +8,6 @@ declare(strict_types=1);
 namespace App\Application\MCP\Service;
 
 use App\Application\Flow\Service\MagicFlowExecuteAppService;
-use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Application\Kernel\DataIsolationSerializer;
 use App\Application\MCP\BuiltInMCP\BuiltInMCPFactory;
 use App\Domain\Flow\Entity\ValueObject\FlowDataIsolation;
@@ -16,6 +15,7 @@ use App\Domain\MCP\Entity\MCPServerToolEntity;
 use App\Domain\MCP\Entity\ValueObject\MCPDataIsolation;
 use App\Domain\MCP\Entity\ValueObject\ToolSource;
 use App\Domain\MCP\Service\MCPServerToolDomainService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\ErrorCode\MCPErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Flow\DTO\MagicFlowApiChatDTO;

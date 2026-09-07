@@ -7,8 +7,8 @@ declare(strict_types=1);
 
 namespace App\Domain\ModelGateway\Entity\Dto;
 
-use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
+use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use RuntimeException;
 
 class AiAbilityConnectivityTestRequestDTO extends AbstractRequestDTO

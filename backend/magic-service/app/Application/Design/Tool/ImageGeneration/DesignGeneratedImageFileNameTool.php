@@ -7,11 +7,11 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\ImageGeneration;
 
-use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Application\ModelGateway\MicroAgent\MicroAgentFactory;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -70,7 +70,7 @@ final class DesignGeneratedImageFileNameTool
             $modelGatewayDataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
 
             $fileName = '';
-            retry(1, function () use (&$fileName, $nameGeneratorAgent, $modelGatewayDataIsolation, $prompt, $dataIsolation): void {
+            retry(1, function () use (&$fileName, $nameGeneratorAgent, $modelGatewayDataIsolation, $prompt, $dataIsolation, $entity): void {
                 $response = $nameGeneratorAgent->easyCall(
                     dataIsolation: $modelGatewayDataIsolation,
                     userPrompt: "请为以下图片生成提示生成一个简洁的文件名：{$prompt}",

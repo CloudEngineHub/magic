@@ -112,7 +112,7 @@ class ScheduleUsageRecordSubscriberTest extends BaseTest
             self::assertSame('image-model-version', $entity->getModelVersion());
             self::assertSame(0, $entity->getUseToken());
             self::assertSame('business-test', $entity->getBusinessId());
-        self::assertSame(SourceId::IMAGE_GENERATE, $entity->getSourceId());
+            self::assertSame(SourceId::IMAGE_GENERATE, $entity->getSourceId());
             self::assertSame('provider-test', $entity->getProviderId());
             self::assertSame('provider-model-test', $entity->getProviderModelId());
         });
