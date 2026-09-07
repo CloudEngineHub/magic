@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
 import type { SelectedElementInfo } from "../types"
 import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
+import { useStylePanelStore } from "../../../iframe-bridge/contexts/StylePanelContext"
 import BoxModelSection from "../sections/BoxModelSection"
 import FlexGridSection from "../sections/FlexGridSection"
 import ImageSection from "../sections/ImageSection"
@@ -59,6 +60,7 @@ export function ContextMorePopover({
 	onUpdateAttributes,
 }: ContextMorePopoverProps) {
 	const { t } = useTranslation("super")
+	const stylePanelStore = useStylePanelStore()
 	const [open, setOpen] = useState(false)
 	const firstTab =
 		showTypography || isLink
@@ -72,11 +74,6 @@ export function ContextMorePopover({
 						: showShadow
 							? "shadow"
 							: "layout"
-	const [tab, setTab] = useState(firstTab)
-	useEffect(() => {
-		setTab(firstTab)
-	}, [firstTab])
-
 	const tabs = [
 		...(showTypography || isLink ? [{ value: "text", label: t("stylePanel.text") }] : []),
 		...(showBackground ? [{ value: "background", label: t("stylePanel.background") }] : []),
@@ -86,6 +83,23 @@ export function ContextMorePopover({
 		{ value: "layout", label: t("stylePanel.layout") },
 		{ value: "advanced", label: t("stylePanel.customCSS.title") },
 	]
+	const availableTabs = tabs.map((item) => item.value)
+	const selector = selectedElement?.selector
+	const resolvedTab = resolveMoreStylesTab(
+		selector ? stylePanelStore.getMoreStylesTab(selector) : undefined,
+		firstTab,
+		availableTabs,
+	)
+	const [tab, setTab] = useState(resolvedTab)
+
+	useEffect(() => {
+		setTab(resolvedTab)
+	}, [resolvedTab])
+
+	function handleTabChange(value: string) {
+		setTab(value)
+		if (selector) stylePanelStore.rememberMoreStylesTab(selector, value)
+	}
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
@@ -112,7 +126,7 @@ export function ContextMorePopover({
 			>
 				<Tabs
 					value={tab}
-					onValueChange={setTab}
+					onValueChange={handleTabChange}
 					className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-1.5"
 				>
 					<ScrollArea
@@ -236,4 +250,13 @@ export function ContextMorePopover({
 			</EditorPopoverContent>
 		</Popover>
 	)
+}
+
+function resolveMoreStylesTab(
+	cachedTab: string | undefined,
+	firstTab: string,
+	availableTabs: string[],
+) {
+	if (cachedTab && availableTabs.includes(cachedTab)) return cachedTab
+	return firstTab
 }

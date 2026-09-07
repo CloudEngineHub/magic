@@ -8,8 +8,24 @@ const tabsContext = vi.hoisted(() => ({
 	onValueChange: vi.fn<(value: string) => void>(),
 }))
 
+const moreStylesTabCache = vi.hoisted(() => {
+	const tabs = new Map<string, string>()
+	return {
+		tabs,
+		getMoreStylesTab: (selector: string) => tabs.get(selector),
+		rememberMoreStylesTab: (selector: string, tab: string) => {
+			tabs.set(selector, tab)
+		},
+		reset: () => tabs.clear(),
+	}
+})
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({ t: (key: string) => key }),
+}))
+
+vi.mock("../../../../iframe-bridge/contexts/StylePanelContext", () => ({
+	useStylePanelStore: () => moreStylesTabCache,
 }))
 
 vi.mock("@/components/shadcn-ui/button", () => ({
@@ -92,8 +108,17 @@ vi.mock("../../sections/CustomCSSSection", () => ({
 	CustomCSSSection: () => <div data-testid="custom-css-section" />,
 }))
 
+function createSelectedElement(selector: string) {
+	return {
+		selector,
+		tagName: "img",
+		isImageElement: true,
+		computedStyles: {},
+	} as never
+}
+
 const baseProps = {
-	selectedElement: null,
+	selectedElement: createSelectedElement("img.hero"),
 	editorRef: { current: null } as never,
 	disabled: false,
 	showTypography: false,
@@ -112,6 +137,7 @@ const baseProps = {
 
 describe("ContextMorePopover", () => {
 	afterEach(() => {
+		moreStylesTabCache.reset()
 		cleanup()
 	})
 
@@ -144,5 +170,61 @@ describe("ContextMorePopover", () => {
 		fireEvent.click(screen.getByRole("button", { name: "stylePanel.shadow" }))
 		expect(screen.getByTestId("shadow-section")).toBeInTheDocument()
 		expect(screen.queryByTestId("border-section")).not.toBeInTheDocument()
+	})
+
+	it("restores the last tab when the same element opens More Styles again", () => {
+		const { unmount } = render(<ContextMorePopover {...baseProps} />)
+
+		expect(screen.getByTestId("image-section")).toBeInTheDocument()
+		fireEvent.click(screen.getByRole("button", { name: "stylePanel.layout" }))
+		expect(screen.getByTestId("layout-section")).toBeInTheDocument()
+
+		unmount()
+		render(<ContextMorePopover {...baseProps} />)
+
+		expect(screen.getByTestId("layout-section")).toBeInTheDocument()
+		expect(screen.queryByTestId("image-section")).not.toBeInTheDocument()
+	})
+
+	it("keeps More Styles tabs independent per element", () => {
+		const { rerender } = render(<ContextMorePopover {...baseProps} />)
+
+		fireEvent.click(screen.getByRole("button", { name: "stylePanel.layout" }))
+		expect(screen.getByTestId("layout-section")).toBeInTheDocument()
+
+		rerender(
+			<ContextMorePopover
+				{...baseProps}
+				selectedElement={createSelectedElement("img.cover")}
+			/>,
+		)
+
+		expect(screen.getByTestId("image-section")).toBeInTheDocument()
+		expect(screen.queryByTestId("layout-section")).not.toBeInTheDocument()
+
+		rerender(<ContextMorePopover {...baseProps} />)
+
+		expect(screen.getByTestId("layout-section")).toBeInTheDocument()
+	})
+
+	it("falls back to the first tab after the edit session cache is cleared", () => {
+		const { unmount } = render(<ContextMorePopover {...baseProps} />)
+
+		fireEvent.click(screen.getByRole("button", { name: "stylePanel.layout" }))
+		moreStylesTabCache.reset()
+		unmount()
+		render(<ContextMorePopover {...baseProps} />)
+
+		expect(screen.getByTestId("image-section")).toBeInTheDocument()
+		expect(screen.queryByTestId("layout-section")).not.toBeInTheDocument()
+	})
+
+	it("falls back to the first tab when the cached tab is no longer available", () => {
+		moreStylesTabCache.rememberMoreStylesTab("img.hero", "image")
+
+		render(<ContextMorePopover {...baseProps} showImage={false} />)
+
+		expect(screen.getByTestId("background-section")).toBeInTheDocument()
+		expect(screen.queryByTestId("image-section")).not.toBeInTheDocument()
 	})
 })

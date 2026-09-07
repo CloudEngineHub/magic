@@ -162,6 +162,9 @@ export class StylePanelStore {
 	/** 当前激活的样式区域 */
 	activeSection: "typography" | "layout" | "background" | "border" | null = null
 
+	/** Last More Styles tab per element in this edit session */
+	moreStylesTabBySelector = new Map<string, string>()
+
 	/** 历史状态 */
 	historyState: HistoryStateInfo = {
 		canUndo: false,
@@ -286,6 +289,22 @@ export class StylePanelStore {
 	}
 
 	/**
+	 * Remember the More Styles tab for one element.
+	 */
+	rememberMoreStylesTab(selector: string, tab: string) {
+		if (!selector || !tab) return
+		this.moreStylesTabBySelector.set(selector, tab)
+	}
+
+	/**
+	 * Read the cached More Styles tab for one element.
+	 */
+	getMoreStylesTab(selector: string): string | undefined {
+		if (!selector) return undefined
+		return this.moreStylesTabBySelector.get(selector)
+	}
+
+	/**
 	 * 更新历史状态
 	 */
 	updateHistoryState(state: HistoryStateInfo) {
@@ -302,6 +321,7 @@ export class StylePanelStore {
 		this.isSelectionMode = false
 		this.isPanelExpanded = true
 		this.activeSection = null
+		this.moreStylesTabBySelector.clear()
 		this.historyState = {
 			canUndo: false,
 			canRedo: false,
