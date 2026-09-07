@@ -18,6 +18,8 @@ use GuzzleHttp\RequestOptions;
 use RuntimeException;
 use Throwable;
 
+use function Hyperf\Translation\trans;
+
 /**
  * MCP Authorization 能力探测服务。
  *
