@@ -228,6 +228,18 @@ function VirtualMessageContent({
 	)
 }
 
+/**
+ * The height each row had the last time it was measured on screen, keyed by message.
+ *
+ * A row the virtualizer scrolls out of range is unmounted, and on the way back its Markdown
+ * subtree paints one commit before producing any DOM. The virtualizer measures that commit and
+ * records the row as collapsed, which shortens the projected total, which widens the range at the
+ * bottom, which mounts more rows that then settle to their real height and shrink the range again.
+ * Holding the remembered height as a floor keeps the empty commit from ever being measured, so the
+ * total stops depending on which rows happen to be mounted and the list can reach a fixed point.
+ */
+const lastMeasuredRowHeights = new Map<string, number>()
+
 function VirtualMessageRow({
 	item,
 	topicId,
@@ -252,6 +264,30 @@ function VirtualMessageRow({
 	const selected = Boolean(selectedKeys?.has(item.turnKey))
 	const selectable = exportMode && item.exportSelectable
 	const disabled = selectable && !selected && Boolean(limitReached)
+	const contentRef = useRef<HTMLDivElement | null>(null)
+	const [heightFloor, setHeightFloor] = useState(() => lastMeasuredRowHeights.get(item.key) ?? 0)
+
+	/**
+	 * The floor tracks the content, so a row that genuinely shrinks still shrinks — but never on
+	 * the first measurement after a mount, which is the empty commit the floor exists to cover.
+	 */
+	useEffect(() => {
+		const content = contentRef.current
+		if (!content || typeof ResizeObserver === "undefined") return undefined
+		let measured = false
+		const observer = new ResizeObserver(() => {
+			const height = content.offsetHeight
+			if (!measured) {
+				measured = true
+				if (height <= (lastMeasuredRowHeights.get(item.key) ?? 0)) return
+			}
+			if (height <= 0) return
+			lastMeasuredRowHeights.set(item.key, height)
+			setHeightFloor(height)
+		})
+		observer.observe(content)
+		return () => observer.disconnect()
+	}, [item.key])
 
 	return (
 		<div
@@ -260,7 +296,7 @@ function VirtualMessageRow({
 			data-virtual-message-kind={item.isUser ? "group" : "item"}
 			// A zero-height child cannot be measured reliably. Keep dynamic sidecar rows
 			// measurable while their Store-backed content resolves, then let content expand it.
-			style={{ minHeight: 1 }}
+			style={{ minHeight: Math.max(1, heightFloor) }}
 			className={cn(
 				"relative w-full",
 				selectable &&
@@ -288,7 +324,7 @@ function VirtualMessageRow({
 					/>
 				</div>
 			) : null}
-			<div className={cn("min-w-0", selected && "opacity-95")}>
+			<div ref={contentRef} className={cn("min-w-0", selected && "opacity-95")}>
 				{item.isUser ? (
 					<>
 						<div
@@ -353,6 +389,10 @@ function VirtualMessageListInner({
 	const stickyInitialMeasurementSettledRef = useRef(false)
 	const stickyLastScrollOffsetRef = useRef<number | null>(null)
 	const lastStickySequenceSignatureRef = useRef<string | null>(null)
+	const trailingSpaceRef = useRef<number | null>(null)
+	const canvasHeightRef = useRef<number | null>(null)
+	const canvasWidthRef = useRef<number | null>(null)
+	const virtualizerChangeFrameRef = useRef<number | null>(null)
 	const [activeStickyIndex, setActiveStickyIndex] = useState(NO_STICKY_INDEX)
 
 	const stickyTopOffset = stickyTopOffsetProp ?? getStickyMessageTopOffset(isMobile)
@@ -389,6 +429,9 @@ function VirtualMessageListInner({
 		stickyInitialMeasurementSettledRef.current = false
 		stickyLastScrollOffsetRef.current = null
 		lastStickySequenceSignatureRef.current = null
+		trailingSpaceRef.current = null
+		canvasHeightRef.current = null
+		canvasWidthRef.current = null
 	}
 
 	const sequenceSignature = items.map((item) => item.key).join("\u0000")
@@ -410,18 +453,42 @@ function VirtualMessageListInner({
 	 * after it, and the caller renders its message column's bottom padding there — inside the same
 	 * scroll element, outside virtua's projected size. Aligning the last row's bottom to the
 	 * viewport bottom therefore stops short of the real scroll end by exactly that strip.
-	 * Measuring the scroll element keeps the caller's padding from having to be restated here.
+	 * Measuring the caller's own boxes keeps that padding from having to be restated here.
 	 *
-	 * `handle.scrollSize` cannot serve this: virtua reports its own projected total size, which
-	 * equals `projectedSize` by construction, so the difference would always collapse to zero.
+	 * It has to be read from the box model. Deriving it as `scrollHeight - startMargin -
+	 * projectedSize` subtracts a virtua cache value from a DOM layout value, and during a
+	 * measurement burst the two describe different moments — the difference then oscillates
+	 * between zero and the real strip. That value is handed to `scrollToIndex` as `offset`, so
+	 * every follow write would land somewhere slightly different, which reads as the list shaking.
+	 * The strip itself is static, so measure it once and hold it until the layout can have changed.
+	 *
+	 * `handle.scrollSize` cannot serve this either: virtua reports its own projected total size,
+	 * which equals `projectedSize` by construction, so the difference always collapses to zero.
 	 */
 	const getTrailingSpace = useCallback(() => {
-		const handle = handleRef.current
+		if (trailingSpaceRef.current !== null) return trailingSpaceRef.current
+
+		const canvas = canvasRef.current
 		const viewport = scrollRef.current
-		const lastIndex = rowCountRef.current - 1
-		if (!handle || !viewport || lastIndex < 0) return 0
-		const projectedSize = handle.getItemOffset(lastIndex) + handle.getItemSize(lastIndex)
-		return Math.max(0, viewport.scrollHeight - startMarginRef.current - projectedSize)
+		if (!canvas || !viewport || typeof getComputedStyle !== "function") return 0
+
+		let trailing = 0
+		for (
+			let node: HTMLElement | null = canvas;
+			node && node !== viewport;
+			node = node.parentElement
+		) {
+			const style = getComputedStyle(node)
+			trailing +=
+				(parseFloat(style.paddingBottom) || 0) +
+				(parseFloat(style.borderBottomWidth) || 0) +
+				(parseFloat(style.marginBottom) || 0)
+		}
+		// A scroll container's own bottom padding is part of its scrollable overflow.
+		trailing += parseFloat(getComputedStyle(viewport).paddingBottom) || 0
+
+		trailingSpaceRef.current = Math.max(0, trailing)
+		return trailingSpaceRef.current
 	}, [])
 
 	const adapter = useMemo<MessageListScrollAdapter>(
@@ -660,18 +727,62 @@ function VirtualMessageListInner({
 		onVirtualizerChange?.(adapter, false)
 	}, [adapter, onVirtualizerChange])
 
+	// Read through a ref so a streaming toggle cannot tear down and re-create the observer below.
+	// `observe()` delivers an entry on subscription, so re-creating it re-fires the growth signal.
+	const allowResizeStickySyncRef = useRef(allowResizeStickySync)
+	allowResizeStickySyncRef.current = allowResizeStickySync
+
+	/**
+	 * Coalesce the growth signal to one delivery per frame. Its consumer answers with a scroll
+	 * request that virtua keeps re-deriving for 150ms after the last measurement, so a per-tick
+	 * delivery only re-arms that request — and the scroll it performs is itself what produces the
+	 * next tick.
+	 */
+	const scheduleVirtualizerChange = useMemoizedFn(() => {
+		if (typeof requestAnimationFrame !== "function") {
+			notifyVirtualizerChange()
+			return
+		}
+		if (virtualizerChangeFrameRef.current !== null) return
+		virtualizerChangeFrameRef.current = requestAnimationFrame(() => {
+			virtualizerChangeFrameRef.current = null
+			notifyVirtualizerChange()
+		})
+	})
+
 	// The canvas wraps the virtualizer container, whose height is the projected total size.
 	// Streaming growth, late measurement and the footer all surface through this one signal.
 	useEffect(() => {
 		const canvas = canvasRef.current
 		if (!canvas || typeof ResizeObserver === "undefined") return undefined
-		const observer = new ResizeObserver(() => {
-			if (allowResizeStickySync) scheduleStickySync()
-			notifyVirtualizerChange()
+		const observer = new ResizeObserver((entries) => {
+			const box = entries[0]?.contentRect
+			const width = box ? box.width : canvas.offsetWidth
+			const height = box ? box.height : canvas.offsetHeight
+			const widthChanged = canvasWidthRef.current !== width
+			const heightChanged = canvasHeightRef.current !== height
+			canvasWidthRef.current = width
+			canvasHeightRef.current = height
+
+			// A responsive breakpoint is the only thing that can move the trailing strip.
+			if (widthChanged) trailingSpaceRef.current = null
+			// The subscription entry and a width-only reflow both arrive here without the projected
+			// size having moved, and neither is the growth this signal exists to report. The very
+			// first entry still passes, because the null seed above counts as a change.
+			if (!widthChanged && !heightChanged) return
+
+			if (allowResizeStickySyncRef.current) scheduleStickySync()
+			if (heightChanged) scheduleVirtualizerChange()
 		})
 		observer.observe(canvas)
-		return () => observer.disconnect()
-	}, [allowResizeStickySync, notifyVirtualizerChange, scheduleStickySync])
+		return () => {
+			observer.disconnect()
+			if (virtualizerChangeFrameRef.current !== null) {
+				cancelAnimationFrame(virtualizerChangeFrameRef.current)
+				virtualizerChangeFrameRef.current = null
+			}
+		}
+	}, [scheduleStickySync, scheduleVirtualizerChange])
 
 	useLayoutEffect(() => {
 		if (lastStickySequenceSignatureRef.current === sequenceSignature) return
@@ -734,8 +845,15 @@ function VirtualMessageListInner({
 		useMobileStickyOverlay,
 	])
 
+	/**
+	 * The canvas is deliberately auto-height. It has to track the virtualizer container's
+	 * projected total size, because that box is the only thing the ResizeObserver above can read
+	 * growth from. Constraining it (`h-full`) pins it to the viewport, and the list then silently
+	 * stops following streaming output — the rows still overflow and scroll, so nothing else looks
+	 * wrong. Give the column a `min-h-*`, never this element a fixed height.
+	 */
 	return (
-		<div ref={canvasRef} data-testid="virtual-message-canvas" className="relative w-full h-full">
+		<div ref={canvasRef} data-testid="virtual-message-canvas" className="relative w-full">
 			{viewport ? (
 				<StickyIndexContext.Provider value={activeStickyIndex}>
 					<Virtualizer

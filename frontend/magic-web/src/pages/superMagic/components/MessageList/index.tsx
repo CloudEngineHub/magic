@@ -904,7 +904,10 @@ const MessageList = observer(
 							 */}
 							<div
 								className={cn(
-									"mx-auto block min-w-[unset] max-w-3xl pb-2 h-full",
+									// `min-h-full`, not `h-full`: the empty state still fills the
+									// viewport, but a growing list can push this column past it so
+									// the virtualizer canvas inside keeps its measurable height.
+									"mx-auto block min-h-full min-w-[unset] max-w-3xl pb-2",
 									isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[50px]",
 								)}
 							>

@@ -100,12 +100,23 @@ vi.mock("react-i18next", async (importOriginal) => {
 })
 
 class ControlledResizeObserver {
+	callback: ResizeObserverCallback
+
 	constructor(callback: ResizeObserverCallback) {
-		virtualState.resizeCallbacks.push(callback)
+		this.callback = callback
 	}
 
-	observe = vi.fn()
-	disconnect = vi.fn()
+	// Rows observe their own content to hold a height floor across a remount. Only the canvas
+	// observer is registered here, so the suite keeps driving layout growth through one callback.
+	observe = vi.fn((target: Element) => {
+		if ((target as HTMLElement).dataset?.testid !== "virtual-message-canvas") return
+		virtualState.resizeCallbacks.push(this.callback)
+	})
+
+	disconnect = vi.fn(() => {
+		const index = virtualState.resizeCallbacks.indexOf(this.callback)
+		if (index !== -1) virtualState.resizeCallbacks.splice(index, 1)
+	})
 }
 
 function message(id: string, role: "user" | "assistant" | "tool"): SuperMagicMessageItem {
@@ -157,6 +168,19 @@ function flushAnimationFrame() {
 	const callbacks = virtualState.animationFrameCallbacks.splice(0)
 	act(() => {
 		callbacks.forEach((callback) => callback(performance.now()))
+	})
+}
+
+/**
+ * jsdom never lays anything out, so the canvas box the component dedupes on has to be supplied
+ * through the observer entry the same way a browser would report it.
+ */
+function resizeCanvas(box: { width?: number; height: number }) {
+	const entries = [
+		{ contentRect: { width: box.width ?? 600, height: box.height } },
+	] as unknown as Array<ResizeObserverEntry>
+	act(() => {
+		virtualState.resizeCallbacks.forEach((callback) => callback(entries, {} as ResizeObserver))
 	})
 }
 
@@ -542,10 +566,75 @@ describe("VirtualMessageList", () => {
 		})
 
 		expect(onVirtualizerChange).not.toHaveBeenCalled()
-		act(() => {
-			virtualState.resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver))
-		})
+		resizeCanvas({ height: 200 })
+		flushAnimationFrame()
 		expect(onVirtualizerChange).toHaveBeenCalledTimes(1)
+	})
+
+	it("coalesces a growth burst into one virtualizer change per frame", () => {
+		// The consumer answers this signal with a scroll request that virtua keeps re-deriving for
+		// 150ms. Delivering it once per measurement frame would re-arm that request before it can
+		// expire, and the scroll it performs is what produces the next measurement.
+		const onVirtualizerChange = vi.fn()
+		renderList([message("user-0", "user"), message("assistant-1", "assistant")], {
+			onVirtualizerChange,
+		})
+
+		resizeCanvas({ height: 200 })
+		resizeCanvas({ height: 320 })
+		resizeCanvas({ height: 480 })
+		expect(onVirtualizerChange).not.toHaveBeenCalled()
+
+		flushAnimationFrame()
+		expect(onVirtualizerChange).toHaveBeenCalledTimes(1)
+	})
+
+	it("does not report growth for an unchanged canvas box", () => {
+		// `observe()` delivers an entry on subscription and a width-only reflow reports no new
+		// projected size; neither is growth, and answering them re-enters the scroll writer.
+		const onVirtualizerChange = vi.fn()
+		renderList([message("user-0", "user"), message("assistant-1", "assistant")], {
+			onVirtualizerChange,
+		})
+
+		resizeCanvas({ height: 200 })
+		flushAnimationFrame()
+		expect(onVirtualizerChange).toHaveBeenCalledTimes(1)
+
+		resizeCanvas({ height: 200 })
+		resizeCanvas({ height: 200 })
+		flushAnimationFrame()
+		expect(onVirtualizerChange).toHaveBeenCalledTimes(1)
+
+		resizeCanvas({ width: 400, height: 200 })
+		flushAnimationFrame()
+		expect(onVirtualizerChange).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps one canvas observer across a streaming toggle", () => {
+		// Re-subscribing would fire `observe()`'s entry again, which reads as growth that never
+		// happened and fires a scroll write on every toggle of the streaming gate.
+		const projection = buildVirtualMessageProjection([
+			message("user-0", "user"),
+			message("assistant-1", "assistant"),
+		])
+		const viewport = createViewport()
+		const props = {
+			items: projection.items,
+			userIndices: projection.userIndices,
+			isMobile: false,
+			getScrollElement: () => viewport,
+			renderNode: ({ item }: { item: (typeof projection.items)[number] }) => (
+				<span>{item.key}</span>
+			),
+		}
+		const { rerender } = render(<VirtualMessageList {...props} allowResizeStickySync={false} />)
+		expect(virtualState.resizeCallbacks).toHaveLength(1)
+
+		rerender(<VirtualMessageList {...props} allowResizeStickySync />)
+		rerender(<VirtualMessageList {...props} allowResizeStickySync={false} />)
+
+		expect(virtualState.resizeCallbacks).toHaveLength(1)
 	})
 
 	it("coalesces a ResizeObserver burst into one follow-up sticky sync", () => {
@@ -753,19 +842,35 @@ describe("VirtualMessageList", () => {
 	})
 
 	it("folds the space below the virtualizer into a scroll-to-last write", () => {
-		// Two rows of 100 sit after a 50px start margin, so virtua projects 250. The caller's
-		// message column adds 8px of bottom padding below the virtualizer, and without it the
-		// write lands 8px above the scroll end. Only the scroll element knows about that strip —
-		// virtua's own `scrollSize` reports the projected size and nothing else.
-		const viewport = createViewport(258)
+		// The caller's message column adds 8px of bottom padding below the virtualizer, inside the
+		// same scroll element. Without folding it in, a bottom-aligned write on the last row lands
+		// 8px above the scroll end — virtua's own `scrollSize` reports the projected size and
+		// nothing else. The strip is read from the boxes between the canvas and the scroll
+		// element, so the column has to actually be one of them here.
+		const viewport = createViewport()
+		const column = document.createElement("div")
+		column.style.paddingBottom = "8px"
+		viewport.appendChild(column)
+
+		const projection = buildVirtualMessageProjection([
+			message("user-0", "user"),
+			message("assistant-1", "assistant"),
+		])
 		const virtualizerRef = { current: null } as {
 			current: import("../message-list-scroll-adapter").MessageListScrollAdapter | null
 		}
-		renderList([message("user-0", "user"), message("assistant-1", "assistant")], {
-			virtualizerRef,
-			getScrollElement: () => viewport,
-			startMargin: 50,
-		})
+		render(
+			<VirtualMessageList
+				items={projection.items}
+				userIndices={projection.userIndices}
+				isMobile={false}
+				virtualizerRef={virtualizerRef}
+				getScrollElement={() => viewport}
+				startMargin={50}
+				renderNode={({ item }) => <span>{item.key}</span>}
+			/>,
+			{ container: column },
+		)
 
 		virtualizerRef.current?.scrollToIndex(1, { align: "end" })
 		expect(virtualState.scrollToIndexCalls).toEqual([[1, { align: "end", offset: 8 }]])
