@@ -765,9 +765,6 @@ readonly class VideoOperationAppService
         if ($usageTokens['total_tokens'] !== null) {
             $businessParams['total_tokens'] = $usageTokens['total_tokens'];
         }
-        if (isset($usageTokens['billing_token_usage'])) {
-            $businessParams['billing_token_usage'] = $usageTokens['billing_token_usage'];
-        }
 
         $event->setOrganizationCode($operation->getOrganizationCode());
         $event->setUserId($operation->getUserId());
@@ -933,7 +930,7 @@ readonly class VideoOperationAppService
      * 解析视频任务 provider 回包中的 token 用量（如火山方舟 succeeded 时的 usage.completion_tokens）。
      * 无字段或非法结构时返回 null，计费侧可回退到按时长等规则。
      *
-     * @return array{completion_tokens: ?int, total_tokens: ?int, billing_token_usage?: array<string, int>}
+     * @return array{completion_tokens: ?int, total_tokens: ?int}
      */
     private function resolveVideoProviderUsageTokens(VideoQueueOperationEntity $operation): array
     {
@@ -947,39 +944,6 @@ readonly class VideoOperationAppService
         }
         $completion = $usage['completion_tokens'] ?? null;
         $total = $usage['total_tokens'] ?? null;
-        $geminiInput = $usage['total_input_tokens'] ?? null;
-        $geminiOutput = $usage['total_output_tokens'] ?? null;
-        $geminiThought = $usage['total_thought_tokens'] ?? null;
-        $modalityUsage = is_array($usage['output_tokens_by_modality'] ?? null) ? $usage['output_tokens_by_modality'] : [];
-        if ($geminiInput !== null || $geminiOutput !== null || $geminiThought !== null || $modalityUsage !== []) {
-            $inputTokens = is_numeric($geminiInput) ? max(0, (int) $geminiInput) : 0;
-            $outputTokens = is_numeric($geminiOutput) ? max(0, (int) $geminiOutput) : 0;
-            $thoughtTokens = is_numeric($geminiThought) ? max(0, (int) $geminiThought) : 0;
-            $outputTextTokens = 0;
-            $outputVideoTokens = 0;
-            foreach ($modalityUsage as $modalityItem) {
-                if (! is_array($modalityItem) || ! is_numeric($modalityItem['tokens'] ?? null)) {
-                    continue;
-                }
-                $tokens = max(0, (int) $modalityItem['tokens']);
-                match (strtolower(trim((string) ($modalityItem['modality'] ?? ''))) ) {
-                    'text' => $outputTextTokens += $tokens,
-                    'video' => $outputVideoTokens += $tokens,
-                    default => null,
-                };
-            }
-
-            return [
-                'completion_tokens' => $outputTokens,
-                'total_tokens' => $inputTokens + $outputTokens,
-                'billing_token_usage' => [
-                    'input_tokens' => $inputTokens,
-                    'output_text_tokens' => $outputTextTokens,
-                    'output_video_tokens' => $outputVideoTokens,
-                    'thought_tokens' => $thoughtTokens,
-                ],
-            ];
-        }
 
         return [
             'completion_tokens' => $completion !== null ? max(0, (int) $completion) : null,
