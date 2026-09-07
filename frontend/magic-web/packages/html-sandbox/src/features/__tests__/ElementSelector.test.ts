@@ -155,6 +155,25 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("omits computed offsets when the element has no inline position", () => {
+			container.innerHTML = '<div id="static">Content</div>'
+			const element = container.querySelector("#static") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					computedStyles: expect.not.objectContaining({
+						top: expect.anything(),
+						left: expect.anything(),
+						right: expect.anything(),
+						bottom: expect.anything(),
+					}),
+				}),
+			)
+		})
+
 		it("should keep authored inline width available for the editor", () => {
 			container.innerHTML = '<div id="full-width" style="width: 100%;">Content</div>'
 			const element = container.querySelector("#full-width") as HTMLElement
