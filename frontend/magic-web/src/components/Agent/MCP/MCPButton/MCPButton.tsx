@@ -13,7 +13,7 @@ import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import AgentSettings from "../AgentSettings"
 import MobileMCPPluginsSheet from "./MobileMCPPluginsSheet"
 import { cn } from "@/utils/cn"
-import { Plug } from "lucide-react"
+import { Plug, Unplug } from "lucide-react"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Switch } from "@/components/shadcn-ui/switch"
@@ -287,37 +287,46 @@ function MCPButton(props?: MCPButtonProps) {
 				{t("mcp.button.addedConnectors")}
 			</div>
 			<div className="max-h-[240px] overflow-y-auto px-1.5 pb-1">
-				{displayMCPList.map((item) => (
-					<div
-						className="flex items-center gap-2.5 rounded-md px-2 py-2 transition-colors hover:bg-accent/60"
-						key={item.id}
-					>
-						<MagicImage
-							className="h-9 w-9 flex-none overflow-hidden rounded-lg"
-							src={item?.icon}
-							alt={item?.name}
-							fallback={
-								<div className="h-9 w-9 flex-none overflow-hidden rounded-lg">
-									<IconMCP size="100%" />
+				{displayMCPList.length > 0 ? (
+					displayMCPList.map((item) => (
+						<div
+							className="flex items-center gap-2.5 rounded-md px-2 py-2 transition-colors hover:bg-accent/60"
+							key={item.id}
+						>
+							<MagicImage
+								className="h-9 w-9 flex-none overflow-hidden rounded-lg"
+								src={item?.icon}
+								alt={item?.name}
+								fallback={
+									<div className="h-9 w-9 flex-none overflow-hidden rounded-lg">
+										<IconMCP size="100%" />
+									</div>
+								}
+							/>
+							<div className="min-w-0 flex-1">
+								<div className="line-clamp-1 text-sm font-medium leading-5 text-foreground">
+									{item.name}
 								</div>
-							}
-						/>
-						<div className="min-w-0 flex-1">
-							<div className="line-clamp-1 text-sm font-medium leading-5 text-foreground">
-								{item.name}
+								<div className="line-clamp-1 text-xs leading-4 text-muted-foreground">
+									{item?.description || t("mcp.card.desc")}
+								</div>
 							</div>
-							<div className="line-clamp-1 text-xs leading-4 text-muted-foreground">
-								{item?.description || t("mcp.card.desc")}
-							</div>
+							<Switch
+								aria-label={t("mcp.button.toggleConnector", { name: item.name })}
+								checked={enabledMCPIds.has(item.id)}
+								loading={!activeMCPAccess.initialized || switchLoadingIds.has(item.id)}
+								onCheckedChange={(checked) => void toggleMCPEnabled(item.id, checked)}
+							/>
 						</div>
-						<Switch
-							aria-label={t("mcp.button.toggleConnector", { name: item.name })}
-							checked={enabledMCPIds.has(item.id)}
-							loading={!activeMCPAccess.initialized || switchLoadingIds.has(item.id)}
-							onCheckedChange={(checked) => void toggleMCPEnabled(item.id, checked)}
-						/>
+					))
+				) : (
+					<div className="flex min-h-[120px] flex-col items-center justify-center gap-2 py-6">
+						<Unplug className="size-8 text-muted-foreground/50" aria-hidden="true" />
+						<div className="text-sm text-muted-foreground">
+							{t("mcp.button.emptyConnectors")}
+						</div>
 					</div>
-				))}
+				)}
 			</div>
 			<div className="border-t border-border p-1.5">
 				<button

@@ -78,7 +78,12 @@ function MobileMCPConnectorItem({
 					{item.description || t("mcp.card.desc")}
 				</div>
 			</div>
-			<div onClick={(event) => event.stopPropagation()}>{action}</div>
+			<div
+				className="flex shrink-0 self-center items-center"
+				onClick={(event) => event.stopPropagation()}
+			>
+				{action}
+			</div>
 		</div>
 	)
 }
@@ -200,7 +205,7 @@ function MobileMCPPluginsSheet({
 	const tabs = [
 		{
 			value: CONNECTOR_MARKET_GROUPS.added,
-			label: tMarket("connectors.added"),
+			label: tMarket("connectors.addedList"),
 			testId: "mobile-mcp-plugins-sheet-added-tab",
 		},
 		{
@@ -336,6 +341,7 @@ function MobileMCPPluginsSheet({
 						onChange={setActiveTab}
 						variant="background"
 						showTooltip={false}
+						enableHoverBackground={false}
 						className="h-9 w-max max-w-full rounded-full bg-muted-foreground/15 p-[3px]"
 						buttonClassName="h-[30px] flex-none rounded-full px-4 text-[14px] leading-5 data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=inactive]:font-normal data-[state=inactive]:text-muted-foreground"
 						indicatorClassName="inset-y-[3px] rounded-full border-0 bg-card shadow-[0px_8px_25px_0px_rgba(0,0,0,0.10)]"
@@ -355,24 +361,26 @@ function MobileMCPPluginsSheet({
 						<div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3 pt-3">
 							{displayMCPList.length > 0 ? (
 								<div className="flex flex-col gap-2">
-									{displayMCPList.map((item) => (
-										<MobileMCPConnectorItem
-											key={item.id}
-											item={item}
-											action={
-												<Switch
-													aria-label={t("mcp.button.toggleConnector", {
-														name: item.name,
-													})}
-													checked={enabledMCPIds.has(item.id)}
-													loading={switchLoadingIds.has(item.id)}
-													onCheckedChange={(checked) =>
-														void toggleMCPEnabled(item.id, checked)
-													}
-												/>
+							{displayMCPList.map((item) => (
+								<MobileMCPConnectorItem
+									key={item.id}
+									item={item}
+									onOpenDetail={openConnectorDetail}
+									action={
+										<Switch
+											aria-label={t("mcp.button.toggleConnector", {
+												name: item.name,
+											})}
+											checked={enabledMCPIds.has(item.id)}
+											loading={switchLoadingIds.has(item.id)}
+											className="self-center translate-y-0 h-[28px] w-[48px] data-[state=checked]:bg-foreground data-[state=unchecked]:bg-border [&_[data-slot=switch-thumb]]:size-6 [&_[data-slot=switch-thumb]]:bg-background [&_[data-slot=switch-thumb]]:translate-y-0 [&_[data-slot=switch-thumb][data-state=checked]]:translate-x-[calc(100%-2px)]"
+											onCheckedChange={(checked) =>
+												void toggleMCPEnabled(item.id, checked)
 											}
 										/>
-									))}
+									}
+								/>
+							))}
 								</div>
 							) : (
 								<div
@@ -413,7 +421,7 @@ function MobileMCPPluginsSheet({
 							</Button>
 						</div>
 					) : (
-						<div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1">
+						<div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3 pt-3">
 							{marketList.length > 0 ? (
 								<div className="flex flex-col gap-2">
 									{marketList.map((item) => (
