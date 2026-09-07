@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { IMCPItem } from "@/components/Agent/MCP/types"
+import { FlowApi } from "@/apis"
+import { generateCallbackUrl } from "@/components/Agent/MCP/helpers"
 import { fetchConnectorAuthData } from "@/components/Agent/MCP/AgentSettings/AgentPanel/MCPPanel/helpers"
 import type { MCPOAuthStatus } from "@/components/Agent/MCP/service/MCPOAuthService"
 import type { GetAvailableMCPListResponse } from "@/types/flow"
@@ -66,6 +68,20 @@ export function useConnectorActions() {
 		})
 	}, [])
 
+	const revokeConnectorAuth = useCallback(async (item: IMCPItem) => {
+		const userSettings = await FlowApi.getMCPUserSettings(
+			{
+				code: item.id,
+				redirectUrl: generateCallbackUrl(),
+			},
+			{
+				enableErrorMessagePrompt: false,
+			},
+		)
+
+		if (userSettings?.auth_type) await FlowApi.unBindMCPOAuth(item.id)
+	}, [])
+
 	const checkConnectorAuth = useCallback(
 		async (item: IMCPItem, options: ConnectorStatusChangeOptions = {}) => {
 			const { userSettings, mcpDetails, requiresAuth } = await fetchConnectorAuthData(item)
@@ -118,6 +134,7 @@ export function useConnectorActions() {
 			try {
 				if (selectedIds.has(item.id)) {
 					const nextItems = selectedItems.filter((candidate) => candidate.id !== item.id)
+					await revokeConnectorAuth(item)
 					await access.save({
 						selectedIds: new Set(nextItems.map((candidate) => candidate.id)),
 						items: nextItems,
@@ -140,7 +157,7 @@ export function useConnectorActions() {
 				inFlightIdsRef.current.delete(item.id)
 			}
 		},
-		[access, checkConnectorAuth, selectedIds, selectedItems, setLoading],
+		[access, checkConnectorAuth, revokeConnectorAuth, selectedIds, selectedItems, setLoading],
 	)
 
 	const onConfigure = useCallback(

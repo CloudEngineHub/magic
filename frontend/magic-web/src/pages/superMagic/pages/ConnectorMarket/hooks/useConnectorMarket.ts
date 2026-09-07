@@ -25,7 +25,12 @@ export function useConnectorMarket(
 	const [hasMore, setHasMore] = useState(false)
 	const pageRef = useRef(1)
 	const requestIdRef = useRef(0)
+	const addedItemsRef = useRef(addedItems)
 	const debouncedSearchQuery = useDebounce(searchQuery, { wait: 350 })
+
+	useEffect(() => {
+		addedItemsRef.current = addedItems
+	}, [addedItems])
 
 	const fetchConnectors = useCallback(
 		async (name: string, currentGroup: ConnectorMarketGroup, page = 1, append = false) => {
@@ -40,7 +45,7 @@ export function useConnectorMarket(
 				let nextHasMore = false
 				if (currentGroup === CONNECTOR_MARKET_GROUPS.added) {
 					const keyword = name.trim().toLowerCase()
-					response = addedItems.filter((item) => {
+					response = addedItemsRef.current.filter((item) => {
 						if (!keyword) return true
 						return [item.name, item.description].some((value) =>
 							value?.toLowerCase().includes(keyword),
@@ -85,11 +90,17 @@ export function useConnectorMarket(
 				}
 			}
 		},
-		[addedItems],
+		[],
 	)
 
 	useEffect(() => {
 		if (!enabled) return
+		if (group === CONNECTOR_MARKET_GROUPS.added) return
+		void fetchConnectors(debouncedSearchQuery, group)
+	}, [debouncedSearchQuery, enabled, fetchConnectors, group])
+
+	useEffect(() => {
+		if (!enabled || group !== CONNECTOR_MARKET_GROUPS.added) return
 		void fetchConnectors(debouncedSearchQuery, group)
 	}, [addedItems, debouncedSearchQuery, enabled, fetchConnectors, group])
 

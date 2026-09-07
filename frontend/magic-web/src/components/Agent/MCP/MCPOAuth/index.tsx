@@ -338,13 +338,13 @@ export default function MCPOAuth(props: MCPEditor) {
 		const description = mcpInfo?.description || t("mcp.card.desc")
 
 		return (
-			<div className="flex min-h-0 min-w-0 flex-col px-3 pb-3 pt-1">
-				<div className="relative flex items-center justify-end pb-1">
+			<div className="flex min-h-0 min-w-0 flex-col px-3 pb-3 pt-2">
+				<div className="relative flex h-7 items-center justify-end pb-1">
 					<Button
 						type="button"
 						variant="ghost"
 						size="icon"
-						className="size-7 rounded-md text-muted-foreground"
+						className="absolute right-0 top-0 size-7 rounded-md text-muted-foreground"
 						onClick={onClose}
 						data-testid="connector-auth-close-button"
 					>
