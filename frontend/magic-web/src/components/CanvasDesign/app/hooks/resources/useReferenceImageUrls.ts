@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
-import { useCanvas } from "../../providers/CanvasProvider"
-import { useCanvasEvent } from "../canvas"
+import { useOptionalCanvas } from "../../providers/CanvasProvider"
+import { useCanvasEventWithInstance } from "../canvas"
 import { areCanvasHostResourceReferencesSame } from "../../../runtime/shared/path/canvasResourcePath"
 import type { ImageInfo } from "../../../runtime/resources/image/ImageResourceManager"
 import { TOOLTIP_PREVIEW_MIN_SIZE } from "../../../runtime/resources/image/imagePreviewUtils"
@@ -71,7 +71,7 @@ export function useReferenceImageUrls(
 ): ReferenceImageUrlInfo {
 	const eagerFullUrl = options?.eagerFullUrl ?? false
 	const enabled = options?.enabled ?? true
-	const { canvas } = useCanvas()
+	const canvas = useOptionalCanvas()
 	const [open, setOpen] = useState(false)
 	const lowImageReleaseRef = useRef<(() => void) | null>(null)
 	const lowImageRequestIdRef = useRef(0)
@@ -250,7 +250,8 @@ export function useReferenceImageUrls(
 	}, [canvas, enabled, path, eagerFullUrl, releaseLowImageUrl])
 
 	// 监听图片资源加载完成事件，确保 ossSrc 可用后更新 tooltip URL
-	useCanvasEvent(
+	useCanvasEventWithInstance(
+		canvas,
 		"resource:image:loaded",
 		useCallback(
 			({ data }) => {
@@ -267,7 +268,8 @@ export function useReferenceImageUrls(
 		),
 	)
 
-	useCanvasEvent(
+	useCanvasEventWithInstance(
+		canvas,
 		"resource:image:load-failed",
 		useCallback(
 			({ data }) => {
@@ -307,7 +309,8 @@ export function useReferenceImageUrls(
 	)
 
 	// 监听资源加载完成事件，刷新 low 档位 URL
-	useCanvasEvent(
+	useCanvasEventWithInstance(
+		canvas,
 		"resource:image:loaded",
 		useCallback(
 			({ data }) => {
@@ -321,7 +324,8 @@ export function useReferenceImageUrls(
 		),
 	)
 
-	useCanvasEvent(
+	useCanvasEventWithInstance(
+		canvas,
 		"resource:remote-load-deferral-released",
 		useCallback(
 			({ data }) => {

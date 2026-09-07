@@ -1,6 +1,6 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react"
+import { useLayoutEffect, useRef } from "react"
 import { LoaderCircle } from "lucide-react"
-import { MediaPreviewTooltip } from "@/components/base/MediaPreview"
+import { MediaPreviewTrigger, type MediaPreviewSource } from "@/components/base/MediaPreview"
 import { cn } from "../../../runtime/shared/lib/utils"
 import { ReferenceSlotVideoIcon } from "../../primitives/icons/index"
 import styles from "../../editors/message/index.module.css"
@@ -33,7 +33,6 @@ export function ReferenceVideoPosterPreview(props: ReferenceVideoPosterPreviewPr
 	const { t } = useCanvasDesignI18n()
 	const portalContainer = usePortalContainer()
 	const canvasRef = useRef<HTMLCanvasElement>(null)
-	const [open, setOpen] = useState(false)
 	const previewSize = posterClone
 		? calculateTooltipBoundedPreviewSize(
 				{ naturalWidth: posterClone.width, naturalHeight: posterClone.height },
@@ -52,17 +51,13 @@ export function ReferenceVideoPosterPreview(props: ReferenceVideoPosterPreviewPr
 		ctx.drawImage(posterClone, 0, 0)
 	}, [posterClone, loadState])
 
-	const handleOpenChange = useCallback((nextOpen: boolean) => {
-		setOpen(nextOpen)
-	}, [])
-
 	const previewWrapperClass = cn(
 		styles.referenceImagePreview,
 		fillParent && styles.referenceImagePreviewFill,
 		fillParent && objectFit === "contain" && styles.referenceImagePreviewFillContain,
 	)
 
-	const previewContent =
+	const previewVisual =
 		loadState === "loading" ? (
 			<div className={styles.referenceImageLoading}>
 				<LoaderCircle size={12} className={styles.loadingIcon} />
@@ -80,52 +75,68 @@ export function ReferenceVideoPosterPreview(props: ReferenceVideoPosterPreviewPr
 			/>
 		)
 
-	const trigger = <div className={previewWrapperClass}>{previewContent}</div>
+	const trigger = <div className={previewWrapperClass}>{previewVisual}</div>
 
 	if (!enableTooltip) return trigger
 
+	const source: MediaPreviewSource = {
+		mediaType: "video",
+		thumbnailElement: posterClone ? (
+			<canvas
+				className="size-4 rounded object-cover"
+				ref={(node) => {
+					if (!node) return
+					node.width = posterClone.width
+					node.height = posterClone.height
+					const context = node.getContext("2d")
+					context?.drawImage(posterClone, 0, 0)
+				}}
+				aria-label={fileName}
+			/>
+		) : undefined,
+		previewUrl: ossSrc,
+		poster: posterClone ? (
+			<canvas
+				className="absolute inset-0 block h-full w-full object-contain"
+				ref={(node) => {
+					if (!node) return
+					node.width = posterClone.width
+					node.height = posterClone.height
+					const context = node.getContext("2d")
+					context?.drawImage(posterClone, 0, 0)
+				}}
+				aria-label={fileName}
+			/>
+		) : undefined,
+		isLoading: loadState === "loading",
+		hasError: loadState === "error" && !posterClone,
+		previewSize:
+			previewSize?.width && previewSize.height
+				? { width: previewSize.width, height: previewSize.height }
+				: undefined,
+	}
+
 	return (
-		<MediaPreviewTooltip
-			mediaType="video"
+		<MediaPreviewTrigger
 			fileName={fileName}
-			previewUrl={ossSrc}
-			maxWidth={REFERENCE_MEDIA_TOOLTIP_MAX_SIZE}
-			maxHeight={REFERENCE_MEDIA_TOOLTIP_MAX_SIZE}
-			previewSize={previewSize?.width && previewSize.height ? previewSize : undefined}
-			open={open}
-			onOpenChange={handleOpenChange}
-			enableTouchTrigger
-			container={portalContainer}
-			poster={
-				posterClone ? (
-					<canvas
-						className="absolute inset-0 block h-full w-full object-contain"
-						ref={(node) => {
-							if (!node) return
-							node.width = posterClone.width
-							node.height = posterClone.height
-							const context = node.getContext("2d")
-							context?.drawImage(posterClone, 0, 0)
-						}}
-						aria-label={fileName}
-					/>
-				) : undefined
-			}
-			isLoading={loadState === "loading"}
-			hasError={loadState === "error" && !posterClone}
-			errorMessage={t(
-				"mediaResourceFullscreenPreview.videoLoadFailed",
-				"视频加载失败，请稍后重试",
-			)}
-			closeLabel={t("mediaResourceFullscreenPreview.close", "关闭预览")}
-			audioLabels={{
-				play: t("video.fullscreen.play", "播放"),
-				pause: t("video.fullscreen.pause", "暂停"),
-				progress: t("video.fullscreen.progress", "播放进度"),
+			source={source}
+			fallback={<ReferenceSlotVideoIcon size={16} />}
+			renderTrigger={() => trigger}
+			labels={{
+				errorMessage: t(
+					"mediaResourceFullscreenPreview.videoLoadFailed",
+					"视频加载失败，请稍后重试",
+				),
+				audioLabels: {
+					play: t("video.fullscreen.play", "播放"),
+					pause: t("video.fullscreen.pause", "暂停"),
+					loading: t("audio.loading", "正在加载音频..."),
+					progress: t("video.fullscreen.progress", "播放进度"),
+				},
 			}}
+			enableTouchTrigger
 			side={tooltipSide}
-		>
-			{trigger}
-		</MediaPreviewTooltip>
+			container={portalContainer}
+		/>
 	)
 }
