@@ -272,8 +272,7 @@ class MCPAuthorizationCapabilityService
         array $authorizationServer,
         ?string $registrationMode,
         bool $allowExistingSecret
-    ): array
-    {
+    ): array {
         $supported = [];
         $metadataMethods = $authorizationServer['token_endpoint_auth_methods_supported'] ?? [];
         if (is_array($metadataMethods)) {
@@ -397,10 +396,10 @@ class MCPAuthorizationCapabilityService
         if ($wwwAuthenticate === '') {
             return '';
         }
-        if (preg_match('/(?:^|[,\\s])scope="([^"]+)"/i', $wwwAuthenticate, $matches) === 1) {
+        if (preg_match('/(?:^|[,\s])scope="([^"]+)"/i', $wwwAuthenticate, $matches) === 1) {
             return trim($matches[1]);
         }
-        if (preg_match('/(?:^|[,\\s])scope=([^,\\s]+)/i', $wwwAuthenticate, $matches) === 1) {
+        if (preg_match('/(?:^|[,\s])scope=([^,\s]+)/i', $wwwAuthenticate, $matches) === 1) {
             return trim($matches[1]);
         }
         return '';

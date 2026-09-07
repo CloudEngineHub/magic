@@ -4,8 +4,8 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-use App\Interfaces\MCP\Facade\Admin\MCPOAuth2BindingApi;
 use App\Interfaces\MCP\Facade\Admin\MCPAuthorizationCapabilityAdminApi;
+use App\Interfaces\MCP\Facade\Admin\MCPOAuth2BindingApi;
 use App\Interfaces\MCP\Facade\Admin\MCPServerAdminApi;
 use App\Interfaces\MCP\Facade\Admin\MCPServerToolAdminApi;
 use App\Interfaces\MCP\Facade\Admin\MCPSuperMagicProjectSettingAdminApi;

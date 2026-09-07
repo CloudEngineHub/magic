@@ -9,6 +9,7 @@ namespace App\Interfaces\MCP\Facade\OpenApi;
 
 use App\Application\MCP\Authorization\MCPAuthorizationAppService;
 use App\Domain\MCP\Entity\ValueObject\MCPDataIsolation;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Agent\Facade\Sandbox\AbstractSuperMagicSandboxApi;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -33,6 +34,7 @@ class MCPAuthorizationCredentialApi extends AbstractSuperMagicSandboxApi
      */
     public function getCredential(string $code): array
     {
+        /** @var MagicUserAuthorization $authorization */
         $authorization = $this->getAuthorization();
         $dataIsolation = MCPDataIsolation::create(
             (string) $authorization->getOrganizationCode(),
