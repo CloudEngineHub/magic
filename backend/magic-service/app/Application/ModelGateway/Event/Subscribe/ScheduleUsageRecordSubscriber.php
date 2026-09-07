@@ -19,7 +19,7 @@ use Hyperf\Event\Contract\ListenerInterface;
 use Hyperf\Odin\Api\Response\Usage;
 use Psr\Container\ContainerInterface;
 
-#[AsyncListener]
+#[AsyncListener(driver: 'coroutine')]
 #[Listener]
 class ScheduleUsageRecordSubscriber implements ListenerInterface
 {

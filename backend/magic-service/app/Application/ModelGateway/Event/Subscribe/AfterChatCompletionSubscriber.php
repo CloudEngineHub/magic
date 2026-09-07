@@ -17,7 +17,7 @@ use Hyperf\Odin\Constants\ModelType;
 use Hyperf\Odin\Event\AfterChatCompletionsEvent;
 use Hyperf\Odin\Event\AfterChatCompletionsStreamEvent;
 
-#[AsyncListener]
+#[AsyncListener(driver: 'coroutine')]
 #[Listener]
 class AfterChatCompletionSubscriber implements ListenerInterface
 {

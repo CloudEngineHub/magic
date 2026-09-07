@@ -16,7 +16,7 @@ use Hyperf\Odin\Api\Response\Usage;
 use Hyperf\Odin\Constants\ModelType;
 use Hyperf\Odin\Event\AfterEmbeddingsEvent;
 
-#[AsyncListener]
+#[AsyncListener(driver: 'coroutine')]
 #[Listener]
 class AfterEmbeddingSubscriber implements ListenerInterface
 {
