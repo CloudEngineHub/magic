@@ -226,7 +226,6 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 			)
 			return {
 				selector: info.selector,
-				info,
 				viewportRect: transformedRect,
 				transformedRect: offsetRect(transformedRect, overlayViewportOrigin),
 				transform,
@@ -335,28 +334,25 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 			}}
 		>
 			{/* Selected elements highlights */}
-			{transformedSelections.map(
-				({ selector, info, viewportRect, transformedRect, transform }) => (
-					<SelectionBox
-						key={selector}
-						info={info}
-						transformedRect={transformedRect}
-						viewportRect={viewportRect}
-						isMultiSelect={isMultiSelect}
-						isSelectionMode={isSelectionMode}
-						transform={transform}
-						containerElement={containerElement}
-						isMoving={isMoving}
-						rotation={rotation}
-						resizeHandles={resizeHandles}
-						onMoveHandleMouseDown={onMoveHandleMouseDown}
-						onRotateHandleMouseDown={onRotateHandleMouseDown}
-						onResizeHandleMouseDown={onHandleMouseDown}
-						onDelete={handleDelete}
-						onDuplicate={handleDuplicate}
-					/>
-				),
-			)}
+			{transformedSelections.map(({ selector, viewportRect, transformedRect, transform }) => (
+				<SelectionBox
+					key={selector}
+					transformedRect={transformedRect}
+					viewportRect={viewportRect}
+					isMultiSelect={isMultiSelect}
+					isSelectionMode={isSelectionMode}
+					transform={transform}
+					containerElement={containerElement}
+					isMoving={isMoving}
+					rotation={rotation}
+					resizeHandles={resizeHandles}
+					onMoveHandleMouseDown={onMoveHandleMouseDown}
+					onRotateHandleMouseDown={onRotateHandleMouseDown}
+					onResizeHandleMouseDown={onHandleMouseDown}
+					onDelete={handleDelete}
+					onDuplicate={handleDuplicate}
+				/>
+			))}
 
 			{/* Hovered element highlight */}
 			{overlayHoveredRect && (

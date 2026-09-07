@@ -39,29 +39,27 @@ FilesViewer 会保留非活动页实例。本次新增的页面级选择器、�
 
 ## 可视化编辑画布
 
-| 元素                | data-testid                                     | 说明                             |
-| ------------------- | ----------------------------------------------- | -------------------------------- |
-| iframe              | `isolated-html-content-iframe`                  | 实际承载 HTML 内容的 iframe      |
-| 全局样式工具栏      | `html-editor-style-toolbar`                     | 编辑模式顶部样式工具栏           |
-| 元素上下文面板      | `html-editor-context-panel`                     | 选中元素旁的浮动面板             |
-| 上下文样式工具栏    | `html-editor-context-style-toolbar`             | 浮动面板中的样式工具栏           |
-| 选区覆盖层          | `html-editor-selection-overlay`                 | 元素高亮和变换控制层             |
-| 移动手柄            | `on-move-handle-mouse-down`                     | 拖动选中元素                     |
-| 缩放手柄            | `on-resize-handle-mouse-down`                   | 重复项通过 `data-handle-id` 区分 |
-| 旋转手柄            | `on-rotate-handle-mouse-down`                   | 旋转选中元素                     |
-| 小元素提示          | `html-editor-small-selection-hint`              | 选中区域过小时显示的操作提示     |
-| 关闭小元素提示      | `html-editor-small-selection-hint-close-button` | 关闭小元素操作提示               |
-| 页面结构开关        | `html-editor-dom-tree-toggle-button`            | 展开或折叠 DOM 树                |
-| DOM 树面板          | `html-dom-tree-panel`                           | 页面结构侧栏                     |
-| DOM 树宽度手柄      | `html-dom-tree-resize-handle`                   | 调整页面结构侧栏宽度             |
-| DOM 树展开/折叠全部 | `html-dom-tree-expand-toggle-button`            | 展开或折叠全部节点               |
-| DOM 树刷新          | `html-dom-tree-refresh-button`                  | 重新读取页面结构                 |
-| DOM 树关闭          | `html-dom-tree-close-button`                    | 关闭页面结构侧栏                 |
-| DOM 树搜索          | `dom-tree-search-input`                         | 搜索页面节点                     |
-| DOM 树加载状态      | `html-dom-tree-loading`                         | DOM 树首次读取中                 |
-| DOM 树加载失败      | `html-dom-tree-load-error`                      | DOM 树读取失败状态               |
-| DOM 树重试          | `html-dom-tree-retry-button`                    | 重新读取 DOM 树                  |
-| DOM 树操作失败      | `html-dom-tree-action-error`                    | 新增、移动或删除失败提示         |
+| 元素                | data-testid                          | 说明                             |
+| ------------------- | ------------------------------------ | -------------------------------- |
+| iframe              | `isolated-html-content-iframe`       | 实际承载 HTML 内容的 iframe      |
+| 全局样式工具栏      | `html-editor-style-toolbar`          | 编辑模式顶部样式工具栏           |
+| 元素上下文面板      | `html-editor-context-panel`          | 选中元素旁的浮动面板             |
+| 上下文样式工具栏    | `html-editor-context-style-toolbar`  | 浮动面板中的样式工具栏           |
+| 选区覆盖层          | `html-editor-selection-overlay`      | 元素高亮和变换控制层             |
+| 移动手柄            | `on-move-handle-mouse-down`          | 拖动选中元素                     |
+| 缩放手柄            | `on-resize-handle-mouse-down`        | 重复项通过 `data-handle-id` 区分 |
+| 旋转手柄            | `on-rotate-handle-mouse-down`        | 旋转选中元素                     |
+| 页面结构开关        | `html-editor-dom-tree-toggle-button` | 展开或折叠 DOM 树                |
+| DOM 树面板          | `html-dom-tree-panel`                | 页面结构侧栏                     |
+| DOM 树宽度手柄      | `html-dom-tree-resize-handle`        | 调整页面结构侧栏宽度             |
+| DOM 树展开/折叠全部 | `html-dom-tree-expand-toggle-button` | 展开或折叠全部节点               |
+| DOM 树刷新          | `html-dom-tree-refresh-button`       | 重新读取页面结构                 |
+| DOM 树关闭          | `html-dom-tree-close-button`         | 关闭页面结构侧栏                 |
+| DOM 树搜索          | `dom-tree-search-input`              | 搜索页面节点                     |
+| DOM 树加载状态      | `html-dom-tree-loading`              | DOM 树首次读取中                 |
+| DOM 树加载失败      | `html-dom-tree-load-error`           | DOM 树读取失败状态               |
+| DOM 树重试          | `html-dom-tree-retry-button`         | 重新读取 DOM 树                  |
+| DOM 树操作失败      | `html-dom-tree-action-error`         | 新增、移动或删除失败提示         |
 
 ## AI 元素选取与编辑
 

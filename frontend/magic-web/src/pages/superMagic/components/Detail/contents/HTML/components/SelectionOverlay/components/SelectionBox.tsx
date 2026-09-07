@@ -1,13 +1,10 @@
 import { memo } from "react"
-import { AnimatePresence } from "framer-motion"
-import type { ElementRect, SelectedInfo, ResizeHandleConfig } from "../types"
+import type { ElementRect, ResizeHandleConfig } from "../types"
 import { HTML_EDITOR_Z_INDEX } from "../../../constants/z-index"
 import { ControlHandles } from "./ControlHandles"
-import { SmallSelectionHint } from "./SmallSelectionHint"
 import { shouldShowActionHandles } from "../utils/size-detection"
 
 interface SelectionBoxProps {
-	info: SelectedInfo
 	/** Overlay-local rect used for drawing absolute-positioned UI. */
 	transformedRect: ElementRect
 	/** Viewport rect used by pointer interactions such as rotation. */
@@ -35,7 +32,6 @@ interface SelectionBoxProps {
  * Single selection box with optional control handles
  */
 export const SelectionBox = memo(function SelectionBox({
-	info,
 	transformedRect,
 	viewportRect,
 	isMultiSelect,
@@ -55,51 +51,38 @@ export const SelectionBox = memo(function SelectionBox({
 	const showActions = shouldShowActionHandles(transformedRect)
 
 	return (
-		<>
-			<div
-				className="pointer-events-none absolute border-2 border-primary"
-				style={{
-					top: `${transformedRect.top}px`,
-					left: `${transformedRect.left}px`,
-					width: `${transformedRect.width}px`,
-					height: `${transformedRect.height}px`,
-					opacity: isMultiSelect ? 0.7 : 1,
-					boxShadow: isMultiSelect
-						? "0 0 0 2px rgb(var(--primary-rgb) / 0.1)"
-						: "0 0 0 4px rgb(var(--primary-rgb) / 0.1)",
-					zIndex: HTML_EDITOR_Z_INDEX.OVERLAY.SELECTION_HIGHLIGHT,
-					transform,
-					transformOrigin: "center center",
-				}}
-			>
-				{/* Only show handles in single-select mode */}
-				{isOnlySelected && isSelectionMode && (
-					<ControlHandles
-						isMoving={isMoving}
-						onMoveHandleMouseDown={onMoveHandleMouseDown}
-						onDuplicate={onDuplicate}
-						onDelete={onDelete}
-						resizeHandles={resizeHandles}
-						onResizeHandleMouseDown={onResizeHandleMouseDown}
-						rotation={rotation}
-						onRotateHandleMouseDown={onRotateHandleMouseDown}
-						transformedRect={viewportRect}
-						containerElement={containerElement}
-						showActionHandles={showActions}
-					/>
-				)}
-			</div>
-
-			{/* Show hint when selection is too small (outside the transformed box) */}
-			<AnimatePresence mode="wait">
-				{isOnlySelected && isSelectionMode && !showActions && (
-					<SmallSelectionHint
-						key={`hint-${info.selector}`}
-						show={true}
-						rect={transformedRect}
-					/>
-				)}
-			</AnimatePresence>
-		</>
+		<div
+			className="pointer-events-none absolute border-2 border-primary"
+			style={{
+				top: `${transformedRect.top}px`,
+				left: `${transformedRect.left}px`,
+				width: `${transformedRect.width}px`,
+				height: `${transformedRect.height}px`,
+				opacity: isMultiSelect ? 0.7 : 1,
+				boxShadow: isMultiSelect
+					? "0 0 0 2px rgb(var(--primary-rgb) / 0.1)"
+					: "0 0 0 4px rgb(var(--primary-rgb) / 0.1)",
+				zIndex: HTML_EDITOR_Z_INDEX.OVERLAY.SELECTION_HIGHLIGHT,
+				transform,
+				transformOrigin: "center center",
+			}}
+		>
+			{/* Only show handles in single-select mode */}
+			{isOnlySelected && isSelectionMode && (
+				<ControlHandles
+					isMoving={isMoving}
+					onMoveHandleMouseDown={onMoveHandleMouseDown}
+					onDuplicate={onDuplicate}
+					onDelete={onDelete}
+					resizeHandles={resizeHandles}
+					onResizeHandleMouseDown={onResizeHandleMouseDown}
+					rotation={rotation}
+					onRotateHandleMouseDown={onRotateHandleMouseDown}
+					transformedRect={viewportRect}
+					containerElement={containerElement}
+					showActionHandles={showActions}
+				/>
+			)}
+		</div>
 	)
 })

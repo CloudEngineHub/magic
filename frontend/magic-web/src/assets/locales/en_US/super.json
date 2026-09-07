@@ -6328,7 +6328,6 @@
 		"shadowSpread": "Spread",
 		"size": "Size",
 		"sizeSettings": "Size Settings",
-		"smallSelectionHint": "Selection too small. Use the toolbar to copy/delete, or try shortcuts: Delete/Backspace to remove, Ctrl/Cmd+D to duplicate. You can also zoom in first.",
 		"solidColor": "Solid Color",
 		"strikethrough": "Strikethrough",
 		"templateColumns": "Column layout",
