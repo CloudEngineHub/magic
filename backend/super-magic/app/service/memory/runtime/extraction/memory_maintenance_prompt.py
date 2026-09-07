@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from agentlang.config.config import config
 from agentlang.logger import get_logger
@@ -29,6 +29,9 @@ class MemoryFileSizeNotice:
     path: Path
     size_bytes: int
     limit_bytes: int
+    suggested_target_bytes: int = 0
+    scope: str = "unknown"
+    rule_id: str = "unknown"
 
     @property
     def size_kb(self) -> float:
@@ -37,19 +40,31 @@ class MemoryFileSizeNotice:
 
     @property
     def limit_kb(self) -> int:
-        """返回以 KiB 表示的整理阈值。"""
+        """返回以 KiB 表示的触发阈值。"""
         return self.limit_bytes // 1024
+
+    @property
+    def suggested_target_kb(self) -> int:
+        """返回以 KiB 表示的建议整理目标。"""
+        return (self.suggested_target_bytes or self.limit_bytes) // 1024
 
 
 class MemoryMaintenancePromptBuilder:
     """以文件大小作为触发条件，生成按文件定位的记忆整理提示。"""
 
-    _DEFAULT_LIMIT_KB = 16
+    _DEFAULT_LIMIT_KB = 32
+    _DEFAULT_TARGET_KB = 24
     _CONFIG_KEY = "memory.after_run.memory_file_max_size_kb"
+    _TARGET_CONFIG_KEY = "memory.after_run.memory_file_target_size_kb"
 
-    def __init__(self, limit_kb: int | None = None) -> None:
-        """初始化记忆文件大小阈值。"""
+    def __init__(
+        self,
+        limit_kb: int | None = None,
+        target_kb: int | None = None,
+    ) -> None:
+        """初始化记忆文件触发阈值和建议目标。"""
         self._limit_kb = self._normalize_limit_kb(limit_kb)
+        self._target_kb = self._normalize_target_kb(target_kb, self._limit_kb)
 
     async def build(self, agent_context: "AgentContext") -> str:
         """返回需要整理的记忆文件提示；没有触发文件时返回空字符串。"""
@@ -96,6 +111,9 @@ class MemoryMaintenancePromptBuilder:
             path=candidate.absolute_path,
             size_bytes=stat.st_size,
             limit_bytes=self._limit_kb * 1024,
+            suggested_target_bytes=self._target_kb * 1024,
+            scope=candidate.scope,
+            rule_id=cast(str, candidate.rule_id.value),
         )
 
     @staticmethod
@@ -111,11 +129,29 @@ class MemoryMaintenancePromptBuilder:
             return MemoryMaintenancePromptBuilder._DEFAULT_LIMIT_KB
         return normalized if normalized > 0 else MemoryMaintenancePromptBuilder._DEFAULT_LIMIT_KB
 
+    @classmethod
+    def _normalize_target_kb(cls, value: int | None, limit_kb: int) -> int:
+        """读取建议目标，并确保目标不会高于触发阈值。"""
+        raw_value = value if value is not None else config.get(
+            cls._TARGET_CONFIG_KEY,
+            cls._DEFAULT_TARGET_KB,
+        )
+        try:
+            normalized = int(raw_value)
+        except (TypeError, ValueError):
+            normalized = cls._DEFAULT_TARGET_KB
+        if normalized <= 0:
+            normalized = cls._DEFAULT_TARGET_KB
+        return min(normalized, limit_kb)
+
     @staticmethod
     def _render_prompt(notices: tuple[MemoryFileSizeNotice, ...]) -> str:
         """把触发整理的文件渲染为 AfterRun 可直接执行的记忆整理要求。"""
         memory_files = "\n".join(
-            f"- {notice.path} (current size: {notice.size_kb:.1f} KiB; suggested target: <= {notice.limit_kb} KiB)"
+            "- "
+            f"scope: {notice.scope}; rule: {notice.rule_id}; path: {notice.path}; "
+            f"current size: {notice.size_kb:.1f} KiB; "
+            f"suggested target: <= {notice.suggested_target_kb} KiB"
             for notice in notices
         )
         return get_memory_extraction_prompt(

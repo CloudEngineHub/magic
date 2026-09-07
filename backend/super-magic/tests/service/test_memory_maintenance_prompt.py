@@ -48,19 +48,23 @@ if _storage_package_was_stubbed:
 
 def _candidate(path: Path, rule_id: AutoReadRuleId) -> AutoReadFileCandidate:
     """构造一个已通过路径安全检查的记忆文件候选。"""
+    scope = {
+        AutoReadRuleId.GLOBAL_MEMORY: "user-global",
+        AutoReadRuleId.PROJECT_MEMORY: "user-project:test",
+    }[rule_id]
     return AutoReadFileCandidate(
         rule_id=rule_id,
         load_policy=AutoReadLoadPolicy.ALWAYS,
         absolute_path=path,
         display_path=str(path),
-        scope="user-memory",
+        scope=scope,
         priority=20,
     )
 
 
 @pytest.mark.asyncio
 async def test_memory_maintenance_prompt_only_lists_files_at_or_over_limit(monkeypatch, tmp_path):
-    """只有达到 16KB 的文件才进入动态整理提示。"""
+    """只有达到 32KB 的文件才进入动态整理提示。"""
     global_path = tmp_path / "global" / "MEMORY.md"
     project_path = tmp_path / "project" / "MEMORY.md"
     candidates = (
@@ -72,7 +76,7 @@ async def test_memory_maintenance_prompt_only_lists_files_at_or_over_limit(monke
         return candidates
 
     async def fake_stat(path):
-        return SimpleNamespace(st_size=16 * 1024 if path == global_path else 15 * 1024)
+        return SimpleNamespace(st_size=32 * 1024 if path == global_path else 31 * 1024)
 
     monkeypatch.setattr(
         maintenance_module.AutoReadFileService,
@@ -84,8 +88,9 @@ async def test_memory_maintenance_prompt_only_lists_files_at_or_over_limit(monke
     prompt = await MemoryMaintenancePromptBuilder().build(SimpleNamespace())
 
     assert str(global_path) in prompt
-    assert "current size: 16.0 KiB" in prompt
-    assert "suggested target: <= 16 KiB" in prompt
+    assert "scope: user-global" in prompt
+    assert "current size: 32.0 KiB" in prompt
+    assert "suggested target: <= 24 KiB" in prompt
     assert str(project_path) not in prompt
     assert "notes/" in prompt
     assert "Every notes filename must be short" in prompt
@@ -133,7 +138,7 @@ def test_memory_extraction_prompt_method_supports_placeholders():
         {"memory_files": "- /tmp/global/MEMORY.md (16.0 KiB; limit 16 KiB)"},
     )
 
-    assert "Files requiring maintenance:" in result
+    assert "Files requiring maintenance (scope, path, current size, and suggested target):" in result
     assert "/tmp/global/MEMORY.md" in result
     assert "<!--zh" not in result
 

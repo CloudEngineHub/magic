@@ -569,8 +569,10 @@ memory:
     extraction_task_threshold: ${MEMORY_AFTER_RUN_EXTRACTION_TASK_THRESHOLD:-5}
     # 未达到阈值时，连续 10 分钟无操作后触发一次完整 fork 提取
     extraction_idle_timeout_seconds: ${MEMORY_AFTER_RUN_EXTRACTION_IDLE_TIMEOUT_SECONDS:-600}
-    # MEMORY.md 达到该大小后触发记忆整理提示；该值仅作为建议目标，不是硬性限制
-    memory_file_max_size_kb: ${MEMORY_AFTER_RUN_MEMORY_FILE_MAX_SIZE_KB:-16}
+    # MEMORY.md 达到该大小后触发记忆整理提示；该值是触发条件，不是内容硬上限
+    memory_file_max_size_kb: ${MEMORY_AFTER_RUN_MEMORY_FILE_MAX_SIZE_KB:-32}
+    # 记忆整理时建议参考的目标大小；不要求机械压缩，长期有效内容可以超过该值
+    memory_file_target_size_kb: ${MEMORY_AFTER_RUN_MEMORY_FILE_TARGET_SIZE_KB:-24}
 
 # =====================================================
 # AI Ability Configuration (AI能力配置)
