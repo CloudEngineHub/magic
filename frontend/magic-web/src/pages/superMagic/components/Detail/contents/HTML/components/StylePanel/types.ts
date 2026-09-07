@@ -159,7 +159,7 @@ export interface StylePanelProps {
 }
 
 /** Renders one contextual toolbar item with its individual enter transition. */
-export type ContextToolbarItemMotion = (children: ReactNode) => ReactNode
+export type ContextToolbarItemMotion = (children: ReactNode, key?: React.Key) => ReactNode
 
 /**
  * 样式配置区域的通用 Props

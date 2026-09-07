@@ -43,10 +43,20 @@ const {
 	}
 })
 
+vi.mock("@dtyq/magic-admin", () => ({}))
+vi.mock("@dtyq/magic-admin/components", () => ({}))
+vi.mock("@dtyq/magic-admin/provider", () => ({}))
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
+	initReactI18next: {
+		type: "3rdParty",
+		init() {
+			// noop
+		},
+	},
 }))
 
 vi.mock("../hooks/useSelectedElement", () => ({
@@ -146,6 +156,25 @@ vi.mock("../controls", () => ({
 	DimensionInput: () => <div data-testid="dimension-input" />,
 	NumericDragInput: () => <div data-testid="numeric-drag-input" />,
 	SpacingInput: () => <div data-testid="spacing-input" />,
+	ContextToolbarMotion: ({
+		children,
+		open = true,
+		as = "div",
+	}: {
+		children: ReactNode
+		open?: boolean
+		as?: "div" | "span"
+	}) => {
+		const MotionTag = as
+		return (
+			<MotionTag
+				data-context-toolbar-motion-item="true"
+				className={open ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"}
+			>
+				{children}
+			</MotionTag>
+		)
+	},
 	ContextMorePopover: ({
 		fontFamilySelector,
 		textContentField,
@@ -281,9 +310,16 @@ describe("StylePanel", () => {
 
 		render(<StylePanel editorRef={{ current: null }} variant="context" />)
 
-		expect(screen.getByTestId("html-editor-context-style-toolbar").className).toContain(
-			"flex-wrap",
-		)
+		expect(
+			screen
+				.getByTestId("html-editor-context-style-toolbar")
+				.querySelector("[data-context-toolbar-row='0']"),
+		).toBeTruthy()
+		expect(
+			screen
+				.getByTestId("html-editor-context-style-toolbar")
+				.querySelector("[data-context-toolbar-row='1']"),
+		).toBeTruthy()
 		expect(screen.queryByTestId("font-family-selector")).not.toBeInTheDocument()
 		expect(screen.getByTestId("font-size-selector")).toBeInTheDocument()
 		expect(screen.getByTestId("line-height-selector")).toHaveAttribute("data-value", "24px")
@@ -298,7 +334,7 @@ describe("StylePanel", () => {
 		expect(screen.getByTestId("style-panel-more-styles-trigger")).toBeInTheDocument()
 		fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
 		expect(screen.getByTestId("font-family-selector")).toBeInTheDocument()
-		expect(document.querySelectorAll('[data-slot="separator"]')).toHaveLength(5)
+		expect(document.querySelectorAll('[data-slot="separator"]')).toHaveLength(4)
 	})
 
 	it("preserves a selected ratio when computed line-height refreshes to pixels", async () => {

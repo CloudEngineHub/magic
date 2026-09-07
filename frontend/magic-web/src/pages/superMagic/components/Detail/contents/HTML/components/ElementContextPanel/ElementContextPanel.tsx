@@ -67,7 +67,7 @@ export function ElementContextPanel({
 	const [position, setPosition] = useState({
 		left: 8,
 		top: 8,
-		width: CONTEXT_TOOLBAR_MAX_WIDTH,
+		width: 0,
 		height: CONTEXT_TOOLBAR_MIN_HEIGHT,
 		maxWidth: CONTEXT_TOOLBAR_MAX_WIDTH,
 	})
@@ -118,8 +118,6 @@ export function ElementContextPanel({
 			// element incorrectly appears to have free space below it.
 			const viewport = getContextViewport(boundaryRef?.current?.getBoundingClientRect())
 			const availableWidth = Math.max(0, viewport.width - 16)
-			// Cap the floating toolbar so a long control row wraps instead of
-			// stretching across the canvas. Short toolbars still shrink to fit.
 			const maxWidth = Math.min(CONTEXT_TOOLBAR_MAX_WIDTH, availableWidth)
 			const measured = getMeasuredToolbarSize(
 				panelRef.current?.getBoundingClientRect(),
@@ -136,7 +134,7 @@ export function ElementContextPanel({
 			const nextPosition = {
 				left: next.left,
 				top: next.top,
-				width: next.width,
+				width: measured.width,
 				height: measured.height,
 				maxWidth,
 			}
