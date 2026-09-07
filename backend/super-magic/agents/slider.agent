@@ -26,7 +26,7 @@ skills:
     - name: user-info
     - name: slide-template
     - name: slide-template-maker
-    - slide-template-replacement
+    - name: slide-template-replacement
     - name: document-converter
   workspace_skills: "*"
 ---
