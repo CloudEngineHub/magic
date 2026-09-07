@@ -27,6 +27,7 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         'frames' => 'image',
         'reference_images' => 'image',
         'reference_videos' => 'video',
+        'reference_audios' => 'audio',
     ];
 
     private const array INPUT_MODES = ['standard', 'image_reference', 'keyframe_guided', 'video_edit', 'omni_reference'];
@@ -47,7 +48,7 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
 
     public function resolveHasAudioOutput(string $modelVersion, string $modelId, array $request): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -255,7 +256,11 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         }
 
         $normalized = [
-            'uri' => ReferenceMediaPayload::normalize($item, 'Gemini ' . $field . ' entry', $type === 'video' ? 'video/mp4' : 'image/png'),
+            'uri' => ReferenceMediaPayload::normalize(
+                $item,
+                'Gemini ' . $field . ' entry',
+                $type === 'video' ? 'video/mp4' : ($type === 'audio' ? 'audio/mpeg' : 'image/png'),
+            ),
         ];
         if ($type === 'image' && isset($item['role'])) {
             $role = strtolower(trim((string) $item['role']));

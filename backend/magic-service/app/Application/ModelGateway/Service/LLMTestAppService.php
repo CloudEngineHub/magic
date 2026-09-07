@@ -157,6 +157,12 @@ class LLMTestAppService extends AbstractLLMAppService
                 throw new BusinessException(__('service_provider.connectivity_not_supported'));
             }
 
+            if (! empty($serviceProviderConfig['use_proxy'])) {
+                $proxyUrl = $this->resolveProxyUrl($serviceProviderConfig);
+                if ($proxyUrl !== null && $proxyUrl !== '') {
+                    $serviceProviderConfig['proxy_url'] = $proxyUrl;
+                }
+            }
             $connectResponse->setStatus($adapter->testConnection(
                 QueueExecutorConfig::fromProviderConfig($serviceProviderConfig),
                 $modelVersion,

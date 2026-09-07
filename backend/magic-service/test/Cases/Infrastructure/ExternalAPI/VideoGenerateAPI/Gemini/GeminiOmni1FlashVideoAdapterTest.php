@@ -103,6 +103,24 @@ final class GeminiOmni1FlashVideoAdapterTest extends TestCase
         ], $payload['input']);
     }
 
+    public function testBuildsOmniInteractionPayloadWithBase64AudioReference(): void
+    {
+        $encoded = base64_encode('audio-bytes');
+        $payload = $this->adapter()->buildProviderPayload($this->operation([
+            'input_mode' => 'omni_reference',
+            'prompt' => 'use this audio',
+            'inputs' => ['reference_audios' => [[
+                'base64' => $encoded,
+                'mime_type' => 'audio/mpeg',
+            ]]],
+        ]));
+
+        self::assertSame([
+            ['type' => 'audio', 'uri' => 'data:audio/mpeg;base64,' . $encoded],
+            ['type' => 'text', 'text' => 'use this audio'],
+        ], $payload['input']);
+    }
+
     public function testBuildsInteractionPayloadWithBase64Frame(): void
     {
         $encoded = base64_encode('frame-bytes');
@@ -305,9 +323,9 @@ final class GeminiOmni1FlashVideoAdapterTest extends TestCase
         self::assertSame('gemini-omni-1.1-flash', $payload['model']);
     }
 
-    public function testGeminiDoesNotAdvertiseAudioOutput(): void
+    public function testGeminiAdvertisesAudioOutput(): void
     {
-        self::assertFalse($this->adapter()->resolveHasAudioOutput('gemini-omni-1.1-flash', '', [
+        self::assertTrue($this->adapter()->resolveHasAudioOutput('gemini-omni-1.1-flash', '', [
             'generation' => ['generate_audio' => true],
         ]));
     }

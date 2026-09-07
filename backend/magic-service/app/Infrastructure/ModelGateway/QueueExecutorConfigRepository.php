@@ -13,6 +13,7 @@ use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Repository\Persistence\Model\ProviderConfigModel;
 use App\Domain\Provider\Repository\Persistence\Model\ProviderModelModel;
 use App\Domain\VideoCatalog\Service\VideoCatalogQueryDomainService;
+use App\Infrastructure\ExternalAPI\Proxy\ProxyConfigResolverInterface;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use RuntimeException;
 
@@ -39,6 +40,13 @@ class QueueExecutorConfigRepository implements QueueExecutorConfigRepositoryInte
         $apiKey = $this->resolveStringConfig($config, ['api_key', 'apiKey']);
         if ($baseUrl === '' || $apiKey === '') {
             throw new RuntimeException('video service provider config missing');
+        }
+
+        if (! empty($config['use_proxy'])) {
+            $proxyUrl = di(ProxyConfigResolverInterface::class)->resolve($config);
+            if ($proxyUrl !== null && $proxyUrl !== '') {
+                $config['proxy_url'] = $proxyUrl;
+            }
         }
 
         return new QueueExecutorConfig(

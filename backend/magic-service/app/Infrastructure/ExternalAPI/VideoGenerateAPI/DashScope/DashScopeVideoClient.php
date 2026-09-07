@@ -32,7 +32,7 @@ readonly class DashScopeVideoClient
         }
     }
 
-    public function post(string $baseUrl, string $apiKey, string $path, array $payload, array $logContext = []): array
+    public function post(string $baseUrl, string $apiKey, string $path, array $payload, array $logContext = [], string $proxyUrl = ''): array
     {
         $normalizedBaseUrl = rtrim($baseUrl, '/');
         $normalizedPath = '/' . ltrim($path, '/');
@@ -46,7 +46,7 @@ readonly class DashScopeVideoClient
 
         try {
             $data = $this->requestJson(
-                fn (): array => Json::decode((string) $this->createClient()->post(
+                fn (): array => Json::decode((string) $this->createClient($proxyUrl)->post(
                     $normalizedBaseUrl . $normalizedPath,
                     [
                         'headers' => [
@@ -79,7 +79,7 @@ readonly class DashScopeVideoClient
         return $data;
     }
 
-    public function get(string $baseUrl, string $apiKey, string $path, array $logContext = []): array
+    public function get(string $baseUrl, string $apiKey, string $path, array $logContext = [], string $proxyUrl = ''): array
     {
         $normalizedBaseUrl = rtrim($baseUrl, '/');
         $normalizedPath = '/' . ltrim($path, '/');
@@ -92,7 +92,7 @@ readonly class DashScopeVideoClient
 
         try {
             $data = $this->requestJson(
-                fn (): array => Json::decode((string) $this->createClient()->get(
+                fn (): array => Json::decode((string) $this->createClient($proxyUrl)->get(
                     $normalizedBaseUrl . $normalizedPath,
                     [
                         'headers' => [
@@ -123,12 +123,16 @@ readonly class DashScopeVideoClient
         return $data;
     }
 
-    private function createClient(): Client
+    private function createClient(string $proxyUrl = ''): Client
     {
-        return $this->clientFactory->create([
+        $options = [
             'timeout' => 30,
             'verify' => false,
-        ]);
+        ];
+        if ($proxyUrl !== '') {
+            $options['proxy'] = $proxyUrl;
+        }
+        return $this->clientFactory->create($options);
     }
 
     private function requestJson(callable $request, string $action): array

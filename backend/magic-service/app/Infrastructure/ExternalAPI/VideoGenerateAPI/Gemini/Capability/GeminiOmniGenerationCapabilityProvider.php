@@ -37,18 +37,18 @@ readonly class GeminiOmniGenerationCapabilityProvider
         }
         $translate = fn (string $key): string => di(TranslatorInterface::class)->trans('video.input_modes.' . $key);
         return new VideoGenerationConfig([
-            'supported_inputs' => ['text_prompt', 'image', 'last_frame', 'reference_images', 'reference_videos'],
+            'supported_inputs' => ['text_prompt', 'image', 'last_frame', 'reference_images', 'reference_videos', 'reference_audios'],
             'generation' => [
-                'duration_type' => 'fixed', 'durations' => [8], 'default_duration_seconds' => 8,
-                'resolutions' => ['720p', '1080p'], 'default_resolution' => '720p',
-                'aspect_ratios' => ['16:9', '9:16'], 'supports_background' => true, 'supports_generate_audio' => false,
+                'duration_type' => 'range', 'durations' => [3, 4, 5, 6, 7, 8, 9, 10], 'default_duration_seconds' => 8,
+                'resolutions' => ['360p', '720p', '1080p', '4k'], 'default_resolution' => '720p',
+                'aspect_ratios' => ['16:9', '9:16'], 'supports_background' => true, 'supports_generate_audio' => true,
             ],
             'input_modes' => [
                 VideoInputMode::Standard->value => VideoInputModeDefinition::standard($translate('standard'))->toArray(),
                 VideoInputMode::ImageReference->value => VideoInputModeDefinition::imageReference($translate('image_reference.single'), 1, ['asset'], false)->toArray(),
                 VideoInputMode::KeyframeGuided->value => VideoInputModeDefinition::keyframeGuided($translate('keyframe_guided.start_end'), ['start', 'end'])->toArray(),
                 VideoInputMode::VideoEdit->value => VideoInputModeDefinition::videoEdit($translate('video_edit.single'), ['reference_videos'], 1)->toArray(),
-                VideoInputMode::OmniReference->value => VideoInputModeDefinition::omniReference($translate('omni_reference'), ['reference_images', 'reference_videos'], 8)->toArray(),
+                VideoInputMode::OmniReference->value => VideoInputModeDefinition::omniReference($translate('omni_reference'), ['reference_images', 'reference_videos', 'reference_audios'], 8)->toArray(),
             ],
         ]);
     }

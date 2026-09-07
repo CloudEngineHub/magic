@@ -66,8 +66,13 @@ final class GeminiOmniGenerationCapabilityProviderTest extends TestCase
         self::assertNotNull($config);
         $data = $config->toArray();
         self::assertArrayHasKey('generation', $data);
+        self::assertSame([3, 4, 5, 6, 7, 8, 9, 10], $data['generation']['durations']);
+        self::assertSame(['360p', '720p', '1080p', '4k'], $data['generation']['resolutions']);
+        self::assertTrue($data['generation']['supports_generate_audio']);
+        self::assertContains('reference_audios', $data['supported_inputs']);
         foreach (['standard', 'image_reference', 'keyframe_guided', 'video_edit', 'omni_reference'] as $mode) {
             self::assertArrayHasKey($mode, $data['input_modes']);
         }
+        self::assertContains('reference_audios', $data['input_modes']['omni_reference']['supported_fields']);
     }
 }

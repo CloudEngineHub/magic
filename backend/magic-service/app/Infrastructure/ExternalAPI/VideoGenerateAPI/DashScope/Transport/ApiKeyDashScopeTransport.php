@@ -26,6 +26,7 @@ readonly class ApiKeyDashScopeTransport implements DashScopeTransportInterface
             $this->buildVideoSynthesisPath(),
             $payload,
             $logContext,
+            $config->getExtraString('proxy_url'),
         );
     }
 
@@ -36,6 +37,7 @@ readonly class ApiKeyDashScopeTransport implements DashScopeTransportInterface
             $config->getApiKey(),
             '/tasks/' . rawurlencode($taskId),
             $logContext,
+            $config->getExtraString('proxy_url'),
         );
     }
 

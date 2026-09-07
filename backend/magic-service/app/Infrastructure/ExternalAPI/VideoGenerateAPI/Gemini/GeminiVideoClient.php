@@ -40,22 +40,22 @@ readonly class GeminiVideoClient
         }
     }
 
-    public function post(string $baseUrl, string $apiKey, string $path, array $payload, array $logContext = []): array
+    public function post(string $baseUrl, string $apiKey, string $path, array $payload, array $logContext = [], string $proxyUrl = ''): array
     {
-        return $this->request('post', $baseUrl, $apiKey, $path, $payload, $logContext);
+        return $this->request('post', $baseUrl, $apiKey, $path, $payload, $logContext, $proxyUrl);
     }
 
-    public function get(string $baseUrl, string $apiKey, string $path, array $logContext = []): array
+    public function get(string $baseUrl, string $apiKey, string $path, array $logContext = [], string $proxyUrl = ''): array
     {
-        return $this->request('get', $baseUrl, $apiKey, $path, null, $logContext);
+        return $this->request('get', $baseUrl, $apiKey, $path, null, $logContext, $proxyUrl);
     }
 
     /** @return array{bytes_base64_encoded: string, mime_type: string} */
-    public function downloadMedia(string $baseUrl, string $apiKey, string $uri, array $logContext = []): array
+    public function downloadMedia(string $baseUrl, string $apiKey, string $uri, array $logContext = [], string $proxyUrl = ''): array
     {
         $url = $this->normalizeMediaUrl($baseUrl, $uri);
         try {
-            $client = $this->createClient();
+            $client = $this->createClient($proxyUrl);
             $safeUrl = SSRFUtil::getSafeUrl($url, replaceIp: false, allowRedirect: false);
             $apiKeyAllowed = $this->sameOrigin($baseUrl, $safeUrl);
             for ($redirect = 0; $redirect <= 3; ++$redirect) {
@@ -148,6 +148,7 @@ readonly class GeminiVideoClient
         string $path,
         ?array $payload,
         array $logContext,
+        string $proxyUrl,
     ): array {
         $normalizedBaseUrl = rtrim($baseUrl, '/');
         $normalizedPath = $path === '' ? '' : '/' . ltrim($path, '/');
@@ -162,7 +163,7 @@ readonly class GeminiVideoClient
         ]);
 
         try {
-            $response = $this->send($method, $normalizedBaseUrl . $normalizedPath, $apiKey, $payload);
+            $response = $this->send($method, $normalizedBaseUrl . $normalizedPath, $apiKey, $payload, $proxyUrl);
             $requestId = $this->extractRequestId($response);
             $body = (string) $response->getBody();
             if (trim($body) === '') {
@@ -238,7 +239,7 @@ readonly class GeminiVideoClient
         }
     }
 
-    private function send(string $method, string $url, string $apiKey, ?array $payload): ResponseInterface
+    private function send(string $method, string $url, string $apiKey, ?array $payload, string $proxyUrl): ResponseInterface
     {
         $options = [
             'headers' => [
@@ -250,15 +251,19 @@ readonly class GeminiVideoClient
             $options['json'] = $payload;
         }
 
-        return $this->createClient()->{$method}($url, $options);
+        return $this->createClient($proxyUrl)->{$method}($url, $options);
     }
 
-    private function createClient(): Client
+    private function createClient(string $proxyUrl = ''): Client
     {
-        return $this->clientFactory->create([
+        $options = [
             'timeout' => self::REQUEST_TIMEOUT_SECONDS,
             'verify' => true,
-        ]);
+        ];
+        if ($proxyUrl !== '') {
+            $options['proxy'] = $proxyUrl;
+        }
+        return $this->clientFactory->create($options);
     }
 
     private function normalizeMediaUrl(string $baseUrl, string $uri): string

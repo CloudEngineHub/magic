@@ -25,6 +25,7 @@ readonly class ApiKeyGeminiTransport implements GeminiTransportInterface
             '',
             $payload,
             $logContext,
+            $config->getExtraString('proxy_url'),
         );
     }
 
@@ -35,6 +36,7 @@ readonly class ApiKeyGeminiTransport implements GeminiTransportInterface
             $config->getApiKey(),
             '/' . rawurlencode($interactionId),
             $logContext,
+            $config->getExtraString('proxy_url'),
         );
     }
 
@@ -45,6 +47,7 @@ readonly class ApiKeyGeminiTransport implements GeminiTransportInterface
             $config->getApiKey(),
             $uri,
             $logContext,
+            $config->getExtraString('proxy_url'),
         );
     }
 }

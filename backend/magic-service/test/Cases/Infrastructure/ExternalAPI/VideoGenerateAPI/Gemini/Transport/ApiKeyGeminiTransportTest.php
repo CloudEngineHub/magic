@@ -47,6 +47,39 @@ final class ApiKeyGeminiTransportTest extends TestCase
         self::assertSame(['id' => 'interaction-1'], $result);
     }
 
+    public function testCreateInteractionUsesProxyFromQueueConfig(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->expects($this->once())->method('post')->with(
+            'https://gemini.example/v1/interactions',
+            [
+                'headers' => ['x-goog-api-key' => 'secret', 'Content-Type' => 'application/json'],
+                'json' => ['model' => 'gemini-omni-1.1-flash'],
+            ],
+        )->willReturn(new Response(200, [], '{"id":"interaction-1"}'));
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->expects($this->once())->method('create')->with([
+            'timeout' => 30,
+            'verify' => true,
+            'proxy' => 'socks5h://127.0.0.1:1080',
+        ])->willReturn($httpClient);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->willReturn(new TransportRecordingLogger());
+
+        $result = (new ApiKeyGeminiTransport(new GeminiVideoClient($clientFactory, $loggerFactory)))->createInteraction(
+            new QueueExecutorConfig(
+                'https://gemini.example/v1/interactions',
+                'secret',
+                3,
+                20,
+                ['proxy_url' => 'socks5h://127.0.0.1:1080'],
+            ),
+            ['model' => 'gemini-omni-1.1-flash'],
+        );
+
+        self::assertSame(['id' => 'interaction-1'], $result);
+    }
+
     public function testGetInteractionEncodesIdAndUsesInteractionsPath(): void
     {
         $httpClient = $this->createMock(Client::class);
@@ -90,7 +123,7 @@ final class ApiKeyGeminiTransportTest extends TestCase
         $client = new GeminiVideoClient($clientFactory, $loggerFactory);
 
         $result = (new ApiKeyGeminiTransport($client))->downloadMedia(
-            new QueueExecutorConfig('https://gemini.example/v1/interactions', 'secret', 3, 20),
+            new QueueExecutorConfig('https://example.com/v1/interactions', 'secret', 3, 20),
             'https://example.com/video.mp4',
         );
 
