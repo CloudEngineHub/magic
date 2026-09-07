@@ -34,8 +34,12 @@ class MCPAuthorizationPreflightService
         try {
             // 保存阶段仍执行严格配置校验，避免能力探测的宽松字段分析绕过必填约束。
             $mcpServer->getServiceConfig()->validate();
-        } catch (Throwable) {
-            ExceptionBuilder::throw(MCPErrorCode::MCPAuthorizationDiscoveryFailed);
+        } catch (Throwable $throwable) {
+            ExceptionBuilder::throw(
+                MCPErrorCode::MCPAuthorizationDiscoveryFailed,
+                $throwable->getMessage(),
+                throwable: $throwable
+            );
         }
 
         $result = $this->capabilityService->analyze($mcpServer);
