@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\Design\Event\Subscribe;
 
 use App\Application\Design\Event\Subscribe\DesignVideoPollConsumer;
+use App\Application\Design\Event\Publish\DesignVideoPollDelayPublisher;
 use App\Application\Design\Tool\VideoGeneration\DesignGeneratedVideoFileNameTool;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
@@ -31,11 +32,13 @@ use Closure;
 use DateTime;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\Amqp\Producer;
+use Hyperf\Amqp\Result;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Database\ConnectionInterface;
 use Hyperf\Database\ConnectionResolverInterface;
 use Hyperf\DbConnection\Db;
+use PhpAmqpLib\Message\AMQPMessage;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
@@ -218,10 +221,63 @@ class DesignVideoPollConsumerTest extends TestCase
         $this->assertSame(6001, $entity->getOutputPayload()['file_dir_id'] ?? null);
     }
 
+    public function testArchiveFailureRepublishesDelayedPollMessage(): void
+    {
+        $repository = new InMemoryDesignGenerationTaskRepository();
+        $entity = $this->createEntity('/archive-failure', [
+            'file_dir_id' => 7001,
+        ]);
+        $entity->setProviderPayload([
+            'operation_id' => 'operation-1',
+            'deadline_at' => date(DATE_ATOM, time() + 3600),
+        ]);
+        $repository->task = $entity;
+
+        $producer = $this->createMock(Producer::class);
+        $producer->expects($this->once())
+            ->method('produce')
+            ->with($this->isInstanceOf(DesignVideoPollDelayPublisher::class));
+
+        $videoGatewayClient = $this->createMock(VideoGatewayClientInterface::class);
+        $videoGatewayClient->expects($this->once())
+            ->method('queryVideo')
+            ->willReturn([
+                'status' => 'succeeded',
+                'output' => [
+                    'video_url' => 'https://provider.example.com/video.mp4',
+                ],
+            ]);
+
+        $fileNameTool = $this->createMock(DesignGeneratedVideoFileNameTool::class);
+        $fileNameTool->expects($this->once())
+            ->method('resolveBaseNameWithoutExtension')
+            ->willThrowException(new \RuntimeException('archive write failed'));
+
+        $consumer = $this->createConsumer(
+            repository: $repository,
+            taskFileDomainService: $this->createMock(TaskFileDomainService::class),
+            producer: $producer,
+            videoGatewayClient: $videoGatewayClient,
+            fileNameTool: $fileNameTool,
+        );
+
+        $result = $consumer->consumeMessage([
+            'organization_code' => 'org',
+            'project_id' => 123,
+            'generation_id' => 'video-1',
+        ], new AMQPMessage());
+
+        $this->assertSame(Result::ACK, $result);
+        $this->assertSame(DesignGenerationStatus::PROCESSING, $entity->getStatus());
+    }
+
     private function createConsumer(
         InMemoryDesignGenerationTaskRepository $repository,
         TaskFileDomainService $taskFileDomainService,
         ?FileDomainService $fileDomainService = null,
+        ?Producer $producer = null,
+        ?VideoGatewayClientInterface $videoGatewayClient = null,
+        ?DesignGeneratedVideoFileNameTool $fileNameTool = null,
     ): TestableDesignVideoPollConsumer {
         $projectDomainService = $this->createMock(ProjectDomainService::class);
         $project = (new ProjectEntity())
@@ -229,13 +285,13 @@ class DesignVideoPollConsumerTest extends TestCase
             ->setUserOrganizationCode('org');
         $projectDomainService->method('getProjectNotUserId')->with(123)->willReturn($project);
 
-        $fileNameTool = $this->createMock(DesignGeneratedVideoFileNameTool::class);
+        $fileNameTool ??= $this->createMock(DesignGeneratedVideoFileNameTool::class);
         $fileNameTool->method('resolveBaseNameWithoutExtension')->willReturn('smart-video');
 
         return new TestableDesignVideoPollConsumer(
             new DesignGenerationTaskDomainService($repository),
-            $this->createMock(VideoGatewayClientInterface::class),
-            $this->createMock(Producer::class),
+            $videoGatewayClient ?? $this->createMock(VideoGatewayClientInterface::class),
+            $producer ?? $this->createMock(Producer::class),
             $fileDomainService ?? $this->createFileDomainServiceExpectingNoUpload(),
             $taskFileDomainService,
             $projectDomainService,
@@ -421,6 +477,8 @@ class InMemoryDesignGenerationTaskRepository implements DesignGenerationTaskRepo
 {
     public int $updateCount = 0;
 
+    public ?DesignGenerationTaskEntity $task = null;
+
     public function create(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity): void
     {
     }
@@ -440,7 +498,7 @@ class InMemoryDesignGenerationTaskRepository implements DesignGenerationTaskRepo
         DesignGenerationAssetType $assetType,
         string $generationId
     ): ?DesignGenerationTaskEntity {
-        return null;
+        return $this->task;
     }
 
     public function findProcessingTasksAfterId(int $cursorId, int $limit): array

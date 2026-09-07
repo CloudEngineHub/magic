@@ -203,16 +203,9 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'operation_id' => $operationId,
                 'error' => $throwable->getMessage(),
             ]);
-            $this->logger->error('design video poll mark failed', [
-                'reason' => 'archive_failed',
-                'video_id' => $entity->getGenerationId(),
-                'project_id' => $entity->getProjectId(),
-                'organization_code' => $entity->getOrganizationCode(),
-                'sandbox_id' => $sandboxId,
-                'operation_id' => $operationId,
-                'error' => $throwable->getMessage(),
-            ]);
-            $this->domainService->markAsFailed($dataIsolation, $entity, $throwable->getMessage());
+
+            $this->producer->produce(new DesignVideoPollDelayPublisher($msg));
+            return Result::ACK;
         }
 
         return Result::ACK;
