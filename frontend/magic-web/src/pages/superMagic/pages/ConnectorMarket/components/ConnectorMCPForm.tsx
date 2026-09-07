@@ -952,11 +952,23 @@ export default function ConnectorMCPForm({
 			onSuccessCallback?.()
 			onClose?.()
 		} catch (error) {
-			magicToast.error(
-				error instanceof Error
-					? error.message
-					: tMarket("connectors.createForm.saveFailed"),
+			if (error instanceof Error) {
+				magicToast.error(error.message)
+				return
+			}
+
+			// API response errors are already displayed by the response interceptor
+		// when they contain a backend message. Avoid showing a duplicate fallback toast.
+			if (
+				error &&
+				typeof error === "object" &&
+				"message" in error &&
+				typeof error.message === "string" &&
+				error.message.trim()
 			)
+				return
+
+			magicToast.error(tMarket("connectors.createForm.saveFailed"))
 		}
 	}
 

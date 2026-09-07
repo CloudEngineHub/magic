@@ -24,6 +24,7 @@
 		"createForm": {
 			"addParameter": "添加参数",
 			"close": "关闭",
+			"descriptionPlaceholder": "例如：用于访问外部服务",
 			"editTitle": "编辑 MCP 连接器",
 			"env": "环境变量",
 			"headersLabel": "Headers",
@@ -33,8 +34,6 @@
 			"key": "键",
 			"loadFailed": "连接器配置加载失败",
 			"loading": "加载中…",
-			"name": "名称",
-			"namePlaceholder": "例如：我的连接器",
 			"mcpAuthorization": "OAuth 2.0（MCP 服务授权）",
 			"mcpAuthorizationLabels": {
 				"additionalParams": "额外授权参数",
@@ -52,12 +51,8 @@
 				"tokenEndpoint": "Token 端点（Token Endpoint）",
 				"tokenEndpointAuthMethod": "Token 端点认证方式"
 			},
-			"registrationModes": {
-				"auto": "自动发现",
-				"pre_registered": "预注册（Pre-registered）",
-				"cimd": "客户端元数据（CIMD）",
-				"dcr": "动态注册（DCR）"
-			},
+			"name": "名称",
+			"namePlaceholder": "例如：我的连接器",
 			"oauthLabels": {
 				"authorizationContentType": "Authorization Content Type",
 				"authorizationUrl": "Authorization URL",
@@ -67,10 +62,15 @@
 				"scope": "Scope"
 			},
 			"oauthRequired": "请输入 {{name}}",
+			"registrationModes": {
+				"auto": "自动发现",
+				"cimd": "客户端元数据（CIMD）",
+				"dcr": "动态注册（DCR）",
+				"pre_registered": "预注册（Pre-registered）"
+			},
 			"removeRow": "移除参数",
 			"saveFailed": "保存失败",
 			"saving": "保存中…",
-			"descriptionPlaceholder": "例如：用于访问外部服务",
 			"title": "创建 MCP 连接器",
 			"type": "类型",
 			"uploadIcon": "上传图标",
@@ -90,7 +90,7 @@
 		"description": "描述",
 		"descriptionFallback": "暂无描述",
 		"disable": "禁用",
-		"disabled": "未启用",
+		"disabled": "已禁用",
 		"edit": "编辑",
 		"editConfig": "修改配置",
 		"editSuccess": "连接器更新成功",

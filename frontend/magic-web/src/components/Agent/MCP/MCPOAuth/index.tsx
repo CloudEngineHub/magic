@@ -16,6 +16,7 @@ import { generateCallbackUrl } from "../helpers"
 import { renderMarkdownLinks } from "../renderMarkdownLinks"
 import { trim, isString } from "lodash-es"
 import MagicImage from "@/components/base/MagicImage"
+import magicToast from "@/components/base/MagicToaster/utils"
 import { useTranslation } from "react-i18next"
 import type { GetAvailableMCPListResponse } from "@/types/flow"
 
@@ -26,6 +27,18 @@ interface MCPEditor extends AgentCommonModalChildrenProps {
 	panelMode?: "add" | "edit"
 	initialUserSettings?: MCPOAuthStatus
 	initialMcpDetails?: GetAvailableMCPListResponse
+}
+
+function getSafeAuthorizationUrl(value: unknown) {
+	if (typeof value !== "string" || !value.trim()) return null
+
+	try {
+		const url = new URL(value.trim())
+		if (url.protocol !== "https:" || url.username || url.password) return null
+		return url.toString()
+	} catch {
+		return null
+	}
 }
 
 export default function MCPOAuth(props: MCPEditor) {
@@ -147,11 +160,15 @@ export default function MCPOAuth(props: MCPEditor) {
 	const triggerStartPolling = useMemoizedFn(() => {
 		const authorizationUrl =
 			data?.auth_config?.authorization_url || data?.auth_config?.oauth_url
-		if (authorizationUrl) {
-			window.open(authorizationUrl)
-			// 这里需要通过新窗口打开授权页面，指定授权成功回调页面
-			service.current?.restart(id, data)
+		const safeAuthorizationUrl = getSafeAuthorizationUrl(authorizationUrl)
+		if (!safeAuthorizationUrl) {
+			magicToast.error(t("mcp.form.authorizationUrlInvalid"))
+			return
 		}
+
+		window.open(safeAuthorizationUrl, "_blank", "noopener,noreferrer")
+		// 这里需要通过新窗口打开授权页面，指定授权成功回调页面
+		service.current?.restart(id, data)
 	})
 
 	const triggerUnbind = useMemoizedFn(async () => {

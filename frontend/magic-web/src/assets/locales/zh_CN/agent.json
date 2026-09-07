@@ -127,6 +127,7 @@
 			"authToSuccess": "已完成账号授权\n点击取消",
 			"authToSuccessAction": "取消连接",
 			"authToSuccessTitle": "已完成账号授权",
+			"authorizationUrlInvalid": "授权地址无效",
 			"cancel": "取消",
 			"command": "Command",
 			"commandPlaceholder": "请输入 Command，如 npx",

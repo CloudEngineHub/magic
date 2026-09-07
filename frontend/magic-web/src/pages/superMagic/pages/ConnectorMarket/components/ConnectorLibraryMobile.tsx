@@ -3,7 +3,7 @@ import type { IMCPItem } from "@/components/Agent/MCP/types"
 import { FlowApi } from "@/apis"
 import { InfiniteScroll } from "antd-mobile"
 import { useTranslation } from "react-i18next"
-import { ChevronLeft, Loader2, Plus, Search } from "lucide-react"
+import { ChevronLeft, Plus, Search } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { useConfirmDialog } from "@/components/shadcn-composed/confirm-dialog"
 import { openAgentCommonModal } from "@/components/Agent/AgentCommonModal"
@@ -55,12 +55,10 @@ export default function ConnectorLibraryMobile({ scrollViewportRef }: ConnectorL
 		handleAuthDialogSuccess,
 		handleAuthDialogOpenChange,
 		onStatusChange,
-		onConfigure,
 	} = useConnectorActions()
 	const {
 		list,
 		loading,
-		loadingMore,
 		loadingMoreError,
 		hasMore,
 		error,
@@ -104,6 +102,9 @@ export default function ConnectorLibraryMobile({ scrollViewportRef }: ConnectorL
 		setStatusLoadingIds((current) => new Set(current).add(connector.id))
 		try {
 			await FlowApi.saveMcp({ ...connector, enabled: !connector.enabled })
+			if (connector.enabled && selectedIds.has(connector.id)) {
+				await onStatusChange(connector)
+			}
 			updateItem(connector.id, (item) => ({ ...item, enabled: !connector.enabled }))
 			magicToast.success(
 				tAgent(connector.enabled ? "mcp.page.switch.disable" : "mcp.page.switch.enable", {
@@ -165,7 +166,6 @@ export default function ConnectorLibraryMobile({ scrollViewportRef }: ConnectorL
 				selected={selectedConnector ? selectedIds.has(selectedConnector.id) : false}
 				loading={selectedConnector ? loadingIds.has(selectedConnector.id) : false}
 				onToggle={onStatusChange}
-				onConfigure={onConfigure}
 			/>
 			<AuthManagerModal
 				open={permissionsConnectorId != null}
@@ -309,9 +309,7 @@ export default function ConnectorLibraryMobile({ scrollViewportRef }: ConnectorL
 									onToggle={onStatusChange}
 									onOpenDetail={openDetail}
 									showManageMenu={group === CONNECTOR_MARKET_GROUPS.mine}
-									descriptionMaxLines={
-										group === CONNECTOR_MARKET_GROUPS.official ? 4 : 3
-									}
+									descriptionMaxLines={3}
 									onEdit={editConnector}
 									onAuthorize={authorizeConnector}
 									onManagePermissions={manageConnectorPermissions}

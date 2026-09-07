@@ -19,6 +19,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import MagicImage from "@/components/base/MagicImage"
+import { Badge } from "@/components/shadcn-ui/badge"
 import { IconMCP } from "@/enhance/tabler/icons-react"
 import { MCPType, type IMCPItem } from "@/components/Agent/MCP/types"
 import { renderMarkdownLinks } from "@/components/Agent/MCP/renderMarkdownLinks"
@@ -93,6 +94,7 @@ export default function ConnectorCard({
 		onOpenDetail?.(connector)
 	}
 	const canEdit = hasEditRight(connector.user_operation)
+	const isDisabled = showManageMenu && connector.enabled === false
 	const menuItems = [
 		...(canEdit
 			? [
@@ -172,7 +174,7 @@ export default function ConnectorCard({
 
 	return (
 		<article
-			className="group relative flex h-[168px] overflow-hidden rounded-2xl border border-border/70 bg-background shadow-[0_8px_26px_rgba(24,25,29,0.035)] transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-[0_12px_30px_rgba(24,25,29,0.07)] sm:h-[176px]"
+			className={`group relative flex overflow-hidden rounded-2xl border border-border/70 bg-background shadow-[0_8px_26px_rgba(24,25,29,0.035)] transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-[0_12px_30px_rgba(24,25,29,0.07)] ${showManageMenu ? "h-[188px] sm:h-[192px]" : "h-[168px] sm:h-[176px]"}`}
 			data-testid="connector-card"
 		>
 			<div
@@ -251,34 +253,46 @@ export default function ConnectorCard({
 					</Button>
 				</MagicDropdown>
 			) : null}
-			<MagicTooltip title={!selected && !loading ? tAgent("mcp.panel.create") : undefined}>
-				<Button
-					type="button"
-					size="icon"
-					variant="ghost"
-					className={
-						"absolute right-4 top-4 z-10 size-8 rounded-lg " +
-						(selected
-							? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-100 dark:text-emerald-400"
-							: "bg-muted/80 text-foreground/80 hover:bg-muted")
-					}
-					disabled={loading}
-					aria-label={selected ? t("connectors.added") : tAgent("mcp.panel.create")}
-					onClick={(event) => {
-						event.stopPropagation()
-						void Promise.resolve(onToggle?.(connector)).catch(console.error)
-					}}
-					data-testid="connector-card-toggle-button"
+			{isDisabled ? (
+				<Badge
+					variant="secondary"
+					className="absolute right-4 top-4 z-10 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
+					data-testid="connector-card-disabled-badge"
 				>
-					{loading ? (
-						<Loader2 className="size-4 animate-spin" />
-					) : selected ? (
-						<Check className="size-4" />
-					) : (
-						<Plus className="size-4" />
-					)}
-				</Button>
-			</MagicTooltip>
+					{t("connectors.disabled")}
+				</Badge>
+			) : (
+				<MagicTooltip
+					title={!selected && !loading ? tAgent("mcp.panel.create") : undefined}
+				>
+					<Button
+						type="button"
+						size="icon"
+						variant="ghost"
+						className={
+							"absolute right-4 top-4 z-10 size-8 rounded-lg " +
+							(selected
+								? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-100 dark:text-emerald-400"
+								: "bg-muted/80 text-foreground/80 hover:bg-muted")
+						}
+						disabled={loading}
+						aria-label={selected ? t("connectors.added") : tAgent("mcp.panel.create")}
+						onClick={(event) => {
+							event.stopPropagation()
+							void Promise.resolve(onToggle?.(connector)).catch(console.error)
+						}}
+						data-testid="connector-card-toggle-button"
+					>
+						{loading ? (
+							<Loader2 className="size-4 animate-spin" />
+						) : selected ? (
+							<Check className="size-4" />
+						) : (
+							<Plus className="size-4" />
+						)}
+					</Button>
+				</MagicTooltip>
+			)}
 		</article>
 	)
 }

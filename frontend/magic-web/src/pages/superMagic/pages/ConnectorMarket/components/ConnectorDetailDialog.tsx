@@ -29,18 +29,6 @@ interface ConnectorDetailDialogProps {
 			panelMode?: "add" | "edit"
 		},
 	) => Promise<unknown> | void
-	onConfigure?: (
-		connector: IMCPItem,
-		options?: {
-			zIndex?: number
-			onNestedPanelOpen?: () => void
-			onNestedPanelClose?: () => void
-			modalClassName?: string
-			modalWidth?: number | string
-			panelVariant?: "default" | "connector-market"
-			panelMode?: "add" | "edit"
-		},
-	) => Promise<unknown> | void
 }
 
 type ConnectorDetail = IMCPItem & {
@@ -57,7 +45,6 @@ export default function ConnectorDetailDialog({
 	selected = false,
 	loading = false,
 	onToggle,
-	onConfigure,
 }: ConnectorDetailDialogProps) {
 	const { t: tMarket } = useTranslation("crew/market")
 	const { t: tAgent } = useTranslation("agent")
@@ -66,13 +53,16 @@ export default function ConnectorDetailDialog({
 	const [isLoading, setIsLoading] = useState(false)
 	const [hasLoadFailed, setHasLoadFailed] = useState(false)
 	const [isActionLoading, setIsActionLoading] = useState(false)
-	const [isConfiguring, setIsConfiguring] = useState(false)
+	const [isRemoving, setIsRemoving] = useState(false)
+	const [selectedOnClose, setSelectedOnClose] = useState<boolean | null>(null)
 	const [isNestedPanelOpen, setIsNestedPanelOpen] = useState(false)
 	const [reloadNonce, setReloadNonce] = useState(0)
 	const connectorId = connector?.id?.trim() || ""
 
 	useEffect(() => {
 		if (!open || !connectorId) return
+		setIsRemoving(false)
+		setSelectedOnClose(null)
 		let disposed = false
 		setIsLoading(true)
 		setHasLoadFailed(false)
@@ -94,6 +84,7 @@ export default function ConnectorDetailDialog({
 			disposed = true
 		}
 	}, [connectorId, open, reloadNonce])
+	const isSelected = open ? selected || isRemoving : (selectedOnClose ?? (selected || isRemoving))
 
 	const displayDetail = detail ?? (connector as ConnectorDetail | null)
 	const displayName = displayDetail?.name || tMarket("connectors.empty")
@@ -103,19 +94,15 @@ export default function ConnectorDetailDialog({
 		linkClassName: "text-primary underline underline-offset-2 hover:opacity-90",
 		linkTestId: "connector-detail-description-link",
 	})
-	const hasConfiguration = Boolean(
-		displayDetail?.require_fields?.length ||
-		displayDetail?.check_require_fields ||
-		displayDetail?.check_auth,
-	)
-
 	const requestClose = () => {
 		if (isNestedPanelOpen) return
+		setSelectedOnClose(selected || isRemoving)
 		onOpenChange(false)
 	}
 
 	async function handleToggle() {
 		if (!connector || loading || isActionLoading) return
+		if (selected) setIsRemoving(true)
 		setIsActionLoading(true)
 		try {
 			const didToggle = await onToggle?.(connector, {
@@ -126,29 +113,11 @@ export default function ConnectorDetailDialog({
 				onNestedPanelOpen: () => setIsNestedPanelOpen(true),
 				onNestedPanelClose: () => setIsNestedPanelOpen(false),
 			})
-			if (didToggle !== false) onOpenChange(false)
+			if (didToggle !== false) {
+				setSelectedOnClose(selected || isRemoving)
+				onOpenChange(false)
+			}
 		} finally {
-			setIsActionLoading(false)
-		}
-	}
-
-	async function handleConfigure() {
-		if (!connector || loading || isActionLoading) return
-		setIsActionLoading(true)
-		setIsConfiguring(true)
-		try {
-			const didConfigure = await onConfigure?.(connector, {
-				zIndex: overlayLayer.contentZIndex + 10,
-				modalWidth: "calc(100% - 2rem)",
-				modalClassName:
-					"!max-h-[calc(100%-3rem)] !max-w-[560px] !overflow-hidden !rounded-xl !border !bg-background !p-0 !shadow-sm",
-				panelMode: "edit",
-				onNestedPanelOpen: () => setIsNestedPanelOpen(true),
-				onNestedPanelClose: () => setIsNestedPanelOpen(false),
-			})
-			if (didConfigure === true) onOpenChange(false)
-		} finally {
-			setIsConfiguring(false)
 			setIsActionLoading(false)
 		}
 	}
@@ -240,36 +209,17 @@ export default function ConnectorDetailDialog({
 											{displayDescriptionNodes}
 										</p>
 									</div>
-									{selected ? (
+									{isSelected ? (
 										<div className="flex items-center justify-end gap-2">
-											{hasConfiguration ? (
-												<Button
-													type="button"
-													variant="outline"
-													className="h-10 min-w-0 flex-1"
-													onClick={() => void handleConfigure()}
-													disabled={
-														!connector || loading || isActionLoading
-													}
-													data-testid="connector-detail-configure-button"
-												>
-													{isConfiguring ? (
-														<Loader2 className="size-4 animate-spin" />
-													) : null}
-													{!loading && !isActionLoading
-														? tMarket("connectors.editConfig")
-														: null}
-												</Button>
-											) : null}
 											<Button
 												type="button"
 												variant="destructive"
-												className="h-10 bg-destructive/10 text-destructive hover:bg-destructive/15"
+												className="h-10 w-full bg-destructive/10 text-destructive hover:bg-destructive/15"
 												onClick={() => void handleToggle()}
 												disabled={!connector || loading || isActionLoading}
 												data-testid="connector-detail-remove-button"
 											>
-												{(loading || isActionLoading) && !isConfiguring ? (
+												{loading || isActionLoading ? (
 													<Loader2 className="size-4 animate-spin" />
 												) : (
 													tMarket("connectors.remove")

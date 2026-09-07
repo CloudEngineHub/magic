@@ -52,7 +52,6 @@ export default function ConnectorLibrary({ scrollViewportRef }: ConnectorLibrary
 		handleAuthDialogSuccess,
 		handleAuthDialogOpenChange,
 		onStatusChange,
-		onConfigure,
 	} = useConnectorActions()
 	const {
 		list,
@@ -113,6 +112,9 @@ export default function ConnectorLibrary({ scrollViewportRef }: ConnectorLibrary
 		setStatusLoadingIds((current) => new Set(current).add(connector.id))
 		try {
 			await FlowApi.saveMcp({ ...connector, enabled: !connector.enabled })
+			if (connector.enabled && selectedIds.has(connector.id)) {
+				await onStatusChange(connector)
+			}
 			updateItem(connector.id, (item) => ({ ...item, enabled: !connector.enabled }))
 			magicToast.success(
 				tAgent(connector.enabled ? "mcp.page.switch.disable" : "mcp.page.switch.enable", {
@@ -161,7 +163,6 @@ export default function ConnectorLibrary({ scrollViewportRef }: ConnectorLibrary
 				selected={selectedConnector ? selectedIds.has(selectedConnector.id) : false}
 				loading={selectedConnector ? loadingIds.has(selectedConnector.id) : false}
 				onToggle={onStatusChange}
-				onConfigure={onConfigure}
 			/>
 			<AuthManagerModal
 				open={permissionsConnectorId != null}
@@ -264,9 +265,7 @@ export default function ConnectorLibrary({ scrollViewportRef }: ConnectorLibrary
 								onToggle={onStatusChange}
 								onOpenDetail={openDetail}
 								showManageMenu={group === CONNECTOR_MARKET_GROUPS.mine}
-								descriptionMaxLines={
-									group === CONNECTOR_MARKET_GROUPS.official ? 4 : 3
-								}
+								descriptionMaxLines={3}
 								onEdit={editConnector}
 								onAuthorize={authorizeConnector}
 								onManagePermissions={manageConnectorPermissions}

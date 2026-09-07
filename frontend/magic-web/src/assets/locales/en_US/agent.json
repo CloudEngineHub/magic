@@ -127,6 +127,7 @@
 			"authToSuccess": "Account authorization completed\nClick Cancel",
 			"authToSuccessAction": "Disconnect",
 			"authToSuccessTitle": "Account authorization completed",
+			"authorizationUrlInvalid": "Invalid authorization URL",
 			"cancel": "Cancel",
 			"command": "Command",
 			"commandPlaceholder": "Please enter command, e.g., npx",

@@ -8,7 +8,7 @@ import MagicImage from "@/components/base/MagicImage"
 import { useTranslation } from "react-i18next"
 import type { MCPButtonProps } from "./MCPButton"
 import type { IMCPItem } from "../types"
-import { getMCPAccess } from "../store/mcp-access"
+import { getMCPAccess, loadMCPWithLegacyCompatibility } from "../store/mcp-access"
 import { mcpEnabledStore } from "../store/mcp-enabled-store"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { Button } from "@/components/shadcn-ui/button"
@@ -142,6 +142,7 @@ function MobileMCPPluginsSheet({
 		() => getMCPAccess({ storageKey, useTempStorage }),
 		[storageKey, useTempStorage],
 	)
+	const legacyStorageKey = storageKey || "__template_project_id__"
 	const {
 		selectedItems,
 		selectedIds,
@@ -150,7 +151,6 @@ function MobileMCPPluginsSheet({
 		handleAuthDialogSuccess,
 		handleAuthDialogOpenChange,
 		onStatusChange,
-		onConfigure,
 	} = useConnectorActions()
 	const {
 		list: marketList,
@@ -165,24 +165,31 @@ function MobileMCPPluginsSheet({
 		mcpEnabledStore.setEnabledIds([])
 
 		const loadMCPSettings = async () => {
-			try {
-				await addedMCPAccess.load()
-			} catch (error) {
-				console.error(error)
+			if (!useTempStorage) {
+				try {
+					await loadMCPWithLegacyCompatibility({
+						addedAccess: addedMCPAccess,
+						legacyAccess: activeMCPAccess,
+						legacyStorageKey,
+					})
+				} catch (error) {
+					console.error(error)
+				}
+			} else {
+				try {
+					await Promise.all([addedMCPAccess.load(), activeMCPAccess.load()])
+				} catch (error) {
+					console.error(error)
+				}
 			}
 			if (cancelled) return
-			try {
-				await activeMCPAccess.load()
-			} catch (error) {
-				console.error(error)
-			}
 		}
 
 		void loadMCPSettings()
 		return () => {
 			cancelled = true
 		}
-	}, [activeMCPAccess, addedMCPAccess])
+	}, [activeMCPAccess, addedMCPAccess, legacyStorageKey, useTempStorage])
 
 	const displayMCPList = addedMCPAccess.mcpList
 	const activeMCPIds = activeMCPAccess.mcpList.map((item) => item.id).join(",")
@@ -291,7 +298,6 @@ function MobileMCPPluginsSheet({
 				selected={selectedConnector ? selectedIds.has(selectedConnector.id) : false}
 				loading={selectedConnector ? loadingIds.has(selectedConnector.id) : false}
 				onToggle={onStatusChange}
-				onConfigure={onConfigure}
 			/>
 			<div
 				className="flex h-[min(640px,calc(100vh-var(--safe-area-inset-top)-var(--safe-area-inset-bottom)-44px))] min-h-0 w-full flex-col overflow-hidden bg-muted"

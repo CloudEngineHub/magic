@@ -2,17 +2,13 @@ import { useEffect, useState } from "react"
 import { IconPlus } from "@tabler/icons-react"
 import { useMemoizedFn, useCreation, useMount } from "ahooks"
 import { AgentCommonModal } from "../../AgentCommonModal"
-import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/shadcn-ui/popover"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { IconMCP } from "@/enhance/tabler/icons-react"
 import MagicImage from "@/components/base/MagicImage"
 import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { getMCPAccess } from "../store/mcp-access"
+import { getMCPAccess, loadMCPWithLegacyCompatibility } from "../store/mcp-access"
 import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import AgentSettings from "../AgentSettings"
 import MobileMCPPluginsSheet from "./MobileMCPPluginsSheet"
@@ -95,10 +91,7 @@ function MCPButton(props?: MCPButtonProps) {
 	const [menuOpen, setMenuOpen] = useState(false)
 	const [enabledMCPIds, setEnabledMCPIds] = useState<Set<string>>(() => new Set())
 	const [switchLoadingIds, setSwitchLoadingIds] = useState<Set<string>>(() => new Set())
-	const addedMCPAccess = useCreation(
-		() => getMCPAccess({ storageKey: "__added__" }),
-		[],
-	)
+	const addedMCPAccess = useCreation(() => getMCPAccess({ storageKey: "__added__" }), [])
 	const activeMCPAccess = useCreation(
 		() =>
 			getMCPAccess({
@@ -107,29 +100,37 @@ function MCPButton(props?: MCPButtonProps) {
 			}),
 		[props?.storageKey, useTempStorage],
 	)
+	const legacyStorageKey = props?.storageKey || "__template_project_id__"
 
 	useEffect(() => {
 		let cancelled = false
 		setEnabledMCPIds(new Set())
 		mcpEnabledStore.setEnabledIds([])
 		const loadMCPSettings = async () => {
-			try {
-				await addedMCPAccess.load()
-			} catch (error) {
-				console.error(error)
+			if (!useTempStorage) {
+				try {
+					await loadMCPWithLegacyCompatibility({
+						addedAccess: addedMCPAccess,
+						legacyAccess: activeMCPAccess,
+						legacyStorageKey,
+					})
+				} catch (error) {
+					console.error(error)
+				}
+			} else {
+				try {
+					await Promise.all([addedMCPAccess.load(), activeMCPAccess.load()])
+				} catch (error) {
+					console.error(error)
+				}
 			}
 			if (cancelled) return
-			try {
-				await activeMCPAccess.load()
-			} catch (error) {
-				console.error(error)
-			}
 		}
 		void loadMCPSettings()
 		return () => {
 			cancelled = true
 		}
-	}, [activeMCPAccess, addedMCPAccess])
+	}, [activeMCPAccess, addedMCPAccess, legacyStorageKey, useTempStorage])
 
 	const displayMCPList = addedMCPAccess.mcpList
 	const activeMCPIds = activeMCPAccess.mcpList.map((item) => item.id).join(",")
@@ -346,8 +347,10 @@ function MCPButton(props?: MCPButtonProps) {
 				</Tooltip>
 				<PopoverContent
 					side="top"
-					align="start"
-					className="z-[1200] w-[320px] p-0"
+					align="end"
+					sideOffset={8}
+					collisionPadding={16}
+					className="z-[1200] max-h-[calc(100vh-32px)] w-[min(320px,calc(100vw-32px))] max-w-[calc(100vw-32px)] overflow-hidden p-0"
 				>
 					{content}
 				</PopoverContent>

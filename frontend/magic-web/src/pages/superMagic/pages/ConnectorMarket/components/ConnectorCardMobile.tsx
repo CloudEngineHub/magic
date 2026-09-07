@@ -16,6 +16,7 @@ import dayjs from "@/infrastructure/vendors/dayjs"
 import { Button } from "@/components/shadcn-ui/button"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import MagicImage from "@/components/base/MagicImage"
+import { Badge } from "@/components/shadcn-ui/badge"
 import { IconMCP } from "@/enhance/tabler/icons-react"
 import { MCPType, type IMCPItem } from "@/components/Agent/MCP/types"
 import { renderMarkdownLinks } from "@/components/Agent/MCP/renderMarkdownLinks"
@@ -82,6 +83,7 @@ export default function ConnectorCardMobile({
 		onOpenDetail?.(connector)
 	}
 	const canEdit = hasEditRight(connector.user_operation)
+	const isDisabled = showManageMenu && connector.enabled === false
 	const menuItems = [
 		...(canEdit
 			? [
@@ -166,7 +168,9 @@ export default function ConnectorCardMobile({
 				/>
 				<div className="flex min-w-0 flex-1 flex-col gap-2">
 					<div className="flex min-w-0 items-start justify-between gap-2">
-						<p className="min-w-0 flex-1 truncate pt-0.5 text-sm font-medium leading-6 text-foreground">
+						<p
+							className={`min-w-0 flex-1 truncate pt-0.5 text-sm font-medium leading-6 text-foreground ${isDisabled ? "pr-16" : ""}`}
+						>
 							{connector.name}
 						</p>
 					</div>
@@ -181,21 +185,35 @@ export default function ConnectorCardMobile({
 				</div>
 			</div>
 			<div className="h-px w-full bg-border" />
-			<Button
-				variant="default"
-				size="sm"
-				className="h-8 w-full text-xs shadow-xs"
-				disabled={loading}
-				onClick={(event) => {
-					event.stopPropagation()
-					void Promise.resolve(onToggle?.(connector)).catch(console.error)
-				}}
-				data-testid="connector-mobile-card-toggle-button"
-			>
-				{loading ? <Loader2 className="size-4 animate-spin" /> : null}
-				{!loading && selected ? <Check className="size-4" /> : null}
-				{!loading ? (selected ? t("connectors.added") : tAgent("mcp.panel.create")) : null}
-			</Button>
+			{isDisabled ? (
+				<Badge
+					variant="secondary"
+					className="absolute right-2.5 top-2.5 z-10 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
+					data-testid="connector-mobile-card-disabled-badge"
+				>
+					{t("connectors.disabled")}
+				</Badge>
+			) : (
+				<Button
+					variant="default"
+					size="sm"
+					className="h-8 w-full text-xs shadow-xs"
+					disabled={loading}
+					onClick={(event) => {
+						event.stopPropagation()
+						void Promise.resolve(onToggle?.(connector)).catch(console.error)
+					}}
+					data-testid="connector-mobile-card-toggle-button"
+				>
+					{loading ? <Loader2 className="size-4 animate-spin" /> : null}
+					{!loading && selected ? <Check className="size-4" /> : null}
+					{!loading
+						? selected
+							? t("connectors.added")
+							: tAgent("mcp.panel.create")
+						: null}
+				</Button>
+			)}
 			<div className="min-h-6" aria-hidden="true" />
 			{showManageMenu ? (
 				<div className="pointer-events-none absolute bottom-1 left-2.5 right-10 flex min-h-6 items-center">
