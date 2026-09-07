@@ -22,6 +22,7 @@ use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityConfig
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\Domain\SuperMagic\Agent\Entity\SuperMagicAgentEntity;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\Query\SuperMagicAgentQuery;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentType;
@@ -217,11 +218,11 @@ class SuperMagicAgentOldAppService extends AbstractSuperMagicAppService
         $apiChatDTO->setParams($arguments);
         $apiChatDTO->setFlowCode($toolFlow->getCode());
         $apiChatDTO->setFlowVersionCode($toolFlow->getVersionCode());
-        $apiChatDTO->setMessage('super_magic_tool_call');
+        $apiChatDTO->setMessage(SourceId::SUPER_MAGIC_TOOL_CALL);
         return di(MagicFlowExecuteAppService::class)->apiParamCallByRemoteTool(
             $flowDataIsolation,
             $apiChatDTO,
-            'super_magic_tool_call'
+            SourceId::SUPER_MAGIC_TOOL_CALL
         );
     }
 

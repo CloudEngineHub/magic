@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\VideoGeneration;
 
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Application\ModelGateway\MicroAgent\MicroAgentFactory;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
@@ -75,7 +76,7 @@ class DesignGeneratedVideoFileNameTool
                     businessParams: [
                         'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
                         'user_id' => $dataIsolation->getCurrentUserId(),
-                        'source_id' => 'design_video_file_name_generation',
+                        'source_id' => SourceId::DESIGN_VIDEO_FILE_NAME_GENERATION,
                     ]
                 );
 

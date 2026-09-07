@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\ModelGateway\Entity\Dto;
 
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use RuntimeException;
 
 class AiAbilityConnectivityTestRequestDTO extends AbstractRequestDTO
@@ -43,7 +44,7 @@ class AiAbilityConnectivityTestRequestDTO extends AbstractRequestDTO
 
     public function getType(): string
     {
-        return 'ai_ability_connectivity_test';
+        return SourceId::AI_ABILITY_CONNECTIVITY_TEST;
     }
 
     public function getAiAbility(): string

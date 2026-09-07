@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Service;
 
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Application\ModelGateway\MicroAgent\MicroAgentFactory;
 use App\Domain\Design\Entity\ValueObject\ImageMarkIdentifyType;
 use App\Domain\File\Service\FileDomainService;
@@ -133,7 +134,7 @@ class ImageMarkIdentifyAppService extends DesignAppService
                     'organization_id' => $dataIsolation->getCurrentOrganizationCode(),
                     'user_id' => $dataIsolation->getCurrentUserId(),
                     'business_id' => (string) $projectId,
-                    'source_id' => 'design_image_mark_identify',
+                    'source_id' => SourceId::DESIGN_IMAGE_MARK_IDENTIFY,
                 ]
             );
         } catch (Throwable $throwable) {

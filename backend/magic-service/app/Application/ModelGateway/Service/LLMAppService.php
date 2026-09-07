@@ -30,6 +30,7 @@ use App\Domain\ModelGateway\Entity\Dto\WebScrapeRequestDTO;
 use App\Domain\ModelGateway\Entity\ModelConfigEntity;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelListType;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\ModelGateway\Event\ImageGeneratedEvent;
 use App\Domain\ModelGateway\Event\ImageGenerateFailedEvent;
 use App\Domain\ModelGateway\Service\VideoGenerationConfigDomainService;
@@ -393,7 +394,7 @@ class LLMAppService extends AbstractLLMAppService
             'organization_id' => $authorization->getOrganizationCode(),
             'user_id' => $authorization->getId(),
             'user_name' => $authorization->getNickname(),
-            'source_id' => (string) ($data['source_id'] ?? 'image_generate'),
+            'source_id' => (string) ($data['source_id'] ?? SourceId::IMAGE_GENERATE),
             'business_id' => (string) ($data['business_id'] ?? ''),
             'tool_code' => (string) ($data['tool_code'] ?? ''),
             'original_model_id' => $modelId,
@@ -419,7 +420,7 @@ class LLMAppService extends AbstractLLMAppService
             }
         }
         $imageGeneratedEvent->setSourceType($sourceType);
-        $imageGeneratedEvent->setSourceId($data['source_id'] ?? 'image_generate');
+        $imageGeneratedEvent->setSourceId($data['source_id'] ?? SourceId::IMAGE_GENERATE);
         $imageGeneratedEvent->setResolution($imageGenerateRequest->getResolution());
         $imageGeneratedEvent->setImageSize($imageGenerateRequest->getSize());
         $imageGeneratedEvent->setReferenceImageCount($referenceImageCount);
@@ -491,7 +492,7 @@ class LLMAppService extends AbstractLLMAppService
             'organization_id' => $userAuthorization->getOrganizationCode(),
             'user_id' => $userAuthorization->getId(),
             'user_name' => $userAuthorization->getNickname(),
-            'source_id' => $reqDTO->getSourceId() ?: 'image_generate',
+            'source_id' => $reqDTO->getSourceId() ?: SourceId::IMAGE_GENERATE,
             'business_id' => $reqDTO->getTopicId() !== '' ? $reqDTO->getTopicId() : $reqDTO->getConversationId(),
             'tool_code' => $reqDTO->getToolCode(),
             'provider_name' => trim($miracleVisionServiceProviderConfig->getAlias()),

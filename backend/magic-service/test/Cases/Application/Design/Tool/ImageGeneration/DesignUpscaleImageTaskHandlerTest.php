@@ -14,6 +14,7 @@ use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Entity\Dto\ImageConvertHighDTO;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
@@ -50,7 +51,7 @@ class DesignUpscaleImageTaskHandlerTest extends BaseTest
             ->with($this->callback(static function (ImageConvertHighDTO $dto): bool {
                 return $dto->getImages() === ['https://example.test/source.png']
                     && $dto->getSize() === '4096x4096'
-                    && $dto->getBusinessParam('source_id') === 'design_image_generation'
+                    && $dto->getBusinessParam('source_id') === SourceId::DESIGN_IMAGE_GENERATION
                     && $dto->getBusinessParam('business_id') === '101';
             }))
             ->willReturn(new OpenAIFormatResponse([

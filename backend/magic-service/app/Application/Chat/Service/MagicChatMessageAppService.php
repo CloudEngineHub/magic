@@ -33,6 +33,7 @@ use App\Domain\Chat\Entity\MagicSeqEntity;
 use App\Domain\Chat\Entity\ValueObject\ConversationStatus;
 use App\Domain\Chat\Entity\ValueObject\ConversationType;
 use App\Domain\Chat\Entity\ValueObject\FileType;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\Chat\Entity\ValueObject\MagicMessageStatus;
 use App\Domain\Chat\Entity\ValueObject\MessageType\ChatMessageType;
 use App\Domain\Chat\Entity\ValueObject\MessageType\ControlMessageType;
@@ -622,7 +623,7 @@ class MagicChatMessageAppService extends MagicSeqAppService
                 'organization_id' => $modelGatewayDataIsolation->getCurrentOrganizationCode(),
                 'user_id' => $modelGatewayDataIsolation->getCurrentUserId(),
                 'business_id' => $conversationId,
-                'source_id' => 'rename_topic',
+                'source_id' => SourceId::RENAME_TOPIC,
                 'task_type' => 'text_completion',
             ]
         );
@@ -1104,7 +1105,7 @@ class MagicChatMessageAppService extends MagicSeqAppService
                 'organization_id' => $dataIsolation->getCurrentOrganizationCode(),
                 'user_id' => $dataIsolation->getCurrentUserId(),
                 'business_id' => $topicId ?: $conversationId,
-                'source_id' => 'summary_content',
+                'source_id' => SourceId::SUMMARY_CONTENT,
             ],
         );
 

@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\MCP\Service;
 
 use App\Application\Flow\Service\MagicFlowExecuteAppService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\MCP\Entity\MCPServerToolEntity;
 use App\Domain\MCP\Entity\ValueObject\MCPDataIsolation;
 use App\Domain\MCP\Entity\ValueObject\ToolSource;
@@ -66,7 +67,7 @@ class MCPServerSSEAppService extends AbstractMCPAppService
                 $apiChatDTO->setFlowCode($MCPServerToolEntity->getRelCode());
                 $apiChatDTO->setFlowVersionCode($MCPServerToolEntity->getRelVersionCode());
                 $apiChatDTO->setMessage('mcp_tool_call');
-                return di(MagicFlowExecuteAppService::class)->apiParamCallByRemoteTool($flowDataIsolation, $apiChatDTO, 'mcp_tool');
+                return di(MagicFlowExecuteAppService::class)->apiParamCallByRemoteTool($flowDataIsolation, $apiChatDTO, SourceId::MCP_TOOL);
             },
             default => null,
         };

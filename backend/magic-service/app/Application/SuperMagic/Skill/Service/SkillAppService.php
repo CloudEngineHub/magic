@@ -38,6 +38,7 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\SuperMagic\Skill\Event\SkillImportedEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketInstalledEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketOfflineEvent;
@@ -953,7 +954,7 @@ class SkillAppService extends AbstractSkillAppService
             }
             AsyncEventUtil::dispatch(new SkillUsedEvent(
                 organizationCode: $userAuthorization->getOrganizationCode(),
-                sourceId: 'super_magic_tool',
+                sourceId: SourceId::SUPER_MAGIC_TOOL,
                 callTime: (int) round(microtime(true) * 1000),
                 userId: $userAuthorization->getId(),
                 userName: $userAuthorization->getRealName(),
@@ -1022,7 +1023,7 @@ class SkillAppService extends AbstractSkillAppService
             }
             AsyncEventUtil::dispatch(new SkillUsedEvent(
                 organizationCode: $userAuthorization->getOrganizationCode(),
-                sourceId: 'super_magic_tool',
+                sourceId: SourceId::SUPER_MAGIC_TOOL,
                 callTime: (int) round(microtime(true) * 1000),
                 userId: $userAuthorization->getId(),
                 userName: $userAuthorization->getRealName(),

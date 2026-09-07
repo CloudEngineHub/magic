@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\ImageGeneration;
 
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Application\ModelGateway\MicroAgent\MicroAgentFactory;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
@@ -77,7 +78,7 @@ final class DesignGeneratedImageFileNameTool
                         'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
                         'user_id' => $dataIsolation->getCurrentUserId(),
                         'business_id' => (string) $entity->getProjectId(),
-                        'source_id' => 'design_image_file_name_generation',
+                        'source_id' => SourceId::DESIGN_IMAGE_FILE_NAME_GENERATION,
                     ]
                 );
 

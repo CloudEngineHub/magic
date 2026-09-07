@@ -9,6 +9,7 @@ namespace HyperfTest\Cases\Domain\ModelGateway\Service;
 
 use App\Domain\ModelGateway\Entity\Dto\CreateVideoDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoOperationStatus;
@@ -1203,7 +1204,7 @@ class VideoQueueDomainServiceTest extends TestCase
             'prompt' => 'make a video',
             'business_params' => [
                 'project_id' => 1001,
-                'source_id' => 'design_video_generation',
+                'source_id' => SourceId::DESIGN_VIDEO_GENERATION,
             ],
         ]);
         $requestDTO->setHeaderConfigs([
@@ -1224,7 +1225,7 @@ class VideoQueueDomainServiceTest extends TestCase
         $this->assertSame(1001, $operation->getProjectId());
         $this->assertSame('topic-1', $operation->getTopicId());
         $this->assertSame('task-1', $operation->getTaskId());
-        $this->assertSame('design_video_generation', $operation->getSourceId());
+        $this->assertSame(SourceId::DESIGN_VIDEO_GENERATION, $operation->getSourceId());
     }
 
     public function testSyncWithExecutionResultMarksFirstSucceededOnlyOnce(): void

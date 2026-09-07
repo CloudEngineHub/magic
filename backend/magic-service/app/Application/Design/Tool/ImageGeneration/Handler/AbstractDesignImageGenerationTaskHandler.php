@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\ImageGeneration\Handler;
 
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Application\Design\Tool\ImageGeneration\Contract\DesignImageGenerationTaskHandlerInterface;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
@@ -51,7 +52,7 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
         return [
             'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
             'user_id' => $dataIsolation->getCurrentUserId(),
-            'source_id' => 'design_image_generation',
+            'source_id' => SourceId::DESIGN_IMAGE_GENERATION,
             'business_id' => (string) $projectId,
         ];
     }

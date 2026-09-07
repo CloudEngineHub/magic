@@ -25,6 +25,7 @@ use App\Domain\Chat\Service\MagicConversationDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Service\MsgLogDomainService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\Provider\Service\AdminProviderDomainService;
 use App\ErrorCode\ImageGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\ImageGenerateModelType;
@@ -157,7 +158,7 @@ class MagicChatAIImageAppService extends AbstractAIImageAppService
     {
         $generateParamsVO = $reqDTO->getParams();
         $toolCode = $generateParamsVO->getSourceId();
-        $generateParamsVO->setSourceId('super_magic');
+        $generateParamsVO->setSourceId(SourceId::SUPER_MAGIC);
         $model = $generateParamsVO->getModel();
         // 根据模型类型创建对应的服务
         $data = $generateParamsVO->toArray();

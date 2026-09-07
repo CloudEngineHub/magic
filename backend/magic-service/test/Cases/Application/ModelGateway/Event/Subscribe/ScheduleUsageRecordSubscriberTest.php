@@ -11,6 +11,7 @@ use App\Application\ModelGateway\Event\ModelUsageEvent;
 use App\Application\ModelGateway\Event\Subscribe\ScheduleUsageRecordSubscriber;
 use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
 use App\Domain\ModelGateway\Entity\MsgLogEntity;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\ModelGateway\Event\ImageGeneratedEvent;
 use App\Domain\ModelGateway\Service\MsgLogDomainService;
 use DateTime;
@@ -101,7 +102,7 @@ class ScheduleUsageRecordSubscriberTest extends BaseTest
             'model_id' => 'image-model-id',
             'model_version' => 'image-model-version',
             'business_id' => 'business-test',
-            'source_id' => 'image_generate',
+            'source_id' => SourceId::IMAGE_GENERATE,
             'service_provider_id' => 'provider-test',
             'provider_model_id' => 'provider-model-test',
         ]);
@@ -111,7 +112,7 @@ class ScheduleUsageRecordSubscriberTest extends BaseTest
             self::assertSame('image-model-version', $entity->getModelVersion());
             self::assertSame(0, $entity->getUseToken());
             self::assertSame('business-test', $entity->getBusinessId());
-            self::assertSame('image_generate', $entity->getSourceId());
+        self::assertSame(SourceId::IMAGE_GENERATE, $entity->getSourceId());
             self::assertSame('provider-test', $entity->getProviderId());
             self::assertSame('provider-model-test', $entity->getProviderModelId());
         });
