@@ -91,10 +91,33 @@
 	cursor: pointer;
 }
 
+/*
+ * File mentions render a shared inner visual chip. Keep the NodeView host
+ * transparent so legacy .magic-mention padding/background do not double-paint.
+ */
+.tiptapEditor :global(.ProseMirror .magic-message-file-mention.magic-mention) {
+	display: inline-flex;
+	max-width: 100%;
+	padding: 0;
+	overflow: visible;
+	line-height: inherit;
+	vertical-align: middle;
+	background: transparent;
+	border-radius: 0;
+}
+
 .tiptapEditor :global(.ProseMirror .canvas-project-file-mention[data-deleted="true"]) {
+	cursor: default;
+}
+
+.tiptapEditor
+	:global(
+		.ProseMirror
+			.canvas-project-file-mention[data-deleted="true"]
+			.magic-message-file-mention-visual
+	) {
 	color: rgb(220 38 38);
 	background: rgb(254 226 226);
-	cursor: default;
 }
 
 /* 内置 @ 扩展（imageFileMention） */

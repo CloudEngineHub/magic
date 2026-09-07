@@ -42,11 +42,17 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("../../../../app/providers/CanvasProvider", () => ({
 	useCanvas: () => ({ canvas: mocks.canvas }),
+	useOptionalCanvas: () => mocks.canvas,
 }))
 
 vi.mock("../../../../app/hooks/canvas", () => ({
 	useCanvasEvent: (_event: string, handler: (event: { data: { key: string } }) => void) =>
 		mocks.setRemoteLoadReleasedHandler(handler),
+	useCanvasEventWithInstance: (
+		_canvas: unknown,
+		_event: string,
+		handler: (event: { data: { key: string } }) => void,
+	) => mocks.setRemoteLoadReleasedHandler(handler),
 }))
 
 describe("useReferenceAudioSrc", () => {

@@ -1,6 +1,7 @@
-import { createElement, useEffect, useMemo, useState } from "react"
+import { createElement, useEffect, useMemo, useState, type ReactNode } from "react"
 import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import { MediaPreviewTrigger } from "@/components/base/MediaPreview"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import type {
 	CanvasMentionAttributes,
@@ -30,6 +31,15 @@ import {
 } from "../../../runtime/shared/path/canvasResourcePath"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { useOptionalCanvas } from "../../../app/providers/CanvasProvider"
+import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
+import { useCanvasMentionMediaSource } from "./useCanvasMentionMediaSource"
+import {
+	MESSAGE_FILE_MENTION_NAME_CLASSES,
+	MESSAGE_FILE_MENTION_ROOT_CLASS,
+	MESSAGE_FILE_MENTION_VISUAL_BASE_CLASSES,
+	MESSAGE_FILE_MENTION_VISUAL_CLASS,
+	MESSAGE_FILE_MENTION_DESKTOP_CLASSES,
+} from "../../../runtime/resources/clipboard/MessageMentionVisual"
 
 interface UseCanvasReferenceMentionOptions {
 	/** 可匹配的项列表（从 referenceImagesState 派生） */
@@ -54,6 +64,7 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 	const { methods } = useMagic()
 	const canvas = useOptionalCanvas()
 	const { t } = useCanvasDesignI18n()
+	const portalContainer = usePortalContainer()
 	const [, forceResourceStateRefresh] = useState(0)
 	const attrs = props.node.attrs as CanvasMentionAttributes & {
 		data?: ReferenceResourcePanelFileData
@@ -80,12 +91,65 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 		isDeleted ? t("messageHistory.deletedSuffix", "（已删除）") : ""
 	}`
 	const fileType = fileData?.file_extension || fileData?.file_name?.split(".").pop() || ""
+	const fileName = fileData?.file_name || displayText
+	const fileIcon = createElement(MagicFileIcon, {
+		type: fileType,
+		size: 16,
+		className: "shrink-0",
+	})
+	const mediaSource = useCanvasMentionMediaSource({
+		path: fileData?.file_path,
+		fileName,
+		fileExtension: fileType,
+		enabled: Boolean(fileData?.file_path) && !isDeleted,
+	})
+	const renderVisual = (thumbnail: ReactNode) =>
+		createElement(
+			"span",
+			{
+				className: `${MESSAGE_FILE_MENTION_VISUAL_CLASS} ${MESSAGE_FILE_MENTION_VISUAL_BASE_CLASSES} ${MESSAGE_FILE_MENTION_DESKTOP_CLASSES}`,
+				"data-testid": "canvas-file-mention-visual",
+			},
+			createElement(
+				"span",
+				{ className: "relative z-10 flex shrink-0 items-center" },
+				thumbnail,
+			),
+			createElement(
+				"span",
+				{ className: MESSAGE_FILE_MENTION_NAME_CLASSES, title: displayText },
+				displayText,
+			),
+		)
+	const mediaTrigger = createElement(MediaPreviewTrigger, {
+		fileName,
+		source: mediaSource,
+		fallback: fileIcon,
+		renderTrigger: renderVisual,
+		labels: {
+			errorMessage: t(
+				"mediaResourceFullscreenPreview.videoLoadFailed",
+				"媒体加载失败，请稍后重试",
+			),
+			audioLabels: {
+				play: t("video.fullscreen.play", "播放"),
+				pause: t("video.fullscreen.pause", "暂停"),
+				progress: t("video.fullscreen.progress", "播放进度"),
+			},
+		},
+		enableTouchTrigger: true,
+		disabled: isDeleted,
+		side: "top",
+		container: portalContainer,
+	})
 
 	return createElement(
 		NodeViewWrapper,
 		{
 			as: "span",
-			className: "magic-mention canvas-project-file-mention",
+			// Reset legacy .magic-mention chip styles so only the shared visual
+			// contract paints the pill (same approach as SuperMagic FileMentionNodeView).
+			className: `magic-mention canvas-project-file-mention ${MESSAGE_FILE_MENTION_ROOT_CLASS} relative -top-px inline-flex max-w-full overflow-visible bg-transparent p-0 align-middle`,
 			"data-mention-suggestion-char": attrs.mentionSuggestionChar || "@",
 			"data-type": attrs.type,
 			"data-data": JSON.stringify(attrs.data || {}),
@@ -111,22 +175,7 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 				})
 			},
 		},
-		createElement(
-			"span",
-			{
-				className: "inline-flex min-w-0 max-w-[220px] items-center gap-1",
-			},
-			createElement(MagicFileIcon, {
-				type: fileType,
-				size: 16,
-				className: "shrink-0",
-			}),
-			createElement(
-				"span",
-				{ className: "min-w-0 truncate", title: displayText },
-				displayText,
-			),
-		),
+		mediaTrigger,
 	)
 }
 

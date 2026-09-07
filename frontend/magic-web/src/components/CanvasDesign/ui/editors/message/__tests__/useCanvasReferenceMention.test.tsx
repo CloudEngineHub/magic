@@ -419,7 +419,10 @@ describe("useCanvasReferenceMention", () => {
 		const resolveResourceReference = createTestResourceReferenceResolver({
 			attachmentsReady: true,
 		})
-		const methods = { resolveResourceReference, locateProjectFile } as CanvasDesignMethods
+		const methods = {
+			resolveResourceReference,
+			locateProjectFile,
+		} as unknown as CanvasDesignMethods
 		renderMention({ methods, tree: [] })
 		const Renderer =
 			getConfiguredOptions().nodeViewRenderers?.[
@@ -448,8 +451,40 @@ describe("useCanvasReferenceMention", () => {
 
 		const mention = screen.getByTestId("canvas-project-file-mention")
 		expect(mention).toHaveAttribute("data-deleted", "true")
-		expect(mention).toHaveTextContent("@截屏.png（已删除）")
+		expect(mention).toHaveTextContent("截屏.png（已删除）")
 		fireEvent.click(mention)
 		expect(locateProjectFile).not.toHaveBeenCalled()
+	})
+
+	it("uses the shared desktop visual contract for media mentions", () => {
+		renderMention({ methods: designAMethods, tree: [] })
+		const Renderer =
+			getConfiguredOptions().nodeViewRenderers?.[
+				CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile
+			]
+		if (!Renderer) throw new Error("Missing project-file node view renderer")
+
+		render(
+			<Providers methods={designAMethods}>
+				{createElement(Renderer, {
+					node: {
+						attrs: {
+							type: CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile,
+							data: {
+								file_id: "image-1",
+								file_name: "cat.png",
+								file_path: "/images/cat.png",
+								file_extension: "png",
+							},
+						},
+					},
+					extension: { options: {} },
+				})}
+			</Providers>,
+		)
+
+		const visual = document.querySelector(".magic-message-file-mention-visual")
+		expect(visual).toHaveClass("bg-primary-10", "text-primary", "h-[18px]")
+		expect(visual).toHaveClass("inline-flex", "items-center")
 	})
 })

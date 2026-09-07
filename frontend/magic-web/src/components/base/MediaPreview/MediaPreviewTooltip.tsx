@@ -1,18 +1,28 @@
-import { Pause, Play, X } from "lucide-react"
+import { LoaderCircle, Pause, Play } from "lucide-react"
 import {
 	cloneElement,
 	useCallback,
 	useEffect,
 	useRef,
 	useState,
+	type MutableRefObject,
 	type PointerEvent as ReactPointerEvent,
-	type RefObject,
+	type SyntheticEvent,
 } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import type { MediaPreviewTooltipProps } from "./types"
+import { MEDIA_PREVIEW_POLICY, type MediaPreviewCrop, type MediaPreviewTooltipProps } from "./types"
 
-const DEFAULT_SIZE = 250
+function isInteractiveTriggerTarget(target: EventTarget | null): boolean {
+	return (
+		target instanceof Element && Boolean(target.closest("button, a, input, textarea, select"))
+	)
+}
+
+function isHoverExcludedTriggerTarget(target: EventTarget | null): boolean {
+	return target instanceof Element && Boolean(target.closest("[data-media-preview-ignore-hover]"))
+}
+
 function formatTime(value: number) {
 	if (!Number.isFinite(value) || value < 0) value = 0
 	const totalSeconds = Math.floor(value)
@@ -24,6 +34,38 @@ function formatTime(value: number) {
 		: `${minutes}:${String(seconds).padStart(2, "0")}`
 }
 
+function clampCrop(crop: MediaPreviewCrop, sourceSize: { width: number; height: number }) {
+	const left = Math.max(0, Math.min(sourceSize.width, crop.x))
+	const top = Math.max(0, Math.min(sourceSize.height, crop.y))
+	const right = Math.max(left, Math.min(sourceSize.width, crop.x + crop.width))
+	const bottom = Math.max(top, Math.min(sourceSize.height, crop.y + crop.height))
+	if (right <= left || bottom <= top) return undefined
+	return { x: left, y: top, width: right - left, height: bottom - top }
+}
+
+function getBoundedPreviewSize(width: number, height: number, maxWidth: number, maxHeight: number) {
+	if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+		return undefined
+	}
+	const scale = Math.min(1, maxWidth / width, maxHeight / height)
+	return {
+		width: Math.max(1, Math.round(width * scale)),
+		height: Math.max(1, Math.round(height * scale)),
+	}
+}
+
+function isValidPreviewSize(
+	size: { width: number; height: number } | undefined,
+): size is { width: number; height: number } {
+	return Boolean(
+		size &&
+		Number.isFinite(size.width) &&
+		Number.isFinite(size.height) &&
+		size.width > 0 &&
+		size.height > 0,
+	)
+}
+
 function AudioPlayer({
 	src,
 	fileName,
@@ -33,7 +75,7 @@ function AudioPlayer({
 }: {
 	src: string
 	fileName: string
-	audioRef: RefObject<HTMLAudioElement | null>
+	audioRef: MutableRefObject<HTMLAudioElement | null>
 	onError?: () => void
 	labels: MediaPreviewTooltipProps["audioLabels"]
 }) {
@@ -41,20 +83,84 @@ function AudioPlayer({
 	const [currentTime, setCurrentTime] = useState(0)
 	const [duration, setDuration] = useState(0)
 	const isSeekingRef = useRef(false)
+	const playRequestRef = useRef(0)
+	const playbackIntentRef = useRef(false)
+	const [isLoading, setIsLoading] = useState(false)
 	const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0
 
 	const playAudio = useCallback((audio: HTMLAudioElement) => {
+		const requestId = ++playRequestRef.current
+		playbackIntentRef.current = true
+		setIsLoading(true)
+		setPlaying(false)
 		void audio
 			.play()
-			.then(() => setPlaying(true))
-			.catch(() => setPlaying(false))
+			.then(() => {
+				if (requestId !== playRequestRef.current || !playbackIntentRef.current) return
+				setIsLoading(false)
+				setPlaying(true)
+			})
+			.catch(() => {
+				if (requestId !== playRequestRef.current || !playbackIntentRef.current) return
+				playbackIntentRef.current = false
+				setIsLoading(false)
+				setPlaying(false)
+			})
 	}, [])
 
+	const pauseAudio = useCallback((audio: HTMLAudioElement) => {
+		++playRequestRef.current
+		playbackIntentRef.current = false
+		audio.pause()
+		setIsLoading(false)
+		setPlaying(false)
+	}, [])
+
+	const invalidatePlayback = useCallback(() => {
+		++playRequestRef.current
+		playbackIntentRef.current = false
+		audioRef.current?.pause()
+	}, [audioRef])
+
+	const syncCurrentTimeFromAudio = useCallback(() => {
+		const audio = audioRef.current
+		if (!audio || isSeekingRef.current) return
+		setCurrentTime(audio.currentTime)
+	}, [audioRef])
+
 	useEffect(() => {
+		invalidatePlayback()
+		setIsLoading(false)
 		setPlaying(false)
 		setCurrentTime(0)
 		setDuration(0)
-	}, [src])
+
+		return invalidatePlayback
+	}, [invalidatePlayback, src])
+
+	// Portal + display:none 的 <audio> 上，React 的 onTimeUpdate 可能不推进 UI；
+	// 与全屏音频一致，播放中用 RAF 读 audio.currentTime 作为进度权威来源。
+	useEffect(() => {
+		if (!playing) {
+			syncCurrentTimeFromAudio()
+			return
+		}
+
+		let rafId = 0
+		const step = () => {
+			const audio = audioRef.current
+			if (!audio || audio.paused || audio.ended) {
+				rafId = 0
+				return
+			}
+			syncCurrentTimeFromAudio()
+			rafId = requestAnimationFrame(step)
+		}
+		rafId = requestAnimationFrame(step)
+		return () => {
+			cancelAnimationFrame(rafId)
+		}
+	}, [audioRef, playing, syncCurrentTimeFromAudio])
 
 	const handleSeek = useCallback(
 		(value: number) => {
@@ -80,38 +186,74 @@ function AudioPlayer({
 	)
 
 	return (
-		<div className="box-border flex min-w-0 max-w-full items-center gap-3 px-2.5 pb-3 pt-2 text-white">
+		<div className="relative box-border flex min-w-0 max-w-full items-center gap-3 px-2.5 pb-3 pt-2 text-white">
 			<audio
 				ref={audioRef}
 				src={src}
 				preload="metadata"
 				aria-label={fileName}
-				className="hidden"
+				// 避免 display:none：部分环境下会让 timeupdate 不可靠；用 sr-only 隐藏即可。
+				className="sr-only"
 				onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
 				onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
-				onTimeUpdate={(event) => {
-					if (!isSeekingRef.current) setCurrentTime(event.currentTarget.currentTime)
+				onTimeUpdate={syncCurrentTimeFromAudio}
+				onLoadStart={() => {
+					if (playbackIntentRef.current) setIsLoading(true)
 				}}
-				onPlay={() => setPlaying(true)}
-				onPause={() => setPlaying(false)}
+				onWaiting={() => {
+					if (playbackIntentRef.current) setIsLoading(true)
+				}}
+				onCanPlay={() => {
+					// 播放请求仍在 pending 时，保持 loading，直到 play() 或 playing 事件确认启动。
+					if (!playbackIntentRef.current || playing) setIsLoading(false)
+				}}
+				onPlaying={() => {
+					setIsLoading(false)
+					setPlaying(playbackIntentRef.current)
+				}}
+				onPlay={() => {
+					setIsLoading(false)
+					setPlaying(playbackIntentRef.current)
+				}}
+				onPause={() => {
+					playbackIntentRef.current = false
+					setIsLoading(false)
+					setPlaying(false)
+					syncCurrentTimeFromAudio()
+				}}
 				onEnded={() => {
+					playbackIntentRef.current = false
+					setIsLoading(false)
 					setPlaying(false)
 					setCurrentTime(duration)
 				}}
-				onError={onError}
+				onError={() => {
+					playbackIntentRef.current = false
+					setIsLoading(false)
+					setPlaying(false)
+					onError?.()
+				}}
 			/>
 			<button
 				type="button"
 				className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
-				aria-label={playing ? labels.pause : labels.play}
+				aria-label={
+					isLoading
+						? (labels.loading ?? labels.play)
+						: playing
+							? labels.pause
+							: labels.play
+				}
 				onClick={() => {
 					const audio = audioRef.current
 					if (!audio) return
-					if (playing) audio.pause()
+					if (playing || isLoading) pauseAudio(audio)
 					else playAudio(audio)
 				}}
 			>
-				{playing ? (
+				{isLoading ? (
+					<LoaderCircle size={15} className="animate-spin" aria-hidden />
+				) : playing ? (
 					<Pause size={15} fill="currentColor" strokeWidth={1.5} aria-hidden />
 				) : (
 					<Play
@@ -169,6 +311,28 @@ function AudioPlayer({
 	)
 }
 
+/**
+ * Keeps the original AudioPlayer layout while the audio source is loading.
+ * The invisible controls preserve the player's natural height; the spinner is
+ * centered in that space instead of introducing the generic media viewport height.
+ */
+function AudioLoadingPlayer({ label }: { label: string }) {
+	return (
+		<div className="relative box-border flex min-w-0 max-w-full items-center gap-3 px-2.5 pb-3 pt-2 text-white">
+			<div className="size-7 shrink-0" aria-hidden="true" />
+			<div className="flex min-w-0 flex-1 flex-col items-start gap-0.5" aria-hidden="true">
+				<div className="relative h-3 w-full min-w-0" />
+				<span className="invisible w-full text-left text-xs tabular-nums">0:00 / 0:00</span>
+			</div>
+			<LoaderCircle
+				size={15}
+				className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin"
+				aria-label={label}
+			/>
+		</div>
+	)
+}
+
 export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 	const {
 		children,
@@ -179,17 +343,16 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		audioUrl,
 		audioLabels,
 		poster,
-		previewContent,
+		crop,
 		isLoading = false,
 		hasError = false,
 		errorMessage,
-		closeLabel,
 		enableTouchTrigger = false,
 		disabled = false,
 		side = "top",
-		maxWidth = DEFAULT_SIZE,
-		maxHeight = DEFAULT_SIZE,
+		sideOffset = 8,
 		previewSize,
+		sourceSize,
 		container,
 		open: controlledOpen,
 		onOpenChange,
@@ -200,13 +363,50 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 	const audioRef = useRef<HTMLAudioElement>(null)
 	const [videoReady, setVideoReady] = useState(false)
 	const [mediaError, setMediaError] = useState(false)
+	const [intrinsicPreviewSize, setIntrinsicPreviewSize] = useState<
+		{ width: number; height: number } | undefined
+	>()
 	const open = controlledOpen ?? uncontrolledOpen
-	const contentWidth = previewSize?.width ?? maxWidth
-	const contentHeight = previewSize?.height ?? Math.round(maxWidth * 0.5625)
+	const policy = MEDIA_PREVIEW_POLICY[mediaType]
+	const resolvedPreviewSize = isValidPreviewSize(previewSize)
+		? previewSize
+		: isValidPreviewSize(sourceSize)
+			? sourceSize
+			: isValidPreviewSize(intrinsicPreviewSize)
+				? intrinsicPreviewSize
+				: undefined
+	const layoutSize = resolvedPreviewSize ?? {
+		width: policy.maxWidth,
+		height: policy.defaultHeight,
+	}
+	const previewScale = Math.min(
+		1,
+		policy.maxWidth / layoutSize.width,
+		policy.maxHeight / layoutSize.height,
+	)
+	const contentWidth = Math.max(1, Math.round(layoutSize.width * previewScale))
+	const contentHeight = Math.max(1, Math.round(layoutSize.height * previewScale))
+	const cropSourceSize = isValidPreviewSize(sourceSize)
+		? sourceSize
+		: isValidPreviewSize(intrinsicPreviewSize)
+			? intrinsicPreviewSize
+			: undefined
+	const cropRect = cropSourceSize && crop ? clampCrop(crop, cropSourceSize) : undefined
+	const cropDisplaySize = cropRect
+		? getBoundedPreviewSize(cropRect.width, cropRect.height, policy.maxWidth, policy.maxHeight)
+		: undefined
+	const cropDisplayScale =
+		cropRect && cropDisplaySize ? cropDisplaySize.width / cropRect.width : 1
 	const touchInteractionRef = useRef(false)
+	const lastContentInteractionAtRef = useRef(0)
+	const handleContentInteraction = useCallback((event: SyntheticEvent) => {
+		lastContentInteractionAtRef.current = Date.now()
+		event.stopPropagation()
+	}, [])
 
 	useEffect(() => {
 		setMediaError(false)
+		setIntrinsicPreviewSize(undefined)
 	}, [mediaType, previewUrl, posterUrl, audioUrl])
 
 	useEffect(() => {
@@ -247,8 +447,13 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 
 	const trigger = cloneElement(children, {
 		"data-media-preview-trigger": "",
+		onPointerMove: (event: ReactPointerEvent<HTMLElement>) => {
+			children.props.onPointerMove?.(event)
+			if (isHoverExcludedTriggerTarget(event.target)) event.preventDefault()
+		},
 		onPointerDown: (event: ReactPointerEvent<HTMLElement>) => {
 			children.props.onPointerDown?.(event)
+			if (isInteractiveTriggerTarget(event.target)) return
 			if (!enableTouchTrigger || event.pointerType !== "touch") return
 			touchInteractionRef.current = true
 			event.preventDefault()
@@ -257,10 +462,20 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		},
 		onClick: (event: React.MouseEvent<HTMLElement>) => {
 			children.props.onClick?.(event)
+			if (isInteractiveTriggerTarget(event.target)) return
 			if (!touchInteractionRef.current) return
 			touchInteractionRef.current = false
 			event.preventDefault()
 			event.stopPropagation()
+		},
+		onDoubleClick: (event: React.MouseEvent<HTMLElement>) => {
+			// Portal content 若在双击期间关闭，第二次事件可能落回 trigger。
+			if (Date.now() - lastContentInteractionAtRef.current < 500) {
+				event.preventDefault()
+				event.stopPropagation()
+				return
+			}
+			children.props.onDoubleClick?.(event)
 		},
 		onPointerCancel: (event: ReactPointerEvent<HTMLElement>) => {
 			children.props.onPointerCancel?.(event)
@@ -271,52 +486,90 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		<div
 			className="relative overflow-hidden rounded-md border border-white/15 bg-black/90 text-white shadow-lg"
 			data-media-preview-content=""
-			onClick={(event) => event.stopPropagation()}
-			onMouseDown={(event) => event.stopPropagation()}
-			onPointerDown={(event) => event.stopPropagation()}
-			onTouchStart={(event) => event.stopPropagation()}
 		>
 			<div
-				className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 bg-gradient-to-b from-black/80 to-transparent px-2.5 py-1.5"
+				className="absolute inset-x-0 top-0 z-10 flex items-center gap-2 bg-gradient-to-b from-black/80 to-transparent px-2.5 py-1.5"
 				data-reference-media-tooltip-header=""
 			>
 				<span className="min-w-0 truncate text-xs font-medium" title={fileName}>
 					{fileName}
 				</span>
-				<button
-					type="button"
-					className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
-					aria-label={closeLabel}
-					onClick={() => handleOpenChange(false)}
-				>
-					<X size={14} />
-				</button>
 			</div>
 			{isLoading ? (
-				<div
-					className="flex min-h-[72px] max-w-full items-center justify-center"
-					style={{ width: contentWidth, height: 120 }}
-				>
-					<span className="animate-spin">◌</span>
-				</div>
+				mediaType === "audio" ? (
+					<div className="box-border w-full min-w-0 max-w-full pt-9">
+						<AudioLoadingPlayer label={audioLabels.loading ?? audioLabels.play} />
+					</div>
+				) : (
+					<div
+						className="flex min-h-[72px] max-w-full items-center justify-center"
+						style={{ width: contentWidth, height: contentHeight }}
+					>
+						<LoaderCircle size={15} className="animate-spin" aria-hidden="true" />
+					</div>
+				)
 			) : hasError || (mediaError && !poster && !posterUrl) ? (
 				<div className="flex min-h-[72px] items-center justify-center px-4 py-8 text-xs text-white/70">
 					{errorMessage}
 				</div>
-			) : previewContent ? (
-				previewContent
 			) : mediaType === "image" ? (
-				<img
-					src={previewUrl ?? undefined}
-					alt={fileName}
-					className="block max-w-full object-contain"
-					style={{ width: contentWidth, maxHeight: contentHeight }}
-					onError={() => setMediaError(true)}
-				/>
+				cropRect && cropSourceSize && cropDisplaySize ? (
+					<div
+						className="relative overflow-hidden bg-black"
+						style={{ width: cropDisplaySize.width, height: cropDisplaySize.height }}
+					>
+						<img
+							src={previewUrl ?? undefined}
+							alt={fileName}
+							className="absolute left-0 top-0 block max-w-none"
+							style={{
+								width: cropSourceSize.width * cropDisplayScale,
+								height: cropSourceSize.height * cropDisplayScale,
+								transform: `translate(${-cropRect.x * cropDisplayScale}px, ${-cropRect.y * cropDisplayScale}px)`,
+							}}
+							onLoad={(event) => {
+								const { naturalWidth, naturalHeight } = event.currentTarget
+								if (naturalWidth > 0 && naturalHeight > 0) {
+									setIntrinsicPreviewSize({
+										width: naturalWidth,
+										height: naturalHeight,
+									})
+								}
+							}}
+							onError={() => setMediaError(true)}
+						/>
+					</div>
+				) : (
+					<img
+						src={previewUrl ?? undefined}
+						alt={fileName}
+						className="block max-w-full object-contain"
+						style={{
+							width: contentWidth,
+							maxWidth: policy.maxWidth,
+							...(previewSize || sourceSize
+								? { height: contentHeight, maxHeight: contentHeight }
+								: { maxHeight: contentHeight }),
+						}}
+						onLoad={(event) => {
+							const { naturalWidth, naturalHeight } = event.currentTarget
+							if (naturalWidth > 0 && naturalHeight > 0) {
+								setIntrinsicPreviewSize({
+									width: naturalWidth,
+									height: naturalHeight,
+								})
+							}
+						}}
+						onError={() => setMediaError(true)}
+					/>
+				)
 			) : mediaType === "video" ? (
 				<div
 					className="relative flex items-center justify-center bg-black"
-					style={{ width: contentWidth, height: contentHeight }}
+					style={{
+						width: contentWidth ?? policy.maxWidth,
+						height: contentHeight ?? policy.defaultHeight,
+					}}
 				>
 					{previewUrl ? (
 						<video
@@ -330,6 +583,15 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 							preload="auto"
 							aria-label={fileName}
 							className="block h-full w-full object-contain"
+							onLoadedMetadata={(event) => {
+								const { videoWidth, videoHeight } = event.currentTarget
+								if (videoWidth > 0 && videoHeight > 0) {
+									setIntrinsicPreviewSize({
+										width: videoWidth,
+										height: videoHeight,
+									})
+								}
+							}}
 							onCanPlay={() => setVideoReady(true)}
 							onError={() => {
 								setVideoReady(false)
@@ -360,13 +622,19 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 			<TooltipTrigger asChild>{trigger}</TooltipTrigger>
 			<TooltipContent
 				side={side}
-				sideOffset={8}
+				sideOffset={sideOffset}
 				className="!p-0"
 				container={container}
+				onClick={handleContentInteraction}
+				onDoubleClick={handleContentInteraction}
+				onDoubleClickCapture={handleContentInteraction}
+				onMouseDown={handleContentInteraction}
+				onPointerDown={handleContentInteraction}
+				onTouchStart={handleContentInteraction}
 				style={{
-					maxWidth: mediaType === "audio" ? "calc(100vw - 32px)" : maxWidth,
-					maxHeight,
-					...(mediaType === "image" || mediaType === "audio" ? { width: maxWidth } : {}),
+					width: mediaType === "audio" ? policy.maxWidth : (contentWidth ?? "auto"),
+					maxWidth: policy.maxWidth,
+					maxHeight: policy.maxHeight,
 				}}
 			>
 				{content}
