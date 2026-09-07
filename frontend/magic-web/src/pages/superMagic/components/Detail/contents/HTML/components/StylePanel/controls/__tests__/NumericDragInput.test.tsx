@@ -17,6 +17,7 @@ function ControlledNumericInput({
 	precision?: number
 	dragSensitivity?: number
 	formatDisplayValue?: (value: string | number) => string
+	scrubStartValue?: number | null
 	onPointerDown?: React.PointerEventHandler<HTMLInputElement>
 }) {
 	const [value, setValue] = useState(initialValue)
@@ -131,6 +132,26 @@ describe("NumericDragInput", () => {
 		expect(input).toHaveValue("10")
 		fireEvent.wheel(input, { deltaY: 80 })
 		expect(input).toHaveValue("10")
+	})
+
+	it("starts a drag from the provided used-pixel value", () => {
+		const onCommit = vi.fn()
+		render(
+			<ControlledNumericInput
+				initialValue="100%"
+				scrubStartValue={508}
+				dragSensitivity={4}
+				onCommit={onCommit}
+			/>,
+		)
+		const input = screen.getByRole("textbox", { name: "numeric value" })
+
+		firePointerEvent(input, "pointerdown", 100)
+		firePointerEvent(window, "pointermove", 96)
+		firePointerEvent(window, "pointerup", 96)
+
+		expect(input).toHaveValue("509")
+		expect(onCommit).toHaveBeenCalledWith("509")
 	})
 
 	it("adjusts with ArrowUp and ArrowDown and formats precision", () => {

@@ -270,18 +270,11 @@ export class ElementSelector {
 			styles.parentAlignItems = parentComputed.alignItems
 		}
 
-		// For positioning properties (top, left, right, bottom), prefer inline styles
-		// because they reflect the actual values we set, not the computed values
+		// Keep used px for width/height. Prefer authored inline for offsets.
 		const positionProps = ["top", "left", "right", "bottom"]
 		positionProps.forEach((prop) => {
 			const inlineValue = element.style.getPropertyValue(prop)
-			if (inlineValue) {
-				// Use inline style if it exists
-				styles[prop] = inlineValue
-			} else {
-				// Fall back to computed style
-				styles[prop] = computed[prop as keyof CSSStyleDeclaration] as string
-			}
+			if (inlineValue) styles[prop] = inlineValue
 		})
 
 		// Debug: Log position values

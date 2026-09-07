@@ -155,6 +155,22 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("should keep authored inline width available for the editor", () => {
+			container.innerHTML = '<div id="full-width" style="width: 100%;">Content</div>'
+			const element = container.querySelector("#full-width") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					inlineStyles: expect.objectContaining({
+						width: "100%",
+					}),
+				}),
+			)
+		})
+
 		it("should include editable inline styles", () => {
 			container.innerHTML =
 				'<div id="inline-styled" style="color: red; --card-gap: 12px;">Content</div>'

@@ -4,6 +4,7 @@ import { useDebounceFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { DimensionInput, NumericDragInput } from "../controls"
 import type { StyleSectionProps } from "../types"
+import { getDimensionField } from "../utils/dimensionValue"
 
 type BoxSide = "top" | "right" | "bottom" | "left"
 type BoxValues = Record<BoxSide, string>
@@ -164,10 +165,12 @@ const BoxModelSection = observer(function BoxModelSection({
 		[applyBoxChange, computedStyles?.borderStyle, onStyleChange],
 	)
 
-	const width = computedStyles?.width || "auto"
-	const height = computedStyles?.height || "auto"
+	const width = getDimensionField(selectedElement, "width")
+	const height = getDimensionField(selectedElement, "height")
 	const borderWidth = computedStyles?.borderWidth || "0px"
-	const dimensions = `${width} × ${height}`
+	const usedWidth = computedStyles?.width || "auto"
+	const usedHeight = computedStyles?.height || "auto"
+	const dimensions = `${usedWidth} × ${usedHeight}`
 	const getSideLabel = useCallback(
 		(layer: string, side: BoxSide) =>
 			t("stylePanel.boxModelSideLabel", {
@@ -184,20 +187,26 @@ const BoxModelSection = observer(function BoxModelSection({
 		<div className="min-w-0 space-y-2" data-testid="html-style-panel-box-model">
 			<div className="grid min-w-0 grid-cols-2 gap-2 [&>*]:min-w-0">
 				<DimensionInput
+					key={`${selectedElement?.selector ?? "none"}-width`}
 					label={t("stylePanel.width")}
-					value={width}
+					value={width.value}
 					onChange={(value) => onStyleChange?.("width", value)}
 					placeholder="auto"
 					id="html-style-panel-box-width"
 					compact
+					pixelValue={computedStyles?.width}
+					valueFromInline={width.fromInline}
 				/>
 				<DimensionInput
+					key={`${selectedElement?.selector ?? "none"}-height`}
 					label={t("stylePanel.height")}
-					value={height}
+					value={height.value}
 					onChange={(value) => onStyleChange?.("height", value)}
 					placeholder="auto"
 					id="html-style-panel-box-height"
 					compact
+					pixelValue={computedStyles?.height}
+					valueFromInline={height.fromInline}
 				/>
 			</div>
 

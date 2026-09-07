@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import { forwardRef, type InputHTMLAttributes } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DimensionInput } from "../DimensionInput"
@@ -29,7 +29,17 @@ vi.mock("@/components/shadcn-ui/label", () => ({
 
 vi.mock("@/components/shadcn-ui/select", () => ({
 	/** Keep the select minimal so tests can focus on unit preservation behavior. */
-	Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+	Select: ({
+		children,
+		onValueChange,
+	}: {
+		children: React.ReactNode
+		onValueChange?: (value: string) => void
+	}) => (
+		<div data-testid="dimension-input-unit-select" data-on-change={Boolean(onValueChange)}>
+			{children}
+		</div>
+	),
 	SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 	SelectItem: ({
 		children,
@@ -40,9 +50,9 @@ vi.mock("@/components/shadcn-ui/select", () => ({
 		value: string
 		"data-testid"?: string
 	}) => (
-		<div data-testid={dataTestId} data-value={value}>
+		<button type="button" data-testid={dataTestId} data-value={value}>
 			{children}
-		</div>
+		</button>
 	),
 	SelectTrigger: ({
 		children,
@@ -54,9 +64,118 @@ vi.mock("@/components/shadcn-ui/select", () => ({
 	SelectValue: () => <span />,
 }))
 
+function firePointerEvent(
+	target: EventTarget,
+	type: "pointerdown" | "pointermove" | "pointerup",
+	clientY: number,
+) {
+	const event = new MouseEvent(type, {
+		bubbles: true,
+		button: 0,
+		cancelable: true,
+		clientY,
+	})
+	act(() => target.dispatchEvent(event))
+}
+
 describe("DimensionInput", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
+	})
+
+	it("hides the px unit and treats a bare number as pixels", () => {
+		const handleChange = vi.fn()
+
+		render(
+			<DimensionInput
+				label="Width"
+				value="200px"
+				onChange={handleChange}
+				id="width"
+				testIdPrefix="dimension-input"
+			/>,
+		)
+
+		expect(screen.getByTestId("dimension-input-input")).toHaveValue("200")
+		expect(screen.queryByTestId("dimension-input-unit-trigger")).not.toBeInTheDocument()
+
+		fireEvent.change(screen.getByTestId("dimension-input-input"), {
+			target: { value: "240" },
+		})
+		vi.advanceTimersByTime(300)
+
+		expect(handleChange).toHaveBeenCalledWith("240px")
+		expect(screen.queryByTestId("dimension-input-unit-trigger")).not.toBeInTheDocument()
+	})
+
+	it("shows a non-px unit and keeps it when the user types that unit", () => {
+		const handleChange = vi.fn()
+
+		render(
+			<DimensionInput
+				label="Width"
+				value="50%"
+				onChange={handleChange}
+				id="width"
+				testIdPrefix="dimension-input"
+			/>,
+		)
+
+		expect(screen.getByTestId("dimension-input-input")).toHaveValue("50")
+		expect(screen.getByTestId("dimension-input-unit-trigger")).toBeInTheDocument()
+
+		fireEvent.change(screen.getByTestId("dimension-input-input"), {
+			target: { value: "60%" },
+		})
+		vi.advanceTimersByTime(300)
+
+		expect(handleChange).toHaveBeenCalledWith("60%")
+		expect(screen.getByTestId("dimension-input-unit-trigger")).toBeInTheDocument()
+	})
+
+	it("converts a number-only edit to px even when the previous unit was not px", () => {
+		const handleChange = vi.fn()
+
+		render(
+			<DimensionInput
+				label="Width"
+				value="50%"
+				onChange={handleChange}
+				id="width"
+				testIdPrefix="dimension-input"
+			/>,
+		)
+
+		fireEvent.change(screen.getByTestId("dimension-input-input"), {
+			target: { value: "60" },
+		})
+		vi.advanceTimersByTime(300)
+
+		expect(handleChange).toHaveBeenCalledWith("60px")
+		expect(screen.queryByTestId("dimension-input-unit-trigger")).not.toBeInTheDocument()
+	})
+
+	it("converts a dragged value to px", () => {
+		const handleChange = vi.fn()
+
+		render(
+			<DimensionInput
+				label="Width"
+				value="50%"
+				onChange={handleChange}
+				id="width"
+				testIdPrefix="dimension-input"
+			/>,
+		)
+		const input = screen.getByTestId("dimension-input-input")
+
+		firePointerEvent(input, "pointerdown", 100)
+		firePointerEvent(window, "pointermove", 96)
+		firePointerEvent(window, "pointerup", 96)
+		vi.advanceTimersByTime(300)
+
+		expect(handleChange).toHaveBeenCalledWith("51px")
+		expect(screen.queryByTestId("dimension-input-unit-trigger")).not.toBeInTheDocument()
 	})
 
 	it("should hide the unit selector and append px automatically when px-only mode is enabled", () => {
@@ -83,29 +202,6 @@ describe("DimensionInput", () => {
 		expect(handleChange).toHaveBeenCalledWith("240px")
 	})
 
-	it("should keep the parsed unit when editing a non-px value", () => {
-		const handleChange = vi.fn()
-
-		render(
-			<DimensionInput
-				label="Width"
-				value="50%"
-				onChange={handleChange}
-				id="width"
-				testIdPrefix="dimension-input"
-			/>,
-		)
-
-		expect(screen.getByTestId("dimension-input-unit-trigger")).toBeInTheDocument()
-
-		fireEvent.change(screen.getByTestId("dimension-input-input"), {
-			target: { value: "60" },
-		})
-		vi.advanceTimersByTime(300)
-
-		expect(handleChange).toHaveBeenCalledWith("60%")
-	})
-
 	it("should sync the displayed number and unit when the external value changes", () => {
 		const { rerender } = render(
 			<DimensionInput
@@ -116,6 +212,8 @@ describe("DimensionInput", () => {
 				testIdPrefix="dimension-input"
 			/>,
 		)
+
+		expect(screen.queryByTestId("dimension-input-unit-trigger")).not.toBeInTheDocument()
 
 		rerender(
 			<DimensionInput
@@ -128,5 +226,19 @@ describe("DimensionInput", () => {
 		)
 
 		expect(screen.getByTestId("dimension-input-input")).toHaveValue("50")
+		expect(screen.getByTestId("dimension-input-unit-trigger")).toBeInTheDocument()
+
+		rerender(
+			<DimensionInput
+				label="Width"
+				value="400px"
+				onChange={vi.fn()}
+				id="width"
+				testIdPrefix="dimension-input"
+			/>,
+		)
+
+		expect(screen.getByTestId("dimension-input-input")).toHaveValue("400")
+		expect(screen.queryByTestId("dimension-input-unit-trigger")).not.toBeInTheDocument()
 	})
 })

@@ -3,6 +3,7 @@ import { useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import { DimensionInput, SpacingInput } from "../controls"
 import type { StyleSectionProps } from "../types"
+import { getDimensionField } from "../utils/dimensionValue"
 import { Label } from "@/components/shadcn-ui/label"
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
 import { EditorSelectContent } from "../../EditorFloating"
@@ -22,8 +23,8 @@ const LayoutSection = observer(function LayoutSection({
 	const computedStyles = selectedElement?.computedStyles
 
 	// 解析当前值
-	const currentWidth = computedStyles?.width || "auto"
-	const currentHeight = computedStyles?.height || "auto"
+	const currentWidth = getDimensionField(selectedElement, "width")
+	const currentHeight = getDimensionField(selectedElement, "height")
 	const currentMargin = computedStyles?.margin || "0px"
 	const currentPadding = computedStyles?.padding || "0px"
 	const currentDisplay = computedStyles?.display || "block"
@@ -74,18 +75,24 @@ const LayoutSection = observer(function LayoutSection({
 			{showDimensions && (
 				<div className="grid min-w-0 grid-cols-2 gap-2">
 					<DimensionInput
+						key={`${selectedElement?.selector ?? "none"}-width`}
 						label={t("stylePanel.width")}
-						value={currentWidth}
+						value={currentWidth.value}
 						onChange={handleSizeChange("width")}
 						placeholder="auto"
 						id="width"
+						pixelValue={computedStyles?.width}
+						valueFromInline={currentWidth.fromInline}
 					/>
 					<DimensionInput
+						key={`${selectedElement?.selector ?? "none"}-height`}
 						label={t("stylePanel.height")}
-						value={currentHeight}
+						value={currentHeight.value}
 						onChange={handleSizeChange("height")}
 						placeholder="auto"
 						id="height"
+						pixelValue={computedStyles?.height}
+						valueFromInline={currentHeight.fromInline}
 					/>
 				</div>
 			)}

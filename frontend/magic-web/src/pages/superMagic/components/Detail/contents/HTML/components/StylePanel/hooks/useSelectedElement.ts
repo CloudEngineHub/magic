@@ -10,6 +10,7 @@ import { useStylePanelStore } from "../../../iframe-bridge/contexts/StylePanelCo
 function buildRefreshedSelectedElement(
 	previousElement: SelectedElementInfo,
 	computedStyles: SelectedElementInfo["computedStyles"],
+	inlineStyles = previousElement.inlineStyles,
 ): SelectedElementInfo {
 	return {
 		selector: previousElement.selector,
@@ -21,7 +22,7 @@ function buildRefreshedSelectedElement(
 		isTextElement: previousElement.isTextElement,
 		hasDirectTextContent: previousElement.hasDirectTextContent,
 		textContent: previousElement.textContent,
-		inlineStyles: previousElement.inlineStyles,
+		inlineStyles,
 		attributes: previousElement.attributes,
 		computedStyles,
 	}
@@ -163,6 +164,10 @@ export function useSelectedElement(editorRef: React.RefObject<HTMLEditorV2Ref>) 
 								buildRefreshedSelectedElement(
 									stylePanelStore.selectedElement,
 									updatedStyles as SelectedElementInfo["computedStyles"],
+									{
+										...stylePanelStore.selectedElement.inlineStyles,
+										[property]: value,
+									},
 								),
 							)
 						}
@@ -219,6 +224,10 @@ export function useSelectedElement(editorRef: React.RefObject<HTMLEditorV2Ref>) 
 								buildRefreshedSelectedElement(
 									stylePanelStore.selectedElement,
 									updatedStyles as SelectedElementInfo["computedStyles"],
+									{
+										...stylePanelStore.selectedElement.inlineStyles,
+										...styles,
+									},
 								),
 							)
 						}

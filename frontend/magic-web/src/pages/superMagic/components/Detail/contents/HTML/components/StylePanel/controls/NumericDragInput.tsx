@@ -15,6 +15,8 @@ interface NumericDragInputProps extends Omit<
 	precision?: number
 	dragSensitivity?: number
 	formatDisplayValue?: (value: string | number) => string
+	/** Used as the drag/nudge origin when the field shows a non-px unit. */
+	scrubStartValue?: number | null
 }
 
 function clamp(value: number, min?: number, max?: number): number {
@@ -44,6 +46,7 @@ export function NumericDragInput({
 	precision,
 	dragSensitivity = 4,
 	formatDisplayValue,
+	scrubStartValue,
 	className,
 	onFocus,
 	onBlur,
@@ -66,9 +69,16 @@ export function NumericDragInput({
 	const inputValue = !isFocused && formatDisplayValue ? formatDisplayValue(value) : value
 
 	const getNumber = useCallback(() => {
+		if (
+			scrubStartValue !== undefined &&
+			scrubStartValue !== null &&
+			Number.isFinite(scrubStartValue)
+		) {
+			return scrubStartValue
+		}
 		const parsed = typeof value === "number" ? value : Number.parseFloat(value)
 		return Number.isFinite(parsed) ? parsed : null
-	}, [value])
+	}, [scrubStartValue, value])
 
 	const updateValue = useCallback(
 		(nextValue: number) => {

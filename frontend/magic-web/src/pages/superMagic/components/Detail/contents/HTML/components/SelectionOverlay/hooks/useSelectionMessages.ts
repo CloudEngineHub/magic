@@ -128,6 +128,7 @@ export function useSelectionMessages({
 							intrinsicWidth,
 							intrinsicHeight,
 							intrinsicAspectRatio,
+							inlineStyles: payload?.inlineStyles,
 							computedStyles,
 						})
 
