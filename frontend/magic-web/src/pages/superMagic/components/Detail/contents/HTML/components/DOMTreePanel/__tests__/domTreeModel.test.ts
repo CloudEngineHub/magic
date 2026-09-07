@@ -45,6 +45,18 @@ describe("domTreeModel", () => {
 		)
 	})
 
+	it("maps heading tags to level-specific labels", () => {
+		expect(getDomTreeSemanticLabel(translate, getSemanticKey("h1"))).toBe(
+			"stylePanel.domTree.semantic.heading1",
+		)
+		expect(getDomTreeSemanticLabel(translate, getSemanticKey("h2"))).toBe(
+			"stylePanel.domTree.semantic.heading2",
+		)
+		expect(getDomTreeSemanticLabel(translate, getSemanticKey("H3"))).toBe(
+			"stylePanel.domTree.semantic.heading3",
+		)
+	})
+
 	it("maps every text insertion placement to its literal translation key", () => {
 		expect(getTextInsertPlacementLabel(translate, "before")).toBe(
 			"stylePanel.domTree.addTextDialog.placements.before",

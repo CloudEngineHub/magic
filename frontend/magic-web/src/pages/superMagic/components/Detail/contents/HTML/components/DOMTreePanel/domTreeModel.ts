@@ -23,6 +23,12 @@ export type DomTreeSemanticKey =
 	| "embed"
 	| "form"
 	| "heading"
+	| "heading1"
+	| "heading2"
+	| "heading3"
+	| "heading4"
+	| "heading5"
+	| "heading6"
 	| "image"
 	| "lineBreak"
 	| "link"
@@ -60,42 +66,7 @@ export function getDomTreeNodeDisplayLabel(node: DomTreeNode, semanticLabel: str
 }
 
 export function getDomTreeSemanticLabel(t: TFunction, semanticKey: DomTreeSemanticKey): string {
-	switch (semanticKey) {
-		case "code":
-			return t("stylePanel.domTree.semantic.code")
-		case "container":
-			return t("stylePanel.domTree.semantic.container")
-		case "control":
-			return t("stylePanel.domTree.semantic.control")
-		case "disclosure":
-			return t("stylePanel.domTree.semantic.disclosure")
-		case "divider":
-			return t("stylePanel.domTree.semantic.divider")
-		case "element":
-			return t("stylePanel.domTree.semantic.element")
-		case "embed":
-			return t("stylePanel.domTree.semantic.embed")
-		case "form":
-			return t("stylePanel.domTree.semantic.form")
-		case "heading":
-			return t("stylePanel.domTree.semantic.heading")
-		case "image":
-			return t("stylePanel.domTree.semantic.image")
-		case "lineBreak":
-			return t("stylePanel.domTree.semantic.lineBreak")
-		case "link":
-			return t("stylePanel.domTree.semantic.link")
-		case "list":
-			return t("stylePanel.domTree.semantic.list")
-		case "media":
-			return t("stylePanel.domTree.semantic.media")
-		case "quote":
-			return t("stylePanel.domTree.semantic.quote")
-		case "table":
-			return t("stylePanel.domTree.semantic.table")
-		case "text":
-			return t("stylePanel.domTree.semantic.text")
-	}
+	return t(`stylePanel.domTree.semantic.${semanticKey}`)
 }
 
 export function getTextInsertPlacementLabel(t: TFunction, placement: InsertPlacement): string {
@@ -198,7 +169,12 @@ export function getSemanticKey(tagName: string): DomTreeSemanticKey {
 		)
 	)
 		return "text"
-	if (["h1", "h2", "h3", "h4", "h5", "h6"].includes(tag)) return "heading"
+	if (tag === "h1") return "heading1"
+	if (tag === "h2") return "heading2"
+	if (tag === "h3") return "heading3"
+	if (tag === "h4") return "heading4"
+	if (tag === "h5") return "heading5"
+	if (tag === "h6") return "heading6"
 	if (["ul", "ol", "li", "dl", "dt", "dd"].includes(tag)) return "list"
 	if (["table", "thead", "tbody", "tr", "th", "td"].includes(tag)) return "table"
 	if (["form", "fieldset", "legend"].includes(tag)) return "form"
@@ -228,6 +204,12 @@ export function getSemanticTone(semanticKey: string): string {
 			return "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300"
 		case "text":
 		case "heading":
+		case "heading1":
+		case "heading2":
+		case "heading3":
+		case "heading4":
+		case "heading5":
+		case "heading6":
 		case "link":
 		case "quote":
 		case "code":
