@@ -49,6 +49,7 @@ FilesViewer 会保留非活动页实例。本次新增的页面级选择器、�
 | 移动手柄            | `on-move-handle-mouse-down`          | 拖动选中元素                     |
 | 缩放手柄            | `on-resize-handle-mouse-down`        | 重复项通过 `data-handle-id` 区分 |
 | 旋转手柄            | `on-rotate-handle-mouse-down`        | 旋转选中元素                     |
+| 间距手柄            | `on-gap-handle-pointer-down`         | 拖动 flex/grid 间距，`data-axis` 区分 |
 | 页面结构开关        | `html-editor-dom-tree-toggle-button` | 展开或折叠 DOM 树                |
 | DOM 树面板          | `html-dom-tree-panel`                | 页面结构侧栏                     |
 | DOM 树宽度手柄      | `html-dom-tree-resize-handle`        | 调整页面结构侧栏宽度             |

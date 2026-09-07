@@ -1,5 +1,6 @@
 import { memo } from "react"
 import type { ElementRect, ResizeHandleConfig } from "../types"
+import type { GapAxis, GapHandleFrame } from "../utils/gapHandleLayout"
 import { HTML_EDITOR_Z_INDEX } from "../../../constants/z-index"
 import { ControlHandles } from "./ControlHandles"
 import { shouldShowActionHandles } from "../utils/size-detection"
@@ -24,6 +25,9 @@ interface SelectionBoxProps {
 		containerElement: HTMLElement | null,
 	) => void
 	onResizeHandleMouseDown: (event: React.PointerEvent, handle: ResizeHandleConfig) => void
+	gapHandles?: GapHandleFrame[]
+	onGapHandlePointerDown?: (event: React.PointerEvent, axis: GapAxis) => void
+	isGapDragging?: boolean
 	onDelete: (event: React.PointerEvent) => void
 	onDuplicate: (event: React.PointerEvent) => void
 }
@@ -44,6 +48,9 @@ export const SelectionBox = memo(function SelectionBox({
 	onMoveHandleMouseDown,
 	onRotateHandleMouseDown,
 	onResizeHandleMouseDown,
+	gapHandles = [],
+	onGapHandlePointerDown,
+	isGapDragging = false,
 	onDelete,
 	onDuplicate,
 }: SelectionBoxProps) {
@@ -52,7 +59,7 @@ export const SelectionBox = memo(function SelectionBox({
 
 	return (
 		<div
-			className="pointer-events-none absolute border-2 border-primary"
+			className="group/selection pointer-events-none absolute border-2 border-primary"
 			style={{
 				top: `${transformedRect.top}px`,
 				left: `${transformedRect.left}px`,
@@ -76,6 +83,9 @@ export const SelectionBox = memo(function SelectionBox({
 					onDelete={onDelete}
 					resizeHandles={resizeHandles}
 					onResizeHandleMouseDown={onResizeHandleMouseDown}
+					gapHandles={gapHandles}
+					onGapHandlePointerDown={onGapHandlePointerDown}
+					isGapDragging={isGapDragging}
 					rotation={rotation}
 					onRotateHandleMouseDown={onRotateHandleMouseDown}
 					transformedRect={viewportRect}

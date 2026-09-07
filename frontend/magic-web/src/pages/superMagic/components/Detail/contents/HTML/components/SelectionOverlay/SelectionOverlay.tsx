@@ -3,9 +3,10 @@
  * Renders element selection and hover highlights in the parent window (not inside iframe)
  */
 
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@/utils/cn"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
+import { useStylePanelStore } from "../../iframe-bridge/contexts/StylePanelContext"
 import type { ElementRect, SelectedInfo } from "./types"
 import { HTML_EDITOR_Z_INDEX } from "../../constants/z-index"
 import { useSelectionMessages } from "./hooks/useSelectionMessages"
@@ -48,6 +49,13 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 	const [selectedInfoList, setSelectedInfoList] = useState<SelectedInfo[]>([])
 	const [hoveredRect, setHoveredRect] = useState<ElementRect | null>(null)
 	const [isSelectionMode, setIsSelectionMode] = useState(false)
+	const stylePanelStore = useStylePanelStore()
+	const handlePreviewStyles = useCallback(
+		(styles: Partial<{ rowGap: string; columnGap: string }>) => {
+			stylePanelStore.updateComputedStyles(styles)
+		},
+		[stylePanelStore],
+	)
 	const [overlayViewportOrigin, setOverlayViewportOrigin] = useState({ top: 0, left: 0 })
 	const overlayRef = useRef<HTMLDivElement>(null)
 
@@ -175,6 +183,9 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 		rotation,
 		onMoveHandleMouseDown,
 		isMoving,
+		gapHandles,
+		isGapDragging,
+		onGapHandlePointerDown,
 		handleDelete,
 		handleDuplicate,
 		executeDelete,
@@ -190,6 +201,8 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 		setIsSelectionMode,
 		onMoveStart: onElementMoveStart,
 		onMoveEnd: onElementMoveEnd,
+		gapAxesLinked: stylePanelStore.gapAxesLinked,
+		onPreviewStyles: handlePreviewStyles,
 	})
 
 	// Transform hover rect (memoized)
@@ -349,6 +362,9 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 					onMoveHandleMouseDown={onMoveHandleMouseDown}
 					onRotateHandleMouseDown={onRotateHandleMouseDown}
 					onResizeHandleMouseDown={onHandleMouseDown}
+					gapHandles={gapHandles}
+					onGapHandlePointerDown={onGapHandlePointerDown}
+					isGapDragging={isGapDragging}
 					onDelete={handleDelete}
 					onDuplicate={handleDuplicate}
 				/>

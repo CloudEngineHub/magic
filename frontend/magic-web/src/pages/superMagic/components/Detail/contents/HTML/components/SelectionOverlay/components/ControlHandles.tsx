@@ -1,8 +1,14 @@
+import { useState } from "react"
 import { RotateCw, Move } from "lucide-react"
 // 恢复复制、删除按钮时，同时启用以下图标：Copy、Trash2。
 // import { Copy, Trash2 } from "lucide-react"
 import type { ResizeHandleConfig, ElementRect } from "../types"
+import type { GapAxis, GapHandleFrame } from "../utils/gapHandleLayout"
+import { GapTick } from "./GapTick"
 import { RotationIndicator } from "./RotationIndicator"
+
+const GAP_HIT_CLASS =
+	"group/gap pointer-events-auto absolute flex items-center justify-center opacity-30 transition-opacity duration-150 group-hover/selection:opacity-100 hover:opacity-100 data-[dragging=true]:opacity-100"
 
 interface ControlHandlesProps {
 	// Move
@@ -15,6 +21,10 @@ interface ControlHandlesProps {
 	// Resize
 	resizeHandles: ResizeHandleConfig[]
 	onResizeHandleMouseDown: (event: React.PointerEvent, handle: ResizeHandleConfig) => void
+	// Gap
+	gapHandles?: GapHandleFrame[]
+	onGapHandlePointerDown?: (event: React.PointerEvent, axis: GapAxis) => void
+	isGapDragging?: boolean
 	// Rotate
 	rotation: number
 	onRotateHandleMouseDown: (
@@ -36,11 +46,16 @@ export function ControlHandles({
 	onMoveHandleMouseDown,
 	resizeHandles,
 	onResizeHandleMouseDown,
+	gapHandles = [],
+	onGapHandlePointerDown,
+	isGapDragging = false,
 	rotation,
 	onRotateHandleMouseDown,
 	transformedRect,
 	containerElement,
 }: ControlHandlesProps) {
+	const [activeAxis, setActiveAxis] = useState<GapAxis | null>(null)
+
 	return (
 		<>
 			{/* Move handle - top left corner */}
@@ -95,6 +110,31 @@ export function ControlHandles({
 				</div>
 			)}
 			*/}
+
+			{gapHandles.map((frame) => (
+				<div
+					key={frame.axis}
+					role="button"
+					aria-label={`Adjust ${frame.axis} gap`}
+					className={GAP_HIT_CLASS}
+					style={{
+						left: frame.left,
+						top: frame.top,
+						width: frame.width,
+						height: frame.height,
+						cursor: frame.cursor,
+					}}
+					data-testid="on-gap-handle-pointer-down"
+					data-axis={frame.axis}
+					data-dragging={isGapDragging && activeAxis === frame.axis ? "true" : undefined}
+					onPointerDown={(event) => {
+						setActiveAxis(frame.axis)
+						onGapHandlePointerDown?.(event, frame.axis)
+					}}
+				>
+					<GapTick axis={frame.axis} />
+				</div>
+			))}
 
 			{/* Resize handles */}
 			{resizeHandles.map((handle) => (
