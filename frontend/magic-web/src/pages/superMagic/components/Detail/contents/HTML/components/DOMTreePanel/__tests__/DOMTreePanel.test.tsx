@@ -1730,4 +1730,120 @@ describe("DOMTreePanel", () => {
 		)
 		expect(selectedRow).not.toHaveClass("border-black", "border-l-2")
 	})
+
+	it("scrolls a selected canvas node into the expanded tree viewport", async () => {
+		const scrollIntoView = vi.fn()
+		const originalScrollIntoView = HTMLElement.prototype.scrollIntoView
+		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+			configurable: true,
+			value: scrollIntoView,
+		})
+
+		try {
+			const getDomTree = vi.fn().mockResolvedValue({
+				root: {
+					nodeId: "body",
+					tagName: "body",
+					label: "body",
+					selector: "body",
+					children: [
+						{
+							nodeId: "section",
+							tagName: "section",
+							label: "section.hero",
+							selector: "section.hero",
+							children: [],
+							editable: true,
+							canHaveChildren: true,
+							canDelete: true,
+							canMove: true,
+						},
+					],
+					editable: false,
+					canHaveChildren: true,
+					canDelete: false,
+					canMove: false,
+				},
+			})
+
+			render(
+				<DOMTreePanel
+					editorRef={{ current: { getDomTree } } as never}
+					selectedSelector="section.hero"
+					visible
+				/>,
+			)
+
+			await waitFor(() => {
+				expect(scrollIntoView).toHaveBeenCalledWith({
+					block: "nearest",
+					inline: "nearest",
+				})
+			})
+		} finally {
+			if (originalScrollIntoView) {
+				Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+					configurable: true,
+					value: originalScrollIntoView,
+				})
+			} else {
+				Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView")
+			}
+		}
+	})
+
+	it("positions a virtual tree before scrolling a selected canvas node", async () => {
+		const scrollTo = vi.fn()
+		const originalScrollTo = HTMLElement.prototype.scrollTo
+		Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+			configurable: true,
+			value: scrollTo,
+		})
+
+		try {
+			const children = Array.from({ length: 120 }, (_, index) => ({
+				nodeId: `node-${index}`,
+				tagName: "section",
+				label: `section-${index}`,
+				selector: `.node-${index}`,
+				children: [],
+				editable: true,
+				canHaveChildren: true,
+				canDelete: true,
+				canMove: true,
+			}))
+			const getDomTree = vi.fn().mockResolvedValue({
+				root: {
+					nodeId: "body",
+					tagName: "body",
+					label: "body",
+					selector: "body",
+					children,
+					editable: false,
+					canHaveChildren: true,
+					canDelete: false,
+					canMove: false,
+				},
+			})
+
+			render(
+				<DOMTreePanel
+					editorRef={{ current: { getDomTree } } as never}
+					selectedSelector=".node-119"
+					visible
+				/>,
+			)
+
+			await waitFor(() => expect(scrollTo).toHaveBeenCalled())
+		} finally {
+			if (originalScrollTo) {
+				Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+					configurable: true,
+					value: originalScrollTo,
+				})
+			} else {
+				Reflect.deleteProperty(HTMLElement.prototype, "scrollTo")
+			}
+		}
+	})
 })

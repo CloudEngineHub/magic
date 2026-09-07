@@ -110,6 +110,7 @@ function DOMTreePanelInner({
 	const requestInFlightRef = useRef(false)
 	const interactionLockedRef = useRef(false)
 	const treeViewportRef = useRef<HTMLDivElement>(null)
+	const selectedScrollFrameRef = useRef<number | null>(null)
 	const autoScrollFrameRef = useRef<number | null>(null)
 	const previousContentRevisionRef = useRef(contentRevision)
 	const virtualRangeLogAtRef = useRef(0)
@@ -455,10 +456,43 @@ function DOMTreePanelInner({
 	}, [normalizedSearchQuery])
 
 	useEffect(() => {
-		if (!shouldVirtualize || !selectedNodeId) return
+		if (!visible || !selectedNodeId) return
 		const rowIndex = visibleRows.findIndex((row) => row.nodeId === selectedNodeId)
-		if (rowIndex >= 0) treeVirtualizer.scrollToIndex(rowIndex, { align: "auto" })
-	}, [selectedNodeId, shouldVirtualize, treeVirtualizer, visibleRows])
+		if (rowIndex < 0) return
+
+		let attempts = 0
+		const scrollSelectedNode = () => {
+			const selectedButton = nodeButtonRefs.current.get(selectedNodeId)
+			if (selectedButton) {
+				selectedButton.scrollIntoView?.({
+					block: "nearest",
+					inline: "nearest",
+				})
+				return
+			}
+
+			// Virtual rows are mounted after scrollToIndex. Retry a few animation
+			// frames so selection does not depend on the browser's render timing.
+			if (shouldVirtualize && attempts < 2) {
+				attempts += 1
+				treeVirtualizer.scrollToIndex(rowIndex, { align: "auto" })
+				selectedScrollFrameRef.current = window.requestAnimationFrame(scrollSelectedNode)
+			}
+		}
+		if (selectedScrollFrameRef.current !== null) {
+			window.cancelAnimationFrame(selectedScrollFrameRef.current)
+		}
+		selectedScrollFrameRef.current = window.requestAnimationFrame(() => {
+			selectedScrollFrameRef.current = null
+			scrollSelectedNode()
+		})
+		return () => {
+			if (selectedScrollFrameRef.current !== null) {
+				window.cancelAnimationFrame(selectedScrollFrameRef.current)
+				selectedScrollFrameRef.current = null
+			}
+		}
+	}, [selectedNodeId, shouldVirtualize, treeVirtualizer, visible, visibleRows])
 
 	useEffect(() => {
 		if (!shouldVirtualize || !manualPerfLogger.isEnabled()) return
