@@ -5,6 +5,7 @@ import { usePPTSidebar } from "../usePPTSidebar"
 const mocks = vi.hoisted(() => ({
 	findMagicProjectJsFile: vi.fn(),
 	updateSlidesOrder: vi.fn(),
+	duplicateSlide: vi.fn(),
 	getTemporaryDownloadUrl: vi.fn(),
 	registeredSync: undefined as undefined | ((slides: Array<{ path: string }>) => Promise<void>),
 }))
@@ -35,6 +36,7 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 vi.mock("../../../../contents/HTML/utils/magicProjectUpdater", () => ({
 	findMagicProjectJsFile: mocks.findMagicProjectJsFile,
 	updateSlidesOrder: mocks.updateSlidesOrder,
+	duplicateSlide: mocks.duplicateSlide,
 	insertSlide: vi.fn(),
 	deleteSlide: vi.fn(),
 	renameSlide: vi.fn(),
@@ -65,6 +67,7 @@ describe("usePPTSidebar structure adapter", () => {
 		const adapter = {
 			reorder: vi.fn().mockResolvedValue(undefined),
 			insert: vi.fn(),
+			duplicate: vi.fn(),
 			remove: vi.fn(),
 			rename: vi.fn(),
 		}
@@ -117,6 +120,7 @@ describe("usePPTSidebar structure adapter", () => {
 				fileId: "slide-12",
 				content: "<html>slide-12.html</html>",
 			}),
+			duplicate: vi.fn(),
 			remove: vi.fn(),
 			rename: vi.fn(),
 		}
@@ -162,5 +166,72 @@ describe("usePPTSidebar structure adapter", () => {
 			],
 			true,
 		)
+	})
+
+	it("duplicates a template slide, selects it, and generates its screenshot", async () => {
+		mocks.getTemporaryDownloadUrl.mockResolvedValue([
+			{ file_id: "slide-copy", url: "https://example.com/slide-copy.html" },
+		])
+		const adapter = {
+			reorder: vi.fn(),
+			insert: vi.fn(),
+			duplicate: vi.fn().mockResolvedValue({
+				filePath: "slides/contents (1).html",
+				fileId: "slide-copy",
+				content: "<html>copied</html>",
+			}),
+			remove: vi.fn(),
+			rename: vi.fn(),
+		}
+		const store = {
+			slides: [{ id: "one", path: "slides/contents.html", index: 0 }],
+			slidePaths: ["slides/contents.html"],
+			syncManager: { registerSyncFunction: vi.fn() },
+			markSkipNextExternalSync: vi.fn(),
+			setSlides: vi.fn(),
+			setActiveIndex: vi.fn(),
+			getFileIdByPath: vi.fn((path: string) => (path ? "source-file" : undefined)),
+			pathMappingService: {
+				setPathFileIdMapping: vi.fn(),
+				setPathUrlMapping: vi.fn(),
+			},
+			loadSlideContentByFileId: vi.fn().mockResolvedValue(""),
+			ensureSlideScreenshot: vi.fn().mockResolvedValue(undefined),
+		}
+
+		const { result } = renderHook(() =>
+			usePPTSidebar({
+				slides: store.slides as never,
+				activeIndex: 0,
+				isTransitioning: false,
+				allowEdit: true,
+				setActiveIndex: store.setActiveIndex,
+				setIsTransitioning: vi.fn(),
+				store: store as never,
+				slideStructureAdapter: adapter,
+				projectId: "project-1",
+			}),
+		)
+
+		await act(async () => {
+			await result.current.handleDuplicateSlide(0)
+		})
+
+		expect(adapter.duplicate).toHaveBeenCalledWith({
+			slidePath: "slides/contents.html",
+			position: 0,
+		})
+		expect(store.setSlides).toHaveBeenCalledWith(
+			[
+				expect.objectContaining({ path: "slides/contents.html" }),
+				expect.objectContaining({
+					path: "slides/contents (1).html",
+					id: "slide-slide-copy",
+				}),
+			],
+			true,
+		)
+		expect(store.setActiveIndex).toHaveBeenCalledWith(1)
+		expect(store.ensureSlideScreenshot).toHaveBeenCalledWith(1)
 	})
 })

@@ -7,6 +7,7 @@ import {
 	findMagicProjectJsFile,
 	updateSlidesOrder,
 	insertSlide,
+	duplicateSlide,
 	deleteSlide,
 	renameSlide,
 } from "../../../contents/HTML/utils/magicProjectUpdater"
@@ -64,13 +65,16 @@ export function usePPTSidebar({
 }: UsePPTSidebarOptions) {
 	const { t } = useTranslation("super")
 	const isInsertingRef = useRef(false)
+	const isDuplicatingRef = useRef(false)
 	const isDeletingRef = useRef(false)
 	const slideStructureAdapterRef = useRef(slideStructureAdapter)
 	slideStructureAdapterRef.current = slideStructureAdapter
 	const [isDeleteModalOpen, setIsModalOpen] = useState(false)
-	const getMagicProjectLookupAttachments = useMemoizedFn(() => {
-		const treeAttachments = Array.isArray(attachments) ? attachments : []
-		const listAttachments = Array.isArray(attachmentList) ? attachmentList : []
+	const getMagicProjectLookupAttachments = useMemoizedFn((): AttachmentItem[] => {
+		const treeAttachments = Array.isArray(attachments) ? (attachments as AttachmentItem[]) : []
+		const listAttachments = Array.isArray(attachmentList)
+			? (attachmentList as AttachmentItem[])
+			: []
 		if (treeAttachments.length === 0) return listAttachments
 		if (listAttachments.length === 0) return treeAttachments
 		return [...treeAttachments, ...listAttachments]
@@ -457,6 +461,150 @@ export function usePPTSidebar({
 			}
 		},
 	)
+
+	const handleDuplicateSlide = useMemoizedFn(async (index: number) => {
+		if (!allowEdit) return
+		if (!projectId && !slideStructureAdapter) {
+			magicToast.error(t("fileViewer.duplicateSlideFailed"))
+			return
+		}
+		if (isDuplicatingRef.current) {
+			magicToast.warning(t("fileViewer.waitForPreviousOperation"))
+			return
+		}
+
+		const sourceSlide = store.slides[index]
+		const sourceFileId = sourceSlide ? store.getFileIdByPath(sourceSlide.path) : undefined
+		if (!sourceSlide || (!slideStructureAdapter && !sourceFileId)) {
+			magicToast.error(t("fileViewer.duplicateSlideFailed"))
+			return
+		}
+
+		isDuplicatingRef.current = true
+		const toastId = magicToast.loading({
+			content: t("fileViewer.duplicatingSlide"),
+			duration: 0,
+		})
+
+		try {
+			let result: {
+				filePath: string
+				fileId: string
+				content: string
+				file: AttachmentItem
+			}
+
+			// Both structure implementations persist first; the sidebar is updated only after the
+			// new file and page order are durable, so a failed copy cannot leave a phantom page.
+			if (slideStructureAdapter) {
+				const duplicateResult = await slideStructureAdapter.duplicate({
+					slidePath: sourceSlide.path,
+					position: index,
+				})
+				result = {
+					...duplicateResult,
+					file: {
+						file_id: duplicateResult.fileId,
+						file_name: duplicateResult.filePath.split("/").pop(),
+						file_extension: "html",
+						relative_file_path: duplicateResult.filePath,
+					},
+				}
+			} else {
+				const magicProjectFile = await findMagicProjectJsFile({
+					attachments: getMagicProjectLookupAttachments(),
+					currentFileId: mainFileId || "",
+					currentFileName: mainFileName || "",
+				})
+				if (!magicProjectFile) throw new Error("Magic project file not found")
+
+				const duplicateResult = await duplicateSlide({
+					projectId: projectId as string,
+					parentId,
+					slidePath: sourceSlide.path,
+					position: index,
+					currentSlides: store.slidePaths,
+					magicProjectFileId: magicProjectFile.fileId,
+					sourceFileId: sourceFileId as string,
+					attachments: getMagicProjectLookupAttachments(),
+				})
+				result = {
+					filePath: duplicateResult.newFilePath,
+					fileId: duplicateResult.newFileId,
+					content: duplicateResult.content,
+					file: duplicateResult.newFile,
+				}
+			}
+
+			let newFileUrl = ""
+			try {
+				const downloadUrls = await getTemporaryDownloadUrl({ file_ids: [result.fileId] })
+				newFileUrl = downloadUrls?.[0]?.url || ""
+			} catch (error) {
+				console.error("Failed to get duplicated slide URL:", error)
+			}
+			let targetIndex = store.slides.findIndex((slide) => slide.path === result.filePath)
+
+			// External attachment sync can arrive before this handler resumes. Reuse the existing
+			// path when that happens instead of inserting the same copied page twice.
+			if (targetIndex === -1) {
+				targetIndex = Math.min(index + 1, store.slides.length)
+				const newSlides = [...store.slides]
+				newSlides.splice(targetIndex, 0, {
+					id: `slide-${result.fileId}`,
+					path: result.filePath,
+					url: newFileUrl,
+					index: targetIndex,
+					title: result.filePath.split("/").pop(),
+					loadingState: "loading",
+				})
+				newSlides.forEach((slide, slideIndex) => {
+					slide.index = slideIndex
+				})
+				store.setSlides(newSlides, true)
+			}
+
+			store.pathMappingService.setPathFileIdMapping(result.filePath, result.fileId)
+			if (newFileUrl) store.pathMappingService.setPathUrlMapping(result.filePath, newFileUrl)
+			store.setActiveIndex(targetIndex)
+			store.markSkipNextExternalSync()
+			onSortSave?.(store.slidePaths)
+
+			projectFilesStore.addWorkspaceFile(result.file)
+			requestProjectAttachmentsFullRefresh({
+				projectId,
+				reason: slideStructureAdapter
+					? "ppt-template-duplicate-slide"
+					: "ppt-duplicate-slide",
+			})
+
+			try {
+				await store.loadSlideContentByFileId(result.fileId, {
+					path: result.filePath,
+					url: newFileUrl,
+					indexHint: targetIndex,
+				})
+				const screenshotIndex = store.slides.findIndex(
+					(slide) => store.getFileIdByPath(slide.path) === result.fileId,
+				)
+				await store.ensureSlideScreenshot(
+					screenshotIndex === -1 ? targetIndex : screenshotIndex,
+				)
+			} catch (error) {
+				// Persistence succeeded; preview failures should not report a failed copy.
+				console.error("Failed to load duplicated slide or generate screenshot:", error)
+			}
+
+			magicToast.destroy(toastId)
+			magicToast.success(t("fileViewer.duplicateSlideSuccess"))
+		} catch (error) {
+			console.error("Failed to duplicate slide:", error)
+			magicToast.destroy(toastId)
+			magicToast.error(t("fileViewer.duplicateSlideFailed"))
+		} finally {
+			isDuplicatingRef.current = false
+		}
+	})
 
 	// Handle delete slide with optimistic update
 	const handleDeleteSlide = useMemoizedFn((index: number) => {
@@ -874,6 +1022,7 @@ export function usePPTSidebar({
 		handleSlideClick,
 		handleSortChange,
 		handleInsertSlide,
+		handleDuplicateSlide,
 		handleDeleteSlide,
 		handleRenameSlide,
 		handleAddToCurrentChat,

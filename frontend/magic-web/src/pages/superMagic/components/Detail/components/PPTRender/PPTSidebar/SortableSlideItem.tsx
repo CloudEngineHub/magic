@@ -11,6 +11,7 @@ import {
 	MessageSquare,
 	FileSearch,
 	RefreshCw,
+	Copy,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
@@ -50,6 +51,7 @@ function SortableSlideItem({
 	totalSlides,
 	onInsertAbove,
 	onInsertBelow,
+	onDuplicate,
 	onDelete,
 	onRename,
 	onAddToCurrentChat,
@@ -387,6 +389,15 @@ function SortableSlideItem({
 					>
 						<ArrowDown className="mr-2 size-4" />
 						{t("fileViewer.insertBelow")}
+					</ContextMenuItem>
+					<ContextMenuItem
+						onClick={(e) => {
+							e.stopPropagation()
+							onDuplicate?.()
+						}}
+					>
+						<Copy className="mr-2 size-4" />
+						{t("fileViewer.duplicateSlide")}
 					</ContextMenuItem>
 					<ContextMenuSeparator />
 					<ContextMenuItem

@@ -563,7 +563,9 @@ describe("PPTSlide", () => {
 		})
 
 		const isolatedProps = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0] as
-			| { onRenderReady?: () => void }
+			| {
+					onRenderReady?: () => void
+			  }
 			| undefined
 		act(() => isolatedProps?.onRenderReady?.())
 
@@ -627,6 +629,43 @@ describe("PPTSlide", () => {
 				expect.objectContaining({
 					content: "<div>history version 2</div>",
 					rawSourceCode: "<div>history version 2</div>",
+				}),
+			)
+		})
+	})
+
+	it("mounts copied content when a loading slide receives its first HTML payload", async () => {
+		const { rerender } = renderPPTSlide({
+			content: "",
+			rawContent: "",
+			loadingState: "loading",
+		})
+
+		rerender(
+			<PPTSlide
+				index={0}
+				isActive={true}
+				content="<div>processed copied slide</div>"
+				rawContent="<div>copied slide</div>"
+				isFullscreen={false}
+				fileId="slide-copy"
+				filePathMapping={new Map()}
+				openNewTab={vi.fn()}
+				updateSlideContents={vi.fn()}
+				allowEdit={true}
+				loadingState="loaded"
+				attachmentList={[]}
+				saveEditContent={mockState.saveEditContent}
+				onManualSave={mockState.onManualSave}
+				onDeactivate={mockState.onDeactivate}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockState.renderedIsolatedProps).toHaveBeenCalledWith(
+				expect.objectContaining({
+					content: "<div>copied slide</div>",
+					rawSourceCode: "<div>copied slide</div>",
 				}),
 			)
 		})

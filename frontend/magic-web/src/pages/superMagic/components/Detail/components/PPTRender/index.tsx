@@ -336,6 +336,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		handleSlideClick,
 		handleSortChange,
 		handleInsertSlide,
+		handleDuplicateSlide,
 		handleDeleteSlide,
 		handleRenameSlide,
 		handleAddToCurrentChat,
@@ -697,6 +698,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								onSlideClick={handleSlideClick}
 								onSortChange={effectiveAllowEdit ? handleSortChange : undefined}
 								onInsertSlide={effectiveAllowEdit ? handleInsertSlide : undefined}
+								onDuplicateSlide={
+									effectiveAllowEdit ? handleDuplicateSlide : undefined
+								}
 								onDeleteSlide={effectiveAllowEdit ? handleDeleteSlide : undefined}
 								onRenameSlide={effectiveAllowEdit ? handleRenameSlide : undefined}
 								onRefreshSlide={effectiveAllowEdit ? handleRefreshSlide : undefined}
