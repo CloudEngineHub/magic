@@ -3,7 +3,8 @@
  * Renders element selection and hover highlights in the parent window (not inside iframe)
  */
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { observer } from "mobx-react-lite"
 import { cn } from "@/utils/cn"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
 import { useStylePanelStore } from "../../iframe-bridge/contexts/StylePanelContext"
@@ -32,7 +33,8 @@ interface SelectionOverlayProps {
 	onElementMoveEnd?: () => void
 }
 
-export const SelectionOverlay = memo(function SelectionOverlay({
+// observer already memos; wrapping memo() throws in mobx-react-lite 4
+export const SelectionOverlay = observer(function SelectionOverlay({
 	scrollContainerRef,
 	containerRef,
 	iframeRef,
