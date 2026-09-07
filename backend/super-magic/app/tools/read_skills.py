@@ -50,7 +50,8 @@ Whether to check for skill version updates. Defaults to true. If the user has ex
         return value
 
 
-@tool(auto_mount=AutoMount.SKILLS)
+# hook 在返回前执行，必须交付完整指令；此豁免不代表已有安全预算。
+@tool(auto_mount=AutoMount.SKILLS, result_overflow_exempt=True)
 class ReadSkills(BaseTool[ReadSkillsParams]):
     """<!--zh
     批量读取可用 skills 的完整内容工具

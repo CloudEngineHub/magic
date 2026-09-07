@@ -173,7 +173,8 @@ class FileReadingResult(BaseModel):
     read_range: Optional[Dict[str, int]] = None  # 实际读取的行号范围
 
 
-@tool()
+# 文件正文已有动态预算与原文件续读协议，避免被全局默认额度再次文件化。
+@tool(result_overflow_exempt=True)
 class ReadFiles(AbstractFileTool[ReadFilesParams], WorkspaceTool[ReadFilesParams]):
     """<!--zh
     批量读取文件内容

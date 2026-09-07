@@ -78,6 +78,7 @@ class BaseTool(Generic[T], ABC):
     params_class: ClassVar[Type[T]] = None
     # 实例运行时默认值；工具注册策略由 @tool 写入私有注册元数据。
     code_mode_only: ClassVar[bool] = False
+    result_overflow_exempt: ClassVar[bool] = False
 
     # 配置项
     model_config = ConfigDict(arbitrary_types_allowed=True)

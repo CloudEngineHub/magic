@@ -265,7 +265,8 @@ Starting line number to read (0-indexed), supports negative numbers to count fro
 Number of lines or pages to read, default 200 lines, set to -1 to read entire file""")
 
 
-@tool()
+# 文件正文已有动态预算与原文件续读协议，避免被全局默认额度再次文件化。
+@tool(result_overflow_exempt=True)
 class ReadFile(AbstractFileTool[ReadFileParams], WorkspaceTool[ReadFileParams]):
     """<!--zh
     读取文件内容

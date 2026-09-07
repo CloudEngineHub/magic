@@ -339,6 +339,11 @@ model_profiles:
       currency: "USD"
 
 agent:
+  # 只限制最终模型正文；预览先取前几行，再限制估算 token，单行也受限。
+  tool_result:
+    max_inline_tokens: 20000
+    max_preview_lines: 5
+    max_preview_tokens: 1000
   # Allow LLM to call multiple tools in a single response
   enable_multi_tool_calls: ${AGENT_ENABLE_MULTI_TOOL_CALLS:-true}
   # Execute multiple tool calls in parallel vs sequential (only applies when multi_tool_calls is enabled)
@@ -524,6 +529,15 @@ chat_history_cleanup:
 # .runtime 清理默认值。
 # 容量字段支持 MB、MiB、KB、KiB 等写法；本项目的 MB 和 MiB 都按 1024 进制换算。
 runtime_cleanup:
+  # 自动结果文件由独立 owner 按容量和存活时间清理。
+  tool_results:
+    max_file_size: 8MiB
+    max_file_count: 128
+    target_file_count: 96
+    max_total_size: 256MiB
+    target_total_size: 192MiB
+    max_age_days: 7
+
   bg_shell:
     max_age_days: 7
     max_file_count: 50
