@@ -322,6 +322,13 @@ export function createUploadCallbacks(params: CreateUploadCallbacksParams): {
 				setUploadProgress(state.progress)
 			}
 		},
+		onFileProgress: (_taskId: string, file: File, progress: number) => {
+			const uploadFile =
+				Array.from(fileNameToUploadFileMap.values()).find(
+					(candidate) => candidate.file === file,
+				) || fileNameToUploadFileMap.get(file.name)
+			uploadFile?.onUploadProgress?.(progress)
+		},
 
 		onBatchSaveComplete: async (batchSaveInfo: BatchSaveInfo) => {
 			if (resolved) return

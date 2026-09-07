@@ -90,6 +90,15 @@ export interface ReferenceResourcePanelFileData {
 	file_path: string
 	file_extension: string
 	file_size?: number
+	project_id?: string
+	source_project_id?: string
+	source_file_id?: string
+	relative_file_path?: string
+	pending?: boolean
+	pending_id?: string
+	upload_progress?: number
+	upload_status?: "init" | "uploading" | "done" | "error"
+	upload_error?: string
 }
 
 export interface ReferenceResourcePanelItem {

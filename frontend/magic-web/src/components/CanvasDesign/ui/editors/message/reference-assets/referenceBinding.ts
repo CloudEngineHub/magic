@@ -8,7 +8,11 @@ import {
 	getCanvasResourceReferenceIdentity,
 } from "../../../../runtime/shared/path/canvasResourcePath"
 import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
-import { getMatchablePathsFromValue, promptContainsMentionForFile } from "../tiptap/contentUtils"
+import {
+	getMatchablePathsFromValue,
+	promptContainsMentionForFile,
+	type MentionPathBinding,
+} from "../tiptap/contentUtils"
 import { createReferenceResourceDescriptor } from "./referenceResourceDescriptor"
 
 export type ReferenceBindingMode = "prompt-linked" | "detached-legacy" | "mixed"
@@ -152,9 +156,17 @@ export function resolveExplicitPromptReferencePaths(params: {
 	tokenConfig: PromptPlaceholderTokenConfig
 	defaultAssetType?: PromptPlaceholderTokenKind
 	resolveResourceReference?: ResolveCanvasResourceReference
+	/** 恢复期间由编辑器保存的有序 mention identity；优先于同名文本推断。 */
+	mentionBindings?: MentionPathBinding[]
 }): string[] {
-	const { prompt, referenceFileInfos, tokenConfig, defaultAssetType, resolveResourceReference } =
-		params
+	const {
+		prompt,
+		referenceFileInfos,
+		tokenConfig,
+		defaultAssetType,
+		resolveResourceReference,
+		mentionBindings,
+	} = params
 	if (!prompt || referenceFileInfos.length === 0) return []
 
 	const explicitPathIdentities = new Set<string>()
@@ -171,14 +183,23 @@ export function resolveExplicitPromptReferencePaths(params: {
 		}
 	}
 
-	const mentionPaths = getMatchablePathsFromValue(
-		prompt,
-		buildPromptMatchableItems(referenceFileInfos),
-	)
-	for (const path of mentionPaths) {
-		explicitPathIdentities.add(
-			getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+	if (mentionBindings?.length) {
+		for (const binding of mentionBindings) {
+			if (!binding.path) continue
+			explicitPathIdentities.add(
+				getCanvasResourceReferenceIdentity(binding.path, resolveResourceReference),
+			)
+		}
+	} else {
+		const mentionPaths = getMatchablePathsFromValue(
+			prompt,
+			buildPromptMatchableItems(referenceFileInfos),
 		)
+		for (const path of mentionPaths) {
+			explicitPathIdentities.add(
+				getCanvasResourceReferenceIdentity(path, resolveResourceReference),
+			)
+		}
 	}
 
 	return referenceFileInfos
@@ -198,15 +219,24 @@ export function resolveReferenceBindingState(params: {
 	tokenConfig: PromptPlaceholderTokenConfig
 	defaultAssetType?: PromptPlaceholderTokenKind
 	resolveResourceReference?: ResolveCanvasResourceReference
+	/** 恢复期间由编辑器保存的有序 mention identity；优先于同名文本推断。 */
+	mentionBindings?: MentionPathBinding[]
 }): ReferenceBindingState {
-	const { prompt, referenceFileInfos, tokenConfig, defaultAssetType, resolveResourceReference } =
-		params
+	const {
+		prompt,
+		referenceFileInfos,
+		tokenConfig,
+		defaultAssetType,
+		resolveResourceReference,
+		mentionBindings,
+	} = params
 	const explicitPromptReferencePaths = resolveExplicitPromptReferencePaths({
 		prompt,
 		referenceFileInfos,
 		tokenConfig,
 		defaultAssetType,
 		resolveResourceReference,
+		mentionBindings,
 	})
 	const explicitPathIdentities = new Set(
 		explicitPromptReferencePaths.map((path) =>

@@ -40,29 +40,49 @@ function findAttachmentByNormalizedPath(
 	attachments: AttachmentItem[],
 	normalizedSearchPath: string,
 ): AttachmentItem | undefined {
-	for (const item of attachments) {
-		// 递归搜索子节点
-		if (item.children) {
-			const found = findAttachmentByNormalizedPath(item.children, normalizedSearchPath)
-			if (found) return found
-		}
+	const suffixMatches: AttachmentItem[] = []
+	const searchBaseName = normalizedSearchPath.split("/").pop() || ""
 
-		// 检查 relative_file_path 是否匹配
-		if (item.relative_file_path) {
-			const normalizedItemPath = normalizeWorkspacePathForComparison(item.relative_file_path)
-			if (normalizedItemPath === normalizedSearchPath) {
-				return item
+	const visit = (items: AttachmentItem[]): AttachmentItem | undefined => {
+		for (const item of items) {
+			if (item.children) {
+				const foundInChildren = visit(item.children)
+				if (foundInChildren) return foundInChildren
+			}
+
+			const candidates = [item.relative_file_path, item.path].filter(
+				(value): value is string => Boolean(value),
+			)
+			for (const candidate of candidates) {
+				const normalizedItemPath = normalizeWorkspacePathForComparison(candidate)
+				if (!normalizedItemPath) continue
+				if (normalizedItemPath === normalizedSearchPath) {
+					return item
+				}
+				if (normalizedItemPath.endsWith(`/${normalizedSearchPath}`)) {
+					suffixMatches.push(item)
+					break
+				}
 			}
 		}
-
-		// 也检查 path 字段作为备选
-		if (item.path) {
-			const normalizedItemPath = normalizeWorkspacePathForComparison(item.path)
-			if (normalizedItemPath === normalizedSearchPath) {
-				return item
-			}
-		}
+		return undefined
 	}
 
+	const exact = visit(attachments)
+	if (exact) return exact
+
+	// Canvas mentions often carry canvas-relative paths (`images/x.png`) while
+	// workspace attachments are prefixed (`画布名/images/x.png`). Accept a unique suffix hit.
+	const uniqueSuffixMatches = Array.from(new Set(suffixMatches))
+	if (uniqueSuffixMatches.length === 1) return uniqueSuffixMatches[0]
+	if (uniqueSuffixMatches.length > 1 && searchBaseName) {
+		const byBaseName = uniqueSuffixMatches.filter((item) => {
+			const name = String(item.file_name || item.filename || item.name || "")
+				.trim()
+				.toLowerCase()
+			return name === searchBaseName.toLowerCase()
+		})
+		if (byBaseName.length === 1) return byBaseName[0]
+	}
 	return undefined
 }

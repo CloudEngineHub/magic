@@ -17,7 +17,6 @@ import {
 } from "@/components/business/MentionPanel/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/utils/cn"
-import { usePortalContainer } from "@/components/CanvasDesign/ui/primitives/custom/PortalContainerContext"
 import { useOptionalMessageEditorStore } from "../../../stores"
 import { toDisplayUploadProgress } from "../../../utils/uploadProgress"
 import { useMentionMediaSource } from "../../MentionMedia/useMentionMediaSource"
@@ -27,7 +26,7 @@ import {
 	MESSAGE_FILE_MENTION_VISUAL_BASE_CLASSES,
 	MESSAGE_FILE_MENTION_VISUAL_CLASS,
 	MESSAGE_FILE_MENTION_DESKTOP_CLASSES,
-} from "@/components/CanvasDesign/runtime/resources/clipboard/MessageMentionVisual"
+} from "@/components/business/MentionPanel/messageMentionVisual"
 
 type FileMentionData = ProjectFileMentionData | UploadFileMentionData
 
@@ -35,7 +34,6 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 	const isMobile = useIsMobile()
 	const { t } = useTranslation("super")
 	const editorStore = useOptionalMessageEditorStore()
-	const portalContainer = usePortalContainer()
 	const mention = attrs as TiptapMentionAttributes
 	const data = attrs.data as FileMentionData
 	const isUpload = attrs.type === MentionItemType.UPLOAD_FILE
@@ -152,7 +150,6 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 				},
 			}}
 			enableTouchTrigger
-			container={portalContainer}
 		/>
 	)
 

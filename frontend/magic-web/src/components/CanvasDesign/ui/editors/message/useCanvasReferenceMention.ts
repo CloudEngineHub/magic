@@ -39,13 +39,18 @@ import {
 	MESSAGE_FILE_MENTION_VISUAL_BASE_CLASSES,
 	MESSAGE_FILE_MENTION_VISUAL_CLASS,
 	MESSAGE_FILE_MENTION_DESKTOP_CLASSES,
-} from "../../../runtime/resources/clipboard/MessageMentionVisual"
+} from "@/components/business/MentionPanel/messageMentionVisual"
 
 interface UseCanvasReferenceMentionOptions {
 	/** 可匹配的项列表（从 referenceImagesState 派生） */
 	matchableItems?: MatchableMentionItem[]
 	/** 外部显式控制 @ 功能可用性；不传时使用默认模型就绪判定 */
 	mentionEnabledOverride?: boolean
+	/**
+	 * 是否把项目附件树并入 string→mention 候选。
+	 * 视频首尾帧等无参考资源能力时应关闭，避免 @文件名 被解析成 mention 芯片。
+	 */
+	includeProjectTreeCandidates?: boolean
 	/** 最大参考文件数量限制 */
 	maxReferenceFiles?: number
 	/** 当前已选中的参考文件路径列表 */
@@ -67,6 +72,7 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 	const portalContainer = usePortalContainer()
 	const [, forceResourceStateRefresh] = useState(0)
 	const attrs = props.node.attrs as CanvasMentionAttributes & {
+		pending?: boolean
 		data?: ReferenceResourcePanelFileData
 	}
 	const fileData = attrs.data
@@ -92,6 +98,11 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 	}`
 	const fileType = fileData?.file_extension || fileData?.file_name?.split(".").pop() || ""
 	const fileName = fileData?.file_name || displayText
+	const uploadStatus = fileData?.upload_status
+	const uploadProgress = Math.min(100, Math.max(0, Math.round(fileData?.upload_progress ?? 0)))
+	const isUploading =
+		attrs.pending === true && (uploadStatus === "init" || uploadStatus === "uploading")
+	const isUploadError = attrs.pending === true && uploadStatus === "error"
 	const fileIcon = createElement(MagicFileIcon, {
 		type: fileType,
 		size: 16,
@@ -101,15 +112,25 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 		path: fileData?.file_path,
 		fileName,
 		fileExtension: fileType,
-		enabled: Boolean(fileData?.file_path) && !isDeleted,
+		enabled: Boolean(fileData?.file_path) && !isDeleted && !attrs.pending,
 	})
 	const renderVisual = (thumbnail: ReactNode) =>
 		createElement(
 			"span",
 			{
-				className: `${MESSAGE_FILE_MENTION_VISUAL_CLASS} ${MESSAGE_FILE_MENTION_VISUAL_BASE_CLASSES} ${MESSAGE_FILE_MENTION_DESKTOP_CLASSES}`,
+				className: `${MESSAGE_FILE_MENTION_VISUAL_CLASS} ${MESSAGE_FILE_MENTION_VISUAL_BASE_CLASSES} ${MESSAGE_FILE_MENTION_DESKTOP_CLASSES}${
+					isUploading ? " bg-muted text-muted-foreground" : ""
+				}${isUploadError ? " bg-destructive/10 text-destructive" : ""}`,
 				"data-testid": "canvas-file-mention-visual",
 			},
+			isUploading
+				? createElement("span", {
+						className:
+							"pointer-events-none absolute inset-y-0 left-0 bg-primary/15 transition-[width] duration-200 ease-out",
+						style: { width: `${uploadProgress}%` },
+						"data-testid": "canvas-file-mention-progress-background",
+					})
+				: null,
 			createElement(
 				"span",
 				{ className: "relative z-10 flex shrink-0 items-center" },
@@ -120,6 +141,24 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 				{ className: MESSAGE_FILE_MENTION_NAME_CLASSES, title: displayText },
 				displayText,
 			),
+			isUploading
+				? createElement(
+						"span",
+						{
+							className:
+								"relative z-10 shrink-0 text-[0.85em] tabular-nums leading-none text-muted-foreground",
+							"data-testid": "canvas-file-mention-progress",
+						},
+						`${uploadProgress}%`,
+					)
+				: null,
+			isUploadError
+				? createElement(
+						"span",
+						{ className: "relative z-10 shrink-0 text-xs" },
+						t("design.errors.uploadFailedBySubDir.images", "上传失败"),
+					)
+				: null,
 		)
 	const mediaTrigger = createElement(MediaPreviewTrigger, {
 		fileName,
@@ -138,7 +177,7 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 			},
 		},
 		enableTouchTrigger: true,
-		disabled: isDeleted,
+		disabled: isDeleted || Boolean(attrs.pending),
 		side: "top",
 		container: portalContainer,
 	})
@@ -149,7 +188,9 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 			as: "span",
 			// Reset legacy .magic-mention chip styles so only the shared visual
 			// contract paints the pill (same approach as SuperMagic FileMentionNodeView).
-			className: `magic-mention canvas-project-file-mention ${MESSAGE_FILE_MENTION_ROOT_CLASS} relative -top-px inline-flex max-w-full overflow-visible bg-transparent p-0 align-middle`,
+			className: `magic-mention canvas-project-file-mention ${MESSAGE_FILE_MENTION_ROOT_CLASS} relative -top-px inline-flex max-w-full overflow-visible bg-transparent p-0 align-middle${
+				attrs.pending ? " opacity-50" : ""
+			}`,
 			"data-mention-suggestion-char": attrs.mentionSuggestionChar || "@",
 			"data-type": attrs.type,
 			"data-data": JSON.stringify(attrs.data || {}),
@@ -197,6 +238,7 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 	const {
 		matchableItems: externalMatchableItems = [],
 		mentionEnabledOverride,
+		includeProjectTreeCandidates = true,
 		maxReferenceFiles,
 		currentReferenceFiles = [],
 		isReferenceFileLimitReached = false,
@@ -236,6 +278,7 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 	const matchableItems = useMemo(() => {
 		const result: MatchableMentionItem[] = []
 		const seenPathIdentities = new Set<string>()
+		const referenceFileNames = new Set<string>()
 
 		const pushItem = (item: MatchableMentionItem) => {
 			if (item.path) {
@@ -251,13 +294,23 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 
 		// 优先放入当前元素参考文件，确保同名文件在 string -> mention 解析时优先命中当前上下文路径。
 		externalMatchableItems.forEach((item) => {
-			pushItem(item)
+			pushItem({
+				...item,
+				source: item.source ?? "element-reference",
+			})
+			if (item.name) referenceFileNames.add(item.name.toLowerCase())
 		})
 
-		for (const item of flattenProjectAttachmentFiles(projectAttachmentMentionTree)) {
+		for (const item of includeProjectTreeCandidates
+			? flattenProjectAttachmentFiles(projectAttachmentMentionTree)
+			: []) {
+			if (item.name && referenceFileNames.has(item.name.toLowerCase())) {
+				continue
+			}
 			pushItem({
 				name: item.name,
 				path: item.path,
+				source: "project-tree",
 				disabled: !isReferenceResourceTypeAllowed({
 					fileName: item.name,
 					filePath: item.path,
@@ -292,6 +345,7 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 	}, [
 		projectAttachmentMentionTree,
 		externalMatchableItems,
+		includeProjectTreeCandidates,
 		isReferenceFileLimitReached,
 		currentReferenceFiles,
 		referenceResourceType,

@@ -1179,6 +1179,10 @@ export interface UploadFile {
 	onUploadComplete: (result: UploadFileResponse) => void
 	/** 单个文件上传失败回调 */
 	onUploadFailed: (error: Error) => void
+	/** 上传开始回调（可选，保持既有宿主实现兼容） */
+	onUploadStart?: () => void
+	/** 单个文件上传进度回调，值为 0-100（可选） */
+	onUploadProgress?: (progress: number) => void
 }
 
 /**
@@ -1205,6 +1209,17 @@ export interface UploadPrivateFile extends Omit<UploadFile, "overwrite" | "uploa
 export interface UploadFileResponse extends GetFileInfoResponse {
 	/** 文件路径（用于 reference_images 等） */
 	path: string
+	/**
+	 * 宿主附件 id。有则 mention/跨编辑器预览优先使用；
+	 * 无则仅用 path，由 resolveResourceReference 解析身份。
+	 */
+	file_id?: string
+	/** 跨项目粘贴时的源附件 id */
+	source_file_id?: string
+	/** 跨项目粘贴时的源项目 id */
+	source_project_id?: string
+	/** 当前项目 id（可选） */
+	project_id?: string
 }
 
 /**
@@ -1370,6 +1385,20 @@ export interface StoredVideoModeInputDraft {
 }
 
 /**
+ * 编辑器恢复用的有序 mention 绑定。
+ * 按 prompt 中 @ 出现顺序保存，避免同名文件仅靠 fileName 反推导致路径/身份漂移。
+ */
+export interface StoredMentionPathBinding {
+	fileName: string
+	path: string
+	/** 宿主附件 id；有则优先于 path 作为跨编辑器身份 */
+	fileId?: string
+	sourceFileId?: string
+	sourceProjectId?: string
+	projectId?: string
+}
+
+/**
  * 未提交的视频编辑草稿。
  * 与 generateVideoRequest 分离，避免刷新恢复草稿时被误判为已创建的生成任务。
  */
@@ -1377,6 +1406,8 @@ export interface StoredVideoEditorDraft {
 	version: 1
 	request: Partial<GenerateVideoRequest>
 	modeDrafts: Partial<Record<VideoInputMode, StoredVideoModeInputDraft>>
+	/** 按 prompt mention 出现顺序保存的结构化身份，关闭重开后直接重建节点。 */
+	mentionBindings?: StoredMentionPathBinding[]
 	updatedAt: number
 }
 

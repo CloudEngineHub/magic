@@ -324,6 +324,33 @@ export function useReferenceImageUrls(
 		),
 	)
 
+	// Cross-canvas copy / upload can mark a path pending until the attachment
+	// snapshot catches up. Retry low-url fetch when that window closes.
+	useCanvasEventWithInstance(
+		canvas,
+		"upload:resource-pending-change",
+		useCallback(
+			({ data }) => {
+				if (!canvas || !enabled || !path) return
+				const matches = data.paths.some(
+					(candidate) =>
+						candidate === path ||
+						areCanvasHostResourceReferencesSame(canvas, path, candidate),
+				)
+				if (!matches) return
+				// Only refresh once the path leaves the pending window; add events are noisy.
+				if (canvas.canvasFileUploadManager.isPendingResourcePath(path)) return
+				setUrlInfo((prev) => ({
+					...prev,
+					hasError: false,
+				}))
+				void updatePathUrl()
+			},
+			[canvas, enabled, path, updatePathUrl],
+		),
+		[canvas, enabled, path, updatePathUrl],
+	)
+
 	useCanvasEventWithInstance(
 		canvas,
 		"resource:remote-load-deferral-released",

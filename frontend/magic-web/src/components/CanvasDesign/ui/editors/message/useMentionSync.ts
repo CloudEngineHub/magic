@@ -74,10 +74,12 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 			}
 
 			const elementInstance = canvas.elementManager.getElementInstance(elementId)
-			if (!(
-				elementInstance instanceof ImageElementClass ||
-				elementInstance instanceof VideoElementClass
-			)) {
+			if (
+				!(
+					elementInstance instanceof ImageElementClass ||
+					elementInstance instanceof VideoElementClass
+				)
+			) {
 				return
 			}
 
@@ -109,6 +111,11 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 			}
 
 			const pathsToAddIdentities = new Set<string>()
+			const currentFileNames = new Set(
+				currentInfos
+					.map((info) => getCanvasResourceFileName(info.path)?.toLowerCase())
+					.filter((name): name is string => Boolean(name)),
+			)
 			let pathsToAdd = reconciledPaths.filter((path) => {
 				const identity = getResourceIdentity(path)
 				if (
@@ -117,6 +124,19 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 					pathsToAddIdentities.has(identity)
 				) {
 					return false
+				}
+				// Repeated @fileName can rematch onto other workspace copies
+				// (./images/a.jpg vs /其他画布/images/a.jpg). Those are different
+				// identities but must not create extra slots when the current canvas
+				// already references that file name — covers both remount sync and paste.
+				const fileName = getCanvasResourceFileName(path)?.toLowerCase()
+				if (fileName && currentFileNames.has(fileName)) {
+					// Same fileName + different identity is usually another canvas copy
+					// from project-tree rematch. Current-element references with the same
+					// name but distinct identities are allowed to add a slot.
+					if (findMatchableItem(path)?.source !== "element-reference") {
+						return false
+					}
 				}
 				pathsToAddIdentities.add(identity)
 				return true
