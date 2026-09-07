@@ -35,6 +35,7 @@ use Hyperf\Amqp\Producer;
 use Hyperf\Amqp\Result;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
+use Hyperf\Contract\TranslatorInterface;
 use Hyperf\Database\ConnectionInterface;
 use Hyperf\Database\ConnectionResolverInterface;
 use Hyperf\DbConnection\Db;
@@ -61,7 +62,9 @@ class DesignVideoPollConsumerTest extends TestCase
         $connectionResolver = $this->createMock(ConnectionResolverInterface::class);
         $connectionResolver->method('connection')->willReturn($this->createMock(ConnectionInterface::class));
 
-        $container = new class($config, $connectionResolver, $this->createMock(ThirdPlatformDataIsolationManagerInterface::class), $this->createMock(SubscriptionManagerInterface::class), $this->createMock(OrganizationInfoManagerInterface::class)) implements ContainerInterface {
+        $translator = $this->createMock(TranslatorInterface::class);
+        $translator->method('trans')->willReturnCallback(static fn (string $key): string => $key);
+        $container = new class($config, $connectionResolver, $this->createMock(ThirdPlatformDataIsolationManagerInterface::class), $this->createMock(SubscriptionManagerInterface::class), $this->createMock(OrganizationInfoManagerInterface::class), $translator) implements ContainerInterface {
             private ?Db $db = null;
 
             public function __construct(
@@ -70,6 +73,7 @@ class DesignVideoPollConsumerTest extends TestCase
                 private readonly ThirdPlatformDataIsolationManagerInterface $thirdPlatformDataIsolationManager,
                 private readonly SubscriptionManagerInterface $subscriptionManager,
                 private readonly OrganizationInfoManagerInterface $organizationInfoManager,
+                private readonly TranslatorInterface $translator,
             ) {
             }
 
@@ -87,6 +91,7 @@ class DesignVideoPollConsumerTest extends TestCase
                     ThirdPlatformDataIsolationManagerInterface::class => $this->thirdPlatformDataIsolationManager,
                     SubscriptionManagerInterface::class => $this->subscriptionManager,
                     OrganizationInfoManagerInterface::class => $this->organizationInfoManager,
+                    TranslatorInterface::class => $this->translator,
                     default => null,
                 };
             }
@@ -105,6 +110,7 @@ class DesignVideoPollConsumerTest extends TestCase
                     ThirdPlatformDataIsolationManagerInterface::class,
                     SubscriptionManagerInterface::class,
                     OrganizationInfoManagerInterface::class,
+                    TranslatorInterface::class,
                 ], true);
             }
         };
@@ -269,6 +275,99 @@ class DesignVideoPollConsumerTest extends TestCase
 
         $this->assertSame(Result::ACK, $result);
         $this->assertSame(DesignGenerationStatus::PROCESSING, $entity->getStatus());
+    }
+
+    public function testSimulatedArchiveTimeoutRepublishesDelayedPollMessage(): void
+    {
+        putenv('APP_ENV=test');
+        putenv('DESIGN_VIDEO_SIMULATE_ARCHIVE_TIMEOUT=true');
+
+        try {
+            $repository = new InMemoryDesignGenerationTaskRepository();
+            $entity = $this->createEntity('/archive-timeout', ['file_dir_id' => 7001]);
+            $entity->setProviderPayload([
+                'operation_id' => 'operation-1',
+                'deadline_at' => date(DATE_ATOM, time() + 3600),
+            ]);
+            $repository->task = $entity;
+
+            $producer = $this->createMock(Producer::class);
+            $producer->expects($this->once())
+                ->method('produce')
+                ->with($this->isInstanceOf(DesignVideoPollDelayPublisher::class));
+
+            $videoGatewayClient = $this->createMock(VideoGatewayClientInterface::class);
+            $videoGatewayClient->expects($this->once())
+                ->method('queryVideo')
+                ->willReturn([
+                    'status' => 'succeeded',
+                    'output' => ['video_url' => 'https://simulation.invalid/seedance-timeout.mp4'],
+                ]);
+
+            $consumer = $this->createConsumer(
+                repository: $repository,
+                taskFileDomainService: $this->createMock(TaskFileDomainService::class),
+                producer: $producer,
+                videoGatewayClient: $videoGatewayClient,
+            );
+
+            $result = $consumer->consumeMessage([
+                'organization_code' => 'org',
+                'project_id' => 123,
+                'generation_id' => 'video-1',
+            ], new AMQPMessage());
+
+            $this->assertSame(Result::ACK, $result);
+            $this->assertSame(DesignGenerationStatus::PROCESSING, $entity->getStatus());
+        } finally {
+            putenv('DESIGN_VIDEO_SIMULATE_ARCHIVE_TIMEOUT=false');
+        }
+    }
+
+    public function testArchiveFailureMarksTaskFailedAfterTwentyHoursFromCreation(): void
+    {
+        $repository = new InMemoryDesignGenerationTaskRepository();
+        $entity = $this->createEntity('/archive-timeout', ['file_dir_id' => 7001]);
+        $entity->setCreatedAt(new DateTime('-20 hours -1 second'));
+        $entity->setProviderPayload([
+            'operation_id' => 'operation-1',
+            'deadline_at' => date(DATE_ATOM, time() + 3600),
+        ]);
+        $repository->task = $entity;
+
+        $producer = $this->createMock(Producer::class);
+        $producer->expects($this->never())->method('produce');
+
+        $videoGatewayClient = $this->createMock(VideoGatewayClientInterface::class);
+        $videoGatewayClient->expects($this->once())
+            ->method('queryVideo')
+            ->willReturn([
+                'status' => 'succeeded',
+                'output' => ['video_url' => 'https://provider.example.com/video.mp4'],
+            ]);
+
+        $fileNameTool = $this->createMock(DesignGeneratedVideoFileNameTool::class);
+        $fileNameTool->expects($this->once())
+            ->method('resolveBaseNameWithoutExtension')
+            ->willThrowException(new \RuntimeException('archive write failed'));
+
+        $consumer = $this->createConsumer(
+            repository: $repository,
+            taskFileDomainService: $this->createMock(TaskFileDomainService::class),
+            producer: $producer,
+            videoGatewayClient: $videoGatewayClient,
+            fileNameTool: $fileNameTool,
+        );
+
+        $result = $consumer->consumeMessage([
+            'organization_code' => 'org',
+            'project_id' => 123,
+            'generation_id' => 'video-1',
+        ], new AMQPMessage());
+
+        $this->assertSame(Result::ACK, $result);
+        $this->assertSame(DesignGenerationStatus::FAILED, $entity->getStatus());
+        $this->assertSame('design.video_generation.failed', $entity->getErrorMessage());
     }
 
     private function createConsumer(
