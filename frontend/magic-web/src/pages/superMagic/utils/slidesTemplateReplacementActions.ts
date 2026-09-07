@@ -16,7 +16,8 @@ import type { OptionItem } from "@/pages/superMagic/components/MainInputContaine
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 export type SlidesTemplateReplacementTarget =
-	{ scope: "deck" } | { scope: "slide"; slideIndex: number }
+	| { scope: "deck" }
+	| { scope: "slide"; slideIndex: number }
 
 interface SlidesTemplateReplacementPayloadOptions {
 	template: OptionItem
@@ -82,7 +83,9 @@ function appendMention(
 		type: "mention",
 		attrs,
 	}
-	content.push(textNode(label), mentionNode(attrs), textNode(suffix))
+	if (label) content.push(textNode(label))
+	content.push(mentionNode(attrs))
+	if (suffix) content.push(textNode(suffix))
 	return mention
 }
 
@@ -129,7 +132,11 @@ export function buildSlidesTemplateReplacementPayload({
 		afterCreate: {
 			send: true,
 			topicMode: TopicMode.PPT,
-			content: { type: "doc", content },
+			// TipTap docs only accept block nodes; inline text/mention must live in a paragraph.
+			content: {
+				type: "doc",
+				content: [{ type: "paragraph", content }],
+			},
 			mentionItems,
 		},
 	}

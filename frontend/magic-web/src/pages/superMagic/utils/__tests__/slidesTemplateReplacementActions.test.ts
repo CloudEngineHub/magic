@@ -58,6 +58,12 @@ describe("buildSlidesTemplateReplacementPayload", () => {
 			expect(payload.topicMode).toBe("ppt")
 			expect(payload.afterCreate?.topicMode).toBe("ppt")
 			expect(payload.afterCreate?.send).toBe(true)
+			expect(payload.afterCreate?.content.content?.[0]?.type).toBe("paragraph")
+			expect(
+				payload.afterCreate?.content.content?.[0]?.content?.some(
+					(node) => node.type === "text" && !node.text,
+				),
+			).toBe(false)
 			expect(mentionItems).toHaveLength(target.scope === "deck" ? 2 : 1)
 			expect(mentionItems[0]?.attrs.type).toBe(MentionItemType.PROJECT_FILE)
 			if (target.scope === "deck") {
