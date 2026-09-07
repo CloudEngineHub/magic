@@ -1,6 +1,6 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react"
 import { observer } from "mobx-react-lite"
-import { Plus, X } from "lucide-react"
+import { Plus, Unplug, X } from "lucide-react"
 import { IconLoader2 } from "@tabler/icons-react"
 import { useCreation, useMemoizedFn } from "ahooks"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
@@ -352,37 +352,49 @@ function MobileMCPPluginsSheet({
 							<IconLoader2 className="size-5 animate-spin text-muted-foreground" />
 						</div>
 					) : activeTab === CONNECTOR_MARKET_GROUPS.added ? (
-						<div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1">
-							{displayMCPList.map((item) => (
-								<MobileMCPConnectorItem
-									key={item.id}
-									item={item}
-									action={
-										<Switch
-											aria-label={t("mcp.button.toggleConnector", {
-												name: item.name,
-											})}
-											checked={enabledMCPIds.has(item.id)}
-											loading={switchLoadingIds.has(item.id)}
-											onCheckedChange={(checked) =>
-												void toggleMCPEnabled(item.id, checked)
+						<div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3 pt-3">
+							{displayMCPList.length > 0 ? (
+								<div className="flex flex-col gap-2">
+									{displayMCPList.map((item) => (
+										<MobileMCPConnectorItem
+											key={item.id}
+											item={item}
+											action={
+												<Switch
+													aria-label={t("mcp.button.toggleConnector", {
+														name: item.name,
+													})}
+													checked={enabledMCPIds.has(item.id)}
+													loading={switchLoadingIds.has(item.id)}
+													onCheckedChange={(checked) =>
+														void toggleMCPEnabled(item.id, checked)
+													}
+												/>
 											}
 										/>
-									}
-								/>
-							))}
-
-							{displayMCPList.length < 1 ? (
+									))}
+								</div>
+							) : (
 								<div
-									className="flex min-h-[180px] flex-col items-center justify-center gap-2 text-center"
+									className="flex min-h-full flex-col items-center justify-center gap-2 px-4 text-center"
 									data-testid="mobile-mcp-plugins-sheet-empty"
 								>
-									<IconMCP size={48} />
-									<div className="text-sm text-muted-foreground">
-										{t("mcp.panel.empty")}
+									<Unplug className="size-[42px] text-muted-foreground" aria-hidden="true" />
+									<div className="text-base text-muted-foreground">
+										{t("mcp.button.emptyConnectors")}
 									</div>
+									<Button
+										variant="default"
+										size="lg"
+										className="mt-3 rounded-full"
+										onClick={() => setActiveTab(CONNECTOR_MARKET_GROUPS.official)}
+										data-testid="mobile-mcp-plugins-sheet-add-more-connectors"
+									>
+										<Plus className="size-4" />
+										{t("mcp.button.addMoreConnectors")}
+									</Button>
 								</div>
-							) : null}
+							)}
 						</div>
 					) : marketLoading && marketList.length === 0 ? (
 						<div

@@ -93,6 +93,7 @@
 			"addMoreConnectors": "Add more connectors",
 			"addedConnectors": "Added connectors",
 			"create": "Add MCP Plugin",
+			"emptyConnectors": "No connectors available",
 			"text": "Connector",
 			"title": "Configure MCP Connector",
 			"toggleConnector": "Enable {{name}}"
