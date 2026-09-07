@@ -1,34 +1,28 @@
-import { getContextViewport } from "../../ElementContextPanel/contextPanelPosition"
 import type { ElementRect } from "../../SelectionOverlay/types"
 
 export const MORE_STYLES_PANEL_WIDTH_REM = 22
 export const MORE_STYLES_PANEL_HEIGHT_REM = 30
 
-export type MoreStylesPopoverSide = "top" | "bottom" | "left" | "right"
-export type MoreStylesPopoverAlign = "start" | "end"
+export type MoreStylesPopoverSide = "right" | "top" | "bottom" | "left"
 
-export interface MoreStylesPopoverPlacement {
-	side: MoreStylesPopoverSide
-	align: MoreStylesPopoverAlign
-	maxHeight: number
-}
-
-interface PanelBox {
+export interface MoreStylesPopoverLayout {
 	left: number
 	top: number
 	width: number
 	height: number
+	maxHeight: number
+	side: MoreStylesPopoverSide
 }
 
-interface PlacementCandidate extends MoreStylesPopoverPlacement {
-	area: number
+interface LayoutCandidate extends MoreStylesPopoverLayout {
+	usable: boolean
 	overlapArea: number
 	priority: number
 }
 
-const SIDES: MoreStylesPopoverSide[] = ["top", "bottom", "left", "right"]
-const ALIGNS: MoreStylesPopoverAlign[] = ["start", "end"]
-const MIN_RENDERABLE_HEIGHT = 48
+const INSET = 8
+const MIN_USABLE_HEIGHT = 160
+const MIN_USABLE_WIDTH = 240
 
 export function getRootFontSize(): number {
 	if (typeof document === "undefined") return 16
@@ -45,159 +39,223 @@ export function getMoreStylesPanelSize(
 	}
 }
 
-export function getMoreStylesPopoverPlacement(
+export function getMoreStylesViewport(
+	_boundary?: { left: number; top: number; right?: number; width: number; height: number } | null,
+) {
+	if (typeof window === "undefined") return { left: 0, top: 0, width: 0, height: 0 }
+	return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
+}
+
+/**
+ * Place the More Styles panel in the window.
+ * Prefer right of the trigger; the panel may leave the canvas.
+ * Keep the panel inside the window, not a random corner.
+ */
+export function getMoreStylesPopoverLayout(
 	trigger: ElementRect,
 	selection: ElementRect,
 	viewport: { left?: number; top?: number; width: number; height: number },
 	panel: { width: number; height: number },
 	gap = 8,
-): MoreStylesPopoverPlacement {
+): MoreStylesPopoverLayout {
 	const viewportLeft = viewport.left ?? 0
 	const viewportTop = viewport.top ?? 0
 	const bounds = {
-		left: viewportLeft + 8,
-		top: viewportTop + 8,
-		right: viewportLeft + viewport.width - 8,
-		bottom: viewportTop + viewport.height - 8,
+		left: viewportLeft + INSET,
+		top: viewportTop + INSET,
+		right: viewportLeft + viewport.width - INSET,
+		bottom: viewportTop + viewport.height - INSET,
 	}
-	const preferredSides = getPreferredSides(trigger, selection)
-	const candidates = SIDES.flatMap((side) =>
-		ALIGNS.map((align) =>
-			createCandidate(side, align, trigger, selection, panel, bounds, gap, preferredSides),
-		),
+	const canvasWidth = Math.max(1, bounds.right - bounds.left)
+	const canvasHeight = Math.max(1, bounds.bottom - bounds.top)
+
+	const candidates = [
+		createRightCandidate(trigger, selection, panel, bounds, canvasWidth, canvasHeight, gap),
+		createTopCandidate(trigger, selection, panel, bounds, canvasWidth, gap),
+		createBottomCandidate(trigger, selection, panel, bounds, canvasWidth, gap),
+		createLeftCandidate(trigger, selection, panel, bounds, canvasWidth, canvasHeight, gap),
+	]
+
+	const usableClear = candidates.filter(
+		(candidate) => candidate.usable && candidate.overlapArea === 0,
 	)
-	const noOverlap = candidates.filter(
-		(item) => item.overlapArea === 0 && item.maxHeight >= MIN_RENDERABLE_HEIGHT,
-	)
-	const chosen =
-		pickCandidate(noOverlap) ||
-		pickCandidate(candidates.filter((item) => item.maxHeight >= MIN_RENDERABLE_HEIGHT)) ||
-		pickCandidate(candidates)
-
-	return {
-		side: chosen.side,
-		align: chosen.align,
-		maxHeight: chosen.maxHeight,
+	if (usableClear.length > 0) {
+		usableClear.sort((a, b) => a.priority - b.priority)
+		return toLayout(usableClear[0])
 	}
-}
 
-export function getMoreStylesViewport(
-	boundary?: { left: number; top: number; right?: number; width: number; height: number } | null,
-) {
-	return getContextViewport(boundary)
-}
-
-function getPreferredSides(trigger: ElementRect, selection: ElementRect): MoreStylesPopoverSide[] {
-	const triggerCenterX = trigger.left + trigger.width / 2
-	const triggerCenterY = trigger.top + trigger.height / 2
-	const selectionCenterX = selection.left + selection.width / 2
-	const selectionCenterY = selection.top + selection.height / 2
-	const deltaX = selectionCenterX - triggerCenterX
-	const deltaY = selectionCenterY - triggerCenterY
-	if (Math.abs(deltaY) >= Math.abs(deltaX)) {
-		return deltaY >= 0 ? ["top", "left", "right", "bottom"] : ["bottom", "left", "right", "top"]
+	const usable = candidates.filter((candidate) => candidate.usable)
+	if (usable.length > 0) {
+		usable.sort((a, b) => a.priority - b.priority)
+		return toLayout(usable[0])
 	}
-	return deltaX >= 0 ? ["left", "top", "bottom", "right"] : ["right", "top", "bottom", "left"]
+
+	candidates.sort((a, b) => b.width * b.height - a.width * a.height || a.priority - b.priority)
+	return toLayout(candidates[0])
 }
 
-function createCandidate(
-	side: MoreStylesPopoverSide,
-	align: MoreStylesPopoverAlign,
+function createRightCandidate(
 	trigger: ElementRect,
 	selection: ElementRect,
 	panel: { width: number; height: number },
-	bounds: { left: number; top: number; right: number; bottom: number },
+	bounds: Bounds,
+	canvasWidth: number,
+	canvasHeight: number,
 	gap: number,
-	preferredSides: MoreStylesPopoverSide[],
-): PlacementCandidate {
-	const space = getAvailableSpace(side, trigger, bounds, gap)
-	const width = Math.max(1, Math.min(panel.width, Math.max(1, space.width)))
-	const height = Math.max(1, Math.min(panel.height, Math.max(1, space.height)))
-	const box = clampBox(getAdjacentBox(side, align, trigger, width, height, gap), bounds)
+): LayoutCandidate {
+	const left = trigger.left + trigger.width + gap
+	const availableWidth = bounds.right - left
+	const box = clampBox(
+		left,
+		trigger.top,
+		Math.min(panel.width, Math.max(1, availableWidth)),
+		Math.min(panel.height, canvasHeight),
+		bounds,
+		canvasWidth,
+		canvasHeight,
+	)
 	return {
-		side,
-		align,
+		...box,
 		maxHeight: box.height,
-		area: box.width * box.height,
+		side: "right",
+		usable: availableWidth >= MIN_USABLE_WIDTH && box.height >= MIN_USABLE_HEIGHT,
 		overlapArea: getOverlapArea(box, selection),
-		priority: preferredSides.indexOf(side) * 2 + (align === "start" ? 0 : 1),
+		priority: 0,
 	}
 }
 
-function getAvailableSpace(
-	side: MoreStylesPopoverSide,
+function createTopCandidate(
 	trigger: ElementRect,
-	bounds: { left: number; top: number; right: number; bottom: number },
+	selection: ElementRect,
+	panel: { width: number; height: number },
+	bounds: Bounds,
+	canvasWidth: number,
 	gap: number,
-) {
-	const viewportWidth = Math.max(1, bounds.right - bounds.left)
-	const viewportHeight = Math.max(1, bounds.bottom - bounds.top)
-	if (side === "top") {
-		return { width: viewportWidth, height: Math.max(0, trigger.top - bounds.top - gap) }
-	}
-	if (side === "bottom") {
-		return {
-			width: viewportWidth,
-			height: Math.max(0, bounds.bottom - trigger.top - trigger.height - gap),
-		}
-	}
-	if (side === "left") {
-		return { width: Math.max(0, trigger.left - bounds.left - gap), height: viewportHeight }
-	}
-	return {
-		width: Math.max(0, bounds.right - trigger.left - trigger.width - gap),
-		height: viewportHeight,
-	}
-}
-
-function getAdjacentBox(
-	side: MoreStylesPopoverSide,
-	align: MoreStylesPopoverAlign,
-	trigger: ElementRect,
-	width: number,
-	height: number,
-	gap: number,
-): PanelBox {
-	if (side === "top" || side === "bottom") {
-		return {
-			left: align === "end" ? trigger.left + trigger.width - width : trigger.left,
-			top: side === "top" ? trigger.top - gap - height : trigger.top + trigger.height + gap,
-			width,
-			height,
-		}
-	}
-	return {
-		left: side === "left" ? trigger.left - gap - width : trigger.left + trigger.width + gap,
-		top: align === "end" ? trigger.top + trigger.height - height : trigger.top,
+): LayoutCandidate {
+	const pocketBottom = Math.min(trigger.top, selection.top) - gap
+	const availableHeight = pocketBottom - bounds.top
+	const height = Math.min(panel.height, Math.max(1, availableHeight))
+	const width = Math.min(panel.width, canvasWidth)
+	const box = clampBox(
+		trigger.left + trigger.width - width,
+		pocketBottom - height,
 		width,
 		height,
+		bounds,
+		canvasWidth,
+		Math.max(1, availableHeight),
+	)
+	return {
+		...box,
+		maxHeight: box.height,
+		side: "top",
+		usable: availableHeight >= MIN_USABLE_HEIGHT && box.height >= MIN_USABLE_HEIGHT,
+		overlapArea: getOverlapArea(box, selection),
+		priority: 1,
 	}
+}
+
+function createBottomCandidate(
+	trigger: ElementRect,
+	selection: ElementRect,
+	panel: { width: number; height: number },
+	bounds: Bounds,
+	canvasWidth: number,
+	gap: number,
+): LayoutCandidate {
+	const top = trigger.top + trigger.height + gap
+	const availableHeight = bounds.bottom - top
+	const width = Math.min(panel.width, canvasWidth)
+	const box = clampBox(
+		trigger.left + trigger.width - width,
+		top,
+		width,
+		Math.min(panel.height, Math.max(1, availableHeight)),
+		bounds,
+		canvasWidth,
+		Math.max(1, availableHeight),
+	)
+	return {
+		...box,
+		maxHeight: box.height,
+		side: "bottom",
+		usable: availableHeight >= MIN_USABLE_HEIGHT && box.height >= MIN_USABLE_HEIGHT,
+		overlapArea: getOverlapArea(box, selection),
+		priority: 2,
+	}
+}
+
+function createLeftCandidate(
+	trigger: ElementRect,
+	selection: ElementRect,
+	panel: { width: number; height: number },
+	bounds: Bounds,
+	canvasWidth: number,
+	canvasHeight: number,
+	gap: number,
+): LayoutCandidate {
+	const availableWidth = trigger.left - bounds.left - gap
+	const width = Math.min(panel.width, Math.max(1, availableWidth))
+	const box = clampBox(
+		trigger.left - gap - width,
+		trigger.top,
+		width,
+		Math.min(panel.height, canvasHeight),
+		bounds,
+		canvasWidth,
+		canvasHeight,
+	)
+	return {
+		...box,
+		maxHeight: box.height,
+		side: "left",
+		usable: availableWidth >= MIN_USABLE_WIDTH && box.height >= MIN_USABLE_HEIGHT,
+		overlapArea: getOverlapArea(box, selection),
+		priority: 3,
+	}
+}
+
+interface Bounds {
+	left: number
+	top: number
+	right: number
+	bottom: number
 }
 
 function clampBox(
-	box: PanelBox,
-	bounds: { left: number; top: number; right: number; bottom: number },
-): PanelBox {
-	const width = Math.max(1, Math.min(box.width, bounds.right - bounds.left))
-	const height = Math.max(1, Math.min(box.height, bounds.bottom - bounds.top))
+	left: number,
+	top: number,
+	width: number,
+	height: number,
+	bounds: Bounds,
+	canvasWidth: number,
+	canvasHeight: number,
+) {
+	const nextWidth = Math.min(Math.max(1, width), canvasWidth)
+	const nextHeight = Math.min(Math.max(1, height), canvasHeight)
 	return {
-		left: clamp(box.left, bounds.left, bounds.right - width),
-		top: clamp(box.top, bounds.top, bounds.bottom - height),
-		width,
-		height,
+		left: clamp(left, bounds.left, bounds.right - nextWidth),
+		top: clamp(top, bounds.top, bounds.bottom - nextHeight),
+		width: nextWidth,
+		height: nextHeight,
 	}
 }
 
-function pickCandidate(candidates: PlacementCandidate[]): PlacementCandidate | undefined {
-	return [...candidates].sort(
-		(left, right) =>
-			left.overlapArea - right.overlapArea ||
-			right.area - left.area ||
-			left.priority - right.priority,
-	)[0]
+function toLayout(candidate: LayoutCandidate): MoreStylesPopoverLayout {
+	return {
+		left: candidate.left,
+		top: candidate.top,
+		width: candidate.width,
+		height: candidate.height,
+		maxHeight: candidate.maxHeight,
+		side: candidate.side,
+	}
 }
 
-function getOverlapArea(first: PanelBox, second: ElementRect): number {
+function getOverlapArea(
+	first: { left: number; top: number; width: number; height: number },
+	second: ElementRect,
+): number {
 	const width = Math.max(
 		0,
 		Math.min(first.left + first.width, second.left + second.width) -

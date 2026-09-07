@@ -106,12 +106,17 @@ vi.mock("../../../EditorFloating", () => ({
 		children,
 		side,
 		style,
+		...props
 	}: {
 		children: ReactNode
 		side?: string
 		style?: CSSProperties
-	}) => (
-		<div data-testid="style-panel-more-styles-content" data-side={side} style={style}>
+	} & Record<string, unknown>) => (
+		<div
+			data-testid="style-panel-more-styles-content"
+			data-side={(props["data-side"] as string | undefined) ?? side}
+			style={style}
+		>
 			{children}
 		</div>
 	),
@@ -269,20 +274,20 @@ describe("ContextMorePopover", () => {
 		expect(screen.queryByTestId("image-section")).not.toBeInTheDocument()
 	})
 
-	it("opens the panel away from the selection beside the trigger", () => {
-		const selectionRect = { left: 160, top: 420, width: 420, height: 240 }
+	it("opens the panel on the right of the trigger when space is available", () => {
+		const selectionRect = { left: 120, top: 280, width: 200, height: 40 }
 		const getRect = HTMLElement.prototype.getBoundingClientRect
 		HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect() {
 			if (this.getAttribute("data-testid") === "style-panel-more-styles-trigger") {
 				return {
-					x: 220,
-					y: 360,
+					x: 240,
+					y: 232,
 					width: 88,
 					height: 32,
-					top: 360,
-					left: 220,
-					bottom: 392,
-					right: 308,
+					top: 232,
+					left: 240,
+					bottom: 264,
+					right: 328,
 					toJSON() {
 						return {}
 					},
@@ -295,7 +300,75 @@ describe("ContextMorePopover", () => {
 			render(<ContextMorePopover {...baseProps} selectionRect={selectionRect} />)
 			fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
 
-			expect(screen.getByTestId("style-panel-more-styles-content").dataset.side).toBe("top")
+			expect(screen.getByTestId("style-panel-more-styles-content").dataset.side).toBe("right")
+		} finally {
+			HTMLElement.prototype.getBoundingClientRect = getRect
+		}
+	})
+
+	it("parks a lower-half selection's panel in the empty canvas above it", () => {
+		const selectionRect = { left: 80, top: 400, width: 640, height: 280 }
+		const getRect = HTMLElement.prototype.getBoundingClientRect
+		HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect() {
+			if (this.getAttribute("data-testid") === "style-panel-more-styles-trigger") {
+				return {
+					x: 400,
+					y: 360,
+					width: 88,
+					height: 32,
+					top: 360,
+					left: 400,
+					bottom: 392,
+					right: 488,
+					toJSON() {
+						return {}
+					},
+				}
+			}
+			return getRect.call(this)
+		}
+
+		try {
+			render(<ContextMorePopover {...baseProps} selectionRect={selectionRect} />)
+			fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
+			const content = screen.getByTestId("style-panel-more-styles-content")
+			expect(content.dataset.side).toBe("top")
+			expect(content.style.position).toBe("fixed")
+			expect(Number.parseFloat(content.style.maxHeight)).toBeGreaterThanOrEqual(160)
+		} finally {
+			HTMLElement.prototype.getBoundingClientRect = getRect
+		}
+	})
+
+	it("keeps a huge selection's panel usable instead of a top sliver", () => {
+		const selectionRect = { left: 80, top: 140, width: 720, height: 560 }
+		const getRect = HTMLElement.prototype.getBoundingClientRect
+		HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect() {
+			if (this.getAttribute("data-testid") === "style-panel-more-styles-trigger") {
+				return {
+					x: 520,
+					y: 100,
+					width: 88,
+					height: 32,
+					top: 100,
+					left: 520,
+					bottom: 132,
+					right: 608,
+					toJSON() {
+						return {}
+					},
+				}
+			}
+			return getRect.call(this)
+		}
+
+		try {
+			render(<ContextMorePopover {...baseProps} selectionRect={selectionRect} />)
+			fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
+			const content = screen.getByTestId("style-panel-more-styles-content")
+			expect(content.dataset.side).not.toBe("top")
+			expect(content.style.position).toBe("fixed")
+			expect(Number.parseFloat(content.style.maxHeight)).toBeGreaterThanOrEqual(160)
 		} finally {
 			HTMLElement.prototype.getBoundingClientRect = getRect
 		}

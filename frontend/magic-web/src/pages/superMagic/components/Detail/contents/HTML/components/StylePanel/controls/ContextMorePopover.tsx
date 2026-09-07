@@ -12,9 +12,9 @@ import type { ElementRect } from "../../SelectionOverlay/types"
 import { useStylePanelStore } from "../../../iframe-bridge/contexts/StylePanelContext"
 import {
 	getMoreStylesPanelSize,
-	getMoreStylesPopoverPlacement,
+	getMoreStylesPopoverLayout,
 	getMoreStylesViewport,
-	type MoreStylesPopoverPlacement,
+	type MoreStylesPopoverLayout,
 } from "../utils/moreStylesPopoverPosition"
 import BoxModelSection from "../sections/BoxModelSection"
 import FlexGridSection from "../sections/FlexGridSection"
@@ -76,10 +76,13 @@ export function ContextMorePopover({
 	const stylePanelStore = useStylePanelStore()
 	const triggerRef = useRef<HTMLButtonElement>(null)
 	const [open, setOpen] = useState(false)
-	const [placement, setPlacement] = useState<MoreStylesPopoverPlacement>({
-		side: "top",
-		align: "start",
+	const [layout, setLayout] = useState<MoreStylesPopoverLayout>({
+		left: 0,
+		top: 0,
+		width: 352,
+		height: 480,
 		maxHeight: 480,
+		side: "right",
 	})
 	const firstTab =
 		showTypography || isLink
@@ -127,7 +130,6 @@ export function ContextMorePopover({
 			selectionWidth == null ||
 			selectionHeight == null
 		) {
-			setPlacement({ side: "top", align: "start", maxHeight: 480 })
 			return
 		}
 		const rect = {
@@ -136,12 +138,12 @@ export function ContextMorePopover({
 			width: selectionWidth,
 			height: selectionHeight,
 		}
-		function updatePlacement() {
+		function updateLayout() {
 			const trigger = triggerRef.current?.getBoundingClientRect()
 			if (!trigger || trigger.width <= 0 || trigger.height <= 0) return
 			const boundary = boundaryRef?.current?.getBoundingClientRect()
 			const viewport = getMoreStylesViewport(boundary)
-			const next = getMoreStylesPopoverPlacement(
+			const next = getMoreStylesPopoverLayout(
 				{
 					left: trigger.left,
 					top: trigger.top,
@@ -152,28 +154,95 @@ export function ContextMorePopover({
 				viewport,
 				getMoreStylesPanelSize(viewport),
 			)
-			setPlacement((previous) =>
-				previous.side === next.side &&
-				previous.align === next.align &&
-				previous.maxHeight === next.maxHeight
+			setLayout((previous) =>
+				previous.left === next.left &&
+				previous.top === next.top &&
+				previous.width === next.width &&
+				previous.height === next.height &&
+				previous.side === next.side
 					? previous
 					: next,
 			)
 		}
-		updatePlacement()
-		window.addEventListener("resize", updatePlacement)
-		window.addEventListener("scroll", updatePlacement, true)
+		updateLayout()
+		window.addEventListener("resize", updateLayout)
+		window.addEventListener("scroll", updateLayout, true)
 		const resizeObserver =
 			typeof ResizeObserver === "undefined" || !boundaryRef?.current
 				? null
-				: new ResizeObserver(updatePlacement)
+				: new ResizeObserver(updateLayout)
 		if (boundaryRef?.current) resizeObserver?.observe(boundaryRef.current)
 		return () => {
-			window.removeEventListener("resize", updatePlacement)
-			window.removeEventListener("scroll", updatePlacement, true)
+			window.removeEventListener("resize", updateLayout)
+			window.removeEventListener("scroll", updateLayout, true)
 			resizeObserver?.disconnect()
 		}
 	}, [boundaryRef, open, selectionHeight, selectionLeft, selectionTop, selectionWidth])
+
+	useLayoutEffect(() => {
+		if (!open) return
+		let observer: MutationObserver | null = null
+		let raf = 0
+		function neutralizeParentTransform(node: HTMLElement) {
+			const parent = node.parentElement
+			if (!parent || parent === document.body) return
+			if (getComputedStyle(parent).transform === "none") return
+			parent.style.setProperty("transform", "none", "important")
+		}
+		function applyFixedLayout(node: HTMLElement) {
+			neutralizeParentTransform(node)
+			const next = {
+				position: "fixed",
+				left: `${layout.left}px`,
+				top: `${layout.top}px`,
+				width: `${layout.width}px`,
+				height: `${layout.height}px`,
+				maxHeight: `${layout.maxHeight}px`,
+				transform: "none",
+			}
+			if (
+				node.style.getPropertyValue("position") === next.position &&
+				node.style.getPropertyValue("left") === next.left &&
+				node.style.getPropertyValue("top") === next.top &&
+				node.style.getPropertyValue("width") === next.width &&
+				node.style.getPropertyValue("height") === next.height &&
+				node.style.getPropertyValue("max-height") === next.maxHeight &&
+				node.style.getPropertyValue("transform") === next.transform
+			) {
+				return
+			}
+			node.style.setProperty("position", next.position, "important")
+			node.style.setProperty("left", next.left, "important")
+			node.style.setProperty("top", next.top, "important")
+			node.style.setProperty("width", next.width, "important")
+			node.style.setProperty("height", next.height, "important")
+			node.style.setProperty("max-height", next.maxHeight, "important")
+			node.style.setProperty("transform", next.transform, "important")
+		}
+		function attach() {
+			const node = document.querySelector<HTMLElement>(
+				'[data-testid="style-panel-more-styles-content"]',
+			)
+			if (!node) {
+				raf = requestAnimationFrame(attach)
+				return
+			}
+			applyFixedLayout(node)
+			observer = new MutationObserver(() => applyFixedLayout(node))
+			observer.observe(node, { attributes: true, attributeFilter: ["style"] })
+			if (node.parentElement) {
+				observer.observe(node.parentElement, {
+					attributes: true,
+					attributeFilter: ["style"],
+				})
+			}
+		}
+		attach()
+		return () => {
+			cancelAnimationFrame(raf)
+			observer?.disconnect()
+		}
+	}, [layout, open])
 
 	function handleTabChange(value: string) {
 		setTab(value)
@@ -197,16 +266,23 @@ export function ContextMorePopover({
 				</Button>
 			</PopoverTrigger>
 			<EditorPopoverContent
-				side={placement.side}
-				align={placement.align}
-				sideOffset={8}
-				collisionPadding={8}
-				collisionBoundary={boundaryRef?.current ?? undefined}
-				// Keep the chosen side. Flip would drop the panel back onto the selection.
+				side="bottom"
+				align="start"
+				sideOffset={0}
+				alignOffset={0}
 				avoidCollisions={false}
-				style={{ maxHeight: placement.maxHeight }}
-				className="grid max-h-[min(30rem,calc(100vh-1rem))] min-h-0 w-[min(22rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-1.5"
+				style={{
+					position: "fixed",
+					left: layout.left,
+					top: layout.top,
+					width: layout.width,
+					height: layout.height,
+					maxHeight: layout.maxHeight,
+					transform: "none",
+				}}
+				className="grid min-h-0 !transform-none grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-1.5"
 				data-testid="style-panel-more-styles-content"
+				data-side={layout.side}
 			>
 				<Tabs
 					value={tab}

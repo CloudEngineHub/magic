@@ -2495,14 +2495,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 									toolbarClassName,
 								)}
 							/>
-							{/* The panel may use the full viewport while the DOM tree is closed. */}
 							<ElementContextPanel
 								editorRef={editorRef as React.RefObject<HTMLEditorV2Ref>}
 								anchor={selectedElementViewportRect}
 								selector={selectedElementViewportRect?.selector}
 								open={!isContextPanelDismissed}
 								disabled={isSaving}
-								boundaryRef={domTreeOpen ? canvasViewportRef : undefined}
+								boundaryRef={canvasViewportRef}
 							/>
 						</>
 					)}

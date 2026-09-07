@@ -1,27 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { getMoreStylesPopoverPlacement } from "../moreStylesPopoverPosition"
+import { getMoreStylesPopoverLayout, getMoreStylesViewport } from "../moreStylesPopoverPosition"
 
 const panel = { width: 352, height: 480 }
-const viewport = { left: 0, top: 0, width: 1000, height: 800 }
-
-function getPanelRect(
-	trigger: { left: number; top: number; width: number; height: number },
-	side: "top" | "bottom" | "left" | "right",
-	align: "start" | "end",
-	size = panel,
-	gap = 8,
-) {
-	const width = size.width
-	const height = size.height
-	if (side === "top" || side === "bottom") {
-		const left = align === "end" ? trigger.left + trigger.width - width : trigger.left
-		const top = side === "top" ? trigger.top - gap - height : trigger.top + trigger.height + gap
-		return { left, top, width, height }
-	}
-	const left = side === "left" ? trigger.left - gap - width : trigger.left + trigger.width + gap
-	const top = align === "end" ? trigger.top + trigger.height - height : trigger.top
-	return { left, top, width, height }
-}
 
 function getOverlapArea(
 	first: { left: number; top: number; width: number; height: number },
@@ -40,37 +20,83 @@ function getOverlapArea(
 	return width * height
 }
 
-describe("getMoreStylesPopoverPlacement", () => {
-	it("opens above the trigger when the selection is below it", () => {
-		const trigger = { left: 220, top: 360, width: 88, height: 32 }
-		const selection = { left: 160, top: 420, width: 420, height: 240 }
-
-		const result = getMoreStylesPopoverPlacement(trigger, selection, viewport, panel)
-
-		expect(result.side).toBe("top")
-		expect(getOverlapArea(getPanelRect(trigger, result.side, result.align), selection)).toBe(0)
-	})
-
-	it("stays beside the trigger instead of jumping to the canvas corner", () => {
+describe("getMoreStylesPopoverLayout", () => {
+	it("places a small selection's panel to the right when there is room", () => {
 		const trigger = { left: 200, top: 80, width: 88, height: 32 }
 		const selection = { left: 120, top: 128, width: 160, height: 56 }
+		const viewport = { left: 0, top: 0, width: 1000, height: 800 }
 
-		const result = getMoreStylesPopoverPlacement(trigger, selection, viewport, panel)
-		const rect = getPanelRect(trigger, result.side, result.align)
-
-		expect(["left", "right", "top"]).toContain(result.side)
-		expect(getOverlapArea(rect, selection)).toBe(0)
-		expect(rect.left).toBeLessThan(trigger.left + trigger.width + 8 + panel.width)
-		expect(rect.top).toBeLessThan(trigger.top + trigger.height + 8 + panel.height)
-	})
-
-	it("prefers a roomy side of the trigger when the top gap is too short", () => {
-		const trigger = { left: 200, top: 40, width: 88, height: 32 }
-		const selection = { left: 120, top: 88, width: 140, height: 48 }
-
-		const result = getMoreStylesPopoverPlacement(trigger, selection, viewport, panel)
+		const result = getMoreStylesPopoverLayout(trigger, selection, viewport, panel)
 
 		expect(result.side).toBe("right")
-		expect(getOverlapArea(getPanelRect(trigger, result.side, result.align), selection)).toBe(0)
+		expect(result.left).toBeGreaterThanOrEqual(selection.left + selection.width)
+		expect(getOverlapArea(result, selection)).toBe(0)
+	})
+
+	it("parks a lower-half selection's panel in the empty canvas above it", () => {
+		const trigger = { left: 360, top: 232, width: 88, height: 32 }
+		const selection = { left: 80, top: 280, width: 640, height: 400 }
+		const viewport = { left: 0, top: 0, width: 800, height: 720 }
+
+		const result = getMoreStylesPopoverLayout(trigger, selection, viewport, panel)
+
+		expect(result.side).toBe("top")
+		expect(result.top + result.height).toBeLessThanOrEqual(selection.top)
+		expect(result.left + result.width).toBe(trigger.left + trigger.width)
+		expect(getOverlapArea(result, selection)).toBe(0)
+	})
+
+	it("keeps a huge near-top selection's panel usable in the canvas", () => {
+		const trigger = { left: 520, top: 100, width: 88, height: 32 }
+		const selection = { left: 80, top: 140, width: 720, height: 560 }
+		const viewport = { left: 0, top: 0, width: 1000, height: 800 }
+
+		const result = getMoreStylesPopoverLayout(trigger, selection, viewport, panel)
+
+		expect(result.side).not.toBe("top")
+		expect(result.top).toBeGreaterThanOrEqual(trigger.top)
+		expect(result.height).toBeGreaterThanOrEqual(160)
+		expect(result.left).toBeGreaterThanOrEqual(viewport.left)
+		expect(result.left + result.width).toBeLessThanOrEqual(viewport.left + viewport.width)
+		expect(result.top + result.height).toBeLessThanOrEqual(viewport.top + viewport.height)
+	})
+
+	it("stays inside the given viewport instead of a random corner", () => {
+		const trigger = { left: 400, top: 252, width: 88, height: 32 }
+		const selection = { left: 200, top: 300, width: 500, height: 360 }
+		const viewport = { left: 80, top: 60, width: 720, height: 640 }
+
+		const result = getMoreStylesPopoverLayout(trigger, selection, viewport, panel)
+
+		expect(result.left).toBeGreaterThanOrEqual(viewport.left)
+		expect(result.top).toBeGreaterThanOrEqual(viewport.top)
+		expect(result.left + result.width).toBeLessThanOrEqual(viewport.left + viewport.width)
+		expect(result.top + result.height).toBeLessThanOrEqual(viewport.top + viewport.height)
+	})
+
+	it("uses the window instead of the canvas so the panel can leave the middle area", () => {
+		Object.defineProperty(window, "innerWidth", { value: 1667, configurable: true })
+		Object.defineProperty(window, "innerHeight", { value: 963, configurable: true })
+		const canvas = { left: 480, top: 140, width: 800, height: 800 }
+
+		const viewport = getMoreStylesViewport(canvas)
+
+		expect(viewport).toEqual({ left: 0, top: 0, width: 1667, height: 963 })
+	})
+
+	it("opens to the right of a right-edge trigger and may exceed the canvas", () => {
+		Object.defineProperty(window, "innerWidth", { value: 1667, configurable: true })
+		Object.defineProperty(window, "innerHeight", { value: 963, configurable: true })
+		const trigger = { left: 1180, top: 240, width: 88, height: 32 }
+		const selection = { left: 980, top: 280, width: 280, height: 180 }
+		const canvas = { left: 480, top: 140, width: 800, height: 800 }
+		const viewport = getMoreStylesViewport(canvas)
+
+		const result = getMoreStylesPopoverLayout(trigger, selection, viewport, panel)
+
+		expect(result.side).toBe("right")
+		expect(result.left).toBeGreaterThanOrEqual(trigger.left + trigger.width)
+		expect(result.left + result.width).toBeGreaterThan(canvas.left + canvas.width)
+		expect(result.left + result.width).toBeLessThanOrEqual(viewport.left + viewport.width)
 	})
 })
