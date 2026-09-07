@@ -121,6 +121,7 @@ return [
 
     // Nama fail berkaitan
     'file_names' => [
+        'recording_at' => 'Rakaman pada :time',
         'recording_prefix' => 'Rakaman',
         'merged_audio_prefix' => 'Fail Rakaman',
         'original_recording' => 'Fail Rakaman Asal',

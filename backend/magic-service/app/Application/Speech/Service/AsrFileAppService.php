@@ -140,6 +140,16 @@ class AsrFileAppService extends AbstractAppService
             // 3. 验证项目权限
             $this->validationService->getAccessibleProjectWithEditor((int) $summaryRequest->projectId, $userId, $organizationCode);
 
+            // 先显影项目再投递 MQ，确保音频项目列表的 is_hidden=0 查询能够立即看到项目。
+            // Consumer 内仍会再次幂等显影，覆盖 MQ 延迟或重试场景。
+            $this->exposeSummaryProject(
+                (int) $summaryRequest->projectId,
+                $userId,
+                $organizationCode,
+                AsrSummaryMessage::MODE_RECORDING,
+                $summaryRequest->taskKey
+            );
+
             // 4. 查询项目、工作区和话题信息
             [$projectName, $workspaceName] = $this->getProjectAndWorkspaceNames($summaryRequest->projectId);
             $topicName = $topicEntity->getTopicName();
@@ -1277,6 +1287,16 @@ class AsrFileAppService extends AbstractAppService
         $taskStatus->phaseStatus = AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS;
         $taskStatus->phasePercent = 0;
         $taskStatus->phaseError = null;
+
+        // 在启动后台合并前同步显影，避免 finish-recording 返回后列表仍过滤掉项目。
+        $this->exposeSummaryProject(
+            (int) $taskStatus->projectId,
+            $userId,
+            $organizationCode,
+            AsrSummaryMessage::MODE_RECORDING,
+            $taskKey
+        );
+
         $this->asrTaskDomainService->saveTaskStatus($taskStatus);
 
         // Execute async. handleFinishRecording re-resolves the per-user
@@ -1368,6 +1388,15 @@ class AsrFileAppService extends AbstractAppService
         }
 
         $taskStatus->updateStatus(AsrTaskStatusEnum::PROCESSING);
+
+        // 在启动后台恢复前同步显影，保持 recover 与 finish-recording 一致。
+        $this->exposeSummaryProject(
+            (int) $taskStatus->projectId,
+            $taskStatus->userId,
+            $organizationCode,
+            AsrSummaryMessage::MODE_RECORDING,
+            $taskKey
+        );
         $this->asrTaskDomainService->startMergingPhase($taskStatus);
 
         $this->executeAsyncRecoverFinishRecording($taskStatus, $organizationCode, $generatedTitle);

@@ -134,6 +134,7 @@ return [
 
     // File names related
     'file_names' => [
+        'recording_at' => 'Recording at :time',
         'recording_prefix' => 'Recording',
         'merged_audio_prefix' => 'Recording File',
         'original_recording' => 'Original Recording',
