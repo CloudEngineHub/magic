@@ -18,6 +18,7 @@ import {
 } from "@/workers/service-worker/sw-constants"
 import { buildConcatenatedPresetContent, localeTextToDisplayString } from "../../panels/utils"
 import { FEATURED_SLIDES_TEMPLATE_TAG_CODE } from "../../panels/slides-preset/templateMeta"
+import { SLIDES_LANGUAGE_OPTIONS } from "./slidesLanguageOptions"
 
 export interface SlidesTemplateItem {
 	id?: string
@@ -306,11 +307,7 @@ const slidesStaticFields: NonNullable<FieldPanelConfig["field"]>["items"] = [
 		data_key: "language",
 		label: { zh_CN: "语言", en_US: "Language" },
 		default_value: "",
-		options: [
-			{ value: "auto", label: { zh_CN: "自动", en_US: "Auto" } },
-			{ value: "zh", label: { zh_CN: "中文", en_US: "Chinese" } },
-			{ value: "en", label: { zh_CN: "英文", en_US: "English" } },
-		],
+		options: SLIDES_LANGUAGE_OPTIONS,
 	},
 ]
 
