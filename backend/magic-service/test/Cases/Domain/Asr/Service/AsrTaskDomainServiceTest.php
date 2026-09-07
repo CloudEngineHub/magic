@@ -14,6 +14,7 @@ use App\Domain\SuperMagic\File\Entity\AudioProjectEntity;
 use App\Domain\SuperMagic\File\Repository\Facade\AudioProjectRepositoryInterface;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Redis\Redis;
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -96,7 +97,7 @@ class AsrTaskDomainServiceTest extends TestCase
         $audioProjectRepository = $this->createMock(AudioProjectRepositoryInterface::class);
         $service = $this->createService($this->createTaskRepository(false), $audioProjectRepository);
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         $service->setAudioFormat($taskStatus, 'opus');
     }
 
@@ -110,7 +111,7 @@ class AsrTaskDomainServiceTest extends TestCase
         $taskStatus = $this->createTaskStatus();
         $service = $this->createService($this->createTaskRepository(false), $audioProjectRepository);
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         $service->setAudioFormat($taskStatus, 'opus');
     }
 

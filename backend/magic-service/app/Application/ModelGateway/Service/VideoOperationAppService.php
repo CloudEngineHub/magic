@@ -765,6 +765,9 @@ readonly class VideoOperationAppService
         if ($usageTokens['total_tokens'] !== null) {
             $businessParams['total_tokens'] = $usageTokens['total_tokens'];
         }
+        if ($usageTokens['billing_token_usage'] !== null) {
+            $businessParams['billing_token_usage'] = $usageTokens['billing_token_usage'];
+        }
 
         $event->setOrganizationCode($operation->getOrganizationCode());
         $event->setUserId($operation->getUserId());
@@ -927,27 +930,55 @@ readonly class VideoOperationAppService
     }
 
     /**
-     * 解析视频任务 provider 回包中的 token 用量（如火山方舟 succeeded 时的 usage.completion_tokens）。
-     * 无字段或非法结构时返回 null，计费侧可回退到按时长等规则。
+     * 按服务商解析视频任务回包中的 token 用量。
      *
-     * @return array{completion_tokens: ?int, total_tokens: ?int}
+     * @return array{completion_tokens: ?int, total_tokens: ?int, billing_token_usage: ?array{input_tokens: int, output_text_tokens: int, output_video_tokens: int, thought_tokens: int}}
      */
     private function resolveVideoProviderUsageTokens(VideoQueueOperationEntity $operation): array
     {
         $providerResult = $operation->getProviderResult();
-        if (! is_array($providerResult)) {
-            return ['completion_tokens' => null, 'total_tokens' => null];
-        }
-        $usage = $providerResult['usage'] ?? null;
+        $usage = is_array($providerResult) ? ($providerResult['usage'] ?? null) : null;
         if (! is_array($usage)) {
-            return ['completion_tokens' => null, 'total_tokens' => null];
+            return ['completion_tokens' => null, 'total_tokens' => null, 'billing_token_usage' => null];
         }
-        $completion = $usage['completion_tokens'] ?? null;
-        $total = $usage['total_tokens'] ?? null;
+
+        if ($operation->getProviderCode() === ProviderCode::Gemini->value) {
+            return $this->resolveGeminiVideoUsageTokens($usage);
+        }
 
         return [
-            'completion_tokens' => $completion !== null ? max(0, (int) $completion) : null,
-            'total_tokens' => $total !== null ? max(0, (int) $total) : null,
+            'completion_tokens' => isset($usage['completion_tokens']) ? max(0, (int) $usage['completion_tokens']) : null,
+            'total_tokens' => isset($usage['total_tokens']) ? max(0, (int) $usage['total_tokens']) : null,
+            'billing_token_usage' => [],
+        ];
+    }
+
+    /**
+     * 解析 Gemini 视频模型的四类 token 用量。
+     *
+     * @param array<string, mixed> $usage
+     * @return array{completion_tokens: int, total_tokens: int, billing_token_usage: array{input_tokens: int, output_text_tokens: int, output_video_tokens: int, thought_tokens: int}}
+     */
+    private function resolveGeminiVideoUsageTokens(array $usage): array
+    {
+        $modalityTokens = array_column($usage['output_tokens_by_modality'] ?? [], 'tokens', 'modality');
+
+        $billingTokenUsage = [
+            'input_tokens' => (int) ($usage['total_input_tokens'] ?? 0),
+            'output_text_tokens' => (int) ($modalityTokens['text'] ?? 0),
+            'output_video_tokens' => (int) ($modalityTokens['video'] ?? 0),
+            'thought_tokens' => (int) ($usage['total_thought_tokens'] ?? 0),
+        ];
+
+        return [
+            'completion_tokens' => $billingTokenUsage['output_text_tokens']
+                + $billingTokenUsage['output_video_tokens']
+                + $billingTokenUsage['thought_tokens'],
+            'total_tokens' => $billingTokenUsage['input_tokens']
+                + $billingTokenUsage['output_text_tokens']
+                + $billingTokenUsage['output_video_tokens']
+                + $billingTokenUsage['thought_tokens'],
+            'billing_token_usage' => $billingTokenUsage,
         ];
     }
 

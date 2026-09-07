@@ -164,7 +164,6 @@ readonly class GeminiVideoClient
 
         try {
             $response = $this->send($method, $normalizedBaseUrl . $normalizedPath, $apiKey, $payload, $proxyUrl);
-            $requestId = $this->extractRequestId($response);
             $body = (string) $response->getBody();
             if (trim($body) === '') {
                 throw $this->responseFormatException();
@@ -181,22 +180,13 @@ readonly class GeminiVideoClient
             }
 
             $this->logger->info('gemini video response', [
-                'method' => $method,
-                'base_url' => $normalizedBaseUrl,
-                'path' => $normalizedPath,
-                'context' => $sanitizedLogContext,
                 'http_status' => $response->getStatusCode(),
-                'provider_request_id' => $requestId,
                 'response' => PayloadLogSanitizer::sanitizeValue($data),
             ]);
 
             return $data;
         } catch (ProviderVideoException $exception) {
             $this->logger->error('gemini video error', [
-                'method' => $method,
-                'base_url' => $normalizedBaseUrl,
-                'path' => $normalizedPath,
-                'context' => $sanitizedLogContext,
                 'http_status' => $exception->getHttpStatus(),
                 'error_code' => $exception->getErrorCode(),
                 'error' => $exception->getMessage(),
@@ -213,15 +203,10 @@ readonly class GeminiVideoClient
             $errorCode = ProviderVideoErrorMapper::resolve($providerCode, $httpStatus);
             $factory = ProviderVideoErrorMapper::isRetriable($httpStatus, ! $exception->hasResponse(), $errorCode) ? 'retriable' : 'nonRetriable';
             $this->logger->error('gemini video request failed', [
-                'method' => $method,
-                'base_url' => $normalizedBaseUrl,
-                'path' => $normalizedPath,
-                'context' => $sanitizedLogContext,
-                'http_status' => $httpStatus,
                 'response' => $responseBody === null ? null : PayloadLogSanitizer::sanitizeResponseBody($responseBody),
-                'provider_request_id' => $exception->getResponse() === null ? null : $this->extractRequestId($exception->getResponse()),
                 'provider_error_code' => $providerCode,
-                'retriable' => $factory === 'retriable',
+                'http_status' => $httpStatus,
+                'error_message' => $exception->getMessage(),
             ]);
             throw ProviderVideoException::$factory(
                 ProviderVideoErrorMapper::message($errorCode, null, $providerCode),
@@ -307,17 +292,5 @@ readonly class GeminiVideoClient
         }
 
         return is_string($data['code'] ?? null) || is_int($data['code'] ?? null) ? $data['code'] : null;
-    }
-
-    private function extractRequestId(ResponseInterface $response): ?string
-    {
-        foreach (['x-request-id', 'x-goog-request-id', 'request-id'] as $header) {
-            $value = trim($response->getHeaderLine($header));
-            if ($value !== '') {
-                return $value;
-            }
-        }
-
-        return null;
     }
 }

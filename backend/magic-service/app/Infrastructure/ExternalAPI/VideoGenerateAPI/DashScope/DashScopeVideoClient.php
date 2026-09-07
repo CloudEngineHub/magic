@@ -61,18 +61,12 @@ readonly class DashScopeVideoClient
             );
         } catch (ProviderVideoException $exception) {
             $this->logger->error('dashscope video post error', [
-                'base_url' => $normalizedBaseUrl,
-                'path' => $normalizedPath,
-                'context' => $sanitizedLogContext,
                 'error' => $exception->getMessage(),
             ]);
             throw $exception;
         }
 
         $this->logger->info('dashscope video post response', [
-            'base_url' => $normalizedBaseUrl,
-            'path' => $normalizedPath,
-            'context' => $sanitizedLogContext,
             'response' => PayloadLogSanitizer::sanitizeValue($data),
         ]);
 
@@ -105,18 +99,12 @@ readonly class DashScopeVideoClient
             );
         } catch (ProviderVideoException $exception) {
             $this->logger->error('dashscope video get error', [
-                'base_url' => $normalizedBaseUrl,
-                'path' => $normalizedPath,
-                'context' => $sanitizedLogContext,
                 'error' => $exception->getMessage(),
             ]);
             throw $exception;
         }
 
         $this->logger->info('dashscope video get response', [
-            'base_url' => $normalizedBaseUrl,
-            'path' => $normalizedPath,
-            'context' => $sanitizedLogContext,
             'response' => PayloadLogSanitizer::sanitizeValue($data),
         ]);
 

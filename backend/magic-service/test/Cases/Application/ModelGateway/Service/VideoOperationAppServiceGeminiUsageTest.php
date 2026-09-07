@@ -58,4 +58,80 @@ final class VideoOperationAppServiceGeminiUsageTest extends TestCase
             ],
         ], $method->invoke($service, $operation));
     }
+
+    public function testUsesProviderCodeToResolveGeminiUsage(): void
+    {
+        $operation = new VideoQueueOperationEntity(
+            'operation-2',
+            'video',
+            'custom-video-model',
+            'custom-video-model',
+            'provider-model',
+            'Gemini',
+            'Google',
+            'org-test',
+            'user-test',
+            VideoOperationStatus::SUCCEEDED,
+            1,
+            providerResult: [
+                'usage' => [
+                    'total_input_tokens' => 10,
+                    'total_thought_tokens' => 2,
+                    'output_tokens_by_modality' => [
+                        ['modality' => 'video', 'tokens' => 8],
+                    ],
+                ],
+            ],
+        );
+        $service = (new ReflectionClass(VideoOperationAppService::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod(VideoOperationAppService::class, 'resolveVideoProviderUsageTokens');
+        $method->setAccessible(true);
+
+        self::assertSame([
+            'completion_tokens' => 10,
+            'total_tokens' => 20,
+            'billing_token_usage' => [
+                'input_tokens' => 10,
+                'output_text_tokens' => 0,
+                'output_video_tokens' => 8,
+                'thought_tokens' => 2,
+            ],
+        ], $method->invoke($service, $operation));
+    }
+
+    public function testKeepsLegacyUsageForNonGeminiProvider(): void
+    {
+        $operation = new VideoQueueOperationEntity(
+            'operation-3',
+            'video',
+            'gemini-omni-1.1-flash',
+            'gemini-omni-1.1-flash',
+            'provider-model',
+            'VolcengineArk',
+            'Volcengine Ark',
+            'org-test',
+            'user-test',
+            VideoOperationStatus::SUCCEEDED,
+            1,
+            providerResult: [
+                'usage' => [
+                    'completion_tokens' => 17,
+                    'total_tokens' => 23,
+                    'total_input_tokens' => 10,
+                    'output_tokens_by_modality' => [
+                        ['modality' => 'video', 'tokens' => 8],
+                    ],
+                ],
+            ],
+        );
+        $service = (new ReflectionClass(VideoOperationAppService::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod(VideoOperationAppService::class, 'resolveVideoProviderUsageTokens');
+        $method->setAccessible(true);
+
+        self::assertSame([
+            'completion_tokens' => 17,
+            'total_tokens' => 23,
+            'billing_token_usage' => null,
+        ], $method->invoke($service, $operation));
+    }
 }
