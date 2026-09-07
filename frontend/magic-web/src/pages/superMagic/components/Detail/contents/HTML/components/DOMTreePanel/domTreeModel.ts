@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next"
 import type { DomTreeNode } from "../../iframe-bridge/types/messages"
 
 export const DOM_TREE_INDENT_STEP = 16
@@ -12,11 +13,30 @@ export function estimateDomTreeRowSize(): number {
 
 export type DropPosition = "before" | "inside" | "after"
 export type InsertPlacement = "before" | "inside" | "after"
+export type DomTreeSemanticKey =
+	| "code"
+	| "container"
+	| "control"
+	| "disclosure"
+	| "divider"
+	| "element"
+	| "embed"
+	| "form"
+	| "heading"
+	| "image"
+	| "lineBreak"
+	| "link"
+	| "list"
+	| "media"
+	| "quote"
+	| "table"
+	| "text"
 
 export interface TextInsertRequest {
 	parentNodeId: string
 	index?: number
 	targetLabel: string
+	placement: InsertPlacement
 }
 
 export interface DeleteRequest {
@@ -33,6 +53,60 @@ export interface DomTreeIndex {
 	nodeMap: Map<string, DomTreeNode>
 	parentMap: Map<string, DomTreeNode>
 	nodeIdBySelector: Map<string, string>
+}
+
+export function getDomTreeNodeDisplayLabel(node: DomTreeNode, semanticLabel: string): string {
+	return node.textContent ? `${semanticLabel} · ${node.textContent}` : semanticLabel
+}
+
+export function getDomTreeSemanticLabel(t: TFunction, semanticKey: DomTreeSemanticKey): string {
+	switch (semanticKey) {
+		case "code":
+			return t("stylePanel.domTree.semantic.code")
+		case "container":
+			return t("stylePanel.domTree.semantic.container")
+		case "control":
+			return t("stylePanel.domTree.semantic.control")
+		case "disclosure":
+			return t("stylePanel.domTree.semantic.disclosure")
+		case "divider":
+			return t("stylePanel.domTree.semantic.divider")
+		case "element":
+			return t("stylePanel.domTree.semantic.element")
+		case "embed":
+			return t("stylePanel.domTree.semantic.embed")
+		case "form":
+			return t("stylePanel.domTree.semantic.form")
+		case "heading":
+			return t("stylePanel.domTree.semantic.heading")
+		case "image":
+			return t("stylePanel.domTree.semantic.image")
+		case "lineBreak":
+			return t("stylePanel.domTree.semantic.lineBreak")
+		case "link":
+			return t("stylePanel.domTree.semantic.link")
+		case "list":
+			return t("stylePanel.domTree.semantic.list")
+		case "media":
+			return t("stylePanel.domTree.semantic.media")
+		case "quote":
+			return t("stylePanel.domTree.semantic.quote")
+		case "table":
+			return t("stylePanel.domTree.semantic.table")
+		case "text":
+			return t("stylePanel.domTree.semantic.text")
+	}
+}
+
+export function getTextInsertPlacementLabel(t: TFunction, placement: InsertPlacement): string {
+	switch (placement) {
+		case "before":
+			return t("stylePanel.domTree.addTextDialog.placements.before")
+		case "inside":
+			return t("stylePanel.domTree.addTextDialog.placements.inside")
+		case "after":
+			return t("stylePanel.domTree.addTextDialog.placements.after")
+	}
 }
 
 export function collectNodeIds(root: DomTreeNode): Set<string> {
@@ -93,7 +167,7 @@ export function buildDomTreeIndex(treeRoot?: DomTreeNode): DomTreeIndex {
 	return { nodeMap, parentMap, nodeIdBySelector }
 }
 
-export function getSemanticKey(tagName: string): string {
+export function getSemanticKey(tagName: string): DomTreeSemanticKey {
 	const tag = tagName.toLowerCase()
 	if (["br", "wbr"].includes(tag)) return "lineBreak"
 	if (tag === "hr") return "divider"

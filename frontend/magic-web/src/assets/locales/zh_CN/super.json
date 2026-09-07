@@ -6009,9 +6009,14 @@
 			"addTextDialog": {
 				"cancel": "取消",
 				"confirm": "添加文字",
-				"description": "将在「{{node}}」对应的位置新增一个段落。",
+				"description": "将在「{{node}}」元素的{{placement}}新增一段文字。",
 				"inputLabel": "文字内容",
 				"placeholder": "输入文字内容",
+				"placements": {
+					"after": "后面",
+					"before": "前面",
+					"inside": "内部"
+				},
 				"title": "新增文字"
 			},
 			"bridgeUnavailable": "编辑器尚未就绪，请稍后重试",

@@ -36,6 +36,14 @@ import { HTML_EDITOR_Z_INDEX } from "../../../constants/z-index"
 import { EditorDropdownMenuContent } from "../../EditorFloating"
 import { STYLE_PANEL_STYLES } from "../styles"
 import type { ContextToolbarItemMotion } from "../types"
+import {
+	getDomTreeNodeDisplayLabel,
+	getDomTreeSemanticLabel,
+	getTextInsertPlacementLabel,
+	getSemanticKey,
+	type InsertPlacement,
+	type TextInsertRequest,
+} from "../../DOMTreePanel/domTreeModel"
 
 interface ElementActionsProps {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
@@ -43,14 +51,6 @@ interface ElementActionsProps {
 	/** Optional per-button enter transition used by the contextual toolbar. */
 	itemMotion?: ContextToolbarItemMotion
 }
-
-interface TextInsertRequest {
-	parentNodeId: string
-	index?: number
-	targetLabel: string
-}
-
-type InsertPlacement = "before" | "inside" | "after"
 
 function findNodeBySelector(node: DomTreeNode, selector: string): DomTreeNode | null {
 	if (node.selector === selector) return node
@@ -372,11 +372,16 @@ export const ElementActions = observer(function ElementActions({
 				if (!parentNodeId) throw new Error("当前元素没有可用的插入位置")
 
 				if (type === "text") {
+					const semanticLabel = getDomTreeSemanticLabel(
+						t,
+						getSemanticKey(selectedNode.tagName),
+					)
 					setTextInput("")
 					setTextInsertRequest({
 						parentNodeId,
 						index,
-						targetLabel: selectedNode.label || selectedNode.tagName,
+						targetLabel: getDomTreeNodeDisplayLabel(selectedNode, semanticLabel),
+						placement,
 					})
 				} else {
 					await editorRef.current.insertImageNode(parentNodeId, index)
@@ -387,7 +392,7 @@ export const ElementActions = observer(function ElementActions({
 				isInsertInProgressRef.current = false
 			}
 		},
-		[editorRef, stylePanelStore],
+		[editorRef, stylePanelStore, t],
 	)
 
 	const closeTextInsertDialog = useCallback(() => {
@@ -655,6 +660,9 @@ export const ElementActions = observer(function ElementActions({
 						<DialogDescription>
 							{t("stylePanel.domTree.addTextDialog.description", {
 								node: textInsertRequest?.targetLabel ?? "",
+								placement: textInsertRequest
+									? getTextInsertPlacementLabel(t, textInsertRequest.placement)
+									: "",
 							})}
 						</DialogDescription>
 					</DialogHeader>

@@ -19,6 +19,7 @@ import { DOMTreeContextMenu } from "./DOMTreeContextMenu"
 import { ActionTooltip, AddNodeMenu, NodeDetailsPopover } from "./DOMTreeRowControls"
 import {
 	DOM_TREE_INDENT_STEP,
+	getDomTreeSemanticLabel,
 	getSemanticKey,
 	getSemanticTone,
 	isSelectableNode,
@@ -121,7 +122,7 @@ export function DOMTreeRow({
 	const { t } = useTranslation("super")
 	const isExpanded = state.expanded.has(node.nodeId)
 	const semanticKey = getSemanticKey(node.tagName)
-	const semanticLabel = t(`stylePanel.domTree.semantic.${semanticKey}`)
+	const semanticLabel = getDomTreeSemanticLabel(t, semanticKey)
 	const isRootNode = rootNodeId === node.nodeId || node.tagName.toLowerCase() === "body"
 	const canInsertInside = node.canHaveChildren && (node.editable || isRootNode)
 	const canInsertSibling = parentMap.has(node.nodeId) && node.editable

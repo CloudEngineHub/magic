@@ -6007,9 +6007,14 @@
 			"addTextDialog": {
 				"cancel": "Cancel",
 				"confirm": "Add text",
-				"description": "A new paragraph will be inserted at the position of “{{node}}”.",
+				"description": "A new paragraph will be added {{placement}} the “{{node}}” element.",
 				"inputLabel": "Text content",
 				"placeholder": "Enter text content",
+				"placements": {
+					"after": "after",
+					"before": "before",
+					"inside": "inside"
+				},
 				"title": "Add text"
 			},
 			"bridgeUnavailable": "The editor is not ready yet. Please try again.",

@@ -44,6 +44,9 @@ import {
 	collectNodeIds,
 	collectVisibleNodeRows,
 	estimateDomTreeRowSize,
+	getDomTreeNodeDisplayLabel,
+	getDomTreeSemanticLabel,
+	getTextInsertPlacementLabel,
 	getSemanticKey,
 	isSelectableNode,
 	type DeleteRequest,
@@ -589,6 +592,10 @@ function DOMTreePanelInner({
 				(placement === "after" ? 1 : 0),
 		}
 	}
+	const getSemanticLabel = (node?: DomTreeNode) =>
+		node ? getDomTreeSemanticLabel(t, getSemanticKey(node.tagName)) : ""
+	const getNodeDisplayLabel = (node?: DomTreeNode) =>
+		node ? getDomTreeNodeDisplayLabel(node, getSemanticLabel(node)) : ""
 
 	const getPasteTarget = useCallback(
 		(node: DomTreeNode) => {
@@ -610,7 +617,8 @@ function DOMTreePanelInner({
 		setTextInsertRequest({
 			parentNodeId: target.parent.nodeId,
 			index: target.index,
-			targetLabel: node.label,
+			targetLabel: getNodeDisplayLabel(node),
+			placement,
 		})
 	}
 
@@ -828,10 +836,6 @@ function DOMTreePanelInner({
 		window.addEventListener("blur", stop)
 	}
 
-	const getSemanticLabel = (node?: DomTreeNode) =>
-		node ? t(`stylePanel.domTree.semantic.${getSemanticKey(node.tagName)}`) : ""
-	const getNodeDisplayLabel = (node?: DomTreeNode) =>
-		node ? `${getSemanticLabel(node)} · ${node.label}` : ""
 	const getDragStatus = () => {
 		if (!draggedNode) return t("stylePanel.domTree.dragHint")
 		if (invalidDropTarget) {
@@ -1187,9 +1191,7 @@ function DOMTreePanelInner({
 									data-testid={`dom-tree-search-result-${node.nodeId}`}
 								>
 									<span className="shrink-0 rounded border border-border/70 bg-muted/50 px-1 py-0.5 text-[9px] text-muted-foreground">
-										{t(
-											`stylePanel.domTree.semantic.${getSemanticKey(node.tagName)}`,
-										)}
+										{getDomTreeSemanticLabel(t, getSemanticKey(node.tagName))}
 									</span>
 									<span className="min-w-0 flex-1 truncate font-medium text-foreground">
 										{node.label}
@@ -1319,6 +1321,12 @@ function DOMTreePanelInner({
 							<DialogDescription>
 								{t("stylePanel.domTree.addTextDialog.description", {
 									node: textInsertRequest?.targetLabel ?? "",
+									placement: textInsertRequest
+										? getTextInsertPlacementLabel(
+												t,
+												textInsertRequest.placement,
+											)
+										: "",
 								})}
 							</DialogDescription>
 						</DialogHeader>
