@@ -289,7 +289,7 @@ describe("ImageManager", () => {
 		expect(mockElementSelector.selectElement).toHaveBeenCalledWith(insertedImage)
 	})
 
-	it("should size inserted document images to half of their parent width", async () => {
+	it("should size inserted document images to their parent width", async () => {
 		container.innerHTML = `<section id="image-parent"><p>Content</p></section>`
 
 		const runPromise = imageManager.runImageAction({
@@ -316,7 +316,7 @@ describe("ImageManager", () => {
 			"img[data-original-path='images/inserted.png']",
 		) as HTMLImageElement | null
 		expect(insertedImage).toBeInstanceOf(HTMLImageElement)
-		expect(insertedImage?.style.width).toBe("50%")
+		expect(insertedImage?.style.width).toBe("100%")
 		expect(insertedImage?.style.height).toBe("auto")
 		expect(insertedImage?.style.maxWidth).toBe("100%")
 	})

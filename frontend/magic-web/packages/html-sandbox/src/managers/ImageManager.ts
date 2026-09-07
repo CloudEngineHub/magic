@@ -87,7 +87,7 @@ const DEFAULT_INSERTED_IMAGE_WIDTH = 240
 // Images inserted into the document tree should scale with their target
 // container instead of keeping the uploaded file's intrinsic width. A
 // percentage width also remains useful when the parent is resized later.
-const DEFAULT_INSERTED_IMAGE_NODE_WIDTH = "50%"
+const DEFAULT_INSERTED_IMAGE_NODE_WIDTH = "100%"
 const DEFAULT_INSERTED_IMAGE_OFFSET = 24
 
 export class ImageManager {
