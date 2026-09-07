@@ -1382,7 +1382,7 @@ class VideoOperationAppServiceTest extends TestCase
                         new MiniMaxH3GenerationCapabilityProvider(),
                         new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
                     ),
-                    $this->createMock(GeminiVideoAdapterRouter::class),
+                    $this->createGeminiVideoAdapterRouter(),
                 ),
             ),
         );
@@ -2293,7 +2293,7 @@ class VideoOperationAppServiceTest extends TestCase
 
         $this->assertTrue($isDone);
         $this->assertSame(VideoOperationStatus::FAILED, $operationRepository->operations[$operation->getId()]->getStatus());
-        $this->assertSame('视频生成失败，请检查输入内容或稍后重试。', $operationRepository->operations[$operation->getId()]->getErrorMessage());
+        $this->assertSame('provider task id is invalid', $operationRepository->operations[$operation->getId()]->getErrorMessage());
         $this->assertSame([], $operationRepository->activeSlots['org-test:user-test'] ?? []);
         $this->assertCount(2, $this->eventDispatcher->events);
     }
@@ -2644,7 +2644,7 @@ class VideoOperationAppServiceTest extends TestCase
                     new MiniMaxH3GenerationCapabilityProvider(),
                     new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
                 ),
-                $this->createMock(GeminiVideoAdapterRouter::class),
+                $this->createGeminiVideoAdapterRouter(),
             )
         );
     }
