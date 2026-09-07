@@ -289,6 +289,62 @@ describe("StylePanel", () => {
 		expect(screen.getByLabelText("stylePanel.domTree.expandPageStructure")).toBeInTheDocument()
 	})
 
+	it("should show the selected tag and size in the toolbar gap", () => {
+		render(
+			<StylePanel
+				editorRef={{ current: null }}
+				variant="global"
+				domTreeOpen={false}
+				onToggleDomTree={vi.fn()}
+			/>,
+		)
+
+		const readout = screen.getByTestId("html-editor-selection-readout")
+		expect(readout).toHaveTextContent("stylePanel.domTree.semantic.image")
+		expect(readout).not.toHaveTextContent("IMG")
+		expect(readout).toHaveTextContent("320")
+		expect(readout).toHaveTextContent("160")
+		expect(screen.getByTestId("history-actions").nextElementSibling).toBe(readout)
+	})
+
+	it("should show a heading level instead of an HTML tag", () => {
+		mockSelectedElement.current = {
+			...mockSelectedElement.current,
+			selector: "h1.title",
+			tagName: "h1",
+			isImageElement: false,
+			isTextElement: true,
+		}
+
+		render(
+			<StylePanel
+				editorRef={{ current: null }}
+				variant="global"
+				domTreeOpen={false}
+				onToggleDomTree={vi.fn()}
+			/>,
+		)
+
+		const readout = screen.getByTestId("html-editor-selection-readout")
+		expect(readout).toHaveTextContent("stylePanel.domTree.semantic.heading1")
+		expect(readout).not.toHaveTextContent("H1")
+	})
+
+	it("should hide the toolbar readout when nothing is selected", () => {
+		mockSelectedElement.current = null
+
+		render(
+			<StylePanel
+				editorRef={{ current: null }}
+				variant="global"
+				domTreeOpen={false}
+				onToggleDomTree={vi.fn()}
+			/>,
+		)
+
+		expect(screen.queryByTestId("html-editor-selection-readout")).not.toBeInTheDocument()
+	})
+
 	it("should wrap the context toolbar and expose one more entry", () => {
 		mockSelectedElement.current = {
 			selector: "a.cta",

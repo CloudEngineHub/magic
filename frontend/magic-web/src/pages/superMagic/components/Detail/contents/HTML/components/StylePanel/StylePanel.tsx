@@ -32,6 +32,7 @@ import {
 	BackgroundImageButton,
 	SizePopover,
 } from "./controls"
+import { SelectionReadout } from "./controls/SelectionReadout"
 import { ContextStyleToolbar } from "./ContextStyleToolbar"
 import { useShowButtonText } from "@/hooks/useShowButtonText"
 import { getElementCapabilities } from "./capabilities"
@@ -429,10 +430,11 @@ const FullStylePanel = observer(function FullStylePanel({
 				<div
 					className={cn(
 						"flex min-w-0 items-center gap-1",
-						toolbarEndRef ? "min-w-0 flex-1 flex-wrap" : "flex-wrap",
+						toolbarEndRef ? "shrink-0 flex-wrap" : "flex-wrap",
 					)}
 				>
 					<HistoryActions editorRef={editorRef} />
+					<SelectionReadout selectedElement={selectedElement} />
 					{showElementControls ? (
 						<Separator orientation="vertical" className="mx-1 !h-4" />
 					) : null}
@@ -646,6 +648,8 @@ const FullStylePanel = observer(function FullStylePanel({
 					) : null}
 				</div>
 
+				<div className="min-w-0 flex-1" />
+
 				{onToggleDomTree ? (
 					<TooltipPrimitive.Root>
 						<TooltipTrigger asChild>
@@ -653,10 +657,7 @@ const FullStylePanel = observer(function FullStylePanel({
 								data-testid="html-editor-dom-tree-toggle-button"
 								variant={domTreeOpen ? "secondary" : "ghost"}
 								size="sm"
-								className={cn(
-									"h-8 shrink-0 gap-1 px-2",
-									toolbarEndRef ? "ml-1" : "ml-auto",
-								)}
+								className="ml-1 h-8 shrink-0 gap-1 px-2"
 								onClick={onToggleDomTree}
 								aria-label={t(
 									domTreeOpen

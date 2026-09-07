@@ -135,7 +135,7 @@ describe("getContextToolbarPosition", () => {
 			{ width: 800, height: 600 },
 		)
 
-		expect(result).toEqual({ left: 140, top: 88, width: 320, placement: "top" })
+		expect(result).toEqual({ left: 140, top: 84, width: 320, placement: "top" })
 	})
 
 	it("falls below when there is not enough room above", () => {
@@ -155,7 +155,7 @@ describe("getContextToolbarPosition", () => {
 			{ width: 800, height: 600 },
 		)
 
-		expect(result).toEqual({ left: 140, top: 388, width: 320, placement: "top" })
+		expect(result).toEqual({ left: 140, top: 384, width: 320, placement: "top" })
 	})
 
 	it("uses the side with more visible room when neither side fully fits", () => {

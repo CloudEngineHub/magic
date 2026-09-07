@@ -47,6 +47,14 @@ export function parseUsedPixelValue(value: string | undefined): number | null {
 	return Number.isFinite(parsed) ? parsed : null
 }
 
+/** Round used px for inspector labels; keep other units as authored. */
+export function formatUsedSizeLabel(value: string | undefined): string {
+	const usedPixels = parseUsedPixelValue(value)
+	if (usedPixels !== null) return `${Math.round(usedPixels)}px`
+	const trimmed = value?.trim()
+	return trimmed && trimmed !== "auto" ? trimmed : "auto"
+}
+
 /**
  * Start scrubbing from used px when the field still shows a non-px unit.
  */

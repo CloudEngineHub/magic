@@ -1,4 +1,7 @@
 import type { ElementRect } from "../SelectionOverlay/types"
+import { CONTEXT_TOOLBAR_TOP_CONTROL_CLEARANCE } from "../SelectionOverlay/utils/rotateHandleLayout"
+
+export { CONTEXT_TOOLBAR_TOP_CONTROL_CLEARANCE }
 
 export type ContextPanelPlacement = "right" | "left" | "bottom" | "top"
 
@@ -16,9 +19,6 @@ export interface ContextToolbarPosition {
 	width: number
 	placement: "bottom" | "top"
 }
-
-/** Space occupied by the rotate handle, its connector and angle indicator. */
-export const CONTEXT_TOOLBAR_TOP_CONTROL_CLEARANCE = 56
 
 interface PanelCandidate extends PanelPosition {
 	/** Whether the candidate has enough room for a useful panel. */

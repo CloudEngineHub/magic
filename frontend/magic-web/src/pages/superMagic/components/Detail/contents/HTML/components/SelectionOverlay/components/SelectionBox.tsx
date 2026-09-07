@@ -3,6 +3,7 @@ import type { ElementRect, ResizeHandleConfig } from "../types"
 import type { GapAxis, GapHandleFrame } from "../utils/gapHandleLayout"
 import { HTML_EDITOR_Z_INDEX } from "../../../constants/z-index"
 import { ControlHandles } from "./ControlHandles"
+import { SelectionMarks } from "./SelectionMarks"
 import { shouldShowActionHandles } from "../utils/size-detection"
 
 interface SelectionBoxProps {
@@ -59,21 +60,20 @@ export const SelectionBox = memo(function SelectionBox({
 
 	return (
 		<div
-			className="group/selection pointer-events-none absolute border-2 border-primary"
+			className="group/selection pointer-events-none absolute outline outline-1 outline-primary/20"
+			data-testid="html-editor-selection-box"
 			style={{
 				top: `${transformedRect.top}px`,
 				left: `${transformedRect.left}px`,
 				width: `${transformedRect.width}px`,
 				height: `${transformedRect.height}px`,
 				opacity: isMultiSelect ? 0.7 : 1,
-				boxShadow: isMultiSelect
-					? "0 0 0 2px rgb(var(--primary-rgb) / 0.1)"
-					: "0 0 0 4px rgb(var(--primary-rgb) / 0.1)",
 				zIndex: HTML_EDITOR_Z_INDEX.OVERLAY.SELECTION_HIGHLIGHT,
 				transform,
 				transformOrigin: "center center",
 			}}
 		>
+			<SelectionMarks />
 			{/* Only show handles in single-select mode */}
 			{isOnlySelected && isSelectionMode && (
 				<ControlHandles

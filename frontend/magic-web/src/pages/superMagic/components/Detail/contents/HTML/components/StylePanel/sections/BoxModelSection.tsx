@@ -4,7 +4,7 @@ import { useDebounceFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { DimensionInput, NumericDragInput } from "../controls"
 import type { StyleSectionProps } from "../types"
-import { getDimensionField } from "../utils/dimensionValue"
+import { formatUsedSizeLabel, getDimensionField } from "../utils/dimensionValue"
 
 type BoxSide = "top" | "right" | "bottom" | "left"
 type BoxValues = Record<BoxSide, string>
@@ -47,7 +47,7 @@ function EdgeInput({ label, value, onChange }: EdgeInputProps) {
 			value={value}
 			onChange={onChange}
 			inputMode="decimal"
-			className="h-5 w-8 rounded-sm border border-transparent bg-transparent px-0.5 text-center font-mono text-[10px] tabular-nums text-foreground shadow-none outline-none transition-[background-color,border-color,box-shadow,color] duration-150 ease-out placeholder:text-muted-foreground/50 hover:border-primary/35 hover:bg-primary/5 hover:text-primary focus-visible:border-primary/70 focus-visible:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-default"
+			className="h-5 w-8 rounded-none border border-transparent bg-transparent px-0.5 text-center text-[11px] tabular-nums text-foreground shadow-none outline-none transition-[background-color,border-color,color] duration-150 ease-out placeholder:text-muted-foreground/50 hover:border-primary/40 hover:text-primary focus-visible:border-primary focus-visible:text-primary disabled:cursor-default"
 			aria-label={label}
 			data-testid={`box-model-edge-${label}`}
 		/>
@@ -65,43 +65,49 @@ interface BoxLayerProps {
 
 function BoxLayer({ label, values, color, center, onChange, sideLabel }: BoxLayerProps) {
 	const palette = {
-		margin: "border-amber-300/70 bg-amber-50/70 dark:border-amber-700/70 dark:bg-amber-950/20",
-		border: "border-slate-300/80 bg-slate-50/90 dark:border-slate-600/80 dark:bg-slate-900/40",
-		padding: "border-sky-300/80 bg-sky-100/70 dark:border-sky-700/80 dark:bg-sky-950/30",
+		margin: "border-border bg-muted/40",
+		border: "border-border bg-background",
+		padding: "border-border bg-muted/20",
 	}[color]
 
 	return (
-		<div
-			className={`group relative min-w-0 border p-1 transition-[background-color,border-color,box-shadow] duration-150 ease-out hover:shadow-[inset_0_0_0_1px_hsl(var(--foreground)/0.08)] ${palette}`.trim()}
-		>
-			<div className="pointer-events-none absolute left-1 top-0.5 max-w-[calc(100%-3rem)] truncate text-[9px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+		<div className={`group relative w-full min-w-0 rounded-none border p-1 ${palette}`}>
+			{color === "margin" ? (
+				<>
+					<span className="pointer-events-none absolute -left-px -top-px h-2 w-2 border-l-[1.5px] border-t-[1.5px] border-foreground/55" />
+					<span className="pointer-events-none absolute -right-px -top-px h-2 w-2 border-r-[1.5px] border-t-[1.5px] border-foreground/55" />
+					<span className="pointer-events-none absolute -bottom-px -left-px h-2 w-2 border-b-[1.5px] border-l-[1.5px] border-foreground/55" />
+					<span className="pointer-events-none absolute -bottom-px -right-px h-2 w-2 border-b-[1.5px] border-r-[1.5px] border-foreground/55" />
+				</>
+			) : null}
+			<div className="pointer-events-none absolute left-1 top-0.5 max-w-[calc(100%-3rem)] truncate text-[10px] font-medium text-muted-foreground">
 				{label}
 			</div>
-			<div className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_1.5rem] grid-rows-[1.15rem_minmax(2rem,auto)_1.15rem]">
+			<div className="grid w-full min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_1.5rem] grid-rows-[1.15rem_minmax(2rem,auto)_1.15rem]">
 				{onChange && (
 					<>
-						<div className="group/edge col-start-2 row-start-1 flex items-center justify-center rounded-sm transition-colors hover:bg-background/35">
+						<div className="col-start-2 row-start-1 flex items-center justify-center">
 							<EdgeInput
 								label={sideLabel("top")}
 								value={values.top}
 								onChange={(value) => onChange("top", value)}
 							/>
 						</div>
-						<div className="group/edge col-start-1 row-start-2 flex items-center justify-center rounded-sm transition-colors hover:bg-background/35">
+						<div className="col-start-1 row-start-2 flex items-center justify-center">
 							<EdgeInput
 								label={sideLabel("left")}
 								value={values.left}
 								onChange={(value) => onChange("left", value)}
 							/>
 						</div>
-						<div className="group/edge col-start-3 row-start-2 flex items-center justify-center rounded-sm transition-colors hover:bg-background/35">
+						<div className="col-start-3 row-start-2 flex items-center justify-center">
 							<EdgeInput
 								label={sideLabel("right")}
 								value={values.right}
 								onChange={(value) => onChange("right", value)}
 							/>
 						</div>
-						<div className="group/edge col-start-2 row-start-3 flex items-center justify-center rounded-sm transition-colors hover:bg-background/35">
+						<div className="col-start-2 row-start-3 flex items-center justify-center">
 							<EdgeInput
 								label={sideLabel("bottom")}
 								value={values.bottom}
@@ -110,7 +116,9 @@ function BoxLayer({ label, values, color, center, onChange, sideLabel }: BoxLaye
 						</div>
 					</>
 				)}
-				<div className="col-start-2 row-start-2 min-w-0">{center}</div>
+				<div className="col-start-2 row-start-2 flex min-h-0 w-full min-w-0 items-center justify-center">
+					{center}
+				</div>
 			</div>
 		</div>
 	)
@@ -168,8 +176,8 @@ const BoxModelSection = observer(function BoxModelSection({
 	const width = getDimensionField(selectedElement, "width")
 	const height = getDimensionField(selectedElement, "height")
 	const borderWidth = computedStyles?.borderWidth || "0px"
-	const usedWidth = computedStyles?.width || "auto"
-	const usedHeight = computedStyles?.height || "auto"
+	const usedWidth = formatUsedSizeLabel(computedStyles?.width)
+	const usedHeight = formatUsedSizeLabel(computedStyles?.height)
 	const dimensions = `${usedWidth} × ${usedHeight}`
 	const getSideLabel = useCallback(
 		(layer: string, side: BoxSide) =>
@@ -234,8 +242,21 @@ const BoxModelSection = observer(function BoxModelSection({
 								sideLabel={(side) => getSideLabel(paddingLabel, side)}
 								onChange={(side, value) => updateBox("padding", side, value)}
 								center={
-									<div className="min-h-8 border border-dashed border-foreground/60 bg-card px-1 py-1 text-center text-[10px] font-medium tabular-nums leading-tight text-foreground transition-[background-color,border-color,box-shadow] duration-150 hover:border-primary/70 hover:bg-primary/5">
-										{dimensions || t("stylePanel.boxModelContent")}
+									<div
+										className="flex min-h-8 w-full min-w-0 items-center justify-center border border-dashed border-border bg-background px-1 py-1 text-center text-[11px] tabular-nums leading-tight text-foreground"
+										data-testid="html-style-panel-box-model-content"
+									>
+										<span className="flex min-w-0 flex-wrap items-center justify-center gap-x-1">
+											{dimensions ? (
+												<>
+													<span>{usedWidth}</span>
+													<span>×</span>
+													<span>{usedHeight}</span>
+												</>
+											) : (
+												t("stylePanel.boxModelContent")
+											)}
+										</span>
 									</div>
 								}
 							/>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+	formatUsedSizeLabel,
 	getDeclaredDimension,
 	getDimensionField,
 	shouldKeepAuthoredDimension,
@@ -53,5 +54,19 @@ describe("shouldKeepAuthoredDimension", () => {
 
 	it("replaces a percent when the incoming px was written inline", () => {
 		expect(shouldKeepAuthoredDimension("%", "400px", true)).toBe(false)
+	})
+})
+
+describe("formatUsedSizeLabel", () => {
+	it("rounds computed pixels to a whole px label", () => {
+		expect(formatUsedSizeLabel("28.7969px")).toBe("29px")
+	})
+
+	it("keeps non-pixel units as authored", () => {
+		expect(formatUsedSizeLabel("50%")).toBe("50%")
+	})
+
+	it("falls back to auto when size is missing", () => {
+		expect(formatUsedSizeLabel(undefined)).toBe("auto")
 	})
 })
