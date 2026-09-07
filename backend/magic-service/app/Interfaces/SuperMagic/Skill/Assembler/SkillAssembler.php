@@ -56,6 +56,7 @@ class SkillAssembler
         return new SkillListItemDTO(
             id: $entity->getCode(),
             code: $entity->getCode(),
+            projectId: $entity->getProjectId() === null ? null : (string) $entity->getProjectId(),
             name: $entity->getI18nName($language),
             description: $entity->getI18nDescription($language),
             source: $entity->getI18nSource($language),
@@ -94,6 +95,7 @@ class SkillAssembler
         return new SkillListItemDTO(
             id: $entity->getCode(),
             code: $entity->getCode(),
+            projectId: $entity->getProjectId() === null ? null : (string) $entity->getProjectId(),
             name: $entity->getI18nName($language),
             description: $entity->getI18nDescription($language),
             source: $entity->getI18nSource($language),

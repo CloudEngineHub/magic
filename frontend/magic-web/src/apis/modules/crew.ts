@@ -222,6 +222,7 @@ export interface CrewAgentCreatorInfo {
 /** Single user agent item */
 export interface AgentItem {
 	id: string
+	project_id?: string | null
 	/** Crew unique code (magic_super_magic_agents.code) */
 	code: string
 	user_role?: CollaboratorPermission

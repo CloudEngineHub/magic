@@ -78,6 +78,7 @@ export interface StoreSkillView {
 export interface UserSkillView {
 	id: string
 	userSkillId: string
+	projectId?: string | null
 	userRole?: CollaboratorPermission
 	skillCode: string
 	packageName?: string
@@ -293,6 +294,7 @@ export class SkillsService {
 		return {
 			id: String(item.id),
 			userSkillId: item.id,
+			projectId: item.project_id,
 			userRole: item.user_role,
 			skillCode: item.code,
 			packageName: item.package_name?.trim() || undefined,

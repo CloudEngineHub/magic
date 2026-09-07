@@ -5226,6 +5226,8 @@
 		"mentionEmptyProject": "当前项目暂无文件",
 		"mentionOtherProjectFiles": "选择其它项目/文件",
 		"mentionProjectLimit": "最多只能选择 10 个不同项目中的项目或文件",
+		"myAgents": "我的数字员工",
+		"mySkills": "我的技能",
 		"myWorkspaces": "我的工作区",
 		"newProject": "新建项目",
 		"newSubfolder": "新建文件夹",

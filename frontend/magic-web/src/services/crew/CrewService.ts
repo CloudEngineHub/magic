@@ -76,6 +76,7 @@ export interface StoreAgentView {
 export interface MyCrewView {
 	id: string
 	agentCode: string
+	projectId?: string | null
 	userRole?: CollaboratorPermission
 	name: string
 	role: string
@@ -466,6 +467,7 @@ export class CrewService {
 		return {
 			id: String(item.id),
 			agentCode: item.code,
+			projectId: item.project_id,
 			userRole: item.user_role,
 			name: this.mapI18nText(item.name_i18n),
 			role: this.mapI18nArrayText(item.role_i18n),

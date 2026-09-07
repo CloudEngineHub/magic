@@ -5224,6 +5224,8 @@
 		"mentionEmptyProject": "This project has no files",
 		"mentionOtherProjectFiles": "Select Other Project/File",
 		"mentionProjectLimit": "You can select projects or files from up to 10 different projects",
+		"myAgents": "My Digital Employees",
+		"mySkills": "My Skills",
 		"myWorkspaces": "My Workspaces",
 		"newProject": "New Project",
 		"newSubfolder": "New Folder",
