@@ -76,6 +76,7 @@ final class DesignGeneratedImageFileNameTool
                     businessParams: [
                         'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
                         'user_id' => $dataIsolation->getCurrentUserId(),
+                        'business_id' => (string) $entity->getProjectId(),
                         'source_id' => 'design_image_file_name_generation',
                     ]
                 );

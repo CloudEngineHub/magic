@@ -35,7 +35,9 @@ class DesignTextImageGenerationTaskHandlerTest extends TestCase
             ->with($this->callback(static function (TextGenerateImageDTO $dto): bool {
                 return $dto->getModel() === 'gpt-image-2'
                     && $dto->getPrompt() === 'make posters'
-                    && $dto->getN() === 3;
+                    && $dto->getN() === 3
+                    && $dto->getBusinessParam('source_id') === 'design_image_generation'
+                    && $dto->getBusinessParam('business_id') === '101';
             }))
             ->willReturn(new OpenAIFormatResponse([
                 'data' => [
@@ -46,6 +48,7 @@ class DesignTextImageGenerationTaskHandlerTest extends TestCase
             ]));
 
         $entity = new ImageGenerationEntity();
+        $entity->setProjectId(101);
         $entity->setModelId('gpt-image-2');
         $entity->setPrompt('make posters');
         $entity->setGenerateNum(3);

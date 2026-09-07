@@ -49,7 +49,9 @@ class DesignUpscaleImageTaskHandlerTest extends BaseTest
             ->method('imageConvertHighV2')
             ->with($this->callback(static function (ImageConvertHighDTO $dto): bool {
                 return $dto->getImages() === ['https://example.test/source.png']
-                    && $dto->getSize() === '4096x4096';
+                    && $dto->getSize() === '4096x4096'
+                    && $dto->getBusinessParam('source_id') === 'design_image_generation'
+                    && $dto->getBusinessParam('business_id') === '101';
             }))
             ->willReturn(new OpenAIFormatResponse([
                 'data' => [
@@ -58,6 +60,7 @@ class DesignUpscaleImageTaskHandlerTest extends BaseTest
             ]));
 
         $entity = new ImageGenerationEntity();
+        $entity->setProjectId(101);
         $entity->setReferenceImages([$sourcePath]);
         $entity->setSize('4096x4096');
 

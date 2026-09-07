@@ -39,8 +39,8 @@ class AfterEmbeddingSubscriber implements ListenerInterface
             );
         }
 
-        $modelVersion = $embeddingRequest->getModel();
         $businessParams = $embeddingRequest->getBusinessParams();
+        $modelVersion = (string) ($businessParams['model_version'] ?? $embeddingRequest->getModel());
         $modelId = empty($businessParams['model_id']) ? $modelVersion : $businessParams['model_id'];
         $organizationCode = (string) ($businessParams['organization_id'] ?? '');
         if ($organizationCode === '') {

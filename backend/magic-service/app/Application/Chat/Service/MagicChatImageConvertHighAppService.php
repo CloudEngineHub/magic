@@ -82,6 +82,10 @@ class MagicChatImageConvertHighAppService extends AbstractAIImageAppService
         }
         $referText = $this->getReferTextByContentForAIImage($referContent);
         $reqDTO->setReferText($referText);
+        if ($reqDTO->getToolCode() === '') {
+            $reqDTO->setToolCode($reqDTO->getSourceId());
+        }
+        $reqDTO->setSourceId('super_magic');
         $dataIsolation = $this->createDataIsolation($requestContext->getUserAuthorization());
         $requestContext->setDataIsolation($dataIsolation);
         $reqDTO->setAppMessageId((string) $this->idGenerator->generate());

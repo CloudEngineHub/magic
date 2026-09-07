@@ -44,14 +44,15 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
     }
 
     /**
-     * @return array{organization_code: string, user_id: int|string, source_id: string}
+     * @return array{organization_code: string, user_id: int|string, source_id: string, business_id: string}
      */
-    protected function designImageGenerationBusinessParams(DesignDataIsolation $dataIsolation): array
+    protected function designImageGenerationBusinessParams(DesignDataIsolation $dataIsolation, int $projectId): array
     {
         return [
             'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
             'user_id' => $dataIsolation->getCurrentUserId(),
             'source_id' => 'design_image_generation',
+            'business_id' => (string) $projectId,
         ];
     }
 

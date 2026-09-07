@@ -78,7 +78,9 @@ class ImageGenerateNodeRunner extends NodeRunner
         $magicUserAuthorization->setOrganizationCode($flowDataIsolation->getCurrentOrganizationCode());
         $magicUserAuthorization->setId($flowDataIsolation->getCurrentUserId());
         $data['source_type'] = ImageGenerateSourceEnum::FLOW_NODE;
-        $data['source_id'] = $executionData->getAgentId() ?? $executionData->getFlowCode();
+        $data['source_id'] = $executionData->getOperator()->getSourceId() ?: 'sk_flow';
+        $data['business_id'] = $executionData->getAgentId();
+        $data['flow_code'] = $executionData->getFlowCode();
         $images = $this->llmAppService->imageGenerate($magicUserAuthorization, $model, '', $data);
         // 流程只取一个
         $image = $images[0];

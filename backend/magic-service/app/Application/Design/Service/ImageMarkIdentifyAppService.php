@@ -132,6 +132,7 @@ class ImageMarkIdentifyAppService extends DesignAppService
                 businessParams: [
                     'organization_id' => $dataIsolation->getCurrentOrganizationCode(),
                     'user_id' => $dataIsolation->getCurrentUserId(),
+                    'business_id' => (string) $projectId,
                     'source_id' => 'design_image_mark_identify',
                 ]
             );

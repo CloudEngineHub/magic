@@ -91,6 +91,8 @@ class CheckLongTermMemoryEventSubscriber implements ListenerInterface
                 'modelName' => $modelName,
                 'conversationContent' => $conversationContent,
                 'appId' => AppCodeEnum::SUPER_MAGIC->value,
+                'sourceId' => 'super_magic',
+                'businessId' => $event->getChatTopicId() ?: $event->getConversationId(),
             ]);
             // 调用 magic-service 的长期记忆评估服务
             $this->getLongTermMemoryApp()->evaluateAndCreateMemory($dto, $authorization);
