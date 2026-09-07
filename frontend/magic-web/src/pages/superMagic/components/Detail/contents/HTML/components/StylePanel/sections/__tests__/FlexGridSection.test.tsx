@@ -1,7 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import type { ChangeEvent, InputHTMLAttributes } from "react"
+import type { ChangeEvent, InputHTMLAttributes, ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { StylePanelStoreProvider } from "../../../../iframe-bridge/contexts/StylePanelContext"
 import FlexGridSection from "../FlexGridSection"
+
+function renderWithStore(ui: ReactNode) {
+	return render(<StylePanelStoreProvider>{ui}</StylePanelStoreProvider>)
+}
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -51,7 +56,7 @@ describe("FlexGridSection", () => {
 	})
 
 	it("shows axis gaps with a linked state instead of the generic gap field", () => {
-		render(
+		renderWithStore(
 			<FlexGridSection
 				selectedElement={createSelectedElement()}
 				editorRef={{ current: null }}
@@ -66,7 +71,7 @@ describe("FlexGridSection", () => {
 
 	it("updates both axis gaps while linked", () => {
 		const onStyleChange = vi.fn()
-		render(
+		renderWithStore(
 			<FlexGridSection
 				selectedElement={createSelectedElement()}
 				editorRef={{ current: null }}
@@ -87,7 +92,7 @@ describe("FlexGridSection", () => {
 
 	it("updates only the edited axis after unlinking", () => {
 		const onStyleChange = vi.fn()
-		render(
+		renderWithStore(
 			<FlexGridSection
 				selectedElement={createSelectedElement()}
 				editorRef={{ current: null }}

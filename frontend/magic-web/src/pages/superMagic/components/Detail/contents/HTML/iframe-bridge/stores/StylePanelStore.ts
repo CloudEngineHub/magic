@@ -1,4 +1,5 @@
 import { makeAutoObservable } from "mobx"
+import { parseUsedPixelValue } from "../../components/StylePanel/utils/dimensionValue"
 
 /**
  * 文本选择信息（选中部分文字）
@@ -165,6 +166,9 @@ export class StylePanelStore {
 	/** Last More Styles tab per element in this edit session */
 	moreStylesTabBySelector = new Map<string, string>()
 
+	/** Shared flex/grid gap lock for More Styles and canvas handles */
+	gapAxesLinked = true
+
 	/** 历史状态 */
 	historyState: HistoryStateInfo = {
 		canUndo: false,
@@ -185,6 +189,7 @@ export class StylePanelStore {
 		// Keep text selection when re-selecting the same element (e.g., after style refresh)
 		if (this.selectedElement?.selector !== element.selector) {
 			this.textSelection = null
+			this.syncGapAxesLinked(element)
 		}
 
 		this.selectedElement = element
@@ -198,6 +203,7 @@ export class StylePanelStore {
 		this.selectedElements = elements
 		this.selectedElement = null // Clear single selection when multi-selecting
 		this.textSelection = null // Clear text selection in multi-select mode
+		this.gapAxesLinked = false
 	}
 
 	/**
@@ -274,6 +280,11 @@ export class StylePanelStore {
 		}
 	}
 
+	updateComputedStyles(styles: Partial<SelectedElementInfo["computedStyles"]>) {
+		if (!this.selectedElement) return
+		Object.assign(this.selectedElement.computedStyles, styles)
+	}
+
 	/**
 	 * 切换面板展开状态
 	 */
@@ -311,6 +322,18 @@ export class StylePanelStore {
 		this.historyState = state
 	}
 
+	setGapAxesLinked(linked: boolean) {
+		this.gapAxesLinked = linked
+	}
+
+	private syncGapAxesLinked(element: SelectedElementInfo) {
+		const row = parseUsedPixelValue(element.computedStyles.rowGap ?? element.computedStyles.gap)
+		const column = parseUsedPixelValue(
+			element.computedStyles.columnGap ?? element.computedStyles.gap,
+		)
+		this.gapAxesLinked = row !== null && column !== null && row === column
+	}
+
 	/**
 	 * 重置 Store
 	 */
@@ -322,6 +345,7 @@ export class StylePanelStore {
 		this.isPanelExpanded = true
 		this.activeSection = null
 		this.moreStylesTabBySelector.clear()
+		this.gapAxesLinked = true
 		this.historyState = {
 			canUndo: false,
 			canRedo: false,

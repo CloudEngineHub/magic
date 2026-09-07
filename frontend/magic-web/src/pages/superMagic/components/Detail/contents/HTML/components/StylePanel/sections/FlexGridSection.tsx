@@ -1,5 +1,6 @@
 import { observer } from "mobx-react-lite"
-import { createElement, useCallback, useEffect, useRef, useState } from "react"
+import { createElement, useCallback, useEffect, useState } from "react"
+import { useStylePanelStore } from "../../../iframe-bridge/contexts/StylePanelContext"
 import { useTranslation } from "react-i18next"
 import {
 	AlignHorizontalDistributeCenter,
@@ -365,6 +366,8 @@ const FlexGridSection = observer(function FlexGridSection({
 	onStyleChange,
 }: StyleSectionProps) {
 	const { t } = useTranslation("super")
+	const stylePanelStore = useStylePanelStore()
+	const isGapLinked = stylePanelStore.gapAxesLinked
 	const styles = selectedElement?.computedStyles
 	const display = styles?.display || "block"
 	const parentDisplay = styles?.parentDisplay
@@ -378,10 +381,8 @@ const FlexGridSection = observer(function FlexGridSection({
 	const initialColumnGap = getGapAxisValue(styles?.columnGap ?? styles?.gap, 1)
 	const [rowGap, setRowGap] = useState(initialRowGap)
 	const [columnGap, setColumnGap] = useState(initialColumnGap)
-	const [isGapLinked, setIsGapLinked] = useState(initialRowGap === initialColumnGap)
 	const [columns, setColumns] = useState(styles?.gridTemplateColumns || "none")
 	const [rows, setRows] = useState(styles?.gridTemplateRows || "none")
-	const previousSelectorRef = useRef(selectedElement?.selector)
 
 	useEffect(() => {
 		const nextRowGap = getGapAxisValue(styles?.rowGap ?? styles?.gap, 0)
@@ -390,10 +391,6 @@ const FlexGridSection = observer(function FlexGridSection({
 		setColumnGap(nextColumnGap)
 		setColumns(styles?.gridTemplateColumns || "none")
 		setRows(styles?.gridTemplateRows || "none")
-		if (previousSelectorRef.current !== selectedElement?.selector) {
-			setIsGapLinked(nextRowGap === nextColumnGap)
-			previousSelectorRef.current = selectedElement?.selector
-		}
 	}, [
 		selectedElement?.selector,
 		styles?.columnGap,
@@ -618,7 +615,7 @@ const FlexGridSection = observer(function FlexGridSection({
 								isGapLinked ? t("stylePanel.unlinkGaps") : t("stylePanel.linkGaps")
 							}
 							aria-pressed={isGapLinked}
-							onClick={() => setIsGapLinked((linked) => !linked)}
+							onClick={() => stylePanelStore.setGapAxesLinked(!isGapLinked)}
 							className={cn(
 								"mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,transform] duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96]",
 								isGapLinked && "bg-muted text-foreground",
