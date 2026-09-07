@@ -466,16 +466,6 @@ return [
         ],
     ],
 
-    'model_templates' => [
-        [
-            'provider_code' => ProviderCode::Gemini->value,
-            'category' => Category::VGM->value,
-            'template_codes' => [
-                BillingType::GeminiOmniVideoTokensPricing->value,
-            ],
-        ],
-    ],
-
     'provider_templates' => [
         // 生图模型服务商模板
         [
@@ -544,14 +534,6 @@ return [
             ],
         ],
         [
-            'provider_code' => ProviderCode::Gemini->value,
-            'category' => Category::VGM->value,
-            'template_codes' => [
-                BillingType::VideoResolutionTokens->value,
-                BillingType::VideoResolutionReferenceVideoTokens->value,
-            ],
-        ],
-        [
             'provider_code' => ProviderCode::Keling->value,
             'category' => Category::VGM->value,
             'template_codes' => [
@@ -563,6 +545,13 @@ return [
             'category' => Category::VGM->value,
             'template_codes' => [
                 BillingType::VolcengineArkVideoResolutionReferenceVideoTokenMatrix->value,
+            ],
+        ],
+        [
+            'provider_code' => ProviderCode::Gemini->value,
+            'category' => Category::VGM->value,
+            'template_codes' => [
+                BillingType::GeminiOmniVideoTokensPricing->value,
             ],
         ],
     ],

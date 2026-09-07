@@ -113,6 +113,10 @@ class ProviderModelPricingTemplateAppServiceTest extends TestCase
             BillingObject::videoToken('default')->value,
             BillingObject::videoTokenCost('default')->value,
         ], $billingObjects);
+        self::assertSame(
+            [BillingType::GeminiOmniVideoTokensPricing->value],
+            array_column($service->queries(Category::VGM, ProviderCode::Gemini), 'code')
+        );
     }
 
     public function testQueriesFallsBackToCategoryDefaultsWhenProviderTemplateMissing(): void
