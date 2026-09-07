@@ -16,6 +16,7 @@ function ControlledNumericInput({
 	max?: number
 	precision?: number
 	dragSensitivity?: number
+	formatDisplayValue?: (value: string | number) => string
 	onPointerDown?: React.PointerEventHandler<HTMLInputElement>
 }) {
 	const [value, setValue] = useState(initialValue)
@@ -49,6 +50,24 @@ function firePointerEvent(
 }
 
 describe("NumericDragInput", () => {
+	it("formats the display value outside editing", () => {
+		render(
+			<ControlledNumericInput
+				initialValue="normal"
+				formatDisplayValue={(value) => (value === "normal" ? "Default" : String(value))}
+			/>,
+		)
+		const input = screen.getByRole("textbox", { name: "numeric value" })
+
+		expect(input).toHaveValue("Default")
+		fireEvent.focus(input)
+		expect(input).toHaveValue("normal")
+		fireEvent.change(input, { target: { value: "1.5" } })
+		expect(input).toHaveValue("1.5")
+		fireEvent.blur(input)
+		expect(input).toHaveValue("1.5")
+	})
+
 	it("adjusts the value by vertical drag", () => {
 		const onPointerDown = vi.fn()
 		const onCommit = vi.fn()

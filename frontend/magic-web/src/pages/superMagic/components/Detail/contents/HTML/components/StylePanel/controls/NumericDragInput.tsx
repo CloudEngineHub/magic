@@ -14,6 +14,7 @@ interface NumericDragInputProps extends Omit<
 	max?: number
 	precision?: number
 	dragSensitivity?: number
+	formatDisplayValue?: (value: string | number) => string
 }
 
 function clamp(value: number, min?: number, max?: number): number {
@@ -42,7 +43,10 @@ export function NumericDragInput({
 	max,
 	precision,
 	dragSensitivity = 4,
+	formatDisplayValue,
 	className,
+	onFocus,
+	onBlur,
 	onPointerDown,
 	onPointerMove,
 	onPointerUp,
@@ -58,6 +62,8 @@ export function NumericDragInput({
 		pendingValue: string | null
 	} | null>(null)
 	const [isDragging, setIsDragging] = useState(false)
+	const [isFocused, setIsFocused] = useState(false)
+	const inputValue = !isFocused && formatDisplayValue ? formatDisplayValue(value) : value
 
 	const getNumber = useCallback(() => {
 		const parsed = typeof value === "number" ? value : Number.parseFloat(value)
@@ -133,7 +139,7 @@ export function NumericDragInput({
 	return (
 		<Input
 			type="text"
-			value={value}
+			value={inputValue}
 			inputMode="decimal"
 			{...props}
 			className={cn(
@@ -161,6 +167,14 @@ export function NumericDragInput({
 			onPointerMove={onPointerMove}
 			onPointerUp={onPointerUp}
 			onWheel={onWheel}
+			onFocus={(event) => {
+				setIsFocused(true)
+				onFocus?.(event)
+			}}
+			onBlur={(event) => {
+				setIsFocused(false)
+				onBlur?.(event)
+			}}
 			onKeyDown={(event) => {
 				if (event.key === "ArrowUp" || event.key === "ArrowDown") {
 					event.preventDefault()

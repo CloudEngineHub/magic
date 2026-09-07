@@ -50,6 +50,11 @@ export function LineHeightSelector({
 		() => getEquivalentLineHeight(value, fontSize),
 		[fontSize, value],
 	)
+	const formatDisplayValue = useCallback(
+		(nextValue: string | number) =>
+			nextValue === "normal" ? t("stylePanel.lineHeightNormal") : String(nextValue),
+		[t],
+	)
 
 	const handleApply = useCallback(() => {
 		const normalizedValue = value.trim()
@@ -125,6 +130,7 @@ export function LineHeightSelector({
 				<NumericDragInput
 					data-testid="html-editor-line-height-input"
 					value={value}
+					formatDisplayValue={formatDisplayValue}
 					onChange={handleNumericChange}
 					onCommit={handleNumericCommit}
 					onBlur={handleApply}
@@ -154,7 +160,7 @@ export function LineHeightSelector({
 									data-testid="html-editor-line-height-item"
 									data-line-height={option}
 								>
-									{option}
+									{formatDisplayValue(option)}
 								</SelectItem>
 							))}
 						{equivalentLineHeight ? (

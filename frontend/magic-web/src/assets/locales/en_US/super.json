@@ -6246,6 +6246,7 @@
 		},
 		"lineHeight": "Line Height",
 		"lineHeightHint": "Use a number (such as 1.5), a length (such as 24px), or normal",
+		"lineHeightNormal": "Normal",
 		"lineHeightPlaceholder": "normal, 1.5, 24px",
 		"lineHeightSwitchUnit": "Switch unit",
 		"linearGradient": "Linear Gradient",

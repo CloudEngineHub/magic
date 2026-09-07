@@ -6248,6 +6248,7 @@
 		},
 		"lineHeight": "行高",
 		"lineHeightHint": "可以是数字（如 1.5）、长度值（如 24px）或 normal",
+		"lineHeightNormal": "默认",
 		"lineHeightPlaceholder": "normal、1.5、24px",
 		"lineHeightSwitchUnit": "切换单位",
 		"linearGradient": "线性渐变",

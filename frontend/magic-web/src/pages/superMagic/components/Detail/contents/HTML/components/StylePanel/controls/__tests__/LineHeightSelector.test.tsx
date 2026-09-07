@@ -60,6 +60,26 @@ function firePointerEvent(
 }
 
 describe("LineHeightSelector", () => {
+	it("localizes normal while preserving the CSS value", () => {
+		const onChange = vi.fn()
+		const onApply = vi.fn()
+		render(<LineHeightSelector value="normal" onChange={onChange} onApply={onApply} />)
+
+		const input = screen.getByTestId("html-editor-line-height-input")
+		expect(input).toHaveValue("stylePanel.lineHeightNormal")
+		fireEvent.focus(input)
+		expect(input).toHaveValue("normal")
+		fireEvent.blur(input)
+		expect(input).toHaveValue("stylePanel.lineHeightNormal")
+
+		onChange.mockClear()
+		onApply.mockClear()
+		fireEvent.click(screen.getByRole("button", { name: "stylePanel.lineHeightNormal" }))
+
+		expect(onChange).toHaveBeenCalledWith("normal")
+		expect(onApply).toHaveBeenCalledWith("normal")
+	})
+
 	it("commits values with units and restores the last value for empty input", () => {
 		const onChange = vi.fn()
 		const onApply = vi.fn()
