@@ -2727,9 +2727,10 @@ export class PPTStore {
 	 * Restore cached activeIndex from storage
 	 * 从存储中恢复缓存的 activeIndex
 	 */
-	async restoreCachedActiveIndex(): Promise<void> {
+	async restoreCachedActiveIndex(options: { shouldApply?: () => boolean } = {}): Promise<void> {
 		try {
 			const cachedIndex = await this.cacheManager.restoreActiveIndex()
+			if (options.shouldApply && !options.shouldApply()) return
 			if (cachedIndex !== null && cachedIndex >= 0 && cachedIndex < this.slides.length) {
 				this.logger.debug("Restoring cached activeIndex", {
 					operation: "restoreCachedActiveIndex",

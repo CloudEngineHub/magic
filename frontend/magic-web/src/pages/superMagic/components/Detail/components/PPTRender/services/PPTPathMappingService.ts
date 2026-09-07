@@ -373,7 +373,17 @@ export class PPTPathMappingService {
 
 	getRelativeFilePathByFileId(fileId?: string): string | undefined {
 		if (!fileId) return undefined
-		const fileItem = this.getAttachmentByFileIdInPPTFolder(fileId)
+		const pptFolderIndex = this.getPPTFolderIndex()
+		const fileItem = pptFolderIndex.byFileId.get(fileId)
+		const mappedPath = Array.from(this.pathToFileIdMapping.entries()).find(
+			([, mappedFileId]) => mappedFileId === fileId,
+		)?.[0]
+		if (mappedPath && pptFolderIndex.baseFolderPath !== undefined) {
+			const slideDirectory = mappedPath.replace(/[^/]*$/, "")
+			return this.normalizeDirectoryPath(
+				this.joinRelativePath(pptFolderIndex.baseFolderPath, slideDirectory),
+			)
+		}
 		if (!fileItem?.relative_file_path || !fileItem?.file_name) return undefined
 		return fileItem.relative_file_path.replace(fileItem.file_name, "")
 	}

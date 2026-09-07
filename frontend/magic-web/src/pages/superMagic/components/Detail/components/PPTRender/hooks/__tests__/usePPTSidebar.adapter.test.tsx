@@ -234,4 +234,67 @@ describe("usePPTSidebar structure adapter", () => {
 		expect(store.setActiveIndex).toHaveBeenCalledWith(1)
 		expect(store.ensureSlideScreenshot).toHaveBeenCalledWith(1)
 	})
+
+	it("duplicates a regular PPT slide through magic.project.js", async () => {
+		mocks.findMagicProjectJsFile.mockResolvedValue({ fileId: "magic-project" })
+		mocks.duplicateSlide.mockResolvedValue({
+			newFilePath: "slides/contents (1).html",
+			newFileId: "slide-copy",
+			content: "<html>copied</html>",
+			newFile: {
+				file_id: "slide-copy",
+				file_name: "contents (1).html",
+				relative_file_path: "slides/contents (1).html",
+			},
+		})
+		mocks.getTemporaryDownloadUrl.mockResolvedValue([
+			{ file_id: "slide-copy", url: "https://example.com/slide-copy.html" },
+		])
+		const store = {
+			slides: [{ id: "one", path: "slides/contents.html", index: 0 }],
+			slidePaths: ["slides/contents.html"],
+			syncManager: { registerSyncFunction: vi.fn() },
+			markSkipNextExternalSync: vi.fn(),
+			setSlides: vi.fn(),
+			setActiveIndex: vi.fn(),
+			getFileIdByPath: vi.fn(() => "source-file"),
+			pathMappingService: {
+				setPathFileIdMapping: vi.fn(),
+				setPathUrlMapping: vi.fn(),
+			},
+			loadSlideContentByFileId: vi.fn().mockResolvedValue(""),
+			ensureSlideScreenshot: vi.fn().mockResolvedValue(undefined),
+		}
+
+		const { result } = renderHook(() =>
+			usePPTSidebar({
+				slides: store.slides as never,
+				activeIndex: 0,
+				isTransitioning: false,
+				allowEdit: true,
+				setActiveIndex: store.setActiveIndex,
+				setIsTransitioning: vi.fn(),
+				store: store as never,
+				projectId: "project-1",
+				mainFileId: "main-file",
+				mainFileName: "deck",
+			}),
+		)
+
+		await act(async () => {
+			await result.current.handleDuplicateSlide(0)
+		})
+
+		expect(mocks.duplicateSlide).toHaveBeenCalledWith(
+			expect.objectContaining({
+				projectId: "project-1",
+				magicProjectFileId: "magic-project",
+				sourceFileId: "source-file",
+				slidePath: "slides/contents.html",
+				position: 0,
+			}),
+		)
+		expect(store.setActiveIndex).toHaveBeenCalledWith(1)
+		expect(store.ensureSlideScreenshot).toHaveBeenCalledWith(1)
+	})
 })

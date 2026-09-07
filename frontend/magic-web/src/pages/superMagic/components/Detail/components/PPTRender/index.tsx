@@ -268,7 +268,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	})
 
 	// 幻灯片初始化与增量同步
-	useSlideSync({ store, slidePaths, initialActiveIndex })
+	useSlideSync({
+		store,
+		slidePaths,
+		deckKey: mainFileId || mainFileName,
+		initialActiveIndex,
+	})
 
 	// 当激活索引或文件 ID 变化时通知父组件
 	useSyncActiveState({ store, onActiveIndexChange, isTabActive })
