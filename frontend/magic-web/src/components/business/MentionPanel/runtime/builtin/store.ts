@@ -24,6 +24,7 @@ import {
 	type ActiveCanvasElementsContext,
 } from "./domains/canvas-elements"
 import { MentionPanelAgentsStore } from "./domains/agents"
+import { MentionPanelDigitalEmployeesStore } from "./domains/digital-employees"
 import { MentionPanelHistoryStore } from "./domains/history"
 import { MentionPanelMcpStore } from "./domains/mcp"
 import { MentionPanelSkillsStore } from "./domains/skills"
@@ -47,6 +48,7 @@ export class MentionPanelStore {
 	private readonly projectFilesStore: ProjectFilesStore
 	private readonly mcpStore: MentionPanelMcpStore
 	private readonly agentsStore: MentionPanelAgentsStore
+	private readonly digitalEmployeesStore: MentionPanelDigitalEmployeesStore
 	private readonly skillsStore: MentionPanelSkillsStore
 	private readonly toolsStore: MentionPanelToolsStore
 	private readonly uploadFilesStore: MentionPanelUploadFilesStore
@@ -59,6 +61,7 @@ export class MentionPanelStore {
 		this.projectFilesStore = projectFilesStore
 		this.mcpStore = new MentionPanelMcpStore()
 		this.agentsStore = new MentionPanelAgentsStore()
+		this.digitalEmployeesStore = new MentionPanelDigitalEmployeesStore()
 		this.skillsStore = new MentionPanelSkillsStore()
 		this.toolsStore = new MentionPanelToolsStore()
 		this.uploadFilesStore = new MentionPanelUploadFilesStore()
@@ -142,6 +145,9 @@ export class MentionPanelStore {
 	}
 
 	setSkillQueryContext(topicMode?: string, agentCode?: string) {
+		// On the home page custom employees are represented directly by their
+		// identifier in `topicMode`; inside a topic the code is carried separately.
+		this.digitalEmployeesStore.setCurrentAgentCode(agentCode ?? topicMode)
 		this.skillsStore.setQueryContext({
 			topicMode,
 			agentCode,
@@ -150,6 +156,7 @@ export class MentionPanelStore {
 
 	preLoadList() {
 		return Promise.all([
+			this.digitalEmployeesStore.fetchItems({ force: true }).catch(() => []),
 			this.skillsStore.fetchItems().catch(() => {
 				if (this.skillsStore.items.length === 0) this.skillsStore.items = []
 			}),
@@ -261,6 +268,7 @@ export class MentionPanelStore {
 			currentSelectedProject: this.currentSelectedProject,
 			matchesQuery: this.matchesQuery,
 			agentsStore: this.agentsStore,
+			digitalEmployeesStore: this.digitalEmployeesStore,
 			historyStore: this.historyStore,
 			mcpStore: this.mcpStore,
 			skillsStore: this.skillsStore,
