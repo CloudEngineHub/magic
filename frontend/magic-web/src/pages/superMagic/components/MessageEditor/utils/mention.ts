@@ -76,15 +76,17 @@ export function transformUploadFileToProjectFile(
 	uploadFileData: UploadFileMentionData,
 	saveResult: FileData["saveResult"],
 ): ProjectFileMentionData {
+	// 保存接口未返回路径时沿用该次上传已确定的工作区路径，不使用对象存储 key 猜测。
+	const relativePath = saveResult?.relative_file_path || uploadFileData.relative_file_path || ""
 	return {
 		file_id: saveResult?.file_id || "",
-		file_name: saveResult?.file_name || "",
-		file_path: saveResult?.relative_file_path || "",
-		relative_file_path: saveResult?.relative_file_path || "",
+		file_name: saveResult?.file_name || uploadFileData.file_name,
+		file_path: relativePath,
+		relative_file_path: relativePath,
 		file_extension: uploadFileData.file_extension,
 		project_id: saveResult?.project_id,
 		file_size: saveResult?.file_size,
-		is_hidden: saveResult?.is_hidden,
+		is_hidden: saveResult?.is_hidden ?? uploadFileData.is_hidden,
 	}
 }
 
@@ -425,6 +427,26 @@ export function markProjectReferenceMentionForCopy(
 }
 
 export const markProjectFileMentionForCopy = markProjectReferenceMentionForCopy
+
+/** 粘贴与历史消息拖入共用来源处理；只准备引用，不在插入时复制文件内容。 */
+export function prepareCopiedMentionAttrs(
+	attrs: TiptapMentionAttributes,
+	sourceProjectId?: string,
+	dataService?: DataService | null,
+): TiptapMentionAttributes | null {
+	const resolvedSourceProjectId =
+		attrs.type === MentionItemType.PROJECT_FILE && sourceProjectId
+			? (attrs.data as ProjectFileMentionData).source_project_id ||
+				(attrs.data as ProjectFileMentionData).project_id ||
+				sourceProjectId
+			: sourceProjectId
+	const pendingProjectFileMention = markProjectFileMentionForCopy(attrs, resolvedSourceProjectId)
+	if (pendingProjectFileMention) return pendingProjectFileMention
+
+	if (isAllowedMention(attrs, dataService)) return attrs
+
+	return null
+}
 
 export interface CopiedProjectReferenceMentionData {
 	sourceId: string

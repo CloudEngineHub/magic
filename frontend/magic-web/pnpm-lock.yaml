@@ -124,8 +124,8 @@ importers:
         specifier: ^0.0.2
         version: 0.0.2(dayjs@1.11.18)
       '@dtyq/upload-sdk':
-        specifier: ~0.0.11
-        version: 0.0.11(lodash-es@4.17.21)
+        specifier: ~0.0.12
+        version: 0.0.12(lodash-es@4.17.21)
       '@dtyq/user-selector':
         specifier: ^0.1.15
         version: 0.1.15(82b21e21b05aa9f9f6c0df7a84a76118)
@@ -1224,8 +1224,8 @@ importers:
         specifier: ~0.0.10
         version: 0.0.11(@types/node@25.9.5)(eslint@8.57.1)(typescript@5.7.3)
       '@dtyq/upload-sdk':
-        specifier: ~0.0.9
-        version: 0.0.9
+        specifier: ~0.0.12
+        version: 0.0.12(lodash-es@4.17.21)
       '@semantic-release/changelog':
         specifier: ^6.0.1
         version: 6.0.3(semantic-release@19.0.3(encoding@0.1.13))
@@ -1795,6 +1795,10 @@ packages:
 
   '@babel/runtime@7.28.4':
     resolution: {integrity: sha512-Q/N6JNWvIvPnLDvjlE1OUBLPQHH6l3CltCEsHIujp45zQUSSh8K+gHnaEX45yAT1nyngnINhvWtzN+Nb9D8RAQ==}
+    engines: {node: '>=6.9.0'}
+
+  '@babel/runtime@7.29.7':
+    resolution: {integrity: sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw==}
     engines: {node: '>=6.9.0'}
 
   '@babel/template@7.27.2':
@@ -2484,6 +2488,12 @@ packages:
   '@dtyq/upload-sdk@0.0.9':
     resolution: {integrity: sha512-gXw3+2xSxOp9QDlejND1EV1sjxmoSSWEexSwt8qQuX4pOFpFP8e5ABwb3oaCM9rHRGEHuZLK8Z3RAE+iPcIfdQ==}
     engines: {node: '>=18.0.0'}
+
+  '@dtyq/upload-sdk@0.0.12':
+    resolution: {integrity: sha512-zwxRtg9wKJ3Z3tGX3CGCW5gqDJt0ctOvmGg4FuVJxc8GjiGAOOdBT5JDhp3aLi0aV5vvymmp3eoXkR2c0t3gLA==, tarball: https://registry.npmjs.org/@dtyq/upload-sdk/-/upload-sdk-0.0.12.tgz}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      lodash-es: ^4.17.21
 
   '@dtyq/user-selector@0.1.15':
     resolution: {integrity: sha512-dDYmrFeQTHHJVfDNGgR749XRByokha3aqffeg3wyTw+fua1jffExgct0NxmBf6BFffxH1znvO+15whGuzvG0fw==}
@@ -17547,6 +17557,8 @@ snapshots:
 
   '@babel/runtime@7.28.4': {}
 
+  '@babel/runtime@7.29.7': {}
+
   '@babel/template@7.27.2':
     dependencies:
       '@babel/code-frame': 7.27.1
@@ -18511,6 +18523,20 @@ snapshots:
     dependencies:
       '@aws-sdk/client-s3': 3.914.0
       '@babel/runtime': 7.28.4
+      buffer: 6.0.3
+      crypto-js: 3.3.0
+      esdk-obs-browserjs: 3.25.6
+      lodash-es: 4.17.21
+      mime: 3.0.0
+      process: 0.11.10
+    transitivePeerDependencies:
+      - aws-crt
+      - debug
+
+  '@dtyq/upload-sdk@0.0.12(lodash-es@4.17.21)':
+    dependencies:
+      '@aws-sdk/client-s3': 3.914.0
+      '@babel/runtime': 7.29.7
       buffer: 6.0.3
       crypto-js: 3.3.0
       esdk-obs-browserjs: 3.25.6
@@ -24237,17 +24263,6 @@ snapshots:
     transitivePeerDependencies:
       - typescript
       - ws
-
-  '@vitejs/devtools-kit@0.1.13(typescript@5.9.3)(vite@8.0.3)(ws@8.20.0)':
-    dependencies:
-      '@vitejs/devtools-rpc': 0.1.13(typescript@5.9.3)(ws@8.20.0)
-      birpc: 4.0.0
-      ohash: 2.0.11
-      vite: 8.0.3(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@22.19.18)(@vitejs/devtools@0.1.13)(esbuild@0.24.0)(jiti@2.6.1)(less@4.4.0)(sass-embedded@1.93.1)(sass@1.93.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.2)
-    transitivePeerDependencies:
-      - typescript
-      - ws
-    optional: true
 
   '@vitejs/devtools-kit@0.1.13(typescript@5.9.3)(vite@8.0.3)(ws@8.20.0)':
     dependencies:

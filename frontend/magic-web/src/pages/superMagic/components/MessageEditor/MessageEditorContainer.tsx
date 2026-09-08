@@ -1,5 +1,13 @@
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
-import { forwardRef, useEffect, useCallback, useMemo, useRef, type ClipboardEvent } from "react"
+import {
+	forwardRef,
+	useEffect,
+	useCallback,
+	useMemo,
+	useRef,
+	useState,
+	type ClipboardEvent,
+} from "react"
 import { useTranslation } from "react-i18next"
 import { useAsyncEffect, useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
@@ -49,6 +57,7 @@ import { insertMentionFromDroppedData } from "./utils/drag"
 import { runActiveEditor, useLatestActiveEditor } from "./utils/editorLifecycle"
 import useEditorPromptCarousel from "./hooks/useEditorPromptCarousel"
 import useChooseUploadDirModal from "./hooks/useChooseUploadDirModal"
+import { useMixedClipboardPaste } from "./hooks/useMixedClipboardPaste"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"
 import { resolveModelTopicMode } from "./utils/modelTopicMode"
 import type { Topic } from "../../pages/Workspace/types"
@@ -202,6 +211,7 @@ export const MessageEditorContainer = observer(
 
 			const fileUploadStore = store.fileUploadStore
 			const canvasClipboardEpochRef = useRef(0)
+			const [isPreparingPaste, setIsPreparingPaste] = useState(false)
 			const getCanvasClipboardSessionId = useMemoizedFn(
 				() =>
 					`${draftKey?.workspaceId ?? selectedWorkspace?.id ?? ""}:${selectedProject?.id ?? selectedTopic?.project_id ?? draftKey?.projectId ?? ""}:${selectedTopic?.id ?? draftKey?.topicId ?? ""}:${canvasClipboardEpochRef.current}`,
@@ -295,6 +305,7 @@ export const MessageEditorContainer = observer(
 
 			const canSendMessage = useMemo(() => {
 				if (!sendEnabled) return false
+				if (isPreparingPaste) return false
 				if (hasLoadingMarker) return false
 				if (isEditingQueueItem) {
 					return isAllFilesUploaded && !isSending && !sendButtonLoading
@@ -304,6 +315,7 @@ export const MessageEditorContainer = observer(
 				return hasContent && isAllFilesUploaded && !isSending && !sendButtonLoading
 			}, [
 				hasLoadingMarker,
+				isPreparingPaste,
 				isEditingQueueItem,
 				store.editorStore.value,
 				isAllFilesUploaded,
@@ -315,7 +327,11 @@ export const MessageEditorContainer = observer(
 
 			const sendButtonDisabled = !canSendMessage
 
-			const { addFilesWithDir, UploadModal } = useChooseUploadDirModal({
+			const {
+				addFilesWithDir,
+				UploadModal,
+				onModalClose: cancelPendingUpload,
+			} = useChooseUploadDirModal({
 				addFiles: _addFiles,
 				selectedProject,
 				attachments,
@@ -323,6 +339,15 @@ export const MessageEditorContainer = observer(
 				validateFileCount,
 			})
 			const uploadModal = uploadEnabled ? UploadModal : null
+			const pasteFilesWithText = useMixedClipboardPaste({
+				getEditor,
+				getSessionId: getCanvasClipboardSessionId,
+				getFiles: () => fileUploadStore.files,
+				addFiles: addFilesWithDir,
+				cancelPendingUpload,
+				isProjectContext,
+				onPreparingChange: setIsPreparingPaste,
+			})
 
 			const addFiles = useMemoizedFn(async (files: File[]) => {
 				if (!uploadEnabled) return
@@ -339,13 +364,13 @@ export const MessageEditorContainer = observer(
 				}
 			})
 
-			const getWorkspaceFilesList = useMemoizedFn(() => {
-				const fromList = projectFilesStore?.workspaceFilesList ?? []
-				if (fromList.length > 0) return fromList
-				const fromTree = projectFilesStore?.workspaceFileTree ?? []
-				if (fromTree.length > 0) return fromTree
-				return attachments ?? []
-			})
+			// 普通话题不一定显式注入文件 Store；Mention Store 已绑定当前作用域的文件列表。
+			const getWorkspaceFilesList = useMemoizedFn(
+				() => projectFilesStore?.workspaceFilesList ?? mentionPanelStore.workspaceFilesList,
+			)
+			const getCurrentProjectId = useMemoizedFn(
+				() => selectedTopic?.project_id ?? selectedProject?.id ?? draftKey?.projectId,
+			)
 
 			const { isDragOver, dragEvents } = useDragUpload({
 				enableFileDrop: uploadEnabled,
@@ -435,6 +460,7 @@ export const MessageEditorContainer = observer(
 				isTrustedMention: (attrs) => store.editorStore.isTrustedMention(attrs),
 				shouldRestoreRemovedMention,
 				getWorkspaceFilesList,
+				getCurrentProjectId,
 			})
 			const activeEditorRef = useLatestActiveEditor(tiptapEditor)
 			const canvasSelectionMentionScope = useMemo(
@@ -851,7 +877,11 @@ export const MessageEditorContainer = observer(
 						if (!claimCanvasClipboardPasteEvent(nativeEvent)) return
 						e.preventDefault()
 						e.stopPropagation()
-						addFiles(files)
+						if (shouldEnableMention) {
+							pasteFilesWithText(clipboardData, files)
+						} else {
+							addFiles(files)
+						}
 						return
 					}
 
@@ -873,6 +903,7 @@ export const MessageEditorContainer = observer(
 				[
 					_addFiles,
 					addFiles,
+					pasteFilesWithText,
 					collectMentionItemsFromEditor,
 					getCanvasClipboardSessionId,
 					ensureProjectContextForPastedText,

@@ -2397,6 +2397,11 @@
 	"fileUpload": {
 		"attachmentCount": "{{count}} 个附件",
 		"attachments": "附件 ({{count}})",
+		"clipboardImportFailed": "粘贴未完成，请重新复制后再试。",
+		"clipboardOrderUnavailable": "已保留文字和附件，但无法完整恢复原来的穿插位置，请检查排列顺序。",
+		"clipboardPartialImport": "部分附件未导入，请检查文字和附件。",
+		"clipboardTextUnavailable": "未能读取剪贴板中可能附带的文字，附件仍可导入。",
+		"clipboardUploadFailed": "部分附件准备失败，已保留可读取的文字。",
 		"dragUpload": {
 			"subtitle": "松开鼠标即可选择存储位置",
 			"title": "将文件或文件夹拖拽至此"

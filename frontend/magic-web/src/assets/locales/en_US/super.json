@@ -2396,6 +2396,11 @@
 	"fileUpload": {
 		"attachmentCount": "{{count}} Attachments",
 		"attachments": "Attachments ({{count}})",
+		"clipboardImportFailed": "Could not paste this content. Please copy it again and retry.",
+		"clipboardOrderUnavailable": "Text and attachments are kept, but their original positions could not be fully restored. Please check their order.",
+		"clipboardPartialImport": "Some attachments were not imported. Please check the text and attachments.",
+		"clipboardTextUnavailable": "Could not read any accompanying text from the clipboard. Attachments can still be imported.",
+		"clipboardUploadFailed": "Some attachments could not be prepared. Any readable text is kept.",
 		"dragUpload": {
 			"subtitle": "Release to select storage location",
 			"title": "Drag and drop files or folders here"

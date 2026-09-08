@@ -17,13 +17,11 @@ import {
 	createDirectoryMentionData,
 	createProjectFileMentionData,
 } from "@/components/business/MentionPanel/utils/projectReferenceMention"
-import { findAttachmentByPath } from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/helper"
-import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import {
-	extractWorkspaceMarkdownLinks,
-	parseCanonicalWorkspaceHref,
-} from "@/pages/superMagic/utils/filePathMention"
-import projectFilesStore from "@/stores/projectFiles"
+	findAttachmentByPath,
+	normalizeWorkspacePathForComparison,
+} from "@/pages/superMagic/utils/markdownFileReference"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import {
 	extractClipboardMetadata,
 	isMagicClipboard,
@@ -31,33 +29,17 @@ import {
 } from "@/utils/clipboard-helpers"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { transformInspectorContent } from "./inspector-detail"
-import { isAllowedMention, markProjectFileMentionForCopy } from "../utils/mention"
+import { prepareCopiedMentionAttrs } from "../utils/mention"
+import { collectMentionItemsFromContent } from "../services/uploadMentionService"
+import { INSPECTOR_DETAIL_TYPE } from "./inspector-detail/const"
+import {
+	pasteMarkdownFileLinks,
+	replaceWorkspaceLinksInRichText,
+	type MarkdownFilePasteOptions,
+} from "./pasteMarkdownFileLinks"
 
-export interface PasteMessageClipboardOptions {
-	onMentionsInsert?: (items: TiptapMentionAttributes[]) => void
+export interface PasteMessageClipboardOptions extends MarkdownFilePasteOptions {
 	dataService?: DataService | null
-	getWorkspaceFilesList?: () => AttachmentItem[]
-}
-
-type PastePart =
-	| { type: "text"; text: string }
-	| { type: "mention"; attrs: TiptapMentionAttributes }
-
-function collectWorkspaceAttachmentPools(preferred: AttachmentItem[]): AttachmentItem[][] {
-	const pools: AttachmentItem[][] = []
-	const pushUnique = (items: AttachmentItem[]) => {
-		if (items.length === 0) return
-		if (pools.some((pool) => pool === items)) return
-		pools.push(items)
-	}
-	pushUnique(preferred)
-	pushUnique(projectFilesStore.workspaceFilesList)
-	pushUnique(projectFilesStore.workspaceFileTree)
-	return pools.sort((left, right) => right.length - left.length)
-}
-
-function collectWorkspaceAttachments(preferred: AttachmentItem[]): AttachmentItem[] {
-	return collectWorkspaceAttachmentPools(preferred)[0] ?? preferred
 }
 
 function findAttachmentByUniqueFileName(
@@ -104,6 +86,57 @@ function createWorkspaceMention(
 	}
 }
 
+/** Canvas 元数据可能只有画布内路径；只在当前编辑器的附件中保留既有恢复规则。 */
+function findCanvasAttachmentByPath(
+	attachments: AttachmentItem[],
+	path: string,
+): AttachmentItem | undefined {
+	const normalizedSearchPath = normalizeWorkspacePathForComparison(path)
+	if (!normalizedSearchPath) return undefined
+	const suffixMatches: AttachmentItem[] = []
+	const searchBaseName = normalizedSearchPath.split("/").pop() || ""
+
+	const visit = (items: AttachmentItem[]): AttachmentItem | undefined => {
+		for (const item of items) {
+			if (item.children) {
+				const foundInChildren = visit(item.children)
+				if (foundInChildren) return foundInChildren
+			}
+			const candidates = [item.relative_file_path, item.path].filter(
+				(value): value is string => Boolean(value),
+			)
+			for (const candidate of candidates) {
+				const normalizedItemPath = normalizeWorkspacePathForComparison(candidate)
+				if (!normalizedItemPath) continue
+				if (normalizedItemPath === normalizedSearchPath) return item
+				if (normalizedItemPath.endsWith(`/${normalizedSearchPath}`)) {
+					suffixMatches.push(item)
+					break
+				}
+			}
+		}
+		return undefined
+	}
+
+	const exact = visit(attachments)
+	if (exact) return exact
+
+	// Canvas mentions often carry canvas-relative paths (`images/x.png`) while
+	// workspace attachments are prefixed (`画布名/images/x.png`). Accept a unique suffix hit.
+	const uniqueSuffixMatches = Array.from(new Set(suffixMatches))
+	if (uniqueSuffixMatches.length === 1) return uniqueSuffixMatches[0]
+	if (uniqueSuffixMatches.length > 1 && searchBaseName) {
+		const byBaseName = uniqueSuffixMatches.filter((item) => {
+			const name = String(item.file_name || item.filename || item.name || "")
+				.trim()
+				.toLowerCase()
+			return name === searchBaseName.toLowerCase()
+		})
+		if (byBaseName.length === 1) return byBaseName[0]
+	}
+	return undefined
+}
+
 function resolvePathOnlyWorkspaceMention(
 	attrs: TiptapMentionAttributes,
 	attachments: AttachmentItem[],
@@ -117,103 +150,18 @@ function resolvePathOnlyWorkspaceMention(
 
 	const path = String(data.file_path || data.relative_file_path || "").trim()
 	const fileName = String(data.file_name || data.filename || "").trim()
-	const pools = collectWorkspaceAttachmentPools(attachments)
-
-	for (const pool of pools) {
-		if (path) {
-			const byPath = createWorkspaceMention(pool, path)
-			if (byPath) return byPath
-		}
-		if (fileName) {
-			const file = findAttachmentByUniqueFileName(pool, fileName)
-			if (!file?.file_id) continue
-			if (file.is_directory || file.type === "directory") {
-				return {
-					type: MentionItemType.FOLDER,
-					data: createDirectoryMentionData(file),
-				}
-			}
-			return {
-				type: MentionItemType.PROJECT_FILE,
-				data: createProjectFileMentionData(file),
-			}
-		}
+	if (path) {
+		const byPath = createWorkspaceMention(attachments, path)
+		if (byPath) return byPath
 	}
-
-	return null
-}
-
-function appendText(parts: PastePart[], text: string): void {
-	if (!text) return
-	const previous = parts[parts.length - 1]
-	if (previous?.type === "text") {
-		previous.text += text
-	} else {
-		parts.push({ type: "text", text })
+	const file =
+		(path ? findCanvasAttachmentByPath(attachments, path) : undefined) ??
+		(fileName ? findAttachmentByUniqueFileName(attachments, fileName) : undefined)
+	if (!file?.file_id) return null
+	if (file.is_directory || file.type === "directory") {
+		return { type: MentionItemType.FOLDER, data: createDirectoryMentionData(file) }
 	}
-}
-
-function buildPlainTextPasteParts(text: string, attachments: AttachmentItem[]): PastePart[] | null {
-	const matches = extractWorkspaceMarkdownLinks(text)
-	if (matches.length === 0) return null
-
-	const parts: PastePart[] = []
-	let lastIndex = 0
-	let matchedCount = 0
-	for (const match of matches) {
-		appendText(parts, text.slice(lastIndex, match.startIndex))
-		const attrs = createWorkspaceMention(attachments, match.path)
-		if (attrs) {
-			parts.push({ type: "mention", attrs })
-			matchedCount++
-		} else {
-			appendText(parts, match.fullMatch)
-		}
-		lastIndex = match.endIndex
-	}
-	appendText(parts, text.slice(lastIndex))
-
-	return matchedCount > 0 ? parts : null
-}
-
-function replaceWorkspaceLinksInRichText(
-	content: JSONContent,
-	attachments: AttachmentItem[],
-): { content: JSONContent; mentions: TiptapMentionAttributes[] } {
-	const mentions: TiptapMentionAttributes[] = []
-
-	const visit = (node: JSONContent): JSONContent[] => {
-		if (
-			node.type === "codeBlock" ||
-			node.type === "code" ||
-			node.marks?.some((mark) => mark.type === "code")
-		) {
-			return [node]
-		}
-
-		if (node.type === "text" && node.text) {
-			const parts = buildPlainTextPasteParts(node.text, attachments)
-			if (!parts) return [node]
-
-			const replacementContent: JSONContent[] = []
-			for (const part of parts) {
-				if (part.type === "mention") {
-					mentions.push(part.attrs)
-					replacementContent.push({ type: "mention", attrs: part.attrs })
-					continue
-				}
-
-				if (part.text) replacementContent.push({ ...node, text: part.text })
-			}
-			return replacementContent
-		}
-
-		if (!node.content) return [node]
-
-		return [{ ...node, content: node.content.flatMap(visit) }]
-	}
-
-	return { content: visit(content)[0] ?? content, mentions }
+	return { type: MentionItemType.PROJECT_FILE, data: createProjectFileMentionData(file) }
 }
 
 function deduplicateMentions(items: TiptapMentionAttributes[]): TiptapMentionAttributes[] {
@@ -228,105 +176,15 @@ function deduplicateMentions(items: TiptapMentionAttributes[]): TiptapMentionAtt
 	})
 }
 
-function buildHtmlPasteParts(html: string, attachments: AttachmentItem[]): PastePart[] | null {
-	if (!html) return null
-
-	const container = document.createElement("div")
-	container.innerHTML = html
-	const parts: PastePart[] = []
-	let matchedCount = 0
-	const blockTags = new Set(["DIV", "P", "LI", "SECTION", "ARTICLE", "BLOCKQUOTE", "PRE"])
-
-	const visit = (node: Node) => {
-		if (node.nodeType === Node.TEXT_NODE) {
-			appendText(parts, node.textContent || "")
-			return
-		}
-		if (!(node instanceof HTMLElement)) return
-
-		if (node.tagName === "BR") {
-			appendText(parts, "\n")
-			return
-		}
-
-		if (node.tagName === "A") {
-			const path = parseCanonicalWorkspaceHref(node.getAttribute("href") || "")
-			const attrs = path ? createWorkspaceMention(attachments, path) : null
-			if (attrs) {
-				parts.push({ type: "mention", attrs })
-				matchedCount++
-			} else {
-				appendText(parts, node.textContent || "")
-			}
-			return
-		}
-
-		if (node.tagName === "CODE" || node.tagName === "PRE") {
-			appendText(parts, node.textContent || "")
-			if (node.tagName === "PRE") appendText(parts, "\n")
-			return
-		}
-
-		node.childNodes.forEach(visit)
-		if (blockTags.has(node.tagName)) {
-			const lastPart = parts[parts.length - 1]
-			if (lastPart?.type !== "text" || !lastPart.text.endsWith("\n")) {
-				appendText(parts, "\n")
-			}
-		}
-	}
-
-	container.childNodes.forEach(visit)
-	return matchedCount > 0 ? parts : null
-}
-
-function buildPasteContent(parts: PastePart[]): {
-	content: JSONContent
-	mentions: TiptapMentionAttributes[]
-} {
-	const paragraphs: JSONContent[] = [{ type: "paragraph", content: [] }]
-	const mentions: TiptapMentionAttributes[] = []
-
-	const appendInline = (node: JSONContent) => {
-		const paragraph = paragraphs[paragraphs.length - 1]
-		paragraph.content = [...(paragraph.content || []), node]
-	}
-
-	for (const part of parts) {
-		if (part.type === "mention") {
-			appendInline({ type: "mention", attrs: part.attrs })
-			mentions.push(part.attrs)
-			continue
-		}
-
-		const lines = part.text.replace(/\r\n?/g, "\n").split("\n")
-		lines.forEach((line, index) => {
-			if (line) appendInline({ type: "text", text: line })
-			if (index < lines.length - 1) paragraphs.push({ type: "paragraph", content: [] })
-		})
-	}
-
-	return {
-		content: { type: "doc", content: paragraphs },
-		mentions,
-	}
-}
-
 function prepareMentionAttrs(
 	attrs: TiptapMentionAttributes,
 	metadata: MagicClipboardMetadata,
 	dataService?: DataService | null,
 	attachments: AttachmentItem[] = [],
+	currentProjectId?: string,
 ): TiptapMentionAttributes | null {
-	const pendingProjectFileMention = markProjectFileMentionForCopy(attrs, metadata.sourceProjectId)
-	if (pendingProjectFileMention) {
-		return pendingProjectFileMention
-	}
-
-	const allowed = isAllowedMention(attrs, dataService)
-	if (allowed) {
-		return attrs
-	}
+	const prepared = prepareCopiedMentionAttrs(attrs, metadata.sourceProjectId, dataService)
+	if (prepared) return prepared
 
 	const workspaceMention = resolvePathOnlyWorkspaceMention(attrs, attachments)
 	if (workspaceMention) {
@@ -339,7 +197,6 @@ function prepareMentionAttrs(
 		attrs.type === MentionItemType.FOLDER
 
 	if (passthroughStructuredMention) {
-		const currentProjectId = projectFilesStore.currentSelectedProject?.id
 		if (attrs.type === MentionItemType.PROJECT_FILE) {
 			const fileData = (attrs.data || {}) as ProjectFileMentionData
 			const sourceProjectId =
@@ -390,9 +247,18 @@ function prepareMentionItems(
 	metadata: MagicClipboardMetadata,
 	dataService?: DataService | null,
 	attachments: AttachmentItem[] = [],
+	currentProjectId?: string,
 ): TiptapMentionAttributes[] {
 	return (mentions as MentionListItem[])
-		.map((mention) => prepareMentionAttrs(mention.attrs, metadata, dataService, attachments))
+		.map((mention) =>
+			prepareMentionAttrs(
+				mention.attrs,
+				metadata,
+				dataService,
+				attachments,
+				currentProjectId,
+			),
+		)
 		.filter((mention): mention is TiptapMentionAttributes => Boolean(mention))
 }
 
@@ -401,6 +267,7 @@ function prepareRichTextContent(
 	metadata: MagicClipboardMetadata,
 	dataService?: DataService | null,
 	attachments: AttachmentItem[] = [],
+	currentProjectId?: string,
 ): JSONContent {
 	if (!content) return content
 
@@ -412,6 +279,7 @@ function prepareRichTextContent(
 			metadata,
 			dataService,
 			attachments,
+			currentProjectId,
 		)
 		if (!attrs) {
 			const data = content.attrs.data as Record<string, unknown> | undefined
@@ -431,9 +299,27 @@ function prepareRichTextContent(
 		}
 	}
 
+	if (content.type === INSPECTOR_DETAIL_TYPE && content.attrs) {
+		const attrs = { ...content.attrs }
+		for (const key of ["fileMention", "screenshotMention"] as const) {
+			if (attrs[key]) {
+				attrs[key] = prepareMentionAttrs(
+					attrs[key] as TiptapMentionAttributes,
+					metadata,
+					dataService,
+					attachments,
+					currentProjectId,
+				)
+			}
+		}
+		transformedContent = { ...content, attrs }
+	}
+
 	if (content.content && Array.isArray(content.content)) {
 		const transformedChildren = content.content
-			.map((child) => prepareRichTextContent(child, metadata, dataService, attachments))
+			.map((child) =>
+				prepareRichTextContent(child, metadata, dataService, attachments, currentProjectId),
+			)
 			.filter((child) => Object.keys(child).length > 0)
 
 		if (transformedChildren.some((child, index) => child !== content.content?.[index])) {
@@ -447,40 +333,6 @@ function prepareRichTextContent(
 	return transformedContent
 }
 
-function insertEditorContent(
-	editor: Editor,
-	content: JSONContent,
-	mentions: TiptapMentionAttributes[],
-	onMentionsInsert?: (items: TiptapMentionAttributes[]) => void,
-): boolean {
-	return (
-		runActiveEditor(
-			editor,
-			(active) => {
-				if (!active.commands.insertContent(content)) return false
-				if (mentions.length > 0) onMentionsInsert?.(mentions)
-				return true
-			},
-			false,
-		) ?? false
-	)
-}
-
-function pasteFromPortableClipboard(
-	editor: Editor,
-	htmlRaw: string,
-	plainRaw: string,
-	attachments: AttachmentItem[],
-	onMentionsInsert?: (items: TiptapMentionAttributes[]) => void,
-): boolean {
-	const parts =
-		buildHtmlPasteParts(htmlRaw, attachments) || buildPlainTextPasteParts(plainRaw, attachments)
-	if (!parts) return false
-
-	const paste = buildPasteContent(parts)
-	return insertEditorContent(editor, paste.content, paste.mentions, onMentionsInsert)
-}
-
 function pasteFromMagicMetadata(
 	editor: Editor,
 	metadata: MagicClipboardMetadata,
@@ -489,7 +341,13 @@ function pasteFromMagicMetadata(
 ): boolean {
 	const mentions = Array.isArray(metadata.mentions) ? metadata.mentions : null
 	const mentionItems = mentions
-		? prepareMentionItems(mentions, metadata, options.dataService ?? null, attachments)
+		? prepareMentionItems(
+				mentions,
+				metadata,
+				options.dataService ?? null,
+				attachments,
+				options.getCurrentProjectId?.(),
+			)
 		: []
 	const syncMentions = (additionalMentions: TiptapMentionAttributes[] = []) => {
 		const allMentions = deduplicateMentions([...mentionItems, ...additionalMentions])
@@ -503,6 +361,7 @@ function pasteFromMagicMetadata(
 				metadata,
 				options.dataService ?? null,
 				attachments,
+				options.getCurrentProjectId?.(),
 			)
 			const converted = replaceWorkspaceLinksInRichText(content, attachments)
 			const editorContent = transformInspectorContent(converted.content)
@@ -511,7 +370,9 @@ function pasteFromMagicMetadata(
 					editor,
 					(active) => {
 						if (!active.commands.insertContent(editorContent)) return false
-						syncMentions(converted.mentions)
+						syncMentions(
+							collectMentionItemsFromContent(editorContent).map((item) => item.attrs),
+						)
 						return true
 					},
 					false,
@@ -538,29 +399,16 @@ export function pasteMessageClipboard(
 	clipboardData: DataTransfer,
 	options: PasteMessageClipboardOptions,
 ): boolean {
-	const attachments = collectWorkspaceAttachments(options.getWorkspaceFilesList?.() ?? [])
-	const htmlRaw = clipboardData.getData("text/html")
-	const plainRaw = clipboardData.getData("text/plain")
+	// 显式注入的空列表也属于当前作用域，不能改用另一个项目的全局列表。
+	const attachments = options.getWorkspaceFilesList?.() ?? []
 
 	if (!isMagicClipboard(clipboardData)) {
-		return pasteFromPortableClipboard(
-			editor,
-			htmlRaw,
-			plainRaw,
-			attachments,
-			options.onMentionsInsert,
-		)
+		return pasteMarkdownFileLinks(editor, clipboardData, options)
 	}
 
 	const metadata = extractClipboardMetadata(clipboardData)
 	if (!metadata) {
-		return pasteFromPortableClipboard(
-			editor,
-			htmlRaw,
-			plainRaw,
-			attachments,
-			options.onMentionsInsert,
-		)
+		return pasteMarkdownFileLinks(editor, clipboardData, options)
 	}
 
 	return pasteFromMagicMetadata(editor, metadata, attachments, options)

@@ -1,8 +1,8 @@
 import { useMemoizedFn } from "ahooks"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
-import { findAttachmentByPath } from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/helper"
 import {
 	downloadFileByPath as publishDownloadFileByPath,
+	findFilePathAttachment,
 	type FilePathAttachment,
 } from "@/pages/superMagic/components/MessageList/utils/attachmentByFilePath"
 import { useMessageAttachmentDownload } from "./useMessageAttachmentDownload"
@@ -13,10 +13,7 @@ export function useFilePathAttachmentDownload() {
 	const downloadFile = useMessageAttachmentDownload()
 
 	return useMemoizedFn((attachment: FilePathAttachment) => {
-		const file = findAttachmentByPath(
-			projectFilesStore?.workspaceFilesList || [],
-			attachment.filePath,
-		)
+		const file = findFilePathAttachment(projectFilesStore?.workspaceFilesList || [], attachment)
 
 		if (file?.file_id) {
 			return downloadFile(file.file_id)
