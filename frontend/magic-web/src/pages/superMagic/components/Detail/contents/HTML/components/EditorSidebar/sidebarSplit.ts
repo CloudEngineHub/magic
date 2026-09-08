@@ -6,6 +6,8 @@ export const SIDEBAR_MIN_WIDTH = STYLES_MIN_WIDTH
 export const SIDEBAR_MAX_WIDTH = 520
 export const SIDEBAR_DEFAULT_WIDTH = 400
 export const DEFAULT_STRUCTURE_RATIO = 0.5
+/** Matches the splitter's h-1.5 track. */
+export const SPLITTER_HEIGHT = 6
 
 export interface SidebarSectionLayout {
 	structureHeight: number

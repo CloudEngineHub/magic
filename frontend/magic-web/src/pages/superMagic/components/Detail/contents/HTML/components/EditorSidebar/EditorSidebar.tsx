@@ -1,5 +1,5 @@
-import type { PointerEvent, ReactNode } from "react"
-import { useMemo, useState } from "react"
+import type { CSSProperties, PointerEvent, ReactNode } from "react"
+import { useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronDown } from "lucide-react"
 import { TooltipProvider } from "@/components/shadcn-ui/tooltip"
@@ -10,8 +10,8 @@ import {
 	SIDEBAR_DEFAULT_WIDTH,
 	SIDEBAR_MAX_WIDTH,
 	SIDEBAR_MIN_WIDTH,
-	STYLES_MIN_HEIGHT,
-	STRUCTURE_MIN_HEIGHT,
+	SPLITTER_HEIGHT,
+	getSidebarSectionLayout,
 	getStructureRatioFromPointer,
 } from "./sidebarSplit"
 
@@ -36,9 +36,37 @@ export function EditorSidebar({
 	const [width, setWidth] = useState(SIDEBAR_DEFAULT_WIDTH)
 	const [isResizing, setIsResizing] = useState(false)
 	const [structureRatio, setStructureRatio] = useState(DEFAULT_STRUCTURE_RATIO)
+	const [railHeight, setRailHeight] = useState(0)
 	const [structureChrome, setStructureChrome] = useState<HTMLDivElement | null>(null)
+	const bodyRef = useRef<HTMLDivElement>(null)
 	const slots = useMemo<EditorSidebarSlots>(() => ({ structureChrome }), [structureChrome])
 	const bothExpanded = structureExpanded && stylesExpanded
+	const layout = getSidebarSectionLayout(
+		Math.max(0, railHeight - (bothExpanded ? SPLITTER_HEIGHT : 0)),
+		structureRatio,
+		structureExpanded,
+		stylesExpanded,
+	)
+
+	useLayoutEffect(() => {
+		const node = bodyRef.current
+		if (!node || typeof ResizeObserver === "undefined") return
+		const observer = new ResizeObserver((entries) => {
+			const entry = entries[0]
+			if (!entry) return
+			setRailHeight(entry.contentRect.height)
+		})
+		observer.observe(node)
+		return () => observer.disconnect()
+	}, [])
+
+	function sectionStyle(expanded: boolean, height: number): CSSProperties | undefined {
+		if (!expanded) return undefined
+		if (bothExpanded && railHeight > 0) {
+			return { height, flex: "none" }
+		}
+		return { flex: 1 }
+	}
 
 	function startResize(event: PointerEvent<HTMLDivElement>) {
 		event.preventDefault()
@@ -122,15 +150,11 @@ export function EditorSidebar({
 			/>
 			<TooltipProvider delayDuration={200}>
 				<EditorSidebarSlotsContext.Provider value={slots}>
-					<div className="flex min-h-0 flex-1 flex-col">
+					<div ref={bodyRef} className="flex min-h-0 flex-1 flex-col">
 						{structureExpanded ? (
 							<section
 								className="flex min-h-0 flex-col overflow-hidden"
-								style={
-									bothExpanded
-										? { flex: structureRatio, minHeight: STRUCTURE_MIN_HEIGHT }
-										: { flex: 1 }
-								}
+								style={sectionStyle(structureExpanded, layout.structureHeight)}
 								data-testid="html-editor-sidebar-structure"
 							>
 								<SectionHeader
@@ -165,11 +189,7 @@ export function EditorSidebar({
 						{stylesExpanded ? (
 							<section
 								className="flex min-h-0 flex-col overflow-hidden"
-								style={
-									bothExpanded
-										? { flex: 1 - structureRatio, minHeight: STYLES_MIN_HEIGHT }
-										: { flex: 1 }
-								}
+								style={sectionStyle(stylesExpanded, layout.stylesHeight)}
 								data-testid="html-editor-sidebar-styles"
 							>
 								<SectionHeader
