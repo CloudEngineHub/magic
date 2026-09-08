@@ -725,11 +725,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						</div>
 					</div>
 
-					{/* 调整宽度的 Handle - 仅在桌面端且侧边栏未折叠/全屏时显示 */}
+					{/* Width handle stays below the canvas stacking context. */}
 					{!isMobile && !isSidebarCollapsed && !isPresentationFullscreen && (
 						<div
 							data-testid="ppt-render-sidebar-resize-handle"
-							className="absolute bottom-0 top-0 z-20 w-4 -translate-x-1/2 cursor-col-resize bg-transparent"
+							className={cn(
+								"absolute bottom-0 top-0 w-4 -translate-x-1/2 cursor-col-resize bg-transparent",
+								TAILWIND_Z_INDEX_CLASSES.BASE.SIDEBAR_RESIZE,
+							)}
 							style={{ left: sidebarWidth }}
 							onMouseDown={handleResizeStart}
 						/>

@@ -582,6 +582,17 @@ describe("PPTRender", () => {
 		expect(screen.getByTestId("ppt-render-expand-sidebar-button")).toBeInTheDocument()
 	})
 
+	it("keeps the sidebar resize strip below the slide canvas", async () => {
+		renderPPTRender()
+
+		const resizeHandle = await screen.findByTestId("ppt-render-sidebar-resize-handle")
+		expect(resizeHandle).toHaveClass(TAILWIND_Z_INDEX_CLASSES.BASE.SIDEBAR_RESIZE)
+		expect(resizeHandle.className).not.toContain("z-20")
+		expect(screen.getByTestId("ppt-render-slide-content")).toHaveClass(
+			TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS,
+		)
+	})
+
 	it("registers a before-close confirmation callback for the PPT file", async () => {
 		const registerCheckBeforeClose = vi.fn()
 

@@ -31,4 +31,16 @@ describe("HTML editor z-index contract", () => {
 			HTML_EDITOR_Z_INDEX.BASE.SIDEBAR,
 		)
 	})
+
+	it("keeps the sidebar resize strip below the slide canvas", () => {
+		expect(HTML_EDITOR_Z_INDEX.BASE.SIDEBAR_RESIZE).toBeGreaterThanOrEqual(
+			HTML_EDITOR_Z_INDEX.BASE.SIDEBAR,
+		)
+		expect(HTML_EDITOR_Z_INDEX.BASE.SIDEBAR_RESIZE).toBeLessThan(
+			HTML_EDITOR_Z_INDEX.BASE.SLIDE_CANVAS,
+		)
+		expect(TAILWIND_Z_INDEX_CLASSES.BASE.SIDEBAR_RESIZE).toBe(
+			`z-[${HTML_EDITOR_Z_INDEX.BASE.SIDEBAR_RESIZE}]`,
+		)
+	})
 })
