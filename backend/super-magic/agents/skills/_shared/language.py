@@ -27,7 +27,7 @@ def get_language() -> dict[str, str]:
         data = json.loads(metadata_path.read_text(encoding="utf-8"))
         if isinstance(data, dict) and isinstance(data.get("language"), str):
             language = data["language"].strip() or DEFAULT_LANGUAGE
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         pass
 
     return {

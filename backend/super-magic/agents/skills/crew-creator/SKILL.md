@@ -120,8 +120,8 @@ If the user chooses skill decomposition in Round 4, after initialization call `s
 
 ### After Initialization
 
-1. Before writing, read the `AGENTS.md` section of `references/crew-file-format.md`, then validate the drafted workflow against its specification: overview, ordered SOP steps, inputs, outputs, tool/skill calls, failure branches, and completion checks must be present. Add security constraints or other special rules only when the user explicitly requests them.
-2. If validation fails, revise the workflow content and validate it again; do not initialize with a plain unstructured checklist or add special rules that the user did not specify.
+1. Before writing, read the `AGENTS.md` section of `references/crew-file-format.md` and `references/prompt-engineering-guide.md`, then validate the drafted workflow against their specifications: overview, ordered SOP steps, inputs, outputs, tool/skill calls, failure branches, completion checks, and the mandatory baseline security constraints must be present. User-requested security or other special rules extend the baseline and must not weaken or replace it.
+2. If validation fails, revise the workflow content and validate it again; do not initialize with a plain unstructured checklist or omit the mandatory baseline security constraints. Do not add domain-specific special rules that the user did not specify.
 3. Show the generated files to the user via `read_files`.
 4. If the user chose skill decomposition, confirm that every skill has an invocation workflow or rule declared in `AGENTS.md`, then call `skill-creator` for each independent skill and validate the results before reporting completion.
 5. Ask if the user wants any adjustments.
