@@ -34,7 +34,11 @@ import { SelectionReadout } from "./controls/SelectionReadout"
 import { ContextStyleToolbar } from "./ContextStyleToolbar"
 import { useShowButtonText } from "@/hooks/useShowButtonText"
 import { getElementCapabilities } from "./capabilities"
-import { areLineHeightsEquivalent } from "./utils/lineHeight"
+import {
+	areLineHeightsEquivalent,
+	getAuthoredLineHeight,
+	resolveDisplayLineHeight,
+} from "./utils/lineHeight"
 
 const FullStylePanel = observer(function FullStylePanel({
 	editorRef,
@@ -143,7 +147,13 @@ const FullStylePanel = observer(function FullStylePanel({
 					? lineHeightDisplayRef.current.value
 					: null
 			if (!preservedLineHeight) lineHeightDisplayRef.current = null
-			setLineHeight(preservedLineHeight || computedLineHeight || "normal")
+			setLineHeight(
+				preservedLineHeight ||
+					resolveDisplayLineHeight(
+						computedLineHeight,
+						getAuthoredLineHeight(selectedElement.inlineStyles),
+					),
+			)
 		} else if (stylePanelStore.selectedElements.length > 0) {
 			lineHeightDisplayRef.current = null
 			setTextContent("")
@@ -168,7 +178,12 @@ const FullStylePanel = observer(function FullStylePanel({
 					const firstFont = computedFontFamily.split(",")[0].trim().replace(/['"]/g, "")
 					setFontFamily(firstFont)
 				}
-				setLineHeight(computedLineHeight || "normal")
+				setLineHeight(
+					resolveDisplayLineHeight(
+						computedLineHeight,
+						getAuthoredLineHeight(firstElement.inlineStyles),
+					),
+				)
 			}
 		} else {
 			lineHeightDisplayRef.current = null

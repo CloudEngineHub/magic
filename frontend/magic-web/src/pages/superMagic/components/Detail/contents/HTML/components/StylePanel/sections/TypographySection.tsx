@@ -7,6 +7,7 @@ import { NumericDragInput } from "../controls"
 import { Label } from "@/components/shadcn-ui/label"
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
 import type { StyleSectionProps } from "../types"
+import { getAuthoredLineHeight, resolveDisplayLineHeight } from "../utils/lineHeight"
 import { EditorSelectContent } from "../../EditorFloating"
 
 const FONT_SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72, 96]
@@ -25,7 +26,10 @@ const TypographySection = observer(function TypographySection({
 	// 解析当前值
 	const currentFontSize = parseInt(computedStyles.fontSize) || 16
 	const currentFontWeight = computedStyles.fontWeight || "400"
-	const currentLineHeight = computedStyles.lineHeight || "normal"
+	const currentLineHeight = resolveDisplayLineHeight(
+		computedStyles.lineHeight,
+		getAuthoredLineHeight(selectedElement.inlineStyles),
+	)
 	const currentColor = computedStyles.color || "#000000"
 
 	// 本地状态（用于输入框）

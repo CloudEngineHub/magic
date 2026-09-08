@@ -9,6 +9,47 @@ import { normalizeColor, normalizeTextAlign } from "../utils/css"
 
 const TEXT_EDITING_STYLE_ID = "magic-editor-text-editing-style"
 
+function isPxLineHeight(value: string): boolean {
+	return /^-?(?:\d+\.?\d*|\.\d+)px$/i.test(value.trim())
+}
+
+/** Prefer the specified line-height over used pixels from getComputedStyle. */
+function readAuthoredLineHeight(element: HTMLElement): string {
+	const inline = element.style.getPropertyValue("line-height").trim()
+	if (inline) return inline
+
+	let authored = ""
+	const visitRules = (rules: CSSRuleList) => {
+		for (const rule of Array.from(rules)) {
+			if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
+				try {
+					visitRules((rule as CSSGroupingRule).cssRules)
+				} catch {
+					// Ignore unreadable grouped rules.
+				}
+				continue
+			}
+			if (!(rule instanceof CSSStyleRule)) continue
+			try {
+				if (!element.matches(rule.selectorText)) continue
+			} catch {
+				continue
+			}
+			const value = rule.style.getPropertyValue("line-height").trim()
+			if (value) authored = value
+		}
+	}
+
+	for (const sheet of Array.from(element.ownerDocument.styleSheets)) {
+		try {
+			visitRules(sheet.cssRules)
+		} catch {
+			// Cross-origin stylesheets cannot be read.
+		}
+	}
+	return authored
+}
+
 interface ElementInfo {
 	selector: string
 	tagName: string
@@ -255,6 +296,11 @@ export class ElementSelector {
 		})
 		if (styles.display === "flex" && styles.justifyContent === "normal") {
 			styles.justifyContent = "flex-start"
+		}
+
+		const authoredLineHeight = readAuthoredLineHeight(element)
+		if (authoredLineHeight && !isPxLineHeight(authoredLineHeight)) {
+			styles.lineHeight = authoredLineHeight
 		}
 
 		const parent = element.parentElement

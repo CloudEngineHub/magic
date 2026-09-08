@@ -2,6 +2,42 @@ function formatMetricValue(value: number): string {
 	return String(Number(value.toFixed(4)))
 }
 
+const LINE_HEIGHT_KEYWORDS = new Set([
+	"normal",
+	"inherit",
+	"initial",
+	"unset",
+	"revert",
+	"revert-layer",
+])
+
+export function getAuthoredLineHeight(inlineStyles?: Record<string, string>): string | undefined {
+	const value = inlineStyles?.lineHeight?.trim() || inlineStyles?.["line-height"]?.trim()
+	if (!value) return undefined
+	return value.replace(/\s*!important$/i, "").trim() || undefined
+}
+
+/**
+ * Show the specified line-height. Used pixels are not a fixed px setting.
+ */
+export function resolveDisplayLineHeight(computed?: string, authored?: string | null): string {
+	const specified = authored?.trim() ?? ""
+	if (specified) {
+		const token = normalizeLineHeightToken(specified)
+		if (!token || LINE_HEIGHT_KEYWORDS.has(token)) return "normal"
+		return specified
+	}
+
+	const computedValue = (computed ?? "").trim()
+	if (!computedValue || LINE_HEIGHT_KEYWORDS.has(normalizeLineHeightToken(computedValue))) {
+		return "normal"
+	}
+
+	const parsed = splitNumericLineHeight(computedValue)
+	if (parsed?.unit.toLowerCase() === "px") return "normal"
+	return computedValue
+}
+
 export function splitNumericLineHeight(value: string): { number: string; unit: string } | null {
 	const match = value.trim().match(/^(-?(?:\d+\.?\d*|\.\d+))(.*)$/)
 	if (!match) return null
@@ -53,7 +89,9 @@ function parseLineHeightNumber(value: string): { amount: number; unit: string } 
 }
 
 function valuesAreClose(left: number, right: number): boolean {
-	return Math.abs(left - right) <= Math.max(0.05, Math.max(Math.abs(left), Math.abs(right)) * 0.005)
+	return (
+		Math.abs(left - right) <= Math.max(0.05, Math.max(Math.abs(left), Math.abs(right)) * 0.005)
+	)
 }
 
 function tokensAreClose(left: string, right: string): boolean {

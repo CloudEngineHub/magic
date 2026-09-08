@@ -404,7 +404,7 @@ describe("StylePanel", () => {
 		).toBeTruthy()
 		expect(screen.queryByTestId("font-family-selector")).not.toBeInTheDocument()
 		expect(screen.getByTestId("font-size-selector")).toBeInTheDocument()
-		expect(screen.getByTestId("line-height-selector")).toHaveAttribute("data-value", "24px")
+		expect(screen.getByTestId("line-height-selector")).toHaveAttribute("data-value", "normal")
 		expect(screen.getByTestId("text-format-tools")).toBeInTheDocument()
 		expect(screen.getByTestId("text-align-tools")).toBeInTheDocument()
 		const colorPicker = screen.getByTestId("color-picker")
@@ -415,6 +415,31 @@ describe("StylePanel", () => {
 		).toBeTruthy()
 		expect(screen.getByTestId("style-panel-more-styles-trigger")).toBeInTheDocument()
 		expect(document.querySelectorAll('[data-slot="separator"]')).toHaveLength(4)
+	})
+
+	it("shows an inline pixel line-height only when it was authored", () => {
+		mockSelectedElement.current = {
+			selector: "h1.title",
+			tagName: "h1",
+			isTextElement: true,
+			hasDirectTextContent: true,
+			inlineStyles: { lineHeight: "24px" },
+			computedStyles: {
+				fontWeight: "400",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "left",
+				lineHeight: "24px",
+				fontSize: "16px",
+				color: "#000000",
+				width: "320px",
+				height: "40px",
+			},
+		}
+
+		render(<StylePanel editorRef={{ current: null }} variant="context" />)
+
+		expect(screen.getByTestId("line-height-selector")).toHaveAttribute("data-value", "24px")
 	})
 
 	it("preserves a selected ratio when computed line-height refreshes to pixels", async () => {
@@ -438,7 +463,7 @@ describe("StylePanel", () => {
 		const { rerender } = render(<StylePanel editorRef={{ current: null }} variant="context" />)
 
 		const lineHeightSelector = screen.getByTestId("line-height-selector")
-		expect(lineHeightSelector).toHaveAttribute("data-value", "120px")
+		expect(lineHeightSelector).toHaveAttribute("data-value", "normal")
 		expect(lineHeightSelector).toHaveAttribute("data-font-size", "100")
 
 		fireEvent.click(lineHeightSelector)
@@ -498,7 +523,7 @@ describe("StylePanel", () => {
 		await waitFor(() =>
 			expect(screen.getByTestId("line-height-selector")).toHaveAttribute(
 				"data-value",
-				"24px",
+				"normal",
 			),
 		)
 	})

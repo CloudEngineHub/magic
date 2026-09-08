@@ -222,6 +222,26 @@ describe("ElementSelector", () => {
 			}
 		})
 
+		it("should keep a specified unitless line-height instead of used pixels", () => {
+			const style = document.createElement("style")
+			style.textContent = "#ratio-title { font-size: 92px; line-height: 1.04; }"
+			document.head.appendChild(style)
+			container.innerHTML = '<h1 id="ratio-title">Title</h1>'
+			const element = container.querySelector("#ratio-title") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					computedStyles: expect.objectContaining({
+						lineHeight: "1.04",
+					}),
+				}),
+			)
+			style.remove()
+		})
+
 		it("should keep authored inline width available for the editor", () => {
 			container.innerHTML = '<div id="full-width" style="width: 100%;">Content</div>'
 			const element = container.querySelector("#full-width") as HTMLElement

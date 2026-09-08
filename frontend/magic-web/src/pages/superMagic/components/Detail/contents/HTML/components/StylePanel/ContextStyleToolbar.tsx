@@ -8,7 +8,11 @@ import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
 import { useStylePanelStore } from "../../iframe-bridge/contexts/StylePanelContext"
 import { useSelectedElement } from "./hooks/useSelectedElement"
 import { getElementCapabilities } from "./capabilities"
-import { areLineHeightsEquivalent } from "./utils/lineHeight"
+import {
+	areLineHeightsEquivalent,
+	getAuthoredLineHeight,
+	resolveDisplayLineHeight,
+} from "./utils/lineHeight"
 import {
 	CONTEXT_TOOLBAR_PANEL_PADDING,
 	getContextToolbarRowMaxWidth,
@@ -103,7 +107,13 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 					? lineHeightDisplayRef.current.value
 					: null
 			if (!preservedLineHeight) lineHeightDisplayRef.current = null
-			setLineHeight(preservedLineHeight || computedLineHeight || "normal")
+			setLineHeight(
+				preservedLineHeight ||
+					resolveDisplayLineHeight(
+						computedLineHeight,
+						getAuthoredLineHeight(selectedElement.inlineStyles),
+					),
+			)
 		} else if (stylePanelStore.selectedElements.length > 0) {
 			lineHeightDisplayRef.current = null
 			const firstElement = stylePanelStore.selectedElements[0]
@@ -118,7 +128,12 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 					}
 				}
 
-				setLineHeight(computedLineHeight || "normal")
+				setLineHeight(
+					resolveDisplayLineHeight(
+						computedLineHeight,
+						getAuthoredLineHeight(firstElement.inlineStyles),
+					),
+				)
 			}
 		}
 	}, [selectedElement, stylePanelStore.selectedElements])
