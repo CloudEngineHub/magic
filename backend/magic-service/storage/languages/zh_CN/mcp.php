@@ -9,6 +9,7 @@ return [
         'code' => '代码',
         'name' => '名称',
         'description' => '描述',
+        'icon' => '图标',
         'status' => '状态',
         'external_sse_url' => 'MCP 服务地址',
         'url' => 'URL',
@@ -40,6 +41,7 @@ return [
     // 错误消息
     'validate_failed' => '验证失败',
     'not_found' => '数据不存在',
+    'field_too_long' => ':label长度不能超过 :max 个字符',
 
     // 服务相关错误
     'service' => [
