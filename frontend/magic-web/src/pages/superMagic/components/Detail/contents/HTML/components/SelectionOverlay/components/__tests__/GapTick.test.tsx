@@ -9,6 +9,7 @@ describe("GapTick", () => {
 		expect(tick).toBeTruthy()
 		expect(tick?.querySelector("svg")).toBeNull()
 		expect(tick?.className).toContain("h-3")
+		expect(tick?.className).toContain("bg-[#808080]")
 		expect(tick?.className).not.toContain("h-full")
 	})
 
@@ -17,6 +18,7 @@ describe("GapTick", () => {
 		const tick = document.querySelector("[data-gap-tick='row']")
 		expect(tick).toBeTruthy()
 		expect(tick?.className).toContain("w-3")
+		expect(tick?.className).toContain("bg-[#808080]")
 		expect(tick?.className).not.toContain("w-full")
 	})
 })

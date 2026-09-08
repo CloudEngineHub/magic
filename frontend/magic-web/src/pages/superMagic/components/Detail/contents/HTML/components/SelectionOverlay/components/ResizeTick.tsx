@@ -1,7 +1,8 @@
 import type { CSSProperties } from "react"
 import "./selectionHandleMotion.css"
+import { SELECTION_CHROME_FILL_CLASS } from "./selectionChrome"
 
-const TICK_CLASS = "html-editor-tick pointer-events-none bg-[#808080]"
+const TICK_CLASS = `html-editor-tick pointer-events-none ${SELECTION_CHROME_FILL_CLASS}`
 
 /** Mid-edge drafting ticks. The corner hit uses SelectionMarks. */
 export function ResizeTick({ id, length = 12 }: { id: string; length?: number }) {

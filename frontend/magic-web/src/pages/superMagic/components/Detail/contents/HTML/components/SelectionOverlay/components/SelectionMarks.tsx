@@ -1,4 +1,6 @@
-const MARK_CLASS = "pointer-events-none absolute h-2.5 w-2.5 border-[#808080]"
+import { SELECTION_CHROME_BORDER_CLASS } from "./selectionChrome"
+
+const MARK_CLASS = `pointer-events-none absolute h-2.5 w-2.5 ${SELECTION_CHROME_BORDER_CLASS}`
 
 const MARKS = [
 	{ id: "tr", className: "-right-px -top-px border-r-[2px] border-t-[2px]" },
