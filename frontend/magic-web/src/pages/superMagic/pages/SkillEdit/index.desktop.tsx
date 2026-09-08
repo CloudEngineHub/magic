@@ -40,6 +40,13 @@ import {
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import PublishPanel, { PublishPanelStore } from "@/pages/superMagic/components/PublishPanel"
 import {
+	AsyncPublishError,
+	loadPendingPublishTask,
+	resolveAsyncPublishErrorMessage,
+	resumePendingPublish,
+	runAsyncPublish,
+} from "@/pages/superMagic/utils/asyncPublish"
+import {
 	FileActionVisibilityProvider,
 	HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS,
 	VIEWER_FILE_ACTIONS,
@@ -193,8 +200,9 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		skillCode,
 		refreshSkillVersions,
 		t,
+		publishPanelStore: null as PublishPanelStore | null,
 	})
-	publishPanelActionRef.current = { store, skillCode, refreshSkillVersions, t }
+	const publishAbortRef = useRef<AbortController | null>(null)
 
 	// New panel store when route skill or locale changes (submit uses ref for latest store)
 	const publishPanelStore = useMemo(() => {
@@ -212,7 +220,13 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 					skillCode: code,
 					refreshSkillVersions: rv,
 					t: translate,
+					publishPanelStore: panelStore,
 				} = publishPanelActionRef.current
+
+				publishAbortRef.current?.abort()
+				const abortController = new AbortController()
+				publishAbortRef.current = abortController
+
 				try {
 					const detail = skillStore.lastFetchedSkillDetail
 					if (detail) {
@@ -233,16 +247,44 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 						}
 					}
 
-					await skillsService.publishSkill(code, buildPublishParamsFromDraft(draft))
+					await runAsyncPublish({
+						resourceType: "skill",
+						code,
+						create: () =>
+							skillsService.publishSkillAsync(
+								code,
+								buildPublishParamsFromDraft(draft),
+							),
+						check: (publishTaskId) =>
+							skillsService.checkSkillPublish(code, publishTaskId),
+						onProgress: (progress) => panelStore?.setPublishProgress(progress),
+						signal: abortController.signal,
+					})
 					magicToast.success(translate("skillEditPage.publishPanel.toast.publishSuccess"))
 					await skillStore.refreshSkillDetail()
 					await rv()
-				} catch {
+				} catch (error) {
+					if (error instanceof AsyncPublishError && error.reason === "aborted") {
+						throw error
+					}
+					if (error instanceof AsyncPublishError) {
+						magicToast.error(resolveAsyncPublishErrorMessage(error, translate))
+						throw error
+					}
 					magicToast.error(translate("skillEditPage.publishPanel.toast.publishFailed"))
+					throw error
 				}
 			},
 		})
 	}, [skillCode, t])
+
+	publishPanelActionRef.current = {
+		store,
+		skillCode,
+		refreshSkillVersions,
+		t,
+		publishPanelStore,
+	}
 
 	const attachments = store.projectFilesStore.workspaceFileTree
 	const attachmentList = store.projectFilesStore.workspaceFilesList
@@ -464,6 +506,79 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		setUserSelectDetail(undefined)
 		setIsDetailPanelFullscreen(false)
 	})
+
+	// Resume async publish polling when the user re-opens the publish panel mid-task.
+	// Already-ready tasks settle silently (no loading button / success toast).
+	useEffect(() => {
+		if (!isPublishPanelVisible || !skillCode) return
+		const pendingTaskId = loadPendingPublishTask("skill", skillCode)
+		if (!pendingTaskId) return
+
+		publishAbortRef.current?.abort()
+		const abortController = new AbortController()
+		publishAbortRef.current = abortController
+		let active = true
+		let waitingUiStarted = false
+
+		void (async () => {
+			try {
+				const result = await resumePendingPublish({
+					resourceType: "skill",
+					code: skillCode,
+					publishTaskId: pendingTaskId,
+					check: (publishTaskId) =>
+						skillsService.checkSkillPublish(skillCode, publishTaskId),
+					onProgress: (progress) => {
+						if (active && waitingUiStarted) {
+							publishPanelStore.setPublishProgress(progress)
+						}
+					},
+					signal: abortController.signal,
+					onStartWaiting: () => {
+						if (!active) return
+						waitingUiStarted = true
+						publishPanelStore.beginPublishing(0)
+						publishPanelStore.openCreateView()
+					},
+				})
+				if (!active) return
+
+				await store.refreshSkillDetail()
+				await refreshSkillVersions()
+				if (!active) return
+
+				if (result.alreadyReady) {
+					publishPanelStore.openHistoryView()
+					return
+				}
+
+				magicToast.success(t("skillEditPage.publishPanel.toast.publishSuccess"))
+				publishPanelStore.openHistoryView()
+			} catch (error) {
+				if (!active) return
+				if (error instanceof AsyncPublishError && error.reason === "aborted") return
+				if (error instanceof AsyncPublishError) {
+					magicToast.error(resolveAsyncPublishErrorMessage(error, t))
+					return
+				}
+				magicToast.error(t("skillEditPage.publishPanel.toast.publishFailed"))
+			} finally {
+				if (active && waitingUiStarted) publishPanelStore.clearPublishingState()
+			}
+		})()
+
+		return () => {
+			active = false
+			abortController.abort()
+			if (waitingUiStarted) publishPanelStore.clearPublishingState()
+		}
+	}, [isPublishPanelVisible, publishPanelStore, refreshSkillVersions, skillCode, store, t])
+
+	useEffect(() => {
+		return () => {
+			publishAbortRef.current?.abort()
+		}
+	}, [])
 
 	const openPublishCreateView = useMemoizedFn(async () => {
 		flushSync(() => setIsPublishPrepareLoading(true))
