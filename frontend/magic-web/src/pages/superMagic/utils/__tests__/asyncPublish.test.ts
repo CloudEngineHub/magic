@@ -22,9 +22,31 @@ describe("asyncPublish", () => {
 
 	it("persists and clears pending publish task ids", () => {
 		savePendingPublishTask("skill", "SK-1", "task-1")
-		expect(loadPendingPublishTask("skill", "SK-1")).toBe("task-1")
+		expect(loadPendingPublishTask("skill", "SK-1")).toEqual({ publish_task_id: "task-1" })
 		clearPendingPublishTask("skill", "SK-1")
 		expect(loadPendingPublishTask("skill", "SK-1")).toBeNull()
+	})
+
+	it("persists draft snapshots for resume", () => {
+		const draft = {
+			version: "1.0.1",
+			details: "notes",
+			publishTo: "INTERNAL",
+			internalTarget: "PRIVATE",
+			specificMembers: [],
+		}
+		savePendingPublishTask("agent", "SMA-draft", "task-draft", draft)
+		expect(loadPendingPublishTask("agent", "SMA-draft")).toEqual({
+			publish_task_id: "task-draft",
+			draft,
+		})
+	})
+
+	it("reads legacy plain-string publish_task_id values", () => {
+		sessionStorage.setItem("async-publish-task:skill:SK-legacy", "legacy-task")
+		expect(loadPendingPublishTask("skill", "SK-legacy")).toEqual({
+			publish_task_id: "legacy-task",
+		})
 	})
 
 	it("returns immediately when create responds ready", async () => {
@@ -53,6 +75,7 @@ describe("asyncPublish", () => {
 		const promise = runAsyncPublish({
 			resourceType: "skill",
 			code: "SK-2",
+			draft: { version: "1.0.0" },
 			create: async () => ({
 				publish_task_id: "task-2",
 				status: "processing",
@@ -62,6 +85,10 @@ describe("asyncPublish", () => {
 			check: async () => {
 				checks += 1
 				if (checks === 1) {
+					expect(loadPendingPublishTask("skill", "SK-2")).toEqual({
+						publish_task_id: "task-2",
+						draft: { version: "1.0.0" },
+					})
 					return {
 						publish_task_id: "task-2",
 						status: "processing",
@@ -170,7 +197,8 @@ describe("asyncPublish", () => {
 	})
 
 	it("enters waiting UI only when resume is still processing", async () => {
-		savePendingPublishTask("skill", "SK-wait", "task-wait")
+		const draft = { version: "2.0.0" }
+		savePendingPublishTask("skill", "SK-wait", "task-wait", draft)
 		const onStartWaiting = vi.fn()
 		const progressValues: number[] = []
 		let checks = 0
@@ -179,6 +207,7 @@ describe("asyncPublish", () => {
 			resourceType: "skill",
 			code: "SK-wait",
 			publishTaskId: "task-wait",
+			draft,
 			check: async () => {
 				checks += 1
 				if (checks === 1) {
@@ -205,6 +234,7 @@ describe("asyncPublish", () => {
 
 		expect(result.alreadyReady).toBe(false)
 		expect(onStartWaiting).toHaveBeenCalledTimes(1)
+		expect(onStartWaiting).toHaveBeenCalledWith(draft)
 		expect(progressValues[0]).toBe(40)
 		expect(progressValues.at(-1)).toBe(100)
 		expect(loadPendingPublishTask("skill", "SK-wait")).toBeNull()

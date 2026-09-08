@@ -38,31 +38,52 @@ const DEFAULT_POLL_INTERVAL_MS = 2500
 const DEFAULT_MAX_ATTEMPTS = 100
 const STORAGE_KEY_PREFIX = "async-publish-task:"
 
+export interface PendingPublishTaskRecord<TDraft = unknown> {
+	publish_task_id: string
+	/** Snapshot of the create-form draft so resume can restore version / targets. */
+	draft?: TDraft
+}
+
 function getStorageKey(resourceType: AsyncPublishResourceType, code: string) {
 	return `${STORAGE_KEY_PREFIX}${resourceType}:${code}`
 }
 
-/** Persist publish_task_id so re-entering the page can resume polling. */
-export function savePendingPublishTask(
+/** Persist publish task + optional draft so re-entering the page can resume polling and form state. */
+export function savePendingPublishTask<TDraft = unknown>(
 	resourceType: AsyncPublishResourceType,
 	code: string,
 	publishTaskId: string,
+	draft?: TDraft,
 ) {
 	if (typeof sessionStorage === "undefined" || !code || !publishTaskId) return
 	try {
-		sessionStorage.setItem(getStorageKey(resourceType, code), publishTaskId)
+		const payload: PendingPublishTaskRecord<TDraft> = {
+			publish_task_id: publishTaskId,
+			...(draft !== undefined ? { draft } : {}),
+		}
+		sessionStorage.setItem(getStorageKey(resourceType, code), JSON.stringify(payload))
 	} catch {
 		// Ignore quota / private-mode failures
 	}
 }
 
-export function loadPendingPublishTask(
+export function loadPendingPublishTask<TDraft = unknown>(
 	resourceType: AsyncPublishResourceType,
 	code: string,
-): string | null {
+): PendingPublishTaskRecord<TDraft> | null {
 	if (typeof sessionStorage === "undefined" || !code) return null
 	try {
-		return sessionStorage.getItem(getStorageKey(resourceType, code))
+		const raw = sessionStorage.getItem(getStorageKey(resourceType, code))
+		if (!raw) return null
+
+		// Backward compatible with the earlier plain-string publish_task_id format.
+		if (!raw.startsWith("{")) {
+			return { publish_task_id: raw }
+		}
+
+		const parsed = JSON.parse(raw) as PendingPublishTaskRecord<TDraft>
+		if (!parsed?.publish_task_id || typeof parsed.publish_task_id !== "string") return null
+		return parsed
 	} catch {
 		return null
 	}
@@ -154,7 +175,7 @@ export async function pollPublishTask(
 	)
 }
 
-export interface RunAsyncPublishOptions {
+export interface RunAsyncPublishOptions<TDraft = unknown> {
 	resourceType: AsyncPublishResourceType
 	code: string
 	create: () => Promise<AsyncPublishTaskSnapshot>
@@ -163,9 +184,11 @@ export interface RunAsyncPublishOptions {
 	signal?: AbortSignal
 	/** When set, skip create and resume polling an existing task. */
 	resumePublishTaskId?: string | null
+	/** Optional create-form draft persisted for resume UX. */
+	draft?: TDraft
 }
 
-export interface ResumePendingPublishOptions {
+export interface ResumePendingPublishOptions<TDraft = unknown> {
 	resourceType: AsyncPublishResourceType
 	code: string
 	publishTaskId: string
@@ -176,7 +199,8 @@ export interface ResumePendingPublishOptions {
 	 * Called only when the task is still processing and the UI should enter waiting state.
 	 * Not called when the first check already returns ready / failed.
 	 */
-	onStartWaiting?: () => void
+	onStartWaiting?: (draft?: TDraft) => void
+	draft?: TDraft
 }
 
 export interface ResumePendingPublishResult {
@@ -187,12 +211,13 @@ export interface ResumePendingPublishResult {
 
 /**
  * Create (or resume) an async publish task and poll until ready.
- * Persists publish_task_id in sessionStorage while processing.
+ * Persists publish_task_id (+ optional draft) in sessionStorage while processing.
  */
-export async function runAsyncPublish(
-	options: RunAsyncPublishOptions,
+export async function runAsyncPublish<TDraft = unknown>(
+	options: RunAsyncPublishOptions<TDraft>,
 ): Promise<AsyncPublishTaskSnapshot> {
-	const { resourceType, code, create, check, onProgress, signal, resumePublishTaskId } = options
+	const { resourceType, code, create, check, onProgress, signal, resumePublishTaskId, draft } =
+		options
 
 	let publishTaskId = resumePublishTaskId?.trim() || ""
 
@@ -219,9 +244,9 @@ export async function runAsyncPublish(
 			throw new AsyncPublishError("Missing publish_task_id from create response", "failed")
 		}
 
-		savePendingPublishTask(resourceType, code, publishTaskId)
+		savePendingPublishTask(resourceType, code, publishTaskId, draft)
 	} else {
-		savePendingPublishTask(resourceType, code, publishTaskId)
+		savePendingPublishTask(resourceType, code, publishTaskId, draft)
 	}
 
 	try {
@@ -244,10 +269,11 @@ export async function runAsyncPublish(
  * Resume a pending publish task after re-entering the page.
  * If the first check is already ready, settle silently without entering waiting UI.
  */
-export async function resumePendingPublish(
-	options: ResumePendingPublishOptions,
+export async function resumePendingPublish<TDraft = unknown>(
+	options: ResumePendingPublishOptions<TDraft>,
 ): Promise<ResumePendingPublishResult> {
-	const { resourceType, code, publishTaskId, check, onProgress, signal, onStartWaiting } = options
+	const { resourceType, code, publishTaskId, check, onProgress, signal, onStartWaiting, draft } =
+		options
 	const taskId = publishTaskId.trim()
 	if (!taskId) {
 		throw new AsyncPublishError("Missing publish_task_id", "failed")
@@ -283,9 +309,9 @@ export async function resumePendingPublish(
 	}
 
 	// Still processing — show waiting UI, then poll until terminal status.
-	onStartWaiting?.()
+	onStartWaiting?.(draft)
 	onProgress?.(typeof snapshot.progress === "number" ? snapshot.progress : 0)
-	savePendingPublishTask(resourceType, code, taskId)
+	savePendingPublishTask(resourceType, code, taskId, draft)
 
 	try {
 		const task = await pollPublishTask({

@@ -225,6 +225,7 @@ function PublishingPanel() {
 			await runAsyncPublish({
 				resourceType: "agent",
 				code: crewCode,
+				draft,
 				create: () =>
 					crewService.publishAgentAsync(crewCode, buildPublishParamsFromDraft(draft)),
 				check: (publishTaskId) => crewService.checkAgentPublish(crewCode, publishTaskId),
@@ -263,8 +264,8 @@ function PublishingPanel() {
 	 */
 	useEffect(() => {
 		if (!crewCode) return
-		const pendingTaskId = loadPendingPublishTask("agent", crewCode)
-		if (!pendingTaskId) return
+		const pending = loadPendingPublishTask<PublishDraft>("agent", crewCode)
+		if (!pending?.publish_task_id) return
 
 		publishAbortRef.current?.abort()
 		const abortController = new AbortController()
@@ -282,7 +283,8 @@ function PublishingPanel() {
 				const result = await resumePendingPublish({
 					resourceType: "agent",
 					code: crewCode,
-					publishTaskId: pendingTaskId,
+					publishTaskId: pending.publish_task_id,
+					draft: pending.draft,
 					check: (publishTaskId) =>
 						crewService.checkAgentPublish(crewCode, publishTaskId),
 					onProgress: (progress) => {
@@ -291,11 +293,15 @@ function PublishingPanel() {
 						}
 					},
 					signal: abortController.signal,
-					onStartWaiting: () => {
+					onStartWaiting: (draft) => {
 						if (!active) return
 						waitingUiStarted = true
 						publishPanelStore.beginPublishing(0)
-						publishPanelStore.openCreateView()
+						if (draft) {
+							publishPanelStore.openCreateViewWithDraft(draft)
+						} else {
+							publishPanelStore.openCreateView()
+						}
 					},
 				})
 				if (!active) return

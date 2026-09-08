@@ -250,6 +250,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 					await runAsyncPublish({
 						resourceType: "skill",
 						code,
+						draft,
 						create: () =>
 							skillsService.publishSkillAsync(
 								code,
@@ -511,8 +512,8 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	// Already-ready tasks settle silently (no loading button / success toast).
 	useEffect(() => {
 		if (!isPublishPanelVisible || !skillCode) return
-		const pendingTaskId = loadPendingPublishTask("skill", skillCode)
-		if (!pendingTaskId) return
+		const pending = loadPendingPublishTask<PublishDraft>("skill", skillCode)
+		if (!pending?.publish_task_id) return
 
 		publishAbortRef.current?.abort()
 		const abortController = new AbortController()
@@ -525,7 +526,8 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 				const result = await resumePendingPublish({
 					resourceType: "skill",
 					code: skillCode,
-					publishTaskId: pendingTaskId,
+					publishTaskId: pending.publish_task_id,
+					draft: pending.draft,
 					check: (publishTaskId) =>
 						skillsService.checkSkillPublish(skillCode, publishTaskId),
 					onProgress: (progress) => {
@@ -534,11 +536,15 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 						}
 					},
 					signal: abortController.signal,
-					onStartWaiting: () => {
+					onStartWaiting: (draft) => {
 						if (!active) return
 						waitingUiStarted = true
 						publishPanelStore.beginPublishing(0)
-						publishPanelStore.openCreateView()
+						if (draft) {
+							publishPanelStore.openCreateViewWithDraft(draft)
+						} else {
+							publishPanelStore.openCreateView()
+						}
 					},
 				})
 				if (!active) return
