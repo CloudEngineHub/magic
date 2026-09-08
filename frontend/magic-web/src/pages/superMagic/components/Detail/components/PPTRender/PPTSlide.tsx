@@ -57,6 +57,8 @@ interface PPTSlideProps {
 	isActive: boolean
 	/** The slide currently painted in the main canvas. May differ from isActive while preparing. */
 	isPresented?: boolean
+	/** Hide presented-slide chrome when the file tab is cached. */
+	isTabActive?: boolean
 	content: string
 	rawContent: string
 	/** Stable content revision used to remount only the iframe whose HTML actually changed. */
@@ -131,6 +133,7 @@ const PPTSlide = observer(function PPTSlide({
 	index,
 	isActive,
 	isPresented,
+	isTabActive,
 	content,
 	rawContent,
 	renderRevision,
@@ -171,7 +174,8 @@ const PPTSlide = observer(function PPTSlide({
 }: PPTSlideProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
-	const effectiveIsPresented = isPresented ?? isActive
+	const fileTabActive = isTabActive !== false
+	const effectiveIsPresented = (isPresented ?? isActive) && fileTabActive
 	const isInteractive = effectiveIsPresented && isActive
 
 	// 内部管理编辑模式

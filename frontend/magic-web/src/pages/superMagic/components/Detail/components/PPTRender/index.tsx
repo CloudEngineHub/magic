@@ -843,6 +843,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											index={index}
 											isActive={index === store.activeIndex}
 											isPresented={key === presentedKey}
+											isTabActive={isTabActive}
 											toolbarOwnerKey={key}
 											onToolbarModelChange={handleToolbarModelChange}
 											content={slide.content || ""}

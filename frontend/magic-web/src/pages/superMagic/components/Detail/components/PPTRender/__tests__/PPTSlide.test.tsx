@@ -554,6 +554,17 @@ describe("PPTSlide", () => {
 		)
 	})
 
+	it("hides the live renderer when the cached file tab is inactive", () => {
+		renderPPTSlide({ isActive: true, isPresented: true, isTabActive: false })
+
+		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				isVisible: false,
+				isTabActive: false,
+			}),
+		)
+	})
+
 	it("reports real iframe readiness to the double-buffer owner", async () => {
 		const onRenderReadyChange = vi.fn()
 		renderPPTSlide({ onRenderReadyChange, renderRevision: "slide-1:1" })

@@ -239,6 +239,8 @@ interface IsolatedHTMLRendererProps {
 	/** Mount target for `createPortal` (e.g. save/cancel) at style toolbar’s right */
 	toolbarEndRef?: Ref<HTMLDivElement | null>
 	isVisible?: boolean
+	/** Hide portaled chrome when this instance is not interactive. */
+	isTabActive?: boolean
 	iframeClassName?: string
 	containIframeOverscroll?: boolean //控制HTML预览增强组件内部是否启用
 	hideVerticalScroll?: boolean
@@ -453,6 +455,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			toolbarEndRef,
 			iframeClassName,
 			isVisible,
+			isTabActive,
 			containIframeOverscroll = false,
 			hideVerticalScroll = false,
 			enableScalingHeightCalculation = false,
@@ -2493,30 +2496,33 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			>
 				<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 					{/* 顶部工具栏与下方工作区共享同一个编辑器外框。 */}
-					{sandboxType === "iframe" && isEditMode && isVisible !== false && (
-						<>
-							<StylePanel
-								variant="global"
-								editorRef={editorRef as React.RefObject<HTMLEditorV2Ref>}
-								disabled={isSaving}
-								domTreeOpen={domTreeOpen}
-								onToggleDomTree={handleToggleDomTree}
-								toolbarEndRef={toolbarEndRef}
-								className={cn(
-									"!w-auto flex-shrink-0 border-b border-border/70 bg-card",
-									toolbarClassName,
-								)}
-							/>
-							<ElementContextPanel
-								editorRef={editorRef as React.RefObject<HTMLEditorV2Ref>}
-								anchor={selectedElementViewportRect}
-								selector={selectedElementViewportRect?.selector}
-								open={!isContextPanelDismissed}
-								disabled={isSaving}
-								boundaryRef={canvasViewportRef}
-							/>
-						</>
-					)}
+					{sandboxType === "iframe" &&
+						isEditMode &&
+						isVisible !== false &&
+						isTabActive !== false && (
+							<>
+								<StylePanel
+									variant="global"
+									editorRef={editorRef as React.RefObject<HTMLEditorV2Ref>}
+									disabled={isSaving}
+									domTreeOpen={domTreeOpen}
+									onToggleDomTree={handleToggleDomTree}
+									toolbarEndRef={toolbarEndRef}
+									className={cn(
+										"!w-auto flex-shrink-0 border-b border-border/70 bg-card",
+										toolbarClassName,
+									)}
+								/>
+								<ElementContextPanel
+									editorRef={editorRef as React.RefObject<HTMLEditorV2Ref>}
+									anchor={selectedElementViewportRect}
+									selector={selectedElementViewportRect?.selector}
+									open={!isContextPanelDismissed}
+									disabled={isSaving}
+									boundaryRef={canvasViewportRef}
+								/>
+							</>
+						)}
 
 					<div className="flex min-h-0 min-w-0 flex-1">
 						<div

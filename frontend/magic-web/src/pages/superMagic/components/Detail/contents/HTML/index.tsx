@@ -1671,6 +1671,7 @@ export default memo(function HTML(props: HTMLProps) {
 									attachmentList={attachmentList}
 									isPlaybackMode={isPlaybackMode}
 									isVisible={htmlTestIdsEnabled}
+									isTabActive={htmlTestIdsEnabled}
 									onRenderReady={handlePreviewRenderReady}
 									onContentMetrics={(
 										metrics: IsolatedHTMLRendererContentMetrics,

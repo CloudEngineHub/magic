@@ -373,6 +373,10 @@ vi.mock("../components/StylePanel", () => ({
 	StylePanel: () => null,
 }))
 
+vi.mock("../components/ElementContextPanel", () => ({
+	ElementContextPanel: () => <div data-testid="html-editor-context-panel" />,
+}))
+
 vi.mock("../components/StylePanel/controls", () => ({
 	ZoomControls: () => null,
 }))
@@ -473,6 +477,22 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 		expect(screen.queryByTestId("html-editor-canvas")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("isolated-html-content-iframe")).not.toBeInTheDocument()
+	})
+
+	it("unmounts the portaled context toolbar when the cached tab is inactive", async () => {
+		const { rerender } = render(
+			<IsolatedHTMLRenderer {...defaultProps} isEditMode isVisible isTabActive />,
+		)
+		await flushReactEffects()
+
+		expect(screen.getByTestId("html-editor-context-panel")).toBeInTheDocument()
+
+		rerender(
+			<IsolatedHTMLRenderer {...defaultProps} isEditMode isVisible isTabActive={false} />,
+		)
+		await flushReactEffects()
+
+		expect(screen.queryByTestId("html-editor-context-panel")).not.toBeInTheDocument()
 	})
 
 	it("shows the scrollbar style only while a PPT is manually zoomed", async () => {

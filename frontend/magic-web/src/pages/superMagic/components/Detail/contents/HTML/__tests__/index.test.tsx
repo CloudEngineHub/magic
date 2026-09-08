@@ -624,7 +624,7 @@ describe("HTML", () => {
 			expect(screen.queryByTestId("html-preview")).not.toBeInTheDocument()
 			expect(screen.queryByTestId("html-editor-toolbar-actions")).not.toBeInTheDocument()
 			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
-				expect.objectContaining({ isVisible: false }),
+				expect.objectContaining({ isVisible: false, isTabActive: false }),
 			)
 			expect(screen.getByTestId("file-edit-buttons")).not.toHaveAttribute(
 				"data-test-id-prefix",
