@@ -2,9 +2,9 @@
 <!--zh
 ## 文件型持久记忆的运行时位置
 
-记忆是当前用户私有、跨会话保留的 Markdown 上下文。当前对话、当前用户指令和当前权威来源优先。memory Skill 通常已预加载，提供检索、写入和维护知识，不需要重复加载；Skill 可用不代表自动流程已经启用。
+记忆是当前用户私有、跨会话保留的 Markdown 上下文，同一项目中的多个话题共享项目记忆。当前对话、当前用户指令和当前权威来源优先。memory Skill 通常已预加载，提供检索、写入和维护知识，不需要重复加载；Skill 可用不代表自动流程已经启用。
 
-根目录为 {{ @variable("memory_root") }}。global/ 保存跨项目记忆，projects/p_<project_id>/ 保存普通项目背景。当前自动设置、实际作用域路径和预算以 <system_injected_context> 中最新的 memory 通知为准，不猜测 project_id。自动记忆开启时，运行时会提供适用的核心 MEMORY.md；同级 notes/ 保存按需读取的细节。
+根目录为 {{ @variable("memory_root") }}。global/ 保存跨项目记忆，projects/p_<project_id>/ 保存普通项目背景。直接使用 <system_injected_context> 中最新 memory 通知给出的完整路径、自动设置和预算；没有当前项目路径时，不自行拼造。项目和话题的 ID、名称见最新 <super_magic_product_context>，发生变化时以 <super_magic_product_context_changed> 中的 current 为准；不要用话题、Agent 或沙盒 ID 拼项目目录。自动记忆开启时，运行时会提供适用的核心 MEMORY.md；同级 notes/ 保存按需读取的细节。
 
 Claw 自身工作区记忆承担普通项目记忆保存项目背景的职责，因此 Claw 不创建或维护普通 projects/p_<project_id>/ 记忆。Claw 仍按自己的工作区规则维护记忆，跨项目信息按归属使用用户全局记忆，不强制重复写两份。
 
@@ -14,9 +14,9 @@ Claw 自身工作区记忆承担普通项目记忆保存项目背景的职责，
 -->
 ## Runtime locations for file-based persistent memory
 
-Memory is private, user-scoped Markdown context retained across sessions. The current conversation, current user instructions, and current authoritative sources take precedence. The memory skill is normally preloaded and explains retrieval, writing, and maintenance; do not reload instructions already present. Skill availability does not mean automatic memory is enabled.
+Memory is private, user-scoped Markdown context retained across sessions; project memory is shared across this user's topics in that project. The current conversation, current user instructions, and current authoritative sources take precedence. The memory skill is normally preloaded and explains retrieval, writing, and maintenance; do not reload instructions already present. Skill availability does not mean automatic memory is enabled.
 
-The root is {{ @variable("memory_root") }}. global/ holds cross-project memory; projects/p_<project_id>/ holds ordinary-project context. Use the latest memory notification in <system_injected_context> for the current automatic-memory setting, actual scope paths, and budgets; do not guess a project_id. When automatic memory is enabled, the runtime supplies applicable core MEMORY.md files; sibling notes/ holds detail read on demand.
+The root is {{ @variable("memory_root") }}. global/ holds cross-project memory; projects/p_<project_id>/ holds ordinary-project context. Use the exact paths, automatic-memory setting, and budgets from the latest memory notification in <system_injected_context>; do not construct a project path when none is provided. Read project and topic IDs and names from the latest <super_magic_product_context>, using current inside <super_magic_product_context_changed> when it changes; do not use a topic, Agent, or sandbox ID to build a project directory. When automatic memory is enabled, the runtime supplies applicable core MEMORY.md files; sibling notes/ holds detail read on demand.
 
 Claw's own workspace memory serves the project-context role that ordinary project memory serves for other Agents. Claw therefore does not create or maintain ordinary projects/p_<project_id>/ memory. Maintain Claw memory under its own workspace rules; use user-global memory for information that belongs across projects, without requiring duplicate copies.
 

@@ -82,9 +82,13 @@ async def test_memory_maintenance_prompt_skips_missing_files(monkeypatch, tmp_pa
 @pytest.mark.asyncio
 async def test_prompt_provider_appends_dynamic_maintenance_prompt(monkeypatch):
     """真实 Skill reference 与动态用量共同进入后台请求，不恢复 Python 政策模板。"""
+    from agentlang.chat_history.chat_history import ChatHistoryForkData
     from agentlang.skills.loader import SkillLoader
+    from app.core.horizon.models import HorizonState
     from app.core.skill_utils.prompt import SkillSources
     from app.core.models.agent_runtime import AgentProviderType, AgentTarget
+    from app.core.models.agent_session import AgentSessionRef
+    from app.service.agent_context_snapshot_service import AgentContextSnapshot
 
     root = Path(__file__).resolve().parents[2]
     skill = await SkillLoader().load_from_file(root / "agents/skills/memory/SKILL.md")
@@ -99,9 +103,16 @@ async def test_prompt_provider_appends_dynamic_maintenance_prompt(monkeypatch):
         has_skill=lambda name: name == "memory",
         shared_context=SimpleNamespace(get_field=lambda _key: "UTC"),
     )
-    prompt = await MemoryExtractionPromptProvider(builder).load(
-        AgentTarget(AgentProviderType.BUILTIN, "magic"), agent_context=context,
+    snapshot = AgentContextSnapshot(
+        source=AgentSessionRef(
+            target=AgentTarget(AgentProviderType.BUILTIN, "magic"),
+            agent_id="source",
+            chat_history_dir=root / ".chat_history",
+        ),
+        chat_history=ChatHistoryForkData(messages=(), session_document={}),
+        horizon_state=HorizonState(agent_id="source"),
     )
+    prompt = await MemoryExtractionPromptProvider(builder).load(snapshot, agent_context=context)
     assert "after-run.md" in prompt
     assert "Dynamic usage facts" in prompt
     assert "Runtime scope facts" in prompt

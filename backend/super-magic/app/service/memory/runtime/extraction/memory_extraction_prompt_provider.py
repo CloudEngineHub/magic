@@ -24,6 +24,8 @@ from app.utils.async_file_utils import async_read_text
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
+    from app.core.horizon.models import SuperMagicProductContextState
+    from app.service.agent_context_snapshot_service import AgentContextSnapshot
 
 logger = get_logger(__name__)
 
@@ -34,16 +36,30 @@ class MemoryExtractionPromptProvider:
     def __init__(self, maintenance_prompt_builder: MemoryMaintenancePromptBuilder | None = None) -> None:
         self._maintenance_prompt_builder = maintenance_prompt_builder or MemoryMaintenancePromptBuilder()
 
-    async def load(self, target: AgentTarget, *, agent_context: "AgentContext") -> str:
+    async def load(self, snapshot: "AgentContextSnapshot", agent_context: "AgentContext") -> str:
         try:
-            return await self._load_memory_request(target, agent_context=agent_context)
+            request = await self._load_memory_request(snapshot.source.target, agent_context=agent_context)
         except Exception as error:
             # 读取中 Skill 或 reference 消失，也不能取消 Claw 独立的工作区维护。
             # CancelledError 不在 Exception 内，用户中断不会触发这条降级。
             if not agent_context.is_magiclaw():
                 raise
             logger.warning(f"通用 memory 说明不可用，Claw 仅维护自身工作区记忆: {error}")
-            return self._unavailable_request(agent_context)
+            request = self._unavailable_request(agent_context)
+        # 快照中的话题是来源模型当时已见的产品话题，不是本次后台 Agent 的运行 ID。
+        # 只复用已有信息；来源缺失不新增失败条件，也不再捕获快照或查询话题接口。
+        source_context = self._format_source_context(snapshot.horizon_state.super_magic_product_context)
+        return f"{source_context}\n\n{request}"
+
+    @staticmethod
+    def _format_source_context(context: "SuperMagicProductContextState | None") -> str:
+        if context is None:
+            return "Source project and topic: unavailable in the captured context."
+        return (
+            "Source conversation captured for this memory task:\n"
+            f"Project: {html.escape(context.project.name)} (ID: {html.escape(context.project.id)})\n"
+            f"Topic: {html.escape(context.topic.name)} (ID: {html.escape(context.topic.id)})"
+        )
 
     async def _load_memory_request(self, target: AgentTarget, *, agent_context: "AgentContext") -> str:
         # 复用编译后的来源定义、归一化和同一 Skill 发现顺序，避免后台读到另一来源的同名 Skill。

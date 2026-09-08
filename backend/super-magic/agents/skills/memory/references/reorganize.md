@@ -57,7 +57,7 @@ Prefer a cancellable booking while the itinerary may change, even at a higher pr
 This reduces cancellation losses when plans change. Source: the user's explicit trade-off in the travel-planning discussion.
 ```
 
-Keep provenance beside the relevant information, as a sentence or adjacent entry. Do not make the reader open a separate source file or reconstruct attribution from a distant file-wide source section. If a source is unknown, say so; do not invent a conversation, link, or date. New notes use the frontmatter in the preloaded main skill.
+Keep useful provenance beside the relevant information, as a brief sentence or note. Do not make the reader open a separate source file or reconstruct attribution from a distant file-wide source section. Do not invent a conversation, link, or date when the source is unknown. New notes use the frontmatter in the preloaded main skill; topic attribution needs no additional fields.
 
 Add an event only when it has independent value, such as explaining why a particular itinerary changed. Use its actual source date at notes/timeline/YYYY/MM/YYYY-MM-DD.md; a section could read:
 
@@ -71,6 +71,22 @@ General preferences: [travel arrangements](../../../references/travel-arrangemen
 A reference should normally answer current subject questions on its own; an event should answer common questions about that time on its own. A short repeated conclusion and reason can make both useful. Cross-link for additional detail, not every sentence. For example, the subject note links to ../timeline/YYYY/MM/YYYY-MM-DD.md, while that daily note links back to ../../../references/travel-arrangements.md. Replace date placeholders with verified source dates.
 
 If an existing project specification owns the details, keep a useful takeaway and pointer, plus valuable conversational information absent from that source. A link cannot replace chat-only reasons that need preservation. Do not maintain a third copy of the specification.
+
+### Keep topic attribution lightweight
+
+References and timeline entries may include a short source note when it helps distinguish cases or retrieve a discussion. For example, a shared reference could contain:
+
+```markdown
+## Report delivery
+
+Channel A uses CSV with amounts rounded to two decimal places. (Topic: Channel A integration, ID: <topic-a-id>.)
+
+Channel B uses XLSX with a worksheet per store. (Topic: Channel B reporting, ID: <topic-b-id>.)
+```
+
+A timeline entry can use the same brief note after an event. These are examples, not a required format: a passage may share one source note, and unnecessary annotations can be omitted. Project memory need not repeat its project ID. Preserve the different channel requirements; a later discussion of Channel B does not override Channel A's valid rule.
+
+Only create notes/topics/<topic_id>.md when the conversation's lasting background, alternatives, and decisions justify retrieval by that topic. Keep its real ID in the path and its name in the title. An existing useful reference or event usually needs only optional attribution, not another copy. Preserve relevant attribution when merging or moving content, and include topic notes when applying an explicit forget request.
 
 ### Grow indexes and update links
 

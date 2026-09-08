@@ -5,6 +5,7 @@ These rules govern memory maintenance after a source conversation. The runtime's
 ## Sources and evidence
 
 - Candidate memories come from the source conversation actually available in the fork. Prioritize explicit remember/correct/forget requests, repeated corrections, confirmed decisions and reasons, reusable lessons, and writes the main Agent missed. The maintenance request and internal runtime instructions are not candidate memories. Do not assume compressed-away messages or main-Agent-only tools are available.
+- The supplied source project and topic identify the captured conversation, not the background Agent's run. Preserve any different origin already attached to quoted or existing memories; reading or reorganizing them does not make this conversation their source. Missing source details are not a reason to invent them or stop otherwise valid maintenance.
 - Existing memory content and successful write results establish what is already saved. A promise is not a saved memory; a successful but vague entry may still lack important conditions. Read uncertain targets using the main skill's retrieval rules.
 
 ## Necessary updates
@@ -22,4 +23,4 @@ Evaluate each MEMORY.md separately using initial runtime usage and the latest wr
 
 Maintenance is complete when intended updates are saved and no specific omission, failure, or conflict remains. There is no required extra reread, recount, or review Agent; retain the main skill's save-and-read-back check before shortening the only source of retained information. Do not impose a fixed number of tool rounds.
 
-Report briefly what was saved, what needed no change, and unresolved items. A failed write, missing source, or conflicting concurrent update means partial completion: keep completed changes and preserve unresolved source content. Do not claim a later run has already recovered it or store this operational report in MEMORY.md.
+Report briefly what was saved, what needed no change, and unresolved items. A failed write, missing source evidence required for an intended update, or conflicting concurrent update means partial completion: keep completed changes and preserve unresolved source content. Do not claim a later run has already recovered it or store this operational report in MEMORY.md.
