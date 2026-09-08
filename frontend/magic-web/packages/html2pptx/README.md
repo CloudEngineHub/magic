@@ -21,19 +21,6 @@ pnpm run build
 pnpm run test
 ```
 
-Run the complete open-source P6 validation (typecheck, tests, 200/300-page
-Node pressure, and Chromium/Worker/OPFS smoke). The Chromium checks require
-Puppeteer's pinned browser:
-
-```bash
-pnpm exec puppeteer browsers install chrome
-pnpm run ci:p6
-```
-
-`ci:p6` writes ignored machine-readable reports under `benchmarks/results/`.
-It runs the package typecheck, tests, build, browser capability checks, and
-the Node/Chromium benchmark suites.
-
 ## Benchmark
 
 Run the quick Node packaging and real-browser smoke benchmarks:
@@ -115,26 +102,3 @@ await handle.promise
 
 The CJS build test covers this explicit override path. The browser smoke benchmark also accepts
 `--target dist` to verify the generated ESM asset path after a package build.
-
-### Browser capability matrix
-
-Firefox and Safari are not assumed to implement the same OPFS/File System
-Access subset as Chromium. `tests/browser-capability-matrix.test.ts` models
-both engines' unavailable and restricted/private-context capabilities and
-asserts the privacy-safe structured result:
-
-```ts
-{
-  code: "opfs-unavailable",
-  diagnostic: {
-    phase: "preflight",
-    details: { capability: "opfs-staging" }
-  }
-}
-```
-
-The matrix intentionally does not UA-sniff or expose the browser's user-agent
-in diagnostics. A real Firefox/WebKit runner should still be scheduled on the
-project's cross-browser infrastructure; the deterministic capability gate
-keeps that external runner from being the only protection against a buffered
-fallback regression.
