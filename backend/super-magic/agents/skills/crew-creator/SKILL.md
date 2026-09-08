@@ -51,6 +51,15 @@ Use `list_dir` to check `.magic/`. If `IDENTITY.md` is missing, enter the initia
 
 Collect information in rounds; you may combine questions but don't overwhelm the user.
 
+When collecting information with `ask_user`, prioritize clickable choices instead of rendering every question as a free-text field:
+
+- Combine questions from the same round into one `ask_user` call when practical.
+- Use `confirm` for yes/no decisions, especially the Round 4 skill-decomposition decision.
+- Use `select` whenever 2-8 useful candidate answers can be offered, and `multi_select` when multiple answers may apply. The UI adds an "Other" free-text choice, so options do not need to be exhaustive.
+- Use `input` only for the employee name, values the user must enter precisely, and genuinely open-ended descriptions that cannot be usefully enumerated.
+- For employee role, work focus, communication style, and workflow type, derive 3-6 concrete options from the name and requirements already provided instead of defaulting to `input`.
+- Give each option a short explanation that makes the tradeoff clear; do not provide bare abstract labels.
+
 **Before gathering, determine the language using the priority above**. Communicate and collect information in the selected language.
 
 **Round 1 (required)**:
