@@ -14,7 +14,7 @@ import type { StyleSectionProps } from "../types"
 import { EditorSelectContent } from "../../EditorFloating"
 import { STYLE_PANEL_STYLES } from "../styles"
 
-type BackgroundType = "solid" | "linear-gradient" | "radial-gradient" | "image"
+type BackgroundType = "none" | "solid" | "linear-gradient" | "radial-gradient" | "image"
 
 interface ColorStop {
 	id: string
@@ -47,6 +47,26 @@ function extractImageUrl(backgroundImage: string): string | null {
 
 	const match = backgroundImage.match(/url\((['"]?)(.*?)\1\)/i)
 	return match?.[2] || null
+}
+
+function isTransparentBackground(color: string): boolean {
+	const compactColor = color.trim().toLowerCase().replace(/\s+/g, "")
+	if (compactColor === "transparent" || compactColor === "rgba(0,0,0,0)") {
+		return true
+	}
+
+	const rgbaMatch = compactColor.match(/^rgba?\(([\d.]+),([\d.]+),([\d.]+)(?:,([\d.]+))?\)$/)
+	if (rgbaMatch?.[4] !== undefined) return Number(rgbaMatch[4]) === 0
+
+	if (/^#[0-9a-f]{8}$/.test(compactColor)) return compactColor.endsWith("00")
+	if (/^#[0-9a-f]{4}$/.test(compactColor)) return compactColor.endsWith("0")
+
+	return false
+}
+
+function applyNoBackground(onStyleChange?: StyleSectionProps["onStyleChange"]) {
+	onStyleChange?.("backgroundColor", "transparent")
+	onStyleChange?.("backgroundImage", "none")
 }
 
 function getDefaultColorStops(): ColorStop[] {
@@ -126,8 +146,16 @@ const BackgroundSection = observer(function BackgroundSection({
 			return
 		}
 
+		// Unknown gradients still count as a fill, so do not label them "none".
+		const hasPaintImage = Boolean(currentBgImage && currentBgImage !== "none")
+		if (!hasPaintImage && isTransparentBackground(currentBgColor)) {
+			setBgType("none")
+			setSolidColor("#ffffff")
+			return
+		}
+
 		setBgType("solid")
-		setSolidColor(currentBgColor !== "transparent" ? currentBgColor : "#ffffff")
+		setSolidColor(currentBgColor)
 	}, [currentBgColor, currentBgImage])
 
 	const { run: applyBackgroundDebounced } = useDebounceFn(
@@ -173,6 +201,11 @@ const BackgroundSection = observer(function BackgroundSection({
 			setBgType(value)
 
 			if (value === "image") {
+				return
+			}
+
+			if (value === "none") {
+				applyNoBackground(onStyleChange)
 				return
 			}
 
@@ -288,6 +321,12 @@ const BackgroundSection = observer(function BackgroundSection({
 						<SelectValue />
 					</SelectTrigger>
 					<EditorSelectContent data-testid="html-style-panel-background-type-content">
+						<SelectItem
+							value="none"
+							data-testid="html-style-panel-background-type-option-none"
+						>
+							{t("stylePanel.noBackground")}
+						</SelectItem>
 						<SelectItem value="solid">{t("stylePanel.solidColor")}</SelectItem>
 						<SelectItem value="linear-gradient">
 							{t("stylePanel.linearGradient")}
