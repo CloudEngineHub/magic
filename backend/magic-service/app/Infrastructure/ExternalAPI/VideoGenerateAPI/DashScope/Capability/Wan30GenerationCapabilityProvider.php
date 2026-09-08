@@ -31,6 +31,25 @@ readonly class Wan30GenerationCapabilityProvider
     /** @var list<string> */
     private const array SUPPORTED_RESOLUTIONS = ['480p', '720p', '1080p'];
 
+    /** @var list<array{label: string, value: string, width: int, height: int, resolution: string}> */
+    private const array SUPPORTED_SIZES = [
+        ['label' => '16:9', 'value' => '864x496', 'width' => 864, 'height' => 496, 'resolution' => '480p'],
+        ['label' => '4:3', 'value' => '752x560', 'width' => 752, 'height' => 560, 'resolution' => '480p'],
+        ['label' => '1:1', 'value' => '640x640', 'width' => 640, 'height' => 640, 'resolution' => '480p'],
+        ['label' => '3:4', 'value' => '560x752', 'width' => 560, 'height' => 752, 'resolution' => '480p'],
+        ['label' => '9:16', 'value' => '496x864', 'width' => 496, 'height' => 864, 'resolution' => '480p'],
+        ['label' => '16:9', 'value' => '1280x720', 'width' => 1280, 'height' => 720, 'resolution' => '720p'],
+        ['label' => '4:3', 'value' => '1112x834', 'width' => 1112, 'height' => 834, 'resolution' => '720p'],
+        ['label' => '1:1', 'value' => '960x960', 'width' => 960, 'height' => 960, 'resolution' => '720p'],
+        ['label' => '3:4', 'value' => '834x1112', 'width' => 834, 'height' => 1112, 'resolution' => '720p'],
+        ['label' => '9:16', 'value' => '720x1280', 'width' => 720, 'height' => 1280, 'resolution' => '720p'],
+        ['label' => '16:9', 'value' => '1920x1080', 'width' => 1920, 'height' => 1080, 'resolution' => '1080p'],
+        ['label' => '4:3', 'value' => '1668x1252', 'width' => 1668, 'height' => 1252, 'resolution' => '1080p'],
+        ['label' => '1:1', 'value' => '1440x1440', 'width' => 1440, 'height' => 1440, 'resolution' => '1080p'],
+        ['label' => '3:4', 'value' => '1252x1668', 'width' => 1252, 'height' => 1668, 'resolution' => '1080p'],
+        ['label' => '9:16', 'value' => '1080x1920', 'width' => 1080, 'height' => 1920, 'resolution' => '1080p'],
+    ];
+
     public function supportsModel(string $modelVersion, string $modelId): bool
     {
         return $this->resolveRequestedModel($modelVersion, $modelId) !== null;
@@ -53,20 +72,13 @@ readonly class Wan30GenerationCapabilityProvider
         $keyframeGuided['role_aliases'] = ['first' => 'start', 'last' => 'end'];
 
         return new VideoGenerationConfig([
-            'supported_inputs' => [
-                'text_prompt',
-                'image',
-                'last_frame',
-                'reference_images',
-                'reference_videos',
-                'reference_audios',
-            ],
             'generation' => [
                 'aspect_ratios' => self::SUPPORTED_ASPECT_RATIOS,
                 'duration_type' => 'range',
                 'durations' => ['min' => 2, 'max' => 30, 'step' => 1],
                 'default_duration_seconds' => 5,
                 'resolutions' => self::SUPPORTED_RESOLUTIONS,
+                'sizes' => self::SUPPORTED_SIZES,
                 'default_resolution' => '720p',
                 'supports_seed' => true,
                 'supports_watermark' => true,
@@ -95,7 +107,7 @@ readonly class Wan30GenerationCapabilityProvider
                     ],
                 )->toArray(),
                 VideoInputMode::VideoEdit->value => VideoInputModeDefinition::videoEdit(
-                    description: $this->translateInputMode('video_edit.single'),
+                    description: $this->translateInputMode('video_edit'),
                     supportedFields: ['reference_videos'],
                     maxCount: 1,
                 )->toArray(),

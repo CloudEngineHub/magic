@@ -14,5 +14,4 @@ interface GeminiTransportInterface
     public function createInteraction(QueueExecutorConfig $config, array $payload, array $logContext = []): array;
 
     public function getInteraction(QueueExecutorConfig $config, string $interactionId, array $logContext = []): array;
-
 }

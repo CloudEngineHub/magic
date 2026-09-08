@@ -39,5 +39,4 @@ readonly class ApiKeyGeminiTransport implements GeminiTransportInterface
             $config->getExtraString('proxy_url'),
         );
     }
-
 }

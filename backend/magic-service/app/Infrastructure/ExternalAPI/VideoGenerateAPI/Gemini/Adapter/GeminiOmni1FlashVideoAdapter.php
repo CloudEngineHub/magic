@@ -17,6 +17,8 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportInterf
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ReferenceMediaPayload;
+use Dtyq\CloudFile\Kernel\Utils\RemoteDownloadSecurityConfig;
+use Dtyq\CloudFile\Kernel\Utils\SafeRemoteFileDownloader;
 use InvalidArgumentException;
 
 final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityTestableInterface
@@ -32,8 +34,18 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
 
     private const array INPUT_MODES = ['standard', 'image_reference', 'keyframe_guided', 'video_edit', 'omni_reference'];
 
-    public function __construct(private GeminiOmniGenerationCapabilityProvider $capabilityProvider, private GeminiTransportInterface $transport)
-    {
+    private SafeRemoteFileDownloader $remoteFileDownloader;
+
+    public function __construct(
+        private GeminiOmniGenerationCapabilityProvider $capabilityProvider,
+        private GeminiTransportInterface $transport,
+        ?SafeRemoteFileDownloader $remoteFileDownloader = null,
+    ) {
+        $this->remoteFileDownloader = $remoteFileDownloader ?? new SafeRemoteFileDownloader(new RemoteDownloadSecurityConfig(
+            enabled: true,
+            level: RemoteDownloadSecurityConfig::LEVEL_STANDARD,
+            maxDownloadSize: 100 * 1024 * 1024,
+        ));
     }
 
     public function supportsModel(string $modelVersion, string $modelId): bool
@@ -241,13 +253,22 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
             throw new InvalidArgumentException('Gemini media item is invalid.');
         }
 
-        $normalized = [
-            'uri' => ReferenceMediaPayload::normalize(
-                $item,
-                'Gemini ' . $field . ' entry',
-                $type === 'video' ? 'video/mp4' : ($type === 'audio' ? 'audio/mpeg' : 'image/png'),
-            ),
-        ];
+        $uri = ReferenceMediaPayload::normalize(
+            $item,
+            'Gemini ' . $field . ' entry',
+            $type === 'video' ? 'video/mp4' : ($type === 'audio' ? 'audio/mpeg' : 'image/png'),
+        );
+        if (preg_match('#^https?://#i', $uri) === 1) {
+            $file = $this->remoteFileDownloader->download($uri);
+            $path = $file->getRealPath();
+            try {
+                $mimeType = trim($file->getMimeType()) ?: ($type === 'video' ? 'video/mp4' : ($type === 'audio' ? 'audio/mpeg' : 'image/png'));
+                $uri = 'data:' . $mimeType . ';base64,' . base64_encode((string) file_get_contents($path));
+            } finally {
+                @unlink($path);
+            }
+        }
+        $normalized = ['uri' => $uri];
         if ($type === 'image' && isset($item['role'])) {
             $role = strtolower(trim((string) $item['role']));
             if ($field === 'frames' && ! in_array($role, ['start', 'end', 'first', 'last'], true)) {
@@ -265,7 +286,13 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         $parts = [];
         foreach (self::MEDIA_TYPES as $field => $type) {
             foreach ($inputs[$field] ?? [] as $item) {
-                $part = ['type' => $type, 'uri' => $item['uri']];
+                $part = ['type' => $type];
+                if (preg_match('/^data:(?<mime_type>[^;]+);base64,(?<data>.+)$/s', (string) $item['uri'], $matches) === 1) {
+                    $part['data'] = $matches['data'];
+                    $part['mime_type'] = $matches['mime_type'];
+                } else {
+                    $part['uri'] = $item['uri'];
+                }
                 if (isset($item['role'])) {
                     $part['role'] = $item['role'];
                 }
