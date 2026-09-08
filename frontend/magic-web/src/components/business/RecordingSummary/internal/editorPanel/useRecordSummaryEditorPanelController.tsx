@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useMemoizedFn, useDebounceFn } from "ahooks"
+import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 import ModelSwitchContainer from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/ModelSwitchContainer"
 import { useMessageEditorStore } from "@/pages/superMagic/components/MessageEditor/stores"
 import superMagicTopicModelService from "@/services/superMagic/topicModel/SuperMagicTopicModelService"
@@ -33,9 +35,10 @@ import {
 import { userStore } from "@/models/user"
 import { runForceRecordingOverride } from "@/components/business/RecordingSummary/utils/force-recording-override"
 import {
-	isHomepageRecordingStartReady,
+	getHomepageRecordingStartBlocker,
 	resolveRecordingStartContext,
 	resolveSelectedProjectStartContext,
+	type HomepageRecordingStartBlocker,
 	type RecordingStartContext,
 } from "./recordingStartContext"
 
@@ -52,6 +55,7 @@ export function useRecordSummaryEditorPanelController({
 	modelSwitch,
 	attachments,
 }: RecordSummaryEditorPanelProps) {
+	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 	const recordSummaryService = initializeRecordSummaryService()
 	const runtime = useRecordingEditorRuntime()
@@ -184,6 +188,17 @@ export function useRecordSummaryEditorPanelController({
 		},
 	})
 
+	const notifyHomepageRecordingStartBlocked = useMemoizedFn(
+		(blocker: HomepageRecordingStartBlocker) => {
+			if (blocker === "missingWorkspace") {
+				toast.error(t("recordingSummary.superEditorPanel.warning.missingWorkspace"))
+				return
+			}
+
+			toast.error(t("recordingSummary.superEditorPanel.warning.missingModel"))
+		},
+	)
+
 	const startNewRecording = useMemoizedFn(
 		async (mode: "new" | "current" = "new", startContext?: RecordingStartContext) => {
 			const resolvedContext =
@@ -198,12 +213,11 @@ export function useRecordSummaryEditorPanelController({
 			const nextProject = resolvedContext.project
 			const nextTopic = resolvedContext.topic
 			const nextModel = resolvedContext.model
+			const startBlocker = getHomepageRecordingStartBlocker(resolvedContext)
 
-			if (
-				(!startContext && !isModelReady) ||
-				!isHomepageRecordingStartReady(resolvedContext)
-			) {
+			if ((!startContext && !isModelReady) || startBlocker) {
 				console.error("workspace, topic, project, model not selected")
+				if (startBlocker) notifyHomepageRecordingStartBlocked(startBlocker)
 				return
 			}
 
@@ -283,8 +297,8 @@ export function useRecordSummaryEditorPanelController({
 		if (startRecordingInFlightRef.current) return
 		startRecordingInFlightRef.current = true
 		try {
-			// Pick the destination project first so canceling the picker does not
-			// stop the active recording or show the override confirm too early.
+			// Resolve the destination before override so a missing workspace or
+			// model cannot finish the current recording and then fail to start.
 			let selectedStartContext: RecordingStartContext | undefined
 			if (mode === "current") {
 				const pickedContext = await resolveSelectedProjectStartContext({
@@ -293,6 +307,19 @@ export function useRecordSummaryEditorPanelController({
 				})
 				if (!pickedContext) return
 				selectedStartContext = pickedContext
+			} else {
+				const homepageStartContext = resolveRecordingStartContext({
+					selectedWorkspace,
+					selectedProject,
+					selectedTopic,
+					selectedModel,
+				})
+				const startBlocker = getHomepageRecordingStartBlocker(homepageStartContext)
+				if (startBlocker) {
+					notifyHomepageRecordingStartBlocked(startBlocker)
+					return
+				}
+				selectedStartContext = homepageStartContext
 			}
 
 			setIsPreparingRecordingStart(true)
@@ -306,23 +333,7 @@ export function useRecordSummaryEditorPanelController({
 				if (!prepared) return
 			}
 
-			if (selectedStartContext) {
-				await startNewRecording("new", selectedStartContext)
-				return
-			}
-
-			if (!overrideContext) {
-				await startNewRecording(mode)
-				return
-			}
-
-			const startContext = resolveRecordingStartContext({
-				selectedWorkspace,
-				selectedProject,
-				selectedTopic,
-				selectedModel,
-			})
-			await startNewRecording("new", startContext)
+			await startNewRecording("new", selectedStartContext)
 		} finally {
 			startRecordingInFlightRef.current = false
 			setIsPreparingRecordingStart(false)

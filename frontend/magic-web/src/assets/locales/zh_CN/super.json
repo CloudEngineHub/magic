@@ -5003,6 +5003,8 @@
 				"beforeRecording": "开始录音后，请勿关闭当前页面，关闭可能会导致录音内容丢失",
 				"duringRecording": "请勿关闭当前页面，关闭可能会导致录音内容丢失",
 				"mediaRecorderNotSupported": "您的浏览器不支持录音功能，您可通过上传已有音频文件进行总结",
+				"missingModel": "请先选择模型后再开始录音",
+				"missingWorkspace": "请先选择工作区后再开始录音",
 				"recordingInProgress": "正在录音中，暂不可发起新录音，您可通过上传已有音频文件进行总结",
 				"recordingInProgressOtherTab": "其他标签正在录音中，暂不可发起新录音，您可通过上传已有音频文件进行总结",
 				"recordingOverride": "当前有正在录制的会话，点击开始录音可确认是否结束上一段并发起新录音",

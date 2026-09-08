@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+	getHomepageRecordingStartBlocker,
 	isHomepageRecordingStartReady,
 	resolveRecordingStartContext,
 	resolveSelectedProjectStartContext,
@@ -236,5 +237,46 @@ describe("isHomepageRecordingStartReady", () => {
 				model: null,
 			}),
 		).toBe(false)
+	})
+})
+
+describe("getHomepageRecordingStartBlocker", () => {
+	it("returns missingWorkspace before override can run", () => {
+		expect(
+			getHomepageRecordingStartBlocker(
+				resolveRecordingStartContext({
+					selectedWorkspace: null,
+					selectedProject: null,
+					selectedTopic: null,
+					selectedModel,
+				}),
+			),
+		).toBe("missingWorkspace")
+	})
+
+	it("returns missingModel when the homepage has a workspace but no model", () => {
+		expect(
+			getHomepageRecordingStartBlocker(
+				resolveRecordingStartContext({
+					selectedWorkspace,
+					selectedProject,
+					selectedTopic,
+					selectedModel: null,
+				}),
+			),
+		).toBe("missingModel")
+	})
+
+	it("returns null when the homepage can start a recording", () => {
+		expect(
+			getHomepageRecordingStartBlocker(
+				resolveRecordingStartContext({
+					selectedWorkspace,
+					selectedProject: null,
+					selectedTopic: null,
+					selectedModel,
+				}),
+			),
+		).toBeNull()
 	})
 })

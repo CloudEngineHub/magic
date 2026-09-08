@@ -126,10 +126,7 @@ export function IdleStateView({
 	}
 
 	const isStartDisabled =
-		isStartingRecord ||
-		uploading ||
-		isMediaRecorderNotSupported ||
-		(!isModelReady && !isRecordingBlocked)
+		isStartingRecord || uploading || isMediaRecorderNotSupported || !isModelReady
 	const warningText = isMediaRecorderNotSupported
 		? t("recordingSummary.superEditorPanel.warning.mediaRecorderNotSupported")
 		: isOtherTabRecording

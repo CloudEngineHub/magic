@@ -141,6 +141,15 @@ describe("IdleStateView", () => {
 		expect(screen.getByTestId("mock-start-recording-button")).toBeEnabled()
 	})
 
+	it("keeps start disabled when the model is not ready during a recording conflict", () => {
+		renderStartState({
+			isRecordingBlocked: true,
+			isModelReady: false,
+		})
+
+		expect(screen.getByTestId("mock-start-recording-button")).toBeDisabled()
+	})
+
 	it("keeps recording disabled when the browser does not support it", () => {
 		renderStartState({
 			isRecordingBlocked: true,

@@ -51,9 +51,20 @@ export function resolveRecordingStartContext({
 	}
 }
 
+export type HomepageRecordingStartBlocker = "missingWorkspace" | "missingModel"
+
+/** Why a homepage start must not replace an existing recording. */
+export function getHomepageRecordingStartBlocker(
+	context: RecordingStartContext,
+): HomepageRecordingStartBlocker | null {
+	if (!context.workspace?.id) return "missingWorkspace"
+	if (!context.model?.model_id) return "missingModel"
+	return null
+}
+
 /** Homepage recording requires a selected workspace and model. */
 export function isHomepageRecordingStartReady(context: RecordingStartContext): boolean {
-	return Boolean(context.workspace?.id && context.model?.model_id)
+	return getHomepageRecordingStartBlocker(context) === null
 }
 
 /** Resolve the homepage "select project" destination before any override. */
