@@ -10,6 +10,7 @@ namespace HyperfTest\Cases\Infrastructure\Audit;
 use App\Domain\Audit\ResourceAccess\Entity\ResourceAccessLogEntity;
 use App\Domain\Audit\ResourceAccess\Repository\Facade\ResourceAccessLogRepositoryInterface;
 use App\Domain\Audit\ResourceAccess\Service\ResourceAccessLogDomainService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketInstalledEvent;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketUninstalledEvent;
@@ -82,14 +83,14 @@ final class SkillMarketAccessLogListenerTest extends TestCase
             'uninstall' => [new SkillMarketUninstalledEvent('1', 'org-1', 'user-1'), 'uninstall', 'api', ''],
             'use' => [new SkillUsedEvent(
                 organizationCode: 'org-1',
-                sourceId: 'super_magic_tool',
+                sourceId: SourceId::SUPER_MAGIC_TOOL,
                 callTime: 1234567890000,
                 userId: 'user-1',
                 userName: 'User One',
                 requestId: 'request-1',
                 skillCode: 'skill-code-1',
                 businessParams: ['task_id' => 'task-1'],
-            ), 'use', 'super_magic_tool', 'User One'],
+            ), 'use', SourceId::SUPER_MAGIC_TOOL, 'User One'],
         ];
     }
 
@@ -117,7 +118,7 @@ final class SkillMarketAccessLogListenerTest extends TestCase
 
         (new ResourceAccessLogListener($container))->process(new SkillUsedEvent(
             organizationCode: 'org-1',
-            sourceId: 'super_magic_tool',
+            sourceId: SourceId::SUPER_MAGIC_TOOL,
             callTime: 1234567890000,
             userId: 'user-1',
             userName: 'User One',
@@ -146,7 +147,7 @@ final class SkillMarketAccessLogListenerTest extends TestCase
 
         (new ResourceAccessLogListener($container))->process(new SkillUsedEvent(
             organizationCode: 'org-1',
-            sourceId: 'super_magic_tool',
+            sourceId: SourceId::SUPER_MAGIC_TOOL,
             callTime: 1234567890000,
             userId: 'user-1',
             userName: 'User One',

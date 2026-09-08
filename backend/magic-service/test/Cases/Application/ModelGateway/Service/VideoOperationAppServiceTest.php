@@ -27,6 +27,7 @@ use App\Domain\ModelGateway\Entity\Dto\CreateVideoDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\AccessTokenType;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoMediaMetadata;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoOperationStatus;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
@@ -1638,7 +1639,7 @@ class VideoOperationAppServiceTest extends TestCase
         $operation->setStartedAt(date(DATE_ATOM));
         $operation->setTopicId('topic-1');
         $operation->setTaskId('task-1');
-        $operation->setSourceId('design_video_generation');
+        $operation->setSourceId(SourceId::DESIGN_VIDEO_GENERATION);
         $operation->setProjectId(1001);
         $operation->setVideoId('video-1001');
         $operation->setRawRequest([
@@ -1724,7 +1725,7 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame('video-1001', $event->getBusinessParams()['video_id'] ?? null);
         $this->assertSame('topic-1', $event->getTopicId());
         $this->assertSame('task-1', $event->getTaskId());
-        $this->assertSame('design_video_generation', $event->getSourceId());
+        $this->assertSame(SourceId::DESIGN_VIDEO_GENERATION, $event->getSourceId());
 
         $secondResponse = $service->getOperation('token-2', 'op-2', ['organization_id' => 'org-test']);
         $this->assertSame('succeeded', $secondResponse->getStatus());

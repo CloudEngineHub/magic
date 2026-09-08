@@ -35,6 +35,34 @@ final class SourceId
 
     public const string IMAGE_GENERATE = 'image_generate';
 
+    public const string DESIGN_IMAGE_GENERATION = 'design_image_generation';
+
+    public const string DESIGN_IMAGE_FILE_NAME_GENERATION = 'design_image_file_name_generation';
+
+    public const string DESIGN_VIDEO_GENERATION = 'design_video_generation';
+
+    public const string DESIGN_VIDEO_FILE_NAME_GENERATION = 'design_video_file_name_generation';
+
+    public const string DESIGN_IMAGE_MARK_IDENTIFY = 'design_image_mark_identify';
+
+    public const string SK_FLOW = 'sk_flow';
+
+    public const string IM_CHAT = 'im_chat';
+
+    public const string MCP_TOOL = 'mcp_tool';
+
+    public const string ROUTINE = 'routine';
+
+    public const string TEST_RUN = 'test_run';
+
+    public const string SINGLE_DEBUG = 'single_debug';
+
+    public const string OAUTH2_FLOW = 'oauth2_flow';
+
+    public const string SUPER_MAGIC_TOOL_CALL = 'super_magic_tool_call';
+
+    public const string SUPER_MAGIC_TOOL = 'super_magic_tool';
+
     public const string DESIGN_IMAGE_PROMPT_COMPLETION = 'design_image_prompt_completion';
 
     public const string DESIGN_TEXT_CONTENT_COMPLETION = 'design_text_content_completion';

@@ -39,7 +39,7 @@ class DesignTextImageGenerationTaskHandler extends AbstractDesignImageGeneration
         $dto = new TextGenerateImageDTO();
         $this->applyMagicAccessToken($dto);
         $dto->setModel($entity->getModelId());
-        $dto->setBusinessParams($this->designImageGenerationBusinessParams($dataIsolation));
+        $dto->setBusinessParams($this->designImageGenerationBusinessParams($dataIsolation, $entity->getProjectId()));
         $dto->setPrompt($this->resolvePromptForGeneration($entity));
         $dto->setN($entity->getGenerateNum());
 

@@ -20,6 +20,7 @@ use App\Domain\Design\Entity\ValueObject\DesignGenerationStatus;
 use App\Domain\Design\Factory\DesignVideoInputPayloadPreparer;
 use App\Domain\Design\Service\DesignGenerationTaskDomainService;
 use App\Domain\Design\Service\DesignVideoSubmissionDomainService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
@@ -42,8 +43,6 @@ class DesignVideoAppService extends DesignAppService
 
     // 给 payload builder 的能力标记：允许透传 provider 专用 asset URI。
     private const string REQUEST_KEY_SUPPORTS_PROVIDER_ASSET_URI = 'supports_provider_asset_uri';
-
-    private const string SOURCE_ID_DESIGN_VIDEO_GENERATION = 'design_video_generation';
 
     public function __construct(
         private readonly TaskFileDomainService $taskFileDomainService,
@@ -207,7 +206,7 @@ class DesignVideoAppService extends DesignAppService
             'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
             'user_id' => $dataIsolation->getCurrentUserId(),
             'project_id' => $projectId,
-            'source_id' => self::SOURCE_ID_DESIGN_VIDEO_GENERATION,
+            'source_id' => SourceId::DESIGN_VIDEO_GENERATION,
         ];
 
         if ($videoId !== null && $videoId !== '') {

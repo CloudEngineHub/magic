@@ -11,6 +11,7 @@ use App\Application\ModelGateway\MicroAgent\MicroAgentFactory;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -75,7 +76,7 @@ class DesignGeneratedVideoFileNameTool
                     businessParams: [
                         'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
                         'user_id' => $dataIsolation->getCurrentUserId(),
-                        'source_id' => 'design_video_file_name_generation',
+                        'source_id' => SourceId::DESIGN_VIDEO_FILE_NAME_GENERATION,
                     ]
                 );
 

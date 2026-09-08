@@ -15,6 +15,7 @@ use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType as OperationPermissionResourceType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
@@ -953,7 +954,7 @@ class SkillAppService extends AbstractSkillAppService
             }
             AsyncEventUtil::dispatch(new SkillUsedEvent(
                 organizationCode: $userAuthorization->getOrganizationCode(),
-                sourceId: 'super_magic_tool',
+                sourceId: SourceId::SUPER_MAGIC_TOOL,
                 callTime: (int) round(microtime(true) * 1000),
                 userId: $userAuthorization->getId(),
                 userName: $userAuthorization->getRealName(),
@@ -1022,7 +1023,7 @@ class SkillAppService extends AbstractSkillAppService
             }
             AsyncEventUtil::dispatch(new SkillUsedEvent(
                 organizationCode: $userAuthorization->getOrganizationCode(),
-                sourceId: 'super_magic_tool',
+                sourceId: SourceId::SUPER_MAGIC_TOOL,
                 callTime: (int) round(microtime(true) * 1000),
                 userId: $userAuthorization->getId(),
                 userName: $userAuthorization->getRealName(),

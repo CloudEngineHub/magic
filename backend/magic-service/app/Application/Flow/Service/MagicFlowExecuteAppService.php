@@ -34,6 +34,7 @@ use App\Domain\Flow\Entity\ValueObject\FlowDataIsolation;
 use App\Domain\Flow\Entity\ValueObject\NodeParamsConfig\Start\Structure\TriggerType;
 use App\Domain\Flow\Entity\ValueObject\Type;
 use App\Domain\Flow\Service\MagicFlowDomainService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\ErrorCode\FlowErrorCode;
 use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\Collector\BuiltInToolSet\BuiltInToolSetCollector;
@@ -90,7 +91,7 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
             isIgnoreMessageEntity: $seqEntity->canTriggerFlow(),
         );
         $operator = $this->createExecutionOperator($authorization);
-        $operator->setSourceId('im_chat');
+        $operator->setSourceId(SourceId::IM_CHAT);
         $executionData = new ExecutionData(
             flowDataIsolation: $dataIsolation,
             operator: $operator,
@@ -139,7 +140,7 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
         }
         $account = $this->magicAccountDomainService->getByMagicId($user->getMagicId());
         $operator->setRealName($account?->getRealName());
-        $operator->setSourceId($apiChatDTO->getShareOptions('source_id', 'sk_flow'));
+        $operator->setSourceId($apiChatDTO->getShareOptions('source_id', SourceId::SK_FLOW));
 
         $flowData = $this->getFlow($flowDataIsolation, $apiChatDTO->getFlowCode(), [Type::Main]);
         $magicFlow = $flowData['flow'];
@@ -205,10 +206,10 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
         }
         $account = $this->magicAccountDomainService->getByMagicId($user->getMagicId());
         $operator->setRealName($account?->getRealName());
-        $operator->setSourceId($apiChatDTO->getShareOptions('source_id', 'sk_flow'));
+        $operator->setSourceId($apiChatDTO->getShareOptions('source_id', SourceId::SK_FLOW));
 
         $operationValidate = 'read';
-        if ($apiChatDTO->getShareOptions('source_id') === 'oauth2_flow') {
+        if ($apiChatDTO->getShareOptions('source_id') === SourceId::OAUTH2_FLOW) {
             $operationValidate = '';
         }
         $flowData = $this->getFlow($flowDataIsolation, $apiChatDTO->getFlowCode(), [Type::Sub, Type::Tools], operationValidate: $operationValidate);
@@ -284,7 +285,7 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
         }
         EnvManager::initDataIsolationEnv($flowDataIsolation, force: true);
         $operator = $this->createExecutionOperator($flowDataIsolation);
-        $operator->setSourceId('mcp_tool');
+        $operator->setSourceId(SourceId::MCP_TOOL);
 
         $flowData = $this->getFlow(
             $flowDataIsolation,
@@ -347,7 +348,7 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
         $operator->setSourceId($sourceId);
 
         $operationValidate = 'read';
-        if ($sourceId === 'super_magic_tool_call') {
+        if ($sourceId === SourceId::SUPER_MAGIC_TOOL_CALL) {
             $operationValidate = '';
         }
 
@@ -448,7 +449,7 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
         );
 
         $operator = Operator::createByCrontab($magicFlow->getOrganizationCode());
-        $operator->setSourceId('routine');
+        $operator->setSourceId(SourceId::ROUTINE);
         $executionData = new ExecutionData(
             flowDataIsolation: $dataIsolation,
             operator: $operator,
@@ -529,7 +530,7 @@ class MagicFlowExecuteAppService extends AbstractFlowAppService
             $nickname = $authorization->getNickname();
         }
         $operator = $this->createExecutionOperator($authorization);
-        $operator->setSourceId('test_run');
+        $operator->setSourceId(SourceId::TEST_RUN);
 
         $triggerData = new TriggerData(
             triggerTime: $triggerTime,
