@@ -60,7 +60,7 @@ export const SelectionBox = memo(function SelectionBox({
 
 	return (
 		<div
-			className="group/selection pointer-events-none absolute outline outline-1 outline-primary/20"
+			className="group/selection pointer-events-none absolute outline outline-1 outline-[#808080]"
 			data-testid="html-editor-selection-box"
 			style={{
 				top: `${transformedRect.top}px`,

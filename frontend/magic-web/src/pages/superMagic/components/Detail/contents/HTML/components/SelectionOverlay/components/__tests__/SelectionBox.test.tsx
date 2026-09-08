@@ -32,7 +32,7 @@ describe("SelectionBox", () => {
 
 		const box = screen.getByTestId("html-editor-selection-box")
 		expect(box.className).toContain("outline")
-		expect(box.className).toContain("outline-primary/20")
+		expect(box.className).toContain("outline-[#808080]")
 		expect(box.className).not.toContain("outline-offset-1")
 		expect(box.className).not.toContain("border-2")
 		expect(box.className).not.toMatch(/(?:^|\s)border(?:\s|$)/)
