@@ -1,4 +1,4 @@
-import { MessageEditorLayoutConfig, ToolbarButton } from "../../../MessageEditor"
+import { type MessageEditorLayoutConfig, ToolbarButton } from "../../../MessageEditor/types"
 
 // 移动端布局配置
 export const MOBILE_LAYOUT_CONFIG: MessageEditorLayoutConfig = {
@@ -7,6 +7,7 @@ export const MOBILE_LAYOUT_CONFIG: MessageEditorLayoutConfig = {
 	// bottom-left toolbar buttons: model switch + tools
 	bottomLeft: [
 		ToolbarButton.MODEL_SWITCH,
+		ToolbarButton.INTERNET_SEARCH,
 		ToolbarButton.AT,
 		ToolbarButton.MCP,
 		ToolbarButton.UPLOAD,
