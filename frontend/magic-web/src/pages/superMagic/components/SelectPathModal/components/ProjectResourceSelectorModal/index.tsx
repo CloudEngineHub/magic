@@ -1390,10 +1390,7 @@ function ProjectResourceSelectorModal({
 		const shareWorkspace = SHARE_WORKSPACE_DATA(t)
 		// 创建我的龙虾工作区对象
 		const myClawWorkspace = MY_CLAW_WORKSPACE_DATA(t)
-		const resourceWorkspaces = [
-			MY_SKILLS_WORKSPACE_DATA(t),
-			MY_AGENTS_WORKSPACE_DATA(t),
-		]
+		const resourceWorkspaces = [MY_SKILLS_WORKSPACE_DATA(t), MY_AGENTS_WORKSPACE_DATA(t)]
 		// 合并工作区列表和底部固定频道：共享工作区、我的龙虾
 		const allWorkspaces = availableWorkspaces
 
