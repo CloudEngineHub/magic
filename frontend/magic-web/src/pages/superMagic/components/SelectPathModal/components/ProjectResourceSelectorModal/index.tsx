@@ -48,13 +48,17 @@ import type {
 	ProjectListItem,
 	CollaborationProjectListItem,
 } from "../../../../pages/Workspace/types"
-import { ProjectStatus, WorkspaceStatus } from "../../../../pages/Workspace/types"
+import { ProjectStatus } from "../../../../pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import {
 	SHARE_WORKSPACE_ID,
 	SHARE_WORKSPACE_DATA,
 	MY_CLAW_WORKSPACE_ID,
 	MY_CLAW_WORKSPACE_DATA,
+	MY_SKILLS_WORKSPACE_ID,
+	MY_AGENTS_WORKSPACE_ID,
+	MY_SKILLS_WORKSPACE_DATA,
+	MY_AGENTS_WORKSPACE_DATA,
 	isCollaborationWorkspace,
 	isCollaborationProject,
 	isWorkspaceShortcutProject,
@@ -82,8 +86,6 @@ import { skillsService, type UserSkillView } from "@/services/skills/SkillsServi
 import { crewService, type MyCrewView } from "@/services/crew/CrewService"
 
 const FIXED_WORKSPACE_IDS = new Set<string>([SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID])
-const MY_SKILLS_WORKSPACE_ID = "my-skills"
-const MY_AGENTS_WORKSPACE_ID = "my-agents"
 const RESOURCE_WORKSPACE_IDS = new Set<string>([MY_SKILLS_WORKSPACE_ID, MY_AGENTS_WORKSPACE_ID])
 
 type ResourceProject = ProjectListItem & {
@@ -393,19 +395,6 @@ function ProjectResourceSelectorModal({
 		setLoading(false)
 	})
 
-	const createResourceWorkspace = useMemoizedFn(
-		(id: string, name: string): Workspace => ({
-			id,
-			name,
-			workspace_status: WorkspaceStatus.WAITING,
-			is_archived: 0,
-			current_topic_id: "",
-			current_project_id: "",
-			project_count: 0,
-			workspace_type: "default",
-		}),
-	)
-
 	const mapResourceProject = useMemoizedFn(
 		(
 			item: UserSkillView | MyCrewView,
@@ -690,17 +679,6 @@ function ProjectResourceSelectorModal({
 					workspace: currentWorkspace,
 					project,
 				})
-				return
-			}
-
-			const resourceProject = project as ResourceProject
-			if (resourceProject.resourceType) {
-				setCurrentProject(project)
-				setViewMode("project")
-				setPath([])
-				setAttachments([])
-				setDirectories([])
-				setLoading(false)
 				return
 			}
 
@@ -1413,8 +1391,8 @@ function ProjectResourceSelectorModal({
 		// 创建我的龙虾工作区对象
 		const myClawWorkspace = MY_CLAW_WORKSPACE_DATA(t)
 		const resourceWorkspaces = [
-			createResourceWorkspace(MY_SKILLS_WORKSPACE_ID, t("selectPathModal.mySkills")),
-			createResourceWorkspace(MY_AGENTS_WORKSPACE_ID, t("selectPathModal.myAgents")),
+			MY_SKILLS_WORKSPACE_DATA(t),
+			MY_AGENTS_WORKSPACE_DATA(t),
 		]
 		// 合并工作区列表和底部固定频道：共享工作区、我的龙虾
 		const allWorkspaces = availableWorkspaces

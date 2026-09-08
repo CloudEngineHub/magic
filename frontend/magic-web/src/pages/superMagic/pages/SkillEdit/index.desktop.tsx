@@ -48,6 +48,7 @@ import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { SkillEditStoreProvider, useSkillEditStore } from "./context"
 import QuickActionCards from "./components/QuickActionCards"
 import SkillFilesPanel from "./components/SkillFilesPanel"
+import { MY_SKILLS_WORKSPACE_DATA } from "@/pages/superMagic/constants"
 import SkillCollaboratorsQuickAction from "./components/SkillCollaboratorsQuickAction"
 import ConversationPanel from "./components/ConversationPanel"
 import { useSkillPublishGuard } from "./hooks/useSkillPublishGuard"
@@ -146,6 +147,7 @@ function SkillEditErrorFallback({ onBack }: { onBack: () => void }) {
 function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	const { t } = useTranslation("crew/market")
 	const { t: tSuper } = useTranslation("super")
+	const skillsWorkspace = useMemo(() => MY_SKILLS_WORKSPACE_DATA(tSuper), [tSuper])
 	const store = useSkillEditStore()
 	const navigate = useNavigate()
 	const location = useLocation()
@@ -748,6 +750,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 										store.projectFilesStore.setWorkspaceFileTree
 									}
 									selectedProject={store.project}
+									selectedWorkspace={skillsWorkspace}
 								/>
 							</div>
 

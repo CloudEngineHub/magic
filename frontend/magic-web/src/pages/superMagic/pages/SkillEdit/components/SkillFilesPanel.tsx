@@ -13,7 +13,6 @@ function SkillFilesPanel({ readOnly, ...props }: SkillFilesPanelProps) {
 			{...props}
 			allowEdit={!readOnly}
 			isInProject
-			spaceConfig={{ capabilities: { crossProject: false } }}
 		/>
 	)
 }

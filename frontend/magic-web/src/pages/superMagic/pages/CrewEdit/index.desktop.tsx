@@ -26,6 +26,7 @@ import {
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { useTopicFiles } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicFiles"
+import { MY_AGENTS_WORKSPACE_DATA } from "@/pages/superMagic/constants"
 import {
 	TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS,
 	useTopicHistoryLayoutState,
@@ -192,6 +193,7 @@ function applyRoutePanelToStore({
 function CrewEditInner({ crewId }: { crewId: string }) {
 	const { t: tCrewCreate } = useTranslation("crew/create")
 	const { t: tSuper } = useTranslation("super")
+	const agentsWorkspace = useMemo(() => MY_AGENTS_WORKSPACE_DATA(tSuper), [tSuper])
 	const store = useCrewEditStore()
 	const { layout, conversation, identity, playbook } = store
 	const navigate = useNavigate()
@@ -300,7 +302,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 
 	const { activeFileId, handleFileClick, topicFilesProps, setActiveFileId } = useTopicFiles({
 		selectedProject,
-		selectedWorkspace: undefined,
+		selectedWorkspace: agentsWorkspace,
 		selectedTopic,
 		projects: [],
 		workspaces: [],
@@ -626,7 +628,6 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 									{...topicFilesPropsWithPanel}
 									className="h-full"
 									title={tSuper("topicFiles.fileTitle")}
-									spaceConfig={{ capabilities: { crossProject: false } }}
 								/>
 							}
 						/>
