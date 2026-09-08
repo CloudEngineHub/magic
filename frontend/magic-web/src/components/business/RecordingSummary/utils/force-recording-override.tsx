@@ -90,10 +90,10 @@ export function confirmForceRecordingOverride(context: RecordingOverrideContext)
 }
 
 /** Keep retry explicit after a failed finish; allow starting the next session anyway. */
-export function confirmForceRecordingRetry(): Promise<"retry" | "continue"> {
+export function confirmForceRecordingRetry(): Promise<"retry" | "continue" | "cancel"> {
 	return new Promise((resolve) => {
 		let settled = false
-		const settle = (value: "retry" | "continue") => {
+		const settle = (value: "retry" | "continue" | "cancel") => {
 			if (settled) return
 			settled = true
 			resolve(value)
@@ -134,7 +134,7 @@ export function confirmForceRecordingRetry(): Promise<"retry" | "continue"> {
 			),
 		})
 
-		if (!modalInstance) settle("continue")
+		if (!modalInstance) settle("cancel")
 	})
 }
 

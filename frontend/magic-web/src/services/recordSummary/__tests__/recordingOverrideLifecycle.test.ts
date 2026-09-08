@@ -82,6 +82,20 @@ describe("runForceOverrideFinalization", () => {
 		).resolves.toBeUndefined()
 
 		expect(completeSession).toHaveBeenCalledTimes(1)
+
+		completeSession.mockClear()
+		await expect(
+			runForceOverrideFinalization({
+				stopRecordingServices: vi.fn(),
+				flushSessionUploads: vi.fn(),
+				summarizeSession: vi.fn().mockRejectedValue({
+					response: { data: { code: 43200 } },
+				}),
+				completeSession,
+			}),
+		).resolves.toBeUndefined()
+
+		expect(completeSession).toHaveBeenCalledTimes(1)
 	})
 })
 
@@ -131,6 +145,22 @@ describe("runForceOverrideFlow", () => {
 		).resolves.toBe(false)
 
 		expect(prepare).not.toHaveBeenCalled()
+		expect(forceRelease).not.toHaveBeenCalled()
+	})
+
+	it("does not release or continue when the retry dialog is cancelled", async () => {
+		const prepare = vi.fn().mockResolvedValue(false)
+		const forceRelease = vi.fn()
+
+		await expect(
+			runForceOverrideFlow({
+				confirm: async () => true,
+				confirmRetry: async () => "cancel",
+				prepare,
+				forceRelease,
+			}),
+		).resolves.toBe(false)
+
 		expect(forceRelease).not.toHaveBeenCalled()
 	})
 })

@@ -318,6 +318,26 @@ describe("TabCoordinator — recording override", () => {
 		requestingTab.cleanup()
 	})
 
+	it("forceAcquireLock steals the lock so a later requestLock succeeds", async () => {
+		const onLockAcquired = vi.fn()
+		const activeTab = makeCoordinator()
+		const requestingTab = makeCoordinator({ onLockAcquired })
+		activeTab.acquireLock()
+
+		expect(requestingTab.hasRecordingPermission()).toBe(false)
+		expect(requestingTab.isAnyTabRecording()).toBe(true)
+
+		requestingTab.forceAcquireLock()
+
+		expect(requestingTab.hasRecordingPermission()).toBe(true)
+		expect(activeTab.hasRecordingPermission()).toBe(false)
+		expect(await requestingTab.requestLock()).toBe(true)
+		expect(onLockAcquired).not.toHaveBeenCalled()
+
+		activeTab.cleanup()
+		requestingTab.cleanup()
+	})
+
 	it("fails closed when the active tab does not respond", async () => {
 		const activeTab = makeCoordinator({
 			onForceOverrideRequest: () => new Promise<boolean>(() => undefined),

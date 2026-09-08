@@ -21,7 +21,7 @@ export interface RecordingOverrideContext {
 	startContext?: RecordingOverrideStartContext
 }
 
-export type ForceOverrideRetryChoice = "retry" | "continue"
+export type ForceOverrideRetryChoice = "retry" | "continue" | "cancel"
 
 export interface ForceOverrideFinalizationSteps {
 	stopRecordingServices: () => void | Promise<void>
@@ -77,6 +77,7 @@ export async function runForceOverrideFlow(steps: ForceOverrideFlowSteps): Promi
 
 		const choice = await steps.confirmRetry()
 		if (choice === "retry") continue
+		if (choice === "cancel") return false
 		await steps.forceRelease?.()
 		return true
 	}

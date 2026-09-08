@@ -2067,6 +2067,16 @@ class RecordSummaryService {
 		}
 
 		this.recordingPersistence.clearAll()
+		recordSummaryStore.completeRecording()
+
+		const otherTabHoldsLock =
+			this.tabCoordinator.isAnyTabRecording() && !this.tabCoordinator.hasRecordingPermission()
+		if (otherTabHoldsLock) {
+			this.tabCoordinator.forceAcquireLock()
+			logger.report("用户选择仍要发起，已强制接管其他标签的录音锁")
+			return
+		}
+
 		this.tabCoordinator.releaseLock({
 			type: "finish",
 			data: {
@@ -2076,7 +2086,6 @@ class RecordSummaryService {
 				sessionId: "",
 			},
 		})
-		recordSummaryStore.completeRecording()
 		logger.report("用户选择仍要发起，已清理可恢复的历史录音指针")
 	}
 

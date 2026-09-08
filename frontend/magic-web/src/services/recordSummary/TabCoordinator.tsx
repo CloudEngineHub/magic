@@ -875,10 +875,23 @@ export class TabCoordinator {
 	}
 
 	/**
+	 * Steal the recording lock without waiting for the other tab to confirm.
+	 * Used when the user explicitly starts anyway after an override timeout.
+	 */
+	forceAcquireLock() {
+		this.takeLock({ notifyAcquired: false })
+		logger.log("Lock force-acquired", { tabId: this.tabId })
+	}
+
+	/**
 	 * Acquire recording lock
 	 */
 	acquireLock() {
-		// Clear any pending request — we already won the lock
+		this.takeLock({ notifyAcquired: true })
+		logger.log("Lock acquired", { tabId: this.tabId })
+	}
+
+	private takeLock({ notifyAcquired }: { notifyAcquired: boolean }) {
 		if (this.pendingLockRequest) {
 			clearTimeout(this.pendingLockRequest.timeoutId)
 			this.pendingLockRequest = null
@@ -893,10 +906,9 @@ export class TabCoordinator {
 			timestamp: Date.now(),
 		})
 
-		// Notify lock acquisition
-		this.callbacks.onLockAcquired?.()
-
-		logger.log("Lock acquired", { tabId: this.tabId })
+		if (notifyAcquired) {
+			this.callbacks.onLockAcquired?.()
+		}
 	}
 
 	/**
