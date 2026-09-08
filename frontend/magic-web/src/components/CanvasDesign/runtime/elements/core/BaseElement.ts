@@ -129,14 +129,19 @@ export abstract class BaseElement<T extends LayerElement = LayerElement> {
 		return this.data
 	}
 
-	/** 当前节点的 active Content；所有媒体/编辑字段都应从这里读取。 */
-	protected getActiveContent<TContent extends ElementContentBase>(): TContent | undefined {
-		if (!isContentElement(this.data)) return undefined
-		// Older host/test doubles may not expose the preview-content resolver yet;
-		// preserve the document active-content behavior in that case.
-		const effectiveContentId = this.canvas?.getEffectiveContentId?.(this.data.id)
-		return (this.data.contents.find((content) => content.contentId === effectiveContentId) ??
-			getElementActiveContent(this.data)) as TContent | undefined
+	/**
+	 * 当前节点的 active Content；所有媒体/编辑字段都应从传入快照读取。
+	 *
+	 * 更新流程可能暂时处于“ElementManager 仍持有旧快照、update() 已收到新快照”
+	 * 的窗口，因此这里不能按 elementId 回查 ElementManager。Canvas 的纯投影
+	 * 只读取传入快照和会话 preview 状态，不会把数据写回文档。
+	 */
+	protected getActiveContent<TContent extends ElementContentBase>(
+		data: T = this.data,
+	): TContent | undefined {
+		if (!isContentElement(data)) return undefined
+		const contentView = this.canvas?.getElementForContentView?.(data) ?? data
+		return getElementActiveContent(contentView) as TContent | undefined
 	}
 
 	/** 当前节点的 main Content；连接、导出和下游输入使用该稳定内容。 */

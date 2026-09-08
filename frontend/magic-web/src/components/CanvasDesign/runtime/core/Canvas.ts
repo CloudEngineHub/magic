@@ -124,6 +124,31 @@ function getCanvasConnectionComparable(connections: CanvasDocument["connections"
 	)
 }
 
+type ContentViewElement = LayerElement & {
+	activeContentId?: string | null
+	contents?: readonly { contentId: string }[]
+}
+
+function resolveEffectiveContentIdForElement(
+	element: ContentViewElement | undefined,
+	previewContentId?: string,
+): { contentId?: string; previewMatched: boolean } {
+	if (!element || !Array.isArray(element.contents)) {
+		return { contentId: undefined, previewMatched: false }
+	}
+
+	const previewMatched = Boolean(
+		previewContentId &&
+		element.contents.some((content) => content.contentId === previewContentId),
+	)
+	return {
+		contentId: previewMatched
+			? previewContentId
+			: (element.activeContentId ?? element.contents[0]?.contentId),
+		previewMatched,
+	}
+}
+
 function getElementResourceReferencePath(
 	canvas: Canvas,
 	element: LayerElement | undefined,
@@ -1384,19 +1409,14 @@ export class Canvas {
 
 	public getEffectiveContentId(elementId: string): string | undefined {
 		const element = this.elementManager.getElementData(elementId) as
-			| (LayerElement & {
-					activeContentId?: string | null
-					contents?: readonly { contentId: string }[]
-			  })
+			| ContentViewElement
 			| undefined
 		const previewContentId = this.previewContentIds.get(elementId)
-		if (previewContentId && "contents" in (element ?? {})) {
-			if (element?.contents?.some((content) => content.contentId === previewContentId)) {
-				return previewContentId
-			}
+		const resolution = resolveEffectiveContentIdForElement(element, previewContentId)
+		if (previewContentId && !resolution.previewMatched) {
 			this.previewContentIds.delete(elementId)
 		}
-		return element?.activeContentId ?? element?.contents?.[0]?.contentId
+		return resolution.contentId
 	}
 
 	public getEffectiveContent<T extends { contentId: string }>(elementId: string): T | undefined {
@@ -1413,7 +1433,11 @@ export class Canvas {
 	 * 返回值只供下载、复制等外部读取路径使用，不会交给 ElementManager 写回文档。
 	 */
 	public getElementForContentView<T extends LayerElement>(element: T): T {
-		const effectiveContentId = this.getEffectiveContentId(element.id)
+		const previewContentId = this.previewContentIds.get(element.id)
+		const { contentId: effectiveContentId } = resolveEffectiveContentIdForElement(
+			element as ContentViewElement,
+			previewContentId,
+		)
 		if (
 			!effectiveContentId ||
 			effectiveContentId === element.activeContentId ||

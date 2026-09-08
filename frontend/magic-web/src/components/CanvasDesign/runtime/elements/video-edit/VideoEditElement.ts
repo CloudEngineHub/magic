@@ -406,11 +406,11 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 
 	public update(newData: VideoEditElementData): boolean {
 		const previousData = this.data
-		const previousContent = this.getActiveContent<VideoEditElementContent>()
+		const previousContent = this.getActiveContent<VideoEditElementContent>(previousData)
 		const previousInputs = this.collectInputs(previousContent)
 		const normalizedData = normalizeVideoEditDisplayDimensions(newData)
 		this.data = normalizedData
-		const nextContent = this.getActiveContent<VideoEditElementContent>()
+		const nextContent = this.getActiveContent<VideoEditElementContent>(normalizedData)
 		const nextInputs = this.collectInputs(nextContent)
 		if (previousInputs.audioElementId !== nextInputs.audioElementId) this.bindAudioRuntime()
 		const previousSequence = previousContent?.videoSequence ?? []

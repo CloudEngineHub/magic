@@ -592,11 +592,7 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 				}
 				return { executed: false, reason: "TARGET_UNAVAILABLE" }
 			case ElementToolTypeEnum.VersionDelete:
-				if (
-					contents.length > 1 &&
-					activeContentId === command.contentId &&
-					!contents.some(isContentGenerationPending)
-				) {
+				if (contents.length > 1 && activeContentId === command.contentId) {
 					void Promise.resolve(instance.deleteActiveContent())
 					return { executed: true }
 				}

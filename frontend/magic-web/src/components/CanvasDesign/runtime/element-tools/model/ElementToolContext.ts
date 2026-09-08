@@ -94,7 +94,6 @@ export function createElementToolContext(
 		? isContentGenerationPending(activeContent) ||
 			(activeContentId ? generatingContentIds.includes(activeContentId) : false)
 		: generationState.activeContentIsGenerating && !activeContentId
-	const hasAnyGenerating = generatingContentIds.length > 0
 	const attemptsByContentId = new Map<string, GenerationAttemptState>()
 	for (const targetState of runtimeTargetStates) {
 		if (!targetState.contentId) continue
@@ -161,7 +160,8 @@ export function createElementToolContext(
 				contentIndex.byId.size > 1 &&
 				!activeContentIsGenerating &&
 				activeContentState === "completed",
-			canDeleteVersion: contentIndex.byId.size > 1 && !hasAnyGenerating,
+			// 版本删除只针对当前 Content；兄弟 Content 的生成状态不参与判断。
+			canDeleteVersion: contentIndex.byId.size > 1 && Boolean(contentIndex.active),
 			canGenerateContent:
 				!activeContentIsGenerating &&
 				(Boolean(contentIndex.active?.src) || element.type === "audio"),

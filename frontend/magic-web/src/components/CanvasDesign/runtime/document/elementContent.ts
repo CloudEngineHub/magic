@@ -245,14 +245,11 @@ export function isContentGenerationPending(content: ElementContentBase): boolean
 	)
 }
 
-/** 删除版本前保证不会删除唯一 Content 或任何仍有后台任务的版本集合。 */
+/** 删除版本前只保证不会删除唯一 Content，兄弟版本状态不影响当前版本删除。 */
 export function canDeleteActiveContentVersion(element: ContentElement): boolean {
 	const contents = getContents(element)
 	const activeContent = getActiveContent(element)
-	if (contents.length <= 1 || !activeContent || isContentGenerationPending(activeContent)) {
-		return false
-	}
-	return !contents.some(isContentGenerationPending)
+	return contents.length > 1 && Boolean(activeContent)
 }
 
 export function updateContent<TElement extends ContentElement>(

@@ -268,12 +268,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		})
 	}
 
-	private resolveActiveContentData(): ImageElementContent {
-		return this.getActiveContent<ImageElementContent>() ?? resolveActiveImageContent(this.data)
+	private resolveActiveContentData(data: ImageElementData = this.data): ImageElementContent {
+		return this.getActiveContent<ImageElementContent>(data) ?? resolveActiveImageContent(data)
 	}
 
-	public getActiveContentData(): ImageElementContent {
-		return this.resolveActiveContentData()
+	public getActiveContentData(data: ImageElementData = this.data): ImageElementContent {
+		return this.resolveActiveContentData(data)
 	}
 
 	public getMainContentData(): ImageElementContent {
@@ -439,6 +439,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const result = deleteActiveImageContent(this.data)
 		if (!result) return false
 		const deletedContentId = result.deletedContent.contentId
+		this.canvas.generationRuntimeManager?.clearTarget(this.data.id, deletedContentId)
 		this.canvas.elementDetailsRuntimeManager?.clearImageContent(this.data.id, deletedContentId)
 		this.canvas.markerManager.removeMarkersByImageContent(this.data.id, deletedContentId)
 		this.canvas.elementManager.update(
@@ -2205,9 +2206,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	update(newData: ImageElementData): boolean {
 		const currentDocumentActiveContentId = getActiveImageContentId(this.data)
 		const nextDocumentActiveContentId = getActiveImageContentId(newData)
-		const currentContent = this.getActiveContentData()
-		const nextViewData = this.canvas?.getElementForContentView?.(newData) ?? newData
-		const nextContent = resolveActiveImageContent(nextViewData)
+		const currentContent = this.getActiveContentData(this.data)
+		const nextContent = this.getActiveContentData(newData)
 		const currentTaskMeta = currentContent.imageGenerationTaskMeta
 		const nextTaskMeta = nextContent.imageGenerationTaskMeta
 		const contentControlsChanged =

@@ -224,6 +224,29 @@ export class GenerationRuntimeManager {
 		return this.clearAttempt(attemptId)
 	}
 
+	/**
+	 * 清理单个 Content 的生成目标。
+	 *
+	 * 版本被用户删除时，不能只依赖轮询管理器从 DSL 中发现目标消失；
+	 * ElementToolContext 还会读取这里的运行时 target 状态决定删除按钮是否可见。
+	 */
+	public clearTarget(elementId: string, contentId?: string): void {
+		const targetKey = this.getTargetKey(elementId, contentId)
+		const current = this.targetStates.get(targetKey)
+		if (!current) return
+
+		this.targetStates.delete(targetKey)
+		const attempt = this.attempts.get(current.attemptId)
+		if (attempt) {
+			attempt.targets = attempt.targets.filter(
+				(target) => this.getTargetKey(target.elementId, target.contentId) !== targetKey,
+			)
+			if (attempt.targets.length === 0) this.attempts.delete(current.attemptId)
+		}
+		this.refreshLatestTargetKey(elementId)
+		this.notifyElement(elementId)
+	}
+
 	public clearElement(elementId: string): void {
 		const targetEntries = Array.from(this.targetStates.entries()).filter(
 			([, state]) => state.elementId === elementId,
