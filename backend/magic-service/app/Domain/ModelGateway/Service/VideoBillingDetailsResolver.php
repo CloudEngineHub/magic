@@ -20,6 +20,7 @@ readonly class VideoBillingDetailsResolver
      * @var array<string, array{size: string, width: int, height: int}>
      */
     private const array BILLING_RESOLUTION_DIMENSIONS = [
+        '360p' => ['size' => '640x360', 'width' => 640, 'height' => 360],
         '480p' => ['size' => '854x480', 'width' => 854, 'height' => 480],
         '768p' => ['size' => '1366x768', 'width' => 1366, 'height' => 768],
         '720p' => ['size' => '1280x720', 'width' => 1280, 'height' => 720],
