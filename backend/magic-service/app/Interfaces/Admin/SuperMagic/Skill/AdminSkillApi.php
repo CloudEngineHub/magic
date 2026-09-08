@@ -65,7 +65,7 @@ class AdminSkillApi extends AbstractApi
     public function repairSkillFileUrls(RequestContext $requestContext): array
     {
         $requestContext->setUserAuthorization($this->getAuthorization());
-        $this->adminSkillAppService->repairSkillFileUrlsAsync($requestContext);
+        $this->adminSkillAppService->repairSkillFileUrlsAsync($this->getAuthorization());
         return [];
     }
 

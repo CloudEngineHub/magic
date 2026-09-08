@@ -34,6 +34,7 @@ use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\Context\RequestContext;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillMarketsRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillVersionsRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\ReviewOrganizationSkillVersionRequestDTO;
@@ -180,12 +181,14 @@ class AdminSkillAppService extends AbstractSkillAppService
         return ['total' => $total, 'updated' => $updated, 'failed' => $failed, 'errors' => $errors];
     }
 
-    public function repairSkillFileUrlsAsync(RequestContext $requestContext): void
+    public function repairSkillFileUrlsAsync(MagicUserAuthorization $authorization): void
     {
         $coroutineId = Coroutine::id();
-        Coroutine::create(function () use ($requestContext, $coroutineId): void {
+        Coroutine::create(function () use ($authorization, $coroutineId): void {
             CoContext::copy($coroutineId);
             try {
+                $requestContext = new RequestContext();
+                $requestContext->setUserAuthorization($authorization);
                 $result = $this->repairSkillFileUrls($requestContext);
                 $this->logger->info('Skill file URL repair finished', $result);
             } catch (Throwable $throwable) {
