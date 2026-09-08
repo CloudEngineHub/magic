@@ -739,7 +739,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 					<div
 						ref={slideContainerRef}
 						data-testid="ppt-render-slide-content"
-						className="min-h-0 min-w-0 flex-1"
+						className={cn(
+							"min-h-0 min-w-0 flex-1",
+							!isSidebarCollapsed &&
+								!isPresentationFullscreen &&
+								`relative ${TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS}`,
+						)}
 					>
 						<div
 							className="relative flex h-full w-full flex-col overflow-hidden"

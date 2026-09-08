@@ -26,6 +26,8 @@ export const HTML_EDITOR_Z_INDEX = {
 		SELECTION_OVERLAY_ROOT: 930,
 		/** PPT Sidebar and its buttons */
 		SIDEBAR: 10,
+		/** PPT canvas column. Above sidebar so selection chrome is visible. */
+		SLIDE_CANVAS: 11,
 	},
 
 	// Toolbar Layer (100-899)
@@ -87,6 +89,7 @@ export const TAILWIND_Z_INDEX_CLASSES = {
 	BASE: {
 		SELECTION_OVERLAY_ROOT: "z-[930]",
 		SIDEBAR: "z-[10]",
+		SLIDE_CANVAS: "z-[11]",
 	},
 	TOOLBAR: {
 		STYLE_PANEL: "z-[100]",
