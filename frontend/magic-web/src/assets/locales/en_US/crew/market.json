@@ -17,13 +17,15 @@
 	"connectors": {
 		"add": "Add",
 		"added": "Added",
-		"addedList": "Added",
+		"addedList": "Installed",
 		"available": "Available",
 		"category": "Connector category",
+		"close": "Close connector panel",
 		"create": "Create Connector",
 		"createForm": {
 			"addParameter": "Add parameter",
 			"close": "Close",
+			"descriptionPlaceholder": "e.g., Access an external service",
 			"editTitle": "Edit MCP Connector",
 			"env": "Environment variables",
 			"headersLabel": "Headers",
@@ -33,8 +35,6 @@
 			"key": "Key",
 			"loadFailed": "Failed to load connector configuration",
 			"loading": "Loading…",
-			"name": "Name",
-			"namePlaceholder": "e.g., My Connector",
 			"mcpAuthorization": "OAuth 2.0 (MCP Service Authorization)",
 			"mcpAuthorizationLabels": {
 				"additionalParams": "Additional Authorization Parameters",
@@ -52,12 +52,8 @@
 				"tokenEndpoint": "Token Endpoint",
 				"tokenEndpointAuthMethod": "Token Endpoint Authentication Method"
 			},
-			"registrationModes": {
-				"auto": "Auto Discovery",
-				"pre_registered": "Pre-registered",
-				"cimd": "Client Metadata (CIMD)",
-				"dcr": "Dynamic Registration (DCR)"
-			},
+			"name": "Name",
+			"namePlaceholder": "e.g., My Connector",
 			"oauthLabels": {
 				"authorizationContentType": "Authorization Content Type",
 				"authorizationUrl": "Authorization URL",
@@ -67,10 +63,15 @@
 				"scope": "Scope"
 			},
 			"oauthRequired": "Enter {{name}}",
+			"registrationModes": {
+				"auto": "Auto Discovery",
+				"cimd": "Client Metadata (CIMD)",
+				"dcr": "Dynamic Registration (DCR)",
+				"pre_registered": "Pre-registered"
+			},
 			"removeRow": "Remove parameter",
 			"saveFailed": "Failed to save",
 			"saving": "Saving…",
-			"descriptionPlaceholder": "e.g., Access an external service",
 			"title": "Create MCP Connector",
 			"type": "Type",
 			"uploadIcon": "Upload icon",
@@ -78,6 +79,7 @@
 			"url": "Service URL (URL)",
 			"urlPlaceholder": "e.g., https://example.com"
 		},
+		"createMcp": "Create MCP Connector",
 		"createSuccess": "Connector created successfully",
 		"delete": "Delete",
 		"deleteConfirm": {
@@ -97,6 +99,8 @@
 		"empty": "No connectors available",
 		"enable": "Enable",
 		"enabled": "Enabled",
+		"install": "Install connector",
+		"installShort": "Install",
 		"loadFailed": "Failed to load connectors. Please try again.",
 		"mine": "My Connectors",
 		"moreActionsAria": "More actions",
@@ -112,6 +116,7 @@
 		"status": "Status",
 		"statusUpdateFailed": "Failed to update status",
 		"subtitle": "Explore and manage available AI connectors",
+		"title": "Connectors",
 		"updatedAt": "Updated on {{dateTime}}",
 		"updatedAtLabel": "Updated"
 	},

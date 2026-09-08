@@ -91,7 +91,7 @@
 	"mcp": {
 		"button": {
 			"addMoreConnectors": "添加更多连接器",
-			"addedConnectors": "已添加的连接器",
+			"addedConnectors": "已安装的连接器",
 			"create": "添加 MCP",
 			"emptyConnectors": "暂无连接器",
 			"text": "连接器",

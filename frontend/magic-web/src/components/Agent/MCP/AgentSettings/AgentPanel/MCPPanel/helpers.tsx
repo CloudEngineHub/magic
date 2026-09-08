@@ -148,6 +148,7 @@ export interface ConnectorAuthDialogProps {
 	initialUserSettings?: MCPOAuthStatus
 	initialMcpDetails?: GetAvailableMCPListResponse
 	onSuccess: () => void
+	onAuthRevoked?: () => void
 	onOpenChange: (open: boolean) => void
 }
 
@@ -160,6 +161,7 @@ export function ConnectorAuthDialog({
 	initialUserSettings,
 	initialMcpDetails,
 	onSuccess,
+	onAuthRevoked,
 	onOpenChange,
 }: ConnectorAuthDialogProps) {
 	return (
@@ -180,6 +182,7 @@ export function ConnectorAuthDialog({
 					initialUserSettings={initialUserSettings}
 					initialMcpDetails={initialMcpDetails}
 					onEnable={onSuccess}
+					onAuthRevoked={onAuthRevoked}
 					onClose={() => onOpenChange(false)}
 				/>
 			</DialogContent>

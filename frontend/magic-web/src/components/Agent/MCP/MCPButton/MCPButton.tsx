@@ -20,8 +20,7 @@ import { Switch } from "@/components/shadcn-ui/switch"
 import { MessageEditorSize } from "@/pages/superMagic/components/MessageEditor/types"
 import { observer } from "mobx-react-lite"
 import { mcpEnabledStore } from "../store/mcp-enabled-store"
-import useNavigate from "@/routes/hooks/useNavigate"
-import { RouteName } from "@/routes/constants"
+import ConnectorLibrary from "@/pages/superMagic/pages/ConnectorMarket/components/ConnectorLibrary"
 
 // 懒加载弹窗组件，避免阻塞按钮渲染
 // const LazyAgentCommonModal = lazy(() =>
@@ -85,9 +84,10 @@ function MCPButton(props?: MCPButtonProps) {
 	const { useTempStorage = false, iconSize = 20, size } = props || {}
 	const isMobile = useIsMobile()
 	const { t } = useTranslation("agent")
-	const navigate = useNavigate()
 
 	const [modalOpen, setModalOpen] = useState(false)
+	const [connectorMarketOpen, setConnectorMarketOpen] = useState(false)
+	const [connectorMarketNestedOpen, setConnectorMarketNestedOpen] = useState(false)
 	const [menuOpen, setMenuOpen] = useState(false)
 	const [enabledMCPIds, setEnabledMCPIds] = useState<Set<string>>(() => new Set())
 	const [switchLoadingIds, setSwitchLoadingIds] = useState<Set<string>>(() => new Set())
@@ -147,7 +147,7 @@ function MCPButton(props?: MCPButtonProps) {
 
 	const openConnectorMarket = useMemoizedFn(() => {
 		setMenuOpen(false)
-		navigate({ name: RouteName.CrewMarketMcp })
+		setConnectorMarketOpen(true)
 	})
 
 	const toggleMCPEnabled = useMemoizedFn(async (id: string, enabled: boolean) => {
@@ -265,6 +265,24 @@ function MCPButton(props?: MCPButtonProps) {
 			/>
 		</AgentCommonModal>
 	)
+	const connectorMarketModal = (
+		<AgentCommonModal
+			open={connectorMarketOpen}
+			onOpenChange={setConnectorMarketOpen}
+			width={1120}
+			keyboard={!connectorMarketNestedOpen}
+			footer={null}
+			closable={false}
+		>
+			<ConnectorLibrary
+				embedded
+				activeStorageKey={props?.storageKey}
+				useTempStorage={useTempStorage}
+				onClose={() => setConnectorMarketOpen(false)}
+				onNestedPanelOpenChange={setConnectorMarketNestedOpen}
+			/>
+		</AgentCommonModal>
+	)
 
 	// Mobile view
 	if (isMobile) {
@@ -314,8 +332,12 @@ function MCPButton(props?: MCPButtonProps) {
 							<Switch
 								aria-label={t("mcp.button.toggleConnector", { name: item.name })}
 								checked={enabledMCPIds.has(item.id)}
-								loading={!activeMCPAccess.initialized || switchLoadingIds.has(item.id)}
-								onCheckedChange={(checked) => void toggleMCPEnabled(item.id, checked)}
+								loading={
+									!activeMCPAccess.initialized || switchLoadingIds.has(item.id)
+								}
+								onCheckedChange={(checked) =>
+									void toggleMCPEnabled(item.id, checked)
+								}
 							/>
 						</div>
 					))
@@ -365,6 +387,7 @@ function MCPButton(props?: MCPButtonProps) {
 				</PopoverContent>
 			</Popover>
 			{modal}
+			{connectorMarketModal}
 		</>
 	)
 }

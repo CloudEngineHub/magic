@@ -1,9 +1,10 @@
-import { useCallback, useRef, useState, type RefObject } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import type { IMCPItem } from "@/components/Agent/MCP/types"
 import { FlowApi } from "@/apis"
-import { Check, Loader2, Plus } from "lucide-react"
+import { Check, Loader2, Plus, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
+import { Input } from "@/components/shadcn-ui/input"
 import { useConfirmDialog } from "@/components/shadcn-composed/confirm-dialog"
 import { openAgentCommonModal } from "@/components/Agent/AgentCommonModal"
 import AgentAuthorizationTools from "@/components/Agent/AgentTools/AgentAuthorizationTools/AgentAuthorizationTools"
@@ -23,6 +24,7 @@ import SkillMarketTabs, {
 } from "@/pages/superMagic/pages/SkillMarket/components/SkillMarketTabs"
 import ConnectorCard from "./ConnectorCard"
 import { useConnectorActions } from "../hooks/useConnectorActions"
+import { getMCPAccess } from "@/components/Agent/MCP/store/mcp-access"
 import ConnectorDetailDialog from "./ConnectorDetailDialog"
 import { ConnectorAuthDialog } from "@/components/Agent/MCP/AgentSettings/AgentPanel/MCPPanel/helpers"
 import ConnectorCreateDialog from "./ConnectorCreateDialog"
@@ -31,12 +33,29 @@ import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMor
 
 interface ConnectorLibraryProps {
 	scrollViewportRef?: RefObject<HTMLDivElement | null>
+	embedded?: boolean
+	activeStorageKey?: string
+	useTempStorage?: boolean
+	onClose?: () => void
+	onNestedPanelOpenChange?: (open: boolean) => void
 }
 
-export default function ConnectorLibrary({ scrollViewportRef }: ConnectorLibraryProps) {
+export default function ConnectorLibrary({
+	scrollViewportRef,
+	embedded = false,
+	activeStorageKey,
+	useTempStorage = false,
+	onClose,
+	onNestedPanelOpenChange,
+}: ConnectorLibraryProps) {
 	const { t } = useTranslation("crew/market")
 	const { t: tAgent } = useTranslation("agent")
 	const navigate = useNavigate()
+	const activeAccess = useMemo(
+		() =>
+			embedded ? getMCPAccess({ storageKey: activeStorageKey, useTempStorage }) : undefined,
+		[activeStorageKey, embedded, useTempStorage],
+	)
 	const [searchQuery, setSearchQuery] = useState("")
 	const [selectedConnector, setSelectedConnector] = useState<IMCPItem | null>(null)
 	const [editingConnector, setEditingConnector] = useState<IMCPItem | null>(null)
@@ -50,9 +69,10 @@ export default function ConnectorLibrary({ scrollViewportRef }: ConnectorLibrary
 		loadingIds,
 		authDialog,
 		handleAuthDialogSuccess,
+		handleAuthDialogRevoked,
 		handleAuthDialogOpenChange,
 		onStatusChange,
-	} = useConnectorActions()
+	} = useConnectorActions({ activeAccess })
 	const {
 		list,
 		loading,
@@ -142,15 +162,44 @@ export default function ConnectorLibrary({ scrollViewportRef }: ConnectorLibrary
 	const manageConnectorPermissions = useCallback((connector: IMCPItem) => {
 		setPermissionsConnectorId(connector.id)
 	}, [])
+	const handleConnectorToggle = useCallback(
+		(connector: IMCPItem) => onStatusChange(connector, embedded ? { zIndex: 1200 } : undefined),
+		[embedded, onStatusChange],
+	)
+
+	useEffect(() => {
+		onNestedPanelOpenChange?.(
+			selectedConnector != null ||
+				editingConnector != null ||
+				createDialogOpen ||
+				permissionsConnectorId != null ||
+				authDialog != null,
+		)
+	}, [
+		authDialog,
+		createDialogOpen,
+		editingConnector,
+		onNestedPanelOpenChange,
+		permissionsConnectorId,
+		selectedConnector,
+	])
 
 	return (
-		<div className="flex min-w-0 flex-col pt-5 sm:pt-6" data-testid="connector-market">
+		<div
+			className={
+				embedded
+					? "flex h-[min(80vh,760px)] min-h-[520px] min-w-0 flex-col overflow-hidden"
+					: "flex min-w-0 flex-col pt-5 sm:pt-6"
+			}
+			data-testid={embedded ? "connector-market-embedded" : "connector-market"}
+		>
 			{dialog}
 			{authDialog ? (
 				<ConnectorAuthDialog
 					open
 					{...authDialog}
 					onSuccess={handleAuthDialogSuccess}
+					onAuthRevoked={handleAuthDialogRevoked}
 					onOpenChange={handleAuthDialogOpenChange}
 				/>
 			) : null}
@@ -175,6 +224,7 @@ export default function ConnectorLibrary({ scrollViewportRef }: ConnectorLibrary
 			<ConnectorCreateDialog
 				open={createDialogOpen}
 				connector={editingConnector}
+				zIndex={embedded ? 1200 : undefined}
 				onOpenChange={(open) => {
 					setCreateDialogOpen(open)
 					if (!open) setEditingConnector(null)
@@ -189,51 +239,94 @@ export default function ConnectorLibrary({ scrollViewportRef }: ConnectorLibrary
 					else setGroup(CONNECTOR_MARKET_GROUPS.mine)
 				}}
 			/>
-			<header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-				<div className="flex min-w-0 flex-1 flex-col gap-2.5">
-					<SkillMarketTabs
-						value={SKILL_MARKET_TAB_VALUES.connectors}
-						onValueChange={(value) => {
-							if (value === SKILL_MARKET_TAB_VALUES.skills)
-								navigate({ name: RouteName.CrewMarketSkills })
-						}}
+			{embedded ? (
+				<header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-3">
+					<div className="min-w-0 flex-1">
+						<ConnectorCategoryFilter value={group} onChange={setGroup} />
+					</div>
+					<div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+						<Input
+							value={searchQuery}
+							onChange={(event) => setSearchQuery(event.target.value)}
+							placeholder={t("connectors.searchPlaceholder")}
+							className="h-9 min-w-0 max-w-[240px] flex-1"
+							data-testid="connector-market-embedded-search-input"
+						/>
+						<Button
+							className="h-9 gap-2 shadow-xs"
+							type="button"
+							data-testid="connector-market-embedded-create-button"
+							onClick={() => setCreateDialogOpen(true)}
+						>
+							<Plus className="size-4" />
+							{t("connectors.createMcp")}
+						</Button>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-7 rounded-md text-muted-foreground"
+							aria-label={t("connectors.close")}
+							onClick={onClose}
+							data-testid="connector-market-embedded-close-button"
+						>
+							<X className="size-4" aria-hidden="true" />
+						</Button>
+					</div>
+				</header>
+			) : (
+				<header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+					<div className="flex min-w-0 flex-1 flex-col gap-2.5">
+						<SkillMarketTabs
+							value={SKILL_MARKET_TAB_VALUES.connectors}
+							onValueChange={(value) => {
+								if (value === SKILL_MARKET_TAB_VALUES.skills)
+									navigate({ name: RouteName.CrewMarketSkills })
+							}}
+						/>
+						<p className="max-w-2xl break-words text-sm text-muted-foreground">
+							{t("connectors.subtitle")}
+						</p>
+					</div>
+
+					<div className="flex w-full flex-wrap items-center gap-3 md:w-auto md:justify-end">
+						<Button
+							className="h-9 flex-1 gap-2 shadow-xs sm:flex-none"
+							type="button"
+							data-testid="connector-market-create-button"
+							onClick={() => setCreateDialogOpen(true)}
+						>
+							<Plus className="size-4" />
+							{t("connectors.create")}
+						</Button>
+					</div>
+				</header>
+			)}
+
+			{!embedded ? (
+				<MarketStickyHeader
+					className="gap-5 pb-5 pt-5 sm:gap-6 sm:pb-6 sm:pt-6"
+					scrollViewportRef={scrollViewportRef}
+					data-testid="connector-market-sticky-header"
+				>
+					<SearchBar
+						value={searchQuery}
+						onChange={setSearchQuery}
+						onSearch={(query) => setSearchQuery(query)}
+						placeholder={t("connectors.searchPlaceholder")}
+						enableSearchSubmit
+						data-testid="connector-market-search-bar"
 					/>
-					<p className="max-w-2xl break-words text-sm text-muted-foreground">
-						{t("connectors.subtitle")}
-					</p>
-				</div>
-
-				<div className="flex w-full flex-wrap items-center gap-3 md:w-auto md:justify-end">
-					<Button
-						className="h-9 flex-1 gap-2 shadow-xs sm:flex-none"
-						type="button"
-						data-testid="connector-market-create-button"
-						onClick={() => setCreateDialogOpen(true)}
-					>
-						<Plus className="size-4" />
-						{t("connectors.create")}
-					</Button>
-				</div>
-			</header>
-
-			<MarketStickyHeader
-				className="gap-5 pb-5 pt-5 sm:gap-6 sm:pb-6 sm:pt-6"
-				scrollViewportRef={scrollViewportRef}
-				data-testid="connector-market-sticky-header"
-			>
-				<SearchBar
-					value={searchQuery}
-					onChange={setSearchQuery}
-					onSearch={(query) => setSearchQuery(query)}
-					placeholder={t("connectors.searchPlaceholder")}
-					enableSearchSubmit
-					data-testid="connector-market-search-bar"
-				/>
-				<ConnectorCategoryFilter value={group} onChange={setGroup} />
-			</MarketStickyHeader>
+					<ConnectorCategoryFilter value={group} onChange={setGroup} />
+				</MarketStickyHeader>
+			) : null}
 
 			<section
-				className="flex min-w-0 flex-col gap-5 pb-5 sm:gap-6 sm:pb-6"
+				ref={embedded ? (viewportRef as RefObject<HTMLDivElement>) : undefined}
+				className={
+					embedded
+						? "min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-4"
+						: "flex min-w-0 flex-col gap-5 pb-5 sm:gap-6 sm:pb-6"
+				}
 				data-testid="connector-market-list"
 			>
 				{error ? (
@@ -262,7 +355,7 @@ export default function ConnectorLibrary({ scrollViewportRef }: ConnectorLibrary
 								connector={connector}
 								selected={selectedIds.has(connector.id)}
 								loading={loadingIds.has(connector.id)}
-								onToggle={onStatusChange}
+								onToggle={handleConnectorToggle}
 								onOpenDetail={openDetail}
 								showManageMenu={group === CONNECTOR_MARKET_GROUPS.mine}
 								descriptionMaxLines={3}

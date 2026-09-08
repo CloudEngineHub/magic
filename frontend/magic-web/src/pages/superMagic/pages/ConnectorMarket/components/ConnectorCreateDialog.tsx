@@ -32,6 +32,7 @@ export default function ConnectorCreateDialog({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent
 				showCloseButton={false}
+				onEscapeKeyDown={(event) => event.stopPropagation()}
 				aria-describedby={undefined}
 				className={cn(
 					"!min-w-0 !max-h-[calc(100%-2rem)] !w-[calc(100%-2rem)] !max-w-[760px] !overflow-hidden !rounded-xl !border !bg-background !p-0 !shadow-sm",

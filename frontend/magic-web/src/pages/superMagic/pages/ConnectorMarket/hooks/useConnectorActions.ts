@@ -6,6 +6,12 @@ import { fetchConnectorAuthData } from "@/components/Agent/MCP/AgentSettings/Age
 import type { MCPOAuthStatus } from "@/components/Agent/MCP/service/MCPOAuthService"
 import type { GetAvailableMCPListResponse } from "@/types/flow"
 import { getMCPAccess } from "@/components/Agent/MCP/store/mcp-access"
+import type { MCPStore } from "@/components/Agent/MCP/store/mcp-store"
+
+interface UseConnectorActionsOptions {
+	/** Optional project-scoped store used when installing from an embedded panel. */
+	activeAccess?: MCPStore
+}
 
 interface ConnectorStatusChangeOptions {
 	zIndex?: number
@@ -32,11 +38,8 @@ const CONNECTOR_AUTH_MODAL_CLASS_NAME =
 /** Connector market uses an isolated project setting bucket for added connectors. */
 const CONNECTOR_MARKET_STORAGE_KEY = "__added__"
 
-export function useConnectorActions() {
-	const access = useMemo(
-		() => getMCPAccess({ storageKey: CONNECTOR_MARKET_STORAGE_KEY }),
-		[],
-	)
+export function useConnectorActions({ activeAccess }: UseConnectorActionsOptions = {}) {
+	const access = useMemo(() => getMCPAccess({ storageKey: CONNECTOR_MARKET_STORAGE_KEY }), [])
 	const [selectedItems, setSelectedItems] = useState<IMCPItem[]>([])
 	const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set())
 	const inFlightIdsRef = useRef(new Set<string>())
@@ -44,6 +47,7 @@ export function useConnectorActions() {
 	const authDialogRef = useRef<ConnectorAuthDialogState | null>(null)
 	const pendingAuthRef = useRef<{
 		resolve?: (success: boolean) => void
+		authorized?: boolean
 		onNestedPanelClose?: () => void
 	} | null>(null)
 
@@ -82,6 +86,44 @@ export function useConnectorActions() {
 		if (userSettings?.auth_type) await FlowApi.unBindMCPOAuth(item.id)
 	}, [])
 
+	const saveConnectorSelections = useCallback(
+		async (nextAddedItems: IMCPItem[], nextActiveItems?: IMCPItem[]) => {
+			const previousAddedItems = access.mcpList
+			const previousActiveItems = activeAccess?.mcpList
+			try {
+				await access.save({
+					selectedIds: new Set(nextAddedItems.map((item) => item.id)),
+					items: nextAddedItems,
+				})
+				if (activeAccess && nextActiveItems) {
+					await activeAccess.save({
+						selectedIds: new Set(nextActiveItems.map((item) => item.id)),
+						items: nextActiveItems,
+					})
+				}
+			} catch (error) {
+				await Promise.allSettled([
+					access.save({
+						selectedIds: new Set(previousAddedItems.map((item) => item.id)),
+						items: previousAddedItems,
+					}),
+					...(activeAccess && previousActiveItems
+						? [
+								activeAccess.save({
+									selectedIds: new Set(
+										previousActiveItems.map((item) => item.id),
+									),
+									items: previousActiveItems,
+								}),
+							]
+						: []),
+				])
+				throw error
+			}
+		},
+		[access, activeAccess],
+	)
+
 	const checkConnectorAuth = useCallback(
 		async (item: IMCPItem, options: ConnectorStatusChangeOptions = {}) => {
 			const { userSettings, mcpDetails, requiresAuth } = await fetchConnectorAuthData(item)
@@ -112,8 +154,12 @@ export function useConnectorActions() {
 
 	const handleAuthDialogSuccess = useCallback(() => {
 		const pending = pendingAuthRef.current
-		pending?.resolve?.(true)
-		if (pending) pending.resolve = undefined
+		if (pending) pending.authorized = true
+	}, [])
+
+	const handleAuthDialogRevoked = useCallback(() => {
+		const pending = pendingAuthRef.current
+		if (pending) pending.authorized = false
 	}, [])
 
 	const handleAuthDialogOpenChange = useCallback((open: boolean) => {
@@ -123,7 +169,7 @@ export function useConnectorActions() {
 		authDialogRef.current = null
 		setAuthDialog(null)
 		pending?.onNestedPanelClose?.()
-		pending?.resolve?.(false)
+		pending?.resolve?.(pending.authorized === true)
 	}, [])
 
 	const onStatusChange = useCallback(
@@ -132,13 +178,14 @@ export function useConnectorActions() {
 			inFlightIdsRef.current.add(item.id)
 			setLoading(item.id, true)
 			try {
+				if (activeAccess) await activeAccess.load()
 				if (selectedIds.has(item.id)) {
 					const nextItems = selectedItems.filter((candidate) => candidate.id !== item.id)
 					await revokeConnectorAuth(item)
-					await access.save({
-						selectedIds: new Set(nextItems.map((candidate) => candidate.id)),
-						items: nextItems,
-					})
+					const nextActiveItems = activeAccess?.mcpList.filter(
+						(candidate) => candidate.id !== item.id,
+					)
+					await saveConnectorSelections(nextItems, nextActiveItems)
 					setSelectedItems(nextItems)
 					return true
 				}
@@ -146,10 +193,13 @@ export function useConnectorActions() {
 				if (!(await checkConnectorAuth(item, options))) return false
 
 				const nextItems = [...selectedItems, item]
-				await access.save({
-					selectedIds: new Set(nextItems.map((candidate) => candidate.id)),
-					items: nextItems,
-				})
+				const currentActiveItems = activeAccess?.mcpList ?? []
+				const nextActiveItems = activeAccess
+					? currentActiveItems.some((candidate) => candidate.id === item.id)
+						? currentActiveItems
+						: [...currentActiveItems, item]
+					: undefined
+				await saveConnectorSelections(nextItems, nextActiveItems)
 				setSelectedItems(nextItems)
 				return true
 			} finally {
@@ -157,7 +207,15 @@ export function useConnectorActions() {
 				inFlightIdsRef.current.delete(item.id)
 			}
 		},
-		[access, checkConnectorAuth, revokeConnectorAuth, selectedIds, selectedItems, setLoading],
+		[
+			activeAccess,
+			checkConnectorAuth,
+			revokeConnectorAuth,
+			saveConnectorSelections,
+			selectedIds,
+			selectedItems,
+			setLoading,
+		],
 	)
 
 	const onConfigure = useCallback(
@@ -181,6 +239,7 @@ export function useConnectorActions() {
 		loadingIds,
 		authDialog,
 		handleAuthDialogSuccess,
+		handleAuthDialogRevoked,
 		handleAuthDialogOpenChange,
 		onStatusChange,
 		onConfigure,

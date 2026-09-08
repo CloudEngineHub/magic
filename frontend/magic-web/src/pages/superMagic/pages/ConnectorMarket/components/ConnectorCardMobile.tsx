@@ -207,11 +207,7 @@ export default function ConnectorCardMobile({
 				>
 					{loading ? <Loader2 className="size-4 animate-spin" /> : null}
 					{!loading && selected ? <Check className="size-4" /> : null}
-					{!loading
-						? selected
-							? t("connectors.added")
-							: tAgent("mcp.panel.create")
-						: null}
+					{!loading ? (selected ? t("connectors.added") : t("connectors.install")) : null}
 				</Button>
 			)}
 			<div className="min-h-6" aria-hidden="true" />

@@ -23,6 +23,7 @@ import type { GetAvailableMCPListResponse } from "@/types/flow"
 interface MCPEditor extends AgentCommonModalChildrenProps {
 	id: string
 	onEnable?: ((id: string) => Promise<void>) | ((id: string) => void)
+	onAuthRevoked?: () => void
 	panelVariant?: "default" | "connector-market"
 	panelMode?: "add" | "edit"
 	initialUserSettings?: MCPOAuthStatus
@@ -46,6 +47,7 @@ export default function MCPOAuth(props: MCPEditor) {
 		id,
 		onClose,
 		onEnable,
+		onAuthRevoked,
 		panelVariant = "default",
 		panelMode = "add",
 		initialUserSettings,
@@ -176,6 +178,7 @@ export default function MCPOAuth(props: MCPEditor) {
 		setAuth(false)
 		setIsAutoAdded(false)
 		isAutoAddingRef.current = false
+		onAuthRevoked?.()
 		refresh()
 	})
 

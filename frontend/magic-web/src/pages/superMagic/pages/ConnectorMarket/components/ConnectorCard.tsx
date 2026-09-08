@@ -262,9 +262,7 @@ export default function ConnectorCard({
 					{t("connectors.disabled")}
 				</Badge>
 			) : (
-				<MagicTooltip
-					title={!selected && !loading ? tAgent("mcp.panel.create") : undefined}
-				>
+				<MagicTooltip title={!selected && !loading ? t("connectors.install") : undefined}>
 					<Button
 						type="button"
 						size="icon"
@@ -276,7 +274,7 @@ export default function ConnectorCard({
 								: "bg-muted/80 text-foreground/80 hover:bg-muted")
 						}
 						disabled={loading}
-						aria-label={selected ? t("connectors.added") : tAgent("mcp.panel.create")}
+						aria-label={selected ? t("connectors.added") : t("connectors.install")}
 						onClick={(event) => {
 							event.stopPropagation()
 							void Promise.resolve(onToggle?.(connector)).catch(console.error)

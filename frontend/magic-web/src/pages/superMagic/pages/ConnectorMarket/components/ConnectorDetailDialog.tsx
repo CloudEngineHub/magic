@@ -47,7 +47,6 @@ export default function ConnectorDetailDialog({
 	onToggle,
 }: ConnectorDetailDialogProps) {
 	const { t: tMarket } = useTranslation("crew/market")
-	const { t: tAgent } = useTranslation("agent")
 	const overlayLayer = useOverlayZIndex({ open })
 	const [detail, setDetail] = useState<ConnectorDetail | null>(null)
 	const [isLoading, setIsLoading] = useState(false)
@@ -136,6 +135,7 @@ export default function ConnectorDetailDialog({
 		>
 			<DialogContent
 				showCloseButton={false}
+				onEscapeKeyDown={(event) => event.stopPropagation()}
 				overlayClassName="bg-black/50 backdrop-blur-sm"
 				className="max-h-[calc(100%-3rem)] w-[calc(100%-2rem)] max-w-[680px] gap-0 overflow-hidden rounded-xl border bg-background p-0 shadow-sm"
 				style={{ zIndex: overlayLayer.contentZIndex }}
@@ -239,7 +239,7 @@ export default function ConnectorDetailDialog({
 												<Loader2 className="size-4 animate-spin" />
 											) : null}
 											{!loading && !isActionLoading
-												? tAgent("mcp.panel.create")
+												? tMarket("connectors.install")
 												: null}
 										</Button>
 									)}

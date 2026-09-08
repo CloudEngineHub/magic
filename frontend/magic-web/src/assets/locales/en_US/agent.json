@@ -91,7 +91,7 @@
 	"mcp": {
 		"button": {
 			"addMoreConnectors": "Add more connectors",
-			"addedConnectors": "Added connectors",
+			"addedConnectors": "Installed connectors",
 			"create": "Add MCP Plugin",
 			"emptyConnectors": "No connectors available",
 			"text": "Connector",

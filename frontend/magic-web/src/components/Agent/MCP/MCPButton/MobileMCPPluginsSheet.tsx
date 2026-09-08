@@ -101,7 +101,6 @@ function MobileMCPMarketItem({
 	onOpenDetail: (item: IMCPItem) => void
 	onToggle: (item: IMCPItem) => void
 }) {
-	const { t } = useTranslation("agent")
 	const { t: tMarket } = useTranslation("crew/market")
 
 	return (
@@ -112,7 +111,7 @@ function MobileMCPMarketItem({
 				<Button
 					variant={selected ? "secondary" : "default"}
 					size="sm"
-					className={`h-8 shrink-0 px-3 text-xs${selected ? " bg-white text-foreground hover:bg-white/90" : ""}`}
+					className={`h-8 shrink-0 px-3 text-xs${selected ? " bg-destructive/10 text-destructive hover:bg-destructive/15" : ""}`}
 					disabled={loading}
 					onClick={() => onToggle(item)}
 					data-testid="mobile-mcp-market-item-toggle"
@@ -120,8 +119,8 @@ function MobileMCPMarketItem({
 					{loading ? <IconLoader2 className="size-4 animate-spin" /> : null}
 					{!loading
 						? selected
-							? tMarket("connectors.added")
-							: t("mcp.panel.create")
+							? tMarket("connectors.remove")
+							: tMarket("connectors.installShort")
 						: null}
 				</Button>
 			}
@@ -154,6 +153,7 @@ function MobileMCPPluginsSheet({
 		loadingIds,
 		authDialog,
 		handleAuthDialogSuccess,
+		handleAuthDialogRevoked,
 		handleAuthDialogOpenChange,
 		onStatusChange,
 	} = useConnectorActions()
@@ -280,6 +280,7 @@ function MobileMCPPluginsSheet({
 					{...authDialog}
 					zIndex={1200}
 					onSuccess={handleAuthDialogSuccess}
+					onAuthRevoked={handleAuthDialogRevoked}
 					onOpenChange={handleAuthDialogOpenChange}
 				/>
 			) : null}
@@ -361,33 +362,36 @@ function MobileMCPPluginsSheet({
 						<div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3 pt-3">
 							{displayMCPList.length > 0 ? (
 								<div className="flex flex-col gap-2">
-							{displayMCPList.map((item) => (
-								<MobileMCPConnectorItem
-									key={item.id}
-									item={item}
-									onOpenDetail={openConnectorDetail}
-									action={
-										<Switch
-											aria-label={t("mcp.button.toggleConnector", {
-												name: item.name,
-											})}
-											checked={enabledMCPIds.has(item.id)}
-											loading={switchLoadingIds.has(item.id)}
-											className="self-center translate-y-0 h-[28px] w-[48px] data-[state=checked]:bg-foreground data-[state=unchecked]:bg-border [&_[data-slot=switch-thumb]]:size-6 [&_[data-slot=switch-thumb]]:bg-background [&_[data-slot=switch-thumb]]:translate-y-0 [&_[data-slot=switch-thumb][data-state=checked]]:translate-x-[calc(100%-2px)]"
-											onCheckedChange={(checked) =>
-												void toggleMCPEnabled(item.id, checked)
+									{displayMCPList.map((item) => (
+										<MobileMCPConnectorItem
+											key={item.id}
+											item={item}
+											onOpenDetail={openConnectorDetail}
+											action={
+												<Switch
+													aria-label={t("mcp.button.toggleConnector", {
+														name: item.name,
+													})}
+													checked={enabledMCPIds.has(item.id)}
+													loading={switchLoadingIds.has(item.id)}
+													className="self-center translate-y-0 h-[28px] w-[48px] data-[state=checked]:bg-foreground data-[state=unchecked]:bg-border [&_[data-slot=switch-thumb]]:size-6 [&_[data-slot=switch-thumb]]:bg-background [&_[data-slot=switch-thumb]]:translate-y-0 [&_[data-slot=switch-thumb][data-state=checked]]:translate-x-[calc(100%-2px)]"
+													onCheckedChange={(checked) =>
+														void toggleMCPEnabled(item.id, checked)
+													}
+												/>
 											}
 										/>
-									}
-								/>
-							))}
+									))}
 								</div>
 							) : (
 								<div
 									className="flex min-h-full flex-col items-center justify-center gap-2 px-4 text-center"
 									data-testid="mobile-mcp-plugins-sheet-empty"
 								>
-									<Unplug className="size-[42px] text-muted-foreground" aria-hidden="true" />
+									<Unplug
+										className="size-[42px] text-muted-foreground"
+										aria-hidden="true"
+									/>
 									<div className="text-base text-muted-foreground">
 										{t("mcp.button.emptyConnectors")}
 									</div>
@@ -395,7 +399,9 @@ function MobileMCPPluginsSheet({
 										variant="default"
 										size="lg"
 										className="mt-3 rounded-full"
-										onClick={() => setActiveTab(CONNECTOR_MARKET_GROUPS.official)}
+										onClick={() =>
+											setActiveTab(CONNECTOR_MARKET_GROUPS.official)
+										}
 										data-testid="mobile-mcp-plugins-sheet-add-more-connectors"
 									>
 										<Plus className="size-4" />
