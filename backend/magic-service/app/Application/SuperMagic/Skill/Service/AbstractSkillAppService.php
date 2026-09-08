@@ -28,11 +28,15 @@ use App\Domain\SuperMagic\Skill\Service\SkillVersionDomainService;
 use App\ErrorCode\SkillErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\Util\File\EasyFileTools;
+use App\Infrastructure\Util\File\TemporaryFileManager;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\Locker\LockerInterface;
+use App\Infrastructure\Util\ZipUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
+use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\Di\Annotation\Inject;
 use Hyperf\Redis\Redis;
 
@@ -44,6 +48,9 @@ abstract class AbstractSkillAppService extends AbstractKernelAppService
     protected const IMPORT_LOCK_EXPIRE_SECONDS = 60;
 
     private const IMPORT_TOKEN_EXPIRE_SECONDS = 4 * 3600;
+
+    /** Skill 包内需要单独存储的说明文件. */
+    private const SKILL_FILE_NAME = 'SKILL.md';
 
     #[Inject]
     protected FileDomainService $fileDomainService;
@@ -65,6 +72,28 @@ abstract class AbstractSkillAppService extends AbstractKernelAppService
 
     #[Inject]
     protected SkillMarketDomainService $skillMarketDomainService;
+
+    /**
+     * 下载 Skill 压缩包，仅提取 SKILL.md 并上传为独立文件.
+     */
+    protected function uploadSkillFileFromPackage(SkillVersionEntity $version): string
+    {
+        $archive = TemporaryFileManager::createTempFile('skill-package-');
+        $filePath = TemporaryFileManager::createTempFile('skill-file-');
+        try {
+            $this->fileDomainService->downloadByChunks($version->getOrganizationCode(), $version->getFileKey(), $archive, StorageBucketType::Private);
+            ZipUtil::extractFile($archive, self::SKILL_FILE_NAME, $filePath);
+            $upload = new UploadFile($filePath, 'skills/' . $version->getCode() . '/versions/' . $version->getId(), self::SKILL_FILE_NAME, false);
+            $this->fileDomainService->uploadByCredential($version->getOrganizationCode(), $upload, StorageBucketType::Private, false);
+            return $upload->getKey();
+        } finally {
+            foreach ([$archive, $filePath] as $path) {
+                if (is_file($path)) {
+                    unlink($path);
+                }
+            }
+        }
+    }
 
     /**
      * 创建导入 Token 并保存导入数据.

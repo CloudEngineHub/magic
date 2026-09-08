@@ -18,6 +18,49 @@ use ZipArchive;
 class ZipUtil
 {
     /**
+     * 从 ZIP 中提取指定文件，不解压其他内容.
+     */
+    public static function extractFile(string $zipFile, string $fileName, string $target): void
+    {
+        if ($fileName === '' || basename($fileName) !== $fileName) {
+            throw new RuntimeException('Invalid ZIP file name');
+        }
+
+        $zip = new ZipArchive();
+        if ($zip->open($zipFile) !== true) {
+            throw new RuntimeException('Failed to open ZIP file');
+        }
+
+        try {
+            $entryName = null;
+            for ($index = 0; $index < $zip->numFiles; ++$index) {
+                $name = $zip->getNameIndex($index);
+                if ($name === false || str_ends_with($name, '/') || basename(str_replace('\\', '/', $name)) !== $fileName) {
+                    continue;
+                }
+                if ($entryName !== null) {
+                    throw new RuntimeException('Multiple ' . $fileName . ' files found');
+                }
+                $entryName = $name;
+            }
+
+            if ($entryName === null) {
+                throw new RuntimeException($fileName . ' not found');
+            }
+
+            $stream = $zip->getStream($entryName);
+            $output = fopen($target, 'wb');
+            if ($stream === false || $output === false || stream_copy_to_stream($stream, $output) === false) {
+                throw new RuntimeException('Failed to extract ' . $fileName);
+            }
+            fclose($stream);
+            fclose($output);
+        } finally {
+            $zip->close();
+        }
+    }
+
+    /**
      * 解压 ZIP 文件到指定目录.
      *
      * @param string|UploadedFile $zipFile ZIP 文件路径或 UploadedFile 对象
