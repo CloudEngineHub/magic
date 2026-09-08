@@ -4,7 +4,11 @@ import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/sha
 import { cn } from "@/utils/cn"
 import { EditorSelectContent } from "../../EditorFloating"
 import { NumericDragInput } from "./NumericDragInput"
-import { getMetricControlWidth, METRIC_CONTROL_MAX_WIDTH } from "./metricControlWidth"
+import {
+	getMetricControlWidth,
+	METRIC_CONTROL_MAX_WIDTH,
+	METRIC_SELECT_TRIGGER_CLASS,
+} from "./metricControlWidth"
 import { getEquivalentLineHeight, splitNumericLineHeight } from "../utils/lineHeight"
 
 const LINE_HEIGHT_PRESETS = ["normal", "1", "1.15", "1.2", "1.5", "1.75", "2", "2.5", "3"]
@@ -138,6 +142,7 @@ export function LineHeightSelector({
 					onKeyDown={handleKeyDown}
 					disabled={disabled}
 					className="h-full min-w-0 flex-1 border-0 bg-transparent px-0 text-center text-xs shadow-none hover:bg-transparent focus-visible:ring-0 disabled:opacity-50"
+					stepperClassName="border-l-0"
 					placeholder="1.5"
 					title={t("stylePanel.lineHeight")}
 					step={1}
@@ -145,7 +150,7 @@ export function LineHeightSelector({
 				<Select value={value} onValueChange={handleSelectChange} disabled={disabled}>
 					<SelectTrigger
 						data-testid="html-editor-line-height-menu-button"
-						className="h-full w-5 shrink-0 rounded-r-md border-0 bg-transparent p-0 shadow-none hover:bg-transparent disabled:opacity-50 [&>span]:hidden [&>svg]:h-3 [&>svg]:w-3"
+						className={METRIC_SELECT_TRIGGER_CLASS}
 					>
 						<SelectValue />
 					</SelectTrigger>

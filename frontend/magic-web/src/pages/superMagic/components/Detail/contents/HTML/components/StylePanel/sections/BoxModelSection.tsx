@@ -47,7 +47,8 @@ function EdgeInput({ label, value, onChange }: EdgeInputProps) {
 			value={value}
 			onChange={onChange}
 			inputMode="decimal"
-			className="h-5 w-8 rounded-none border border-transparent bg-transparent px-0.5 text-center text-[11px] tabular-nums text-foreground shadow-none outline-none transition-[background-color,border-color,color] duration-150 ease-out placeholder:text-muted-foreground/50 hover:border-primary/40 hover:text-primary focus-visible:border-primary focus-visible:text-primary disabled:cursor-default"
+			hideStepper
+			className="h-5 w-8 rounded-none border-transparent bg-transparent px-0.5 text-center text-[11px] tabular-nums leading-none shadow-none outline-none ring-0 focus-visible:ring-0"
 			aria-label={label}
 			data-testid={`box-model-edge-${label}`}
 		/>
@@ -83,31 +84,31 @@ function BoxLayer({ label, values, color, center, onChange, sideLabel }: BoxLaye
 			<div className="pointer-events-none absolute left-1 top-0.5 max-w-[calc(100%-3rem)] truncate text-[10px] font-medium text-muted-foreground">
 				{label}
 			</div>
-			<div className="grid w-full min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_1.5rem] grid-rows-[1.15rem_minmax(2rem,auto)_1.15rem]">
+			<div className="grid w-full min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_1.5rem] grid-rows-[1.25rem_minmax(2rem,auto)_1.25rem]">
 				{onChange && (
 					<>
-						<div className="col-start-2 row-start-1 flex items-center justify-center">
+						<div className="col-start-2 row-start-1 flex items-center justify-center overflow-hidden">
 							<EdgeInput
 								label={sideLabel("top")}
 								value={values.top}
 								onChange={(value) => onChange("top", value)}
 							/>
 						</div>
-						<div className="col-start-1 row-start-2 flex items-center justify-center">
+						<div className="col-start-1 row-start-2 flex items-center justify-center overflow-hidden">
 							<EdgeInput
 								label={sideLabel("left")}
 								value={values.left}
 								onChange={(value) => onChange("left", value)}
 							/>
 						</div>
-						<div className="col-start-3 row-start-2 flex items-center justify-center">
+						<div className="col-start-3 row-start-2 flex items-center justify-center overflow-hidden">
 							<EdgeInput
 								label={sideLabel("right")}
 								value={values.right}
 								onChange={(value) => onChange("right", value)}
 							/>
 						</div>
-						<div className="col-start-2 row-start-3 flex items-center justify-center">
+						<div className="col-start-2 row-start-3 flex items-center justify-center overflow-hidden">
 							<EdgeInput
 								label={sideLabel("bottom")}
 								value={values.bottom}

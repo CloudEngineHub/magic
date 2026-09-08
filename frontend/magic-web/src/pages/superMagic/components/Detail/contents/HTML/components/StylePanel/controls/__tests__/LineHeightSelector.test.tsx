@@ -75,6 +75,7 @@ describe("LineHeightSelector", () => {
 		const input = screen.getByTestId("html-editor-line-height-input")
 		expect(input).not.toHaveAttribute("data-can-drag", "true")
 		expect(input.className).not.toContain("cursor-ns-resize")
+		expect(screen.queryByTestId("numeric-drag-stepper")).not.toBeInTheDocument()
 
 		fireEvent.click(screen.getByRole("button", { name: "1.5" }))
 		expect(onChange).toHaveBeenCalledWith("1.5")
@@ -83,6 +84,7 @@ describe("LineHeightSelector", () => {
 		rerender(<LineHeightSelector value="1.5" onChange={onChange} onApply={onApply} />)
 		expect(input).toHaveAttribute("data-can-drag", "true")
 		expect(input.className).toContain("cursor-ns-resize")
+		expect(screen.getByTestId("numeric-drag-stepper")).toBeInTheDocument()
 	})
 
 	it("localizes normal and clears it on focus for numeric entry", () => {

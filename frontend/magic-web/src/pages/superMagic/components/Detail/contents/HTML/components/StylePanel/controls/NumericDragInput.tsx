@@ -24,6 +24,9 @@ interface NumericDragInputProps extends Omit<
 	formatEditValue?: (value: string | number) => string
 	/** Used as the drag/nudge origin when the field shows a non-px unit. */
 	scrubStartValue?: number | null
+	stepperClassName?: string
+	/** Hide steppers in compact diagrams such as the box model. */
+	hideStepper?: boolean
 }
 
 function clamp(value: number, min?: number, max?: number): number {
@@ -35,6 +38,19 @@ function clamp(value: number, min?: number, max?: number): number {
 function formatValue(value: number, precision?: number): string {
 	if (precision !== undefined) return value.toFixed(precision)
 	return String(Number(value.toFixed(6)))
+}
+
+function hasExplicitFixedWidth(className?: string): boolean {
+	return Boolean(className && /(?:^|\s)w-\d/.test(className))
+}
+
+function isTooCompactForStepper(className?: string): boolean {
+	const match = className?.match(/(?:^|\s)w-(\d+)(?:\s|$)/)
+	return Boolean(match && Number(match[1]) < 12)
+}
+
+function isFlexChild(className?: string): boolean {
+	return Boolean(className && /(?:^|\s)flex-1(?:\s|$)/.test(className))
 }
 
 /**
@@ -54,6 +70,8 @@ export function NumericDragInput({
 	formatDisplayValue,
 	formatEditValue,
 	scrubStartValue,
+	stepperClassName,
+	hideStepper = false,
 	className,
 	onFocus,
 	onBlur,
@@ -97,6 +115,11 @@ export function NumericDragInput({
 	// Keywords like "normal" have no numeric origin to scrub from.
 	const currentValue = getNumber()
 	const canDrag = currentValue !== null
+	const isEmbeddedStepper = Boolean(stepperClassName?.includes("border-l-0"))
+	const isFixedWidth = hasExplicitFixedWidth(className)
+	const canShowStepper =
+		canDrag && !props.disabled && !hideStepper && !isTooCompactForStepper(className)
+	const overlayStepper = canShowStepper && !isEmbeddedStepper
 	const isIncrementDisabled =
 		Boolean(props.disabled) ||
 		currentValue === null ||
@@ -191,7 +214,13 @@ export function NumericDragInput({
 	const stepper = (
 		<div
 			data-testid="numeric-drag-stepper"
-			className="flex w-3.5 shrink-0 flex-col self-stretch border-r border-border/60"
+			className={cn(
+				"flex w-3.5 shrink-0 flex-col",
+				overlayStepper
+					? "absolute inset-y-px right-px z-10 overflow-hidden rounded-r-md border-l border-border/60"
+					: "self-stretch border-l-0",
+				stepperClassName,
+			)}
 			onMouseEnter={revealHint}
 		>
 			<button
@@ -229,10 +258,18 @@ export function NumericDragInput({
 
 	return (
 		<div
-			className="flex w-full min-w-0 items-stretch"
+			className={cn(
+				canShowStepper
+					? [
+							"relative min-w-0 items-stretch",
+							isFixedWidth ? "inline-flex" : "flex",
+							!isFixedWidth && (isFlexChild(className) ? "flex-1" : "w-full"),
+						]
+					: "contents",
+			)}
 			data-testid="numeric-drag-input"
-			onMouseEnter={revealHint}
-			onMouseLeave={dismissHint}
+			onMouseEnter={canShowStepper ? revealHint : undefined}
+			onMouseLeave={canShowStepper ? dismissHint : undefined}
 		>
 			<Input
 				type="text"
@@ -242,8 +279,10 @@ export function NumericDragInput({
 				className={cn(
 					canDrag && "cursor-ns-resize touch-none select-none",
 					isDragging && "cursor-ns-resize bg-primary/10 text-primary",
-					"min-w-0 flex-1",
+					"min-w-0",
 					className,
+					hideStepper && "!bg-transparent !shadow-none ring-0 focus-visible:ring-0",
+					overlayStepper && "!pr-4",
 				)}
 				data-can-drag={canDrag ? "true" : undefined}
 				onPointerDown={(event) => {
@@ -286,20 +325,22 @@ export function NumericDragInput({
 				aria-description={t("stylePanel.numericDragHint")}
 				data-dragging={isDragging ? "true" : undefined}
 			/>
-			<Tooltip open={showHint} delayDuration={0}>
-				<TooltipTrigger asChild>{stepper}</TooltipTrigger>
-				{showHint ? (
-					<TooltipContent
-						side="top"
-						sideOffset={6}
-						className="max-w-48 px-2 py-1 text-[11px] leading-snug"
-						zIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}
-						data-testid="numeric-drag-hint"
-					>
-						{t("stylePanel.numericDragHint")}
-					</TooltipContent>
-				) : null}
-			</Tooltip>
+			{canShowStepper ? (
+				<Tooltip open={showHint} delayDuration={0}>
+					<TooltipTrigger asChild>{stepper}</TooltipTrigger>
+					{showHint ? (
+						<TooltipContent
+							side="top"
+							sideOffset={6}
+							className="max-w-48 px-2 py-1 text-[11px] leading-snug"
+							zIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}
+							data-testid="numeric-drag-hint"
+						>
+							{t("stylePanel.numericDragHint")}
+						</TooltipContent>
+					) : null}
+				</Tooltip>
+			) : null}
 		</div>
 	)
 }

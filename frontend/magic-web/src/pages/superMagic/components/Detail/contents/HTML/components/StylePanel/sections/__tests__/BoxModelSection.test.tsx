@@ -19,10 +19,12 @@ vi.mock("../../controls", () => ({
 	NumericDragInput: ({
 		value,
 		onChange,
+		hideStepper: _hideStepper,
 		...props
 	}: Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> & {
 		value: string | number
 		onChange: (value: string) => void
+		hideStepper?: boolean
 	}) => (
 		<input
 			{...props}
@@ -68,5 +70,21 @@ describe("BoxModelSection", () => {
 		expect(content.className).toContain("items-center")
 		expect(content.className).toContain("justify-center")
 		expect(content.className).toContain("w-full")
+	})
+
+	it("keeps box-model edge fields inside their grid rows", () => {
+		renderSection(
+			<BoxModelSection
+				selectedElement={createSelectedElement()}
+				editorRef={{ current: null }}
+			/>,
+		)
+
+		const edge = screen.getAllByTestId("box-model-edge-stylePanel.boxModelSideLabel")[0]
+		expect(edge.closest(".grid")?.className).toContain(
+			"grid-rows-[1.25rem_minmax(2rem,auto)_1.25rem]",
+		)
+		expect(edge.className).toContain("h-5")
+		expect(edge.className).toContain("ring-0")
 	})
 })

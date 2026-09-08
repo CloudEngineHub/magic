@@ -24,6 +24,8 @@ function ControlledNumericInput({
 	formatDisplayValue?: (value: string | number) => string
 	formatEditValue?: (value: string | number) => string
 	scrubStartValue?: number | null
+	className?: string
+	hideStepper?: boolean
 	onPointerDown?: React.PointerEventHandler<HTMLInputElement>
 }) {
 	const [value, setValue] = useState(initialValue)
@@ -258,11 +260,48 @@ describe("NumericDragInput", () => {
 		expect(screen.getByTestId("numeric-drag-decrement-button")).not.toBeDisabled()
 	})
 
-	it("disables both steppers when the value cannot be adjusted", () => {
+	it("keeps the field border and rounds the overlay stepper", () => {
+		render(
+			<ControlledNumericInput
+				initialValue="4"
+				className="h-6 w-14 rounded-md px-1 text-right text-xs"
+			/>,
+		)
+
+		const field = screen.getByTestId("numeric-drag-input")
+		const input = screen.getByRole("textbox", { name: "numeric value" })
+		const stepper = screen.getByTestId("numeric-drag-stepper")
+		expect(field.contains(stepper)).toBe(true)
+		expect(stepper.className).toContain("absolute")
+		expect(stepper.className).toContain("rounded-r-md")
+		expect(input.className).toContain("rounded-md")
+		expect(input.className).not.toContain("rounded-r-none")
+		expect(input.className).not.toContain("border-r-0")
+		expect(input.className).toContain("pr-4")
+	})
+
+	it("hides the stepper when hideStepper is set", () => {
+		render(<ControlledNumericInput initialValue="26" hideStepper />)
+
+		expect(screen.queryByTestId("numeric-drag-stepper")).not.toBeInTheDocument()
+		expect(screen.getByTestId("numeric-drag-input").className).toContain("contents")
+	})
+
+	it("hides the stepper on compact box-model fields", () => {
+		render(
+			<ControlledNumericInput
+				initialValue="8"
+				className="h-5 w-8 px-0.5 text-center text-[11px]"
+			/>,
+		)
+
+		expect(screen.queryByTestId("numeric-drag-stepper")).not.toBeInTheDocument()
+	})
+
+	it("hides the stepper when the value cannot be adjusted", () => {
 		render(<ControlledNumericInput initialValue="" />)
 
-		expect(screen.getByTestId("numeric-drag-increment-button")).toBeDisabled()
-		expect(screen.getByTestId("numeric-drag-decrement-button")).toBeDisabled()
+		expect(screen.queryByTestId("numeric-drag-stepper")).not.toBeInTheDocument()
 	})
 
 	it("shows the drag hint once on the first stepper hover", () => {
