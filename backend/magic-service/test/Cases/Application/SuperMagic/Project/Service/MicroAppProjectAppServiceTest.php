@@ -28,6 +28,7 @@ use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppListScope;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
+use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
 use App\Domain\SuperMagic\Workspace\Repository\Facade\WorkspaceRepositoryInterface;
@@ -448,6 +449,8 @@ class MicroAppProjectAppServiceTest extends TestCase
             $publishedResolver ?? $this->createMock(PublishedMicroAppResolver::class),
             $responseFormatter,
             new MicroAppShareConfig(),
+            $this->createMock(\App\Domain\SuperMagic\Project\Repository\Facade\MicroAppVisitRepositoryInterface::class),
+            $this->createMock(TaskFileRepositoryInterface::class),
         );
     }
 }

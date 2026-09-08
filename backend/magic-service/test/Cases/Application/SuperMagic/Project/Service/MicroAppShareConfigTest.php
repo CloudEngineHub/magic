@@ -46,4 +46,18 @@ final class MicroAppShareConfigTest extends TestCase
         self::assertSame(['pure_mode' => false], $config->formatResponseExtra(['pure_mode' => '0']));
         self::assertSame(['pure_mode' => false], $config->formatResponseExtra(null));
     }
+
+    public function testPublishRequestTracksWhetherExpiryWasProvided(): void
+    {
+        $request = new PublishMicroAppRequestDTO();
+        self::assertFalse($request->hasExpireDays());
+
+        $request->setExpireDays(null);
+        self::assertTrue($request->hasExpireDays());
+        self::assertNull($request->getExpireDays());
+
+        $request = new PublishMicroAppRequestDTO(['expire_days' => 30]);
+        self::assertTrue($request->hasExpireDays());
+        self::assertSame(30, $request->getExpireDays());
+    }
 }

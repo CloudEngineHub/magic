@@ -156,6 +156,23 @@ vi.mock("@/pages/superMagic/components/Share/ShareFields", async () => {
 				),
 			),
 		ShareRangeField: () => React.createElement("div", { "data-testid": "share-range-field" }),
+		ShareExpiryField: ({
+			value,
+			onChange,
+		}: {
+			value: number | null
+			onChange: (value: number | null) => void
+		}) =>
+			React.createElement(
+				"button",
+				{
+					type: "button",
+					"data-testid": "share-expiry-field",
+					"data-value": value === null ? "permanent" : String(value),
+					onClick: () => onChange(value === null ? 30 : null),
+				},
+				"expiry",
+			),
 	}
 })
 

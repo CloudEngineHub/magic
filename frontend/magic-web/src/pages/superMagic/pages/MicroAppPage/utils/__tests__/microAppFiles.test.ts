@@ -97,6 +97,34 @@ describe("microAppFiles", () => {
 		expect(selected?.file_id).toBe("second")
 	})
 
+	it("matches persisted numeric and string file ids", () => {
+		const selected = resolveSelectedHtmlEntry({
+			selectedFileId: "42",
+			items: [
+				file({ file_id: 42 as unknown as string, file_name: "custom.html" }),
+				file({ file_id: "index", file_name: "index.html" }),
+			],
+		})
+
+		expect(selected?.file_id).toBe(42)
+	})
+
+	it("falls back when the persisted entry is missing or no longer valid", () => {
+		const selected = resolveSelectedHtmlEntry({
+			selectedFileId: "missing",
+			items: [
+				file({
+					file_id: "nested",
+					file_name: "nested.html",
+					relative_file_path: "pages/nested.html",
+				}),
+				file({ file_id: "fallback", file_name: "fallback.htm" }),
+			],
+		})
+
+		expect(selected?.file_id).toBe("fallback")
+	})
+
 	it("compares preview entries by file id and update time", () => {
 		expect(
 			isSamePreviewEntryFile(
