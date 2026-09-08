@@ -19,6 +19,7 @@ function mapDigitalEmployeeToMention(item: CrewItemResponse): MentionItem {
 		isFolder: false,
 		data: {
 			agent_id: agentId,
+			agent_code: item.mode.identifier,
 			agent_name: name,
 			agent_avatar: avatar,
 			agent_description: description,
@@ -29,6 +30,7 @@ function mapDigitalEmployeeToMention(item: CrewItemResponse): MentionItem {
 
 export class MentionPanelDigitalEmployeesStore {
 	items: MentionItem[] = []
+	private currentAgentCode = ""
 
 	private fetchPromise: Promise<MentionItem[]> | null = null
 
@@ -42,8 +44,19 @@ export class MentionPanelDigitalEmployeesStore {
 		)
 	}
 
+	setCurrentAgentCode(agentCode?: string) {
+		this.currentAgentCode = agentCode?.trim() || ""
+	}
+
+	private getVisibleItems() {
+		return this.items.filter(
+			(item) =>
+				(item.data as AgentMentionData | undefined)?.agent_code !== this.currentAgentCode,
+		)
+	}
+
 	fetchItems({ force = false }: { force?: boolean } = {}) {
-		if (!force && this.loaded) return Promise.resolve(this.items)
+		if (!force && this.loaded) return Promise.resolve(this.getVisibleItems())
 		if (this.fetchPromise) return this.fetchPromise
 
 		this.fetchPromise = SuperMagicApi.getCrewList()
@@ -52,7 +65,7 @@ export class MentionPanelDigitalEmployeesStore {
 					.filter((item) => item.agent.is_visible !== false && item.mode.id?.trim())
 					.map(mapDigitalEmployeeToMention)
 				this.loaded = true
-				return this.items
+				return this.getVisibleItems()
 			})
 			.finally(() => {
 				this.fetchPromise = null
@@ -62,7 +75,7 @@ export class MentionPanelDigitalEmployeesStore {
 	}
 
 	searchItems(normalizedQuery: string, matchesQuery: (target: string, query: string) => boolean) {
-		return this.items.filter(
+		return this.getVisibleItems().filter(
 			(item) =>
 				matchesQuery(item.name, normalizedQuery) ||
 				matchesQuery(item.description ?? "", normalizedQuery),
@@ -70,6 +83,6 @@ export class MentionPanelDigitalEmployeesStore {
 	}
 
 	hasItem(agentId: string) {
-		return this.items.some((item) => item.id === agentId)
+		return this.getVisibleItems().some((item) => item.id === agentId)
 	}
 }

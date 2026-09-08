@@ -82,6 +82,7 @@ export type SkillMentionSource = "system" | "agent" | "mine"
 
 export interface AgentMentionData {
 	agent_id: string
+	agent_code?: string
 	agent_name: string
 	agent_avatar: string
 	agent_description: string

@@ -145,6 +145,9 @@ export class MentionPanelStore {
 	}
 
 	setSkillQueryContext(topicMode?: string, agentCode?: string) {
+		// On the home page custom employees are represented directly by their
+		// identifier in `topicMode`; inside a topic the code is carried separately.
+		this.digitalEmployeesStore.setCurrentAgentCode(agentCode ?? topicMode)
 		this.skillsStore.setQueryContext({
 			topicMode,
 			agentCode,
