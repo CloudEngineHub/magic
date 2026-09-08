@@ -1,7 +1,8 @@
 import type { AudioChunkData } from "../types/RecorderTypes"
+import { DEFAULT_RECORDING_SAMPLE_RATE } from "./RecordingEncodingProfile"
 
 /** Resample target required by the recording artifact contract. */
-export const RECORDING_TARGET_SAMPLE_RATE = 16_000
+export const RECORDING_TARGET_SAMPLE_RATE = DEFAULT_RECORDING_SAMPLE_RATE
 
 /** Normalize one PCM chunk to the requested sample rate with linear interpolation. */
 export function normalizePcm(

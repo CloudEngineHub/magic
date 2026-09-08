@@ -54,6 +54,8 @@ import { TypedEventEmitter } from "./utils/TypedEventEmitter"
 import {
 	ERROR_CODE_TASK_ENDED,
 	ERROR_CODES,
+	getBusinessErrorCode,
+	isOverrideSummaryAlreadySettled,
 	isTaskEndError,
 	defaultErrorManager,
 } from "./RecordingErrorManager"
@@ -66,9 +68,19 @@ import SilenceDetector from "./SilenceDetector"
 import { DurationTracker } from "./DurationTracker"
 import { getSummaryMessageService, SummaryStage } from "./SummaryMessageService"
 import { UploadQueueWatchdog } from "./uploadQueueWatchdog"
+import { runTaskEndCleanup } from "./taskEndCleanup"
+import {
+	runForceOverrideFinalization,
+	type RecordingOverrideContext,
+} from "./recordingOverrideLifecycle"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Button } from "@/components/shadcn-ui/button"
 import type { RecordingEncodingSnapshot } from "./MediaRecorderService/types/RecorderTypes"
+import {
+	createRecordingEncodingSnapshot,
+	inferLegacyRecordingAudioProfile,
+	normalizeRecordingEncodingSnapshot,
+} from "./MediaRecorderService/utils/RecordingEncodingProfile"
 
 const logger = createRecordingLogger("Main")
 
@@ -83,9 +95,12 @@ interface EnsureUploadOptions {
 	topicId?: string
 	projectId?: string
 	allowUserDecision?: boolean
+	maxWaitTimeouts?: number
 }
 
 const MAX_UPLOAD_WAIT_TIMEOUTS = 3
+const FORCE_OVERRIDE_MAX_UPLOAD_WAIT_TIMEOUTS = 1
+const FORCE_OVERRIDE_REQUEST_TIMEOUT_MS = 130_000
 
 class RecordSummaryService {
 	// Duration tracking (using reliable AudioContext-based tracker)
@@ -134,7 +149,10 @@ class RecordSummaryService {
 	private restoreEncodingSnapshot(session: RecordingSession): void {
 		const persistedSnapshot = session.metadata.recordingEncoding
 		if (persistedSnapshot) {
-			this.mediaRecorderService.setEncodingSnapshot(session.id, { ...persistedSnapshot })
+			this.mediaRecorderService.setEncodingSnapshot(
+				session.id,
+				normalizeRecordingEncodingSnapshot(persistedSnapshot, session.metadata.sampleRate),
+			)
 			return
 		}
 
@@ -144,9 +162,17 @@ class RecordSummaryService {
 			session.metadata.audioFormat === "webm" ? "wav" : session.metadata.audioFormat
 		const supportedFormats: RecordingEncodingSnapshot["format"][] = ["wav", "pcm", "ogg-opus"]
 		if (supportedFormats.includes(format as RecordingEncodingSnapshot["format"])) {
-			this.mediaRecorderService.setEncodingSnapshot(session.id, {
-				format: format as RecordingEncodingSnapshot["format"],
-			})
+			const profile = inferLegacyRecordingAudioProfile(
+				session.metadata.audioFormat,
+				session.metadata.sampleRate,
+			)
+			this.mediaRecorderService.setEncodingSnapshot(
+				session.id,
+				createRecordingEncodingSnapshot(
+					format as RecordingEncodingSnapshot["format"],
+					profile,
+				),
+			)
 		}
 	}
 
@@ -287,6 +313,7 @@ class RecordSummaryService {
 	private uploadRetryContext: { sessionId: string; topicId: string; projectId: string } | null =
 		null
 	private uploadRetryInFlight = false
+	private forceOverridePreparation: Promise<boolean> | null = null
 	// 录音开始后是否已收到第一个分片
 	private hasReceivedFirstChunk = false
 	// 是否已尝试过自动恢复
@@ -1426,7 +1453,7 @@ class RecordSummaryService {
 				if (isTaskEndError(error)) {
 					logger.warn(`恢复录音前检测到任务已结束，停止恢复会话 ${session.id}`)
 					// Handle task end: stop local instances and reset state
-					await this.handleTaskEnd(session.id)
+					await this.handleTaskEnd(session.id, error.code)
 					return
 				}
 				// If it's not a task end error, log but continue with resume
@@ -1796,6 +1823,315 @@ class RecordSummaryService {
 		})
 
 		return cancelledSession
+	}
+
+	/**
+	 * Stop the active recorder for an explicit override, summarize the session,
+	 * then release it while keeping its IndexedDB chunks available for audit/export.
+	 */
+	forceStopRecordingForOverride = async (expectedSessionId?: string): Promise<boolean> => {
+		const activeSession = this.sessionManager.getCurrentSession()
+		if (!activeSession || (expectedSessionId && activeSession.id !== expectedSessionId)) {
+			return false
+		}
+
+		logger.report("用户强制发起新录音，停止上一段录音", {
+			sessionId: activeSession.id,
+			duration: activeSession.totalDuration,
+			chunkCount: activeSession.currentChunkIndex,
+			source: "force_override",
+			previousIssue: {
+				hasRecordingError: recordSummaryStore.errorState.hasRecordingError,
+				hasChunkError: recordSummaryStore.errorState.hasChunkError,
+				hasVoiceError: recordSummaryStore.errorState.hasVoiceError,
+				recordingError: recordSummaryStore.errorState.recordingError?.message,
+				retryCount: recordSummaryStore.errorState.retryInfo.current,
+			},
+		})
+
+		this.stopChunkProductionWatchdog()
+		this.recordStatusChecker.stop()
+
+		let overrideSummaryResult: GetRecordingSummaryResultResponse | null = null
+		try {
+			await runForceOverrideFinalization({
+				stopRecordingServices: () =>
+					this.stopRecordingServices("force_override", {
+						throwOnMediaRecorderError: true,
+					}),
+				flushSessionUploads: () => this.flushSessionUploadsBeforeOverride(activeSession),
+				summarizeSession: async () => {
+					this.statusReporter.stopPeriodicReport()
+					this.stopUploadQueueWatchdog()
+
+					const { project, topic } = await this.ensureProjectAndTopic(activeSession)
+					try {
+						overrideSummaryResult = await this.processSummaryForSession(
+							activeSession,
+							project.id,
+							topic.id,
+							{
+								note: activeSession.note ?? recordSummaryStore.note,
+								asr_stream_content: this.getLatestAsrContent(),
+							},
+						)
+					} catch (error) {
+						if (!isOverrideSummaryAlreadySettled(error)) throw error
+
+						logger.report("总结接口返回会话已在总结中或已结束，视为上一段已结束", {
+							sessionId: activeSession.id,
+							errorCode: getBusinessErrorCode(error),
+						})
+					}
+				},
+				completeSession: () => {
+					// Summary has been accepted by the server; complete only the old local
+					// session and leave its IndexedDB audio chunks available for audit/export.
+					this.cleanupAfterSessionComplete()
+					this.recordingPersistence.deleteSession(activeSession.id)
+					this.emit(RECORD_SUMMARY_EVENTS.UPDATE_EMPTY_WORKSPACE_PANEL_PROJECTS, {
+						topicId: activeSession.topic?.id || "",
+						projectId: activeSession.project?.id || "",
+						workspaceId: activeSession.workspace?.id || "",
+					})
+					this.emit(RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE, { session: activeSession })
+					logger.report("强制发起前上一段录音总结已触发", {
+						sessionId: activeSession.id,
+						taskKey: overrideSummaryResult?.task_key,
+					})
+				},
+			})
+		} catch (error) {
+			this.statusReporter.stopPeriodicReport()
+			this.stopUploadQueueWatchdog()
+			logger.error({
+				eventKey: "force_override_summary_failed",
+				errorKind: "unknown",
+				error,
+				message: "强制发起时上一段录音总结失败，保留原录音锁",
+				context: { sessionId: activeSession.id },
+			})
+			return false
+		}
+		return true
+	}
+
+	private flushSessionUploadsBeforeOverride = async (
+		session: RecordingSession,
+	): Promise<void> => {
+		const topicId = session.topic?.id || ""
+		const projectId = session.project?.id || ""
+		const progress = await this.chunkUploader.getSessionUploadProgress(session.id)
+
+		if (progress.failed > 0) {
+			await this.chunkUploader.retryFailedChunks(session.id, topicId, projectId)
+		}
+
+		this.startUploadQueueWatchdog(session.id, topicId, projectId)
+		await this.chunkUploader.uploadSession(session.id, topicId, projectId)
+		await this.ensureSessionUploadComplete(session, {
+			topicId,
+			projectId,
+			allowUserDecision: false,
+			maxWaitTimeouts: FORCE_OVERRIDE_MAX_UPLOAD_WAIT_TIMEOUTS,
+		})
+
+		logger.report("强制发起前上一段录音分片已全部上传", {
+			sessionId: session.id,
+			chunkCount: session.currentChunkIndex,
+		})
+	}
+
+	/** Describe the recording that must finish before a new one can start. */
+	getRecordingOverrideContext = async (): Promise<RecordingOverrideContext | null> => {
+		const currentSession = this.sessionManager.getCurrentSession()
+		if (currentSession) {
+			return {
+				sessionId: currentSession.id,
+				duration: formatDuration(currentSession.totalDuration || 0),
+				source: "currentTab",
+				status: currentSession.status === "paused" ? "paused" : "recording",
+				startContext: {
+					workspace: currentSession.workspace,
+					project: currentSession.project,
+					topic: currentSession.topic ?? null,
+					model: currentSession.model,
+				},
+			}
+		}
+
+		const hasOtherTabRecording =
+			recordSummaryStore.isOtherTabRecording ||
+			(this.tabCoordinator.isAnyTabRecording() &&
+				!this.tabCoordinator.hasRecordingPermission())
+		if (hasOtherTabRecording) {
+			return {
+				sessionId: recordSummaryStore.multiTabState.activeTabData.sessionId,
+				duration: recordSummaryStore.multiTabState.activeTabData.duration,
+				source: "otherTab",
+				status: "recording",
+			}
+		}
+
+		if (!this.recordingPersistence.hasRecoverableData()) return null
+		const historicalSession = (await this.recordingPersistence.getRestorationData())
+			.currentSession
+		if (!historicalSession) return null
+
+		return {
+			sessionId: historicalSession.id,
+			duration: formatDuration(historicalSession.totalDuration || 0),
+			source: "history",
+			status: historicalSession.status === "paused" ? "paused" : "recording",
+			startContext: {
+				workspace: historicalSession.workspace,
+				project: historicalSession.project,
+				topic: historicalSession.topic ?? null,
+				model: historicalSession.model,
+			},
+		}
+	}
+
+	/** Prepare a new recording after explicitly taking over an existing session. */
+	prepareRecordingOverride = async (expectedSessionId?: string): Promise<boolean> => {
+		if (this.forceOverridePreparation) return this.forceOverridePreparation
+
+		this.forceOverridePreparation = this.prepareRecordingOverrideInternal(expectedSessionId)
+		try {
+			return await this.forceOverridePreparation
+		} finally {
+			this.forceOverridePreparation = null
+		}
+	}
+
+	private prepareRecordingOverrideInternal = async (
+		expectedSessionId?: string,
+	): Promise<boolean> => {
+		const currentSession = this.sessionManager.getCurrentSession()
+		if (currentSession) {
+			const stopped = await this.forceStopRecordingForOverride(
+				expectedSessionId ?? currentSession.id,
+			)
+			if (!stopped) return false
+		}
+
+		const hasOtherTabRecording =
+			recordSummaryStore.isOtherTabRecording ||
+			(this.tabCoordinator.isAnyTabRecording() &&
+				!this.tabCoordinator.hasRecordingPermission())
+		if (hasOtherTabRecording) {
+			const overridden = await this.tabCoordinator.requestRecordingOverride(
+				expectedSessionId ?? recordSummaryStore.multiTabState.activeTabData.sessionId,
+				FORCE_OVERRIDE_REQUEST_TIMEOUT_MS,
+			)
+			if (!overridden) {
+				logger.warn("未能确认其他标签已停止录音", { source: "force_override" })
+				return false
+			}
+
+			return this.tabCoordinator.requestLock()
+		}
+
+		if (!this.recordingPersistence.hasRecoverableData()) return true
+		const historicalSession = (await this.recordingPersistence.getRestorationData())
+			.currentSession
+		if (
+			!historicalSession ||
+			(expectedSessionId && historicalSession.id !== expectedSessionId)
+		) {
+			return false
+		}
+
+		// Historical sessions have no active recorder, but restoring the session lets
+		// the same upload, summary, completion, and persistence path handle them.
+		if (!this.sessionManager.restoreSession(historicalSession)) return false
+		return this.forceStopRecordingForOverride(historicalSession.id)
+	}
+
+	/** Release the confirmed session so a new recording can start without a summary. */
+	releaseOverrideSessionForForceStart = async (expectedSessionId?: string): Promise<boolean> => {
+		const activeSession = this.sessionManager.getCurrentSession()
+		if (activeSession) {
+			if (expectedSessionId && activeSession.id !== expectedSessionId) {
+				logger.warn("仍要发起已取消：当前会话已变化", {
+					expectedSessionId,
+					currentSessionId: activeSession.id,
+				})
+				return false
+			}
+
+			const recorderStopped = await this.stopLeftoverRecordingServicesForForceStart()
+			if (!recorderStopped) {
+				logger.warn("仍要发起已取消：旧录音器仍在运行", {
+					sessionId: activeSession.id,
+				})
+				return false
+			}
+
+			this.cleanupAfterSessionComplete()
+			this.recordingPersistence.deleteSession(activeSession.id)
+			this.emit(RECORD_SUMMARY_EVENTS.UPDATE_EMPTY_WORKSPACE_PANEL_PROJECTS, {
+				topicId: activeSession.topic?.id || "",
+				projectId: activeSession.project?.id || "",
+				workspaceId: activeSession.workspace?.id || "",
+			})
+			this.emit(RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE, { session: activeSession })
+			logger.report("用户选择仍要发起，已释放上一段录音锁", {
+				sessionId: activeSession.id,
+			})
+			return true
+		}
+
+		const otherTabHoldsLock =
+			this.tabCoordinator.isAnyTabRecording() && !this.tabCoordinator.hasRecordingPermission()
+		const otherTabSessionId = recordSummaryStore.multiTabState.activeTabData.sessionId
+		if (
+			expectedSessionId &&
+			otherTabHoldsLock &&
+			otherTabSessionId &&
+			otherTabSessionId !== expectedSessionId
+		) {
+			logger.warn("仍要发起已取消：其他标签会话已变化", {
+				expectedSessionId,
+				otherTabSessionId,
+			})
+			return false
+		}
+
+		this.recordingPersistence.clearAll()
+		recordSummaryStore.completeRecording()
+
+		if (otherTabHoldsLock) {
+			this.tabCoordinator.forceAcquireLock()
+			logger.report("用户选择仍要发起，已强制接管其他标签的录音锁")
+			return true
+		}
+
+		this.tabCoordinator.releaseLock({
+			type: "finish",
+			data: {
+				message: [],
+				duration: "00:00:00",
+				isRecording: false,
+				sessionId: "",
+			},
+		})
+		logger.report("用户选择仍要发起，已清理可恢复的历史录音指针")
+		return true
+	}
+
+	private stopLeftoverRecordingServicesForForceStart = async (): Promise<boolean> => {
+		try {
+			await this.stopRecordingServices("force_override_release")
+		} catch (error) {
+			logger.error({
+				eventKey: "force_override_release_stop_failed",
+				errorKind: "unknown",
+				error,
+				message: "强制发起前停止旧录音服务失败",
+			})
+		}
+		return !this.mediaRecorderService.getStatus().isRecording
 	}
 
 	/**
@@ -2961,12 +3297,8 @@ class RecordSummaryService {
 		// Check if error is task end error
 		if (isTaskEndError(error)) {
 			const session = this.sessionManager.getCurrentSession()
-			if (session) {
-				logger.warn(`恢复录音前检测到任务已结束，停止恢复会话 ${session.id}`)
-				// Handle task end: stop local instances and reset state
-				await this.handleTaskEnd(session.id)
-				return
-			}
+			const sessionId = session?.id ?? error.sessionId
+			if (sessionId) await this.handleTaskEnd(sessionId, error.code)
 		}
 	}
 
@@ -3760,7 +4092,7 @@ class RecordSummaryService {
 	 * 处理服务端结束任务事件。
 	 * 服务端状态已经结束，只需要强制停止本地的录制相关实例
 	 */
-	private handleTaskEnd = async (sessionId: string, errorCode?: number) => {
+	private handleTaskEnd = async (sessionId: string, errorCode?: number | string) => {
 		logger.warn(
 			`检测到任务结束（错误码 ${errorCode ?? ERROR_CODE_TASK_ENDED}），停止本地录制会话 ${sessionId}`,
 		)
@@ -3772,61 +4104,81 @@ class RecordSummaryService {
 
 		try {
 			const currentSession = this.sessionManager.getCurrentSession()
-			// Only stop if this is the current active session
-			if (!currentSession || currentSession.id !== sessionId) {
+			// Never stop a different recording session because of a stale event.
+			if (currentSession && currentSession.id !== sessionId) {
 				logger.log(`任务结束事件针对的会话 ${sessionId} 不是当前活跃会话，忽略`)
 				return
 			}
 
-			// Stop recording services (voice and media recorder)
-			// This includes stopping duration timer
-			await this.stopRecordingServices("task_end")
-
-			// Release wake lock
-			this.wakeLockManager.releaseWakeLock()
-			this.wakeLockManager.removeVisibilityChangeListener()
-
-			// Remove before unload listener
-			this.removeBeforeUnloadListener()
-
-			// Stop periodic reporting (server already knows task ended)
-			this.statusReporter.stopPeriodicReport()
-			this.chunkUploader.stopSessionUploads(sessionId, "task_end")
-			this.batchSaveReporter.clearSession(sessionId)
-
-			// 保留本地分片和会话记录。服务端已结束任务，但这里删除数据会让
-			// 上传失败的分片无法导出，也会丢失后续排查所需的本地记录。
+			const numericErrorCode =
+				typeof errorCode === "string" && errorCode.trim() === ""
+					? undefined
+					: Number(errorCode)
+			const normalizedErrorCode = Number.isFinite(numericErrorCode)
+				? numericErrorCode
+				: undefined
 			const terminationSource =
-				errorCode === ERROR_CODES.TASK_IS_SUMMARIZING
+				normalizedErrorCode === ERROR_CODES.TASK_IS_SUMMARIZING
 					? "server_auto_summary"
 					: "server_task_ended"
-			const cancelledSession = this.sessionManager.markServerCancelledSession(
-				errorCode,
-				terminationSource,
-			)
-			if (cancelledSession) {
-				this.recordingPersistence.saveSession(cancelledSession)
-				const queueStatus = await this.chunkUploader.getQueueStatus(sessionId)
-				logger.report("服务端自动总结后保留本地录音数据", {
-					sessionId,
-					errorCode,
-					status: cancelledSession.status,
-					queueStatus,
-					chunkIndex: cancelledSession.currentChunkIndex,
-				})
-			}
 
-			// Reset store state
-			recordSummaryStore.reset()
+			await runTaskEndCleanup({
+				stopRecordingServices: () => this.stopRecordingServices("task_end"),
+				stopSessionUploads: () =>
+					this.chunkUploader.stopSessionUploads(sessionId, "task_end"),
+				stopStatusReporter: () => {
+					this.stopChunkProductionWatchdog()
+					this.stopUploadQueueWatchdog()
+					this.statusReporter.stopPeriodicReport()
+					this.batchSaveReporter.clearSession(sessionId)
+				},
+				stopRecordStatusChecker: () => this.recordStatusChecker.stop(),
+				releaseWakeLock: () => this.wakeLockManager.releaseWakeLock(),
+				removeVisibilityChangeListener: () =>
+					this.wakeLockManager.removeVisibilityChangeListener(),
+				removeBeforeUnloadListener: () => this.removeBeforeUnloadListener(),
+				releaseRecordingLock: () =>
+					this.tabCoordinator.releaseLock({
+						type: "finish",
+						data: {
+							message: [],
+							duration: "00:00:00",
+							isRecording: false,
+							sessionId,
+						},
+					}),
+				preserveSession: async () => {
+					const cancelledSession = this.sessionManager.markServerCancelledSession(
+						normalizedErrorCode,
+						terminationSource,
+					)
+					if (!cancelledSession) return
+
+					this.recordingPersistence.saveSession(cancelledSession)
+					const queueStatus = await this.chunkUploader.getQueueStatus(sessionId)
+					logger.report("服务端自动总结后保留本地录音数据", {
+						sessionId,
+						errorCode: normalizedErrorCode,
+						status: cancelledSession.status,
+						queueStatus,
+						chunkIndex: cancelledSession.currentChunkIndex,
+					})
+				},
+				resetStore: () => {
+					recordSummaryStore.reset()
+				},
+				reportError: (stage, error) => {
+					logger.error({
+						eventKey: "task_end_cleanup_failed",
+						errorKind: "unknown",
+						error,
+						message: `任务结束清理阶段失败：${stage}`,
+						context: { sessionId, errorCode: normalizedErrorCode },
+					})
+				},
+			})
 
 			logger.log(`任务结束，本地录制实例已停止，会话 ${sessionId}，已保留本地数据`)
-		} catch (error) {
-			logger.error({
-				eventKey: "task_end_event_failed",
-				errorKind: "unknown",
-				error: error,
-				message: `处理任务结束事件失败：`,
-			})
 		} finally {
 			this.handlingTaskEndSessions.delete(sessionId)
 		}
@@ -4092,7 +4444,10 @@ class RecordSummaryService {
 	/**
 	 * 停止录音服务
 	 */
-	private async stopRecordingServices(source: string = "service"): Promise<void> {
+	private async stopRecordingServices(
+		source: string = "service",
+		options: { throwOnMediaRecorderError?: boolean } = {},
+	): Promise<void> {
 		const session = this.sessionManager.getCurrentSession()
 		logger.log("Recording services stop requested", {
 			sessionId: session?.id,
@@ -4140,12 +4495,12 @@ class RecordSummaryService {
 				message: "停止媒体录制器失败",
 				context: { sessionId: session?.id, source },
 			})
+			if (options.throwOnMediaRecorderError) throw error
+		} finally {
+			// Keep duration even when the media recorder fails to stop.
+			this.durationTracker.pause()
+			this.stopDurationUpdateTimer()
 		}
-
-		// Pause duration tracking (save current duration)
-		// Note: We don't reset here, just pause to preserve accumulated duration
-		this.durationTracker.pause()
-		this.stopDurationUpdateTimer()
 	}
 
 	/**
@@ -4218,7 +4573,11 @@ class RecordSummaryService {
 							queueReason: health.reason,
 						})
 
-						if (stalledTimeouts >= MAX_UPLOAD_WAIT_TIMEOUTS) throw error
+						if (
+							stalledTimeouts >= (options.maxWaitTimeouts ?? MAX_UPLOAD_WAIT_TIMEOUTS)
+						) {
+							throw error
+						}
 						if (health.stalled) {
 							await this.chunkUploader.resumeStalledSessionUploads(
 								session.id,

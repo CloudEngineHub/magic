@@ -1555,12 +1555,12 @@
 				"backHome": "返回首页",
 				"badge": "Self Media",
 				"bindAndFetchPublishedData": "保存并抓取文章数据",
-				"bindPublishedLink": "绑定发布链接",
+				"bindPublishedLink": "绑定链接",
 				"bindPublishedLinkAction": "保存链接",
 				"brandConfig": "品牌配置",
 				"create": "新增文章",
 				"dataOverview": "数据总览",
-				"dataSyncNow": "立即同步",
+				"dataSyncNow": "同步",
 				"deletePost": "删除文章",
 				"deletePostCancel": "取消",
 				"deletePostConfirm": "永久删除",
@@ -1568,7 +1568,7 @@
 				"deletePostFailed": "删除文章失败，请稍后重试",
 				"deletePostSuccess": "文章已删除",
 				"deletePostTitle": "确认删除这篇文章？",
-				"editPublishedLink": "修改发布链接",
+				"editPublishedLink": "修改链接",
 				"emptyDesc": "点击新增文章，进入初始化向导开始规划内容。",
 				"emptyTitle": "暂无文章",
 				"engagement": {
@@ -1588,7 +1588,7 @@
 				"loadingPublishedLink": "正在读取链接...",
 				"mentionPost": "引用该文章",
 				"moreActions": "更多操作",
-				"openOpsReview": "查看复盘",
+				"openOpsReview": "复盘",
 				"openPlatform": "打开平台内容",
 				"opsArtifacts": {
 					"commentsMissing": "反馈未整理",
@@ -4843,6 +4843,24 @@
 			"useMerge": "使用合并内容",
 			"useServer": "使用最新内容"
 		},
+		"forceOverride": {
+			"cancel": "取消",
+			"confirm": "停止并开始新录音",
+			"continue": "仍要发起",
+			"description": "上一段录音会先完成上传并触发总结，确认处理完成后再开始新的录音。",
+			"duration": "录制时长",
+			"failed": "未能确认上一段录音已安全结束，请检查网络后再次尝试。新的录音尚未开始",
+			"retry": "再次尝试",
+			"retryTitle": "上一段录音仍未安全结束",
+			"source": "录音来源",
+			"sourceCurrentTab": "当前标签",
+			"sourceHistory": "本地历史记录",
+			"sourceOtherTab": "其他标签",
+			"status": "当前状态",
+			"statusPaused": "已暂停",
+			"statusRecording": "录音中",
+			"title": "开始新的录音？"
+		},
 		"message": {
 			"completing": "正在完成总结...",
 			"continueSummary": "继续总结",
@@ -4994,8 +5012,12 @@
 				"beforeRecording": "开始录音后，请勿关闭当前页面，关闭可能会导致录音内容丢失",
 				"duringRecording": "请勿关闭当前页面，关闭可能会导致录音内容丢失",
 				"mediaRecorderNotSupported": "您的浏览器不支持录音功能，您可通过上传已有音频文件进行总结",
+				"missingModel": "请先选择模型后再开始录音",
+				"missingWorkspace": "请先选择工作区后再开始录音",
 				"recordingInProgress": "正在录音中，暂不可发起新录音，您可通过上传已有音频文件进行总结",
-				"recordingInProgressOtherTab": "其他标签正在录音中，暂不可发起新录音，您可通过上传已有音频文件进行总结"
+				"recordingInProgressOtherTab": "其他标签正在录音中，暂不可发起新录音，您可通过上传已有音频文件进行总结",
+				"recordingOverride": "当前有正在录制的会话，点击开始录音可确认是否结束上一段并发起新录音",
+				"recordingOverrideOtherTab": "其他标签有正在录制的会话，点击开始录音可确认是否结束上一段并发起新录音"
 			}
 		},
 		"ui": {

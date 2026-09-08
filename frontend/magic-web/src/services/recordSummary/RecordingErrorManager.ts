@@ -51,6 +51,12 @@ export const TASK_END_CODES: ReadonlySet<number> = new Set([
 	ERROR_CODES.SANDBOX_START_RETRY_EXCEEDED,
 ])
 
+/** Summary API codes that mean the previous recording is already done. */
+export const OVERRIDE_SUMMARY_SETTLED_CODES: ReadonlySet<number> = new Set([
+	ERROR_CODES.TASK_ALREADY_COMPLETED,
+	ERROR_CODES.TASK_IS_SUMMARIZING,
+])
+
 /**
  * Task end error interface
  * 任务结束错误接口
@@ -78,12 +84,8 @@ export class RecordingErrorManager {
 	 * 检查错误是否为任务结束错误
 	 */
 	isTaskEndError(error: unknown): error is TaskEndError {
-		return (
-			error !== null &&
-			typeof error === "object" &&
-			"code" in error &&
-			TASK_END_CODES.has((error as { code: number }).code)
-		)
+		const code = getBusinessErrorCode(error)
+		return code !== undefined && TASK_END_CODES.has(code)
 	}
 
 	/**
@@ -92,12 +94,16 @@ export class RecordingErrorManager {
 	 */
 	createTaskEndError(
 		sessionId: string,
-		code: number = ERROR_CODES.TASK_ALREADY_COMPLETED,
+		code: number | string = ERROR_CODES.TASK_ALREADY_COMPLETED,
 	): TaskEndError {
+		const numericCode = Number(code)
+		const resolvedCode = Number.isFinite(numericCode)
+			? numericCode
+			: ERROR_CODES.TASK_ALREADY_COMPLETED
 		const error = new Error(
-			`Task ended (error code: ${code}). Recording should be stopped for session ${sessionId}`,
+			`Task ended (error code: ${resolvedCode}). Recording should be stopped for session ${sessionId}`,
 		) as TaskEndError
-		error.code = code
+		error.code = resolvedCode
 		error.sessionId = sessionId
 		return error
 	}
@@ -185,4 +191,25 @@ export function createTaskEndError(sessionId: string, code?: number): TaskEndErr
 
 export function getSessionIdFromError(error: unknown): string | undefined {
 	return defaultErrorManager.getSessionIdFromError(error)
+}
+
+export function getBusinessErrorCode(error: unknown): number | undefined {
+	if (!error || typeof error !== "object") return undefined
+
+	const record = error as Record<string, unknown>
+	const response = record.response as Record<string, unknown> | undefined
+	const responseData = response?.data as Record<string, unknown> | undefined
+	const candidates = [record.code, response?.code, responseData?.code]
+
+	for (const raw of candidates) {
+		const code = typeof raw === "string" && raw.trim() !== "" ? Number(raw) : raw
+		if (typeof code === "number" && Number.isFinite(code)) return code
+	}
+
+	return undefined
+}
+
+export function isOverrideSummaryAlreadySettled(error: unknown): boolean {
+	const code = getBusinessErrorCode(error)
+	return code !== undefined && OVERRIDE_SUMMARY_SETTLED_CODES.has(code)
 }

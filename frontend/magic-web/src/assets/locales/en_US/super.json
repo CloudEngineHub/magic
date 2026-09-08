@@ -1370,7 +1370,7 @@
 		"saveAndClose": "Save and Close",
 		"selfMedia": {
 			"analysis": {
-				"action": "AI diagnosis",
+				"action": "Diagnose",
 				"cancel": "Cancel",
 				"confirm": "Start diagnosis",
 				"description": "Choose the diagnosis goal. The IP operations expert will compare similar content online, score this work, and suggest edits.",
@@ -1538,7 +1538,8 @@
 				"archivePost": "Pause publishing",
 				"archivePostSuccess": "Article paused for publishing",
 				"article": "Article",
-				"articleCount": "{{count}} article(s)",
+				"articleCount_one": "{{count}} article",
+				"articleCount_other": "{{count}} articles",
 				"autoSync": "Auto sync",
 				"autoSyncDaily": "Daily",
 				"autoSyncDescription": "Keep this article's ops files fresh on a schedule.",
@@ -1554,12 +1555,12 @@
 				"backHome": "Back home",
 				"badge": "Self Media",
 				"bindAndFetchPublishedData": "Save and fetch article data",
-				"bindPublishedLink": "Connect published link",
+				"bindPublishedLink": "Add link",
 				"bindPublishedLinkAction": "Save link",
 				"brandConfig": "Brand config",
 				"create": "New article",
 				"dataOverview": "Data overview",
-				"dataSyncNow": "Sync now",
+				"dataSyncNow": "Sync",
 				"deletePost": "Delete article",
 				"deletePostCancel": "Cancel",
 				"deletePostConfirm": "Delete permanently",
@@ -1567,7 +1568,7 @@
 				"deletePostFailed": "Failed to delete article. Please try again later.",
 				"deletePostSuccess": "Article deleted",
 				"deletePostTitle": "Delete this article?",
-				"editPublishedLink": "Change published link",
+				"editPublishedLink": "Edit link",
 				"emptyDesc": "Create a new article to open the setup wizard.",
 				"emptyTitle": "No articles yet",
 				"engagement": {
@@ -1587,7 +1588,7 @@
 				"loadingPublishedLink": "Loading link...",
 				"mentionPost": "Mention this article",
 				"moreActions": "More actions",
-				"openOpsReview": "View review",
+				"openOpsReview": "Review",
 				"openPlatform": "Open platform content",
 				"opsArtifacts": {
 					"commentsMissing": "Feedback not organized",
@@ -4841,6 +4842,24 @@
 			"useMerge": "Use Merged Content",
 			"useServer": "Use Latest Content"
 		},
+		"forceOverride": {
+			"cancel": "Cancel",
+			"confirm": "Stop and Start New Recording",
+			"continue": "Start Anyway",
+			"description": "The previous recording will finish uploading and start summarizing before the new recording begins.",
+			"duration": "Duration",
+			"failed": "The previous recording could not be safely finished. Check your network and try again. The new recording has not started.",
+			"retry": "Try Again",
+			"retryTitle": "The previous recording is not safely finished",
+			"source": "Recording source",
+			"sourceCurrentTab": "Current tab",
+			"sourceHistory": "Local history",
+			"sourceOtherTab": "Another tab",
+			"status": "Current status",
+			"statusPaused": "Paused",
+			"statusRecording": "Recording",
+			"title": "Start a new recording?"
+		},
 		"message": {
 			"completing": "Completing summary...",
 			"continueSummary": "Continue summary",
@@ -4992,8 +5011,12 @@
 				"beforeRecording": "Please do not close this page after starting recording, as closing may result in loss of recording content",
 				"duringRecording": "Please do not close this page, as closing may result in loss of recording content",
 				"mediaRecorderNotSupported": "Your browser does not support recording. You can upload existing audio files for summary.",
+				"missingModel": "Select a model before starting a recording.",
+				"missingWorkspace": "Select a workspace before starting a recording.",
 				"recordingInProgress": "Recording is in progress. You cannot start a new recording at this time. You can upload existing audio files for summary.",
-				"recordingInProgressOtherTab": "Another tab is recording. You cannot start a new recording at this time. You can upload existing audio files for summary."
+				"recordingInProgressOtherTab": "Another tab is recording. You cannot start a new recording at this time. You can upload existing audio files for summary.",
+				"recordingOverride": "A recording is already in progress. Select Start Recording to confirm ending it and starting a new one.",
+				"recordingOverrideOtherTab": "Another tab is recording. Select Start Recording to confirm ending it and starting a new one."
 			}
 		},
 		"ui": {

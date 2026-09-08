@@ -14,6 +14,10 @@ import { RecorderInitializationError, InvalidStateError } from "./types/Recorder
 import { logger as Logger } from "@/utils/log"
 import { DEFAULT_RECORDING_ENCODING_POLICY } from "./encoders/RecordingEncoderResolver"
 import { createRecordingLogger } from "../utils/RecordingLogger"
+import {
+	normalizeRecordingEncodingSnapshot,
+	resolveRecordingAudioProfile,
+} from "./utils/RecordingEncodingProfile"
 
 /**
  * Media recorder service dependencies
@@ -209,14 +213,20 @@ export class MediaRecorderService {
 			}
 
 			// Create audio recorder adapter configuration
+			const persistedEncoding =
+				this.config.lockedEncoding ?? this.encodingSnapshots.get(sessionId)
+			const lockedEncoding = persistedEncoding
+				? normalizeRecordingEncodingSnapshot(persistedEncoding)
+				: undefined
+			const audioProfile = resolveRecordingAudioProfile(lockedEncoding)
 			const recorderConfig: Partial<RecorderCoreConfig> = {
-				sampleRate: 16000, // 16kHz
-				bitRate: 16, // 16-bit
+				sampleRate: audioProfile.sampleRate,
+				bitRate: audioProfile.bitsPerSample,
 				audioBitsPerSecond: this.config.audioBitsPerSecond,
 				chunkDuration: (this.config.timeslice || 10000) / 1000, // Convert ms to seconds
 				type: resolveRecorderFormat(this.config.mimeType),
 				encodingPolicy: this.config.encodingPolicy ?? DEFAULT_RECORDING_ENCODING_POLICY,
-				lockedEncoding: this.config.lockedEncoding ?? this.encodingSnapshots.get(sessionId),
+				lockedEncoding,
 				audioSource: audioSourceConfig,
 			}
 
@@ -788,7 +798,7 @@ export class MediaRecorderService {
 
 	/** Seed recovery with the persisted session format before creating a new adapter. */
 	setEncodingSnapshot(sessionId: string, snapshot: RecordingEncodingSnapshot): void {
-		this.encodingSnapshots.set(sessionId, { ...snapshot })
+		this.encodingSnapshots.set(sessionId, normalizeRecordingEncodingSnapshot(snapshot))
 	}
 
 	/**

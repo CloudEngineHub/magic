@@ -1,5 +1,5 @@
 import type { ComponentType } from "react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import i18next from "i18next"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -36,6 +36,7 @@ import type { VoiceResultUtterance } from "@/components/business/VoiceInput/serv
 import { buildOptimisticRecordingItem } from "../utils/build-optimistic-recording-item"
 import { resolveCardStatusFromListItem } from "../utils/normalize-audio-project-item"
 import { readAudioRecordingsFilterSession } from "../utils/audio-recordings-filter-session"
+import { runForceRecordingOverride } from "@/components/business/RecordingSummary/utils/force-recording-override"
 
 export type EntryPresentation = "list" | "recording"
 export type RecordingStartupState = "idle" | "starting" | "error"
@@ -200,6 +201,7 @@ export interface UseRecordingEntryFacadeResult {
 	startupState: RecordingStartupState
 	startupErrorMessage: string
 	startupErrorDetail: string
+	isPreparingRecordingStart: boolean
 	duration: string
 	recordingTitle: string
 	transcriptMessages: TranscriptMessage[]
@@ -266,6 +268,8 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	const [startupState, setStartupState] = useState<RecordingStartupState>("idle")
 	const [startupErrorMessage, setStartupErrorMessage] = useState("")
 	const [startupErrorDetail, setStartupErrorDetail] = useState("")
+	const [isPreparingRecordingStart, setIsPreparingRecordingStart] = useState(false)
+	const startRecordingInFlightRef = useRef(false)
 	const [transcriptionEnabled, setTranscriptionEnabled] = useState(
 		recordSummaryStore.businessData.transcriptionEnabled,
 	)
@@ -430,21 +434,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	 * Starts a recording with ensured workspace/project/topic context so the
 	 * entry reuses the same backend contract as the legacy expert flow.
 	 */
-	const startRecording = useCallback(async () => {
-		if (recordSummaryStore.isOtherTabRecording) {
-			toast.error(t("recordingSummary.superEditorPanel.warning.recordingInProgressOtherTab"))
-			return
-		}
-
-		if (isSessionActive) {
-			if (!isMobile) {
-				expandDesktopRecordingFloatPanel()
-				return
-			}
-			setPresentation("recording")
-			return
-		}
-
+	const startNewRecording = useCallback(async () => {
 		if (isMobile) {
 			setPresentation("recording")
 		}
@@ -548,13 +538,60 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		}
 	}, [
 		isMobile,
-		isSessionActive,
 		createAudioProjectContext,
 		resolveRecordingModel,
 		runtime.actions,
 		runtime.state.isRecording,
 		t,
 	])
+
+	const startRecording = useCallback(async () => {
+		if (startRecordingInFlightRef.current) return
+		startRecordingInFlightRef.current = true
+		setIsPreparingRecordingStart(true)
+		try {
+			const overrideContext = await recordSummaryService.getRecordingOverrideContext()
+			if (overrideContext) {
+				const prepared = await runForceRecordingOverride(
+					overrideContext,
+					() => recordSummaryService.prepareRecordingOverride(overrideContext.sessionId),
+					() =>
+						recordSummaryService.releaseOverrideSessionForForceStart(
+							overrideContext.sessionId,
+						),
+				)
+				if (!prepared) return
+
+				await startNewRecording()
+				return
+			}
+
+			// Preserve the previous fallback when the shared store changes between
+			// conflict detection and startup, instead of creating a second session.
+			if (recordSummaryStore.isOtherTabRecording) {
+				toast.error(
+					t("recordingSummary.superEditorPanel.warning.recordingInProgressOtherTab"),
+				)
+				return
+			}
+
+			if (recordSummaryStore.status !== "init") {
+				if (!isMobile) {
+					expandDesktopRecordingFloatPanel()
+					return
+				}
+				setPresentation("recording")
+				return
+			}
+
+			await startNewRecording()
+		} catch {
+			toast.error(t("recordingSummary.recordErrorModal.title"))
+		} finally {
+			startRecordingInFlightRef.current = false
+			setIsPreparingRecordingStart(false)
+		}
+	}, [isMobile, recordSummaryService, startNewRecording, t])
 
 	/**
 	 * Pauses the shared recording session.
@@ -811,6 +848,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 		startupState,
 		startupErrorMessage,
 		startupErrorDetail,
+		isPreparingRecordingStart,
 		duration: runtime.state.duration,
 		recordingTitle:
 			recordSummaryStore.businessData.project?.project_name ||

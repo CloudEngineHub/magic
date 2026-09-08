@@ -380,7 +380,9 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 					onOpenSettings={() => setIsSettingsOpen(true)}
 					onImportFiles={(files) => void facade.importAudioFiles(files)}
 					onStartRecording={() => void facade.startRecording()}
-					isStartingRecording={facade.startupState === "starting"}
+					isStartingRecording={
+						facade.startupState === "starting" || facade.isPreparingRecordingStart
+					}
 				/>
 			</div>
 
