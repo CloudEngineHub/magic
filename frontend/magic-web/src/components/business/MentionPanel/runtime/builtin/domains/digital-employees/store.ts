@@ -1,43 +1,30 @@
 import { makeAutoObservable } from "mobx"
 import { SuperMagicApi } from "@/apis"
-import type { SuperMagicAgentOrderItem } from "@/apis/modules/superMagic"
+import type { CrewItemResponse } from "@/pages/superMagic/pages/Workspace/types"
 import { MentionItemType, type AgentMentionData, type MentionItem } from "../../../../types"
 
-function mapDigitalEmployeeToMention(item: SuperMagicAgentOrderItem): MentionItem {
-	const agentId = item.id.trim()
-	const avatar = item.icon?.url?.trim() || ""
+function mapDigitalEmployeeToMention(item: CrewItemResponse): MentionItem {
+	const agentId = item.mode.id.trim()
+	const name = item.mode.name || agentId
+	const description = item.mode.description || ""
+	const avatar = item.mode.icon_url?.trim() || ""
 
 	return {
 		id: agentId,
 		type: MentionItemType.AGENT,
-		name: item.name || agentId,
+		name,
 		icon: avatar,
-		description: item.description,
+		description,
 		hasChildren: false,
 		isFolder: false,
 		data: {
 			agent_id: agentId,
-			agent_name: item.name || agentId,
+			agent_name: name,
 			agent_avatar: avatar,
-			agent_description: item.description,
+			agent_description: description,
 			agent_source: "digital_employee",
 		} satisfies AgentMentionData,
 	}
-}
-
-function mergeDigitalEmployees(
-	frequent: SuperMagicAgentOrderItem[],
-	all: SuperMagicAgentOrderItem[],
-) {
-	const seenAgentIds = new Set<string>()
-
-	return [...frequent, ...all].filter((item) => {
-		const agentId = item.id.trim()
-		if (!agentId || seenAgentIds.has(agentId)) return false
-
-		seenAgentIds.add(agentId)
-		return true
-	})
 }
 
 export class MentionPanelDigitalEmployeesStore {
@@ -59,11 +46,11 @@ export class MentionPanelDigitalEmployeesStore {
 		if (!force && this.loaded) return Promise.resolve(this.items)
 		if (this.fetchPromise) return this.fetchPromise
 
-		this.fetchPromise = SuperMagicApi.getAgentsList()
+		this.fetchPromise = SuperMagicApi.getCrewList()
 			.then((response) => {
-				this.items = mergeDigitalEmployees(response.frequent ?? [], response.all ?? []).map(
-					mapDigitalEmployeeToMention,
-				)
+				this.items = response.list
+					.filter((item) => item.agent.is_visible !== false && item.mode.id?.trim())
+					.map(mapDigitalEmployeeToMention)
 				this.loaded = true
 				return this.items
 			})
