@@ -215,7 +215,10 @@ export function NumericDragInput({
 		<div
 			data-testid="numeric-drag-stepper"
 			className={cn(
-				"flex w-3.5 shrink-0 flex-col",
+				"pointer-events-none flex w-3.5 shrink-0 flex-col opacity-0 transition-opacity duration-150",
+				"group-hover/numeric:pointer-events-auto group-hover/numeric:opacity-100",
+				"group-focus-within/numeric:pointer-events-auto group-focus-within/numeric:opacity-100",
+				(isDragging || showHint) && "pointer-events-auto opacity-100",
 				overlayStepper
 					? "absolute inset-y-px right-px z-10 overflow-hidden rounded-r-md border-l border-border/60"
 					: "self-stretch border-l-0",
@@ -261,7 +264,7 @@ export function NumericDragInput({
 			className={cn(
 				canShowStepper
 					? [
-							"relative min-w-0 items-stretch",
+							"group/numeric relative min-w-0 items-stretch",
 							isFixedWidth ? "inline-flex" : "flex",
 							!isFixedWidth && (isFlexChild(className) ? "flex-1" : "w-full"),
 						]

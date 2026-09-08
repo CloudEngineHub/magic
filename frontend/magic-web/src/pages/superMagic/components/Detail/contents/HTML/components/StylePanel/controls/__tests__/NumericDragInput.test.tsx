@@ -260,6 +260,21 @@ describe("NumericDragInput", () => {
 		expect(screen.getByTestId("numeric-drag-decrement-button")).not.toBeDisabled()
 	})
 
+	it("reveals the stepper on hover and while dragging", () => {
+		render(<ControlledNumericInput initialValue="10" />)
+
+		const stepper = screen.getByTestId("numeric-drag-stepper")
+		expect(stepper.className).toContain("opacity-0")
+		expect(stepper.className).toContain("group-hover/numeric:opacity-100")
+		expect(stepper.className).toContain("group-focus-within/numeric:opacity-100")
+
+		const input = screen.getByRole("textbox", { name: "numeric value" })
+		firePointerEvent(input, "pointerdown", 100)
+		expect(screen.getByTestId("numeric-drag-stepper").className.split(" ")).toContain(
+			"opacity-100",
+		)
+	})
+
 	it("keeps the field border and rounds the overlay stepper", () => {
 		render(
 			<ControlledNumericInput
