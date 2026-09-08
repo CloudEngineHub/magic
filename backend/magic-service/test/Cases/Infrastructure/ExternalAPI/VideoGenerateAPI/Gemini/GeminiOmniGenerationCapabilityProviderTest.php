@@ -74,5 +74,6 @@ final class GeminiOmniGenerationCapabilityProviderTest extends TestCase
             self::assertArrayHasKey($mode, $data['input_modes']);
         }
         self::assertContains('reference_audios', $data['input_modes']['omni_reference']['supported_fields']);
+        self::assertSame('video.input_modes.omni_reference', $data['input_modes']['omni_reference']['description']);
     }
 }

@@ -127,6 +127,7 @@ final class Wan30GenerationCapabilityProviderTest extends TestCase
         self::assertSame(['first' => 'start', 'last' => 'end'], $modes['keyframe_guided']['role_aliases']);
         self::assertSame(['reference_images', 'reference_videos', 'reference_audios'], $modes['omni_reference']['supported_fields']);
         self::assertSame(20, $modes['omni_reference']['max_count']);
+        self::assertSame('video.input_modes.omni_reference', $modes['omni_reference']['description']);
         self::assertSame([
             ['code' => 'reference_image', 'description' => 'video.input_modes.reference_image', 'limits' => ['count' => ['max' => 10]]],
             ['code' => 'reference_video', 'description' => 'video.input_modes.reference_video', 'limits' => ['count' => ['max' => 5], 'duration_seconds' => ['max' => 15], 'total_duration_seconds' => ['max' => 15]]],

@@ -26,7 +26,7 @@ readonly class Wan30GenerationCapabilityProvider
     ];
 
     /** @var list<string> */
-    private const array SUPPORTED_ASPECT_RATIOS = ['16:9', '4:3', '1:1', '3:4', '9:16', 'adaptive'];
+    private const array SUPPORTED_ASPECT_RATIOS = ['16:9', '4:3', '1:1', '3:4', '9:16'];
 
     /** @var list<string> */
     private const array SUPPORTED_RESOLUTIONS = ['480p', '720p', '1080p'];
