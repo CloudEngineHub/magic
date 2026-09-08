@@ -3250,7 +3250,7 @@ class TaskFileDomainService
         $taskFileEntity->setFileSize(! empty($attachment['file_size']) ? $attachment['file_size'] : 0);
 
         // message type
-        $taskFileEntity->setFileType(! empty($attachment['file_tag']) ? $attachment['file_tag'] : FileType::PROCESS->value);
+        $taskFileEntity->setFileType(FileType::fromValue($attachment['file_tag'] ?? null, FileType::PROCESS)->value);
         $taskFileEntity->setSource(TaskFileSource::AGENT);
 
         // Set storage type (will be overridden by saveProjectFile parameter)

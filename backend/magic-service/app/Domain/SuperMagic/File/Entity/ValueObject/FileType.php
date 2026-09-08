@@ -58,6 +58,21 @@ enum FileType: string
     case DIRECTORY = 'directory';
 
     /**
+     * 从外部输入创建枚举实例，非法值（含空串、非字符串）返回指定默认值.
+     */
+    public static function fromValue(mixed $value, self $default = self::USER_UPLOAD): self
+    {
+        if ($value instanceof self) {
+            return $value;
+        }
+        if (! is_string($value)) {
+            return $default;
+        }
+
+        return self::tryFrom($value) ?? $default;
+    }
+
+    /**
      * 获取文件类型名称.
      */
     public function getName(): string
