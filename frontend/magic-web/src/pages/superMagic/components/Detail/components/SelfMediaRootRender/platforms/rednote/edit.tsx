@@ -617,7 +617,7 @@ const RednoteEditView = observer(function RednoteEditView({
 							attachmentList={attachmentList}
 							isVisible
 							toolbarEndRef={onHtmlToolbarEndRef}
-							toolbarClassName={`absolute left-1/2 top-2 z-[10] w-[98%] -translate-x-1/2 p-2 ${selfMediaOverlayStyles.floatingPanel}`}
+							toolbarClassName={`absolute left-2 top-2 z-[10] p-2 ${selfMediaOverlayStyles.floatingPanel}`}
 							className="h-full w-full"
 						/>
 						{htmlToolbarEndHost && hasUnsavedChanges && cardContent
