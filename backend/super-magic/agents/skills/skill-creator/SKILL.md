@@ -142,7 +142,7 @@ For a knowledge-base skill, the plan must also specify the resource directories,
 
 After user confirms the plan, **check for name conflicts first**, then create files.
 
-Before writing, confirm that the employee's `AGENTS.md` explicitly specifies which workflow calls this skill, or specifies its trigger conditions, applicable scenarios, and invocation timing. If this invocation mapping is missing or has not been confirmed by the user, do not write any skill files.
+Before finalizing, confirm that the employee's `AGENTS.md` explicitly specifies which workflow calls this skill, or specifies its trigger conditions, applicable scenarios, and invocation timing. If this invocation mapping is missing or has not been confirmed by the user, you may create files as a reviewable draft, but do not overwrite an existing skill, update formal registration, run publication steps, package, or upload it.
 
 For a knowledge-base skill, before writing, validate the resource directories and index design against `references/knowledge-base-skill-guide.md`. Reference images, reference files, and index files must stay inside the Skill's dedicated directory; do not scatter them outside the directory or embed large knowledge-base content directly in `SKILL.md`.
 
