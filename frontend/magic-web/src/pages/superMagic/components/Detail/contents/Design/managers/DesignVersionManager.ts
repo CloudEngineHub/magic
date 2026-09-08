@@ -20,6 +20,7 @@ import {
 	type LoadDesignDataToRuntimeResult,
 } from "../utils/designDataLoader"
 import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
+import { stringifyUnknownError } from "@/utils/error"
 
 export interface DesignVersionLoadResult {
 	data: DesignData | null
@@ -74,7 +75,7 @@ export class DesignVersionManager {
 			throw new DesignLoadError({
 				kind: "invalid-envelope",
 				stage: "parse-envelope",
-				message: error instanceof Error ? error.message : String(error),
+				message: stringifyUnknownError(error),
 				fileId: magicProjectJsFileId,
 			})
 		}
@@ -103,7 +104,7 @@ export class DesignVersionManager {
 			throw new DesignLoadError({
 				kind: "invalid-envelope",
 				stage: "parse-envelope",
-				message: error instanceof Error ? error.message : String(error),
+				message: stringifyUnknownError(error),
 				fileId: magicProjectJsFileId,
 			})
 		}

@@ -31,6 +31,7 @@ import {
 } from "./magicProjectCompression"
 import { stripHeavyFields } from "./elementDetailsStore"
 import { upgradeDesignDataToV3 } from "./designDataCodec"
+import { stringifyUnknownError } from "@/utils/error"
 
 function layerTreeHasMedia(elements: LayerElement[] | undefined): boolean {
 	if (!elements?.length) return false
@@ -166,7 +167,11 @@ export function generateMagicProjectJsContent(
 }
 
 export type MagicProjectCanvasStatus =
-	"valid-empty" | "valid-non-empty" | "missing" | "invalid" | "decompress-failed"
+	| "valid-empty"
+	| "valid-non-empty"
+	| "missing"
+	| "invalid"
+	| "decompress-failed"
 
 export interface MagicProjectJsParseDiagnostics {
 	data: DesignData | null
@@ -243,7 +248,7 @@ export function parseMagicProjectJsContentWithDiagnostics(
 					data: null,
 					canvasStatus: "decompress-failed",
 					sourceVersion: normalizedSourceVersion,
-					error: error instanceof Error ? error.message : String(error),
+					error: stringifyUnknownError(error),
 				}
 			}
 		} else if (canvasField && typeof canvasField === "object" && !Array.isArray(canvasField)) {
@@ -275,7 +280,7 @@ export function parseMagicProjectJsContentWithDiagnostics(
 		return {
 			data: null,
 			canvasStatus: "invalid",
-			error: error instanceof Error ? error.message : String(error),
+			error: stringifyUnknownError(error),
 		}
 	}
 }
@@ -320,7 +325,8 @@ export function parseMagicProjectJsContent(content: string): DesignData | null {
 			connections = getConnectionsFromCanvasObject(canvasObj)
 		} else {
 			const canvasObj = canvasField as
-				{ elements?: LayerElement[]; connections?: unknown } | undefined
+				| { elements?: LayerElement[]; connections?: unknown }
+				| undefined
 			elements = canvasObj?.elements || []
 			connections = getConnectionsFromCanvasObject(canvasObj ?? null)
 		}
@@ -592,7 +598,9 @@ export function replaceNameInMagicProjectJsContent(
 		const rawCanvas = config.canvas
 		const canvasCompressed = isCompressedCanvas(rawCanvas)
 		const canvasObj = (canvasCompressed ? decompressCanvasData(rawCanvas) : rawCanvas) as
-			{ elements?: LayerElement[] } | null | undefined
+			| { elements?: LayerElement[] }
+			| null
+			| undefined
 
 		if (canvasObj?.elements && Array.isArray(canvasObj.elements)) {
 			for (let i = 0; i < canvasObj.elements.length; i++) {

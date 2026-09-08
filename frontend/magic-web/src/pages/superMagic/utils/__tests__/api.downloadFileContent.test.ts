@@ -68,4 +68,15 @@ describe("downloadFileContent", () => {
 		expect(result.failures.get("file-a")?.message).toBe("download failed")
 		expect(result.failures.get("file-c")?.message).toBe("无法获取文件下载地址: file-c")
 	})
+
+	it("serializes object API errors as JSON", async () => {
+		vi.mocked(magicClient.post).mockRejectedValue({
+			code: 403,
+			message: "forbidden",
+		})
+
+		const result = await getFileContentsByIds(["file-a"])
+
+		expect(result.failures.get("file-a")?.message).toBe('{"code":403,"message":"forbidden"}')
+	})
 })
