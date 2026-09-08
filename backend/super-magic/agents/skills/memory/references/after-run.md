@@ -10,8 +10,8 @@ These rules govern memory maintenance after a source conversation. The runtime's
 
 ## Necessary updates
 
-- Missing useful information requires a saved addition; an incomplete entry needs its missing conditions and reasons; a confirmed correction or forget request must be reflected in the affected memory. Apply the main skill's placement and merge rules. Complete, already-saved information needs no second write merely because wording could differ.
-- A maintenance task does not resume the source business task or require a library-wide reorganization. No new information, missed write, correction, forget request, or over-budget core means no write is necessary.
+- Missing useful information requires a saved addition; an incomplete entry needs its missing conditions and reasons; a confirmed correction or forget request must be reflected in the affected memory. Apply the main skill's placement and merge rules. If frequently needed facts, rules, or details are saved only in notes, restore them to MEMORY.md with enough detail for routine work. If pointers to infrequently needed notes do not say when to read them, correct the reading instructions. Correctly placed, complete information needs no second write merely because wording could differ.
+- A maintenance task does not resume the source business task or require a library-wide reorganization. No new information, missed write, correction, forget request, missing core context, unclear note pointers, or over-budget core means no write is necessary.
 
 For Claw, maintain its own workspace memory under the inherited rules and claw_memory path. Apply the main skill's global/project scope rules: respect enabled/excluded state, do not create ordinary project memory or rewrite Claw's workspace-memory policy, and do not require a global copy merely because its workspace changed.
 
