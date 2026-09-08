@@ -130,6 +130,13 @@ async function _write(items: ClipboardItem[]): Promise<void> {
 export const clipboard = {
 	writeText: _writeText,
 	write: _write,
+	// 文件列表可能遮蔽 paste 事件中的正文；只在用户主动粘贴时补读，权限由浏览器管理。
+	readText: async (): Promise<string> => {
+		if (!navigator.clipboard?.readText) {
+			throw new Error("Clipboard text reading is unavailable")
+		}
+		return navigator.clipboard.readText()
+	},
 }
 
 /** 纯文本 execCommand 降级方案 */

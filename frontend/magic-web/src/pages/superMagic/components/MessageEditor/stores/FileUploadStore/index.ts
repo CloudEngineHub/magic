@@ -29,6 +29,10 @@ const TEMP_UPLOAD_DIR_NAME = ".tmp"
 const MAX_TEMP_DIRECTORY_ATTACHMENT_PAGES = 100
 
 export interface AddFilesOptions {
+	/** 单次导入覆盖默认的末尾插入；sourceFiles 保留改名前的对象身份，与 files 一一对应。 */
+	onFileAdded?: (files: FileData[], sourceFiles: File[]) => void
+	/** 异步准备期间离开原话题或清空输入后，不再向新的编辑上下文添加文件。 */
+	isCurrent?: () => boolean
 	/** Upload directly into the hidden project temp directory. */
 	useTempDirectory?: boolean
 	/** @deprecated Use useTempDirectory. Kept for consumer compatibility. */
@@ -402,6 +406,7 @@ export class FileUploadStore {
 	async addFiles(newFiles: File[], parentId?: string, options: AddFilesOptions | string = {}) {
 		const addFilesOptions =
 			typeof options === "string" ? { defaultRelativePathPrefix: options } : options
+		if (addFilesOptions.isCurrent?.() === false) return
 		const shouldUseTempDirectory = Boolean(
 			addFilesOptions.useTempDirectory || addFilesOptions.usePastedTextTempDirectory,
 		)
@@ -409,6 +414,7 @@ export class FileUploadStore {
 		const tempDirectoryId = shouldRequestTempDirectory
 			? await this.ensureTempUploadDirectory()
 			: undefined
+		if (addFilesOptions.isCurrent?.() === false) return
 		const defaultRelativePathPrefix = shouldUseTempDirectory
 			? TEMP_UPLOAD_DIR_NAME
 			: addFilesOptions.defaultRelativePathPrefix
@@ -471,6 +477,7 @@ export class FileUploadStore {
 			this.projectId,
 			targetParentId,
 		)
+		if (addFilesOptions.isCurrent?.() === false) return
 
 		if (tempDirectoryId && customCredentials) {
 			customCredentials = superMagicUploadTokenService.changeDir(
@@ -521,11 +528,16 @@ export class FileUploadStore {
 			})
 		}
 
+		if (addFilesOptions.isCurrent?.() === false) return
 		this.trackSessionUploads(fileDataList)
 
 		this.setFilesWithLimit((prev) => {
 			const newList = [...prev, ...fileDataList]
-			this.onFileAdded?.(fileDataList)
+			if (addFilesOptions.onFileAdded) {
+				addFilesOptions.onFileAdded(fileDataList, validFiles)
+			} else {
+				this.onFileAdded?.(fileDataList)
+			}
 			return newList
 		})
 
