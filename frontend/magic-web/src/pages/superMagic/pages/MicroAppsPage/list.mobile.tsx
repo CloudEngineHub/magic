@@ -130,7 +130,7 @@ export default function MicroAppsListPageMobile() {
 							value={scope}
 							onValueChange={(value) => setScope(value as MicroAppListScope)}
 						>
-							<TabsList className="grid h-10 w-full grid-cols-3 rounded-xl">
+							<TabsList className="grid h-10 w-full grid-cols-4 rounded-xl">
 								<TabsTrigger value="all" data-testid="micro-apps-mobile-scope-all">
 									{t("microAppsPage.scopeAll")}
 								</TabsTrigger>
@@ -145,6 +145,12 @@ export default function MicroAppsListPageMobile() {
 									data-testid="micro-apps-mobile-scope-collaborated"
 								>
 									{t("microAppsPage.scopeCollaborated")}
+								</TabsTrigger>
+								<TabsTrigger
+									value="recent"
+									data-testid="micro-apps-mobile-scope-recent"
+								>
+									{t("microAppsPage.scopeRecent")}
 								</TabsTrigger>
 							</TabsList>
 						</Tabs>

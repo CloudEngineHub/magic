@@ -262,6 +262,14 @@ class MicroAppRepository implements MicroAppRepositoryInterface
                 });
             });
 
+        if ($scope === MicroAppListScope::Recent) {
+            $query->join('magic_super_agent_micro_app_visits as mav', function ($join) use ($userId, $organizationCodes): void {
+                $join->on('mav.micro_app_id', '=', 'ma.id')
+                    ->where('mav.user_id', $userId)
+                    ->where('mav.organization_code', (string) ($organizationCodes[0] ?? ''));
+            });
+        }
+
         if ($keyword !== '') {
             $query->where('p.project_name', 'like', '%' . $keyword . '%');
         }
@@ -275,24 +283,33 @@ class MicroAppRepository implements MicroAppRepositoryInterface
                     ->where('p.user_id', '<>', $userId)
                     ->where('ma.creator_id', '<>', $userId);
                 break;
+            case MicroAppListScope::Recent:
+                break;
         }
 
         $total = (clone $query)->count('ma.id');
+        $query = $query->select([
+            'ma.id as app_id',
+            'p.id as project_id',
+            'p.project_name as app_name',
+            'p.project_description as app_description',
+            'ma.creator_id',
+            'ma.cover_file_key',
+            'ma.publish_status',
+            'p.updated_at',
+            'p.user_id as project_owner_id',
+            'p.user_organization_code as organization_code',
+        ]);
+
+        if ($scope === MicroAppListScope::Recent) {
+            $query = $query->addSelect('mav.last_visited_at')
+                ->orderBy('mav.last_visited_at', 'desc')
+                ->orderBy('ma.id', 'desc');
+        } else {
+            $query = $query->orderBy('p.updated_at', 'desc')->orderBy('ma.id', 'desc');
+        }
+
         $rows = $query
-            ->select([
-                'ma.id as app_id',
-                'p.id as project_id',
-                'p.project_name as app_name',
-                'p.project_description as app_description',
-                'ma.creator_id',
-                'ma.cover_file_key',
-                'ma.publish_status',
-                'p.updated_at',
-                'p.user_id as project_owner_id',
-                'p.user_organization_code as organization_code',
-            ])
-            ->orderBy('p.updated_at', 'desc')
-            ->orderBy('ma.id', 'desc')
             ->offset(($page - 1) * $pageSize)
             ->limit($pageSize)
             ->get()

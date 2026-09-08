@@ -205,7 +205,7 @@ function MicroAppsPageDesktop() {
 							value={scope}
 							onValueChange={(value) => setScope(value as MicroAppListScope)}
 						>
-							<TabsList className="grid w-[320px] grid-cols-3 rounded-xl">
+							<TabsList className="grid w-[420px] grid-cols-4 rounded-xl">
 								<TabsTrigger value="all" data-testid="micro-apps-scope-all">
 									{t("microAppsPage.scopeAll")}
 								</TabsTrigger>
@@ -217,6 +217,9 @@ function MicroAppsPageDesktop() {
 									data-testid="micro-apps-scope-collaborated"
 								>
 									{t("microAppsPage.scopeCollaborated")}
+								</TabsTrigger>
+								<TabsTrigger value="recent" data-testid="micro-apps-scope-recent">
+									{t("microAppsPage.scopeRecent")}
 								</TabsTrigger>
 							</TabsList>
 						</Tabs>

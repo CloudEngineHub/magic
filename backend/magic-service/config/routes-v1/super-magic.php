@@ -392,6 +392,9 @@ Router::addGroup(
             Router::delete('/{id}', [SuperAgentMemoryApi::class, 'deleteMemory']);
         });
 
+        // 记录当前用户访问微应用
+        Router::post('/micro-apps/{appId}/visit', [MicroAppProjectApi::class, 'recordVisit']);
+
         // 文件相关
         Router::addGroup('/file', static function () {
             // 沙盒文件变更通知 (目前已废弃，改成 magic fs)
