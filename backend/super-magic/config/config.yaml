@@ -515,13 +515,18 @@ checkpoint:
   # 是否启用自动清理功能
   auto_cleanup: ${CHECKPOINT_AUTO_CLEANUP:-true}
 
-# 聊天记录统计与清理。这里的配置只针对 .topic 中的持久化历史。
+# 聊天记录统计与清理，作用于本地 .chat_history，随既有归档上传持久化。
 chat_history_cleanup:
   completed_subagent_max_age_days: null
   completed_subagent_max_count: null
   compacted_max_age_days: null
   compacted_max_count: null
   total_max_bytes: null
+
+# 完整排查存档的独立数量配额，运行期仍使用本地目录。
+diagnostic_retention:
+  llm_failed_max_count: 3
+  memory_after_run_max_count: 3
 
 # .runtime 清理默认值。
 # 容量字段支持 MB、MiB、KB、KiB 等写法；本项目的 MB 和 MiB 都按 1024 进制换算。

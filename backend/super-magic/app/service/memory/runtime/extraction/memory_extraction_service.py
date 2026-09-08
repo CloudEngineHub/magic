@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 import uuid
 from typing import TYPE_CHECKING
@@ -14,6 +15,7 @@ from app.service.memory.runtime.extraction.memory_extraction_prompt_provider imp
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
+    from app.core.models.agent_session import AgentSessionRef
     from app.service.agent_context_snapshot_service import AgentContextSnapshot
 
 logger = get_logger(__name__)
@@ -126,10 +128,65 @@ class MemoryExtractionService:
                     chat_history_dir=runtime_dir,
                 )
             )
+            current_task = asyncio.current_task()
+            if current_task is not None and current_task.cancelling():
+                raise asyncio.CancelledError
+            from app.core.models.agent_session import AgentSessionRef
+            await self._archive_extraction(
+                agent_context,
+                AgentSessionRef(source.target, agent_id, runtime_dir),
+            )
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.warning("会话后记忆提取失败，本轮主任务不受影响", exc_info=True)
+
+    @staticmethod
+    async def _archive_extraction(agent_context: "AgentContext", session: "AgentSessionRef") -> None:
+        """先保留本地完整副本，再尝试上传；凭证或网络故障不丢掉本地记录。"""
+        from app.service.chat_history_archive_service import ChatHistoryArchiveService
+        from app.path_manager import PathManager
+        from app.tools.core.tool_keepalive import DEFAULT_KEEP_ALIVE_INTERVAL
+
+        archive_context = (
+            f"source={agent_context.get_agent_name()}<{agent_context.get_agent_id()}> "
+            f"target={session.target.agent_name}<{session.agent_id}> "
+            f"runtime_dir={session.chat_history_dir} "
+            f"archive_dir={PathManager.get_subagent_chat_history_dir(session.target.agent_name, session.agent_id)}"
+        )
+
+        async def keep_alive() -> None:
+            while True:
+                agent_context.update_activity_time()
+                await asyncio.sleep(DEFAULT_KEEP_ALIVE_INTERVAL)
+
+        keep_alive_task = asyncio.create_task(keep_alive())
+        try:
+            archive = ChatHistoryArchiveService()
+            if not await archive.publish_completed_session(session):
+                logger.warning(f"记忆整理档案本地发布未完成: {archive_context}")
+                return
+            if os.getenv("ENABLE_PROJECT_ARCHIVE", "true").lower() != "true":
+                logger.info(f"记忆整理档案仅保存在本地，上传已关闭: {archive_context}")
+                return
+            metadata = agent_context.get_metadata()
+            topic_id = metadata.get("topic_id") or metadata.get("chat_topic_id")
+            if not topic_id:
+                logger.warning(f"记忆整理档案未上传，来源缺少 topic_id: {archive_context}")
+                return
+            from app.infrastructure.storage.factory import StorageFactory
+            storage = await StorageFactory.get_storage(
+                sts_token_refresh=agent_context.get_init_client_message_sts_token_refresh(),
+                metadata=metadata,
+                platform=agent_context.get_init_client_message_platform_type(),
+            )
+            uploaded = await archive.upload(topic_id=str(topic_id), storage_service=storage)
+            logger.info(f"记忆整理档案上传结果: {archive_context} uploaded={uploaded}")
+        except Exception as error:
+            logger.warning(f"记忆整理档案未完成上传，保留本地记录: {archive_context} error={error!r}")
+        finally:
+            keep_alive_task.cancel()
+            await asyncio.gather(keep_alive_task, return_exceptions=True)
 
     @classmethod
     def _try_acquire_run_lock(cls) -> bool:
