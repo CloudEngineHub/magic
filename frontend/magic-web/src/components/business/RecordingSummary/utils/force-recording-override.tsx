@@ -5,7 +5,10 @@ import {
 	RecordSummaryActionButton,
 	RecordSummaryAlertIcon,
 } from "../components/RecordSummaryAlertCard"
-import type { RecordingOverrideContext } from "@/services/recordSummary/recordingOverrideLifecycle"
+import {
+	runForceOverrideFlow,
+	type RecordingOverrideContext,
+} from "@/services/recordSummary/recordingOverrideLifecycle"
 
 function renderDescriptionLines(lines: string[]) {
 	return (
@@ -86,11 +89,11 @@ export function confirmForceRecordingOverride(context: RecordingOverrideContext)
 	})
 }
 
-/** Keep retry explicit after a cross-tab timeout; never start optimistically. */
-export function confirmForceRecordingRetry(): Promise<boolean> {
+/** Keep retry explicit after a failed finish; allow starting the next session anyway. */
+export function confirmForceRecordingRetry(): Promise<"retry" | "continue"> {
 	return new Promise((resolve) => {
 		let settled = false
-		const settle = (value: boolean) => {
+		const settle = (value: "retry" | "continue") => {
 			if (settled) return
 			settled = true
 			resolve(value)
@@ -111,17 +114,17 @@ export function confirmForceRecordingRetry(): Promise<boolean> {
 						appearance="secondary"
 						onClick={() => {
 							modalInstance.destroy()
-							settle(false)
+							settle("continue")
 						}}
-						data-testid="recording-force-override-retry-cancel-button"
+						data-testid="recording-force-override-continue-button"
 					>
-						{i18next.t("recordingSummary.forceOverride.cancel", { ns: "super" })}
+						{i18next.t("recordingSummary.forceOverride.continue", { ns: "super" })}
 					</RecordSummaryActionButton>
 					<RecordSummaryActionButton
 						appearance="primary"
 						onClick={() => {
 							modalInstance.destroy()
-							settle(true)
+							settle("retry")
 						}}
 						data-testid="recording-force-override-retry-button"
 					>
@@ -131,27 +134,20 @@ export function confirmForceRecordingRetry(): Promise<boolean> {
 			),
 		})
 
-		if (!modalInstance) settle(false)
+		if (!modalInstance) settle("continue")
 	})
 }
 
-/** Shared confirmation, retry, and failure-close flow for both entry points. */
+/** Shared confirmation, retry, and force-continue flow for both entry points. */
 export async function runForceRecordingOverride(
 	context: RecordingOverrideContext,
 	prepare: () => Promise<boolean>,
+	forceRelease?: () => void | Promise<void>,
 ): Promise<boolean> {
-	if (!(await confirmForceRecordingOverride(context))) return false
-
-	let shouldRetry = true
-	while (shouldRetry) {
-		let prepared = false
-		try {
-			prepared = await prepare()
-		} catch {
-			prepared = false
-		}
-		if (prepared) return true
-		shouldRetry = await confirmForceRecordingRetry()
-	}
-	return false
+	return runForceOverrideFlow({
+		confirm: () => confirmForceRecordingOverride(context),
+		confirmRetry: confirmForceRecordingRetry,
+		prepare,
+		forceRelease,
+	})
 }

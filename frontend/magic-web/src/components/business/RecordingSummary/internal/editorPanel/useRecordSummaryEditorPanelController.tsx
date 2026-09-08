@@ -32,7 +32,12 @@ import {
 } from "@/pages/superMagic/services/sendSuperMagicInterruptMessage"
 import { userStore } from "@/models/user"
 import { runForceRecordingOverride } from "@/components/business/RecordingSummary/utils/force-recording-override"
-import { resolveRecordingStartContext, type RecordingStartContext } from "./recordingStartContext"
+import {
+	isHomepageRecordingStartReady,
+	resolveRecordingStartContext,
+	resolveSelectedProjectStartContext,
+	type RecordingStartContext,
+} from "./recordingStartContext"
 
 type SaveSuperMagicTopicModel = RecordSummaryEditorPanelRef["saveSuperMagicTopicModel"]
 
@@ -181,16 +186,22 @@ export function useRecordSummaryEditorPanelController({
 
 	const startNewRecording = useMemoizedFn(
 		async (mode: "new" | "current" = "new", startContext?: RecordingStartContext) => {
-			const nextWorkspace = startContext?.workspace ?? selectedWorkspace ?? null
-			const nextProject = startContext?.project ?? selectedProject
-			const nextTopic = startContext?.topic ?? selectedTopic
-			const nextModel = startContext?.model ?? selectedModel
-			const hasValidWorkspaceOrProject = Boolean(nextWorkspace?.id || nextProject?.id)
+			const resolvedContext =
+				startContext ??
+				resolveRecordingStartContext({
+					selectedWorkspace,
+					selectedProject,
+					selectedTopic,
+					selectedModel,
+				})
+			const nextWorkspace = resolvedContext.workspace
+			const nextProject = resolvedContext.project
+			const nextTopic = resolvedContext.topic
+			const nextModel = resolvedContext.model
 
 			if (
 				(!startContext && !isModelReady) ||
-				!nextModel?.model_id ||
-				!hasValidWorkspaceOrProject
+				!isHomepageRecordingStartReady(resolvedContext)
 			) {
 				console.error("workspace, topic, project, model not selected")
 				return
@@ -271,43 +282,46 @@ export function useRecordSummaryEditorPanelController({
 	const handleStartRecording = useMemoizedFn(async (mode: "new" | "current" = "new") => {
 		if (startRecordingInFlightRef.current) return
 		startRecordingInFlightRef.current = true
-		setIsPreparingRecordingStart(true)
 		try {
+			// Pick the destination project first so canceling the picker does not
+			// stop the active recording or show the override confirm too early.
+			let selectedStartContext: RecordingStartContext | undefined
+			if (mode === "current") {
+				const pickedContext = await resolveSelectedProjectStartContext({
+					openSelector: openSelectorWithResult,
+					selectedModel,
+				})
+				if (!pickedContext) return
+				selectedStartContext = pickedContext
+			}
+
+			setIsPreparingRecordingStart(true)
 			const overrideContext = await recordSummaryService.getRecordingOverrideContext()
+			if (overrideContext) {
+				const prepared = await runForceRecordingOverride(
+					overrideContext,
+					() => recordSummaryService.prepareRecordingOverride(overrideContext.sessionId),
+					() => recordSummaryService.releaseOverrideSessionForForceStart(),
+				)
+				if (!prepared) return
+			}
+
+			if (selectedStartContext) {
+				await startNewRecording("new", selectedStartContext)
+				return
+			}
+
 			if (!overrideContext) {
 				await startNewRecording(mode)
 				return
 			}
 
-			// Capture the target context before completing the old session because
-			// completion resets the shared recording store.
 			const startContext = resolveRecordingStartContext({
 				selectedWorkspace,
 				selectedProject,
 				selectedTopic,
 				selectedModel,
-				activeWorkspace:
-					overrideContext.startContext?.workspace ??
-					recordSummaryStore.businessData.workspace,
-				activeProject:
-					overrideContext.startContext?.project ??
-					recordSummaryStore.businessData.project,
-				activeTopic:
-					overrideContext.startContext?.topic ?? recordSummaryStore.businessData.topic,
-				activeModel:
-					overrideContext.startContext?.model ?? recordSummaryStore.businessData.model,
 			})
-			const prepared = await runForceRecordingOverride(overrideContext, () =>
-				recordSummaryService.prepareRecordingOverride(overrideContext.sessionId),
-			)
-			if (!prepared) return
-
-			// Keep the existing project-selection behavior when that explicit entry
-			// was chosen; otherwise reuse the captured context cleared by completion.
-			if (mode === "current") {
-				await startNewRecording("current")
-				return
-			}
 			await startNewRecording("new", startContext)
 		} finally {
 			startRecordingInFlightRef.current = false

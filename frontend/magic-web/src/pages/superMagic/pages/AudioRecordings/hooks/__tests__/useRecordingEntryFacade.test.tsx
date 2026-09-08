@@ -62,6 +62,7 @@ const {
 			ensureProjectAndTopic: vi.fn(),
 			getRecordingOverrideContext: vi.fn(),
 			prepareRecordingOverride: vi.fn(),
+			releaseOverrideSessionForForceStart: vi.fn(),
 			pauseRecording: vi.fn(),
 			continueRecording: vi.fn(),
 			updateNote: vi.fn(),
@@ -305,6 +306,7 @@ describe("useRecordingEntryFacade", () => {
 		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue(null)
 		recordSummaryServiceMock.prepareRecordingOverride.mockReset()
 		recordSummaryServiceMock.prepareRecordingOverride.mockResolvedValue(true)
+		recordSummaryServiceMock.releaseOverrideSessionForForceStart.mockReset()
 		recordSummaryServiceMock.pauseRecording.mockReset()
 		recordSummaryServiceMock.continueRecording.mockReset()
 		recordSummaryServiceMock.updateNote.mockReset()
@@ -612,7 +614,11 @@ describe("useRecordingEntryFacade", () => {
 			await result.current.startRecording()
 		})
 
-		expect(forceOverrideMock.run).toHaveBeenCalledWith(overrideContext, expect.any(Function))
+		expect(forceOverrideMock.run).toHaveBeenCalledWith(
+			overrideContext,
+			expect.any(Function),
+			expect.any(Function),
+		)
 		expect(recordSummaryServiceMock.prepareRecordingOverride).toHaveBeenCalledWith(
 			"current-session",
 		)
@@ -634,7 +640,11 @@ describe("useRecordingEntryFacade", () => {
 			await result.current.startRecording()
 		})
 
-		expect(forceOverrideMock.run).toHaveBeenCalledWith(overrideContext, expect.any(Function))
+		expect(forceOverrideMock.run).toHaveBeenCalledWith(
+			overrideContext,
+			expect.any(Function),
+			expect.any(Function),
+		)
 		expect(recordSummaryServiceMock.prepareRecordingOverride).toHaveBeenCalledWith(
 			"historical-session",
 		)
@@ -656,7 +666,11 @@ describe("useRecordingEntryFacade", () => {
 			await result.current.startRecording()
 		})
 
-		expect(forceOverrideMock.run).toHaveBeenCalledWith(overrideContext, expect.any(Function))
+		expect(forceOverrideMock.run).toHaveBeenCalledWith(
+			overrideContext,
+			expect.any(Function),
+			expect.any(Function),
+		)
 		expect(recordSummaryServiceMock.prepareRecordingOverride).toHaveBeenCalledWith(
 			"other-tab-session",
 		)

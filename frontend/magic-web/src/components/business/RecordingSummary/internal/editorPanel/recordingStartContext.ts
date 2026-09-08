@@ -8,17 +8,27 @@ export interface RecordingStartContext {
 	model: ModelItem | null
 }
 
-/** Keep the current editor selection as the primary source, with the active
- * recording snapshot as a fallback before an override clears the store. */
+function belongsToWorkspace(
+	project: ProjectListItem | null | undefined,
+	workspace: Workspace | null | undefined,
+): project is ProjectListItem {
+	return Boolean(project?.id && workspace?.id && project.workspace_id === workspace.id)
+}
+
+function belongsToProject(
+	topic: Topic | null | undefined,
+	project: ProjectListItem | null | undefined,
+): topic is Topic {
+	return Boolean(topic?.id && project?.id && topic.project_id === project.id)
+}
+
+/** Homepage starts use the current editor selection only. Do not stitch
+ * workspace/project/topic/model from an active recording snapshot. */
 export function resolveRecordingStartContext({
 	selectedWorkspace,
 	selectedProject,
 	selectedTopic,
 	selectedModel,
-	activeWorkspace,
-	activeProject,
-	activeTopic,
-	activeModel,
 }: {
 	selectedWorkspace?: Workspace | null
 	selectedProject?: ProjectListItem | null
@@ -29,10 +39,45 @@ export function resolveRecordingStartContext({
 	activeTopic?: Topic | null
 	activeModel?: ModelItem | null
 }): RecordingStartContext {
+	const workspace = selectedWorkspace ?? null
+	const project = belongsToWorkspace(selectedProject, workspace) ? selectedProject : null
+	const topic = belongsToProject(selectedTopic, project) ? selectedTopic : null
+
 	return {
-		workspace: selectedWorkspace ?? activeWorkspace ?? null,
-		project: selectedProject ?? activeProject ?? null,
-		topic: selectedTopic ?? activeTopic ?? null,
-		model: selectedModel ?? activeModel ?? null,
+		workspace,
+		project,
+		topic,
+		model: selectedModel ?? null,
+	}
+}
+
+/** Homepage recording requires a selected workspace and model. */
+export function isHomepageRecordingStartReady(context: RecordingStartContext): boolean {
+	return Boolean(context.workspace?.id && context.model?.model_id)
+}
+
+/** Resolve the homepage "select project" destination before any override. */
+export async function resolveSelectedProjectStartContext({
+	openSelector,
+	selectedModel,
+}: {
+	openSelector: () => Promise<{
+		project: ProjectListItem | null
+		workspace: Workspace | null
+	}>
+	selectedModel?: ModelItem | null
+}): Promise<RecordingStartContext | null> {
+	try {
+		const selection = await openSelector()
+		const startContext = resolveRecordingStartContext({
+			selectedWorkspace: selection.workspace,
+			selectedProject: selection.project,
+			selectedTopic: null,
+			selectedModel,
+		})
+		if (!isHomepageRecordingStartReady(startContext)) return null
+		return startContext
+	} catch {
+		return null
 	}
 }

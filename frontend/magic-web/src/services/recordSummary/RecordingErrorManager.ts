@@ -51,6 +51,12 @@ export const TASK_END_CODES: ReadonlySet<number> = new Set([
 	ERROR_CODES.SANDBOX_START_RETRY_EXCEEDED,
 ])
 
+/** Summary API codes that mean the previous recording is already done. */
+export const OVERRIDE_SUMMARY_SETTLED_CODES: ReadonlySet<number> = new Set([
+	ERROR_CODES.TASK_ALREADY_COMPLETED,
+	ERROR_CODES.TASK_IS_SUMMARIZING,
+])
+
 /**
  * Task end error interface
  * 任务结束错误接口
@@ -78,15 +84,8 @@ export class RecordingErrorManager {
 	 * 检查错误是否为任务结束错误
 	 */
 	isTaskEndError(error: unknown): error is TaskEndError {
-		if (error === null || typeof error !== "object" || !("code" in error)) {
-			return false
-		}
-
-		const rawCode = (error as { code?: unknown }).code
-		const code =
-			typeof rawCode === "string" && rawCode.trim() !== "" ? Number(rawCode) : rawCode
-
-		return typeof code === "number" && Number.isFinite(code) && TASK_END_CODES.has(code)
+		const code = getBusinessErrorCode(error)
+		return code !== undefined && TASK_END_CODES.has(code)
 	}
 
 	/**
@@ -192,4 +191,25 @@ export function createTaskEndError(sessionId: string, code?: number): TaskEndErr
 
 export function getSessionIdFromError(error: unknown): string | undefined {
 	return defaultErrorManager.getSessionIdFromError(error)
+}
+
+export function getBusinessErrorCode(error: unknown): number | undefined {
+	if (!error || typeof error !== "object") return undefined
+
+	const record = error as Record<string, unknown>
+	const response = record.response as Record<string, unknown> | undefined
+	const responseData = response?.data as Record<string, unknown> | undefined
+	const candidates = [record.code, response?.code, responseData?.code]
+
+	for (const raw of candidates) {
+		const code = typeof raw === "string" && raw.trim() !== "" ? Number(raw) : raw
+		if (typeof code === "number" && Number.isFinite(code)) return code
+	}
+
+	return undefined
+}
+
+export function isOverrideSummaryAlreadySettled(error: unknown): boolean {
+	const code = getBusinessErrorCode(error)
+	return code !== undefined && OVERRIDE_SUMMARY_SETTLED_CODES.has(code)
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { runForceOverrideFinalization } from "../recordingOverrideLifecycle"
+import { runForceOverrideFinalization, runForceOverrideFlow } from "../recordingOverrideLifecycle"
 
 describe("runForceOverrideFinalization", () => {
 	it("uploads and summarizes the old session before completing it", async () => {
@@ -67,5 +67,70 @@ describe("runForceOverrideFinalization", () => {
 		).rejects.toThrow("summary failed")
 
 		expect(completeSession).not.toHaveBeenCalled()
+	})
+
+	it("completes the old session when summary says it is already summarizing or finished", async () => {
+		const completeSession = vi.fn()
+
+		await expect(
+			runForceOverrideFinalization({
+				stopRecordingServices: vi.fn(),
+				flushSessionUploads: vi.fn(),
+				summarizeSession: vi.fn().mockRejectedValue({ code: 43202 }),
+				completeSession,
+			}),
+		).resolves.toBeUndefined()
+
+		expect(completeSession).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("runForceOverrideFlow", () => {
+	it("releases the old session and continues when the user starts anyway", async () => {
+		const prepare = vi.fn().mockResolvedValue(false)
+		const forceRelease = vi.fn()
+
+		await expect(
+			runForceOverrideFlow({
+				confirm: async () => true,
+				confirmRetry: async () => "continue",
+				prepare,
+				forceRelease,
+			}),
+		).resolves.toBe(true)
+
+		expect(prepare).toHaveBeenCalledTimes(1)
+		expect(forceRelease).toHaveBeenCalledTimes(1)
+	})
+
+	it("retries prepare when the user asks to try again", async () => {
+		const prepare = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+
+		await expect(
+			runForceOverrideFlow({
+				confirm: async () => true,
+				confirmRetry: async () => "retry",
+				prepare,
+			}),
+		).resolves.toBe(true)
+
+		expect(prepare).toHaveBeenCalledTimes(2)
+	})
+
+	it("does not prepare when the first confirmation is declined", async () => {
+		const prepare = vi.fn()
+		const forceRelease = vi.fn()
+
+		await expect(
+			runForceOverrideFlow({
+				confirm: async () => false,
+				confirmRetry: async () => "continue",
+				prepare,
+				forceRelease,
+			}),
+		).resolves.toBe(false)
+
+		expect(prepare).not.toHaveBeenCalled()
+		expect(forceRelease).not.toHaveBeenCalled()
 	})
 })

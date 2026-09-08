@@ -54,6 +54,8 @@ import { TypedEventEmitter } from "./utils/TypedEventEmitter"
 import {
 	ERROR_CODE_TASK_ENDED,
 	ERROR_CODES,
+	getBusinessErrorCode,
+	isOverrideSummaryAlreadySettled,
 	isTaskEndError,
 	defaultErrorManager,
 } from "./RecordingErrorManager"
@@ -1863,15 +1865,24 @@ class RecordSummaryService {
 					this.stopUploadQueueWatchdog()
 
 					const { project, topic } = await this.ensureProjectAndTopic(activeSession)
-					overrideSummaryResult = await this.processSummaryForSession(
-						activeSession,
-						project.id,
-						topic.id,
-						{
-							note: activeSession.note ?? recordSummaryStore.note,
-							asr_stream_content: this.getLatestAsrContent(),
-						},
-					)
+					try {
+						overrideSummaryResult = await this.processSummaryForSession(
+							activeSession,
+							project.id,
+							topic.id,
+							{
+								note: activeSession.note ?? recordSummaryStore.note,
+								asr_stream_content: this.getLatestAsrContent(),
+							},
+						)
+					} catch (error) {
+						if (!isOverrideSummaryAlreadySettled(error)) throw error
+
+						logger.report("总结接口返回会话已在总结中或已结束，视为上一段已结束", {
+							sessionId: activeSession.id,
+							errorCode: getBusinessErrorCode(error),
+						})
+					}
 				},
 				completeSession: () => {
 					// Summary has been accepted by the server; complete only the old local
@@ -2035,6 +2046,38 @@ class RecordSummaryService {
 		// the same upload, summary, completion, and persistence path handle them.
 		if (!this.sessionManager.restoreSession(historicalSession)) return false
 		return this.forceStopRecordingForOverride(historicalSession.id)
+	}
+
+	/** Release the old local session so a new recording can start without a summary. */
+	releaseOverrideSessionForForceStart = async (): Promise<void> => {
+		const activeSession = this.sessionManager.getCurrentSession()
+		if (activeSession) {
+			this.cleanupAfterSessionComplete()
+			this.recordingPersistence.deleteSession(activeSession.id)
+			this.emit(RECORD_SUMMARY_EVENTS.UPDATE_EMPTY_WORKSPACE_PANEL_PROJECTS, {
+				topicId: activeSession.topic?.id || "",
+				projectId: activeSession.project?.id || "",
+				workspaceId: activeSession.workspace?.id || "",
+			})
+			this.emit(RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE, { session: activeSession })
+			logger.report("用户选择仍要发起，已释放上一段录音锁", {
+				sessionId: activeSession.id,
+			})
+			return
+		}
+
+		this.recordingPersistence.clearAll()
+		this.tabCoordinator.releaseLock({
+			type: "finish",
+			data: {
+				message: [],
+				duration: "00:00:00",
+				isRecording: false,
+				sessionId: "",
+			},
+		})
+		recordSummaryStore.completeRecording()
+		logger.report("用户选择仍要发起，已清理可恢复的历史录音指针")
 	}
 
 	/**

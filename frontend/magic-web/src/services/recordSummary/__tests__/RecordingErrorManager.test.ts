@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { createTaskEndError, RecordingErrorManager } from "../RecordingErrorManager"
+import {
+	createTaskEndError,
+	isOverrideSummaryAlreadySettled,
+	RecordingErrorManager,
+} from "../RecordingErrorManager"
 
 describe("RecordingErrorManager", () => {
 	it("recognizes task-end errors when the backend serializes the code", () => {
@@ -19,5 +23,22 @@ describe("RecordingErrorManager", () => {
 
 	it("normalizes serialized task-end codes when creating errors", () => {
 		expect(createTaskEndError("session-1", "43200").code).toBe(43200)
+	})
+
+	it("treats summarizing and completed summary codes as already settled", () => {
+		expect(isOverrideSummaryAlreadySettled({ code: 43200 })).toBe(true)
+		expect(isOverrideSummaryAlreadySettled({ code: "43202" })).toBe(true)
+		expect(
+			isOverrideSummaryAlreadySettled(
+				Object.assign(new Error("already summarizing"), {
+					response: { code: 43202 },
+				}),
+			),
+		).toBe(true)
+	})
+
+	it("does not treat network or unrelated codes as a settled summary", () => {
+		expect(isOverrideSummaryAlreadySettled(new Error("network failed"))).toBe(false)
+		expect(isOverrideSummaryAlreadySettled({ code: 43206 })).toBe(false)
 	})
 })
