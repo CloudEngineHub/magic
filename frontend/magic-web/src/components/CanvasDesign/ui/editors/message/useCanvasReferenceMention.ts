@@ -138,7 +138,12 @@ const CanvasProjectFileMentionNodeView: CanvasMentionNodeViewRenderer = (props) 
 			),
 			createElement(
 				"span",
-				{ className: MESSAGE_FILE_MENTION_NAME_CLASSES, title: displayText },
+				{
+					className: MESSAGE_FILE_MENTION_NAME_CLASSES,
+					title: fileData?.file_path
+						? `${displayText} (${fileData.file_path})`
+						: displayText,
+				},
 				displayText,
 			),
 			isUploading
@@ -278,7 +283,6 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 	const matchableItems = useMemo(() => {
 		const result: MatchableMentionItem[] = []
 		const seenPathIdentities = new Set<string>()
-		const referenceFileNames = new Set<string>()
 
 		const pushItem = (item: MatchableMentionItem) => {
 			if (item.path) {
@@ -298,15 +302,11 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 				...item,
 				source: item.source ?? "element-reference",
 			})
-			if (item.name) referenceFileNames.add(item.name.toLowerCase())
 		})
 
 		for (const item of includeProjectTreeCandidates
 			? flattenProjectAttachmentFiles(projectAttachmentMentionTree)
 			: []) {
-			if (item.name && referenceFileNames.has(item.name.toLowerCase())) {
-				continue
-			}
 			pushItem({
 				name: item.name,
 				path: item.path,

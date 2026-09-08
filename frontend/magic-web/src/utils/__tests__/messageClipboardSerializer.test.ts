@@ -241,6 +241,57 @@ describe("MessageClipboardSerializer", () => {
 		expect(serializeMessageClipboard(unstableEditor.view)).toBeNull()
 	})
 
+	it("returns null for non-file mention types", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [
+						{
+							type: "mention",
+							attrs: {
+								type: MentionItemType.AGENT,
+								data: { id: "agent-1", name: "助手" },
+							},
+						},
+					],
+				},
+			],
+		})
+		editor.commands.selectAll()
+		expect(serializeMessageClipboard(editor.view)).toBeNull()
+	})
+
+	it("still writes magic metadata when a file mention is mixed with other mention types", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [
+						{
+							type: "mention",
+							attrs: {
+								type: MentionItemType.AGENT,
+								data: { id: "agent-1", name: "助手" },
+							},
+						},
+						{ type: "mention", attrs: mention("猫.png", "images/cat.png") },
+					],
+				},
+			],
+		})
+		editor.commands.selectAll()
+		const payload = serializeMessageClipboard(editor.view)
+		expect(payload).not.toBeNull()
+		expect(
+			payload?.metadata.mentions?.some(
+				(item) => item.attrs.type === MentionItemType.PROJECT_FILE,
+			),
+		).toBe(true)
+	})
+
 	it("preserves an unstable mention as fallback text when another portable mention exists", () => {
 		const editor = createEditor({
 			type: "doc",

@@ -129,6 +129,7 @@ import {
 	type CanvasClipboardAsset,
 	type CanvasClipboardMediaType,
 } from "../../../../runtime/resources/clipboard/CanvasClipboardPasteController"
+import { collectVideoEditorExistingClipboardResourceKeys } from "../../../../runtime/resources/clipboard/collectMediaEditorExistingClipboardResourceKeys"
 import { synchronizeLinkedFrameBindings } from "./linkedFrameBindings"
 import {
 	createFrameSlotPromptPlaceholderAllocator,
@@ -1056,6 +1057,13 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 							t,
 						})
 					: undefined
+			const existingResourceKeys = collectVideoEditorExistingClipboardResourceKeys({
+				referencePaths: effectiveReferencePaths,
+				referenceAssetInfos: mergedReferenceAssetInfos,
+				framePaths: config.currentFrameImages,
+				mentionBindings: config.mentionBindings,
+				resolveResourceReference,
+			})
 
 			void getCanvasClipboardPasteController(
 				canvas?.magicConfigManager.config?.methods,
@@ -1071,6 +1079,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 					canvasId: canvas?.id,
 					maxCount,
 					maxCountByType,
+					existingResourceKeys,
 					sessionId: pasteSessionId,
 				},
 				{
@@ -1225,6 +1234,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			config.currentFrameImages,
 			effectiveReferencePaths,
 			effectiveReferenceAssetCounts,
+			mergedReferenceAssetInfos,
+			config.mentionBindings,
+			resolveResourceReference,
 			getClipboardSessionId,
 			t,
 		],

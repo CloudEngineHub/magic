@@ -33,6 +33,27 @@ interface UseMentionSyncOptions {
 	mentionSyncAddOnly?: boolean
 }
 
+/** Keep distinct resolver identities; never merge slots by file name. */
+export function collectMentionPathsToAdd(
+	reconciledPaths: string[],
+	currentPathByIdentity: Map<string, string>,
+	getResourceIdentity: (path?: string) => string,
+): string[] {
+	const pathsToAddIdentities = new Set<string>()
+	return reconciledPaths.filter((path) => {
+		const identity = getResourceIdentity(path)
+		if (
+			!identity ||
+			currentPathByIdentity.has(identity) ||
+			pathsToAddIdentities.has(identity)
+		) {
+			return false
+		}
+		pathsToAddIdentities.add(identity)
+		return true
+	})
+}
+
 /**
  * 将编辑器中的 mention 路径同步到元素的参考文件列表的 hook
  *
@@ -110,37 +131,11 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 				return matchableItems.find((item) => getResourceIdentity(item.path) === identity)
 			}
 
-			const pathsToAddIdentities = new Set<string>()
-			const currentFileNames = new Set(
-				currentInfos
-					.map((info) => getCanvasResourceFileName(info.path)?.toLowerCase())
-					.filter((name): name is string => Boolean(name)),
+			let pathsToAdd = collectMentionPathsToAdd(
+				reconciledPaths,
+				currentPathByIdentity,
+				getResourceIdentity,
 			)
-			let pathsToAdd = reconciledPaths.filter((path) => {
-				const identity = getResourceIdentity(path)
-				if (
-					!identity ||
-					currentPathByIdentity.has(identity) ||
-					pathsToAddIdentities.has(identity)
-				) {
-					return false
-				}
-				// Repeated @fileName can rematch onto other workspace copies
-				// (./images/a.jpg vs /其他画布/images/a.jpg). Those are different
-				// identities but must not create extra slots when the current canvas
-				// already references that file name — covers both remount sync and paste.
-				const fileName = getCanvasResourceFileName(path)?.toLowerCase()
-				if (fileName && currentFileNames.has(fileName)) {
-					// Same fileName + different identity is usually another canvas copy
-					// from project-tree rematch. Current-element references with the same
-					// name but distinct identities are allowed to add a slot.
-					if (findMatchableItem(path)?.source !== "element-reference") {
-						return false
-					}
-				}
-				pathsToAddIdentities.add(identity)
-				return true
-			})
 			const pathsToRemove = mentionSyncAddOnly
 				? []
 				: currentInfos
