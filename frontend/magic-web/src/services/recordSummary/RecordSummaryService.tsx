@@ -2048,10 +2048,26 @@ class RecordSummaryService {
 		return this.forceStopRecordingForOverride(historicalSession.id)
 	}
 
-	/** Release the old local session so a new recording can start without a summary. */
-	releaseOverrideSessionForForceStart = async (): Promise<void> => {
+	/** Release the confirmed session so a new recording can start without a summary. */
+	releaseOverrideSessionForForceStart = async (expectedSessionId?: string): Promise<boolean> => {
 		const activeSession = this.sessionManager.getCurrentSession()
 		if (activeSession) {
+			if (expectedSessionId && activeSession.id !== expectedSessionId) {
+				logger.warn("仍要发起已取消：当前会话已变化", {
+					expectedSessionId,
+					currentSessionId: activeSession.id,
+				})
+				return false
+			}
+
+			const recorderStopped = await this.stopLeftoverRecordingServicesForForceStart()
+			if (!recorderStopped) {
+				logger.warn("仍要发起已取消：旧录音器仍在运行", {
+					sessionId: activeSession.id,
+				})
+				return false
+			}
+
 			this.cleanupAfterSessionComplete()
 			this.recordingPersistence.deleteSession(activeSession.id)
 			this.emit(RECORD_SUMMARY_EVENTS.UPDATE_EMPTY_WORKSPACE_PANEL_PROJECTS, {
@@ -2063,18 +2079,32 @@ class RecordSummaryService {
 			logger.report("用户选择仍要发起，已释放上一段录音锁", {
 				sessionId: activeSession.id,
 			})
-			return
+			return true
+		}
+
+		const otherTabHoldsLock =
+			this.tabCoordinator.isAnyTabRecording() && !this.tabCoordinator.hasRecordingPermission()
+		const otherTabSessionId = recordSummaryStore.multiTabState.activeTabData.sessionId
+		if (
+			expectedSessionId &&
+			otherTabHoldsLock &&
+			otherTabSessionId &&
+			otherTabSessionId !== expectedSessionId
+		) {
+			logger.warn("仍要发起已取消：其他标签会话已变化", {
+				expectedSessionId,
+				otherTabSessionId,
+			})
+			return false
 		}
 
 		this.recordingPersistence.clearAll()
 		recordSummaryStore.completeRecording()
 
-		const otherTabHoldsLock =
-			this.tabCoordinator.isAnyTabRecording() && !this.tabCoordinator.hasRecordingPermission()
 		if (otherTabHoldsLock) {
 			this.tabCoordinator.forceAcquireLock()
 			logger.report("用户选择仍要发起，已强制接管其他标签的录音锁")
-			return
+			return true
 		}
 
 		this.tabCoordinator.releaseLock({
@@ -2087,6 +2117,21 @@ class RecordSummaryService {
 			},
 		})
 		logger.report("用户选择仍要发起，已清理可恢复的历史录音指针")
+		return true
+	}
+
+	private stopLeftoverRecordingServicesForForceStart = async (): Promise<boolean> => {
+		try {
+			await this.stopRecordingServices("force_override_release")
+		} catch (error) {
+			logger.error({
+				eventKey: "force_override_release_stop_failed",
+				errorKind: "unknown",
+				error,
+				message: "强制发起前停止旧录音服务失败",
+			})
+		}
+		return !this.mediaRecorderService.getStatus().isRecording
 	}
 
 	/**
@@ -4451,12 +4496,11 @@ class RecordSummaryService {
 				context: { sessionId: session?.id, source },
 			})
 			if (options.throwOnMediaRecorderError) throw error
+		} finally {
+			// Keep duration even when the media recorder fails to stop.
+			this.durationTracker.pause()
+			this.stopDurationUpdateTimer()
 		}
-
-		// Pause duration tracking (save current duration)
-		// Note: We don't reset here, just pause to preserve accumulated duration
-		this.durationTracker.pause()
-		this.stopDurationUpdateTimer()
 	}
 
 	/**

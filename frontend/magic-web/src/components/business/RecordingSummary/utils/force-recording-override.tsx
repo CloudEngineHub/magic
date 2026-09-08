@@ -103,6 +103,7 @@ export function confirmForceRecordingRetry(): Promise<"retry" | "continue" | "ca
 			content: i18next.t("recordingSummary.forceOverride.failed", { ns: "super" }),
 			closable: false,
 			maskClosable: false,
+			onCancel: () => settle("cancel"),
 			icon: (
 				<RecordSummaryAlertIcon tone="danger">
 					<TriangleAlert size={16} />
@@ -113,8 +114,18 @@ export function confirmForceRecordingRetry(): Promise<"retry" | "continue" | "ca
 					<RecordSummaryActionButton
 						appearance="secondary"
 						onClick={() => {
+							settle("cancel")
 							modalInstance.destroy()
+						}}
+						data-testid="recording-force-override-retry-cancel-button"
+					>
+						{i18next.t("recordingSummary.forceOverride.cancel", { ns: "super" })}
+					</RecordSummaryActionButton>
+					<RecordSummaryActionButton
+						appearance="secondary"
+						onClick={() => {
 							settle("continue")
+							modalInstance.destroy()
 						}}
 						data-testid="recording-force-override-continue-button"
 					>
@@ -123,8 +134,8 @@ export function confirmForceRecordingRetry(): Promise<"retry" | "continue" | "ca
 					<RecordSummaryActionButton
 						appearance="primary"
 						onClick={() => {
-							modalInstance.destroy()
 							settle("retry")
+							modalInstance.destroy()
 						}}
 						data-testid="recording-force-override-retry-button"
 					>
@@ -142,7 +153,7 @@ export function confirmForceRecordingRetry(): Promise<"retry" | "continue" | "ca
 export async function runForceRecordingOverride(
 	context: RecordingOverrideContext,
 	prepare: () => Promise<boolean>,
-	forceRelease?: () => void | Promise<void>,
+	forceRelease?: () => boolean | void | Promise<boolean | void>,
 ): Promise<boolean> {
 	return runForceOverrideFlow({
 		confirm: () => confirmForceRecordingOverride(context),

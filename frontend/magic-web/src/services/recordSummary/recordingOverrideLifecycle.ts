@@ -34,7 +34,7 @@ export interface ForceOverrideFlowSteps {
 	confirm: () => boolean | Promise<boolean>
 	confirmRetry: () => ForceOverrideRetryChoice | Promise<ForceOverrideRetryChoice>
 	prepare: () => boolean | Promise<boolean>
-	forceRelease?: () => void | Promise<void>
+	forceRelease?: () => boolean | void | Promise<boolean | void>
 }
 
 /**
@@ -78,8 +78,8 @@ export async function runForceOverrideFlow(steps: ForceOverrideFlowSteps): Promi
 		const choice = await steps.confirmRetry()
 		if (choice === "retry") continue
 		if (choice === "cancel") return false
-		await steps.forceRelease?.()
-		return true
+		const released = await steps.forceRelease?.()
+		return released !== false
 	}
 
 	return false

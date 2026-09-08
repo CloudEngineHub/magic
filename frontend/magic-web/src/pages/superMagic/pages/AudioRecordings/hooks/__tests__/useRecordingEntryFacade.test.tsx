@@ -696,6 +696,37 @@ describe("useRecordingEntryFacade", () => {
 		expect(runtimeMock.actions.startRecording).not.toHaveBeenCalled()
 	})
 
+	it("passes the confirmed session id when force-releasing", async () => {
+		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue({
+			sessionId: "current-session",
+			duration: "00:12:34",
+			source: "currentTab",
+			status: "recording",
+		})
+		recordSummaryServiceMock.prepareRecordingOverride.mockResolvedValue(false)
+		forceOverrideMock.run.mockImplementation(
+			async (
+				_context: unknown,
+				prepare: () => Promise<boolean>,
+				forceRelease?: () => Promise<boolean> | boolean,
+			) => {
+				await prepare()
+				await forceRelease?.()
+				return true
+			},
+		)
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.startRecording()
+		})
+
+		expect(recordSummaryServiceMock.releaseOverrideSessionForForceStart).toHaveBeenCalledWith(
+			"current-session",
+		)
+	})
+
 	it("does not create a new recording when replacement preparation fails", async () => {
 		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue({
 			sessionId: "current-session",

@@ -312,6 +312,7 @@ describe("TabCoordinator — recording override", () => {
 		expect(onForceOverrideRequest).toHaveBeenCalledWith({
 			requestId: expect.any(String),
 			sessionId: "session-1",
+			targetTabId: activeTab.getTabId(),
 		})
 
 		activeTab.cleanup()
@@ -334,6 +335,35 @@ describe("TabCoordinator — recording override", () => {
 		expect(await requestingTab.requestLock()).toBe(true)
 		expect(onLockAcquired).not.toHaveBeenCalled()
 
+		activeTab.cleanup()
+		requestingTab.cleanup()
+	})
+
+	it("ignores idle-tab rejections until the lock holder responds", async () => {
+		let resolveOverride: ((value: boolean) => void) | undefined
+		const onForceOverrideRequest = vi.fn(
+			() =>
+				new Promise<boolean>((resolve) => {
+					resolveOverride = resolve
+				}),
+		)
+		const idleOverride = vi.fn(() => false)
+		const idleTab = makeCoordinator({ onForceOverrideRequest: idleOverride })
+		const activeTab = makeCoordinator({ onForceOverrideRequest })
+		const requestingTab = makeCoordinator()
+
+		activeTab.acquireLock()
+		const resultPromise = requestingTab.requestRecordingOverride("session-1")
+
+		expect(onForceOverrideRequest).toHaveBeenCalledTimes(1)
+		expect(idleOverride).not.toHaveBeenCalled()
+		expect(idleTab.hasRecordingPermission()).toBe(false)
+		expect(requestingTab.getCurrentLockHolder()).toBe(activeTab.getTabId())
+
+		resolveOverride?.(true)
+		await expect(resultPromise).resolves.toBe(true)
+
+		idleTab.cleanup()
 		activeTab.cleanup()
 		requestingTab.cleanup()
 	})

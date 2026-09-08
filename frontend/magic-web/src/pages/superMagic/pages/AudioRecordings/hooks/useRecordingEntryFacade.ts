@@ -555,7 +555,10 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				const prepared = await runForceRecordingOverride(
 					overrideContext,
 					() => recordSummaryService.prepareRecordingOverride(overrideContext.sessionId),
-					() => recordSummaryService.releaseOverrideSessionForForceStart(),
+					() =>
+						recordSummaryService.releaseOverrideSessionForForceStart(
+							overrideContext.sessionId,
+						),
 				)
 				if (!prepared) return
 

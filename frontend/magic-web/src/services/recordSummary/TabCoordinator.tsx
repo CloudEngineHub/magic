@@ -129,11 +129,15 @@ export interface RecordingDataSyncData {
 export interface RecordingOverrideRequestData {
 	requestId: string
 	sessionId?: string
+	/** Only this lock holder should answer the broadcast. */
+	targetTabId?: string
 }
 
 export interface RecordingOverrideResultData {
 	requestId: string
 	accepted: boolean
+	responderTabId?: string
+	targetTabId?: string
 }
 
 export type TabStatus = "active" | "inactive" | "pending" | "disconnected"
@@ -194,6 +198,7 @@ interface PendingLockRequest {
 
 interface PendingOverrideRequest {
 	requestId: string
+	targetTabId?: string
 	resolve: (value: boolean) => void
 	timeoutId: ReturnType<typeof setTimeout>
 }
@@ -520,18 +525,24 @@ export class TabCoordinator {
 		const data = message.data as RecordingOverrideRequestData | undefined
 		if (!data?.requestId) return
 
+		// Idle tabs must stay silent. A premature accepted:false would
+		// settle the requester before the lock holder finishes.
+		const isLockHolder = this.currentLockHolder === this.tabId && this.status === "active"
+		if (!isLockHolder) return
+		if (data.targetTabId && data.targetTabId !== this.tabId) return
+
 		const respond = (accepted: boolean) => {
 			this.sendMessage({
 				type: "RECORDING_OVERRIDE_RESULT",
 				tabId: this.tabId,
 				timestamp: Date.now(),
-				data: { requestId: data.requestId, accepted },
+				data: {
+					requestId: data.requestId,
+					accepted,
+					responderTabId: this.tabId,
+					targetTabId: data.targetTabId,
+				},
 			})
-		}
-
-		if (this.status !== "active") {
-			respond(false)
-			return
 		}
 
 		Promise.resolve(this.callbacks.onForceOverrideRequest?.(data) ?? false)
@@ -556,6 +567,10 @@ export class TabCoordinator {
 		) {
 			return
 		}
+
+		const expectedTarget = this.pendingOverrideRequest.targetTabId
+		const responderId = data.responderTabId ?? message.tabId
+		if (expectedTarget && responderId !== expectedTarget) return
 
 		clearTimeout(this.pendingOverrideRequest.timeoutId)
 		const resolve = this.pendingOverrideRequest.resolve
@@ -953,6 +968,7 @@ export class TabCoordinator {
 		}
 
 		const requestId = `${this.tabId}_${Date.now()}_${Math.random().toString(36).slice(2)}`
+		const targetTabId = this.currentLockHolder
 		return new Promise((resolve) => {
 			const timeoutId = setTimeout(() => {
 				if (!this.pendingOverrideRequest) return
@@ -961,12 +977,12 @@ export class TabCoordinator {
 				resolve(false)
 			}, timeoutMs)
 
-			this.pendingOverrideRequest = { requestId, resolve, timeoutId }
+			this.pendingOverrideRequest = { requestId, targetTabId, resolve, timeoutId }
 			this.sendMessage({
 				type: "RECORDING_OVERRIDE_REQUEST",
 				tabId: this.tabId,
 				timestamp: Date.now(),
-				data: { requestId, sessionId },
+				data: { requestId, sessionId, targetTabId },
 			})
 		})
 	}
@@ -1036,6 +1052,10 @@ export class TabCoordinator {
 	 */
 	getCurrentLockHolder(): string | null {
 		return this.currentLockHolder
+	}
+
+	getTabId(): string {
+		return this.tabId
 	}
 
 	/**

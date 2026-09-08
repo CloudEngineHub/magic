@@ -148,6 +148,22 @@ describe("runForceOverrideFlow", () => {
 		expect(forceRelease).not.toHaveBeenCalled()
 	})
 
+	it("does not start a new recording when force-release fails", async () => {
+		const prepare = vi.fn().mockResolvedValue(false)
+		const forceRelease = vi.fn().mockResolvedValue(false)
+
+		await expect(
+			runForceOverrideFlow({
+				confirm: async () => true,
+				confirmRetry: async () => "continue",
+				prepare,
+				forceRelease,
+			}),
+		).resolves.toBe(false)
+
+		expect(forceRelease).toHaveBeenCalledTimes(1)
+	})
+
 	it("does not release or continue when the retry dialog is cancelled", async () => {
 		const prepare = vi.fn().mockResolvedValue(false)
 		const forceRelease = vi.fn()
