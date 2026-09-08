@@ -1,4 +1,5 @@
-const MARK_CLASS = "pointer-events-none absolute h-3 w-3 border-[#808080]"
+const MARK_CLASS =
+	"pointer-events-none absolute h-3 w-3 border-white [filter:drop-shadow(0_0_0.6px_#000)]"
 
 const MARKS = [
 	{ id: "tr", className: "-right-px -top-px border-r-[2px] border-t-[2px]" },

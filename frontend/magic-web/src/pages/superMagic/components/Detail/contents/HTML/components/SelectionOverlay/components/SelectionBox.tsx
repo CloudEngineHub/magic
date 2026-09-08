@@ -60,7 +60,8 @@ export const SelectionBox = memo(function SelectionBox({
 
 	return (
 		<div
-			className="group/selection pointer-events-none absolute outline outline-1 outline-[#808080]"
+			// White + dark rings stay visible on mixed page backgrounds.
+			className="group/selection pointer-events-none absolute shadow-[0_0_0_1px_#fff,0_0_0_2px_rgb(0_0_0_/_0.65)]"
 			data-testid="html-editor-selection-box"
 			style={{
 				top: `${transformedRect.top}px`,
