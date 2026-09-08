@@ -1409,7 +1409,7 @@ function DOMTreePanelInner({ editorRef, visible, selectedSelector, contentRevisi
 				</div>
 				<ScrollArea
 					type="always"
-					className="min-h-0 min-w-0 flex-1 overflow-hidden [&_[data-slot='scroll-area-viewport']>div]:!block [&_[data-slot='scroll-area-viewport']>div]:!w-full"
+					className="min-h-0 min-w-0 flex-1 overflow-hidden [&_[data-orientation=horizontal]]:hidden [&_[data-slot='scroll-area-viewport']>div]:!block [&_[data-slot='scroll-area-viewport']>div]:!w-full [&_[data-slot='scroll-area-viewport']>div]:!min-w-0"
 					viewportRef={treeViewportRef}
 					viewportClassName="h-full min-h-0 min-w-0 overflow-x-hidden bg-muted/10 pr-4"
 					viewportStyle={{ overflowX: "hidden", overflowY: "auto" }}

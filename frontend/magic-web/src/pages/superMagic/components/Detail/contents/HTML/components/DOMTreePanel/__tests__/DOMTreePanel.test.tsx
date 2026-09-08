@@ -1043,7 +1043,11 @@ describe("DOMTreePanel", () => {
 			screen
 				.getByTestId("html-dom-tree-panel")
 				.querySelector('[data-slot="scroll-area-viewport"]'),
-		).toHaveClass("bg-muted/10", "pr-4")
+		).toHaveClass("bg-muted/10", "pr-4", "overflow-x-hidden")
+		expect(
+			screen.getByTestId("html-dom-tree-panel").querySelector('[data-slot="scroll-area"]')
+				?.className,
+		).toContain("data-orientation=horizontal")
 
 		const row = await screen.findByTestId("dom-tree-node-section")
 		const actions = screen.getByTestId("dom-tree-actions-section")

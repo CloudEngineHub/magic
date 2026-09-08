@@ -4,6 +4,10 @@ import { useTranslation } from "react-i18next"
 import { ChevronDown } from "lucide-react"
 import { TooltipProvider } from "@/components/shadcn-ui/tooltip"
 import { cn } from "@/utils/cn"
+import {
+	ResizeGrip,
+	resizeHandleGlowClass,
+} from "@/pages/superMagic/components/ResizeGrip/ResizeGrip"
 import { EditorSidebarSlotsContext, type EditorSidebarSlots } from "./sidebarSlots"
 import {
 	DEFAULT_STRUCTURE_RATIO,
@@ -35,6 +39,7 @@ export function EditorSidebar({
 	const { t } = useTranslation("super")
 	const [width, setWidth] = useState(SIDEBAR_DEFAULT_WIDTH)
 	const [isResizing, setIsResizing] = useState(false)
+	const [isSplitting, setIsSplitting] = useState(false)
 	const [structureRatio, setStructureRatio] = useState(DEFAULT_STRUCTURE_RATIO)
 	const [railHeight, setRailHeight] = useState(0)
 	const [structureChrome, setStructureChrome] = useState<HTMLDivElement | null>(null)
@@ -100,16 +105,18 @@ export function EditorSidebar({
 	function startSplit(event: PointerEvent<HTMLDivElement>) {
 		event.preventDefault()
 		const handle = event.currentTarget
-		const body = handle.parentElement
-		if (!body) return
+		const rail = bodyRef.current
+		if (!rail) return
+		const railRect = rail.getBoundingClientRect()
 		handle.setPointerCapture?.(event.pointerId)
+		setIsSplitting(true)
 		function move(moveEvent: PointerEvent) {
-			const rect = body.getBoundingClientRect()
 			setStructureRatio(
-				getStructureRatioFromPointer(moveEvent.clientY, rect.top, rect.height),
+				getStructureRatioFromPointer(moveEvent.clientY, railRect.top, railRect.height),
 			)
 		}
 		function stop() {
+			setIsSplitting(false)
 			if (handle.hasPointerCapture?.(event.pointerId)) {
 				handle.releasePointerCapture?.(event.pointerId)
 			}
@@ -136,21 +143,28 @@ export function EditorSidebar({
 		>
 			<div
 				className={cn(
-					"group absolute inset-y-0 left-0 z-30 w-1 cursor-col-resize bg-transparent transition-colors hover:bg-primary/60",
-					isResizing && "bg-primary",
+					"group absolute inset-y-0 left-0 z-30 flex w-2 -translate-x-px cursor-col-resize items-center justify-center",
+					resizeHandleGlowClass("vertical"),
 				)}
 				onPointerDown={startResize}
 				data-testid="html-editor-sidebar-resize-handle"
+				data-resizing={isResizing ? "true" : undefined}
 				role="separator"
 				aria-label={t("stylePanel.sidebar.resize")}
 				aria-orientation="vertical"
 				aria-valuemin={SIDEBAR_MIN_WIDTH}
 				aria-valuemax={SIDEBAR_MAX_WIDTH}
 				aria-valuenow={width}
-			/>
+			>
+				<ResizeGrip orientation="vertical" />
+			</div>
 			<TooltipProvider delayDuration={200}>
 				<EditorSidebarSlotsContext.Provider value={slots}>
-					<div ref={bodyRef} className="flex min-h-0 flex-1 flex-col">
+					<div
+						ref={bodyRef}
+						className="flex min-h-0 flex-1 flex-col pl-2"
+						data-testid="html-editor-sidebar-rail"
+					>
 						{structureExpanded ? (
 							<section
 								className="flex min-h-0 flex-col overflow-hidden"
@@ -178,17 +192,28 @@ export function EditorSidebar({
 						)}
 						{bothExpanded ? (
 							<div
-								className="z-20 h-1.5 shrink-0 cursor-row-resize bg-border/70 hover:bg-primary/60"
-								onPointerDown={startSplit}
-								data-testid="html-editor-sidebar-splitter"
-								role="separator"
-								aria-label={t("stylePanel.sidebar.split")}
-								aria-orientation="horizontal"
-							/>
+								className="relative z-20 h-px shrink-0 bg-border/70"
+								data-testid="html-editor-sidebar-splitter-line"
+							>
+								<div
+									className={cn(
+										"group absolute inset-x-0 top-0.5 flex h-2 cursor-row-resize items-center justify-center bg-transparent",
+										resizeHandleGlowClass("horizontal"),
+									)}
+									onPointerDown={startSplit}
+									data-testid="html-editor-sidebar-splitter"
+									data-resizing={isSplitting ? "true" : undefined}
+									role="separator"
+									aria-label={t("stylePanel.sidebar.split")}
+									aria-orientation="horizontal"
+								>
+									<ResizeGrip orientation="horizontal" />
+								</div>
+							</div>
 						) : null}
 						{stylesExpanded ? (
 							<section
-								className="flex min-h-0 flex-col overflow-hidden"
+								className="flex min-h-0 flex-col overflow-hidden pt-2"
 								style={sectionStyle(stylesExpanded, layout.stylesHeight)}
 								data-testid="html-editor-sidebar-styles"
 							>
@@ -233,7 +258,12 @@ function SectionHeader({
 	chromeRef?: (node: HTMLDivElement | null) => void
 }) {
 	return (
-		<div className="flex h-8 w-full shrink-0 items-center gap-1 border-b border-border/70 bg-card/90 px-2">
+		<div
+			className={cn(
+				"flex h-8 w-full shrink-0 items-center gap-1 px-2",
+				expanded ? "border-b border-border/70 bg-card/90" : "border-t border-border/70",
+			)}
+		>
 			<button
 				type="button"
 				className="flex min-w-0 flex-1 items-center gap-1 px-1 text-left text-[13px] font-semibold tracking-tight"
