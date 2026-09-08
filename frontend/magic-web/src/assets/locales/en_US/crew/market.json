@@ -511,6 +511,17 @@
 		"delivered": "{{marker}} slides delivered",
 		"deliveredPrivate": "{{marker}} decks delivered"
 	},
+	"publishScopeNotice": {
+		"attachmentsLoadFailed": "Project files are still loading, so the publish scope cannot be confirmed. Please try again.",
+		"cancel": "Cancel",
+		"confirm": "Confirm that the files you need are inside this directory.",
+		"continue": "Continue publishing",
+		"intro": "This project contains files outside the publish scope.",
+		"morePaths": "{{count}} more paths not shown",
+		"outsidePathsLabel": "Paths outside the publish scope",
+		"scopeLabel": "Publish scope",
+		"title": "Confirm the publish file scope"
+	},
 	"skillDetailDialog": {
 		"collapse": "Collapse",
 		"emptyName": "Untitled Skill",
