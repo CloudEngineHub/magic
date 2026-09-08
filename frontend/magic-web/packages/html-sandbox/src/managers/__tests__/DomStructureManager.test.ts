@@ -218,6 +218,60 @@ describe("DomStructureManager move preview", () => {
 		expect(getBodyElementIds()).toEqual(["source", "middle", "last", "target"])
 		expect(history.getUndoStackSize()).toBe(0)
 	})
+
+	it("cancels without throwing when the original parent is gone", () => {
+		document.body.innerHTML = `
+			<div id="wrapper"><section id="source">Source</section></div>
+			<section id="last">Last</section>
+		`
+		manager = new DomStructureManager(history, selector as never)
+		manager.getTree()
+
+		const sourceId = findNodeId("source")
+		const lastId = findNodeId("last")
+		manager.beginMovePreview(sourceId)
+		manager.previewMove(sourceId, lastId, "after")
+		document.getElementById("wrapper")?.remove()
+
+		expect(() => manager.cancelMovePreview()).not.toThrow()
+		expect(document.getElementById("source")?.parentElement).toBe(document.body)
+		expect(getBodyElementIds()).toEqual(["last", "source"])
+		expect(history.getUndoStackSize()).toBe(0)
+
+		manager.beginMovePreview(sourceId)
+		expect(manager.previewMove(sourceId, lastId, "before")).toBe(true)
+	})
+
+	it("restores a cancelled preview through the original parent node id", () => {
+		document.body.innerHTML = `
+			<div id="wrapper"><section id="source">Source</section></div>
+			<section id="last">Last</section>
+		`
+		manager = new DomStructureManager(history, selector as never)
+		manager.getTree()
+
+		const wrapper = document.getElementById("wrapper")
+		if (!wrapper) throw new Error("Missing wrapper")
+		const parentId = wrapper.getAttribute("data-magic-editor-node-id")
+		if (!parentId) throw new Error("Missing wrapper node id")
+
+		const sourceId = findNodeId("source")
+		const lastId = findNodeId("last")
+		manager.beginMovePreview(sourceId)
+		manager.previewMove(sourceId, lastId, "after")
+		wrapper.remove()
+
+		const replacement = document.createElement("div")
+		replacement.id = "replacement"
+		replacement.setAttribute("data-magic-editor-node-id", parentId)
+		document.body.insertBefore(replacement, document.getElementById("last"))
+
+		manager.cancelMovePreview()
+
+		expect(document.getElementById("source")?.parentElement).toBe(replacement)
+		expect(Array.from(replacement.children).map((element) => element.id)).toEqual(["source"])
+		expect(history.getUndoStackSize()).toBe(0)
+	})
 })
 
 function findNodeId(id: string): string {

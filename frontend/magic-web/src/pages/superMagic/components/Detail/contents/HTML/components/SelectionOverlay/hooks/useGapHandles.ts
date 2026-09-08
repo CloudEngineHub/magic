@@ -51,6 +51,13 @@ function snapshotStartStyles(computedStyles: Record<string, string>): Record<str
 	return styles
 }
 
+function sameStyleMap(left: Record<string, string>, right: Record<string, string>): boolean {
+	const leftKeys = Object.keys(left)
+	const rightKeys = Object.keys(right)
+	if (leftKeys.length !== rightKeys.length) return false
+	return leftKeys.every((key) => left[key] === right[key])
+}
+
 export function useGapHandles({
 	editorRef,
 	selectedInfo,
@@ -79,6 +86,10 @@ export function useGapHandles({
 	const dragStateRef = useRef<GapDragState | null>(null)
 	const gapRafRef = useRef<number | null>(null)
 	const pendingGapRef = useRef<{ selector: string; styles: Record<string, string> } | null>(null)
+	const lastAppliedGapRef = useRef<{ selector: string; styles: Record<string, string> } | null>(
+		null,
+	)
+	const gapSessionRef = useRef(0)
 	const pointerCaptureRef = useRef<PointerCaptureState | null>(null)
 
 	gapAxesLinkedRef.current = gapAxesLinked
@@ -120,11 +131,14 @@ export function useGapHandles({
 
 			gapRafRef.current = window.requestAnimationFrame(() => {
 				const pending = pendingGapRef.current
+				const session = gapSessionRef.current
 				gapRafRef.current = null
 				if (!pending || !editorRef?.current) return
+				lastAppliedGapRef.current = pending
 				editorRef.current
 					.applyStylesTemporary(pending.selector, pending.styles)
 					.then((result) => {
+						if (session !== gapSessionRef.current || !isDraggingRef.current) return
 						if (!result?.rect || !result.childRects) return
 						const nextLayout = {
 							rect: result.rect,
@@ -154,6 +168,7 @@ export function useGapHandles({
 
 		const currentSelector = selectedInfoRef.current?.selector
 		isDraggingRef.current = false
+		gapSessionRef.current += 1
 		dragStateRef.current = null
 		setIsGapDragging(false)
 		setGapPreview(null)
@@ -178,12 +193,18 @@ export function useGapHandles({
 		if (pendingGapRef.current && editorRef?.current) {
 			const { selector, styles } = pendingGapRef.current
 			try {
-				await editorRef.current.applyStylesTemporary(selector, styles)
+				const lastApplied = lastAppliedGapRef.current
+				const alreadyApplied =
+					lastApplied?.selector === selector && sameStyleMap(lastApplied.styles, styles)
+				if (!alreadyApplied) {
+					await editorRef.current.applyStylesTemporary(selector, styles)
+				}
 				await editorRef.current.endBatchOperation(selector, styles)
 			} catch (error) {
 				console.error("[useGapHandles] Final gap update failed:", error)
 			}
 			pendingGapRef.current = null
+			lastAppliedGapRef.current = null
 		} else if (editorRef?.current) {
 			try {
 				await editorRef.current.cancelBatchOperation()
@@ -246,6 +267,9 @@ export function useGapHandles({
 			event.stopPropagation()
 
 			if (isDraggingRef.current) await stopGapDrag()
+
+			gapSessionRef.current += 1
+			lastAppliedGapRef.current = null
 
 			const target = event.currentTarget as HTMLElement
 			try {
@@ -348,7 +372,9 @@ export function useGapHandles({
 				window.cancelAnimationFrame(gapRafRef.current)
 				gapRafRef.current = null
 			}
+			gapSessionRef.current += 1
 			pendingGapRef.current = null
+			lastAppliedGapRef.current = null
 			document.body.style.userSelect = ""
 			document.body.style.cursor = ""
 		}

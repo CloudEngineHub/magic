@@ -104,6 +104,23 @@ interface DuplicatePreviousState {
 	duplicatedNodeId: string
 }
 
+function resolveMovePreviewParent(preview: DomMovePreviewState): HTMLElement | null {
+	if (preview.originalParent.isConnected) return preview.originalParent
+	if (preview.originalParentId) {
+		try {
+			return findNodeById(preview.originalParentId)
+		} catch {
+			// Fall through to the stored selector.
+		}
+	}
+	if (!preview.originalParentSelector) return null
+	try {
+		return findElement(preview.originalParentSelector)
+	} catch {
+		return null
+	}
+}
+
 export class DomStructureManager {
 	private readonly commandHistory: CommandHistory
 	private readonly elementSelector: ElementSelector
@@ -371,9 +388,14 @@ export class DomStructureManager {
 		if (!preview) return
 
 		try {
-			const originalParent = preview.originalParent.isConnected
-				? preview.originalParent
-				: findElement(preview.originalParentSelector)
+			const originalParent = resolveMovePreviewParent(preview)
+			if (!originalParent) {
+				EditorLogger.warn("Cannot restore DOM move preview; original parent is gone", {
+					nodeId: preview.nodeId,
+					originalParentId: preview.originalParentId,
+				})
+				return
+			}
 			preview.element.remove()
 			insertAtElementIndex(originalParent, preview.element, preview.originalIndex)
 		} finally {

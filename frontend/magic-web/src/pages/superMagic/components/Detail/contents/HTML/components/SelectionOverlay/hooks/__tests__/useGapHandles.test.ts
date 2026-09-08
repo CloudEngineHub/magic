@@ -94,6 +94,7 @@ describe("useGapHandles", () => {
 		moveX: number
 		moveY: number
 		onPreviewStyles?: (styles: Partial<{ rowGap: string; columnGap: string }>) => void
+		setSelectedInfo?: (updater: (prev: SelectedInfo | null) => SelectedInfo | null) => void
 		skipPointerUp?: boolean
 	}) {
 		const onPreviewStyles = options.onPreviewStyles ?? vi.fn()
@@ -103,6 +104,7 @@ describe("useGapHandles", () => {
 				selectedInfo: options.selectedInfo,
 				gapAxesLinked: options.gapAxesLinked,
 				onPreviewStyles,
+				setSelectedInfo: options.setSelectedInfo,
 			}),
 		)
 
@@ -188,6 +190,63 @@ describe("useGapHandles", () => {
 
 		expect(mockEditorRef.current.endBatchOperation).toHaveBeenCalledTimes(1)
 		expect(mockEditorRef.current.refreshSelectedElement).toHaveBeenCalledWith("div.flex-row")
+	})
+
+	it("commits the already-applied gap without applying it again", async () => {
+		await dragGap({
+			selectedInfo: createFlexSelectedInfo(),
+			axis: "column",
+			gapAxesLinked: false,
+			moveX: 120,
+			moveY: 100,
+		})
+
+		expect(mockEditorRef.current.applyStylesTemporary).toHaveBeenCalledTimes(1)
+		expect(mockEditorRef.current.endBatchOperation).toHaveBeenCalledTimes(1)
+	})
+
+	it("does not write stale layout after the drag ends", async () => {
+		let resolvePreview: (value: {
+			rect: SelectedInfo["rect"]
+			childRects: NonNullable<SelectedInfo["childRects"]>
+		}) => void = () => {}
+		const previewResult = new Promise<{
+			rect: SelectedInfo["rect"]
+			childRects: NonNullable<SelectedInfo["childRects"]>
+		}>((resolve) => {
+			resolvePreview = resolve
+		})
+		mockEditorRef.current.applyStylesTemporary
+			.mockReturnValueOnce(previewResult)
+			.mockResolvedValue(undefined)
+
+		const setSelectedInfo = vi.fn()
+		const { result } = await dragGap({
+			selectedInfo: createFlexSelectedInfo(),
+			axis: "column",
+			gapAxesLinked: false,
+			moveX: 120,
+			moveY: 100,
+			setSelectedInfo,
+		})
+		const settledHandle = result.current.gapHandles[0]
+		setSelectedInfo.mockClear()
+
+		await act(async () => {
+			resolvePreview({
+				rect: { top: 0, left: 0, width: 220, height: 100 },
+				childRects: [
+					{ top: 10, left: 10, width: 70, height: 80 },
+					{ top: 10, left: 140, width: 70, height: 80 },
+				],
+			})
+		})
+
+		expect(setSelectedInfo).not.toHaveBeenCalled()
+		const handle = result.current.gapHandles[0]
+		expect(handle.left + handle.width / 2).toBeCloseTo(
+			settledHandle.left + settledHandle.width / 2,
+		)
 	})
 
 	it("does not write a gap below 0", async () => {
