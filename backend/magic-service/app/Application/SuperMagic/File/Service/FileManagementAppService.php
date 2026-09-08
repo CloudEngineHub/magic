@@ -2341,13 +2341,23 @@ class FileManagementAppService extends AbstractAppService
     /**
      * Update the source of a task file.
      *
+     * @param RequestContext $requestContext Request context
      * @param UpdateFileSourceRequestDTO $requestDTO Request DTO containing file_id and source
      * @return array Updated file info
      */
-    public function updateFileSource(UpdateFileSourceRequestDTO $requestDTO): array
+    public function updateFileSource(RequestContext $requestContext, UpdateFileSourceRequestDTO $requestDTO): array
     {
+        $userAuthorization = $requestContext->getUserAuthorization();
+
         $fileId = $requestDTO->getFileId();
         $source = TaskFileSource::fromValue($requestDTO->getSource());
+
+        // 鉴权前置：项目空间文件校验项目编辑权限，用户空间文件校验文件 owner。
+        $fileEntity = $this->taskFileDomainService->getById($fileId);
+        if ($fileEntity === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, trans('file.file_not_found'));
+        }
+        $this->getAccessibleProjectForTaskFile($fileEntity, $userAuthorization, MemberRole::EDITOR);
 
         $fileEntity = $this->taskFileDomainService->updateFileSource($fileId, $source);
 

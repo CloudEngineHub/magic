@@ -16,6 +16,7 @@ use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\File\Entity\FileCollectionItemEntity;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
 use App\Domain\SuperMagic\File\Event\FilesBatchDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FileUploadedEvent;
 use App\Domain\SuperMagic\File\Service\FileCollectionDomainService;
@@ -33,6 +34,7 @@ use App\Interfaces\SuperMagic\Common\Share\DTO\Request\CreateShareRequestDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\BatchCopyFileRequestDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\BatchDeleteFilesRequestDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\CreateFileRequestDTO;
+use App\Interfaces\SuperMagic\File\DTO\Request\UpdateFileSourceRequestDTO;
 use Hyperf\Amqp\Message\ProducerMessage;
 use Hyperf\Amqp\Producer;
 use Hyperf\Context\ApplicationContext;
@@ -348,6 +350,110 @@ class FileManagementAppServiceTest extends TestCase
 
         $this->assertSame('501', $result['file_id']);
         $this->assertSame('profile.md', $result['file_name']);
+    }
+
+    public function testUpdateFileSourceAllowsOwnedUserSpaceFileWithoutProjectLookup(): void
+    {
+        $fileEntity = $this->createUserSpaceFileEntity(501, '/user/memory.md');
+        $updatedEntity = $this->createUserSpaceFileEntity(501, '/user/memory.md');
+        $updatedEntity->setSource(2);
+
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getById')
+            ->with(501)
+            ->willReturn($fileEntity);
+        $taskFileDomainService->expects($this->once())
+            ->method('updateFileSource')
+            ->with(501, TaskFileSource::PROJECT_DIRECTORY)
+            ->willReturn($updatedEntity);
+
+        $service = $this->createService($this->createMock(EventDispatcherInterface::class));
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+        $requestDTO = new UpdateFileSourceRequestDTO();
+        $requestDTO->fileId = 501;
+        $requestDTO->source = 2;
+
+        $this->assertSame(
+            ['file_id' => 501, 'source' => 2],
+            $service->updateFileSource($requestContext, $requestDTO)
+        );
+    }
+
+    public function testUpdateFileSourceRejectsUserSpaceFileOwnedByAnotherUser(): void
+    {
+        $fileEntity = $this->createUserSpaceFileEntity(501, '/user/memory.md');
+        $fileEntity->setUserId('U2');
+
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getById')
+            ->with(501)
+            ->willReturn($fileEntity);
+        $taskFileDomainService->expects($this->never())->method('updateFileSource');
+
+        $service = $this->createService($this->createMock(EventDispatcherInterface::class));
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+        $requestDTO = new UpdateFileSourceRequestDTO();
+        $requestDTO->fileId = 501;
+        $requestDTO->source = 2;
+
+        $this->expectException(BusinessException::class);
+        $service->updateFileSource($requestContext, $requestDTO);
+    }
+
+    public function testUpdateFileSourceRejectsProjectFileWithoutProjectAccess(): void
+    {
+        // TestableFileManagementAppService::getAccessibleProject 直接抛异常，
+        // 模拟当前用户对文件所属项目无访问权限的场景。
+        $fileEntity = $this->createTaskFileEntity(501, '/workspace/hh.md');
+
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getById')
+            ->with(501)
+            ->willReturn($fileEntity);
+        $taskFileDomainService->expects($this->never())->method('updateFileSource');
+
+        $service = $this->createService($this->createMock(EventDispatcherInterface::class));
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+        $requestDTO = new UpdateFileSourceRequestDTO();
+        $requestDTO->fileId = 501;
+        $requestDTO->source = 2;
+
+        $this->expectException(BusinessException::class);
+        $service->updateFileSource($requestContext, $requestDTO);
+    }
+
+    public function testUpdateFileSourceThrowsWhenFileNotFound(): void
+    {
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getById')
+            ->with(999)
+            ->willReturn(null);
+        $taskFileDomainService->expects($this->never())->method('updateFileSource');
+
+        $service = $this->createService($this->createMock(EventDispatcherInterface::class));
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+        $requestDTO = new UpdateFileSourceRequestDTO();
+        $requestDTO->fileId = 999;
+        $requestDTO->source = 2;
+
+        $this->expectException(BusinessException::class);
+        $service->updateFileSource($requestContext, $requestDTO);
     }
 
     public function testBatchDeleteFilesDoesNotDispatchEventWhenDomainRejectsProjectScope(): void
