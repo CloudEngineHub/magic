@@ -4,11 +4,7 @@ import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/sha
 import { cn } from "@/utils/cn"
 import { EditorSelectContent } from "../../EditorFloating"
 import { NumericDragInput } from "./NumericDragInput"
-import {
-	getMetricControlWidth,
-	getMetricInputWidth,
-	METRIC_CONTROL_MAX_WIDTH,
-} from "./metricControlWidth"
+import { getMetricControlWidth, METRIC_CONTROL_MAX_WIDTH } from "./metricControlWidth"
 import { getEquivalentLineHeight, splitNumericLineHeight } from "../utils/lineHeight"
 
 const LINE_HEIGHT_PRESETS = ["normal", "1", "1.15", "1.2", "1.5", "1.75", "2", "2.5", "3"]
@@ -54,6 +50,10 @@ export function LineHeightSelector({
 		(nextValue: string | number) =>
 			nextValue === "normal" ? t("stylePanel.lineHeightNormal") : String(nextValue),
 		[t],
+	)
+	const formatEditValue = useCallback(
+		(nextValue: string | number) => (nextValue === "normal" ? "" : String(nextValue)),
+		[],
 	)
 
 	const handleApply = useCallback(() => {
@@ -126,18 +126,18 @@ export function LineHeightSelector({
 			<span className="shrink-0 text-xs font-medium text-muted-foreground">
 				{t("stylePanel.lineHeight")}
 			</span>
-			<div className="relative flex min-w-0 flex-1 items-center">
+			<div className="flex min-w-0 flex-1 items-center">
 				<NumericDragInput
 					data-testid="html-editor-line-height-input"
 					value={value}
 					formatDisplayValue={formatDisplayValue}
+					formatEditValue={formatEditValue}
 					onChange={handleNumericChange}
 					onCommit={handleNumericCommit}
 					onBlur={handleApply}
 					onKeyDown={handleKeyDown}
 					disabled={disabled}
-					style={{ width: getMetricInputWidth(value) }}
-					className="h-full flex-none border-0 bg-transparent pl-0 pr-6 text-center text-xs shadow-none hover:bg-transparent focus-visible:ring-0 disabled:opacity-50"
+					className="h-full min-w-0 flex-1 border-0 bg-transparent px-0 text-center text-xs shadow-none hover:bg-transparent focus-visible:ring-0 disabled:opacity-50"
 					placeholder="1.5"
 					title={t("stylePanel.lineHeight")}
 					step={1}
@@ -145,7 +145,7 @@ export function LineHeightSelector({
 				<Select value={value} onValueChange={handleSelectChange} disabled={disabled}>
 					<SelectTrigger
 						data-testid="html-editor-line-height-menu-button"
-						className="absolute right-0 h-full w-5 rounded-r-md border-0 bg-transparent p-0 shadow-none hover:bg-transparent disabled:opacity-50 [&>span]:hidden [&>svg]:h-3 [&>svg]:w-3"
+						className="h-full w-5 shrink-0 rounded-r-md border-0 bg-transparent p-0 shadow-none hover:bg-transparent disabled:opacity-50 [&>span]:hidden [&>svg]:h-3 [&>svg]:w-3"
 					>
 						<SelectValue />
 					</SelectTrigger>

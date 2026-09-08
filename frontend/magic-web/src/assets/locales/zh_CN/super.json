@@ -5876,6 +5876,7 @@
 			"title": "自定义样式"
 		},
 		"decreaseFontSize": "缩小字号",
+		"decreaseValue": "减小",
 		"decreaseZoom": "缩小",
 		"deleteElement": "删除元素",
 		"devConsole": {
@@ -6162,6 +6163,7 @@
 		"imageBackground": "图片背景",
 		"imageSettings": "图片",
 		"increaseFontSize": "增大字号",
+		"increaseValue": "增大",
 		"increaseZoom": "放大",
 		"inspector": {
 			"agentPromptPlaceholder": "在此描述你遇到的问题",
@@ -6283,6 +6285,7 @@
 		"moreStyles": "更多样式",
 		"noBackground": "无背景",
 		"noBackgroundImage": "当前无背景图",
+		"numericDragHint": "上下拖动或点击箭头可调整数值",
 		"objectFit": "填充方式",
 		"objectFitValues": {
 			"contain": "完整显示",

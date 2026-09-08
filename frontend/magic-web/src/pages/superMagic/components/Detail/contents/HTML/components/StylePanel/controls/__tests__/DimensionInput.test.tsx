@@ -2,6 +2,11 @@ import { act, fireEvent, render, screen } from "@testing-library/react"
 import { forwardRef, type InputHTMLAttributes } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { DimensionInput } from "../DimensionInput"
+import { resetNumericDragHintState } from "../numericDragHint"
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({ t: (key: string) => key }),
+}))
 
 vi.mock("@/components/shadcn-ui/input", () => ({
 	/** Use a plain input so the test can focus on inline unit behavior. */
@@ -47,6 +52,7 @@ describe("DimensionInput", () => {
 	})
 
 	afterEach(() => {
+		resetNumericDragHintState()
 		vi.useRealTimers()
 	})
 

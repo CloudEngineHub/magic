@@ -1,8 +1,9 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { LineHeightSelector } from "../LineHeightSelector"
 import { getMetricControlWidth, METRIC_CONTROL_MAX_WIDTH } from "../metricControlWidth"
+import { resetNumericDragHintState } from "../numericDragHint"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({ t: (key: string) => key }),
@@ -60,17 +61,50 @@ function firePointerEvent(
 }
 
 describe("LineHeightSelector", () => {
-	it("localizes normal while preserving the CSS value", () => {
+	afterEach(() => {
+		resetNumericDragHintState()
+	})
+
+	it("hides the drag cursor for normal until a numeric preset is selected", () => {
 		const onChange = vi.fn()
 		const onApply = vi.fn()
-		render(<LineHeightSelector value="normal" onChange={onChange} onApply={onApply} />)
+		const { rerender } = render(
+			<LineHeightSelector value="normal" onChange={onChange} onApply={onApply} />,
+		)
+
+		const input = screen.getByTestId("html-editor-line-height-input")
+		expect(input).not.toHaveAttribute("data-can-drag", "true")
+		expect(input.className).not.toContain("cursor-ns-resize")
+
+		fireEvent.click(screen.getByRole("button", { name: "1.5" }))
+		expect(onChange).toHaveBeenCalledWith("1.5")
+		expect(onApply).toHaveBeenCalledWith("1.5")
+
+		rerender(<LineHeightSelector value="1.5" onChange={onChange} onApply={onApply} />)
+		expect(input).toHaveAttribute("data-can-drag", "true")
+		expect(input.className).toContain("cursor-ns-resize")
+	})
+
+	it("localizes normal and clears it on focus for numeric entry", () => {
+		const onChange = vi.fn()
+		const onApply = vi.fn()
+		const { rerender } = render(
+			<LineHeightSelector value="normal" onChange={onChange} onApply={onApply} />,
+		)
 
 		const input = screen.getByTestId("html-editor-line-height-input")
 		expect(input).toHaveValue("stylePanel.lineHeightNormal")
 		fireEvent.focus(input)
-		expect(input).toHaveValue("normal")
+		expect(input).toHaveValue("")
 		fireEvent.blur(input)
 		expect(input).toHaveValue("stylePanel.lineHeightNormal")
+
+		fireEvent.focus(input)
+		fireEvent.change(input, { target: { value: "1.5" } })
+		expect(onChange).toHaveBeenCalledWith("1.5")
+		rerender(<LineHeightSelector value="1.5" onChange={onChange} onApply={onApply} />)
+		fireEvent.blur(input)
+		expect(onApply).toHaveBeenCalledWith("1.5")
 
 		onChange.mockClear()
 		onApply.mockClear()
@@ -105,7 +139,7 @@ describe("LineHeightSelector", () => {
 		const onApply = vi.fn()
 		render(<LineHeightSelector value="121px" onChange={onChange} onApply={onApply} />)
 		expect(screen.getByTestId("html-editor-line-height-control")).toHaveStyle({
-			width: "124px",
+			width: "138px",
 			maxWidth: `${METRIC_CONTROL_MAX_WIDTH}px`,
 		})
 
@@ -119,7 +153,7 @@ describe("LineHeightSelector", () => {
 	})
 
 	it("caps the adaptive width for long CSS values", () => {
-		expect(getMetricControlWidth("10")).toBe(104)
+		expect(getMetricControlWidth("10")).toBe(118)
 		expect(getMetricControlWidth("calc(100% + 200000px)")).toBe(METRIC_CONTROL_MAX_WIDTH)
 	})
 

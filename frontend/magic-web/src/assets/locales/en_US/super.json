@@ -5874,6 +5874,7 @@
 			"title": "Custom Styles"
 		},
 		"decreaseFontSize": "Decrease Font Size",
+		"decreaseValue": "Decrease",
 		"decreaseZoom": "Decrease Zoom",
 		"deleteElement": "Delete Element",
 		"devConsole": {
@@ -6160,6 +6161,7 @@
 		"imageBackground": "Image Background",
 		"imageSettings": "Image",
 		"increaseFontSize": "Increase Font Size",
+		"increaseValue": "Increase",
 		"increaseZoom": "Increase Zoom",
 		"inspector": {
 			"agentPromptPlaceholder": "Describe the problem here",
@@ -6281,6 +6283,7 @@
 		"moreStyles": "More styles",
 		"noBackground": "No Background",
 		"noBackgroundImage": "No Background Image",
+		"numericDragHint": "Drag up or down, or click the arrows to adjust",
 		"objectFit": "Object fit",
 		"objectFitValues": {
 			"contain": "Contain",

@@ -4,11 +4,7 @@ import { NumericDragInput } from "./NumericDragInput"
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
 import { cn } from "@/utils/cn"
 import { EditorSelectContent } from "../../EditorFloating"
-import {
-	getMetricControlWidth,
-	getMetricInputWidth,
-	METRIC_CONTROL_MAX_WIDTH,
-} from "./metricControlWidth"
+import { getMetricControlWidth, METRIC_CONTROL_MAX_WIDTH } from "./metricControlWidth"
 
 const FONT_SIZES = ["12", "14", "16", "18", "20", "24", "28", "32", "36", "48", "64", "72"]
 
@@ -88,7 +84,7 @@ export function FontSizeSelector({
 			<span className="shrink-0 text-xs font-medium text-muted-foreground">
 				{t("stylePanel.fontSize")}
 			</span>
-			<div className="relative flex min-w-0 flex-1 items-center">
+			<div className="flex min-w-0 flex-1 items-center">
 				<NumericDragInput
 					data-testid="html-editor-font-size-input"
 					value={value}
@@ -97,8 +93,7 @@ export function FontSizeSelector({
 					onBlur={handleBlur}
 					onKeyDown={handleKeyDown}
 					disabled={disabled}
-					style={{ width: getMetricInputWidth(value) }}
-					className="h-full flex-none border-0 bg-transparent pl-0 pr-6 text-center text-xs shadow-none hover:bg-transparent focus-visible:ring-0 disabled:opacity-50"
+					className="h-full min-w-0 flex-1 border-0 bg-transparent px-0 text-center text-xs shadow-none hover:bg-transparent focus-visible:ring-0 disabled:opacity-50"
 					placeholder="16"
 					title={t("stylePanel.fontSize")}
 					min={1}
@@ -107,7 +102,7 @@ export function FontSizeSelector({
 				<Select value={value} onValueChange={handleSelectChange} disabled={disabled}>
 					<SelectTrigger
 						data-testid="html-editor-font-size-menu-button"
-						className="absolute right-0 h-full w-5 rounded-r-md border-0 bg-transparent p-0 shadow-none hover:bg-transparent disabled:opacity-50 [&>span]:hidden [&>svg]:h-3 [&>svg]:w-3"
+						className="h-full w-5 shrink-0 rounded-r-md border-0 bg-transparent p-0 shadow-none hover:bg-transparent disabled:opacity-50 [&>span]:hidden [&>svg]:h-3 [&>svg]:w-3"
 					>
 						<SelectValue />
 					</SelectTrigger>

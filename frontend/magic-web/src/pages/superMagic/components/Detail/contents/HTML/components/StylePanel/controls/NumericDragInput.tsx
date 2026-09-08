@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { ChevronDown, ChevronUp } from "lucide-react"
 import { Input } from "@/components/shadcn-ui/input"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { cn } from "@/utils/cn"
+import { HTML_EDITOR_Z_INDEX } from "../../../constants/z-index"
+import { claimNumericDragHint, markNumericDragHintSeen } from "./numericDragHint"
 
 interface NumericDragInputProps extends Omit<
 	React.ComponentProps<typeof Input>,
@@ -15,6 +20,8 @@ interface NumericDragInputProps extends Omit<
 	precision?: number
 	dragSensitivity?: number
 	formatDisplayValue?: (value: string | number) => string
+	/** Shown while focused; keywords can become an empty field. */
+	formatEditValue?: (value: string | number) => string
 	/** Used as the drag/nudge origin when the field shows a non-px unit. */
 	scrubStartValue?: number | null
 }
@@ -31,10 +38,9 @@ function formatValue(value: number, precision?: number): string {
 }
 
 /**
- * Numeric field with the interaction used by design tools: drag vertically
- * or use ArrowUp/ArrowDown to nudge the value. Mouse-wheel changes are
- * intentionally disabled so scrolling the surrounding panel never edits a
- * value accidentally.
+ * Numeric field with the interaction used by design tools: drag vertically,
+ * click the stepper, or use ArrowUp/ArrowDown to nudge the value. Mouse-wheel
+ * changes are disabled so scrolling the panel never edits a value accidentally.
  */
 export function NumericDragInput({
 	value,
@@ -46,6 +52,7 @@ export function NumericDragInput({
 	precision,
 	dragSensitivity = 4,
 	formatDisplayValue,
+	formatEditValue,
 	scrubStartValue,
 	className,
 	onFocus,
@@ -57,6 +64,7 @@ export function NumericDragInput({
 	onKeyDown,
 	...props
 }: NumericDragInputProps) {
+	const { t } = useTranslation("super")
 	const dragRef = useRef<{
 		startY: number
 		startValue: number
@@ -66,7 +74,14 @@ export function NumericDragInput({
 	} | null>(null)
 	const [isDragging, setIsDragging] = useState(false)
 	const [isFocused, setIsFocused] = useState(false)
-	const inputValue = !isFocused && formatDisplayValue ? formatDisplayValue(value) : value
+	const [showHint, setShowHint] = useState(false)
+	const inputValue = isFocused
+		? formatEditValue
+			? formatEditValue(value)
+			: value
+		: formatDisplayValue
+			? formatDisplayValue(value)
+			: value
 
 	const getNumber = useCallback(() => {
 		if (
@@ -79,6 +94,17 @@ export function NumericDragInput({
 		const parsed = typeof value === "number" ? value : Number.parseFloat(value)
 		return Number.isFinite(parsed) ? parsed : null
 	}, [scrubStartValue, value])
+	// Keywords like "normal" have no numeric origin to scrub from.
+	const currentValue = getNumber()
+	const canDrag = currentValue !== null
+	const isIncrementDisabled =
+		Boolean(props.disabled) ||
+		currentValue === null ||
+		(max !== undefined && currentValue >= max)
+	const isDecrementDisabled =
+		Boolean(props.disabled) ||
+		currentValue === null ||
+		(min !== undefined && currentValue <= min)
 
 	const updateValue = useCallback(
 		(nextValue: number) => {
@@ -105,6 +131,17 @@ export function NumericDragInput({
 		},
 		[commit, getNumber, step],
 	)
+
+	const dismissHint = useCallback(() => {
+		setShowHint(false)
+		markNumericDragHintSeen()
+	}, [])
+
+	const revealHint = useCallback(() => {
+		if (!claimNumericDragHint()) return
+		setShowHint(true)
+		markNumericDragHintSeen()
+	}, [])
 
 	useEffect(() => {
 		if (!isDragging) return
@@ -146,55 +183,123 @@ export function NumericDragInput({
 		}
 	}, [dragSensitivity, isDragging, onCommit, step, updateValue])
 
+	function handleStepperPointerDown(event: React.PointerEvent<HTMLButtonElement>) {
+		event.preventDefault()
+		event.stopPropagation()
+	}
+
+	const stepper = (
+		<div
+			data-testid="numeric-drag-stepper"
+			className="flex w-3.5 shrink-0 flex-col self-stretch border-r border-border/60"
+			onMouseEnter={revealHint}
+		>
+			<button
+				type="button"
+				tabIndex={-1}
+				disabled={isIncrementDisabled}
+				aria-label={t("stylePanel.increaseValue")}
+				data-testid="numeric-drag-increment-button"
+				className="flex flex-1 items-center justify-center text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:pointer-events-none disabled:opacity-30"
+				onPointerDown={handleStepperPointerDown}
+				onClick={() => {
+					dismissHint()
+					nudge(1)
+				}}
+			>
+				<ChevronUp className="h-2.5 w-2.5" />
+			</button>
+			<button
+				type="button"
+				tabIndex={-1}
+				disabled={isDecrementDisabled}
+				aria-label={t("stylePanel.decreaseValue")}
+				data-testid="numeric-drag-decrement-button"
+				className="flex flex-1 items-center justify-center text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:pointer-events-none disabled:opacity-30"
+				onPointerDown={handleStepperPointerDown}
+				onClick={() => {
+					dismissHint()
+					nudge(-1)
+				}}
+			>
+				<ChevronDown className="h-2.5 w-2.5" />
+			</button>
+		</div>
+	)
+
 	return (
-		<Input
-			type="text"
-			value={inputValue}
-			inputMode="decimal"
-			{...props}
-			className={cn(
-				"cursor-ns-resize touch-none select-none",
-				isDragging && "cursor-ns-resize bg-primary/10 text-primary",
-				className,
-			)}
-			onPointerDown={(event) => {
-				if (event.button === 0 && !props.disabled) {
-					const current = getNumber()
-					if (current !== null) {
-						dragRef.current = {
-							startY: event.clientY,
-							startValue: current,
-							target: event.currentTarget,
-							pointerId: event.pointerId ?? null,
-							pendingValue: null,
+		<div
+			className="flex w-full min-w-0 items-stretch"
+			data-testid="numeric-drag-input"
+			onMouseEnter={revealHint}
+			onMouseLeave={dismissHint}
+		>
+			<Input
+				type="text"
+				value={inputValue}
+				inputMode="decimal"
+				{...props}
+				className={cn(
+					canDrag && "cursor-ns-resize touch-none select-none",
+					isDragging && "cursor-ns-resize bg-primary/10 text-primary",
+					"min-w-0 flex-1",
+					className,
+				)}
+				data-can-drag={canDrag ? "true" : undefined}
+				onPointerDown={(event) => {
+					if (event.button === 0 && !props.disabled) {
+						const current = getNumber()
+						if (current !== null) {
+							dragRef.current = {
+								startY: event.clientY,
+								startValue: current,
+								target: event.currentTarget,
+								pointerId: event.pointerId ?? null,
+								pendingValue: null,
+							}
+							event.currentTarget.setPointerCapture?.(event.pointerId)
+							setIsDragging(true)
+							dismissHint()
 						}
-						event.currentTarget.setPointerCapture?.(event.pointerId)
-						setIsDragging(true)
 					}
-				}
-				onPointerDown?.(event)
-			}}
-			onPointerMove={onPointerMove}
-			onPointerUp={onPointerUp}
-			onWheel={onWheel}
-			onFocus={(event) => {
-				setIsFocused(true)
-				onFocus?.(event)
-			}}
-			onBlur={(event) => {
-				setIsFocused(false)
-				onBlur?.(event)
-			}}
-			onKeyDown={(event) => {
-				if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-					event.preventDefault()
-					nudge(event.key === "ArrowUp" ? 1 : -1)
-				}
-				onKeyDown?.(event)
-			}}
-			onChange={(event) => onChange(event.target.value)}
-			aria-description="Drag vertically or use ArrowUp and ArrowDown to adjust"
-			data-dragging={isDragging ? "true" : undefined}
-		/>
+					onPointerDown?.(event)
+				}}
+				onPointerMove={onPointerMove}
+				onPointerUp={onPointerUp}
+				onWheel={onWheel}
+				onFocus={(event) => {
+					setIsFocused(true)
+					onFocus?.(event)
+				}}
+				onBlur={(event) => {
+					setIsFocused(false)
+					onBlur?.(event)
+				}}
+				onKeyDown={(event) => {
+					if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+						event.preventDefault()
+						nudge(event.key === "ArrowUp" ? 1 : -1)
+					}
+					onKeyDown?.(event)
+				}}
+				onChange={(event) => onChange(event.target.value)}
+				aria-description={t("stylePanel.numericDragHint")}
+				data-dragging={isDragging ? "true" : undefined}
+			/>
+			<Tooltip open={showHint} delayDuration={0}>
+				<TooltipTrigger asChild>{stepper}</TooltipTrigger>
+				{showHint ? (
+					<TooltipContent
+						side="top"
+						sideOffset={6}
+						className="max-w-48 px-2 py-1 text-[11px] leading-snug"
+						zIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}
+						data-testid="numeric-drag-hint"
+					>
+						{t("stylePanel.numericDragHint")}
+					</TooltipContent>
+				) : null}
+			</Tooltip>
+		</div>
 	)
 }

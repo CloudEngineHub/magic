@@ -1,7 +1,12 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import { useState } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { NumericDragInput } from "../NumericDragInput"
+import { resetNumericDragHintState } from "../numericDragHint"
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({ t: (key: string) => key }),
+}))
 
 function ControlledNumericInput({
 	initialValue,
@@ -17,6 +22,7 @@ function ControlledNumericInput({
 	precision?: number
 	dragSensitivity?: number
 	formatDisplayValue?: (value: string | number) => string
+	formatEditValue?: (value: string | number) => string
 	scrubStartValue?: number | null
 	onPointerDown?: React.PointerEventHandler<HTMLInputElement>
 }) {
@@ -51,6 +57,10 @@ function firePointerEvent(
 }
 
 describe("NumericDragInput", () => {
+	afterEach(() => {
+		resetNumericDragHintState()
+	})
+
 	it("formats the display value outside editing", () => {
 		render(
 			<ControlledNumericInput
@@ -67,6 +77,25 @@ describe("NumericDragInput", () => {
 		expect(input).toHaveValue("1.5")
 		fireEvent.blur(input)
 		expect(input).toHaveValue("1.5")
+	})
+
+	it("uses the edit formatter while focused", () => {
+		render(
+			<ControlledNumericInput
+				initialValue="normal"
+				formatDisplayValue={(value) => (value === "normal" ? "Default" : String(value))}
+				formatEditValue={(value) => (value === "normal" ? "" : String(value))}
+			/>,
+		)
+		const input = screen.getByRole("textbox", { name: "numeric value" })
+
+		expect(input).toHaveValue("Default")
+		fireEvent.focus(input)
+		expect(input).toHaveValue("")
+		fireEvent.change(input, { target: { value: "1.2" } })
+		expect(input).toHaveValue("1.2")
+		fireEvent.blur(input)
+		expect(input).toHaveValue("1.2")
 	})
 
 	it("adjusts the value by vertical drag", () => {
@@ -181,5 +210,89 @@ describe("NumericDragInput", () => {
 		fireEvent.change(input, { target: { value: "24" } })
 		expect(input).toHaveValue("24")
 		expect(onChange).toHaveBeenCalledWith("24")
+	})
+
+	it("hides the drag cursor until the value is numeric", () => {
+		render(
+			<ControlledNumericInput
+				initialValue="normal"
+				formatDisplayValue={(value) => (value === "normal" ? "Default" : String(value))}
+			/>,
+		)
+		const input = screen.getByRole("textbox", { name: "numeric value" })
+
+		expect(input).not.toHaveAttribute("data-can-drag", "true")
+		expect(input.className).not.toContain("cursor-ns-resize")
+
+		fireEvent.change(input, { target: { value: "1.5" } })
+
+		expect(input).toHaveAttribute("data-can-drag", "true")
+		expect(input.className).toContain("cursor-ns-resize")
+	})
+
+	it("increments and decrements with the stepper buttons", () => {
+		const onCommit = vi.fn()
+		render(
+			<ControlledNumericInput
+				initialValue="10"
+				step={2}
+				min={6}
+				max={14}
+				onCommit={onCommit}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("numeric-drag-increment-button"))
+		expect(screen.getByRole("textbox", { name: "numeric value" })).toHaveValue("12")
+		expect(onCommit).toHaveBeenCalledWith("12")
+
+		fireEvent.click(screen.getByTestId("numeric-drag-decrement-button"))
+		expect(screen.getByRole("textbox", { name: "numeric value" })).toHaveValue("10")
+		expect(onCommit).toHaveBeenCalledWith("10")
+	})
+
+	it("disables the stepper that would exceed min or max", () => {
+		render(<ControlledNumericInput initialValue="12" step={2} min={6} max={12} />)
+
+		expect(screen.getByTestId("numeric-drag-increment-button")).toBeDisabled()
+		expect(screen.getByTestId("numeric-drag-decrement-button")).not.toBeDisabled()
+	})
+
+	it("disables both steppers when the value cannot be adjusted", () => {
+		render(<ControlledNumericInput initialValue="" />)
+
+		expect(screen.getByTestId("numeric-drag-increment-button")).toBeDisabled()
+		expect(screen.getByTestId("numeric-drag-decrement-button")).toBeDisabled()
+	})
+
+	it("shows the drag hint once on the first stepper hover", () => {
+		const { unmount } = render(<ControlledNumericInput initialValue="10" />)
+
+		expect(screen.queryByTestId("numeric-drag-hint")).not.toBeInTheDocument()
+		fireEvent.mouseEnter(screen.getByTestId("numeric-drag-stepper"))
+		expect(screen.getByTestId("numeric-drag-hint")).toHaveTextContent(
+			"stylePanel.numericDragHint",
+		)
+		unmount()
+
+		render(<ControlledNumericInput initialValue="8" />)
+		fireEvent.mouseEnter(screen.getByTestId("numeric-drag-stepper"))
+		expect(screen.queryByTestId("numeric-drag-hint")).not.toBeInTheDocument()
+	})
+
+	it("shows the drag hint on only one input at a time", () => {
+		render(
+			<>
+				<ControlledNumericInput initialValue="10" />
+				<ControlledNumericInput initialValue="20" />
+			</>,
+		)
+		const steppers = screen.getAllByTestId("numeric-drag-stepper")
+
+		fireEvent.mouseEnter(steppers[0])
+		expect(screen.getAllByTestId("numeric-drag-hint")).toHaveLength(1)
+
+		fireEvent.mouseEnter(steppers[1])
+		expect(screen.getAllByTestId("numeric-drag-hint")).toHaveLength(1)
 	})
 })
