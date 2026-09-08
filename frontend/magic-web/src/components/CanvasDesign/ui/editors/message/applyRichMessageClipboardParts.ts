@@ -72,8 +72,21 @@ type PlannedInsert =
 	| { type: "text"; text: string }
 	| { type: "frame-placeholder"; text: string }
 	| { type: "mention"; item: ReferenceResourcePanelItem }
-	| { type: "upload"; file: File }
-	| { type: "resolving"; occurrenceKey: string; fileName: string; fileSize?: number }
+	| { type: "upload"; file: File; pendingKey: string }
+	| {
+			type: "resolving"
+			occurrenceKey: string
+			fileName: string
+			fileSize?: number
+			pendingKey: string
+	  }
+
+type PendingPlanEntry = {
+	pendingKey: string
+	file: File
+	kind: "upload" | "resolving"
+	occurrenceKey?: string
+}
 
 type PendingOccurrence =
 	| { destination: "prompt"; handle: CanvasUploadMentionHandle }
@@ -82,6 +95,29 @@ type PendingOccurrence =
 
 const WHITESPACE_END_RE = /\s$/u
 const WHITESPACE_START_RE = /^\s/u
+
+function buildPromptPendingPlan(planned: PlannedInsert[]): PendingPlanEntry[] {
+	const pendingPlan: PendingPlanEntry[] = []
+	for (const entry of planned) {
+		if (entry.type === "upload") {
+			pendingPlan.push({
+				pendingKey: entry.pendingKey,
+				file: entry.file,
+				kind: "upload",
+			})
+			continue
+		}
+		if (entry.type === "resolving") {
+			pendingPlan.push({
+				pendingKey: entry.pendingKey,
+				file: new File([], entry.fileName, { type: "application/octet-stream" }),
+				kind: "resolving",
+				occurrenceKey: entry.occurrenceKey,
+			})
+		}
+	}
+	return pendingPlan
+}
 
 function padBracketPlaceholderText(
 	placeholder: string,
@@ -253,7 +289,11 @@ export async function applyRichMessageClipboardParts(
 					frameUploadFiles.push(asset.file)
 				}
 			} else {
-				planned.push({ type: "upload", file: asset.file })
+				planned.push({
+					type: "upload",
+					file: asset.file,
+					pendingKey: `upload:${assetIndex}`,
+				})
 			}
 			assetIndex += 1
 			continue
@@ -273,30 +313,22 @@ export async function applyRichMessageClipboardParts(
 				type: "resolving",
 				occurrenceKey: part.occurrenceKey,
 				fileName: asset.fileName,
+				pendingKey: part.occurrenceKey,
 			})
 		}
 		assetIndex += 1
 	}
 
-	const promptUploadFiles = planned
-		.filter(
-			(entry): entry is Extract<PlannedInsert, { type: "upload" }> => entry.type === "upload",
-		)
-		.map((entry) => entry.file)
-	const resolvingEntries = planned.filter(
-		(entry): entry is Extract<PlannedInsert, { type: "resolving" }> =>
-			entry.type === "resolving",
-	)
-
-	const syntheticFilesForResolving = resolvingEntries.map(
-		(entry) => new File([], entry.fileName, { type: "application/octet-stream" }),
-	)
-	const filesNeedingPending = [...promptUploadFiles, ...syntheticFilesForResolving]
+	const pendingPlan = buildPromptPendingPlan(planned)
 
 	let handles: CanvasUploadMentionHandle[] = []
-	let pendingItems: ReturnType<CanvasUploadMentionController["allocateBatch"]>["pendingItems"] =
-		[]
-	if (filesNeedingPending.length > 0) {
+	const pendingItemByKey = new Map<
+		string,
+		ReturnType<CanvasUploadMentionController["allocateBatch"]>["pendingItems"][number]
+	>()
+	const handleByKey = new Map<string, CanvasUploadMentionHandle>()
+
+	if (pendingPlan.length > 0) {
 		if (!controller) {
 			for (let i = 0; i < planned.length; i += 1) {
 				const entry = planned[i]
@@ -307,12 +339,14 @@ export async function applyRichMessageClipboardParts(
 				}
 			}
 		} else {
-			const allocated = controller.allocateBatch(filesNeedingPending)
+			const allocated = controller.allocateBatch(pendingPlan.map((entry) => entry.file))
 			handles = allocated.handles
-			pendingItems = allocated.pendingItems
-			resolvingEntries.forEach((entry, index) => {
-				const handle = handles[promptUploadFiles.length + index]
-				if (handle) {
+			pendingPlan.forEach((entry, index) => {
+				const pendingItem = allocated.pendingItems[index]
+				const handle = allocated.handles[index]
+				if (pendingItem) pendingItemByKey.set(entry.pendingKey, pendingItem)
+				if (handle) handleByKey.set(entry.pendingKey, handle)
+				if (entry.kind === "resolving" && entry.occurrenceKey && handle) {
 					pendingByOccurrenceKey.set(entry.occurrenceKey, {
 						destination: "prompt",
 						handle,
@@ -322,7 +356,6 @@ export async function applyRichMessageClipboardParts(
 		}
 	}
 
-	let pendingCursor = 0
 	const insertParts: MessageEditorClipboardInsertPart[] = []
 	const documentBoundaries = resolveDocumentInsertionBoundaries(editor, selection)
 	for (let index = 0; index < planned.length; index += 1) {
@@ -352,8 +385,7 @@ export async function applyRichMessageClipboardParts(
 			insertParts.push({ type: "mention", item: entry.item })
 			continue
 		}
-		const pendingItem = pendingItems[pendingCursor]
-		pendingCursor += 1
+		const pendingItem = pendingItemByKey.get(entry.pendingKey)
 		if (pendingItem) {
 			insertParts.push({ type: "pending", item: pendingItem })
 		} else if (entry.type === "upload") {
@@ -401,15 +433,20 @@ export async function applyRichMessageClipboardParts(
 		)
 	}
 
-	if (promptUploadFiles.length > 0 && controller) {
-		const uploadHandles = handles.slice(0, promptUploadFiles.length)
+	const uploadPlan = pendingPlan.filter((entry) => entry.kind === "upload")
+	if (uploadPlan.length > 0 && controller) {
 		uploadTasks.push(
-			uploadFiles(promptUploadFiles, {
-				ignoreSelectedReferenceSlot: true,
-				suppressPromptMention: true,
-				pendingMentionHandles: uploadHandles,
-				isCurrent: isSessionCurrent,
-			}),
+			uploadFiles(
+				uploadPlan.map((entry) => entry.file),
+				{
+					ignoreSelectedReferenceSlot: true,
+					suppressPromptMention: true,
+					pendingMentionHandles: uploadPlan.map((entry) =>
+						handleByKey.get(entry.pendingKey),
+					),
+					isCurrent: isSessionCurrent,
+				},
+			),
 		)
 	}
 
