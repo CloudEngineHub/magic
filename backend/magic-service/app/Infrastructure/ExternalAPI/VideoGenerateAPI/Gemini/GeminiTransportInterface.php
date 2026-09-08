@@ -15,6 +15,4 @@ interface GeminiTransportInterface
 
     public function getInteraction(QueueExecutorConfig $config, string $interactionId, array $logContext = []): array;
 
-    /** @return array{bytes_base64_encoded: string, mime_type: string} */
-    public function downloadMedia(QueueExecutorConfig $config, string $uri, array $logContext = []): array;
 }

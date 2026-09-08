@@ -14,11 +14,8 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\Util\File\TemporaryFileManager;
 use App\Infrastructure\Util\Http\GuzzleClientFactory;
 use App\Infrastructure\Util\Log\PayloadLogSanitizer;
-use App\Infrastructure\Util\SSRF\SSRFUtil;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Psr7\Uri;
-use GuzzleHttp\Psr7\UriResolver;
 use Hyperf\Codec\Json;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Http\Message\ResponseInterface;
@@ -27,8 +24,6 @@ use Throwable;
 readonly class GeminiVideoClient
 {
     use HasLogger;
-
-    private const int REQUEST_TIMEOUT_SECONDS = 60;
 
     private const int MEDIA_MAX_BYTES = 104857600;
 
@@ -50,42 +45,10 @@ readonly class GeminiVideoClient
         return $this->request('get', $baseUrl, $apiKey, $path, null, $logContext, $proxyUrl);
     }
 
-    /** @return array{bytes_base64_encoded: string, mime_type: string} */
-    public function downloadMedia(string $baseUrl, string $apiKey, string $uri, array $logContext = [], string $proxyUrl = ''): array
-    {
-        $response = $this->requestMedia($baseUrl, $apiKey, $uri, $proxyUrl);
-        $body = $response->getBody();
-        $chunks = [];
-        $downloadedBytes = 0;
-        while (! $body->eof()) {
-            $chunk = $body->read(8192);
-            if ($chunk === '') {
-                continue;
-            }
-            $downloadedBytes += strlen($chunk);
-            if ($downloadedBytes > self::MEDIA_MAX_BYTES) {
-                throw ProviderVideoException::retriable('gemini video media download failed: response exceeds max size');
-            }
-            $chunks[] = $chunk;
-        }
-        $content = implode('', $chunks);
-        if ($content === '') {
-            throw ProviderVideoException::retriable('gemini video media download failed: empty response body');
-        }
-
-        $mimeType = trim((string) explode(';', $response->getHeaderLine('Content-Type'), 2)[0]);
-        if ($mimeType === '' || ! str_starts_with(strtolower($mimeType), 'video/')) {
-            $mimeType = 'video/mp4';
-        }
-
-        return ['bytes_base64_encoded' => base64_encode($content), 'mime_type' => $mimeType];
-    }
-
     public function downloadMediaToLocalFile(
         string $baseUrl,
         string $apiKey,
         string $uri,
-        array $logContext = [],
         string $proxyUrl = '',
     ): string {
         $targetPath = TemporaryFileManager::createTempFile('gemini-video-');
@@ -128,40 +91,22 @@ readonly class GeminiVideoClient
     {
         $url = $this->normalizeMediaUrl($baseUrl, $uri);
         try {
-            $client = $this->createClient($proxyUrl);
-            $safeUrl = $this->getSafeMediaUrl($url, $baseUrl);
-            $apiKeyAllowed = $this->sameOrigin($baseUrl, $safeUrl);
-            for ($redirect = 0; $redirect <= 3; ++$redirect) {
-                $headers = ['Accept' => '*/*'];
-                if ($apiKeyAllowed) {
-                    $headers['x-goog-api-key'] = $apiKey;
-                }
-                $response = $client->get($safeUrl, [
-                    'headers' => $headers,
-                    'allow_redirects' => false,
-                    'http_errors' => false,
-                ]);
-                $status = $response->getStatusCode();
-                if ($status >= 400) {
-                    throw ProviderVideoException::retriable('gemini video media download failed', null, $status);
-                }
-                if ($status < 300) {
-                    return $response;
-                }
-                $location = trim($response->getHeaderLine('Location'));
-                if ($location === '') {
-                    throw ProviderVideoException::retriable('gemini video media download failed: redirect location missing');
-                }
-                if ($redirect === 3) {
-                    throw ProviderVideoException::retriable('gemini video media download failed: redirect limit exceeded');
-                }
-                $redirectUrl = (string) UriResolver::resolve(new Uri($safeUrl), new Uri($location));
-                $nextSafeUrl = $this->getSafeMediaUrl($redirectUrl, $baseUrl);
-                if (! $this->sameOrigin($safeUrl, $nextSafeUrl)) {
-                    $apiKeyAllowed = false;
-                }
-                $safeUrl = $nextSafeUrl;
+            $response = $this->createClient($proxyUrl)->get($url, [
+                'headers' => [
+                    'Accept' => '*/*',
+                    'x-goog-api-key' => $apiKey,
+                ],
+                'http_errors' => false,
+            ]);
+            if ($response->getStatusCode() >= 400) {
+                throw ProviderVideoException::retriable(
+                    'gemini video media download failed',
+                    null,
+                    $response->getStatusCode(),
+                );
             }
+
+            return $response;
         } catch (RequestException $exception) {
             throw ProviderVideoException::retriable('gemini video media download failed', $exception, $exception->getResponse()?->getStatusCode());
         } catch (ProviderVideoException $exception) {
@@ -171,41 +116,6 @@ readonly class GeminiVideoClient
         }
 
         throw ProviderVideoException::retriable('gemini video media download failed');
-    }
-
-    private function sameOrigin(string $first, string $second): bool
-    {
-        $firstParts = parse_url($first);
-        $secondParts = parse_url($second);
-        if (! is_array($firstParts) || ! is_array($secondParts)) {
-            return false;
-        }
-        $firstScheme = strtolower((string) ($firstParts['scheme'] ?? ''));
-        $secondScheme = strtolower((string) ($secondParts['scheme'] ?? ''));
-        $firstHost = strtolower((string) ($firstParts['host'] ?? ''));
-        $secondHost = strtolower((string) ($secondParts['host'] ?? ''));
-        $firstPort = (int) ($firstParts['port'] ?? ($firstScheme === 'https' ? 443 : 80));
-        $secondPort = (int) ($secondParts['port'] ?? ($secondScheme === 'https' ? 443 : 80));
-
-        return $firstScheme === $secondScheme && $firstHost === $secondHost && $firstPort === $secondPort;
-    }
-
-    private function getSafeMediaUrl(string $url, string $geminiBaseUrl): string
-    {
-        $whiteList = [];
-        if ($this->sameOrigin($geminiBaseUrl, $url)) {
-            $host = parse_url($geminiBaseUrl, PHP_URL_HOST);
-            if (is_string($host) && $host !== '') {
-                $whiteList[] = $host;
-            }
-        }
-
-        return SSRFUtil::getSafeUrl(
-            $url,
-            whiteList: $whiteList,
-            replaceIp: false,
-            allowRedirect: true,
-        );
     }
 
     private function request(

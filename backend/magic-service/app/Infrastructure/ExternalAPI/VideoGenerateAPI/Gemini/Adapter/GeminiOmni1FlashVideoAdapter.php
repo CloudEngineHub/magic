@@ -145,27 +145,6 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
             return $this->failedResult($detail, $providerTaskId, VideoGenerateErrorCode::MISSING_VIDEO_DATA);
         }
         $videoUrl = $videoMedia['uri'] ?? null;
-        if ($status === 'succeeded' && $videoMedia !== null && $videoMedia['kind'] === 'uri') {
-            $downloaded = $this->transport->downloadMedia($config, $videoMedia['uri'], [
-                'operation_id' => $operation->getId(),
-                'provider_task_id' => $providerTaskId,
-            ]);
-            $videoMedia = [
-                'kind' => 'bytes',
-                'bytes_base64_encoded' => trim((string) ($downloaded['bytes_base64_encoded'] ?? '')),
-                'mime_type' => trim((string) ($downloaded['mime_type'] ?? 'video/mp4')),
-                'uri' => $videoUrl,
-            ];
-            if ($videoMedia['bytes_base64_encoded'] === '') {
-                return $this->failedResult($detail, $providerTaskId, VideoGenerateErrorCode::MISSING_VIDEO_DATA);
-            }
-        }
-        if ($videoMedia !== null && $videoMedia['kind'] === 'bytes') {
-            $detail['response']['videos'] = [[
-                'bytesBase64Encoded' => $videoMedia['bytes_base64_encoded'],
-                'mimeType' => $videoMedia['mime_type'] !== '' ? $videoMedia['mime_type'] : 'video/mp4',
-            ]];
-        }
         $errorNode = is_array($detail['error'] ?? null) ? $detail['error'] : [];
         $providerCode = $errorNode['code'] ?? $detail['error_code'] ?? ($providerStatus === 'expired' ? 'TASK_TIMEOUT' : null);
         $errorCode = ProviderVideoErrorMapper::resolve(is_string($providerCode) || is_int($providerCode) ? $providerCode : null);

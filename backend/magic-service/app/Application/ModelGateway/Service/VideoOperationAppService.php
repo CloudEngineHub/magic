@@ -312,7 +312,6 @@ readonly class VideoOperationAppService
                 $executorConfig->getBaseUrl(),
                 $executorConfig->getApiKey(),
                 $url,
-                ['operation_id' => $operationId],
                 $executorConfig->getExtraString('proxy_url'),
             );
         }

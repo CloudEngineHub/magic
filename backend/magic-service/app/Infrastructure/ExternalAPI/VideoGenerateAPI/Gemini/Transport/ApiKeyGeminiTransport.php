@@ -40,14 +40,4 @@ readonly class ApiKeyGeminiTransport implements GeminiTransportInterface
         );
     }
 
-    public function downloadMedia(QueueExecutorConfig $config, string $uri, array $logContext = []): array
-    {
-        return $this->client->downloadMedia(
-            $config->getBaseUrl(),
-            $config->getApiKey(),
-            $uri,
-            $logContext,
-            $config->getExtraString('proxy_url'),
-        );
-    }
 }
