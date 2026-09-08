@@ -268,14 +268,12 @@ export function transformInspectorContent(doc: JSONContent): JSONContent {
 						attrs.screenshotMention = screenshotMention
 						newContent.pop()
 					}
-					const fileMention = getOnlyMention(newContent[newContent.length - 1])
+					const prev = newContent[newContent.length - 1]
+					const fileMention = getOnlyMention(prev)
 					if (fileMention && (hasFileMention || !inlineBefore)) {
 						attrs.fileMention = fileMention
 						newContent.pop()
-					} else if (
-						newContent[newContent.length - 1]?.type === "paragraph" &&
-						getFirstText(newContent[newContent.length - 1]) === titleText
-					) {
+					} else if (prev?.type === "paragraph" && getFirstText(prev) === titleText) {
 						newContent.pop()
 					}
 				}

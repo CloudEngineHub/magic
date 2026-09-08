@@ -62,8 +62,7 @@ export function useDragUpload({
 
 	const handleDragEnter = useCallback(
 		(e: React.DragEvent) => {
-			// Node drags are handled by the ProseMirror plugin. Letting the upload
-			// container consume them would incorrectly show the file-upload overlay.
+			// 节点拖拽由编辑器处理，不能触发文件上传遮罩。
 			if (isMagicNodeDrag(e)) return
 
 			e.preventDefault()

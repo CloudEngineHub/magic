@@ -23,10 +23,6 @@
         "zh_CN": "写入文件",
         "en_US": "Write file"
     },
-    "append_to_file": {
-        "zh_CN": "更新文件",
-        "en_US": "Append file"
-    },
     "edit_file": {
         "zh_CN": "编辑文件",
         "en_US": "Edit file"

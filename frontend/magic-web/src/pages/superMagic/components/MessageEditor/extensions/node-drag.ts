@@ -1,6 +1,7 @@
 import { Plugin, PluginKey, TextSelection } from "@/infrastructure/editors/tiptap/pm-state"
 import type { Node as ProseMirrorNode } from "prosemirror-model"
 import type { EditorView } from "prosemirror-view"
+import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { sanitizeCopiedInspectorDetailAttrs } from "./inspector-detail/copyAttrs"
 import { INSPECTOR_DETAIL_TYPE } from "./inspector-detail/const"
 
@@ -11,6 +12,11 @@ const MAGIC_NODE_DRAG_VERSION = 1
 const nodeDragPluginKey = new PluginKey("magicNodeDrag")
 const DROP_CURSOR_CLASS = "magic-node-dropcursor"
 const POINTER_DRAG_THRESHOLD = 4
+
+export interface MagicNodeDragOptions {
+	/** The receiving editor owns reference validation; editor moves keep their original attrs. */
+	prepareCopiedMention?: (attrs: Record<string, unknown>) => TiptapMentionAttributes | null
+}
 
 interface MagicNodeDragPayload {
 	version: number
@@ -99,6 +105,7 @@ export function resolveDroppedNodeAttrs(
 }
 
 const editorViews = new Map<string, EditorView>()
+const editorDragOptions = new WeakMap<EditorView, MagicNodeDragOptions>()
 const activeDragSources = new Map<string, MagicNodeDragSource>()
 let activeDragPreview: HTMLElement | null = null
 let activeNativeDragImage: HTMLElement | null = null
@@ -285,19 +292,38 @@ function createDragPayload(
 	}
 }
 
+function getEmptyDocumentStart(doc: ProseMirrorNode): number | null {
+	const firstChild = doc.firstChild
+	// Atom nodes and explicit line breaks are content, even without textContent.
+	if (doc.childCount !== 1 || !firstChild?.isTextblock || firstChild.content.size !== 0) {
+		return null
+	}
+	return TextSelection.atStart(doc).from
+}
+
+function getDropPosition(view: EditorView, clientX: number, clientY: number): number | null {
+	if (view.isDestroyed || !view.editable) return null
+	const rect = view.dom.getBoundingClientRect()
+	if (
+		clientX < rect.left ||
+		clientX > rect.right ||
+		clientY < rect.top ||
+		clientY > rect.bottom
+	) {
+		return null
+	}
+	// Wrapped placeholder lines do not introduce additional insertion positions.
+	return (
+		getEmptyDocumentStart(view.state.doc) ??
+		view.posAtCoords({ left: clientX, top: clientY })?.pos ??
+		null
+	)
+}
+
 function findDropTarget(clientX: number, clientY: number): MagicNodeDropTarget | null {
 	for (const view of editorViews.values()) {
-		const rect = view.dom.getBoundingClientRect()
-		if (
-			clientX < rect.left ||
-			clientX > rect.right ||
-			clientY < rect.top ||
-			clientY > rect.bottom
-		) {
-			continue
-		}
-		const coords = view.posAtCoords({ left: clientX, top: clientY })
-		if (coords) return { view, position: coords.pos }
+		const position = getDropPosition(view, clientX, clientY)
+		if (position !== null) return { view, position }
 	}
 	return null
 }
@@ -347,15 +373,63 @@ function resolveSourceNode(
 }
 
 function updateDropCursorAtPosition(dropCursor: HTMLElement, view: EditorView, position: number) {
-	const caret = view.coordsAtPos(position)
-	dropCursor.style.left = `${Math.min(caret.left, caret.right)}px`
-	dropCursor.style.top = `${caret.top - 2}px`
-	dropCursor.style.height = `${Math.max(24, caret.bottom - caret.top + 4)}px`
+	dropCursor.hidden = true
+	if (view.isDestroyed || !view.editable) return
+	const $position = view.state.doc.resolve(position)
+	const block = $position.parent.isTextblock ? view.nodeDOM($position.before()) : view.dom
+	if (!(block instanceof HTMLElement) || !block.offsetWidth || !block.offsetHeight) return
+
+	const rect = block.getBoundingClientRect()
+	if (rect.width <= 0 || rect.height <= 0) return
+	const style = window.getComputedStyle(block)
+	// The marker uses viewport coordinates, including any scale on the editor.
+	const scaleX = rect.width / block.offsetWidth
+	const scaleY = rect.height / block.offsetHeight
+	const fontSize = Number.parseFloat(style.fontSize)
+	const lineHeight = (Number.parseFloat(style.lineHeight) || fontSize) * scaleY
+	let left: number
+	let top: number
+	let height: number
+
+	if (getEmptyDocumentStart(view.state.doc) !== null) {
+		// A wrapped placeholder can displace the empty paragraph's BR rectangle.
+		// Anchor to the first content line, not that BR or the placeholder's height.
+		height = Math.min(fontSize * scaleY, lineHeight)
+		left =
+			style.direction === "rtl"
+				? rect.right -
+					(Number.parseFloat(style.borderRightWidth) +
+						Number.parseFloat(style.paddingRight)) *
+						scaleX
+				: rect.left +
+					(Number.parseFloat(style.borderLeftWidth) +
+						Number.parseFloat(style.paddingLeft)) *
+						scaleX
+		top =
+			rect.top +
+			(Number.parseFloat(style.borderTopWidth) + Number.parseFloat(style.paddingTop)) *
+				scaleY +
+			(lineHeight - height) / 2
+	} else {
+		const caret = view.coordsAtPos(position)
+		const caretHeight = caret.bottom - caret.top
+		height = Math.min(caretHeight, lineHeight)
+		left = Math.min(caret.left, caret.right)
+		top = caret.top + (caretHeight - height) / 2
+	}
+	if (height <= 0 || ![left, top, height].every(Number.isFinite)) return
+
+	// The marker is mounted on body, so use concrete colors instead of editor theme variables.
+	dropCursor.style.background = style.caretColor === "auto" ? style.color : style.caretColor
+	dropCursor.style.left = `${left}px`
+	dropCursor.style.top = `${top}px`
+	dropCursor.style.height = `${height}px`
 	dropCursor.hidden = false
 }
 
 function applyNodeDrop(target: MagicNodeDropTarget, payload: MagicNodeDragPayload) {
 	const { view, position } = target
+	if (view.isDestroyed || !view.editable) return false
 	const nodeType = view.state.schema.nodes[payload.node.type]
 	if (!nodeType) return false
 
@@ -371,13 +445,17 @@ function applyNodeDrop(target: MagicNodeDropTarget, payload: MagicNodeDragPayloa
 
 	const node = (() => {
 		try {
-			return nodeType.create(
-				resolveDroppedNodeAttrs(
-					payload.node.type,
-					payload.node.attrs,
-					!payload.sourceEditorId,
-				),
+			const attrs = resolveDroppedNodeAttrs(
+				payload.node.type,
+				payload.node.attrs,
+				!payload.sourceEditorId,
 			)
+			const prepareMention = editorDragOptions.get(view)?.prepareCopiedMention
+			if (payload.node.type === "mention" && !payload.sourceEditorId && prepareMention) {
+				const preparedAttrs = prepareMention(attrs)
+				return preparedAttrs ? nodeType.create(preparedAttrs) : null
+			}
+			return nodeType.create(attrs)
 		} catch {
 			return null
 		}
@@ -438,6 +516,10 @@ function installPointerDragListeners() {
 
 	const handlePointerDown = (event: Event) => {
 		const pointerEvent = event as PointerEvent
+		// A new gesture must not inherit click suppression from a cancelled drag.
+		suppressClickTarget = null
+		// Touch keeps its existing scrolling and long-press selection behavior.
+		if (pointerEvent.pointerType === "touch") return
 		if (pointerEvent.button !== 0 || pointerDragSession) return
 		const target = getPointerDragTarget(pointerEvent.target)
 		if (!target) return
@@ -800,6 +882,7 @@ function writeDragData(view: EditorView, editorId: string, event: DragEvent) {
 }
 
 function findDraggedNode(view: EditorView, target: EventTarget | null) {
+	if (view.isDestroyed || !view.editable) return null
 	if (!(target instanceof Element)) return null
 	const element = target.closest<HTMLElement>("[data-magic-editor-node]")
 	if (!element) return null
@@ -816,51 +899,36 @@ function findDraggedNode(view: EditorView, target: EventTarget | null) {
 	}
 }
 
-export function createMagicNodeDragPlugin() {
+export function createMagicNodeDragPlugin(options: MagicNodeDragOptions = {}) {
 	return new Plugin({
 		key: nodeDragPluginKey,
 		view(view) {
 			installPointerDragListeners()
 			const editorId = createEditorId()
 			const dropCursor = document.createElement("span")
-			const dropPointer = document.createElement("span")
 			dropCursor.className = DROP_CURSOR_CLASS
-			dropPointer.setAttribute("aria-hidden", "true")
 			dropCursor.setAttribute("aria-hidden", "true")
 			dropCursor.hidden = true
 			dropCursor.style.position = "fixed"
 			dropCursor.style.width = "1px"
 			dropCursor.style.borderRadius = "999px"
-			// The marker is mounted on body, so use concrete colors instead of editor theme variables.
-			dropCursor.style.background = "#111"
-			dropCursor.style.boxShadow =
-				"0 0 0 1px rgb(255 255 255 / 0.9), 0 1px 3px rgb(0 0 0 / 0.22)"
 			dropCursor.style.pointerEvents = "none"
 			dropCursor.style.zIndex = "2147483647"
-			dropPointer.style.position = "absolute"
-			dropPointer.style.left = "-3px"
-			dropPointer.style.top = "-3px"
-			dropPointer.style.width = "0"
-			dropPointer.style.height = "0"
-			dropPointer.style.borderLeft = "3px solid transparent"
-			dropPointer.style.borderRight = "3px solid transparent"
-			dropPointer.style.borderTop = "5px solid #111"
-			dropPointer.style.filter = "drop-shadow(0 0 1px rgb(255 255 255 / 0.9))"
-			dropCursor.appendChild(dropPointer)
 			document.body.appendChild(dropCursor)
 
 			const hideDropCursor = () => {
 				dropCursor.hidden = true
 			}
 			const updateDropCursor = (event: DragEvent) => {
+				if (view.isDestroyed || !view.editable) return false
 				if (!event.dataTransfer?.types.includes(MAGIC_NODE_DRAG_MIME)) return false
-				const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
-				if (!coords) {
+				const position = getDropPosition(view, event.clientX, event.clientY)
+				if (position === null) {
 					hideDropCursor()
 					return false
 				}
 
-				updateDropCursorAtPosition(dropCursor, view, coords.pos)
+				updateDropCursorAtPosition(dropCursor, view, position)
 				return true
 			}
 			const handleDragOver = (event: Event) => {
@@ -899,6 +967,7 @@ export function createMagicNodeDragPlugin() {
 			}
 			view.dom.addEventListener("dragstart", handleDragStart, true)
 			editorViews.set(editorId, view)
+			editorDragOptions.set(view, options)
 
 			return {
 				destroy() {
@@ -914,6 +983,7 @@ export function createMagicNodeDragPlugin() {
 					)
 					view.dom.removeEventListener("dragstart", handleDragStart, true)
 					editorViews.delete(editorId)
+					editorDragOptions.delete(view)
 					for (const [dragId, source] of activeDragSources) {
 						if (source.view === view) activeDragSources.delete(dragId)
 					}
@@ -931,21 +1001,26 @@ export function createMagicNodeDragPlugin() {
 					)
 					return false
 				},
-				dragover(_view, event) {
+				dragover(view, event) {
+					if (view.isDestroyed || !view.editable) return false
 					if (!event.dataTransfer?.types.includes(MAGIC_NODE_DRAG_MIME)) return false
 					event.preventDefault()
-					event.dataTransfer.dropEffect = "move"
+					// History sources only allow copying, so requesting a move rejects the drop.
+					event.dataTransfer.dropEffect =
+						event.dataTransfer.effectAllowed === "copy" ? "copy" : "move"
 					return true
 				},
 				drop(view, event) {
+					if (!event.dataTransfer?.types.includes(MAGIC_NODE_DRAG_MIME)) return false
+					// Rejected node copies must not fall through to native HTML/text insertion.
+					event.preventDefault()
+					if (view.isDestroyed || !view.editable) return true
 					const payload = readPayload(event)
-					if (!payload) return false
+					if (!payload) return true
 
-					const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
-					if (!coords) return false
-					const didDrop = applyNodeDrop({ view, position: coords.pos }, payload)
-					if (didDrop) event.preventDefault()
-					return didDrop
+					const position = getDropPosition(view, event.clientX, event.clientY)
+					if (position !== null) applyNodeDrop({ view, position }, payload)
+					return true
 				},
 			},
 		},

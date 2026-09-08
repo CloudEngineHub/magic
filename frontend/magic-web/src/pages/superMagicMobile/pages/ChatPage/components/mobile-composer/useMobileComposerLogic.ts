@@ -508,6 +508,13 @@ export default function useMobileComposerLogic({
 		isMountedRef,
 	})
 
+	const getWorkspaceFilesList = useMemoizedFn(
+		() => editorContext.projectFilesStore?.workspaceFilesList ?? [],
+	)
+	const getCurrentProjectId = useMemoizedFn(
+		() => selectedTopic?.project_id ?? selectedProject?.id ?? draftKey?.projectId,
+	)
+
 	const { tiptapEditor, domRef } = useMessageEditor({
 		value: store.editorStore.value,
 		onSend: handleSend,
@@ -533,6 +540,8 @@ export default function useMobileComposerLogic({
 		isAllowedMention: editorContext.isAllowedMention,
 		shouldSkipRemoveSync: () => shouldSkipMentionRemoveSyncRef.current,
 		shouldRestoreRemovedMention,
+		getWorkspaceFilesList,
+		getCurrentProjectId,
 	})
 
 	const updateContent = useMemoizedFn((content: JSONContent | undefined) => {

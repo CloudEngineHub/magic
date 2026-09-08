@@ -96,7 +96,6 @@ from app.tools.write_file import WriteFile
 from app.tools.manage_cron import ManageCron
 from app.tools.magic_calendar import ManageCalendar, CreateCalendarProject
 from app.tools.abstract_file_tool import AbstractFileTool
-from app.tools.append_to_file import AppendToFile
 from app.tools.document_parse import (
     BuildDocumentIndex,
     ConvertDocumentFormat,
@@ -275,7 +274,6 @@ __all__ = [
     # 工具类
     "AbstractFileTool",
     "AnalysisSlideWebpage",
-    "AppendToFile",
     "WebSearch",
     "FindAgentsTool",
     "CallSubagent",

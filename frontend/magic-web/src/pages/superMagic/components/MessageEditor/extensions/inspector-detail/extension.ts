@@ -21,6 +21,11 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 
 	addAttributes() {
 		return {
+			title: {
+				default: "",
+				parseHTML: (el) => el.getAttribute("data-title") ?? "",
+				renderHTML: (attrs) => ({ "data-title": attrs.title }),
+			},
 			selector: {
 				default: "",
 				parseHTML: (el) => el.getAttribute("data-selector") ?? "",
@@ -173,7 +178,7 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 	},
 
 	addProseMirrorPlugins() {
-		return [createMagicNodeDragPlugin()]
+		return [createMagicNodeDragPlugin(this.options)]
 	},
 
 	addCommands() {

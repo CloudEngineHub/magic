@@ -184,12 +184,39 @@ function InlineDefaultMention(props: InlineMentionProps) {
 	const filePath =
 		fileData?.relative_file_path || fileData?.file_path || fileData?.file_name || ""
 	const fileLabel = fileData?.file_name || displayName
+	// 历史消息可能没存 project_id；只补来源项目，不能用接收输入框的项目替代。
+	const projectData =
+		data.type === MentionItemType.PROJECT_FILE || data.type === MentionItemType.FOLDER
+			? (data.data as ProjectFileMentionData | DirectoryMentionData)
+			: null
+	const dragAttrs = projectData
+		? {
+				...data,
+				data: {
+					...projectData,
+					project_id:
+						projectData.project_id ||
+						projectData.source_project_id ||
+						projectFilesStore?.currentSelectedProject?.id,
+				},
+			}
+		: data
+	const dragSourceProps = {
+		draggable: false as const,
+		"data-magic-editor-node": true as const,
+		"data-magic-node-type": "mention",
+		"data-magic-node-attrs": JSON.stringify(dragAttrs),
+	}
 	const fileVisual = isFileMention ? (
 		shouldRenderIcon && fileData ? (
 			<span
-				className={cn("magic-mention", "!inline-flex items-center gap-1 !align-middle")}
+				className={cn(
+					"magic-mention select-none",
+					"!inline-flex items-center gap-1 !align-middle",
+				)}
 				data-type={data.type}
 				data-data={JSON.stringify(data.data)}
+				{...dragSourceProps}
 				onMouseDown={(event) => event.preventDefault()}
 				onClick={handleClick}
 			>
@@ -211,9 +238,10 @@ function InlineDefaultMention(props: InlineMentionProps) {
 			</span>
 		) : (
 			<span
-				className="magic-mention !inline-flex max-w-full !overflow-visible !rounded-none !bg-transparent !p-0 !align-middle"
+				className="magic-mention !inline-flex max-w-full select-none !overflow-visible !rounded-none !bg-transparent !p-0 !align-middle"
 				data-type={data.type}
 				data-data={JSON.stringify(data.data)}
+				{...dragSourceProps}
 				onMouseDown={(event) => event.preventDefault()}
 			>
 				<FileReference
@@ -226,9 +254,10 @@ function InlineDefaultMention(props: InlineMentionProps) {
 		)
 	) : isDirectory ? (
 		<span
-			className="magic-mention !inline-flex items-center gap-1 !align-middle"
+			className="magic-mention !inline-flex select-none items-center gap-1 !align-middle"
 			data-type={data.type}
 			data-data={JSON.stringify(data.data)}
+			{...dragSourceProps}
 			onMouseDown={(event) => event.preventDefault()}
 			onClick={handleClick}
 		>
@@ -247,9 +276,10 @@ function InlineDefaultMention(props: InlineMentionProps) {
 		</span>
 	) : (
 		<span
-			className="magic-mention"
+			className="magic-mention select-none"
 			data-type={data.type}
 			data-data={JSON.stringify(data.data)}
+			{...dragSourceProps}
 			onMouseDown={(event) => event.preventDefault()}
 			onClick={handleClick}
 		>

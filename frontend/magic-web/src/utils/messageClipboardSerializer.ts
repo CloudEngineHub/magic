@@ -1,5 +1,5 @@
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
-import { DOMSerializer, type Node as ProseMirrorNode } from "prosemirror-model"
+import { DOMSerializer } from "prosemirror-model"
 import type { EditorView } from "prosemirror-view"
 import {
 	MentionItemType,
@@ -11,11 +11,18 @@ import {
 	getMentionDisplayName,
 	type TiptapMentionAttributes,
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import {
-	createCanonicalWorkspaceHref,
-	escapeHtmlText,
-	escapeMarkdownLinkLabel,
-} from "@/pages/superMagic/utils/filePathMention"
+	getClipboardHtml,
+	getClipboardPlainText,
+	resolveMentionForClipboard,
+} from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
+
+export {
+	getClipboardHtml,
+	getClipboardPlainText,
+	getMentionClipboardRepresentation,
+} from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 
 export const MESSAGE_CLIPBOARD_RICH_TEXT_MIME = "text/x-magic-message-rich-text"
 export const MESSAGE_CLIPBOARD_MENTIONS_MIME = "text/x-magic-message-mentions"
@@ -27,6 +34,7 @@ export interface MessageClipboardMentionItem {
 }
 
 export interface MessageClipboardMetadata {
+	sourceProjectId?: string
 	richText: string
 	mentions?: MessageClipboardMentionItem[]
 }
@@ -93,50 +101,10 @@ function getMentionFallbackText(attrs: unknown): string | null {
 		data?.file_name ||
 			data?.filename ||
 			data?.directory_name ||
-			(record ? getMentionDisplayName(record as TiptapMentionAttributes) : "") ||
+			(record ? getMentionDisplayName(record as unknown as TiptapMentionAttributes) : "") ||
 			"",
 	).trim()
 	return name ? `@${name}` : null
-}
-
-function getPortableMention(attrs: TiptapMentionAttributes): {
-	plainText: string
-	htmlContent: string
-} | null {
-	let path = ""
-	let label = ""
-
-	if (attrs.type === MentionItemType.FOLDER) {
-		const data = asRecord(attrs.data) as Partial<DirectoryMentionData> | null
-		path = String(data?.directory_path || "")
-		label = String(data?.directory_name || "").trim()
-	} else if (
-		attrs.type === MentionItemType.PROJECT_FILE ||
-		attrs.type === MentionItemType.UPLOAD_FILE
-	) {
-		const data = asRecord(attrs.data) as Partial<
-			ProjectFileMentionData & UploadFileMentionData
-		> | null
-		path = String(data?.relative_file_path || data?.file_path || "")
-		label = String(data?.file_name || "").trim()
-	} else {
-		return null
-	}
-
-	const href = createCanonicalWorkspaceHref(path)
-	if (!href || !label) return null
-	const markdownDestination = href.includes(" ") ? `<${href}>` : href
-
-	return {
-		plainText: `[${escapeMarkdownLinkLabel(label)}](${markdownDestination})`,
-		htmlContent: `<a href="${escapeHtmlText(href)}">${escapeHtmlText(label)}</a>`,
-	}
-}
-
-export function getMentionClipboardRepresentation(
-	attrs: TiptapMentionAttributes,
-): { plainText: string; htmlContent: string } | null {
-	return getPortableMention(attrs)
 }
 
 function normalizeRichTextNode(node: JSONContent): JSONContent | null {
@@ -172,100 +140,22 @@ function normalizeRichTextNode(node: JSONContent): JSONContent | null {
 	return normalized
 }
 
-function collectMentionAttrs(node: ProseMirrorNode, mentions: TiptapMentionAttributes[]): void {
-	if (node.type.name === "mention" && node.attrs) {
-		const attrs = normalizeMentionAttrs(node.attrs as TiptapMentionAttributes)
-		if (attrs) mentions.push(attrs)
-	} else if (node.type.name === INSPECTOR_DETAIL_TYPE && node.attrs?.fileMention) {
-		const attrs = normalizeMentionAttrs(node.attrs.fileMention as TiptapMentionAttributes)
-		if (attrs) mentions.push(attrs)
+function collectMentionAttrs(node: JSONContent, mentions: TiptapMentionAttributes[]): void {
+	if (node.type === "mention" && node.attrs) {
+		mentions.push(node.attrs as TiptapMentionAttributes)
+	} else if (node.type === INSPECTOR_DETAIL_TYPE && node.attrs) {
+		for (const key of ["fileMention", "screenshotMention"] as const) {
+			if (!node.attrs[key]) continue
+			const attrs = normalizeMentionAttrs(node.attrs[key] as TiptapMentionAttributes)
+			if (attrs) mentions.push(attrs)
+		}
 	}
-
-	node.forEach((child) => collectMentionAttrs(child, mentions))
-}
-
-/**
- * Internal Canvas ↔ SuperMagic paste is driven by structured mention attrs in metadata.
- * Portable markdown/HTML links are only an external-clipboard fallback and must not gate
- * whether magic clipboard payload is written.
- */
-function hasStructuredMention(mentions: TiptapMentionAttributes[]): boolean {
-	return mentions.some(
-		(attrs) =>
-			attrs.type === MentionItemType.PROJECT_FILE ||
-			attrs.type === MentionItemType.UPLOAD_FILE ||
-			attrs.type === MentionItemType.FOLDER,
-	)
-}
-
-export function getClipboardPlainText(content: JSONContent): string {
-	function serialize(node: JSONContent): string {
-		if (node.type === "text") return node.text || ""
-
-		if (node.type === "mention" && node.attrs) {
-			const attrs = node.attrs as TiptapMentionAttributes
-			if (attrs.pending === true || asRecord(attrs.data)?.pending === true) return ""
-			const portable = getPortableMention(attrs)
-			const displayName = getMentionDisplayName(attrs)
-			const suffix = attrs.type === MentionItemType.FOLDER ? "/" : ""
-			return ` ${portable?.plainText || `@${displayName}${suffix}`} `
-		}
-
-		if (node.type === "super-placeholder") {
-			const props = node.attrs?.props as Record<string, unknown> | undefined
-			return String(props?.value || props?.defaultValue || props?.placeholder || "")
-		}
-
-		if (node.type === INSPECTOR_DETAIL_TYPE) {
-			const attrs = node.attrs || {}
-			const lines: string[] = []
-			if (attrs.selector) lines.push(`selector: ${attrs.selector}`)
-			if (attrs.size) lines.push(`size: ${attrs.size}`)
-			if (attrs.textContent) lines.push(`textContent: "${attrs.textContent}"`)
-			return lines.length > 0 ? `${lines.join("\n")}\n` : ""
-		}
-
-		if (node.type === "hardBreak" || node.type === "hard_break") return "\n"
-
-		const childText = node.content?.map(serialize).join("") || ""
-		return node.type === "paragraph" ? `${childText}\n` : childText
-	}
-
-	return serialize(content).replace(/\n$/, "")
-}
-
-export function getClipboardHtml(htmlContent: string): string {
-	const container = document.createElement("div")
-	container.innerHTML = htmlContent
-
-	container.querySelectorAll<HTMLElement>("span.magic-mention").forEach((element) => {
-		try {
-			const data = JSON.parse(element.dataset.data || "{}") as Record<string, unknown>
-			if (data.pending === true) {
-				element.remove()
-				return
-			}
-			const attrs: TiptapMentionAttributes = {
-				type: element.dataset.type as TiptapMentionAttributes["type"],
-				data,
-			}
-			const portable = getPortableMention(attrs)
-			if (!portable) return
-
-			const replacement = document.createElement("span")
-			replacement.innerHTML = portable.htmlContent
-			const link = replacement.firstElementChild
-			if (!link) return
-			element.replaceWith(document.createTextNode(" "), link, document.createTextNode(" "))
-		} catch {
-			// Metadata remains authoritative for internal paste when DOM attrs are incomplete.
-		}
-	})
-
-	return container.innerHTML
+	node.content?.forEach((child) => collectMentionAttrs(child, mentions))
 }
 
 export interface SerializeMessageClipboardOptions {
+	workspaceFiles?: ReadonlyArray<AttachmentItem>
+	sourceProjectId?: string
 	enrichMentionAttrs?: (attrs: TiptapMentionAttributes) => TiptapMentionAttributes
 }
 
@@ -275,6 +165,8 @@ export function serializeMessageClipboard(
 ): MessageClipboardPayload | null {
 	const { state } = view
 	const enrichMentionAttrs = options?.enrichMentionAttrs
+	const workspaceFiles = options?.workspaceFiles ?? []
+	const sourceProjectId = options?.sourceProjectId
 	if (state.selection.empty) return null
 
 	const fragment = state.selection.content()
@@ -284,39 +176,47 @@ export function serializeMessageClipboard(
 	tempDiv.appendChild(dom)
 
 	const applyEnrichment = (attrs: TiptapMentionAttributes): TiptapMentionAttributes =>
-		enrichMentionAttrs ? enrichMentionAttrs(attrs) : attrs
+		resolveMentionForClipboard(
+			enrichMentionAttrs ? enrichMentionAttrs(attrs) : attrs,
+			workspaceFiles,
+			sourceProjectId,
+		)
 
 	const mentions: TiptapMentionAttributes[] = []
 	const richTextContent: JSONContent[] = []
 	fragment.content.forEach((node) => {
-		const normalized = normalizeRichTextNode(node.toJSON() as JSONContent)
-		if (!normalized) return
-		richTextContent.push(
-			enrichMentionAttrs ? enrichRichTextMentions(normalized, applyEnrichment) : normalized,
-		)
+		// 先用所属工作区补全历史引用，再校验；不能先把缺路径但可恢复的节点丢掉。
+		const enriched = enrichRichTextMentions(node.toJSON() as JSONContent, applyEnrichment)
+		const normalized = normalizeRichTextNode(enriched)
+		if (normalized) richTextContent.push(normalized)
 	})
 	const richTextJson: JSONContent = {
 		type: "doc",
 		content: richTextContent,
 	}
-	fragment.content.forEach((node) => collectMentionAttrs(node, mentions))
-	const enrichedMentions = mentions.map(applyEnrichment)
+	collectMentionAttrs(richTextJson, mentions)
 
 	// Require structured file/folder mention identity, not portable markdown hrefs.
 	// Absolute workspace paths, canvas-relative paths, and opaque asset refs can all
 	// round-trip through metadata even when external plain-text links are unavailable.
-	if (!hasStructuredMention(enrichedMentions)) return null
+	// 独立元素标签和非文件 Mention 也有结构语义，不能回退为浏览器纯文本。
+	const containsInspector = (node: JSONContent): boolean =>
+		node.type === INSPECTOR_DETAIL_TYPE || Boolean(node.content?.some(containsInspector))
+	if (mentions.length === 0 && !containsInspector(richTextJson)) return null
 
 	const metadata: MessageClipboardMetadata = {
 		richText: JSON.stringify(richTextJson),
-		mentions: enrichedMentions.map((attrs) => ({ attrs })),
+		sourceProjectId,
+		mentions: mentions.map((attrs) => ({ attrs })),
 	}
 	const metadataBase64 = btoa(encodeURIComponent(JSON.stringify(metadata)))
 
 	return {
-		plainText: getClipboardPlainText(richTextJson),
+		plainText: getClipboardPlainText(richTextJson, workspaceFiles, sourceProjectId),
 		htmlWithMetadata: `<div data-magic-clipboard="${metadataBase64}">${getClipboardHtml(
 			tempDiv.innerHTML,
+			workspaceFiles,
+			sourceProjectId,
 		)}</div>`,
 		metadata,
 	}
@@ -333,13 +233,16 @@ function enrichRichTextMentions(
 			attrs: enrichMentionAttrs(node.attrs as TiptapMentionAttributes),
 		}
 	}
-	if (node.type === INSPECTOR_DETAIL_TYPE && node.attrs?.fileMention) {
-		next = {
-			...next,
-			attrs: {
-				...next.attrs,
-				fileMention: enrichMentionAttrs(node.attrs.fileMention as TiptapMentionAttributes),
-			},
+	if (node.type === INSPECTOR_DETAIL_TYPE && node.attrs) {
+		for (const key of ["fileMention", "screenshotMention"] as const) {
+			if (!node.attrs[key]) continue
+			next = {
+				...next,
+				attrs: {
+					...next.attrs,
+					[key]: enrichMentionAttrs(node.attrs[key] as TiptapMentionAttributes),
+				},
+			}
 		}
 	}
 	if (next.content?.length) {

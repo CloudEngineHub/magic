@@ -14,16 +14,20 @@ interface CopyMessageOptions {
 	onContentChange?: (content: JSONContent) => void
 	dataService?: DataService | null
 	getWorkspaceFilesList?: () => AttachmentItem[]
+	getCurrentProjectId?: () => string | undefined
 }
 
 const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 	name: "copyMessage",
+	// Tiptap 会反转同优先级扩展；先恢复资源，再让通用文本插件处理剩余粘贴。
+	priority: 110,
 
 	addOptions() {
 		return {
 			onMentionsInsert: undefined,
 			dataService: null,
 			getWorkspaceFilesList: undefined,
+			getCurrentProjectId: undefined,
 		}
 	},
 
@@ -45,7 +49,10 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 								return false
 							}
 
-							const payload = serializeMessageClipboard(view)
+							const payload = serializeMessageClipboard(view, {
+								workspaceFiles: this.options.getWorkspaceFilesList(),
+								sourceProjectId: this.options.getCurrentProjectId?.(),
+							})
 							if (!payload) {
 								return false
 							}
@@ -64,6 +71,7 @@ const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 							onMentionsInsert: this.options.onMentionsInsert,
 							dataService: this.options.dataService ?? null,
 							getWorkspaceFilesList: this.options.getWorkspaceFilesList,
+							getCurrentProjectId: this.options.getCurrentProjectId,
 						})
 					},
 				},

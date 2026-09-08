@@ -34,6 +34,7 @@ import { CitationBadge } from "../../../Citations"
 import MarkdownCodeBlockToolbar from "./components/MarkdownCodeBlockToolbar"
 import { useCodeBlockWrapPreference } from "@/services/markdown/codeBlockWrapPreference"
 import { extractFilePathMentions } from "@/pages/superMagic/utils/filePathMention"
+import { copySelectedFileReferences } from "@/pages/superMagic/components/MessageList/utils/fileReferenceClipboard"
 
 const MARKDOWN_ALLOWED_URI_REGEXP =
 	/^(?:(?:https?|ftps?|mailto|tel|callto|sms|cid|xmpp|matrix|oa|oa-view|open-action|openaction):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i
@@ -430,7 +431,12 @@ function MarkdownComponent({
 	})
 
 	return (
-		<div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} data-testid="on-mouse-enter">
+		<div
+			onMouseEnter={onMouseEnter}
+			onMouseLeave={onMouseLeave}
+			onCopy={copySelectedFileReferences}
+			data-testid="on-mouse-enter"
+		>
 			<XMarkdown
 				className={cn(
 					"!dark:text-white !text-sidebar-foreground",

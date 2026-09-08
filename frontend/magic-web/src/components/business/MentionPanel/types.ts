@@ -173,6 +173,9 @@ export interface UploadFileMentionData {
 	upload_progress?: number // 上传进度 0-100
 	upload_status?: "init" | "uploading" | "done" | "error"
 	upload_error?: string
+	/** Local HTML screenshot identity; not an upload task. */
+	is_html_screenshot?: boolean
+	storage_id?: string
 	/** Internal marker for canvas clipboard attachments; never promote to project mention. */
 	is_canvas_clipboard?: boolean
 	/** IndexedDB screenshot. Region shots stage after confirm; save on send. */

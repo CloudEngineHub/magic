@@ -1,4 +1,12 @@
-import { extractWorkspaceFileReferences } from "@/pages/superMagic/utils/filePathMention"
+import {
+	extractWorkspaceFileReferences,
+	type WorkspaceFileReferenceMatch,
+} from "@/pages/superMagic/utils/filePathMention"
+import {
+	findAttachmentByPath,
+	findLegacyAttachmentByPath,
+} from "@/pages/superMagic/utils/markdownFileReference"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 /**
@@ -47,16 +55,18 @@ export function fileExtFromPath(filePath: string): string {
  *   - __byPath  标志位，区分普通附件与路径附件
  */
 export function buildFilePathAttachments(content: string): FilePathAttachment[] {
-	const paths = extractFilePathsFromContent(content)
-	return paths.map((filePath) => ({
-		filePath,
-		fileName: fileNameFromPath(filePath),
-		fileExt: fileExtFromPath(filePath),
+	return extractWorkspaceFileReferences(content).map((match) => ({
+		filePath: match.path,
+		fileName: fileNameFromPath(match.path),
+		fileExt: fileExtFromPath(match.path),
+		source: match.source,
 		__byPath: true as const,
 	}))
 }
 
 export interface FilePathAttachment {
+	/** 保留语法来源，Markdown 路径已解码，不能再按旧语法尝试解码。 */
+	source?: WorkspaceFileReferenceMatch["source"]
 	/** 工作区相对路径，例如 "新闻报道/分类一/xxx.md" */
 	filePath: string
 	/** 展示用文件名 */
@@ -65,6 +75,15 @@ export interface FilePathAttachment {
 	fileExt: string
 	/** 标志位，区分路径附件与普通附件 */
 	__byPath: true
+}
+
+export function findFilePathAttachment(
+	attachments: AttachmentItem[],
+	reference: FilePathAttachment,
+): AttachmentItem | undefined {
+	return reference.source === "legacy"
+		? findLegacyAttachmentByPath(attachments, reference.filePath)
+		: findAttachmentByPath(attachments, reference.filePath)
 }
 
 /**

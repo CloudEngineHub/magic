@@ -33,6 +33,7 @@ interface SuperPlaceholderSchemaAttrs extends Record<string, unknown> {
 }
 
 interface InspectorDetailSchemaAttrs extends Record<string, unknown> {
+	title?: string
 	selector?: string
 	tagName?: string
 	size?: string
@@ -42,6 +43,11 @@ interface InspectorDetailSchemaAttrs extends Record<string, unknown> {
 	fileMention?: TiptapMentionAttributes | null
 	screenshotMention?: TiptapMentionAttributes | null
 	captureId?: string | null
+	elementAttributes?: string
+	resource?: string
+	domContext?: string
+	elementHtml?: string
+	selectorMatchCount?: number
 }
 
 export default {
@@ -215,6 +221,7 @@ export default {
 			atom: true,
 			selectable: true,
 			attrs: {
+				title: { default: "" },
 				selector: { default: "" },
 				tagName: { default: "" },
 				size: { default: "" },
@@ -224,11 +231,17 @@ export default {
 				fileMention: { default: null },
 				screenshotMention: { default: null },
 				captureId: { default: null },
+				elementAttributes: { default: "{}" },
+				resource: { default: "" },
+				domContext: { default: "{}" },
+				elementHtml: { default: "" },
+				selectorMatchCount: { default: -1 },
 			},
 			parseDOM: [
 				{
 					tag: `[data-type="${INSPECTOR_DETAIL_TYPE}"]`,
 					getAttrs: (dom: HTMLElement) => ({
+						title: dom.getAttribute("data-title") || "",
 						selector: dom.getAttribute("data-selector") || "",
 						tagName: dom.getAttribute("data-tag-name") || "",
 						size: dom.getAttribute("data-size") || "",
@@ -243,6 +256,13 @@ export default {
 							dom.getAttribute("data-capture-id") ||
 							dom.getAttribute("data-target-id") ||
 							null,
+						elementAttributes: dom.getAttribute("data-element-attributes") || "{}",
+						resource: dom.getAttribute("data-resource") || "",
+						domContext: dom.getAttribute("data-dom-context") || "{}",
+						elementHtml: dom.getAttribute("data-element-html") || "",
+						selectorMatchCount: Number(
+							dom.getAttribute("data-selector-match-count") ?? -1,
+						),
 					}),
 				},
 			],
@@ -251,6 +271,7 @@ export default {
 					"span",
 					{
 						"data-type": INSPECTOR_DETAIL_TYPE,
+						"data-title": node.attrs.title,
 						"data-selector": node.attrs.selector,
 						"data-tag-name": node.attrs.tagName,
 						"data-size": node.attrs.size,
@@ -264,6 +285,11 @@ export default {
 							? JSON.stringify(node.attrs.screenshotMention)
 							: undefined,
 						"data-capture-id": node.attrs.captureId || undefined,
+						"data-element-attributes": node.attrs.elementAttributes,
+						"data-resource": node.attrs.resource,
+						"data-dom-context": node.attrs.domContext,
+						"data-element-html": node.attrs.elementHtml,
+						"data-selector-match-count": String(node.attrs.selectorMatchCount ?? -1),
 						class: "inspector-detail-node",
 					},
 					"[Element Inspector Detail]",
