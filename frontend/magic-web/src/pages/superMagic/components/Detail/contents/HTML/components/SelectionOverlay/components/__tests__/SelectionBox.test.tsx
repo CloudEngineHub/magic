@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { ROTATE_HANDLE_WRAPPER_TOP } from "../../utils/rotateHandleLayout"
 import { SelectionBox } from "../SelectionBox"
+import { SELECTION_CHROME, SELECTION_FRAME_SHADOW } from "../selectionChrome"
 
 const rect = { top: 40, left: 40, width: 160, height: 80 }
 
@@ -31,15 +32,16 @@ describe("SelectionBox", () => {
 		renderSelectionBox()
 
 		const box = screen.getByTestId("html-editor-selection-box")
-		expect(box.className).toContain("shadow-[0_0_0_1px_#fff,0_0_0_2px_rgb(0_0_0_/_0.65)]")
+		expect(box.style.boxShadow).toBe(SELECTION_FRAME_SHADOW)
+		expect(box.style.boxShadow).toContain(SELECTION_CHROME)
 		expect(box.className).not.toContain("outline-offset-1")
 		expect(box.className).not.toContain("border-2")
 		expect(box.className).not.toMatch(/(?:^|\s)border(?:\s|$)/)
 		const marks = screen.getAllByTestId("html-editor-selection-mark")
 		expect(marks.map((mark) => mark.getAttribute("data-mark-id"))).toEqual(["tr", "bl", "br"])
-		expect(marks[0].className).toContain("border-white")
+		expect(marks[0].className).toContain("border-[#808080]")
 		expect(marks[0].className).toContain("border-r-[2px]")
-		expect(marks[0].className).toContain("h-3")
+		expect(marks[0].className).toContain("h-2.5")
 	})
 
 	it("keeps the rotate stem above the selection edge", () => {

@@ -5,6 +5,7 @@ import { HTML_EDITOR_Z_INDEX } from "../../../constants/z-index"
 import { ControlHandles } from "./ControlHandles"
 import { SelectionMarks } from "./SelectionMarks"
 import { shouldShowActionHandles } from "../utils/size-detection"
+import { SELECTION_FRAME_SHADOW } from "./selectionChrome"
 
 interface SelectionBoxProps {
 	/** Overlay-local rect used for drawing absolute-positioned UI. */
@@ -60,14 +61,14 @@ export const SelectionBox = memo(function SelectionBox({
 
 	return (
 		<div
-			// White + dark rings stay visible on mixed page backgrounds.
-			className="group/selection pointer-events-none absolute shadow-[0_0_0_1px_#fff,0_0_0_2px_rgb(0_0_0_/_0.65)]"
+			className="group/selection pointer-events-none absolute"
 			data-testid="html-editor-selection-box"
 			style={{
 				top: `${transformedRect.top}px`,
 				left: `${transformedRect.left}px`,
 				width: `${transformedRect.width}px`,
 				height: `${transformedRect.height}px`,
+				boxShadow: SELECTION_FRAME_SHADOW,
 				opacity: isMultiSelect ? 0.7 : 1,
 				zIndex: HTML_EDITOR_Z_INDEX.OVERLAY.SELECTION_HIGHLIGHT,
 				transform,

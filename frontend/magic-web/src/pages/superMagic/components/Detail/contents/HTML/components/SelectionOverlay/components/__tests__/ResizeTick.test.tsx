@@ -13,7 +13,9 @@ describe("ResizeTick", () => {
 		const bottomTick = bottom.querySelector("[data-resize-tick='bottom']")
 
 		expect(rightTick?.className).toContain("html-editor-tick")
+		expect(rightTick?.className).toContain("bg-[#808080]")
 		expect(bottomTick?.className).toContain("html-editor-tick")
+		expect(bottomTick?.className).toContain("bg-[#808080]")
 		expect(right.querySelector("svg")).toBeNull()
 		expect(bottom.querySelector("svg")).toBeNull()
 		expect(corner.firstChild).toBeNull()
