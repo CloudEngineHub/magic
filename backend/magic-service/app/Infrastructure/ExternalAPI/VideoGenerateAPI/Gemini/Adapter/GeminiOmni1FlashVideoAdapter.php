@@ -10,6 +10,7 @@ namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter;
 use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
+use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Capability\GeminiOmniGenerationCapabilityProvider;
@@ -32,7 +33,13 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         'reference_audios' => 'audio',
     ];
 
-    private const array INPUT_MODES = ['standard', 'image_reference', 'keyframe_guided', 'video_edit', 'omni_reference'];
+    private const array INPUT_MODES = [
+        VideoInputMode::Standard->value,
+        VideoInputMode::ImageReference->value,
+        VideoInputMode::KeyframeGuided->value,
+        VideoInputMode::VideoEdit->value,
+        VideoInputMode::OmniReference->value,
+    ];
 
     private SafeRemoteFileDownloader $remoteFileDownloader;
 
@@ -83,13 +90,20 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         }
         $generationConfig = $capability->toArray()['generation'];
         $mode = $this->normalizeInputMode($request['input_mode'] ?? null);
-        $this->validateGeneration($generation, $generationConfig);
+        $this->validateGeneration($generation, $generationConfig, $mode !== VideoInputMode::VideoEdit->value);
         $this->validateModeInputs($mode, $inputs);
         $normalizedInputs = $this->normalizeMediaInputs($inputs);
         $parts = $this->buildInputParts($normalizedInputs, $request['prompt'] ?? null);
-        $responseFormat = $this->buildResponseFormat($generation, $generationConfig);
+        $responseFormat = $this->buildResponseFormat($generation, $generationConfig, $mode !== VideoInputMode::VideoEdit->value);
         $ignored = $this->ignoredParams($request, $generation);
-        $operation->setAcceptedParams(['prompt', 'input_mode', 'inputs', 'generation.aspect_ratio', 'generation.resolution', 'generation.duration_seconds']);
+        if ($mode === VideoInputMode::VideoEdit->value && array_key_exists('duration_seconds', $generation)) {
+            $ignored[] = 'generation.duration_seconds';
+        }
+        $acceptedParams = ['prompt', 'input_mode', 'inputs', 'generation.aspect_ratio', 'generation.resolution'];
+        if ($mode !== VideoInputMode::VideoEdit->value) {
+            $acceptedParams[] = 'generation.duration_seconds';
+        }
+        $operation->setAcceptedParams($acceptedParams);
         $operation->setIgnoredParams($ignored);
         return [
             'model' => $model,
@@ -176,7 +190,7 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
 
     private function normalizeInputMode(mixed $mode): string
     {
-        $mode = strtolower(trim((string) ($mode ?? 'standard')));
+        $mode = strtolower(trim((string) ($mode ?? VideoInputMode::Standard->value)));
         if (! in_array($mode, self::INPUT_MODES, true)) {
             throw new InvalidArgumentException('Gemini input mode is invalid.');
         }
@@ -185,7 +199,7 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
     }
 
     /** @param array<string, mixed> $generationConfig */
-    private function validateGeneration(array $generation, array $generationConfig): void
+    private function validateGeneration(array $generation, array $generationConfig, bool $validateDuration = true): void
     {
         $resolution = strtolower(trim((string) ($generation['resolution'] ?? $generationConfig['default_resolution'])));
         if (! in_array($resolution, $generationConfig['resolutions'], true)) {
@@ -197,25 +211,27 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
             throw new InvalidArgumentException('Gemini aspect ratio is invalid.');
         }
 
-        $duration = (int) ($generation['duration_seconds'] ?? $generationConfig['default_duration_seconds']);
-        if (! in_array($duration, array_map('intval', $generationConfig['durations']), true)) {
-            throw new InvalidArgumentException('Gemini duration is invalid.');
+        if ($validateDuration) {
+            $duration = (int) ($generation['duration_seconds'] ?? $generationConfig['default_duration_seconds']);
+            if (! in_array($duration, array_map('intval', $generationConfig['durations']), true)) {
+                throw new InvalidArgumentException('Gemini duration is invalid.');
+            }
         }
     }
 
     /** @param array<string, mixed> $inputs */
     private function validateModeInputs(string $mode, array $inputs): void
     {
-        if ($mode === 'standard' && $inputs !== []) {
+        if ($mode === VideoInputMode::Standard->value && $inputs !== []) {
             throw new InvalidArgumentException('Gemini standard mode does not accept media.');
         }
-        if ($mode === 'image_reference' && (($inputs['reference_images'] ?? []) === [] || ($inputs['frames'] ?? []) !== [] || ($inputs['reference_videos'] ?? []) !== [])) {
+        if ($mode === VideoInputMode::ImageReference->value && (($inputs['reference_images'] ?? []) === [] || ($inputs['frames'] ?? []) !== [] || ($inputs['reference_videos'] ?? []) !== [])) {
             throw new InvalidArgumentException('Gemini image reference mode requires reference images only.');
         }
-        if ($mode === 'keyframe_guided' && (($inputs['frames'] ?? []) === [] || ($inputs['reference_images'] ?? []) !== [] || ($inputs['reference_videos'] ?? []) !== [])) {
+        if ($mode === VideoInputMode::KeyframeGuided->value && (($inputs['frames'] ?? []) === [] || ($inputs['reference_images'] ?? []) !== [] || ($inputs['reference_videos'] ?? []) !== [])) {
             throw new InvalidArgumentException('Gemini keyframe mode requires frames only.');
         }
-        if ($mode === 'video_edit' && (($inputs['reference_videos'] ?? []) === [] || ($inputs['frames'] ?? []) !== [] || ($inputs['reference_images'] ?? []) !== [])) {
+        if ($mode === VideoInputMode::VideoEdit->value && (($inputs['reference_videos'] ?? []) === [] || ($inputs['frames'] ?? []) !== [] || ($inputs['reference_images'] ?? []) !== [])) {
             throw new InvalidArgumentException('Gemini video edit mode requires a reference video.');
         }
         // Omni mode accepts zero or more reference media items, so prompt-only requests stay valid.
@@ -308,19 +324,23 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
     }
 
     /** @param array<string, mixed> $generationConfig */
-    private function buildResponseFormat(array $generation, array $generationConfig): array
+    private function buildResponseFormat(array $generation, array $generationConfig, bool $includeDuration = true): array
     {
         $resolution = strtolower(trim((string) ($generation['resolution'] ?? $generationConfig['default_resolution'])));
         $aspectRatio = trim((string) ($generation['aspect_ratio'] ?? '16:9'));
         $duration = (int) ($generation['duration_seconds'] ?? $generationConfig['default_duration_seconds']);
 
-        return [
+        $responseFormat = [
             'type' => 'video',
             'delivery' => 'uri',
             'aspect_ratio' => $aspectRatio,
             'resolution' => $resolution,
-            'duration' => $duration . 's',
         ];
+        if ($includeDuration) {
+            $responseFormat['duration'] = $duration . 's';
+        }
+
+        return $responseFormat;
     }
 
     /** @param array<string, mixed> $request @param array<string, mixed> $generation */

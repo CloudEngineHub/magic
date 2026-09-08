@@ -79,12 +79,19 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
         $generationConfig = $capabilityData['generation'];
         $inputModeConfig = $capabilityData['input_modes'][$inputMode];
         $constraints = $capabilityData['constraints'];
-        $this->validateGeneration($generation, $generationConfig);
+        $includeDuration = $inputMode !== VideoInputMode::VideoEdit->value;
+        $this->validateGeneration($generation, $generationConfig, $includeDuration);
         $inputs = $this->normalizeMediaInputs($rawInputs);
 
         $input = ['prompt' => (string) ($request['prompt'] ?? '')];
-        $acceptedParams = ['prompt', 'input_mode', 'generation.duration_seconds'];
+        $acceptedParams = ['prompt', 'input_mode'];
+        if ($includeDuration) {
+            $acceptedParams[] = 'generation.duration_seconds';
+        }
         $ignoredParams = [];
+        if (! $includeDuration && array_key_exists('duration_seconds', $generation)) {
+            $ignoredParams[] = 'generation.duration_seconds';
+        }
 
         // Each mode owns its media rules; an empty media list is valid for text-only modes.
         $media = match ($inputMode) {
@@ -99,7 +106,7 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
             $input['media'] = $media;
         }
 
-        $parameters = $this->buildGenerationParameters($generation, $generationConfig, $acceptedParams, $ignoredParams);
+        $parameters = $this->buildGenerationParameters($generation, $generationConfig, $acceptedParams, $ignoredParams, $includeDuration);
         $this->markIgnoredParams($request, $rawInputs, $inputs, $acceptedParams, $ignoredParams);
 
         $operation->setAcceptedParams(array_values(array_unique($acceptedParams)));
@@ -220,12 +227,14 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
      * @param list<string> $ignoredParams
      * @return array<string, mixed>
      */
-    private function buildGenerationParameters(array $generation, array $generationConfig, array &$acceptedParams, array &$ignoredParams): array
+    private function buildGenerationParameters(array $generation, array $generationConfig, array &$acceptedParams, array &$ignoredParams, bool $includeDuration = true): array
     {
         $parameters = [
             'resolution' => strtoupper($this->normalizeResolution($generation['resolution'] ?? ($generationConfig['default_resolution'] ?? '720p'))),
-            'duration' => (int) ($generation['duration_seconds'] ?? ($generationConfig['default_duration_seconds'] ?? 5)),
         ];
+        if ($includeDuration) {
+            $parameters['duration'] = (int) ($generation['duration_seconds'] ?? ($generationConfig['default_duration_seconds'] ?? 5));
+        }
         $providerFields = [
             'aspect_ratio' => 'ratio',
             'enhance_prompt' => 'prompt_extend',
@@ -349,18 +358,20 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
     /**
      * Validates generation options against the capability schema published by Wan 3.x.
      */
-    private function validateGeneration(array $generation, array $capability): void
+    private function validateGeneration(array $generation, array $capability, bool $validateDuration = true): void
     {
         $resolution = $this->normalizeResolution($generation['resolution'] ?? ($capability['default_resolution'] ?? '720p'));
         if (! in_array($resolution, $capability['resolutions'], true)) {
             throw new InvalidArgumentException('Wan 3.x resolution is invalid.');
         }
 
-        $duration = (int) ($generation['duration_seconds'] ?? ($capability['default_duration_seconds'] ?? 5));
-        $durationConfig = $capability['durations'];
-        if ($duration < $durationConfig['min'] || $duration > $durationConfig['max']
-            || ($duration - $durationConfig['min']) % $durationConfig['step'] !== 0) {
-            throw new InvalidArgumentException('Wan 3.x duration is invalid.');
+        if ($validateDuration) {
+            $duration = (int) ($generation['duration_seconds'] ?? ($capability['default_duration_seconds'] ?? 5));
+            $durationConfig = $capability['durations'];
+            if ($duration < $durationConfig['min'] || $duration > $durationConfig['max']
+                || ($duration - $durationConfig['min']) % $durationConfig['step'] !== 0) {
+                throw new InvalidArgumentException('Wan 3.x duration is invalid.');
+            }
         }
 
         if (array_key_exists('aspect_ratio', $generation) && ! in_array((string) $generation['aspect_ratio'], $capability['aspect_ratios'], true)) {

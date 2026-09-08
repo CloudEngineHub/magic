@@ -14,6 +14,7 @@ use App\Domain\Design\Entity\ValueObject\DesignGenerationStatus;
 use App\Domain\Design\Repository\Facade\DesignGenerationTaskRepositoryInterface;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use DateTime;
 
 use function Hyperf\Translation\trans;
@@ -162,7 +163,7 @@ readonly class DesignGenerationTaskDomainService
             $runtimeStatus,
             $this->resolveProviderMessage($providerResult, $error),
         );
-        $providerPayload[self::PROVIDER_KEY_LAST_PROVIDER_RESULT] = $providerResult;
+        $providerPayload[self::PROVIDER_KEY_LAST_PROVIDER_RESULT] = PayloadLogSanitizer::sanitizeValue($providerResult);
         $providerPayload[self::PROVIDER_KEY_LAST_PROVIDER_RESULT_UPDATED_AT] = $providerResult === [] ? ($providerPayload[self::PROVIDER_KEY_LAST_PROVIDER_RESULT_UPDATED_AT] ?? null) : $now;
         $providerPayload[self::PROVIDER_KEY_PROVIDER_TASK_ID] = $this->resolveProviderTaskId($providerPayload, $providerResult, $output);
 

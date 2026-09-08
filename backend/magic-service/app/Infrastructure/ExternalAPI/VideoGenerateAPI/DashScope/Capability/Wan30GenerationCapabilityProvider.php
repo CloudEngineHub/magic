@@ -106,11 +106,14 @@ readonly class Wan30GenerationCapabilityProvider
                         ['code' => 'reference_audio', 'description' => $this->translateInputMode('reference_audio'), 'limits' => ['count' => ['max' => 5], 'duration_seconds' => ['max' => 15], 'total_duration_seconds' => ['max' => 15]]],
                     ],
                 )->toArray(),
-                VideoInputMode::VideoEdit->value => VideoInputModeDefinition::videoEdit(
-                    description: $this->translateInputMode('video_edit'),
-                    supportedFields: ['reference_videos'],
-                    maxCount: 1,
-                )->toArray(),
+                VideoInputMode::VideoEdit->value => array_merge(
+                    VideoInputModeDefinition::videoEdit(
+                        description: $this->translateInputMode('video_edit'),
+                        supportedFields: ['reference_videos'],
+                        maxCount: 1,
+                    )->toArray(),
+                    ['generation_constraints' => ['durations' => []]],
+                ),
             ],
             'constraints' => [
                 'reference_media' => [

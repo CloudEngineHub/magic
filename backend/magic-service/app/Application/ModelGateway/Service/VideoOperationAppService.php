@@ -45,6 +45,7 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\Locker\LockerInterface;
+use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use DateTime;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
@@ -1089,7 +1090,9 @@ readonly class VideoOperationAppService
             return $result;
         }
 
-        $result['provider_result'] = $this->stripProviderVideoBytes($providerResult);
+        $result['provider_result'] = PayloadLogSanitizer::sanitizeValue(
+            $this->stripProviderVideoBytes($providerResult),
+        );
         $output = is_array($result['output'] ?? null) ? $result['output'] : [];
         if (trim((string) ($output['video_url'] ?? '')) !== '') {
             return $result;
