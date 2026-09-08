@@ -19,6 +19,9 @@ interface UseElementToolsOptions {
 	isErasing?: boolean
 	isFullscreenPreviewOpen?: boolean
 	convertHightSupported?: boolean
+	removeBackgroundSupported?: boolean
+	eraserSupported?: boolean
+	expandSupported?: boolean
 	showMediaOriginalSize?: boolean
 	isStoryboardOutputFrame?: boolean
 	canConcurrentGenerate?: boolean
@@ -32,7 +35,7 @@ export function useElementTools(
 ): ElementToolResolution[] {
 	const { canvas } = useCanvas()
 	// 展示面可以直接提供快照，但仍保留 Canvas 元素订阅，让异步 Content 状态
-	// 变化能够触发重新解析；测试/降级宿主没有完整 Canvas 时跳过这条订阅。
+	// 和会话 Content 预览变化能够触发重新解析；测试/降级宿主没有完整 Canvas 时跳过。
 	const canSubscribeToElement = Boolean(
 		canvas?.elementManager?.getElementData && canvas?.eventEmitter?.on,
 	)
@@ -52,8 +55,11 @@ export function useElementTools(
 	}, [element, options.selectedElements])
 	const activeMediaSrc =
 		element?.type === "video" || element?.type === "image"
-			? (element.contents?.find((content) => content.contentId === element.activeContentId)
-					?.src as string | undefined)
+			? (element.contents?.find(
+					(content) =>
+						content.contentId ===
+						(canvas?.getEffectiveContentId?.(element.id) ?? element.activeContentId),
+				)?.src as string | undefined)
 			: undefined
 	const showMediaOriginalSize = useShowMediaOriginalSizeButton({
 		canvas,
@@ -79,6 +85,9 @@ export function useElementTools(
 				isErasing: options.isErasing,
 				isFullscreenPreviewOpen: options.isFullscreenPreviewOpen,
 				convertHightSupported: options.convertHightSupported,
+				removeBackgroundSupported: options.removeBackgroundSupported,
+				eraserSupported: options.eraserSupported,
+				expandSupported: options.expandSupported,
 				showMediaOriginalSize: options.showMediaOriginalSize ?? showMediaOriginalSize,
 				isStoryboardOutputFrame: options.isStoryboardOutputFrame,
 				canConcurrentGenerate: options.canConcurrentGenerate,
@@ -98,6 +107,9 @@ export function useElementTools(
 			options.isSelecting,
 			options.canConcurrentGenerate,
 			options.convertHightSupported,
+			options.removeBackgroundSupported,
+			options.eraserSupported,
+			options.expandSupported,
 			options.showMediaOriginalSize,
 			showMediaOriginalSize,
 			options.activeToolSession,

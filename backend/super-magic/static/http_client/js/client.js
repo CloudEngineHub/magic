@@ -2140,12 +2140,15 @@ function buildLocalDebugClientContextContent() {
 function formatClientContextTabName(tab) {
     if (!tab || typeof tab !== 'object') return '';
     if (isToolDetailPreviewPath(tab.path)) return tab.title || 'Tool detail';
+    if (tab.type === 'canvas-project' || tab.type === 'micro-app') {
+        return tab.title || getFilePreviewResourcePath(tab);
+    }
     return tab.path || tab.title || '';
 }
 
 function getClientContextFocusedFile() {
     if (!activeFilePreviewPath || isToolDetailPreviewPath(activeFilePreviewPath)) return '';
-    return activeFilePreviewPath;
+    return getFilePreviewResourcePath(filePreviewTabs.get(activeFilePreviewPath)) || activeFilePreviewPath;
 }
 
 function getManualClientContextContent() {
@@ -4849,7 +4852,7 @@ function finalizeAskUserCard(wrapper, data) {
     }
 
     // 禁用所有输入和按钮
-    card.querySelectorAll('input, button').forEach(el => { el.disabled = true; });
+    card.querySelectorAll('input, textarea, button').forEach(el => { el.disabled = true; });
 
     // 移除旧结果标签（如果提交后已存在）
     card.querySelectorAll('.ask-user-result').forEach(el => el.remove());
@@ -4875,6 +4878,7 @@ function finalizeAskUserCard(wrapper, data) {
         resultEl.textContent = statusLabel[status] || `状态: ${status}`;
         card.appendChild(resultEl);
     }
+    appendAskUserRemark(card, data.remark);
 
     card.classList.remove('ask-user-card');
     card.classList.add('ask-user-card', status === 'answered' ? 'answered' : 'expired');
@@ -4886,9 +4890,20 @@ function finalizeAskUserCard(wrapper, data) {
     askUserCardRegistry.delete(data.question_id);
 }
 
+/** 展示 ask_user 提交时携带的追加备注。 */
+function appendAskUserRemark(card, remark) {
+    const normalizedRemark = typeof remark === 'string' ? remark.trim() : '';
+    if (!normalizedRemark) return;
+
+    const remarkEl = document.createElement('div');
+    remarkEl.className = 'ask-user-result ask-user-remark-result';
+    remarkEl.textContent = `备注：${normalizedRemark}`;
+    card.appendChild(remarkEl);
+}
+
 /**
  * 渲染 ask_user 交互卡片并挂到 container 上。
- * data: { question_id, questions[], expires_at, status }
+ * data: { question_id, questions[], expires_at, status, answers?, remark? }
  */
 function renderAskUserCard(data, container) {
     const { question_id, questions = [], expires_at, status } = data;
@@ -4900,7 +4915,7 @@ function renderAskUserCard(data, container) {
     // 通用禁用函数（仅操作 DOM，不依赖闭包变量顺序）
     function disableCard() {
         if (card._countdownTimer) clearInterval(card._countdownTimer);
-        card.querySelectorAll('input, button').forEach(el => { el.disabled = true; });
+        card.querySelectorAll('input, textarea, button').forEach(el => { el.disabled = true; });
     }
 
     // 倒计时
@@ -5088,6 +5103,7 @@ function renderAskUserCard(data, container) {
 
     // 如果已有结果（after_tool_call 时 re-render），只展示结果
     if (alreadyDone) {
+        disableCard();
         const resultEl = document.createElement('div');
         resultEl.className = 'ask-user-result' + (status !== 'answered' ? ' skipped' : '');
         const statusLabel = { answered: '✅ 已回答', skipped: '⏭ 已跳过', timeout: '⏰ 已超时', cancelled: '🚫 已取消' };
@@ -5103,9 +5119,21 @@ function renderAskUserCard(data, container) {
             resultEl.textContent = statusLabel[status] || `状态: ${status}`;
         }
         card.appendChild(resultEl);
+        appendAskUserRemark(card, data.remark);
         container.appendChild(card);
         return;
     }
+
+    // 备注属于整张问答卡片的附加上下文，不参与答案 JSON。
+    const remarkLabel = document.createElement('label');
+    remarkLabel.className = 'ask-user-remark-label';
+    remarkLabel.textContent = '补充备注（可选）';
+    const remarkInput = document.createElement('textarea');
+    remarkInput.className = 'ask-user-input ask-user-remark';
+    remarkInput.rows = 2;
+    remarkInput.placeholder = '可补充说明、约束或其他上下文…';
+    remarkLabel.appendChild(remarkInput);
+    card.appendChild(remarkLabel);
 
     // 操作按钮
     const actions = document.createElement('div');
@@ -5131,6 +5159,12 @@ function renderAskUserCard(data, container) {
                 answers[q.sub_id] = getValue();
             });
         }
+        const remark = remarkInput.value.trim();
+        const detail = {
+            response_status,
+            answer: JSON.stringify(answers),
+        };
+        if (remark) detail.remark = remark;
 
         const serverUrl = serverUrlInput.value.trim();
         try {
@@ -5143,10 +5177,7 @@ function renderAskUserCard(data, container) {
                     user_tool_call: {
                         name: 'ask_user',
                         tool_call_id: question_id,
-                        detail: {
-                            response_status,
-                            answer: JSON.stringify(answers)
-                        }
+                        detail,
                     }
                 })
             });
@@ -5156,14 +5187,14 @@ function renderAskUserCard(data, container) {
             resultEl.className = 'ask-user-result' + (response_status === 'skipped' ? ' skipped' : '');
             resultEl.textContent = response_status === 'answered' ? '✅ 已提交' : '⏭ 已跳过';
             card.appendChild(resultEl);
+            appendAskUserRemark(card, remark);
             card.classList.add('answered');
 
             showEventLog({ label: `ask_user 响应: ${json.message || response_status}`, ...json });
         } catch (e) {
             showSystemMessage(`ask_user 提交失败: ${e.message}`);
             // 重新启用按钮允许重试
-            submitBtn.disabled = false;
-            skipBtn.disabled = false;
+            card.querySelectorAll('input, textarea, button').forEach(el => { el.disabled = false; });
         }
     }
 
@@ -7039,6 +7070,15 @@ function isWorkspacePreviewPathAffected(targetPath, previewPath) {
     return preview === target || preview.startsWith(`${target}/`);
 }
 
+/** 返回预览标签关联的工作区真实路径，用于删除和自动刷新判断。 */
+function getFilePreviewResourcePath(tab) {
+    if (!tab) return '';
+    if (tab.type === 'canvas-project') return tab.directoryPath || tab.projectPath || '';
+    if (tab.type === 'micro-app') return tab.appRootPath || '';
+    if (tab.type === 'api-directory') return tab.entry?.path || tab.path || '';
+    return tab.path || '';
+}
+
 async function deleteWorkspacePath(path, isDir) {
     const normalizedPath = String(path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
     if (!normalizedPath) return;
@@ -7052,12 +7092,13 @@ async function deleteWorkspacePath(path, isDir) {
             expandedDirs.delete(item);
         }
     }
-    for (const tabPath of [...filePreviewTabs.keys()]) {
-        if (isWorkspacePreviewPathAffected(normalizedPath, tabPath)) {
+    for (const [tabPath, tab] of [...filePreviewTabs.entries()]) {
+        if (isWorkspacePreviewPathAffected(normalizedPath, getFilePreviewResourcePath(tab))) {
             filePreviewTabs.delete(tabPath);
         }
     }
-    if (isWorkspacePreviewPathAffected(normalizedPath, activeFilePreviewPath) || isWorkspacePreviewPathAffected(normalizedPath, currentPreviewPath)) {
+    const activePreviewResourcePath = getFilePreviewResourcePath(filePreviewTabs.get(activeFilePreviewPath));
+    if (isWorkspacePreviewPathAffected(normalizedPath, activePreviewResourcePath || activeFilePreviewPath) || isWorkspacePreviewPathAffected(normalizedPath, currentPreviewPath)) {
         closeFilePreviewWorkbench();
     } else {
         renderFilePreviewTabs();
@@ -7542,7 +7583,7 @@ function renderFilePreviewTabs() {
         btn.className = `file-preview-tab${tab.path === activeFilePreviewPath ? ' active' : ''}`;
         btn.setAttribute('role', 'tab');
         btn.setAttribute('aria-selected', String(tab.path === activeFilePreviewPath));
-        btn.title = tab.path;
+        btn.title = getFilePreviewResourcePath(tab) || tab.path;
 
         const title = document.createElement('span');
         title.className = 'file-preview-tab-title';
@@ -7674,7 +7715,6 @@ function resetActivePreviewSurface(options = {}) {
     const canvasModal = document.getElementById('canvasMediaModal');
     if (canvasModal) canvasModal.remove();
     filePreviewMain?.classList.remove('has-canvas-panel');
-    filePreviewWorkbench?.classList.remove('file-preview-workbench-canvas-project');
     if (filePreviewBody) {
         filePreviewBody.innerHTML = '';
         filePreviewBody.classList.remove(
@@ -8336,6 +8376,37 @@ function hasApiCanvasProjectFile(entry) {
     return entry.children.some(child => child && child.type === 'file' && child.name === 'magic.project.js');
 }
 
+/** 为支持打开的特殊目录添加显式操作按钮。 */
+function appendFileTreeOpenHints(node, options = {}) {
+    if (!node) return;
+    const actions = [];
+    if (options.canvasProject && typeof options.openCanvas === 'function') {
+        actions.push({ type: 'canvas', label: '打开画布', onClick: options.openCanvas });
+    }
+    if (options.microApp && typeof options.openMicroApp === 'function') {
+        actions.push({ type: 'micro-app', label: '打开微应用', onClick: options.openMicroApp });
+    }
+    if (!actions.length) return;
+
+    const hints = document.createElement('span');
+    hints.className = 'ft-open-hints';
+    for (const action of actions) {
+        const hint = document.createElement('button');
+        hint.type = 'button';
+        hint.className = `ft-open-hint ft-open-hint-${action.type}`;
+        hint.textContent = action.label;
+        hint.title = `单击${action.label}`;
+        hint.setAttribute('aria-label', hint.title);
+        hint.addEventListener('click', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            await action.onClick();
+        });
+        hints.appendChild(hint);
+    }
+    node.appendChild(hints);
+}
+
 /** 只读取顶层信封，避免文件树渲染时提前解压整个画布。 */
 async function isApiCanvasDesignProject(entry, dirPath) {
     if (!hasApiCanvasProjectFile(entry)) return false;
@@ -8445,11 +8516,13 @@ function hydrateApiCanvasElementDetails(config, agentDoc, userDoc) {
 async function openApiCanvasProjectPreviewTab(dirPath, entry = null) {
     try {
         const { config, projectPath, data } = await readApiCanvasProjectConfig(dirPath);
-        const tabPath = `${String(dirPath || '').replace(/\/+$/, '')}/`;
+        const normalizedDirPath = String(dirPath || '').replace(/\/+$/, '');
+        const tabPath = `@canvas:${normalizedDirPath || '/'}`;
         filePreviewTabs.set(tabPath, {
             type: 'canvas-project',
             path: tabPath,
-            title: config.name || getWorkspaceFileBaseName(dirPath) || '画布项目',
+            directoryPath: normalizedDirPath,
+            title: `画布：${config.name || getWorkspaceFileBaseName(dirPath) || '画布项目'}`,
             projectPath,
             projectConfig: config,
             projectEntry: entry,
@@ -8531,20 +8604,19 @@ async function renderApiCanvasProjectPreviewTab(tab) {
     if (!filePreviewBody || !filePreviewWorkbench) return;
     resetActivePreviewSurface();
     currentPreviewFile = null;
-    currentPreviewPath = tab.projectPath || tab.path;
+    currentPreviewPath = tab.projectPath || tab.directoryPath || tab.path;
     currentPreviewCopyText = '';
     currentPreviewEditable = false;
     if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = 'none';
     renderFilePreviewMetaRows(filePreviewMeta, [
         { label: '文件名', value: tab.title || '画布项目' },
-        { label: '路径', value: tab.path },
+        { label: '路径', value: tab.directoryPath || tab.projectPath || '—' },
         { label: '预览类型', value: '只读画布' },
         { label: '版本', value: tab.projectConfig?.version || '—' },
         { label: '元素数', value: String(tab.projectConfig?.canvas?.elements?.length || 0) },
         { label: '连接数', value: String(tab.projectConfig?.canvas?.connections?.length || 0) },
     ]);
 
-    filePreviewWorkbench.classList.add('file-preview-workbench-canvas-project');
     filePreviewBody.classList.add('file-preview-body-canvas-project');
     const shell = document.createElement('div');
     shell.className = 'canvas-project-shell';
@@ -8553,7 +8625,7 @@ async function renderApiCanvasProjectPreviewTab(tab) {
     const zoomToolbar = createCanvasPreviewZoomToolbar();
     shell.append(viewport, zoomToolbar.element);
     filePreviewBody.appendChild(shell);
-    const projectDirPath = String(tab.projectPath || '').split('/').filter(Boolean).slice(0, -1).join('/');
+    const projectDirPath = tab.directoryPath || String(tab.projectPath || '').split('/').filter(Boolean).slice(0, -1).join('/');
     const resolveMediaUrl = async relPath => appendPreviewRefreshToken(
         debugWorkspaceApi.rawUrl(joinWorkspacePath(projectDirPath, relPath)),
     );
@@ -8581,11 +8653,11 @@ async function openApiMicroAppPreviewTab(dirPath, appConfig) {
         showSystemMessage(`微应用入口不存在: ${workspaceEntryPath}`);
         return;
     }
-    const tabPath = dirPath ? `${dirPath}/` : '/';
+    const tabPath = `@micro-app:${dirPath || '/'}`;
     filePreviewTabs.set(tabPath, {
         type: 'micro-app',
         path: tabPath,
-        title: appConfig.name || getWorkspaceFileBaseName(dirPath) || '微应用',
+        title: `微应用：${appConfig.name || getWorkspaceFileBaseName(dirPath) || '微应用'}`,
         appRootHandle: null,
         appRootPath: dirPath,
         appConfig,
@@ -8618,11 +8690,11 @@ async function openMicroAppPreviewTab(dirHandle, dirPath, appConfig) {
         showSystemMessage(`微应用入口不存在: ${dirPath}/${entryPath}`);
         return;
     }
-    const tabPath = dirPath ? `${dirPath}/` : '/';
+    const tabPath = `@micro-app:${dirPath || '/'}`;
     filePreviewTabs.set(tabPath, {
         type: 'micro-app',
         path: tabPath,
-        title: appConfig.name || getWorkspaceFileBaseName(dirPath) || '微应用',
+        title: `微应用：${appConfig.name || getWorkspaceFileBaseName(dirPath) || '微应用'}`,
         appRootHandle: dirHandle,
         appRootPath: dirPath,
         appConfig,
@@ -8636,7 +8708,7 @@ async function renderMicroAppPreviewTab(tab) {
     if (!filePreviewBody || !window.MicroAppRuntimeHost) return;
     resetActivePreviewSurface();
     currentPreviewFile = null;
-    currentPreviewPath = tab.path;
+    currentPreviewPath = tab.appRootPath || tab.path;
     currentPreviewCopyText = '';
     if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = 'none';
     if (filePreviewRenderBtn) filePreviewRenderBtn.style.display = 'none';
@@ -9227,13 +9299,13 @@ function findFileTreeEntryByPath(entries, targetPath) {
 function renderMissingActiveFilePreview(tab) {
     resetActivePreviewSurface();
     currentPreviewFile = null;
-    currentPreviewPath = tab?.path || '';
+    currentPreviewPath = getFilePreviewResourcePath(tab);
     currentPreviewCopyText = '';
     currentPreviewEditable = false;
     if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = 'none';
     renderFilePreviewMetaRows(filePreviewMeta, [
-        { label: '文件名', value: tab?.title || getWorkspaceFileBaseName(tab?.path) || '未知文件' },
-        { label: '路径', value: tab?.path || '—' },
+        { label: '文件名', value: tab?.title || getWorkspaceFileBaseName(currentPreviewPath) || '未知文件' },
+        { label: '路径', value: currentPreviewPath || '—' },
         { label: '状态', value: '文件已删除或移动' },
     ]);
     appendPreviewMessage(filePreviewBody, '当前预览目标已被删除或移动。');
@@ -9255,12 +9327,12 @@ async function refreshActiveFilePreview() {
     persistActiveFilePreviewScroll();
     try {
         if (tab.type === 'canvas-project') {
-            const latestProjectEntry = findFileTreeEntryByPath(currentFileTreeEntries, tab.projectPath);
+            const latestProjectEntry = findFileTreeEntryByPath(currentFileTreeEntries, tab.directoryPath);
             if (!latestProjectEntry) {
                 renderMissingActiveFilePreview(tab);
                 return;
             }
-            const dirPath = String(tab.path || '').replace(/\/+$/, '');
+            const dirPath = tab.directoryPath || getWorkspaceParentPath(tab.projectPath);
             const latest = await readApiCanvasProjectConfig(dirPath);
             if (activeFilePreviewPath !== previewPath) return;
             Object.assign(tab, {
@@ -9330,7 +9402,7 @@ async function openApiFilePreviewTab(entry) {
     filePreviewTabs.set(entry.path, {
         type: 'api-file',
         path: entry.path,
-        title: entry.name || getWorkspaceFileBaseName(entry.path),
+        title: `目录：${entry.name || getWorkspaceFileBaseName(entry.path)}`,
         entry,
     });
     await activateFilePreviewTab(entry.path, { resetScroll: true });
@@ -9701,13 +9773,19 @@ async function buildApiTreeNodes(entries, container, depth) {
         name.className = 'ft-name';
         name.textContent = entry.name;
         name.title = microAppConfig
-            ? `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，双击打开`
+            ? `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，使用“打开微应用”按钮打开`
             : canvasProject
-                ? '画布项目：单击展开/收起，双击打开只读预览'
+                ? '画布项目：单击展开/收起，使用“打开画布”按钮打开只读预览'
                 : fullPath;
 
         node.appendChild(icon);
         node.appendChild(name);
+        appendFileTreeOpenHints(node, {
+            microApp: !!microAppConfig,
+            canvasProject,
+            openMicroApp: () => openApiMicroAppPreviewTab(fullPath, microAppConfig),
+            openCanvas: () => openApiCanvasProjectPreviewTab(fullPath, entry),
+        });
         node.appendChild(createWorkspaceDeleteButton(fullPath, isDir));
         container.appendChild(node);
 
@@ -9739,20 +9817,6 @@ async function buildApiTreeNodes(entries, container, depth) {
                 }
                 await openApiDirectoryPreviewTab(entry);
             });
-            if (microAppConfig) {
-                node.addEventListener('dblclick', async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    await openApiMicroAppPreviewTab(fullPath, microAppConfig);
-                });
-            }
-            if (canvasProject) {
-                node.addEventListener('dblclick', async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    await openApiCanvasProjectPreviewTab(fullPath, entry);
-                });
-            }
             node.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -9871,11 +9935,15 @@ async function buildTreeNodes(dirHandle, container, pathPrefix, depth) {
         name.className = 'ft-name';
         name.textContent = entry.name;
         if (microAppConfig) {
-            name.title = `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，双击打开`;
+            name.title = `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，使用“打开微应用”按钮打开`;
         }
 
         node.appendChild(icon);
         node.appendChild(name);
+        appendFileTreeOpenHints(node, {
+            microApp: !!microAppConfig,
+            openMicroApp: () => openMicroAppPreviewTab(entry, fullPath, microAppConfig),
+        });
         node.appendChild(createWorkspaceDeleteButton(fullPath, isDir));
         container.appendChild(node);
 
@@ -9908,13 +9976,6 @@ async function buildTreeNodes(dirHandle, container, pathPrefix, depth) {
                     updateFileTreeIcon(icon, entry.name, true, true, { microApp: !!microAppConfig });
                 }
             });
-            if (microAppConfig) {
-                node.addEventListener('dblclick', async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    await openMicroAppPreviewTab(entry, fullPath, microAppConfig);
-                });
-            }
             node.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 e.stopPropagation();

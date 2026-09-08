@@ -39,7 +39,7 @@ vi.mock("../../../app/providers/LayersUIProvider", () => ({
 vi.mock("../../../app/providers/CanvasProvider", () => ({
 	useCanvas: () => ({
 		canvas: {
-			readonly: false,
+			can: vi.fn(() => true),
 			toolManager: {
 				getAudioGeneratorTool: () => ({
 					createAudioAtCenter: mocks.createAudioAtCenter,

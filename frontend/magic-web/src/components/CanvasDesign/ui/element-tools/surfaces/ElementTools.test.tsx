@@ -6,10 +6,13 @@ import ElementTools from "../index"
 
 const mocks = vi.hoisted(() => ({
 	selectedElements: [] as Array<Record<string, unknown>>,
+	magic: {
+		convertHightConfig: { enabled: false },
+	} as Record<string, unknown>,
 	canvas: undefined as
 		| {
 				mediaReplaceController: { getReplacingElementId: () => string | null }
-				readonly?: boolean
+				can: ReturnType<typeof vi.fn>
 				elementManager?: {
 					getAllElementIds: () => string[]
 					getElementData: (elementId: string) => unknown
@@ -19,6 +22,9 @@ const mocks = vi.hoisted(() => ({
 						sourceElementId: string
 						targetElementId: string
 					}>
+				}
+				eventEmitter?: {
+					on: () => () => void
 				}
 		  }
 		| undefined,
@@ -49,7 +55,7 @@ vi.mock("../../../app/providers/CanvasUIProvider", () => ({
 }))
 
 vi.mock("../../../app/providers/MagicProvider", () => ({
-	useMagic: () => ({ convertHightConfig: { supported: false } }),
+	useMagic: () => mocks.magic,
 }))
 
 vi.mock("../../../app/providers/CanvasProvider", () => ({
@@ -81,8 +87,68 @@ vi.mock("../shared/hooks/useShowMediaOriginalSizeButton", () => ({
 describe("ElementTools image replacement ordering", () => {
 	beforeEach(() => {
 		mocks.selectedElements = []
+		mocks.magic = { convertHightConfig: { enabled: false } }
 		mocks.canvas = undefined
 		mocks.mediaReplaceStateHandler = undefined
+	})
+
+	it("defaults missing AI ability fields to disabled", () => {
+		mocks.magic = {
+			convertHightConfig: { enabled: false },
+			hasAiAbilityAvailabilityProvider: true,
+			isAiAbilityAvailabilityReady: true,
+			aiAbilityAvailability: {
+				abilities: {
+					image_convert_high: { enabled: true },
+					image_remove_background: { enabled: true },
+					image_eraser: { enabled: true },
+					// image_expand is intentionally missing to cover older API responses.
+				},
+			},
+		}
+		mocks.selectedElements = [
+			{
+				id: "image-1",
+				type: ElementTypeEnum.Image,
+				activeContentId: "version-1",
+				mainContentId: "version-1",
+				contents: [
+					{ contentId: "version-1", src: "./images/one.png", status: "completed" },
+				],
+			},
+		]
+
+		expect(() => render(<ElementTools />)).not.toThrow()
+		expect(screen.getByTestId("element-tools")).not.toHaveTextContent(
+			ElementToolTypeEnum.ContentExtend,
+		)
+	})
+
+	it("keeps gated tools hidden until the host returns an availability result", () => {
+		mocks.magic = {
+			hasAiAbilityAvailabilityProvider: true,
+			isAiAbilityAvailabilityReady: false,
+			aiAbilityAvailability: null,
+		}
+		mocks.selectedElements = [
+			{
+				id: "image-pending-availability",
+				type: ElementTypeEnum.Image,
+				activeContentId: "version-1",
+				mainContentId: "version-1",
+				contents: [
+					{ contentId: "version-1", src: "./images/one.png", status: "completed" },
+				],
+			},
+		]
+
+		render(<ElementTools />)
+
+		const toolbar = screen.getByTestId("element-tools")
+		expect(toolbar).not.toHaveTextContent(ElementToolTypeEnum.ContentEnhance)
+		expect(toolbar).not.toHaveTextContent(ElementToolTypeEnum.ContentRemoveBackground)
+		expect(toolbar).not.toHaveTextContent(ElementToolTypeEnum.ContentEraser)
+		expect(toolbar).not.toHaveTextContent(ElementToolTypeEnum.ContentExtend)
 	})
 
 	it("does not show replace for a new empty image node", () => {
@@ -311,6 +377,8 @@ describe("ElementTools image replacement ordering", () => {
 		}
 		mocks.canvas = {
 			mediaReplaceController: { getReplacingElementId: () => null },
+			can: vi.fn(() => true),
+			eventEmitter: { on: () => () => undefined },
 			elementManager: {
 				getAllElementIds: () => [frame.id, image.id, storyboard.id],
 				getElementData: (elementId) =>
@@ -348,6 +416,8 @@ describe("ElementTools image replacement ordering", () => {
 		}
 		mocks.canvas = {
 			mediaReplaceController: { getReplacingElementId: () => null },
+			can: vi.fn(() => true),
+			eventEmitter: { on: () => () => undefined },
 			elementManager: {
 				getAllElementIds: () => [frame.id, image.id],
 				getElementData: (elementId) => (elementId === frame.id ? frame : image),
@@ -548,6 +618,8 @@ describe("ElementTools image replacement ordering", () => {
 	it("restores replacement state when a video is reselected", () => {
 		mocks.canvas = {
 			mediaReplaceController: { getReplacingElementId: () => "video-1" },
+			can: vi.fn(() => true),
+			eventEmitter: { on: () => () => undefined },
 		}
 		mocks.selectedElements = [
 			{

@@ -202,6 +202,7 @@ class SkillAssembler
             packageName: $packageName,
             latestVersion: $latestVersion,
             installCount: $entity->getTotalInstallCount(),
+            totalInstallCount: $entity->getTotalInstallCount(),
         );
     }
 

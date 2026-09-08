@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -45,9 +46,20 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         self._workspace_directories = CanvasWorkspaceDirectoryManager(workspace)
         self._file_readiness = CanvasFileReadinessChecker(workspace)
 
+    async def resolve_request_metadata(self, request: GenerationRequest, tool_context: ToolContext | None) -> dict[str, object]:
+        """在提交前解析视频最终模型、输入模式和任务类型。"""
+        return {
+            "model_id": self._payload_builder.resolve_model_id(request.parameters, tool_context),
+            "input_mode": self._payload_builder.resolve_input_mode(request.parameters),
+            "task": request.parameters.task or "generate",
+        }
+
     async def submit(self, request: GenerationRequest, tool_context: ToolContext | None) -> GenerationSubmission:
         """提交 Design 视频任务并保存服务返回的视频 ID。"""
         provider_task_id = f"vid_{uuid.uuid4().hex[:16]}"
+        started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        request_metadata: dict[str, Any] = {}
+        result_metadata: dict[str, Any] = {"runtime": {"started_at": started_at}}
         try:
             project = self._project_identity_resolver.resolve(request.project_path)
             project_id = self._payload_builder.resolve_project_id(tool_context)
@@ -66,6 +78,18 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                 request.project_path,
                 request.parameters,
             )
+            request_metadata = {
+                "model_id": payload.get("model_id"),
+                "input_mode": payload.get("input_mode"),
+                "task": payload.get("task"),
+            }
+            result_metadata = self._result_metadata(
+                {},
+                fallback={
+                    "generation_info": self._generation_info(payload),
+                    "runtime": {"started_at": started_at},
+                },
+            )
         except Exception as error:
             logger.exception(
                 "Canvas Design 视频提交请求构造失败: project_path={} element_id={} content_id={} video_id={} error={}",
@@ -75,7 +99,13 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                 provider_task_id,
                 error,
             )
-            return GenerationSubmission("async", "failed", error_message=str(error))
+            return GenerationSubmission(
+                "async",
+                "failed",
+                error_message=str(error),
+                request_metadata=request_metadata,
+                result_metadata=result_metadata,
+            )
 
         logger.info(
             "Canvas Design 视频提交请求: endpoint=POST /api/v1/design/generate-video "
@@ -103,7 +133,13 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                 provider_task_id,
                 error,
             )
-            return GenerationSubmission("async", "failed", error_message=str(error))
+            return GenerationSubmission(
+                "async",
+                "failed",
+                error_message=str(error),
+                request_metadata=request_metadata,
+                result_metadata=result_metadata,
+            )
         returned_id = str(response.get("video_id") or response.get("id") or provider_task_id).strip()
         status = self._status(response) or "processing"
         logger.info(
@@ -125,7 +161,13 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                 status,
                 self._error_message(response),
             )
-            return GenerationSubmission("async", "failed", error_message=self._error_message(response))
+            return GenerationSubmission(
+                "async",
+                "failed",
+                error_message=self._error_message(response),
+                request_metadata=request_metadata,
+                result_metadata=self._result_metadata(response, fallback=result_metadata),
+            )
         generation_task_id = f"canvas-generation-{uuid.uuid4().hex}"
         logger.info(
             "Canvas Design 视频任务已提交: project_path={} content_id={} generation_task_id={} provider_video_id={} output_filename={}",
@@ -140,7 +182,14 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
             "processing",
             generation_task_id=generation_task_id,
             provider_task_id=returned_id,
-            request_metadata={"outputFilename": output_filename},
+            request_metadata={"outputFilename": output_filename, **request_metadata},
+            result_metadata=self._result_metadata(
+                response,
+                fallback={
+                    "generation_info": self._generation_info(payload),
+                    "runtime": {"started_at": started_at},
+                },
+            ),
         )
 
     async def _ensure_remote_media_directories(self, project_id: str, project_path: str) -> None:
@@ -260,9 +309,13 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                 status,
                 self._error_message(response),
             )
-            return GenerationQueryResult("failed", error_message=self._error_message(response))
+            return GenerationQueryResult(
+                "failed",
+                error_message=self._error_message(response),
+                result_metadata=self._result_metadata(response),
+            )
         if status != "completed":
-            return GenerationQueryResult("processing")
+            return GenerationQueryResult("processing", result_metadata=self._result_metadata(response))
         project = self._project_identity_resolver.resolve(request.project_path)
         project_root = self._asset_path_resolver.resolve_project_root(request.project_path)
         if not is_local_debug_mode_enabled():
@@ -299,7 +352,11 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                 request.provider_task_id,
                 output_uri,
             )
-            return GenerationQueryResult("completed", output_uri=output_uri)
+            return GenerationQueryResult(
+                "completed",
+                output_uri=output_uri,
+                result_metadata=self._result_metadata(response),
+            )
 
         file_url = str(response.get("file_url") or "").strip()
         if not file_url:
@@ -328,7 +385,11 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
             await self._client.download_url_to_path(file_url, target)
             output_uri = self._asset_path_resolver.to_project_uri(project.project_path, target)
             if not await self._file_readiness.wait_for_uri(request.project_path, output_uri):
-                return GenerationQueryResult("failed", error_message="Downloaded Design video is not ready in the Canvas workspace.")
+                return GenerationQueryResult(
+                    "failed",
+                    error_message="Downloaded Design video is not ready in the Canvas workspace.",
+                    result_metadata=self._result_metadata(response),
+                )
             logger.info(
                 "Canvas Design 本地调试视频下载完成: project_path={} content_id={} provider_video_id={} output_uri={}",
                 request.project_path,
@@ -336,7 +397,11 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                 request.provider_task_id,
                 output_uri,
             )
-            return GenerationQueryResult("completed", output_uri=output_uri)
+            return GenerationQueryResult(
+                "completed",
+                output_uri=output_uri,
+                result_metadata=self._result_metadata(response),
+            )
         except Exception as error:
             logger.exception(
                 "Canvas Design 本地调试视频下载失败: project_path={} content_id={} provider_video_id={} target={} error={}",
@@ -346,7 +411,42 @@ class DesignVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
                 target,
                 error,
             )
-            return GenerationQueryResult("failed", error_message=str(error))
+            return GenerationQueryResult(
+                "failed",
+                error_message=str(error),
+                result_metadata=self._result_metadata(response),
+            )
+
+    @staticmethod
+    def _generation_info(payload: dict[str, Any]) -> dict[str, Any]:
+        """从已解析的 Design 请求体提取前端展示所需的生成信息。"""
+        generation = payload.get("generation") if isinstance(payload.get("generation"), dict) else {}
+        values = {
+            "task": payload.get("task"),
+            "input_mode": payload.get("input_mode"),
+            "aspect_ratio": generation.get("aspect_ratio"),
+            "resolution": generation.get("resolution"),
+            "duration_seconds": generation.get("duration_seconds"),
+        }
+        return {key: value for key, value in values.items() if value not in (None, "")}
+
+    @classmethod
+    def _result_metadata(
+        cls,
+        response: dict[str, Any],
+        fallback: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """从 Design 响应提取白名单元数据，避免把 provider 原始响应写入 sidecar。"""
+        metadata = dict(fallback or {})
+        for nested_key in ("data", "result", "metadata"):
+            nested_response = response.get(nested_key)
+            if isinstance(nested_response, dict):
+                response = {**nested_response, **response}
+        for key in ("billing", "generation_info", "runtime"):
+            value = response.get(key)
+            if isinstance(value, dict):
+                metadata[key] = {**(metadata.get(key) if isinstance(metadata.get(key), dict) else {}), **value}
+        return metadata
 
     def _build_workspace_output_uri(
         self,

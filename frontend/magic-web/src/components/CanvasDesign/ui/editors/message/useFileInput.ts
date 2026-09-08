@@ -3,6 +3,23 @@ import type { CanvasDesignMethods, UploadFileResponse } from "../../../public/ma
 import type { Canvas } from "../../../runtime/core/Canvas"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
+import { isAudioFile, isImageFile, isVideoFile } from "../../../runtime/shared/ids"
+
+function primeUploadedResource(
+	canvas: Canvas,
+	file: File | undefined,
+	result: UploadFileResponse,
+): void {
+	if (!file || !result.src) return
+
+	if (isImageFile(file)) {
+		canvas.imageResourceManager.primeCache(result.path, result)
+	} else if (isVideoFile(file)) {
+		canvas.videoResourceManager.primeCache(result.path, result)
+	} else if (isAudioFile(file)) {
+		canvas.audioResourceManager.primeCache(result.path, result)
+	}
+}
 
 interface UseFileInputOptions {
 	methods?: CanvasDesignMethods
@@ -20,6 +37,8 @@ interface UseFileInputOptions {
 	accept?: string
 	/** 本次文件选择最多处理多少个文件；替换场景传 1。 */
 	maxSelectedFiles?: number
+	/** 可选的逐项过滤器；用于混合媒体批量选择时跳过不支持/超限文件。 */
+	filterFiles?: (files: File[]) => File[]
 	/** 默认上传后写入元素参考资源；视频编辑器可关闭，自行按槽位分发 */
 	shouldSaveToElement?: boolean
 	/** 一次文件选择流程结束（含未选文件、校验失败、上传结束），用于清理临时上下文 */
@@ -48,6 +67,7 @@ export function useFileInput(options: UseFileInputOptions) {
 		maxReferenceFiles,
 		accept,
 		maxSelectedFiles,
+		filterFiles,
 		shouldSaveToElement = true,
 		onUploadSessionEnd,
 	} = options
@@ -81,6 +101,7 @@ export function useFileInput(options: UseFileInputOptions) {
 
 	const uploadFiles = useCallback(
 		async (selectedFiles: File[], overrides?: UploadFilesOverrides) => {
+			const filteredSelectedFiles = filterFiles ? filterFiles(selectedFiles) : selectedFiles
 			const nextCurrentReferenceFiles =
 				overrides?.currentReferenceFiles ?? currentReferenceFiles ?? []
 			const nextMaxReferenceFiles = overrides?.maxReferenceFiles ?? maxReferenceFiles
@@ -101,8 +122,8 @@ export function useFileInput(options: UseFileInputOptions) {
 
 			const selectedFilesWithinSelectionLimit =
 				nextMaxSelectedFiles !== undefined
-					? selectedFiles.slice(0, Math.max(0, Math.floor(nextMaxSelectedFiles)))
-					: selectedFiles
+					? filteredSelectedFiles.slice(0, Math.max(0, Math.floor(nextMaxSelectedFiles)))
+					: filteredSelectedFiles
 
 			if (selectedFilesWithinSelectionLimit.length === 0 || !methods?.uploadFiles) {
 				finishUploadSession()
@@ -138,6 +159,9 @@ export function useFileInput(options: UseFileInputOptions) {
 					{
 						onUploadComplete: (result, index) => {
 							if (result && result.path) {
+								// 先登记上传结果，再更新编辑器状态，避免 SourceList 在附件快照刷新前按 path 解析失败。
+								primeUploadedResource(canvas, filesToUpload[index], result)
+
 								if (shouldSaveToElement && elementId) {
 									const elementInstance =
 										canvas.elementManager.getElementInstance(elementId)
@@ -175,6 +199,7 @@ export function useFileInput(options: UseFileInputOptions) {
 			elementId,
 			onFileUploaded,
 			finishUploadSession,
+			filterFiles,
 		],
 	)
 

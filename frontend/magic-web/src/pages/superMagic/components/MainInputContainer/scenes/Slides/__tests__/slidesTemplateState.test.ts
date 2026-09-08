@@ -274,11 +274,14 @@ describe("slides template state", () => {
 		expect(option?.tags).toEqual(template.tags)
 	})
 
-	it("maps per-slide preview image URLs", () => {
+	it("keeps detail preview URLs out of the Service Worker cache", () => {
 		const option: OptionItem = toTemplateOption(officialTemplate)
 
-		expect(option.preview_image_urls).toEqual(
-			officialTemplate.preview_image_urls?.map(markSlidesTemplateImageUrl),
+		expect(option.collage_url).toBe(officialTemplate.collage_url)
+		expect(option.preview_image_urls).toEqual(officialTemplate.preview_image_urls)
+		expect(new URL(option.collage_url ?? "").searchParams.has("swCache")).toBe(false)
+		expect(new URL(option.preview_image_urls?.[0] ?? "").searchParams.has("swCache")).toBe(
+			false,
 		)
 	})
 
@@ -300,10 +303,10 @@ describe("slides template state", () => {
 		const option = group?.children?.[0]
 
 		expect(new URL(option?.thumbnail_url ?? "").searchParams.get("swCache")).toBe(
-			"featured-slides-template-image",
+			"featured-slides-template-image-v2",
 		)
-		expect(new URL(option?.preview_image_urls?.[0] ?? "").searchParams.get("swCache")).toBe(
-			"featured-slides-template-image",
+		expect(new URL(option?.preview_image_urls?.[0] ?? "").searchParams.has("swCache")).toBe(
+			false,
 		)
 	})
 
@@ -313,7 +316,9 @@ describe("slides template state", () => {
 		)
 
 		expect(markedUrl).toContain("x-tos-process=image%2Fresize%2Cw_720")
-		expect(new URL(markedUrl ?? "").searchParams.get("swCache")).toBe("slides-template-image")
+		expect(new URL(markedUrl ?? "").searchParams.get("swCache")).toBe(
+			"slides-template-image-v2",
+		)
 		expect(markSlidesTemplateImageUrl(markedUrl)).toBe(markedUrl)
 		expect(markSlidesTemplateImageUrl("not a url")).toBe("not a url")
 		expect(markSlidesTemplateImageUrl("data:image/webp;base64,abc")).toBe(

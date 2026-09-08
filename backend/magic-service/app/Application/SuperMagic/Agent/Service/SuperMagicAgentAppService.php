@@ -42,6 +42,7 @@ use App\Domain\SuperMagic\Agent\Entity\ValueObject\Query\SuperMagicAgentQuery;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentType;
+use App\Domain\SuperMagic\Agent\Event\AgentMarketOfflineEvent;
 use App\Domain\SuperMagic\Agent\Event\AgentSkillsAddedEvent;
 use App\Domain\SuperMagic\Agent\Event\AgentSkillsRemovedEvent;
 use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentCategoryDomainService;
@@ -1306,17 +1307,25 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             }
         }
 
+        $offlineMarketId = $this->superMagicAgentMarketDomainService
+            ->getByAgentCodeWithoutStatus($code)
+            ?->getId();
         Db::beginTransaction();
         try {
             $this->clearAgentVisibility($dataIsolation, $code);
             $this->clearAgentOwnerPermission($dataIsolation, $code);
             $result = $this->superMagicAgentDomainService->delete($dataIsolation, $code);
             Db::commit();
-            return $result;
         } catch (Throwable $throwable) {
             Db::rollBack();
             throw $throwable;
         }
+
+        if ($result) {
+            $this->dispatchAgentMarketOfflineEvent($offlineMarketId, $dataIsolation);
+        }
+
+        return $result;
     }
 
     /**
@@ -1377,6 +1386,21 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 $skillCodes ?? []
             ))
         )));
+    }
+
+    private function dispatchAgentMarketOfflineEvent(
+        ?int $marketId,
+        SuperMagicAgentDataIsolation $dataIsolation,
+    ): void {
+        if ($marketId === null) {
+            return;
+        }
+
+        AsyncEventUtil::dispatch(new AgentMarketOfflineEvent(
+            (string) $marketId,
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId(),
+        ));
     }
 
     /**

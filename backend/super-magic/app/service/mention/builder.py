@@ -5,6 +5,7 @@ from app.service.image_ref_normalizer import ImageRefNormalizer
 from app.service.mention.base import BaseMentionHandler
 from app.service.mention.handlers import (
     AgentHandler,
+    AssistantHandler,
     DesignMarkerHandler,
     FileHandler,
     MCPHandler,
@@ -38,6 +39,7 @@ class MentionContextBuilder:
         # 其他处理器
         handlers['mcp'] = MCPHandler()
         handlers['agent'] = AgentHandler()
+        handlers['assistant'] = AssistantHandler()
         handlers['tool'] = ToolHandler()
         handlers['design_marker'] = DesignMarkerHandler()
         handlers['project_directory'] = ProjectDirectoryHandler()

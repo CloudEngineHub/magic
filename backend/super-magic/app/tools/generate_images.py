@@ -37,10 +37,12 @@ from app.tools.core import BaseToolParams, tool
 from app.tools.image_utils import (
     cleanup_temp_files,
     detect_image_file_extension,
+    get_model_valid_sizes,
     resolve_image_model,
     resolve_reference_images_to_urls,
     resolve_safe_save_path,
     resolve_size_from_references,
+    snap_to_nearest_valid_size,
 )
 from app.tools.media_generator import (
     HANDLER_MAGIC_SERVICE,
@@ -109,8 +111,8 @@ Image generation prompt. Include subject, style, composition, lighting, and colo
     )
     size: Optional[str] = Field(
         None,
-        description="""<!--zh: 输出图片尺寸，格式 'WxH'。有参考图时可省略，系统自动取面积最大的参考图尺寸；无参考图时必须明确填写，常用备选：2048x2048（方）、1440x2560（9:16）、2560x1440（16:9）、1728x2304（2:3）、2304x1728（3:2）。-->
-Output image dimensions in 'WxH' format. Optional when reference_images is non-empty — the system automatically uses the largest reference image's dimensions. Required when reference_images is empty; common options: 2048x2048 (square), 1440x2560 (9:16), 2560x1440 (16:9), 1728x2304 (2:3), 2304x1728 (3:2).""",
+        description="""<!--zh: 输出图片尺寸，格式 'WxH'。有参考图时建议省略——系统会自动取参考图尺寸并 snap 到当前模型的合法尺寸，不要自行按参考图比例计算 size；无参考图时必须明确填写，且只能从当前会话上下文里模型信息（<image model=... sizes=.../>）给出的合法尺寸中选择，不要自己拍一个值。常用备选（仅供无该信息时参考）：2048x2048（方）、1440x2560（9:16）、2560x1440（16:9）、1728x2304（2:3）、2304x1728（3:2）。-->
+Output image dimensions in 'WxH' format. When reference_images is non-empty, prefer omitting this field — the system automatically derives it from the reference image and snaps it to the current model's valid sizes. Do NOT calculate a custom size from the reference image's aspect ratio yourself. When reference_images is empty, this field is required and MUST be chosen from the valid sizes listed in the current model info (the `<image model=... sizes=.../>` context), not a self-calculated value. Fallback options if no such info is available: 2048x2048 (square), 1440x2560 (9:16), 2560x1440 (16:9), 1728x2304 (2:3), 2304x1728 (3:2).""",
     )
     name: str = Field(
         ...,
@@ -283,7 +285,7 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
             model = model_id.strip() if model_id and model_id.strip() else await resolve_image_model(tool_context)
 
             workspace_root = Path(str(self.base_dir))
-            await self._normalize_tasks(params.tasks, workspace_root)
+            await self._normalize_tasks(params.tasks, workspace_root, tool_context)
 
             async def _run_with_delay(
                 idx: int, gen_task: ImageGenerationTask
@@ -368,33 +370,41 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
         )
 
     async def _normalize_tasks(
-        self, tasks: List[ImageGenerationTask], workspace_root: Path
+        self, tasks: List[ImageGenerationTask], workspace_root: Path, tool_context: ToolContext
     ) -> None:
         """
         对所有 task 做参数归一化：
         1. reference_images 去前导 /
         2. size 缺失时从参考图自动推断
+        3. 无论 size 来自 LLM 还是参考图推断，统一 snap 到当前模型的合法尺寸
+           （合法尺寸列表来自平台注入的模型能力，未配置时不做任何改写）
         """
+        valid_sizes = get_model_valid_sizes(tool_context)
+
         for idx, task in enumerate(tasks):
             if task.reference_images:
                 task.reference_images = [p.lstrip("/") for p in task.reference_images]
 
-            if task.size:
-                continue
-            if not task.reference_images:
-                raise ValueError(
-                    f"Task {idx + 1} ({task.prompt[:30]!r}): "
-                    f"size is required when reference_images is empty."
-                )
-            resolved = await resolve_size_from_references(task.reference_images, workspace_root)
-            if resolved is None:
-                raise ValueError(
-                    f"Task {idx + 1} ({task.prompt[:30]!r}): "
-                    f"could not read dimensions from any reference image. "
-                    f"Please provide size explicitly."
-                )
-            task.size = resolved
-            logger.info(f"Task {idx + 1}: auto-resolved size={resolved} from reference images")
+            if not task.size:
+                if not task.reference_images:
+                    raise ValueError(
+                        f"Task {idx + 1} ({task.prompt[:30]!r}): "
+                        f"size is required when reference_images is empty."
+                    )
+                resolved = await resolve_size_from_references(task.reference_images, workspace_root)
+                if resolved is None:
+                    raise ValueError(
+                        f"Task {idx + 1} ({task.prompt[:30]!r}): "
+                        f"could not read dimensions from any reference image. "
+                        f"Please provide size explicitly."
+                    )
+                task.size = resolved
+                logger.info(f"Task {idx + 1}: auto-resolved size={resolved} from reference images")
+
+            snapped = snap_to_nearest_valid_size(task.size, valid_sizes)
+            if snapped != task.size:
+                logger.info(f"Task {idx + 1}: size {task.size} not in valid list, snapped to {snapped}")
+                task.size = snapped
 
     def _make_relative_path(self, saved_path: str) -> str:
         """计算相对于工作区根目录的相对路径，失败时回退到文件名。"""

@@ -103,7 +103,7 @@ function createCanvas({
 	const generationRuntimeManager = new GenerationRuntimeManager()
 	const beginAttempt = vi.spyOn(generationRuntimeManager, "beginAttempt")
 	const canvas = {
-		readonly: false,
+		can: vi.fn(() => true),
 		historyManager: null,
 		magicConfigManager: {
 			config: {
@@ -156,6 +156,7 @@ function createCanvas({
 		},
 		generationRuntimeManager,
 		permissionManager: {
+			can: vi.fn(() => true),
 			isVisible: vi.fn((element) => element.visible !== false),
 		},
 		selectionManager: {
@@ -190,6 +191,22 @@ function createCanvas({
 }
 
 describe("imageGeneration", () => {
+	it("requires document write in addition to generation capability", async () => {
+		const canvas = createCanvas()
+		canvas.permissionManager.can = vi.fn(
+			(capability: string) => capability !== "document.write",
+		)
+
+		await expect(
+			generatePluginImages(canvas as never, {
+				model_id: "model-a",
+				prompt: "Generate",
+			}),
+		).rejects.toThrow("Canvas does not allow document generation.")
+		expect(generateImages).not.toHaveBeenCalled()
+		expect(canvas.__spies.createImageElementsAtPositions).not.toHaveBeenCalled()
+	})
+
 	it("creates one batch task, then fills placeholders from multi-image results", async () => {
 		const canvas = createCanvas({ maxOutputImages: 4 })
 		generateImages.mockReset()
@@ -344,6 +361,10 @@ describe("imageGeneration", () => {
 		await vi.waitFor(() => {
 			expect(canvas.__spies.beginAttempt).toHaveBeenCalled()
 		})
+		// The runtime manager rejects concurrent attempts for the same Content;
+		// clear the older ownership before installing the newer attempt used by
+		// this cleanup-ownership scenario.
+		canvas.generationRuntimeManager.clearElement("element-1")
 		canvas.generationRuntimeManager.beginAttempt({
 			attemptId: "newer-attempt",
 			operation: "image-generate",

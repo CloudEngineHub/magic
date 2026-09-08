@@ -39,6 +39,10 @@ export interface ProjectShareSheetProps {
 	projectName?: string
 	attachments: AttachmentItem[]
 	attachmentList?: AttachmentItem[]
+	/** Full attachment snapshot used for hidden recording document dependency lookup. */
+	dependencyAttachments?: AttachmentItem[]
+	/** Recording bundle root used to prevent cross-bundle dependency matching. */
+	dependencyBundleRootPath?: string
 	fileMap?: RecordingDetailFileMap
 	defaultSelectedFileIds?: string[]
 	defaultOpenFileId?: string

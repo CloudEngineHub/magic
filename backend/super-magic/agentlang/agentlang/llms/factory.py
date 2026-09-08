@@ -74,13 +74,6 @@ class LLMFactory:
     pricing = ModelPricing()
     sandbox_id = os.environ.get("SANDBOX_ID", "default")
 
-    # 初始化 TokenUsageReport
-    _ = TokenUsageReport.get_instance(
-        sandbox_id=sandbox_id,
-        token_tracker=token_tracker,
-        pricing=pricing
-    )
-
     @classmethod
     def register_config(cls, llm_config: LLMClientConfig) -> None:
         """Register a configuration for a model ID.

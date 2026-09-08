@@ -30,6 +30,9 @@ function MainLayout() {
 		if (!stateParams) return
 
 		const needsRestore =
+			Boolean(!stateParams.projectId && projectStore.selectedProject) ||
+			Boolean(!stateParams.projectId && topicStore.selectedTopic) ||
+			Boolean(stateParams.projectId && !stateParams.topicId && topicStore.selectedTopic) ||
 			Boolean(
 				stateParams.workspaceId &&
 				workspaceStore.selectedWorkspace?.id !== stateParams.workspaceId,

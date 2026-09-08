@@ -14,6 +14,8 @@ export interface UseIframeDatabaseOptions {
 	iframeRef: React.RefObject<HTMLIFrameElement>
 	/** 当前选中的项目 ID */
 	projectId: string | undefined
+	/** 项目上下文不可用时返回给 iframe 的语义化错误。 */
+	projectContextUnavailableError?: string
 }
 
 export interface UseIframeDatabaseReturn {
@@ -22,7 +24,7 @@ export interface UseIframeDatabaseReturn {
 }
 
 export function useIframeDatabase(options: UseIframeDatabaseOptions): UseIframeDatabaseReturn {
-	const { iframeRef, projectId } = options
+	const { iframeRef, projectId, projectContextUnavailableError } = options
 
 	const serviceRef = useRef<IframeDatabaseService | null>(null)
 	const projectIdRef = useRef(projectId)
@@ -38,6 +40,7 @@ export function useIframeDatabase(options: UseIframeDatabaseOptions): UseIframeD
 		const cfg: IframeDatabaseConfig = {
 			postToIframe,
 			getProjectId,
+			projectContextUnavailableError,
 		}
 
 		serviceRef.current = new IframeDatabaseService(cfg)
@@ -46,7 +49,7 @@ export function useIframeDatabase(options: UseIframeDatabaseOptions): UseIframeD
 			serviceRef.current?.destroy()
 			serviceRef.current = null
 		}
-	}, [postToIframe, getProjectId])
+	}, [postToIframe, getProjectId, projectContextUnavailableError])
 
 	const handleDatabaseMessage = useMemoizedFn(
 		async (type: string, payload: unknown): Promise<boolean> => {

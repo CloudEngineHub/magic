@@ -163,7 +163,9 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         string $sortDirection = 'desc',
         array $creatorUserIds = [],
         ?string $joinMethod = null,
-        array $organizationCodes = []
+        array $organizationCodes = [],
+        int $page = 1,
+        int $pageSize = 10
     ): array {
         $query = $this->projectMemberModel::query()
             ->where(function ($query) use ($userId, $departmentIds) {
@@ -187,7 +189,11 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             })
             ->where('magic_super_agent_project.user_id', '!=', $userId)
             ->where('magic_super_agent_project.is_collaboration_enabled', 1)
-            ->whereNull('magic_super_agent_project.deleted_at');
+            ->whereNull('magic_super_agent_project.deleted_at')
+            ->whereNotIn(
+                'magic_super_agent_project.project_mode',
+                ProjectMode::getQueryFilterModes()
+            );
 
         if (! empty($name)) {
             // 如果有项目名称搜索条件，则需要连接项目表
@@ -208,6 +214,10 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             // 根据组织编码过滤
             $query->whereIn('magic_super_agent_project.user_organization_code', $organizationCodes);
         }
+
+        $total = (clone $query)
+            ->distinct()
+            ->count('magic_super_agent_project_members.project_id');
 
         $query->select(
             'magic_super_agent_project_members.project_id',
@@ -240,10 +250,14 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
                 break;
         }
 
-        $results = $query->get()->toArray();
+        $results = $query
+            ->offset(max(0, $page - 1) * $pageSize)
+            ->limit($pageSize)
+            ->get()
+            ->toArray();
 
         return [
-            'total' => count($results),
+            'total' => $total,
             'list' => $results,
         ];
     }
@@ -349,7 +363,11 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             ->where('magic_super_agent_project.user_id', '=', $userId)
             ->where('magic_super_agent_project.user_organization_code', '=', $organizationCode)
             ->where('magic_super_agent_project.is_collaboration_enabled', 1)
-            ->whereNull('magic_super_agent_project.deleted_at');
+            ->whereNull('magic_super_agent_project.deleted_at')
+            ->whereNotIn(
+                'magic_super_agent_project.project_mode',
+                ProjectMode::getQueryFilterModes()
+            );
 
         // 如果有项目名称搜索条件
         if (! empty($name)) {
@@ -507,7 +525,17 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             Db::raw('COALESCE(pms.is_bind_workspace, 0) as is_bind_workspace'),
             Db::raw('COALESCE(pms.bind_workspace_id, 0) as bind_workspace_id'),
             Db::raw('COALESCE(pms.last_active_at, p.created_at) as last_active_at'),
+            Db::raw('pms.sort_order as sort_order'),
+            Db::raw('pms.pinned_sort_order as pinned_sort_order'),
             'pms.pinned_at',
+            Db::raw('CASE WHEN COALESCE(pms.is_pinned, 0) = 1 AND pms.pinned_sort_order IS NULL THEN 0 ELSE 1 END as pinned_sort_group'),
+            Db::raw('CASE WHEN COALESCE(pms.is_pinned, 0) = 1 AND pms.pinned_sort_order IS NULL THEN pms.pinned_at END as dynamic_pinned_sort'),
+            Db::raw('CASE WHEN COALESCE(pms.is_pinned, 0) = 1 AND pms.pinned_sort_order IS NOT NULL THEN pms.pinned_sort_order END as pinned_manual_sort_value'),
+            Db::raw('CASE WHEN COALESCE(pms.is_pinned, 0) = 0 AND pms.sort_order IS NULL THEN 0 ELSE 1 END as manual_sort_group'),
+            // Snowflake IDs are monotonic by creation order and avoid sorting
+            // the dynamic segment by a timestamp column.
+            Db::raw('CASE WHEN COALESCE(pms.is_pinned, 0) = 0 AND pms.sort_order IS NULL THEN p.id END as dynamic_created_sort'),
+            Db::raw('CASE WHEN COALESCE(pms.is_pinned, 0) = 0 THEN pms.sort_order END as manual_sort_value'),
             Db::raw('CASE WHEN p.user_id != ? THEN 1 ELSE 0 END as is_collaborator'),
         ])
             ->addBinding($userId, 'select');
@@ -515,10 +543,22 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
         // 去重
         $query->distinct();
 
-        // 排序逻辑：置顶优先，置顶项目按置顶时间排序，最后按活跃时间排序
-        $query->orderByRaw('COALESCE(pms.is_pinned, 0) DESC'); // 1. 置顶的在前
-        $query->orderByRaw('pms.pinned_at DESC'); // 2. 置顶项目按置顶时间排序（最后置顶的在前）
-        $query->orderByRaw('COALESCE(pms.last_active_at, p.created_at) DESC'); // 3. 按活跃时间排序
+        if (! $showCollaboration) {
+            // Recent-use mode ignores pin/manual ordering.
+            $query->orderByDesc('last_active_at')
+                ->orderByDesc('p.created_at')
+                ->orderBy('p.id', 'desc');
+        } else {
+            // 置顶优先，其次是动态项目，最后是手工排序项目。
+            $query->orderByDesc('is_pinned')
+                ->orderBy('pinned_sort_group', 'asc')
+                ->orderByDesc('dynamic_pinned_sort')
+                ->orderBy('pinned_manual_sort_value', 'asc')
+                ->orderBy('manual_sort_group', 'asc')
+                ->orderByDesc('dynamic_created_sort')
+                ->orderBy('manual_sort_value', 'asc')
+                ->orderBy('p.id', 'asc');
+        }
 
         // 分页
         $offset = ($page - 1) * $pageSize;
@@ -526,6 +566,20 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             ->limit($pageSize)
             ->get()
             ->toArray();
+
+        // These columns only make DISTINCT + ORDER BY compatible with MySQL;
+        // they are not part of the public project response.
+        $projects = array_map(static function (array $project): array {
+            unset(
+                $project['manual_sort_group'],
+                $project['dynamic_created_sort'],
+                $project['manual_sort_value'],
+                $project['pinned_sort_group'],
+                $project['dynamic_pinned_sort'],
+                $project['pinned_manual_sort_value']
+            );
+            return $project;
+        }, $projects);
 
         return [
             'total' => $total,

@@ -43,6 +43,8 @@ export interface UseVideoEditorConfigOptions {
 	recoveryIntent?: MediaEditIntent
 	/** 尺寸选择变化时是否同步更新当前 videoElement；结果态重新编辑生成新元素时应关闭 */
 	syncElementSize?: boolean
+	/** 当前有效的画布联动参考媒体，仅用于添加入口的统一计数，不由该 hook 持久化。 */
+	getAdditionalReferenceAssetInfos?: () => readonly VideoReferenceAssetInfo[]
 }
 
 export interface VideoModelOption {
@@ -227,6 +229,7 @@ export interface VideoEditorConfig {
 			context?: MessageEditorMentionChangeContext,
 			metadataCandidates?: readonly ReferenceResourceMetadataCandidate[],
 		) => void
+		resetSelectedResourceSlot: (expectedSlot?: VideoInputSlotInfo) => void
 		prepareResourceSlotSelection: (
 			inputTab: "frame" | "reference",
 			slotIndex: number,
@@ -242,6 +245,7 @@ export interface VideoEditorConfig {
 			fileInfo: UploadFileResponse,
 			options?: { retainResourceSlot?: boolean },
 		) => void
+		appendFrameImage: (fileInfo: UploadFileResponse) => boolean
 		replaceReferenceImageAt: (
 			slotIndex: number,
 			fileInfo: UploadFileResponse & { assetType?: VideoReferenceAssetKind },
@@ -250,7 +254,10 @@ export interface VideoEditorConfig {
 				mentionPlacement?: "cursor" | "documentEnd"
 			},
 		) => void
-		replaceSelectedResource: (fileInfo: UploadFileResponse) => void
+		replaceSelectedResource: (
+			fileInfo: UploadFileResponse,
+			options?: { retainResourceSlot?: boolean },
+		) => void
 		handleReferenceImageRemove: (path: string) => void
 		handleFrameImageRemove: (slotIndex: number) => void
 		/** 本地上传进行中：取消并忽略后续上传完成回调 */
@@ -269,7 +276,15 @@ export interface VideoEditorConfig {
 		buildSessionSnapshot: () => VideoEditSessionSnapshot
 		restoreSessionSnapshotToUi: (snapshot: VideoEditSessionSnapshot) => void
 		triggerFileSelect: () => void
-		uploadReferenceFiles: (files: File[]) => Promise<void>
+		uploadReferenceFiles: (
+			files: File[],
+			options?: {
+				ignoreSelectedResourceSlot?: boolean
+				retainSelectedResourceSlot?: boolean
+				suppressPartialSkippedToast?: boolean
+				isCurrent?: () => boolean
+			},
+		) => Promise<void>
 		handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
 		syncReferenceImagesFromElement: () => void
 	}

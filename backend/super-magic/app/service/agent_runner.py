@@ -6,11 +6,11 @@
 import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from agentlang.agent.models import AgentRunRequest
-from agentlang.logger import get_logger
 from agentlang.chat_history.session_config import SessionConfig
+from agentlang.logger import get_logger
 from app.core.models.agent_runtime import AgentLifetime, AgentTarget
 from app.core.models.agent_session import AgentSessionRef
 from app.core.models.media_model import ImageModelSpec, VideoModelSpec
@@ -143,15 +143,7 @@ async def run_compaction_agent(
     request: IsolatedAgentRunRequest,
 ) -> Optional[str]:
     """运行后台压缩 Agent，捕获 compact_chat_history 结果并禁止再次压缩。"""
-    try:
-        return await _run_isolated_agent(request, capture_compact_history_result=True)
-    finally:
-        if request.chat_history_dir is not None:
-            from app.utils.async_file_utils import async_rmtree
-            try:
-                await async_rmtree(request.chat_history_dir)
-            except Exception as error:
-                logger.warning(f"后台压缩临时目录删除失败: {error}")
+    return await _run_isolated_agent(request, capture_compact_history_result=True)
 
 
 async def _run_isolated_agent(
@@ -184,8 +176,8 @@ async def _run_isolated_agent(
     路径；不同点只在 prompt、模型选择和压缩结果捕获方式。
     """
     from app.core.context.agent_context import AgentContext
-    from app.service.agent_runtime import AgentRuntime
     from app.service.agent_context_snapshot_service import AgentContextSnapshotService
+    from app.service.agent_runtime import AgentRuntime
 
     target_session = AgentSessionRef(
         target=request.target,

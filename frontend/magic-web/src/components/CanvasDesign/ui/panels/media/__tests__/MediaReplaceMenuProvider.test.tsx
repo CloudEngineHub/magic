@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
 	handlers: {} as Record<string, (event: { data: Record<string, unknown> }) => void>,
 	canvas: undefined as
 		| {
-				readonly: boolean
+				can: ReturnType<typeof vi.fn>
 				container: HTMLDivElement
 				elementManager: { getElementData: ReturnType<typeof vi.fn> }
 				mediaReplaceController: {
@@ -98,7 +98,8 @@ describe("MediaReplaceMenuProvider", () => {
 			toJSON: () => ({}),
 		})
 		mocks.canvas = {
-			readonly: false,
+			can: vi.fn(() => true),
+			permissionManager: { can: vi.fn(() => true) },
 			container,
 			elementManager: { getElementData: vi.fn() },
 			mediaReplaceController: {

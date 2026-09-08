@@ -93,6 +93,7 @@ class FileManagementAppService extends AbstractAppService
         private readonly FileAppService $fileAppService,
         private readonly TopicDomainService $topicDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
+        private readonly TaskFileAuthorizationService $taskFileAuthorizationService,
         private readonly TaskFileVersionDomainService $taskFileVersionDomainService,
         private readonly ResourceShareDomainService $resourceShareDomainService,
         private readonly FileBatchOperationStatusManager $batchOperationStatusManager,
@@ -543,6 +544,11 @@ class FileManagementAppService extends AbstractAppService
                         organizationCode: $dataIsolation->getCurrentOrganizationCode(),
                         projectOrganizationCode: $projectEntity->getUserOrganizationCode(),
                     );
+                } else {
+                    $parentEntity = $this->taskFileDomainService->getDirectoryByIdAndProject($parentId, $projectId);
+                    if ($parentEntity === null) {
+                        ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, trans('file.parent_file_not_found'));
+                    }
                 }
             } else {
                 // 用户空间没有项目根节点，必须由父目录锚定并使用文件 owner 鉴权。
@@ -662,7 +668,7 @@ class FileManagementAppService extends AbstractAppService
             $this->magicFSFileDomainService->deleteFile((string) $fileId);
 
             if ($fileEntity->isProjectFile()) {
-                // 4. Dispatch the matching event so notification / asset subscribers can react.
+                // 项目空间文件才进入回收站/物理删除策略链路。
                 if ($fileEntity->getIsDirectory()) {
                     $this->eventDispatcher->dispatch(new DirectoryDeletedEvent($fileEntity, $userAuthorization));
                 } else {
@@ -716,7 +722,6 @@ class FileManagementAppService extends AbstractAppService
             $this->magicFSFileDomainService->deleteFile((string) $fileId);
 
             if ($fileEntity->isProjectFile()) {
-                // Dispatch directory deleted event
                 $dirUserAuth = new MagicUserAuthorization();
                 $dirUserAuth->setId($userAuthorization->getId());
                 $dirUserAuth->setOrganizationCode($userAuthorization->getOrganizationCode());
@@ -2925,7 +2930,12 @@ class FileManagementAppService extends AbstractAppService
      */
     private function getFileUrlsGroupedByProject(MagicUserAuthorization $authorization, array $fileIds, string $downloadMode, array $options, array $fileVersions): array
     {
-        $fileEntities = $this->taskFileDomainService->getFilesByIds($fileIds);
+        $fileEntities = $this->taskFileAuthorizationService->authorizeFilesByIds(
+            $authorization,
+            $fileIds,
+            MemberRole::VIEWER,
+            true,
+        );
         if (empty($fileEntities)) {
             return [];
         }
@@ -2943,23 +2953,14 @@ class FileManagementAppService extends AbstractAppService
                 $groupFileEntities
             );
 
-            $projectEntity = $this->getAccessibleProjectForTaskFile(
-                $groupFileEntities[0],
-                $authorization,
-                MemberRole::VIEWER,
-            );
-            if ($projectEntity === null) {
-                // 用户空间没有项目权限，逐文件校验 task_files owner 信息。
-                foreach ($groupFileEntities as $groupFileEntity) {
-                    $this->getAccessibleProjectForTaskFile(
-                        $groupFileEntity,
-                        $authorization,
-                        MemberRole::VIEWER,
-                    );
+            if ($groupFileEntities[0]->isProjectFile()) {
+                $groupProject = $this->projectDomainService->getProjectNotUserId((int) $groupProjectId);
+                if ($groupProject === null) {
+                    ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, trans('project.project_not_found'));
                 }
-                $organizationCode = $groupFileEntities[0]->getOrganizationCode();
+                $organizationCode = $groupProject->getUserOrganizationCode();
             } else {
-                $organizationCode = $projectEntity->getUserOrganizationCode();
+                $organizationCode = $groupFileEntities[0]->getOrganizationCode();
             }
 
             $urls = $this->taskFileDomainService->getFileUrls(

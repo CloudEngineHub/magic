@@ -12,10 +12,17 @@ import FileShareManagementListCore from "@/pages/superMagic/components/ShareMana
 import ShareListFooter from "@/pages/superMagic/components/ShareManagement/components/ShareListFooter"
 import { SharedTopicFilterStatus } from "@/pages/superMagic/components/ShareManagement/types"
 import { createRecordingShareUiConfig } from "@/pages/superMagic/components/Share/utils/recordingShareUiConfig"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 
 export interface RecordingShareManagementDialogProps {
 	open: boolean
 	projectId: string
+	/** Full recording attachment snapshot used to resolve static document dependencies. */
+	dependencyAttachments?: AttachmentItem[]
+	/** Recording bundle root used to keep dependency analysis scoped to this recording. */
+	dependencyBundleRootPath?: string
+	displayNameByFileId?: Record<string, string>
+	displayNameByFileName?: Record<string, string>
 	onClose: () => void
 }
 
@@ -27,12 +34,14 @@ const STATUS_OPTIONS = [
 	SharedTopicFilterStatus.Expired,
 	SharedTopicFilterStatus.Cancelled,
 ]
-const RECORDING_SHARE_UI_CONFIG = createRecordingShareUiConfig()
-
 /** PC recording-only share-management shell; the global share manager keeps its original tabs. */
 function RecordingShareManagementDialog({
 	open,
 	projectId,
+	dependencyAttachments,
+	dependencyBundleRootPath,
+	displayNameByFileId,
+	displayNameByFileName,
 	onClose,
 }: RecordingShareManagementDialogProps) {
 	const { t: tAudio } = useTranslation("audioRecordings")
@@ -42,6 +51,11 @@ function RecordingShareManagementDialog({
 	)
 	const [currentPage, setCurrentPage] = useState(1)
 	const [totalPages, setTotalPages] = useState(0)
+	const recordingShareUiConfig = {
+		...createRecordingShareUiConfig({ dependencyAttachments, dependencyBundleRootPath }),
+		displayNameByFileId,
+		displayNameByFileName,
+	}
 
 	useEffect(() => {
 		// Reset scene-local filters when the dialog is reopened for another recording project.
@@ -133,7 +147,7 @@ function RecordingShareManagementDialog({
 						currentPage={currentPage}
 						pageSize={PAGE_SIZE}
 						onTotalPagesChange={handleTotalPagesChange}
-						fileShareUiConfig={RECORDING_SHARE_UI_CONFIG}
+						fileShareUiConfig={recordingShareUiConfig}
 					/>
 				</div>
 

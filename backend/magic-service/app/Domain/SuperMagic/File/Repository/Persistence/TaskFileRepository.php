@@ -31,6 +31,20 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         return new TaskFileEntity($model->toArray());
     }
 
+    public function getDirectoryByIdAndProject(int $parentId, int $projectId): ?TaskFileEntity
+    {
+        $model = $this->model::query()
+            ->where('file_id', $parentId)
+            ->where('project_id', $projectId)
+            ->where('is_directory', true)
+            ->first();
+        if (! $model) {
+            return null;
+        }
+
+        return new TaskFileEntity($model->toArray());
+    }
+
     public function getByIdWithTrash(int $id): ?TaskFileEntity
     {
         /* @phpstan-ignore-next-line - TaskFileModel uses SoftDeletes trait which provides withTrashed() */
@@ -88,6 +102,35 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $models = $query->get();
 
             foreach ($models as $model) {
+                $list[] = new TaskFileEntity($model->toArray());
+            }
+        }
+
+        return $list;
+    }
+
+    public function getFilesByIdsWithTrash(array $fileIds, int $projectId = 0, ?string $spaceType = null): array
+    {
+        if (empty($fileIds)) {
+            return [];
+        }
+
+        $chunks = array_chunk(array_values(array_unique($fileIds)), 500);
+        $list = [];
+
+        foreach ($chunks as $chunk) {
+            /* @phpstan-ignore-next-line - TaskFileModel uses SoftDeletes trait which provides withTrashed() */
+            $query = $this->model::withTrashed()->whereIn('file_id', $chunk);
+
+            if ($projectId > 0) {
+                $query->where('project_id', $projectId);
+            }
+
+            if ($spaceType !== null) {
+                $query->where('space_type', $spaceType);
+            }
+
+            foreach ($query->get() as $model) {
                 $list[] = new TaskFileEntity($model->toArray());
             }
         }
@@ -193,9 +236,10 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     /**
      * 根据项目ID和fileKey获取文件.
      */
-    public function getByProjectIdAndFileKey(int $projectId, string $fileKey): ?TaskFileEntity
+    public function getByProjectIdAndFileKey(int $projectId, string $fileKey, bool $withTrash = false): ?TaskFileEntity
     {
-        $model = $this->model::query()
+        $query = $withTrash ? $this->model::withTrashed() : $this->model::query();
+        $model = $query
             ->where('project_id', $projectId)
             ->where('file_key', $fileKey)
             ->first();
@@ -953,6 +997,61 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         }
 
         return $list;
+    }
+
+    public function getChildrenByParentIdsAndProjectWithTrash(int $projectId, array $parentIds, int $limit = 1000, int $offset = 0): array
+    {
+        if (empty($parentIds)) {
+            return [];
+        }
+
+        /* @phpstan-ignore-next-line - TaskFileModel uses SoftDeletes trait which provides withTrashed() */
+        $models = $this->model::withTrashed()
+            ->where('project_id', $projectId)
+            ->whereIn('parent_id', $parentIds)
+            ->offset($offset)
+            ->limit($limit)
+            ->get();
+
+        $list = [];
+        foreach ($models as $model) {
+            $list[] = new TaskFileEntity($model->toArray());
+        }
+
+        return $list;
+    }
+
+    public function getAllDescendantEntitiesWithTrash(int $parentId, int $projectId = 0, int $maxDepth = 100): array
+    {
+        $result = [];
+        $parentIds = [$parentId];
+
+        for ($depth = 0; $depth < $maxDepth && $parentIds !== []; ++$depth) {
+            $nextParentIds = [];
+            $offset = 0;
+            do {
+                $children = $this->getChildrenByParentIdsAndProjectWithTrash(
+                    $projectId,
+                    $parentIds,
+                    1000,
+                    $offset
+                );
+                foreach ($children as $child) {
+                    if (isset($result[$child->getFileId()])) {
+                        continue;
+                    }
+                    $result[$child->getFileId()] = $child;
+                    if ($child->getIsDirectory()) {
+                        $nextParentIds[] = $child->getFileId();
+                    }
+                }
+                $offset += count($children);
+            } while (count($children) === 1000);
+
+            $parentIds = array_values(array_unique($nextParentIds));
+        }
+
+        return array_values($result);
     }
 
     /**

@@ -45,6 +45,7 @@ export const MentionBusinessItemType = {
 	UPLOAD_FILE: "upload_file",
 	CLOUD_FILE: "cloud_file",
 	DESIGN_MARKER: "design_marker",
+	TEXT: "text",
 } as const
 
 export type MentionBusinessItemType =
@@ -170,6 +171,8 @@ export interface UploadFileMentionData {
 	upload_progress?: number // 上传进度 0-100
 	upload_status?: "init" | "uploading" | "done" | "error"
 	upload_error?: string
+	/** Internal marker for canvas clipboard attachments; never promote to project mention. */
+	is_canvas_clipboard?: boolean
 }
 
 export interface CloudFileMentionData {
@@ -182,6 +185,14 @@ export interface CloudFileMentionData {
 	created_at?: string
 	modified_at?: string
 	[key: string]: unknown // 待定字段
+}
+
+/** Stores the SDK-provided display label, send text, and stable business identifier. */
+export interface TextMentionData {
+	label: string
+	text: string
+	id: string
+	[key: string]: unknown
 }
 
 export interface CanvasMarkerMentionSuggestion {
@@ -236,6 +247,7 @@ export interface MentionBusinessItemDataMap {
 	[MentionBusinessItemType.UPLOAD_FILE]: UploadFileMentionData
 	[MentionBusinessItemType.CLOUD_FILE]: CloudFileMentionData
 	[MentionBusinessItemType.DESIGN_MARKER]: CanvasMarkerMentionData
+	[MentionBusinessItemType.TEXT]: TextMentionData
 }
 
 export interface MentionItemDataMap extends MentionCoreItemDataMap, MentionBusinessItemDataMap {}

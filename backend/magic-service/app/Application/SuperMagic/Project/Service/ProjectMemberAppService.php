@@ -43,8 +43,11 @@ use App\Interfaces\SuperMagic\Project\DTO\Response\CollaborationProjectListRespo
 use App\Interfaces\SuperMagic\Project\DTO\Response\CollaboratorMemberDTO;
 use App\Interfaces\SuperMagic\Project\DTO\Response\ParticipatedProjectListResponseDTO;
 use App\Interfaces\SuperMagic\Project\DTO\Response\ProjectMembersResponseDTO;
+use Hyperf\DbConnection\Db;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
+
+use function Hyperf\Translation\trans;
 
 /**
  * 项目成员应用服务
@@ -258,7 +261,8 @@ class ProjectMemberAppService extends AbstractAppService
 
         $result = $this->projectDomainService->getProjectsByConditions(
             ['project_ids' => $projectIds],
-            $requestDTO->getPage(),
+            // $projectIds 已由上游列表查询确定，实体查询不能再次按同一页码偏移。
+            1,
             10000
         );
 
@@ -280,15 +284,50 @@ class ProjectMemberAppService extends AbstractAppService
         $userAuthorization = $requestContext->getUserAuthorization();
 
         // 1. 验证并获取可访问的项目
-        $this->getAccessibleProject($projectId, $userAuthorization->getId(), $userAuthorization->getOrganizationCode());
+        $projectEntity = $this->getAccessibleProject($projectId, $userAuthorization->getId(), $userAuthorization->getOrganizationCode());
 
-        // 2. 委托给Domain层处理业务逻辑
-        $this->projectMemberDomainService->updateProjectPinStatus(
-            $userAuthorization->getId(),
-            $projectId,
-            $userAuthorization->getOrganizationCode(),
-            $requestDTO->isPinOperation()
-        );
+        $targetWorkspaceId = $requestDTO->getTargetWorkspaceId();
+        if ($targetWorkspaceId !== null && $targetWorkspaceId !== $projectEntity->getWorkspaceId()) {
+            if ($projectEntity->getUserId() !== $userAuthorization->getId()) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::WORKSPACE_ACCESS_DENIED, trans('workspace.workspace_access_denied'));
+            }
+            $workspace = $this->workspaceDomainService->getWorkspaceDetail($targetWorkspaceId);
+            if ($workspace === null || $workspace->getUserId() !== $userAuthorization->getId()) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::WORKSPACE_NOT_FOUND);
+            }
+        }
+
+        Db::transaction(function () use ($projectId, $requestDTO, $userAuthorization, $projectEntity, $targetWorkspaceId): void {
+            if ($targetWorkspaceId !== null && $targetWorkspaceId !== $projectEntity->getWorkspaceId()) {
+                $this->projectDomainService->moveProject(
+                    $projectId,
+                    $targetWorkspaceId,
+                    $userAuthorization->getId()
+                );
+            }
+            $this->projectMemberDomainService->updateProjectPinStatus(
+                $userAuthorization->getId(),
+                $projectId,
+                $userAuthorization->getOrganizationCode(),
+                $requestDTO->isPinOperation()
+            );
+            $preProjectId = $requestDTO->getPreProjectId();
+            $nextProjectId = $requestDTO->getNextProjectId();
+            if ($preProjectId !== null && $nextProjectId !== null) {
+                $nextProjectId = null;
+            }
+            if ($preProjectId !== null || $nextProjectId !== null) {
+                $this->projectDomainService->applyProjectSortOrderForGroup(
+                    $userAuthorization->getId(),
+                    $userAuthorization->getOrganizationCode(),
+                    $projectId,
+                    $targetWorkspaceId ?? $projectEntity->getWorkspaceId(),
+                    $preProjectId,
+                    $nextProjectId,
+                    $requestDTO->isPinOperation()
+                );
+            }
+        });
     }
 
     /**
@@ -630,7 +669,9 @@ class ProjectMemberAppService extends AbstractAppService
             $requestDTO->getSortDirection(),
             $requestDTO->getCreatorUserIds(),
             $requestDTO->getJoinMethod(),
-            $organizationCodes
+            $organizationCodes,
+            $requestDTO->getPage(),
+            $requestDTO->getPageSize()
         );
     }
 

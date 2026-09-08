@@ -78,7 +78,7 @@ export class ElementCornerActionsDecorator {
 	private mouseLeaveHandler?: () => void
 	private dragStartHandler?: () => void
 	private dragEndHandler?: () => void
-	private readonlyHandler?: () => void
+	private permissionChangedHandler?: () => void
 	private isHovering = false
 
 	constructor(group: Konva.Group, config: ElementCornerActionsDecoratorConfig) {
@@ -623,11 +623,11 @@ export class ElementCornerActionsDecorator {
 			this.group.on("dragend", this.dragEndHandler)
 		}
 
-		if (!this.readonlyHandler) {
-			this.readonlyHandler = () => {
+		if (!this.permissionChangedHandler) {
+			this.permissionChangedHandler = () => {
 				this.refresh()
 			}
-			this.config.canvas.eventEmitter.on("canvas:readonly", this.readonlyHandler)
+			this.config.canvas.eventEmitter.on("permission:changed", this.permissionChangedHandler)
 		}
 	}
 
@@ -660,9 +660,9 @@ export class ElementCornerActionsDecorator {
 			this.group.off("dragend", this.dragEndHandler)
 			this.dragEndHandler = undefined
 		}
-		if (this.readonlyHandler) {
-			this.config.canvas.eventEmitter.off("canvas:readonly", this.readonlyHandler)
-			this.readonlyHandler = undefined
+		if (this.permissionChangedHandler) {
+			this.config.canvas.eventEmitter.off("permission:changed", this.permissionChangedHandler)
+			this.permissionChangedHandler = undefined
 		}
 	}
 

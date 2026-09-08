@@ -26,8 +26,6 @@ import { IconArrowBackUp, IconChevronsDown, IconChevronsUp } from "@tabler/icons
 import { SuperMagicMessageItem } from "./type"
 import { Node } from "./components/Nodes"
 import { observer } from "mobx-react-lite"
-import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import type { Virtualizer } from "@tanstack/react-virtual"
 import { superMagicStore } from "../../stores"
 import { optimisticMessageStore } from "../../stores/optimisticMessageStore"
 import { SuperMagicApi } from "@/apis"
@@ -42,6 +40,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { Button } from "@/components/shadcn-ui/button"
 import { Spinner } from "@/components/shadcn-ui/spinner"
 import { useVirtualMessageScroll } from "./hooks/useVirtualMessageScroll"
+import { useStalledGenerationLoading } from "./hooks/useStalledGenerationLoading"
 import RevokedEditableUserMessage from "./components/RevokedEditableUserMessage"
 import type { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 import {
@@ -60,11 +59,14 @@ import { resolveBottomLoadingVisibility } from "./bottom-loading-visibility"
 import {
 	buildVirtualMessageProjection,
 	composeVirtualMessageItems,
+	stabilizeVirtualMessageItems,
 	type VirtualMessageItem,
 } from "./virtual-message-items"
 import { VirtualMessageList } from "./components/VirtualMessageList"
 import { MessageViewStateProvider } from "./view-state/MessageViewStateContext"
 import type { RevokedMessageEditorContext } from "./revoked-editor-context"
+import type { MessageListScrollAdapter } from "./message-list-scroll-adapter"
+import { useStableArrayReference } from "./hooks/useStableArrayReference"
 
 export { MessageListProvider }
 
@@ -106,7 +108,7 @@ interface MessageListProps {
 	exportApiRef?: (api: MessageListExportApi | null) => void
 	/** Title used as export document header / default file name. */
 	exportTitle?: string
-	/** Optional ref to the ScrollArea viewport (mobile TopicPage scroll coordination). */
+	/** Optional ref to the message list scroll viewport (mobile TopicPage scroll coordination). */
 	viewportRef?: Ref<HTMLDivElement | null>
 	/** Distance from the top at which a fresh upward gesture may load one history page. */
 	historyLoadThresholdPx?: number
@@ -182,13 +184,12 @@ const MessageList = observer(
 
 		const nodesPanelRef = useRef<HTMLDivElement | null>(null)
 		/**
-		 * ScrollArea viewport commits after VirtualMessageList's first render.
-		 * Keep the element in state so that mount triggers a re-render and
-		 * TanStack Virtualizer can bind a real getScrollElement (ref-only
-		 * assignment would leave memoized VirtualMessageList stuck on null).
+		 * The scroll viewport commits after VirtualMessageList's first render.
+		 * Keep the element in state so the virtualizer receives the real scroll
+		 * container instead of staying bound to the initial null value.
 		 */
 		const [scrollViewport, setScrollViewport] = useState<HTMLDivElement | null>(null)
-		const virtualizerRef = useRef<Virtualizer<HTMLDivElement, HTMLDivElement> | null>(null)
+		const virtualizerRef = useRef<MessageListScrollAdapter | null>(null)
 		/** Scroll edge fade is mobile-only; desktop TopicMessagePanel / share pages stay unchanged. */
 		const scrollEdgeFadeConfig = useMemo(() => {
 			if (!isMobile || isShare) return null
@@ -207,6 +208,7 @@ const MessageList = observer(
 			main: new MessageProjectionCache(),
 			revoked: new MessageProjectionCache(),
 		})
+		const normalVirtualMessageItemsRef = useRef<Array<VirtualMessageItem>>([])
 		const canAnimateNewMessagesRef = useRef(false)
 		const currentTopicKeyRef = useRef<string>("")
 
@@ -254,19 +256,23 @@ const MessageList = observer(
 			selectedTopic?.chat_topic_id,
 		])
 
-		const mainDisplayData = useMemo(() => {
+		const filteredMainDisplayData = useMemo(() => {
 			return revokedProjection.mainMessages.filter(
 				(node) => !hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || ""),
 			)
 		}, [hiddenRevokedOptimisticMessageIdSet, revokedProjection.mainMessages])
+		// Filtering creates a fresh array even when every projected message is unchanged. Keep the
+		// previous reference so downstream conversion and virtualization remain quiet on parent renders.
+		const mainDisplayData = useStableArrayReference(filteredMainDisplayData)
 
-		const revokedBranchData = useMemo(() => {
+		const filteredRevokedBranchData = useMemo(() => {
 			// Failed optimistic messages stay hidden while the selected revoked branch is edited;
 			// Assistant and Tool descendants remain together regardless of their own status.
 			return revokedProjection.revokedBranchMessages.filter(
 				(node) => !hiddenRevokedOptimisticMessageIdSet.has(node?.app_message_id || ""),
 			)
 		}, [hiddenRevokedOptimisticMessageIdSet, revokedProjection.revokedBranchMessages])
+		const revokedBranchData = useStableArrayReference(filteredRevokedBranchData)
 
 		const currentTopicKey = selectedTopic?.chat_topic_id || ""
 		if (currentTopicKeyRef.current !== currentTopicKey) {
@@ -276,6 +282,7 @@ const MessageList = observer(
 			projectionCachesRef.current.revoked.clear()
 			currentTopicKeyRef.current = currentTopicKey
 			renderedMessageKeysRef.current = new Set()
+			normalVirtualMessageItemsRef.current = []
 			canAnimateNewMessagesRef.current = false
 		}
 		const topicMembershipRevision =
@@ -284,7 +291,15 @@ const MessageList = observer(
 			? `${topicMembershipRevision}:${activeRevokedAnchor?.seq_id || ""}:${hiddenRevokedOptimisticMessageIds.join("\u0000")}`
 			: undefined
 
-		const visibleData = [...mainDisplayData, ...revokedBranchData]
+		const visibleData = useMemo(
+			() => [...mainDisplayData, ...revokedBranchData],
+			[mainDisplayData, revokedBranchData],
+		)
+
+		// useWhyDidYouUpdate("MessageList", {
+		// 	revokedBranchData,
+		// 	mainDisplayData
+		// })
 
 		const { messages, messageKeys, messageTurnGroups, normalVirtualMessageItems } =
 			useMemo(() => {
@@ -297,11 +312,16 @@ const MessageList = observer(
 					projectionVersion,
 				)
 				const projection = buildVirtualMessageProjection(messages)
+				const stableItems = stabilizeVirtualMessageItems(
+					normalVirtualMessageItemsRef.current,
+					projection.items,
+				)
+				normalVirtualMessageItemsRef.current = stableItems
 				return {
 					messages,
 					messageKeys: projection.messageKeys,
 					messageTurnGroups: projection.messageTurnGroups,
-					normalVirtualMessageItems: projection.items,
+					normalVirtualMessageItems: stableItems,
 				}
 			}, [mainDisplayData, projectionVersion])
 
@@ -334,7 +354,8 @@ const MessageList = observer(
 		const isLastMessageError = useMemo(() => {
 			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
 			const n = superMagicStore.getMessageNode(lastNode?.super_message_id) as
-				{ status?: TaskStatus } | undefined
+				| { status?: TaskStatus }
+				| undefined
 			return n?.status === TaskStatus.ERROR
 		}, [mainDisplayData])
 
@@ -421,23 +442,33 @@ const MessageList = observer(
 			superMagicStore.getActiveStreamSuperMessageIds(currentTopicKey)
 		// 活跃 StreamState 和占位消息行都不代表用户已经看到流式进度；
 		// projected node 尚未形成可见内容时需要保留底部兜底 Loading。
+		// 此外,生成中但推进停住(content 流完等待 tool_call chunk、
+		// 两条消息之间的空档)时,经防抖后也重新显示 Loading。
+		const bottomLoadingVisibility = resolveBottomLoadingVisibility({
+			showLoading: Boolean(showLoading),
+			isTopicTaskRunning: currentTopicStatus === TaskStatus.RUNNING,
+			activeStreamSuperMessageIds,
+			visibleMessages: effectiveVisibleMessages,
+			resolveMessageNode: (superMessageId) =>
+				superMagicStore.getMessageNode(superMessageId) as
+					| {
+							reasoning_content?: unknown
+							content?: unknown
+							tool_calls?: unknown
+					  }
+					| undefined,
+			resolveStreamState: (superMessageId) =>
+				superMagicStore.getStreamState(currentTopicKey, superMessageId),
+		})
+		const isStalledLoadingVisible = useStalledGenerationLoading(
+			currentTopicStatus !== TaskStatus.WAITING_FOR_USER &&
+				bottomLoadingVisibility.isGenerationStalled,
+			{ resetKey: currentTopicKey },
+		)
 		const shouldShowBottomLoading =
 			currentTopicStatus !== TaskStatus.WAITING_FOR_USER &&
-			resolveBottomLoadingVisibility({
-				showLoading: Boolean(showLoading),
-				activeStreamSuperMessageIds,
-				visibleMessages: effectiveVisibleMessages,
-				resolveMessageNode: (superMessageId) =>
-					superMagicStore.getMessageNode(superMessageId) as
-						| {
-								reasoning_content?: unknown
-								content?: unknown
-								tool_calls?: unknown
-						  }
-						| undefined,
-				resolveStreamStage: (superMessageId) =>
-					superMagicStore.getStreamState(currentTopicKey, superMessageId)?.stage,
-			})
+			currentTopicStatus !== TaskStatus.FINISHED &&
+			(bottomLoadingVisibility.showImmediately || isStalledLoadingVisible)
 		const showAiGeneratedTip =
 			!shouldShowBottomLoading &&
 			((mainDisplayData.length > 0 && currentTopicStatus !== TaskStatus.RUNNING) ||
@@ -485,6 +516,11 @@ const MessageList = observer(
 					return handlePullMoreMessage?.(selectedTopic, notifyPullMoreStarted)
 				},
 				minTopDistance: historyLoadThresholdPx,
+				allowFollowOutput:
+					isStreamLoading ||
+					Boolean(showLoading) ||
+					currentTopicStatus === TaskStatus.RUNNING ||
+					shouldShowBottomLoading,
 			})
 
 		const checkIsLastMessage = useMemoizedFn(createCheckIsLastMessage(messages))
@@ -734,6 +770,95 @@ const MessageList = observer(
 				</div>
 			)
 		}
+		const renderVirtualMessageNode = useMemoizedFn(({ item }: { item: VirtualMessageItem }) =>
+			renderVirtualMessageContent(item),
+		)
+		const messageListFooter = useMemo(() => {
+			const shouldRenderRevokedActions =
+				revokedDisplayMessages.length > 0 &&
+				!forceHideRevokedMessages &&
+				!isFirstRevokedUserMessagePendingSend
+			const hasFooter =
+				shouldRenderRevokedActions || shouldShowBottomLoading || showAiGeneratedTip
+			if (!hasFooter) return null
+
+			return (
+				<>
+					{shouldRenderRevokedActions ? (
+						<div
+							data-testid="revoked-message-actions"
+							className={cn(
+								"relative z-10 flex items-start gap-1 rounded-lg bg-sidebar px-4 pb-2.5 pt-2.5",
+								maskedRevokedMessages.length > 0 &&
+									!isRevokedMessagesExpanded &&
+									"bg-[linear-gradient(to_bottom,transparent_0%,rgb(var(--sidebar-rgb))_72%)] pt-20",
+							)}
+						>
+							<IconArrowBackUp size={22} />
+							<div className="flex flex-col gap-2.5">
+								<div className="text-sm leading-5 text-foreground">
+									{t("warningCard.undoMessageContentTip")}
+								</div>
+								<div className="flex gap-2.5">
+									{maskedRevokedMessages.length > 0 ? (
+										<Button
+											className={revokedActionButton}
+											onClick={handleRevokedMessagesExpanded}
+										>
+											<div>
+												{isRevokedMessagesExpanded
+													? t("warningCard.collapseContent")
+													: t("warningCard.expandContent")}
+											</div>
+											{isRevokedMessagesExpanded ? (
+												<IconChevronsUp size={16} />
+											) : (
+												<IconChevronsDown size={16} />
+											)}
+										</Button>
+									) : null}
+									<Button
+										className={revokedActionButton}
+										onClick={handleCancelRevokedMessages}
+									>
+										{isCancelRevokedLoading ? (
+											<Spinner className="animate-spin" size={16} />
+										) : null}
+										{t("warningCard.restoreContent")}
+									</Button>
+								</div>
+							</div>
+						</div>
+					) : null}
+					{shouldShowBottomLoading ? (
+						<LoadingMessage
+							messages={visibleData}
+							showLoading={shouldShowBottomLoading}
+							selectedTopic={selectedTopic}
+						/>
+					) : null}
+					{showAiGeneratedTip ? (
+						<div className="mx-auto mb-2.5 mt-2.5 text-center text-xs leading-4 text-muted-foreground">
+							{t("ui.aiGeneratedTip")}
+						</div>
+					) : null}
+				</>
+			)
+		}, [
+			handleCancelRevokedMessages,
+			handleRevokedMessagesExpanded,
+			forceHideRevokedMessages,
+			isCancelRevokedLoading,
+			isFirstRevokedUserMessagePendingSend,
+			isRevokedMessagesExpanded,
+			maskedRevokedMessages.length,
+			revokedDisplayMessages.length,
+			selectedTopic,
+			shouldShowBottomLoading,
+			showAiGeneratedTip,
+			t,
+			visibleData,
+		])
 
 		return (
 			<MessageListProvider value={augmentedMessageListContext}>
@@ -754,118 +879,67 @@ const MessageList = observer(
 								/>
 							</div>
 						)}
-						<ScrollArea
+						{/*
+						 * Plain scroll element instead of Radix ScrollArea: virtua compensates
+						 * measurement and prepend itself, so the list must own the only scroll
+						 * container. `overflow-anchor: none` keeps the browser's native anchoring
+						 * from fighting that compensation.
+						 */}
+						<div
+							ref={setScrollViewportRef}
+							data-message-list-viewport="true"
+							data-testid="message-list-viewport"
 							className={cn(
-								"h-full w-full",
-								isMobile
-									? "[&>[data-slot='scroll-area-viewport']>div]:px-4"
-									: "[&>[data-slot='scroll-area-viewport']>div]:pl-2 [&>[data-slot='scroll-area-viewport']>div]:pr-3",
-								"[&>[data-slot='scroll-area-viewport']>div]:pt-0",
-								"[&>[data-slot='scroll-area-viewport']>div]:pb-2",
-								"[&>[data-slot='scroll-area-viewport']>div]:!block",
-								"[&>[data-slot='scroll-area-viewport']>div]:!max-w-3xl",
-								"[&>[data-slot='scroll-area-viewport']>div]:!min-w-[unset]",
-								"[&>[data-slot='scroll-area-viewport']>div]:!mx-auto",
-								isMobile
-									? "[&>[data-slot='scroll-area-viewport']>div:first-child]:mt-[10px]"
-									: "[&>[data-slot='scroll-area-viewport']>div:first-child]:mt-[50px]",
+								"h-full w-full overflow-y-auto overflow-x-hidden [overflow-anchor:none]",
+								// Restores the thin overlay scrollbar the Radix ScrollArea used to draw.
+								"[scrollbar-color:rgb(var(--border-rgb))_transparent] [scrollbar-width:thin]",
+								"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
+								"[&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5",
 							)}
-							viewportRef={setScrollViewportRef}
 						>
-							{visibleData.length > 0 || !isEmptyStatus ? (
-								<>
+							{/*
+							 * Centered message column. The top padding used to live on the Radix
+							 * wrapper's first child; keeping it on the column means a prepended
+							 * history page cannot carry the spacing away with the old first row.
+							 */}
+							<div
+								className={cn(
+									// `min-h-full`, not `h-full`: the empty state still fills the
+									// viewport, but a growing list can push this column past it so
+									// the virtualizer canvas inside keeps its measurable height.
+									"mx-auto block min-h-full min-w-[unset] max-w-3xl pb-2",
+									isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[50px]",
+								)}
+							>
+								{visibleData.length > 0 || !isEmptyStatus ? (
 									<VirtualMessageList
 										topicId={currentTopicKey}
 										items={virtualMessageItems}
 										userIndices={userIndices}
 										isMobile={isMobile}
 										getScrollElement={getScrollElement}
+										startMargin={isMobile ? 10 : 50}
+										footer={messageListFooter}
 										stickyMessageClassName={stickyMessageClassName}
-										renderNode={({ item }) => renderVirtualMessageContent(item)}
+										renderNode={renderVirtualMessageNode}
 										exportMode={enableExport && exportStore.exportMode}
 										selectedKeys={exportStore.selectedKeys}
 										onToggleSelect={handleToggleSelect}
 										limitReached={exportLimitReached}
 										virtualizerRef={virtualizerRef}
 										onVirtualizerChange={onVirtualizerChange}
+										allowResizeStickySync={
+											isStreamLoading ||
+											Boolean(showLoading) ||
+											currentTopicStatus === TaskStatus.RUNNING ||
+											shouldShowBottomLoading
+										}
 									/>
-									{revokedDisplayMessages.length > 0 &&
-									!forceHideRevokedMessages &&
-									!isFirstRevokedUserMessagePendingSend ? (
-										<div
-											data-testid="revoked-message-actions"
-											className={cn(
-												"relative z-10 flex items-start gap-1 rounded-lg bg-sidebar px-4 pb-2.5 pt-2.5",
-												maskedRevokedMessages.length > 0 &&
-													!isRevokedMessagesExpanded &&
-													"-mt-20 bg-[linear-gradient(to_bottom,transparent_0%,rgb(var(--sidebar-rgb))_72%)] pt-20",
-											)}
-										>
-											<IconArrowBackUp size={22} />
-											<div className="flex flex-col gap-2.5">
-												<div className="text-sm leading-5 text-foreground">
-													{t("warningCard.undoMessageContentTip")}
-												</div>
-												<div className="flex gap-2.5">
-													{maskedRevokedMessages.length > 0 ? (
-														<Button
-															className={revokedActionButton}
-															onClick={handleRevokedMessagesExpanded}
-														>
-															<div>
-																{isRevokedMessagesExpanded
-																	? t(
-																			"warningCard.collapseContent",
-																		)
-																	: t(
-																			"warningCard.expandContent",
-																		)}
-															</div>
-															{isRevokedMessagesExpanded ? (
-																<IconChevronsUp size={16} />
-															) : (
-																<IconChevronsDown size={16} />
-															)}
-														</Button>
-													) : null}
-													<Button
-														className={revokedActionButton}
-														onClick={handleCancelRevokedMessages}
-													>
-														{isCancelRevokedLoading ? (
-															<Spinner
-																className="animate-spin"
-																size={16}
-															/>
-														) : null}
-														{t("warningCard.restoreContent")}
-													</Button>
-												</div>
-											</div>
-										</div>
-									) : null}
-								</>
-							) : (
-								<Empty />
-							)}
-							{shouldShowBottomLoading && (
-								<LoadingMessage
-									messages={visibleData}
-									showLoading={shouldShowBottomLoading}
-									selectedTopic={selectedTopic}
-								/>
-							)}
-							{showAiGeneratedTip && (
-								<div
-									className={cn(
-										"mx-auto mb-2.5 mt-2.5 text-center text-xs leading-4",
-										"text-muted-foreground",
-									)}
-								>
-									{t("ui.aiGeneratedTip")}
-								</div>
-							)}
-						</ScrollArea>
+								) : (
+									<Empty />
+								)}
+							</div>
+						</div>
 						{scrollEdgeFadeConfig ? (
 							<ScrollEdgeFadeOverlays
 								fadeColor={scrollEdgeFadeConfig.fadeColor}

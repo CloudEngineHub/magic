@@ -37,7 +37,7 @@ import { ScheduledTask } from "@/types/scheduledTask"
 import { useAttachments } from "../hooks/useAttachments"
 import mcpTempStorage from "../store/MCPTempStorage"
 import { FormValues } from "../types"
-import { getNextRunTime } from "../utils"
+import { getNextRunTime, serializeScheduledTaskModel } from "../utils"
 import ProjectTopicItem from "./ProjectTopicItem"
 import { reaction } from "mobx"
 import {
@@ -183,6 +183,12 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 				setPromptRequired(false)
 				const content = tiptapEditorRef.current?.editor?.getJSON() ?? {}
 				const selection = resolveAgentSelection(topicMode, agentCode)
+				const imageModel = serializeScheduledTaskModel(
+					tiptapEditorRef.current?.selectedImageModel,
+				)
+				const videoModel = serializeScheduledTaskModel(
+					tiptapEditorRef.current?.selectedVideoModel,
+				)
 				const messageContent = {
 					content: typeof content === "string" ? content : JSON.stringify(content),
 					extra: {
@@ -193,12 +199,8 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 							topic_pattern: selection.topicPattern,
 							...(selection.agentCode && { agent_code: selection.agentCode }),
 							model: tiptapEditorRef.current?.selectedModel,
-							...(tiptapEditorRef.current?.selectedImageModel && {
-								image_model: tiptapEditorRef.current.selectedImageModel,
-							}),
-							...(tiptapEditorRef.current?.selectedVideoModel && {
-								video_model: tiptapEditorRef.current.selectedVideoModel,
-							}),
+							...(imageModel && { image_model: imageModel }),
+							...(videoModel && { video_model: videoModel }),
 						},
 					},
 				}

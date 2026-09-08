@@ -29,6 +29,7 @@ Router::addGroup('/api/v2/admin', static function () {
 
         Router::addGroup('/markets', static function () {
             Router::post('/queries', [AdminSuperMagicAgentApi::class, 'queryMarkets']);
+            Router::post('/vector-index/reindex', [AdminSuperMagicAgentApi::class, 'reindexMarketVectors']);
             Router::put('/{id}', [AdminSuperMagicAgentApi::class, 'updateMarket']);
             Router::put('/{id}/category', [AdminSuperMagicAgentApi::class, 'updateMarketCategory']);
             Router::put('/{id}/sort-order', [AdminSuperMagicAgentApi::class, 'updateMarketSortOrder']);

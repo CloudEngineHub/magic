@@ -1,7 +1,9 @@
 import { SuperMagicApi } from "@/apis"
 import { ProjectStorage } from "@/components/Agent/MCP/service/MCPStorageService"
 import type { MessageEditorRef } from "@/pages/superMagic/components/MessageEditor/MessageEditor"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { mentionItemsProcessor } from "@/pages/superMagic/components/MessageEditor/services/MentionItemsProcessor"
+import { collectMentionItemsFromContent } from "@/pages/superMagic/components/MessageEditor/services/uploadMentionService"
 import { stripProjectResourceMentionDisplayMetadata } from "@/pages/superMagic/components/MessageEditor/utils/mention"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 import type {
@@ -79,6 +81,23 @@ export interface EnsuredMessageProjectResult {
 	currentTopic: Topic | null
 }
 
+export async function processMessageMentions(
+	content: JSONContent,
+	projectId: string,
+	topicId?: string,
+): Promise<JSONContent> {
+	const mentionItems = collectMentionItemsFromContent(content)
+	if (mentionItems.length === 0) return content
+
+	const result = await mentionItemsProcessor.processMentionItems(
+		content,
+		mentionItems,
+		projectId,
+		topicId,
+	)
+	return stripProjectResourceMentionDisplayMetadata(result.content, result.mentionItems).content
+}
+
 export function resolveMessageSendContext(
 	context?: MessageSendPreparationContext,
 ): ResolvedPreparationContext {
@@ -141,6 +160,7 @@ export function resolveMessageSendContext(
 		selectedProject,
 		selectedTopic,
 		selectedWorkspace,
+		topicStore: context?.topicStore ?? topicStore,
 		workspaceId: selectedWorkspace?.id ?? selectedProject?.workspace_id,
 		updateTopicName,
 		refreshProjectAfterTopicRename: context?.refreshProjectAfterTopicRename,
@@ -162,7 +182,7 @@ export async function preparePanelSend({
 }: PreparePanelSendParams): Promise<PreparedPanelSendResult | null> {
 	const resolvedContext = resolveMessageSendContext(context)
 	let currentProject = resolvedContext.selectedProject
-	let currentTopic = resolvedContext.selectedTopic
+	let currentTopic = params.targetTopic ?? resolvedContext.selectedTopic
 	let nextMentionItems = [...params.mentionItems]
 	let nextContent = params.value
 	const selection = resolveAgentSelection(
@@ -262,6 +282,8 @@ export async function preparePanelSend({
 			selectedProject: currentProject,
 			selectedTopic: currentTopic,
 			selectedWorkspace: resolvedContext.selectedWorkspace,
+			// Preserve the scoped store so dispatchMessage can update the visible Topic immediately.
+			topicStore: resolvedContext.topicStore,
 			workspaceId: resolvedContext.workspaceId,
 			updateTopicName: resolvedContext.updateTopicName,
 			refreshProjectAfterTopicRename: resolvedContext.refreshProjectAfterTopicRename,

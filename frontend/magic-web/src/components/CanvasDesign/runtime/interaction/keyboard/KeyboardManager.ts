@@ -296,8 +296,8 @@ export class KeyboardManager {
 	 * 分发快捷键事件
 	 */
 	private emitShortcutEvent(eventType: string, key: string): void {
-		// 只读模式下允许的快捷键：缩放、复制、添加至当前对话、平移工具(space)、选择工具(v)
-		const allowedInReadonly = [
+		// 缺少文档写能力时仍允许的快捷键：缩放、复制、添加至当前对话、平移工具(space)、选择工具(v)
+		const allowedWithoutDocumentWrite = [
 			"keyboard:zoom:in",
 			"keyboard:zoom:out",
 			"keyboard:zoom:fit",
@@ -307,17 +307,17 @@ export class KeyboardManager {
 			"keyboard:conversation:add-to-current",
 		]
 
-		// 只读模式下允许的工具快捷键
+		// 缺少文档写能力时允许的工具快捷键
 		const allowedToolKeys = ["space", "v", "h"]
 
-		// 使用 PermissionManager 统一判断：只读模式下只允许部分快捷键
-		if (this.canvas.readonly) {
+		// 使用 CanvasAccessContext 统一判断：无文档写能力时只允许部分快捷键
+		if (!this.canvas.permissionManager.can("document.write")) {
 			// 如果是工具快捷键，只允许 space(平移)、v(选择)、h(平移)
 			if (eventType === "keyboard:tool" && !allowedToolKeys.includes(key)) {
 				return
 			}
 			// 如果是其他快捷键，检查是否在允许列表中
-			if (eventType !== "keyboard:tool" && !allowedInReadonly.includes(eventType)) {
+			if (eventType !== "keyboard:tool" && !allowedWithoutDocumentWrite.includes(eventType)) {
 				return
 			}
 		}

@@ -34,7 +34,7 @@ function createCanvasStub(
 		parentById?: Map<string, string>
 		elementNodes?: Map<string, Konva.Group>
 		dragTargetParentById?: Map<string, string | null>
-		readonly?: boolean
+		canWrite?: boolean
 		stageScale?: number
 	} = {},
 ) {
@@ -74,6 +74,11 @@ function createCanvasStub(
 			),
 		},
 		permissionManager: {
+			can: vi.fn((capability: string) =>
+				capability === "document.write" || capability === "document.delete"
+					? options.canWrite !== false
+					: true,
+			),
 			canUseSelectionToolAffordance: vi.fn(() => true),
 		},
 		cursorManager: {
@@ -96,7 +101,7 @@ function createCanvasStub(
 			isDragging: () => false,
 		},
 		controlsLayer,
-		readonly: options.readonly ?? false,
+		can: vi.fn(() => options.canWrite !== false),
 	} as unknown as Canvas
 
 	return { canvas, connectionGroup, contentLayer, controlsLayer }
@@ -412,7 +417,7 @@ describe("ConnectionRenderer", () => {
 			["target", { x: 220, y: 0, width: 100, height: 40 }],
 		])
 		const { canvas, connectionGroup, controlsLayer } = createCanvasStub(boundsById, {
-			readonly: true,
+			canWrite: false,
 		})
 		const renderer = new ConnectionRenderer({ canvas })
 		renderer.render([{ id: "edge", sourceElementId: "source", targetElementId: "target" }])

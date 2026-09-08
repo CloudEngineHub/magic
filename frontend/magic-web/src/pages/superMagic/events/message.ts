@@ -82,13 +82,17 @@ export interface SuperMagicCreateNewTopicPayload {
 }
 
 export type SuperMagicWidgetEditorCommandName =
-	"setInput" | "appendInput" | "clearInput" | "getInput"
+	| "setInput"
+	| "appendInput"
+	| "clearInput"
+	| "getInput"
+	| "sendMessage"
 
-/** Carries one Widget-only editor request and returns its plain-text result to the bridge. */
+/** Carries one Widget-only editor request without exposing editor state to the host page. */
 export interface SuperMagicWidgetEditorCommandPayload {
 	command: SuperMagicWidgetEditorCommandName
-	content?: string
-	respond: (result?: string) => void
+	content?: string | JSONContent
+	respond: (result?: string, error?: string) => void
 }
 
 /**

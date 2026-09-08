@@ -27,7 +27,7 @@ export const DEFAULT_MIN_WIDTH = {
  */
 export const DEFAULT_MAX_WIDTH = {
 	PROJECT_SIDER: 600,
-	MESSAGE_PANEL: 600,
+	MESSAGE_PANEL: 768,
 }
 
 /**

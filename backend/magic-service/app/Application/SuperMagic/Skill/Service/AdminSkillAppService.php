@@ -184,6 +184,13 @@ class AdminSkillAppService extends AbstractSkillAppService
         SkillDataIsolation $dataIsolation,
         bool $forceReEmbedding = false,
     ): array {
+        if (! $this->skillMarketVectorIndexDomainService->isVectorSearchEnabled()) {
+            $this->logger->info('Skill market vector reindex skipped because embedding ability is disabled', [
+                'force_re_embedding' => $forceReEmbedding,
+            ]);
+            return ['task_id' => bin2hex(random_bytes(12)), 'queued' => 0, 'after_id' => '0'];
+        }
+
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
         $operatorId = $dataIsolation->getCurrentUserId();
         $batchSize = self::VECTOR_REINDEX_EVENT_BATCH_SIZE;

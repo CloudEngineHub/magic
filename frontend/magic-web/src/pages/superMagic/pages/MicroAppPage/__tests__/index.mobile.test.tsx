@@ -21,6 +21,7 @@ const resolverMocks = vi.hoisted(() => ({
 const controllerMocks = vi.hoisted(() => ({
 	initLoading: false,
 	initError: null as string | null,
+	isReadOnly: false,
 	checkAttachmentsNowDebounced: vi.fn(),
 	handleBackToMicroApps: vi.fn(),
 }))
@@ -91,7 +92,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		selectedProject: { id: "project-1", project_name: "Micro App" },
 		selectedTopic: { id: "topic-1", topic_name: "Topic" },
 		hasRunningTopic: true,
-		isReadOnly: false,
+		isReadOnly: controllerMocks.isReadOnly,
 		canEdit: false,
 		canPublish: true,
 		attachments: [
@@ -213,6 +214,7 @@ describe("MicroAppPageMobile", () => {
 			error: null,
 		}
 		controllerMocks.initLoading = false
+		controllerMocks.isReadOnly = false
 		controllerMocks.initError = null
 		controllerMocks.checkAttachmentsNowDebounced.mockClear()
 		controllerMocks.handleBackToMicroApps.mockClear()
@@ -306,6 +308,16 @@ describe("MicroAppPageMobile", () => {
 				onTerminalTopicStatusChange: controllerMocks.checkAttachmentsNowDebounced,
 			}),
 		)
+	})
+
+	it("hides the conversation entry for read-only projects", async () => {
+		controllerMocks.isReadOnly = true
+
+		render(<MicroAppPageMobile />)
+		await screen.findByTestId("mobile-preview-content")
+
+		expect(screen.queryByTestId("micro-app-mobile-conversation-button")).not.toBeInTheDocument()
+		expect(mobileConversationMocks.render).not.toHaveBeenCalled()
 	})
 
 	it("opens a mobile preview popup without replacing the entry preview", async () => {

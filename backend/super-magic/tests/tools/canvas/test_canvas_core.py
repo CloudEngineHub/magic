@@ -193,6 +193,10 @@ class MockSynchronousGenerationPort:
 
     execution_mode = "sync"
 
+    async def resolve_request_metadata(self, request, tool_context):
+        """返回提交前即可确定的图片模型和生成模式。"""
+        return {"model_id": "mock-image-model", "mode": "generate"}
+
     async def submit(self, request, tool_context):
         """返回固定的工作区相对图片路径。"""
         return GenerationSubmission("sync", "completed", output_uri="mock/images/result.png")
@@ -214,12 +218,31 @@ class MockAsynchronousGenerationPort:
             "processing",
             generation_task_id="canvas-task-1",
             provider_task_id="provider-task-1",
+            request_metadata={"model_id": "mock-video-model", "input_mode": "standard"},
+            result_metadata={
+                "generation_info": {
+                    "input_mode": "standard",
+                    "resolution": "720p",
+                    "duration_seconds": 4,
+                },
+                "runtime": {"started_at": "2026-09-02 10:00:00"},
+            },
         )
 
     async def query(self, request, tool_context):
         """返回固定完成状态和视频路径。"""
         self.query_count += 1
-        return GenerationQueryResult("completed", output_uri="./videos/result.mp4")
+        return GenerationQueryResult(
+            "completed",
+            output_uri="./videos/result.mp4",
+            result_metadata={
+                "runtime": {
+                    "finished_at": "2026-09-02 10:00:04",
+                    "elapsed_seconds": 4,
+                },
+                "billing": {"points": 8},
+            },
+        )
 
 
 class MockVideoMediaProbePort(FakeMediaProbePort):
@@ -322,12 +345,32 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
     image = project.canvas.get_element(image_result["items"][0]["element_id"])
     video = project.canvas.get_element(video_result["items"][0]["element_id"])
     assert image.get_content(image.active_content_id).fields.src == "mock/images/result.png"
+    sidecar = await repository.read_sidecar("mock-project")
+    image_detail = sidecar["elements"][image.element_id]["contentDetails"][image.active_content_id]
+    assert image_detail["generateImageRequest"]["model_id"] == "mock-image-model"
     assert video_result["items"][0]["generation_task_id"] == "canvas-task-1"
     assert waited["items"][0]["status"] == "completed"
     assert waited_again["items"][0]["already_finalized"] is True
     assert video_port.query_count == 1
     assert video.get_content(video.active_content_id).fields.src == "./videos/result.mp4"
     assert (video.properties.width, video.properties.height) == (1080, 1920)
+    sidecar = await repository.read_sidecar("mock-project")
+    video_detail = sidecar["elements"][video.element_id]["contentDetails"][video.active_content_id]
+    assert video_detail["generateVideoRequest"]["model_id"] == "mock-video-model"
+    assert video_detail["generateVideoRequest"]["input_mode"] == "standard"
+    assert video_detail["videoGenerationResultMeta"] == {
+        "generation_info": {
+            "input_mode": "standard",
+            "resolution": "720p",
+            "duration_seconds": 4,
+        },
+        "runtime": {
+            "started_at": "2026-09-02 10:00:00",
+            "finished_at": "2026-09-02 10:00:04",
+            "elapsed_seconds": 4,
+        },
+        "billing": {"points": 8},
+    }
 
 
 @pytest.mark.asyncio
@@ -475,6 +518,34 @@ async def test_add_contents_materializes_imported_asset_into_project(tmp_path) -
     content = element.get_content(result["items"][0]["content_id"])
     assert content.fields.src.startswith("./audios/")
     assert len(list((tmp_path / "mock-project" / "audios").glob("*"))) == 1
+
+
+@pytest.mark.asyncio
+async def test_imported_asset_accepts_absolute_path_outside_workspace(tmp_path) -> None:
+    """导入媒体应允许用户明确提供工作区外的本机绝对路径。"""
+    workspace = tmp_path / "workspace"
+    external_asset = tmp_path / "external" / "mock.png"
+    external_asset.parent.mkdir(parents=True)
+    external_asset.write_bytes(b"mock-image")
+    repository = CanvasRepository(workspace)
+    application = CanvasApplicationFactory.create(repository)
+    await application.initialize("mock-project")
+
+    result = await application.add_elements(
+        "mock-project",
+        [{
+            "item_ref": "external-image",
+            "element_type": "image",
+            "content": {
+                "source": "imported",
+                "content_type": "image",
+                "asset_path": str(external_asset),
+            },
+        }],
+    )
+
+    assert result["items"][0]["asset_path"].startswith("./images/")
+    assert (workspace / "mock-project" / "images" / "mock.png").is_file()
 
 
 @pytest.mark.asyncio

@@ -143,6 +143,8 @@ import { userStore } from "@/models/user"
 import { ContactApi } from "@/apis"
 import MagicModal from "@/components/base/MagicModal"
 import type { HtmlNavigationRequest } from "./utils/html-navigation"
+import type { HtmlPermissionScope } from "./iframe-api/types"
+import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 
 interface IsolatedHTMLRendererProps {
 	content: string
@@ -176,6 +178,10 @@ interface IsolatedHTMLRendererProps {
 	htmlRelativeFolderPath?: string
 	openNewTab: (fileId: string, path: string, autoEdit?: boolean) => void
 	selectedProject?: any
+	/** Host project ID passed by preview or share pages. */
+	projectId?: string
+	/** 微应用编辑页的独立话题 store；未传时回退到全局 store。 */
+	topicStore?: TopicStore
 	attachmentList?: any[]
 	setSlideContents?: (slideContents: Map<number, string>) => void
 	slideIndex?: number
@@ -213,6 +219,10 @@ interface IsolatedHTMLRendererProps {
 	enableInlineInspectorFallback?: boolean
 	/** Parent-owned controller used by the HTML detail toolbar and runtime. */
 	permissionController?: HtmlAppPermissionController
+}
+
+function isProjectScopedPermission(scope: HtmlPermissionScope): boolean {
+	return scope.startsWith("project.") || scope.startsWith("fs.project.")
 }
 
 function isHtmlImagesUploadPath(path: string): boolean {
@@ -385,6 +395,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			openNewTab,
 			htmlRelativeFolderPath,
 			selectedProject,
+			projectId,
+			topicStore: scopedTopicStore,
 			attachmentList,
 			isPlaybackMode,
 			toolbarClassName,
@@ -412,6 +424,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			enableInlineInspectorFallback = false,
 			permissionController,
 		} = props
+		// Share pages inject project_id on window when props omit it.
+		const runtimeProjectId = projectId ?? selectedProject?.id
 		const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
 		const htmlSandboxShellUrl = useMemo(
 			() => externalRenderSiteUrl || "/husky.html",
@@ -867,7 +881,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const { upload } = useUpload<any>({
 			url: superMagicUploadTokenService.getUploadTokenUrl,
 			body: {
-				project_id: selectedProject?.id ?? "",
+				project_id: runtimeProjectId ?? "",
 				expires: 3600,
 			},
 			rewriteFileName: false,
@@ -879,7 +893,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		})
 
 		const ensureHtmlImagesDirectoryId = useMemoizedFn(async () => {
-			if (!selectedProject?.id) throw new Error("No project selected")
+			if (!runtimeProjectId) throw new Error("No project selected")
 
 			const htmlDirectoryPath = getHtmlDirectoryPath(currentHtmlFilePath)
 			const imagesDirectoryPath = `${htmlDirectoryPath}images`
@@ -894,7 +908,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			if (existingDirectory?.file_id) return existingDirectory.file_id
 
 			const res = await createIframeFile({
-				project_id: selectedProject.id,
+				project_id: runtimeProjectId,
 				parent_id: currentHtmlFileInfo.parentId || htmlDirectory?.file_id || "",
 				file_name: "images",
 				is_directory: true,
@@ -916,7 +930,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				fileSize?: number
 				parentId?: string
 			}) => {
-				if (!selectedProject?.id) {
+				if (!runtimeProjectId) {
 					throw new Error("No project selected")
 				}
 
@@ -930,7 +944,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					(isHtmlImagesUploadPath(path) ? await ensureHtmlImagesDirectoryId() : undefined)
 
 				const token = await superMagicUploadTokenService.getUploadToken(
-					selectedProject.id,
+					runtimeProjectId,
 					cleanPathValue || "",
 				)
 				const newFiles = Array.from([file]).map(genFileData)
@@ -949,7 +963,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					: resolvedPath
 
 				const saveRes = await superMagicUploadTokenService.saveFileToProject({
-					project_id: selectedProject.id,
+					project_id: runtimeProjectId,
 					parent_id: resolvedParentId,
 					file_key: uploadedKey,
 					file_name: deduplicatedFileName || file.name,
@@ -1012,12 +1026,20 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			content,
 			rawSourceCode,
 			relativeFilePath: htmlEntryFilePath,
-			projectId: selectedProject?.id,
+			projectId: runtimeProjectId,
 			fileList: flatFileList,
 			enabled: !permissionController,
 		})
 		const { htmlAppConfig, authorizeHtmlPermission, authorizeHtmlPermissions } =
 			permissionController || fallbackPermissionController
+		const projectContextUnavailableError = t("htmlEditor.projectContextUnavailable")
+		const authorizeProjectPermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
+			// 分享页没有可授权的项目上下文，先返回明确原因，避免先弹授权再失败。
+			if (!runtimeProjectId && isProjectScopedPermission(scope)) {
+				throw new Error(projectContextUnavailableError)
+			}
+			return authorizeHtmlPermission(scope)
+		})
 
 		const { handleFSMessage } = useIframeFS({
 			iframeRef,
@@ -1025,13 +1047,16 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			entryPath: htmlEntryFilePath,
 			fileList: flatFileList,
 			appConfig: htmlAppConfig,
-			projectId: selectedProject?.id,
+			projectId: runtimeProjectId,
+			projectContextUnavailableError: !runtimeProjectId
+				? projectContextUnavailableError
+				: undefined,
 			uploadFn: uploadImageFileToProject,
 			saveContentFn: ({ file_id, content }) => saveIframeFileContent([{ file_id, content }]),
 			mkdirFn: useMemoizedFn(async ({ name, parentId }) => {
-				if (!selectedProject?.id) throw new Error("No project selected")
+				if (!runtimeProjectId) throw new Error("No project selected")
 				const res = await createIframeFile({
-					project_id: selectedProject.id,
+					project_id: runtimeProjectId,
 					parent_id: parentId,
 					file_name: name,
 					is_directory: true,
@@ -1055,7 +1080,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			verifyFileFn: useMemoizedFn(async ({ file_id, project_id }) =>
 				getIframeFileInfo(file_id, project_id),
 			),
-			authorizePermission: authorizeHtmlPermission,
+			authorizePermission: authorizeProjectPermission,
 			confirmProjectDeleteFn: useMemoizedFn(
 				({ path, isDirectory, appRootDir, operation }) =>
 					new Promise<boolean>((resolve) => {
@@ -1106,10 +1131,17 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 		const { handleDatabaseMessage } = useIframeDatabase({
 			iframeRef,
-			projectId: selectedProject?.id,
+			projectId: runtimeProjectId,
+			projectContextUnavailableError: !runtimeProjectId
+				? projectContextUnavailableError
+				: undefined,
 		})
 
-		const { getAgentList, createTopicAndSend, sendMessage } = useIframeAgentActions()
+		const { getAgentList, createTopicAndSend, sendMessage } = useIframeAgentActions(
+			runtimeProjectId,
+			scopedTopicStore,
+			selectedProject,
+		)
 
 		const { handleAgentMessage } = useIframeAgent({
 			iframeRef,
@@ -1118,7 +1150,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			createTopicAndSend,
 			sendMessage,
 			enableWriteOperations: true,
-			authorizePermission: authorizeHtmlPermission,
+			projectId: runtimeProjectId,
+			projectContextUnavailableError: !runtimeProjectId
+				? projectContextUnavailableError
+				: undefined,
+			authorizePermission: authorizeProjectPermission,
 		})
 
 		const { handleUserInfoMessage } = useIframeUserInfo({
@@ -1161,10 +1197,15 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				iframeRef,
 				targetOrigin: iframeTargetOrigin,
 				selectedProject,
+				projectId: runtimeProjectId,
+				projectContextUnavailableError: !runtimeProjectId
+					? projectContextUnavailableError
+					: undefined,
+				topicStore: scopedTopicStore,
 				attachmentList,
 				htmlRelativeFolderPath,
 				uploadImageFileToProject,
-				authorizePermission: authorizeHtmlPermission,
+				authorizePermission: authorizeProjectPermission,
 			})
 
 		// 监听 iframe 准备就绪并初始化内容
@@ -1211,8 +1252,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			let cancelled = false
 			const markerId = getStorageMarkerId()
 			const namespace = buildHtmlVirtualStorageNamespace({
-				projectId: selectedProject?.id,
-				topicId: selectedProject?.current_topic_id,
+				projectId: runtimeProjectId,
+				topicId: scopedTopicStore?.selectedTopic?.id ?? selectedProject?.current_topic_id,
 				fileId: markerId || fileId,
 			})
 
@@ -1232,7 +1273,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			fileId,
 			getStorageMarkerId,
 			selectedProject?.current_topic_id,
-			selectedProject?.id,
+			scopedTopicStore?.selectedTopic?.id,
+			runtimeProjectId,
 			virtualStorageMarkerId,
 		])
 
@@ -1406,8 +1448,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							console.error("清除编辑历史失败:", error)
 						})
 					}
-					// Refresh iframe content to original state
-					refreshIframeContent()
+					// Refresh iframe content to original state, even when the source content
+					// itself has not changed. The editor may have changed the live iframe DOM.
+					refreshIframeContent({ force: true })
 				},
 				updateContent: async (
 					newContent: string,
@@ -1626,7 +1669,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						)
 					}
 
-					void waitForProjectAttachmentChange(selectedProject?.id, {
+					void waitForProjectAttachmentChange(runtimeProjectId, {
 						operations: ["add"],
 						matchMode: "project-any-apply",
 						fallback: "full-refresh",

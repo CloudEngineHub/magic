@@ -398,7 +398,7 @@ export class AudioBufferManager {
 	 * Force flush current buffer regardless of duration
 	 * 强制清空当前缓冲区，无论时长如何
 	 */
-	forceFlush(sampleRate: number): void {
+	forceFlush(sampleRate: number = this.lastKnownSampleRate): void {
 		if (this.audioBuffer.length > 0 || this.bufferOffset > 0) {
 			this.flushBuffer(sampleRate, false)
 		}
@@ -409,9 +409,13 @@ export class AudioBufferManager {
 	 * 获取当前缓冲区状态
 	 */
 	getBufferState(): AudioBufferData {
-		const totalSamples = this.audioBuffer.reduce((sum, buf) => sum + buf.length, 0)
+		const buffers = [...this.audioBuffer]
+		if (this.preallocatedBuffer && this.bufferOffset > 0) {
+			buffers.push(this.preallocatedBuffer.slice(0, this.bufferOffset))
+		}
+		const totalSamples = buffers.reduce((sum, buf) => sum + buf.length, 0)
 		return {
-			buffers: [...this.audioBuffer],
+			buffers,
 			duration: this.bufferDuration,
 			totalSamples,
 		}

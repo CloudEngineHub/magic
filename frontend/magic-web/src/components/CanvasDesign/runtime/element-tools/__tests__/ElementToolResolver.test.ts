@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { ElementToolTypeEnum } from "../../../public/props"
+import { resolveCanvasAccessContext } from "../../core/CanvasAccessPolicy"
 import { ElementTypeEnum, type ImageElement } from "../../document/types"
 import { createElementToolContext } from "../model/ElementToolContext"
 import { resolveElementTools } from "../resolver/ElementToolResolver"
@@ -88,6 +89,99 @@ describe("ElementToolResolver", () => {
 		expect(bottom.map((tool) => tool.id)).toContain(ElementToolTypeEnum.VersionPrevious)
 		expect(bottom.map((tool) => tool.id)).toContain(ElementToolTypeEnum.VersionNext)
 		expect(bottom.map((tool) => tool.id)).not.toContain(ElementToolTypeEnum.VersionDelete)
+	})
+
+	it("hides AI image editing tools when their abilities are disabled", () => {
+		const { top } = resolve(createImage(), {
+			removeBackgroundSupported: false,
+			eraserSupported: false,
+			expandSupported: false,
+		})
+
+		expect(top.map((tool) => tool.id)).not.toContain(
+			ElementToolTypeEnum.ContentRemoveBackground,
+		)
+		expect(top.map((tool) => tool.id)).not.toContain(ElementToolTypeEnum.ContentEraser)
+		expect(top.map((tool) => tool.id)).not.toContain(ElementToolTypeEnum.ContentExtend)
+	})
+
+	it("keeps share mode limited to readonly-safe version browsing by default", () => {
+		const { top, bottom } = resolve(
+			createImage({
+				contents: [
+					{ contentId: "content-a", src: "a.png", status: "completed" },
+					{ contentId: "content-b", src: "b.png", status: "completed" },
+				],
+			}),
+			{
+				canvas: {
+					permissionManager: {
+						getContext: () => resolveCanvasAccessContext({ mode: "share" }),
+					},
+				} as never,
+			},
+		)
+
+		expect(top).toEqual([])
+		expect(bottom.map((tool) => tool.id)).toEqual([
+			ElementToolTypeEnum.VersionPrevious,
+			ElementToolTypeEnum.VersionNext,
+			ElementToolTypeEnum.VersionCount,
+		])
+	})
+
+	it("allows the host to add download capability without enabling document edits", () => {
+		const { top, bottom } = resolve(
+			createImage({
+				contents: [
+					{ contentId: "content-a", src: "a.png", status: "completed" },
+					{ contentId: "content-b", src: "b.png", status: "completed" },
+				],
+			}),
+			{
+				canvas: {
+					permissionManager: {
+						getContext: () =>
+							resolveCanvasAccessContext({
+								mode: "share",
+								capabilities: { "sideEffect.download": true },
+							}),
+					},
+				} as never,
+			},
+		)
+
+		expect(top.map((tool) => tool.id)).toEqual([ElementToolTypeEnum.ContentDownload])
+		expect(bottom.map((tool) => tool.id)).toEqual([
+			ElementToolTypeEnum.VersionPrevious,
+			ElementToolTypeEnum.VersionNext,
+			ElementToolTypeEnum.VersionCount,
+		])
+	})
+
+	it("hides generation tools when document write is denied", () => {
+		const { bottom } = resolve(createImage(), {
+			canvas: {
+				permissionManager: {
+					getContext: () =>
+						resolveCanvasAccessContext({
+							mode: "edit",
+							capabilities: {
+								"document.write": false,
+								"sideEffect.generate": true,
+							},
+						}),
+				},
+			} as never,
+		})
+
+		expect(bottom.map((tool) => tool.id)).not.toEqual(
+			expect.arrayContaining([
+				ElementToolTypeEnum.GenerationQuickEdit,
+				ElementToolTypeEnum.GenerationReEdit,
+				ElementToolTypeEnum.GenerationGenerateAgain,
+			]),
+		)
 	})
 
 	it("captures the active Content target instead of re-reading it later", () => {

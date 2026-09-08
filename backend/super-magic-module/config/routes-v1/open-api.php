@@ -120,6 +120,10 @@ Router::addGroup(
             Router::delete('/{code}/skills', [SuperMagicAgentSandboxApi::class, 'removeAgentSkills']);
         });
 
+        Router::addGroup('/assistants', static function () {
+            Router::post('/assistant-execute', [SuperMagicAgentSandboxApi::class, 'executeAssistant']);
+        });
+
         // OAuth2 callback payload 内部操作接口
         Router::addGroup('/oauth2', static function () {
             Router::get('/callback-relay/fetch-callback', [OAuth2CallbackRelayApi::class, 'fetchCallback']);

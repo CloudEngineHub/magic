@@ -7,11 +7,6 @@ import HtmlPreviewContent from "@/pages/superMagic/components/Detail/contents/HT
 import { MicroAppPermissionIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { resolveDefaultHtmlEntry } from "@/pages/superMagic/pages/MicroAppPage/utils/microAppFiles"
-import {
-	ProjectStatus,
-	type ProjectListItem,
-	TopicMode,
-} from "@/pages/superMagic/pages/Workspace/types"
 import MicroAppInstallDialog from "./components/MicroAppInstallDialog"
 import MicroAppSafetyNotice from "./components/MicroAppSafetyNotice"
 import MicroAppShareHeader from "./components/MicroAppShareHeader"
@@ -21,23 +16,6 @@ import useMicroAppSafetyNoticeConfirmation from "./hooks/useMicroAppSafetyNotice
 import useMicroAppShareData from "./hooks/useMicroAppShareData"
 
 type MicroAppPreviewMode = NonNullable<ComponentProps<typeof HtmlPreviewContent>["viewMode"]>
-
-function createShareProject(projectId: string, projectName: string): ProjectListItem {
-	return {
-		id: projectId,
-		project_name: projectName || projectId,
-		project_status: ProjectStatus.WAITING,
-		project_mode: TopicMode.General,
-		workspace_id: "",
-		work_dir: "",
-		workspace_name: "",
-		current_topic_id: "",
-		current_topic_status: "",
-		created_at: "",
-		updated_at: "",
-		tag: "",
-	}
-}
 
 function MicroAppShareEmpty() {
 	const { t } = useTranslation("super")
@@ -118,13 +96,6 @@ export default function MicroAppSharePage() {
 		[activeFileId, attachmentList, defaultEntryFile],
 	)
 
-	const selectedProject = useMemo<ProjectListItem | null>(
-		() =>
-			shareMeta.projectId
-				? createShareProject(shareMeta.projectId, shareMeta.projectName)
-				: null,
-		[shareMeta.projectId, shareMeta.projectName],
-	)
 	const installFlow = useMicroAppInstallFlow({
 		appId,
 		hasEntryFile: Boolean(previewFile),
@@ -250,15 +221,14 @@ export default function MicroAppSharePage() {
 							attachments={attachmentsTree}
 							attachmentList={attachmentList}
 							allowEdit={false}
-							selectedProject={selectedProject}
 							selectedTopic={null}
 							showFileHeader={false}
 							showFooter={false}
 							viewMode={previewMode}
 							onViewModeChange={setPreviewMode}
 							activeFileId={previewFile.file_id}
-							virtualStorageMarkerId={defaultEntryFile?.file_id}
 							projectId={shareMeta.projectId}
+							virtualStorageMarkerId={defaultEntryFile?.file_id}
 							openFileTab={handleOpenFileTab}
 							onHtmlPermissionManagerChange={setPermissionManager}
 							className="h-full"

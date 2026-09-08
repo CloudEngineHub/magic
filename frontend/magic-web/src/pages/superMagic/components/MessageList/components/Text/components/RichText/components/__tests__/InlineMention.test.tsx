@@ -78,7 +78,7 @@ describe("InlineMention", () => {
 		expect(screen.getByRole("img")).toHaveAttribute("src", mediaSource.thumbnailUrl)
 
 		const trigger = container.querySelector("[data-media-preview-trigger]") as HTMLElement
-		expect(trigger).toHaveTextContent("@cover.png")
+		expect(trigger).toHaveTextContent("cover.png")
 		fireEvent.pointerMove(trigger)
 		expect(await screen.findByRole("tooltip")).toBeInTheDocument()
 	})
@@ -94,6 +94,6 @@ describe("InlineMention", () => {
 		render(<InlineMention data={createMention("README.md", "md")} />)
 
 		expect(screen.queryByTestId("inline-file-mention-icon")).not.toBeInTheDocument()
-		expect(screen.getByText("@README.md")).toBeInTheDocument()
+		expect(screen.getByText("README.md")).toBeInTheDocument()
 	})
 })

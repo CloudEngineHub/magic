@@ -20,6 +20,7 @@ function createCanvasMock(
 ): Canvas {
 	const outputImageIdSet = new Set(outputImageIds)
 	return {
+		getEffectiveContentId: vi.fn(() => undefined),
 		deviceInfo: {
 			formFactor: "desktop",
 			input: { touch: false, coarsePointer: false, hover: true },
@@ -53,6 +54,10 @@ function createCanvasMock(
 		transformManager: {
 			isTransformInteractionActive: vi.fn(() => false),
 			isTransforming: vi.fn(() => false),
+		},
+		permissionManager: {
+			can: vi.fn(() => true),
+			canUseSelectionToolAffordance: vi.fn(() => true),
 		},
 	} as unknown as Canvas
 }
@@ -191,11 +196,13 @@ describe("StoryboardElement", () => {
 		const generateAgainIcon = group.findOne(".storyboard-generate-again-icon") as Konva.Path
 		const modelHit = group.find(".storyboard-control-hit").find((node) => {
 			const metadata = node.getAttr("storyboardControlMetadata") as
-				{ action?: { type?: string } } | undefined
+				| { action?: { type?: string } }
+				| undefined
 			return metadata?.action?.type === "select-model"
 		})
 		const modelMetadata = modelHit?.getAttr("storyboardControlMetadata") as
-			{ selectPresentation?: Record<string, number> } | undefined
+			| { selectPresentation?: Record<string, number> }
+			| undefined
 
 		expect(group.size()).toEqual({
 			width: STORYBOARD_CONFIG.DEFAULT_WIDTH,
@@ -299,7 +306,12 @@ describe("StoryboardElement", () => {
 				},
 			],
 		)
-		canvas.readonly = true
+		canvas.permissionManager.can = vi.fn(
+			(capability: string) =>
+				capability !== "document.write" &&
+				capability !== "document.delete" &&
+				capability !== "sideEffect.generate",
+		)
 		const element = new StoryboardElement(
 			StoryboardElement.createElementData({
 				id: "storyboard-1",
@@ -331,7 +343,7 @@ describe("StoryboardElement", () => {
 		})
 	})
 
-	it("rerenders storyboard controls when readonly changes at runtime", () => {
+	it("rerenders storyboard controls when access changes at runtime", () => {
 		const eventEmitter = new EventEmitter()
 		const canvas = createCanvasMock()
 		canvas.eventEmitter = eventEmitter
@@ -343,15 +355,24 @@ describe("StoryboardElement", () => {
 		element.onMounted()
 		expect(element.getNode()?.find(".storyboard-control-hit").length).toBeGreaterThan(0)
 
-		canvas.readonly = true
-		eventEmitter.emit({ type: "canvas:readonly", data: { readonly: true } })
+		canvas.permissionManager.can = vi.fn(
+			(capability: string) =>
+				capability !== "document.write" && capability !== "sideEffect.generate",
+		)
+		eventEmitter.emit({
+			type: "permission:changed",
+			data: { mode: "readonly", capabilities: new Set(), can: () => false },
+		})
 		expect(element.getNode()?.find(".storyboard-control-hit")).toHaveLength(0)
 
-		canvas.readonly = false
-		eventEmitter.emit({ type: "canvas:readonly", data: { readonly: false } })
+		canvas.permissionManager.can = vi.fn(() => true)
+		eventEmitter.emit({
+			type: "permission:changed",
+			data: { mode: "edit", capabilities: new Set(), can: () => true },
+		})
 		expect(element.getNode()?.find(".storyboard-control-hit").length).toBeGreaterThan(0)
 		element.destroy()
-		expect(eventEmitter.listenerCount("canvas:readonly")).toBe(0)
+		expect(eventEmitter.listenerCount("permission:changed")).toBe(0)
 	})
 
 	it("does not recurse when visibility registration synchronously rerenders", () => {
@@ -429,6 +450,76 @@ describe("StoryboardElement", () => {
 		expect(unregister).toHaveBeenCalledTimes(1)
 	})
 
+	it("detaches reference preview nodes before their decoded resource is closed", () => {
+		const image = { width: 32, height: 32 } as unknown as ImageBitmap
+		const closeHandlers = new Map<string, (event: unknown) => void>()
+		const cleanup = vi.fn()
+		const requestLayerDraw = vi.fn()
+		const canvas = createCanvasMock()
+		Object.assign(canvas, {
+			eventEmitter: new EventEmitter(),
+			imageResourceManager: {
+				onImageResourceWillClose: vi.fn(
+					(path: string, handler: (event: unknown) => void) => {
+						closeHandlers.set(path, handler)
+						return cleanup
+					},
+				),
+				peekResource: vi.fn(() => ({
+					ossSrc: "https://example.com/reference.png",
+					image,
+					imageInfo: {
+						naturalWidth: 32,
+						naturalHeight: 32,
+						fileSize: 0,
+						mimeType: "image/png",
+						filename: "reference.png",
+					},
+					variant: "low",
+					sourceWidth: 32,
+					sourceHeight: 32,
+					isFullSize: true,
+				})),
+			},
+			runtimeScheduler: { requestLayerDraw },
+		})
+
+		const element = new StoryboardElement(
+			StoryboardElement.createElementData({ id: "storyboard-resource-close", x: 0, y: 0 }),
+			canvas,
+		)
+		const group = element.render()
+		;(element as unknown as { node: Konva.Group }).node = group
+		const referenceNode = new Konva.Image({
+			image,
+			name: "storyboard-reference-image",
+		})
+		group.add(referenceNode)
+
+		const getReferencePreviewResource = (
+			element as unknown as {
+				getReferencePreviewResource: (path: string) => unknown
+			}
+		).getReferencePreviewResource
+		getReferencePreviewResource.call(element, "./images/reference.png")
+
+		closeHandlers.get("./images/reference.png")?.({
+			data: { image, variant: "low", reason: "test" },
+		})
+
+		expect(referenceNode.image()).toBeUndefined()
+		expect(requestLayerDraw).toHaveBeenCalledWith(
+			"content",
+			expect.objectContaining({
+				source: "StoryboardElement",
+				reason: "resource-will-close",
+			}),
+		)
+
+		element.destroy()
+		expect(cleanup).toHaveBeenCalledTimes(1)
+	})
+
 	it("renders the selected model icon from runtime metadata without persisting it", () => {
 		vi.stubGlobal(
 			"Image",
@@ -496,7 +587,8 @@ describe("StoryboardElement", () => {
 		const closeIcons = group.find(".storyboard-control-icon")
 		const deleteHit = group.find(".storyboard-control-hit").find((node) => {
 			const metadata = node.getAttr("storyboardControlMetadata") as
-				{ action?: { type?: string } } | undefined
+				| { action?: { type?: string } }
+				| undefined
 			return metadata?.action?.type === "delete-shot"
 		}) as Konva.Rect | undefined
 		const deleteBackground = group.findOne(".storyboard-control-background")

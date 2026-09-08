@@ -1,9 +1,20 @@
 import { observer } from "mobx-react-lite"
 import type { ReactNode } from "react"
 import projectFilesStore from "@/stores/projectFiles"
+import { cn } from "@/utils/cn"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import {
+	isWorkspaceHrefCandidate,
+	parseCanonicalWorkspaceHref,
+} from "@/pages/superMagic/utils/filePathMention"
 import { findAttachmentByPath } from "./helper"
 import { normalizeInlineStyle } from "../normalizeInlineStyle"
+import { FileReference, getFileExtensionFromPath } from "./FileReference"
+import { IconExternalLink } from "@tabler/icons-react"
+
+// 授权链接这类超长 URL 没有空格，nowrap + ellipsis 会把消息气泡撑出去。
+const markdownLinkClassName =
+	"min-w-0 max-w-full cursor-pointer overflow-hidden whitespace-normal break-all rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 text-[#315cec] [overflow-wrap:anywhere] hover:bg-[#e0ecff]"
 
 interface ParsedDomElement {
 	attribs?: Record<string, string>
@@ -37,7 +48,8 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	)
 	const normalizedStyle = normalizeInlineStyle(rawAttributes.style)
 	const attachments = projectFilesStore.workspaceFilesList
-	const fileInfo = findAttachmentByPath(attachments, normalizedHref)
+	const workspacePath = parseCanonicalWorkspaceHref(normalizedHref)
+	const fileInfo = workspacePath ? findAttachmentByPath(attachments, workspacePath) : undefined
 
 	const onClick = () => {
 		if (!fileInfo) return
@@ -50,27 +62,47 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 
 	if (fileInfo) {
 		return (
-			<span
-				className="cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 text-[#315cec] hover:bg-[#e0ecff]"
+			<FileReference
+				label={children}
+				fileType={
+					fileInfo.file_extension ||
+					getFileExtensionFromPath(workspacePath ?? normalizedHref)
+				}
 				onClick={onClick}
 				title={typeof children === "string" ? children : normalizedHref}
-			>
-				{children}
+			/>
+		)
+	}
+
+	if (isWorkspaceHrefCandidate(normalizedHref)) {
+		return (
+			<span {...safeAttributes} style={normalizedStyle}>
+				<FileReference
+					label={children}
+					fileType={getFileExtensionFromPath(normalizedHref)}
+					disabled
+					title={normalizedTitle ?? normalizedHref}
+				/>
 			</span>
 		)
 	}
+
+	const isExternalLink = /^(?:https?:|mailto:)/i.test(normalizedHref)
 
 	return (
 		<a
 			href={normalizedHref}
 			rel={normalizedRel}
 			target={normalizedTarget}
-			className="cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 !text-[#315cec] hover:bg-[#e0ecff]"
-			title={normalizedTitle ?? `File does not exist @${normalizedHref}`}
+			className={cn(markdownLinkClassName, "!text-[#315cec]")}
+			title={normalizedTitle ?? normalizedHref}
 			data-testid="markdown-link-anchor"
 			{...safeAttributes}
 			style={normalizedStyle}
 		>
+			{isExternalLink ? (
+				<IconExternalLink size={14} className="mr-1 inline shrink-0" />
+			) : null}
 			{children}
 		</a>
 	)

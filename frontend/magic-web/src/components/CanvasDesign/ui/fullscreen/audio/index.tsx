@@ -43,12 +43,22 @@ interface AudioFullscreenOverlayProps {
 	fileName?: string
 	isOpen: boolean
 	autoPlay?: boolean
+	/** 是否允许当前宿主会话执行播放、暂停和拖动进度。 */
+	playbackEnabled?: boolean
 	onClose: () => void
 	closeAriaLabel?: string
 }
 
 export default function AudioFullscreenOverlay(props: AudioFullscreenOverlayProps) {
-	const { path, fileName, isOpen, autoPlay = true, onClose, closeAriaLabel } = props
+	const {
+		path,
+		fileName,
+		isOpen,
+		autoPlay = true,
+		playbackEnabled = true,
+		onClose,
+		closeAriaLabel,
+	} = props
 	const { t } = useCanvasDesignI18n()
 
 	const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -131,6 +141,7 @@ export default function AudioFullscreenOverlay(props: AudioFullscreenOverlayProp
 	}, [syncProgressDOM])
 
 	const togglePlay = useCallback(() => {
+		if (!playbackEnabled) return
 		const audio = audioRef.current
 		if (!audio) return
 		if (audio.paused) {
@@ -138,19 +149,23 @@ export default function AudioFullscreenOverlay(props: AudioFullscreenOverlayProp
 		} else {
 			audio.pause()
 		}
-	}, [])
+	}, [playbackEnabled])
 
-	const handleProgressInput = useCallback((value: number) => {
-		const audio = audioRef.current
-		const input = progressRangeRef.current
-		if (!audio) return
-		const d = Number.isFinite(audio.duration) ? audio.duration : 0
-		if (d <= 0) return
-		audio.currentTime = (value / 100) * d
-		if (input) {
-			input.style.setProperty("--progress", `${value}%`)
-		}
-	}, [])
+	const handleProgressInput = useCallback(
+		(value: number) => {
+			if (!playbackEnabled) return
+			const audio = audioRef.current
+			const input = progressRangeRef.current
+			if (!audio) return
+			const d = Number.isFinite(audio.duration) ? audio.duration : 0
+			if (d <= 0) return
+			audio.currentTime = (value / 100) * d
+			if (input) {
+				input.style.setProperty("--progress", `${value}%`)
+			}
+		},
+		[playbackEnabled],
+	)
 
 	const handleScrubStart = useCallback(() => {
 		isScrubbingRef.current = true
@@ -222,6 +237,12 @@ export default function AudioFullscreenOverlay(props: AudioFullscreenOverlayProp
 		setDuration(0)
 		setIsPlaying(false)
 	}, [isOpen, src])
+
+	useEffect(() => {
+		if (playbackEnabled) return
+		audioRef.current?.pause()
+		setIsPlaying(false)
+	}, [playbackEnabled])
 
 	useLayoutEffect(() => {
 		const input = progressRangeRef.current
@@ -360,7 +381,7 @@ export default function AudioFullscreenOverlay(props: AudioFullscreenOverlayProp
 									ref={audioRef}
 									style={{ width: "min(420px, 100%)" }}
 									src={src}
-									autoPlay={autoPlay}
+									autoPlay={autoPlay && playbackEnabled}
 									preload="metadata"
 									onLoadedMetadata={syncAudioStateFromDom}
 									onCanPlay={syncAudioStateFromDom}
@@ -381,6 +402,7 @@ export default function AudioFullscreenOverlay(props: AudioFullscreenOverlayProp
 							<MediaControls
 								progressAlwaysVisible
 								visible={chromeVisible}
+								playbackEnabled={playbackEnabled}
 								duration={duration}
 								progressRangeRef={progressRangeRef}
 								currentTimeLabelRef={currentTimeLabelRef}

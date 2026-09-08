@@ -255,6 +255,7 @@ const UploadModal = forwardRef<UploadModalRef, UploadModalProps>(function Upload
 							className={styles.createDirectoryButton}
 							type="text"
 							onClick={showCreateDirectory}
+							data-testid="upload-modal-create-folder-button"
 						>
 							{t("selectPathModal.newSubfolder")}
 						</Button>
@@ -315,6 +316,7 @@ const UploadModal = forwardRef<UploadModalRef, UploadModalProps>(function Upload
 			footer={footerConfig}
 			onClose={onClose}
 			width={modalWidth}
+			testId="upload-modal"
 			customModalProps={{
 				maskClosable: false,
 			}}

@@ -35,11 +35,13 @@ import { SUPER_PLACEHOLDER_TYPE } from "../extensions/super-placeholder/const"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import MarkerMentionNodeView from "../components/MentionNodes/marker/MarkerMentionNodeView"
 import FileMentionNodeView from "../components/MentionNodes/file/FileMentionNodeView"
+import FolderMentionNodeView from "../components/MentionNodes/folder/FolderMentionNodeView"
 import { runActiveEditor } from "../utils/editorLifecycle"
 import {
 	tryAcceptPromptCarouselShortcut,
 	tryNavigatePromptCarouselShortcut,
 } from "../utils/promptCarousel"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 
 interface UseMessageEditorProps {
 	value?: JSONContent
@@ -69,6 +71,10 @@ interface UseMessageEditorProps {
 	mentionPanelStore?: MentionPanelStore
 	/** 恢复内容期间返回 true 时，appendTransaction 跳过 onInsertItems，避免与 restoreMentionItems 冲突 */
 	shouldSkipInsertSync?: () => boolean
+	/** Allows trusted programmatic content restoration to keep existing Mention nodes intact. */
+	shouldSkipMentionValidation?: () => boolean
+	/** Allows previously trusted Mention nodes to survive follow-up editor transactions. */
+	isTrustedMention?: (attrs: TiptapMentionAttributes) => boolean
 	/** 程序化清空期间跳过删除同步，避免误判为用户删除 */
 	shouldSkipRemoveSync?: () => boolean
 	/** 删除后需要先恢复的 mention，用于等待确认弹窗 */
@@ -77,6 +83,7 @@ interface UseMessageEditorProps {
 		stillExists: boolean,
 		context?: { deletionInput: MentionDeletionInput },
 	) => boolean
+	getWorkspaceFilesList?: () => AttachmentItem[]
 }
 
 type MentionEditorCommands = {
@@ -146,8 +153,11 @@ export const useMessageEditor = ({
 	topicMode,
 	mentionPanelStore = GlobalMentionPanelStore,
 	shouldSkipInsertSync,
+	shouldSkipMentionValidation,
+	isTrustedMention,
 	shouldSkipRemoveSync,
 	shouldRestoreRemovedMention,
+	getWorkspaceFilesList,
 }: UseMessageEditorProps) => {
 	const domRef = useRef<HTMLDivElement>(null)
 	const { i18n } = useTranslation()
@@ -302,6 +312,12 @@ export const useMessageEditor = ({
 			Paragraph,
 			Text,
 			HardBlock,
+			CopyMessageExtension.configure({
+				onMentionsInsert: onMentionInsertItems,
+				onContentChange: onChange,
+				dataService: mentionPanelStore,
+				getWorkspaceFilesList,
+			}),
 			CodeAwarePasteExtension,
 			SuperPlaceholderExtension.configure({
 				size: size || "default",
@@ -313,11 +329,6 @@ export const useMessageEditor = ({
 			UndoRedo.configure({
 				depth: 100,
 				newGroupDelay: 250,
-			}),
-			CopyMessageExtension.configure({
-				onMentionsInsert: onMentionInsertItems,
-				onContentChange: onChange,
-				dataService: mentionPanelStore,
 			}),
 			...(shouldEnableMention
 				? [
@@ -348,8 +359,16 @@ export const useMessageEditor = ({
 								[MentionItemType.DESIGN_MARKER]: MarkerMentionNodeView,
 								[MentionItemType.PROJECT_FILE]: FileMentionNodeView,
 								[MentionItemType.UPLOAD_FILE]: FileMentionNodeView,
+								[MentionItemType.FOLDER]: (props) => (
+									<FolderMentionNodeView
+										{...props}
+										getWorkspaceFilesList={getWorkspaceFilesList}
+									/>
+								),
 							},
 							shouldSkipInsertSync,
+							shouldSkipMentionValidation,
+							isTrustedMention,
 							shouldSkipRemoveSync,
 							shouldRestoreRemovedMention,
 						}),

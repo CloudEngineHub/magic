@@ -563,6 +563,17 @@ class ProjectAppService extends AbstractAppService
             // 获取工作区信息用于写入 extra_data
             $workspaceId = $projectEntity->getWorkspaceId();
             $workspace = $this->workspaceDomainService->getWorkspaceDetail($workspaceId);
+            if ($workspaceId !== null && $workspace === null) {
+                $this->logger->warning('项目关联的工作区不存在', [
+                    'project_id' => $projectId,
+                    'workspace_id' => $workspaceId,
+                ]);
+            }
+
+            $parentInfo = $workspace === null ? null : [
+                'workspace_id' => $workspaceId,
+                'workspace_name' => $workspace->getName(),
+            ];
 
             // 记录到回收站表
             $this->recycleBinDomainService->recordDeletion(
@@ -571,12 +582,9 @@ class ProjectAppService extends AbstractAppService
                 resourceName: $projectEntity->getProjectName(),
                 ownerId: $projectEntity->getUserId(),
                 deletedBy: (string) $dataIsolation->getCurrentUserId(),
-                parentId: $projectEntity->getWorkspaceId(),
+                parentId: $workspaceId,
                 extraData: array_filter([
-                    'parent_info' => [
-                        'workspace_id' => $workspaceId,
-                        'workspace_name' => $workspace ? $workspace->getName() : '',
-                    ],
+                    'parent_info' => $parentInfo,
                     'micro_app' => $microAppRecord === null ? null : [
                         'app_id' => (string) $microAppRecord->getId(),
                         'project_id' => (string) $projectId,
@@ -1411,13 +1419,29 @@ class ProjectAppService extends AbstractAppService
             $dataIsolation->getCurrentUserId()
         );
 
+        // `pre_project_id` has priority only when both relative-position IDs
+        // have a value. An explicitly null `pre_project_id` must not suppress
+        // a valid `next_project_id`.
+        $preProjectId = $requestDTO->getPreProjectId();
+        $nextProjectId = $requestDTO->getNextProjectId();
+        if ($preProjectId !== null && $nextProjectId !== null) {
+            $this->logger->warning('Both pre_project_id and next_project_id were provided; pre_project_id wins', [
+                'project_id' => $requestDTO->getSourceProjectId(),
+            ]);
+            $nextProjectId = null;
+        }
+        $sortProvided = ($preProjectId !== null || $nextProjectId !== null);
+
         // Call domain service to handle the move
         $movedProjectEntity = $this->projectDomainService->moveProject(
             $requestDTO->getSourceProjectId(),
             $targetWorkspaceId,
             $userAuthorization->getId(),
             $requestDTO->getTargetProjectName(),
-            $requestDTO->getProjectMode()
+            $requestDTO->getProjectMode(),
+            $preProjectId,
+            $nextProjectId,
+            $sortProvided
         );
 
         $this->logger->info(sprintf(
@@ -1497,14 +1521,20 @@ class ProjectAppService extends AbstractAppService
 
         /** @var int[] $validProjectIds */
         $validProjectIds = [];
+        /** @var int[] $workspaceChangeProjectIds */
+        $workspaceChangeProjectIds = [];
         $invalidResults = [];
 
         foreach ($requestDTO->getProjectIds() as $projectId) {
             $projectIdInt = (int) $projectId;
             if (isset($projectMap[$projectIdInt])) {
                 $project = $projectMap[$projectIdInt];
-                // Check if project is already in target workspace
-                if ($project->getWorkspaceId() === $targetWorkspaceId) {
+                // A same-workspace request is valid when it explicitly carries a
+                // sorting parameter; otherwise preserve the legacy no-op rejection.
+                if ($project->getWorkspaceId() === $targetWorkspaceId
+                    && ! $requestDTO->preProjectIdProvided
+                    && ! $requestDTO->nextProjectIdProvided
+                ) {
                     $invalidResults[] = [
                         'project_id' => $projectId,
                         'success' => false,
@@ -1512,6 +1542,9 @@ class ProjectAppService extends AbstractAppService
                     ];
                 } else {
                     $validProjectIds[] = $projectIdInt;
+                    if ($project->getWorkspaceId() !== $targetWorkspaceId) {
+                        $workspaceChangeProjectIds[] = $projectIdInt;
+                    }
                 }
             } else {
                 $invalidResults[] = [
@@ -1528,10 +1561,23 @@ class ProjectAppService extends AbstractAppService
 
         if (! empty($validProjectIds)) {
             try {
-                $successResults = Db::transaction(function () use ($validProjectIds, $targetWorkspaceId, $now, $userId, $organizationCode) {
-                    // Step 4.1: Batch update projects (1 query)
-                    $updatedCount = $this->projectRepository->batchUpdateWorkspace(
-                        $validProjectIds,
+                $successResults = Db::transaction(function () use ($validProjectIds, $workspaceChangeProjectIds, $targetWorkspaceId, $now, $userId, $organizationCode, $requestDTO) {
+                    $preProjectId = $requestDTO->getPreProjectId();
+                    $nextProjectId = $requestDTO->getNextProjectId();
+                    if ($preProjectId !== null && $nextProjectId !== null) {
+                        $this->logger->warning('Both pre_project_id and next_project_id were provided in batch move; pre_project_id wins');
+                        $nextProjectId = null;
+                    }
+                    $relativeProjectId = $preProjectId ?? $nextProjectId;
+                    if ($relativeProjectId !== null
+                        && in_array($relativeProjectId, $validProjectIds, true)
+                    ) {
+                        throw new RuntimeException('Relative project cannot be included in the moved project list');
+                    }
+
+                    // Step 4.1: Batch update projects only when workspace changes.
+                    $updatedCount = $workspaceChangeProjectIds === [] ? 0 : $this->projectRepository->batchUpdateWorkspace(
+                        $workspaceChangeProjectIds,
                         $targetWorkspaceId,
                         $now
                     );
@@ -1541,8 +1587,8 @@ class ProjectAppService extends AbstractAppService
                     ]);
 
                     // Step 4.2: Batch update topics (1 query)
-                    $topicUpdatedCount = $this->topicDomainService->batchUpdateWorkspaceByProjects(
-                        $validProjectIds,
+                    $topicUpdatedCount = $workspaceChangeProjectIds === [] ? 0 : $this->topicDomainService->batchUpdateWorkspaceByProjects(
+                        $workspaceChangeProjectIds,
                         $targetWorkspaceId,
                         $now
                     );
@@ -1553,7 +1599,7 @@ class ProjectAppService extends AbstractAppService
 
                     // Step 4.3: Sync message schedule workspace.
                     $scheduleUpdatedCount = $this->messageScheduleDomainService->syncMovedProjectSchedules(
-                        $validProjectIds,
+                        $workspaceChangeProjectIds,
                         $userId,
                         $organizationCode,
                         (int) ($targetWorkspaceId ?? 0),
@@ -1567,7 +1613,7 @@ class ProjectAppService extends AbstractAppService
                     // Step 4.4: Sync owner's personal workspace binding.
                     $settingUpdatedCount = $this->projectMemberDomainService->syncOwnerProjectWorkspaceBindings(
                         $userId,
-                        $validProjectIds,
+                        $workspaceChangeProjectIds,
                         $targetWorkspaceId,
                         $organizationCode
                     );
@@ -1575,6 +1621,31 @@ class ProjectAppService extends AbstractAppService
                     $this->logger->info('Batch synced owner project workspace bindings', [
                         'updated_count' => $settingUpdatedCount,
                     ]);
+
+                    if ($preProjectId !== null || $nextProjectId !== null) {
+                        // For a `next_*_id` anchor, reverse processing keeps
+                        // the caller's project order in the final list.
+                        $sortProjectIds = $preProjectId !== null
+                            ? $validProjectIds
+                            : array_reverse($validProjectIds);
+                        $currentPreProjectId = $preProjectId;
+                        $currentNextProjectId = $nextProjectId;
+                        foreach ($sortProjectIds as $projectId) {
+                            $this->projectDomainService->applyProjectSortOrderForBatch(
+                                $userId,
+                                $organizationCode,
+                                $projectId,
+                                $targetWorkspaceId,
+                                $currentPreProjectId,
+                                $currentNextProjectId
+                            );
+                            if ($currentPreProjectId !== null) {
+                                $currentPreProjectId = $projectId;
+                            } else {
+                                $currentNextProjectId = $projectId;
+                            }
+                        }
+                    }
 
                     // Step 4.5: Build success results
                     $results = [];
@@ -1666,6 +1737,14 @@ class ProjectAppService extends AbstractAppService
                 'list' => [],
                 'tree' => [],
             ];
+        }
+
+        // The project authorization above is bound to the route/token project. A
+        // caller-supplied parent_id must belong to that same project before it can
+        // be used as the root of a file-tree traversal.
+        $parentFile = $this->magicFSFileDomainService->getFileById($parentId);
+        if ((int) $parentFile->getProjectId() !== (int) $requestDTO->getProjectId()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
         }
 
         // Only return project-space files; filter at DB level to avoid loading snapshot/other files

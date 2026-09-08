@@ -79,6 +79,9 @@
 		"refresh": "Refresh",
 		"scopeAll": "All",
 		"scopeCurrent": "Current User",
+		"status": {
+			"serverCancelled": "Ended by server (export only)"
+		},
 		"table": {
 			"actions": "Actions",
 			"duration": "Duration",

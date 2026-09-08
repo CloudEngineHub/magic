@@ -799,8 +799,8 @@ export interface GenerateHightImageResponse {
  * 获取转高清配置响应数据
  */
 export interface GetConvertHightConfigResponse {
-	/** 是否支持转高清，如果没有配置则不支持转高清 */
-	supported: boolean
+	/** 后台是否开启转高清能力 */
+	enabled: boolean
 	/** 支持的尺寸配置列表 */
 	image_size_config: {
 		sizes: {
@@ -809,8 +809,24 @@ export interface GetConvertHightConfigResponse {
 			/** 尺寸值，格式为 "宽度x高度"，如 "1024x1024" */
 			value: string
 			/** 分辨率等级，如 "1K", "2K", "4K" */
-			scale: string
+			scale: string | null
 		}[]
+	}
+}
+
+/** 获取 AI 能力可用性响应数据 */
+export interface AiAbilityAvailabilityResponse {
+	abilities: {
+		image_convert_high: GetConvertHightConfigResponse
+		image_remove_background: {
+			enabled: boolean
+		}
+		image_eraser: {
+			enabled: boolean
+		}
+		image_expand: {
+			enabled: boolean
+		}
 	}
 }
 
@@ -1388,6 +1404,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @description 获取工作区列表
 	 * @param page
 	 * @param page_size
+	 * @param pin_priority Whether the backend should return pinned workspaces first.
 	 */
 	getWorkspaces({
 		page,
@@ -1395,22 +1412,49 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		workspace_type,
 		auto_create,
 		workspace_name,
+		pin_priority = true,
 	}: {
 		page: number
 		page_size: number
 		workspace_type?: string
 		auto_create?: boolean
 		workspace_name?: string
+		pin_priority?: boolean
 	}) {
 		return fetch.get(
 			genRequestUrl(
 				"/api/v1/super-agent/workspaces/queries",
 				{},
-				{ page, page_size, workspace_type, auto_create, workspace_name },
+				{ page, page_size, workspace_type, auto_create, workspace_name, pin_priority },
 			),
 			{
 				enableRequestUnion: true,
 			},
+		)
+	},
+
+	/**
+	 * 保存侧栏工作区顺序。
+	 */
+	moveWorkspace(
+		{
+			id,
+			pre_workspace_id,
+			next_workspace_id,
+		}: {
+			id: string
+			pre_workspace_id: string | null
+			next_workspace_id: string | null
+		},
+		options?: Omit<RequestConfig, "url">,
+	) {
+		return fetch.put<{ workspace?: Workspace }>(
+			`/api/v1/super-agent/workspaces/${id}`,
+			{
+				pre_workspace_id,
+				next_workspace_id,
+			},
+			options,
 		)
 	},
 
@@ -1471,14 +1515,16 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		id,
 		workspace_name,
 		is_pinned,
+		pre_workspace_id,
 	}: {
 		id: string
 		workspace_name: string
 		is_pinned?: boolean
+		pre_workspace_id?: string | null
 	}) {
 		return fetch.put(
 			`/api/v1/super-agent/workspaces/${id}`,
-			{ workspace_name, is_pinned },
+			{ workspace_name, is_pinned, pre_workspace_id },
 			{
 				enableRequestUnion: true,
 			},
@@ -2151,6 +2197,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		project_name,
 		order_by,
 		sort,
+		pin_priority,
 		page,
 		page_size,
 	}: {
@@ -2158,6 +2205,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		project_name?: string
 		order_by?: string
 		sort?: string
+		pin_priority?: number
 		page: number
 		page_size: number
 	}) {
@@ -2170,6 +2218,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 					project_name,
 					order_by,
 					sort,
+					pin_priority,
 					page,
 					page_size,
 				},
@@ -2177,6 +2226,32 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			{
 				enableRequestUnion: true,
 			},
+		)
+	},
+
+	/**
+	 * 保存指定工作区内的项目顺序。
+	 */
+	moveProject(
+		{
+			source_project_id,
+			target_workspace_id,
+			pre_project_id,
+			next_project_id,
+			target_project_name,
+		},
+		options?: Omit<RequestConfig, "url">,
+	) {
+		return fetch.post(
+			"/api/v1/super-agent/projects/move",
+			{
+				source_project_id,
+				target_workspace_id,
+				...(pre_project_id === undefined ? {} : { pre_project_id }),
+				...(next_project_id === undefined ? {} : { next_project_id }),
+				target_project_name,
+			},
+			options,
 		)
 	},
 
@@ -2620,23 +2695,36 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param target_project_name 目标项目名称（后端若支持则在移动时同步改名）
 	 * @returns 移动项目结果
 	 */
-	moveProjectToNewWorkspace({
-		source_project_id,
-		target_workspace_id,
-		target_workspace_name,
-		target_project_name,
-	}: {
-		source_project_id: string
-		target_workspace_id: string
-		target_workspace_name?: string
-		target_project_name?: string
-	}) {
-		return fetch.post("/api/v1/super-agent/projects/move", {
+	moveProjectToNewWorkspace(
+		{
 			source_project_id,
 			target_workspace_id,
 			target_workspace_name,
 			target_project_name,
-		})
+			pre_project_id,
+			next_project_id,
+		}: {
+			source_project_id: string
+			target_workspace_id: string
+			target_workspace_name?: string
+			target_project_name?: string
+			pre_project_id?: string | null
+			next_project_id?: string | null
+		},
+		options?: Omit<RequestConfig, "url">,
+	) {
+		return fetch.post(
+			"/api/v1/super-agent/projects/move",
+			{
+				source_project_id,
+				target_workspace_id,
+				target_workspace_name,
+				target_project_name,
+				...(pre_project_id === undefined ? {} : { pre_project_id }),
+				...(next_project_id === undefined ? {} : { next_project_id }),
+			},
+			options,
+		)
 	},
 
 	/**
@@ -2883,9 +2971,28 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		project_id: string,
 		data: {
 			is_pin: boolean
+			target_workspace_id?: string
+			pre_project_id?: string | null
+			next_project_id?: string | null
 		},
+		options?: Omit<RequestConfig, "url">,
 	) {
-		return fetch.put(`/api/v1/super-agent/projects/${project_id}/pin`, data)
+		return fetch.put(
+			`/api/v1/super-agent/projects/${project_id}/pin`,
+			{
+				is_pin: data.is_pin,
+				...(data.target_workspace_id === undefined
+					? {}
+					: { target_workspace_id: data.target_workspace_id }),
+				...(data.pre_project_id === undefined
+					? {}
+					: { pre_project_id: data.pre_project_id }),
+				...(data.next_project_id === undefined
+					? {}
+					: { next_project_id: data.next_project_id }),
+			},
+			options,
+		)
 	},
 
 	/**
@@ -3077,7 +3184,17 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @returns 转高清配置响应数据
 	 */
 	getConvertHightConfig() {
-		return fetch.get<GetConvertHightConfigResponse>("/api/v1/design/convert-high/config")
+		return fetch
+			.get<AiAbilityAvailabilityResponse>("/api/v1/ai-abilities/availability")
+			.then((response) => response.abilities.image_convert_high)
+	},
+
+	/**
+	 * @description 获取 AI 能力可用性配置
+	 * @returns AI 能力可用性响应数据
+	 */
+	getAiAbilityAvailability() {
+		return fetch.get<AiAbilityAvailabilityResponse>("/api/v1/ai-abilities/availability")
 	},
 
 	/**

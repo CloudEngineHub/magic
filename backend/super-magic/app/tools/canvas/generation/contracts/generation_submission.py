@@ -16,3 +16,4 @@ class GenerationSubmission:
     error_message: str | None = None
     provider_task_id: str | None = None
     request_metadata: JsonObject | None = None
+    result_metadata: JsonObject | None = None

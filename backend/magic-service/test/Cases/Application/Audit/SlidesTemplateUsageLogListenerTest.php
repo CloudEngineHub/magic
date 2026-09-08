@@ -12,11 +12,13 @@ use App\Domain\Audit\ResourceAccess\Repository\Facade\ResourceAccessLogRepositor
 use App\Domain\Audit\ResourceAccess\Service\ResourceAccessLogDomainService;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
-use App\Infrastructure\Audit\Listener\SlidesTemplateUsageLogListener;
+use App\Infrastructure\Audit\Listener\ResourceAccessLogListener;
 use App\Infrastructure\Audit\Repository\Model\ResourceAccessLogModel;
 use App\Infrastructure\Core\ValueObject\Page;
+use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
+use Psr\Log\NullLogger;
 use ReflectionClass;
 use RuntimeException;
 
@@ -29,7 +31,9 @@ class SlidesTemplateUsageLogListenerTest extends TestCase
     {
         $repository = new RecordingResourceAccessLogRepository();
         $domainService = new ResourceAccessLogDomainService($repository);
-        $listener = new SlidesTemplateUsageLogListener(new SlidesTemplateUsageLogListenerTestContainer($domainService));
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->willReturn(new NullLogger());
+        $listener = new ResourceAccessLogListener(new SlidesTemplateUsageLogListenerTestContainer($domainService, $loggerFactory));
 
         $template = new SlidesTemplateEntity();
         $template->setCode('PPT-business-minimal')
@@ -94,13 +98,15 @@ class SlidesTemplateUsageLogListenerTest extends TestCase
 final readonly class SlidesTemplateUsageLogListenerTestContainer implements ContainerInterface
 {
     public function __construct(
-        private ResourceAccessLogDomainService $domainService
+        private ResourceAccessLogDomainService $domainService,
+        private LoggerFactory $loggerFactory,
     ) {
     }
 
     public function get(string $id)
     {
         return match ($id) {
+            LoggerFactory::class => $this->loggerFactory,
             ResourceAccessLogDomainService::class => $this->domainService,
             default => throw new RuntimeException('Unexpected container dependency: ' . $id),
         };

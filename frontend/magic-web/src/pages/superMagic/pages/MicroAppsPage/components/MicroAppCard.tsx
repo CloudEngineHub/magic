@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AppWindow, ExternalLink, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { AppWindow, ExternalLink, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react"
 import { motion, useReducedMotion } from "framer-motion"
 import {
 	ContextMenu,
@@ -60,7 +60,11 @@ interface MicroAppCardProps {
 	onOpenInNewWindow: () => void
 	onRename: () => void
 	onDelete: () => void
+	onManageCollaborators?: () => void
+	managingCollaborators?: boolean
 	canDelete?: boolean
+	canRename: boolean
+	canManageCollaborators?: boolean
 }
 
 export default function MicroAppCard({
@@ -77,7 +81,11 @@ export default function MicroAppCard({
 	onOpenInNewWindow,
 	onRename,
 	onDelete,
+	onManageCollaborators,
+	managingCollaborators = false,
 	canDelete = true,
+	canRename,
+	canManageCollaborators = false,
 }: MicroAppCardProps) {
 	const { t } = useTranslation("super")
 	const theme = coverThemes[resolveThemeIndex(id)]
@@ -257,10 +265,21 @@ export default function MicroAppCard({
 						<ExternalLink className="size-4" />
 						{t("microAppsPage.actions.openInNewWindow")}
 					</ContextMenuItem>
-					<ContextMenuItem onSelect={onRename}>
-						<Pencil className="size-4" />
-						{t("microAppsPage.actions.rename")}
-					</ContextMenuItem>
+					{canRename ? (
+						<ContextMenuItem onSelect={onRename}>
+							<Pencil className="size-4" />
+							{t("microAppsPage.actions.rename")}
+						</ContextMenuItem>
+					) : null}
+					{canManageCollaborators && onManageCollaborators ? (
+						<ContextMenuItem
+							onSelect={onManageCollaborators}
+							disabled={managingCollaborators}
+						>
+							<Users className="size-4" />
+							{t("microAppsPage.actions.manageCollaborators")}
+						</ContextMenuItem>
+					) : null}
 					{canDelete ? (
 						<ContextMenuItem variant="destructive" onSelect={onDelete}>
 							<Trash2 className="size-4" />
@@ -284,17 +303,36 @@ export default function MicroAppCard({
 				>
 					<SheetTitle className="px-2 pb-3 pt-1 text-left text-base">{title}</SheetTitle>
 					<div className="overflow-hidden rounded-2xl bg-card">
-						<button
-							type="button"
-							className="flex h-14 w-full items-center gap-3 px-4 text-left text-base active:bg-muted/60"
-							onClick={() => {
-								setMobileMenuOpen(false)
-								onRename()
-							}}
-						>
-							<Pencil className="size-4" />
-							{t("microAppsPage.actions.rename")}
-						</button>
+						{canRename ? (
+							<button
+								type="button"
+								className="flex h-14 w-full items-center gap-3 px-4 text-left text-base active:bg-muted/60"
+								onClick={() => {
+									setMobileMenuOpen(false)
+									onRename()
+								}}
+							>
+								<Pencil className="size-4" />
+								{t("microAppsPage.actions.rename")}
+							</button>
+						) : null}
+						{canManageCollaborators && onManageCollaborators ? (
+							<>
+								<div className="ml-12 h-px bg-border/60" />
+								<button
+									type="button"
+									className="flex h-14 w-full items-center gap-3 px-4 text-left text-base active:bg-muted/60 disabled:opacity-50"
+									disabled={managingCollaborators}
+									onClick={() => {
+										setMobileMenuOpen(false)
+										onManageCollaborators()
+									}}
+								>
+									<Users className="size-4" />
+									{t("microAppsPage.actions.manageCollaborators")}
+								</button>
+							</>
+						) : null}
 						{canDelete ? (
 							<>
 								<div className="ml-12 h-px bg-border/60" />

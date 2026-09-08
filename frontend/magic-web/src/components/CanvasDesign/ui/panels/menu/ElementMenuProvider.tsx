@@ -58,7 +58,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 
 	const { canvas } = useCanvas()
 	const { imageModelList, permissions, videoModelList } = useMagic()
-	const { readonly, selectedElementIds, setLayerRenamingElementId, setCanvasRenamingElementId } =
+	const { selectedElementIds, setLayerRenamingElementId, setCanvasRenamingElementId } =
 		useCanvasUI()
 
 	const MENU_WIDTH = 220
@@ -73,7 +73,11 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 		void (async () => {
 			const images = getLoadedImageElements(canvas)
 			for (const img of images) {
-				const src = getActiveImageContent(img).src
+				const src =
+					(typeof canvas.getEffectiveContent === "function"
+						? (canvas.getEffectiveContent(img.id) as { src?: string } | undefined)
+						: undefined
+					)?.src ?? getActiveImageContent(img).src
 				if (!src) continue
 				const entry = await canvas.imageResourceManager.getEntry(src)
 				if (entry?.fileName) continue
@@ -282,7 +286,6 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 					canvas,
 					selectedIds: canvas.selectionManager.getSelectedIds(),
 					currentElementId: elementId,
-					readonly,
 					t,
 					downloadMenuContext: ctx,
 					renameMenuConfig: {
@@ -296,7 +299,6 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 		},
 		[
 			canvas,
-			readonly,
 			t,
 			cleanMenuItems,
 			fileInfoEpoch,
@@ -343,7 +345,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 	// 获取画布空白区域的菜单项（只有粘贴项），position 用于预计算时传入即将使用的位置
 	const getCanvasMenuItems = useCallback(
 		(position?: { x: number; y: number }): MenuItem[] => {
-			if (!canvas || readonly) return []
+			if (!canvas || !canvas.permissionManager.can("document.write")) return []
 
 			const translate = (key: string, fallback: string) => {
 				return t ? t(key, fallback) : fallback
@@ -371,13 +373,14 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 				},
 			]
 		},
-		[canvas, readonly, t, canvasMenuPosition],
+		[canvas, t, canvasMenuPosition],
 	)
 
 	const createElementAtCanvasPoint = useCallback(
 		(kind: CreateElementMenuKind, position?: { x: number; y: number }) => {
 			const targetPosition = position ?? canvasMenuPosition
-			if (!canvas || readonly || !targetPosition) return
+			if (!canvas || !canvas.permissionManager.can("document.write") || !targetPosition)
+				return
 
 			if (kind === "text") {
 				canvas.textEditingManager.startCreatingAt(targetPosition.x, targetPosition.y)
@@ -395,13 +398,14 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 				.getVideoGeneratorTool()
 				.createVideoAtCanvasPoint(targetPosition.x, targetPosition.y, videoModelList)
 		},
-		[canvas, canvasMenuPosition, imageModelList, readonly, videoModelList],
+		[canvas, canvasMenuPosition, imageModelList, videoModelList],
 	)
 
 	const getCanvasCreateMenuItems = useCallback(
 		(position?: { x: number; y: number }): MenuItem[] => {
 			const targetPosition = position ?? canvasMenuPosition
-			if (!canvas || readonly || !targetPosition) return []
+			if (!canvas || !canvas.permissionManager.can("document.write") || !targetPosition)
+				return []
 
 			const translate = (key: string, fallback: string) => {
 				return t ? t(key, fallback) : fallback
@@ -418,7 +422,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 				},
 			})
 		},
-		[canvas, canvasMenuPosition, createElementAtCanvasPoint, readonly, t],
+		[canvas, canvasMenuPosition, createElementAtCanvasPoint, t],
 	)
 
 	// 获取菜单项
@@ -436,7 +440,6 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 			canvas,
 			selectedIds: canvas.selectionManager.getSelectedIds(),
 			currentElementId,
-			readonly,
 			t,
 			downloadMenuContext,
 			renameMenuConfig: {
@@ -449,7 +452,6 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 		return cleanMenuItems(items)
 	}, [
 		canvas,
-		readonly,
 		currentElementId,
 		t,
 		cleanMenuItems,
@@ -525,7 +527,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 		"canvas:dblclick",
 		useCallback(
 			({ data }) => {
-				if (!canvas || readonly) return
+				if (!canvas || !canvas.permissionManager.can("document.write")) return
 				if (canvas.toolManager.getActiveTool() !== canvas.toolManager.getSelectionTool()) {
 					return
 				}
@@ -543,9 +545,9 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 				setMenuKey((prev) => prev + 1)
 				triggerMenuDisplay(x, y)
 			},
-			[canvas, cleanMenuItems, getCanvasCreateMenuItems, readonly, triggerMenuDisplay],
+			[canvas, cleanMenuItems, getCanvasCreateMenuItems, triggerMenuDisplay],
 		),
-		[canvas, cleanMenuItems, getCanvasCreateMenuItems, readonly, triggerMenuDisplay],
+		[canvas, cleanMenuItems, getCanvasCreateMenuItems, triggerMenuDisplay],
 	)
 
 	return (

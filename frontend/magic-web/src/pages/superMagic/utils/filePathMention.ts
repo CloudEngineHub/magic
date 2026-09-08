@@ -1,10 +1,300 @@
 export const FILE_PATH_MENTION_PREFIX = "[@file_path:"
+const WORKSPACE_ROOT_PREFIX = ".workspace/"
+const MAGIC_ROOT_PREFIX = ".magic/"
 
 export interface FilePathMentionMatch {
 	path: string
 	startIndex: number
 	endIndex: number
 	fullMatch: string
+}
+
+export interface WorkspaceMarkdownLinkMatch extends FilePathMentionMatch {
+	label: string
+	href: string
+}
+
+export interface WorkspaceFileReferenceMatch extends FilePathMentionMatch {
+	source: "markdown" | "legacy"
+	label?: string
+	href?: string
+}
+
+function decodeHtmlEntities(value: string): string {
+	return value
+		.replace(/&amp;/gi, "&")
+		.replace(/&quot;/gi, '"')
+		.replace(/&#(?:39|x27);/gi, "'")
+		.replace(/&lt;/gi, "<")
+		.replace(/&gt;/gi, ">")
+}
+
+function decodeURIComponentOnce(value: string): string | null {
+	try {
+		return decodeURIComponent(value)
+	} catch {
+		return null
+	}
+}
+
+function normalizeWorkspacePathSegments(path: string): string | null {
+	const normalizedSlashes = path.replace(/\\/g, "/")
+	if (!normalizedSlashes || normalizedSlashes.startsWith("/")) return null
+
+	const segments: string[] = []
+	for (const segment of normalizedSlashes.split("/")) {
+		if (!segment || segment === ".") continue
+		if (segment === ".." || segment.includes("\0")) return null
+		segments.push(segment)
+	}
+
+	return segments.length > 0 ? segments.join("/") : null
+}
+
+/** 将内部工作区相对路径规范化为不带 ./ 的比较形式。 */
+export function normalizeWorkspaceRelativePath(path: string): string | null {
+	if (!path) return null
+
+	const normalized = decodeHtmlEntities(path.trim())
+	const withoutPrefix = normalized.startsWith("./") ? normalized.slice(2) : normalized
+	const withoutWorkspaceRoot = withoutPrefix.startsWith(WORKSPACE_ROOT_PREFIX)
+		? withoutPrefix.slice(WORKSPACE_ROOT_PREFIX.length)
+		: withoutPrefix
+	if (
+		!withoutWorkspaceRoot ||
+		/^[a-z][a-z\d+.-]*:/i.test(withoutWorkspaceRoot) ||
+		withoutWorkspaceRoot.startsWith("//")
+	) {
+		return null
+	}
+
+	return normalizeWorkspacePathSegments(withoutWorkspaceRoot)
+}
+
+/** 兼容附件树中以 / 表示工作区根的历史路径，只用于内部精确比较。 */
+export function normalizeWorkspacePathForComparison(path: string): string | null {
+	if (!path) return null
+
+	const normalized = decodeHtmlEntities(path.trim())
+	if (normalized.startsWith("//")) return null
+
+	const withoutRootPrefix = normalized.startsWith("/") ? normalized.slice(1) : normalized
+	return normalizeWorkspaceRelativePath(withoutRootPrefix)
+}
+
+/** 接受规范的 ./ 工作区链接及历史 .workspace/.magic 入口，并且只做一次 URI 解码。 */
+export function parseCanonicalWorkspaceHref(href: string): string | null {
+	if (!href) return null
+
+	const rawHref = decodeHtmlEntities(href.trim())
+	const isCanonicalHref = rawHref.startsWith("./")
+	const isWorkspaceRootPrefixedHref =
+		rawHref.startsWith(WORKSPACE_ROOT_PREFIX) ||
+		rawHref.startsWith(`./${WORKSPACE_ROOT_PREFIX}`)
+	const isBareMagicHref = rawHref.startsWith(MAGIC_ROOT_PREFIX)
+	if (
+		(!isCanonicalHref && !isWorkspaceRootPrefixedHref && !isBareMagicHref) ||
+		rawHref.includes("#") ||
+		rawHref.includes("?")
+	) {
+		return null
+	}
+
+	const decoded = decodeURIComponentOnce(rawHref)
+	if (decoded === null) return null
+	if (isCanonicalHref && !decoded.startsWith("./")) return null
+	if (
+		!isCanonicalHref &&
+		!decoded.startsWith(WORKSPACE_ROOT_PREFIX) &&
+		!decoded.startsWith(MAGIC_ROOT_PREFIX)
+	)
+		return null
+
+	return normalizeWorkspaceRelativePath(isCanonicalHref ? decoded.slice(2) : decoded)
+}
+
+export function isWorkspaceHrefCandidate(href: string): boolean {
+	const normalizedHref = decodeHtmlEntities(href.trim())
+	return (
+		normalizedHref.startsWith("./") ||
+		normalizedHref.startsWith(WORKSPACE_ROOT_PREFIX) ||
+		normalizedHref.startsWith(MAGIC_ROOT_PREFIX)
+	)
+}
+
+function encodePathSegment(segment: string): string {
+	return segment.replace(/[#?%<>]/g, (char) => {
+		const encoded: Record<string, string> = {
+			"#": "%23",
+			"?": "%3F",
+			"%": "%25",
+			"<": "%3C",
+			">": "%3E",
+		}
+		return encoded[char]
+	})
+}
+
+export function createCanonicalWorkspaceHref(path: string): string | null {
+	const normalizedPath = normalizeWorkspaceRelativePath(path)
+	if (!normalizedPath) return null
+
+	return `./${normalizedPath.split("/").map(encodePathSegment).join("/")}`
+}
+
+export function escapeMarkdownLinkLabel(label: string): string {
+	return label
+		.replace(/\s+/g, " ")
+		.trim()
+		.replace(/[\\[\]]/g, "\\$&")
+}
+
+export function escapeHtmlText(value: string): string {
+	return value.replace(/[&<>"']/g, (char) => {
+		const entities: Record<string, string> = {
+			"&": "&amp;",
+			"<": "&lt;",
+			">": "&gt;",
+			'"': "&quot;",
+			"'": "&#39;",
+		}
+		return entities[char]
+	})
+}
+
+function unescapeMarkdownText(value: string): string {
+	return value.replace(/\\([\\[\]()])/g, "$1")
+}
+
+function parseMarkdownLinkAt(
+	content: string,
+	startIndex: number,
+): WorkspaceMarkdownLinkMatch | null {
+	if (content[startIndex] !== "[" || content[startIndex - 1] === "!") return null
+
+	let index = startIndex + 1
+	let labelEnd = -1
+	while (index < content.length) {
+		if (content[index] === "\\") {
+			index += 2
+			continue
+		}
+		if (content[index] === "]") {
+			labelEnd = index
+			break
+		}
+		index++
+	}
+	if (labelEnd === -1 || content[labelEnd + 1] !== "(") return null
+
+	index = labelEnd + 2
+	let href = ""
+	if (content[index] === "<") {
+		const hrefStart = ++index
+		while (index < content.length && content[index] !== ">") index++
+		if (content[index] !== ">") return null
+		href = content.slice(hrefStart, index)
+		index++
+		while (content[index] === " " || content[index] === "\t") index++
+		if (content[index] !== ")") return null
+	} else {
+		const hrefStart = index
+		while (index < content.length) {
+			if (content[index] === "\\") {
+				index += 2
+				continue
+			}
+			if (content[index] === ")") break
+			index++
+		}
+		if (content[index] !== ")") return null
+		href = content.slice(hrefStart, index).trim()
+	}
+
+	const path = parseCanonicalWorkspaceHref(unescapeMarkdownText(href))
+	if (!path) return null
+
+	const endIndex = index + 1
+	return {
+		path,
+		label: unescapeMarkdownText(content.slice(startIndex + 1, labelEnd)),
+		href,
+		startIndex,
+		endIndex,
+		fullMatch: content.slice(startIndex, endIndex),
+	}
+}
+
+function readFenceMarker(
+	content: string,
+	index: number,
+): { marker: string; endIndex: number } | null {
+	const lineStart = index === 0 || content[index - 1] === "\n"
+	if (!lineStart) return null
+
+	let cursor = index
+	let leadingSpaces = 0
+	while (content[cursor] === " " && leadingSpaces < 3) {
+		cursor++
+		leadingSpaces++
+	}
+
+	const markerChar = content[cursor]
+	if (markerChar !== "`" && markerChar !== "~") return null
+
+	let markerEnd = cursor
+	while (content[markerEnd] === markerChar) markerEnd++
+	if (markerEnd - cursor < 3) return null
+
+	return { marker: content.slice(cursor, markerEnd), endIndex: markerEnd }
+}
+
+export function extractWorkspaceMarkdownLinks(content: string): WorkspaceMarkdownLinkMatch[] {
+	if (!content.includes("](")) return []
+
+	const matches: WorkspaceMarkdownLinkMatch[] = []
+	let index = 0
+	let fenceMarker = ""
+
+	while (index < content.length) {
+		const fence = readFenceMarker(content, index)
+		if (fence && (!fenceMarker || fence.marker[0] === fenceMarker[0])) {
+			if (!fenceMarker) {
+				fenceMarker = fence.marker
+			} else if (fence.marker.length >= fenceMarker.length) {
+				fenceMarker = ""
+			}
+			index = fence.endIndex
+			continue
+		}
+
+		if (fenceMarker) {
+			index++
+			continue
+		}
+
+		if (content[index] === "`") {
+			let runEnd = index
+			while (content[runEnd] === "`") runEnd++
+			const marker = content.slice(index, runEnd)
+			const closeIndex = content.indexOf(marker, runEnd)
+			index = closeIndex === -1 ? runEnd : closeIndex + marker.length
+			continue
+		}
+
+		if (content[index] === "[") {
+			const match = parseMarkdownLinkAt(content, index)
+			if (match) {
+				matches.push(match)
+				index = match.endIndex
+				continue
+			}
+		}
+
+		index++
+	}
+
+	return matches
 }
 
 function parseQuotedFilePath(
@@ -157,6 +447,19 @@ export function extractFilePathMentions(content: string): FilePathMentionMatch[]
 	return matches
 }
 
+export function extractWorkspaceFileReferences(content: string): WorkspaceFileReferenceMatch[] {
+	const markdownMatches: WorkspaceFileReferenceMatch[] = extractWorkspaceMarkdownLinks(
+		content,
+	).map((match) => ({ ...match, source: "markdown" }))
+	const legacyMatches: WorkspaceFileReferenceMatch[] = extractFilePathMentions(content).map(
+		(match) => ({ ...match, source: "legacy" }),
+	)
+
+	return [...markdownMatches, ...legacyMatches].sort(
+		(first, second) => first.startIndex - second.startIndex,
+	)
+}
+
 export function replaceFilePathMentions(
 	content: string,
 	replacer: (path: string, match: FilePathMentionMatch) => string,
@@ -174,5 +477,49 @@ export function replaceFilePathMentions(
 	}
 
 	result += content.slice(lastIndex)
+	return result
+}
+
+export function replaceFilePathMentionsOutsideFencedCode(
+	content: string,
+	replacer: (path: string, match: FilePathMentionMatch) => string,
+): string {
+	const lines = content.split(/(\r?\n)/)
+	let fenceCharacter: "`" | "~" | null = null
+	let fenceLength = 0
+	let outsideBuffer = ""
+	let result = ""
+
+	const flushOutsideBuffer = () => {
+		if (!outsideBuffer) return
+		result += replaceFilePathMentions(outsideBuffer, replacer)
+		outsideBuffer = ""
+	}
+
+	for (const line of lines) {
+		const fenceMatch = line.match(/^(?: {0,3})(`{3,}|~{3,})/)
+		if (fenceMatch) {
+			flushOutsideBuffer()
+			const marker = fenceMatch[1]
+			const markerCharacter = marker[0] as "`" | "~"
+			if (!fenceCharacter) {
+				fenceCharacter = markerCharacter
+				fenceLength = marker.length
+			} else if (markerCharacter === fenceCharacter && marker.length >= fenceLength) {
+				fenceCharacter = null
+				fenceLength = 0
+			}
+			result += line
+			continue
+		}
+
+		if (fenceCharacter) {
+			result += line
+		} else {
+			outsideBuffer += line
+		}
+	}
+
+	flushOutsideBuffer()
 	return result
 }

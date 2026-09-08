@@ -9,6 +9,7 @@ namespace App\Application\SuperMagic\Project\Event\Subscribe;
 
 use App\Domain\SuperMagic\Common\Constants\OperationAction;
 use App\Domain\SuperMagic\Common\Constants\ResourceType;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Event\DirectoryDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FileBatchMoveEvent;
 use App\Domain\SuperMagic\File\Event\FileContentSavedEvent;
@@ -18,7 +19,6 @@ use App\Domain\SuperMagic\File\Event\FileRenamedEvent;
 use App\Domain\SuperMagic\File\Event\FileReplacedEvent;
 use App\Domain\SuperMagic\File\Event\FilesBatchDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FileUploadedEvent;
-use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectOperationLogEntity;
 use App\Domain\SuperMagic\Project\Event\ProjectCreatedEvent;

@@ -13,6 +13,7 @@ import { canManageProject } from "@/pages/superMagic/utils/permission"
 import type { HandleRenameProjectParams } from "@/pages/superMagic/hooks/useProjects"
 import { getWorkspaceProjectRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
+import { canDragSidebarProject } from "./projectDndUtils"
 
 type ProjectRowActionHandler = (project: ProjectListItem) => void | Promise<void>
 
@@ -55,6 +56,7 @@ function CollapsedWorkspaceProjectRow({
 	const suppressProjectItemClickRef = useRef(false)
 
 	const canRename = canManageProject(project.user_role) && !!onRenameProject
+	const canDrag = canDragSidebarProject(project)
 
 	const {
 		isEditing,
@@ -132,10 +134,12 @@ function CollapsedWorkspaceProjectRow({
 			data-project-more-trigger="true"
 			data-workspace-id={workspaceId}
 			className={cn(
-				"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
+				"flex h-4 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full transition-[margin,width,opacity] [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
 				isSelected ? "text-sidebar-accent-foreground" : "text-sidebar-foreground",
-				isHovered || open ? "opacity-100" : "pointer-events-none opacity-0",
-				"no-hover:pointer-events-auto no-hover:opacity-100",
+				isHovered || open
+					? "ml-1 w-4 opacity-100"
+					: "pointer-events-none ml-0 w-0 opacity-0",
+				"no-hover:pointer-events-auto no-hover:ml-1 no-hover:w-4 no-hover:opacity-100",
 			)}
 			onClick={(e) => {
 				blockProjectItemClickTemporarily()
@@ -160,11 +164,24 @@ function CollapsedWorkspaceProjectRow({
 		open: boolean,
 		triggerContextMenu?: (e: React.MouseEvent<HTMLElement>) => void,
 	) => (
-		<div className={cn("h-8 w-full rounded-md", isSelected && "bg-sidebar-accent")}>
+		<div
+			className={cn("h-8 w-full rounded-md", isSelected && "bg-sidebar-accent")}
+			draggable={canDrag}
+			data-collapsed-sidebar-dnd-source={canDrag ? "project" : undefined}
+			data-collapsed-sidebar-dnd-workspace-id={workspaceId}
+			data-collapsed-sidebar-dnd-project-id={project.id}
+			data-collapsed-sidebar-dnd-label={
+				canDrag ? project.project_name || t("project.unnamedProject") : undefined
+			}
+			data-collapsed-sidebar-dnd-drop-type="project"
+			onDragStart={blockProjectItemClickTemporarily}
+			onDragEnd={blockProjectItemClickTemporarily}
+		>
 			<a
 				href={getWorkspaceProjectRouteUrl(workspaceId, project.id)}
+				draggable={false}
 				data-testid={`sidebar-collapsed-project-row-${project.id}`}
-				className="inline-flex h-full w-full items-center justify-start gap-2 rounded-md px-2 text-sm font-normal leading-5 text-current no-underline outline-none [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent focus-visible:outline-none"
+				className="relative inline-flex h-full w-full items-center justify-start gap-0 rounded-md px-2 text-sm font-normal leading-5 text-current no-underline outline-none [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent focus-visible:outline-none"
 				onMouseEnter={() => setIsHovered(true)}
 				onMouseLeave={() => setIsHovered(false)}
 				onClick={(event) => {
@@ -185,15 +202,16 @@ function CollapsedWorkspaceProjectRow({
 				<NavigationStatusIcon
 					itemType="project"
 					status={project.project_status}
-					className={
-						isSelected ? "text-sidebar-accent-foreground" : "text-sidebar-foreground"
-					}
+					className={cn(
+						"mr-2",
+						isSelected ? "text-sidebar-accent-foreground" : "text-sidebar-foreground",
+					)}
 				/>
 				<div className="min-w-0 flex-1">
-					<div className="flex min-w-0 max-w-full items-center gap-1.5">
+					<div className="flex min-w-0 flex-1 items-center gap-1.5">
 						<span
 							className={cn(
-								"min-w-0 max-w-full truncate text-left",
+								"min-w-0 max-w-full shrink truncate text-left",
 								isSelected
 									? "text-sidebar-accent-foreground"
 									: "text-sidebar-foreground",

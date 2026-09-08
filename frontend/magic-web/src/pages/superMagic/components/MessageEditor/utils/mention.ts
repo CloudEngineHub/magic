@@ -50,6 +50,7 @@ export function createUploadFileMentionData(fileData: FileData): UploadFileMenti
 		upload_progress: fileData.progress,
 		upload_status: fileData.status,
 		upload_error: fileData.error,
+		is_canvas_clipboard: fileData.isCanvasClipboard,
 	}
 }
 
@@ -125,6 +126,7 @@ export function transformMentionItemToProjectFile(
 	}
 
 	const uploadFile = item.attrs.data as UploadFileMentionData
+	if (uploadFile.is_canvas_clipboard) return item
 
 	return {
 		...item,
@@ -159,6 +161,7 @@ function transformContentByMentionItems(
 		// Check if it's an upload_file mention
 		if (mentionAttrs.type === MentionItemType.UPLOAD_FILE && mentionAttrs.data) {
 			const uploadFile = mentionAttrs.data as UploadFileMentionData
+			if (uploadFile.is_canvas_clipboard) return transformedContent
 
 			// Find corresponding save result
 			if (uploadFile.file_path && saveResultMap[uploadFile.file_path]) {
@@ -202,6 +205,7 @@ export function transformMentionItemsToProjectFiles(
 	const transformedItems = mentionItems.map((item) => {
 		if (item.attrs.type === MentionItemType.UPLOAD_FILE && hasValidFilePath(item)) {
 			const uploadFile = item.attrs.data as UploadFileMentionData
+			if (uploadFile.is_canvas_clipboard) return item
 
 			if (uploadFile.file_path) {
 				const saveResult = saveResultMap[uploadFile.file_path]
@@ -526,6 +530,10 @@ export const isAllowedMention = (
 	attrs: TiptapMentionAttributes,
 	dataService?: DataService | null,
 ) => {
+	// SDK text mentions are self-contained and do not require a panel data-service lookup.
+	if (attrs.type === MentionItemType.TEXT) return true
+	// Unknown types are accepted only by the trusted SDK/draft restore path, not by normal panel input.
+	if (!Object.values(MentionItemType).includes(attrs.type as MentionItemType)) return false
 	if (
 		attrs.type === MentionItemType.MEMORY_FILE ||
 		attrs.type === MentionItemType.MEMORY_DIRECTORY
@@ -591,6 +599,7 @@ export function filterPendingCanvasMentionsFromContent(
 export function filterUploadFileMentionsFromContent(
 	content: JSONContent,
 	dataService: DataService,
+	options: { preserveMentionValidation?: boolean } = {},
 ): JSONContent {
 	if (!content) {
 		return content
@@ -608,12 +617,13 @@ export function filterUploadFileMentionsFromContent(
 					const mentionAttrs = child.attrs as TiptapMentionAttributes
 					return (
 						mentionAttrs.type !== MentionItemType.UPLOAD_FILE &&
-						isAllowedMention(mentionAttrs, dataService)
+						(options.preserveMentionValidation ||
+							isAllowedMention(mentionAttrs, dataService))
 					)
 				}
 				return true
 			})
-			.map((child) => filterUploadFileMentionsFromContent(child, dataService))
+			.map((child) => filterUploadFileMentionsFromContent(child, dataService, options))
 
 		filteredContent.content = filteredChildren
 	}

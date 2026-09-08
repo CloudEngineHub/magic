@@ -7,6 +7,8 @@ import { useToolTooltip } from "@/pages/superMagic/components/MessageList/compon
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import {
 	buildAskUserToolReplyDetail,
+	isAskUserTaskSuspended,
+	normalizeAskUserRemark,
 	resolveAskUserLocaleFromAction,
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
 import {
@@ -160,12 +162,22 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 			}),
 		[detailData?.answers, detailData?.questions, parsedQuestions],
 	)
+	const submittedRemark = useMemo(
+		() => normalizeAskUserRemark(detailData?.remark),
+		[detailData?.remark],
+	)
 
-	const isOpen = !!loading || open
 	const toolStatus =
 		(typeof detailData?.status === "string" ? detailData.status : "") ||
 		(typeof tool?.status === "string" ? tool.status : "")
-	const askUserStatus = normalizeAskUserStatus(toolStatus)
+	const normalizedAskUserStatus = normalizeAskUserStatus(toolStatus)
+	const isTaskSuspended = isAskUserTaskSuspended(selectedTopic)
+	const askUserStatus =
+		isTaskSuspended && normalizedAskUserStatus === ASK_USER_CARD_STATUS.pending
+			? ASK_USER_CARD_STATUS.cancelled
+			: normalizedAskUserStatus
+	const isLoading = loading && !isTaskSuspended
+	const isOpen = !!isLoading || open
 	const askUserLocale = resolveAskUserLocaleFromAction(
 		typeof tool?.action === "string" ? tool.action : undefined,
 	)
@@ -174,8 +186,8 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 	const [answeredQuestionCount, setAnsweredQuestionCount] = useState(0)
 
 	const allComplete = parsedQuestions.length > 0 && parsedQuestions.every((q) => q.isComplete)
-	const isStreaming = !!loading && !allComplete
-	const isFrozen = pendingAction !== null || !loading || props.isShare || isShareRoute
+	const isStreaming = !!isLoading && !allComplete
+	const isFrozen = pendingAction !== null || !isLoading || props.isShare || isShareRoute
 	const toolId = tool?.id
 	const detailQuestionId = detailData?.question_id
 	const resolvedQuestionId =
@@ -186,7 +198,11 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 	})
 
 	const submitReply = useCallback(
-		async (responseStatus: AskUserResponseStatusValue, answers?: AskUserAnswers) => {
+		async (
+			responseStatus: AskUserResponseStatusValue,
+			answers?: AskUserAnswers,
+			remark = "",
+		) => {
 			const conversationId = selectedTopic?.chat_conversation_id || ""
 			const topicId = selectedTopic?.chat_topic_id || ""
 			if (!conversationId || !topicId) throw new Error("missing_topic_context")
@@ -214,6 +230,7 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 				questionId: resolvedQuestionId,
 				responseStatus,
 				answer: isAnswered && answers ? JSON.stringify(answers) : "",
+				remark: isAnswered ? remark : "",
 			})
 			if (!detail || !toolId) throw new Error("missing_ask_user_task_id")
 			await sendAskUserToolReply({
@@ -239,12 +256,12 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 		],
 	)
 
-	const handleSubmit = useCallback<(answers: AskUserAnswers) => void>(
-		async (answers) => {
+	const handleSubmit = useCallback<(answers: AskUserAnswers, remark: string) => void>(
+		async (answers, remark) => {
 			if (pendingAction) return
 			try {
 				setPendingAction("submit")
-				await submitReply(ASK_USER_RESPONSE_STATUS.answered, answers)
+				await submitReply(ASK_USER_RESPONSE_STATUS.answered, answers, remark)
 			} catch (error) {
 				console.error(error)
 				setPendingAction(null)
@@ -309,7 +326,7 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 							variant="ghost"
 							size="icon-sm"
 							onClick={() => setOpen((value) => !value)}
-							disabled={!!loading}
+							disabled={!!isLoading}
 							data-testid="ask-user-v2-card-collapse-button"
 							aria-label={
 								isOpen ? t("askUser.actions.collapse") : t("askUser.actions.expand")
@@ -317,7 +334,7 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 							aria-expanded={isOpen}
 							className="h-4 w-4 shrink-0 p-0 text-muted-foreground hover:bg-transparent hover:text-accent-foreground active:bg-transparent"
 						>
-							{loading ? (
+							{isLoading ? (
 								<IconLoader2 size={14} className="animate-spin" aria-hidden />
 							) : (
 								<ChevronDown
@@ -346,6 +363,7 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 									: undefined
 							}
 							submittedAnswers={submittedAnswers}
+							submittedRemark={submittedRemark}
 							onSubmit={handleSubmit}
 							onSkip={handleSkip}
 							onProgressChange={setAnsweredQuestionCount}

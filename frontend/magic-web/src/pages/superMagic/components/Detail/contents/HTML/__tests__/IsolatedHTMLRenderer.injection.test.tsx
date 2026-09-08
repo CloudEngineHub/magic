@@ -1,7 +1,8 @@
 import { act, render, screen } from "@testing-library/react"
-import type { ReactNode } from "react"
+import { createRef, type ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import IsolatedHTMLRenderer from "../IsolatedHTMLRenderer"
+import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import IsolatedHTMLRenderer, { type IsolatedHTMLRendererRef } from "../IsolatedHTMLRenderer"
 
 const hookState = vi.hoisted(() => ({
 	editorContentInjectedValues: [] as boolean[],
@@ -27,6 +28,10 @@ const virtualStorageMocks = vi.hoisted(() => ({
 		},
 	})),
 	getFullContent: vi.fn((content: string) => `<!doctype html>${content}`),
+}))
+
+const agentActionMocks = vi.hoisted(() => ({
+	useIframeAgentActions: vi.fn(),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -330,11 +335,14 @@ vi.mock("../iframe-api/hooks/useIframeUserInfo", () => ({
 }))
 
 vi.mock("../hooks/useIframeAgentActions", () => ({
-	useIframeAgentActions: () => ({
-		getAgentList: vi.fn(),
-		createTopicAndSend: vi.fn(),
-		sendMessage: vi.fn(),
-	}),
+	useIframeAgentActions: (...args: [string | undefined, unknown?]) => {
+		agentActionMocks.useIframeAgentActions(...args)
+		return {
+			getAgentList: vi.fn(),
+			createTopicAndSend: vi.fn(),
+			sendMessage: vi.fn(),
+		}
+	},
 }))
 
 vi.mock("../iframe-api/hooks/useMagicFiles", () => ({
@@ -411,6 +419,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		hookState.editorContentInjectedValues = []
 		hookState.isManualZoom = false
 		hookState.shouldApplyScaling = false
+		agentActionMocks.useIframeAgentActions.mockClear()
 	})
 
 	afterEach(() => {
@@ -419,6 +428,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		})
 		vi.useRealTimers()
 		vi.restoreAllMocks()
+		delete (window as Window & { project_id?: string }).project_id
 	})
 
 	it("enables presentation and low-risk media capabilities for HTML previews", async () => {
@@ -497,6 +507,74 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		)
 	})
 
+	it("uses the scoped selected topic for virtual storage", async () => {
+		const scopedTopicStore = { selectedTopic: { id: "topic-from-micro-app" } }
+
+		render(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				selectedProject={{ id: "project-1", current_topic_id: "old-topic" }}
+				topicStore={scopedTopicStore as unknown as TopicStore}
+			/>,
+		)
+		await flushReactEffects()
+
+		expect(virtualStorageMocks.buildNamespace).toHaveBeenCalledWith({
+			projectId: "project-1",
+			topicId: "topic-from-micro-app",
+			fileId: "history-file",
+		})
+	})
+
+	it("passes the explicit projectId to Agent actions", async () => {
+		render(<IsolatedHTMLRenderer {...defaultProps} projectId="project-from-preview" />)
+		await flushReactEffects()
+
+		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
+			"project-from-preview",
+			undefined,
+			defaultProps.selectedProject,
+		)
+	})
+
+	it("does not read window.project_id when host props omit projectId", async () => {
+		;(window as Window & { project_id?: string }).project_id = "share-window-project"
+
+		render(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				selectedProject={undefined}
+				projectId={undefined}
+			/>,
+		)
+		await flushReactEffects()
+
+		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
+			undefined,
+			undefined,
+			undefined,
+		)
+	})
+
+	it("passes the scoped topic store to Agent actions", async () => {
+		const scopedTopicStore = { selectedTopic: { id: "topic-from-micro-app" } }
+
+		render(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				projectId="project-from-preview"
+				topicStore={scopedTopicStore as unknown as TopicStore}
+			/>,
+		)
+		await flushReactEffects()
+
+		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
+			"project-from-preview",
+			scopedTopicStore,
+			defaultProps.selectedProject,
+		)
+	})
+
 	it("does not inject content into a sibling iframe from another iframeReady message", async () => {
 		render(
 			<>
@@ -550,6 +628,30 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		await flushReactEffects()
 
 		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+	})
+
+	it("reloads the original content when resetContent is called", async () => {
+		const rendererRef = createRef<IsolatedHTMLRendererRef>()
+		render(<IsolatedHTMLRenderer {...defaultProps} ref={rendererRef} />)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+
+		dispatchIframeMessage(iframe, "iframeReady")
+		await flushReactEffects()
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+
+		await act(async () => {
+			rendererRef.current?.resetContent()
+			await Promise.resolve()
+		})
+
+		const setContentCalls = getSetContentCalls(postMessage)
+		expect(setContentCalls).toHaveLength(2)
+		expect(setContentCalls[1][0]).toMatchObject({
+			content: setContentCalls[0][0].content,
+		})
 	})
 
 	it("updates location query when the same HTML navigation changes", async () => {

@@ -130,7 +130,9 @@ class AgentDomainService
             StorageBucketType::SandBox->value,
             $projectDir,
             3600,
-            false
+            false,
+            // 沙箱内 agent 需要直接删除工作目录下的对象（如 checkpoint 清理），凭证需同时含上传与删除权限
+            ['sts_type' => 'upload_objects|del_objects']
         );
         $agentInitContext->setUploadConfig($stsConfig);
         // 设置消息回调接口（数组格式，支持多个订阅目标）

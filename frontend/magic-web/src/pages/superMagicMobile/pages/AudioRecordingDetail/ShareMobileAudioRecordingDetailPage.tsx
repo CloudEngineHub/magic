@@ -235,6 +235,7 @@ export default function ShareMobileAudioRecordingDetailPage({
 						onSeek={(seconds) => player.seekTo(seconds)}
 						searchScopeRef={searchScopeRef}
 						onActiveTabChange={setSourceSubtab}
+						showNotesTab={Boolean(fileMap?.notes?.file_id)}
 					/>
 				) : (
 					<MobileRecordingSummaryPanel

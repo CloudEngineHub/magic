@@ -364,7 +364,9 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			autoFocus
 			autoFocusAtDocumentEnd
 			restoreOnMount={editingMode === "quick-edit" ? "quickEdit" : "originalRequestOnly"}
-			submitTarget={editingMode === "quick-edit" ? "new-element" : "current-content"}
+			// 结果态的快捷编辑、重新编辑都沿用旧链路，在右侧创建新元素；
+			// 结果态“再次生成”单独通过 handleGenerateAgain 追加 Content。
+			submitTarget="new-element"
 			sessionIntent={editingMode}
 			sessionSourceFingerprint={sessionSourceFingerprint}
 			sessionSnapshot={

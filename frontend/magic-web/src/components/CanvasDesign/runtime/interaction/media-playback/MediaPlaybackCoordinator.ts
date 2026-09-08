@@ -20,6 +20,7 @@ export class MediaPlaybackCoordinator {
 
 	public pauseAll(exceptElementId?: string): void {
 		this.canvas.audioPlaybackManager.pauseAll(exceptElementId)
+		this.canvas.videoPlaybackManager?.pauseAll?.(exceptElementId)
 		this.canvas.elementManager.getAllElementIds().forEach((elementId) => {
 			if (elementId === exceptElementId) return
 			const element = this.canvas.elementManager.getElementInstance(elementId)

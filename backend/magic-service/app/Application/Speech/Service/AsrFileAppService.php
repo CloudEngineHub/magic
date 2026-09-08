@@ -17,6 +17,7 @@ use App\Application\Speech\DTO\Response\AsrFileDataDTO;
 use App\Application\Speech\DTO\SummaryRequestDTO;
 use App\Application\Speech\Enum\AsrRecordingStatusEnum;
 use App\Application\Speech\Enum\AsrTaskStatusEnum;
+use App\Application\Speech\Enum\AsrTopicModeEnum;
 use App\Application\Speech\Event\AsrSummaryMessage;
 use App\Application\Speech\Event\Publish\AsrSummaryPublisher;
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
@@ -518,7 +519,8 @@ class AsrFileAppService extends AbstractAppService
         ?string $markerContent,
         string $language,
         string $userId,
-        string $organizationCode
+        string $organizationCode,
+        ?int $fileShardCount = null
     ): bool {
         $taskStatus = $this->getTaskStatusFromRedis($taskKey, $userId);
 
@@ -528,6 +530,11 @@ class AsrFileAppService extends AbstractAppService
 
         // 保存 model_id、ASR 内容、笔记内容、标记内容和语种
         $this->updateTaskStatusFromReport($taskStatus, $modelId, $asrStreamContent, $noteContent, $noteFileType, $markerContent, $language);
+        if ($status === AsrRecordingStatusEnum::STOPPED && $fileShardCount !== null) {
+            $taskStatus->fileShardCount = $fileShardCount;
+            // 先持久化分片数，覆盖“任务此前已 stopped、handleStopRecording 幂等返回”的场景。
+            $this->saveTaskStatusToRedis($taskStatus);
+        }
 
         // Per-call DataIsolation. DataIsolation::create() auto-fetches the
         // user-authorization token from the magic_tokens stable user-token
@@ -1799,9 +1806,10 @@ class AsrFileAppService extends AbstractAppService
             return;
         }
 
-        $hiddenTopic = $this->superAgentTopicDomainService->findHiddenTopicByProjectAndUser(
+        $hiddenTopic = $this->superAgentTopicDomainService->findHiddenTopicByProjectUserAndMode(
             (int) $taskStatus->projectId,
-            $taskStatus->userId
+            $taskStatus->userId,
+            AsrTopicModeEnum::AUDIO_MERGE->value
         );
 
         if ($hiddenTopic !== null) {
@@ -1843,6 +1851,7 @@ class AsrFileAppService extends AbstractAppService
                 'target_dir' => $taskStatus->displayDirectory,
                 'output_filename' => $taskStatus->finishOutputFilename,
                 'expected_audio_file_name' => $taskStatus->expectedAudioFileName,
+                'file_shard_count' => $taskStatus->fileShardCount,
             ],
             'preset_files' => [
                 'note_file_id' => $taskStatus->presetNoteFileId,
@@ -1876,8 +1885,25 @@ class AsrFileAppService extends AbstractAppService
     private function setFinishRecoverableContext(AsrTaskStatusDTO $taskStatus, string $fileTitle): void
     {
         $taskStatus->finishOutputFilename = $fileTitle;
-        $taskStatus->expectedAudioFileName = $fileTitle . '.wav';
+        if (! empty($taskStatus->audioFormat)) {
+            $taskStatus->expectedAudioFileName = $fileTitle . '.' . $taskStatus->audioFormat;
+        }
         $this->syncAsrRecoverableContextToDatabase($taskStatus);
+    }
+
+    /**
+     * 构建期望音频文件名的候选列表.
+     *
+     * 产物扩展名跟随任务分片格式（opus 任务产出 .opus，wav 任务产出 .wav），
+     * 状态未确定格式时可能没有扩展名，恢复查找时兼容 wav 和 opus 两种后缀。
+     *
+     * @return array<int, string>
+     */
+    private function buildExpectedAudioFileNameCandidates(string $expectedAudioFileName): array
+    {
+        $baseName = (string) preg_replace('/\.(wav|opus)$/i', '', $expectedAudioFileName);
+
+        return array_values(array_unique([$expectedAudioFileName, $baseName . '.wav', $baseName . '.opus']));
     }
 
     private function completeRecoverFromExistingAudioFileIfPossible(AsrTaskStatusDTO $taskStatus): bool
@@ -1911,11 +1937,28 @@ class AsrFileAppService extends AbstractAppService
         $lookupStrategy = null;
         if (! empty($taskStatus->displayDirectoryId) && ! empty($taskStatus->expectedAudioFileName)) {
             $lookupStrategy = 'parent_id_and_name';
-            $audioFile = $this->taskFileDomainService->getByProjectParentAndName(
-                (int) $taskStatus->projectId,
-                (int) $taskStatus->displayDirectoryId,
-                $taskStatus->expectedAudioFileName
-            );
+            // 音频产物扩展名跟随任务分片格式（wav/opus），按候选名查找并拒绝双文件歧义
+            $matches = [];
+            foreach ($this->buildExpectedAudioFileNameCandidates($taskStatus->expectedAudioFileName) as $candidateName) {
+                $candidate = $this->taskFileDomainService->getByProjectParentAndName(
+                    (int) $taskStatus->projectId,
+                    (int) $taskStatus->displayDirectoryId,
+                    $candidateName
+                );
+                if ($candidate !== null) {
+                    $matches[] = $candidate;
+                }
+            }
+            if (count($matches) > 1) {
+                $this->logger->warning('恢复 finish-recording 时发现多个候选音频文件，停止自动恢复', [
+                    'task_key' => $taskStatus->taskKey,
+                    'project_id' => $taskStatus->projectId,
+                    'display_directory_id' => $taskStatus->displayDirectoryId,
+                    'candidates' => array_map(static fn ($file) => $file->getFileName(), $matches),
+                ]);
+                return false;
+            }
+            $audioFile = $matches[0] ?? null;
         } elseif (! empty($taskStatus->filePath)) {
             $lookupStrategy = 'historical_relative_path';
             $relativePath = $this->normalizeWorkspaceRelativePath($taskStatus->filePath);

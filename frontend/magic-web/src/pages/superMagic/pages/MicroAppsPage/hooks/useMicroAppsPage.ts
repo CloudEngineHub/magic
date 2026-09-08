@@ -6,12 +6,14 @@ import type {
 	MicroAppListScope,
 } from "@/apis/modules/superMagic"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
 
 const MICRO_APP_PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 250
 
 interface MicroAppListItem extends ApiMicroAppListItem {
 	can_delete: boolean
+	project_id: string
 }
 
 interface MicroAppListResponse extends Omit<ApiMicroAppListResponse, "list"> {
@@ -22,11 +24,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return Boolean(value && typeof value === "object")
 }
 
+function normalizeCollaboratorPermission(value: unknown): CollaboratorPermission | undefined {
+	switch (value) {
+		case "owner":
+		case "manage":
+		case "editor":
+		case "viewer":
+		case "collaborator":
+			return value
+		default:
+			return undefined
+	}
+}
+
 function normalizeMicroAppItem(item: unknown): MicroAppListItem | null {
 	if (!isRecord(item) || !item.app_id) return null
 
 	return {
 		app_id: String(item.app_id),
+		project_id: String(item.project_id ?? ""),
 		app_name: String(item.app_name ?? ""),
 		app_description: String(item.app_description ?? ""),
 		creator_id: String(item.creator_id ?? ""),
@@ -34,6 +50,7 @@ function normalizeMicroAppItem(item: unknown): MicroAppListItem | null {
 		publish_status: String(item.publish_status ?? "unpublished"),
 		updated_at: item.updated_at == null ? null : String(item.updated_at),
 		can_delete: item.can_delete !== false,
+		user_role: normalizeCollaboratorPermission(item.user_role),
 	}
 }
 

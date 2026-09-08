@@ -293,7 +293,7 @@ export class DesignSaveManager {
 		fromDraft?: boolean
 	}): Promise<DesignSaveResult> {
 		this.lastSaveFullyPersisted = false
-		if (this.stateBag.getIsReadOnly() && !options?.allowReadOnlyRetry) {
+		if (this.stateBag.getAccessMode() !== "edit" && !options?.allowReadOnlyRetry) {
 			this.stateBag.setters.setIsSaving(false)
 			return { ok: false, reason: "readonly" }
 		}
@@ -402,7 +402,7 @@ export class DesignSaveManager {
 			}
 			this.clearRemoteConflict()
 
-			if (!this.options.isShareRoute) {
+			if (this.stateBag.getAccessMode() !== "share") {
 				try {
 					const fileInfo = await SuperMagicApi.getFileInfo({
 						file_id: magicProjectJsFileId,
@@ -434,7 +434,7 @@ export class DesignSaveManager {
 	}
 
 	async checkRemoteUpdate(): Promise<RemoteUpdateCheckResult> {
-		if (this.options.isShareRoute) {
+		if (this.stateBag.getAccessMode() === "share") {
 			return { hasUpdate: false, currentVersion: null, isCheckReliable: true }
 		}
 		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()

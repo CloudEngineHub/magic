@@ -47,14 +47,10 @@ export const PERMISSION_KEY_MAP: Record<string, string> = {
 	/** AI管理 - 视频大模型-编辑 */
 	VIDEO_MODEL_EDIT: "workspace.model.video.edit",
 
-	/** AI管理 - 员工发布审核-菜单 */
-	AGENT_REVIEW_MENU: "menu.ai_management.internal_employee_and_skill.agent",
 	/** AI管理 - 员工发布审核-查询 */
 	AGENT_REVIEW_QUERY: "workspace.ai.agent_management.query",
 	/** AI管理 - 员工发布审核-编辑 */
 	AGENT_REVIEW_EDIT: "workspace.ai.agent_management.edit",
-	/** AI管理 - 技能发布审核-菜单 */
-	SKILL_REVIEW_MENU: "menu.ai_management.internal_employee_and_skill.skill",
 	/** AI管理 - 技能发布审核-查询 */
 	SKILL_REVIEW_QUERY: "workspace.ai.skill_management.query",
 	/** AI管理 - 技能发布审核-编辑 */
@@ -64,6 +60,15 @@ export const PERMISSION_KEY_MAP: Record<string, string> = {
 	AI_APP_MENU_QUERY: "admin.ai.application.menu.query",
 	/** AI管理 - 应用菜单-编辑 */
 	AI_APP_MENU_EDIT: "admin.ai.application.menu.edit",
+
+	/** AI管理 - 数据看板 - 成员分析-查询 */
+	DATA_DASHBOARD_MEMBER_QUERY: "admin.data_dashboard.member.query",
+	/** AI管理 - 数据看板 - 组织分析-查询 */
+	DATA_DASHBOARD_ORGANIZATION_QUERY: "admin.data_dashboard.organization.query",
+	/** AI管理 - 数据看板 - 数字员工分析-查询 */
+	DATA_DASHBOARD_AGENT_QUERY: "admin.data_dashboard.agent.query",
+	/** AI管理 - 数据看板 - 消耗分析-查询 */
+	DATA_DASHBOARD_CONSUMPTION_QUERY: "admin.data_dashboard.consumption.query",
 
 	/* -- 平台管理 -- */
 	/** 平台管理 - 模型管理-查询 */
@@ -170,6 +175,7 @@ export const PLATFORM_INFO_MANAGEMENT = [
 /** 平台管理 - 总权限 */
 export const PLATFORM_MANAGEMENT = [
 	PERMISSION_KEY_MAP.MAGIC_PLATFORM_PERMISSIONS,
+	...PLATFORM_MODEL_MANAGEMENT,
 	...PLATFORM_AGENT_MANAGEMENT,
 	...PLATFORM_SYSTEM_SETTING,
 ]
@@ -186,14 +192,12 @@ export const AI_CUSTOM_MODEL = [
 
 /** AI管理 - 员工发布审核 */
 export const AI_EMPLOYEE_REVIEW = [
-	PERMISSION_KEY_MAP.AGENT_REVIEW_MENU,
 	PERMISSION_KEY_MAP.AGENT_REVIEW_QUERY,
 	PERMISSION_KEY_MAP.AGENT_REVIEW_EDIT,
 ]
 
 /** AI管理 - 技能发布审核 */
 export const AI_SKILL_REVIEW = [
-	PERMISSION_KEY_MAP.SKILL_REVIEW_MENU,
 	PERMISSION_KEY_MAP.SKILL_REVIEW_QUERY,
 	PERMISSION_KEY_MAP.SKILL_REVIEW_EDIT,
 ]
@@ -208,10 +212,12 @@ export const AI_APP_MENU = [
 ]
 
 /** AI管理 - 数据看板 */
-// export const AI_DATA_DASHBOARD = [
-// 	PERMISSION_KEY_MAP.AI_DATA_DASHBOARD_QUERY,
-// 	PERMISSION_KEY_MAP.AI_DATA_DASHBOARD_EDIT,
-// ]
+export const AI_DATA_DASHBOARD = [
+	PERMISSION_KEY_MAP.DATA_DASHBOARD_MEMBER_QUERY,
+	PERMISSION_KEY_MAP.DATA_DASHBOARD_ORGANIZATION_QUERY,
+	PERMISSION_KEY_MAP.DATA_DASHBOARD_AGENT_QUERY,
+	PERMISSION_KEY_MAP.DATA_DASHBOARD_CONSUMPTION_QUERY,
+]
 
 /** AI管理 - 总权限 */
 export const AI_MANAGEMENT = [
@@ -221,4 +227,5 @@ export const AI_MANAGEMENT = [
 	...AI_CUSTOM_MODEL,
 	...AI_INTERNAL_EMPLOYEE_SKILL,
 	...AI_APP_MENU,
+	...AI_DATA_DASHBOARD,
 ]

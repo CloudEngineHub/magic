@@ -21,9 +21,13 @@ interface UseMessageEditorPubSubParams {
 	editor: Editor | null
 	isMobile: boolean
 	draftStore: DraftStore
-	updateContent: (content: JSONContent | undefined) => void
+	updateContent: (
+		content: JSONContent | undefined,
+		options?: { preserveMentionValidation?: boolean },
+	) => void
 	enableMessageSendByContent: boolean
 	onSendMessageByContent: (data: SendMessageByContentPayload) => void
+	onSendCurrentContent?: () => void | Promise<void>
 }
 
 interface AddContentPayload {
@@ -55,6 +59,15 @@ function safeEditorFocus(editor: Editor | null) {
 	})
 }
 
+/** Persists programmatic Widget input after the topic draft has finished its initial restore. */
+async function persistWidgetDraft(draftStore: DraftStore, content: JSONContent) {
+	await draftStore.waitForLoadDraft()
+	// Keep lightweight test doubles and disabled draft adapters harmless while preserving real saves.
+	if (typeof draftStore.saveDraft === "function") {
+		draftStore.saveDraft({ value: content })
+	}
+}
+
 /** Converts Widget plain text into the editor document written by setInput. */
 function createPlainTextDocument(content: string): JSONContent {
 	return {
@@ -68,8 +81,16 @@ function createPlainTextDocument(content: string): JSONContent {
 	}
 }
 
-/** Appends plain text to the final paragraph without changing existing structured nodes. */
-function appendPlainTextToDocument(currentContent: JSONContent, content: string): JSONContent {
+/** Normalizes Widget text and JSON input into one editor document. */
+function normalizeWidgetDocument(content: string | JSONContent): JSONContent {
+	return typeof content === "string" ? createPlainTextDocument(content) : content
+}
+
+/** Appends Widget content while keeping inline text and mention nodes in their original order. */
+function appendWidgetContentToDocument(
+	currentContent: JSONContent,
+	content: string | JSONContent,
+): JSONContent {
 	const documentContent: JSONContent =
 		currentContent.type === "doc"
 			? currentContent
@@ -78,16 +99,24 @@ function appendPlainTextToDocument(currentContent: JSONContent, content: string)
 					content: [currentContent],
 				}
 	const nodes = [...(documentContent.content ?? [])]
+	const incomingDocument = normalizeWidgetDocument(content)
+	const incomingNodes =
+		incomingDocument.type === "doc" ? [...(incomingDocument.content ?? [])] : [incomingDocument]
 	const lastIndex = nodes.length - 1
 	const lastNode = nodes[lastIndex]
+	const firstIncomingNode = incomingNodes[0]
 
-	if (lastNode?.type === "paragraph") {
+	if (
+		lastNode?.type === "paragraph" &&
+		incomingNodes.length === 1 &&
+		firstIncomingNode?.type === "paragraph"
+	) {
 		nodes[lastIndex] = {
 			...lastNode,
-			content: [...(lastNode.content ?? []), { type: "text", text: content }],
+			content: [...(lastNode.content ?? []), ...(firstIncomingNode.content ?? [])],
 		}
 	} else {
-		nodes.push({ type: "paragraph", content: [{ type: "text", text: content }] })
+		nodes.push(...incomingNodes)
 	}
 
 	return { ...documentContent, content: nodes }
@@ -100,6 +129,7 @@ function useMessageEditorPubSub({
 	updateContent,
 	enableMessageSendByContent,
 	onSendMessageByContent,
+	onSendCurrentContent,
 }: UseMessageEditorPubSubParams) {
 	const activeEditorRef = useLatestActiveEditor(editor)
 
@@ -334,18 +364,45 @@ function useMessageEditorPubSub({
 
 	useEffect(() => {
 		const handleWidgetEditorCommand = (payload: SuperMagicWidgetEditorCommandPayload) => {
+			if (payload.command === "sendMessage") {
+				if (!onSendCurrentContent) {
+					payload.respond(undefined, "Magic widget editor sending is not available")
+					return
+				}
+				// Reuse the editor's normal send handler so validation, drafts, and mentions stay aligned.
+				void (async () => {
+					try {
+						await onSendCurrentContent()
+						payload.respond()
+					} catch (error) {
+						payload.respond(
+							undefined,
+							error instanceof Error ? error.message : "Magic widget send failed",
+						)
+					}
+				})()
+				return
+			}
+
 			runActiveEditor(activeEditorRef.current, (activeEditor) => {
 				if (payload.command === "setInput") {
-					updateContent(createPlainTextDocument(payload.content ?? ""))
+					const nextContent = normalizeWidgetDocument(payload.content ?? "")
+					updateContent(nextContent, {
+						preserveMentionValidation: true,
+					})
+					void persistWidgetDraft(draftStore, nextContent)
 					activeEditor.commands.focus()
 					payload.respond()
 					return
 				}
 
 				if (payload.command === "appendInput") {
-					updateContent(
-						appendPlainTextToDocument(activeEditor.getJSON(), payload.content ?? ""),
+					const nextContent = appendWidgetContentToDocument(
+						activeEditor.getJSON(),
+						payload.content ?? "",
 					)
+					updateContent(nextContent, { preserveMentionValidation: true })
+					void persistWidgetDraft(draftStore, nextContent)
 					activeEditor.commands.focus()
 					payload.respond()
 					return
@@ -366,7 +423,7 @@ function useMessageEditorPubSub({
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Magic_Widget_Editor_Command, handleWidgetEditorCommand)
 		}
-	}, [activeEditorRef, updateContent])
+	}, [activeEditorRef, draftStore, onSendCurrentContent, updateContent])
 }
 
 export default useMessageEditorPubSub

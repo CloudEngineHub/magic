@@ -362,7 +362,7 @@ async def _snapshot_debug_files() -> set[Path]:
     from app.path_manager import PathManager
     from app.utils.async_file_utils import async_exists, async_iterdir
 
-    debug_dir = PathManager.get_llm_request_dir()
+    debug_dir = PathManager.get_llm_requests_dir()
     if not await async_exists(debug_dir):
         return set()
     return set(await async_iterdir(debug_dir))
@@ -391,7 +391,7 @@ async def _cleanup_run_artifacts(
             await async_rmtree(subagent_dir)
             cleaned = True
 
-    debug_dir = PathManager.get_llm_request_dir()
+    debug_dir = PathManager.get_llm_requests_dir()
     if await async_exists(debug_dir):
         for path in await async_iterdir(debug_dir):
             if path not in debug_files_before:

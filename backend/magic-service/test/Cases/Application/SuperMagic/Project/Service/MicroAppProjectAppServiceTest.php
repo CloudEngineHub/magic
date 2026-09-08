@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\SuperMagic\Project\Service;
 
 use App\Application\SuperMagic\Common\Share\Service\ResourceShareAppService;
+use App\Application\SuperMagic\Project\DTO\Request\MicroAppListRequestDTO;
 use App\Application\SuperMagic\Project\DTO\Request\PublishMicroAppRequestDTO;
 use App\Application\SuperMagic\Project\Service\MicroAppProjectAppService;
 use App\Application\SuperMagic\Project\Service\MicroAppProjectResponseFormatter;
@@ -22,6 +23,8 @@ use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppListScope;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
@@ -190,6 +193,186 @@ class MicroAppProjectAppServiceTest extends TestCase
         );
     }
 
+    public function testShowByProjectReturnsCurrentUserRole(): void
+    {
+        $authorization = (new MagicUserAuthorization())
+            ->setId('user-1')
+            ->setOrganizationCode('org-1');
+        $requestContext = $this->createMock(RequestContext::class);
+        $requestContext->method('getUserAuthorization')->willReturn($authorization);
+
+        $project = (new ProjectEntity())
+            ->setId(2001)
+            ->setUserId('user-1')
+            ->setCreatedUid('user-1')
+            ->setUserOrganizationCode('org-1')
+            ->setProjectMode(ProjectMode::MICRO_APP->value);
+        $record = (new MicroAppEntity())
+            ->setId(1001)
+            ->setProjectId(2001);
+
+        $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
+        $microAppRepository->expects(self::once())
+            ->method('ensureByProjectId')
+            ->with(2001, 'org-1', 'user-1', 'user-1')
+            ->willReturn($record);
+        $projectRepository = $this->createMock(ProjectRepositoryInterface::class);
+        $projectRepository->expects(self::once())->method('findById')->with(2001)->willReturn($project);
+        $responseFormatter = $this->createMock(MicroAppProjectResponseFormatter::class);
+        $responseFormatter->expects(self::once())
+            ->method('formatMicroApp')
+            ->with($record, $project)
+            ->willReturn(['project' => ['id' => 2001]]);
+
+        $service = $this->createService(
+            $microAppRepository,
+            $projectRepository,
+            $this->createMock(ResourceShareAppService::class),
+            $this->createMock(ResourceShareDomainService::class),
+            $this->createMock(ShareUrlBuilder::class),
+            $responseFormatter,
+        );
+
+        self::assertSame(
+            ['project' => ['id' => 2001, 'user_role' => 'owner']],
+            $service->showByProject($requestContext, 2001),
+        );
+    }
+
+    public function testListReturnsProjectIdAndEffectiveUserRole(): void
+    {
+        $authorization = (new MagicUserAuthorization())
+            ->setId('user-1')
+            ->setOrganizationCode('org-1');
+        $requestContext = $this->createMock(RequestContext::class);
+        $requestContext->method('getUserAuthorization')->willReturn($authorization);
+
+        $rows = [
+            [
+                'app_id' => 1001,
+                'project_id' => 2001,
+                'app_name' => 'Owned App',
+                'app_description' => 'Owned description',
+                'creator_id' => 'user-1',
+                'cover_file_key' => null,
+                'publish_status' => 'published',
+                'updated_at' => '2026-08-28 10:00:00',
+                'project_owner_id' => 'user-1',
+                'organization_code' => 'org-1',
+            ],
+            [
+                'app_id' => 1002,
+                'project_id' => 2002,
+                'app_name' => 'Managed App',
+                'app_description' => 'Managed description',
+                'creator_id' => 'user-2',
+                'cover_file_key' => null,
+                'publish_status' => 'unpublished',
+                'updated_at' => null,
+                'project_owner_id' => 'user-2',
+                'organization_code' => 'org-1',
+            ],
+        ];
+
+        $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
+        $microAppRepository->expects(self::once())
+            ->method('paginateAccessible')
+            ->with(
+                'user-1',
+                ['dept-1'],
+                ['org-1'],
+                MicroAppListScope::All,
+                '',
+                1,
+                20,
+            )
+            ->willReturn(['total' => 2, 'list' => $rows]);
+
+        $projectMemberDomainService = $this->createMock(ProjectMemberDomainService::class);
+        $projectMemberDomainService->expects(self::once())
+            ->method('getProjectIdsByCollaboratorTargets')
+            ->with(['user-1', 'dept-1'])
+            ->willReturn([]);
+        $projectMemberDomainService->expects(self::once())
+            ->method('getUserHighestRolesInProjects')
+            ->with([2001, 2002], ['user-1', 'dept-1'])
+            ->willReturn([2002 => 'manage']);
+
+        $departmentRepository = $this->createMock(MagicDepartmentUserRepositoryInterface::class);
+        $departmentRepository->expects(self::once())
+            ->method('getDepartmentIdsByUserIds')
+            ->willReturn(['user-1' => ['dept-1']]);
+
+        $projectDomainService = $this->createMock(ProjectDomainService::class);
+        $projectDomainService->expects(self::once())
+            ->method('getOrganizationCodesByProjectIds')
+            ->with([])
+            ->willReturn([]);
+        $packageFilterService = $this->createMock(PackageFilterInterface::class);
+        $packageFilterService->expects(self::once())
+            ->method('filterPaidOrganizations')
+            ->with([])
+            ->willReturn([]);
+
+        $responseFormatter = $this->createMock(MicroAppProjectResponseFormatter::class);
+        $responseFormatter->expects(self::once())
+            ->method('resolveCoverUrls')
+            ->with($rows)
+            ->willReturn([]);
+        $responseFormatter->method('coverUrlMapKey')
+            ->willReturnCallback(
+                static fn (array $row, string $coverKey): string => (string) ($row['organization_code'] ?? '') . ':' . $coverKey
+            );
+
+        $service = $this->createService(
+            $microAppRepository,
+            $this->createMock(ProjectRepositoryInterface::class),
+            $this->createMock(ResourceShareAppService::class),
+            $this->createMock(ResourceShareDomainService::class),
+            $this->createMock(ShareUrlBuilder::class),
+            $responseFormatter,
+            projectMemberDomainService: $projectMemberDomainService,
+            departmentUserDomainService: new MagicDepartmentUserDomainService($departmentRepository),
+            projectDomainService: $projectDomainService,
+            packageFilterService: $packageFilterService,
+        );
+
+        self::assertSame(
+            [
+                'list' => [
+                    [
+                        'app_id' => '1001',
+                        'project_id' => '2001',
+                        'app_name' => 'Owned App',
+                        'app_description' => 'Owned description',
+                        'creator_id' => 'user-1',
+                        'cover_url' => '',
+                        'publish_status' => 'published',
+                        'updated_at' => '2026-08-28 10:00:00',
+                        'user_role' => 'owner',
+                        'can_delete' => true,
+                    ],
+                    [
+                        'app_id' => '1002',
+                        'project_id' => '2002',
+                        'app_name' => 'Managed App',
+                        'app_description' => 'Managed description',
+                        'creator_id' => 'user-2',
+                        'cover_url' => '',
+                        'publish_status' => 'unpublished',
+                        'updated_at' => null,
+                        'user_role' => 'manage',
+                        'can_delete' => false,
+                    ],
+                ],
+                'total' => 2,
+                'page' => 1,
+                'page_size' => 20,
+            ],
+            $service->list($requestContext, new MicroAppListRequestDTO()),
+        );
+    }
+
     private function setDatabaseContainer(): void
     {
         $connection = $this->createMock(ConnectionInterface::class);
@@ -242,6 +425,10 @@ class MicroAppProjectAppServiceTest extends TestCase
         ShareUrlBuilder $shareUrlBuilder,
         MicroAppProjectResponseFormatter $responseFormatter,
         ?PublishedMicroAppResolver $publishedResolver = null,
+        ?ProjectMemberDomainService $projectMemberDomainService = null,
+        ?MagicDepartmentUserDomainService $departmentUserDomainService = null,
+        ?ProjectDomainService $projectDomainService = null,
+        ?PackageFilterInterface $packageFilterService = null,
     ): TestableMicroAppProjectAppService {
         return new TestableMicroAppProjectAppService(
             $microAppRepository,
@@ -250,13 +437,13 @@ class MicroAppProjectAppServiceTest extends TestCase
             $resourceShareAppService,
             $shareDomainService,
             $shareUrlBuilder,
-            $this->createMock(ProjectDomainService::class),
+            $projectDomainService ?? $this->createMock(ProjectDomainService::class),
             $this->createMock(ProjectAppService::class),
-            $this->createMock(ProjectMemberDomainService::class),
-            new MagicDepartmentUserDomainService(
+            $projectMemberDomainService ?? $this->createMock(ProjectMemberDomainService::class),
+            $departmentUserDomainService ?? new MagicDepartmentUserDomainService(
                 $this->createMock(MagicDepartmentUserRepositoryInterface::class)
             ),
-            $this->createMock(PackageFilterInterface::class),
+            $packageFilterService ?? $this->createMock(PackageFilterInterface::class),
             $this->createMock(EventDispatcherInterface::class),
             $publishedResolver ?? $this->createMock(PublishedMicroAppResolver::class),
             $responseFormatter,
@@ -267,6 +454,15 @@ class MicroAppProjectAppServiceTest extends TestCase
 
 final class TestableMicroAppProjectAppService extends MicroAppProjectAppService
 {
+    public function getAccessibleProject(
+        int $projectId,
+        string $userId,
+        string $organizationCode,
+        MemberRole $requiredRole = MemberRole::VIEWER,
+    ): ProjectEntity {
+        return new ProjectEntity();
+    }
+
     public function getAccessibleProjectWithManager(
         int $projectId,
         string $userId,

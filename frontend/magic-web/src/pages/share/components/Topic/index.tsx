@@ -37,6 +37,7 @@ import { getBaseUrl } from "@/pages/superMagicMobile/utils/mobile"
 import { useTranslation } from "react-i18next"
 import ProjectSider from "@/pages/superMagic/components/ProjectSider"
 import BackToLatestButton from "@/pages/superMagic/components/MessageList/components/BackToLatestButton"
+import type { MessageListScrollAdapter } from "@/pages/superMagic/components/MessageList/message-list-scroll-adapter"
 import { filterClickableMessage } from "@/pages/superMagic/utils/handleMessage"
 import { history } from "@/routes/history"
 import { RouteName } from "@/routes/constants"
@@ -487,17 +488,6 @@ function Topic({
 		}
 	}, [messagesWithoutRevoked, hasStarted, startShowingMessages, messageList])
 
-	// 滚动到消息列表的合适位置，确保初始消息可见
-	useEffect(() => {
-		if (messageList.length > 0 && !hasStarted) {
-			const container = messageContainerRef.current
-			if (container) {
-				// 滚动到50%高度位置，让上半部分消息可见
-				container.scrollTop = container.scrollHeight * 0.3
-			}
-		}
-	}, [messageList, hasStarted])
-
 	// 分享话题里的消息预览也要复用统一打开文件事件；桌面走 Detail，移动端走预览弹层。
 	useEffect(() => {
 		const handleOpenFileTab = (openFileTabData: { fileId?: string; fileData?: any }) => {
@@ -605,34 +595,95 @@ function Topic({
 	}, [attachments?.tree])
 
 	const isAtBottomRef = useRef(true) // 👈 用 ref 保存旧的 isAtBottom 状态
+	const virtualizerRef = useRef<MessageListScrollAdapter | null>(null)
+
+	/**
+	 * Ask the virtualizer for the scroll end rather than writing `scrollHeight` ourselves. That
+	 * height only covers the rows virtua has measured; the rest of its canvas is an estimate that
+	 * keeps growing, so a raw write lands short and nothing follows up. `scrollToIndex` re-derives
+	 * the target from the measurement cache on every measurement pass until the sizes settle.
+	 */
+	const scrollToLatest = useMemoizedFn(() => {
+		const virtualizer = virtualizerRef.current
+		const lastIndex = virtualizer ? virtualizer.itemCount - 1 : -1
+		if (virtualizer && lastIndex >= 0) {
+			virtualizer.scrollToIndex(lastIndex, { align: "end" })
+			return
+		}
+		// Before the virtualizer mounts there is nothing to address, and the canvas is still
+		// whatever the shell rendered itself.
+		messageContainerRef.current?.scrollTo({ top: messageContainerRef.current.scrollHeight })
+	})
+
+	/**
+	 * The list mounts one render after this shell, because its virtualizer needs the scroll
+	 * element that only exists once we have committed. Every scroll issued before that reaches an
+	 * empty canvas, and no state change follows to retry it, so re-issue from the canvas itself:
+	 * this fires when the virtualizer first renders rows and again as their measurements land.
+	 */
+	const handleVirtualizerChange = useMemoizedFn(() => {
+		if (isAtBottomRef.current) scrollToLatest()
+	})
+
+	const releaseFollow = useMemoizedFn(() => {
+		if (!isAtBottomRef.current) return
+		isAtBottomRef.current = false
+		setShowBackToLatest(true)
+	})
 
 	useEffect(() => {
 		const el = messageContainerRef.current
-		if (!el) return
+		if (!el) return undefined
 
+		/**
+		 * Re-arm only. Distance from the bottom also grows when virtua measures a row taller than
+		 * it estimated, and treating that as "the reader left the bottom" latches the follow off
+		 * for the rest of the playback.
+		 */
 		const handleScroll = () => {
 			const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-			isAtBottomRef.current = distanceFromBottom < 30
-			setShowBackToLatest(!isAtBottomRef.current)
+			if (distanceFromBottom >= 30) return
+			isAtBottomRef.current = true
+			setShowBackToLatest(false)
 		}
 
-		el.addEventListener("scroll", handleScroll)
-		return () => el.removeEventListener("scroll", handleScroll)
-	}, [hasStarted])
+		// Leaving the bottom is a decision, so take it from the gesture that made it.
+		const handleWheel = (event: WheelEvent) => {
+			if (event.deltaY < 0) releaseFollow()
+		}
+		let touchY = 0
+		const handleTouchStart = (event: TouchEvent) => {
+			touchY = event.touches[0]?.clientY ?? 0
+		}
+		const handleTouchMove = (event: TouchEvent) => {
+			const y = event.touches[0]?.clientY ?? 0
+			if (y > touchY) releaseFollow()
+			touchY = y
+		}
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "ArrowUp" || event.key === "PageUp" || event.key === "Home") {
+				releaseFollow()
+			}
+		}
+
+		el.addEventListener("scroll", handleScroll, { passive: true })
+		el.addEventListener("wheel", handleWheel, { passive: true })
+		el.addEventListener("touchstart", handleTouchStart, { passive: true })
+		el.addEventListener("touchmove", handleTouchMove, { passive: true })
+		el.addEventListener("keydown", handleKeyDown)
+		return () => {
+			el.removeEventListener("scroll", handleScroll)
+			el.removeEventListener("wheel", handleWheel)
+			el.removeEventListener("touchstart", handleTouchStart)
+			el.removeEventListener("touchmove", handleTouchMove)
+			el.removeEventListener("keydown", handleKeyDown)
+		}
+	}, [hasStarted, releaseFollow])
 
 	// 👇 2. 在 DOM 完成渲染后再判断要不要滚到底部
 	useLayoutEffect(() => {
-		const el = messageContainerRef.current
-		if (!el) return
-
-		if (isAtBottomRef.current) {
-			requestAnimationFrame(() => {
-				el.scrollTo({
-					top: el.scrollHeight,
-				})
-			})
-		}
-	}, [messageList]) // 👈 注意：这里不能再判断 isScrolledToBottom，而是用之前记录的 isAtBottomRef
+		if (isAtBottomRef.current) scrollToLatest()
+	}, [messageList, scrollToLatest]) // 👈 注意：这里不能再判断 isScrolledToBottom，而是用之前记录的 isAtBottomRef
 
 	useEffect(() => {
 		if (messageList.length === messagesWithoutRevoked?.length) {
@@ -684,14 +735,11 @@ function Topic({
 		}
 	}, [messageList])
 
-	const scrollToBottom = useCallback(() => {
-		const container = messageContainerRef.current
-		if (container) {
-			container.scrollTo({
-				top: container.scrollHeight,
-			})
-		}
-	}, [])
+	const scrollToBottom = useMemoizedFn(() => {
+		isAtBottomRef.current = true
+		setShowBackToLatest(false)
+		scrollToLatest()
+	})
 
 	// 直接显示结果的处理：立即加载所有消息，停止倒计时
 	const handleShowResult = useMemoizedFn(() => {
@@ -1034,6 +1082,7 @@ function Topic({
 									onPreviewFullscreenChange?.(false)
 								}}
 								isFileShare={false}
+								projectId={projectId}
 								allowDownload={allowDownloadProjectFile}
 								hideHeader={hidePreviewHeader}
 								showFileHeader={showFileHeader}
@@ -1210,9 +1259,11 @@ function Topic({
 											currentTopicStatus={
 												isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 											}
-											stickyMessageClassName="[--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)] top-0"
+											stickyMessageClassName="[--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
 											projectFilesStore={projectFilesStore}
 											scrollContainerRef={messageContainerRef}
+											virtualizerRef={virtualizerRef}
+											onVirtualizerChange={handleVirtualizerChange}
 										/>
 										{!taskIsEnd && messageList?.length > 0 && !hasStarted && (
 											<LoadingMessage />
@@ -1381,9 +1432,11 @@ function Topic({
 										currentTopicStatus={
 											isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 										}
-										stickyMessageClassName="z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)] top-0"
+										stickyMessageClassName="z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
 										projectFilesStore={projectFilesStore}
 										scrollContainerRef={messageContainerRef}
+										virtualizerRef={virtualizerRef}
+										onVirtualizerChange={handleVirtualizerChange}
 									/>
 									{!taskIsEnd && messageList?.length > 0 && !hasStarted && (
 										<LoadingMessage />

@@ -34,6 +34,10 @@ export interface SimpleEditorProps {
 	 * @default true
 	 */
 	enableSearchReplace?: boolean
+	/** Enable the read-only search panel and global Cmd/Ctrl+F shortcut. @default false */
+	enableReadonlySearch?: boolean
+	/** Cached tabs pass their visibility down so only the active preview handles global shortcuts. */
+	isTabActive?: boolean
 	/**
 	 * Enable the persisted wrap toggle for read-only code blocks.
 	 * @default false

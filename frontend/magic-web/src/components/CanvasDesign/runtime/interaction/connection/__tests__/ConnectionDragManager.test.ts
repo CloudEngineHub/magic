@@ -26,7 +26,6 @@ beforeAll(() => {
 
 function createCanvasStub() {
 	const state = {
-		readonly: false,
 		selectionToolActive: true,
 		transformActive: false,
 		dragging: false,
@@ -114,9 +113,7 @@ function createCanvasStub() {
 		getSelectedIds: vi.fn(() => state.selectedIds),
 	}
 	const canvas = {
-		get readonly() {
-			return state.readonly
-		},
+		can: vi.fn(() => true),
 		stage,
 		controlsLayer,
 		eventEmitter: new EventEmitter(),
@@ -136,6 +133,7 @@ function createCanvasStub() {
 			requestLayerDraw: vi.fn(),
 		},
 		permissionManager: {
+			can: vi.fn(() => true),
 			canUseSelectionToolAffordance: () => state.selectionToolActive,
 			canHover: (element: LayerElement | undefined) =>
 				!!element && state.visibleIds.has(element.id),

@@ -106,7 +106,9 @@ class ProjectMemberDomainService
         string $sortDirection = 'desc',
         array $creatorUserIds = [],
         ?string $joinMethod = null,
-        array $organizationCodes = []
+        array $organizationCodes = [],
+        int $page = 1,
+        int $pageSize = 10
     ): array {
         return $this->projectMemberRepository->getProjectIdsByUserAndDepartments(
             $userId,
@@ -116,7 +118,9 @@ class ProjectMemberDomainService
             $sortDirection,
             $creatorUserIds,
             $joinMethod,
-            $organizationCodes
+            $organizationCodes,
+            $page,
+            $pageSize
         );
     }
 
@@ -211,7 +215,6 @@ class ProjectMemberDomainService
             $this->projectMemberSettingRepository->create($userId, $projectId, $organizationCode);
         }
 
-        // 2. 更新置顶状态
         return $this->projectMemberSettingRepository->updatePinStatus($userId, $projectId, $isPinned);
     }
 

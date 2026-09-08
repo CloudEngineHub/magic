@@ -59,6 +59,9 @@ export class MessageProjectionCache {
 			item.content,
 			item.reasoning_content,
 			item.tool_calls,
+			// Tool row visibility is decided by attachments alone, so an attachment array that
+			// arrives after the message must invalidate the cached snapshot and reproject.
+			item.attachments,
 		]
 	}
 

@@ -567,7 +567,10 @@ class FileChangeNotificationSubscriber implements ListenerInterface
             return;
         }
 
-        $fileEntities = $this->taskFileDomainService->getFilesByIds(
+        // Rollback delete may target a file that has already been soft-deleted
+        // in task_file metadata. Keep the entity available for parent/project
+        // context, while still emitting a delete payload without a file DTO.
+        $fileEntities = $this->taskFileDomainService->getFilesByIdsWithTrash(
             array_values($fileIds),
             $projectId,
             FileSpaceType::PROJECT->value

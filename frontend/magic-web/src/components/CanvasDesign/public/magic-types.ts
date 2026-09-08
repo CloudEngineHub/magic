@@ -4,6 +4,7 @@ import type {
 	CanvasFileElement,
 	MarkerTypeEnum,
 	CropConfig,
+	ElementType,
 } from "../runtime/document/types"
 import type {
 	CanvasResourceReferenceResolverSnapshot,
@@ -176,11 +177,18 @@ export interface VideoModelItem {
 
 /** 视频输入模式 */
 export type VideoInputMode =
-	"standard" | "image_reference" | "omni_reference" | "video_edit" | "keyframe_guided"
+	| "standard"
+	| "image_reference"
+	| "omni_reference"
+	| "video_edit"
+	| "keyframe_guided"
 
 /** 输入模式下允许提交的素材字段 */
 export type VideoInputModeSupportedField =
-	"reference_images" | "reference_videos" | "reference_audios" | "frames"
+	| "reference_images"
+	| "reference_videos"
+	| "reference_audios"
+	| "frames"
 
 /**
  * 模式级/变体级生成参数限制。
@@ -930,8 +938,8 @@ export interface DownloadImageOptions {
  * 获取高清图片生成配置响应数据
  */
 export interface GetConvertHightConfigResponse {
-	/** 是否支持转高清，如果没有配置则不支持转高清 */
-	supported: boolean
+	/** 后台是否开启转高清能力 */
+	enabled: boolean
 	/** 支持的尺寸配置列表 */
 	image_size_config?: {
 		sizes: {
@@ -940,8 +948,24 @@ export interface GetConvertHightConfigResponse {
 			/** 尺寸值，格式为 "宽度x高度"，如 "1024x1024" */
 			value: string
 			/** 分辨率等级，如 "1K", "2K", "4K" */
-			scale: string
+			scale: string | null
 		}[]
+	}
+}
+
+/** 获取 AI 能力可用性响应数据 */
+export interface AiAbilityAvailability {
+	abilities: {
+		image_convert_high: GetConvertHightConfigResponse
+		image_remove_background: {
+			enabled: boolean
+		}
+		image_eraser: {
+			enabled: boolean
+		}
+		image_expand: {
+			enabled: boolean
+		}
 	}
 }
 
@@ -1286,7 +1310,8 @@ export interface IdentifyImageMarkAreaResponse extends IdentifyImageMarkResponse
  * 识别图片标记响应类型
  */
 export type IdentifyImageMarkResponse =
-	IdentifyImageMarkPointResponse | IdentifyImageMarkAreaResponse
+	| IdentifyImageMarkPointResponse
+	| IdentifyImageMarkAreaResponse
 
 /**
  * Storage 数据结构
@@ -1298,9 +1323,17 @@ export interface CanvasDesignStorageData {
 	expandedElementIds?: string[]
 	layersCollapsed?: boolean
 	layersWidth?: number
+	layersFilter?: CanvasLayersFilterState
 	markers?: Marker[]
 	/** 关联文本的用户选择与顺序（不进入生成 API） */
 	tempLinkedEditorDrafts?: Record<string, StoredLinkedEditorDraftV1 | StoredLinkedEditorDraft>
+}
+
+/** 图层列表的持久化筛选条件。 */
+export interface CanvasLayersFilterState {
+	visibility: "all" | "visible" | "hidden"
+	locked: "all" | "locked" | "unlocked"
+	types: ElementType[]
 }
 
 /** v1 草稿兼容读取类型；媒体 selected ID 仅为历史字段，不再参与业务状态。 */
@@ -1484,6 +1517,11 @@ export interface CanvasDesignMethods {
 	 */
 	getConvertHightConfig: () => Promise<GetConvertHightConfigResponse>
 	/**
+	 * 获取画布 AI 能力可用性
+	 * @returns Promise<AI 能力可用性响应数据>
+	 */
+	getAiAbilityAvailability?: () => Promise<AiAbilityAvailability>
+	/**
 	 * 查询图片生成结果
 	 * @param params 查询参数
 	 * @returns Promise<图片生成结果响应数据>
@@ -1641,6 +1679,46 @@ export interface CanvasDesignMethods {
 	 * 注入后 CanvasDesign 使用注入实现，否则降级到 navigator.clipboard
 	 */
 	clipboard?: CanvasDesignClipboard
+	/**
+	 * 将画布剪贴板中的源资源物化为目标控件可上传的 File。
+	 * 宿主可在此处执行跨项目权限校验、过期 URL 刷新和资源转移。
+	 */
+	materializeCanvasClipboardAsset?: (input: {
+		sourceCanvasId?: string
+		resourceIdentity?: string
+		sourcePath?: string
+		sourceRef?: {
+			src?: string
+			ossUrl?: string
+			expiresAt?: string
+		}
+		fileName: string
+		mimeType: string
+	}) => Promise<File | null>
+	/** 将画布剪贴板资源解析为目标控件可直接引用的规范路径。 */
+	resolveCanvasClipboardReference?: (input: {
+		sourceProjectId?: string
+		sourceCanvasId?: string
+		sourceFileId?: string
+		resourceIdentity?: string
+		sourcePath?: string
+		projectPath?: string
+		fileName?: string
+		targetProjectId?: string
+		targetCanvasId?: string
+		target: "canvas-editor" | "message-editor"
+	}) => Promise<{
+		kind: "current-canvas" | "project"
+		path: string
+		fileId?: string
+		projectPath?: string
+		resourceIdentity: string
+		fileName: string
+		/** 服务端复制已成功，但目标画布附件快照尚未确认该路径。 */
+		awaitingAttachmentConfirmation?: boolean
+	} | null>
+	/** 当前画布所属项目/画布上下文，供剪贴板协议写入来源身份。 */
+	getCanvasClipboardContext?: () => { projectId?: string; canvasId?: string }
 }
 
 /**

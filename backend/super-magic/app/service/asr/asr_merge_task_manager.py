@@ -6,22 +6,26 @@ ASR 音频合并任务管理器
 """
 
 import asyncio
-from functools import lru_cache
 import json
 import os
 import threading
 from datetime import datetime, timedelta
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Optional, TypeVar, Union
 from uuid import uuid4
+
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.path_manager import PathManager
-from app.service.asr.asr_time_config import asr_time_config
 from app.service.asr.asr_base import AsrServiceBase, ReadJsonOptions
-
+from app.service.asr.asr_time_config import asr_time_config
+from app.service.asr.asr_utils import (
+    resolve_audio_format_from_directory,
+    validate_audio_format_for_write,
+)
 
 T = TypeVar("T")
 
@@ -46,6 +50,8 @@ class AsrTaskResult(BaseModel):
     task_key: str
     status: AsrTaskStatus
     source_dir: str
+    audio_format: Optional[str] = None  # 任务音频分片格式（wav/opus），首次扫描确定后不再变更；None 按 wav 兼容历史任务
+    audio_format_error: Optional[str] = None  # 格式冲突/实际编码校验错误，阻止任务正常完成
     target_dir: Optional[str] = None  # 创建时可选，完成时必填
     intelligent_title: Optional[str] = None  # 智能标题，完成时必填
     file_path: Optional[str] = None  # 音频文件路径（向后兼容）
@@ -70,9 +76,17 @@ class TaskProgress(BaseModel):
     max_processed_index: int = -1  # 最大文件索引
     file_count: int = 0  # 当前文件数量
     upload_completed: bool = False  # 用户是否告知上传完成（通过 finish 接口）
-    file_shard_count: int = -1  # 客户端声明/服务端兜底的分片总数（首次 finish 固定基线）
+    file_shard_count: int = -1  # 客户端声明的分片总数；-1 表示历史客户端未声明
     upload_completed_at: Optional[float] = None  # 首次 finish 时间戳（unix seconds）
     completion_deadline_at: Optional[float] = None  # 完成等待截止时间（unix seconds）
+    finish_scan_signature: Optional[str] = None  # finish 阶段最近一次分片集合/文件状态签名
+    finish_stable_count: int = 0  # 连续稳定扫描次数
+    last_stable_shard_indices: list[int] = Field(default_factory=list)
+    opus_merge_status: str = "pending"  # Opus finish 合并状态：pending/merging/completed/failed
+    opus_merge_error: Optional[str] = None
+    opus_merge_attempt_id: Optional[str] = None
+    opus_merge_started_at: Optional[float] = None
+    opus_merge_completed_at: Optional[float] = None
     start_time: float = Field(default_factory=lambda: datetime.now().timestamp())
     retry_count: int = 0  # 整体任务重试次数（由 finish 触发），最大允许次数由服务端控制
 
@@ -95,8 +109,6 @@ class AsrMergeTaskManager(AsrServiceBase):
 
     # 常量定义
     STATE_FILE_SUFFIX = ".json"
-    TEMP_FILE_PREFIX = "."
-    TEMP_FILE_SUFFIX = ".tmp"
     MAX_TASK_RETRIES = 10  # 最大允许重试整个任务次数（由 finish 触发）
 
     def __init__(self):
@@ -159,7 +171,12 @@ class AsrMergeTaskManager(AsrServiceBase):
     @staticmethod
     def _atomic_write(target_file: Path, data: dict) -> None:
         """
-        原子性写入 JSON 文件（使用临时文件+原子替换）
+        直接写入 JSON 文件。
+
+        状态文件位于 AGFS 挂载的 workspace 中。不能使用临时文件加
+        ``os.replace``，因为 AGFS 会把 replace 记录成新的文件对象，导致
+        同一个状态文件不断产生新的 file_id。调用方已经用 ``_io_lock``
+        保护 read-modify-write；这里直接 truncate/write 同一个目标文件。
 
         Args:
             target_file: 目标文件路径
@@ -169,29 +186,15 @@ class AsrMergeTaskManager(AsrServiceBase):
             IOError: 文件写入失败时抛出
             OSError: 文件操作失败时抛出
         """
-        temp_file = target_file.parent / (
-            f"{AsrMergeTaskManager.TEMP_FILE_PREFIX}"
-            f"{target_file.name}_{uuid4().hex}{AsrMergeTaskManager.TEMP_FILE_SUFFIX}"
-        )
-
         try:
-            # 写入临时文件
-            with open(temp_file, "w", encoding="utf-8") as f:
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(target_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
                 f.flush()
                 os.fsync(f.fileno())
 
-            # 原子替换
-            os.replace(str(temp_file), str(target_file))
-
         except (IOError, OSError) as e:
-            # 清理临时文件
-            if temp_file.exists():
-                try:
-                    temp_file.unlink()
-                except OSError:
-                    pass
-            raise IOError(f"原子写入失败: {e}") from e
+            raise IOError(f"状态文件写入失败: {e}") from e
 
     @staticmethod
     def get_state_file_path(task_key: str) -> Path:
@@ -694,6 +697,164 @@ class AsrMergeTaskManager(AsrServiceBase):
 
         return await self._atomic_update_state(task_key, updater, "更新任务进度失败")
 
+    async def claim_opus_merge(self, task_key: str) -> bool:
+        """Atomically claim the Opus finish merge for one task."""
+
+        attempt_id = uuid4().hex
+
+        def updater(state: TaskState) -> TaskState:
+            status = state.progress.opus_merge_status
+            if status not in {"pending", "failed"}:
+                raise ValueError(f"opus_merge_not_claimable:{status}")
+            now_ts = datetime.now().timestamp()
+            return self._apply_state_updates(
+                state,
+                progress_updates={
+                    "opus_merge_status": "merging",
+                    "opus_merge_error": None,
+                    "opus_merge_attempt_id": attempt_id,
+                    "opus_merge_started_at": now_ts,
+                    "opus_merge_completed_at": None,
+                },
+            )
+
+        try:
+            claimed = await self._atomic_update_state(task_key, updater, "领取 Opus 合并任务失败")
+        except ValueError:
+            return False
+        if claimed:
+            logger.info(
+                f"🎙️ {self.LOG_PREFIX} task_key={task_key} "
+                f"attempt_id={attempt_id} 已领取 Opus finish 合并"
+            )
+        return claimed
+
+    async def recover_interrupted_opus_merge(self, task_key: str) -> bool:
+        """Reset a persisted ``merging`` state after the owning worker has stopped."""
+
+        def updater(state: TaskState) -> TaskState:
+            progress = state.progress
+            if (
+                state.task.audio_format != "opus"
+                or not progress.upload_completed
+                or progress.opus_merge_status != "merging"
+            ):
+                raise ValueError("opus_merge_not_recoverable")
+            return self._apply_state_updates(
+                state,
+                progress_updates={
+                    "opus_merge_status": "pending",
+                    "opus_merge_error": "检测到上一次 Opus 合并中断，已重新等待领取",
+                    "opus_merge_attempt_id": None,
+                    "opus_merge_started_at": None,
+                    "opus_merge_completed_at": None,
+                },
+            )
+
+        try:
+            recovered = await self._atomic_update_state(task_key, updater, "恢复中断的 Opus 合并失败")
+        except ValueError:
+            return False
+        if recovered:
+            logger.warning(
+                f"⚠️ {self.LOG_PREFIX} task_key={task_key} 检测到中断的 Opus finish 合并，已重置为 pending"
+            )
+        return recovered
+
+    async def set_opus_merge_status(
+        self,
+        task_key: str,
+        status: str,
+        error: str | None = None,
+        expected_attempt_id: str | None = None,
+    ) -> bool:
+        """Persist Opus finish merge status and bounded error information."""
+        allowed = {"pending", "merging", "completed", "failed"}
+        if status not in allowed:
+            raise ValueError(f"unsupported opus merge status: {status}")
+
+        def updater(state: TaskState) -> TaskState:
+            if (
+                expected_attempt_id is not None
+                and state.progress.opus_merge_attempt_id != expected_attempt_id
+            ):
+                raise ValueError("stale_opus_merge_attempt")
+            progress_updates = {
+                "opus_merge_status": status,
+                "opus_merge_error": (error or None)[:2000] if error else None,
+            }
+            if status == "pending":
+                progress_updates["opus_merge_attempt_id"] = None
+                progress_updates["opus_merge_started_at"] = None
+            if status == "completed":
+                progress_updates["opus_merge_completed_at"] = datetime.now().timestamp()
+            return self._apply_state_updates(state, progress_updates=progress_updates)
+
+        try:
+            return await self._atomic_update_state(task_key, updater, "更新 Opus 合并状态失败")
+        except ValueError as exc:
+            if str(exc) == "stale_opus_merge_attempt":
+                logger.warning(
+                    f"⚠️ {self.LOG_PREFIX} task_key={task_key} 忽略过期 Opus 合并状态回写: "
+                    f"attempt_id={expected_attempt_id}"
+                )
+                return False
+            raise
+
+    async def ensure_opus_finish_deadline(self, task_key: str) -> bool:
+        """Ensure an Opus task uses its own finish deadline instead of WAV idle timeout."""
+
+        def updater(state: TaskState) -> TaskState:
+            if state.task.audio_format != "opus" or not state.progress.upload_completed:
+                return state
+            base_ts = state.progress.upload_completed_at or datetime.now().timestamp()
+            opus_deadline = base_ts + asr_time_config.OPUS_FINISH_DEADLINE_TIMEOUT
+            current_deadline = state.progress.completion_deadline_at or 0
+            if current_deadline >= opus_deadline:
+                return state
+            return self._apply_state_updates(
+                state,
+                progress_updates={"completion_deadline_at": opus_deadline},
+            )
+
+        return await self._atomic_update_state(task_key, updater, "更新 Opus finish deadline 失败")
+
+    async def set_audio_format(self, task_key: str, audio_format: str) -> bool:
+        """
+        设置任务音频格式（原子性操作，仅首次生效）
+
+        任务级格式钉住：已确定格式的任务不会被改写，避免运行中被异格式分片带偏。
+
+        Args:
+            task_key: 任务标识符
+            audio_format: 音频格式（仅支持 wav/opus，非法值抛出 ValueError）
+
+        Returns:
+            bool: 是否更新成功
+        """
+        normalized = validate_audio_format_for_write(audio_format)
+
+        def updater(state: TaskState) -> TaskState:
+            """仅在格式未确定时写入"""
+            if state.task.audio_format:
+                return state
+            state = self._apply_state_updates(state, task_updates={"audio_format": normalized})
+            logger.info(f"🎵 {AsrMergeTaskManager.LOG_PREFIX} 任务音频格式已钉住: {task_key} -> {normalized}")
+            return state
+
+        return await self._atomic_update_state(task_key, updater, "设置音频格式失败")
+
+    async def set_audio_format_error(self, task_key: str, error_message: str) -> bool:
+        """Persist a format error so finish cannot silently complete a bad task."""
+        message = (error_message or "audio format validation failed").strip()
+
+        def updater(state: TaskState) -> TaskState:
+            if state.task.audio_format_error == message:
+                return state
+            return self._apply_state_updates(state, task_updates={"audio_format_error": message})
+
+        return await self._atomic_update_state(task_key, updater, "记录音频格式错误失败")
+
     async def mark_upload_completed(self, task_key: str, file_shard_count: Optional[int] = None) -> bool:
         """
         标记用户已告知上传完成（原子性操作）
@@ -708,10 +869,17 @@ class AsrMergeTaskManager(AsrServiceBase):
 
         def updater(state: TaskState) -> TaskState:
             """设置upload_completed标志"""
-            # 分片总数只增不减，避免重复 finish 被旧值回退
+            # 首次声明后固定分片总数，重复请求只能携带相同值
             final_shard_count = state.progress.file_shard_count
-            if file_shard_count is not None and file_shard_count >= 0:
-                final_shard_count = max(final_shard_count, file_shard_count)
+            if file_shard_count is not None:
+                if file_shard_count <= 0:
+                    raise ValueError("file_shard_count must be a positive integer")
+                if final_shard_count >= 0 and final_shard_count != file_shard_count:
+                    raise ValueError(
+                        f"file_shard_count conflicts with existing value: "
+                        f"existing={final_shard_count}, requested={file_shard_count}"
+                    )
+                final_shard_count = file_shard_count
 
             progress_updates: dict = {
                 "upload_completed": True,
@@ -722,8 +890,8 @@ class AsrMergeTaskManager(AsrServiceBase):
             if not state.progress.upload_completed:
                 now_ts = datetime.now().timestamp()
                 progress_updates["upload_completed_at"] = now_ts
-                # deadline 复用无新文件超时配置，避免双配置不一致
-                progress_updates["completion_deadline_at"] = now_ts + asr_time_config.NO_NEW_FILE_TIMEOUT
+                deadline_timeout = asr_time_config.FINISH_SHARD_TIMEOUT_SECONDS
+                progress_updates["completion_deadline_at"] = now_ts + deadline_timeout
 
             state = self._apply_state_updates(state, progress_updates=progress_updates)
             logger.info(
@@ -776,10 +944,17 @@ class AsrMergeTaskManager(AsrServiceBase):
             if transcript_file_config is not None:
                 update_fields["transcript_file_config"] = transcript_file_config
 
-            # 分片总数只增不减，避免重复 finish 被旧值回退
+            # 首次声明后固定分片总数，重复请求只能携带相同值
             final_shard_count = state.progress.file_shard_count
-            if file_shard_count is not None and file_shard_count >= 0:
-                final_shard_count = max(final_shard_count, file_shard_count)
+            if file_shard_count is not None:
+                if file_shard_count <= 0:
+                    raise ValueError("file_shard_count must be a positive integer")
+                if final_shard_count >= 0 and final_shard_count != file_shard_count:
+                    raise ValueError(
+                        f"file_shard_count conflicts with existing value: "
+                        f"existing={final_shard_count}, requested={file_shard_count}"
+                    )
+                final_shard_count = file_shard_count
 
             progress_updates: dict = {
                 "upload_completed": True,
@@ -790,8 +965,8 @@ class AsrMergeTaskManager(AsrServiceBase):
             if not state.progress.upload_completed:
                 now_ts = datetime.now().timestamp()
                 progress_updates["upload_completed_at"] = now_ts
-                # deadline 复用无新文件超时配置，避免双配置不一致
-                progress_updates["completion_deadline_at"] = now_ts + asr_time_config.NO_NEW_FILE_TIMEOUT
+                deadline_timeout = asr_time_config.FINISH_SHARD_TIMEOUT_SECONDS
+                progress_updates["completion_deadline_at"] = now_ts + deadline_timeout
 
             state = self._apply_state_updates(
                 state,
@@ -842,6 +1017,79 @@ class AsrMergeTaskManager(AsrServiceBase):
         if not state:
             return None
         return state.progress
+
+    async def update_finish_shard_stability(
+        self, task_key: str, files: list[tuple[int, Path]]
+    ) -> tuple[bool, bool]:
+        """Record finish scans and decide whether the shard set is ready.
+
+        Returns ``(ready, terminal_failed)``.  A declared shard count must be
+        complete and stable for the configured number of scans; legacy tasks
+        without a declaration use a contiguous, stable set and may fall back
+        to the last stable set when the deadline is reached.
+        """
+        state = await self._read_task_state(task_key)
+        if not state or not state.progress.upload_completed:
+            return False, False
+
+        indices = sorted(index for index, _ in files)
+        signature_parts: list[tuple[int, int]] = []
+        for index, path in files:
+            try:
+                stat = await asyncio.to_thread(path.stat)
+                signature_parts.append((index, stat.st_size))
+            except OSError:
+                signature_parts.append((index, -1))
+        signature = json.dumps(signature_parts, separators=(",", ":"))
+
+        expected = state.progress.file_shard_count
+        expected_indices = list(range(expected)) if expected >= 0 else list(range(indices[-1] + 1)) if indices else []
+        complete = bool(indices) and indices == expected_indices
+
+        def updater(current: TaskState) -> TaskState:
+            previous_signature = current.progress.finish_scan_signature
+            stable_count = current.progress.finish_stable_count + 1 if previous_signature == signature else 1
+            progress_updates = {
+                "finish_scan_signature": signature,
+                "finish_stable_count": stable_count,
+            }
+            if complete and stable_count >= asr_time_config.FINISH_SHARD_STABLE_SCAN_COUNT:
+                progress_updates["last_stable_shard_indices"] = indices
+            return self._apply_state_updates(current, progress_updates=progress_updates)
+
+        updated = await self._atomic_update_state(task_key, updater, "记录 finish 分片稳定状态失败")
+        if not updated:
+            return False, False
+
+        latest_state = await self._read_task_state(task_key)
+        if not latest_state:
+            return False, False
+        progress = latest_state.progress
+        stable_ready = complete and progress.finish_stable_count >= asr_time_config.FINISH_SHARD_STABLE_SCAN_COUNT
+        if stable_ready:
+            return True, False
+
+        deadline_reached = (
+            progress.completion_deadline_at is not None
+            and datetime.now().timestamp() >= progress.completion_deadline_at
+        )
+        if not deadline_reached:
+            return False, False
+
+        if expected < 0 and progress.last_stable_shard_indices:
+            logger.warning(
+                f"{self.LOG_PREFIX} task_key={task_key} 历史客户端达到 finish 超时，使用最后稳定分片集合: "
+                f"indices={progress.last_stable_shard_indices}"
+            )
+            return True, False
+
+        message = (
+            f"finish 等待分片超时: declared={expected}, scanned={indices}, "
+            f"stable_count={progress.finish_stable_count}"
+        )
+        await self.fail_task(task_key, message)
+        logger.error(f"{self.LOG_PREFIX} ❌ task_key={task_key} {message}")
+        return False, True
 
     async def start_monitoring(self, task_key: str) -> bool:
         """
@@ -980,11 +1228,25 @@ class AsrMergeTaskManager(AsrServiceBase):
                 raise ValueError(f"retry_limit_reached({current_retry}/{max_retries})")
 
             new_retry = current_retry + 1
+            now_ts = datetime.now().timestamp()
 
             state = self._apply_state_updates(
                 state,
                 task_updates={"status": AsrTaskStatus.WAITING, "error_message": None},
-                progress_updates={"retry_count": new_retry},
+                progress_updates={
+                    "retry_count": new_retry,
+                    "upload_completed": True,
+                    "upload_completed_at": now_ts,
+                    "completion_deadline_at": now_ts + asr_time_config.FINISH_SHARD_TIMEOUT_SECONDS,
+                    "finish_scan_signature": None,
+                    "finish_stable_count": 0,
+                    "last_stable_shard_indices": [],
+                    "opus_merge_status": "pending",
+                    "opus_merge_error": None,
+                    "opus_merge_attempt_id": None,
+                    "opus_merge_started_at": None,
+                    "opus_merge_completed_at": None,
+                },
             )
 
             logger.warning(
@@ -1136,6 +1398,77 @@ class AsrMergeTaskManager(AsrServiceBase):
 
         return cleaned_count
 
+    async def check_should_complete_opus(
+        self, task_key: str, source_dir: Path, scanned_file_count: int
+    ) -> bool:
+        """Check Opus staging completeness without WAV deadline convergence rules."""
+        progress = await self.get_progress(task_key)
+        task = await self.get_task(task_key)
+        if not progress or not task:
+            return False
+        if task.audio_format != "opus" or task.audio_format_error:
+            return False
+        if not progress.upload_completed or progress.opus_merge_status != "completed":
+            return False
+
+        required_count = (
+            progress.file_shard_count
+            if progress.file_shard_count >= 0
+            else scanned_file_count
+        )
+        processed_count = max(
+            progress.file_count,
+            progress.max_processed_index + 1 if progress.max_processed_index >= 0 else 0,
+        )
+        if scanned_file_count != required_count or processed_count != required_count:
+            logger.warning(
+                f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} Opus 分片数量不一致: "
+                f"scanned={scanned_file_count}, processed={processed_count}, required={required_count}"
+            )
+            return False
+
+        metadata_path = source_dir / "merged_metadata.json"
+        metadata = None
+        if await asyncio.to_thread(metadata_path.exists):
+            metadata = await asyncio.to_thread(
+                self._read_json_with_retry_sync,
+                metadata_path,
+                "merged_metadata.json",
+            )
+        if not metadata:
+            logger.warning(
+                f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} Opus metadata 不存在或不可读"
+            )
+            return False
+        if (
+            metadata.get("audio_format") != "opus"
+            or metadata.get("merge_attempt_id") != progress.opus_merge_attempt_id
+            or metadata.get("source_shard_count") != required_count
+            or metadata.get("source_last_index") != required_count - 1
+        ):
+            logger.warning(
+                f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} Opus metadata 与分片集合不匹配"
+            )
+            return False
+
+        merged_file = source_dir / self.get_merged_filename("opus")
+        if not await asyncio.to_thread(merged_file.exists):
+            return False
+        try:
+            from app.service.asr.asr_size_config import asr_size_config
+
+            file_size = await asyncio.to_thread(lambda: merged_file.stat().st_size)
+            if file_size < asr_size_config.AUDIO_FILE_MIN_SIZE:
+                return False
+        except OSError:
+            return False
+
+        logger.info(
+            f"{AsrMergeTaskManager.LOG_PREFIX} 🎉 task_key={task_key} Opus staging 满足完成条件: "
+            f"shard_count={required_count}, merged_size={file_size}B"
+        )
+        return True
+
     async def check_should_complete(self, task_key: str, source_dir: Path, scanned_file_count: int) -> bool:
         """
         检查是否应该完成任务
@@ -1158,6 +1491,19 @@ class AsrMergeTaskManager(AsrServiceBase):
         progress = await self.get_progress(task_key)
         if not progress or not progress.upload_completed:
             return False
+
+        task = await self.get_task(task_key)
+        if task and task.audio_format_error:
+            logger.warning(
+                f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} 存在音频格式错误，阻止完成: "
+                f"{task.audio_format_error}"
+            )
+            return False
+
+        if task and task.audio_format == "opus":
+            return await self.check_should_complete_opus(
+                task_key, source_dir, scanned_file_count
+            )
 
         # 2. 计算“要求数量”：以客户端声明数量和本轮扫描数量中的较大值为准
         required_file_count = max(scanned_file_count, progress.file_shard_count if progress.file_shard_count >= 0 else 0)
@@ -1194,12 +1540,19 @@ class AsrMergeTaskManager(AsrServiceBase):
             )
             return False
 
-        # 5. 验证 merged.wav 是否存在且稳定（轻量级检查，不阻塞）
-        merged_file = source_dir / self.MERGED_WAV_FILENAME
+        # 5. 验证 merged 文件是否存在且稳定（轻量级检查，不阻塞）
+        try:
+            resolved_format = resolve_audio_format_from_directory(source_dir, task.audio_format if task else None)
+        except ValueError as exc:
+            logger.warning(f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} merged 格式冲突: {exc}")
+            await self.set_audio_format_error(task_key, str(exc))
+            return False
+        merged_filename = self.get_merged_filename(resolved_format or (task.audio_format if task else None))
+        merged_file = source_dir / merged_filename
         if not await asyncio.to_thread(merged_file.exists):
             logger.warning(
                 f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} "
-                f"完成判定已触发但 {self.MERGED_WAV_FILENAME} 不存在"
+                f"完成判定已触发但 {merged_filename} 不存在"
             )
             return False
 
@@ -1211,12 +1564,12 @@ class AsrMergeTaskManager(AsrServiceBase):
             if file_size < asr_size_config.AUDIO_FILE_MIN_SIZE:
                 logger.warning(
                     f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} "
-                    f"{self.MERGED_WAV_FILENAME} 大小异常: {file_size}B < {asr_size_config.AUDIO_FILE_MIN_SIZE}B"
+                    f"{merged_filename} 大小异常: {file_size}B < {asr_size_config.AUDIO_FILE_MIN_SIZE}B"
                 )
                 return False
         except Exception as e:
             logger.warning(
-                f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} 无法获取 {self.MERGED_WAV_FILENAME} 大小: {e}"
+                f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} 无法获取 {merged_filename} 大小: {e}"
             )
             return False
 

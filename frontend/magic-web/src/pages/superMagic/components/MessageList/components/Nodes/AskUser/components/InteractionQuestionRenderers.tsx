@@ -16,7 +16,6 @@ import {
 	type AskUserQuestionData,
 	isAskUserOtherOption,
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
-
 const askUserOptionControlBase =
 	"size-4 shrink-0 border border-input bg-background shadow-xs focus-visible:ring-1 focus-visible:ring-ring/50"
 

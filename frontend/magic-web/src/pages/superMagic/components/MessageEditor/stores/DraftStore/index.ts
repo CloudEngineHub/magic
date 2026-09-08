@@ -111,7 +111,9 @@ export class DraftStore {
 		const valueWithoutPending = filterPendingCanvasMentionsFromContent(value)
 		const filteredValue =
 			valueWithoutPending && dataService
-				? filterUploadFileMentionsFromContent(valueWithoutPending, dataService)
+				? filterUploadFileMentionsFromContent(valueWithoutPending, dataService, {
+						preserveMentionValidation: this.editorStore.preserveMentionContent,
+					})
 				: valueWithoutPending
 
 		draftManager.saveDraft({
@@ -135,7 +137,9 @@ export class DraftStore {
 		const valueWithoutPending = filterPendingCanvasMentionsFromContent(value)
 		const filteredValue =
 			valueWithoutPending && dataService
-				? filterUploadFileMentionsFromContent(valueWithoutPending, dataService)
+				? filterUploadFileMentionsFromContent(valueWithoutPending, dataService, {
+						preserveMentionValidation: this.editorStore.preserveMentionContent,
+					})
 				: valueWithoutPending
 
 		try {
@@ -314,9 +318,11 @@ export class DraftStore {
 			const valueWithoutPending = filterPendingCanvasMentionsFromContent(draft.value)
 			const filteredContent =
 				valueWithoutPending && dataService
-					? filterUploadFileMentionsFromContent(valueWithoutPending, dataService)
+					? filterUploadFileMentionsFromContent(valueWithoutPending, dataService, {
+							preserveMentionValidation: true,
+						})
 					: valueWithoutPending
-			this.editorStore.updateContent(filteredContent)
+			this.editorStore.updateContent(filteredContent, { preserveMentionValidation: true })
 		}
 
 		runInAction(() => {

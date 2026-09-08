@@ -50,6 +50,8 @@ export interface FileData {
 	parentId?: string // 记录文件的父目录ID
 	defaultRelativePath?: string // 默认相对路径（当 parentId 为空时使用）
 	isHidden?: boolean
+	/** Canvas clipboard assets stay upload mentions and are never promoted to project mentions. */
+	isCanvasClipboard?: boolean
 }
 
 /**
@@ -77,6 +79,7 @@ export interface SerializableFileData {
 	saveResult?: any // SaveUploadFileToProjectResponse
 	result?: any // UploadResponse
 	reportResult?: any // ReportFileUploadsResponse
+	isCanvasClipboard?: boolean
 }
 
 // Component size
@@ -132,6 +135,7 @@ export interface MessageEditorProps {
 		selectedVideoModel?: ModelItem | null
 		shouldClearEditorAfterSend?: boolean
 		extra?: Record<string, unknown>
+		targetTopic?: Topic | null
 	}) => void
 	/** Placeholder */
 	placeholder?: string
@@ -221,6 +225,7 @@ export interface SendMessageByContentPayload {
 	selectedVideoModel?: ModelItem | null
 	shouldClearEditorAfterSend?: boolean
 	extra?: Record<string, unknown>
+	targetTopic?: Topic | null
 }
 
 // Component Ref

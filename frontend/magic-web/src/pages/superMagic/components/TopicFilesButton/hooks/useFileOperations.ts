@@ -1691,9 +1691,15 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		}
 	})
 
-	// 移动文件或文件夹
+	// Move a file or folder.
 	const handleMoveFile = useCallback(
-		async (fileId: string, targetParentId: string, preFileId?: string) => {
+		async (
+			fileId: string,
+			targetParentId: string,
+			preFileId?: string,
+			keepBothFileIds?: string[],
+			showLoadingToast = true,
+		) => {
 			if (!fileId) {
 				magicToast.error(t("topicFiles.error.moveFileParamsRequired"))
 				return false
@@ -1703,13 +1709,16 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			let data: any = null
 
 			try {
-				// 显示移动进度
-				magicToast.loading({ content: t("topicFiles.moving"), duration: 0 })
+				// Use Toast unless the caller owns progress UI.
+				if (showLoadingToast) {
+					magicToast.loading({ content: t("topicFiles.moving"), duration: 0 })
+				}
 
 				data = await SuperMagicApi.moveFile({
 					file_id: fileId,
 					target_parent_id: targetParentId || ROOT_FILE_ID,
 					pre_file_id: preFileId,
+					keep_both_file_ids: keepBothFileIds,
 				})
 
 				// 如果直接完成

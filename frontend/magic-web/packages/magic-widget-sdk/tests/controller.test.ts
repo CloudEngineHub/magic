@@ -341,7 +341,7 @@ describe("createMagicWidgetController", () => {
 		expect(iframeUrl.searchParams.get("magicWidgetProtocolVersion")).toBe("1")
 	})
 
-	it("emits agent_ready and rejects empty appended input", async () => {
+	it("emits agent_ready and rejects invalid text or structured input", async () => {
 		appendWidgetScript("https://magic.example.invalid/sdk/magic-widget.js")
 		const widget = createMagicWidgetController()
 		const listener = vi.fn()
@@ -355,6 +355,22 @@ describe("createMagicWidgetController", () => {
 		})
 
 		await expect(widget.appendInput("   ")).rejects.toMatchObject({ code: "INVALID_INPUT" })
+		await expect(widget.setInput({ blocks: [] })).rejects.toMatchObject({
+			code: "INVALID_INPUT",
+		})
+		await expect(
+			widget.sendMessage({
+				blocks: [
+					{
+						type: "mention",
+						mention: {
+								type: "text",
+								data: { label: "Chart Mock", text: "chart id: mock-chart" },
+						},
+					},
+				],
+			}),
+		).rejects.toMatchObject({ code: "INVALID_INPUT" })
 		widget.open()
 		const iframe = document
 			.querySelector("[data-magic-widget-root]")

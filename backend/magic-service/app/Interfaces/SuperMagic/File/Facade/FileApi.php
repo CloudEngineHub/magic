@@ -283,9 +283,13 @@ class FileApi extends AbstractApi
 
         // 获取 token 参数
         $token = $this->request->input('token');
+        $authorizedProjectId = null;
         if (! empty($token)) {
             // 先进行下载权限校验
-            $this->accessTokenAuthorizationService->validateTokenAndCheckDownloadPermission($token);
+            $shareEntity = $this->accessTokenAuthorizationService->validateTokenAndCheckDownloadPermission($token);
+            // A token must be bound to the project stored on its share record.
+            // Treat a missing project scope as invalid for this status endpoint.
+            $authorizedProjectId = $shareEntity->getProjectId() ?? '';
 
             // 走token鉴权逻辑：验证token并创建临时用户授权（基于分享创建者信息）
             $userAuthorization = $this->accessTokenAuthorizationService->validateTokenAndCreateUserAuthorization($token);
@@ -296,7 +300,7 @@ class FileApi extends AbstractApi
         }
 
         // Call application service
-        $responseDTO = $this->fileBatchAppService->checkBatchDownload($requestContext, $batchKey);
+        $responseDTO = $this->fileBatchAppService->checkBatchDownload($requestContext, $batchKey, $authorizedProjectId);
 
         return $responseDTO->toArray();
     }

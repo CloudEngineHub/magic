@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import uuid
+from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -34,7 +35,11 @@ from app.service.cli_manager.service import CliManagerService
 from app.service.cli_status import CliStatusFactory
 from app.core.base_service import Base
 from app.service.mention import MentionContextBuilder
-from app.service.topic_persistence import TopicPersistenceManager, safe_extract_archive
+from app.service.topic_persistence import (
+    TopicPersistenceManager,
+    get_chat_history_excluded_dir_names,
+    safe_extract_archive,
+)
 
 logger = get_logger(__name__)
 
@@ -49,6 +54,23 @@ class AgentService(Base):
         super().__init__()
         # 初始化mention上下文构建器（复用实例，避免每次调用都创建）
         self._mention_builder = MentionContextBuilder()
+        self._background_tasks: set[asyncio.Task[None]] = set()
+
+    def _schedule_background_task(self, coroutine: Coroutine[Any, Any, None], *, name: str) -> None:
+        """Schedule a maintenance coroutine without delaying the startup path."""
+        task = asyncio.create_task(coroutine, name=name)
+        self._background_tasks.add(task)
+
+        def _finish(completed_task: asyncio.Task[None]) -> None:
+            self._background_tasks.discard(completed_task)
+            try:
+                completed_task.result()
+            except asyncio.CancelledError:
+                return
+            except Exception as error:
+                logger.warning("后台维护任务失败: %s", error)
+
+        task.add_done_callback(_finish)
 
 
     def is_support_fetch_workspace(self) -> bool:
@@ -147,6 +169,10 @@ class AgentService(Base):
         """
         persistence = TopicPersistenceManager(PathManager.get_project_root())
         await asyncio.to_thread(persistence.ensure_directories)
+        self._schedule_background_task(
+            persistence.cleanup_legacy_llm_requests_dir(),
+            name="topic-legacy-llm-requests-cleanup",
+        )
         local_chat_history_dir = PathManager.get_chat_history_dir()
         await asyncio.to_thread(local_chat_history_dir.mkdir, parents=True, exist_ok=True)
 
@@ -396,7 +422,7 @@ class AgentService(Base):
                 safe_extract_archive,
                 temp_file_path,
                 target_dir,
-                skip_top_level="llm_request",
+                skip_top_levels=get_chat_history_excluded_dir_names(),
                 strip_top_level=".chat_history",
             )
             logger.info(f"聊天历史解压完成，处理 {extracted_count} 个条目")

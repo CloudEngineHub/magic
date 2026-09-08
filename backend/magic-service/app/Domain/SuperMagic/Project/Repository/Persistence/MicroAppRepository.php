@@ -281,6 +281,7 @@ class MicroAppRepository implements MicroAppRepositoryInterface
         $rows = $query
             ->select([
                 'ma.id as app_id',
+                'p.id as project_id',
                 'p.project_name as app_name',
                 'p.project_description as app_description',
                 'ma.creator_id',

@@ -90,9 +90,13 @@ export function resolveSharedFileUrl(
 		is_download: request.isDownload,
 		cache: request.cache,
 		options: request.imageProcess ? { xMagicImageProcess: request.imageProcess } : undefined,
+		enableErrorMessagePrompt: false,
 	})
 		.then((items) => {
 			const item = findResponseItem(fileId, items)
+			if (!item?.url) {
+				console.warn("[SuperMagic] Mention preview file URL is unavailable", { fileId })
+			}
 			if (item?.url && item.expires_at) {
 				sharedFileUrlCache.set(requestKey, {
 					item,
@@ -100,6 +104,13 @@ export function resolveSharedFileUrl(
 				})
 			}
 			return item
+		})
+		.catch((error: unknown) => {
+			console.warn("[SuperMagic] Failed to resolve mention preview file URL", {
+				fileId,
+				error,
+			})
+			throw error
 		})
 		.finally(() => {
 			sharedFileUrlRequests.delete(requestKey)
