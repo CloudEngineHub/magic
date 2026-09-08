@@ -28,7 +28,9 @@ from agentlang.chat_history.chat_history_models import UserMessage
 from agentlang.context.tool_context import ToolContext
 from agentlang.event.data import (
     AfterAgentReplyEventData,
+    AfterLlmRequestSucceededEventData,
     AfterMainAgentRunEventData,
+    BeforeLlmRetryEventData,
     BeforeMainAgentRunEventData,
     ErrorEventData,
 )
@@ -82,6 +84,7 @@ from app.core.entity.message.server_message import TaskStatus
 from app.magic.user_command_handler import Commands
 from app.path_manager import PathManager
 from app.service.auto_read_file_service import AutoReadFileService
+from app.service.agent_event.native_visual_disable_listener_service import NativeVisualDisableListenerService
 from app.service.native_visual_message_builder import NativeVisualMessageBuilder
 from app.service.todo_service import TodoService
 from app.tools.core import AutoMount
@@ -251,6 +254,7 @@ class Agent(BaseAgent):
             agent_context.chat_history_dir = PathManager.get_chat_history_dir()
             logger.warning(f"AgentContext 中未设置 chat_history_dir，使用默认值: {PathManager.get_chat_history_dir()}")
 
+        NativeVisualDisableListenerService.register_standard_listeners(agent_context)
         return agent_context
 
     def _initialize_configured_text_model(self) -> None:
@@ -271,6 +275,8 @@ class Agent(BaseAgent):
         self._active_run_task: asyncio.Task[object] | None = None
         self._tool_preflight_failures: Dict[str, str] = {}
         self._workspace_snapshot: WorkspaceSnapshot | None = None
+        # 当前最近一次真实 LLM 请求是否包含原生图片输入。
+        self._last_llm_request_contains_native_images = False
 
         # 设置Agent上下文
         self.agent_context = self._setup_agent_context(agent_context)
@@ -2345,6 +2351,60 @@ Since your subsequent output will be merged with pre-interruption content and di
         retry_state.consecutive_generation_failures = 0
         retry_state.max_lost_output_chars_in_streak = 0
 
+    def _extract_api_status_code(self, exception: Exception) -> Optional[int]:
+        """从异常链中提取 HTTP 状态码。"""
+        from openai import APIStatusError
+
+        for exc in self._iter_exception_chain(exception):
+            if isinstance(exc, APIStatusError):
+                return exc.status_code
+        return None
+
+    async def _dispatch_before_llm_retry_event(
+        self,
+        *,
+        exception: Exception,
+        loop_state: AgentLoopState,
+        use_stream: bool,
+    ) -> BeforeLlmRetryEventData:
+        """请求失败后、进入重试决策前抛出重试前事件。"""
+        model_id = ""
+        supports_multimodal = False
+        try:
+            model_state = self.agent_context.model_context.resolve_text_model()
+            model_id = model_state.model_id
+            supports_multimodal = bool(model_state.config.supports_multimodal)
+        except Exception:
+            model_id = self.agent_context.model_context.current_text_model_id or ""
+
+        event_data = BeforeLlmRetryEventData(
+            agent_context=self.agent_context,
+            exception=exception,
+            status_code=self._extract_api_status_code(exception),
+            model_id=model_id,
+            use_stream=use_stream,
+            backoff_retry_count=loop_state.retry_state.backoff_retry_count,
+            streaming_disabled=loop_state.retry_state.streaming_disabled,
+            request_contains_native_images=bool(
+                getattr(self, "_last_llm_request_contains_native_images", False)
+            ),
+            supports_multimodal=supports_multimodal,
+            is_context_window_exceeded=bool(self._find_context_window_error(exception)),
+        )
+        event = await self.agent_context.dispatch_event(EventType.BEFORE_LLM_RETRY, event_data)
+        return event.data
+
+    async def _dispatch_llm_request_succeeded_event(self, *, use_stream: bool) -> None:
+        """请求成功后抛出成功事件，供监听器清理失败计数。"""
+        await self.agent_context.dispatch_event(
+            EventType.AFTER_LLM_REQUEST_SUCCEEDED,
+            AfterLlmRequestSucceededEventData(
+                agent_context=self.agent_context,
+                model_id=self.agent_context.model_context.current_text_model_id or "",
+                use_stream=use_stream,
+            ),
+        )
+
     def _find_context_window_error(self, exception: Exception) -> Optional[LLMErrorSnapshot]:
         """在异常链中查找上下文超长错误，返回对应的 snapshot 或 None"""
         from openai import APIError
@@ -2434,6 +2494,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                     chunk_timeout=config.get("llm.stream_chunk_timeout_seconds", 60),
                 )
                 self._reset_generation_failure_streak(loop_state)
+                await self._dispatch_llm_request_succeeded_event(use_stream=True)
                 return response
             except ResourceLimitExceededException:
                 raise  # 平台业务限制（积分/并发），直接终止
@@ -2441,10 +2502,22 @@ Since your subsequent output will be merged with pre-interruption content and di
                 compact_fallback = await self._try_fallback_compact_model_once(e)
                 if compact_fallback is not None:
                     self._reset_generation_failure_streak(loop_state)
+                    await self._dispatch_llm_request_succeeded_event(use_stream=False)
                     return compact_fallback
                 if self._find_context_window_error(e):
                     raise  # 上下文超长走 compact 路径
-                if is_non_retryable_model_config_error(e):
+                retry_decision = await self._dispatch_before_llm_retry_event(
+                    exception=e,
+                    loop_state=loop_state,
+                    use_stream=True,
+                )
+                if retry_decision.allow_retry:
+                    if retry_decision.disable_streaming:
+                        loop_state.retry_state.streaming_disabled = True
+                    logger.warning(
+                        f"流式请求失败，监听器要求重试: reason={retry_decision.reason}, error={e}"
+                    )
+                elif is_non_retryable_model_config_error(e):
                     logger.warning(f"流式请求遇到模型配置错误，不降级不重试，直接抛出: {e}")
                     raise
                 # 确定性错误：不降级非流式，也不重试。
@@ -2452,12 +2525,15 @@ Since your subsequent output will be merged with pre-interruption content and di
                 # 必须先检查此条件再走降级分支，否则会白白浪费一轮非流式请求。
                 # 注意：上下文超长（同样是 400）已在前面被 _find_context_window_error 拦截并 raise，
                 # 走到这里的 400 一定是消息序列/格式问题，无法通过重试自愈。
-                if isinstance(e, APIStatusError) and e.status_code in self._NON_RETRYABLE_STATUS_CODES:
+                elif (
+                    isinstance(e, APIStatusError)
+                    and e.status_code in self._NON_RETRYABLE_STATUS_CODES
+                ):
                     logger.warning(
                         f"流式请求遇到确定性错误 HTTP {e.status_code}，不降级不重试，直接抛出: {e}"
                     )
                     raise
-                if isinstance(e, APIStatusError) and e.status_code in self._PROVIDER_RATE_LIMIT_STATUS_CODES:
+                elif isinstance(e, APIStatusError) and e.status_code in self._PROVIDER_RATE_LIMIT_STATUS_CODES:
                     # 供应商限流/过载，等待后降级到非流式。
                     # 不计入 backoff_retry_count — 流式阶段的 429 等待仅用于降级过渡，
                     # 进入第二阶梯后应拥有完整的重试预算。
@@ -2492,6 +2568,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                     non_stream_timeout=timeout,
                 )
                 self._reset_generation_failure_streak(loop_state)
+                await self._dispatch_llm_request_succeeded_event(use_stream=False)
                 return response
             except ResourceLimitExceededException:
                 raise  # 平台业务限制，直接终止
@@ -2502,6 +2579,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                 )
                 if compact_fallback is not None:
                     self._reset_generation_failure_streak(loop_state)
+                    await self._dispatch_llm_request_succeeded_event(use_stream=False)
                     return compact_fallback
                 if self._find_context_window_error(e):
                     if not loop_state.reactive_compact_attempted:
@@ -2512,14 +2590,23 @@ Since your subsequent output will be merged with pre-interruption content and di
                             continue
                     raise
 
+                retry_decision = await self._dispatch_before_llm_retry_event(
+                    exception=e,
+                    loop_state=loop_state,
+                    use_stream=False,
+                )
+                if retry_decision.allow_retry and retry_decision.skip_backoff:
+                    continue
+
                 # 确定性错误：重试必然失败，直接抛出由上层走终态逻辑。
                 # 400 消息序列损坏时，每次重试还会额外注入 recovery user 消息，
                 # 反而让序列更乱，形成死亡螺旋，必须在退避重试逻辑之前先拦截。
-                if is_non_retryable_model_config_error(e):
-                    logger.warning(f"非流式请求遇到模型配置错误，不重试，直接抛出: {e}")
-                    raise
-                if isinstance(e, APIStatusError) and e.status_code in self._NON_RETRYABLE_STATUS_CODES:
-                    raise
+                if not retry_decision.allow_retry:
+                    if is_non_retryable_model_config_error(e):
+                        logger.warning(f"非流式请求遇到模型配置错误，不重试，直接抛出: {e}")
+                        raise
+                    if isinstance(e, APIStatusError) and e.status_code in self._NON_RETRYABLE_STATUS_CODES:
+                        raise
 
                 # 供应商 429/529：等待后重试，不注入恢复提示词，纳入重试计数
                 if isinstance(e, APIStatusError) and e.status_code in self._PROVIDER_RATE_LIMIT_STATUS_CODES:
@@ -2600,6 +2687,12 @@ Since your subsequent output will be merged with pre-interruption content and di
         rendered_messages = await self._message_renderer.render_messages(
             message_snapshot,
             supports_multimodal=text_model_state.config.supports_multimodal,
+        )
+        self._last_llm_request_contains_native_images = any(
+            isinstance(message.get("content"), list)
+            and any(part.get("type") == "image_url" for part in message["content"])
+            for message in rendered_messages
+            if isinstance(message, dict)
         )
         messages_for_llm = self.chat_history.normalize_messages_for_llm(rendered_messages)
         if not messages_for_llm:
