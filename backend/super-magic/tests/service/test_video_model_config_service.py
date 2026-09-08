@@ -106,6 +106,7 @@ def test_build_video_model_info_keeps_selected_model_without_config():
     assert malformed_info.strip().endswith("/>")
     assert 'native_mute="false"' in info
     assert 'mute_fallback="compose"' in info
+    assert 'audio_output="unknown"' in info
 
 
 def test_build_video_model_info_handles_invalid_generation_constraint_types():
@@ -164,6 +165,16 @@ def test_build_video_model_info_does_not_expose_generate_audio_as_tool_param():
 
     assert "generate_audio" not in info
     assert "support=" not in info
+    assert 'audio_output="supported"' in info
+
+
+def test_build_video_model_info_marks_explicit_audio_limitations_only():
+    info = VideoModelConfigService.build_video_model_info(
+        "mock-video-model",
+        {"generation": {"supports_generate_audio": False}},
+    )
+
+    assert 'audio_output="unsupported"' in info
 
 
 def test_build_video_model_info_does_not_expose_option_as_tool_param():

@@ -29,3 +29,18 @@ def test_video_audio_policy_resolver_uses_safe_model_strategy(model_id, expected
 )
 def test_video_audio_policy_resolver_maps_legacy_magic_service_field(policy, model_id, expected):
     assert VideoAudioPolicyResolver.to_legacy_generate_audio(policy, model_id) is expected
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_output"),
+    [
+        ({"generation": {"supports_generate_audio": True}}, "supported"),
+        ({"generation": {"supports_generate_audio": False}}, "unsupported"),
+        ({"generation": {}}, "unknown"),
+        ({}, "unknown"),
+    ],
+)
+def test_video_audio_policy_prompt_attributes_distinguish_unknown_from_unsupported(config, expected_output):
+    attributes = VideoAudioPolicyResolver.prompt_attributes("mock-video-model", config)
+
+    assert attributes["audio_output"] == expected_output

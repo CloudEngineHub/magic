@@ -580,6 +580,31 @@ class VideoQueueDomainServiceTest extends TestCase
         $this->assertSame(300, $operation->getRawRequest()['execution']['expires_after_seconds']);
     }
 
+    public function testCreateOperationPreservesGenerateAudioWhenCapabilityIsUndeclared(): void
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $requestDTO = new CreateVideoDTO([
+            'model_id' => 'unknown-video-model',
+            'task' => 'generate',
+            'prompt' => 'make a video with spoken narration',
+            'generation' => [
+                'generate_audio' => true,
+            ],
+        ]);
+        $requestDTO->valid();
+
+        $operation = $service->createOperation(
+            ModelGatewayDataIsolation::create('org-test', 'user-test'),
+            'LCnVzCkkMnVulyrz',
+            'provider-model-unknown',
+            ProviderCode::Cloudsway,
+            $requestDTO,
+            $this->createEmptyConfig(),
+        );
+
+        $this->assertTrue($operation->getRawRequest()['generation']['generate_audio']);
+    }
+
     public function testCreateOperationPreservesEnhancePromptWhenModelSupportsIt(): void
     {
         $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
