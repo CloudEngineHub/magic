@@ -28,8 +28,9 @@ import type { DetailRef } from "@/pages/superMagic/components/Detail"
 import { useAppStore } from "../context"
 import { captureMicroAppCover } from "../utils/captureMicroAppCover"
 import { canEditMicroAppMetadata, canPublishMicroApp } from "../utils/microAppPermissions"
-import { resolveDefaultHtmlEntry } from "../utils/microAppFiles"
+import { getAttachmentId, resolveSelectedHtmlEntry } from "../utils/microAppFiles"
 import { useMicroAppSelectedProjectSync } from "./useMicroAppSelectedProjectSync"
+import { useMicroAppVisit } from "./useMicroAppVisit"
 
 /**
  * 微应用桌面端和移动端共用的数据控制层。
@@ -48,8 +49,12 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	const [editDialogOpen, setEditDialogOpen] = useState(false)
 	const [editSubmitting, setEditSubmitting] = useState(false)
 	const [isDatabasePanelOpen, setIsDatabasePanelOpen] = useState(false)
+	const [publishedDefaultOpenFileId, setPublishedDefaultOpenFileId] = useState<string | null>(
+		null,
+	)
 	const detailRef = useRef<DetailRef>(null)
 	const defaultEntryOpenedKeyRef = useRef<string | null>(null)
+	const recordVisit = useMicroAppVisit(appId)
 	const selectedProject = conversation.selectedProject
 	const selectedTopic = conversation.topicStore.selectedTopic
 	const hasRunningTopic =
@@ -91,7 +96,28 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		setEditDialogOpen(false)
 		setEditSubmitting(false)
 		setIsDatabasePanelOpen(false)
+		setPublishedDefaultOpenFileId(null)
 	}, [projectId])
+
+	useEffect(() => {
+		if (!appId) return
+
+		let active = true
+		void SuperMagicApi.getMicroAppProject(appId, { enableErrorMessagePrompt: false })
+			.then((detail) => {
+				if (!active) return
+				const published = detail.publish as
+					{ default_open_file_id?: string | null } | undefined
+				setPublishedDefaultOpenFileId(published?.default_open_file_id ?? null)
+			})
+			.catch(() => {
+				if (active) setPublishedDefaultOpenFileId(null)
+			})
+
+		return () => {
+			active = false
+		}
+	}, [appId])
 
 	useDefaultModeModelListRefreshOnMount()
 	useCreateTopicListener({
@@ -139,8 +165,12 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	).run
 
 	const defaultEntryFile = useMemo(
-		() => resolveDefaultHtmlEntry(attachmentList),
-		[attachmentList],
+		() =>
+			resolveSelectedHtmlEntry({
+				items: attachmentList,
+				selectedFileId: publishedDefaultOpenFileId,
+			}),
+		[publishedDefaultOpenFileId, attachmentList],
 	)
 	const handleAttachmentsChange = useCallback(
 		({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
@@ -152,19 +182,26 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	)
 
 	useEffect(() => {
-		if (!isInitialAttachmentsLoaded || !isFileTabsCacheLoaded || !defaultEntryFile?.file_id) {
+		if (!isInitialAttachmentsLoaded || !isFileTabsCacheLoaded || !defaultEntryFile) {
 			return
 		}
 
 		// FilesViewer 会异步恢复缓存标签，等待恢复完成后再打开默认入口，避免缓存覆盖入口页。
-		const entryId = String(defaultEntryFile.file_id)
+		const entryId = String(getAttachmentId(defaultEntryFile))
 		const openKey = `${projectId}:${entryId}`
 		if (defaultEntryOpenedKeyRef.current === openKey) return
 
 		defaultEntryOpenedKeyRef.current = openKey
 		setActiveFileId(entryId)
 		detailRef.current?.openFileTab(defaultEntryFile)
-	}, [defaultEntryFile, isFileTabsCacheLoaded, isInitialAttachmentsLoaded, projectId])
+		recordVisit()
+	}, [
+		defaultEntryFile,
+		isFileTabsCacheLoaded,
+		isInitialAttachmentsLoaded,
+		projectId,
+		recordVisit,
+	])
 
 	useMicroAppSelectedProjectSync(store.projectFilesStore, selectedProject)
 
@@ -369,6 +406,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		checkAttachmentsNowDebounced,
 		publishDialogOpen,
 		setPublishDialogOpen,
+		setPublishedDefaultOpenFileId,
 		editDialogOpen,
 		setEditDialogOpen,
 		editSubmitting,
@@ -378,7 +416,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		canManageCollaborators,
 		handleManageCollaborators,
 		handleProjectNameChange,
-		captureCoverReady: Boolean(defaultEntryFile?.file_id),
+		captureCoverReady: Boolean(defaultEntryFile),
 		handleCaptureCover,
 		handleEditMicroApp,
 	}

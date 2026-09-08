@@ -6,7 +6,7 @@ import { ErrorDisplay, PasswordVerification, ShareEmptyState } from "@/pages/sha
 import HtmlPreviewContent from "@/pages/superMagic/components/Detail/contents/HTML"
 import { MicroAppPermissionIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
-import { resolveDefaultHtmlEntry } from "@/pages/superMagic/pages/MicroAppPage/utils/microAppFiles"
+import { resolveSelectedHtmlEntry } from "@/pages/superMagic/pages/MicroAppPage/utils/microAppFiles"
 import MicroAppInstallDialog from "./components/MicroAppInstallDialog"
 import MicroAppSafetyNotice from "./components/MicroAppSafetyNotice"
 import MicroAppShareHeader from "./components/MicroAppShareHeader"
@@ -50,6 +50,18 @@ function buildPreviewFile(entryFile: AttachmentItem) {
 	}
 }
 
+function resolvePublishedDefaultOpenFileId(shareData: unknown): string | null {
+	const value = shareData as {
+		default_open_file_id?: unknown
+		data?: { default_open_file_id?: unknown; data?: { default_open_file_id?: unknown } }
+	}
+	const id =
+		value?.default_open_file_id ??
+		value?.data?.default_open_file_id ??
+		value?.data?.data?.default_open_file_id
+	return id === null || id === undefined || id === "" ? null : String(id)
+}
+
 export default function MicroAppSharePage() {
 	const { t } = useTranslation("super")
 	const { appId = "" } = useParams<{ appId: string }>()
@@ -83,9 +95,14 @@ export default function MicroAppSharePage() {
 		reload,
 	} = useMicroAppShareData({ appId })
 
+	const defaultOpenFileId = useMemo(
+		() => resolvePublishedDefaultOpenFileId(shareData),
+		[shareData],
+	)
 	const defaultEntryFile = useMemo(
-		() => resolveDefaultHtmlEntry(attachmentList),
-		[attachmentList],
+		() =>
+			resolveSelectedHtmlEntry({ items: attachmentList, selectedFileId: defaultOpenFileId }),
+		[attachmentList, defaultOpenFileId],
 	)
 	const displayAppName = shareMeta.projectName
 	useEffect(() => {

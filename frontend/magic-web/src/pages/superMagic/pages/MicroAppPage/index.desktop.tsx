@@ -91,6 +91,7 @@ function MicroAppPageInner({
 		checkAttachmentsNowDebounced,
 		publishDialogOpen,
 		setPublishDialogOpen,
+		setPublishedDefaultOpenFileId,
 		editDialogOpen,
 		setEditDialogOpen,
 		editSubmitting,
@@ -456,9 +457,11 @@ function MicroAppPageInner({
 			<MicroAppPageOverlays
 				appId={appId}
 				projectName={selectedProject?.project_name}
+				attachmentList={attachmentList}
 				publishDialogOpen={publishDialogOpen}
 				onPublishDialogOpenChange={setPublishDialogOpen}
 				onPublishStatusChange={onPublishStatusChange}
+				onDefaultOpenFileChange={setPublishedDefaultOpenFileId}
 				onProjectNameChange={handleProjectNameChange}
 				editDialogOpen={editDialogOpen}
 				editSubmitting={editSubmitting}
