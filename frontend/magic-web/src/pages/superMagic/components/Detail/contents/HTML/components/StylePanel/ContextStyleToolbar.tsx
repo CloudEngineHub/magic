@@ -1,8 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import { Separator } from "@/components/shadcn-ui/separator"
-import { Textarea } from "@/components/shadcn-ui/textarea"
 import { TooltipProvider } from "@/components/shadcn-ui/tooltip"
 import { cn } from "@/utils/cn"
 import type { ElementRect } from "../SelectionOverlay/types"
@@ -12,10 +10,11 @@ import { useSelectedElement } from "./hooks/useSelectedElement"
 import { getElementCapabilities } from "./capabilities"
 import { areLineHeightsEquivalent } from "./utils/lineHeight"
 import {
-	CONTEXT_TOOLBAR_ROW_MAX_WIDTH,
+	CONTEXT_TOOLBAR_PANEL_PADDING,
+	getContextToolbarRowMaxWidth,
 	partitionContextToolGroups,
 } from "./utils/contextToolbarPartition"
-import { ContextMorePopover, ContextToolbarMotion, FontFamilySelector } from "./controls"
+import { ContextMorePopover, ContextToolbarMotion } from "./controls"
 import { useContextToolbarGroups } from "./hooks/useContextToolbarGroups"
 import type { ContextToolbarItemMotion } from "./types"
 
@@ -27,6 +26,8 @@ export interface ContextStyleToolbarProps {
 	contextToolbarOpen?: boolean
 	selectionRect?: ElementRect | null
 	boundaryRef?: React.RefObject<HTMLElement | null>
+	availableWidth?: number
+	onRevealMoreStyles?: () => void
 }
 
 export const ContextStyleToolbar = observer(function ContextStyleToolbar({
@@ -35,18 +36,14 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 	disabled = false,
 	className,
 	contextToolbarOpen = true,
-	selectionRect,
-	boundaryRef,
+	availableWidth,
+	onRevealMoreStyles,
 }: ContextStyleToolbarProps) {
-	const { t } = useTranslation("super")
-	const { selectedElement, updateStyle, updateBatchStyles, updateAttributes } =
-		useSelectedElement(editorRef)
+	const { selectedElement, updateStyle } = useSelectedElement(editorRef)
 	const stylePanelStore = useStylePanelStore()
 
 	const [fontSize, setFontSize] = useState("16")
 	const [lineHeight, setLineHeight] = useState("normal")
-	const [fontFamily, setFontFamily] = useState("sans-serif")
-	const [textContent, setTextContent] = useState("")
 	const lineHeightDisplayRef = useRef<{ selector: string; value: string } | null>(null)
 
 	const computedStyles =
@@ -86,12 +83,8 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 
 	useEffect(() => {
 		if (selectedElement?.computedStyles) {
-			setTextContent(selectedElement.textContent ?? "")
-			const {
-				fontSize: computedFontSize,
-				fontFamily: computedFontFamily,
-				lineHeight: computedLineHeight,
-			} = selectedElement.computedStyles
+			const { fontSize: computedFontSize, lineHeight: computedLineHeight } =
+				selectedElement.computedStyles
 
 			if (computedFontSize) {
 				const sizeMatch = computedFontSize.match(/(\d+)/)
@@ -100,9 +93,6 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 				}
 			}
 
-			if (computedFontFamily) {
-				setFontFamily(computedFontFamily.split(",")[0].trim().replace(/['"]/g, ""))
-			}
 			const preservedLineHeight =
 				lineHeightDisplayRef.current?.selector === selectedElement.selector &&
 				areLineHeightsEquivalent(
@@ -116,24 +106,16 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 			setLineHeight(preservedLineHeight || computedLineHeight || "normal")
 		} else if (stylePanelStore.selectedElements.length > 0) {
 			lineHeightDisplayRef.current = null
-			setTextContent("")
 			const firstElement = stylePanelStore.selectedElements[0]
 			if (firstElement?.computedStyles) {
-				const {
-					fontSize: computedFontSize,
-					fontFamily: computedFontFamily,
-					lineHeight: computedLineHeight,
-				} = firstElement.computedStyles
+				const { fontSize: computedFontSize, lineHeight: computedLineHeight } =
+					firstElement.computedStyles
 
 				if (computedFontSize) {
 					const sizeMatch = computedFontSize.match(/(\d+)/)
 					if (sizeMatch) {
 						setFontSize(Number.parseInt(sizeMatch[1], 10).toString())
 					}
-				}
-
-				if (computedFontFamily) {
-					setFontFamily(computedFontFamily.split(",")[0].trim().replace(/['"]/g, ""))
 				}
 
 				setLineHeight(computedLineHeight || "normal")
@@ -149,18 +131,6 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 			await updateStyle(property, value)
 		},
 		[externalOnStyleChange, selectedElement, updateStyle],
-	)
-
-	const handleBatchStyleChange = useCallback(
-		async (styles: Record<string, string>) => {
-			if (selectedElement) {
-				for (const [property, value] of Object.entries(styles)) {
-					externalOnStyleChange?.(selectedElement.selector, property, value)
-				}
-			}
-			await updateBatchStyles(styles)
-		},
-		[externalOnStyleChange, selectedElement, updateBatchStyles],
 	)
 
 	const handleFontSizeApply = useCallback(
@@ -219,35 +189,6 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 			handleStyleChange("lineHeight", newLineHeight)
 		},
 		[handleStyleChange, selectedElement],
-	)
-
-	const handleTextContentCommit = useCallback(
-		async (value: string) => {
-			if (
-				!selectedElement?.isTextElement ||
-				!selectedElement.selector ||
-				!editorRef.current?.updateTextContent
-			)
-				return
-
-			const nextContent = value.replace(/\r\n/g, "\n")
-			if (nextContent === (selectedElement.textContent ?? "")) return
-
-			await editorRef.current.updateTextContent(selectedElement.selector, nextContent)
-			stylePanelStore.selectElement({
-				...selectedElement,
-				textContent: nextContent,
-			})
-		},
-		[editorRef, selectedElement, stylePanelStore],
-	)
-
-	const handleFontFamilyChange = useCallback(
-		(newFontFamily: string) => {
-			setFontFamily(newFontFamily)
-			handleStyleChange("fontFamily", newFontFamily)
-		},
-		[handleStyleChange],
 	)
 
 	const handleFormat = useCallback(
@@ -313,51 +254,8 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 		[contextToolbarOpen],
 	)
 
-	const textContentField = capabilities.showTypography ? (
-		<div className="w-full min-w-0 basis-full">
-			<label className="mb-2 block text-xs font-medium text-muted-foreground">
-				<span className="mb-1 block">{t("stylePanel.textContent")}</span>
-				<Textarea
-					data-testid="html-editor-text-content-input"
-					value={textContent}
-					onChange={(event) => setTextContent(event.target.value)}
-					onBlur={(event) => handleTextContentCommit(event.target.value)}
-					placeholder={t("stylePanel.textContentPlaceholder")}
-					rows={4}
-					maxLength={5000}
-					disabled={isDisabled}
-					className="min-h-24 resize-y rounded-md px-2 py-1.5 text-sm"
-				/>
-			</label>
-		</div>
-	) : null
-
 	const contextMorePopover = (
-		<ContextMorePopover
-			selectedElement={selectedElement}
-			editorRef={editorRef}
-			disabled={isDisabled}
-			showTypography={capabilities.showTypography}
-			showFlexGrid={capabilities.showFlexGrid}
-			showImage={capabilities.showImage}
-			showBackground={capabilities.showBackground}
-			showBorder={capabilities.showBorder}
-			showShadow={capabilities.showShadow}
-			isLink={capabilities.isLink}
-			fontFamilySelector={
-				<FontFamilySelector
-					value={fontFamily}
-					onChange={handleFontFamilyChange}
-					disabled={isDisabled}
-				/>
-			}
-			textContentField={textContentField}
-			onStyleChange={handleStyleChange}
-			onBatchStyleChange={handleBatchStyleChange}
-			onUpdateAttributes={updateAttributes}
-			selectionRect={selectionRect}
-			boundaryRef={boundaryRef}
-		/>
+		<ContextMorePopover disabled={isDisabled} onReveal={onRevealMoreStyles ?? (() => {})} />
 	)
 
 	// Build atomic tool groups for contextual editing
@@ -391,8 +289,10 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 	})
 
 	const rows = useMemo(() => {
-		return partitionContextToolGroups(groups, CONTEXT_TOOLBAR_ROW_MAX_WIDTH)
-	}, [groups])
+		const innerWidth =
+			availableWidth == null ? undefined : availableWidth - CONTEXT_TOOLBAR_PANEL_PADDING
+		return partitionContextToolGroups(groups, getContextToolbarRowMaxWidth(innerWidth))
+	}, [availableWidth, groups])
 
 	return (
 		<TooltipProvider delayDuration={300}>
@@ -400,7 +300,9 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 				data-testid="html-editor-context-style-toolbar"
 				className={cn(
 					"w-fit max-w-full overflow-visible border-0 bg-transparent p-0",
-					rows.length > 1 ? "flex flex-col items-start gap-1" : "flex items-center gap-1",
+					rows.length > 1
+						? "flex flex-col items-start gap-1.5"
+						: "flex items-center gap-1",
 					className,
 				)}
 			>
@@ -408,17 +310,25 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 					<div
 						key={rowIndex}
 						data-context-toolbar-row={rowIndex}
-						className="flex w-fit items-center gap-1"
+						className="flex min-h-7 max-w-full flex-nowrap items-center gap-1"
 					>
 						{row.map((group, groupIndex) => (
-							<Fragment key={group.id}>
+							<Fragment key={`${group.id}-${group.items?.[0]?.id ?? "group"}`}>
 								{groupIndex > 0 ? (
 									<Separator
 										orientation="vertical"
-										className="mx-1 !h-4 bg-border/70"
+										className="mx-1 !h-4 shrink-0 bg-border/70"
 									/>
 								) : null}
-								{group.data?.node}
+								{group.items ? (
+									<div className="flex items-center gap-1">
+										{group.items.map((item) => (
+											<Fragment key={item.id}>{item.data?.node}</Fragment>
+										))}
+									</div>
+								) : (
+									group.data?.node
+								)}
 							</Fragment>
 						))}
 					</div>

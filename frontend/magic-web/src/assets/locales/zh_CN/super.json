@@ -6335,6 +6335,17 @@
 		"shadowPreview": "阴影预览",
 		"shadowSoftness": "柔和度",
 		"shadowSpread": "扩散",
+		"sidebar": {
+			"close": "关闭侧栏",
+			"collapse": "收起侧栏",
+			"collapseSection": "收起",
+			"expand": "展开侧栏",
+			"expandSection": "展开",
+			"moreStylesEmpty": "请先在画布上选择一个元素",
+			"resize": "调整侧栏宽度",
+			"split": "调整分区高度",
+			"title": "侧栏"
+		},
 		"size": "尺寸",
 		"sizeSettings": "尺寸设置",
 		"solidColor": "纯色",

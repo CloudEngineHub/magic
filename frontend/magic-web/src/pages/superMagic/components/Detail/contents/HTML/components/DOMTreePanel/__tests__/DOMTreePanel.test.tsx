@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useState } from "react"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
 import { DOMTreePanel } from "../DOMTreePanel"
+import { EditorSidebar } from "../../EditorSidebar"
 
 const toastMocks = vi.hoisted(() => ({
 	success: vi.fn(),
@@ -183,6 +184,8 @@ describe("DOMTreePanel", () => {
 		)
 
 		const input = await screen.findByTestId("dom-tree-search-input")
+		expect(screen.getByTestId("dom-tree-search-bar")).toHaveClass("z-10")
+		expect(screen.getByTestId("dom-tree-search-bar")).not.toHaveClass("z-40")
 		fireEvent.change(input, { target: { value: "hero" } })
 
 		const result = await screen.findByTestId("dom-tree-search-result-section")
@@ -405,8 +408,6 @@ describe("DOMTreePanel", () => {
 			},
 		})
 		const editorRef = { current: { getDomTree } } as never
-		const onClose = vi.fn()
-
 		function ZoomHarness() {
 			const [, setScale] = useState(1)
 			return (
@@ -418,7 +419,7 @@ describe("DOMTreePanel", () => {
 					>
 						Zoom
 					</button>
-					<DOMTreePanel editorRef={editorRef} visible onClose={onClose} />
+					<DOMTreePanel editorRef={editorRef} visible />
 				</>
 			)
 		}
@@ -1033,7 +1034,6 @@ describe("DOMTreePanel", () => {
 
 		expect(screen.getByTestId("html-dom-tree-panel")).toHaveClass(
 			"h-full",
-			"border-l",
 			"min-h-0",
 			"bg-background/95",
 		)
@@ -2138,5 +2138,46 @@ describe("DOMTreePanel", () => {
 				Reflect.deleteProperty(HTMLElement.prototype, "scrollTo")
 			}
 		}
+	})
+
+	it("moves tree actions into the page-structure header", async () => {
+		const getDomTree = vi.fn().mockResolvedValue({
+			root: {
+				nodeId: "root",
+				tagName: "body",
+				label: "body",
+				children: [],
+				editable: false,
+				canHaveChildren: true,
+				canDelete: false,
+				canMove: false,
+			},
+		})
+
+		const onStructureExpandedChange = vi.fn()
+		render(
+			<EditorSidebar
+				structureExpanded
+				stylesExpanded={false}
+				onStructureExpandedChange={onStructureExpandedChange}
+				onStylesExpandedChange={vi.fn()}
+				structure={
+					<DOMTreePanel editorRef={{ current: { getDomTree } } as never} visible />
+				}
+				styles={<div />}
+			/>,
+		)
+
+		await screen.findByTestId("dom-tree-node-root")
+		const chrome = screen.getByTestId("html-editor-sidebar-structure-chrome")
+		expect(within(chrome).getByTestId("html-dom-tree-expand-toggle-button")).toBeInTheDocument()
+		expect(within(chrome).getByTestId("html-dom-tree-refresh-button")).toBeInTheDocument()
+		expect(within(chrome).getByText("stylePanel.domTree.nodeCount")).toBeInTheDocument()
+		expect(screen.queryByTestId("html-dom-tree-local-chrome")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("html-editor-sidebar-close-button")).not.toBeInTheDocument()
+		expect(screen.getAllByText("stylePanel.domTree.title")).toHaveLength(1)
+
+		fireEvent.click(within(chrome).getByTestId("html-dom-tree-refresh-button"))
+		expect(onStructureExpandedChange).not.toHaveBeenCalled()
 	})
 })

@@ -11,8 +11,18 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("../StylePanel", () => ({
-	StylePanel: ({ children }: { children?: ReactNode }) => (
-		<div data-testid="mock-style-panel" style={{ minHeight: 1200 }}>
+	StylePanel: ({
+		availableWidth,
+		children,
+	}: {
+		availableWidth?: number
+		children?: ReactNode
+	}) => (
+		<div
+			data-testid="mock-style-panel"
+			data-available-width={availableWidth}
+			style={{ minHeight: 1200 }}
+		>
 			{children}
 		</div>
 	),
@@ -90,5 +100,20 @@ describe("ElementContextPanel", () => {
 		)
 
 		expect(document.querySelector("[data-html-context-panel]")).toBeNull()
+	})
+
+	it("forwards the toolbar max width so rows can follow the canvas", () => {
+		render(
+			<ElementContextPanel
+				editorRef={{ current: null }}
+				anchor={{ top: 80, left: 80, width: 120, height: 40 }}
+				selector="section.hero"
+			/>,
+		)
+
+		expect(document.querySelector("[data-testid='mock-style-panel']")).toHaveAttribute(
+			"data-available-width",
+			"680",
+		)
 	})
 })

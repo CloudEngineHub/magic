@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { useState, type ReactNode } from "react"
+import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { StylePanel } from "../StylePanel"
 
@@ -175,32 +175,15 @@ vi.mock("../controls", () => ({
 			</MotionTag>
 		)
 	},
-	ContextMorePopover: ({
-		fontFamilySelector,
-		textContentField,
-	}: {
-		fontFamilySelector: ReactNode
-		textContentField: ReactNode
-	}) => {
-		const [open, setOpen] = useState(false)
-		return (
-			<div>
-				<button
-					type="button"
-					onClick={() => setOpen(true)}
-					data-testid="style-panel-more-styles-trigger"
-				>
-					stylePanel.moreStyles
-				</button>
-				{open ? (
-					<div data-testid="style-panel-more-styles-content">
-						{fontFamilySelector}
-						{textContentField}
-					</div>
-				) : null}
-			</div>
-		)
-	},
+	ContextMorePopover: ({ onReveal }: { onReveal?: () => void }) => (
+		<button
+			type="button"
+			onClick={() => onReveal?.()}
+			data-testid="style-panel-more-styles-trigger"
+		>
+			stylePanel.moreStyles
+		</button>
+	),
 	StylePopoverButton: ({
 		title,
 		children,
@@ -285,8 +268,8 @@ describe("StylePanel", () => {
 			/>,
 		)
 
-		expect(screen.getByText("stylePanel.domTree.expandPageStructure")).toBeInTheDocument()
-		expect(screen.getByLabelText("stylePanel.domTree.expandPageStructure")).toBeInTheDocument()
+		expect(screen.getByText("stylePanel.sidebar.expand")).toBeInTheDocument()
+		expect(screen.getByLabelText("stylePanel.sidebar.expand")).toBeInTheDocument()
 	})
 
 	it("should place toolbar-end actions before the page-structure toggle", () => {
@@ -406,8 +389,6 @@ describe("StylePanel", () => {
 				Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy()
 		expect(screen.getByTestId("style-panel-more-styles-trigger")).toBeInTheDocument()
-		fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
-		expect(screen.getByTestId("font-family-selector")).toBeInTheDocument()
 		expect(document.querySelectorAll('[data-slot="separator"]')).toHaveLength(4)
 	})
 
@@ -537,8 +518,6 @@ describe("StylePanel", () => {
 		expect(screen.queryByTestId("font-size-selector")).not.toBeInTheDocument()
 		expect(screen.getByTestId("font-size-adjuster")).toBeInTheDocument()
 		expect(screen.queryByTestId("text-format-tools")).not.toBeInTheDocument()
-
-		fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
 		expect(screen.queryByText("stylePanel.textContent")).not.toBeInTheDocument()
 	})
 
@@ -559,7 +538,6 @@ describe("StylePanel", () => {
 		} as never
 
 		render(<StylePanel editorRef={{ current: null }} variant="context" />)
-		fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
 
 		expect(screen.queryByText("stylePanel.textContent")).not.toBeInTheDocument()
 	})
@@ -587,14 +565,13 @@ describe("StylePanel", () => {
 		expect(screen.queryByTestId("text-format-tools")).not.toBeInTheDocument()
 	})
 
-	it("should render and commit text content from the more panel", async () => {
+	it("reveals the sidebar More Styles section from the context toolbar", () => {
+		const onRevealMoreStyles = vi.fn()
 		mockSelectedElement.current = {
 			selector: "p.copy",
 			tagName: "p",
-			isImageElement: false,
 			isTextElement: true,
 			hasDirectTextContent: true,
-			textContent: "Initial text",
 			computedStyles: {
 				fontWeight: "400",
 				fontStyle: "normal",
@@ -605,22 +582,17 @@ describe("StylePanel", () => {
 				height: "40px",
 			},
 		}
-		const updateTextContent = vi.fn().mockResolvedValue(undefined)
-		const editorRef = { current: { updateTextContent } } as never
 
-		render(<StylePanel editorRef={editorRef} variant="context" />)
+		render(
+			<StylePanel
+				editorRef={{ current: null }}
+				variant="context"
+				onRevealMoreStyles={onRevealMoreStyles}
+			/>,
+		)
 
 		fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
-		const input = screen.getByDisplayValue("Initial text")
-		fireEvent.change(input, { target: { value: "Updated text" } })
-		fireEvent.blur(input)
-
-		await waitFor(() => {
-			expect(updateTextContent).toHaveBeenCalledWith("p.copy", "Updated text")
-			expect(mockSelectElement).toHaveBeenCalledWith(
-				expect.objectContaining({ textContent: "Updated text" }),
-			)
-		})
+		expect(onRevealMoreStyles).toHaveBeenCalledTimes(1)
 	})
 
 	it("should expose the more styles entry in context mode", () => {

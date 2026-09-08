@@ -2,7 +2,17 @@ import { useMemo, type ReactNode } from "react"
 import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
 import type { ElementCapabilities } from "../capabilities"
 import type { ContextToolbarItemMotion, SelectedElementInfo } from "../types"
-import type { ContextToolGroup } from "../utils/contextToolbarPartition"
+import { getMetricControlWidth } from "../controls/metricControlWidth"
+import {
+	CONTEXT_TOOLBAR_ACTIONS_WIDTH,
+	CONTEXT_TOOLBAR_FORMATTING_WIDTH,
+	CONTEXT_TOOLBAR_ITEM_GAP,
+	CONTEXT_TOOLBAR_MORE_WIDTH,
+	getContextToolbarTypographyUnits,
+	getContextToolbarTypographyWidth,
+	type ContextToolGroup,
+	type ContextToolItem,
+} from "../utils/contextToolbarPartition"
 import {
 	BackgroundImageButton,
 	ColorPicker,
@@ -77,7 +87,7 @@ export function useContextToolbarGroups({
 		// 1. Actions group
 		list.push({
 			id: "actions",
-			estimatedWidth: 124,
+			estimatedWidth: CONTEXT_TOOLBAR_ACTIONS_WIDTH,
 			data: {
 				node: (
 					<ElementActions
@@ -91,12 +101,9 @@ export function useContextToolbarGroups({
 
 		// 2. Typography sizes group (fontSize, adjuster, lineHeight)
 		if (capabilities.showTypography || capabilities.showFontSizeAdjuster) {
-			const sizeNodes: ReactNode[] = []
-			let estimatedWidth = 0
-
-			if (capabilities.showFontSize) {
-				sizeNodes.push(
-					renderContextToolbarItem(
+			const typographyItems: ContextToolItem<{ node: ReactNode }>[] = []
+			const fontSizeNode = capabilities.showFontSize
+				? renderContextToolbarItem(
 						<FontSizeSelector
 							key="fontSize"
 							value={fontSize}
@@ -106,47 +113,65 @@ export function useContextToolbarGroups({
 							className="max-w-[220px] shrink-0"
 						/>,
 						"fontSize",
-					),
-				)
-				estimatedWidth += 88
-			}
+					)
+				: null
+			const fontAdjusterNode = capabilities.showFontSizeAdjuster ? (
+				<FontSizeAdjuster
+					key="fontAdjuster"
+					onAdjust={handleFontSizeAdjust}
+					disabled={isDisabled}
+					itemMotion={renderContextToolbarItem}
+				/>
+			) : null
 
-			if (capabilities.showFontSizeAdjuster) {
-				sizeNodes.push(
-					<FontSizeAdjuster
-						key="fontAdjuster"
-						onAdjust={handleFontSizeAdjust}
-						disabled={isDisabled}
-						itemMotion={renderContextToolbarItem}
-					/>,
-				)
-				estimatedWidth += 56
+			if (fontSizeNode || fontAdjusterNode) {
+				const fontSizeUnit = getContextToolbarTypographyUnits({
+					fontSize: capabilities.showFontSize ? fontSize : undefined,
+					showAdjuster: capabilities.showFontSizeAdjuster,
+				})[0]
+				typographyItems.push({
+					id: "fontSize",
+					estimatedWidth: fontSizeUnit?.estimatedWidth ?? 0,
+					data: {
+						node: (
+							<div className="flex items-center gap-1">
+								{fontSizeNode}
+								{fontAdjusterNode}
+							</div>
+						),
+					},
+				})
 			}
 
 			if (capabilities.showTypography) {
-				sizeNodes.push(
-					renderContextToolbarItem(
-						<LineHeightSelector
-							key="lineHeight"
-							value={lineHeight}
-							fontSize={fontSize}
-							onChange={setLineHeight}
-							onApply={handleLineHeightApply}
-							disabled={isDisabled}
-							className="max-w-[220px] shrink-0"
-						/>,
-						"lineHeight",
-					),
-				)
-				estimatedWidth += 88
+				typographyItems.push({
+					id: "lineHeight",
+					estimatedWidth: getMetricControlWidth(lineHeight),
+					data: {
+						node: renderContextToolbarItem(
+							<LineHeightSelector
+								key="lineHeight"
+								value={lineHeight}
+								fontSize={fontSize}
+								onChange={setLineHeight}
+								onApply={handleLineHeightApply}
+								disabled={isDisabled}
+								className="max-w-[220px] shrink-0"
+							/>,
+							"lineHeight",
+						),
+					},
+				})
 			}
 
 			list.push({
 				id: "typography",
-				estimatedWidth,
-				data: {
-					node: <div className="flex items-center gap-1">{sizeNodes}</div>,
-				},
+				estimatedWidth: getContextToolbarTypographyWidth({
+					fontSize: capabilities.showFontSize ? fontSize : undefined,
+					lineHeight: capabilities.showTypography ? lineHeight : undefined,
+					showAdjuster: capabilities.showFontSizeAdjuster,
+				}),
+				items: typographyItems,
 			})
 		}
 
@@ -154,7 +179,7 @@ export function useContextToolbarGroups({
 		if (capabilities.showTypography) {
 			list.push({
 				id: "formatting",
-				estimatedWidth: 116,
+				estimatedWidth: CONTEXT_TOOLBAR_FORMATTING_WIDTH,
 				data: {
 					node: (
 						<TextFormatTools
@@ -194,50 +219,57 @@ export function useContextToolbarGroups({
 
 		// 5. Appearance tools (Color + Background Image)
 		if (capabilities.showTypography || showBackgroundImageAction) {
-			const appearanceNodes: ReactNode[] = []
-			let estimatedWidth = 0
+			const appearanceItems: ContextToolItem<{ node: ReactNode }>[] = []
 
 			if (capabilities.showTypography) {
-				appearanceNodes.push(
-					renderContextToolbarItem(
-						<ColorPicker
-							key="color"
-							value={currentColor}
-							onChangeComplete={(value) => handleStyleChange("color", value)}
-							disabled={isDisabled}
-						/>,
-						"color",
-					),
-				)
-				estimatedWidth += 32
+				appearanceItems.push({
+					id: "color",
+					estimatedWidth: 32,
+					data: {
+						node: renderContextToolbarItem(
+							<ColorPicker
+								key="color"
+								value={currentColor}
+								onChangeComplete={(value) => handleStyleChange("color", value)}
+								disabled={isDisabled}
+							/>,
+							"color",
+						),
+					},
+				})
 			}
 
 			if (showBackgroundImageAction) {
-				appearanceNodes.push(
-					<BackgroundImageButton
-						key="bgImage"
-						selectedElement={selectedElement}
-						editorRef={editorRef}
-						disabled={isDisabled}
-						itemMotion={renderContextToolbarItem}
-					/>,
-				)
-				estimatedWidth += 32
+				appearanceItems.push({
+					id: "bgImage",
+					estimatedWidth: 32,
+					data: {
+						node: (
+							<BackgroundImageButton
+								key="bgImage"
+								selectedElement={selectedElement}
+								editorRef={editorRef}
+								disabled={isDisabled}
+								itemMotion={renderContextToolbarItem}
+							/>
+						),
+					},
+				})
 			}
 
 			list.push({
 				id: "appearance",
-				estimatedWidth,
-				data: {
-					node: <div className="flex items-center gap-1">{appearanceNodes}</div>,
-				},
+				estimatedWidth:
+					appearanceItems.reduce((sum, item) => sum + item.estimatedWidth, 0) +
+					Math.max(0, appearanceItems.length - 1) * CONTEXT_TOOLBAR_ITEM_GAP,
+				items: appearanceItems,
 			})
 		}
 
 		// 6. More styles entry
 		list.push({
 			id: "more",
-			estimatedWidth: 76,
+			estimatedWidth: CONTEXT_TOOLBAR_MORE_WIDTH,
 			data: {
 				node: renderContextToolbarItem(contextMorePopover),
 			},

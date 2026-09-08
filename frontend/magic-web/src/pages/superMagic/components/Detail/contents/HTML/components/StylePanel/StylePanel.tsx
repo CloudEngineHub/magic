@@ -45,9 +45,13 @@ const FullStylePanel = observer(function FullStylePanel({
 	className,
 	toolbarEndRef,
 	variant = "full",
+	sidebarOpen,
+	onToggleSidebar,
 	domTreeOpen = false,
 	onToggleDomTree,
 }: StylePanelProps) {
+	const isSidebarOpen = sidebarOpen ?? domTreeOpen
+	const toggleSidebar = onToggleSidebar ?? onToggleDomTree
 	const { t } = useTranslation("super")
 	const { selectedElement, updateStyle, updateBatchStyles } = useSelectedElement(editorRef)
 	const stylePanelStore = useStylePanelStore()
@@ -658,27 +662,27 @@ const FullStylePanel = observer(function FullStylePanel({
 					/>
 				) : null}
 
-				{onToggleDomTree ? (
+				{toggleSidebar ? (
 					<TooltipPrimitive.Root>
 						<TooltipTrigger asChild>
 							<Button
 								data-testid="html-editor-dom-tree-toggle-button"
-								variant={domTreeOpen ? "secondary" : "ghost"}
+								variant={isSidebarOpen ? "secondary" : "ghost"}
 								size="sm"
 								className="ml-1 h-8 shrink-0 gap-1 px-2"
-								onClick={onToggleDomTree}
+								onClick={toggleSidebar}
 								aria-label={t(
-									domTreeOpen
-										? "stylePanel.domTree.collapsePageStructure"
-										: "stylePanel.domTree.expandPageStructure",
+									isSidebarOpen
+										? "stylePanel.sidebar.collapse"
+										: "stylePanel.sidebar.expand",
 								)}
 							>
 								<PanelRight className="h-4 w-4" />
 								<span>
 									{t(
-										domTreeOpen
-											? "stylePanel.domTree.collapsePageStructure"
-											: "stylePanel.domTree.expandPageStructure",
+										isSidebarOpen
+											? "stylePanel.sidebar.collapse"
+											: "stylePanel.sidebar.expand",
 									)}
 								</span>
 							</Button>
@@ -687,9 +691,9 @@ const FullStylePanel = observer(function FullStylePanel({
 							className={TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP}
 						>
 							{t(
-								domTreeOpen
-									? "stylePanel.domTree.collapsePageStructure"
-									: "stylePanel.domTree.expandPageStructure",
+								isSidebarOpen
+									? "stylePanel.sidebar.collapse"
+									: "stylePanel.sidebar.expand",
 							)}
 						</TooltipContent>
 					</TooltipPrimitive.Root>
@@ -716,6 +720,8 @@ export const StylePanel = observer(function StylePanel(props: StylePanelProps) {
 				contextToolbarOpen={props.contextToolbarOpen}
 				selectionRect={props.selectionRect}
 				boundaryRef={props.boundaryRef}
+				availableWidth={props.availableWidth}
+				onRevealMoreStyles={props.onRevealMoreStyles}
 			/>
 		)
 	}

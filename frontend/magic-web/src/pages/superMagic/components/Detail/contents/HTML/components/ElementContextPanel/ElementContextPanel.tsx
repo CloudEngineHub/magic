@@ -19,6 +19,7 @@ interface Props {
 	open?: boolean
 	/** The canvas column bounds. The DOM tree is rendered outside this area. */
 	boundaryRef?: React.RefObject<HTMLElement | null>
+	onRevealMoreStyles?: () => void
 }
 
 const CONTEXT_TOOLBAR_MAX_WIDTH = 680
@@ -61,6 +62,7 @@ export function ElementContextPanel({
 	disabled,
 	open = true,
 	boundaryRef,
+	onRevealMoreStyles,
 }: Props) {
 	const panelRef = useRef<HTMLDivElement>(null)
 	const toolbarContentRef = useRef<HTMLDivElement>(null)
@@ -189,7 +191,7 @@ export function ElementContextPanel({
 			// overflow-x:auto would compute overflow-y to auto and show a
 			// first-frame scrollbar while child motion still uses translate-y.
 			className={cn(
-				"group/context-toolbar pointer-events-none fixed box-border flex h-auto w-fit max-w-[calc(100vw_-_16px)] translate-y-2 scale-[0.99] items-start overflow-visible rounded-lg border border-border/60 bg-card/95 p-1 opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.14)] blur-[2px] backdrop-blur transition-[transform,opacity,filter] [transition-duration:160ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[open=true]:pointer-events-auto data-[open=true]:translate-y-0 data-[open=true]:scale-100 data-[open=true]:opacity-100 data-[open=true]:blur-0 motion-reduce:transition-none",
+				"group/context-toolbar pointer-events-none fixed box-border flex h-auto w-fit max-w-[calc(100vw_-_16px)] translate-y-2 scale-[0.99] items-start overflow-visible rounded-lg border border-border/60 bg-card/95 p-1.5 opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.14)] blur-[2px] backdrop-blur transition-[transform,opacity,filter] [transition-duration:160ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[open=true]:pointer-events-auto data-[open=true]:translate-y-0 data-[open=true]:scale-100 data-[open=true]:opacity-100 data-[open=true]:blur-0 motion-reduce:transition-none",
 				TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.CONTEXT_PANEL,
 			)}
 			data-open={isOpen}
@@ -207,6 +209,8 @@ export function ElementContextPanel({
 					contextToolbarOpen={isOpen}
 					selectionRect={anchor}
 					boundaryRef={boundaryRef}
+					availableWidth={position.maxWidth}
+					onRevealMoreStyles={onRevealMoreStyles}
 				/>
 			</div>
 		</div>,

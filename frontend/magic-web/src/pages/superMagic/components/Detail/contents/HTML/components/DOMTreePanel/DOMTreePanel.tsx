@@ -9,10 +9,10 @@ import {
 	ArrowUp,
 	RefreshCw,
 	GripVertical,
-	Layers3,
 	Search,
 	X,
 } from "lucide-react"
+import { createPortal } from "react-dom"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import {
@@ -35,6 +35,7 @@ import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
 import { DOMTreeRow, type DOMTreeRowHandlers } from "./DOMTreeRow"
 import { DOMTreeVirtualList } from "./DOMTreeVirtualList"
 import { ActionTooltip } from "./DOMTreeRowControls"
+import { useEditorSidebarSlots } from "../EditorSidebar/sidebarSlots"
 import {
 	DOM_TREE_ROW_HEIGHT,
 	DOM_TREE_VIRTUAL_INITIAL_RECT,
@@ -58,7 +59,6 @@ import {
 interface Props {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
 	visible: boolean
-	onClose?: () => void
 	selectedSelector?: string
 	contentRevision?: number
 }
@@ -92,20 +92,14 @@ function createDragPreview(label: string): HTMLElement {
 	return preview
 }
 
-function DOMTreePanelInner({
-	editorRef,
-	visible,
-	onClose,
-	selectedSelector,
-	contentRevision = 0,
-}: Props) {
+function DOMTreePanelInner({ editorRef, visible, selectedSelector, contentRevision = 0 }: Props) {
 	const { t } = useTranslation("super")
+	const sidebarSlots = useEditorSidebarSlots()
 	const [tree, setTree] = useState<DomTreeResponse | null>(null)
 	const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading")
 	const [expanded, setExpanded] = useState<Set<string>>(new Set())
 	const [searchQuery, setSearchQuery] = useState("")
 	const [activeSearchIndex, setActiveSearchIndex] = useState(0)
-	const [width, setWidth] = useState(360)
 	const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null)
 	const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
 	const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
@@ -116,7 +110,6 @@ function DOMTreePanelInner({
 	const [invalidDropTargetId, setInvalidDropTargetId] = useState<string | null>(null)
 	const [actionError, setActionError] = useState<string | null>(null)
 	const [isBusy, setIsBusy] = useState(false)
-	const [isResizing, setIsResizing] = useState(false)
 	const [textInsertRequest, setTextInsertRequest] = useState<TextInsertRequest | null>(null)
 	const [textInput, setTextInput] = useState("")
 	const [openAddMenuKey, setOpenAddMenuKey] = useState<string | null>(null)
@@ -1008,34 +1001,6 @@ function DOMTreePanelInner({
 		clearDragState()
 	}
 
-	const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
-		event.preventDefault()
-		interactionLockedRef.current = true
-		const resizeHandle = event.currentTarget
-		resizeHandle.setPointerCapture?.(event.pointerId)
-		setIsResizing(true)
-		const startX = event.clientX
-		const startWidth = width
-		const move = (moveEvent: PointerEvent) => {
-			setWidth(Math.min(440, Math.max(260, startWidth + startX - moveEvent.clientX)))
-		}
-		const stop = () => {
-			interactionLockedRef.current = false
-			setIsResizing(false)
-			if (resizeHandle.hasPointerCapture?.(event.pointerId)) {
-				resizeHandle.releasePointerCapture?.(event.pointerId)
-			}
-			window.removeEventListener("pointermove", move)
-			window.removeEventListener("pointerup", stop)
-			window.removeEventListener("pointercancel", stop)
-			window.removeEventListener("blur", stop)
-		}
-		window.addEventListener("pointermove", move)
-		window.addEventListener("pointerup", stop)
-		window.addEventListener("pointercancel", stop)
-		window.addEventListener("blur", stop)
-	}
-
 	const getDragStatus = () => {
 		if (!draggedNode) return t("stylePanel.domTree.dragHint")
 		if (invalidDropTarget) {
@@ -1247,106 +1212,74 @@ function DOMTreePanelInner({
 		</DOMTreeRow>
 	)
 	if (!visible) return null
+	const nodeCountBadge =
+		tree && loadState === "ready" ? (
+			<span className="shrink-0 rounded-md border border-border/80 bg-muted/55 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+				{t("stylePanel.domTree.nodeCount", { count: nodeMap.size })}
+			</span>
+		) : null
+	const treeActions = (
+		<>
+			<ActionTooltip
+				label={t(
+					allNodesExpanded
+						? "stylePanel.domTree.collapseAll"
+						: "stylePanel.domTree.expandAll",
+				)}
+			>
+				<Button
+					data-testid="html-dom-tree-expand-toggle-button"
+					size="icon"
+					variant="ghost"
+					className="h-6 w-6 shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+					disabled={!tree || loadState !== "ready" || Boolean(draggedNodeId)}
+					onClick={allNodesExpanded ? collapseAll : expandAll}
+					aria-label={t(
+						allNodesExpanded
+							? "stylePanel.domTree.collapseAll"
+							: "stylePanel.domTree.expandAll",
+					)}
+				>
+					{allNodesExpanded ? (
+						<ChevronsUpDown className="h-3.5 w-3.5" />
+					) : (
+						<ChevronsDownUp className="h-3.5 w-3.5" />
+					)}
+				</Button>
+			</ActionTooltip>
+			<ActionTooltip label={t("stylePanel.domTree.refresh")}>
+				<Button
+					data-testid="html-dom-tree-refresh-button"
+					size="icon"
+					variant="ghost"
+					className="h-6 w-6 shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+					disabled={loadState === "loading" || Boolean(draggedNodeId)}
+					onClick={() => void refresh()}
+					aria-label={t("stylePanel.domTree.refresh")}
+				>
+					<RefreshCw className="h-3.5 w-3.5" />
+				</Button>
+			</ActionTooltip>
+		</>
+	)
 	return (
 		<TooltipProvider delayDuration={200}>
-			<aside
-				className="relative flex h-full min-h-0 min-w-[260px] max-w-[520px] shrink-0 flex-col overflow-hidden border-l border-border/80 bg-background/95 shadow-[-10px_0_24px_-18px_rgba(15,23,42,0.2)] backdrop-blur supports-[backdrop-filter]:bg-background/85"
-				style={{
-					width,
-					minWidth: "min(260px, 100%)",
-					maxWidth: "min(520px, 100%)",
-				}}
+			<div
+				className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background/95"
 				data-testid="html-dom-tree-panel"
 				aria-label={t("stylePanel.domTree.title")}
 				aria-busy={isBusy || loadState === "loading"}
-				data-resizing={isResizing ? "true" : undefined}
 			>
-				<ActionTooltip label={t("stylePanel.domTree.resize")} side="left">
-					<div
-						className={cn(
-							"group absolute inset-y-0 left-0 z-30 w-1 cursor-col-resize bg-transparent transition-colors hover:bg-primary/60",
-							isResizing && "bg-primary",
-						)}
-						onPointerDown={startResize}
-						data-testid="html-dom-tree-resize-handle"
-						role="separator"
-						aria-label={t("stylePanel.domTree.resize")}
-						aria-valuemin={260}
-						aria-valuemax={520}
-						aria-valuenow={width}
-					/>
-				</ActionTooltip>
-				<div className="flex h-11 shrink-0 items-center gap-2 border-b border-border/80 bg-card/95 px-3 text-sm font-medium">
-					<div className="flex min-w-0 flex-1 items-center gap-2">
-						<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/10 text-primary">
-							<Layers3 className="h-4 w-4" />
-						</span>
-						<div className="flex min-w-0 items-center gap-2">
-							<span className="min-w-0 truncate text-[13px] font-semibold tracking-tight">
-								{t("stylePanel.domTree.title")}
-							</span>
-							{tree && loadState === "ready" ? (
-								<span className="shrink-0 rounded-md border border-border/80 bg-muted/55 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
-									{t("stylePanel.domTree.nodeCount", { count: nodeMap.size })}
-								</span>
-							) : null}
-						</div>
-					</div>
-					<ActionTooltip
-						label={t(
-							allNodesExpanded
-								? "stylePanel.domTree.collapseAll"
-								: "stylePanel.domTree.expandAll",
-						)}
-					>
-						<Button
-							data-testid="html-dom-tree-expand-toggle-button"
-							size="icon"
-							variant="ghost"
-							className="h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-							disabled={!tree || loadState !== "ready" || Boolean(draggedNodeId)}
-							onClick={allNodesExpanded ? collapseAll : expandAll}
-							aria-label={t(
-								allNodesExpanded
-									? "stylePanel.domTree.collapseAll"
-									: "stylePanel.domTree.expandAll",
-							)}
-						>
-							{allNodesExpanded ? (
-								<ChevronsUpDown className="h-3.5 w-3.5" />
-							) : (
-								<ChevronsDownUp className="h-3.5 w-3.5" />
-							)}
-						</Button>
-					</ActionTooltip>
-					<ActionTooltip label={t("stylePanel.domTree.refresh")}>
-						<Button
-							data-testid="html-dom-tree-refresh-button"
-							size="icon"
-							variant="ghost"
-							className="h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-							disabled={
-								loadState === "loading" || Boolean(draggedNodeId) || isResizing
-							}
-							onClick={() => void refresh()}
-							aria-label={t("stylePanel.domTree.refresh")}
-						>
-							<RefreshCw className="h-3.5 w-3.5" />
-						</Button>
-					</ActionTooltip>
-					<ActionTooltip label={t("stylePanel.domTree.close")}>
-						<button
-							data-testid="html-dom-tree-close-button"
-							type="button"
-							onClick={onClose}
-							aria-label={t("stylePanel.domTree.close")}
-							className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-						>
-							<X className="h-3.5 w-3.5" />
-						</button>
-					</ActionTooltip>
-				</div>
-				<div className="relative z-40 flex min-h-10 shrink-0 items-center border-b border-border/70 bg-background/95 px-3 py-1.5">
+				<DomTreeChrome
+					inSidebar={sidebarSlots !== null}
+					structureChrome={sidebarSlots?.structureChrome ?? null}
+					nodeCountBadge={nodeCountBadge}
+					treeActions={treeActions}
+				/>
+				<div
+					className="relative z-10 flex min-h-10 shrink-0 items-center border-b border-border/70 bg-background/95 px-3 py-1.5"
+					data-testid="dom-tree-search-bar"
+				>
 					<Search className="pointer-events-none absolute left-5 h-3.5 w-3.5 text-muted-foreground" />
 					<Input
 						value={searchQuery}
@@ -1637,8 +1570,41 @@ function DOMTreePanelInner({
 						</DialogFooter>
 					</DialogContent>
 				</Dialog>
-			</aside>
+			</div>
 		</TooltipProvider>
+	)
+}
+
+function DomTreeChrome({
+	inSidebar,
+	structureChrome,
+	nodeCountBadge,
+	treeActions,
+}: {
+	inSidebar: boolean
+	structureChrome: HTMLElement | null
+	nodeCountBadge: React.ReactNode
+	treeActions: React.ReactNode
+}) {
+	if (inSidebar) {
+		return structureChrome
+			? createPortal(
+					<>
+						{nodeCountBadge}
+						{treeActions}
+					</>,
+					structureChrome,
+				)
+			: null
+	}
+	return (
+		<div
+			className="flex h-9 shrink-0 items-center justify-end gap-1 border-b border-border/80 bg-card/95 px-2"
+			data-testid="html-dom-tree-local-chrome"
+		>
+			{nodeCountBadge}
+			{treeActions}
+		</div>
 	)
 }
 

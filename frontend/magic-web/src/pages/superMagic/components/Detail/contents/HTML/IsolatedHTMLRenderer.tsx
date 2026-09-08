@@ -59,6 +59,9 @@ import { StylePanelStoreProvider } from "./iframe-bridge/contexts/StylePanelCont
 import { DevConsolePanel } from "./components/DevConsole"
 import { ElementContextPanel } from "./components/ElementContextPanel"
 import { DOMTreePanel } from "./components/DOMTreePanel"
+import { EditorSidebar } from "./components/EditorSidebar"
+import { shouldCollapseStylesOnBlur } from "./components/EditorSidebar/sidebarSelection"
+import { MoreStylesPanel } from "./components/StylePanel/MoreStylesPanel"
 import type { DevConsoleLayout } from "./components/DevConsole/types"
 import { useDevConsole } from "./hooks/useDevConsole"
 import { platformKey } from "@/utils/storage"
@@ -582,13 +585,16 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		}, [])
 
 		const [iframeLoaded, setIframeLoaded] = useState(false)
-		const [domTreeOpen, setDomTreeOpen] = useState(false)
+		const [sidebarOpen, setSidebarOpen] = useState(false)
+		const [structureExpanded, setStructureExpanded] = useState(true)
+		const [stylesExpanded, setStylesExpanded] = useState(true)
 		const [domTreeRevision, setDomTreeRevision] = useState(0)
-		const handleToggleDomTree = useCallback(() => {
-			setDomTreeOpen((open) => !open)
+		const handleToggleSidebar = useCallback(() => {
+			setSidebarOpen((open) => !open)
 		}, [])
-		const handleCloseDomTree = useCallback(() => {
-			setDomTreeOpen(false)
+		const handleRevealMoreStyles = useCallback(() => {
+			setSidebarOpen(true)
+			setStylesExpanded(true)
 		}, [])
 		const [contentInjected, setContentInjected] = useState(false) // 标记内容是否已注入到 iframe
 		const [processedSourceCode, setProcessedSourceCode] = useState<string | undefined>(
@@ -619,6 +625,15 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		} | null>(null)
 		const [isContextPanelDismissed, setIsContextPanelDismissed] = useState(false)
 		const selectedElementSelector = selectedElementViewportRect?.selector
+		const previousSelectedSelectorRef = useRef<string | undefined>(undefined)
+
+		useEffect(() => {
+			const nextSelector = selectedElementSelector
+			if (shouldCollapseStylesOnBlur(previousSelectedSelectorRef.current, nextSelector)) {
+				setStylesExpanded(false)
+			}
+			previousSelectedSelectorRef.current = nextSelector
+		}, [selectedElementSelector])
 
 		// Keep the selected element and edit mode when the user dismisses the panel.
 		// A different selection starts a fresh contextual-panel session.
@@ -2505,8 +2520,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 									variant="global"
 									editorRef={editorRef as React.RefObject<HTMLEditorV2Ref>}
 									disabled={isSaving}
-									domTreeOpen={domTreeOpen}
-									onToggleDomTree={handleToggleDomTree}
+									sidebarOpen={sidebarOpen}
+									onToggleSidebar={handleToggleSidebar}
 									toolbarEndRef={toolbarEndRef}
 									className={cn(
 										"!w-auto flex-shrink-0 border-b border-border/70 bg-card",
@@ -2520,6 +2535,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 									open={!isContextPanelDismissed}
 									disabled={isSaving}
 									boundaryRef={canvasViewportRef}
+									onRevealMoreStyles={handleRevealMoreStyles}
 								/>
 							</>
 						)}
@@ -2808,13 +2824,26 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						{sandboxType === "iframe" &&
 						isEditMode &&
 						isVisible !== false &&
-						domTreeOpen ? (
-							<DOMTreePanel
-								editorRef={editorRef as React.RefObject<HTMLEditorV2Ref>}
-								visible
-								selectedSelector={selectedElementSelector}
-								contentRevision={domTreeRevision}
-								onClose={handleCloseDomTree}
+						sidebarOpen ? (
+							<EditorSidebar
+								structureExpanded={structureExpanded}
+								stylesExpanded={stylesExpanded}
+								onStructureExpandedChange={setStructureExpanded}
+								onStylesExpandedChange={setStylesExpanded}
+								structure={
+									<DOMTreePanel
+										editorRef={editorRef as React.RefObject<HTMLEditorV2Ref>}
+										visible
+										selectedSelector={selectedElementSelector}
+										contentRevision={domTreeRevision}
+									/>
+								}
+								styles={
+									<MoreStylesPanel
+										editorRef={editorRef as React.RefObject<HTMLEditorV2Ref>}
+										disabled={isSaving}
+									/>
+								}
 							/>
 						) : null}
 					</div>

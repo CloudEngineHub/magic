@@ -140,9 +140,15 @@ export interface StylePanelProps {
 
 	/** Mount node for portaled toolbar actions (e.g. save), shown at far right */
 	toolbarEndRef?: Ref<HTMLDivElement | null>
-	/** Whether the DOM tree panel is open in the HTML editor. */
+	/** Whether the editor sidebar is open. */
+	sidebarOpen?: boolean
+	/** Toggle the editor sidebar from the global toolbar. */
+	onToggleSidebar?: () => void
+	/** Open the sidebar and show the More Styles section. */
+	onRevealMoreStyles?: () => void
+	/** @deprecated Use sidebarOpen. */
 	domTreeOpen?: boolean
-	/** Toggle the DOM tree panel from the global toolbar. */
+	/** @deprecated Use onToggleSidebar. */
 	onToggleDomTree?: () => void
 
 	/** Whether the element inspector is currently active */
@@ -153,6 +159,8 @@ export interface StylePanelProps {
 	selectionRect?: ElementRect | null
 	/** Canvas bounds used to keep floating style popovers in view. */
 	boundaryRef?: RefObject<HTMLElement | null>
+	/** Visible canvas width used to wrap context toolbar rows. */
+	availableWidth?: number
 
 	/** Called when user clicks the inspector button to toggle inspector mode */
 	onStartInspector?: () => void
