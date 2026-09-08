@@ -4,20 +4,20 @@ import type { SuperMagicAgentOrderItem } from "@/apis/modules/superMagic"
 import { MentionItemType, type AgentMentionData, type MentionItem } from "../../../../types"
 
 function mapDigitalEmployeeToMention(item: SuperMagicAgentOrderItem): MentionItem {
-	const agentCode = item.code?.trim() || item.id
+	const agentId = item.id.trim()
 	const avatar = item.icon?.url?.trim() || ""
 
 	return {
-		id: agentCode,
+		id: agentId,
 		type: MentionItemType.AGENT,
-		name: item.name || agentCode,
+		name: item.name || agentId,
 		icon: avatar,
 		description: item.description,
 		hasChildren: false,
 		isFolder: false,
 		data: {
-			agent_id: agentCode,
-			agent_name: item.name || agentCode,
+			agent_id: agentId,
+			agent_name: item.name || agentId,
 			agent_avatar: avatar,
 			agent_description: item.description,
 			agent_source: "digital_employee",
@@ -29,13 +29,13 @@ function mergeDigitalEmployees(
 	frequent: SuperMagicAgentOrderItem[],
 	all: SuperMagicAgentOrderItem[],
 ) {
-	const seenAgentCodes = new Set<string>()
+	const seenAgentIds = new Set<string>()
 
 	return [...frequent, ...all].filter((item) => {
-		const agentCode = item.code?.trim() || item.id
-		if (!agentCode || seenAgentCodes.has(agentCode)) return false
+		const agentId = item.id.trim()
+		if (!agentId || seenAgentIds.has(agentId)) return false
 
-		seenAgentCodes.add(agentCode)
+		seenAgentIds.add(agentId)
 		return true
 	})
 }
