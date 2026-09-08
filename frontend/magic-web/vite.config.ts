@@ -211,6 +211,13 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 					replacement: resolve(__dirname, "packages/html-sandbox/src/utils/safeUrl.ts"),
 				},
 				{
+					find: "@dtyq/html-sandbox/utils/textContent",
+					replacement: resolve(
+						__dirname,
+						"packages/html-sandbox/src/utils/textContent.ts",
+					),
+				},
+				{
 					find: "@dtyq/html-sandbox/telemetry",
 					replacement: resolve(__dirname, "packages/html-sandbox/src/telemetry/index.ts"),
 				},

@@ -60,6 +60,58 @@ describe("setElementTextContent", () => {
 		expect(element.textContent).toBe("Hi")
 		expect(element.querySelector("strong")).toBeNull()
 	})
+
+	it("keeps an empty icon element when updating text", () => {
+		const element = document.createElement("div")
+		const icon = document.createElement("i")
+		icon.className = "icon"
+		element.append(icon, "Submit")
+
+		setElementTextContent(element, "Save")
+
+		expect(element.querySelector("i")).toBe(icon)
+		expect(element.textContent).toBe("Save")
+	})
+
+	it("keeps an empty span icon when updating text", () => {
+		const element = document.createElement("button")
+		const icon = document.createElement("span")
+		icon.className = "icon"
+		element.append(icon, "Open")
+
+		setElementTextContent(element, "Close")
+
+		expect(element.querySelector("span")).toBe(icon)
+		expect(element.textContent).toBe("Close")
+	})
+
+	it("does not overwrite style text when the container has no copy", () => {
+		const element = document.createElement("div")
+		const style = document.createElement("style")
+		style.textContent = ".card { color: red }"
+		const image = document.createElement("img")
+		element.append(style, image)
+
+		setElementTextContent(element, "Title")
+
+		expect(style.textContent).toBe(".card { color: red }")
+		expect(element.querySelector("img")).toBe(image)
+		expect(element.textContent).toContain("Title")
+	})
+
+	it("does not overwrite script text when falling back to descendants", () => {
+		const element = document.createElement("div")
+		const script = document.createElement("script")
+		script.textContent = "window.__ready = true"
+		const title = document.createElement("h2")
+		title.textContent = "Original"
+		element.append(script, title)
+
+		setElementTextContent(element, "Updated")
+
+		expect(script.textContent).toBe("window.__ready = true")
+		expect(title.textContent).toBe("Updated")
+	})
 })
 
 describe("getEditableTextContent", () => {
@@ -77,6 +129,15 @@ describe("getEditableTextContent", () => {
 		const subtitle = document.createElement("p")
 		subtitle.textContent = "Subtitle"
 		element.append(subtitle)
+
+		expect(getEditableTextContent(element)).toBe("Title")
+	})
+
+	it("returns direct text when the container only has an empty icon", () => {
+		const element = document.createElement("div")
+		const icon = document.createElement("i")
+		icon.className = "icon"
+		element.append(icon, "Title")
 
 		expect(getEditableTextContent(element)).toBe("Title")
 	})

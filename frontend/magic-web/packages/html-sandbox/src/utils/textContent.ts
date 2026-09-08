@@ -24,10 +24,26 @@ const PHRASING_TAGS = new Set([
 	"wbr",
 ])
 
-function hasNonPhrasingDescendant(element: Element): boolean {
-	return Array.from(element.querySelectorAll("*")).some(
-		(node) => !PHRASING_TAGS.has(node.tagName.toLowerCase()),
-	)
+const SKIPPED_TEXT_HOSTS = new Set(["noscript", "script", "style", "textarea"])
+
+function isDecorativePhrasing(node: Element): boolean {
+	const tag = node.tagName.toLowerCase()
+	if (tag === "br" || !PHRASING_TAGS.has(tag)) return false
+	return !node.textContent?.trim()
+}
+
+function shouldPreserveElementChildren(element: Element): boolean {
+	return Array.from(element.querySelectorAll("*")).some((node) => {
+		const tag = node.tagName.toLowerCase()
+		if (SKIPPED_TEXT_HOSTS.has(tag)) return true
+		if (!PHRASING_TAGS.has(tag)) return true
+		return isDecorativePhrasing(node)
+	})
+}
+
+function isSkippedTextHost(node: Node): boolean {
+	const parent = node.parentElement
+	return Boolean(parent?.closest("noscript, script, style, textarea"))
 }
 
 function getDirectTextNodes(element: Element): Text[] {
@@ -46,7 +62,7 @@ function findFirstSignificantTextNode(element: Element): Text | null {
 	const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT)
 	let node = walker.nextNode()
 	while (node) {
-		if (node.textContent?.trim()) return node as Text
+		if (node.textContent?.trim() && !isSkippedTextHost(node)) return node as Text
 		node = walker.nextNode()
 	}
 	return null
@@ -54,13 +70,13 @@ function findFirstSignificantTextNode(element: Element): Text | null {
 
 /** Text shown/edited in the style panel for this element. */
 export function getEditableTextContent(element: Element): string {
-	if (!hasNonPhrasingDescendant(element)) return element.textContent ?? ""
+	if (!shouldPreserveElementChildren(element)) return element.textContent ?? ""
 	return getDirectTextContent(element)
 }
 
 /** Replace editable text without removing preserved element children. */
 export function setElementTextContent(element: Element, nextContent: string): void {
-	if (!hasNonPhrasingDescendant(element)) {
+	if (!shouldPreserveElementChildren(element)) {
 		element.textContent = nextContent
 		return
 	}

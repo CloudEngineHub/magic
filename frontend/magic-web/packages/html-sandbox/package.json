@@ -42,6 +42,10 @@
 			"types": "./src/utils/safeUrl.ts",
 			"import": "./dist/utils/safeUrl.js"
 		},
+		"./utils/textContent": {
+			"types": "./src/utils/textContent.ts",
+			"import": "./dist/utils/textContent.js"
+		},
 		"./telemetry": {
 			"types": "./src/telemetry/index.ts",
 			"import": "./dist/telemetry/index.js"
