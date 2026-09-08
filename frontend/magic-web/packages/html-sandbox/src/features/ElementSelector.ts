@@ -352,6 +352,10 @@ export class ElementSelector {
 		}
 	}
 
+	private isDocumentRoot(element: EventTarget | HTMLElement | null): boolean {
+		return element === document.body || element === document.documentElement
+	}
+
 	/**
 	 * Find the actual selectable element (handle special containers like ECharts)
 	 * If element is inside a special container (e.g. ECharts), return the container
@@ -669,7 +673,7 @@ export class ElementSelector {
 	}
 
 	selectElement(element: HTMLElement, multiSelect = false) {
-		if (!element || element === document.documentElement || element === document.body) {
+		if (!element || this.isDocumentRoot(element)) {
 			return
 		}
 
@@ -728,7 +732,7 @@ export class ElementSelector {
 	 * Show a hover highlight requested by the host UI without changing selection.
 	 */
 	hoverElement(element: HTMLElement): void {
-		if (!element || element === document.documentElement || element === document.body) return
+		if (!element || this.isDocumentRoot(element)) return
 		if (isInjectedElement(element)) return
 
 		this.hoveredElement = element
@@ -832,7 +836,7 @@ export class ElementSelector {
 			if (!this.enabled) return
 
 			const target = e.target as HTMLElement
-			if (!target || target === document.body || target === document.documentElement) {
+			if (!target || this.isDocumentRoot(target)) {
 				return
 			}
 
@@ -902,6 +906,15 @@ export class ElementSelector {
 
 				// Find the actual selectable element (might be a container like ECharts)
 				const selectableElement = this.findSelectableElement(target)
+
+				// Clicks on the page gutters hit html/body. Those are not
+				// selectable, so treat them as a request to clear selection.
+				if (this.isDocumentRoot(target) || this.isDocumentRoot(selectableElement)) {
+					if (this.selectedElements.size > 0) {
+						this.deselectElement()
+					}
+					return
+				}
 
 				if (e.shiftKey) {
 					// Shift + Click: Multi-select mode

@@ -537,6 +537,28 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it.each([
+			["body", () => document.body],
+			["html", () => document.documentElement],
+		])("should deselect the current element when clicking %s", (_label, getTarget) => {
+			container.innerHTML = "<div id='selected-block'>Content</div>"
+			const element = container.querySelector("#selected-block") as HTMLElement
+
+			selector.enable()
+			selector.selectElement(element)
+			sendEventSpy.mockClear()
+
+			const event = new MouseEvent("click", {
+				bubbles: true,
+				cancelable: true,
+			})
+			Object.defineProperty(event, "target", { value: getTarget(), enumerable: true })
+			document.dispatchEvent(event)
+
+			expect(selector.getSelectedCount()).toBe(0)
+			expect(sendEventSpy).toHaveBeenCalledWith("ELEMENTS_DESELECTED", {})
+		})
+
 		it("should not select element on click when text is selected", () => {
 			container.innerHTML =
 				'<div id="text-element" contenteditable="true">Some text content</div><div id="other-element">Other element</div>'
