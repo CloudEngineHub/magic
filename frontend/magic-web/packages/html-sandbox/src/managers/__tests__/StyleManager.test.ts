@@ -1097,6 +1097,20 @@ describe("StyleManager", () => {
 			expect(element.textContent).toBe("新的标题")
 		})
 
+		it("restores nested-only copy on undo without dropping media", async () => {
+			container.innerHTML = "<div id='test'><img id='icon' src='icon.png'><h2>Original</h2></div>"
+			const element = container.querySelector("#test") as HTMLElement
+			const title = container.querySelector("h2") as HTMLHeadingElement
+
+			await styleManager.updateTextContent("div#test", "Updated")
+			expect(title.textContent).toBe("Updated")
+
+			await styleManager.undo()
+
+			expect(element.querySelector("#icon")).not.toBeNull()
+			expect(title.textContent).toBe("Original")
+		})
+
 		it("restores mixed-container text on undo without dropping the image", async () => {
 			container.innerHTML =
 				"<div id='test'><img id='icon' src='icon.png'>从低渗透率盆地读向高增长脊线</div>"

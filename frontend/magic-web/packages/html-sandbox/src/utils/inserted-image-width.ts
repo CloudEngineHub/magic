@@ -10,6 +10,7 @@ const CONTENT_SIZED_DISPLAYS = new Set([
 	"table",
 	"inline-table",
 ])
+const STRETCHING_DISPLAYS = new Set(["block", "flex", "grid", "list-item", "flow-root"])
 
 /**
  * Resolve insert width from the live parent box.
@@ -31,7 +32,22 @@ function shouldUsePercentageWidth(parent: HTMLElement): boolean {
 	if (hasAbsoluteSpecifiedWidth(parent)) return true
 	if (hasContentSizedAncestorBeforeDefiniteWidth(parent)) return false
 	if (hasDefiniteSpecifiedWidth(parent)) return true
+	if (isNormalFlowStretchingBox(parent)) return true
 	return stretchesToContainingBlock(parent)
+}
+
+function isNormalFlowStretchingBox(element: HTMLElement): boolean {
+	if (isContentSizedBox(element)) return false
+	const style = getComputedStyle(element)
+	if (!STRETCHING_DISPLAYS.has(style.display)) return false
+	if (style.float && style.float !== "none") return false
+	if (
+		(style.position === "absolute" || style.position === "fixed") &&
+		(isAutoOrEmpty(style.left) || isAutoOrEmpty(style.right))
+	) {
+		return false
+	}
+	return !hasDefiniteSpecifiedWidth(element)
 }
 
 function hasDefiniteSpecifiedWidth(element: HTMLElement): boolean {

@@ -52,12 +52,6 @@ function getDirectTextNodes(element: Element): Text[] {
 	)
 }
 
-function getDirectTextContent(element: Element): string {
-	return getDirectTextNodes(element)
-		.map((node) => node.textContent ?? "")
-		.join("")
-}
-
 function findFirstSignificantTextNode(element: Element): Text | null {
 	const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT)
 	let node = walker.nextNode()
@@ -68,33 +62,37 @@ function findFirstSignificantTextNode(element: Element): Text | null {
 	return null
 }
 
+function resolveEditableTextTarget(element: Element): Text | "replace-all" | null {
+	if (!shouldPreserveElementChildren(element)) return "replace-all"
+
+	const directTextNodes = getDirectTextNodes(element)
+	const significant = directTextNodes.filter((node) => node.textContent?.trim())
+	return significant[0] ?? findFirstSignificantTextNode(element)
+}
+
 /** Text shown/edited in the style panel for this element. */
 export function getEditableTextContent(element: Element): string {
-	if (!shouldPreserveElementChildren(element)) return element.textContent ?? ""
-	return getDirectTextContent(element)
+	const target = resolveEditableTextTarget(element)
+	if (target === "replace-all") return element.textContent ?? ""
+	return target?.textContent ?? ""
 }
 
 /** Replace editable text without removing preserved element children. */
 export function setElementTextContent(element: Element, nextContent: string): void {
-	if (!shouldPreserveElementChildren(element)) {
+	const target = resolveEditableTextTarget(element)
+	if (target === "replace-all") {
 		element.textContent = nextContent
 		return
 	}
 
-	const directTextNodes = getDirectTextNodes(element)
-	const significant = directTextNodes.filter((node) => node.textContent?.trim())
-	const target = significant[0] ?? directTextNodes[0]
 	if (target) {
 		target.textContent = nextContent
-		for (const node of directTextNodes) {
-			if (node !== target) node.remove()
+		const directTextNodes = getDirectTextNodes(element)
+		if (directTextNodes.includes(target)) {
+			for (const node of directTextNodes) {
+				if (node !== target) node.remove()
+			}
 		}
-		return
-	}
-
-	const descendantText = findFirstSignificantTextNode(element)
-	if (descendantText) {
-		descendantText.textContent = nextContent
 		return
 	}
 

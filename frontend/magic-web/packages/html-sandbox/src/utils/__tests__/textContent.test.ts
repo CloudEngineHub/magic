@@ -141,4 +141,58 @@ describe("getEditableTextContent", () => {
 
 		expect(getEditableTextContent(element)).toBe("Title")
 	})
+
+	it("returns nested copy when a mixed container has no direct text", () => {
+		const element = document.createElement("div")
+		const image = document.createElement("img")
+		const title = document.createElement("h2")
+		title.textContent = "Original"
+		element.append(image, title)
+
+		expect(getEditableTextContent(element)).toBe("Original")
+	})
+
+	it("reads and writes the same nested text target", () => {
+		const element = document.createElement("button")
+		const icon = document.createElement("span")
+		icon.className = "icon"
+		const label = document.createElement("span")
+		label.textContent = "Open"
+		element.append(icon, label)
+
+		expect(getEditableTextContent(element)).toBe("Open")
+		setElementTextContent(element, "Close")
+		expect(label.textContent).toBe("Close")
+		expect(getEditableTextContent(element)).toBe("Close")
+	})
+
+	it("skips pretty-printed whitespace and edits nested copy", () => {
+		const element = document.createElement("div")
+		element.innerHTML = `
+			<img src="icon.png">
+			<h2>Original</h2>
+		`
+		const title = element.querySelector("h2") as HTMLHeadingElement
+
+		expect(getEditableTextContent(element)).toBe("Original")
+		setElementTextContent(element, "Updated")
+		expect(title.textContent).toBe("Updated")
+		expect(element.querySelector("img")).not.toBeNull()
+	})
+
+	it("restores nested copy after a get/set undo cycle", () => {
+		const element = document.createElement("div")
+		const image = document.createElement("img")
+		const title = document.createElement("h2")
+		title.textContent = "Original"
+		element.append(image, title)
+
+		const previousValue = getEditableTextContent(element)
+		setElementTextContent(element, "Updated")
+		expect(title.textContent).toBe("Updated")
+
+		setElementTextContent(element, previousValue)
+		expect(title.textContent).toBe("Original")
+		expect(element.querySelector("img")).toBe(image)
+	})
 })

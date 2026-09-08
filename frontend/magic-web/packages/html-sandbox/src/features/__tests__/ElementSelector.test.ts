@@ -222,6 +222,45 @@ describe("ElementSelector", () => {
 			}
 		})
 
+		it("should ignore inactive media-query line-height rules", () => {
+			const matchMediaSpy = vi.spyOn(window, "matchMedia").mockImplementation((query) => {
+				return {
+					matches: !String(query).includes("max-width"),
+					media: String(query),
+					onchange: null,
+					addListener: vi.fn(),
+					removeListener: vi.fn(),
+					addEventListener: vi.fn(),
+					removeEventListener: vi.fn(),
+					dispatchEvent: vi.fn(),
+				} as MediaQueryList
+			})
+			const style = document.createElement("style")
+			style.textContent = `
+				#title { font-size: 24px; line-height: 1.5; }
+				@media (max-width: 400px) { #title { line-height: 1.1; } }
+			`
+			document.head.appendChild(style)
+			container.innerHTML = '<h1 id="title">Title</h1>'
+			const element = container.querySelector("#title") as HTMLElement
+
+			try {
+				selector.selectElement(element)
+
+				expect(sendEventSpy).toHaveBeenCalledWith(
+					"ELEMENT_SELECTED",
+					expect.objectContaining({
+						computedStyles: expect.objectContaining({
+							lineHeight: "1.5",
+						}),
+					}),
+				)
+			} finally {
+				matchMediaSpy.mockRestore()
+				style.remove()
+			}
+		})
+
 		it("should keep a specified unitless line-height instead of used pixels", () => {
 			const style = document.createElement("style")
 			style.textContent = "#ratio-title { font-size: 92px; line-height: 1.04; }"

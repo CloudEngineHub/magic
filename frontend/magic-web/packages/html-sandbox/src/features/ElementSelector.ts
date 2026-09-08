@@ -19,10 +19,23 @@ function readAuthoredLineHeight(element: HTMLElement): string {
 	const inline = element.style.getPropertyValue("line-height").trim()
 	if (inline) return inline
 
+	const typed = readTypedLineHeight(element)
+	if (typed) return typed
+
 	let authored = ""
 	const visitRules = (rules: CSSRuleList) => {
 		for (const rule of Array.from(rules)) {
-			if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
+			if (rule.type === CSSRule.MEDIA_RULE) {
+				if (!isMatchingMediaRule(element, rule as CSSMediaRule)) continue
+				try {
+					visitRules((rule as CSSGroupingRule).cssRules)
+				} catch {
+					// Ignore unreadable grouped rules.
+				}
+				continue
+			}
+			if (rule.type === CSSRule.SUPPORTS_RULE) {
+				if (!isMatchingSupportsRule(rule as CSSSupportsRule)) continue
 				try {
 					visitRules((rule as CSSGroupingRule).cssRules)
 				} catch {
@@ -42,6 +55,7 @@ function readAuthoredLineHeight(element: HTMLElement): string {
 	}
 
 	for (const sheet of Array.from(element.ownerDocument.styleSheets)) {
+		if (sheet.disabled || !isMatchingStyleSheetMedia(element, sheet)) continue
 		try {
 			visitRules(sheet.cssRules)
 		} catch {
@@ -49,6 +63,55 @@ function readAuthoredLineHeight(element: HTMLElement): string {
 		}
 	}
 	return authored
+}
+
+function readTypedLineHeight(element: HTMLElement): string {
+	if (typeof element.computedStyleMap !== "function") return ""
+
+	try {
+		const mapped = element.computedStyleMap().get("line-height")
+		if (!mapped) return ""
+		if (typeof CSSKeywordValue !== "undefined" && mapped instanceof CSSKeywordValue) {
+			return mapped.value
+		}
+		if (typeof CSSUnitValue !== "undefined" && mapped instanceof CSSUnitValue) {
+			if (mapped.unit === "number") return String(mapped.value)
+			if (mapped.unit === "percent") return `${mapped.value}%`
+			return `${mapped.value}${mapped.unit}`
+		}
+		return mapped.toString()
+	} catch {
+		return ""
+	}
+}
+
+function isMatchingMediaRule(element: HTMLElement, rule: CSSMediaRule): boolean {
+	return matchesMediaQuery(element, rule.media?.mediaText ?? "")
+}
+
+function isMatchingSupportsRule(rule: CSSSupportsRule): boolean {
+	if (typeof CSS === "undefined" || typeof CSS.supports !== "function") return true
+	try {
+		return CSS.supports(rule.conditionText)
+	} catch {
+		return true
+	}
+}
+
+function isMatchingStyleSheetMedia(element: HTMLElement, sheet: CSSStyleSheet): boolean {
+	return matchesMediaQuery(element, sheet.media?.mediaText ?? "")
+}
+
+function matchesMediaQuery(element: HTMLElement, mediaText: string): boolean {
+	const query = mediaText.trim()
+	if (!query || query === "all") return true
+	const view = element.ownerDocument.defaultView
+	if (!view?.matchMedia) return true
+	try {
+		return view.matchMedia(query).matches
+	} catch {
+		return true
+	}
 }
 
 interface ElementInfo {

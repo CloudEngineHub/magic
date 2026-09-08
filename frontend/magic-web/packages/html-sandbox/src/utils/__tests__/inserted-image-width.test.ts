@@ -30,6 +30,13 @@ describe("resolveInsertedImageNodeWidth", () => {
 		document.body.replaceChildren()
 	})
 
+	it("keeps percentage width for a padded block that fills the container", () => {
+		const parent = createParent({ padding: "16px 24px" })
+		mockBoxWidth(parent, 400, 448)
+
+		expect(resolveInsertedImageNodeWidth(parent)).toBe("100%")
+	})
+
 	it("keeps percentage width for block parents that fill the container", () => {
 		const parent = createParent()
 
