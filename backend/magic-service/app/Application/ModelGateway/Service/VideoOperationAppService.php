@@ -765,6 +765,9 @@ readonly class VideoOperationAppService
         if ($usageTokens['total_tokens'] !== null) {
             $businessParams['total_tokens'] = $usageTokens['total_tokens'];
         }
+        if ($usageTokens['thought_tokens'] !== null) {
+            $businessParams['thought_tokens'] = $usageTokens['thought_tokens'];
+        }
         if ($usageTokens['billing_token_usage'] !== null) {
             $businessParams['billing_token_usage'] = $usageTokens['billing_token_usage'];
         }
@@ -793,6 +796,8 @@ readonly class VideoOperationAppService
         // 与 businessParams 中字段一致，便于 billing-manager 读事件对象直接扣费
         $event->setCompletionTokens($usageTokens['completion_tokens']);
         $event->setTotalTokens($usageTokens['total_tokens']);
+        $event->setThoughtTokens($usageTokens['thought_tokens']);
+        $event->setBillingTokenUsage($usageTokens['billing_token_usage']);
 
         AsyncEventUtil::dispatch($event);
         $this->dispatchOperationUsageFinished($operation, OperationUsageFinishedEvent::STATUS_SUCCESS);
@@ -932,14 +937,14 @@ readonly class VideoOperationAppService
     /**
      * 按服务商解析视频任务回包中的 token 用量。
      *
-     * @return array{completion_tokens: ?int, total_tokens: ?int, billing_token_usage: ?array{input_tokens: int, output_text_tokens: int, output_video_tokens: int, thought_tokens: int}}
+     * @return array{completion_tokens: ?int, total_tokens: ?int, thought_tokens: int, billing_token_usage: ?array{input_tokens: int, output_text_tokens: int, output_video_tokens: int}}
      */
     private function resolveVideoProviderUsageTokens(VideoQueueOperationEntity $operation): array
     {
         $providerResult = $operation->getProviderResult();
         $usage = is_array($providerResult) ? ($providerResult['usage'] ?? null) : null;
         if (! is_array($usage)) {
-            return ['completion_tokens' => null, 'total_tokens' => null, 'billing_token_usage' => null];
+            return ['completion_tokens' => null, 'total_tokens' => null, 'thought_tokens' => 0, 'billing_token_usage' => null];
         }
 
         if ($operation->getProviderCode() === ProviderCode::Gemini->value) {
@@ -949,7 +954,8 @@ readonly class VideoOperationAppService
         return [
             'completion_tokens' => isset($usage['completion_tokens']) ? max(0, (int) $usage['completion_tokens']) : null,
             'total_tokens' => isset($usage['total_tokens']) ? max(0, (int) $usage['total_tokens']) : null,
-            'billing_token_usage' => [],
+            'thought_tokens' => 0,
+            'billing_token_usage' => null,
         ];
     }
 
@@ -957,27 +963,34 @@ readonly class VideoOperationAppService
      * 解析 Gemini 视频模型的四类 token 用量。
      *
      * @param array<string, mixed> $usage
-     * @return array{completion_tokens: int, total_tokens: int, billing_token_usage: array{input_tokens: int, output_text_tokens: int, output_video_tokens: int, thought_tokens: int}}
+     * @return array{completion_tokens: int, total_tokens: int, thought_tokens: int, billing_token_usage: array{input_tokens: int, output_text_tokens: int, output_video_tokens: int}}
      */
     private function resolveGeminiVideoUsageTokens(array $usage): array
     {
         $modalityTokens = array_column($usage['output_tokens_by_modality'] ?? [], 'tokens', 'modality');
+        $thoughtTokens = (int) ($usage['total_thought_tokens'] ?? 0);
 
         $billingTokenUsage = [
             'input_tokens' => (int) ($usage['total_input_tokens'] ?? 0),
             'output_text_tokens' => (int) ($modalityTokens['text'] ?? 0),
             'output_video_tokens' => (int) ($modalityTokens['video'] ?? 0),
-            'thought_tokens' => (int) ($usage['total_thought_tokens'] ?? 0),
         ];
 
+        $completionTokens = isset($usage['total_output_tokens'])
+            ? (int) $usage['total_output_tokens']
+            : (int) ($usage['completion_tokens'] ?? (
+                $billingTokenUsage['output_text_tokens']
+                + $billingTokenUsage['output_video_tokens']
+                + $billingTokenUsage['thought_tokens']
+            ));
+        $totalTokens = isset($usage['total_tokens'])
+            ? (int) $usage['total_tokens']
+            : $billingTokenUsage['input_tokens'] + $completionTokens;
+
         return [
-            'completion_tokens' => $billingTokenUsage['output_text_tokens']
-                + $billingTokenUsage['output_video_tokens']
-                + $billingTokenUsage['thought_tokens'],
-            'total_tokens' => $billingTokenUsage['input_tokens']
-                + $billingTokenUsage['output_text_tokens']
-                + $billingTokenUsage['output_video_tokens']
-                + $billingTokenUsage['thought_tokens'],
+            'completion_tokens' => $completionTokens,
+            'total_tokens' => $totalTokens,
+            'thought_tokens' => $thoughtTokens,
             'billing_token_usage' => $billingTokenUsage,
         ];
     }
