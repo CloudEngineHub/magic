@@ -169,15 +169,46 @@ describe("getContextToolbarPosition", () => {
 		expect(result.top).toBe(92)
 	})
 
-	it("limits width only when the viewport is narrower than the content", () => {
+	it("limits width only when the window is narrower than the content", () => {
 		const result = getContextToolbarPosition(
 			{ left: 80, top: 100, width: 120, height: 40 },
 			{ width: 680, height: 48 },
 			{ width: 400, height: 600 },
+			8,
+			{ windowSize: { width: 400, height: 600 } },
 		)
 
 		expect(result.width).toBe(384)
 		expect(result.left).toBe(8)
+	})
+
+	it("keeps a measured toolbar wider than the canvas inside the window", () => {
+		const result = getContextToolbarPosition(
+			{ left: 220, top: 200, width: 80, height: 40 },
+			{ width: 600, height: 88 },
+			{ left: 200, top: 80, width: 160, height: 500 },
+			8,
+			{ windowSize: { width: 1024, height: 768 } },
+		)
+
+		expect(result.width).toBe(600)
+		expect(result.left).toBeGreaterThanOrEqual(8)
+		expect(result.left + result.width).toBeLessThanOrEqual(1016)
+	})
+
+	it("keeps the minimum width when the canvas is narrower than the toolbar", () => {
+		const result = getContextToolbarPosition(
+			{ left: 220, top: 200, width: 80, height: 40 },
+			{ width: 448, height: 88 },
+			{ left: 200, top: 80, width: 160, height: 500 },
+			8,
+			{ windowSize: { width: 1024, height: 768 } },
+		)
+
+		expect(result.width).toBe(448)
+		expect(result.left).toBeGreaterThanOrEqual(8)
+		expect(result.left + result.width).toBeLessThanOrEqual(1016)
+		expect(result.left + result.width).toBeGreaterThan(360)
 	})
 })
 

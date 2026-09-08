@@ -58,8 +58,9 @@ describe("ElementContextPanel", () => {
 		expect(panel.className).not.toMatch(/overflow-x-auto|overflow-y-auto/)
 		expect(panel).toHaveStyle({ maxWidth: "680px" })
 		expect(panel).not.toHaveStyle({ height: "48px" })
+		expect(panel).not.toHaveStyle({ minWidth: "448px" })
 		expect(panel.querySelector('[data-testid="mock-style-panel"]')?.parentElement).toHaveClass(
-			"min-w-0",
+			"min-w-min",
 			"w-fit",
 			"max-w-full",
 		)

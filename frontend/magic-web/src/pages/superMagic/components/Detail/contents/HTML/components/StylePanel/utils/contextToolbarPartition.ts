@@ -13,8 +13,12 @@ export interface ContextToolGroup<T = unknown> {
 	data?: T
 }
 
-/** The default maximum width before context tools split into two rows. */
-export const CONTEXT_TOOLBAR_ROW_MAX_WIDTH = 520
+/** Wide enough for format, align, color, and More Styles on one row. */
+export const CONTEXT_TOOLBAR_ROW_MAX_WIDTH = 600
+/** Keep a compact one-row toolbar even when the canvas is narrower. */
+export const CONTEXT_TOOLBAR_MIN_WIDTH = 448
+/** Outer floating panel cap, including padding. */
+export const CONTEXT_TOOLBAR_PANEL_MAX_WIDTH = 680
 /** Vertical separator plus flex gap between toolbar groups. */
 export const CONTEXT_TOOLBAR_GROUP_GAP = 16
 /** gap-1 between controls inside a typography group. */
@@ -29,12 +33,30 @@ export const CONTEXT_TOOLBAR_FORMATTING_WIDTH = 124
 /** Ellipsis plus the More Styles label. */
 export const CONTEXT_TOOLBAR_MORE_WIDTH = 96
 
-/** Cap row width to the canvas when a sidebar shrinks the editor. */
+function isUsableWidth(availableWidth?: number): availableWidth is number {
+	return availableWidth != null && Number.isFinite(availableWidth) && availableWidth > 0
+}
+
+/** Cap row width, but never below the usable minimum. */
 export function getContextToolbarRowMaxWidth(availableWidth?: number): number {
-	if (availableWidth == null || !Number.isFinite(availableWidth) || availableWidth <= 0) {
+	if (!isUsableWidth(availableWidth)) {
 		return CONTEXT_TOOLBAR_ROW_MAX_WIDTH
 	}
-	return Math.max(1, Math.min(CONTEXT_TOOLBAR_ROW_MAX_WIDTH, availableWidth))
+	return Math.max(
+		CONTEXT_TOOLBAR_MIN_WIDTH,
+		Math.min(CONTEXT_TOOLBAR_ROW_MAX_WIDTH, availableWidth),
+	)
+}
+
+/** Cap the floating panel, but never below the usable minimum. */
+export function getContextToolbarPanelMaxWidth(availableWidth?: number): number {
+	if (!isUsableWidth(availableWidth)) {
+		return CONTEXT_TOOLBAR_PANEL_MAX_WIDTH
+	}
+	return Math.max(
+		CONTEXT_TOOLBAR_MIN_WIDTH,
+		Math.min(CONTEXT_TOOLBAR_PANEL_MAX_WIDTH, availableWidth),
+	)
 }
 
 export function getContextToolbarItemList<T>(group: ContextToolGroup<T>): ContextToolItem<T>[] {
@@ -202,22 +224,36 @@ export function partitionContextToolGroups<T>(
 	if (groups.length <= 1) return [groups]
 	if (getContextToolbarRowWidth(groups) <= maxRowWidth) return [groups]
 
-	let bestSplit = 1
-	let minMax = Number.POSITIVE_INFINITY
-
+	const splits: { index: number; maxWidth: number; sparseFirst: boolean }[] = []
 	for (let i = 1; i < groups.length; i += 1) {
-		const row1Width = getContextToolbarRowWidth(groups.slice(0, i))
-		const row2Width = getContextToolbarRowWidth(groups.slice(i))
-		const max = Math.max(row1Width, row2Width)
-		if (max < minMax) {
-			minMax = max
-			bestSplit = i
+		const row1 = groups.slice(0, i)
+		const row2 = groups.slice(i)
+		const row1Width = getContextToolbarRowWidth(row1)
+		const row2Width = getContextToolbarRowWidth(row2)
+		if (row1Width > maxRowWidth || row2Width > maxRowWidth) continue
+		splits.push({
+			index: i,
+			maxWidth: Math.max(row1Width, row2Width),
+			sparseFirst: row1.length === 1,
+		})
+	}
+
+	const filledSplits = splits.filter((split) => !split.sparseFirst)
+	const usableSplits = filledSplits.length > 0 ? filledSplits : splits
+	let bestSplit = 0
+	let minMax = Number.POSITIVE_INFINITY
+	for (const split of usableSplits) {
+		if (split.maxWidth < minMax) {
+			minMax = split.maxWidth
+			bestSplit = split.index
 		}
 	}
 
-	const balanced = [groups.slice(0, bestSplit), groups.slice(bestSplit)]
-	if (balanced.every((row) => getContextToolbarRowWidth(row) <= maxRowWidth)) {
-		return balanced
+	if (bestSplit > 0) {
+		return rebalanceOrphanToolbarRows(
+			[groups.slice(0, bestSplit), groups.slice(bestSplit)],
+			maxRowWidth,
+		)
 	}
 
 	return wrapContextToolGroups(groups, maxRowWidth)

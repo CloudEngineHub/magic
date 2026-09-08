@@ -10,6 +10,10 @@ import {
 } from "./contextPanelPosition"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../constants/z-index"
 import { cn } from "@/utils/cn"
+import {
+	CONTEXT_TOOLBAR_PANEL_MAX_WIDTH,
+	getContextToolbarPanelMaxWidth,
+} from "../StylePanel/utils/contextToolbarPartition"
 
 interface Props {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
@@ -22,7 +26,6 @@ interface Props {
 	onRevealMoreStyles?: () => void
 }
 
-const CONTEXT_TOOLBAR_MAX_WIDTH = 680
 const CONTEXT_TOOLBAR_MIN_HEIGHT = 48
 const CONTEXT_TOOLBAR_CLOSE_DURATION = 240
 
@@ -71,7 +74,7 @@ export function ElementContextPanel({
 		top: 8,
 		width: 0,
 		height: CONTEXT_TOOLBAR_MIN_HEIGHT,
-		maxWidth: CONTEXT_TOOLBAR_MAX_WIDTH,
+		maxWidth: CONTEXT_TOOLBAR_PANEL_MAX_WIDTH,
 	})
 	const hasAnchor = Boolean(open && anchor && selector)
 	const [isOpen, setIsOpen] = useState(false)
@@ -119,8 +122,10 @@ export function ElementContextPanel({
 			// floating panel must use the clipped viewport, otherwise a lower
 			// element incorrectly appears to have free space below it.
 			const viewport = getContextViewport(boundaryRef?.current?.getBoundingClientRect())
-			const availableWidth = Math.max(0, viewport.width - 16)
-			const maxWidth = Math.min(CONTEXT_TOOLBAR_MAX_WIDTH, availableWidth)
+			// Wrap against the window, not the canvas. The toolbar may overlap
+			// the sidebar instead of collapsing into a sparse extra row.
+			const availableWidth = Math.max(0, window.innerWidth - 16)
+			const maxWidth = getContextToolbarPanelMaxWidth(availableWidth)
 			const measured = getMeasuredToolbarSize(
 				panelRef.current?.getBoundingClientRect(),
 				maxWidth,
@@ -132,7 +137,9 @@ export function ElementContextPanel({
 				)
 				return
 			}
-			const next = getContextToolbarPosition(anchor, measured, viewport, 8)
+			const next = getContextToolbarPosition(anchor, measured, viewport, 8, {
+				windowSize: { width: window.innerWidth, height: window.innerHeight },
+			})
 			const nextPosition = {
 				left: next.left,
 				top: next.top,
@@ -201,7 +208,7 @@ export function ElementContextPanel({
 				maxWidth: position.maxWidth,
 			}}
 		>
-			<div ref={toolbarContentRef} className="w-fit min-w-0 max-w-full">
+			<div ref={toolbarContentRef} className="w-fit min-w-min max-w-full">
 				<StylePanel
 					editorRef={editorRef}
 					variant="context"

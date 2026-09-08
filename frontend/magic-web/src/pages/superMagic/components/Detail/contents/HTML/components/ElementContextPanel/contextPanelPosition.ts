@@ -241,13 +241,15 @@ export function getContextPanelPosition(
 /**
  * Position the compact element toolbar above the selection whenever possible.
  * Use the bottom side only when the toolbar cannot fit above. The toolbar
- * remains horizontally centered and clamped to the canvas.
+ * remains horizontally centered. If the canvas is narrower than the minimum
+ * width, keep that width and clamp to the window instead of crushing controls.
  */
 export function getContextToolbarPosition(
 	anchor: ElementRect,
 	toolbar: { width: number; height: number },
 	viewport: { left?: number; top?: number; width: number; height: number },
 	gap = 8,
+	options?: { minWidth?: number; windowSize?: { width: number; height: number } },
 ): ContextToolbarPosition {
 	const viewportLeft = viewport.left ?? 0
 	const viewportTop = viewport.top ?? 0
@@ -260,10 +262,24 @@ export function getContextToolbarPosition(
 		right: viewportRight - inset,
 		bottom: viewportBottom - inset,
 	}
-	const width = Math.max(1, Math.min(toolbar.width, bounds.right - bounds.left))
+	const canvasInnerWidth = Math.max(0, bounds.right - bounds.left)
+	const windowWidth =
+		options?.windowSize?.width ??
+		(typeof window !== "undefined" ? window.innerWidth : viewport.width)
+	const windowInnerWidth = Math.max(1, windowWidth - inset * 2)
+	const minWidth = options?.minWidth ?? 1
+	const width = Math.max(minWidth, Math.min(Math.max(1, toolbar.width), windowInnerWidth))
 	const height = Math.max(1, Math.min(toolbar.height, bounds.bottom - bounds.top))
+	const overflowX = width > canvasInnerWidth
+	const horizontal = overflowX
+		? { left: inset, right: windowWidth - inset }
+		: { left: bounds.left, right: bounds.right }
 	const centeredLeft = anchor.left + anchor.width / 2 - width / 2
-	const clampedLeft = clamp(centeredLeft, bounds.left, bounds.right - width)
+	const clampedLeft = clamp(
+		centeredLeft,
+		horizontal.left,
+		Math.max(horizontal.left, horizontal.right - width),
+	)
 	const bottomTop = anchor.top + anchor.height + gap
 	const topTop = anchor.top - height - gap - CONTEXT_TOOLBAR_TOP_CONTROL_CLEARANCE
 	const fitsAbove = topTop >= bounds.top

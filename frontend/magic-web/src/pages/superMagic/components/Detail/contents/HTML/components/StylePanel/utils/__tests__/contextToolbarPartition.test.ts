@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest"
 import { getMetricControlWidth } from "../../controls/metricControlWidth"
 import {
 	CONTEXT_TOOLBAR_ACTIONS_WIDTH,
+	CONTEXT_TOOLBAR_FONT_ADJUSTER_WIDTH,
 	CONTEXT_TOOLBAR_FORMATTING_WIDTH,
+	CONTEXT_TOOLBAR_MIN_WIDTH,
 	CONTEXT_TOOLBAR_MORE_WIDTH,
+	CONTEXT_TOOLBAR_PANEL_MAX_WIDTH,
 	CONTEXT_TOOLBAR_ROW_MAX_WIDTH,
+	getContextToolbarPanelMaxWidth,
 	getContextToolbarRowMaxWidth,
 	getContextToolbarRowWidth,
 	getContextToolbarTypographyUnits,
@@ -50,12 +54,20 @@ function headingToolbarGroups(): ContextToolGroup[] {
 describe("getContextToolbarRowMaxWidth", () => {
 	it("keeps the default row cap when the canvas is wide enough", () => {
 		expect(getContextToolbarRowMaxWidth(800)).toBe(CONTEXT_TOOLBAR_ROW_MAX_WIDTH)
-		expect(getContextToolbarRowMaxWidth(520)).toBe(CONTEXT_TOOLBAR_ROW_MAX_WIDTH)
+		expect(getContextToolbarRowMaxWidth(600)).toBe(CONTEXT_TOOLBAR_ROW_MAX_WIDTH)
+		expect(getContextToolbarRowMaxWidth(520)).toBe(520)
 	})
 
-	it("follows the canvas when a sidebar shrinks available space", () => {
-		expect(getContextToolbarRowMaxWidth(400)).toBe(400)
-		expect(getContextToolbarRowMaxWidth(384)).toBe(384)
+	it("follows a mid-size width between the minimum and the row cap", () => {
+		expect(getContextToolbarRowMaxWidth(480)).toBe(480)
+		expect(getContextToolbarRowMaxWidth(448)).toBe(CONTEXT_TOOLBAR_MIN_WIDTH)
+	})
+
+	it("keeps a usable minimum when the canvas is extremely narrow", () => {
+		expect(getContextToolbarRowMaxWidth(200)).toBe(CONTEXT_TOOLBAR_MIN_WIDTH)
+		expect(getContextToolbarRowMaxWidth(80)).toBe(CONTEXT_TOOLBAR_MIN_WIDTH)
+		expect(getContextToolbarPanelMaxWidth(200)).toBe(CONTEXT_TOOLBAR_MIN_WIDTH)
+		expect(getContextToolbarPanelMaxWidth(800)).toBe(CONTEXT_TOOLBAR_PANEL_MAX_WIDTH)
 	})
 
 	it("falls back to the default cap when the canvas width is unknown", () => {
@@ -137,7 +149,7 @@ describe("partitionContextToolGroups", () => {
 		])
 	})
 
-	it("balances rows effectively when an item is heavy", () => {
+	it("balances rows without leaving a single group on the first row", () => {
 		const groups: ContextToolGroup[] = [
 			{ id: "heavy", estimatedWidth: 300 },
 			{ id: "a", estimatedWidth: 80 },
@@ -146,8 +158,8 @@ describe("partitionContextToolGroups", () => {
 		]
 		const result = partitionContextToolGroups(groups, 400)
 		expect(result).toHaveLength(2)
-		expect(result[0].map((g) => g.id)).toEqual(["heavy"])
-		expect(result[1].map((g) => g.id)).toEqual(["a", "b", "c"])
+		expect(result[0].map((g) => g.id)).toEqual(["heavy", "a"])
+		expect(result[1].map((g) => g.id)).toEqual(["b", "c"])
 	})
 
 	it("re-splits typical tools so each row fits a sidebar-narrowed canvas", () => {
@@ -218,6 +230,63 @@ describe("partitionContextToolGroups", () => {
 			expect(
 				row.some((group) => group.items?.every((item) => item.id === "fontAdjuster")),
 			).toBe(false)
+		}
+	})
+
+	it("keeps a compact actions toolbar on one row at the minimum width", () => {
+		const groups: ContextToolGroup[] = [
+			{ id: "actions", estimatedWidth: CONTEXT_TOOLBAR_ACTIONS_WIDTH },
+			{
+				id: "typography",
+				estimatedWidth: CONTEXT_TOOLBAR_FONT_ADJUSTER_WIDTH,
+				items: [{ id: "fontSize", estimatedWidth: CONTEXT_TOOLBAR_FONT_ADJUSTER_WIDTH }],
+			},
+			{ id: "appearance", estimatedWidth: 32 },
+			{ id: "more", estimatedWidth: CONTEXT_TOOLBAR_MORE_WIDTH },
+		]
+
+		const result = partitionContextToolGroups(groups, CONTEXT_TOOLBAR_MIN_WIDTH)
+
+		expect(result).toHaveLength(1)
+		expect(result[0]?.map((group) => group.id)).toEqual([
+			"actions",
+			"typography",
+			"appearance",
+			"more",
+		])
+	})
+
+	it("does not leave only the actions group on the first row", () => {
+		const groups: ContextToolGroup[] = [
+			{ id: "actions", estimatedWidth: CONTEXT_TOOLBAR_ACTIONS_WIDTH },
+			{
+				id: "typography",
+				estimatedWidth: CONTEXT_TOOLBAR_FONT_ADJUSTER_WIDTH,
+				items: [{ id: "fontSize", estimatedWidth: CONTEXT_TOOLBAR_FONT_ADJUSTER_WIDTH }],
+			},
+			{ id: "appearance", estimatedWidth: 32 },
+			{ id: "more", estimatedWidth: CONTEXT_TOOLBAR_MORE_WIDTH },
+		]
+
+		const result = partitionContextToolGroups(groups, 400)
+
+		expect(result[0]?.map((group) => group.id)).not.toEqual(["actions"])
+		expect(result[0]?.length).toBeGreaterThan(1)
+	})
+
+	it("packs a typical heading toolbar into two rows at the default cap", () => {
+		const result = partitionContextToolGroups(
+			headingToolbarGroups(),
+			CONTEXT_TOOLBAR_ROW_MAX_WIDTH,
+		)
+
+		expect(result).toHaveLength(2)
+		expect(result.some((row) => row.map((group) => group.id).includes("more"))).toBe(true)
+		expect(result[result.length - 1]?.length).toBeGreaterThan(1)
+		for (const row of result) {
+			expect(getContextToolbarRowWidth(row)).toBeLessThanOrEqual(
+				CONTEXT_TOOLBAR_ROW_MAX_WIDTH,
+			)
 		}
 	})
 
