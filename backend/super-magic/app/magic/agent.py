@@ -968,11 +968,6 @@ class Agent(BaseAgent):
             self.set_agent_state(AgentState.FINISHED)
             return session_prep_result.direct_response
 
-        # 在首次 build_context_update 前设置输出预算，确保 output_size_limit 能写入 initial_context
-        # set_output_token_budget 只在首次设置时生效，_handle_agent_loop 里的调用会成为幂等 no-op
-        budget = self._get_runtime_output_budget()
-        self.agent_context.horizon.set_output_token_budget(budget)
-
         # 注入点1：用户消息入库后、第一次 LLM 调用前，注入 system_injected_context
         # 若历史末尾存在未完成的 tool call 序列，跳过注入避免破坏序列完整性
         # MOCK DEMO：/resume 不会追加可见用户消息；这里只把 Horizon 的恢复事项
@@ -1136,10 +1131,6 @@ class Agent(BaseAgent):
         """处理 agent 循环 - 使用Context对象简化参数传递和状态管理"""
         loop_state = AgentLoopState()
 
-        # 初始输出预算：直接使用运行时模型配置的 max_output_tokens，只设置一次
-        initial_budget = self._get_runtime_output_budget()
-        self.agent_context.horizon.set_output_token_budget(initial_budget)
-
         while loop_state.should_continue:
             # 更新活动时间，用于活动追踪
             self.agent_context.update_activity_time()
@@ -1229,14 +1220,13 @@ class Agent(BaseAgent):
                         if llm_context.has_tool_calls:
                             await self._synthesize_error_tool_results(
                                 llm_context.tool_calls,
-                                "Tool call was truncated due to output token limit. "
-                                "Do NOT retry this call. Break the work into smaller pieces.",
+                                "Tool call was not executed because the response ended with "
+                                f"finish_reason='{llm_context.finish_reason}' and may be incomplete.",
                             )
                         await self._try_inject_output_recovery_message(
                             loop_state,
-                            "Output token limit hit. Resume directly — no apology, no recap. "
-                            "Pick up mid-thought if that is where the cut happened. "
-                            "Break remaining work into smaller pieces.",
+                            f"The response ended with finish_reason='{llm_context.finish_reason}'. "
+                            "The output may be incomplete. Any tool calls in that response were not executed.",
                             source="max_output_tokens_recovery",
                         )
                         continue
@@ -1258,15 +1248,15 @@ class Agent(BaseAgent):
                             await self._add_tool_calls_to_history(llm_context)
                             await self._synthesize_error_tool_results(
                                 llm_context.tool_calls,
-                                "Tool call arguments were truncated due to output token limit. "
-                                "Do NOT retry this call. Break the work into smaller pieces.",
+                                "Tool calls were not executed because one or more argument payloads "
+                                "could not be parsed as a JSON object.",
                             )
                             await self._try_inject_output_recovery_message(
                                 loop_state,
-                                "One or more tool calls above failed because their arguments were "
-                                "truncated — the content was too long. "
-                                "Do NOT retry with the same approach. "
-                                "Break the work into smaller pieces.",
+                                "Tool argument preprocessing failed for: "
+                                f"{', '.join(preprocess_result.truncated_tool_names)}. "
+                                "Their arguments could not be parsed as JSON objects. "
+                                "No tool calls from that response were executed.",
                                 source="tool_args_truncation_recovery",
                             )
                             continue
@@ -1373,10 +1363,10 @@ class Agent(BaseAgent):
                 if tool_result.has_long_args_failure:
                     await self._try_inject_output_recovery_message(
                         loop_state,
-                        "One or more tool calls above failed because their arguments were "
-                        "truncated or incomplete — the content was too long. "
-                        "Do NOT retry with the same approach. "
-                        "Break the work into smaller pieces.",
+                        "One or more failed tool calls had arguments longer than "
+                        f"{self._LONG_ARGS_THRESHOLD} characters. "
+                        "Their tool results contain the reported errors; "
+                        "argument length alone does not establish why the calls failed.",
                         source="tool_args_truncation_recovery",
                     )
 
@@ -2313,8 +2303,7 @@ Since your subsequent output will be merged with pre-interruption content and di
 
     _GENERATION_SPLIT_RECOVERY_PROMPT = (
         "A substantial model response was lost after repeated generation failures. "
-        "Continue from the available context, split the remaining work into smaller steps, "
-        "and keep each response focused."
+        "That response is unavailable in the current context."
     )
 
     def _extract_chunk_count(self, exception: Exception) -> int:
@@ -2810,14 +2799,6 @@ Since your subsequent output will be merged with pre-interruption content and di
             model_name=text_model_state.model_name,
         )
         return user_facing_max_context_tokens or text_model_state.max_context_tokens
-
-    def _get_runtime_output_budget(self) -> int:
-        """获取当前运行时模型的输出预算；解析失败时保守使用默认值。"""
-        try:
-            return self._resolve_current_text_model().max_output_tokens
-        except Exception as e:
-            logger.warning(f"获取运行时模型输出预算失败，使用默认值 4096: {e}")
-            return 4096
 
     def _build_horizon_llm_model_info(
         self,
