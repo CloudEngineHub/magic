@@ -35,6 +35,7 @@ interface TestPreviewFile {
 
 interface TestHtmlPreviewProps {
 	data: TestPreviewFile
+	projectId?: string
 	openFileTab?: (file: TestPreviewFile) => void
 	virtualStorageMarkerId?: string
 	onHtmlPermissionManagerChange?: (manager: { open: () => void } | null) => void
@@ -228,6 +229,7 @@ vi.mock("@/pages/share/components", () => ({
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 	default: function MockHtmlPreview({
 		data,
+		projectId,
 		openFileTab,
 		virtualStorageMarkerId,
 		onHtmlPermissionManagerChange,
@@ -247,6 +249,7 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 		return (
 			<div
 				data-testid="mock-html-preview"
+				data-project-id={projectId}
 				data-virtual-storage-marker-id={virtualStorageMarkerId}
 			>
 				<span>{data.file_name}</span>

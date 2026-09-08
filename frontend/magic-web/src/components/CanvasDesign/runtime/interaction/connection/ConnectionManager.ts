@@ -535,7 +535,7 @@ export class ConnectionManager {
 			this.canvas.eventEmitter.on("connection:change", rerenderAfterConnectionChange),
 			this.canvas.eventEmitter.on("document:loaded", rerender),
 			this.canvas.eventEmitter.on("document:restored", rerender),
-			this.canvas.eventEmitter.on("canvas:readonly", clearHoverAndRerender),
+			this.canvas.eventEmitter.on("permission:changed", clearHoverAndRerender),
 			this.canvas.eventEmitter.on("tool:change", clearHoverAndRerender),
 			this.canvas.eventEmitter.on("canvas:clear", clearSelection),
 			this.canvas.eventEmitter.on(
@@ -801,7 +801,9 @@ export class ConnectionManager {
 			const currentAudioSequence = content.audioSequence ?? []
 			if (
 				currentSequence.length === nextVideoSequence.length &&
-				currentSequence.every((elementId, index) => elementId === nextVideoSequence[index]) &&
+				currentSequence.every(
+					(elementId, index) => elementId === nextVideoSequence[index],
+				) &&
 				currentAudioSequence.length === nextAudioSequence.length &&
 				currentAudioSequence.every(
 					(elementId, index) => elementId === nextAudioSequence[index],

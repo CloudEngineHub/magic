@@ -1082,6 +1082,7 @@ function Topic({
 									onPreviewFullscreenChange?.(false)
 								}}
 								isFileShare={false}
+								projectId={projectId}
 								allowDownload={allowDownloadProjectFile}
 								hideHeader={hidePreviewHeader}
 								showFileHeader={showFileHeader}

@@ -79,6 +79,9 @@
 		"refresh": "刷新",
 		"scopeAll": "全部",
 		"scopeCurrent": "当前用户",
+		"status": {
+			"serverCancelled": "服务端已结束（仅可导出）"
+		},
 		"table": {
 			"actions": "操作",
 			"duration": "时长",

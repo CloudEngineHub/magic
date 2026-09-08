@@ -313,7 +313,6 @@ class OdinQdrantVectorStore implements VectorStoreInterface
             if (array_key_exists('value', $definition) && (
                 is_string($definition['value'])
                 || is_numeric($definition['value'])
-                || is_bool($definition['value'])
             )) {
                 $conditions[] = new FieldCondition(key: $key, match: new MatchValue($definition['value']));
                 continue;

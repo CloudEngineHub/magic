@@ -89,8 +89,71 @@ class GenerationSubmissionService:
             return result
 
         work_items = [self._build_work_item(item, project_path) for item in generated]
+        await self._persist_generation_start_metadata(project_path, work_items, tool_context)
         await self._execute_work_items(work_items, project_path, tool_context, by_content)
         return result
+
+    async def _persist_generation_start_metadata(
+        self,
+        project_path: str,
+        work_items: list[_GenerationWorkItem],
+        tool_context: ToolContext | None,
+    ) -> None:
+        """在 provider 调用前把最终模型和模式写入公共生成请求。"""
+        for work_item in work_items:
+            resolver = getattr(work_item.capability.submission_port, "resolve_request_metadata", None)
+            if resolver is None:
+                continue
+            try:
+                request_metadata = await resolver(work_item.request, tool_context)
+            except Exception:
+                # 解析失败时仍交给 provider 执行，保持原有单项失败收敛语义。
+                continue
+            if not request_metadata:
+                continue
+
+            def persist(project: CanvasProject, metadata: dict[str, Any]) -> tuple[None, dict[str, Any]]:
+                """在项目事务中更新当前 Content 的公共生成请求。"""
+                detail = ContentMetadataService.get(
+                    metadata,
+                    work_item.submission_item.element_id,
+                    work_item.submission_item.content_id,
+                )
+                parameters = {
+                    **dict(detail.get("generationParameters") or {}),
+                    **work_item.parameter_payload,
+                    **dict(request_metadata),
+                }
+                request_field = generation_request_field(work_item.submission_item.element_type)
+                if not request_field:
+                    return None, metadata
+                detail_update = {
+                    **detail,
+                    "generationParameters": parameters,
+                    request_field: ContentMetadataService.build_public_generation_request(
+                        parameters,
+                        work_item.submission_item.element_type,
+                    ),
+                }
+                if work_item.submission_item.element_type == "video":
+                    detail_update["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
+                        detail.get("videoGenerationResultMeta") or {},
+                        ContentMetadataService.build_video_result_metadata(parameters),
+                        "pending",
+                    )
+                ContentMetadataService.set(
+                    metadata,
+                    work_item.submission_item.element_id,
+                    work_item.submission_item.content_id,
+                    detail_update,
+                )
+                return None, metadata
+
+            try:
+                await self.unit_of_work.transaction_with_sidecar(project_path, persist)
+            except Exception:
+                # 预写失败不改变 provider 的执行与原有失败收敛流程，完成阶段还会再次持久化。
+                continue
 
     def _build_work_item(
         self,
@@ -200,6 +263,7 @@ class GenerationSubmissionService:
             detail = ContentMetadataService.get(metadata, submission_item.element_id, submission_item.content_id)
             public_request = ContentMetadataService.build_public_generation_request(
                 {
+                    **dict(detail.get("generationParameters") or {}),
                     **work_item.parameter_payload,
                     **dict(submission.request_metadata or {}),
                 },
@@ -217,15 +281,19 @@ class GenerationSubmissionService:
                 "outputFilename": self._output_filename(submission),
                 "errorMessage": submission.error_message,
             }
-            if submission.status == "completed":
-                request_field = generation_request_field(submission_item.element_type)
-                if request_field:
-                    detail_update[request_field] = public_request
-            else:
-                ContentMetadataService.clear_public_request(
-                    metadata,
-                    submission_item.element_id,
-                    submission_item.content_id,
+            request_field = generation_request_field(submission_item.element_type)
+            if request_field:
+                if submission_item.element_type == "image":
+                    public_request = ContentMetadataService.complete_image_generation_request(
+                        public_request,
+                        submission.status,
+                    )
+                detail_update[request_field] = public_request
+            if submission_item.element_type == "video":
+                detail_update["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
+                    detail.get("videoGenerationResultMeta") or {},
+                    submission.result_metadata,
+                    submission.status,
                 )
             if submission_item.retry_idempotency_key:
                 detail_update["retryIdempotencyKey"] = submission_item.retry_idempotency_key

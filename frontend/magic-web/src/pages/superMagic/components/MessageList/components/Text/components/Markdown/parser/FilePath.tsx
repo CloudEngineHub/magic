@@ -2,6 +2,7 @@ import { observer } from "mobx-react-lite"
 import { decodePathForDisplay, findAttachmentByPath } from "./helper"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import { FileReference, getFileExtensionFromPath } from "./FileReference"
 
 export const FilePath = observer((props: { path?: unknown }) => {
 	const { path } = props
@@ -25,25 +26,22 @@ export const FilePath = observer((props: { path?: unknown }) => {
 	}
 
 	if (fileInfo) {
-		// 找到文件，渲染可点击的文件标签
 		return (
-			<span
-				className="cursor-pointer overflow-hidden whitespace-normal break-all rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 text-[#315cec] hover:bg-[#e0ecff]"
+			<FileReference
+				label={displayPath}
+				fileType={fileInfo.file_extension || getFileExtensionFromPath(displayPath)}
 				onClick={onClick}
 				title={displayPath}
-			>
-				@{displayPath}
-			</span>
+			/>
 		)
 	}
 
-	// 未找到文件，渲染为 disabled 状态的文件标签
 	return (
-		<span
-			className="cursor-not-allowed overflow-hidden whitespace-normal break-all rounded bg-gray-100 px-1.5 py-0.5 text-xs font-normal leading-5 text-gray-500"
-			title={`File does not exist @${displayPath}`}
-		>
-			@{displayPath}
-		</span>
+		<FileReference
+			label={displayPath}
+			fileType={getFileExtensionFromPath(displayPath)}
+			disabled
+			title={`File does not exist: ${displayPath}`}
+		/>
 	)
 })

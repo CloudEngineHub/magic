@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 		| undefined,
 	canvas: undefined as
 		| {
-				readonly: boolean
+				can: ReturnType<typeof vi.fn>
 				container: HTMLDivElement
 				audioReplaceController: {
 					openLocalFilePicker: ReturnType<typeof vi.fn>
@@ -100,7 +100,8 @@ describe("AudioReplaceMenuProvider", () => {
 			toJSON: () => ({}),
 		})
 		mocks.canvas = {
-			readonly: false,
+			can: vi.fn(() => true),
+			permissionManager: { can: vi.fn(() => true) },
 			container,
 			audioReplaceController: {
 				openLocalFilePicker: vi.fn(),

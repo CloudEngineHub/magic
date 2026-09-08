@@ -1,8 +1,8 @@
 import { act, render, screen } from "@testing-library/react"
-import type { ReactNode } from "react"
+import { createRef, type ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
-import IsolatedHTMLRenderer from "../IsolatedHTMLRenderer"
+import IsolatedHTMLRenderer, { type IsolatedHTMLRendererRef } from "../IsolatedHTMLRenderer"
 
 const hookState = vi.hoisted(() => ({
 	editorContentInjectedValues: [] as boolean[],
@@ -428,6 +428,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		})
 		vi.useRealTimers()
 		vi.restoreAllMocks()
+		delete (window as Window & { project_id?: string }).project_id
 	})
 
 	it("enables presentation and low-risk media capabilities for HTML previews", async () => {
@@ -536,6 +537,25 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		)
 	})
 
+	it("does not read window.project_id when host props omit projectId", async () => {
+		;(window as Window & { project_id?: string }).project_id = "share-window-project"
+
+		render(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				selectedProject={undefined}
+				projectId={undefined}
+			/>,
+		)
+		await flushReactEffects()
+
+		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
+			undefined,
+			undefined,
+			undefined,
+		)
+	})
+
 	it("passes the scoped topic store to Agent actions", async () => {
 		const scopedTopicStore = { selectedTopic: { id: "topic-from-micro-app" } }
 
@@ -608,6 +628,30 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		await flushReactEffects()
 
 		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+	})
+
+	it("reloads the original content when resetContent is called", async () => {
+		const rendererRef = createRef<IsolatedHTMLRendererRef>()
+		render(<IsolatedHTMLRenderer {...defaultProps} ref={rendererRef} />)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+
+		dispatchIframeMessage(iframe, "iframeReady")
+		await flushReactEffects()
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+
+		await act(async () => {
+			rendererRef.current?.resetContent()
+			await Promise.resolve()
+		})
+
+		const setContentCalls = getSetContentCalls(postMessage)
+		expect(setContentCalls).toHaveLength(2)
+		expect(setContentCalls[1][0]).toMatchObject({
+			content: setContentCalls[0][0].content,
+		})
 	})
 
 	it("updates location query when the same HTML navigation changes", async () => {

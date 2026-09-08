@@ -32,13 +32,13 @@ function stateBag(): DesignProjectStateBag {
 		setMagicProjectJsVersion: vi.fn(),
 		getPrevDesignDataFingerprint: () => "",
 		setPrevDesignDataFingerprint: vi.fn(),
-		getIsReadOnly: () => false,
+		getAccessMode: () => "edit",
 		setters: {
 			setMagicProjectJsFileId: vi.fn(),
 			setDesignData: vi.fn(),
 			setIsInitialLoading: vi.fn(),
 			setIsSaving: vi.fn(),
-			setIsReadOnly: vi.fn(),
+			setAccessMode: vi.fn(),
 			setFileVersionsList: vi.fn(),
 			setFileVersion: vi.fn(),
 			setIsProcessingRevoke: vi.fn(),
@@ -128,6 +128,46 @@ describe("DesignVersionManager", () => {
 		expect(bag.setters.setDesignData).toHaveBeenCalledWith(
 			expect.objectContaining({ name: "history" }),
 		)
-		expect(bag.setters.setIsReadOnly).toHaveBeenCalledWith(true)
+		expect(bag.setters.setAccessMode).toHaveBeenCalledWith("history")
+	})
+
+	it("restores the stable edit mode after returning from history to latest", async () => {
+		const bag = stateBag()
+		const manager = new DesignVersionManager(
+			bag,
+			{
+				allowEdit: true,
+				isPlaybackMode: false,
+				isShareRoute: false,
+				isMobile: false,
+				projectId: "project-1",
+				attachments: [],
+				flatAttachments: [],
+			},
+			{ cancelAutoSave: vi.fn(), clearRemoteConflict: vi.fn() } as never,
+			() => [],
+			() => undefined,
+		)
+
+		manager.applyVersionData(
+			{
+				type: "design",
+				name: "history",
+				version: "3.0.0",
+				canvas: { elements: [] },
+			},
+			true,
+		)
+		manager.applyVersionData(
+			{
+				type: "design",
+				name: "latest",
+				version: "3.0.0",
+				canvas: { elements: [] },
+			},
+			false,
+		)
+
+		expect(bag.setters.setAccessMode).toHaveBeenLastCalledWith("edit")
 	})
 })

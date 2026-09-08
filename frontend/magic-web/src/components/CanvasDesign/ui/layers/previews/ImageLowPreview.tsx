@@ -16,8 +16,11 @@ const TOOLTIP_PREVIEW_MAX_SIZE = 160
 
 export default function LayerImageLowPreview(props: { element: ImageElement; alt: string }) {
 	const { element, alt } = props
-	const activeContent = getActiveImageContent(element)
 	const { canvas } = useCanvas()
+	const activeContent =
+		(canvas?.getEffectiveContent(element.id) as
+			| ReturnType<typeof getActiveImageContent>
+			| undefined) ?? getActiveImageContent(element)
 	const portalContainer = usePortalContainer()
 	const previewRootRef = useRef<HTMLDivElement>(null)
 	const [shouldLoadLow, setShouldLoadLow] = useState(false)

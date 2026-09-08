@@ -37,20 +37,22 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 	const { t } = useCanvasDesignI18n()
 	const generationRuntime = useGenerationRuntime(imageElement.id)
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
+	const imageContent =
+		canvas?.getEffectiveContent<ImageElementContent>(imageElement.id) ??
+		getActiveImageContent(imageElement)
 
 	// 获取请求信息
-	const request =
-		generationRuntime?.generateImageRequest ||
-		getActiveImageContent(imageElement).generateImageRequest
+	const request = generationRuntime?.generateImageRequest || imageContent.generateImageRequest
 
 	const imageGenerationTaskMeta =
-		generationRuntime?.imageGenerationTaskMeta || getImageGenerationTaskMeta(imageElement)
+		generationRuntime?.imageGenerationTaskMeta || imageContent.imageGenerationTaskMeta
 
 	// 获取元素实例以访问 getImageInfo 方法
 	const elementInstance = useMemo(() => {
 		if (!canvas || !imageElement.id) return undefined
 		return canvas.elementManager.getElementInstance(imageElement.id) as
-			ImageElementClass | undefined
+			| ImageElementClass
+			| undefined
 	}, [canvas, imageElement.id])
 
 	// 获取尺寸

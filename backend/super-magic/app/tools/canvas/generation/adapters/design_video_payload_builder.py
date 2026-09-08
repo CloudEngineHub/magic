@@ -110,6 +110,11 @@ class DesignVideoPayloadBuilder:
         return "standard"
 
     @staticmethod
+    def resolve_input_mode(parameters: GenerationParameters) -> str:
+        """返回提交前可确定的视频输入模式。"""
+        return DesignVideoPayloadBuilder._resolve_input_mode(parameters)
+
+    @staticmethod
     def resolve_project_id(tool_context: ToolContext | None) -> str:
         """从当前工具上下文取得 Magic Service 所需的项目 ID。"""
         project_id = ""
@@ -135,6 +140,11 @@ class DesignVideoPayloadBuilder:
         if not model_id:
             raise ValueError("未指定视频模型，无法提交 Design 视频生成任务")
         return model_id
+
+    @staticmethod
+    def resolve_model_id(parameters: GenerationParameters, tool_context: ToolContext | None) -> str:
+        """返回提交前可确定的视频最终模型。"""
+        return DesignVideoPayloadBuilder._resolve_model_id(parameters, tool_context)
 
     @staticmethod
     def _format_file_dir(file_dir: str, project_path: str) -> str:

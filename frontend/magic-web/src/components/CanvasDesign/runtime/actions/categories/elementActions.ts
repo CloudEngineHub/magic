@@ -21,7 +21,7 @@ export const elementActions: UserAction[] = [
 		category: "element",
 		canExecute: (canvas) => {
 			// 非只读模式且有选中的元素
-			if (canvas.readonly) return false
+			if (!canvas.permissionManager.can("document.write")) return false
 			const selectedIds = canvas.selectionManager.getSelectedIds()
 			return selectedIds.length > 0
 		},

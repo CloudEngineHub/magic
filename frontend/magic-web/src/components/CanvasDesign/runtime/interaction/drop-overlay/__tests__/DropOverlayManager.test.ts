@@ -79,6 +79,7 @@ function createDropHarness(options: {
 	const canvasContainer = document.createElement("div")
 	overlayHost.appendChild(canvasContainer)
 	const canvas = {
+		permissionManager: { can: vi.fn(() => true) },
 		container: canvasContainer,
 		elementManager,
 		historyManager,
@@ -264,8 +265,9 @@ describe("DropOverlayManager custom attachment drops", () => {
 
 		const manager = new DropOverlayManager({
 			canvas: {
+				permissionManager: { can: vi.fn(() => true) },
 				container: canvasContainer,
-				readonly: false,
+				can: vi.fn(() => true),
 				viewportController: {
 					getResolvedDefaultViewportPadding: vi.fn(() => ({
 						left: 0,
@@ -306,8 +308,9 @@ describe("DropOverlayManager custom attachment drops", () => {
 
 		const manager = new DropOverlayManager({
 			canvas: {
+				permissionManager: { can: vi.fn(() => true) },
 				container: canvasContainer,
-				readonly: false,
+				can: vi.fn(() => true),
 				magicConfigManager: {
 					config: { methods: { getDataTransferFileInfo } },
 				},
@@ -334,8 +337,9 @@ describe("DropOverlayManager custom attachment drops", () => {
 
 		const manager = new DropOverlayManager({
 			canvas: {
+				permissionManager: { can: vi.fn(() => true) },
 				container: canvasContainer,
-				readonly: false,
+				can: vi.fn(() => true),
 				viewportController: {
 					getResolvedDefaultViewportPadding: vi.fn(() => ({
 						left: 0,

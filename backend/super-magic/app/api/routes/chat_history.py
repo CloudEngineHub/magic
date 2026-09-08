@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse
 
 from agentlang.logger import get_logger
 from app.path_manager import PathManager
+from app.service.topic_persistence import get_chat_history_excluded_dir_names
 
 logger = get_logger(__name__)
 
@@ -34,9 +35,12 @@ def remove_file(path: str):
 def build_chat_history_archive(source_dir: Path, dest_zip_path: str) -> str:
     """打包聊天历史目录，zip 内顶层固定为 .chat_history/，保持外部消费方兼容。"""
     top = PurePosixPath(".chat_history")
+    excluded_dir_names = get_chat_history_excluded_dir_names()
     with zipfile.ZipFile(dest_zip_path, "w", zipfile.ZIP_DEFLATED) as zip_ref:
         for root, dirnames, filenames in os.walk(source_dir):
-            dirnames[:] = [dirname for dirname in dirnames if dirname != "llm_request"]
+            dirnames[:] = [
+                dirname for dirname in dirnames if dirname not in excluded_dir_names
+            ]
             rel_root = PurePosixPath(Path(root).relative_to(source_dir).as_posix())
             for dirname in dirnames:
                 zip_ref.writestr(str(top / rel_root / dirname) + "/", "")

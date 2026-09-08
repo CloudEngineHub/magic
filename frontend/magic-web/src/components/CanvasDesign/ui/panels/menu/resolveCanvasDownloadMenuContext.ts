@@ -93,7 +93,11 @@ export async function resolveCanvasDownloadMenuContext(
 	const getFileResourceMeta = canvas.magicConfigManager.config?.methods?.getFileResourceMeta
 	const flags = await Promise.all(
 		imageElements.map(async (img) => {
-			const src = getActiveImageContent(img).src
+			const src =
+				(typeof canvas.getEffectiveContent === "function"
+					? (canvas.getEffectiveContent(img.id) as { src?: string } | undefined)
+					: undefined
+				)?.src ?? getActiveImageContent(img).src
 			if (!src) return false
 			const meta = getFileResourceMeta
 				? await getFileResourceMeta(src).catch(() => null)

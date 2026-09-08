@@ -21,7 +21,7 @@ export class AudioReplaceController {
 	}
 
 	public openLocalFilePicker(elementId: string): void {
-		if (this.destroyed || this.canvas.readonly) return
+		if (this.destroyed || !this.canvas.permissionManager.can("document.write")) return
 		const element = this.canvas.elementManager.getElementData(elementId)
 		const contentId =
 			element?.type === ElementTypeEnum.Audio
@@ -35,7 +35,8 @@ export class AudioReplaceController {
 	}
 
 	public replaceWithProjectFile(elementId: string, path: string): Promise<boolean> {
-		if (this.destroyed || this.canvas.readonly) return Promise.resolve(false)
+		if (this.destroyed || !this.canvas.permissionManager.can("document.write"))
+			return Promise.resolve(false)
 		return (
 			this.canvas.mediaReplaceController?.replaceWithProjectFile({
 				elementId,

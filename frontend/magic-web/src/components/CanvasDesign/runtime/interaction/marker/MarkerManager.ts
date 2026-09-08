@@ -129,6 +129,16 @@ export class MarkerManager {
 			}
 		})
 
+		// Content 预览只改变会话展示状态；按 effective Content 重新计算
+		// marker 可见性，不能复用 element:updated（预览不会产生文档更新）。
+		this.canvas.eventEmitter.on("content:previewChanged", ({ data }) => {
+			if (!data.elementId) {
+				this.rerenderAllMarkers()
+				return
+			}
+			this.rerenderMarkersForElement(data.elementId)
+		})
+
 		// 监听viewport缩放事件，更新标记缩放（保持固定大小）
 		this.canvas.eventEmitter.on("viewport:scale", () => {
 			this.updateAllMarkerScales()
@@ -370,14 +380,15 @@ export class MarkerManager {
 
 	private getActiveImageContentId(elementId: string): string | undefined {
 		const element = this.canvas.elementManager.getElementData(elementId)
-		return element?.type === "image" ? getActiveImageContentId(element) : undefined
+		if (element?.type !== "image") return undefined
+		return this.canvas.getEffectiveContentId(elementId) ?? getActiveImageContentId(element)
 	}
 
 	private isMarkerVisible(marker: Marker): boolean {
 		const element = this.canvas.elementManager.getElementData(marker.elementId)
 		if (!element || element.type !== "image") return true
 		if (!isImageElementContent(element)) return true
-		return marker.contentId === element.activeContentId
+		return marker.contentId === this.getActiveImageContentId(element.id)
 	}
 
 	/** 切换 Content 后永久清理旧 Content Marker；Marker 不进入撤销恢复。 */

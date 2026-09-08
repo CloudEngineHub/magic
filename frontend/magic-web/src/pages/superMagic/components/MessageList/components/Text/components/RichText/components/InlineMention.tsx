@@ -1,5 +1,6 @@
 import { memo, useCallback, type MouseEvent } from "react"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
+import TSIcon from "@/components/base/TSIcon"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import {
 	getMentionDescription,
@@ -33,6 +34,11 @@ import {
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { getCanvasMarkerMentionImagePath } from "@/components/business/MentionPanel/utils/canvasMarkerMention"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
+import { ProjectDirectoryMentionIcon } from "@/pages/superMagic/components/MessageEditor/components/MentionNodes/folder/ProjectDirectoryMentionIcon"
+import {
+	FileReference,
+	getFileExtensionFromPath,
+} from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/FileReference"
 
 interface InlineMentionProps {
 	data: TiptapMentionAttributes
@@ -168,7 +174,82 @@ function InlineDefaultMention(props: InlineMentionProps) {
 
 	const isDirectory =
 		data.type === MentionItemType.FOLDER || data.type === MentionItemType.MEMORY_DIRECTORY
-	const label = isDirectory ? `@${displayName}/` : `@${displayName}`
+	const label = `@${displayName}`
+	const filePath =
+		fileData?.relative_file_path || fileData?.file_path || fileData?.file_name || ""
+	const fileLabel = fileData?.file_name || displayName
+	const fileVisual = isFileMention ? (
+		shouldRenderIcon && fileData ? (
+			<span
+				className={cn("magic-mention", "!inline-flex items-center gap-1 !align-middle")}
+				data-type={data.type}
+				data-data={JSON.stringify(data.data)}
+				onMouseDown={(event) => event.preventDefault()}
+				onClick={handleClick}
+			>
+				<span className="flex shrink-0 items-center" data-testid="inline-file-mention-icon">
+					<MentionMediaIcon
+						type={
+							data.type as
+								| typeof MentionItemType.PROJECT_FILE
+								| typeof MentionItemType.UPLOAD_FILE
+						}
+						data={fileData}
+						size={16}
+						mediaSource={mediaSource}
+					/>
+				</span>
+				<span className="min-w-0 truncate" title={fileLabel}>
+					{fileLabel}
+				</span>
+			</span>
+		) : (
+			<span
+				className="magic-mention !inline-flex max-w-full !overflow-visible !rounded-none !bg-transparent !p-0 !align-middle"
+				data-type={data.type}
+				data-data={JSON.stringify(data.data)}
+				onMouseDown={(event) => event.preventDefault()}
+			>
+				<FileReference
+					label={fileLabel}
+					fileType={fileData?.file_extension || getFileExtensionFromPath(filePath)}
+					title={fileLabel}
+					onClick={handleClick}
+				/>
+			</span>
+		)
+	) : isDirectory ? (
+		<span
+			className="magic-mention !inline-flex items-center gap-1 !align-middle"
+			data-type={data.type}
+			data-data={JSON.stringify(data.data)}
+			onMouseDown={(event) => event.preventDefault()}
+			onClick={handleClick}
+		>
+			{data.type === MentionItemType.FOLDER ? (
+				<ProjectDirectoryMentionIcon
+					data={data.data as DirectoryMentionData}
+					workspaceFilesList={projectFilesStore?.workspaceFilesList ?? []}
+					size={16}
+				/>
+			) : (
+				<TSIcon type="ts-folder" size="16" className="shrink-0" />
+			)}
+			<span className="min-w-0 truncate" title={displayName}>
+				{displayName}
+			</span>
+		</span>
+	) : (
+		<span
+			className="magic-mention"
+			data-type={data.type}
+			data-data={JSON.stringify(data.data)}
+			onMouseDown={(event) => event.preventDefault()}
+			onClick={handleClick}
+		>
+			{label}
+		</span>
+	)
 
 	return (
 		<MentionTooltipWrapper
@@ -182,34 +263,7 @@ function InlineDefaultMention(props: InlineMentionProps) {
 			mediaSource={mediaSource}
 			fileMentionRenderConfig={fileMentionRenderConfig}
 		>
-			<span
-				className={cn(
-					"magic-mention",
-					shouldRenderIcon && "!inline-flex items-center gap-1 !align-middle",
-				)}
-				data-type={data.type}
-				data-data={JSON.stringify(data.data)}
-				onMouseDown={(event) => event.preventDefault()}
-				onClick={handleClick}
-			>
-				{shouldRenderIcon && fileData ? (
-					<span
-						className="flex shrink-0 items-center"
-						data-testid="inline-file-mention-icon"
-					>
-						<MentionMediaIcon
-							type={
-								data.type as
-									MentionItemType.PROJECT_FILE | MentionItemType.UPLOAD_FILE
-							}
-							data={fileData}
-							size={16}
-							mediaSource={mediaSource}
-						/>
-					</span>
-				) : null}
-				{label}
-			</span>
+			{fileVisual}
 		</MentionTooltipWrapper>
 	)
 }

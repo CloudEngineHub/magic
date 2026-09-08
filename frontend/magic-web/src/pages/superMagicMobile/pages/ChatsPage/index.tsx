@@ -87,6 +87,20 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 		})
 	}, [location.state, navigate, optimisticRemove, reload])
 
+	/** Execute the destructive operation only after the shared confirmation popup accepts it. */
+	const handleDeleteConversation = useMemoizedFn(async (project: ProjectListItem) => {
+		try {
+			optimisticRemove(project.id)
+			await SuperMagicService.deleteProject(project, {
+				selectedProjectBehavior: "navigate-home",
+			})
+			await reload({ silent: true })
+		} catch {
+			await reload({ silent: true })
+			magicToast.error(t("super:chat.deleteChatDescription"))
+		}
+	})
+
 	/**
 	 * 与对话详情页使用完全相同的参数调用 useProjectListActions，确保操作项（label/行为）严格一致。
 	 * - visibleActionKeys 与详情页 MOBILE_CHAT_DETAIL_ACTION_KEYS 对齐，不展示「移动」「协作者」等列表页不相关的操作
@@ -97,12 +111,14 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 		projectActions,
 		projectActionComponents: chatProjectActionComponents,
 		updateCurrentActionItem,
+		openProjectDeleteConfirm,
 	} = useProjectListActions({
 		mode: "chat",
 		chatActionContext: "detail",
 		deleteSelectedProjectBehavior: "navigate-home",
 		visibleActionKeys: MOBILE_CHAT_DETAIL_ACTION_KEYS,
 		onProjectChanged: () => reload({ silent: true }),
+		onDeleteProjectConfirmed: handleDeleteConversation,
 	})
 
 	/** 当前待操作的对话（点击更多时设置，面板关闭时清空） */
@@ -227,23 +243,6 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 	})
 
 	/**
-	 * 左滑删除：先乐观移除（即时 UI 反馈），等待删除 API 完成后再刷新列表。
-	 * 若服务端删除失败，reload 会恢复列表并还原乐观删除。
-	 */
-	const handleDeleteConversation = useMemoizedFn(async (item: ChatConversationListItem) => {
-		try {
-			optimisticRemove(item.id)
-			await SuperMagicService.deleteProject(item.project, {
-				selectedProjectBehavior: "navigate-home",
-			})
-			await reload({ silent: true })
-		} catch {
-			await reload({ silent: true })
-			magicToast.error(t("super:chat.deleteChatDescription"))
-		}
-	})
-
-	/**
 	 * 左滑置顶/取消置顶：成功后先做一次本地乐观重排，再由列表自己的 reload 对齐服务端顺序。
 	 * 这里避免调用 pinProjectAndRefresh，防止同时触发 participated 列表刷新和 chat queries 刷新。
 	 */
@@ -285,7 +284,7 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 				onOpenConversation={handleOpenConversation}
 				onMore={handleMoreConversation}
 				onPin={MOBILE_CHAT_PIN_ENABLED ? handlePinConversation : undefined}
-				onDelete={handleDeleteConversation}
+				onDelete={(item) => openProjectDeleteConfirm(item.project)}
 				onRefresh={reload}
 				loadMore={loadMore}
 				title={t("super:chatList.title")}

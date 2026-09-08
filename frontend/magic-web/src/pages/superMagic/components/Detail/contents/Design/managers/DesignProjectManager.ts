@@ -62,6 +62,8 @@ import {
 	setHydratedElementDetailsProvenance,
 	transferHydratedElementDetailsProvenance,
 } from "../utils/elementDetailsIo"
+import { getDesignBaseAccessMode } from "./types"
+import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
 
 type ElementLevelMergeConflictResult = Extract<
 	DesignDataElementMergeResult,
@@ -133,8 +135,7 @@ export interface DesignProjectManagerAPI {
 	}>
 	updateLocalVersion: (version: number) => void
 
-	isReadOnly: boolean
-	setIsReadOnly: (value: boolean) => void
+	setAccessMode: (value: CanvasAccessMode) => void
 	clearConflictState: () => void
 	resolveBlockingConflictWithRemote: () => boolean
 	resolveBlockingConflictWithLocal: () => Promise<boolean>
@@ -177,7 +178,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 	fileVersionsList: FileHistoryVersion[]
 	fileVersion: number | undefined
-	isReadOnly: boolean
 	isProcessingRevoke: boolean
 	revokeType: "revoke" | "restore" | null
 	conflictState: DesignConflict | null
@@ -210,7 +210,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	private options: DesignProjectManagerOptions
 	private getFileVersionsList: () => FileHistoryVersion[]
 	private getFileVersion: () => number | undefined
-	private getIsReadOnly: () => boolean
+	private getAccessMode: () => CanvasAccessMode
 
 	constructor(params: DesignProjectManagerFactoryParams) {
 		const { stateBag, options, getFileVersionsList, getFileVersion } = params
@@ -219,7 +219,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.options = options
 		this.getFileVersionsList = getFileVersionsList
 		this.getFileVersion = getFileVersion
-		this.getIsReadOnly = () => stateBag.getIsReadOnly()
+		this.getAccessMode = () => stateBag.getAccessMode()
 
 		this.magicProjectJsFileId = null
 		this.designData = {
@@ -234,8 +234,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.isSaving = false
 		this.fileVersionsList = []
 		this.fileVersion = undefined
-		this.isReadOnly =
-			!options.allowEdit || options.isPlaybackMode || options.isShareRoute || options.isMobile
 		this.isProcessingRevoke = false
 		this.revokeType = null
 		this.conflictState = null
@@ -290,7 +288,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 			try {
 				const { data, version, loadResult } = await this.versionManager.loadLatest()
-				if (!data) return null
+				if (!data || !loadResult) return null
 
 				const clonedData = cloneDeep(data) as DesignData
 				transferHydratedElementDetailsProvenance(data, clonedData)
@@ -350,6 +348,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 		const listenerOptions: DesignRemoteListenerOptions = {
 			...options,
+			getAccessMode: () => this.getAccessMode(),
 			getMagicProjectJsFileId: () => this.stateBag.getMagicProjectJsFileId(),
 			getIsViewingHistory: isVersionDataSourceLocked,
 			getDesignDataName: () => this.stateBag.getDesignData().name,
@@ -369,12 +368,21 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	}
 
 	updateOptions(options: DesignProjectManagerOptions): void {
+		const previousBaseMode = getDesignBaseAccessMode(this.options)
+		const nextBaseMode = getDesignBaseAccessMode(options)
 		this.options = options
+		if (
+			this.stateBag.getAccessMode() === previousBaseMode &&
+			nextBaseMode !== previousBaseMode
+		) {
+			this.setAccessMode(nextBaseMode)
+		}
 		this.loadManager.updateOptions(options)
 		this.saveManager.updateOptions(options)
 		this.versionManager.updateOptions(options)
 		this.remoteListener?.updateOptions({
 			...options,
+			getAccessMode: () => this.getAccessMode(),
 			getMagicProjectJsFileId: () => this.stateBag.getMagicProjectJsFileId(),
 			getIsViewingHistory: () => this.isVersionDataSourceLocked(),
 			getDesignDataName: () => this.stateBag.getDesignData().name,
@@ -417,7 +425,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.stateBag.setters.setDesignLoadIssue?.(loadResult.issue)
 		if (loadResult.sidecarStatus === "unsupported") {
 			this.stateBag.setters.setPendingDesignUpgrade?.(null)
-			this.stateBag.setters.setIsReadOnly(true)
+			this.stateBag.setters.setAccessMode("readonly")
 			return
 		}
 
@@ -448,7 +456,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			sourceVersion: pending.sourceVersion,
 			fileId: pending.fileId,
 		})
-		this.stateBag.setters.setIsReadOnly(true)
+		this.stateBag.setters.setAccessMode("readonly")
 	}
 
 	private updateLocalVersionIfNewer(version: number): void {
@@ -1435,10 +1443,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			!!this.options.projectId &&
 			!!this.options.designProjectId &&
 			!!this.stateBag.getMagicProjectJsFileId() &&
-			this.options.allowEdit &&
-			!this.options.isPlaybackMode &&
-			!this.options.isShareRoute &&
-			!this.options.isMobile &&
+			this.getAccessMode() === "edit" &&
 			!this.isVersionDataSourceLocked() &&
 			this.getFileVersion() === undefined
 		)
@@ -1909,7 +1914,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				sourceVersion: retry.sourceVersion,
 				fileId,
 			})
-			this.stateBag.setters.setIsReadOnly(true)
+			this.stateBag.setters.setAccessMode("readonly")
 			void writePendingDesignUpgrade(this.getUpgradeIdentity(), retry)
 			return
 		}
@@ -2004,6 +2009,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		load: () => Promise<boolean | DesignLoadResult>,
 		restoreLocalDraft: boolean,
 	): Promise<boolean> {
+		this.stateBag.setters.setIsInitialLoading(true)
 		const loadIdentity = this.loadManager.getCurrentLoadIdentity()
 		const rawLoadResult = await load()
 		const loadResult: DesignLoadResult =
@@ -2021,9 +2027,8 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 					}
 		const isCurrentLoad = !loadIdentity || this.loadManager.isCurrentLoadIdentity(loadIdentity)
 		if (!loadResult.didLoad || !isCurrentLoad) {
-			if (!loadResult.didLoad && isCurrentLoad) {
-				this.stateBag.setters.setIsInitialLoading(false)
-			}
+			// Keep the initial loading state while the attachment snapshot is not
+			// trusted yet; the caller will retry after the next refresh.
 			return false
 		}
 
@@ -2082,13 +2087,10 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		if (pendingUpgrade.fileId !== this.stateBag.getMagicProjectJsFileId()) return false
 		if (pendingUpgrade.targetVersion !== MAGIC_PROJECT_VERSION_V3) return false
 		if (this.stateBag.getDesignData().version !== MAGIC_PROJECT_VERSION_V3) return false
-		const isBaseReadOnly =
-			!this.options.allowEdit ||
-			this.options.isPlaybackMode ||
-			this.options.isShareRoute ||
-			this.options.isMobile
-		if (this.isVersionDataSourceLocked() || isBaseReadOnly) return false
-		if (this.getIsReadOnly() && pendingUpgrade.reason !== "sidecar-retry") return false
+		const baseAccessMode = getDesignBaseAccessMode(this.options)
+		if (this.isVersionDataSourceLocked() || baseAccessMode !== "edit") return false
+		if (this.getAccessMode() !== "edit" && pendingUpgrade.reason !== "sidecar-retry")
+			return false
 		if (this.hasBlockingConflict() || this.hasUnresolvedMergeConflicts()) return false
 
 		this.saveManager.cancelAutoSave()
@@ -2109,7 +2111,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 					fileId: pendingUpgrade.fileId,
 				})
 				this.stateBag.setters.setSidecarStatus?.("unsupported")
-				this.stateBag.setters.setIsReadOnly(true)
+				this.stateBag.setters.setAccessMode("readonly")
 			}
 			await this.handleSaveResultConflict(saveResult)
 			this.tryApplyPendingRemoteDesignData()
@@ -2131,7 +2133,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				sourceVersion: retry.sourceVersion,
 				fileId: retry.fileId,
 			})
-			this.stateBag.setters.setIsReadOnly(true)
+			this.stateBag.setters.setAccessMode("readonly")
 			await writePendingDesignUpgrade(this.getUpgradeIdentity(), retry)
 			return false
 		}
@@ -2143,13 +2145,13 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.stateBag.setters.setPendingDesignUpgrade?.(null)
 		this.stateBag.setters.setDesignLoadIssue?.(undefined)
 		await clearPendingDesignUpgrade(this.getUpgradeIdentity())
-		this.stateBag.setters.setIsReadOnly(isBaseReadOnly)
+		this.stateBag.setters.setAccessMode(getDesignBaseAccessMode(this.options))
 		return true
 	}
 
 	async saveToRemote(): Promise<void> {
 		if (this.isVersionDataSourceLocked()) return
-		if (this.getIsReadOnly()) return
+		if (this.getAccessMode() !== "edit") return
 		if (this.hasUnresolvedConnectionConflicts()) {
 			this.persistLocalDraft(this.stateBag.getDesignData(), { immediate: true })
 			return
@@ -2272,8 +2274,8 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		return this.versionManager.fetchFileVersions()
 	}
 
-	setIsReadOnly(value: boolean): void {
-		this.stateBag.setters.setIsReadOnly(value)
+	setAccessMode(value: CanvasAccessMode): void {
+		this.stateBag.setters.setAccessMode(value)
 	}
 
 	private resolveElementConflicts(options: {

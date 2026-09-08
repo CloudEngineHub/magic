@@ -35,11 +35,13 @@ import { SUPER_PLACEHOLDER_TYPE } from "../extensions/super-placeholder/const"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import MarkerMentionNodeView from "../components/MentionNodes/marker/MarkerMentionNodeView"
 import FileMentionNodeView from "../components/MentionNodes/file/FileMentionNodeView"
+import FolderMentionNodeView from "../components/MentionNodes/folder/FolderMentionNodeView"
 import { runActiveEditor } from "../utils/editorLifecycle"
 import {
 	tryAcceptPromptCarouselShortcut,
 	tryNavigatePromptCarouselShortcut,
 } from "../utils/promptCarousel"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 
 interface UseMessageEditorProps {
 	value?: JSONContent
@@ -81,6 +83,7 @@ interface UseMessageEditorProps {
 		stillExists: boolean,
 		context?: { deletionInput: MentionDeletionInput },
 	) => boolean
+	getWorkspaceFilesList?: () => AttachmentItem[]
 }
 
 type MentionEditorCommands = {
@@ -154,6 +157,7 @@ export const useMessageEditor = ({
 	isTrustedMention,
 	shouldSkipRemoveSync,
 	shouldRestoreRemovedMention,
+	getWorkspaceFilesList,
 }: UseMessageEditorProps) => {
 	const domRef = useRef<HTMLDivElement>(null)
 	const { i18n } = useTranslation()
@@ -308,6 +312,12 @@ export const useMessageEditor = ({
 			Paragraph,
 			Text,
 			HardBlock,
+			CopyMessageExtension.configure({
+				onMentionsInsert: onMentionInsertItems,
+				onContentChange: onChange,
+				dataService: mentionPanelStore,
+				getWorkspaceFilesList,
+			}),
 			CodeAwarePasteExtension,
 			SuperPlaceholderExtension.configure({
 				size: size || "default",
@@ -319,11 +329,6 @@ export const useMessageEditor = ({
 			UndoRedo.configure({
 				depth: 100,
 				newGroupDelay: 250,
-			}),
-			CopyMessageExtension.configure({
-				onMentionsInsert: onMentionInsertItems,
-				onContentChange: onChange,
-				dataService: mentionPanelStore,
 			}),
 			...(shouldEnableMention
 				? [
@@ -354,6 +359,12 @@ export const useMessageEditor = ({
 								[MentionItemType.DESIGN_MARKER]: MarkerMentionNodeView,
 								[MentionItemType.PROJECT_FILE]: FileMentionNodeView,
 								[MentionItemType.UPLOAD_FILE]: FileMentionNodeView,
+								[MentionItemType.FOLDER]: (props) => (
+									<FolderMentionNodeView
+										{...props}
+										getWorkspaceFilesList={getWorkspaceFilesList}
+									/>
+								),
 							},
 							shouldSkipInsertSync,
 							shouldSkipMentionValidation,

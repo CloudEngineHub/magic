@@ -39,6 +39,7 @@ import {
 	getCanvasResourceFileName,
 	getCanvasResourceReferenceIdentity,
 } from "../../../../runtime/shared/path/canvasResourcePath"
+import { createReferenceResourcePanelItemFromPath } from "../../../editors/message/reference-assets/createReferenceResourcePanelItem"
 import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
 import MessageEditor, { type MessageEditorRef } from "../../../editors/message/MessageEditor"
 import { useCanvasReferenceMention } from "../../../editors/message/useCanvasReferenceMention"
@@ -109,6 +110,15 @@ import {
 	type VideoPromptPlaceholderReference,
 } from "./prompt-placeholders/video-prompt-placeholder"
 import { hasVideoGenerationRequestSubmitIntent } from "../../../../runtime/shared/videoGenerationRequestIntent"
+import { CanvasDesignClipboard } from "../../../../runtime/resources/clipboard/CanvasDesignClipboard"
+import {
+	claimCanvasClipboardPasteEvent,
+	getCanvasClipboardPasteController,
+	hasCanvasClipboardMimeType,
+	hasCanvasClipboardTextOrHtml,
+	type CanvasClipboardAsset,
+	type CanvasClipboardMediaType,
+} from "../../../../runtime/resources/clipboard/CanvasClipboardPasteController"
 import { synchronizeLinkedFrameBindings } from "./linkedFrameBindings"
 import {
 	areMediaEditSnapshotsEqual,
@@ -171,6 +181,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const [sourceListContainer, setSourceListContainer] = useState<HTMLDivElement | null>(null)
 	const sendingRef = useRef(false)
 	const isMountedRef = useRef(false)
+	const clipboardEpochRef = useRef(0)
 	const sessionPersistenceEnabledRef = useRef(true)
 	const hasScrollbar = hasEditorScrollbar || hasSourceListScrollbar
 	const confirmVideoGeneration = useVideoPointsConfirm()
@@ -203,6 +214,35 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		getAdditionalReferenceAssetInfos,
 	})
 	const { handlers } = config
+	const clipboardSessionIdRef = useRef("")
+	const getClipboardSessionId = useCallback(
+		() =>
+			[
+				videoElement.id,
+				videoElement.activeContentId ?? "",
+				config.selectedModelId,
+				config.selectedInputMode,
+				config.selectedResourceSlot?.inputTab ?? "",
+				config.selectedResourceSlot?.slotKey ??
+					(config.selectedResourceSlot
+						? `index-${config.selectedResourceSlot.slotIndex}`
+						: ""),
+				config.selectedResourceSlot?.slotIndex ?? "",
+				config.selectedResourceSlot?.referenceAssetKind ?? "",
+				config.selectedResourceSlot?.path ?? "",
+				clipboardEpochRef.current,
+			].join(":"),
+		[
+			config.selectedInputMode,
+			config.selectedModelId,
+			config.selectedResourceSlot,
+			videoElement.activeContentId,
+			videoElement.id,
+		],
+	)
+	clipboardSessionIdRef.current = getClipboardSessionId()
+	const clipboardHandlersRef = useRef(handlers)
+	clipboardHandlersRef.current = handlers
 	const sessionStore = canvas?.mediaEditRecoveryManager
 	const sessionKey = useMemo(
 		() =>
@@ -857,14 +897,206 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 
 	const handlePaste = useCallback(
 		(event: ClipboardEvent<HTMLDivElement>) => {
-			const files = Array.from(event.clipboardData.files) as File[]
-			if (files.length === 0) return
-			if (!canAcceptLocalFiles(files).accepted) return
+			const nativeEvent = event.nativeEvent
+			const files = CanvasDesignClipboard.readEventFilesSnapshot(nativeEvent)
+			const nativeFiles = CanvasDesignClipboard.readAllEventFilesSnapshot(nativeEvent)
+			const hasCanvasMime = hasCanvasClipboardMimeType(nativeEvent)
+			const hasTextOrHtml = hasCanvasClipboardTextOrHtml(nativeEvent)
+			// Keep unsupported native files (such as PDFs) on the existing browser
+			// path; this media editor only owns image/video/audio files.
+			if (!hasCanvasMime && nativeFiles.length > 0 && files.length === 0) return
+			if (!hasCanvasMime && files.length > 0) {
+				if (!canAcceptLocalFiles(files).accepted) return
+				if (!claimCanvasClipboardPasteEvent(nativeEvent)) return
+				event.preventDefault()
+				event.stopPropagation()
+				void clipboardHandlersRef.current.uploadReferenceFiles(files)
+				return
+			}
+			if (!hasCanvasMime && files.length === 0 && hasTextOrHtml) return
 
-			event.preventDefault()
-			void handlers.uploadReferenceFiles(files)
+			const selectedSlot = config.selectedResourceSlot
+			const targetInputTab = selectedSlot?.inputTab ?? config.activeInputTab
+			const frameAcceptedTypes: CanvasClipboardMediaType[] =
+				config.supportsStartFrame || config.supportsEndFrame ? ["image"] : []
+			const referenceAcceptedTypes: CanvasClipboardMediaType[] = [
+				...(config.supportsReferenceImages ? (["image"] as const) : []),
+				...(config.supportsReferenceVideos ? (["video"] as const) : []),
+				...(config.supportsReferenceAudios ? (["audio"] as const) : []),
+			]
+			const acceptedTypes =
+				targetInputTab === "frame" ? frameAcceptedTypes : referenceAcceptedTypes
+			if (acceptedTypes.length === 0) {
+				if (hasCanvasMime && claimCanvasClipboardPasteEvent(nativeEvent)) {
+					event.preventDefault()
+					event.stopPropagation()
+				}
+				return
+			}
+
+			const currentFrameCount = config.currentFrameImages.filter(Boolean).length
+			const currentReferenceCount = effectiveReferencePaths.length
+			const frameCapacity =
+				config.maxFrameImages === undefined
+					? undefined
+					: Math.max(
+							0,
+							config.maxFrameImages -
+								currentFrameCount +
+								(selectedSlot?.inputTab === "frame" && selectedSlot.path ? 1 : 0),
+						)
+			const referenceCapacity =
+				effectiveMaxReferenceFiles === undefined
+					? undefined
+					: Math.max(
+							0,
+							effectiveMaxReferenceFiles -
+								currentReferenceCount +
+								(selectedSlot?.inputTab === "reference" && selectedSlot.path
+									? 1
+									: 0),
+						)
+			const selectedReferenceKinds =
+				selectedSlot?.inputTab === "reference"
+					? selectedSlot.referenceAssetKinds?.length
+						? selectedSlot.referenceAssetKinds
+						: selectedSlot.referenceAssetKind
+							? [selectedSlot.referenceAssetKind]
+							: acceptedTypes
+					: acceptedTypes
+			const targetAcceptedTypes: CanvasClipboardMediaType[] =
+				targetInputTab === "frame" ? ["image"] : [...selectedReferenceKinds]
+			const referenceTypeCapacity = (kind: "image" | "video" | "audio") => {
+				if (!selectedReferenceKinds.includes(kind)) return 0
+				const limit =
+					kind === "image"
+						? effectiveReferenceAssetLimits.reference_images.max
+						: kind === "video"
+							? effectiveReferenceAssetLimits.reference_videos.max
+							: effectiveReferenceAssetLimits.reference_audios.max
+				const current =
+					kind === "image"
+						? effectiveReferenceAssetCounts.images
+						: kind === "video"
+							? effectiveReferenceAssetCounts.videos
+							: effectiveReferenceAssetCounts.audios
+				const replacementAllowance =
+					selectedSlot?.inputTab === "reference" &&
+					selectedSlot.path &&
+					selectedSlot.referenceAssetKind === kind
+						? 1
+						: 0
+				return Number.isFinite(limit)
+					? Math.max(0, limit - current + replacementAllowance)
+					: undefined
+			}
+			// Capacity already includes one replacement slot when an existing resource
+			// is selected. This allows a multi-asset paste to replace the selected
+			// resource first and append subsequent assets in order.
+			const maxCount = targetInputTab === "frame" ? frameCapacity : referenceCapacity
+			const maxCountByType =
+				targetInputTab === "frame"
+					? { image: frameCapacity }
+					: {
+							image: referenceTypeCapacity("image"),
+							video: referenceTypeCapacity("video"),
+							audio: referenceTypeCapacity("audio"),
+						}
+			let pastedAssetIndex = 0
+
+			void getCanvasClipboardPasteController().paste(
+				nativeEvent,
+				{
+					control: "video-editor",
+					acceptedTypes: [...targetAcceptedTypes],
+					projectId:
+						canvas?.magicConfigManager.config?.methods?.getCanvasClipboardContext?.()
+							.projectId,
+					canvasId: canvas?.id,
+					maxCount,
+					maxCountByType,
+					sessionId: getClipboardSessionId(),
+				},
+				{
+					onAsset: async (asset: CanvasClipboardAsset) => {
+						if (asset.reference?.kind === "current-canvas") {
+							if (asset.reference.awaitingAttachmentConfirmation) {
+								canvas?.canvasFileUploadManager.registerPendingResourcePath(
+									asset.reference.path,
+								)
+							}
+							const item = createReferenceResourcePanelItemFromPath(
+								asset.reference.path,
+								asset.reference.fileName,
+							)
+							const selected = selectedSlot
+							if (selected && pastedAssetIndex === 0) {
+								clipboardHandlersRef.current.replaceSelectedResource(
+									{
+										path: item.data.file_path,
+										src: item.data.file_path,
+										fileName: item.data.file_name,
+									},
+									{ retainResourceSlot: true },
+								)
+							} else {
+								const fileInfo = {
+									path: item.data.file_path,
+									src: item.data.file_path,
+									fileName: item.data.file_name,
+								}
+								if (targetInputTab === "frame") {
+									clipboardHandlersRef.current.appendFrameImage(fileInfo)
+								} else {
+									editorRef.current?.insertMentionItems([item])
+								}
+							}
+							pastedAssetIndex += 1
+							return
+						}
+						if (!asset.file) return
+						const isFirstAsset = pastedAssetIndex === 0
+						// uploadReferenceFiles consumes the selected slot for the first
+						// asset and subsequent assets intentionally use the normal
+						// append/first-empty-slot path so an existing later slot can
+						// never be overwritten by a stale selection index.
+						await clipboardHandlersRef.current.uploadReferenceFiles([asset.file], {
+							ignoreSelectedResourceSlot: !isFirstAsset,
+							retainSelectedResourceSlot: Boolean(selectedSlot),
+							suppressPartialSkippedToast: true,
+						})
+						pastedAssetIndex += 1
+					},
+					onSettled: () => {
+						if (selectedSlot) {
+							clipboardHandlersRef.current.resetSelectedResourceSlot(selectedSlot)
+						}
+					},
+					isSessionCurrent: (sessionId: string) =>
+						isMountedRef.current && sessionId === clipboardSessionIdRef.current,
+				},
+			)
 		},
-		[canAcceptLocalFiles, handlers],
+		[
+			canAcceptLocalFiles,
+			canvas?.id,
+			canvas?.canvasFileUploadManager,
+			canvas?.magicConfigManager.config?.methods,
+			config.maxFrameImages,
+			effectiveReferenceAssetLimits,
+			effectiveMaxReferenceFiles,
+			config.selectedResourceSlot,
+			config.supportsEndFrame,
+			config.supportsReferenceAudios,
+			config.supportsReferenceImages,
+			config.supportsReferenceVideos,
+			config.supportsStartFrame,
+			config.activeInputTab,
+			config.currentFrameImages,
+			effectiveReferencePaths,
+			effectiveReferenceAssetCounts,
+			getClipboardSessionId,
+		],
 	)
 
 	const { overlayState, dragEvents } = useReferenceResourceDrop({
@@ -896,6 +1128,8 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
 			if (!(elementInstance instanceof VideoElementClass)) return
 			sendingRef.current = true
+			clipboardEpochRef.current += 1
+			clipboardSessionIdRef.current = getClipboardSessionId()
 			setIsSending(true)
 			try {
 				handlers.cancelPendingDraftPersistence()
@@ -936,6 +1170,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			config.ratioOption,
 			config.selectedModelId,
 			captureSessionDraft,
+			getClipboardSessionId,
 			handlers,
 			onGenerateSubmitSucceeded,
 			sessionKey,
@@ -1156,7 +1391,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 					onMentionChange={handleMentionChange}
 					onMentionItemHoverChange={setHoveredMentionPath}
 					mentionEnabled={mentionEnabled}
-					onPaste={handlePaste}
+					onPasteCapture={handlePaste}
 				/>
 				<VideoEditorControls
 					config={config}

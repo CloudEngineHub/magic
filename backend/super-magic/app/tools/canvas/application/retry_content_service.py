@@ -141,13 +141,13 @@ class RetryContentService:
                 if not isinstance(content.fields, GeneratedMediaContentFields):
                     raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Only generated media Content can be retried.")
                 content.fields.mark_pending()
-                ContentMetadataService.clear_public_request(metadata, element.element_id, item.content_id)
                 retry_detail = CanvasApplicationOperations.start_retry_detail(
                     element.element_id,
                     detail,
                     retry_count + 1,
                     parameters,
                     idempotency_key,
+                    element_type=element.element_type,
                 )
                 if is_composition:
                     retry_detail["retryResult"] = self._composition_retry_result(

@@ -320,8 +320,8 @@ class MicroAppProjectAppServiceTest extends TestCase
             ->with($rows)
             ->willReturn([]);
         $responseFormatter->method('coverUrlMapKey')
-            ->willReturnCallback(static fn (array $row, string $coverKey): string =>
-                (string) ($row['organization_code'] ?? '') . ':' . $coverKey
+            ->willReturnCallback(
+                static fn (array $row, string $coverKey): string => (string) ($row['organization_code'] ?? '') . ':' . $coverKey
             );
 
         $service = $this->createService(

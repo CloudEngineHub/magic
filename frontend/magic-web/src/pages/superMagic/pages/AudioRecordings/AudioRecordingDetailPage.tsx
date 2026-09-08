@@ -29,7 +29,10 @@ import { useRecordingAudioPlayer } from "./hooks/useRecordingAudioPlayer"
 import { useRecordingPlayerCurrentSec } from "./hooks/useRecordingPlayerCurrentSec"
 import { useRecordingColorSegments } from "./hooks/useRecordingColorSegments"
 import { useRecordingDetailActions } from "./hooks/useRecordingDetailActions"
-import { isAudioProjectSummaryReady } from "./utils/audio-recordings-utils"
+import {
+	isAudioProjectSummarizing,
+	isAudioProjectSummaryReady,
+} from "./utils/audio-recordings-utils"
 import { resolveDetailSummaryVisualState } from "./utils/summary-action-utils"
 import { playTranscriptFromSegment } from "./utils/transcript-playback"
 import { OWNER_RECORDING_DETAIL_CAPABILITIES } from "./types/recording-detail-capabilities"
@@ -217,6 +220,11 @@ function AudioRecordingDetailPageDesktop() {
 		if (resolvedItem) return isAudioProjectSummaryReady(resolvedItem)
 		return locationState?.cardStatus === "summarized"
 	}, [locationState?.cardStatus, resolvedItem])
+	// Completed recordings keep the historical summary path; only in-progress previews require parsed config.
+	const summaryPreviewAvailable =
+		summaryReady ||
+		(Boolean(resolvedItem && isAudioProjectSummarizing(resolvedItem)) &&
+			Boolean(fileMap?.magicProject && fileMap.magicProjectConfig))
 
 	const detailSummaryState = useMemo(
 		() =>
@@ -304,7 +312,10 @@ function AudioRecordingDetailPageDesktop() {
 		[texts.summary],
 	)
 
-	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
+	const colorSegments = useRecordingColorSegments(
+		summaryPreviewAvailable,
+		texts.summary.topics?.content,
+	)
 
 	function handleBack() {
 		navigate({ name: RouteName.AudioRecordings })
@@ -464,6 +475,7 @@ function AudioRecordingDetailPageDesktop() {
 										onExpandedChange={setPlayerExpanded}
 										onPlaybackRateChange={player.setPlaybackRate}
 										onOpenSpeakerSettings={openSpeakerSettings}
+										isSummarizing={detailSummaryState.status === "generating"}
 									/>
 								}
 								right={
@@ -479,7 +491,7 @@ function AudioRecordingDetailPageDesktop() {
 											fileMap?.notes?.path
 										}
 										attachmentList={attachmentList}
-										summaryReady={summaryReady}
+										summaryReady={summaryPreviewAvailable}
 										summarizing={detailSummaryState.status === "generating"}
 										summaryFailed={detailSummaryState.status === "failed"}
 										speakerNameMap={speakerNameMap}
@@ -577,14 +589,23 @@ function AudioRecordingDetailPageDesktop() {
 					attachmentList={shareControls.attachmentList}
 					projectName={displayTitle}
 					defaultSelectedFileIds={shareControls.defaultSelectedFileIds}
+					displayNameByFileId={shareControls.displayNameByFileId}
+					displayNameByFileName={shareControls.displayNameByFileName}
 					requiredFileIds={shareControls.requiredFileIds}
 					types={[ShareType.PasswordProtected, ShareType.Organization, ShareType.Public]}
-					fileShareUiConfig={createRecordingShareUiConfig()}
+					fileShareUiConfig={createRecordingShareUiConfig({
+						dependencyAttachments: attachmentList,
+						dependencyBundleRootPath: fileMap?.bundleRootPath,
+					})}
 				/>
 
 				<RecordingShareManagementDialog
 					open={shareControls.shareManagementOpen}
 					projectId={projectId}
+					dependencyAttachments={attachmentList}
+					dependencyBundleRootPath={fileMap?.bundleRootPath}
+					displayNameByFileId={shareControls.displayNameByFileId}
+					displayNameByFileName={shareControls.displayNameByFileName}
 					onClose={shareControls.closeManageShare}
 				/>
 				<AudioRecordingCopyDialog controller={copyController} />

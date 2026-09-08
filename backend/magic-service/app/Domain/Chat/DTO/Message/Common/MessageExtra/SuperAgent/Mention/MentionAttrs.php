@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention;
 
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Agent\AgentData;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Assistant\AssistantData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\DesignMarker\DesignMarkerData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Directory\DirectoryData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\File\FileData;
@@ -61,6 +62,7 @@ final class MentionAttrs extends AbstractDTO
                 MentionType::MEMORY_FILE => new MemoryFileData($data),
                 MentionType::MEMORY_DIRECTORY => new MemoryDirectoryData($data),
                 MentionType::AGENT => new AgentData($data),
+                MentionType::ASSISTANT => new AssistantData($data),
                 MentionType::MCP => new McpData($data),
                 MentionType::TOOL => new ToolData($data),
                 MentionType::PROJECT_DIRECTORY => new DirectoryData($data),

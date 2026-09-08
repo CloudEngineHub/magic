@@ -173,7 +173,8 @@ export class ConnectionDeleteActionRenderer {
 				radius: metrics.radius,
 				strokeWidth: metrics.borderWidth,
 				shadowColor: "rgba(0, 0, 0, 0.2)",
-				shadowBlur: ConnectionDeleteActionRenderer.SHADOW_BLUR_PX / this.getSafeStageScale(),
+				shadowBlur:
+					ConnectionDeleteActionRenderer.SHADOW_BLUR_PX / this.getSafeStageScale(),
 				shadowOffsetY: 1 / this.getSafeStageScale(),
 				shadowOpacity: 0.18,
 			})
@@ -189,7 +190,9 @@ export class ConnectionDeleteActionRenderer {
 			icon instanceof Konva.Group
 				? icon
 						.getChildren()
-						.filter((item: Konva.Node): item is Konva.Line => item instanceof Konva.Line)
+						.filter(
+							(item: Konva.Node): item is Konva.Line => item instanceof Konva.Line,
+						)
 				: []
 		iconLines[0]?.setAttrs({
 			points: [
@@ -251,7 +254,7 @@ export class ConnectionDeleteActionRenderer {
 
 	private canShow(): boolean {
 		return (
-			!this.canvas.readonly &&
+			this.canvas.permissionManager.can("document.delete") &&
 			this.canvas.permissionManager.canUseSelectionToolAffordance() &&
 			!this.canvas.connectionDragManager?.isDraggingConnection?.() &&
 			!this.canvas.stage.isDragging?.()

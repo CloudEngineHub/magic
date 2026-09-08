@@ -165,7 +165,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	private interactionCleanups: Array<() => void> = []
 	private interactionEventUnsubscribers: Array<() => void> = []
 	private referenceSourceEventUnsubscribers: Array<() => void> = []
-	private readonlyChangedUnsubscribe?: () => void
+	private permissionChangedUnsubscribe?: () => void
 	private referenceScrollOffset = 0
 	private referenceScrollMax = 0
 	private referenceListHovered = false
@@ -335,10 +335,13 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				this.consumerVisibilityInitialNotificationHandled = true
 			}
 		}
-		if (!this.readonlyChangedUnsubscribe && this.canvas.eventEmitter?.on) {
-			this.readonlyChangedUnsubscribe = this.canvas.eventEmitter.on("canvas:readonly", () => {
-				this.rerenderWhenTransformIdle()
-			})
+		if (!this.permissionChangedUnsubscribe && this.canvas.eventEmitter?.on) {
+			this.permissionChangedUnsubscribe = this.canvas.eventEmitter.on(
+				"permission:changed",
+				() => {
+					this.rerenderWhenTransformIdle()
+				},
+			)
 		}
 		if (this.referenceSourceEventUnsubscribers.length === 0 && this.canvas.eventEmitter?.on) {
 			const refreshFromSourceChange = () => {
@@ -368,8 +371,8 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	public override destroy(): void {
 		this.consumerVisibilityUnsubscribe?.()
 		this.consumerVisibilityUnsubscribe = undefined
-		this.readonlyChangedUnsubscribe?.()
-		this.readonlyChangedUnsubscribe = undefined
+		this.permissionChangedUnsubscribe?.()
+		this.permissionChangedUnsubscribe = undefined
 		this.abortReferencePreviewRequests()
 		this.referencePreviewTokens.clear()
 		this.referencePreviewResources.clear()
@@ -426,7 +429,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				if (!this.canUseElementControls(node)) return false
 				if (action.type === "preview-reference-image") return true
 				return (
-					!this.canvas.readonly &&
+					this.canvas.permissionManager.can("document.write") &&
 					!this.data.locked &&
 					this.canvas.permissionManager.canUseSelectionToolAffordance()
 				)
@@ -594,9 +597,11 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				wrap: "none",
 				name: "storyboard-control-text",
 			}),
-			...(this.canvas.readonly ? [] : [this.createSelectSuffix(row)]),
+			...(this.canvas.permissionManager.can("document.write")
+				? [this.createSelectSuffix(row)]
+				: []),
 		)
-		const overlayAnchor = this.canvas.readonly
+		const overlayAnchor = !this.canvas.permissionManager.can("document.write")
 			? undefined
 			: new Konva.Rect({
 					...row.triggerRect,
@@ -622,7 +627,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			}
 			iconImage.src = iconUrl
 		}
-		if (!this.canvas.readonly) {
+		if (this.canvas.permissionManager.can("document.write")) {
 			this.addControlHit(group, {
 				action,
 				kind: "parameter",
@@ -1217,7 +1222,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			)
 		}
 
-		if (!this.canvas.readonly) {
+		if (this.canvas.permissionManager.can("sideEffect.generate")) {
 			const generateVisual = new Konva.Group({ listening: false })
 			const generateText = generated
 				? this.getText("storyboard.regenerate", "再次生成")
@@ -1364,7 +1369,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				...descriptionTextRect,
 				text:
 					shot.description ||
-					(this.canvas.readonly
+					(!this.canvas.permissionManager.can("document.write")
 						? this.getText("storyboard.noDescription", "暂无描述")
 						: this.getText("storyboard.descriptionPlaceholder", "请输入分镜画面描述")),
 				fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
@@ -1381,7 +1386,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			}),
 		)
 		group.add(descriptionVisual)
-		if (!this.canvas.readonly) {
+		if (this.canvas.permissionManager.can("document.write")) {
 			this.addControlHit(group, {
 				action: { type: "edit-description", shotId: shot.id },
 				kind: "description",
@@ -1407,7 +1412,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			clipHeight: footer.rect.height,
 		})
 		group.add(footerGroup)
-		if (!this.canvas.readonly) {
+		if (this.canvas.permissionManager.can("document.write")) {
 			const addVisual = new Konva.Group({ listening: false })
 			addVisual.add(
 				new Konva.Rect({
@@ -1474,7 +1479,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				}),
 			)
 		}
-		if (this.canvas.readonly) return
+		if (!this.canvas.permissionManager.can("sideEffect.generate")) return
 		const generateAllVisual = new Konva.Group({ listening: false })
 		generateAllVisual.add(
 			new Konva.Rect({

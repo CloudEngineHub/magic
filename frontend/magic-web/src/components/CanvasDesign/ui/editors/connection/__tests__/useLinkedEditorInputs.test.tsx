@@ -72,6 +72,7 @@ describe("useLinkedEditorInputs draft persistence", () => {
 		})
 		mocks.useCanvas.mockReturnValue({ canvas })
 		mocks.resolveLinkedEditorInputs.mockReturnValue({
+			connectedSourceElementIds: [],
 			textConnections: [
 				{ connectionId: "text-1", sourceElementId: "source-text-1", text: "first" },
 				{ connectionId: "text-2", sourceElementId: "source-text-2", text: "second" },
@@ -123,6 +124,7 @@ describe("useLinkedEditorInputs draft persistence", () => {
 		const { canvas } = createCanvas({})
 		mocks.useCanvas.mockReturnValue({ canvas })
 		mocks.resolveLinkedEditorInputs.mockReturnValue({
+			connectedSourceElementIds: [],
 			textConnections: [],
 			textPrompt: "",
 			mediaItems: [
@@ -157,6 +159,7 @@ describe("useLinkedEditorInputs draft persistence", () => {
 		const { canvas } = createCanvas({})
 		mocks.useCanvas.mockReturnValue({ canvas })
 		mocks.resolveLinkedEditorInputs.mockReturnValue({
+			connectedSourceElementIds: [],
 			textConnections: [],
 			textPrompt: "",
 			mediaItems: [

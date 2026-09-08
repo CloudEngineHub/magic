@@ -25,6 +25,9 @@ interface TaskRepositoryInterface
      */
     public function getTaskById(int $id): ?TaskEntity;
 
+    /** @param int[] $ids @return array<int, TaskEntity> */
+    public function getTasksByIds(array $ids): array;
+
     /**
      * 通过任务ID(沙箱服务返回的taskId)获取任务
      */

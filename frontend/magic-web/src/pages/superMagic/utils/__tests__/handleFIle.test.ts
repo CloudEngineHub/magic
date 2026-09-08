@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { downloadFileWithAnchor } from "../handleFIle"
+import { downloadFileWithAnchor, getFileType } from "../handleFIle"
 
 const openLightModalMock = vi.hoisted(() => vi.fn())
 const isInAppMock = vi.hoisted(() => vi.fn(() => false))
@@ -116,5 +116,12 @@ describe("downloadFileWithAnchor", () => {
 		expect(openLightModalMock.mock.calls[0][1]).toMatchObject({
 			onAfterClose: onModalClose,
 		})
+	})
+})
+
+describe("getFileType", () => {
+	it("recognizes an Opus recording artifact as audio", () => {
+		expect(getFileType("opus")).toBe("audio")
+		expect(getFileType("OPUS")).toBe("audio")
 	})
 })

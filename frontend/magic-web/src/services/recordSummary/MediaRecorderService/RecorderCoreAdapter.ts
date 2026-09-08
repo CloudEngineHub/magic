@@ -16,6 +16,7 @@ import type {
 	AudioChunkData,
 	AudioRecorder,
 	AudioProcessingMode,
+	RecordingEncodingSnapshot,
 } from "./types/RecorderTypes"
 import {
 	RecorderError,
@@ -35,8 +36,8 @@ import { TimeTrackingWorkerManager } from "./managers/TimeTrackingWorkerManager"
 
 // Import encoders
 import type { AudioEncoder } from "./encoders/AudioEncoder"
-import { WAVEncoder } from "./encoders/WAVEncoder"
-import { PCMEncoder } from "./encoders/PCMEncoder"
+import { RecordingEncoderResolver } from "./encoders/RecordingEncoderResolver"
+import { normalizeAudioChunk } from "./utils/PcmNormalizer"
 
 // Import strategies
 import type { AudioSourceStrategy } from "./strategies/AudioSourceStrategy"
@@ -44,6 +45,7 @@ import { AudioSourceStrategyFactory } from "./utils/AudioSourceStrategyFactory"
 
 const logger = recordingLogger.namespace("Audio:RecorderCore")
 const AUDIO_WORKLET_WARNING_COOLDOWN_MS = 60_000
+const AUDIO_CALLBACK_WARNING_COOLDOWN_MS = 60_000
 
 /**
  * Default configuration for RecorderCore adapter
@@ -75,6 +77,10 @@ export class RecorderCoreAdapter {
 	// Components
 	private bufferManager: AudioBufferManager | null = null
 	private encoder: AudioEncoder | null = null
+	private readonly encoderResolver = new RecordingEncoderResolver()
+	private encodingSnapshot: RecordingEncodingSnapshot | null = null
+	private chunkProcessingPromise: Promise<void> = Promise.resolve()
+	private encodingFailed = false
 	private resourceManager: ResourceManager
 	private audioSourceStrategy: AudioSourceStrategy | null = null
 	private audioRecorder: AudioRecorder | null = null
@@ -90,9 +96,9 @@ export class RecorderCoreAdapter {
 	private visibilityChangeHandler: (() => void) | null = null
 	private audioContextStateChangeHandler: ((event: Event) => void) | null = null
 	private previousAudioContextStateChangeHandler:
-		| ((this: AudioContext, event: Event) => void)
-		| null = null
+		((this: AudioContext, event: Event) => void) | null = null
 	private audioContextStateChangeUsesEventListener = false
+	private audioTrackEndedHandlers = new Map<MediaStreamTrack, () => void>()
 	private audioContextDiagnosticsTarget: AudioContext | null = null
 	private lastAudioWorkletMetrics: {
 		processedSamples: number
@@ -103,6 +109,8 @@ export class RecorderCoreAdapter {
 	} | null = null
 	private lastAudioWorkletWarningTimestamp: number | null = null
 	private lastAudioWorkletWarningSignature: string | null = null
+	private lastAudioCallbackWarningTimestamp: number | null = null
+	private lastAudioCallbackWarningMode: AudioProcessingMode | null = null
 
 	constructor(
 		config: Partial<RecorderCoreConfig> = {},
@@ -118,9 +126,6 @@ export class RecorderCoreAdapter {
 			: createDefaultDependencies(logger)
 
 		this.resourceManager = new ResourceManager(this.dependencies.logger)
-
-		// Create encoder based on config
-		this.encoder = this.createEncoder()
 	}
 
 	/**
@@ -146,6 +151,16 @@ export class RecorderCoreAdapter {
 			this.sessionId = sessionId
 			this.chunkIndex = startChunkIndex
 			this.attachVisibilityDiagnostics()
+			this.encodingFailed = false
+
+			// Resolve and smoke-test the encoder before opening the microphone. This prevents
+			// a session from producing a first chunk with a format that later becomes invalid.
+			const resolvedEncoder = await this.encoderResolver.resolve(this.config)
+			this.encoder = resolvedEncoder.encoder
+			this.encodingSnapshot = {
+				format: resolvedEncoder.format,
+				policyVersion: resolvedEncoder.policyVersion,
+			}
 
 			this.dependencies.logger.log("Starting recording", {
 				sessionId,
@@ -295,7 +310,16 @@ export class RecorderCoreAdapter {
 				this.dependencies.logger.log("Flushing remaining audio buffer on stop", {
 					diagnostics: this.bufferManager.getDiagnostics(),
 				})
-				this.bufferManager.forceFlush(this.config.sampleRate)
+				this.bufferManager.forceFlush()
+			}
+
+			// Wait until the last encoded chunk has been delivered before marking the session idle.
+			await this.chunkProcessingPromise
+			await this.encoder?.flush()
+			// Keep the failure state visible when an asynchronous chunk encode failed during stop.
+			if (this.encodingFailed) {
+				this.setState("error")
+				return
 			}
 
 			this.dependencies.logger.log("Recording stopped")
@@ -631,6 +655,11 @@ export class RecorderCoreAdapter {
 		return this.sessionId || null
 	}
 
+	/** Return the format snapshot that must be reused when this session resumes. */
+	getEncodingSnapshot(): RecordingEncodingSnapshot | null {
+		return this.encodingSnapshot ? { ...this.encodingSnapshot } : null
+	}
+
 	/**
 	 * Get media stream for silence detection
 	 * 获取用于静音检测的音频流
@@ -671,6 +700,11 @@ export class RecorderCoreAdapter {
 	async cleanup(): Promise<void> {
 		try {
 			this.dependencies.logger.log("Cleaning up RecorderCoreAdapter")
+			await this.chunkProcessingPromise
+			await this.encoder?.close()
+			this.encoder = null
+			this.encodingSnapshot = null
+			this.encodingFailed = false
 
 			// Clean up time tracking worker
 			// 清理时间追踪 Worker
@@ -710,8 +744,11 @@ export class RecorderCoreAdapter {
 			this.visibilityChangeHandler = null
 			this.detachAudioContextDiagnostics()
 			this.audioContext = null // Reference will be cleaned up by resourceManager
+			this.detachAudioTrackDiagnostics()
 			this.lastAudioCallbackTimestamp = null
 			this.audioCallbackCount = 0
+			this.lastAudioCallbackWarningTimestamp = null
+			this.lastAudioCallbackWarningMode = null
 			this.lastAudioWorkletMetrics = null
 			this.lastAudioWorkletWarningTimestamp = null
 			this.lastAudioWorkletWarningSignature = null
@@ -950,6 +987,7 @@ export class RecorderCoreAdapter {
 			// Store AudioContext reference for visualization
 			this.audioContext = audioContext
 			this.attachAudioContextDiagnostics(audioContext)
+			this.attachAudioTrackDiagnostics(mediaStream)
 
 			this.dependencies.logger.log("AudioContext created for AudioWorklet", {
 				requestedSampleRate: this.config.sampleRate,
@@ -1025,9 +1063,14 @@ export class RecorderCoreAdapter {
 								AUDIO_WORKLET_WARNING_COOLDOWN_MS
 
 						if (shouldLogWarning) {
-							this.dependencies.logger.warn("AudioWorklet health anomaly", {
-								...metrics,
-								warningSignature,
+							this.dependencies.logger.report({
+								namespace: "recordingAudioWorklet",
+								data: {
+									event: "health_anomaly",
+									sessionId: this.sessionId,
+									...metrics,
+									warningSignature,
+								},
 							})
 							this.lastAudioWorkletWarningTimestamp = now
 							this.lastAudioWorkletWarningSignature = warningSignature
@@ -1130,6 +1173,7 @@ export class RecorderCoreAdapter {
 				this.dependencies.logger.warn("No media stream available for script processor")
 				return
 			}
+			this.attachAudioTrackDiagnostics(mediaStream)
 
 			try {
 				// Create AudioContext
@@ -1254,31 +1298,52 @@ export class RecorderCoreAdapter {
 		this.lastAudioCallbackTimestamp = now
 		this.audioCallbackCount++
 
-		// 仅记录首个回调和间隔异常的回调，避免在热路径持续刷日志。
+		// 仅记录首个回调和节流后的间隔异常，避免在热路径持续刷日志。
 		if (this.audioCallbackCount === 1) {
-			this.dependencies.logger.log("Audio callback started", {
-				processingMode,
-				sampleCount,
-				sampleRate,
-				callbackTimestamp: this.lastAudioCallbackTimestamp,
-				audioContextState: this.audioContext?.state ?? "unavailable",
-				streamState: this.getAudioStreamDiagnostics(),
-				browserVisibilityState:
-					typeof document !== "undefined" ? document.visibilityState : "unavailable",
+			this.dependencies.logger.report({
+				namespace: "recordingAudioCallback",
+				data: {
+					event: "started",
+					sessionId: this.sessionId,
+					processingMode,
+					sampleCount,
+					sampleRate,
+					callbackTimestamp: this.lastAudioCallbackTimestamp,
+					audioContextState: this.audioContext?.state ?? "unavailable",
+					streamState: this.getAudioStreamDiagnostics(),
+					browserVisibilityState:
+						typeof document !== "undefined" ? document.visibilityState : "unavailable",
+				},
 			})
 		} else if (callbackInterval !== null && callbackInterval > 1000) {
-			this.dependencies.logger.warn("Audio callback cadence anomaly", {
-				processingMode,
-				sampleCount,
-				sampleRate,
-				callbackInterval,
-				callbackTimestamp: this.lastAudioCallbackTimestamp,
-				audioCallbackCount: this.audioCallbackCount,
-				audioContextState: this.audioContext?.state ?? "unavailable",
-				streamState: this.getAudioStreamDiagnostics(),
-				browserVisibilityState:
-					typeof document !== "undefined" ? document.visibilityState : "unavailable",
-			})
+			const now = Date.now()
+			const shouldReport =
+				this.lastAudioCallbackWarningMode !== processingMode ||
+				this.lastAudioCallbackWarningTimestamp === null ||
+				now - this.lastAudioCallbackWarningTimestamp >= AUDIO_CALLBACK_WARNING_COOLDOWN_MS
+			if (shouldReport) {
+				const data = {
+					event: "cadence_anomaly",
+					sessionId: this.sessionId,
+					processingMode,
+					sampleCount,
+					sampleRate,
+					callbackInterval,
+					callbackTimestamp: this.lastAudioCallbackTimestamp,
+					audioCallbackCount: this.audioCallbackCount,
+					audioContextState: this.audioContext?.state ?? "unavailable",
+					streamState: this.getAudioStreamDiagnostics(),
+					browserVisibilityState:
+						typeof document !== "undefined" ? document.visibilityState : "unavailable",
+				}
+				this.dependencies.logger.warn("Audio callback cadence anomaly", data)
+				this.dependencies.logger.report({
+					namespace: "recordingAudioCallback",
+					data,
+				})
+				this.lastAudioCallbackWarningTimestamp = now
+				this.lastAudioCallbackWarningMode = processingMode
+			}
 		}
 	}
 
@@ -1288,13 +1353,18 @@ export class RecorderCoreAdapter {
 			if (!this.audioContextStateChangeUsesEventListener) {
 				this.previousAudioContextStateChangeHandler?.call(audioContext, event)
 			}
-			this.dependencies.logger.warn("AudioContext state changed", {
-				state: audioContext.state,
-				currentTime: audioContext.currentTime,
-				processingMode: this.audioRecorder?.processingMode,
-				streamState: this.getAudioStreamDiagnostics(),
-				browserVisibilityState:
-					typeof document !== "undefined" ? document.visibilityState : "unavailable",
+			this.dependencies.logger.report({
+				namespace: "recordingAudioContext",
+				data: {
+					event: "state_changed",
+					sessionId: this.sessionId,
+					state: audioContext.state,
+					currentTime: audioContext.currentTime,
+					processingMode: this.audioRecorder?.processingMode,
+					streamState: this.getAudioStreamDiagnostics(),
+					browserVisibilityState:
+						typeof document !== "undefined" ? document.visibilityState : "unavailable",
+				},
 			})
 		}
 		this.audioContextDiagnosticsTarget = audioContext
@@ -1308,9 +1378,14 @@ export class RecorderCoreAdapter {
 			this.audioContextStateChangeUsesEventListener = false
 		}
 
-		this.dependencies.logger.log("AudioContext diagnostics attached", {
-			state: audioContext.state,
-			currentTime: audioContext.currentTime,
+		this.dependencies.logger.report({
+			namespace: "recordingAudioContext",
+			data: {
+				event: "diagnostics_attached",
+				sessionId: this.sessionId,
+				state: audioContext.state,
+				currentTime: audioContext.currentTime,
+			},
 		})
 	}
 
@@ -1346,13 +1421,18 @@ export class RecorderCoreAdapter {
 		}
 
 		this.visibilityChangeHandler = () => {
-			this.dependencies.logger.warn("Recording page visibility changed", {
-				visibilityState: document.visibilityState,
-				audioContextState: this.audioContext?.state ?? "unavailable",
-				audioContextTime: this.audioContext?.currentTime ?? null,
-				processingMode: this.audioRecorder?.processingMode,
-				bufferDiagnostics: this.bufferManager?.getDiagnostics(),
-				streamState: this.getAudioStreamDiagnostics(),
+			this.dependencies.logger.report({
+				namespace: "recordingPageVisibility",
+				data: {
+					event: "changed",
+					sessionId: this.sessionId,
+					visibilityState: document.visibilityState,
+					audioContextState: this.audioContext?.state ?? "unavailable",
+					audioContextTime: this.audioContext?.currentTime ?? null,
+					processingMode: this.audioRecorder?.processingMode,
+					bufferDiagnostics: this.bufferManager?.getDiagnostics(),
+					streamState: this.getAudioStreamDiagnostics(),
+				},
 			})
 		}
 
@@ -1384,6 +1464,37 @@ export class RecorderCoreAdapter {
 		}
 	}
 
+	private attachAudioTrackDiagnostics(stream: MediaStream): void {
+		const tracks = typeof stream.getAudioTracks === "function" ? stream.getAudioTracks() : []
+		for (const track of tracks) {
+			if (this.audioTrackEndedHandlers.has(track)) continue
+			const handler = () => {
+				this.dependencies.logger.report({
+					namespace: "recordingAudioTrack",
+					data: {
+						event: "ended",
+						sessionId: this.sessionId,
+						readyState: track.readyState,
+						muted: track.muted,
+						enabled: track.enabled,
+					},
+				})
+			}
+			if (typeof track.addEventListener !== "function") continue
+			track.addEventListener("ended", handler)
+			this.audioTrackEndedHandlers.set(track, handler)
+		}
+	}
+
+	private detachAudioTrackDiagnostics(): void {
+		for (const [track, handler] of this.audioTrackEndedHandlers) {
+			if (typeof track.removeEventListener === "function") {
+				track.removeEventListener("ended", handler)
+			}
+		}
+		this.audioTrackEndedHandlers.clear()
+	}
+
 	private connectSourceToNode(
 		source: MediaStreamAudioSourceNode,
 		target: AudioNode,
@@ -1402,86 +1513,67 @@ export class RecorderCoreAdapter {
 	 * 处理音频分片准备就绪事件
 	 */
 	private handleChunkReady(chunkData: AudioChunkData): void {
-		const encodingStartedAt = Date.now()
-		try {
-			if (!this.encoder) {
-				throw new RecorderError("Encoder not initialized", "ENCODER_MISSING")
-			}
+		if (this.encodingFailed) return
 
-			this.dependencies.logger.log("Audio chunk encoding started", {
-				sessionId: this.sessionId,
-				chunkIndex: this.chunkIndex,
-				sampleRate: chunkData.sampleRate,
-				samples: chunkData.pcmData.length,
-				duration: chunkData.duration,
-				encoder: this.config.type,
+		this.dependencies.logger.log("Audio chunk encoding started", {
+			sessionId: this.sessionId,
+			chunkIndex: this.chunkIndex,
+			sampleRate: chunkData.sampleRate,
+			samples: chunkData.pcmData.length,
+			duration: chunkData.duration,
+			encoder: this.config.type,
+		})
+
+		// Serialize async encodes so IndexedDB and upload callbacks retain chunk index order.
+		this.chunkProcessingPromise = this.chunkProcessingPromise
+			.then(() => this.encodeAndEmitChunk(chunkData))
+			.catch((error: Error) => {
+				this.dependencies.logger.error({
+					eventKey: "handle_chunk_ready_failed",
+					errorKind: "unknown",
+					error,
+					message: "Failed to handle chunk ready:",
+				})
+				this.encodingFailed = true
+				if (this.audioRecorder) {
+					this.audioRecorder.isRecording = false
+					this.audioRecorder.isPaused = false
+				}
+				this.setState("error")
+				this.events.onError?.(error)
 			})
-
-			// Encode audio data
-			const encodedChunk = this.encoder.encode(chunkData)
-
-			// Create blob
-			const blob = new Blob([encodedChunk.data], { type: encodedChunk.mimeType })
-
-			// Create stored audio chunk
-			const currentChunkIndex = this.chunkIndex
-			const storedChunk: StoredAudioChunk = {
-				id: this.generateChunkId(),
-				sessionId: this.sessionId,
-				chunk: blob,
-				index: this.chunkIndex++,
-				timestamp: Date.now(),
-				size: blob.size,
-				mimeType: encodedChunk.mimeType,
-				uploadStatus: "pending",
-			}
-
-			this.dependencies.logger.log("Chunk created", {
-				index: currentChunkIndex,
-				size: blob.size,
-				duration: chunkData.duration,
-				encodingDurationMs: Date.now() - encodingStartedAt,
-				processingMode: this.audioRecorder?.processingMode,
-				audioContextState: this.audioContext?.state ?? "unavailable",
-				audioCallbackCount: this.audioCallbackCount,
-			})
-
-			// Notify about chunk ready
-			this.events.onChunkReady?.(storedChunk, currentChunkIndex)
-		} catch (error) {
-			this.dependencies.logger.error({
-				eventKey: "encode_audio_chunk_failed",
-				errorKind: "unknown",
-				error: error,
-				message: "Failed to encode audio chunk",
-				context: {
-					sessionId: this.sessionId,
-					chunkIndex: this.chunkIndex,
-					encodingDurationMs: Date.now() - encodingStartedAt,
-					sampleRate: chunkData.sampleRate,
-					samples: chunkData.pcmData.length,
-				},
-			})
-			this.events.onError?.(error as Error)
-		}
 	}
 
-	/**
-	 * Create encoder based on config
-	 * 根据配置创建编码器
-	 */
-	private createEncoder(): AudioEncoder {
-		switch (this.config.type) {
-			case "wav":
-				return new WAVEncoder()
-			case "pcm":
-				return new PCMEncoder()
-			default:
-				this.dependencies.logger.warn(
-					`Unknown encoder type: ${this.config.type}, defaulting to WAV`,
-				)
-				return new WAVEncoder()
+	/** Encode one chunk and emit it only after a complete file is available. */
+	private async encodeAndEmitChunk(chunkData: AudioChunkData): Promise<void> {
+		const encodingStartedAt = Date.now()
+		if (!this.encoder) throw new RecorderError("Encoder not initialized", "ENCODER_MISSING")
+		const normalizedChunkData = normalizeAudioChunk(chunkData, this.config.sampleRate)
+		const encodedChunk = await this.encoder.encode(normalizedChunkData)
+		const blob = new Blob([encodedChunk.data], { type: encodedChunk.mimeType })
+		const currentChunkIndex = this.chunkIndex
+		const storedChunk: StoredAudioChunk = {
+			id: this.generateChunkId(),
+			sessionId: this.sessionId,
+			chunk: blob,
+			index: this.chunkIndex++,
+			timestamp: Date.now(),
+			size: blob.size,
+			mimeType: encodedChunk.mimeType,
+			uploadStatus: "pending",
 		}
+
+		this.dependencies.logger.log("Chunk created", {
+			index: currentChunkIndex,
+			size: blob.size,
+			duration: normalizedChunkData.duration,
+			format: this.encodingSnapshot?.format,
+			encodingDurationMs: Date.now() - encodingStartedAt,
+			processingMode: this.audioRecorder?.processingMode,
+			audioContextState: this.audioContext?.state ?? "unavailable",
+			audioCallbackCount: this.audioCallbackCount,
+		})
+		await this.events.onChunkReady?.(storedChunk, currentChunkIndex)
 	}
 
 	/**

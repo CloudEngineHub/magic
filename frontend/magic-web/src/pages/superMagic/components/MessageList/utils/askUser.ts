@@ -128,6 +128,7 @@ export interface AskUserActionDetail {
 	question_id: string
 	response_status: AskUserResponseStatus
 	answer: string
+	remark?: string
 }
 
 export interface AskUserAutoAction {
@@ -141,6 +142,7 @@ interface AskUserToolDetailData {
 	status?: string
 	questions?: AskUserQuestionItem[]
 	answers?: AskUserAnswerContent
+	remark?: string
 }
 
 function getSuperAgentDynamicParams(extra: unknown) {
@@ -235,22 +237,31 @@ export function buildAskUserToolReplyDetail({
 	questionId,
 	responseStatus,
 	answer = "",
+	remark = "",
 }: {
 	taskId?: string
 	questionId: string
 	responseStatus: AskUserResponseStatus
 	answer?: string
+	remark?: string
 }): AskUserActionDetail | null {
 	const resolvedTaskId = typeof taskId === "string" ? taskId.trim() : ""
 	const resolvedQuestionId = typeof questionId === "string" ? questionId : ""
 	if (!resolvedTaskId) return null
+
+	const resolvedRemark = typeof remark === "string" ? remark.trim() : ""
 
 	return {
 		task_id: resolvedTaskId,
 		question_id: resolvedQuestionId,
 		response_status: responseStatus,
 		answer,
+		...(resolvedRemark ? { remark: resolvedRemark } : {}),
 	}
+}
+
+export function normalizeAskUserRemark(value: unknown) {
+	return typeof value === "string" ? value.trim() : ""
 }
 
 interface AskUserMessageSnapshot {

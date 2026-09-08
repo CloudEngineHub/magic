@@ -9,6 +9,7 @@ import signal
 import socket
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 import uvicorn
@@ -16,29 +17,28 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from uvicorn.config import Config
-from pathlib import Path
 
+from agentlang.logger import get_logger
+from agentlang.utils.process_manager import ProcessManager
 from app.api.middleware import (
     RequestLoggingMiddleware,
     UserAuthorizationMiddleware,
     WebSocketAuthorizationMiddleware,
 )
 from app.api.routes import api_router
-from app.service.agent_dispatcher import AgentDispatcher
-from agentlang.logger import get_logger
-from app.service.cron.service import CronService
-from app.service.idle_monitor_service import IdleMonitorService
-from agentlang.utils.process_manager import ProcessManager
 from app.infrastructure.observability import (
-    setup_telemetry,
-    instrument_fastapi,
+    install_error_tracking,
     instrument_aiohttp,
-    instrument_requests,
+    instrument_fastapi,
     instrument_httpx,
     instrument_openai,
+    instrument_requests,
+    setup_telemetry,
     shutdown_telemetry,
-    install_error_tracking,
 )
+from app.service.agent_dispatcher import AgentDispatcher
+from app.service.cron.service import CronService
+from app.service.idle_monitor_service import IdleMonitorService
 
 # 获取日志记录器
 logger = get_logger(__name__)
@@ -116,16 +116,32 @@ async def cleanup_stale_files_on_startup():
 
     try:
         from app.path_manager import PathManager
-        from app.utils.async_file_utils import async_exists, async_rmtree, async_scandir
+        from app.utils.runtime_storage import (
+            RuntimeEvictionPolicy,
+            evict_runtime_directories,
+            get_runtime_config_int,
+        )
 
-        background_dir = PathManager.get_background_compact_dir()
-        if await async_exists(background_dir):
-            for entry in await async_scandir(background_dir):
-                if entry.is_dir(follow_symlinks=False):
-                    await async_rmtree(Path(entry.path))
-            logger.info("后台压缩临时目录残留检查完成")
+        for runtime_dir, config_key in (
+            (
+                PathManager.get_background_compact_dir(),
+                "runtime_cleanup.background_compact.max_age_days",
+            ),
+            (
+                PathManager.get_memory_after_run_dir(),
+                "runtime_cleanup.memory_after_run.max_age_days",
+            ),
+        ):
+            policy = RuntimeEvictionPolicy(
+                max_age_seconds=get_runtime_config_int(config_key, minimum=1)
+                * 24
+                * 60
+                * 60,
+            )
+            await evict_runtime_directories(runtime_dir, policy=policy)
+        logger.info("runtime 临时会话目录残留检查完成")
     except Exception as e:
-        logger.error(f"后台压缩临时目录残留清理失败: {e}")
+        logger.error(f"runtime 临时会话目录残留清理失败: {e}")
 
     try:
         from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
@@ -187,8 +203,8 @@ async def lifespan(app: FastAPI):
 
     # 恢复通用沙箱任务，避免服务重启后丢失页面提交的合成任务。
     try:
-        from app.service.sandbox_task.task_manager import SandboxTaskManager
         from app.api.routes.sandbox_tasks import _run_capability
+        from app.service.sandbox_task.task_manager import SandboxTaskManager
         recovered = await SandboxTaskManager.instance().recover(_run_capability)
         logger.info("通用沙箱任务恢复完成: {}", recovered)
     except Exception as e:

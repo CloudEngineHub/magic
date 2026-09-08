@@ -50,6 +50,8 @@ function computeVideoPanelPixelSize(
 interface VideoFullscreenPlayerOverlayProps {
 	src?: string
 	isOpen: boolean
+	/** 是否允许当前宿主会话执行播放、暂停和拖动进度。 */
+	playbackEnabled?: boolean
 	onClose: () => void
 	videoElement?: HTMLVideoElement | null
 	onPlayRequest?: () => Promise<boolean> | boolean
@@ -68,6 +70,7 @@ export default function VideoFullscreenPlayerOverlay(props: VideoFullscreenPlaye
 	const {
 		src,
 		isOpen,
+		playbackEnabled = true,
 		onClose,
 		videoElement: managedVideoElement = null,
 		onPlayRequest,
@@ -176,6 +179,7 @@ export default function VideoFullscreenPlayerOverlay(props: VideoFullscreenPlaye
 	}, [clearHideChromeTimer])
 
 	const togglePlay = useCallback(() => {
+		if (!playbackEnabled) return
 		const video = videoRef.current
 		if (!video) return
 		if (video.paused) {
@@ -194,7 +198,7 @@ export default function VideoFullscreenPlayerOverlay(props: VideoFullscreenPlaye
 		} else {
 			video.pause()
 		}
-	}, [onPlayRequest])
+	}, [onPlayRequest, playbackEnabled])
 
 	const handleManagedVideoError = useCallback(() => {
 		setIsVideoLoading(false)
@@ -209,6 +213,12 @@ export default function VideoFullscreenPlayerOverlay(props: VideoFullscreenPlaye
 	useEffect(() => {
 		setIsClient(true)
 	}, [])
+
+	useEffect(() => {
+		if (playbackEnabled) return
+		videoRef.current?.pause()
+		setIsPlaying(false)
+	}, [playbackEnabled])
 
 	useEffect(() => {
 		return () => clearHideChromeTimer()
@@ -415,17 +425,21 @@ export default function VideoFullscreenPlayerOverlay(props: VideoFullscreenPlaye
 		? getVideoFullscreenInset()
 		: VIDEO_FULLSCREEN_LAYOUT.insetPx
 
-	const handleProgressInput = useCallback((value: number) => {
-		const video = videoRef.current
-		const input = progressRangeRef.current
-		if (!video) return
-		const d = Number.isFinite(video.duration) ? video.duration : 0
-		if (d <= 0) return
-		video.currentTime = (value / 100) * d
-		if (input) {
-			input.style.setProperty("--progress", `${value}%`)
-		}
-	}, [])
+	const handleProgressInput = useCallback(
+		(value: number) => {
+			if (!playbackEnabled) return
+			const video = videoRef.current
+			const input = progressRangeRef.current
+			if (!video) return
+			const d = Number.isFinite(video.duration) ? video.duration : 0
+			if (d <= 0) return
+			video.currentTime = (value / 100) * d
+			if (input) {
+				input.style.setProperty("--progress", `${value}%`)
+			}
+		},
+		[playbackEnabled],
+	)
 
 	const handleScrubStart = useCallback(() => {
 		isScrubbingRef.current = true
@@ -573,7 +587,7 @@ export default function VideoFullscreenPlayerOverlay(props: VideoFullscreenPlaye
 								}}
 								className={styles.video}
 								src={src}
-								autoPlay
+								autoPlay={playbackEnabled}
 								playsInline
 								preload="metadata"
 								style={
@@ -622,7 +636,7 @@ export default function VideoFullscreenPlayerOverlay(props: VideoFullscreenPlaye
 						)}
 
 						<VideoFullscreenCenterPlayButton
-							visible={chromeVisible && !showLoading && !showError}
+							visible={playbackEnabled && chromeVisible && !showLoading && !showError}
 							isPlaying={isPlaying}
 							onToggle={togglePlay}
 							playAriaLabel={t("video.fullscreen.play", "播放")}
@@ -631,6 +645,7 @@ export default function VideoFullscreenPlayerOverlay(props: VideoFullscreenPlaye
 
 						<MediaControls
 							visible={chromeVisible}
+							playbackEnabled={playbackEnabled}
 							duration={duration}
 							progressRangeRef={progressRangeRef}
 							currentTimeLabelRef={currentTimeLabelRef}

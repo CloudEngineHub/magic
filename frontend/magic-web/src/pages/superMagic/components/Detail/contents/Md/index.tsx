@@ -1,5 +1,5 @@
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
 import { cn } from "@/utils/cn"
@@ -37,6 +37,7 @@ import { SuperMagicApi } from "@/apis"
 import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
 import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { documentExportService } from "@/pages/superMagic/services/documentExport"
+import { isLargeMarkdownContent } from "./components/EditorBody/largeMarkdown"
 
 interface TextEditorProps {
 	data?: any
@@ -98,6 +99,8 @@ interface TextEditorProps {
 	isExporting?: boolean
 	openFileTab?: (fileItem: { file_id: string } & Record<string, any>) => void
 	isPlaybackMode?: boolean
+	/** Cached file tabs use this to gate global preview shortcuts and background work. */
+	isTabActive?: boolean
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
 	/** playback 模式下，由 PlaybackTabContent 提供的 portal 挂载点 */
@@ -171,6 +174,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		isExporting,
 		openFileTab,
 		isPlaybackMode,
+		isTabActive = true,
 		allowDownload,
 		mdToolbarContainer,
 	} = props
@@ -217,6 +221,27 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// 计算当前的内容源 - savedContent 优先于 fileData 和 displayData?.content
 	const currentContent = savedContent || displayData?.content || fileData || ""
+	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(currentContent), [currentContent])
+	const wasEditingLargeMarkdownRef = useRef(false)
+
+	// Large documents use the virtual preview while reading and Monaco while editing.
+	// Keep the public view-mode state aligned so the header never advertises rich preview during edits.
+	useEffect(() => {
+		if (isLargeMarkdown && isEditMode) {
+			wasEditingLargeMarkdownRef.current = true
+			if (internalViewMode !== "code") {
+				setInternalViewMode("code")
+				onViewModeChange?.("code")
+			}
+			return
+		}
+
+		if (wasEditingLargeMarkdownRef.current && !isEditMode) {
+			wasEditingLargeMarkdownRef.current = false
+			setInternalViewMode("desktop")
+			onViewModeChange?.("desktop")
+		}
+	}, [internalViewMode, isEditMode, isLargeMarkdown, onViewModeChange])
 
 	// 初始化编辑内容和原始内容
 	useEffect(() => {
@@ -878,6 +903,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								resolveImagesFolderParentId={resolveImagesFolderParentId}
 								suppressLoadingIndicator={documentFlowFullscreen}
 								documentFlowFullscreen={documentFlowFullscreen}
+								isTabActive={isTabActive}
 							/>
 						</div>
 					</div>

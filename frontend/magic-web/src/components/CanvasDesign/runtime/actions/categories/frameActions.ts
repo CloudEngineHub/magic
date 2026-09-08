@@ -10,7 +10,7 @@ export const frameActions: UserAction[] = [
 		category: "frame",
 		canExecute: (canvas) => {
 			// 非只读模式
-			if (canvas.readonly) return false
+			if (!canvas.permissionManager.can("document.write")) return false
 
 			// 必须有选中的元素
 			const selectedIds = canvas.selectionManager.getSelectedIds()
@@ -50,7 +50,7 @@ export const frameActions: UserAction[] = [
 		category: "frame",
 		canExecute: (canvas) => {
 			// 非只读模式
-			if (canvas.readonly) return false
+			if (!canvas.permissionManager.can("document.delete")) return false
 
 			// 必须只选中一个元素
 			const selectedIds = canvas.selectionManager.getSelectedIds()

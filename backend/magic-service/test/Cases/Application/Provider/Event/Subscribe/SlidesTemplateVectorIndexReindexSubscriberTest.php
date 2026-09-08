@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\Provider\Event\Subscribe;
 
-use App\Application\Provider\Event\Subscribe\SlidesTemplateVectorIndexReindexSubscriber;
+use App\Application\SlidesTemplate\Event\Subscribe\SlidesTemplateVectorIndexReindexSubscriber;
 use App\Application\SlidesTemplate\Service\AdminSlidesTemplateAppService;
 use App\Domain\Provider\Entity\AiAbilityEntity;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;

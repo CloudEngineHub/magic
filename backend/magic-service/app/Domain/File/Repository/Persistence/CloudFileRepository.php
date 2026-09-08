@@ -275,12 +275,24 @@ class CloudFileRepository implements CloudFileRepositoryInterface
 
         $dir = $this->formatPrefix($dir, $organizationCode);
 
-        $credentialPolicy = new CredentialPolicy([
+        $policyConfig = [
             'sts' => true,
             'role_session_name' => 'magic',
             'dir' => $dir,
             'expires' => $expires,
-        ]);
+        ];
+        // 组合权限（如 upload_objects|del_objects）依赖 cloudfile v0.1.43 的 StsPolicyBuilder；
+        // 旧版本会命中 default 分支静默退化为仅上传权限，这里显式失败，避免下游出现难排查的 403
+        $stsType = (string) ($options['sts_type'] ?? '');
+        unset($options['sts_type']);
+        if ($stsType !== '') {
+            if (str_contains($stsType, '|') && ! in_array('addStsType', get_class_methods(CredentialPolicy::class), true)) {
+                throw new RuntimeException('Combined sts_type requires dtyq/cloudfile >= v0.1.43, please upgrade the dependency');
+            }
+            $policyConfig['sts_type'] = $stsType;
+        }
+        $credentialPolicy = new CredentialPolicy($policyConfig);
+
         $useInternalEndpoint = ($options['internal_endpoint'] ?? false) === true;
         $credentialOptions = $useInternalEndpoint
             ? $this->getInternalEndpointOptions($organizationCode, $options)

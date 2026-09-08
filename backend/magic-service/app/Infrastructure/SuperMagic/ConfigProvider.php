@@ -53,12 +53,14 @@ use App\Domain\SuperMagic\File\Repository\Facade\AudioProjectRepositoryInterface
 use App\Domain\SuperMagic\File\Repository\Facade\BatchDownloadPackRepositoryInterface;
 use App\Domain\SuperMagic\File\Repository\Facade\FileCollectionItemRepositoryInterface;
 use App\Domain\SuperMagic\File\Repository\Facade\FileCollectionRepositoryInterface;
+use App\Domain\SuperMagic\File\Repository\Facade\TaskFileCleanupRecordRepositoryInterface;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileVersionRepositoryInterface;
 use App\Domain\SuperMagic\File\Repository\Persistence\AudioMarkerRepository;
 use App\Domain\SuperMagic\File\Repository\Persistence\AudioProjectRepository;
 use App\Domain\SuperMagic\File\Repository\Persistence\FileCollectionItemRepository;
 use App\Domain\SuperMagic\File\Repository\Persistence\FileCollectionRepository;
+use App\Domain\SuperMagic\File\Repository\Persistence\TaskFileCleanupRecordRepository;
 use App\Domain\SuperMagic\File\Repository\Persistence\TaskFileRepository;
 use App\Domain\SuperMagic\File\Repository\Persistence\TaskFileVersionRepository;
 use App\Domain\SuperMagic\File\Service\TaskFileVersionDomainService;
@@ -136,6 +138,7 @@ class ConfigProvider
                 UserAiWatermarkPolicyInterface::class => DefaultUserAiWatermarkPolicy::class,
                 // 添加接口到实现类的映射
                 TaskFileRepositoryInterface::class => TaskFileRepository::class,
+                TaskFileCleanupRecordRepositoryInterface::class => TaskFileCleanupRecordRepository::class,
                 TaskFileVersionRepositoryInterface::class => TaskFileVersionRepository::class,
                 TopicRepositoryInterface::class => TopicRepository::class,
                 TaskRepositoryInterface::class => TaskRepository::class,

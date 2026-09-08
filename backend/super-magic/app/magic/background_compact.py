@@ -221,16 +221,38 @@ async def start_background_compact(
         f"bg-compact-{parent_context_id}-{generation[:12]}",
     )
 
+    from app.path_manager import PathManager
     from app.service.agent_runner import (
         IsolatedAgentModelRequest,
         IsolatedAgentRunRequest,
         run_compaction_agent,
     )
-    from app.path_manager import PathManager
-    from app.utils.runtime_storage import ensure_runtime_directory
+    from app.utils.runtime_storage import (
+        RuntimeEvictionPolicy,
+        ensure_runtime_directory,
+        evict_runtime_directories,
+        get_runtime_config_int,
+        trigger_opportunistic_cleanup,
+    )
 
     temporary_dir = await ensure_runtime_directory(
         PathManager.get_background_compact_dir() / f"{target.agent_name}<{agent_id}>"
+    )
+    trigger_opportunistic_cleanup(
+        "background_compact",
+        lambda: evict_runtime_directories(
+            PathManager.get_background_compact_dir(),
+            policy=RuntimeEvictionPolicy(
+                max_age_seconds=get_runtime_config_int(
+                    "runtime_cleanup.background_compact.max_age_days",
+                    minimum=1,
+                )
+                * 24
+                * 60
+                * 60,
+            ),
+            protected_paths=frozenset({temporary_dir}),
+        ),
     )
 
     compact_task = asyncio.create_task(

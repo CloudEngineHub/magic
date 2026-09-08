@@ -1,7 +1,17 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { DetailType } from "../../../../types"
 import type { FileItem } from "../../types"
 import { detectContentTypeRender } from "../preview"
+
+// Keep this focused renderer test independent from the application cache bootstrap.
+vi.mock("@/models/repository/Cache", () => ({
+	Storage: {
+		get: vi.fn(),
+		getItem: vi.fn(),
+		setItem: vi.fn(),
+		removeItem: vi.fn(),
+	},
+}))
 
 describe("detectContentTypeRender", () => {
 	it("routes project template folders to the template PPT renderer", () => {
@@ -68,5 +78,24 @@ describe("detectContentTypeRender", () => {
 
 		expect(transformedData).not.toHaveProperty("relative_file_path")
 		expect(transformedData).not.toHaveProperty("parent_id")
+	})
+
+	it("routes audio folders to the recording HTML root renderer", () => {
+		const item: FileItem = {
+			file_id: "folder-audio",
+			file_name: "录音资料",
+			is_directory: true,
+			relative_file_path: "uploads/录音资料",
+			display_config: { type: "audio", name: "录音资料" },
+		}
+
+		const config = detectContentTypeRender(item)
+
+		expect(config?.detailType).toBe(DetailType.Html)
+		expect(config?.dataTransformer?.(item)).toMatchObject({
+			file_name: "录音资料",
+			is_directory: true,
+			display_config: { type: "audio", name: "录音资料" },
+		})
 	})
 })

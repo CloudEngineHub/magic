@@ -40,7 +40,8 @@ class McpCallToolParams(BaseToolParams):
         default="",
         description=(
             "Optional absolute JSON output path. Successful results are returned inline by default; "
-            "when omitted, results larger than 8 KiB are stored in the capacity-managed .runtime "
+            "when omitted, results larger than the configured "
+            "runtime_cleanup.mcp_outputs.result_size_threshold are stored in the capacity-managed .runtime "
             "directory and may disappear after later eviction or a sandbox restart. To keep a result "
             "across restarts or deliver it to the user, provide an absolute path inside the current "
             ".workspace directory."

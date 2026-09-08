@@ -5,6 +5,7 @@ ASR 音频合并 HTTP DTO
 """
 
 from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -59,7 +60,9 @@ class AsrAudioConfig(BaseModel):
     output_filename: str = Field(..., description="输出文件名（不含扩展名），通常为智能标题")
     file_shard_count: Optional[int] = Field(
         default=None,
-        description="客户端已上传分片总数（可选）。不传时服务端会按 scan 口径扫描目录计算"
+        strict=True,
+        ge=1,
+        description="客户端已上传分片总数（可选）。不传时保持历史客户端兼容模式，不固化目录扫描数量"
     )
 
 
@@ -160,6 +163,7 @@ class AsrTaskResponse(BaseModel):
     """ASR任务响应数据模型"""
     status: str = Field(..., description="任务状态：waiting | running | finalizing | completed | error（推荐使用completed，finished已废弃但仍兼容）")
     task_key: str = Field(..., description="任务唯一标识")
+    audio_format: Optional[str] = Field(default=None, description="任务音频格式：wav 或 opus")
     intelligent_title: Optional[str] = Field(None, description="智能标题（仅在 finalizing 状态返回）")
     error_message: Optional[str] = Field(default=None, description="错误信息，仅在 status=error 时有值")
     files: Optional[FilesDetail] = Field(None, description="文件详情，仅在 status=completed 时有值")

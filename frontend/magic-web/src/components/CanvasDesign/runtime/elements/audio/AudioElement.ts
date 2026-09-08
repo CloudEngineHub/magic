@@ -7,7 +7,6 @@ import type {
 import { ElementTypeEnum } from "../../document/types"
 import {
 	deleteActiveContent as deleteContentFromData,
-	getActiveContent,
 	getContentById,
 } from "../../document/elementContent"
 import type { Canvas } from "../../core/Canvas"
@@ -204,6 +203,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	private waveformUnsubscribe: () => void = () => undefined
 	private resourceFailureUnsubscribe: () => void
 	private mediaReplaceStateUnsubscribe: () => void
+	private contentPreviewUnsubscribe: () => void = () => undefined
+	private effectiveContentSrc?: string
 	private resourceError = false
 	private interactionEventUnsubscribers: Array<() => void> = []
 	private lastTouchActionAt = 0
@@ -213,6 +214,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	private readonly elementControlInteractionPolicy: AudioElementControlInteractionPolicy = {
 		canInteract: () =>
 			this.controlsEnabled &&
+			(this.canvas.permissionManager?.can?.("interaction.playback") ?? true) &&
 			(this.canvas.permissionManager?.canUseSelectionToolAffordance?.() ?? true),
 	}
 	private pendingScrubProgress: number | null = null
@@ -238,7 +240,17 @@ export class AudioElement extends BaseElement<AudioElementData> {
 				this.syncRenderState()
 			},
 		)
-		this.subscribeWaveform(getActiveContent<AudioElementContent>(normalizedData)?.src)
+		this.effectiveContentSrc = this.getAudioSrc()
+		this.subscribeWaveform(this.effectiveContentSrc)
+		this.contentPreviewUnsubscribe = canvas.eventEmitter.on(
+			"content:previewChanged",
+			({ data: eventData }) => {
+				if (eventData.elementId && eventData.elementId !== normalizedData.id) return
+				if (this.syncEffectiveContentSource(this.getAudioSrc())) {
+					this.syncRenderState()
+				}
+			},
+		)
 		this.resourceFailureUnsubscribe = canvas.eventEmitter.on(
 			"resource:audio:load-failed",
 			({ data: eventData }) => {
@@ -307,6 +319,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	public switchActiveContent(contentId: string): boolean {
+		if (!this.canvas.permissionManager.can("document.write")) return false
 		if (!getContentById(this.data, contentId)) return false
 		if (this.data.activeContentId === contentId) return true
 		this.canvas.elementManager.update(
@@ -318,6 +331,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	public setMainContent(contentId: string): boolean {
+		if (!this.canvas.permissionManager.can("document.write")) return false
 		const target = getContentById(this.data, contentId)
 		if (!target?.src) return false
 		if (this.data.mainContentId === contentId) return true
@@ -330,6 +344,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	public deleteActiveContent(): boolean {
+		if (!this.canvas.permissionManager.can("document.delete")) return false
 		const result = deleteContentFromData(this.data, (content) => Boolean(content.src))
 		if (!result) return false
 		this.canvas.elementManager.update(
@@ -350,6 +365,26 @@ export class AudioElement extends BaseElement<AudioElementData> {
 
 	private getAudioSrc(): string | undefined {
 		return this.getAudioContent()?.src
+	}
+
+	/**
+	 * Content 预览只改变会话内的 effective Content。音频播放、波形和资源错误均为
+	 * 元素级运行时状态，切换到不同资源时必须一起重绑，避免短暂沿用上一版本状态。
+	 */
+	private syncEffectiveContentSource(nextSrc: string | undefined): boolean {
+		if (this.effectiveContentSrc === nextSrc) return false
+		this.effectiveContentSrc = nextSrc
+		this.canvas.audioPlaybackManager.release(this.data.id)
+		this.playbackSnapshot = this.canvas.audioPlaybackManager.getSnapshot(this.data.id)
+		this.resourceError = false
+		this.retryingPreparation = false
+		this.subscribeWaveform(nextSrc)
+		if (nextSrc) {
+			this.canvas.visibilityManager.updateAudioElement(this.data.id, nextSrc)
+		} else {
+			this.canvas.visibilityManager.unregisterAudioElement(this.data.id)
+		}
+		return true
 	}
 
 	public render(): Konva.Group {
@@ -413,7 +448,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	private isUploadingPlaceholder(): boolean {
-		const activeContentId = getActiveContent<AudioElementContent>(this.data)?.contentId ?? null
+		const activeContentId = this.getAudioContent()?.contentId ?? null
 		const replacementState = this.canvas.mediaReplaceController?.getReplacementState?.(
 			this.data.id,
 		)
@@ -454,9 +489,11 @@ export class AudioElement extends BaseElement<AudioElementData> {
 					rotation: -90,
 					sceneFunc(context, shape) {
 						const radius = shape.getAttr("audioStatusSpinnerRadius") as
-							number | undefined
+							| number
+							| undefined
 						const strokeWidth = shape.getAttr("audioStatusSpinnerStrokeWidth") as
-							number | undefined
+							| number
+							| undefined
 						if (!radius || !strokeWidth) return
 
 						context.beginPath()
@@ -560,16 +597,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			previousData.height !== normalizedData.height
 
 		if (resourceChanged) {
-			this.canvas.audioPlaybackManager.release(this.data.id)
-			this.playbackSnapshot = this.canvas.audioPlaybackManager.getSnapshot(this.data.id)
-			this.resourceError = false
-			this.retryingPreparation = false
-			this.subscribeWaveform(nextContent?.src)
-			if (nextContent?.src) {
-				this.canvas.visibilityManager.updateAudioElement(this.data.id, nextContent.src)
-			} else {
-				this.canvas.visibilityManager.unregisterAudioElement(this.data.id)
-			}
+			this.syncEffectiveContentSource(nextContent?.src)
 		}
 
 		if (!needsRerender && this.node) {
@@ -645,6 +673,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	public playPreview(): void {
+		if (!this.canvas.permissionManager.can("interaction.playback")) return
 		const src = this.getAudioSrc()
 		if (!src) return
 		void this.canvas.audioPlaybackManager.toggle(this.data.id, src).then((success) => {
@@ -675,6 +704,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		this.waveformUnsubscribe()
 		this.resourceFailureUnsubscribe()
 		this.mediaReplaceStateUnsubscribe()
+		this.contentPreviewUnsubscribe()
 		this.backButtonStateSync = undefined
 		this.forwardButtonStateSync = undefined
 		if (this.node) this.cleanupNodeListeners(this.node)
@@ -1274,7 +1304,11 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	private flushScrubProgress(): void {
 		const progress = this.pendingScrubProgress
 		this.pendingScrubProgress = null
-		if (progress === null) return
+		if (
+			progress === null ||
+			!(this.canvas.permissionManager?.can?.("interaction.playback") ?? true)
+		)
+			return
 		this.canvas.audioPlaybackManager.seek(this.data.id, progress)
 	}
 
@@ -1410,15 +1444,20 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		const waveform = playerGroup.findOne(`.${NODE_NAMES.waveform}`) as Konva.Shape | undefined
 		waveform?.setAttrs(layout.waveform)
 		const progressTrack = playerGroup.findOne(`.${NODE_NAMES.progressTrack}`) as
-			Konva.Rect | undefined
+			| Konva.Rect
+			| undefined
 		const progressFill = playerGroup.findOne(`.${NODE_NAMES.progressFill}`) as
-			Konva.Rect | undefined
+			| Konva.Rect
+			| undefined
 		const progressThumb = playerGroup.findOne(`.${NODE_NAMES.progressThumb}`) as
-			Konva.Circle | undefined
+			| Konva.Circle
+			| undefined
 		const progressThumbHit = playerGroup.findOne(`.${NODE_NAMES.progressThumbHit}`) as
-			Konva.Circle | undefined
+			| Konva.Circle
+			| undefined
 		const progressHit = playerGroup.findOne(`.${NODE_NAMES.progressHit}`) as
-			Konva.Rect | undefined
+			| Konva.Rect
+			| undefined
 		const timeText = playerGroup.findOne(`.${NODE_NAMES.time}`) as Konva.Text | undefined
 		const errorText = playerGroup.findOne(`.${NODE_NAMES.error}`) as Konva.Text | undefined
 		progressTrack?.setAttrs({
@@ -1454,7 +1493,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		this.syncProgressNodes(progress)
 
 		const operationGroup = playerGroup.findOne(`.${NODE_NAMES.operationGroup}`) as
-			Konva.Group | undefined
+			| Konva.Group
+			| undefined
 		operationGroup?.setAttrs({
 			x: layout.operations.x,
 			y: layout.operations.y,
@@ -1486,7 +1526,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	private syncStatusPlaceholderLayout(width: number, height: number): void {
 		if (!(this.node instanceof Konva.Group)) return
 		const placeholder = this.node.findOne(`.${NODE_NAMES.statusPlaceholder}`) as
-			Konva.Group | undefined
+			| Konva.Group
+			| undefined
 		if (!placeholder) return
 		const state = this.renderedState ?? "preparing"
 		const layout = resolveAudioStatusPlaceholderLayout(width, height, {
@@ -1494,7 +1535,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		})
 		placeholder.setAttrs(layout.group)
 		const spinner = placeholder.findOne(`.${NODE_NAMES.statusSpinner}`) as
-			Konva.Shape | undefined
+			| Konva.Shape
+			| undefined
 		spinner?.setAttrs({
 			x: layout.spinner.x,
 			y: layout.spinner.y,
@@ -1570,7 +1612,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 
 			if (candidate instanceof Konva.Circle) {
 				const baseRadius = candidate.getAttr("audioControlBaseHitRadius") as
-					number | undefined
+					| number
+					| undefined
 				if (baseRadius === undefined) return
 				syncControlHitCircle(candidate, baseRadius, minimumScreenSize)
 				return
@@ -1578,7 +1621,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 
 			if (!(candidate instanceof Konva.Rect)) return
 			const baseBounds = candidate.getAttr("audioControlBaseHitBounds") as
-				AudioControlHitBounds | undefined
+				| AudioControlHitBounds
+				| undefined
 			if (!baseBounds) return
 			const minimumScreenHeight = candidate.hasName(NODE_NAMES.progressHit)
 				? policy.progressMinimumScreenHeight
@@ -1643,7 +1687,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		const fill = this.node.findOne(`.${NODE_NAMES.progressFill}`) as Konva.Rect | undefined
 		const thumb = this.node.findOne(`.${NODE_NAMES.progressThumb}`) as Konva.Circle | undefined
 		const thumbHit = this.node.findOne(`.${NODE_NAMES.progressThumbHit}`) as
-			Konva.Circle | undefined
+			| Konva.Circle
+			| undefined
 		if (!track) return
 		const normalizedProgress = clampProgress(progress)
 		fill?.width(track.width() * normalizedProgress)

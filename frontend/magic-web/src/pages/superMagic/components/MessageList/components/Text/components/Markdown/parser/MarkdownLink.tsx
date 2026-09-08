@@ -3,8 +3,14 @@ import type { ReactNode } from "react"
 import projectFilesStore from "@/stores/projectFiles"
 import { cn } from "@/utils/cn"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import {
+	isWorkspaceHrefCandidate,
+	parseCanonicalWorkspaceHref,
+} from "@/pages/superMagic/utils/filePathMention"
 import { findAttachmentByPath } from "./helper"
 import { normalizeInlineStyle } from "../normalizeInlineStyle"
+import { FileReference, getFileExtensionFromPath } from "./FileReference"
+import { IconExternalLink } from "@tabler/icons-react"
 
 // 授权链接这类超长 URL 没有空格，nowrap + ellipsis 会把消息气泡撑出去。
 const markdownLinkClassName =
@@ -42,7 +48,8 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	)
 	const normalizedStyle = normalizeInlineStyle(rawAttributes.style)
 	const attachments = projectFilesStore.workspaceFilesList
-	const fileInfo = findAttachmentByPath(attachments, normalizedHref)
+	const workspacePath = parseCanonicalWorkspaceHref(normalizedHref)
+	const fileInfo = workspacePath ? findAttachmentByPath(attachments, workspacePath) : undefined
 
 	const onClick = () => {
 		if (!fileInfo) return
@@ -55,15 +62,32 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 
 	if (fileInfo) {
 		return (
-			<span
-				className={markdownLinkClassName}
+			<FileReference
+				label={children}
+				fileType={
+					fileInfo.file_extension ||
+					getFileExtensionFromPath(workspacePath ?? normalizedHref)
+				}
 				onClick={onClick}
 				title={typeof children === "string" ? children : normalizedHref}
-			>
-				{children}
+			/>
+		)
+	}
+
+	if (isWorkspaceHrefCandidate(normalizedHref)) {
+		return (
+			<span {...safeAttributes} style={normalizedStyle}>
+				<FileReference
+					label={children}
+					fileType={getFileExtensionFromPath(normalizedHref)}
+					disabled
+					title={normalizedTitle ?? normalizedHref}
+				/>
 			</span>
 		)
 	}
+
+	const isExternalLink = /^(?:https?:|mailto:)/i.test(normalizedHref)
 
 	return (
 		<a
@@ -71,11 +95,14 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 			rel={normalizedRel}
 			target={normalizedTarget}
 			className={cn(markdownLinkClassName, "!text-[#315cec]")}
-			title={normalizedTitle ?? `File does not exist @${normalizedHref}`}
+			title={normalizedTitle ?? normalizedHref}
 			data-testid="markdown-link-anchor"
 			{...safeAttributes}
 			style={normalizedStyle}
 		>
+			{isExternalLink ? (
+				<IconExternalLink size={14} className="mr-1 inline shrink-0" />
+			) : null}
 			{children}
 		</a>
 	)

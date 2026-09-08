@@ -119,6 +119,15 @@ class TopicRepository implements TopicRepositoryInterface
         return new TopicEntity($data);
     }
 
+    public function getTopicByIdForUpdate(int $id): ?TopicEntity
+    {
+        $model = $this->model::query()->where('id', $id)->lockForUpdate()->first();
+        if (! $model) {
+            return null;
+        }
+        return new TopicEntity($this->convertModelToEntityData($model->toArray()));
+    }
+
     public function getTopicBySandboxId(string $sandboxId): ?TopicEntity
     {
         $model = $this->model::query()->whereNull('deleted_at')->where('sandbox_id', $sandboxId)->first();
@@ -560,6 +569,24 @@ class TopicRepository implements TopicRepositoryInterface
 
         $data = $this->convertModelToEntityData($model->toArray());
         return new TopicEntity($data);
+    }
+
+    public function findHiddenTopicByProjectUserAndMode(int $projectId, string $userId, string $topicMode): ?TopicEntity
+    {
+        $model = $this->model::query()
+            ->where('project_id', $projectId)
+            ->where('user_id', $userId)
+            ->where('is_hidden', true)
+            ->where('topic_mode', $topicMode)
+            ->whereNull('deleted_at')
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if (! $model) {
+            return null;
+        }
+
+        return new TopicEntity($this->convertModelToEntityData($model->toArray()));
     }
 
     public function findHiddenTopicByProjectUserAndType(int $projectId, string $userId, int $hiddenType): ?TopicEntity

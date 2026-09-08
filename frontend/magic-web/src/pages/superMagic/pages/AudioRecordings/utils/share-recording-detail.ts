@@ -33,6 +33,48 @@ export function shouldRenderAudioRecordingShareShell(input: {
 	return Boolean(attachments?.tree?.length || attachments?.list?.length)
 }
 
+/**
+ * Resolves an explicitly selected audio folder or entry file in an ordinary project share.
+ * The resolver never picks an audio folder implicitly, so a share with no default target keeps
+ * the normal file-list experience even when several audio bundles are present.
+ */
+export function resolveAudioFolderShareTarget(input: {
+	tree?: AttachmentItem[]
+	defaultOpenFileId?: string
+	fileId?: string
+}): AttachmentItem | undefined {
+	const { tree = [], defaultOpenFileId, fileId } = input
+	const targetId = String(defaultOpenFileId || fileId || "")
+	if (!targetId) return undefined
+
+	const items = flattenShareAttachments(tree)
+	const itemById = new Map(items.map((item) => [String(item.file_id || ""), item]))
+	let current = itemById.get(targetId)
+
+	while (current) {
+		if (isAudioShareTarget(current)) return current
+		const parentId = String(current.parent_id || "")
+		if (!parentId || parentId === String(current.file_id || "")) break
+		current = itemById.get(parentId)
+	}
+
+	return undefined
+}
+
+/** Flattens a share attachment tree while retaining parent relationships for target resolution. */
+function flattenShareAttachments(items: AttachmentItem[], result: AttachmentItem[] = []) {
+	for (const item of items) {
+		result.push(item)
+		flattenShareAttachments(item.children || [], result)
+	}
+	return result
+}
+
+/** Identifies only nodes carrying the audio display marker, including legacy index.html entries. */
+function isAudioShareTarget(item: AttachmentItem): boolean {
+	return item.display_config?.type === "audio"
+}
+
 /** Derives a read-only capability matrix and only opens export when the share permission allows downloads. */
 export function buildShareRecordingCapabilities(
 	allowDownloadProjectFile: boolean,

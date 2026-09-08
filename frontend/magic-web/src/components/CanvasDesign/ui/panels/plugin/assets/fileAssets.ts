@@ -39,8 +39,8 @@ export async function pickPluginFiles(
 	files: File[],
 	options?: PluginPickFilesOptions,
 ): Promise<PluginFileAsset[]> {
-	if (canvas.readonly) {
-		throw new Error("Canvas is readonly.")
+	if (!canvas.permissionManager.can("document.write")) {
+		throw new Error("Canvas does not allow document changes.")
 	}
 
 	const maxCount = Math.max(1, options?.maxCount ?? (options?.multiple ? files.length : 1))
@@ -129,8 +129,8 @@ export async function resolvePluginFileAssets(
 	files: Array<{ path: string; fileName?: string }>,
 	options?: PluginPickFilesOptions,
 ): Promise<PluginFileAsset[]> {
-	if (canvas.readonly) {
-		throw new Error("Canvas is readonly.")
+	if (!canvas.permissionManager.can("document.write")) {
+		throw new Error("Canvas does not allow document changes.")
 	}
 
 	const resolved = await Promise.all(

@@ -156,7 +156,10 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 				const elementInstance = canvas.elementManager.getElementInstance(elementId)
 				if (elementInstance && elementInstance instanceof ImageElementClass) {
 					const imageData = elementInstance.getData()
-					const active = getActiveImageContent(imageData)
+					const active =
+						(canvas.getEffectiveContent(imageData.id) as ReturnType<
+							typeof getActiveImageContent
+						>) ?? getActiveImageContent(imageData)
 					if (!active.src) return null
 					const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(active.src)
 					return ossInfo?.ossSrc ?? null
@@ -169,7 +172,10 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 				if (!(elementInstance instanceof ImageElementClass)) return null
 
 				const imageData = elementInstance.getData()
-				const active = getActiveImageContent(imageData)
+				const active =
+					(canvas.getEffectiveContent(imageData.id) as ReturnType<
+						typeof getActiveImageContent
+					>) ?? getActiveImageContent(imageData)
 				if (!active.src) return null
 
 				const resource = await canvas.imageResourceManager.getResource(active.src, {
