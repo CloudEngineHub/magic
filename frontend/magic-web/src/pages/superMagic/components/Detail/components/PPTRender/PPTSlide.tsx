@@ -57,6 +57,8 @@ interface PPTSlideProps {
 	isActive: boolean
 	/** The slide currently painted in the main canvas. May differ from isActive while preparing. */
 	isPresented?: boolean
+	/** Hide presented-slide chrome when the file tab is cached. */
+	isTabActive?: boolean
 	content: string
 	rawContent: string
 	/** Stable content revision used to remount only the iframe whose HTML actually changed. */
@@ -69,7 +71,7 @@ interface PPTSlideProps {
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
-	) => Promise<void>
+	) => Promise<boolean | void>
 	fileId: string
 	projectId?: string
 	filePathMapping: Map<string, string>
@@ -131,6 +133,7 @@ const PPTSlide = observer(function PPTSlide({
 	index,
 	isActive,
 	isPresented,
+	isTabActive,
 	content,
 	rawContent,
 	renderRevision,
@@ -171,7 +174,8 @@ const PPTSlide = observer(function PPTSlide({
 }: PPTSlideProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
-	const effectiveIsPresented = isPresented ?? isActive
+	const fileTabActive = isTabActive !== false
+	const effectiveIsPresented = (isPresented ?? isActive) && fileTabActive
 	const isInteractive = effectiveIsPresented && isActive
 
 	// 内部管理编辑模式
@@ -181,6 +185,7 @@ const PPTSlide = observer(function PPTSlide({
 	const [isSaving, setIsSaving] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isAppendPicking, setIsAppendPicking] = useState(false)
+	const [isQuickSelecting, setIsQuickSelecting] = useState(false)
 	// 跨域 shell 渲染下，setContent 后到真实绘制完成有异步空窗；
 	// 这里用 iframe renderReady 作为 PPT 幻灯片 loading 的收敛信号。
 	const [isSlideRenderReady, setIsSlideRenderReady] = useState(false)
@@ -549,13 +554,16 @@ const PPTSlide = observer(function PPTSlide({
 
 	const executeSaveContent = useMemoizedFn(async () => {
 		if (viewMode === "code") {
-			await saveEditContent?.(
+			const saveResult = await saveEditContent?.(
 				shadow(editingCodeContent),
 				fileId,
 				true,
 				fetchFileVersions,
 				true,
 			)
+			// Render returns false when the persistence request fails. Do not mark the
+			// slide as saved or leave edit/fullscreen state in that case.
+			if (saveResult === false) return false
 			await onManualSave?.(
 				{
 					success: true,
@@ -830,11 +838,19 @@ const PPTSlide = observer(function PPTSlide({
 		projectId,
 	])
 
-	const handleStartInspector = useMemoizedFn(() => {
-		rendererRef.current?.startInspector()
+	const handleAIEdit = useMemoizedFn(() => {
+		if (isAppendPicking) {
+			rendererRef.current?.stopInspector()
+		} else {
+			rendererRef.current?.startInspectorAppend()
+		}
 	})
-	const handleStartInspectorAppend = useMemoizedFn(() => {
-		rendererRef.current?.startInspectorAppend()
+	const handleQuickSelect = useMemoizedFn(() => {
+		if (isQuickSelecting) {
+			void rendererRef.current?.requestInspectorExit?.()
+		} else {
+			rendererRef.current?.startInspectorQuickSelect?.()
+		}
 	})
 	const resolvedToolbarOwnerKey = toolbarOwnerKey || `${fileId || "missing-file"}:${index}`
 	const toolbarModel = useMemo<PPTSlideToolbarModel | null>(() => {
@@ -843,10 +859,13 @@ const PPTSlide = observer(function PPTSlide({
 		return {
 			token: toolbarRegistrationToken,
 			props: {
-				onStartInspector: handleStartInspector,
-				onStartInspectorAppend: handleStartInspectorAppend,
+				onStartInspectorAppend: handleAIEdit,
 				isAppendPicking,
+				onStartInspectorQuickSelect: handleQuickSelect,
+				isQuickSelecting,
 				showAIOptimization: allowEdit && !fileVersion,
+				beforeAction: () =>
+					rendererRef.current?.requestInspectorExit?.() ?? Promise.resolve(true),
 				showFileEdit: allowEdit && !fileVersion,
 				isEditMode,
 				isSaving,
@@ -899,13 +918,14 @@ const PPTSlide = observer(function PPTSlide({
 		handleRollback,
 		handleSave,
 		handleSaveAndExit,
-		handleStartInspector,
-		handleStartInspectorAppend,
+		handleAIEdit,
+		handleQuickSelect,
 		handleVersionChange,
 		handleViewServerUpdate,
 		hasServerUpdate,
 		isAppendPicking,
 		isEditMode,
+		isQuickSelecting,
 		isNewestVersion,
 		isRefreshing,
 		isSaving,
@@ -1063,6 +1083,7 @@ const PPTSlide = observer(function PPTSlide({
 					onScaleRatioChange={effectiveIsPresented ? onScaleRatioChange : undefined}
 					onRenderReady={handleSlideRenderReady}
 					onAppendPickingChange={setIsAppendPicking}
+					onQuickSelectionChange={setIsQuickSelecting}
 				/>
 				{!isSlideRenderReady && (
 					<div className="absolute inset-0 z-10 flex items-center justify-center bg-white dark:bg-[#1c1c1c]">

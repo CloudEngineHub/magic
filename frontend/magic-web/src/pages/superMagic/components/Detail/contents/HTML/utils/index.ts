@@ -18,7 +18,7 @@ interface AttemptHtmlSaveFlowOptions {
 	refreshServerUpdateState: () => Promise<boolean>
 	showConflictDialog: () => void
 	checkServerUpdateBeforeSave: () => boolean
-	performSave: () => Promise<void>
+	performSave: () => Promise<boolean | void>
 	exitEditMode?: () => void
 	onRefreshServerUpdateError?: (error: unknown) => void
 }
@@ -30,7 +30,7 @@ interface AttemptHtmlSaveFlowResult {
 
 interface ConfirmHtmlConflictSaveOptions {
 	shouldExitAfterSave?: boolean
-	performSave: () => Promise<void>
+	performSave: () => Promise<boolean | void>
 	exitEditMode?: () => void
 }
 
@@ -97,11 +97,12 @@ export async function attemptHtmlSaveFlow({
 		}
 	}
 
-	await performSave()
-	if (shouldExitAfterSave) exitEditMode?.()
+	const saveResult = await performSave()
+	const didSave = saveResult !== false
+	if (shouldExitAfterSave && didSave) exitEditMode?.()
 
 	return {
-		didSave: true,
+		didSave,
 		isAwaitingConflictConfirmation: false,
 	}
 }
@@ -111,8 +112,8 @@ export async function confirmHtmlConflictSave({
 	performSave,
 	exitEditMode,
 }: ConfirmHtmlConflictSaveOptions) {
-	await performSave()
-	if (shouldExitAfterSave) exitEditMode?.()
+	const saveResult = await performSave()
+	if (shouldExitAfterSave && saveResult !== false) exitEditMode?.()
 }
 
 // 外部资源URL

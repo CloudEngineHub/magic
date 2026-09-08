@@ -11,6 +11,8 @@ interface SizePopoverProps {
 	selectedElement: SelectedElementInfo | null
 	disabled?: boolean
 	showLabel?: boolean
+	/** Render the size fields inline in the contextual editor panel. */
+	inline?: boolean
 	onStyleChange: (property: "width" | "height", value: string) => void
 	onBatchStyleChange: (styles: Record<string, string>) => void
 }
@@ -108,6 +110,7 @@ export function SizePopover({
 	selectedElement,
 	disabled = false,
 	showLabel = false,
+	inline = false,
 	onStyleChange,
 	onBatchStyleChange,
 }: SizePopoverProps) {
@@ -187,6 +190,62 @@ export function SizePopover({
 		[currentHeight, currentWidth, intrinsicAspectRatio, onBatchStyleChange],
 	)
 
+	const sizeFields = (
+		<div className="space-y-3" data-testid="html-style-panel-size-popover">
+			{canLockAspectRatio && (
+				<div
+					className="flex items-center justify-between gap-3"
+					data-testid="html-style-panel-size-lock-row"
+				>
+					<Label
+						htmlFor="html-style-panel-size-lock-switch"
+						className="text-xs font-medium"
+					>
+						{t("stylePanel.lockAspectRatio")}
+					</Label>
+					<Switch
+						id="html-style-panel-size-lock-switch"
+						checked={isAspectRatioLocked}
+						onCheckedChange={handleLockCheckedChange}
+						data-testid="html-style-panel-size-lock-switch"
+					/>
+				</div>
+			)}
+
+			<div className="grid min-w-0 grid-cols-2 gap-2 [&>*]:min-w-0">
+				<DimensionInput
+					label={t("stylePanel.width")}
+					value={currentWidth}
+					onChange={(value) => handleDimensionChange("width", value)}
+					placeholder="auto"
+					id="html-style-panel-size-width"
+					fixedUnit="px"
+					testIdPrefix="html-style-panel-size-width"
+				/>
+				<DimensionInput
+					label={t("stylePanel.height")}
+					value={currentHeight}
+					onChange={(value) => handleDimensionChange("height", value)}
+					placeholder="auto"
+					id="html-style-panel-size-height"
+					fixedUnit="px"
+					testIdPrefix="html-style-panel-size-height"
+				/>
+			</div>
+		</div>
+	)
+
+	if (inline) {
+		return (
+			<div className="min-w-0 space-y-2">
+				<div className="text-[11px] font-medium text-muted-foreground">
+					{t("stylePanel.size")}
+				</div>
+				{sizeFields}
+			</div>
+		)
+	}
+
 	return (
 		<StylePopoverButton
 			icon={<Ruler className="h-4 w-4" />}
@@ -198,50 +257,7 @@ export function SizePopover({
 			contentTestId="html-style-panel-size-content"
 			contentClassName="w-[26rem] max-w-[calc(100vw-2rem)]"
 		>
-			<div className="space-y-4" data-testid="html-style-panel-size-popover">
-				{canLockAspectRatio && (
-					<div
-						className="flex items-center justify-between gap-3"
-						data-testid="html-style-panel-size-lock-row"
-					>
-						<div className="space-y-1">
-							<Label
-								htmlFor="html-style-panel-size-lock-switch"
-								className="text-xs font-medium"
-							>
-								{t("stylePanel.lockAspectRatio")}
-							</Label>
-						</div>
-						<Switch
-							id="html-style-panel-size-lock-switch"
-							checked={isAspectRatioLocked}
-							onCheckedChange={handleLockCheckedChange}
-							data-testid="html-style-panel-size-lock-switch"
-						/>
-					</div>
-				)}
-
-				<div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
-					<DimensionInput
-						label={t("stylePanel.width")}
-						value={currentWidth}
-						onChange={(value) => handleDimensionChange("width", value)}
-						placeholder="auto"
-						id="html-style-panel-size-width"
-						fixedUnit="px"
-						testIdPrefix="html-style-panel-size-width"
-					/>
-					<DimensionInput
-						label={t("stylePanel.height")}
-						value={currentHeight}
-						onChange={(value) => handleDimensionChange("height", value)}
-						placeholder="auto"
-						id="html-style-panel-size-height"
-						fixedUnit="px"
-						testIdPrefix="html-style-panel-size-height"
-					/>
-				</div>
-			</div>
+			{sizeFields}
 		</StylePopoverButton>
 	)
 }

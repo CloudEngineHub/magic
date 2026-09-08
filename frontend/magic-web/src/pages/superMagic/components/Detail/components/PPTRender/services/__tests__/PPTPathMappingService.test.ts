@@ -80,4 +80,42 @@ describe("PPTPathMappingService", () => {
 		expect(service.getPPTFolderFileIds().has("slide-1")).toBe(true)
 		expect(service.getAttachmentByFileIdInPPTFolder("slide-1")?.file_name).toBe("1.html")
 	})
+
+	it("uses the mapped slide path when copied attachment metadata has a different root", () => {
+		const service = new PPTPathMappingService(
+			{
+				mainFileId: "template-root",
+				attachmentList: [
+					{
+						file_id: "template-root",
+						file_name: "PPT-soft-pink-midyear-review",
+						is_directory: true,
+						relative_file_path: "/PPT-soft-pink-midyear-review",
+						children: [
+							{
+								file_id: "slides-dir",
+								file_name: "slides",
+								is_directory: true,
+								relative_file_path: "/PPT-soft-pink-midyear-review/slides",
+								children: [
+									{
+										file_id: "copied-slide",
+										file_name: "contents (1).html",
+										relative_file_path: "slides/contents (1).html",
+									},
+								],
+							},
+						],
+					},
+				],
+			},
+			createLogger(),
+		)
+
+		service.setPathFileIdMapping("slides/contents (1).html", "copied-slide")
+
+		expect(service.getRelativeFilePathByFileId("copied-slide")).toBe(
+			"/PPT-soft-pink-midyear-review/slides/",
+		)
+	})
 })

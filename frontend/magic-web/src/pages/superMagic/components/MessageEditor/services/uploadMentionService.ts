@@ -42,11 +42,13 @@ export function collectMentionItemsFromContent(content?: JSONContent): MentionLi
 			if (!attrs.pending) {
 				items.push({ type: "mention", attrs })
 			}
-		} else if (node.type === INSPECTOR_DETAIL_TYPE && node.attrs?.fileMention) {
-			items.push({
-				type: "mention",
-				attrs: node.attrs.fileMention as TiptapMentionAttributes,
-			})
+		} else if (node.type === INSPECTOR_DETAIL_TYPE) {
+			if (node.attrs?.fileMention) {
+				items.push({
+					type: "mention",
+					attrs: node.attrs.fileMention as TiptapMentionAttributes,
+				})
+			}
 		}
 		if (Array.isArray(node.content)) {
 			node.content.forEach((child) => walk(child as JSONContent))
@@ -67,11 +69,13 @@ export function collectMentionItemsFromEditor(editor: Editor | null): MentionLis
 			if (!attrs.pending) {
 				items.push({ type: "mention", attrs })
 			}
-		} else if (node.type.name === INSPECTOR_DETAIL_TYPE && node.attrs.fileMention) {
-			items.push({
-				type: "mention",
-				attrs: node.attrs.fileMention as TiptapMentionAttributes,
-			})
+		} else if (node.type.name === INSPECTOR_DETAIL_TYPE) {
+			if (node.attrs.fileMention) {
+				items.push({
+					type: "mention",
+					attrs: node.attrs.fileMention as TiptapMentionAttributes,
+				})
+			}
 		}
 		return true
 	})

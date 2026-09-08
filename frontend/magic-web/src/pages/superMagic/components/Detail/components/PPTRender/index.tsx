@@ -112,7 +112,7 @@ interface PPTRenderProps {
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
-	) => Promise<void>
+	) => Promise<boolean | void>
 	onSortSave?: (newSlidesUrls: string[]) => void
 	openNewTab?: (fileId: string, path: string) => void
 	onDownload?: ({
@@ -231,6 +231,8 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 	const [manualScale, setManualScale] = useState<number | null>(null)
 	const [activeSlideScaleRatio, setActiveSlideScaleRatio] = useState(1)
+	const activeInspectorPickingRef = useRef(false)
+	const activeInspectorExitRef = useRef<(() => boolean | Promise<boolean>) | null>(null)
 	const activeSlideCloseSaveHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
 	const activeSlideDiscardHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
 
@@ -260,11 +262,18 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		handleCancelNavigation,
 	} = useCheckBeforeNavigate({
 		isAnySlideEditing,
+		isInspectorPicking: () => activeInspectorPickingRef.current,
+		requestInspectorExit: () => activeInspectorExitRef.current?.() ?? Promise.resolve(true),
 		activeIndex: store.activeIndex,
 	})
 
 	// 幻灯片初始化与增量同步
-	useSlideSync({ store, slidePaths, initialActiveIndex })
+	useSlideSync({
+		store,
+		slidePaths,
+		deckKey: mainFileId || mainFileName,
+		initialActiveIndex,
+	})
 
 	// 当激活索引或文件 ID 变化时通知父组件
 	useSyncActiveState({ store, onActiveIndexChange, isTabActive })
@@ -332,6 +341,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		handleSlideClick,
 		handleSortChange,
 		handleInsertSlide,
+		handleDuplicateSlide,
 		handleDeleteSlide,
 		handleRenameSlide,
 		handleAddToCurrentChat,
@@ -469,6 +479,16 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const presentedToolbarModel = scopedPresentedKey
 		? toolbarModels.get(scopedPresentedKey)
 		: undefined
+
+	useLayoutEffect(() => {
+		activeInspectorPickingRef.current = Boolean(presentedToolbarModel?.props.isAppendPicking)
+		activeInspectorExitRef.current = presentedToolbarModel?.props.beforeAction ?? null
+
+		return () => {
+			activeInspectorPickingRef.current = false
+			activeInspectorExitRef.current = null
+		}
+	}, [presentedToolbarModel])
 
 	useLayoutEffect(() => {
 		const host = toolbarHostRef.current as (HTMLDivElement & { inert?: boolean }) | null
@@ -683,6 +703,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								onSlideClick={handleSlideClick}
 								onSortChange={effectiveAllowEdit ? handleSortChange : undefined}
 								onInsertSlide={effectiveAllowEdit ? handleInsertSlide : undefined}
+								onDuplicateSlide={
+									effectiveAllowEdit ? handleDuplicateSlide : undefined
+								}
 								onDeleteSlide={effectiveAllowEdit ? handleDeleteSlide : undefined}
 								onRenameSlide={effectiveAllowEdit ? handleRenameSlide : undefined}
 								onRefreshSlide={effectiveAllowEdit ? handleRefreshSlide : undefined}
@@ -702,11 +725,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						</div>
 					</div>
 
-					{/* 调整宽度的 Handle - 仅在桌面端且侧边栏未折叠/全屏时显示 */}
+					{/* Width handle stays below the canvas stacking context. */}
 					{!isMobile && !isSidebarCollapsed && !isPresentationFullscreen && (
 						<div
 							data-testid="ppt-render-sidebar-resize-handle"
-							className="absolute bottom-0 top-0 z-20 w-4 -translate-x-1/2 cursor-col-resize bg-transparent"
+							className={cn(
+								"absolute bottom-0 top-0 w-4 -translate-x-1/2 cursor-col-resize bg-transparent",
+								TAILWIND_Z_INDEX_CLASSES.BASE.SIDEBAR_RESIZE,
+							)}
 							style={{ left: sidebarWidth }}
 							onMouseDown={handleResizeStart}
 						/>
@@ -716,7 +742,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 					<div
 						ref={slideContainerRef}
 						data-testid="ppt-render-slide-content"
-						className="min-h-0 min-w-0 flex-1"
+						className={cn(
+							"min-h-0 min-w-0 flex-1",
+							!isSidebarCollapsed &&
+								!isPresentationFullscreen &&
+								`relative ${TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS}`,
+						)}
 					>
 						<div
 							className="relative flex h-full w-full flex-col overflow-hidden"
@@ -762,6 +793,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										key={liveRenderScopeKey}
 										{...presentedToolbarModel.props}
 										interactionDisabled={Boolean(pendingKey)}
+										testIdsEnabled={isTabActive !== false}
 									/>
 								</div>
 							)}
@@ -819,6 +851,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											index={index}
 											isActive={index === store.activeIndex}
 											isPresented={key === presentedKey}
+											isTabActive={isTabActive}
 											toolbarOwnerKey={key}
 											onToolbarModelChange={handleToolbarModelChange}
 											content={slide.content || ""}
@@ -854,6 +887,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 												store.updateSlideContents(newContents)
 											}}
 											allowEdit={effectiveAllowEdit}
+											showButtonText={shouldShowButtonText}
 											onEditModeChange={(isEditing) =>
 												handleEditModeChange(slideFileId, isEditing)
 											}
@@ -880,7 +914,6 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											}}
 											onRefreshSlide={handleRefreshSlide}
 											onManualSave={handleManualSave}
-											showButtonText={shouldShowButtonText}
 											mainFileId={mainFileId}
 											mainFileName={mainFileName}
 											allowDownload={allowDownload}

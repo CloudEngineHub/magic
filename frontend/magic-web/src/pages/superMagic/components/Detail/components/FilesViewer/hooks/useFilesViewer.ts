@@ -101,7 +101,8 @@ function normalizeFileItemForTab(fileItem: unknown): {
 		relativeFilePath = sourceRecord.file_path
 	}
 
-	const recordDisplayConfig = sourceRecord.display_config as FileItem["display_config"]
+	const recordDisplayConfig = sourceRecord.display_config as
+		FileItem["display_config"] | undefined
 	let hiddenPreviewPolicy = recordDisplayConfig
 	if (sourceRecord.is_hidden === true) {
 		hiddenPreviewPolicy = {

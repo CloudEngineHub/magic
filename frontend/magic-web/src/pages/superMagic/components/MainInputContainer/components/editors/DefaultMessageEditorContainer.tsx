@@ -15,6 +15,7 @@ import {
 	createTopicForMessageContext,
 	ensureProjectForMessageContext,
 	preparePanelSend,
+	releaseHtmlScreenshotsAfterSend,
 } from "@/pages/superMagic/services/messageSendPreparation"
 import { roleStore } from "@/pages/superMagic/stores"
 import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
@@ -339,6 +340,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			})
 
 			if (sendResult) {
+				releaseHtmlScreenshotsAfterSend(finalParams.mentionItems)
 				editorContext?.onSendSuccess?.({
 					currentProject: sendResult.currentProject ?? null,
 					currentTopic: sendResult.currentTopic ?? null,

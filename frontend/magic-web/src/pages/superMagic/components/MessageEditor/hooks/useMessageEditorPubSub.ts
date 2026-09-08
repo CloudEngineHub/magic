@@ -1,11 +1,23 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { DraftStore } from "../stores"
 import type { SendMessageByContentPayload } from "../types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
+import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { SuperMagicWidgetEditorCommandPayload } from "@/pages/superMagic/events/message"
+import type {
+	HtmlInspectorScreenshotUpdate,
+	HtmlMultiSelectionRequest,
+	HtmlScreenshotUploadRequest,
+} from "@/components/business/ElementInspector"
+import {
+	buildHtmlMultiSelectionPromptContent,
+	getHtmlScreenshotFileName,
+} from "@/components/business/ElementInspector"
+import { serializeInspectorContent } from "../extensions/inspector-detail"
+import { htmlScreenshotUploadService } from "../services/HtmlScreenshotUploadService"
 import {
 	insertMentionFromDroppedData,
 	DRAG_TYPE,
@@ -16,6 +28,7 @@ import {
 } from "../utils/drag"
 import { runActiveEditor, useLatestActiveEditor } from "../utils/editorLifecycle"
 import { INSPECTOR_DETAIL_TYPE } from "../extensions/inspector-detail/const"
+import { setHtmlScreenshotMention } from "../services/HtmlScreenshotTargetStore"
 
 interface UseMessageEditorPubSubParams {
 	editor: Editor | null
@@ -26,8 +39,10 @@ interface UseMessageEditorPubSubParams {
 		options?: { preserveMentionValidation?: boolean },
 	) => void
 	enableMessageSendByContent: boolean
-	onSendMessageByContent: (data: SendMessageByContentPayload) => void
+	onSendMessageByContent: (data: SendMessageByContentPayload) => void | Promise<void>
 	onSendCurrentContent?: () => void | Promise<void>
+	projectId?: string
+	topicId?: string
 }
 
 interface AddContentPayload {
@@ -57,6 +72,14 @@ function safeEditorFocus(editor: Editor | null) {
 	runActiveEditor(editor, (activeEditor) => {
 		activeEditor.commands.focus()
 	})
+}
+
+/** Insert an inspector chip and leave the caret after it for continued typing. */
+function insertInspectorNode(editor: Editor, node: JSONContent) {
+	const position = editor.state.selection.from
+	const inserted = editor.commands.insertContent(node)
+	if (inserted) editor.commands.setTextSelection(position + 1)
+	return inserted
 }
 
 /** Persists programmatic Widget input after the topic draft has finished its initial restore. */
@@ -130,8 +153,207 @@ function useMessageEditorPubSub({
 	enableMessageSendByContent,
 	onSendMessageByContent,
 	onSendCurrentContent,
+	projectId,
+	topicId,
 }: UseMessageEditorPubSubParams) {
 	const activeEditorRef = useLatestActiveEditor(editor)
+	const preparedScreenshotMentionsRef = useRef(
+		new Map<string, { dataUrl: string; mention: TiptapMentionAttributes }>(),
+	)
+	const preparingScreenshotPromisesRef = useRef(
+		new Map<string, { dataUrl: string; promise: Promise<TiptapMentionAttributes> }>(),
+	)
+
+	const prepareScreenshot = useMemoizedFn(
+		(
+			captureId: string,
+			dataUrl: string,
+			fileName: string,
+			options?: { stageUpload?: boolean },
+		) => {
+			const prepared = preparedScreenshotMentionsRef.current.get(captureId)
+			if (prepared?.dataUrl === dataUrl) return Promise.resolve(prepared.mention)
+
+			const preparing = preparingScreenshotPromisesRef.current.get(captureId)
+			if (preparing?.dataUrl === dataUrl) return preparing.promise
+
+			const promise = (async () => {
+				try {
+					const storedScreenshot = await htmlScreenshotUploadService.storeScreenshot({
+						dataUrl,
+						fileName,
+						captureId,
+					})
+					try {
+						const mention: TiptapMentionAttributes = {
+							type: MentionItemType.UPLOAD_FILE,
+							data: {
+								file_id: storedScreenshot.storageId,
+								file_name: storedScreenshot.fileName,
+								file_path: storedScreenshot.storageId,
+								file_extension: storedScreenshot.fileName.split(".").pop() ?? "",
+								file_size: storedScreenshot.fileSize,
+								is_hidden: true,
+								is_html_screenshot: true,
+								storage_id: storedScreenshot.storageId,
+								upload_status: "done",
+							},
+						}
+						preparedScreenshotMentionsRef.current.set(captureId, { dataUrl, mention })
+						setHtmlScreenshotMention(captureId, mention)
+						if (options?.stageUpload && projectId) {
+							void htmlScreenshotUploadService
+								.uploadStoredScreenshot({
+									storageId: storedScreenshot.storageId,
+									fileName: storedScreenshot.fileName,
+									projectId,
+									topicId,
+								})
+								.catch((error) => {
+									console.warn("html screenshot upload failed", error)
+								})
+						}
+						return mention
+					} catch (error) {
+						await htmlScreenshotUploadService.discardStoredScreenshot(
+							storedScreenshot.storageId,
+						)
+						throw error
+					}
+				} finally {
+					const current = preparingScreenshotPromisesRef.current.get(captureId)
+					if (current?.dataUrl === dataUrl) {
+						preparingScreenshotPromisesRef.current.delete(captureId)
+					}
+				}
+			})()
+
+			preparingScreenshotPromisesRef.current.set(captureId, { dataUrl, promise })
+			return promise
+		},
+	)
+
+	useEffect(() => {
+		const handlePrepareHtmlScreenshot = async (request: HtmlScreenshotUploadRequest) => {
+			try {
+				const mention = await prepareScreenshot(
+					request.captureId,
+					request.dataUrl,
+					request.fileName ?? `html-screenshot-${Date.now()}.png`,
+					{ stageUpload: request.stageUpload },
+				)
+				request.onSuccess?.(mention)
+			} catch (error) {
+				request.onError?.(error)
+			} finally {
+				if (request.releaseAfterSuccess) {
+					preparedScreenshotMentionsRef.current.delete(request.captureId)
+				}
+			}
+		}
+		pubsub.subscribe(PubSubEvents.Prepare_Html_Screenshot, handlePrepareHtmlScreenshot)
+		return () => {
+			pubsub.unsubscribe(PubSubEvents.Prepare_Html_Screenshot, handlePrepareHtmlScreenshot)
+		}
+	}, [prepareScreenshot])
+
+	useEffect(() => {
+		const handleUpdateHtmlInspectorScreenshot = (update: HtmlInspectorScreenshotUpdate) => {
+			if (!update.captureId || !update.screenshotMention) return
+			setHtmlScreenshotMention(update.captureId, update.screenshotMention)
+		}
+
+		pubsub.subscribe(
+			PubSubEvents.Update_Html_Inspector_Screenshot,
+			handleUpdateHtmlInspectorScreenshot,
+		)
+		return () => {
+			pubsub.unsubscribe(
+				PubSubEvents.Update_Html_Inspector_Screenshot,
+				handleUpdateHtmlInspectorScreenshot,
+			)
+		}
+	}, [])
+
+	useEffect(() => {
+		const handleSubmitHtmlMultiSelection = async (request: HtmlMultiSelectionRequest) => {
+			try {
+				const screenshotTargets = request.targets.filter(
+					(target) => target.kind === "screenshot" && Boolean(target.screenshot?.dataUrl),
+				)
+				const screenshotMentions = new Map(
+					await Promise.all(
+						screenshotTargets.map(
+							async (target, index) =>
+								[
+									target.id ?? `screenshot:${index}`,
+									target.screenshot?.mention ??
+										(await prepareScreenshot(
+											target.id ?? `screenshot:${index}`,
+											target.screenshot?.dataUrl ?? "",
+											getHtmlScreenshotFileName(
+												target.id ?? `screenshot:${index}`,
+												index,
+											),
+											{ stageUpload: true },
+										)),
+								] as const,
+						),
+					),
+				)
+				const content = buildHtmlMultiSelectionPromptContent(
+					{
+						fileId: request.fileId,
+						fileName: request.fileName || "index.html",
+						filePath: request.filePath || request.fileId,
+					},
+					request.targets,
+					"HTML 页面修改目标",
+					screenshotMentions,
+				)
+				const serializedContent = serializeInspectorContent(content, {
+					title: "HTML 页面修改目标",
+					selector: "选择器",
+					size: "尺寸",
+					computedStyles: "计算样式",
+					textContent: "文本内容",
+					elementAttributes: "元素属性",
+					resource: "资源信息",
+					domContext: "DOM 上下文",
+					elementHtml: "元素片段",
+					selectorMatchCount: "选择器匹配数",
+				})
+				if (projectId) {
+					const uploadItems = htmlScreenshotUploadService.collectUploadItems([
+						...screenshotMentions.values(),
+					])
+					if (uploadItems.length > 0) {
+						await htmlScreenshotUploadService.uploadStoredScreenshots(uploadItems, {
+							projectId,
+							topicId,
+						})
+					}
+				}
+				await onSendMessageByContent({
+					jsonContent: serializedContent,
+					shouldClearEditorAfterSend: true,
+				})
+				screenshotTargets.forEach((target, index) => {
+					preparedScreenshotMentionsRef.current.delete(target.id ?? `screenshot:${index}`)
+				})
+				request.onSuccess?.()
+			} catch (error) {
+				request.onError?.(error)
+			}
+		}
+		pubsub.subscribe(PubSubEvents.Submit_Html_Multi_Selection, handleSubmitHtmlMultiSelection)
+		return () => {
+			pubsub.unsubscribe(
+				PubSubEvents.Submit_Html_Multi_Selection,
+				handleSubmitHtmlMultiSelection,
+			)
+		}
+	}, [onSendMessageByContent, prepareScreenshot, projectId, topicId])
 
 	useEffect(() => {
 		const handleAddFileToChat = (data: {
@@ -301,7 +523,7 @@ function useMessageEditorPubSub({
 					inspectorNode?.type === INSPECTOR_DETAIL_TYPE
 
 				if (isSingleInspectorNode && inspectorNode) {
-					activeEditor.commands.insertContent(inspectorNode)
+					insertInspectorNode(activeEditor, inspectorNode)
 					activeEditor.commands.focus()
 					return
 				}
@@ -340,7 +562,7 @@ function useMessageEditorPubSub({
 
 			if (isSingleInspectorNode && inspectorNode) {
 				runActiveEditor(activeEditorRef.current, (activeEditor) => {
-					activeEditor.commands.insertContent(inspectorNode)
+					insertInspectorNode(activeEditor, inspectorNode)
 				})
 				safeEditorFocus(activeEditorRef.current)
 				return

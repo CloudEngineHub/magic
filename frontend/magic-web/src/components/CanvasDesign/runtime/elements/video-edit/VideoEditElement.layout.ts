@@ -165,9 +165,7 @@ export function resolveVideoEditElementLayout(
 	const preferredAudioRowHeight = px(VIDEO_EDIT_LAYOUT_DESIGN.audioRowHeight)
 
 	// 1) 页脚按内容定高
-	const footerControlHeight = Math.max(
-		px(VIDEO_EDIT_LAYOUT_DESIGN.mergeButtonHeight),
-	)
+	const footerControlHeight = Math.max(px(VIDEO_EDIT_LAYOUT_DESIGN.mergeButtonHeight))
 	const preferredFooterHeight = footerVerticalPadding * 2 + footerControlHeight
 	const footerHeight = Math.min(preferredFooterHeight, responsive.height)
 

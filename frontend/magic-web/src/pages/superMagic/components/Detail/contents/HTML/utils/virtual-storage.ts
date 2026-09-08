@@ -406,7 +406,12 @@ class VirtualStorageRegistry {
 
 	register(context: RegisteredVirtualStorageContext): void {
 		this.cleanup()
-		this.contexts.set(this.getKey(context.renderId, context.token), context)
+		const key = this.getKey(context.renderId, context.token)
+		this.contexts.set(key, context)
+		console.log("[VirtualStorageRegistry] register", {
+			...this.toContextLog(context),
+			contextCount: this.contexts.size,
+		})
 	}
 
 	unregister(
@@ -414,8 +419,12 @@ class VirtualStorageRegistry {
 			Partial<Pick<RegisteredVirtualStorageContext, "namespace">>,
 	): void {
 		const key = this.getKey(context.renderId, context.token)
-		const existing = this.contexts.get(key)
 		const removed = this.contexts.delete(key)
+		console.log("[VirtualStorageRegistry] unregister", {
+			...this.toContextLog(context),
+			contextCount: this.contexts.size,
+			removed,
+		})
 	}
 
 	get(message: Pick<StorageMessageBase, "renderId" | "token" | "namespace">) {
@@ -1074,6 +1083,10 @@ export function createVirtualStorageMessageHandler(
 		const message = event.data
 		const context = registry.get(message)
 		if (!context) {
+			console.log(
+				"[VirtualStorageRegistry] context-not-found",
+				registry.getContextNotFoundLog(message),
+			)
 			recordRejectedStorageMessage(event, "context-not-found", message)
 			return
 		}

@@ -7,6 +7,7 @@ export interface PPTSidebarProps {
 	onSlideClick: (index: number) => void
 	onSortChange?: (newSlides: SlideItem[]) => void
 	onInsertSlide?: (position: number, direction: "before" | "after") => void
+	onDuplicateSlide?: (index: number) => void
 	onDeleteSlide?: (index: number) => void
 	onRenameSlide?: (index: number, newFileName: string) => void
 	onRefreshSlide?: (index: number) => void
@@ -55,6 +56,7 @@ export interface SortableSlideItemProps {
 	totalSlides: number
 	onInsertAbove?: () => void
 	onInsertBelow?: () => void
+	onDuplicate?: () => void
 	onDelete?: () => void
 	onRename?: (newFileName: string) => void
 	onAddToCurrentChat?: () => void

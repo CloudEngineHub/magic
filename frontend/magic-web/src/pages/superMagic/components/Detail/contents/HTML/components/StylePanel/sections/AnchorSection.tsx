@@ -1,0 +1,154 @@
+import { useEffect, useState } from "react"
+import { ChevronDown, Link2 } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import { Input } from "@/components/shadcn-ui/input"
+import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
+import {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+} from "@/components/shadcn-ui/collapsible"
+import { cn } from "@/utils/cn"
+import type { SelectedElementInfo } from "../types"
+import { STYLE_PANEL_STYLES } from "../styles"
+import { EditorSelectContent } from "../../EditorFloating"
+import { isSafeHref } from "@dtyq/html-sandbox/utils/safeUrl"
+
+interface AnchorSectionProps {
+	selectedElement: SelectedElementInfo
+	disabled?: boolean
+	onUpdate: (attributes: Record<string, string | null>) => Promise<void>
+}
+
+type AnchorField = "href" | "target" | "title" | "rel" | "download" | "ariaLabel"
+
+const EMPTY_ATTRIBUTES: NonNullable<SelectedElementInfo["attributes"]> = {}
+
+export function AnchorSection({ selectedElement, disabled = false, onUpdate }: AnchorSectionProps) {
+	const { t } = useTranslation("super")
+	const attributes = selectedElement.attributes ?? EMPTY_ATTRIBUTES
+	const [draft, setDraft] = useState(attributes)
+	const [advancedOpen, setAdvancedOpen] = useState(false)
+
+	useEffect(() => {
+		setDraft(selectedElement.attributes ?? EMPTY_ATTRIBUTES)
+		setAdvancedOpen(false)
+	}, [selectedElement.selector, selectedElement.attributes])
+
+	const commit = async (field: AnchorField, value: string) => {
+		const normalized = value.trim()
+		if (field === "href" && !isSafeHref(normalized)) {
+			setDraft((current) => ({ ...current, href: attributes.href ?? "" }))
+			return
+		}
+		const nextValue = normalized || null
+		setDraft((current) => ({ ...current, [field]: normalized }))
+		if ((attributes[field] ?? "") === normalized) return
+		await onUpdate({ [field]: nextValue })
+	}
+
+	const inputField = (
+		field: AnchorField,
+		label: string,
+		placeholder: string,
+		type: "text" | "url" = "text",
+	) => (
+		<label className={cn("block", STYLE_PANEL_STYLES.field)}>
+			<span className={STYLE_PANEL_STYLES.label}>{label}</span>
+			<Input
+				type={type}
+				value={draft[field] ?? ""}
+				onChange={(event) =>
+					setDraft((current) => ({ ...current, [field]: event.target.value }))
+				}
+				onBlur={(event) => void commit(field, event.target.value)}
+				onKeyDown={(event) => {
+					if (event.key === "Enter") {
+						event.currentTarget.blur()
+					}
+				}}
+				placeholder={placeholder}
+				disabled={disabled}
+				className={STYLE_PANEL_STYLES.control}
+			/>
+		</label>
+	)
+
+	return (
+		<div className={STYLE_PANEL_STYLES.section} data-testid="style-panel-anchor-section">
+			<div className={cn(STYLE_PANEL_STYLES.sectionTitle, "flex items-center gap-1.5")}>
+				<Link2 className="h-3.5 w-3.5 text-muted-foreground" />
+				<span>{t("stylePanel.linkSettings")}</span>
+			</div>
+			<div className="space-y-2 px-1">
+				{inputField(
+					"href",
+					t("stylePanel.linkUrl"),
+					t("stylePanel.linkUrlPlaceholder"),
+					"url",
+				)}
+				<label className={cn("block", STYLE_PANEL_STYLES.field)}>
+					<span className={STYLE_PANEL_STYLES.label}>{t("stylePanel.linkTarget")}</span>
+					<Select
+						value={draft.target || "_self"}
+						onValueChange={(value) =>
+							void commit("target", value === "_self" ? "" : value)
+						}
+						disabled={disabled}
+					>
+						<SelectTrigger className={cn("w-full", STYLE_PANEL_STYLES.control)}>
+							<SelectValue />
+						</SelectTrigger>
+						<EditorSelectContent>
+							<SelectItem value="_self">{t("stylePanel.linkTargetSelf")}</SelectItem>
+							<SelectItem value="_blank">
+								{t("stylePanel.linkTargetBlank")}
+							</SelectItem>
+							<SelectItem value="_parent">
+								{t("stylePanel.linkTargetParent")}
+							</SelectItem>
+							<SelectItem value="_top">{t("stylePanel.linkTargetTop")}</SelectItem>
+						</EditorSelectContent>
+					</Select>
+				</label>
+
+				<Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+					<CollapsibleTrigger
+						type="button"
+						className="flex w-full items-center justify-between rounded-md px-1 py-1 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					>
+						<span>{t("stylePanel.linkAdvanced")}</span>
+						<ChevronDown
+							className={cn(
+								"h-3.5 w-3.5 transition-transform",
+								advancedOpen && "rotate-180",
+							)}
+						/>
+					</CollapsibleTrigger>
+					<CollapsibleContent className="space-y-2 pt-1">
+						{inputField(
+							"title",
+							t("stylePanel.linkTitle"),
+							t("stylePanel.linkTitlePlaceholder"),
+						)}
+						{inputField(
+							"rel",
+							t("stylePanel.linkRel"),
+							t("stylePanel.linkRelPlaceholder"),
+						)}
+						{inputField(
+							"download",
+							t("stylePanel.linkDownload"),
+							t("stylePanel.linkDownloadPlaceholder"),
+						)}
+						{inputField(
+							"ariaLabel",
+							t("stylePanel.linkAriaLabel"),
+							t("stylePanel.linkAriaLabelPlaceholder"),
+						)}
+					</CollapsibleContent>
+				</Collapsible>
+			</div>
+		</div>
+	)
+}

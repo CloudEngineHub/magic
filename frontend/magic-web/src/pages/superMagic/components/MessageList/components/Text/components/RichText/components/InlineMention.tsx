@@ -53,7 +53,13 @@ function InlineMarkerMention(props: InlineMentionProps) {
 	const { data, markerClickScene = "messageList", messageContent, projectFilesStore } = props
 
 	return (
-		<span className="magic-marker-mention inline-flex align-bottom">
+		<span
+			className="magic-marker-mention inline-flex cursor-grab select-none align-bottom active:cursor-grabbing"
+			draggable={false}
+			data-magic-editor-node
+			data-magic-node-type="mention"
+			data-magic-node-attrs={JSON.stringify(data)}
+		>
 			<MarkerAtItem
 				data={data}
 				markerClickScene={markerClickScene}

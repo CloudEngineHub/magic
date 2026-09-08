@@ -4,6 +4,7 @@ import {
 	ensureProjectForMessageContext,
 	preparePanelSend,
 	processMessageMentions,
+	releaseHtmlScreenshotsAfterSend,
 	resolveMessageSendContext,
 } from "@/pages/superMagic/services/messageSendPreparation"
 import { mentionItemsProcessor } from "@/pages/superMagic/components/MessageEditor/services/MentionItemsProcessor"
@@ -26,9 +27,21 @@ vi.mock("@/components/Agent/MCP/service/MCPStorageService", () => ({
 	},
 }))
 
+const screenshotMocks = vi.hoisted(() => ({
+	collectStorageIds: vi.fn(() => [] as string[]),
+	releaseStoredScreenshots: vi.fn(),
+}))
+
 vi.mock("@/pages/superMagic/components/MessageEditor/services/MentionItemsProcessor", () => ({
 	mentionItemsProcessor: {
 		processMentionItems: vi.fn(async (content, mentionItems) => ({ content, mentionItems })),
+	},
+}))
+
+vi.mock("@/pages/superMagic/components/MessageEditor/services/HtmlScreenshotUploadService", () => ({
+	htmlScreenshotUploadService: {
+		collectStorageIds: screenshotMocks.collectStorageIds,
+		releaseStoredScreenshots: screenshotMocks.releaseStoredScreenshots,
 	},
 }))
 
@@ -84,6 +97,8 @@ describe("messageSendPreparation", () => {
 		isModeValidMock.mockReturnValue(false)
 		isModeVisibleMock.mockReset()
 		isModeVisibleMock.mockReturnValue(true)
+		screenshotMocks.collectStorageIds.mockReset()
+		screenshotMocks.releaseStoredScreenshots.mockReset()
 	})
 
 	it("normalizes the configured non-SMA default employee for topic state and send params", async () => {
@@ -164,6 +179,23 @@ describe("messageSendPreparation", () => {
 			"project-1",
 			"topic-1",
 		)
+	})
+
+	it("releases uploaded region screenshots after send succeeds", () => {
+		const mentionItems = [
+			{
+				type: "mention",
+				attrs: {
+					data: { is_html_screenshot: true, storage_id: "region-1" },
+				},
+			},
+		]
+		screenshotMocks.collectStorageIds.mockReturnValue(["region-1"])
+
+		releaseHtmlScreenshotsAfterSend(mentionItems as never)
+
+		expect(screenshotMocks.collectStorageIds).toHaveBeenCalledWith(mentionItems)
+		expect(screenshotMocks.releaseStoredScreenshots).toHaveBeenCalledWith(["region-1"])
 	})
 
 	it("clears the previous agent_code when switching to a built-in mode", async () => {

@@ -110,6 +110,17 @@ describe("SlideScreenshotService", () => {
 			})
 		})
 
+		it("captures the main slide root used by generated PPT HTML", async () => {
+			await service.generateScreenshot(
+				"https://example.com/generated-slide.html",
+				`<main class="slide cobalt"><h1>Generated slide</h1></main>`,
+			)
+
+			const [target] = vi.mocked(snapdom).mock.calls[0]
+			expect((target as HTMLElement).tagName).toBe("MAIN")
+			expect((target as HTMLElement).classList.contains("slide")).toBe(true)
+		})
+
 		it("refreshes cross-origin images before snapDOM reads their pixels", async () => {
 			const imageBlob = new window.Blob(["image-data"], { type: "image/webp" })
 			global.fetch = vi.fn().mockResolvedValue({

@@ -41,6 +41,7 @@ function PPTSidebar({
 	onSlideClick,
 	onSortChange,
 	onInsertSlide,
+	onDuplicateSlide,
 	onDeleteSlide,
 	onRenameSlide,
 	onRefreshSlide,
@@ -350,6 +351,11 @@ function PPTSidebar({
 		onInsertSlide(position, direction)
 	}
 
+	function handleDuplicateSlide(index: number) {
+		if (!onDuplicateSlide) return
+		onDuplicateSlide(index)
+	}
+
 	// Handle delete slide
 	function handleDeleteSlide(index: number) {
 		if (!onDeleteSlide) return
@@ -547,6 +553,7 @@ function PPTSidebar({
 											onInsertBelow={() =>
 												handleInsertSlide(item.index, "after")
 											}
+											onDuplicate={() => handleDuplicateSlide(item.index)}
 											onDelete={() => handleDeleteSlide(item.index)}
 											onRename={(newFileName) =>
 												handleRenameSlide(item.index, newFileName)

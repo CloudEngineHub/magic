@@ -24,7 +24,6 @@ function createCanvasDoubleClickHarness() {
 	const eventEmitter = { emit: vi.fn() }
 	const canvas = Object.create(Canvas.prototype) as Canvas
 	Object.assign(canvas, { stage, eventEmitter })
-
 	;(
 		canvas as unknown as { setupCanvasDoubleClickHandler: () => void }
 	).setupCanvasDoubleClickHandler()

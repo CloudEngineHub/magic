@@ -21,9 +21,11 @@ import { createCodeSplittingGroups } from "./vite/code-splitting-groups"
 import { resolveMicroAppInstallDevProxy } from "./vite/micro-app-install-proxy"
 import Inspect from "vite-plugin-inspect"
 import { codeInspectorPlugin } from "code-inspector-plugin"
+import createHtmlSandboxRuntimePlugin from "./plugins/vite-plugin-html-sandbox-runtime"
 
 /** 环境变量前缀 */
 const ENV_PREFIX = "MAGIC_"
+const requireModule = createRequire(import.meta.url)
 
 function formatLucideComponentImportName(componentName: string): string {
 	return `${componentName
@@ -35,7 +37,7 @@ function formatLucideComponentImportName(componentName: string): string {
 		.toLowerCase()}.js`
 }
 
-function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
+function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string): UserConfig {
 	// Env overlay resolution runs before this factory so every config decision
 	// observes the same winning physical files as import.meta.env and child tasks.
 	const allowedHosts = env.MAGIC_DEV_ALLOWED_HOSTS
@@ -43,7 +45,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 				.map((host) => host.trim())
 				.filter(Boolean)
 		: []
-	const isDev = env.NODE_ENV === "development"
+	const isDev = mode === "development" || env.NODE_ENV === "development"
 	const devServerPort = env.PORT ? Number(env.PORT) : undefined
 	const isHttpsDevServer = isDev && devServerPort === 443
 	const isVisualizer = env.VISUALIZER === "true"
@@ -205,6 +207,17 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 					replacement: resolve(__dirname, "packages/html-sandbox/src/runtime/index.ts"),
 				},
 				{
+					find: "@dtyq/html-sandbox/utils/safeUrl",
+					replacement: resolve(__dirname, "packages/html-sandbox/src/utils/safeUrl.ts"),
+				},
+				{
+					find: "@dtyq/html-sandbox/utils/textContent",
+					replacement: resolve(
+						__dirname,
+						"packages/html-sandbox/src/utils/textContent.ts",
+					),
+				},
+				{
 					find: "@dtyq/html-sandbox/telemetry",
 					replacement: resolve(__dirname, "packages/html-sandbox/src/telemetry/index.ts"),
 				},
@@ -230,6 +243,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 			],
 		},
 		plugins: [
+			isDev && createHtmlSandboxRuntimePlugin(env),
 			lucideDynamicAggregatePlugin(),
 			createAppServiceWorkerPlugin(),
 			vitePluginMagicApi({ projectRoot: __dirname }),
@@ -361,10 +375,9 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 
 export default defineConfig(({ mode }): UserConfig => {
 	const overlayViteConfig = getOverlayViteConfig({ projectRoot: __dirname, mode })
-	const baseViteConfig = getBaseViteConfig(process.env)
+	const baseViteConfig = getBaseViteConfig(process.env, mode)
 
 	if (process.env.DUMP_VITE_CONFIG === "1") {
-		const requireModule = createRequire(import.meta.url)
 		const { writeViteConfigDumps } = requireModule("./scripts/dump-vite-config.cjs")
 		writeViteConfigDumps(
 			__dirname,

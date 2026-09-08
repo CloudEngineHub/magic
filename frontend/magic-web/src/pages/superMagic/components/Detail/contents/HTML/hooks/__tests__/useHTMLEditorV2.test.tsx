@@ -1,5 +1,6 @@
 import { act, render, waitFor } from "@testing-library/react"
 import { useRef } from "react"
+import type { RefObject } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { EditorMessageType } from "../../iframe-bridge/types/messages"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
@@ -8,12 +9,14 @@ import { useHTMLEditorV2 } from "../useHTMLEditorV2"
 const bridgeState = vi.hoisted(() => ({
 	instances: [] as Array<{
 		request: ReturnType<typeof vi.fn>
+		sendCommand: ReturnType<typeof vi.fn>
 		on: ReturnType<typeof vi.fn>
 		isActive: ReturnType<typeof vi.fn>
 		destroy: ReturnType<typeof vi.fn>
 		emit: (type: string, payload?: unknown) => void
 	}>,
 	requests: [] as string[],
+	activationMessages: [] as unknown[],
 }))
 
 vi.mock("@/utils/env", () => ({
@@ -23,6 +26,7 @@ vi.mock("@/utils/env", () => ({
 vi.mock("../../iframe-bridge/contexts/StylePanelContext", () => ({
 	useStylePanelStore: () => ({
 		reset: vi.fn(),
+		clearSelectedElements: vi.fn(),
 		selectElement: vi.fn(),
 		setSelectionMode: vi.fn(),
 		updateHistoryState: vi.fn(),
@@ -40,6 +44,7 @@ vi.mock("../../iframe-bridge/bridge/MessageBridge", () => ({
 				bridgeState.requests.push(type)
 				return {}
 			}),
+			sendCommand: vi.fn(async () => undefined),
 			on: vi.fn((type: string, handler: (message: { payload?: unknown }) => void) => {
 				const nextHandlers = handlers.get(type) ?? []
 				nextHandlers.push(handler)
@@ -62,7 +67,9 @@ function createIframeRef() {
 	const iframe = document.createElement("iframe")
 	Object.defineProperty(iframe, "contentWindow", {
 		value: {
-			postMessage: vi.fn(),
+			postMessage: vi.fn((message: unknown) => {
+				bridgeState.activationMessages.push(message)
+			}),
 		},
 		configurable: true,
 	})
@@ -73,15 +80,21 @@ interface TestHarnessProps {
 	isEditMode: boolean
 	contentInjected?: boolean
 	renderSiteUrl?: string
+	editorRef?: RefObject<HTMLEditorV2Ref | null>
 }
 
-function TestHarness({ isEditMode, contentInjected = true, renderSiteUrl }: TestHarnessProps) {
+function TestHarness({
+	isEditMode,
+	contentInjected = true,
+	renderSiteUrl,
+	editorRef,
+}: TestHarnessProps) {
 	const iframeRef = useRef(createIframeRef().current)
-	const editorRef = useRef<HTMLEditorV2Ref>(null)
+	const localEditorRef = useRef<HTMLEditorV2Ref>(null)
 
 	useHTMLEditorV2({
 		iframeRef,
-		editorRef,
+		editorRef: editorRef ?? localEditorRef,
 		isEditMode,
 		sandboxType: "iframe",
 		iframeLoaded: true,
@@ -98,6 +111,32 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 	beforeEach(() => {
 		bridgeState.instances.length = 0
 		bridgeState.requests.length = 0
+		bridgeState.activationMessages.length = 0
+	})
+
+	it("retries runtime activation until the iframe confirms readiness", async () => {
+		vi.useFakeTimers()
+		try {
+			render(<TestHarness isEditMode />)
+
+			await act(async () => {
+				await Promise.resolve()
+			})
+			expect(bridgeState.activationMessages).toHaveLength(1)
+
+			act(() => {
+				vi.advanceTimersByTime(350)
+			})
+			expect(bridgeState.activationMessages).toHaveLength(2)
+
+			act(() => {
+				bridgeState.instances[0].emit("EDITOR_READY")
+				vi.advanceTimersByTime(2_000)
+			})
+			expect(bridgeState.activationMessages).toHaveLength(2)
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	it("re-enters edit and selection mode after cancelling edit without waiting for a second runtime ready event", async () => {
@@ -189,5 +228,24 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 				EditorMessageType.ENTER_SELECTION_MODE,
 			])
 		})
+	})
+
+	it("returns the iframe layout from applyStylesTemporary", async () => {
+		const editorRef = { current: null } as RefObject<HTMLEditorV2Ref | null>
+		const layout = {
+			rect: { top: 80, left: 0, width: 220, height: 216 },
+			childRects: [
+				{ top: 80, left: 10, width: 80, height: 80 },
+				{ top: 196, left: 10, width: 80, height: 80 },
+			],
+		}
+		render(<TestHarness isEditMode editorRef={editorRef} />)
+		await waitFor(() => expect(bridgeState.instances).toHaveLength(1))
+		bridgeState.instances[0].sendCommand.mockResolvedValue(layout)
+
+		await waitFor(() => expect(editorRef.current?.applyStylesTemporary).toBeTypeOf("function"))
+		await expect(
+			editorRef.current!.applyStylesTemporary("div.meta-grid", { rowGap: "36px" }),
+		).resolves.toEqual(layout)
 	})
 })

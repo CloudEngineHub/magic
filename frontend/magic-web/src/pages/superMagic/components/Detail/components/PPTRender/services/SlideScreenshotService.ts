@@ -1099,7 +1099,10 @@ export class SlideScreenshotService {
 	}
 
 	private getScreenshotTarget(doc: Document): HTMLElement | null {
-		return doc.querySelector<HTMLElement>(".slide-container") || doc.body
+		const slideContainer = doc.querySelector<HTMLElement>(".slide-container")
+		const ftCanvas = doc.querySelector<HTMLElement>("main.ft-canvas")
+		const slide = doc.querySelector<HTMLElement>("main.slide")
+		return slideContainer || ftCanvas || slide || doc.body
 	}
 
 	/**

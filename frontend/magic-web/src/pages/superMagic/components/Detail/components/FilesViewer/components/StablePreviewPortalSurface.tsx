@@ -2,12 +2,13 @@ import type { ReactNode } from "react"
 import { useCallback, useLayoutEffect, useRef } from "react"
 import { createPortal } from "react-dom"
 
-interface StablePPTPortalSurfaceProps {
+interface StablePreviewPortalSurfaceProps {
 	anchor: HTMLElement | null
-	borderRadius: string
+	borderRadius?: string
 	children: ReactNode
 	enabled: boolean
 	isFullscreen: boolean
+	isPpt?: boolean
 	visible: boolean
 }
 
@@ -30,22 +31,24 @@ function isAnchorTreeVisible(anchor: HTMLElement): boolean {
 }
 
 /**
- * Keeps PPT TabCache nodes in one body Portal for their whole cached lifetime.
- * Only the host geometry changes between the embedded and viewer-fullscreen layouts.
+ * Keeps preview content in one body Portal for its whole cached lifetime.
+ * Only the host geometry changes, so fullscreen does not recreate iframe-backed renderers.
  */
-export default function StablePPTPortalSurface({
+export default function StablePreviewPortalSurface({
 	anchor,
-	borderRadius,
+	borderRadius = "0px",
 	children,
 	enabled,
 	isFullscreen,
+	isPpt = false,
 	visible,
-}: StablePPTPortalSurfaceProps) {
+}: StablePreviewPortalSurfaceProps) {
 	const hostRef = useRef<HTMLDivElement | null>(null)
 	if (!hostRef.current && typeof document !== "undefined") {
 		const host = document.createElement("div")
 		host.className = "fixed overflow-hidden bg-background"
-		host.dataset.filesViewerPptPortal = "true"
+		host.dataset.filesViewerPreviewPortal = "true"
+		if (isPpt) host.dataset.filesViewerPptPortal = "true"
 		host.style.display = "none"
 		host.style.pointerEvents = "none"
 		host.style.visibility = "hidden"
@@ -89,16 +92,20 @@ export default function StablePPTPortalSurface({
 		)
 		const layoutSignature =
 			isVisible && rect
-				? `${rect.top}|${rect.left}|${rect.width}|${rect.height}|${isFullscreen}|${borderRadius}`
-				: `hidden|${isFullscreen}|${borderRadius}`
+				? `${rect.top}|${rect.left}|${rect.width}|${rect.height}|${isFullscreen}|${borderRadius}|${isPpt}`
+				: `hidden|${isFullscreen}|${borderRadius}|${isPpt}`
 		if (layoutSignatureRef.current === layoutSignature) return
 		layoutSignatureRef.current = layoutSignature
 
 		host.style.pointerEvents = isVisible ? "auto" : "none"
 		host.style.display = isVisible ? "block" : "none"
 		host.style.visibility = isVisible ? "visible" : "hidden"
-		host.style.zIndex = isFullscreen ? "calc(var(--z-index-detail-fullscreen) + 1)" : "10"
 		host.style.borderRadius = borderRadius
+		if (isPpt) host.dataset.filesViewerPptPortal = "true"
+		else delete host.dataset.filesViewerPptPortal
+		// The fullscreen viewer shell has the base fullscreen z-index and a white background.
+		// Keep the iframe surface one layer above it so the shell cannot cover the preview.
+		host.style.zIndex = isFullscreen ? "calc(var(--z-index-detail-fullscreen) + 1)" : "10"
 
 		if (!isVisible || !rect) return
 
@@ -108,7 +115,7 @@ export default function StablePPTPortalSurface({
 		host.style.left = `${rect.left}px`
 		host.style.width = `${rect.width}px`
 		host.style.height = `${rect.height}px`
-	}, [anchor, borderRadius, host, isFullscreen, visible])
+	}, [anchor, borderRadius, host, isFullscreen, isPpt, visible])
 
 	useLayoutEffect(() => {
 		syncSurface()
@@ -150,7 +157,7 @@ export default function StablePPTPortalSurface({
 			window.visualViewport?.removeEventListener("scroll", scheduleSync)
 			if (animationFrame) window.cancelAnimationFrame(animationFrame)
 		}
-	}, [anchor, host, syncSurface, visible])
+	}, [anchor, enabled, host, syncSurface, visible])
 
-	return enabled && host ? createPortal(children, host, "files-viewer-stable-ppt-tabs") : null
+	return enabled && host ? createPortal(children, host, "files-viewer-stable-preview") : null
 }

@@ -84,6 +84,38 @@ describe("useIframeScaling", () => {
 		expect(result.current.scaleRatio).toBeCloseTo(960 / 1920, 5)
 	})
 
+	it("uses the canvas measurement viewport when a side panel is present", async () => {
+		const scrollContainer = document.createElement("div")
+		Object.defineProperties(scrollContainer, {
+			offsetWidth: { value: 1200 },
+			offsetHeight: { value: 800 },
+		})
+		const canvasViewport = document.createElement("div")
+		Object.defineProperties(canvasViewport, {
+			offsetWidth: { value: 880 },
+			offsetHeight: { value: 800 },
+		})
+
+		const iframe = document.createElement("iframe")
+		document.body.appendChild(iframe)
+
+		const { result } = renderHook(() =>
+			useIframeScaling({
+				containerRef: { current: scrollContainer },
+				measurementRef: { current: canvasViewport },
+				iframeRef: { current: iframe },
+				isPptRender: true,
+				iframeLoaded: true,
+				contentInjected: true,
+				scaleContentDimensions: { width: 1920, height: 1080 },
+			}),
+		)
+
+		await waitFor(() => {
+			expect(result.current.scaleRatio).toBeCloseTo(880 / 1920, 5)
+		})
+	})
+
 	it("reserves vertical space for PPT preview controls during auto-fit", async () => {
 		const container = document.createElement("div")
 		Object.defineProperties(container, {

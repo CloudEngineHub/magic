@@ -20,6 +20,7 @@ import type { FileItem } from "../../../../contents/HTML/utils/fetchInterceptor"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
 import type { PlatformComponentProps, SelfMediaPost, SelfMediaView } from "../../types"
 import { selfMediaOverlayStyles } from "../../components/selfMediaOverlayStyles"
+import { usePendingActionGuard } from "../../../../utils/usePendingActionGuard"
 
 interface WechatCodeViewProps {
 	post: SelfMediaPost
@@ -56,7 +57,20 @@ function WechatCodeView({
 
 	const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
 	const isDirtyRef = useRef(false)
-	const pendingActionRef = useRef<(() => void) | null>(null)
+
+	const shouldBlockNavigation = useCallback(() => isDirtyRef.current, [])
+	const handleNavigationBlocked = useCallback(() => {
+		setShowUnsavedNavDialog(true)
+	}, [])
+	const navigationGuard = usePendingActionGuard({
+		shouldBlock: shouldBlockNavigation,
+		onBlocked: handleNavigationBlocked,
+	})
+	const {
+		run: runNavigation,
+		resolve: resolveNavigation,
+		cancel: cancelNavigation,
+	} = navigationGuard
 
 	const { prefersColorScheme } = useTheme()
 	const monacoTheme = prefersColorScheme === "dark" ? "vs-dark" : "vs-light"
@@ -134,25 +148,11 @@ function WechatCodeView({
 		}
 	})
 
-	const runPendingAction = useCallback(() => {
-		pendingActionRef.current?.()
-		pendingActionRef.current = null
-	}, [])
-
-	const clearPendingAction = useCallback(() => {
-		pendingActionRef.current = null
-	}, [])
-
 	const runNavigationAfterSave = useMemoizedFn(async (action: () => void) => {
-		if (!isDirtyRef.current) {
-			action()
-			return
-		}
-		pendingActionRef.current = () => {
+		return runNavigation(() => {
 			setDirtyState(false)
 			action()
-		}
-		setShowUnsavedNavDialog(true)
+		}, undefined)
 	})
 
 	const handleRequestViewChange = useMemoizedFn(async (nextView: SelfMediaView) => {
@@ -190,11 +190,11 @@ function WechatCodeView({
 		setShowUnsavedNavDialog(false)
 		const saved = await executeSave()
 		if (saved) {
-			runPendingAction()
+			await resolveNavigation(true)
 			return
 		}
 		setShowSaveRetryDialog(true)
-	}, [executeSave, runPendingAction])
+	}, [executeSave, resolveNavigation])
 
 	const handleDiscardBeforeNav = useCallback(() => {
 		setShowUnsavedNavDialog(false)
@@ -203,22 +203,22 @@ function WechatCodeView({
 			editorRef.current.setValue(source)
 		}
 		setDirtyState(false)
-		runPendingAction()
-	}, [runPendingAction, setDirtyState, source])
+		void resolveNavigation(true)
+	}, [resolveNavigation, setDirtyState, source])
 
 	const handleCancelNav = useCallback(() => {
 		setShowUnsavedNavDialog(false)
-		clearPendingAction()
-	}, [clearPendingAction])
+		cancelNavigation()
+	}, [cancelNavigation])
 
 	// Save-retry dialog handlers
 	const handleRetryFailedSave = useCallback(async () => {
 		const saved = await executeSave()
 		if (saved) {
 			setShowSaveRetryDialog(false)
-			runPendingAction()
+			await resolveNavigation(true)
 		}
-	}, [executeSave, runPendingAction])
+	}, [executeSave, resolveNavigation])
 
 	const handleDiscardAfterFailedSave = useCallback(() => {
 		setShowSaveRetryDialog(false)
@@ -226,8 +226,8 @@ function WechatCodeView({
 			editorRef.current.setValue(source)
 		}
 		setDirtyState(false)
-		runPendingAction()
-	}, [runPendingAction, setDirtyState, source])
+		void resolveNavigation(true)
+	}, [resolveNavigation, setDirtyState, source])
 
 	const handleCancelEdit = useCallback(() => {
 		if (!source) return
