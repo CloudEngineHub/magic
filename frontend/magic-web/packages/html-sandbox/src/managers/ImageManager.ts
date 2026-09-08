@@ -10,6 +10,7 @@ import { replaceBackgroundImageInStyleAttribute } from "../utils/background-styl
 import { EditorLogger } from "../utils/EditorLogger"
 import { findElement } from "../utils/ElementSelector"
 import { getElementSelector } from "../utils/dom"
+import { resolveInsertedImageNodeWidth } from "../utils/inserted-image-width"
 import { getParentOrigin } from "../utils/parentOrigin"
 
 interface ReplaceElementImageState {
@@ -84,10 +85,6 @@ interface PendingImageUploadContext {
 }
 
 const DEFAULT_INSERTED_IMAGE_WIDTH = 240
-// Images inserted into the document tree should scale with their target
-// container instead of keeping the uploaded file's intrinsic width. A
-// percentage width also remains useful when the parent is resized later.
-const DEFAULT_INSERTED_IMAGE_NODE_WIDTH = "100%"
 const DEFAULT_INSERTED_IMAGE_OFFSET = 24
 
 export class ImageManager {
@@ -681,7 +678,7 @@ export class ImageManager {
 		element.setAttribute("data-original-path", uploadResult.relativeFilePath || "")
 		element.alt = ""
 		element.style.display = "block"
-		element.style.width = DEFAULT_INSERTED_IMAGE_NODE_WIDTH
+		element.style.width = resolveInsertedImageNodeWidth(parent)
 		element.style.height = "auto"
 		element.style.maxWidth = "100%"
 		const children = Array.from(parent.children)
