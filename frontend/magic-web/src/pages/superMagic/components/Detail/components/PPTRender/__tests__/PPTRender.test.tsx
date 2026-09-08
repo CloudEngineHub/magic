@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
 import PPTRender, { reconcilePPTSlideToolbarModels } from "../index"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../contents/HTML/constants/z-index"
+import type { PPTSlideStructureAdapter } from "../types"
 
 const mockState = vi.hoisted(() => ({
 	store: {
@@ -152,11 +153,13 @@ vi.mock("../PPTControlBar", () => ({
 	PPTControlBar: ({
 		scaleRatio,
 		onScaleChange,
+		onReplaceTemplate,
 	}: {
 		scaleRatio: number
 		onScaleChange: (scale: number) => void
+		onReplaceTemplate?: () => void
 	}) => {
-		mockState.pptControlBarProps({ scaleRatio, onScaleChange })
+		mockState.pptControlBarProps({ scaleRatio, onScaleChange, onReplaceTemplate })
 		return (
 			<div data-testid="ppt-control-bar">
 				<span data-testid="ppt-control-bar-scale">{scaleRatio}</span>
@@ -432,6 +435,7 @@ function renderPPTRender(input?: {
 	onRegisterCheckBeforeClose?: (fileId: string, callback: () => Promise<boolean>) => void
 	onUnregisterCheckBeforeClose?: (fileId: string) => void
 	isTabActive?: boolean
+	slideStructureAdapter?: PPTSlideStructureAdapter
 }) {
 	return render(
 		<PPTRender
@@ -443,6 +447,7 @@ function renderPPTRender(input?: {
 			isTabActive={input?.isTabActive}
 			onRegisterCheckBeforeClose={input?.onRegisterCheckBeforeClose}
 			onUnregisterCheckBeforeClose={input?.onUnregisterCheckBeforeClose}
+			slideStructureAdapter={input?.slideStructureAdapter}
 		/>,
 	)
 }
@@ -641,6 +646,28 @@ describe("PPTRender", () => {
 		await waitFor(() => {
 			expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
 				expect.objectContaining({ manualScale: 0.44 }),
+			)
+		})
+	})
+
+	it("passes template replacement through the bottom control bar", async () => {
+		mockState.isSlideEditing = false
+		renderPPTRender()
+
+		await waitFor(() => {
+			expect(mockState.pptControlBarProps).toHaveBeenCalledWith(
+				expect.objectContaining({ onReplaceTemplate: expect.any(Function) }),
+			)
+		})
+	})
+
+	it("hides template replacement for slide template projects", async () => {
+		mockState.isSlideEditing = false
+		renderPPTRender({ slideStructureAdapter: {} })
+
+		await waitFor(() => {
+			expect(mockState.pptControlBarProps).toHaveBeenCalledWith(
+				expect.objectContaining({ onReplaceTemplate: undefined }),
 			)
 		})
 	})

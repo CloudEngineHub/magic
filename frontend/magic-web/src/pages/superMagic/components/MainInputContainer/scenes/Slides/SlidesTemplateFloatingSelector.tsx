@@ -154,7 +154,7 @@ function SlidesTemplateFloatingSelector({
 				ref={setHoverDetailsContainer}
 				className={cn(
 					"relative flex min-h-0 flex-col overflow-hidden",
-					isMobile ? "h-full" : "h-[min(640px,70vh)] min-h-[360px]",
+					isMobile || hideTrigger ? "h-full" : "h-[min(640px,70vh)] min-h-[360px]",
 				)}
 			>
 				<SlidesTemplatePanelContent
@@ -177,6 +177,7 @@ function SlidesTemplateFloatingSelector({
 		[
 			handlePreviewOpenChange,
 			handleTemplateClick,
+			hideTrigger,
 			hoverDetailsContainer,
 			isMobile,
 			selectedTemplate,

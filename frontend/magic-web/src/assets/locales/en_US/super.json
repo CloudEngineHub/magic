@@ -4444,6 +4444,16 @@
 		"slideIdleDescription": "Slide {{index}} is waiting to load",
 		"slideLoadError": "Failed to load slide {{index}}",
 		"slideLoading": "Loading slide {{index}}...",
+		"templateReplacement": {
+			"button": "Change Template",
+			"confirm": "Use Template",
+			"replaceSlide": "Change This Slide's Template",
+			"scopeDeck": "Apply the template to the entire PPT",
+			"scopeSlide": "Apply the template to slide {{page}}",
+			"selectHint": "Select a template",
+			"selected": "Selected: {{name}}",
+			"title": "Select a Slide Template"
+		},
 		"unsavedChangesDescription": "You have unsaved changes in the current slide. Do you want to save your changes?",
 		"unsavedChangesTitle": "Unsaved Changes",
 		"versionCompare": {
