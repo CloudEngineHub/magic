@@ -220,10 +220,13 @@ class SessionPrepResult:
 
 
 class Agent(BaseAgent):
-    """绑定 Context、ChatHistory 与 Horizon 的可运行 Agent 实例。
+    """
+    绑定 Context、ChatHistory 与 Horizon 的可运行 Agent 实例。
 
     Agent 管理自身运行状态；定义来源、编译准备、缓存和动态初始化时机由
     AgentRuntime 统一决定。
+
+    被动压缩仍使用原专用正文缓存；默认挂载规则由应用 YAML 声明。
     """
 
     def _setup_agent_context(self, agent_context: Optional[AgentContext] = None) -> AgentContext:
@@ -467,13 +470,16 @@ class Agent(BaseAgent):
             raise ValueError("Text model id is not configured")
         return model_id
 
-    # 被动压缩仍使用原专用正文缓存；默认挂载规则由应用 YAML 声明。
     _COMPACT_SKILL_NAME = "compact-chat-history"
 
     def _initialize_agent(self):
         """初始化 agent"""
         # 从 .agent 文件中加载 agent 配置
         agent_define = self.load_agent_config(self.agent_name)
+        """
+        先合并应用默认 Skill，再选择对应运行工具；否则 .agent 未列 memory 时会漏掉预加载底座。
+        这里只决定需要加载哪些能力，真正可用的 Skill 要等下方正文生成完成后登记。
+        """
         runtime_skills = resolve_runtime_skills(self._agent_loader.get_skills_config(self.agent_name))
         skills_config = runtime_skills.skills_config
         self._mount_runtime_tools(agent_define, skills_config)
@@ -481,8 +487,10 @@ class Agent(BaseAgent):
         # 缓存 compact skill 内容，供被动触发时直接注入（避免运行时读文件）
         self._compact_skill_content = self._load_compact_skill_content()
 
-        # 声明合并不等于正文已加载。只有实际生成的 Skill 进入 loaded_skills；
-        # 必需预加载失败写入原有 excluded_skills，使日常入口和 after-run 使用同一状态。
+        """
+        声明合并不等于正文已加载。只有实际生成的 Skill 进入 loaded_skills；
+        必需预加载失败写入原有 excluded_skills，使日常入口和 after-run 使用同一状态。
+        """
         skill_result = generate_skills_prompt(
             skills_config,
             agent_name=self.agent_name,
@@ -657,7 +665,12 @@ class Agent(BaseAgent):
         return snapshot
 
     async def _get_memory_directory_snapshot(self) -> MemoryDirectorySnapshot | None:
-        """获取当前普通项目的记忆目录快照，不读取笔记正文。"""
+        """
+        获取当前普通项目的记忆目录快照，不读取笔记正文。
+
+        只自动观察本次普通项目的记忆根；全局 notes 和其它项目不会因为本轮对话被顺带扫描。
+        Claw 自有记忆已属于它的工作区，由原工作区入口处理，不再追加普通项目目录。
+        """
         if not (is_auto_memory_enabled(self.agent_context) and is_memory_skill_available(self.agent_context)):
             return None
         scope = next(
@@ -669,7 +682,13 @@ class Agent(BaseAgent):
         return await scan_memory_directory(scope.root, self.agent_context)
 
     async def _refresh_directory_snapshots(self) -> None:
-        """每轮上下文准备时统一刷新目录；单个目录失败不阻止另一目录更新。"""
+        """
+        每轮上下文准备时统一刷新目录；单个目录失败不阻止另一目录更新。
+
+        例：第一轮工具创建了文件，第二轮即使没有新用户消息，也应能看到它。
+        Workspace 与项目记忆各自扫描，在同一个上下文准备时机交给 Horizon 比较变化。
+        不把目录发现误作全文读取，模型仍按当前任务判断是否打开新笔记。
+        """
         horizon = self.agent_context.horizon
         try:
             await horizon.set_workspace_snapshot(await self._get_workspace_snapshot())
@@ -961,8 +980,11 @@ class Agent(BaseAgent):
         budget = self._get_runtime_output_budget()
         self.agent_context.horizon.set_output_token_budget(budget)
 
-        # 同一 Agent 会跨 CHAT 复用：每个 run 提供当前设置，避免模型沿用初始化时的旧开关。
-        # 关闭自动记忆仍保留 Skill 与目录知识；不在每次工具调用后重复发送。
+        """
+        同一 Agent 会跨 CHAT 复用：每个 run 提供当前设置，避免模型沿用初始化时的旧开关。
+        关闭自动记忆仍保留 Skill 与目录知识；不在每次工具调用后重复发送。
+        例：上一条 CHAT 自动开启，这条关闭；重新发当前事实即可，不必重建 Agent 或删 Skill。
+        """
         self.agent_context.horizon.push_notification("memory", build_memory_runtime_context(self.agent_context))
 
         # 注入点1：用户消息入库后、第一次 LLM 调用前，注入 system_injected_context
@@ -2133,6 +2155,7 @@ Since your subsequent output will be merged with pre-interruption content and di
 
             await self.agent_context.horizon.on_context_reset()
             await self._rehydrate_media_models_after_context_reset()
+            # 后台压缩替换了旧窗口中的通知，按当前状态重新提供记忆模式和准确路径。
             self.agent_context.horizon.push_notification("memory", build_memory_runtime_context(self.agent_context))
             return True
 
@@ -2731,6 +2754,10 @@ Since your subsequent output will be merged with pre-interruption content and di
         """构建 Horizon 注入内容，模型配置错误时静默跳过。"""
         try:
             self._sync_horizon_llm_model_info()
+            """
+            每轮先刷新再生成通知：首轮、工具后的下一轮、未完成 TODO 驱动的续轮都经过这里。
+            模型传输重试复用已准备的消息，不因为重试重新触发一轮目录扫描。
+            """
             await self._refresh_directory_snapshots()
             return await self.agent_context.horizon.build_context_update(injection_point)
         except Exception as horizon_err:
@@ -3094,6 +3121,7 @@ Since your subsequent output will be merged with pre-interruption content and di
 
             await self.agent_context.horizon.on_context_reset()
             await self._rehydrate_media_models_after_context_reset()
+            # 主动压缩同样需要恢复当前记忆事实，不能指望摘要完整保留旧开关通知。
             self.agent_context.horizon.push_notification("memory", build_memory_runtime_context(self.agent_context))
 
         except Exception as e:

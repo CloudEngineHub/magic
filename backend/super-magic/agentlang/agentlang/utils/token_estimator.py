@@ -14,12 +14,15 @@ logger = get_logger(__name__)
 
 @dataclass(slots=True)
 class TokenEstimateCounter:
-    """累计字符后统一取整，使分块计数与整段文本使用相同口径。"""
-    # 背景：记忆测量要支持增量解码，但不能改变项目原有的中文／其它字符估算公式。
-    # MOCK DEMO：四个英文字符分成四块，每块单独估算并取整可能得到 4 Token；
-    # 先累计 4 个字符再统一取整，得到 1 Token，与整段估算一致。
-    # 本类只数已解码字符，不处理 UTF-8 字节边界；文件读取方使用增量 decoder。
-    # 它不是精确 tokenizer，也不提供内容摘要、语义质量或是否应删记忆的判断。
+    """
+    累计字符后统一取整，使分块计数与整段文本使用相同口径。
+
+    背景：记忆测量要支持增量解码，但不能改变项目原有的中文／其它字符估算公式。
+    MOCK DEMO：四个英文字符分成四块，每块单独估算并取整可能得到 4 Token；
+    先累计 4 个字符再统一取整，得到 1 Token，与整段估算一致。
+    本类只数已解码字符，不处理 UTF-8 字节边界；文件读取方使用增量 decoder。
+    它不是精确 tokenizer，也不提供内容摘要、语义质量或是否应删记忆的判断。
+    """
 
     chinese_char_count: int = 0
     non_chinese_char_count: int = 0
@@ -41,6 +44,9 @@ def num_tokens_from_string(string: str) -> int:
     估算字符串的 token 数量
 
     采用字符级启发式：中文每 1.5 字符 ≈ 1 token，其余每 4 字符 ≈ 1 token。
+
+    整段调用与分块测量共用字符范围和最后一次取整；它估算上下文成本，不测文件字节大小。
+    此函数不读磁盘、不保留跨次状态，每次输入均从空计数开始。
     """
     counter = TokenEstimateCounter()
     counter.add_text(string)

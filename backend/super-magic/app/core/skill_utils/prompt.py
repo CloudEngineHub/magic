@@ -30,14 +30,20 @@ MAX_CHARS = 30000
 
 @dataclass
 class SkillSources:
+    """
+    两类消费者共用同一发现结果：日常 Agent 预加载主文，后台维护再读取同来源的 reference。
+    不根据 Skill 名称另找一份系统副本，否则自定义覆盖的主文和默认 reference 可能不一致。
+    """
     metadata: list[SkillMetadata]
     region_filtered_names: list[str]
 
 
 @dataclass
 class SkillPromptResult:
-    # 配置声明和实际加载分开：后续能力只使用真正生成成功的说明。
-    # MOCK DEMO：memory 的 SKILL.md 不可读 -> disabled_names 包含它；其它 Skill 照常返回。
+    """
+    配置声明和实际加载分开：后续能力只使用真正生成成功的说明。
+    MOCK DEMO：memory 的 SKILL.md 不可读 -> disabled_names 包含它；其它 Skill 照常返回。
+    """
     content: str = ""
     loaded_names: list[str] = field(default_factory=list)
     disabled_names: list[str] = field(default_factory=list)
@@ -45,6 +51,10 @@ class SkillPromptResult:
 
 @dataclass
 class PreloadedSkillsResult:
+    """
+    loaded_files 记录真正交付的文件，不是配置里「打算加载」的文件。
+    只有 SKILL.md 确实展开后才从可发现列表移除该 Skill，避免主文没加载却也找不到入口。
+    """
     content: str
     loaded_files: dict[str, tuple[str, ...]]
     disabled_names: list[str]
@@ -79,8 +89,10 @@ def generate_skills_prompt(
 
 
 async def resolve_skills_metadata(skills_config: SkillsConfig, agent_name: str) -> SkillSources:
-    # 保留原有来源顺序和目录容错，供日常 preload 和后台 reference 选择同一份 Skill。
-    # preload 补载发生在最终过滤之前，防止已排除或地区不可用的 Skill 被补载重新放回。
+    """
+    保留原有来源顺序和目录容错，供日常 preload 和后台 reference 选择同一份 Skill。
+    preload 补载发生在最终过滤之前，防止已排除或地区不可用的 Skill 被补载重新放回。
+    """
     personal_skills = await discover_skills_in_personal()
 
     # Personal Skills are an independent source. Keep the prompt when they exist even if
@@ -180,8 +192,10 @@ async def resolve_skills_metadata(skills_config: SkillsConfig, agent_name: str) 
             loaded_names.add(personal_skill.name)
             logger.info(f"Scanned and appended personal skill: {personal_skill.name}")
 
-    # ── 3e. Load skills referenced by preload but not loaded from any source. ──────────────────────
-    # Preloaded skills do not need duplicate system_skills declarations; this is the fallback load.
+    """
+    ── 3e. Load skills referenced by preload but not loaded from any source. ──────────────────────
+    Preloaded skills do not need duplicate system_skills declarations; this is the fallback load.
+    """
     for skill_name in preload_map:
         if skill_name in loaded_names:
             continue
@@ -356,6 +370,10 @@ async def _build_preloaded_skills_xml(
     <file> child block. Missing files are logged and skipped instead of raising.
     """
     required = required_preloads or {}
+    """
+    可选文件缺失只跳过该文件；必需文件缺失会停用整个 Skill，但不终止主 Agent。
+    例：某 Skill 的参考例子没找到，主文仍可用；memory 的必需主文没读到，则不能自动维护。
+    """
     loaded_files: dict[str, tuple[str, ...]] = {}
     if not preload_map:
         return PreloadedSkillsResult("", loaded_files, list(required))
@@ -412,6 +430,7 @@ async def _build_preloaded_skills_xml(
             file_blocks.append(f'<file location="{file_path}">\n{file_content}\n</file>')
 
         loaded_files[skill_name] = tuple(successful)
+        # 先记录真实读取结果，再判断是否交付这一整项 Skill；不能以目录存在或配置声明代替成功。
         if not set(required.get(skill_name, ())).issubset(successful):
             continue
         if not file_blocks:

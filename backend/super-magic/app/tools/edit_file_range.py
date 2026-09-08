@@ -194,6 +194,7 @@ On failure: re-read and verify anchor existence/uniqueness -> increase anchor le
                 ai_warnings.append(f"WARNING: Syntax errors detected in the modified file:\n{errors_str}")
 
             stats = DiffGenerator.calculate_change_stats(
+                # 选中范围只决定替换位置；这里比较整份修改前后文本，不把片段大小当成文件大小。
                 original_content, new_content, old_size=original_snapshot.metrics.byte_count,
             )
             summary_diff = DiffGenerator.generate_summary_diff(str(file_path.name), stats)
@@ -294,7 +295,11 @@ On failure: re-read and verify anchor existence/uniqueness -> increase anchor le
         return await read_text_snapshot(file_path)
 
     async def _write_file(self, file_path: Path, content: str) -> str:
-        """Write file content"""
+        """
+        Write file content
+
+        返回加过末尾换行的实际内容，使语法检查、Diff 和用量反馈讨论的是同一份文件。
+        """
         if content and not content.endswith("\n"):
             content += "\n"
 

@@ -52,7 +52,11 @@ if _storage_package_was_stubbed:
 
 
 def _context_with_metadata(chat_value, init_value):
-    """构造包含当前聊天和历史 INIT 元数据的轻量上下文桩。"""
+    """
+    构造包含当前聊天和历史 INIT 元数据的轻量上下文桩。
+
+    当前 CHAT 可覆盖启动时的自动设置；这项来源选择不同时决定 Skill 是否加载成功。
+    """
     message = ChatClientMessage(
         message_id="message-1",
         prompt="test",

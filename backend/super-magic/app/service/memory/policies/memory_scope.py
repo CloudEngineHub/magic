@@ -35,10 +35,17 @@ class MemoryScope:
 
 
 def resolve_memory_scopes(agent_context: "AgentContext") -> tuple[MemoryScope, ...]:
-    # 普通项目拥有 global 和 p_<project_id>；Claw 拥有 global 和自己的 .magic。
-    # Claw 的工作区记忆承担项目背景职责，不再多建普通项目副本。
-    # 这里不创建目录、不判断文件已读，路径不存在仍可用于之后发现新目录；文件读取另行检查。
-    # 关闭自动记忆后，用户仍能主动查询或整理；目录归属不能由自动设置或 Skill 状态决定。
+    """
+    普通项目拥有 global 和 p_<project_id>；Claw 拥有 global 和自己的 .magic。
+    Claw 的工作区记忆承担项目背景职责，不再多建普通项目副本。
+    这里不创建目录、不判断文件已读，路径不存在仍可用于之后发现新目录；文件读取另行检查。
+    关闭自动记忆后，用户仍能主动查询或整理；目录归属不能由自动设置或 Skill 状态决定。
+    | 场景                    | 返回的根目录                      |
+    | 普通项目中的任意话题    | global + projects/p_<project_id> |
+    | 同一项目切换到另一话题  | 仍是上面两个目录，不按话题分库    |
+    | Claw                    | global + 自己工作区下的 .magic  |
+    Claw 的 .magic 已负责项目背景，再加一份 p_<id> 会让同一背景在两处分别更新。
+    """
     memory_root = PathManager.get_memory_root_dir().expanduser().absolute()
     scopes: list[MemoryScope] = [MemoryScope(MemoryScopeKind.GLOBAL, memory_root / "global")]
     if not agent_context.is_magiclaw():
@@ -56,6 +63,19 @@ def build_memory_runtime_context(agent_context: "AgentContext") -> str:
     """只提供运行时事实；记忆组织和维护策略保持在 Skill 中。"""
     from app.service.memory.policies.memory_file_budget import get_memory_md_budget
 
+    """
+    模型从这里拿可以直接使用的完整路径，不根据话题 ID、Agent ID 或项目名称拼目录。
+    通知同时列出「当前是否自动执行」与「当前能做什么」，避免关闭自动操作后丢掉手动入口。
+    保存内容、如何归档、是否注明来源等判断仍由 Skill 负责；这里不复制一套维护政策。
+    例：home=/home/user，普通项目 ID=demo，自动记忆和 Skill 可用，预算为 10,000/16,000：
+    Automatic long-term memory: enabled.
+    The memory skill is available independently of the automatic-memory setting.
+    User-global memory: /home/user/.magic/memory/global
+    Current ordinary-project memory: /home/user/.magic/memory/projects/p_demo
+    Each user-global or ordinary-project MEMORY.md has a target of 10,000 and a maximum of 16,000 estimated tokens. These are per-file values, not a combined limit.
+    这些是完整目录，不是 MEMORY.md 文件名。相同项目切换话题时，仍使用 p_demo。
+    关闭自动记忆会将首行改为 disabled 并追加手动操作说明，目录行仍保留。
+    """
     labels = {
         MemoryScopeKind.GLOBAL: "User-global memory",
         MemoryScopeKind.PROJECT: "Current ordinary-project memory",

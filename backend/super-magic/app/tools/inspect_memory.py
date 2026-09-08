@@ -46,11 +46,13 @@ class InspectMemoryParams(BaseToolParams):
     file_paths: list[str] = Field(..., min_length=1, description="Absolute paths to memory files to measure.")
 
 
-# Code Mode 使用说明：agents/skills/memory/SKILL.md 的 Optional measurement。
-# MOCK DEMO：显式传入两个绝对文件路径 -> 逐项测量 -> 返回成功数量、每项状态和计数；
-# 一项失败表示部分完成，不能因另一个文件可读就把整批 ok 设为 True。
-# 这里只计数，不返回正文、不登记 Horizon 已读、不自动展开目录，更不执行记忆整理。
-# 用户展示走 i18n 和 ToolDetail；模型 content 保留逐项状态，不能只依赖 data 解释失败。
+"""
+Code Mode 使用说明：agents/skills/memory/SKILL.md 的 Optional measurement。
+MOCK DEMO：显式传入两个绝对文件路径 -> 逐项测量 -> 返回成功数量、每项状态和计数；
+一项失败表示部分完成，不能因另一个文件可读就把整批 ok 设为 True。
+这里只计数，不返回正文、不登记 Horizon 已读、不自动展开目录，更不执行记忆整理。
+用户展示走 i18n 和 ToolDetail；模型 content 保留逐项状态，不能只依赖 data 解释失败。
+"""
 @tool(name="inspect_memory", code_mode_only=True)
 class InspectMemory(BaseTool[InspectMemoryParams]):
     """Measure memory file sizes and estimated token counts without returning their contents."""
@@ -82,6 +84,15 @@ class InspectMemory(BaseTool[InspectMemoryParams]):
              "estimated_tokens": usage.estimated_tokens, "size_bytes": usage.size_bytes}
             for usage in usages
         ]
+        """
+        例：global/MEMORY.md 测得 12,000 tokens、48,000 bytes，项目主文件不存在，
+        预算为 10,000/16,000 时，ok=False，content 仍完整交代已完成的一项：
+        Measured 1 of 2 requested memory files. Token counts use the project estimate, not an exact model tokenizer. File contents were not returned or recorded as read.
+        - /home/user/.magic/memory/global/MEMORY.md: 12,000 estimated tokens; 48,000 bytes. MEMORY.md: target 10,000, maximum 16,000 tokens.
+        - /home/user/.magic/memory/projects/p_demo/MEMORY.md: file does not exist.
+        对应 data["files"] 保留两项：前者 status="ok" 和实际计数；后者 status="missing"、
+        estimated_tokens=None、size_bytes=None。调用方可继续使用成功项，不把缺失项当成空文件。
+        """
         return ToolResult(
             ok=succeeded == len(usages),
             content=(
@@ -94,6 +105,10 @@ class InspectMemory(BaseTool[InspectMemoryParams]):
 
     @staticmethod
     async def _resolve_scope(context: AgentContext, path: Path) -> MemoryScope | None:
+        """
+        路径文字在允许目录内还不够，链接的真实目标也要属于同一作用域。
+        例：项目 notes/a.md 是指向项目外文件的链接，不能借这个入口测量项目外内容。
+        """
         if not path.is_absolute() or "\x00" in str(path):
             return None
         real_path = await async_realpath(path)
@@ -117,6 +132,7 @@ class InspectMemory(BaseTool[InspectMemoryParams]):
             if await self._resolve_scope(context, path) != scope or await async_realpath(path) != real_path:
                 return MemoryInspection(MemoryFileTokenUsage(path, MemoryFileReadStatus.OUTSIDE_SCOPE, None))
             is_memory_md = (
+                # 主文件的预算只匹配作用域根下的 MEMORY.md；普通笔记或 Claw 文件不套这份额度。
                 scope.kind != MemoryScopeKind.CLAW_WORKSPACE
                 and real_path == await async_realpath(scope.memory_file)
             )
@@ -165,6 +181,10 @@ class InspectMemory(BaseTool[InspectMemoryParams]):
     async def get_tool_detail(
         self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None,
     ) -> ToolDetail:
+        """
+        用户详情只呈现文件名、数量和友好状态；完整路径与技术错误留在给模型的 content 中。
+        即使整批失败也返回详情，使用户知道是未找到文件、不可读取还是没有可用上下文。
+        """
         key = "inspect_memory.success" if result.ok else "inspect_memory.failed"
         lines = [i18n.translate(key, category="tool.messages"), ""]
         files = cast(list[MemoryUsageData], (result.data or {}).get("files", []))

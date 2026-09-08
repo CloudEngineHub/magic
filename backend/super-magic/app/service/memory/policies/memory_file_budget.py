@@ -18,9 +18,11 @@ logger = get_logger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class MemoryMdBudget:
-    # 每份全局／项目主文件单独使用预算；target 是整理目标，max 才决定是否超限。
-    # MOCK DEMO：target=10,000、max=16,000；15,000 只做相关增量，16,000 仍未超限，
-    # 16,001 才请求语义整理。不是把文件切到指定长度，也不能把两份文件的 Token 相加判断。
+    """
+    每份全局／项目主文件单独使用预算；target 是整理目标，max 才决定是否超限。
+    MOCK DEMO：target=10,000、max=16,000；15,000 只做相关增量，16,000 仍未超限，
+    16,001 才请求语义整理。不是把文件切到指定长度，也不能把两份文件的 Token 相加判断。
+    """
     target_tokens: int
     max_tokens: int
 
@@ -55,6 +57,10 @@ class MemoryFileReadStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class MemoryFileTokenUsage:
+    """
+    MISSING 表示尚未建文件；UNREADABLE/UNSTABLE 表示本次不知道用量，均不能写成 0。
+    例：真正的空文件可报告 0 Token；读取失败的旧文件不能被当成空文件直接覆盖。
+    """
     path: Path
     status: MemoryFileReadStatus
     estimated_tokens: int | None
@@ -73,10 +79,12 @@ def get_memory_md_budget() -> MemoryMdBudget | None:
 async def inspect_memory_file(
     path: Path, interruption_event: asyncio.Event | None = None,
 ) -> MemoryFileTokenUsage:
-    # 真正需要计数时才读取全文；它与 Horizon 的周期文件变化探测承担不同成本。
-    # MOCK DEMO：用户要求核实某 MEMORY.md 用量 -> 分块解码累计 -> 返回计数；正文不入上下文。
-    # 中断同时取消计数任务和等待任务，不能让取消后的文件扫描继续占用 I/O。
-    # None 表示数值不可用，不是 0；调用方不能把读失败当空文件并据此覆盖记忆。
+    """
+    真正需要计数时才读取全文；它与 Horizon 的周期文件变化探测承担不同成本。
+    MOCK DEMO：用户要求核实某 MEMORY.md 用量 -> 分块解码累计 -> 返回计数；正文不入上下文。
+    中断同时取消计数任务和等待任务，不能让取消后的文件扫描继续占用 I/O。
+    None 表示数值不可用，不是 0；调用方不能把读失败当空文件并据此覆盖记忆。
+    """
     if interruption_event is None:
         return await _count_memory_file(path)
     if interruption_event.is_set():
@@ -96,6 +104,11 @@ async def inspect_memory_file(
 
 
 async def _count_memory_file(path: Path) -> MemoryFileTokenUsage:
+    """
+    数据流：原始字节块 -> 增量 UTF-8 解码 -> 累计字符 -> 统一取整得到 Token 估算。
+    一个中文字符的字节可能落在两块中，decoder 会等待后半段，不把它当成损坏文本。
+    这里为测量而读完整个文件，降低的是峰值内存；Horizon 日常大文件探测仍使用 mtime。
+    """
     try:
         if not stat.S_ISREG((await async_stat(path)).st_mode):
             return MemoryFileTokenUsage(path, MemoryFileReadStatus.NOT_FILE, None)
@@ -112,7 +125,11 @@ async def _count_memory_file(path: Path) -> MemoryFileTokenUsage:
                 await asyncio.sleep(0)
         counter.add_text(decoder.decode(b"", final=True))
         after = await async_fresh_stat(path)
-        # 元数据只能证明此次观察可用；发生替换或写入时不发布混合版本的计数。
+        """
+        元数据只能证明此次观察可用；发生替换或写入时不发布混合版本的计数。
+        例：统计一半时另一任务追加内容，前半份旧文件加后半份新文件不能称作某个版本的用量。
+        本次返回不可用，由调用方说明事实；不在计数器内反复读取或替用户发起整理。
+        """
         if size_bytes != after.st_size or any(
             left != right for left, right in (
                 (before.st_dev, after.st_dev), (before.st_ino, after.st_ino),

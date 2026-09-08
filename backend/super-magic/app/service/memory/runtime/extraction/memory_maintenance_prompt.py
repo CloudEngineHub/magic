@@ -18,8 +18,10 @@ class MemoryMaintenancePromptBuilder:
     """并发测量适用的主文件，不读取 notes、不根据数字生成语义整改指令。"""
 
     async def inspect(self, agent_context: "AgentContext") -> tuple[MemoryFileTokenUsage, ...]:
-        # MOCK DEMO：全局 12K、项目 18K -> 两份分别报告，只有项目触发重组 reference。
-        # Claw 工作区记忆由自身规则管理，不套普通 MEMORY.md 的 10K/16K 预算。
+        """
+        MOCK DEMO：全局 12K、项目 18K -> 两份分别报告，只有项目触发重组 reference。
+        Claw 工作区记忆由自身规则管理，不套普通 MEMORY.md 的 10K/16K 预算。
+        """
         scopes = tuple(scope for scope in resolve_memory_scopes(agent_context) if scope.kind != MemoryScopeKind.CLAW_WORKSPACE)
         usages = await asyncio.gather(*(
             inspect_memory_file(scope.memory_file, agent_context.get_interruption_event()) for scope in scopes
@@ -30,6 +32,19 @@ class MemoryMaintenancePromptBuilder:
 
     @staticmethod
     def render_usage(usages: tuple[MemoryFileTokenUsage, ...], budget: MemoryMdBudget | None) -> str:
+        """
+        这份初始用量供模型直接使用，之后接续写工具的前后统计，不要求写完再专门计数。
+        数字可以提示「从 80K 变成 1K 值得检查」，不能推断究竟丢了哪项理由或规则。
+        缺少主文件、计数失败、预算缺失分别表达，避免把技术异常说成需要删除内容。
+        例：预算 target=10,000/max=16,000，两个主文件测得以下用量，实际输出为：
+        Initial MEMORY.md usage; counts are estimates, and each file is evaluated separately:
+        - /home/user/.magic/memory/global/MEMORY.md: 12,000 estimated tokens; 48,000 bytes; target 10,000; maximum 16,000; over maximum: no.
+        - /home/user/.magic/memory/projects/p_demo/MEMORY.md: 18,000 estimated tokens; 72,000 bytes; target 10,000; maximum 16,000; over maximum: yes.
+        Reuse these initial counts and subsequent writing-tool feedback; do not recount merely because a write succeeded.
+        若项目文件在计数中改变，其对应行改为（不会报告 0 tokens）：
+        - /home/user/.magic/memory/projects/p_demo/MEMORY.md: current count unavailable (unstable); preserve existing content until it can be inspected.
+        12,000 已超过 target，但未超过 maximum，不能与 18,000 那份一起判为超限。
+        """
         lines = ["Initial MEMORY.md usage; counts are estimates, and each file is evaluated separately:"]
         for usage in usages:
             if usage.status == MemoryFileReadStatus.MISSING:

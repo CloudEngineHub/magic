@@ -115,8 +115,10 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
                 return ToolResult.error("MICRO-APP.md is managed by update_html_app_memory. Use that tool instead of write_file so MagicBase data model records are not overwritten.")
 
             initial_file_exists = await async_exists(file_path)
-            # 覆盖前读取旧用量只用于反馈，不增加写入权限或版本校验条件。
-            # 新建文件从 0 开始；旧文件不可读取时保留 unavailable，不能伪装成空文件。
+            """
+            覆盖前读取旧用量只用于反馈，不增加写入权限或版本校验条件。
+            新建文件从 0 开始；旧文件不可读取时保留 unavailable，不能伪装成空文件。
+            """
             before_metrics = await read_file_metrics(file_path) if initial_file_exists else FileContentMetrics(0, 0)
 
             content_to_write, auto_repaired_json, original_syntax_errors = await self._prepare_content_for_write(
@@ -130,7 +132,11 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
 
             # 所有写入工具通过同一 Horizon 文件记录更新写入后的变化基线。
             async with self._file_versioning_context(tool_context, file_path) as file_exists:
-                # 写入文件内容
+                """
+                写入文件内容
+                统计要使用真正写入的版本：JSON 可能已修复，末尾也可能按原规则添加换行。
+                例：输入 abc，实际保存 abc 加换行，反馈不能仍按 3 字节计算。
+                """
                 content_to_write = await self._write_file(file_path, content_to_write)
 
             # 执行语法检查
@@ -151,6 +157,7 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
                 f"Size: {write_result.file_size} bytes"
             )
             if file_exists != initial_file_exists:
+                # 初次观察到的存在状态已经变化，旧统计不能再冒充此次覆盖的可靠起点。
                 before_metrics = FileContentMetrics(None, None)
             output += "\n" + format_file_change_metrics(
                 FileChangeMetrics(before_metrics, measure_text(content_to_write, write_result.file_size)),

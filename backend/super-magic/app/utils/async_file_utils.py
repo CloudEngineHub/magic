@@ -638,7 +638,11 @@ async def async_read_json(file_path: Union[str, Path]) -> Dict[str, Any]:
 
 
 async def async_append_text(file_path: Union[str, Path], content: str, encoding: str = 'utf-8') -> None:
-    """异步追加文本，保留原文件并沿用追加写语义，不使用临时文件替换。"""
+    """
+    异步追加文本，保留原文件并沿用追加写语义，不使用临时文件替换。
+
+    网络挂载路径的 rename/replace 可能产生新的文件记录；追加应写现有对象，不重建整文件。
+    """
     async with aiofiles.open(file_path, "a", encoding=encoding) as stream:
         await stream.write(content)
 
@@ -958,20 +962,32 @@ async def async_try_count_text_lines(file_path: Union[str, Path], encoding: str 
 
 
 async def async_realpath(path: Union[str, Path], *, strict: bool = False) -> Path:
-    """异步解析链接，供边界层校验目标仍在允许的目录内。"""
+    """
+    异步解析链接，供边界层校验目标仍在允许的目录内。
+
+    这里只把可能阻塞的路径解析移出事件循环；是否允许访问由调用方结合自己的作用域决定。
+    """
     return Path(await asyncio.to_thread(os.path.realpath, str(path), strict=strict))
 
 
 async def async_fresh_stat(file_path: str | Path) -> os.stat_result:
-    """打开文件取 fstat，避免仅使用网络挂载的路径元数据缓存。"""
+    """
+    打开文件取 fstat，避免仅使用网络挂载的路径元数据缓存。
+
+    记忆测量用句柄观察文件身份与大小；这不是替换所有 stat 的通用入口。
+    Horizon 的高频变化探测仍沿用既有 mtime 和网络延迟容差，避免增加每轮打开文件的成本。
+    """
     async with aiofiles.open(file_path, "rb") as stream:
         return await asyncio.to_thread(os.fstat, stream.fileno())
 
 
 async def async_read_bytes_iter(file_path: str | Path, *, chunk_size: int = 256 * 1024) -> AsyncIterator[bytes]:
-    """使用单个句柄分段读取，结束或取消时关闭文件。"""
-    # 只降低测量时的峰值内存，不减少总读取量。不得用它替换大文件的 mtime 快速探测。
-    # 调用方提前停止时使用 aclosing，保证异步生成器及时退出文件上下文。
+    """
+    使用单个句柄分段读取，结束或取消时关闭文件。
+
+    只降低测量时的峰值内存，不减少总读取量。不得用它替换大文件的 mtime 快速探测。
+    调用方提前停止时使用 aclosing，保证异步生成器及时退出文件上下文。
+    """
     if chunk_size <= 0:
         raise ValueError("Read chunk size must be positive")
     async with aiofiles.open(file_path, "rb") as stream:

@@ -39,8 +39,10 @@ if _tools_package_was_stubbed:
 if _storage_package_was_stubbed:
     sys.modules.pop("app.infrastructure.storage", None)
 
-# 旧模板枚举和占位符渲染入口已随政策迁入 Skill 删除；对应三个模板接口用例不再适用。
-# 保留并适配原有的预算、缺失文件容错、动态事实、中文注释和主提示词职责检查，不增加场景。
+"""
+旧模板枚举和占位符渲染入口已随政策迁入 Skill 删除；对应三个模板接口用例不再适用。
+保留并适配原有的预算、缺失文件容错、动态事实、中文注释和主提示词职责检查，不增加场景。
+"""
 
 
 @pytest.mark.asyncio
@@ -103,6 +105,10 @@ async def test_prompt_provider_appends_dynamic_maintenance_prompt(monkeypatch):
         has_skill=lambda name: name == "memory",
         shared_context=SimpleNamespace(get_field=lambda _key: "UTC"),
     )
+    """
+    与生产调用传同一种快照：provider 从 source 取得 Agent 配置，从 Horizon 取得来源话题。
+    这里没有话题信息是合法状态，不能靠缺字段的桩迫使生产代码猜 ID 或增加宽松访问。
+    """
     snapshot = AgentContextSnapshot(
         source=AgentSessionRef(
             target=AgentTarget(AgentProviderType.BUILTIN, "magic"),

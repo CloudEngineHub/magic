@@ -73,5 +73,10 @@ class MemoryListenerService:
 
     @staticmethod
     def _is_enabled(agent_context: "AgentContext") -> bool:
-        """仅为主 Agent 启用；通用 Agent 尊重开关，Claw 保持原有行为。"""
+        """
+        仅为主 Agent 启用；通用 Agent 尊重开关，Claw 保持原有行为。
+
+        事件监听器只决定是否进入自动流程；不能把此判断传播成用户手动记忆工具的权限。
+        开关、Skill 实际可用性与 Claw 例外集中在同一政策函数，防止多个入口各写一套解释。
+        """
         return is_memory_maintenance_enabled(agent_context)

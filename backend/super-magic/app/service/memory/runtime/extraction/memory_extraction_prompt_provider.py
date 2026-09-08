@@ -31,7 +31,19 @@ logger = get_logger(__name__)
 
 
 class MemoryExtractionPromptProvider:
-    """高频主文由 fork 初始化预加载，本请求只增加 after-run 和必要的重组 reference。"""
+    """
+    高频主文由 fork 初始化预加载，本请求只增加 after-run 和必要的重组 reference。
+
+    这里是共享记忆能力的后台使用入口，不能将整理能力限定为 after-run 专属。
+    主 Agent 需要整体整理时也能通过 Skill 读取同一份 reorganize.md；后台只补一条记忆
+    时也无需加载它。完整场景表见 app/service/memory/__init__.py。
+    本类提供任务和运行时事实，分类、归档或冲突取舍仍由 Agent 根据 Skill 判断。
+
+    后台模型的任务上下文：原对话及已有状态 + 预加载的主 Skill + 本次 User 任务。
+    User 任务明确要求按 after-run.md 保存新增信息；初始超限才附加 reorganize.md。
+    仅给一份规则文档不足以发起任务，所以规则与「现在执行什么」在这里分别提供。
+    """
+
 
     def __init__(self, maintenance_prompt_builder: MemoryMaintenancePromptBuilder | None = None) -> None:
         self._maintenance_prompt_builder = maintenance_prompt_builder or MemoryMaintenancePromptBuilder()
@@ -40,19 +52,50 @@ class MemoryExtractionPromptProvider:
         try:
             request = await self._load_memory_request(snapshot.source.target, agent_context=agent_context)
         except Exception as error:
-            # 读取中 Skill 或 reference 消失，也不能取消 Claw 独立的工作区维护。
-            # CancelledError 不在 Exception 内，用户中断不会触发这条降级。
+            """
+            读取中 Skill 或 reference 消失，也不能取消 Claw 独立的工作区维护。
+            CancelledError 不在 Exception 内，用户中断不会触发这条降级。
+            """
             if not agent_context.is_magiclaw():
                 raise
             logger.warning(f"通用 memory 说明不可用，Claw 仅维护自身工作区记忆: {error}")
             request = self._unavailable_request(agent_context)
-        # 快照中的话题是来源模型当时已见的产品话题，不是本次后台 Agent 的运行 ID。
-        # 只复用已有信息；来源缺失不新增失败条件，也不再捕获快照或查询话题接口。
+        """
+        快照中的话题是来源模型当时已见的产品话题，不是本次后台 Agent 的运行 ID。
+        只复用已有信息；来源缺失不新增失败条件，也不再捕获快照或查询话题接口。
+        """
         source_context = self._format_source_context(snapshot.horizon_state.super_magic_product_context)
+        """
+        最终追加到 fork 的 User 消息结构如下；方括号表示此例省略的正文，不是实际输出：
+        Source conversation captured for this memory task:
+        Project: Reports &amp; exports (ID: project-demo)
+        Topic: Channel A (ID: topic-demo)
+
+        <memory_after_run>
+        [本次维护任务、预加载 Skill 路径、可用记忆目录、当前时钟和初始用量]
+
+        <reference path="/app/agents/skills/memory/references/after-run.md">
+        [after-run.md 的完整正文，按 XML 文本转义]
+        </reference>
+
+        <reference path="/app/agents/skills/memory/references/reorganize.md">
+        [仅初始存在超限主文件时附加；前文另列具体超限路径]
+        </reference>
+
+        </memory_after_run>
+        上例假定 Skill 来自 /app/agents/skills/memory，项目名称含 &，因此输出为 &amp;。
+        快照缺少产品上下文时，头部改为下面这一行，维护请求仍保留：
+        Source project and topic: unavailable in the captured context.
+        """
         return f"{source_context}\n\n{request}"
 
     @staticmethod
     def _format_source_context(context: "SuperMagicProductContextState | None") -> str:
+        """
+        这里只说明本次 fork 来自哪个产品话题，不要求每条记忆复制项目和话题字段。
+        例：本次来自话题 B，读到话题 A 的笔记后做了整理，原有内容仍应保留 A 的来源。
+        轻量括注、是否需要 topics 笔记由 Skill 指导，Python 不替模型决定内容组织。
+        """
         if context is None:
             return "Source project and topic: unavailable in the captured context."
         return (
@@ -62,9 +105,11 @@ class MemoryExtractionPromptProvider:
         )
 
     async def _load_memory_request(self, target: AgentTarget, *, agent_context: "AgentContext") -> str:
-        # 复用编译后的来源定义、归一化和同一 Skill 发现顺序，避免后台读到另一来源的同名 Skill。
-        # MOCK DEMO：只有项目主文件超过 max -> 注入重组 reference，范围仍只针对该文件；
-        # Claw 排除通用 memory -> 仍执行原工作区维护，不能把排除 Skill 当成取消 Claw 记忆。
+        """
+        复用编译后的来源定义、归一化和同一 Skill 发现顺序，避免后台读到另一来源的同名 Skill。
+        MOCK DEMO：只有项目主文件超过 max -> 注入重组 reference，范围仍只针对该文件；
+        Claw 排除通用 memory -> 仍执行原工作区维护，不能把排除 Skill 当成取消 Claw 记忆。
+        """
         if not is_memory_skill_available(agent_context):
             return self._unavailable_request(agent_context)
         definition_text = await async_read_text(PathManager.get_compiled_agent_file(target.agent_name))
@@ -91,9 +136,12 @@ class MemoryExtractionPromptProvider:
         ]
         references = ["after-run.md"]
         if over_budget_files:
+            # 例：全局 12K、项目 18K，只要求整理项目主文件；另一份不会被连带重写。
             references.append("reorganize.md")
-        # Skill 提供维护规则；这条 User 消息明确发起本次任务，不能仅提供说明和用量。
-        # 同一超限结果同时决定整理目标和 reference 注入，写后超限仍按 Skill 按需读取。
+        """
+        Skill 提供维护规则；这条 User 消息明确发起本次任务，不能仅提供说明和用量。
+        同一超限结果同时决定整理目标和 reference 注入，写后超限仍按 Skill 按需读取。
+        """
         parts = [
             "<memory_after_run>",
             "Perform this internal after-run memory task now. Follow the supplied after-run.md rules and the "
@@ -122,6 +170,10 @@ class MemoryExtractionPromptProvider:
 
     @staticmethod
     def _unavailable_request(agent_context: "AgentContext") -> str:
+        """
+        通用 Skill 缺失时普通 Agent 无法启动这项维护；Claw 还继承了自己的工作区规则。
+        因此 Claw 降级任务只维护自有记忆，不把缺少通用 Skill 误解为取消所有记忆能力。
+        """
         if not agent_context.is_magiclaw():
             raise RuntimeError("Long-term memory maintenance is unavailable or excluded")
         # 只触发 Claw 已有政策，不在 Python 复制一套记忆维护规则，也不加载被排除的 Skill。

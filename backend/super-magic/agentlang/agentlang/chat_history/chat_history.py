@@ -1121,10 +1121,16 @@ class ChatHistory:
         """
         sanitized_messages: List[ChatMessage] = []
         fixes = 0
-        # 与 Horizon 新内容生成共用应用预算，避免 20K Token 的合法消息重启后被旧 32K
-        # 字符规则删除。Agentlang 独立使用且未配置 Horizon 时，继续原有字符保护。
-        # source 仍为 horizon；不改变其它消息清理、不引入消息版本或新的交付协议。
+        """
+        与 Horizon 新内容生成共用应用预算，避免 20K Token 的合法消息重启后被旧 32K
+        字符规则删除。Agentlang 独立使用且未配置 Horizon 时，继续原有字符保护。
+        source 仍为 horizon；不改变其它消息清理、不引入消息版本或新的交付协议。
+        """
         configured_limit = config.get("horizon.context_max_tokens")
+        """
+        本段只清理历史中的异常 Horizon 消息；普通用户文本和模型退化输出仍走各自规则。
+        日志继续保留字符长度、最大内容块和文件占用，同时标出 Token 额度，方便追查来源。
+        """
         use_tokens = (
             not isinstance(configured_limit, bool)
             and isinstance(configured_limit, (str, int))

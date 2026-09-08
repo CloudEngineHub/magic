@@ -305,7 +305,11 @@ When editing the same file multiple times:
                 errors_str = "\n".join(syntax_result.errors)
                 ai_warnings.append(f"WARNING: Syntax errors detected in the modified file:\n{errors_str}")
 
-            # Calculate stats
+            """
+            Calculate stats
+            在真实替换与末尾换行处理后只计算一次，原摘要、用户 Diff 旁的数字与 Token 反馈共用。
+            匹配是否成功仍由原替换逻辑决定，用量数字不参与编辑权限或内容正确性判断。
+            """
             stats = DiffGenerator.calculate_change_stats(
                 original_content, new_content, old_size=original_snapshot.metrics.byte_count,
             )
@@ -380,7 +384,11 @@ When editing the same file multiple times:
 
 
     async def _read_file(self, file_path: Path) -> FileTextSnapshot:
-        """Read file content"""
+        """
+        Read file content
+
+        原文继续参与匹配，同一次读取留下真实字节数，避免为新增反馈再读一遍文件。
+        """
         return await read_text_snapshot(file_path)
 
     async def _write_file(self, file_path: Path, content: str) -> str:

@@ -563,16 +563,21 @@ runtime_cleanup:
     max_directory_count: 16
 
 # Horizon 的展示额度与 5 MiB 文件扫描保护相互独立。
+# 例：普通文件每份最多 4K，重要规则文件每份最多 16K；所有文件变化合计仍受 24K 约束。
+# 整条通知还包含目录、浏览器和运行时事实，最后统一受 context_max_tokens 约束。
 horizon:
   file_change_max_tokens: ${HORIZON_FILE_CHANGE_MAX_TOKENS:-4000}
   important_file_change_max_tokens: ${HORIZON_IMPORTANT_FILE_CHANGE_MAX_TOKENS:-16000}
   file_changes_max_tokens: ${HORIZON_FILE_CHANGES_MAX_TOKENS:-24000}
   context_max_tokens: ${HORIZON_CONTEXT_MAX_TOKENS:-32000}
+  # 快照额度决定后续 Diff 可保留多少原文，不是单次读取或单次展示的额度。
   file_snapshot_max_tokens: ${HORIZON_FILE_SNAPSHOT_MAX_TOKENS:-128000}
   # 比较正文，diff 达到全文的此比例时优先真实读取全文；不计算包装的理解成本。
   full_read_ratio: ${HORIZON_FULL_READ_RATIO:-0.8}
 
 # 默认挂载规则在应用层声明，来源优先级和实际文件读取仍由 Skill 加载器处理。
+# mount_when 表示默认提供知识，allow_exclude 表示 Agent 能否排除，preload_files 表示直接展开正文。
+# 例：关闭自动记忆不撤下 memory；用户主动要求整理时仍需要这些知识。
 skills:
   runtime:
     - name: compact-chat-history
@@ -600,8 +605,10 @@ memory:
     # 只限制文件树首次发现和变更通知的上下文，不读取 notes 正文，不改变真实目录。
     max_tokens: ${MEMORY_FILE_TREE_CHANGE_CONTEXT_MAX_TOKENS:-2000}
     preferred_paths: [MEMORY.md, notes, notes/references, notes/timeline]
+    # 偏好和时间目录只影响展示；未知命名仍参与扫描，不要求模型严格照模板建立目录。
     timeline_paths: [notes/timeline]
   after_run:
+    # 这里只决定何时派生记忆任务，不决定每次是否全库整理；超限判断与整理政策分别在预算和 Skill。
     # 累计达到指定数量的有效主任务后触发一次完整 fork 提取
     extraction_task_threshold: ${MEMORY_AFTER_RUN_EXTRACTION_TASK_THRESHOLD:-5}
     # 未达到阈值时，连续 10 分钟无操作后触发一次完整 fork 提取

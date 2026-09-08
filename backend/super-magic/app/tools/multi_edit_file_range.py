@@ -214,6 +214,7 @@ Key constraints:
                 ai_warnings.append(f"WARNING: Syntax errors detected in the modified file:\n{errors_str}")
 
             stats = DiffGenerator.calculate_change_stats(
+                # 多个范围只是一次整文件编辑的输入；总统计比较原文件与最终文件，保留原有行数事实。
                 original_content, new_content, old_size=original_snapshot.metrics.byte_count,
             )
             summary_diff = DiffGenerator.generate_summary_diff(str(file_path.name), stats)
@@ -392,7 +393,11 @@ Key constraints:
         return await read_text_snapshot(file_path)
 
     async def _write_file(self, file_path: Path, content: str) -> str:
-        """Write file content"""
+        """
+        Write file content
+
+        调用方用返回值生成 Diff 和计数，避免仍按未加末尾换行的中间文本报告结果。
+        """
         if content and not content.endswith("\n"):
             content += "\n"
 

@@ -181,7 +181,12 @@ def _manual_context_windows_from_dict(data: object) -> dict[str, ManualContextWi
 
 
 def _memory_directory_from_dict(data: object) -> MemoryDirectorySnapshot | None:
-    """恢复有限深度快照；旧成员摘要没有完整条目，下一次扫描重新建立。"""
+    """
+    恢复有限深度快照；旧成员摘要没有完整条目，下一次扫描重新建立。
+
+    恢复真实条目后，进程重启或完整 fork 才能识别同数量的文件替换。
+    只有分组名称或计数无法重建这些路径，所以不猜旧状态，交给下一次真实扫描。
+    """
     if not isinstance(data, dict) or "entries" not in data or "scan_depth" not in data:
         return None
     return MemoryDirectorySnapshot(
@@ -239,6 +244,7 @@ def _encode_state(state: HorizonState) -> dict:
         "user_preferred_language": state.user_preferred_language,
         "workspace_files": state.workspace_files,
         "workspace_entries": state.workspace_entries,
+        # 目录快照跟其它 Horizon 字段一起保存；显示折叠从不写回这个结构。
         "memory_directory": asdict(state.memory_directory) if state.memory_directory is not None else None,
         "client_context": state.client_context,
         "cli_status": state.cli_status,

@@ -9,7 +9,14 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class HorizonDisplayBudget:
-    """上下文展示预算；不改变文件扫描、哈希或编辑校验的性能边界。"""
+    """
+    上下文展示预算；不改变文件扫描、哈希或编辑校验的性能边界。
+
+    额度由小到大：单个普通文件 <= 单个重要文件 <= 所有文件变化 <= 整条 Horizon 通知。
+    例：一个规则文件允许 16K，但本轮所有文件只剩 3K，仍只能使用剩余的 3K。
+    file_snapshot_max_tokens 管缓存多少正文；它不保证这些正文会一次性全部展示给模型。
+    """
+
 
     file_change_max_tokens: int
     important_file_change_max_tokens: int
@@ -39,7 +46,15 @@ class HorizonDisplayBudget:
 
 @dataclass
 class FileContextRecord:
-    """Horizon 已记录的文件版本，用于后续变化检测、Diff 生成和编辑校验。"""
+    """
+    Horizon 已记录的文件版本，用于后续变化检测、Diff 生成和编辑校验。
+
+    read_ranges 留作观察记录，不作为编辑权限，也不跨版本平移或拼成完整读取的证明。
+    MOCK DEMO：模型读过 1～10 行后用脚本插入数行，仍可能知道第 11 行的新位置。
+    编辑条件继续由文件级校验和工具目标匹配决定，不能因工程记录跟不上而阻止正确编辑。
+    file_content 服务于「如何展示下一次变化」，read_ranges 记录「当时请求过哪些行」。
+    二者都不能推导新的行级权限；是否允许本次编辑仍由原文件版本和目标匹配检查负责。
+    """
     path: str                           # 绝对路径
     file_hash: str                      # 文件级变化探测信号（小文件真 hash，大文件 __mtime__ 伪 hash）
     file_mtime_ms: float                # 读取时的 mtime（毫秒）
@@ -51,9 +66,6 @@ class FileContextRecord:
     # 留档字段：不参与主链路判断，但保留用于排查
     read_at: str = ""                   # ISO 8601 datetime
     read_ranges: list[tuple[int, int]] = field(default_factory=list)  # 当时读取的行号区间
-    # read_ranges 留作观察记录，不作为编辑权限，也不跨版本平移或拼成完整读取的证明。
-    # MOCK DEMO：模型读过 1～10 行后用脚本插入数行，仍可能知道第 11 行的新位置。
-    # 编辑条件继续由文件级校验和工具目标匹配决定，不能因工程记录跟不上而阻止正确编辑。
 
 
 @dataclass(frozen=True)
@@ -66,10 +78,15 @@ class MemoryDirectoryDisplayPolicy:
 
 @dataclass
 class MemoryDirectorySnapshot:
-    """有限深度内的目录条目，用于比较增删；不表示模型读过笔记正文。
+    """
+    有限深度内的目录条目，用于比较增删；不表示模型读过笔记正文。
 
     展示可以折叠，条目仍完整保留到扫描深度。扫描失败不生成新快照，避免把未读到
     的成员误报为删除；调整扫描深度时重新展示，不能把缩小范围当成文件消失。
+
+    entries 保存观察范围内的真实相对路径和类型，不保存压缩后的展示文本。
+    例：界面只显示「2025/ 共 20 项」，状态里仍保留那 20 项；换掉其中一个文件也能发现。
+    本状态随 Horizon codec 重启／fork；上下文重置后重新发现，不另建话题专属持久化文件。
     """
 
     root: str

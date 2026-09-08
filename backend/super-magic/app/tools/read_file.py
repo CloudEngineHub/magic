@@ -251,7 +251,18 @@ def _build_truncation_message(info: TruncationInfo, file_path: str) -> str:
 
 @dataclass
 class TextReadResult:
-    """文本读取结果，包含带行号和不带行号的两个版本"""
+    r"""
+    文本读取结果，包含带行号和不带行号的两个版本
+
+    with_line_numbers 给模型定位；without_line_numbers 给详情展示；source_content 给内部版本比对。
+    例：文件最后有换行，展示可以按行重组，但内部不能因此把同一源文本误判成另一版本。
+    完整读取磁盘文本 "alpha\nbeta"（最后没有换行）时，三个字段实际为：
+      with_line_numbers    = "1\talpha\n2\tbeta\n"
+      without_line_numbers = "alpha\nbeta\n"
+      source_content       = "alpha\nbeta"
+    展示按行补齐换行，source_content 保留本次读到的文本；范围读取时它为 None，
+    结果被截断时 extra_info 也将它置为 None，避免将局部内容当作完整文件快照。
+    """
     with_line_numbers: str  # 带行号的内容版本（用于AI展示）
     without_line_numbers: str  # 不带行号的原始内容版本（用于工具详情）
     source_content: str | None = None  # 全文读取时的真实源文本，保留末尾换行供内部 diff 使用
@@ -417,10 +428,13 @@ Suggestions:
             content = text_result.with_line_numbers
             # --- 内容读取逻辑结束 ---
 
-            # 根据当前上下文剩余量动态决定本次读取上限
-            # 运行时自动读取可指定更小的正文额度；普通工具调用继续使用原动态上限。
-            # 这是内部参数，不扩展模型 schema，也不改变行范围、版本校验或截断算法。
+            """
+            根据当前上下文剩余量动态决定本次读取上限
+            运行时自动读取可指定更小的正文额度；普通工具调用继续使用原动态上限。
+            这是内部参数，不扩展模型 schema，也不改变行范围、版本校验或截断算法。
+            """
             dynamic_max_tokens = _compute_max_tokens(tool_context)
+            # 外部只可收紧这次读取额度，不能突破 ReadFile 依据上下文算出的原有上限。
             max_tokens = min(dynamic_max_tokens, max_tokens) if max_tokens is not None else dynamic_max_tokens
             context_remaining = _get_context_remaining(tool_context)
 
@@ -492,6 +506,7 @@ Suggestions:
                 raw_content_without_line_numbers = text_result.without_line_numbers
 
             extra_info = {
+                # source_content 仅供 Python 内部确认全文版本；范围读取或截断时不声称拿到了全文。
                 "raw_content": raw_content,
                 "raw_content_without_line_numbers": raw_content_without_line_numbers,
                 "source_content": text_result.source_content if not content_truncated else None,

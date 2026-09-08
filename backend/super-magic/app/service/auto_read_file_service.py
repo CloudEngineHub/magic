@@ -205,6 +205,10 @@ class AutoReadFileService:
         if rule.path_kind == AutoReadPathKind.NESTED_AGENTS:
             return cls._resolve_nested_agents_from_snapshot(workspace_dir, rule, workspace_entries)
         if rule.path_kind in {AutoReadPathKind.GLOBAL_MEMORY, AutoReadPathKind.PROJECT_MEMORY}:
+            """
+            自动读取只挑作用域解析器给出的主文件，不自行生成另一套 project_id 路径。
+            Claw 没有普通项目作用域，稍后的 CLAW_MEMORY 分支仍处理它自己的启动记忆。
+            """
             scope_kind = MemoryScopeKind.GLOBAL if rule.path_kind == AutoReadPathKind.GLOBAL_MEMORY else MemoryScopeKind.PROJECT
             memory_scope = next((scope for scope in resolve_memory_scopes(agent_context) if scope.kind == scope_kind), None)
             if memory_scope is None:
@@ -362,6 +366,10 @@ class AutoReadFileService:
 
             max_tokens = None
             if candidate.rule_id in {AutoReadRuleId.GLOBAL_MEMORY, AutoReadRuleId.PROJECT_MEMORY}:
+                """
+                每份主文件独立给额度；这里限制本次自动交付，不删除或截短磁盘上的记忆。
+                超限内容如何保留到 notes，由后续维护 Skill 决定，不由读取服务做摘要。
+                """
                 budget = get_memory_md_budget()
                 if budget is None:
                     continue
@@ -406,9 +414,13 @@ class AutoReadFileService:
 
     @staticmethod
     async def read_changed_file(file_path: str, max_tokens: int) -> ToolResult:
-        # Horizon 选择全文表达时仍执行真正的 ReadFile，保留行号和截断说明。
-        # 不传 ToolContext：结果尚未决定是否展示，不能让工具提前改写 Horizon 的已知版本。
-        # 文件记录仍由 Horizon 在原有整包预算判断通过之后更新，不引入跨模块提交协议。
+        """
+        Horizon 选择全文表达时仍执行真正的 ReadFile，保留行号和截断说明。
+        不传 ToolContext：结果尚未决定是否展示，不能让工具提前改写 Horizon 的已知版本。
+        文件记录仍由 Horizon 在原有整包预算判断通过之后更新，不引入跨模块提交协议。
+        例：Diff 9K、当前全文 10K，Horizon 选择全文后调用本入口；返回值仍含真实行号与截断标记。
+        本方法接受任何已选中的文件，不根据名字判断 AGENTS.md 或 MEMORY.md 是否更重要。
+        """
         return await ReadFile(base_dir=Path(file_path).parent).execute_purely(
             ReadFileParams(file_path=file_path, offset=0, limit=-1), max_tokens=max_tokens,
         )

@@ -27,9 +27,11 @@ logger = get_logger(__name__)
 
 @dataclass(frozen=True)
 class FileChangeBlock:
-    # 只描述本文件将展示的块，以及完整展示时对应的正文。
-    # MOCK DEMO：A -> B 的完整 diff 已展示，下一次可从 B 生成 diff；只有摘要时，
-    # new_snapshot=None，不能把未交付的 B 当作模型已知全文。这里不控制编辑权限。
+    """
+    只描述本文件将展示的块，以及完整展示时对应的正文。
+    MOCK DEMO：A -> B 的完整 diff 已展示，下一次可从 B 生成 diff；只有摘要时，
+    new_snapshot=None，不能把未交付的 B 当作模型已知全文。这里不控制编辑权限。
+    """
     path: str
     content: str
     new_snapshot: str | None = None
@@ -49,6 +51,11 @@ class FileChanges:
 
 
 def _omission_notice(count: int) -> str:
+    """
+    例：还有 2 个变化文件连摘要都放不下时，<file_changes> 尾部追加：
+    <summary>2 additional changed files exceeded the display budget. Inspect relevant files before relying on their previous contents.</summary>
+    这是文件数量，不是被省略的行数；这些文件没有对应的 <file> 块。
+    """
     return f"<summary>{count} additional changed files exceeded the display budget. Inspect relevant files before relying on their previous contents.</summary>"
 
 
@@ -116,14 +123,30 @@ async def _try_full_read(
 
         result = await AutoReadFileService.read_changed_file(record.path, max_tokens)
         info = result.extra_info or {}
-        # ReadFile 保留自己的截断与文件类型判断；完整结果才可作为全文表达。
-        # 不传工具上下文，因此读取不会提前推进文件记录。两次读到的内容不同则留待下一轮。
+        """
+        ReadFile 保留自己的截断与文件类型判断；完整结果才可作为全文表达。
+        不传工具上下文，因此读取不会提前推进文件记录。两次读到的内容不同则留待下一轮。
+        """
         if not result.ok or info.get("was_truncated") or info.get("source_content") != current_content:
             return None
         body = info.get("raw_content")
         read_path = info.get("original_file_path")
         if not isinstance(body, str) or not isinstance(read_path, str) or Path(read_path).absolute() != Path(record.path).absolute():
             return None
+        r"""
+        例：短文件从 "format=csv\n" 改为 "format=tsv\n"，Diff 比全文长，真实 read_file 完整返回后：
+        <file path="/app/report.txt">
+          <summary>The runtime called read_file. This complete current content replaces the previous file content; scope and authority are unchanged.</summary>
+          <read_file_result>
+        1	format=tsv
+
+          </read_file_result>
+          <size>11 -> 11 bytes</size>
+          <mtime>2026-09-08 06:00:00 UTC -> 2026-09-08 06:01:00 UTC</mtime>
+        </file>
+        行号后是制表符；body 自带末尾换行，因此闭合标签前还有一个空行。
+        body 供模型阅读；缓存的是不带行号的 current_content，不能拿展示文本参与下一次 Diff。
+        """
         return FileChangeBlock(record.path, (
             f'<file path="{html.escape(record.path, quote=True)}">\n'
             '  <summary>The runtime called read_file. This complete current content replaces the previous file content; scope and authority are unchanged.</summary>\n'
@@ -143,7 +166,15 @@ async def _build_file_diff_block(
     max_tokens: int,
     full_read_ratio: float,
 ) -> FileChangeBlock | None:
-    """为单个文件构建完整的 <file> 块；保留大小、时间和可得的增删统计。"""
+    """
+    为单个文件构建完整的 <file> 块；保留大小、时间和可得的增删统计。
+
+    一个文件的展示选择：
+      没有旧全文                 -> 尝试真实读取当前全文，否则只说明已变化。
+      Diff 接近或超过当前全文    -> 优先全文，减少模型在新旧文本之间手动合并的负担。
+      小 Diff 且放得下           -> 展示完整 Diff，沿用当前全文作为下一次比较基准。
+      两种完整表达都放不下       -> 只给摘要，不能声称模型已经知道新版内容。
+    """
     current_content = await _read_current_file(record.path)
     if current_content is None:
         return _notice(record, current_size, current_mtime_ms, "The file changed, but current content could not be read")
@@ -166,13 +197,40 @@ async def _build_file_diff_block(
     diff_text = "\n".join(diff_lines)
     diff_tokens = num_tokens_from_string(diff_text)
     file_tokens = num_tokens_from_string(current_content)
-    # 只比较正文；行号和 XML 包装不参与「接近全文」的判断。
-    # 例如 diff 9K、全文 10K，比例达到 0.8 -> 真实读取全文，减少模型合并 diff 的负担。
+    """
+    只比较正文；行号和 XML 包装不参与「接近全文」的判断。
+    例如 diff 9K、全文 10K，比例达到 0.8 -> 真实读取全文，减少模型合并 diff 的负担。
+    """
     if diff_tokens >= file_tokens * full_read_ratio:
         full_read = await _try_full_read(record, current_content, current_size, current_mtime_ms, max_tokens)
         if full_read is not None:
             return full_read
     if _is_diff_payload_safe(diff_lines, max_tokens):
+        """
+        例：1,024 字节的 report.txt 只把首行 csv 改为 tsv，较长的后文未改，完整 Diff 放得下：
+        <file path="/app/report.txt">
+          <diff>
+        --- a/report.txt
+        +++ b/report.txt
+        @@ -1,4 +1,4 @@
+        -format=csv
+
+        +format=tsv
+
+         encoding=utf-8
+
+         currency=USD
+
+         timezone=UTC
+
+          </diff>
+          <size>1,024 -> 1,024 bytes</size>
+          <mtime>2026-09-08 06:00:00 UTC -> 2026-09-08 06:01:00 UTC</mtime>
+        </file>
+        @@ 使用 1 起始行号和行数；其后的空行来自保留原换行后再 join 的现有输出。
+        原文若含 <tag>，此处显示 &lt;tag&gt;，它仍是文件文字，不会成为通知的 XML 节点。
+        外层 Horizon 再将这些 <file> 块放入 <system_injected_context>/<file_changes>。
+        """
         return FileChangeBlock(record.path, (
             f'<file path="{html.escape(record.path, quote=True)}">\n'
             f"  <diff>\n{html.escape(diff_text, quote=False)}\n  </diff>\n"
@@ -182,6 +240,17 @@ async def _build_file_diff_block(
     # 行数只是事实摘要；前两行是文件头，其余 +/- 行才计入增删，正文的 +++ 不能误排除。
     added = sum(line.startswith("+") for line in diff_lines[2:])
     removed = sum(line.startswith("-") for line in diff_lines[2:])
+    """
+    例：正文和 Diff 都超过本文件展示预算，但下面的摘要仍放得下：
+    <file path="/app/report.txt">
+      <diff_summary>80 lines added, 20 lines removed</diff_summary>
+      <size>1,024 -> 4,096 bytes</size>
+      <mtime>2026-09-08 06:00:00 UTC -> 2026-09-08 06:01:00 UTC</mtime>
+      <summary>Complete content exceeded the display budget. Read the relevant file or sections if this change affects the task.</summary>
+    </file>
+    80/20 是增删行数，不包含新增文字；此分支不提供 new_snapshot，后续仍需读取相关正文。
+    读不到文件等情况下连增删也未知，_notice 只给 <summary>、<size>、<mtime>。
+    """
     return FileChangeBlock(record.path, (
         f'<file path="{html.escape(record.path, quote=True)}">\n'
         f"  <diff_summary>{added} lines added, {removed} lines removed</diff_summary>\n"
@@ -197,7 +266,13 @@ async def detect_file_changes(
     current_mtimes: dict[str, float],
     *, budget: HorizonDisplayBudget, max_read_bytes: int,
 ) -> FileChanges:
-    """在文件总预算内选择完整表达；外层原有 hash/mtime 并发采集保持不变。"""
+    """
+    在文件总预算内选择完整表达；外层原有 hash/mtime 并发采集保持不变。
+
+    文件事实由外层采集，这里只决定怎样占用本轮模型上下文，不重新决定文件是否允许编辑。
+    即使重要文件额度较高，也受全体文件预算约束；额度耗尽后保留明确的省略数量。
+    FileChangeBlock.new_snapshot 只有完整内容可用时才有值，最终是否接纳仍由 Horizon 决定。
+    """
     result = FileChanges()
     used = num_tokens_from_string("<file_changes>\n</file_changes>")
     reserve = num_tokens_from_string(_omission_notice(len(state.file_records)))

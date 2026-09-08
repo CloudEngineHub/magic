@@ -33,8 +33,12 @@ class DiffGenerator:
         if stats['total_changes'] == 0:
             return ""
 
-        # 旧摘要的总行数、大小和增删改均有独立用途，增加 Token 反馈时不能将它们删掉。
-        # 只展示已有统计；不能为生成另一段摘要再次比较全文或编码统计大小。
+        """
+        旧摘要的总行数、大小和增删改均有独立用途，增加 Token 反馈时不能将它们删掉。
+        只展示已有统计；不能为生成另一段摘要再次比较全文或编码统计大小。
+        同一份 stats 同时回答「行数怎么变、字节怎么变、增删改多少」；Token 由工具另行反馈。
+        即使只需给模型摘要，用户查看的完整 Diff 也仍由 generate_unified_diff 独立生成。
+        """
 
         return f"""\
 --- a/{file_path}
@@ -188,8 +192,11 @@ Large file change - showing summary:
                 # 替换操作计为修改
                 modified += max(i2 - i1, j2 - j1)
 
-        # 计算文件大小变化
-        # 例：CRLF 读取后转成 LF，旧大小仍使用快照的原始字节数；新大小按待写文本计算。
+        """
+        计算文件大小变化
+        例：CRLF 读取后转成 LF，旧大小仍使用快照的原始字节数；新大小按待写文本计算。
+        字符数不等于文件大小：中文可能只占一个字符却有多个 UTF-8 字节，不能用 len(text) 代替。
+        """
         old_size = len(old_content.encode('utf-8')) if old_size is None else old_size
         new_size = len(new_content.encode('utf-8'))
         size_change = new_size - old_size

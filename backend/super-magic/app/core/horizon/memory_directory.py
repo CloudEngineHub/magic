@@ -50,6 +50,10 @@ def _configured_paths(key: str) -> tuple[str, ...]:
 
 
 def _display_policy() -> MemoryDirectoryDisplayPolicy:
+    """
+    preferred_paths 只影响展示顺序，timeline_paths 只启用日期折叠；都不是允许扫描的白名单。
+    例：模型把资料放在 notes/custom/，即使没有命中配置，仍按普通路径参与成员变化比较。
+    """
     return MemoryDirectoryDisplayPolicy(_configured_paths("preferred_paths"), _configured_paths("timeline_paths"))
 
 
@@ -98,7 +102,13 @@ def _priority(path: str, today: date, policy: MemoryDirectoryDisplayPolicy) -> t
 async def scan_memory_directory(
     root: Path, agent_context: "AgentContext",
 ) -> MemoryDirectorySnapshot | None:
-    """获取允许深度内的完整目录条目；失败时不返回半份快照。"""
+    """
+    获取允许深度内的完整目录条目；失败时不返回半份快照。
+
+    扫描回答「目录里有哪些路径」，不读 Markdown，也不评价文件内容是否值得记住。
+    名称、类型相同而正文更新时，这份快照可以不变；已读文件的正文变化由文件记录跟踪。
+    只沿真实子目录走到配置深度，符号链接记作一项，不跟随链接扫描别的目录树。
+    """
     try:
         scan_depth = _positive_setting("scan_depth")
         root = root.absolute()
@@ -118,8 +128,10 @@ async def scan_memory_directory(
                 if kind == "directory" and depth < scan_depth:
                     await scan(path, depth + 1)
 
-        # notes/timeline/YYYY/MM/YYYY-MM-DD.md 在第 5 层，日内事件详情在第 6 层。
-        # 扫描深度可配置；展示折叠不改变条目，也不再为分组数量继续遍历深层后代。
+        """
+        notes/timeline/YYYY/MM/YYYY-MM-DD.md 在第 5 层，日内事件详情在第 6 层。
+        扫描深度可配置；展示折叠不改变条目，也不再为分组数量继续遍历深层后代。
+        """
         await scan(root, 1)
         return snapshot
     except Exception as error:
@@ -145,6 +157,10 @@ def _fold_history_path(path: str, today: date, policy: MemoryDirectoryDisplayPol
 def _entry_lines(
     entries: dict[str, str], label: str, today: date, policy: MemoryDirectoryDisplayPolicy,
 ) -> dict[str, str]:
+    """
+    折叠后的数字只统计本次输入里真正扫描过的成员，不能理解为磁盘目录的递归文件总数。
+    增量输入只有 2 个新增项时，就展示新增的 2 项，不为求总数再次遍历历史目录。
+    """
     counts = Counter(_fold_history_path(path, today, policy) for path in entries)
     lines: dict[str, str] = {}
     for path, count in counts.items():
@@ -158,11 +174,36 @@ def _entry_lines(
 def render_memory_directory(
     current: MemoryDirectorySnapshot, previous: MemoryDirectorySnapshot | None, today: date,
 ) -> str:
-    """比较扫描条目并按 Token 折叠展示，不记录模型看过哪些成员名称。"""
+    """
+    比较扫描条目并按 Token 折叠展示，不记录模型看过哪些成员名称。
+
+    先对真实路径算增删，再对输出做年月分组；两次目录都各有 10 个文件也可能有一增一删。
+    例：当前是 2026 年 9 月，旧年记录可显示为 2025/，旧月可显示为 2026/08/。
+    折叠只降低提示词大小，Agent 需要细节时仍沿真实路径查询，不移动或删除历史文件。
+    例：首次发现 MEMORY.md、notes/、notes/report.md 共 3 项，扫描深度为 6，预算充足：
+    <memory_directory root="/home/user/.magic/memory/projects/p_demo" status="current">
+    Scanned 3 entries through depth 6. Note contents have not been read.
+    Use relevant paths directly; use list_dir or file search for deeper or folded entries.
+    Available: MEMORY.md (file)
+    Available: notes (directory)
+    Available: notes/report.md (file)
+    </memory_directory>
+    下一轮把 report.md 换成 delivery.md，总数仍是 3；同一根目录、同一深度下只列变化：
+    <memory_directory root="/home/user/.magic/memory/projects/p_demo" status="current">
+    Scanned 3 entries through depth 6. Note contents have not been read.
+    Use relevant paths directly; use list_dir or file search for deeper or folded entries.
+    Added: notes/delivery.md (file)
+    Removed: notes/report.md (file)
+    </memory_directory>
+    若本轮只新增旧月里的两个日期文件，且已配置 timeline_paths=["notes/timeline"]，
+    2026 年 9 月的对应明细行会合为：Added: notes/timeline/2026/08/ (2 scanned entries)。
+    若只是 report.md 正文改变且路径／类型不变，current == previous，本函数返回空串。
+    """
     if current == previous:
         return ""
     policy = _display_policy()
     same_scope = previous is not None and previous.root == current.root and previous.scan_depth == current.scan_depth
+    # 根目录或扫描深度变化时展示新范围；深度由 6 改成 4，不能把第 5、6 层误报为删除。
     if same_scope:
         added = {path: kind for path, kind in current.entries.items() if previous.entries.get(path) != kind}
         removed = {path: kind for path, kind in previous.entries.items() if current.entries.get(path) != kind}

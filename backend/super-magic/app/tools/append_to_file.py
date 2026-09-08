@@ -109,6 +109,10 @@ class AppendToFile(AbstractFileTool[AppendToFileParams], WorkspaceTool[AppendToF
 
             # 在写入成功后读取文件的完整内容
             final_snapshot = await read_text_snapshot(file_path, replace_errors=False)
+            """
+            追加完成后复用原本就要读取的完整结果做统计，不能只拿 params.content 当作最终文件。
+            例：原文件已有 8K Token，本次追加 1K，反馈应说明整份约 8K -> 9K 的变化。
+            """
             final_content = final_snapshot.content
 
             # 执行语法检查（对最新的完整内容进行检查）
@@ -129,9 +133,11 @@ class AppendToFile(AbstractFileTool[AppendToFileParams], WorkspaceTool[AppendToF
                 file_exists
             )
 
-            # 生成格式化的输出
-            # 保留原追加行数和全文总行数；用同一次前后读取取得真实字节和 Token。
-            # Append 仍然使用追加写入，不为了统计改成整文件覆盖。
+            """
+            生成格式化的输出
+            保留原追加行数和全文总行数；用同一次前后读取取得真实字节和 Token。
+            Append 仍然使用追加写入，不为了统计改成整文件覆盖。
+            """
             action = "File updated" if file_exists else "File created"
             output = (
                 f"{action}: {file_path}\n"
@@ -192,7 +198,10 @@ class AppendToFile(AbstractFileTool[AppendToFileParams], WorkspaceTool[AppendToF
         new_lines = final_content.count('\n') + (0 if final_content.endswith('\n') or not final_content else 1)
         added_lines = normalized_append.count('\n') + (0 if normalized_append.endswith('\n') or not normalized_append else 1)
 
-        # 字节与 Token 已由前后快照提供，此处只计算追加与全文行数。
+        """
+        字节与 Token 已由前后快照提供，此处只计算追加与全文行数。
+        行数说明编辑动作，字节说明存储大小，Token 说明模型用量；不相互替代或重复计算。
+        """
         return AppendResult(
             content=append_content,
             is_new_file=not file_exists,

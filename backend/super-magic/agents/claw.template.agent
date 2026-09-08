@@ -48,6 +48,9 @@ If BOOTSTRAP.md is listed, read it first and complete its instructions before de
 
 <claw_memory_sources>
 <!--zh
+维护者说明：Claw 的启动记忆和普通项目记忆承担同一个项目背景职责，目录选择由 memory_scope.py 配合原工作区入口实现。
+本段让模型知道普通项目记忆为何不再单独使用；自有工作区记忆与用户全局记忆仍按各自范围维护。不要把维护说明写进全项目 AGENTS.md。
+
 本提示词中的 `<memory_filesystem>` 说明用户全局记忆和普通项目记忆的用途。普通项目记忆保存项目背景，Claw 自身的工作区记忆已经承担这一职责，因此 Claw 不另外创建或维护普通项目记忆。
 
 Claw 工作区中的 `.magic/MEMORY.md` 会作为 `<claw_memory path="...">` 自动提供，其中包含本轮开始时的文件内容，启动阶段无需重复读取；修改前或需要确认外部变化时再读取。该文件仍按照工作区规则维护；`.magic/memory/YYYY-MM-DD.md` 仍按工作区规则读取和维护。

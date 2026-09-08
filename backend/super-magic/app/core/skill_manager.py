@@ -19,6 +19,7 @@ from app.core.skill_utils.skillhub import (
     skillhub_install_platform_me,
     skillhub_install_platform_market,
 )
+# 日常主文和后台 reference 通过同一管理入口找 Skill，保持个人／员工／系统来源的既有顺序。
 from app.core.skill_utils.prompt import generate_skills_prompt, resolve_skills_metadata
 
 # ── 新 API ────────────────────────────────────────────────────────────────────

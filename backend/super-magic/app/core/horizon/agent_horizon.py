@@ -56,9 +56,11 @@ logger = get_logger(__name__)
 # 与原 FileTimestampManager 保持一致
 HASH_DETECTION_THRESHOLD = 5 * 1024 * 1024   # 5 MB
 NETWORK_FS_MTIME_BUFFER = 1.0                  # seconds
-# 线上网络文件系统的元数据可能延迟约 1 秒；这个容差是实际使用形成的保护。
-# MOCK DEMO：刚写入后 path stat 暂时返回较旧时间，不能据此误判为外部变更并阻止下一次编辑。
-# 大于 5 MiB 的文件继续使用 __mtime__ 信号；分段哈希仍会读取全文，不可替换这条快速路径。
+"""
+线上网络文件系统的元数据可能延迟约 1 秒；这个容差是实际使用形成的保护。
+MOCK DEMO：刚写入后 path stat 暂时返回较旧时间，不能据此误判为外部变更并阻止下一次编辑。
+大于 5 MiB 的文件继续使用 __mtime__ 信号；分段哈希仍会读取全文，不可替换这条快速路径。
+"""
 VALIDATION_ERROR_NOT_READ = "File must be read before editing. Please read the file first."
 VALIDATION_ERROR_CHANGED = "File changed since last read. Please read the file again."
 HORIZON_CONTEXT_OVERSIZED_NOTICE = (
@@ -161,7 +163,11 @@ async def _read_file_content_for_snapshot(abs_path: str) -> tuple[str, str, Opti
         stat = await async_stat(abs_path)
         if stat.st_size > HASH_DETECTION_THRESHOLD:
             return "", "metadata_only", "file_too_large"
-        # Token 限制缓存多少正文，5 MiB 保护实际自动读取量；两者不能互相替代。
+        """
+        Token 限制缓存多少正文，5 MiB 保护实际自动读取量；两者不能互相替代。
+        例：50 MiB 文件只记录元数据，不为估算 Token 读一遍；500 KiB 文件可以读取，
+        但正文超过缓存 Token 预算时仍只保留元数据。缓存额度变大不等于放弃大文件保护。
+        """
         content = await async_read_text(abs_path)
         if num_tokens_from_string(content) > HorizonDisplayBudget.from_config().file_snapshot_max_tokens:
             return "", "metadata_only", "snapshot_token_limit"
@@ -1353,7 +1359,12 @@ class AgentHorizon:
             self._workspace_entries_current = list(snapshot.entries)
 
     async def set_memory_directory_snapshot(self, snapshot: MemoryDirectorySnapshot | None) -> None:
-        """接收本轮目录快照；扫描失败或没有作用域时不覆盖上次成功结果。"""
+        """
+        接收本轮目录快照；扫描失败或没有作用域时不覆盖上次成功结果。
+
+        current 是刚观察到的事实，state.memory_directory 是已进入模型上下文的比较基准。
+        先暂存再构建通知；本轮扫描失败传 None 时不产生删除通知，也不改写已保存的基准。
+        """
         await self._ensure_loaded()
         self._memory_directory_current = snapshot
 
@@ -1738,6 +1749,10 @@ class AgentHorizon:
         context_update = "\n".join(parts)
 
         if num_tokens_from_string(context_update) > display_budget.context_max_tokens:
+            """
+            单个文件、目录各自放得下，和其它通知拼起来仍可能超限。
+            此时返回轻量提示，并保留旧比较基准；下一轮仍有机会把未交付的变化告诉模型。
+            """
             self._log_oversized_context_update(context_update, injection_point)
             return HORIZON_CONTEXT_OVERSIZED_NOTICE
 
@@ -1758,6 +1773,10 @@ class AgentHorizon:
         persistence_changed = False
         if memory_directory_context:
             self._state.memory_directory = self._memory_directory_current
+            """
+            只保存扫描范围内的成员事实，沿用 Horizon 原有保存／fork 入口。
+            年月折叠不丢掉底层条目，也不额外记录某个目录名称是否已经被模型逐项读过。
+            """
             persistence_changed = True
         if self._state.last_injected_date != today_date:
             self._state.last_injected_date = today_date
@@ -1815,9 +1834,19 @@ class AgentHorizon:
                 rec.file_hash = cur_hash
                 rec.file_size_bytes = cur_size
                 rec.file_mtime_ms = current_mtimes.get(abs_path, rec.file_mtime_ms)
-                # 只更新本文件快照，不重构其它动态上下文的提交状态。
-                # 完整 diff／真实全文已展示才缓存新正文；摘要不含新正文，清空旧快照，
-                # 防止下次把旧 A 与新版本 C 的差异误当成 B -> C。文件级编辑校验仍用原 hash/mtime。
+                r"""
+                只更新本文件快照，不重构其它动态上下文的提交状态。
+                完整 diff／真实全文已展示才缓存新正文；摘要不含新正文，清空旧快照，
+                防止下次把旧 A 与新版本 C 的差异误当成 B -> C。文件级编辑校验仍用原 hash/mtime。
+                比如 B 只显示「改了 80 行」，继续拿 A 生成后续 Diff 会让模型误拼正文。
+                清空的是无法再作为已知版本的缓存，磁盘文件和模型正常编辑能力不因此改变。
+                例：原缓存 A="format=csv\n"，磁盘已是 B="format=tsv\n"，整包通过预算检查后：
+                  展示完整 Diff／全文，且 B 可缓存 -> file_content=B，snapshot_mode="full"。
+                  只展示摘要或本文件被省略        -> file_content=""，snapshot_mode="metadata_only"，
+                                                     snapshot_reason="changed_content_not_cached"。
+                两种结果的 hash/size/mtime 都记录 B；只有第一种保留可供下次比较的正文。
+                整包超限则在前面直接返回，仍保留 A 的原状态，不会到达此处。
+                """
                 displayed = displayed_files.get(abs_path)
                 snapshot = displayed.new_snapshot if displayed is not None else None
                 if snapshot is not None and num_tokens_from_string(snapshot) <= display_budget.file_snapshot_max_tokens:

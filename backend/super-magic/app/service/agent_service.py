@@ -574,6 +574,10 @@ class AgentService(Base):
             agent.agent_context.horizon,
         )
 
+        """
+        文件树刷新放在 Agent 每轮准备 Horizon 的入口；只在用户消息入口刷新会漏掉工具新增文件。
+        这里不重复扫描，让首轮和后续工具轮使用同一个观察时机。
+        """
         await CliStatusFactory.wait_initial(agent_context)
 
         try:

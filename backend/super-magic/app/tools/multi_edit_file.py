@@ -262,8 +262,11 @@ Never include the line number + tab in any old_string or new_string.
                     edit.expected_replacements
                 )
 
-                # Track applied edit
-                # 每项替换报告字符变化；整份文件的字节大小在全部编辑完成后统一统计。
+                """
+                Track applied edit
+                每项替换报告字符变化；整份文件的字节大小在全部编辑完成后统一统计。
+                例：「中文」替换为 abcd，字符数增加 2，但 UTF-8 字节减少 2；此处只报告前者。
+                """
                 applied_edits.append({
                     'index': i + 1,
                     'replacements': edit.expected_replacements,
@@ -292,7 +295,11 @@ Never include the line number + tab in any old_string or new_string.
                 errors_str = "\n".join(syntax_result.errors)
                 ai_warnings.append(f"WARNING: Syntax errors detected in the modified file:\n{errors_str}")
 
-            # Calculate stats
+            """
+            Calculate stats
+            所有替换完成后统一比较 original_content 与最终 working_content。
+            不把每步中间版本重复计为最终变化，也不为摘要和用量反馈分别再比较全文。
+            """
             stats = DiffGenerator.calculate_change_stats(
                 original_content, working_content, old_size=original_snapshot.metrics.byte_count,
             )
