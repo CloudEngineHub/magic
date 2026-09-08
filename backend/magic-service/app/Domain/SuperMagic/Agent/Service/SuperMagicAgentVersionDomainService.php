@@ -247,7 +247,8 @@ class SuperMagicAgentVersionDomainService
         $versionEntity->setPublishTargetValue($publishTargetValue);
         $versionEntity->setPublisherUserId($dataIsolation->getCurrentUserId());
         $versionEntity->setProjectId($agentEntity->getProjectId());
-        $versionEntity->setFileKey($prepareOnly ? null : $agentEntity->getFileKey());
+        // 异步 prepare 阶段尚未生成压缩包，使用空字符串占位，避免持久化 NULL。
+        $versionEntity->setFileKey($prepareOnly ? '' : $agentEntity->getFileKey());
 
         if ($prepareOnly) {
             $versionEntity->setPublishStatus(PublishStatus::PUBLISHING);

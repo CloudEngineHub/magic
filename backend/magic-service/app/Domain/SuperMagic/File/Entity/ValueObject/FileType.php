@@ -18,6 +18,11 @@ enum FileType: string
     case USER_UPLOAD = 'user_upload';
 
     /**
+     * 用户创建.
+     */
+    case USER_CREATE = 'user_create';
+
+    /**
      * 处理过程.
      */
     case PROCESS = 'process';
@@ -59,6 +64,7 @@ enum FileType: string
     {
         return match ($this) {
             self::USER_UPLOAD => '用户上传',
+            self::USER_CREATE => '用户创建',
             self::PROCESS => '处理过程',
             self::BROWSER => '浏览器',
             self::SYSTEM_AUTO_UPLOAD => '系统自动上传',
@@ -76,6 +82,7 @@ enum FileType: string
     {
         return match ($this) {
             self::USER_UPLOAD => '用户手动上传的文件',
+            self::USER_CREATE => '用户手动创建的文件',
             self::PROCESS => '在处理过程中产生的文件',
             self::BROWSER => '通过浏览器获取的文件',
             self::SYSTEM_AUTO_UPLOAD => '系统自动上传的文件',

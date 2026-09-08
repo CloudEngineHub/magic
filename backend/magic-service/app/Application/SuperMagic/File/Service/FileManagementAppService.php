@@ -573,8 +573,8 @@ class FileManagementAppService extends AbstractAppService
                 }
             }
 
-            // 根据是否为目录确定文件类型
-            $fileType = $requestDTO->getIsDirectory() ? FileType::DIRECTORY : FileType::USER_UPLOAD;
+            // 根据是否为目录确定文件类型；用户新建的文件标记为 user_create，与用户上传（user_upload）区分
+            $fileType = $requestDTO->getIsDirectory() ? FileType::DIRECTORY : FileType::USER_CREATE;
 
             try {
                 // 调用 MagicFS 领域服务创建文件（会自动发布事件）

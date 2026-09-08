@@ -16,6 +16,7 @@ use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\File\Entity\FileCollectionItemEntity;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
 use App\Domain\SuperMagic\File\Event\FilesBatchDeletedEvent;
 use App\Domain\SuperMagic\File\Event\FileUploadedEvent;
@@ -105,6 +106,44 @@ class FileManagementAppServiceTest extends TestCase
 
         $this->expectException(BusinessException::class);
         $service->createFile($requestContext, $requestDTO);
+    }
+
+    public function testCreateFileMarksNonDirectoryFileAsUserCreate(): void
+    {
+        $parentDir = $this->createTaskFileEntity(901, '/workspace/docs', true);
+
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getDirectoryByIdAndProject')
+            ->with(901, 900)
+            ->willReturn($parentDir);
+        $taskFileDomainService->method('getFilesWithParentsByIds')->willReturn([]);
+
+        $createdEntity = $this->createTaskFileEntity(502, '/workspace/docs/new.txt');
+        $createdEntity->setParentId(901);
+        $createdEntity->setFileType(FileType::USER_CREATE->value);
+
+        $magicFSFileDomainService = $this->createMock(MagicFSFileDomainService::class);
+        $magicFSFileDomainService->expects($this->once())
+            ->method('createFile')
+            ->with('new.txt', '901', false, null, null, FileType::USER_CREATE, TaskFileSource::PROJECT_DIRECTORY, null, false, 0)
+            ->willReturn($createdEntity);
+
+        $service = $this->createService($this->createMock(EventDispatcherInterface::class));
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
+        $this->setPrivateProperty($service, 'magicFSFileDomainService', $magicFSFileDomainService);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+        $requestDTO = new CreateFileRequestDTO();
+        $requestDTO->projectId = '900';
+        $requestDTO->parentId = '901';
+        $requestDTO->fileName = 'new.txt';
+        $requestDTO->isDirectory = false;
+
+        $result = $service->createFile($requestContext, $requestDTO);
+
+        $this->assertSame(FileType::USER_CREATE->value, $result['file_type']);
     }
 
     public function testDispatchFileUploadedEventUsesPersistedFileEntity(): void

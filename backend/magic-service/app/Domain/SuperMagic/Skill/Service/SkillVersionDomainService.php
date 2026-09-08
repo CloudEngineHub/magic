@@ -292,7 +292,8 @@ class SkillVersionDomainService
         $versionEntity->setDescriptionI18n($skillEntity->getDescriptionI18n());
         $versionEntity->setSourceI18n($skillEntity->getSourceI18n());
         $versionEntity->setLogo($logoPath ?: null);
-        $versionEntity->setFileKey($prepareOnly ? null : $skillEntity->getFileKey());
+        // 版本表 file_key 为非 NULL 字段；异步 prepare 阶段尚未生成压缩包时使用空字符串占位，finalize 再写入真实 key。
+        $versionEntity->setFileKey($prepareOnly ? '' : $skillEntity->getFileKey());
         $versionEntity->setSourceType($skillEntity->getSourceType());
         $versionEntity->setProjectId($skillEntity->getProjectId());
         $versionEntity->setPublisherUserId($dataIsolation->getCurrentUserId());
