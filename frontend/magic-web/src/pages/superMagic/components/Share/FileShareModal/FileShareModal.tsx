@@ -409,14 +409,16 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 					// Just set the confirmed type directly
 					// Public and PasswordProtected are separate types now
 					setShareType(confirmedType)
-					// Update passwordEnabled based on type
+					// Keep passwordEnabled in sync with share type. Switching to
+					// Organization/Public must clear it, otherwise success URL still
+					// embeds the previous password even though the API omits it.
 					if (confirmedType === ShareType.PasswordProtected) {
 						setExtraData((prev) => ({
 							...prev,
 							passwordEnabled: true,
 							password: prev.password || generateSharePassword(),
 						}))
-					} else if (confirmedType === ShareType.Public) {
+					} else {
 						setExtraData((prev) => ({
 							...prev,
 							passwordEnabled: false,
@@ -752,7 +754,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 								target_id: t.target_id,
 							}))
 						: undefined,
-				password: extraData.passwordEnabled ? extraData.password : undefined,
+				...(shareType === ShareType.Organization
+					? {}
+					: { password: extraData.passwordEnabled ? extraData.password : undefined }),
 				// Recording shares keep hidden runtime files out of the selector but always
 				// send them to the backend so readonly pages can reconstruct the bundle.
 				file_ids: submittedFileIds,
@@ -774,11 +778,12 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				hasResourceIdCreated.current = true
 			}
 
-			const shareUrl = generateShareUrl(
-				currentResourceId as string,
-				extraData.passwordEnabled ? extraData.password : undefined,
-				"files",
-			)
+			// Success URL must follow shareType, not leftover passwordEnabled state.
+			const sharePassword =
+				shareType === ShareType.PasswordProtected && extraData.passwordEnabled
+					? extraData.password
+					: undefined
+			const shareUrl = generateShareUrl(currentResourceId as string, sharePassword, "files")
 
 			// Step 3: Generate share message and copy to clipboard (silently, no toast)
 			try {
@@ -830,7 +835,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				fileCount: actualFileCount,
 				mainFileName: apiResult?.main_file_name || t("share.untitled"),
 				shareUrl,
-				password: extraData.passwordEnabled ? extraData.password : undefined,
+				password: sharePassword,
 				expire_at: apiResult?.data?.expire_at || apiResult?.expire_at, // 使用后端返回的 expire_at
 				shareType: shareType,
 				resourceId: currentResourceId, // 传递 resourceId

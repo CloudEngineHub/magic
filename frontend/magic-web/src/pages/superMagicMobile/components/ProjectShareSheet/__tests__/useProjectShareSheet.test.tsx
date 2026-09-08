@@ -557,6 +557,9 @@ describe("useProjectShareSheet", () => {
 				],
 			}),
 		)
+		expect(mocks.createOrUpdateShareResource.mock.calls.at(-1)?.[0]).not.toHaveProperty(
+			"password",
+		)
 	})
 
 	it("取消分享后刷新列表并回到 manage", async () => {

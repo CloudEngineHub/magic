@@ -1089,7 +1089,7 @@ export function useProjectShareSheet({
 								target_id: target.target_id,
 							}))
 						: undefined,
-				password,
+				...(formState.shareType === ShareType.Organization ? {} : { password }),
 				file_ids: submittedFileIds,
 				default_open_file_id: isAudioRecordingScene
 					? undefined

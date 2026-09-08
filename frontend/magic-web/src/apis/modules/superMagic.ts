@@ -19,6 +19,7 @@ import type {
 	Workspace,
 } from "@/pages/superMagic/pages/Workspace/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { ShareType } from "@/pages/superMagic/components/Share/types"
 import type { FileItem } from "@/pages/superMagic/components/SelectPathModal"
 import type { UploadSource } from "@/pages/superMagic/components/MessageEditor/hooks/useFileUpload"
 import type { SaveUploadFileToProjectResponse } from "@/pages/superMagic/utils/api"
@@ -1870,7 +1871,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			resource_type,
 			share_type,
 			resource_name,
-			password,
+			...(share_type === ShareType.Organization ? {} : { password }),
 			expire_days,
 			share_range,
 			target_ids,
