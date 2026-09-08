@@ -66,15 +66,17 @@ MentionPanel/
 
 - `project-files`
 - `upload-files`
-- `agents`
+- `digital-employees`（调用现有数字员工列表接口）
+- `flows`（二级包含 `agents`、`tools`）
 - `mcp-extensions`
 - `skills`
-- `tools`
 
 当前 builtin catalog 在 `runtime/builtin/registry.ts` 里注册了：
 
 - `upload-files`
 - `mcp-extensions`
+- `digital-employees`
+- `flows`
 - `agents`
 - `skills`
 - `tools`
