@@ -82,4 +82,13 @@ describe("isHtmlPreviewShellNavigation", () => {
 		expect(isHtmlPreviewShellNavigation("/slides/cover.html")).toBe(false)
 		expect(isHtmlPreviewShellNavigation("./2 新建幻灯片 2.html")).toBe(false)
 	})
+
+	it("does not treat project files named husky.html as the preview shell", () => {
+		expect(isHtmlPreviewShellNavigation("slides/husky.html")).toBe(false)
+		expect(isHtmlPreviewShellNavigation("/slides/husky.html")).toBe(false)
+		expect(isHtmlPreviewShellNavigation("./husky.html")).toBe(false)
+		expect(
+			isHtmlPreviewShellNavigation("slides/husky.html", "https://husky.example/index.html"),
+		).toBe(false)
+	})
 })

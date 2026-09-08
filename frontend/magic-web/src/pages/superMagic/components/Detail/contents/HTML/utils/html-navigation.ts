@@ -113,7 +113,5 @@ export function isHtmlPreviewShellNavigation(href: string, shellUrl = "/husky.ht
 
 	const hrefPath = getNavigationFilePath(href)
 	const shellPath = getNavigationFilePath(shellUrl)
-	if (!hrefPath || !shellPath) return false
-
-	return hrefPath === shellPath || hrefPath === "husky.html" || hrefPath.endsWith("/husky.html")
+	return Boolean(hrefPath && shellPath && hrefPath === shellPath)
 }
