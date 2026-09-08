@@ -6336,9 +6336,7 @@
 		"shadowSpread": "Spread",
 		"sidebar": {
 			"close": "Close sidebar",
-			"collapse": "Collapse",
 			"collapseSection": "Collapse",
-			"expand": "Page structure",
 			"expandSection": "Expand",
 			"moreStylesEmpty": "Select an element on the canvas first",
 			"resize": "Resize sidebar",

@@ -6338,9 +6338,7 @@
 		"shadowSpread": "扩散",
 		"sidebar": {
 			"close": "关闭侧栏",
-			"collapse": "收起",
 			"collapseSection": "收起",
-			"expand": "页面结构",
 			"expandSection": "展开",
 			"moreStylesEmpty": "请先在画布上选择一个元素",
 			"resize": "调整侧栏宽度",

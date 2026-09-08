@@ -398,6 +398,9 @@ const FullStylePanel = observer(function FullStylePanel({
 	const hasSelection = selectedElement !== null || stylePanelStore.selectedElements.length > 0
 	const isDisabled = !hasSelection || disabled
 	const showElementControls = variant !== "global"
+	const sidebarToggleLabel = isSidebarOpen
+		? t("stylePanel.sidebar.collapseSection")
+		: t("stylePanel.domTree.title")
 	const textContentField = capabilities.showTypography ? (
 		<div className="w-full min-w-0 basis-full">
 			<label className="mb-2 block text-xs font-medium text-muted-foreground">
@@ -668,20 +671,10 @@ const FullStylePanel = observer(function FullStylePanel({
 						className="ml-1 h-8 shrink-0 gap-1 px-2"
 						onClick={toggleSidebar}
 						aria-expanded={isSidebarOpen}
-						aria-label={t(
-							isSidebarOpen
-								? "stylePanel.sidebar.collapseSection"
-								: "stylePanel.domTree.title",
-						)}
+						aria-label={sidebarToggleLabel}
 					>
 						<PanelRight className="h-4 w-4" />
-						<span>
-							{t(
-								isSidebarOpen
-									? "stylePanel.sidebar.collapseSection"
-									: "stylePanel.domTree.title",
-							)}
-						</span>
+						<span>{sidebarToggleLabel}</span>
 					</Button>
 				) : null}
 			</div>
