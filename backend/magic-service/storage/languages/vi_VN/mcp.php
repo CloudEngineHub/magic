@@ -9,6 +9,7 @@ return [
         'code' => 'Mã',
         'name' => 'Tên',
         'description' => 'Mô tả',
+        'icon' => 'Biểu tượng',
         'status' => 'Trạng thái',
         'external_sse_url' => 'URL Dịch vụ MCP',
         'url' => 'URL',
@@ -40,6 +41,7 @@ return [
     // Thông báo lỗi
     'validate_failed' => 'Xác thực thất bại',
     'not_found' => 'Không tìm thấy dữ liệu',
+    'field_too_long' => ':label không được vượt quá :max ký tự',
 
     // Lỗi liên quan đến dịch vụ
     'service' => [

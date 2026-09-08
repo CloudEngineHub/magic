@@ -9,6 +9,7 @@ return [
         'code' => 'รหัส',
         'name' => 'ชื่อ',
         'description' => 'คำอธิบาย',
+        'icon' => 'ไอคอน',
         'status' => 'สถานะ',
         'external_sse_url' => 'URL บริการ MCP',
         'url' => 'URL',
@@ -40,6 +41,7 @@ return [
     // ข้อความแสดงข้อผิดพลาด
     'validate_failed' => 'การตรวจสอบล้มเหลว',
     'not_found' => 'ไม่พบข้อมูล',
+    'field_too_long' => ':label ต้องไม่เกิน :max ตัวอักษร',
 
     // ข้อผิดพลาดที่เกี่ยวข้องกับบริการ
     'service' => [

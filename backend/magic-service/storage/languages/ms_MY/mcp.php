@@ -9,6 +9,7 @@ return [
         'code' => 'Kod',
         'name' => 'Nama',
         'description' => 'Penerangan',
+        'icon' => 'Ikon',
         'status' => 'Status',
         'external_sse_url' => 'URL Perkhidmatan MCP',
         'url' => 'URL',
@@ -40,6 +41,7 @@ return [
     // Mesej ralat
     'validate_failed' => 'Pengesahan gagal',
     'not_found' => 'Data tidak dijumpai',
+    'field_too_long' => ':label tidak boleh melebihi :max aksara',
 
     // Ralat berkaitan perkhidmatan
     'service' => [
