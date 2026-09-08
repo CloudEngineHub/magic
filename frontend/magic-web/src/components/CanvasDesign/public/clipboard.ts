@@ -3,6 +3,7 @@
  * Message editors / Design host may import from here; do not deep-import runtime paths.
  */
 export {
+	collectExistingClipboardResourceKeys,
 	claimCanvasClipboardPasteEvent,
 	getCanvasClipboardPasteController,
 	hasCanvasClipboardMimeType,

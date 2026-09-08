@@ -372,7 +372,7 @@ describe("useCanvasReferenceMention", () => {
 		})
 
 		const catItems = getMention().matchableItems.filter((item) => item.name === "cat.png")
-		expect(catItems.map((item) => item.path)).toEqual(["current/cat.png"])
+		expect(catItems.map((item) => item.path)).toEqual(["current/cat.png", "project/cat.png"])
 
 		const doc = getContentFromString("@cat.png", getMention().matchableItems)
 		const mentionNode = doc.content?.[0]?.content?.[0] as
@@ -419,7 +419,7 @@ describe("useCanvasReferenceMention", () => {
 		])
 	})
 
-	it("skips project-tree duplicates that share the current reference file name", () => {
+	it("keeps same-name project-tree files with a distinct resolver identity", () => {
 		renderMention({
 			methods: designAMethods,
 			tree: [folderNode("root", "Root", [fileNode("cat.png", "/images/cat.png")])],
@@ -430,7 +430,55 @@ describe("useCanvasReferenceMention", () => {
 		})
 
 		expect(getMention().matchableItems.filter((item) => item.name === "cat.png")).toEqual([
-			expect.objectContaining({ path: "./images/cat.png" }),
+			expect.objectContaining({ path: "./images/cat.png", source: "element-reference" }),
+			expect.objectContaining({ path: "/images/cat.png", source: "project-tree" }),
+		])
+	})
+
+	it("keeps relative and absolute spellings when the host resolver is missing", () => {
+		renderMention({
+			tree: [folderNode("root", "Root", [fileNode("cat.png", "/images/cat.png")])],
+			options: {
+				matchableItems: [{ name: "cat.png", path: "./images/cat.png" }],
+				referenceResourceType: "image",
+			},
+		})
+
+		expect(getMention().matchableItems.filter((item) => item.name === "cat.png")).toEqual([
+			expect.objectContaining({ path: "./images/cat.png", source: "element-reference" }),
+			expect.objectContaining({ path: "/images/cat.png", source: "project-tree" }),
+		])
+	})
+
+	it("keeps relative and absolute spellings when the host resolver cannot resolve them", () => {
+		const unresolvedMethods = {
+			resolveResourceReference: ((input) => {
+				const rawReference =
+					input.namespace === "external-url"
+						? input.url
+						: "path" in input
+							? input.path
+							: input.fileId
+				return {
+					status: "not-found",
+					rawReference,
+					candidates: [],
+				}
+			}) as ResolveCanvasResourceReference,
+		} as CanvasDesignMethods
+
+		renderMention({
+			methods: unresolvedMethods,
+			tree: [folderNode("root", "Root", [fileNode("cat.png", "/images/cat.png")])],
+			options: {
+				matchableItems: [{ name: "cat.png", path: "./images/cat.png" }],
+				referenceResourceType: "image",
+			},
+		})
+
+		expect(getMention().matchableItems.filter((item) => item.name === "cat.png")).toEqual([
+			expect.objectContaining({ path: "./images/cat.png", source: "element-reference" }),
+			expect.objectContaining({ path: "/images/cat.png", source: "project-tree" }),
 		])
 	})
 

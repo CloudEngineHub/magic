@@ -1662,4 +1662,196 @@ describe("CanvasClipboardPasteController", () => {
 		expect(onComplete).not.toHaveBeenCalled()
 		expect(onSettled).toHaveBeenCalledWith(result)
 	})
+
+	it("allows a repeated message-reference paste through count limits when keys already exist", async () => {
+		const metadata = btoa(
+			encodeURIComponent(
+				JSON.stringify({
+					richText: JSON.stringify({
+						type: "doc",
+						content: [
+							{
+								type: "paragraph",
+								content: [
+									{
+										type: "mention",
+										attrs: {
+											type: "project_file",
+											data: {
+												file_id: "file-repeat",
+												file_path: "images/repeat.png",
+												file_name: "repeat.png",
+											},
+										},
+									},
+								],
+							},
+						],
+					}),
+				}),
+			),
+		)
+		const event = {
+			clipboardData: {
+				types: ["text/html"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/html" ? `<div data-magic-clipboard="${metadata}"></div>` : "",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+		const resolveReference = vi.fn(async () => ({
+			kind: "current-canvas" as const,
+			path: "./images/repeat.png",
+			resourceIdentity: "workspace:/canvas-a/images/repeat.png",
+			fileName: "repeat.png",
+			fileId: "file-repeat",
+		}))
+		const controller = new CanvasClipboardPasteController({ resolveReference })
+		const onMessageParts = vi.fn()
+
+		const result = await controller.paste(
+			event,
+			{
+				control: "image-editor",
+				acceptedTypes: ["image"],
+				messagePasteMode: "rich-text-with-media",
+				maxCount: 0,
+				existingResourceKeys: ["file-repeat", "workspace:/canvas-a/images/repeat.png"],
+				sessionId: "existing-message-keys",
+			},
+			{ onMessageParts },
+		)
+
+		expect(result.accepted).toHaveLength(1)
+		expect(result.skipped).toEqual([])
+		expect(onMessageParts).toHaveBeenCalledTimes(1)
+		expect(resolveReference).toHaveBeenCalledTimes(1)
+	})
+
+	it("removes failed message assets from accepted after resolve fails", async () => {
+		const metadata = btoa(
+			encodeURIComponent(
+				JSON.stringify({
+					richText: JSON.stringify({
+						type: "doc",
+						content: [
+							{
+								type: "paragraph",
+								content: [
+									{
+										type: "mention",
+										attrs: {
+											type: "project_file",
+											data: {
+												file_id: "missing-image",
+												file_path: "images/missing.png",
+												file_name: "missing.png",
+											},
+										},
+									},
+								],
+							},
+						],
+					}),
+				}),
+			),
+		)
+		const event = {
+			clipboardData: {
+				types: ["text/html"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/html" ? `<div data-magic-clipboard="${metadata}"></div>` : "",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+		const controller = new CanvasClipboardPasteController({
+			resolveReference: vi.fn(async () => null),
+			materialize: vi.fn(async () => null),
+		})
+
+		const result = await controller.paste(
+			event,
+			{
+				control: "image-editor",
+				acceptedTypes: ["image"],
+				messagePasteMode: "rich-text-with-media",
+				sessionId: "failed-accepted-cleanup",
+			},
+			{ onMessageParts: vi.fn(), onMessageAssetResolved: vi.fn() },
+		)
+
+		expect(result.accepted).toEqual([])
+		expect(result.failed).toEqual([
+			{ reason: "resource-materialize-failed", fileName: "missing.png" },
+		])
+	})
+
+	it("removes failed message assets from accepted in the legacy onAsset path", async () => {
+		const metadata = btoa(
+			encodeURIComponent(
+				JSON.stringify({
+					richText: JSON.stringify({
+						type: "doc",
+						content: [
+							{
+								type: "paragraph",
+								content: [
+									{
+										type: "mention",
+										attrs: {
+											type: "project_file",
+											data: {
+												file_id: "missing-legacy",
+												file_path: "images/missing-legacy.png",
+												file_name: "missing-legacy.png",
+											},
+										},
+									},
+								],
+							},
+						],
+					}),
+				}),
+			),
+		)
+		const event = {
+			clipboardData: {
+				types: ["text/html"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/html" ? `<div data-magic-clipboard="${metadata}"></div>` : "",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+		const onAsset = vi.fn()
+		const controller = new CanvasClipboardPasteController({
+			resolveReference: vi.fn(async () => null),
+			materialize: vi.fn(async () => null),
+		})
+
+		const result = await controller.paste(
+			event,
+			{
+				control: "image-editor",
+				acceptedTypes: ["image"],
+				messagePasteMode: "rich-text-with-media",
+				sessionId: "failed-accepted-cleanup-legacy",
+			},
+			{ onAsset },
+		)
+
+		expect(result.accepted).toEqual([])
+		expect(result.failed).toEqual([
+			{ reason: "resource-materialize-failed", fileName: "missing-legacy.png" },
+		])
+		expect(onAsset).not.toHaveBeenCalled()
+	})
 })

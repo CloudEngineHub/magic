@@ -190,7 +190,12 @@ function collectMentionAttrs(node: ProseMirrorNode, mentions: TiptapMentionAttri
  * whether magic clipboard payload is written.
  */
 function hasStructuredMention(mentions: TiptapMentionAttributes[]): boolean {
-	return mentions.length > 0
+	return mentions.some(
+		(attrs) =>
+			attrs.type === MentionItemType.PROJECT_FILE ||
+			attrs.type === MentionItemType.UPLOAD_FILE ||
+			attrs.type === MentionItemType.FOLDER,
+	)
 }
 
 export function getClipboardPlainText(content: JSONContent): string {

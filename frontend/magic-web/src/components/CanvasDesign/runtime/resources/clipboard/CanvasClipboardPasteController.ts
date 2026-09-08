@@ -311,6 +311,18 @@ function normalizeClipboardSource(value: string): string {
 	return trimmed.replace(/\\/g, "/").replace(/\/+/g, "/")
 }
 
+export function collectExistingClipboardResourceKeys(
+	values: Array<string | undefined | null>,
+): string[] {
+	return Array.from(
+		new Set(
+			values
+				.filter((value): value is string => Boolean(value?.trim()))
+				.map(normalizeClipboardSource),
+		),
+	)
+}
+
 function getSourceKey(asset: Omit<InternalCanvasClipboardAsset, "key">): string {
 	const fallbackSource = asset.sourceElementId || asset.fileName
 	return [
@@ -353,6 +365,21 @@ function getAssetReferenceKeys(asset: InternalCanvasClipboardAsset): string[] {
 	]
 		.filter((value): value is string => Boolean(value?.trim()))
 		.map(normalizeClipboardSource)
+}
+
+function isExistingClipboardReference(
+	asset: InternalCanvasClipboardAsset,
+	existingResourceKeys: Set<string>,
+): boolean {
+	if (asset.origin !== "canvas-element" && asset.origin !== "message-reference") {
+		return false
+	}
+	return (
+		getAssetReferenceKeys(asset).some((key) => existingResourceKeys.has(key)) ||
+		getAssetDedupKeys(asset).some((key) =>
+			existingResourceKeys.has(normalizeClipboardSource(key)),
+		)
+	)
 }
 
 function metadataForElement(
@@ -783,12 +810,7 @@ export class CanvasClipboardPasteController {
 				continue
 			}
 			const dedupKeys = getAssetDedupKeys(rawAsset)
-			const isExistingReference =
-				(rawAsset.origin === "canvas-element" || rawAsset.origin === "message-reference") &&
-				(getAssetReferenceKeys(rawAsset).some((key) => existingResourceKeys.has(key)) ||
-					dedupKeys.some((key) =>
-						existingResourceKeys.has(normalizeClipboardSource(key)),
-					))
+			const isExistingReference = isExistingClipboardReference(rawAsset, existingResourceKeys)
 			if (dedupKeys.some((key) => deduped.has(key))) {
 				skipped.push({ reason: "duplicate", fileName: rawAsset.fileName })
 				continue
@@ -879,6 +901,9 @@ export class CanvasClipboardPasteController {
 		const accepted: CanvasClipboardAsset[] = []
 		const skipped: CanvasClipboardPasteResult["skipped"] = []
 		const failed: CanvasClipboardPasteResult["failed"] = []
+		const existingResourceKeys = new Set(
+			(target.existingResourceKeys ?? []).map(normalizeClipboardSource),
+		)
 		const resourcePromises = new Map<
 			string,
 			Promise<CanvasClipboardResolvedReference | File | null>
@@ -902,9 +927,13 @@ export class CanvasClipboardPasteController {
 			}
 			const currentTypeCount = counts[rawAsset.type] ?? 0
 			const typeLimit = target.maxCountByType?.[rawAsset.type]
-			const overTypeLimit = typeLimit !== undefined && currentTypeCount >= typeLimit
+			const isExistingReference = isExistingClipboardReference(rawAsset, existingResourceKeys)
+			const overTypeLimit =
+				!isExistingReference && typeLimit !== undefined && currentTypeCount >= typeLimit
 			const overTotalLimit =
-				target.maxCount !== undefined && accepted.length >= target.maxCount
+				!isExistingReference &&
+				target.maxCount !== undefined &&
+				accepted.length >= target.maxCount
 
 			if (!isMediaType(rawAsset.type) || !target.acceptedTypes.includes(rawAsset.type)) {
 				skipped.push({ reason: "unsupported-type", fileName: rawAsset.fileName })
@@ -976,6 +1005,10 @@ export class CanvasClipboardPasteController {
 										reason: "resource-materialize-failed",
 										fileName: pending.rawAsset.fileName,
 									})
+									const acceptedIndex = accepted.findIndex(
+										(item) => item.key === pending.rawAsset.key,
+									)
+									if (acceptedIndex >= 0) accepted.splice(acceptedIndex, 1)
 									await callbacks.onMessageAssetResolved?.(
 										pending.occurrenceKey,
 										null,
@@ -1010,14 +1043,18 @@ export class CanvasClipboardPasteController {
 						// Legacy consumers without onMessageParts still wait for resolve.
 						for (const pending of pendingResolutions) {
 							const resolved = await pending.promise
+							if (callbacks.isSessionCurrent?.(target.sessionId) === false) break
 							if (!resolved) {
 								failed.push({
 									reason: "resource-materialize-failed",
 									fileName: pending.rawAsset.fileName,
 								})
+								const acceptedIndex = accepted.findIndex(
+									(item) => item.key === pending.rawAsset.key,
+								)
+								if (acceptedIndex >= 0) accepted.splice(acceptedIndex, 1)
 								continue
 							}
-							if (callbacks.isSessionCurrent?.(target.sessionId) === false) break
 							const asset: CanvasClipboardAsset =
 								typeof File !== "undefined" && resolved instanceof File
 									? {

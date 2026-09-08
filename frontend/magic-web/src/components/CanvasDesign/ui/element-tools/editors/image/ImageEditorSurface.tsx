@@ -89,6 +89,7 @@ import {
 	hasCanvasClipboardTextOrHtml,
 	type CanvasClipboardAsset,
 } from "../../../../runtime/resources/clipboard/CanvasClipboardPasteController"
+import { collectImageEditorExistingClipboardResourceKeys } from "../../../../runtime/resources/clipboard/collectMediaEditorExistingClipboardResourceKeys"
 
 import {
 	createPromptPlaceholderTokenFactory,
@@ -484,6 +485,12 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			const pasteSelection = editorRef.current?.getSelectionRange?.() ?? undefined
 			let pastedAssetIndex = 0
 			const pasteSessionId = getClipboardSessionId()
+			const existingResourceKeys = collectImageEditorExistingClipboardResourceKeys({
+				referencePaths: effectiveCurrentReferenceFiles,
+				referenceFileInfos: config.referenceFileInfos,
+				mentionBindings: config.mentionBindings,
+				resolveResourceReference,
+			})
 
 			void getCanvasClipboardPasteController(
 				canvas?.magicConfigManager.config?.methods,
@@ -499,6 +506,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 					canvasId: canvas?.id,
 					maxCount: remainingCapacity,
 					maxCountByType: { image: remainingCapacity },
+					existingResourceKeys,
 					sessionId: pasteSessionId,
 				},
 				{
@@ -594,6 +602,9 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			editorRef,
 			maxReferenceFiles,
 			effectiveCurrentReferenceFiles,
+			config.mentionBindings,
+			config.referenceFileInfos,
+			resolveResourceReference,
 		],
 	)
 

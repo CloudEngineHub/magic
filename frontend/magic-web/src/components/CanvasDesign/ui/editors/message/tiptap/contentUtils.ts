@@ -21,7 +21,7 @@ export interface MatchableMentionItem {
 	disabled?: boolean
 	/**
 	 * element-reference: 当前元素已绑定的参考文件，是 string rematch 的首选。
-	 * project-tree: 工作区其它文件，同名时不得覆盖或追加槽位。
+	 * project-tree: 工作区其它文件；同名但 identity 不同时应作为独立候选。
 	 */
 	source?: MatchableMentionSource
 }
