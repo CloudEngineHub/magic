@@ -3,6 +3,7 @@ import { ImagePlus, Loader2, RefreshCw, Settings2, Trash2, X } from "lucide-reac
 import { useTranslation } from "react-i18next"
 
 import type { PublishedMicroAppProjectItem } from "@/apis/modules/superMagic"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { Label } from "@/components/shadcn-ui/label"
@@ -12,11 +13,13 @@ import { Switch } from "@/components/shadcn-ui/switch"
 import { cn } from "@/utils/cn"
 import {
 	ShareRangeField,
+	ShareExpiryField,
 	ShareTypeField,
 	type ShareRange,
 	type ShareTarget,
 } from "@/pages/superMagic/components/Share/ShareFields"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
+import { collectRootHtmlFiles, getAttachmentId } from "../utils/microAppFiles"
 
 import type {
 	MicroAppPublishFormState,
@@ -50,6 +53,9 @@ interface MicroAppPublishDialogContentProps {
 	onShareTypeChange: (shareType: ShareType) => void
 	onShareRangeChange: (shareRange: ShareRange) => void
 	onTargetsChange: (targets: ShareTarget[]) => void
+	onShareExpiryChange: (value: number | null) => void
+	attachmentList: AttachmentItem[]
+	onDefaultOpenFileChange: (value: string | null) => void
 	onPasswordChange: ChangeEventHandler<HTMLInputElement>
 	onPasswordReset: () => void
 	onCopyAccessUrl: () => void
@@ -95,6 +101,9 @@ export default function MicroAppPublishDialogContent({
 	onShareTypeChange,
 	onShareRangeChange,
 	onTargetsChange,
+	onShareExpiryChange,
+	attachmentList,
+	onDefaultOpenFileChange,
 	onPasswordChange,
 	onPasswordReset,
 	onCopyAccessUrl,
@@ -105,6 +114,7 @@ export default function MicroAppPublishDialogContent({
 }: MicroAppPublishDialogContentProps) {
 	const { t } = useTranslation("super")
 	const isBusy = saving || unpublishing || coverUploading
+	const htmlEntries = collectRootHtmlFiles(attachmentList)
 	const handleCoverPaste: ClipboardEventHandler<HTMLDivElement> = (event) => {
 		if (loading || isBusy) return
 		const target = event.target
@@ -276,6 +286,44 @@ export default function MicroAppPublishDialogContent({
 									resourceId={publishedItem?.resource_id}
 								/>
 							) : null}
+
+							<ShareExpiryField
+								value={formState.shareExpiry}
+								onChange={onShareExpiryChange}
+							/>
+
+							<div className="mt-4 flex flex-col gap-2">
+								<Label htmlFor="micro-app-default-open-file">
+									{t("microAppPage.publish.defaultOpenFile")}
+								</Label>
+								<select
+									id="micro-app-default-open-file"
+									value={formState.defaultOpenFileId ?? ""}
+									onChange={(event) =>
+										onDefaultOpenFileChange(event.target.value || null)
+									}
+									disabled={isBusy || loading}
+									className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+									data-testid="micro-app-default-open-file"
+								>
+									<option value="">
+										{t("microAppPage.publish.defaultOpenFileAuto")}
+									</option>
+									{htmlEntries.map((item) => {
+										const id = String(getAttachmentId(item))
+										const name =
+											item.file_name || item.filename || item.name || id
+										return (
+											<option key={id} value={id}>
+												{name}
+											</option>
+										)
+									})}
+								</select>
+								<p className="text-xs text-muted-foreground">
+									{t("microAppPage.publish.defaultOpenFileDescription")}
+								</p>
+							</div>
 
 							{formState.shareType === ShareType.PasswordProtected ? (
 								<div className="flex flex-col gap-2">

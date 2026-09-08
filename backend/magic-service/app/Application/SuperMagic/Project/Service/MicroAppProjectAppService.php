@@ -19,6 +19,7 @@ use App\Domain\SuperMagic\Common\Share\Constant\ResourceType;
 use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
 use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
+use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
@@ -26,6 +27,7 @@ use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppPublishStatus;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Event\ProjectUpdatedEvent;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
+use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppVisitRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
@@ -60,6 +62,8 @@ class MicroAppProjectAppService extends AbstractAppService
         private readonly PublishedMicroAppResolver $publishedMicroAppResolver,
         private readonly MicroAppProjectResponseFormatter $responseFormatter,
         private readonly MicroAppShareConfig $shareConfig,
+        private readonly MicroAppVisitRepositoryInterface $microAppVisitRepository,
+        private readonly TaskFileRepositoryInterface $taskFileRepository,
     ) {
     }
 
@@ -76,6 +80,9 @@ class MicroAppProjectAppService extends AbstractAppService
         $projectNameChanged = $project->getProjectName() !== $requestDTO->getProjectName();
         $coverFileKey = $requestDTO->hasCoverFileKey() ? $requestDTO->getCoverFileKey() : $record->getCoverFileKey();
         $coverChanged = $record->getCoverFileKey() !== $coverFileKey;
+        $defaultOpenFileId = $requestDTO->hasDefaultOpenFileId()
+            ? $this->validateDefaultOpenFileId($requestDTO->getDefaultOpenFileId(), $projectId)
+            : null;
 
         if ($record->getOrganizationCode() !== $project->getUserOrganizationCode()) {
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
@@ -105,9 +112,14 @@ class MicroAppProjectAppService extends AbstractAppService
                     : [],
                 'password' => $requestDTO->getShareType() === ShareAccessType::PasswordProtected->value ? $requestDTO->getPassword() : null,
                 'share_project' => true,
-                'expire_days' => null,
                 'show_share_url' => true,
             ];
+            if ($requestDTO->hasExpireDays()) {
+                $shareData['expire_days'] = $requestDTO->getExpireDays();
+            }
+            if ($requestDTO->hasDefaultOpenFileId()) {
+                $shareData['default_open_file_id'] = $defaultOpenFileId;
+            }
             if ($requestDTO->hasExtra()) {
                 $existingShare = $this->resourceShareDomainService->getShareByResourceIdWithTrashed($record->getResourceId());
                 $shareData['extra'] = $this->shareConfig->buildExtra($existingShare?->getExtra(), $requestDTO);
@@ -143,6 +155,9 @@ class MicroAppProjectAppService extends AbstractAppService
             $record,
             $project->getProjectName(),
             $shareItem->extra,
+            $shareItem->expireDays,
+            $shareItem->expireAt,
+            $shareItem->defaultOpenFileId,
         );
     }
 
@@ -333,6 +348,9 @@ class MicroAppProjectAppService extends AbstractAppService
                     $record,
                     $project->getProjectName(),
                     $shareEntity->getExtra(),
+                    $shareEntity->getExpireDays(),
+                    $shareEntity->getExpireAt(),
+                    $shareEntity->getDefaultOpenFileId() !== null ? (string) $shareEntity->getDefaultOpenFileId() : null,
                 ),
             ];
         }
@@ -365,6 +383,10 @@ class MicroAppProjectAppService extends AbstractAppService
             $departmentIds,
             $authorization->getOrganizationCode()
         );
+        $organizationCodes = array_values(array_unique(array_merge(
+            [$authorization->getOrganizationCode()],
+            $organizationCodes,
+        )));
 
         $result = $this->microAppRepository->paginateAccessible(
             $userId,
@@ -410,6 +432,16 @@ class MicroAppProjectAppService extends AbstractAppService
             'page' => $requestDTO->getPage(),
             'page_size' => $requestDTO->getPageSize(),
         ];
+    }
+
+    public function recordVisit(RequestContext $requestContext, int $appId): array
+    {
+        $authorization = $requestContext->getUserAuthorization();
+        [$record, $project] = $this->getValidatedMicroApp($appId);
+        $this->getAccessibleProject($project->getId(), $authorization->getId(), $authorization->getOrganizationCode());
+        $this->microAppVisitRepository->recordVisit($record->getId(), $authorization->getId(), $authorization->getOrganizationCode());
+
+        return ['recorded' => true];
     }
 
     /**
@@ -502,6 +534,32 @@ class MicroAppProjectAppService extends AbstractAppService
         }
 
         return stripos($haystack, $needle) !== false;
+    }
+
+    private function validateDefaultOpenFileId(?string $fileId, int $projectId): ?string
+    {
+        if ($fileId === null || $fileId === '') {
+            return null;
+        }
+        if (! ctype_digit($fileId) || (int) $fileId <= 0) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'default_open_file_id is invalid');
+        }
+
+        $file = $this->taskFileRepository->getFilesByIds([(int) $fileId], $projectId)[0] ?? null;
+        $root = $this->taskFileRepository->findRootDirectoryByProjectId($projectId);
+        $rootId = $root?->getFileId();
+        $isRootChild = $file?->getParentId() === null || $file?->getParentId() === $rootId;
+        if ($file === null
+            || $file->getProjectId() !== $projectId
+            || $file->getDeletedAt() !== null
+            || ! $isRootChild
+            || $file->getIsHidden()
+            || $file->getIsDirectory()
+            || ! in_array(strtolower($file->getFileExtension()), ['html', 'htm'], true)) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'default_open_file_id is invalid');
+        }
+
+        return (string) $file->getFileId();
     }
 
     /**

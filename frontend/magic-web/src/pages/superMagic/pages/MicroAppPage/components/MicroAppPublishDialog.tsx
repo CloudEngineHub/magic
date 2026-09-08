@@ -13,6 +13,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { userStore } from "@/models/user"
 import type { ShareRange, ShareTarget } from "@/pages/superMagic/components/Share/ShareFields"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { generateSharePassword } from "@/pages/superMagic/components/Share/utils"
 import { clipboard } from "@/utils/clipboard-helpers"
@@ -49,7 +50,9 @@ interface MicroAppPublishDialogProps {
 	mobile?: boolean
 	onProjectNameChange?: (projectName: string) => void
 	onPublishStatusChange?: (published: boolean) => void
+	onDefaultOpenFileChange?: (fileId: string | null) => void
 	onOpenChange: (open: boolean) => void
+	attachmentList?: AttachmentItem[]
 }
 
 function MicroAppPublishDialog({
@@ -59,7 +62,9 @@ function MicroAppPublishDialog({
 	mobile = false,
 	onProjectNameChange,
 	onPublishStatusChange,
+	onDefaultOpenFileChange,
 	onOpenChange,
+	attachmentList = [],
 }: MicroAppPublishDialogProps) {
 	const { t } = useTranslation("super")
 	const isPersonalOrganization = userStore.user.isPersonalOrganization
@@ -242,6 +247,14 @@ function MicroAppPublishDialog({
 		setFormState((prev) => ({ ...prev, fullScreen }))
 	}, [])
 
+	const handleShareExpiryChange = useCallback((shareExpiry: number | null) => {
+		setFormState((prev) => ({ ...prev, shareExpiry }))
+	}, [])
+
+	const handleDefaultOpenFileChange = useCallback((defaultOpenFileId: string | null) => {
+		setFormState((prev) => ({ ...prev, defaultOpenFileId }))
+	}, [])
+
 	const resolvePublishedPasswordForCopy = useCallback((): string | null => {
 		if (publishedItem?.share_type !== ShareType.PasswordProtected) return ""
 
@@ -298,14 +311,23 @@ function MicroAppPublishDialog({
 
 		setSaving(true)
 		try {
-			const response = await SuperMagicApi.publishMicroAppProject(
-				appId,
-				buildMicroAppPublishPayload(formState, isPersonalOrganization),
-			)
+			const payload = buildMicroAppPublishPayload(formState, isPersonalOrganization)
+			if (formState.shareExpiry === null && publishedItem?.expire_days != null) {
+				payload.expire_days = null
+			}
+			if (
+				formState.defaultOpenFileId === null &&
+				publishedItem?.default_open_file_id != null
+			) {
+				payload.default_open_file_id = null
+			}
+			const response = await SuperMagicApi.publishMicroAppProject(appId, payload)
 			const nextItem = getPublishedItemFromResponse(response)
 			const savedAppName = nextItem.app_name || nextAppName
 			const savedCoverFileKey = nextItem.cover_file_key ?? formState.coverFileKey
 			const savedCoverUrl = nextItem.cover_url || formState.coverUrl
+			const savedShareExpiry =
+				nextItem.expire_days !== undefined ? nextItem.expire_days : formState.shareExpiry
 			const savedShareType = normalizeMicroAppPublishShareType(
 				nextItem.share_type || formState.shareType,
 				isPersonalOrganization,
@@ -316,6 +338,8 @@ function MicroAppPublishDialog({
 				shareType: savedShareType,
 				coverFileKey: savedCoverFileKey,
 				coverUrl: savedCoverUrl,
+				shareExpiry: savedShareExpiry ?? null,
+				defaultOpenFileId: nextItem.default_open_file_id ?? formState.defaultOpenFileId,
 			}
 			setPublishedItem({
 				...nextItem,
@@ -323,6 +347,7 @@ function MicroAppPublishDialog({
 				app_name: savedAppName,
 				cover_file_key: savedCoverFileKey,
 				cover_url: savedCoverUrl,
+				expire_days: savedShareExpiry,
 				extra: {
 					...nextItem.extra,
 					pure_mode: formState.fullScreen,
@@ -331,10 +356,12 @@ function MicroAppPublishDialog({
 				share_range: nextItem.share_range || formState.shareRange,
 				target_ids: nextItem.target_ids || formState.targets,
 				password: nextItem.password || formState.password,
+				default_open_file_id: nextItem.default_open_file_id ?? formState.defaultOpenFileId,
 			})
 			setFormState(savedFormState)
 			setPublishedFormState(savedFormState)
 			onProjectNameChange?.(savedAppName)
+			onDefaultOpenFileChange?.(savedFormState.defaultOpenFileId)
 			onPublishStatusChange?.(true)
 			magicToast.success(t("microAppPage.publish.saveSuccess"))
 		} catch (error) {
@@ -345,6 +372,9 @@ function MicroAppPublishDialog({
 		}
 	}, [
 		appId,
+		onDefaultOpenFileChange,
+		publishedItem?.expire_days,
+		publishedItem?.default_open_file_id,
 		coverUploadError,
 		coverUploading,
 		formState,
@@ -413,6 +443,9 @@ function MicroAppPublishDialog({
 			onCoverFile={handleCoverFile}
 			onClearCover={handleClearCover}
 			onFullScreenChange={handleFullScreenChange}
+			onShareExpiryChange={handleShareExpiryChange}
+			attachmentList={attachmentList}
+			onDefaultOpenFileChange={handleDefaultOpenFileChange}
 			onShareTypeChange={handleShareTypeChange}
 			onShareRangeChange={handleShareRangeChange}
 			onTargetsChange={handleTargetsChange}

@@ -5,7 +5,7 @@ import { genRequestUrl } from "@/utils/http"
 
 export type MicroAppPublishShareType = 2 | 4 | 5
 export type MicroAppPublishShareRange = "all" | "designated"
-export type MicroAppListScope = "all" | "created" | "collaborated"
+export type MicroAppListScope = "all" | "created" | "collaborated" | "recent"
 
 export interface MicroAppShareExtra {
 	pure_mode?: boolean
@@ -23,6 +23,8 @@ export interface PublishMicroAppProjectBody {
 	target_ids?: MicroAppPublishTarget[]
 	password?: string
 	cover_file_key?: string | null
+	expire_days?: number | null
+	default_open_file_id?: string | null
 	extra?: MicroAppShareExtra
 }
 
@@ -41,6 +43,9 @@ export interface PublishedMicroAppProjectItem {
 	published_at?: string
 	password?: string
 	cover_file_key?: string | null
+	expire_days?: number | null
+	expire_at?: string | null
+	default_open_file_id?: string | null
 	cover_url?: string
 	extra?: MicroAppShareExtra
 	publish_status?: "published" | "unpublished" | string
@@ -127,6 +132,7 @@ export interface ResolvedPublishedMicroApp {
 	resource_id: string
 	share_code: string
 	cover_url?: string
+	default_open_file_id?: string | null
 	extra?: MicroAppShareExtra
 }
 
@@ -174,6 +180,13 @@ export const generateMicroAppApi = (fetch: HttpClient) => ({
 				{ page, page_size, keyword, scope },
 			),
 			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	recordMicroAppVisit(appId: string) {
+		return fetch.post<{ recorded: boolean }>(
+			genRequestUrl("/api/v1/super-agent/micro-apps/${appId}/visit", { appId }),
+			undefined,
 		)
 	},
 
