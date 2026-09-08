@@ -168,6 +168,45 @@ describe("DomStructureManager move preview", () => {
 		).toEqual(["existing", "source"])
 	})
 
+	it("rejects ordinary moves into images without changing DOM or history", async () => {
+		const image = document.createElement("img")
+		image.id = "image"
+		document.body.append(image)
+		manager.getTree()
+
+		await expect(
+			manager.moveNode(findNodeId("source"), findNodeId("image"), 0),
+		).rejects.toThrow("该节点不能包含子节点")
+
+		expect(document.getElementById("source")?.parentElement).toBe(document.body)
+		expect(image.children).toHaveLength(0)
+		expect(history.getUndoStackSize()).toBe(0)
+	})
+
+	it("keeps image-rejected previews usable and restores the original position on cancel", () => {
+		const image = document.createElement("img")
+		image.id = "image"
+		document.body.append(image)
+		manager.getTree()
+		const sourceId = findNodeId("source")
+		const originalOrder = getBodyElementIds()
+
+		manager.beginMovePreview(sourceId)
+		expect(manager.previewMove(sourceId, findNodeId("last"), "after")).toBe(true)
+		expect(manager.previewMove(sourceId, findNodeId("image"), "inside")).toBe(false)
+		expect(image.children).toHaveLength(0)
+		expect(manager.previewMove(sourceId, findNodeId("target"), "inside")).toBe(true)
+		expect(document.getElementById("source")?.parentElement).toBe(
+			document.getElementById("target"),
+		)
+		expect(manager.previewMove(sourceId, findNodeId("image"), "inside")).toBe(false)
+		manager.cancelMovePreview()
+
+		expect(getBodyElementIds()).toEqual(originalOrder)
+		expect(history.getUndoStackSize()).toBe(0)
+		expect(history.getRedoStackSize()).toBe(0)
+	})
+
 	it("does not record a no-op preview", () => {
 		const sourceId = findNodeId("source")
 		const middleId = findNodeId("middle")

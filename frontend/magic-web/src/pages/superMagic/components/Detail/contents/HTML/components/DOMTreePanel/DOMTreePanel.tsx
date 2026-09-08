@@ -211,8 +211,11 @@ function DOMTreePanelInner({
 						target.position,
 					)
 					if (!session.cancelled) {
-						session.appliedTargetKey = targetKey
-						if (applied === false) setInvalidDropTargetId(target.nodeId)
+						if (applied === false) {
+							setInvalidDropTargetId(target.nodeId)
+						} else {
+							session.appliedTargetKey = targetKey
+						}
 					}
 				}
 			} finally {
@@ -258,10 +261,22 @@ function DOMTreePanelInner({
 			const session = domMovePreviewRef.current
 			if (!session || session.cancelled) return false
 			session.finalizing = true
-			session.appliedTargetKey = null
-			session.pendingTarget = target
 			try {
+				// Let in-flight previews settle before forcing a fresh check of the drop target.
+				// Otherwise an earlier response for the same target can skip the final check.
+				if (session.flushPromise) await session.flushPromise
+				if (session.cancelled) return false
+				session.appliedTargetKey = null
+				session.pendingTarget = target
 				await flushDomMovePreview(session)
+				if (
+					session.cancelled ||
+					session.appliedTargetKey !== getDomMovePreviewTargetKey(target)
+				) {
+					session.cancelled = true
+					await editorRef.current?.cancelDomMovePreview?.()
+					return false
+				}
 				await editorRef.current?.commitDomMovePreview?.()
 				return true
 			} catch (error) {
@@ -277,7 +292,7 @@ function DOMTreePanelInner({
 				domMovePreviewRef.current = null
 			}
 		},
-		[editorRef, flushDomMovePreview],
+		[editorRef, flushDomMovePreview, getDomMovePreviewTargetKey],
 	)
 	const resetDragState = useCallback(() => {
 		clearDragState()
