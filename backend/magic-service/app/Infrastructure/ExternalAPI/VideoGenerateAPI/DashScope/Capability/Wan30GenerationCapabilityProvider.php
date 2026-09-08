@@ -109,8 +109,19 @@ readonly class Wan30GenerationCapabilityProvider
                 VideoInputMode::VideoEdit->value => array_merge(
                     VideoInputModeDefinition::videoEdit(
                         description: $this->translateInputMode('video_edit'),
-                        supportedFields: ['reference_images', 'reference_videos'],
-                        maxCount: 7,
+                        supportedFields: ['reference_images', 'reference_videos', 'reference_audios'],
+                        maxCount: 16,
+                        variants: [
+                            [
+                                'code' => 'image_video_audio',
+                                'description' => $this->translateInputMode('video_edit'),
+                                'limits' => [
+                                    'reference_images' => ['min' => 0, 'max' => 10],
+                                    'reference_videos' => ['min' => 1, 'max' => 1],
+                                    'reference_audios' => ['min' => 0, 'max' => 5],
+                                ],
+                            ],
+                        ],
                     )->toArray(),
                     ['generation_constraints' => ['durations' => []]],
                 ),

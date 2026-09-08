@@ -60,7 +60,21 @@ readonly class GeminiOmniGenerationCapabilityProvider
                 VideoInputMode::ImageReference->value => VideoInputModeDefinition::imageReference($translate('image_reference.single'), 1, ['asset'], false)->toArray(),
                 VideoInputMode::KeyframeGuided->value => VideoInputModeDefinition::keyframeGuided($translate('keyframe_guided.start_end'), ['start', 'end'])->toArray(),
                 VideoInputMode::VideoEdit->value => array_merge(
-                    VideoInputModeDefinition::videoEdit($translate('video_edit'), ['reference_images', 'reference_videos'], 7)->toArray(),
+                    VideoInputModeDefinition::videoEdit(
+                        $translate('video_edit'),
+                        ['reference_images', 'reference_videos'],
+                        7,
+                        [
+                            [
+                                'code' => 'image_and_video',
+                                'description' => $translate('video_edit'),
+                                'limits' => [
+                                    'reference_images' => ['min' => 0, 'max' => 6],
+                                    'reference_videos' => ['min' => 1, 'max' => 1],
+                                ],
+                            ],
+                        ],
+                    )->toArray(),
                     ['generation_constraints' => ['durations' => []]],
                 ),
                 VideoInputMode::OmniReference->value => VideoInputModeDefinition::omniReference(
