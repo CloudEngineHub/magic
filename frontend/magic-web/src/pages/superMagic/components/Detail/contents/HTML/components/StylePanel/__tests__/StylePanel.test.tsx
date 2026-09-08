@@ -289,6 +289,24 @@ describe("StylePanel", () => {
 		expect(screen.getByLabelText("stylePanel.domTree.expandPageStructure")).toBeInTheDocument()
 	})
 
+	it("should place toolbar-end actions before the page-structure toggle", () => {
+		const toolbarEndRef = { current: null as HTMLDivElement | null }
+
+		render(
+			<StylePanel
+				editorRef={{ current: null }}
+				variant="global"
+				domTreeOpen={false}
+				onToggleDomTree={vi.fn()}
+				toolbarEndRef={toolbarEndRef}
+			/>,
+		)
+
+		const toolbarEnd = screen.getByTestId("html-style-panel-toolbar-end")
+		const structureToggle = screen.getByTestId("html-editor-dom-tree-toggle-button")
+		expect(toolbarEnd.nextElementSibling).toBe(structureToggle)
+	})
+
 	it("should show the selected tag and size in the toolbar gap", () => {
 		render(
 			<StylePanel

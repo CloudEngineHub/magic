@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import {
@@ -94,6 +95,11 @@ function WechatEditView({
 	const [showUnsavedNavDialog, setShowUnsavedNavDialog] = useState(false)
 	const [showRefreshConfirmDialog, setShowRefreshConfirmDialog] = useState(false)
 	const saveRetryTargetRef = useRef<"navigation" | "refresh" | null>(null)
+
+	const [htmlToolbarEndHost, setHtmlToolbarEndHost] = useState<HTMLDivElement | null>(null)
+	const onHtmlToolbarEndRef = useCallback((el: HTMLDivElement | null) => {
+		setHtmlToolbarEndHost(el)
+	}, [])
 
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
 	const [contentReloadVersion, setContentReloadVersion] = useState(0)
@@ -448,25 +454,6 @@ function WechatEditView({
 	return (
 		<div className="flex h-full" data-testid="wechat-edit-view">
 			<div className="relative flex-1 overflow-hidden">
-				{/* Manual save toolbar — shown when there are unsaved changes */}
-				{hasUnsavedChanges ? (
-					<div
-						className={`absolute right-3 top-[42px] z-50 flex items-center gap-1 px-2 py-1 ${selfMediaOverlayStyles.floatingPanel}`}
-					>
-						<FileEditButtons
-							isEditMode
-							isSaving={isSaving}
-							showButtonText
-							onSave={async () => {
-								await executeSave()
-							}}
-							onCancel={handleCancelEdit}
-						/>
-					</div>
-				) : (
-					<RednoteEditSaveStatusIndicator status={saveStatus} />
-				)}
-
 				{contentLoading ? (
 					<div
 						className="flex h-full items-center justify-center text-sm text-muted-foreground"
@@ -498,9 +485,31 @@ function WechatEditView({
 							selectedProject={selectedProject}
 							attachmentList={attachmentList}
 							isVisible
-							// toolbarClassName="absolute left-1/2 top-2 z-[10] -translate-x-1/2 w-[98%] rounded-lg border border-border bg-card/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/60"
+							toolbarEndRef={onHtmlToolbarEndRef}
 							className="h-full w-full"
 						/>
+						{htmlToolbarEndHost && content
+							? createPortal(
+									hasUnsavedChanges ? (
+										<FileEditButtons
+											testIdPrefix="wechat-edit"
+											isEditMode
+											isSaving={isSaving}
+											showButtonText
+											onSave={async () => {
+												await executeSave()
+											}}
+											onCancel={handleCancelEdit}
+										/>
+									) : (
+										<RednoteEditSaveStatusIndicator
+											status={saveStatus}
+											inline
+										/>
+									),
+									htmlToolbarEndHost,
+								)
+							: null}
 					</div>
 				) : (
 					<div

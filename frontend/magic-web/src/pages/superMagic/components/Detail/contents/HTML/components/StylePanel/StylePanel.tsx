@@ -650,6 +650,14 @@ const FullStylePanel = observer(function FullStylePanel({
 
 				<div className="min-w-0 flex-1" />
 
+				{toolbarEndRef ? (
+					<div
+						ref={toolbarEndRef as React.Ref<HTMLDivElement>}
+						className="ml-1 flex shrink-0 items-center"
+						data-testid="html-style-panel-toolbar-end"
+					/>
+				) : null}
+
 				{onToggleDomTree ? (
 					<TooltipPrimitive.Root>
 						<TooltipTrigger asChild>
@@ -685,13 +693,6 @@ const FullStylePanel = observer(function FullStylePanel({
 							)}
 						</TooltipContent>
 					</TooltipPrimitive.Root>
-				) : null}
-				{toolbarEndRef ? (
-					<div
-						ref={toolbarEndRef as React.Ref<HTMLDivElement>}
-						className="ml-1 flex shrink-0 items-center"
-						data-testid="html-style-panel-toolbar-end"
-					/>
 				) : null}
 			</div>
 		</TooltipProvider>
