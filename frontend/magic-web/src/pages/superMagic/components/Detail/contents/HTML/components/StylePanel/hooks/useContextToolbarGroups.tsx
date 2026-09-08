@@ -41,7 +41,7 @@ export interface UseContextToolbarGroupsParams {
 	isItalic: boolean
 	hasUnderline: boolean
 	hasLineThrough: boolean
-	handleFormat: (format: "bold" | "italic" | "underline" | "lineThrough", active: boolean) => void
+	handleFormat: (property: string, value: string) => void
 	showAlignmentTools: boolean
 	flexAlignment: { value: string; direction: string; targetSelector: string } | null
 	textAlign: "left" | "center" | "right" | "justify"

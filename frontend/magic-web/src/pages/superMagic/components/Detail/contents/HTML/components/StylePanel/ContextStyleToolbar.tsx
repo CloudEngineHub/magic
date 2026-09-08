@@ -192,18 +192,8 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 	)
 
 	const handleFormat = useCallback(
-		(format: "bold" | "italic" | "underline" | "lineThrough", active: boolean) => {
-			const formatStyleMap: Record<typeof format, { property: string; value: string }> = {
-				bold: { property: "fontWeight", value: active ? "bold" : "normal" },
-				italic: { property: "fontStyle", value: active ? "italic" : "normal" },
-				underline: { property: "textDecoration", value: active ? "underline" : "none" },
-				lineThrough: {
-					property: "textDecoration",
-					value: active ? "line-through" : "none",
-				},
-			}
-			const style = formatStyleMap[format]
-			handleStyleChange(style.property, style.value)
+		(property: string, value: string) => {
+			handleStyleChange(property, value)
 		},
 		[handleStyleChange],
 	)
