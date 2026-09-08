@@ -140,15 +140,22 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
             'failed', 'cancelled', 'canceled', 'expired' => 'failed',
             default => 'processing',
         };
-        $videoMedia = $this->findVideoMedia($detail);
-        if ($status === 'succeeded' && $videoMedia === null) {
+        $videoUrl = '';
+        foreach ($detail['steps'] ?? [] as $step) {
+            foreach ($step['content'] ?? [] as $content) {
+                if (($content['type'] ?? '') === 'video') {
+                    $videoUrl = trim((string) ($content['uri'] ?? ''));
+                    break 2;
+                }
+            }
+        }
+        if ($status === 'succeeded' && $videoUrl === '') {
             return $this->failedResult($detail, $providerTaskId, VideoGenerateErrorCode::MISSING_VIDEO_DATA);
         }
-        $videoUrl = $videoMedia['uri'] ?? null;
         $errorNode = is_array($detail['error'] ?? null) ? $detail['error'] : [];
         $providerCode = $errorNode['code'] ?? $detail['error_code'] ?? ($providerStatus === 'expired' ? 'TASK_TIMEOUT' : null);
         $errorCode = ProviderVideoErrorMapper::resolve(is_string($providerCode) || is_int($providerCode) ? $providerCode : null);
-        $result = ['status' => $status, 'provider_result' => $detail, 'output' => $videoUrl === null ? [] : ['video_url' => $videoUrl, 'provider_task_id' => $providerTaskId, 'provider_base_url' => rtrim($config->getBaseUrl(), '/')], 'error' => null];
+        $result = ['status' => $status, 'provider_result' => $detail, 'output' => $videoUrl === '' ? [] : ['video_url' => $videoUrl, 'provider_task_id' => $providerTaskId, 'provider_base_url' => rtrim($config->getBaseUrl(), '/')], 'error' => null];
         if ($status === 'failed') {
             $result['error'] = ['code' => (string) $errorCode->value, 'message' => ProviderVideoErrorMapper::message($errorCode), 'provider_code' => $providerCode];
         }
@@ -305,58 +312,6 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
     private function failedResult(array $detail, string $taskId, VideoGenerateErrorCode $code): array
     {
         return ['status' => 'failed', 'provider_result' => $detail, 'output' => [], 'error' => ['code' => (string) $code->value, 'message' => ProviderVideoErrorMapper::message($code), 'provider_code' => null, 'provider_task_id' => $taskId]];
-    }
-
-    /** @return null|array{kind: 'bytes', bytes_base64_encoded: string, mime_type: string, uri?: string}|array{kind: 'uri', uri: string} */
-    private function findVideoMedia(mixed $value, bool $videoContext = false): ?array
-    {
-        if (! is_array($value)) {
-            return null;
-        }
-        $type = strtolower(trim((string) ($value['type'] ?? '')));
-        $mimeType = trim((string) ($value['mimeType'] ?? $value['mime_type'] ?? ''));
-        $videoContext = $videoContext
-            || $type === 'video'
-            || str_starts_with(strtolower($mimeType), 'video/');
-        if ($videoContext && is_string($value['bytesBase64Encoded'] ?? null) && trim($value['bytesBase64Encoded']) !== '') {
-            return [
-                'kind' => 'bytes',
-                'bytes_base64_encoded' => preg_replace('/\s+/', '', trim($value['bytesBase64Encoded'])) ?? '',
-                'mime_type' => trim((string) ($value['mimeType'] ?? $value['mime_type'] ?? 'video/mp4')),
-            ];
-        }
-        if ($videoContext) {
-            foreach (['inlineData', 'inline_data'] as $inlineKey) {
-                $inline = is_array($value[$inlineKey] ?? null) ? $value[$inlineKey] : null;
-                if ($inline !== null && is_string($inline['data'] ?? null) && trim($inline['data']) !== '') {
-                    return [
-                        'kind' => 'bytes',
-                        'bytes_base64_encoded' => preg_replace('/\s+/', '', trim($inline['data'])) ?? '',
-                        'mime_type' => trim((string) ($inline['mimeType'] ?? $inline['mime_type'] ?? 'video/mp4')),
-                    ];
-                }
-            }
-            if (is_string($value['data'] ?? null) && trim($value['data']) !== '') {
-                $data = trim($value['data']);
-                if (preg_match('#^data:(?<mime>[-\w.+/]+);base64,(?<encoded>.+)$#is', $data, $matches) === 1) {
-                    return ['kind' => 'bytes', 'bytes_base64_encoded' => preg_replace('/\s+/', '', $matches['encoded']) ?? '', 'mime_type' => strtolower(trim($matches['mime']))];
-                }
-                return ['kind' => 'bytes', 'bytes_base64_encoded' => preg_replace('/\s+/', '', $data) ?? '', 'mime_type' => trim((string) ($value['mimeType'] ?? $value['mime_type'] ?? 'video/mp4'))];
-            }
-            foreach (['uri', 'url', 'video_uri', 'video_url'] as $key) {
-                if (is_string($value[$key] ?? null) && trim($value[$key]) !== '') {
-                    return ['kind' => 'uri', 'uri' => trim($value[$key])];
-                }
-            }
-        }
-        foreach ($value as $key => $child) {
-            $childVideoContext = $videoContext || in_array(strtolower((string) $key), ['videos', 'output_video'], true);
-            $found = $this->findVideoMedia($child, $childVideoContext);
-            if ($found !== null) {
-                return $found;
-            }
-        }
-        return null;
     }
 
     private function preferModelVersion(string $modelVersion, string $modelId): string
