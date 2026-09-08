@@ -96,7 +96,8 @@ export class RecorderCoreAdapter {
 	private visibilityChangeHandler: (() => void) | null = null
 	private audioContextStateChangeHandler: ((event: Event) => void) | null = null
 	private previousAudioContextStateChangeHandler:
-		((this: AudioContext, event: Event) => void) | null = null
+		| ((this: AudioContext, event: Event) => void)
+		| null = null
 	private audioContextStateChangeUsesEventListener = false
 	private audioTrackEndedHandlers = new Map<MediaStreamTrack, () => void>()
 	private audioContextDiagnosticsTarget: AudioContext | null = null

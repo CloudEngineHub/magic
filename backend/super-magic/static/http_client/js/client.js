@@ -2446,6 +2446,7 @@ function createImChatMessage(prompt) {
         message_id: generateImMessageId(currentImChannel, userId),
         type: MessageType.CHAT,
         prompt: prompt,
+        attachments: buildNativeVisionAttachments(prompt),
         metadata: {
             agent_user_id: userId,
         },
@@ -2471,7 +2472,7 @@ function createChatMessage(prompt, contextType = ContextType.NORMAL, remark = nu
         context_type: contextType,
         task_mode: currentTaskMode, // 保留兼容性
         agent_mode: currentAgentMode, // 新的 agent 模式
-        attachments: [],
+        attachments: buildNativeVisionAttachments(prompt),
         metadata: {
             language: currentLanguage
         }
@@ -6154,6 +6155,38 @@ function parsePromptMentions(prompt) {
         mentions.push(mention);
     }
     return mentions;
+}
+
+/** 根据文件路径判断是否为聊天图片。 */
+function isImagePath(path) {
+    const value = String(path || '').split(/[?#]/, 1)[0];
+    const extensionIndex = value.lastIndexOf('.');
+    return extensionIndex >= 0 && IMAGE_UPLOAD_EXTENSIONS.has(value.slice(extensionIndex + 1).toLowerCase());
+}
+
+/** 根据消息中的工作区图片引用生成后端附件描述，触发原生视觉链路。 */
+function buildNativeVisionAttachments(prompt) {
+    const imageMentions = parsePromptMentions(prompt)
+        .filter((mention) => mention.type === 'project_file' && isImagePath(mention.file_path));
+    const seen = new Set();
+    const attachments = [];
+    for (const mention of imageMentions) {
+        const path = normalizeMentionFilePath(mention.file_path);
+        if (!path || seen.has(path)) continue;
+        seen.add(path);
+        const entry = workspaceMentionIndex.find((item) => item.kind === 'file' && item.scope !== 'memory' && item.path === path);
+        const filename = getWorkspaceFileBaseName(path);
+        attachments.push({
+            file_url: debugWorkspaceApi.rawUrl(path, 'workspace'),
+            filename,
+            file_name: filename,
+            file_key: `local-debug/workspace/${path}`,
+            file_tag: 'image',
+            file_size: Number(entry?.size || 0),
+            relative_file_path: path,
+        });
+    }
+    return attachments;
 }
 
 let activeFiletreeContextMenu = null;

@@ -469,6 +469,8 @@ async def _run_verification(args: argparse.Namespace) -> VerificationResult:
     started_at = time.time()
     project_root = _project_root()
     await _bootstrap(project_root, load_dynamic_models=args.load_dynamic_models)
+    from agentlang.agent.models import AgentRunRequest
+
     await _prepare_verification_artifacts()
     debug_files_before = await _snapshot_debug_files()
 
@@ -528,7 +530,7 @@ async def _run_verification(args: argparse.Namespace) -> VerificationResult:
             first_check_result = await agent._try_compact_chat_history(threshold_model_id=runtime_model)
             subagent_id = _subagent_id(agent)
         else:
-            await agent.run("/compact")
+            await agent.run(AgentRunRequest(query="/compact"))
             apply_ok = (
                 len(agent.chat_history.messages) < messages_before
                 and not agent._has_pending_compact_request()

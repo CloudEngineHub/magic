@@ -70,7 +70,9 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 
 	// 查找匹配的账号（使用 useMemo 缓存）
 	const matchedAccount = useMemo(() => {
-		return userStore.account.accounts.find((account) => account.deployCode?.toLowerCase?.() === targetClusterCode?.toLowerCase?.())
+		return userStore.account.accounts.find(
+			(account) => account.deployCode?.toLowerCase?.() === targetClusterCode?.toLowerCase?.(),
+		)
 	}, [targetClusterCode, userStore.account.accounts])
 
 	// 稳定的错误处理函数

@@ -112,10 +112,7 @@ export function shouldSyncTopicStatusAfterForegroundMessageReconciliation({
 	chatTopicId?: string
 	localTaskStatus?: TaskStatus
 }) {
-	if (
-		!chatTopicId ||
-		(typeof document !== "undefined" && document.visibilityState !== "visible")
-	)
+	if (!chatTopicId || (typeof document !== "undefined" && document.visibilityState !== "visible"))
 		return false
 
 	if (isExplicitNonTerminalTopicTaskStatus(localTaskStatus)) return true

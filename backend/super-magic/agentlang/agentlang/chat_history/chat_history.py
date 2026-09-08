@@ -12,9 +12,10 @@ import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 import aiofiles
 
+from agentlang.agent.models import AgentRunRequest
 from agentlang.llms.token_usage.models import TokenUsage
 from agentlang.utils.token_estimator import num_tokens_from_string
 
@@ -22,6 +23,7 @@ from agentlang.utils.token_estimator import num_tokens_from_string
 from agentlang.chat_history.chat_history_models import (
     format_duration_to_str, parse_duration_from_str,
     SystemMessage, UserMessage,
+    UserMessageContentPart,
     AssistantMessage, ToolMessage, ChatMessage,
     FunctionCall, ToolCall, chat_message_from_dict
 )
@@ -1602,10 +1604,32 @@ class ChatHistory:
         message = SystemMessage(content=content, show_in_ui=show_in_ui)
         await self.add_message(message)
 
-    async def append_user_message(self, content: str, show_in_ui: bool = True, source: Optional[str] = None) -> None:
-        """添加一条用户消息。source 用于标记消息来源（None=用户，"horizon"=系统注入等）。"""
-        message = UserMessage(content=content, show_in_ui=show_in_ui, source=source)
+    async def append_user_message(
+        self,
+        content: str,
+        show_in_ui: bool = True,
+        source: Optional[str] = None,
+        content_parts: Optional[List[UserMessageContentPart]] = None,
+    ) -> None:
+        """添加一条用户消息，可选保存规范化多模态内容片段。"""
+        message = UserMessage(
+            content=content,
+            show_in_ui=show_in_ui,
+            source=source,
+            content_parts=content_parts,
+        )
         await self.add_message(message)
+
+    async def append_user_query(
+        self,
+        request: AgentRunRequest,
+    ) -> None:
+        """将已规范化的 Agent 运行请求转换为普通用户消息并写入聊天历史。"""
+        content_parts: List[UserMessageContentPart] = [
+            UserMessageContentPart.text_part(request.query)
+        ]
+        content_parts.extend(UserMessageContentPart.image_ref(path) for path in request.image_refs)
+        await self.append_user_message(request.query, content_parts=content_parts)
 
     async def append_assistant_message(self,
                                  content: Optional[str],
@@ -1776,8 +1800,18 @@ class ChatHistory:
                 continue
 
         # 🔧 修复历史消息中的序列错误（兼容已存在的错误历史）
-        fixed_messages = self._fix_message_sequence_errors(llm_messages)
-        return fixed_messages
+        return self.normalize_messages_for_llm(llm_messages)
+
+    def get_message_snapshot(self) -> tuple[ChatMessage, ...]:
+        """返回当前全部聊天消息的元组快照，隔离列表结构的后续变更。"""
+        return tuple(self.messages)
+
+    def normalize_messages_for_llm(
+        self,
+        llm_messages: Sequence[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """规范化已序列化的 LLM 消息，并修复工具调用序列。"""
+        return self._fix_message_sequence_errors(list(llm_messages))
 
     def _reorder_displaced_tool_results(self, llm_messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """一步到位地重排工具调用序列，确保每个 assistant(tool_calls) 紧跟其所有 tool_result。

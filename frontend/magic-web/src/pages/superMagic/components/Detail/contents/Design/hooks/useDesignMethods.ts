@@ -212,9 +212,8 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		flatAttachments,
 	})
 
-	const getAiAbilityAvailability: NonNullable<
-		CanvasDesignMethods["getAiAbilityAvailability"]
-	> = useCallback(() => SuperMagicApi.getAiAbilityAvailability(), [])
+	const getAiAbilityAvailability: NonNullable<CanvasDesignMethods["getAiAbilityAvailability"]> =
+		useCallback(() => SuperMagicApi.getAiAbilityAvailability(), [])
 
 	const generateCanvasHightImage: CanvasDesignMethods["generateHightImage"] = useCallback(
 		(params) =>

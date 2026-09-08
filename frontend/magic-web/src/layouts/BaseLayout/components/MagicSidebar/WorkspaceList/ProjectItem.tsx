@@ -248,7 +248,7 @@ function ProjectItem({
 										/>
 									)}
 								</div>
-				{/* Only reserve space for the menu trigger while it is visible. */}
+								{/* Only reserve space for the menu trigger while it is visible. */}
 								<div
 									data-project-more-trigger="true"
 									className={cn(

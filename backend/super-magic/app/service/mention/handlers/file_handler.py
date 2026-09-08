@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
 from app.service.mention.utils.canvas_project_detector import find_parent_canvas_project
 
-_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif"}
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif", ".tif", ".tiff"}
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".webm", ".mkv", ".flv", ".wmv"}
 
 _TEMPORARY_FILE_NOTIFICATION = (
@@ -151,6 +151,39 @@ class FileHandler(BaseMentionHandler):
             except Exception as error:
                 logger.warning(f"推送临时文件 Horizon 通知失败: {error}")
         return f"{notification}\n\nRead and understand the referenced files before proceeding."
+
+    async def extract_image_refs(
+        self,
+        mention: Dict[str, Any],
+        agent_context: Optional["AgentContext"] = None,
+    ) -> List[str]:
+        """从文件 mention 中提取可用于原生视觉的图片路径。"""
+        attrs = mention.get("attrs", {})
+        if not isinstance(attrs, dict):
+            attrs = {}
+        data = attrs.get("data", {})
+        if not isinstance(data, dict):
+            data = {}
+
+        file_path = (
+            mention.get("file_path")
+            or mention.get("relative_file_path")
+            or data.get("file_path")
+            or data.get("relative_file_path")
+        )
+        if not isinstance(file_path, str) or not file_path.strip():
+            return []
+        file_path = file_path.strip()
+
+        extension = mention.get("file_extension") or data.get("file_extension")
+        if not isinstance(extension, str) or not extension.strip():
+            file_name = mention.get("file_name") or data.get("file_name") or file_path
+            extension = Path(str(file_name)).suffix
+        extension = str(extension).strip().lower()
+        if extension and not extension.startswith("."):
+            extension = f".{extension}"
+
+        return [file_path] if extension in _IMAGE_EXTS else []
 
     def _build_temporary_file_notification(self) -> str:
         """构建包含临时文件列表的统一英文提示。"""

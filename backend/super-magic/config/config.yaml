@@ -114,6 +114,8 @@ llm:
   # 第二阶梯：非流式退避重试
   non_stream_timeout_seconds: 600          # 非流式请求超时
   backoff_max_retries: 5                   # 最大退避重试次数
+  # 原生视觉请求连续返回 400 后，当前沙箱将当前模型降级为非视觉；2 表示第三次请求使用非视觉。
+  native_visual_400_failure_threshold: ${LLM_NATIVE_VISUAL_400_FAILURE_THRESHOLD:-2}
 
 # 用户可见上下文窗口配置
 #

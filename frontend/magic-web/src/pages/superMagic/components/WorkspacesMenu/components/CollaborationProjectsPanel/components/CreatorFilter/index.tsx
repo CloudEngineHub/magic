@@ -67,7 +67,7 @@ const CreatorFilterComponent = forwardRef<CreatorFilterComponentRef, CreatorFilt
 									<button
 										key={item.user_id}
 										type="button"
-										className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2 py-1 text-left truncate text-sm hover:bg-accent"
+										className="flex min-h-10 w-full items-center gap-2 truncate rounded-lg px-2 py-1 text-left text-sm hover:bg-accent"
 										onClick={() => onChange(item)}
 									>
 										<MagicAvatar src={item.avatar_url} size={20} shape="circle">

@@ -9,7 +9,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 
 from agentlang.config.config import config
 from agentlang.config.models.model_config import model_config_utils
@@ -643,6 +643,102 @@ class SystemMessage:
             created_at=data.get("timestamp", datetime.now().isoformat()),
         )
 
+
+class TextContentPartDict(TypedDict, total=False):
+    """文本内容片段持久化后的字典结构。"""
+
+    type: Literal["text"]
+    text: str
+    include_in_fallback: bool
+
+
+class ImageRefContentPartDict(TypedDict):
+    """本地图片引用内容片段持久化后的字典结构。"""
+
+    type: Literal["image_ref"]
+    path: str
+
+
+UserMessageContentPartDict = Union[TextContentPartDict, ImageRefContentPartDict]
+
+
+@dataclass
+class UserMessageContentPart:
+    """用户消息中的规范化内容片段，只承载文本或本地图片引用。"""
+
+    type: Literal["text", "image_ref"]
+    text: Optional[str] = None
+    path: Optional[str] = None
+    include_in_fallback: bool = True
+
+    def __post_init__(self) -> None:
+        """校验内容片段的固定字段，避免产生无法渲染的半结构化对象。"""
+        if self.type == "text":
+            if self.text is None:
+                raise ValueError("text content part requires text")
+            self.path = None
+        elif self.type == "image_ref":
+            if not self.path:
+                raise ValueError("image_ref content part requires path")
+            self.text = None
+            self.include_in_fallback = True
+        else:
+            raise ValueError(f"Unsupported user message content part type: {self.type}")
+
+    @classmethod
+    def text_part(
+        cls,
+        text: str,
+        *,
+        include_in_fallback: bool = True,
+    ) -> "UserMessageContentPart":
+        """创建文本内容片段，并指定非原生视觉回退时是否保留。"""
+        return cls(
+            type="text",
+            text=text,
+            include_in_fallback=include_in_fallback,
+        )
+
+    @classmethod
+    def image_ref(cls, path: str) -> "UserMessageContentPart":
+        """创建本地图片引用；工作区内可转 URL，外部绝对路径使用 base64。"""
+        return cls(type="image_ref", path=path)
+
+    def to_dict(self) -> UserMessageContentPartDict:
+        """将内容片段转换为历史文件使用的稳定字典格式。"""
+        if self.type == "text":
+            assert self.text is not None
+            result: TextContentPartDict = {"type": "text", "text": self.text}
+            if not self.include_in_fallback:
+                result["include_in_fallback"] = False
+            return result
+
+        assert self.path is not None
+        result: ImageRefContentPartDict = {"type": "image_ref", "path": self.path}
+        return result
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "UserMessageContentPart":
+        """从历史文件中的字典恢复内容片段。"""
+        if not isinstance(data, dict):
+            raise TypeError("content part must be a dictionary")
+        part_type = data.get("type")
+        if part_type == "text":
+            text = data.get("text")
+            if not isinstance(text, str):
+                raise ValueError("text content part requires a string text")
+            include_in_fallback = data.get("include_in_fallback", True)
+            if not isinstance(include_in_fallback, bool):
+                raise ValueError("include_in_fallback must be a boolean")
+            return cls.text_part(text, include_in_fallback=include_in_fallback)
+        if part_type == "image_ref":
+            path = data.get("path")
+            if not isinstance(path, str) or not path.strip():
+                raise ValueError("image_ref content part requires a non-empty string path")
+            return cls.image_ref(path)
+        raise ValueError(f"Unsupported user message content part type: {part_type}")
+
+
 @dataclass
 class UserMessage:
     """用户消息"""
@@ -652,6 +748,23 @@ class UserMessage:
     show_in_ui: bool = True
     # 消息来源标记：None = 真实用户输入；"horizon" = AgentHorizon 注入；其他值供扩展使用
     source: Optional[str] = None
+    # 规范化的多模态内容片段；历史只保存文本和 image_ref，不保存 Provider payload。
+    # 放在既有字段之后，避免破坏外部对 UserMessage 的位置参数构造。
+    content_parts: Optional[List[UserMessageContentPart]] = None
+
+    def __post_init__(self) -> None:
+        """规范化内容片段对象，并兼容旧代码传入的历史字典结构。"""
+        if self.content_parts is None:
+            return
+        normalized_parts: List[UserMessageContentPart] = []
+        for part in self.content_parts:
+            if isinstance(part, UserMessageContentPart):
+                normalized_parts.append(part)
+            elif isinstance(part, dict):
+                normalized_parts.append(UserMessageContentPart.from_dict(part))
+            else:
+                raise TypeError(f"Unsupported user message content part: {type(part)!r}")
+        self.content_parts = normalized_parts
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -663,6 +776,8 @@ class UserMessage:
         }
         if self.source is not None:
             d["source"] = self.source
+        if self.content_parts is not None:
+            d["content_parts"] = [part.to_dict() for part in self.content_parts]
         return d
 
     def to_llm_dict(self) -> Dict[str, Any]:
@@ -676,12 +791,16 @@ class UserMessage:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "UserMessage":
         """从字典创建用户消息对象"""
+        raw_parts = data.get("content_parts")
+        if raw_parts is not None and not isinstance(raw_parts, list):
+            raise TypeError("content_parts must be a list")
         return cls(
             content=data.get("content", ""),
             role=data.get("role", "user"),
             show_in_ui=data.get("show_in_ui", True),
             created_at=data.get("timestamp", datetime.now().isoformat()),
             source=data.get("source"),
+            content_parts=[UserMessageContentPart.from_dict(part) for part in (raw_parts or [])] or None,
         )
 
 @dataclass

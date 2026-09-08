@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from agentlang.agent.base import BaseAgent
 from agentlang.agent.loader import AgentLoader
+from agentlang.agent.models import AgentRunRequest
 from agentlang.agent.state import AgentState
 from agentlang.chat_history import AssistantMessage, CompactionConfig, SystemMessage, ToolCall
 from agentlang.chat_history.chat_history import ChatHistory
@@ -27,7 +28,9 @@ from agentlang.chat_history.chat_history_models import UserMessage
 from agentlang.context.tool_context import ToolContext
 from agentlang.event.data import (
     AfterAgentReplyEventData,
+    AfterLlmRequestSucceededEventData,
     AfterMainAgentRunEventData,
+    BeforeLlmRetryEventData,
     BeforeMainAgentRunEventData,
     ErrorEventData,
 )
@@ -81,6 +84,8 @@ from app.core.entity.message.server_message import TaskStatus
 from app.magic.user_command_handler import Commands
 from app.path_manager import PathManager
 from app.service.auto_read_file_service import AutoReadFileService
+from app.service.agent_event.native_visual_disable_listener_service import NativeVisualDisableListenerService
+from app.service.native_visual_message_builder import NativeVisualMessageBuilder
 from app.service.todo_service import TodoService
 from app.tools.core import AutoMount
 from app.tools.core.app_tool_validator import AppToolValidator
@@ -97,6 +102,7 @@ from app.core.prompt.personal_preferences_prompt import apply_personal_preferenc
 from agentlang.agent.define import AgentDefine, SkillsConfig, SystemSkillEntry
 from app.core.models.agent_model_context import TextModelState
 from app.core.models.agent_runtime import AgentProviderType
+from app.service.multimodal_message_renderer import LLMMessageRenderer
 
 logger = get_logger(__name__)
 
@@ -248,6 +254,7 @@ class Agent(BaseAgent):
             agent_context.chat_history_dir = PathManager.get_chat_history_dir()
             logger.warning(f"AgentContext 中未设置 chat_history_dir，使用默认值: {PathManager.get_chat_history_dir()}")
 
+        NativeVisualDisableListenerService.register_standard_listeners(agent_context)
         return agent_context
 
     def _initialize_configured_text_model(self) -> None:
@@ -268,9 +275,17 @@ class Agent(BaseAgent):
         self._active_run_task: asyncio.Task[object] | None = None
         self._tool_preflight_failures: Dict[str, str] = {}
         self._workspace_snapshot: WorkspaceSnapshot | None = None
+        # 当前最近一次真实 LLM 请求是否包含原生图片输入。
+        self._last_llm_request_contains_native_images = False
 
         # 设置Agent上下文
         self.agent_context = self._setup_agent_context(agent_context)
+        self._message_renderer = LLMMessageRenderer(
+            workspace_dir=self.agent_context.get_workspace_dir()
+        )
+        self._native_visual_message_builder = NativeVisualMessageBuilder(
+            self.agent_context.get_workspace_dir()
+        )
         self._initialize_configured_text_model()
         agents_dir = Path(PathManager.get_project_root() / "agents")
         agent_target = self.agent_context.get_agent_target()
@@ -848,8 +863,9 @@ class Agent(BaseAgent):
             return None
         return i18n.translate(i18n_key, category="common.messages")
 
-    async def run_main_agent(self, query: str):
-        """运行主 agent"""
+    async def run_main_agent(self, request: AgentRunRequest):
+        """运行主 agent。"""
+        query = request.query
         try:
             # 触发主 agent 运行前事件
             await self.agent_context.dispatch_event(EventType.BEFORE_MAIN_AGENT_RUN, BeforeMainAgentRunEventData(
@@ -858,7 +874,7 @@ class Agent(BaseAgent):
                 query=query
             ))
 
-            await self.run(query)
+            await self.run(request)
 
             # 触发主 agent 运行后事件
             logger.info(f"run_main_agent: 准备发送 AFTER_MAIN_AGENT_RUN 事件，agent_state = {self.agent_state.value}")
@@ -902,11 +918,11 @@ class Agent(BaseAgent):
         except Exception:
             pass
 
-    async def run(self, query: str):
-        """运行 agent"""
+    async def run(self, request: AgentRunRequest):
+        """运行 agent。"""
         run_task = self._claim_run()
         try:
-            result = await self._run_once(query)
+            result = await self._run_once(request)
         except asyncio.CancelledError:
             self._set_run_terminal_state(run_task, AgentState.SUSPENDED)
             raise
@@ -935,15 +951,16 @@ class Agent(BaseAgent):
             self.agent_context.set_resumption_context(None, None)
             self._release_run(run_task)
 
-    async def _run_once(self, query: str):
+    async def _run_once(self, request: AgentRunRequest):
         """执行单轮 Agent 业务逻辑；run() 统一管理执行身份。"""
+        query = request.query
         self.agent_context.set_final_task_state(None)
         self.agent_context.set_final_response(None)
 
         # 异步加载聊天记录（幂等：首次加载从磁盘读取并修复序列，后续调用跳过）
         await self.chat_history.load()
 
-        session_prep_result = await self._prepare_run_session(query)
+        session_prep_result = await self._prepare_run_session(request)
 
         if session_prep_result.direct_response is not None:
             await self._dispatch_direct_command_response(session_prep_result.direct_response)
@@ -999,7 +1016,10 @@ class Agent(BaseAgent):
             # 任务被用户终止时，agent 协程会被 cancel 异常强制挂掉，需要在这里关闭所有资源
             await self.agent_context.close_all_resources()
 
-    async def _prepare_run_session(self, query: str) -> SessionPrepResult:
+    async def _prepare_run_session(
+        self,
+        request: AgentRunRequest,
+    ) -> SessionPrepResult:
         """准备本轮运行需要的会话状态，并保证 prepare 段完整收尾。"""
         prepare_blocker_acquired = False
         try:
@@ -1029,21 +1049,26 @@ class Agent(BaseAgent):
                 # 因为代码会更新，聊天记录不会更新，需要在 agent 每次运行时更新最新的 system prompt
                 await self.chat_history.update_first_system_prompt(self.system_prompt)
 
-            return await self._prepare_session_for_new_query(query)
+            return await self._prepare_session_for_new_query(request)
         finally:
             if prepare_blocker_acquired:
                 self.agent_context.decrement_cancel_blocker()
 
-    async def _prepare_session_for_new_query(self, query: str) -> SessionPrepResult:
+    async def _prepare_session_for_new_query(
+        self,
+        request: AgentRunRequest,
+    ) -> SessionPrepResult:
         """
         准备会话：处理pending工具调用和用户查询
 
         Args:
-            query: 用户输入的查询
+            request: Agent 运行请求
 
         Returns:
             SessionPrepResult: 会话准备结果
         """
+        query = request.query
+
         # 检测用户命令（/compact、/new 等），命令处理后 query 替换为命令执行结果
         command_match = Commands.get(query)
         is_continue_request = command_match and command_match.command.name == "continue"
@@ -1056,11 +1081,11 @@ class Agent(BaseAgent):
                     user_message_added=False,
                     direct_response=command_result.direct_response or "",
                 )
-            query = command_result.query or ""
+            request = request.with_query(command_result.query or "")
 
         # 如果没有聊天历史，直接添加用户消息
         if not self.chat_history.messages:
-            await self.chat_history.append_user_message(query)
+            await self._append_user_query(request)
             return SessionPrepResult(user_message_added=True)
 
         # 查找pending工具调用
@@ -1082,7 +1107,7 @@ class Agent(BaseAgent):
                     assistant_with_pending_tools,
                     reason=self._build_pending_tool_interruption_message(assistant_with_pending_tools),
                 )
-                await self.chat_history.append_user_message(query)
+                await self._append_user_query(request)
                 return SessionPrepResult(user_message_added=True)
         else:
             # /resume 是系统内部信号（由 ask_user 等工具的 resume 流程发出）：
@@ -1092,8 +1117,20 @@ class Agent(BaseAgent):
                 return SessionPrepResult(user_message_added=False)
 
             # 没有pending工具调用，正常添加用户消息
-            await self.chat_history.append_user_message(query)
+            await self._append_user_query(request)
             return SessionPrepResult(user_message_added=True)
+
+    async def _append_user_query(self, request: AgentRunRequest) -> None:
+        """在 app 层构造并写入用户消息，图片请求附加原生视觉元数据。"""
+        if not request.image_refs:
+            await self.chat_history.append_user_query(request)
+            return
+
+        message = await self._native_visual_message_builder.build_user_message(
+            request.query,
+            list(request.image_refs),
+        )
+        await self.chat_history.add_message(message)
 
     async def _handle_agent_loop(self, session_prep_result: SessionPrepResult) -> None:
         """处理 agent 循环 - 使用Context对象简化参数传递和状态管理"""
@@ -2314,6 +2351,60 @@ Since your subsequent output will be merged with pre-interruption content and di
         retry_state.consecutive_generation_failures = 0
         retry_state.max_lost_output_chars_in_streak = 0
 
+    def _extract_api_status_code(self, exception: Exception) -> Optional[int]:
+        """从异常链中提取 HTTP 状态码。"""
+        from openai import APIStatusError
+
+        for exc in self._iter_exception_chain(exception):
+            if isinstance(exc, APIStatusError):
+                return exc.status_code
+        return None
+
+    async def _dispatch_before_llm_retry_event(
+        self,
+        *,
+        exception: Exception,
+        loop_state: AgentLoopState,
+        use_stream: bool,
+    ) -> BeforeLlmRetryEventData:
+        """请求失败后、进入重试决策前抛出重试前事件。"""
+        model_id = ""
+        supports_multimodal = False
+        try:
+            model_state = self.agent_context.model_context.resolve_text_model()
+            model_id = model_state.model_id
+            supports_multimodal = bool(model_state.config.supports_multimodal)
+        except Exception:
+            model_id = self.agent_context.model_context.current_text_model_id or ""
+
+        event_data = BeforeLlmRetryEventData(
+            agent_context=self.agent_context,
+            exception=exception,
+            status_code=self._extract_api_status_code(exception),
+            model_id=model_id,
+            use_stream=use_stream,
+            backoff_retry_count=loop_state.retry_state.backoff_retry_count,
+            streaming_disabled=loop_state.retry_state.streaming_disabled,
+            request_contains_native_images=bool(
+                getattr(self, "_last_llm_request_contains_native_images", False)
+            ),
+            supports_multimodal=supports_multimodal,
+            is_context_window_exceeded=bool(self._find_context_window_error(exception)),
+        )
+        event = await self.agent_context.dispatch_event(EventType.BEFORE_LLM_RETRY, event_data)
+        return event.data
+
+    async def _dispatch_llm_request_succeeded_event(self, *, use_stream: bool) -> None:
+        """请求成功后抛出成功事件，供监听器清理失败计数。"""
+        await self.agent_context.dispatch_event(
+            EventType.AFTER_LLM_REQUEST_SUCCEEDED,
+            AfterLlmRequestSucceededEventData(
+                agent_context=self.agent_context,
+                model_id=self.agent_context.model_context.current_text_model_id or "",
+                use_stream=use_stream,
+            ),
+        )
+
     def _find_context_window_error(self, exception: Exception) -> Optional[LLMErrorSnapshot]:
         """在异常链中查找上下文超长错误，返回对应的 snapshot 或 None"""
         from openai import APIError
@@ -2403,6 +2494,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                     chunk_timeout=config.get("llm.stream_chunk_timeout_seconds", 60),
                 )
                 self._reset_generation_failure_streak(loop_state)
+                await self._dispatch_llm_request_succeeded_event(use_stream=True)
                 return response
             except ResourceLimitExceededException:
                 raise  # 平台业务限制（积分/并发），直接终止
@@ -2410,10 +2502,22 @@ Since your subsequent output will be merged with pre-interruption content and di
                 compact_fallback = await self._try_fallback_compact_model_once(e)
                 if compact_fallback is not None:
                     self._reset_generation_failure_streak(loop_state)
+                    await self._dispatch_llm_request_succeeded_event(use_stream=False)
                     return compact_fallback
                 if self._find_context_window_error(e):
                     raise  # 上下文超长走 compact 路径
-                if is_non_retryable_model_config_error(e):
+                retry_decision = await self._dispatch_before_llm_retry_event(
+                    exception=e,
+                    loop_state=loop_state,
+                    use_stream=True,
+                )
+                if retry_decision.allow_retry:
+                    if retry_decision.disable_streaming:
+                        loop_state.retry_state.streaming_disabled = True
+                    logger.warning(
+                        f"流式请求失败，监听器要求重试: reason={retry_decision.reason}, error={e}"
+                    )
+                elif is_non_retryable_model_config_error(e):
                     logger.warning(f"流式请求遇到模型配置错误，不降级不重试，直接抛出: {e}")
                     raise
                 # 确定性错误：不降级非流式，也不重试。
@@ -2421,12 +2525,15 @@ Since your subsequent output will be merged with pre-interruption content and di
                 # 必须先检查此条件再走降级分支，否则会白白浪费一轮非流式请求。
                 # 注意：上下文超长（同样是 400）已在前面被 _find_context_window_error 拦截并 raise，
                 # 走到这里的 400 一定是消息序列/格式问题，无法通过重试自愈。
-                if isinstance(e, APIStatusError) and e.status_code in self._NON_RETRYABLE_STATUS_CODES:
+                elif (
+                    isinstance(e, APIStatusError)
+                    and e.status_code in self._NON_RETRYABLE_STATUS_CODES
+                ):
                     logger.warning(
                         f"流式请求遇到确定性错误 HTTP {e.status_code}，不降级不重试，直接抛出: {e}"
                     )
                     raise
-                if isinstance(e, APIStatusError) and e.status_code in self._PROVIDER_RATE_LIMIT_STATUS_CODES:
+                elif isinstance(e, APIStatusError) and e.status_code in self._PROVIDER_RATE_LIMIT_STATUS_CODES:
                     # 供应商限流/过载，等待后降级到非流式。
                     # 不计入 backoff_retry_count — 流式阶段的 429 等待仅用于降级过渡，
                     # 进入第二阶梯后应拥有完整的重试预算。
@@ -2461,6 +2568,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                     non_stream_timeout=timeout,
                 )
                 self._reset_generation_failure_streak(loop_state)
+                await self._dispatch_llm_request_succeeded_event(use_stream=False)
                 return response
             except ResourceLimitExceededException:
                 raise  # 平台业务限制，直接终止
@@ -2471,6 +2579,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                 )
                 if compact_fallback is not None:
                     self._reset_generation_failure_streak(loop_state)
+                    await self._dispatch_llm_request_succeeded_event(use_stream=False)
                     return compact_fallback
                 if self._find_context_window_error(e):
                     if not loop_state.reactive_compact_attempted:
@@ -2481,14 +2590,23 @@ Since your subsequent output will be merged with pre-interruption content and di
                             continue
                     raise
 
+                retry_decision = await self._dispatch_before_llm_retry_event(
+                    exception=e,
+                    loop_state=loop_state,
+                    use_stream=False,
+                )
+                if retry_decision.allow_retry and retry_decision.skip_backoff:
+                    continue
+
                 # 确定性错误：重试必然失败，直接抛出由上层走终态逻辑。
                 # 400 消息序列损坏时，每次重试还会额外注入 recovery user 消息，
                 # 反而让序列更乱，形成死亡螺旋，必须在退避重试逻辑之前先拦截。
-                if is_non_retryable_model_config_error(e):
-                    logger.warning(f"非流式请求遇到模型配置错误，不重试，直接抛出: {e}")
-                    raise
-                if isinstance(e, APIStatusError) and e.status_code in self._NON_RETRYABLE_STATUS_CODES:
-                    raise
+                if not retry_decision.allow_retry:
+                    if is_non_retryable_model_config_error(e):
+                        logger.warning(f"非流式请求遇到模型配置错误，不重试，直接抛出: {e}")
+                        raise
+                    if isinstance(e, APIStatusError) and e.status_code in self._NON_RETRYABLE_STATUS_CODES:
+                        raise
 
                 # 供应商 429/529：等待后重试，不注入恢复提示词，纳入重试计数
                 if isinstance(e, APIStatusError) and e.status_code in self._PROVIDER_RATE_LIMIT_STATUS_CODES:
@@ -2561,15 +2679,26 @@ Since your subsequent output will be merged with pre-interruption content and di
             ),
         )
 
-        # 使用ChatHistory获取格式化后的消息列表
-        messages_for_llm = self.chat_history.get_messages_for_llm()
+        # 压缩可能切换到专属模型，调用前重新解析一次当前文本模型。
+        text_model_state = self._resolve_current_text_model()
+
+        # 应用层基于聊天消息元组快照渲染多模态消息，再交由 agentlang 修复通用消息序列。
+        message_snapshot = self.chat_history.get_message_snapshot()
+        rendered_messages = await self._message_renderer.render_messages(
+            message_snapshot,
+            supports_multimodal=text_model_state.config.supports_multimodal,
+        )
+        self._last_llm_request_contains_native_images = any(
+            isinstance(message.get("content"), list)
+            and any(part.get("type") == "image_url" for part in message["content"])
+            for message in rendered_messages
+            if isinstance(message, dict)
+        )
+        messages_for_llm = self.chat_history.normalize_messages_for_llm(rendered_messages)
         if not messages_for_llm:
             logger.error("无法获取用于LLM调用的消息列表(可能历史记录为空或只有内部消息)")
             self.set_agent_state(AgentState.ERROR)
             raise ValueError("无法准备与LLM的对话。")
-
-        # 压缩可能切换到专属模型，调用前重新解析一次当前文本模型。
-        text_model_state = self._resolve_current_text_model()
 
         # _call_llm 的异常全部透传给 _call_llm_with_retry 做分类处理
         llm_start_time = time.time()
@@ -2720,6 +2849,7 @@ Since your subsequent output will be merged with pre-interruption content and di
     ) -> Optional[str]:
         """构建 Horizon 注入内容，模型配置错误时静默跳过。"""
         try:
+            await self.agent_context.horizon.flush_pending_user_messages()
             self._sync_horizon_llm_model_info()
             return await self.agent_context.horizon.build_context_update(
                 injection_point=injection_point

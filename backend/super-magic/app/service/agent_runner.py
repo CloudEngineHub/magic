@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
+from agentlang.agent.models import AgentRunRequest
 from agentlang.chat_history.session_config import SessionConfig
 from agentlang.logger import get_logger
 from app.core.models.agent_runtime import AgentLifetime, AgentTarget
@@ -334,7 +335,7 @@ async def _run_subagent_task(
     current_task = asyncio.current_task()
 
     try:
-        result = await agent.run(prompt)
+        result = await agent.run(AgentRunRequest(query=prompt))
         if capture_compact_history_result:
             captured_summary = agent.get_captured_compact_summary()
             if captured_summary:

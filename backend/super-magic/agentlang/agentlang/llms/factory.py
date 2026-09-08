@@ -57,6 +57,7 @@ class LLMClientConfig(BaseModel):
     extra_params: Dict[str, Any] = Field(default_factory=dict)
     metadata: Dict[str, Any] = Field(default_factory=dict)
     supports_tool_use: bool = True
+    supports_multimodal: bool = False
     type: str = "llm"
     resolved_model_id: Optional[str] = None
 
@@ -416,6 +417,7 @@ class LLMFactory:
                 provider=mc.provider,
                 client_type=mc.client_type,
                 supports_tool_use=mc.supports_tool_use,
+                supports_multimodal=mc.supports_multimodal,
                 max_output_tokens=mc.max_output_tokens,
                 max_context_tokens=mc.max_context_tokens,
                 temperature=mc.temperature,

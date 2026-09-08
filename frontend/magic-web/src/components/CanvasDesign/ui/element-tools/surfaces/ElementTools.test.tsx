@@ -112,7 +112,9 @@ describe("ElementTools image replacement ordering", () => {
 				type: ElementTypeEnum.Image,
 				activeContentId: "version-1",
 				mainContentId: "version-1",
-				contents: [{ contentId: "version-1", src: "./images/one.png", status: "completed" }],
+				contents: [
+					{ contentId: "version-1", src: "./images/one.png", status: "completed" },
+				],
 			},
 		]
 

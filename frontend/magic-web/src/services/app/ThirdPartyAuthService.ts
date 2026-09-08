@@ -422,11 +422,7 @@ class ThirdPartyAuthService {
 			// Remove third-party cluster code to prevent process dead loop
 			searchParams.delete(this.thirdPartyAuthDeployCode)
 
-			if (
-				syncAccountInSameWindow &&
-				!reloadCurrentWindow &&
-				userStore.user.authorization
-			) {
+			if (syncAccountInSameWindow && !reloadCurrentWindow && userStore.user.authorization) {
 				const deployCode = configStore.cluster.clusterCode ?? ""
 				logger.log("同窗口免登，同步账号体系", { deployCode })
 				await this.syncAccountSystem(deployCode, userStore.user.authorization, options)
@@ -727,7 +723,10 @@ class ThirdPartyAuthService {
 			await this.generateAuthorizationToken(tempAuthorizationCode, options)
 		} else if (thirdPartyAuthDeployCode) {
 			// If and only if there is a private exclusive code can it trigger login exemption
-			await this.handleAutoLogin(thirdPartyAuthDeployCode === "global" ? "" : thirdPartyAuthDeployCode, options)
+			await this.handleAutoLogin(
+				thirdPartyAuthDeployCode === "global" ? "" : thirdPartyAuthDeployCode,
+				options,
+			)
 		} else {
 			throw new Error("no third party auth params")
 		}
