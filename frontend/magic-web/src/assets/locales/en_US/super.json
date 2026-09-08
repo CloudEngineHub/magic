@@ -5221,6 +5221,8 @@
 		"inputFolderName": "Input Folder Name",
 		"inputProjectName": "Input Project Name",
 		"inputWorkspaceName": "Input Workspace Name",
+		"loadMore": "Load more",
+		"loadingMore": "Loading more...",
 		"mentionEmptyProject": "This project has no files",
 		"mentionOtherProjectFiles": "Select Other Project/File",
 		"mentionProjectLimit": "You can select projects or files from up to 10 different projects",

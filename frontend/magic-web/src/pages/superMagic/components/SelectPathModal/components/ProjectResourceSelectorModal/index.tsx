@@ -12,7 +12,7 @@ import {
 	IconFolder,
 	IconFileSearch,
 } from "@tabler/icons-react"
-import { Bot, Box, UsersRound, Wrench } from "lucide-react"
+import { Bot, Box, Loader2, UsersRound, Wrench } from "lucide-react"
 import { isEmpty, last } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { useMatch } from "react-router"
@@ -87,6 +87,8 @@ import { crewService, type MyCrewView } from "@/services/crew/CrewService"
 
 const FIXED_WORKSPACE_IDS = new Set<string>([SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID])
 const RESOURCE_WORKSPACE_IDS = new Set<string>([MY_SKILLS_WORKSPACE_ID, MY_AGENTS_WORKSPACE_ID])
+/** Align with MySkills / MyCrew list page size; selector loads more on demand. */
+const RESOURCE_PROJECTS_PAGE_SIZE = 20
 
 type ResourceProject = ProjectListItem & {
 	resourceType?: "skill" | "agent"
@@ -175,6 +177,10 @@ function ProjectResourceSelectorModal({
 	const [viewMode, setViewMode] = useState<ViewMode>("workspace")
 	const effectiveViewMode = isProjectOnly && viewMode === "directory" ? "project" : viewMode
 	const [loading, setLoading] = useState(false)
+	const [loadingMoreResources, setLoadingMoreResources] = useState(false)
+	const [resourceProjectsPage, setResourceProjectsPage] = useState(1)
+	const [hasMoreResourceProjects, setHasMoreResourceProjects] = useState(false)
+	const loadingMoreResourcesRef = useRef(false)
 	const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null)
 	const [currentProject, setCurrentProject] = useState<ProjectListItem | null>(null)
 	const [availableWorkspaces, setAvailableWorkspaces] = useState<Workspace[]>(workspaces)
@@ -422,39 +428,74 @@ function ProjectResourceSelectorModal({
 		},
 	)
 
-	const fetchResourceProjects = useMemoizedFn(async (workspaceId: string) => {
-		setLoading(true)
+	const resetResourceProjectsPagination = useMemoizedFn(() => {
+		setResourceProjectsPage(1)
+		setHasMoreResourceProjects(false)
+		setLoadingMoreResources(false)
+		loadingMoreResourcesRef.current = false
+	})
+
+	const fetchResourceProjects = useMemoizedFn(async (workspaceId: string, page = 1) => {
+		const isLoadMore = page > 1
+		if (isLoadMore) {
+			if (loadingMoreResourcesRef.current || loading || !hasMoreResourceProjects) return
+			loadingMoreResourcesRef.current = true
+			setLoadingMoreResources(true)
+		} else {
+			setLoading(true)
+			resetResourceProjectsPagination()
+		}
+
 		try {
-			if (workspaceId === MY_SKILLS_WORKSPACE_ID) {
-				const response = await skillsService.getCreatedSkills({ page: 1, page_size: 99 })
-				setAvailableProjects(
-					response.list.map((item) =>
-						mapResourceProject(item, "skill", MY_SKILLS_WORKSPACE_ID),
-					),
-				)
-			} else {
-				const response = await crewService.getCreatedAgents({ page: 1, page_size: 99 })
-				setAvailableProjects(
-					response.list.map((item) =>
-						mapResourceProject(item, "agent", MY_AGENTS_WORKSPACE_ID),
-					),
-				)
-			}
+			const params = { page, page_size: RESOURCE_PROJECTS_PAGE_SIZE }
+			const isSkillsWorkspace = workspaceId === MY_SKILLS_WORKSPACE_ID
+			const response = isSkillsWorkspace
+				? await skillsService.getCreatedSkills(params)
+				: await crewService.getCreatedAgents(params)
+			const mapped = response.list.map((item) =>
+				mapResourceProject(
+					item,
+					isSkillsWorkspace ? "skill" : "agent",
+					isSkillsWorkspace ? MY_SKILLS_WORKSPACE_ID : MY_AGENTS_WORKSPACE_ID,
+				),
+			)
+
+			setAvailableProjects((prev) => {
+				if (!isLoadMore) return mapped
+				const existingIds = new Set(prev.map((project) => project.id))
+				return [...prev, ...mapped.filter((project) => !existingIds.has(project.id))]
+			})
+			setResourceProjectsPage(response.page)
+			setHasMoreResourceProjects(response.page * response.pageSize < response.total)
 		} catch (error) {
 			console.error("Failed to fetch personal resources:", error)
 			magicToast.error(t("selectPathModal.fetchProjectsFailed"))
-			setAvailableProjects([])
+			if (!isLoadMore) {
+				setAvailableProjects([])
+				resetResourceProjectsPagination()
+			}
 		} finally {
-			setLoading(false)
+			if (isLoadMore) {
+				loadingMoreResourcesRef.current = false
+				setLoadingMoreResources(false)
+			} else {
+				setLoading(false)
+			}
 		}
+	})
+
+	const handleLoadMoreResourceProjects = useMemoizedFn(async () => {
+		if (!currentWorkspace || !RESOURCE_WORKSPACE_IDS.has(currentWorkspace.id)) return
+		await fetchResourceProjects(currentWorkspace.id, resourceProjectsPage + 1)
 	})
 
 	// 获取工作区的项目列表
 	const fetchProjectsByWorkspace = useMemoizedFn(async (workspaceId: string) => {
 		if (RESOURCE_WORKSPACE_IDS.has(workspaceId)) {
-			await fetchResourceProjects(workspaceId)
+			await fetchResourceProjects(workspaceId, 1)
 			return
 		}
+		resetResourceProjectsPagination()
 		if (workspaceId === SHARE_WORKSPACE_ID) {
 			await fetchCollaborationProjects()
 			return
@@ -522,6 +563,7 @@ function ProjectResourceSelectorModal({
 		setCurrentWorkspace(null)
 		setCurrentProject(null)
 		setAvailableProjects([])
+		resetResourceProjectsPagination()
 		setAttachments([])
 		setPath([])
 		setDirectories([])
@@ -1270,6 +1312,7 @@ function ProjectResourceSelectorModal({
 			setCurrentWorkspace(null)
 			setCurrentProject(null)
 			setAvailableProjects([])
+			resetResourceProjectsPagination()
 			setAttachments([])
 			setPath([])
 			setDirectories([])
@@ -1773,6 +1816,29 @@ function ProjectResourceSelectorModal({
 						</div>
 					</div>
 				)}
+				{hasMoreResourceProjects &&
+				currentWorkspace &&
+				RESOURCE_WORKSPACE_IDS.has(currentWorkspace.id) ? (
+					<div className="px-1 py-2">
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-8 w-full text-xs text-muted-foreground"
+							onClick={() => void handleLoadMoreResourceProjects()}
+							disabled={loadingMoreResources || loading}
+							data-testid="project-resource-selector-load-more"
+						>
+							{loadingMoreResources ? (
+								<>
+									<Loader2 className="mr-1 size-3.5 animate-spin" />
+									{t("selectPathModal.loadingMore")}
+								</>
+							) : (
+								t("selectPathModal.loadMore")
+							)}
+						</Button>
+					</div>
+				) : null}
 			</>
 		)
 	}

@@ -5223,6 +5223,8 @@
 		"inputFolderName": "输入文件夹名称",
 		"inputProjectName": "输入项目名称",
 		"inputWorkspaceName": "输入工作区名称",
+		"loadMore": "加载更多",
+		"loadingMore": "加载更多中...",
 		"mentionEmptyProject": "当前项目暂无文件",
 		"mentionOtherProjectFiles": "选择其它项目/文件",
 		"mentionProjectLimit": "最多只能选择 10 个不同项目中的项目或文件",
