@@ -40,13 +40,14 @@ use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\Locker\LockerInterface;
-use App\Infrastructure\Util\SSRF\SSRFUtil;
 use DateTime;
 use Dtyq\AsyncEvent\AsyncEventUtil;
+use Dtyq\CloudFile\Kernel\Utils\SafeRemoteFileDownloader;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\Amqp\Producer;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -67,10 +68,6 @@ readonly class VideoOperationAppService
     use HasLogger;
 
     private const string INTERNAL_PROBE_RESULT_KEY = '__video_media_probe_result';
-
-    private const int PROBE_DOWNLOAD_MAX_BYTES = 104857600;
-
-    private const int STREAM_BUFFER_BYTES = 8192;
 
     private const string AUDIT_STATUS_SUCCESS = 'SUCCESS';
 
@@ -94,6 +91,8 @@ readonly class VideoOperationAppService
         private FileDomainService $fileDomainService,
         private VideoBillingDetailsResolver $videoBillingDetailsResolver,
         private VideoMediaProbeInterface $videoMediaProbe,
+        private GeminiVideoClient $geminiVideoClient,
+        private SafeRemoteFileDownloader $remoteFileDownloader,
         private VideoInputMediaMetadataResolver $videoInputMediaMetadataResolver,
         private Producer $producer,
         private LockerInterface $locker,
@@ -1213,22 +1212,28 @@ readonly class VideoOperationAppService
      */
     private function probeVideoFromUrl(VideoQueueOperationEntity $operation, string $url, string $probeSource): ?array
     {
-        $tempPath = tempnam(sys_get_temp_dir(), 'video-probe-');
-        if ($tempPath === false) {
-            $this->logger->warning('video billing probe failed', [
-                'operation_id' => $operation->getId(),
-                'organization_code' => $operation->getOrganizationCode(),
-                'probe_source' => $probeSource,
-                'fallback_used' => false,
-                'error' => 'create temporary probe file failed',
-            ]);
-
-            return null;
-        }
-
+        $tempPath = null;
+        $downloadedPath = null;
         try {
-            $this->downloadProbeSourceToTempFile($url, $tempPath);
-            return $this->probeVideoFromFile($operation, $tempPath, $probeSource);
+            $executorConfig = $this->queueOperationExecutionDomainService->getConfig($operation);
+            if ($operation->getProviderCode() === ProviderCode::Gemini->value) {
+                $tempPath = tempnam(sys_get_temp_dir(), 'video-probe-');
+                if ($tempPath === false) {
+                    throw new RuntimeException('create temporary probe file failed');
+                }
+                $this->geminiVideoClient->downloadMediaToFile(
+                    $executorConfig->getBaseUrl(),
+                    $executorConfig->getApiKey(),
+                    $url,
+                    $tempPath,
+                    ['operation_id' => $operation->getId(), 'probe_source' => $probeSource],
+                    $executorConfig->getExtraString('proxy_url'),
+                );
+                $downloadedPath = $tempPath;
+            } else {
+                $downloadedPath = $this->remoteFileDownloader->download($url)->getRealPath();
+            }
+            return $this->probeVideoFromFile($operation, $downloadedPath, $probeSource);
         } catch (Throwable $throwable) {
             $this->logger->warning('video billing probe failed', [
                 'operation_id' => $operation->getId(),
@@ -1240,56 +1245,12 @@ readonly class VideoOperationAppService
 
             return null;
         } finally {
-            @unlink($tempPath);
-        }
-    }
-
-    private function downloadProbeSourceToTempFile(string $url, string $tempPath): void
-    {
-        // Probe sources come from provider execution results; keep the URL safety checks,
-        // but skip the extra redirect probe so we do not depend on live network behavior here.
-        $safeUrl = SSRFUtil::getSafeUrl($url, replaceIp: false, allowRedirect: true);
-        $context = stream_context_create([
-            'ssl' => [
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-            ],
-        ]);
-        $remoteStream = fopen($safeUrl, 'rb', false, $context);
-        $localStream = fopen($tempPath, 'wb');
-        if (! is_resource($remoteStream) || ! is_resource($localStream)) {
-            if (is_resource($remoteStream)) {
-                fclose($remoteStream);
+            if (is_string($downloadedPath) && is_file($downloadedPath)) {
+                @unlink($downloadedPath);
             }
-            if (is_resource($localStream)) {
-                fclose($localStream);
+            if (is_string($tempPath) && $tempPath !== $downloadedPath && is_file($tempPath)) {
+                @unlink($tempPath);
             }
-            throw new RuntimeException('open video probe stream failed');
-        }
-
-        try {
-            $downloadedBytes = 0;
-            while (! feof($remoteStream)) {
-                $buffer = fread($remoteStream, self::STREAM_BUFFER_BYTES);
-                if ($buffer === false) {
-                    throw new RuntimeException('read video probe stream failed');
-                }
-                if ($buffer === '') {
-                    continue;
-                }
-
-                $downloadedBytes += strlen($buffer);
-                if ($downloadedBytes > self::PROBE_DOWNLOAD_MAX_BYTES) {
-                    throw new RuntimeException('video probe file exceeds max size');
-                }
-
-                if (fwrite($localStream, $buffer) === false) {
-                    throw new RuntimeException('write video probe temp file failed');
-                }
-            }
-        } finally {
-            fclose($remoteStream);
-            fclose($localStream);
         }
     }
 

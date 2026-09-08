@@ -52,52 +52,9 @@ readonly class GeminiVideoClient
     /** @return array{bytes_base64_encoded: string, mime_type: string} */
     public function downloadMedia(string $baseUrl, string $apiKey, string $uri, array $logContext = [], string $proxyUrl = ''): array
     {
-        $url = $this->normalizeMediaUrl($baseUrl, $uri);
-        try {
-            $client = $this->createClient($proxyUrl);
-            $safeUrl = SSRFUtil::getSafeUrl($url, replaceIp: false, allowRedirect: false);
-            $apiKeyAllowed = $this->sameOrigin($baseUrl, $safeUrl);
-            for ($redirect = 0; $redirect <= 3; ++$redirect) {
-                $headers = ['Accept' => '*/*'];
-                if ($apiKeyAllowed) {
-                    $headers['x-goog-api-key'] = $apiKey;
-                }
-                $response = $client->get($safeUrl, [
-                    'headers' => $headers,
-                    'allow_redirects' => false,
-                    'http_errors' => false,
-                ]);
-                $status = $response->getStatusCode();
-                if ($status >= 400) {
-                    throw ProviderVideoException::retriable('gemini video media download failed', null, $status);
-                }
-                if ($status < 300) {
-                    break;
-                }
-                $location = trim($response->getHeaderLine('Location'));
-                if ($location === '') {
-                    throw ProviderVideoException::retriable('gemini video media download failed: redirect location missing');
-                }
-                if ($redirect === 3) {
-                    throw ProviderVideoException::retriable('gemini video media download failed: redirect limit exceeded');
-                }
-                $redirectUrl = (string) UriResolver::resolve(new Uri($safeUrl), new Uri($location));
-                $nextSafeUrl = SSRFUtil::getSafeUrl($redirectUrl, replaceIp: false, allowRedirect: false);
-                if (! $this->sameOrigin($safeUrl, $nextSafeUrl)) {
-                    $apiKeyAllowed = false;
-                }
-                $safeUrl = $nextSafeUrl;
-            }
-        } catch (RequestException $exception) {
-            throw ProviderVideoException::retriable('gemini video media download failed', $exception, $exception->getResponse()?->getStatusCode());
-        } catch (ProviderVideoException $exception) {
-            throw $exception;
-        } catch (Throwable $throwable) {
-            throw ProviderVideoException::retriable('gemini video media download failed', $throwable);
-        }
-
-        $chunks = [];
+        $response = $this->requestMedia($baseUrl, $apiKey, $uri, $proxyUrl);
         $body = $response->getBody();
+        $chunks = [];
         $downloadedBytes = 0;
         while (! $body->eof()) {
             $chunk = $body->read(8192);
@@ -123,6 +80,90 @@ readonly class GeminiVideoClient
         return ['bytes_base64_encoded' => base64_encode($content), 'mime_type' => $mimeType];
     }
 
+    public function downloadMediaToFile(
+        string $baseUrl,
+        string $apiKey,
+        string $uri,
+        string $targetPath,
+        array $logContext = [],
+        string $proxyUrl = '',
+    ): void {
+        $response = $this->requestMedia($baseUrl, $apiKey, $uri, $proxyUrl);
+        $localStream = fopen($targetPath, 'wb');
+        if (! is_resource($localStream)) {
+            throw ProviderVideoException::retriable('gemini video media download failed: cannot open target file');
+        }
+
+        try {
+            $body = $response->getBody();
+            $downloadedBytes = 0;
+            while (! $body->eof()) {
+                $chunk = $body->read(8192);
+                if ($chunk === '') {
+                    continue;
+                }
+                $downloadedBytes += strlen($chunk);
+                if ($downloadedBytes > self::MEDIA_MAX_BYTES) {
+                    throw ProviderVideoException::retriable('gemini video media download failed: response exceeds max size');
+                }
+                if (fwrite($localStream, $chunk) === false) {
+                    throw ProviderVideoException::retriable('gemini video media download failed: cannot write target file');
+                }
+            }
+        } finally {
+            fclose($localStream);
+        }
+    }
+
+    private function requestMedia(string $baseUrl, string $apiKey, string $uri, string $proxyUrl = ''): ResponseInterface
+    {
+        $url = $this->normalizeMediaUrl($baseUrl, $uri);
+        try {
+            $client = $this->createClient($proxyUrl);
+            $safeUrl = $this->getSafeMediaUrl($url, $baseUrl);
+            $apiKeyAllowed = $this->sameOrigin($baseUrl, $safeUrl);
+            for ($redirect = 0; $redirect <= 3; ++$redirect) {
+                $headers = ['Accept' => '*/*'];
+                if ($apiKeyAllowed) {
+                    $headers['x-goog-api-key'] = $apiKey;
+                }
+                $response = $client->get($safeUrl, [
+                    'headers' => $headers,
+                    'allow_redirects' => false,
+                    'http_errors' => false,
+                ]);
+                $status = $response->getStatusCode();
+                if ($status >= 400) {
+                    throw ProviderVideoException::retriable('gemini video media download failed', null, $status);
+                }
+                if ($status < 300) {
+                    return $response;
+                }
+                $location = trim($response->getHeaderLine('Location'));
+                if ($location === '') {
+                    throw ProviderVideoException::retriable('gemini video media download failed: redirect location missing');
+                }
+                if ($redirect === 3) {
+                    throw ProviderVideoException::retriable('gemini video media download failed: redirect limit exceeded');
+                }
+                $redirectUrl = (string) UriResolver::resolve(new Uri($safeUrl), new Uri($location));
+                $nextSafeUrl = $this->getSafeMediaUrl($redirectUrl, $baseUrl);
+                if (! $this->sameOrigin($safeUrl, $nextSafeUrl)) {
+                    $apiKeyAllowed = false;
+                }
+                $safeUrl = $nextSafeUrl;
+            }
+        } catch (RequestException $exception) {
+            throw ProviderVideoException::retriable('gemini video media download failed', $exception, $exception->getResponse()?->getStatusCode());
+        } catch (ProviderVideoException $exception) {
+            throw $exception;
+        } catch (Throwable $throwable) {
+            throw ProviderVideoException::retriable('gemini video media download failed', $throwable);
+        }
+
+        throw ProviderVideoException::retriable('gemini video media download failed');
+    }
+
     private function sameOrigin(string $first, string $second): bool
     {
         $firstParts = parse_url($first);
@@ -138,6 +179,24 @@ readonly class GeminiVideoClient
         $secondPort = (int) ($secondParts['port'] ?? ($secondScheme === 'https' ? 443 : 80));
 
         return $firstScheme === $secondScheme && $firstHost === $secondHost && $firstPort === $secondPort;
+    }
+
+    private function getSafeMediaUrl(string $url, string $geminiBaseUrl): string
+    {
+        $whiteList = [];
+        if ($this->sameOrigin($geminiBaseUrl, $url)) {
+            $host = parse_url($geminiBaseUrl, PHP_URL_HOST);
+            if (is_string($host) && $host !== '') {
+                $whiteList[] = $host;
+            }
+        }
+
+        return SSRFUtil::getSafeUrl(
+            $url,
+            whiteList: $whiteList,
+            replaceIp: false,
+            allowRedirect: true,
+        );
     }
 
     private function request(
