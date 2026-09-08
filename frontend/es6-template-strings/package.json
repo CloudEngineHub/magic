@@ -1,6 +1,6 @@
 {
 	"name": "@dtyq/es6-template-strings",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"description": "Lightweight ES6 template string engine for dynamic string interpolation.",
 	"keywords": [
 		"template-string",

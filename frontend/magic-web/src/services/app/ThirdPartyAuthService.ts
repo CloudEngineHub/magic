@@ -494,7 +494,7 @@ class ThirdPartyAuthService {
 			 * (as authorization requires obtaining the corresponding third-party organization ID, application key, etc.)
 			 */
 			logger.log("获取私有化配置", { deployCode })
-			const data = await CommonApi.getPrivateConfigure(deployCode, options)
+			const data = await CommonApi.getPrivateConfigure(deployCode, { enableRequestUnion: true, enableErrorMessagePrompt: false, ...options })
 			logger.log("私有化配置获取完成")
 
 			/**
@@ -601,7 +601,7 @@ class ThirdPartyAuthService {
 			if (!(await this.canBackgroundProbe())) return "unsupported"
 
 			// Load the target deployment configuration for the platform SDK without switching the current access cluster.
-			const targetConfig = await CommonApi.getPrivateConfigure(deployCode, options)
+			const targetConfig = await CommonApi.getPrivateConfigure(deployCode, { enableRequestUnion: true, enableErrorMessagePrompt: false, ...options })
 			await service
 				.get<ConfigService>("configService")
 				.setClusterConfig(deployCode, targetConfig.config)

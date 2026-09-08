@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
-import {
-	IntermediateMessageType,
-	type SuperMagicChunkMessage,
-} from "@/types/chat/intermediate_message"
+import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
+import mockStream from "@/pages/superMagic/stores/mock_v1.json"
+import { IntermediateMessageType } from "@/types/chat/intermediate_message"
 import { getToolRemarkPreviewStrategy } from "../registry"
 
 const CORRELATION_ID = "3c93bb53-a127-4de2-96f5-85c78ef2e87a"
