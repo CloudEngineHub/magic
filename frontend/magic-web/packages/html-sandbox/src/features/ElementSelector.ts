@@ -6,6 +6,7 @@
 import type { EditorBridge } from "../core/EditorBridge"
 import { getElementSelector, isInjectedElement } from "../utils/dom"
 import { normalizeColor, normalizeTextAlign } from "../utils/css"
+import { getEditableTextContent } from "../utils/textContent"
 
 const TEXT_EDITING_STYLE_ID = "magic-editor-text-editing-style"
 
@@ -144,7 +145,7 @@ export class ElementSelector {
 			const { rect, rotation } = this.getElementRectWithRotation(element)
 			const isText = this.isTextElement(element)
 			const hasDirectTextContent = this.hasDirectTextContent(element)
-			const textContent = element.textContent?.trim() || ""
+			const textContent = getEditableTextContent(element).trim()
 			const imageMetadata = this.getImageMetadata(element)
 			const attributes = this.getCommonAttributes(element)
 
@@ -848,7 +849,7 @@ export class ElementSelector {
 			const { rect, rotation } = this.getElementRectWithRotation(element)
 			const isText = this.isTextElement(element)
 			const hasDirectTextContent = this.hasDirectTextContent(element)
-			const textContent = element.textContent?.trim() || ""
+			const textContent = getEditableTextContent(element).trim()
 			const imageMetadata = this.getImageMetadata(element)
 			const attributes = this.getCommonAttributes(element)
 

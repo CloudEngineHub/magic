@@ -20,6 +20,7 @@ import { EditorLogger } from "../utils/EditorLogger"
 import { findElement } from "../utils/ElementSelector"
 import { camelToKebab } from "../utils/css"
 import { normalizeSafeHref } from "../utils/safeUrl"
+import { getEditableTextContent, setElementTextContent } from "../utils/textContent"
 import {
 	assignEditorNodeIds,
 	assignUniqueIdsToClone,
@@ -714,10 +715,10 @@ export class StyleManager {
 	 */
 	async setTextContent(selector: string, textContent: string): Promise<void> {
 		const element = findElement(selector)
-		const previousValue = element.textContent || ""
+		const previousValue = getEditableTextContent(element)
 
-		// Apply text content
-		element.textContent = textContent
+		// Apply text content without wiping non-text children
+		setElementTextContent(element, textContent)
 
 		// Record command
 		this.commandHistory.push({
@@ -737,7 +738,7 @@ export class StyleManager {
 	 */
 	getTextContent(selector: string): { textContent: string; hasText: boolean } {
 		const element = findElement(selector)
-		const textContent = element.textContent || ""
+		const textContent = getEditableTextContent(element)
 		const hasText = textContent.trim().length > 0
 
 		return { textContent, hasText }
@@ -879,10 +880,10 @@ export class StyleManager {
 	 */
 	async updateTextContent(selector: string, content: string): Promise<void> {
 		const element = findElement(selector)
-		const previousValue = element.textContent || ""
+		const previousValue = getEditableTextContent(element)
 
-		// Apply text content
-		element.textContent = content
+		// Apply text content without wiping non-text children
+		setElementTextContent(element, content)
 
 		// Record command
 		this.commandHistory.push({
@@ -1827,7 +1828,7 @@ export class StyleManager {
 
 			// Handle text content restoration
 			if (textContent !== undefined) {
-				element.textContent = textContent
+				setElementTextContent(element, textContent)
 				return
 			}
 
@@ -2039,11 +2040,11 @@ export class StyleManager {
 					break
 				}
 				case "SET_TEXT_CONTENT": {
-					element.textContent = textContent
+					setElementTextContent(element, textContent)
 					break
 				}
 				case "UPDATE_TEXT_CONTENT": {
-					element.textContent = content
+					setElementTextContent(element, content)
 					break
 				}
 				case "SET_ELEMENT_POSITION": {

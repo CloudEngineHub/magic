@@ -1084,6 +1084,31 @@ describe("StyleManager", () => {
 			expect(element.textContent).toBe("New Text")
 		})
 
+		it("keeps image nodes when updating a mixed container", async () => {
+			container.innerHTML =
+				"<div id='test'><img id='icon' src='icon.png'>从低渗透率盆地读向高增长脊线</div>"
+			const element = container.querySelector("#test") as HTMLElement
+			const image = container.querySelector("#icon") as HTMLImageElement
+
+			await styleManager.updateTextContent("div#test", "新的标题")
+
+			expect(element.querySelector("#icon")).toBe(image)
+			expect(image.getAttribute("src")).toBe("icon.png")
+			expect(element.textContent).toBe("新的标题")
+		})
+
+		it("restores mixed-container text on undo without dropping the image", async () => {
+			container.innerHTML =
+				"<div id='test'><img id='icon' src='icon.png'>从低渗透率盆地读向高增长脊线</div>"
+			const element = container.querySelector("#test") as HTMLElement
+
+			await styleManager.updateTextContent("div#test", "新的标题")
+			await styleManager.undo()
+
+			expect(element.querySelector("#icon")).not.toBeNull()
+			expect(element.textContent).toBe("从低渗透率盆地读向高增长脊线")
+		})
+
 		it("should not record command during batch mode", async () => {
 			container.innerHTML = "<div id='test'>Original Text</div>"
 

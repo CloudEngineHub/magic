@@ -802,6 +802,28 @@ describe("ElementSelector", () => {
 				}),
 			)
 		})
+
+		it("reports only the container's own text when it also has an image", () => {
+			container.innerHTML = `
+				<div id="card">
+					<img src="icon.png" alt="" />
+					从低渗透率盆地读向高增长脊线
+					<p>Subtitle</p>
+				</div>
+			`
+			const element = container.querySelector("#card") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					isTextElement: true,
+					hasDirectTextContent: true,
+					textContent: "从低渗透率盆地读向高增长脊线",
+				}),
+			)
+		})
 	})
 
 	describe("Multi-select functionality", () => {
