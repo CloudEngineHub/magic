@@ -97,7 +97,7 @@ readonly class Wan30GenerationCapabilityProvider
                 )->toArray(),
                 VideoInputMode::KeyframeGuided->value => $keyframeGuided,
                 VideoInputMode::OmniReference->value => VideoInputModeDefinition::omniReference(
-                    description: $this->translateInputMode('omni_reference', ['max_count' => 20]),
+                    description: $this->translateInputMode('wan30_omni_reference'),
                     supportedFields: ['reference_images', 'reference_videos', 'reference_audios'],
                     maxCount: 20,
                     variants: [
@@ -109,8 +109,8 @@ readonly class Wan30GenerationCapabilityProvider
                 VideoInputMode::VideoEdit->value => array_merge(
                     VideoInputModeDefinition::videoEdit(
                         description: $this->translateInputMode('video_edit'),
-                        supportedFields: ['reference_videos'],
-                        maxCount: 1,
+                        supportedFields: ['reference_images', 'reference_videos'],
+                        maxCount: 7,
                     )->toArray(),
                     ['generation_constraints' => ['durations' => []]],
                 ),

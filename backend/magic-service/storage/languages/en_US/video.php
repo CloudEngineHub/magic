@@ -18,6 +18,8 @@ return [
     'input_modes' => [
         'standard' => 'Standard text-to-video mode without any reference assets.',
         'omni_reference' => 'Upload 1 to :max_count reference images to generate a video, with up to 1 reference video. Example: combine the subject from @image 1 with the motion from @video 1 to create an atmospheric short film.',
+        'wan30_omni_reference' => 'Supports up to 10 reference images, 5 reference videos, and 5 reference audios, with a maximum of 20 reference assets in total. Example: combine the subject from @image 1 with the motion from @video 1 to create an atmospheric short film.',
+        'gemini_omni_reference' => 'Upload 1 to 8 reference images to generate a video; when also uploading 1 reference video, up to 6 reference images are supported. Example: combine the subject from @image 1 with the motion from @video 1 to create an atmospheric short film.',
         'minimax_h3_omni_reference' => 'Supports up to 9 reference images, 3 reference videos, and 3 reference audios. Reference audio must be used with a reference image or video.',
         'minimax_h3_omni_reference_mode' => [
             'reference_media' => 'Mix reference images, videos, and audios, with up to 9 images and up to 3 videos and audios each. Reference audio must be paired with an image or video.',

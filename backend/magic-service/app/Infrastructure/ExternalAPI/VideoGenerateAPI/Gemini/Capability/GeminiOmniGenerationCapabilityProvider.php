@@ -60,10 +60,18 @@ readonly class GeminiOmniGenerationCapabilityProvider
                 VideoInputMode::ImageReference->value => VideoInputModeDefinition::imageReference($translate('image_reference.single'), 1, ['asset'], false)->toArray(),
                 VideoInputMode::KeyframeGuided->value => VideoInputModeDefinition::keyframeGuided($translate('keyframe_guided.start_end'), ['start', 'end'])->toArray(),
                 VideoInputMode::VideoEdit->value => array_merge(
-                    VideoInputModeDefinition::videoEdit($translate('video_edit'), ['reference_videos'], 1)->toArray(),
+                    VideoInputModeDefinition::videoEdit($translate('video_edit'), ['reference_images', 'reference_videos'], 7)->toArray(),
                     ['generation_constraints' => ['durations' => []]],
                 ),
-                VideoInputMode::OmniReference->value => VideoInputModeDefinition::omniReference($translate('omni_reference', ['max_count' => 8]), ['reference_images', 'reference_videos', 'reference_audios'], 8)->toArray(),
+                VideoInputMode::OmniReference->value => VideoInputModeDefinition::omniReference(
+                    $translate('gemini_omni_reference'),
+                    ['reference_images', 'reference_videos', 'reference_audios'],
+                    8,
+                    [
+                        ['code' => 'reference_images', 'description' => $translate('gemini_omni_reference'), 'limits' => ['reference_images' => ['max' => 8], 'reference_videos' => ['max' => 0]]],
+                        ['code' => 'reference_video', 'description' => $translate('gemini_omni_reference'), 'limits' => ['reference_images' => ['max' => 6], 'reference_videos' => ['max' => 1]]],
+                    ],
+                )->toArray(),
             ],
         ]);
     }

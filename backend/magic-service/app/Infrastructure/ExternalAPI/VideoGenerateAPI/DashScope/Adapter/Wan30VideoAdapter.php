@@ -487,11 +487,15 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
     private function buildVideoEditMedia(array $inputs, array &$accepted): array
     {
         $videos = $inputs['reference_videos'] ?? [];
-        if (count($videos) !== 1 || $this->hasItems($inputs, 'reference_images') || $this->hasItems($inputs, 'reference_audios') || $this->hasItems($inputs, 'frames')) {
-            throw new InvalidArgumentException('Wan 3.x video edit mode requires exactly one reference video.');
+        $images = $inputs['reference_images'] ?? [];
+        if (count($videos) !== 1 || count($images) > 6 || $this->hasItems($inputs, 'reference_audios') || $this->hasItems($inputs, 'frames')) {
+            throw new InvalidArgumentException('Wan 3.x video edit mode requires one reference video and up to six reference images.');
         }
-        $accepted[] = 'inputs.reference_videos';
-        return [['type' => 'reference_video', 'url' => $videos[0]['uri']]];
+        $accepted = array_merge($accepted, ['inputs.reference_images', 'inputs.reference_videos']);
+        return array_merge(
+            $this->typedMedia($images, 'reference_image'),
+            [['type' => 'reference_video', 'url' => $videos[0]['uri']]],
+        );
     }
 
     private function typedMedia(array $items, string $type): array

@@ -231,7 +231,11 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         if ($mode === VideoInputMode::KeyframeGuided->value && (($inputs['frames'] ?? []) === [] || ($inputs['reference_images'] ?? []) !== [] || ($inputs['reference_videos'] ?? []) !== [])) {
             throw new InvalidArgumentException('Gemini keyframe mode requires frames only.');
         }
-        if ($mode === VideoInputMode::VideoEdit->value && (($inputs['reference_videos'] ?? []) === [] || ($inputs['frames'] ?? []) !== [] || ($inputs['reference_images'] ?? []) !== [])) {
+        if ($mode === VideoInputMode::VideoEdit->value
+            && (count($inputs['reference_videos'] ?? []) !== 1
+                || count($inputs['reference_images'] ?? []) > 6
+                || ($inputs['frames'] ?? []) !== []
+                || ($inputs['reference_audios'] ?? []) !== [])) {
             throw new InvalidArgumentException('Gemini video edit mode requires a reference video.');
         }
         // Omni mode accepts zero or more reference media items, so prompt-only requests stay valid.
