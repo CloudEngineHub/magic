@@ -56,11 +56,13 @@ async def validate_skill(skill_path):
     name = name.strip()
     if not name:
         return False, "Name cannot be empty"
-    # Check naming convention (kebab-case: lowercase with hyphens)
-    if not re.match(r'^[a-z0-9-]+$', name):
-        return False, f"Name '{name}' should be kebab-case (lowercase letters, digits, and hyphens only)"
-    if name.startswith('-') or name.endswith('-') or '--' in name:
-        return False, f"Name '{name}' cannot start/end with hyphen or contain consecutive hyphens"
+    # Keep the name safe as a single filesystem directory while allowing localized text.
+    if not name[0].isalpha():
+        return False, f"Name '{name}' must start with a Unicode letter"
+    if not all(character.isalnum() or character in '-_' for character in name):
+        return False, f"Name '{name}' may contain only Unicode letters, numbers, hyphens, and underscores"
+    if name.endswith(('-', '_')) or '--' in name or '__' in name or '-_' in name or '_-' in name:
+        return False, f"Name '{name}' cannot end with or contain consecutive separators"
     # Length limit: 2 to 64 characters.
     if len(name) < 2:
         return False, f"Name '{name}' is too short. Minimum length is 2 characters."

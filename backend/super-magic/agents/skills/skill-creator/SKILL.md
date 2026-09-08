@@ -18,7 +18,7 @@ Assess where the user is and jump in from there.
 - Otherwise, run `python '<skill_dir>/scripts/language.py'` before generating or editing skill content, replacing `<skill_dir>` with the skill's absolute directory, and use the returned `language` code. Language codes are passed through without a fixed allowlist, so newly supported frontend languages require no skill-side mapping update
 - Generate skill content (SKILL.md body, comments, and examples) in the selected language
 - Skills always use single-language content. Do not ask for, generate, or maintain translations or language-specific duplicate sections.
-- Keep `description` in English (triggering relies on English semantics)
+- Generate the frontmatter `description` in the selected language as well. It must describe the skill's capability and trigger conditions in the same language as the rest of the skill.
 
 When the user has not explicitly specified a language, run the language helper before generating or editing skill content:
 
@@ -171,8 +171,8 @@ description: "One sentence on what this skill does. Use when [specific trigger c
 ```
 
 Frontmatter fields:
-- **name** (required): lowercase letters/digits/underscores only; must not be empty; must start with a letter; no trailing underscore; no consecutive underscores (`__`); length 2–64 chars; must exactly match the directory name
-- **description** (required): English, max 1024 chars, no angle brackets `<` `>`.
+- **name** (required): use the selected language and make it a safe single directory name; it must not be empty, start or end with a separator, contain `/`, `\\`, `.`, whitespace, or consecutive separators, and must be 2–64 characters; it must exactly match the directory name
+- **description** (required): Use the selected language, max 1024 chars, no angle brackets `<` `>`.
   Must contain two parts:
   1. **Capability summary**: what this skill does (one sentence)
   2. **Trigger conditions**: when the AI should load it ("Use when...") and example user phrases ("Also use when user says...")
@@ -332,8 +332,9 @@ After the skill is done and user-confirmed, always ask:
 **Important:** If the user only asks to "package", "pack only", or "build the .zip file" without clearly requesting upload to the skill library, you **must** use the package-only command (do **not** pass `--upload`). Only use `--upload` when the user explicitly agrees to upload or uses phrasing like "package and upload" / "upload to my skill library".
 
 `package_skill.py` automatically runs `quick_validate.py` before packaging. Checks include:
-1. Directory name and `name` field must contain only English letters, digits, and underscores — no hyphens, Chinese characters, spaces, or other special characters
-2. `name` field must exactly match the directory name
+1. Directory name and `name` field must use the selected language. Chinese, Japanese, and other Unicode letters are valid; keep technical identifiers such as API field names and tool names in stable ASCII when required by their interfaces.
+2. Use only Unicode letters or numbers, with single hyphens or underscores as separators. Do not use path separators, dots, whitespace, or other filesystem-special characters.
+3. `name` field must exactly match the directory name
 
 If validation fails, fix the issues and retry.
 
