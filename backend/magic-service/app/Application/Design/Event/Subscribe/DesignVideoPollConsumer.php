@@ -310,44 +310,60 @@ class DesignVideoPollConsumer extends ConsumerMessage
         // 目录可能已被用户改名或移动，任务完成时同步为 ID 解析出的最新相对路径。
         $entity->setFileDir($relativeFileDir);
         $uploadPath = substr($fullFileDir, strlen($filePrefix));
-        $videoUploadFile = new UploadFile($videoUrl, $uploadPath, $fileName, false);
-        $posterUploadFile = $posterUrl !== '' ? new UploadFile($posterUrl, $uploadPath, $posterFileName, false) : null;
-
-        Db::beginTransaction();
+        $videoTempPath = null;
+        $posterTempPath = null;
         try {
-            $videoTaskFile = $this->createProjectFile(
-                $dataIsolation,
-                $project,
-                $taskFileDir->getFileId(),
-                rtrim($fullFileDir, '/') . '/' . ltrim($fileName, '/'),
-                $fileName,
-                $videoUploadFile
-            );
-            $posterTaskFile = null;
-            if ($posterUploadFile !== null) {
-                $posterTaskFile = $this->createProjectFile(
+            $videoTempPath = $this->videoGatewayClient->downloadMediaToLocalFile($entity->getOperationId(), $videoUrl);
+            if ($posterUrl !== '') {
+                $posterTempPath = $this->videoGatewayClient->downloadMediaToLocalFile($entity->getOperationId(), $posterUrl);
+            }
+
+            $videoUploadFile = new UploadFile($videoTempPath, $uploadPath, $fileName, false);
+            $posterUploadFile = $posterTempPath !== null ? new UploadFile($posterTempPath, $uploadPath, $posterFileName, false) : null;
+
+            Db::beginTransaction();
+            try {
+                $videoTaskFile = $this->createProjectFile(
                     $dataIsolation,
                     $project,
                     $taskFileDir->getFileId(),
-                    rtrim($fullFileDir, '/') . '/' . ltrim($posterFileName, '/'),
-                    $posterFileName,
-                    $posterUploadFile
+                    rtrim($fullFileDir, '/') . '/' . ltrim($fileName, '/'),
+                    $fileName,
+                    $videoUploadFile
                 );
+                $posterTaskFile = null;
+                if ($posterUploadFile !== null) {
+                    $posterTaskFile = $this->createProjectFile(
+                        $dataIsolation,
+                        $project,
+                        $taskFileDir->getFileId(),
+                        rtrim($fullFileDir, '/') . '/' . ltrim($posterFileName, '/'),
+                        $posterFileName,
+                        $posterUploadFile
+                    );
+                }
+
+                $this->fileDomainService->uploadByCredential($entity->getOrganizationCode(), $videoUploadFile, StorageBucketType::SandBox, false);
+                if ($posterUploadFile !== null) {
+                    $this->fileDomainService->uploadByCredential($entity->getOrganizationCode(), $posterUploadFile, StorageBucketType::SandBox, false);
+                }
+
+                $this->domainService->markAsCompleted($dataIsolation, $entity, $outputPayload, $fileName);
+                Db::commit();
+
+                $entity->setFileId($videoTaskFile->getFileId());
+                $entity->setPosterFileId($posterTaskFile?->getFileId());
+            } catch (Throwable $throwable) {
+                Db::rollBack();
+                throw $throwable;
             }
-
-            $this->fileDomainService->uploadByCredential($entity->getOrganizationCode(), $videoUploadFile, StorageBucketType::SandBox, false);
-            if ($posterUploadFile !== null) {
-                $this->fileDomainService->uploadByCredential($entity->getOrganizationCode(), $posterUploadFile, StorageBucketType::SandBox, false);
+        } finally {
+            if ($videoTempPath !== null) {
+                @unlink($videoTempPath);
             }
-
-            $this->domainService->markAsCompleted($dataIsolation, $entity, $outputPayload, $fileName);
-            Db::commit();
-
-            $entity->setFileId($videoTaskFile->getFileId());
-            $entity->setPosterFileId($posterTaskFile?->getFileId());
-        } catch (Throwable $throwable) {
-            Db::rollBack();
-            throw $throwable;
+            if ($posterTempPath !== null) {
+                @unlink($posterTempPath);
+            }
         }
     }
 

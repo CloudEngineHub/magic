@@ -11,6 +11,7 @@ use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
+use App\Infrastructure\Util\File\TemporaryFileManager;
 use App\Infrastructure\Util\Http\GuzzleClientFactory;
 use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use App\Infrastructure\Util\SSRF\SSRFUtil;
@@ -80,21 +81,22 @@ readonly class GeminiVideoClient
         return ['bytes_base64_encoded' => base64_encode($content), 'mime_type' => $mimeType];
     }
 
-    public function downloadMediaToFile(
+    public function downloadMediaToLocalFile(
         string $baseUrl,
         string $apiKey,
         string $uri,
-        string $targetPath,
         array $logContext = [],
         string $proxyUrl = '',
-    ): void {
-        $response = $this->requestMedia($baseUrl, $apiKey, $uri, $proxyUrl);
-        $localStream = fopen($targetPath, 'wb');
-        if (! is_resource($localStream)) {
-            throw ProviderVideoException::retriable('gemini video media download failed: cannot open target file');
-        }
+    ): string {
+        $targetPath = TemporaryFileManager::createTempFile('gemini-video-');
 
+        $localStream = null;
         try {
+            $response = $this->requestMedia($baseUrl, $apiKey, $uri, $proxyUrl);
+            $localStream = fopen($targetPath, 'wb');
+            if (! is_resource($localStream)) {
+                throw ProviderVideoException::retriable('gemini video media download failed: cannot open target file');
+            }
             $body = $response->getBody();
             $downloadedBytes = 0;
             while (! $body->eof()) {
@@ -110,9 +112,16 @@ readonly class GeminiVideoClient
                     throw ProviderVideoException::retriable('gemini video media download failed: cannot write target file');
                 }
             }
+        } catch (Throwable $throwable) {
+            @unlink($targetPath);
+            throw $throwable;
         } finally {
-            fclose($localStream);
+            if (is_resource($localStream)) {
+                fclose($localStream);
+            }
         }
+
+        return $targetPath;
     }
 
     private function requestMedia(string $baseUrl, string $apiKey, string $uri, string $proxyUrl = ''): ResponseInterface

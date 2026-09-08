@@ -296,6 +296,30 @@ readonly class VideoOperationAppService
         return $response;
     }
 
+    /**
+     * 按 provider 规则把远程媒体下载到本地文件，供计费探测和归档上传共用。
+     */
+    public function downloadOperationMediaToLocalFile(string $operationId, string $url): string
+    {
+        $operation = $this->videoQueueDomainService->findOperation($operationId);
+        if ($operation === null) {
+            throw new RuntimeException('video operation not found');
+        }
+
+        $executorConfig = $this->queueOperationExecutionDomainService->getConfig($operation);
+        if ($operation->getProviderCode() === ProviderCode::Gemini->value) {
+            return $this->geminiVideoClient->downloadMediaToLocalFile(
+                $executorConfig->getBaseUrl(),
+                $executorConfig->getApiKey(),
+                $url,
+                ['operation_id' => $operationId],
+                $executorConfig->getExtraString('proxy_url'),
+            );
+        }
+
+        return $this->remoteFileDownloader->download($url)->getRealPath();
+    }
+
     public function pollOperationById(string $operationId, array $businessParams = []): bool
     {
         $operation = $this->videoQueueDomainService->findOperation($operationId);
@@ -1213,27 +1237,9 @@ readonly class VideoOperationAppService
     private function probeVideoFromUrl(VideoQueueOperationEntity $operation, string $url, string $probeSource): ?array
     {
         $tempPath = null;
-        $downloadedPath = null;
         try {
-            $executorConfig = $this->queueOperationExecutionDomainService->getConfig($operation);
-            if ($operation->getProviderCode() === ProviderCode::Gemini->value) {
-                $tempPath = tempnam(sys_get_temp_dir(), 'video-probe-');
-                if ($tempPath === false) {
-                    throw new RuntimeException('create temporary probe file failed');
-                }
-                $this->geminiVideoClient->downloadMediaToFile(
-                    $executorConfig->getBaseUrl(),
-                    $executorConfig->getApiKey(),
-                    $url,
-                    $tempPath,
-                    ['operation_id' => $operation->getId(), 'probe_source' => $probeSource],
-                    $executorConfig->getExtraString('proxy_url'),
-                );
-                $downloadedPath = $tempPath;
-            } else {
-                $downloadedPath = $this->remoteFileDownloader->download($url)->getRealPath();
-            }
-            return $this->probeVideoFromFile($operation, $downloadedPath, $probeSource);
+            $tempPath = $this->downloadOperationMediaToLocalFile($operation->getId(), $url);
+            return $this->probeVideoFromFile($operation, $tempPath, $probeSource);
         } catch (Throwable $throwable) {
             $this->logger->warning('video billing probe failed', [
                 'operation_id' => $operation->getId(),
@@ -1245,10 +1251,7 @@ readonly class VideoOperationAppService
 
             return null;
         } finally {
-            if (is_string($downloadedPath) && is_file($downloadedPath)) {
-                @unlink($downloadedPath);
-            }
-            if (is_string($tempPath) && $tempPath !== $downloadedPath && is_file($tempPath)) {
+            if (is_string($tempPath)) {
                 @unlink($tempPath);
             }
         }
