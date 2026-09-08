@@ -176,17 +176,17 @@ readonly class GeminiVideoClient
             if ($response?->getBody()->isSeekable()) {
                 $response->getBody()->rewind();
             }
-            $providerCode = $this->extractProviderCode($responseBody);
-            $errorCode = ProviderVideoErrorMapper::resolve($providerCode, $httpStatus);
+            $errorDetails = trim((string) $responseBody . ' ' . $exception->getMessage());
+            $errorCode = ProviderVideoErrorMapper::resolve($errorDetails, $httpStatus);
             $factory = ProviderVideoErrorMapper::isRetriable($httpStatus, ! $exception->hasResponse(), $errorCode) ? 'retriable' : 'nonRetriable';
             $this->logger->error('gemini video request failed', [
                 'response' => $responseBody === null ? null : PayloadLogSanitizer::sanitizeResponseBody($responseBody),
-                'provider_error_code' => $providerCode,
+                'error_code' => $errorCode->value,
                 'http_status' => $httpStatus,
                 'error_message' => $exception->getMessage(),
             ]);
             throw ProviderVideoException::$factory(
-                ProviderVideoErrorMapper::message($errorCode, null, $providerCode),
+                ProviderVideoErrorMapper::message($errorCode),
                 $exception,
                 $httpStatus,
                 (string) $errorCode->value,
@@ -240,27 +240,4 @@ readonly class GeminiVideoClient
         );
     }
 
-    private function extractProviderCode(?string $responseBody): null|int|string
-    {
-        if ($responseBody === null || trim($responseBody) === '') {
-            return null;
-        }
-
-        try {
-            $data = Json::decode($responseBody);
-        } catch (Throwable) {
-            return null;
-        }
-
-        if (! is_array($data)) {
-            return null;
-        }
-
-        $error = $data['error'] ?? null;
-        if (is_array($error) && (is_string($error['code'] ?? null) || is_int($error['code'] ?? null))) {
-            return $error['code'];
-        }
-
-        return is_string($data['code'] ?? null) || is_int($data['code'] ?? null) ? $data['code'] : null;
-    }
 }

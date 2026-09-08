@@ -130,7 +130,7 @@ readonly class DashScopeVideoClient
         } catch (RequestException $exception) {
             $httpStatus = $exception->getResponse()?->getStatusCode();
             $providerCode = $this->extractProviderCodeFromResponse($exception);
-            $errorCode = ProviderVideoErrorMapper::resolve($providerCode, $httpStatus);
+            $errorCode = ProviderVideoErrorMapper::resolve($providerCode, $httpStatus, $exception->getMessage());
             $retriable = ProviderVideoErrorMapper::isRetriable($httpStatus, ! $exception->hasResponse(), $errorCode);
             $factory = $retriable ? 'retriable' : 'nonRetriable';
             throw ProviderVideoException::$factory(

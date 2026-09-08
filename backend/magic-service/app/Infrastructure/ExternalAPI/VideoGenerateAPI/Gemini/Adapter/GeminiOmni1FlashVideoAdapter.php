@@ -180,7 +180,12 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         }
         $errorNode = is_array($detail['error'] ?? null) ? $detail['error'] : [];
         $providerCode = $errorNode['code'] ?? $detail['error_code'] ?? ($providerStatus === 'expired' ? 'TASK_TIMEOUT' : null);
-        $errorCode = ProviderVideoErrorMapper::resolve(is_string($providerCode) || is_int($providerCode) ? $providerCode : null);
+        $providerMessage = is_string($errorNode['message'] ?? null) ? $errorNode['message'] : ($detail['message'] ?? null);
+        $errorCode = ProviderVideoErrorMapper::resolve(
+            is_string($providerCode) || is_int($providerCode) ? $providerCode : null,
+            null,
+            is_string($providerMessage) ? $providerMessage : null,
+        );
         $result = ['status' => $status, 'provider_result' => $detail, 'output' => $videoUrl === '' ? [] : ['video_url' => $videoUrl, 'provider_task_id' => $providerTaskId, 'provider_base_url' => rtrim($config->getBaseUrl(), '/')], 'error' => null];
         if ($status === 'failed') {
             $result['error'] = ['code' => (string) $errorCode->value, 'message' => ProviderVideoErrorMapper::message($errorCode), 'provider_code' => $providerCode];

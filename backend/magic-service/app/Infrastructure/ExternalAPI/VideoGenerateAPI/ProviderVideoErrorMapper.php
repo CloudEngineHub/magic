@@ -15,46 +15,119 @@ use function Hyperf\Translation\trans;
 
 final class ProviderVideoErrorMapper
 {
-    public static function resolve(null|int|string $providerCode, ?int $httpStatus = null): VideoGenerateErrorCode
+    public static function resolve(
+        null|int|string $providerCode,
+        ?int $httpStatus = null,
+        ?string $providerMessage = null,
+    ): VideoGenerateErrorCode
     {
-        $code = preg_replace('/[^a-z0-9]+/', '', strtolower(trim((string) $providerCode))) ?? '';
-        if ($code === '') {
-            return match ($httpStatus) {
-                401, 403 => VideoGenerateErrorCode::AUTHENTICATION_FAILED,
-                429 => VideoGenerateErrorCode::RATE_LIMITED,
-                default => VideoGenerateErrorCode::GENERAL_ERROR,
-            };
+        if ($httpStatus === 401 || $httpStatus === 403) {
+            return VideoGenerateErrorCode::AUTHENTICATION_FAILED;
+        }
+        if ($httpStatus === 429) {
+            return VideoGenerateErrorCode::RATE_LIMITED;
         }
 
-        return match (true) {
-            str_starts_with($code, 'inputtextsensitivecontentdetected') => VideoGenerateErrorCode::INPUT_TEXT_AUDIT_FAILED,
-            str_starts_with($code, 'inputimagesensitivecontentdetected') => VideoGenerateErrorCode::INPUT_IMAGE_AUDIT_FAILED,
-            str_starts_with($code, 'inputvideosensitivecontentdetected') => VideoGenerateErrorCode::INPUT_VIDEO_AUDIT_FAILED,
-            str_starts_with($code, 'inputaudiosensitivecontentdetected') => VideoGenerateErrorCode::INPUT_AUDIO_AUDIT_FAILED,
-            str_starts_with($code, 'outputtextsensitivecontentdetected') => VideoGenerateErrorCode::OUTPUT_TEXT_AUDIT_FAILED,
-            str_starts_with($code, 'outputvideosensitivecontentdetected') => VideoGenerateErrorCode::OUTPUT_VIDEO_AUDIT_FAILED,
-            str_starts_with($code, 'outputaudiosensitivecontentdetected') => VideoGenerateErrorCode::OUTPUT_AUDIO_AUDIT_FAILED,
-            in_array($code, ['invalidprompt', 'promptcheckfailed', 'promptblocked'], true) => VideoGenerateErrorCode::INVALID_PROMPT,
-            in_array($code, ['invalidaspectratio', 'invalidparameter.invalidaspectratio'], true) => VideoGenerateErrorCode::INVALID_ASPECT_RATIO,
-            in_array($code, ['invalidfileformat', 'unsupportedvideoformat', 'unsupportedformat'], true) => VideoGenerateErrorCode::UNSUPPORTED_VIDEO_FORMAT,
-            in_array($code, ['responseformaterror', 'invalidresponse'], true) => VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR,
-            in_array($code, ['missingvideodata', 'missingvideo', 'novideooutput'], true) => VideoGenerateErrorCode::MISSING_VIDEO_DATA,
-            in_array($code, ['tasktimeout', 'timeout'], true) => VideoGenerateErrorCode::TASK_TIMEOUT,
-            in_array($code, ['tasknotfound', 'notfound', 'resourcenotfound'], true) => VideoGenerateErrorCode::TASK_NOT_FOUND,
-            in_array($code, ['videodownloadfailed', 'downloadfailed'], true) => VideoGenerateErrorCode::VIDEO_DOWNLOAD_FAILED,
-            in_array($code, ['invalidargument'], true) => VideoGenerateErrorCode::INVALID_PARAMETER,
-            in_array($code, ['unauthenticated', 'permissiondenied'], true) => VideoGenerateErrorCode::AUTHENTICATION_FAILED,
-            in_array($code, ['resourceexhausted'], true) => VideoGenerateErrorCode::QUOTA_EXCEEDED,
-            in_array($code, ['authenticationerror', 'unauthorized', 'accessdenied', 'invalidapikey'], true) => VideoGenerateErrorCode::AUTHENTICATION_FAILED,
-            in_array($code, ['ratelimited', 'ratelimitexceeded', 'toomanyrequests', 'throttling', 'throttled'], true) => VideoGenerateErrorCode::RATE_LIMITED,
-            in_array($code, ['quotaexceeded', 'insufficientquota', 'accountoverdueerror'], true) => VideoGenerateErrorCode::QUOTA_EXCEEDED,
-            in_array($code, ['missingparameter', 'invalidparameter', 'invalidrequesterror', 'invalidargumenterror', 'invalidresolution', 'invalidvideoduration', 'filesizetoolarge', 'audiodurationtoolong'], true)
-                || str_starts_with($code, 'invalidparameter'), => VideoGenerateErrorCode::INVALID_PARAMETER,
-            $httpStatus === 401 || $httpStatus === 403 => VideoGenerateErrorCode::AUTHENTICATION_FAILED,
-            $httpStatus === 429 => VideoGenerateErrorCode::RATE_LIMITED,
-            $httpStatus === 400 => VideoGenerateErrorCode::GENERAL_ERROR,
-            default => VideoGenerateErrorCode::GENERAL_ERROR,
-        };
+        $code = self::normalize((string) $providerCode);
+        $text = self::normalize((string) $providerCode . ' ' . (string) $providerMessage);
+        $errorRules = [
+            VideoGenerateErrorCode::OUTPUT_VIDEO_AUDIT_FAILED->value => [
+                'codes' => ['outputvideosensitivecontentdetected'],
+                'keywords' => ['video was filtered', 'generated video was filtered'],
+            ],
+            VideoGenerateErrorCode::INPUT_TEXT_AUDIT_FAILED->value => [
+                'codes' => ['inputtextsensitivecontentdetected', 'contentblocked'],
+                'keywords' => ['input blocked', 'prohibited content', 'real people', 'likeness', 'safety policy'],
+            ],
+            VideoGenerateErrorCode::INPUT_IMAGE_AUDIT_FAILED->value => [
+                'codes' => ['inputimagesensitivecontentdetected'],
+                'keywords' => [],
+            ],
+            VideoGenerateErrorCode::INPUT_VIDEO_AUDIT_FAILED->value => [
+                'codes' => ['inputvideosensitivecontentdetected'],
+                'keywords' => [],
+            ],
+            VideoGenerateErrorCode::INPUT_AUDIO_AUDIT_FAILED->value => [
+                'codes' => ['inputaudiosensitivecontentdetected'],
+                'keywords' => [],
+            ],
+            VideoGenerateErrorCode::OUTPUT_TEXT_AUDIT_FAILED->value => [
+                'codes' => ['outputtextsensitivecontentdetected'],
+                'keywords' => [],
+            ],
+            VideoGenerateErrorCode::OUTPUT_AUDIO_AUDIT_FAILED->value => [
+                'codes' => ['outputaudiosensitivecontentdetected'],
+                'keywords' => [],
+            ],
+            VideoGenerateErrorCode::INVALID_PROMPT->value => [
+                'codes' => ['invalidprompt', 'promptcheckfailed', 'promptblocked'],
+                'keywords' => ['invalid prompt', 'prompt blocked'],
+            ],
+            VideoGenerateErrorCode::INVALID_ASPECT_RATIO->value => [
+                'codes' => ['invalidaspectratio'],
+                'keywords' => ['aspect ratio', '宽高比'],
+            ],
+            VideoGenerateErrorCode::INVALID_PARAMETER->value => [
+                'codes' => [
+                    'invalidargument', 'invalidrequest', 'invalidparameter', 'invalidargumenterror',
+                    'invalidresolution', 'invalidvideoduration', 'missingparameter', 'filesizetoolarge', 'audiodurationtoolong',
+                ],
+                'keywords' => ['invalid parameter', 'invalid argument', 'duration does not match', 'aspect ratio', 'unsupported resolution'],
+            ],
+            VideoGenerateErrorCode::UNSUPPORTED_VIDEO_FORMAT->value => [
+                'codes' => ['invalidfileformat', 'unsupportedvideoformat', 'unsupportedformat'],
+                'keywords' => ['unsupported video format', 'invalid file format'],
+            ],
+            VideoGenerateErrorCode::AUTHENTICATION_FAILED->value => [
+                'codes' => ['unauthenticated', 'permissiondenied', 'authenticationerror', 'unauthorized', 'accessdenied', 'invalidapikey'],
+                'keywords' => ['api key', 'authentication', 'permission denied', 'unauthorized'],
+            ],
+            VideoGenerateErrorCode::RATE_LIMITED->value => [
+                'codes' => ['ratelimited', 'ratelimitexceeded', 'toomanyrequests', 'throttling', 'throttled'],
+                'keywords' => ['rate limit', 'too many requests', 'throttled'],
+            ],
+            VideoGenerateErrorCode::QUOTA_EXCEEDED->value => [
+                'codes' => ['resourceexhausted', 'quotaexceeded', 'insufficientquota', 'accountoverdueerror'],
+                'keywords' => ['quota exceeded', 'insufficient quota'],
+            ],
+            VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR->value => [
+                'codes' => ['responseformaterror', 'invalidresponse'],
+                'keywords' => [],
+            ],
+            VideoGenerateErrorCode::MISSING_VIDEO_DATA->value => [
+                'codes' => ['missingvideodata', 'missingvideo', 'novideooutput'],
+                'keywords' => [],
+            ],
+            VideoGenerateErrorCode::TASK_TIMEOUT->value => [
+                'codes' => ['tasktimeout', 'timeout'],
+                'keywords' => ['timed out', 'timeout'],
+            ],
+            VideoGenerateErrorCode::TASK_NOT_FOUND->value => [
+                'codes' => ['tasknotfound', 'notfound', 'resourcenotfound'],
+                'keywords' => ['task not found', 'resource not found'],
+            ],
+            VideoGenerateErrorCode::VIDEO_DOWNLOAD_FAILED->value => [
+                'codes' => ['videodownloadfailed', 'downloadfailed'],
+                'keywords' => ['video download failed', 'download failed'],
+            ],
+        ];
+
+        foreach ($errorRules as $errorCode => $rule) {
+            foreach ($rule['codes'] as $candidate) {
+                $normalizedCandidate = self::normalize($candidate);
+                if ($normalizedCandidate !== '' && ($code === $normalizedCandidate || str_starts_with($code, $normalizedCandidate))) {
+                    return VideoGenerateErrorCode::from($errorCode);
+                }
+            }
+            foreach ($rule['keywords'] as $keyword) {
+                $normalizedKeyword = self::normalize($keyword);
+                if ($normalizedKeyword !== '' && str_contains($text, $normalizedKeyword)) {
+                    return VideoGenerateErrorCode::from($errorCode);
+                }
+            }
+        }
+
+        return VideoGenerateErrorCode::GENERAL_ERROR;
     }
 
     public static function isRetriable(
@@ -119,5 +192,10 @@ final class ProviderVideoErrorMapper
         } catch (Throwable) {
             return $key;
         }
+    }
+
+    private static function normalize(string $value): string
+    {
+        return preg_replace('/[^a-z0-9]+/', '', strtolower(trim($value))) ?? '';
     }
 }

@@ -173,7 +173,13 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
         if ($status === 'succeeded' && $videoUrl === null) {
             return $this->failedQueryResult($detail, VideoGenerateErrorCode::MISSING_VIDEO_DATA, $providerTaskId);
         }
-        $errorCode = ProviderVideoErrorMapper::resolve($providerCode);
+        $providerMessage = $this->firstString(
+            $output['task_status_msg'] ?? null,
+            $output['message'] ?? null,
+            is_array($output['error'] ?? null) ? ($output['error']['message'] ?? null) : null,
+            $detail['message'] ?? null,
+        );
+        $errorCode = ProviderVideoErrorMapper::resolve($providerCode, null, $providerMessage);
         return [
             'status' => $status,
             'provider_result' => $detail,
@@ -186,12 +192,7 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
                 'code' => (string) $errorCode->value,
                 'message' => ProviderVideoErrorMapper::message($errorCode, null, $providerCode),
                 'provider_code' => $providerCode,
-                'provider_message' => $this->firstString(
-                    $output['task_status_msg'] ?? null,
-                    $output['message'] ?? null,
-                    is_array($output['error'] ?? null) ? ($output['error']['message'] ?? null) : null,
-                    $detail['message'] ?? null,
-                ),
+                'provider_message' => $providerMessage,
             ],
         ];
     }
