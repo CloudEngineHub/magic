@@ -4,26 +4,31 @@
  *
  * Layer Structure (from bottom to top):
  * 1. Base Layer (1-99): Basic UI elements
- * 2. Toolbar Layer (100-999): Edit toolbars and panels
- * 3. Iframe Internal Layer (1000-1999): Elements inside iframe (V2 editing mechanism)
- * 4. Overlay Layer (9000-9999): DOM tree and selection highlights
- * 5. Fullscreen Layer (10000+): Context panels and fullscreen containers
+ * 2. Toolbar Layer (100-899): Edit toolbars and panels
+ * 3. Fullscreen Layer (900): PPT fullscreen containers
+ * 4. Editor Chrome (910-980): Context toolbar, selection overlay, editor popovers
+ * 5. App Modal Layer (1000): Dialogs such as PPT export
+ * 6. Iframe Internal Layer (1000-1999): Elements inside iframe (V2 editing mechanism)
+ * 7. Overlay Layer (9000-9999): Selection highlights inside the overlay stacking context
  *
  * @note The old V1 editing script (utils/editing-script.ts) is deprecated and not managed here.
  * It uses hardcoded z-index values (999, 1001, 1002, etc.) for backward compatibility.
  */
 
+/** Matches --z-index-modal / --z-index-popup in src/index.css. */
+export const APP_MODAL_Z_INDEX = 1000
+
 export const HTML_EDITOR_Z_INDEX = {
 	// Base Layer (1-99)
 	// Basic UI elements that should stay behind most content
 	BASE: {
-		/** SelectionOverlay root container - controls must stay above editor panels */
-		SELECTION_OVERLAY_ROOT: 10030,
+		/** SelectionOverlay root. Keep below app dialogs such as PPT export. */
+		SELECTION_OVERLAY_ROOT: 930,
 		/** PPT Sidebar and its buttons */
 		SIDEBAR: 10,
 	},
 
-	// Toolbar Layer (100-999)
+	// Toolbar Layer (100-899)
 	// Edit toolbars and control panels
 	TOOLBAR: {
 		/** StylePanel - floating toolbar for style editing */
@@ -52,26 +57,25 @@ export const HTML_EDITOR_Z_INDEX = {
 		TEXT_STYLE_TOOLBAR: 9200,
 	},
 
-	// Fullscreen Layer (10000+)
-	// Fullscreen mode containers
+	// Fullscreen Layer (~900)
+	// Stay below editor chrome so the context toolbar remains usable.
 	FULLSCREEN: {
 		/** PPT Render fullscreen container */
-		CONTAINER: 10000,
+		CONTAINER: 900,
 	},
 
 	/**
 	 * Floating controls rendered by the HTML editor in the parent document.
-	 * Keep these values above the selection overlay and the application's
-	 * default popup stack without changing global overlay tokens.
+	 * Stay above fullscreen PPT, but below the app modal stack (1000).
 	 */
 	EDITOR_FLOATING: {
-		DOM_TREE: 9000,
-		CONTEXT_PANEL: 10020,
-		POPOVER: 10040,
-		SELECT: 10050,
-		TOOLTIP: 10060,
-		CONTEXT_MENU: 10070,
-		DROPDOWN: 10080,
+		DOM_TREE: 910,
+		CONTEXT_PANEL: 920,
+		POPOVER: 940,
+		SELECT: 950,
+		TOOLTIP: 960,
+		CONTEXT_MENU: 970,
+		DROPDOWN: 980,
 	},
 } as const
 
@@ -81,7 +85,7 @@ export const HTML_EDITOR_Z_INDEX = {
  */
 export const TAILWIND_Z_INDEX_CLASSES = {
 	BASE: {
-		SELECTION_OVERLAY_ROOT: "z-[10030]",
+		SELECTION_OVERLAY_ROOT: "z-[930]",
 		SIDEBAR: "z-[10]",
 	},
 	TOOLBAR: {
@@ -98,16 +102,16 @@ export const TAILWIND_Z_INDEX_CLASSES = {
 		TEXT_STYLE_TOOLBAR: "z-[9200]",
 	},
 	FULLSCREEN: {
-		CONTAINER: "z-[10000]",
+		CONTAINER: "z-[900]",
 	},
 	EDITOR_FLOATING: {
-		DOM_TREE: "!z-[9000]",
-		CONTEXT_PANEL: "!z-[10020]",
-		POPOVER: "!z-[10040]",
-		SELECT: "!z-[10050]",
-		TOOLTIP: "!z-[10060]",
-		CONTEXT_MENU: "!z-[10070]",
-		DROPDOWN: "!z-[10080]",
+		DOM_TREE: "!z-[910]",
+		CONTEXT_PANEL: "!z-[920]",
+		POPOVER: "!z-[940]",
+		SELECT: "!z-[950]",
+		TOOLTIP: "!z-[960]",
+		CONTEXT_MENU: "!z-[970]",
+		DROPDOWN: "!z-[980]",
 	},
 } as const
 

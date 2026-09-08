@@ -1,6 +1,7 @@
 import { createRef, type ReactNode } from "react"
 import { render } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
+import { TAILWIND_Z_INDEX_CLASSES } from "../../constants/z-index"
 import { ElementContextPanel } from "./ElementContextPanel"
 
 vi.mock("react-i18next", () => ({
@@ -43,6 +44,7 @@ describe("ElementContextPanel", () => {
 			"overflow-visible",
 			"rounded-lg",
 		)
+		expect(panel.className).toContain(TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.CONTEXT_PANEL)
 		expect(panel.className).not.toMatch(/overflow-x-auto|overflow-y-auto/)
 		expect(panel).toHaveStyle({ maxWidth: "680px" })
 		expect(panel).not.toHaveStyle({ height: "48px" })

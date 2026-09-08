@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/
 import { Popover, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
-import { HTML_EDITOR_Z_INDEX } from "../../constants/z-index"
+import { HTML_EDITOR_Z_INDEX, TAILWIND_Z_INDEX_CLASSES } from "../../constants/z-index"
 import type { InsertPlacement } from "./domTreeModel"
 import { EditorDropdownMenuContent, EditorPopoverContent } from "../EditorFloating"
 
@@ -41,7 +41,10 @@ export const ActionTooltip = React.forwardRef<
 			<TooltipContent
 				side={side}
 				sideOffset={6}
-				className="z-[10060] max-w-72 whitespace-normal break-words"
+				className={cn(
+					TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP,
+					"max-w-72 whitespace-normal break-words",
+				)}
 				zIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}
 			>
 				{label}
@@ -73,7 +76,7 @@ export function NodeDetailsPopover({
 				align="start"
 				sideOffset={6}
 				className={cn(
-					"!z-[10060] w-fit max-w-72 border-0 bg-foreground px-3 py-2 text-background shadow-lg",
+					"w-fit max-w-72 border-0 bg-foreground px-3 py-2 text-background shadow-lg",
 				)}
 			>
 				{content}

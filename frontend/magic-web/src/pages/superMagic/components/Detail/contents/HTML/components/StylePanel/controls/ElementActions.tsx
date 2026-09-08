@@ -651,8 +651,7 @@ export const ElementActions = observer(function ElementActions({
 				}}
 			>
 				<DialogContent
-					className="!z-[10080] max-w-md gap-5 rounded-xl border-border/80 p-5 shadow-2xl"
-					overlayClassName="!z-[10075]"
+					className="max-w-md gap-5 rounded-xl border-border/80 p-5 shadow-2xl"
 					data-testid="html-style-panel-add-text-dialog"
 				>
 					<DialogHeader className="gap-1.5 text-left">

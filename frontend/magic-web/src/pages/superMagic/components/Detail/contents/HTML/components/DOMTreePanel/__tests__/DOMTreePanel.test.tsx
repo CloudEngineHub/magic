@@ -1,6 +1,7 @@
 import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useState } from "react"
+import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
 import { DOMTreePanel } from "../DOMTreePanel"
 
 const toastMocks = vi.hoisted(() => ({
@@ -1429,7 +1430,11 @@ describe("DOMTreePanel", () => {
 			expect(screen.getByText("stylePanel.domTree.insertAfter")).toBeInTheDocument()
 		})
 		expect(
-			screen.getAllByRole("menu").some((menu) => menu.classList.contains("!z-[10070]")),
+			screen
+				.getAllByRole("menu")
+				.some((menu) =>
+					menu.classList.contains(TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.CONTEXT_MENU),
+				),
 		).toBe(true)
 		fireEvent.click(screen.getByTestId("dom-tree-context-menu-duplicate-item"))
 		await waitFor(() => expect(duplicateDomNode).toHaveBeenCalledWith("section"))
