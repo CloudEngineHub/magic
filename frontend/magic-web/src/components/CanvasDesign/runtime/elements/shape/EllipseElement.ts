@@ -80,8 +80,8 @@ export class EllipseElement extends BaseElement<EllipseElementData> {
 	}
 
 	update(newData: EllipseElementData): boolean {
+		const content = this.getActiveContent<ShapeElementContent>(newData)
 		this.data = newData
-		const content = this.getActiveContent<ShapeElementContent>()
 
 		// 椭圆元素不需要重新渲染，所有属性都可以通过 setAttrs 更新
 		if (this.node instanceof Konva.Ellipse) {

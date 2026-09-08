@@ -347,6 +347,10 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		if (!this.canvas.permissionManager.can("document.delete")) return false
 		const result = deleteContentFromData(this.data, (content) => Boolean(content.src))
 		if (!result) return false
+		this.canvas.generationRuntimeManager?.clearTarget(
+			this.data.id,
+			result.deletedContent.contentId,
+		)
 		this.canvas.elementManager.update(
 			this.data.id,
 			{
@@ -359,12 +363,12 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		return true
 	}
 
-	private getAudioContent(): AudioElementContent | undefined {
-		return this.getActiveContent<AudioElementContent>()
+	private getAudioContent(data: AudioElementData = this.data): AudioElementContent | undefined {
+		return this.getActiveContent<AudioElementContent>(data)
 	}
 
-	private getAudioSrc(): string | undefined {
-		return this.getAudioContent()?.src
+	private getAudioSrc(data: AudioElementData = this.data): string | undefined {
+		return this.getAudioContent(data)?.src
 	}
 
 	/**
@@ -587,9 +591,9 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	public update(newData: AudioElementData): boolean {
 		const normalizedData = normalizeAudioDimensionsOnUpdate(newData)
 		const previousData = this.data
-		const previousContent = this.getAudioContent()
+		const previousContent = this.getAudioContent(previousData)
 		this.data = normalizedData
-		const nextContent = this.getAudioContent()
+		const nextContent = this.getAudioContent(normalizedData)
 		const resourceChanged = previousContent?.src !== nextContent?.src
 		const needsRerender =
 			resourceChanged ||

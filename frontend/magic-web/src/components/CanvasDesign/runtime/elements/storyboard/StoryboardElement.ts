@@ -295,7 +295,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		const normalizedData = normalizeStoryboardDisplayDimensions(newData)
 		this.data = normalizedData
 		const previousContent = getActiveContent<StoryboardElementContent>(previousData)
-		const nextContent = this.getActiveContent<StoryboardElementContent>()
+		const nextContent = this.getActiveContent<StoryboardElementContent>(normalizedData)
 		const needsRerender =
 			previousData.width !== normalizedData.width ||
 			previousData.height !== normalizedData.height ||

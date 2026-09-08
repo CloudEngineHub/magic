@@ -204,6 +204,27 @@ describe("CanvasElementToolCommandBus", () => {
 		).toEqual({ executed: false, reason: "ACTIVE_CONTENT_MISMATCH" })
 	})
 
+	it("allows deleting an active processing version", () => {
+		const canvas = createCanvas()
+		canvas.image.contents = [
+			{ contentId: "content-a", src: "a.png" },
+			{ contentId: "content-b" },
+		]
+		canvas.image.activeContentId = "content-b"
+		;(canvas.image.contents[1] as { status?: string }).status = "processing"
+		const operations = canvas.elementManager.getElementInstance()
+		const bus = new CanvasElementToolCommandBus(canvas as never)
+
+		expect(
+			bus.execute({
+				toolId: ElementToolTypeEnum.VersionDelete,
+				elementId: "image-1",
+				contentId: "content-b",
+			}),
+		).toEqual({ executed: true })
+		expect(operations.deleteActiveContent).toHaveBeenCalledOnce()
+	})
+
 	it("uses session preview for version navigation outside edit mode", () => {
 		const canvas = createCanvas()
 		canvas.image.contents = [

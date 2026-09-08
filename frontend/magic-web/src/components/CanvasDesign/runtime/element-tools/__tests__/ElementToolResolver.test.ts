@@ -59,7 +59,7 @@ describe("ElementToolResolver", () => {
 				ElementToolTypeEnum.GenerationGenerateAgain,
 			]),
 		)
-		expect(bottom.some((tool) => tool.id === ElementToolTypeEnum.VersionDelete)).toBe(false)
+		expect(bottom.some((tool) => tool.id === ElementToolTypeEnum.VersionDelete)).toBe(true)
 		const generationToolIds = new Set<string>([
 			ElementToolTypeEnum.GenerationQuickEdit,
 			ElementToolTypeEnum.GenerationReEdit,
@@ -70,7 +70,7 @@ describe("ElementToolResolver", () => {
 		}
 	})
 
-	it("limits an active processing Content to safe operations", () => {
+	it("allows deleting an active processing Content while keeping other unsafe operations hidden", () => {
 		const { context, top, bottom } = resolve(
 			createImage({
 				activeContentId: "content-b",
@@ -88,7 +88,21 @@ describe("ElementToolResolver", () => {
 		)
 		expect(bottom.map((tool) => tool.id)).toContain(ElementToolTypeEnum.VersionPrevious)
 		expect(bottom.map((tool) => tool.id)).toContain(ElementToolTypeEnum.VersionNext)
-		expect(bottom.map((tool) => tool.id)).not.toContain(ElementToolTypeEnum.VersionDelete)
+		expect(bottom.map((tool) => tool.id)).toContain(ElementToolTypeEnum.VersionDelete)
+	})
+
+	it("allows deleting an active failed Content", () => {
+		const { bottom } = resolve(
+			createImage({
+				activeContentId: "content-b",
+				contents: [
+					{ contentId: "content-a", src: "a.png", status: "completed" },
+					{ contentId: "content-b", status: "failed", errorMessage: "generation failed" },
+				],
+			}),
+		)
+
+		expect(bottom.map((tool) => tool.id)).toContain(ElementToolTypeEnum.VersionDelete)
 	})
 
 	it("hides AI image editing tools when their abilities are disabled", () => {
@@ -386,7 +400,7 @@ describe("ElementToolResolver", () => {
 			} as never,
 		})
 
-		expect(bottom.some((tool) => tool.id === ElementToolTypeEnum.VersionDelete)).toBe(false)
+		expect(bottom.some((tool) => tool.id === ElementToolTypeEnum.VersionDelete)).toBe(true)
 		expect(bottom.some((tool) => tool.id === ElementToolTypeEnum.VersionSetMain)).toBe(true)
 	})
 

@@ -107,6 +107,9 @@ describe("media element updates with session Content previews", () => {
 		}
 		const canvas = {
 			getEffectiveContentId: vi.fn(() => effectiveContentId),
+			getElementForContentView: vi.fn((element: ImageElementData) =>
+				effectiveContentId ? { ...element, activeContentId: effectiveContentId } : element,
+			),
 			eventEmitter,
 			visibilityManager: { unregisterImageElement: vi.fn() },
 			transformManager: {},
@@ -166,6 +169,9 @@ describe("media element updates with session Content previews", () => {
 		const resetPreview = vi.fn()
 		const canvas = {
 			getEffectiveContentId: vi.fn(() => effectiveContentId),
+			getElementForContentView: vi.fn((element: VideoElementData) =>
+				effectiveContentId ? { ...element, activeContentId: effectiveContentId } : element,
+			),
 			eventEmitter,
 			visibilityManager: { updateVideoElement: vi.fn() },
 		}

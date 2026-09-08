@@ -110,6 +110,29 @@ describe("GenerationRuntimeManager", () => {
 		expect(manager.hasActiveGeneration("image-1")).toBe(true)
 	})
 
+	it("clears one deleted Content target without affecting sibling attempts", () => {
+		const manager = new GenerationRuntimeManager()
+		manager.beginAttempt({
+			attemptId: "content-a-attempt",
+			operation: "image-generate",
+			failurePolicy: "restore-existing",
+			targets: [{ elementId: "image-1", contentId: "a" }],
+		})
+		manager.beginAttempt({
+			attemptId: "content-b-attempt",
+			operation: "image-generate",
+			failurePolicy: "restore-existing",
+			targets: [{ elementId: "image-1", contentId: "b" }],
+		})
+
+		manager.clearTarget("image-1", "a")
+
+		expect(manager.hasActiveGeneration("image-1", "a")).toBe(false)
+		expect(manager.hasActiveGeneration("image-1", "b")).toBe(true)
+		expect(manager.getAttempt("content-a-attempt")).toBeNull()
+		expect(manager.getAttempt("content-b-attempt")).not.toBeNull()
+	})
+
 	it("rejects duplicate attempts for the same Content while allowing sibling Content", () => {
 		const manager = new GenerationRuntimeManager()
 		manager.beginAttempt({

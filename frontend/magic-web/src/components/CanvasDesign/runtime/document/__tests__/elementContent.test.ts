@@ -135,7 +135,7 @@ describe("elementContent", () => {
 		expect(getPendingVideoGenerationContent(element)?.contentId).toBe("pending")
 		expect(hasPendingVideoGenerationContent(element)).toBe(true)
 		expect(isContentGenerationPending(element.contents[1])).toBe(true)
-		expect(canDeleteActiveContentVersion(element)).toBe(false)
+		expect(canDeleteActiveContentVersion(element)).toBe(true)
 	})
 
 	it("separates active and sibling generation state", () => {
