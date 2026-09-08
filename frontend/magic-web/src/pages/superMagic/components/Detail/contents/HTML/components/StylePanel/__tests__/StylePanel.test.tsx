@@ -258,7 +258,7 @@ describe("StylePanel", () => {
 		expect(screen.getByTestId("html-style-panel-shadow-trigger")).toBeInTheDocument()
 	})
 
-	it("should expose a DOM tree entry in the global toolbar", () => {
+	it("should expose a page-structure entry without a duplicate tooltip", () => {
 		render(
 			<StylePanel
 				editorRef={{ current: null }}
@@ -268,8 +268,30 @@ describe("StylePanel", () => {
 			/>,
 		)
 
-		expect(screen.getByText("stylePanel.sidebar.expand")).toBeInTheDocument()
-		expect(screen.getByLabelText("stylePanel.sidebar.expand")).toBeInTheDocument()
+		const toggle = screen.getByTestId("html-editor-dom-tree-toggle-button")
+		expect(toggle).toHaveTextContent("stylePanel.domTree.title")
+		expect(toggle).toHaveAttribute("aria-label", "stylePanel.domTree.title")
+		expect(toggle).toHaveAttribute("aria-expanded", "false")
+		expect(toggle.className).not.toContain("bg-secondary")
+		expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
+	})
+
+	it("should show a pressed collapse control when the sidebar is open", () => {
+		render(
+			<StylePanel
+				editorRef={{ current: null }}
+				variant="global"
+				domTreeOpen
+				onToggleDomTree={vi.fn()}
+			/>,
+		)
+
+		const toggle = screen.getByTestId("html-editor-dom-tree-toggle-button")
+		expect(toggle).toHaveTextContent("stylePanel.sidebar.collapseSection")
+		expect(toggle).toHaveAttribute("aria-label", "stylePanel.sidebar.collapseSection")
+		expect(toggle).toHaveAttribute("aria-expanded", "true")
+		expect(toggle.className).toContain("bg-secondary")
+		expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
 	})
 
 	it("should place toolbar-end actions before the page-structure toggle", () => {
@@ -331,7 +353,7 @@ describe("StylePanel", () => {
 		expect(readout).not.toHaveTextContent("H1")
 	})
 
-	it("should hide the toolbar readout when nothing is selected", () => {
+	it("should show an empty readout when nothing is selected", () => {
 		mockSelectedElement.current = null
 
 		render(
@@ -343,7 +365,10 @@ describe("StylePanel", () => {
 			/>,
 		)
 
-		expect(screen.queryByTestId("html-editor-selection-readout")).not.toBeInTheDocument()
+		const readout = screen.getByTestId("html-editor-selection-readout")
+		expect(readout).toHaveTextContent("stylePanel.selectionReadoutEmpty")
+		expect(readout).not.toHaveTextContent("×")
+		expect(screen.getByTestId("history-actions").nextElementSibling).toBe(readout)
 	})
 
 	it("should wrap the context toolbar and expose one more entry", () => {

@@ -4,13 +4,11 @@ import { useTranslation } from "react-i18next"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Button } from "@/components/shadcn-ui/button"
 import { Textarea } from "@/components/shadcn-ui/textarea"
-import { TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
-import * as TooltipPrimitive from "@radix-ui/react-tooltip"
+import { TooltipProvider } from "@/components/shadcn-ui/tooltip"
 import { cn } from "@/utils/cn"
 import { LayoutPanelTop, Paintbrush, PanelRight, ScanEye, RectangleHorizontal } from "lucide-react"
 import { useSelectedElement } from "./hooks/useSelectedElement"
 import { useStylePanelStore } from "../../iframe-bridge/contexts/StylePanelContext"
-import { TAILWIND_Z_INDEX_CLASSES } from "../../constants/z-index"
 import type { StylePanelProps } from "./types"
 import LayoutSection from "./sections/LayoutSection"
 import FlexGridSection from "./sections/FlexGridSection"
@@ -663,40 +661,28 @@ const FullStylePanel = observer(function FullStylePanel({
 				) : null}
 
 				{toggleSidebar ? (
-					<TooltipPrimitive.Root>
-						<TooltipTrigger asChild>
-							<Button
-								data-testid="html-editor-dom-tree-toggle-button"
-								variant={isSidebarOpen ? "secondary" : "ghost"}
-								size="sm"
-								className="ml-1 h-8 shrink-0 gap-1 px-2"
-								onClick={toggleSidebar}
-								aria-label={t(
-									isSidebarOpen
-										? "stylePanel.sidebar.collapse"
-										: "stylePanel.sidebar.expand",
-								)}
-							>
-								<PanelRight className="h-4 w-4" />
-								<span>
-									{t(
-										isSidebarOpen
-											? "stylePanel.sidebar.collapse"
-											: "stylePanel.sidebar.expand",
-									)}
-								</span>
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent
-							className={TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP}
-						>
+					<Button
+						data-testid="html-editor-dom-tree-toggle-button"
+						variant={isSidebarOpen ? "secondary" : "ghost"}
+						size="sm"
+						className="ml-1 h-8 shrink-0 gap-1 px-2"
+						onClick={toggleSidebar}
+						aria-expanded={isSidebarOpen}
+						aria-label={t(
+							isSidebarOpen
+								? "stylePanel.sidebar.collapseSection"
+								: "stylePanel.domTree.title",
+						)}
+					>
+						<PanelRight className="h-4 w-4" />
+						<span>
 							{t(
 								isSidebarOpen
-									? "stylePanel.sidebar.collapse"
-									: "stylePanel.sidebar.expand",
+									? "stylePanel.sidebar.collapseSection"
+									: "stylePanel.domTree.title",
 							)}
-						</TooltipContent>
-					</TooltipPrimitive.Root>
+						</span>
+					</Button>
 				) : null}
 			</div>
 		</TooltipProvider>
