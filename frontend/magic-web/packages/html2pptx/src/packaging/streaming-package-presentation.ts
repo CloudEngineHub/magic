@@ -594,13 +594,17 @@ function cloneEmbedFontsForWorker(embedFonts?: EmbedFontInput[]): {
 		clonesByOriginal.set(buffer, cloned)
 		return cloned
 	}
+	const cloneFace = (face: EmbedFontInput["regular"]): EmbedFontInput["regular"] => {
+		if (!face || face.kind !== "bytes") return face
+		return { ...face, data: cloneBuffer(face.data) }
+	}
 
 	const fonts = embedFonts.map((font) => ({
 		...font,
-		regular: font.regular ? cloneBuffer(font.regular) : undefined,
-		bold: font.bold ? cloneBuffer(font.bold) : undefined,
-		italic: font.italic ? cloneBuffer(font.italic) : undefined,
-		boldItalic: font.boldItalic ? cloneBuffer(font.boldItalic) : undefined,
+		regular: cloneFace(font.regular),
+		bold: cloneFace(font.bold),
+		italic: cloneFace(font.italic),
+		boldItalic: cloneFace(font.boldItalic),
 	}))
 
 	return {

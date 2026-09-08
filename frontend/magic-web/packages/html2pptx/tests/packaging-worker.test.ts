@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { createSinkProxyWritable, createStreamingPackagingWorkerHandler } from "../src/packaging"
 import { createStreamingPresentationPackager } from "../src/packaging/streaming-package-presentation"
 import { PACKAGING_RUNTIME_IDENTITY } from "../src/packaging/runtime-identity"
+import { bytesMediaSourceDescriptor } from "../src/media/source-descriptor"
 import type {
 	PackagingRuntimeIdentity,
 	StreamingPackagingWorkerRequest,
@@ -173,7 +174,59 @@ describe("packaging Worker protocol", () => {
 		)
 		expect(session.addSlide).toHaveBeenCalledWith(undefined)
 		expect(session.commitSlide).toHaveBeenCalledOnce()
-		expect(responses.filter((message) => message.type === "progress")).toHaveLength(0)
+		 expect(responses.filter((message) => message.type === "progress")).toHaveLength(0)
+	})
+
+	it("passes font MediaSourceDescriptors to PptxGenJS", async () => {
+		const responses: StreamingPackagingWorkerResponse[] = []
+		const embedFont = vi.fn()
+		const session = {
+			addSlide: vi.fn(() => ({})),
+			commitSlide: vi.fn(async () => ({ bytesWritten: 0, manifest: {} })),
+			finalize: vi.fn(async () => ({ slideCount: 0, mediaPartCount: 0, bytesWritten: 0 })),
+			abort: vi.fn(async () => undefined),
+		}
+		const presentation = {
+			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
+			embedFont,
+			beginStreaming: vi.fn(async () => session),
+		}
+		const handler = createStreamingPackagingWorkerHandler({
+			createPresentation: () => presentation as never,
+			postMessage: (message) => responses.push(message),
+		})
+		const fontData = Uint8Array.from([1, 2, 3, 4]).buffer
+
+		handler.handle({
+			type: "start",
+			payload: {
+				identity: PACKAGING_RUNTIME_IDENTITY,
+				config,
+				plan: { finalSlideCount: 0 },
+				destination: { kind: "sink-proxy", ackWindow: 1 },
+				embedFonts: [
+					{
+						typeface: "Test Font",
+						regular: bytesMediaSourceDescriptor({
+							data: fontData,
+							contentType: "font/ttf",
+							extn: "ttf",
+							key: "font:test:regular",
+						}),
+					},
+				],
+			},
+		})
+
+		await eventually(() =>
+			expect(responses.some((message) => message.type === "ready")).toBe(true),
+		)
+		expect(embedFont).toHaveBeenCalledWith(
+			expect.objectContaining({
+				typeface: "Test Font",
+				regular: expect.objectContaining({ kind: "bytes", data: fontData }),
+			}),
+		)
 	})
 
 	it("normalizes PptxGenJS bigint byte counts at the Worker boundary", async () => {
