@@ -56,32 +56,35 @@ When collecting information with `ask_user`, prioritize clickable choices instea
 - Combine questions from the same round into one `ask_user` call when practical.
 - Use `confirm` for yes/no decisions, especially the Round 4 skill-decomposition decision.
 - Use `select` whenever 2-8 useful candidate answers can be offered, and `multi_select` when multiple answers may apply. The UI adds an "Other" free-text choice, so options do not need to be exhaustive.
-- Use `input` only for the employee name, values the user must enter precisely, and genuinely open-ended descriptions that cannot be usefully enumerated.
-- For employee role, work focus, communication style, and workflow type, derive 3-6 concrete options from the name and requirements already provided instead of defaulting to `input`.
+- Use `input` only for the employee name or a custom value the user must enter precisely. A request for a "one-line description", "detailed description", or "additional details" is not by itself a reason to use `input`.
+- Use `select` for employee role. Use `multi_select` for core functions and traits, professional capabilities, specialties, working style, and communication style. Use `select` or `multi_select` for workflow types.
+- Dynamically derive 3-6 concrete options for those choice questions from the name, selected role, and requirements already provided. After selection, synthesize the choices into the one-line description and full role definition; do not ask the user to rewrite the same information as free text.
 - Give each option a short explanation that makes the tradeoff clear; do not provide bare abstract labels.
 
 **Before gathering, determine the language using the priority above**. Communicate and collect information in the selected language.
 
 **Round 1 (required)**:
-1. **Employee name**: Ask in the selected language (e.g., for English users: "What name would you like to give your employee?")
-2. **Employee role**: (e.g., "What role will this employee take on?")
-3. **One-line description**: What does this employee mainly do?
+1. **Employee name**: Ask with `input` in the selected language (e.g., for English users: "What name would you like to give your employee?")
+2. **Employee role**: Derive 3-6 role candidates from the employee name and ask with `select`.
+3. **Core functions and traits**: Derive 3-6 candidates from the employee name and selected role and ask with `multi_select`. Synthesize the selected choices into the one-line description; do not ask for that description again with `input`.
 
 Do not ask for translations or offer multilingual output.
 
 **Round 2 (recommended but optional)**:
-4. **Role definition**: A richer description of capabilities, expertise, and working style (goes into IDENTITY.md body)
-5. **Personality and communication style**: What personality should the employee have? (e.g. rigorous, lively, concise) (goes into SOUL.md)
+4. **Professional capabilities**: Generate 3-6 concrete candidates and use `multi_select`.
+5. **Professional domains and specialties**: Generate 3-6 concrete candidates and use `multi_select`.
+6. **Working style**: Generate 3-6 concrete candidates and use `multi_select`. Synthesize this round into the full role definition for IDENTITY.md; do not ask the user to manually write the same details afterward.
+7. **Personality and communication style**: Generate 3-6 candidates and use `multi_select` (goes into SOUL.md).
 
 **Round 3 (required)**:
-6. **Workflow / rules**: What workflow should this employee follow? What special rules apply? (goes into AGENTS.md)
+8. **Workflow / rules**: First offer selectable workflow types and common rules. Collect extra text only when the user chooses "Other" or an exact custom rule is genuinely required (goes into AGENTS.md).
 
 Workflows must be split into clear, independently executable processes. Each process should be designed to call one independent skill; do not pile multiple complex workflows into AGENTS.md.
 
 **Round 4 (required decision)**:
-7. **Skill decomposition decision**: After collecting the workflow, explicitly ask whether the independent processes should be created as separate skills. Do not infer consent from silence, and do not finish initialization before receiving a clear yes/no answer.
-8. If the user chooses yes, summarize the proposed skill boundaries and specify which workflow in `AGENTS.md` will call each skill, or which invocation rules each skill will follow. Then load `skill-creator` and follow its plan, confirmation, conflict-check, creation, and validation workflow once for each independent process.
-9. If the user chooses no, record that decision in the initialization summary and keep the workflow in `AGENTS.md`. If the user is unsure, explain the tradeoff and ask again; do not silently choose.
+9. **Skill decomposition decision**: After collecting the workflow, use `confirm` to ask whether the independent processes should be created as separate skills. Do not infer consent from silence, and do not finish initialization before receiving a clear yes/no answer.
+10. If the user chooses yes, summarize the proposed skill boundaries and specify which workflow in `AGENTS.md` will call each skill, or which invocation rules each skill will follow. Then load `skill-creator` and follow its plan, confirmation, conflict-check, creation, and validation workflow once for each independent process.
+11. If the user chooses no, record that decision in the initialization summary and keep the workflow in `AGENTS.md`. If the user is unsure, explain the tradeoff and ask again; do not silently choose.
 
 Round 2 may be skipped. If the user has not provided workflow / rules for Round 3, initialization cannot be completed and the conversation must continue until they provide them. Round 4 is a required decision gate even when the user ultimately chooses no.
 
