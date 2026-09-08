@@ -474,6 +474,8 @@ export interface SkillVersionItem {
 	/** @deprecated Kept for compatibility with older version responses. */
 	version_description_i18n?: SkillI18nText | null
 	publish_target_value?: SkillPublishTargetValueResolved | null
+	/** Categories selected when this version was published to the skills library. */
+	category_ids?: string[]
 	categories?: Array<{
 		id: string | number
 		name: string
