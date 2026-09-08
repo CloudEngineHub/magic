@@ -15,7 +15,7 @@ Assess where the user is and jump in from there.
 ## Language Awareness
 
 - If the user explicitly specifies an output language in the current request, use that language
-- Otherwise, run `python '<skill_dir>/scripts/language.py'` before generating or editing skill content, replacing `<skill_dir>` with the skill's absolute directory, and use the returned `language_name`
+- Otherwise, run `python '<skill_dir>/scripts/language.py'` before generating or editing skill content, replacing `<skill_dir>` with the skill's absolute directory, and use the returned `language` code. Language codes are passed through without a fixed allowlist, so newly supported frontend languages require no skill-side mapping update
 - Generate skill content (SKILL.md body, comments, and examples) in the selected language
 - Skills always use single-language content. Do not ask for, generate, or maintain translations or language-specific duplicate sections.
 - Keep `description` in English (triggering relies on English semantics)

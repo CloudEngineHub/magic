@@ -138,7 +138,7 @@ In the Crew Agent file system, this means:
 
 - Generate employee prompts in one selected language.
 - If the user explicitly specifies a language, use it.
-- Otherwise, run `python '<skill_dir>/scripts/language.py'` and use its `language_name` result. Replace `<skill_dir>` with the skill's absolute directory.
+- Otherwise, run `python '<skill_dir>/scripts/language.py'` and use its `language` result. Replace `<skill_dir>` with the skill's absolute directory. Treat the value as an open language code rather than a fixed allowlist.
 - Do not generate duplicate translations, language-specific sections, or language-suffixed fields.
 
 ## 5. Security Constraint Template (Optional)

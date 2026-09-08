@@ -10,15 +10,6 @@ from _shared.bootstrap import get_project_root
 
 
 DEFAULT_LANGUAGE = "zh_CN"
-LANGUAGE_LABELS = {
-    "zh": "Chinese",
-    "zh_cn": "Chinese",
-    "zh_tw": "Chinese",
-    "zh_hk": "Chinese",
-    "en": "English",
-    "en_us": "English",
-    "en_gb": "English",
-}
 
 
 def get_metadata_path() -> Path:
@@ -39,10 +30,10 @@ def get_language() -> dict[str, str]:
     except (OSError, json.JSONDecodeError):
         pass
 
-    normalized = language.lower().replace("-", "_")
     return {
         "language": language,
-        "language_name": LANGUAGE_LABELS.get(normalized, language),
+        # Compatibility alias for existing skill instructions and callers.
+        "language_name": language,
         "metadata_path": str(metadata_path),
     }
 

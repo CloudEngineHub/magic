@@ -31,9 +31,9 @@ shell_exec(
 
 将 `<skill_dir>` 替换为当前技能的绝对目录。不要省略技能目录前缀，因为 Shell 的当前目录可能是 `.workspace` 或其他目录。
 
-The script reads `.credentials/metadata.json` and returns JSON such as `{"language": "zh_CN", "language_name": "Chinese"}`. It defaults to `zh_CN` when the metadata file is missing, invalid, or has no usable `language` value. `USER_AUTH_METADATA_PATH` can override the metadata path for testing or operational use.
+The script reads `.credentials/metadata.json` and returns JSON such as `{"language": "zh_CN", "language_name": "zh_CN"}`. It defaults to `zh_CN` when the metadata file is missing, invalid, or has no usable `language` value. `USER_AUTH_METADATA_PATH` can override the metadata path for testing or operational use. Language codes are passed through without a fixed allowlist, so newly supported frontend languages require no skill-side mapping update.
 
-When the user has not specified a language, use the returned `language_name` as the primary language when writing prompts and employee files. The system-injected `<user_preferred_language>` is not the source of truth for this decision.
+When the user has not specified a language, use the returned `language` code as the primary language when writing prompts and employee files. The system-injected `<user_preferred_language>` is not the source of truth for this decision. `language_name` remains only as a compatibility alias for older callers.
 
 **Default single-language mode**: Generate all content in the selected language. YAML header uses single-language fields only.
 
