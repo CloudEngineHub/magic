@@ -97,6 +97,11 @@ vi.mock("../../PPTRender", () => ({
 				data-testid="open-slide-new-tab"
 				onClick={() => openNewTab?.("slide-file", "slides/slide-1.html")}
 			/>
+			<button
+				type="button"
+				data-testid="open-shell-navigation"
+				onClick={() => openNewTab?.("slide-file", "/husky.html")}
+			/>
 		</div>
 	),
 }))
@@ -483,6 +488,46 @@ describe("PPTRootRender", () => {
 		fireEvent.click(screen.getByTestId("open-slide-new-tab"))
 
 		expect(openFileTab).toHaveBeenCalledWith(slideFile)
+	})
+
+	it("does not open the current slide as HTML when navigation is a preview shell rewrite", async () => {
+		const openFileTab = vi.fn()
+		const slideFile = {
+			file_id: "slide-file",
+			file_name: "cover.html",
+			relative_file_path: "deck/slides/cover.html",
+			parent_id: "deck-folder",
+		}
+		const folder = {
+			file_id: "deck-folder",
+			file_name: "deck",
+			is_directory: true,
+			relative_file_path: "deck",
+			display_config: {
+				type: "slide",
+				slides: ["slides/cover.html"],
+			},
+			children: [slideFile],
+		}
+
+		render(
+			<PPTRootRender
+				data={folder}
+				attachmentList={[]}
+				attachments={[]}
+				displayConfig={folder.display_config}
+				activeFileId="deck-folder"
+				openFileTab={openFileTab}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("ppt-render")).not.toBeNull()
+		})
+
+		fireEvent.click(screen.getByTestId("open-shell-navigation"))
+
+		expect(openFileTab).not.toHaveBeenCalled()
 	})
 
 	it("renders template slide paths without reading magic.project.js", async () => {

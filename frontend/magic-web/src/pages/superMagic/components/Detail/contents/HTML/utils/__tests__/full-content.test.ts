@@ -266,6 +266,8 @@ describe("getFullContent", () => {
 		expect(result.indexOf("var nativeWindowOpen = window.open")).toBeLessThan(
 			result.indexOf("window.__USER_SEARCH__"),
 		)
+		expect(result).toContain("destination.hash === window.location.hash")
+		expect(result).toContain("isSameDocumentRewrite")
 	})
 
 	it("normalizes nested HTML links to project-root paths without forwarding file identity", async () => {

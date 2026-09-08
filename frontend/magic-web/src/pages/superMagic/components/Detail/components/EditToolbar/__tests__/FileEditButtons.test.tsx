@@ -76,5 +76,24 @@ describe("FileEditButtons", () => {
 
 		fireEvent.keyDown(document, { key: "s", ctrlKey: true })
 		await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+
+		fireEvent.keyDown(document, { key: "Escape" })
+		expect(onCancel).toHaveBeenCalledTimes(1)
+	})
+
+	it("cancels from the button without throwing when Escape has no mouse event", () => {
+		const onCancel = vi.fn()
+		render(
+			<FileEditButtons
+				testIdPrefix="html-editor"
+				isEditMode
+				showButtonText
+				onSave={vi.fn()}
+				onCancel={onCancel}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("html-editor-cancel-button"))
+		expect(onCancel).toHaveBeenCalledTimes(1)
 	})
 })

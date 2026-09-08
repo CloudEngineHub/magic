@@ -1,4 +1,4 @@
-import { memo, useEffect, useCallback, useState } from "react"
+import { memo, useEffect, useCallback, useState, type MouseEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { FilePenLine, Save, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -73,11 +73,16 @@ function FileEditButtons({
 		}
 	}, [interactionDisabled, onSaveAndExit, isSaving, isSavingLocal])
 
-	const handleCancel = useCallback(() => {
-		if (!interactionDisabled && onCancel) {
-			onCancel()
-		}
-	}, [interactionDisabled, onCancel])
+	const handleCancel = useCallback(
+		(event?: MouseEvent<HTMLButtonElement>) => {
+			// Button clicks can land on the iframe after the toolbar unmounts.
+			event?.stopPropagation()
+			if (!interactionDisabled && onCancel) {
+				onCancel()
+			}
+		},
+		[interactionDisabled, onCancel],
+	)
 
 	const handleEdit = useCallback(() => {
 		if (interactionDisabled || !onEdit) return

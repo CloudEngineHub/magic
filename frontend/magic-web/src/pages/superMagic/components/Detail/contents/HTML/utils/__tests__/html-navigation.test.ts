@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { getHtmlNavigationKey, parseHtmlNavigationRequest } from "../html-navigation"
+import {
+	getHtmlNavigationKey,
+	isHtmlPreviewShellNavigation,
+	parseHtmlNavigationRequest,
+} from "../html-navigation"
 
 describe("parseHtmlNavigationRequest", () => {
 	it("separates a relative path, query, hash, and normalized anchor", () => {
@@ -57,5 +61,25 @@ describe("parseHtmlNavigationRequest", () => {
 
 		expect(getHtmlNavigationKey(first)).not.toBe(getHtmlNavigationKey(second))
 		expect(getHtmlNavigationKey()).toBe("")
+	})
+})
+
+describe("isHtmlPreviewShellNavigation", () => {
+	it("treats same-document husky shell rewrites as non-user navigation", () => {
+		expect(isHtmlPreviewShellNavigation("/husky.html")).toBe(true)
+		expect(isHtmlPreviewShellNavigation("husky.html")).toBe(true)
+		expect(isHtmlPreviewShellNavigation("https://app.example.test/husky.html")).toBe(true)
+		expect(
+			isHtmlPreviewShellNavigation(
+				"https://husky.example/index.html",
+				"https://husky.example/index.html",
+			),
+		).toBe(true)
+	})
+
+	it("keeps project HTML files as user navigation", () => {
+		expect(isHtmlPreviewShellNavigation("cover.html")).toBe(false)
+		expect(isHtmlPreviewShellNavigation("/slides/cover.html")).toBe(false)
+		expect(isHtmlPreviewShellNavigation("./2 新建幻灯片 2.html")).toBe(false)
 	})
 })

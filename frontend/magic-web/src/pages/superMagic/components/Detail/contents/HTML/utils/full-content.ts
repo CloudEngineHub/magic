@@ -1022,10 +1022,15 @@ const getLinkHandlingScript = (navigationBasePath = "") => {
 							var isSameDocument =
 								destination.pathname === window.location.pathname &&
 								destination.search === window.location.search;
+							var isSameDocumentRewrite =
+								isSameDocument &&
+								destination.hash === window.location.hash;
 							var isHashRouter =
 								destination.hash.indexOf("#?") === 0 ||
 								destination.hash.indexOf("#/") === 0;
 
+							// document.open/write used by setContent is a same-URL rewrite.
+							if (isSameDocumentRewrite) return;
 							if (isSameDocument && isHashRouter) return;
 						} catch (error) {
 							console.warn("linkClicked navigate URL parse failed", error);

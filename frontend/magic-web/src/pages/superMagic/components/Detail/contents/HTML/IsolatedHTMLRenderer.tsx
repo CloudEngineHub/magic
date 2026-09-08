@@ -160,7 +160,7 @@ import {
 	POST_MESSAGE_TARGET_STRATEGIES,
 	type OnFetchIntercepted,
 } from "./utils/fetchInterceptor"
-import { getHtmlNavigationKey } from "./utils/html-navigation"
+import { getHtmlNavigationKey, isHtmlPreviewShellNavigation } from "./utils/html-navigation"
 import {
 	HtmlNavigationRuntimeService,
 	type HtmlNavigationRuntimeRequest,
@@ -2171,6 +2171,18 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 					const href = typeof event.data?.href === "string" ? event.data.href : ""
 					const autoEdit = event.data?.autoEdit === true
+					// Ignore husky/shell rewrites after cancel resetContent.
+					if (isHtmlPreviewShellNavigation(href, htmlSandboxShellUrl)) {
+						logger.report(
+							"忽略 iframe 预览壳重写导航",
+							buildMessageLogContext(event, messageType, {
+								isExpectedSource,
+								isExpectedOrigin,
+								href,
+							}),
+						)
+						return
+					}
 					try {
 						openNewTab(fileId || "", href, autoEdit)
 					} catch (error) {

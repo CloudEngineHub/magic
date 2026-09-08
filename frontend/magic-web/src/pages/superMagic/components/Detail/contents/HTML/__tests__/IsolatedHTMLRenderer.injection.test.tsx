@@ -742,6 +742,20 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		})
 	})
 
+	it("does not open a tab when iframe navigation points at the preview shell", async () => {
+		const openNewTab = vi.fn()
+		const iframeProps = { ...defaultProps, openNewTab, fileId: "cover-file" }
+		render(<IsolatedHTMLRenderer {...iframeProps} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "linkClicked", window.location.origin, {
+			href: "/husky.html",
+		})
+		await flushReactEffects()
+
+		expect(openNewTab).not.toHaveBeenCalled()
+	})
+
 	it("keeps the renderer file identity when a link message contains a forged fileId", async () => {
 		const openNewTab = vi.fn()
 		const iframeProps = { ...defaultProps, openNewTab, fileId: "current-file" }
