@@ -11,6 +11,7 @@ use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
+use App\Infrastructure\Util\Http\GuzzleClientFactory;
 use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use App\Infrastructure\Util\SSRF\SSRFUtil;
 use GuzzleHttp\Client;
@@ -18,7 +19,6 @@ use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\Psr7\UriResolver;
 use Hyperf\Codec\Json;
-use Hyperf\Guzzle\ClientFactory;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Http\Message\ResponseInterface;
 use Throwable;
@@ -27,12 +27,11 @@ readonly class GeminiVideoClient
 {
     use HasLogger;
 
-    private const int REQUEST_TIMEOUT_SECONDS = 30;
+    private const int REQUEST_TIMEOUT_SECONDS = 60;
 
     private const int MEDIA_MAX_BYTES = 104857600;
 
     public function __construct(
-        private ClientFactory $clientFactory,
         ?LoggerFactory $loggerFactory = null,
     ) {
         if ($loggerFactory !== null) {
@@ -241,14 +240,7 @@ readonly class GeminiVideoClient
 
     private function createClient(string $proxyUrl = ''): Client
     {
-        $options = [
-            'timeout' => self::REQUEST_TIMEOUT_SECONDS,
-            'verify' => true,
-        ];
-        if ($proxyUrl !== '') {
-            $options['proxy'] = $proxyUrl;
-        }
-        return $this->clientFactory->create($options);
+        return GuzzleClientFactory::createProxyClient([], $proxyUrl);
     }
 
     private function normalizeMediaUrl(string $baseUrl, string $uri): string
