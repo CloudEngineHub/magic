@@ -51,7 +51,10 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 	const isError = isUpload && status === "error"
 
 	const handleMouseDown = useCallback((event: MouseEvent) => {
+		// Mentions are atomic nodes; prevent the browser and ProseMirror from
+		// turning a pointer drag into a text selection.
 		event.preventDefault()
+		event.stopPropagation()
 	}, [])
 
 	const handleRemove = useCallback(
@@ -157,7 +160,7 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 		<NodeViewWrapper
 			as="span"
 			className={cn(
-				"magic-mention relative !-top-px !inline-flex max-w-full !overflow-visible !bg-transparent !p-0 !align-middle",
+				"magic-mention relative !-top-px !inline-flex max-w-full !cursor-grab select-none !overflow-visible !bg-transparent !p-0 !align-middle active:cursor-grabbing",
 				MESSAGE_FILE_MENTION_ROOT_CLASS,
 				mention.pending && "opacity-50",
 			)}
@@ -165,6 +168,8 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 			data-mention-node-view="file"
 			data-type={attrs.type}
 			data-data={JSON.stringify(attrs.data || {})}
+			draggable={false}
+			data-magic-editor-node
 			onMouseDown={handleMouseDown}
 		>
 			{content}

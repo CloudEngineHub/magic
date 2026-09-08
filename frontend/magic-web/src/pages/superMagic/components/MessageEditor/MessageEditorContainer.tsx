@@ -578,6 +578,8 @@ export const MessageEditorContainer = observer(
 				enableMessageSendByContent,
 				onSendMessageByContent: handleSendMessageByContent,
 				onSendCurrentContent: handleSend,
+				projectId: selectedProject?.id ?? draftKey?.projectId,
+				topicId: selectedTopic?.id ?? draftKey?.topicId,
 			})
 
 			useSharedDataFromApp({

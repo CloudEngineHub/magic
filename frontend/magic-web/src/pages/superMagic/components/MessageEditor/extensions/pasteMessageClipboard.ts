@@ -31,6 +31,7 @@ import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { transformInspectorContent } from "./inspector-detail"
 import { prepareCopiedMentionAttrs } from "../utils/mention"
 import { collectMentionItemsFromContent } from "../services/uploadMentionService"
+import { getHtmlScreenshotStorageId } from "../services/HtmlScreenshotTargetStore"
 import { INSPECTOR_DETAIL_TYPE } from "./inspector-detail/const"
 import {
 	pasteMarkdownFileLinks,
@@ -350,7 +351,16 @@ function pasteFromMagicMetadata(
 			)
 		: []
 	const syncMentions = (additionalMentions: TiptapMentionAttributes[] = []) => {
-		const allMentions = deduplicateMentions([...mentionItems, ...additionalMentions])
+		const contentMentionIds = new Set(additionalMentions.map(getMentionUniqueId))
+		const allMentions = deduplicateMentions([
+			// 预览截图可随节点复制，但不能仅凭剪贴板元数据进入上传队列。
+			...mentionItems.filter(
+				(item) =>
+					!getHtmlScreenshotStorageId(item) ||
+					contentMentionIds.has(getMentionUniqueId(item)),
+			),
+			...additionalMentions,
+		])
 		if (allMentions.length > 0) options.onMentionsInsert?.(allMentions)
 	}
 

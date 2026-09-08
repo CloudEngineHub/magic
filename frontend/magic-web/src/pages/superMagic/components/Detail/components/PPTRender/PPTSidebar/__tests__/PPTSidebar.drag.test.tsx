@@ -282,8 +282,7 @@ function installRafController() {
 		cancel,
 		flushNext() {
 			const entry = callbacks.entries().next().value as
-				| [number, FrameRequestCallback]
-				| undefined
+				[number, FrameRequestCallback] | undefined
 			if (!entry) return false
 			const [id, callback] = entry
 			callbacks.delete(id)
@@ -347,6 +346,15 @@ describe("PPTSidebar drag sorting", () => {
 			"slide-3",
 			"slide-2",
 		])
+	})
+
+	it("exposes duplicate page in the editable context menu", () => {
+		const onDuplicateSlide = vi.fn()
+		render(<PPTSidebar allowEdit onSlideClick={vi.fn()} onDuplicateSlide={onDuplicateSlide} />)
+
+		fireEvent.click(screen.getAllByText("fileViewer.duplicateSlide")[0])
+
+		expect(onDuplicateSlide).toHaveBeenCalledWith(0)
 	})
 
 	it("sorts into whitespace below the final virtual row", async () => {

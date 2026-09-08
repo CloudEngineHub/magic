@@ -22,8 +22,10 @@ import type { AgentInfo, TiptapJSONContent } from "../iframe-api/types"
 import { messageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import {
 	processMessageMentions,
+	releaseHtmlScreenshotsAfterSend,
 	resolveMessageSendContext,
 } from "@/pages/superMagic/services/messageSendPreparation"
+import { collectMentionItemsFromContent } from "@/pages/superMagic/components/MessageEditor/services/uploadMentionService"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 
 export function useIframeAgentActions(
@@ -75,6 +77,7 @@ export function useIframeAgentActions(
 			const runtimeProjectId = getRuntimeProjectId()
 			if (!scopedTopicStore || !runtimeProjectId) return false
 
+			const screenshotMentions = collectMentionItemsFromContent(jsonContent as JSONContent)
 			const processedJsonContent = (await processMessageMentions(
 				jsonContent as JSONContent,
 				runtimeProjectId,
@@ -104,6 +107,7 @@ export function useIframeAgentActions(
 			})
 
 			if (!success) throw new Error("Failed to send message")
+			releaseHtmlScreenshotsAfterSend(screenshotMentions)
 			return true
 		},
 	)

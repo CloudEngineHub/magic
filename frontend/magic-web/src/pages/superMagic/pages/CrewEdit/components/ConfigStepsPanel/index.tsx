@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
+import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import {
@@ -60,10 +61,13 @@ import KnowledgeCard from "../StepDetailPanel/KnowledgeDetailView/components/Kno
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 import { getSceneThemePreviewStyle } from "../common/sceneThemePreview"
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
+import { usePublishScopeNotice } from "@/pages/superMagic/hooks/usePublishScopeNotice"
 
 interface ConfigStepsPanelProps {
 	onBack: () => void
 	filesContent: ReactNode
+	isAttachmentsLoaded: boolean
+	isAttachmentsLoadFailed: boolean
 }
 
 function SidebarExpandableItem({
@@ -660,7 +664,12 @@ function SidebarSection({
 	)
 }
 
-function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
+function ConfigStepsPanel({
+	onBack,
+	filesContent,
+	isAttachmentsLoaded,
+	isAttachmentsLoadFailed,
+}: ConfigStepsPanelProps) {
 	const store = useCrewEditStore()
 	const { identity, skills, layout, playbook, conversation, initLoading, crewCode } = store
 	const { t } = useTranslation("crew/create")
@@ -684,6 +693,23 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 	const crewDisplayName = identity.name_i18n.default?.trim()
 	const { skills: builtinSkills } = useBuiltinSkills()
 	const installImportedSkill = useInstallImportedSkill()
+	const { checkBeforeContinue, noticeDialog } = usePublishScopeNotice({
+		projectId: conversation.selectedProject?.id,
+		getAttachmentsStatus: () => ({
+			isLoaded: isAttachmentsLoaded,
+			hasError: isAttachmentsLoadFailed,
+		}),
+		getAttachments: () => store.projectFilesStore.workspaceFilesList,
+		publishPath: ".magic",
+	})
+	const openPublishingStep = useMemoizedFn(() => {
+		if (layout.activeDetailKey === CREW_EDIT_STEP.Publishing) {
+			handleAdvancedStep(CREW_EDIT_STEP.Publishing)
+			return
+		}
+
+		return checkBeforeContinue(() => handleAdvancedStep(CREW_EDIT_STEP.Publishing))
+	})
 	const {
 		isPublishIdentityDialogOpen,
 		isPublishingPending,
@@ -696,7 +722,7 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 		isInitializing: crewCode == null || initLoading,
 		readOnly: isViewer,
 		projectId: conversation.selectedProject?.id,
-		openPublishingStep: () => handleAdvancedStep(CREW_EDIT_STEP.Publishing),
+		openPublishingStep,
 	})
 	const isCrewIdentityDialogOpen = isEditCrewDialogOpen || isPublishIdentityDialogOpen
 
@@ -1094,6 +1120,7 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 				defaultNameRequiredMessage={t("publishNameDialog.required")}
 				readOnly={isViewer}
 			/>
+			{noticeDialog}
 		</div>
 	)
 }

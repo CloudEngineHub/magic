@@ -15,6 +15,8 @@ import type { SlideItem } from "../PPTRender/PPTSidebar/types"
 // import { TSIcon } from "@/components/base"
 // import FileSlicesIcon from "./FileSlicesIcon"
 import ActionButton from "../CommonHeader/components/ActionButton"
+import type { BeforeAction } from "../../utils/actionGuard"
+import { runGuardedAction } from "../../utils/actionGuard"
 // import { TOOLBAR_Z_INDEX } from "../../constants/z-index"
 
 interface ExportDropdownProps {
@@ -59,6 +61,8 @@ interface ExportDropdownProps {
 	) => void
 	/** 生成截图回调 */
 	onGenerateScreenshot?: (index: number) => Promise<void>
+	/** Optional guard run before opening the export flow. */
+	beforeAction?: BeforeAction
 }
 
 function ExportDropdown({
@@ -81,6 +85,7 @@ function ExportDropdown({
 	onExportCurrentEditablePPT,
 	onExportSpecificPages,
 	onGenerateScreenshot,
+	beforeAction,
 }: ExportDropdownProps) {
 	const { t } = useTranslation("super")
 	const [slideDialogOpen, setSlideDialogOpen] = useState(false)
@@ -128,10 +133,12 @@ function ExportDropdown({
 
 	const handlePrimaryClick = useCallback(() => {
 		if (isDisabled) return
-		// cancelCloseTimer()
-		// setMenuOpen(false)
-		setSlideDialogOpen(true)
-	}, [isDisabled])
+		void runGuardedAction(beforeAction, () => {
+			// cancelCloseTimer()
+			// setMenuOpen(false)
+			setSlideDialogOpen(true)
+		})
+	}, [beforeAction, isDisabled])
 
 	function handleConfirmExport(
 		filePaths: string[],

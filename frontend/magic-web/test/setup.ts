@@ -120,6 +120,7 @@ vi.mock("antd", () => {
 		Avatar: createMockComponent("Avatar"),
 		Badge: createMockComponent("Badge"),
 		Flex: createMockComponent("Flex"),
+		Tooltip: createMockComponent("Tooltip"),
 		message: mockMessage,
 	}
 })

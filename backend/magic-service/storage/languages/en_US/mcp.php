@@ -9,6 +9,7 @@ return [
         'code' => 'Code',
         'name' => 'Name',
         'description' => 'Description',
+        'icon' => 'Icon',
         'status' => 'Status',
         'external_sse_url' => 'MCP Service URL',
         'url' => 'URL',
@@ -51,6 +52,7 @@ return [
     // Error messages
     'validate_failed' => 'Validation failed',
     'not_found' => 'Data not found',
+    'field_too_long' => ':label cannot exceed :max characters',
 
     // Service related errors
     'service' => [

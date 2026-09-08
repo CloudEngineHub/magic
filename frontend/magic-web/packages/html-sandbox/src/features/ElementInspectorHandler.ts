@@ -12,6 +12,11 @@
 
 import { getElementSelector, isInjectedElement } from "../utils/dom"
 import { getParentOrigin } from "../utils/parentOrigin"
+import {
+	captureScreenshotBlob,
+	ScreenshotCancelledError,
+	type ScreenshotRequest,
+} from "./inspectorScreenshot"
 
 // Mirror the constants from the shared types (iframe-runtime is a separate build)
 const INSPECTOR_MSG = {
@@ -20,6 +25,16 @@ const INSPECTOR_MSG = {
 	HOVER: "MAGIC_INSPECTOR_HOVER",
 	SELECT: "MAGIC_INSPECTOR_SELECT",
 	HOVER_END: "MAGIC_INSPECTOR_HOVER_END",
+	TRACK: "MAGIC_INSPECTOR_TRACK",
+	RECTS_CHANGED: "MAGIC_INSPECTOR_RECTS_CHANGED",
+	SCROLL_CHANGED: "MAGIC_INSPECTOR_SCROLL_CHANGED",
+	SCROLL_TO_SELECTOR: "MAGIC_INSPECTOR_SCROLL_TO_SELECTOR",
+	SCROLL_TO_POSITION: "MAGIC_INSPECTOR_SCROLL_TO_POSITION",
+	SCREENSHOT_REQUEST: "MAGIC_INSPECTOR_SCREENSHOT_REQUEST",
+	SCREENSHOT_ACK: "MAGIC_INSPECTOR_SCREENSHOT_ACK",
+	SCREENSHOT_PROGRESS: "MAGIC_INSPECTOR_SCREENSHOT_PROGRESS",
+	SCREENSHOT_CANCEL: "MAGIC_INSPECTOR_SCREENSHOT_CANCEL",
+	SCREENSHOT_RESPONSE: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
 } as const
 
 interface BoxModelSides {
@@ -313,6 +328,233 @@ function collectElementInfo(element: HTMLElement): InspectedElementInfo {
 export class ElementInspectorHandler {
 	private active = false
 	private hoveredElement: HTMLElement | null = null
+	private trackedSelectors = new Set<string>()
+	private trackedElements = new Map<string, Element>()
+	private lastTrackedRects = new Map<string, InspectedElementInfo["rect"]>()
+	private rectRefreshScheduled = false
+	private scrollRefreshScheduled = false
+	private trackingListenersAttached = false
+	private screenshotGeneration = 0
+	private activeScreenshotRequestId: string | null = null
+
+	scrollToSelector(selector: string): void {
+		if (!selector.trim()) return
+		try {
+			document.querySelector<HTMLElement>(selector)?.scrollIntoView({
+				behavior: "auto",
+				block: "center",
+				inline: "nearest",
+			})
+		} catch {
+			// Ignore invalid selectors and pages that do not expose the target.
+		}
+	}
+
+	scrollToPosition(offset: { left: number; top: number }): void {
+		if (!Number.isFinite(offset.left) || !Number.isFinite(offset.top)) return
+		try {
+			window.scrollTo({
+				left: Math.max(0, offset.left),
+				top: Math.max(0, offset.top),
+				behavior: "auto",
+			})
+		} catch {
+			// Ignore disconnected or restricted documents.
+		}
+	}
+
+	private postScreenshotMessage(message: Record<string, unknown>): void {
+		try {
+			window.parent.postMessage(message, getParentOrigin())
+		} catch {
+			// ignore disconnected parents
+		}
+	}
+
+	private postScreenshotProgress(requestId: string): void {
+		this.postScreenshotMessage({
+			type: INSPECTOR_MSG.SCREENSHOT_PROGRESS,
+			requestId,
+			timestamp: Date.now(),
+		})
+	}
+
+	cancelScreenshot(requestId: string): void {
+		if (!requestId || this.activeScreenshotRequestId !== requestId) return
+		this.screenshotGeneration += 1
+		this.activeScreenshotRequestId = null
+	}
+
+	async captureScreenshot(request: ScreenshotRequest): Promise<void> {
+		const generation = ++this.screenshotGeneration
+		this.activeScreenshotRequestId = request.requestId
+		this.postScreenshotMessage({
+			type: INSPECTOR_MSG.SCREENSHOT_ACK,
+			requestId: request.requestId,
+			timestamp: Date.now(),
+		})
+		try {
+			const blob = await captureScreenshotBlob(request, {
+				shouldAbort: () => generation !== this.screenshotGeneration,
+				onProgress: () => {
+					if (generation !== this.screenshotGeneration) return
+					this.postScreenshotProgress(request.requestId)
+				},
+			})
+			if (generation !== this.screenshotGeneration) return
+			this.postScreenshotMessage({
+				type: INSPECTOR_MSG.SCREENSHOT_RESPONSE,
+				requestId: request.requestId,
+				success: true,
+				blob,
+				timestamp: Date.now(),
+			})
+		} catch (error) {
+			if (generation !== this.screenshotGeneration) return
+			if (error instanceof ScreenshotCancelledError) return
+			this.postScreenshotMessage({
+				type: INSPECTOR_MSG.SCREENSHOT_RESPONSE,
+				requestId: request.requestId,
+				success: false,
+				error: error instanceof Error ? error.message : String(error),
+				timestamp: Date.now(),
+			})
+		} finally {
+			if (generation === this.screenshotGeneration) {
+				this.activeScreenshotRequestId = null
+			}
+		}
+	}
+
+	private postTrackedRects(rects: { selector: string; rect: InspectedElementInfo["rect"] }[]) {
+		try {
+			window.parent.postMessage(
+				{ type: INSPECTOR_MSG.RECTS_CHANGED, rects, timestamp: Date.now() },
+				getParentOrigin(),
+			)
+		} catch {
+			// ignore
+		}
+	}
+
+	private postScrollOffset() {
+		try {
+			window.parent.postMessage(
+				{
+					type: INSPECTOR_MSG.SCROLL_CHANGED,
+					left: Math.max(0, window.scrollX || window.pageXOffset || 0),
+					top: Math.max(0, window.scrollY || window.pageYOffset || 0),
+					timestamp: Date.now(),
+				},
+				getParentOrigin(),
+			)
+		} catch {
+			// ignore
+		}
+	}
+
+	private getTrackedElement(selector: string): Element | null {
+		const cached = this.trackedElements.get(selector)
+		if (cached?.isConnected) return cached
+		try {
+			const element = document.querySelector(selector)
+			if (element) this.trackedElements.set(selector, element)
+			return element
+		} catch {
+			return null
+		}
+	}
+
+	private refreshTrackedRects = () => {
+		this.rectRefreshScheduled = false
+		if (this.trackedSelectors.size === 0) return
+
+		const rects: { selector: string; rect: InspectedElementInfo["rect"] }[] = []
+		for (const selector of this.trackedSelectors) {
+			const element = this.getTrackedElement(selector)
+			if (!element) continue
+			const rect = element.getBoundingClientRect()
+			const nextRect = {
+				top: rect.top,
+				left: rect.left,
+				width: rect.width,
+				height: rect.height,
+			}
+			const previousRect = this.lastTrackedRects.get(selector)
+			if (
+				previousRect &&
+				previousRect.top === nextRect.top &&
+				previousRect.left === nextRect.left &&
+				previousRect.width === nextRect.width &&
+				previousRect.height === nextRect.height
+			) {
+				continue
+			}
+			this.lastTrackedRects.set(selector, nextRect)
+			rects.push({ selector, rect: nextRect })
+		}
+
+		if (rects.length > 0) this.postTrackedRects(rects)
+	}
+
+	private scheduleRectRefresh = () => {
+		if (this.rectRefreshScheduled || this.trackedSelectors.size === 0) return
+		this.rectRefreshScheduled = true
+		window.requestAnimationFrame(this.refreshTrackedRects)
+	}
+
+	private scheduleScrollRefresh = () => {
+		if (this.scrollRefreshScheduled) return
+		this.scrollRefreshScheduled = true
+		window.requestAnimationFrame(() => {
+			this.scrollRefreshScheduled = false
+			this.postScrollOffset()
+		})
+	}
+
+	private scheduleRefresh = () => {
+		this.scheduleRectRefresh()
+		this.scheduleScrollRefresh()
+	}
+
+	private attachTrackingListeners() {
+		if (this.trackingListenersAttached) return
+		document.addEventListener("scroll", this.scheduleRefresh, true)
+		window.addEventListener("resize", this.scheduleRefresh)
+		this.trackingListenersAttached = true
+	}
+
+	private detachTrackingListeners() {
+		if (!this.trackingListenersAttached) return
+		document.removeEventListener("scroll", this.scheduleRefresh, true)
+		window.removeEventListener("resize", this.scheduleRefresh)
+		this.trackingListenersAttached = false
+	}
+
+	updateTrackedSelectors(selectors: unknown): void {
+		const nextSelectors = new Set(
+			Array.isArray(selectors)
+				? selectors.filter(
+						(selector): selector is string =>
+							typeof selector === "string" && !!selector,
+					)
+				: [],
+		)
+		this.trackedSelectors = nextSelectors
+		for (const selector of this.trackedElements.keys()) {
+			if (!nextSelectors.has(selector)) {
+				this.trackedElements.delete(selector)
+				this.lastTrackedRects.delete(selector)
+			}
+		}
+		// Screenshot selection has no tracked selector, but still needs the
+		// iframe scroll position to keep arbitrary regions anchored.
+		this.attachTrackingListeners()
+		this.postScrollOffset()
+		if (nextSelectors.size === 0) return
+		for (const selector of nextSelectors) this.getTrackedElement(selector)
+		this.scheduleRectRefresh()
+	}
 
 	private onMouseMove = (e: MouseEvent) => {
 		if (!this.active) return

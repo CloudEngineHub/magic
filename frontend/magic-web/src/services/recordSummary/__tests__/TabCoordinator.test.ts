@@ -288,6 +288,102 @@ describe("TabCoordinator — LockAcquireIntent", () => {
 	})
 })
 
+describe("TabCoordinator — recording override", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+		MockBroadcastChannel.reset()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+		MockBroadcastChannel.reset()
+	})
+
+	it("asks the active tab to stop before taking over", async () => {
+		const onForceOverrideRequest = vi.fn(() => true)
+		const activeTab = makeCoordinator({ onForceOverrideRequest })
+		const requestingTab = makeCoordinator()
+
+		activeTab.acquireLock()
+		const resultPromise = requestingTab.requestRecordingOverride("session-1")
+		const result = await resultPromise
+
+		expect(result).toBe(true)
+		expect(onForceOverrideRequest).toHaveBeenCalledWith({
+			requestId: expect.any(String),
+			sessionId: "session-1",
+			targetTabId: activeTab.getTabId(),
+		})
+
+		activeTab.cleanup()
+		requestingTab.cleanup()
+	})
+
+	it("forceAcquireLock steals the lock so a later requestLock succeeds", async () => {
+		const onLockAcquired = vi.fn()
+		const activeTab = makeCoordinator()
+		const requestingTab = makeCoordinator({ onLockAcquired })
+		activeTab.acquireLock()
+
+		expect(requestingTab.hasRecordingPermission()).toBe(false)
+		expect(requestingTab.isAnyTabRecording()).toBe(true)
+
+		requestingTab.forceAcquireLock()
+
+		expect(requestingTab.hasRecordingPermission()).toBe(true)
+		expect(activeTab.hasRecordingPermission()).toBe(false)
+		expect(await requestingTab.requestLock()).toBe(true)
+		expect(onLockAcquired).not.toHaveBeenCalled()
+
+		activeTab.cleanup()
+		requestingTab.cleanup()
+	})
+
+	it("ignores idle-tab rejections until the lock holder responds", async () => {
+		let resolveOverride: ((value: boolean) => void) | undefined
+		const onForceOverrideRequest = vi.fn(
+			() =>
+				new Promise<boolean>((resolve) => {
+					resolveOverride = resolve
+				}),
+		)
+		const idleOverride = vi.fn(() => false)
+		const idleTab = makeCoordinator({ onForceOverrideRequest: idleOverride })
+		const activeTab = makeCoordinator({ onForceOverrideRequest })
+		const requestingTab = makeCoordinator()
+
+		activeTab.acquireLock()
+		const resultPromise = requestingTab.requestRecordingOverride("session-1")
+
+		expect(onForceOverrideRequest).toHaveBeenCalledTimes(1)
+		expect(idleOverride).not.toHaveBeenCalled()
+		expect(idleTab.hasRecordingPermission()).toBe(false)
+		expect(requestingTab.getCurrentLockHolder()).toBe(activeTab.getTabId())
+
+		resolveOverride?.(true)
+		await expect(resultPromise).resolves.toBe(true)
+
+		idleTab.cleanup()
+		activeTab.cleanup()
+		requestingTab.cleanup()
+	})
+
+	it("fails closed when the active tab does not respond", async () => {
+		const activeTab = makeCoordinator({
+			onForceOverrideRequest: () => new Promise<boolean>(() => undefined),
+		})
+		const requestingTab = makeCoordinator()
+		activeTab.acquireLock()
+
+		const resultPromise = requestingTab.requestRecordingOverride(undefined, 1000)
+		await vi.advanceTimersByTimeAsync(1000)
+
+		expect(await resultPromise).toBe(false)
+		activeTab.cleanup()
+		requestingTab.cleanup()
+	})
+})
+
 describe("TabCoordinator — LOCK_PRIORITY constants", () => {
 	it("LOCK_PRIORITY_USER > LOCK_PRIORITY_BACKGROUND", () => {
 		expect(LOCK_PRIORITY_USER).toBeGreaterThan(LOCK_PRIORITY_BACKGROUND)

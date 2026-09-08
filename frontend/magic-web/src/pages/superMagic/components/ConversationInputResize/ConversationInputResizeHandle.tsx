@@ -6,6 +6,10 @@ import {
 	type PointerEvent as ReactPointerEvent,
 } from "react"
 import { cn } from "@/utils/cn"
+import {
+	ResizeGrip,
+	resizeHandleGlowClass,
+} from "@/pages/superMagic/components/ResizeGrip/ResizeGrip"
 
 interface ConversationInputResizeHandleProps {
 	disabled?: boolean
@@ -161,23 +165,16 @@ export default function ConversationInputResizeHandle({
 			data-resizing={isDragging}
 			data-testid="conversation-input-resize-handle"
 			className={cn(
-				"group absolute inset-x-0 z-10 flex h-2 overflow-hidden",
+				"group absolute inset-x-0 z-10 flex h-3 items-center justify-center bg-transparent",
 				positionClassName,
-				"cursor-row-resize touch-none select-none items-center justify-center",
-				"before:pointer-events-none before:absolute before:inset-0",
-				"before:bg-gradient-to-r before:from-[rgba(239,246,255,0)] before:via-[rgba(210,230,255,1)] before:to-[rgba(239,246,255,0)]",
-				"before:opacity-0 before:transition-opacity before:duration-200 before:content-['']",
-				"hover:before:opacity-100 data-[resizing=true]:before:opacity-100",
+				"cursor-row-resize touch-none select-none",
+				resizeHandleGlowClass("horizontal"),
 				disabled && "pointer-events-none",
 			)}
 			onPointerDown={handlePointerDown}
 			onDoubleClick={handleDoubleClick}
 		>
-			{/* Keep the two-line indicator inside the clipped input panel so both lines stay visible. */}
-			<div className="pointer-events-none relative z-10 flex w-5 flex-col gap-0.5">
-				<div className="h-px w-full rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary group-data-[resizing=true]:bg-primary" />
-				<div className="h-px w-full rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary group-data-[resizing=true]:bg-primary" />
-			</div>
+			<ResizeGrip orientation="horizontal" />
 		</div>
 	)
 }

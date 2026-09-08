@@ -18,6 +18,7 @@ import { CardVersionCompareDialog } from "./CardVersionCompareDialog"
 import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
 import { CARD_IMAGE_PROCESS } from "../constants/imageProcess"
 import type { SelfMediaAttachmentNode } from "../types"
+import type { BeforeAction } from "../../../utils/actionGuard"
 
 interface CardVersionHistoryButtonProps {
 	/** 文件 ID */
@@ -30,7 +31,7 @@ interface CardVersionHistoryButtonProps {
 	 * 打开下拉前的拦截回调（例如：有未保存内容时弹框询问用户）。
 	 * 返回 true 允许打开，返回 false 取消打开。
 	 */
-	onBeforeOpen?: () => Promise<boolean>
+	onBeforeOpen?: BeforeAction
 }
 
 /**

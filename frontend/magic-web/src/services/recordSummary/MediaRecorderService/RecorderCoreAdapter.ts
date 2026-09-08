@@ -38,6 +38,10 @@ import { TimeTrackingWorkerManager } from "./managers/TimeTrackingWorkerManager"
 import type { AudioEncoder } from "./encoders/AudioEncoder"
 import { RecordingEncoderResolver } from "./encoders/RecordingEncoderResolver"
 import { normalizeAudioChunk } from "./utils/PcmNormalizer"
+import {
+	DEFAULT_RECORDING_CHANNELS,
+	createRecordingEncodingSnapshot,
+} from "./utils/RecordingEncodingProfile"
 
 // Import strategies
 import type { AudioSourceStrategy } from "./strategies/AudioSourceStrategy"
@@ -96,8 +100,7 @@ export class RecorderCoreAdapter {
 	private visibilityChangeHandler: (() => void) | null = null
 	private audioContextStateChangeHandler: ((event: Event) => void) | null = null
 	private previousAudioContextStateChangeHandler:
-		| ((this: AudioContext, event: Event) => void)
-		| null = null
+		((this: AudioContext, event: Event) => void) | null = null
 	private audioContextStateChangeUsesEventListener = false
 	private audioTrackEndedHandlers = new Map<MediaStreamTrack, () => void>()
 	private audioContextDiagnosticsTarget: AudioContext | null = null
@@ -158,10 +161,15 @@ export class RecorderCoreAdapter {
 			// a session from producing a first chunk with a format that later becomes invalid.
 			const resolvedEncoder = await this.encoderResolver.resolve(this.config)
 			this.encoder = resolvedEncoder.encoder
-			this.encodingSnapshot = {
-				format: resolvedEncoder.format,
-				policyVersion: resolvedEncoder.policyVersion,
-			}
+			this.encodingSnapshot = createRecordingEncodingSnapshot(
+				resolvedEncoder.format,
+				{
+					sampleRate: this.config.sampleRate,
+					channels: DEFAULT_RECORDING_CHANNELS,
+					bitsPerSample: this.config.bitRate,
+				},
+				resolvedEncoder.policyVersion,
+			)
 
 			this.dependencies.logger.log("Starting recording", {
 				sessionId,

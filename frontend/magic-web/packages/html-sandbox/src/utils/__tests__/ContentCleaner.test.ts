@@ -189,6 +189,17 @@ describe("ContentCleaner", () => {
 			expect(cleaned).not.toContain("data-previous-webkit-user-select")
 		})
 
+		it("should remove unsafe hrefs and protect blank targets before persistence", () => {
+			const cleaned = ContentCleaner.cleanDocument(
+				"<html><body><a href='javascript:alert(1)' target='_blank'>Unsafe</a><a href=' /safe '>Safe</a></body></html>",
+			)
+			const doc = new DOMParser().parseFromString(cleaned, "text/html")
+
+			expect(doc.querySelector("a")?.hasAttribute("href")).toBe(false)
+			expect(doc.querySelectorAll("a")[0]?.getAttribute("rel")).toBe("noopener noreferrer")
+			expect(doc.querySelectorAll("a")[1]?.getAttribute("href")).toBe("/safe")
+		})
+
 		it("should handle empty document", () => {
 			const html = `<!DOCTYPE html><html><body></body></html>`
 			const cleaned = ContentCleaner.cleanDocument(html)

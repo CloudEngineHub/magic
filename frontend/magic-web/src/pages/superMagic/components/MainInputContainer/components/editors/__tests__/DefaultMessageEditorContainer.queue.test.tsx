@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 	addToQueue: vi.fn(),
 	preparePanelSend: vi.fn(),
 	sendPanelMessage: vi.fn(),
+	releaseHtmlScreenshotsAfterSend: vi.fn(),
 	handleSend: undefined as
 		| ((params: {
 				value: JSONContent
@@ -22,6 +23,7 @@ vi.mock("@/pages/superMagic/components/MessageEditor/MessageEditor", () => ({
 }))
 
 vi.mock("react-i18next", () => ({
+	initReactI18next: { type: "3rdParty", init: () => undefined },
 	useTranslation: () => ({
 		t: (key: string) => key,
 		i18n: { language: "zh_CN" },
@@ -85,6 +87,7 @@ vi.mock("@/pages/superMagic/services/messageSendPreparation", () => ({
 	createTopicForMessageContext: vi.fn(),
 	ensureProjectForMessageContext: vi.fn(),
 	preparePanelSend: mocks.preparePanelSend,
+	releaseHtmlScreenshotsAfterSend: mocks.releaseHtmlScreenshotsAfterSend,
 }))
 
 vi.mock("@/pages/superMagic/components/MessageEditor/utils", () => ({
@@ -243,5 +246,75 @@ describe("DefaultMessageEditorContainer queue sending", () => {
 				context: expect.objectContaining({ refreshProjectAfterTopicRename: true }),
 			}),
 		)
+	})
+
+	it("releases screenshot blobs only after send succeeds", async () => {
+		const currentProject = { id: "project-1" }
+		const currentTopic = { id: "topic-1" }
+		const mentionItems = [
+			{
+				type: "mention",
+				attrs: {
+					data: { is_html_screenshot: true, storage_id: "region-1" },
+				},
+			},
+		]
+		mocks.preparePanelSend.mockResolvedValue({
+			params: { value: { type: "doc" }, mentionItems },
+			context: {},
+			currentProject,
+			currentTopic,
+		})
+		mocks.sendPanelMessage.mockResolvedValue({ currentProject, currentTopic })
+
+		render(
+			<DefaultMessageEditorContainer
+				editorContext={{
+					selectedProject: currentProject as never,
+					selectedTopic: currentTopic as never,
+					topicMode: TopicMode.MicroApp,
+					onMessageSendReady: (sendMessage) => {
+						mocks.handleSend = sendMessage as typeof mocks.handleSend
+					},
+				}}
+			/>,
+		)
+
+		await act(async () => {
+			await mocks.handleSend?.({
+				value: { type: "doc" },
+				mentionItems: mentionItems as never,
+				topicMode: TopicMode.MicroApp,
+			})
+		})
+
+		expect(mocks.releaseHtmlScreenshotsAfterSend).toHaveBeenCalledWith(mentionItems)
+	})
+
+	it("keeps screenshot blobs when send preparation fails", async () => {
+		mocks.preparePanelSend.mockResolvedValue(null)
+
+		render(
+			<DefaultMessageEditorContainer
+				editorContext={{
+					selectedProject: { id: "project-1" } as never,
+					selectedTopic: { id: "topic-1" } as never,
+					topicMode: TopicMode.MicroApp,
+					onMessageSendReady: (sendMessage) => {
+						mocks.handleSend = sendMessage as typeof mocks.handleSend
+					},
+				}}
+			/>,
+		)
+
+		await act(async () => {
+			await mocks.handleSend?.({
+				value: { type: "doc" },
+				mentionItems: [] as never,
+				topicMode: TopicMode.MicroApp,
+			})
+		})
+
+		expect(mocks.releaseHtmlScreenshotsAfterSend).not.toHaveBeenCalled()
 	})
 })

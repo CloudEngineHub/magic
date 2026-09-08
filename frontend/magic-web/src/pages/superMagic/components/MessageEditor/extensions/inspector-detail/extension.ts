@@ -15,6 +15,8 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 	inline: true,
 	atom: true,
 	selectable: true,
+	// Pointer Events handles custom node dragging; native draggable would show a
+	// browser/system drag cursor and can be mistaken for a file upload.
 	draggable: false,
 
 	addAttributes() {

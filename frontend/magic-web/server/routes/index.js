@@ -19,6 +19,11 @@ const path = require("node:path")
 const cors = require("cors")
 const { rootPath } = require("../config")
 const noIndexMiddleware = require("../middleware/noIndexMiddleware")
+const {
+	getHtmlSandboxAllowedOrigins,
+	isHtmlSandboxRuntimeRequest,
+	setHtmlSandboxRuntimeCorsHeaders,
+} = require("../utils/htmlSandboxRuntimeCors.cjs")
 
 const hasLoginPopupTemplate = fs.existsSync(
 	path.join(rootPath, "../dist/login-popup-callback.html"),
@@ -38,6 +43,13 @@ const configureRoutes = (app) => {
 	app.use(noIndexMiddleware)
 	// CORS 开启
 	app.use(cors())
+	const htmlSandboxAllowedOrigins = getHtmlSandboxAllowedOrigins()
+	app.use((req, res, next) => {
+		if (isHtmlSandboxRuntimeRequest(req.path)) {
+			setHtmlSandboxRuntimeCorsHeaders(res, req.headers.origin, htmlSandboxAllowedOrigins)
+		}
+		next()
+	})
 
 	/**
 	 * ======================== 基础 API 路由 ========================

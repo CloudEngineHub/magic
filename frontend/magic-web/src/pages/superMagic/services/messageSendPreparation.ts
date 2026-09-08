@@ -4,6 +4,7 @@ import type { MessageEditorRef } from "@/pages/superMagic/components/MessageEdit
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { mentionItemsProcessor } from "@/pages/superMagic/components/MessageEditor/services/MentionItemsProcessor"
 import { collectMentionItemsFromContent } from "@/pages/superMagic/components/MessageEditor/services/uploadMentionService"
+import { htmlScreenshotUploadService } from "@/pages/superMagic/components/MessageEditor/services/HtmlScreenshotUploadService"
 import { stripProjectResourceMentionDisplayMetadata } from "@/pages/superMagic/components/MessageEditor/utils/mention"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 import type {
@@ -96,6 +97,16 @@ export async function processMessageMentions(
 		topicId,
 	)
 	return stripProjectResourceMentionDisplayMetadata(result.content, result.mentionItems).content
+}
+
+export function releaseHtmlScreenshotsAfterSend(
+	mentionItems: HandleSendParams["mentionItems"],
+): void {
+	void Promise.resolve(
+		htmlScreenshotUploadService.releaseStoredScreenshots(
+			htmlScreenshotUploadService.collectStorageIds(mentionItems),
+		),
+	).catch(() => undefined)
 }
 
 export function resolveMessageSendContext(

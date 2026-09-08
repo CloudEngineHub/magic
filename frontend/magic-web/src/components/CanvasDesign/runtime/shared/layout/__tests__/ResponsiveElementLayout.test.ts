@@ -39,7 +39,9 @@ describe("ResponsiveElementLayout", () => {
 	it("scales shared design tokens with the element root scale", () => {
 		const layout = resolveResponsiveElementLayout({ width: 640, height: 720 }, SPEC)
 
-		expect(layout.design.type.title).toBeCloseTo(ELEMENT_DESIGN_TOKENS.type.title * layout.scale)
+		expect(layout.design.type.title).toBeCloseTo(
+			ELEMENT_DESIGN_TOKENS.type.title * layout.scale,
+		)
 		expect(layout.design.pad.sectionInline).toBeCloseTo(
 			ELEMENT_DESIGN_TOKENS.pad.sectionInline * layout.scale,
 		)

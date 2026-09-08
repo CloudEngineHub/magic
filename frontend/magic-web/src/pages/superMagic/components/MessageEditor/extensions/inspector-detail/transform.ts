@@ -378,7 +378,10 @@ export function serializeInspectorContent(
 		const metadataMarkerCount =
 			(inlinePosition.before ? 1 : 0) +
 			(inlinePosition.after ? 2 : 0) +
-			(attrs.fileMention ? 4 : 0)
+			// The file marker is only needed when inline content precedes the
+			// inspector node; standalone file mentions are inferred from the
+			// paragraph immediately before the title for backward compatibility.
+			(attrs.fileMention && inlinePosition.before ? 4 : 0)
 		content.push(
 			para(text(`${INSPECTOR_DETAIL_MARKER.repeat(1 + metadataMarkerCount)}${labels.title}`)),
 		)
