@@ -175,6 +175,9 @@ export interface UploadFileMentionData {
 	upload_error?: string
 	/** Internal marker for canvas clipboard attachments; never promote to project mention. */
 	is_canvas_clipboard?: boolean
+	/** IndexedDB screenshot. Region shots stage after confirm; save on send. */
+	is_html_screenshot?: boolean
+	storage_id?: string
 }
 
 export interface CloudFileMentionData {

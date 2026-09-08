@@ -58,9 +58,11 @@ vi.mock("react-i18next", () => ({
 		t: (key: string, options?: { count?: string }) =>
 			key === "playbook.edit.presets.templateCount"
 				? `${options?.count} 套`
-				: key === "playbook.edit.presets.unselected"
-					? "Not selected"
-					: key,
+				: key === "ppt.templateReplacement.title"
+					? "选择 PPT 模板"
+					: key === "playbook.edit.presets.unselected"
+						? "Not selected"
+						: key,
 		i18n: { language: "en_US" },
 	}),
 }))
@@ -470,6 +472,8 @@ describe("SlidesTemplatePanel", () => {
 			"playbook.edit.presets.form.selectOrAutoSelectTemplate",
 		)
 		expect(chooseTemplateButton).toHaveAttribute("aria-haspopup", "dialog")
+		fireEvent.click(chooseTemplateButton)
+		expect(screen.getByRole("dialog")).toHaveTextContent("选择 PPT 模板")
 	})
 
 	it("highlights the template area and requests a random template on drop", () => {
@@ -550,7 +554,7 @@ describe("SlidesTemplatePanel", () => {
 		)
 	})
 
-	it("opens the template picker from the selected template hover action", async () => {
+	it("opens the template picker dialog from the selected template hover action", async () => {
 		useFinePointerHoverMock.mockReturnValue(true)
 		const handleClear = vi.fn()
 		const handleTemplatePickerContainerChange = vi.fn()
@@ -588,6 +592,7 @@ describe("SlidesTemplatePanel", () => {
 		expect(
 			screen.getByTestId("slides-template-home-replace-selected-template"),
 		).toHaveAttribute("aria-expanded", "true")
+		expect(screen.getByRole("dialog")).toHaveTextContent("选择 PPT 模板")
 		expect(handleClear).not.toHaveBeenCalled()
 		await waitFor(() =>
 			expect(handleTemplatePickerContainerChange).toHaveBeenCalledWith(
@@ -763,7 +768,7 @@ describe("SlidesTemplatePanel", () => {
 		expect(trigger).not.toHaveTextContent("101,582 套")
 	})
 
-	it("keeps the floating template picker open while changing a desktop tag filter", async () => {
+	it("keeps the template picker dialog open while changing a desktop tag filter", async () => {
 		vi.mocked(SuperMagicApi.getSlidesTemplateTagGroups).mockResolvedValue([
 			{
 				id: "style-group",
@@ -1062,6 +1067,7 @@ describe("SlidesTemplatePanel", () => {
 		)
 		const featuredTab = screen.getByTestId("template-group-selector-option-tag:featured")
 		expect(myTemplatesTab).toContainElement(screen.getByTestId("my-slides-templates-tab-icon"))
+		expect(screen.queryByTestId("my-slides-templates-section-tabs")).toBeNull()
 		expect(
 			myTemplatesTab.compareDocumentPosition(featuredTab) & Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy()
@@ -1124,6 +1130,22 @@ describe("SlidesTemplatePanel", () => {
 			/>,
 		)
 
+		const myTemplatesTab = screen.getByTestId(
+			"template-group-selector-option-__my_slides_templates__",
+		)
+		const createdTab = screen.getByTestId("my-slides-templates-section-created")
+		expect(myTemplatesTab).toHaveClass("h-9", "rounded-full")
+		expect(createdTab).toHaveClass(
+			"h-8",
+			"rounded-lg",
+			"bg-muted/60",
+			"transition-none",
+			"active:scale-100",
+		)
+		expect(screen.getByTestId("my-slides-templates-secondary-tabs")).toBeInTheDocument()
+		expect(screen.getByTestId("my-slides-templates-section-favorites")).toBeInTheDocument()
+		expect(screen.getByTestId("my-slides-templates-section-used")).toBeInTheDocument()
+		expect(screen.queryByTestId("my-slides-templates-section-tabs")).toBeNull()
 		expect(screen.queryByTestId("slides-template-category-tag-filters")).toBeNull()
 		expect(screen.queryByTestId("slides-template-tag-filters-skeleton")).toBeNull()
 	})

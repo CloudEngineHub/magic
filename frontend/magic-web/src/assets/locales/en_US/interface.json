@@ -540,12 +540,12 @@
 		"rechargePointsTip1": "Free users are temporarily unable to recharge points. Please",
 		"rechargePointsTip2": "first before recharging.",
 		"recordId": "Record ID",
-		"remark": "Remark",
 		"redirecting": "Redirecting...",
 		"refundTime": "Refund time",
 		"refundedTag": "Refunded",
 		"registerToEarnPointsLabel": "Free on Sign-up",
 		"remainingPoints": "Points Balance",
+		"remark": "Remark",
 		"renew": "Renew",
 		"renewalDuration": "Renewal Duration",
 		"renewalDurationOptions": {

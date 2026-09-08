@@ -9,6 +9,7 @@ import { type FileItem } from "../../contents/HTML/utils/fetchInterceptor"
 import { createParentMessageHandler } from "../../contents/HTML/utils/fetchInterceptor"
 import type { PPTRootRenderProps } from "./types"
 import { flattenAttachments } from "../../contents/HTML/utils"
+import { isHtmlPreviewShellNavigation } from "../../contents/HTML/utils/html-navigation"
 import { cn } from "@/utils/cn"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 
@@ -406,12 +407,14 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 	)
 
 	const openNewTab = useCallback(
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		(fileId: string, _path: string) => {
+		(fileId: string, path: string) => {
 			if (!fileId) {
 				console.warn("openNewTab: fileId is empty, cannot open new tab")
 				return
 			}
+
+			// Ignore husky/shell rewrites from canceling slide edit.
+			if (isHtmlPreviewShellNavigation(path)) return
 
 			const fileItem = findAttachmentNodeByFileId(pptAttachmentList, fileId)
 			if (!fileItem) {
@@ -439,9 +442,19 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		!isInitialEntryLoading && !isInitialMagicProjectLoading && canRenderFromExistingState
 
 	return (
-		<div className={cn("h-full w-full", className)}>
+		<div
+			className={cn("h-full w-full", className)}
+			data-testid={props.isTabActive === false ? undefined : "ppt-project-preview"}
+		>
 			{!isReadyToRender ? (
-				<Flex justify="center" align="center" className="h-full w-full bg-background">
+				<Flex
+					justify="center"
+					align="center"
+					className="h-full w-full bg-background"
+					data-testid={
+						props.isTabActive === false ? undefined : "ppt-project-preview-loading"
+					}
+				>
 					<MagicSpin spinning />
 				</Flex>
 			) : (

@@ -2,6 +2,8 @@
 
 本文档列出了 PPTRender 组件及其子组件中所有可用的 `data-testid` 属性，便于单元测试和 E2E 测试使用 `getByTestId` 进行稳定元素选择。
 
+FilesViewer 会保留非活动页实例。项目级固定选择器和本次新增的编辑工具栏选择器只在活动 PPT 预览上暴露；查询时优先以 `ppt-project-preview` 为作用域。
+
 ## 命名规范
 
 - 使用 lowercase kebab-case
@@ -35,6 +37,31 @@
 | 导航对话框 - 取消       | `ppt-render-navigation-dialog-cancel`  | 取消导航                   |
 | 导航对话框 - 丢弃并跳转 | `ppt-render-navigation-dialog-discard` | 丢弃修改并跳转             |
 | 导航对话框 - 保存并跳转 | `ppt-render-navigation-dialog-save`    | 保存后跳转                 |
+
+## PPT 项目预览与编辑工具栏
+
+| 元素               | data-testid                                 | 说明                                       |
+| ------------------ | ------------------------------------------- | ------------------------------------------ |
+| PPT 项目预览根节点 | `ppt-project-preview`                       | 包含加载态和 PPTRender 的项目级预览容器    |
+| PPT 项目加载态     | `ppt-project-preview-loading`               | 首次解析入口文件或 magic.project.js 时显示 |
+| 编辑工具栏操作区   | `ppt-edit-toolbar-actions`                  | PPT 预览顶部编辑工具栏                     |
+| 视图模式切换       | `ppt-edit-toolbar-view-mode-switcher`       | 代码与预览模式切换                         |
+| 代码模式           | `ppt-edit-toolbar-view-mode-code-button`    | 切换到代码模式的实际按钮                   |
+| 预览模式           | `ppt-edit-toolbar-view-mode-desktop-button` | 切换到桌面预览模式的实际按钮               |
+| 服务端更新         | `ppt-edit-toolbar-server-update-button`     | 查看服务端更新                             |
+| 快速选取           | `ppt-edit-toolbar-quick-select-button`      | 进入或退出快速元素选取                     |
+| 文件编辑操作组     | `ppt-edit-toolbar-file-actions`             | 编辑、保存、保存并退出、取消按钮容器       |
+| 编辑               | `ppt-edit-toolbar-edit-button`              | 进入当前幻灯片编辑模式                     |
+| 保存               | `ppt-edit-toolbar-save-button`              | 保存当前幻灯片                             |
+| 保存并退出         | `ppt-edit-toolbar-save-and-exit-button`     | 保存并退出编辑模式                         |
+| 取消               | `ppt-edit-toolbar-cancel-button`            | 放弃本轮编辑                               |
+| AI 编辑操作组      | `ppt-edit-toolbar-ai-edit`                  | AI 编辑主按钮与菜单按钮容器                |
+| AI 编辑主按钮      | `ppt-edit-toolbar-ai-edit-primary-button`   | 执行主要 AI 编辑动作                       |
+| AI 编辑菜单按钮    | `ppt-edit-toolbar-ai-edit-menu-button`      | 展开 AI 编辑菜单                           |
+| AI 编辑菜单        | `ppt-edit-toolbar-ai-edit-menu`             | AI 编辑菜单内容                            |
+| AI 编辑菜单项      | `ppt-edit-toolbar-ai-edit-item`             | 重复项通过 `data-item-key` 区分            |
+| 刷新               | `ppt-edit-toolbar-refresh-button`           | 刷新当前幻灯片                             |
+| 全屏               | `ppt-edit-toolbar-fullscreen-button`        | 进入或退出 PPT 演示全屏                    |
 
 ---
 

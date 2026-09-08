@@ -1203,7 +1203,11 @@ export class ChunkUploader {
 				error: new Error(errorMessage),
 				message: `获取会话 ${sessionId} 上传凭证失败：`,
 			})
-			throw new Error(`Failed to get upload credentials: ${errorMessage}`)
+			const uploadError = createUploadError(error) as Error & { sessionId?: string }
+			// Preserve the existing caller-facing message while retaining terminal-error metadata.
+			uploadError.message = `Failed to get upload credentials: ${errorMessage}`
+			if (!uploadError.sessionId) uploadError.sessionId = sessionId
+			throw uploadError
 		}
 	}
 

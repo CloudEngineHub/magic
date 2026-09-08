@@ -55,7 +55,6 @@ function PublishingPanel() {
 				onSubmit: (draft) => submitDraftRef.current(draft),
 			}),
 	)
-
 	const loadPublishPanelData = useCallback(async () => {
 		if (!crewCode) {
 			versionsRef.current = []
@@ -148,7 +147,7 @@ function PublishingPanel() {
 		publishPanelStore,
 	])
 
-	const handleCreateNewVersion = useCallback(async () => {
+	const openCreateNewVersion = useCallback(async () => {
 		if (!crewCode) {
 			magicToast.error(getCrewCodeRequiredMessage())
 			return
@@ -220,7 +219,7 @@ function PublishingPanel() {
 		<PublishPanel
 			store={publishPanelStore}
 			onClose={() => setActiveStep(null)}
-			onCreateNewVersion={handleCreateNewVersion}
+			onCreateNewVersion={openCreateNewVersion}
 		/>
 	)
 }

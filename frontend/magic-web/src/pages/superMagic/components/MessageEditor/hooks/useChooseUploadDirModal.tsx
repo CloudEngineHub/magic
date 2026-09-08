@@ -83,9 +83,9 @@ function useChooseUploadDirModal({
 
 			if (path.length > 0) {
 				const parentId = last(path)?.file_id
-				_addFiles(editedFiles, parentId)
+				await _addFiles(editedFiles, parentId)
 			} else {
-				_addFiles(editedFiles, undefined)
+				await _addFiles(editedFiles, undefined)
 			}
 		} catch (err: unknown) {
 			if (err && typeof err === "object" && "type" in err && err.type === "cancel") {

@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
 	setScopedSelectedTopic: vi.fn(),
 	dispatchMessage: vi.fn(),
 	hasListeners: vi.fn(() => false),
+	releaseHtmlScreenshotsAfterSend: vi.fn(),
+	collectMentionItemsFromContent: vi.fn(() => []),
 }))
 
 vi.mock("ahooks", () => ({
@@ -81,6 +83,11 @@ vi.mock("@/pages/superMagic/services/messageSendFlowService", () => ({
 vi.mock("@/pages/superMagic/services/messageSendPreparation", () => ({
 	resolveMessageSendContext: (context: unknown) => context,
 	processMessageMentions: async (content: unknown) => content,
+	releaseHtmlScreenshotsAfterSend: mocks.releaseHtmlScreenshotsAfterSend,
+}))
+
+vi.mock("@/pages/superMagic/components/MessageEditor/services/uploadMentionService", () => ({
+	collectMentionItemsFromContent: mocks.collectMentionItemsFromContent,
 }))
 
 describe("useIframeAgentActions", () => {
@@ -286,5 +293,53 @@ describe("useIframeAgentActions", () => {
 			}),
 		)
 		expect(mocks.publish).not.toHaveBeenCalled()
+	})
+
+	it("releases screenshot blobs after a scoped send succeeds", async () => {
+		const screenshotMentions = [
+			{ attrs: { data: { is_html_screenshot: true, storage_id: "region-1" } } },
+		]
+		mocks.collectMentionItemsFromContent.mockReturnValue(screenshotMentions)
+		const scopedTopicStore = {
+			topics: [],
+			setTopics: mocks.setScopedTopics,
+			setSelectedTopic: mocks.setScopedSelectedTopic,
+		} as any
+		const { result } = renderHook(() =>
+			useIframeAgentActions("project-from-preview", scopedTopicStore, {
+				id: "project-from-preview",
+			} as any),
+		)
+
+		await act(async () => {
+			await result.current.createTopicAndSend({ message: "hello" })
+		})
+
+		expect(mocks.releaseHtmlScreenshotsAfterSend).toHaveBeenCalledWith(screenshotMentions)
+	})
+
+	it("keeps screenshot blobs when a scoped send fails", async () => {
+		mocks.collectMentionItemsFromContent.mockReturnValue([
+			{ attrs: { data: { is_html_screenshot: true, storage_id: "region-1" } } },
+		])
+		mocks.dispatchMessage.mockResolvedValue(false)
+		const scopedTopicStore = {
+			topics: [],
+			setTopics: mocks.setScopedTopics,
+			setSelectedTopic: mocks.setScopedSelectedTopic,
+		} as any
+		const { result } = renderHook(() =>
+			useIframeAgentActions("project-from-preview", scopedTopicStore, {
+				id: "project-from-preview",
+			} as any),
+		)
+
+		await act(async () => {
+			await expect(result.current.createTopicAndSend({ message: "hello" })).rejects.toThrow(
+				"Failed to send message",
+			)
+		})
+
+		expect(mocks.releaseHtmlScreenshotsAfterSend).not.toHaveBeenCalled()
 	})
 })

@@ -510,6 +510,17 @@
 		"delivered": "已制作 {{marker}} 页",
 		"deliveredPrivate": "已制作 {{marker}} 套"
 	},
+	"publishScopeNotice": {
+		"attachmentsLoadFailed": "项目文件仍在加载，暂时无法确认发布范围，请稍后重试。",
+		"cancel": "取消",
+		"confirm": "请确认需要发布的文件位于该目录内。",
+		"continue": "继续发布",
+		"intro": "当前项目中存在发布范围外的文件。",
+		"morePaths": "还有 {{count}} 个路径未显示",
+		"outsidePathsLabel": "发布范围外的路径",
+		"scopeLabel": "本次发布范围",
+		"title": "请确认发布文件范围"
+	},
 	"skillDetailDialog": {
 		"collapse": "收起",
 		"emptyName": "未命名技能",

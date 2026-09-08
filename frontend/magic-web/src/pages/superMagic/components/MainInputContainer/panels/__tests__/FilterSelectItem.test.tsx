@@ -57,6 +57,31 @@ describe("FilterSelectItem", () => {
 		expect(handleFilterChange).toHaveBeenCalledWith("pages", "8")
 	})
 
+	it("caps long desktop option lists and keeps them scrollable", () => {
+		const languageFilter: FieldItem = {
+			data_key: "language",
+			label: { en_US: "Language" },
+			current_value: "",
+			options: Array.from({ length: 18 }, (_, index) => ({
+				value: `language-${index}`,
+				label: `Language ${index}`,
+			})),
+		}
+
+		render(<FilterSelectItem filter={languageFilter} onFilterChange={vi.fn()} />)
+		fireEvent.click(screen.getByRole("combobox", { name: "Language" }))
+
+		const content = document.querySelector('[data-slot="select-content"]')
+		const viewport = document.querySelector("[data-radix-select-viewport]")
+		expect(content).toHaveClass(
+			"max-h-[min(520px,var(--radix-select-content-available-height))]",
+		)
+		expect(viewport).toHaveClass(
+			"max-h-[min(520px,var(--radix-select-content-available-height))]",
+			"overflow-y-auto",
+		)
+	})
+
 	it("does not submit a page count below the configured minimum", () => {
 		render(<FilterSelectItem filter={pagesFilter} onFilterChange={vi.fn()} />)
 

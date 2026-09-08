@@ -159,7 +159,7 @@ function SelfMediaOpsOverviewCard({
 	onDismissDailyInsightAction,
 	className,
 }: SelfMediaOpsOverviewCardProps) {
-	const { t } = useTranslation("super")
+	const { t, i18n } = useTranslation("super")
 	const { containerRef: opsContainerRef, width: opsContainerWidth } =
 		useMeasuredContainerWidth<HTMLElement>()
 	const animatedReads = useAnimatedOverviewValue(overview.totalReads, NUMBER_ANIMATION_MS)
@@ -171,8 +171,8 @@ function SelfMediaOpsOverviewCard({
 		overview.engagementRate ?? 0,
 		NUMBER_ANIMATION_MS,
 	)
-	const reads = formatSelfMediaCompactNumber(animatedReads)
-	const engagement = formatSelfMediaCompactNumber(animatedEngagement)
+	const reads = formatSelfMediaCompactNumber(animatedReads, i18n?.language)
+	const engagement = formatSelfMediaCompactNumber(animatedEngagement, i18n?.language)
 	const engagementRate = formatSelfMediaPercent(animatedEngagementRate)
 	const primarySignal = buildSelfMediaOpsPrimarySignal(overview)
 	const workflowHealth = buildSelfMediaOpsHealth(overview)

@@ -120,6 +120,7 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
+		i18n: { language: "en" },
 		t: (key: string, options?: Record<string, unknown>) => {
 			const text =
 				(
@@ -137,7 +138,7 @@ vi.mock("react-i18next", () => ({
 						"detail.selfMedia.home.engagement.reads": "Reads",
 						"detail.selfMedia.home.articleCount": "1 article",
 						"detail.selfMedia.home.postReviewCard": "Create review",
-						"detail.selfMedia.home.openOpsReview": "View review",
+						"detail.selfMedia.home.openOpsReview": "Review",
 						"detail.selfMedia.home.postReviewCardName": "Review: {{title}}",
 						"detail.selfMedia.opsReview.title": "Operations review",
 						"detail.selfMedia.opsReview.close": "Close review",
@@ -175,7 +176,7 @@ vi.mock("react-i18next", () => ({
 						"detail.selfMedia.opsReview.deltaReads": "Reads change",
 						"detail.selfMedia.opsReview.reviewHtmlTitle": "HTML review report",
 						"detail.selfMedia.home.opsData": "Data",
-						"detail.selfMedia.home.dataSyncNow": "Sync now",
+						"detail.selfMedia.home.dataSyncNow": "Sync",
 						"detail.selfMedia.home.dataOverview": "Data overview",
 						"detail.selfMedia.home.autoSync": "Auto sync",
 						"detail.selfMedia.home.autoSyncDescription": "Run on a schedule",
@@ -191,9 +192,9 @@ vi.mock("react-i18next", () => ({
 						"detail.selfMedia.home.autoSyncTurnOff": "Turn off auto sync",
 						"detail.selfMedia.home.loadingAutoSync": "Loading auto sync",
 						"detail.selfMedia.home.mentionPost": "Mention this article",
-						"detail.selfMedia.analysis.action": "AI diagnosis",
-						"detail.selfMedia.home.bindPublishedLink": "Connect published link",
-						"detail.selfMedia.home.editPublishedLink": "Change published link",
+						"detail.selfMedia.analysis.action": "Diagnose",
+						"detail.selfMedia.home.bindPublishedLink": "Add link",
+						"detail.selfMedia.home.editPublishedLink": "Edit link",
 						"detail.selfMedia.home.publishedLinkInput": "Published content link",
 						"detail.selfMedia.home.publishedLinkPlaceholder":
 							"Paste the published content link",
@@ -1550,19 +1551,19 @@ describe("SelfMediaRootRender", () => {
 				)
 			})
 			expect(screen.getByTestId("self-media-home-post-analysis-post-1")).toHaveTextContent(
-				"AI diagnosis",
+				"Diagnose",
 			)
 			expect(
 				screen.queryByTestId("self-media-home-post-bind-link-post-1"),
 			).not.toBeInTheDocument()
 			expect(screen.getByTestId("self-media-home-post-ops-data-post-1")).toHaveTextContent(
-				"Sync now",
+				"Sync",
 			)
 			expect(
 				screen.queryByTestId("self-media-home-post-publish-ingest-post-1"),
 			).not.toBeInTheDocument()
 			expect(screen.getByTestId("self-media-home-post-review-card-post-1")).toHaveTextContent(
-				"View review",
+				"Review",
 			)
 		})
 	})
@@ -1649,7 +1650,7 @@ describe("SelfMediaRootRender", () => {
 			expect(screen.getByTestId("self-media-home-post-ops-data-post-1")).toHaveTextContent("")
 			expect(screen.getByTestId("self-media-home-post-ops-data-post-1")).toHaveAttribute(
 				"aria-label",
-				"Sync now",
+				"Sync",
 			)
 			expect(
 				screen.queryByTestId("self-media-home-post-publish-ingest-post-1"),
@@ -1730,10 +1731,10 @@ describe("SelfMediaRootRender", () => {
 				)
 			})
 			expect(screen.getByTestId("self-media-home-post-analysis-post-1")).toHaveTextContent(
-				"AI diagnosis",
+				"Diagnose",
 			)
 			expect(screen.getByTestId("self-media-home-post-bind-link-post-1")).toHaveTextContent(
-				"Connect published link",
+				"Add link",
 			)
 		})
 	})

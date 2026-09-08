@@ -9,13 +9,11 @@ import type { SuperMagicUpdateAttachmentsPayload } from "../events/files"
  */
 
 export type SuperMagicUpdateAttachmentsRequest =
-	| SuperMagicUpdateAttachmentsPayload
-	| (() => void)
-	| undefined
+	SuperMagicUpdateAttachmentsPayload | (() => void) | undefined
 
 interface WaitEntry {
 	projectId: string
-	resolve: () => void
+	resolve: (didLoad: boolean) => void
 	timeoutId: ReturnType<typeof setTimeout>
 }
 
@@ -44,10 +42,10 @@ function removeEntry(entry: WaitEntry) {
 function enqueueAttachmentsRefreshWait(
 	projectId: string,
 	options: { timeoutMs: number; publishRefresh: boolean },
-): Promise<void> {
+): Promise<boolean> {
 	const { timeoutMs, publishRefresh } = options
 
-	return new Promise((resolve, reject) => {
+	return new Promise<boolean>((resolve, reject) => {
 		const timeoutId = setTimeout(() => {
 			removeEntry(entry)
 			reject(
@@ -59,9 +57,9 @@ function enqueueAttachmentsRefreshWait(
 
 		const entry: WaitEntry = {
 			projectId,
-			resolve: () => {
+			resolve: (didLoad) => {
 				clearTimeout(timeoutId)
-				resolve()
+				resolve(didLoad)
 			},
 			timeoutId,
 		}
@@ -78,8 +76,8 @@ function enqueueAttachmentsRefreshWait(
 export function waitForNextFullAttachmentsRefreshForProject(
 	projectId: string | undefined,
 	options?: { timeoutMs?: number },
-): Promise<void> {
-	if (!projectId) return Promise.resolve()
+): Promise<boolean> {
+	if (!projectId) return Promise.resolve(false)
 	const timeoutMs = options?.timeoutMs ?? 15_000
 	return enqueueAttachmentsRefreshWait(projectId, { timeoutMs, publishRefresh: true })
 }
@@ -91,7 +89,7 @@ export function waitForNextFullAttachmentsRefreshForProject(
 export function waitForNextAttachmentsRefreshForProject(
 	projectId: string | undefined,
 	options?: { timeoutMs?: number },
-): Promise<void> {
+): Promise<boolean> {
 	return waitForNextFullAttachmentsRefreshForProject(projectId, options)
 }
 
@@ -102,20 +100,20 @@ export function waitForNextAttachmentsRefreshForProject(
 export function registerWaitForNextAttachmentsRefreshForProject(
 	projectId: string | undefined,
 	options?: { timeoutMs?: number },
-): Promise<void> {
-	if (!projectId) return Promise.resolve()
+): Promise<boolean> {
+	if (!projectId) return Promise.resolve(false)
 	const timeoutMs = options?.timeoutMs ?? 15_000
 	return enqueueAttachmentsRefreshWait(projectId, { timeoutMs, publishRefresh: false })
 }
 
 /** 在对应 project 的 getAttachments 进入 finally 后调用（成功或失败均应调用） */
-export function resolveAttachmentsRefreshWaitersForProject(projectId: string) {
+export function resolveAttachmentsRefreshWaitersForProject(projectId: string, didLoad = true) {
 	for (let i = waitQueue.length - 1; i >= 0; i--) {
 		const w = waitQueue[i]
 		if (w.projectId === projectId) {
 			waitQueue.splice(i, 1)
 			clearTimeout(w.timeoutId)
-			w.resolve()
+			w.resolve(didLoad)
 		}
 	}
 }
@@ -142,6 +140,6 @@ export function releaseAttachmentsRefreshWaitersWithoutFetch() {
 	const pending = waitQueue.splice(0, waitQueue.length)
 	for (const w of pending) {
 		clearTimeout(w.timeoutId)
-		w.resolve()
+		w.resolve(false)
 	}
 }

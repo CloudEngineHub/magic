@@ -59,6 +59,18 @@ export function buildSkillMdRelativePath(skillDir: string): string {
 	return `${MAGIC_SKILLS_ROOT}/${trimmed}/${SKILL_MD_FILE_NAME}`
 }
 
+export function normalizeSkillDir(value: unknown): string | null {
+	if (typeof value !== "string") return null
+
+	const normalized = value.trim().replace(/\\/g, "/")
+	if (!normalized || normalized.startsWith("/") || normalized.includes("\0")) return null
+
+	const segments = normalized.split("/")
+	if (segments.some((segment) => !segment || segment === "." || segment === "..")) return null
+
+	return segments.join("/")
+}
+
 type AttachmentPathFields = AttachmentItem & { file_path?: string; file_type?: string }
 
 function itemProjectRelativePath(item: AttachmentPathFields): string {
@@ -201,8 +213,7 @@ export function parseSkillConfigYaml(content: string): string | null {
 		const data = yaml.load(content) as SkillConfigYamlShape | null | undefined
 		const dir = data?.[SKILL_CONFIG_YAML_SKILL_KEY]?.[SKILL_CONFIG_YAML_DIR_KEY]
 		if (typeof dir !== "string") return null
-		const trimmed = dir.trim()
-		return trimmed.length > 0 ? trimmed : null
+		return normalizeSkillDir(dir)
 	} catch {
 		return null
 	}

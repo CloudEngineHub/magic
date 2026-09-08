@@ -71,6 +71,33 @@ describe("StyleManager", () => {
 		})
 	})
 
+	describe("duplicateElement", () => {
+		it("assigns unique ids to the duplicated subtree", async () => {
+			container.innerHTML =
+				"<section id='source'><span id='source-label'>Content</span></section>"
+
+			await styleManager.duplicateElement("#source")
+
+			expect(document.querySelectorAll("#source")).toHaveLength(1)
+			expect(document.querySelector("#source-copy")).toBeTruthy()
+			expect(document.querySelector("#source-label-copy")).toBeTruthy()
+		})
+
+		it("keeps duplicated ids stable across undo and redo", async () => {
+			container.innerHTML = "<section id='source'>Content</section>"
+
+			await styleManager.duplicateElement("#source")
+			expect(document.querySelector("#source-copy")).toBeTruthy()
+
+			await styleManager.undo()
+			expect(document.querySelector("#source-copy")).toBeNull()
+
+			await styleManager.redo()
+			expect(document.querySelector("#source-copy")).toBeTruthy()
+			expect(document.querySelectorAll("[id='source-copy']")).toHaveLength(1)
+		})
+	})
+
 	describe("setTextColor", () => {
 		it("should set text color", async () => {
 			container.innerHTML = "<div id='test'>Content</div>"
@@ -1057,6 +1084,45 @@ describe("StyleManager", () => {
 			expect(element.textContent).toBe("New Text")
 		})
 
+		it("keeps image nodes when updating a mixed container", async () => {
+			container.innerHTML =
+				"<div id='test'><img id='icon' src='icon.png'>从低渗透率盆地读向高增长脊线</div>"
+			const element = container.querySelector("#test") as HTMLElement
+			const image = container.querySelector("#icon") as HTMLImageElement
+
+			await styleManager.updateTextContent("div#test", "新的标题")
+
+			expect(element.querySelector("#icon")).toBe(image)
+			expect(image.getAttribute("src")).toBe("icon.png")
+			expect(element.textContent).toBe("新的标题")
+		})
+
+		it("restores nested-only copy on undo without dropping media", async () => {
+			container.innerHTML = "<div id='test'><img id='icon' src='icon.png'><h2>Original</h2></div>"
+			const element = container.querySelector("#test") as HTMLElement
+			const title = container.querySelector("h2") as HTMLHeadingElement
+
+			await styleManager.updateTextContent("div#test", "Updated")
+			expect(title.textContent).toBe("Updated")
+
+			await styleManager.undo()
+
+			expect(element.querySelector("#icon")).not.toBeNull()
+			expect(title.textContent).toBe("Original")
+		})
+
+		it("restores mixed-container text on undo without dropping the image", async () => {
+			container.innerHTML =
+				"<div id='test'><img id='icon' src='icon.png'>从低渗透率盆地读向高增长脊线</div>"
+			const element = container.querySelector("#test") as HTMLElement
+
+			await styleManager.updateTextContent("div#test", "新的标题")
+			await styleManager.undo()
+
+			expect(element.querySelector("#icon")).not.toBeNull()
+			expect(element.textContent).toBe("从低渗透率盆地读向高增长脊线")
+		})
+
 		it("should not record command during batch mode", async () => {
 			container.innerHTML = "<div id='test'>Original Text</div>"
 
@@ -1084,6 +1150,86 @@ describe("StyleManager", () => {
 
 			// Now should have one batch command
 			expect(commandHistory.getUndoStackSize()).toBe(1)
+		})
+	})
+
+	describe("updateElementAttributes", () => {
+		it("should update common anchor attributes", async () => {
+			container.innerHTML = "<a id='test' href='/old' target='_self' rel='nofollow'>Link</a>"
+			const element = container.querySelector("#test") as HTMLAnchorElement
+
+			await styleManager.updateElementAttributes("a#test", {
+				href: "/new",
+				target: "_blank",
+				rel: "noopener",
+				ariaLabel: "Open link",
+			})
+
+			expect(element.getAttribute("href")).toBe("/new")
+			expect(element.getAttribute("target")).toBe("_blank")
+			expect(element.getAttribute("rel")).toBe("noopener noreferrer")
+			expect(element.getAttribute("aria-label")).toBe("Open link")
+		})
+
+		it("should restore and reapply attributes through undo and redo", async () => {
+			container.innerHTML = "<a id='test' href='/old' title='Old title'>Link</a>"
+			const element = container.querySelector("#test") as HTMLAnchorElement
+
+			await styleManager.updateElementAttributes("a#test", {
+				href: "/new",
+				title: "New title",
+			})
+			await styleManager.undo()
+
+			expect(element.getAttribute("href")).toBe("/old")
+			expect(element.getAttribute("title")).toBe("Old title")
+
+			await styleManager.redo()
+
+			expect(element.getAttribute("href")).toBe("/new")
+			expect(element.getAttribute("title")).toBe("New title")
+		})
+
+		it("should remove an attribute when its value is empty", async () => {
+			container.innerHTML = "<a id='test' href='/page' download='file.pdf'>Link</a>"
+			const element = container.querySelector("#test") as HTMLAnchorElement
+
+			await styleManager.updateElementAttributes("a#test", { download: "" })
+
+			expect(element.hasAttribute("download")).toBe(false)
+		})
+
+		it("should reject executable href schemes before changing the element", async () => {
+			container.innerHTML = "<a id='test' href='/safe'>Link</a>"
+			const element = container.querySelector("#test") as HTMLAnchorElement
+
+			await expect(
+				styleManager.updateElementAttributes("a#test", {
+					href: " javascript:alert(1)",
+				}),
+			).rejects.toThrow("Unsafe href URL protocol")
+
+			expect(element.getAttribute("href")).toBe("/safe")
+			expect(commandHistory.getUndoStackSize()).toBe(0)
+		})
+
+		it("should not restore an unsafe pre-existing href during undo", async () => {
+			container.innerHTML = "<a id='test' href='javascript:alert(1)'>Link</a>"
+			const element = container.querySelector("#test") as HTMLAnchorElement
+
+			await styleManager.updateElementAttributes("a#test", { title: "Updated" })
+			await styleManager.undo()
+
+			expect(element.hasAttribute("href")).toBe(false)
+		})
+
+		it("should add noopener and noreferrer for blank targets", async () => {
+			container.innerHTML = "<a id='test' href='/page'>Link</a>"
+			const element = container.querySelector("#test") as HTMLAnchorElement
+
+			await styleManager.updateElementAttributes("a#test", { target: "_blank" })
+
+			expect(element.getAttribute("rel")).toBe("noopener noreferrer")
 		})
 	})
 })

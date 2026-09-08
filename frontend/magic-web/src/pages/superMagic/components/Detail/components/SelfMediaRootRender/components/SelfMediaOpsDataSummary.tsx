@@ -28,29 +28,29 @@ const secondaryMetricDefs = [
 		key: "likes",
 		labelKey: "selfMedia.likes",
 		icon: Heart,
-		getValue: (overview: SelfMediaOpsOverview) =>
-			formatSelfMediaCompactNumber(getEngagementTotals(overview).likes),
+		getValue: (overview: SelfMediaOpsOverview, locale?: string) =>
+			formatSelfMediaCompactNumber(getEngagementTotals(overview).likes, locale),
 	},
 	{
 		key: "comments",
 		labelKey: "selfMedia.comments",
 		icon: MessageCircle,
-		getValue: (overview: SelfMediaOpsOverview) =>
-			formatSelfMediaCompactNumber(getEngagementTotals(overview).comments),
+		getValue: (overview: SelfMediaOpsOverview, locale?: string) =>
+			formatSelfMediaCompactNumber(getEngagementTotals(overview).comments, locale),
 	},
 	{
 		key: "saves",
 		labelKey: "selfMedia.saves",
 		icon: Bookmark,
-		getValue: (overview: SelfMediaOpsOverview) =>
-			formatSelfMediaCompactNumber(getEngagementTotals(overview).saves),
+		getValue: (overview: SelfMediaOpsOverview, locale?: string) =>
+			formatSelfMediaCompactNumber(getEngagementTotals(overview).saves, locale),
 	},
 	{
 		key: "shares",
 		labelKey: "selfMedia.shares",
 		icon: Send,
-		getValue: (overview: SelfMediaOpsOverview) =>
-			formatSelfMediaCompactNumber(getEngagementTotals(overview).shares),
+		getValue: (overview: SelfMediaOpsOverview, locale?: string) =>
+			formatSelfMediaCompactNumber(getEngagementTotals(overview).shares, locale),
 	},
 ] as const
 
@@ -77,19 +77,20 @@ function SelfMediaOpsDataSummary({
 	dense = false,
 	className,
 }: SelfMediaOpsDataSummaryProps) {
-	const { t } = useTranslation("super")
+	const { t, i18n } = useTranslation("super")
 	const secondaryLabels = {
 		likes: t("selfMedia.likes"),
 		comments: t("selfMedia.comments"),
 		saves: t("selfMedia.saves"),
 		shares: t("selfMedia.shares"),
 	}
+	const locale = i18n?.language
 	const synced = overview.completion.metrics.done
 	const total = overview.completion.metrics.total
 	const averageReads = loading
 		? t("selfMedia.syncing")
 		: synced > 0
-			? formatSelfMediaCompactNumber(overview.totalReads / synced)
+			? formatSelfMediaCompactNumber(overview.totalReads / synced, locale)
 			: "--"
 	const displayValues: Record<SelfMediaOpsMetricKey, string> = loading
 		? {
@@ -207,7 +208,7 @@ function SelfMediaOpsDataSummary({
 									dense ? "text-[13px]" : "text-[16px]",
 								)}
 							>
-								{loading ? "—" : item.getValue(overview)}
+								{loading ? "—" : item.getValue(overview, locale)}
 							</div>
 						</div>
 					)

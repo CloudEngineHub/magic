@@ -87,3 +87,31 @@ export function parseHtmlNavigationRequest(
 
 	return splitNavigationParts(value)
 }
+
+function getNavigationFilePath(value: string): string {
+	const trimmed = value.trim()
+	if (!trimmed) return ""
+
+	try {
+		if (/^[a-z][a-z\d+.-]*:/i.test(trimmed)) {
+			return new URL(trimmed).pathname.replace(/^\/+/, "")
+		}
+	} catch {
+		return ""
+	}
+
+	const parsed = parseHtmlNavigationRequest(trimmed)
+	return (parsed?.filePath || trimmed).replace(/^\/+/, "").split(/[?#]/)[0]
+}
+
+/**
+ * True when href is the preview iframe shell, not a project HTML file.
+ * document.open after cancel is reported as this same-URL navigation.
+ */
+export function isHtmlPreviewShellNavigation(href: string, shellUrl = "/husky.html"): boolean {
+	if (typeof href !== "string" || !href.trim()) return false
+
+	const hrefPath = getNavigationFilePath(href)
+	const shellPath = getNavigationFilePath(shellUrl)
+	return Boolean(hrefPath && shellPath && hrefPath === shellPath)
+}

@@ -42,6 +42,11 @@ import type {
 	SuperMagicWidgetEditorCommandPayload,
 } from "@/pages/superMagic/events/message"
 import type {
+	HtmlInspectorScreenshotUpdate,
+	HtmlMultiSelectionRequest,
+	HtmlScreenshotUploadRequest,
+} from "@/components/business/ElementInspector"
+import type {
 	SuperMagicOpenFileTabPayload,
 	SuperMagicOpenFileTabByPathPayload,
 	SuperMagicOpenKnowledgeBaseTabPayload,
@@ -205,6 +210,12 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Append_Suggestion_To_Editor]: [
 		content: string | import("@/infrastructure/editors/tiptap/core").JSONContent,
 	]
+	/** Submit structured HTML targets to the active conversation editor. */
+	[PubSubEvents.Submit_Html_Multi_Selection]: [request: HtmlMultiSelectionRequest]
+	/** Upload an HTML screenshot after target confirmation. */
+	[PubSubEvents.Prepare_Html_Screenshot]: [request: HtmlScreenshotUploadRequest]
+	/** Update the screenshot mention on an already inserted HTML inspector node. */
+	[PubSubEvents.Update_Html_Inspector_Screenshot]: [update: HtmlInspectorScreenshotUpdate]
 	/** 幻灯片添加后设置编辑器内容。 */
 	[PubSubEvents.Set_Content_When_Slide_Added]: SuperMagicSetContentWhenSlideAddedArgs
 	/** 设置 demo 文本到输入框：传入字符串文本。 */

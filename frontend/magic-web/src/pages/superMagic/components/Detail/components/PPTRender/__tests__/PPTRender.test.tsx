@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
 import PPTRender, { reconcilePPTSlideToolbarModels } from "../index"
+import { TAILWIND_Z_INDEX_CLASSES } from "../../../contents/HTML/constants/z-index"
+import type { PPTSlideStructureAdapter } from "../types"
 
 const mockState = vi.hoisted(() => ({
 	store: {
@@ -120,11 +122,27 @@ vi.mock("../contexts/PPTContext", () => ({
 
 vi.mock("../PPTSidebar/index", async () => {
 	const React = await import("react")
-	function MockPPTSidebar({ isPreviewLoadingEnabled }: { isPreviewLoadingEnabled?: boolean }) {
+	function MockPPTSidebar({
+		isPreviewLoadingEnabled,
+		onCollapsedChange,
+	}: {
+		isPreviewLoadingEnabled?: boolean
+		onCollapsedChange?: (collapsed: boolean) => void
+	}) {
 		React.useEffect(() => {
 			mockState.sidebarPreviewEffect(isPreviewLoadingEnabled)
 		}, [isPreviewLoadingEnabled])
-		return <div data-testid="ppt-sidebar" />
+		return (
+			<div data-testid="ppt-sidebar">
+				<button
+					type="button"
+					data-testid="ppt-sidebar-collapse-button"
+					onClick={() => onCollapsedChange?.(true)}
+				>
+					collapse
+				</button>
+			</div>
+		)
 	}
 	return {
 		default: MockPPTSidebar,
@@ -135,11 +153,13 @@ vi.mock("../PPTControlBar", () => ({
 	PPTControlBar: ({
 		scaleRatio,
 		onScaleChange,
+		onReplaceTemplate,
 	}: {
 		scaleRatio: number
 		onScaleChange: (scale: number) => void
+		onReplaceTemplate?: () => void
 	}) => {
-		mockState.pptControlBarProps({ scaleRatio, onScaleChange })
+		mockState.pptControlBarProps({ scaleRatio, onScaleChange, onReplaceTemplate })
 		return (
 			<div data-testid="ppt-control-bar">
 				<span data-testid="ppt-control-bar-scale">{scaleRatio}</span>
@@ -157,9 +177,11 @@ vi.mock("../../EditToolbar", async () => {
 	function MockEditToolbar({
 		fileId,
 		interactionDisabled,
+		testIdsEnabled,
 	}: {
 		fileId?: string
 		interactionDisabled?: boolean
+		testIdsEnabled?: boolean
 	}) {
 		React.useEffect(() => {
 			mockState.toolbarMounted()
@@ -171,6 +193,7 @@ vi.mock("../../EditToolbar", async () => {
 				data-testid="ppt-edit-toolbar"
 				data-file-id={fileId}
 				data-interaction-disabled={String(Boolean(interactionDisabled))}
+				data-test-ids-enabled={String(testIdsEnabled !== false)}
 			/>
 		)
 	}
@@ -344,15 +367,17 @@ vi.mock("../hooks", () => ({
 	}),
 	useSlideHandlers: ({
 		setIsAnySlideEditing,
+		setIsSidebarCollapsed,
 	}: {
 		setIsAnySlideEditing: (value: boolean) => void
+		setIsSidebarCollapsed: (collapsed: boolean) => void
 	}) => ({
 		handleEditModeChange: (_fileId: string, isEditing: boolean) =>
 			setIsAnySlideEditing(isEditing),
 		handleRefreshSlide: vi.fn(),
 		handleRefreshAllSlides: vi.fn(),
 		handleRegenerateScreenshot: vi.fn(),
-		handleSidebarCollapsedChange: vi.fn(),
+		handleSidebarCollapsedChange: (collapsed: boolean) => setIsSidebarCollapsed(collapsed),
 	}),
 }))
 
@@ -409,6 +434,8 @@ vi.mock("@/components/shadcn-ui/alert-dialog", () => ({
 function renderPPTRender(input?: {
 	onRegisterCheckBeforeClose?: (fileId: string, callback: () => Promise<boolean>) => void
 	onUnregisterCheckBeforeClose?: (fileId: string) => void
+	isTabActive?: boolean
+	slideStructureAdapter?: PPTSlideStructureAdapter
 }) {
 	return render(
 		<PPTRender
@@ -417,8 +444,10 @@ function renderPPTRender(input?: {
 			mainFileId="ppt-root-file"
 			mainFileName="Deck.html"
 			allowEdit={true}
+			isTabActive={input?.isTabActive}
 			onRegisterCheckBeforeClose={input?.onRegisterCheckBeforeClose}
 			onUnregisterCheckBeforeClose={input?.onUnregisterCheckBeforeClose}
+			slideStructureAdapter={input?.slideStructureAdapter}
 		/>,
 	)
 }
@@ -498,6 +527,9 @@ describe("PPTRender", () => {
 		})
 		expect(screen.getByTestId("ppt-render-container")).toHaveClass("fixed")
 		expect(screen.getByTestId("ppt-render-sidebar")).toHaveStyle({ width: "0px" })
+		expect(screen.getByTestId("ppt-render-slide-content").className).not.toContain(
+			TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS,
+		)
 		expect(screen.queryByTestId("ppt-render-sidebar-resize-handle")).toBeNull()
 		expect(screen.queryByTestId("ppt-control-bar")).toBeNull()
 		expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
@@ -533,6 +565,37 @@ describe("PPTRender", () => {
 			expect.objectContaining({ isFullscreen: false }),
 		)
 		expect(screen.getByTestId("ppt-slide-slide-file-id")).toBe(liveSlideNode)
+		expect(screen.getByTestId("ppt-render-slide-content")).toHaveClass(
+			"relative",
+			TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS,
+		)
+	})
+
+	it("stacks the slide canvas above the sidebar so selection chrome is visible", async () => {
+		renderPPTRender()
+
+		expect(await screen.findByTestId("ppt-render-slide-content")).toHaveClass(
+			"relative",
+			TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS,
+		)
+
+		fireEvent.click(screen.getByTestId("ppt-sidebar-collapse-button"))
+
+		expect(screen.getByTestId("ppt-render-slide-content").className).not.toContain(
+			TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS,
+		)
+		expect(screen.getByTestId("ppt-render-expand-sidebar-button")).toBeInTheDocument()
+	})
+
+	it("keeps the sidebar resize strip below the slide canvas", async () => {
+		renderPPTRender()
+
+		const resizeHandle = await screen.findByTestId("ppt-render-sidebar-resize-handle")
+		expect(resizeHandle).toHaveClass(TAILWIND_Z_INDEX_CLASSES.BASE.SIDEBAR_RESIZE)
+		expect(resizeHandle.className).not.toContain("z-20")
+		expect(screen.getByTestId("ppt-render-slide-content")).toHaveClass(
+			TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS,
+		)
 	})
 
 	it("registers a before-close confirmation callback for the PPT file", async () => {
@@ -583,6 +646,28 @@ describe("PPTRender", () => {
 		await waitFor(() => {
 			expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
 				expect.objectContaining({ manualScale: 0.44 }),
+			)
+		})
+	})
+
+	it("passes template replacement through the bottom control bar", async () => {
+		mockState.isSlideEditing = false
+		renderPPTRender()
+
+		await waitFor(() => {
+			expect(mockState.pptControlBarProps).toHaveBeenCalledWith(
+				expect.objectContaining({ onReplaceTemplate: expect.any(Function) }),
+			)
+		})
+	})
+
+	it("hides template replacement for slide template projects", async () => {
+		mockState.isSlideEditing = false
+		renderPPTRender({ slideStructureAdapter: {} })
+
+		await waitFor(() => {
+			expect(mockState.pptControlBarProps).toHaveBeenCalledWith(
+				expect.objectContaining({ onReplaceTemplate: undefined }),
 			)
 		})
 	})
@@ -698,6 +783,7 @@ describe("PPTRender", () => {
 
 		const toolbar = await screen.findByTestId("ppt-edit-toolbar")
 		expect(toolbar).toHaveAttribute("data-file-id", "slide-file-id")
+		expect(toolbar).toHaveAttribute("data-test-ids-enabled", "true")
 		expect(screen.getAllByTestId("ppt-edit-toolbar")).toHaveLength(1)
 		expect(mockState.toolbarMounted).toHaveBeenCalledTimes(1)
 		expect(mockState.toolbarUnmounted).not.toHaveBeenCalled()
@@ -749,6 +835,16 @@ describe("PPTRender", () => {
 		expect(toolbar).toHaveAttribute("data-interaction-disabled", "false")
 		expect(mockState.toolbarMounted).toHaveBeenCalledTimes(1)
 		expect(mockState.toolbarUnmounted).not.toHaveBeenCalled()
+	})
+
+	it("disables fixed toolbar test ids for an inactive cached preview", async () => {
+		mockState.isSlideEditing = false
+		renderPPTRender({ isTabActive: false })
+
+		expect(await screen.findByTestId("ppt-edit-toolbar")).toHaveAttribute(
+			"data-test-ids-enabled",
+			"false",
+		)
 	})
 
 	it("ignores a stale ready callback after rapid navigation chooses a newer target", async () => {

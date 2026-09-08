@@ -91,6 +91,48 @@ describe("MediaRecorderService", () => {
 			expect(latestConfig).toMatchObject({ type: "pcm" })
 		})
 
+		it("should reuse the persisted 48 kHz profile when a session resumes", async () => {
+			const sessionId = "legacy-wav-session"
+			service.setEncodingSnapshot(sessionId, {
+				format: "wav",
+				sampleRate: 48_000,
+				channels: 1,
+				bitsPerSample: 16,
+			})
+
+			await service.startRecording(sessionId)
+
+			const constructorMock = vi.mocked(RecorderCoreAdapter)
+			const latestConfig =
+				constructorMock.mock.calls[constructorMock.mock.calls.length - 1]?.[0]
+			expect(latestConfig).toMatchObject({
+				sampleRate: 48_000,
+				bitRate: 16,
+				lockedEncoding: {
+					format: "wav",
+					sampleRate: 48_000,
+				},
+			})
+		})
+
+		it("should infer 48 kHz for a format-only legacy WAV snapshot", async () => {
+			const sessionId = "format-only-legacy-session"
+			service.setEncodingSnapshot(sessionId, { format: "wav" })
+
+			await service.startRecording(sessionId)
+
+			const constructorMock = vi.mocked(RecorderCoreAdapter)
+			const latestConfig =
+				constructorMock.mock.calls[constructorMock.mock.calls.length - 1]?.[0]
+			expect(latestConfig).toMatchObject({
+				sampleRate: 48_000,
+				lockedEncoding: {
+					format: "wav",
+					sampleRate: 48_000,
+				},
+			})
+		})
+
 		it("should throw error if session ID is missing", async () => {
 			await expect(service.startRecording("")).rejects.toThrow(
 				"Session ID is required to start recording",

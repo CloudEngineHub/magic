@@ -43,7 +43,7 @@ import WebsitePresetMenu from "./components/WebsitePresetMenu"
 import CommonWebsitePresetDialog, {
 	type CommonWebsitePresetFormValues,
 } from "./components/CommonWebsitePresetDialog"
-import StablePPTPortalSurface from "./components/StablePPTPortalSurface"
+import StablePreviewPortalSurface from "./components/StablePreviewPortalSurface"
 import {
 	COMMON_WEBSITE_PRESETS_LIMIT,
 	getWebsiteTabData,
@@ -316,7 +316,7 @@ const FilesViewer = memo(
 				// Tab ids may contain file-path characters that are invalid inside CSS selectors.
 				const activeTabElement = Array.from(
 					container.querySelectorAll<HTMLElement>("[data-tab-id]"),
-				).find((element) => element.dataset.tabId === activeTab.id)
+				).find((element) => element.dataset.tabId === activeTab?.id)
 
 				if (activeTabElement) {
 					// 计算目标tab相对于容器的位置
@@ -331,7 +331,7 @@ const FilesViewer = memo(
 						behavior: "smooth",
 					})
 				}
-			}, [activeTab, tabs])
+			}, [activeTab?.id, tabs.length])
 
 			// 渲染tab项
 			const renderTabItem = (tab: TabItemType, index: number) => {
@@ -484,8 +484,8 @@ const FilesViewer = memo(
 				[activeTab?.id, cachedTabIds],
 			)
 
-			// 渲染活跃和缓存的 tabs。PPTRootRender tabs 会被放入稳定的 body Portal，
-			// 避免 FilesViewer 在普通 DOM 与全屏 Portal 间切换时销毁 PPTStore。
+			// 每个 Tab 只生成一个 TabCache。非文档流模式统一放入稳定 body Portal，
+			// 文档流模式统一保留在当前文档树中，避免同一 Tab 同时出现在两条渲染链路。
 			const cachedTabRenders = useMemo(() => {
 				const filteredTabs = tabs.filter(shouldRenderTab)
 
@@ -545,13 +545,8 @@ const FilesViewer = memo(
 					// 判断是否是知识库tab
 					const isKbTab = isKnowledgeBaseTab(tab.id)
 					const knowledgeBaseData = isKbTab ? (tab as any).data : undefined
-					const usesStablePptPortal =
-						!props.documentFlowFullscreen &&
-						shouldUsePPTRootRender(renderProps.type, renderProps.data)
-
 					return {
 						isActive,
-						usesStablePptPortal,
 						node: (
 							<TabCache
 								key={tab.id}
@@ -565,7 +560,7 @@ const FilesViewer = memo(
 								playbackProps={playbackProps}
 								hideTabBar={props.hideTabBar}
 								knowledgeBaseData={knowledgeBaseData}
-								fillPortalSurface={usesStablePptPortal}
+								fillPortalSurface={!isDocumentFlowFullscreen}
 							/>
 						),
 					}
@@ -588,18 +583,19 @@ const FilesViewer = memo(
 				openFileTab,
 			])
 			const inlineCachedTabs = cachedTabRenders
-				.filter((entry) => !entry.usesStablePptPortal)
+				.filter(() => isDocumentFlowFullscreen)
 				.map((entry) => entry.node)
-			const stablePptCachedTabs = cachedTabRenders
-				.filter((entry) => entry.usesStablePptPortal)
+			const stableCachedTabs = cachedTabRenders
+				.filter(() => !isDocumentFlowFullscreen)
 				.map((entry) => entry.node)
-			const hasActiveStablePptTab = cachedTabRenders.some(
-				(entry) => entry.usesStablePptPortal && entry.isActive,
+			const hasStableTabs = stableCachedTabs.length > 0
+			const hasActiveStableTab =
+				Boolean(currentTab) && !isDocumentFlowFullscreen && !isRestoringFileTabs
+			const isActivePptPreview = Boolean(
+				currentTab &&
+				shouldUsePPTRootRender(currentRenderProps.type, currentRenderProps.data),
 			)
-			const hasStablePptTabs = stablePptCachedTabs.length > 0
-			const shouldShowStablePptSurface =
-				hasActiveStablePptTab && Boolean(currentTab) && !isRestoringFileTabs
-			const [stablePptSurfaceAnchor, setStablePptSurfaceAnchor] =
+			const [stablePreviewSurfaceAnchor, setStablePreviewSurfaceAnchor] =
 				useState<HTMLDivElement | null>(null)
 
 			const viewer = (
@@ -707,13 +703,16 @@ const FilesViewer = memo(
 									</div>
 								) : (
 									<>
-										{/* Non-PPT tabs keep the existing FilesViewer rendering path. */}
+										{/* Cached preview tabs use stable body portals outside document-flow share mode. */}
 										{inlineCachedTabs}
-										{hasActiveStablePptTab ? (
+										{hasActiveStableTab ? (
 											<div
-												ref={setStablePptSurfaceAnchor}
+												ref={setStablePreviewSurfaceAnchor}
 												className="relative min-h-0 flex-1"
-												data-files-viewer-ppt-anchor="true"
+												data-files-viewer-preview-anchor="true"
+												data-files-viewer-ppt-anchor={
+													isActivePptPreview ? "true" : undefined
+												}
 											/>
 										) : null}
 									</>
@@ -726,9 +725,9 @@ const FilesViewer = memo(
 				</div>
 			)
 
-			// Fixed fullscreen layers can be trapped by transformed workspace ancestors, so they
-			// need a body portal. PPT TabCache nodes are a stable sibling Portal and survive this
-			// inline/body switch; document-flow fullscreen stays in the share document tree.
+			// Fixed fullscreen layers can be trapped by transformed workspace ancestors, so the
+			// viewer shell uses a body portal. Preview TabCache nodes live in the single stable
+			// sibling Portal; document-flow fullscreen stays in the share document tree.
 			const viewerLayer =
 				effectiveIsFullscreen &&
 				!isDocumentFlowFullscreen &&
@@ -738,21 +737,24 @@ const FilesViewer = memo(
 
 			return (
 				<>
-					<StablePPTPortalSurface
-						anchor={stablePptSurfaceAnchor}
+					<StablePreviewPortalSurface
+						anchor={stablePreviewSurfaceAnchor}
 						borderRadius={
-							effectiveIsFullscreen
-								? "0px"
-								: props.hideTabBar
-									? "0.5rem"
-									: "0px 0px 0.5rem 0.5rem"
+							isActivePptPreview
+								? effectiveIsFullscreen
+									? "0px"
+									: props.hideTabBar
+										? "0.5rem"
+										: "0px 0px 0.5rem 0.5rem"
+								: "0px"
 						}
-						enabled={Boolean(currentTab) && !isRestoringFileTabs && hasStablePptTabs}
+						enabled={Boolean(currentTab) && !isRestoringFileTabs && hasStableTabs}
 						isFullscreen={effectiveIsFullscreen}
-						visible={shouldShowStablePptSurface}
+						isPpt={isActivePptPreview}
+						visible={hasActiveStableTab}
 					>
-						{stablePptCachedTabs}
-					</StablePPTPortalSurface>
+						{stableCachedTabs}
+					</StablePreviewPortalSurface>
 					{viewerLayer}
 				</>
 			)
