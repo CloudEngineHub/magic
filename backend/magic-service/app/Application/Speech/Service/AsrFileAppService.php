@@ -140,6 +140,10 @@ class AsrFileAppService extends AbstractAppService
             // 3. 验证项目权限
             $this->validationService->getAccessibleProjectWithEditor((int) $summaryRequest->projectId, $userId, $organizationCode);
 
+            if ($summaryRequest->hasFileId()) {
+                $this->validateSummaryFile($summaryRequest->fileId, $summaryRequest->projectId);
+            }
+
             // 4. 查询项目、工作区和话题信息
             [$projectName, $workspaceName] = $this->getProjectAndWorkspaceNames($summaryRequest->projectId);
             $topicName = $topicEntity->getTopicName();
@@ -1677,6 +1681,18 @@ class AsrFileAppService extends AbstractAppService
         }
 
         return ['tasks' => $results];
+    }
+
+    private function validateSummaryFile(?string $fileId, string $projectId): void
+    {
+        $fileEntity = $this->taskFileDomainService->getById((int) $fileId);
+        if ($fileEntity === null) {
+            ExceptionBuilder::throw(AsrErrorCode::FileNotExist, '', ['fileId' => $fileId]);
+        }
+
+        if ((string) $fileEntity->getProjectId() !== $projectId) {
+            ExceptionBuilder::throw(AsrErrorCode::FileNotBelongToProject, '', ['fileId' => $fileId]);
+        }
     }
 
     /**
