@@ -5,7 +5,6 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
-	useState,
 	useSyncExternalStore,
 	type ReactNode,
 } from "react"
@@ -52,9 +51,6 @@ interface ProjectFileImagePreviewManager {
 const imageExtSet = new Set(IMAGE_EXTENSIONS.map((ext) => normalizeFileExtension(ext)))
 const THUMBNAIL_BATCH_DELAY_MS = 32
 const THUMBNAIL_BATCH_SIZE = 50
-const TOOLTIP_IMAGE_MAX_WIDTH = 320
-const TOOLTIP_IMAGE_MAX_HEIGHT = 320
-const TOOLTIP_IMAGE_MIN_LONG_EDGE = 160
 const EMPTY_PREVIEW_STATE: PreviewState = { status: "idle" }
 const PREVIEW_CACHE_RESOURCE_FIELD_NAMES = [
 	"id",
@@ -197,27 +193,6 @@ function shouldRequestPreview(
 
 	const state = states.get(source.cacheKey)
 	return !state || state.status === "idle" || state.status === "error"
-}
-
-function resolveTooltipImageSize(naturalWidth: number, naturalHeight: number) {
-	if (naturalWidth <= 0 || naturalHeight <= 0) {
-		return {
-			width: TOOLTIP_IMAGE_MIN_LONG_EDGE,
-			height: TOOLTIP_IMAGE_MIN_LONG_EDGE,
-		}
-	}
-
-	const maxScale = Math.min(
-		TOOLTIP_IMAGE_MAX_WIDTH / naturalWidth,
-		TOOLTIP_IMAGE_MAX_HEIGHT / naturalHeight,
-	)
-	const minScale = TOOLTIP_IMAGE_MIN_LONG_EDGE / Math.max(naturalWidth, naturalHeight)
-	const scale = Math.min(maxScale, Math.max(minScale, 1))
-
-	return {
-		width: Math.round(naturalWidth * scale),
-		height: Math.round(naturalHeight * scale),
-	}
 }
 
 export function useProjectFileImagePreviewManager({
@@ -620,90 +595,4 @@ export function useProjectFileImagePreviewState(
 		return { status: "loaded", url: source.directThumbnailUrl }
 	}
 	return EMPTY_PREVIEW_STATE
-}
-
-export function ProjectFileImagePreviewTooltipContent({
-	source,
-	onPreviewUnavailable,
-}: {
-	source: ProjectFileImagePreviewSource
-	onPreviewUnavailable?: () => void
-}) {
-	const manager = useProjectFileImagePreviewContext()
-	const previewState = useProjectFileImagePreviewState(source)
-	const [previewImageSize, setPreviewImageSize] = useState<{
-		width: number
-		height: number
-	} | null>(null)
-	const [imageFailed, setImageFailed] = useState(false)
-
-	useEffect(() => {
-		setPreviewImageSize(null)
-		setImageFailed(false)
-	}, [previewState?.url, source.cacheKey])
-
-	if (!manager || !previewState) return null
-	if (previewState.status === "error" || previewState.status === "unavailable" || imageFailed) {
-		return null
-	}
-
-	return (
-		<div
-			className="inline-flex max-w-none flex-col whitespace-nowrap pb-1.5"
-			data-testid="project-file-image-preview-tooltip"
-		>
-			<div
-				className="mb-2 max-w-none whitespace-nowrap leading-5"
-				data-testid="project-file-image-preview-tooltip-title"
-			>
-				{source.fileName}
-			</div>
-			{previewState.url ? (
-				<img
-					key={previewState.url}
-					src={previewState.url}
-					alt=""
-					className="block self-center rounded-sm object-contain"
-					style={{
-						...(previewImageSize
-							? {
-									width: previewImageSize.width,
-									height: previewImageSize.height,
-								}
-							: {
-									maxWidth: TOOLTIP_IMAGE_MAX_WIDTH,
-									maxHeight: TOOLTIP_IMAGE_MAX_HEIGHT,
-									minWidth: TOOLTIP_IMAGE_MIN_LONG_EDGE,
-								}),
-					}}
-					loading="lazy"
-					decoding="async"
-					referrerPolicy="no-referrer"
-					onLoad={(event) => {
-						setPreviewImageSize(
-							resolveTooltipImageSize(
-								event.currentTarget.naturalWidth,
-								event.currentTarget.naturalHeight,
-							),
-						)
-					}}
-					onError={() => {
-						setImageFailed(true)
-						onPreviewUnavailable?.()
-						manager.markPreviewImageError(source)
-					}}
-					data-testid="project-file-image-preview-tooltip-image"
-				/>
-			) : (
-				<div
-					className="animate-pulse self-center rounded-sm bg-background/20 motion-reduce:animate-none"
-					style={{
-						width: TOOLTIP_IMAGE_MIN_LONG_EDGE,
-						height: TOOLTIP_IMAGE_MIN_LONG_EDGE,
-					}}
-					data-testid="project-file-image-preview-tooltip-loading"
-				/>
-			)}
-		</div>
-	)
 }

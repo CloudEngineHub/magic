@@ -359,6 +359,24 @@ describe("RecordingSummaryContent empty state", () => {
 		).toHaveClass("min-h-full", "items-center", "justify-center")
 		expect(container.querySelector(".lucide-sparkles")).toBeTruthy()
 	})
+
+	it("uses the generating copy only while summary generation is active", () => {
+		render(
+			<RecordingSummaryContent
+				file={summaryFile}
+				content=""
+				isGenerating
+				attachmentList={[]}
+				speakerNameMap={{}}
+				onOpenSpeakerSettings={() => undefined}
+				onTimeClick={() => undefined}
+				layout="desktop"
+			/>,
+		)
+
+		expect(screen.getByText("detail.summarizingHint")).toBeInTheDocument()
+		expect(screen.queryByText("detail.emptySummary")).toBeNull()
+	})
 })
 
 describe("RecordingSummaryContent mindmap desktop layout", () => {

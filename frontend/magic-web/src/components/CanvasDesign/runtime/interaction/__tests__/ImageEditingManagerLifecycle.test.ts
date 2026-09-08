@@ -24,6 +24,7 @@ afterEach(() => {
 
 function createCanvasWithoutRenderedImage(options?: { withRenderedImage?: boolean }) {
 	const eventEmitter = new EventEmitter()
+	const permissionState = { write: true, generate: true }
 	const sourceNode = new Konva.Group({ width: 160, height: 100, visible: true })
 	const contentLayer = new Konva.Group()
 	const controlsLayer = new Konva.Group()
@@ -82,6 +83,14 @@ function createCanvasWithoutRenderedImage(options?: { withRenderedImage?: boolea
 		elementManager,
 		selectionManager,
 		imageEditingCoordinator,
+		permissionManager: {
+			can: (capability: string) =>
+				capability === "document.write"
+					? permissionState.write
+					: capability === "sideEffect.generate"
+						? permissionState.generate
+						: true,
+		},
 		markerManager: {
 			previewMarkersForCrop: vi.fn(),
 			clearCropPreview: vi.fn(),
@@ -99,6 +108,7 @@ function createCanvasWithoutRenderedImage(options?: { withRenderedImage?: boolea
 		sourceNode,
 		selectionManager,
 		imageEditingCoordinator,
+		permissionState,
 	}
 }
 
@@ -215,5 +225,22 @@ describe("image editing manager lifecycle", () => {
 		expect(imageEditingCoordinator.deactivate).toHaveBeenCalledTimes(1)
 		expect(selectionManager.select).toHaveBeenCalledTimes(1)
 		manager.destroy()
+	})
+
+	it("does not enter extend or eraser mode when generation is disabled", () => {
+		const { canvas, permissionState } = createCanvasWithoutRenderedImage({
+			withRenderedImage: true,
+		})
+		permissionState.generate = false
+		const extendManager = new ExtendManager({ canvas })
+		const eraserManager = new EraserManager({ canvas })
+
+		extendManager.enterExtendMode("image-1")
+		eraserManager.enterEraserMode("image-1")
+
+		expect(extendManager.getExtendingElementId()).toBeNull()
+		expect(eraserManager.getErasingElementId()).toBeNull()
+		extendManager.destroy()
+		eraserManager.destroy()
 	})
 })

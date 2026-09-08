@@ -44,7 +44,7 @@ class ElementDetailsCodec:
             details = raw_element.get("contentDetails") if isinstance(raw_element, dict) else None
             for detail in (details or {}).values() if isinstance(details, dict) else ():
                 if not isinstance(detail, dict) or not set(detail).issubset(
-                    generated_request_fields() | {"visualUnderstanding"}
+                    generated_request_fields() | {"videoGenerationResultMeta", "visualUnderstanding"}
                 ):
                     raise ValueError("UNSUPPORTED_PUBLIC_ELEMENT_DETAILS_STRUCTURE")
         return document

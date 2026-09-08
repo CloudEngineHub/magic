@@ -20,6 +20,7 @@ import { MessageHistoryCollapsiblePrompt } from "./MessageHistoryCollapsibleProm
 import { PromptPlaceholderPreviewText } from "./PromptPlaceholderPreviewText"
 import { GenerationStatus, type VideoGenerationInfo } from "../../../public/magic-types"
 import { useGenerationRuntime } from "../../../app/hooks/canvas"
+import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { getActiveContent } from "../../../runtime/document/elementContent"
 
 interface VideoMessageHistoryRenderProps {
@@ -36,12 +37,16 @@ interface MessageHistoryInfoRow {
 /** 右侧浮层：展示选中视频元素最近一次生成请求的摘要 */
 export default function VideoMessageHistoryRender(props: VideoMessageHistoryRenderProps) {
 	const { videoElement, onPreviewMediaResource } = props
+	const { canvas } = useCanvas()
 	const { selectedElements } = useCanvasSelectionUI()
 	const { setMessageHistoryElementId } = useCanvasPanelUI()
 	const { videoModelList, methods } = useMagic()
 	const { t } = useCanvasDesignI18n()
 	const generationRuntime = useGenerationRuntime(videoElement.id)
-	const videoContent = getActiveContent(videoElement)
+	const videoContent =
+		(canvas?.getEffectiveContent(videoElement.id) as
+			| ReturnType<typeof getActiveContent>
+			| undefined) ?? getActiveContent(videoElement)
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 
 	const request = generationRuntime?.generateVideoRequest || videoContent?.generateVideoRequest

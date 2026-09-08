@@ -4,6 +4,7 @@ import {
 	buildShareRecordingCapabilities,
 	buildShareRecordingMagicProjectConfig,
 	isAudioProjectMode,
+	resolveAudioFolderShareTarget,
 	shouldRenderAudioRecordingShareShell,
 } from "../share-recording-detail"
 
@@ -110,5 +111,41 @@ describe("share recording detail helpers", () => {
 			canExport: true,
 		})
 		expect(buildShareRecordingCapabilities(false).canExport).toBe(false)
+	})
+
+	it("resolves an explicitly selected audio folder through a nested shared entry", () => {
+		const audioFolder = createAttachment({
+			file_id: "audio-folder-mock",
+			file_name: "mock-recording-folder",
+			is_directory: true,
+			parent_id: "project-root-mock",
+			display_config: { type: "audio" },
+		})
+		const indexFile = createAttachment({
+			file_id: "audio-index-mock",
+			file_name: "index.html",
+			file_extension: "html",
+			parent_id: "audio-folder-mock",
+			display_config: { type: "audio" },
+		})
+		audioFolder.children = [indexFile]
+
+		expect(
+			resolveAudioFolderShareTarget({
+				tree: [audioFolder],
+				defaultOpenFileId: "audio-index-mock",
+			}),
+		).toBe(indexFile)
+	})
+
+	it("does not auto-select an audio folder when the ordinary share has no target", () => {
+		const audioFolder = createAttachment({
+			file_id: "audio-folder-mock",
+			file_name: "mock-recording-folder",
+			is_directory: true,
+			display_config: { type: "audio" },
+		})
+
+		expect(resolveAudioFolderShareTarget({ tree: [audioFolder] })).toBeUndefined()
 	})
 })

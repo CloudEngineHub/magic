@@ -120,20 +120,27 @@ export function useDesignMarker(options: UseDesignMarkerOptions): UseDesignMarke
 	const handleMarkerCreated = useCallback(
 		async (marker: Marker) => {
 			if (designProjectId && markerManager) {
-				const el = findImageElement(
+				const rawElement = findImageElement(
 					marker.elementId,
 					canvas?.elements,
 				) as ImageElement | null
-				const active = el ? getActiveImageContent(el) : undefined
-				const element = active?.src ? { src: active.src } : undefined
-				markerManager.addMarker(designProjectId, marker, element)
+				const contentViewElement = rawElement
+					? (canvasDesignRef.current
+							?.getCanvasInstance()
+							?.getElementForContentView(rawElement) ?? rawElement)
+					: null
+				const active = contentViewElement
+					? getActiveImageContent(contentViewElement)
+					: undefined
+				const elementInfo = active?.src ? { src: active.src } : undefined
+				markerManager.addMarker(designProjectId, marker, elementInfo)
 				markerManager.fetchMarkerData(designProjectId, marker.id)
 				await markerManager.syncToMessageEditor(designProjectId, "insert", {
 					markerId: marker.id,
 				})
 			}
 		},
-		[designProjectId, markerManager, canvas?.elements, findImageElement],
+		[canvasDesignRef, designProjectId, markerManager, canvas?.elements, findImageElement],
 	)
 
 	// 处理 marker 更新事件（识别结果获取成功/失败）

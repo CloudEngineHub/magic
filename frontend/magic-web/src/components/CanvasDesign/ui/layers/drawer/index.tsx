@@ -9,10 +9,8 @@ import {
 	LockKeyhole,
 	LockOpen,
 	Minimize2 as MinimizeIcon,
-	Mic,
 	Search,
 	Type,
-	Video,
 	Workflow,
 	X,
 } from "lucide-react"
@@ -26,14 +24,17 @@ import { cn } from "../../../runtime/shared/lib/utils"
 import Tree, { type TreeNode, type RenderNodeContext } from "../../primitives/custom/Tree/index"
 import {
 	ElementTypeEnum,
+	type AudioElement,
 	type RectangleElement,
 	type EllipseElement,
 	type TriangleElement,
 	type StarElement,
 	type ImageElement,
+	type VideoElement,
 } from "../../../runtime/document/types"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasData, useCanvasEvent } from "../../../app/hooks/canvas"
+import type { CanvasEvent } from "../../../runtime/core/EventEmitter"
 import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
 import { useLayersUI } from "../../../app/providers/LayersUIProvider"
 import { useElementMenu } from "../../panels/menu/ElementMenuContext"
@@ -46,7 +47,7 @@ import { StarPreview } from "../previews/StarPreview"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import type { LayerTreeData } from "../types"
 import { convertLayerToTreeNode } from "../layerTreeAdapter"
-import LayerImageLowPreview from "../previews/ImageLowPreview"
+import LayerMediaPreview from "../previews/LayerMediaPreview"
 import {
 	DEFAULT_LAYERS_FILTER,
 	collectExpandableNodeIds,
@@ -55,6 +56,7 @@ import {
 	normalizeLayersFilter,
 } from "../layerFilters"
 import LayersFilterPopover, { LayersFilterForm } from "./LayersFilterPopover"
+import { createLayerRefreshScheduler } from "./layerRefreshScheduler"
 
 const LAYER_TREE_VIRTUAL_THRESHOLD = 80
 const LAYER_TREE_ROW_HEIGHT = 34
@@ -95,6 +97,8 @@ export default function LayersDrawer() {
 	})
 	// 监听画布 hover 事件，同步到图层面板
 	const [hoveredElementId, setHoveredElementId] = useState<string | null>(null)
+	// 独立记录鼠标是否正在图层列表行内，避免依赖跨 CSS Module 的 hover 选择器
+	const [hoveredLayerItemId, setHoveredLayerItemId] = useState<string | null>(null)
 	const [layerSearchValue, setLayerSearchValue] = useState("")
 	const [isLayersFilterOpen, setIsLayersFilterOpen] = useState(false)
 	const [layersFilter, setLayersFilter] = useState<CanvasLayersFilterState>(() => {
@@ -107,11 +111,39 @@ export default function LayersDrawer() {
 		}
 		return { ...DEFAULT_LAYERS_FILTER }
 	})
+	const layerRefreshScheduler = useMemo(() => createLayerRefreshScheduler(), [])
+
+	useEffect(() => {
+		return () => layerRefreshScheduler.dispose()
+	}, [layerRefreshScheduler])
 
 	// 订阅并获取画布数据
-	const elements = useCanvasData((manager) => manager.getAllElements(), ["element:change"], {
-		shouldUpdateOnElementChange: (event) => event.data?.phase !== "transient",
-	})
+	const elements = useCanvasData(
+		(manager) => manager.getAllElements(),
+		[
+			"element:change",
+			"element:rerendered",
+			"element:image:generate-submit-started",
+			"element:image:generate-submit-failed",
+			"element:image:resultUpdated",
+			"element:video:generate-submit-started",
+			"element:video:generate-submit-failed",
+			"element:media:replaceStateChanged",
+			"element:image:ossSrcReady",
+		],
+		{
+			shouldUpdateOnElementChange: (event) => event.data?.phase !== "transient",
+			scheduleUpdate: layerRefreshScheduler.schedule,
+			shouldUpdateOnEvent: (event) => {
+				if (event.type !== "element:rerendered") return true
+				const rerenderedEvent = event as CanvasEvent<"element:rerendered">
+				return (
+					rerenderedEvent.data.data.type === ElementTypeEnum.Image ||
+					rerenderedEvent.data.data.type === ElementTypeEnum.Video
+				)
+			},
+		},
+	)
 
 	// 获取操作方法
 	const { canvas } = useCanvas()
@@ -120,8 +152,8 @@ export default function LayersDrawer() {
 	const { openMenu } = useElementMenu()
 
 	// 从 Context 获取画布 UI 状态
-	const { layerRenamingElementId, setLayerRenamingElementId, selectedElementIds, readonly } =
-		useCanvasUI()
+	const { layerRenamingElementId, setLayerRenamingElementId, selectedElementIds } = useCanvasUI()
+	const canWrite = canvas?.permissionManager?.can("document.write") ?? false
 
 	// 将画布数据转换为树形结构，先按 zIndex 降序排序（zIndex 大的在上面）
 	const treeData = useMemo(() => {
@@ -229,10 +261,17 @@ export default function LayersDrawer() {
 			const isLocked = node.data?.locked ?? false
 			const isVisible = node.data?.visible ?? true
 			const isEditing = layerRenamingElementId === node.id
+			const isLayerItemHovered = hoveredLayerItemId === node.id
 			const LockIcon = isLocked ? LockKeyhole : LockOpen
 			const VisibilityIcon = isVisible ? Eye : EyeClosed
 
 			let iconContent: React.ReactNode = null
+			const mediaElement =
+				node.data?.type === ElementTypeEnum.Image ||
+				node.data?.type === ElementTypeEnum.Video ||
+				node.data?.type === ElementTypeEnum.Audio
+					? (node.data as ImageElement | VideoElement | AudioElement)
+					: null
 			switch (node.data?.type) {
 				case ElementTypeEnum.Frame:
 					iconContent = <FolderIcon size={16} className={styles.layerNodeFolderIcon} />
@@ -244,12 +283,7 @@ export default function LayersDrawer() {
 					iconContent = <Type size={16} className={styles.layerNodeTextIcon} />
 					break
 				case ElementTypeEnum.Image:
-					iconContent = (
-						<LayerImageLowPreview
-							element={node.data as ImageElement}
-							alt={node.label}
-						/>
-					)
+					iconContent = null
 					break
 				case ElementTypeEnum.Rectangle:
 					iconContent = (
@@ -280,13 +314,13 @@ export default function LayersDrawer() {
 					)
 					break
 				case ElementTypeEnum.Video:
-					iconContent = <Video size={16} className={styles.layerNodeVideoIcon} />
+					iconContent = null
 					break
 				case ElementTypeEnum.VideoEdit:
 					iconContent = <Film size={16} className={styles.layerNodeVideoIcon} />
 					break
 				case ElementTypeEnum.Audio:
-					iconContent = <Mic size={16} className={styles.layerNodeVideoIcon} />
+					iconContent = null
 					break
 				case ElementTypeEnum.Storyboard:
 					iconContent = <Workflow size={16} className={styles.layerNodeVideoIcon} />
@@ -296,9 +330,9 @@ export default function LayersDrawer() {
 					break
 			}
 
-			return (
-				<div className={styles.layerNode}>
-					<div className={styles.layerNodeIcon}>{iconContent}</div>
+			const renderMainContent = (thumbnail?: React.ReactNode) => (
+				<div className={styles.layerNodeMain}>
+					<div className={styles.layerNodeIcon}>{thumbnail ?? iconContent}</div>
 					<div className={styles.layerNodeLabel}>
 						{isEditing ? (
 							<Input
@@ -309,6 +343,7 @@ export default function LayersDrawer() {
 								)}
 								defaultValue={node.label}
 								autoFocus
+								onFocus={(event) => event.currentTarget.select()}
 								onClick={stopPropagation}
 								onBlur={(e) => {
 									const newName = e.target.value.trim()
@@ -334,62 +369,93 @@ export default function LayersDrawer() {
 							<div className={styles.layerNodeLabelText}>{node.label}</div>
 						)}
 					</div>
-					{!isEditing && (
-						<div className={styles.layerNodeActions}>
-							<div
-								className={cn(
-									// 锁定按钮：当被锁定时一直显示，否则只在 hover 时显示
-									!isLocked && context.showOnHoverClassName,
-									readonly && !isLocked && styles.hidden,
-								)}
-							>
-								<IconButton
-									className={cn(
-										styles.layerNodeActionButton,
-										readonly && styles.noHover,
-										context.noHoverClassName,
-										context.noActiveClassName,
-									)}
-									onClick={(e) => {
-										if (readonly) return
-										stopPropagation(e)
-										toggleLocked(node.id, isLocked)
-									}}
-								>
-									<LockIcon size={12} strokeWidth={2.5} />
-								</IconButton>
-							</div>
-							<div
-								className={cn(
-									// 可见性按钮：当不可见时一直显示，否则只在 hover 时显示
-									isVisible && context.showOnHoverClassName,
-								)}
-							>
-								<IconButton
-									className={cn(
-										styles.layerNodeActionButton,
-										context.noHoverClassName,
-										context.noActiveClassName,
-									)}
-									onClick={(e) => {
-										stopPropagation(e)
-										toggleVisible(node.id, isVisible)
-									}}
-								>
-									<VisibilityIcon size={12} strokeWidth={2.5} />
-								</IconButton>
-							</div>
-						</div>
-					)}
 				</div>
+			)
+			const renderActions = () =>
+				!isEditing && (
+					<div className={styles.layerNodeActions}>
+						<div
+							className={cn(
+								styles.layerNodeActionSlot,
+								isLocked && styles.layerNodeActionSlotAlwaysVisible,
+							)}
+							data-media-preview-ignore-hover=""
+							onPointerDown={(event) => event.stopPropagation()}
+						>
+							<IconButton
+								className={cn(
+									styles.layerNodeActionButton,
+									!canWrite && styles.noHover,
+									context.noHoverClassName,
+									context.noActiveClassName,
+								)}
+								onClick={(e) => {
+									if (!canWrite) return
+									stopPropagation(e)
+									toggleLocked(node.id, isLocked)
+								}}
+							>
+								<LockIcon size={12} strokeWidth={2.5} />
+							</IconButton>
+						</div>
+						<div
+							className={cn(
+								styles.layerNodeActionSlot,
+								!isVisible && styles.layerNodeActionSlotAlwaysVisible,
+							)}
+							data-media-preview-ignore-hover=""
+							onPointerDown={(event) => event.stopPropagation()}
+						>
+							<IconButton
+								className={cn(
+									styles.layerNodeActionButton,
+									context.noHoverClassName,
+									context.noActiveClassName,
+								)}
+								onClick={(e) => {
+									if (!canWrite) return
+									stopPropagation(e)
+									toggleVisible(node.id, isVisible)
+								}}
+							>
+								<VisibilityIcon size={12} strokeWidth={2.5} />
+							</IconButton>
+						</div>
+					</div>
+				)
+
+			const renderLayerRow = (thumbnail?: React.ReactNode) => (
+				<div
+					className={cn(styles.layerNode, isLayerItemHovered && styles.layerNodeHovered)}
+				>
+					{renderMainContent(thumbnail)}
+					{renderActions()}
+				</div>
+			)
+
+			return (
+				<>
+					{mediaElement ? (
+						<LayerMediaPreview
+							element={mediaElement}
+							fileName={node.label}
+							disabled={isEditing}
+						>
+							{renderLayerRow}
+						</LayerMediaPreview>
+					) : (
+						renderLayerRow()
+					)}
+				</>
 			)
 		},
 		[
 			layerRenamingElementId,
+			hoveredLayerItemId,
 			stopPropagation,
 			toggleLocked,
 			toggleVisible,
-			readonly,
+			canWrite,
 			canvas,
 			setLayerRenamingElementId,
 		],
@@ -410,18 +476,19 @@ export default function LayersDrawer() {
 
 	const handleDoubleClick = useCallback(
 		(_event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
-			// readonly 状态下不允许编辑名称
-			if (readonly) {
+			// 没有文档写能力时不允许编辑名称
+			if (!canWrite) {
 				return
 			}
 			// 双击进入编辑模式
 			setLayerRenamingElementId(node.id)
 		},
-		[readonly, setLayerRenamingElementId],
+		[canWrite, setLayerRenamingElementId],
 	)
 
 	const handleMouseEnter = useCallback(
 		(_event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
+			setHoveredLayerItemId(node.id)
 			// 在画布上显示 hover 效果
 			canvas?.hoverManager.manualSetHover(node.id)
 		},
@@ -429,6 +496,7 @@ export default function LayersDrawer() {
 	)
 
 	const handleMouseLeave = useCallback(() => {
+		setHoveredLayerItemId(null)
 		// 清除画布上的 hover 效果
 		canvas?.hoverManager.manualSetHover(null)
 	}, [canvas?.hoverManager])
@@ -477,11 +545,7 @@ export default function LayersDrawer() {
 
 	return (
 		<div
-			className={cn(
-				styles.layersDrawer,
-				collapsed && styles.collapsed,
-				readonly && styles.readonly,
-			)}
+			className={cn(styles.layersDrawer, collapsed && styles.collapsed)}
 			style={{
 				width: width,
 				transition: transitionAnimation,
@@ -557,7 +621,7 @@ export default function LayersDrawer() {
 								selectedIds={selectedIds}
 								hoveredIds={hoveredIds}
 								treeNodeContentClassName={
-									readonly ? styles.treeNodeContentReadonly : undefined
+									!canWrite ? styles.treeNodeContentViewOnly : undefined
 								}
 								virtualize
 								virtualThreshold={LAYER_TREE_VIRTUAL_THRESHOLD}

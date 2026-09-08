@@ -508,16 +508,59 @@ checkpoint:
   # 是否启用自动清理功能
   auto_cleanup: ${CHECKPOINT_AUTO_CLEANUP:-true}
 
-# 聊天记录统计与清理。默认全部为空，只统计，不删除用户历史。
+# 聊天记录统计与清理。这里的配置只针对 .topic 中的持久化历史。
 chat_history_cleanup:
   completed_subagent_max_age_days: null
   completed_subagent_max_count: null
   compacted_max_age_days: null
   compacted_max_count: null
   total_max_bytes: null
-  llm_request_max_age_days: null
-  llm_request_max_count: null
-  llm_request_max_bytes: null
+
+# .runtime 清理默认值。
+# 容量字段支持 MB、MiB、KB、KiB 等写法；本项目的 MB 和 MiB 都按 1024 进制换算。
+runtime_cleanup:
+  bg_shell:
+    max_age_days: 7
+    max_file_count: 50
+    target_file_count: 40
+    max_total_size: 256MB
+    target_total_size: 192MB
+    max_file_size: 8MB
+    head_keep_size: 1MB
+    tail_keep_size: 1MB
+
+  mcp_outputs:
+    max_age_days: 7
+    max_file_count: 128
+    target_file_count: 96
+    max_total_size: 256MB
+    target_total_size: 192MB
+    result_size_threshold: 8KB
+
+  oauth2_callback:
+    max_age_hours: 24
+    max_file_count: 128
+    target_file_count: 96
+
+  snippets:
+    max_age_days: 7
+    max_file_count: 64
+    target_file_count: 48
+    max_total_size: 16MB
+    target_total_size: 12MB
+
+  llm_request:
+    max_file_count: 10
+
+  background_compact:
+    max_age_days: 7
+
+  memory_after_run:
+    max_age_days: 7
+
+  slide_template_maker:
+    max_age_days: 3
+    max_directory_count: 16
 
 # 文件记忆运行时配置
 memory:

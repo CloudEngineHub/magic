@@ -10,6 +10,7 @@ interface DownloadActionProps {
 	className: string
 	size: "lg"
 	variant?: "default" | "outline"
+	"data-testid"?: string
 }
 
 /**
@@ -28,12 +29,19 @@ export default function DownloadAction({
 	className,
 	size,
 	variant = "default",
+	"data-testid": dataTestId,
 }: DownloadActionProps) {
 	if (nativeDownload) {
 		const isBlobOrDataUrl = /^(blob:|data:)/i.test(downloadUrl)
 
 		return (
-			<Button asChild className={className} size={size} variant={variant}>
+			<Button
+				asChild
+				className={className}
+				size={size}
+				variant={variant}
+				data-testid={dataTestId}
+			>
 				<a
 					href={downloadUrl}
 					target={downloadTarget || "_blank"}
@@ -47,7 +55,13 @@ export default function DownloadAction({
 	}
 
 	return (
-		<Button className={className} size={size} variant={variant} onClick={onDownload}>
+		<Button
+			className={className}
+			size={size}
+			variant={variant}
+			onClick={onDownload}
+			data-testid={dataTestId}
+		>
 			{label}
 		</Button>
 	)

@@ -20,6 +20,7 @@ interface ShareRecordingDetailTextState {
 interface ShareRecordingDetailDataInput {
 	projectId: string
 	resourceName?: string
+	target?: AttachmentItem
 	attachments: {
 		tree: AttachmentItem[]
 		list: AttachmentItem[]
@@ -28,13 +29,16 @@ interface ShareRecordingDetailDataInput {
 
 /** Loads recording detail data directly from share attachments so the share page never depends on owner-only APIs. */
 export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput) {
-	const { projectId, resourceName, attachments } = input
+	const { projectId, resourceName, target, attachments } = input
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState(false)
 	const [projectItem, setProjectItem] = useState<AudioProjectListItem | null>(null)
 	const [fileMap, setFileMap] = useState<RecordingDetailFileMap | null>(null)
 	const [texts, setTexts] = useState<ShareRecordingDetailTextState>({ summary: {} })
 	const [audioUrl, setAudioUrl] = useState("")
+	const [refreshing, setRefreshing] = useState(false)
+	const loadedRequestKeyRef = useRef("")
+	const requestSequenceRef = useRef(0)
 
 	const activeProjectIdRef = useRef(projectId)
 	useEffect(() => {
@@ -50,30 +54,42 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 		}
 
 		const currentProjectId = projectId
-		setLoading(true)
+		const requestSequence = ++requestSequenceRef.current
+		const requestKey = `${projectId}:${String(target?.file_id || target?.relative_file_path || "")}`
+		const isInitialLoad = loadedRequestKeyRef.current !== requestKey
+		// Target changes can happen inside one project, so projectId alone cannot identify the latest request.
+		const isCurrentRequest = () =>
+			requestSequence === requestSequenceRef.current &&
+			currentProjectId === activeProjectIdRef.current
+		// Keep the workbench mounted during same-bundle refreshes; only a new bundle needs the blocking skeleton.
+		if (isInitialLoad) setLoading(true)
+		else setRefreshing(true)
 		setError(false)
-		setTexts({ summary: {} })
-		setAudioUrl("")
+		if (isInitialLoad) {
+			setTexts({ summary: {} })
+			setAudioUrl("")
+		}
 
 		try {
-			const audioDirectory = findAudioDirectoryNode(attachments.tree)
+			const audioDirectory = findAudioDirectoryNode(attachments.tree, target)
 			const bundleRootPath = resolveRecordingBundleRootPath(
 				attachments.tree,
 				attachments.list,
+				target,
 			)
 			const magicProjectFile = findMagicProjectFile(attachments.list, bundleRootPath)
 			const magicProjectContent = magicProjectFile
 				? await readTextFile(magicProjectFile.file_id)
 				: undefined
-			if (currentProjectId !== activeProjectIdRef.current) return
+			if (!isCurrentRequest()) return
 
 			const parsedMagicProjectConfig = magicProjectContent?.content
 				? parseMagicProjectConfig(magicProjectContent.content)
 				: null
 			const magicProjectConfig = buildShareRecordingMagicProjectConfig({
 				magicProjectConfig: parsedMagicProjectConfig,
-				audioDisplayConfig:
-					audioDirectory?.display_config as ShareRecordingDisplayConfig | null,
+				audioDisplayConfig: (audioDirectory?.display_config ||
+					target?.display_config) as ShareRecordingDisplayConfig | null,
 			})
 			const nextFileMap = buildRecordingDetailFileMap({
 				tree: attachments.tree,
@@ -81,11 +97,18 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 				magicProjectConfig,
 				bundleRootPath,
 			})
+			// Share pages may only render files that are present in the authorized snapshot.
+			nextFileMap.summaryFiles = nextFileMap.summaryFiles.filter((entry) =>
+				Boolean(entry.file?.file_id),
+			)
 			const [nextTexts, nextAudioUrl] = await Promise.all([
 				loadTextFiles(nextFileMap, magicProjectContent),
 				loadAudioUrl(nextFileMap.audio),
 			])
-			if (currentProjectId !== activeProjectIdRef.current) return
+			if (!nextFileMap.audio?.file_id || !nextAudioUrl) {
+				throw new Error("Recording bundle is missing a playable audio attachment")
+			}
+			if (!isCurrentRequest()) return
 
 			setProjectItem(
 				buildShareProjectItem({
@@ -101,13 +124,17 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 			setFileMap(nextFileMap)
 			setTexts(nextTexts)
 			setAudioUrl(nextAudioUrl)
+			loadedRequestKeyRef.current = requestKey
 		} catch (loadError) {
 			console.error("Failed to load share recording detail:", loadError)
-			if (currentProjectId === activeProjectIdRef.current) setError(true)
+			if (isCurrentRequest()) setError(true)
 		} finally {
-			if (currentProjectId === activeProjectIdRef.current) setLoading(false)
+			if (isCurrentRequest()) {
+				setLoading(false)
+				setRefreshing(false)
+			}
 		}
-	}, [attachments.list, attachments.tree, projectId, resourceName])
+	}, [attachments.list, attachments.tree, projectId, resourceName, target])
 
 	useEffect(() => {
 		void loadDetail()
@@ -132,6 +159,7 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 	return {
 		loading,
 		error,
+		refreshing,
 		projectItem,
 		fileMap,
 		texts,
@@ -139,6 +167,7 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 		title,
 		attachmentTree: attachments.tree,
 		attachmentList: attachments.list,
+		refresh: loadDetail,
 	}
 }
 
@@ -159,6 +188,7 @@ async function loadTextFiles(
 ): Promise<ShareRecordingDetailTextState> {
 	const summaryEntries = await Promise.all(
 		fileMap.summaryFiles.map(async (entry) => {
+			if (!entry.file?.file_id) return [entry.type, undefined] as const
 			try {
 				return [entry.type, await readTextFile(entry.file.file_id)] as const
 			} catch (error) {
@@ -200,8 +230,16 @@ async function loadAudioUrl(file?: AttachmentItem): Promise<string> {
 function resolveRecordingBundleRootPath(
 	tree: AttachmentItem[],
 	list: AttachmentItem[],
+	target?: AttachmentItem,
 ): string | undefined {
-	const audioDirectory = findAudioDirectoryNode(tree)
+	const targetPath = getAttachmentPathCandidates(target).find(Boolean)
+	if (targetPath) {
+		return target?.is_directory
+			? normalizeBundlePath(targetPath)
+			: getParentDirectoryPath(targetPath)
+	}
+
+	const audioDirectory = findAudioDirectoryNode(tree, target)
 	const audioDirectoryPath = getAttachmentPathCandidates(audioDirectory).find(Boolean)
 	if (audioDirectoryPath) return normalizeBundlePath(audioDirectoryPath)
 
@@ -210,10 +248,15 @@ function resolveRecordingBundleRootPath(
 }
 
 /** Locates the shared audio directory node that carries display_config metadata and bundle file mappings. */
-function findAudioDirectoryNode(items: AttachmentItem[] = []): AttachmentItem | undefined {
+function findAudioDirectoryNode(
+	items: AttachmentItem[] = [],
+	target?: AttachmentItem,
+): AttachmentItem | undefined {
+	if (target?.is_directory && target.display_config?.type === "audio") return target
+
 	for (const item of items) {
 		if (item.is_directory && item.display_config?.type === "audio") return item
-		const nested = findAudioDirectoryNode(item.children || [])
+		const nested = findAudioDirectoryNode(item.children || [], target)
 		if (nested) return nested
 	}
 	return undefined

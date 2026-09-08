@@ -174,6 +174,8 @@ export interface UploadFileMentionData {
 	/** Local HTML screenshot identity; not an upload task. */
 	is_html_screenshot?: boolean
 	storage_id?: string
+	/** Internal marker for canvas clipboard attachments; never promote to project mention. */
+	is_canvas_clipboard?: boolean
 }
 
 export interface CloudFileMentionData {

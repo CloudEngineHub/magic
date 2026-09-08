@@ -57,6 +57,40 @@ describe("useCanvasResourceRefresh snapshots", () => {
 		expect(snapshot.itemsByReference.size).toBe(0)
 	})
 
+	it("uses the runtime effective Content for preview resource snapshots", () => {
+		const canvas = canvasWithImages("./images/document.png")
+		const image = canvas.elements?.[0]
+		if (!image || image.type !== ElementTypeEnum.Image) throw new Error("image fixture missing")
+		image.contents = [
+			{ contentId: "image-0-content-1", src: "./images/document.png" },
+			{ contentId: "image-0-content-2", src: "./images/preview.png" },
+		]
+		const canvasInstance = {
+			getEffectiveContent: (elementId: string) =>
+				elementId === image.id
+					? { contentId: "image-0-content-2", src: "./images/preview.png" }
+					: undefined,
+		} as never
+		const snapshot = buildCanvasResourceSnapshot({
+			canvas,
+			canvasInstance,
+			flatAttachments: [
+				attachment("document", "画布A/images/document.png"),
+				attachment("preview", "画布A/images/preview.png"),
+			],
+			attachmentsReady: true,
+			attachmentIndex: buildDesignAttachmentIndex([
+				attachment("document", "画布A/images/document.png"),
+				attachment("preview", "画布A/images/preview.png"),
+			]),
+			designProjectBasePath: "画布A",
+		})
+
+		expect([...snapshot.items.values()].map((item) => item.path)).toEqual([
+			"./images/preview.png",
+		])
+	})
+
 	it("deduplicates current-canvas aliases without crossing workspace roots", () => {
 		const flatAttachments = [
 			attachment("canvas-a", "画布A/images/shared.png"),

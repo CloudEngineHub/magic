@@ -4,6 +4,8 @@ import { getFileContentById, getFileContentsByIds } from "@/pages/superMagic/uti
 import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
 import { compressCanvasData, decompressCanvasData } from "../magicProjectCompression"
 import {
+	commitCanvasProjectPathRepair,
+	planCanvasProjectsBeforeFileOperation,
 	repairCanvasProjectsBeforeFileOperation,
 	syncCanvasProjectNameAfterFileOperation,
 } from "../canvasProjectPathRepair"
@@ -181,6 +183,28 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 		expect(saved.file_id).toBe("main")
 		expect(saved.content).toContain('"name": "Canvas"')
 		expect(saved.content).toContain('"src": "./images/a.png"')
+	})
+
+	it("plans path repairs without saving until commit", async () => {
+		vi.mocked(getFileContentById).mockResolvedValue(
+			projectContent("1.0.0", {
+				elements: [{ type: "image", contents: [{ src: "/Canvas/images/a.png" }] }],
+			}) as never,
+		)
+
+		const plan = await planCanvasProjectsBeforeFileOperation({
+			attachments: attachments(),
+			items: [attachments()[0]],
+			operation: "rename",
+		})
+
+		expect(plan.failures).toEqual([])
+		expect(plan.pendingFileSaves).toHaveLength(1)
+		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
+
+		const result = await commitCanvasProjectPathRepair(plan)
+		expect(result.repairedFileIds).toEqual(["main"])
+		expect(SuperMagicApi.saveFileContent).toHaveBeenCalledTimes(1)
 	})
 
 	it("syncs a renamed canvas root name in a separate post-operation step", async () => {
@@ -428,10 +452,164 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 			attachments: tree,
 			items: [tree[0]],
 			operation: "move",
+			attachmentSnapshotComplete: true,
 		})
 
-		expect(result.hasFailures).toBe(true)
+		expect(result.hasFailures).toBe(false)
+		expect(result.hasWarnings).toBe(true)
+		expect(result.warnings).toEqual([
+			{
+				projectName: "Canvas",
+				fileName: "magic.project.js",
+				message: "ambiguous resource paths: images/a.png",
+			},
+		])
 		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
+	})
+
+	it("rewrites a unique bare external resource path to a workspace absolute path", async () => {
+		const [root, main] = attachments()
+		const tree = [
+			root,
+			main,
+			{
+				file_id: "external-image",
+				file_name: "a.png",
+				relative_file_path: "images/a.png",
+			},
+		] as any
+		vi.mocked(getFileContentById).mockResolvedValue(
+			projectContent("1.0.0", {
+				elements: [{ type: "image", contents: [{ src: "images/a.png" }] }],
+			}) as never,
+		)
+
+		const result = await repairCanvasProjectsBeforeFileOperation({
+			attachments: tree,
+			items: [tree[0]],
+			operation: "move",
+			attachmentSnapshotComplete: true,
+		})
+
+		expect(result.failures).toEqual([])
+		expect(result.warnings).toEqual([])
+		expect(result.repairedFileIds).toEqual(["main"])
+		const saved = vi.mocked(SuperMagicApi.saveFileContent).mock.calls[0][0][0].content as string
+		expect(saved).toContain('"src": "/images/a.png"')
+	})
+
+	it("does not rewrite a locally unique bare resource path in a partial snapshot", async () => {
+		const [root, main] = attachments()
+		const tree = [
+			root,
+			main,
+			{
+				file_id: "external-image",
+				file_name: "a.png",
+				relative_file_path: "images/a.png",
+			},
+		] as any
+		vi.mocked(getFileContentById).mockResolvedValue(
+			projectContent("1.0.0", {
+				elements: [{ type: "image", contents: [{ src: "images/a.png" }] }],
+			}) as never,
+		)
+
+		const result = await repairCanvasProjectsBeforeFileOperation({
+			attachments: tree,
+			items: [tree[0]],
+			operation: "move",
+		})
+
+		expect(result.warnings).toEqual([
+			{
+				projectName: "Canvas",
+				fileName: "magic.project.js",
+				message: "unverified resource paths: images/a.png",
+			},
+		])
+		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
+	})
+
+	it("reports a missing bare resource path in a complete snapshot", async () => {
+		const tree = attachments().filter((item: any) => item.file_id !== "image")
+		vi.mocked(getFileContentById).mockResolvedValue(
+			projectContent("1.0.0", {
+				elements: [{ type: "image", contents: [{ src: "images/a.png" }] }],
+			}) as never,
+		)
+
+		const result = await repairCanvasProjectsBeforeFileOperation({
+			attachments: tree,
+			items: [tree[0]],
+			operation: "move",
+			attachmentSnapshotComplete: true,
+		})
+
+		expect(result.hasWarnings).toBe(true)
+		expect(result.warnings).toEqual([
+			{
+				projectName: "Canvas",
+				fileName: "magic.project.js",
+				message: "missing resource paths: images/a.png",
+			},
+		])
+		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
+	})
+
+	it("rewrites a unique bare current-canvas resource path to a canvas relative path", async () => {
+		vi.mocked(getFileContentById).mockResolvedValue(
+			projectContent("1.0.0", {
+				elements: [{ type: "image", contents: [{ src: "images/a.png" }] }],
+			}) as never,
+		)
+
+		const tree = attachments()
+		const result = await repairCanvasProjectsBeforeFileOperation({
+			attachments: tree,
+			items: [tree[0]],
+			operation: "move",
+			attachmentSnapshotComplete: true,
+		})
+
+		expect(result.failures).toEqual([])
+		expect(result.warnings).toEqual([])
+		expect(result.repairedFileIds).toEqual(["main"])
+		const saved = vi.mocked(SuperMagicApi.saveFileContent).mock.calls[0][0][0].content as string
+		expect(saved).toContain('"src": "./images/a.png"')
+	})
+
+	it("rewrites a unique bare external resource directory to a workspace absolute path", async () => {
+		const [root, main] = attachments()
+		const tree = [
+			root,
+			main,
+			{
+				file_id: "external-images",
+				file_name: "images",
+				is_directory: true,
+				relative_file_path: "images",
+			},
+		] as any
+		vi.mocked(getFileContentById).mockResolvedValue(
+			projectContent("1.0.0", {
+				elements: [
+					{ type: "image", contents: [{ generateImageRequest: { file_dir: "images" } }] },
+				],
+			}) as never,
+		)
+
+		const result = await repairCanvasProjectsBeforeFileOperation({
+			attachments: tree,
+			items: [tree[0]],
+			operation: "move",
+			attachmentSnapshotComplete: true,
+		})
+
+		expect(result.failures).toEqual([])
+		expect(result.warnings).toEqual([])
+		const saved = vi.mocked(SuperMagicApi.saveFileContent).mock.calls[0][0][0].content as string
+		expect(saved).toContain('"file_dir": "/images"')
 	})
 
 	it("does not use a resource whose path disagrees with its parent_id chain", async () => {
@@ -448,9 +626,45 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 			attachments: tree,
 			items: [tree[0]],
 			operation: "move",
+			attachmentSnapshotComplete: true,
 		})
 
-		expect(result.hasFailures).toBe(true)
+		expect(result.hasFailures).toBe(false)
+		expect(result.hasWarnings).toBe(true)
+		expect(result.warnings).toEqual([
+			{
+				projectName: "Canvas",
+				fileName: "magic.project.js",
+				message: "missing resource paths: /Canvas/images/a.png",
+			},
+		])
+		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
+	})
+
+	it("does not classify an unresolved path as missing when the attachment snapshot is partial", async () => {
+		const tree = attachments()
+		const inconsistentImage = tree.find((item: any) => item.file_id === "image")!
+		inconsistentImage.relative_file_path = "Other/images/a.png"
+		vi.mocked(getFileContentById).mockResolvedValue(
+			projectContent("1.0.0", {
+				elements: [{ type: "image", contents: [{ src: "/Canvas/images/a.png" }] }],
+			}) as never,
+		)
+
+		const result = await repairCanvasProjectsBeforeFileOperation({
+			attachments: tree,
+			items: [tree[0]],
+			operation: "move",
+		})
+
+		expect(result.hasFailures).toBe(false)
+		expect(result.warnings).toEqual([
+			{
+				projectName: "Canvas",
+				fileName: "magic.project.js",
+				message: "unverified resource paths: /Canvas/images/a.png",
+			},
+		])
 		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
 	})
 
@@ -658,6 +872,10 @@ describe("repairCanvasProjectsBeforeFileOperation", () => {
 		})
 
 		expect(result.repairedFileIds).toEqual([])
+		expect(result.hasSaveFailures).toBe(true)
+		expect(result.saveFailures).toEqual([
+			expect.objectContaining({ fileName: "magic.project.js", message: "save failed" }),
+		])
 		expect(result.failures).toEqual([
 			expect.objectContaining({ fileName: "magic.project.js", message: "save failed" }),
 		])

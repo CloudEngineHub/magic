@@ -19,9 +19,13 @@ import {
 	getCanvasResourceReferenceIdentity,
 } from "../../../../runtime/shared/path/canvasResourcePath"
 import { useFileInput } from "../../../editors/message/useFileInput"
+import { CanvasUploadMentionController } from "../../../editors/message/CanvasUploadMentionController"
+import type { CanvasUploadMentionHandle } from "../../../editors/message/CanvasUploadMentionController"
 import {
 	removeMentionFromString,
 	appendMentionToString,
+	areMentionPathBindingsEqual,
+	type MentionPathBinding,
 } from "../../../editors/message/tiptap/contentUtils"
 import {
 	resolvePromptPlaceholderTokenConfig,
@@ -212,6 +216,16 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		[],
 	)
 
+	const latestMentionBindingsRef = useRef<MentionPathBinding[]>([])
+	const [mentionBindings, setMentionBindings] = useState<MentionPathBinding[]>([])
+	const updateMentionBindings = useCallback((bindings: MentionPathBinding[]) => {
+		const nextBindings = bindings.map((binding) => ({ ...binding }))
+		latestMentionBindingsRef.current = nextBindings
+		setMentionBindings((previous) =>
+			areMentionPathBindingsEqual(previous, nextBindings) ? previous : nextBindings,
+		)
+	}, [])
+
 	const scheduleReferenceMentionInserts = useCallback(
 		(
 			refs: VideoReferenceAssetInfo[],
@@ -227,7 +241,12 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				if (!toInsert.length) return
 				editor.insertMentionItems(
 					toInsert.map((r) =>
-						createReferenceResourcePanelItemFromPath(r.path, r.fileName),
+						createReferenceResourcePanelItemFromPath(r.path, r.fileName, {
+							fileId: r.file_id,
+							sourceFileId: r.source_file_id,
+							sourceProjectId: r.source_project_id,
+							projectId: r.project_id,
+						}),
 					),
 					placement === "documentEnd" ? { placement: "documentEnd" } : {},
 				)
@@ -251,13 +270,19 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		string | undefined
 	>(undefined)
 	const [activeInputTab, setActiveInputTab] = useState<"frame" | "reference">("frame")
+	const activeInputTabRef = useRef<"frame" | "reference">(activeInputTab)
 	const [frameImageInfos, setFrameImageInfos] = useState<Array<UploadFileResponse | undefined>>(
 		[],
 	)
+	// Upload callbacks can arrive back-to-back in one promise turn. Keep the
+	// latest slot state synchronously so a multi-file paste never targets the
+	// same empty frame/reference slot twice before React renders again.
+	const frameImageInfosRef = useRef(frameImageInfos)
 	const [linkedFrameBindings, setLinkedFrameBindings] = useState<
 		Array<LinkedFrameBinding | undefined>
 	>([])
 	const [referenceImageInfos, setReferenceImageInfos] = useState<VideoReferenceAssetInfo[]>([])
+	const referenceImageInfosRef = useRef(referenceImageInfos)
 	const [protectedReferencePaths, setProtectedReferencePaths] = useState<string[]>([])
 	const [isPopoverOpen, setIsPopoverOpen] = useState(false)
 	const [isReferenceProjectPanelOpen, setIsReferenceProjectPanelOpen] = useState(false)
@@ -277,10 +302,18 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const isRemovingReferenceImageRef = useRef(false)
 	const selectedResourceSlotRef = useRef<VideoInputSlotInfo | null>(null)
 	const discardPendingUploadRef = useRef(false)
+	const uploadMentionController = useMemo(
+		() => (messageEditorRef ? new CanvasUploadMentionController(messageEditorRef) : undefined),
+		[messageEditorRef],
+	)
 	/** 本地上传多选：记录起始槽位，按序号连续写入 */
 	const batchUploadBaseRef = useRef<{
 		inputTab: "frame" | "reference"
 		startSlot: number
+		retainResourceSlotAfterBatch?: boolean
+		isCurrent?: () => boolean
+		suppressPromptMention?: boolean
+		hasExistingSlot?: boolean
 	} | null>(null)
 	const modeDraftCacheRef = useRef<Partial<Record<VideoInputMode, VideoModeInputDraft>>>({})
 	const restoreModeRef = useRef<"normal" | "quickEdit">("normal")
@@ -430,9 +463,12 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 
 	useEffect(() => {
 		if (!availableInputTabs.includes(activeInputTab)) {
-			setActiveInputTab(
-				resolveInputSubTabForAvailableTabs(availableInputTabs, activeInputTab),
+			const nextInputTab = resolveInputSubTabForAvailableTabs(
+				availableInputTabs,
+				activeInputTab,
 			)
+			activeInputTabRef.current = nextInputTab
+			setActiveInputTab(nextInputTab)
 		}
 	}, [availableInputTabs, activeInputTab])
 
@@ -493,15 +529,16 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		[referenceImageInfos],
 	)
 	const getEffectiveReferenceAssetInfos = useCallback(() => {
+		const currentInfos = referenceImageInfosRef.current
 		const additionalInfos = getAdditionalReferenceAssetInfos?.() ?? []
-		if (additionalInfos.length === 0) return [...referenceImageInfos]
+		if (additionalInfos.length === 0) return [...currentInfos]
 		const existingIdentities = new Set(
-			referenceImageInfos.map((info) =>
+			currentInfos.map((info) =>
 				getCanvasResourceReferenceIdentity(info.path, resolveResourceReference),
 			),
 		)
 		return [
-			...referenceImageInfos,
+			...currentInfos,
 			...additionalInfos.filter((info) => {
 				const identity = getCanvasResourceReferenceIdentity(
 					info.path,
@@ -512,7 +549,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				return true
 			}),
 		]
-	}, [getAdditionalReferenceAssetInfos, referenceImageInfos, resolveResourceReference])
+	}, [getAdditionalReferenceAssetInfos, resolveResourceReference])
 
 	const maxReferenceImages = useMemo(() => {
 		if (!supportsReferenceAssets) return 0
@@ -536,12 +573,17 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		[resolveResourceReference],
 	)
 	const applyBindingStateFromPromptAndReferences = useCallback(
-		(nextPrompt: string, nextReferenceInfos: VideoReferenceAssetInfo[]) => {
+		(
+			nextPrompt: string,
+			nextReferenceInfos: VideoReferenceAssetInfo[],
+			nextMentionBindings?: MentionPathBinding[],
+		) => {
 			const bindingState = resolveReferenceBindingState({
 				prompt: nextPrompt,
 				referenceFileInfos: nextReferenceInfos,
 				tokenConfig: promptPlaceholderTokenConfig,
 				resolveResourceReference,
+				mentionBindings: nextMentionBindings,
 			})
 			updateProtectedReferencePaths(bindingState.protectedReferencePaths)
 			return bindingState
@@ -608,8 +650,15 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		return Array.from(new Set(acceptParts)).join(",") || fileInputAccept
 	}, [fileInputAccept, selectedReferenceAssetKinds])
 	const filterSelectedReferenceFiles = useCallback(
-		(files: File[]) => {
-			if (selectedResourceSlot?.inputTab === "frame") return files
+		(files: File[], options?: { ignoreSelectedResourceSlot?: boolean }) => {
+			const selectedSlot = options?.ignoreSelectedResourceSlot
+				? null
+				: selectedResourceSlotRef.current
+			if (
+				selectedSlot?.inputTab === "frame" ||
+				(options?.ignoreSelectedResourceSlot && activeInputTabRef.current === "frame")
+			)
+				return files
 			const allowedKinds = new Set<VideoReferenceAssetKind>(
 				selectedReferenceAssetKinds?.length
 					? selectedReferenceAssetKinds
@@ -619,7 +668,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 							supportsReferenceAudios ? "audio" : null,
 						].filter((kind): kind is VideoReferenceAssetKind => Boolean(kind)),
 			)
-			const selectedPath = selectedResourceSlot?.path
+			const selectedPath = selectedSlot?.path
 			const replacing = Boolean(selectedPath)
 			const effectiveAssets = getEffectiveReferenceAssetInfos()
 			const replacedInfo = selectedPath
@@ -685,7 +734,6 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			resolveResourceReference,
 			selectedInputMode,
 			selectedReferenceAssetKinds,
-			selectedResourceSlot,
 			supportsReferenceAudios,
 			supportsReferenceImages,
 			supportsReferenceVideos,
@@ -696,6 +744,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			name: info.fileName,
 			path: info.path,
 			assetType: info.assetType,
+			source: "element-reference" as const,
 		}))
 	}, [referenceImageInfos])
 	const isReferenceImageLimitReached = useMemo(() => {
@@ -707,6 +756,27 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		() => frameImageInfos.map((info) => info?.path),
 		[frameImageInfos],
 	)
+	const currentReferenceImagesRef = useRef(currentReferenceImages)
+	const selectedReferenceFilesRef = useRef(selectedReferenceFiles)
+	const selectedReferenceMaxFilesRef = useRef(selectedReferenceMaxFiles)
+	const filterSelectedReferenceFilesRef = useRef(filterSelectedReferenceFiles)
+	const protectedReferencePathsRef = useRef(protectedReferencePaths)
+	const currentInputModeConfigRef = useRef(currentInputModeConfig)
+	const selectedInputModeRef = useRef(selectedInputMode)
+	const maxFrameImagesRef = useRef(maxFrameImages)
+	const maxReferenceImagesRef = useRef(maxReferenceImages)
+	frameImageInfosRef.current = frameImageInfos
+	currentReferenceImagesRef.current = currentReferenceImages
+	selectedReferenceFilesRef.current = selectedReferenceFiles
+	selectedReferenceMaxFilesRef.current = selectedReferenceMaxFiles
+	filterSelectedReferenceFilesRef.current = filterSelectedReferenceFiles
+	referenceImageInfosRef.current = referenceImageInfos
+	protectedReferencePathsRef.current = protectedReferencePaths
+	currentInputModeConfigRef.current = currentInputModeConfig
+	selectedInputModeRef.current = selectedInputMode
+	activeInputTabRef.current = activeInputTab
+	maxFrameImagesRef.current = maxFrameImages
+	maxReferenceImagesRef.current = maxReferenceImages
 	const hasFrameImagesConfigured = useMemo(
 		() => currentFrameImages.some((path) => Boolean(path)),
 		[currentFrameImages],
@@ -918,7 +988,19 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		}
 	}, [generationSwitchConfig.webSearch, selectedWebSearch])
 
-	const resetSelectedResourceSlot = useCallback(() => {
+	const resetSelectedResourceSlot = useCallback((expectedSlot?: VideoInputSlotInfo) => {
+		const currentSlot = selectedResourceSlotRef.current
+		if (
+			expectedSlot &&
+			(!currentSlot ||
+				currentSlot.inputTab !== expectedSlot.inputTab ||
+				currentSlot.slotIndex !== expectedSlot.slotIndex ||
+				currentSlot.slotKey !== expectedSlot.slotKey ||
+				currentSlot.referenceAssetKind !== expectedSlot.referenceAssetKind ||
+				currentSlot.path !== expectedSlot.path)
+		) {
+			return
+		}
 		selectedResourceSlotRef.current = null
 		setSelectedResourceSlot(null)
 	}, [])
@@ -929,24 +1011,44 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			fileInfo: UploadFileResponse,
 			options?: { retainResourceSlot?: boolean },
 		) => {
-			setFrameImageInfos((prev) => {
-				const next = [...prev]
-				next[slotIndex] = {
-					path: fileInfo.path,
-					src: fileInfo.src || fileInfo.path,
-					fileName:
-						fileInfo.fileName ||
-						getCanvasResourceFileName(fileInfo.path) ||
-						fileInfo.path,
-				}
-				return next
-			})
+			const next = [...frameImageInfosRef.current]
+			next[slotIndex] = {
+				path: fileInfo.path,
+				src: fileInfo.src || fileInfo.path,
+				fileName:
+					fileInfo.fileName || getCanvasResourceFileName(fileInfo.path) || fileInfo.path,
+			}
+			frameImageInfosRef.current = next
+			setFrameImageInfos(next)
+			activeInputTabRef.current = "frame"
 			setActiveInputTab("frame")
 			if (!options?.retainResourceSlot) {
 				resetSelectedResourceSlot()
 			}
 		},
 		[resetSelectedResourceSlot],
+	)
+
+	const appendFrameImage = useCallback(
+		(fileInfo: UploadFileResponse): boolean => {
+			const next = [...frameImageInfosRef.current]
+			const firstEmptySlot = next.findIndex((info) => !info?.path)
+			const slotIndex = firstEmptySlot >= 0 ? firstEmptySlot : next.length
+			if (maxFrameImages !== undefined && slotIndex >= maxFrameImages) return false
+
+			next[slotIndex] = {
+				path: fileInfo.path,
+				src: fileInfo.src || fileInfo.path,
+				fileName:
+					fileInfo.fileName || getCanvasResourceFileName(fileInfo.path) || fileInfo.path,
+			}
+			frameImageInfosRef.current = next
+			setFrameImageInfos(next)
+			activeInputTabRef.current = "frame"
+			setActiveInputTab("frame")
+			return true
+		},
+		[maxFrameImages],
 	)
 
 	const replaceReferenceImageAt = useCallback(
@@ -957,19 +1059,28 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				retainResourceSlot?: boolean
 				/** 默认 cursor；仅少数场景（如需文末追加）可传 documentEnd */
 				mentionPlacement?: "cursor" | "documentEnd"
+				suppressPromptMention?: boolean
 			},
 		) => {
+			const latestReferenceImageInfos = referenceImageInfosRef.current
+			const latestProtectedReferencePaths = protectedReferencePathsRef.current
+			const latestInputModeConfig = currentInputModeConfigRef.current
+			const latestSelectedInputMode = selectedInputModeRef.current
 			const normalizedFileInfo = resolveVideoReferenceAssetInfo({
 				path: fileInfo.path,
 				src: fileInfo.src,
 				fileName: fileInfo.fileName,
+				file_id: fileInfo.file_id,
+				source_file_id: fileInfo.source_file_id,
+				source_project_id: fileInfo.source_project_id,
+				project_id: fileInfo.project_id,
 				explicitAssetType: fileInfo.assetType,
-				metadataCandidates: referenceImageInfos,
+				metadataCandidates: latestReferenceImageInfos,
 				resolveResourceReference,
 			})
 			if (!normalizedFileInfo) return
 			const { assetType } = normalizedFileInfo
-			if (!isReferenceAssetTypeAllowed(assetType, currentInputModeConfig)) return
+			if (!isReferenceAssetTypeAllowed(assetType, latestInputModeConfig)) return
 			const selectedSlot = selectedResourceSlotRef.current
 			const expectedAssetTypes =
 				selectedSlot?.inputTab === "reference"
@@ -980,7 +1091,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 							? [selectedSlot.referenceAssetKind]
 							: undefined
 					: undefined
-			const previousInfo = referenceImageInfos[slotIndex]
+			const previousInfo = latestReferenceImageInfos[slotIndex]
 			if (expectedAssetTypes?.length && !expectedAssetTypes.includes(assetType)) return
 			const isSelectedSlotReplacement = Boolean(
 				selectedSlot?.inputTab === "reference" &&
@@ -1001,7 +1112,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 						resolveResourceReference,
 					),
 				) ||
-				referenceImageInfos.some(
+				latestReferenceImageInfos.some(
 					(info, index) =>
 						index !== slotIndex &&
 						areCanvasResourceReferencesSame(
@@ -1020,19 +1131,20 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				const effectiveCurrentInfos = getEffectiveReferenceAssetInfos()
 				if (
 					!canReplaceReferenceAssetByCounts(
-						currentInputModeConfig,
+						latestInputModeConfig,
 						countReferenceAssets(effectiveCurrentInfos),
 						previousInfo.assetType,
 						assetType,
 						{
-							ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference",
+							ignoreModeMaxCountForTotal:
+								latestSelectedInputMode === "omni_reference",
 						},
 					)
 				) {
 					return
 				}
 			}
-			const deduped = referenceImageInfos.filter(
+			const deduped = latestReferenceImageInfos.filter(
 				(info) =>
 					!areCanvasResourceReferencesSame(
 						info.path,
@@ -1053,13 +1165,14 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			}
 			const limitedInfos = clampReferenceAssetsToLimits(
 				nextInfos.filter(Boolean) as VideoReferenceAssetInfo[],
-				currentInputModeConfig,
-				{ ignoreModeMaxCountForTotal: selectedInputMode === "omni_reference" },
+				latestInputModeConfig,
+				{ ignoreModeMaxCountForTotal: latestSelectedInputMode === "omni_reference" },
 			)
+			referenceImageInfosRef.current = limitedInfos
 			setReferenceImageInfos(limitedInfos)
 			const nextProtectedReferencePaths =
 				shouldReplaceExisting && previousInfo?.path
-					? protectedReferencePaths.map((path) =>
+					? latestProtectedReferencePaths.map((path) =>
 							areCanvasResourceReferencesSame(
 								path,
 								previousInfo.path,
@@ -1068,25 +1181,32 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 								? normalizedFileInfo.path
 								: path,
 						)
-					: protectedReferencePaths
-			updateProtectedReferencePaths(
-				pruneProtectedReferencePaths(
-					limitedInfos.map((info) => info.path),
-					nextProtectedReferencePaths,
-					resolveResourceReference,
-				),
+					: latestProtectedReferencePaths
+			const prunedProtectedReferencePaths = pruneProtectedReferencePaths(
+				limitedInfos.map((info) => info.path),
+				nextProtectedReferencePaths,
+				resolveResourceReference,
 			)
+			protectedReferencePathsRef.current = prunedProtectedReferencePaths
+			updateProtectedReferencePaths(prunedProtectedReferencePaths)
 			if (shouldReplaceExisting && previousInfo?.path) {
 				messageEditorRef?.current?.replaceMentionItems(
 					createCanvasMentionPathMatcher(previousInfo.path, resolveResourceReference),
 					createReferenceResourcePanelItemFromPath(
 						normalizedFileInfo.path,
 						normalizedFileInfo.fileName,
+						{
+							fileId: normalizedFileInfo.file_id,
+							sourceFileId: normalizedFileInfo.source_file_id,
+							sourceProjectId: normalizedFileInfo.source_project_id,
+							projectId: normalizedFileInfo.project_id,
+						},
 					),
 				)
 			}
 			if (
 				!shouldReplaceExisting &&
+				!options?.suppressPromptMention &&
 				limitedInfos.some((info) =>
 					areCanvasResourceReferencesSame(
 						info.path,
@@ -1099,6 +1219,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					placement: options?.mentionPlacement ?? "cursor",
 				})
 			}
+			activeInputTabRef.current = "reference"
 			setActiveInputTab("reference")
 			if (!options?.retainResourceSlot) {
 				resetSelectedResourceSlot()
@@ -1107,26 +1228,22 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		[
 			scheduleReferenceMentionInserts,
 			resetSelectedResourceSlot,
-			currentInputModeConfig,
 			getEffectiveReferenceAssetInfos,
-			referenceImageInfos,
-			protectedReferencePaths,
 			resolveResourceReference,
-			selectedInputMode,
 			updateProtectedReferencePaths,
 			messageEditorRef,
 		],
 	)
 
 	const replaceSelectedResource = useCallback(
-		(fileInfo: UploadFileResponse) => {
+		(fileInfo: UploadFileResponse, options?: { retainResourceSlot?: boolean }) => {
 			const selectedSlot = selectedResourceSlotRef.current
 			if (!selectedSlot) return
 			if (selectedSlot.inputTab === "frame") {
-				replaceFrameImageAt(selectedSlot.slotIndex, fileInfo)
+				replaceFrameImageAt(selectedSlot.slotIndex, fileInfo, options)
 				return
 			}
-			replaceReferenceImageAt(selectedSlot.slotIndex, fileInfo)
+			replaceReferenceImageAt(selectedSlot.slotIndex, fileInfo, options)
 		},
 		[replaceFrameImageAt, replaceReferenceImageAt],
 	)
@@ -1155,26 +1272,44 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				if (discardPendingUploadRef.current) return
 				const base = batchUploadBaseRef.current
 				if (!base) return
+				if (base.isCurrent?.() === false) return
 				const targetIndex = base.startSlot + fileIndex
-				const retainResourceSlot = fileIndex < batchTotal - 1
+				const retainResourceSlot =
+					base.retainResourceSlotAfterBatch === true || fileIndex < batchTotal - 1
 				if (base.inputTab === "frame") {
 					replaceFrameImageAt(targetIndex, result, { retainResourceSlot })
 				} else {
-					replaceReferenceImageAt(targetIndex, result, { retainResourceSlot })
+					replaceReferenceImageAt(targetIndex, result, {
+						retainResourceSlot,
+						suppressPromptMention:
+							base.suppressPromptMention === true || Boolean(uploadMentionController),
+					})
 				}
 			},
-			[replaceFrameImageAt, replaceReferenceImageAt],
+			[replaceFrameImageAt, replaceReferenceImageAt, uploadMentionController],
 		),
 		onUploadSessionEnd: useCallback(() => {
 			batchUploadBaseRef.current = null
 		}, []),
+		pendingUploadMentionController: uploadMentionController,
+		shouldInsertPendingMention: useCallback(
+			() =>
+				batchUploadBaseRef.current?.inputTab === "reference" &&
+				!batchUploadBaseRef.current?.hasExistingSlot &&
+				!batchUploadBaseRef.current?.suppressPromptMention,
+			[],
+		),
 	})
 
 	const triggerFileSelect = useCallback(() => {
 		if (isUploading) return
 		const sel = selectedResourceSlotRef.current
 		batchUploadBaseRef.current = sel
-			? { inputTab: sel.inputTab, startSlot: sel.slotIndex }
+			? {
+					inputTab: sel.inputTab,
+					startSlot: sel.slotIndex,
+					hasExistingSlot: Boolean(sel.path),
+				}
 			: null
 		rawTriggerFileSelect({
 			maxSelectedFiles: sel?.path ? 1 : undefined,
@@ -1183,34 +1318,112 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	}, [isUploading, rawTriggerFileSelect])
 
 	const uploadReferenceFiles = useCallback(
-		async (files: File[]) => {
-			if (isUploading || !supportsReferenceAssets || files.length === 0) return
-			const selectedSlot = selectedResourceSlotRef.current
+		async (
+			files: File[],
+			options?: {
+				ignoreSelectedResourceSlot?: boolean
+				retainSelectedResourceSlot?: boolean
+				suppressPartialSkippedToast?: boolean
+				isCurrent?: () => boolean
+				suppressPromptMention?: boolean
+				pendingMentionHandles?: Array<CanvasUploadMentionHandle | undefined>
+			},
+		) => {
+			if (isUploading || files.length === 0) return []
+			const latestCurrentFrameImages = frameImageInfosRef.current.map((info) => info?.path)
+			const latestCurrentReferenceImages = currentReferenceImagesRef.current
+			const latestSelectedReferenceFiles = selectedReferenceFilesRef.current
+			const latestSelectedReferenceMaxFiles = selectedReferenceMaxFilesRef.current
+			const latestFilterSelectedReferenceFiles = filterSelectedReferenceFilesRef.current
+			const latestActiveInputTab = activeInputTabRef.current
+			const latestMaxFrameImages = maxFrameImagesRef.current
+			const selectedSlot = options?.ignoreSelectedResourceSlot
+				? null
+				: selectedResourceSlotRef.current
+			const targetInputTab = selectedSlot?.inputTab ?? latestActiveInputTab
+			if (!supportsReferenceAssets && targetInputTab !== "frame") return []
+			if (targetInputTab === "frame") {
+				const isReplacingFrameSlot = Boolean(
+					selectedSlot?.inputTab === "frame" && selectedSlot.path,
+				)
+				const imageFiles = files.filter((file) =>
+					file.type.toLowerCase().startsWith("image/"),
+				)
+				const filesToUpload = isReplacingFrameSlot ? imageFiles.slice(0, 1) : imageFiles
+				if (filesToUpload.length === 0) return []
+				const currentFrameCount = latestCurrentFrameImages.filter(Boolean).length
+				const remainingFrameCapacity =
+					latestMaxFrameImages === undefined
+						? undefined
+						: Math.max(
+								0,
+								latestMaxFrameImages -
+									currentFrameCount +
+									(isReplacingFrameSlot ? 1 : 0),
+							)
+				const capacityLimitedFiles =
+					remainingFrameCapacity === undefined
+						? filesToUpload
+						: filesToUpload.slice(0, remainingFrameCapacity)
+				if (capacityLimitedFiles.length === 0) return []
+				const firstEmptyFrameSlot = latestCurrentFrameImages.findIndex((path) => !path)
+				batchUploadBaseRef.current = {
+					inputTab: "frame",
+					startSlot: isReplacingFrameSlot
+						? (selectedSlot?.slotIndex ?? 0)
+						: selectedSlot?.inputTab === "frame"
+							? selectedSlot.slotIndex
+							: firstEmptyFrameSlot >= 0
+								? firstEmptyFrameSlot
+								: latestCurrentFrameImages.length,
+					retainResourceSlotAfterBatch: options?.retainSelectedResourceSlot === true,
+					isCurrent: options?.isCurrent,
+					suppressPromptMention: options?.suppressPromptMention,
+					hasExistingSlot: isReplacingFrameSlot,
+				}
+				return await rawUploadFiles(capacityLimitedFiles, {
+					currentReferenceFiles: latestCurrentFrameImages.filter((path): path is string =>
+						Boolean(path),
+					),
+					maxReferenceFiles: remainingFrameCapacity,
+					maxSelectedFiles: isReplacingFrameSlot ? 1 : capacityLimitedFiles.length,
+					ignoreReferenceFileCapacity: false,
+					pendingMentionHandles: options?.pendingMentionHandles,
+				})
+			}
 			const replacementSlot =
 				selectedSlot?.inputTab === "reference" && selectedSlot.path ? selectedSlot : null
 			const replacementPath = replacementSlot?.path
-			const acceptedFiles = filterSelectedReferenceFiles(files)
+			const acceptedFiles = latestFilterSelectedReferenceFiles(files, {
+				ignoreSelectedResourceSlot: options?.ignoreSelectedResourceSlot,
+			})
 			const filesToUpload = replacementSlot ? acceptedFiles.slice(0, 1) : acceptedFiles
-			if (filesToUpload.length < files.length) {
+			if (filesToUpload.length < files.length && !options?.suppressPartialSkippedToast) {
 				toast.info(
 					t("videoEditor.referenceAssetPartialSkipped", {
 						defaultValue: "部分素材因类型不支持、重复或达到上限已跳过",
 					}),
 				)
 			}
-			if (filesToUpload.length === 0) return
+			if (filesToUpload.length === 0) return []
 
 			const startSlot = replacementSlot
 				? replacementSlot.slotIndex
-				: currentReferenceImages.length
+				: selectedSlot?.inputTab === "reference"
+					? selectedSlot.slotIndex
+					: latestCurrentReferenceImages.length
 			batchUploadBaseRef.current = {
 				inputTab: "reference",
 				startSlot,
+				retainResourceSlotAfterBatch: options?.retainSelectedResourceSlot === true,
+				isCurrent: options?.isCurrent,
+				suppressPromptMention: options?.suppressPromptMention,
+				hasExistingSlot: Boolean(replacementSlot?.path),
 			}
-			await rawUploadFiles(filesToUpload, {
+			return await rawUploadFiles(filesToUpload, {
 				currentReferenceFiles:
 					replacementSlot && replacementPath
-						? selectedReferenceFiles.filter(
+						? latestSelectedReferenceFiles.filter(
 								(path) =>
 									!areCanvasResourceReferencesSame(
 										path,
@@ -1218,24 +1431,17 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 										resolveResourceReference,
 									),
 							)
-						: currentReferenceImages,
+						: latestCurrentReferenceImages,
 				maxReferenceFiles:
-					replacementSlot && replacementPath ? selectedReferenceMaxFiles : undefined,
+					replacementSlot && replacementPath
+						? latestSelectedReferenceMaxFiles
+						: undefined,
 				maxSelectedFiles: replacementSlot ? 1 : filesToUpload.length,
 				ignoreReferenceFileCapacity: !replacementSlot,
+				pendingMentionHandles: options?.pendingMentionHandles,
 			})
 		},
-		[
-			isUploading,
-			supportsReferenceAssets,
-			filterSelectedReferenceFiles,
-			currentReferenceImages,
-			resolveResourceReference,
-			selectedReferenceFiles,
-			selectedReferenceMaxFiles,
-			rawUploadFiles,
-			t,
-		],
+		[isUploading, supportsReferenceAssets, resolveResourceReference, rawUploadFiles, t],
 	)
 
 	const [resourceUploadSlotKey, setResourceUploadSlotKey] = useState<string | null>(null)
@@ -1283,7 +1489,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const nextInputMode = resolveInputModeForAvailableModes(nextModes, selectedInputMode)
 			setSelectedInputMode(nextInputMode)
 			const nextTabs = getAvailableInputTabs(nextModel, nextInputMode)
-			setActiveInputTab(resolveInputSubTabForAvailableTabs(nextTabs, prevInputTab))
+			const nextInputTab = resolveInputSubTabForAvailableTabs(nextTabs, prevInputTab)
+			activeInputTabRef.current = nextInputTab
+			setActiveInputTab(nextInputTab)
 			selectedResourceSlotRef.current = null
 			setSelectedResourceSlot(null)
 			const nextFrameMaxCount = getMaxFrameCount(nextModel, nextInputMode)
@@ -1498,9 +1706,13 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				promptPlaceholderTokenConfig,
 			)
 			setPrompt(decodedDraftPrompt)
-			setActiveInputTab(
-				resolveModeDraftInputTab(value, selectedModel, nextDraft.activeInputTab),
+			const nextInputTab = resolveModeDraftInputTab(
+				value,
+				selectedModel,
+				nextDraft.activeInputTab,
 			)
+			activeInputTabRef.current = nextInputTab
+			setActiveInputTab(nextInputTab)
 			setFrameImageInfos(nextDraft.frameImageInfos ?? [])
 			setLinkedFrameBindings(nextDraft.linkedFrameBindings ?? [])
 			setReferenceImageInfos(nextReferenceInfos)
@@ -1526,6 +1738,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		(value: "frame" | "reference") => {
 			resetSelectedResourceSlot()
 			setIsReferenceProjectPanelOpen(false)
+			activeInputTabRef.current = value
 			setActiveInputTab(value)
 		},
 		[resetSelectedResourceSlot],
@@ -1577,6 +1790,12 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 						),
 				),
 			]
+			const latestMentionBindings =
+				messageEditorRef?.current?.getMentionBindings?.() ??
+				latestMentionBindingsRef.current
+			if (latestMentionBindings.length) {
+				updateMentionBindings(latestMentionBindings)
+			}
 			const typeMetadataCandidates: ReferenceResourceMetadataCandidate[] = [
 				...referenceImageInfos,
 				...metadataCandidates,
@@ -1605,9 +1824,17 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 							),
 						),
 					)
+					const binding = latestMentionBindings.find((item) =>
+						areCanvasResourceReferencesSame(item.path, path, resolveResourceReference),
+					)
 					const normalizedInfo = resolveVideoReferenceAssetInfo({
 						path,
-						fileName: matchedItem?.name,
+						fileName: matchedItem?.name || binding?.fileName,
+						file_id: binding?.fileId || existingInfo?.file_id,
+						source_file_id: binding?.sourceFileId || existingInfo?.source_file_id,
+						source_project_id:
+							binding?.sourceProjectId || existingInfo?.source_project_id,
+						project_id: binding?.projectId || existingInfo?.project_id,
 						metadataCandidates: typeMetadataCandidates,
 						resolveResourceReference,
 					})
@@ -1637,6 +1864,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			setIsReferenceProjectPanelOpen(false)
 			resetSelectedResourceSlot()
 			if (normalizedInfos.length > 0) {
+				activeInputTabRef.current = "reference"
 				setActiveInputTab("reference")
 			}
 		},
@@ -1645,11 +1873,13 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			currentInputModeConfig,
 			matchableItems,
 			maxReferenceImages,
-			resetSelectedResourceSlot,
+			messageEditorRef,
 			protectedReferencePaths,
 			referenceImageInfos,
+			resetSelectedResourceSlot,
 			resolveResourceReference,
 			selectedInputMode,
+			updateMentionBindings,
 			updateProtectedReferencePaths,
 		],
 	)
@@ -1770,6 +2000,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			!hasFrameImagesConfigured &&
 			activeInputTab !== "reference"
 		) {
+			activeInputTabRef.current = "reference"
 			setActiveInputTab("reference")
 		}
 		if (
@@ -1777,6 +2008,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			!hasReferenceImagesConfigured &&
 			activeInputTab !== "frame"
 		) {
+			activeInputTabRef.current = "frame"
 			setActiveInputTab("frame")
 		}
 	}, [availableInputTabs, hasFrameImagesConfigured, hasReferenceImagesConfigured, activeInputTab])
@@ -1884,9 +2116,14 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				return
 			}
 			if (!canvas || !manageRecoverySession || !recoveryKey) return
+			const capturedMentionBindings =
+				messageEditorRef?.current?.getMentionBindings?.() ??
+				latestMentionBindingsRef.current
+			updateMentionBindings(capturedMentionBindings)
 			const snapshot: VideoEditSessionSnapshot = {
 				request,
 				modeDrafts: cloneModeDraftCache(modeDraftCacheRef.current),
+				mentionBindings: capturedMentionBindings,
 			}
 			canvas.mediaEditRecoveryManager.saveDraft(
 				recoveryKey,
@@ -1901,7 +2138,15 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			})
 			pendingDraftRequestRef.current = null
 		},
-		[canvas, manageRecoverySession, recoveryKey, recoverySourceFingerprint, videoElement.id],
+		[
+			canvas,
+			manageRecoverySession,
+			messageEditorRef,
+			recoveryKey,
+			recoverySourceFingerprint,
+			updateMentionBindings,
+			videoElement.id,
+		],
 	)
 
 	const cancelPendingDraftPersistence = useCallback(() => {
@@ -1957,9 +2202,12 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 					? {
 							request: persistedEditorDraft.request,
 							modeDrafts: persistedEditorDraft.modeDrafts,
+							mentionBindings: persistedEditorDraft.mentionBindings,
 						}
 					: undefined)
 			sessionRestoreSnapshotRef.current = null
+			const restoredMentionBindings = sessionSnapshot?.mentionBindings ?? []
+			updateMentionBindings(restoredMentionBindings)
 			const isSessionRestore = Boolean(sessionSnapshot)
 			const isQuickEdit =
 				!isSessionRestore &&
@@ -2142,11 +2390,13 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			setPrompt(promptToRestore)
 			setFrameImageInfos(restoredFrameInfosForDraft)
 			setLinkedFrameBindings(restoredLinkedFrameBindings)
+			activeInputTabRef.current = restoredActiveInputTabForDraft
 			setActiveInputTab(restoredActiveInputTabForDraft)
 			setReferenceImageInfos(restoredReferenceInfosForDraft)
 			applyBindingStateFromPromptAndReferences(
 				promptToRestore,
 				restoredReferenceInfosForDraft,
+				restoredMentionBindings,
 			)
 
 			const mergedDrafts = mergeCurrentUiIntoModeDraftCache(
@@ -2185,6 +2435,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		recoveryKey,
 		recoverySourceFingerprint,
 		persistedEditorDraft,
+		updateMentionBindings,
 	])
 
 	const restoreOriginalGenerateVideoRequestToUi = useCallback(() => {
@@ -2194,10 +2445,18 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 
 		cancelPendingDraftPersistence()
 		modeDraftCacheRef.current = {}
+		updateMentionBindings([])
 		hasRestoredRef.current = false
 		restoreModeRef.current = "normal"
 		restoreConfig()
-	}, [canvas, videoElement.id, savedRequest, cancelPendingDraftPersistence, restoreConfig])
+	}, [
+		canvas,
+		videoElement.id,
+		savedRequest,
+		cancelPendingDraftPersistence,
+		restoreConfig,
+		updateMentionBindings,
+	])
 
 	const restoreQuickEditConfigToUi = useCallback(() => {
 		if (!canvas || !getActiveContent(videoElement)?.src) return
@@ -2205,6 +2464,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		if (!resolveVideoReferenceVideoModel(videoModelList, quickEditPreferredModelId)) return
 		cancelPendingDraftPersistence()
 		modeDraftCacheRef.current = {}
+		updateMentionBindings([])
 		hasRestoredRef.current = false
 		restoreModeRef.current = "quickEdit"
 		restoreConfig()
@@ -2213,18 +2473,22 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		cancelPendingDraftPersistence,
 		restoreConfig,
 		selectedModelId,
+		updateMentionBindings,
 		videoElement,
 		videoModelList,
 	])
 
 	const buildSessionSnapshot = useCallback((): VideoEditSessionSnapshot => {
+		const capturedMentionBindings =
+			messageEditorRef?.current?.getMentionBindings?.() ?? latestMentionBindingsRef.current
+		updateMentionBindings(capturedMentionBindings)
 		const request = buildRequestParams()
-		const snapshot = {
+		return {
 			request,
 			modeDrafts: cloneModeDraftCache(modeDraftCacheRef.current),
+			mentionBindings: capturedMentionBindings,
 		}
-		return snapshot
-	}, [buildRequestParams])
+	}, [buildRequestParams, messageEditorRef, updateMentionBindings])
 
 	// 首次完成初始化后建立普通生成意图的 baseline；已有失败/中断草稿则保留原 baseline。
 	useEffect(() => {
@@ -2359,8 +2623,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			handleInputModeChange,
 			handleInputTabChange,
 			handleReferenceMentionPathsChange,
+			resetSelectedResourceSlot,
 			prepareResourceSlotSelection,
 			replaceFrameImageAt,
+			appendFrameImage,
 			replaceReferenceImageAt,
 			replaceSelectedResource,
 			handleReferenceImageRemove,
@@ -2378,8 +2644,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			restoreSessionSnapshotToUi,
 			triggerFileSelect,
 			uploadReferenceFiles,
+			uploadMentionController,
 			handleFileChange,
 			syncReferenceImagesFromElement,
+			updateMentionBindings,
 		}),
 		[
 			handleModelChange,
@@ -2392,8 +2660,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			handleInputModeChange,
 			handleInputTabChange,
 			handleReferenceMentionPathsChange,
+			resetSelectedResourceSlot,
 			prepareResourceSlotSelection,
 			replaceFrameImageAt,
+			appendFrameImage,
 			replaceReferenceImageAt,
 			replaceSelectedResource,
 			handleReferenceImageRemove,
@@ -2411,8 +2681,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			restoreSessionSnapshotToUi,
 			triggerFileSelect,
 			uploadReferenceFiles,
+			uploadMentionController,
 			handleFileChange,
 			syncReferenceImagesFromElement,
+			updateMentionBindings,
 		],
 	)
 
@@ -2436,6 +2708,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		protectedReferencePaths,
 		referenceBindingMode,
 		referenceImageInfos,
+		mentionBindings,
 		matchableItems,
 		modelOptions,
 		modelOptionGroups,

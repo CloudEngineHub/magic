@@ -96,8 +96,8 @@ export class StarElement extends BaseElement<StarElementData> {
 	}
 
 	update(newData: StarElementData): boolean {
+		const content = this.getActiveContent<StarElementContent>(newData)
 		this.data = newData
-		const content = this.getActiveContent<StarElementContent>()
 
 		// 星形元素不需要重新渲染，所有属性都可以通过 setAttrs 更新
 		if (this.node instanceof Konva.Star) {

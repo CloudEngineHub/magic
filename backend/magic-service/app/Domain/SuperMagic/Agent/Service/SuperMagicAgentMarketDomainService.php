@@ -51,6 +51,14 @@ class SuperMagicAgentMarketDomainService
     }
 
     /**
+     * Return the market record by agent code regardless of publish status.
+     */
+    public function getByAgentCodeWithoutStatus(string $agentCode): ?AgentMarketEntity
+    {
+        return $this->agentMarketRepository->findByAgentCodeWithoutStatus($agentCode);
+    }
+
+    /**
      * 锁定市场记录后再校验雇佣资格，避免协作者撤权与雇佣并发留下失效关系。
      */
     public function getPublishedByAgentCodeForUpdate(
@@ -267,6 +275,12 @@ class SuperMagicAgentMarketDomainService
     public function queries(AgentMarketQuery $query, Page $page): array
     {
         return $this->agentMarketRepository->queries($query, $page);
+    }
+
+    /** Return eligible market IDs for a full vector-index scan. */
+    public function findVectorIndexIds(string $afterId = '0', int $limit = 100): array
+    {
+        return $this->agentMarketRepository->findVectorIndexIds($afterId, $limit);
     }
 
     /**

@@ -52,8 +52,13 @@ class BrowserEvaluate(BrowserToolBase[BrowserEvaluateParams]):
     name = "browser_evaluate"
     operation_key = "browser.evaluate"
 
-    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
-        return self.create_browser_tool_detail(result, evaluate_detail(result))
+    async def get_tool_detail(
+        self,
+        tool_context: ToolContext,
+        result: ToolResult,
+        arguments: dict[str, object] | None = None,
+    ) -> ToolDetail:
+        return self.create_browser_tool_detail(result, evaluate_detail(result, arguments or {}))
 
     async def execute(self, tool_context: ToolContext, params: BrowserEvaluateParams) -> ToolResult:
         async def operation() -> ToolResult:

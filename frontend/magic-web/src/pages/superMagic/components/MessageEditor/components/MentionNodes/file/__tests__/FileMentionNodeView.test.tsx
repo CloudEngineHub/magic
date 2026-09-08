@@ -48,9 +48,31 @@ vi.mock("@/pages/superMagic/hooks/useFileUrl", () => ({
 	}),
 }))
 
+vi.mock("@/services/media/MediaResourceRegistry", () => ({
+	mediaResourceRegistry: {
+		ensurePreview: vi.fn(),
+	},
+	useMediaResourceSnapshot: () => ({
+		snapshot: {
+			identity: "project-file-1",
+			status: "ready",
+			thumbnailUrl: "https://cdn.test/project.png",
+			previewUrl: "https://cdn.test/project.png",
+		},
+		loadPreview: vi.fn(),
+	}),
+}))
+
 vi.mock("@/components/base/MediaPreview", () => ({
 	MediaPreviewThumbnail: ({ fallback }: { fallback: ReactNode }) => fallback,
 	MediaPreviewTooltip: ({ children }: PropsWithChildren) => children,
+	MediaPreviewTrigger: ({
+		fallback,
+		renderTrigger,
+	}: {
+		fallback: ReactNode
+		renderTrigger: (thumbnail: ReactNode) => ReactNode
+	}) => renderTrigger(fallback),
 }))
 
 function createProps(
@@ -61,7 +83,7 @@ function createProps(
 		attrs: { type, data },
 		selected: false,
 		deleteNode: vi.fn(),
-	} as ComponentProps<typeof FileMentionNodeView>
+	} as unknown as ComponentProps<typeof FileMentionNodeView>
 }
 
 describe("FileMentionNodeView", () => {

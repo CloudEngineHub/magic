@@ -100,12 +100,16 @@ export class TimeTrackingWorkerManager {
 						this.messageCount === 1 ||
 						this.messageCount % heartbeatMessageInterval === 0
 					) {
-						this.logger.log("TimeTrackingWorker heartbeat", {
-							interval,
-							messageCount: this.messageCount,
-							lastMessageInterval: this.lastMessageInterval,
-							workerTimestamp: this.lastWorkerTimestamp,
-							deliveryDelay: this.lastDeliveryDelay,
+						this.logger.report({
+							namespace: "recordingTimeTrackingWorker",
+							data: {
+								event: "heartbeat",
+								interval,
+								messageCount: this.messageCount,
+								lastMessageInterval: this.lastMessageInterval,
+								workerTimestamp: this.lastWorkerTimestamp,
+								deliveryDelay: this.lastDeliveryDelay,
+							},
 						})
 					}
 					if (
@@ -119,6 +123,15 @@ export class TimeTrackingWorkerManager {
 							interval,
 							actualInterval: this.lastMessageInterval,
 							messageCount: this.messageCount,
+						})
+						this.logger.report({
+							namespace: "recordingTimeTrackingWorker",
+							data: {
+								event: "message_delayed",
+								interval,
+								actualInterval: this.lastMessageInterval,
+								messageCount: this.messageCount,
+							},
 						})
 						this.lastDelayedWarningTimestamp = now
 					} else if (

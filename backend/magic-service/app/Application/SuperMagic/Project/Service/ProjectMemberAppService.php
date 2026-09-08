@@ -261,7 +261,8 @@ class ProjectMemberAppService extends AbstractAppService
 
         $result = $this->projectDomainService->getProjectsByConditions(
             ['project_ids' => $projectIds],
-            $requestDTO->getPage(),
+            // $projectIds 已由上游列表查询确定，实体查询不能再次按同一页码偏移。
+            1,
             10000
         );
 
@@ -668,7 +669,9 @@ class ProjectMemberAppService extends AbstractAppService
             $requestDTO->getSortDirection(),
             $requestDTO->getCreatorUserIds(),
             $requestDTO->getJoinMethod(),
-            $organizationCodes
+            $organizationCodes,
+            $requestDTO->getPage(),
+            $requestDTO->getPageSize()
         );
     }
 

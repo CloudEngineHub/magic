@@ -70,7 +70,9 @@ export function RecordingDetailEmptyState({
 				</div>
 			) : null}
 			<div className="space-y-1">
-				<p className="text-sm font-medium text-foreground">{copy.title}</p>
+				{copy.title ? (
+					<p className="text-sm font-medium text-foreground">{copy.title}</p>
+				) : null}
 				{copy.description ? (
 					<p className="text-sm text-muted-foreground">{copy.description}</p>
 				) : null}
@@ -104,13 +106,13 @@ function resolveEmptyCopy(
 	}
 	if (variant === "noTranscript") {
 		return {
-			title: t("detail.emptyTranscript"),
+			title: t("detail.emptySummary"),
 			// Keep transcript-empty copy minimal so the empty state matches the latest product wording.
 			description: "",
 		}
 	}
 	if (variant === "noNotes") {
-		return { title: t("detail.emptyNotes"), description: "" }
+		return { title: t("detail.emptySummary"), description: "" }
 	}
 	if (variant === "noSummary") {
 		return { title: t("detail.emptySummary"), description: "" }
@@ -122,7 +124,7 @@ function resolveEmptyCopy(
 		return { title: t("detail.notSummarized"), description: t("detail.notSummarizedHint") }
 	}
 	if (variant === "summaryGenerating") {
-		return { title: t("detail.summarizing"), description: t("detail.summarizingHint") }
+		return { title: t("detail.summarizingHint"), description: "" }
 	}
 	if (variant === "summaryFailed") {
 		return {
@@ -363,7 +365,7 @@ export function RecordingDetailPageSkeleton() {
 			data-testid="recording-detail-page-skeleton-scroll"
 		>
 			<div
-				className="grid h-full min-h-0 w-full gap-6 px-8 pb-8 duration-300 animate-in fade-in"
+				className="grid h-full min-h-0 w-full gap-6 px-8 pb-8 pt-4 duration-300 animate-in fade-in"
 				style={{
 					minWidth: RECORDING_DETAIL_WORKBENCH_MIN_WIDTH,
 					gridTemplateColumns: `minmax(${RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH}px, ${RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH}px) minmax(${RECORDING_DETAIL_SUMMARY_MIN_WIDTH}px, 1fr)`,

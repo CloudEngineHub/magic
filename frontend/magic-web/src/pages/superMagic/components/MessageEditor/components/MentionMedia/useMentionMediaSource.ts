@@ -1,22 +1,23 @@
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import {
 	MentionItemType,
 	type ProjectFileMentionData,
 	type UploadFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin/types"
+import type { MediaPreviewSource, MediaPreviewType } from "@/components/base/MediaPreview"
+import {
+	mediaResourceRegistry,
+	useMediaResourceSnapshot,
+	type MediaResourceRef,
+	type MediaResourceResolver,
+} from "@/services/media/MediaResourceRegistry"
+import { resolveSharedFileUrl } from "@/pages/superMagic/services/sharedFileUrlCache"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
-import { useFileUrl } from "@/pages/superMagic/hooks/useFileUrl"
 import useObjectUrl from "../AtItem/hooks/useObjectURL"
-import type { MediaPreviewType } from "@/components/base/MediaPreview"
 
-export interface MentionMediaSource {
+export interface MentionMediaSource extends Omit<MediaPreviewSource, "mediaType"> {
 	mediaType: MediaPreviewType | null
-	thumbnailUrl: string | null
-	previewUrl: string | null
-	audioUrl: string | null
-	isLoading: boolean
-	hasError: boolean
 }
 
 interface UseMentionMediaSourceOptions {
@@ -36,6 +37,10 @@ function getMentionFileData(data: TiptapMentionAttributes) {
 	return null
 }
 
+function isResourceError(status: string | undefined) {
+	return status === "error" || status === "forbidden" || status === "deleted"
+}
+
 export function useMentionMediaSource({
 	data,
 	uploadFile,
@@ -53,24 +58,97 @@ export function useMentionMediaSource({
 	const isProjectFile = data.type === MentionItemType.PROJECT_FILE
 	const isUploadFile = data.type === MentionItemType.UPLOAD_FILE
 	const projectFileId = isProjectFile ? (fileData as ProjectFileMentionData)?.file_id : ""
-	const { fileUrl, isLoading, hasError } = useFileUrl({
-		file_id: projectFileId || "",
+	const projectIdentity =
+		(isProjectFile ? (fileData as ProjectFileMentionData)?.source_file_id : undefined) ||
+		projectFileId
+	const fileName = fileData?.file_name || ""
+
+	const projectRef = useMemo<MediaResourceRef | null>(() => {
+		if (!isProjectFile || !projectFileId || !mediaType) return null
+		return {
+			identity: projectIdentity,
+			provider: "project-file",
+			projectId:
+				(fileData as ProjectFileMentionData)?.source_project_id ||
+				(fileData as ProjectFileMentionData)?.project_id,
+			fileId: projectFileId,
+			path: (fileData as ProjectFileMentionData)?.file_path,
+			fileName,
+			mediaType,
+		}
+	}, [fileData, fileName, isProjectFile, mediaType, projectFileId, projectIdentity])
+
+	const projectResolver = useCallback<MediaResourceResolver>(async (ref, rendition, signal) => {
+		if (!ref.fileId || signal.aborted) return null
+		const item = await resolveSharedFileUrl({ fileId: ref.fileId })
+		if (signal.aborted) return null
+		if (!item?.url) return { status: "error", errorCode: "url-unavailable" }
+
+		// The current project-file endpoint returns one temporary URL. Reuse it for
+		// image thumbnail and preview so opening an image mention does not issue a
+		// second request. Video/audio remain preview-on-open only.
+		return {
+			status: "ready" as const,
+			thumbnailUrl: rendition === "thumbnail" ? item.url : undefined,
+			previewUrl:
+				rendition === "preview" || (ref.mediaType === "image" && rendition === "thumbnail")
+					? item.url
+					: undefined,
+			audioUrl: ref.mediaType === "audio" && rendition === "preview" ? item.url : undefined,
+			expiresAt: item.expires_at,
+		}
+	}, [])
+
+	const projectResource = useMediaResourceSnapshot(projectRef, {
 		enabled: enabled && isProjectFile && Boolean(mediaType),
+		loadThumbnail: mediaType === "image",
+		resolver: projectResolver,
 	})
+
 	const objectUrl = useObjectUrl(enabled && isUploadFile && mediaType ? uploadFile || null : null)
-	const url = isProjectFile ? fileUrl : objectUrl
+	const snapshot = projectResource.snapshot
+	const projectUrl = snapshot.previewUrl ?? snapshot.thumbnailUrl
+	const isProjectLoading = isProjectFile && snapshot.status === "loading"
+	const isProjectError = isProjectFile && isResourceError(snapshot.status)
+	const loadPreview = useCallback(() => {
+		if (!enabled || !projectRef) return Promise.resolve()
+		return mediaResourceRegistry.ensurePreview(projectRef, projectResolver)
+	}, [enabled, projectRef, projectResolver])
 
 	return useMemo(
 		() => ({
 			mediaType,
-			thumbnailUrl: url,
-			previewUrl: url,
-			audioUrl: mediaType === "audio" ? url : null,
-			isLoading: isProjectFile ? isLoading : false,
+			thumbnailUrl: isUploadFile ? objectUrl : snapshot.thumbnailUrl,
+			previewUrl: isUploadFile ? objectUrl : projectUrl,
+			audioUrl:
+				mediaType === "audio"
+					? isUploadFile
+						? objectUrl
+						: (snapshot.audioUrl ?? snapshot.previewUrl)
+					: null,
+			isLoading: isProjectFile ? isProjectLoading : false,
 			hasError: isProjectFile
-				? hasError
-				: Boolean(isUploadFile && mediaType && !url && uploadFile),
+				? isProjectError
+				: Boolean(isUploadFile && mediaType && !objectUrl && uploadFile),
+			loadPreview: isProjectFile ? loadPreview : undefined,
+			previewSize: snapshot.previewSize,
+			posterUrl: snapshot.posterUrl,
 		}),
-		[hasError, isLoading, isProjectFile, isUploadFile, mediaType, uploadFile, url],
+		[
+			isProjectError,
+			isProjectFile,
+			isProjectLoading,
+			isUploadFile,
+			loadPreview,
+			mediaType,
+			objectUrl,
+			projectUrl,
+			snapshot.audioUrl,
+			snapshot.previewUrl,
+			snapshot.previewSize,
+			snapshot.posterUrl,
+			snapshot.thumbnailUrl,
+			uploadFile,
+		],
 	)
 }

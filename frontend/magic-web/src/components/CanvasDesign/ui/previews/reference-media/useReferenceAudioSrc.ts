@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useCanvas } from "../../../app/providers/CanvasProvider"
-import { useCanvasEvent } from "../../../app/hooks/canvas"
+import { useOptionalCanvas } from "../../../app/providers/CanvasProvider"
+import { useCanvasEventWithInstance } from "../../../app/hooks/canvas"
 
 interface ReferenceAudioSrcResult {
 	src: string | undefined
@@ -9,9 +9,17 @@ interface ReferenceAudioSrcResult {
 	load: () => Promise<void>
 }
 
+interface UseReferenceAudioSrcOptions {
+	enabled?: boolean
+}
+
 /** 按需获取 SourceList 音频 Tooltip 播放地址。 */
-export function useReferenceAudioSrc(path: string): ReferenceAudioSrcResult {
-	const { canvas } = useCanvas()
+export function useReferenceAudioSrc(
+	path: string,
+	options?: UseReferenceAudioSrcOptions,
+): ReferenceAudioSrcResult {
+	const enabled = options?.enabled ?? true
+	const canvas = useOptionalCanvas()
 	const [src, setSrc] = useState<string | undefined>(undefined)
 	const [isLoading, setIsLoading] = useState(false)
 	const [hasError, setHasError] = useState(false)
@@ -19,7 +27,7 @@ export function useReferenceAudioSrc(path: string): ReferenceAudioSrcResult {
 	const loadingRef = useRef(false)
 
 	const load = useCallback(async () => {
-		if (!canvas || !path || loadingRef.current || src) return
+		if (!enabled || !canvas || !path || loadingRef.current || src) return
 
 		const requestId = requestIdRef.current + 1
 		requestIdRef.current = requestId
@@ -49,22 +57,23 @@ export function useReferenceAudioSrc(path: string): ReferenceAudioSrcResult {
 				if (!deferredAfterResource) setIsLoading(false)
 			}
 		}
-	}, [canvas, path, src])
+	}, [canvas, enabled, path, src])
 
-	useCanvasEvent(
+	useCanvasEventWithInstance(
+		canvas,
 		"resource:remote-load-deferral-released",
 		useCallback(
 			({ data }) => {
-				if (!canvas) return
+				if (!canvas || !enabled) return
 				const pathKey =
 					canvas.canvasFileUploadManager.getRemoteResourceLoadDeferralKey(path)
 				if (pathKey && pathKey === data.key) {
 					void load()
 				}
 			},
-			[canvas, load, path],
+			[canvas, enabled, load, path],
 		),
-		[canvas, load, path],
+		[canvas, enabled, load, path],
 	)
 
 	useEffect(() => {
@@ -73,7 +82,12 @@ export function useReferenceAudioSrc(path: string): ReferenceAudioSrcResult {
 		setSrc(undefined)
 		setIsLoading(false)
 		setHasError(false)
-	}, [path])
+		if (!enabled) {
+			setSrc(undefined)
+			setIsLoading(false)
+			setHasError(false)
+		}
+	}, [enabled, path])
 
 	useEffect(
 		() => () => {

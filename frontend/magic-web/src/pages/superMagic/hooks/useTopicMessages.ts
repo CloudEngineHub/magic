@@ -9,7 +9,10 @@ import {
 	requestTopicRecovery,
 	resumeTopicRecovery,
 } from "@/pages/superMagic/services/streamRecoveryCoordinator"
+import { syncTopicStatusAfterForegroundMessageReconciliation } from "@/pages/superMagic/services/topicStatusSyncService"
 import { superMagicStore, type CanonicalCommitTrigger } from "@/pages/superMagic/stores"
+import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import defaultTopicStore from "@/pages/superMagic/stores/core/topic"
 import { getRawMessageNode } from "@/pages/superMagic/stores/message-transforms"
 import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
 import {
@@ -115,6 +118,7 @@ function releaseMessagePageRequests(ownerToken: symbol) {
 interface UseTopicMessagesParams {
 	selectedTopic: Topic | null
 	checkNowDebounced?: () => void
+	topicStore?: TopicStore
 }
 
 interface PullMessageParams {
@@ -274,7 +278,11 @@ function matchesForegroundRecoveryAnchor(item: any, anchor?: ForegroundRecoveryA
 /**
  * 管理当前话题的消息拉取、增量同步、前台恢复和分页加载。
  */
-export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicMessagesParams) {
+export function useTopicMessages({
+	selectedTopic,
+	checkNowDebounced,
+	topicStore = defaultTopicStore,
+}: UseTopicMessagesParams) {
 	// topic_id和page_token的映射
 	const topicPageTokenMap = useRef<Record<string, string>>({})
 	const topicNotHaveMoreMessageMap = useRef<Record<string, boolean>>({})
@@ -1072,6 +1080,21 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		},
 	)
 
+	const reconcileTopicStatusAfterForegroundSync = useMemoizedFn(async () => {
+		const currentTopic = selectedTopicRef.current
+		if (!currentTopic?.id || !currentTopic.chat_topic_id) return
+		try {
+			await syncTopicStatusAfterForegroundMessageReconciliation({
+				topicStore,
+				topicId: currentTopic.id,
+				chatTopicId: currentTopic.chat_topic_id,
+				localTaskStatus: currentTopic.task_status || currentTopic.status,
+			})
+		} catch (error) {
+			console.warn("[useTopicMessages] 前台对账后同步话题状态失败:", error)
+		}
+	})
+
 	/**
 	 * 当前处于前台时按 durable anchor 恢复当前 Topic。
 	 * 带 anchor 的恢复只允许两段有限窗口；命中公共 anchor 后只替换权威尾部，
@@ -1089,47 +1112,52 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		// 某些浏览器在切回前台时会连续触发 visibilitychange，所有前台 HTTP 对账共享去重窗口。
 		if (now - lastForegroundSyncAtRef.current < FOREGROUND_SYNC_DEDUPE_MS) return
 		lastForegroundSyncAtRef.current = now
-		if (!shouldRunForegroundRecovery(currentSelectedTopic)) {
-			// 稳定会话无需完整快照恢复，但仍做一次最近窗口状态对账，覆盖 WS 通知丢失。
-			delete foregroundRecoveryAnchorRef.current[currentSelectedTopic.chat_topic_id]
-			await pullMessage({
-				conversation_id: currentSelectedTopic.chat_conversation_id,
-				chat_topic_id: currentSelectedTopic.chat_topic_id,
-				page_token: "",
-				order: "desc",
-				limit: POLLING_SYNC_MESSAGE_COUNT,
-				updatePageToken: false,
-				writeIntent: "authoritative_tail",
-				canonicalCommitTrigger: "recovery",
-			})
-			acknowledgeTopicSync(
-				currentSelectedTopic.chat_topic_id,
-				superMagicStore.getLatestMessageSeqId(currentSelectedTopic.chat_topic_id),
-			)
-			return
-		}
-		const topicId = currentSelectedTopic.chat_topic_id
-		const syncGeneration = superMagicStore.beginTopicSync(topicId)
-		const inFlightSync = { topicId, generation: syncGeneration }
-		foregroundTopicSyncRef.current = inFlightSync
-		const isCurrentForegroundOwner = () =>
-			foregroundTopicSyncRef.current === inFlightSync &&
-			selectedTopicRef.current?.chat_topic_id === topicId
-		const completeFailedSync = () => {
-			if (!isCurrentForegroundOwner()) return
-			if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) return
-			const currentTopic = selectedTopicRef.current
-			superMagicStore.completeTopicSync(topicId, syncGeneration, {
-				succeeded: false,
-				taskStatus: currentTopic?.task_status || currentTopic?.status,
-				renderStrategy: "foreground-instant",
-			})
-		}
-		const recoveryAnchor = getCurrentTopicRecoveryAnchor(topicId)
-		const activeStreamIdsAtRequestStart = Array.from(
-			superMagicStore.topicMeta.get(topicId)?.content?.keys() || [],
-		)
+
+		let didAttemptForegroundReconciliation = false
+		let inFlightSync: { topicId: string; generation: number } | null = null
 		try {
+			if (!shouldRunForegroundRecovery(currentSelectedTopic)) {
+				didAttemptForegroundReconciliation = true
+				// 稳定会话无需完整快照恢复，但仍做一次最近窗口状态对账，覆盖 WS 通知丢失。
+				delete foregroundRecoveryAnchorRef.current[currentSelectedTopic.chat_topic_id]
+				await pullMessage({
+					conversation_id: currentSelectedTopic.chat_conversation_id,
+					chat_topic_id: currentSelectedTopic.chat_topic_id,
+					page_token: "",
+					order: "desc",
+					limit: POLLING_SYNC_MESSAGE_COUNT,
+					updatePageToken: false,
+					writeIntent: "authoritative_tail",
+					canonicalCommitTrigger: "recovery",
+				})
+				acknowledgeTopicSync(
+					currentSelectedTopic.chat_topic_id,
+					superMagicStore.getLatestMessageSeqId(currentSelectedTopic.chat_topic_id),
+				)
+				return
+			}
+			didAttemptForegroundReconciliation = true
+			const topicId = currentSelectedTopic.chat_topic_id
+			const syncGeneration = superMagicStore.beginTopicSync(topicId)
+			inFlightSync = { topicId, generation: syncGeneration }
+			foregroundTopicSyncRef.current = inFlightSync
+			const isCurrentForegroundOwner = () =>
+				foregroundTopicSyncRef.current === inFlightSync &&
+				selectedTopicRef.current?.chat_topic_id === topicId
+			const completeFailedSync = () => {
+				if (!isCurrentForegroundOwner()) return
+				if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) return
+				const currentTopic = selectedTopicRef.current
+				superMagicStore.completeTopicSync(topicId, syncGeneration, {
+					succeeded: false,
+					taskStatus: currentTopic?.task_status || currentTopic?.status,
+					renderStrategy: "foreground-instant",
+				})
+			}
+			const recoveryAnchor = getCurrentTopicRecoveryAnchor(topicId)
+			const activeStreamIdsAtRequestStart = Array.from(
+				superMagicStore.topicMeta.get(topicId)?.content?.keys() || [],
+			)
 			let aggregatedPulledItems: any[] = []
 			let aggregatedStatusItems: any[] = []
 			let latestResponse: any
@@ -1285,12 +1313,15 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			setIsSelectedTopicMessagesReady(true)
 			delete foregroundRecoveryAnchorRef.current[topicId]
 		} catch {
-			if (foregroundTopicSyncRef.current === inFlightSync) {
-				cancelForegroundTopicSync(topicId)
+			if (inFlightSync && foregroundTopicSyncRef.current === inFlightSync) {
+				cancelForegroundTopicSync(inFlightSync.topicId)
 			}
 		} finally {
-			if (foregroundTopicSyncRef.current === inFlightSync) {
+			if (inFlightSync && foregroundTopicSyncRef.current === inFlightSync) {
 				foregroundTopicSyncRef.current = null
+			}
+			if (didAttemptForegroundReconciliation) {
+				await reconcileTopicStatusAfterForegroundSync()
 			}
 		}
 	})

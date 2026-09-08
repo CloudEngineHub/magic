@@ -7,6 +7,7 @@ import {
 import type { FileItem } from "../types"
 import { isMagicProjectConfigFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { normalizeAttachmentPath } from "../hooks/previewPolicy"
+import { isAudioFolderRootRenderEnabled } from "../../../utils/file"
 import { shouldPreserveLegacyToolContentDetail } from "./legacyToolDetailCompatibility"
 
 /** 易被误标为文本、进而拉取/序列化大资源导致卡顿的 detail 类型 */
@@ -211,6 +212,22 @@ function slideDataTransformer(item: FileItem) {
 	}
 }
 
+/** Audio bundle transformer keeps the folder or legacy HTML entry metadata for AudioRootRender. */
+function audioDataTransformer(item: FileItem) {
+	const fileName = item.display_filename || item.file_name || item.filename
+	return {
+		file_name: fileName,
+		name: fileName,
+		is_directory: item.is_directory,
+		children: item.children,
+		...(item.relative_file_path !== undefined
+			? { relative_file_path: item.relative_file_path }
+			: {}),
+		...(item.parent_id !== undefined ? { parent_id: item.parent_id } : {}),
+		display_config: item.display_config,
+	}
+}
+
 function slidesTemplateDataTransformer(item: FileItem) {
 	return {
 		file_name: item.display_filename || item.file_name || item.filename,
@@ -264,6 +281,12 @@ function aiCardDataTransformer(item: FileItem) {
  */
 const contentTypeRenderConfigs: ContentTypeRenderConfig[] = [
 	{
+		displayConfigType: "audio",
+		detailType: DetailType.Html,
+		dataTransformer: audioDataTransformer,
+		priority: 10,
+	},
+	{
 		displayConfigType: "slide",
 		detailType: DetailType.Html,
 		dataTransformer: slideDataTransformer,
@@ -300,6 +323,9 @@ const contentTypeRenderConfigs: ContentTypeRenderConfig[] = [
  * 这种渲染不依赖文件内容，有自己的 detail render content
  */
 export function detectContentTypeRender(item: FileItem): ContentTypeRenderConfig | null {
+	if (item.display_config?.type === "audio" && !isAudioFolderRootRenderEnabled()) {
+		return null
+	}
 	if (!item.display_config?.type) {
 		return null
 	}

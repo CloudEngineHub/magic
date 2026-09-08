@@ -9,6 +9,7 @@ import type {
 	CanvasDocument,
 	LayerElement,
 } from "@/components/CanvasDesign/runtime/document/types"
+import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
 import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
 import { decompressCanvasData, isCompressedCanvas } from "../../utils/magicProjectCompression"
 import {
@@ -49,7 +50,7 @@ function createSaveManager(
 	let magicProjectJsFileId: string | null = "file-1"
 	let magicProjectJsVersion: number | null = 2
 	let prevDesignDataFingerprint = "base-fingerprint"
-	let isReadOnly = false
+	let accessMode: CanvasAccessMode = "edit"
 
 	const stateBag: DesignProjectStateBag = {
 		getDesignData: () => designData,
@@ -63,7 +64,7 @@ function createSaveManager(
 		setPrevDesignDataFingerprint: (v) => {
 			prevDesignDataFingerprint = v
 		},
-		getIsReadOnly: () => isReadOnly,
+		getAccessMode: () => accessMode,
 		setters: {
 			setMagicProjectJsFileId: vi.fn((v: string | null) => {
 				magicProjectJsFileId = v
@@ -73,8 +74,8 @@ function createSaveManager(
 			}),
 			setIsInitialLoading: vi.fn(),
 			setIsSaving: vi.fn(),
-			setIsReadOnly: vi.fn((v: boolean) => {
-				isReadOnly = v
+			setAccessMode: vi.fn((v: CanvasAccessMode) => {
+				accessMode = v
 			}),
 			setFileVersionsList: vi.fn(),
 			setFileVersion: vi.fn(),

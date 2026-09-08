@@ -18,6 +18,8 @@ interface TopicRepositoryInterface
      */
     public function getTopicById(int $id): ?TopicEntity;
 
+    public function getTopicByIdForUpdate(int $id): ?TopicEntity;
+
     public function getTopicByTopicIdAndUserId(int $topicId, string $userId): ?TopicEntity;
 
     /**
@@ -104,6 +106,8 @@ interface TopicRepositoryInterface
     public function updateTopicStatusAndSandboxId(int $id, $taskId, TaskStatus $status, string $sandboxId): bool;
 
     public function findHiddenTopicByProjectAndUser(int $projectId, string $userId): ?TopicEntity;
+
+    public function findHiddenTopicByProjectUserAndMode(int $projectId, string $userId, string $topicMode): ?TopicEntity;
 
     /**
      * 查找用户在指定项目下的隐藏话题（根据隐藏类型）.

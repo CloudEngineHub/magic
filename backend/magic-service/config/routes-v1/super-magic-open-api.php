@@ -22,6 +22,7 @@ use App\Interfaces\SuperMagic\Task\Facade\OpenApi\OAuth2CallbackRelayApi;
 use App\Interfaces\SuperMagic\Task\Facade\OpenApi\OAuth2CallbackRelayPublicApi;
 use App\Interfaces\SuperMagic\Task\Facade\OpenApi\OpenTaskApi;
 use App\Interfaces\SuperMagic\Task\Facade\SandboxApi;
+use App\Interfaces\SuperMagic\Topic\Facade\OpenApi\OpenTopicApi;
 use App\Interfaces\SuperMagic\Workspace\Facade\OpenApi\OpenWorkspaceApi;
 use Hyperf\HttpServer\Router\Router;
 
@@ -214,6 +215,18 @@ Router::addGroup(
             Router::get('/queries', [OpenProjectApi::class, 'index']);
             // 获取项目附件列表
             Router::post('/{id}/attachments', [OpenProjectApi::class, 'getProjectAttachments']);
+        });
+
+        // 话题管理
+        Router::addGroup('/topics', static function () {
+            // 获取话题详情
+            Router::get('/{id}', [OpenTopicApi::class, 'getTopic']);
+            // 创建话题
+            Router::post('', [OpenTopicApi::class, 'createTopic']);
+            // 更新话题
+            Router::put('/{id}', [OpenTopicApi::class, 'updateTopic']);
+            // 删除话题（逻辑删除）
+            Router::post('/delete', [OpenTopicApi::class, 'deleteTopic']);
         });
 
         // 消息定时任务

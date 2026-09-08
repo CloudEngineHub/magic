@@ -151,7 +151,10 @@ export class CropManager {
 	 * 设置裁剪模式下的位置更新监听（视口/元素变化时触发 crop:position）
 	 */
 	private setupCropPositionListeners(): void {
-		this.viewportScaleHandler = () => this.emitCropPosition()
+		this.viewportScaleHandler = () => {
+			this.cropRenderer?.syncViewportScale()
+			this.emitCropPosition()
+		}
 		this.viewportPanHandler = () => this.emitCropPosition()
 		this.elementUpdatedHandler = ({ data }) => {
 			if (data.elementId === this.croppingElementId) this.emitCropPosition()
@@ -247,6 +250,7 @@ export class CropManager {
 	 * 进入裁剪模式
 	 */
 	public enterCropMode(elementId: string, contentId?: string): void {
+		if (!this.canvas.permissionManager.can("document.write")) return
 		if (this.croppingElementId === elementId) return
 
 		// 获取元素数据

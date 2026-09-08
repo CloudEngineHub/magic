@@ -30,6 +30,8 @@ const iconNameMap: Record<string, string> = {
 	mp3: "audio",
 	wav: "audio",
 	ogg: "audio",
+	opus: "audio",
+	m4a: "audio",
 	flac: "audio",
 	aac: "audio",
 	audio: "audio-project",

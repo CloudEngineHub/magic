@@ -116,3 +116,140 @@ def test_generation_parameters_use_reference_images_as_canonical_field():
     assert parameters.effective_reference_images() == ("./images/legacy.webp",)
     assert parameters.reference_images == ("./images/legacy.webp",)
     assert parameters.reference_image_paths == ("./images/legacy.webp",)
+
+
+def test_new_generated_video_detail_persists_public_request_before_submission():
+    """新建视频生成 Content 时应在提交 provider 前写入公共生成请求。"""
+    detail = ContentMetadataService.new_detail(
+        "element-1",
+        {
+            "source": "generated",
+            "contentType": "video",
+            "generationParameters": {
+                "prompt": "让产品动起来 [image1]",
+                "reference_images": ["images/product.webp"],
+                "duration_seconds": 5,
+            },
+        },
+    )
+
+    assert detail["generationStatus"] == "pending"
+    assert detail["generateVideoRequest"]["prompt"] == "让产品动起来 [image1]"
+    assert detail["generateVideoRequest"]["inputs"]["reference_images"] == [
+        {"uri": "./images/product.webp"}
+    ]
+    assert detail["generationParameters"]["reference_images"] == ["images/product.webp"]
+
+    metadata = {}
+    ContentMetadataService.set(metadata, "element-1", "content-1", detail)
+
+    public_detail = metadata["elements"]["element-1"]["contentDetails"]["content-1"]
+    runtime_detail = metadata["__canvas_runtime__"]["elements"]["element-1"]["contentDetails"]["content-1"]
+    assert public_detail["generateVideoRequest"]["prompt"] == "让产品动起来 [image1]"
+    assert "generationParameters" not in public_detail
+    assert runtime_detail["generationParameters"]["reference_images"] == ["images/product.webp"]
+
+
+def test_start_retry_replaces_public_video_request_with_new_parameters():
+    """重试详情应携带新参数构造的公共视频请求。"""
+    detail = ContentMetadataService.start_retry(
+        "element-1",
+        {
+            "source": "generated",
+            "generationStatus": "failed",
+            "retryCount": 0,
+            "generationTaskId": "task-old",
+            "generateVideoRequest": {"prompt": "旧提示词"},
+        },
+        1,
+        {
+            "prompt": "新提示词 [image1]",
+            "reference_image_paths": ["images/new.webp"],
+        },
+        "retry-key",
+        element_type="video",
+    )
+
+    assert detail["generationStatus"] == "pending"
+    assert detail["generateVideoRequest"]["prompt"] == "新提示词 [image1]"
+    assert detail["generateVideoRequest"]["inputs"]["reference_images"] == [
+        {"uri": "./images/new.webp"}
+    ]
+    assert "generationTaskId" not in detail
+
+
+def test_new_image_detail_persists_public_request_before_submission():
+    """新建生图 Content 时应写入 generateImageRequest，并隔离运行态参数。"""
+    detail = ContentMetadataService.new_detail(
+        "element-image",
+        {
+            "source": "generated",
+            "contentType": "image",
+            "generationParameters": {
+                "prompt": "生成一张产品图",
+                "reference_images": ["images/source.png"],
+            },
+        },
+    )
+
+    metadata = {}
+    ContentMetadataService.set(metadata, "element-image", "content-image", detail)
+
+    public_detail = metadata["elements"]["element-image"]["contentDetails"]["content-image"]
+    runtime_detail = metadata["__canvas_runtime__"]["elements"]["element-image"]["contentDetails"]["content-image"]
+    assert public_detail["generateImageRequest"]["prompt"] == "生成一张产品图"
+    assert public_detail["generateImageRequest"]["reference_images"] == ["./images/source.png"]
+    assert public_detail["generateImageRequest"]["mode"] == "edit"
+    assert public_detail["generateImageRequest"]["start_time"]
+    assert "generationParameters" not in public_detail
+    assert runtime_detail["generationParameters"]["reference_images"] == ["images/source.png"]
+
+
+def test_new_video_detail_persists_initial_runtime_display_metadata():
+    """新建视频 Content 时应立即保存模式、规格和开始时间。"""
+    detail = ContentMetadataService.new_detail(
+        "element-video",
+        {
+            "source": "generated",
+            "contentType": "video",
+            "generationParameters": {
+                "prompt": "让产品动起来",
+                "model_id": "video-model",
+                "reference_images": ["images/source.png"],
+                "duration_seconds": 5,
+                "resolution": "720p",
+            },
+        },
+    )
+
+    meta = detail["videoGenerationResultMeta"]
+    assert meta["generation_info"] == {
+        "input_mode": "omni_reference",
+        "resolution": "720p",
+        "duration_seconds": 5,
+    }
+    assert meta["runtime"]["started_at"]
+    assert detail["generateVideoRequest"]["model_id"] == "video-model"
+
+
+def test_video_result_metadata_adds_terminal_runtime_fields():
+    """视频终态元数据应补齐完成时间和整秒耗时。"""
+    result = ContentMetadataService.merge_video_result_metadata(
+        {
+            "runtime": {"started_at": "2026-09-02 10:00:00"},
+        },
+        {
+            "generation_info": {"input_mode": "standard"},
+            "billing": {"points": 3},
+        },
+        "completed",
+        finished_at="2026-09-02 10:00:07",
+    )
+
+    assert result["generation_info"]["input_mode"] == "standard"
+    assert result["billing"]["points"] == 3
+    assert result["runtime"] == {
+        "started_at": "2026-09-02 10:00:00",
+        "finished_at": "2026-09-02 10:00:07",
+        "elapsed_seconds": 7,
+    }

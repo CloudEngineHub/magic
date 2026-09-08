@@ -138,6 +138,8 @@ export function resolveMentionForClipboard(
 	const data = attrs.data as ProjectFileMentionData | UploadFileMentionData
 	if (attrs.type === MentionItemType.UPLOAD_FILE) {
 		const uploadData = data as UploadFileMentionData
+		// 画布附件保留对象存储身份，不能因工作区存在同 ID 就改成项目引用。
+		if (uploadData.is_canvas_clipboard) return attrs
 		if (!workspaceResource || isPendingUpload(attrs) || workspaceResource.is_directory) {
 			return {
 				...attrs,
@@ -237,6 +239,9 @@ export function getMentionClipboardRepresentation(
 	workspaceFiles: ReadonlyArray<AttachmentItem> = [],
 	currentProjectId?: string,
 ): MentionClipboardRepresentation | null {
+	if (attrs.pending === true || (attrs.data as Record<string, unknown>)?.pending === true) {
+		return null
+	}
 	const resolvedAttrs = resolveMentionForClipboard(attrs, workspaceFiles, currentProjectId)
 	let path = ""
 	let label = ""
@@ -330,6 +335,12 @@ export function getClipboardPlainText(
 
 		if (node.type === "mention" && node.attrs) {
 			const attrs = node.attrs as TiptapMentionAttributes
+			if (
+				attrs.pending === true ||
+				(attrs.data as Record<string, unknown>)?.pending === true
+			) {
+				return ""
+			}
 			const portable = getMentionClipboardRepresentation(
 				attrs,
 				workspaceFiles,
@@ -352,7 +363,7 @@ export function getClipboardPlainText(
 			return serialize(serializeClipboardInspectors({ type: "doc", content: [node] }))
 		}
 
-		if (node.type === "hardBreak") return "\n"
+		if (node.type === "hardBreak" || node.type === "hard_break") return "\n"
 
 		const childText = node.content?.map(serialize).join("") || ""
 		return node.type === "paragraph" ? `${childText}\n` : childText
@@ -441,6 +452,10 @@ export function getClipboardHtml(
 				type: type as TiptapMentionAttributes["type"],
 				data: JSON.parse(data) as TiptapMentionAttributes["data"],
 			}
+			if ((attrs.data as Record<string, unknown>)?.pending === true) {
+				element.remove()
+				return
+			}
 			const portable = getMentionClipboardRepresentation(
 				attrs,
 				workspaceFiles,
@@ -465,3 +480,9 @@ export function getClipboardHtml(
 
 	return container.innerHTML
 }
+
+export type {
+	MessageClipboardMetadata,
+	MessageClipboardMentionItem,
+	MessageClipboardPayload,
+} from "@/utils/messageClipboardSerializer"

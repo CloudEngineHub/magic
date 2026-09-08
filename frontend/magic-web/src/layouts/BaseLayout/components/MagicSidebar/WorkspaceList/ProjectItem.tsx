@@ -218,47 +218,45 @@ function ProjectItem({
 							className="w-full min-w-0 text-left text-current no-underline [-webkit-tap-highlight-color:transparent]"
 						>
 							<div className="flex w-full min-w-0 items-center">
-								<div className="min-w-0 flex-1">
-									<div className="flex min-w-0 max-w-full items-center gap-1.5">
-										<NavigationStatusIcon
-											itemType="project"
-											status={project.project_status}
-											showDefaultIcon={false}
-											className={
-												isSelected
-													? "text-sidebar-accent-foreground"
-													: "text-sidebar-foreground"
-											}
-										/>
-										<span
-											className={cn(
-												"min-w-0 max-w-full truncate text-left text-sm leading-5",
-												isSelected
-													? "text-sidebar-accent-foreground"
-													: "text-sidebar-foreground",
-											)}
-										>
-											{project.project_name || t("project.unnamedProject")}
-										</span>
-										{project.is_pinned && <PinnedTag />}
-										{showCollaborationTag && (
-											<CollaborationProjectTag
-												visible={showCollaborationTag}
-												project={project}
-												showText={false}
-											/>
+								<div className="flex min-w-0 flex-1 items-center gap-1.5">
+									<NavigationStatusIcon
+										itemType="project"
+										status={project.project_status}
+										showDefaultIcon={false}
+										className={
+											isSelected
+												? "text-sidebar-accent-foreground"
+												: "text-sidebar-foreground"
+										}
+									/>
+									<span
+										className={cn(
+											"min-w-0 max-w-full shrink truncate text-left text-sm leading-5",
+											isSelected
+												? "text-sidebar-accent-foreground"
+												: "text-sidebar-foreground",
 										)}
-									</div>
+									>
+										{project.project_name || t("project.unnamedProject")}
+									</span>
+									{project.is_pinned && <PinnedTag />}
+									{showCollaborationTag && (
+										<CollaborationProjectTag
+											visible={showCollaborationTag}
+											project={project}
+											showText={false}
+										/>
+									)}
 								</div>
-								{/* The menu trigger must stay tappable on coarse pointer desktop layouts. */}
+								{/* Only reserve space for the menu trigger while it is visible. */}
 								<div
 									data-project-more-trigger="true"
 									className={cn(
-										"ml-1 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
+										"flex h-4 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full text-sidebar-foreground transition-[margin,width,opacity] [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
 										isHovered || open
-											? "opacity-100"
-											: "pointer-events-none opacity-0",
-										"no-hover:pointer-events-auto no-hover:opacity-100",
+											? "ml-1 w-4 opacity-100"
+											: "pointer-events-none ml-0 w-0 opacity-0",
+										"no-hover:pointer-events-auto no-hover:ml-1 no-hover:w-4 no-hover:opacity-100",
 									)}
 									onClick={(e) => {
 										blockItemClickTemporarily()

@@ -1,7 +1,8 @@
 import os
 import re
-from typing import Any, Dict, Generic, Optional, Type, TypeVar
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any, Dict, Generic, Optional, Type, TypeVar
 
 import yaml
 from pydantic import BaseModel
@@ -10,6 +11,56 @@ from agentlang.context.application_context import ApplicationContext
 from agentlang.logger import get_logger
 
 T = TypeVar("T", bound=BaseModel)
+
+_SIZE_VALUE_PATTERN = re.compile(
+    r"^\s*(?P<number>(?:\d+(?:\.\d*)?|\.\d+))\s*(?P<unit>[A-Za-z]+)?\s*$"
+)
+_SIZE_UNIT_FACTORS: dict[str, int] = {
+    "B": 1,
+    "KB": 1024,
+    "KIB": 1024,
+    "MB": 1024**2,
+    "MIB": 1024**2,
+    "GB": 1024**3,
+    "GIB": 1024**3,
+    "TB": 1024**4,
+    "TIB": 1024**4,
+}
+
+
+def parse_size_bytes(value: int | float | str) -> int:
+    """Parse a human-readable size value into bytes."""
+    if isinstance(value, bool):
+        raise ValueError(f"Boolean is not a valid size: {value!r}")
+
+    if isinstance(value, int):
+        if value < 0:
+            raise ValueError(f"Size must not be negative: {value!r}")
+        return value
+
+    if isinstance(value, float):
+        if value != value or value in {float("inf"), float("-inf")}:
+            raise ValueError(f"Size must be finite: {value!r}")
+        numeric_value = Decimal(str(value))
+        factor = 1
+    elif isinstance(value, str):
+        match = _SIZE_VALUE_PATTERN.fullmatch(value)
+        if match is None:
+            raise ValueError(f"Invalid size value: {value!r}")
+        try:
+            numeric_value = Decimal(match.group("number"))
+        except InvalidOperation as exc:
+            raise ValueError(f"Invalid size value: {value!r}") from exc
+        unit = (match.group("unit") or "B").upper()
+        factor = _SIZE_UNIT_FACTORS.get(unit)
+        if factor is None:
+            raise ValueError(f"Unsupported size unit {unit!r} in {value!r}")
+    else:
+        raise ValueError(f"Unsupported size value type: {type(value).__name__}")
+
+    if numeric_value < 0:
+        raise ValueError(f"Size must not be negative: {value!r}")
+    return int((numeric_value * factor).to_integral_value(rounding=ROUND_HALF_UP))
 
 
 class Config(Generic[T]):
@@ -261,6 +312,16 @@ class Config(Generic[T]):
             return default
 
         return current
+
+    def get_size_bytes(self, key_path: str, default: int | str | float | None = None) -> int | None:
+        """Read a size configuration value and convert it to bytes."""
+        value = self.get(key_path, default)
+        if value is None:
+            return None
+        try:
+            return parse_size_bytes(value)
+        except ValueError as exc:
+            raise ValueError(f"Invalid size configuration {key_path}={value!r}: {exc}") from exc
 
     def reload_config(self) -> None:
         """重新加载配置，会重新处理环境变量和模式"""

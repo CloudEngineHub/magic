@@ -309,7 +309,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	private consumerVisibilityUnsubscribe?: () => void
 	private interactionCleanups: Array<() => void> = []
 	private interactionEventUnsubscribers: Array<() => void> = []
-	private readonlyChangedUnsubscribe?: () => void
+	private permissionChangedUnsubscribe?: () => void
 
 	constructor(data: VideoEditElementData, canvas: Canvas) {
 		super(normalizeVideoEditDisplayDimensions(data), canvas)
@@ -406,11 +406,11 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 
 	public update(newData: VideoEditElementData): boolean {
 		const previousData = this.data
-		const previousContent = this.getActiveContent<VideoEditElementContent>()
+		const previousContent = this.getActiveContent<VideoEditElementContent>(previousData)
 		const previousInputs = this.collectInputs(previousContent)
 		const normalizedData = normalizeVideoEditDisplayDimensions(newData)
 		this.data = normalizedData
-		const nextContent = this.getActiveContent<VideoEditElementContent>()
+		const nextContent = this.getActiveContent<VideoEditElementContent>(normalizedData)
 		const nextInputs = this.collectInputs(nextContent)
 		if (previousInputs.audioElementId !== nextInputs.audioElementId) this.bindAudioRuntime()
 		const previousSequence = previousContent?.videoSequence ?? []
@@ -437,10 +437,13 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 
 	public override onMounted(): void {
 		super.onMounted()
-		if (!this.readonlyChangedUnsubscribe && this.canvas.eventEmitter?.on) {
-			this.readonlyChangedUnsubscribe = this.canvas.eventEmitter.on("canvas:readonly", () => {
-				this.rerenderWhenTransformIdle()
-			})
+		if (!this.permissionChangedUnsubscribe && this.canvas.eventEmitter?.on) {
+			this.permissionChangedUnsubscribe = this.canvas.eventEmitter.on(
+				"permission:changed",
+				() => {
+					this.rerenderWhenTransformIdle()
+				},
+			)
 		}
 		this.syncInteractionHitTargets()
 		this.bindAudioRuntime()
@@ -535,8 +538,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	}
 
 	public override destroy(): void {
-		this.readonlyChangedUnsubscribe?.()
-		this.readonlyChangedUnsubscribe = undefined
+		this.permissionChangedUnsubscribe?.()
+		this.permissionChangedUnsubscribe = undefined
 		this.finishAudioScrub()
 		this.playbackUnsubscribe()
 		this.playbackManager.release(this.data.id)
@@ -582,7 +585,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			controlHits.forEach((candidate) => {
 				if (!(candidate instanceof Konva.Rect)) return
 				const metadata = candidate.getAttr("videoEditControlMetadata") as
-					VideoEditControlMetadata | undefined
+					| VideoEditControlMetadata
+					| undefined
 				if (!metadata) return
 				this.interactionCleanups.push(
 					manager.bindControl({
@@ -614,13 +618,17 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 				if (!this.canUseElementControls(node)) return false
 				if (action.type === "toggle-audio-playback") return true
 				return (
-					!this.canvas.readonly &&
+					this.canvas.permissionManager.can("document.write") &&
 					!this.data.locked &&
 					this.canvas.permissionManager.canUseSelectionToolAffordance()
 				)
 			},
 			prepare: (action) => {
-				if (this.canvas.readonly && action.type === "toggle-audio-playback") return
+				if (
+					!this.canvas.permissionManager.can("interaction.playback") &&
+					action.type === "toggle-audio-playback"
+				)
+					return
 				if (
 					this.canvas.selectionManager.getSelectionCount() !== 1 ||
 					!this.canvas.selectionManager.isSelected(this.data.id)
@@ -1102,7 +1110,9 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			border,
 		)
 
-		const gripAndHandle = this.canvas.readonly ? null : this.renderGrip(card, layout)
+		const gripAndHandle = this.canvas.permissionManager.can("document.write")
+			? this.renderGrip(card, layout)
+			: null
 		const grip = gripAndHandle?.grip
 		const handle = gripAndHandle?.handle
 		const setGripShown = (shown: boolean) => {
@@ -1115,7 +1125,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		card.draggable(false)
 		const beginCardDrag = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
 			if (
-				this.canvas.readonly ||
+				!this.canvas.permissionManager.can("document.write") ||
 				["checking", "preparing", "processing"].includes(this.compositionSnapshot.status)
 			)
 				return
@@ -1704,7 +1714,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 				listening: false,
 			}),
 		)
-		if (!this.canvas.readonly) this.renderMergeButton(group, layout, videoCount)
+		if (this.canvas.permissionManager.can("document.write"))
+			this.renderMergeButton(group, layout, videoCount)
 	}
 
 	private addControlHit(group: Konva.Group, metadata: VideoEditControlMetadata): void {
@@ -1733,7 +1744,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		group.find(".video-edit-control-hit").forEach((candidate) => {
 			if (!(candidate instanceof Konva.Rect)) return
 			const baseBounds = candidate.getAttr("videoEditBaseHitBounds") as
-				{ x: number; y: number; width: number; height: number } | undefined
+				| { x: number; y: number; width: number; height: number }
+				| undefined
 			if (
 				!baseBounds ||
 				!Number.isFinite(baseBounds.x) ||
@@ -1765,7 +1777,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		group.find(`.${NODE_NAMES.audioProgressThumbHit}`).forEach((candidate) => {
 			if (!(candidate instanceof Konva.Circle)) return
 			const radius = candidate.getAttr("videoEditAudioProgressBaseHitRadius") as
-				number | undefined
+				| number
+				| undefined
 			if (radius === undefined) return
 			syncControlHitCircle(candidate, radius, minimumScreenSize)
 			candidate.moveToTop()
@@ -1784,9 +1797,11 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		state: VideoEditControlState,
 	): void {
 		const background = metadata.visualNode.findOne(".video-edit-control-background") as
-			Konva.Shape | undefined
+			| Konva.Shape
+			| undefined
 		const text = metadata.visualNode.findOne(".video-edit-control-text") as
-			Konva.Text | undefined
+			| Konva.Text
+			| undefined
 		if (!background) return
 
 		if (metadata.kind === "play") {
@@ -2072,9 +2087,11 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		if (!(this.node instanceof Konva.Group)) return
 		const isPlaying = !this.playbackSnapshot.paused && !this.playbackSnapshot.ended
 		const button = this.node.findOne(`.${NODE_NAMES.audioPlayButton}`) as
-			Konva.Group | undefined
+			| Konva.Group
+			| undefined
 		const background = button?.findOne(".video-edit-control-background") as
-			Konva.Shape | undefined
+			| Konva.Shape
+			| undefined
 		if (background) {
 			background.fill(VIDEO_EDIT_CONFIG.AUDIO_PLAY_BUTTON)
 			background.opacity(1)
@@ -2105,13 +2122,16 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			text: audioProgressRow.timeLabel,
 		})
 		const track = this.node.findOne(`.${NODE_NAMES.audioProgressTrack}`) as
-			Konva.Rect | undefined
+			| Konva.Rect
+			| undefined
 		const fill = this.node.findOne(`.${NODE_NAMES.audioProgressFill}`) as Konva.Rect | undefined
 		const thumb = this.node.findOne(`.${NODE_NAMES.audioProgressThumb}`) as
-			Konva.Circle | undefined
+			| Konva.Circle
+			| undefined
 		const hit = this.node.findOne(`.${NODE_NAMES.audioProgressHit}`) as Konva.Rect | undefined
 		const thumbHit = this.node.findOne(`.${NODE_NAMES.audioProgressThumbHit}`) as
-			Konva.Circle | undefined
+			| Konva.Circle
+			| undefined
 		if (!track) return
 		const fillWidth = audioProgressRow.progressRect.width * displayedProgress
 		const thumbX = audioProgressRow.progressRect.x + fillWidth
@@ -2134,7 +2154,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			radius: audioProgressRow.thumbRadius,
 		})
 		const baseHitBounds = hit?.getAttr("videoEditAudioProgressBaseHitBounds") as
-			{ height?: number } | undefined
+			| { height?: number }
+			| undefined
 		const hitHeight =
 			baseHitBounds?.height ??
 			hit?.height() ??

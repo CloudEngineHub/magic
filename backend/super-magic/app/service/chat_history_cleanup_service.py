@@ -20,7 +20,11 @@ from app.utils.async_file_utils import (
     async_stat,
     async_unlink,
 )
-from app.utils.runtime_storage import RuntimeEvictionPolicy, evict_runtime_files
+from app.utils.runtime_storage import (
+    RuntimeEvictionPolicy,
+    evict_runtime_files,
+    get_runtime_config_int,
+)
 
 logger = get_logger(__name__)
 
@@ -151,20 +155,18 @@ class ChatHistoryCleanupService:
             )
 
     async def _clean_runtime_logs(self) -> None:
-        max_age_days = self._positive_int("chat_history_cleanup.llm_request_max_age_days")
-        max_entries = self._positive_int("chat_history_cleanup.llm_request_max_count")
-        max_bytes = self._positive_int("chat_history_cleanup.llm_request_max_bytes")
-        if max_age_days is None and max_entries is None and max_bytes is None:
+        max_entries = get_runtime_config_int(
+            "runtime_cleanup.llm_request.max_file_count",
+            minimum=0,
+        )
+        if max_entries <= 0:
             return
         policy = RuntimeEvictionPolicy(
             max_entries=max_entries,
             target_entries=max_entries,
-            max_total_bytes=max_bytes,
-            target_total_bytes=max_bytes,
-            max_age_seconds=max_age_days * 24 * 60 * 60 if max_age_days is not None else None,
         )
         await evict_runtime_files(
-            PathManager.get_llm_request_dir(),
+            PathManager.get_llm_requests_dir(),
             policy=policy,
             suffixes=(".log",),
         )
@@ -174,13 +176,13 @@ class ChatHistoryCleanupService:
         root_files = await self._root_file_stats(root)
         subagent_stats = await self._directory_stats(PathManager.get_subagents_chat_history_dir())
         compacted_stats = await self._directory_stats(root / "compacted")
-        llm_stats = await self._directory_stats(PathManager.get_llm_request_dir())
+        llm_stats = await self._directory_stats(PathManager.get_llm_requests_dir())
         logger.info(
             "聊天记录存储统计: "
             f"main_files={root_files[0]}/{root_files[1]}B, "
             f"subagents={subagent_stats[0]}/{subagent_stats[1]}B, "
             f"compacted={compacted_stats[0]}/{compacted_stats[1]}B, "
-            f"llm_request={llm_stats[0]}/{llm_stats[1]}B"
+            f"llm_requests={llm_stats[0]}/{llm_stats[1]}B"
         )
 
     async def _root_file_stats(self, root: Path) -> tuple[int, int]:

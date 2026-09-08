@@ -1,4 +1,4 @@
-import { useCallback } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import {
 	DRAG_TYPE,
 	type AttachmentDragData,
@@ -18,7 +18,13 @@ import {
 	getOrCreateUploadSubDirFileId,
 	validateUploadDirectoryFileId,
 } from "../utils/designAssetDirectory"
-import { getCanvasResourceFileName } from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
+import {
+	formatCanvasRelativeResourcePath,
+	getCanvasResourceFileName,
+	isCanvasResourceRootPath,
+	stripCurrentDirectoryPrefix,
+	stripPathEdgeSlashes,
+} from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import {
 	resolveDesignResourceFileItem,
 	resolveDesignResourceReference,
@@ -54,6 +60,27 @@ interface UseDesignFileDropPathsOptions {
 interface UseDesignFileDropPathsReturn {
 	/** 解析拖拽资源，必要时先复制到当前画布资源目录。 */
 	getDataTransferFileInfo: (dataTransfer: DataTransfer) => Promise<string[]>
+	/** 解析画布剪贴板资源，必要时服务端复制到当前画布。 */
+	resolveCanvasClipboardReference: (input: {
+		sourceProjectId?: string
+		sourceCanvasId?: string
+		sourceFileId?: string
+		resourceIdentity?: string
+		sourcePath?: string
+		projectPath?: string
+		targetProjectId?: string
+		targetCanvasId?: string
+		target: "canvas-editor" | "message-editor"
+		fileName?: string
+	}) => Promise<{
+		kind: "current-canvas" | "project"
+		path: string
+		fileId?: string
+		projectPath?: string
+		resourceIdentity: string
+		fileName: string
+		awaitingAttachmentConfirmation?: boolean
+	} | null>
 }
 
 export interface DesignDropResourceEntry {
@@ -193,7 +220,9 @@ function isAudioResourcePath(path: string): boolean {
 }
 
 function getUploadSubDir(path: string): UploadSubDirType {
-	return isVideoResourcePath(path) ? UploadSubDir.Videos : UploadSubDir.Images
+	if (isVideoResourcePath(path)) return UploadSubDir.Videos
+	if (isAudioResourcePath(path)) return UploadSubDir.Audios
+	return UploadSubDir.Images
 }
 
 function getDropResourceLabel(entry: DesignDropResourceEntry): string {
@@ -274,6 +303,18 @@ export function useDesignFileDropPaths(
 		},
 		[attachmentIndex, attachmentsReady, designProjectBasePath, flatAttachments],
 	)
+
+	const canvasClipboardReferenceCacheRef = useRef<
+		Map<
+			string,
+			Promise<
+				Awaited<ReturnType<UseDesignFileDropPathsReturn["resolveCanvasClipboardReference"]>>
+			>
+		>
+	>(new Map())
+	useEffect(() => {
+		canvasClipboardReferenceCacheRef.current.clear()
+	}, [currentFile?.id, projectId])
 
 	const getDataTransferFileInfo = useCallback(
 		async (dataTransfer: DataTransfer): Promise<string[]> => {
@@ -372,8 +413,6 @@ export function useDesignFileDropPaths(
 						)
 					}
 
-					if (isAudioResourcePath(authoritativePath)) continue
-
 					if (!sourceFileId || !projectId) {
 						throw new Error(`无法确定待复制资源的文件ID: ${resourceLabel}`)
 					}
@@ -443,5 +482,284 @@ export function useDesignFileDropPaths(
 		],
 	)
 
-	return { getDataTransferFileInfo }
+	const resolveCanvasClipboardReference = useCallback(
+		async (
+			input: Parameters<UseDesignFileDropPathsReturn["resolveCanvasClipboardReference"]>[0],
+		) => {
+			const targetProjectId = input.targetProjectId || projectId
+			const resourceIdentity =
+				input.resourceIdentity ||
+				input.sourceFileId ||
+				input.projectPath ||
+				input.sourcePath
+			if (!targetProjectId || !resourceIdentity) {
+				return null
+			}
+			const fileName =
+				input.fileName ||
+				getCanvasResourceFileName(input.sourcePath || resourceIdentity) ||
+				"canvas-clipboard-file"
+			const sourceAttachment = input.sourceFileId
+				? attachmentIndex?.byFileId.get(input.sourceFileId) ||
+					flatAttachments?.find((item) => item.file_id === input.sourceFileId)
+				: undefined
+			const inferredSameProject = Boolean(
+				sourceAttachment ||
+				(input.projectPath && getSourceFileIdByWorkspacePath(input.projectPath)) ||
+				(input.sourcePath && getSourceFileIdByWorkspacePath(input.sourcePath)),
+			)
+			const sameProject = input.sourceProjectId
+				? input.sourceProjectId === targetProjectId
+				: inferredSameProject
+			const sameCanvas = Boolean(
+				input.sourceCanvasId &&
+				input.targetCanvasId &&
+				input.sourceCanvasId === input.targetCanvasId,
+			)
+
+			if (input.target === "message-editor" && sameProject) {
+				let projectPath = input.projectPath?.trim()
+				const sourcePath = input.sourcePath || input.projectPath
+				if ((!projectPath || projectPath.startsWith("./")) && sourcePath) {
+					const resolution = sameCanvas
+						? resolveDesignResourceReference(
+								{
+									namespace: "canvas-storage",
+									path: sourcePath,
+									mode: "legacy-recovery",
+								},
+								{
+									designProjectBasePath,
+									flatAttachments,
+									attachmentsReady,
+									attachmentIndex,
+								},
+							)
+						: resolveDesignResourceReference(
+								{ namespace: "workspace-path", path: sourcePath },
+								{
+									designProjectBasePath,
+									flatAttachments,
+									attachmentsReady,
+									attachmentIndex,
+								},
+							)
+					if (resolution.status === "resolved" && resolution.workspacePath) {
+						projectPath = resolution.workspacePath
+					}
+				}
+				if (projectPath && !projectPath.startsWith("/")) projectPath = `/${projectPath}`
+				const fileId =
+					input.sourceFileId ||
+					(projectPath ? getSourceFileIdByWorkspacePath(projectPath) : undefined)
+				if (!projectPath || !fileId) {
+					return null
+				}
+				const result = {
+					kind: "project" as const,
+					path: projectPath,
+					projectPath,
+					fileId,
+					resourceIdentity,
+					fileName,
+				}
+				return result
+			}
+
+			if (input.target !== "canvas-editor") {
+				return null
+			}
+			if (sameProject && !sameCanvas) {
+				const sourceWorkspacePath =
+					sourceAttachment?.relative_file_path || input.projectPath || undefined
+				if (sourceWorkspacePath) {
+					const workspaceResolution = resolveDesignResourceReference(
+						{ namespace: "workspace-path", path: sourceWorkspacePath },
+						{
+							designProjectBasePath,
+							flatAttachments,
+							attachmentsReady,
+							attachmentIndex,
+						},
+					)
+					if (
+						workspaceResolution.status === "resolved" &&
+						workspaceResolution.storagePath.startsWith("./")
+					) {
+						const result = {
+							kind: "current-canvas" as const,
+							path: workspaceResolution.storagePath,
+							fileId: workspaceResolution.attachmentId,
+							projectPath: workspaceResolution.workspacePath
+								? `/${workspaceResolution.workspacePath.replace(/^\/+/, "")}`
+								: undefined,
+							resourceIdentity,
+							fileName,
+						}
+						return result
+					}
+				}
+			}
+			if (sameCanvas && input.sourcePath) {
+				const current = resolveDesignResourceReference(
+					{
+						namespace: "canvas-storage",
+						path: input.sourcePath,
+						mode: "legacy-recovery",
+					},
+					{ designProjectBasePath, flatAttachments, attachmentsReady, attachmentIndex },
+				)
+				if (current.status === "resolved" && current.storagePath.startsWith("./")) {
+					const result = {
+						kind: "current-canvas" as const,
+						path: current.storagePath,
+						fileId: current.attachmentId,
+						projectPath: current.workspacePath
+							? `/${current.workspacePath.replace(/^\/+/, "")}`
+							: undefined,
+						resourceIdentity,
+						fileName,
+					}
+					return result
+				}
+				const normalizedCanvasPath = stripCurrentDirectoryPrefix(input.sourcePath)
+				if (
+					isCanvasResourceRootPath(normalizedCanvasPath) &&
+					!normalizedCanvasPath
+						.split("/")
+						.some((segment) => segment === ".." || segment.includes("\0"))
+				) {
+					const result = {
+						kind: "current-canvas" as const,
+						path: formatCanvasRelativeResourcePath(normalizedCanvasPath),
+						resourceIdentity,
+						fileName,
+					}
+					return result
+				}
+			}
+
+			if (!sameProject) {
+				return null
+			}
+
+			// Clipboard may still point at another canvas workspace path even when the
+			// same file name already exists under the current canvas asset directory
+			// (copyFile would then create a "(2)" duplicate). Prefer the local asset.
+			const reuseAuthoritativePath = input.projectPath || input.sourcePath || fileName
+			const reuseSubDir = getUploadSubDir(reuseAuthoritativePath)
+			if (designProjectBasePath) {
+				const existingWorkspacePath = `/${stripPathEdgeSlashes(designProjectBasePath)}/${reuseSubDir}/${fileName}`
+				const existingFileId = getSourceFileIdByWorkspacePath(existingWorkspacePath)
+				if (existingFileId) {
+					const existingPath = formatCanvasRelativeResourcePath(
+						`${reuseSubDir}/${fileName}`,
+					)
+					return {
+						kind: "current-canvas" as const,
+						path: existingPath,
+						fileId: existingFileId,
+						projectPath: existingWorkspacePath,
+						resourceIdentity,
+						fileName,
+					}
+				}
+			}
+
+			const copyCacheKey = [
+				input.sourceProjectId ?? "",
+				input.sourceCanvasId ?? "",
+				targetProjectId,
+				input.targetCanvasId ?? "",
+				resourceIdentity,
+			].join("\0")
+			const cachedCopy = canvasClipboardReferenceCacheRef.current.get(copyCacheKey)
+			if (cachedCopy) {
+				return cachedCopy
+			}
+			const copyPromise = (async () => {
+				const sourceFileId =
+					input.sourceFileId ||
+					(input.projectPath
+						? getSourceFileIdByWorkspacePath(input.projectPath)
+						: undefined) ||
+					(input.sourcePath
+						? getSourceFileIdByWorkspacePath(input.sourcePath)
+						: undefined)
+				if (!sourceFileId) {
+					return null
+				}
+				const authoritativePath = input.projectPath || input.sourcePath || fileName
+				const subDir = getUploadSubDir(authoritativePath)
+				const assetDirectory = await resolveAssetDirectory(subDir)
+				if (!assetDirectory) {
+					return null
+				}
+				const response = (await SuperMagicApi.copyFile({
+					file_id: sourceFileId,
+					target_parent_id: assetDirectory.assetDirFileId,
+					target_project_id: targetProjectId,
+					pre_file_id: "-1",
+					keep_both_file_ids: [sourceFileId],
+				})) as CopyFileResponse
+				const copiedFile = getCopiedFileInfo(response, fileName)
+				const copiedWorkspacePath =
+					copiedFile.relative_file_path ||
+					`${assetDirectory.suffixDir}/${copiedFile.file_name}`
+				const copiedPath = resolveDesignWorkspaceStoragePath(copiedWorkspacePath, {
+					designProjectBasePath,
+				})
+				if (!copiedPath) return null
+				if (getFileInfoById && setFileInfoCache && copiedFile.file_id) {
+					try {
+						const copiedInfo = await getFileInfoById(
+							copiedFile.file_id,
+							copiedFile.file_name,
+						)
+						setFileInfoCache(copiedPath, copiedInfo, { allowMissingAttachment: true })
+					} catch {
+						// Copy succeeded; cache warming is best effort.
+					}
+				}
+				updateAttachments()
+				const result = {
+					kind: "current-canvas" as const,
+					path: copiedPath,
+					fileId: copiedFile.file_id,
+					projectPath: `/${copiedWorkspacePath.replace(/^\/+/, "")}`,
+					resourceIdentity,
+					fileName: copiedFile.file_name || fileName,
+					awaitingAttachmentConfirmation: true,
+				}
+				return result
+			})()
+			canvasClipboardReferenceCacheRef.current.set(
+				copyCacheKey,
+				copyPromise
+					.then((result) => {
+						if (!result) canvasClipboardReferenceCacheRef.current.delete(copyCacheKey)
+						return result
+					})
+					.catch((error) => {
+						canvasClipboardReferenceCacheRef.current.delete(copyCacheKey)
+						throw error
+					}),
+			)
+			return copyPromise
+		},
+		[
+			attachmentIndex,
+			attachmentsReady,
+			designProjectBasePath,
+			flatAttachments,
+			getFileInfoById,
+			getSourceFileIdByWorkspacePath,
+			projectId,
+			resolveAssetDirectory,
+			setFileInfoCache,
+			updateAttachments,
+		],
+	)
+
+	return { getDataTransferFileInfo, resolveCanvasClipboardReference }
 }

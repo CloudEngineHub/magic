@@ -14,9 +14,17 @@ function getPngFilename(element: ImageElement): string {
 	return sanitized.toLowerCase().endsWith(".png") ? sanitized : `${sanitized}.png`
 }
 
+function getEffectiveImageContent(canvas: Canvas, element: ImageElement) {
+	return (
+		(canvas.getEffectiveContent?.(element.id) as
+			| ReturnType<typeof getActiveImageContent>
+			| undefined) ?? getActiveImageContent(element)
+	)
+}
+
 /** 判断图片在画布上是否存在需要重新渲染的视觉修改 */
-function hasVisualImageModification(element: ImageElement): boolean {
-	return Boolean(getActiveImageContent(element).crop)
+function hasVisualImageModification(canvas: Canvas, element: ImageElement): boolean {
+	return Boolean(getEffectiveImageContent(canvas, element).crop)
 }
 
 /** 获取画布图片元素的显示尺寸 */
@@ -95,12 +103,12 @@ async function resolveImageElementAsAsset(
 	canvas: Canvas,
 	element: ImageElement,
 ): Promise<PluginFileAsset> {
-	const active = getActiveImageContent(element)
+	const active = getEffectiveImageContent(canvas, element)
 	if (!active.src) {
 		throw new Error("Image element source is empty.")
 	}
 
-	if (hasVisualImageModification(element)) {
+	if (hasVisualImageModification(canvas, element)) {
 		return exportImageElementAsAsset(canvas, element)
 	}
 
@@ -129,7 +137,7 @@ export async function resolveCanvasImageDragAssets(
 		(element): element is ImageElement =>
 			Boolean(element) &&
 			element?.type === ElementTypeEnum.Image &&
-			Boolean(getActiveImageContent(element).src),
+			Boolean(getEffectiveImageContent(canvas, element).src),
 	)
 
 	if (imageElements.length !== elementIds.length) {

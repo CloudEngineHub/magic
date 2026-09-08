@@ -560,6 +560,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const { handlePullMoreMessage, isMessagesInitialLoading, isSelectedTopicMessagesReady } =
 		useTopicMessages({
 			selectedTopic,
+			topicStore,
 		})
 
 	useUpdateEffect(() => {

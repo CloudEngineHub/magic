@@ -1,7 +1,11 @@
 import { lazy } from "react"
 import type { DetailHTMLData, DetailTerminalData, DetailUniverData } from "../../types"
 import { DetailType } from "../../types"
-import { isFileInSlideCanvasMode, shouldUsePPTRootRender } from "../../utils/file"
+import {
+	isFileInSlideCanvasMode,
+	shouldUseAudioRootRender,
+	shouldUsePPTRootRender,
+} from "../../utils/file"
 import type { CodeViewerExtensionContext } from "../../contents/Code"
 import { isDesignMagicProjectFile } from "../../contents/Design/utils/isDesignMagicProjectFile"
 
@@ -32,6 +36,7 @@ const PPTRootRender = lazy(() => import("../PPTRootRender"))
 const SlidesTemplateRootRender = lazy(() => import("../SlidesTemplateRootRender"))
 const SelfMediaRootRender = lazy(() => import("../SelfMediaRootRender"))
 const AICardRootRender = lazy(() => import("../AICardRootRender"))
+const AudioRootRender = lazy(() => import("../AudioRootRender"))
 
 let RenderOffice: any = null
 if (localStorage.getItem("office_preview") === "onlyoffice") {
@@ -65,6 +70,9 @@ function ContentRenderer({ type, data, commonProps }: ContentRendererProps) {
 		case DetailType.Browser:
 			return <Browser data={data} {...commonProps} />
 		case DetailType.Html:
+			if (shouldUseAudioRootRender(type, data)) {
+				return <AudioRootRender data={data} {...commonProps} />
+			}
 			if (shouldUsePPTRootRender(type, data)) {
 				return <PPTRootRender data={data} {...commonProps} />
 			}

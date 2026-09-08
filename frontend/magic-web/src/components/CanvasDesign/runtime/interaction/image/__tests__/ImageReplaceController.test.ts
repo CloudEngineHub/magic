@@ -7,7 +7,8 @@ function createCanvas() {
 	const openLocalFilePicker = vi.fn()
 	const replaceWithProjectFile = vi.fn(async () => true)
 	const canvas = {
-		readonly: false,
+		can: vi.fn(() => true),
+		permissionManager: { can: vi.fn(() => true) },
 		elementManager: {
 			getElementData: vi.fn(() => ({
 				id: "image-1",

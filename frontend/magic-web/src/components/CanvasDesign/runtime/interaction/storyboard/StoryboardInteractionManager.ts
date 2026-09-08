@@ -370,7 +370,7 @@ export class StoryboardInteractionManager {
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("element:select", reconcileSelection),
 			this.canvas.eventEmitter.on("element:deselect", reconcileSelection),
-			this.canvas.eventEmitter.on("canvas:readonly", commitEditor),
+			this.canvas.eventEmitter.on("permission:changed", commitEditor),
 			this.canvas.eventEmitter.on("tool:change", commitEditor),
 			this.canvas.eventEmitter.on("canvas:devicechange", commitEditor),
 			this.canvas.eventEmitter.on("elements:transform:dragstart", commitEditor),
@@ -1016,7 +1016,7 @@ export class StoryboardInteractionManager {
 		const element = this.getStoryboardElement(binding.elementId)
 		if (!element) return false
 		if (binding.action.type !== "preview-reference-image") {
-			if (this.canvas.readonly || element.locked) return false
+			if (!this.canvas.permissionManager.can("document.write") || element.locked) return false
 			if (!this.canvas.permissionManager.canUseSelectionToolAffordance()) return false
 		}
 		return true

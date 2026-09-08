@@ -34,6 +34,8 @@ export interface AddFilesOptions {
 	/** @deprecated Use useTempDirectory. Kept for consumer compatibility. */
 	usePastedTextTempDirectory?: boolean
 	defaultRelativePathPrefix?: string
+	/** Keep the resulting attachment as an upload mention instead of a project mention. */
+	isCanvasClipboard?: boolean
 }
 
 export interface FileUploadStoreOptions {
@@ -204,6 +206,7 @@ export class FileUploadStore {
 						upload_progress: file.progress,
 						upload_status: file.status,
 						upload_error: file.error,
+						is_canvas_clipboard: file.isCanvasClipboard,
 					},
 				},
 			]
@@ -460,6 +463,7 @@ export class FileUploadStore {
 					? `${defaultRelativePathPrefix}/${uniqueFileName}`
 					: undefined,
 				isHidden: shouldUseTempDirectory,
+				isCanvasClipboard: addFilesOptions.isCanvasClipboard,
 			})
 		}
 

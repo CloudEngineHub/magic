@@ -49,7 +49,7 @@ describe("LayersFilterPopover", () => {
 				<LayersFilterForm filter={defaultFilter} onFilterChange={onFilterChange} />
 			</CanvasDesignI18nProvider>,
 		)
-		fireEvent.click(screen.getByRole("button", { name: "隐藏" }))
+		fireEvent.click(screen.getByRole("radio", { name: "隐藏" }))
 		fireEvent.click(screen.getByRole("button", { name: "元素类型" }))
 		fireEvent.click(screen.getByRole("option", { name: "图片" }))
 

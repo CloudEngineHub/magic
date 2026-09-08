@@ -4851,7 +4851,7 @@ function finalizeAskUserCard(wrapper, data) {
     }
 
     // 禁用所有输入和按钮
-    card.querySelectorAll('input, button').forEach(el => { el.disabled = true; });
+    card.querySelectorAll('input, textarea, button').forEach(el => { el.disabled = true; });
 
     // 移除旧结果标签（如果提交后已存在）
     card.querySelectorAll('.ask-user-result').forEach(el => el.remove());
@@ -4877,6 +4877,7 @@ function finalizeAskUserCard(wrapper, data) {
         resultEl.textContent = statusLabel[status] || `状态: ${status}`;
         card.appendChild(resultEl);
     }
+    appendAskUserRemark(card, data.remark);
 
     card.classList.remove('ask-user-card');
     card.classList.add('ask-user-card', status === 'answered' ? 'answered' : 'expired');
@@ -4888,9 +4889,20 @@ function finalizeAskUserCard(wrapper, data) {
     askUserCardRegistry.delete(data.question_id);
 }
 
+/** 展示 ask_user 提交时携带的追加备注。 */
+function appendAskUserRemark(card, remark) {
+    const normalizedRemark = typeof remark === 'string' ? remark.trim() : '';
+    if (!normalizedRemark) return;
+
+    const remarkEl = document.createElement('div');
+    remarkEl.className = 'ask-user-result ask-user-remark-result';
+    remarkEl.textContent = `备注：${normalizedRemark}`;
+    card.appendChild(remarkEl);
+}
+
 /**
  * 渲染 ask_user 交互卡片并挂到 container 上。
- * data: { question_id, questions[], expires_at, status }
+ * data: { question_id, questions[], expires_at, status, answers?, remark? }
  */
 function renderAskUserCard(data, container) {
     const { question_id, questions = [], expires_at, status } = data;
@@ -4902,7 +4914,7 @@ function renderAskUserCard(data, container) {
     // 通用禁用函数（仅操作 DOM，不依赖闭包变量顺序）
     function disableCard() {
         if (card._countdownTimer) clearInterval(card._countdownTimer);
-        card.querySelectorAll('input, button').forEach(el => { el.disabled = true; });
+        card.querySelectorAll('input, textarea, button').forEach(el => { el.disabled = true; });
     }
 
     // 倒计时
@@ -5090,6 +5102,7 @@ function renderAskUserCard(data, container) {
 
     // 如果已有结果（after_tool_call 时 re-render），只展示结果
     if (alreadyDone) {
+        disableCard();
         const resultEl = document.createElement('div');
         resultEl.className = 'ask-user-result' + (status !== 'answered' ? ' skipped' : '');
         const statusLabel = { answered: '✅ 已回答', skipped: '⏭ 已跳过', timeout: '⏰ 已超时', cancelled: '🚫 已取消' };
@@ -5105,9 +5118,21 @@ function renderAskUserCard(data, container) {
             resultEl.textContent = statusLabel[status] || `状态: ${status}`;
         }
         card.appendChild(resultEl);
+        appendAskUserRemark(card, data.remark);
         container.appendChild(card);
         return;
     }
+
+    // 备注属于整张问答卡片的附加上下文，不参与答案 JSON。
+    const remarkLabel = document.createElement('label');
+    remarkLabel.className = 'ask-user-remark-label';
+    remarkLabel.textContent = '补充备注（可选）';
+    const remarkInput = document.createElement('textarea');
+    remarkInput.className = 'ask-user-input ask-user-remark';
+    remarkInput.rows = 2;
+    remarkInput.placeholder = '可补充说明、约束或其他上下文…';
+    remarkLabel.appendChild(remarkInput);
+    card.appendChild(remarkLabel);
 
     // 操作按钮
     const actions = document.createElement('div');
@@ -5133,6 +5158,12 @@ function renderAskUserCard(data, container) {
                 answers[q.sub_id] = getValue();
             });
         }
+        const remark = remarkInput.value.trim();
+        const detail = {
+            response_status,
+            answer: JSON.stringify(answers),
+        };
+        if (remark) detail.remark = remark;
 
         const serverUrl = serverUrlInput.value.trim();
         try {
@@ -5145,10 +5176,7 @@ function renderAskUserCard(data, container) {
                     user_tool_call: {
                         name: 'ask_user',
                         tool_call_id: question_id,
-                        detail: {
-                            response_status,
-                            answer: JSON.stringify(answers)
-                        }
+                        detail,
                     }
                 })
             });
@@ -5158,14 +5186,14 @@ function renderAskUserCard(data, container) {
             resultEl.className = 'ask-user-result' + (response_status === 'skipped' ? ' skipped' : '');
             resultEl.textContent = response_status === 'answered' ? '✅ 已提交' : '⏭ 已跳过';
             card.appendChild(resultEl);
+            appendAskUserRemark(card, remark);
             card.classList.add('answered');
 
             showEventLog({ label: `ask_user 响应: ${json.message || response_status}`, ...json });
         } catch (e) {
             showSystemMessage(`ask_user 提交失败: ${e.message}`);
             // 重新启用按钮允许重试
-            submitBtn.disabled = false;
-            skipBtn.disabled = false;
+            card.querySelectorAll('input, textarea, button').forEach(el => { el.disabled = false; });
         }
     }
 

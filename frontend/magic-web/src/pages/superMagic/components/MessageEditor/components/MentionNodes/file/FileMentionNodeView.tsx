@@ -1,10 +1,10 @@
 import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
 import { observer } from "mobx-react-lite"
-import { useCallback, type MouseEvent } from "react"
+import { useCallback, type MouseEvent, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { X } from "lucide-react"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
-import { MediaPreviewThumbnail, MediaPreviewTooltip } from "@/components/base/MediaPreview"
+import { MediaPreviewTrigger, type MediaPreviewSource } from "@/components/base/MediaPreview"
 import {
 	getMentionDisplayName,
 	type MentionNodeViewRendererProps,
@@ -21,10 +21,12 @@ import { useOptionalMessageEditorStore } from "../../../stores"
 import { toDisplayUploadProgress } from "../../../utils/uploadProgress"
 import { useMentionMediaSource } from "../../MentionMedia/useMentionMediaSource"
 import {
-	DEFAULT_FILE_MENTION_RENDER_CONFIG,
-	getFileMentionRenderType,
-	isFileMentionFeatureEnabled,
-} from "../../MentionMedia/fileMentionRenderConfig"
+	MESSAGE_FILE_MENTION_NAME_CLASSES,
+	MESSAGE_FILE_MENTION_ROOT_CLASS,
+	MESSAGE_FILE_MENTION_VISUAL_BASE_CLASSES,
+	MESSAGE_FILE_MENTION_VISUAL_CLASS,
+	MESSAGE_FILE_MENTION_DESKTOP_CLASSES,
+} from "@/components/business/MentionPanel/messageMentionVisual"
 
 type FileMentionData = ProjectFileMentionData | UploadFileMentionData
 
@@ -42,7 +44,7 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 	const fileName = liveFile?.name || getMentionDisplayName(mention)
 	const file = liveFile?.file || uploadData?.file || null
 	const mediaSource = useMentionMediaSource({ data: mention, uploadFile: file })
-	const { mediaType, thumbnailUrl: mediaUrl, isLoading, hasError } = mediaSource
+	const { mediaType } = mediaSource
 	const status = liveFile?.status ?? uploadData?.upload_status
 	const progress = toDisplayUploadProgress(liveFile?.progress ?? uploadData?.upload_progress) ?? 0
 	const isUploading = isUpload && (status === "init" || status === "uploading")
@@ -68,39 +70,17 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 			className="shrink-0"
 		/>
 	)
-	const showIcon = isFileMentionFeatureEnabled(
-		"icon",
-		getFileMentionRenderType(mediaType),
-		DEFAULT_FILE_MENTION_RENDER_CONFIG,
-	)
-	const showMediaTooltip =
-		!isMobile &&
-		isFileMentionFeatureEnabled(
-			"tooltip",
-			getFileMentionRenderType(mediaType),
-			DEFAULT_FILE_MENTION_RENDER_CONFIG,
-		)
-	const thumbnail =
-		showIcon && mediaType ? (
-			<MediaPreviewThumbnail
-				mediaType={mediaType}
-				thumbnailUrl={mediaUrl}
-				alt={fileName}
-				fallback={fileIcon}
-				className="size-4 shrink-0 rounded object-cover"
-			/>
-		) : (
-			fileIcon
-		)
-	const shouldRenderMediaPreview = isLoading || Boolean(mediaUrl) || hasError
-
-	const visual = (
+	const previewSource: MediaPreviewSource | null = mediaType
+		? (mediaSource as MediaPreviewSource)
+		: null
+	const renderVisual = (thumbnail: ReactNode) => (
 		<span
 			className={cn(
-				"relative inline-flex min-w-0 max-w-[220px] items-center gap-1 overflow-hidden",
+				MESSAGE_FILE_MENTION_VISUAL_CLASS,
+				MESSAGE_FILE_MENTION_VISUAL_BASE_CLASSES,
 				isMobile
 					? "mb-1 rounded-full bg-muted py-0.5 pl-2 pr-1 text-sm text-foreground"
-					: "h-[18px] rounded bg-primary-10 px-1 leading-none text-primary",
+					: MESSAGE_FILE_MENTION_DESKTOP_CLASSES,
 				!isMobile && isUploading && "bg-muted text-muted-foreground",
 				isError && "bg-destructive/10 text-destructive",
 				selected && "ring-1 ring-primary/40",
@@ -121,10 +101,8 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 					}
 				/>
 			)}
-			{thumbnail && (
-				<span className="relative z-10 flex shrink-0 items-center">{thumbnail}</span>
-			)}
-			<span className="relative z-10 min-w-0 truncate" title={fileName}>
+			<span className="relative z-10 flex shrink-0 items-center">{thumbnail}</span>
+			<span className={MESSAGE_FILE_MENTION_NAME_CLASSES} title={fileName}>
 				{fileName}
 			</span>
 			{isUploading && (
@@ -142,7 +120,7 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 					{t("fileUpload.uploadFailed")}
 				</span>
 			)}
-			{isMobile && deleteNode && (
+			{isMobile && typeof deleteNode === "function" && (
 				<button
 					type="button"
 					className="relative z-10 inline-flex size-4 shrink-0 items-center justify-center rounded-full"
@@ -156,34 +134,31 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 		</span>
 	)
 
-	const content =
-		showMediaTooltip && mediaType && shouldRenderMediaPreview ? (
-			<MediaPreviewTooltip
-				mediaType={mediaType}
-				fileName={fileName}
-				previewUrl={mediaUrl}
-				audioUrl={mediaSource.audioUrl}
-				isLoading={isLoading}
-				hasError={hasError || Boolean(mediaType && !mediaUrl && !isLoading)}
-				errorMessage={t("common.fileNotFoundOrLoadFailed", "文件不存在或加载错误")}
-				closeLabel={t("filePreview.close", "关闭预览")}
-				audioLabels={{
+	const content = (
+		<MediaPreviewTrigger
+			fileName={fileName}
+			source={previewSource}
+			fallback={fileIcon}
+			renderTrigger={renderVisual}
+			labels={{
+				errorMessage: t("common.fileNotFoundOrLoadFailed", "文件不存在或加载错误"),
+				audioLabels: {
 					play: t("filePreview.play", "播放"),
 					pause: t("filePreview.pause", "暂停"),
+					loading: t("common.loading", "加载中"),
 					progress: t("filePreview.progress", "播放进度"),
-				}}
-			>
-				{visual}
-			</MediaPreviewTooltip>
-		) : (
-			visual
-		)
+				},
+			}}
+			enableTouchTrigger
+		/>
+	)
 
 	return (
 		<NodeViewWrapper
 			as="span"
 			className={cn(
 				"magic-mention relative !-top-px !inline-flex max-w-full !overflow-visible !bg-transparent !p-0 !align-middle",
+				MESSAGE_FILE_MENTION_ROOT_CLASS,
 				mention.pending && "opacity-50",
 			)}
 			contentEditable={false}

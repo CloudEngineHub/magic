@@ -1,5 +1,5 @@
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
-import { forwardRef, useEffect, useCallback, useMemo, useRef } from "react"
+import { forwardRef, useEffect, useCallback, useMemo, useRef, type ClipboardEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { useAsyncEffect, useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
@@ -73,6 +73,13 @@ import {
 	resolveMessageSendModels,
 	type ResolvedMessageSendModels,
 } from "./utils/messageSendModelFallback"
+import {
+	claimCanvasClipboardPasteEvent,
+	getCanvasClipboardPasteController,
+	hasCanvasClipboardMimeType,
+	CanvasDesignClipboard,
+	type CanvasClipboardAsset,
+} from "@/components/CanvasDesign/public/clipboard"
 
 export type MessageEditorRef = MessageEditorRefType & {
 	/**
@@ -194,6 +201,11 @@ export const MessageEditorContainer = observer(
 			})
 
 			const fileUploadStore = store.fileUploadStore
+			const canvasClipboardEpochRef = useRef(0)
+			const getCanvasClipboardSessionId = useMemoizedFn(
+				() =>
+					`${draftKey?.workspaceId ?? selectedWorkspace?.id ?? ""}:${selectedProject?.id ?? selectedTopic?.project_id ?? draftKey?.projectId ?? ""}:${selectedTopic?.id ?? draftKey?.topicId ?? ""}:${canvasClipboardEpochRef.current}`,
+			)
 			const tiptapEditorRef = useRef<Editor | null>(null)
 			const shouldSkipMentionRemoveSyncRef = useRef(false)
 			const promoteCanvasPendingMentionsRef = useRef<(() => void) | null>(null)
@@ -384,6 +396,9 @@ export const MessageEditorContainer = observer(
 				topicMode,
 				collectMentionItemsFromEditor,
 				promoteCanvasPendingMentions,
+				onSendStart: () => {
+					canvasClipboardEpochRef.current += 1
+				},
 				isMountedRef,
 			})
 
@@ -551,6 +566,7 @@ export const MessageEditorContainer = observer(
 			})
 
 			const clearContent = useMemoizedFn(() => {
+				canvasClipboardEpochRef.current += 1
 				clearAllMarkers()
 
 				setValue(undefined)
@@ -561,6 +577,7 @@ export const MessageEditorContainer = observer(
 			})
 
 			const clearContentAfterSend = useMemoizedFn(() => {
+				canvasClipboardEpochRef.current += 1
 				shouldSkipMentionRemoveSyncRef.current = true
 				try {
 					clearAllMarkers()
@@ -730,13 +747,109 @@ export const MessageEditorContainer = observer(
 			})
 
 			const handlePaste = useCallback(
-				(e: React.ClipboardEvent) => {
+				(e: ClipboardEvent) => {
 					const clipboardData = e.clipboardData
 					if (!clipboardData) return
+					const nativeEvent = e.nativeEvent
+					const hasCanvasMime = hasCanvasClipboardMimeType(nativeEvent)
+					const nativeFiles = CanvasDesignClipboard.readAllEventFilesSnapshot(nativeEvent)
+					if (hasCanvasMime && !uploadEnabled) {
+						if (!claimCanvasClipboardPasteEvent(nativeEvent)) return
+						e.preventDefault()
+						e.stopPropagation()
+						return
+					}
 
-					const files = Array.from(clipboardData.files)
+					if (
+						hasCanvasMime ||
+						(nativeFiles.length === 0 &&
+							!Array.from(clipboardData.types).some((type) => {
+								const normalized = type.trim().toLowerCase()
+								return normalized === "text/plain" || normalized === "text/html"
+							}))
+					) {
+						const existingResourceKeys = collectMentionItemsFromEditor().flatMap(
+							(item) => {
+								const data = item.attrs.data as {
+									file_id?: string
+									file_path?: string
+									relative_file_path?: string
+								}
+								return [
+									data.file_id,
+									data.file_path,
+									data.relative_file_path,
+								].filter((value): value is string => Boolean(value?.trim()))
+							},
+						)
+						void getCanvasClipboardPasteController().paste(
+							nativeEvent,
+							{
+								control: "message-editor",
+								acceptedTypes: ["image", "video", "audio"],
+								projectId: selectedProject?.id ?? selectedTopic?.project_id,
+								hasProjectContext: isProjectContext,
+								maxCount: Math.max(
+									0,
+									fileUploadStore.maxUploadCount - fileUploadStore.files.length,
+								),
+								existingResourceKeys,
+								sessionId: getCanvasClipboardSessionId(),
+							},
+							{
+								onAsset: async (asset: CanvasClipboardAsset) => {
+									if (
+										asset.reference?.kind === "project" &&
+										asset.reference.fileId &&
+										asset.reference.projectPath
+									) {
+										const fileName = asset.reference.fileName || asset.fileName
+										const fileExtension = fileName.split(".").pop() ?? ""
+										const mention: TiptapMentionAttributes = {
+											type: MentionItemType.PROJECT_FILE,
+											data: {
+												file_id: asset.reference.fileId,
+												file_name: fileName,
+												file_path: asset.reference.projectPath,
+												relative_file_path: asset.reference.projectPath,
+												file_extension: fileExtension,
+												file_size: 0,
+												project_id:
+													selectedProject?.id ??
+													selectedTopic?.project_id,
+											},
+										}
+										tiptapEditorRef.current?.commands.insertContent({
+											type: "mention",
+											attrs: mention,
+										})
+										store.fileUploadStore.addPendingProjectFileReferences([
+											mention,
+										])
+										onMentionInsertItems?.([mention])
+										return
+									}
+									if (!asset.file) return
+									if (asset.file.size > fileUploadStore.maxUploadSize) {
+										throw new Error("file-size-limit")
+									}
+									await _addFiles([asset.file], undefined, {
+										useTempDirectory: true,
+										isCanvasClipboard: true,
+									})
+								},
+								isSessionCurrent: (sessionId) =>
+									isMountedRef.current &&
+									sessionId === getCanvasClipboardSessionId(),
+							},
+						)
+						return
+					}
+
+					const files = nativeFiles
 
 					if (uploadEnabled && files.length > 0) {
+						if (!claimCanvasClipboardPasteEvent(nativeEvent)) return
 						e.preventDefault()
 						e.stopPropagation()
 						addFiles(files)
@@ -746,6 +859,7 @@ export const MessageEditorContainer = observer(
 					if (!uploadEnabled || !shouldEnableMention) return
 					if (containsCanonicalWorkspaceLink(clipboardData)) return
 					if (!shouldConvertPastedTextToAttachment(clipboardData)) return
+					if (!claimCanvasClipboardPasteEvent(nativeEvent)) return
 
 					const text = clipboardData.getData("text/plain")
 					const textFile = createPastedTextFile({ text })
@@ -760,8 +874,16 @@ export const MessageEditorContainer = observer(
 				[
 					_addFiles,
 					addFiles,
+					collectMentionItemsFromEditor,
+					getCanvasClipboardSessionId,
 					ensureProjectContextForPastedText,
+					fileUploadStore,
+					isProjectContext,
+					onMentionInsertItems,
+					selectedProject?.id,
+					selectedTopic?.project_id,
 					shouldEnableMention,
+					store.fileUploadStore,
 					uploadEnabled,
 				],
 			)

@@ -1,5 +1,5 @@
-import type { ElementToolType } from "../../../public/props"
-export type { ElementToolType } from "../../../public/props"
+import type { CanvasAccessContext, CanvasCapability, ElementToolType } from "../../../public/props"
+export type { ElementToolType }
 import type { ElementContentBase, LayerElement } from "../../document/types"
 import type { ContentState } from "../../document/elementContent"
 
@@ -26,6 +26,25 @@ export type ElementToolIcon =
 export type ElementToolScope = "element" | "active-content" | "version-set" | "generation"
 
 export type ElementToolExecution = "command" | "display-only"
+
+export type ElementToolEffect = "display" | "session" | "document" | "destructive" | "external"
+
+/**
+ * CommandBus 的执行路由。路由描述的是运行时接管方式，不承担权限语义；
+ * 权限始终由 effect/requiredCapability 声明决定。
+ */
+export type ElementToolCommandRoute =
+	| "registered"
+	| "action"
+	| "element"
+	| "storyboard-batch"
+	| "text"
+	| "shape"
+	| "content-interaction"
+	| "media"
+	| "media-original-size"
+	| "generation"
+	| "version"
 
 export type ElementToolVisibility = "visible" | "hidden" | "disabled"
 
@@ -69,6 +88,7 @@ export interface ElementToolSession {
 	readonly toolId: ElementToolType
 	readonly elementId: string
 	readonly contentId?: string
+	readonly contentRevision?: string | number
 	readonly operationId?: string
 }
 
@@ -95,6 +115,8 @@ export interface ElementToolContext {
 		readonly byId: ReadonlyMap<string, ContentSnapshot>
 		readonly states: ReadonlyMap<string, ContentState>
 	}
+	/** Resolved Canvas access context; tool resolution never falls back to legacy flags. */
+	access: CanvasAccessContext
 	generation: {
 		readonly activeContentIsGenerating: boolean
 		readonly siblingGeneratingContentIds: readonly string[]
@@ -142,8 +164,29 @@ export interface ElementToolCommand {
 	payload?: unknown
 }
 
+export interface ElementToolCommandResult {
+	executed: boolean
+	reason?:
+		| "UNKNOWN_TOOL"
+		| "CAPABILITY_REQUIRED"
+		| "ELEMENT_NOT_FOUND"
+		| "CONTENT_NOT_FOUND"
+		| "CONTENT_REVISION_MISMATCH"
+		| "ACTIVE_CONTENT_MISMATCH"
+		| "GENERATION_STALE"
+		| "OPERATION_MISMATCH"
+		| "TOOL_UNAVAILABLE"
+		| "NO_HANDLER"
+		| "TARGET_UNAVAILABLE"
+		| "ACTION_UNAVAILABLE"
+		| "INVALID_PAYLOAD"
+	requiredCapability?: CanvasCapability
+}
+
 export interface ElementToolCommandBus {
-	execute(command: ElementToolCommand): Promise<void> | void
+	execute(
+		command: ElementToolCommand,
+	): Promise<void | ElementToolCommandResult> | void | ElementToolCommandResult
 }
 
 export interface ElementToolResolution {
@@ -187,6 +230,11 @@ export interface ElementToolDefinition {
 	id: ElementToolType
 	scope: ElementToolScope
 	execution: ElementToolExecution
+	effect: ElementToolEffect
+	requiredCapability: CanvasCapability
+	commandRoute: ElementToolCommandRoute
+	/** Optional action identity used when an action route has no mounted handler. */
+	fallbackActionId?: string
 	surfaces: Partial<Record<ElementToolSurface, ElementToolSurfaceOptions>>
 	isApplicable: (context: ElementToolContext) => boolean
 	resolve: (context: ElementToolContext) => ElementToolResolution

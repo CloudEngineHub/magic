@@ -20,6 +20,8 @@ import { Editor } from "@/infrastructure/editors/tiptap/react"
 import type { ProjectImageUrlResolver } from "@/components/tiptap-node/project-image-node/project-image-node-extension"
 import { SafeHtmlDiv, SafeHtmlSpan, SafeHtmlTextBlockStyles } from "./extensions/safe-html-style"
 import { SafeVideo } from "./extensions/safe-video"
+import LargeMarkdownPreview from "./components/LargeMarkdownPreview"
+import { isLargeMarkdownContent } from "./largeMarkdown"
 
 interface EditorBodyProps {
 	isLoading: boolean
@@ -27,6 +29,10 @@ interface EditorBodyProps {
 	suppressLoadingIndicator?: boolean
 	/** Lets the markdown editor contribute its full height to the page scroll range. */
 	documentFlowFullscreen?: boolean
+	/** Cached file tabs pass their visibility down so global search is active only on the visible tab. */
+	isTabActive?: boolean
+	/** Disable interactive search for temporary offscreen export renders. */
+	enableSearch?: boolean
 	viewMode: "code" | "desktop" | "phone" | "markdown"
 	language?: string
 	content: string
@@ -60,6 +66,8 @@ function EditorBody({
 	isLoading,
 	suppressLoadingIndicator = false,
 	documentFlowFullscreen = false,
+	isTabActive = true,
+	enableSearch = true,
 	viewMode,
 	language = "text",
 	content,
@@ -171,6 +179,8 @@ function EditorBody({
 		if (viewMode !== "code" || isEditMode) return content
 		return formatLongCurlDataRawForPreview(content)
 	}, [content, isEditMode, viewMode])
+	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(content), [content])
+	const shouldUseCodeSourceEditor = viewMode === "code" || (isLargeMarkdown && isEditMode)
 
 	// Combine all extensions
 	const allExtensions = [
@@ -219,12 +229,12 @@ function EditorBody({
 		<EditorErrorBoundary
 			fallbackMode="simple"
 			inputData={{
-				content,
-				processedContent,
+				contentLength: content.length,
+				processedContentLength: processedContent?.length ?? 0,
 				viewMode,
 				isLoading,
 				isEditMode,
-				editContent,
+				editContentLength: editContent?.length ?? 0,
 				language,
 				className,
 			}}
@@ -245,19 +255,31 @@ function EditorBody({
 							<MagicSpin spinning />
 						</div>
 					)
-				) : viewMode === "code" ? (
+				) : shouldUseCodeSourceEditor ? (
 					<CodeSourceEditor
 						key={isEditMode ? "edit" : "preview"}
 						language={language}
 						isEditMode={isEditMode}
+						isLargeFile={isLargeMarkdown}
 						content={isEditMode ? editContent || content : previewCodeContent}
 						onChange={setEditContent}
+					/>
+				) : isLargeMarkdown ? (
+					<LargeMarkdownPreview
+						content={processedContent || content}
+						documentFlow={documentFlowFullscreen}
+						isTabActive={isTabActive}
+						enableSearch={enableSearch}
+						urlResolver={urlResolver}
+						onLinkClick={handleLinkClick}
 					/>
 				) : (
 					<SimpleEditor
 						ref={actualEditorRef}
 						content={isEditMode ? editContent || content : processedContent || content}
 						enableCodeBlockWrap
+						enableReadonlySearch={enableSearch}
+						isTabActive={isTabActive}
 						onUpdate={({ editor: _editor }) => {
 							const content =
 								(

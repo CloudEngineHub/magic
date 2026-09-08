@@ -22,7 +22,11 @@ import {
 	MY_CLAW_WORKSPACE_ID,
 	SHARE_WORKSPACE_DATA,
 	SHARE_WORKSPACE_ID,
+	isCollaborationProject,
+	isWorkspaceShortcutProject,
 } from "@/pages/superMagic/constants"
+import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
+import CollaborationProjectTag from "@/pages/superMagic/components/CollaborationProjectTag"
 import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 
@@ -404,9 +408,15 @@ function ProjectRow({
 					className="size-[22px] shrink-0 text-muted-foreground"
 					data-testid={`select-directory-mobile-project-icon-${project.id}`}
 				/>
-				<p className="min-w-0 flex-1 truncate text-[16px] font-medium leading-5 text-foreground">
-					{getProjectDisplayName(project, t, workspaceEntryType)}
-				</p>
+				<div className="flex min-w-0 flex-1 items-center gap-1.5">
+					<p className="min-w-0 max-w-full shrink truncate text-[16px] font-medium leading-5 text-foreground">
+						{getProjectDisplayName(project, t, workspaceEntryType)}
+					</p>
+					{project.is_pinned && <PinnedTag />}
+					{(isWorkspaceShortcutProject(project) || isCollaborationProject(project)) && (
+						<CollaborationProjectTag visible project={project} showText={false} />
+					)}
+				</div>
 			</button>
 			{onSelect ? (
 				<>

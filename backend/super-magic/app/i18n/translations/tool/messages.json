@@ -2355,6 +2355,22 @@
         "zh_CN": "正在{{action}}：{{target}}",
         "en_US": "{{action}}: {{target}}"
     },
+    "browser.remark.running_script": {
+        "zh_CN": "正在{{action}}：{{script}}",
+        "en_US": "{{action}}: {{script}}"
+    },
+    "browser.remark.completed_script": {
+        "zh_CN": "脚本执行完成：{{script}}",
+        "en_US": "Script completed: {{script}}"
+    },
+    "browser.remark.running_init_script": {
+        "zh_CN": "正在注册页面初始化脚本：{{script}}",
+        "en_US": "Registering page init script: {{script}}"
+    },
+    "browser.remark.completed_init_script": {
+        "zh_CN": "初始化脚本已登记：{{script}}",
+        "en_US": "Page init script registered: {{script}}"
+    },
     "browser.remark.recovering_navigation": {
         "zh_CN": "页面暂时没有响应，AI 正在继续尝试",
         "en_US": "The page is temporarily unresponsive; AI is continuing with another attempt"
@@ -2607,6 +2623,10 @@
         "zh_CN": "返回值",
         "en_US": "Returned value"
     },
+    "browser.detail.heading.script": {
+        "zh_CN": "执行脚本",
+        "en_US": "Executed script"
+    },
     "browser.detail.heading.diagnostics": {
         "zh_CN": "错误与警告",
         "en_US": "Errors and warnings"
@@ -2858,6 +2878,10 @@
     "browser.detail.value_truncated": {
         "zh_CN": "返回值较长，这里仅展示前 {{limit}} 个字符。",
         "en_US": "The returned value is long; only the first {{limit}} characters are shown."
+    },
+    "browser.detail.script_truncated": {
+        "zh_CN": "脚本超过 {{limit}} 个字符，尾部已省略。",
+        "en_US": "The script exceeded {{limit}} characters; the rest is omitted."
     },
     "browser.detail.redirect_chain": {
         "zh_CN": "页面发生了重定向：{{chain}}",

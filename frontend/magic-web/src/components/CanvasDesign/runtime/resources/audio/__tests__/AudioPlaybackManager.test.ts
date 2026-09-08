@@ -91,6 +91,38 @@ describe("AudioPlaybackManager", () => {
 		}
 	}
 
+	it("rejects playback controls when playback capability is unavailable", async () => {
+		const audio = new FakeAudioElement()
+		const originalCreateElement = document.createElement.bind(document)
+		vi.spyOn(document, "createElement").mockImplementation(((tagName: string) =>
+			tagName.toLowerCase() === "audio"
+				? (audio as unknown as HTMLAudioElement)
+				: originalCreateElement(tagName)) as typeof document.createElement)
+		const canvas = createCanvas({
+			getResource: vi.fn().mockResolvedValue({
+				ossSrc: "https://example.test/voice.mp3",
+			}),
+		})
+		let playbackEnabled = true
+		canvas.permissionManager = {
+			can: vi.fn(() => playbackEnabled),
+		} as Canvas["permissionManager"]
+		const manager = new AudioPlaybackManager({ canvas })
+
+		expect(await manager.prepare("audio-1", "./audios/voice.mp3")).toBe(true)
+		audio.currentTime = 12
+		playbackEnabled = false
+
+		expect(await manager.toggle("audio-1", "./audios/voice.mp3")).toBe(false)
+		manager.seek("audio-1", 0.5)
+		expect(await manager.seekBy("audio-1", "./audios/voice.mp3", 10)).toBe(false)
+		expect(audio.currentTime).toBe(12)
+		expect(audio.play).not.toHaveBeenCalled()
+
+		manager.destroy()
+		canvas.resourceScheduler.destroy()
+	})
+
 	it("does not create a session after release cancels an in-flight resource lookup", async () => {
 		let resolveResource!: (value: { ossSrc: string }) => void
 		const resourcePromise = new Promise<{ ossSrc: string }>((resolve) => {
@@ -239,7 +271,8 @@ describe("AudioPlaybackManager", () => {
 
 		audio.currentTime = 0.25
 		const firstFrameEntry = frameCallbacks.entries().next().value as
-			[number, FrameRequestCallback] | undefined
+			| [number, FrameRequestCallback]
+			| undefined
 		expect(firstFrameEntry).toBeDefined()
 		if (!firstFrameEntry) return
 		frameCallbacks.delete(firstFrameEntry[0])
