@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { neutralizeParentTransform } from "../parentTransformOverride"
+import { neutralizeParentTransform, pinFixedPopoverWrapper } from "../parentTransformOverride"
 
 describe("neutralizeParentTransform", () => {
 	const originalGetComputedStyle = window.getComputedStyle
@@ -62,6 +62,21 @@ describe("neutralizeParentTransform", () => {
 		restore?.()
 
 		expect(parent.style.getPropertyValue("transform")).toBe("scale(2)")
+	})
+
+	it("pins the wrapper origin so viewport-fixed content is not translated", () => {
+		const { parent } = createTree("translate(800px, 240px)")
+		parent.style.setProperty("left", "0px")
+		parent.style.setProperty("top", "0px")
+
+		pinFixedPopoverWrapper(parent)
+
+		expect(parent.style.getPropertyValue("transform")).toBe("none")
+		expect(parent.style.getPropertyValue("left")).toBe("0px")
+		expect(parent.style.getPropertyValue("top")).toBe("0px")
+		expect(parent.style.getPropertyPriority("transform")).toBe("important")
+		expect(parent.style.getPropertyPriority("left")).toBe("important")
+		expect(parent.style.getPropertyPriority("top")).toBe("important")
 	})
 
 	it("leaves the parent unchanged after open, close, and reopen", () => {

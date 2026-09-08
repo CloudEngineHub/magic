@@ -16,7 +16,7 @@ import {
 	getMoreStylesViewport,
 	type MoreStylesPopoverLayout,
 } from "../utils/moreStylesPopoverPosition"
-import { neutralizeParentTransform } from "../utils/parentTransformOverride"
+import { neutralizeParentTransform, pinFixedPopoverWrapper } from "../utils/parentTransformOverride"
 import BoxModelSection from "../sections/BoxModelSection"
 import FlexGridSection from "../sections/FlexGridSection"
 import ImageSection from "../sections/ImageSection"
@@ -114,6 +114,7 @@ export function ContextMorePopover({
 		availableTabs,
 	)
 	const [tab, setTab] = useState(resolvedTab)
+	const unpinWrapperRef = useRef<(() => void) | undefined>(undefined)
 
 	useEffect(() => {
 		setTab(resolvedTab)
@@ -182,11 +183,22 @@ export function ContextMorePopover({
 
 	useLayoutEffect(() => {
 		if (!open) return
+		return () => {
+			unpinWrapperRef.current?.()
+			unpinWrapperRef.current = undefined
+		}
+	}, [open])
+
+	useLayoutEffect(() => {
+		if (!open) return
 		let observer: MutationObserver | null = null
 		let raf = 0
-		let restoreParentTransform: (() => void) | undefined
 		function applyFixedLayout(node: HTMLElement) {
-			restoreParentTransform ??= neutralizeParentTransform(node)
+			const parent = node.parentElement
+			if (parent && parent !== document.body) {
+				unpinWrapperRef.current ??= neutralizeParentTransform(node)
+				pinFixedPopoverWrapper(parent)
+			}
 			const next = {
 				position: "fixed",
 				left: `${layout.left}px`,
@@ -237,7 +249,6 @@ export function ContextMorePopover({
 		return () => {
 			cancelAnimationFrame(raf)
 			observer?.disconnect()
-			restoreParentTransform?.()
 		}
 	}, [layout, open])
 

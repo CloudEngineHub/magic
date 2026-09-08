@@ -426,6 +426,76 @@ describe("ContextMorePopover", () => {
 		}
 	})
 
+	it("keeps the wrapper transform neutralized when the selection moves while open", () => {
+		const originalGetComputedStyle = window.getComputedStyle
+		const getRect = HTMLElement.prototype.getBoundingClientRect
+		let treatTransformAsNone = false
+		window.getComputedStyle = ((element: Element) => {
+			const computed = originalGetComputedStyle(element)
+			if ((element as HTMLElement).dataset.testid !== "style-panel-more-styles-portal") {
+				return computed
+			}
+			const inline = (element as HTMLElement).style.getPropertyValue("transform")
+			return new Proxy(computed, {
+				get(style, prop) {
+					if (prop === "transform") {
+						if (treatTransformAsNone || inline === "none") return "none"
+						return "matrix(1, 0, 0, 1, 12, 0)"
+					}
+					return Reflect.get(style, prop)
+				},
+			})
+		}) as typeof window.getComputedStyle
+		HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect() {
+			if (this.getAttribute("data-testid") === "style-panel-more-styles-trigger") {
+				return {
+					x: 868,
+					y: 236,
+					width: 88,
+					height: 32,
+					top: 236,
+					left: 868,
+					bottom: 268,
+					right: 956,
+					toJSON() {
+						return {}
+					},
+				}
+			}
+			return getRect.call(this)
+		}
+
+		try {
+			const { rerender } = render(
+				<ContextMorePopover
+					{...baseProps}
+					selectionRect={{ left: 460, top: 280, width: 400, height: 24 }}
+				/>,
+			)
+			const parent = screen.getByTestId("style-panel-more-styles-portal")
+			fireEvent.click(screen.getByTestId("style-panel-more-styles-trigger"))
+			expect(parent.style.getPropertyValue("transform")).toBe("none")
+
+			// After the first pin, computed transform looks unset. A layout
+			// update must not restore Radix's translate and compound offsets.
+			treatTransformAsNone = true
+			rerender(
+				<ContextMorePopover
+					{...baseProps}
+					selectionRect={{ left: 480, top: 320, width: 400, height: 24 }}
+				/>,
+			)
+
+			expect(parent.style.getPropertyValue("transform")).toBe("none")
+			expect(parent.style.getPropertyPriority("transform")).toBe("important")
+			expect(parent.style.getPropertyValue("left")).toBe("0px")
+			expect(parent.style.getPropertyValue("top")).toBe("0px")
+		} finally {
+			window.getComputedStyle = originalGetComputedStyle
+			HTMLElement.prototype.getBoundingClientRect = getRect
+		}
+	})
+
 	it("does not listen for scroll until More Styles is open", () => {
 		const addEventListener = vi.spyOn(window, "addEventListener")
 		render(

@@ -84,6 +84,24 @@ describe("getMoreStylesPopoverLayout", () => {
 		expect(viewport).toEqual({ left: 0, top: 0, width: 1667, height: 963 })
 	})
 
+	it("keeps a Xiaohongshu card toolbar panel inside the window", () => {
+		Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true })
+		Object.defineProperty(window, "innerHeight", { value: 900, configurable: true })
+		const trigger = { left: 868, top: 236, width: 88, height: 32 }
+		const selection = { left: 460, top: 280, width: 400, height: 24 }
+		const canvas = { left: 420, top: 120, width: 480, height: 640 }
+		const viewport = getMoreStylesViewport(canvas)
+
+		const result = getMoreStylesPopoverLayout(trigger, selection, viewport, panel)
+
+		expect(result.width).toBeGreaterThanOrEqual(240)
+		expect(result.height).toBeGreaterThanOrEqual(160)
+		expect(result.left).toBeGreaterThanOrEqual(viewport.left)
+		expect(result.top).toBeGreaterThanOrEqual(viewport.top)
+		expect(result.left + result.width).toBeLessThanOrEqual(viewport.left + viewport.width)
+		expect(result.top + result.height).toBeLessThanOrEqual(viewport.top + viewport.height)
+	})
+
 	it("opens to the right of a right-edge trigger and may exceed the canvas", () => {
 		Object.defineProperty(window, "innerWidth", { value: 1667, configurable: true })
 		Object.defineProperty(window, "innerHeight", { value: 963, configurable: true })
