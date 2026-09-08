@@ -339,6 +339,25 @@ class SkillApi extends AbstractApi
         return $response;
     }
 
+    /** 创建异步发布任务。 */
+    public function publishSkillAsync(RequestContext $requestContext, string $code): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        return $this->userSkillAppService->createAsyncPublishSkill(
+            $requestContext,
+            $code,
+            PublishSkillRequestDTO::fromRequest($this->request)
+        );
+    }
+
+    /** 查询异步发布任务。 */
+    public function checkPublishAsync(RequestContext $requestContext, string $code): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        $taskId = (string) $this->request->input('publish_task_id', $this->request->input('task_id', ''));
+        return $this->userSkillAppService->checkAsyncPublishSkill($requestContext, $code, $taskId);
+    }
+
     public function getVersionList(RequestContext $requestContext, string $code): array
     {
         $requestContext->setUserAuthorization($this->getAuthorization());

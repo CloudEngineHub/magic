@@ -437,6 +437,49 @@ readonly class SuperMagicAgentDomainService
         return $response->toArray();
     }
 
+    /** 创建异步 Agent 工作区导出任务。 */
+    public function createAgentWorkspaceExportAsync(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $code,
+        string $sandboxId,
+        string $sourcePath,
+        string $fileName,
+        string $taskKey
+    ): array {
+        $uploadConfig = $this->cloudFileRepository->getStsTemporaryCredential(
+            $dataIsolation->getCurrentOrganizationCode(),
+            StorageBucketType::Private,
+            '/agent_export',
+            options: ['internal_endpoint' => true]
+        );
+        $request = new ExportWorkspaceRequest(
+            ProjectMode::AGENT_CREATOR->value,
+            $code,
+            $uploadConfig,
+            $sourcePath,
+            $code,
+            $fileName,
+        );
+        $contactDataIsolation = DataIsolation::create(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId()
+        );
+        return $this->workspaceExporter->createAsync($contactDataIsolation, $sandboxId, $request, $taskKey)->toArray();
+    }
+
+    /** 查询异步 Agent 工作区导出任务。 */
+    public function checkAgentWorkspaceExportAsync(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $sandboxId,
+        string $taskKey
+    ): array {
+        $contactDataIsolation = DataIsolation::create(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId()
+        );
+        return $this->workspaceExporter->checkAsync($contactDataIsolation, $sandboxId, $taskKey)->toArray();
+    }
+
     /**
      * 雇用市场员工（从市场添加到用户员工列表）.
      *

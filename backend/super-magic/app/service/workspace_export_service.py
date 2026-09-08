@@ -8,11 +8,12 @@ metadata 供上游写入数据库，由前端用于展示和检索。
 """
 
 import os
+import asyncio
 import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 import yaml
 from loguru import logger
@@ -227,6 +228,7 @@ async def _package_and_upload(
     file_key: str,
     upload_config: Dict[str, Any],
     arcdir: str = "",
+    on_package_completed: Callable[[], Awaitable[None]] | None = None,
 ) -> None:
     """Zip workspace_dir contents and upload the archive to object storage.
 
@@ -264,7 +266,9 @@ async def _package_and_upload(
 
     try:
         logger.info(f"Creating workspace ZIP from {workspace_dir} → {tmp_path} (arcdir={arcdir!r})")
-        _zip_directory(workspace_dir, tmp_path, arcdir=arcdir)
+        await asyncio.to_thread(_zip_directory, workspace_dir, tmp_path, arcdir=arcdir)
+        if on_package_completed is not None:
+            await on_package_completed()
 
         if platform == PlatformType.tos:
             credentials = VolcEngineCredentials(**upload_config)
@@ -304,6 +308,7 @@ async def export_workspace(
     source_path: str = "",
     archive_root: str = "",
     file_name: str = "",
+    progress_callback: Callable[[], Awaitable[None]] | None = None,
 ) -> Dict[str, Any]:
     """Package the workspace, upload it, and return the file key with extracted metadata.
 
@@ -400,7 +405,13 @@ async def export_workspace(
 
     # Package and upload.
     # arcdir=code means the ZIP extracts to a folder named after code (without timestamp).
-    await _package_and_upload(workspace_dir, file_key, upload_config, arcdir=archive_root or code)
+    await _package_and_upload(
+        workspace_dir,
+        file_key,
+        upload_config,
+        arcdir=archive_root or code,
+        on_package_completed=progress_callback,
+    )
 
     return {
         "file_key": file_key,

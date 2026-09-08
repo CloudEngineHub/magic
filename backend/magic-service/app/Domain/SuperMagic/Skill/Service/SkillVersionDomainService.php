@@ -245,7 +245,8 @@ class SkillVersionDomainService
     public function publishSkill(
         SkillDataIsolation $dataIsolation,
         SkillEntity $skillEntity,
-        SkillVersionEntity $versionEntity
+        SkillVersionEntity $versionEntity,
+        bool $prepareOnly = false
     ): SkillVersionEntity {
         if ($skillEntity->getSourceType()->isMarket()) {
             ExceptionBuilder::throw(SkillErrorCode::STORE_SKILL_CANNOT_PUBLISH, 'skill.store_skill_cannot_publish');
@@ -291,10 +292,18 @@ class SkillVersionDomainService
         $versionEntity->setDescriptionI18n($skillEntity->getDescriptionI18n());
         $versionEntity->setSourceI18n($skillEntity->getSourceI18n());
         $versionEntity->setLogo($logoPath ?: null);
-        $versionEntity->setFileKey($skillEntity->getFileKey());
+        $versionEntity->setFileKey($prepareOnly ? null : $skillEntity->getFileKey());
         $versionEntity->setSourceType($skillEntity->getSourceType());
         $versionEntity->setProjectId($skillEntity->getProjectId());
         $versionEntity->setPublisherUserId($dataIsolation->getCurrentUserId());
+
+        if ($prepareOnly) {
+            $versionEntity->setPublishStatus(PublishStatus::PUBLISHING);
+            $versionEntity->setReviewStatus(ReviewStatus::PENDING);
+            $versionEntity->setPublishedAt(null);
+            $versionEntity->setIsCurrentVersion(false);
+            return $this->saveSkillVersion($dataIsolation, $versionEntity);
+        }
 
         if ($publishTargetType === PublishTargetType::PRIVATE) {
             $versionEntity->setPublishStatus(PublishStatus::PUBLISHED);
@@ -343,6 +352,42 @@ class SkillVersionDomainService
         return $versionEntity;
     }
 
+    /** 将已完成 Sandbox 导出的 Skill 版本落库。 */
+    public function finalizePreparedSkill(
+        SkillDataIsolation $dataIsolation,
+        int $versionId,
+        string $fileKey
+    ): SkillVersionEntity {
+        $versionEntity = $this->skillVersionRepository->findByIdForUpdate($dataIsolation, $versionId);
+        if ($versionEntity === null) {
+            ExceptionBuilder::throw(SkillErrorCode::SKILL_VERSION_NOT_FOUND, 'skill.version_not_found');
+        }
+        if (! $versionEntity->getPublishStatus()->isPublishing()) {
+            return $versionEntity;
+        }
+
+        $versionEntity->setFileKey($fileKey);
+        if ($versionEntity->getPublishTargetType() === PublishTargetType::PRIVATE) {
+            $this->skillVersionRepository->clearCurrentVersion($dataIsolation, $versionEntity->getCode());
+            $versionEntity->setPublishStatus(PublishStatus::PUBLISHED);
+            $versionEntity->setReviewStatus(ReviewStatus::APPROVED);
+            $versionEntity->setPublishedAt(date('Y-m-d H:i:s'));
+            $versionEntity->setIsCurrentVersion(true);
+        } else {
+            $versionEntity->setPublishStatus(PublishStatus::UNPUBLISHED);
+            $versionEntity->setReviewStatus(ReviewStatus::UNDER_REVIEW);
+            $versionEntity->setPublishedAt(null);
+            $versionEntity->setIsCurrentVersion(false);
+        }
+        $versionEntity = $this->skillVersionRepository->save($dataIsolation, $versionEntity);
+        $skillEntity = $this->skillRepository->findByCode($dataIsolation, $versionEntity->getCode());
+        if ($skillEntity !== null) {
+            $skillEntity->setLatestPublishedAt(date('Y-m-d H:i:s'));
+            $this->skillRepository->save($dataIsolation, $skillEntity);
+        }
+        return $versionEntity;
+    }
+
     /**
      * @return array{list: SkillVersionEntity[], total: int}
      */
@@ -351,7 +396,8 @@ class SkillVersionDomainService
         string $code,
         ?PublishTargetType $publishTargetType = null,
         ?ReviewStatus $reviewStatus = null,
-        Page $page = new Page()
+        Page $page = new Page(),
+        bool $includePublishing = false
     ): array {
         $skillEntity = $this->getSkillByCodeOrFail($dataIsolation, $code);
         if ($skillEntity->getSourceType()->isMarket()) {
@@ -363,7 +409,8 @@ class SkillVersionDomainService
             $code,
             $publishTargetType,
             $reviewStatus,
-            $page
+            $page,
+            $includePublishing
         );
     }
 
