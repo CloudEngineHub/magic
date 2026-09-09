@@ -421,6 +421,47 @@ describe("TopicDesktopPanels", () => {
 		expect(screen.getByTestId("topic-history-panel-fixed")).toBeInTheDocument()
 	})
 
+	it("普通分栏为详情、拖拽条和会话建立稳定层级", () => {
+		renderComponent()
+
+		expect(screen.getByTestId("topic-detail-panel-slot")).toHaveClass(
+			"relative",
+			"overflow-hidden",
+			"isolate",
+			"z-0",
+		)
+		expect(screen.getByTestId("topic-detail-resize-handle-slot")).toHaveClass(
+			"relative",
+			"z-20",
+			"overflow-visible",
+		)
+		expect(screen.getByTestId("topic-conversation-panel-slot")).toHaveClass("relative", "z-10")
+	})
+
+	it("详情 wrapper 始终跟随动态 slot 宽度并覆盖调用方最小宽度", () => {
+		renderComponent()
+
+		expect(screen.getByTestId("detail-panel-wrapper")).toHaveStyle({
+			width: "100%",
+			minWidth: "0",
+			maxWidth: "100%",
+		})
+	})
+
+	it("详情全屏时不应用普通分栏的隔离层级", () => {
+		renderComponent({ isDetailPanelFullscreen: true })
+
+		const detailSlot = screen.getByTestId("topic-detail-panel-slot")
+		const detailWrapper = screen.getByTestId("detail-panel-wrapper")
+		expect(detailSlot).toHaveClass("relative", "overflow-hidden")
+		expect(detailSlot).not.toHaveClass("isolate", "z-0")
+		expect(detailWrapper).not.toHaveStyle({
+			width: "100%",
+			minWidth: "0",
+			maxWidth: "100%",
+		})
+	})
+
 	it("有详情区时保持 detail -> handle -> conversation -> topic history 的顺序", () => {
 		renderComponent()
 
