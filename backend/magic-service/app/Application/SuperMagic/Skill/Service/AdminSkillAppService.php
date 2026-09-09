@@ -145,7 +145,7 @@ class AdminSkillAppService extends AbstractSkillAppService
         $dataIsolation = $this->createSkillDataIsolation($requestContext->getUserAuthorization());
         $dataIsolation->disabled();
         $afterId = 0;
-        $total = $updated = $failed = 0;
+        $total = $updated = $skipped = $failed = 0;
         $errors = [];
         while (true) {
             $batch = $this->skillMarketDomainService->findPublishedWithoutSkillFileByIdCursor($afterId);
@@ -160,6 +160,18 @@ class AdminSkillAppService extends AbstractSkillAppService
             $versions = $this->skillVersionDomainService->findSkillVersionsByIdsWithoutOrganizationFilter($versionIds);
             $total += count($versions);
             foreach ($versions as $version) {
+                $fileKey = $version->getFileKey();
+                if ($fileKey === null || trim($fileKey) === '') {
+                    ++$skipped;
+                    $this->logger->info('Skill file URL repair skipped', [
+                        'version_id' => $version->getId(),
+                        'skill_code' => $version->getCode(),
+                        'source_type' => $version->getSourceType()->value,
+                        'reason' => 'empty_file_key',
+                    ]);
+                    continue;
+                }
+
                 try {
                     $version->setSkillFileKey($this->uploadSkillFileFromPackage($version));
                     $this->skillVersionDomainService->saveSkillVersion($dataIsolation, $version);
@@ -178,7 +190,7 @@ class AdminSkillAppService extends AbstractSkillAppService
             $afterId = (int) $batch[array_key_last($batch)]->getId();
         }
 
-        return ['total' => $total, 'updated' => $updated, 'failed' => $failed, 'errors' => $errors];
+        return ['total' => $total, 'updated' => $updated, 'skipped' => $skipped, 'failed' => $failed, 'errors' => $errors];
     }
 
     public function repairSkillFileUrlsAsync(MagicUserAuthorization $authorization): void

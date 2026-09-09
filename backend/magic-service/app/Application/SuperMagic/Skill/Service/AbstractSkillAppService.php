@@ -39,6 +39,7 @@ use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\Di\Annotation\Inject;
 use Hyperf\Redis\Redis;
+use RuntimeException;
 
 /**
  * Skill 应用服务抽象基类.
@@ -78,10 +79,15 @@ abstract class AbstractSkillAppService extends AbstractKernelAppService
      */
     protected function uploadSkillFileFromPackage(SkillVersionEntity $version): string
     {
+        $fileKey = $version->getFileKey();
+        if ($fileKey === null || trim($fileKey) === '') {
+            throw new RuntimeException('Skill package file_key is empty');
+        }
+
         $archive = TemporaryFileManager::createTempFile('skill-package-');
         $filePath = TemporaryFileManager::createTempFile('skill-file-');
         try {
-            $this->fileDomainService->downloadByChunks($version->getOrganizationCode(), $version->getFileKey(), $archive, StorageBucketType::Private);
+            $this->fileDomainService->downloadByChunks($version->getOrganizationCode(), $fileKey, $archive, StorageBucketType::Private);
             ZipUtil::extractFile($archive, self::SKILL_FILE_NAME, $filePath);
             $upload = new UploadFile($filePath, 'skills/' . $version->getCode() . '/versions/' . $version->getId(), self::SKILL_FILE_NAME, false);
             $this->fileDomainService->uploadByCredential($version->getOrganizationCode(), $upload, StorageBucketType::Private, false);
