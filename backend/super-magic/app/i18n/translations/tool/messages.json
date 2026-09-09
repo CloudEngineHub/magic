@@ -2187,6 +2187,112 @@
         "zh_CN": "等待智能体失败: {{error}}",
         "en_US": "Failed while waiting for Agents: {{error}}"
     },
+    "chat_history.history_root": {
+        "zh_CN": "历史根目录（只读）：{{root}}",
+        "en_US": "History root (read-only): {{root}}"
+    },
+    "chat_history.history_type.current": {
+        "zh_CN": "当前对话",
+        "en_US": "Current conversation"
+    },
+    "chat_history.history_type.compacted": {
+        "zh_CN": "压缩前记录",
+        "en_US": "Compacted history"
+    },
+    "chat_history.history_type.subagent": {
+        "zh_CN": "子任务记录",
+        "en_US": "Subagent history"
+    },
+    "chat_history.message_type.user_input": {
+        "zh_CN": "用户输入",
+        "en_US": "User input"
+    },
+    "chat_history.message_type.user": {
+        "zh_CN": "用户角色消息",
+        "en_US": "User role message"
+    },
+    "chat_history.message_type.assistant": {
+        "zh_CN": "助手回复",
+        "en_US": "Assistant reply"
+    },
+    "chat_history.message_type.tool": {
+        "zh_CN": "工具结果",
+        "en_US": "Tool result"
+    },
+    "chat_history.message_type.system": {
+        "zh_CN": "系统消息",
+        "en_US": "System message"
+    },
+    "chat_history.status.idle": {"zh_CN": "空闲", "en_US": "Idle"},
+    "chat_history.status.pending": {"zh_CN": "等待中", "en_US": "Pending"},
+    "chat_history.status.running": {"zh_CN": "运行中", "en_US": "Running"},
+    "chat_history.status.interrupted": {"zh_CN": "已中断", "en_US": "Interrupted"},
+    "chat_history.status.done": {"zh_CN": "已完成", "en_US": "Done"},
+    "chat_history.status.error": {"zh_CN": "失败", "en_US": "Error"},
+    "chat_history.range.unlimited": {"zh_CN": "不限制时间", "en_US": "No time limit"},
+    "chat_history.range.beginning": {"zh_CN": "起始时间", "en_US": "the beginning"},
+    "chat_history.range.now": {"zh_CN": "当前时间", "en_US": "now"},
+    "chat_history.range.value": {"zh_CN": "{{start}} 至 {{end}}", "en_US": "{{start}} to {{end}}"},
+    "chat_history.time_unavailable": {"zh_CN": "时间不可用", "en_US": "Time unavailable"},
+    "chat_history.field.type": {"zh_CN": "类型", "en_US": "Type"},
+    "chat_history.field.history_file": {"zh_CN": "记录文件", "en_US": "History file"},
+    "chat_history.field.modified": {"zh_CN": "更新时间", "en_US": "Modified"},
+    "chat_history.field.size": {"zh_CN": "大小", "en_US": "Size"},
+    "chat_history.field.status": {"zh_CN": "状态", "en_US": "Status"},
+    "chat_history.field.finished": {"zh_CN": "完成时间", "en_US": "Finished"},
+    "chat_history.field.result": {"zh_CN": "摘要", "en_US": "Summary"},
+    "chat_history.field.range": {"zh_CN": "时间范围", "en_US": "Time range"},
+    "chat_history.field.candidate_files": {"zh_CN": "候选记录", "en_US": "Candidate files"},
+    "chat_history.field.searched_files": {"zh_CN": "实际搜索", "en_US": "Searched files"},
+    "chat_history.field.returned": {"zh_CN": "本次返回", "en_US": "Returned"},
+    "chat_history.field.time": {"zh_CN": "时间", "en_US": "Time"},
+    "chat_history.field.time_filter": {"zh_CN": "时间筛选", "en_US": "Time filter"},
+    "chat_history.field.matched": {"zh_CN": "范围内匹配", "en_US": "Matched in range"},
+    "chat_history.empty_message": {"zh_CN": "（空消息）", "en_US": "(empty message)"},
+    "chat_history.detail_truncated": {"zh_CN": "详情展示已缩略。", "en_US": "The detail preview was shortened."},
+    "chat_history.list.before": {"zh_CN": "正在查看可用聊天记录", "en_US": "Inspecting available chat history"},
+    "chat_history.list.after": {"zh_CN": "找到 {{total}} 份记录，本次展示 {{returned}} 份", "en_US": "Found {{total}} history file(s); showing {{returned}}"},
+    "chat_history.list.empty": {"zh_CN": "当前筛选范围内没有聊天记录。", "en_US": "No chat history matched the selected filters."},
+    "chat_history.list.failed": {"zh_CN": "聊天记录查询未完成", "en_US": "Chat history lookup did not complete"},
+    "chat_history.list.truncated": {"zh_CN": "结果受到数量限制，可能还有其它记录。", "en_US": "The result was limited; more history files may exist."},
+    "chat_history.list.detail_title": {"zh_CN": "聊天记录清单", "en_US": "Chat history inventory"},
+    "chat_history.list.detail_summary": {"zh_CN": "找到 {{total}} 份记录，本次展示 {{returned}} 份。", "en_US": "Found {{total}} history file(s); showing {{returned}}."},
+    "chat_history.list.detail_inventory": {"zh_CN": "当前对话 {{current}} 份 · 压缩前记录 {{compacted}} 份 · 子任务记录 {{subagent}} 份。", "en_US": "Current {{current}} · compacted {{compacted}} · subagent {{subagent}}."},
+    "chat_history.search.before": {"zh_CN": "正在筛选历史消息", "en_US": "Filtering history messages"},
+    "chat_history.search.before_pattern": {"zh_CN": "正在查找「{{pattern}}」", "en_US": "Searching for “{{pattern}}”"},
+    "chat_history.search.after": {"zh_CN": "本次返回 {{returned}} 条消息", "en_US": "Returned {{returned}} message(s)"},
+    "chat_history.search.empty": {"zh_CN": "在本次已搜索的记录中没有找到符合条件的消息。", "en_US": "No matching messages were found in the searched history."},
+    "chat_history.search.failed": {"zh_CN": "聊天记录搜索未完成", "en_US": "Chat history search did not complete"},
+    "chat_history.search.skipped": {"zh_CN": "另有 {{count}} 份记录因文件过大未搜索，结果可能不完整。", "en_US": "{{count}} oversized file(s) were skipped, so the search may be incomplete."},
+    "chat_history.search.truncated": {"zh_CN": "已达到返回数量上限，可能还有其它匹配。", "en_US": "The result limit was reached; more matches may exist."},
+    "chat_history.search.detail_title": {"zh_CN": "聊天记录搜索结果", "en_US": "Chat history search results"},
+    "chat_history.search.message_heading": {"zh_CN": "消息 {{index}}", "en_US": "Message {{index}}"},
+    "chat_history.read.before": {"zh_CN": "正在读取消息 {{start}}–{{end}}", "en_US": "Reading messages {{start}}–{{end}}"},
+    "chat_history.read.after": {"zh_CN": "消息 {{start}}–{{end}}，返回 {{returned}} 条消息", "en_US": "Messages {{start}}–{{end}}, returned {{returned}} message(s)"},
+    "chat_history.read.failed": {"zh_CN": "聊天记录读取未完成", "en_US": "Chat history read did not complete"},
+    "chat_history.read.empty": {"zh_CN": "所选范围内没有符合筛选条件的消息。", "en_US": "No messages matched within the selected range."},
+    "chat_history.read.detail_title": {"zh_CN": "聊天记录片段", "en_US": "Chat history excerpt"},
+    "chat_history.read.range": {"zh_CN": "消息 {{start}}–{{end}}（原始编号，从 0 开始）", "en_US": "Messages {{start}}–{{end}} (original zero-based indexes)"},
+    "chat_history.read.message_heading": {"zh_CN": "消息 {{index}}", "en_US": "Message {{index}}"},
+    "chat_history.read.message_truncated": {"zh_CN": "该消息内容在本次输出中被截短。", "en_US": "This message was truncated in the current output."},
+    "chat_history.read.output_truncated": {"zh_CN": "本次输出已达到字符限制，详情不代表完整读取整个范围。", "en_US": "The output reached its character limit; the detail does not represent the complete range."},
+    "chat_history.read.detail_unavailable": {"zh_CN": "详情暂不可用。", "en_US": "The detail is temporarily unavailable."},
+    "chat_history.error.suggestion": {"zh_CN": "请调整筛选条件或记录范围后重试。", "en_US": "Adjust the filters or history range and try again."},
+    "chat_history.list.error_title": {"zh_CN": "聊天记录列表未完成", "en_US": "Chat history list incomplete"},
+    "chat_history.search.error_title": {"zh_CN": "聊天记录搜索未完成", "en_US": "Chat history search incomplete"},
+    "chat_history.read.error_title": {"zh_CN": "聊天记录读取未完成", "en_US": "Chat history read incomplete"},
+    "chat_history.error.unavailable.title": {"zh_CN": "当前无法查询聊天记录", "en_US": "Chat history is unavailable here"},
+    "chat_history.error.unavailable.description": {"zh_CN": "当前执行环境无法查询聊天记录。", "en_US": "This execution context cannot query chat history."},
+    "chat_history.error.timeout.title": {"zh_CN": "聊天记录查询超时", "en_US": "Chat history query timed out"},
+    "chat_history.error.timeout.description": {"zh_CN": "聊天记录查询超时，请缩小范围后重试。", "en_US": "The chat history query timed out. Narrow the range and try again."},
+    "chat_history.error.invalid_record.title": {"zh_CN": "聊天记录暂时无法读取", "en_US": "Chat history could not be read"},
+    "chat_history.error.invalid_record.description": {"zh_CN": "所选聊天记录格式暂时无法读取。", "en_US": "The selected history record could not be read in its current format."},
+    "chat_history.error.access_failed.title": {"zh_CN": "暂时无法访问聊天记录", "en_US": "Chat history could not be accessed"},
+    "chat_history.error.access_failed.description": {"zh_CN": "暂时无法访问所选聊天记录。", "en_US": "The selected chat history could not be accessed."},
+    "chat_history.error.invalid_query.title": {"zh_CN": "查询条件无法处理", "en_US": "The query could not be processed"},
+    "chat_history.error.invalid_query.description": {"zh_CN": "查询条件无法处理。", "en_US": "The selected query could not be processed."},
+    "chat_history.error.unknown.title": {"zh_CN": "聊天记录查询未完成", "en_US": "Chat history query incomplete"},
+    "chat_history.error.unknown.description": {"zh_CN": "聊天记录查询未完成，请检查条件后重试。", "en_US": "The chat history query did not complete. Check the conditions and try again."},
     "compact_chat_history.remark": {
         "zh_CN": "当前对话内容过长，「{{agent_name}}」将整理自己的记忆，可能导致先前对话中的一些细节被遗忘；太长的对话会影响「{{agent_name}}」的工作效率",
         "en_US": "Current conversation is too long. {{agent_name}} will organize its memory, which may cause some details from previous conversations to be forgotten. Long conversations will affect {{agent_name}}'s work efficiency."

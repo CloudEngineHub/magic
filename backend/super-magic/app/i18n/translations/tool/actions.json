@@ -403,6 +403,18 @@
         "zh_CN": "整理对话内容",
         "en_US": "Compact chat history"
     },
+    "list_chat_history": {
+        "zh_CN": "查看聊天记录",
+        "en_US": "List chat history"
+    },
+    "search_chat_history": {
+        "zh_CN": "搜索聊天记录",
+        "en_US": "Search chat history"
+    },
+    "read_chat_history": {
+        "zh_CN": "读取聊天记录",
+        "en_US": "Read chat history"
+    },
     "read_skills": {
         "zh_CN": "装备技能",
         "en_US": "Equip Skill"
