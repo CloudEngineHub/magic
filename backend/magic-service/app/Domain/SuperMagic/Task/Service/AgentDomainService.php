@@ -1841,6 +1841,7 @@ class AgentDomainService
             'profile' => [
                 'code' => $entity->getCode(),
                 'name' => $entity->getName(),
+                'user_facing_name' => $entity->getName(),
                 'description' => $entity->getDescription(),
                 'template_code' => $entity->getTemplateCode(),
             ],
@@ -1869,6 +1870,7 @@ class AgentDomainService
             'profile' => [
                 'code' => $entity->getCode(),
                 'name' => $entity->getI18nName($language),
+                'user_facing_name' => $entity->getI18nName($language),
                 'description' => $entity->getI18nDescription($language),
             ],
         ];
@@ -1895,6 +1897,7 @@ class AgentDomainService
             'profile' => [
                 'code' => $entity->getCode(),
                 'name' => $entity->getI18nName($language),
+                'user_facing_name' => $entity->getI18nName($language),
                 'description' => $entity->getI18nDescription($language),
                 'role' => $entity->getI18nRole($language),
             ],

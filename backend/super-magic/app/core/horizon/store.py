@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Optional
 
 from agentlang.logger import get_logger
+from app.core.entity.user_context import UserContextSnapshot
+from app.core.horizon.profile_context import AgentIdentityState
 from app.core.horizon.migration import CURRENT_VERSION, apply_migrations
 from app.core.horizon.models import (
     BrowserPageObservation,
@@ -204,6 +206,10 @@ def _encode_state(state: HorizonState) -> dict:
     data = {
         "version": CURRENT_VERSION,
         "agent_id": state.agent_id,
+        "user_context": state.user_context.model_dump(mode="json") if state.user_context else None,
+        "user_context_baseline": state.user_context_baseline.model_dump(mode="json") if state.user_context_baseline else None,
+        "user_context_auto_fetch_attempted": state.user_context_auto_fetch_attempted,
+        "agent_identity": state.agent_identity.model_dump(mode="json") if state.agent_identity else None,
         "loaded_skills": state.loaded_skills,
         "pending_notifications": [_notif_to_dict(n) for n in state.pending_notifications],
         "pending_resumptions": [_resumption_to_dict(r) for r in state.pending_resumptions],
@@ -246,6 +252,10 @@ def _decode_state(data: dict) -> HorizonState:
     恢复逻辑。
     """
     decoded_fields = {
+        "user_context",
+        "user_context_baseline",
+        "user_context_auto_fetch_attempted",
+        "agent_identity",
         "agent_id",
         "file_records",
         "pending_notifications",
@@ -273,6 +283,13 @@ def _decode_state(data: dict) -> HorizonState:
     _assert_codec_covers_horizon_state("decoder", decoded_fields)
 
     state = HorizonState(agent_id=data.get("agent_id", ""))
+    if data.get("user_context") is not None:
+        state.user_context = UserContextSnapshot.model_validate(data["user_context"])
+    if data.get("user_context_baseline") is not None:
+        state.user_context_baseline = UserContextSnapshot.model_validate(data["user_context_baseline"])
+    state.user_context_auto_fetch_attempted = bool(data.get("user_context_auto_fetch_attempted", False))
+    if data.get("agent_identity") is not None:
+        state.agent_identity = AgentIdentityState.model_validate(data["agent_identity"])
     state.loaded_skills = data.get("loaded_skills", [])
     state.pending_notifications = [
         _notif_from_dict(notification)

@@ -522,6 +522,35 @@ xattr 缺失说明文件尚未与对象存储同步完成，应直接抛错让�
 
 ## 20. 每次改动前自检
 
+### 运行周期术语
+
+| 术语 | 本项目中的含义 | 边界 |
+|---|---|---|
+| 业务任务 Task | Magic Service 的任务记录；metadata.super_magic_task_id | 与一次运行有关联，恢复和系统运行时不能假设严格一一对应 |
+| 完整 Agent Loop／Main Run | 主 Agent 接受一次 AgentRunRequest，完成其中全部推理、工具调用和结果检查，直到终态 | 对应 Claude Code、Codex 产品交互层的一个 Turn |
+| 核心循环 | Agent._handle_agent_loop | 负责 Loop 内反复执行；外层还有会话准备和清理 |
+| 循环迭代 | 核心循环中的一个重复步骤 | 一个完整 Loop 可以有多次迭代 |
+| 模型请求 LLM request | 对模型服务的一次请求 | 重试、压缩或内部调用不能视为主 Loop 完成 |
+| 工具批次 | 一次模型输出中的工具调用及执行结果 | 不是完整主运行的边界 |
+| asyncio.Task | Python 并发调度对象 | 不能与业务 Task 或 Main Run 混用 |
+
+例如：用户提出问题 → 模型调用工具 → 检查结果并再次调用工具 → 最终回复，
+是一次完整 Agent Loop，即一次 Main Run。用户资料首次查询后，只在完整主 Loop
+正常结束时自动刷新一次，不随内部工具批次、重试或附件发送次数刷新。
+
+外部术语必须注明来源和层次。Claude Agent SDK 的 turn 表示 Loop 内一次模型／工具往返，
+比产品层 Turn 小；外层 Goal、定时或主动 Loop 又可能跨多个 Main Run。
+此对应关系不要求重命名现有代码、事件或新增 loop_id／turn_id。
+
+官方定义：
+
+- [Claude Code 团队：Getting started with loops](https://x.com/ClaudeDevs/status/2074208949205881033)：重复工作直到满足停止条件；普通提示触发的全过程称为 agentic loop。
+- [Claude Code Glossary：Turn](https://code.claude.com/docs/en/glossary#turn)：从用户发消息到完成回复，期间允许任意多次工具调用。
+- [Codex App Server：Core primitives](https://developers.openai.com/codex/app-server/#core-primitives)：一个用户请求及其后续 Agent 工作。
+- [Claude Agent SDK：Turns and messages](https://code.claude.com/docs/en/agent-sdk/agent-loop#turns-and-messages)：turn 是 Loop 内一次往返。
+
+### 修改检查
+
 - 这是在解决真实问题，还是在满足抽象冲动？
 - 这层包装有没有新增语义？
 - 这套命名是否贴合现有项目风格？
