@@ -105,13 +105,16 @@ export function useTopicDetailPanelController({
 	useEffect(() => {
 		const handleOpenFileTab = (data: unknown) => {
 			const payload = data as { fileId: string; fileData?: unknown }
+			// On open failure, restore the prior tab type instead of clearing the panel.
+			const fallbackTabType = activeDetailTabTypeRef.current
+			setActiveDetailTabType("file")
 			window.setTimeout(() => {
 				// Allow messages to pass temporary fileData through the detail panel open flow.
 				detailRef.current?.openFileTab?.(
 					payload.fileData ?? payload.fileData ?? { file_id: payload.fileId },
 				)
 			}, DETAIL_OPEN_DELAY_MS)
-			scheduleFileOpenFallback()
+			scheduleFileOpenFallback(fallbackTabType)
 		}
 
 		const handleOpenPlaybackTab = (toolData: unknown) => {

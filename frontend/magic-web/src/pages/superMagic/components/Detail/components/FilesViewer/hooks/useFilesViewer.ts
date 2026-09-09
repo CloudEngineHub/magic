@@ -1626,8 +1626,10 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 	// Notify parent when active tab changes
 	useEffect(() => {
-		// 知识库tab和回放tab没有fileId，不需要通知parent文件变更
+		// Playback/KB clear parent activeFileId separately. Reset lastNotified so
+		// switching back to the same file tab re-syncs the parent.
 		if (activeTabType === "knowledge_base" || activeTabType === "playback") {
+			lastNotifiedActiveFileIdRef.current = undefined
 			return
 		}
 
