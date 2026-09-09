@@ -644,7 +644,7 @@ class VideoOperationAppServiceTest extends TestCase
         $operationRepository = new InMemoryVideoQueueOperationRepository();
         $executor = new RecordingQueueOperationExecutor(
             submitResult: 'unused',
-            submitThrowable: ProviderVideoException::nonRetriable('provider submit failed'),
+            submitThrowable: new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'provider submit failed'),
         );
         $service = $this->createVideoOperationAppService($operationRepository, $executor);
 
@@ -693,7 +693,7 @@ class VideoOperationAppServiceTest extends TestCase
         $operationRepository = new InMemoryVideoQueueOperationRepository();
         $failingExecutor = new RecordingQueueOperationExecutor(
             submitResult: 'unused',
-            submitThrowable: ProviderVideoException::nonRetriable('provider submit failed'),
+            submitThrowable: new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'provider submit failed'),
         );
         $failingService = $this->createVideoOperationAppService(
             $operationRepository,
@@ -2159,7 +2159,7 @@ class VideoOperationAppServiceTest extends TestCase
                 new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
                 new RecordingQueueOperationExecutor(
                     submitResult: 'unused',
-                    submitThrowable: ProviderVideoException::nonRetriable('provider says duration_seconds=9 is invalid'),
+                    submitThrowable: new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'provider says duration_seconds=9 is invalid'),
                 ),
             ),
             $pointComponent,
@@ -2202,7 +2202,7 @@ class VideoOperationAppServiceTest extends TestCase
                 new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
                 new RecordingQueueOperationExecutor(
                     submitResult: 'unused',
-                    queryThrowable: ProviderVideoException::nonRetriable('provider says operationName is invalid'),
+                    queryThrowable: new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'provider says operationName is invalid'),
                 ),
             ),
             $this->createMock(PointComponentInterface::class),
@@ -2247,7 +2247,7 @@ class VideoOperationAppServiceTest extends TestCase
                 new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
                 new RecordingQueueOperationExecutor(
                     submitResult: 'unused',
-                    queryThrowable: ProviderVideoException::retriable('temporary provider query error'),
+                    queryThrowable: new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'temporary provider query error'),
                 ),
             ),
             $this->createMock(PointComponentInterface::class),
@@ -2284,7 +2284,7 @@ class VideoOperationAppServiceTest extends TestCase
             $operationRepository,
             new RecordingQueueOperationExecutor(
                 submitResult: 'unused',
-                queryThrowable: ProviderVideoException::nonRetriable('provider task id is invalid'),
+                queryThrowable: new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'provider task id is invalid'),
             ),
         );
 
@@ -2357,7 +2357,7 @@ class VideoOperationAppServiceTest extends TestCase
             $operationRepository,
             new RecordingQueueOperationExecutor(
                 submitResult: 'unused',
-                queryThrowable: ProviderVideoException::retriable('temporary provider query error'),
+                queryThrowable: new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'temporary provider query error'),
             ),
         );
 

@@ -7,10 +7,13 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Response;
 use Hyperf\Codec\Json;
 use Hyperf\Guzzle\ClientFactory;
 use Hyperf\Logger\LoggerFactory;
@@ -97,10 +100,11 @@ readonly class VolcengineArkVideoClient
                 'Content-Type' => 'application/json',
             ],
         ], $options);
+
         $response = match ($method) {
             'post' => $this->createClient()->post($normalizedBaseUrl . $normalizedPath, $requestOptions),
             'get' => $this->createClient()->get($normalizedBaseUrl . $normalizedPath, $requestOptions),
-            default => throw ProviderVideoException::nonRetriable(sprintf('unsupported volcengine ark video method %s', $method)),
+            default => throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, sprintf('unsupported volcengine ark video method %s', $method)),
         };
         $data = Json::decode((string) $response->getBody());
 
@@ -157,11 +161,11 @@ readonly class VolcengineArkVideoClient
                 'error' => $errorMessage,
             ]);
             $message = $this->formatRequestExceptionMessage($httpStatus ?? 0, $errorMessage);
-            $exceptionFactory = $this->isDeterministicHttpFailure($httpStatus)
-                ? ProviderVideoException::nonRetriable(...)
-                : ProviderVideoException::retriable(...);
-
-            throw $exceptionFactory($message, $exception, $httpStatus);
+            throw new ProviderVideoException(
+                $this->isDeterministicHttpFailure($httpStatus) ? VideoGenerateErrorCode::INVALID_PARAMETER : VideoGenerateErrorCode::GENERAL_ERROR,
+                $message,
+                $exception,
+            );
         } catch (ProviderVideoException $exception) {
             throw $exception;
         } catch (Throwable $throwable) {
@@ -175,10 +179,7 @@ readonly class VolcengineArkVideoClient
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
                 'error' => sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()),
             ]);
-            throw ProviderVideoException::retriable(
-                sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()),
-                $throwable,
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()), $throwable);
         }
     }
 

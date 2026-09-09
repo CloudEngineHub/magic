@@ -126,32 +126,18 @@ readonly class DashScopeVideoClient
         try {
             $data = $request();
         } catch (RequestException $exception) {
-            $httpStatus = $exception->getResponse()?->getStatusCode();
             $errorCode = ProviderVideoErrorMapper::resolveDashScope($exception);
-            $retriable = ProviderVideoErrorMapper::isRetriable($exception, $errorCode);
-            $factory = $retriable ? 'retriable' : 'nonRetriable';
-            throw ProviderVideoException::$factory(
+            throw new ProviderVideoException(
+                $errorCode,
                 $errorCode->getMessage(),
                 $exception,
-                $httpStatus,
-                (string) $errorCode->value,
             );
         } catch (Throwable $throwable) {
-            throw ProviderVideoException::retriable(
-                VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
-                $throwable,
-                null,
-                (string) VideoGenerateErrorCode::GENERAL_ERROR->value,
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $throwable);
         }
 
         if (! is_array($data)) {
-            throw ProviderVideoException::retriable(
-                VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR->getMessage(),
-                null,
-                null,
-                (string) VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR->value,
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR, VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR->getMessage());
         }
 
         $this->assertProviderSuccess($data);

@@ -118,7 +118,7 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         $response = $this->transport->createInteraction($config, $operation->getProviderPayload(), ['operation_id' => $operation->getId()]);
         $id = isset($response['id']) && is_string($response['id']) ? trim($response['id']) : '';
         if ($id === '') {
-            throw ProviderVideoException::nonRetriable('Gemini interaction id missing');
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'Gemini interaction id missing');
         }
         return $id;
     }
@@ -145,16 +145,10 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
                 return true;
             }
 
-            throw ProviderVideoException::nonRetriable(
-                $exception->getRequestException()?->getMessage() ?? $exception->getMessage(),
-                $exception->getRequestException(),
-                $exception->getHttpStatus(),
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, $exception->getRequestException()?->getMessage() ?? $exception->getMessage(), $exception->getRequestException());
         }
 
-        throw ProviderVideoException::nonRetriable(
-            'Gemini connectivity test did not receive the expected validation error',
-        );
+        throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'Gemini connectivity test did not receive the expected validation error');
     }
 
     public function query(VideoQueueOperationEntity $operation, QueueExecutorConfig $config, string $providerTaskId): array

@@ -119,7 +119,7 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
         $response = $this->transport->submitVideo($config, $operation->getProviderPayload(), $this->buildLogContext($operation));
         $taskId = $this->firstString($response['output']['task_id'] ?? null, $response['task_id'] ?? null);
         if ($taskId === null) {
-            throw ProviderVideoException::nonRetriable('dashscope submit succeeded but task id missing');
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'dashscope submit succeeded but task id missing');
         }
         return $taskId;
     }
@@ -133,7 +133,7 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
         ], ['connectivity_test' => true]);
         $taskId = $this->firstString($response['output']['task_id'] ?? null, $response['task_id'] ?? null);
         if ($taskId === null) {
-            throw ProviderVideoException::nonRetriable('Wan connectivity test task id missing');
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'Wan connectivity test task id missing');
         }
 
         $message = 'Wan connectivity test failed';
@@ -150,7 +150,7 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
             }
         }
 
-        throw ProviderVideoException::nonRetriable($message);
+        throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, $message);
     }
 
     public function query(VideoQueueOperationEntity $operation, QueueExecutorConfig $config, string $providerTaskId): array

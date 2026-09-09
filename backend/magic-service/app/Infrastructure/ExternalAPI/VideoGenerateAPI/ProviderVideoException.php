@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use GuzzleHttp\Exception\RequestException;
 use RuntimeException;
 use Throwable;
@@ -15,34 +16,23 @@ final class ProviderVideoException extends RuntimeException
 {
     private const int MAX_ORIGINAL_ERROR_MESSAGE_LENGTH = 1000;
 
-    private function __construct(
+    public function __construct(
+        VideoGenerateErrorCode $code,
         string $message,
-        private readonly bool $retriable,
-        private readonly ?int $httpStatus = null,
-        private readonly ?string $errorCode = null,
         ?Throwable $previous = null,
     ) {
-        parent::__construct($message, 0, $previous);
+        parent::__construct($message, $code->value, $previous);
     }
 
-    public static function retriable(string $message, ?Throwable $previous = null, ?int $httpStatus = null, ?string $errorCode = null): self
+    public function isRetry(): bool
     {
-        return new self($message, true, $httpStatus, $errorCode, $previous);
-    }
-
-    public static function nonRetriable(string $message, ?Throwable $previous = null, ?int $httpStatus = null, ?string $errorCode = null): self
-    {
-        return new self($message, false, $httpStatus, $errorCode, $previous);
-    }
-
-    public function isRetriable(): bool
-    {
-        return $this->retriable;
+        $status = $this->getHttpStatus();
+        return $status === null || $status < 400 || $status >= 500 || in_array($status, [408, 409, 429], true);
     }
 
     public function getHttpStatus(): ?int
     {
-        return $this->httpStatus ?? $this->getRequestException()?->getResponse()?->getStatusCode();
+        return $this->getRequestException()?->getResponse()?->getStatusCode();
     }
 
     public function getRequestException(): ?RequestException
@@ -70,9 +60,14 @@ final class ProviderVideoException extends RuntimeException
         return $content;
     }
 
-    public function getErrorCode(): ?string
+    public function getErrorCode(): string
     {
-        return $this->errorCode;
+        return (string) $this->getCode();
+    }
+
+    public function getVideoErrorCode(): VideoGenerateErrorCode
+    {
+        return VideoGenerateErrorCode::from($this->getCode());
     }
 
     public function getOriginalErrorMessage(): string

@@ -201,18 +201,10 @@ readonly class DesignGenerationTaskDomainService
         $this->repository->update($dataIsolation, $entity);
     }
 
-    public function markAsFailed(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity, string $errorMessage, ?string $errorCode = null): void
+    public function markAsFailed(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity, string $errorMessage): void
     {
         $entity->setStatus(DesignGenerationStatus::FAILED);
-
-        $sanitizePublicErrorMessage = null;
-        if ($errorCode) {
-            $sanitizePublicErrorMessage = $this->sanitizePublicErrorCode($errorCode);
-        }
-        if (is_null($sanitizePublicErrorMessage)) {
-            $sanitizePublicErrorMessage = $this->sanitizePublicErrorMessage($errorMessage);
-        }
-        $entity->setErrorMessage($sanitizePublicErrorMessage);
+        $entity->setErrorMessage($errorMessage);
         $entity->setUpdatedAt(new DateTime());
         $this->repository->update($dataIsolation, $entity);
     }
@@ -266,17 +258,6 @@ readonly class DesignGenerationTaskDomainService
         }
 
         return $this->sanitizePublicErrorMessage($message);
-    }
-
-    private function sanitizePublicErrorCode(string $errorCode): ?string
-    {
-        $errorKey = 'video.errors.' . $errorCode;
-        $errorMessage = trans($errorKey);
-        if (! is_string($errorMessage) || $errorMessage === '' || $errorMessage === $errorKey) {
-            return null;
-        }
-
-        return $errorMessage;
     }
 
     private function sanitizePublicErrorMessage(?string $message): string

@@ -300,14 +300,11 @@ final class GeminiOmni1FlashVideoAdapterTest extends TestCase
     public function testRouterSupportsConnectivityTest(): void
     {
         $transport = new GeminiFakeTransport();
-        $transport->submitException = ProviderVideoException::nonRetriable(
-            'mapped error',
-            new RequestException(
-                'provider request failed',
-                new Request('POST', 'https://gemini.example/v1/interactions'),
-                new Response(400, [], 'Video response format duration must be positive'),
-            ),
-        );
+        $transport->submitException = new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'mapped error', new RequestException(
+            'provider request failed',
+            new Request('POST', 'https://gemini.example/v1/interactions'),
+            new Response(400, [], 'Video response format duration must be positive'),
+        ));
         $router = new GeminiVideoAdapterRouter($this->adapter($transport));
 
         self::assertInstanceOf(VideoGenerationConnectivityTestableInterface::class, $router);

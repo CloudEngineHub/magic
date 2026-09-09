@@ -145,7 +145,7 @@ class VolcengineArkVideoClientTest extends TestCase
             );
             self::fail('Expected ProviderVideoException was not thrown.');
         } catch (ProviderVideoException $exception) {
-            $this->assertFalse($exception->isRetriable());
+            $this->assertFalse($exception->isRetry());
             $this->assertSame(404, $exception->getHttpStatus());
             $this->assertNotSame('', $exception->getMessage());
         }

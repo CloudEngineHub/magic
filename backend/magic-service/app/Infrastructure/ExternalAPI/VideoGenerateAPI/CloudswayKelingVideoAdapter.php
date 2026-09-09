@@ -10,6 +10,7 @@ namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
+use App\ErrorCode\VideoGenerateErrorCode;
 use Hyperf\Contract\TranslatorInterface;
 
 readonly class CloudswayKelingVideoAdapter extends AbstractCloudswayVideoAdapter
@@ -226,9 +227,7 @@ readonly class CloudswayKelingVideoAdapter extends AbstractCloudswayVideoAdapter
             $response['data']['id'] ?? null,
         );
         if ($taskId === null) {
-            throw ProviderVideoException::nonRetriable(
-                $this->extractProviderMessage($response, 'cloudsway keling submit succeeded but task id missing')
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, $this->extractProviderMessage($response, 'cloudsway keling submit succeeded but task id missing'));
         }
 
         return $taskId;

@@ -52,7 +52,7 @@ final class DashScopeVideoClientErrorTest extends TestCase
         } catch (ProviderVideoException $exception) {
             self::assertSame((string) VideoGenerateErrorCode::INVALID_PARAMETER->value, $exception->getErrorCode());
             self::assertSame('请求参数不合法，请检查后重试。', $exception->getMessage());
-            self::assertFalse($exception->isRetriable());
+            self::assertFalse($exception->isRetry());
             self::assertStringNotContainsString('provider secret details', $exception->getMessage());
         }
     }
@@ -84,7 +84,7 @@ final class DashScopeVideoClientErrorTest extends TestCase
             self::fail('Expected ProviderVideoException.');
         } catch (ProviderVideoException $exception) {
             self::assertSame((string) VideoGenerateErrorCode::INVALID_ASPECT_RATIO->value, $exception->getErrorCode());
-            self::assertFalse($exception->isRetriable());
+            self::assertFalse($exception->isRetry());
         }
     }
 
@@ -110,7 +110,7 @@ final class DashScopeVideoClientErrorTest extends TestCase
             );
             self::fail('Expected ProviderVideoException.');
         } catch (ProviderVideoException $exception) {
-            self::assertTrue($exception->isRetriable());
+            self::assertTrue($exception->isRetry());
             self::assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $exception->getErrorCode());
         }
     }
@@ -137,7 +137,7 @@ final class DashScopeVideoClientErrorTest extends TestCase
             );
             self::fail('Expected ProviderVideoException.');
         } catch (ProviderVideoException $exception) {
-            self::assertTrue($exception->isRetriable());
+            self::assertTrue($exception->isRetry());
             self::assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $exception->getErrorCode());
         }
     }

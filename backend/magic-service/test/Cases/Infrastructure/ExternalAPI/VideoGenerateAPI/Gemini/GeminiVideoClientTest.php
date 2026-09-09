@@ -114,7 +114,7 @@ final class GeminiVideoClientTest extends TestCase
             self::fail('Expected ProviderVideoException.');
         } catch (ProviderVideoException $exception) {
             self::assertSame((string) $errorCode, $exception->getErrorCode());
-            self::assertFalse($exception->isRetriable());
+            self::assertFalse($exception->isRetry());
             self::assertStringNotContainsString('secret', $exception->getMessage());
         }
     }
@@ -146,7 +146,7 @@ final class GeminiVideoClientTest extends TestCase
                 (new GeminiVideoClient($clientFactory, $loggerFactory))->get('https://gemini.example/v1', 'key', '/interactions/i-1');
                 self::fail('Expected ProviderVideoException.');
             } catch (ProviderVideoException $exception) {
-                self::assertTrue($exception->isRetriable());
+                self::assertTrue($exception->isRetry());
                 self::assertSame((string) $expectedCode->value, $exception->getErrorCode());
             }
         }
@@ -229,7 +229,7 @@ final class GeminiVideoClientTest extends TestCase
                 (new GeminiVideoClient($clientFactory, $loggerFactory))->post('https://gemini.example/v1', 'key', '/interactions', []);
                 self::fail('Expected ProviderVideoException.');
             } catch (ProviderVideoException $exception) {
-                self::assertTrue($exception->isRetriable());
+                self::assertTrue($exception->isRetry());
                 self::assertSame((string) VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR->value, $exception->getErrorCode());
             }
         }
@@ -248,7 +248,7 @@ final class GeminiVideoClientTest extends TestCase
             (new GeminiVideoClient($clientFactory, $loggerFactory))->get('https://gemini.example/v1', 'key', '/interactions/i-1');
             self::fail('Expected ProviderVideoException.');
         } catch (ProviderVideoException $exception) {
-            self::assertTrue($exception->isRetriable());
+            self::assertTrue($exception->isRetry());
             self::assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $exception->getErrorCode());
             self::assertStringNotContainsString('provider network secret', $exception->getMessage());
         }

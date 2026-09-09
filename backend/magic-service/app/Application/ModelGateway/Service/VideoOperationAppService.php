@@ -229,7 +229,7 @@ readonly class VideoOperationAppService
                 $throwable
             );
             $this->videoQueueDomainService->deleteOperation($operation);
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, $throwable->getMessage(), throwable: $throwable);
+            ExceptionBuilder::throw($throwable->getVideoErrorCode(), $throwable->getMessage(), throwable: $throwable);
         } catch (Throwable $throwable) {
             // 非业务异常会中断提交流程，释放槽位避免残留运行态阻塞后续提交。
             $this->videoQueueDomainService->releaseUserActiveOperation($operation);
@@ -538,7 +538,7 @@ readonly class VideoOperationAppService
                 $this->videoQueueDomainService->releaseUserActiveOperationIfDone($operation);
             }
         } catch (ProviderVideoException $throwable) {
-            if ($throwable->isRetriable()) {
+            if ($throwable->isRetry()) {
                 throw $throwable;
             }
             $this->logger->warning('video provider query failed', [

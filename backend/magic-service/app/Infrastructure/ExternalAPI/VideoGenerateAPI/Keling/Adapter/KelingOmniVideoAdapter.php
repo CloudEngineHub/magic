@@ -12,6 +12,7 @@ use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoTaskType;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Capability\KelingOmniGenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingTransportFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Prompt\KelingPromptReferenceFormatter;
@@ -104,7 +105,7 @@ readonly class KelingOmniVideoAdapter implements VideoGenerationConnectivityTest
             $response['data']['id'] ?? null,
         );
         if ($taskId === null) {
-            throw ProviderVideoException::nonRetriable($this->extractProviderMessage($response, 'keling submit succeeded but task id missing'));
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, $this->extractProviderMessage($response, 'keling submit succeeded but task id missing'));
         }
 
         return $taskId;
@@ -141,9 +142,7 @@ readonly class KelingOmniVideoAdapter implements VideoGenerationConnectivityTest
         }
 
         // 未返回预期校验错误说明请求可能被接受，不能视为连通性测试成功。
-        throw ProviderVideoException::nonRetriable(
-            'Keling connectivity test did not receive the expected validation error',
-        );
+        throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'Keling connectivity test did not receive the expected validation error');
     }
 
     public function query(VideoQueueOperationEntity $operation, QueueExecutorConfig $config, string $providerTaskId): array

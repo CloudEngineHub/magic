@@ -233,17 +233,12 @@ final class VideoProviderErrorMapperTest extends TestCase
 
     public function testProviderExceptionKeepsSafeMessageAndOptionalErrorCode(): void
     {
-        $exception = ProviderVideoException::nonRetriable(
-            '视频提示词未通过内容审核，请调整后重试。',
-            null,
-            400,
-            (string) VideoGenerateErrorCode::INVALID_PROMPT->value,
-        );
+        $exception = new ProviderVideoException((string) VideoGenerateErrorCode::INVALID_PROMPT, '视频提示词未通过内容审核，请调整后重试。');
 
         self::assertSame('视频提示词未通过内容审核，请调整后重试。', $exception->getMessage());
         self::assertSame((string) VideoGenerateErrorCode::INVALID_PROMPT->value, $exception->getErrorCode());
         self::assertSame(400, $exception->getHttpStatus());
-        self::assertFalse($exception->isRetriable());
+        self::assertFalse($exception->isRetry());
     }
 
     /** @param array<string, mixed> $payload */

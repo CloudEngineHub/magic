@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\Util\Log\PayloadLogSanitizer;
@@ -133,20 +134,13 @@ readonly class KelingVideoClient
         try {
             $data = $request();
         } catch (RequestException $exception) {
-            throw ProviderVideoException::retriable(
-                $this->formatRequestExceptionMessage($exception, $action),
-                $exception,
-                $exception->getResponse()?->getStatusCode(),
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, $this->formatRequestExceptionMessage($exception, $action), $exception);
         } catch (Throwable $throwable) {
-            throw ProviderVideoException::retriable(
-                sprintf('keling video %s failed: %s', $action, $throwable->getMessage()),
-                $throwable,
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, sprintf('keling video %s failed: %s', $action, $throwable->getMessage()), $throwable);
         }
 
         if (! is_array($data)) {
-            throw ProviderVideoException::retriable(sprintf('keling video %s returned invalid json', $action));
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, sprintf('keling video %s returned invalid json', $action));
         }
 
         return $data;

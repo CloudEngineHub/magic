@@ -11,6 +11,7 @@ use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Capability\KelingV3GenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingTransportFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Prompt\KelingPromptReferenceFormatter;
@@ -144,7 +145,7 @@ readonly class KelingV3VideoAdapter implements VideoGenerationProviderAdapterInt
             $response['data']['id'] ?? null,
         );
         if ($taskId === null) {
-            throw ProviderVideoException::nonRetriable('keling v3 submit succeeded but task id missing');
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'keling v3 submit succeeded but task id missing');
         }
 
         return $taskId;

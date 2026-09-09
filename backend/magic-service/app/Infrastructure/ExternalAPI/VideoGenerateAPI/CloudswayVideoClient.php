@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use App\Infrastructure\Util\SSRF\SSRFUtil;
@@ -137,20 +138,14 @@ readonly class CloudswayVideoClient
                 ],
             ]);
         } catch (RequestException $exception) {
-            throw ProviderVideoException::retriable(
-                $this->formatRequestExceptionMessage($exception, 'download media'),
-                $exception,
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, $this->formatRequestExceptionMessage($exception, 'download media'), $exception);
         } catch (Throwable $throwable) {
-            throw ProviderVideoException::retriable(
-                sprintf('cloudsway video download media failed: %s', $throwable->getMessage()),
-                $throwable,
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, sprintf('cloudsway video download media failed: %s', $throwable->getMessage()), $throwable);
         }
 
         $content = (string) $response->getBody();
         if ($content === '') {
-            throw ProviderVideoException::retriable('cloudsway video download media failed: empty response body');
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'cloudsway video download media failed: empty response body');
         }
 
         $mimeType = $this->resolveMediaMimeType($response->getHeaderLine('Content-Type'), $safeUrl);
@@ -181,19 +176,13 @@ readonly class CloudswayVideoClient
         try {
             $data = $request();
         } catch (RequestException $exception) {
-            throw ProviderVideoException::retriable(
-                $this->formatRequestExceptionMessage($exception, $action),
-                $exception,
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, $this->formatRequestExceptionMessage($exception, $action), $exception);
         } catch (Throwable $throwable) {
-            throw ProviderVideoException::retriable(
-                sprintf('cloudsway video %s failed: %s', $action, $throwable->getMessage()),
-                $throwable,
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, sprintf('cloudsway video %s failed: %s', $action, $throwable->getMessage()), $throwable);
         }
 
         if (! is_array($data)) {
-            throw ProviderVideoException::retriable(sprintf('cloudsway video %s returned invalid json', $action));
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, sprintf('cloudsway video %s returned invalid json', $action));
         }
 
         return $data;

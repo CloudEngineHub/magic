@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\Util\Log\PayloadLogSanitizer;
@@ -92,7 +93,7 @@ readonly class MiniMaxVideoClient
                 'http_status' => null,
                 'error' => $exception->getMessage(),
             ]);
-            throw ProviderVideoException::retriable('MiniMax video request failed: ' . $exception->getMessage(), $exception);
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'MiniMax video request failed: ' . $exception->getMessage(), $exception);
         }
 
         if (! is_array($data)) {
@@ -102,7 +103,7 @@ readonly class MiniMaxVideoClient
                 'http_status' => $response->getStatusCode(),
                 'error' => 'MiniMax video returned invalid json',
             ]);
-            throw ProviderVideoException::retriable('MiniMax video returned invalid json');
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'MiniMax video returned invalid json');
         }
 
         $this->logger->info('minimax video response', [
@@ -142,9 +143,9 @@ readonly class MiniMaxVideoClient
         Throwable $previous,
     ): ProviderVideoException {
         if (in_array($httpStatus, self::NON_RETRIABLE_HTTP_STATUSES, true)) {
-            return ProviderVideoException::nonRetriable($message, $previous, $httpStatus);
+            return new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, $message, $previous);
         }
 
-        return ProviderVideoException::retriable($message, $previous, $httpStatus);
+        return new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, $message, $previous);
     }
 }

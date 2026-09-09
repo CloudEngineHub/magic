@@ -168,7 +168,6 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 $dataIsolation,
                 $entity,
                 (string) ($error['message'] ?? 'video generation failed'),
-                $error['code'] ?? null
             );
             return Result::ACK;
         }

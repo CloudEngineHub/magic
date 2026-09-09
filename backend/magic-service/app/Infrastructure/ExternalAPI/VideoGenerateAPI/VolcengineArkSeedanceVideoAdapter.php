@@ -11,6 +11,7 @@ use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterfac
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Prompt\AtStylePromptReferenceFormatter;
 use GuzzleHttp\Exception\RequestException;
 use Hyperf\Codec\Json;
@@ -412,7 +413,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
             $response['data']['task_id'] ?? null,
         );
         if ($taskId === null) {
-            throw ProviderVideoException::nonRetriable('volcengine ark seedance submit succeeded but task id missing');
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'volcengine ark seedance submit succeeded but task id missing');
         }
 
         return $taskId;
@@ -520,16 +521,10 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
                 return true;
             }
 
-            throw ProviderVideoException::nonRetriable(
-                (string) ($error['message'] ?? 'Volcengine Ark connectivity test failed'),
-                $exception,
-                $response?->getStatusCode(),
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, (string) ($error['message'] ?? 'Volcengine Ark connectivity test failed'), $exception);
         }
 
-        throw ProviderVideoException::nonRetriable(
-            'Volcengine Ark connectivity test did not receive the expected validation error',
-        );
+        throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'Volcengine Ark connectivity test did not receive the expected validation error');
     }
 
     /**

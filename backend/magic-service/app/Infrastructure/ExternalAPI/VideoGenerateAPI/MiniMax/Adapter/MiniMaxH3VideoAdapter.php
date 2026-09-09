@@ -12,6 +12,7 @@ use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\ErrorCode\MagicApiErrorCode;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Capability\MiniMaxH3GenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Transport\ApiKeyMiniMaxTransport;
@@ -101,7 +102,7 @@ readonly class MiniMaxH3VideoAdapter implements VideoGenerationConnectivityTesta
         $response = $this->transport->submit($config, $operation->getProviderPayload());
         $taskId = trim((string) ($response['task_id'] ?? ''));
         if ($taskId === '') {
-            throw ProviderVideoException::nonRetriable('MiniMax H3 submit succeeded but task_id is missing');
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'MiniMax H3 submit succeeded but task_id is missing');
         }
         return $taskId;
     }

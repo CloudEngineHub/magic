@@ -10,6 +10,7 @@ namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Prompt\AtStylePromptReferenceFormatter;
 use Hyperf\Contract\TranslatorInterface;
 
@@ -204,9 +205,7 @@ readonly class CloudswaySeedanceVideoAdapter extends AbstractCloudswayVideoAdapt
             $response['data']['task_id'] ?? null,
         );
         if ($taskId === null) {
-            throw ProviderVideoException::nonRetriable(
-                $this->extractProviderMessage($response, 'cloudsway seedance submit succeeded but task id missing')
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, $this->extractProviderMessage($response, 'cloudsway seedance submit succeeded but task id missing'));
         }
 
         return $taskId;

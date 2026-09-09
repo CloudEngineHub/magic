@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Request;
@@ -23,7 +24,7 @@ final class ProviderVideoExceptionTest extends TestCase
             new Request('POST', 'https://gemini.example/v1/interactions'),
             new Response(400, [], 'Video response format duration must be positive'),
         );
-        $exception = ProviderVideoException::nonRetriable('mapped error', $requestException);
+        $exception = new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'mapped error', $requestException);
 
         self::assertSame($requestException, $exception->getRequestException());
         self::assertSame(400, $exception->getHttpStatus());
@@ -32,7 +33,7 @@ final class ProviderVideoExceptionTest extends TestCase
 
     public function testReturnsNullWhenNoRequestResponseExists(): void
     {
-        $exception = ProviderVideoException::nonRetriable('mapped error');
+        $exception = new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'mapped error');
 
         self::assertNull($exception->getRequestException());
         self::assertNull($exception->getResponseContent());
