@@ -84,6 +84,9 @@ func (s *ProjectFileChangeAppService) computeProjectFileChangeEligibility(
 	if err != nil {
 		return sourcebindingrepository.SourceCallbackEligibilityDecision{}, fmt.Errorf("check realtime project source binding: %w", err)
 	}
+	if len(bindings) == 0 {
+		return newSourceCallbackEligibilityDecision(false, sourceCallbackReasonNoRealtimeBinding), nil
+	}
 	ancestorRefs, err := s.support.loadProjectFileAncestorFolderRefs(ctx, meta)
 	if err != nil {
 		return sourcebindingrepository.SourceCallbackEligibilityDecision{}, err
