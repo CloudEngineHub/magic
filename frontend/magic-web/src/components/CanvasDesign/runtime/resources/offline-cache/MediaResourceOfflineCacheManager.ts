@@ -6,6 +6,7 @@ import type { ResolveCanvasResourceReference } from "../../../public/resource-re
 import {
 	CANVAS_MEDIA_CACHE_NAME,
 	CANVAS_MEDIA_DB_NAME,
+	CANVAS_MEDIA_MAX_IDLE_AGE_MS,
 	CANVAS_MEDIA_OFFLINE_CACHE_VERSION,
 	getCacheKey,
 	encodeResourcePathForUrl,
@@ -680,6 +681,7 @@ export class MediaResourceOfflineCacheManager {
 		this.getRegistrationWorker(registration)?.postMessage({
 			type: "CANVAS_MEDIA_CACHE_CONFIG",
 			maxBytes: this.getMaxBytes(),
+			maxIdleAgeMs: CANVAS_MEDIA_MAX_IDLE_AGE_MS,
 		})
 		return registration
 	}

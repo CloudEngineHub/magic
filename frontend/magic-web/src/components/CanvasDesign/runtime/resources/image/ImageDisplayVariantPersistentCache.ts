@@ -1,5 +1,6 @@
 import type { ImageInfo } from "./ImageResourceManager"
 import type { MediaDisplayResourceVariant } from "../visibility/CanvasMediaViewingPolicy"
+import { CANVAS_MEDIA_MAX_IDLE_AGE_MS } from "@/workers/service-worker/canvasMediaShared"
 
 export type PersistentImageDisplayVariant = Extract<MediaDisplayResourceVariant, "low">
 
@@ -12,7 +13,9 @@ export interface PersistentImageDisplayCacheRecord {
 	path: string
 	variant: PersistentImageDisplayVariant
 	rendition: PersistentImageDisplayRendition
-	blob: Blob
+	/** 旧版本直接存入 IndexedDB 的 body；新记录优先只保留 bodyCacheKey。 */
+	blob?: Blob
+	bodyCacheKey?: string
 	mimeType: string
 	width: number
 	height: number
@@ -27,6 +30,10 @@ export interface PersistentImageDisplayCacheRecord {
 	writeOrder: string
 	createdAt: number
 	lastAccessAt: number
+}
+
+export type HydratedPersistentImageDisplayCacheRecord = PersistentImageDisplayCacheRecord & {
+	blob: Blob
 }
 
 export interface PersistentImageDisplayCachePutOptions {
@@ -58,6 +65,8 @@ export interface PersistentImageDisplayCacheGetOptions {
 const DB_NAME = "canvas-design-image-display-variant-cache-v1"
 const DB_VERSION = 4
 const STORE_NAME = "resources"
+const BODY_CACHE_NAME = "canvas-design-image-display-variant-bodies-v1"
+const BODY_CACHE_URL_PREFIX = "https://canvas-design-image.invalid/body/"
 const LOOKUP_INDEX = "lookupKey"
 const LAST_ACCESS_INDEX = "lastAccessAt"
 const DEFAULT_MAX_BYTES = 200 * 1024 * 1024
@@ -66,7 +75,7 @@ const PRUNE_IDLE_DELAY_MS = 1000
 const TOUCH_WRITEBACK_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 interface PendingGetRequest {
-	resolve: (record: PersistentImageDisplayCacheRecord | null) => void
+	resolve: (record: HydratedPersistentImageDisplayCacheRecord | null) => void
 	resourceVersion?: string | null
 }
 
@@ -81,6 +90,65 @@ function isIndexedDbSupported(): boolean {
 
 function normalizeKeyPart(value: string): string {
 	return encodeURIComponent(value)
+}
+
+function getBodyCacheKey(recordKey: string): string {
+	return `${BODY_CACHE_URL_PREFIX}${encodeURIComponent(recordKey)}`
+}
+
+function getCacheStorage(): CacheStorage | null {
+	if (typeof caches === "undefined" || typeof Response === "undefined") return null
+	return caches
+}
+
+async function putBodyInCache(bodyCacheKey: string, blob: Blob): Promise<boolean> {
+	const cacheStorage = getCacheStorage()
+	if (!cacheStorage) return false
+	try {
+		const cache = await cacheStorage.open(BODY_CACHE_NAME)
+		await cache.put(
+			bodyCacheKey,
+			new Response(blob, {
+				headers: {
+					"Content-Type": blob.type || "image/webp",
+					"Content-Length": String(blob.size),
+				},
+			}),
+		)
+		return true
+	} catch {
+		return false
+	}
+}
+
+interface BodyCacheReadResult {
+	/** Whether CacheStorage was available and the lookup completed. */
+	available: boolean
+	blob: Blob | null
+}
+
+async function readBodyFromCache(bodyCacheKey: string): Promise<BodyCacheReadResult> {
+	const cacheStorage = getCacheStorage()
+	if (!cacheStorage) return { available: false, blob: null }
+	try {
+		const cache = await cacheStorage.open(BODY_CACHE_NAME)
+		const response = await cache.match(bodyCacheKey)
+		return { available: true, blob: response ? await response.blob() : null }
+	} catch {
+		return { available: false, blob: null }
+	}
+}
+
+async function deleteBodyFromCache(bodyCacheKey: string | undefined): Promise<void> {
+	if (!bodyCacheKey) return
+	const cacheStorage = getCacheStorage()
+	if (!cacheStorage) return
+	try {
+		const cache = await cacheStorage.open(BODY_CACHE_NAME)
+		await cache.delete(bodyCacheKey)
+	} catch {
+		// Body eviction is best effort; metadata remains authoritative.
+	}
 }
 
 function createLookupKey(options: PersistentImageDisplayCacheGetOptions): string {
@@ -119,10 +187,12 @@ export class ImageDisplayVariantPersistentCache {
 	private pendingTouches = new Map<string, PersistentImageDisplayCacheTouch>()
 	private lastTouchWriteAt = new Map<string, number>()
 	private readonly maxBytes: number
+	private readonly maxIdleAgeMs: number
 	private readonly now: () => number
 
-	constructor(options?: { maxBytes?: number; now?: () => number }) {
+	constructor(options?: { maxBytes?: number; maxIdleAgeMs?: number; now?: () => number }) {
 		this.maxBytes = options?.maxBytes ?? DEFAULT_MAX_BYTES
+		this.maxIdleAgeMs = options?.maxIdleAgeMs ?? CANVAS_MEDIA_MAX_IDLE_AGE_MS
 		this.now = options?.now ?? Date.now
 	}
 
@@ -142,7 +212,7 @@ export class ImageDisplayVariantPersistentCache {
 
 	public async getLatest(
 		options: PersistentImageDisplayCacheGetOptions,
-	): Promise<PersistentImageDisplayCacheRecord | null> {
+	): Promise<HydratedPersistentImageDisplayCacheRecord | null> {
 		const lookupKey = createLookupKey(options)
 		return new Promise((resolve) => {
 			const requests = this.pendingGets.get(lookupKey) ?? []
@@ -171,6 +241,8 @@ export class ImageDisplayVariantPersistentCache {
 			normalizeKeyPart(options.writeOrder),
 			`codec${CODEC_VERSION}`,
 		].join(":")
+		const bodyCacheKey = getBodyCacheKey(key)
+		const bodyStoredInCache = await putBodyInCache(bodyCacheKey, options.blob)
 		const record: PersistentImageDisplayCacheRecord = {
 			key,
 			lookupKey,
@@ -178,7 +250,7 @@ export class ImageDisplayVariantPersistentCache {
 			path: options.path,
 			variant: options.variant,
 			rendition: options.rendition,
-			blob: options.blob,
+			...(bodyStoredInCache ? { bodyCacheKey } : { blob: options.blob }),
 			mimeType: options.blob.type || "image/webp",
 			width: options.width,
 			height: options.height,
@@ -196,6 +268,7 @@ export class ImageDisplayVariantPersistentCache {
 		}
 
 		const accepted = await this.putLatestRecord(db, record)
+		if (!accepted && bodyStoredInCache) await deleteBodyFromCache(bodyCacheKey)
 		if (accepted) this.schedulePrune()
 		return accepted
 	}
@@ -206,16 +279,19 @@ export class ImageDisplayVariantPersistentCache {
 		const tx = db.transaction(STORE_NAME, "readwrite")
 		const store = tx.objectStore(STORE_NAME)
 		const records = await this.readAllRecords(store)
+		const removedBodyKeys: string[] = []
 		records.forEach((record) => {
 			if (
 				record.scope === scope &&
 				record.path === path &&
 				(!maxWriteOrder || getRecordWriteOrder(record) <= maxWriteOrder)
 			) {
+				if (record.bodyCacheKey) removedBodyKeys.push(record.bodyCacheKey)
 				store.delete(record.key)
 			}
 		})
 		await this.awaitTransaction(tx)
+		await Promise.all(removedBodyKeys.map((bodyCacheKey) => deleteBodyFromCache(bodyCacheKey)))
 	}
 
 	public async removeVersion(
@@ -230,6 +306,7 @@ export class ImageDisplayVariantPersistentCache {
 		const tx = db.transaction(STORE_NAME, "readwrite")
 		const store = tx.objectStore(STORE_NAME)
 		const records = await this.readAllRecords(store)
+		const removedBodyKeys: string[] = []
 		records.forEach((record) => {
 			if (
 				record.scope === scope &&
@@ -238,10 +315,12 @@ export class ImageDisplayVariantPersistentCache {
 				record.resourceVersion === resourceVersion &&
 				(!maxWriteOrder || getRecordWriteOrder(record) <= maxWriteOrder)
 			) {
+				if (record.bodyCacheKey) removedBodyKeys.push(record.bodyCacheKey)
 				store.delete(record.key)
 			}
 		})
 		await this.awaitTransaction(tx)
+		await Promise.all(removedBodyKeys.map((bodyCacheKey) => deleteBodyFromCache(bodyCacheKey)))
 	}
 
 	public async removeWriteOrder(
@@ -256,6 +335,7 @@ export class ImageDisplayVariantPersistentCache {
 		const tx = db.transaction(STORE_NAME, "readwrite")
 		const store = tx.objectStore(STORE_NAME)
 		const records = await this.readAllRecords(store)
+		const removedBodyKeys: string[] = []
 		records.forEach((record) => {
 			if (
 				record.scope === scope &&
@@ -264,10 +344,12 @@ export class ImageDisplayVariantPersistentCache {
 				record.resourceVersion === resourceVersion &&
 				record.writeOrder === writeOrder
 			) {
+				if (record.bodyCacheKey) removedBodyKeys.push(record.bodyCacheKey)
 				store.delete(record.key)
 			}
 		})
 		await this.awaitTransaction(tx)
+		await Promise.all(removedBodyKeys.map((bodyCacheKey) => deleteBodyFromCache(bodyCacheKey)))
 	}
 
 	private scheduleGetFlush(): void {
@@ -292,8 +374,17 @@ export class ImageDisplayVariantPersistentCache {
 
 		const lookupKeys = Array.from(pendingGets.keys())
 		const recordsByLookupKey = await this.readRecordsByLookupKeys(db, lookupKeys)
+		const now = this.now()
+		let hasExpiredRecord = false
+		const resolutionTasks: Promise<void>[] = []
 		pendingGets.forEach((requests, lookupKey) => {
-			const records = (recordsByLookupKey.get(lookupKey) ?? []).filter(hasComparableVersion)
+			const records = (recordsByLookupKey.get(lookupKey) ?? [])
+				.filter(hasComparableVersion)
+				.filter((record) => {
+					const expired = this.isRecordExpired(record, now)
+					if (expired) hasExpiredRecord = true
+					return !expired
+				})
 			requests.forEach(({ resolve, resourceVersion }) => {
 				const record =
 					records
@@ -304,16 +395,116 @@ export class ImageDisplayVariantPersistentCache {
 						.sort((a, b) =>
 							getRecordWriteOrder(b).localeCompare(getRecordWriteOrder(a)),
 						)[0] ?? null
-				if (!record) {
-					resolve(null)
-					return
-				}
-
-				const lastAccessAt = this.now()
-				this.queueTouch(record, lastAccessAt)
-				resolve({ ...record, lastAccessAt })
+				resolutionTasks.push(
+					(async () => {
+						if (!record) {
+							resolve(null)
+							return
+						}
+						const hydratedRecord = await this.hydrateRecord(record)
+						if (!hydratedRecord) {
+							resolve(null)
+							return
+						}
+						const lastAccessAt = this.now()
+						this.queueTouch(hydratedRecord, lastAccessAt)
+						resolve({ ...hydratedRecord, lastAccessAt })
+					})(),
+				)
 			})
 		})
+		await Promise.all(resolutionTasks)
+		if (hasExpiredRecord) this.schedulePrune()
+	}
+
+	private async hydrateRecord(
+		record: PersistentImageDisplayCacheRecord,
+	): Promise<HydratedPersistentImageDisplayCacheRecord | null> {
+		if (record.blob) {
+			if (!record.bodyCacheKey && getCacheStorage()) {
+				void this.migrateLegacyBody(record)
+			}
+			return record as HydratedPersistentImageDisplayCacheRecord
+		}
+		if (!record.bodyCacheKey) return null
+		const bodyResult = await readBodyFromCache(record.bodyCacheKey)
+		if (bodyResult.blob) return { ...record, blob: bodyResult.blob }
+		if (bodyResult.available) {
+			void this.removeMissingBodyRecord(record).catch(() => undefined)
+		}
+		return null
+	}
+
+	private async removeMissingBodyRecord(
+		record: PersistentImageDisplayCacheRecord,
+	): Promise<void> {
+		const db = await this.getDb()
+		if (!db) return
+		const tx = db.transaction(STORE_NAME, "readwrite")
+		const store = tx.objectStore(STORE_NAME)
+		const request = store.get(record.key)
+		request.onsuccess = () => {
+			const current = request.result as PersistentImageDisplayCacheRecord | undefined
+			if (
+				!current ||
+				current.bodyCacheKey !== record.bodyCacheKey ||
+				current.createdAt !== record.createdAt ||
+				getRecordWriteOrder(current) !== getRecordWriteOrder(record)
+			) {
+				return
+			}
+			store.delete(record.key)
+		}
+		await this.awaitTransaction(tx)
+	}
+
+	private async migrateLegacyBody(record: PersistentImageDisplayCacheRecord): Promise<void> {
+		if (!record.blob || record.bodyCacheKey) return
+		const bodyCacheKey = getBodyCacheKey(record.key)
+		if (!(await putBodyInCache(bodyCacheKey, record.blob))) return
+		const db = await this.getDb()
+		if (!db) {
+			await deleteBodyFromCache(bodyCacheKey)
+			return
+		}
+
+		let bodyReferencedByMetadata = false
+		try {
+			bodyReferencedByMetadata = await new Promise<boolean>((resolve) => {
+				const tx = db.transaction(STORE_NAME, "readwrite")
+				const store = tx.objectStore(STORE_NAME)
+				const request = store.get(record.key)
+				let shouldKeepBody = false
+				request.onsuccess = () => {
+					const current = request.result as PersistentImageDisplayCacheRecord | undefined
+					if (current?.bodyCacheKey === bodyCacheKey) {
+						// A concurrent migration already committed the same cache identity.
+						shouldKeepBody = true
+						return
+					}
+					if (!current?.blob || current.bodyCacheKey) return
+					const metadata = { ...current, bodyCacheKey }
+					delete metadata.blob
+					store.put(metadata)
+					shouldKeepBody = true
+				}
+				tx.oncomplete = () => resolve(shouldKeepBody)
+				tx.onerror = () => resolve(false)
+				tx.onabort = () => resolve(false)
+			})
+		} catch {
+			bodyReferencedByMetadata = false
+		}
+		if (!bodyReferencedByMetadata) await deleteBodyFromCache(bodyCacheKey)
+	}
+
+	private isRecordExpired(
+		record: Pick<PersistentImageDisplayCacheRecord, "lastAccessAt" | "createdAt">,
+		now = this.now(),
+	): boolean {
+		if (!Number.isFinite(this.maxIdleAgeMs) || this.maxIdleAgeMs < 0) return false
+		const lastAccessAt = record.lastAccessAt || record.createdAt || 0
+		return now - lastAccessAt > this.maxIdleAgeMs
 	}
 
 	private queueTouch(record: PersistentImageDisplayCacheRecord, lastAccessAt: number): void {
@@ -400,6 +591,7 @@ export class ImageDisplayVariantPersistentCache {
 			const store = tx.objectStore(STORE_NAME)
 			const request = store.index(LOOKUP_INDEX).getAll(current.lookupKey)
 			let accepted = false
+			const removedBodyKeys: string[] = []
 			request.onsuccess = () => {
 				const records = (request.result ?? []) as PersistentImageDisplayCacheRecord[]
 				const currentWriteOrder = getRecordWriteOrder(current)
@@ -425,11 +617,18 @@ export class ImageDisplayVariantPersistentCache {
 						(currentIsNewerThanAllExisting ||
 							getRecordWriteOrder(record) <= currentWriteOrder)
 					) {
+						if (record.bodyCacheKey) removedBodyKeys.push(record.bodyCacheKey)
 						store.delete(record.key)
 					}
 				})
 			}
-			tx.oncomplete = () => resolve(accepted)
+			tx.oncomplete = () => {
+				void Promise.all(
+					removedBodyKeys.map((bodyCacheKey) => deleteBodyFromCache(bodyCacheKey)),
+				)
+					.then(() => resolve(accepted))
+					.catch(() => resolve(accepted))
+			}
 			tx.onerror = () => resolve(false)
 			tx.onabort = () => resolve(false)
 		})
@@ -470,19 +669,31 @@ export class ImageDisplayVariantPersistentCache {
 		const tx = db.transaction(STORE_NAME, "readwrite")
 		const store = tx.objectStore(STORE_NAME)
 		const records = await this.readAllRecords(store)
-		let totalBytes = records.reduce((sum, record) => sum + record.byteSize, 0)
+		const now = this.now()
+		const expiredRecords = records.filter((record) => this.isRecordExpired(record, now))
+		const removedBodyKeys = expiredRecords
+			.map((record) => record.bodyCacheKey)
+			.filter((bodyCacheKey): bodyCacheKey is string => !!bodyCacheKey)
+		expiredRecords.forEach((record) => store.delete(record.key))
+		const activeRecords = records.filter((record) => !this.isRecordExpired(record, now))
+		let totalBytes = activeRecords.reduce((sum, record) => sum + record.byteSize, 0)
 		if (totalBytes <= this.maxBytes) {
 			await this.awaitTransaction(tx)
+			await Promise.all(
+				removedBodyKeys.map((bodyCacheKey) => deleteBodyFromCache(bodyCacheKey)),
+			)
 			return
 		}
 
-		records.sort((a, b) => a.lastAccessAt - b.lastAccessAt)
-		for (const record of records) {
+		activeRecords.sort((a, b) => a.lastAccessAt - b.lastAccessAt)
+		for (const record of activeRecords) {
 			if (totalBytes <= this.maxBytes) break
 			store.delete(record.key)
+			if (record.bodyCacheKey) removedBodyKeys.push(record.bodyCacheKey)
 			totalBytes -= record.byteSize
 		}
 		await this.awaitTransaction(tx)
+		await Promise.all(removedBodyKeys.map((bodyCacheKey) => deleteBodyFromCache(bodyCacheKey)))
 	}
 
 	private readAllRecords(store: IDBObjectStore): Promise<PersistentImageDisplayCacheRecord[]> {

@@ -41,9 +41,206 @@ function createRecord(
 	}
 }
 
+class FakeBodyCache {
+	private readonly entries = new Map<string, Response>()
+
+	public async put(key: string, response: Response): Promise<void> {
+		this.entries.set(key, response.clone())
+	}
+
+	public async match(key: string): Promise<Response | undefined> {
+		return this.entries.get(key)?.clone()
+	}
+
+	public async delete(key: string): Promise<boolean> {
+		return this.entries.delete(key)
+	}
+}
+
+class FakeBodyCacheStorage {
+	private readonly cache = new FakeBodyCache()
+
+	public async open(): Promise<FakeBodyCache> {
+		return this.cache
+	}
+}
+
 describe("ImageDisplayVariantPersistentCache", () => {
 	beforeEach(() => {
+		vi.unstubAllGlobals()
 		vi.stubGlobal("indexedDB", new IDBFactory())
+	})
+
+	it("stores new low bodies in CacheStorage while IndexedDB keeps metadata", async () => {
+		vi.stubGlobal("caches", new FakeBodyCacheStorage())
+		const cache = new ImageDisplayVariantPersistentCache({
+			maxIdleAgeMs: Number.POSITIVE_INFINITY,
+		})
+		const imageInfo = createRecord("unused").imageInfo
+		await expect(
+			cache.put({
+				scope: "scope-a",
+				path: "images/cache-storage.png",
+				variant: "low",
+				rendition: "image-process",
+				blob: new Blob(["cache-storage"], { type: "image/webp" }),
+				width: 384,
+				height: 216,
+				imageInfo,
+				resourceVersion: "version-a",
+				sourceUpdatedAt: null,
+				contentLength: 13,
+				sourceUrl: null,
+				maxEdge: 384,
+				writeOrder: "0000000000000001:test:00000001",
+			}),
+		).resolves.toBe(true)
+
+		const internals = cache as unknown as {
+			getDb: () => Promise<IDBDatabase | null>
+		}
+		const db = await internals.getDb()
+		if (!db) throw new Error("Expected IndexedDB")
+		const records = await new Promise<PersistentImageDisplayCacheRecord[]>((resolve) => {
+			const request = db
+				.transaction("resources", "readonly")
+				.objectStore("resources")
+				.getAll()
+			request.onsuccess = () => resolve(request.result as PersistentImageDisplayCacheRecord[])
+		})
+		expect(records).toHaveLength(1)
+		expect(records[0]?.blob).toBeUndefined()
+		expect(records[0]?.bodyCacheKey).toBeTruthy()
+
+		const restored = await cache.getLatest({
+			scope: "scope-a",
+			path: "images/cache-storage.png",
+			variant: "low",
+			rendition: "image-process",
+		})
+		expect(restored?.blob).toBeInstanceOf(Blob)
+		expect(restored?.blob.size).toBe(13)
+		expect(restored?.blob.type).toBe("image/webp")
+		cache.destroy()
+	})
+
+	it("removes metadata after confirming a CacheStorage body is missing", async () => {
+		vi.stubGlobal("caches", new FakeBodyCacheStorage())
+		const cache = new ImageDisplayVariantPersistentCache({
+			maxIdleAgeMs: Number.POSITIVE_INFINITY,
+		})
+		const internals = cache as unknown as {
+			getDb: () => Promise<IDBDatabase | null>
+		}
+		const db = await internals.getDb()
+		if (!db) throw new Error("Expected IndexedDB")
+		const lookupKey = JSON.stringify(["scope-a", "image-process", "images/missing.png", "low"])
+		const record = createRecord(lookupKey, {
+			key: "record:missing-body",
+			path: "images/missing.png",
+			bodyCacheKey: "https://canvas-design-image.invalid/body/missing-body",
+			blob: undefined,
+		})
+		await new Promise<void>((resolve, reject) => {
+			const tx = db.transaction("resources", "readwrite")
+			tx.objectStore("resources").put(record)
+			tx.oncomplete = () => resolve()
+			tx.onerror = () => reject(tx.error)
+			tx.onabort = () => reject(tx.error)
+		})
+
+		await expect(
+			cache.getLatest({
+				scope: "scope-a",
+				path: "images/missing.png",
+				variant: "low",
+				rendition: "image-process",
+			}),
+		).resolves.toBeNull()
+
+		await new Promise((resolve) => setTimeout(resolve, 0))
+		const remaining = await new Promise<PersistentImageDisplayCacheRecord[]>((resolve) => {
+			const request = db
+				.transaction("resources", "readonly")
+				.objectStore("resources")
+				.getAll()
+			request.onsuccess = () => resolve(request.result as PersistentImageDisplayCacheRecord[])
+		})
+		expect(remaining).toEqual([])
+		cache.destroy()
+	})
+
+	it("keeps metadata when CacheStorage is unavailable", async () => {
+		const cache = new ImageDisplayVariantPersistentCache({
+			maxIdleAgeMs: Number.POSITIVE_INFINITY,
+		})
+		const internals = cache as unknown as {
+			getDb: () => Promise<IDBDatabase | null>
+		}
+		const db = await internals.getDb()
+		if (!db) throw new Error("Expected IndexedDB")
+		const lookupKey = JSON.stringify([
+			"scope-a",
+			"image-process",
+			"images/unavailable.png",
+			"low",
+		])
+		const record = createRecord(lookupKey, {
+			key: "record:unavailable-body",
+			path: "images/unavailable.png",
+			bodyCacheKey: "https://canvas-design-image.invalid/body/unavailable-body",
+			blob: undefined,
+		})
+		await new Promise<void>((resolve, reject) => {
+			const tx = db.transaction("resources", "readwrite")
+			tx.objectStore("resources").put(record)
+			tx.oncomplete = () => resolve()
+			tx.onerror = () => reject(tx.error)
+			tx.onabort = () => reject(tx.error)
+		})
+
+		await expect(
+			cache.getLatest({
+				scope: "scope-a",
+				path: "images/unavailable.png",
+				variant: "low",
+				rendition: "image-process",
+			}),
+		).resolves.toBeNull()
+
+		const remaining = await new Promise<PersistentImageDisplayCacheRecord[]>((resolve) => {
+			const request = db
+				.transaction("resources", "readonly")
+				.objectStore("resources")
+				.getAll()
+			request.onsuccess = () => resolve(request.result as PersistentImageDisplayCacheRecord[])
+		})
+		expect(remaining).toEqual([expect.objectContaining({ key: record.key })])
+		cache.destroy()
+	})
+
+	it("removes a migrated legacy body when metadata cannot be committed", async () => {
+		const bodyCacheStorage = new FakeBodyCacheStorage()
+		vi.stubGlobal("caches", bodyCacheStorage)
+		const cache = new ImageDisplayVariantPersistentCache({
+			maxIdleAgeMs: Number.POSITIVE_INFINITY,
+		})
+		const record = createRecord("legacy-rollback", {
+			key: "record:legacy-rollback",
+			bodyCacheKey: undefined,
+		})
+		const internals = cache as unknown as {
+			getDb: ReturnType<typeof vi.fn>
+			migrateLegacyBody: (record: PersistentImageDisplayCacheRecord) => Promise<void>
+		}
+		internals.getDb = vi.fn(async () => null)
+
+		await internals.migrateLegacyBody(record)
+
+		const bodyCache = await bodyCacheStorage.open()
+		const bodyCacheKey = `https://canvas-design-image.invalid/body/${encodeURIComponent(record.key)}`
+		expect(await bodyCache.match(bodyCacheKey)).toBeUndefined()
+		cache.destroy()
 	})
 
 	it("coalesces same-tick low reads without immediate access writes", async () => {
@@ -99,6 +296,57 @@ describe("ImageDisplayVariantPersistentCache", () => {
 
 		expect(record?.lastAccessAt).toBe(20)
 		expect(internals.touchRecords).not.toHaveBeenCalled()
+	})
+
+	it("treats idle low blobs as expired and removes them during the next prune", async () => {
+		let now = 0
+		const cache = new ImageDisplayVariantPersistentCache({
+			now: () => now,
+			maxIdleAgeMs: 50,
+		})
+		await cache.put({
+			scope: "scope-a",
+			path: "images/idle.png",
+			variant: "low",
+			rendition: "image-process",
+			blob: new Blob(["low"], { type: "image/webp" }),
+			width: 384,
+			height: 216,
+			imageInfo: createRecord("unused").imageInfo,
+			resourceVersion: "version-a",
+			sourceUpdatedAt: null,
+			contentLength: 3,
+			sourceUrl: null,
+			maxEdge: 384,
+			writeOrder: "0000000000000001:test:00000001",
+		})
+
+		now = 100
+		await expect(
+			cache.getLatest({
+				scope: "scope-a",
+				path: "images/idle.png",
+				variant: "low",
+				rendition: "image-process",
+			}),
+		).resolves.toBeNull()
+
+		const internals = cache as unknown as {
+			getDb: () => Promise<IDBDatabase | null>
+			prune: (db: IDBDatabase) => Promise<void>
+		}
+		const db = await internals.getDb()
+		if (!db) throw new Error("Expected IndexedDB")
+		await internals.prune(db)
+		await expect(
+			cache.getLatest({
+				scope: "scope-a",
+				path: "images/idle.png",
+				variant: "low",
+				rendition: "image-process",
+			}),
+		).resolves.toBeNull()
+		cache.destroy()
 	})
 
 	it("writes access time only after the 24-hour interval", async () => {
@@ -173,7 +421,9 @@ describe("ImageDisplayVariantPersistentCache", () => {
 		expect(raw).toBeTruthy()
 		verifyDb.close()
 
-		const cache = new ImageDisplayVariantPersistentCache()
+		const cache = new ImageDisplayVariantPersistentCache({
+			maxIdleAgeMs: Number.POSITIVE_INFINITY,
+		})
 		const record = await cache.getLatest({
 			scope: "scope-a",
 			path: "images/a.png",
@@ -233,7 +483,9 @@ describe("ImageDisplayVariantPersistentCache", () => {
 	})
 
 	it("returns whether the low write was accepted", async () => {
-		const cache = new ImageDisplayVariantPersistentCache()
+		const cache = new ImageDisplayVariantPersistentCache({
+			maxIdleAgeMs: Number.POSITIVE_INFINITY,
+		})
 		const internals = cache as unknown as {
 			getDb: ReturnType<typeof vi.fn>
 			putLatestRecord: ReturnType<typeof vi.fn>
@@ -265,7 +517,9 @@ describe("ImageDisplayVariantPersistentCache", () => {
 	})
 
 	it("keeps identical paths isolated by persistent resource scope", async () => {
-		const cache = new ImageDisplayVariantPersistentCache()
+		const cache = new ImageDisplayVariantPersistentCache({
+			maxIdleAgeMs: Number.POSITIVE_INFINITY,
+		})
 		const internals = cache as unknown as {
 			getDb: ReturnType<typeof vi.fn>
 			readRecordsByLookupKeys: ReturnType<typeof vi.fn>

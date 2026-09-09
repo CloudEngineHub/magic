@@ -28,6 +28,8 @@ const LEGACY_CANVAS_MEDIA_CACHE_VERSIONS = Array.from(
 )
 const STORE_NAME = "resources"
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024
+/** Idle eviction for current-version Canvas media bodies (SW + host CONFIG). */
+export const CANVAS_MEDIA_MAX_IDLE_AGE_MS = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_RESOURCE_NAMESPACE = "__global__"
 const VIRTUAL_RESOURCE_PATH_SEGMENT = "/canvas-design-media/"
 const VIRTUAL_RESOURCE_ROUTE_MARKER = `/sw${VIRTUAL_RESOURCE_PATH_SEGMENT}`
@@ -68,6 +70,8 @@ type CanvasMediaEntry = {
 	lastModified?: string | null
 	contentLength?: number | null
 	contentType?: string | null
+	resourceVersion?: string | null
+	sourceUpdatedAt?: string | null
 	lastAccessedAt?: number
 	updatedAt?: number
 }
@@ -79,7 +83,13 @@ type CanvasMediaRefreshResult = {
 }
 
 let maxBytes = DEFAULT_MAX_BYTES
-const inflightResourceMap = new Map<string, Promise<FetchResourceBlobResult>>()
+let maxIdleAgeMs = CANVAS_MEDIA_MAX_IDLE_AGE_MS
+interface InflightResourceRequest {
+	identity: string
+	promise: Promise<FetchResourceBlobResult>
+}
+
+const inflightResourceMap = new Map<string, InflightResourceRequest>()
 
 /** 将 Service Worker URL 中的 percent-encoded 路径还原为业务资源路径。 */
 export function normalizeResourcePathForLookup(path: string | null | undefined): string {
@@ -260,6 +270,14 @@ function getSourceUrl(entry: CanvasMediaEntry): string | undefined {
 	return entry.sourceUrl || entry.originalUrl || entry.url
 }
 
+function getResourceFetchIdentity(entry: CanvasMediaEntry): string {
+	return [
+		getSourceUrl(entry) || "",
+		entry.resourceVersion || "",
+		entry.sourceUpdatedAt || "",
+	].join("\0")
+}
+
 function getResponseMetadata(response: Response, blobSize: number) {
 	const contentLengthText = response.headers.get("Content-Length")
 	const contentLength = Number(contentLengthText)
@@ -347,6 +365,8 @@ async function saveEntry(entry: CanvasMediaEntry): Promise<void> {
 			lastModified: entry.lastModified ?? existing?.lastModified,
 			contentLength: entry.contentLength ?? existing?.contentLength,
 			contentType: entry.contentType ?? existing?.contentType,
+			resourceVersion: entry.resourceVersion ?? existing?.resourceVersion ?? null,
+			sourceUpdatedAt: entry.sourceUpdatedAt ?? existing?.sourceUpdatedAt ?? null,
 			lastAccessedAt: entry.lastAccessedAt ?? existing?.lastAccessedAt ?? Date.now(),
 			updatedAt: entry.updatedAt ?? existing?.updatedAt ?? Date.now(),
 		}),
@@ -386,6 +406,23 @@ async function deleteEntry(entry: CanvasMediaEntry): Promise<void> {
 	await requestToPromise(store.delete(entry.id as string))
 	const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
 	await cache.delete(getCacheKey(entry))
+}
+
+function isEntryIdleExpired(entry: CanvasMediaEntry, now = Date.now()): boolean {
+	if (!Number.isFinite(maxIdleAgeMs) || maxIdleAgeMs < 0) return false
+	const lastAccessedAt = entry.lastAccessedAt || entry.updatedAt || 0
+	return lastAccessedAt > 0 && now - lastAccessedAt > maxIdleAgeMs
+}
+
+/** Best-effort maintenance for current-version entries that have been idle too long. */
+export async function cleanupExpiredCanvasMediaStorage(): Promise<void> {
+	try {
+		const entries = await getAllEntries()
+		const expiredEntries = entries.filter((entry) => isEntryIdleExpired(entry))
+		await Promise.allSettled(expiredEntries.map((entry) => deleteEntry(entry)))
+	} catch {
+		// Cache maintenance must never block Canvas media reads or SW activation.
+	}
 }
 
 async function touchEntry(
@@ -449,6 +486,7 @@ async function enforceMaxBytes(
 	bytesToReserve = 0,
 	protectedResourceId: string | null = null,
 ): Promise<void> {
+	await cleanupExpiredCanvasMediaStorage()
 	const entries = await getAllEntries()
 	let total = entries.reduce((sum, entry) => {
 		if (entry.id === protectedResourceId) return sum
@@ -557,19 +595,48 @@ async function putResponseInCache(
 
 	await enforceMaxBytes(blob.size, getResourceId(entry))
 	const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
-	await cache.put(getCacheKey(entry), response.clone())
-	await touchEntry(entry, {
-		...metadata,
-		size: blob.size,
-		updatedAt: Date.now(),
-	})
+	const cacheKey = getCacheKey(entry)
+	// CacheStorage and IndexedDB are separate stores. Snapshot the previous
+	// response so an IndexedDB failure cannot leave an unreachable body behind
+	// (or discard the last known-good body when refreshing an existing entry).
+	const previousResponse = await cache.match(cacheKey)
+	await cache.put(cacheKey, response.clone())
+	try {
+		await touchEntry(entry, {
+			...metadata,
+			size: blob.size,
+			updatedAt: Date.now(),
+		})
+	} catch (error) {
+		try {
+			if (previousResponse) await cache.put(cacheKey, previousResponse)
+			else await cache.delete(cacheKey)
+		} catch {
+			// Rollback is best effort; preserve the original metadata error.
+		}
+		throw error
+	}
 	await enforceMaxBytes()
+}
+
+async function isCurrentResourceGeneration(entry: CanvasMediaEntry): Promise<boolean> {
+	try {
+		const current = await getEntryByPath(
+			String(entry.path || "").replace(/^\/+/, ""),
+			normalizeResourceNamespaceForStorage(entry.namespace),
+			entry.mediaType as CanvasMediaType,
+		)
+		return !!current && getResourceFetchIdentity(current) === getResourceFetchIdentity(entry)
+	} catch {
+		return false
+	}
 }
 
 async function fetchResourceBlobOnce(entry: CanvasMediaEntry): Promise<FetchResourceBlobResult> {
 	const cacheKey = getCacheKey(entry)
-	const existingPromise = inflightResourceMap.get(cacheKey)
-	if (existingPromise) return existingPromise
+	const identity = getResourceFetchIdentity(entry)
+	const existingRequest = inflightResourceMap.get(cacheKey)
+	if (existingRequest?.identity === identity) return existingRequest.promise
 
 	const promise = (async () => {
 		const sourceUrl = getSourceUrl(entry)
@@ -591,15 +658,20 @@ async function fetchResourceBlobOnce(entry: CanvasMediaEntry): Promise<FetchReso
 			status: response.status,
 			statusText: response.statusText,
 		}
-		await putResponseInCache(createResponseFromBlobResult(result), entry, metadata).catch(
-			() => undefined,
-		)
+		if (await isCurrentResourceGeneration(entry)) {
+			await putResponseInCache(createResponseFromBlobResult(result), entry, metadata).catch(
+				() => undefined,
+			)
+		}
 		return result
 	})().finally(() => {
-		inflightResourceMap.delete(cacheKey)
+		const currentRequest = inflightResourceMap.get(cacheKey)
+		if (currentRequest?.identity === identity && currentRequest.promise === promise) {
+			inflightResourceMap.delete(cacheKey)
+		}
 	})
 
-	inflightResourceMap.set(cacheKey, promise)
+	inflightResourceMap.set(cacheKey, { identity, promise })
 	return promise
 }
 
@@ -677,6 +749,14 @@ export function handleCanvasMediaMessage(event: ExtendableMessageEvent): boolean
 	const data = event.data || {}
 	if (data.maxBytes && Number.isFinite(data.maxBytes)) {
 		maxBytes = data.maxBytes
+	}
+	if (data.maxIdleAgeMs !== undefined && Number.isFinite(data.maxIdleAgeMs)) {
+		maxIdleAgeMs = Math.max(0, data.maxIdleAgeMs)
+	}
+
+	if (data.type === "CANVAS_MEDIA_CACHE_CONFIG") {
+		event.waitUntil(cleanupExpiredCanvasMediaStorage())
+		return true
 	}
 
 	if (data.type === "CANVAS_MEDIA_CACHE_REGISTER" && data.entry) {

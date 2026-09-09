@@ -4,6 +4,7 @@ import {
 	CANVAS_MEDIA_CACHE_NAME,
 	CANVAS_MEDIA_DB_NAME,
 	CANVAS_MEDIA_OFFLINE_CACHE_VERSION,
+	cleanupExpiredCanvasMediaStorage,
 	cleanupLegacyCanvasMediaStorage,
 	encodeResourcePathForUrl,
 	handleCanvasMediaMessage,
@@ -26,6 +27,8 @@ type StoredCanvasEntry = {
 	lastModified?: string | null
 	contentLength?: number | null
 	contentType?: string | null
+	resourceVersion?: string | null
+	sourceUpdatedAt?: string | null
 }
 
 const TEST_ORIGIN = "https://canvas.test"
@@ -48,7 +51,10 @@ class FakeIdbRequest<T> {
 }
 
 class FakeObjectStore {
-	public constructor(private readonly records: Map<string, StoredCanvasEntry>) {}
+	public constructor(
+		private readonly records: Map<string, StoredCanvasEntry>,
+		private readonly beforePut?: () => void,
+	) {}
 
 	public get(key: string): IDBRequest<StoredCanvasEntry | undefined> {
 		const request = new FakeIdbRequest<StoredCanvasEntry | undefined>()
@@ -57,6 +63,7 @@ class FakeObjectStore {
 	}
 
 	public put(value: StoredCanvasEntry): IDBRequest<StoredCanvasEntry> {
+		this.beforePut?.()
 		const request = new FakeIdbRequest<StoredCanvasEntry>()
 		this.records.set(value.id, value)
 		request.succeed(value)
@@ -82,18 +89,22 @@ class FakeTransaction {
 	public onerror: (() => void) | null = null
 	public onabort: (() => void) | null = null
 
-	public constructor(private readonly records: Map<string, StoredCanvasEntry>) {
+	public constructor(
+		private readonly records: Map<string, StoredCanvasEntry>,
+		private readonly beforePut?: () => void,
+	) {
 		queueMicrotask(() => {
 			queueMicrotask(() => this.oncomplete?.())
 		})
 	}
 
 	public objectStore(): FakeObjectStore {
-		return new FakeObjectStore(this.records)
+		return new FakeObjectStore(this.records, this.beforePut)
 	}
 }
 
 class FakeDatabase {
+	public failNextPut = false
 	private readonly stores = new Map<string, Map<string, StoredCanvasEntry>>()
 
 	public objectStoreNames = {
@@ -112,12 +123,20 @@ class FakeDatabase {
 		}
 		const store = this.stores.get(name)
 		if (!store) throw new Error(`Missing object store: ${name}`)
-		return new FakeTransaction(store)
+		return new FakeTransaction(store, () => {
+			if (!this.failNextPut) return
+			this.failNextPut = false
+			throw new Error("IndexedDB metadata write failed")
+		})
 	}
 }
 
 class FakeIndexedDbFactory {
 	private readonly databases = new Map<string, FakeDatabase>()
+
+	public getDatabase(name: string): FakeDatabase | undefined {
+		return this.databases.get(name)
+	}
 
 	public open(name: string): IDBOpenDBRequest {
 		const request = new FakeIdbRequest<IDBDatabase>() as unknown as IDBOpenDBRequest
@@ -248,15 +267,19 @@ describe("canvasMediaShared", () => {
 
 		await cleanupLegacyCanvasMediaStorage({ indexedDBFactory, cacheStorage })
 
-		expect(deletedDatabases).toEqual([
-			"canvas-media-resource-offline-cache-v1",
-			"canvas-media-resource-offline-cache-v2",
-			"canvas-media-resource-offline-cache-v3",
-		])
-		expect(cacheStorage.delete).toHaveBeenCalledTimes(3)
-		expect(cacheStorage.delete).toHaveBeenNthCalledWith(1, "canvas-media-resources-v1")
-		expect(cacheStorage.delete).toHaveBeenNthCalledWith(2, "canvas-media-resources-v2")
-		expect(cacheStorage.delete).toHaveBeenNthCalledWith(3, "canvas-media-resources-v3")
+		expect(deletedDatabases).toEqual(
+			Array.from(
+				{ length: CANVAS_MEDIA_OFFLINE_CACHE_VERSION - 1 },
+				(_, index) => `canvas-media-resource-offline-cache-v${index + 1}`,
+			),
+		)
+		expect(cacheStorage.delete).toHaveBeenCalledTimes(CANVAS_MEDIA_OFFLINE_CACHE_VERSION - 1)
+		for (let version = 1; version < CANVAS_MEDIA_OFFLINE_CACHE_VERSION; version += 1) {
+			expect(cacheStorage.delete).toHaveBeenNthCalledWith(
+				version,
+				`canvas-media-resources-v${version}`,
+			)
+		}
 		expect(deletedDatabases).not.toContain(CANVAS_MEDIA_DB_NAME)
 		expect(cacheStorage.delete).not.toHaveBeenCalledWith(CANVAS_MEDIA_CACHE_NAME)
 	})
@@ -274,6 +297,29 @@ describe("canvasMediaShared", () => {
 		await expect(
 			cleanupLegacyCanvasMediaStorage({ indexedDBFactory, cacheStorage }),
 		).resolves.toBeUndefined()
+	})
+
+	it("cleans idle current-version entries and their CacheStorage bodies", async () => {
+		const requestUrl = buildVirtualUrl("images/idle.png")
+		const staleEntry: StoredCanvasEntry = {
+			id: "workspace/project/design/demo/image/images/idle.png",
+			namespace: "workspace/project/design/demo",
+			path: "images/idle.png",
+			mediaType: "image",
+			cacheKey: requestUrl,
+			sourceUrl: "https://oss.example.com/images/idle.png",
+			lastAccessedAt: Date.now() - 31 * 24 * 60 * 60 * 1000,
+			updatedAt: Date.now() - 31 * 24 * 60 * 60 * 1000,
+			size: 12,
+		}
+		await saveCanvasEntry(staleEntry)
+		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
+		await cache.put(requestUrl, new Response("stale-image"))
+
+		await cleanupExpiredCanvasMediaStorage()
+
+		expect(await readCanvasEntry(staleEntry.id)).toBeUndefined()
+		expect(await cache.match(requestUrl)).toBeUndefined()
 	})
 
 	it("does not read metadata from the incompatible v1 path-key namespace", async () => {
@@ -404,6 +450,80 @@ describe("canvasMediaShared", () => {
 		expect(await cachedResponse?.text()).toBe("network-image")
 	})
 
+	it("does not persist an older body after resource metadata advances", async () => {
+		const requestUrl = buildVirtualUrl("images/generation.png")
+		const entry: StoredCanvasEntry = {
+			id: "workspace/project/design/demo/image/images/generation.png",
+			namespace: "workspace/project/design/demo",
+			path: "images/generation.png",
+			mediaType: "image",
+			cacheKey: requestUrl,
+			sourceUrl: "https://oss.example.com/images/generation-v1.png",
+			resourceVersion: "generation-v1",
+		}
+		await saveCanvasEntry(entry)
+
+		let resolveResponse!: (response: Response) => void
+		const responsePromise = new Promise<Response>((resolve) => {
+			resolveResponse = resolve
+		})
+		vi.spyOn(globalThis, "fetch").mockReturnValue(responsePromise)
+		const requestPromise = handleCanvasMediaRequest(new Request(requestUrl))
+		await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+
+		await saveCanvasEntry({
+			...entry,
+			sourceUrl: "https://oss.example.com/images/generation-v2.png",
+			resourceVersion: "generation-v2",
+		})
+		const networkBlob = new NodeBlob(["generation-v1"], { type: "image/png" })
+		const networkResponse = new Response(networkBlob, { status: 200 })
+		Object.defineProperty(networkResponse, "blob", {
+			value: vi.fn(async () => networkBlob),
+		})
+		resolveResponse(networkResponse)
+
+		const response = await requestPromise
+		expect(response).not.toBeNull()
+		expect(await response?.text()).toBe("generation-v1")
+		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
+		expect(await cache.match(requestUrl)).toBeUndefined()
+	})
+
+	it("rolls back a newly cached body when metadata persistence fails", async () => {
+		const requestUrl = buildVirtualUrl("images/metadata-failure.png")
+		const entry: StoredCanvasEntry = {
+			id: "workspace/project/design/demo/image/images/metadata-failure.png",
+			namespace: "workspace/project/design/demo",
+			path: "images/metadata-failure.png",
+			mediaType: "image",
+			cacheKey: requestUrl,
+			sourceUrl: "https://oss.example.com/images/metadata-failure.png",
+		}
+		await saveCanvasEntry(entry)
+		const database = (indexedDB as unknown as FakeIndexedDbFactory).getDatabase(
+			CANVAS_MEDIA_DB_NAME,
+		)
+		if (!database) throw new Error("Test database was not initialized")
+		database.failNextPut = true
+
+		const networkBlob = new NodeBlob(["network-image"], { type: "image/png" })
+		const networkResponse = new Response(networkBlob, {
+			status: 200,
+			headers: { "Content-Type": "image/png" },
+		})
+		Object.defineProperty(networkResponse, "blob", {
+			value: vi.fn(async () => networkBlob),
+		})
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(networkResponse)
+
+		const response = await handleCanvasMediaRequest(new Request(requestUrl))
+		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
+
+		expect(await response?.text()).toBe("network-image")
+		expect(await cache.match(requestUrl)).toBeUndefined()
+	})
+
 	it("caches an audio body and serves byte ranges for playback seeking", async () => {
 		const requestUrl = buildVirtualUrl("audios/voice.mp3", "audio")
 		const entry: StoredCanvasEntry = {
@@ -459,6 +579,35 @@ describe("canvasMediaShared", () => {
 
 		expect(handled).toBe(true)
 		expect(waitUntil).toHaveBeenCalledTimes(1)
+	})
+
+	it("persists resource version metadata used to validate cached bodies", async () => {
+		const id = "workspace/project/design/versioned/image/images/example.png"
+		const waitUntil = vi.fn((promise: Promise<unknown>) => promise)
+		const event = {
+			data: {
+				type: "CANVAS_MEDIA_CACHE_REGISTER",
+				entry: {
+					namespace: "workspace/project/design/versioned",
+					path: "images/example.png",
+					mediaType: "image",
+					sourceUrl: "https://oss.example.com/images/example.png?signature=v2",
+					resourceVersion: "file-version:v2",
+					sourceUpdatedAt: "2030-01-02T00:00:00Z",
+				},
+			},
+			waitUntil,
+		} as unknown as ExtendableMessageEvent
+
+		expect(handleCanvasMediaMessage(event)).toBe(true)
+		await waitUntil.mock.results[0]?.value
+
+		expect(await readCanvasEntry(id)).toEqual(
+			expect.objectContaining({
+				resourceVersion: "file-version:v2",
+				sourceUpdatedAt: "2030-01-02T00:00:00Z",
+			}),
+		)
 	})
 
 	it("accepts batched cache-hit touch messages", async () => {

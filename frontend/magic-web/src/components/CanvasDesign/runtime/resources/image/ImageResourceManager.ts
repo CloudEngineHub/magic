@@ -367,10 +367,7 @@ export class ImageResourceManager {
 	private diagnostics = createImageResourceDiagnostics()
 
 	private urlLifecycle!: MediaResourceUrlLifecycle<ImageResourceEntry>
-	private bodyCache = new MediaResourceBodyCache<ImageResourceEntry>({
-		ttlMs: COMPRESSED_BODY_CACHE_TTL_MS,
-		maxBytes: COMPRESSED_BODY_CACHE_MAX_BYTES,
-	})
+	private bodyCache!: MediaResourceBodyCache<ImageResourceEntry>
 	private displayVariantPersistentCache = new ImageDisplayVariantPersistentCache()
 	private persistentLowReadyKeys = new Set<string>()
 	private persistentLowWritePromises = new Map<string, Promise<void>>()
@@ -647,6 +644,12 @@ export class ImageResourceManager {
 
 	constructor(options: { canvas: Canvas }) {
 		this.canvas = options.canvas
+		this.bodyCache = new MediaResourceBodyCache<ImageResourceEntry>({
+			ttlMs: COMPRESSED_BODY_CACHE_TTL_MS,
+			maxBytes: COMPRESSED_BODY_CACHE_MAX_BYTES,
+			shared: true,
+			sharedScope: () => this.getPersistentDisplayScope(),
+		})
 		this.urlLifecycle = new MediaResourceUrlLifecycle<ImageResourceEntry>({
 			canvas: this.canvas,
 			mediaType: "image",
@@ -1618,10 +1621,13 @@ export class ImageResourceManager {
 	}
 
 	private getPersistentDisplayScope(): string {
-		return buildVirtualResourceScope(
-			this.canvas.magicConfigManager.config?.methods?.getVirtualResourceScope?.(),
-			this.canvas.id,
-		)
+		const hostScope =
+			this.canvas.magicConfigManager.config?.methods?.getVirtualResourceScope?.()
+		// Host scope already has workspace/project. Do not append the runtime Canvas
+		// id, or identical low-image bodies persist under separate IndexedDB keys.
+		return hostScope
+			? buildVirtualResourceScope(hostScope, "")
+			: buildVirtualResourceScope(undefined, this.canvas.id)
 	}
 
 	private getPersistentImageProcessRendition(): string {
@@ -1938,7 +1944,7 @@ export class ImageResourceManager {
 			return null
 		}
 		const { width, height } = getImageSourceDimensions(resource.image)
-		const maxEdge = this.getMaxEdgeForVariant("low")
+		const maxEdge = this.getMaxEdgeForVariant("low") ?? 0
 		const largestEdge = Math.max(width, height)
 		const resize =
 			maxEdge > 0 && largestEdge > maxEdge
@@ -2142,6 +2148,7 @@ export class ImageResourceManager {
 
 		const ossSrc = entry.bodyOssSrc ?? entry.ossSrc ?? entry.sourceUrl ?? ""
 		const hydratedCacheKey = this.getBodyCacheKey(resourceIdentity, ossSrc, entry)
+		this.bodyCache.rekeyBodyCacheKey(entry, previousCacheKey, hydratedCacheKey)
 		entry.bodyCacheKey = hydratedCacheKey
 		if (entry.bodyPromiseCacheKey === previousCacheKey) {
 			entry.bodyPromiseCacheKey = hydratedCacheKey
@@ -3897,7 +3904,7 @@ export class ImageResourceManager {
 			clearTimeout(this.cleanupTimer)
 			this.cleanupTimer = null
 		}
-		this.bodyCache.abortAll()
+		this.bodyCache.dispose()
 		this.workerWarmupPromise = null
 		this.displayVariantPersistentCache.destroy()
 		this.persistentLowWritePromises.clear()
