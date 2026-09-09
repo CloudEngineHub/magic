@@ -95,13 +95,13 @@ func (r *Repository) ListAncestorFolderIDs(ctx context.Context, projectFileID in
 
 	links, err := r.queries.ListTaskFileParentLinksByProjectID(ctx, node.ProjectID)
 	if err != nil {
-		r.logQueryError(ctx, "ListTaskFileParentLinksByProjectID", map[string]any{
+		r.logQueryError(ctx, "project_file_ancestor_lookup", map[string]any{
 			"project_id":      node.ProjectID,
 			"project_file_id": projectFileID,
 		}, err)
 		return nil, fmt.Errorf("list task file parent links by project id: %w", err)
 	}
-	r.logQuery(ctx, "ListTaskFileParentLinksByProjectID", map[string]any{
+	r.logQuery(ctx, "project_file_ancestor_lookup", map[string]any{
 		"project_id":      node.ProjectID,
 		"project_file_id": projectFileID,
 		"row_count":       len(links),
@@ -164,7 +164,7 @@ func (r *Repository) ListDescendants(ctx context.Context, projectID, directoryID
 			ParentIds: taskFileParentIDParams(parentIDs),
 		})
 		if err != nil {
-			r.logQueryError(ctx, "ListTaskFileChildLinksByParentIDs", map[string]any{
+			r.logQueryError(ctx, "project_file_descendant_lookup", map[string]any{
 				"project_id":           projectID,
 				"directory_id":         directoryID,
 				"parent_id_count":      len(parentIDs),
@@ -173,7 +173,7 @@ func (r *Repository) ListDescendants(ctx context.Context, projectID, directoryID
 			}, err)
 			return nil, fmt.Errorf("list task file child links by parent ids: %w", err)
 		}
-		r.logQuery(ctx, "ListTaskFileChildLinksByParentIDs", map[string]any{
+		r.logQuery(ctx, "project_file_descendant_lookup", map[string]any{
 			"project_id":           projectID,
 			"directory_id":         directoryID,
 			"parent_id_count":      len(parentIDs),
