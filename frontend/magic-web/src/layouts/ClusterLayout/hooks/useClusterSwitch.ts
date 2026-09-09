@@ -65,7 +65,6 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 		[initialSameCluster, isWhiteListRoute],
 	)
 
-	console.log("-------->", targetClusterCode === configStore.cluster.clusterCode, targetClusterCode, configStore.cluster.clusterCode)
 	const [isSameCluster, setSameCluster] = useState(initialSameCluster)
 	const [loading, setLoading] = useState(initialLoading)
 

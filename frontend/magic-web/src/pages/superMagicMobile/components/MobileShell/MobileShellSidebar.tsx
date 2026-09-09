@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/shadcn-ui/avat
 import { cn } from "@/utils/cn"
 import { userStore } from "@/models/user"
 import { getAvatarColor } from "@/utils/avatar-color"
+import { getAvatarUrl } from "@/utils/avatar"
 import { MobileBrandLogo } from "@/pages/superMagicMobile/components/MobileBrandLogo"
 import { useMobileSettingsController } from "@/pages/superMagicMobile/components/MobileShell/MobileSettingsContext"
 import { useProjectListActions } from "@/pages/superMagicMobile/components/ProjectList/hooks/useProjectActions"
@@ -300,7 +301,11 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 						{/* Prefer real avatar; colored initial fallback matches prototype when image is missing. */}
 						<Avatar className="size-6">
 							{avatarUrl ? (
-								<AvatarImage src={avatarUrl} alt="" referrerPolicy="no-referrer" />
+								<AvatarImage
+									src={getAvatarUrl(avatarUrl, 24)}
+									alt=""
+									referrerPolicy="no-referrer"
+								/>
 							) : null}
 							<AvatarFallback
 								className="text-[12px] font-semibold"

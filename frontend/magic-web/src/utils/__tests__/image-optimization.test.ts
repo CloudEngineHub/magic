@@ -76,6 +76,36 @@ describe("getOptimizedImageUrl", () => {
 		expect(url).toBe("https://static-legacy.dingtalk.com/avatar.jpg@64w_64h?token=public")
 	})
 
+	it.each([
+		[
+			"https://static-legacy.dingtalk.com/media/avatar_hcHsuveMxYhAA_1290_1290.jpg",
+			"https://static-legacy.dingtalk.com/media/avatar_hcHsuveMxYhAA_1290_1290.jpg@64w_64h",
+		],
+		[
+			"https://static-legacy.dingtalk.com/media/avatar@1290w_1290h.png?tenant=magic#avatar",
+			"https://static-legacy.dingtalk.com/media/avatar.png@64w_64h?tenant=magic#avatar",
+		],
+	])(
+		"replaces existing DingTalk dimensions without changing the resource suffix",
+		(source, expected) => {
+			expect(
+				getOptimizedImageUrl(source, { variant: "thumbnail", width: 32, height: 32 }),
+			).toBe(expected)
+		},
+	)
+
+	it("is idempotent for DingTalk thumbnails", () => {
+		const url = "https://static-legacy.dingtalk.com/media/avatar_hcHsuveMxYhAA_1290_1290.jpg"
+		const optimized = getOptimizedImageUrl(url, {
+			variant: "thumbnail",
+			width: 32,
+			height: 32,
+		})
+		expect(
+			getOptimizedImageUrl(optimized, { variant: "thumbnail", width: 32, height: 32 }),
+		).toBe(optimized)
+	})
+
 	it("does not mutate signed or original URLs", () => {
 		const signedUrl =
 			"https://example.tos-cn-beijing.volces.com/private.png?X-Tos-Signature=secret"

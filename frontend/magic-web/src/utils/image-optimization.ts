@@ -80,7 +80,20 @@ function appendQueryParameter(imageUrl: string, key: string, value: string): str
 function appendDingTalkSize(imageUrl: string, width: number, height: number): string {
 	try {
 		const url = new URL(imageUrl)
-		url.pathname = `${url.pathname.replace(/@\d+w_\d+h$/, "")}@${width}w_${height}h`
+		const path = url.pathname
+		// DingTalk's resize marker is appended to the complete media filename,
+		// including files that already contain an `_originalWidth_originalHeight`
+		// suffix. Replacing that suffix produces a different media key and commonly
+		// returns 404, which makes AvatarImage render its text fallback.
+		if (/@\d+w_\d+h$/.test(path)) {
+			url.pathname = path.replace(/@\d+w_\d+h$/, `@${width}w_${height}h`)
+		} else if (/@\d+w_\d+h(\.[^./]+)$/.test(path)) {
+			// Normalize the intermediate form produced by older clients
+			// (`avatar@1290w_1290h.jpg`) to DingTalk's suffix form.
+			url.pathname = path.replace(/@\d+w_\d+h(\.[^./]+)$/, `$1@${width}w_${height}h`)
+		} else {
+			url.pathname = `${path}@${width}w_${height}h`
+		}
 		return url.toString()
 	} catch {
 		return imageUrl

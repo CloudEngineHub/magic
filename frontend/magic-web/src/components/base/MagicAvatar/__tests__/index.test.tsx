@@ -29,7 +29,7 @@ describe("MagicAvatar image variants", () => {
 			</MagicAvatar>,
 		)
 		const img = screen.getByAltText("User")
-		expect(img).toHaveAttribute("src", `${original}@64w_64h`)
+		expect(img).toHaveAttribute("src", "https://static-legacy.dingtalk.com/avatar.jpg@64w_64h")
 		fireEvent.error(img)
 		expect(img).toHaveAttribute("src", original)
 		fireEvent.error(img)
