@@ -2132,6 +2132,14 @@ class SkillAppService extends AbstractSkillAppService
         }
 
         $organizationCode = $latestVersionEntity?->getOrganizationCode() ?? $skillEntity->getOrganizationCode();
+        if ($latestVersionEntity !== null && $taskFileEntity->getFileKey() === $latestVersionEntity->getSkillFileKey()) {
+            return $this->fileDomainService->getLink(
+                $organizationCode,
+                $taskFileEntity->getFileKey(),
+                StorageBucketType::Private,
+            )?->getUrl() ?? '';
+        }
+
         return $this->taskFileDomainService->getFilePreSignedUrl($organizationCode, $taskFileEntity);
     }
 
