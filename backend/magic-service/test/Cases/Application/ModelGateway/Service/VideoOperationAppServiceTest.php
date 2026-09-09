@@ -74,7 +74,6 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Adapter\MiniMaxH3Vid
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Capability\MiniMaxH3GenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\MiniMaxVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Transport\ApiKeyMiniMaxTransport;
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoGenerateFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoModel;
@@ -432,7 +431,7 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame(VideoOperationStatus::FAILED, $operationRepository->operations['stale-without-provider-task']->getStatus());
         $this->assertSame('EXECUTION_FAILED', $operationRepository->operations['stale-without-provider-task']->getErrorCode());
         $this->assertSame(
-            ProviderVideoErrorMapper::message(VideoGenerateErrorCode::GENERAL_ERROR),
+            VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
             $operationRepository->operations['stale-without-provider-task']->getErrorMessage()
         );
         $this->assertSame([$response->getId()], $operationRepository->activeSlots['org-test:user-test'] ?? null);

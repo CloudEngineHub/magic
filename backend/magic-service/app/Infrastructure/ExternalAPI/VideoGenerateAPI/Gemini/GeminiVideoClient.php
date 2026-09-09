@@ -177,7 +177,7 @@ readonly class GeminiVideoClient
                 $response->getBody()->rewind();
             }
             $errorCode = ProviderVideoErrorMapper::resolveGemini($exception);
-            $factory = ProviderVideoErrorMapper::isRetriable($httpStatus, ! $exception->hasResponse(), $errorCode) ? 'retriable' : 'nonRetriable';
+            $factory = ProviderVideoErrorMapper::isRetriable($exception, $errorCode) ? 'retriable' : 'nonRetriable';
             $this->logger->error('gemini video request failed', [
                 'response' => $responseBody === null ? null : PayloadLogSanitizer::sanitizeResponseBody($responseBody),
                 'error_code' => $errorCode->value,
@@ -185,14 +185,14 @@ readonly class GeminiVideoClient
                 'error_message' => $exception->getMessage(),
             ]);
             throw ProviderVideoException::$factory(
-                ProviderVideoErrorMapper::message($errorCode),
+                $errorCode->getMessage(),
                 $exception,
                 $httpStatus,
                 (string) $errorCode->value,
             );
         } catch (Throwable $throwable) {
             throw ProviderVideoException::retriable(
-                ProviderVideoErrorMapper::message(VideoGenerateErrorCode::GENERAL_ERROR),
+                VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
                 $throwable,
                 null,
                 (string) VideoGenerateErrorCode::GENERAL_ERROR->value,
@@ -232,11 +232,10 @@ readonly class GeminiVideoClient
     private function responseFormatException(?Throwable $previous = null): ProviderVideoException
     {
         return ProviderVideoException::retriable(
-            ProviderVideoErrorMapper::message(VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR),
+            VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR->getMessage(),
             $previous,
             null,
             (string) VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR->value,
         );
     }
-
 }

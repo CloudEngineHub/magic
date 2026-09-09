@@ -51,9 +51,40 @@ final class DashScopeVideoClientErrorTest extends TestCase
             self::fail('Expected ProviderVideoException.');
         } catch (ProviderVideoException $exception) {
             self::assertSame((string) VideoGenerateErrorCode::INVALID_PARAMETER->value, $exception->getErrorCode());
-            self::assertSame('视频生成失败，请检查输入内容或稍后重试。', $exception->getMessage());
+            self::assertSame('请求参数不合法，请检查后重试。', $exception->getMessage());
             self::assertFalse($exception->isRetriable());
             self::assertStringNotContainsString('provider secret details', $exception->getMessage());
+        }
+    }
+
+    public function testKnownAspectRatioErrorUsesSpecificVideoErrorCode(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->method('post')->willThrowException(new RequestException(
+            'provider raw message',
+            new Request('POST', 'https://dashscope.example/v1/video'),
+            new Response(400, [], json_encode([
+                'code' => 'InvalidParameter.InvalidAspectRatio',
+                'message' => 'The aspect ratio is not supported.',
+            ], JSON_THROW_ON_ERROR)),
+        ));
+
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->method('create')->willReturn($httpClient);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->willReturn(new DashScopeRecordingLogger());
+
+        try {
+            (new DashScopeVideoClient($clientFactory, $loggerFactory))->post(
+                'https://dashscope.example',
+                'secret-api-key',
+                '/v1/video',
+                ['prompt' => 'test'],
+            );
+            self::fail('Expected ProviderVideoException.');
+        } catch (ProviderVideoException $exception) {
+            self::assertSame((string) VideoGenerateErrorCode::INVALID_ASPECT_RATIO->value, $exception->getErrorCode());
+            self::assertFalse($exception->isRetriable());
         }
     }
 
@@ -80,7 +111,34 @@ final class DashScopeVideoClientErrorTest extends TestCase
             self::fail('Expected ProviderVideoException.');
         } catch (ProviderVideoException $exception) {
             self::assertTrue($exception->isRetriable());
-            self::assertSame((string) VideoGenerateErrorCode::RATE_LIMITED->value, $exception->getErrorCode());
+            self::assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $exception->getErrorCode());
+        }
+    }
+
+    public function testTransientBusinessCodeIsRetriable(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->method('post')->willReturn(new Response(200, [], json_encode([
+            'code' => 'Throttling',
+            'message' => 'too many requests',
+        ], JSON_THROW_ON_ERROR)));
+
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->method('create')->willReturn($httpClient);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->willReturn(new DashScopeRecordingLogger());
+
+        try {
+            (new DashScopeVideoClient($clientFactory, $loggerFactory))->post(
+                'https://dashscope.example',
+                'secret-api-key',
+                '/v1/video',
+                ['prompt' => 'test'],
+            );
+            self::fail('Expected ProviderVideoException.');
+        } catch (ProviderVideoException $exception) {
+            self::assertTrue($exception->isRetriable());
+            self::assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $exception->getErrorCode());
         }
     }
 }

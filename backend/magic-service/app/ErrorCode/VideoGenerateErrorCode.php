@@ -8,6 +8,9 @@ declare(strict_types=1);
 namespace App\ErrorCode;
 
 use App\Infrastructure\Core\Exception\Annotation\ErrorMessage;
+use Throwable;
+
+use function Hyperf\Translation\trans;
 
 /**
  * 50000 - 50099 视频生成业务错误码。
@@ -76,4 +79,19 @@ enum VideoGenerateErrorCode: int
 
     #[ErrorMessage(message: 'video_generate.quota_exceeded')]
     case QUOTA_EXCEEDED = 50020;
+
+    public function getMessage(): string
+    {
+        $key = 'video_generate.' . strtolower($this->name);
+        try {
+            $message = trans($key);
+        } catch (Throwable) {
+            return $key;
+        }
+        if (is_array($message)) {
+            return implode(' ', $message);
+        }
+
+        return is_string($message) && $message !== '' ? $message : $key;
+    }
 }

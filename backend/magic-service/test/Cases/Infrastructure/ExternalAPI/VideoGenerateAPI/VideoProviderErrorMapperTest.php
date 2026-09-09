@@ -20,21 +20,35 @@ use PHPUnit\Framework\TestCase;
  */
 final class VideoProviderErrorMapperTest extends TestCase
 {
-    public function testMapsWhitelistedProviderCodeToVideoErrorCode(): void
+    public function testMapsDashScopeProviderCodeToVideoErrorCode(): void
     {
         self::assertSame(
             VideoGenerateErrorCode::INPUT_VIDEO_AUDIT_FAILED,
-            ProviderVideoErrorMapper::resolve('InputVideoSensitiveContentDetected.PrivacyInformation'),
+            ProviderVideoErrorMapper::resolveDashScope(null, [
+                'code' => 'InputVideoSensitiveContentDetected.PrivacyInformation',
+            ]),
         );
     }
 
-    public function testMapsUnknownBadRequestToGenericErrorAndNonRetriable(): void
+    public function testMapsNestedDashScopeErrorCodeToVideoErrorCode(): void
+    {
+        self::assertSame(
+            VideoGenerateErrorCode::INPUT_VIDEO_AUDIT_FAILED,
+            ProviderVideoErrorMapper::resolveDashScope(null, [
+                'output' => [
+                    'error' => ['code' => 'InputVideoSensitiveContentDetected.PrivacyInformation'],
+                ],
+            ]),
+        );
+    }
+
+    public function testMapsUnknownDashScopeErrorToGenericErrorAndNonRetriable(): void
     {
         self::assertSame(
             VideoGenerateErrorCode::GENERAL_ERROR,
-            ProviderVideoErrorMapper::resolve('UnknownProviderCode', 400),
+            ProviderVideoErrorMapper::resolveDashScope(null, ['code' => 'UnknownProviderCode']),
         );
-        self::assertFalse(ProviderVideoErrorMapper::isRetriable(400));
+        self::assertFalse(ProviderVideoErrorMapper::isRetriable(null, VideoGenerateErrorCode::GENERAL_ERROR));
     }
 
     /**
@@ -42,7 +56,12 @@ final class VideoProviderErrorMapperTest extends TestCase
      */
     public function testMapsGeminiProviderCodes(string $providerCode, VideoGenerateErrorCode $expected): void
     {
-        self::assertSame($expected, ProviderVideoErrorMapper::resolve($providerCode));
+        self::assertSame(
+            $expected,
+            ProviderVideoErrorMapper::resolveGemini($this->requestException(400, [
+                'error' => ['code' => $providerCode, 'message' => 'provider message'],
+            ])),
+        );
     }
 
     /**
@@ -51,26 +70,17 @@ final class VideoProviderErrorMapperTest extends TestCase
     public static function geminiProviderCodeMap(): iterable
     {
         yield 'invalid argument' => ['INVALID_ARGUMENT', VideoGenerateErrorCode::INVALID_PARAMETER];
-        yield 'resource exhausted' => ['RESOURCE_EXHAUSTED', VideoGenerateErrorCode::QUOTA_EXCEEDED];
-        yield 'unauthenticated' => ['UNAUTHENTICATED', VideoGenerateErrorCode::AUTHENTICATION_FAILED];
-        yield 'permission denied' => ['PERMISSION_DENIED', VideoGenerateErrorCode::AUTHENTICATION_FAILED];
-        yield 'rate limited' => ['RATE_LIMITED', VideoGenerateErrorCode::RATE_LIMITED];
-    }
-
-    public function testMapsBareHttpStatuses(): void
-    {
-        self::assertSame(VideoGenerateErrorCode::AUTHENTICATION_FAILED, ProviderVideoErrorMapper::resolve(null, 401));
-        self::assertSame(VideoGenerateErrorCode::AUTHENTICATION_FAILED, ProviderVideoErrorMapper::resolve(null, 403));
-        self::assertSame(VideoGenerateErrorCode::RATE_LIMITED, ProviderVideoErrorMapper::resolve(null, 429));
-        self::assertSame(VideoGenerateErrorCode::GENERAL_ERROR, ProviderVideoErrorMapper::resolve(null, 500));
+        yield 'resource exhausted' => ['RESOURCE_EXHAUSTED', VideoGenerateErrorCode::GENERAL_ERROR];
+        yield 'unauthenticated' => ['UNAUTHENTICATED', VideoGenerateErrorCode::GENERAL_ERROR];
+        yield 'permission denied' => ['PERMISSION_DENIED', VideoGenerateErrorCode::GENERAL_ERROR];
+        yield 'rate limited' => ['RATE_LIMITED', VideoGenerateErrorCode::GENERAL_ERROR];
     }
 
     public function testMarksTransientStatusesRetriable(): void
     {
-        self::assertTrue(ProviderVideoErrorMapper::isRetriable(429));
-        self::assertTrue(ProviderVideoErrorMapper::isRetriable(500));
-        self::assertTrue(ProviderVideoErrorMapper::isRetriable(null, true));
-        self::assertFalse(ProviderVideoErrorMapper::isRetriable(500, false, VideoGenerateErrorCode::INVALID_PARAMETER));
+        self::assertTrue(ProviderVideoErrorMapper::isRetriable($this->requestException(429, [])));
+        self::assertTrue(ProviderVideoErrorMapper::isRetriable($this->requestException(500, [])));
+        self::assertFalse(ProviderVideoErrorMapper::isRetriable($this->requestException(400, [])));
     }
 
     public function testGeminiResolverHidesProviderQuotaError(): void
@@ -143,16 +153,6 @@ final class VideoProviderErrorMapperTest extends TestCase
         }
     }
 
-    /** @param array<string, mixed> $payload */
-    private function requestException(int $status, array $payload): RequestException
-    {
-        return new RequestException(
-            'provider raw message',
-            new Request('POST', 'https://provider.example/video'),
-            new Response($status, [], json_encode($payload, JSON_THROW_ON_ERROR)),
-        );
-    }
-
     /**
      * @dataProvider geminiMessageMap
      */
@@ -214,6 +214,45 @@ final class VideoProviderErrorMapperTest extends TestCase
         );
     }
 
+    public function testVolcengineResolverMapsUserFixableErrorsAndHidesInternalErrors(): void
+    {
+        self::assertSame(
+            VideoGenerateErrorCode::INPUT_IMAGE_AUDIT_FAILED,
+            ProviderVideoErrorMapper::resolveVolcengine(null, [
+                'error' => ['code' => 'InputImageSensitiveContentDetected.PrivacyInformation'],
+            ]),
+        );
+        self::assertSame(
+            VideoGenerateErrorCode::GENERAL_ERROR,
+            ProviderVideoErrorMapper::resolveVolcengine(null, [
+                'error' => ['code' => 'AccountOverdueError', 'message' => 'provider secret'],
+            ]),
+        );
+        self::assertSame(
+            VideoGenerateErrorCode::INPUT_AUDIO_AUDIT_FAILED,
+            ProviderVideoErrorMapper::resolveVolcengine(null, [
+                'error' => ['code' => 'InputAudioSensitiveContentDetected.PrivacyInformation'],
+            ]),
+        );
+    }
+
+    public function testResolversIgnoreNonJsonResponseBodies(): void
+    {
+        self::assertSame(
+            VideoGenerateErrorCode::GENERAL_ERROR,
+            ProviderVideoErrorMapper::resolveGemini($this->requestException(500, [], 'upstream unavailable')),
+        );
+        self::assertSame(
+            VideoGenerateErrorCode::GENERAL_ERROR,
+            ProviderVideoErrorMapper::resolveDashScope(null, 'upstream unavailable'),
+        );
+    }
+
+    public function testVideoErrorCodeResolvesLocalizedMessage(): void
+    {
+        self::assertSame('视频生成失败，请检查输入内容或稍后重试。', VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
+    }
+
     public function testProviderExceptionKeepsSafeMessageAndOptionalErrorCode(): void
     {
         $exception = ProviderVideoException::nonRetriable(
@@ -229,4 +268,13 @@ final class VideoProviderErrorMapperTest extends TestCase
         self::assertFalse($exception->isRetriable());
     }
 
+    /** @param array<string, mixed> $payload */
+    private function requestException(int $status, array $payload, ?string $body = null): RequestException
+    {
+        return new RequestException(
+            'provider raw message',
+            new Request('POST', 'https://provider.example/video'),
+            new Response($status, [], $body ?? json_encode($payload, JSON_THROW_ON_ERROR)),
+        );
+    }
 }

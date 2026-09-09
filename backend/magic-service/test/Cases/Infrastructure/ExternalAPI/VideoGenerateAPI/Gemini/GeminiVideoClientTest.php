@@ -123,14 +123,14 @@ final class GeminiVideoClientTest extends TestCase
     {
         return [
             'bad request' => [400, 'INVALID_ARGUMENT', VideoGenerateErrorCode::INVALID_PARAMETER->value],
-            'unauthorized' => [401, 'UNAUTHENTICATED', VideoGenerateErrorCode::AUTHENTICATION_FAILED->value],
-            'forbidden' => [403, 'PERMISSION_DENIED', VideoGenerateErrorCode::AUTHENTICATION_FAILED->value],
+            'unauthorized' => [401, 'UNAUTHENTICATED', VideoGenerateErrorCode::GENERAL_ERROR->value],
+            'forbidden' => [403, 'PERMISSION_DENIED', VideoGenerateErrorCode::GENERAL_ERROR->value],
         ];
     }
 
     public function testRateLimitAndServerErrorsAreRetriable(): void
     {
-        foreach ([[429, VideoGenerateErrorCode::RATE_LIMITED], [500, VideoGenerateErrorCode::GENERAL_ERROR]] as [$status, $expectedCode]) {
+        foreach ([[429, VideoGenerateErrorCode::GENERAL_ERROR], [500, VideoGenerateErrorCode::GENERAL_ERROR]] as [$status, $expectedCode]) {
             $httpClient = $this->createMock(Client::class);
             $httpClient->method('get')->willThrowException(new RequestException(
                 'provider raw message',

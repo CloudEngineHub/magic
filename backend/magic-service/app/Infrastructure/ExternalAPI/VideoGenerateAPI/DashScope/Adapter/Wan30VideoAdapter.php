@@ -164,22 +164,10 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
             default => 'processing',
         };
         $videoUrl = $this->firstString($output['video_url'] ?? null);
-        $providerCode = $this->firstString(
-            $output['code'] ?? null,
-            $detail['code'] ?? null,
-            is_array($output['error'] ?? null) ? ($output['error']['code'] ?? null) : null,
-            is_array($detail['error'] ?? null) ? ($detail['error']['code'] ?? null) : null,
-        );
         if ($status === 'succeeded' && $videoUrl === null) {
             return $this->failedQueryResult($detail, VideoGenerateErrorCode::MISSING_VIDEO_DATA, $providerTaskId);
         }
-        $providerMessage = $this->firstString(
-            $output['task_status_msg'] ?? null,
-            $output['message'] ?? null,
-            is_array($output['error'] ?? null) ? ($output['error']['message'] ?? null) : null,
-            $detail['message'] ?? null,
-        );
-        $errorCode = ProviderVideoErrorMapper::resolve($providerCode, null, $providerMessage);
+        $errorCode = ProviderVideoErrorMapper::resolveDashScope(null, $detail);
         return [
             'status' => $status,
             'provider_result' => $detail,
@@ -190,9 +178,7 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
             ],
             'error' => $status !== 'failed' ? null : [
                 'code' => (string) $errorCode->value,
-                'message' => ProviderVideoErrorMapper::message($errorCode, null, $providerCode),
-                'provider_code' => $providerCode,
-                'provider_message' => $providerMessage,
+                'message' => $errorCode->getMessage(),
             ],
         ];
     }
@@ -285,8 +271,7 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
             'output' => [],
             'error' => [
                 'code' => (string) $errorCode->value,
-                'message' => ProviderVideoErrorMapper::message($errorCode),
-                'provider_code' => null,
+                'message' => $errorCode->getMessage(),
                 'provider_task_id' => $providerTaskId,
             ],
         ];

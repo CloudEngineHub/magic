@@ -13,7 +13,6 @@ use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Hyperf\Codec\Json;
-use Hyperf\Contract\TranslatorInterface;
 use Hyperf\Guzzle\ClientFactory;
 use Hyperf\Logger\LoggerFactory;
 use Throwable;
@@ -28,7 +27,6 @@ readonly class VolcengineArkVideoClient
     public function __construct(
         private ClientFactory $clientFactory,
         ?LoggerFactory $loggerFactory = null,
-        private ?TranslatorInterface $translator = null,
     ) {
         if ($loggerFactory !== null) {
             $this->logger = $loggerFactory->get(self::class);
@@ -157,13 +155,13 @@ readonly class VolcengineArkVideoClient
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
                 'error' => $errorMessage,
             ]);
-            $providerCode = $this->extractProviderCode($errorMessage);
-            $errorCode = ProviderVideoErrorMapper::resolve($providerCode, $httpStatus);
-            $isRetriable = ProviderVideoErrorMapper::isRetriable($httpStatus, ! $exception->hasResponse(), $errorCode)
+            $errorCode = ProviderVideoErrorMapper::resolveVolcengine($exception);
+            $retriable = ProviderVideoErrorMapper::isRetriable($exception, $errorCode)
                 || in_array($httpStatus, [408, 409], true);
-            $factory = $isRetriable ? 'retriable' : 'nonRetriable';
+            $factory = $retriable ? 'retriable' : 'nonRetriable';
+
             throw ProviderVideoException::$factory(
-                ProviderVideoErrorMapper::message($errorCode, $this->translator, $providerCode),
+                $errorCode->getMessage(),
                 $exception,
                 $httpStatus,
                 (string) $errorCode->value,
@@ -182,7 +180,7 @@ readonly class VolcengineArkVideoClient
                 'error' => sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()),
             ]);
             throw ProviderVideoException::retriable(
-                ProviderVideoErrorMapper::message(VideoGenerateErrorCode::GENERAL_ERROR, $this->translator),
+                VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
                 $throwable,
                 null,
                 (string) VideoGenerateErrorCode::GENERAL_ERROR->value,
@@ -193,19 +191,5 @@ readonly class VolcengineArkVideoClient
     private function calculateElapsedMilliseconds(float $startedAt): int
     {
         return max(0, (int) round((microtime(true) - $startedAt) * 1000));
-    }
-
-    private function extractProviderCode(string $errorContent): null|int|string
-    {
-        try {
-            $payload = Json::decode(trim($errorContent));
-            if (is_array($payload)) {
-                $error = is_array($payload['error'] ?? null) ? $payload['error'] : [];
-                return is_string($error['code'] ?? null) || is_int($error['code'] ?? null) ? $error['code'] : null;
-            }
-        } catch (Throwable) {
-        }
-
-        return null;
     }
 }
