@@ -1,5 +1,9 @@
 import { snapdom, type SnapdomPlugin } from "@zumer/snapdom"
+import { logger as Logger } from "@/utils/log"
 import { INSPECTOR_MSG, type InspectedElementRect } from "./types"
+
+export const htmlScreenshotLogger = Logger.createLogger("HtmlScreenshot")
+export const HTML_SCREENSHOT_FALLBACK_EVENT = "html_screenshot_capture_fallback"
 
 interface CaptureOptions {
 	iframe: HTMLIFrameElement
@@ -13,6 +17,13 @@ interface CaptureOptions {
 	iframeTargetOrigin?: string
 	/** Hide host inspector chrome before falling back to rendered-tab capture. */
 	beforeCurrentTabCapture?: () => Promise<void>
+	/** Ask the user to authorize browser capture immediately before getDisplayMedia. */
+	requestCurrentTabCaptureAuthorization?: (
+		context: CurrentTabCaptureAuthorizationContext,
+		startCapture: () => Promise<string>,
+	) => Promise<string | null>
+	/** Receives the reason when the iframe runtime cannot provide a screenshot. */
+	onIframeRuntimeFailure?: (failure: IframeRuntimeFailure) => void
 }
 
 /** Hide every page-defined cursor before a rendered-tab frame is captured. */
@@ -70,12 +81,23 @@ export class CurrentTabCaptureError extends Error {
 	}
 }
 
-interface ScreenRect {
+export interface ScreenRect {
 	left: number
 	top: number
 	width: number
 	height: number
 }
+
+export interface CurrentTabCaptureAuthorizationContext {
+	requestId?: string
+	reason: string
+	selection: InspectedElementRect
+	viewportSelection?: ScreenRect
+	outputSize: { width: number; height: number }
+	iframeTargetOrigin: string
+}
+
+type IframeRuntimeFailure = CurrentTabCaptureAuthorizationContext
 
 const IFRAME_SCREENSHOT_ACK_TIMEOUT_MS = 500
 // Must cover iframe font wait (1s), two compositor frames (240ms), snapdom
@@ -156,6 +178,28 @@ export function waitForCaptureVideoPlayback(video: HTMLVideoElement): Promise<vo
 	})
 }
 
+function reportIframeRuntimeFailure(
+	options: CaptureOptions,
+	requestId: string | undefined,
+	reason: string,
+): IframeRuntimeFailure {
+	const outputSize = getCaptureOutputSize(options.selection, options.viewportSelection)
+	const failure = {
+		requestId,
+		reason,
+		selection: options.selection,
+		viewportSelection: options.viewportSelection,
+		outputSize,
+		iframeTargetOrigin: getIframeTargetOrigin(options.iframe, options.iframeTargetOrigin),
+	}
+	options.onIframeRuntimeFailure?.(failure)
+	htmlScreenshotLogger.report(HTML_SCREENSHOT_FALLBACK_EVENT, {
+		...failure,
+		stage: "iframe-runtime-failure",
+	})
+	return failure
+}
+
 function blobToDataUrl(blob: Blob): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const reader = new FileReader()
@@ -180,7 +224,10 @@ function getIframeTargetOrigin(iframe: HTMLIFrameElement, configuredOrigin?: str
 /** Ask the iframe runtime to rasterize its own DOM without display-media permission. */
 export async function captureWithIframeRuntime(options: CaptureOptions): Promise<string | null> {
 	const targetWindow = options.iframe.contentWindow
-	if (!targetWindow) return null
+	if (!targetWindow) {
+		reportIframeRuntimeFailure(options, undefined, "iframe-window-unavailable")
+		return null
+	}
 
 	const requestId = `inspector-screenshot-${Date.now()}-${Math.random().toString(36).slice(2)}`
 	const targetOrigin = getIframeTargetOrigin(options.iframe, options.iframeTargetOrigin)
@@ -215,9 +262,11 @@ export async function captureWithIframeRuntime(options: CaptureOptions): Promise
 			window.clearTimeout(timeoutId)
 			timeoutId = window.setTimeout(() => {
 				cancelIframeScreenshot()
+				reportIframeRuntimeFailure(options, requestId, "result-timeout")
 				finish(null)
 			}, IFRAME_SCREENSHOT_RESULT_TIMEOUT_MS)
 		}
+
 		const handleMessage = (event: MessageEvent) => {
 			if (event.source !== targetWindow || event.origin !== targetOrigin) return
 			const data = event.data
@@ -230,19 +279,38 @@ export async function captureWithIframeRuntime(options: CaptureOptions): Promise
 				return
 			}
 			if (data.type !== INSPECTOR_MSG.SCREENSHOT_RESPONSE) return
-			if (!data.success || !(data.blob instanceof Blob)) {
+			if (!data.success) {
+				reportIframeRuntimeFailure(
+					options,
+					requestId,
+					typeof data.error === "string" && data.error ? data.error : "runtime-failure",
+				)
+				finish(null)
+				return
+			}
+			if (!(data.blob instanceof Blob)) {
+				reportIframeRuntimeFailure(options, requestId, "invalid-response-blob")
 				finish(null)
 				return
 			}
 			void blobToDataUrl(data.blob).then(
 				(value) => finish(value),
-				() => finish(null),
+				(error) => {
+					reportIframeRuntimeFailure(
+						options,
+						requestId,
+						error instanceof Error ? error.message : "blob-read-failed",
+					)
+					finish(null)
+				},
 			)
 		}
 		timeoutId = window.setTimeout(() => {
 			cancelIframeScreenshot()
+			reportIframeRuntimeFailure(options, requestId, "ack-timeout")
 			finish(null)
 		}, IFRAME_SCREENSHOT_ACK_TIMEOUT_MS)
+
 		window.addEventListener("message", handleMessage)
 		try {
 			targetWindow.postMessage(
@@ -254,7 +322,12 @@ export async function captureWithIframeRuntime(options: CaptureOptions): Promise
 				},
 				targetOrigin,
 			)
-		} catch {
+		} catch (error) {
+			reportIframeRuntimeFailure(
+				options,
+				requestId,
+				error instanceof Error ? error.message : "request-post-message-failed",
+			)
 			finish(null)
 		}
 	})
@@ -1111,6 +1184,7 @@ async function captureCurrentTab({
 
 /** Capture a selected iframe region from the rendered tab or a stable PPT capture root. */
 export async function captureIframeRegion(options: CaptureOptions): Promise<string> {
+	let iframeRuntimeFailure: IframeRuntimeFailure | null = null
 	let iframeDocument: Document | null = null
 	try {
 		iframeDocument = options.iframe.contentDocument
@@ -1118,10 +1192,56 @@ export async function captureIframeRegion(options: CaptureOptions): Promise<stri
 		iframeDocument = null
 	}
 	if (!iframeDocument?.body || shouldCaptureCurrentTab(iframeDocument.body, options.selection)) {
-		const iframeScreenshot = await captureWithIframeRuntime(options)
+		const iframeScreenshot = await captureWithIframeRuntime({
+			...options,
+			onIframeRuntimeFailure: (failure) => {
+				iframeRuntimeFailure = failure
+				options.onIframeRuntimeFailure?.(failure)
+			},
+		})
 		if (iframeScreenshot) return iframeScreenshot
-		await options.beforeCurrentTabCapture?.()
-		return captureCurrentTab(options)
+
+		const authorizationContext =
+			iframeRuntimeFailure ??
+			({
+				reason: "iframe-runtime-unavailable",
+				selection: options.selection,
+				viewportSelection: options.viewportSelection,
+				outputSize: getCaptureOutputSize(options.selection, options.viewportSelection),
+				iframeTargetOrigin: getIframeTargetOrigin(
+					options.iframe,
+					options.iframeTargetOrigin,
+				),
+			} satisfies CurrentTabCaptureAuthorizationContext)
+		const startCurrentTabCapture = () => {
+			htmlScreenshotLogger.report(HTML_SCREENSHOT_FALLBACK_EVENT, {
+				...authorizationContext,
+				fallback: "current-tab",
+				stage: "start",
+			})
+			const capturePromise = captureCurrentTab(options)
+			const beforeCurrentTabCapture = options.beforeCurrentTabCapture
+			if (!beforeCurrentTabCapture) return capturePromise
+			return beforeCurrentTabCapture().then(
+				() => capturePromise,
+				(error) => {
+					void capturePromise.catch(() => undefined)
+					throw error
+				},
+			)
+		}
+		if (options.requestCurrentTabCaptureAuthorization) {
+			const dataUrl = await options.requestCurrentTabCaptureAuthorization(
+				authorizationContext,
+				startCurrentTabCapture,
+			)
+			if (dataUrl) return dataUrl
+			throw new CurrentTabCaptureError(
+				"cancelled",
+				"AI editing capture authorization was cancelled",
+			)
+		}
+		return startCurrentTabCapture()
 	}
 
 	const restoreDocument = iframeDocument

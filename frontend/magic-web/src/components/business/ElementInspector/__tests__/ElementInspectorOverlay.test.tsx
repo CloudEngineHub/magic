@@ -12,6 +12,7 @@ const captureIframeRegion = vi.hoisted(() =>
 const suppressCaptureCursor = vi.hoisted(() => vi.fn(() => vi.fn()))
 
 vi.mock("react-i18next", () => ({
+	initReactI18next: { type: "3rdParty", init: vi.fn() },
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
