@@ -66,6 +66,29 @@ describe("MediaResourceRegistry", () => {
 		)
 	})
 
+	it("preserves the thumbnail when loading the preview rendition", async () => {
+		const resolver = vi
+			.fn<MediaResourceResolver>()
+			.mockResolvedValueOnce({
+				thumbnailUrl: "https://cdn.test/thumbnail.png",
+				status: "ready",
+			})
+			.mockResolvedValueOnce({
+				previewUrl: "https://cdn.test/thumbnail.png",
+				thumbnailUrl: undefined,
+				status: "ready",
+			})
+
+		await mediaResourceRegistry.ensureThumbnail(imageRef, resolver)
+		await mediaResourceRegistry.ensurePreview(imageRef, resolver)
+
+		expect(mediaResourceRegistry.getSnapshot(imageRef)).toMatchObject({
+			thumbnailUrl: "https://cdn.test/thumbnail.png",
+			previewUrl: "https://cdn.test/thumbnail.png",
+			status: "ready",
+		})
+	})
+
 	it("keeps the null hook snapshot referentially stable", async () => {
 		const resolver = vi.fn<MediaResourceResolver>().mockResolvedValue(null)
 		const { result, rerender } = renderHook(() =>
@@ -99,6 +122,16 @@ describe("MediaResourceRegistry", () => {
 		expect(mediaResourceRegistryTestUtils.buildKey(imageRef)).toBe(
 			"project-file|project-1|file-1|image",
 		)
+	})
+
+	it("isolates scoped and versioned resources without changing the base key", () => {
+		expect(
+			mediaResourceRegistryTestUtils.buildKey({
+				...imageRef,
+				resourceVersion: "v2",
+				scope: "org:o|user:u",
+			}),
+		).toBe("project-file|project-1|file-1|image|version:||v2|scope:org:o|user:u")
 	})
 
 	it("publishes provider-owned snapshots without starting a request", () => {

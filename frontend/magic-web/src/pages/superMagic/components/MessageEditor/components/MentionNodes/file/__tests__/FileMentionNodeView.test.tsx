@@ -6,6 +6,15 @@ import FileMentionNodeView from "../FileMentionNodeView"
 
 const storeMocks = vi.hoisted(() => ({
 	getFileById: vi.fn(),
+	useMediaResourceSnapshot: vi.fn(() => ({
+		snapshot: {
+			identity: "project-file-1",
+			status: "ready",
+			thumbnailUrl: "https://cdn.test/project.png",
+			previewUrl: "https://cdn.test/project.png",
+		},
+		loadPreview: vi.fn(),
+	})),
 }))
 
 vi.mock("@/infrastructure/editors/tiptap/react", () => ({
@@ -40,27 +49,11 @@ vi.mock("@/pages/superMagic/components/MessageEditor/components/AtItem/hooks/use
 	default: () => null,
 }))
 
-vi.mock("@/pages/superMagic/hooks/useFileUrl", () => ({
-	useFileUrl: () => ({
-		fileUrl: "https://cdn.test/project.png",
-		isLoading: false,
-		hasError: false,
-	}),
-}))
-
 vi.mock("@/services/media/MediaResourceRegistry", () => ({
 	mediaResourceRegistry: {
 		ensurePreview: vi.fn(),
 	},
-	useMediaResourceSnapshot: () => ({
-		snapshot: {
-			identity: "project-file-1",
-			status: "ready",
-			thumbnailUrl: "https://cdn.test/project.png",
-			previewUrl: "https://cdn.test/project.png",
-		},
-		loadPreview: vi.fn(),
-	}),
+	useMediaResourceSnapshot: storeMocks.useMediaResourceSnapshot,
 }))
 
 vi.mock("@/components/base/MediaPreview", () => ({
@@ -89,6 +82,16 @@ function createProps(
 describe("FileMentionNodeView", () => {
 	beforeEach(() => {
 		storeMocks.getFileById.mockReset()
+		storeMocks.useMediaResourceSnapshot.mockReset()
+		storeMocks.useMediaResourceSnapshot.mockReturnValue({
+			snapshot: {
+				identity: "project-file-1",
+				status: "ready",
+				thumbnailUrl: "https://cdn.test/project.png",
+				previewUrl: "https://cdn.test/project.png",
+			},
+			loadPreview: vi.fn(),
+		})
 	})
 
 	it("keeps production upload progress behavior in the shared renderer", () => {
@@ -131,6 +134,16 @@ describe("FileMentionNodeView", () => {
 
 		expect(screen.getByText("project.png")).toBeInTheDocument()
 		expect(screen.getByTestId("file-mention-visual")).toBeInTheDocument()
+		expect(storeMocks.useMediaResourceSnapshot).toHaveBeenCalledWith(
+			expect.objectContaining({
+				identity: "project-file-1",
+				mediaType: "image",
+			}),
+			expect.objectContaining({
+				enabled: true,
+				loadThumbnail: true,
+			}),
+		)
 	})
 
 	it("renders pending canvas file mentions with reduced opacity", () => {

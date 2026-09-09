@@ -8,6 +8,11 @@ export interface MentionFilePreviewSourceRow {
 	is_directory?: boolean
 	file_id?: string | number
 	updated_at?: string
+	resource_version?: string | null
+	version?: string | number | null
+	file_version?: number
+	project_id?: string
+	file_size?: number
 	relative_file_path?: string
 	file_key?: string
 	file_url?: string

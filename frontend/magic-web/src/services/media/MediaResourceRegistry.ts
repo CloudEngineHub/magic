@@ -47,7 +47,15 @@ function isExpired(snapshot: MediaResourceSnapshot): boolean {
 }
 
 function buildKey(ref: MediaResourceRef): string {
-	return [ref.provider, ref.projectId ?? "", ref.identity, ref.mediaType].join("|")
+	const baseKey = [ref.provider, ref.projectId ?? "", ref.identity, ref.mediaType].join("|")
+	const versionKey = [ref.fileVersion ?? "", ref.updatedAt ?? "", ref.resourceVersion ?? ""].join(
+		"|",
+	)
+	const hasVersion = Boolean(
+		ref.fileVersion !== undefined || ref.updatedAt || ref.resourceVersion,
+	)
+	const scopedKey = hasVersion ? `${baseKey}|version:${versionKey}` : baseKey
+	return ref.scope?.trim() ? `${scopedKey}|scope:${ref.scope.trim()}` : scopedKey
 }
 
 function createIdleSnapshot(identity: string): MediaResourceSnapshot {
@@ -63,11 +71,15 @@ function mergeSnapshot(
 	result: MediaResourceResolveResult,
 	identity: string,
 ): MediaResourceSnapshot {
+	const definedResult = Object.fromEntries(
+		Object.entries(result).filter(([, value]) => value !== undefined),
+	) as MediaResourceResolveResult
+
 	return {
 		...previous,
-		...result,
+		...definedResult,
 		identity,
-		status: result.status ?? "ready",
+		status: definedResult.status ?? "ready",
 	}
 }
 

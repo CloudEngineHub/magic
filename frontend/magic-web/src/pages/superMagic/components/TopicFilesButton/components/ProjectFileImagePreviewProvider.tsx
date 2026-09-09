@@ -17,10 +17,11 @@ import {
 	cancelProjectFileImagePreviewRequest,
 	deleteProjectFileImagePreviewCacheItem,
 	getProjectFileImagePreviewCacheItem,
-	getProjectFileImagePreviewMemoryCacheItem,
+	isProjectFileImagePreviewDirectUrlUsable,
 	PROJECT_FILE_IMAGE_PREVIEW_RENDITION_KEY,
 	requestProjectFileImagePreview,
 	requestProjectFileImagePreviewBatch,
+	seedProjectFileImagePreviewDirectUrls,
 } from "./projectFileImagePreviewCoordinator"
 
 type PreviewStatus = "idle" | "loading" | "loaded" | "error" | "unavailable"
@@ -31,6 +32,10 @@ export interface ProjectFileImagePreviewSource {
 	cacheKey: string
 	fileName: string
 	directThumbnailUrl?: string
+	directThumbnailExpiresAt?: string
+	fileVersion?: number
+	updatedAt?: string
+	resourceVersion?: string
 }
 
 interface PreviewState {
@@ -123,6 +128,39 @@ function resolveDirectThumbnailUrl(item: AttachmentItem): string {
 	return pickStringUrlField(item, "thumbnail_url") || pickStringUrlField(item, "preview_url")
 }
 
+function resolveDirectThumbnailExpiresAt(item: AttachmentItem): string | undefined {
+	const value = item.expires_at ?? item.expiresAt
+	return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function resolveAttachmentFileVersion(item: AttachmentItem): number | undefined {
+	const value = item.file_version
+	if (typeof value === "number" && Number.isFinite(value)) return value
+	if (typeof value === "string" && value.trim() !== "") {
+		const parsed = Number(value)
+		return Number.isFinite(parsed) ? parsed : undefined
+	}
+	return undefined
+}
+
+function resolveAttachmentUpdatedAt(item: AttachmentItem): string | undefined {
+	const value = item.updated_at ?? item.updatedAt ?? item.modified_at ?? item.modify_time
+	return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function resolveAttachmentResourceVersion(item: AttachmentItem): string | undefined {
+	const explicit = item.resource_version ?? item.resourceVersion ?? item.version
+	if (explicit !== undefined && explicit !== null && String(explicit).trim() !== "") {
+		return String(explicit)
+	}
+	return undefined
+}
+
+function seedDirectPreviewSourceIfNeeded(source: ProjectFileImagePreviewSource): void {
+	if (!source.directThumbnailUrl) return
+	seedProjectFileImagePreviewDirectUrls([source])
+}
+
 function getAttachmentDisplayNameFallback(item: AttachmentItem): string {
 	return item.display_filename || item.file_name || item.filename || item.name || ""
 }
@@ -140,6 +178,7 @@ export function resolveProjectFileImagePreviewSource(
 	if (!fileId && !directThumbnailUrl) return null
 
 	const fileName = getAttachmentDisplayNameFallback(item)
+	const updatedAt = resolveAttachmentUpdatedAt(item)
 	const cacheKey = [
 		fileId,
 		extension,
@@ -159,11 +198,17 @@ export function resolveProjectFileImagePreviewSource(
 		cacheKey,
 		fileName,
 		directThumbnailUrl: directThumbnailUrl || undefined,
+		directThumbnailExpiresAt: directThumbnailUrl
+			? resolveDirectThumbnailExpiresAt(item)
+			: undefined,
+		fileVersion: resolveAttachmentFileVersion(item),
+		updatedAt,
+		resourceVersion: resolveAttachmentResourceVersion(item),
 	}
 }
 
-function getMemoryCachedPreviewUrl(cacheKey: string): string | undefined {
-	return getProjectFileImagePreviewMemoryCacheItem(cacheKey)?.url
+function getCachedPreviewUrl(source: ProjectFileImagePreviewSource): string | undefined {
+	return getProjectFileImagePreviewCacheItem(source)?.url
 }
 
 function collectCurrentPreviewKeys(items: AttachmentItem[]): Set<string> {
@@ -187,8 +232,8 @@ function shouldRequestPreview(
 	pendingKeys: ReadonlySet<string>,
 ) {
 	if (!source.fileId) return false
-	if (source.directThumbnailUrl) return false
-	if (getMemoryCachedPreviewUrl(source.cacheKey)) return false
+	if (isProjectFileImagePreviewDirectUrlUsable(source)) return false
+	if (getCachedPreviewUrl(source)) return false
 	if (pendingKeys.has(source.cacheKey)) return false
 
 	const state = states.get(source.cacheKey)
@@ -214,6 +259,7 @@ export function useProjectFileImagePreviewManager({
 	const disposedRef = useRef(false)
 
 	const currentPreviewKeys = useMemo(() => collectCurrentPreviewKeys(attachments), [attachments])
+
 	const isSourceAdmitted = useCallback((cacheKey: string) => {
 		return mountedSourceKeysRef.current.has(cacheKey) || visibleSourcesRef.current.has(cacheKey)
 	}, [])
@@ -251,7 +297,7 @@ export function useProjectFileImagePreviewManager({
 	)
 	const hydrateCachedPreview = useCallback(
 		(source: ProjectFileImagePreviewSource) => {
-			if (!getProjectFileImagePreviewCacheItem(source.cacheKey)) return false
+			if (!getProjectFileImagePreviewCacheItem(source)) return false
 
 			notifyPreviewKeys([source.cacheKey])
 			return true
@@ -259,14 +305,17 @@ export function useProjectFileImagePreviewManager({
 		[notifyPreviewKeys],
 	)
 	const getPreviewState = useCallback((source: ProjectFileImagePreviewSource): PreviewState => {
-		if (source.directThumbnailUrl) {
+		const state = previewStatesRef.current.get(source.cacheKey)
+		if (state) return state
+
+		const cachedPreviewUrl = getCachedPreviewUrl(source)
+		if (cachedPreviewUrl) return { status: "loaded", url: cachedPreviewUrl }
+
+		if (isProjectFileImagePreviewDirectUrlUsable(source)) {
 			return { status: "loaded", url: source.directThumbnailUrl }
 		}
 
-		const cachedPreviewUrl = getMemoryCachedPreviewUrl(source.cacheKey)
-		if (cachedPreviewUrl) return { status: "loaded", url: cachedPreviewUrl }
-
-		return previewStatesRef.current.get(source.cacheKey) || EMPTY_PREVIEW_STATE
+		return EMPTY_PREVIEW_STATE
 	}, [])
 	const getPreviewSnapshot = useCallback(
 		(source: ProjectFileImagePreviewSource) => {
@@ -290,14 +339,21 @@ export function useProjectFileImagePreviewManager({
 	}, [])
 
 	const requestPreviewSources = useCallback(
-		(sources: ProjectFileImagePreviewSource[], options?: { prebatched?: boolean }) => {
+		(
+			sources: ProjectFileImagePreviewSource[],
+			options?: {
+				prebatched?: boolean
+				forceRefresh?: boolean
+				allowAttachmentListUrl?: boolean
+			},
+		) => {
 			const requestSources = sources.filter((source) => source.fileId)
 			if (requestSources.length === 0) return
 
 			const pendingKeys = pendingKeysRef.current
 			const nextPendingSources = requestSources.filter((source) => {
 				if (pendingKeys.has(source.cacheKey)) return false
-				if (getMemoryCachedPreviewUrl(source.cacheKey)) return false
+				if (!options?.forceRefresh && getCachedPreviewUrl(source)) return false
 				pendingKeys.add(source.cacheKey)
 				return true
 			})
@@ -308,9 +364,11 @@ export function useProjectFileImagePreviewManager({
 			)
 
 			const request = options?.prebatched
-				? requestProjectFileImagePreviewBatch(nextPendingSources)
+				? requestProjectFileImagePreviewBatch(nextPendingSources, options)
 				: Promise.all(
-						nextPendingSources.map((source) => requestProjectFileImagePreview(source)),
+						nextPendingSources.map((source) =>
+							requestProjectFileImagePreview(source, options),
+						),
 					)
 
 			void request
@@ -388,7 +446,7 @@ export function useProjectFileImagePreviewManager({
 		(sources: ProjectFileImagePreviewSource[]) => {
 			let queued = false
 			for (const source of sources) {
-				if (source.directThumbnailUrl || !source.fileId) continue
+				if (isProjectFileImagePreviewDirectUrlUsable(source) || !source.fileId) continue
 				if (thumbnailQueueRef.current.has(source.cacheKey)) continue
 				thumbnailQueueRef.current.set(source.cacheKey, source)
 				queued = true
@@ -458,6 +516,7 @@ export function useProjectFileImagePreviewManager({
 				}
 
 				visibleSourcesRef.current.set(source.cacheKey, { source, count: 1 })
+				seedDirectPreviewSourceIfNeeded(source)
 				if (hydrateCachedPreview(source)) return
 				if (
 					shouldRequestPreview(source, previewStatesRef.current, pendingKeysRef.current)
@@ -504,17 +563,21 @@ export function useProjectFileImagePreviewManager({
 
 	const markPreviewImageError = useCallback(
 		(source: ProjectFileImagePreviewSource) => {
-			if (source.directThumbnailUrl || getMemoryCachedPreviewUrl(source.cacheKey)) return
-
-			deleteProjectFileImagePreviewCacheItem(source.cacheKey)
-			applyPreviewStateChanges([[source.cacheKey, undefined]])
-			if (isSourceAdmitted(source.cacheKey)) requestPreviewSources([source])
+			deleteProjectFileImagePreviewCacheItem(source)
+			applyPreviewStateChanges([[source.cacheKey, { status: "error" }]])
+			if (isSourceAdmitted(source.cacheKey)) {
+				void requestPreviewSources([source], {
+					forceRefresh: true,
+					allowAttachmentListUrl: false,
+				})
+			}
 		},
 		[applyPreviewStateChanges, isSourceAdmitted, requestPreviewSources],
 	)
 
 	const ensurePreview = useCallback(
 		(source: ProjectFileImagePreviewSource) => {
+			seedDirectPreviewSourceIfNeeded(source)
 			if (hydrateCachedPreview(source)) return
 			if (shouldRequestPreview(source, previewStatesRef.current, pendingKeysRef.current)) {
 				requestPreviewSources([source])
@@ -582,7 +645,7 @@ export function useProjectFileImagePreviewState(
 		const currentSource = sourceRef.current
 		if (!currentSource) return "unavailable\0"
 		if (manager) return manager.getPreviewSnapshot(currentSource)
-		return currentSource.directThumbnailUrl
+		return isProjectFileImagePreviewDirectUrlUsable(currentSource)
 			? `loaded\0${currentSource.directThumbnailUrl}`
 			: "idle\0"
 	}, [manager?.getPreviewSnapshot, source?.cacheKey, source?.directThumbnailUrl])
@@ -591,7 +654,7 @@ export function useProjectFileImagePreviewState(
 
 	if (!source) return null
 	if (manager) return manager.getPreviewState(source)
-	if (source.directThumbnailUrl) {
+	if (isProjectFileImagePreviewDirectUrlUsable(source)) {
 		return { status: "loaded", url: source.directThumbnailUrl }
 	}
 	return EMPTY_PREVIEW_STATE
