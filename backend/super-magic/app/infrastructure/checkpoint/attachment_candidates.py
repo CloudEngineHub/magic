@@ -8,6 +8,10 @@
 chat_history 等，见空间注册表）是 Agent 的内部状态，随 checkpoint
 恢复，不应以文件变更的形式呈现给用户。
 
+注意：隐藏路径（以 "." 开头的段，如 .magic/、.venv/）不在此过滤——
+隐藏目录里的持久文件（如用户空间的记忆文件）同样要进入变更附件与
+文件版本链路。
+
 本模块为纯函数，无重依赖；监听服务委托本模块做选择，测试可直接导入。
 """
 
@@ -21,20 +25,6 @@ from app.core.entity.checkpoint import (
 )
 
 
-def is_hidden_checkpoint_path(path: str) -> bool:
-    """判断路径是否属于隐藏路径（任一路径段以 "." 开头）。
-
-    覆盖工具或 Agent 自动生成的隐藏产物（如 .tmp/、.cache/）。
-    """
-    normalized = path.replace("\\", "/").lstrip("/")
-    if not normalized:
-        return False
-    for segment in normalized.split("/"):
-        if segment.startswith("."):
-            return True
-    return False
-
-
 def select_changed_attachment_paths(file_snapshots: List[FileSnapshot]) -> List[str]:
     """从聚合流水中挑出需要构造变更附件的文件路径。
 
@@ -44,7 +34,8 @@ def select_changed_attachment_paths(file_snapshots: List[FileSnapshot]) -> List[
     - 跳过目录快照（附件只针对文件）
     - 跳过 DELETED 操作（文件已不存在）
     - 跳过 RENAMED 操作（内容未变，避免无意义的版本创建）
-    - 跳过隐藏路径
+    - 不按"隐藏路径"过滤：以 "." 开头的目录（.magic/、.venv/ 等）里的
+      持久文件同样进入变更附件与文件版本链路
     - 按 file_path 首次出现去重，保持出现顺序
 
     Returns:
@@ -65,8 +56,6 @@ def select_changed_attachment_paths(file_snapshots: List[FileSnapshot]) -> List[
 
         path = snapshot.file_path
         if path in seen:
-            continue
-        if is_hidden_checkpoint_path(path):
             continue
 
         seen.add(path)

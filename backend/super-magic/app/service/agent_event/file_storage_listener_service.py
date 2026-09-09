@@ -961,7 +961,8 @@ class FileStorageListenerService:
         - 只收集工作区空间（project / user）条目；topic 空间（聊天历史等内部状态）不出现在用户可见变更里
         - 跳过目录快照 (版本与 attachment 都只针对文件)
         - 跳过 DELETED 操作 (文件已不存在，无法构造 attachment)
-        - 跳过任一路径段以 "." 开头的隐藏路径，覆盖工具和 Agent 生成的隐藏目录
+        - 不按隐藏路径过滤：以 "." 开头的目录（.magic/、.venv/ 等）里的
+          持久文件同样进入变更附件与文件版本链路
         - 同一路径同一 checkpoint 内只取第一次出现 (file_snapshots 已是按顺序追加
           的操作流，保留首次即可)
 
@@ -1034,8 +1035,8 @@ class FileStorageListenerService:
         """
         从 checkpoint 流水中挑出需要构造 attachment 的文件路径。
 
-        选择逻辑（含空间过滤：topic/聊天历史条目不呈现给用户、目录与删除跳过、
-        隐藏路径过滤）委托 infrastructure 层纯函数，便于单测直接覆盖；
+        选择逻辑（含空间过滤：topic/聊天历史条目不呈现给用户、目录与删除
+        跳过）委托 infrastructure 层纯函数，便于单测直接覆盖；
         本方法保留仅为调用点稳定。
 
         Args:

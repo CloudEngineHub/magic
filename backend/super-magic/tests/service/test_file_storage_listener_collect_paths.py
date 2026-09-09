@@ -2,8 +2,9 @@
 """变更附件候选路径选择器的过滤规则测试。
 
 覆盖核心回归点：聚合流水中 topic 空间的条目（聊天历史等内部状态）
-不得进入用户可见的变更附件列表；项目/user 工作区空间的既有过滤规则
-不回归。
+不得进入用户可见的变更附件列表；工作区空间（project / user）条目
+（含以 "." 开头的隐藏目录下的持久文件，如用户空间记忆文件）进入变更
+附件候选。
 """
 
 from datetime import datetime
@@ -16,7 +17,6 @@ from app.core.entity.checkpoint import (
     FileType,
 )
 from app.infrastructure.checkpoint.attachment_candidates import (
-    is_hidden_checkpoint_path,
     select_changed_attachment_paths,
 )
 
@@ -56,26 +56,44 @@ def test_topic_entries_never_become_user_visible_changes():
     ]
 
 
-def test_project_rules_keep_deeleted_and_hidden_filtered():
-    """既有规则不回归：created 保留、deleted/renamed/目录/隐藏路径剔除。"""
+def test_created_kept_and_deleted_renamed_dirs_filtered():
+    """既有规则不回归：created 保留、deleted/renamed/目录剔除。"""
     snapshots = [
         _snap("1", "created.txt", FileOperation.CREATED),
         _snap("2", "deleted.txt", FileOperation.DELETED),
         _snap("3", "renamed-target.txt", FileOperation.RENAMED),
-        _snap("4", ".cache/junk.bin"),
-        _snap("5", "docs/readme.md"),
+        _snap("4", "docs/readme.md"),
     ]
 
     assert select_changed_attachment_paths(snapshots) == ["created.txt", "docs/readme.md"]
 
 
+def test_hidden_path_files_are_user_visible():
+    """回归（生产案例）：以 "." 开头的目录里的持久文件不得被过滤。
+
+    用户空间的记忆文件位于 .magic/ 下，曾因隐藏路径过滤被整条剔除，
+    导致变更附件缺失、magic-service 文件版本停在 v1。
+    """
+    snapshots = [
+        _snap("1", "/mnt/agfs/magicfs/user/.magic/memory/global/MEMORY.md",
+              FileOperation.CREATED, space=USER_SPACE),
+        _snap("2", "/mnt/agfs/magicfs/user/.venv/lib.py", space=USER_SPACE),
+        _snap("3", "/mnt/agfs/magicfs/project/.magic/skills/README.md",
+              space="project"),
+    ]
+
+    assert select_changed_attachment_paths(snapshots) == [
+        "/mnt/agfs/magicfs/user/.magic/memory/global/MEMORY.md",
+        "/mnt/agfs/magicfs/user/.venv/lib.py",
+        "/mnt/agfs/magicfs/project/.magic/skills/README.md",
+    ]
+
+
 def test_user_space_entries_enter_user_visible_changes():
-    """user 空间与项目空间同为工作区空间：变更进入用户可见附件候选，
-    既有过滤规则（隐藏路径等）同样生效。"""
+    """user 空间与项目空间同为工作区空间：变更进入用户可见附件候选。"""
     snapshots = [
         _snap("1", "/mnt/agfs/magicfs/project/report.md", space="project"),
         _snap("2", "/mnt/agfs/magicfs/user/notes.txt", space=USER_SPACE),
-        _snap("3", "/mnt/agfs/magicfs/user/.venv/lib.py", space=USER_SPACE),
         _snap("4", "/mnt/agfs/magicfs/user/gone.txt", FileOperation.DELETED,
               space=USER_SPACE),
     ]
@@ -105,10 +123,3 @@ def test_directory_entries_skipped_regardless_of_space():
     ]
 
     assert select_changed_attachment_paths(snapshots) == []
-
-
-def test_is_hidden_checkpoint_path_segment_semantics():
-    assert is_hidden_checkpoint_path(".tmp/a.txt") is True
-    assert is_hidden_checkpoint_path("a/.hidden") is True
-    assert is_hidden_checkpoint_path("a.txt") is False
-    assert is_hidden_checkpoint_path("..") is True
