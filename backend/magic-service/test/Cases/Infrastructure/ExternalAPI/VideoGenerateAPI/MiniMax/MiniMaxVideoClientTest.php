@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\MiniMaxVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use GuzzleHttp\Client;
@@ -137,7 +138,7 @@ class MiniMaxVideoClientTest extends TestCase
             );
             self::fail('Expected ProviderVideoException to be thrown');
         } catch (ProviderVideoException $exception) {
-            self::assertSame('MiniMax video request failed: {"base_resp":{"status_msg":"rate limited"}}', $exception->getMessage());
+            self::assertSame(VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $exception->getMessage());
             self::assertTrue($exception->isRetry());
             self::assertSame(429, $exception->getHttpStatus());
         } finally {

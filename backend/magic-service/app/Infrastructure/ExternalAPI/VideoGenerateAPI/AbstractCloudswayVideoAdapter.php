@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
@@ -31,7 +32,7 @@ abstract readonly class AbstractCloudswayVideoAdapter implements VideoGeneration
             return $modelVersion;
         }
 
-        throw new RuntimeException('cloudsway endpoint id missing');
+        throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
     }
 
     protected function buildEndpointPath(VideoQueueOperationEntity $operation, string $suffix): string

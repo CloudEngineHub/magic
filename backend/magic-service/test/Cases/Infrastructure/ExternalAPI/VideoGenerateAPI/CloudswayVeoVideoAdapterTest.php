@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoOperationStatus;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
@@ -440,7 +441,7 @@ class CloudswayVeoVideoAdapterTest extends TestCase
         $adapter = new CloudswayVeoVideoAdapter(new CloudswayVideoClient($this->createMock(ClientFactory::class)));
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('cloudsway endpoint id missing');
+        $this->expectExceptionMessage(VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
 
         $adapter->query(
             new VideoQueueOperationEntity(

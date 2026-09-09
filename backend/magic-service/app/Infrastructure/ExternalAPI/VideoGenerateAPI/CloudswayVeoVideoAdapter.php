@@ -383,7 +383,6 @@ readonly class CloudswayVeoVideoAdapter extends AbstractCloudswayVideoAdapter
             'output' => $videoUrl === null ? [] : [
                 'video_url' => $videoUrl,
                 'provider_task_id' => $providerTaskId,
-                'provider_base_url' => rtrim($config->getBaseUrl(), '/'),
             ],
             'error' => $error === null ? null : [
                 'code' => 'PROVIDER_FAILED',

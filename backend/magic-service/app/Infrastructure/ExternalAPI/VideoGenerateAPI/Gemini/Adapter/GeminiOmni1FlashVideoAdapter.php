@@ -173,7 +173,7 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
             return $this->failedResult($detail, $providerTaskId, VideoGenerateErrorCode::MISSING_VIDEO_DATA);
         }
         $errorCode = ProviderVideoErrorMapper::resolveGemini(null, $detail);
-        $result = ['status' => $status, 'provider_result' => $detail, 'output' => $videoUrl === '' ? [] : ['video_url' => $videoUrl, 'provider_task_id' => $providerTaskId, 'provider_base_url' => rtrim($config->getBaseUrl(), '/')], 'error' => null];
+        $result = ['status' => $status, 'provider_result' => $detail, 'output' => $videoUrl === '' ? [] : ['video_url' => $videoUrl, 'provider_task_id' => $providerTaskId], 'error' => null];
         if ($status === 'failed') {
             $result['error'] = ['code' => (string) $errorCode->value, 'message' => $errorCode->getMessage(), 'provider_code' => null];
         }

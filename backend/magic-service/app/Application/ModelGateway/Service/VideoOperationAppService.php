@@ -1009,7 +1009,7 @@ readonly class VideoOperationAppService
             : (int) ($usage['completion_tokens'] ?? (
                 $billingTokenUsage['output_text_tokens']
                 + $billingTokenUsage['output_video_tokens']
-                + $billingTokenUsage['thought_tokens']
+                + $thoughtTokens
             ));
         $totalTokens = isset($usage['total_tokens'])
             ? (int) $usage['total_tokens']

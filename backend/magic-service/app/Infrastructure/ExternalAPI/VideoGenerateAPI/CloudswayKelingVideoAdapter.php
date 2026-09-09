@@ -267,7 +267,6 @@ readonly class CloudswayKelingVideoAdapter extends AbstractCloudswayVideoAdapter
             'output' => $videoUrl === null ? [] : [
                 'video_url' => $videoUrl,
                 'provider_task_id' => $providerTaskId,
-                'provider_base_url' => rtrim($config->getBaseUrl(), '/'),
             ],
             'error' => in_array($status, ['failed', 'error'], true) ? [
                 'code' => 'PROVIDER_FAILED',

@@ -154,7 +154,7 @@ readonly class DashScopeVideoClient
         if ($code === null) {
             return;
         }
-        if ($code === 0 || $code === '0' || $code === null || $code === '') {
+        if ($code === 0 || $code === '0' || $code === '') {
             return;
         }
 
