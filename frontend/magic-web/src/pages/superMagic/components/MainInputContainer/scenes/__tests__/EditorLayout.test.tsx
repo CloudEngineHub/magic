@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -131,13 +131,12 @@ vi.mock("@/pages/superMagic/stores/core", () => ({
 }))
 
 vi.mock("@/components/Agent/AgentCommonModal", () => ({
-	AgentCommonModal: ({ children }: { children: ReactNode }) => (
-		<div data-testid="agent-common-modal">{children}</div>
-	),
+	AgentCommonModal: ({ children, open }: { children: ReactNode; open: boolean }) =>
+		open ? <div data-testid="agent-common-modal">{children}</div> : null,
 }))
 
-vi.mock("@/components/Agent/MCP/AgentSettings", () => ({
-	default: () => <div data-testid="agent-settings" />,
+vi.mock("@/pages/superMagic/pages/ConnectorMarket/components/ConnectorLibrary", () => ({
+	default: () => <div data-testid="connector-library" />,
 }))
 
 import EditorLayout from "../EditorLayout"
@@ -161,6 +160,21 @@ describe("EditorLayout", () => {
 		await waitFor(() => {
 			expect(screen.getByText("pluginTips.connectTools")).toBeInTheDocument()
 		})
+	})
+
+	it("opens the connector library from plugin tips", async () => {
+		render(<EditorLayout />)
+
+		await waitFor(() => {
+			expect(screen.getByText("pluginTips.connectTools")).toBeInTheDocument()
+		})
+
+		fireEvent.click(screen.getByText("pluginTips.connectTools"))
+
+		await waitFor(() => {
+			expect(screen.getByTestId("connector-library")).toBeInTheDocument()
+		})
+		expect(screen.queryByTestId("agent-settings")).not.toBeInTheDocument()
 	})
 
 	it("hides plugin tips after user once added MCP but removed all", async () => {
