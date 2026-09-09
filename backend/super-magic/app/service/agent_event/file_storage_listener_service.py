@@ -958,7 +958,7 @@ class FileStorageListenerService:
         FILE_UPDATED 事件。
 
         过滤规则:
-        - 只收集项目空间条目；topic 空间（聊天历史等内部状态）不出现在用户可见变更里
+        - 只收集工作区空间（project / user）条目；topic 空间（聊天历史等内部状态）不出现在用户可见变更里
         - 跳过目录快照 (版本与 attachment 都只针对文件)
         - 跳过 DELETED 操作 (文件已不存在，无法构造 attachment)
         - 跳过任一路径段以 "." 开头的隐藏路径，覆盖工具和 Agent 生成的隐藏目录

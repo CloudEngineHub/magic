@@ -21,10 +21,15 @@ class VirtualCheckpoint:
     INITIAL = "__INITIAL__"  # 初始状态
 
 
-# magicfs 分区布局中的工作区空间标识（用户文件，元数据服务 + S3 后端）。
-# 当前唯一的用户文件空间：条目进入用户可见链路（文件版本创建、变更
-# 附件），回滚时严格重放。space 字段为空的旧格式条目也按本空间解析。
+# magicfs 分区布局中的项目工作区空间标识（用户文件，元数据服务 + S3
+# 后端）。条目进入用户可见链路（文件版本创建、变更附件），回滚时严格
+# 重放。space 字段为空的旧格式条目也按本空间解析。
 PROJECT_SPACE = "project"
+
+# magicfs 分区布局中的用户个人空间标识（用户文件，元数据服务 + S3
+# 后端）。与项目空间同策略：条目进入用户可见链路（文件版本创建、变更
+# 附件），回滚时严格重放。
+USER_SPACE = "user"
 
 # magicfs 分区布局中的话题空间标识（Agent 内部状态）：随 checkpoint
 # 尽力而为重放，不进入用户可见的文件变更列表与文件版本链路。
@@ -47,7 +52,7 @@ CHAT_HISTORY_SPACE = "chat_history"
 #   文件、文件版本创建、变更附件）。
 # - INTERNAL_SPACES（Agent 内部状态空间）：随 checkpoint 尽力而为重放
 #   （失败仅告警），不进入用户可见链路——无文件版本、无变更附件。
-WORKSPACE_SPACES = (PROJECT_SPACE,)
+WORKSPACE_SPACES = (PROJECT_SPACE, USER_SPACE)
 INTERNAL_SPACES = (TOPIC_SPACE, CHAT_HISTORY_SPACE)
 
 

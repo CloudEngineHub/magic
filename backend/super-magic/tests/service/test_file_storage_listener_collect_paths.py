@@ -2,12 +2,19 @@
 """变更附件候选路径选择器的过滤规则测试。
 
 覆盖核心回归点：聚合流水中 topic 空间的条目（聊天历史等内部状态）
-不得进入用户可见的变更附件列表；项目空间的既有过滤规则不回归。
+不得进入用户可见的变更附件列表；项目/user 工作区空间的既有过滤规则
+不回归。
 """
 
 from datetime import datetime
 
-from app.core.entity.checkpoint import TOPIC_SPACE, FileOperation, FileSnapshot, FileType
+from app.core.entity.checkpoint import (
+    TOPIC_SPACE,
+    USER_SPACE,
+    FileOperation,
+    FileSnapshot,
+    FileType,
+)
 from app.infrastructure.checkpoint.attachment_candidates import (
     is_hidden_checkpoint_path,
     select_changed_attachment_paths,
@@ -60,6 +67,23 @@ def test_project_rules_keep_deeleted_and_hidden_filtered():
     ]
 
     assert select_changed_attachment_paths(snapshots) == ["created.txt", "docs/readme.md"]
+
+
+def test_user_space_entries_enter_user_visible_changes():
+    """user 空间与项目空间同为工作区空间：变更进入用户可见附件候选，
+    既有过滤规则（隐藏路径等）同样生效。"""
+    snapshots = [
+        _snap("1", "/mnt/agfs/magicfs/project/report.md", space="project"),
+        _snap("2", "/mnt/agfs/magicfs/user/notes.txt", space=USER_SPACE),
+        _snap("3", "/mnt/agfs/magicfs/user/.venv/lib.py", space=USER_SPACE),
+        _snap("4", "/mnt/agfs/magicfs/user/gone.txt", FileOperation.DELETED,
+              space=USER_SPACE),
+    ]
+
+    assert select_changed_attachment_paths(snapshots) == [
+        "/mnt/agfs/magicfs/project/report.md",
+        "/mnt/agfs/magicfs/user/notes.txt",
+    ]
 
 
 def test_renamed_then_updated_keeps_target():

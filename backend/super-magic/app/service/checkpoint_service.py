@@ -180,9 +180,9 @@ class CheckpointService(Base):
                 file_snapshots=[]
             )
 
-            # 注意：挂载内所有空间（project / topic / chat_history）的变更
-            # 由 agfs 侧 checkpoint hook 依据 manifest 自动增量入账；聊天
-            # 历史运行期经 localfs 空间接管，Python 侧不做任何整目录快照。
+            # 注意：挂载内所有空间（project / user / topic / chat_history）的
+            # 变更由 agfs 侧 checkpoint hook 依据 manifest 自动增量入账；
+            # 聊天历史运行期经 localfs 空间接管，Python 侧不做任何整目录快照。
 
             # 保存checkpoint信息
             success = await self.metadata_manager.save_checkpoint_info(checkpoint_info)

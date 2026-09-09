@@ -56,6 +56,7 @@ checkpoint 数据保存在 `.checkpoints/`，挂载内文件由 agfs 侧 checkpo
 .checkpoints/checkpoint_manifest.json          共享清单（Python 写、agfs 侧 hook 读）
 .checkpoints/<checkpoint_id>/checkpoint_info.json      Python 簿记（id/created_time，只写一次）
 .checkpoints/<checkpoint_id>/project/operations.json   project 操作流水 + file_snapshots/
+.checkpoints/<checkpoint_id>/user/operations.json      user 挂载内文件的流水 + file_snapshots/
 .checkpoints/<checkpoint_id>/topic/operations.json     topic 挂载内文件的流水 + file_snapshots/
 .checkpoints/<checkpoint_id>/chat_history/operations.json   聊天历史空间的流水 + file_snapshots/
 ```

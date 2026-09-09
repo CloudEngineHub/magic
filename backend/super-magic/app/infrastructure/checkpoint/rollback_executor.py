@@ -4,8 +4,8 @@
 
 统一处理checkpoint的完整回滚，全部通过帧重放完成。重放策略由空间
 注册表（entity/checkpoint.py）按条目决定：
-- 工作区空间（project）：失败即中止整体回滚，构建受影响文件、创建
-  文件版本；
+- 工作区空间（project / user）：失败即中止整体回滚，构建受影响文件、
+  创建文件版本；
 - 内部状态空间（topic / chat_history，以及未来新增）：尽力而为——
   失败仅告警跳过，不做文件版本创建、不产生变更附件。
 
@@ -781,8 +781,9 @@ class RollbackExecutor:
             )
 
             # 根据回滚方向和操作类型过滤文件
-            # 文件版本只针对用户可见的项目文件；topic / chat_history
-            # 空间（Agent 内部状态）条目随 checkpoint 恢复，不进入版本链路。
+            # 文件版本只针对用户可见的工作区文件（project / user）；topic /
+            # chat_history 空间（Agent 内部状态）条目随 checkpoint 恢复，
+            # 不进入版本链路。
             merged_operations = [
                 entry for entry in merged_operations if not _is_internal_space_entry(entry[1])
             ]

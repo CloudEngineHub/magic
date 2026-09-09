@@ -3,8 +3,8 @@
 从 checkpoint 流水中挑选"用户可见的文件变更"候选。
 
 权威数据源是 agfs 侧按空间分区的 operations.json，聚合后的流水包含
-各空间（project / topic / chat_history，以及未来新增空间）的条目。
-用户可见的变更附件只应来自工作区空间——内部状态空间（topic /
+各空间（project / user / topic / chat_history，以及未来新增空间）的
+条目。用户可见的变更附件只应来自工作区空间——内部状态空间（topic /
 chat_history 等，见空间注册表）是 Agent 的内部状态，随 checkpoint
 恢复，不应以文件变更的形式呈现给用户。
 
