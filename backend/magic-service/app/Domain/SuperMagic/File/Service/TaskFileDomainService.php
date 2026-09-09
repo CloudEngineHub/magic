@@ -3863,12 +3863,16 @@ class TaskFileDomainService
             ExceptionBuilder::throw(SuperAgentErrorCode::FILE_UPLOAD_FAILED, 'Cannot replace directory');
         }
 
-        $project = $this->projectRepository->findById($originalFile->getProjectId());
-        if ($project === null) {
-            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, trans('project.project_not_found'));
+        // 用户空间文件没有项目（project_id=0），存储目录由文件所属用户确定。
+        if ($originalFile->isProjectFile()) {
+            $project = $this->projectRepository->findById($originalFile->getProjectId());
+            if ($project === null) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, trans('project.project_not_found'));
+            }
+            $workDir = $project->getWorkDir();
+        } else {
+            $workDir = WorkDirectoryUtil::getUserWorkDir($originalFile->getUserId());
         }
-
-        $workDir = $project->getWorkDir();
         $organizationCode = $originalFile->getOrganizationCode();
         $fullPrefix = $this->cloudFileRepository->getFullPrefix($organizationCode);
 
