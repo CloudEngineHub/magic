@@ -1,11 +1,21 @@
 import Dexie, { type Table } from "dexie"
 import type { GetFileInfoResponse } from "@/components/CanvasDesign/public/magic-types"
 
+/**
+ * Persist only path/resource metadata. Signed OSS URLs are short-lived and
+ * belong to the shared in-memory URL cache, not the durable design cache.
+ * `src` remains optional here so legacy IndexedDB rows can be sanitized on
+ * their next read.
+ */
+export type DesignFileInfoPersisted = Omit<GetFileInfoResponse, "src"> & {
+	src?: string
+}
+
 export interface DesignFileInfoIndexedDbEntry {
 	cacheKey: string
 	namespace: string
 	normalizedPath: string
-	fileInfo: GetFileInfoResponse
+	fileInfo: DesignFileInfoPersisted
 	previewWatermarkSignature: string
 	cachedAt: number
 	resolvedFileId?: string
@@ -141,6 +151,13 @@ function estimateEntryBytes(entry: DesignFileInfoIndexedDbEntry): number {
 	} catch {
 		return 0
 	}
+}
+
+function stripSignedUrl(entry: DesignFileInfoIndexedDbEntry): DesignFileInfoIndexedDbEntry {
+	if (entry.fileInfo.src === undefined) return entry
+	const fileInfo = { ...entry.fileInfo }
+	delete fileInfo.src
+	return { ...entry, fileInfo }
 }
 
 function schedulePrune(): void {
@@ -297,7 +314,9 @@ export function writeDesignFileInfoCacheEntries(
 ): Promise<void> {
 	if (entries.length === 0) return Promise.resolve()
 	const mutations = new Map<string, PendingMutation>()
-	entries.forEach((entry) => mutations.set(entry.cacheKey, { kind: "put", entry }))
+	entries.forEach((entry) => {
+		mutations.set(entry.cacheKey, { kind: "put", entry: stripSignedUrl(entry) })
+	})
 	return enqueueMutations(mutations)
 }
 

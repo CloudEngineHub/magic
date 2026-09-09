@@ -71,8 +71,11 @@ describe("designFileInfoIndexedDbCache mutation batching", () => {
 		])
 		await expect(readDesignFileInfoCacheEntry(entry.cacheKey)).resolves.toMatchObject({
 			cacheKey: entry.cacheKey,
-			fileInfo: entry.fileInfo,
+			fileInfo: { fileName: entry.fileInfo.fileName },
 		})
+		await expect(readDesignFileInfoCacheEntry(entry.cacheKey)).resolves.not.toHaveProperty(
+			"fileInfo.src",
+		)
 	})
 
 	it("waits for an active mutation before clearing the database", async () => {
@@ -91,8 +94,12 @@ describe("designFileInfoIndexedDbCache mutation batching", () => {
 		await flushDesignFileInfoIndexedDbCacheWrites()
 
 		const beforeRead = getDesignFileInfoIndexedDbCacheDiagnosticsForTests()
-		await expect(readDesignFileInfoCacheEntry(entry.cacheKey)).resolves.toMatchObject(entry)
+		await expect(readDesignFileInfoCacheEntry(entry.cacheKey)).resolves.toMatchObject({
+			...entry,
+			fileInfo: { fileName: entry.fileInfo.fileName },
+		})
 		const persisted = await readDesignFileInfoCacheEntry(entry.cacheKey)
+		expect(persisted).not.toHaveProperty("fileInfo.src")
 		expect(persisted).not.toHaveProperty("attachmentsSnapshotKey")
 		expect(persisted).not.toHaveProperty("lastAccessedAt")
 		expect(persisted).not.toHaveProperty("updatedAt")
@@ -126,6 +133,9 @@ describe("designFileInfoIndexedDbCache mutation batching", () => {
 		await flushDesignFileInfoIndexedDbCachePruneForTests()
 
 		await expect(readDesignFileInfoCacheEntry(expired.cacheKey)).resolves.toBeNull()
-		await expect(readDesignFileInfoCacheEntry(fresh.cacheKey)).resolves.toMatchObject(fresh)
+		await expect(readDesignFileInfoCacheEntry(fresh.cacheKey)).resolves.toMatchObject({
+			...fresh,
+			fileInfo: { fileName: fresh.fileInfo.fileName },
+		})
 	})
 })
