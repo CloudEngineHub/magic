@@ -33,6 +33,8 @@ Fill the point-estimate request with the fields listed by the estimate tool. Do 
 
 For a generated video Content, the supported generation fields are `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, `watermark`, and the conditional `audioPolicy` field. Use `audioPolicy="mute"` for a silent result or `audioPolicy="generate"` when generated audio is explicitly requested. Use `audioPolicy="auto"` only when the model rules require an explicit default. Missing audio capability metadata means unknown, not unsupported; do not claim that narration or audio is impossible unless the model explicitly declares audio output unsupported. Distinguish generated voice from recording the user's real voice. This field belongs directly under `content`; it is not a prompt instruction and it is not an estimate parameter.
 
+Before submitting a generated video, check the user request for voiceover, dubbing, narration, spoken lines, dialogue, sound effects, or ambient sound. If any of those are present, keep the complete text, speaker or voice, tone, and sound description in `prompt`, state that the video must include those sounds, and set `content.audioPolicy="generate"`. Do not let the visual description replace or drop those audio requirements, and do not use `mute` or omit the field. If the user asked for a silent result, set `mute`. If no audio behavior was requested, omit `audioPolicy`. Never pass `generate` on `task="compose"`; composition uses `output.audioPolicy` as `preserve` or `mute`.
+
 Before submitting, validate the complete nested shape and keep the operation identity stable:
 
 ```python
@@ -125,12 +127,13 @@ result = tool.call("add_canvas_elements", {
             "duration_seconds": 5,
             "aspect_ratio": "9:16",
             "resolution": "720p",
-            "audioPolicy": "mute",
         },
     }],
 })
 print(result.content)
 ```
+
+This example omits `audioPolicy` because the request has no audio requirement. When the user asks for narration, dialogue, or sound effects, keep that complete audio text in `prompt` and set `content.audioPolicy="generate"` on the generation call only.
 
 ## Code Mode example: wait and verify
 

@@ -10,9 +10,11 @@ For a minimal basic Canvas request such as “generate a video” or “animate 
 
 ## Production modes
 
-Select exactly one mode from the user's wording and the current task state. When the mode is unclear, follow the video-intent decision rules in SKILL.md:
+Inspect the latest user message for an explicit generation mode before inferring one. Ordinary, simple, or direct versus detailed or fine-grained — including a structured field such as `生成模式: 普通/精细` or `generation mode: ordinary/detailed` — is a hard constraint. It beats “advertisement”, uploaded assets, task complexity, and any Agent role. Never interpret “advertisement” alone as detailed staged mode.
 
-- **Ordinary direct mode**: the user explicitly asks for ordinary, simple, or direct video production. Generate one final video directly with no storyboard, initialization images, first frames, `video-edit`, or separate final composition, while preserving direct business predecessors through explicit Connections.
+When no explicit mode is present, select exactly one mode from the user's wording and the current task state. When the mode is still unclear, follow the video-intent decision rules in SKILL.md:
+
+- **Ordinary direct mode**: the user explicitly asks for ordinary, simple, or direct video production, or an explicit ordinary generation-mode field is present. Generate one final video directly with no storyboard, initialization images, first frames, `video-edit`, or separate final composition, while preserving direct business predecessors through explicit Connections.
 - **Direct professional mode**: the user asks for professional video production without a detailed or staged workflow. Generate one final professional video directly, preserving direct business predecessors.
 - **Detailed staged mode**: the user asks for detailed, fine-grained, staged, multi-shot production, or names storyboards, first frames, shot videos, staged approvals, BGM replacement, or final composition. Use all applicable stages below.
 
@@ -22,7 +24,7 @@ All three modes share the same project binding, `result.content` reading, estima
 
 ### Ordinary direct mode
 
-Use this mode only when the user explicitly asks for a simple, direct, or ordinary video-production workflow.
+Use this mode when the user explicitly asks for a simple, direct, or ordinary video-production workflow, or when an explicit ordinary generation-mode field is present.
 
 1. Understand all submitted assets and identify the subject, product treatment, scene, visual style, motion, pacing, audio expectation, duration, aspect ratio, resolution, model, and artifact exclusions.
 2. Present one complete creative target and the final video prompt in readable Markdown. Ask one concise confirmation question after presenting it; ask again after any material revision.
@@ -126,7 +128,7 @@ Place each token next to the subject, action, or source media it controls. Do no
 
 Use `task="edit"` and `input_mode="video_edit"` only for an explicit video-to-video edit. For prompt-only generation, omit reference arrays. For image, video, or audio references, populate the corresponding arrays and bind every reference in the prompt.
 
-Keep one clear scene and one main action unless the user explicitly asks for a sequence. Cover the subject, action, scene, camera, lighting, pacing, and any requested sound, narration, or dialogue. Preserve requested narration or dialogue verbatim.
+Keep one clear scene and one main action unless the user explicitly asks for a sequence. Cover the subject, action, scene, camera, lighting, pacing, and any requested sound, narration, or dialogue. Preserve requested narration or dialogue verbatim. When the user request or a confirmed storyboard includes voiceover, dubbing, narration, spoken lines, dialogue, sound effects, or ambient sound, keep the complete text, speaker or voice, tone, and sound description in the generation prompt, state that the video must include those sounds, and set `content.audioPolicy="generate"` on the direct video request. Do not let the visual description replace or drop those audio requirements, and do not use `mute` or omit `audioPolicy` in that case. Composition still uses `output.audioPolicy` as `preserve` or `mute`; never pass `generate` on a `task="compose"` request.
 
 Use this reference-mode mapping for generated videos:
 
@@ -173,7 +175,7 @@ Use the current Canvas Content lifecycle rather than creating replacement Elemen
 
 - Treat all submitted compatible assets as required source material by default. Use every relevant path in the appropriate reference array and map every materially contributing Canvas Element separately to direct Connections.
 - Exclude an asset only when the user explicitly asks to ignore it or the current generation tool cannot accept its media type. If relevance is unclear, ask before omitting it.
-- Before each generation call, verify that every used asset appears in the correct reference array and that direct Connections contain only the intended upstream Element IDs.
+- Before each generation call, verify that every used asset appears in the correct reference array, that direct Connections contain only the intended upstream Element IDs, and that any requested or storyboarded audio is still present in the prompt with `content.audioPolicy="generate"` on the direct video request.
 - Reference media may contain watermarks, captions, interface marks, compression artifacts, unwanted backgrounds, or accidental crops. Preserve intended subject information but explicitly exclude those defects from generated prompts unless the user requests them.
 - Use only model IDs, `input_mode`, task values, aspect ratios, resolutions, durations, FPS values, and other generation fields declared by the current `<media_model_info>`.
 
@@ -353,6 +355,8 @@ print(result.content)
 ```
 
 Use `standard` for prompt-only generation, `image_reference` for image references, `omni_reference` for mixed media references, and `keyframe_guided` only when the current model declares it. For `keyframe_guided`, pass `frame_start_path` and optional `frame_end_path`; do not duplicate those files in `reference_image_paths`. Bind every reference token by array order before estimating.
+
+If the confirmed storyboard shot includes voiceover, dialogue, or sound effects, copy that complete audio text into the shot-video prompt and set `content.audioPolicy="generate"`. Do not generate a silent shot when the storyboard specified sound.
 
 ### 8. Define ordered media inputs and optional audio
 
