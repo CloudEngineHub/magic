@@ -56,7 +56,7 @@ import { SharedAbortableRequest } from "../offline-cache/SharedAbortableRequest"
 import { ImageDisplayVariantPersistentCache } from "./ImageDisplayVariantPersistentCache"
 import type { DecodedImageRetentionHint } from "../visibility/CanvasVisibilityManager"
 import {
-	buildVirtualResourceScope,
+	buildSharedMediaStorageScope,
 	getCanvasResourceAvailability,
 	type CanvasResourceReferenceResolverChangeOptions,
 } from "../../shared/path/canvasResourcePath"
@@ -1621,13 +1621,10 @@ export class ImageResourceManager {
 	}
 
 	private getPersistentDisplayScope(): string {
-		const hostScope =
-			this.canvas.magicConfigManager.config?.methods?.getVirtualResourceScope?.()
-		// Host scope already has workspace/project. Do not append the runtime Canvas
-		// id, or identical low-image bodies persist under separate IndexedDB keys.
-		return hostScope
-			? buildVirtualResourceScope(hostScope, "")
-			: buildVirtualResourceScope(undefined, this.canvas.id)
+		return buildSharedMediaStorageScope(
+			this.canvas.magicConfigManager.config?.methods?.getVirtualResourceScope?.(),
+			this.canvas.id,
+		)
 	}
 
 	private getPersistentImageProcessRendition(): string {

@@ -73,7 +73,7 @@ import { TextFormattingManager } from "../interaction/text-editing/TextFormattin
 import { CanvasInputManager } from "../interaction/input/index"
 import { isCanvasUIComponentNode } from "../shared/dom/domGuards"
 import {
-	buildVirtualResourceScope,
+	buildSharedMediaStorageScope,
 	getCanvasHostResourceReferenceResolver,
 	resolveCanvasStorageResourceReference,
 	type CanvasResourceReferenceResolverChangeOptions,
@@ -388,7 +388,7 @@ export class Canvas {
 			getResolveResourceReference: () =>
 				this.magicConfigManager.config?.methods?.resolveResourceReference,
 			getVirtualResourceScope: () =>
-				buildVirtualResourceScope(
+				buildSharedMediaStorageScope(
 					this.magicConfigManager.config?.methods?.getVirtualResourceScope?.(),
 					this.id,
 				),

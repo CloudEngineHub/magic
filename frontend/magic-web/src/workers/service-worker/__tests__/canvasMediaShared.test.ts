@@ -246,9 +246,9 @@ describe("canvasMediaShared", () => {
 	})
 
 	it("uses a new cache namespace when path key semantics change", () => {
-		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(4)
-		expect(CANVAS_MEDIA_DB_NAME).toBe("canvas-media-resource-offline-cache-v4")
-		expect(CANVAS_MEDIA_CACHE_NAME).toBe("canvas-media-resources-v4")
+		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(5)
+		expect(CANVAS_MEDIA_DB_NAME).toBe("canvas-media-resource-offline-cache-v5")
+		expect(CANVAS_MEDIA_CACHE_NAME).toBe("canvas-media-resources-v5")
 	})
 
 	it("deletes only legacy Canvas media IndexedDB and CacheStorage namespaces", async () => {
@@ -389,13 +389,13 @@ describe("canvasMediaShared", () => {
 		expect(await response?.text()).toBe("cached-delimited-image")
 	})
 
-	it("parses audio virtual urls without changing the v4 cache namespace", () => {
+	it("parses audio virtual urls without changing the v5 cache namespace", () => {
 		expect(parseVirtualResourceRequest(buildVirtualUrl("audios/voice.mp3", "audio"))).toEqual({
 			namespace: "workspace/project/design/demo",
 			mediaType: "audio",
 			resourcePath: "audios/voice.mp3",
 		})
-		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(4)
+		expect(CANVAS_MEDIA_OFFLINE_CACHE_VERSION).toBe(5)
 	})
 
 	it("returns cached canvas response when cache entry exists", async () => {
