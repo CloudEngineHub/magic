@@ -6,7 +6,6 @@ import {
 	ArrowDown,
 	Trash2,
 	Pencil,
-	Sparkles,
 	MessageSquarePlus,
 	MessageSquare,
 	FileSearch,
@@ -22,9 +21,6 @@ import {
 	ContextMenuContent,
 	ContextMenuItem,
 	ContextMenuSeparator,
-	ContextMenuSub,
-	ContextMenuSubTrigger,
-	ContextMenuSubContent,
 } from "@/components/shadcn-ui/context-menu"
 import {
 	Dialog,
@@ -37,7 +33,6 @@ import {
 import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
 import type { SortableSlideItemProps } from "./types"
-import { useAIEdit } from "../hooks/useAIEdit"
 import { observer } from "mobx-react-lite"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import { useScreenshotRetry } from "./hooks/useScreenshotRetry"
@@ -61,7 +56,6 @@ function SortableSlideItem({
 	onLocateFile,
 	onRefresh,
 	onRegenerateScreenshot,
-	mainFileId,
 	className,
 	isMobile = false,
 	allowEdit = false,
@@ -126,26 +120,6 @@ function SortableSlideItem({
 	}
 
 	const { onSlideDragStart } = props
-
-	// Build current file info for this slide (each slide is an HTML file)
-	const currentFile = useMemo(() => {
-		if (!mainFileId || !item.path) return undefined
-
-		// Extract file name from path (e.g., "slides/page1.html" -> "page1.html")
-		const fileName = item.path.split("/").pop() || item.path
-		// Get file extension (should be "html")
-		const fileExtension = fileName.split(".").pop() || "html"
-
-		return {
-			file_id: mainFileId, // Use main file ID as parent
-			file_name: fileName,
-			relative_file_path: slideFullRelativePath || item.path,
-			file_extension: fileExtension,
-		}
-	}, [mainFileId, item.path, slideFullRelativePath])
-
-	// Use AI edit hook
-	const { aiEditItems } = useAIEdit({ currentFile })
 
 	// Render thumbnail based on screenshot state
 	const renderThumbnail = () => {
@@ -373,18 +347,6 @@ function SortableSlideItem({
 						<RefreshCw className="mr-2 size-4" />
 						{t("fileViewer.refreshSlide")}
 					</ContextMenuItem>
-					{onReplaceTemplate && (
-						<ContextMenuItem
-							data-testid="ppt-template-replacement-slide-menu-item"
-							onClick={(e) => {
-								e.stopPropagation()
-								onReplaceTemplate()
-							}}
-						>
-							<LayoutTemplate className="mr-2 size-4" />
-							{t("ppt.templateReplacement.replaceSlide")}
-						</ContextMenuItem>
-					)}
 					<ContextMenuSeparator />
 					<ContextMenuItem
 						onClick={(e) => {
@@ -414,6 +376,21 @@ function SortableSlideItem({
 						{t("fileViewer.duplicateSlide")}
 					</ContextMenuItem>
 					<ContextMenuSeparator />
+					{onReplaceTemplate && (
+						<>
+							<ContextMenuItem
+								data-testid="ppt-template-replacement-slide-menu-item"
+								onClick={(e) => {
+									e.stopPropagation()
+									onReplaceTemplate()
+								}}
+							>
+								<LayoutTemplate className="mr-2 size-4" />
+								{t("ppt.templateReplacement.replaceSlide")}
+							</ContextMenuItem>
+							<ContextMenuSeparator />
+						</>
+					)}
 					<ContextMenuItem
 						onClick={(e) => {
 							e.stopPropagation()
@@ -424,39 +401,6 @@ function SortableSlideItem({
 						{t("fileViewer.renameSlide")}
 					</ContextMenuItem>
 					<ContextMenuSeparator />
-					{/* AI Edit submenu */}
-					{currentFile && aiEditItems.length > 0 && (
-						<>
-							<ContextMenuSub>
-								<ContextMenuSubTrigger>
-									<Sparkles className="mr-4 size-4" />
-									{t("fileViewer.aiEdit")}
-								</ContextMenuSubTrigger>
-								<ContextMenuSubContent className="w-56">
-									{aiEditItems.map((aiItem) => (
-										<ContextMenuItem
-											key={aiItem.key}
-											onClick={(e) => {
-												e.stopPropagation()
-												aiItem.onClick()
-											}}
-										>
-											<span className="mr-2">{aiItem.icon}</span>
-											<div className="flex flex-col">
-												<span className="text-sm font-medium">
-													{aiItem.label}
-												</span>
-												<span className="text-xs text-muted-foreground">
-													{aiItem.description}
-												</span>
-											</div>
-										</ContextMenuItem>
-									))}
-								</ContextMenuSubContent>
-							</ContextMenuSub>
-							<ContextMenuSeparator />
-						</>
-					)}
 					<ContextMenuItem
 						variant="destructive"
 						disabled={isLastSlide}
