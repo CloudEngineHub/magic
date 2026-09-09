@@ -89,15 +89,6 @@ vi.mock("@/components/tiptap-templates/simple/simple-editor", async () => {
 	}
 })
 
-vi.mock(
-	"@/pages/superMagic/components/Detail/contents/Md/components/EditorBody/components/MarkdownPreview",
-	() => ({
-		default: ({ content }: { content?: string }) => (
-			<div data-testid="markdown-preview-markdown">{content}</div>
-		),
-	}),
-)
-
 vi.mock("@/pages/superMagic/components/MessageEditor/types", () => ({
 	ModelStatusEnum: {
 		Disabled: "disabled",

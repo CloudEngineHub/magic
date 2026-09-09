@@ -1,8 +1,8 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useEffect, useMemo, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import MagicSpin from "@/components/base/MagicSpin"
 import EditorErrorBoundary from "./components/EditorErrorBoundary"
-import { LazySimpleEditor } from "@/components/tiptap-templates/simple/lazy-simple-editor"
+import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor"
 import type { SimpleEditorRef } from "@/components/tiptap-templates/simple/types"
 import { useProjectImageExtensions } from "@/components/tiptap-templates/simple/hooks"
 import { useCustomLinkNode } from "./hooks/useCustomLinkNode"
@@ -22,7 +22,6 @@ import type { ProjectImageUrlResolver } from "@/components/tiptap-node/project-i
 import { SafeHtmlDiv, SafeHtmlSpan, SafeHtmlTextBlockStyles } from "./extensions/safe-html-style"
 import { SafeVideo } from "./extensions/safe-video"
 import LargeMarkdownPreview from "./components/LargeMarkdownPreview"
-import MarkdownPreview from "./components/MarkdownPreview"
 import { isLargeMarkdownContent } from "./largeMarkdown"
 
 interface EditorBodyProps {
@@ -197,22 +196,12 @@ function EditorBody({
 	// 创建内部的 editorRef（如果外部没有传入）
 	const internalEditorRef = useRef<SimpleEditorRef>(null)
 	const actualEditorRef = editorRef || internalEditorRef
-	const [simpleEditorReady, setSimpleEditorReady] = useState(false)
-	const isSimpleEditorMode = isEditMode === true && !shouldUseCodeSourceEditor && !isLargeMarkdown
-
-	useEffect(() => {
-		// The lazy editor unmounts when the code or large-markdown renderer takes over;
-		// reset readiness so a later return to the editor waits for a fresh ref.
-		setSimpleEditorReady(false)
-	}, [isSimpleEditorMode])
-
 	// 当 isEditMode 为 true 且 editContent 变化时，手动更新编辑器内容
 	// 因为 SimpleEditor 在 isEditable=true 时不会自动响应 content prop 的变化
 	useEffect(() => {
 		if (
 			isEditMode &&
 			editContent !== undefined &&
-			simpleEditorReady &&
 			actualEditorRef?.current?.editor &&
 			viewMode !== "code"
 		) {
@@ -234,7 +223,7 @@ function EditorBody({
 				}
 			}
 		}
-	}, [isEditMode, editContent, actualEditorRef, viewMode, simpleEditorReady])
+	}, [isEditMode, editContent, actualEditorRef, viewMode])
 
 	return (
 		<EditorErrorBoundary
@@ -284,19 +273,9 @@ function EditorBody({
 						urlResolver={urlResolver}
 						onLinkClick={handleLinkClick}
 					/>
-				) : !isEditMode ? (
-					// Read-only Markdown does not need TipTap's parser, extensions, or imperative ref;
-					// keeping it on the light renderer prevents the editor chunk from loading in previews.
-					<MarkdownPreview
-						content={processedContent || content}
-						documentFlow={documentFlowFullscreen}
-						urlResolver={urlResolver}
-						onLinkClick={handleLinkClick}
-					/>
 				) : (
-					<LazySimpleEditor
+					<SimpleEditor
 						ref={actualEditorRef}
-						onReady={() => setSimpleEditorReady(true)}
 						content={isEditMode ? editContent || content : processedContent || content}
 						enableCodeBlockWrap
 						enableReadonlySearch={enableSearch}

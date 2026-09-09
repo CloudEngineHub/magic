@@ -6,7 +6,6 @@ import { formatLongCurlDataRawForPreview } from "./components/CodeSourceEditor/p
 
 const codeSourceEditorProps = vi.hoisted(() => vi.fn())
 const simpleEditorProps = vi.hoisted(() => vi.fn())
-const markdownPreviewProps = vi.hoisted(() => vi.fn())
 
 vi.mock("./components/CodeSourceEditor", () => ({
 	default: (props: Record<string, unknown>) => {
@@ -31,13 +30,6 @@ vi.mock("./components/LargeMarkdownPreview", () => ({
 	default: () => <div data-testid="large-markdown-preview" />,
 }))
 
-vi.mock("./components/MarkdownPreview", () => ({
-	default: (props: Record<string, unknown>) => {
-		markdownPreviewProps(props)
-		return <div data-testid="markdown-preview" />
-	},
-}))
-
 vi.mock("@/components/tiptap-templates/simple/hooks", () => ({
 	useProjectImageExtensions: () => [],
 }))
@@ -58,7 +50,6 @@ describe("EditorBody code source content", () => {
 	beforeEach(() => {
 		codeSourceEditorProps.mockClear()
 		simpleEditorProps.mockClear()
-		markdownPreviewProps.mockClear()
 	})
 
 	it("formats only read-only source previews", () => {
@@ -90,28 +81,28 @@ describe("EditorBody code source content", () => {
 		)
 	})
 
-	it("keeps small markdown documents out of SimpleEditor in read-only mode", async () => {
+	it("keeps small markdown documents in SimpleEditor in read-only mode", () => {
 		render(<EditorBody isLoading={false} viewMode="desktop" content="# Small document" />)
 
-		expect(screen.getByTestId("markdown-preview")).toBeInTheDocument()
-		expect(screen.queryByTestId("simple-editor")).not.toBeInTheDocument()
+		expect(screen.getByTestId("simple-editor")).toBeInTheDocument()
 		expect(screen.queryByTestId("large-markdown-preview")).not.toBeInTheDocument()
 	})
 
-	it("passes markdown content and link context to the small markdown preview", () => {
+	it("passes read-only search controls to the small markdown preview", () => {
 		render(
 			<EditorBody
 				isLoading={false}
 				viewMode="desktop"
 				content="# Small document"
-				processedContent="# Processed document"
+				isTabActive={false}
+				enableSearch={false}
 			/>,
 		)
 
-		expect(markdownPreviewProps).toHaveBeenLastCalledWith(
+		expect(simpleEditorProps).toHaveBeenLastCalledWith(
 			expect.objectContaining({
-				content: "# Processed document",
-				onLinkClick: expect.any(Function),
+				enableReadonlySearch: false,
+				isTabActive: false,
 			}),
 		)
 	})
@@ -128,7 +119,6 @@ describe("EditorBody code source content", () => {
 		)
 
 		await waitFor(() => expect(screen.getByTestId("simple-editor")).toBeInTheDocument())
-		expect(screen.queryByTestId("markdown-preview")).not.toBeInTheDocument()
 	})
 
 	it("uses the virtual preview for read-only markdown larger than 3 MB", () => {
