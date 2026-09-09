@@ -67,5 +67,4 @@ final class ProviderVideoException extends RuntimeException
     {
         return VideoGenerateErrorCode::from($this->getCode());
     }
-
 }

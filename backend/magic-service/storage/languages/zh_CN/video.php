@@ -47,6 +47,5 @@ return [
         'user_concurrency_limit' => '您的视频生成任务已达到同时运行上限（最多 :limit 个），请等待已有任务完成后再提交。',
         'organization_concurrency_limit' => '当前组织的视频生成任务已达到同时运行上限（最多 :limit 个），请等待组织内已有任务完成后再提交。',
         'model_resolution_not_supported' => '当前模型（:model）暂不支持 :resolution，请改为 :supported 后重试。',
-
     ],
 ];

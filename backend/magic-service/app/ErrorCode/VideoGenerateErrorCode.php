@@ -104,65 +104,89 @@ enum VideoGenerateErrorCode: int
     // 输入或生成内容可能包含敏感信息
     #[ErrorMessage(message: 'video_generate.sensitive_content_detected')]
     case SENSITIVE_CONTENT_DETECTED = 50026;
+
     // 输入提示词可能包含敏感信息
     #[ErrorMessage(message: 'video_generate.input_text_sensitive_content_detected')]
     case INPUT_TEXT_SENSITIVE_CONTENT_DETECTED = 50027;
+
     // 输入提示词可能涉及版权相关限制
     #[ErrorMessage(message: 'video_generate.input_text_sensitive_content_detected_policy_violation')]
     case INPUT_TEXT_SENSITIVE_CONTENT_DETECTED_POLICY_VIOLATION = 50028;
+
     // 输入图片可能包含敏感信息
     #[ErrorMessage(message: 'video_generate.input_image_sensitive_content_detected')]
     case INPUT_IMAGE_SENSITIVE_CONTENT_DETECTED = 50029;
+
     // 输入视频可能包含敏感信息
     #[ErrorMessage(message: 'video_generate.input_video_sensitive_content_detected')]
     case INPUT_VIDEO_SENSITIVE_CONTENT_DETECTED = 50030;
+
     // 输入音频可能涉及版权相关限制
     #[ErrorMessage(message: 'video_generate.input_audio_sensitive_content_detected_policy_violation')]
     case INPUT_AUDIO_SENSITIVE_CONTENT_DETECTED_POLICY_VIOLATION = 50031;
+
     // 生成内容可能包含敏感信息
     #[ErrorMessage(message: 'video_generate.output_text_sensitive_content_detected')]
     case OUTPUT_TEXT_SENSITIVE_CONTENT_DETECTED = 50032;
+
     // 生成图片可能包含敏感或受限内容
     #[ErrorMessage(message: 'video_generate.output_image_sensitive_content_detected')]
     case OUTPUT_IMAGE_SENSITIVE_CONTENT_DETECTED = 50033;
+
     // 生成视频可能包含敏感信息
     #[ErrorMessage(message: 'video_generate.output_video_sensitive_content_detected')]
     case OUTPUT_VIDEO_SENSITIVE_CONTENT_DETECTED = 50034;
+
     // 生成视频可能涉及版权相关限制
     #[ErrorMessage(message: 'video_generate.output_video_sensitive_content_detected_policy_violation')]
     case OUTPUT_VIDEO_SENSITIVE_CONTENT_DETECTED_POLICY_VIOLATION = 50035;
+
     // 生成音频可能包含敏感或受限内容
     #[ErrorMessage(message: 'video_generate.output_audio_sensitive_content_detected')]
     case OUTPUT_AUDIO_SENSITIVE_CONTENT_DETECTED = 50036;
+
     // 当前内容可能涉及版权风险
     #[ErrorMessage(message: 'video_generate.content_security_copyright_risk')]
     case CONTENT_SECURITY_COPYRIGHT_RISK = 50037;
+
     // 输入内容可能包含敏感信息
     #[ErrorMessage(message: 'video_generate.content_security_sensitive_content')]
     case CONTENT_SECURITY_SENSITIVE_CONTENT = 50038;
+
     // 素材中可能包含品牌 Logo 或商标
     #[ErrorMessage(message: 'video_generate.content_security_trademark_risk')]
     case CONTENT_SECURITY_TRADEMARK_RISK = 50039;
+
     // 输入内容可能包含暴力或不适画面
     case CONTENT_SECURITY_VIOLENT_CONTENT = 50040;
+
     // 缺少必要请求参数
     case MISSING_PARAMETER = 50041;
+
     // 当前视频时长不受支持
     case INVALID_PARAMETER_INVALID_VIDEO_DURATION = 50042;
+
     // 当前分辨率不受支持
     case INVALID_PARAMETER_INVALID_RESOLUTION = 50043;
+
     // 未检测到有效素材
     case INVALID_PARAMETER_EMPTY_INPUT = 50044;
+
     // 请求格式不合法
     case INVALID_REQUEST_ERROR = 50045;
+
     // 请求参数内容不合法
     case INVALID_ARGUMENT_ERROR = 50046;
+
     // 当前服务繁忙
     case SERVER_OVERLOADED = 50047;
+
     // 素材格式不受支持
     case INVALID_FILE_FORMAT = 50049;
+
     // 素材文件大小超出限制
     case FILE_SIZE_TOO_LARGE = 50050;
+
     // 音频时长长于生成视频时长
     case AUDIO_DURATION_TOO_LONG = 50051;
 

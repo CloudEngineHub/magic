@@ -145,5 +145,4 @@ readonly class KelingVideoClient
 
         return $data;
     }
-
 }

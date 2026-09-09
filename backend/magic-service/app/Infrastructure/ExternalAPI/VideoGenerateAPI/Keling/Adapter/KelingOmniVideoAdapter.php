@@ -351,5 +351,4 @@ readonly class KelingOmniVideoAdapter implements VideoGenerationConnectivityTest
 
         return null;
     }
-
 }
