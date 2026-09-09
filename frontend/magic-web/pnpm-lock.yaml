@@ -63,7 +63,7 @@ overrides:
 
 patchedDependencies:
   pptxgenjs@4.0.1:
-    hash: 48c8a696c37412518dd97ce3ec69e6a7439cc123c091745a940043e0b028164a
+    hash: 668754a4380375aeead657811cf8909f1bbdc87ff248f06988987a0e885041d3
     path: patches/pptxgenjs@4.0.1.patch
   tiptap-markdown@0.9.0:
     hash: dff3f968e3e70a1e0f1d3b502ab6441e71149a5ca5125a8c10915c43448d90f5
@@ -660,7 +660,7 @@ importers:
         version: 1.0.7
       pptxgenjs:
         specifier: 4.0.1
-        version: 4.0.1(patch_hash=48c8a696c37412518dd97ce3ec69e6a7439cc123c091745a940043e0b028164a)
+        version: 4.0.1(patch_hash=668754a4380375aeead657811cf8909f1bbdc87ff248f06988987a0e885041d3)
       prismjs:
         specifier: ^1.30.0
         version: 1.30.0
@@ -1180,7 +1180,7 @@ importers:
         version: 3.10.1
       pptxgenjs:
         specifier: 4.0.1
-        version: 4.0.1(patch_hash=48c8a696c37412518dd97ce3ec69e6a7439cc123c091745a940043e0b028164a)
+        version: 4.0.1(patch_hash=668754a4380375aeead657811cf8909f1bbdc87ff248f06988987a0e885041d3)
       puppeteer:
         specifier: 24.32.0
         version: 24.32.0(typescript@5.8.3)
@@ -32177,7 +32177,7 @@ snapshots:
       tslib: 2.8.1
       uuid: 10.0.0
 
-  pptxgenjs@4.0.1(patch_hash=48c8a696c37412518dd97ce3ec69e6a7439cc123c091745a940043e0b028164a):
+  pptxgenjs@4.0.1(patch_hash=668754a4380375aeead657811cf8909f1bbdc87ff248f06988987a0e885041d3):
     dependencies:
       '@zip.js/zip.js': 2.8.34
 

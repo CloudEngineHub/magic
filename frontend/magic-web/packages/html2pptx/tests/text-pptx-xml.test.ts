@@ -43,6 +43,11 @@ describe("PowerPoint text XML", () => {
 
 		expect(slideXml).toContain('<a:off x="1876425" y="4429125"/>')
 		expect(slideXml).toContain('<a:ext cx="952500" cy="266700"/>')
+		// An omitted transparency is OOXML's fully-opaque default.  A previous
+		// patched PptxGenJS build serialized it as alpha=0, making every text run
+		// invisible even though the <a:t> nodes were present.
+		expect(slideXml).toContain('<a:srgbClr val="112233"/>')
+		expect(slideXml).not.toContain('<a:srgbClr val="112233"><a:alpha val="0"/>')
 		expect(slideXml).toMatch(/<a:bodyPr[^>]*wrap="none"/)
 		expect(slideXml).toMatch(/lIns="76200"/)
 		expect(slideXml).toMatch(/tIns="38100"/)
