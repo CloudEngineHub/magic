@@ -154,7 +154,24 @@ const BoxModelSection = observer(function BoxModelSection({
 	const [margin, setMargin] = useState(() => parseBox(computedStyles?.margin))
 	const [border, setBorder] = useState(() => parseBox(computedStyles?.borderWidth))
 	const [padding, setPadding] = useState(() => parseBox(computedStyles?.padding))
-	const previewSessionRef = useRef<{ property: BoxProperty } | null>(null)
+	const previewSessionRef = useRef<{
+		property: BoxProperty
+		selector: string
+		generation: number
+	} | null>(null)
+	const previewBatchRef = useRef<{
+		property: BoxProperty
+		selector: string
+		generation: number
+	} | null>(null)
+	const previewPromiseRef = useRef<Promise<void> | null>(null)
+	const previewGenerationRef = useRef(0)
+	const lastCommitRef = useRef<{
+		property: BoxProperty
+		selector?: string
+		value: string
+	} | null>(null)
+	const commitPromiseRef = useRef<Promise<void> | null>(null)
 
 	useEffect(() => {
 		setMargin(parseBox(computedStyles?.margin))
@@ -167,58 +184,152 @@ const BoxModelSection = observer(function BoxModelSection({
 		selectedElement?.selector,
 	])
 
-	useEffect(() => {
+	const cancelPreviewBatch = useCallback(async () => {
+		if (!previewBatchRef.current) {
+			previewSessionRef.current = null
+			return
+		}
+		previewBatchRef.current = null
 		previewSessionRef.current = null
-	}, [selectedElement?.selector])
+		const editor = editorRef?.current
+		if (!editor) return
+		try {
+			await editor.cancelBatchOperation()
+		} catch (error) {
+			console.error("[BoxModelSection] Failed to cancel preview:", error)
+		}
+	}, [editorRef])
+
+	useEffect(() => {
+		previewGenerationRef.current += 1
+		previewSessionRef.current = null
+		lastCommitRef.current = null
+		void cancelPreviewBatch()
+
+		return () => {
+			previewGenerationRef.current += 1
+			previewSessionRef.current = null
+			void cancelPreviewBatch()
+		}
+	}, [cancelPreviewBatch, selectedElement?.selector])
 
 	const previewBox = useCallback(
-		async (property: BoxProperty, previous: BoxValues, next: BoxValues) => {
+		(property: BoxProperty, previous: BoxValues, next: BoxValues) => {
 			const selector = selectedElement?.selector
-			if (!selector || !editorRef?.current) return
+			const editor = editorRef?.current
+			if (!selector || !editor) return
+			const generation = previewGenerationRef.current
 			const styles = { [property]: formatBox(next) }
-			try {
-				if (previewSessionRef.current?.property !== property) {
-					previewSessionRef.current = { property }
-					await editorRef.current.beginBatchOperation(selector, {
-						[property]: formatBox(previous),
-					})
+			const runPreview = async () => {
+				let ownsBatch = false
+				try {
+					const currentSession = previewSessionRef.current
+					if (
+						currentSession?.property !== property ||
+						currentSession.selector !== selector ||
+						currentSession.generation !== generation
+					) {
+						if (previewBatchRef.current) await cancelPreviewBatch()
+						if (generation !== previewGenerationRef.current) return
+						await editor.beginBatchOperation(selector, {
+							[property]: formatBox(previous),
+						})
+						previewBatchRef.current = { property, selector, generation }
+						ownsBatch = true
+					}
+					if (generation !== previewGenerationRef.current) {
+						if (ownsBatch) await cancelPreviewBatch()
+						return
+					}
+					await editor.applyStylesTemporary(selector, styles)
+					if (generation !== previewGenerationRef.current) {
+						if (ownsBatch) await cancelPreviewBatch()
+						return
+					}
+					previewSessionRef.current = { property, selector, generation }
+				} catch (error) {
+					console.error("[BoxModelSection] Preview failed:", error)
+					if (
+						previewBatchRef.current?.property === property &&
+						previewBatchRef.current.selector === selector &&
+						previewBatchRef.current.generation === generation
+					) {
+						await cancelPreviewBatch()
+					}
+					if (previewSessionRef.current?.property === property) {
+						previewSessionRef.current = null
+					}
 				}
-				await editorRef.current.applyStylesTemporary(selector, styles)
-			} catch (error) {
-				console.error("[BoxModelSection] Preview failed:", error)
 			}
+			const previousPromise = previewPromiseRef.current ?? Promise.resolve()
+			const promise = previousPromise.then(runPreview, runPreview)
+			previewPromiseRef.current = promise
+			void promise.finally(() => {
+				if (previewPromiseRef.current === promise) previewPromiseRef.current = null
+			})
 		},
-		[editorRef, selectedElement?.selector],
+		[cancelPreviewBatch, editorRef, selectedElement?.selector],
 	)
 
 	const commitBox = useCallback(
 		async (property: BoxProperty, values: BoxValues) => {
-			const selector = selectedElement?.selector
 			const styles = { [property]: formatBox(values) }
-			if (
-				previewSessionRef.current?.property === property &&
-				selector &&
-				editorRef?.current
-			) {
-				previewSessionRef.current = null
-				try {
-					await editorRef.current.endBatchOperation(selector, styles)
-					await editorRef.current.refreshSelectedElement(selector)
-				} catch (error) {
-					console.error("[BoxModelSection] Commit failed:", error)
+			const selector = selectedElement?.selector
+			const runCommit = async () => {
+				await previewPromiseRef.current?.catch(() => undefined)
+				const value = styles[property]
+				const lastCommit = lastCommitRef.current
+				if (
+					lastCommit?.property === property &&
+					lastCommit.selector === selector &&
+					lastCommit.value === value
+				) {
+					return
 				}
-				return
+
+				const session = previewSessionRef.current
+				const editor = editorRef?.current
+				if (session?.property === property && session.selector === selector && editor) {
+					try {
+						await editor.endBatchOperation(selector, styles)
+						previewSessionRef.current = null
+						previewBatchRef.current = null
+					} catch (error) {
+						console.error("[BoxModelSection] Commit failed:", error)
+						await cancelPreviewBatch()
+						onStyleChange?.(property, value)
+						lastCommitRef.current = { property, selector, value }
+						return
+					}
+					try {
+						await editor.refreshSelectedElement(selector)
+					} catch (error) {
+						console.error("[BoxModelSection] Refresh after commit failed:", error)
+					}
+					lastCommitRef.current = { property, selector, value }
+					return
+				}
+
+				// Preview is optional; persist the value when it was not established.
+				onStyleChange?.(property, value)
+				lastCommitRef.current = { property, selector, value }
 			}
-			// Ignore a second commit after batch end (blur after drag).
-			if (selector && editorRef?.current) return
-			onStyleChange?.(property, styles[property])
+			const previousPromise = commitPromiseRef.current ?? Promise.resolve()
+			const promise = previousPromise.then(runCommit, runCommit)
+			commitPromiseRef.current = promise
+			try {
+				await promise
+			} finally {
+				if (commitPromiseRef.current === promise) commitPromiseRef.current = null
+			}
 		},
-		[editorRef, onStyleChange, selectedElement?.selector],
+		[cancelPreviewBatch, editorRef, onStyleChange, selectedElement?.selector],
 	)
 
 	const updateBox = useCallback(
 		(property: BoxProperty, side: BoxSide, value: string) => {
 			if (value !== "" && !/^-?\d*(?:\.\d*)?$/.test(value)) return
+			lastCommitRef.current = null
 			if (
 				property === "borderWidth" &&
 				Number.parseFloat(value) > 0 &&
@@ -230,7 +341,7 @@ const BoxModelSection = observer(function BoxModelSection({
 				property === "margin" ? setMargin : property === "padding" ? setPadding : setBorder
 			setter((previous) => {
 				const next = { ...previous, [side]: value || "0" }
-				void previewBox(property, previous, next)
+				previewBox(property, previous, next)
 				return next
 			})
 		},

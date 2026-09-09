@@ -1213,22 +1213,14 @@ export async function captureIframeRegion(options: CaptureOptions): Promise<stri
 					options.iframeTargetOrigin,
 				),
 			} satisfies CurrentTabCaptureAuthorizationContext)
-		const startCurrentTabCapture = () => {
+		const startCurrentTabCapture = async () => {
 			htmlScreenshotLogger.report(HTML_SCREENSHOT_FALLBACK_EVENT, {
 				...authorizationContext,
 				fallback: "current-tab",
 				stage: "start",
 			})
-			const capturePromise = captureCurrentTab(options)
-			const beforeCurrentTabCapture = options.beforeCurrentTabCapture
-			if (!beforeCurrentTabCapture) return capturePromise
-			return beforeCurrentTabCapture().then(
-				() => capturePromise,
-				(error) => {
-					void capturePromise.catch(() => undefined)
-					throw error
-				},
-			)
+			await options.beforeCurrentTabCapture?.()
+			return captureCurrentTab(options)
 		}
 		if (options.requestCurrentTabCaptureAuthorization) {
 			const dataUrl = await options.requestCurrentTabCaptureAuthorization(

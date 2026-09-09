@@ -20,7 +20,7 @@ vi.mock("../../controls", () => ({
 		value,
 		onChange,
 		onCommit,
-		hideStepper: _,
+		hideStepper,
 		...props
 	}: Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> & {
 		value: string | number
@@ -30,6 +30,7 @@ vi.mock("../../controls", () => ({
 	}) => (
 		<input
 			{...props}
+			data-hide-stepper={hideStepper}
 			value={value}
 			onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
 			onBlur={(event) => onCommit?.(event.currentTarget.value)}
@@ -56,6 +57,16 @@ function createSelectedElement(
 
 function renderSection(ui: ReactNode) {
 	return render(ui)
+}
+
+function createDeferred<T = void>() {
+	let resolve!: (value: T | PromiseLike<T>) => void
+	let reject!: (error: unknown) => void
+	const promise = new Promise<T>((res, rej) => {
+		resolve = res
+		reject = rej
+	})
+	return { promise, resolve, reject }
 }
 
 describe("BoxModelSection", () => {
@@ -89,6 +100,99 @@ describe("BoxModelSection", () => {
 		)
 		expect(edge.className).toContain("h-5")
 		expect(edge.className).toContain("ring-0")
+	})
+
+	it("persists the value when starting a preview batch fails", async () => {
+		const editorRef = {
+			current: {
+				beginBatchOperation: vi.fn().mockRejectedValue(new Error("begin failed")),
+				applyStylesTemporary: vi.fn(),
+				endBatchOperation: vi.fn(),
+				cancelBatchOperation: vi.fn(),
+				refreshSelectedElement: vi.fn(),
+			},
+		}
+		const onStyleChange = vi.fn()
+
+		renderSection(
+			<BoxModelSection
+				selectedElement={createSelectedElement()}
+				editorRef={editorRef as never}
+				onStyleChange={onStyleChange}
+			/>,
+		)
+
+		const leftPadding = screen.getByTestId("box-model-edge-padding-left")
+		fireEvent.change(leftPadding, { target: { value: "16" } })
+		fireEvent.blur(leftPadding)
+
+		await waitFor(() =>
+			expect(onStyleChange).toHaveBeenCalledWith("padding", "0px 0px 0px 16px"),
+		)
+		expect(editorRef.current.endBatchOperation).not.toHaveBeenCalled()
+	})
+
+	it("cancels a partially started preview when temporary styles fail", async () => {
+		const editorRef = {
+			current: {
+				beginBatchOperation: vi.fn().mockResolvedValue(undefined),
+				applyStylesTemporary: vi.fn().mockRejectedValue(new Error("apply failed")),
+				endBatchOperation: vi.fn(),
+				cancelBatchOperation: vi.fn().mockResolvedValue(undefined),
+				refreshSelectedElement: vi.fn(),
+			},
+		}
+		const onStyleChange = vi.fn()
+
+		renderSection(
+			<BoxModelSection
+				selectedElement={createSelectedElement()}
+				editorRef={editorRef as never}
+				onStyleChange={onStyleChange}
+			/>,
+		)
+
+		const leftPadding = screen.getByTestId("box-model-edge-padding-left")
+		fireEvent.change(leftPadding, { target: { value: "16" } })
+		await waitFor(() => expect(editorRef.current.cancelBatchOperation).toHaveBeenCalledOnce())
+		fireEvent.blur(leftPadding)
+
+		await waitFor(() =>
+			expect(onStyleChange).toHaveBeenCalledWith("padding", "0px 0px 0px 16px"),
+		)
+		expect(editorRef.current.endBatchOperation).not.toHaveBeenCalled()
+	})
+
+	it("waits for an in-flight preview before committing", async () => {
+		const applyTemporary = createDeferred<void>()
+		const editorRef = {
+			current: {
+				beginBatchOperation: vi.fn().mockResolvedValue(undefined),
+				applyStylesTemporary: vi.fn(() => applyTemporary.promise),
+				endBatchOperation: vi.fn().mockResolvedValue(undefined),
+				cancelBatchOperation: vi.fn().mockResolvedValue(undefined),
+				refreshSelectedElement: vi.fn().mockResolvedValue(undefined),
+			},
+		}
+		const onStyleChange = vi.fn()
+
+		renderSection(
+			<BoxModelSection
+				selectedElement={createSelectedElement()}
+				editorRef={editorRef as never}
+				onStyleChange={onStyleChange}
+			/>,
+		)
+
+		const leftPadding = screen.getByTestId("box-model-edge-padding-left")
+		fireEvent.change(leftPadding, { target: { value: "16" } })
+		await waitFor(() => expect(editorRef.current.applyStylesTemporary).toHaveBeenCalledOnce())
+		fireEvent.blur(leftPadding)
+		expect(editorRef.current.endBatchOperation).not.toHaveBeenCalled()
+
+		applyTemporary.resolve()
+		await waitFor(() => expect(editorRef.current.endBatchOperation).toHaveBeenCalledOnce())
+		expect(onStyleChange).not.toHaveBeenCalled()
 	})
 
 	it("previews padding while dragging and commits once on blur", async () => {
