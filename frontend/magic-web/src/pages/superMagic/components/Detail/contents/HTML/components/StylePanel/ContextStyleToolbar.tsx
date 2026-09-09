@@ -57,8 +57,10 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 			: undefined)
 	const isFlexContainer = computedStyles?.display === "flex"
 	const isFlexItem = computedStyles?.parentDisplay === "flex"
+	const isTextElement = selectedElement?.isTextElement === true
 	const flexAlignment = useMemo(() => {
-		if (stylePanelStore.textSelection?.hasSelection || !selectedElement) return null
+		if (stylePanelStore.textSelection?.hasSelection || !selectedElement || isTextElement)
+			return null
 
 		if (isFlexContainer) {
 			return {
@@ -83,6 +85,7 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 		isFlexItem,
 		selectedElement,
 		stylePanelStore.textSelection?.hasSelection,
+		isTextElement,
 	])
 
 	useEffect(() => {

@@ -39,6 +39,7 @@ const {
 			selectedElements: [] as Array<unknown>,
 			getSelectedSelectors: () => ["img.hero"],
 			selectElement: mockSelectElement,
+			setPreviewRect: vi.fn(),
 		},
 	}
 })
@@ -118,6 +119,7 @@ vi.mock("../controls", () => ({
 	),
 	FontSizeAdjuster: () => <div data-testid="font-size-adjuster" />,
 	TextFormatTools: () => <div data-testid="text-format-tools" />,
+	AlignmentImpactHint: ({ children }: { children: ReactNode }) => <>{children}</>,
 	TextAlignTools: ({
 		mode,
 		value,
@@ -667,12 +669,46 @@ describe("StylePanel", () => {
 		expect(screen.queryByTestId("background-section")).not.toBeInTheDocument()
 	})
 
-	it("should use the parent flex container for alignment of a flex item", async () => {
+	it("should keep text alignment for a text element inside a flex container", async () => {
 		mockSelectedElement.current = {
 			selector: "p.copy",
 			tagName: "p",
 			isTextElement: true,
 			hasDirectTextContent: true,
+			computedStyles: {
+				fontWeight: "400",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "left",
+				color: "#000000",
+				width: "320px",
+				height: "40px",
+				display: "block",
+				parentSelector: "div.layout",
+				parentDisplay: "flex",
+				parentFlexDirection: "row",
+				parentJustifyContent: "flex-start",
+			},
+		}
+
+		render(<StylePanel editorRef={{ current: null }} />)
+
+		const alignmentTools = screen.getByTestId("text-align-tools")
+		expect(alignmentTools).toHaveAttribute("data-mode", "text")
+		expect(alignmentTools).toHaveAttribute("data-value", "left")
+
+		fireEvent.click(alignmentTools)
+
+		await waitFor(() => {
+			expect(mockUpdateStyle).toHaveBeenCalledWith("textAlign", "center")
+		})
+	})
+
+	it("should use the parent flex container for alignment of a non-text flex item", async () => {
+		mockSelectedElement.current = {
+			selector: "div.card",
+			tagName: "div",
+			isTextElement: false,
 			computedStyles: {
 				fontWeight: "400",
 				fontStyle: "normal",
@@ -708,7 +744,7 @@ describe("StylePanel", () => {
 			expect(setBatchStyles).toHaveBeenCalledWith("div.layout", {
 				justifyContent: "center",
 			})
-			expect(refreshSelectedElement).toHaveBeenCalledWith("p.copy")
+			expect(refreshSelectedElement).toHaveBeenCalledWith("div.card")
 			expect(mockUpdateStyle).toHaveBeenCalledWith("div.layout", "justifyContent", "center")
 		})
 	})

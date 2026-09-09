@@ -24,6 +24,7 @@ import {
 	FontSizeAdjuster,
 	TextFormatTools,
 	TextAlignTools,
+	AlignmentImpactHint,
 	ColorPicker,
 	StylePopoverButton,
 	ElementActions,
@@ -69,8 +70,8 @@ const FullStylePanel = observer(function FullStylePanel({
 
 	const showButtonLabel = useShowButtonText(800)
 
-	// In a flex context, alignment is controlled by the flex container's
-	// justify-content rather than the selected text element's text-align.
+	// Text elements keep text alignment even when they are flex items; other
+	// flex items expose the parent container's justify-content controls.
 	const computedStyles =
 		selectedElement?.computedStyles ||
 		(stylePanelStore.selectedElements.length > 0
@@ -78,8 +79,10 @@ const FullStylePanel = observer(function FullStylePanel({
 			: undefined)
 	const isFlexContainer = computedStyles?.display === "flex"
 	const isFlexItem = computedStyles?.parentDisplay === "flex"
+	const isTextElement = selectedElement?.isTextElement === true
 	const flexAlignment = useMemo(() => {
-		if (stylePanelStore.textSelection?.hasSelection || !selectedElement) return null
+		if (stylePanelStore.textSelection?.hasSelection || !selectedElement || isTextElement)
+			return null
 
 		if (isFlexContainer) {
 			return {
@@ -104,6 +107,7 @@ const FullStylePanel = observer(function FullStylePanel({
 		isFlexItem,
 		selectedElement,
 		stylePanelStore.textSelection?.hasSelection,
+		isTextElement,
 	])
 
 	/**
@@ -454,7 +458,7 @@ const FullStylePanel = observer(function FullStylePanel({
 					)}
 				>
 					<HistoryActions editorRef={editorRef} />
-					<SelectionReadout selectedElement={selectedElement} />
+					<SelectionReadout selectedElement={selectedElement} editorRef={editorRef} />
 					{showElementControls ? (
 						<Separator orientation="vertical" className="mx-1 !h-4" />
 					) : null}
@@ -521,13 +525,18 @@ const FullStylePanel = observer(function FullStylePanel({
 							) : null}
 
 							{showAlignmentTools ? (
-								<TextAlignTools
-									value={flexAlignment?.value || textAlign}
-									onAlign={handleAlignment}
-									mode={flexAlignment ? "flex" : "text"}
-									flexDirection={flexAlignment?.direction}
-									disabled={isDisabled}
-								/>
+								<AlignmentImpactHint
+									selectedElement={selectedElement}
+									targetSelector={flexAlignment?.targetSelector}
+								>
+									<TextAlignTools
+										value={flexAlignment?.value || textAlign}
+										onAlign={handleAlignment}
+										mode={flexAlignment ? "flex" : "text"}
+										flexDirection={flexAlignment?.direction}
+										disabled={isDisabled}
+									/>
+								</AlignmentImpactHint>
 							) : null}
 
 							{showAlignmentTools ? (
@@ -557,6 +566,7 @@ const FullStylePanel = observer(function FullStylePanel({
 
 							<SizePopover
 								selectedElement={selectedElement}
+								editorRef={editorRef}
 								disabled={isDisabled}
 								showLabel={showButtonLabel}
 								onStyleChange={(property, value) =>
