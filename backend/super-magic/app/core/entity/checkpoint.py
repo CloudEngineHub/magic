@@ -22,13 +22,13 @@ class VirtualCheckpoint:
 
 
 # magicfs 分区布局中的项目工作区空间标识（用户文件，元数据服务 + S3
-# 后端）。条目进入用户可见链路（文件版本创建、变更附件），回滚时严格
+# 后端）。变更进入用户可见的变更附件列表，创建文件版本，回滚时严格
 # 重放。space 字段为空的旧格式条目也按本空间解析。
 PROJECT_SPACE = "project"
 
 # magicfs 分区布局中的用户个人空间标识（用户文件，元数据服务 + S3
-# 后端）。与项目空间同策略：条目进入用户可见链路（文件版本创建、变更
-# 附件），回滚时严格重放。
+# 后端）。变更创建文件版本、回滚时严格重放，但不进入用户可见的变更
+# 附件列表（附件变更仅展示项目空间）。
 USER_SPACE = "user"
 
 # magicfs 分区布局中的话题空间标识（Agent 内部状态）：随 checkpoint
@@ -43,22 +43,39 @@ CHAT_HISTORY_SPACE = "chat_history"
 
 # ── 空间注册表（单一事实来源）─────────────────────────────────────
 #
-# 新增一个需要回滚的空间 = 在下面两个元组里登记一行 + agfs/gateway 侧
-# 挂载该空间（checkpoint hook 自动按 space_type 分区记账），回滚执行器
-# 零改动。两个元组的策略差异：
+# 新增一个需要回滚的空间 = 在下面元组里登记一行 + agfs/gateway 侧挂载
+# 该空间（checkpoint hook 自动按 space_type 分区记账），回滚执行器零
+# 改动。各元组的策略差异：
 #
-# - WORKSPACE_SPACES（用户文件空间）：随 checkpoint 严格重放（任何一条
-#   失败即中止整体回滚），进入用户可见链路（collect_affected 构建受影响
-#   文件、文件版本创建、变更附件）。
+# - WORKSPACE_SPACES（工作区空间）：随 checkpoint 严格重放（任何一条
+#   失败即中止整体回滚），并进入文件版本创建链路（collect_affected
+#   构建受影响文件）。
+# - CHANGE_ATTACHMENT_SPACES（变更附件空间）：变更以附件形式进入用户
+#   可见的变更附件列表。附件与文件版本是两条独立策略：附件仅展示
+#   项目空间，文件版本覆盖全部工作区空间。
 # - INTERNAL_SPACES（Agent 内部状态空间）：随 checkpoint 尽力而为重放
-#   （失败仅告警），不进入用户可见链路——无文件版本、无变更附件。
+#   （失败仅告警），不进入文件版本与变更附件链路。
 WORKSPACE_SPACES = (PROJECT_SPACE, USER_SPACE)
+CHANGE_ATTACHMENT_SPACES = (PROJECT_SPACE,)
 INTERNAL_SPACES = (TOPIC_SPACE, CHAT_HISTORY_SPACE)
 
 
 def is_internal_space(space: str) -> bool:
     """判断空间是否为 Agent 内部状态空间（topic / chat_history 及未来新增）。"""
     return space in INTERNAL_SPACES
+
+
+def is_change_attachment_space(space: str) -> bool:
+    """判断空间条目是否进入用户可见的变更附件列表。
+
+    旧格式条目（space 为空）按项目空间解析。
+    """
+    return (space or PROJECT_SPACE) in CHANGE_ATTACHMENT_SPACES
+
+
+def is_file_version_space(space: str) -> bool:
+    """判断空间条目是否创建文件版本（工作区空间，旧格式空 space 按项目空间解析）。"""
+    return (space or PROJECT_SPACE) in WORKSPACE_SPACES
 
 class FileOperation(str, Enum):
     """文件操作类型枚举"""

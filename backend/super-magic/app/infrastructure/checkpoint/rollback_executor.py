@@ -21,6 +21,7 @@ from app.core.entity.checkpoint import (
     FileSnapshot,
     FileOperation,
     FileType,
+    is_file_version_space,
     is_internal_space,
 )
 from app.infrastructure.checkpoint.metadata_manager import CheckpointMetadataManager
@@ -781,11 +782,13 @@ class RollbackExecutor:
             )
 
             # 根据回滚方向和操作类型过滤文件
-            # 文件版本只针对用户可见的工作区文件（project / user）；topic /
+            # 文件版本只针对版本空间条目（工作区空间 project / user，
+            # 含用户空间 .magic/ 等隐藏目录下的持久文件）；topic /
             # chat_history 空间（Agent 内部状态）条目随 checkpoint 恢复，
             # 不进入版本链路。
             merged_operations = [
-                entry for entry in merged_operations if not _is_internal_space_entry(entry[1])
+                entry for entry in merged_operations
+                if is_file_version_space(entry[1].space)
             ]
             files_for_version = []
             for checkpoint_id, file_snapshot in merged_operations:
