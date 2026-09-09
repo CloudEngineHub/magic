@@ -119,7 +119,6 @@ vi.mock("../controls", () => ({
 	),
 	FontSizeAdjuster: () => <div data-testid="font-size-adjuster" />,
 	TextFormatTools: () => <div data-testid="text-format-tools" />,
-	AlignmentImpactHint: ({ children }: { children: ReactNode }) => <>{children}</>,
 	TextAlignTools: ({
 		mode,
 		value,
@@ -704,7 +703,7 @@ describe("StylePanel", () => {
 		})
 	})
 
-	it("should use the parent flex container for alignment of a non-text flex item", async () => {
+	it("should hide flex alignment tools for a non-text flex item", () => {
 		mockSelectedElement.current = {
 			selector: "div.card",
 			tagName: "div",
@@ -724,29 +723,10 @@ describe("StylePanel", () => {
 				parentJustifyContent: "flex-start",
 			},
 		}
-		const setBatchStyles = vi.fn().mockResolvedValue(undefined)
-		const refreshSelectedElement = vi.fn().mockResolvedValue(undefined)
 
-		render(
-			<StylePanel
-				editorRef={{ current: { setBatchStyles, refreshSelectedElement } } as never}
-				onStyleChange={mockUpdateStyle}
-			/>,
-		)
+		render(<StylePanel editorRef={{ current: null }} />)
 
-		const alignmentTools = screen.getByTestId("text-align-tools")
-		expect(alignmentTools).toHaveAttribute("data-mode", "flex")
-		expect(alignmentTools).toHaveAttribute("data-value", "flex-start")
-
-		fireEvent.click(alignmentTools)
-
-		await waitFor(() => {
-			expect(setBatchStyles).toHaveBeenCalledWith("div.layout", {
-				justifyContent: "center",
-			})
-			expect(refreshSelectedElement).toHaveBeenCalledWith("div.card")
-			expect(mockUpdateStyle).toHaveBeenCalledWith("div.layout", "justifyContent", "center")
-		})
+		expect(screen.queryByTestId("text-align-tools")).not.toBeInTheDocument()
 	})
 
 	it("should keep text alignment for a regular text element", async () => {

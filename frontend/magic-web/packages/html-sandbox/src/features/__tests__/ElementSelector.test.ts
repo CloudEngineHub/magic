@@ -139,6 +139,29 @@ describe("ElementSelector", () => {
 			expect(sendEventSpy).not.toHaveBeenCalledWith("ELEMENT_SELECTED", expect.anything())
 		})
 
+		it("includes ancestor path for parent selection", () => {
+			container.innerHTML =
+				'<section id="group"><article id="card"><h2 id="title">春季特惠</h2></article></section>'
+			const element = container.querySelector("#title") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					ancestors: expect.arrayContaining([
+						expect.objectContaining({
+							tagName: "article",
+							textContent: expect.stringContaining("春季特惠"),
+						}),
+						expect.objectContaining({
+							tagName: "section",
+						}),
+					]),
+				}),
+			)
+		})
+
 		it("should include computed styles", () => {
 			container.innerHTML = '<div id="styled" style="color: red;">Content</div>'
 			const element = container.querySelector("#styled") as HTMLElement

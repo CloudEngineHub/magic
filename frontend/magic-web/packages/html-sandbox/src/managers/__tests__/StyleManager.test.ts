@@ -206,6 +206,22 @@ describe("StyleManager", () => {
 			expect(element.style.top).toBe("60px")
 			expect(element.style.left).toBe("80px")
 		})
+
+		it("restores inline styles when a batch is cancelled", () => {
+			container.innerHTML = "<div id='test' style='padding: 8px;'>Content</div>"
+			const element = container.querySelector("#test") as HTMLElement
+
+			styleManager.beginBatchOperation("div#test", {
+				padding: "8px",
+			})
+			styleManager.applyStylesTemporary("div#test", {
+				padding: "24px",
+			})
+			expect(element.style.padding).toBe("24px")
+
+			styleManager.cancelBatchOperation()
+			expect(element.style.padding).toBe("8px")
+		})
 	})
 
 	describe("setBatchStyles", () => {
@@ -1098,7 +1114,8 @@ describe("StyleManager", () => {
 		})
 
 		it("restores nested-only copy on undo without dropping media", async () => {
-			container.innerHTML = "<div id='test'><img id='icon' src='icon.png'><h2>Original</h2></div>"
+			container.innerHTML =
+				"<div id='test'><img id='icon' src='icon.png'><h2>Original</h2></div>"
 			const element = container.querySelector("#test") as HTMLElement
 			const title = container.querySelector("h2") as HTMLHeadingElement
 

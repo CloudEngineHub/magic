@@ -206,6 +206,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 				isTextElement: payload.isTextElement,
 				hasDirectTextContent: payload.hasDirectTextContent,
 				textContent: payload.textContent,
+				ancestors: payload.ancestors,
 				inlineStyles: payload.inlineStyles,
 				attributes: payload.attributes,
 				computedStyles: payload.computedStyles,
@@ -500,17 +501,9 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 			},
 			selectElement: async (selector: string) => {
 				if (!messageBridgeRef.current) return
-				const response = await messageBridgeRef.current.request(
-					EditorMessageType.GET_COMPUTED_STYLES,
-					{ selector },
-				)
-				if (response?.styles) {
-					stylePanelStore.selectElement({
-						selector,
-						tagName: "",
-						computedStyles: response.styles,
-					})
-				}
+				await messageBridgeRef.current.request(EditorMessageType.SELECT_ELEMENT, {
+					selector,
+				})
 			},
 			getDomTree: async () => {
 				// DOM structure handlers are registered by EditorRuntime. Returning null

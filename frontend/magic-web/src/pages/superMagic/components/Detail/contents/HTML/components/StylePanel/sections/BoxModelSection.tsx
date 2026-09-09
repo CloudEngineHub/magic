@@ -1,6 +1,5 @@
 import { observer } from "mobx-react-lite"
-import { useCallback, useEffect, useState } from "react"
-import { useDebounceFn } from "ahooks"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DimensionInput, NumericDragInput } from "../controls"
 import type { StyleSectionProps } from "../types"
@@ -37,20 +36,25 @@ function formatBox(values: BoxValues) {
 
 interface EdgeInputProps {
 	label: string
+	layer: "margin" | "border" | "padding"
+	side: BoxSide
 	value: string
 	onChange: (value: string) => void
+	onCommit: (value: string) => void
 }
 
-function EdgeInput({ label, value, onChange }: EdgeInputProps) {
+function EdgeInput({ label, layer, side, value, onChange, onCommit }: EdgeInputProps) {
 	return (
 		<NumericDragInput
 			value={value}
 			onChange={onChange}
+			onCommit={onCommit}
+			onBlur={() => onCommit(value)}
 			inputMode="decimal"
 			hideStepper
 			className="h-5 w-8 rounded-none border-transparent bg-transparent px-0.5 text-center text-[11px] tabular-nums leading-none shadow-none outline-none ring-0 focus-visible:ring-0"
 			aria-label={label}
-			data-testid={`box-model-edge-${label}`}
+			data-testid={`box-model-edge-${layer}-${side}`}
 		/>
 	)
 }
@@ -61,10 +65,11 @@ interface BoxLayerProps {
 	color: "margin" | "border" | "padding"
 	center: React.ReactNode
 	onChange?: (side: BoxSide, value: string) => void
+	onCommit?: (side: BoxSide, value: string) => void
 	sideLabel: (side: BoxSide) => string
 }
 
-function BoxLayer({ label, values, color, center, onChange, sideLabel }: BoxLayerProps) {
+function BoxLayer({ label, values, color, center, onChange, onCommit, sideLabel }: BoxLayerProps) {
 	const palette = {
 		margin: "border-border bg-muted/40",
 		border: "border-border bg-background",
@@ -90,29 +95,41 @@ function BoxLayer({ label, values, color, center, onChange, sideLabel }: BoxLaye
 						<div className="col-start-2 row-start-1 flex items-center justify-center overflow-hidden">
 							<EdgeInput
 								label={sideLabel("top")}
+								layer={color}
+								side="top"
 								value={values.top}
 								onChange={(value) => onChange("top", value)}
+								onCommit={(value) => onCommit?.("top", value)}
 							/>
 						</div>
 						<div className="col-start-1 row-start-2 flex items-center justify-center overflow-hidden">
 							<EdgeInput
 								label={sideLabel("left")}
+								layer={color}
+								side="left"
 								value={values.left}
 								onChange={(value) => onChange("left", value)}
+								onCommit={(value) => onCommit?.("left", value)}
 							/>
 						</div>
 						<div className="col-start-3 row-start-2 flex items-center justify-center overflow-hidden">
 							<EdgeInput
 								label={sideLabel("right")}
+								layer={color}
+								side="right"
 								value={values.right}
 								onChange={(value) => onChange("right", value)}
+								onCommit={(value) => onCommit?.("right", value)}
 							/>
 						</div>
 						<div className="col-start-2 row-start-3 flex items-center justify-center overflow-hidden">
 							<EdgeInput
 								label={sideLabel("bottom")}
+								layer={color}
+								side="bottom"
 								value={values.bottom}
 								onChange={(value) => onChange("bottom", value)}
+								onCommit={(value) => onCommit?.("bottom", value)}
 							/>
 						</div>
 					</>
@@ -125,8 +142,11 @@ function BoxLayer({ label, values, color, center, onChange, sideLabel }: BoxLaye
 	)
 }
 
+type BoxProperty = "margin" | "padding" | "borderWidth"
+
 const BoxModelSection = observer(function BoxModelSection({
 	selectedElement,
+	editorRef,
 	onStyleChange,
 }: StyleSectionProps) {
 	const { t } = useTranslation("super")
@@ -134,6 +154,7 @@ const BoxModelSection = observer(function BoxModelSection({
 	const [margin, setMargin] = useState(() => parseBox(computedStyles?.margin))
 	const [border, setBorder] = useState(() => parseBox(computedStyles?.borderWidth))
 	const [padding, setPadding] = useState(() => parseBox(computedStyles?.padding))
+	const previewSessionRef = useRef<{ property: BoxProperty } | null>(null)
 
 	useEffect(() => {
 		setMargin(parseBox(computedStyles?.margin))
@@ -146,15 +167,57 @@ const BoxModelSection = observer(function BoxModelSection({
 		selectedElement?.selector,
 	])
 
-	const { run: applyBoxChange } = useDebounceFn(
-		(property: "margin" | "padding" | "borderWidth", values: BoxValues) => {
-			onStyleChange?.(property, formatBox(values))
+	useEffect(() => {
+		previewSessionRef.current = null
+	}, [selectedElement?.selector])
+
+	const previewBox = useCallback(
+		async (property: BoxProperty, previous: BoxValues, next: BoxValues) => {
+			const selector = selectedElement?.selector
+			if (!selector || !editorRef?.current) return
+			const styles = { [property]: formatBox(next) }
+			try {
+				if (previewSessionRef.current?.property !== property) {
+					previewSessionRef.current = { property }
+					await editorRef.current.beginBatchOperation(selector, {
+						[property]: formatBox(previous),
+					})
+				}
+				await editorRef.current.applyStylesTemporary(selector, styles)
+			} catch (error) {
+				console.error("[BoxModelSection] Preview failed:", error)
+			}
 		},
-		{ wait: 250 },
+		[editorRef, selectedElement?.selector],
+	)
+
+	const commitBox = useCallback(
+		async (property: BoxProperty, values: BoxValues) => {
+			const selector = selectedElement?.selector
+			const styles = { [property]: formatBox(values) }
+			if (
+				previewSessionRef.current?.property === property &&
+				selector &&
+				editorRef?.current
+			) {
+				previewSessionRef.current = null
+				try {
+					await editorRef.current.endBatchOperation(selector, styles)
+					await editorRef.current.refreshSelectedElement(selector)
+				} catch (error) {
+					console.error("[BoxModelSection] Commit failed:", error)
+				}
+				return
+			}
+			// Ignore a second commit after batch end (blur after drag).
+			if (selector && editorRef?.current) return
+			onStyleChange?.(property, styles[property])
+		},
+		[editorRef, onStyleChange, selectedElement?.selector],
 	)
 
 	const updateBox = useCallback(
-		(property: "margin" | "padding" | "borderWidth", side: BoxSide, value: string) => {
+		(property: BoxProperty, side: BoxSide, value: string) => {
 			if (value !== "" && !/^-?\d*(?:\.\d*)?$/.test(value)) return
 			if (
 				property === "borderWidth" &&
@@ -167,11 +230,21 @@ const BoxModelSection = observer(function BoxModelSection({
 				property === "margin" ? setMargin : property === "padding" ? setPadding : setBorder
 			setter((previous) => {
 				const next = { ...previous, [side]: value || "0" }
-				applyBoxChange(property, next)
+				void previewBox(property, previous, next)
 				return next
 			})
 		},
-		[applyBoxChange, computedStyles?.borderStyle, onStyleChange],
+		[computedStyles?.borderStyle, onStyleChange, previewBox],
+	)
+
+	const finishBox = useCallback(
+		(property: BoxProperty, side: BoxSide, value: string) => {
+			if (value !== "" && !/^-?\d*(?:\.\d*)?$/.test(value)) return
+			const current =
+				property === "margin" ? margin : property === "padding" ? padding : border
+			void commitBox(property, { ...current, [side]: value || "0" })
+		},
+		[border, commitBox, margin, padding],
 	)
 
 	const width = getDimensionField(selectedElement, "width")
@@ -225,6 +298,7 @@ const BoxModelSection = observer(function BoxModelSection({
 				color="margin"
 				sideLabel={(side) => getSideLabel(marginLabel, side)}
 				onChange={(side, value) => updateBox("margin", side, value)}
+				onCommit={(side, value) => finishBox("margin", side, value)}
 				center={
 					<BoxLayer
 						label={t("stylePanel.boxModelLayer", {
@@ -235,6 +309,7 @@ const BoxModelSection = observer(function BoxModelSection({
 						color="border"
 						sideLabel={(side) => getSideLabel(borderLabel, side)}
 						onChange={(side, value) => updateBox("borderWidth", side, value)}
+						onCommit={(side, value) => finishBox("borderWidth", side, value)}
 						center={
 							<BoxLayer
 								label={paddingLabel}
@@ -242,6 +317,7 @@ const BoxModelSection = observer(function BoxModelSection({
 								color="padding"
 								sideLabel={(side) => getSideLabel(paddingLabel, side)}
 								onChange={(side, value) => updateBox("padding", side, value)}
+								onCommit={(side, value) => finishBox("padding", side, value)}
 								center={
 									<div
 										className="flex min-h-8 w-full min-w-0 items-center justify-center border border-dashed border-border bg-background px-1 py-1 text-center text-[11px] tabular-nums leading-tight text-foreground"

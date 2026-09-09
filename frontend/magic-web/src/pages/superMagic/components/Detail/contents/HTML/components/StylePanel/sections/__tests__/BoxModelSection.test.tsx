@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ChangeEvent, ComponentProps, InputHTMLAttributes, ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
 import BoxModelSection from "../BoxModelSection"
@@ -19,17 +19,20 @@ vi.mock("../../controls", () => ({
 	NumericDragInput: ({
 		value,
 		onChange,
-		hideStepper: _hideStepper,
+		onCommit,
+		hideStepper: _,
 		...props
 	}: Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> & {
 		value: string | number
 		onChange: (value: string) => void
+		onCommit?: (value: string) => void
 		hideStepper?: boolean
 	}) => (
 		<input
 			{...props}
 			value={value}
 			onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
+			onBlur={(event) => onCommit?.(event.currentTarget.value)}
 		/>
 	),
 }))
@@ -80,11 +83,55 @@ describe("BoxModelSection", () => {
 			/>,
 		)
 
-		const edge = screen.getAllByTestId("box-model-edge-stylePanel.boxModelSideLabel")[0]
+		const edge = screen.getByTestId("box-model-edge-margin-top")
 		expect(edge.closest(".grid")?.className).toContain(
 			"grid-rows-[1.25rem_minmax(2rem,auto)_1.25rem]",
 		)
 		expect(edge.className).toContain("h-5")
 		expect(edge.className).toContain("ring-0")
+	})
+
+	it("previews padding while dragging and commits once on blur", async () => {
+		const editorRef = {
+			current: {
+				beginBatchOperation: vi.fn().mockResolvedValue(undefined),
+				applyStylesTemporary: vi.fn().mockResolvedValue(undefined),
+				endBatchOperation: vi.fn().mockResolvedValue(undefined),
+				refreshSelectedElement: vi.fn().mockResolvedValue(undefined),
+			},
+		}
+		const onStyleChange = vi.fn()
+
+		renderSection(
+			<BoxModelSection
+				selectedElement={createSelectedElement()}
+				editorRef={editorRef as never}
+				onStyleChange={onStyleChange}
+			/>,
+		)
+
+		const leftPadding = screen.getByTestId("box-model-edge-padding-left")
+
+		fireEvent.change(leftPadding, { target: { value: "16" } })
+		await waitFor(() => {
+			expect(editorRef.current.beginBatchOperation).toHaveBeenCalledWith(".slide", {
+				padding: "0px 0px 0px 0px",
+			})
+		})
+		expect(editorRef.current.applyStylesTemporary).toHaveBeenCalledWith(".slide", {
+			padding: "0px 0px 0px 16px",
+		})
+
+		fireEvent.blur(leftPadding)
+		await waitFor(() => {
+			expect(editorRef.current.endBatchOperation).toHaveBeenCalledWith(".slide", {
+				padding: "0px 0px 0px 16px",
+			})
+		})
+		expect(onStyleChange).not.toHaveBeenCalledWith("padding", expect.anything())
+
+		fireEvent.blur(leftPadding)
+		expect(editorRef.current.endBatchOperation).toHaveBeenCalledTimes(1)
+		expect(onStyleChange).not.toHaveBeenCalled()
 	})
 })

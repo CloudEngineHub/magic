@@ -24,7 +24,6 @@ import {
 	FontSizeAdjuster,
 	TextFormatTools,
 	TextAlignTools,
-	AlignmentImpactHint,
 	ColorPicker,
 	StylePopoverButton,
 	ElementActions,
@@ -78,33 +77,21 @@ const FullStylePanel = observer(function FullStylePanel({
 			? stylePanelStore.selectedElements[0]?.computedStyles
 			: undefined)
 	const isFlexContainer = computedStyles?.display === "flex"
-	const isFlexItem = computedStyles?.parentDisplay === "flex"
 	const isTextElement = selectedElement?.isTextElement === true
 	const flexAlignment = useMemo(() => {
 		if (stylePanelStore.textSelection?.hasSelection || !selectedElement || isTextElement)
 			return null
 
-		if (isFlexContainer) {
-			return {
-				value: computedStyles?.justifyContent || "flex-start",
-				direction: computedStyles?.flexDirection || "row",
-				targetSelector: selectedElement.selector,
-			}
-		}
+		if (!isFlexContainer) return null
 
-		if (isFlexItem && computedStyles?.parentSelector) {
-			return {
-				value: computedStyles.parentJustifyContent || "flex-start",
-				direction: computedStyles.parentFlexDirection || "row",
-				targetSelector: computedStyles.parentSelector,
-			}
+		return {
+			value: computedStyles?.justifyContent || "flex-start",
+			direction: computedStyles?.flexDirection || "row",
+			targetSelector: selectedElement.selector,
 		}
-
-		return null
 	}, [
 		computedStyles,
 		isFlexContainer,
-		isFlexItem,
 		selectedElement,
 		stylePanelStore.textSelection?.hasSelection,
 		isTextElement,
@@ -318,8 +305,6 @@ const FullStylePanel = observer(function FullStylePanel({
 			})
 			onStyleChange?.(flexAlignment.targetSelector, "justifyContent", value)
 
-			// Refresh the selected element so parentJustifyContent reflects the new
-			// value when the selected node is a flex item.
 			if (selectedElement?.selector) {
 				await editorRef.current.refreshSelectedElement(selectedElement.selector)
 			}
@@ -525,18 +510,13 @@ const FullStylePanel = observer(function FullStylePanel({
 							) : null}
 
 							{showAlignmentTools ? (
-								<AlignmentImpactHint
-									selectedElement={selectedElement}
-									targetSelector={flexAlignment?.targetSelector}
-								>
-									<TextAlignTools
-										value={flexAlignment?.value || textAlign}
-										onAlign={handleAlignment}
-										mode={flexAlignment ? "flex" : "text"}
-										flexDirection={flexAlignment?.direction}
-										disabled={isDisabled}
-									/>
-								</AlignmentImpactHint>
+								<TextAlignTools
+									value={flexAlignment?.value || textAlign}
+									onAlign={handleAlignment}
+									mode={flexAlignment ? "flex" : "text"}
+									flexDirection={flexAlignment?.direction}
+									disabled={isDisabled}
+								/>
 							) : null}
 
 							{showAlignmentTools ? (

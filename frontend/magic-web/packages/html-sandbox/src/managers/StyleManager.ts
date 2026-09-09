@@ -704,10 +704,23 @@ export class StyleManager {
 	}
 
 	/**
-	 * Cancel batch operation without recording
+	 * Cancel batch operation without recording and restore the start snapshot.
 	 */
 	cancelBatchOperation(): void {
+		const start = this.commandHistory.peekBatchStart()
 		this.commandHistory.cancelBatch()
+		const selector = start?.previousState?.selector
+		if (!selector || typeof selector !== "string") return
+
+		try {
+			const element = findElement(selector)
+			for (const [property, value] of Object.entries(start.previousState)) {
+				if (property === "selector" || typeof value !== "string") continue
+				setInlineStyle(element, property, value)
+			}
+		} catch {
+			// The element may have been removed while the drag was active.
+		}
 	}
 
 	/**

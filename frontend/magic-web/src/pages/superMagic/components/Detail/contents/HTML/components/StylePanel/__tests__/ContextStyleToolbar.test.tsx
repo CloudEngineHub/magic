@@ -71,7 +71,6 @@ vi.mock("../controls", async () => {
 		FontSizeSelector: () => <div data-testid="font-size-selector" />,
 		FontSizeAdjuster: () => <div data-testid="font-size-adjuster" />,
 		LineHeightSelector: () => <div data-testid="line-height-selector" />,
-		AlignmentImpactHint: ({ children }: { children: ReactNode }) => <>{children}</>,
 		TextAlignTools: ({
 			mode,
 			value,
