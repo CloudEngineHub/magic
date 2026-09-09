@@ -307,7 +307,8 @@
 	},
 	"clawPlayground": {
 		"stopTaskBeforeToolbarAction": "请先停止当前任务后再操作",
-		"toolbarNewChat": "新对话"
+		"toolbarNewChat": "新对话",
+		"toolbarSkills": "技能"
 	},
 	"collaborationInvite": {
 		"currentLogin": "将以下身份加入该共享项目",
