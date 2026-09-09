@@ -126,59 +126,6 @@ final class ProviderVideoErrorMapper
         return VideoGenerateErrorCode::GENERAL_ERROR;
     }
 
-    public static function resolveVolcengine(
-        ?RequestException $exception = null,
-        null|array|string $body = null,
-    ): VideoGenerateErrorCode {
-        $body = is_array($body) ? json_encode($body, JSON_THROW_ON_ERROR) : $body;
-        $body ??= $exception === null ? null : self::readResponseBody($exception);
-        $payload = self::decodeResponseBody($body);
-        $error = is_array($payload['error'] ?? null) ? $payload['error'] : [];
-        $providerCode = $error['code'] ?? $payload['code'] ?? null;
-        $providerMessage = $error['message'] ?? $payload['message'] ?? $body ?? $exception?->getMessage();
-        $code = self::normalize((string) $providerCode);
-        $text = self::normalize((string) $providerMessage);
-
-        if (str_starts_with($code, 'inputvideosensitivecontentdetected')) {
-            return VideoGenerateErrorCode::INPUT_VIDEO_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'inputimagesensitivecontentdetected')) {
-            return VideoGenerateErrorCode::INPUT_IMAGE_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'inputtextsensitivecontentdetected')) {
-            return VideoGenerateErrorCode::INPUT_TEXT_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'inputaudiosensitivecontentdetected')) {
-            return VideoGenerateErrorCode::INPUT_AUDIO_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'outputtextsensitivecontentdetected')) {
-            return VideoGenerateErrorCode::OUTPUT_TEXT_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'outputvideosensitivecontentdetected')) {
-            return VideoGenerateErrorCode::OUTPUT_VIDEO_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'outputaudiosensitivecontentdetected')) {
-            return VideoGenerateErrorCode::OUTPUT_AUDIO_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'invalidprompt') || str_starts_with($code, 'promptcheckfailed') || str_starts_with($code, 'promptblocked')) {
-            return VideoGenerateErrorCode::INVALID_PROMPT;
-        }
-        if (str_starts_with($code, 'invalidparameterinvalidaspectratio') || str_contains($text, 'aspectratio')) {
-            return VideoGenerateErrorCode::INVALID_ASPECT_RATIO;
-        }
-        if (str_starts_with($code, 'invalidparameter') || str_contains($text, 'invalidparameter')) {
-            return VideoGenerateErrorCode::INVALID_PARAMETER;
-        }
-        if (str_starts_with($code, 'invalidfileformat') || str_starts_with($code, 'unsupportedvideoformat')) {
-            return VideoGenerateErrorCode::UNSUPPORTED_VIDEO_FORMAT;
-        }
-        if (str_starts_with($code, 'resourcenotfound') || str_starts_with($code, 'tasknotfound')) {
-            return VideoGenerateErrorCode::TASK_NOT_FOUND;
-        }
-
-        return VideoGenerateErrorCode::GENERAL_ERROR;
-    }
-
     public static function isRetriable(
         ?RequestException $exception = null,
         ?VideoGenerateErrorCode $errorCode = null,

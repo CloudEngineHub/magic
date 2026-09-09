@@ -7,7 +7,6 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
-use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use GuzzleHttp\Client;
@@ -16,6 +15,8 @@ use Hyperf\Codec\Json;
 use Hyperf\Guzzle\ClientFactory;
 use Hyperf\Logger\LoggerFactory;
 use Throwable;
+
+use function Hyperf\Translation\__;
 
 readonly class VolcengineArkVideoClient
 {
@@ -155,17 +156,12 @@ readonly class VolcengineArkVideoClient
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
                 'error' => $errorMessage,
             ]);
-            $errorCode = ProviderVideoErrorMapper::resolveVolcengine($exception);
-            $retriable = ProviderVideoErrorMapper::isRetriable($exception, $errorCode)
-                || in_array($httpStatus, [408, 409], true);
-            $factory = $retriable ? 'retriable' : 'nonRetriable';
+            $message = $this->formatRequestExceptionMessage($httpStatus ?? 0, $errorMessage);
+            $exceptionFactory = $this->isDeterministicHttpFailure($httpStatus)
+                ? ProviderVideoException::nonRetriable(...)
+                : ProviderVideoException::retriable(...);
 
-            throw ProviderVideoException::$factory(
-                $errorCode->getMessage(),
-                $exception,
-                $httpStatus,
-                (string) $errorCode->value,
-            );
+            throw $exceptionFactory($message, $exception, $httpStatus);
         } catch (ProviderVideoException $exception) {
             throw $exception;
         } catch (Throwable $throwable) {
@@ -180,10 +176,8 @@ readonly class VolcengineArkVideoClient
                 'error' => sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()),
             ]);
             throw ProviderVideoException::retriable(
-                VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
+                sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()),
                 $throwable,
-                null,
-                (string) VideoGenerateErrorCode::GENERAL_ERROR->value,
             );
         }
     }
@@ -191,5 +185,37 @@ readonly class VolcengineArkVideoClient
     private function calculateElapsedMilliseconds(float $startedAt): int
     {
         return max(0, (int) round((microtime(true) - $startedAt) * 1000));
+    }
+
+    private function formatRequestExceptionMessage(int $httpStatus, string $errorContent): string
+    {
+        try {
+            $payload = Json::decode(trim($errorContent));
+            if (is_array($payload)) {
+                $error = is_array($payload['error'] ?? null) ? $payload['error'] : [];
+                $errorCode = trim((string) ($error['code'] ?? ''));
+                if ($errorCode !== '') {
+                    $key = sprintf('video.errors.%s', $errorCode);
+                    $translated = __($key);
+                    if (is_string($translated) && $translated !== '' && $translated !== $key) {
+                        return $translated;
+                    }
+                    if ($httpStatus === 400) {
+                        return $error['message'] ?? '视频生成失败，请检查输入内容或稍后重试。';
+                    }
+                }
+            }
+        } catch (Throwable) {
+        }
+
+        return __('video.errors.generic') ?: '视频生成失败，请检查输入内容或稍后重试。';
+    }
+
+    private function isDeterministicHttpFailure(?int $httpStatus): bool
+    {
+        return $httpStatus !== null
+            && $httpStatus >= 400
+            && $httpStatus < 500
+            && ! in_array($httpStatus, [408, 409, 429], true);
     }
 }

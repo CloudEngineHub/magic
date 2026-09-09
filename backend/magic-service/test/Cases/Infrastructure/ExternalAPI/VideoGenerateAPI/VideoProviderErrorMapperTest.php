@@ -214,28 +214,6 @@ final class VideoProviderErrorMapperTest extends TestCase
         );
     }
 
-    public function testVolcengineResolverMapsUserFixableErrorsAndHidesInternalErrors(): void
-    {
-        self::assertSame(
-            VideoGenerateErrorCode::INPUT_IMAGE_AUDIT_FAILED,
-            ProviderVideoErrorMapper::resolveVolcengine(null, [
-                'error' => ['code' => 'InputImageSensitiveContentDetected.PrivacyInformation'],
-            ]),
-        );
-        self::assertSame(
-            VideoGenerateErrorCode::GENERAL_ERROR,
-            ProviderVideoErrorMapper::resolveVolcengine(null, [
-                'error' => ['code' => 'AccountOverdueError', 'message' => 'provider secret'],
-            ]),
-        );
-        self::assertSame(
-            VideoGenerateErrorCode::INPUT_AUDIO_AUDIT_FAILED,
-            ProviderVideoErrorMapper::resolveVolcengine(null, [
-                'error' => ['code' => 'InputAudioSensitiveContentDetected.PrivacyInformation'],
-            ]),
-        );
-    }
-
     public function testResolversIgnoreNonJsonResponseBodies(): void
     {
         self::assertSame(
