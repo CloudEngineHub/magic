@@ -340,7 +340,7 @@ readonly class CloudswayVeoVideoAdapter extends AbstractCloudswayVideoAdapter
             $response['data']['name'] ?? null,
         );
         if ($operationName === null) {
-            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, $this->extractProviderMessage($response, 'cloudsway veo submit succeeded but operation name missing'));
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         }
 
         return $operationName;
@@ -387,7 +387,7 @@ readonly class CloudswayVeoVideoAdapter extends AbstractCloudswayVideoAdapter
             ],
             'error' => $error === null ? null : [
                 'code' => 'PROVIDER_FAILED',
-                'message' => $this->firstNonEmptyString($error['message'] ?? null, 'video generation failed') ?? 'video generation failed',
+                'message' => VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
                 'provider_code' => isset($error['code']) ? (string) $error['code'] : null,
             ],
         ];

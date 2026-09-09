@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArkVideoClient;
 use GuzzleHttp\Client;
@@ -87,7 +88,7 @@ class VolcengineArkVideoClientTest extends TestCase
         $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
 
         $this->expectException(ProviderVideoException::class);
-        $this->expectExceptionMessage('视频生成失败，请检查输入内容或稍后重试。');
+        $this->expectExceptionMessage(VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         try {
             $client->post(
                 'https://ark.cn-beijing.volces.com/api/v3',
@@ -103,7 +104,9 @@ class VolcengineArkVideoClientTest extends TestCase
             $this->assertSame('/contents/generations/tasks', $logger->records[1]['context']['path']);
             $this->assertSame('op-ark-400', $logger->records[1]['context']['context']['operation_id']);
             $this->assertSame(400, $logger->records[1]['context']['http_status']);
-            $this->assertSame('{"error":{"message":"service_tier must be empty"}}', $logger->records[1]['context']['error']);
+            $this->assertSame('{"error":{"message":"service_tier must be empty"}}', $logger->records[1]['context']['response']);
+            $this->assertSame(VideoGenerateErrorCode::GENERAL_ERROR->value, $logger->records[1]['context']['error_code']);
+            $this->assertSame('bad request', $logger->records[1]['context']['error_message']);
         }
     }
 
@@ -181,7 +184,7 @@ class VolcengineArkVideoClientTest extends TestCase
         $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
 
         $this->expectException(ProviderVideoException::class);
-        $this->expectExceptionMessage('输入视频未通过内容审核，请更换素材后重试。');
+        $this->expectExceptionMessage(VideoGenerateErrorCode::INPUT_VIDEO_PRIVACY_FAILED->getMessage());
 
         $client->post(
             'https://ark.cn-beijing.volces.com/api/v3',
@@ -275,7 +278,7 @@ class VolcengineArkVideoClientTest extends TestCase
         $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
 
         $this->expectException(ProviderVideoException::class);
-        $this->expectExceptionMessage('请求参数不合法，请检查后重试。');
+        $this->expectExceptionMessage(VideoGenerateErrorCode::INVALID_PARAMETER->getMessage());
 
         $client->post(
             'https://ark.cn-beijing.volces.com/api/v3',

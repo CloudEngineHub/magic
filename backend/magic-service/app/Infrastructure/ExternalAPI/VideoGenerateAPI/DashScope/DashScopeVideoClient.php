@@ -159,25 +159,9 @@ readonly class DashScopeVideoClient
         }
 
         $errorCode = ProviderVideoErrorMapper::resolveDashScope(null, $data);
-        $factory = $this->isTransientBusinessError($data) ? 'retriable' : 'nonRetriable';
-        throw ProviderVideoException::$factory(
+        throw new ProviderVideoException(
+            $errorCode,
             $errorCode->getMessage(),
-            null,
-            null,
-            (string) $errorCode->value,
         );
-    }
-
-    private function isTransientBusinessError(array $data): bool
-    {
-        $output = is_array($data['output'] ?? null) ? $data['output'] : [];
-        $error = is_array($data['error'] ?? null) ? $data['error'] : [];
-        $outputError = is_array($output['error'] ?? null) ? $output['error'] : [];
-        $code = strtolower((string) ($data['code'] ?? $error['code'] ?? $output['code'] ?? $outputError['code'] ?? ''));
-
-        return str_contains($code, 'throttl')
-            || str_contains($code, 'ratelimit')
-            || str_contains($code, 'serviceunavailable')
-            || str_contains($code, 'internalerror');
     }
 }

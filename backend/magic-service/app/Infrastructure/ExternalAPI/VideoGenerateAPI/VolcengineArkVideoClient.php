@@ -12,14 +12,10 @@ use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Psr7\Request;
-use GuzzleHttp\Psr7\Response;
 use Hyperf\Codec\Json;
 use Hyperf\Guzzle\ClientFactory;
 use Hyperf\Logger\LoggerFactory;
 use Throwable;
-
-use function Hyperf\Translation\__;
 
 readonly class VolcengineArkVideoClient
 {
@@ -145,78 +141,42 @@ readonly class VolcengineArkVideoClient
             return $request();
         } catch (RequestException $exception) {
             $response = $exception->getResponse();
-            $responseBody = $response?->getBody();
-            $errorMessage = $responseBody !== null ? (string) $responseBody : $exception->getMessage();
-            if ($responseBody?->isSeekable()) {
-                $responseBody->rewind();
+            $responseBody = $response === null ? null : (string) $response->getBody();
+            if ($response?->getBody()->isSeekable()) {
+                $response->getBody()->rewind();
             }
             $httpStatus = $response?->getStatusCode();
+            $errorCode = ProviderVideoErrorMapper::resolveVolcengine($exception);
             $this->logger->error('volcengine ark video error', [
                 'method' => $method,
                 'base_url' => $normalizedBaseUrl,
                 'path' => $normalizedPath,
                 'context' => $sanitizedLogContext,
+                'response' => $responseBody === null ? null : PayloadLogSanitizer::sanitizeResponseBody($responseBody),
+                'error_code' => $errorCode->value,
                 'http_status' => $httpStatus,
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
-                'error' => $errorMessage,
+                'error_message' => $exception->getMessage(),
             ]);
-            $message = $this->formatRequestExceptionMessage($httpStatus ?? 0, $errorMessage);
             throw new ProviderVideoException(
-                $this->isDeterministicHttpFailure($httpStatus) ? VideoGenerateErrorCode::INVALID_PARAMETER : VideoGenerateErrorCode::GENERAL_ERROR,
-                $message,
+                $errorCode,
+                $errorCode->getMessage(),
                 $exception,
             );
         } catch (ProviderVideoException $exception) {
             throw $exception;
         } catch (Throwable $throwable) {
             $this->logger->error('volcengine ark video error', [
-                'method' => $method,
-                'base_url' => $normalizedBaseUrl,
-                'path' => $normalizedPath,
                 'context' => $sanitizedLogContext,
-                'http_status' => null,
-                'provider_request_id' => null,
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
                 'error' => sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()),
             ]);
-            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()), $throwable);
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $throwable);
         }
     }
 
     private function calculateElapsedMilliseconds(float $startedAt): int
     {
         return max(0, (int) round((microtime(true) - $startedAt) * 1000));
-    }
-
-    private function formatRequestExceptionMessage(int $httpStatus, string $errorContent): string
-    {
-        try {
-            $payload = Json::decode(trim($errorContent));
-            if (is_array($payload)) {
-                $error = is_array($payload['error'] ?? null) ? $payload['error'] : [];
-                $errorCode = trim((string) ($error['code'] ?? ''));
-                if ($errorCode !== '') {
-                    $key = sprintf('video.errors.%s', $errorCode);
-                    $translated = __($key);
-                    if (is_string($translated) && $translated !== '' && $translated !== $key) {
-                        return $translated;
-                    }
-                    if ($httpStatus === 400) {
-                        return $error['message'] ?? '视频生成失败，请检查输入内容或稍后重试。';
-                    }
-                }
-            }
-        } catch (Throwable) {
-        }
-
-        return __('video.errors.generic') ?: '视频生成失败，请检查输入内容或稍后重试。';
-    }
-
-    private function isDeterministicHttpFailure(?int $httpStatus): bool
-    {
-        return $httpStatus !== null
-            && $httpStatus >= 400
-            && $httpStatus < 500
-            && ! in_array($httpStatus, [408, 409, 429], true);
     }
 }

@@ -102,7 +102,7 @@ readonly class MiniMaxH3VideoAdapter implements VideoGenerationConnectivityTesta
         $response = $this->transport->submit($config, $operation->getProviderPayload());
         $taskId = trim((string) ($response['task_id'] ?? ''));
         if ($taskId === '') {
-            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'MiniMax H3 submit succeeded but task_id is missing');
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         }
         return $taskId;
     }
@@ -124,8 +124,8 @@ readonly class MiniMaxH3VideoAdapter implements VideoGenerationConnectivityTesta
             'provider_result' => $response,
             'output' => is_string($url) && $url !== '' ? ['video_url' => $url, 'provider_task_id' => $providerTaskId] : [],
             'error' => $failed ? [
-                'code' => (string) ($task['error']['code'] ?? strtoupper($status)),
-                'message' => (string) ($task['error']['message'] ?? 'MiniMax H3 generation failed'),
+                'code' => (string) VideoGenerateErrorCode::GENERAL_ERROR->value,
+                'message' => VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
             ] : null,
         ];
     }

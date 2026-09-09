@@ -145,7 +145,7 @@ readonly class KelingV3VideoAdapter implements VideoGenerationProviderAdapterInt
             $response['data']['id'] ?? null,
         );
         if ($taskId === null) {
-            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'keling v3 submit succeeded but task id missing');
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         }
 
         return $taskId;
@@ -191,7 +191,6 @@ readonly class KelingV3VideoAdapter implements VideoGenerationProviderAdapterInt
             'error' => in_array($status, ['failed', 'error'], true) ? [
                 'code' => 'PROVIDER_FAILED',
                 'message' => 'video generation failed',
-                'provider_code' => isset($detail['code']) ? (string) $detail['code'] : null,
             ] : null,
         ];
     }

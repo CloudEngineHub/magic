@@ -138,14 +138,14 @@ readonly class CloudswayVideoClient
                 ],
             ]);
         } catch (RequestException $exception) {
-            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, $this->formatRequestExceptionMessage($exception, 'download media'), $exception);
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $exception);
         } catch (Throwable $throwable) {
-            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, sprintf('cloudsway video download media failed: %s', $throwable->getMessage()), $throwable);
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $throwable);
         }
 
         $content = (string) $response->getBody();
         if ($content === '') {
-            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'cloudsway video download media failed: empty response body');
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         }
 
         $mimeType = $this->resolveMediaMimeType($response->getHeaderLine('Content-Type'), $safeUrl);
@@ -176,69 +176,16 @@ readonly class CloudswayVideoClient
         try {
             $data = $request();
         } catch (RequestException $exception) {
-            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, $this->formatRequestExceptionMessage($exception, $action), $exception);
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $exception);
         } catch (Throwable $throwable) {
-            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, sprintf('cloudsway video %s failed: %s', $action, $throwable->getMessage()), $throwable);
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $throwable);
         }
 
         if (! is_array($data)) {
-            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, sprintf('cloudsway video %s returned invalid json', $action));
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         }
 
         return $data;
-    }
-
-    private function formatRequestExceptionMessage(RequestException $exception, string $action): string
-    {
-        if (! $exception->hasResponse()) {
-            return sprintf('cloudsway video %s failed: %s', $action, $exception->getMessage());
-        }
-
-        $response = $exception->getResponse();
-        $statusCode = $response?->getStatusCode() ?? 0;
-        $reason = $response?->getReasonPhrase() ?? 'unknown';
-        $body = trim((string) $response?->getBody());
-
-        if ($body === '') {
-            return sprintf('cloudsway video %s failed: HTTP %d %s', $action, $statusCode, $reason);
-        }
-
-        $providerMessage = $this->extractProviderMessageFromBody($body);
-        return $providerMessage ?? sprintf(
-            'cloudsway video %s failed: HTTP %d %s: %s',
-            $action,
-            $statusCode,
-            $reason,
-            PayloadLogSanitizer::sanitizeResponseBody($body),
-        );
-    }
-
-    private function extractProviderMessageFromBody(string $body): ?string
-    {
-        try {
-            $decoded = Json::decode($body);
-        } catch (Throwable) {
-            return null;
-        }
-
-        if (! is_array($decoded)) {
-            return null;
-        }
-
-        foreach ([
-            $decoded['error']['message'] ?? null,
-            $decoded['message'] ?? null,
-            $decoded['msg'] ?? null,
-            is_array($decoded['data'] ?? null) ? ($decoded['data']['message'] ?? null) : null,
-            is_array($decoded['data']['error'] ?? null) ? ($decoded['data']['error']['message'] ?? null) : null,
-            is_array($decoded['data'] ?? null) ? ($decoded['data']['task_status_msg'] ?? null) : null,
-        ] as $candidate) {
-            if (is_string($candidate) && trim($candidate) !== '') {
-                return trim($candidate);
-            }
-        }
-
-        return null;
     }
 
     private function resolveMediaMimeType(?string $contentType, string $url): string

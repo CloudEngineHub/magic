@@ -119,7 +119,7 @@ final class Wan30VideoAdapter implements VideoGenerationConnectivityTestableInte
         $response = $this->transport->submitVideo($config, $operation->getProviderPayload(), $this->buildLogContext($operation));
         $taskId = $this->firstString($response['output']['task_id'] ?? null, $response['task_id'] ?? null);
         if ($taskId === null) {
-            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'dashscope submit succeeded but task id missing');
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         }
         return $taskId;
     }

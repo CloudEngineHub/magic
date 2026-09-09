@@ -50,6 +50,84 @@ final class ProviderVideoErrorMapper
         return VideoGenerateErrorCode::GENERAL_ERROR;
     }
 
+    public static function resolveVolcengine(
+        ?RequestException $exception = null,
+        null|array|string $body = null,
+    ): VideoGenerateErrorCode {
+        $body = is_array($body) ? json_encode($body, JSON_THROW_ON_ERROR) : $body;
+        $body ??= $exception === null ? null : self::readResponseBody($exception);
+        $payload = self::decodeResponseBody($body);
+        $error = is_array($payload['error'] ?? null) ? $payload['error'] : [];
+        $providerCode = (string) ($error['code'] ?? $payload['code'] ?? '');
+        $code = self::normalize($providerCode);
+
+        return match ($providerCode) {
+            'SensitiveContentDetected' => VideoGenerateErrorCode::SENSITIVE_CONTENT_DETECTED,
+            'InputTextSensitiveContentDetected' => VideoGenerateErrorCode::INPUT_TEXT_SENSITIVE_CONTENT_DETECTED,
+            'InputTextSensitiveContentDetected.PolicyViolation' => VideoGenerateErrorCode::INPUT_TEXT_SENSITIVE_CONTENT_DETECTED_POLICY_VIOLATION,
+            'InputImageSensitiveContentDetected' => VideoGenerateErrorCode::INPUT_IMAGE_SENSITIVE_CONTENT_DETECTED,
+            'InputImageSensitiveContentDetected.PrivacyInformation' => VideoGenerateErrorCode::INPUT_IMAGE_PRIVACY_FAILED,
+            'InputImageSensitiveContentDetected.PolicyViolation' => VideoGenerateErrorCode::INPUT_IMAGE_POLICY_VIOLATION,
+            'InputVideoSensitiveContentDetected' => VideoGenerateErrorCode::INPUT_VIDEO_SENSITIVE_CONTENT_DETECTED,
+            'InputVideoSensitiveContentDetected.PrivacyInformation' => VideoGenerateErrorCode::INPUT_VIDEO_PRIVACY_FAILED,
+            'InputVideoSensitiveContentDetected.PolicyViolation' => VideoGenerateErrorCode::INPUT_VIDEO_POLICY_VIOLATION,
+            'InputAudioSensitiveContentDetected.PolicyViolation' => VideoGenerateErrorCode::INPUT_AUDIO_SENSITIVE_CONTENT_DETECTED_POLICY_VIOLATION,
+            'OutputTextSensitiveContentDetected' => VideoGenerateErrorCode::OUTPUT_TEXT_SENSITIVE_CONTENT_DETECTED,
+            'OutputImageSensitiveContentDetected' => VideoGenerateErrorCode::OUTPUT_IMAGE_SENSITIVE_CONTENT_DETECTED,
+            'OutputVideoSensitiveContentDetected' => VideoGenerateErrorCode::OUTPUT_VIDEO_SENSITIVE_CONTENT_DETECTED,
+            'OutputVideoSensitiveContentDetected.PolicyViolation' => VideoGenerateErrorCode::OUTPUT_VIDEO_SENSITIVE_CONTENT_DETECTED_POLICY_VIOLATION,
+            'OutputAudioSensitiveContentDetected' => VideoGenerateErrorCode::OUTPUT_AUDIO_SENSITIVE_CONTENT_DETECTED,
+            'OutputAudioSensitiveContentDetected.PolicyViolation' => VideoGenerateErrorCode::OUTPUT_AUDIO_POLICY_VIOLATION,
+            'ContentSecurity.CopyrightRisk' => VideoGenerateErrorCode::CONTENT_SECURITY_COPYRIGHT_RISK,
+            'ContentSecurity.SensitiveContent' => VideoGenerateErrorCode::CONTENT_SECURITY_SENSITIVE_CONTENT,
+            'ContentSecurity.TrademarkRisk' => VideoGenerateErrorCode::CONTENT_SECURITY_TRADEMARK_RISK,
+            'ContentSecurity.ViolentContent' => VideoGenerateErrorCode::CONTENT_SECURITY_VIOLENT_CONTENT,
+            'MissingParameter' => VideoGenerateErrorCode::MISSING_PARAMETER,
+            'InvalidParameter.InvalidVideoDuration' => VideoGenerateErrorCode::INVALID_PARAMETER_INVALID_VIDEO_DURATION,
+            'InvalidParameter.InvalidResolution' => VideoGenerateErrorCode::INVALID_PARAMETER_INVALID_RESOLUTION,
+            'InvalidParameter.EmptyInput' => VideoGenerateErrorCode::INVALID_PARAMETER_EMPTY_INPUT,
+            'InvalidRequestError' => VideoGenerateErrorCode::INVALID_REQUEST_ERROR,
+            'InvalidArgumentError' => VideoGenerateErrorCode::INVALID_ARGUMENT_ERROR,
+            'ServerOverloaded' => VideoGenerateErrorCode::SERVER_OVERLOADED,
+            'InternalServiceError' => VideoGenerateErrorCode::GENERAL_ERROR,
+            'InvalidFileFormat' => VideoGenerateErrorCode::INVALID_FILE_FORMAT,
+            'FileSizeTooLarge' => VideoGenerateErrorCode::FILE_SIZE_TOO_LARGE,
+            'AudioDurationTooLong' => VideoGenerateErrorCode::AUDIO_DURATION_TOO_LONG,
+            default => self::resolveVolcengineGeneric($code),
+        };
+    }
+
+    private static function resolveVolcengineGeneric(string $code): VideoGenerateErrorCode
+    {
+
+        if (str_starts_with($code, 'inputtextsensitivecontentdetected')) {
+            return VideoGenerateErrorCode::INPUT_TEXT_AUDIT_FAILED;
+        }
+        if (str_starts_with($code, 'inputimagesensitivecontentdetected')) {
+            return VideoGenerateErrorCode::INPUT_IMAGE_AUDIT_FAILED;
+        }
+        if (str_starts_with($code, 'inputvideosensitivecontentdetected')) {
+            return VideoGenerateErrorCode::INPUT_VIDEO_AUDIT_FAILED;
+        }
+        if (str_starts_with($code, 'inputaudiosensitivecontentdetected')) {
+            return VideoGenerateErrorCode::INPUT_AUDIO_AUDIT_FAILED;
+        }
+        if (str_starts_with($code, 'outputvideosensitivecontentdetected')) {
+            return VideoGenerateErrorCode::OUTPUT_VIDEO_AUDIT_FAILED;
+        }
+        if (str_starts_with($code, 'outputaudiosensitivecontentdetected')) {
+            return VideoGenerateErrorCode::OUTPUT_AUDIO_AUDIT_FAILED;
+        }
+        if (str_starts_with($code, 'resourcenotfound')) {
+            return VideoGenerateErrorCode::GENERAL_ERROR;
+        }
+        if (str_starts_with($code, 'invalidparameter')) {
+            return VideoGenerateErrorCode::INVALID_PARAMETER;
+        }
+
+        return VideoGenerateErrorCode::GENERAL_ERROR;
+    }
+
     public static function resolveDashScope(
         ?RequestException $exception = null,
         null|array|string $body = null,
@@ -112,7 +190,7 @@ final class ProviderVideoErrorMapper
         }
         // 任务不存在
         if (str_starts_with($code, 'tasknotfound') || str_starts_with($code, 'resourcenotfound')) {
-            return VideoGenerateErrorCode::TASK_NOT_FOUND;
+            return VideoGenerateErrorCode::GENERAL_ERROR;
         }
         // 任务超时
         if ($code === 'tasktimeout' || $code === 'timeout') {
@@ -124,33 +202,6 @@ final class ProviderVideoErrorMapper
         }
 
         return VideoGenerateErrorCode::GENERAL_ERROR;
-    }
-
-    public static function isRetriable(
-        ?RequestException $exception = null,
-        ?VideoGenerateErrorCode $errorCode = null,
-    ): bool {
-        if ($errorCode !== null && in_array($errorCode, [
-            VideoGenerateErrorCode::INPUT_TEXT_AUDIT_FAILED,
-            VideoGenerateErrorCode::INPUT_IMAGE_AUDIT_FAILED,
-            VideoGenerateErrorCode::INPUT_VIDEO_AUDIT_FAILED,
-            VideoGenerateErrorCode::INPUT_AUDIO_AUDIT_FAILED,
-            VideoGenerateErrorCode::OUTPUT_TEXT_AUDIT_FAILED,
-            VideoGenerateErrorCode::OUTPUT_VIDEO_AUDIT_FAILED,
-            VideoGenerateErrorCode::OUTPUT_AUDIO_AUDIT_FAILED,
-            VideoGenerateErrorCode::INVALID_PROMPT,
-            VideoGenerateErrorCode::INVALID_PARAMETER,
-            VideoGenerateErrorCode::UNSUPPORTED_VIDEO_FORMAT,
-            VideoGenerateErrorCode::INVALID_ASPECT_RATIO,
-            VideoGenerateErrorCode::TASK_NOT_FOUND,
-            VideoGenerateErrorCode::AUTHENTICATION_FAILED,
-            VideoGenerateErrorCode::QUOTA_EXCEEDED,
-        ], true)) {
-            return false;
-        }
-
-        $status = $exception?->getResponse()?->getStatusCode();
-        return $exception !== null && ($status === 429 || ($status !== null && $status >= 500) || ! $exception->hasResponse());
     }
 
     private static function readResponseBody(RequestException $exception): ?string

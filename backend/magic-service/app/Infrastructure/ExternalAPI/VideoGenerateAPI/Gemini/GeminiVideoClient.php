@@ -58,7 +58,7 @@ readonly class GeminiVideoClient
             $response = $this->requestMedia($baseUrl, $apiKey, $uri, $proxyUrl);
             $localStream = fopen($targetPath, 'wb');
             if (! is_resource($localStream)) {
-                throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'gemini video media download failed: cannot open target file');
+                throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
             }
             $body = $response->getBody();
             $downloadedBytes = 0;
@@ -69,10 +69,10 @@ readonly class GeminiVideoClient
                 }
                 $downloadedBytes += strlen($chunk);
                 if ($downloadedBytes > self::MEDIA_MAX_BYTES) {
-                    throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'gemini video media download failed: response exceeds max size');
+                    throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
                 }
                 if (fwrite($localStream, $chunk) === false) {
-                    throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'gemini video media download failed: cannot write target file');
+                    throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
                 }
             }
         } catch (Throwable $throwable) {
@@ -99,19 +99,19 @@ readonly class GeminiVideoClient
                 'http_errors' => false,
             ]);
             if ($response->getStatusCode() >= 400) {
-                throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'gemini video media download failed');
+                throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
             }
 
             return $response;
         } catch (RequestException $exception) {
-            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'gemini video media download failed', $exception);
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $exception);
         } catch (ProviderVideoException $exception) {
             throw $exception;
         } catch (Throwable $throwable) {
-            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'gemini video media download failed', $throwable);
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $throwable);
         }
 
-        throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'gemini video media download failed');
+        throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
     }
 
     private function request(

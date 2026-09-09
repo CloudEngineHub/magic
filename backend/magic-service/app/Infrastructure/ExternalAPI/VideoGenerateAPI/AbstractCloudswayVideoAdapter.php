@@ -146,24 +146,6 @@ abstract readonly class AbstractCloudswayVideoAdapter implements VideoGeneration
         $operation->setIgnoredParams(array_values(array_unique($ignoredParams)));
     }
 
-    protected function extractProviderMessage(array $response, string $fallback): string
-    {
-        foreach ([
-            is_array($response['error'] ?? null) ? ($response['error']['message'] ?? null) : null,
-            $response['message'] ?? null,
-            $response['msg'] ?? null,
-            is_array($response['data'] ?? null) ? ($response['data']['message'] ?? null) : null,
-            is_array($response['data']['error'] ?? null) ? ($response['data']['error']['message'] ?? null) : null,
-            is_array($response['data'] ?? null) ? ($response['data']['task_status_msg'] ?? null) : null,
-        ] as $candidate) {
-            if (is_string($candidate) && trim($candidate) !== '') {
-                return trim($candidate);
-            }
-        }
-
-        return $fallback;
-    }
-
     protected function buildLogContext(VideoQueueOperationEntity $operation, ?string $providerTaskId = null): array
     {
         $context = [

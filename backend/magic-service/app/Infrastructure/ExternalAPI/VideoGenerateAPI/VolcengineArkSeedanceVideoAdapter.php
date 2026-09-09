@@ -455,7 +455,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
         $error = is_array($detail['error'] ?? null) ? $detail['error'] : [];
         $data = is_array($detail['data'] ?? null) ? $detail['data'] : [];
 
-        $errorCode = $detail['error']['code'] ?? '';
+        $errorCode = $error['code'] ?? '';
         if (! $errorCode) {
             $errorCode = match ($status) {
                 'expired' => 'PROVIDER_EXPIRED',
@@ -472,18 +472,10 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
                 'video_url' => $videoUrl,
                 'last_frame_url' => $lastFrameUrl,
                 'provider_task_id' => $providerTaskId,
-                'provider_base_url' => rtrim($config->getBaseUrl(), '/'),
             ], static fn (mixed $value): bool => $value !== null && $value !== ''),
             'error' => $errorCode === null ? null : [
                 'code' => $errorCode,
-                'message' => $this->firstNonEmptyString(
-                    $detail['message'] ?? null,
-                    $detail['msg'] ?? null,
-                    $error['message'] ?? null,
-                    $data['message'] ?? null,
-                    'video generation failed',
-                ) ?? 'video generation failed',
-                'provider_code' => null,
+                'message' => VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
             ],
         ];
     }

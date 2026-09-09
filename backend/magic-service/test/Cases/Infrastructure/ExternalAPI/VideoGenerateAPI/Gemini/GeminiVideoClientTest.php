@@ -211,7 +211,6 @@ final class GeminiVideoClientTest extends TestCase
             );
             self::fail('Expected ProviderVideoException.');
         } catch (ProviderVideoException $exception) {
-            self::assertSame($responseBody, $exception->getOriginalErrorMessage());
         }
     }
 

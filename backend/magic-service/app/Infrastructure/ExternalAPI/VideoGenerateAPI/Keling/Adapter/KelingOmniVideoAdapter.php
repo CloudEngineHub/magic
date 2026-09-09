@@ -105,7 +105,7 @@ readonly class KelingOmniVideoAdapter implements VideoGenerationConnectivityTest
             $response['data']['id'] ?? null,
         );
         if ($taskId === null) {
-            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, $this->extractProviderMessage($response, 'keling submit succeeded but task id missing'));
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         }
 
         return $taskId;
@@ -183,7 +183,7 @@ readonly class KelingOmniVideoAdapter implements VideoGenerationConnectivityTest
             ],
             'error' => in_array($status, ['failed', 'error'], true) ? [
                 'code' => 'PROVIDER_FAILED',
-                'message' => $this->firstNonEmptyString($data['task_status_msg'] ?? null, $detail['message'] ?? null, 'video generation failed') ?? 'video generation failed',
+                'message' => VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
                 'provider_code' => isset($detail['code']) ? (string) $detail['code'] : null,
             ] : null,
         ];
@@ -352,21 +352,4 @@ readonly class KelingOmniVideoAdapter implements VideoGenerationConnectivityTest
         return null;
     }
 
-    private function extractProviderMessage(array $response, string $fallback): string
-    {
-        foreach ([
-            is_array($response['error'] ?? null) ? ($response['error']['message'] ?? null) : null,
-            $response['message'] ?? null,
-            $response['msg'] ?? null,
-            is_array($response['data'] ?? null) ? ($response['data']['message'] ?? null) : null,
-            is_array($response['data']['error'] ?? null) ? ($response['data']['error']['message'] ?? null) : null,
-            is_array($response['data'] ?? null) ? ($response['data']['task_status_msg'] ?? null) : null,
-        ] as $candidate) {
-            if (is_string($candidate) && trim($candidate) !== '') {
-                return trim($candidate);
-            }
-        }
-
-        return $fallback;
-    }
 }

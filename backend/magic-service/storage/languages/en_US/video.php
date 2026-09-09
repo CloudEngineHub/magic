@@ -48,45 +48,5 @@ return [
         'organization_concurrency_limit' => 'This organization has reached its video generation concurrency limit (maximum :limit running task(s)). Please wait for an existing organization task to finish before submitting another one.',
         'model_resolution_not_supported' => 'The current model (:model) does not support :resolution. Please switch to :supported and try again.',
 
-        // volcengine ark
-        'SensitiveContentDetected' => 'The input or generated content may contain sensitive material. Please adjust the prompt or assets and try again.',
-        'InputTextSensitiveContentDetected' => [
-            'PolicyViolation' => 'The input prompt may involve copyright-related restrictions. Please remove celebrity, IP, or brand references and try again.',
-        ],
-        'InputImageSensitiveContentDetected' => [
-            'PolicyViolation' => 'The input image may involve copyright-related restrictions. Please replace it with low-risk assets and try again.',
-            'PrivacyInformation' => 'The input image may contain a real person or face. Please replace it with non-person content and try again.',
-        ],
-        'InputVideoSensitiveContentDetected' => [
-            'PolicyViolation' => 'The input video may involve copyright-related restrictions. Please replace it with low-risk assets and try again.',
-            'PrivacyInformation' => 'The input video may contain a real person or face. Please replace it with non-person content and try again.',
-        ],
-        'InputAudioSensitiveContentDetected' => [
-            'PolicyViolation' => 'The input audio may involve copyright-related restrictions. Please replace it with royalty-free audio and try again.',
-        ],
-        'OutputTextSensitiveContentDetected' => 'The generated content may contain sensitive material. Please adjust the prompt and try again.',
-        'OutputImageSensitiveContentDetected' => 'The generated image may contain sensitive or restricted content. Please adjust the prompt or reference assets and try again.',
-        'OutputVideoSensitiveContentDetected' => [
-            'PolicyViolation' => 'The request failed because the output video may be related to copyright restrictions. Please adjust your prompt, audio, or reference assets and try again.',
-        ],
-        'OutputAudioSensitiveContentDetected' => 'The generated audio may contain sensitive or restricted content. Please adjust the prompt or reference assets and try again.',
-        'ContentSecurity' => [
-            'CopyrightRisk' => 'The content may involve copyright risk. Please remove copyrighted audio or brand, celebrity, or IP references and try again.',
-            'SensitiveContent' => 'The input may contain sensitive content. Please simplify the prompt and remove inappropriate or restricted content before trying again.',
-            'TrademarkRisk' => 'The asset may contain a logo or trademark. Please crop, blur, or replace the marked asset and try again.',
-            'ViolentContent' => 'The input may contain violent or inappropriate content. Please replace it with compliant material and try again.',
-        ],
-        'MissingParameter' => 'A required request parameter is missing. Please review the request and try again.',
-        'InvalidParameter' => [
-            'InvalidVideoDuration' => 'The requested video duration is not supported. Please switch to a supported duration and try again.',
-            'InvalidResolution' => 'The requested resolution is not supported. Please use 480p or 720p and try again.',
-            'EmptyInput' => 'No valid image, video, or audio input was found. Please confirm the asset upload succeeded and try again.',
-        ],
-        'InvalidRequestError' => 'The request format is invalid. Please review the request body and try again.',
-        'InvalidArgumentError' => 'One or more request arguments are invalid. Please review the parameters and try again.',
-        'InternalServiceError' => 'The service encountered an internal error. Please try again later.',
-        'InvalidFileFormat' => 'The asset format is not supported. Please use JPG/PNG images, MP4 videos, or MP3/WAV audio files.',
-        'FileSizeTooLarge' => 'The asset file is too large. Please compress the file and try again.',
-        'AudioDurationTooLong' => 'The audio is longer than the target video duration. Please trim the audio and try again.',
     ],
 ];

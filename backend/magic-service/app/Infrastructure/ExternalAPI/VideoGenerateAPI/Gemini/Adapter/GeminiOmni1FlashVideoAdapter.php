@@ -118,7 +118,7 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         $response = $this->transport->createInteraction($config, $operation->getProviderPayload(), ['operation_id' => $operation->getId()]);
         $id = isset($response['id']) && is_string($response['id']) ? trim($response['id']) : '';
         if ($id === '') {
-            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'Gemini interaction id missing');
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         }
         return $id;
     }
@@ -172,12 +172,10 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         if ($status === 'succeeded' && $videoUrl === '') {
             return $this->failedResult($detail, $providerTaskId, VideoGenerateErrorCode::MISSING_VIDEO_DATA);
         }
-        $errorNode = is_array($detail['error'] ?? null) ? $detail['error'] : [];
-        $providerCode = $errorNode['code'] ?? $detail['error_code'] ?? ($providerStatus === 'expired' ? 'TASK_TIMEOUT' : null);
         $errorCode = ProviderVideoErrorMapper::resolveGemini(null, $detail);
         $result = ['status' => $status, 'provider_result' => $detail, 'output' => $videoUrl === '' ? [] : ['video_url' => $videoUrl, 'provider_task_id' => $providerTaskId, 'provider_base_url' => rtrim($config->getBaseUrl(), '/')], 'error' => null];
         if ($status === 'failed') {
-            $result['error'] = ['code' => (string) $errorCode->value, 'message' => ProviderVideoErrorMapper::message($errorCode), 'provider_code' => $providerCode];
+            $result['error'] = ['code' => (string) $errorCode->value, 'message' => $errorCode->getMessage(), 'provider_code' => null];
         }
         return $result;
     }
@@ -356,7 +354,7 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
 
     private function failedResult(array $detail, string $taskId, VideoGenerateErrorCode $code): array
     {
-        return ['status' => 'failed', 'provider_result' => $detail, 'output' => [], 'error' => ['code' => (string) $code->value, 'message' => ProviderVideoErrorMapper::message($code), 'provider_code' => null, 'provider_task_id' => $taskId]];
+        return ['status' => 'failed', 'provider_result' => $detail, 'output' => [], 'error' => ['code' => (string) $code->value, 'message' => $code->getMessage(), 'provider_code' => null, 'provider_task_id' => $taskId]];
     }
 
     private function preferModelVersion(string $modelVersion, string $modelId): string

@@ -14,8 +14,6 @@ use Throwable;
 
 final class ProviderVideoException extends RuntimeException
 {
-    private const int MAX_ORIGINAL_ERROR_MESSAGE_LENGTH = 1000;
-
     public function __construct(
         VideoGenerateErrorCode $code,
         string $message,
@@ -70,18 +68,4 @@ final class ProviderVideoException extends RuntimeException
         return VideoGenerateErrorCode::from($this->getCode());
     }
 
-    public function getOriginalErrorMessage(): string
-    {
-        $responseContent = $this->getResponseContent();
-        if ($responseContent === null) {
-            return '';
-        }
-
-        $sanitizedErrorMessage = preg_replace('/[\x00-\x1F\x7F]+/', ' ', $responseContent);
-        if (! is_string($sanitizedErrorMessage)) {
-            return '';
-        }
-
-        return mb_substr(trim($sanitizedErrorMessage), 0, self::MAX_ORIGINAL_ERROR_MESSAGE_LENGTH, 'UTF-8');
-    }
 }

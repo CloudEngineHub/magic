@@ -2066,7 +2066,7 @@ class VideoOperationAppServiceTest extends TestCase
         $response = $service->getOperation('token-output-url-unsafe', $operation->getId(), ['organization_id' => 'org-test']);
 
         $this->assertSame('failed', $response->getStatus());
-        $this->assertSame((string) VideoGenerateErrorCode::VIDEO_DOWNLOAD_FAILED->value, $operation->getErrorCode());
+        $this->assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $operation->getErrorCode());
         $this->assertStringNotContainsString('file:///etc/passwd', (string) $operation->getErrorMessage());
     }
 
