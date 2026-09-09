@@ -7,10 +7,10 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
-use App\ErrorCode\VideoGenerateErrorCode;
 use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
+use App\ErrorCode\VideoGenerateErrorCode;
 use RuntimeException;
 
 abstract readonly class AbstractCloudswayVideoAdapter implements VideoGenerationProviderAdapterInterface

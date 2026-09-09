@@ -93,7 +93,7 @@ final class ProviderVideoErrorMapper
             'InvalidFileFormat' => VideoGenerateErrorCode::INVALID_FILE_FORMAT,
             'FileSizeTooLarge' => VideoGenerateErrorCode::FILE_SIZE_TOO_LARGE,
             'AudioDurationTooLong' => VideoGenerateErrorCode::AUDIO_DURATION_TOO_LONG,
-            default => self::resolveVolcengineGeneric($code),
+            default => VideoGenerateErrorCode::GENERAL_ERROR,
         };
     }
 
@@ -167,36 +167,6 @@ final class ProviderVideoErrorMapper
         }
         // 参数错误
         if (str_starts_with($code, 'invalidparameter') || str_contains($text, 'invalidparameter')) {
-            return VideoGenerateErrorCode::INVALID_PARAMETER;
-        }
-
-        return VideoGenerateErrorCode::GENERAL_ERROR;
-    }
-
-    private static function resolveVolcengineGeneric(string $code): VideoGenerateErrorCode
-    {
-        if (str_starts_with($code, 'inputtextsensitivecontentdetected')) {
-            return VideoGenerateErrorCode::INPUT_TEXT_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'inputimagesensitivecontentdetected')) {
-            return VideoGenerateErrorCode::INPUT_IMAGE_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'inputvideosensitivecontentdetected')) {
-            return VideoGenerateErrorCode::INPUT_VIDEO_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'inputaudiosensitivecontentdetected')) {
-            return VideoGenerateErrorCode::INPUT_AUDIO_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'outputvideosensitivecontentdetected')) {
-            return VideoGenerateErrorCode::OUTPUT_VIDEO_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'outputaudiosensitivecontentdetected')) {
-            return VideoGenerateErrorCode::OUTPUT_AUDIO_AUDIT_FAILED;
-        }
-        if (str_starts_with($code, 'resourcenotfound')) {
-            return VideoGenerateErrorCode::GENERAL_ERROR;
-        }
-        if (str_starts_with($code, 'invalidparameter')) {
             return VideoGenerateErrorCode::INVALID_PARAMETER;
         }
 

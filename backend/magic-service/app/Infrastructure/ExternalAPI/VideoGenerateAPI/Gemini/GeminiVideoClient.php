@@ -110,7 +110,6 @@ readonly class GeminiVideoClient
         } catch (Throwable $throwable) {
             throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $throwable);
         }
-
     }
 
     private function request(
