@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 namespace App\Application\ModelGateway\Service;
 
+use App\Application\ModelGateway\Service\ConnectivityTest\LLMConnectivityTestExecutor;
+use App\Application\ModelGateway\Service\ConnectivityTest\LLMConnectivityTestMessageBuilder;
 use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterFactoryInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
@@ -102,7 +104,8 @@ class LLMTestAppService extends AbstractLLMAppService
                     $authorization,
                     $modelConfig,
                     $serviceProviderConfigDTO,
-                    $providerModelEntity
+                    $providerModelEntity,
+                    $request->getSupportMultiModal()
                 ),
                 NaturalLanguageProcessing::VLM => $this->vlmConnectivityTestByConfig(
                     $providerCode,
@@ -287,40 +290,81 @@ class LLMTestAppService extends AbstractLLMAppService
         MagicUserAuthorization $authorization,
         ?ModelConfigItem $modelConfig = null,
         ?ProviderConfigDTO $serviceProviderConfigDTO = null,
-        ?ProviderModelEntity $providerModelEntity = null
+        ?ProviderModelEntity $providerModelEntity = null,
+        ?bool $requestedSupportMultiModal = null
     ): ConnectResponse {
-        $connectResponse = new ConnectResponse();
+        $supportMultiModal = $this->resolveConnectivitySupportMultiModal($modelConfig, $requestedSupportMultiModal);
+        $model = null;
+        $getModel = function () use (
+            &$model,
+            $providerCode,
+            $serviceProviderConfig,
+            $modelVersion,
+            $modelConfig,
+            $supportMultiModal
+        ): ModelInterface {
+            if ($model instanceof ModelInterface) {
+                return $model;
+            }
 
-        try {
-            $businessParams = $this->buildConnectivityBusinessParams(
-                $authorization,
-                $modelVersion,
-                'chat',
-                $serviceProviderConfigDTO,
-                $providerModelEntity
-            );
-
-            $model = $this->createConnectivityModelByConfig(
+            $createdModel = $this->createConnectivityModelByConfig(
                 $providerCode,
                 $serviceProviderConfig,
                 $modelVersion,
                 false,
-                $modelConfig
+                $modelConfig,
+                $supportMultiModal
             );
-
-            if (! $model instanceof ModelInterface) {
+            if (! $createdModel instanceof ModelInterface) {
                 ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidModelType);
             }
 
-            $chatRequest = $this->buildConnectivityChatRequest($businessParams, $modelConfig);
-            $model->chatWithRequest($chatRequest);
-            $connectResponse->setStatus(true);
-        } catch (Throwable $exception) {
-            $connectResponse->setStatus(false);
-            $connectResponse->setMessage($exception->getMessage());
-        }
+            $model = $createdModel;
+            return $model;
+        };
 
-        return $connectResponse;
+        return LLMConnectivityTestExecutor::execute(
+            function () use (
+                $getModel,
+                $authorization,
+                $modelVersion,
+                $serviceProviderConfigDTO,
+                $providerModelEntity,
+                $modelConfig
+            ): void {
+                $getModel()->chatWithRequest($this->buildConnectivityChatRequest(
+                    LLMConnectivityTestMessageBuilder::buildTextMessages(),
+                    $this->buildConnectivityBusinessParams(
+                        $authorization,
+                        $modelVersion,
+                        'chat',
+                        $serviceProviderConfigDTO,
+                        $providerModelEntity
+                    ),
+                    $modelConfig
+                ));
+            },
+            $supportMultiModal,
+            function () use (
+                $getModel,
+                $authorization,
+                $modelVersion,
+                $serviceProviderConfigDTO,
+                $providerModelEntity
+            ): void {
+                $getModel()->chatWithRequest($this->buildConnectivityChatRequest(
+                    LLMConnectivityTestMessageBuilder::buildMultimodalMessages(),
+                    $this->buildConnectivityBusinessParams(
+                        $authorization,
+                        $modelVersion,
+                        'chat',
+                        $serviceProviderConfigDTO,
+                        $providerModelEntity
+                    ),
+                    maxTokens: 64
+                ));
+            }
+        );
     }
 
     /**
@@ -331,20 +375,21 @@ class LLMTestAppService extends AbstractLLMAppService
         array $resolvedConfig,
         string $modelVersion,
         bool $embedding,
-        ?ModelConfigItem $modelConfig = null
+        ?ModelConfigItem $modelConfig = null,
+        ?bool $supportMultiModal = null
     ): EmbeddingInterface|ModelInterface {
         $providerCodeEnum = ProviderCode::from($resolvedProviderCode);
         $providerConfigItem = ProviderConfigFactory::create($providerCodeEnum, $resolvedConfig);
         $providerConfigItem->setModelVersion($modelVersion);
 
         $implementationConfig = $providerCodeEnum->getImplementationConfig($providerConfigItem, $modelVersion);
-        $multiModal = $modelConfig?->isSupportMultiModal() ?? false;
+        $supportMultiModal ??= $modelConfig?->isSupportMultiModal() ?? false;
 
         return ModelFactory::create(
-            $providerCodeEnum->getImplementationForModel($embedding, $multiModal),
+            $providerCodeEnum->getImplementationForModel($embedding, $supportMultiModal),
             $modelVersion,
             $implementationConfig,
-            modelOptions: $this->buildConnectivityModelOptions($embedding, $modelConfig),
+            modelOptions: $this->buildConnectivityModelOptions($embedding, $modelConfig, $supportMultiModal),
             apiOptions: new ApiOptions([
                 'proxy' => $this->resolveConnectivityProxy($resolvedConfig),
             ])
@@ -353,13 +398,14 @@ class LLMTestAppService extends AbstractLLMAppService
 
     private function buildConnectivityModelOptions(
         bool $embedding,
-        ?ModelConfigItem $modelConfig = null
+        ?ModelConfigItem $modelConfig = null,
+        ?bool $supportMultiModal = null
     ): ModelOptions {
         return new ModelOptions([
             'chat' => ! $embedding,
             'function_call' => ! $embedding && ($modelConfig?->isSupportFunction() ?? false),
             'embedding' => $embedding,
-            'multi_modal' => $modelConfig?->isSupportMultiModal() ?? false,
+            'multi_modal' => $supportMultiModal ?? $modelConfig?->isSupportMultiModal() ?? false,
             'vector_size' => $embedding ? ($modelConfig?->getVectorSize() ?? 0) : 0,
             'max_tokens' => $modelConfig?->getMaxTokens(),
             'max_output_tokens' => $modelConfig?->getMaxOutputTokens(),
@@ -369,19 +415,38 @@ class LLMTestAppService extends AbstractLLMAppService
     }
 
     private function buildConnectivityChatRequest(
+        array $messageArrays,
         array $businessParams,
-        ?ModelConfigItem $modelConfig = null
+        ?ModelConfigItem $modelConfig = null,
+        ?int $maxTokens = null
     ): ChatCompletionRequest {
-        $message = MessageUtil::createFromArray(['role' => 'user', 'content' => 'Hello, please reply to me 1']);
+        $messages = [];
+        foreach ($messageArrays as $messageArray) {
+            $message = MessageUtil::createFromArray($messageArray);
+            if ($message) {
+                $messages[] = $message;
+            }
+        }
+
         $chatRequest = new ChatCompletionRequest(
-            messages: $message ? [$message] : [],
+            messages: $messages,
             temperature: $this->resolveConnectivityTemperature($modelConfig),
-            maxTokens: $this->resolveConnectivityMaxTokens($modelConfig),
+            maxTokens: $maxTokens ?? $this->resolveConnectivityMaxTokens($modelConfig),
             stop: [],
             tools: []
         );
         $chatRequest->setBusinessParams($businessParams);
         return $chatRequest;
+    }
+
+    /**
+     * 解析按配置连通性测试最终使用的多模态能力。
+     */
+    private function resolveConnectivitySupportMultiModal(
+        ?ModelConfigItem $modelConfig,
+        ?bool $requestedSupportMultiModal
+    ): bool {
+        return $modelConfig?->isSupportMultiModal() ?? $requestedSupportMultiModal ?? false;
     }
 
     private function resolveConnectivityTemperature(?ModelConfigItem $modelConfig = null): float
