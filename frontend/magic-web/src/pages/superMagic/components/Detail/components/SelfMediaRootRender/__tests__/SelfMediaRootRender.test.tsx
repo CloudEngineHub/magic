@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
+import superZhCN from "@/assets/locales/zh_CN/super.json"
 
 const mockSendSelfMediaPrePublishAnalysis = vi.hoisted(() => vi.fn())
 const mockSendSelfMediaPostPublishDataRefresh = vi.hoisted(() => vi.fn())
@@ -78,14 +79,24 @@ vi.mock("react-dom", async () => {
 vi.mock("@/components/tiptap-templates/simple/simple-editor", async () => {
 	const React = await vi.importActual<typeof import("react")>("react")
 	return {
-		SimpleEditor: ({ content }: { content?: string }) =>
+		SimpleEditor: React.forwardRef(({ content }: { content?: string }, _ref) =>
 			React.createElement(
 				"div",
 				{ "data-testid": "simple-editor-markdown-preview" },
 				content,
 			),
+		),
 	}
 })
+
+vi.mock(
+	"@/pages/superMagic/components/Detail/contents/Md/components/EditorBody/components/MarkdownPreview",
+	() => ({
+		default: ({ content }: { content?: string }) => (
+			<div data-testid="markdown-preview-markdown">{content}</div>
+		),
+	}),
+)
 
 vi.mock("@/pages/superMagic/components/MessageEditor/types", () => ({
 	ModelStatusEnum: {
@@ -122,6 +133,16 @@ vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		i18n: { language: "en" },
 		t: (key: string, options?: Record<string, unknown>) => {
+			// The operations overview uses the shared selfMedia namespace. Keep its Chinese
+			// assertions backed by real locale data rather than returning untranslated keys.
+			if (key.startsWith("selfMedia.")) {
+				const localeKey = key.slice("selfMedia.".length) as keyof typeof superZhCN.selfMedia
+				const value = superZhCN.selfMedia[localeKey]
+				if (typeof value === "string")
+					return value.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+						String(options?.[name] ?? ""),
+					)
+			}
 			const text =
 				(
 					{

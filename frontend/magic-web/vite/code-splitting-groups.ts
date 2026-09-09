@@ -106,12 +106,6 @@ export function createCodeSplittingGroups() {
 			},
 		},
 		{
-			name: "simple-editor",
-			priority: 20,
-			test: (id: string) =>
-				normalizeModuleId(id).includes("src/components/tiptap-templates/simple"),
-		},
-		{
 			name: "message-editor",
 			priority: 10,
 			test: (id: string) =>

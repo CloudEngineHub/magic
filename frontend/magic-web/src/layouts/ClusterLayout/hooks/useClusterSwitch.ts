@@ -15,6 +15,7 @@ import { RouteName } from "@/routes/constants"
 import { omit } from "lodash-es"
 import { whiteListRoutes } from "@/routes/const/whiteRoutes"
 import { refreshAccountContextPage } from "@/broadcastChannel/eventFactory/accountContextRefresh"
+import { defaultClusterCode } from "@/routes/helpers"
 
 const clusterConfigLoadedCache = new Set<string>()
 
@@ -45,7 +46,10 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 
 	// 使用 useMemo 避免不必要的初始状态计算
 	const initialSameCluster = useMemo(
-		() => targetClusterCode === configStore.cluster.clusterCode,
+		() => {
+			const code = configStore.cluster.clusterCode === defaultClusterCode ? "" : configStore.cluster.clusterCode
+			return targetClusterCode === code
+		},
 		[targetClusterCode, configStore.cluster.clusterCode],
 	)
 
@@ -61,6 +65,7 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 		[initialSameCluster, isWhiteListRoute],
 	)
 
+	console.log("-------->", targetClusterCode === configStore.cluster.clusterCode, targetClusterCode, configStore.cluster.clusterCode)
 	const [isSameCluster, setSameCluster] = useState(initialSameCluster)
 	const [loading, setLoading] = useState(initialLoading)
 

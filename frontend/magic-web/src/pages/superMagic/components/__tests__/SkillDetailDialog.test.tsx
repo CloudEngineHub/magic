@@ -137,8 +137,19 @@ vi.mock("@/services/skills/SkillsService", () => ({
 }))
 
 vi.mock("@/components/tiptap-templates/simple/simple-editor", () => ({
-	SimpleEditor: ({ content }: { content: string }) => <div>{content}</div>,
+	SimpleEditor: ({ content }: { content: string }) => (
+		<div data-testid="skill-simple-editor">{content}</div>
+	),
 }))
+
+vi.mock(
+	"@/pages/superMagic/components/Detail/contents/Md/components/EditorBody/components/MarkdownPreview",
+	() => ({
+		default: ({ content }: { content: string }) => (
+			<div data-testid="skill-markdown-preview">{content}</div>
+		),
+	}),
+)
 
 describe("SkillDetailDialog", () => {
 	it("registers overlay z-index above parent popups when open", async () => {
@@ -212,6 +223,39 @@ describe("SkillDetailDialog", () => {
 		await waitFor(() => {
 			expect(screen.queryByTestId("skill-detail-dialog-skill-file")).not.toBeInTheDocument()
 		})
+	})
+
+	it("renders skill markdown without mounting the editor", async () => {
+		getMarketSkillDetailViewMock.mockResolvedValue({
+			code: "skill.code",
+			name: "Skill Name",
+			description: "Skill description",
+			logo: "",
+			packageName: "skill.package",
+			versionCode: "1.0.0",
+			updatedAt: "2026-04-09 10:00:00",
+			skillFileUrl: "https://example.com/skill.md",
+			isFeatured: false,
+			publisherType: "OFFICIAL",
+			publisherName: "Magic",
+		})
+		downloadFileContentMock.mockResolvedValue("# Skill instructions")
+
+		const { SkillDetailDialog } = await import("../SkillDetailDialog")
+
+		render(
+			<SkillDetailDialog
+				open={true}
+				onOpenChange={vi.fn()}
+				skillCode="skill.code"
+				detailSource="market"
+			/>,
+		)
+
+		expect(await screen.findByTestId("skill-markdown-preview")).toHaveTextContent(
+			"# Skill instructions",
+		)
+		expect(screen.queryByTestId("skill-simple-editor")).not.toBeInTheDocument()
 	})
 
 	it("keeps the dialog open and reports primary action errors", async () => {

@@ -57,14 +57,53 @@ vi.mock("@/components/tiptap-templates/simple/simple-editor", async () => {
 			})
 
 	return {
-		SimpleEditor: ({ content }: { content?: string }) =>
+		SimpleEditor: React.forwardRef(({ content }: { content?: string }, _ref) =>
 			React.createElement(
 				"div",
 				{ "data-testid": "simple-editor-markdown-preview" },
 				renderMarkdown(content ?? ""),
 			),
+		),
 	}
 })
+
+vi.mock(
+	"@/pages/superMagic/components/Detail/contents/Md/components/EditorBody/components/MarkdownPreview",
+	async () => {
+		const React = await vi.importActual<typeof import("react")>("react")
+		const renderMarkdown = (content: string) =>
+			content
+				.split(/\n+/)
+				.filter(Boolean)
+				.map((line, index) => {
+					if (line.startsWith("# ")) {
+						return React.createElement("h1", { key: index }, line.slice(2))
+					}
+					if (line.startsWith("- ")) {
+						return React.createElement("li", { key: index }, line.slice(2))
+					}
+					const boldMatch = line.match(/^\*\*(.+?)\*\*：(.+)$/)
+					if (boldMatch) {
+						return React.createElement(
+							"p",
+							{ key: index },
+							React.createElement("strong", null, boldMatch[1]),
+							`：${boldMatch[2]}`,
+						)
+					}
+					return React.createElement("p", { key: index }, line)
+				})
+
+		return {
+			default: ({ content }: { content?: string }) =>
+				React.createElement(
+					"div",
+					{ "data-testid": "markdown-preview-markdown" },
+					renderMarkdown(content ?? ""),
+				),
+		}
+	},
+)
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -454,7 +493,7 @@ describe("SelfMediaOpsReviewDashboard", () => {
 		const preview = await screen.findByTestId("self-media-ops-review-markdown-preview")
 		expect(preview).toHaveClass("max-h-[560px]")
 		expect(preview).toHaveClass("overflow-auto")
-		expect(within(preview).getByTestId("simple-editor-markdown-preview")).toBeInTheDocument()
+		expect(within(preview).getByTestId("markdown-preview-markdown")).toBeInTheDocument()
 		expect(within(preview).getByRole("heading", { name: "复盘结论" })).toBeInTheDocument()
 		expect(within(preview).getByText("第一条：标题钩子有效")).toBeInTheDocument()
 		expect(within(preview).getByText("下一步")).toBeInTheDocument()

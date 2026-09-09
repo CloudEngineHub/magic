@@ -14,7 +14,7 @@ import { useTranslation } from "react-i18next"
 import { Line, LineChart, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/shadcn-ui/button"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/shadcn-ui/chart"
-import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor"
+import MarkdownPreview from "@/pages/superMagic/components/Detail/contents/Md/components/EditorBody/components/MarkdownPreview"
 import { cn } from "@/utils/cn"
 import IsolatedHTMLRenderer from "@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
@@ -460,10 +460,7 @@ export function OpsReviewMarkdownPreview({
 			)}
 			data-testid="self-media-ops-review-markdown-preview"
 		>
-			<SimpleEditor
-				isEditable={false}
-				enableDragHandle={false}
-				enableSearchReplace={false}
+			<MarkdownPreview
 				className="!h-auto !overflow-visible [&_.simple-editor-content]:!h-auto [&_.simple-editor-content]:!overflow-visible [&_.simple-editor]:!p-0"
 				content={content}
 			/>

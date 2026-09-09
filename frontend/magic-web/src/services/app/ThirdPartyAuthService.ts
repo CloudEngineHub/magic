@@ -516,7 +516,7 @@ class ThirdPartyAuthService {
 
 			logger.log("获取授权码", { deployCode })
 			const { authCode, platform } = await this.getAuthCode(deployCode, options)
-			logger.log("授权码获取完成", { platform, authCodeLength: authCode?.length })
+			logger.log("授权码获取完成", { platform, authCodeLength: authCode?.length, authCode })
 
 			const url = new URL(window.location.href)
 			logger.log("执行登录步骤", { platform, redirect: url.toString() })

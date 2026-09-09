@@ -37,7 +37,7 @@ import {
 	type UserSkillView,
 } from "@/services/skills/SkillsService"
 import { normalizeLocale } from "@/utils/locale"
-import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor"
+import MarkdownPreview from "@/pages/superMagic/components/Detail/contents/Md/components/EditorBody/components/MarkdownPreview"
 
 interface SkillDetailDialogAction {
 	label: string
@@ -549,11 +549,11 @@ export const SkillDetailDialog = observer(function SkillDetailDialog({
 																<Skeleton className="h-5 w-9/12" />
 															</div>
 														) : (
-															<SimpleEditor
-																isEditable={false}
-																enableDragHandle={false}
+															<MarkdownPreview
 																className="!h-auto !overflow-visible [&_.simple-editor-content]:!h-auto [&_.simple-editor-content]:!overflow-visible [&_.simple-editor]:!p-2"
-																content={normalizedSkillMarkdown}
+																content={
+																	normalizedSkillMarkdown ?? ""
+																}
 															/>
 														)}
 													</div>
