@@ -51,14 +51,14 @@ describe("setElementTextContent", () => {
 		expect(subtitle.textContent).toBe("Subtitle")
 	})
 
-	it("still replaces phrasing markup like a simple text edit", () => {
+	it("preserves inline child markup in a block text container", () => {
 		const element = document.createElement("p")
 		element.innerHTML = "Hello <strong>World</strong>"
 
-		setElementTextContent(element, "Hi")
+		setElementTextContent(element, "Hi ")
 
-		expect(element.textContent).toBe("Hi")
-		expect(element.querySelector("strong")).toBeNull()
+		expect(element.textContent).toBe("Hi World")
+		expect(element.querySelector("strong")?.textContent).toBe("World")
 	})
 
 	it("keeps an empty icon element when updating text", () => {
@@ -115,8 +115,8 @@ describe("setElementTextContent", () => {
 })
 
 describe("getEditableTextContent", () => {
-	it("returns full text for phrasing-only elements", () => {
-		const element = document.createElement("p")
+	it("returns full text for inline phrasing elements", () => {
+		const element = document.createElement("span")
 		element.innerHTML = "Hello <strong>World</strong>"
 
 		expect(getEditableTextContent(element)).toBe("Hello World")
@@ -131,6 +131,24 @@ describe("getEditableTextContent", () => {
 		element.append(subtitle)
 
 		expect(getEditableTextContent(element)).toBe("Title")
+	})
+
+	it.each([
+		["div", ""],
+		["span", "display: block"],
+	])("excludes inline child text for a block %s text container", (tagName, style) => {
+		const element = document.createElement(tagName)
+		if (style) element.setAttribute("style", style)
+		const emphasis = document.createElement("span")
+		emphasis.setAttribute("style", "text-decoration: line-through")
+		emphasis.textContent = "55%渗透率"
+		element.append("中国 ·", emphasis)
+
+		expect(getEditableTextContent(element)).toBe("中国 ·")
+		setElementTextContent(element, "欧洲 · ")
+
+		expect(getEditableTextContent(element)).toBe("欧洲 · ")
+		expect(emphasis.textContent).toBe("55%渗透率")
 	})
 
 	it("returns direct text when the container only has an empty icon", () => {

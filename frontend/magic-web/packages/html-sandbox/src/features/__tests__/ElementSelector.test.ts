@@ -863,6 +863,26 @@ describe("ElementSelector", () => {
 				}),
 			)
 		})
+
+		it("excludes inline child text from a selected block text container", () => {
+			container.innerHTML = `
+				<span id="metric" style="display: block">
+					中国 ·<span style="text-decoration: line-through"> 55%渗透率</span>
+				</span>
+			`
+			const element = container.querySelector("#metric") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					isTextElement: true,
+					hasDirectTextContent: true,
+					textContent: "中国 ·",
+				}),
+			)
+		})
 	})
 
 	describe("Multi-select functionality", () => {
