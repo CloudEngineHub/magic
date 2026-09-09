@@ -18,7 +18,7 @@ class UpdateAgentParameter(MagicServiceAbstractParameter):
         description_i18n: Optional[Dict[str, str]] = None,
         role_i18n: Optional[Dict[str, Any]] = None,
         prompt_shadow: Optional[str] = None,
-        icon: Optional[Dict[str, str]] = None,
+        icon: Optional[Dict[str, Any]] = None,
         icon_type: Optional[int] = None,
     ):
         """
@@ -30,7 +30,7 @@ class UpdateAgentParameter(MagicServiceAbstractParameter):
             description_i18n: Multilingual description
             role_i18n: Multilingual role definition
             prompt_shadow: Obfuscated prompt (ShadowCode encoded)
-            icon: Icon config, e.g. {"type": "image", "value": "..."}
+            icon: Icon config, e.g. {"type": "image", "url": "..."}
             icon_type: Icon type, 1=icon, 2=image
         """
         super().__init__()

@@ -1,14 +1,15 @@
 ---
 name: crew-creator
 description: |
-  Manage and optimize custom agent definition files (IDENTITY.md, AGENTS.md, SOUL.md, TOOLS.md).
-  Also handles first-time employee initialization when .workspace/ has no IDENTITY.md.
-  Use when users want to edit agent identity, modify workflow instructions, adjust personality,
-  add/remove tools, optimize prompts, or initialize a new employee from scratch.
-  Trigger signals: 'modify prompt', 'change identity', 'add tool', 'remove tool', 'optimize workflow',
-  'adjust personality', 'initialize employee', '修改提示词', '改身份', '加工具', '去掉工具',
-  '优化能力', '调性格', '初始化员工', '创建员工'.
-  Do NOT use for: skill creation (use skill-creator), skill searching (use find_skills tool).
+    Manage and optimize custom agent definition files (IDENTITY.md, AGENTS.md, SOUL.md, TOOLS.md).
+    Also handles first-time employee initialization when .workspace/ has no IDENTITY.md, including
+    generating a default Logo from IDENTITY.md and SOUL.md and synchronizing the Agent profile.
+    Use when users want to edit agent identity, modify workflow instructions, adjust personality,
+    add/remove tools, optimize prompts, or initialize a new employee from scratch.
+    Trigger signals: 'modify prompt', 'change identity', 'add tool', 'remove tool', 'optimize workflow',
+    'adjust personality', 'initialize employee', '修改提示词', '改身份', '加工具', '去掉工具',
+    '优化能力', '调性格', '初始化员工', '创建员工'.
+    Do NOT use for: skill creation (use skill-creator), skill searching (use find_skills tool).
 ---
 
 # Agent Prompt Manager
@@ -31,9 +32,9 @@ shell_exec(
 
 将 `<skill_dir>` 替换为当前技能的绝对目录。不要省略技能目录前缀，因为 Shell 的当前目录可能是 `.workspace` 或其他目录。
 
-The script reads `.credentials/metadata.json` and returns JSON such as `{"language": "zh_CN", "language_name": "zh_CN"}`. It defaults to `zh_CN` when the metadata file is missing, invalid, or has no usable `language` value. `USER_AUTH_METADATA_PATH` can override the metadata path for testing or operational use. Language codes are passed through without a fixed allowlist, so newly supported frontend languages require no skill-side mapping update.
+The script reads `.credentials/metadata.json` and returns JSON such as `{"language": "zh_CN", "language_name": "Chinese"}`. It defaults to `zh_CN` when the metadata file is missing, invalid, or has no usable `language` value. `USER_AUTH_METADATA_PATH` can override the metadata path for testing or operational use.
 
-When the user has not specified a language, use the returned `language` code as the primary language when writing prompts and employee files. The system-injected `<user_preferred_language>` is not the source of truth for this decision. `language_name` remains only as a compatibility alias for older callers.
+When the user has not specified a language, use the returned `language_name` as the primary language when writing prompts and employee files. The system-injected `<user_preferred_language>` is not the source of truth for this decision.
 
 **Default single-language mode**: Generate all content in the selected language. YAML header uses single-language fields only.
 
@@ -51,40 +52,28 @@ Use `list_dir` to check `.magic/`. If `IDENTITY.md` is missing, enter the initia
 
 Collect information in rounds; you may combine questions but don't overwhelm the user.
 
-When collecting information with `ask_user`, prioritize clickable choices instead of rendering every question as a free-text field:
-
-- Combine questions from the same round into one `ask_user` call when practical.
-- Use `confirm` for yes/no decisions, especially the Round 4 skill-decomposition decision.
-- Use `select` whenever 2-8 useful candidate answers can be offered, and `multi_select` when multiple answers may apply. The UI adds an "Other" free-text choice, so options do not need to be exhaustive.
-- Use `input` only for the employee name or a custom value the user must enter precisely. A request for a "one-line description", "detailed description", or "additional details" is not by itself a reason to use `input`.
-- Use `select` for employee role. Use `multi_select` for core functions and traits, professional capabilities, specialties, working style, and communication style. Use `select` or `multi_select` for workflow types.
-- Dynamically derive 3-6 concrete options for those choice questions from the name, selected role, and requirements already provided. After selection, synthesize the choices into the one-line description and full role definition; do not ask the user to rewrite the same information as free text.
-- Give each option a short explanation that makes the tradeoff clear; do not provide bare abstract labels.
-
 **Before gathering, determine the language using the priority above**. Communicate and collect information in the selected language.
 
 **Round 1 (required)**:
-1. **Employee name**: Ask with `input` in the selected language (e.g., for English users: "What name would you like to give your employee?")
-2. **Employee role**: Derive 3-6 role candidates from the employee name and ask with `select`.
-3. **Core functions and traits**: Derive 3-6 candidates from the employee name and selected role and ask with `multi_select`. Synthesize the selected choices into the one-line description; do not ask for that description again with `input`.
+1. **Employee name**: Ask in the selected language (e.g., for English users: "What name would you like to give your employee?")
+2. **Employee role**: (e.g., "What role will this employee take on?")
+3. **One-line description**: What does this employee mainly do?
 
 Do not ask for translations or offer multilingual output.
 
 **Round 2 (recommended but optional)**:
-4. **Professional capabilities**: Generate 3-6 concrete candidates and use `multi_select`.
-5. **Professional domains and specialties**: Generate 3-6 concrete candidates and use `multi_select`.
-6. **Working style**: Generate 3-6 concrete candidates and use `multi_select`. Synthesize this round into the full role definition for IDENTITY.md; do not ask the user to manually write the same details afterward.
-7. **Personality and communication style**: Generate 3-6 candidates and use `multi_select` (goes into SOUL.md).
+4. **Role definition**: A richer description of capabilities, expertise, and working style (goes into IDENTITY.md body)
+5. **Personality and communication style**: What personality should the employee have? (e.g. rigorous, lively, concise) (goes into SOUL.md)
 
 **Round 3 (required)**:
-8. **Workflow / rules**: First offer selectable workflow types and common rules. Collect extra text only when the user chooses "Other" or an exact custom rule is genuinely required (goes into AGENTS.md).
+6. **Workflow / rules**: What workflow should this employee follow? What special rules apply? (goes into AGENTS.md)
 
 Workflows must be split into clear, independently executable processes. Each process should be designed to call one independent skill; do not pile multiple complex workflows into AGENTS.md.
 
 **Round 4 (required decision)**:
-9. **Skill decomposition decision**: After collecting the workflow, use `confirm` to ask whether the independent processes should be created as separate skills. Do not infer consent from silence, and do not finish initialization before receiving a clear yes/no answer.
-10. If the user chooses yes, summarize the proposed skill boundaries and specify which workflow in `AGENTS.md` will call each skill, or which invocation rules each skill will follow. Then load `skill-creator` and follow its plan, confirmation, conflict-check, creation, and validation workflow once for each independent process.
-11. If the user chooses no, record that decision in the initialization summary and keep the workflow in `AGENTS.md`. If the user is unsure, explain the tradeoff and ask again; do not silently choose.
+7. **Skill decomposition decision**: After collecting the workflow, explicitly ask whether the independent processes should be created as separate skills. Do not infer consent from silence, and do not finish initialization before receiving a clear yes/no answer.
+8. If the user chooses yes, summarize the proposed skill boundaries, then load `skill-creator` and follow its plan, confirmation, conflict-check, creation, and validation workflow once for each independent process.
+9. If the user chooses no, record that decision in the initialization summary and keep the workflow in `AGENTS.md`. If the user is unsure, explain the tradeoff and ask again; do not silently choose.
 
 Round 2 may be skipped. If the user has not provided workflow / rules for Round 3, initialization cannot be completed and the conversation must continue until they provide them. Round 4 is a required decision gate even when the user ultimately chooses no.
 
@@ -116,17 +105,46 @@ The script generates files based on the config (TOOLS.md and SKILLS.md are inten
 - `AGENTS.md` — generated if workflow instructions were provided
 - `SOUL.md` — generated if personality was provided
 
+### Generating the Default Logo
+
+After `init_crew.py` completes successfully, read
+`references/avatar-generation-guide.md` before generating the employee Logo.
+
+1. Read `.workspace/.magic/IDENTITY.md` and `.workspace/.magic/SOUL.md` when it exists.
+2. Build a role-specific Logo prompt from the employee's identity, capabilities, personality, aesthetic, and communication style. Do not use a generic avatar prompt that ignores these files.
+3. Call `generate_images` once with `size` set to `1024x1024`, generating one square image.
+4. Save the result as `.workspace/.magic/avatars/agent-logo.png` or a compliant JPG. Validate that it is square, readable, and no larger than `500KB`.
+5. If the user already supplied a Logo or the Agent already has an image icon, preserve it and skip automatic replacement.
+
+Generation failure is non-blocking: record the error, continue the text metadata synchronization, and tell the user that the Logo needs to be generated or supplied later.
+
+### Synchronizing the Agent Profile
+
+Once the definition files exist, use the Agent update operation to synchronize the profile with magic-service. The update must use the current Agent code and the values parsed from `IDENTITY.md`:
+
+- `name_i18n`: employee name
+- `role_i18n`: employee role
+- `description_i18n`: employee description
+- `icon`: `{"type": "image", "url": "<uploaded_logo_file_key>"}`; the URL value is the uploaded object-storage `file_key`, not a local image path
+- `icon_type`: `2` for image icons
+
+Submit the text fields and Logo in one update when the Logo is available. If the runtime exposes a registered `agent` update tool, use that tool. If it does not, use the existing `AgentApi.update_agent_async()` SDK operation through `run_sdk_snippet` with `UpdateAgentParameter`; do not invent a browser-side request or call the frontend API directly.
+
+The update is successful only when the response confirms the current Agent code was updated. If Logo generation/upload fails, retry the update with only `name_i18n`, `role_i18n`, and `description_i18n`; Agent creation must not be rolled back because the optional default Logo failed.
+
 If the user chooses skill decomposition in Round 4, after initialization call `skill-creator` once for each independent workflow. Follow `skill-creator`'s plan, confirmation, creation, and validation process; do not write `SKILL.md` manually.
 
 ### After Initialization
 
-1. Before writing, read the `AGENTS.md` section of `references/crew-file-format.md` and `references/prompt-engineering-guide.md`, then validate the drafted workflow against their specifications: overview, ordered SOP steps, inputs, outputs, tool/skill calls, failure branches, completion checks, and the mandatory baseline security constraints must be present. User-requested security or other special rules extend the baseline and must not weaken or replace it.
-2. If validation fails, revise the workflow content and validate it again; do not initialize with a plain unstructured checklist or omit the mandatory baseline security constraints. Do not add domain-specific special rules that the user did not specify.
+1. Before writing, validate `AGENTS.md` against the workflow format: overview, ordered SOP steps, inputs, outputs, tool/skill calls, failure branches, completion checks, and security constraints must be present.
+2. If validation fails, revise the workflow content and validate it again; do not initialize with a plain unstructured checklist.
 3. Show the generated files to the user via `read_files`.
-4. If the user chose skill decomposition, confirm that every skill has an invocation workflow or rule declared in `AGENTS.md`, then call `skill-creator` for each independent skill and validate the results before reporting completion.
-5. Ask if the user wants any adjustments.
-6. Clean up the temp config: `delete_files(path=".crew_init_config.json")`.
-7. Inform the user: TOOLS.md and SKILLS.md were not generated by the initialization script (system defaults apply); custom skills are created under `.magic/skills/` and can be adjusted later through employee management.
+4. If the user chose skill decomposition, call `skill-creator` for each independent skill and validate the results before reporting completion.
+5. Read `references/avatar-generation-guide.md` and complete the default Logo generation and Agent profile synchronization steps above.
+6. Verify the generated files and the Agent update response. Report whether text metadata and Logo synchronization each succeeded.
+7. Ask if the user wants any adjustments.
+8. Clean up the temp config: `delete_files(path=".crew_init_config.json")`.
+9. Inform the user: TOOLS.md and SKILLS.md were not generated by the initialization script (system defaults apply); custom skills are created under `.magic/skills/` and can be adjusted later through employee management.
 
 ## File Responsibility Mapping
 
@@ -136,6 +154,7 @@ If the user chooses skill decomposition in Round 4, after initialization call `s
 | `AGENTS.md` | WHAT — Instructions | Workflow, rules, special directives | Recommended |
 | `SOUL.md` | HOW — Personality | Core personality, communication style, behavior guidelines | Optional |
 | `TOOLS.md` | WITH WHAT — Tools | Tool whitelist (YAML) + usage preferences | Optional |
+| `avatars/agent-logo.png` | VISUAL — Logo | Default employee Logo generated from IDENTITY.md and SOUL.md | Optional |
 
 ## Editing Workflow
 
@@ -177,6 +196,19 @@ Contains YAML header (metadata) and body (role definition).
 **Key points**:
 - Role definition must be specific; avoid vague descriptions like "you are an AI assistant"
 - Define expertise domains, target users, and usage scenarios
+
+### AGENTS.md — Workflow Reference Guide
+
+Pure Markdown, no YAML header. Defines this employee's standard operating procedures (SOPs) and rules. The workflow should be concise and clear, explicitly describing the action, input, output, and tool or skill call for every step.
+
+**Key points**:
+- Start with a concise workflow overview, purpose, applicable scenarios, and overall sequence.
+- Use SOP steps in execution order; every step must state what to do, what the input is, what the output is, and which tool or skill to call.
+- Cover real input sources such as user text, uploaded images, uploaded files, workspace files, and outputs from previous steps.
+- Make output formats explicit, such as Markdown files, HTML files, structured data, execution commands, or directly viewable results.
+- Put tool and skill calls in the steps where they are used instead of listing tool names generically.
+- Use if/then/else logic for missing inputs, unsupported formats, and execution failures.
+- Define verifiable completion conditions for every step, along with rules and output quality requirements.
 
 ### SOUL.md — Personality and Behavior
 
