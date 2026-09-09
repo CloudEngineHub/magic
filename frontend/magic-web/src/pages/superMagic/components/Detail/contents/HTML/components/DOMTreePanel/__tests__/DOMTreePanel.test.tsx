@@ -110,10 +110,19 @@ describe("DOMTreePanel", () => {
 		render(<DOMTreePanel editorRef={{ current: { getDomTree } } as never} visible />)
 
 		const thumbnail = await screen.findByTestId("dom-tree-thumbnail-hero")
+
 		expect(thumbnail.querySelector("img")).toHaveAttribute(
 			"src",
 			"https://cdn.example.com/hero.webp",
 		)
+
+		fireEvent.mouseEnter(thumbnail)
+		fireEvent.focus(thumbnail)
+
+		const tooltip = await screen.findByRole("tooltip")
+		expect(
+			tooltip.querySelector('img[src="https://cdn.example.com/hero.webp"]'),
+		).toBeInTheDocument()
 	})
 
 	it("virtualizes a large visible tree", async () => {

@@ -1,4 +1,5 @@
 import * as React from "react"
+import { createPortal } from "react-dom"
 import {
 	AlertTriangle,
 	ArrowDown,
@@ -81,28 +82,64 @@ interface Props {
 
 function NodeThumbnail({ nodeId, src }: { nodeId: string; src: string }) {
 	const [failed, setFailed] = React.useState(false)
+	const [open, setOpen] = React.useState(false)
+	const [position, setPosition] = React.useState({ top: 0, left: 0 })
+	const triggerRef = React.useRef<HTMLSpanElement>(null)
 
 	React.useEffect(() => {
 		setFailed(false)
+		setOpen(false)
 	}, [src])
+
+	const showPreview = () => {
+		const rect = triggerRef.current?.getBoundingClientRect()
+		if (!rect) return
+		setPosition({ top: Math.max(8, rect.top - 8), left: rect.left + rect.width / 2 })
+		setOpen(true)
+	}
 
 	if (failed) return null
 
 	return (
-		<span
-			className="inline-flex h-5 w-5 shrink-0 overflow-hidden rounded-sm bg-muted/40 outline outline-1 outline-black/10 dark:outline-white/10"
-			data-testid={`dom-tree-thumbnail-${nodeId}`}
-			aria-hidden="true"
-		>
-			<img
-				src={src}
-				alt=""
-				loading="lazy"
-				draggable={false}
-				className="h-full w-full object-cover"
-				onError={() => setFailed(true)}
-			/>
-		</span>
+		<>
+			<span
+				ref={triggerRef}
+				className="inline-flex h-5 w-5 shrink-0 overflow-hidden rounded-sm bg-muted/40 outline outline-1 outline-black/10 dark:outline-white/10"
+				data-testid={`dom-tree-thumbnail-${nodeId}`}
+				aria-hidden="true"
+				onMouseEnter={showPreview}
+				onPointerMove={showPreview}
+				onMouseLeave={() => setOpen(false)}
+			>
+				<img
+					src={src}
+					alt=""
+					loading="lazy"
+					draggable={false}
+					className="h-full w-full object-cover"
+					onError={() => setFailed(true)}
+				/>
+			</span>
+			{open
+				? createPortal(
+						<div
+							role="tooltip"
+							data-testid={`dom-tree-thumbnail-preview-${nodeId}`}
+							className="pointer-events-none fixed z-[2147483647] -translate-x-1/2 -translate-y-full rounded-md border border-white/15 bg-black/90 p-1 shadow-lg"
+							style={{ top: position.top, left: position.left }}
+						>
+							<img
+								src={src}
+								alt={nodeId}
+								loading="lazy"
+								draggable={false}
+								className="block max-h-[250px] max-w-[250px] object-contain"
+							/>
+						</div>,
+						document.body,
+					)
+				: null}
+		</>
 	)
 }
 
