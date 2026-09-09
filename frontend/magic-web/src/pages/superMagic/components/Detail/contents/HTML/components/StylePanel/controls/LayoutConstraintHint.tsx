@@ -17,7 +17,9 @@ export function LayoutConstraintHintCard({
 	onApply,
 }: LayoutConstraintHintCardProps) {
 	const { t } = useTranslation("super")
+	const previewGenRef = useRef(0)
 	const previewSessionRef = useRef(false)
+	const previewPromiseRef = useRef<Promise<void> | null>(null)
 	const message =
 		hint.kind === "distributed-alignment"
 			? t("stylePanel.layoutHintDistributed")
@@ -31,22 +33,58 @@ export function LayoutConstraintHintCard({
 				? t("stylePanel.layoutHintFixWidth")
 				: t("stylePanel.layoutHintFixHeight")
 
-	async function preview() {
+	function invalidatePreview() {
+		previewGenRef.current += 1
+		previewSessionRef.current = false
+	}
+
+	async function waitForPreview() {
+		const pending = previewPromiseRef.current
+		if (!pending) return
+		await pending.catch(() => {})
+	}
+
+	async function runPreview(gen: number) {
 		if (!selector || !editorRef?.current) return
 		try {
 			await editorRef.current.beginBatchOperation(selector, hint.fix)
+			if (gen !== previewGenRef.current) {
+				await editorRef.current.cancelBatchOperation()
+				return
+			}
 			await editorRef.current.applyStylesTemporary(selector, hint.fix)
+			if (gen !== previewGenRef.current) {
+				await editorRef.current.cancelBatchOperation()
+				return
+			}
 			previewSessionRef.current = true
 		} catch (error) {
 			console.error("[LayoutConstraintHint] Preview failed:", error)
 		}
 	}
 
+	function preview() {
+		if (!selector || !editorRef?.current) return
+		const gen = previewGenRef.current
+		const promise = runPreview(gen)
+		previewPromiseRef.current = promise
+		void promise.finally(() => {
+			if (previewPromiseRef.current === promise) {
+				previewPromiseRef.current = null
+			}
+		})
+	}
+
 	async function restore() {
-		if (!selector || !editorRef?.current || !previewSessionRef.current) return
-		previewSessionRef.current = false
+		invalidatePreview()
+		const hadPendingPreview = Boolean(previewPromiseRef.current)
+		await waitForPreview()
+		if (!selector || !editorRef?.current) return
 		try {
-			await editorRef.current.cancelBatchOperation()
+			// In-flight preview cancels its own stale batch after each await.
+			if (!hadPendingPreview) {
+				await editorRef.current.cancelBatchOperation()
+			}
 			await editorRef.current.refreshSelectedElement(selector)
 		} catch (error) {
 			console.error("[LayoutConstraintHint] Restore failed:", error)
@@ -54,8 +92,9 @@ export function LayoutConstraintHintCard({
 	}
 
 	async function apply() {
+		await waitForPreview()
 		if (selector && editorRef?.current && previewSessionRef.current) {
-			previewSessionRef.current = false
+			invalidatePreview()
 			try {
 				await editorRef.current.endBatchOperation(selector, hint.fix)
 				await editorRef.current.refreshSelectedElement(selector)
@@ -64,6 +103,7 @@ export function LayoutConstraintHintCard({
 			}
 			return
 		}
+		invalidatePreview()
 		onApply?.(hint.fix)
 	}
 
