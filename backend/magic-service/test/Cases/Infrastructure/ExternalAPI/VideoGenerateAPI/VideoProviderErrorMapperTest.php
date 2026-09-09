@@ -10,6 +10,9 @@ namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI;
 use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
+use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -70,6 +73,147 @@ final class VideoProviderErrorMapperTest extends TestCase
         self::assertFalse(ProviderVideoErrorMapper::isRetriable(500, false, VideoGenerateErrorCode::INVALID_PARAMETER));
     }
 
+    public function testGeminiResolverHidesProviderQuotaError(): void
+    {
+        self::assertSame(
+            VideoGenerateErrorCode::GENERAL_ERROR,
+            ProviderVideoErrorMapper::resolveGemini($this->requestException(400, [
+                'error' => [
+                    'code' => 'RESOURCE_EXHAUSTED',
+                    'message' => 'Quota exceeded',
+                ],
+            ])),
+        );
+    }
+
+    public function testGeminiResolverMapsAspectRatioFromInvalidArgument(): void
+    {
+        self::assertSame(
+            VideoGenerateErrorCode::INVALID_ASPECT_RATIO,
+            ProviderVideoErrorMapper::resolveGemini($this->requestException(400, [
+                'error' => [
+                    'code' => 'INVALID_ARGUMENT',
+                    'message' => 'The requested aspect ratio is not supported.',
+                ],
+            ])),
+        );
+    }
+
+    public function testGeminiResolverMapsActualProviderErrors(): void
+    {
+        $cases = [
+            [
+                'invalid_request',
+                'Edited video duration (4.958s, rounded to 1st decimal: 5s) does not match config duration (3s, rounded to 1st decimal: 3s).',
+                VideoGenerateErrorCode::INVALID_PARAMETER,
+            ],
+            [
+                'content_blocked',
+                "Input blocked: Sorry, we can't create videos with real people's names or likenesses.",
+                VideoGenerateErrorCode::INPUT_TEXT_AUDIT_FAILED,
+            ],
+            [
+                'invalid_request',
+                'HTTP video input is not supported by the model.',
+                VideoGenerateErrorCode::INVALID_PARAMETER,
+            ],
+            [
+                'Unable to show the generated video. The video was filtered out because it violated Google policy.',
+                'Request blocked due to prohibited content guidelines.',
+                VideoGenerateErrorCode::OUTPUT_VIDEO_AUDIT_FAILED,
+            ],
+            [
+                'invalid_request',
+                'Video response format duration must be positive.',
+                VideoGenerateErrorCode::INVALID_PARAMETER,
+            ],
+        ];
+
+        foreach ($cases as [$providerCode, $providerMessage, $expected]) {
+            self::assertSame(
+                $expected,
+                ProviderVideoErrorMapper::resolveGemini($this->requestException(400, [
+                    'error' => [
+                        'code' => $providerCode,
+                        'message' => $providerMessage,
+                    ],
+                ])),
+                (string) $providerMessage,
+            );
+        }
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function requestException(int $status, array $payload): RequestException
+    {
+        return new RequestException(
+            'provider raw message',
+            new Request('POST', 'https://provider.example/video'),
+            new Response($status, [], json_encode($payload, JSON_THROW_ON_ERROR)),
+        );
+    }
+
+    /**
+     * @dataProvider geminiMessageMap
+     */
+    public function testMapsGeminiProviderMessages(string $providerCode, string $providerMessage, VideoGenerateErrorCode $expected): void
+    {
+        self::assertSame(
+            $expected,
+            ProviderVideoErrorMapper::resolveGemini($this->requestException(400, [
+                'error' => [
+                    'code' => $providerCode,
+                    'message' => $providerMessage,
+                ],
+            ])),
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string, string, VideoGenerateErrorCode}>
+     */
+    public static function geminiMessageMap(): iterable
+    {
+        yield 'duration mismatch' => [
+            'invalid_request',
+            'Edited video duration (4.958s, rounded to 1st decimal: 5s) does not match config duration (3s, rounded to 1st decimal: 3s).',
+            VideoGenerateErrorCode::INVALID_PARAMETER,
+        ];
+        yield 'real people likeness blocked' => [
+            'content_blocked',
+            "Input blocked: Sorry, we can't create videos with real people's names or likenesses.",
+            VideoGenerateErrorCode::INPUT_TEXT_AUDIT_FAILED,
+        ];
+        yield 'http video input unsupported' => [
+            'invalid_request',
+            'HTTP video input is not supported by the model.',
+            VideoGenerateErrorCode::INVALID_PARAMETER,
+        ];
+        yield 'filtered output video' => [
+            'Unable to show the generated video. The video was filtered out because it violated policy.',
+            'Request blocked due to prohibited content guidelines.',
+            VideoGenerateErrorCode::OUTPUT_VIDEO_AUDIT_FAILED,
+        ];
+        yield 'non-positive duration' => [
+            'invalid_request',
+            'Video response format duration must be positive.',
+            VideoGenerateErrorCode::INVALID_PARAMETER,
+        ];
+    }
+
+    public function testGeminiResolverAcceptsAsyncResponseArray(): void
+    {
+        self::assertSame(
+            VideoGenerateErrorCode::INVALID_PARAMETER,
+            ProviderVideoErrorMapper::resolveGemini(null, [
+                'error' => [
+                    'code' => 'invalid_request',
+                    'message' => 'Video response format duration must be positive.',
+                ],
+            ]),
+        );
+    }
+
     public function testProviderExceptionKeepsSafeMessageAndOptionalErrorCode(): void
     {
         $exception = ProviderVideoException::nonRetriable(
@@ -84,4 +228,5 @@ final class VideoProviderErrorMapperTest extends TestCase
         self::assertSame(400, $exception->getHttpStatus());
         self::assertFalse($exception->isRetriable());
     }
+
 }

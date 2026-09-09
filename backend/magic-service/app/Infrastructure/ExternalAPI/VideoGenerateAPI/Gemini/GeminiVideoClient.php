@@ -176,8 +176,7 @@ readonly class GeminiVideoClient
             if ($response?->getBody()->isSeekable()) {
                 $response->getBody()->rewind();
             }
-            $errorDetails = trim((string) $responseBody . ' ' . $exception->getMessage());
-            $errorCode = ProviderVideoErrorMapper::resolve($errorDetails, $httpStatus);
+            $errorCode = ProviderVideoErrorMapper::resolveGemini($exception);
             $factory = ProviderVideoErrorMapper::isRetriable($httpStatus, ! $exception->hasResponse(), $errorCode) ? 'retriable' : 'nonRetriable';
             $this->logger->error('gemini video request failed', [
                 'response' => $responseBody === null ? null : PayloadLogSanitizer::sanitizeResponseBody($responseBody),

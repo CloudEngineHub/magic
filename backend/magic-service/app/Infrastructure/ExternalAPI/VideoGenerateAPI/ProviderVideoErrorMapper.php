@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
 use App\ErrorCode\VideoGenerateErrorCode;
+use GuzzleHttp\Exception\RequestException;
 use Hyperf\Contract\TranslatorInterface;
 use Throwable;
 
@@ -128,6 +129,76 @@ final class ProviderVideoErrorMapper
         }
 
         return VideoGenerateErrorCode::GENERAL_ERROR;
+    }
+
+    public static function resolveGemini(
+        ?RequestException $exception = null,
+        string|array|null $body = null,
+    ): VideoGenerateErrorCode {
+        $body = is_array($body) ? json_encode($body, JSON_THROW_ON_ERROR) : $body;
+        $body ??= $exception === null ? null : self::readResponseBody($exception);
+        $payload = self::decodeResponseBody($body);
+        $error = is_array($payload['error'] ?? null) ? $payload['error'] : [];
+        $providerCode = $error['code'] ?? $payload['code'] ?? null;
+        $providerMessage = $error['message'] ?? $payload['message'] ?? $body ?? $exception?->getMessage();
+        $code = self::normalize((string) $providerCode);
+        $text = self::normalize((string) $providerMessage);
+
+        // 宽高比不匹配
+        if ($code === 'invalidargument' && str_contains($text, 'aspectratio')) {
+            return VideoGenerateErrorCode::INVALID_ASPECT_RATIO;
+        }
+        // 通用参数错误
+        if ($code === 'invalidargument') {
+            return VideoGenerateErrorCode::INVALID_PARAMETER;
+        }
+        // 输入文本审核失败
+        if ($code === 'inputtextsensitivecontentdetected' || $code === 'contentblocked') {
+            return VideoGenerateErrorCode::INPUT_TEXT_AUDIT_FAILED;
+        }
+        // Gemini 请求参数错误
+        if ($code === 'invalidrequest') {
+            return VideoGenerateErrorCode::INVALID_PARAMETER;
+        }
+        // 输出视频审核失败
+        if (str_contains($code, 'videowasfilteredout') || str_contains($text, 'videowasfilteredout')) {
+            return VideoGenerateErrorCode::OUTPUT_VIDEO_AUDIT_FAILED;
+        }
+
+        return VideoGenerateErrorCode::GENERAL_ERROR;
+    }
+
+    private static function readResponseBody(RequestException $exception): ?string
+    {
+        $body = $exception->getResponse()?->getBody();
+        if ($body === null) {
+            return null;
+        }
+        if ($body->isSeekable()) {
+            $body->rewind();
+        }
+        $content = (string) $body;
+        if ($body->isSeekable()) {
+            $body->rewind();
+        }
+
+        return $content === '' ? null : $content;
+    }
+
+    /** @return array<string, mixed> */
+    private static function decodeResponseBody(?string $body): array
+    {
+        if ($body === null || trim($body) === '') {
+            return [];
+        }
+
+        try {
+            $payload = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+        } catch (Throwable) {
+            return [];
+        }
+
+        return is_array($payload) ? $payload : [];
     }
 
     public static function isRetriable(
