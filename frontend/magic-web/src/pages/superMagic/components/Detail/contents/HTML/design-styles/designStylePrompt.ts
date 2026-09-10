@@ -30,10 +30,25 @@ export function buildDesignStylePromptContent(
 	if (!fileInfo.fileId || !fileInfo.fileName || !fileInfo.filePath) {
 		throw new Error("HTML file context is incomplete")
 	}
+	const requirementPrompts = [
+		i18next.t("htmlEditor.designStyle.promptVisualOnly", { ns: "super" }),
+		i18next.t("htmlEditor.designStyle.promptPreserve", { ns: "super" }),
+		i18next.t("htmlEditor.designStyle.promptUpdateOriginal", { ns: "super" }),
+		i18next.t("htmlEditor.designStyle.promptReport", { ns: "super" }),
+	]
 
 	return {
 		type: "doc",
 		content: [
+			{
+				type: "paragraph",
+				content: [
+					{
+						type: "text",
+						text: i18next.t("htmlEditor.designStyle.promptSkill", { ns: "super" }),
+					},
+				],
+			},
 			{
 				type: "paragraph",
 				content: [
@@ -57,6 +72,15 @@ export function buildDesignStylePromptContent(
 					},
 				],
 			},
+			...requirementPrompts.map((text) => ({
+				type: "paragraph",
+				content: [
+					{
+						type: "text",
+						text,
+					},
+				],
+			})),
 		],
 	}
 }

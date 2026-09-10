@@ -35,7 +35,7 @@ describe("buildDesignStylePromptContent", () => {
 			style,
 		)
 		const paragraphs = result.content ?? []
-		const mention = paragraphs[0]?.content?.find((node) => node.type === "mention")
+		const mention = paragraphs[1]?.content?.find((node) => node.type === "mention")
 
 		expect(mention?.attrs).toMatchObject({
 			type: MentionItemType.PROJECT_FILE,
@@ -47,30 +47,34 @@ describe("buildDesignStylePromptContent", () => {
 			},
 		})
 		expect(JSON.stringify(result)).toContain(`style_code: ${style.code}`)
-		expect(paragraphs).toHaveLength(2)
-		expect(JSON.stringify(result)).not.toContain("Preserve the current content")
+		expect(paragraphs).toHaveLength(7)
+		expect(paragraphs[0]?.content?.[0]?.text).toContain("html-design-style")
+		expect(JSON.stringify(result)).toContain("Preserve the existing content")
 	})
 
 	it.each([
 		{
 			language: "en_US",
-			filePrompt: "Restyle this HTML file: ",
+			skillPrompt: "Use the `html-design-style` skill to complete this task:",
+			filePrompt: "Apply the specified design style to this HTML file: ",
 			stylePrompt: 'Target style: "Fixture Style" (style_code: fixture-style).',
 		},
 		{
 			language: "zh_CN",
-			filePrompt: "请更换这个 HTML 文件的风格：",
+			skillPrompt: "请使用 `html-design-style` skill 完成以下任务：",
+			filePrompt: "将以下 HTML 文件应用为指定设计风格：",
 			stylePrompt: "目标风格：「Fixture Style」（style_code: fixture-style）。",
 		},
-	])("uses the $language prompt", async ({ language, filePrompt, stylePrompt }) => {
+	])("uses the $language prompt", async ({ language, skillPrompt, filePrompt, stylePrompt }) => {
 		await i18next.changeLanguage(language)
 		const result = buildDesignStylePromptContent(
 			{ fileId: "file-1", fileName: "index.html", filePath: "pages/index.html" },
 			designStyleFixture,
 		)
 
-		expect(result.content?.[0]?.content?.[0]?.text).toBe(filePrompt)
-		expect(result.content?.[1]?.content?.[0]?.text).toBe(stylePrompt)
+		expect(result.content?.[0]?.content?.[0]?.text).toBe(skillPrompt)
+		expect(result.content?.[1]?.content?.[0]?.text).toBe(filePrompt)
+		expect(result.content?.[2]?.content?.[0]?.text).toBe(stylePrompt)
 	})
 
 	it("rejects an incomplete file context", () => {
