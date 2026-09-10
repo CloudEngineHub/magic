@@ -5,6 +5,7 @@ import { computeEffectiveOpacity } from "../shared/color"
 import { pxToInch, resolveEffectiveRadius, getGlobalTransform } from "../shared/unit"
 import { createMediaAssetKey, getOriginalMediaPath } from "../media/asset-identity"
 import { createMediaSourceDescriptor } from "../media/source-descriptor"
+import { extractCssImageUrls } from "../shared/css-image-url"
 
 /**
  * Parse an image from an IMG tag or background-image.
@@ -88,14 +89,14 @@ export function parseImage(
 	const bgImage = style.backgroundImage
 	if (!bgImage || bgImage === "none") return null
 
-	// Skip gradient backgrounds; parseShape handles them.
+	// Gradient layers are represented by parseShape. Compound background layer
+	// rendering needs separate z-order handling and is intentionally unchanged here.
 	if (bgImage.includes("gradient")) return null
 
-	// Extract the image URL from url().
-	const urlMatch = bgImage.match(/url\(["']?([^"')]+)["']?\)/)
-	if (!urlMatch || !urlMatch[1]) return null
-
-	const src = urlMatch[1]
+	// Extract the first URL-backed image without making assumptions about its
+	// quoting, escaping, file extension, query string, or containing function.
+	const [src] = extractCssImageUrls(bgImage)
+	if (!src) return null
 	const originalPath = getOriginalMediaPath(element)
 	const assetKey = createMediaAssetKey("image", originalPath)
 
