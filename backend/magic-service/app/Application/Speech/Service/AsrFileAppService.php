@@ -140,24 +140,21 @@ class AsrFileAppService extends AbstractAppService
             // 3. 验证项目权限
             $this->validationService->getAccessibleProjectWithEditor((int) $summaryRequest->projectId, $userId, $organizationCode);
 
+            // 先显影项目再投递 MQ，确保音频项目列表的 is_hidden=0 查询能够立即看到项目。
+            // Consumer 内仍会再次幂等显影，覆盖 MQ 延迟或重试场景。
+            $this->exposeSummaryProject(
+                (int) $summaryRequest->projectId,
+                $userId,
+                $organizationCode,
+                AsrSummaryMessage::MODE_RECORDING,
+                $summaryRequest->taskKey
+            );
+
             // 4. 查询项目、工作区和话题信息
             [$projectName, $workspaceName] = $this->getProjectAndWorkspaceNames($summaryRequest->projectId);
             $topicName = $topicEntity->getTopicName();
 
-            // 5. 更新空项目/话题名称（如果有生成的标题）
-            if (! empty($summaryRequest->generatedTitle) && $this->shouldUpdateNames($projectName, $topicName)) {
-                $this->updateEmptyProjectAndTopicNames(
-                    $summaryRequest->projectId,
-                    (int) $summaryRequest->topicId,
-                    $summaryRequest->generatedTitle,
-                    $userId,
-                    $organizationCode
-                );
-                $projectName = empty(trim($projectName ?? '')) ? $summaryRequest->generatedTitle : $projectName;
-                $topicName = empty(trim($topicName)) ? $summaryRequest->generatedTitle : $topicName;
-            }
-
-            // 6. MQ 执行录音总结流程：由 Consumer 负责重试（1分钟间隔，最多10次）
+            // MQ 执行录音总结流程：由 Consumer 负责标题准备、重试和正式总结
             $this->publishSummaryToMq($summaryRequest, $userAuthorization);
 
             return [
@@ -208,30 +205,25 @@ class AsrFileAppService extends AbstractAppService
         }
         try {
             // 1. 准备任务状态
-            if ($summaryRequest->hasFileId()) {
+            $hasFileId = $summaryRequest->hasFileId();
+            if ($hasFileId) {
                 $taskStatus = $this->createVirtualTaskStatusFromFileId($summaryRequest, $userId, $organizationCode);
             } else {
                 $taskStatus = $this->validationService->validateTaskStatus($summaryRequest->taskKey, $userId);
             }
 
-            // 2. 使用 Redis 中保存的 topic_id 获取话题及会话信息
-            $topicEntity = $this->validationService->validateTopicOwnership((int) $taskStatus->topicId, $userId);
-            $chatTopicId = $topicEntity->getChatTopicId();
-            $conversationId = $this->magicChatDomainService->getConversationIdByTopicId($chatTopicId);
-
-            // 3. 准备任务状态的后续处理
-            if (! $summaryRequest->hasFileId()) {
-                // 3.1 幂等性检查：如果总结已完成，直接返回（只发送消息，不重复处理）
+            // 普通任务的幂等检查和录音停止必须早于标题生成，避免重复任务再次触发 LLM。
+            if (! $hasFileId) {
                 if ($taskStatus->isSummaryCompleted()) {
                     $this->logger->info('检测到总结已完成，跳过重复处理', [
                         'task_key' => $summaryRequest->taskKey,
                         'audio_file_id' => $taskStatus->audioFileId,
                         'status' => $taskStatus->status->value,
+                        'mode' => AsrSummaryMessage::MODE_RECORDING,
                     ]);
                     return;
                 }
 
-                // 3.2 如果录音未停止，先执行录音终止逻辑
                 if (in_array($taskStatus->recordingStatus, [
                     AsrRecordingStatusEnum::START->value,
                     AsrRecordingStatusEnum::RECORDING->value,
@@ -246,26 +238,88 @@ class AsrFileAppService extends AbstractAppService
                     $this->asrTaskDomainService->saveTaskStatus($taskStatus);
                     $this->asrTaskDomainService->deleteTaskHeartbeat($taskStatus->taskKey, $taskStatus->userId);
                 }
+            }
 
+            // 2. 使用 Redis 中保存的 topic_id 获取话题及会话信息，先完成轻量权限校验。
+            $topicEntity = $this->validationService->validateTopicOwnership((int) $taskStatus->topicId, $userId);
+            $chatTopicId = $topicEntity->getChatTopicId();
+            $conversationId = $this->magicChatDomainService->getConversationIdByTopicId($chatTopicId);
+
+            // 先显影项目；标题 LLM 不得阻塞项目可见性。
+            $this->exposeSummaryProject(
+                (int) $summaryRequest->projectId,
+                $userId,
+                $organizationCode,
+                AsrSummaryMessage::MODE_RECORDING,
+                $summaryRequest->taskKey
+            );
+
+            // 普通录音先写入 merging，file_id 场景直接写入 summarizing。
+            if ($hasFileId) {
+                $this->asrTaskDomainService->startVirtualTaskSummarizingPhase($taskStatus);
+                $this->logger->info('ASR 导入任务已进入总结阶段', [
+                    'task_key' => $summaryRequest->taskKey,
+                    'mode' => AsrSummaryMessage::MODE_RECORDING,
+                    'summarizing_started_at' => microtime(true),
+                ]);
+            } else {
+                $this->asrTaskDomainService->startMergingPhase($taskStatus);
+                $this->logger->info('ASR 合并阶段已启动', [
+                    'task_key' => $summaryRequest->taskKey,
+                    'mode' => AsrSummaryMessage::MODE_RECORDING,
+                    'merging_started_at' => microtime(true),
+                ]);
+            }
+
+            // 标题准备必须位于业务 SUMMARY_LOCK 内，确保同一任务并发时只生成一次。
+            $generatedTitle = $this->resolveTitleForEmptyProjectAndTopicNames(
+                $taskStatus,
+                null,
+                $summaryRequest->generatedTitle,
+                $summaryRequest->fileId
+            );
+            $this->logger->info('ASR 总结标题准备完成', [
+                'task_key' => $summaryRequest->taskKey,
+                'mode' => AsrSummaryMessage::MODE_RECORDING,
+                'title_generated_at' => microtime(true),
+                'has_title' => $generatedTitle !== '',
+            ]);
+            if ($generatedTitle !== '') {
+                $summaryRequest = new SummaryRequestDTO(
+                    $summaryRequest->taskKey,
+                    $summaryRequest->projectId,
+                    $summaryRequest->topicId,
+                    $summaryRequest->modelId,
+                    $summaryRequest->fileId,
+                    $summaryRequest->note,
+                    $summaryRequest->asrStreamContent,
+                    $generatedTitle
+                );
+                if ($summaryRequest->hasFileId()) {
+                    $this->redis->setex(
+                        sprintf(AsrRedisKeys::SUMMARY_TITLE, md5($userId . ':' . $summaryRequest->taskKey)),
+                        AsrConfig::TASK_STATUS_TTL,
+                        $generatedTitle
+                    );
+                } else {
+                    $taskStatus->summaryGeneratedTitle = $generatedTitle;
+                    $this->asrTaskDomainService->saveTaskStatus($taskStatus);
+                }
+                $this->ensureEmptyProjectAndTopicNames(
+                    $taskStatus,
+                    $userId,
+                    $organizationCode,
+                    null,
+                    $generatedTitle,
+                    $summaryRequest->fileId
+                );
+            }
+
+            // 3. 普通录音执行合并；file_id 已在前面直接进入 summarizing。
+            if (! $hasFileId) {
                 $existingWorkspaceFilePath = $taskStatus->filePath;
 
                 try {
-                    // ===== Step 1: Business Logic - Show project =====
-                    $projectShown = $this->audioProjectDomainService->showProjectIfExists((int) $summaryRequest->projectId);
-                    if ($projectShown) {
-                        $projectEntity = $this->projectDomainService->getProjectNotUserId((int) $summaryRequest->projectId);
-                        $this->eventDispatcher->dispatch(new ProjectHiddenStatusUpdatedEvent(
-                            $projectEntity->getId(),
-                            $userId,
-                            $organizationCode,
-                            $projectEntity->getProjectMode(),
-                            false
-                        ));
-                    }
-
-                    // ===== Step 2: State Management - Start merging phase =====
-                    $this->asrTaskDomainService->startMergingPhase($taskStatus);
-
                     // 先生成新的显示目录路径并更新到 taskStatus（确保沙箱使用正确的目录）
                     if (! empty($summaryRequest->generatedTitle)) {
                         $newDisplayDirectory = $this->directoryService->getNewDisplayDirectory(
@@ -310,7 +364,14 @@ class AsrFileAppService extends AbstractAppService
             }
 
             // ===== Step 5: State Management - Start summarizing phase =====
-            $this->asrTaskDomainService->startSummarizingPhase($taskStatus);
+            if (! $hasFileId) {
+                $this->asrTaskDomainService->startSummarizingPhase($taskStatus);
+                $this->logger->info('ASR 总结阶段已启动', [
+                    'task_key' => $summaryRequest->taskKey,
+                    'mode' => AsrSummaryMessage::MODE_RECORDING,
+                    'summarizing_started_at' => microtime(true),
+                ]);
+            }
 
             // 4. 发送总结消息
             $processSummaryTaskDTO = new ProcessSummaryTaskDTO(
@@ -331,8 +392,10 @@ class AsrFileAppService extends AbstractAppService
             $taskStatus->updateStatus(AsrTaskStatusEnum::COMPLETED);
             $taskStatus->recordingStatus = AsrRecordingStatusEnum::STOPPED->value;
 
-            // 6. 保存任务状态
-            $this->asrTaskDomainService->saveTaskStatus($taskStatus);
+            // 6. 普通任务保存 Redis 状态；file_id 虚拟任务不能创建任务 Hash。
+            if (! $hasFileId) {
+                $this->asrTaskDomainService->saveTaskStatus($taskStatus);
+            }
 
             // 6.1 总结完成后显影显示目录（上传阶段 display_dir 先隐藏）
             if (! empty($taskStatus->displayDirectoryId)) {
@@ -375,6 +438,45 @@ class AsrFileAppService extends AbstractAppService
     }
 
     /**
+     * 异步补齐手动总结后的项目/话题标题，不重复触发正式总结。
+     */
+    public function handleAsyncTitleOnly(
+        string $taskKey,
+        string $userId,
+        string $organizationCode,
+        ?string $preferredTitle = null,
+        ?string $audioFileId = null
+    ): void {
+        $lockName = sprintf(AsrRedisKeys::SUMMARY_LOCK, md5($userId . ':' . $taskKey));
+        $lockOwner = sprintf('%s:%s:%s', $userId, $taskKey, microtime(true));
+        if (! $this->locker->spinLock($lockName, $lockOwner, AsrConfig::SUMMARY_LOCK_TTL)) {
+            return;
+        }
+
+        try {
+            $taskStatus = $this->getTaskStatusFromRedis($taskKey, $userId);
+            if ($taskStatus->isEmpty()) {
+                return;
+            }
+
+            $generatedTitle = $this->ensureEmptyProjectAndTopicNames(
+                $taskStatus,
+                $userId,
+                $organizationCode,
+                null,
+                $preferredTitle,
+                $audioFileId ?: $taskStatus->audioFileId
+            );
+            if (! empty($generatedTitle) && empty($taskStatus->summaryGeneratedTitle)) {
+                $taskStatus->summaryGeneratedTitle = $generatedTitle;
+                $this->asrTaskDomainService->saveTaskStatus($taskStatus);
+            }
+        } finally {
+            $this->locker->release($lockName, $lockOwner);
+        }
+    }
+
+    /**
      * 验证项目权限.
      */
     public function validateProjectAccess(string $projectId, string $userId, string $organizationCode): ProjectEntity
@@ -398,6 +500,31 @@ class AsrFileAppService extends AbstractAppService
     {
         $taskStatus = $this->asrTaskDomainService->findTaskByKey($taskKey, $userId);
         return $taskStatus ?? new AsrTaskStatusDTO();
+    }
+
+    /**
+     * 持久化 /summary 请求中补传的标题素材，避免大文本进入 MQ。
+     */
+    public function persistSummaryRequestContext(SummaryRequestDTO $request, string $userId, string $language): void
+    {
+        if ($request->hasFileId() || $request->taskKey === '') {
+            return;
+        }
+
+        $taskStatus = $this->getTaskStatusFromRedis($request->taskKey, $userId);
+        if ($taskStatus->isEmpty()) {
+            return;
+        }
+
+        if (! empty($request->asrStreamContent)) {
+            $taskStatus->asrStreamContent = mb_substr($request->asrStreamContent, 0, 10000);
+        }
+        if ($request->note?->hasContent()) {
+            $taskStatus->noteContent = mb_substr($request->note->content, 0, 25000);
+            $taskStatus->noteFileType = $request->note->getFileExtension();
+        }
+        $taskStatus->language = $language;
+        $this->saveTaskStatusToRedis($taskStatus);
     }
 
     public function loadRecoverFinishRecordingTaskStatus(
@@ -596,8 +723,42 @@ class AsrFileAppService extends AbstractAppService
                 'project_id' => $taskStatus->projectId,
             ]);
 
-            // 生成标题
-            $fileTitle = $this->titleGeneratorService->generateFromTaskStatus($taskStatus);
+            $this->exposeSummaryProject(
+                (int) $taskStatus->projectId,
+                $userId,
+                $organizationCode,
+                AsrSummaryMessage::MODE_RECORDING,
+                $taskStatus->taskKey
+            );
+
+            // 项目显影后立即写入 merging，标题 LLM 不阻塞阶段展示。
+            $this->asrTaskDomainService->startMergingPhase($taskStatus);
+            $this->logger->info('ASR 自动总结合并阶段已启动', [
+                'task_key' => $taskStatus->taskKey,
+                'mode' => AsrSummaryMessage::MODE_RECORDING,
+                'merging_started_at' => microtime(true),
+            ]);
+
+            // 生成标题；异常时使用默认标题继续合并。
+            try {
+                $fileTitle = $this->titleGeneratorService->generateFromTaskStatus($taskStatus);
+            } catch (Throwable $e) {
+                $this->logger->warning('自动总结标题生成失败，使用默认标题继续', [
+                    'task_key' => $taskStatus->taskKey,
+                    'error' => $e->getMessage(),
+                ]);
+                $fileTitle = $this->titleGeneratorService->generateDefaultDirectoryName();
+            }
+            $this->logger->info('ASR 自动总结标题准备完成', [
+                'task_key' => $taskStatus->taskKey,
+                'mode' => AsrSummaryMessage::MODE_RECORDING,
+                'title_generated_at' => microtime(true),
+                'has_title' => ! empty($fileTitle),
+            ]);
+            if (! empty($fileTitle)) {
+                $taskStatus->summaryGeneratedTitle = $this->titleGeneratorService->sanitizeTitle($fileTitle);
+                $this->asrTaskDomainService->saveTaskStatus($taskStatus);
+            }
 
             $this->ensureEmptyProjectAndTopicNames(
                 $taskStatus,
@@ -624,9 +785,6 @@ class AsrFileAppService extends AbstractAppService
             // AsrSandboxService forwards the same User-Authorization header.
             $dataIsolation = DataIsolation::create($organizationCode, $userId);
 
-            // ===== Phase 1: 状态管理 - 开始合并 =====
-            $this->asrTaskDomainService->startMergingPhase($taskStatus);
-
             // 合并音频（沙箱会重命名目录但不会通知文件变动）
             $this->asrSandboxService->mergeAudioFiles($dataIsolation, $taskStatus, $fileTitle, AsrTaskStatusEnum::COMPLETED);
             $this->syncAsrRecoverableContextToDatabase($taskStatus);
@@ -636,6 +794,11 @@ class AsrFileAppService extends AbstractAppService
 
             // ===== Phase 2: 状态管理 - 开始总结 =====
             $this->asrTaskDomainService->startSummarizingPhase($taskStatus);
+            $this->logger->info('ASR 自动总结阶段已启动', [
+                'task_key' => $taskStatus->taskKey,
+                'mode' => AsrSummaryMessage::MODE_RECORDING,
+                'summarizing_started_at' => microtime(true),
+            ]);
 
             // 发送聊天消息
             $this->sendAutoSummaryChatMessage($taskStatus, $userId, $organizationCode);
@@ -816,17 +979,22 @@ class AsrFileAppService extends AbstractAppService
         $taskStatus->modelId = $effectiveModelId;
         $this->asrTaskDomainService->saveTaskStatus($taskStatus);
 
-        $this->ensureEmptyProjectAndTopicNames(
-            $taskStatus,
+        // 手动总结没有 merging 阶段，但仍保证项目在进入 summarizing 前可见。
+        $this->exposeSummaryProject(
+            (int) $taskStatus->projectId,
             $userId,
             $organizationCode,
-            $userAuthorization,
-            null,
-            $taskStatus->audioFileId
+            AsrSummaryMessage::MODE_TITLE_ONLY,
+            $taskKey
         );
 
         // ===== Step 4: State Management - Start summarizing phase =====
         $this->asrTaskDomainService->startSummarizingPhase($taskStatus);
+        $this->logger->info('ASR 手动总结阶段已启动', [
+            'task_key' => $taskKey,
+            'mode' => AsrSummaryMessage::MODE_TITLE_ONLY,
+            'summarizing_started_at' => microtime(true),
+        ]);
 
         // Async trigger summary
         $this->sendAutoSummaryChatMessage($taskStatus, $userId, $organizationCode);
@@ -834,6 +1002,16 @@ class AsrFileAppService extends AbstractAppService
         // Mark as completed
         $taskStatus->updateStatus(AsrTaskStatusEnum::COMPLETED);
         $this->asrTaskDomainService->saveTaskStatus($taskStatus);
+
+        // 正式总结保持同步；标题补齐作为 best-effort 异步任务投递。
+        try {
+            $this->publishTitleOnlyToMq($taskStatus, $userAuthorization);
+        } catch (Throwable $e) {
+            $this->logger->warning('手动总结标题异步任务投递失败，不影响正式总结', [
+                'task_key' => $taskKey,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         return [
             'success' => true,
@@ -1109,6 +1287,16 @@ class AsrFileAppService extends AbstractAppService
         $taskStatus->phaseStatus = AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS;
         $taskStatus->phasePercent = 0;
         $taskStatus->phaseError = null;
+
+        // 在启动后台合并前同步显影，避免 finish-recording 返回后列表仍过滤掉项目。
+        $this->exposeSummaryProject(
+            (int) $taskStatus->projectId,
+            $userId,
+            $organizationCode,
+            AsrSummaryMessage::MODE_RECORDING,
+            $taskKey
+        );
+
         $this->asrTaskDomainService->saveTaskStatus($taskStatus);
 
         // Execute async. handleFinishRecording re-resolves the per-user
@@ -1200,6 +1388,15 @@ class AsrFileAppService extends AbstractAppService
         }
 
         $taskStatus->updateStatus(AsrTaskStatusEnum::PROCESSING);
+
+        // 在启动后台恢复前同步显影，保持 recover 与 finish-recording 一致。
+        $this->exposeSummaryProject(
+            (int) $taskStatus->projectId,
+            $taskStatus->userId,
+            $organizationCode,
+            AsrSummaryMessage::MODE_RECORDING,
+            $taskKey
+        );
         $this->asrTaskDomainService->startMergingPhase($taskStatus);
 
         $this->executeAsyncRecoverFinishRecording($taskStatus, $organizationCode, $generatedTitle);
@@ -2151,22 +2348,15 @@ class AsrFileAppService extends AbstractAppService
             throw new RuntimeException('Model id is required for imported summary');
         }
 
-        $generatedTitle = $this->ensureEmptyProjectAndTopicNames(
-            $taskStatus,
-            $userAuthorization->getId(),
-            $userAuthorization->getOrganizationCode(),
-            $userAuthorization,
-            null,
-            (string) $fileId
-        );
-
+        // 标题生成下沉到 Consumer；这里只复用已有标题，避免丢弃 upload-tokens 预生成结果
         $summaryRequest = new SummaryRequestDTO(
             taskKey: $taskKey,
             projectId: (string) $taskStatus->projectId,
             topicId: (string) $topicId,
             modelId: $effectiveModelId,
             fileId: (string) $fileId,
-            generatedTitle: $generatedTitle
+            generatedTitle: $taskStatus->summaryGeneratedTitle
+                ?: $taskStatus->uploadGeneratedTitle
         );
 
         $result = $this->processSummaryWithChat($summaryRequest, $userAuthorization);
@@ -2205,6 +2395,7 @@ class AsrFileAppService extends AbstractAppService
             'language' => CoContext::getLanguage(),
             'request_id' => CoContext::getRequestId(),
             'retry_count' => 0,
+            'mode' => AsrSummaryMessage::MODE_RECORDING,
         ];
 
         $message = AsrSummaryMessage::fromArray($payload);
@@ -2215,6 +2406,27 @@ class AsrFileAppService extends AbstractAppService
                 'user_id' => $userAuthorization->getId(),
             ]);
             ExceptionBuilder::throw(AsrErrorCode::SystemBusy);
+        }
+    }
+
+    private function publishTitleOnlyToMq(AsrTaskStatusDTO $taskStatus, MagicUserAuthorization $userAuthorization): void
+    {
+        $message = new AsrSummaryMessage(
+            $taskStatus->taskKey,
+            (string) $taskStatus->projectId,
+            (string) $taskStatus->topicId,
+            (string) $taskStatus->modelId,
+            $taskStatus->audioFileId,
+            null,
+            $userAuthorization->getId(),
+            $userAuthorization->getOrganizationCode(),
+            CoContext::getLanguage(),
+            CoContext::getRequestId(),
+            0,
+            AsrSummaryMessage::MODE_TITLE_ONLY
+        );
+        if (! $this->producer->produce(new AsrSummaryPublisher($message))) {
+            throw new RuntimeException('publish title-only summary message failed');
         }
     }
 
@@ -2244,6 +2456,51 @@ class AsrFileAppService extends AbstractAppService
                 'error' => $e->getMessage(),
             ]);
             return [null, null];
+        }
+    }
+
+    /**
+     * 在总结流程进入耗时阶段前显影项目。显影失败不应阻断后续总结。
+     */
+    private function exposeSummaryProject(
+        int $projectId,
+        string $userId,
+        string $organizationCode,
+        string $mode,
+        string $taskKey
+    ): void {
+        $requestedAt = microtime(true);
+        try {
+            $projectShown = $this->audioProjectDomainService->showProjectIfExists($projectId);
+            if ($projectShown) {
+                $projectEntity = $this->projectDomainService->getProjectNotUserId($projectId);
+                if ($projectEntity !== null) {
+                    $this->eventDispatcher->dispatch(new ProjectHiddenStatusUpdatedEvent(
+                        $projectEntity->getId(),
+                        $userId,
+                        $organizationCode,
+                        $projectEntity->getProjectMode(),
+                        false
+                    ));
+                }
+            }
+
+            $this->logger->info('ASR 总结项目显影完成', [
+                'task_key' => $taskKey,
+                'project_id' => $projectId,
+                'mode' => $mode,
+                'project_visible_at' => microtime(true),
+                'project_visibility_requested_at' => $requestedAt,
+                'project_was_hidden' => $projectShown,
+            ]);
+        } catch (Throwable $e) {
+            $this->logger->warning('ASR 总结项目显影失败，继续后续流程', [
+                'task_key' => $taskKey,
+                'project_id' => $projectId,
+                'mode' => $mode,
+                'project_visibility_requested_at' => $requestedAt,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -2305,6 +2562,11 @@ class AsrFileAppService extends AbstractAppService
         ?string $preferredTitle,
         ?string $audioFileId
     ): string {
+        $summaryGeneratedTitle = $this->titleGeneratorService->sanitizeTitle($taskStatus->summaryGeneratedTitle ?? '');
+        if ($summaryGeneratedTitle !== '') {
+            return $summaryGeneratedTitle;
+        }
+
         $uploadGeneratedTitle = $this->titleGeneratorService->sanitizeTitle($taskStatus->uploadGeneratedTitle ?? '');
         if ($uploadGeneratedTitle !== '') {
             return $uploadGeneratedTitle;
@@ -2315,11 +2577,28 @@ class AsrFileAppService extends AbstractAppService
             return $preferredTitle;
         }
 
-        $generatedFromTask = $this->titleGeneratorService->sanitizeTitle(
-            $this->titleGeneratorService->generateNullableFromTaskStatus($taskStatus) ?? ''
-        );
-        if ($generatedFromTask !== '') {
-            return $generatedFromTask;
+        if ($taskStatus->taskKey !== '') {
+            $cachedTitle = $this->titleGeneratorService->sanitizeTitle((string) $this->redis->get(
+                sprintf(AsrRedisKeys::SUMMARY_TITLE, md5($taskStatus->userId . ':' . $taskStatus->taskKey))
+            ));
+            if ($cachedTitle !== '') {
+                return $cachedTitle;
+            }
+        }
+
+        try {
+            $generatedFromTask = $this->titleGeneratorService->sanitizeTitle(
+                $this->titleGeneratorService->generateNullableFromTaskStatus($taskStatus) ?? ''
+            );
+            if ($generatedFromTask !== '') {
+                return $generatedFromTask;
+            }
+        } catch (Throwable $e) {
+            // 标题 LLM 失败不应阻断正式总结，继续使用文件名或默认标题兜底。
+            $this->logger->warning('根据 ASR 内容生成标题失败，继续使用兜底标题', [
+                'task_key' => $taskStatus->taskKey,
+                'error' => $e->getMessage(),
+            ]);
         }
 
         $audioFileTitle = $this->generateTitleFromAudioFileName(

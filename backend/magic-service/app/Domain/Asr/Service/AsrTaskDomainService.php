@@ -93,6 +93,21 @@ readonly class AsrTaskDomainService
     }
 
     /**
+     * Start summarizing for a file_id virtual task without creating a Redis task hash.
+     */
+    public function startVirtualTaskSummarizingPhase(AsrTaskStatusDTO $taskStatus): void
+    {
+        $taskStatus->currentPhase = AsrTaskStatusDTO::PHASE_SUMMARIZING;
+        $taskStatus->phaseStatus = AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS;
+        $taskStatus->phasePercent = 0;
+        $taskStatus->phaseError = null;
+
+        if (! empty($taskStatus->projectId)) {
+            $this->syncPhaseStateToDatabase($taskStatus);
+        }
+    }
+
+    /**
      * Complete summarizing phase (paired update: Redis + Database).
      */
     public function completeSummarizingPhase(AsrTaskStatusDTO $taskStatus, int $ttl = 604800): void

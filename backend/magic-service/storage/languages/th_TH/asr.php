@@ -121,6 +121,7 @@ return [
 
     // เกี่ยวกับชื่อไฟล์
     'file_names' => [
+        'recording_at' => 'การบันทึกเสียงเมื่อ :time',
         'recording_prefix' => 'บันทึกเสียง',
         'merged_audio_prefix' => 'ไฟล์เสียง',
         'original_recording' => 'ไฟล์บันทึกเสียงต้นฉบับ',
