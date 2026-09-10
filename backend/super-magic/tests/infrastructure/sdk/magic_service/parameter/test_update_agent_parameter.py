@@ -7,12 +7,14 @@ def test_update_agent_parameter_serializes_image_icon_with_url():
         name_i18n={"default": "测试员工"},
         icon={"type": "image", "url": "agent_export/avatars/agent-logo.png"},
         icon_type=2,
+        file_key="agent_export/avatars/agent-logo.png",
     )
 
     assert parameter.to_body() == {
         "name_i18n": {"default": "测试员工"},
         "icon": {"type": "image", "url": "agent_export/avatars/agent-logo.png"},
         "icon_type": 2,
+        "file_key": "agent_export/avatars/agent-logo.png",
     }
 
 

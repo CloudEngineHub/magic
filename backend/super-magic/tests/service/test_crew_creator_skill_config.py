@@ -71,3 +71,60 @@ def test_crew_creator_logo_paths_are_workspace_relative():
     assert "| `.magic/avatars/agent-logo.png` |" in skill
     assert "do not prepend `.workspace/`" in guide
     assert "`.magic/avatars/agent-logo.png`" in guide
+
+
+def test_crew_creator_requires_logo_and_agent_sync_before_completion():
+    skill = (CREW_CREATOR_DIR / "SKILL.md").read_text(encoding="utf-8")
+    completion_gate = skill.split("### Mandatory Initialization Completion Gate", 1)[
+        1
+    ].split("### After Initialization", 1)[0]
+
+    assert "Creating or validating the definition files is not the end" in completion_gate
+    assert "call `generate_images`" in completion_gate
+    assert "object-storage `file_key`" in completion_gate
+    assert "Call `update_agent` exactly once" in completion_gate
+    assert "`icon_file_key`" in completion_gate
+    assert "`run_sdk_snippet`" not in completion_gate
+    assert "current Agent code" in completion_gate
+    assert "Do not delete `.crew_init_config.json`" in completion_gate
+    assert "text metadata synchronization" in completion_gate
+    assert "Logo synchronization" in completion_gate
+
+
+def test_crew_creator_registers_agent_manager_tools():
+    agent = (PROJECT_ROOT / "agents" / "crew-creator.agent").read_text(encoding="utf-8")
+    frontmatter = agent.split("---", 2)[1]
+
+    for tool_name in (
+        "get_agent_info",
+        "update_agent",
+        "create_skill",
+        "edit_skill",
+        "upload_skill",
+    ):
+        assert f"  - {tool_name}\n" in frontmatter
+
+
+def test_restored_agent_manager_tools_are_exported_and_workspace_scoped():
+    tools_init = (PROJECT_ROOT / "app" / "tools" / "__init__.py").read_text(encoding="utf-8")
+    manager_dir = PROJECT_ROOT / "app" / "tools" / "agent_manager"
+
+    assert "from app.tools.agent_manager import" in tools_init
+    for module_name in (
+        "get_agent_info",
+        "update_agent",
+        "create_skill",
+        "edit_skill",
+        "upload_skill",
+    ):
+        assert (manager_dir / f"{module_name}.py").is_file()
+
+    for module_name in ("create_skill", "edit_skill", "upload_skill"):
+        source = (manager_dir / f"{module_name}.py").read_text(encoding="utf-8")
+        assert "PathManager.get_magic_skills_dir()" in source
+        assert "get_agent_studio_dir" not in source
+
+    update_source = (manager_dir / "update_agent.py").read_text(encoding="utf-8")
+    assert 'icon = {"type": "Image", "value": params.icon_file_key}' in update_source
+    assert "file_key=params.icon_file_key" in update_source
+    assert "params.agent_code" not in update_source

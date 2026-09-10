@@ -20,6 +20,7 @@ class UpdateAgentParameter(MagicServiceAbstractParameter):
         prompt_shadow: Optional[str] = None,
         icon: Optional[Dict[str, Any]] = None,
         icon_type: Optional[int] = None,
+        file_key: Optional[str] = None,
     ):
         """
         Initialize update agent parameter
@@ -32,6 +33,7 @@ class UpdateAgentParameter(MagicServiceAbstractParameter):
             prompt_shadow: Obfuscated prompt (ShadowCode encoded)
             icon: Icon config, e.g. {"type": "image", "url": "..."}
             icon_type: Icon type, 1=icon, 2=image
+            file_key: Object-storage key for an uploaded image
         """
         super().__init__()
         self.code = code
@@ -41,6 +43,7 @@ class UpdateAgentParameter(MagicServiceAbstractParameter):
         self.prompt_shadow = prompt_shadow
         self.icon = icon
         self.icon_type = icon_type
+        self.file_key = file_key
 
     def get_code(self) -> str:
         """Get agent code"""
@@ -61,6 +64,8 @@ class UpdateAgentParameter(MagicServiceAbstractParameter):
             body['icon'] = self.icon
         if self.icon_type is not None:
             body['icon_type'] = self.icon_type
+        if self.file_key is not None:
+            body['file_key'] = self.file_key
         return body
 
     def to_query_params(self) -> Dict[str, Any]:
