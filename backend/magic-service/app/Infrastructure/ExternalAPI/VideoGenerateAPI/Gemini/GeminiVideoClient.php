@@ -221,6 +221,7 @@ readonly class GeminiVideoClient
     {
         $options = [
             'headers' => array_merge($headers, ['Content-Type' => 'application/json']),
+            'expect' => false,
         ];
         if ($payload !== null) {
             $options['json'] = $payload;
