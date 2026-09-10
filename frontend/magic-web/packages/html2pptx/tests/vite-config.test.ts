@@ -14,6 +14,9 @@ describe("package build configuration", () => {
 	it("emits a relative ESM worker asset and keeps the CJS workerUrl override runnable", async () => {
 		const baseConfig = getBaseViteConfig({ mode: "production" })
 		expect(baseConfig.base).toBe("./")
+		expect(baseConfig.build?.rollupOptions?.external).toEqual(
+			expect.arrayContaining(["@zumer/snapdom", "postcss-value-parser", "pptxgenjs"]),
+		)
 		const outDir = await mkdtemp(resolve(packageRoot, "node_modules/.html2pptx-worker-build-"))
 
 		try {
@@ -41,6 +44,7 @@ describe("package build configuration", () => {
 			expect(workerSource).toContain(PACKAGING_RUNTIME_IDENTITY.buildId)
 			expect(esmSource).toContain(PACKAGING_RUNTIME_IDENTITY.artifactHash)
 			expect(workerSource).toContain(PACKAGING_RUNTIME_IDENTITY.artifactHash)
+			expect(esmSource).toMatch(/from ["']postcss-value-parser["']/)
 			expect(esmSource).toMatch(/["']assets\/packaging-worker-[^"']+\.js["']/)
 			expect(esmSource).not.toMatch(/["']\/assets\/packaging-worker-/)
 

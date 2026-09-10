@@ -136,7 +136,7 @@ export function getBaseViteConfig({
 				formats: ["es", "cjs"],
 			},
 			rollupOptions: {
-				external: ["@zumer/snapdom", "pptxgenjs"],
+				external: ["@zumer/snapdom", "postcss-value-parser", "pptxgenjs"],
 				output: {
 					globals: {
 						"@zumer/snapdom": "snapdom",
