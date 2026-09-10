@@ -82,7 +82,6 @@ function ClawPlaygroundInputToolbarComponent({
 	onOpenFiles,
 }: ClawPlaygroundInputToolbarProps) {
 	const { t: tSuper } = useTranslation("super")
-	const { t: tSidebar } = useTranslation("sidebar")
 	const hint = tSuper("clawPlayground.stopTaskBeforeToolbarAction")
 
 	return (
@@ -132,7 +131,7 @@ function ClawPlaygroundInputToolbarComponent({
 				onClick={() => onOpenSkills?.()}
 			>
 				<Skills className="size-4 shrink-0" aria-hidden />
-				{tSidebar("skillsLibrary.title")}
+				{tSuper("clawPlayground.toolbarSkills")}
 			</Button>
 		</div>
 	)

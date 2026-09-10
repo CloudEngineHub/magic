@@ -308,7 +308,8 @@
 	},
 	"clawPlayground": {
 		"stopTaskBeforeToolbarAction": "Stop the current task before using this",
-		"toolbarNewChat": "New Chat"
+		"toolbarNewChat": "New Chat",
+		"toolbarSkills": "Skills"
 	},
 	"collaborationInvite": {
 		"currentLogin": "You will join the shared project as",

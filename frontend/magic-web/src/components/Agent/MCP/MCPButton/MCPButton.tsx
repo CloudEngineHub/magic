@@ -310,6 +310,7 @@ function MCPButton(props?: MCPButtonProps) {
 						<div
 							className="flex items-center gap-2.5 rounded-md px-2 py-2 transition-colors hover:bg-accent/60"
 							key={item.id}
+							data-testid="mcp-installed-connector-item"
 						>
 							<MagicImage
 								className="h-9 w-9 flex-none overflow-hidden rounded-lg"
@@ -335,6 +336,7 @@ function MCPButton(props?: MCPButtonProps) {
 								loading={
 									!activeMCPAccess.initialized || switchLoadingIds.has(item.id)
 								}
+								data-testid="mcp-installed-connector-switch"
 								onCheckedChange={(checked) =>
 									void toggleMCPEnabled(item.id, checked)
 								}
@@ -355,6 +357,7 @@ function MCPButton(props?: MCPButtonProps) {
 					type="button"
 					className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-accent"
 					onClick={openConnectorMarket}
+					data-testid="mcp-add-more-connectors-button"
 				>
 					<IconPlus size={16} />
 					{t("mcp.button.addMoreConnectors")}
@@ -382,6 +385,7 @@ function MCPButton(props?: MCPButtonProps) {
 					sideOffset={8}
 					collisionPadding={16}
 					className="z-[1200] max-h-[calc(100vh-32px)] w-[min(320px,calc(100vw-32px))] max-w-[calc(100vw-32px)] overflow-hidden p-0"
+					data-testid="mcp-installed-connectors-panel"
 				>
 					{content}
 				</PopoverContent>
