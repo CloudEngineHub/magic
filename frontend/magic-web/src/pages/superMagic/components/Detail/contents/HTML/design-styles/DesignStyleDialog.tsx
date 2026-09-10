@@ -269,7 +269,11 @@ export default function DesignStyleDialog({
 
 						{selectedStyle && (
 							<section className="flex min-h-0 flex-1 flex-col">
-								<div className="min-h-0 flex-1 overflow-y-auto bg-muted/20 p-4 sm:p-6">
+								{/* The scrollport has no top padding so sticky section headers can reach its visible edge. */}
+								<div
+									className="min-h-0 flex-1 overflow-y-auto bg-muted/20 px-4 pb-4 sm:px-6 sm:pb-6"
+									data-testid="design-style-detail-scroll"
+								>
 									<DesignStylePreview
 										key={selectedStyle.code}
 										style={selectedStyle}

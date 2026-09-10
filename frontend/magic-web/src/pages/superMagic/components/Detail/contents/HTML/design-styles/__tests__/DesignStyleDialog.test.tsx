@@ -43,6 +43,13 @@ describe("DesignStyleDialog", () => {
 		expect(screen.queryByTestId("design-style-apply-button")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("design-style-card-second-style")).not.toBeInTheDocument()
 		fireEvent.click(card)
+		expect(screen.getByTestId("design-style-detail-scroll")).toHaveClass(
+			"px-4",
+			"pb-4",
+			"sm:px-6",
+			"sm:pb-6",
+		)
+		expect(screen.getByTestId("design-style-detail-scroll")).not.toHaveClass("pt-4", "sm:pt-6")
 		expect(screen.getByTestId("design-style-back")).toHaveFocus()
 		expect(screen.getByTestId("design-style-detail-header")).toHaveTextContent(
 			designStyleFixture.title,

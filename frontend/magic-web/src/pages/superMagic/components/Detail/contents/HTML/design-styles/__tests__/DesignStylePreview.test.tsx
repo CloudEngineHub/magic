@@ -107,6 +107,7 @@ describe("DesignStylePreview", () => {
 	it("keeps each section heading sticky within its own section", () => {
 		renderPreview()
 
+		expect(screen.getByTestId("design-style-preview")).toHaveClass("pt-4", "sm:pt-6")
 		const headerTestIds = [
 			"design-style-page-preview-header",
 			"design-style-color-header",

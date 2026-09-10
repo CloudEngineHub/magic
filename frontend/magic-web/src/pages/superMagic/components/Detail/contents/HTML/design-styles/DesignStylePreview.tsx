@@ -24,7 +24,7 @@ export default function DesignStylePreview({ style, mode }: DesignStylePreviewPr
 
 	return (
 		<div
-			className="mx-auto min-w-0 max-w-[1320px] space-y-4 pb-2"
+			className="mx-auto min-w-0 max-w-[1320px] space-y-4 pb-2 pt-4 sm:pt-6"
 			data-testid="design-style-preview"
 			data-preview-mode={mode}
 		>
