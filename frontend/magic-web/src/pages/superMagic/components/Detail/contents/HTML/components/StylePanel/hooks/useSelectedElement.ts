@@ -22,6 +22,7 @@ function buildRefreshedSelectedElement(
 		isTextElement: previousElement.isTextElement,
 		hasDirectTextContent: previousElement.hasDirectTextContent,
 		textContent: previousElement.textContent,
+		ancestors: previousElement.ancestors,
 		inlineStyles,
 		attributes: previousElement.attributes,
 		computedStyles,

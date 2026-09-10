@@ -502,6 +502,8 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
                     // Add request body based on method
                     if (! empty($data) && in_array(strtoupper($method), ['POST', 'PUT', 'PATCH'])) {
                         $requestOptions['json'] = $data;
+                    } elseif (! empty($data) && strtoupper($method) === 'GET') {
+                        $requestOptions['query'] = $data;
                     }
 
                     $proxyPath = $this->buildProxyPath($sandboxId, $path);

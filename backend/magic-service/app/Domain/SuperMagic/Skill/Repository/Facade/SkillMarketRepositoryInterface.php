@@ -130,6 +130,9 @@ interface SkillMarketRepositoryInterface
      */
     public function findVisibleByIds(array $ids): array;
 
+    /** Query published market skills missing SKILL.md by an ID cursor. */
+    public function findPublishedWithoutSkillFileByIdCursor(int $afterId = 0, int $limit = 100): array;
+
     /**
      * Query published and visible market IDs for cursor-based vector reindexing.
      *

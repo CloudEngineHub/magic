@@ -32,7 +32,7 @@ describe("google cdn rewrite", () => {
 	})
 
 	describe("fonts.googleapis.com/css2 (single family)", () => {
-		it("should rewrite to internal CDN static CSS path", () => {
+		it("keeps Noto Sans SC on a unicode-range capable CSS2 endpoint", () => {
 			const html = `<html><head>
 				<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
 			</head><body></body></html>`
@@ -40,7 +40,23 @@ describe("google cdn rewrite", () => {
 			const doc = rewriteHtmlCdnWithHost(html, CDN_HOST)
 			const hrefs = getLinkHrefs(doc)
 
-			expect(hrefs).toContain(`${CDN_HOST}/google-fonts/css/woff2/Noto_Sans_SC_woff2.css`)
+			expect(hrefs).toContain(
+				"https://fonts.googleapis.com/css2?family=Noto+Sans+SC%3Awght%40400%3B500%3B700%3B900&display=swap",
+			)
+			expect(hrefs).not.toContain(`${CDN_HOST}/google-fonts/css/woff2/Noto_Sans_SC_woff2.css`)
+		})
+
+		it("adds display=swap when a Noto Sans SC request omits it", () => {
+			const html = `<html><head>
+				<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400" rel="stylesheet">
+			</head><body></body></html>`
+
+			const doc = rewriteHtmlCdnWithHost(html, CDN_HOST)
+			const hrefs = getLinkHrefs(doc)
+
+			expect(hrefs).toEqual([
+				"https://fonts.googleapis.com/css2?family=Noto+Sans+SC%3Awght%40400&display=swap",
+			])
 		})
 
 		it("should preserve data-original-href", () => {
@@ -58,7 +74,7 @@ describe("google cdn rewrite", () => {
 	})
 
 	describe("fonts.googleapis.com/css2 (multiple families)", () => {
-		it("should split into multiple <link> tags", () => {
+		it("keeps a mixed Noto Sans SC request together so weight and subset metadata survive", () => {
 			const html = `<html><head>
 				<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Roboto:wght@300&display=swap" rel="stylesheet">
 			</head><body></body></html>`
@@ -66,8 +82,9 @@ describe("google cdn rewrite", () => {
 			const doc = rewriteHtmlCdnWithHost(html, CDN_HOST)
 			const hrefs = getLinkHrefs(doc)
 
-			expect(hrefs).toContain(`${CDN_HOST}/google-fonts/css/woff2/Noto_Sans_SC_woff2.css`)
-			expect(hrefs).toContain(`${CDN_HOST}/google-fonts/css/woff2/Roboto_woff2.css`)
+			expect(hrefs).toEqual([
+				"https://fonts.googleapis.com/css2?family=Noto+Sans+SC%3Awght%40400%3B700&family=Roboto%3Awght%40300&display=swap",
+			])
 		})
 
 		it("should set data-original-href on all split links", () => {
@@ -150,7 +167,7 @@ describe("google cdn rewrite", () => {
 			const styles = getStyleContents(doc)
 
 			expect(styles.join("\n")).toContain(
-				`${CDN_HOST}/google-fonts/css/woff2/Noto_Sans_SC_woff2.css`,
+				"https://fonts.googleapis.com/css2?family=Noto+Sans+SC%3Awght%40300%3B400%3B500%3B700%3B900&display=swap",
 			)
 			expect(styles.join("\n")).toContain(
 				"/*__ORIGINAL_GOOGLE_IMPORT_URL__:https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap__*/",
@@ -158,6 +175,24 @@ describe("google cdn rewrite", () => {
 			expect(styles.join("\n")).not.toContain(
 				"@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');",
 			)
+		})
+	})
+
+	describe("inline font-face declarations", () => {
+		it("adds font-display swap without overwriting an explicit strategy", () => {
+			const html = `<html><head>
+				<style>
+					@font-face { font-family: Demo; src: url("demo.woff2"); }
+					@font-face { font-family: Existing; src: url("existing.woff2"); font-display: optional; }
+				</style>
+			</head><body></body></html>`
+
+			const doc = rewriteHtmlCdnWithHost(html, CDN_HOST)
+			const style = getStyleContents(doc).join("\n")
+
+			expect(style).toContain("font-display: swap;")
+			expect(style).toContain("font-display: optional;")
+			expect(style.match(/font-display:/g)).toHaveLength(2)
 		})
 	})
 

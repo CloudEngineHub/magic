@@ -78,13 +78,15 @@ function createIframeRef() {
 
 interface TestHarnessProps {
 	isEditMode: boolean
+	iframeLoaded?: boolean
 	contentInjected?: boolean
 	renderSiteUrl?: string
-	editorRef?: RefObject<HTMLEditorV2Ref | null>
+	editorRef?: RefObject<HTMLEditorV2Ref>
 }
 
 function TestHarness({
 	isEditMode,
+	iframeLoaded = true,
 	contentInjected = true,
 	renderSiteUrl,
 	editorRef,
@@ -97,7 +99,7 @@ function TestHarness({
 		editorRef: editorRef ?? localEditorRef,
 		isEditMode,
 		sandboxType: "iframe",
-		iframeLoaded: true,
+		iframeLoaded,
 		contentInjected,
 		renderSiteUrl,
 		targetOrigin: "*",
@@ -230,8 +232,25 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 		})
 	})
 
+	it("rejects batch preview commands after the editor bridge is destroyed", async () => {
+		const editorRef = { current: null } as unknown as RefObject<HTMLEditorV2Ref>
+		const { rerender } = render(<TestHarness isEditMode editorRef={editorRef} />)
+		await waitFor(() => expect(editorRef.current?.beginBatchOperation).toBeTypeOf("function"))
+		const editor = editorRef.current
+		if (!editor) throw new Error("Editor ref was not initialized")
+
+		rerender(<TestHarness isEditMode iframeLoaded={false} editorRef={editorRef} />)
+
+		await expect(editor.beginBatchOperation(".slide", { padding: "16px" })).rejects.toThrow(
+			"HTML editor bridge is unavailable",
+		)
+		await expect(editor.applyStylesTemporary(".slide", { padding: "16px" })).rejects.toThrow(
+			"HTML editor bridge is unavailable",
+		)
+	})
+
 	it("returns the iframe layout from applyStylesTemporary", async () => {
-		const editorRef = { current: null } as RefObject<HTMLEditorV2Ref | null>
+		const editorRef = { current: null } as unknown as RefObject<HTMLEditorV2Ref>
 		const layout = {
 			rect: { top: 80, left: 0, width: 220, height: 216 },
 			childRects: [
@@ -244,8 +263,10 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 		bridgeState.instances[0].sendCommand.mockResolvedValue(layout)
 
 		await waitFor(() => expect(editorRef.current?.applyStylesTemporary).toBeTypeOf("function"))
+		const editor = editorRef.current
+		if (!editor) throw new Error("Editor ref was not initialized")
 		await expect(
-			editorRef.current!.applyStylesTemporary("div.meta-grid", { rowGap: "36px" }),
+			editor.applyStylesTemporary("div.meta-grid", { rowGap: "36px" }),
 		).resolves.toEqual(layout)
 	})
 })

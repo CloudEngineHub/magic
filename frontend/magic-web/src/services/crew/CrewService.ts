@@ -18,6 +18,7 @@ import {
 	type GetStoreAgentsParams,
 	type GetUnifiedAgentListParams,
 	type CreateAgentParams,
+	type AsyncPublishTaskResponse,
 	type PublishAgentParams,
 	type PublishAgentPrefillResponse,
 	type UpdateAgentInfoParams,
@@ -334,6 +335,14 @@ export class CrewService {
 
 	publishAgent(code: string, params: PublishAgentParams) {
 		return CrewApi.publishAgent({ code, ...params })
+	}
+
+	publishAgentAsync(code: string, params: PublishAgentParams): Promise<AsyncPublishTaskResponse> {
+		return CrewApi.publishAgentAsync({ code, ...params })
+	}
+
+	checkAgentPublish(code: string, publishTaskId: string): Promise<AsyncPublishTaskResponse> {
+		return CrewApi.checkAgentPublish({ code, publish_task_id: publishTaskId })
 	}
 
 	getAgentPublishPrefill(code: string): Promise<PublishAgentPrefillResponse> {

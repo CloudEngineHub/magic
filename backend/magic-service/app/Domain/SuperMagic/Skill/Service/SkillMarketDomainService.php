@@ -209,6 +209,12 @@ class SkillMarketDomainService
         return $this->skillMarketRepository->findVisibleByIds($ids);
     }
 
+    /** Query published market skills missing SKILL.md by an ID cursor. */
+    public function findPublishedWithoutSkillFileByIdCursor(int $afterId = 0, int $limit = 100): array
+    {
+        return $this->skillMarketRepository->findPublishedWithoutSkillFileByIdCursor($afterId, $limit);
+    }
+
     /**
      * @param array<int, int|string> $categoryIds
      * @param array<int, string> $codes

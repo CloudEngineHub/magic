@@ -113,7 +113,7 @@ const DEFAULT_THRESHOLD = 0
 const DEFAULT_PAGE_SIZE = 1000
 const MIDDLE_BATCH_SNAPSHOT_MIN_GAP_MS = 2500
 const MIDDLE_BATCH_SNAPSHOT_IDLE_TIMEOUT_MS = 1200
-const FILE_TYPES = ["user_upload", "process", "system_auto_upload", "directory"]
+const FILE_TYPES = ["user_upload", "user_create", "process", "system_auto_upload", "directory"]
 
 type WindowWithIdleCallback = Window & {
 	requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number

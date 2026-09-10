@@ -37,6 +37,7 @@ use App\Domain\SuperMagic\File\Service\AudioProjectDomainService;
 use App\Domain\SuperMagic\File\Service\FileCollectionDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Event\ForkProjectStartEvent;
 use App\Domain\SuperMagic\Project\Event\ProjectForkEvent;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectForkRepositoryInterface;
@@ -3062,7 +3063,8 @@ class ResourceShareAppService extends AbstractShareAppService
                 $targetWorkspaceId,
                 $projectName,
                 $dataIsolation->getCurrentUserId(),
-                $dataIsolation->getCurrentOrganizationCode()
+                $dataIsolation->getCurrentOrganizationCode(),
+                ProjectMode::GENERAL->value
             );
 
             // 初始化项目成员和设置

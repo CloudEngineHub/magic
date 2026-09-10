@@ -15,6 +15,7 @@ import { RouteName } from "@/routes/constants"
 import { omit } from "lodash-es"
 import { whiteListRoutes } from "@/routes/const/whiteRoutes"
 import { refreshAccountContextPage } from "@/broadcastChannel/eventFactory/accountContextRefresh"
+import { defaultClusterCode } from "@/routes/helpers"
 
 const clusterConfigLoadedCache = new Set<string>()
 
@@ -44,10 +45,13 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 	const { clustersConfig } = useClusterConfig()
 
 	// 使用 useMemo 避免不必要的初始状态计算
-	const initialSameCluster = useMemo(
-		() => targetClusterCode === configStore.cluster.clusterCode,
-		[targetClusterCode, configStore.cluster.clusterCode],
-	)
+	const initialSameCluster = useMemo(() => {
+		const code =
+			configStore.cluster.clusterCode === defaultClusterCode
+				? ""
+				: configStore.cluster.clusterCode
+		return targetClusterCode === code
+	}, [targetClusterCode, configStore.cluster.clusterCode])
 
 	// 预先检查是否为白名单路由（只在 mount 时计算一次）
 	const isWhiteListRoute = useMemo(
@@ -181,8 +185,11 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 		abortControllerRef.current = abortController
 
 		// 快速判断：如果集群已匹配或在白名单中，立即执行（无需防抖）
-		const needsSwitch =
-			targetClusterCode !== configStore.cluster.clusterCode && !isWhiteListRoute
+		const code =
+			configStore.cluster.clusterCode === defaultClusterCode
+				? ""
+				: configStore.cluster.clusterCode
+		const needsSwitch = targetClusterCode !== code && !isWhiteListRoute
 
 		if (!needsSwitch) {
 			// 无需切换，立即执行

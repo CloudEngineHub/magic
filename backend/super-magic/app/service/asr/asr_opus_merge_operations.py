@@ -99,6 +99,15 @@ class AsrOpusMergeOperations(AsrServiceBase):
                 extra={
                     "audio_format": "opus",
                     "merge_strategy": "opus_finish_full_rebuild_v1",
+                    "merge_mode": "normalized_reencode",
+                    "audio_signature": "opus:opus:16000:1:0",
+                    "audio_signature_details": {
+                        "format": "opus",
+                        "codec": "opus",
+                        "sample_rate": 16000,
+                        "channels": 1,
+                        "bits_per_sample": 0,
+                    },
                     "merge_attempt_id": token,
                     "source_shard_count": len(indices),
                     "source_last_index": indices[-1],

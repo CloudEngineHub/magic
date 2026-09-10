@@ -333,15 +333,27 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		},
 		[],
 	)
-	const supportedReferenceKinds = useMemo(
-		() =>
-			[
-				supportsReferenceImages ? "image" : null,
-				supportsReferenceVideos ? "video" : null,
-				supportsReferenceAudios ? "audio" : null,
-			].filter((item): item is VideoReferenceAssetKind => Boolean(item)),
-		[supportsReferenceAudios, supportsReferenceImages, supportsReferenceVideos],
-	)
+	const supportedReferenceKinds = useMemo(() => {
+		// video_edit：视频槽在前，方便先选待编辑视频再补参考图
+		const orderedKinds =
+			selectedInputMode === "video_edit"
+				? [
+						supportsReferenceVideos ? "video" : null,
+						supportsReferenceImages ? "image" : null,
+						supportsReferenceAudios ? "audio" : null,
+					]
+				: [
+						supportsReferenceImages ? "image" : null,
+						supportsReferenceVideos ? "video" : null,
+						supportsReferenceAudios ? "audio" : null,
+					]
+		return orderedKinds.filter((item): item is VideoReferenceAssetKind => Boolean(item))
+	}, [
+		selectedInputMode,
+		supportsReferenceAudios,
+		supportsReferenceImages,
+		supportsReferenceVideos,
+	])
 	const referenceSlotLabelByType = useMemo(
 		() => ({
 			image:

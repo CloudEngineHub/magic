@@ -7,7 +7,7 @@ import pytest
 import tests.tools.canvas.helpers  # noqa: F401
 from app.tools.canvas.application.commands import ContentCommand
 from app.tools.canvas.bootstrap import CanvasApplicationFactory
-from app.tools.canvas.domain.content_fields import ImageContentFields, TextContentFields
+from app.tools.canvas.domain.content_fields import ImageContentFields, TextContentFields, VideoContentFields
 from app.tools.canvas.domain.errors import CanvasBatchError, CanvasDomainError, CanvasProtocolError
 from app.tools.canvas.domain.models import (
     CanvasConnection,
@@ -88,6 +88,51 @@ def test_codec_rejects_unsupported_version() -> None:
         CanvasCodec.decode(legacy)
 
     assert error.value.code == "UNSUPPORTED_CANVAS_VERSION"
+
+
+def test_codec_preserves_unknown_frontend_fields_when_reading_and_saving() -> None:
+    """读取和保存时保留前端新增字段，不因未知字段让整个画布失败。"""
+    draft = {
+        "version": 1,
+        "request": {
+            "model_id": "minimaxh3",
+            "input_mode": "omni_reference",
+        },
+    }
+    project = CanvasProject(
+        version="3.0.0",
+        project_type="design",
+        name="mock-project",
+        canvas=CanvasDocument(
+            elements=[
+                CanvasElement(
+                    element_id="video-1",
+                    element_type="video",
+                    contents=[
+                        CanvasContent(
+                            "video-1-content",
+                            VideoContentFields(),
+                            extra_data={"videoEditorDraft": draft},
+                        )
+                    ],
+                    active_content_id="video-1-content",
+                    main_content_id="video-1-content",
+                    extra_data={"frontendElementState": {"selected": True}},
+                )
+            ],
+        ),
+    )
+
+    decoded = CanvasCodec.decode(CanvasCodec.encode(project))
+    content = decoded.canvas.elements[0].contents[0]
+    element = decoded.canvas.elements[0]
+
+    assert content.extra_data["videoEditorDraft"] == draft
+    assert element.extra_data == {"frontendElementState": {"selected": True}}
+
+    saved_again = CanvasCodec.decode(CanvasCodec.encode(decoded))
+    assert saved_again.canvas.elements[0].contents[0].extra_data["videoEditorDraft"] == draft
+    assert saved_again.canvas.elements[0].extra_data == {"frontendElementState": {"selected": True}}
 
 
 @pytest.mark.asyncio

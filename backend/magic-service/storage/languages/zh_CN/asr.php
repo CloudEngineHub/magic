@@ -134,6 +134,7 @@ return [
 
     // 文件名相关
     'file_names' => [
+        'recording_at' => ':time 的录音',
         'recording_prefix' => '录音',
         'merged_audio_prefix' => '录音文件',
         'original_recording' => '原始录音文件',

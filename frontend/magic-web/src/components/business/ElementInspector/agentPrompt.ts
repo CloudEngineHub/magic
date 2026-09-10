@@ -8,15 +8,33 @@ import type {
 	InspectedElementInfo,
 } from "./types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
+import type { TFunction } from "i18next"
+import { getInspectorElementDisplayText } from "./format"
 import { getHtmlElementLabel } from "./selection"
 
 /** Build the structured inspector context inserted into the agent input. */
+function resolveTextPreview(
+	info: Pick<InspectedElementInfo, "tagName" | "textContent" | "accessibleName">,
+	t?: TFunction,
+): string {
+	const raw = t
+		? getInspectorElementDisplayText(info, t)
+		: normalizeInspectorText(info.textContent)
+	if (!raw) return ""
+	return raw.length > 60 ? `${raw.slice(0, 60)}…` : raw
+}
+
+function normalizeInspectorText(value?: string): string {
+	return value?.replace(/\s+/g, " ").trim() ?? ""
+}
+
 export function buildAgentPromptContent(
 	info: InspectedElementInfo,
 	title: string,
 	fileInfo?: { fileId: string; fileName: string; filePath: string },
 	screenshotMention?: TiptapMentionAttributes | null,
 	captureId?: string,
+	t?: TFunction,
 ): JSONContent {
 	const paragraphs: JSONContent[] = []
 	const fileMention = fileInfo
@@ -74,11 +92,7 @@ export function buildAgentPromptContent(
 			computedStyles[line.slice(0, separatorIndex)] = line.slice(separatorIndex + 2)
 		}
 	}
-	const textPreview = info.textContent
-		? info.textContent.length > 60
-			? `${info.textContent.slice(0, 60)}…`
-			: info.textContent
-		: ""
+	const textPreview = resolveTextPreview(info, t)
 
 	paragraphs.push({
 		type: "paragraph",
@@ -132,8 +146,9 @@ function buildInspectorDetailNode(
 	title: string,
 	screenshotMention?: TiptapMentionAttributes | null,
 	captureId?: string,
+	t?: TFunction,
 ): JSONContent {
-	const content = buildAgentPromptContent(info, title, undefined, screenshotMention, captureId)
+	const content = buildAgentPromptContent(info, title, undefined, screenshotMention, captureId, t)
 	return content.content?.[0]?.content?.[0] ?? { type: "text", text: info.tagName }
 }
 
@@ -146,11 +161,15 @@ function buildInspectorDetailNodeFromTarget(
 	target: HtmlMultiSelectionRequestTarget,
 	title: string,
 	screenshotMention?: TiptapMentionAttributes | null,
+	t?: TFunction,
 ): JSONContent {
 	const tagName =
 		target.selector.match(/(?:^|\s|>)\s*([a-z][a-z0-9-]*)/i)?.[1] ??
 		target.elementLabel.match(/^[a-z][a-z0-9-]*/i)?.[0] ??
 		""
+	const textContent = t
+		? resolveTextPreview({ tagName, textContent: target.textContent ?? "" }, t)
+		: (target.textContent ?? "")
 	return {
 		type: INSPECTOR_DETAIL_TYPE,
 		attrs: {
@@ -160,7 +179,7 @@ function buildInspectorDetailNodeFromTarget(
 			size: "",
 			computedStyles: "{}",
 			styleCount: 0,
-			textContent: target.textContent ?? "",
+			textContent,
 			elementAttributes: "{}",
 			resource: "",
 			domContext: target.domContext ? JSON.stringify(target.domContext) : "{}",
@@ -178,6 +197,7 @@ export function buildHtmlMultiSelectionPromptContent(
 	targets: Array<HtmlSelectionTarget | HtmlMultiSelectionRequestTarget>,
 	title: string,
 	screenshotMentions: Map<string, TiptapMentionAttributes> = new Map(),
+	t?: TFunction,
 ): JSONContent {
 	const content: JSONContent[] = [
 		{
@@ -226,12 +246,12 @@ export function buildHtmlMultiSelectionPromptContent(
 		if (info) {
 			content.push({
 				type: "paragraph",
-				content: [buildInspectorDetailNode(info, title, undefined, target.id)],
+				content: [buildInspectorDetailNode(info, title, undefined, target.id, t)],
 			})
 		} else {
 			content.push({
 				type: "paragraph",
-				content: [buildInspectorDetailNodeFromTarget(target, title)],
+				content: [buildInspectorDetailNodeFromTarget(target, title, undefined, t)],
 			})
 		}
 	})

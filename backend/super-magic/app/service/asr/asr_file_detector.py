@@ -7,7 +7,9 @@ ASR 文件检测和分类模块
 import asyncio
 import json
 import re
+import wave
 from asyncio.subprocess import PIPE
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -15,6 +17,23 @@ from loguru import logger
 
 from app.service.asr.asr_base import AsrServiceBase
 from app.service.asr.asr_utils import SUPPORTED_AUDIO_FORMATS, validate_audio_format_for_write
+
+
+@dataclass(frozen=True)
+class AudioSignature:
+    """可用于比较和缓存的音频流参数签名。"""
+
+    format: str
+    codec: str
+    sample_rate: int
+    channels: int
+    bits_per_sample: int
+
+    def as_key(self) -> str:
+        return (
+            f"{self.format}:{self.codec}:{self.sample_rate}:"
+            f"{self.channels}:{self.bits_per_sample}"
+        )
 
 
 class AsrFileDetector(AsrServiceBase):
@@ -150,6 +169,44 @@ class AsrFileDetector(AsrServiceBase):
         fmt = payload.get("format") or {}
         return {**stream, "format_name": fmt.get("format_name", "")}
 
+    async def inspect_audio_signature(self, path: Path, expected_format: str) -> AudioSignature:
+        """读取用于合并决策的音频参数；WAV 使用本地文件头，Opus 复用 ffprobe。"""
+        expected = validate_audio_format_for_write(expected_format)
+        if not path.is_file() or path.stat().st_size <= 0:
+            raise ValueError("Audio shard is missing or empty")
+
+        if expected == "wav":
+            try:
+                with wave.open(str(path), "rb") as wav_file:
+                    sample_width = wav_file.getsampwidth()
+                    frames = wav_file.getnframes()
+                    if frames <= 0:
+                        raise ValueError("WAV data section is empty")
+                    return AudioSignature(
+                        format="wav",
+                        codec="pcm_s16le" if sample_width == 2 else f"pcm_s{sample_width * 8}",
+                        sample_rate=wav_file.getframerate(),
+                        channels=wav_file.getnchannels(),
+                        bits_per_sample=sample_width * 8,
+                    )
+            except (wave.Error, EOFError) as exc:
+                raise ValueError(f"WAV header parse failed: {exc}") from exc
+
+        metadata = await self.probe_audio_file(path)
+        try:
+            channels = int(metadata.get("channels") or 0)
+            sample_rate = int(metadata.get("sample_rate") or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Invalid audio stream metadata") from exc
+        codec = str(metadata.get("codec_name") or "unknown").lower()
+        return AudioSignature(
+            format=expected,
+            codec=codec,
+            sample_rate=sample_rate,
+            channels=channels,
+            bits_per_sample=0,
+        )
+
     async def validate_audio_file(self, path: Path, expected_format: str) -> tuple[bool, str]:
         """Validate a shard's actual container/codec against its task format."""
         try:
@@ -160,6 +217,9 @@ class AsrFileDetector(AsrServiceBase):
         try:
             if not path.is_file() or path.stat().st_size <= 0:
                 return False, "Audio shard is missing or empty"
+            if expected == "wav":
+                await self.inspect_audio_signature(path, "wav")
+                return True, ""
             metadata = await self.probe_audio_file(path)
         except Exception as exc:
             return False, f"Audio probe failed: {exc}"

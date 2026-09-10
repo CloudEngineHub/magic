@@ -10,6 +10,7 @@ namespace App\Application\SuperMagic\Agent\Service;
 use App\Application\Contact\UserSetting\UserSettingKey;
 use App\Application\Flow\ExecuteManager\NodeRunner\LLM\ToolsExecutor;
 use App\Application\SuperMagic\Agent\DTO\PublishAgentResultDTO;
+use App\Application\SuperMagic\Publish\PublishAsyncStatusManager;
 use App\Domain\Contact\Entity\MagicDepartmentEntity;
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\MagicUserSettingEntity;
@@ -74,6 +75,7 @@ use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\File\EasyFileTools;
+use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\SuperMagic\Agent\DTO\Request\GetMyAvailableAgentsRequestDTO;
 use App\Interfaces\SuperMagic\Agent\DTO\Request\PublishAgentRequestDTO;
@@ -135,6 +137,9 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
     #[Inject]
     protected SkillsMdSyncService $skillsMdSyncService;
+
+    #[Inject]
+    protected PublishAsyncStatusManager $publishAsyncStatusManager;
 
     #[Inject]
     protected MagicDepartmentDomainService $magicDepartmentDomainService;
@@ -952,6 +957,171 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $versionEntity->setPublishTargetValue($requestDTO->toPublishTargetValue());
 
         return $this->publishPreparedAgentVersion($authorization, $dataIsolation, $code, $agentEntity, $versionEntity, true);
+    }
+
+    /** 创建异步 Agent 发布任务。 */
+    public function createAsyncPublishAgent(Authenticatable $authorization, string $code, PublishAgentRequestDTO $requestDTO): array
+    {
+        $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
+        $this->assertAgentEditable($dataIsolation, $code);
+        $agentEntity = $this->superMagicAgentDomainService->getByCodeWithException($dataIsolation, $code);
+
+        if ($requestDTO->getPublishTargetType() === PublishTargetType::MARKET->value) {
+            $this->superMagicAgentCategoryDomainService->assertIdsExist($requestDTO->getCategoryIds());
+        }
+        $projectId = $agentEntity->getProjectId();
+        if (empty($projectId)) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'super_magic.agent.export_failed');
+        }
+        $projectEntity = $this->projectDomainService->getProjectNotUserId($projectId);
+        if ($projectEntity === null) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'project.project_not_found');
+        }
+        [$excludePaths, $skillsMdHash] = $this->preparePublishSkillReferences($dataIsolation, $code, $projectId, $projectEntity);
+        $sourcePath = $this->resolvePublishExportSourcePath($projectId);
+        $this->validateIdentityMdExists($projectId);
+
+        // 同一版本已有发布中任务时复用版本和任务状态，避免重复创建版本。
+        $reusedVersion = null;
+        $existingVersions = $this->superMagicAgentVersionDomainService->queriesByCode($dataIsolation, $code, null, null, Page::createNoPage(), includePublishing: true)['list'];
+        foreach ($existingVersions as $existingVersion) {
+            if ($existingVersion->getVersion() === $requestDTO->getVersion()
+                && $existingVersion->getPublisherUserId() === $dataIsolation->getCurrentUserId()
+                && $existingVersion->getPublishStatus()->isPublishing()
+                && $existingVersion->getId() !== null
+            ) {
+                $existingTaskId = (string) $existingVersion->getId();
+                $existingStatus = $this->publishAsyncStatusManager->get($existingTaskId);
+                if ($existingStatus !== null && ($existingStatus['status'] ?? '') !== 'failed') {
+                    return $existingStatus;
+                }
+                if ($existingStatus !== null) {
+                    $this->publishAsyncStatusManager->update($existingTaskId, ['status' => 'processing', 'progress' => 0, 'file_key' => null, 'error' => null]);
+                }
+                $reusedVersion = $existingVersion;
+                break;
+            }
+        }
+
+        $versionEntity = $reusedVersion ?? new AgentVersionEntity();
+        if ($reusedVersion === null) {
+            $versionEntity->setCode($code);
+            $versionEntity->setVersion($requestDTO->getVersion());
+            $versionEntity->setVersionDescriptionI18n($requestDTO->getVersionDescriptionI18n() ?? []);
+            $versionEntity->setPublishTargetType($requestDTO->getPublishTargetType());
+            $versionEntity->setPublishTargetValue($requestDTO->toPublishTargetValue());
+            if ($requestDTO->getPublishTargetType() === PublishTargetType::MARKET->value) {
+                $versionEntity->setCategoryIds($requestDTO->getCategoryIds());
+            }
+
+            Db::beginTransaction();
+            try {
+                $versionEntity = $this->superMagicAgentVersionDomainService->publishAgent($dataIsolation, $agentEntity, $versionEntity, true);
+                if ($versionEntity->getId() !== null) {
+                    $this->superMagicAgentCategoryRelationDomainService->replaceVersionCategories($dataIsolation, $versionEntity->getId(), $versionEntity->getCategoryIds());
+                }
+                Db::commit();
+            } catch (Throwable $e) {
+                Db::rollBack();
+                throw $e;
+            }
+        }
+
+        $taskId = (string) ($versionEntity->getId() ?? IdGenerator::getUniqueId32());
+        $taskKey = 'publish:agent:' . $taskId;
+        $this->publishAsyncStatusManager->initialize($taskId, [
+            'resource_type' => 'agent', 'resource_code' => $code,
+            'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+            'publisher_user_id' => $dataIsolation->getCurrentUserId(),
+            'version_id' => $versionEntity->getId(), 'task_key' => $taskKey,
+        ]);
+        try {
+            $sandboxId = $this->initializeAgentPublishSandbox($dataIsolation, $code, $projectEntity);
+            $result = $this->superMagicAgentDomainService->createAgentWorkspaceExportAsync(
+                $dataIsolation,
+                $code,
+                $sandboxId,
+                $sourcePath ?? '',
+                $code . '_' . $taskId . '.zip',
+                $taskKey,
+                $excludePaths,
+                $skillsMdHash
+            );
+            $this->publishAsyncStatusManager->update($taskId, ['sandbox_id' => $sandboxId, 'task_key' => $taskKey]);
+            if (($result['status'] ?? '') === 'FAILED' || (($result['code'] ?? 1000) !== 1000 && ($result['code'] ?? -1) !== 4000)) {
+                throw new RuntimeException((string) ($result['message'] ?? 'sandbox export failed'));
+            }
+        } catch (Throwable $e) {
+            $this->logger->error('异步 Agent 发布失败', ['task_id' => $taskId, 'error' => $e->getMessage()]);
+            $this->publishAsyncStatusManager->update($taskId, ['status' => 'failed', 'error' => '发布任务执行失败，请重新发起发布']);
+        }
+        return $this->publishAsyncStatusManager->get($taskId) ?? ['publish_task_id' => $taskId, 'status' => 'processing'];
+    }
+
+    /** 查询并推进异步 Agent 发布任务。 */
+    public function checkAsyncPublishAgent(Authenticatable $authorization, string $code, string $taskId): array
+    {
+        $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
+        $this->assertAgentEditable($dataIsolation, $code);
+        $status = $this->publishAsyncStatusManager->get($taskId);
+        if ($status === null) {
+            $version = $this->superMagicAgentVersionDomainService->findByIdWithoutOrganizationFilter((int) $taskId);
+            if ($version !== null
+                && $version->getCode() === $code
+                && $version->getOrganizationCode() === $dataIsolation->getCurrentOrganizationCode()
+                && $version->getPublisherUserId() === $dataIsolation->getCurrentUserId()
+                && $version->getPublishStatus()->isPublished()
+                && $version->getFileKey() !== null
+            ) {
+                return ['publish_task_id' => $taskId, 'status' => 'ready', 'progress' => 100, 'file_key' => $version->getFileKey()];
+            }
+        }
+        if ($status === null || ($status['resource_type'] ?? '') !== 'agent' || ($status['resource_code'] ?? '') !== $code
+            || ($status['organization_code'] ?? '') !== $dataIsolation->getCurrentOrganizationCode()
+            || ($status['publisher_user_id'] ?? '') !== $dataIsolation->getCurrentUserId()) {
+            return ['publish_task_id' => $taskId, 'status' => 'failed', 'error' => '发布任务不存在或已过期'];
+        }
+        if (in_array($status['status'] ?? '', ['ready', 'failed'], true)) {
+            return $status;
+        }
+        if (empty($status['sandbox_id'])) {
+            return $status;
+        }
+        $sandboxId = (string) ($status['sandbox_id'] ?? '');
+        $taskKey = (string) ($status['task_key'] ?? ('publish:agent:' . $taskId));
+        if ($sandboxId === '') {
+            return $status;
+        }
+        try {
+            $result = $this->superMagicAgentDomainService->checkAgentWorkspaceExportAsync($dataIsolation, $sandboxId, $taskKey);
+            $sandboxStatus = strtoupper((string) ($result['status'] ?? ''));
+            if (($result['code'] ?? 1000) === 4004 || $sandboxStatus === 'FAILED') {
+                $this->publishAsyncStatusManager->update($taskId, ['status' => 'failed', 'error' => (string) ($result['message'] ?? 'sandbox export failed')]);
+            } elseif (in_array($sandboxStatus, ['COMPLETED', 'SUCCESS'], true) && ($result['file_key'] ?? '') !== '') {
+                Db::beginTransaction();
+                try {
+                    $previousVersion = $this->superMagicAgentVersionDomainService->getCurrentVersionByCodeForUpdate($dataIsolation, $code);
+                    $version = $this->superMagicAgentVersionDomainService->finalizePreparedAgent($dataIsolation, (int) $status['version_id'], (string) $result['file_key']);
+                    $agent = $this->superMagicAgentDomainService->getByCodeWithException($dataIsolation, $code);
+                    $agent->setFileKey((string) $result['file_key']);
+                    $this->superMagicAgentDomainService->save($dataIsolation, $agent, false);
+                    if ($version->getPublishStatus()->isPublished()) {
+                        $this->syncAgentPublishScopeTransition($dataIsolation, $agent, $previousVersion, $version);
+                    }
+                    Db::commit();
+                } catch (Throwable $e) {
+                    Db::rollBack();
+                    throw $e;
+                }
+                $this->publishAsyncStatusManager->update($taskId, ['status' => 'ready', 'progress' => 100, 'file_key' => $result['file_key']]);
+            } else {
+                $this->publishAsyncStatusManager->update($taskId, ['progress' => (int) ($result['progress'] ?? $status['progress'] ?? 0)]);
+            }
+        } catch (Throwable $e) {
+            $this->logger->error('异步 Agent 发布检查失败', ['task_id' => $taskId, 'error' => $e->getMessage()]);
+            $this->publishAsyncStatusManager->update($taskId, ['status' => 'failed', 'error' => '发布任务检查失败，请重新发起发布']);
+        }
+        return $this->publishAsyncStatusManager->get($taskId) ?? $status;
     }
 
     /**
@@ -2764,6 +2934,37 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         return $list;
     }
 
+    /** @return array{0: array, 1: ?string} */
+    private function preparePublishSkillReferences(SuperMagicAgentDataIsolation $dataIsolation, string $code, int $projectId, ProjectEntity $projectEntity): array
+    {
+        try {
+            $bound = $this->skillsMdSyncService->getBoundSkills($dataIsolation, $code);
+            $skillsMdHash = $this->skillsMdSyncService->syncSkillsMd(
+                $projectId,
+                $projectEntity,
+                $dataIsolation->getCurrentOrganizationCode(),
+                $projectEntity->getUserOrganizationCode(),
+                [],
+                SkillsMdSyncService::OPERATION_SYNC,
+                $bound['system_skills'],
+                $bound['market_skills'],
+                true
+            );
+        } catch (RuntimeException $e) {
+            // 发布前的严格重建失败（绑定技能无可用版本/包名冲突/SKILLS.md 读写失败等）必须中止发布，
+            // 但要以业务异常码暴露给用户，不能裸抛 RuntimeException 变成 500 + 英文原文
+            ExceptionBuilder::throw(
+                SuperAgentErrorCode::PUBLISH_SKILLS_SYNC_FAILED,
+                'super_magic.agent.publish.skills_sync_failed',
+                ['reason' => $e->getMessage()],
+                null,
+                $e
+            );
+        }
+        $excludePaths = array_map(static fn (array $entry): string => 'skills/' . $entry['name'], $bound['market_skills']);
+        return [$excludePaths, $skillsMdHash];
+    }
+
     /**
      * 发布准备智能体版本.
      */
@@ -2782,31 +2983,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             if ($projectEntity === null) {
                 ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
             }
-            try {
-                $bound = $this->skillsMdSyncService->getBoundSkills($dataIsolation, $code);
-                $skillsMdHash = $this->skillsMdSyncService->syncSkillsMd(
-                    $projectId,
-                    $projectEntity,
-                    $dataIsolation->getCurrentOrganizationCode(),
-                    $projectEntity->getUserOrganizationCode(),
-                    [],
-                    SkillsMdSyncService::OPERATION_SYNC,
-                    $bound['system_skills'],
-                    $bound['market_skills'],
-                    true
-                );
-            } catch (RuntimeException $e) {
-                // 发布前的严格重建失败（绑定技能无可用版本/包名冲突/SKILLS.md 读写失败等）必须中止发布，
-                // 但要以业务异常码暴露给用户，不能裸抛 RuntimeException 变成 500 + 英文原文
-                ExceptionBuilder::throw(
-                    SuperAgentErrorCode::PUBLISH_SKILLS_SYNC_FAILED,
-                    'super_magic.agent.publish.skills_sync_failed',
-                    ['reason' => $e->getMessage()],
-                    null,
-                    $e
-                );
-            }
-            $excludePaths = array_map(static fn (array $entry): string => 'skills/' . $entry['name'], $bound['market_skills']);
+            [$excludePaths, $skillsMdHash] = $this->preparePublishSkillReferences($dataIsolation, $code, $projectId, $projectEntity);
 
             $sourcePath = $this->resolvePublishExportSourcePath($agentEntity->getProjectId());
             $this->validateIdentityMdExists($agentEntity->getProjectId());

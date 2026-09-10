@@ -32,7 +32,9 @@ use App\ErrorCode\SuperMagicErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Core\ValueObject\Page;
+use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\Context\RequestContext;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillMarketsRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillVersionsRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\ReviewOrganizationSkillVersionRequestDTO;
@@ -41,6 +43,7 @@ use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillMarketRequestAdminDTO
 use App\Interfaces\SuperMagic\Skill\DTO\Response\QuerySkillMarketsResponseAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\QuerySkillVersionsResponseAdminDTO;
 use Dtyq\AsyncEvent\AsyncEventUtil;
+use Hyperf\Coroutine\Coroutine;
 use Hyperf\DbConnection\Db;
 use Throwable;
 
@@ -134,6 +137,79 @@ class AdminSkillAppService extends AbstractSkillAppService
     {
         $dataIsolation = $this->createSkillDataIsolation($requestContext->getUserAuthorization());
         return $this->reconcileMarketVectorIndex($dataIsolation);
+    }
+
+    /** Backfill published market versions whose SKILL.md snapshot is missing. */
+    public function repairSkillFileUrls(RequestContext $requestContext): array
+    {
+        $dataIsolation = $this->createSkillDataIsolation($requestContext->getUserAuthorization());
+        $dataIsolation->disabled();
+        $afterId = 0;
+        $total = $updated = $skipped = $failed = 0;
+        $errors = [];
+        while (true) {
+            $batch = $this->skillMarketDomainService->findPublishedWithoutSkillFileByIdCursor($afterId);
+            if ($batch === []) {
+                break;
+            }
+
+            $versionIds = array_map(
+                static fn (SkillMarketEntity $market): int => (int) $market->getSkillVersionId(),
+                $batch
+            );
+            $versions = $this->skillVersionDomainService->findSkillVersionsByIdsWithoutOrganizationFilter($versionIds);
+            $total += count($versions);
+            foreach ($versions as $version) {
+                $fileKey = $version->getFileKey();
+                if ($fileKey === null || trim($fileKey) === '') {
+                    ++$skipped;
+                    $this->logger->info('Skill file URL repair skipped', [
+                        'version_id' => $version->getId(),
+                        'skill_code' => $version->getCode(),
+                        'source_type' => $version->getSourceType()->value,
+                        'reason' => 'empty_file_key',
+                    ]);
+                    continue;
+                }
+
+                try {
+                    $version->setSkillFileKey($this->uploadSkillFileFromPackage($version));
+                    $this->skillVersionDomainService->saveSkillVersion($dataIsolation, $version);
+                    ++$updated;
+                } catch (Throwable $throwable) {
+                    ++$failed;
+                    $errors[] = ['version_id' => $version->getId(), 'message' => $throwable->getMessage()];
+                    $this->logger->error('Skill file URL repair failed', [
+                        'version_id' => $version->getId(),
+                        'skill_code' => $version->getCode(),
+                        'exception' => $throwable::class,
+                        'message' => $throwable->getMessage(),
+                    ]);
+                }
+            }
+            $afterId = (int) $batch[array_key_last($batch)]->getId();
+        }
+
+        return ['total' => $total, 'updated' => $updated, 'skipped' => $skipped, 'failed' => $failed, 'errors' => $errors];
+    }
+
+    public function repairSkillFileUrlsAsync(MagicUserAuthorization $authorization): void
+    {
+        $coroutineId = Coroutine::id();
+        Coroutine::create(function () use ($authorization, $coroutineId): void {
+            CoContext::copy($coroutineId);
+            try {
+                $requestContext = new RequestContext();
+                $requestContext->setUserAuthorization($authorization);
+                $result = $this->repairSkillFileUrls($requestContext);
+                $this->logger->info('Skill file URL repair finished', $result);
+            } catch (Throwable $throwable) {
+                $this->logger->error('Skill file URL repair failed', [
+                    'exception' => $throwable::class,
+                    'message' => $throwable->getMessage(),
+                ]);
+            }
+        });
     }
 
     /** Clean orphan points and queue every visible market Skill for reconciliation. */

@@ -18,6 +18,12 @@ export interface SelectedElementInfo {
 	hasDirectTextContent?: boolean
 	/** 元素当前的文本内容 */
 	textContent?: string
+	ancestors?: Array<{
+		selector: string
+		tagName: string
+		textContent?: string
+		rect: ElementRect
+	}>
 	/** 元素当前的内联 CSS 声明 */
 	inlineStyles?: Record<string, string>
 	/** 图片原始宽度 */
@@ -219,7 +225,12 @@ export type FlexDirection = "row" | "row-reverse" | "column" | "column-reverse"
  * Flex 主轴对齐
  */
 export type JustifyContent =
-	"flex-start" | "center" | "flex-end" | "space-between" | "space-around" | "space-evenly"
+	| "flex-start"
+	| "center"
+	| "flex-end"
+	| "space-between"
+	| "space-around"
+	| "space-evenly"
 
 /**
  * Flex 交叉轴对齐

@@ -38,6 +38,15 @@ export function getAttachmentFileName(file: AttachmentItem | undefined): string 
 	return file?.file_name || file?.filename || file?.display_filename || file?.name || ""
 }
 
+/** Checks whether the recording bundle explicitly declares a non-empty file path. */
+export function hasConfiguredRecordingFile(
+	fileMap: RecordingDetailFileMap | null | undefined,
+	type: string,
+): boolean {
+	const configuredPath = fileMap?.magicProjectConfig?.files?.[type]
+	return typeof configuredPath === "string" && configuredPath.trim().length > 0
+}
+
 /** Flattens tree/list attachment data into one deduplicated file list for lookup. */
 export function flattenRecordingAttachments(
 	tree: AttachmentItem[] = [],

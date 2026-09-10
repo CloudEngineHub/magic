@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../../app/providers/MagicProvider"
 import type {
@@ -35,10 +35,17 @@ export function useVideoPointsEstimate(
 	const { canvas } = useCanvas()
 	const { methods, getCachedVideoPointsEstimate, getVideoPointsEstimate } = useMagic()
 	const [estimate, setEstimate] = useState<EstimateVideoPointsResponse | null>(null)
+	const [estimateSignature, setEstimateSignature] = useState<string | null>(null)
 	const [error, setError] = useState<unknown>(null)
 	const [isLoading, setIsLoading] = useState(false)
 	const [deferralVersion, setDeferralVersion] = useState(0)
 	const resolveResourceReference = methods?.resolveResourceReference
+	const requestRef = useRef(request)
+	requestRef.current = request
+	const getCachedVideoPointsEstimateRef = useRef(getCachedVideoPointsEstimate)
+	getCachedVideoPointsEstimateRef.current = getCachedVideoPointsEstimate
+	const getVideoPointsEstimateRef = useRef(getVideoPointsEstimate)
+	getVideoPointsEstimateRef.current = getVideoPointsEstimate
 
 	const requestResourcePaths = useMemo(() => {
 		return collectVideoGenerationRequestResourcePaths(request, resolveResourceReference)
@@ -93,35 +100,47 @@ export function useVideoPointsEstimate(
 	}, [canvas, estimateGate.blockedReason, pendingResourceKey, pendingResourcePaths, signature])
 
 	useEffect(() => {
-		if (!canEstimate || !signature || !request?.model_id) {
+		const latestRequest = requestRef.current
+
+		if (!canEstimate || !signature || !latestRequest?.model_id) {
 			setEstimate(null)
+			setEstimateSignature(null)
 			setError(null)
 			setIsLoading(false)
 			return
 		}
 
-		const cachedEstimate = getCachedVideoPointsEstimate(signature)
+		const cachedEstimate = getCachedVideoPointsEstimateRef.current(signature)
 		if (cachedEstimate) {
 			setEstimate(cachedEstimate)
+			setEstimateSignature(signature)
 			setError(null)
 			setIsLoading(false)
 			return
 		}
 
-		let cancelled = false
+		// Drop previous mode points immediately so a failed edit estimate cannot keep showing them.
+		setEstimate(null)
+		setEstimateSignature(null)
 		setError(null)
 		setIsLoading(true)
 
-		void getVideoPointsEstimate({
-			signature,
-			request: request as GenerateVideoRequest,
-		})
+		let cancelled = false
+
+		void getVideoPointsEstimateRef
+			.current({
+				signature,
+				request: latestRequest as GenerateVideoRequest,
+			})
 			.then((nextEstimate) => {
 				if (cancelled) return
 				setEstimate(nextEstimate)
+				setEstimateSignature(signature)
 			})
 			.catch((nextError) => {
 				if (cancelled) return
+				setEstimate(null)
+				setEstimateSignature(null)
 				setError(nextError)
 			})
 			.finally(() => {
@@ -132,18 +151,17 @@ export function useVideoPointsEstimate(
 		return () => {
 			cancelled = true
 		}
-	}, [
-		canvas?.id,
-		canEstimate,
-		getCachedVideoPointsEstimate,
-		getVideoPointsEstimate,
-		request,
-		signature,
-	])
+		// Only signature/canEstimate should re-trigger network. Method identity churn is ignored via refs.
+	}, [canvas?.id, canEstimate, signature])
+
+	const pointsForCurrentSignature =
+		estimateSignature === signature && typeof estimate?.points === "number"
+			? estimate.points
+			: null
 
 	return {
-		estimate,
-		points: typeof estimate?.points === "number" ? estimate.points : null,
+		estimate: estimateSignature === signature ? estimate : null,
+		points: pointsForCurrentSignature,
 		isLoading:
 			estimateGate.blockedReason === "pending_resource_deferrals" ||
 			(canEstimate && isLoading),

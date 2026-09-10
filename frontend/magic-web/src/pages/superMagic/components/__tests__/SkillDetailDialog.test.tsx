@@ -137,7 +137,9 @@ vi.mock("@/services/skills/SkillsService", () => ({
 }))
 
 vi.mock("@/components/tiptap-templates/simple/simple-editor", () => ({
-	SimpleEditor: ({ content }: { content: string }) => <div>{content}</div>,
+	SimpleEditor: ({ content }: { content: string }) => (
+		<div data-testid="skill-simple-editor">{content}</div>
+	),
 }))
 
 describe("SkillDetailDialog", () => {

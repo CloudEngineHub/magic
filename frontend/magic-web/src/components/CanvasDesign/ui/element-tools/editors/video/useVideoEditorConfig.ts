@@ -1717,6 +1717,42 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			setLinkedFrameBindings(nextDraft.linkedFrameBindings ?? [])
 			setReferenceImageInfos(nextReferenceInfos)
 			applyBindingStateFromPromptAndReferences(decodedDraftPrompt, nextReferenceInfos)
+			const nextModeConfig = getInputModeConfig(selectedModel, value)
+			const nextVariantCode = resolveReferenceAssetLimits(
+				nextModeConfig,
+				nextReferenceInfos,
+				{ ignoreModeMaxCountForTotal: value === "omni_reference" },
+			).variantCode
+			const nextVariantConfig = nextModeConfig?.variants?.find(
+				(variant) => variant.code === nextVariantCode,
+			)
+			const nextGenerationConstraints = mergeVideoGenerationConstraints(
+				nextModeConfig?.generation_constraints,
+				nextVariantConfig?.generation_constraints,
+			)
+			const selection = resolveVideoGenerationSelectionPreserving(
+				selectedModel,
+				{
+					resolution: selectedResolution,
+					aspectRatio: selectedAspectRatio,
+				},
+				nextGenerationConstraints,
+			)
+			setSelectedResolution(selection.resolution)
+			setSelectedAspectRatio(selection.aspectRatio)
+			updateVideoElementSize(selection.size)
+			const nextDurations = buildVideoDurationOptions(
+				selectedModel,
+				nextGenerationConstraints,
+			)
+			setSelectedDurationSeconds(
+				nextDurations.length === 0
+					? undefined
+					: selectedDurationSeconds != null &&
+						  nextDurations.includes(selectedDurationSeconds)
+						? selectedDurationSeconds
+						: resolveVideoDefaultDuration(selectedModel, nextGenerationConstraints),
+			)
 		},
 		[
 			activeInputTab,
@@ -1730,6 +1766,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			promptPlaceholderTokenConfig,
 			selectedModel,
 			selectedInputMode,
+			selectedDurationSeconds,
+			selectedResolution,
+			selectedAspectRatio,
+			updateVideoElementSize,
 			resolveModeDraftInputTab,
 		],
 	)
@@ -2041,7 +2081,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			...(supportedResolutionOptions.length > 0 && selectedResolution
 				? { resolution: selectedResolution }
 				: {}),
-			...(selectedDurationSeconds != null && Number.isFinite(selectedDurationSeconds)
+			...(supportedDurationOptions.length > 0 &&
+			selectedDurationSeconds != null &&
+			Number.isFinite(selectedDurationSeconds)
 				? { duration_seconds: selectedDurationSeconds }
 				: {}),
 			...(selectedGenerateAudio !== undefined
@@ -2100,6 +2142,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		selectedResolution,
 		supportedAspectRatioOptions.length,
 		supportedResolutionOptions.length,
+		supportedDurationOptions.length,
 		selectedDurationSeconds,
 		selectedGenerateAudio,
 		selectedWebSearch,

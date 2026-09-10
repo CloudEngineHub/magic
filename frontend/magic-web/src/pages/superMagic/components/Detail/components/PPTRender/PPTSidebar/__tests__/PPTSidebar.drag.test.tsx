@@ -138,12 +138,6 @@ vi.mock("../hooks/useScreenshotRetry", () => ({
 	}),
 }))
 
-vi.mock("../../hooks/useAIEdit", () => ({
-	useAIEdit: () => ({
-		aiEditItems: [],
-	}),
-}))
-
 vi.mock("@/components/other/SmartTooltip", () => ({
 	default: ({ children }: { children?: ReactNode }) => <>{children}</>,
 }))
@@ -156,9 +150,6 @@ vi.mock("@/components/shadcn-ui/context-menu", () => ({
 		<button {...props}>{children}</button>
 	),
 	ContextMenuSeparator: () => null,
-	ContextMenuSub: ({ children }: { children?: ReactNode }) => <>{children}</>,
-	ContextMenuSubTrigger: ({ children }: { children?: ReactNode }) => <>{children}</>,
-	ContextMenuSubContent: ({ children }: { children?: ReactNode }) => <>{children}</>,
 }))
 
 vi.mock("@/components/shadcn-ui/dialog", () => ({
@@ -282,7 +273,8 @@ function installRafController() {
 		cancel,
 		flushNext() {
 			const entry = callbacks.entries().next().value as
-				[number, FrameRequestCallback] | undefined
+				| [number, FrameRequestCallback]
+				| undefined
 			if (!entry) return false
 			const [id, callback] = entry
 			callbacks.delete(id)

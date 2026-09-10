@@ -5,6 +5,7 @@
 
 // 核心导出
 export { createLogger, getLogger } from "./core/logger"
+export type { CreateLoggerOptions } from "./core/logger"
 export { BaseProvider } from "./core/base-provider"
 export { MagicLoggerSyntheticError, normalizeError } from "./core/error"
 export { ErrorCaptureSource } from "./core/types"

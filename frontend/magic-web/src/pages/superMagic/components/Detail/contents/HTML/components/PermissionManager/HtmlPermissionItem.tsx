@@ -4,8 +4,13 @@ import { Clock3, Loader2, ShieldCheck, ShieldOff } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Button } from "@/components/shadcn-ui/button"
-import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
-import { EditorSelectContent } from "../EditorFloating"
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/shadcn-ui/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import type { HtmlPermissionScope } from "../../iframe-api/types"
 import type { HtmlPermissionSnapshotItem } from "../../iframe-api/services/IframePermissionService"
@@ -113,7 +118,7 @@ export function HtmlPermissionItem({
 										>
 											<SelectValue />
 										</SelectTrigger>
-										<EditorSelectContent>
+										<SelectContent>
 											{item.ttlOptions.map((option) => (
 												<SelectItem
 													key={serializeHtmlPermissionTtl(option.ttlMs)}
@@ -122,7 +127,7 @@ export function HtmlPermissionItem({
 													{getTtlLabel(option.ttlMs)}
 												</SelectItem>
 											))}
-										</EditorSelectContent>
+										</SelectContent>
 									</Select>
 									<Button
 										size="sm"

@@ -213,11 +213,15 @@ export const SelectionOverlay = observer(function SelectionOverlay({
 		gapAxesLinked: stylePanelStore.gapAxesLinked,
 		onPreviewStyles: handlePreviewStyles,
 	})
+	const previewHoverRect = stylePanelStore.previewRect ?? hoveredRect
 
 	// Transform hover rect (memoized)
 	const transformedHoveredRect = useMemo(
-		() => (hoveredRect ? transformRect(hoveredRect, iframeRef, isPptRender, scaleRatio) : null),
-		[hoveredRect, iframeRef, isPptRender, scaleRatio],
+		() =>
+			previewHoverRect
+				? transformRect(previewHoverRect, iframeRef, isPptRender, scaleRatio)
+				: null,
+		[previewHoverRect, iframeRef, isPptRender, scaleRatio],
 	)
 	const overlayHoveredRect = useMemo(
 		() =>

@@ -56,9 +56,10 @@ class SuperMagicAgentVersionDomainService
         string $code,
         ?PublishTargetType $publishTargetType = null,
         ?ReviewStatus $reviewStatus = null,
-        Page $page = new Page()
+        Page $page = new Page(),
+        bool $includePublishing = false
     ): array {
-        return $this->agentVersionRepository->queriesByCode($dataIsolation, $code, $publishTargetType, $reviewStatus, $page);
+        return $this->agentVersionRepository->queriesByCode($dataIsolation, $code, $publishTargetType, $reviewStatus, $page, $includePublishing);
     }
 
     public function countVersionsByCode(SuperMagicAgentDataIsolation $dataIsolation, string $code): int
@@ -186,7 +187,8 @@ class SuperMagicAgentVersionDomainService
     public function publishAgent(
         SuperMagicAgentDataIsolation $dataIsolation,
         SuperMagicAgentEntity $agentEntity,
-        AgentVersionEntity $versionEntity
+        AgentVersionEntity $versionEntity,
+        bool $prepareOnly = false
     ): AgentVersionEntity {
         if ($agentEntity->getSourceType()->isMarket()) {
             ExceptionBuilder::throw(SuperMagicErrorCode::StoreAgentCannotPublish, 'super_magic.agent.store_agent_cannot_publish');
@@ -245,7 +247,36 @@ class SuperMagicAgentVersionDomainService
         $versionEntity->setPublishTargetValue($publishTargetValue);
         $versionEntity->setPublisherUserId($dataIsolation->getCurrentUserId());
         $versionEntity->setProjectId($agentEntity->getProjectId());
-        $versionEntity->setFileKey($agentEntity->getFileKey());
+        // 异步 prepare 阶段尚未生成压缩包，使用空字符串占位，避免持久化 NULL。
+        $versionEntity->setFileKey($prepareOnly ? '' : $agentEntity->getFileKey());
+
+        if ($prepareOnly) {
+            $versionEntity->setPublishStatus(PublishStatus::PUBLISHING);
+            $versionEntity->setReviewStatus(ReviewStatus::PENDING);
+            $versionEntity->setPublishedAt(null);
+            $versionEntity->setIsCurrentVersion(false);
+            $versionEntity = $this->agentVersionRepository->save($dataIsolation, $versionEntity);
+            $agentSkills = $this->agentSkillRepository->getByAgentCodeForCurrentVersion($dataIsolation, $agentEntity->getCode());
+            if ($agentSkills !== []) {
+                $skillEntities = [];
+                foreach ($agentSkills as $agentSkill) {
+                    $newSkillEntity = new AgentSkillEntity();
+                    $newSkillEntity->setAgentId($agentEntity->getId());
+                    $newSkillEntity->setAgentCode($agentSkill->getAgentCode());
+                    $newSkillEntity->setSkillId($agentSkill->getSkillId());
+                    $newSkillEntity->setSkillVersionId($agentSkill->getSkillVersionId());
+                    $newSkillEntity->setSkillCode($agentSkill->getSkillCode());
+                    $newSkillEntity->setSortOrder($agentSkill->getSortOrder());
+                    $newSkillEntity->setCreatorId($agentSkill->getCreatorId());
+                    $newSkillEntity->setAgentVersionId($versionEntity->getId());
+                    $newSkillEntity->setOrganizationCode($agentSkill->getOrganizationCode());
+                    $skillEntities[] = $newSkillEntity;
+                }
+                $this->agentSkillRepository->batchSave($dataIsolation, $skillEntities);
+            }
+            $this->agentPlaybookRepository->batchCopyToVersion($dataIsolation, $agentEntity->getId(), $versionEntity->getId());
+            return $versionEntity;
+        }
 
         if ($publishTargetType === PublishTargetType::PRIVATE) {
             $versionEntity->setPublishStatus(PublishStatus::PUBLISHED);
@@ -291,6 +322,43 @@ class SuperMagicAgentVersionDomainService
 
         $this->agentPlaybookRepository->batchCopyToVersion($dataIsolation, $agentEntity->getId(), $versionEntity->getId());
 
+        return $versionEntity;
+    }
+
+    /** 将已完成 Sandbox 导出的 Agent 版本落库。 */
+    public function finalizePreparedAgent(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        int $versionId,
+        string $fileKey
+    ): AgentVersionEntity {
+        $versionEntity = $this->agentVersionRepository->findByIdForUpdate($dataIsolation, $versionId);
+        if ($versionEntity === null) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::AgentVersionNotFound, 'super_magic.agent.agent_version_not_found');
+        }
+        if (! $versionEntity->getPublishStatus()->isPublishing()) {
+            return $versionEntity;
+        }
+
+        $versionEntity->setFileKey($fileKey);
+        if ($versionEntity->getPublishTargetType() === PublishTargetType::PRIVATE) {
+            $this->agentVersionRepository->clearCurrentVersion($dataIsolation, $versionEntity->getCode());
+            $versionEntity->setPublishStatus(PublishStatus::PUBLISHED);
+            $versionEntity->setReviewStatus(ReviewStatus::APPROVED);
+            $versionEntity->setPublishedAt(date('Y-m-d H:i:s'));
+            $versionEntity->setIsCurrentVersion(true);
+        } else {
+            $versionEntity->setPublishStatus(PublishStatus::UNPUBLISHED);
+            $versionEntity->setReviewStatus(ReviewStatus::UNDER_REVIEW);
+            $versionEntity->setPublishedAt(null);
+            $versionEntity->setIsCurrentVersion(false);
+        }
+        $versionEntity = $this->agentVersionRepository->save($dataIsolation, $versionEntity);
+        $agentEntity = $this->superMagicAgentRepository->getByCode($dataIsolation, $versionEntity->getCode());
+        if ($agentEntity !== null) {
+            $agentEntity->setLatestPublishedAt(date('Y-m-d H:i:s'));
+            $agentEntity->setModifier($dataIsolation->getCurrentUserId());
+            $this->superMagicAgentRepository->save($dataIsolation, $agentEntity);
+        }
         return $versionEntity;
     }
 

@@ -92,18 +92,34 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
         }
 
         try {
+            $fingerprint = $this->buildConfigFingerprint($mcpServer, $resource, $this->tryGetCallbackUrl());
             $pendingState = $this->stateStore->getPending(
                 $dataIsolation->getCurrentOrganizationCode(),
                 (string) $userId,
                 $mcpServer->getCode()
             );
-            if ($pendingState !== null) {
+            if ($pendingState !== null && MCPAuthorizationConfigFingerprint::matches($pendingState, $fingerprint)) {
                 $this->logger->info('MCPAuthorizationPendingStateReused', [
                     'mcp_server_code' => $mcpServer->getCode(),
                     'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
                     'user_id' => $userId,
                 ]);
                 return $this->buildPendingAuthConfig($pendingState, $resource);
+            }
+            if ($pendingState !== null) {
+                $this->logger->info('MCPAuthorizationPendingStateInvalidated', [
+                    'mcp_server_code' => $mcpServer->getCode(),
+                    'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+                    'user_id' => $userId,
+                    'pending_resource' => (string) ($pendingState['resource'] ?? ''),
+                    'current_resource' => $resource,
+                ]);
+                $this->stateStore->invalidatePending(
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    (string) $userId,
+                    $mcpServer->getCode(),
+                    (string) ($pendingState['state'] ?? '')
+                );
             }
 
             if ($credential && $credential->getRefreshTokenCiphertext() !== null) {
@@ -157,6 +173,7 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
             $url = $authorizationEndpoint . (str_contains($authorizationEndpoint, '?') ? '&' : '?') . http_build_query($query);
 
             $stateTtl = (int) $this->config->get('mcp_authorization.state_ttl', 600);
+            $fingerprint = $this->buildConfigFingerprint($mcpServer, $resource, $redirectUri);
             $this->stateStore->put($state, [
                 'user_id' => $userId,
                 'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
@@ -172,6 +189,7 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
                 'metadata' => $metadata,
                 'language' => $dataIsolation->getLanguage(),
                 'authorization_url' => $url,
+                'config_fingerprint' => $fingerprint,
                 'expires_at' => time() + $stateTtl,
                 'created_at' => time(),
             ]);
@@ -188,7 +206,7 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
                     (string) $userId,
                     $mcpServer->getCode()
                 );
-                if ($pendingState !== null) {
+                if ($pendingState !== null && MCPAuthorizationConfigFingerprint::matches($pendingState, $fingerprint)) {
                     $this->logger->info('MCPAuthorizationPendingStateRaceLost', [
                         'mcp_server_code' => $mcpServer->getCode(),
                         'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
@@ -330,6 +348,7 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
      */
     public function getRuntimeCredential(MCPDataIsolation $dataIsolation, string $mcpServerCode): array
     {
+        $dataIsolation->setContainOfficialOrganization(true);
         $mcpServer = $this->mcpServerDomainService->getByCode($dataIsolation, $mcpServerCode);
         if (! $mcpServer || ! $mcpServer->isEnabled()) {
             return ['status' => 'authorization_required'];
@@ -372,6 +391,31 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
         $credential->setScope(isset($tokens['scope']) ? (string) $tokens['scope'] : $credential->getScope());
         $credential->setExpiresAt(isset($tokens['expires_in']) ? date('Y-m-d H:i:s', time() + (int) $tokens['expires_in']) : null);
         $credential->setRefreshTokenExpiresAt(isset($tokens['refresh_token_expires_in']) ? date('Y-m-d H:i:s', time() + (int) $tokens['refresh_token_expires_in']) : $credential->getRefreshTokenExpiresAt());
+    }
+
+    /**
+     * 计算当前 MCP 服务配置对应的授权指纹。
+     */
+    private function buildConfigFingerprint(MCPServerEntity $mcpServer, string $resource, string $redirectUri): string
+    {
+        return MCPAuthorizationConfigFingerprint::from(
+            $this->getResource($mcpServer),
+            $this->getConfig($mcpServer),
+            $resource,
+            $redirectUri
+        );
+    }
+
+    /**
+     * 读取回调地址；未配置时返回空字符串，避免复用 pending 时提前失败。
+     */
+    private function tryGetCallbackUrl(): string
+    {
+        try {
+            return $this->getCallbackUrl();
+        } catch (Throwable) {
+            return '';
+        }
     }
 
     /**

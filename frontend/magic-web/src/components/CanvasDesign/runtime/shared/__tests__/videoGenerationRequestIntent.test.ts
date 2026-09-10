@@ -22,6 +22,28 @@ describe("videoGenerationRequestIntent", () => {
 		).toBe(true)
 	})
 
+	it("requires media input for video edit estimate intent", () => {
+		expect(
+			hasVideoGenerationRequestEstimateIntent({
+				model_id: "video-model",
+				input_mode: "video_edit",
+				task: "edit",
+				prompt: "rewrite this clip",
+			}),
+		).toBe(false)
+		expect(
+			hasVideoGenerationRequestEstimateIntent({
+				model_id: "video-model",
+				input_mode: "video_edit",
+				task: "edit",
+				prompt: "rewrite this clip",
+				inputs: {
+					reference_videos: [{ uri: "./videos/linked.mp4" }],
+				},
+			}),
+		).toBe(true)
+	})
+
 	it("treats video generation media inputs as user intent", () => {
 		const request: Partial<GenerateVideoRequest> = {
 			model_id: "video-model",

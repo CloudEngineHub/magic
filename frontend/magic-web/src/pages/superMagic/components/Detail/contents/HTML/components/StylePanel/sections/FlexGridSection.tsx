@@ -28,7 +28,8 @@ import {
 } from "lucide-react"
 import { useDebounceFn } from "ahooks"
 import { Input } from "@/components/shadcn-ui/input"
-import { NumericDragInput } from "../controls"
+import { LayoutConstraintHintCard, NumericDragInput } from "../controls"
+import { getLayoutConstraintHints } from "../utils/layoutConstraintHint"
 import { Label } from "@/components/shadcn-ui/label"
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
 import { cn } from "@/utils/cn"
@@ -363,6 +364,7 @@ function getGapAxisValue(value: string | undefined, axis: 0 | 1): string {
 
 const FlexGridSection = observer(function FlexGridSection({
 	selectedElement,
+	editorRef,
 	onStyleChange,
 }: StyleSectionProps) {
 	const { t } = useTranslation("super")
@@ -628,6 +630,21 @@ const FlexGridSection = observer(function FlexGridSection({
 							)}
 						</button>
 					</div>
+					{getLayoutConstraintHints(styles || {})
+						.filter((hint) => hint.kind === "distributed-alignment")
+						.map((hint) => (
+							<LayoutConstraintHintCard
+								key={hint.kind}
+								hint={hint}
+								selector={selectedElement?.selector}
+								editorRef={editorRef}
+								onApply={(nextStyles) => {
+									Object.entries(nextStyles).forEach(([property, value]) => {
+										onStyleChange?.(property, value)
+									})
+								}}
+							/>
+						))}
 
 					{isGrid ? (
 						<div className="space-y-2">

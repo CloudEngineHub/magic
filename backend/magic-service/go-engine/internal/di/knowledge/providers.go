@@ -570,6 +570,7 @@ func ProvideDocumentAppDeps(
 	tokenizerService *tokenizer.Service,
 	userService *userdomain.DomainService,
 	client *mysqlclient.SQLCClient,
+	logger *logging.SugaredLogger,
 ) documentapp.AppDeps {
 	deps := documentapp.AppDeps{
 		ParseService:              parseService,
@@ -585,7 +586,7 @@ func ProvideDocumentAppDeps(
 	if client != nil {
 		deps.SourceBindingRepo = mysqlsourcebindingrepo.NewRepository(client)
 		deps.KnowledgeBaseBindingRepo = mysqlknowledgebasebinding.NewRepository(client)
-		deps.ProjectFileMetadataReader = mysqlprojectfilemeta.NewRepository(client)
+		deps.ProjectFileMetadataReader = mysqlprojectfilemeta.NewRepository(client, logger.Named("mysql.ProjectFileMetadataRepository"))
 	}
 	return deps
 }

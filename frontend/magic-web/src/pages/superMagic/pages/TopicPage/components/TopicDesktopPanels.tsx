@@ -258,7 +258,11 @@ function TopicDesktopPanels({
 					{(isReadOnly || shouldShowDetailPanel || keepDetailMountedWhenHidden) && (
 						<div
 							data-testid="topic-detail-panel-slot"
-							className={cn("h-full min-w-0 overflow-hidden", isReadOnly && "flex-1")}
+							className={cn(
+								"relative h-full min-w-0 overflow-hidden",
+								!isDetailPanelFullscreen && "isolate z-0",
+								isReadOnly && "flex-1",
+							)}
 							aria-hidden={!isReadOnly && !shouldShowDetailPanel}
 							style={
 								isReadOnly
@@ -286,6 +290,11 @@ function TopicDesktopPanels({
 									shouldShowDetailPanel && "opacity-100",
 								)}
 								style={{
+									...(!isDetailPanelFullscreen && {
+										width: "100%",
+										minWidth: 0,
+										maxWidth: "100%",
+									}),
 									transform: isDetailPanelFullscreen
 										? "none"
 										: detailContentTransform,
@@ -301,7 +310,7 @@ function TopicDesktopPanels({
 					{!isReadOnly && shouldShowDetailPanel && (
 						<div
 							data-testid="topic-detail-resize-handle-slot"
-							className="shrink-0 overflow-hidden"
+							className="relative z-20 shrink-0 overflow-visible"
 							style={{
 								width: targetRightHandleWidth,
 								minWidth: targetRightHandleWidth,
@@ -328,7 +337,7 @@ function TopicDesktopPanels({
 					{!isReadOnly && (
 						<div
 							data-testid="topic-conversation-panel-slot"
-							className="h-full min-w-0 shrink-0"
+							className="relative z-10 h-full min-w-0 shrink-0"
 							style={{
 								width: targetMessagePanelWidth,
 								minWidth: targetMessagePanelWidth,
