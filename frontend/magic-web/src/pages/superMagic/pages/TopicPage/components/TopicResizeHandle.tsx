@@ -14,6 +14,7 @@ interface TopicResizeHandleProps {
 	style?: CSSProperties
 }
 
+/** Keeps the layout divider narrow while exposing a wider pointer target for reliable resizing. */
 function TopicResizeHandle({
 	className,
 	disabled = false,
@@ -53,12 +54,11 @@ function TopicResizeHandle({
 				data-slot="resizable-handle"
 				onPointerDown={handlePointerDown}
 				className={cn(
-					"focus-visible:outline-hidden relative flex w-px items-center justify-center bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full data-[panel-group-direction=vertical]:after:left-0 data-[panel-group-direction=vertical]:after:h-1 data-[panel-group-direction=vertical]:after:w-full data-[panel-group-direction=vertical]:after:-translate-y-1/2 data-[panel-group-direction=vertical]:after:translate-x-0 [&[data-panel-group-direction=vertical]>div]:rotate-90",
+					"focus-visible:outline-hidden relative flex w-px items-center justify-center bg-border focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full [&[data-panel-group-direction=vertical]>div]:rotate-90",
 					"group relative flex !w-2 cursor-col-resize touch-none items-center justify-center !bg-transparent",
-					"overflow-hidden before:pointer-events-none before:absolute before:inset-0 before:z-0",
+					"overflow-visible before:pointer-events-none before:absolute before:inset-0 before:z-0",
 					"before:bg-gradient-to-b before:from-[rgba(239,246,255,0)] before:via-[rgba(210,230,255,1)] before:to-[rgba(239,246,255,0)]",
 					"before:opacity-0 before:transition-opacity before:duration-200 hover:before:opacity-100",
-					"after:!w-4",
 					"data-[panel-group-direction=vertical]:!h-2 data-[panel-group-direction=vertical]:!w-full",
 					"data-[panel-group-direction=vertical]:before:bg-gradient-to-r",
 					disabled && "pointer-events-none opacity-0",
@@ -67,7 +67,12 @@ function TopicResizeHandle({
 				data-testid="handle-mouse-down"
 				data-pointer-testid="handle-pointer-down"
 			>
-				<div className="relative z-10 flex h-5 shrink-0 items-center justify-center gap-0.5 data-[panel-group-direction=vertical]:h-auto data-[panel-group-direction=vertical]:w-5 data-[panel-group-direction=vertical]:flex-col">
+				<div
+					className="absolute inset-y-0 left-1/2 z-20 w-4 -translate-x-1/2 cursor-col-resize touch-none"
+					data-testid="resize-handle-hit-area"
+					aria-hidden="true"
+				/>
+				<div className="pointer-events-none relative z-10 flex h-5 shrink-0 items-center justify-center gap-0.5 data-[panel-group-direction=vertical]:h-auto data-[panel-group-direction=vertical]:w-5 data-[panel-group-direction=vertical]:flex-col">
 					<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />
 					<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />
 				</div>
