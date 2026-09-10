@@ -160,7 +160,10 @@ final class GeminiOmni1FlashVideoAdapterTest extends TestCase
 
         $transport->queryResponse = [
             'id' => 'interaction-1', 'status' => 'completed',
-            'steps' => [['content' => [['type' => 'video', 'uri' => 'https://example.com/video.mp4']]]],
+            'steps' => [
+                ['type' => 'user_input', 'content' => [['type' => 'video', 'data' => ['type' => 'base64']]]],
+                ['type' => 'model_output', 'content' => [['type' => 'video', 'uri' => 'https://example.com/video.mp4']]],
+            ],
             'usage' => ['completion_tokens' => 17, 'total_tokens' => 23],
         ];
         $transport->downloadResponse = ['bytes_base64_encoded' => base64_encode('provider-video'), 'mime_type' => 'video/mp4'];

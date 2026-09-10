@@ -162,6 +162,9 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         };
         $videoUrl = '';
         foreach ($detail['steps'] ?? [] as $step) {
+            if (($step['type'] ?? '') !== 'model_output') {
+                continue;
+            }
             foreach ($step['content'] ?? [] as $content) {
                 if (($content['type'] ?? '') === 'video') {
                     $videoUrl = trim((string) ($content['uri'] ?? ''));
