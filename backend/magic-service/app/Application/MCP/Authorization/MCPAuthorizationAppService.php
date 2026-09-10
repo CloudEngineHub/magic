@@ -348,6 +348,7 @@ class MCPAuthorizationAppService extends AbstractKernelAppService
      */
     public function getRuntimeCredential(MCPDataIsolation $dataIsolation, string $mcpServerCode): array
     {
+        $dataIsolation->setContainOfficialOrganization(true);
         $mcpServer = $this->mcpServerDomainService->getByCode($dataIsolation, $mcpServerCode);
         if (! $mcpServer || ! $mcpServer->isEnabled()) {
             return ['status' => 'authorization_required'];
