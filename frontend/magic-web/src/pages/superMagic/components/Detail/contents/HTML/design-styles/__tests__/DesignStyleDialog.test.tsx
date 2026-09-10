@@ -1,0 +1,90 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { describe, expect, it, vi } from "vitest"
+import DesignStyleDialog from "../DesignStyleDialog"
+import { designStyleFixture } from "./fixtures"
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({ i18n: { language: "zh_CN" }, t: (key: string) => key }),
+}))
+vi.mock("../DesignStyleThumbnail", () => ({ default: () => <div /> }))
+vi.mock("../DesignStylePreview", () => ({
+	default: ({ style, mode }: { style: { code: string }; mode: "details" | "raw" }) => (
+		<div data-testid="design-style-preview" data-preview-mode={mode}>
+			{style.code}
+		</div>
+	),
+}))
+vi.mock("../catalog", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../catalog")>()),
+	loadDesignStyleCatalog: vi.fn(async () => ({
+		styles: [
+			designStyleFixture,
+			{ ...designStyleFixture, code: "second-style", title: "Second Style", featured: false },
+		],
+	})),
+}))
+
+describe("DesignStyleDialog", () => {
+	it("starts in the featured gallery and applies only the opened detail", async () => {
+		const onApply = vi.fn()
+		render(<DesignStyleDialog open onOpenChange={vi.fn()} onApply={onApply} canApply />)
+		expect(screen.getByTestId("design-style-dialog")).toHaveClass(
+			"h-[min(820px,calc(100vh-2rem))]",
+		)
+		const card = await screen.findByTestId(`design-style-card-${designStyleFixture.code}`)
+		expect(screen.getByTestId("design-style-grid")).toHaveClass(
+			"grid-cols-1",
+			"sm:grid-cols-2",
+			"lg:grid-cols-4",
+			"gap-3",
+			"pt-2",
+		)
+		expect(screen.queryByTestId("design-style-preview")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("design-style-apply-button")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("design-style-card-second-style")).not.toBeInTheDocument()
+		fireEvent.click(card)
+		expect(screen.getByTestId("design-style-back")).toHaveFocus()
+		expect(screen.getByTestId("design-style-detail-header")).toHaveTextContent(
+			designStyleFixture.title,
+		)
+		expect(screen.getByTestId("design-style-detail-header")).not.toHaveTextContent(
+			"htmlEditor.designStyle.gallery.styleExample",
+		)
+		expect(screen.queryByText("htmlEditor.designStyle.title")).not.toBeInTheDocument()
+		fireEvent.click(screen.getByRole("tab", { name: "htmlEditor.designStyle.rawMode" }))
+		expect(screen.getByTestId("design-style-preview")).toHaveAttribute(
+			"data-preview-mode",
+			"raw",
+		)
+		fireEvent.click(screen.getByTestId("design-style-apply-button"))
+		expect(onApply).toHaveBeenCalledWith(designStyleFixture)
+	})
+
+	it("restores search, gallery position and focus when returning from detail", async () => {
+		render(<DesignStyleDialog open onOpenChange={vi.fn()} onApply={vi.fn()} canApply />)
+		const card = await screen.findByTestId(`design-style-card-${designStyleFixture.code}`)
+		const search = screen.getByRole("textbox")
+		fireEvent.change(search, { target: { value: designStyleFixture.title } })
+		const gallery = screen.getByTestId("design-style-gallery")
+		gallery.scrollTop = 320
+		fireEvent.click(card)
+		fireEvent.click(screen.getByTestId("design-style-back"))
+		expect(gallery.scrollTop).toBe(320)
+		expect(search).toHaveValue(designStyleFixture.title)
+		expect(card).toHaveFocus()
+		expect(screen.queryByTestId("design-style-preview")).not.toBeInTheDocument()
+	})
+
+	it("uses Escape to return before closing the dialog", async () => {
+		const onOpenChange = vi.fn()
+		render(<DesignStyleDialog open onOpenChange={onOpenChange} onApply={vi.fn()} canApply />)
+		fireEvent.click(await screen.findByTestId(`design-style-card-${designStyleFixture.code}`))
+		fireEvent.keyDown(document, { key: "Escape" })
+		await waitFor(() =>
+			expect(screen.queryByTestId("design-style-preview")).not.toBeInTheDocument(),
+		)
+		expect(onOpenChange).not.toHaveBeenCalled()
+		fireEvent.keyDown(document, { key: "Escape" })
+		expect(onOpenChange).toHaveBeenCalledWith(false)
+	})
+})

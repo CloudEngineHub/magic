@@ -61,6 +61,11 @@ return [
         'estimate_failed' => '操作失败',
     ],
     'third_party_service_error' => '第三方服务错误',
+    'html_design_style' => [
+        'invalid_style_code' => '设计风格代码不合法',
+        'style_source_not_found' => '设计风格源文件不存在: :style_code',
+        'style_source_read_failed' => '设计风格源文件读取失败',
+    ],
     'attributes' => [
         'project_id' => '项目ID',
         'image_id' => '图片ID',

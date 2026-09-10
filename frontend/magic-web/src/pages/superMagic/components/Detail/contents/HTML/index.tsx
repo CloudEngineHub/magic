@@ -87,6 +87,7 @@ import {
 } from "./hooks/useHtmlAppPermissions"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { useHtmlDevConsoleState } from "./hooks/useHtmlDevConsoleState"
+import DesignStyleButton from "./design-styles/DesignStyleButton"
 import {
 	type HtmlPermissionManagerHandle,
 	useHtmlPermissionManagerBridge,
@@ -1292,6 +1293,30 @@ export default memo(function HTML(props: HTMLProps) {
 		activeHistory.isNewestVersion,
 	])
 
+	const showDesignStyleButton = useMemo(
+		() =>
+			Boolean(
+				!isReadonlyPreview &&
+				!isEditMode &&
+				allowEdit &&
+				!isDataAnalysis &&
+				!isMediaScenario &&
+				displayData?.file_id &&
+				currentHtmlFileInfo.fileName &&
+				(currentHtmlFileInfo.relativeFilePath || currentHtmlFileInfo.fileName),
+			),
+		[
+			allowEdit,
+			currentHtmlFileInfo.fileName,
+			currentHtmlFileInfo.relativeFilePath,
+			displayData?.file_id,
+			isDataAnalysis,
+			isEditMode,
+			isMediaScenario,
+			isReadonlyPreview,
+		],
+	)
+
 	/** 使用分享按钮可见性控制 Hook */
 	const { showDownloadButton, showExportButton } = useShareButtonVisibility({
 		allowDownload,
@@ -1357,7 +1382,10 @@ export default memo(function HTML(props: HTMLProps) {
 				{
 					key: "html-toolbar-actions",
 					zone: "primary",
-					visible: () => Boolean(showAIOptimizationButton || showFileEditButton),
+					visible: () =>
+						Boolean(
+							showAIOptimizationButton || showFileEditButton || showDesignStyleButton,
+						),
 					render: () => (
 						<div
 							className="flex items-center gap-1"
@@ -1365,6 +1393,21 @@ export default memo(function HTML(props: HTMLProps) {
 								htmlTestIdsEnabled ? "html-editor-toolbar-actions" : undefined
 							}
 						>
+							{showDesignStyleButton && (
+								<DesignStyleButton
+									fileInfo={{
+										fileId: displayData?.file_id ?? "",
+										fileName: currentHtmlFileInfo.fileName,
+										filePath:
+											currentHtmlFileInfo.relativeFilePath ??
+											currentHtmlFileInfo.fileName ??
+											"",
+									}}
+									testId={
+										htmlTestIdsEnabled ? "html-design-style-button" : undefined
+									}
+								/>
+							)}
 							{showAIOptimizationButton && !isEditMode && (
 								<Button
 									variant="outline"
@@ -1467,7 +1510,9 @@ export default memo(function HTML(props: HTMLProps) {
 		}),
 		[
 			attachmentList,
-			displayData?.file_id,
+			currentHtmlFileInfo.fileName,
+			currentHtmlFileInfo.relativeFilePath,
+			displayData,
 			handleCancel,
 			handleAIEdit,
 			handleQuickSelection,
@@ -1488,6 +1533,7 @@ export default memo(function HTML(props: HTMLProps) {
 			isInPPTMode,
 			isReadonlyPreview,
 			showAIOptimizationButton,
+			showDesignStyleButton,
 			showExportButton,
 			showFileEditButton,
 			isAppendPicking,
@@ -1496,9 +1542,6 @@ export default memo(function HTML(props: HTMLProps) {
 			quickSelectionTitle,
 			canManageHtmlPermissions,
 			handleOpenHtmlPermissionManager,
-			isDataAnalysis,
-			htmlIsDeleted,
-			hasHtmlPermissionDeclarations,
 			t,
 		],
 	)

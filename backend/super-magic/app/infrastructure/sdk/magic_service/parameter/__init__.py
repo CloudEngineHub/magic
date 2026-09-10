@@ -24,6 +24,7 @@ from .cancel_share_parameter import CancelShareParameter
 from .get_share_parameter import GetShareParameter
 from .list_share_parameter import ListShareParameter
 from .get_latest_published_skill_versions_parameter import GetLatestPublishedSkillVersionsParameter
+from .get_html_design_style_source_parameter import GetHtmlDesignStyleSourceParameter
 from .ingest_third_party_message_parameter import IngestThirdPartyMessageParameter
 from .scan_wav_parameter import ScanWavParameter  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
 from .search_knowledge_parameter import SearchKnowledgeParameter
@@ -67,6 +68,7 @@ __all__ = [  # noqa: RUF022 - 保留既有分组和导出顺序
     'GetShareParameter',
     'ListShareParameter',
     'GetLatestPublishedSkillVersionsParameter',
+    'GetHtmlDesignStyleSourceParameter',
     'IngestThirdPartyMessageParameter',
     'ScanWavParameter',
     'SearchKnowledgeParameter',
