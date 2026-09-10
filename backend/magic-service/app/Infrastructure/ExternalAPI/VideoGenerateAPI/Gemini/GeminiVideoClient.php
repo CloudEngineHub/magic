@@ -71,11 +71,8 @@ readonly class GeminiVideoClient
             return $url;
         }
 
-        $extraConfig = $config->getExtraConfig();
         $proxyUrl = $config->getExtraString('proxy_url');
-        $headers = strtolower((string) ($extraConfig['auth_type'] ?? 'api_key')) === 'service_account'
-            ? ['Authorization' => 'Bearer ' . (new GoogleServiceAccountTokenProvider($extraConfig, $proxyUrl))->getAccessToken()]
-            : ['x-goog-api-key' => $config->getApiKey()];
+        $headers = ['x-goog-api-key' => $config->getApiKey()];
 
         $targetPath = TemporaryFileManager::createTempFile('gemini-video-');
 
