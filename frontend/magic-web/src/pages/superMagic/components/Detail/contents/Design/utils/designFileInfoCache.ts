@@ -41,9 +41,11 @@ import {
 
 const IMAGE_PROCESS_OPTIONS: { xMagicImageProcess?: ImageProcessOptions } = {
 	xMagicImageProcess: {
+		autoOrient: 1,
 		format: "webp",
 	},
 }
+const IMAGE_PROCESS_CACHE_SIGNATURE = "auto-orient-v1"
 
 // 图片处理大小限制 50MB
 const IMAGE_PROCESS_SIZE_LIMIT = 50971420
@@ -84,6 +86,12 @@ interface CacheEntry {
 }
 
 type FileUrlRendition = "raw" | "image-process"
+
+function getRenditionCacheIdentity(rendition: FileUrlRendition): string {
+	return rendition === "image-process"
+		? `${rendition}:${IMAGE_PROCESS_CACHE_SIGNATURE}`
+		: rendition
+}
 
 interface FileUrlRequestGroup {
 	baseIdentityKey: string
@@ -214,7 +222,7 @@ function buildScopedPathKey(
 	rendition: FileUrlRendition = "raw",
 ): string {
 	const namespace = designProjectId || "__global__"
-	return `${namespace}\0${normalizedPath}\0${rendition}`
+	return `${namespace}\0${normalizedPath}\0${getRenditionCacheIdentity(rendition)}`
 }
 
 function resolveFileUrlRendition(
@@ -263,11 +271,19 @@ function parseScopedPathKey(scopedPathKey: string): {
 		}
 	}
 	const possibleRendition = parts.at(-1)
-	const hasRendition = possibleRendition === "raw" || possibleRendition === "image-process"
+	const currentImageProcessIdentity = getRenditionCacheIdentity("image-process")
+	const hasRendition =
+		possibleRendition === "raw" ||
+		possibleRendition === "image-process" ||
+		possibleRendition === currentImageProcessIdentity
 	return {
 		namespace: parts[0] || "__global__",
 		normalizedPath: parts.slice(1, hasRendition ? -1 : undefined).join("\0"),
-		rendition: hasRendition ? possibleRendition : "raw",
+		rendition:
+			possibleRendition === "image-process" ||
+			possibleRendition === currentImageProcessIdentity
+				? "image-process"
+				: "raw",
 	}
 }
 
@@ -643,7 +659,7 @@ function buildFileUrlIdentityKey(
 	designProjectId?: string,
 	resourceVersion?: string,
 ): string {
-	return `${buildNamespaceKey(designProjectId)}\0${fileId}\0${rendition}\0${resourceVersion ?? ""}`
+	return `${buildNamespaceKey(designProjectId)}\0${fileId}\0${getRenditionCacheIdentity(rendition)}\0${resourceVersion ?? ""}`
 }
 
 function invalidateFileUrlResultsForFileId(fileId: string): void {

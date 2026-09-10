@@ -29,6 +29,7 @@ import {
 	type MediaDisplayResourceVariant,
 } from "../visibility/CanvasMediaViewingPolicy"
 import { parseImageDimensionsFromBlobHeader } from "./imageHeaderDimensions"
+import type { ImageExifOrientation } from "./imageOrientation"
 import {
 	buildImageResourceSnapshot,
 	createImageResourceDiagnostics,
@@ -77,6 +78,9 @@ function createImageAbortError(): Error {
 export interface ImageInfo {
 	naturalWidth: number
 	naturalHeight: number
+	orientation?: ImageExifOrientation
+	encodedWidth?: number
+	encodedHeight?: number
 	fileSize: number
 	mimeType: string
 	filename: string
@@ -1631,7 +1635,7 @@ export class ImageResourceManager {
 		const signature =
 			this.canvas.magicConfigManager.config?.methods?.getImageProcessCacheSignature?.() ??
 			"default"
-		return `image-process:${signature}`
+		return `image-process:${signature}:exif-orientation-v1`
 	}
 
 	private getPersistentLowIdentity(path: string, resourceVersion: string): string {

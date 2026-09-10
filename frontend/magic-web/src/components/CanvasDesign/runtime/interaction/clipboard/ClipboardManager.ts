@@ -54,6 +54,7 @@ import {
 	type ClipboardResourceReference,
 } from "../../resources/clipboard/clipboardResourceReferences"
 import canvasSize from "canvas-size"
+import { createOrientedImageBitmapFromBlob } from "../../resources/image/imageSourceUtils"
 
 const PNG_MIME_TYPE = "image/png"
 const PNG_EXTENSION = ".png"
@@ -513,20 +514,22 @@ export class ClipboardManager {
 		}
 
 		try {
-			const img = await createImageBitmap(blob)
-			const canvas = document.createElement("canvas")
-			canvas.width = img.width
-			canvas.height = img.height
-			const ctx = canvas.getContext("2d")
-			if (!ctx) {
-				return null
+			const img = await createOrientedImageBitmapFromBlob(blob)
+			try {
+				const canvas = document.createElement("canvas")
+				canvas.width = img.width
+				canvas.height = img.height
+				const ctx = canvas.getContext("2d")
+				if (!ctx) return null
+				ctx.drawImage(img, 0, 0)
+				return await new Promise<Blob | null>((resolve) => {
+					canvas.toBlob((pngBlob) => {
+						resolve(pngBlob || null)
+					}, PNG_MIME_TYPE)
+				})
+			} finally {
+				img.close()
 			}
-			ctx.drawImage(img, 0, 0)
-			return await new Promise<Blob | null>((resolve) => {
-				canvas.toBlob((pngBlob) => {
-					resolve(pngBlob || null)
-				}, PNG_MIME_TYPE)
-			})
 		} catch (error) {
 			return null
 		}

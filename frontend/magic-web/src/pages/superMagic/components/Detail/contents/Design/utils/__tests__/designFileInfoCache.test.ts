@@ -667,7 +667,12 @@ describe("getFileResourceMetaByPath", () => {
 		expect(calls).toHaveLength(3)
 		expect(calls.map(([request]) => request.file_ids.length)).toEqual([100, 100, 50])
 		calls.forEach(([request]) => {
-			expect(request.options).toBeDefined()
+			expect(request.options).toEqual({
+				xMagicImageProcess: {
+					autoOrient: 1,
+					format: "webp",
+				},
+			})
 		})
 	})
 
