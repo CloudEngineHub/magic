@@ -1,6 +1,7 @@
 import { snapdom } from "@zumer/snapdom"
 
 export const CAPTURE_FRAME_WAIT_TIMEOUT_MS = 120
+export const VIDEO_DATA_WAIT_TIMEOUT_MS = 3_000
 export const FONT_READY_WAIT_TIMEOUT_MS = 1_000
 export const IMAGE_ENCODE_TIMEOUT_MS = 2_000
 export const MAX_SCREENSHOT_OUTPUT_EDGE = 4096
@@ -266,6 +267,179 @@ export function resolveCaptureRoot(selection: ScreenshotRequest["selection"]): H
 	return containingRoot?.root ?? document.body
 }
 
+interface CaptureClipRect {
+	x: number
+	y: number
+	width: number
+	height: number
+}
+
+type VideoFrameCallbackTarget = {
+	requestVideoFrameCallback?: (callback: () => void) => number
+}
+
+function readViewportClip(root: HTMLElement, clip: CaptureClipRect) {
+	const rootRect = root.getBoundingClientRect()
+	return {
+		left: rootRect.left + clip.x,
+		top: rootRect.top + clip.y,
+		right: rootRect.left + clip.x + clip.width,
+		bottom: rootRect.top + clip.y + clip.height,
+	}
+}
+
+function intersectsViewportClip(
+	elementRect: DOMRect,
+	clip: ReturnType<typeof readViewportClip>,
+): boolean {
+	return !(
+		elementRect.right <= clip.left ||
+		elementRect.left >= clip.right ||
+		elementRect.bottom <= clip.top ||
+		elementRect.top >= clip.bottom
+	)
+}
+
+export function findVideosInCaptureClip(
+	root: HTMLElement,
+	clip: CaptureClipRect,
+): HTMLVideoElement[] {
+	const viewportClip = readViewportClip(root, clip)
+	return Array.from(root.querySelectorAll("video")).filter((video) => {
+		const rect = video.getBoundingClientRect()
+		return rect.width > 0 && rect.height > 0 && intersectsViewportClip(rect, viewportClip)
+	})
+}
+
+async function waitForVideoFramePresented(video: HTMLVideoElement): Promise<void> {
+	const requestVideoFrameCallback = (video as HTMLVideoElement & VideoFrameCallbackTarget)
+		.requestVideoFrameCallback
+	if (typeof requestVideoFrameCallback === "function") {
+		await new Promise<void>((resolve) => {
+			let settled = false
+			const finish = () => {
+				if (settled) return
+				settled = true
+				window.clearTimeout(timeoutId)
+				resolve()
+			}
+			const timeoutId = window.setTimeout(finish, CAPTURE_FRAME_WAIT_TIMEOUT_MS)
+			try {
+				requestVideoFrameCallback.call(video, finish)
+			} catch {
+				finish()
+			}
+		})
+		return
+	}
+	await waitForAnimationFrameWithTimeout(CAPTURE_FRAME_WAIT_TIMEOUT_MS)
+}
+
+function waitForVideoLoadedData(video: HTMLVideoElement): Promise<void> {
+	return new Promise((resolve) => {
+		let settled = false
+		const finish = () => {
+			if (settled) return
+			settled = true
+			window.clearTimeout(timeoutId)
+			video.removeEventListener("loadeddata", finish)
+			video.removeEventListener("error", finish)
+			resolve()
+		}
+		const timeoutId = window.setTimeout(finish, VIDEO_DATA_WAIT_TIMEOUT_MS)
+		if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+			finish()
+			return
+		}
+		video.addEventListener("loadeddata", finish, { once: true })
+		video.addEventListener("error", finish, { once: true })
+	})
+}
+
+function seekVideoForCaptureFrame(video: HTMLVideoElement): Promise<void> {
+	return new Promise((resolve) => {
+		let settled = false
+		const finish = () => {
+			if (settled) return
+			settled = true
+			window.clearTimeout(timeoutId)
+			video.removeEventListener("seeked", finish)
+			video.removeEventListener("error", finish)
+			resolve()
+		}
+		const timeoutId = window.setTimeout(finish, VIDEO_DATA_WAIT_TIMEOUT_MS)
+		if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
+			finish()
+			return
+		}
+		try {
+			const targetTime = Math.min(0.001, Number.isFinite(video.duration) ? video.duration : 0.001)
+			if (Math.abs(video.currentTime - targetTime) < 1e-6) {
+				finish()
+				return
+			}
+			video.addEventListener("seeked", finish, { once: true })
+			video.addEventListener("error", finish, { once: true })
+			video.currentTime = targetTime
+		} catch {
+			finish()
+		}
+	})
+}
+
+async function waitForVideoCaptureFrame(video: HTMLVideoElement): Promise<void> {
+	video.muted = true
+	if (video.networkState === HTMLMediaElement.NETWORK_EMPTY && video.currentSrc) {
+		try {
+			video.load()
+		} catch {
+			// Ignore invalid sources and continue with best-effort capture.
+		}
+	}
+
+	await waitForVideoLoadedData(video)
+	if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+		await seekVideoForCaptureFrame(video)
+	}
+	await waitForVideoFramePresented(video)
+}
+
+/** Wait for clip videos to decode a frame before DOM capture. */
+export async function waitForCaptureVideosInClip(
+	root: HTMLElement,
+	clip: CaptureClipRect,
+): Promise<void> {
+	const videos = findVideosInCaptureClip(root, clip)
+	if (videos.length === 0) return
+	await Promise.all(videos.map((video) => waitForVideoCaptureFrame(video)))
+	await waitForAnimationFrameWithTimeout(CAPTURE_FRAME_WAIT_TIMEOUT_MS)
+}
+
+function resolveVideoAlignedClip(
+	root: HTMLElement,
+	selection: ScreenshotRequest["selection"],
+	clip: CaptureClipRect,
+): CaptureClipRect {
+	const centerX = selection.left + selection.width / 2
+	const centerY = selection.top + selection.height / 2
+	const target = document.elementFromPoint(centerX, centerY)
+	const video = target?.closest("video")
+	if (!(video instanceof HTMLVideoElement) || !root.contains(video)) return clip
+
+	const rootRect = root.getBoundingClientRect()
+	const videoRect = video.getBoundingClientRect()
+	const selectionLeft = Math.max(0, videoRect.left - rootRect.left)
+	const selectionTop = Math.max(0, videoRect.top - rootRect.top)
+	const selectionRight = Math.min(rootRect.width, videoRect.right - rootRect.left)
+	const selectionBottom = Math.min(rootRect.height, videoRect.bottom - rootRect.top)
+	return {
+		x: selectionLeft,
+		y: selectionTop,
+		width: Math.max(1, selectionRight - selectionLeft),
+		height: Math.max(1, selectionBottom - selectionTop),
+	}
+}
+
 async function waitForCaptureFrame(): Promise<void> {
 	const fontsReady = document.fonts?.ready
 	if (fontsReady) {
@@ -326,7 +500,7 @@ export async function captureScreenshotBlob(
 		rootRect.height,
 		request.selection.top - rootRect.top + request.selection.height,
 	)
-	const clip = {
+	let clip: CaptureClipRect = {
 		x: selectionLeft,
 		y: selectionTop,
 		width: Math.max(1, selectionRight - selectionLeft),
@@ -346,6 +520,10 @@ export async function captureScreenshotBlob(
 	try {
 		throwIfAborted(hooks.shouldAbort)
 		await waitForCaptureFrame()
+		throwIfAborted(hooks.shouldAbort)
+		await waitForCaptureVideosInClip(root, clip)
+		throwIfAborted(hooks.shouldAbort)
+		clip = resolveVideoAlignedClip(root, request.selection, clip)
 		throwIfAborted(hooks.shouldAbort)
 		hooks.onProgress?.()
 		const result = await snapdom(root, {

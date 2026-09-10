@@ -556,14 +556,19 @@ export function ElementInspectorOverlay({
 			return
 		}
 		if (!onCaptureElementScreenshot || !selectBox) return
-		if (elementScreenshotSelectorRef.current === selectedElement.selector) return
+		const captureKey =
+			selectedElement.tagName.toLowerCase() === "video" ||
+			selectedElement.tagName.toLowerCase() === "audio"
+				? `${selectedElement.selector}:${Math.round(selectBox.width)}x${Math.round(selectBox.height)}`
+				: selectedElement.selector
+		if (elementScreenshotSelectorRef.current === captureKey) return
 
 		const selector = selectedElement.selector
-		elementScreenshotSelectorRef.current = selector
+		elementScreenshotSelectorRef.current = captureKey
 		let cancelled = false
 		void captureElementPreview(selectBox)
 			.then((result) => {
-				if (cancelled || elementScreenshotSelectorRef.current !== selector) return
+				if (cancelled || elementScreenshotSelectorRef.current !== captureKey) return
 				onCaptureElementScreenshot(selector, {
 					dataUrl: result.dataUrl,
 					rect: result.rect,
@@ -578,7 +583,7 @@ export function ElementInspectorOverlay({
 		return () => {
 			// Rect refreshes can rerun this effect while the same capture is pending.
 			// Only cancel when the selection itself has changed or was cleared.
-			if (elementScreenshotSelectorRef.current !== selector) cancelled = true
+			if (elementScreenshotSelectorRef.current !== captureKey) cancelled = true
 		}
 	}, [
 		captureElementPreview,

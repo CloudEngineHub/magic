@@ -1,28 +1,6 @@
+import { isNonTextualElementTag } from "@dtyq/html-sandbox/utils/inspectableTextContent"
 import type { TFunction } from "i18next"
 import type { InspectedElementInfo } from "./types"
-
-const NON_TEXTUAL_TAGS = new Set([
-	"area",
-	"audio",
-	"base",
-	"br",
-	"canvas",
-	"col",
-	"embed",
-	"hr",
-	"iframe",
-	"img",
-	"input",
-	"link",
-	"meta",
-	"noscript",
-	"object",
-	"param",
-	"source",
-	"track",
-	"video",
-	"wbr",
-])
 
 function normalizeInspectorText(value?: string): string {
 	return value?.replace(/\s+/g, " ").trim() ?? ""
@@ -60,7 +38,7 @@ export function getInspectorElementDisplayText(
 	const tagLabel = getTagLabel(tag, t)
 
 	if (accessibleName) return accessibleName
-	if (NON_TEXTUAL_TAGS.has(tag)) return tagLabel ?? text
+	if (isNonTextualElementTag(tag)) return tagLabel ?? text
 	if (text) return text
 	return tagLabel ?? ""
 }

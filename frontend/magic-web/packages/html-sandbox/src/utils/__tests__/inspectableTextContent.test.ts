@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest"
-import { getInspectableTextContent } from "../inspectableTextContent"
+import {
+	getInspectableTextContent,
+	isNonTextualElementTag,
+	NON_TEXTUAL_ELEMENT_TAGS,
+} from "../inspectableTextContent"
+
+describe("isNonTextualElementTag", () => {
+	it("matches media and replaced-element tags case-insensitively", () => {
+		expect(isNonTextualElementTag("VIDEO")).toBe(true)
+		expect(isNonTextualElementTag("iframe")).toBe(true)
+		expect(isNonTextualElementTag("div")).toBe(false)
+		expect(NON_TEXTUAL_ELEMENT_TAGS.has("canvas")).toBe(true)
+	})
+})
 
 describe("getInspectableTextContent", () => {
 	it("ignores video fallback copy on the media element itself", () => {

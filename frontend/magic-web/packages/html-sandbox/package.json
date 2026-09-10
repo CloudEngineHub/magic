@@ -46,6 +46,10 @@
 			"types": "./src/utils/textContent.ts",
 			"import": "./dist/utils/textContent.js"
 		},
+		"./utils/inspectableTextContent": {
+			"types": "./src/utils/inspectableTextContent.ts",
+			"import": "./dist/utils/inspectableTextContent.js"
+		},
 		"./telemetry": {
 			"types": "./src/telemetry/index.ts",
 			"import": "./dist/telemetry/index.js"
