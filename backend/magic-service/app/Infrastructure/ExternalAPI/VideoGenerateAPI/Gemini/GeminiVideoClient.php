@@ -63,6 +63,14 @@ readonly class GeminiVideoClient
         QueueExecutorConfig $config,
         string $uri,
     ): string {
+
+        $url = $this->normalizeMediaUrl($config->getBaseUrl(), $uri);
+        try {
+            $this->assertAllowedMediaUri($url);
+        } catch (ProviderVideoException) {
+            return $url;
+        }
+
         $extraConfig = $config->getExtraConfig();
         $proxyUrl = $config->getExtraString('proxy_url');
         $headers = strtolower((string) ($extraConfig['auth_type'] ?? 'api_key')) === 'service_account'
