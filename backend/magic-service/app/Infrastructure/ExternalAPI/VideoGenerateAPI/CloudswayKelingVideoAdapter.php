@@ -10,6 +10,7 @@ namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
+use App\ErrorCode\VideoGenerateErrorCode;
 use Hyperf\Contract\TranslatorInterface;
 
 readonly class CloudswayKelingVideoAdapter extends AbstractCloudswayVideoAdapter
@@ -226,9 +227,7 @@ readonly class CloudswayKelingVideoAdapter extends AbstractCloudswayVideoAdapter
             $response['data']['id'] ?? null,
         );
         if ($taskId === null) {
-            throw ProviderVideoException::nonRetriable(
-                $this->extractProviderMessage($response, 'cloudsway keling submit succeeded but task id missing')
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         }
 
         return $taskId;
@@ -268,11 +267,10 @@ readonly class CloudswayKelingVideoAdapter extends AbstractCloudswayVideoAdapter
             'output' => $videoUrl === null ? [] : [
                 'video_url' => $videoUrl,
                 'provider_task_id' => $providerTaskId,
-                'provider_base_url' => rtrim($config->getBaseUrl(), '/'),
             ],
             'error' => in_array($status, ['failed', 'error'], true) ? [
                 'code' => 'PROVIDER_FAILED',
-                'message' => $this->firstNonEmptyString($data['task_status_msg'] ?? null, $detail['message'] ?? null, 'video generation failed') ?? 'video generation failed',
+                'message' => VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
                 'provider_code' => isset($detail['code']) ? (string) $detail['code'] : null,
             ] : null,
         ];

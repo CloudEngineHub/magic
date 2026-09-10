@@ -31,6 +31,8 @@ class ServiceProviderInitializerTest extends TestCase
         [ProviderCode::Keling, 'vgm'],
         [ProviderCode::VolcengineArk, 'vgm'],
         [ProviderCode::MiniMax, 'vgm'],
+        [ProviderCode::DashScope, 'vgm'],
+        [ProviderCode::Gemini, 'vgm'],
     ];
 
     private mixed $originalOfficialOrganization;

@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\Util\Log\PayloadLogSanitizer;
@@ -133,75 +134,15 @@ readonly class KelingVideoClient
         try {
             $data = $request();
         } catch (RequestException $exception) {
-            throw ProviderVideoException::retriable(
-                $this->formatRequestExceptionMessage($exception, $action),
-                $exception,
-                $exception->getResponse()?->getStatusCode(),
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $exception);
         } catch (Throwable $throwable) {
-            throw ProviderVideoException::retriable(
-                sprintf('keling video %s failed: %s', $action, $throwable->getMessage()),
-                $throwable,
-            );
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $throwable);
         }
 
         if (! is_array($data)) {
-            throw ProviderVideoException::retriable(sprintf('keling video %s returned invalid json', $action));
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         }
 
         return $data;
-    }
-
-    private function formatRequestExceptionMessage(RequestException $exception, string $action): string
-    {
-        if (! $exception->hasResponse()) {
-            return sprintf('keling video %s failed: %s', $action, $exception->getMessage());
-        }
-
-        $response = $exception->getResponse();
-        $statusCode = $response?->getStatusCode() ?? 0;
-        $reason = $response?->getReasonPhrase() ?? 'unknown';
-        $body = trim((string) $response?->getBody());
-
-        if ($body === '') {
-            return sprintf('keling video %s failed: HTTP %d %s', $action, $statusCode, $reason);
-        }
-
-        $providerMessage = $this->extractProviderMessageFromBody($body);
-        return $providerMessage ?? sprintf(
-            'keling video %s failed: HTTP %d %s: %s',
-            $action,
-            $statusCode,
-            $reason,
-            PayloadLogSanitizer::sanitizeResponseBody($body),
-        );
-    }
-
-    private function extractProviderMessageFromBody(string $body): ?string
-    {
-        try {
-            $decoded = Json::decode($body);
-        } catch (Throwable) {
-            return null;
-        }
-
-        if (! is_array($decoded)) {
-            return null;
-        }
-
-        foreach ([
-            is_array($decoded['error'] ?? null) ? ($decoded['error']['message'] ?? null) : null,
-            $decoded['message'] ?? null,
-            $decoded['msg'] ?? null,
-            is_array($decoded['data'] ?? null) ? ($decoded['data']['message'] ?? null) : null,
-            is_array($decoded['data']['error'] ?? null) ? ($decoded['data']['error']['message'] ?? null) : null,
-            is_array($decoded['data'] ?? null) ? ($decoded['data']['task_status_msg'] ?? null) : null,
-        ] as $candidate) {
-            if (is_string($candidate) && trim($candidate) !== '') {
-                return trim($candidate);
-            }
-        }
-
-        return null;
     }
 }
