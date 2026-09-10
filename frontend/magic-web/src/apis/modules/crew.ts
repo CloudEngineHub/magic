@@ -390,6 +390,31 @@ export interface PublishAgentResponse {
 	published_at: string
 }
 
+/** Async publish task lifecycle status (ZIP packing / upload). */
+export type AsyncPublishTaskStatus = "processing" | "ready" | "failed"
+
+/** Response for async agent publish create / check. */
+export interface AsyncPublishTaskResponse {
+	publish_task_id: string
+	status: AsyncPublishTaskStatus
+	progress: number | null
+	resource_type?: "agent" | "skill"
+	resource_code?: string
+	organization_code?: string
+	publisher_user_id?: string
+	version_id?: number | string
+	task_key?: string
+	sandbox_id?: string
+	file_key?: string | null
+	error?: string | null
+	created_at?: number
+	updated_at?: number
+}
+
+export interface CheckAgentPublishParams {
+	publish_task_id: string
+}
+
 // ======================== Update Agent Info (API 5) ========================
 
 /** Request body for updating agent basic info */
@@ -815,6 +840,30 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 		return fetch.post<PublishAgentResponse>(
 			genRequestUrl("/api/v2/super-magic/agents/${code}/publish", { code }),
 			params,
+		)
+	},
+
+	/**
+	 * Create an async agent publish task (returns quickly; poll checkAgentPublish for result).
+	 * Request body matches the sync publish endpoint.
+	 */
+	publishAgentAsync({ code, ...params }: { code: string } & PublishAgentParams) {
+		return fetch.post<AsyncPublishTaskResponse>(
+			genRequestUrl("/api/v2/super-magic/agents/${code}/publish/async", { code }),
+			params,
+		)
+	},
+
+	/**
+	 * Poll async agent publish task status by publish_task_id.
+	 */
+	checkAgentPublish({ code, publish_task_id }: { code: string } & CheckAgentPublishParams) {
+		return fetch.get<AsyncPublishTaskResponse>(
+			genRequestUrl(
+				"/api/v2/super-magic/agents/${code}/publish/check",
+				{ code },
+				{ publish_task_id },
+			),
 		)
 	},
 

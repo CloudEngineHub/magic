@@ -573,7 +573,9 @@
 		"publishPanel": {
 			"actions": {
 				"cancel": "Cancel",
-				"publish": "Publish"
+				"publish": "Publish",
+				"publishing": "Publishing…",
+				"publishingWithProgress": "Publishing {{progress}}%"
 			},
 			"create": {
 				"channelChangeConfirm": {
@@ -706,8 +708,11 @@
 				"ensureSkillConfigFailed": "Could not create skill_config.yaml. Please try again.",
 				"noValidSkillForPublish": "No valid skill found. Add .magic/skills/<name>/SKILL.md before publishing.",
 				"publishFailed": "Publish failed. Please try again.",
+				"publishInProgress": "A publish task is still in progress. Wait for it to finish before submitting different publish settings.",
 				"publishNeedsProject": "No project workspace linked. Publishing is unavailable.",
-				"publishSuccess": "Published successfully"
+				"publishSuccess": "Published successfully",
+				"publishTaskExpired": "The publish task expired or was not found. Please publish again.",
+				"publishTimeout": "Publish is taking longer than expected. Check the version list later, or try publishing again."
 			}
 		},
 		"untitledSkill": "Untitled Skill"

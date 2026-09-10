@@ -321,7 +321,13 @@ export class FileUploadStore {
 				parentId,
 				nextParentIds,
 				pageSize: 1000,
-				fileType: ["user_upload", "process", "system_auto_upload", "directory"],
+				fileType: [
+					"user_upload",
+					"user_create",
+					"process",
+					"system_auto_upload",
+					"directory",
+				],
 			})
 
 			for (const item of response.list ?? []) {
