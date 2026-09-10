@@ -20,7 +20,7 @@ export const DEFAULT_PROJECT_ATTACHMENTS_PARENT_REFRESH_WINDOW_MS = 1000
 
 const DEDUPE_TTL_MS = 60_000
 const PROJECT_ATTACHMENTS_PARENT_REFRESH_PAGE_SIZE = 1000
-const FILE_TYPES = ["user_upload", "process", "system_auto_upload", "directory"]
+const FILE_TYPES = ["user_upload", "user_create", "process", "system_auto_upload", "directory"]
 // Dedupe state follows each store instance so pages/popups do not swallow each other.
 const appliedSeqKeysByStore = new WeakMap<ProjectFilesStore, Map<string, number>>()
 // Full-refresh fallback can have many triggers; keep one in-flight request per project.
@@ -410,7 +410,10 @@ function createParentChildrenReconcileChanges(params: {
 	for (const serverParentItem of serverParentItems) {
 		const fileId = normalizeAttachmentId(serverParentItem.file_id)
 		const localParentItem = localById.get(fileId)
-		if (localParentItem && getReconcileSignature(localParentItem) === getReconcileSignature(serverParentItem)) {
+		if (
+			localParentItem &&
+			getReconcileSignature(localParentItem) === getReconcileSignature(serverParentItem)
+		) {
 			continue
 		}
 		changes.push({
@@ -602,9 +605,7 @@ export function applyRefreshParentFileItems(params: ApplyRefreshParentFileItemsP
 }
 
 // Applies reconciled subtree changes for parent children consistency.
-export function applyRefreshParentChildrenSubtree(
-	params: ApplyRefreshParentChildrenSubtreeParams,
-) {
+export function applyRefreshParentChildrenSubtree(params: ApplyRefreshParentChildrenSubtreeParams) {
 	const parentIds = normalizeRefreshParentIds(params.parentIds)
 	if (parentIds.length === 0) return null
 
