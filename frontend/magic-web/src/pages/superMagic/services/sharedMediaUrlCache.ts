@@ -63,6 +63,7 @@ interface SharedMediaUrlCacheEntry {
 	downloadMode?: DownloadImageMode
 	isDownload: boolean
 	cache?: boolean
+	imageProcess?: ImageProcessOptions
 	cachedAt: number
 	lastAccessAt: number
 }
@@ -131,6 +132,7 @@ function removeCacheEntry(key: string, entry?: SharedMediaUrlCacheEntry): void {
 	if (resolvedEntry?.source === "attachment-list") {
 		removeAttachmentListIndex(resolvedEntry.scope, resolvedEntry.fileId, key)
 	}
+	if (resolvedEntry) removePersistedThumbnailForEntry(resolvedEntry)
 	sharedMediaUrlCache.delete(key)
 }
 
@@ -278,7 +280,18 @@ function removePersistedThumbnailForRequest(request: SharedMediaUrlRequest): voi
 }
 
 function removePersistedThumbnailForEntry(entry: SharedMediaUrlCacheEntry): void {
-	if (entry.source !== "temporary-download-url" || entry.isDownload) return
+	if (
+		!isThumbnailExchangeRequest(
+			{
+				fileId: entry.fileId,
+				isDownload: entry.isDownload,
+				imageProcess: entry.imageProcess,
+			},
+			entry.source,
+		)
+	) {
+		return
+	}
 	removePersistedSharedMediaThumbnailUrl({
 		scope: entry.scope,
 		fileId: entry.fileId,
@@ -290,7 +303,18 @@ function removePersistedThumbnailForEntry(entry: SharedMediaUrlCacheEntry): void
 }
 
 function persistThumbnailExchangeEntry(entry: SharedMediaUrlCacheEntry): void {
-	if (entry.source !== "temporary-download-url" || entry.isDownload) return
+	if (
+		!isThumbnailExchangeRequest(
+			{
+				fileId: entry.fileId,
+				isDownload: entry.isDownload,
+				imageProcess: entry.imageProcess,
+			},
+			entry.source,
+		)
+	) {
+		return
+	}
 	writePersistedSharedMediaThumbnailUrl({
 		identity: {
 			scope: entry.scope,
@@ -333,6 +357,7 @@ function hydrateThumbnailExchangeEntry(
 		downloadMode: resolveEffectiveDownloadMode(request.downloadMode),
 		isDownload: request.isDownload ?? false,
 		cache: request.cache,
+		imageProcess: request.imageProcess,
 		cachedAt: record.cachedAt,
 		lastAccessAt: accessedAt,
 	}
@@ -457,6 +482,7 @@ function cacheResolvedItem(
 		downloadMode: resolveEffectiveDownloadMode(request.downloadMode),
 		isDownload: request.isDownload ?? false,
 		cache: request.cache,
+		imageProcess: request.imageProcess,
 		cachedAt,
 		lastAccessAt: cachedAt,
 	}

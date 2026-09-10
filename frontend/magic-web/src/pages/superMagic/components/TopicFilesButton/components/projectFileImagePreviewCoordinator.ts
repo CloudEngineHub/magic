@@ -469,8 +469,12 @@ function enqueueProjectFileImagePreviewRequest(
 	if (isStrictPreviewRequest(options)) {
 		const normalInFlight = previewInFlightRequests.get(source.cacheKey)
 		if (normalInFlight?.request.started) {
-			return normalInFlight.promise.finally(() =>
-				enqueueProjectFileImagePreviewRequest(source, options),
+			// Wait for the started normal exchange, then schedule a strict refresh
+			// through the public entry so flush runs and the caller receives the
+			// refreshed result (Promise.finally would keep the normal result).
+			return normalInFlight.promise.then(
+				() => requestProjectFileImagePreview(source, options),
+				() => requestProjectFileImagePreview(source, options),
 			)
 		}
 	}

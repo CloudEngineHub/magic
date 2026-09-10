@@ -229,7 +229,7 @@ function collectCurrentPreviewKeys(items: AttachmentItem[]): Set<string> {
 function shouldRequestPreview(
 	source: ProjectFileImagePreviewSource,
 	states: ReadonlyMap<string, PreviewState>,
-	pendingKeys: ReadonlySet<string>,
+	pendingKeys: { has(cacheKey: string): boolean },
 	imageErrorRetryAttemptedKeys?: ReadonlySet<string>,
 ) {
 	if (!source.fileId) return false
@@ -256,7 +256,7 @@ export function useProjectFileImagePreviewManager({
 		Map<string, { source: ProjectFileImagePreviewSource; count: number }>
 	>(new Map())
 	const mountedSourcesFingerprintRef = useRef("")
-	const pendingKeysRef = useRef<Set<string>>(new Set())
+	const pendingKeysRef = useRef<Map<string, number>>(new Map())
 	const thumbnailQueueRef = useRef<Map<string, ProjectFileImagePreviewSource>>(new Map())
 	const thumbnailFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const previewStatesRef = useRef<Map<string, PreviewState>>(new Map())
@@ -358,10 +358,15 @@ export function useProjectFileImagePreviewManager({
 			if (requestSources.length === 0) return
 
 			const pendingKeys = pendingKeysRef.current
+			const isStrictRefresh =
+				Boolean(options?.forceRefresh) || options?.allowAttachmentListUrl === false
 			const nextPendingSources = requestSources.filter((source) => {
-				if (pendingKeys.has(source.cacheKey)) return false
+				const alreadyPending = pendingKeys.has(source.cacheKey)
+				// Strict refresh must still reach the coordinator so it can chain
+				// behind an in-flight normal exchange instead of being dropped.
+				if (alreadyPending && !isStrictRefresh) return false
 				if (!options?.forceRefresh && getCachedPreviewUrl(source)) return false
-				pendingKeys.add(source.cacheKey)
+				pendingKeys.set(source.cacheKey, (pendingKeys.get(source.cacheKey) ?? 0) + 1)
 				return true
 			})
 			if (nextPendingSources.length === 0) return
@@ -415,7 +420,9 @@ export function useProjectFileImagePreviewManager({
 				})
 				.finally(() => {
 					for (const source of nextPendingSources) {
-						pendingKeys.delete(source.cacheKey)
+						const nextCount = (pendingKeys.get(source.cacheKey) ?? 1) - 1
+						if (nextCount <= 0) pendingKeys.delete(source.cacheKey)
+						else pendingKeys.set(source.cacheKey, nextCount)
 					}
 				})
 		},
@@ -573,7 +580,7 @@ export function useProjectFileImagePreviewManager({
 		return () => {
 			disposedRef.current = true
 			if (thumbnailFlushTimerRef.current) clearTimeout(thumbnailFlushTimerRef.current)
-			for (const cacheKey of Array.from(pendingKeysRef.current)) {
+			for (const cacheKey of Array.from(pendingKeysRef.current.keys())) {
 				releasePendingPreviewRequest(cacheKey)
 			}
 			previewListenersRef.current.clear()

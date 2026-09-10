@@ -460,9 +460,10 @@ export class MediaResourceOfflineCacheManager {
 				cacheKey: resourceUrl,
 				mediaType: params.mediaType,
 				expiresAt: params.expiresAt,
-				contentLength: params.contentLength ?? null,
-				resourceVersion: params.resourceVersion ?? null,
-				sourceUpdatedAt: params.sourceUpdatedAt ?? null,
+				contentLength: params.contentLength,
+				// Keep undefined when omitted so flush can preserve existing version fields.
+				resourceVersion: params.resourceVersion,
+				sourceUpdatedAt: params.sourceUpdatedAt,
 				lastAccessedAt: now,
 			}
 
@@ -708,8 +709,26 @@ export class MediaResourceOfflineCacheManager {
 		const id = buildResourceId(namespace, entry.mediaType, entry.path)
 		return new Promise<void>((resolve, reject) => {
 			const queued = this.pendingMetadataWrites.get(id)
+			const previous = queued?.entry
+			// Coalesce pending writes without treating omitted version fields as clears.
+			const mergedEntry: CachedMediaResource = {
+				...entry,
+				namespace,
+				contentLength:
+					entry.contentLength !== undefined
+						? entry.contentLength
+						: previous?.contentLength,
+				resourceVersion:
+					entry.resourceVersion !== undefined
+						? entry.resourceVersion
+						: previous?.resourceVersion,
+				sourceUpdatedAt:
+					entry.sourceUpdatedAt !== undefined
+						? entry.sourceUpdatedAt
+						: previous?.sourceUpdatedAt,
+			}
 			this.pendingMetadataWrites.set(id, {
-				entry: { ...entry, namespace },
+				entry: mergedEntry,
 				worker,
 				waiters: [...(queued?.waiters ?? []), { resolve, reject }],
 			})
@@ -745,9 +764,18 @@ export class MediaResourceOfflineCacheManager {
 						mediaType: entry.mediaType,
 						expiresAt: entry.expiresAt,
 						size: existing?.size,
-						contentLength: entry.contentLength ?? existing?.contentLength ?? null,
-						resourceVersion: entry.resourceVersion ?? null,
-						sourceUpdatedAt: entry.sourceUpdatedAt ?? null,
+						contentLength:
+							entry.contentLength !== undefined
+								? entry.contentLength
+								: (existing?.contentLength ?? null),
+						resourceVersion:
+							entry.resourceVersion !== undefined
+								? entry.resourceVersion
+								: (existing?.resourceVersion ?? null),
+						sourceUpdatedAt:
+							entry.sourceUpdatedAt !== undefined
+								? entry.sourceUpdatedAt
+								: (existing?.sourceUpdatedAt ?? null),
 						lastAccessedAt: entry.lastAccessedAt,
 						pendingBodyToken: existing?.pendingBodyToken ?? null,
 						pendingBodySize: existing?.pendingBodySize ?? null,

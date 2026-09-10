@@ -1,7 +1,12 @@
 import type { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
+import { parseExpiresAt } from "@/components/CanvasDesign/runtime/resources/offline-cache/ossExpiryUtils"
 
 /** Session-scoped persistence for exchanged thumbnail signed URLs. */
 export const SHARED_MEDIA_THUMBNAIL_URL_SESSION_PREFIX = "magic:shared-media-url:thumb:"
+/** Soft cap so long browsing sessions cannot grow sessionStorage without bound. */
+export const SHARED_MEDIA_THUMBNAIL_SESSION_MAX_ENTRIES = 2048
+const THUMBNAIL_SESSION_EXPIRY_SAFETY_WINDOW_MS = 30_000
+const THUMBNAIL_SESSION_FALLBACK_TTL_MS = 15 * 60 * 1000
 
 export interface SharedMediaThumbnailSessionIdentity {
 	scope: string
@@ -96,6 +101,76 @@ function parseRecord(raw: string | null): PersistedSharedMediaThumbnailUrlRecord
 	}
 }
 
+function isPersistedThumbnailRecordValid(
+	record: PersistedSharedMediaThumbnailUrlRecord,
+	now = Date.now(),
+): boolean {
+	const expiresAt = parseExpiresAt(record.expiresAt)
+	if (expiresAt !== null) {
+		return expiresAt - now > THUMBNAIL_SESSION_EXPIRY_SAFETY_WINDOW_MS
+	}
+	return now - record.cachedAt < THUMBNAIL_SESSION_FALLBACK_TTL_MS
+}
+
+function listPersistedThumbnailEntries(): Array<{
+	key: string
+	record: PersistedSharedMediaThumbnailUrlRecord
+}> {
+	const storage = getSessionStorage()
+	if (!storage) return []
+
+	const entries: Array<{ key: string; record: PersistedSharedMediaThumbnailUrlRecord }> = []
+	for (let index = 0; index < storage.length; index += 1) {
+		const key = storage.key(index)
+		if (!key?.startsWith(SHARED_MEDIA_THUMBNAIL_URL_SESSION_PREFIX)) continue
+		const record = parseRecord(storage.getItem(key))
+		if (!record) {
+			try {
+				storage.removeItem(key)
+			} catch {
+				// Ignore storage failures while cleaning corrupt entries.
+			}
+			continue
+		}
+		entries.push({ key, record })
+	}
+	return entries
+}
+
+/** Drop expired thumbnail URLs, then evict oldest records past the soft cap. */
+export function prunePersistedSharedMediaThumbnailUrls(
+	maxEntries = SHARED_MEDIA_THUMBNAIL_SESSION_MAX_ENTRIES,
+): void {
+	const storage = getSessionStorage()
+	if (!storage) return
+
+	const now = Date.now()
+	const alive: Array<{ key: string; record: PersistedSharedMediaThumbnailUrlRecord }> = []
+	for (const entry of listPersistedThumbnailEntries()) {
+		if (isPersistedThumbnailRecordValid(entry.record, now)) {
+			alive.push(entry)
+			continue
+		}
+		try {
+			storage.removeItem(entry.key)
+		} catch {
+			// Ignore storage failures while evicting expired URLs.
+		}
+	}
+
+	if (alive.length <= maxEntries) return
+
+	alive.sort((left, right) => left.record.cachedAt - right.record.cachedAt)
+	const overflow = alive.length - maxEntries
+	for (let index = 0; index < overflow; index += 1) {
+		try {
+			storage.removeItem(alive[index].key)
+		} catch {
+			// Ignore storage failures while enforcing the soft cap.
+		}
+	}
+}
+
 function forEachMatchingKey(
 	match: (key: string, record: PersistedSharedMediaThumbnailUrlRecord) => boolean,
 ) {
@@ -130,9 +205,18 @@ export function readPersistedSharedMediaThumbnailUrl(
 	if (!storage) return null
 
 	const slimRequestKey = buildSlimThumbnailSessionRequestKey(identity)
-	const record = parseRecord(storage.getItem(buildStorageKey(identity.scope, slimRequestKey)))
+	const storageKey = buildStorageKey(identity.scope, slimRequestKey)
+	const record = parseRecord(storage.getItem(storageKey))
 	if (!record) return null
 	if (record.requestKey !== slimRequestKey) return null
+	if (!isPersistedThumbnailRecordValid(record)) {
+		try {
+			storage.removeItem(storageKey)
+		} catch {
+			// Ignore storage failures while dropping expired URLs.
+		}
+		return null
+	}
 	return record
 }
 
@@ -154,13 +238,24 @@ export function writePersistedSharedMediaThumbnailUrl(params: {
 	}
 	if (params.expiresAt) record.expiresAt = params.expiresAt
 
+	const storageKey = buildStorageKey(params.identity.scope, slimRequestKey)
+	const write = () => {
+		storage.setItem(storageKey, JSON.stringify(record))
+		prunePersistedSharedMediaThumbnailUrls()
+	}
+
 	try {
-		storage.setItem(
-			buildStorageKey(params.identity.scope, slimRequestKey),
-			JSON.stringify(record),
-		)
+		write()
 	} catch {
-		// Quota / private mode: keep the in-memory cache only.
+		// Quota pressure: evict then retry once before falling back to memory-only.
+		try {
+			prunePersistedSharedMediaThumbnailUrls(
+				Math.max(1, Math.floor(SHARED_MEDIA_THUMBNAIL_SESSION_MAX_ENTRIES / 2)),
+			)
+			write()
+		} catch {
+			// Quota / private mode: keep the in-memory cache only.
+		}
 	}
 }
 

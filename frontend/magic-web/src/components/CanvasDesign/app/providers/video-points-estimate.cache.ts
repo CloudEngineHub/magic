@@ -15,14 +15,12 @@ interface GetOrRequestVideoPointsEstimateOptions {
 export class VideoPointsEstimateCache {
 	private readonly estimates = new Map<string, EstimateVideoPointsResponse>()
 	private readonly pendingRequests = new Map<string, Promise<EstimateVideoPointsResponse>>()
-	private readonly failures = new Map<string, unknown>()
 	private version = 0
 
 	clear() {
 		this.version += 1
 		this.estimates.clear()
 		this.pendingRequests.clear()
-		this.failures.clear()
 	}
 
 	get(signature: string): EstimateVideoPointsResponse | undefined {
@@ -38,10 +36,6 @@ export class VideoPointsEstimateCache {
 		const pendingEstimate = this.pendingRequests.get(options.signature)
 		if (pendingEstimate) return pendingEstimate
 
-		if (this.failures.has(options.signature)) {
-			return Promise.reject(this.failures.get(options.signature))
-		}
-
 		if (!options.estimateVideoPoints) {
 			throw new Error("estimateVideoPoints is unavailable")
 		}
@@ -51,16 +45,9 @@ export class VideoPointsEstimateCache {
 			.estimateVideoPoints(options.request)
 			.then((estimate) => {
 				if (this.version === requestVersion) {
-					this.failures.delete(options.signature)
 					this.estimates.set(options.signature, estimate)
 				}
 				return estimate
-			})
-			.catch((error) => {
-				if (this.version === requestVersion) {
-					this.failures.set(options.signature, error)
-				}
-				throw error
 			})
 			.finally(() => {
 				if (this.version === requestVersion) {

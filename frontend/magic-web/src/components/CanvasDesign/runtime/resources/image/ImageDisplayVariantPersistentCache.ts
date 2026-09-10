@@ -660,6 +660,15 @@ export class ImageDisplayVariantPersistentCache {
 				}
 
 				accepted = true
+				// Same ready key with a new bodyCacheKey replaces metadata in place;
+				// collect the orphaned body so prune can still reclaim CacheStorage.
+				const existingSameKey = records.find((record) => record.key === current.key)
+				if (
+					existingSameKey?.bodyCacheKey &&
+					existingSameKey.bodyCacheKey !== current.bodyCacheKey
+				) {
+					removedBodyKeys.push(existingSameKey.bodyCacheKey)
+				}
 				store.put(current)
 				const currentIsNewerThanAllExisting = records
 					.filter(
