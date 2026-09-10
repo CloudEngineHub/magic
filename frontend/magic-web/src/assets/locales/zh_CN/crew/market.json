@@ -572,7 +572,9 @@
 		"publishPanel": {
 			"actions": {
 				"cancel": "取消",
-				"publish": "发布"
+				"publish": "发布",
+				"publishing": "发布中…",
+				"publishingWithProgress": "发布中 {{progress}}%"
 			},
 			"create": {
 				"channelChangeConfirm": {
@@ -705,8 +707,11 @@
 				"ensureSkillConfigFailed": "自动生成 skill_config.yaml 失败，请稍后重试",
 				"noValidSkillForPublish": "未找到有效的技能目录（需存在 .magic/skills/<名称>/SKILL.md），无法发布",
 				"publishFailed": "发布失败，请稍后重试",
+				"publishInProgress": "已有发布任务正在处理中，请等待完成后再提交新的发布内容",
 				"publishNeedsProject": "未关联项目工作区，无法发布",
-				"publishSuccess": "发布成功"
+				"publishSuccess": "发布成功",
+				"publishTaskExpired": "发布任务不存在或已过期，请重新发布",
+				"publishTimeout": "发布处理时间较长，请稍后在版本列表中查看结果，或重新发起发布"
 			}
 		},
 		"untitledSkill": "未命名技能"

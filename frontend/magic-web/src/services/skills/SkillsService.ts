@@ -15,6 +15,7 @@ import type {
 	ImportSkillResponse,
 	ParseOfficialSkillResponse,
 	ParseSkillResponse,
+	AsyncPublishTaskResponse,
 	PublishSkillParams,
 	PublishSkillPrefillResponse,
 	PublishSkillResponse,
@@ -241,6 +242,14 @@ export class SkillsService {
 
 	publishSkill(code: string, params: PublishSkillParams): Promise<PublishSkillResponse> {
 		return SkillsApi.publishSkill({ code, ...params })
+	}
+
+	publishSkillAsync(code: string, params: PublishSkillParams): Promise<AsyncPublishTaskResponse> {
+		return SkillsApi.publishSkillAsync({ code, ...params })
+	}
+
+	checkSkillPublish(code: string, publishTaskId: string): Promise<AsyncPublishTaskResponse> {
+		return SkillsApi.checkSkillPublish({ code, publish_task_id: publishTaskId })
 	}
 
 	getSkillPublishPrefill(code: string): Promise<PublishSkillPrefillResponse> {

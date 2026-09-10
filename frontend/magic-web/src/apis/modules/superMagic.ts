@@ -1304,7 +1304,13 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			{
 				page: 1,
 				page_size: 999,
-				file_type: ["user_upload", "process", "system_auto_upload", "directory"],
+				file_type: [
+					"user_upload",
+					"user_create",
+					"process",
+					"system_auto_upload",
+					"directory",
+				],
 				...(params.scope ? { scope: params.scope } : {}),
 				...(params?.temporaryToken ? { token: params.temporaryToken } : {}),
 			},
@@ -1393,7 +1399,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 				{
 					page: 1,
 					page_size: 999,
-					file_type: ["user_upload", "process", "system_auto_upload"],
+					file_type: ["user_upload", "user_create", "process", "system_auto_upload"],
 					token: params.temporary_token || "",
 					topic_id: params?.topic_id,
 				},

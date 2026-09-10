@@ -95,7 +95,7 @@ export const getAttachmentsByThreadId = async ({ id }: { id: string }) => {
 	return magicClient.post(url, {
 		page: 1,
 		page_size: 999,
-		file_type: ["user_upload", "process", "system_auto_upload"],
+		file_type: ["user_upload", "user_create", "process", "system_auto_upload"],
 		// @ts-ignore 使用window添加临时的token
 		token: window.temporary_token || "",
 		topic_id: id,
@@ -107,7 +107,7 @@ export const getAttachmentsByThreadId = async ({ id }: { id: string }) => {
 // 	return magicClient.post(`/api/v1/super-agent/projects/${id}/attachments`, {
 // 		page: 1,
 // 		page_size: 999,
-// 		file_type: ["user_upload", "process", "system_auto_upload", "directory"],
+// 		file_type: ["user_upload", "user_create", "process", "system_auto_upload", "directory"],
 // 		// @ts-ignore 使用window添加临时的token
 // 		token: window.temporary_token || "",
 // 	})
