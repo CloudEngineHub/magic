@@ -17,15 +17,23 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\CloudswayVeoVideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\CloudswayVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\CloudswayVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\DashScopeVideoAdapterRouter;
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\Wan27VideoAdapter;
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Capability\Wan27GenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\Wan30VideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Capability\Wan30GenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\DashScopeTransportInterface;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiOmni1FlashVideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiVideoAdapterRouter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Capability\GeminiOmniGenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportInterface;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Adapter\KelingOmniVideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Adapter\KelingVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Capability\KelingOmniGenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingTransportFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Transport\ApiKeyKelingTransport;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Adapter\MiniMaxH3VideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Capability\MiniMaxH3GenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\MiniMaxVideoClient;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Transport\ApiKeyMiniMaxTransport;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoGenerateFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoProviderOperationExecutor;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArkSeedanceVideoAdapter;
@@ -94,6 +102,16 @@ class VideoProviderOperationExecutorTest extends TestCase
                 $this->createKelingRouter($this->createMock(ClientFactory::class)),
                 new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($this->createMock(ClientFactory::class))),
                 $this->createDashScopeRouter(),
+                new MiniMaxH3VideoAdapter(
+                    new MiniMaxH3GenerationCapabilityProvider(),
+                    new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
+                ),
+                new GeminiVideoAdapterRouter(
+                    new GeminiOmni1FlashVideoAdapter(
+                        new GeminiOmniGenerationCapabilityProvider(),
+                        $this->createMock(GeminiTransportInterface::class),
+                    ),
+                ),
             ),
         );
 
@@ -118,6 +136,16 @@ class VideoProviderOperationExecutorTest extends TestCase
                 $this->createKelingRouter($this->createMock(ClientFactory::class)),
                 new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($this->createMock(ClientFactory::class))),
                 $this->createDashScopeRouter(),
+                new MiniMaxH3VideoAdapter(
+                    new MiniMaxH3GenerationCapabilityProvider(),
+                    new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
+                ),
+                new GeminiVideoAdapterRouter(
+                    new GeminiOmni1FlashVideoAdapter(
+                        new GeminiOmniGenerationCapabilityProvider(),
+                        $this->createMock(GeminiTransportInterface::class),
+                    ),
+                ),
             ),
         );
 
@@ -213,6 +241,16 @@ class VideoProviderOperationExecutorTest extends TestCase
                 $this->createKelingRouter($this->createMock(ClientFactory::class)),
                 new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($clientFactory)),
                 $this->createDashScopeRouter(),
+                new MiniMaxH3VideoAdapter(
+                    new MiniMaxH3GenerationCapabilityProvider(),
+                    new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
+                ),
+                new GeminiVideoAdapterRouter(
+                    new GeminiOmni1FlashVideoAdapter(
+                        new GeminiOmniGenerationCapabilityProvider(),
+                        $this->createMock(GeminiTransportInterface::class),
+                    ),
+                ),
             ),
         );
 
@@ -261,6 +299,16 @@ class VideoProviderOperationExecutorTest extends TestCase
                 $this->createKelingRouter($this->createMock(ClientFactory::class)),
                 new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($clientFactory)),
                 $this->createDashScopeRouter(),
+                new MiniMaxH3VideoAdapter(
+                    new MiniMaxH3GenerationCapabilityProvider(),
+                    new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
+                ),
+                new GeminiVideoAdapterRouter(
+                    new GeminiOmni1FlashVideoAdapter(
+                        new GeminiOmniGenerationCapabilityProvider(),
+                        $this->createMock(GeminiTransportInterface::class),
+                    ),
+                ),
             ),
         );
 
@@ -322,8 +370,8 @@ class VideoProviderOperationExecutorTest extends TestCase
 
     private function createDashScopeRouter(): DashScopeVideoAdapterRouter
     {
-        return new DashScopeVideoAdapterRouter(new Wan27VideoAdapter(
-            new Wan27GenerationCapabilityProvider(),
+        return new DashScopeVideoAdapterRouter(new Wan30VideoAdapter(
+            new Wan30GenerationCapabilityProvider(),
             $this->createMock(DashScopeTransportInterface::class),
         ));
     }

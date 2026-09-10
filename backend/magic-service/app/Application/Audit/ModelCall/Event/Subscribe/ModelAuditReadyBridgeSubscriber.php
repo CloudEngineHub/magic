@@ -302,6 +302,11 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
             $usage['completion_tokens'] = $completionTokens;
             $resolvedTotal = $totalTokens ?? $completionTokens;
             $usage['total_tokens'] = $resolvedTotal;
+            $usage['thought_tokens'] = $event->getThoughtTokens();
+        }
+        $billingTokenUsage = $event->getBillingTokenUsage();
+        if (is_array($billingTokenUsage)) {
+            $usage = [...$usage, ...$billingTokenUsage];
         }
 
         $this->persistAudit(

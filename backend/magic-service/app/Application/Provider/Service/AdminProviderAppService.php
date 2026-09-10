@@ -48,6 +48,7 @@ use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
+use App\Infrastructure\ExternalAPI\Proxy\ProxyConfigResolverInterface;
 use App\Infrastructure\Util\FuzzMatchUtil;
 use App\Interfaces\Agent\Assembler\FileAssembler;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
@@ -860,8 +861,15 @@ readonly class AdminProviderAppService
             }
 
             // 各 provider 自实现连通性探测，失败异常在下方统一转成 ConnectResponse 返回给前端。
+            $config = $providerConfig->getConfig()?->toArray() ?? [];
+            if (! empty($config['use_proxy'])) {
+                $proxyUrl = di(ProxyConfigResolverInterface::class)->resolve($config);
+                if ($proxyUrl !== null && $proxyUrl !== '') {
+                    $config['proxy_url'] = $proxyUrl;
+                }
+            }
             $connectResponse->setStatus($adapter->testConnection(
-                QueueExecutorConfig::fromProviderConfig($providerConfig->getConfig()?->toArray() ?? []),
+                QueueExecutorConfig::fromProviderConfig($config),
                 $providerModelEntity->getModelVersion(),
             ));
             if (! $connectResponse->isStatus()) {

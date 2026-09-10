@@ -781,6 +781,66 @@ class ServiceProviderInitializer
                 ]),
                 'remark' => 'MiniMax',
             ],
+            // DashScope - VGM
+            [
+                'name' => '阿里云(百炼)',
+                'provider_code' => ProviderCode::DashScope->value,
+                'sort_order' => 1000,
+                'description' => '阿里云百炼提供 Wan 系列视频生成模型服务，支持文生视频、图生视频等创作场景。',
+                'icon' => 'MAGIC/713471849556451329/default/magic.png',
+                'provider_type' => 0,
+                'category' => 'vgm',
+                'status' => 1,
+                'is_models_enable' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'Aliyun (Bailian)',
+                        'zh_CN' => '阿里云(百炼)',
+                    ],
+                    'alias' => [
+                        'en_US' => 'Aliyun (Bailian)',
+                        'zh_CN' => '阿里云(百炼)',
+                    ],
+                    'description' => [
+                        'en_US' => 'Alibaba Cloud Bailian provides Wan video generation models for text-to-video and image-to-video creation scenarios.',
+                        'zh_CN' => '阿里云百炼提供 Wan 系列视频生成模型服务，支持文生视频、图生视频等创作场景。',
+                    ],
+                ]),
+                'remark' => 'Wan 视频生成',
+            ],
+            // Gemini - VGM
+            [
+                'name' => 'Google Gemini',
+                'provider_code' => ProviderCode::Gemini->value,
+                'sort_order' => 1000,
+                'description' => 'Google Gemini 提供视频生成模型服务，支持文本和参考素材驱动的视频创作场景。',
+                'icon' => 'MAGIC/713471849556451329/default/default.png',
+                'provider_type' => 0,
+                'category' => 'vgm',
+                'status' => 1,
+                'is_models_enable' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'translate' => json_encode([
+                    'name' => [
+                        'en_US' => 'Google Gemini',
+                        'zh_CN' => 'Google Gemini',
+                    ],
+                    'alias' => [
+                        'en_US' => 'Google Gemini',
+                        'zh_CN' => 'Google Gemini',
+                    ],
+                    'description' => [
+                        'en_US' => 'Google Gemini provides video generation model services for text and reference-material-driven video creation scenarios.',
+                        'zh_CN' => 'Google Gemini 提供视频生成模型服务，支持文本和参考素材驱动的视频创作场景。',
+                    ],
+                ]),
+                'remark' => 'Gemini 视频生成',
+            ],
         ];
     }
 }

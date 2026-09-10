@@ -80,6 +80,11 @@ readonly class ModelGatewayVideoGatewayClient implements VideoGatewayClientInter
         return $result;
     }
 
+    public function downloadMediaToLocalFile(string $operationId, string $url): string
+    {
+        return $this->videoOperationAppService->downloadOperationMediaToLocalFile($operationId, $url);
+    }
+
     public function timeoutVideo(string $operationId, array $businessParams): void
     {
         $this->videoOperationAppService->timeoutOperationById($operationId, $businessParams);
