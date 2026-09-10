@@ -111,7 +111,7 @@ describe("ChatProjectMessageLayout", () => {
 		const panels = screen.getAllByTestId("splitter-panel")
 		expect(panels).toHaveLength(2)
 		expect(panels[1]).toHaveAttribute("data-size", "240")
-		expect(panels[1]).toHaveAttribute("data-min", "200")
+		expect(panels[1]).toHaveAttribute("data-min", "244")
 		expect(panels[1]).toHaveAttribute("data-max", "400")
 		expect(panels[1]).toHaveAttribute("data-resizable", "true")
 		expect(screen.getByTestId("conversation-input-resize-handle").parentElement).toHaveClass(
@@ -121,7 +121,7 @@ describe("ChatProjectMessageLayout", () => {
 		)
 		expect(inputHeightMocks.useConversationInputHeight).toHaveBeenCalledWith(
 			expect.objectContaining({
-				minHeight: 200,
+				minHeight: 244,
 				maxRatio: 0.5,
 				manualMaxRatio: 0.7,
 				manualMinAvailableHeight: 240,
@@ -129,7 +129,7 @@ describe("ChatProjectMessageLayout", () => {
 		)
 		expect(screen.getByTestId("conversation-input-resize-handle")).toHaveAttribute(
 			"aria-valuemin",
-			"200",
+			"244",
 		)
 
 		fireEvent.click(screen.getByRole("button", { name: "resize-start" }))
