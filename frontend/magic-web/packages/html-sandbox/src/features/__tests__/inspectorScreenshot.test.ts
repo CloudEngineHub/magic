@@ -415,9 +415,7 @@ describe("waitForCaptureVideosInClip", () => {
 		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
 		await vi.advanceTimersByTimeAsync(VIDEO_DATA_WAIT_TIMEOUT_MS * 2 + 400)
 		const restore = await pending
-		const overlay = root.querySelector<HTMLImageElement>(
-			"img[data-magic-video-poster-capture]",
-		)
+		const overlay = root.querySelector<HTMLImageElement>("img[data-magic-video-poster-capture]")
 		expect(overlay?.src).toBe("https://cdn.example/cover.png")
 		expect(video.muted).toBe(false)
 		restore()
