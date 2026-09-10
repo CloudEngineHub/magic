@@ -3,12 +3,13 @@ import { observer } from "mobx-react-lite"
 import { Plus, Unplug, X } from "lucide-react"
 import { IconLoader2 } from "@tabler/icons-react"
 import { useCreation, useMemoizedFn } from "ahooks"
+import { InfiniteScroll } from "antd-mobile"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import MagicImage from "@/components/base/MagicImage"
 import { useTranslation } from "react-i18next"
 import type { MCPButtonProps } from "./MCPButton"
 import type { IMCPItem } from "../types"
-import { getMCPAccess, loadMCPWithLegacyCompatibility } from "../store/mcp-access"
+import { getMCPAccess, loadMCPWithInstalledConnectorReconciliation } from "../store/mcp-access"
 import { mcpEnabledStore } from "../store/mcp-enabled-store"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { Button } from "@/components/shadcn-ui/button"
@@ -79,7 +80,7 @@ function MobileMCPConnectorItem({
 				</div>
 			</div>
 			<div
-				className="flex shrink-0 self-center items-center"
+				className="flex shrink-0 items-center self-center"
 				onClick={(event) => event.stopPropagation()}
 			>
 				{action}
@@ -146,7 +147,7 @@ function MobileMCPPluginsSheet({
 		() => getMCPAccess({ storageKey, useTempStorage }),
 		[storageKey, useTempStorage],
 	)
-	const legacyStorageKey = storageKey || "__template_project_id__"
+	const activeStorageKey = storageKey || "__template_project_id__"
 	const {
 		selectedItems,
 		selectedIds,
@@ -156,12 +157,15 @@ function MobileMCPPluginsSheet({
 		handleAuthDialogRevoked,
 		handleAuthDialogOpenChange,
 		onStatusChange,
-	} = useConnectorActions()
+	} = useConnectorActions({ activeAccess: activeMCPAccess })
 	const {
 		list: marketList,
 		loading: marketLoading,
+		loadingMoreError: marketLoadingMoreError,
+		hasMore: marketHasMore,
 		error: marketError,
 		retry: retryMarket,
+		loadMore: loadMoreMarket,
 	} = useConnectorMarket("", activeTab, selectedItems, open)
 
 	useEffect(() => {
@@ -172,10 +176,10 @@ function MobileMCPPluginsSheet({
 		const loadMCPSettings = async () => {
 			if (!useTempStorage) {
 				try {
-					await loadMCPWithLegacyCompatibility({
-						addedAccess: addedMCPAccess,
-						legacyAccess: activeMCPAccess,
-						legacyStorageKey,
+					await loadMCPWithInstalledConnectorReconciliation({
+						installedAccess: addedMCPAccess,
+						activeAccess: activeMCPAccess,
+						activeStorageKey,
 					})
 				} catch (error) {
 					console.error(error)
@@ -194,7 +198,7 @@ function MobileMCPPluginsSheet({
 		return () => {
 			cancelled = true
 		}
-	}, [activeMCPAccess, addedMCPAccess, legacyStorageKey, useTempStorage])
+	}, [activeMCPAccess, activeStorageKey, addedMCPAccess, useTempStorage])
 
 	const displayMCPList = addedMCPAccess.mcpList
 	const activeMCPIds = activeMCPAccess.mcpList.map((item) => item.id).join(",")
@@ -374,7 +378,7 @@ function MobileMCPPluginsSheet({
 													})}
 													checked={enabledMCPIds.has(item.id)}
 													loading={switchLoadingIds.has(item.id)}
-													className="self-center translate-y-0 h-[28px] w-[48px] data-[state=checked]:bg-foreground data-[state=unchecked]:bg-border [&_[data-slot=switch-thumb]]:size-6 [&_[data-slot=switch-thumb]]:bg-background [&_[data-slot=switch-thumb]]:translate-y-0 [&_[data-slot=switch-thumb][data-state=checked]]:translate-x-[calc(100%-2px)]"
+													className="h-[28px] w-[48px] translate-y-0 self-center data-[state=checked]:bg-foreground data-[state=unchecked]:bg-border [&_[data-slot=switch-thumb][data-state=checked]]:translate-x-[calc(100%-2px)] [&_[data-slot=switch-thumb]]:size-6 [&_[data-slot=switch-thumb]]:translate-y-0 [&_[data-slot=switch-thumb]]:bg-background"
 													onCheckedChange={(checked) =>
 														void toggleMCPEnabled(item.id, checked)
 													}
@@ -429,18 +433,40 @@ function MobileMCPPluginsSheet({
 					) : (
 						<div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3 pt-3">
 							{marketList.length > 0 ? (
-								<div className="flex flex-col gap-2">
-									{marketList.map((item) => (
-										<MobileMCPMarketItem
-											key={item.id}
-											item={item}
-											selected={selectedIds.has(item.id)}
-											loading={loadingIds.has(item.id)}
-											onOpenDetail={openConnectorDetail}
-											onToggle={(connector) => void onStatusChange(connector)}
-										/>
-									))}
-								</div>
+								<>
+									<div className="flex flex-col gap-2">
+										{marketList.map((item) => (
+											<MobileMCPMarketItem
+												key={item.id}
+												item={item}
+												selected={selectedIds.has(item.id)}
+												loading={loadingIds.has(item.id)}
+												onOpenDetail={openConnectorDetail}
+												onToggle={(connector) =>
+													void onStatusChange(connector)
+												}
+											/>
+										))}
+									</div>
+									{marketLoadingMoreError ? (
+										<div className="flex items-center justify-center gap-2 py-2 text-xs text-destructive">
+											<span>{tMarket("connectors.loadFailed")}</span>
+											<Button
+												variant="ghost"
+												size="sm"
+												className="h-7 px-2"
+												onClick={loadMoreMarket}
+											>
+												{tMarket("connectors.retry")}
+											</Button>
+										</div>
+									) : null}
+									{/* Official and mine lists are server-paginated; the added list is local. */}
+									<InfiniteScroll
+										hasMore={marketHasMore}
+										loadMore={loadMoreMarket}
+									/>
+								</>
 							) : (
 								<div className="flex min-h-[180px] items-center justify-center text-sm text-muted-foreground">
 									{tMarket("connectors.empty")}

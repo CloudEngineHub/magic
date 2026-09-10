@@ -8,7 +8,7 @@ import { IconMCP } from "@/enhance/tabler/icons-react"
 import MagicImage from "@/components/base/MagicImage"
 import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { getMCPAccess, loadMCPWithLegacyCompatibility } from "../store/mcp-access"
+import { getMCPAccess, loadMCPWithInstalledConnectorReconciliation } from "../store/mcp-access"
 import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import AgentSettings from "../AgentSettings"
 import MobileMCPPluginsSheet from "./MobileMCPPluginsSheet"
@@ -100,7 +100,7 @@ function MCPButton(props?: MCPButtonProps) {
 			}),
 		[props?.storageKey, useTempStorage],
 	)
-	const legacyStorageKey = props?.storageKey || "__template_project_id__"
+	const activeStorageKey = props?.storageKey || "__template_project_id__"
 
 	useEffect(() => {
 		let cancelled = false
@@ -109,10 +109,10 @@ function MCPButton(props?: MCPButtonProps) {
 		const loadMCPSettings = async () => {
 			if (!useTempStorage) {
 				try {
-					await loadMCPWithLegacyCompatibility({
-						addedAccess: addedMCPAccess,
-						legacyAccess: activeMCPAccess,
-						legacyStorageKey,
+					await loadMCPWithInstalledConnectorReconciliation({
+						installedAccess: addedMCPAccess,
+						activeAccess: activeMCPAccess,
+						activeStorageKey,
 					})
 				} catch (error) {
 					console.error(error)
@@ -130,7 +130,7 @@ function MCPButton(props?: MCPButtonProps) {
 		return () => {
 			cancelled = true
 		}
-	}, [activeMCPAccess, addedMCPAccess, legacyStorageKey, useTempStorage])
+	}, [activeMCPAccess, activeStorageKey, addedMCPAccess, useTempStorage])
 
 	const displayMCPList = addedMCPAccess.mcpList
 	const activeMCPIds = activeMCPAccess.mcpList.map((item) => item.id).join(",")
