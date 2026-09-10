@@ -103,6 +103,7 @@ final class GeminiOmni1FlashVideoAdapterTest extends TestCase
         self::assertSame([
             ['type' => 'text', 'text' => 'generate a city sunset'],
         ], $payload['input']);
+        self::assertSame(['video_config' => ['task' => 'reference_to_video']], $payload['generation_config']);
     }
 
     public function testBuildsOmniInteractionPayloadWithBase64AudioReference(): void

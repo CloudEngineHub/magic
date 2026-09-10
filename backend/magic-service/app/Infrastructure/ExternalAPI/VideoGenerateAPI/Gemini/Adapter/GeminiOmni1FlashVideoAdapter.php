@@ -110,6 +110,12 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
             'model' => $model,
             'input' => $parts,
             'background' => array_key_exists('background', $request) ? (bool) $request['background'] : true,
+            'generation_config' => ['video_config' => ['task' => match ($mode) {
+                VideoInputMode::Standard->value => 'text_to_video',
+                VideoInputMode::KeyframeGuided->value => 'image_to_video',
+                VideoInputMode::VideoEdit->value => 'edit',
+                default => 'reference_to_video',
+            }]],
             'response_format' => $responseFormat,
         ];
     }
