@@ -18,6 +18,8 @@ interface LayoutHintStyles {
 	flexDirection?: string
 	width?: string
 	height?: string
+	declaredWidth?: string
+	declaredHeight?: string
 	parentDisplay?: string
 	parentFlexDirection?: string
 	parentAlignItems?: string
@@ -44,6 +46,13 @@ function parseGrow(value?: string): number {
 	return Number.isFinite(parsed) ? parsed : 0
 }
 
+/** Stretch only owns a cross size that is still auto. */
+function isDeclaredAutoSize(value?: string): boolean {
+	if (value == null) return false
+	const trimmed = value.trim().toLowerCase()
+	return trimmed === "" || trimmed === "auto"
+}
+
 export function getLayoutConstraintHints(styles: LayoutHintStyles): LayoutConstraintHint[] {
 	const hints: LayoutConstraintHint[] = []
 	const justifyContent = styles.justifyContent || ""
@@ -62,7 +71,7 @@ export function getLayoutConstraintHints(styles: LayoutHintStyles): LayoutConstr
 
 	const parentVertical = isVerticalFlex(styles.parentFlexDirection)
 	const alignSelf = styles.alignSelf || "auto"
-	const parentAlign = styles.parentAlignItems || "stretch"
+	const parentAlign = styles.parentAlignItems
 	const stretches = alignSelf === "stretch" || (alignSelf === "auto" && parentAlign === "stretch")
 
 	if (parseGrow(styles.flexGrow) > 0) {
@@ -79,10 +88,13 @@ export function getLayoutConstraintHints(styles: LayoutHintStyles): LayoutConstr
 				},
 			})
 		}
-	} else if (stretches) {
+	}
+
+	if (stretches) {
 		const axis = parentVertical ? "width" : "height"
 		const used = axis === "width" ? styles.width : styles.height
-		if (used) {
+		const declared = axis === "width" ? styles.declaredWidth : styles.declaredHeight
+		if (used && isDeclaredAutoSize(declared)) {
 			hints.push({
 				kind: "parent-owned-size",
 				axis,

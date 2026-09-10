@@ -237,7 +237,11 @@ export function SizePopover({
 					testIdPrefix="html-style-panel-size-height"
 				/>
 			</div>
-			{getLayoutConstraintHints(selectedElement?.computedStyles || {})
+			{getLayoutConstraintHints({
+				...(selectedElement?.computedStyles || {}),
+				declaredWidth: selectedElement?.inlineStyles?.width,
+				declaredHeight: selectedElement?.inlineStyles?.height,
+			})
 				.filter((hint) => hint.kind === "parent-owned-size")
 				.map((hint) => (
 					<LayoutConstraintHintCard

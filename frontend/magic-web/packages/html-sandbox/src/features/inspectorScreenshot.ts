@@ -373,7 +373,10 @@ function seekVideoForCaptureFrame(video: HTMLVideoElement): Promise<void> {
 			return
 		}
 		try {
-			const targetTime = Math.min(0.001, Number.isFinite(video.duration) ? video.duration : 0.001)
+			const targetTime = Math.min(
+				0.001,
+				Number.isFinite(video.duration) ? video.duration : 0.001,
+			)
 			if (Math.abs(video.currentTime - targetTime) < 1e-6) {
 				finish()
 				return
@@ -387,7 +390,54 @@ function seekVideoForCaptureFrame(video: HTMLVideoElement): Promise<void> {
 	})
 }
 
+interface VideoCaptureSnapshot {
+	muted: boolean
+	currentTime: number
+	paused: boolean
+}
+
+function readVideoCaptureSnapshot(video: HTMLVideoElement): VideoCaptureSnapshot {
+	return {
+		muted: video.muted,
+		currentTime: video.currentTime,
+		paused: video.paused,
+	}
+}
+
+function restoreVideoCaptureSnapshot(
+	video: HTMLVideoElement,
+	snapshot: VideoCaptureSnapshot,
+): void {
+	try {
+		video.muted = snapshot.muted
+	} catch {
+		// Detached media can reject property writes.
+	}
+	try {
+		if (
+			Number.isFinite(snapshot.currentTime) &&
+			Math.abs(video.currentTime - snapshot.currentTime) > 1e-6
+		) {
+			video.currentTime = snapshot.currentTime
+		}
+	} catch {
+		// Seeking back can fail if the source was replaced.
+	}
+	try {
+		if (snapshot.paused && !video.paused) video.pause()
+		else if (!snapshot.paused && video.paused) void video.play().catch(() => undefined)
+	} catch {
+		// Autoplay policies may block resume after load().
+	}
+}
+
 async function waitForVideoCaptureFrame(video: HTMLVideoElement): Promise<void> {
+	if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+		await waitForVideoFramePresented(video)
+		return
+	}
+
+	// Mute only while forcing a frame so seek/load cannot blip audio.
 	video.muted = true
 	if (video.networkState === HTMLMediaElement.NETWORK_EMPTY && video.currentSrc) {
 		try {
@@ -404,15 +454,27 @@ async function waitForVideoCaptureFrame(video: HTMLVideoElement): Promise<void> 
 	await waitForVideoFramePresented(video)
 }
 
-/** Wait for clip videos to decode a frame before DOM capture. */
+/** Wait for clip videos to decode a frame; restore playback after capture. */
 export async function waitForCaptureVideosInClip(
 	root: HTMLElement,
 	clip: CaptureClipRect,
-): Promise<void> {
+): Promise<() => void> {
 	const videos = findVideosInCaptureClip(root, clip)
-	if (videos.length === 0) return
-	await Promise.all(videos.map((video) => waitForVideoCaptureFrame(video)))
-	await waitForAnimationFrameWithTimeout(CAPTURE_FRAME_WAIT_TIMEOUT_MS)
+	if (videos.length === 0) return () => undefined
+	const snapshots = videos.map((video) => ({
+		video,
+		...readVideoCaptureSnapshot(video),
+	}))
+	try {
+		await Promise.all(videos.map((video) => waitForVideoCaptureFrame(video)))
+		await waitForAnimationFrameWithTimeout(CAPTURE_FRAME_WAIT_TIMEOUT_MS)
+	} catch (error) {
+		for (const snapshot of snapshots) restoreVideoCaptureSnapshot(snapshot.video, snapshot)
+		throw error
+	}
+	return () => {
+		for (const snapshot of snapshots) restoreVideoCaptureSnapshot(snapshot.video, snapshot)
+	}
 }
 
 function resolveVideoAlignedClip(
@@ -422,6 +484,7 @@ function resolveVideoAlignedClip(
 ): CaptureClipRect {
 	const centerX = selection.left + selection.width / 2
 	const centerY = selection.top + selection.height / 2
+	if (typeof document.elementFromPoint !== "function") return clip
 	const target = document.elementFromPoint(centerX, centerY)
 	const video = target?.closest("video")
 	if (!(video instanceof HTMLVideoElement) || !root.contains(video)) return clip
@@ -513,15 +576,15 @@ export async function captureScreenshotBlob(
 			animation: none !important;
 			transition: none !important;
 			caret-color: transparent !important;
-			cursor: none !important;
 		}
 	`
 	;(document.head ?? document.documentElement).appendChild(style)
+	let restoreCaptureVideos = () => undefined
 	try {
 		throwIfAborted(hooks.shouldAbort)
 		await waitForCaptureFrame()
 		throwIfAborted(hooks.shouldAbort)
-		await waitForCaptureVideosInClip(root, clip)
+		restoreCaptureVideos = await waitForCaptureVideosInClip(root, clip)
 		throwIfAborted(hooks.shouldAbort)
 		clip = resolveVideoAlignedClip(root, request.selection, clip)
 		throwIfAborted(hooks.shouldAbort)
@@ -557,6 +620,7 @@ export async function captureScreenshotBlob(
 		throwIfAborted(hooks.shouldAbort)
 		return await encodeCanvasToScreenshotBlob(outputCanvas, hooks.shouldAbort)
 	} finally {
+		restoreCaptureVideos()
 		style.remove()
 	}
 }

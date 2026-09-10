@@ -179,6 +179,24 @@ describe("useGapHandles", () => {
 		})
 	})
 
+	it("commits the drag when the window blurs", async () => {
+		await dragGap({
+			selectedInfo: createFlexSelectedInfo(),
+			axis: "column",
+			gapAxesLinked: false,
+			moveX: 120,
+			moveY: 100,
+			skipPointerUp: true,
+		})
+
+		await act(async () => {
+			window.dispatchEvent(new Event("blur"))
+		})
+
+		expect(mockEditorRef.current.endBatchOperation).toHaveBeenCalledTimes(1)
+		expect(mockEditorRef.current.refreshSelectedElement).toHaveBeenCalledWith("div.flex-row")
+	})
+
 	it("calls endBatchOperation once on pointer up", async () => {
 		await dragGap({
 			selectedInfo: createFlexSelectedInfo(),

@@ -319,6 +319,52 @@ describe("getFullContent", () => {
 		expect(result).toContain('RECTS_CHANGED: "MAGIC_INSPECTOR_RECTS_CHANGED"')
 		expect(result).toContain("requestAnimationFrame(refreshTrackedRects)")
 		expect(result).toContain("lastTrackedRects")
+		expect(result).toContain("function getInspectableTextContent")
+	})
+
+	it("selects an element through the injected inspector fallback script", async () => {
+		const { getFullContent } = await import("../full-content")
+		const html = getFullContent(
+			"<!DOCTYPE html><html><body><h2>产品演示</h2></body></html>",
+			"",
+			{ enableInlineInspectorFallback: true },
+		)
+		const scriptMatch = html.match(
+			/\(function\(\) \{\s*var INSPECTOR_MSG = \{[\s\S]*?\}\)\(\);/,
+		)
+		const inspectorScript = scriptMatch?.[0]
+		expect(inspectorScript).toContain("function getInspectableTextContent")
+		if (!inspectorScript) return
+
+		const messages: unknown[] = []
+		vi.spyOn(window.parent, "postMessage").mockImplementation((data) => {
+			messages.push(data)
+		})
+		document.body.replaceChildren()
+		document.body.innerHTML = "<h2>产品演示</h2>"
+		new Function(inspectorScript)()
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				data: { type: "MAGIC_INSPECTOR_START", timestamp: Date.now() },
+			}),
+		)
+
+		const title = document.querySelector("h2")
+		expect(title).toBeTruthy()
+		if (!title) return
+		title.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+
+		expect(messages).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					type: "MAGIC_INSPECTOR_SELECT",
+					elementInfo: expect.objectContaining({
+						tagName: "h2",
+						textContent: "产品演示",
+					}),
+				}),
+			]),
+		)
 	})
 
 	it("injects iframe content metrics only for document-flow fullscreen", async () => {

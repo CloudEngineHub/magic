@@ -228,7 +228,8 @@ describe("waitForCaptureVideosInClip", () => {
 		})
 		video.dispatchEvent(new Event("loadeddata"))
 		await vi.advanceTimersByTimeAsync(200)
-		await pending
+		const restore = await pending
+		restore()
 		root.remove()
 		vi.useRealTimers()
 	})
@@ -249,7 +250,69 @@ describe("waitForCaptureVideosInClip", () => {
 
 		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
 		await vi.advanceTimersByTimeAsync(VIDEO_DATA_WAIT_TIMEOUT_MS + 200)
-		await pending
+		const restore = await pending
+		restore()
+		root.remove()
+		vi.useRealTimers()
+	})
+
+	it("does not leave a ready video muted after capture wait", async () => {
+		vi.useFakeTimers()
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			return window.setTimeout(() => callback(0), 0) as unknown as number
+		})
+		const root = document.createElement("div")
+		document.body.appendChild(root)
+		mockBoundingClientRect(root, { left: 0, top: 0, width: 200, height: 200 })
+
+		const video = document.createElement("video")
+		video.muted = false
+		Object.defineProperty(video, "readyState", {
+			configurable: true,
+			get: () => HTMLMediaElement.HAVE_CURRENT_DATA,
+		})
+		root.appendChild(video)
+		mockBoundingClientRect(video, { left: 10, top: 10, width: 120, height: 80 })
+
+		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
+		await vi.advanceTimersByTimeAsync(200)
+		const restore = await pending
+		restore()
+		expect(video.muted).toBe(false)
+		root.remove()
+		vi.useRealTimers()
+	})
+
+	it("restores muted and currentTime after seeking a metadata-only video", async () => {
+		vi.useFakeTimers()
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			return window.setTimeout(() => callback(0), 0) as unknown as number
+		})
+		const root = document.createElement("div")
+		document.body.appendChild(root)
+		mockBoundingClientRect(root, { left: 0, top: 0, width: 200, height: 200 })
+
+		const video = document.createElement("video")
+		video.muted = false
+		video.currentTime = 12
+		Object.defineProperty(video, "readyState", {
+			configurable: true,
+			get: () => HTMLMediaElement.HAVE_METADATA,
+		})
+		Object.defineProperty(video, "duration", {
+			configurable: true,
+			get: () => 30,
+		})
+		root.appendChild(video)
+		mockBoundingClientRect(video, { left: 10, top: 10, width: 120, height: 80 })
+
+		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
+		await vi.advanceTimersByTimeAsync(VIDEO_DATA_WAIT_TIMEOUT_MS * 2 + 400)
+		const restore = await pending
+		expect(video.muted).toBe(true)
+		restore()
+		expect(video.muted).toBe(false)
+		expect(video.currentTime).toBe(12)
 		root.remove()
 		vi.useRealTimers()
 	})
