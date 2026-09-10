@@ -184,14 +184,21 @@ describe("pptxStreamingExport", () => {
 		await expect(openPptxDestination({ suggestedName: "deck" })).resolves.toBeNull()
 	})
 
-	it("formats phase and page progress without carrying page content", () => {
+	it("formats page progress without exposing the internal export phase", () => {
 		expect(
 			formatPptxStreamingProgress("Exporting", {
 				phase: "package-page",
 				pageIndex: 8,
 				pageCount: 300,
 			}),
-		).toBe("Exporting (9/300) · package-page")
+		).toBe("Exporting (9/300)")
+		expect(
+			formatPptxStreamingProgress("Exporting", {
+				phase: "stage-media",
+				pageIndex: 0,
+				pageCount: 6,
+			}),
+		).toBe("Exporting (1/6)")
 	})
 
 	it("peeks the first page once and replays the source in order", async () => {

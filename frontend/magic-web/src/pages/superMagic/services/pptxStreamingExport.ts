@@ -430,9 +430,7 @@ async function* normalizeStreamingPages(
 	}
 }
 
-/**
- * Build progress text without retaining page HTML or media data in UI state.
- */
+/** Build user-facing progress text without exposing internal export phase names. */
 export function formatPptxStreamingProgress(baseText: string, progress: ExportProgress): string {
 	const pageText =
 		progress.pageIndex !== undefined
@@ -440,8 +438,7 @@ export function formatPptxStreamingProgress(baseText: string, progress: ExportPr
 				? ` (${progress.pageIndex + 1}/${progress.pageCount})`
 				: ` (${progress.pageIndex + 1})`
 			: ""
-	const phaseText = progress.phase === "completed" ? "" : ` · ${progress.phase}`
-	return `${baseText}${pageText}${phaseText}`
+	return `${baseText}${pageText}`
 }
 
 function isAbortError(error: unknown): boolean {
