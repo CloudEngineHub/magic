@@ -392,8 +392,9 @@ describe("ElementInspectorOverlay", () => {
 		}
 	})
 
-	it("hides the cursor before automatic preview capture starts", async () => {
+	it("does not hide the cursor before automatic preview capture starts", async () => {
 		suppressCaptureCursor.mockClear()
+		captureIframeRegion.mockClear()
 		const rect = {
 			top: 0,
 			left: 0,
@@ -425,8 +426,8 @@ describe("ElementInspectorOverlay", () => {
 				</div>,
 			)
 
-			await waitFor(() => expect(suppressCaptureCursor).toHaveBeenCalledOnce())
-			expect(suppressCaptureCursor).toHaveBeenCalled()
+			await waitFor(() => expect(captureIframeRegion).toHaveBeenCalledOnce())
+			expect(suppressCaptureCursor).not.toHaveBeenCalled()
 		} finally {
 			HTMLIFrameElement.prototype.getBoundingClientRect = originalGetBoundingClientRect
 		}

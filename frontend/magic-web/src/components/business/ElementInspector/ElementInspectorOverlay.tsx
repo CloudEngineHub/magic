@@ -46,7 +46,6 @@ import {
 	type CurrentTabCaptureAuthorizationContext,
 	type CurrentTabCaptureSession,
 	supportsCurrentTabCapture,
-	suppressCaptureCursor,
 	toRenderedSelection,
 	waitForNextAnimationFrame,
 } from "./screenshot"
@@ -460,54 +459,45 @@ export function ElementInspectorOverlay({
 			if (!iframe) throw new Error("HTML screenshot capture is unavailable")
 			const overlay = overlayRef.current
 			if (!overlay) throw new Error("HTML screenshot overlay is unavailable")
-			const restoreCaptureCursor = suppressCaptureCursor(iframe)
-			try {
-				// Keep the cursor hidden before waiting for layout and video frames. The
-				// automatic element preview starts while the pointer is still over the
-				// selected element, so delaying this until after the first animation frame
-				// can leave the pointer in the captured frame.
-				const geometry = getOverlayGeometry()
-				if (!geometry) throw new Error("HTML screenshot geometry is unavailable")
-				const overlayBounds = overlay.getBoundingClientRect()
-				const viewportSelection = toRenderedSelection(
-					{
-						clientWidth: overlay.clientWidth || overlayBounds.width,
-						clientHeight: overlay.clientHeight || overlayBounds.height,
-					},
-					overlayBounds,
-					overlayRect,
-				)
-				const iframeSelection = fromInspectorOverlayRect(overlayRect, geometry)
-				const { left: scrollLeft, top: scrollTop } = readIframeScrollOffset(iframe)
-				const documentSelection =
-					scrollLeft || scrollTop
-						? {
-								...iframeSelection,
-								left: iframeSelection.left + scrollLeft,
-								top: iframeSelection.top + scrollTop,
-							}
-						: undefined
-				const dataUrl = await captureIframeRegion({
-					iframe,
-					selection: iframeSelection,
-					viewportSelection,
-					iframeTargetOrigin,
-					beforeCurrentTabCapture,
-					currentTabSession: currentTabCaptureSessionRef.current ?? undefined,
-					requestCurrentTabCaptureAuthorization,
-				})
-				const displaySize = {
-					width: viewportSelection.width,
-					height: viewportSelection.height,
-				}
-				return {
-					dataUrl,
-					rect: iframeSelection,
-					displaySize,
-					documentRect: documentSelection,
-				}
-			} finally {
-				restoreCaptureCursor()
+			const geometry = getOverlayGeometry()
+			if (!geometry) throw new Error("HTML screenshot geometry is unavailable")
+			const overlayBounds = overlay.getBoundingClientRect()
+			const viewportSelection = toRenderedSelection(
+				{
+					clientWidth: overlay.clientWidth || overlayBounds.width,
+					clientHeight: overlay.clientHeight || overlayBounds.height,
+				},
+				overlayBounds,
+				overlayRect,
+			)
+			const iframeSelection = fromInspectorOverlayRect(overlayRect, geometry)
+			const { left: scrollLeft, top: scrollTop } = readIframeScrollOffset(iframe)
+			const documentSelection =
+				scrollLeft || scrollTop
+					? {
+							...iframeSelection,
+							left: iframeSelection.left + scrollLeft,
+							top: iframeSelection.top + scrollTop,
+						}
+					: undefined
+			const dataUrl = await captureIframeRegion({
+				iframe,
+				selection: iframeSelection,
+				viewportSelection,
+				iframeTargetOrigin,
+				beforeCurrentTabCapture,
+				currentTabSession: currentTabCaptureSessionRef.current ?? undefined,
+				requestCurrentTabCaptureAuthorization,
+			})
+			const displaySize = {
+				width: viewportSelection.width,
+				height: viewportSelection.height,
+			}
+			return {
+				dataUrl,
+				rect: iframeSelection,
+				displaySize,
+				documentRect: documentSelection,
 			}
 		},
 		[getOverlayGeometry, iframeRef, iframeTargetOrigin, requestCurrentTabCaptureAuthorization],
