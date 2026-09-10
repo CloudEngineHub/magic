@@ -60,7 +60,13 @@ export class EraserRenderer {
 	private brushSurfaceKey = ""
 
 	private sessionUpdateHandler?: (event: {
-		data: { elementId: string; radius: number; strokeCount: number; canUndo: boolean }
+		data: {
+			elementId: string
+			radius: number
+			strokeCount: number
+			canUndo: boolean
+			canRedo: boolean
+		}
 	}) => void
 
 	private elementBounds: { width: number; height: number } | null = null

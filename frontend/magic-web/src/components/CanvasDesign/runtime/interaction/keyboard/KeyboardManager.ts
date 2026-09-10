@@ -193,6 +193,13 @@ export class KeyboardManager {
 					modifiers as PlatformModifier[],
 				)
 
+				if (
+					matchedDefinition &&
+					this.handleEraserHistoryShortcut(matchedDefinition.id, e)
+				) {
+					return
+				}
+
 				if (matchedDefinition && matchedDefinition.preventDefault) {
 					// 阻止默认行为和传播，防止浏览器或 Radix UI 拦截
 					e.preventDefault()
@@ -212,6 +219,30 @@ export class KeyboardManager {
 		window.addEventListener("keyup", this.handleKeyUp)
 		window.addEventListener("blur", this.handleWindowBlur)
 		document.addEventListener("visibilitychange", this.handleVisibilityChange)
+	}
+
+	/**
+	 * 橡皮擦编辑态拥有独立的临时历史；撤销/重做不能继续进入画布历史。
+	 * 即使当前没有可操作记录也必须消费事件，避免误改画布文档。
+	 */
+	private handleEraserHistoryShortcut(shortcutId: string, event: KeyboardEvent): boolean {
+		if (
+			(shortcutId !== "edit.undo" && shortcutId !== "edit.redo") ||
+			!this.canvas.eraserManager?.getErasingElementId()
+		) {
+			return false
+		}
+
+		event.preventDefault()
+		event.stopImmediatePropagation()
+
+		if (shortcutId === "edit.undo") {
+			this.canvas.eraserManager.undoLastStroke()
+		} else {
+			this.canvas.eraserManager.redoLastStroke()
+		}
+
+		return true
 	}
 
 	/**
