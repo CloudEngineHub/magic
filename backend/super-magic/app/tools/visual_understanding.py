@@ -298,9 +298,8 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
                 query,
                 provide_native_visual=provide_native_visual,
             ):
-                return ToolResult(
-                    content="The image has been prepared as native visual input for the next model call.",
-                )
+                # 工具结果只保留最小动作提示，原生视觉机制说明统一由 Horizon 承载。
+                return ToolResult(content="Please read the image(s).")
 
             # 并发处理所有图片来源
             tasks = [
@@ -426,15 +425,14 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
             for image in images:
                 if re.match(r"^https?://", image):
                     return False
-            message = await NativeVisualMessageBuilder(workspace_dir).build_user_message(
+            message_builder = NativeVisualMessageBuilder(workspace_dir)
+            message = await message_builder.build_user_message(
                 query,
                 images,
                 show_in_ui=False,
                 source="native_visual",
             )
-            agent_context.horizon.push_user_message(
-                message
-            )
+            agent_context.horizon.push_user_message(message)
             return True
         except (AttributeError, ValueError, OSError):
             return False
