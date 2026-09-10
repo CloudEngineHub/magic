@@ -3574,7 +3574,7 @@
 			"coverUpload": "上传封面",
 			"coverUploadFailed": "封面上传失败，请重试",
 			"defaultOpenFile": "默认入口",
-			"defaultOpenFileAuto": "自动选择（index.html 优先）",
+			"defaultOpenFileAuto": "自动选择",
 			"defaultOpenFileDescription": "仅显示项目根目录下的 HTML 文件。文件失效后会自动回退。",
 			"description": "配置访问范围后，其他人可以通过发布链接使用这个微应用。",
 			"displaySettings": "高级选项",

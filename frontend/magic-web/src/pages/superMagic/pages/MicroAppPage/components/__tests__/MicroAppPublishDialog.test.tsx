@@ -193,6 +193,23 @@ describe("MicroAppPublishDialog", () => {
 		expect(settings).toContainElement(screen.getByTestId("micro-app-cover-upload"))
 	})
 
+	it("uses the shadcn select for the default entry", async () => {
+		renderDialog({
+			attachmentList: [
+				{
+					file_id: "entry-1",
+					file_name: "index.html",
+					relative_file_path: "index.html",
+				},
+			],
+		})
+
+		const trigger = await screen.findByTestId("micro-app-default-open-file")
+		expect(trigger).toHaveAttribute("data-slot", "select-trigger")
+		expect(trigger).toHaveAttribute("role", "combobox")
+		expect(trigger).toHaveTextContent("microAppPage.publish.defaultOpenFileAuto")
+	})
+
 	it("disables publishing and prompts for a missing app name", async () => {
 		mocks.getMicroAppProject.mockResolvedValue({
 			app_id: "app-1",
