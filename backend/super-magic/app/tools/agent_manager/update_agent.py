@@ -85,7 +85,6 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
                 prompt_shadow=prompt_shadow,
                 icon=icon,
                 icon_type=icon_type,
-                file_key=params.icon_file_key,
             )
             await get_magic_service_sdk().agent.update_agent_async(parameter)
             self._update_local_cache(agent_code, params, name_i18n, description_i18n, icon, icon_type)
@@ -133,7 +132,6 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
             if icon is not None:
                 profile["icon"] = icon
                 profile["icon_type"] = icon_type
-                profile["file_key"] = params.icon_file_key
             cache_path.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception as error:
             logger.warning(f"Failed to update local agent cache: {error}")

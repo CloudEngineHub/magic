@@ -126,5 +126,5 @@ def test_restored_agent_manager_tools_are_exported_and_workspace_scoped():
 
     update_source = (manager_dir / "update_agent.py").read_text(encoding="utf-8")
     assert 'icon = {"type": "Image", "value": params.icon_file_key}' in update_source
-    assert "file_key=params.icon_file_key" in update_source
+    assert "file_key=params.icon_file_key" not in update_source
     assert "params.agent_code" not in update_source

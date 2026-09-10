@@ -123,10 +123,10 @@ Once the definition files exist, use the Agent update operation to synchronize t
 - `name_i18n`: employee name
 - `role_i18n`: employee role
 - `description_i18n`: employee description
-- `icon`: `{"type": "image", "url": "<uploaded_logo_file_key>"}`; the URL value is the uploaded object-storage `file_key`, not a local image path
+- `icon`: `{"type": "Image", "value": "<uploaded_logo_file_key>"}`; the value is the uploaded object-storage key, not a local image path
 - `icon_type`: `2` for image icons
 
-Submit the text fields and Logo in one `update_agent` call when the Logo is available. Pass the uploaded object-storage key as `icon_file_key`; the tool binds the update to the current Agent code and sends the required `icon`, `icon_type`, and `file_key` fields to magic-service. Do not use `run_sdk_snippet`, invent a browser-side request, or call the frontend API directly.
+Submit the text fields and Logo in one `update_agent` call when the Logo is available. Pass the uploaded object-storage key as `icon_file_key`; the tool binds the update to the current Agent code and sends the same `icon.value` and `icon_type` shape used by the frontend. Do not use `run_sdk_snippet`, invent a browser-side request, or call the frontend API directly.
 
 The update is successful only when the response confirms the current Agent code was updated. If Logo generation/upload fails, retry the update with only `name_i18n`, `role_i18n`, and `description_i18n`; Agent creation must not be rolled back because the optional default Logo failed.
 

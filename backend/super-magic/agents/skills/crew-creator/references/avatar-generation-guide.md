@@ -57,7 +57,7 @@ Treat the current working directory as the employee workspace root. All paths be
 
 ## Agent Synchronization Payload
 
-The generated file must first obtain a `file_key` recognized by magic-service through the current Agent workspace's file synchronization/upload mechanism. Then use the Agent update tool to submit the employee metadata and logo in a single request:
+The generated file must first obtain an object-storage key recognized by magic-service through the current Agent workspace's file synchronization/upload mechanism. Then use the Agent update tool to submit the employee metadata and logo in a single request:
 
 ```json
 {
@@ -65,12 +65,12 @@ The generated file must first obtain a `file_key` recognized by magic-service th
   "name_i18n": {"default": "<name>"},
   "role_i18n": {"default": "<role>"},
   "description_i18n": {"default": "<description>"},
-  "icon": {"type": "image", "url": "<logo_file_key>"},
+  "icon": {"type": "Image", "value": "<logo_file_key>"},
   "icon_type": 2
 }
 ```
 
-Language fields should retain the actual language used in `IDENTITY.md`; do not generate additional translation fields solely for synchronization. `icon.url` must be the object-storage `file_key` that magic-service can read after upload. It must not be a local path or raw image data. If logo synchronization fails, the text fields may be submitted on their own, and the failure must not block employee creation.
+Language fields should retain the actual language used in `IDENTITY.md`; do not generate additional translation fields solely for synchronization. `icon.value` must be the object-storage key that magic-service can read after upload. It must not be a local path or raw image data. If logo synchronization fails, the text fields may be submitted on their own, and the failure must not block employee creation.
 
 ## Acceptance Criteria
 
