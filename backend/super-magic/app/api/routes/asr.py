@@ -74,6 +74,7 @@ async def _resolve_finish_file_shard_count(audio_config, workspace_dir: str, tas
 async def _get_task_and_check_completed_or_error(
     task_key: str,
     allow_error_retry: bool = False,
+    force_reset: bool = False,
 ) -> tuple[BaseResponse | None, AsrTaskResult | None]:
     """
     查询任务并检查是否已完成或出错
@@ -82,6 +83,8 @@ async def _get_task_and_check_completed_or_error(
 
     Args:
         task_key: 任务标识符
+        allow_error_retry: 任务处于 error 时是否尝试重试
+        force_reset: allow_error_retry 为 True 时，是否忽略重试上限并重置计数（手动重新合并）
 
     Returns:
         tuple: (错误/完成响应或None, 任务对象或None)
@@ -117,13 +120,15 @@ async def _get_task_and_check_completed_or_error(
     # 如果任务出错，返回错误
     if existing_task.status == AsrTaskStatus.ERROR.value:
         if allow_error_retry:
-            retry_ok, retry_count, max_retries = await AsrMergeTaskManager.instance().request_retry(task_key)
+            retry_ok, retry_count, max_retries = await AsrMergeTaskManager.instance().request_retry(
+                task_key, force=force_reset
+            )
             if retry_ok:
                 existing_task = await AsrMergeTaskManager.instance().get_task(task_key)
                 if existing_task is not None:
                     logger.warning(
                         f"🔁 [asrmerge] task_key={task_key} ERROR 任务进入重试: "
-                        f"retry_count={retry_count}/{max_retries}"
+                        f"retry_count={retry_count}/{max_retries} force_reset={force_reset}"
                     )
                     return None, existing_task
             response_data = _build_task_response(existing_task)
@@ -577,6 +582,7 @@ async def finish_asr_task(
         error_response, existing_task = await _get_task_and_check_completed_or_error(
             task_key,
             allow_error_retry=True,
+            force_reset=request.force_reset,
         )
         if error_response:
             return error_response

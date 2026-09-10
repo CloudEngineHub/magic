@@ -1276,13 +1276,15 @@ class AsrMergeTaskManager(AsrServiceBase):
         await self._log_task_status_update(task_key, "ERROR", success)
         return success
 
-    async def request_retry(self, task_key: str, max_retries: int | None = None) -> tuple[bool, int, int]:
+    async def request_retry(self, task_key: str, max_retries: int | None = None, force: bool = False) -> tuple[bool, int, int]:
         """
         请求对整个任务进行一次重试（由 finish 触发）
 
         规则：
         - 只有任务处于 error 状态时才需要走 retry（其他状态由轮询继续处理）
         - retry_count 达到上限则拒绝重试
+        - force=True 时忽略重试上限并把 retry_count 归零（手动「重新合并」场景，
+          用于救回重试耗尽后无法再触发的任务）
         - 允许清空 error_message 并把状态拉回 waiting，便于重新启动轮询
 
         Returns:
@@ -1298,10 +1300,10 @@ class AsrMergeTaskManager(AsrServiceBase):
                 # 非 error 不计入重试次数，直接返回原状态
                 return state
 
-            if current_retry >= max_retries:
+            if current_retry >= max_retries and not force:
                 raise ValueError(f"retry_limit_reached({current_retry}/{max_retries})")
 
-            new_retry = current_retry + 1
+            new_retry = 0 if force else current_retry + 1
             now_ts = datetime.now().timestamp()
 
             state = self._apply_state_updates(
@@ -1325,7 +1327,7 @@ class AsrMergeTaskManager(AsrServiceBase):
 
             logger.warning(
                 f"🔁 {AsrMergeTaskManager.LOG_PREFIX} task_key={task_key} 进入重试流程: "
-                f"retry_count={new_retry}/{max_retries}"
+                f"retry_count={new_retry}/{max_retries} force={force}"
             )
             return state
 
