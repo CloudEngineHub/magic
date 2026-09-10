@@ -3,8 +3,13 @@ import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import MagicModal from "@/components/base/MagicModal"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/shadcn-ui/select"
-import { EditorSelectContent } from "../components/EditorFloating"
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/shadcn-ui/select"
 import { userStore } from "@/models/user"
 import { getIframeDownloadUrl } from "../iframe-api/iframeApi"
 import { htmlMicroAppPreviewLogger } from "../utils/htmlMicroAppPreviewLogger"
@@ -259,7 +264,7 @@ export function useHtmlAppPermissions({
 								<SelectTrigger className="mt-3 w-full">
 									<SelectValue />
 								</SelectTrigger>
-								<EditorSelectContent>
+								<SelectContent>
 									{ttlOptions.map((option) => (
 										<SelectItem
 											key={serializeHtmlPermissionTtl(option.ttlMs)}
@@ -268,7 +273,7 @@ export function useHtmlAppPermissions({
 											{getTtlLabel(option.ttlMs)}
 										</SelectItem>
 									))}
-								</EditorSelectContent>
+								</SelectContent>
 							</Select>
 						</div>
 					),
