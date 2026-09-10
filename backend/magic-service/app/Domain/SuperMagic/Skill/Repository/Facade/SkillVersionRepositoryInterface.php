@@ -24,6 +24,8 @@ interface SkillVersionRepositoryInterface
      */
     public function findById(SkillDataIsolation $dataIsolation, int $id): ?SkillVersionEntity;
 
+    public function findByIdForUpdate(SkillDataIsolation $dataIsolation, int $id): ?SkillVersionEntity;
+
     /**
      * 保存 Skill 版本.
      */
@@ -151,7 +153,8 @@ interface SkillVersionRepositoryInterface
         string $code,
         ?PublishTargetType $publishTargetType = null,
         ?ReviewStatus $reviewStatus = null,
-        Page $page = new Page()
+        Page $page = new Page(),
+        bool $includePublishing = false
     ): array;
 
     /**

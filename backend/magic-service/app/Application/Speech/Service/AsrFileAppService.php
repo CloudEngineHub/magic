@@ -66,15 +66,6 @@ use Throwable;
  */
 class AsrFileAppService extends AbstractAppService
 {
-    private const RESUMMARY_SCOPE_CONFIGURED_ANALYSIS_FILES = 'configured_analysis_files';
-
-    private const RESUMMARY_SCOPE_TEMPLATE_ANALYSIS_FILES = 'template_analysis_files';
-
-    private const RESUMMARY_SUPPORTED_SCOPES = [
-        self::RESUMMARY_SCOPE_CONFIGURED_ANALYSIS_FILES,
-        self::RESUMMARY_SCOPE_TEMPLATE_ANALYSIS_FILES,
-    ];
-
     private const ASR_EXTRA_VERSION = 1;
 
     /**
@@ -1028,19 +1019,12 @@ class AsrFileAppService extends AbstractAppService
 
     /**
      * Manually trigger re-summary for an existing audio project.
-     *
-     * @param array<int,string> $specifiedAnalysisTypes
      */
     public function triggerResummary(
         string $taskKey,
         ?string $modelId,
-        string $analysisScope,
-        array $specifiedAnalysisTypes,
         MagicUserAuthorization $userAuthorization
     ): array {
-        $analysisScope = $this->normalizeResummaryAnalysisScope($analysisScope);
-        $specifiedAnalysisTypes = $this->normalizeResummaryAnalysisTypes($specifiedAnalysisTypes);
-
         $userId = $userAuthorization->getId();
         $organizationCode = $userAuthorization->getOrganizationCode();
 
@@ -1099,8 +1083,6 @@ class AsrFileAppService extends AbstractAppService
             $taskStatus,
             $userId,
             $organizationCode,
-            $analysisScope,
-            $specifiedAnalysisTypes
         );
 
         $taskStatus->updateStatus(AsrTaskStatusEnum::COMPLETED);
@@ -1114,8 +1096,6 @@ class AsrFileAppService extends AbstractAppService
                 'status' => 'in_progress',
                 'topic_id' => $taskStatus->topicId,
                 'model_id' => $taskStatus->modelId,
-                'analysis_scope' => $analysisScope,
-                'specified_analysis_types' => $specifiedAnalysisTypes,
             ],
             'message' => 'Re-summary is being generated, you will receive updates via WebSocket',
         ];
@@ -2984,14 +2964,10 @@ class AsrFileAppService extends AbstractAppService
 
     /**
      * 发送重新总结聊天消息.
-     *
-     * @param array<int,string> $specifiedAnalysisTypes
      */
     private function sendResummaryChatMessage(
         ProcessSummaryTaskDTO $dto,
         MagicUserAuthorization $userAuthorization,
-        string $analysisScope,
-        array $specifiedAnalysisTypes
     ): void {
         $dedupAcquired = false;
         $dedupKey = null;
@@ -3028,11 +3004,7 @@ class AsrFileAppService extends AbstractAppService
             $resummaryDynamicParams = [
                 'summary_task' => true,
                 're_summary_task' => true,
-                'analysis_scope' => $analysisScope,
             ];
-            if ($specifiedAnalysisTypes !== []) {
-                $resummaryDynamicParams['specified_analysis_types'] = $specifiedAnalysisTypes;
-            }
             $dynamicParams = array_merge($topicDynamicParams ?? [], $resummaryDynamicParams);
 
             $chatRequest = $this->chatMessageAssembler->buildResummaryMessage(
@@ -3040,8 +3012,6 @@ class AsrFileAppService extends AbstractAppService
                 $audioFileData,
                 $noteFileData,
                 $markerFileData,
-                $analysisScope,
-                $specifiedAnalysisTypes,
                 $dynamicParams
             );
 
@@ -3058,8 +3028,6 @@ class AsrFileAppService extends AbstractAppService
                 'has_note_file' => $noteFileData !== null,
                 'marker_file_id' => $dto->taskStatus->markerFileId,
                 'has_marker_file' => $markerFileData !== null,
-                'analysis_scope' => $analysisScope,
-                'specified_analysis_types' => $specifiedAnalysisTypes,
                 'message_content' => $messageData->toArray(),
                 'topic_dynamic_params' => $topicDynamicParams,
                 'is_queued' => $this->shouldQueueMessage($dto->topicId),
@@ -3539,15 +3507,11 @@ class AsrFileAppService extends AbstractAppService
 
     /**
      * 发送自动重新总结聊天消息.
-     *
-     * @param array<int,string> $specifiedAnalysisTypes
      */
     private function sendAutoResummaryChatMessage(
         AsrTaskStatusDTO $taskStatus,
         string $userId,
         string $organizationCode,
-        string $analysisScope,
-        array $specifiedAnalysisTypes
     ): void {
         $topicEntity = $this->superAgentTopicDomainService->getTopicById((int) $taskStatus->topicId);
         if ($topicEntity === null) {
@@ -3569,7 +3533,7 @@ class AsrFileAppService extends AbstractAppService
         );
 
         $userAuthorization = $this->getUserAuthorizationFromUserId($userId);
-        $this->sendResummaryChatMessage($processSummaryTaskDTO, $userAuthorization, $analysisScope, $specifiedAnalysisTypes);
+        $this->sendResummaryChatMessage($processSummaryTaskDTO, $userAuthorization);
     }
 
     /**
@@ -3697,34 +3661,5 @@ class AsrFileAppService extends AbstractAppService
                 $taskStatus->currentPhase === AsrTaskStatusDTO::PHASE_SUMMARIZING
                 && $taskStatus->phaseStatus === AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS
             );
-    }
-
-    private function normalizeResummaryAnalysisScope(string $analysisScope): string
-    {
-        $analysisScope = trim($analysisScope);
-        if ($analysisScope === '') {
-            return self::RESUMMARY_SCOPE_TEMPLATE_ANALYSIS_FILES;
-        }
-
-        if (! in_array($analysisScope, self::RESUMMARY_SUPPORTED_SCOPES, true)) {
-            ExceptionBuilder::throw(
-                GenericErrorCode::ParameterValidationFailed,
-                'analysis_scope must be configured_analysis_files or template_analysis_files'
-            );
-        }
-
-        return $analysisScope;
-    }
-
-    /**
-     * @param array<int|string,mixed> $specifiedAnalysisTypes
-     * @return array<int,string>
-     */
-    private function normalizeResummaryAnalysisTypes(array $specifiedAnalysisTypes): array
-    {
-        $types = array_map(static fn ($type) => trim((string) $type), $specifiedAnalysisTypes);
-        $types = array_filter($types, static fn (string $type) => $type !== '');
-
-        return array_values(array_unique($types));
     }
 }
