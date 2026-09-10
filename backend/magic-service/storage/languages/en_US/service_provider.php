@@ -41,6 +41,7 @@ return [
     'config_load_failed' => 'Configuration loading failed',
     'connectivity_test_prompt' => 'Generate a picture of a kitten',
     'connectivity_not_supported' => 'Connectivity test is not supported for this model type.',
+    'multimodal_connectivity_test_failed_after_text_success' => 'The standard connectivity test passed, but the multimodal connectivity test failed: :reason',
     'dynamic_model_config_invalid' => 'Dynamic model configuration is invalid',
     'dynamic_model_sub_models_empty' => 'Dynamic model sub-models list is empty',
     'insufficient_permission_for_model' => 'Current subscription does not support this intelligent model',
@@ -81,6 +82,9 @@ return [
         'model_version' => [
             'required' => 'Please provide model version',
             'string' => 'Model version must be a string',
+        ],
+        'support_multi_modal' => [
+            'boolean' => 'The multimodal support flag must be a boolean',
         ],
     ],
     'api_key_empty' => 'Value is required',
