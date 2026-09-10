@@ -52,7 +52,7 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("@/components/Agent/MCP/store/mcp-access", () => ({
 	getMCPAccess,
-	loadMCPWithLegacyCompatibility: vi.fn().mockResolvedValue(undefined),
+	loadMCPWithInstalledConnectorReconciliation: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock("@/pages/superMagic/pages/ConnectorMarket/hooks/useConnectorActions", () => ({

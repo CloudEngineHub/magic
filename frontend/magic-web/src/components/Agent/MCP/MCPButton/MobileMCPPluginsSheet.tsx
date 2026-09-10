@@ -9,7 +9,7 @@ import MagicImage from "@/components/base/MagicImage"
 import { useTranslation } from "react-i18next"
 import type { MCPButtonProps } from "./MCPButton"
 import type { IMCPItem } from "../types"
-import { getMCPAccess, loadMCPWithLegacyCompatibility } from "../store/mcp-access"
+import { getMCPAccess, loadMCPWithInstalledConnectorReconciliation } from "../store/mcp-access"
 import { mcpEnabledStore } from "../store/mcp-enabled-store"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { Button } from "@/components/shadcn-ui/button"
@@ -147,7 +147,7 @@ function MobileMCPPluginsSheet({
 		() => getMCPAccess({ storageKey, useTempStorage }),
 		[storageKey, useTempStorage],
 	)
-	const legacyStorageKey = storageKey || "__template_project_id__"
+	const activeStorageKey = storageKey || "__template_project_id__"
 	const {
 		selectedItems,
 		selectedIds,
@@ -176,10 +176,10 @@ function MobileMCPPluginsSheet({
 		const loadMCPSettings = async () => {
 			if (!useTempStorage) {
 				try {
-					await loadMCPWithLegacyCompatibility({
-						addedAccess: addedMCPAccess,
-						legacyAccess: activeMCPAccess,
-						legacyStorageKey,
+					await loadMCPWithInstalledConnectorReconciliation({
+						installedAccess: addedMCPAccess,
+						activeAccess: activeMCPAccess,
+						activeStorageKey,
 					})
 				} catch (error) {
 					console.error(error)
@@ -198,7 +198,7 @@ function MobileMCPPluginsSheet({
 		return () => {
 			cancelled = true
 		}
-	}, [activeMCPAccess, addedMCPAccess, legacyStorageKey, useTempStorage])
+	}, [activeMCPAccess, activeStorageKey, addedMCPAccess, useTempStorage])
 
 	const displayMCPList = addedMCPAccess.mcpList
 	const activeMCPIds = activeMCPAccess.mcpList.map((item) => item.id).join(",")

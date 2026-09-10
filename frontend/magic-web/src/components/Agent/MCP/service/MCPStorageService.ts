@@ -49,13 +49,8 @@ export class ProjectStorage extends MCPSave {
 	}
 
 	async getMCP(): Promise<Array<IMCPItem>> {
-		try {
-			const { servers } = await FlowApi.getMCPFromProject(this.storageKey)
-			return servers || []
-		} catch (error) {
-			console.error("Project storage get MCP error", error)
-			return []
-		}
+		const { servers } = await FlowApi.getMCPFromProject(this.storageKey)
+		return servers || []
 	}
 
 	async saveMCP(value: Array<IMCPItem>): Promise<void> {

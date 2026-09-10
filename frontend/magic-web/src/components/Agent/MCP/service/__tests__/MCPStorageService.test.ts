@@ -5,7 +5,7 @@ const { getMCPFromProject, saveMCPFromProject } = vi.hoisted(() => ({
 	saveMCPFromProject: vi.fn(),
 }))
 
-vi.mock("@/apis", async (importOriginal) => {
+vi.mock("@/apis", () => {
 	return {
 		ContactApi: {},
 		FlowApi: {
@@ -36,5 +36,13 @@ describe("MCPStorageService", () => {
 		expect(saveMCPFromProject).toHaveBeenCalledWith("__template_project_id__", [
 			{ id: "template-mcp" },
 		])
+	})
+
+	it("propagates project load failures instead of treating them as empty settings", async () => {
+		const requestError = new Error("request failed")
+		getMCPFromProject.mockRejectedValue(requestError)
+		const storage = new MCPStorageService(new ProjectStorage("project-id"))
+
+		await expect(storage.getMCP()).rejects.toBe(requestError)
 	})
 })

@@ -5,12 +5,15 @@ vi.mock("@/apis", () => ({
 	FlowApi: {},
 }))
 
-import { getMCPAccess, loadMCPWithLegacyCompatibility } from "../mcp-access"
+import { getMCPAccess, loadMCPWithInstalledConnectorReconciliation } from "../mcp-access"
 import { defaultMCPStore } from "../mcp-store"
 
-const createAccess = (mcpList: Array<{ id: string }>) => ({
+const createAccess = (
+	mcpList: Array<{ id: string }>,
+	load = vi.fn().mockResolvedValue(undefined),
+) => ({
 	mcpList,
-	load: vi.fn().mockResolvedValue(undefined),
+	load,
 	save: vi.fn().mockResolvedValue(undefined),
 })
 
@@ -39,46 +42,94 @@ describe("getMCPAccess", () => {
 		expect(firstAccess).not.toBe(defaultMCPStore)
 	})
 
-	it("rehydrates an empty added bucket even when the migration marker exists", async () => {
-		localStorage.setItem(
-			"magic_mcp_legacy_migration_v1",
-			JSON.stringify({ "project-id": ["legacy-mcp"] }),
-		)
-		const addedAccess = createAccess([])
-		const legacyAccess = createAccess([{ id: "legacy-mcp" }])
+	it("clears project connectors when the installed bucket is empty", async () => {
+		const installedAccess = createAccess([])
+		const activeAccess = createAccess([{ id: "project-mcp" }])
 
-		await loadMCPWithLegacyCompatibility({
-			addedAccess: addedAccess as never,
-			legacyAccess: legacyAccess as never,
-			legacyStorageKey: "project-id",
+		await loadMCPWithInstalledConnectorReconciliation({
+			installedAccess: installedAccess as never,
+			activeAccess: activeAccess as never,
+			activeStorageKey: "project-id",
 		})
 
-		expect(addedAccess.save).toHaveBeenCalledWith({
-			selectedIds: new Set(["legacy-mcp"]),
-			items: [{ id: "legacy-mcp" }],
+		expect(activeAccess.save).toHaveBeenCalledWith({
+			selectedIds: new Set(),
+			items: [],
 		})
-		expect(JSON.parse(localStorage.getItem("magic_mcp_legacy_migration_v1") ?? "{}")).toEqual({
-			"project-id": ["legacy-mcp"],
+		expect(installedAccess.save).not.toHaveBeenCalled()
+	})
+
+	it("removes only project connectors that are not installed", async () => {
+		const installedAccess = createAccess([{ id: "shared-mcp" }, { id: "installed-only" }])
+		const activeAccess = createAccess([{ id: "shared-mcp" }, { id: "project-only" }])
+
+		await loadMCPWithInstalledConnectorReconciliation({
+			installedAccess: installedAccess as never,
+			activeAccess: activeAccess as never,
+			activeStorageKey: "project-id",
+		})
+
+		expect(activeAccess.save).toHaveBeenCalledWith({
+			selectedIds: new Set(["shared-mcp"]),
+			items: [{ id: "shared-mcp" }],
 		})
 	})
 
-	it("shares an in-flight migration between input surfaces", async () => {
-		const addedAccess = createAccess([])
-		const legacyAccess = createAccess([{ id: "legacy-mcp" }])
+	it("does not enable installed connectors missing from the project setting", async () => {
+		const installedAccess = createAccess([{ id: "shared-mcp" }, { id: "installed-only" }])
+		const activeAccess = createAccess([{ id: "shared-mcp" }])
+
+		await loadMCPWithInstalledConnectorReconciliation({
+			installedAccess: installedAccess as never,
+			activeAccess: activeAccess as never,
+			activeStorageKey: "project-id",
+		})
+
+		expect(activeAccess.save).not.toHaveBeenCalled()
+	})
+
+	it.each(["installed", "active"])(
+		"does not clean the project setting when the %s request fails",
+		async (failedAccess) => {
+			const failedLoad = vi.fn().mockRejectedValue(new Error("request failed"))
+			const installedAccess = createAccess(
+				[],
+				failedAccess === "installed" ? failedLoad : undefined,
+			)
+			const activeAccess = createAccess(
+				[{ id: "project-mcp" }],
+				failedAccess === "active" ? failedLoad : undefined,
+			)
+
+			await expect(
+				loadMCPWithInstalledConnectorReconciliation({
+					installedAccess: installedAccess as never,
+					activeAccess: activeAccess as never,
+					activeStorageKey: `failed-${failedAccess}`,
+				}),
+			).rejects.toThrow("request failed")
+
+			expect(activeAccess.save).not.toHaveBeenCalled()
+		},
+	)
+
+	it("shares an in-flight cleanup between input surfaces", async () => {
+		const installedAccess = createAccess([])
+		const activeAccess = createAccess([{ id: "project-mcp" }])
 
 		await Promise.all([
-			loadMCPWithLegacyCompatibility({
-				addedAccess: addedAccess as never,
-				legacyAccess: legacyAccess as never,
-				legacyStorageKey: "project-id",
+			loadMCPWithInstalledConnectorReconciliation({
+				installedAccess: installedAccess as never,
+				activeAccess: activeAccess as never,
+				activeStorageKey: "project-id",
 			}),
-			loadMCPWithLegacyCompatibility({
-				addedAccess: addedAccess as never,
-				legacyAccess: legacyAccess as never,
-				legacyStorageKey: "project-id",
+			loadMCPWithInstalledConnectorReconciliation({
+				installedAccess: installedAccess as never,
+				activeAccess: activeAccess as never,
+				activeStorageKey: "project-id",
 			}),
 		])
 
-		expect(addedAccess.save).toHaveBeenCalledTimes(1)
+		expect(activeAccess.save).toHaveBeenCalledTimes(1)
 	})
 })
