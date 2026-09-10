@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react"
+import { useTranslation } from "react-i18next"
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
@@ -156,6 +157,7 @@ function useMessageEditorPubSub({
 	projectId,
 	topicId,
 }: UseMessageEditorPubSubParams) {
+	const { t } = useTranslation("super")
 	const activeEditorRef = useLatestActiveEditor(editor)
 	const preparedScreenshotMentionsRef = useRef(
 		new Map<string, { dataUrl: string; mention: TiptapMentionAttributes }>(),
@@ -310,6 +312,7 @@ function useMessageEditorPubSub({
 					request.targets,
 					"HTML 页面修改目标",
 					screenshotMentions,
+					t,
 				)
 				const serializedContent = serializeInspectorContent(content, {
 					title: "HTML 页面修改目标",

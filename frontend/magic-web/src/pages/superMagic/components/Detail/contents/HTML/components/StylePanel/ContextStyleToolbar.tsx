@@ -56,33 +56,24 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 			? stylePanelStore.selectedElements[0]?.computedStyles
 			: undefined)
 	const isFlexContainer = computedStyles?.display === "flex"
-	const isFlexItem = computedStyles?.parentDisplay === "flex"
+	const isTextElement = selectedElement?.isTextElement === true
 	const flexAlignment = useMemo(() => {
-		if (stylePanelStore.textSelection?.hasSelection || !selectedElement) return null
+		if (stylePanelStore.textSelection?.hasSelection || !selectedElement || isTextElement)
+			return null
 
-		if (isFlexContainer) {
-			return {
-				value: computedStyles?.justifyContent || "flex-start",
-				direction: computedStyles?.flexDirection || "row",
-				targetSelector: selectedElement.selector,
-			}
+		if (!isFlexContainer) return null
+
+		return {
+			value: computedStyles?.justifyContent || "flex-start",
+			direction: computedStyles?.flexDirection || "row",
+			targetSelector: selectedElement.selector,
 		}
-
-		if (isFlexItem && computedStyles?.parentSelector) {
-			return {
-				value: computedStyles.parentJustifyContent || "flex-start",
-				direction: computedStyles.parentFlexDirection || "row",
-				targetSelector: computedStyles.parentSelector,
-			}
-		}
-
-		return null
 	}, [
 		computedStyles,
 		isFlexContainer,
-		isFlexItem,
 		selectedElement,
 		stylePanelStore.textSelection?.hasSelection,
+		isTextElement,
 	])
 
 	useEffect(() => {

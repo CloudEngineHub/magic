@@ -791,7 +791,6 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								onRegenerateScreenshot={handleRegenerateScreenshot}
 								onAddToCurrentChat={handleAddToCurrentChat}
 								onAddToNewChat={handleAddToNewChat}
-								mainFileId={mainFileId}
 								isMobile={isMobile}
 								sidebarWidth={sidebarWidth}
 								allowEdit={effectiveAllowEdit}

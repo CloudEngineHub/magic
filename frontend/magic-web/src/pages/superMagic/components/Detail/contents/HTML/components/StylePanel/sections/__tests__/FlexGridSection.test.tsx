@@ -15,6 +15,7 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("../../controls", () => ({
+	LayoutConstraintHintCard: () => null,
 	NumericDragInput: ({
 		value,
 		onChange,

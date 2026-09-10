@@ -49,7 +49,6 @@ function PPTSidebar({
 	onAddToCurrentChat,
 	onAddToNewChat,
 	onReplaceSlideTemplate,
-	mainFileId,
 	allowEdit = false,
 	canReplaceTemplate = false,
 	isMobile = false,
@@ -543,7 +542,6 @@ function PPTSidebar({
 											isActive={item.index === activeIndex}
 											onClick={() => onSlideClick(item.index)}
 											totalSlides={items.length}
-											mainFileId={mainFileId}
 											slideFileId={store.getFileIdByPath(item.path)}
 											slideFullRelativePath={store.getFullRelativePath(
 												item.path,

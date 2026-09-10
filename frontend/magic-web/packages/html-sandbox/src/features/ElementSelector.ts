@@ -759,6 +759,34 @@ export class ElementSelector {
 		}
 	}
 
+	private getAncestorInfos(element: HTMLElement) {
+		const ancestors: Array<{
+			selector: string
+			tagName: string
+			textContent?: string
+			rect: { top: number; left: number; width: number; height: number }
+		}> = []
+		let current = element.parentElement
+		while (
+			current &&
+			!this.isDocumentRoot(current) &&
+			ancestors.length < 8
+		) {
+			if (!isInjectedElement(current)) {
+				const { rect } = this.getElementRectWithRotation(current)
+				const textContent = getEditableTextContent(current).trim()
+				ancestors.push({
+					selector: getElementSelector(current),
+					tagName: current.tagName.toLowerCase(),
+					textContent: textContent || undefined,
+					rect,
+				})
+			}
+			current = current.parentElement
+		}
+		return ancestors
+	}
+
 	private getInFlowChildRects(element: HTMLElement) {
 		return Array.from(element.children)
 			.filter((node): node is HTMLElement => node instanceof HTMLElement)
@@ -924,6 +952,7 @@ export class ElementSelector {
 				inlineStyles,
 				rect,
 				childRects: this.getInFlowChildRects(element),
+				ancestors: this.getAncestorInfos(element),
 				rotation,
 				isTextElement: isText,
 				hasDirectTextContent,

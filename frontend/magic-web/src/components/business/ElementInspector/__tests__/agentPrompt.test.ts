@@ -1,9 +1,37 @@
 import { describe, expect, it } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
-import { buildHtmlMultiSelectionPromptContent } from "../agentPrompt"
+import { buildAgentPromptContent, buildHtmlMultiSelectionPromptContent } from "../agentPrompt"
 import type { HtmlSelectionTarget } from "../types"
 
 describe("HTML inspector agent prompt", () => {
+	it("labels video elements instead of using browser fallback copy", () => {
+		const t = (key: string) => (key === "stylePanel.inspector.tagLabel.video" ? "视频" : key)
+		const content = buildAgentPromptContent(
+			{
+				selector: "video.demo",
+				tagName: "video",
+				id: "",
+				classList: ["demo"],
+				rect: { top: 0, left: 0, width: 640, height: 360 },
+				margin: { top: 0, right: 0, bottom: 0, left: 0 },
+				padding: { top: 0, right: 0, bottom: 0, left: 0 },
+				border: { top: 0, right: 0, bottom: 0, left: 0 },
+				computedStyles: {},
+				attributes: {},
+				textContent: "您的浏览器不支持视频播放，请升级浏览器。",
+				resource: "https://example.com/demo.mp4",
+			},
+			"Inspector details",
+			undefined,
+			undefined,
+			undefined,
+			t,
+		)
+
+		const detail = content.content?.[0]?.content?.[0]
+		expect(detail?.attrs?.textContent).toBe("视频")
+	})
+
 	it("renders the HTML file and screenshot as mention nodes", () => {
 		const screenshot: HtmlSelectionTarget = {
 			id: "screenshot:1",

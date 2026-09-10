@@ -118,6 +118,17 @@ export interface SelectedElementInfo {
 		boxShadow: string
 		textShadow: string
 	}
+	ancestors?: Array<{
+		selector: string
+		tagName: string
+		textContent?: string
+		rect: {
+			top: number
+			left: number
+			width: number
+			height: number
+		}
+	}>
 	attributes?: {
 		src?: string
 		alt?: string
@@ -168,6 +179,14 @@ export class StylePanelStore {
 
 	/** Shared flex/grid gap lock for More Styles and canvas handles */
 	gapAxesLinked = true
+
+	/** Overlay hover preview for ancestor crumbs and parent-impact hints. */
+	previewRect: {
+		top: number
+		left: number
+		width: number
+		height: number
+	} | null = null
 
 	/** 历史状态 */
 	historyState: HistoryStateInfo = {
@@ -240,6 +259,7 @@ export class StylePanelStore {
 		this.selectedElements = []
 		this.textSelection = null
 		this.isSelectionMode = false
+		this.previewRect = null
 	}
 
 	/**
@@ -250,6 +270,7 @@ export class StylePanelStore {
 		this.selectedElement = null
 		this.selectedElements = []
 		this.textSelection = null
+		this.previewRect = null
 	}
 
 	/**
@@ -326,6 +347,17 @@ export class StylePanelStore {
 		this.gapAxesLinked = linked
 	}
 
+	setPreviewRect(
+		rect: {
+			top: number
+			left: number
+			width: number
+			height: number
+		} | null,
+	) {
+		this.previewRect = rect
+	}
+
 	private syncGapAxesLinked(element: SelectedElementInfo) {
 		const row = parseUsedPixelValue(element.computedStyles.rowGap ?? element.computedStyles.gap)
 		const column = parseUsedPixelValue(
@@ -346,6 +378,7 @@ export class StylePanelStore {
 		this.activeSection = null
 		this.moreStylesTabBySelector.clear()
 		this.gapAxesLinked = true
+		this.previewRect = null
 		this.historyState = {
 			canUndo: false,
 			canRedo: false,

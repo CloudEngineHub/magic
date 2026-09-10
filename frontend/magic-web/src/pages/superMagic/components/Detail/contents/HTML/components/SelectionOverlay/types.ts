@@ -24,6 +24,12 @@ export interface SelectedInfo {
 	isTextElement?: boolean
 	hasDirectTextContent?: boolean
 	textContent?: string
+	ancestors?: Array<{
+		selector: string
+		tagName: string
+		textContent?: string
+		rect: ElementRect
+	}>
 	inlineStyles?: Record<string, string>
 	attributes?: {
 		href?: string

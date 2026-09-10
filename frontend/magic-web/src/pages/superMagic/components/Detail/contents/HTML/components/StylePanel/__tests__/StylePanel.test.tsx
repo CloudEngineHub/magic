@@ -39,6 +39,7 @@ const {
 			selectedElements: [] as Array<unknown>,
 			getSelectedSelectors: () => ["img.hero"],
 			selectElement: mockSelectElement,
+			setPreviewRect: vi.fn(),
 		},
 	}
 })
@@ -667,7 +668,7 @@ describe("StylePanel", () => {
 		expect(screen.queryByTestId("background-section")).not.toBeInTheDocument()
 	})
 
-	it("should use the parent flex container for alignment of a flex item", async () => {
+	it("should keep text alignment for a text element inside a flex container", async () => {
 		mockSelectedElement.current = {
 			selector: "p.copy",
 			tagName: "p",
@@ -688,29 +689,44 @@ describe("StylePanel", () => {
 				parentJustifyContent: "flex-start",
 			},
 		}
-		const setBatchStyles = vi.fn().mockResolvedValue(undefined)
-		const refreshSelectedElement = vi.fn().mockResolvedValue(undefined)
 
-		render(
-			<StylePanel
-				editorRef={{ current: { setBatchStyles, refreshSelectedElement } } as never}
-				onStyleChange={mockUpdateStyle}
-			/>,
-		)
+		render(<StylePanel editorRef={{ current: null }} />)
 
 		const alignmentTools = screen.getByTestId("text-align-tools")
-		expect(alignmentTools).toHaveAttribute("data-mode", "flex")
-		expect(alignmentTools).toHaveAttribute("data-value", "flex-start")
+		expect(alignmentTools).toHaveAttribute("data-mode", "text")
+		expect(alignmentTools).toHaveAttribute("data-value", "left")
 
 		fireEvent.click(alignmentTools)
 
 		await waitFor(() => {
-			expect(setBatchStyles).toHaveBeenCalledWith("div.layout", {
-				justifyContent: "center",
-			})
-			expect(refreshSelectedElement).toHaveBeenCalledWith("p.copy")
-			expect(mockUpdateStyle).toHaveBeenCalledWith("div.layout", "justifyContent", "center")
+			expect(mockUpdateStyle).toHaveBeenCalledWith("textAlign", "center")
 		})
+	})
+
+	it("should hide flex alignment tools for a non-text flex item", () => {
+		mockSelectedElement.current = {
+			selector: "div.card",
+			tagName: "div",
+			isTextElement: false,
+			computedStyles: {
+				fontWeight: "400",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "left",
+				color: "#000000",
+				width: "320px",
+				height: "40px",
+				display: "block",
+				parentSelector: "div.layout",
+				parentDisplay: "flex",
+				parentFlexDirection: "row",
+				parentJustifyContent: "flex-start",
+			},
+		}
+
+		render(<StylePanel editorRef={{ current: null }} />)
+
+		expect(screen.queryByTestId("text-align-tools")).not.toBeInTheDocument()
 	})
 
 	it("should keep text alignment for a regular text element", async () => {
