@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import DesignStyleRawPreview from "../DesignStyleRawPreview"
 import { clearDesignStyleSourceCache } from "../useDesignStyleSource"
@@ -74,5 +74,46 @@ describe("DesignStyleRawPreview", () => {
 		render(<DesignStyleRawPreview style={designStyleFixture} active={false} />)
 
 		expect(getSource).not.toHaveBeenCalled()
+	})
+
+	it("ignores a stale response after switching styles", async () => {
+		let resolveFirstRequest: (value: {
+			style_code: string
+			content: string
+			sha256: string
+		}) => void = () => undefined
+		const nextStyle = { ...designStyleFixture, code: "next-style" }
+
+		getSource
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						resolveFirstRequest = resolve
+					}),
+			)
+			.mockResolvedValueOnce({
+				style_code: nextStyle.code,
+				content: "# Current style",
+				sha256: "current",
+			})
+
+		const { rerender } = render(<DesignStyleRawPreview style={designStyleFixture} active />)
+		rerender(<DesignStyleRawPreview style={nextStyle} active />)
+
+		await waitFor(() =>
+			expect(screen.getByTestId("design-style-raw-content")).toHaveTextContent(
+				"# Current style",
+			),
+		)
+
+		await act(async () => {
+			resolveFirstRequest({
+				style_code: designStyleFixture.code,
+				content: "# Stale style",
+				sha256: "stale",
+			})
+		})
+
+		expect(screen.getByTestId("design-style-raw-content")).toHaveTextContent("# Current style")
 	})
 })

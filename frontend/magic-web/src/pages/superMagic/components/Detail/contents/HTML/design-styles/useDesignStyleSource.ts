@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { HtmlDesignStylesApi } from "@/apis"
 export interface DesignStyleSourceState {
 	content: string
@@ -53,14 +53,6 @@ export function useDesignStyleSource(styleCode: string, enabled: boolean) {
 	const [status, setStatus] = useState<DesignStyleSourceStatus>("idle")
 	const [source, setSource] = useState<DesignStyleSourceState | null>(null)
 	const [retryToken, setRetryToken] = useState(0)
-	const mountedRef = useRef(true)
-
-	useEffect(() => {
-		mountedRef.current = true
-		return () => {
-			mountedRef.current = false
-		}
-	}, [])
 
 	useEffect(() => {
 		if (!enabled || !styleCode) {
@@ -77,18 +69,24 @@ export function useDesignStyleSource(styleCode: string, enabled: boolean) {
 		}
 
 		setStatus("loading")
+		let cancelled = false
 
 		fetchSource(styleCode)
 			.then((state) => {
-				if (!mountedRef.current) return
+				if (cancelled) return
 				setSource(state)
 				setStatus("success")
 			})
 			.catch(() => {
-				if (!mountedRef.current) return
+				if (cancelled) return
 				setSource(null)
 				setStatus("error")
 			})
+
+		return () => {
+			// Let superseded requests populate their own cache without updating the current view.
+			cancelled = true
+		}
 	}, [enabled, retryToken, styleCode])
 
 	const retry = useCallback(() => {
