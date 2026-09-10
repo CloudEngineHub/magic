@@ -212,6 +212,7 @@ export interface ResumePendingPublishResult {
 /**
  * Create (or resume) an async publish task and poll until ready.
  * Persists publish_task_id (+ optional draft) in sessionStorage while processing.
+ * A later submit on the same resource reuses a stored in-progress task instead of creating another.
  */
 export async function runAsyncPublish<TDraft = unknown>(
 	options: RunAsyncPublishOptions<TDraft>,
@@ -220,6 +221,30 @@ export async function runAsyncPublish<TDraft = unknown>(
 		options
 
 	let publishTaskId = resumePublishTaskId?.trim() || ""
+
+	if (!publishTaskId) {
+		const pendingId = loadPendingPublishTask(resourceType, code)?.publish_task_id?.trim() || ""
+		if (pendingId) {
+			const existing = await inspectExistingPublishTask({
+				resourceType,
+				code,
+				publishTaskId: pendingId,
+				check,
+				signal,
+			})
+			if (existing.kind === "ready") {
+				onProgress?.(
+					typeof existing.snapshot.progress === "number"
+						? existing.snapshot.progress
+						: 100,
+				)
+				return existing.snapshot
+			}
+			if (existing.kind === "processing") {
+				publishTaskId = pendingId
+			}
+		}
+	}
 
 	if (!publishTaskId) {
 		throwIfAborted(signal)
@@ -327,6 +352,53 @@ export async function resumePendingPublish<TDraft = unknown>(
 		}
 		throw error
 	}
+}
+
+/**
+ * Look up a stored task before create. Ready tasks settle here; failed/expired tasks
+ * are cleared so a new create is allowed; processing tasks must be polled instead.
+ */
+async function inspectExistingPublishTask({
+	resourceType,
+	code,
+	publishTaskId,
+	check,
+	signal,
+}: {
+	resourceType: AsyncPublishResourceType
+	code: string
+	publishTaskId: string
+	check: (publishTaskId: string) => Promise<AsyncPublishTaskSnapshot>
+	signal?: AbortSignal
+}): Promise<
+	| { kind: "ready"; snapshot: AsyncPublishTaskSnapshot }
+	| { kind: "processing"; snapshot: AsyncPublishTaskSnapshot }
+	| { kind: "create" }
+> {
+	throwIfAborted(signal)
+
+	let snapshot: AsyncPublishTaskSnapshot
+	try {
+		snapshot = await check(publishTaskId)
+	} catch (error) {
+		if (isPublishTaskMissingError(error)) {
+			clearPendingPublishTask(resourceType, code)
+			return { kind: "create" }
+		}
+		throw error
+	}
+
+	if (snapshot.status === "ready") {
+		clearPendingPublishTask(resourceType, code)
+		return { kind: "ready", snapshot }
+	}
+
+	if (snapshot.status === "failed") {
+		clearPendingPublishTask(resourceType, code)
+		return { kind: "create" }
+	}
+
+	return { kind: "processing", snapshot }
 }
 
 /**

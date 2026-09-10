@@ -301,4 +301,79 @@ describe("asyncPublish", () => {
 		})
 		expect(loadPendingPublishTask("skill", "SK-failed")).toBeNull()
 	})
+
+	it("does not create a second task when submitting again after timeout", async () => {
+		const draft = { version: "1.0.0" }
+		const create = vi.fn(async () => ({
+			publish_task_id: "task-timeout",
+			status: "processing" as const,
+			progress: 10,
+			error: null,
+		}))
+		const check = vi.fn(async () => ({
+			publish_task_id: "task-timeout",
+			status: "processing" as const,
+			progress: 10,
+			error: null,
+		}))
+
+		const first = runAsyncPublish({
+			resourceType: "agent",
+			code: "SMA-resubmit",
+			draft,
+			create,
+			check,
+		})
+		const firstResult = first.catch((error: unknown) => error)
+		for (let attempt = 0; attempt < 100; attempt += 1) {
+			await vi.advanceTimersByTimeAsync(2500)
+		}
+		expect(await firstResult).toMatchObject({ reason: "timeout" })
+		expect(create).toHaveBeenCalledTimes(1)
+
+		check.mockResolvedValue({
+			publish_task_id: "task-timeout",
+			status: "ready",
+			progress: 100,
+			error: null,
+		})
+
+		const second = await runAsyncPublish({
+			resourceType: "agent",
+			code: "SMA-resubmit",
+			draft,
+			create,
+			check,
+		})
+
+		expect(create).toHaveBeenCalledTimes(1)
+		expect(second.status).toBe("ready")
+		expect(loadPendingPublishTask("agent", "SMA-resubmit")).toBeNull()
+	})
+
+	it("creates a new task only after the stored pending task has failed", async () => {
+		savePendingPublishTask("skill", "SK-retry", "task-old", { version: "1.0.0" })
+		const create = vi.fn(async () => ({
+			publish_task_id: "task-new",
+			status: "ready" as const,
+			progress: 100,
+			error: null,
+		}))
+		const check = vi.fn(async () => ({
+			publish_task_id: "task-old",
+			status: "failed" as const,
+			progress: 10,
+			error: "zip failed",
+		}))
+
+		const result = await runAsyncPublish({
+			resourceType: "skill",
+			code: "SK-retry",
+			create,
+			check,
+		})
+
+		expect(create).toHaveBeenCalledTimes(1)
+		expect(result).toMatchObject({ publish_task_id: "task-new", status: "ready" })
+	})
 })
