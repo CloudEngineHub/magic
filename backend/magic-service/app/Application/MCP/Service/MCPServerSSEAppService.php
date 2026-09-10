@@ -26,6 +26,7 @@ class MCPServerSSEAppService extends AbstractMCPAppService
     public function getTools(Authenticatable $authorization, string $mcpServerCode): array
     {
         $dataIsolation = $this->createMCPDataIsolation($authorization);
+        $dataIsolation->setContainOfficialOrganization(true);
         $operation = $this->getMCPServerOperation($dataIsolation, $mcpServerCode);
         $operation->validate('r', $mcpServerCode);
 

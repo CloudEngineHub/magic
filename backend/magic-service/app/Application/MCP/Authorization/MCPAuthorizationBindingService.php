@@ -165,6 +165,7 @@ class MCPAuthorizationBindingService extends AbstractKernelAppService
         }
 
         $dataIsolation = MCPDataIsolation::create($organizationCode, $userId);
+        $dataIsolation->setContainOfficialOrganization(true);
         $serverCode = (string) ($stateData['mcp_server_code'] ?? '');
         $server = $this->mcpServerDomainService->getByCode($dataIsolation, $serverCode);
         if (! $server) {
