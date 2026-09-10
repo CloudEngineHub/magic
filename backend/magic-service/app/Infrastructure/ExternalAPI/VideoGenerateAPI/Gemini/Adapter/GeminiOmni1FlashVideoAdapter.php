@@ -308,9 +308,6 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
                 } else {
                     $part['uri'] = $item['uri'];
                 }
-                if (isset($item['role'])) {
-                    $part['role'] = $item['role'];
-                }
                 $parts[] = $part;
             }
         }

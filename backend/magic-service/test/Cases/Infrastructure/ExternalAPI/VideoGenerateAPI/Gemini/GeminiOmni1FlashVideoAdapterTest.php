@@ -69,12 +69,14 @@ final class GeminiOmni1FlashVideoAdapterTest extends TestCase
 
     public function testBuildsInteractionPayloadWithPartsAndVideoResponseFormat(): void
     {
+        $start = base64_encode('start-frame');
+        $end = base64_encode('end-frame');
         $operation = $this->operation([
             'input_mode' => 'keyframe_guided',
             'prompt' => 'camera moves forward',
             'inputs' => ['frames' => [
-                ['role' => 'start', 'uri' => 'https://example.com/start.jpg'],
-                ['role' => 'end', 'uri' => 'https://example.com/end.jpg'],
+                ['role' => 'start', 'base64' => $start, 'mime_type' => 'image/jpeg'],
+                ['role' => 'end', 'base64' => $end, 'mime_type' => 'image/jpeg'],
             ]],
             'generation' => ['aspect_ratio' => '16:9', 'resolution' => '1080p', 'duration_seconds' => 8],
         ]);
@@ -83,8 +85,8 @@ final class GeminiOmni1FlashVideoAdapterTest extends TestCase
 
         self::assertSame('gemini-omni-1.1-flash', $payload['model']);
         self::assertSame([
-            ['type' => 'image', 'uri' => 'https://example.com/start.jpg', 'role' => 'start'],
-            ['type' => 'image', 'uri' => 'https://example.com/end.jpg', 'role' => 'end'],
+            ['type' => 'image', 'data' => $start, 'mime_type' => 'image/jpeg'],
+            ['type' => 'image', 'data' => $end, 'mime_type' => 'image/jpeg'],
             ['type' => 'text', 'text' => 'camera moves forward'],
         ], $payload['input']);
         self::assertTrue($payload['background']);
