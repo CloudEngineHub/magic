@@ -10,6 +10,7 @@ interface GetMCPAccessParams {
 const projectMCPStoreMap = new Map<string, MCPStore>()
 const tempMCPStore = new MCPStore(new MCPStorageService(mcpTempStorage), "items")
 const LEGACY_MCP_MIGRATION_STORAGE_KEY = "magic_mcp_legacy_migration_v1"
+const legacyMigrationPromises = new Map<string, Promise<void>>()
 
 type LegacyMCPMigrationRecord = Record<string, string[]>
 
@@ -44,7 +45,7 @@ interface LoadMCPWithLegacyCompatibilityParams {
  * so missing entries are silently merged into the new bucket. The local marker
  * prevents a connector removed in the new UI from being re-added on every load.
  */
-export async function loadMCPWithLegacyCompatibility({
+async function runLegacyMCPMigration({
 	addedAccess,
 	legacyAccess,
 	legacyStorageKey,
@@ -67,7 +68,15 @@ export async function loadMCPWithLegacyCompatibility({
 	const currentIds = new Set(currentItems.map((item) => item.id))
 	const migrationRecord = readLegacyMigrationRecord()
 	const migratedIds = new Set(migrationRecord[legacyStorageKey] ?? [])
-	const pendingItems = legacyItems.filter((item) => !migratedIds.has(item.id))
+	// If the added bucket is empty, it may have been reset independently of the
+	// legacy project setting. In that case, rehydrate it even when an earlier
+	// migration marker exists. Once the bucket has entries, keep the marker
+	// behavior so connectors deliberately removed from the new bucket are not
+	// re-added on every load.
+	const pendingItems =
+		currentItems.length === 0
+			? legacyItems
+			: legacyItems.filter((item) => !migratedIds.has(item.id))
 	const missingItems = pendingItems.filter((item) => !currentIds.has(item.id))
 
 	if (missingItems.length > 0) {
@@ -78,12 +87,34 @@ export async function loadMCPWithLegacyCompatibility({
 	}
 
 	if (pendingItems.length > 0) {
-		migrationRecord[legacyStorageKey] = [
-			...(migrationRecord[legacyStorageKey] ?? []),
-			...pendingItems.map((item) => item.id),
-		]
+		migrationRecord[legacyStorageKey] = Array.from(
+			new Set([
+				...(migrationRecord[legacyStorageKey] ?? []),
+				...pendingItems.map((item) => item.id),
+			]),
+		)
 		writeLegacyMigrationRecord(migrationRecord)
 	}
+}
+
+/**
+ * Load both connector buckets and migrate legacy project entries once per
+ * project at a time. Multiple input surfaces can mount together, so sharing
+ * the in-flight promise prevents duplicate migration PUTs.
+ */
+export function loadMCPWithLegacyCompatibility(
+	params: LoadMCPWithLegacyCompatibilityParams,
+): Promise<void> {
+	const existingPromise = legacyMigrationPromises.get(params.legacyStorageKey)
+	if (existingPromise) return existingPromise
+
+	const migrationPromise = runLegacyMCPMigration(params).finally(() => {
+		if (legacyMigrationPromises.get(params.legacyStorageKey) === migrationPromise) {
+			legacyMigrationPromises.delete(params.legacyStorageKey)
+		}
+	})
+	legacyMigrationPromises.set(params.legacyStorageKey, migrationPromise)
+	return migrationPromise
 }
 
 export function getMCPAccess(params: GetMCPAccessParams = {}) {

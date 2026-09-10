@@ -51,7 +51,10 @@ import {
 	checkMCPOAuth,
 	MCPOAuthType,
 } from "@/components/Agent/MCP/AgentSettings/AgentPanel/MCPPanel/helpers"
-import { getMCPAccess } from "@/components/Agent/MCP/store/mcp-access"
+import {
+	getMCPAccess,
+	loadMCPWithLegacyCompatibility,
+} from "@/components/Agent/MCP/store/mcp-access"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import { buildQueueMessageInput } from "@/pages/superMagic/components/MainInputContainer/components/editors/messageParams"
@@ -216,6 +219,8 @@ export default function useMobileComposerLogic({
 			}),
 		[mcpStorageKey, mcpUseTempStorage],
 	)
+	const addedMCPAccess = useCreation(() => getMCPAccess({ storageKey: "__added__" }), [])
+	const legacyMCPStorageKey = mcpStorageKey || "__template_project_id__"
 	const selectedPluginCount = mcpAccess.mcpList.length
 
 	const voiceInputRef = useRef<VoiceInputRef>(null)
@@ -902,8 +907,17 @@ export default function useMobileComposerLogic({
 	})
 
 	useEffect(() => {
-		void mcpAccess.load().catch(console.error)
-	}, [mcpAccess])
+		if (mcpUseTempStorage) {
+			void mcpAccess.load().catch(console.error)
+			return
+		}
+
+		void loadMCPWithLegacyCompatibility({
+			addedAccess: addedMCPAccess,
+			legacyAccess: mcpAccess,
+			legacyStorageKey: legacyMCPStorageKey,
+		}).catch(console.error)
+	}, [addedMCPAccess, legacyMCPStorageKey, mcpAccess, mcpUseTempStorage])
 
 	return {
 		parentStore,
