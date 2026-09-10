@@ -35,7 +35,7 @@ def test_read_skills_params_rejects_empty_skill_name_string():
 
 @pytest.mark.asyncio
 async def test_read_skills_executes_with_single_skill_name_string(monkeypatch):
-    async def mock_find_skill(skill_name: str):
+    async def mock_find_skill(skill_name: str, *, agent_name=None):
         return MockSkill(skill_name)
 
     monkeypatch.setattr(read_skills_module, "find_skill", mock_find_skill)
@@ -49,3 +49,32 @@ async def test_read_skills_executes_with_single_skill_name_string(monkeypatch):
     assert result.ok
     assert result.extra_info["skill_names"] == ["mock-skill-a"]
     assert '<skill_content name="mock-skill-a">' in result.content
+
+
+@pytest.mark.asyncio
+async def test_read_skills_loads_after_lazy_install(monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.core.skill_utils import skill_references
+    find = AsyncMock(side_effect=[None, None, MockSkill('lazy-skill')])
+    monkeypatch.setattr(read_skills_module, 'find_skill', find)
+    monkeypatch.setattr(read_skills_module.asyncio, 'sleep', AsyncMock())
+    install = AsyncMock(return_value=True)
+    monkeypatch.setattr(skill_references, 'install_market_reference', install)
+    result = await ReadSkills().execute(None, ReadSkillsParams(skill_names=['lazy-skill'], check_updates=False))
+    assert result.ok
+    assert '<skill_content name="lazy-skill">' in result.content
+    install.assert_awaited_once()
+    assert find.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_read_skills_reports_declared_fetch_failure(monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.core.skill_utils import skill_references
+    monkeypatch.setattr(read_skills_module, 'find_skill', AsyncMock(return_value=None))
+    monkeypatch.setattr(read_skills_module.asyncio, 'sleep', AsyncMock())
+    monkeypatch.setattr(skill_references, 'install_market_reference', AsyncMock(side_effect=RuntimeError('internal URL must not leak')))
+    result = await ReadSkills().execute(None, ReadSkillsParams(skill_names=['private-skill'], check_updates=False))
+    assert not result.ok
+    assert 'declared but could not be fetched' in result.content
+    assert 'internal URL' not in result.content

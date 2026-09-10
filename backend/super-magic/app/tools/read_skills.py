@@ -119,6 +119,18 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                         await asyncio.sleep(2)
                         skill = await find_skill(skill_name, agent_name=agent_name)
 
+                    if not skill:
+                        from app.core.skill_utils.skill_references import install_market_reference
+                        try:
+                            declared = await install_market_reference(skill_name, agent_name or "", agent_context, tool_context)
+                            if declared:
+                                skill = await find_skill(skill_name, agent_name=agent_name)
+                        except Exception:
+                            results.append({"skill_name": skill_name, "success": False, "error": f"Skill '{skill_name}' is declared but could not be fetched. Access may have changed or the package may be unavailable."})
+                            failure_count += 1
+                            failed_skills.append(skill_name)
+                            continue
+
                     if (
                         skill is not None
                         and skill.name.strip().casefold() in excluded_skills
@@ -130,7 +142,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                         continue
 
                     if not skill:
-                        error_msg = f"未找到名为 '{skill_name}' 的 skill"
+                        error_msg = f"Skill '{skill_name}' was not found."
                         results.append({"skill_name": skill_name, "success": False, "error": error_msg})
                         failure_count += 1
                         failed_skills.append(skill_name)
@@ -249,7 +261,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
             content = "\n".join(output_parts)
 
             return ToolResult(
-                ok=True,
+                ok=success_count > 0,
                 content=content,
                 extra_info={
                     "success_count": success_count,
@@ -337,8 +349,8 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
     ) -> Dict:
         """获取工具调用后的友好动作和备注"""
         action = i18n.translate(tool_name, category="tool.actions")
-        if not result.ok:
-            # 只有 skill_names 为空时才走这里
+        if not result.extra_info or "success_count" not in result.extra_info:
+            # Failures before per-skill processing have no structured counters.
             remark = i18n.translate("read_skills.error", category="tool.messages")
         else:
             remark = self._get_remark_content(result, arguments)

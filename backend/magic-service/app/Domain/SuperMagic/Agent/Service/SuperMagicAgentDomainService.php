@@ -408,7 +408,9 @@ readonly class SuperMagicAgentDomainService
         int $projectId,
         string $fullWorkdir,
         string $sandboxId,
-        ?string $sourcePath = null
+        ?string $sourcePath = null,
+        array $excludePaths = [],
+        ?string $skillsMdHash = null
     ): array {
         // Build upload_config: STS credentials for private bucket, matches sandbox API contract
         $uploadConfig = $this->cloudFileRepository->getStsTemporaryCredential(
@@ -419,7 +421,7 @@ readonly class SuperMagicAgentDomainService
         );
 
         // Call sandbox workspace export API via proxy request
-        $request = new ExportWorkspaceRequest(ProjectMode::AGENT_CREATOR->value, $code, $uploadConfig, $sourcePath);
+        $request = new ExportWorkspaceRequest(ProjectMode::AGENT_CREATOR->value, $code, $uploadConfig, $sourcePath, excludePaths: $excludePaths, skillsMdHash: $skillsMdHash);
         // SuperMagicAgentDataIsolation is the Agent-domain isolation VO
         // (BaseDataIsolation derivative), NOT the Contact-side DataIsolation
         // used by the sandbox gateway. Adapt it to Contact\DataIsolation

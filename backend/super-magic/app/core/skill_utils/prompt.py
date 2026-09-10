@@ -58,11 +58,13 @@ async def _do_generate(
     agent_name: str,
 ) -> Optional[str]:
     """Load skills, build XML, and render the prompt in an isolated event loop."""
+    from app.core.skill_utils.skill_references import load_market_references
+    references = await load_market_references(agent_name)
     personal_skills = await discover_skills_in_personal()
 
     # Personal Skills are an independent source. Keep the prompt when they exist even if
     # the Agent frontmatter does not explicitly configure system, Crew, or workspace Skills.
-    if skills_config.is_empty() and not personal_skills:
+    if skills_config.is_empty() and not personal_skills and not references:
         return None
 
     if agent_name:
@@ -156,6 +158,18 @@ async def _do_generate(
             skills_metadata.append(personal_skill)
             loaded_names.add(personal_skill.name)
             logger.info(f"Scanned and appended personal skill: {personal_skill.name}")
+
+    from app.core.skill_utils.skill_references import is_current_reference_skill
+    skills_metadata = [skill for skill in skills_metadata if await is_current_reference_skill(skill, agent_name)]
+
+    loaded_names = {skill.name for skill in skills_metadata}
+
+    # Disk metadata wins after first download, including creator-local downloads.
+    for name, reference in references.items():
+        if name.casefold() not in {loaded.casefold() for loaded in loaded_names}:
+            disk_skill = await find_skill(name, agent_name=agent_name)
+            skills_metadata.append(disk_skill or SkillMetadata(name=name, description=reference.description))
+            loaded_names.add(name)
 
     # ── 3b. Region filtering: hide international-platform skills in mainland environments. ──
     region_filtered_names: list[str] = []
@@ -373,7 +387,7 @@ async def _build_preloaded_skills_xml(
             parts.append(f"<skill_dir>{meta.skill_dir}</skill_dir>")
         parts.append("")
         parts.extend(file_blocks)
-        parts.append(f"</skill>")
+        parts.append("</skill>")
         skill_parts.append("\n".join(parts))
 
     if not skill_parts:
