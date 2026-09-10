@@ -113,6 +113,41 @@ function createCanvasWithoutRenderedImage(options?: { withRenderedImage?: boolea
 }
 
 describe("image editing manager lifecycle", () => {
+	it("keeps eraser undo and redo history isolated within the active session", () => {
+		const { canvas } = createCanvasWithoutRenderedImage()
+		const manager = new EraserManager({ canvas })
+		const internalManager = manager as unknown as { erasingElementId: string | null }
+		internalManager.erasingElementId = "image-1"
+
+		const firstStroke = { radius: 16, points: [{ x: 10, y: 10 }] }
+		const secondStroke = { radius: 20, points: [{ x: 20, y: 20 }] }
+		const replacementStroke = { radius: 24, points: [{ x: 30, y: 30 }] }
+
+		manager.pushStroke(firstStroke)
+		manager.pushStroke(secondStroke)
+		expect(manager.getStrokes()).toEqual([firstStroke, secondStroke])
+		expect(manager.canUndo()).toBe(true)
+		expect(manager.canRedo()).toBe(false)
+
+		manager.undoLastStroke()
+		expect(manager.getStrokes()).toEqual([firstStroke])
+		expect(manager.canRedo()).toBe(true)
+
+		manager.redoLastStroke()
+		expect(manager.getStrokes()).toEqual([firstStroke, secondStroke])
+		expect(manager.canRedo()).toBe(false)
+
+		manager.undoLastStroke()
+		manager.pushStroke(replacementStroke)
+		expect(manager.getStrokes()).toEqual([firstStroke, replacementStroke])
+		expect(manager.canRedo()).toBe(false)
+
+		manager.exitEraserMode(true)
+		expect(manager.canUndo()).toBe(false)
+		expect(manager.canRedo()).toBe(false)
+		manager.destroy()
+	})
+
 	it("rolls crop mode back once when the visible proxy cannot mount", () => {
 		const { canvas, sourceNode, selectionManager, imageEditingCoordinator } =
 			createCanvasWithoutRenderedImage()

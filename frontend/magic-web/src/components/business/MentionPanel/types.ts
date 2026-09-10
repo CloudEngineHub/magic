@@ -108,6 +108,11 @@ export interface ProjectFileMentionData {
 	file_path: string
 	relative_file_path?: string
 	file_extension: string
+	/** File metadata used to prevent stale signed-URL reuse across editor/canvas entry points. */
+	updated_at?: string
+	resource_version?: string | null
+	version?: string | null
+	file_version?: number
 	/** Project that owns this file. Optional for compatibility with historical mention data. */
 	project_id?: string
 	/** Frontend-only source project name used to render cross-project mention chips. */

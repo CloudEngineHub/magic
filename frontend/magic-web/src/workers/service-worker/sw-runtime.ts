@@ -4,6 +4,7 @@
  */
 
 import {
+	cleanupExpiredCanvasMediaStorage,
 	cleanupLegacyCanvasMediaStorage,
 	handleCanvasMediaMessage,
 	handleCanvasMediaRequest,
@@ -104,6 +105,7 @@ function createCanvasMediaFeature(): ServiceWorkerFeature {
 		id: "canvas-media",
 		async onActivate() {
 			await cleanupLegacyCanvasMediaStorage()
+			await cleanupExpiredCanvasMediaStorage()
 		},
 		onMessage(event) {
 			handleCanvasMediaMessage(event)

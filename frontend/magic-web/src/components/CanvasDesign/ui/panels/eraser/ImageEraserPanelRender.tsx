@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Undo2 } from "lucide-react"
+import { Redo2, Undo2 } from "lucide-react"
 import {
 	getEraserRadiusDefault,
 	MIN_RADIUS,
@@ -46,6 +46,7 @@ export default function ImageEraserPanelRender() {
 		() => canvas?.eraserManager.getRadius() ?? getEraserRadiusDefault(),
 	)
 	const [canUndo, setCanUndo] = useState(() => canvas?.eraserManager.canUndo() ?? false)
+	const [canRedo, setCanRedo] = useState(() => canvas?.eraserManager.canRedo() ?? false)
 	const [isSubmitting, setIsSubmitting] = useState(false)
 
 	const radiusRange = useMemo(() => {
@@ -70,9 +71,14 @@ export default function ImageEraserPanelRender() {
 	}, [canvas, erasingElementId])
 
 	useEffect(() => {
-		if (!canvas || !erasingElementId) return
+		if (!canvas || !erasingElementId) {
+			setCanUndo(false)
+			setCanRedo(false)
+			return
+		}
 		setRadius(canvas.eraserManager.getRadius())
 		setCanUndo(canvas.eraserManager.canUndo())
+		setCanRedo(canvas.eraserManager.canRedo())
 	}, [canvas, erasingElementId])
 
 	useCanvasEvent(
@@ -81,6 +87,7 @@ export default function ImageEraserPanelRender() {
 			if (data.elementId !== erasingElementId) return
 			setRadius(data.radius)
 			setCanUndo(data.canUndo)
+			setCanRedo(data.canRedo)
 		},
 		[erasingElementId],
 	)
@@ -92,6 +99,10 @@ export default function ImageEraserPanelRender() {
 		shouldShow: () => !!erasingElementId,
 		positionEventType: "eraser:position",
 		trackedElementId: erasingElementId,
+		stickyTopRight: {
+			gap: 8,
+			headerSelector: "[data-canvas-design-header-actions]",
+		},
 	})
 
 	const { containerRef: floatingRef } = useFloatingComponent({
@@ -118,6 +129,10 @@ export default function ImageEraserPanelRender() {
 
 	const handleUndo = useCallback(() => {
 		canvas?.eraserManager.undoLastStroke()
+	}, [canvas])
+
+	const handleRedo = useCallback(() => {
+		canvas?.eraserManager.redoLastStroke()
 	}, [canvas])
 
 	const handleCancel = useCallback(() => {
@@ -339,6 +354,18 @@ export default function ImageEraserPanelRender() {
 					title={t("common.undo", "撤销")}
 				>
 					<Undo2 size={16} />
+				</Button>
+				<Button
+					type="button"
+					variant="outline"
+					size="icon"
+					className={styles.undoIconButton}
+					disabled={!canRedo || isSubmitting}
+					onClick={handleRedo}
+					aria-label={t("common.redo", "重做")}
+					title={t("common.redo", "重做")}
+				>
+					<Redo2 size={16} />
 				</Button>
 			</div>
 			<div className={styles.section}>

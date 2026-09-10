@@ -3,10 +3,12 @@ import { bindServiceWorkerEvents } from "../sw-runtime"
 
 const mocks = vi.hoisted(() => ({
 	cleanupLegacyCanvasMediaStorage: vi.fn().mockResolvedValue(undefined),
+	cleanupExpiredCanvasMediaStorage: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock("../canvasMediaShared", () => ({
 	cleanupLegacyCanvasMediaStorage: mocks.cleanupLegacyCanvasMediaStorage,
+	cleanupExpiredCanvasMediaStorage: mocks.cleanupExpiredCanvasMediaStorage,
 	handleCanvasMediaMessage: vi.fn(),
 	handleCanvasMediaRequest: vi.fn(),
 }))
@@ -78,5 +80,6 @@ describe("service worker canvas media activation", () => {
 		await activation
 
 		expect(mocks.cleanupLegacyCanvasMediaStorage).toHaveBeenCalledTimes(1)
+		expect(mocks.cleanupExpiredCanvasMediaStorage).toHaveBeenCalledTimes(1)
 	})
 })

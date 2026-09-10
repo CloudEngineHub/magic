@@ -373,12 +373,13 @@ export interface CanvasEventMap {
 		boundingRect: { x: number; y: number; width: number; height: number } | null
 	}
 	"eraser:sessionUpdate": {
-		// 橡皮擦会话状态变化（半径、撤销栈等）
+		// 橡皮擦会话状态变化（半径、撤销/重做栈等）
 		elementId: string
 		contentId?: string
 		radius: number
 		strokeCount: number
 		canUndo: boolean
+		canRedo: boolean
 	}
 
 	// 键盘事件
