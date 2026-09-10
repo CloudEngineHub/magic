@@ -26,6 +26,8 @@ final class VertexGeminiTransport implements GeminiTransportInterface
 
     public function createInteraction(QueueExecutorConfig $config, array $payload, array $logContext = []): array
     {
+        unset($payload['response_format']['delivery']);
+
         return $this->request($config, function (GoogleServiceAccountTokenProvider $tokenProvider, string $baseUrl, string $path) use ($config, $payload, $logContext): array {
             return $this->client->postWithHeaders(
                 $baseUrl,

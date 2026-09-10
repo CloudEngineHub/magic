@@ -145,7 +145,7 @@ readonly class Wan30GenerationCapabilityProvider
             throw new InvalidArgumentException('Unsupported or conflicting Wan 3.x model identifiers.');
         }
 
-        return $model;
+        return $modelVersion;
     }
 
     private function resolveRequestedModel(string $modelVersion, string $modelId): ?string

@@ -162,6 +162,8 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
             default => 'processing',
         };
         $videoUrl = '';
+        $videoBase64 = '';
+        $videoMimeType = 'video/mp4';
         foreach ($detail['steps'] ?? [] as $step) {
             if (($step['type'] ?? '') !== 'model_output') {
                 continue;
@@ -169,12 +171,20 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
             foreach ($step['content'] ?? [] as $content) {
                 if (($content['type'] ?? '') === 'video') {
                     $videoUrl = trim((string) ($content['uri'] ?? ''));
-                    break 2;
+                    if ($videoUrl !== '') {
+                        break 2;
+                    }
+                    $inlineData = is_array($content['inlineData'] ?? null) ? $content['inlineData'] : [];
+                    $videoBase64 = trim((string) ($content['data'] ?? $inlineData['data'] ?? ''));
+                    $videoMimeType = trim((string) ($content['mime_type'] ?? $inlineData['mimeType'] ?? $videoMimeType));
                 }
             }
         }
-        if ($status === 'succeeded' && $videoUrl === '') {
+        if ($status === 'succeeded' && $videoUrl === '' && $videoBase64 === '') {
             return $this->failedResult($detail, $providerTaskId, VideoGenerateErrorCode::MISSING_VIDEO_DATA);
+        }
+        if ($videoUrl === '' && $videoBase64 !== '') {
+            $detail['response']['videos'][] = ['bytesBase64Encoded' => $videoBase64, 'mimeType' => $videoMimeType];
         }
         $errorCode = ProviderVideoErrorMapper::resolveGemini(null, $detail);
         $result = ['status' => $status, 'provider_result' => $detail, 'output' => $videoUrl === '' ? [] : ['video_url' => $videoUrl, 'provider_task_id' => $providerTaskId], 'error' => null];
