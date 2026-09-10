@@ -668,8 +668,7 @@ export class StyleManager {
 
 		// Save current values as initial state
 		for (const property of Object.keys(styles)) {
-			const kebabProperty = camelToKebab(property)
-			previousState[property] = element.style.getPropertyValue(kebabProperty) || ""
+			previousState[property] = getInlineStyleValue(element, property)
 		}
 
 		// Begin batch mode with initial command
