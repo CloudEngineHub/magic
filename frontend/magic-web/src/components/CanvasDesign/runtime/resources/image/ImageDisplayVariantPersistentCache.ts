@@ -13,23 +13,27 @@ export interface PersistentImageDisplayCacheRecord {
 	path: string
 	variant: PersistentImageDisplayVariant
 	rendition: PersistentImageDisplayRendition
-	/** 旧版本直接存入 IndexedDB 的 body；新记录优先只保留 bodyCacheKey。 */
+	/** 旧版本直接存入 IndexedDB 的 body；新记录绝不写入该字段。 */
 	blob?: Blob
 	bodyCacheKey?: string
-	mimeType: string
-	width: number
-	height: number
+	/** 缺失表示旧记录，按 ready 兼容。 */
+	bodyState?: "pending" | "ready"
+	pendingAt?: number
 	byteSize: number
 	imageInfo: ImageInfo
 	resourceVersion: string
 	sourceUpdatedAt: string | null
 	contentLength: number | null
-	sourceUrl: string | null
-	maxEdge: number | null
-	codecVersion: number
 	writeOrder: string
 	createdAt: number
 	lastAccessAt: number
+	/** 仅用于兼容旧记录；新写入不再持久化。 */
+	mimeType?: string
+	width?: number
+	height?: number
+	sourceUrl?: string | null
+	maxEdge?: number | null
+	codecVersion?: number
 }
 
 export type HydratedPersistentImageDisplayCacheRecord = PersistentImageDisplayCacheRecord & {
@@ -42,13 +46,10 @@ export interface PersistentImageDisplayCachePutOptions {
 	variant: PersistentImageDisplayVariant
 	rendition: PersistentImageDisplayRendition
 	blob: Blob
-	width: number
-	height: number
 	imageInfo: ImageInfo
 	resourceVersion: string | null
 	sourceUpdatedAt: string | null
 	contentLength: number | null
-	sourceUrl: string | null
 	maxEdge?: number
 	writeOrder: string
 }
@@ -70,9 +71,11 @@ const BODY_CACHE_URL_PREFIX = "https://canvas-design-image.invalid/body/"
 const LOOKUP_INDEX = "lookupKey"
 const LAST_ACCESS_INDEX = "lastAccessAt"
 const DEFAULT_MAX_BYTES = 200 * 1024 * 1024
+const DEFAULT_MAX_ENTRIES = 4096
 const CODEC_VERSION = 3
 const PRUNE_IDLE_DELAY_MS = 1000
 const TOUCH_WRITEBACK_INTERVAL_MS = 24 * 60 * 60 * 1000
+const PENDING_WRITE_MAX_AGE_MS = 60 * 60 * 1000
 
 interface PendingGetRequest {
 	resolve: (record: HydratedPersistentImageDisplayCacheRecord | null) => void
@@ -186,12 +189,20 @@ export class ImageDisplayVariantPersistentCache {
 	private touchTimerId: ReturnType<typeof setTimeout> | null = null
 	private pendingTouches = new Map<string, PersistentImageDisplayCacheTouch>()
 	private lastTouchWriteAt = new Map<string, number>()
+	private activePutLookupCounts = new Map<string, number>()
 	private readonly maxBytes: number
+	private readonly maxEntries: number
 	private readonly maxIdleAgeMs: number
 	private readonly now: () => number
 
-	constructor(options?: { maxBytes?: number; maxIdleAgeMs?: number; now?: () => number }) {
+	constructor(options?: {
+		maxBytes?: number
+		maxEntries?: number
+		maxIdleAgeMs?: number
+		now?: () => number
+	}) {
 		this.maxBytes = options?.maxBytes ?? DEFAULT_MAX_BYTES
+		this.maxEntries = options?.maxEntries ?? DEFAULT_MAX_ENTRIES
 		this.maxIdleAgeMs = options?.maxIdleAgeMs ?? CANVAS_MEDIA_MAX_IDLE_AGE_MS
 		this.now = options?.now ?? Date.now
 	}
@@ -224,12 +235,14 @@ export class ImageDisplayVariantPersistentCache {
 
 	public async put(options: PersistentImageDisplayCachePutOptions): Promise<boolean> {
 		if (!options.resourceVersion) return false
+		// 新 body 只允许进入 CacheStorage；不可用时不要用 IndexedDB Blob 兜底。
+		if (!getCacheStorage()) return false
 		const db = await this.getDb()
 		if (!db) return false
 
 		const lookupKey = createLookupKey(options)
 		const createdAt = this.now()
-		const key = [
+		const readyKey = [
 			"canvas-display-image",
 			`v${DB_VERSION}`,
 			normalizeKeyPart(options.scope),
@@ -241,8 +254,8 @@ export class ImageDisplayVariantPersistentCache {
 			normalizeKeyPart(options.writeOrder),
 			`codec${CODEC_VERSION}`,
 		].join(":")
+		const key = `${readyKey}:pending:${createdAt}:${Math.random().toString(36).slice(2)}`
 		const bodyCacheKey = getBodyCacheKey(key)
-		const bodyStoredInCache = await putBodyInCache(bodyCacheKey, options.blob)
 		const record: PersistentImageDisplayCacheRecord = {
 			key,
 			lookupKey,
@@ -250,27 +263,60 @@ export class ImageDisplayVariantPersistentCache {
 			path: options.path,
 			variant: options.variant,
 			rendition: options.rendition,
-			...(bodyStoredInCache ? { bodyCacheKey } : { blob: options.blob }),
-			mimeType: options.blob.type || "image/webp",
-			width: options.width,
-			height: options.height,
+			bodyCacheKey,
+			bodyState: "pending",
+			pendingAt: createdAt,
 			byteSize: options.blob.size,
 			imageInfo: options.imageInfo,
 			resourceVersion: options.resourceVersion,
 			sourceUpdatedAt: options.sourceUpdatedAt,
 			contentLength: options.contentLength,
-			sourceUrl: options.sourceUrl,
-			maxEdge: options.maxEdge ?? null,
-			codecVersion: CODEC_VERSION,
 			writeOrder: options.writeOrder,
 			createdAt,
 			lastAccessAt: createdAt,
 		}
 
-		const accepted = await this.putLatestRecord(db, record)
-		if (!accepted && bodyStoredInCache) await deleteBodyFromCache(bodyCacheKey)
-		if (accepted) this.schedulePrune()
-		return accepted
+		this.incrementActivePut(lookupKey)
+		try {
+			const pendingAccepted = await this.putPendingRecord(db, record)
+			if (!pendingAccepted) return false
+			this.schedulePrune()
+
+			const bodyStoredInCache = await putBodyInCache(bodyCacheKey, options.blob)
+			if (!bodyStoredInCache) {
+				await this.removePendingRecord(db, record)
+				return false
+			}
+
+			const readyRecord: PersistentImageDisplayCacheRecord = {
+				...record,
+				key: readyKey,
+				bodyState: "ready",
+			}
+			delete readyRecord.pendingAt
+			const accepted = await this.putLatestRecord(db, readyRecord)
+			if (!accepted) {
+				await this.removePendingRecord(db, record)
+				await deleteBodyFromCache(bodyCacheKey)
+			}
+			if (accepted) this.schedulePrune()
+			return accepted
+		} finally {
+			this.decrementActivePut(lookupKey)
+		}
+	}
+
+	private incrementActivePut(lookupKey: string): void {
+		this.activePutLookupCounts.set(
+			lookupKey,
+			(this.activePutLookupCounts.get(lookupKey) ?? 0) + 1,
+		)
+	}
+
+	private decrementActivePut(lookupKey: string): void {
+		const nextCount = (this.activePutLookupCounts.get(lookupKey) ?? 1) - 1
+		if (nextCount <= 0) this.activePutLookupCounts.delete(lookupKey)
+		else this.activePutLookupCounts.set(lookupKey, nextCount)
 	}
 
 	public async removeByPath(scope: string, path: string, maxWriteOrder?: string): Promise<void> {
@@ -380,6 +426,7 @@ export class ImageDisplayVariantPersistentCache {
 		pendingGets.forEach((requests, lookupKey) => {
 			const records = (recordsByLookupKey.get(lookupKey) ?? [])
 				.filter(hasComparableVersion)
+				.filter((record) => record.bodyState !== "pending")
 				.filter((record) => {
 					const expired = this.isRecordExpired(record, now)
 					if (expired) hasExpiredRecord = true
@@ -421,9 +468,6 @@ export class ImageDisplayVariantPersistentCache {
 		record: PersistentImageDisplayCacheRecord,
 	): Promise<HydratedPersistentImageDisplayCacheRecord | null> {
 		if (record.blob) {
-			if (!record.bodyCacheKey && getCacheStorage()) {
-				void this.migrateLegacyBody(record)
-			}
 			return record as HydratedPersistentImageDisplayCacheRecord
 		}
 		if (!record.bodyCacheKey) return null
@@ -456,46 +500,6 @@ export class ImageDisplayVariantPersistentCache {
 			store.delete(record.key)
 		}
 		await this.awaitTransaction(tx)
-	}
-
-	private async migrateLegacyBody(record: PersistentImageDisplayCacheRecord): Promise<void> {
-		if (!record.blob || record.bodyCacheKey) return
-		const bodyCacheKey = getBodyCacheKey(record.key)
-		if (!(await putBodyInCache(bodyCacheKey, record.blob))) return
-		const db = await this.getDb()
-		if (!db) {
-			await deleteBodyFromCache(bodyCacheKey)
-			return
-		}
-
-		let bodyReferencedByMetadata = false
-		try {
-			bodyReferencedByMetadata = await new Promise<boolean>((resolve) => {
-				const tx = db.transaction(STORE_NAME, "readwrite")
-				const store = tx.objectStore(STORE_NAME)
-				const request = store.get(record.key)
-				let shouldKeepBody = false
-				request.onsuccess = () => {
-					const current = request.result as PersistentImageDisplayCacheRecord | undefined
-					if (current?.bodyCacheKey === bodyCacheKey) {
-						// A concurrent migration already committed the same cache identity.
-						shouldKeepBody = true
-						return
-					}
-					if (!current?.blob || current.bodyCacheKey) return
-					const metadata = { ...current, bodyCacheKey }
-					delete metadata.blob
-					store.put(metadata)
-					shouldKeepBody = true
-				}
-				tx.oncomplete = () => resolve(shouldKeepBody)
-				tx.onerror = () => resolve(false)
-				tx.onabort = () => resolve(false)
-			})
-		} catch {
-			bodyReferencedByMetadata = false
-		}
-		if (!bodyReferencedByMetadata) await deleteBodyFromCache(bodyCacheKey)
 	}
 
 	private isRecordExpired(
@@ -582,6 +586,55 @@ export class ImageDisplayVariantPersistentCache {
 		return Promise.all(reads).then((entries) => new Map(entries))
 	}
 
+	/**
+	 * Persist a non-readable reservation before CacheStorage is touched. Keeping
+	 * older ready rows until commit avoids turning a failed replacement into a miss.
+	 */
+	private putPendingRecord(
+		db: IDBDatabase,
+		current: PersistentImageDisplayCacheRecord,
+	): Promise<boolean> {
+		return new Promise((resolve) => {
+			const tx = db.transaction(STORE_NAME, "readwrite")
+			const store = tx.objectStore(STORE_NAME)
+			const request = store.index(LOOKUP_INDEX).getAll(current.lookupKey)
+			let accepted = false
+			request.onsuccess = () => {
+				const records = (request.result ?? []) as PersistentImageDisplayCacheRecord[]
+				const currentWriteOrder = getRecordWriteOrder(current)
+				const isStale = records.some(
+					(record) =>
+						record.key !== current.key &&
+						(compareSourceFreshness(record, current) > 0 ||
+							(compareSourceFreshness(record, current) === 0 &&
+								getRecordWriteOrder(record) > currentWriteOrder)),
+				)
+				if (isStale) return
+				accepted = true
+				store.put(current)
+			}
+			tx.oncomplete = () => resolve(accepted)
+			tx.onerror = () => resolve(false)
+			tx.onabort = () => resolve(false)
+		})
+	}
+
+	private async removePendingRecord(
+		db: IDBDatabase,
+		record: PersistentImageDisplayCacheRecord,
+	): Promise<void> {
+		const tx = db.transaction(STORE_NAME, "readwrite")
+		const store = tx.objectStore(STORE_NAME)
+		const request = store.get(record.key)
+		request.onsuccess = () => {
+			const current = request.result as PersistentImageDisplayCacheRecord | undefined
+			if (current?.bodyState === "pending" && current.pendingAt === record.pendingAt) {
+				store.delete(record.key)
+			}
+		}
+		await this.awaitTransaction(tx)
+	}
+
 	private putLatestRecord(
 		db: IDBDatabase,
 		current: PersistentImageDisplayCacheRecord,
@@ -608,16 +661,22 @@ export class ImageDisplayVariantPersistentCache {
 
 				accepted = true
 				store.put(current)
-				const currentIsNewerThanAllExisting = records.every(
-					(record) => compareSourceFreshness(current, record) > 0,
-				)
+				const currentIsNewerThanAllExisting = records
+					.filter(
+						(record) =>
+							record.key !== current.key &&
+							record.bodyCacheKey !== current.bodyCacheKey,
+					)
+					.every((record) => compareSourceFreshness(current, record) > 0)
 				records.forEach((record) => {
 					if (
 						record.key !== current.key &&
 						(currentIsNewerThanAllExisting ||
 							getRecordWriteOrder(record) <= currentWriteOrder)
 					) {
-						if (record.bodyCacheKey) removedBodyKeys.push(record.bodyCacheKey)
+						if (record.bodyCacheKey && record.bodyCacheKey !== current.bodyCacheKey) {
+							removedBodyKeys.push(record.bodyCacheKey)
+						}
 						store.delete(record.key)
 					}
 				})
@@ -670,14 +729,24 @@ export class ImageDisplayVariantPersistentCache {
 		const store = tx.objectStore(STORE_NAME)
 		const records = await this.readAllRecords(store)
 		const now = this.now()
-		const expiredRecords = records.filter((record) => this.isRecordExpired(record, now))
+		const expiredRecords = records.filter(
+			(record) =>
+				!this.activePutLookupCounts.has(record.lookupKey) &&
+				(this.isRecordExpired(record, now) ||
+					(record.bodyState === "pending" &&
+						typeof record.pendingAt === "number" &&
+						now - record.pendingAt > PENDING_WRITE_MAX_AGE_MS)),
+		)
 		const removedBodyKeys = expiredRecords
 			.map((record) => record.bodyCacheKey)
 			.filter((bodyCacheKey): bodyCacheKey is string => !!bodyCacheKey)
 		expiredRecords.forEach((record) => store.delete(record.key))
-		const activeRecords = records.filter((record) => !this.isRecordExpired(record, now))
+		const activeRecords = records
+			.filter((record) => !this.isRecordExpired(record, now))
+			.filter((record) => !expiredRecords.includes(record))
 		let totalBytes = activeRecords.reduce((sum, record) => sum + record.byteSize, 0)
-		if (totalBytes <= this.maxBytes) {
+		let totalEntries = activeRecords.length
+		if (totalBytes <= this.maxBytes && totalEntries <= this.maxEntries) {
 			await this.awaitTransaction(tx)
 			await Promise.all(
 				removedBodyKeys.map((bodyCacheKey) => deleteBodyFromCache(bodyCacheKey)),
@@ -686,11 +755,14 @@ export class ImageDisplayVariantPersistentCache {
 		}
 
 		activeRecords.sort((a, b) => a.lastAccessAt - b.lastAccessAt)
-		for (const record of activeRecords) {
-			if (totalBytes <= this.maxBytes) break
+		for (const record of activeRecords.filter(
+			(record) => !this.activePutLookupCounts.has(record.lookupKey),
+		)) {
+			if (totalBytes <= this.maxBytes && totalEntries <= this.maxEntries) break
 			store.delete(record.key)
 			if (record.bodyCacheKey) removedBodyKeys.push(record.bodyCacheKey)
 			totalBytes -= record.byteSize
+			totalEntries -= 1
 		}
 		await this.awaitTransaction(tx)
 		await Promise.all(removedBodyKeys.map((bodyCacheKey) => deleteBodyFromCache(bodyCacheKey)))

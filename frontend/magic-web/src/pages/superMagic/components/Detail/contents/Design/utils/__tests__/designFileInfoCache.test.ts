@@ -4,7 +4,6 @@ import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import {
 	clearAllFileInfoCache,
 	cleanupFileInfoCache,
-	flushFileInfoCachePersistenceForTests,
 	getFileInfoById,
 	getFileInfoByPath,
 	getFileResourceMetaByPath,
@@ -41,17 +40,15 @@ function deferred<T>(): {
 }
 
 describe("getFileResourceMetaByPath", () => {
-	beforeEach(async () => {
+	beforeEach(() => {
 		vi.clearAllMocks()
 		vi.useRealTimers()
 		clearAllFileInfoCache()
-		await flushFileInfoCachePersistenceForTests()
 	})
 
-	afterEach(async () => {
+	afterEach(() => {
 		vi.useRealTimers()
 		clearAllFileInfoCache()
-		await flushFileInfoCachePersistenceForTests()
 	})
 
 	it("returns metadata-only resource version without fetching a signed url", async () => {
@@ -301,7 +298,7 @@ describe("getFileResourceMetaByPath", () => {
 		expect(fileInfo).not.toHaveProperty("file_id")
 	})
 
-	it("re-signs URL after a module reload while keeping path metadata durable", async () => {
+	it("re-signs URL after a module reload without durable path metadata", async () => {
 		const files = [
 			fileItem({
 				file_id: "file-4",
@@ -329,7 +326,6 @@ describe("getFileResourceMetaByPath", () => {
 			"project-1",
 		)
 
-		await flushFileInfoCachePersistenceForTests()
 		vi.resetModules()
 		const apiModule = await import("@/pages/superMagic/utils/api")
 		vi.mocked(apiModule.getTemporaryDownloadUrl).mockResolvedValue([
@@ -354,7 +350,6 @@ describe("getFileResourceMetaByPath", () => {
 		})
 		expect(apiModule.getTemporaryDownloadUrl).toHaveBeenCalledTimes(1)
 		cacheModule.clearAllFileInfoCache()
-		await cacheModule.flushFileInfoCachePersistenceForTests()
 	})
 
 	it("does not delete restored path cache before attachments are ready", async () => {

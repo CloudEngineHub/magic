@@ -28,6 +28,10 @@ const LEGACY_CANVAS_MEDIA_CACHE_VERSIONS = Array.from(
 )
 const STORE_NAME = "resources"
 const DEFAULT_MAX_BYTES = 1024 * 1024 * 1024
+export const CANVAS_MEDIA_MAX_ENTRIES = 16_384
+export const CANVAS_MEDIA_MAX_METADATA_BYTES = 32 * 1024 * 1024
+const PENDING_BODY_MAX_AGE_MS = 60 * 60 * 1000
+const BODY_WRITE_TOKEN_HEADER = "X-Magic-Canvas-Body-Write-Token"
 /** Idle eviction for current-version Canvas media bodies (SW + host CONFIG). */
 export const CANVAS_MEDIA_MAX_IDLE_AGE_MS = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_RESOURCE_NAMESPACE = "__global__"
@@ -74,15 +78,14 @@ type CanvasMediaEntry = {
 	sourceUpdatedAt?: string | null
 	lastAccessedAt?: number
 	updatedAt?: number
-}
-
-type CanvasMediaRefreshResult = {
-	refreshed: boolean
-	changed: boolean
-	metadata?: ReturnType<typeof getResponseMetadata>
+	pendingBodyToken?: string | null
+	pendingBodySize?: number | null
+	pendingBodyStartedAt?: number | null
 }
 
 let maxBytes = DEFAULT_MAX_BYTES
+let maxEntries = CANVAS_MEDIA_MAX_ENTRIES
+let maxMetadataBytes = CANVAS_MEDIA_MAX_METADATA_BYTES
 let maxIdleAgeMs = CANVAS_MEDIA_MAX_IDLE_AGE_MS
 interface InflightResourceRequest {
 	identity: string
@@ -90,6 +93,7 @@ interface InflightResourceRequest {
 }
 
 const inflightResourceMap = new Map<string, InflightResourceRequest>()
+const activeBodyWriteCounts = new Map<string, number>()
 
 /** 将 Service Worker URL 中的 percent-encoded 路径还原为业务资源路径。 */
 export function normalizeResourcePathForLookup(path: string | null | undefined): string {
@@ -282,30 +286,8 @@ function getResponseMetadata(response: Response, blobSize: number) {
 	const contentLengthText = response.headers.get("Content-Length")
 	const contentLength = Number(contentLengthText)
 	return {
-		etag: response.headers.get("ETag"),
-		lastModified: response.headers.get("Last-Modified"),
 		contentLength: Number.isFinite(contentLength) ? contentLength : blobSize,
-		contentType: response.headers.get("Content-Type"),
 	}
-}
-
-function hasResourceChanged(
-	previousEntry: CanvasMediaEntry | null,
-	metadata: ReturnType<typeof getResponseMetadata>,
-): boolean {
-	if (!previousEntry) return true
-	if (previousEntry.etag && metadata.etag) return previousEntry.etag !== metadata.etag
-	if (previousEntry.lastModified && metadata.lastModified) {
-		return previousEntry.lastModified !== metadata.lastModified
-	}
-	if (previousEntry.contentLength && metadata.contentLength) {
-		if (previousEntry.contentLength !== metadata.contentLength) return true
-		if (previousEntry.contentType && metadata.contentType) {
-			return previousEntry.contentType !== metadata.contentType
-		}
-		return false
-	}
-	return true
 }
 
 /** 从虚拟媒体 URL 解析资源定位信息。 */
@@ -343,34 +325,70 @@ export function parseVirtualResourceRequest(
 	return { namespace, mediaType: mediaType as CanvasMediaType, resourcePath }
 }
 
-async function saveEntry(entry: CanvasMediaEntry): Promise<void> {
+function hasOwnField(entry: CanvasMediaEntry, field: keyof CanvasMediaEntry): boolean {
+	return Object.prototype.hasOwnProperty.call(entry, field)
+}
+
+function toStoredCanvasMediaEntry(
+	entry: CanvasMediaEntry,
+	existing?: CanvasMediaEntry,
+): CanvasMediaEntry {
+	const namespace = normalizeResourceNamespaceForStorage(entry.namespace ?? existing?.namespace)
+	const path = entry.path ?? existing?.path
+	const mediaType = entry.mediaType ?? existing?.mediaType
+	const merged: CanvasMediaEntry = {
+		id: entry.id || existing?.id || getResourceId({ namespace, path, mediaType }),
+		namespace,
+		path,
+		mediaType,
+		sourceUrl: entry.sourceUrl || existing?.sourceUrl || existing?.originalUrl || existing?.url,
+		expiresAt: hasOwnField(entry, "expiresAt") ? entry.expiresAt : existing?.expiresAt,
+		size: hasOwnField(entry, "size") ? entry.size : existing?.size,
+		contentLength: hasOwnField(entry, "contentLength")
+			? entry.contentLength
+			: existing?.contentLength,
+		resourceVersion: hasOwnField(entry, "resourceVersion")
+			? entry.resourceVersion
+			: (existing?.resourceVersion ?? null),
+		sourceUpdatedAt: hasOwnField(entry, "sourceUpdatedAt")
+			? entry.sourceUpdatedAt
+			: (existing?.sourceUpdatedAt ?? null),
+		lastAccessedAt: entry.lastAccessedAt ?? existing?.lastAccessedAt ?? Date.now(),
+		pendingBodyToken: hasOwnField(entry, "pendingBodyToken")
+			? entry.pendingBodyToken
+			: (existing?.pendingBodyToken ?? null),
+		pendingBodySize: hasOwnField(entry, "pendingBodySize")
+			? entry.pendingBodySize
+			: (existing?.pendingBodySize ?? null),
+		pendingBodyStartedAt: hasOwnField(entry, "pendingBodyStartedAt")
+			? entry.pendingBodyStartedAt
+			: (existing?.pendingBodyStartedAt ?? null),
+	}
+	return merged
+}
+
+async function updateEntryById(
+	id: string,
+	update: (current: CanvasMediaEntry) => CanvasMediaEntry | null,
+): Promise<CanvasMediaEntry | null> {
 	const db = await openDb()
 	const transaction = db.transaction(STORE_NAME, "readwrite")
+	const transactionDone = transactionToPromise(transaction)
 	const store = transaction.objectStore(STORE_NAME)
-	const namespace = normalizeResourceNamespaceForStorage(entry.namespace)
-	const id = getResourceId(entry)
-	const existing = await requestToPromise<CanvasMediaEntry | undefined>(store.get(id))
-
-	await requestToPromise(
-		store.put({
-			id,
-			namespace,
-			path: entry.path,
-			sourceUrl:
-				entry.sourceUrl || existing?.sourceUrl || existing?.originalUrl || existing?.url,
-			mediaType: entry.mediaType,
-			expiresAt: entry.expiresAt ?? existing?.expiresAt,
-			size: entry.size ?? existing?.size,
-			etag: entry.etag ?? existing?.etag,
-			lastModified: entry.lastModified ?? existing?.lastModified,
-			contentLength: entry.contentLength ?? existing?.contentLength,
-			contentType: entry.contentType ?? existing?.contentType,
-			resourceVersion: entry.resourceVersion ?? existing?.resourceVersion ?? null,
-			sourceUpdatedAt: entry.sourceUpdatedAt ?? existing?.sourceUpdatedAt ?? null,
-			lastAccessedAt: entry.lastAccessedAt ?? existing?.lastAccessedAt ?? Date.now(),
-			updatedAt: entry.updatedAt ?? existing?.updatedAt ?? Date.now(),
-		}),
-	)
+	const current = await requestToPromise<CanvasMediaEntry | undefined>(store.get(id))
+	if (!current) {
+		await transactionDone
+		return null
+	}
+	const updated = update(current)
+	if (!updated) {
+		await transactionDone
+		return null
+	}
+	const stored = toStoredCanvasMediaEntry({ ...updated, id }, current)
+	await requestToPromise(store.put(stored))
+	await transactionDone
+	return stored
 }
 
 async function getAllEntries(): Promise<CanvasMediaEntry[]> {
@@ -402,8 +420,10 @@ async function getEntryByPath(
 async function deleteEntry(entry: CanvasMediaEntry): Promise<void> {
 	const db = await openDb()
 	const transaction = db.transaction(STORE_NAME, "readwrite")
+	const transactionDone = transactionToPromise(transaction)
 	const store = transaction.objectStore(STORE_NAME)
 	await requestToPromise(store.delete(entry.id as string))
+	await transactionDone
 	const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
 	await cache.delete(getCacheKey(entry))
 }
@@ -418,22 +438,13 @@ function isEntryIdleExpired(entry: CanvasMediaEntry, now = Date.now()): boolean 
 export async function cleanupExpiredCanvasMediaStorage(): Promise<void> {
 	try {
 		const entries = await getAllEntries()
-		const expiredEntries = entries.filter((entry) => isEntryIdleExpired(entry))
+		const expiredEntries = entries.filter(
+			(entry) => !isBodyWriteActive(entry.id) && isEntryIdleExpired(entry),
+		)
 		await Promise.allSettled(expiredEntries.map((entry) => deleteEntry(entry)))
 	} catch {
 		// Cache maintenance must never block Canvas media reads or SW activation.
 	}
-}
-
-async function touchEntry(
-	entry: CanvasMediaEntry,
-	updates: Partial<CanvasMediaEntry> = {},
-): Promise<void> {
-	await saveEntry({
-		...entry,
-		...updates,
-		lastAccessedAt: Date.now(),
-	})
 }
 
 function queueTouch(entry: CanvasMediaEntry): void {
@@ -457,6 +468,7 @@ async function flushPendingTouches(touches?: CanvasMediaTouch[]): Promise<void> 
 	try {
 		const db = await openDb()
 		const transaction = db.transaction(STORE_NAME, "readwrite")
+		const transactionDone = transactionToPromise(transaction)
 		const store = transaction.objectStore(STORE_NAME)
 		const appliedIds = new Set<string>()
 		updates.forEach((update) => {
@@ -469,11 +481,16 @@ async function flushPendingTouches(touches?: CanvasMediaTouch[]): Promise<void> 
 					lastTouchWriteAt.get(update.id) || 0,
 				)
 				if (update.lastAccessedAt - lastWrittenAt < TOUCH_WRITEBACK_INTERVAL_MS) return
-				store.put({ ...current, lastAccessedAt: update.lastAccessedAt })
+				store.put(
+					toStoredCanvasMediaEntry(
+						{ ...current, lastAccessedAt: update.lastAccessedAt },
+						current,
+					),
+				)
 				appliedIds.add(update.id)
 			}
 		})
-		await transactionToPromise(transaction)
+		await transactionDone
 		updates
 			.filter((update) => appliedIds.has(update.id))
 			.forEach((update) => lastTouchWriteAt.set(update.id, update.lastAccessedAt))
@@ -482,26 +499,141 @@ async function flushPendingTouches(touches?: CanvasMediaTouch[]): Promise<void> 
 	}
 }
 
-async function enforceMaxBytes(
-	bytesToReserve = 0,
-	protectedResourceId: string | null = null,
-): Promise<void> {
-	await cleanupExpiredCanvasMediaStorage()
+function getAccountedBodySize(entry: CanvasMediaEntry): number {
+	return Math.max(entry.size || 0, entry.pendingBodySize || 0)
+}
+
+function estimateMetadataBytes(entry: CanvasMediaEntry): number {
+	try {
+		return JSON.stringify(entry).length * 2
+	} catch {
+		return 0
+	}
+}
+
+function isBodyWriteActive(id: string | null | undefined): boolean {
+	return !!id && (activeBodyWriteCounts.get(id) ?? 0) > 0
+}
+
+function beginActiveBodyWrite(id: string): void {
+	activeBodyWriteCounts.set(id, (activeBodyWriteCounts.get(id) ?? 0) + 1)
+}
+
+function endActiveBodyWrite(id: string): void {
+	const nextCount = (activeBodyWriteCounts.get(id) ?? 1) - 1
+	if (nextCount <= 0) activeBodyWriteCounts.delete(id)
+	else activeBodyWriteCounts.set(id, nextCount)
+}
+
+function hasTimedOutPendingBody(entry: CanvasMediaEntry, now = Date.now()): boolean {
+	return (
+		!!entry.pendingBodyToken &&
+		!!entry.pendingBodyStartedAt &&
+		now - entry.pendingBodyStartedAt > PENDING_BODY_MAX_AGE_MS
+	)
+}
+
+async function reconcilePendingBody(entry: CanvasMediaEntry): Promise<CanvasMediaEntry> {
+	const id = String(entry.id || "")
+	const token = entry.pendingBodyToken
+	if (!id || !token) return entry
+	const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
+	const response = await cache.match(getCacheKey(entry))
+	const tokenMatches =
+		response?.headers.get(BODY_WRITE_TOKEN_HEADER) === token &&
+		tokenMatchesResourceIdentity(token, entry)
+	return (
+		(await updateEntryById(id, (current) => {
+			if (current.pendingBodyToken !== token) return null
+			const canCommitBody = tokenMatches && tokenMatchesResourceIdentity(token, current)
+			return {
+				...current,
+				...(canCommitBody ? { size: current.pendingBodySize ?? current.size } : {}),
+				pendingBodyToken: null,
+				pendingBodySize: null,
+				pendingBodyStartedAt: null,
+			}
+		})) ?? entry
+	)
+}
+
+async function enforceStorageLimits(protectedResourceId: string | null = null): Promise<void> {
+	const now = Date.now()
+	let entries = await getAllEntries()
+	const isProtected = (entry: CanvasMediaEntry) =>
+		entry.id === protectedResourceId || isBodyWriteActive(entry.id)
+
+	const expiredEntries = entries.filter(
+		(entry) => !isProtected(entry) && isEntryIdleExpired(entry, now),
+	)
+	for (const entry of expiredEntries) await deleteEntry(entry)
+	if (expiredEntries.length > 0) {
+		const deletedIds = new Set(expiredEntries.map((entry) => entry.id))
+		entries = entries.filter((entry) => !deletedIds.has(entry.id))
+	}
+
+	for (const entry of entries) {
+		if (isProtected(entry) || !hasTimedOutPendingBody(entry, now)) continue
+		try {
+			const reconciled = await reconcilePendingBody(entry)
+			entries = entries.map((candidate) =>
+				candidate.id === entry.id ? reconciled : candidate,
+			)
+		} catch {
+			// Pending recovery is best effort; later maintenance can retry it.
+		}
+	}
+
+	let totalBodyBytes = entries.reduce((sum, entry) => sum + getAccountedBodySize(entry), 0)
+	let totalMetadataBytes = entries.reduce((sum, entry) => sum + estimateMetadataBytes(entry), 0)
+	let totalEntries = entries.length
+	const exceedsLimit = () =>
+		totalBodyBytes > maxBytes ||
+		totalEntries > maxEntries ||
+		totalMetadataBytes > maxMetadataBytes
+	const evict = async (candidates: CanvasMediaEntry[]) => {
+		for (const entry of candidates) {
+			if (!exceedsLimit()) break
+			await deleteEntry(entry)
+			totalBodyBytes -= getAccountedBodySize(entry)
+			totalMetadataBytes -= estimateMetadataBytes(entry)
+			totalEntries -= 1
+		}
+	}
+	const byLeastRecentAccess = (a: CanvasMediaEntry, b: CanvasMediaEntry) =>
+		(a.lastAccessedAt || a.updatedAt || 0) - (b.lastAccessedAt || b.updatedAt || 0)
+	const removableEntries = entries.filter((entry) => !isProtected(entry))
+	await evict(
+		removableEntries
+			.filter((entry) => getAccountedBodySize(entry) <= 0)
+			.sort(byLeastRecentAccess),
+	)
+	await evict(
+		removableEntries
+			.filter((entry) => getAccountedBodySize(entry) > 0)
+			.sort(byLeastRecentAccess),
+	)
+}
+
+async function enforceBodyByteLimit(protectedResourceId: string): Promise<void> {
 	const entries = await getAllEntries()
-	let total = entries.reduce((sum, entry) => {
-		if (entry.id === protectedResourceId) return sum
-		return sum + (entry.size || 0)
-	}, 0)
-	if (total + bytesToReserve <= maxBytes) return
-
+	let totalBodyBytes = entries.reduce((sum, entry) => sum + getAccountedBodySize(entry), 0)
+	if (totalBodyBytes <= maxBytes) return
 	const removableEntries = entries
-		.filter((entry) => (entry.size || 0) > 0 && entry.id !== protectedResourceId)
-		.sort((a, b) => (a.lastAccessedAt || 0) - (b.lastAccessedAt || 0))
-
+		.filter(
+			(entry) =>
+				entry.id !== protectedResourceId &&
+				!isBodyWriteActive(entry.id) &&
+				getAccountedBodySize(entry) > 0,
+		)
+		.sort(
+			(a, b) =>
+				(a.lastAccessedAt || a.updatedAt || 0) - (b.lastAccessedAt || b.updatedAt || 0),
+		)
 	for (const entry of removableEntries) {
-		if (total + bytesToReserve <= maxBytes) break
+		if (totalBodyBytes <= maxBytes) break
 		await deleteEntry(entry)
-		total -= entry.size || 0
+		totalBodyBytes -= getAccountedBodySize(entry)
 	}
 }
 
@@ -549,6 +681,71 @@ function createResponseFromBlobResult(result: {
 	})
 }
 
+function getIdentityFingerprint(identity: string): string {
+	let hash = 2166136261
+	for (let index = 0; index < identity.length; index += 1) {
+		hash ^= identity.charCodeAt(index)
+		hash = Math.imul(hash, 16777619)
+	}
+	return (hash >>> 0).toString(36)
+}
+
+function createBodyWriteToken(entry: CanvasMediaEntry): string {
+	const randomPart =
+		typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+			? crypto.randomUUID()
+			: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+	return `${getIdentityFingerprint(getResourceFetchIdentity(entry))}.${randomPart}`
+}
+
+function tokenMatchesResourceIdentity(token: string, entry: CanvasMediaEntry): boolean {
+	return token.startsWith(`${getIdentityFingerprint(getResourceFetchIdentity(entry))}.`)
+}
+
+async function getReadableCachedResponse(
+	cache: Cache,
+	entry: CanvasMediaEntry,
+): Promise<Response | undefined> {
+	const response = await cache.match(getCacheKey(entry))
+	if (!response) return undefined
+	const bodyToken = response.headers.get(BODY_WRITE_TOKEN_HEADER)
+	if (entry.pendingBodyToken) {
+		if (
+			bodyToken !== entry.pendingBodyToken ||
+			!tokenMatchesResourceIdentity(entry.pendingBodyToken, entry)
+		) {
+			return undefined
+		}
+		void updateEntryById(String(entry.id || ""), (current) => {
+			const currentToken = current.pendingBodyToken
+			if (!currentToken || currentToken !== entry.pendingBodyToken) return null
+			return {
+				...current,
+				...(tokenMatchesResourceIdentity(currentToken, current)
+					? { size: current.pendingBodySize ?? current.size }
+					: {}),
+				pendingBodyToken: null,
+				pendingBodySize: null,
+				pendingBodyStartedAt: null,
+			}
+		}).catch(() => undefined)
+		return response
+	}
+	if (bodyToken && !tokenMatchesResourceIdentity(bodyToken, entry)) return undefined
+	return response
+}
+
+function stripInternalBodyHeaders(response: Response): Response {
+	if (!response.headers.has(BODY_WRITE_TOKEN_HEADER)) return response
+	const headers = new Headers(response.headers)
+	headers.delete(BODY_WRITE_TOKEN_HEADER)
+	return new Response(response.body, {
+		status: response.status,
+		statusText: response.statusText,
+		headers,
+	})
+}
+
 async function buildRangeResponse(response: Response, request: Request): Promise<Response> {
 	const range = request.headers.get("range")
 	if (!range) return response
@@ -587,26 +784,88 @@ async function putResponseInCache(
 	response: Response,
 	entry: CanvasMediaEntry,
 	metadata: ReturnType<typeof getResponseMetadata>,
+	bodySize: number,
 ): Promise<void> {
 	if (!response.ok) return
-	const responseForSize = response.clone()
-	const blob = await responseForSize.blob()
-	if (blob.size > maxBytes) return
+	if (bodySize > maxBytes) return
 
-	await enforceMaxBytes(blob.size, getResourceId(entry))
-	const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
-	const cacheKey = getCacheKey(entry)
-	// CacheStorage and IndexedDB are separate stores. Snapshot the previous
-	// response so an IndexedDB failure cannot leave an unreachable body behind
-	// (or discard the last known-good body when refreshing an existing entry).
-	const previousResponse = await cache.match(cacheKey)
-	await cache.put(cacheKey, response.clone())
+	const resourceId = getResourceId(entry)
+	const token = createBodyWriteToken(entry)
+	const pendingStartedAt = Date.now()
+	let pendingPrepared = false
+	let pendingEntry: CanvasMediaEntry | null = null
+	beginActiveBodyWrite(resourceId)
 	try {
-		await touchEntry(entry, {
-			...metadata,
-			size: blob.size,
-			updatedAt: Date.now(),
+		pendingEntry = await updateEntryById(resourceId, (current) => {
+			if (getResourceFetchIdentity(current) !== getResourceFetchIdentity(entry)) return null
+			pendingPrepared = true
+			return {
+				...current,
+				pendingBodyToken: token,
+				pendingBodySize: bodySize,
+				pendingBodyStartedAt: pendingStartedAt,
+			}
 		})
+	} catch (error) {
+		endActiveBodyWrite(resourceId)
+		throw error
+	}
+	if (!pendingPrepared) {
+		endActiveBodyWrite(resourceId)
+		return
+	}
+
+	try {
+		await enforceBodyByteLimit(resourceId)
+	} catch {
+		await updateEntryById(resourceId, (current) =>
+			current.pendingBodyToken === token
+				? {
+						...current,
+						pendingBodyToken: null,
+						pendingBodySize: null,
+						pendingBodyStartedAt: null,
+					}
+				: null,
+		).catch(() => undefined)
+		endActiveBodyWrite(resourceId)
+		return
+	}
+
+	const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
+	const cacheKey = getCacheKey(pendingEntry ?? entry)
+	const previousResponse = await cache.match(cacheKey)
+	try {
+		const cacheHeaders = new Headers(response.headers)
+		cacheHeaders.set(BODY_WRITE_TOKEN_HEADER, token)
+		await cache.put(
+			cacheKey,
+			new Response(response.clone().body, {
+				status: response.status,
+				statusText: response.statusText,
+				headers: cacheHeaders,
+			}),
+		)
+		let committed = false
+		await updateEntryById(resourceId, (current) => {
+			if (
+				current.pendingBodyToken !== token ||
+				getResourceFetchIdentity(current) !== getResourceFetchIdentity(entry)
+			) {
+				return null
+			}
+			committed = true
+			return {
+				...current,
+				...metadata,
+				size: bodySize,
+				lastAccessedAt: Date.now(),
+				pendingBodyToken: null,
+				pendingBodySize: null,
+				pendingBodyStartedAt: null,
+			}
+		})
+		if (!committed) throw new Error("Canvas media generation changed during body write")
 	} catch (error) {
 		try {
 			if (previousResponse) await cache.put(cacheKey, previousResponse)
@@ -614,9 +873,21 @@ async function putResponseInCache(
 		} catch {
 			// Rollback is best effort; preserve the original metadata error.
 		}
+		await updateEntryById(resourceId, (current) =>
+			current.pendingBodyToken === token
+				? {
+						...current,
+						pendingBodyToken: null,
+						pendingBodySize: null,
+						pendingBodyStartedAt: null,
+					}
+				: null,
+		).catch(() => undefined)
 		throw error
+	} finally {
+		endActiveBodyWrite(resourceId)
 	}
-	await enforceMaxBytes()
+	void enforceStorageLimits().catch(() => undefined)
 }
 
 async function isCurrentResourceGeneration(entry: CanvasMediaEntry): Promise<boolean> {
@@ -659,9 +930,12 @@ async function fetchResourceBlobOnce(entry: CanvasMediaEntry): Promise<FetchReso
 			statusText: response.statusText,
 		}
 		if (await isCurrentResourceGeneration(entry)) {
-			await putResponseInCache(createResponseFromBlobResult(result), entry, metadata).catch(
-				() => undefined,
-			)
+			await putResponseInCache(
+				createResponseFromBlobResult(result),
+				entry,
+				metadata,
+				result.blob.size,
+			).catch(() => undefined)
 		}
 		return result
 	})().finally(() => {
@@ -673,31 +947,6 @@ async function fetchResourceBlobOnce(entry: CanvasMediaEntry): Promise<FetchReso
 
 	inflightResourceMap.set(cacheKey, { identity, promise })
 	return promise
-}
-
-/** 刷新单条 Canvas 资源缓存，并返回“是否刷新/是否内容变化”的结果。 */
-export async function refreshCanvasMediaResource(
-	entry: CanvasMediaEntry,
-): Promise<CanvasMediaRefreshResult> {
-	const previousEntry = await getEntryByPath(
-		String(entry.path || "").replace(/^\/+/, ""),
-		normalizeResourceNamespaceForStorage(entry.namespace),
-		entry.mediaType as CanvasMediaType,
-	)
-	await saveEntry(entry)
-	const result = await fetchResourceBlobOnce(entry)
-	if (!("blob" in result) || !result.blob) {
-		return {
-			refreshed: false,
-			changed: false,
-		}
-	}
-
-	return {
-		refreshed: true,
-		changed: hasResourceChanged(previousEntry, result.metadata),
-		metadata: result.metadata,
-	}
 }
 
 /** 处理 Canvas 虚拟资源请求，保持与历史独立 SW 相同的缓存/回源行为。 */
@@ -717,10 +966,10 @@ export async function handleCanvasMediaRequest(request: Request): Promise<Respon
 		}
 
 		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
-		const cachedResponse = await cache.match(getCacheKey(entry))
+		const cachedResponse = await getReadableCachedResponse(cache, entry)
 		if (cachedResponse) {
 			queueTouch(entry)
-			return buildRangeResponse(cachedResponse, request)
+			return buildRangeResponse(stripInternalBodyHeaders(cachedResponse), request)
 		}
 
 		const result = await fetchResourceBlobOnce(entry)
@@ -736,9 +985,9 @@ export async function handleCanvasMediaRequest(request: Request): Promise<Respon
 			return new Response(null, { status: 404 })
 		}
 		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
-		const cachedResponse = await cache.match(getCacheKey(entry))
+		const cachedResponse = await getReadableCachedResponse(cache, entry)
 		if (cachedResponse) {
-			return buildRangeResponse(cachedResponse, request)
+			return buildRangeResponse(stripInternalBodyHeaders(cachedResponse), request)
 		}
 		return Response.error()
 	}
@@ -753,36 +1002,14 @@ export function handleCanvasMediaMessage(event: ExtendableMessageEvent): boolean
 	if (data.maxIdleAgeMs !== undefined && Number.isFinite(data.maxIdleAgeMs)) {
 		maxIdleAgeMs = Math.max(0, data.maxIdleAgeMs)
 	}
+	if (data.maxEntries !== undefined && Number.isFinite(data.maxEntries)) {
+		maxEntries = Math.max(1, data.maxEntries)
+	}
+	if (data.maxMetadataBytes !== undefined && Number.isFinite(data.maxMetadataBytes)) {
+		maxMetadataBytes = Math.max(1, data.maxMetadataBytes)
+	}
 
 	if (data.type === "CANVAS_MEDIA_CACHE_CONFIG") {
-		event.waitUntil(cleanupExpiredCanvasMediaStorage())
-		return true
-	}
-
-	if (data.type === "CANVAS_MEDIA_CACHE_REGISTER" && data.entry) {
-		event.waitUntil(saveEntry(data.entry))
-		return true
-	}
-
-	if (data.type === "CANVAS_MEDIA_CACHE_REFRESH" && data.entry) {
-		event.waitUntil(
-			refreshCanvasMediaResource(data.entry)
-				.then((result) => {
-					const port = event.ports?.[0]
-					port?.postMessage({
-						type: "CANVAS_MEDIA_CACHE_REFRESH_RESULT",
-						...result,
-					})
-				})
-				.catch(() => {
-					const port = event.ports?.[0]
-					port?.postMessage({
-						type: "CANVAS_MEDIA_CACHE_REFRESH_RESULT",
-						refreshed: false,
-						changed: false,
-					})
-				}),
-		)
 		return true
 	}
 
@@ -792,7 +1019,7 @@ export function handleCanvasMediaMessage(event: ExtendableMessageEvent): boolean
 	}
 
 	if (data.type === "CANVAS_MEDIA_CACHE_ENFORCE_LIMIT") {
-		event.waitUntil(enforceMaxBytes())
+		event.waitUntil(enforceStorageLimits())
 		return true
 	}
 

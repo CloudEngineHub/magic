@@ -230,6 +230,7 @@ function shouldRequestPreview(
 	source: ProjectFileImagePreviewSource,
 	states: ReadonlyMap<string, PreviewState>,
 	pendingKeys: ReadonlySet<string>,
+	imageErrorRetryAttemptedKeys?: ReadonlySet<string>,
 ) {
 	if (!source.fileId) return false
 	if (isProjectFileImagePreviewDirectUrlUsable(source)) return false
@@ -237,6 +238,10 @@ function shouldRequestPreview(
 	if (pendingKeys.has(source.cacheKey)) return false
 
 	const state = states.get(source.cacheKey)
+	// After one image-error forceRefresh, keep the terminal error and do not auto-retry.
+	if (state?.status === "error" && imageErrorRetryAttemptedKeys?.has(source.cacheKey)) {
+		return false
+	}
 	return !state || state.status === "idle" || state.status === "error"
 }
 
@@ -257,6 +262,8 @@ export function useProjectFileImagePreviewManager({
 	const previewStatesRef = useRef<Map<string, PreviewState>>(new Map())
 	const previewListenersRef = useRef<Map<string, Set<() => void>>>(new Map())
 	const disposedRef = useRef(false)
+	// One forceRefresh per cacheKey after <img> onError; broken URLs otherwise loop forever.
+	const imageErrorRetryAttemptedKeysRef = useRef<Set<string>>(new Set())
 
 	const currentPreviewKeys = useMemo(() => collectCurrentPreviewKeys(attachments), [attachments])
 
@@ -497,6 +504,7 @@ export function useProjectFileImagePreviewManager({
 					source,
 					previewStatesRef.current,
 					pendingKeysRef.current,
+					imageErrorRetryAttemptedKeysRef.current,
 				)
 			})
 			if (requestableSources.length > 0) enqueueThumbnailSources(requestableSources)
@@ -519,7 +527,12 @@ export function useProjectFileImagePreviewManager({
 				seedDirectPreviewSourceIfNeeded(source)
 				if (hydrateCachedPreview(source)) return
 				if (
-					shouldRequestPreview(source, previewStatesRef.current, pendingKeysRef.current)
+					shouldRequestPreview(
+						source,
+						previewStatesRef.current,
+						pendingKeysRef.current,
+						imageErrorRetryAttemptedKeysRef.current,
+					)
 				) {
 					enqueueThumbnailSources([source])
 				}
@@ -547,6 +560,12 @@ export function useProjectFileImagePreviewManager({
 			if (!currentPreviewKeys.has(cacheKey)) staleStateChanges.push([cacheKey, undefined])
 		}
 		if (staleStateChanges.length > 0) applyPreviewStateChanges(staleStateChanges)
+
+		for (const cacheKey of Array.from(imageErrorRetryAttemptedKeysRef.current)) {
+			if (!currentPreviewKeys.has(cacheKey)) {
+				imageErrorRetryAttemptedKeysRef.current.delete(cacheKey)
+			}
+		}
 	}, [applyPreviewStateChanges, currentPreviewKeys])
 
 	useEffect(() => {
@@ -558,19 +577,23 @@ export function useProjectFileImagePreviewManager({
 				releasePendingPreviewRequest(cacheKey)
 			}
 			previewListenersRef.current.clear()
+			imageErrorRetryAttemptedKeysRef.current.clear()
 		}
 	}, [releasePendingPreviewRequest])
 
 	const markPreviewImageError = useCallback(
 		(source: ProjectFileImagePreviewSource) => {
+			const alreadyRetried = imageErrorRetryAttemptedKeysRef.current.has(source.cacheKey)
+			const willForceRefresh = isSourceAdmitted(source.cacheKey) && !alreadyRetried
 			deleteProjectFileImagePreviewCacheItem(source)
 			applyPreviewStateChanges([[source.cacheKey, { status: "error" }]])
-			if (isSourceAdmitted(source.cacheKey)) {
-				void requestPreviewSources([source], {
-					forceRefresh: true,
-					allowAttachmentListUrl: false,
-				})
-			}
+			// Broken thumbnail URLs must not force-refresh forever while the row stays visible.
+			if (!willForceRefresh) return
+			imageErrorRetryAttemptedKeysRef.current.add(source.cacheKey)
+			void requestPreviewSources([source], {
+				forceRefresh: true,
+				allowAttachmentListUrl: false,
+			})
 		},
 		[applyPreviewStateChanges, isSourceAdmitted, requestPreviewSources],
 	)
@@ -579,7 +602,14 @@ export function useProjectFileImagePreviewManager({
 		(source: ProjectFileImagePreviewSource) => {
 			seedDirectPreviewSourceIfNeeded(source)
 			if (hydrateCachedPreview(source)) return
-			if (shouldRequestPreview(source, previewStatesRef.current, pendingKeysRef.current)) {
+			if (
+				shouldRequestPreview(
+					source,
+					previewStatesRef.current,
+					pendingKeysRef.current,
+					imageErrorRetryAttemptedKeysRef.current,
+				)
+			) {
 				requestPreviewSources([source])
 			}
 		},

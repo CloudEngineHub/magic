@@ -28,17 +28,6 @@ import {
 	buildAttachmentsSnapshotKeyFromFlatFiles,
 	type DesignAttachmentIndex,
 } from "./designAttachmentIndex"
-import {
-	clearDesignFileInfoIndexedDbCache,
-	cancelPendingDesignFileInfoCacheReads,
-	deleteDesignFileInfoCacheEntries,
-	flushDesignFileInfoIndexedDbCacheWrites,
-	readDesignFileInfoCacheEntry,
-	writeDesignFileInfoCacheEntries,
-	type DesignFileInfoIndexedDbEntry,
-	type DesignFileInfoPersisted,
-} from "./designFileInfoIndexedDbCache"
-
 const IMAGE_PROCESS_OPTIONS: { xMagicImageProcess?: ImageProcessOptions } = {
 	xMagicImageProcess: {
 		autoOrient: 1,
@@ -53,22 +42,13 @@ const IMAGE_PROCESS_SIZE_LIMIT = 50971420
 const MAX_GET_FILE_URL_BATCH_SIZE = 100
 // identity 级 URL 结果仅保留最近使用的一段工作集，避免跨画布导航后长期累积。
 const MAX_FILE_INFO_MEMORY_CACHE_SIZE = 2048
-const MAX_PATH_CACHE_GENERATION_ENTRIES = 4096
-const MAX_INVALIDATED_PATH_CACHE_KEYS = 4096
 // 默认缓存时间 15 分钟
 const DEFAULT_TTL_MS = 15 * 60 * 1000
 // 上传已保存但附件树尚未刷回时的短期桥接窗口。
 const OPTIMISTIC_UPLOAD_CACHE_TTL_MS = 15 * 1000
-// 旧 file-info localStorage key：仅用于清理历史缓存，不再迁移这个大 JSON。
-const FILE_INFO_STORAGE_KEY = "MAGIC:supermagic-design:file-info-cache:v3"
-const LEGACY_FILE_INFO_STORAGE_KEY = "MAGIC:supermagic-design:file-info-cache"
 
-/** 是否启用换链结果缓存：为 false 时不读内存命中、不写内存/持久化，可用于强制每次拉新 URL */
+/** 是否启用换链结果缓存：为 false 时不读写内存命中，可用于强制每次拉新 URL */
 let cacheEnabled = true
-/** 旧 localStorage 冷启动数据是否已处理：只执行一次，避免每次 getFileInfo 都访问存储 */
-let storageCacheLoaded = false
-/** IndexedDB 持续异常时停止读持久化缓存，避免失效墓碑集合无限增长。 */
-let indexedDbCacheReadsDisabled = false
 
 interface CacheEntry {
 	fileInfo: GetFileInfoResponse
@@ -131,9 +111,6 @@ type FileInfoCacheTargetResolution =
 // 主缓存：key = designProjectId + normalizedRelativePath
 const fileInfoRequestCache = new Map<string, PendingFileInfoRequest>()
 const fileInfoCache = new Map<string, CacheEntry>()
-const invalidatedPathCacheKeys = new Set<string>()
-const pathCacheGenerationByKey = new Map<string, number>()
-const pendingPathCacheReads = new Set<string>()
 // URL 请求只按项目、file_id 与实际 rendition 去重；path 仅作为结果订阅方保留自己的元数据缓存。
 const fileUrlRequestGroups = new Map<string, FileUrlRequestGroup>()
 const activeFileUrlRequestGroups = new Set<FileUrlRequestGroup>()
@@ -147,16 +124,6 @@ function shouldUseImageProcess(fileSize?: number): boolean {
 		return false
 	}
 	return fileSize < IMAGE_PROCESS_SIZE_LIMIT
-}
-
-function getCacheStorage(): Storage | null {
-	if (typeof window === "undefined") return null
-
-	try {
-		return window.localStorage
-	} catch {
-		return null
-	}
 }
 
 function getStoreFiles(filesList?: FileItem[]): FileItem[] {
@@ -348,45 +315,12 @@ function setMemoryCache(
 			: {}),
 		cachedAt: now,
 	})
-	invalidatedPathCacheKeys.delete(cacheKey)
 	trimFileInfoMemoryCache()
-	trimPathCacheGenerations()
 }
 
 function deleteMemoryCache(cacheKey: string): void {
-	const generation = (pathCacheGenerationByKey.get(cacheKey) ?? 0) + 1
-	pathCacheGenerationByKey.delete(cacheKey)
-	pathCacheGenerationByKey.set(cacheKey, generation)
-	if (!indexedDbCacheReadsDisabled) {
-		invalidatedPathCacheKeys.add(cacheKey)
-		if (invalidatedPathCacheKeys.size > MAX_INVALIDATED_PATH_CACHE_KEYS) {
-			indexedDbCacheReadsDisabled = true
-			cancelPendingDesignFileInfoCacheReads()
-			invalidatedPathCacheKeys.clear()
-			pathCacheGenerationByKey.clear()
-			void clearDesignFileInfoIndexedDbCache().then(
-				() => {
-					indexedDbCacheReadsDisabled = false
-				},
-				() => undefined,
-			)
-		}
-	}
 	fileInfoCache.delete(cacheKey)
 	deletePathRequestCache(cacheKey)
-	void deleteDesignFileInfoCacheEntries([cacheKey]).then(
-		() => {
-			if (
-				pathCacheGenerationByKey.get(cacheKey) === generation &&
-				!fileInfoCache.has(cacheKey)
-			) {
-				invalidatedPathCacheKeys.delete(cacheKey)
-				trimPathCacheGenerations()
-			}
-		},
-		() => undefined,
-	)
-	trimPathCacheGenerations()
 }
 
 function trimFileInfoMemoryCache(): void {
@@ -395,113 +329,6 @@ function trimFileInfoMemoryCache(): void {
 		if (typeof oldestKey !== "string") break
 		fileInfoCache.delete(oldestKey)
 	}
-}
-
-function trimPathCacheGenerations(): void {
-	if (pathCacheGenerationByKey.size <= MAX_PATH_CACHE_GENERATION_ENTRIES) return
-	for (const cacheKey of pathCacheGenerationByKey.keys()) {
-		if (pathCacheGenerationByKey.size <= MAX_PATH_CACHE_GENERATION_ENTRIES) break
-		if (pendingPathCacheReads.has(cacheKey) || invalidatedPathCacheKeys.has(cacheKey)) continue
-		pathCacheGenerationByKey.delete(cacheKey)
-	}
-}
-
-function buildIndexedDbEntry(cacheKey: string, entry: CacheEntry): DesignFileInfoIndexedDbEntry {
-	const { namespace, normalizedPath } = parseScopedPathKey(cacheKey)
-	const now = Date.now()
-	const persistedFileInfo: DesignFileInfoPersisted = {
-		...entry.fileInfo,
-		src: undefined,
-	}
-	return {
-		cacheKey,
-		namespace,
-		normalizedPath,
-		fileInfo: persistedFileInfo,
-		previewWatermarkSignature: entry.previewWatermarkSignature,
-		cachedAt: entry.cachedAt ?? now,
-		...(entry.resolvedFileId ? { resolvedFileId: entry.resolvedFileId } : {}),
-		...(entry.resolvedResourceVersion
-			? { resolvedResourceVersion: entry.resolvedResourceVersion }
-			: {}),
-	}
-}
-
-function toMemoryCacheEntry(entry: DesignFileInfoIndexedDbEntry): CacheEntry {
-	return {
-		fileInfo: {
-			...entry.fileInfo,
-			src: entry.fileInfo.src ?? "",
-		},
-		previewWatermarkSignature: entry.previewWatermarkSignature,
-		cachedAt: entry.cachedAt,
-		...(entry.resolvedFileId ? { resolvedFileId: entry.resolvedFileId } : {}),
-		...(entry.resolvedResourceVersion
-			? { resolvedResourceVersion: entry.resolvedResourceVersion }
-			: {}),
-	}
-}
-
-function stripPersistedSignedUrl(
-	entry: DesignFileInfoIndexedDbEntry,
-): DesignFileInfoIndexedDbEntry {
-	if (entry.fileInfo.src === undefined) return entry
-	const fileInfo: DesignFileInfoPersisted = {
-		...entry.fileInfo,
-		src: undefined,
-	}
-	return { ...entry, fileInfo }
-}
-
-function persistCacheEntriesToStorage(cacheKeys: string[]): void {
-	const seenCacheKeys = new Set<string>()
-	const uniqueCacheKeys: string[] = []
-	cacheKeys.forEach((cacheKey) => {
-		if (seenCacheKeys.has(cacheKey)) return
-		seenCacheKeys.add(cacheKey)
-		uniqueCacheKeys.push(cacheKey)
-	})
-	const entries = uniqueCacheKeys
-		.map((cacheKey) => {
-			const entry = fileInfoCache.get(cacheKey)
-			return entry ? buildIndexedDbEntry(cacheKey, entry) : null
-		})
-		.filter((entry): entry is DesignFileInfoIndexedDbEntry => Boolean(entry))
-	if (entries.length === 0) return
-
-	writeDesignFileInfoCacheEntries(entries)
-		.then(() => undefined)
-		.catch(() => undefined)
-}
-
-function clearLegacyPersistedCache(): void {
-	const storage = getCacheStorage()
-	if (!storage) return
-
-	try {
-		storage.removeItem(FILE_INFO_STORAGE_KEY)
-		storage.removeItem(LEGACY_FILE_INFO_STORAGE_KEY)
-	} catch {
-		// ignore storage cleanup failures
-	}
-}
-
-function clearPersistedCache(): void {
-	clearLegacyPersistedCache()
-	clearDesignFileInfoIndexedDbCache()
-		.then(() => {
-			indexedDbCacheReadsDisabled = false
-		})
-		.catch(() => undefined)
-}
-
-function ensureStorageCacheLoaded(): void {
-	if (storageCacheLoaded) return
-
-	storageCacheLoaded = true
-	// The old localStorage payload duplicated the complete attachment snapshot.
-	// Do not migrate it back into IndexedDB; remove only these cache-specific keys.
-	clearLegacyPersistedCache()
 }
 
 function findFileItemByFileId(fileId: string, filesList?: FileItem[]): FileItem | null {
@@ -963,8 +790,6 @@ export async function getFileInfoByPath(
 		priority?: FileUrlRequestPriority
 	},
 ): Promise<GetFileInfoResponse | null> {
-	ensureStorageCacheLoaded()
-
 	const storeFiles = getStoreFiles(filesList)
 	const hasAttachmentSnapshot = resolveHasAttachmentSnapshot(
 		storeFiles,
@@ -1083,57 +908,6 @@ export async function getFileInfoByPath(
 		}
 	}
 
-	if (!shouldBypassCache && cacheEnabled && !indexedDbCacheReadsDisabled) {
-		const cachedFileItem = target.fileItem
-		const rendition = resolveFileUrlRendition(
-			options?.useImageProcess,
-			cachedFileItem?.file_size,
-		)
-		const cacheKey = buildScopedPathKey(
-			target.normalizedPath,
-			options?.designProjectId,
-			rendition,
-		)
-		if (!invalidatedPathCacheKeys.has(cacheKey)) {
-			const cacheGeneration = pathCacheGenerationByKey.get(cacheKey) ?? 0
-			try {
-				pendingPathCacheReads.add(cacheKey)
-				const persistedEntry = await readDesignFileInfoCacheEntry(cacheKey)
-				if (
-					persistedEntry &&
-					(pathCacheGenerationByKey.get(cacheKey) ?? 0) === cacheGeneration
-				) {
-					const sanitizedPersistedEntry = stripPersistedSignedUrl(persistedEntry)
-					if (sanitizedPersistedEntry !== persistedEntry) {
-						// One-time migration for legacy rows that persisted a signed URL.
-						void writeDesignFileInfoCacheEntries([sanitizedPersistedEntry]).catch(
-							() => undefined,
-						)
-					}
-					const cachedEntry = toMemoryCacheEntry(sanitizedPersistedEntry)
-					const staleReasons = getCachedEntryStaleReasons(
-						cachedEntry,
-						cachedFileItem,
-						hasAttachmentSnapshot,
-					)
-					if (staleReasons.length > 0) {
-						invalidateFileUrlResultsForFileId(cachedEntry.resolvedFileId ?? "")
-						deleteMemoryCache(cacheKey)
-					} else if (cachedEntry.fileInfo.src) {
-						fileInfoCache.set(cacheKey, cachedEntry)
-						trimFileInfoMemoryCache()
-						return mergeFileItemMetaIntoFileInfo(cachedEntry.fileInfo, cachedFileItem)
-					}
-				}
-			} catch {
-				// IndexedDB 不可用或读取已被清理操作取消时，继续走附件解析与 URL 请求。
-			} finally {
-				pendingPathCacheReads.delete(cacheKey)
-				trimPathCacheGenerations()
-			}
-		}
-	}
-
 	let resolvedTarget = target.fileItem
 		? {
 				normalizedPath: target.normalizedPath,
@@ -1244,7 +1018,6 @@ export async function getFileInfoByPath(
 					fileItem.file_id,
 					getPreviewFileUrlWatermarkSignature(),
 				)
-				persistCacheEntriesToStorage([cacheKey])
 			}
 			if (!shouldBypassCache) {
 				clearPendingPathRequest(requestCacheKey, requestToken)
@@ -1285,7 +1058,6 @@ export async function getFileResourceMetaByPath(
 		hasAttachmentSnapshot?: boolean
 	},
 ): Promise<CanvasFileResourceMeta> {
-	ensureStorageCacheLoaded()
 	const storeFiles = getStoreFiles(filesList)
 	const hasAttachmentSnapshot = resolveHasAttachmentSnapshot(
 		storeFiles,
@@ -1347,7 +1119,6 @@ export function setFileInfoCache(
 	attachmentIndex?: DesignAttachmentIndex | null,
 	options?: { allowMissingAttachment?: boolean; hasAttachmentSnapshot?: boolean },
 ): void {
-	ensureStorageCacheLoaded()
 	if (!cacheEnabled) return
 
 	const storeFiles = getStoreFiles(filesList)
@@ -1374,7 +1145,7 @@ export function setFileInfoCache(
 				? String(fileInfoFileId)
 				: undefined)
 	// 手动 prime 代表当前 path 的新一代结果；先使两个 rendition 的旧 path 请求、
-	// completed identity URL 和持久化条目失效，避免旧 in-flight response 回写覆盖新 URL。
+	// completed identity URL 失效，避免旧 in-flight response 回写覆盖新 URL。
 	;(["raw", "image-process"] as FileUrlRendition[]).forEach((rendition) => {
 		const renditionCacheKey = buildScopedPathKey(
 			targetCandidate.normalizedPath,
@@ -1395,9 +1166,6 @@ export function setFileInfoCache(
 		getPreviewFileUrlWatermarkSignature(),
 		{ allowMissingAttachment: options?.allowMissingAttachment },
 	)
-	if (!options?.allowMissingAttachment) {
-		persistCacheEntriesToStorage([cacheKey])
-	}
 }
 
 export async function getFileInfoById(
@@ -1459,28 +1227,17 @@ export async function getFileInfoById(
 }
 
 export function clearAllFileInfoCache(): void {
-	ensureStorageCacheLoaded()
 	clearSharedMediaUrlCache()
 
-	cancelPendingDesignFileInfoCacheReads()
 	fileInfoCache.clear()
-	invalidatedPathCacheKeys.clear()
-	pathCacheGenerationByKey.clear()
-	pendingPathCacheReads.clear()
 	fileInfoRequestCache.clear()
 	forceRefreshRequestTokens.clear()
-	indexedDbCacheReadsDisabled = true
 	clearFileUrlFlushSchedule()
 	activeFileUrlRequestGroups.forEach((group) => {
 		settleFileUrlRequestGroup(group, new Error("File URL request cancelled"))
 	})
 	fileUrlRequestGroups.clear()
 	activeFileUrlRequestGroups.clear()
-	clearPersistedCache()
-}
-
-export async function flushFileInfoCachePersistenceForTests(): Promise<void> {
-	await flushDesignFileInfoIndexedDbCacheWrites()
 }
 
 export function setCacheEnabled(enabled: boolean): void {
@@ -1496,8 +1253,6 @@ export function cleanupFileInfoCache(
 	designProjectId?: string,
 	options?: { hasAttachmentSnapshot?: boolean },
 ): void {
-	ensureStorageCacheLoaded()
-
 	const storeFiles = getStoreFiles(filesList)
 	const hasAttachmentSnapshot = resolveHasAttachmentSnapshot(
 		storeFiles,

@@ -6,7 +6,9 @@ import type { ResolveCanvasResourceReference } from "../../../public/resource-re
 import {
 	CANVAS_MEDIA_CACHE_NAME,
 	CANVAS_MEDIA_DB_NAME,
+	CANVAS_MEDIA_MAX_ENTRIES,
 	CANVAS_MEDIA_MAX_IDLE_AGE_MS,
+	CANVAS_MEDIA_MAX_METADATA_BYTES,
 	CANVAS_MEDIA_OFFLINE_CACHE_VERSION,
 	getCacheKey,
 	encodeResourcePathForUrl,
@@ -54,27 +56,35 @@ export interface CachedMediaResource {
 	mediaType: MediaResourceOfflineCacheMediaType
 	expiresAt?: number | null
 	size?: number
-	etag?: string | null
-	lastModified?: string | null
 	contentLength?: number | null
-	contentType?: string | null
 	resourceVersion?: string | null | undefined
 	sourceUpdatedAt?: string | null | undefined
 	lastAccessedAt: number
-	updatedAt: number
 }
 
-type StoredCachedMediaResource = Omit<CachedMediaResource, "url" | "cacheKey"> & {
+type StoredCachedMediaResource = {
 	id: string
+	namespace: string
+	path: string
+	mediaType: MediaResourceOfflineCacheMediaType
+	sourceUrl?: string
+	expiresAt?: number | null
+	size?: number
+	contentLength?: number | null
+	resourceVersion?: string | null
+	sourceUpdatedAt?: string | null
+	lastAccessedAt: number
+	pendingBodyToken?: string | null
+	pendingBodySize?: number | null
+	pendingBodyStartedAt?: number | null
+	/** Legacy read fallbacks; new records never write these fields. */
 	url?: string
 	cacheKey?: string
 	originalUrl?: string
-}
-
-interface RefreshResourceMessageResult {
-	type?: string
-	refreshed?: boolean
-	changed?: boolean
+	updatedAt?: number
+	etag?: string | null
+	lastModified?: string | null
+	contentType?: string | null
 }
 
 interface RememberResourceParams {
@@ -94,12 +104,6 @@ interface ResolveResourceUrlOptions {
 	preferVirtualResource?: boolean
 	/** 返回真实源地址时是否登记离线映射，默认 true；只登记 metadata，不下载 body。 */
 	registerOfflineResource?: boolean
-	/** @deprecated 兼容旧选项：false 时不登记离线映射；默认不再 warm body。 */
-	warmOfflineCache?: boolean
-}
-
-interface CacheResourceParams extends RememberResourceParams {
-	force?: boolean
 }
 
 interface RemoveCachedResourceParams {
@@ -131,9 +135,51 @@ const VIRTUAL_RESOURCE_FAILURE_THRESHOLD = 3
 const VIRTUAL_RESOURCE_FALLBACK_COOLDOWN_MS = 60_000
 const VIRTUAL_RESOURCE_REPAIR_THROTTLE_MS = 30_000
 const SERVICE_WORKER_READY_TIMEOUT_MS = 1500
-const BACKGROUND_CACHE_WARM_CONCURRENCY = 2
 const TOUCH_WRITEBACK_INTERVAL_MS = 24 * 60 * 60 * 1000
 const TOUCH_FLUSH_IDLE_DELAY_MS = 1000
+const MAINTENANCE_TRAILING_DELAY_MS = 1000
+const MAINTENANCE_MAX_DELAY_MS = 30_000
+
+const configuredWorkers = new WeakMap<ServiceWorker, string>()
+const workerMaintenanceStates = new WeakMap<
+	ServiceWorker,
+	{ firstQueuedAt: number; timerId: ReturnType<typeof setTimeout> | null }
+>()
+
+function configureWorkerOnce(
+	worker: ServiceWorker,
+	config: {
+		maxBytes: number
+		maxEntries: number
+		maxMetadataBytes: number
+		maxIdleAgeMs: number
+	},
+): void {
+	const signature = `${config.maxBytes}:${config.maxEntries}:${config.maxMetadataBytes}:${config.maxIdleAgeMs}`
+	if (configuredWorkers.get(worker) === signature) return
+	configuredWorkers.set(worker, signature)
+	worker.postMessage({ type: "CANVAS_MEDIA_CACHE_CONFIG", ...config })
+}
+
+function scheduleWorkerMaintenance(worker: ServiceWorker): void {
+	const now = Date.now()
+	const state = workerMaintenanceStates.get(worker) ?? {
+		firstQueuedAt: now,
+		timerId: null,
+	}
+	if (state.timerId === null) state.firstQueuedAt = now
+	if (state.timerId !== null) clearTimeout(state.timerId)
+	const maxDelayRemaining = Math.max(0, MAINTENANCE_MAX_DELAY_MS - (now - state.firstQueuedAt))
+	state.timerId = setTimeout(
+		() => {
+			state.timerId = null
+			state.firstQueuedAt = 0
+			worker.postMessage({ type: "CANVAS_MEDIA_CACHE_ENFORCE_LIMIT" })
+		},
+		Math.min(MAINTENANCE_TRAILING_DELAY_MS, maxDelayRemaining),
+	)
+	workerMaintenanceStates.set(worker, state)
+}
 
 function readServiceWorkerController(): ServiceWorker | null {
 	if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null
@@ -249,9 +295,6 @@ export class MediaResourceOfflineCacheManager {
 
 	private options: MediaResourceOfflineCacheOptions | null
 	private dbPromise?: Promise<IDBDatabase>
-	private cachePromises = new Map<string, Promise<void>>()
-	private backgroundCacheWarmQueue: Array<() => void> = []
-	private activeBackgroundCacheWarmCount = 0
 	private isActiveConsumer = false
 	private virtualResourceFailureTimestamps: number[] = []
 	private virtualResourceFallbackUntil = 0
@@ -263,11 +306,16 @@ export class MediaResourceOfflineCacheManager {
 		backgroundRegisterQueuedCount: 0,
 		backgroundRegisterCompletedCount: 0,
 		backgroundRegisterFailedCount: 0,
-		backgroundWarmQueuedCount: 0,
-		backgroundWarmCompletedCount: 0,
-		backgroundWarmFailedCount: 0,
 	}
-	private registerPromises = new Map<string, Promise<void>>()
+	private pendingMetadataWrites = new Map<
+		string,
+		{
+			entry: CachedMediaResource
+			worker: ServiceWorker | null
+			waiters: Array<{ resolve: () => void; reject: (error: unknown) => void }>
+		}
+	>()
+	private metadataFlushScheduled = false
 	private pendingTouches = new Map<string, { id: string; lastAccessedAt: number }>()
 	private lastTouchWriteAt = new Map<string, number>()
 	private touchTimerId: ReturnType<typeof setTimeout> | null = null
@@ -332,10 +380,6 @@ export class MediaResourceOfflineCacheManager {
 		}
 		void this.flushPendingTouches()
 		this.deactivateConsumer()
-		this.registerPromises.clear()
-		this.cachePromises.clear()
-		this.backgroundCacheWarmQueue = []
-		this.activeBackgroundCacheWarmCount = 0
 	}
 
 	private queueTouch(entry: CachedMediaResource): void {
@@ -407,7 +451,6 @@ export class MediaResourceOfflineCacheManager {
 			const namespace = this.getResourceNamespace()
 			const resourcePath = this.resolveStoredResourcePath(params.path)
 			if (!resourcePath) return null
-			const existing = await this.getEntry(params.path, params.mediaType)
 			const resourceUrl = this.getVirtualResourceUrl(resourcePath, params.mediaType)
 			const entry: CachedMediaResource = {
 				namespace,
@@ -417,23 +460,14 @@ export class MediaResourceOfflineCacheManager {
 				cacheKey: resourceUrl,
 				mediaType: params.mediaType,
 				expiresAt: params.expiresAt,
-				size: existing?.size,
-				etag: existing?.etag,
-				lastModified: existing?.lastModified,
-				contentLength: params.contentLength ?? existing?.contentLength,
-				contentType: existing?.contentType,
-				resourceVersion: params.resourceVersion ?? existing?.resourceVersion ?? null,
-				sourceUpdatedAt: params.sourceUpdatedAt ?? existing?.sourceUpdatedAt ?? null,
+				contentLength: params.contentLength ?? null,
+				resourceVersion: params.resourceVersion ?? null,
+				sourceUpdatedAt: params.sourceUpdatedAt ?? null,
 				lastAccessedAt: now,
-				updatedAt: now,
 			}
 
-			await this.saveEntry(entry)
-			this.getRegistrationWorker(registration)?.postMessage({
-				type: "CANVAS_MEDIA_CACHE_REGISTER",
-				entry,
-				maxBytes: this.getMaxBytes(),
-			})
+			const worker = this.getRegistrationWorker(registration)
+			await this.saveEntry(entry, worker)
 			return entry
 		} catch {
 			return null
@@ -453,7 +487,7 @@ export class MediaResourceOfflineCacheManager {
 
 		if (!options?.preferVirtualResource) {
 			this.stats.resolveDirectCount += 1
-			if (options?.registerOfflineResource !== false && options?.warmOfflineCache !== false) {
+			if (options?.registerOfflineResource !== false) {
 				this.rememberResolvedResourceInBackground(params)
 			}
 			return params.url
@@ -500,9 +534,7 @@ export class MediaResourceOfflineCacheManager {
 			const unhealthyUntil = now + VIRTUAL_RESOURCE_FALLBACK_COOLDOWN_MS
 			this.virtualResourceFallbackUntil = unhealthyUntil
 			this.virtualResourceFailureTimestamps = []
-			if (this.persistVirtualResourceHealthState(unhealthyUntil, now)) {
-				this.requestVirtualResourceRepair()
-			}
+			this.persistVirtualResourceHealthState(unhealthyUntil, now)
 		}
 	}
 
@@ -516,27 +548,6 @@ export class MediaResourceOfflineCacheManager {
 			now < this.virtualResourceFallbackUntil ||
 			(!!healthState && now < healthState.unhealthyUntil)
 		)
-	}
-
-	public async refreshCachedResource(
-		path: string,
-		mediaType: MediaResourceOfflineCacheMediaType,
-	): Promise<boolean> {
-		if (!this.canUseServiceWorkerCache()) return false
-
-		const entry = await this.getEntry(path, mediaType)
-		if (!entry?.sourceUrl) return false
-
-		const result =
-			await this.postMessageToServiceWorkerWithResponse<RefreshResourceMessageResult>({
-				type: "CANVAS_MEDIA_CACHE_REFRESH",
-				entry: {
-					...entry,
-					lastAccessedAt: Date.now(),
-				},
-				maxBytes: this.getMaxBytes(),
-			})
-		return result?.refreshed === true && result.changed === true
 	}
 
 	public async getCachedResource(
@@ -559,74 +570,20 @@ export class MediaResourceOfflineCacheManager {
 		return entry
 	}
 
-	/**
-	 * 显式预热离线缓存 body。默认资源链路不调用这里，避免首屏 direct fetch 之外再触发
-	 * SW 后台 body 下载；只有明确离线缓存需求时才使用。
-	 */
-	public warmResolvedResourceBodyExplicitly(params: CacheResourceParams): void {
-		if (!this.isOfflineCacheFeatureOn()) return
-		void (async () => {
-			const namespace = this.getResourceNamespace()
-			const resourcePath = this.resolveStoredResourcePath(params.path)
-			if (!resourcePath) return
-			const key = buildResourceId(namespace, params.mediaType, resourcePath)
-			if (!params.force && this.cachePromises.has(key)) return
-
-			const promise = this.rememberResolvedResource(params)
-				.then((entry) => {
-					if (!entry) return undefined
-					return this.enqueueBackgroundCacheWarm(params)
-				})
-				.catch(() => {
-					this.stats.backgroundWarmFailedCount += 1
-				})
-				.finally(() => {
-					this.cachePromises.delete(key)
-				})
-			this.cachePromises.set(key, promise)
-		})()
-	}
-
-	/**
-	 * @deprecated 使用 `warmResolvedResourceBodyExplicitly()`。这个方法会触发后台 body warm，
-	 * 不应出现在默认首屏资源加载链路里。
-	 */
-	public cacheResolvedResource(params: CacheResourceParams): void {
-		this.warmResolvedResourceBodyExplicitly(params)
-	}
-
 	public getSnapshot() {
-		return {
-			...this.stats,
-			backgroundWarmActive: this.activeBackgroundCacheWarmCount,
-			backgroundWarmQueued: this.backgroundCacheWarmQueue.length,
-		}
+		return { ...this.stats }
 	}
 
 	private rememberResolvedResourceInBackground(params: RememberResourceParams): void {
 		if (!this.isOfflineCacheFeatureOn()) return
-		void (async () => {
-			const namespace = this.getResourceNamespace()
-			const resourcePath = this.resolveStoredResourcePath(params.path)
-			if (!resourcePath) return
-			const key = buildResourceId(namespace, params.mediaType, resourcePath)
-			if (this.registerPromises.has(key)) return
-
-			this.stats.backgroundRegisterQueuedCount += 1
-			const promise = this.rememberResolvedResource(params)
-				.then((entry) => {
-					if (entry) {
-						this.stats.backgroundRegisterCompletedCount += 1
-					}
-				})
-				.catch(() => {
-					this.stats.backgroundRegisterFailedCount += 1
-				})
-				.finally(() => {
-					this.registerPromises.delete(key)
-				})
-			this.registerPromises.set(key, promise)
-		})()
+		this.stats.backgroundRegisterQueuedCount += 1
+		void this.rememberResolvedResource(params)
+			.then((entry) => {
+				if (entry) this.stats.backgroundRegisterCompletedCount += 1
+			})
+			.catch(() => {
+				this.stats.backgroundRegisterFailedCount += 1
+			})
 	}
 
 	public removeCachedResource(params: RemoveCachedResourceParams): void {
@@ -678,11 +635,15 @@ export class MediaResourceOfflineCacheManager {
 		if (!registration) return null
 		if (options.requireController && !readServiceWorkerController()) return null
 
-		this.getRegistrationWorker(registration)?.postMessage({
-			type: "CANVAS_MEDIA_CACHE_CONFIG",
-			maxBytes: this.getMaxBytes(),
-			maxIdleAgeMs: CANVAS_MEDIA_MAX_IDLE_AGE_MS,
-		})
+		const worker = this.getRegistrationWorker(registration)
+		if (worker) {
+			configureWorkerOnce(worker, {
+				maxBytes: this.getMaxBytes(),
+				maxEntries: CANVAS_MEDIA_MAX_ENTRIES,
+				maxMetadataBytes: CANVAS_MEDIA_MAX_METADATA_BYTES,
+				maxIdleAgeMs: CANVAS_MEDIA_MAX_IDLE_AGE_MS,
+			})
+		}
 		return registration
 	}
 
@@ -699,68 +660,10 @@ export class MediaResourceOfflineCacheManager {
 		return registration
 	}
 
-	private enqueueBackgroundCacheWarm(params: CacheResourceParams): Promise<void> {
-		this.stats.backgroundWarmQueuedCount += 1
-		return new Promise((resolve) => {
-			const run = () => {
-				this.activeBackgroundCacheWarmCount += 1
-				void this.refreshCachedResource(params.path, params.mediaType)
-					.then(() => {
-						this.stats.backgroundWarmCompletedCount += 1
-					})
-					.catch(() => {
-						this.stats.backgroundWarmFailedCount += 1
-					})
-					.finally(() => {
-						this.activeBackgroundCacheWarmCount = Math.max(
-							0,
-							this.activeBackgroundCacheWarmCount - 1,
-						)
-						const next = this.backgroundCacheWarmQueue.shift()
-						if (next) next()
-						resolve()
-					})
-			}
-
-			if (this.activeBackgroundCacheWarmCount < BACKGROUND_CACHE_WARM_CONCURRENCY) {
-				run()
-				return
-			}
-			this.backgroundCacheWarmQueue.push(run)
-		})
-	}
-
 	private async postMessageToServiceWorker(message: unknown): Promise<void> {
 		if (!this.canUseServiceWorkerCache()) return
 		const registration = await this.ensureServiceWorker()
 		this.getRegistrationWorker(registration)?.postMessage(message)
-	}
-
-	private async postMessageToServiceWorkerWithResponse<T>(message: unknown): Promise<T | null> {
-		if (!this.canUseServiceWorkerCache()) return null
-		const registration = await this.ensureServiceWorker()
-		const worker = this.getRegistrationWorker(registration)
-		if (!worker) return null
-
-		return new Promise<T | null>((resolve) => {
-			const channel = new MessageChannel()
-			const timeoutId = window.setTimeout(() => {
-				channel.port1.onmessage = null
-				channel.port1.close()
-				channel.port2.close()
-				resolve(null)
-			}, 30000)
-
-			channel.port1.onmessage = (event: MessageEvent<T>) => {
-				window.clearTimeout(timeoutId)
-				channel.port1.onmessage = null
-				channel.port1.close()
-				channel.port2.close()
-				resolve(event.data)
-			}
-
-			worker.postMessage(message, [channel.port2])
-		})
 	}
 
 	private getRegistrationWorker(
@@ -797,37 +700,69 @@ export class MediaResourceOfflineCacheManager {
 		return this.dbPromise
 	}
 
-	private async saveEntry(entry: CachedMediaResource): Promise<void> {
-		const db = await this.openDb()
-		const transaction = db.transaction(STORE_NAME, "readwrite")
-		const store = transaction.objectStore(STORE_NAME)
+	private async saveEntry(
+		entry: CachedMediaResource,
+		worker: ServiceWorker | null = null,
+	): Promise<void> {
 		const namespace = normalizeResourceNamespaceForStorage(entry.namespace)
-		const derivedCacheKey = this.getVirtualResourceUrlForNamespace(
-			entry.path,
-			namespace,
-			entry.mediaType,
-		)
-		const cacheKey = this.getCacheKey(entry)
-		const storedEntry: StoredCachedMediaResource = {
-			id: buildResourceId(namespace, entry.mediaType, entry.path),
-			namespace,
-			path: entry.path,
-			sourceUrl: entry.sourceUrl,
-			mediaType: entry.mediaType,
-			expiresAt: entry.expiresAt,
-			size: entry.size,
-			etag: entry.etag,
-			lastModified: entry.lastModified,
-			contentLength: entry.contentLength ?? null,
-			contentType: entry.contentType,
-			resourceVersion: entry.resourceVersion ?? null,
-			sourceUpdatedAt: entry.sourceUpdatedAt ?? null,
-			lastAccessedAt: entry.lastAccessedAt,
-			updatedAt: entry.updatedAt,
-			...(cacheKey !== derivedCacheKey ? { cacheKey } : {}),
+		const id = buildResourceId(namespace, entry.mediaType, entry.path)
+		return new Promise<void>((resolve, reject) => {
+			const queued = this.pendingMetadataWrites.get(id)
+			this.pendingMetadataWrites.set(id, {
+				entry: { ...entry, namespace },
+				worker,
+				waiters: [...(queued?.waiters ?? []), { resolve, reject }],
+			})
+			if (this.metadataFlushScheduled) return
+			this.metadataFlushScheduled = true
+			queueMicrotask(() => {
+				void this.flushPendingMetadataWrites()
+			})
+		})
+	}
+
+	private async flushPendingMetadataWrites(): Promise<void> {
+		const writes = Array.from(this.pendingMetadataWrites.entries())
+		this.pendingMetadataWrites.clear()
+		this.metadataFlushScheduled = false
+		if (writes.length === 0) return
+
+		try {
+			const db = await this.openDb()
+			const transaction = db.transaction(STORE_NAME, "readwrite")
+			const transactionDone = transactionToPromise(transaction)
+			const store = transaction.objectStore(STORE_NAME)
+			for (const [id, { entry }] of writes) {
+				const existing = await requestToPromise<StoredCachedMediaResource | undefined>(
+					store.get(id),
+				)
+				await requestToPromise(
+					store.put({
+						id,
+						namespace: entry.namespace,
+						path: entry.path,
+						sourceUrl: entry.sourceUrl,
+						mediaType: entry.mediaType,
+						expiresAt: entry.expiresAt,
+						size: existing?.size,
+						contentLength: entry.contentLength ?? existing?.contentLength ?? null,
+						resourceVersion: entry.resourceVersion ?? null,
+						sourceUpdatedAt: entry.sourceUpdatedAt ?? null,
+						lastAccessedAt: entry.lastAccessedAt,
+						pendingBodyToken: existing?.pendingBodyToken ?? null,
+						pendingBodySize: existing?.pendingBodySize ?? null,
+						pendingBodyStartedAt: existing?.pendingBodyStartedAt ?? null,
+					} satisfies StoredCachedMediaResource),
+				)
+			}
+			await transactionDone
+			new Set(writes.map(([, { worker }]) => worker).filter(Boolean)).forEach((worker) =>
+				scheduleWorkerMaintenance(worker as ServiceWorker),
+			)
+			writes.forEach(([, { waiters }]) => waiters.forEach(({ resolve }) => resolve()))
+		} catch (error) {
+			writes.forEach(([, { waiters }]) => waiters.forEach(({ reject }) => reject(error)))
 		}
-		await requestToPromise(store.put(storedEntry))
-		await transactionToPromise(transaction)
 	}
 
 	private async getEntry(
@@ -862,14 +797,10 @@ export class MediaResourceOfflineCacheManager {
 			mediaType: entry.mediaType,
 			expiresAt: entry.expiresAt,
 			size: entry.size,
-			etag: entry.etag,
-			lastModified: entry.lastModified,
 			contentLength: entry.contentLength ?? null,
-			contentType: entry.contentType,
 			resourceVersion: entry.resourceVersion ?? null,
 			sourceUpdatedAt: entry.sourceUpdatedAt ?? null,
-			lastAccessedAt: entry.lastAccessedAt,
-			updatedAt: entry.updatedAt,
+			lastAccessedAt: entry.lastAccessedAt ?? entry.updatedAt ?? 0,
 		}
 	}
 
@@ -883,10 +814,12 @@ export class MediaResourceOfflineCacheManager {
 			: this.getVirtualResourceUrl(resourcePathForDelete, params.mediaType)
 		const db = await this.openDb()
 		const transaction = db.transaction(STORE_NAME, "readwrite")
+		const transactionDone = transactionToPromise(transaction)
 		const store = transaction.objectStore(STORE_NAME)
 		await requestToPromise(
 			store.delete(buildResourceId(namespace, params.mediaType, resourcePathForDelete)),
 		)
+		await transactionDone
 
 		const cache = await caches.open(CANVAS_MEDIA_CACHE_NAME)
 		await cache.delete(cacheKey)
@@ -944,9 +877,5 @@ export class MediaResourceOfflineCacheManager {
 		} catch {
 			// ignore localStorage cleanup failure
 		}
-	}
-
-	private requestVirtualResourceRepair(): void {
-		this.cachePromises.clear()
 	}
 }

@@ -69,6 +69,7 @@ describe("ImageDisplayVariantPersistentCache", () => {
 	beforeEach(() => {
 		vi.unstubAllGlobals()
 		vi.stubGlobal("indexedDB", new IDBFactory())
+		vi.stubGlobal("caches", new FakeBodyCacheStorage())
 	})
 
 	it("stores new low bodies in CacheStorage while IndexedDB keeps metadata", async () => {
@@ -84,13 +85,10 @@ describe("ImageDisplayVariantPersistentCache", () => {
 				variant: "low",
 				rendition: "image-process",
 				blob: new Blob(["cache-storage"], { type: "image/webp" }),
-				width: 384,
-				height: 216,
 				imageInfo,
 				resourceVersion: "version-a",
 				sourceUpdatedAt: null,
 				contentLength: 13,
-				sourceUrl: null,
 				maxEdge: 384,
 				writeOrder: "0000000000000001:test:00000001",
 			}),
@@ -111,6 +109,13 @@ describe("ImageDisplayVariantPersistentCache", () => {
 		expect(records).toHaveLength(1)
 		expect(records[0]?.blob).toBeUndefined()
 		expect(records[0]?.bodyCacheKey).toBeTruthy()
+		expect(records[0]?.bodyState).toBe("ready")
+		expect(records[0]).not.toHaveProperty("mimeType")
+		expect(records[0]).not.toHaveProperty("width")
+		expect(records[0]).not.toHaveProperty("height")
+		expect(records[0]).not.toHaveProperty("sourceUrl")
+		expect(records[0]).not.toHaveProperty("maxEdge")
+		expect(records[0]).not.toHaveProperty("codecVersion")
 
 		const restored = await cache.getLatest({
 			scope: "scope-a",
@@ -121,6 +126,71 @@ describe("ImageDisplayVariantPersistentCache", () => {
 		expect(restored?.blob).toBeInstanceOf(Blob)
 		expect(restored?.blob.size).toBe(13)
 		expect(restored?.blob.type).toBe("image/webp")
+		cache.destroy()
+	})
+
+	it("keeps the previous ready body readable while a replacement is pending", async () => {
+		const bodyCacheStorage = new FakeBodyCacheStorage()
+		vi.stubGlobal("caches", bodyCacheStorage)
+		const cache = new ImageDisplayVariantPersistentCache({
+			maxIdleAgeMs: Number.POSITIVE_INFINITY,
+		})
+		const baseOptions = {
+			scope: "scope-a",
+			path: "images/replacement.png",
+			variant: "low" as const,
+			rendition: "image-process",
+			imageInfo: createRecord("unused").imageInfo,
+			contentLength: 3,
+			maxEdge: 384,
+		}
+		await cache.put({
+			...baseOptions,
+			blob: new Blob(["old"], { type: "image/webp" }),
+			resourceVersion: "version-1",
+			sourceUpdatedAt: "2026-07-21T09:00:00.000Z",
+			writeOrder: "0000000000000001:test:00000001",
+		})
+		const bodyCache = await bodyCacheStorage.open()
+		const originalPut = bodyCache.put.bind(bodyCache)
+		let releaseBodyPut!: () => void
+		const bodyPutGate = new Promise<void>((resolve) => {
+			releaseBodyPut = resolve
+		})
+		const bodyPutSpy = vi
+			.spyOn(bodyCache, "put")
+			.mockImplementationOnce(async (key, response) => {
+				await bodyPutGate
+				return originalPut(key, response)
+			})
+		const replacement = cache.put({
+			...baseOptions,
+			blob: new Blob(["new"], { type: "image/webp" }),
+			resourceVersion: "version-2",
+			sourceUpdatedAt: "2026-07-21T10:00:00.000Z",
+			writeOrder: "0000000000000002:test:00000002",
+		})
+		await vi.waitFor(() => expect(bodyPutSpy).toHaveBeenCalledTimes(1))
+
+		const previous = await cache.getLatest({
+			scope: "scope-a",
+			path: "images/replacement.png",
+			variant: "low",
+			rendition: "image-process",
+		})
+		expect(previous?.resourceVersion).toBe("version-1")
+		expect(previous?.blob).toBeInstanceOf(Blob)
+
+		releaseBodyPut()
+		await expect(replacement).resolves.toBe(true)
+		await expect(
+			cache.getLatest({
+				scope: "scope-a",
+				path: "images/replacement.png",
+				variant: "low",
+				rendition: "image-process",
+			}),
+		).resolves.toEqual(expect.objectContaining({ resourceVersion: "version-2" }))
 		cache.destroy()
 	})
 
@@ -171,6 +241,7 @@ describe("ImageDisplayVariantPersistentCache", () => {
 	})
 
 	it("keeps metadata when CacheStorage is unavailable", async () => {
+		vi.stubGlobal("caches", undefined)
 		const cache = new ImageDisplayVariantPersistentCache({
 			maxIdleAgeMs: Number.POSITIVE_INFINITY,
 		})
@@ -219,27 +290,39 @@ describe("ImageDisplayVariantPersistentCache", () => {
 		cache.destroy()
 	})
 
-	it("removes a migrated legacy body when metadata cannot be committed", async () => {
-		const bodyCacheStorage = new FakeBodyCacheStorage()
-		vi.stubGlobal("caches", bodyCacheStorage)
+	it("does not create metadata or an IndexedDB Blob when CacheStorage is unavailable", async () => {
+		vi.stubGlobal("caches", undefined)
 		const cache = new ImageDisplayVariantPersistentCache({
 			maxIdleAgeMs: Number.POSITIVE_INFINITY,
 		})
-		const record = createRecord("legacy-rollback", {
-			key: "record:legacy-rollback",
-			bodyCacheKey: undefined,
-		})
 		const internals = cache as unknown as {
-			getDb: ReturnType<typeof vi.fn>
-			migrateLegacyBody: (record: PersistentImageDisplayCacheRecord) => Promise<void>
+			getDb: () => Promise<IDBDatabase | null>
 		}
-		internals.getDb = vi.fn(async () => null)
-
-		await internals.migrateLegacyBody(record)
-
-		const bodyCache = await bodyCacheStorage.open()
-		const bodyCacheKey = `https://canvas-design-image.invalid/body/${encodeURIComponent(record.key)}`
-		expect(await bodyCache.match(bodyCacheKey)).toBeUndefined()
+		await expect(
+			cache.put({
+				scope: "scope-a",
+				path: "images/no-cache-storage.png",
+				variant: "low",
+				rendition: "image-process",
+				blob: new Blob(["low"], { type: "image/webp" }),
+				imageInfo: createRecord("unused").imageInfo,
+				resourceVersion: "version-a",
+				sourceUpdatedAt: null,
+				contentLength: 3,
+				maxEdge: 384,
+				writeOrder: "0000000000000001:test:00000001",
+			}),
+		).resolves.toBe(false)
+		const db = await internals.getDb()
+		if (!db) throw new Error("Expected IndexedDB")
+		const records = await new Promise<PersistentImageDisplayCacheRecord[]>((resolve) => {
+			const request = db
+				.transaction("resources", "readonly")
+				.objectStore("resources")
+				.getAll()
+			request.onsuccess = () => resolve(request.result as PersistentImageDisplayCacheRecord[])
+		})
+		expect(records).toEqual([])
 		cache.destroy()
 	})
 
@@ -310,13 +393,10 @@ describe("ImageDisplayVariantPersistentCache", () => {
 			variant: "low",
 			rendition: "image-process",
 			blob: new Blob(["low"], { type: "image/webp" }),
-			width: 384,
-			height: 216,
 			imageInfo: createRecord("unused").imageInfo,
 			resourceVersion: "version-a",
 			sourceUpdatedAt: null,
 			contentLength: 3,
-			sourceUrl: null,
 			maxEdge: 384,
 			writeOrder: "0000000000000001:test:00000001",
 		})
@@ -346,6 +426,112 @@ describe("ImageDisplayVariantPersistentCache", () => {
 				rendition: "image-process",
 			}),
 		).resolves.toBeNull()
+		cache.destroy()
+	})
+
+	it("ignores pending rows and removes them after the one-hour write window", async () => {
+		let now = 0
+		const bodyCacheStorage = new FakeBodyCacheStorage()
+		vi.stubGlobal("caches", bodyCacheStorage)
+		const cache = new ImageDisplayVariantPersistentCache({
+			now: () => now,
+			maxIdleAgeMs: Number.POSITIVE_INFINITY,
+		})
+		const internals = cache as unknown as {
+			getDb: () => Promise<IDBDatabase | null>
+			prune: (db: IDBDatabase) => Promise<void>
+		}
+		const db = await internals.getDb()
+		if (!db) throw new Error("Expected IndexedDB")
+		const lookupKey = JSON.stringify(["scope-a", "image-process", "images/pending.png", "low"])
+		const record = createRecord(lookupKey, {
+			key: "record:pending",
+			path: "images/pending.png",
+			blob: undefined,
+			bodyCacheKey: "https://canvas-design-image.invalid/body/pending",
+			bodyState: "pending",
+			pendingAt: 0,
+		})
+		await new Promise<void>((resolve, reject) => {
+			const tx = db.transaction("resources", "readwrite")
+			tx.objectStore("resources").put(record)
+			tx.oncomplete = () => resolve()
+			tx.onerror = () => reject(tx.error)
+		})
+
+		await expect(
+			cache.getLatest({
+				scope: "scope-a",
+				path: "images/pending.png",
+				variant: "low",
+				rendition: "image-process",
+			}),
+		).resolves.toBeNull()
+		now = 60 * 60 * 1000 + 1
+		await internals.prune(db)
+		const remaining = await new Promise<PersistentImageDisplayCacheRecord[]>((resolve) => {
+			const request = db
+				.transaction("resources", "readonly")
+				.objectStore("resources")
+				.getAll()
+			request.onsuccess = () => resolve(request.result as PersistentImageDisplayCacheRecord[])
+		})
+		expect(remaining).toEqual([])
+		cache.destroy()
+	})
+
+	it("evicts the least-recently-used low row when the entry cap is exceeded", async () => {
+		let now = 0
+		const cache = new ImageDisplayVariantPersistentCache({
+			now: () => ++now,
+			maxEntries: 2,
+			maxBytes: Number.POSITIVE_INFINITY,
+			maxIdleAgeMs: Number.POSITIVE_INFINITY,
+		})
+		const imageInfo = createRecord("unused").imageInfo
+		for (const [index, path] of [
+			"images/old.png",
+			"images/middle.png",
+			"images/new.png",
+		].entries()) {
+			await cache.put({
+				scope: "scope-a",
+				path,
+				variant: "low",
+				rendition: "image-process",
+				blob: new Blob([path], { type: "image/webp" }),
+				imageInfo,
+				resourceVersion: `version-${index}`,
+				sourceUpdatedAt: null,
+				contentLength: path.length,
+				maxEdge: 384,
+				writeOrder: `000000000000000${index}:test:0000000${index}`,
+			})
+		}
+		const internals = cache as unknown as {
+			getDb: () => Promise<IDBDatabase | null>
+			prune: (db: IDBDatabase) => Promise<void>
+		}
+		const db = await internals.getDb()
+		if (!db) throw new Error("Expected IndexedDB")
+		await internals.prune(db)
+
+		await expect(
+			cache.getLatest({
+				scope: "scope-a",
+				path: "images/old.png",
+				variant: "low",
+				rendition: "image-process",
+			}),
+		).resolves.toBeNull()
+		await expect(
+			cache.getLatest({
+				scope: "scope-a",
+				path: "images/new.png",
+				variant: "low",
+				rendition: "image-process",
+			}),
+		).resolves.toEqual(expect.objectContaining({ resourceVersion: "version-2" }))
 		cache.destroy()
 	})
 
@@ -447,10 +633,12 @@ describe("ImageDisplayVariantPersistentCache", () => {
 			const cache = new ImageDisplayVariantPersistentCache()
 			const internals = cache as unknown as {
 				getDb: ReturnType<typeof vi.fn>
+				putPendingRecord: ReturnType<typeof vi.fn>
 				putLatestRecord: ReturnType<typeof vi.fn>
 				prune: ReturnType<typeof vi.fn>
 			}
 			internals.getDb = vi.fn(async () => ({}) as IDBDatabase)
+			internals.putPendingRecord = vi.fn(async () => true)
 			internals.putLatestRecord = vi.fn(async () => true)
 			internals.prune = vi.fn(async () => undefined)
 			const options = {
@@ -459,13 +647,10 @@ describe("ImageDisplayVariantPersistentCache", () => {
 				variant: "low" as const,
 				rendition: "image-process",
 				blob: new Blob(["low"], { type: "image/webp" }),
-				width: 384,
-				height: 216,
 				imageInfo: createRecord("unused").imageInfo,
 				resourceVersion: "version-a",
 				sourceUpdatedAt: null,
 				contentLength: 3,
-				sourceUrl: null,
 				maxEdge: 384,
 			}
 
@@ -488,23 +673,24 @@ describe("ImageDisplayVariantPersistentCache", () => {
 		})
 		const internals = cache as unknown as {
 			getDb: ReturnType<typeof vi.fn>
+			putPendingRecord: ReturnType<typeof vi.fn>
 			putLatestRecord: ReturnType<typeof vi.fn>
+			removePendingRecord: ReturnType<typeof vi.fn>
 		}
 		internals.getDb = vi.fn(async () => ({}) as IDBDatabase)
+		internals.putPendingRecord = vi.fn(async () => true)
 		internals.putLatestRecord = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+		internals.removePendingRecord = vi.fn(async () => undefined)
 		const options = {
 			scope: "scope-a",
 			path: "images/a.png",
 			variant: "low" as const,
 			rendition: "image-process",
 			blob: new Blob(["low"], { type: "image/webp" }),
-			width: 384,
-			height: 216,
 			imageInfo: createRecord("unused").imageInfo,
 			resourceVersion: "version-a",
 			sourceUpdatedAt: null,
 			contentLength: 3,
-			sourceUrl: null,
 			maxEdge: 384,
 		}
 
@@ -567,12 +753,9 @@ describe("ImageDisplayVariantPersistentCache", () => {
 			path: "images/versioned.png",
 			variant: "low" as const,
 			rendition: "image-process",
-			width: 384,
-			height: 216,
 			imageInfo: createRecord("unused").imageInfo,
 			sourceUpdatedAt: null,
 			contentLength: 3,
-			sourceUrl: null,
 			maxEdge: 384,
 		}
 
@@ -636,13 +819,10 @@ describe("ImageDisplayVariantPersistentCache", () => {
 			variant: "low",
 			rendition: "image-process",
 			blob: new Blob(["low"], { type: "image/webp" }),
-			width: 384,
-			height: 216,
 			imageInfo: createRecord("unused").imageInfo,
 			resourceVersion: "version-a",
 			sourceUpdatedAt: null,
 			contentLength: 3,
-			sourceUrl: null,
 			maxEdge: 384,
 			writeOrder: "0000000000000001:test:00000001",
 		})
@@ -688,13 +868,10 @@ describe("ImageDisplayVariantPersistentCache", () => {
 			path: "images/race.png",
 			variant: "low" as const,
 			rendition: "image-process",
-			width: 384,
-			height: 216,
 			imageInfo: createRecord("unused").imageInfo,
 			resourceVersion: "version-a",
 			sourceUpdatedAt: null,
 			contentLength: 3,
-			sourceUrl: null,
 			maxEdge: 384,
 		}
 
@@ -742,11 +919,8 @@ describe("ImageDisplayVariantPersistentCache", () => {
 			path: "images/replaced.png",
 			variant: "low" as const,
 			rendition: "image-process",
-			width: 384,
-			height: 216,
 			imageInfo: createRecord("unused").imageInfo,
 			contentLength: 3,
-			sourceUrl: null,
 			maxEdge: 384,
 		}
 
@@ -784,11 +958,8 @@ describe("ImageDisplayVariantPersistentCache", () => {
 			path: "images/delayed-new-version.png",
 			variant: "low" as const,
 			rendition: "image-process",
-			width: 384,
-			height: 216,
 			imageInfo: createRecord("unused").imageInfo,
 			contentLength: 3,
-			sourceUrl: null,
 			maxEdge: 384,
 		}
 
@@ -826,13 +997,10 @@ describe("ImageDisplayVariantPersistentCache", () => {
 			path: "images/race.png",
 			variant: "low" as const,
 			rendition: "image-process",
-			width: 384,
-			height: 216,
 			imageInfo: createRecord("unused").imageInfo,
 			resourceVersion: "version-a",
 			sourceUpdatedAt: null,
 			contentLength: 3,
-			sourceUrl: null,
 			maxEdge: 384,
 		}
 

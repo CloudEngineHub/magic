@@ -1890,13 +1890,10 @@ export class ImageResourceManager {
 			variant: "low",
 			rendition,
 			blob: persistentDisplay.blob,
-			width: persistentDisplay.width,
-			height: persistentDisplay.height,
 			imageInfo,
 			resourceVersion,
 			sourceUpdatedAt: entry.sourceUpdatedAt,
 			contentLength: entry.contentLength,
-			sourceUrl: entry.sourceUrl ?? entry.ossSrc,
 			maxEdge: this.getMaxEdgeForVariant("low"),
 			writeOrder,
 		})
