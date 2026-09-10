@@ -55,7 +55,7 @@ tools:
   - visual_understanding
   - video_understanding
   - generate_canvas_images
-  - search_images_to_canvas
+  - search_canvas_images
   - create_canvas
 ```
 
@@ -215,7 +215,7 @@ skills:
 | `create_canvas` | Create a canvas project |
 | `generate_canvas_images` | Generate images directly to canvas |
 | `generate_canvas_videos` | Generate videos directly to canvas |
-| `search_images_to_canvas` | Search and add images to canvas |
+| `search_canvas_images` | Search and add images to canvas |
 
 ### Data Dashboard
 

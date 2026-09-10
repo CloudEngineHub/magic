@@ -22,19 +22,15 @@ Also handles first-time employee initialization when the workspace has no defini
 Determine the output language in this order:
 
 1. If the user explicitly specifies an output language in the current request, use that language.
-2. Otherwise, run the language helper script before generating or editing employee files:
+2. Otherwise, call `get_user_language` before generating or editing employee files:
 
-```python
-shell_exec(
-    command="python '<skill_dir>/scripts/language.py'"
-)
+```
+get_user_language()
 ```
 
-将 `<skill_dir>` 替换为当前技能的绝对目录。不要省略技能目录前缀，因为 Shell 的当前目录可能是 `.workspace` 或其他目录。
+Read the selected language from `data.language`.
 
-The script reads `.credentials/metadata.json` and returns JSON such as `{"language": "zh_CN", "language_name": "Chinese"}`. It defaults to `zh_CN` when the metadata file is missing, invalid, or has no usable `language` value. `USER_AUTH_METADATA_PATH` can override the metadata path for testing or operational use.
-
-When the user has not specified a language, use the returned `language_name` as the primary language when writing prompts and employee files. The system-injected `<user_preferred_language>` is not the source of truth for this decision.
+When the user has not specified a language, use the returned `language` as the primary language when writing prompts and employee files. The system-injected `<user_preferred_language>` is not the source of truth for this decision.
 
 **Default single-language mode**: Generate all content in the selected language. YAML header uses single-language fields only.
 
@@ -110,10 +106,12 @@ The script generates files based on the config (TOOLS.md and SKILLS.md are inten
 After `init_crew.py` completes successfully, read
 `references/avatar-generation-guide.md` before generating the employee Logo.
 
-1. Read `.workspace/.magic/IDENTITY.md` and `.workspace/.magic/SOUL.md` when it exists.
+All paths in this section are relative to the current employee workspace. Do not prepend `.workspace/`, because the tool working directory may already be the workspace root.
+
+1. Read `.magic/IDENTITY.md` and `.magic/SOUL.md` when it exists.
 2. Build a role-specific Logo prompt from the employee's identity, capabilities, personality, aesthetic, and communication style. Do not use a generic avatar prompt that ignores these files.
 3. Call `generate_images` once with `size` set to `1024x1024`, generating one square image.
-4. Save the result as `.workspace/.magic/avatars/agent-logo.png` or a compliant JPG. Validate that it is square, readable, and no larger than `500KB`.
+4. Save the result as `.magic/avatars/agent-logo.png` or a compliant JPG. Validate that it is square, readable, and no larger than `500KB`.
 5. If the user already supplied a Logo or the Agent already has an image icon, preserve it and skip automatic replacement.
 
 Generation failure is non-blocking: record the error, continue the text metadata synchronization, and tell the user that the Logo needs to be generated or supplied later.
@@ -154,7 +152,7 @@ If the user chooses skill decomposition in Round 4, after initialization call `s
 | `AGENTS.md` | WHAT — Instructions | Workflow, rules, special directives | Recommended |
 | `SOUL.md` | HOW — Personality | Core personality, communication style, behavior guidelines | Optional |
 | `TOOLS.md` | WITH WHAT — Tools | Tool whitelist (YAML) + usage preferences | Optional |
-| `avatars/agent-logo.png` | VISUAL — Logo | Default employee Logo generated from IDENTITY.md and SOUL.md | Optional |
+| `.magic/avatars/agent-logo.png` | VISUAL — Logo | Default employee Logo generated from IDENTITY.md and SOUL.md | Optional |
 
 ## Editing Workflow
 

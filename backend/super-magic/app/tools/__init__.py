@@ -30,6 +30,7 @@ from app.tools.multi_edit_file_range import MultiEditFileRange
 from app.tools.file_search import FileSearch
 from app.tools.get_js_cdn_address import GetJsCdnAddress
 from app.tools.get_sandbox_info import GetSandboxInfo
+from app.tools.get_user_language import GetUserLanguage
 from app.tools.grep_search import GrepSearch
 
 from app.tools.generate_images import GenerateImages
@@ -293,6 +294,7 @@ __all__ = [
     "FileSearch",
     "GetJsCdnAddress",
     "GetSandboxInfo",
+    "GetUserLanguage",
     "GrepSearch",
     "ImageSearch",
     "GenerateImages",

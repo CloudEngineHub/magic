@@ -15,20 +15,18 @@ Assess where the user is and jump in from there.
 ## Language Awareness
 
 - If the user explicitly specifies an output language in the current request, use that language
-- Otherwise, run `python '<skill_dir>/scripts/language.py'` before generating or editing skill content, replacing `<skill_dir>` with the skill's absolute directory, and use the returned `language` code. Language codes are passed through without a fixed allowlist, so newly supported frontend languages require no skill-side mapping update
+- Otherwise, call `get_user_language` before generating or editing skill content and use `data.language`. Language codes are passed through without a fixed allowlist, so newly supported frontend languages require no skill-side mapping update
 - Generate skill content (SKILL.md body, comments, and examples) in the selected language
 - Skills always use single-language content. Do not ask for, generate, or maintain translations or language-specific duplicate sections.
 - Generate the frontmatter `description` in the selected language as well. It must describe the skill's capability and trigger conditions in the same language as the rest of the skill.
 
-When the user has not explicitly specified a language, run the language helper before generating or editing skill content:
+When the user has not explicitly specified a language, call the language tool before generating or editing skill content:
 
-```python
-shell_exec(
-  command="python '<skill_dir>/scripts/language.py'"
-)
+```
+get_user_language()
 ```
 
-将 `<skill_dir>` 替换为当前技能的绝对目录。不要省略技能目录前缀，因为 Shell 的当前目录可能是 `.workspace` 或其他目录。脚本读取 `.credentials/metadata.json`，元数据不可用或无效时回退到 `zh_CN`。
+Read the selected language from `data.language`.
 
 ---
 
