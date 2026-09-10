@@ -105,6 +105,7 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         }
         $operation->setAcceptedParams($acceptedParams);
         $operation->setIgnoredParams($ignored);
+
         return [
             'model' => $model,
             'input' => $parts,

@@ -36,10 +36,10 @@ readonly class GeminiOmniGenerationCapabilityProvider
         if ($version !== '' && $this->isNumericProviderModelId($id)) {
             $id = '';
         }
-        if ($version !== '' && $version !== self::MODEL || $id !== '' && $id !== self::MODEL) {
-            return false;
-        }
-        return $version === self::MODEL || $id === self::MODEL;
+
+        return ($version === '' || str_starts_with($version, self::MODEL))
+            && ($id === '' || str_starts_with($id, self::MODEL))
+            && ($version !== '' || $id !== '');
     }
 
     public function resolveGenerationConfig(string $modelVersion, string $modelId): ?VideoGenerationConfig
@@ -95,7 +95,8 @@ readonly class GeminiOmniGenerationCapabilityProvider
         if (! $this->supportsModel($modelVersion, $modelId)) {
             throw new InvalidArgumentException('Unsupported or conflicting Gemini video model identifiers.');
         }
-        return self::MODEL;
+
+        return trim($modelVersion) !== '' ? trim($modelVersion) : trim($modelId);
     }
 
     private function normalize(string $value): string
