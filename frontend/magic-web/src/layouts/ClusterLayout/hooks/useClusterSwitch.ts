@@ -74,9 +74,7 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 
 	// 查找匹配的账号（使用 useMemo 缓存）
 	const matchedAccount = useMemo(() => {
-		return userStore.account.accounts.find(
-			(account) => account.deployCode?.toLowerCase?.() === targetClusterCode?.toLowerCase?.(),
-		)
+		return userStore.account.accounts.find((account) => account.deployCode?.toLowerCase?.() === targetClusterCode?.toLowerCase?.())
 	}, [targetClusterCode, userStore.account.accounts])
 
 	// 稳定的错误处理函数
@@ -185,8 +183,8 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 		abortControllerRef.current = abortController
 
 		// 快速判断：如果集群已匹配或在白名单中，立即执行（无需防抖）
-		const needsSwitch =
-			targetClusterCode !== configStore.cluster.clusterCode && !isWhiteListRoute
+		const code = configStore.cluster.clusterCode === defaultClusterCode ? "" : configStore.cluster.clusterCode
+		const needsSwitch = targetClusterCode !== code && !isWhiteListRoute
 
 		if (!needsSwitch) {
 			// 无需切换，立即执行

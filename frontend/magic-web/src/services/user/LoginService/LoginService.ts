@@ -212,7 +212,11 @@ export class LoginService {
 			if (orgCode) {
 				const userInfo = await this.service
 					.get<UserService>("userService")
-					.fetchUserInfo(options)
+					.fetchUserInfo({
+						headers: (h) => {
+						h.append("organization-code", orgCode)
+						return h
+					}, ...options})
 				if (userInfo) {
 					userStore.user.setUserInfo(userTransformer(userInfo))
 					// 登录完成后构造用户信息，维护在账号体系中
