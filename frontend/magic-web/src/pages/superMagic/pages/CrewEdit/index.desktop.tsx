@@ -559,7 +559,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 				className="flex h-full w-full items-center justify-center"
 				data-testid="crew-edit-loading"
 			>
-				<Loader2 className="size-8 animate-spin text-muted-foreground" />
+				<Loader2 className="size-4 animate-spin text-muted-foreground" />
 			</div>
 		)
 	}

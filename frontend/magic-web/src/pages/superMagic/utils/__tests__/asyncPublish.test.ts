@@ -376,4 +376,52 @@ describe("asyncPublish", () => {
 		expect(create).toHaveBeenCalledTimes(1)
 		expect(result).toMatchObject({ publish_task_id: "task-new", status: "ready" })
 	})
+
+	it("does not reuse an in-progress task when the draft fingerprint changed", async () => {
+		const storedDraft = {
+			version: "1.0.0",
+			details: "old",
+			publishTo: "INTERNAL",
+			internalTarget: "PRIVATE",
+			specificMembers: [],
+		}
+		const nextDraft = {
+			...storedDraft,
+			version: "1.0.1",
+			details: "new",
+		}
+		savePendingPublishTask("agent", "SMA-conflict", "task-old", storedDraft)
+
+		const create = vi.fn(async () => ({
+			publish_task_id: "task-new",
+			status: "ready" as const,
+			progress: 100,
+			error: null,
+		}))
+		const check = vi.fn(async () => ({
+			publish_task_id: "task-old",
+			status: "processing" as const,
+			progress: 40,
+			error: null,
+		}))
+
+		await expect(
+			runAsyncPublish({
+				resourceType: "agent",
+				code: "SMA-conflict",
+				draft: nextDraft,
+				create,
+				check,
+			}),
+		).rejects.toMatchObject({
+			name: "AsyncPublishError",
+			reason: "conflict",
+		})
+
+		expect(create).not.toHaveBeenCalled()
+		expect(loadPendingPublishTask("agent", "SMA-conflict")).toEqual({
+			publish_task_id: "task-old",
+			draft: storedDraft,
+		})
+	})
 })

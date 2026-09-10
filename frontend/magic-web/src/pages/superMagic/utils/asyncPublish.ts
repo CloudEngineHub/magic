@@ -22,7 +22,7 @@ export interface PollPublishOptions {
 	signal?: AbortSignal
 }
 
-export type AsyncPublishFailureReason = "failed" | "timeout" | "aborted" | "expired"
+export type AsyncPublishFailureReason = "failed" | "timeout" | "aborted" | "expired" | "conflict"
 
 export class AsyncPublishError extends Error {
 	readonly reason: AsyncPublishFailureReason
@@ -123,6 +123,42 @@ function throwIfAborted(signal?: AbortSignal) {
 	if (signal?.aborted) throw new AsyncPublishError("Publish polling aborted", "aborted")
 }
 
+/** Stable fingerprint of the fields that actually go into a publish request. */
+export function buildPublishDraftFingerprint(draft: unknown): string {
+	if (!draft || typeof draft !== "object") return ""
+
+	const value = draft as Record<string, unknown>
+	const members = Array.isArray(value.specificMembers)
+		? value.specificMembers
+				.map((item) => {
+					if (!item || typeof item !== "object") return ""
+					const member = item as { id?: string; type?: string }
+					return `${member.type ?? ""}:${member.id ?? ""}`
+				})
+				.sort()
+		: []
+	const categoryIds = Array.isArray(value.categoryIds)
+		? value.categoryIds.map((item) => String(item)).sort()
+		: []
+
+	return JSON.stringify({
+		version:
+			typeof value.version === "string" ? value.version.trim() : String(value.version ?? ""),
+		details: value.details ?? "",
+		publishTo: value.publishTo ?? "",
+		internalTarget: value.internalTarget ?? "",
+		members,
+		categoryId: value.categoryId ?? "",
+		categoryIds,
+	})
+}
+
+function canReusePendingDraft(pendingDraft: unknown, currentDraft: unknown): boolean {
+	// Legacy pending records without a draft snapshot remain reusable.
+	if (currentDraft === undefined || pendingDraft === undefined) return true
+	return buildPublishDraftFingerprint(pendingDraft) === buildPublishDraftFingerprint(currentDraft)
+}
+
 /**
  * Poll publish/check until status is ready or failed.
  * Treats missing / expired task responses as failed so the user can republish.
@@ -221,9 +257,10 @@ export async function runAsyncPublish<TDraft = unknown>(
 		options
 
 	let publishTaskId = resumePublishTaskId?.trim() || ""
+	const pending = loadPendingPublishTask<TDraft>(resourceType, code)
 
 	if (!publishTaskId) {
-		const pendingId = loadPendingPublishTask(resourceType, code)?.publish_task_id?.trim() || ""
+		const pendingId = pending?.publish_task_id?.trim() || ""
 		if (pendingId) {
 			const existing = await inspectExistingPublishTask({
 				resourceType,
@@ -232,7 +269,9 @@ export async function runAsyncPublish<TDraft = unknown>(
 				check,
 				signal,
 			})
-			if (existing.kind === "ready") {
+			const sameDraft = canReusePendingDraft(pending?.draft, draft)
+
+			if (existing.kind === "ready" && sameDraft) {
 				onProgress?.(
 					typeof existing.snapshot.progress === "number"
 						? existing.snapshot.progress
@@ -240,7 +279,15 @@ export async function runAsyncPublish<TDraft = unknown>(
 				)
 				return existing.snapshot
 			}
+
 			if (existing.kind === "processing") {
+				if (!sameDraft) {
+					// Keep the original pending draft; do not overwrite with the new submission.
+					throw new AsyncPublishError(
+						"A publish task is still in progress for this resource.",
+						"conflict",
+					)
+				}
 				publishTaskId = pendingId
 			}
 		}
@@ -271,7 +318,8 @@ export async function runAsyncPublish<TDraft = unknown>(
 
 		savePendingPublishTask(resourceType, code, publishTaskId, draft)
 	} else {
-		savePendingPublishTask(resourceType, code, publishTaskId, draft)
+		// Reusing an in-progress / resumed task: keep the original draft snapshot when present.
+		savePendingPublishTask(resourceType, code, publishTaskId, pending?.draft ?? draft)
 	}
 
 	try {
@@ -429,6 +477,9 @@ export function resolveAsyncPublishErrorMessage(
 ): string {
 	if (error.reason === "timeout") {
 		return t("skillEditPage.publishPanel.toast.publishTimeout")
+	}
+	if (error.reason === "conflict") {
+		return t("skillEditPage.publishPanel.toast.publishInProgress")
 	}
 	if (error.reason === "expired") {
 		return t("skillEditPage.publishPanel.toast.publishTaskExpired")
