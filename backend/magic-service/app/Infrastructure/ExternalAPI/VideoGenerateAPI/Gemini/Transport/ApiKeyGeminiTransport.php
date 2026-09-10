@@ -10,6 +10,7 @@ namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Transport;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportInterface;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiVideoClient;
+use InvalidArgumentException;
 
 readonly class ApiKeyGeminiTransport implements GeminiTransportInterface
 {
@@ -19,6 +20,8 @@ readonly class ApiKeyGeminiTransport implements GeminiTransportInterface
 
     public function createInteraction(QueueExecutorConfig $config, array $payload, array $logContext = []): array
     {
+        $this->validateConfig($config);
+
         return $this->client->post(
             $config->getBaseUrl(),
             $config->getApiKey(),
@@ -31,6 +34,8 @@ readonly class ApiKeyGeminiTransport implements GeminiTransportInterface
 
     public function getInteraction(QueueExecutorConfig $config, string $interactionId, array $logContext = []): array
     {
+        $this->validateConfig($config);
+
         return $this->client->get(
             $config->getBaseUrl(),
             $config->getApiKey(),
@@ -38,5 +43,12 @@ readonly class ApiKeyGeminiTransport implements GeminiTransportInterface
             $logContext,
             $config->getExtraString('proxy_url'),
         );
+    }
+
+    private function validateConfig(QueueExecutorConfig $config): void
+    {
+        if ($config->getBaseUrl() === '' || $config->getApiKey() === '') {
+            throw new InvalidArgumentException('Google Gemini API Key config is incomplete');
+        }
     }
 }

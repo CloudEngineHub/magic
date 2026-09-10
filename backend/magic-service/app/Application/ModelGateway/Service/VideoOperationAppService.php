@@ -311,10 +311,8 @@ readonly class VideoOperationAppService
         $executorConfig = $this->queueOperationExecutionDomainService->getConfig($operation);
         if ($operation->getProviderCode() === ProviderCode::Gemini->value) {
             return $this->geminiVideoClient->downloadMediaToLocalFile(
-                $executorConfig->getBaseUrl(),
-                $executorConfig->getApiKey(),
+                $executorConfig,
                 $url,
-                $executorConfig->getExtraString('proxy_url'),
             );
         }
 

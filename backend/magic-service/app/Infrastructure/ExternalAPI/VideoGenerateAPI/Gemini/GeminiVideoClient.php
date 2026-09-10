@@ -7,8 +7,10 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini;
 
+use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Traits\HasLogger;
+use App\Infrastructure\ExternalAPI\Google\Auth\GoogleServiceAccountTokenProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\Util\File\TemporaryFileManager;
@@ -18,7 +20,9 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Hyperf\Codec\Json;
 use Hyperf\Logger\LoggerFactory;
+use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\UriInterface;
 use Throwable;
 
 readonly class GeminiVideoClient
@@ -37,25 +41,39 @@ readonly class GeminiVideoClient
 
     public function post(string $baseUrl, string $apiKey, string $path, array $payload, array $logContext = [], string $proxyUrl = ''): array
     {
-        return $this->request('post', $baseUrl, $apiKey, $path, $payload, $logContext, $proxyUrl);
+        return $this->postWithHeaders($baseUrl, ['x-goog-api-key' => $apiKey], $path, $payload, $logContext, $proxyUrl);
     }
 
     public function get(string $baseUrl, string $apiKey, string $path, array $logContext = [], string $proxyUrl = ''): array
     {
-        return $this->request('get', $baseUrl, $apiKey, $path, null, $logContext, $proxyUrl);
+        return $this->getWithHeaders($baseUrl, ['x-goog-api-key' => $apiKey], $path, $logContext, $proxyUrl);
+    }
+
+    public function postWithHeaders(string $baseUrl, array $headers, string $path, array $payload, array $logContext = [], string $proxyUrl = ''): array
+    {
+        return $this->request('post', $baseUrl, $headers, $path, $payload, $logContext, $proxyUrl);
+    }
+
+    public function getWithHeaders(string $baseUrl, array $headers, string $path, array $logContext = [], string $proxyUrl = ''): array
+    {
+        return $this->request('get', $baseUrl, $headers, $path, null, $logContext, $proxyUrl);
     }
 
     public function downloadMediaToLocalFile(
-        string $baseUrl,
-        string $apiKey,
+        QueueExecutorConfig $config,
         string $uri,
-        string $proxyUrl = '',
     ): string {
+        $extraConfig = $config->getExtraConfig();
+        $proxyUrl = $config->getExtraString('proxy_url');
+        $headers = strtolower((string) ($extraConfig['auth_type'] ?? 'api_key')) === 'service_account'
+            ? ['Authorization' => 'Bearer ' . (new GoogleServiceAccountTokenProvider($extraConfig, $proxyUrl))->getAccessToken()]
+            : ['x-goog-api-key' => $config->getApiKey()];
+
         $targetPath = TemporaryFileManager::createTempFile('gemini-video-');
 
         $localStream = null;
         try {
-            $response = $this->requestMedia($baseUrl, $apiKey, $uri, $proxyUrl);
+            $response = $this->requestMedia($config->getBaseUrl(), $headers, $uri, $proxyUrl);
             $localStream = fopen($targetPath, 'wb');
             if (! is_resource($localStream)) {
                 throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
@@ -87,16 +105,20 @@ readonly class GeminiVideoClient
         return $targetPath;
     }
 
-    private function requestMedia(string $baseUrl, string $apiKey, string $uri, string $proxyUrl = ''): ResponseInterface
+    private function requestMedia(string $baseUrl, array $headers, string $uri, string $proxyUrl = ''): ResponseInterface
     {
         $url = $this->normalizeMediaUrl($baseUrl, $uri);
+        $this->assertAllowedMediaUri($url);
         try {
             $response = $this->createClient($proxyUrl)->get($url, [
-                'headers' => [
-                    'Accept' => '*/*',
-                    'x-goog-api-key' => $apiKey,
-                ],
+                'headers' => array_merge(['Accept' => '*/*'], $headers),
                 'http_errors' => false,
+                'allow_redirects' => [
+                    'max' => 5,
+                    'on_redirect' => function (RequestInterface $_request, ResponseInterface $_response, UriInterface $uri): void {
+                        $this->assertAllowedMediaUri((string) $uri);
+                    },
+                ],
             ]);
             if ($response->getStatusCode() >= 400) {
                 throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
@@ -115,7 +137,7 @@ readonly class GeminiVideoClient
     private function request(
         string $method,
         string $baseUrl,
-        string $apiKey,
+        array $headers,
         string $path,
         ?array $payload,
         array $logContext,
@@ -134,7 +156,7 @@ readonly class GeminiVideoClient
         ]);
 
         try {
-            $response = $this->send($method, $normalizedBaseUrl . $normalizedPath, $apiKey, $payload, $proxyUrl);
+            $response = $this->send($method, $normalizedBaseUrl . $normalizedPath, $headers, $payload, $proxyUrl);
             $body = (string) $response->getBody();
             if (trim($body) === '') {
                 throw $this->responseFormatException();
@@ -187,13 +209,10 @@ readonly class GeminiVideoClient
         }
     }
 
-    private function send(string $method, string $url, string $apiKey, ?array $payload, string $proxyUrl): ResponseInterface
+    private function send(string $method, string $url, array $headers, ?array $payload, string $proxyUrl): ResponseInterface
     {
         $options = [
-            'headers' => [
-                'x-goog-api-key' => $apiKey,
-                'Content-Type' => 'application/json',
-            ],
+            'headers' => array_merge($headers, ['Content-Type' => 'application/json']),
         ];
         if ($payload !== null) {
             $options['json'] = $payload;
@@ -214,6 +233,29 @@ readonly class GeminiVideoClient
             return $uri;
         }
         return rtrim($baseUrl, '/') . '/' . ltrim($uri, '/');
+    }
+
+    private function assertAllowedMediaUri(string $uri): void
+    {
+        $parts = parse_url($uri);
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        $port = $parts['port'] ?? 443;
+        $allowed = in_array($host, [
+            'generativelanguage.googleapis.com',
+            'aiplatform.googleapis.com',
+            'storage.googleapis.com',
+            'googleusercontent.com',
+            'gstatic.com',
+        ], true)
+            || str_ends_with($host, '-aiplatform.googleapis.com')
+            || str_ends_with($host, '.storage.googleapis.com')
+            || str_ends_with($host, '.googleusercontent.com')
+            || str_ends_with($host, '.gstatic.com');
+        if ($scheme !== 'https' || $host === '' || $port !== 443 || isset($parts['user']) || isset($parts['pass'])
+            || ! $allowed) {
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
+        }
     }
 
     private function responseFormatException(?Throwable $previous = null): ProviderVideoException

@@ -36,12 +36,6 @@ class QueueExecutorConfigRepository implements QueueExecutorConfigRepositoryInte
         }
 
         $config = is_array($providerConfig->config) ? $providerConfig->config : [];
-        $baseUrl = $this->resolveStringConfig($config, ['url', 'base_url']);
-        $apiKey = $this->resolveStringConfig($config, ['api_key', 'apiKey']);
-        if ($baseUrl === '' || $apiKey === '') {
-            throw new RuntimeException('video service provider config missing');
-        }
-
         if (! empty($config['use_proxy'])) {
             $proxyUrl = di(ProxyConfigResolverInterface::class)->resolve($config);
             if ($proxyUrl !== null && $proxyUrl !== '') {
@@ -49,12 +43,10 @@ class QueueExecutorConfigRepository implements QueueExecutorConfigRepositoryInte
             }
         }
 
-        return new QueueExecutorConfig(
-            baseUrl: $baseUrl,
-            apiKey: $apiKey,
-            pollIntervalSeconds: max(1, (int) config('model_gateway.video_queue.poll_interval_seconds', 3)),
-            maxPollTimes: max(20, (int) config('model_gateway.video_queue.poll_max_times', 200)),
-            extraConfig: $config,
+        return QueueExecutorConfig::fromProviderConfig(
+            $config,
+            max(1, (int) config('model_gateway.video_queue.poll_interval_seconds', 3)),
+            max(20, (int) config('model_gateway.video_queue.poll_max_times', 200)),
         );
     }
 
@@ -99,18 +91,6 @@ class QueueExecutorConfigRepository implements QueueExecutorConfigRepositoryInte
         }
 
         return $providerModel->service_provider_config_id;
-    }
-
-    private function resolveStringConfig(array $config, array $keys): string
-    {
-        foreach ($keys as $key) {
-            $value = $config[$key] ?? null;
-            if (is_string($value) && trim($value) !== '') {
-                return trim($value);
-            }
-        }
-
-        return '';
     }
 
     private function isOfficialModel(ProviderModelModel $providerModel): bool
