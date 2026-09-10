@@ -131,6 +131,10 @@ class AsrFileAppService extends AbstractAppService
             // 3. 验证项目权限
             $this->validationService->getAccessibleProjectWithEditor((int) $summaryRequest->projectId, $userId, $organizationCode);
 
+            if ($summaryRequest->hasFileId()) {
+                $this->validateSummaryFile($summaryRequest->fileId, $summaryRequest->projectId);
+            }
+
             // 先显影项目再投递 MQ，确保音频项目列表的 is_hidden=0 查询能够立即看到项目。
             // Consumer 内仍会再次幂等显影，覆盖 MQ 延迟或重试场景。
             $this->exposeSummaryProject(
@@ -1854,6 +1858,18 @@ class AsrFileAppService extends AbstractAppService
         }
 
         return ['tasks' => $results];
+    }
+
+    private function validateSummaryFile(?string $fileId, string $projectId): void
+    {
+        $fileEntity = $this->taskFileDomainService->getById((int) $fileId);
+        if ($fileEntity === null) {
+            ExceptionBuilder::throw(AsrErrorCode::FileNotExist, '', ['fileId' => $fileId]);
+        }
+
+        if ((string) $fileEntity->getProjectId() !== $projectId) {
+            ExceptionBuilder::throw(AsrErrorCode::FileNotBelongToProject, '', ['fileId' => $fileId]);
+        }
     }
 
     /**
