@@ -604,7 +604,10 @@ describe("MobileAudioRecordingDetailPage", () => {
 				audio: { file_id: "audio-mobile-001", file_name: "recording-mock.mp3" },
 				summaryFiles: [{ type: "summary", fileId: "summary-file", fileName: "summary.md" }],
 				magicProject: { file_id: "magic-project-file-001" },
-				magicProjectConfig: { metadata: { speakers: { "Speaker-1": "Saved Host" } } },
+				magicProjectConfig: {
+					files: { notes: "notes/mock-notes.md" },
+					metadata: { speakers: { "Speaker-1": "Saved Host" } },
+				},
 			},
 			texts: {
 				transcript: { fileId: "transcript-file", content: "Transcript mock" },
@@ -638,7 +641,25 @@ describe("MobileAudioRecordingDetailPage", () => {
 				selectedSpeakerIds: ["Speaker-1"],
 				transcriptContent: "Transcript mock",
 				notesContent: "Notes mock",
+				showNotesTab: true,
 			}),
+		)
+	})
+
+	it("hides notes when the bundle config does not declare them", () => {
+		const detailData = detailDataMock()
+		detailDataMock.mockReturnValue({
+			...detailData,
+			fileMap: {
+				...detailData.fileMap,
+				magicProjectConfig: { metadata: { speakers: {} } },
+			},
+		})
+
+		render(<MobileAudioRecordingDetailPage />)
+
+		expect(sourcePanelPropsMock).toHaveBeenCalledWith(
+			expect.objectContaining({ showNotesTab: false }),
 		)
 	})
 

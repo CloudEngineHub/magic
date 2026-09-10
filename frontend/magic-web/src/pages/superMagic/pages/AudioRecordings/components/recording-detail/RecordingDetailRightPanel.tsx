@@ -12,6 +12,7 @@ import { RECORDING_DESKTOP_MD_CONTENT_CLASS } from "./recording-detail-layout"
 import { RecordingMarkdownContent } from "./RecordingMarkdownContent"
 import { RecordingSummaryContent } from "./RecordingSummaryContent"
 import { resolveSummaryTypeLabel } from "./resolve-summary-type-label"
+import { hasConfiguredRecordingFile } from "../../utils/recording-detail-files"
 
 interface RecordingDetailRightPanelProps {
 	fileMap: RecordingDetailFileMap | null
@@ -187,7 +188,7 @@ interface RightPanelTab {
 	badgeCount?: number
 }
 
-/** Assembles summary tabs from fileMap and always appends the notes tab. */
+/** Assembles summary tabs and appends notes when config and access gates allow it. */
 function buildRightPanelTabs(
 	fileMap: RecordingDetailFileMap | null,
 	summaryContent: Record<string, string | undefined>,
@@ -203,7 +204,8 @@ function buildRightPanelTabs(
 			content: summaryContent[file.type],
 		})) ?? []
 
-	if (!showNotesTab) return summaryTabs
+	// Notes follows the same config-driven visibility rule as generated summary tabs.
+	if (!showNotesTab || !hasConfiguredRecordingFile(fileMap, "notes")) return summaryTabs
 
 	const notesTab: RightPanelTab = {
 		key: "notes",

@@ -18,7 +18,13 @@ vi.mock("../RecordingDetailSummaryState", () => ({
 }))
 
 vi.mock("../RecordingDetailTabStrip", () => ({
-	RecordingDetailTabStrip: () => <div data-testid="summary-tabs" />,
+	RecordingDetailTabStrip: ({ tabs }: { tabs: Array<{ key: string }> }) => (
+		<div data-testid="summary-tabs">
+			{tabs.map((tab) => (
+				<span key={tab.key} data-testid={`summary-tab-${tab.key}`} />
+			))}
+		</div>
+	),
 }))
 
 vi.mock("../RecordingDetailEmptyState", () => ({
@@ -73,7 +79,16 @@ describe("RecordingDetailRightPanel responsive height", () => {
 
 	/** Verifies ready summary content uses the same shrinkable panel contract. */
 	it("allows the ready summary panel to shrink with its parent", () => {
-		render(<RecordingDetailRightPanel {...baseProps} summaryReady />)
+		render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				fileMap={{
+					summaryFiles: [],
+					magicProjectConfig: { files: { notes: "notes/mock-notes.md" } },
+				}}
+			/>,
+		)
 
 		const panel = screen.getByTestId("recording-detail-right-panel")
 		expect(panel).toHaveClass("h-full", "min-h-0")
@@ -86,6 +101,14 @@ describe("RecordingDetailRightPanel responsive height", () => {
 			<RecordingDetailRightPanel
 				{...baseProps}
 				summaryReady
+				fileMap={{
+					summaryFiles: [],
+					notes: {
+						file_id: "mock-notes-file",
+						file_name: "mock-notes.md",
+					},
+					magicProjectConfig: { files: { notes: "notes/mock-notes.md" } },
+				}}
 				notesContent="![mock](./images/mock.png)"
 				attachmentTree={[
 					{
@@ -101,6 +124,50 @@ describe("RecordingDetailRightPanel responsive height", () => {
 		const markdown = screen.getByTestId("markdown-content")
 		expect(markdown).toHaveAttribute("data-attachment-count", "1")
 		expect(markdown).toHaveAttribute("data-relative-file-path", "notes/mock.md")
+	})
+
+	it("shows notes only when the bundle config declares them", () => {
+		const { rerender } = render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				fileMap={{
+					summaryFiles: [],
+					magicProjectConfig: { files: { notes: "notes/mock-notes.md" } },
+				}}
+			/>,
+		)
+
+		expect(screen.getByTestId("summary-tab-notes")).toBeInTheDocument()
+
+		rerender(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				fileMap={{
+					summaryFiles: [],
+					notes: { file_id: "fallback-notes-file", file_name: "fallback-notes.md" },
+				}}
+			/>,
+		)
+
+		expect(screen.queryByTestId("summary-tab-notes")).not.toBeInTheDocument()
+	})
+
+	it("keeps the share visibility gate in addition to the bundle config", () => {
+		render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				showNotesTab={false}
+				fileMap={{
+					summaryFiles: [],
+					magicProjectConfig: { files: { notes: "notes/mock-notes.md" } },
+				}}
+			/>,
+		)
+
+		expect(screen.queryByTestId("summary-tab-notes")).not.toBeInTheDocument()
 	})
 
 	it("passes attachment context to markdown summary content", () => {

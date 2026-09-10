@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import { buildRecordingDetailFileMap, flattenRecordingAttachments } from "../recording-detail-files"
+import {
+	buildRecordingDetailFileMap,
+	flattenRecordingAttachments,
+	hasConfiguredRecordingFile,
+} from "../recording-detail-files"
 import type { MagicProjectConfig } from "../../types/recording-detail"
 
 /** Builds a minimal attachment row so file-map tests stay focused on lookup behavior. */
@@ -44,6 +48,37 @@ function createMagicProjectConfig(files: Record<string, string>): MagicProjectCo
 }
 
 describe("recording detail files", () => {
+	it("detects only non-empty file declarations from magic.project config", () => {
+		expect(
+			hasConfiguredRecordingFile(
+				{
+					summaryFiles: [],
+					magicProjectConfig: { files: { notes: "notes/mock-notes.md" } },
+				},
+				"notes",
+			),
+		).toBe(true)
+		expect(
+			hasConfiguredRecordingFile(
+				{
+					summaryFiles: [],
+					notes: createAttachment({ file_name: "fallback-notes.md" }),
+					magicProjectConfig: { files: { notes: "   " } },
+				},
+				"notes",
+			),
+		).toBe(false)
+		expect(
+			hasConfiguredRecordingFile(
+				{
+					summaryFiles: [],
+					notes: createAttachment({ file_name: "fallback-notes.md" }),
+				},
+				"notes",
+			),
+		).toBe(false)
+	})
+
 	it("flattens tree and list attachments without duplicating the same file", () => {
 		const transcript = createAttachment({
 			file_id: "file-transcript-001",
