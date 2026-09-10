@@ -352,15 +352,19 @@ export function useGapHandles({
 			capture: true,
 			passive: false,
 		})
+		const handleWindowBlur = () => {
+			void finishGapDrag()
+		}
+
 		document.addEventListener("keydown", handleKeyDown, true)
-		window.addEventListener("blur", finishGapDrag)
+		window.addEventListener("blur", handleWindowBlur)
 
 		return () => {
 			document.removeEventListener("pointermove", handlePointerMove, true)
 			document.removeEventListener("pointerup", handlePointerUp, true)
 			document.removeEventListener("pointercancel", handlePointerUp, true)
 			document.removeEventListener("keydown", handleKeyDown, true)
-			window.removeEventListener("blur", finishGapDrag)
+			window.removeEventListener("blur", handleWindowBlur)
 			if (gapRafRef.current) window.cancelAnimationFrame(gapRafRef.current)
 		}
 	}, [finishGapDrag, updateGapDrag])

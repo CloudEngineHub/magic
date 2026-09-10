@@ -76,7 +76,7 @@
 		"typecheck": "tsc -p tsconfig.json --noEmit"
 	},
 	"dependencies": {
-		"@zumer/snapdom": "^2.0.2"
+		"@zumer/snapdom": "^2.24.17"
 	},
 	"devDependencies": {
 		"@types/node": "^22.16.4",

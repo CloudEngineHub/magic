@@ -373,7 +373,10 @@ function seekVideoForCaptureFrame(video: HTMLVideoElement): Promise<void> {
 			return
 		}
 		try {
-			const targetTime = Math.min(0.001, Number.isFinite(video.duration) ? video.duration : 0.001)
+			const targetTime = Math.min(
+				0.001,
+				Number.isFinite(video.duration) ? video.duration : 0.001,
+			)
 			if (Math.abs(video.currentTime - targetTime) < 1e-6) {
 				finish()
 				return
@@ -387,7 +390,180 @@ function seekVideoForCaptureFrame(video: HTMLVideoElement): Promise<void> {
 	})
 }
 
+interface VideoCaptureSnapshot {
+	muted: boolean
+	currentTime: number
+	paused: boolean
+}
+
+function readVideoCaptureSnapshot(video: HTMLVideoElement): VideoCaptureSnapshot {
+	return {
+		muted: video.muted,
+		currentTime: video.currentTime,
+		paused: video.paused,
+	}
+}
+
+function restoreVideoCaptureSnapshot(
+	video: HTMLVideoElement,
+	snapshot: VideoCaptureSnapshot,
+): void {
+	try {
+		video.muted = snapshot.muted
+	} catch {
+		// Detached media can reject property writes.
+	}
+	try {
+		if (
+			Number.isFinite(snapshot.currentTime) &&
+			Math.abs(video.currentTime - snapshot.currentTime) > 1e-6
+		) {
+			video.currentTime = snapshot.currentTime
+		}
+	} catch {
+		// Seeking back can fail if the source was replaced.
+	}
+	try {
+		if (snapshot.paused && !video.paused) video.pause()
+		else if (!snapshot.paused && video.paused) void video.play().catch(() => undefined)
+	} catch {
+		// Autoplay policies may block resume after load().
+	}
+}
+
+function hasDecodedCaptureFrame(video: HTMLVideoElement): boolean {
+	return video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0
+}
+
+function readVideoPosterUrl(video: HTMLVideoElement): string {
+	return video.poster || video.getAttribute("poster") || ""
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+	if (typeof FileReader === "undefined") {
+		throw new Error("FileReader is unavailable")
+	}
+	return await new Promise<string>((resolve, reject) => {
+		const reader = new FileReader()
+		reader.onload = () => {
+			if (typeof reader.result === "string") resolve(reader.result)
+			else reject(new Error("Poster encode produced no data URL"))
+		}
+		reader.onerror = () => reject(reader.error ?? new Error("Failed to encode poster"))
+		reader.readAsDataURL(blob)
+	})
+}
+
+async function materializePosterSrc(poster: string): Promise<string | null> {
+	if (!poster) return null
+	if (poster.startsWith("data:")) return poster
+	const controller = new AbortController()
+	const timeoutId = window.setTimeout(() => controller.abort(), VIDEO_DATA_WAIT_TIMEOUT_MS)
+	try {
+		const response = await fetch(poster, { signal: controller.signal })
+		if (!response.ok) return poster
+		const blob = await response.blob()
+		if (blob.type && !blob.type.startsWith("image/")) return poster
+		return await blobToDataUrl(blob)
+	} catch {
+		return poster
+	} finally {
+		window.clearTimeout(timeoutId)
+	}
+}
+
+function waitForPosterImage(image: HTMLImageElement): Promise<void> {
+	return new Promise((resolve) => {
+		let settled = false
+		const finish = () => {
+			if (settled) return
+			settled = true
+			window.clearTimeout(timeoutId)
+			image.removeEventListener("load", finish)
+			image.removeEventListener("error", finish)
+			resolve()
+		}
+		const timeoutId = window.setTimeout(finish, VIDEO_DATA_WAIT_TIMEOUT_MS)
+		if (image.complete) {
+			finish()
+			return
+		}
+		image.addEventListener("load", finish, { once: true })
+		image.addEventListener("error", finish, { once: true })
+	})
+}
+
+function overlayPosterOnVideo(
+	video: HTMLVideoElement,
+	src: string,
+): { image: HTMLImageElement; restore: () => void } {
+	const document = video.ownerDocument
+	const image = document.createElement("img")
+	image.setAttribute("data-magic-video-poster-capture", "true")
+	image.alt = ""
+	image.src = src
+	const rect = video.getBoundingClientRect()
+	const style = window.getComputedStyle(video)
+	const parent = video.parentNode
+	const nextSibling = video.nextSibling
+	image.style.width = `${Math.max(1, Math.round(rect.width))}px`
+	image.style.height = `${Math.max(1, Math.round(rect.height))}px`
+	image.style.objectFit = style.objectFit || "contain"
+	image.style.objectPosition = style.objectPosition
+	image.style.display = style.display === "none" ? "block" : style.display
+	image.style.margin = "0"
+	image.style.borderRadius = style.borderRadius
+	video.replaceWith(image)
+	return {
+		image,
+		restore: () => {
+			if (image.parentNode) {
+				image.replaceWith(video)
+				return
+			}
+			image.remove()
+			if (parent && !video.parentNode) parent.insertBefore(video, nextSibling)
+		},
+	}
+}
+
+async function prepareVideoPosterOverlays(videos: HTMLVideoElement[]): Promise<Array<() => void>> {
+	const restores: Array<() => void> = []
+	try {
+		await Promise.all(
+			videos.map(async (video) => {
+				if (hasDecodedCaptureFrame(video)) return
+				const poster = readVideoPosterUrl(video)
+				if (!poster) return
+				const src = await materializePosterSrc(poster)
+				if (!src) return
+				const overlay = overlayPosterOnVideo(video, src)
+				restores.push(overlay.restore)
+				await waitForPosterImage(overlay.image)
+			}),
+		)
+		return restores
+	} catch (error) {
+		for (const restore of restores) restore()
+		throw error
+	}
+}
+
 async function waitForVideoCaptureFrame(video: HTMLVideoElement): Promise<void> {
+	if (hasDecodedCaptureFrame(video)) {
+		await waitForVideoFramePresented(video)
+		return
+	}
+	if (readVideoPosterUrl(video)) {
+		// snapdom drawImage of an empty video is a blank PNG, not an error.
+		return
+	}
+	if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+		await waitForVideoFramePresented(video)
+		return
+	}
+
+	// Mute only while forcing a frame so seek/load cannot blip audio.
 	video.muted = true
 	if (video.networkState === HTMLMediaElement.NETWORK_EMPTY && video.currentSrc) {
 		try {
@@ -404,15 +580,34 @@ async function waitForVideoCaptureFrame(video: HTMLVideoElement): Promise<void> 
 	await waitForVideoFramePresented(video)
 }
 
-/** Wait for clip videos to decode a frame before DOM capture. */
+/** Wait for clip videos to decode a frame; restore playback after capture. */
 export async function waitForCaptureVideosInClip(
 	root: HTMLElement,
 	clip: CaptureClipRect,
-): Promise<void> {
+): Promise<() => void> {
 	const videos = findVideosInCaptureClip(root, clip)
-	if (videos.length === 0) return
-	await Promise.all(videos.map((video) => waitForVideoCaptureFrame(video)))
-	await waitForAnimationFrameWithTimeout(CAPTURE_FRAME_WAIT_TIMEOUT_MS)
+	if (videos.length === 0) return () => undefined
+	const snapshots = videos.map((video) => ({
+		video,
+		...readVideoCaptureSnapshot(video),
+	}))
+	let restorePosters: () => void = () => {}
+	try {
+		await Promise.all(videos.map((video) => waitForVideoCaptureFrame(video)))
+		const posterRestores = await prepareVideoPosterOverlays(videos)
+		restorePosters = () => {
+			for (const restore of posterRestores) restore()
+		}
+		await waitForAnimationFrameWithTimeout(CAPTURE_FRAME_WAIT_TIMEOUT_MS)
+	} catch (error) {
+		restorePosters()
+		for (const snapshot of snapshots) restoreVideoCaptureSnapshot(snapshot.video, snapshot)
+		throw error
+	}
+	return () => {
+		restorePosters()
+		for (const snapshot of snapshots) restoreVideoCaptureSnapshot(snapshot.video, snapshot)
+	}
 }
 
 function resolveVideoAlignedClip(
@@ -422,6 +617,7 @@ function resolveVideoAlignedClip(
 ): CaptureClipRect {
 	const centerX = selection.left + selection.width / 2
 	const centerY = selection.top + selection.height / 2
+	if (typeof document.elementFromPoint !== "function") return clip
 	const target = document.elementFromPoint(centerX, centerY)
 	const video = target?.closest("video")
 	if (!(video instanceof HTMLVideoElement) || !root.contains(video)) return clip
@@ -513,17 +709,17 @@ export async function captureScreenshotBlob(
 			animation: none !important;
 			transition: none !important;
 			caret-color: transparent !important;
-			cursor: none !important;
 		}
 	`
 	;(document.head ?? document.documentElement).appendChild(style)
+	let restoreCaptureVideos: () => void = () => {}
 	try {
 		throwIfAborted(hooks.shouldAbort)
 		await waitForCaptureFrame()
 		throwIfAborted(hooks.shouldAbort)
-		await waitForCaptureVideosInClip(root, clip)
-		throwIfAborted(hooks.shouldAbort)
 		clip = resolveVideoAlignedClip(root, request.selection, clip)
+		throwIfAborted(hooks.shouldAbort)
+		restoreCaptureVideos = await waitForCaptureVideosInClip(root, clip)
 		throwIfAborted(hooks.shouldAbort)
 		hooks.onProgress?.()
 		const result = await snapdom(root, {
@@ -557,6 +753,7 @@ export async function captureScreenshotBlob(
 		throwIfAborted(hooks.shouldAbort)
 		return await encodeCanvasToScreenshotBlob(outputCanvas, hooks.shouldAbort)
 	} finally {
+		restoreCaptureVideos()
 		style.remove()
 	}
 }

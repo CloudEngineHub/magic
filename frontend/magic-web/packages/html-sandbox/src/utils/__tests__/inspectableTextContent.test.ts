@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
 	getInspectableTextContent,
+	INSPECTABLE_TEXT_CONTENT_SCRIPT,
 	isNonTextualElementTag,
 	NON_TEXTUAL_ELEMENT_TAGS,
 } from "../inspectableTextContent"
@@ -72,5 +73,54 @@ describe("getInspectableTextContent", () => {
 		svg.appendChild(label)
 
 		expect(getInspectableTextContent(svg)).toBe("Play")
+	})
+
+	it("does not insert spaces between adjacent inline nodes", () => {
+		const price = document.createElement("p")
+		const symbol = document.createElement("span")
+		symbol.textContent = "￥"
+		const amount = document.createElement("strong")
+		amount.textContent = "100"
+		price.append(symbol, amount)
+
+		expect(getInspectableTextContent(price)).toBe("￥100")
+	})
+
+	it("keeps Chinese words intact when inline tags split them", () => {
+		const heading = document.createElement("h2")
+		const first = document.createElement("span")
+		first.textContent = "产品"
+		const second = document.createElement("em")
+		second.textContent = "演示"
+		heading.append(first, second)
+
+		expect(getInspectableTextContent(heading)).toBe("产品演示")
+	})
+
+	it("matches the inlined browser script on the same fixtures", () => {
+		const getFromScript = new Function(
+			`${INSPECTABLE_TEXT_CONTENT_SCRIPT}; return getInspectableTextContent;`,
+		)() as (element: Element) => string
+
+		const video = document.createElement("video")
+		video.textContent = "您的浏览器不支持视频播放，请升级浏览器。"
+		const container = document.createElement("section")
+		const title = document.createElement("h2")
+		title.textContent = "产品演示"
+		container.append(title, video)
+		document.body.appendChild(container)
+
+		const price = document.createElement("p")
+		const symbol = document.createElement("span")
+		symbol.textContent = "￥"
+		const amount = document.createElement("strong")
+		amount.textContent = "100"
+		price.append(symbol, amount)
+
+		expect(getFromScript(video)).toBe(getInspectableTextContent(video))
+		expect(getFromScript(container)).toBe(getInspectableTextContent(container))
+		expect(getFromScript(price)).toBe(getInspectableTextContent(price))
+
+		container.remove()
 	})
 })

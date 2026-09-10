@@ -201,7 +201,11 @@ describe("findVideosInCaptureClip", () => {
 })
 
 describe("waitForCaptureVideosInClip", () => {
-	afterEach(() => vi.restoreAllMocks())
+	afterEach(() => {
+		vi.restoreAllMocks()
+		vi.unstubAllGlobals()
+		vi.useRealTimers()
+	})
 
 	it("waits for loadeddata before resolving", async () => {
 		vi.useFakeTimers()
@@ -228,7 +232,8 @@ describe("waitForCaptureVideosInClip", () => {
 		})
 		video.dispatchEvent(new Event("loadeddata"))
 		await vi.advanceTimersByTimeAsync(200)
-		await pending
+		const restore = await pending
+		restore()
 		root.remove()
 		vi.useRealTimers()
 	})
@@ -249,7 +254,237 @@ describe("waitForCaptureVideosInClip", () => {
 
 		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
 		await vi.advanceTimersByTimeAsync(VIDEO_DATA_WAIT_TIMEOUT_MS + 200)
-		await pending
+		const restore = await pending
+		restore()
+		root.remove()
+		vi.useRealTimers()
+	})
+
+	it("does not leave a ready video muted after capture wait", async () => {
+		vi.useFakeTimers()
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			return window.setTimeout(() => callback(0), 0) as unknown as number
+		})
+		const root = document.createElement("div")
+		document.body.appendChild(root)
+		mockBoundingClientRect(root, { left: 0, top: 0, width: 200, height: 200 })
+
+		const video = document.createElement("video")
+		video.muted = false
+		Object.defineProperty(video, "readyState", {
+			configurable: true,
+			get: () => HTMLMediaElement.HAVE_CURRENT_DATA,
+		})
+		root.appendChild(video)
+		mockBoundingClientRect(video, { left: 10, top: 10, width: 120, height: 80 })
+
+		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
+		await vi.advanceTimersByTimeAsync(200)
+		const restore = await pending
+		restore()
+		expect(video.muted).toBe(false)
+		root.remove()
+		vi.useRealTimers()
+	})
+
+	it("overlays the poster when the video has no decoded frame", async () => {
+		vi.useFakeTimers()
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			return window.setTimeout(() => callback(0), 0) as unknown as number
+		})
+		const root = document.createElement("div")
+		document.body.appendChild(root)
+		mockBoundingClientRect(root, { left: 0, top: 0, width: 200, height: 200 })
+
+		const poster =
+			"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+		const video = document.createElement("video")
+		video.poster = poster
+		Object.defineProperty(video, "readyState", {
+			configurable: true,
+			get: () => HTMLMediaElement.HAVE_NOTHING,
+		})
+		Object.defineProperty(video, "videoWidth", {
+			configurable: true,
+			get: () => 0,
+		})
+		root.appendChild(video)
+		mockBoundingClientRect(video, { left: 10, top: 10, width: 120, height: 80 })
+
+		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
+		await vi.advanceTimersByTimeAsync(VIDEO_DATA_WAIT_TIMEOUT_MS + 200)
+		const restore = await pending
+		const overlay = root.querySelector<HTMLImageElement>("img[data-magic-video-poster-capture]")
+		expect(overlay).toBeInstanceOf(HTMLImageElement)
+		expect(overlay?.src).toBe(poster)
+		expect(video.muted).toBe(false)
+		expect(root.contains(video)).toBe(false)
+		restore()
+		expect(root.contains(video)).toBe(true)
+		expect(root.querySelector("img[data-magic-video-poster-capture]")).toBeNull()
+		root.remove()
+		vi.useRealTimers()
+	})
+
+	it("inlines a remote poster so snapdom can paint it", async () => {
+		vi.useFakeTimers()
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			return window.setTimeout(() => callback(0), 0) as unknown as number
+		})
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(new Blob(["poster-bytes"], { type: "image/png" }), {
+				status: 200,
+				headers: { "content-type": "image/png" },
+			}),
+		)
+		vi.stubGlobal(
+			"FileReader",
+			class {
+				result: string | null = null
+				onload: ((event: ProgressEvent<FileReader>) => void) | null = null
+				onerror: ((event: ProgressEvent<FileReader>) => void) | null = null
+				readAsDataURL() {
+					this.result = "data:image/png;base64,ZmFrZQ=="
+					this.onload?.(null as never)
+				}
+			},
+		)
+		const root = document.createElement("div")
+		document.body.appendChild(root)
+		mockBoundingClientRect(root, { left: 0, top: 0, width: 200, height: 200 })
+
+		const video = document.createElement("video")
+		video.poster = "https://cdn.example/cover.png"
+		Object.defineProperty(video, "readyState", {
+			configurable: true,
+			get: () => HTMLMediaElement.HAVE_NOTHING,
+		})
+		Object.defineProperty(video, "videoWidth", {
+			configurable: true,
+			get: () => 0,
+		})
+		root.appendChild(video)
+		mockBoundingClientRect(video, { left: 10, top: 10, width: 120, height: 80 })
+
+		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
+		await vi.advanceTimersByTimeAsync(VIDEO_DATA_WAIT_TIMEOUT_MS + 200)
+		const restore = await pending
+		const overlay = root.querySelector<HTMLImageElement>("img[data-magic-video-poster-capture]")
+		expect(overlay?.src).toBe("data:image/png;base64,ZmFrZQ==")
+		expect(fetch).toHaveBeenCalledWith(
+			"https://cdn.example/cover.png",
+			expect.objectContaining({ signal: expect.any(AbortSignal) }),
+		)
+		restore()
+		root.remove()
+		vi.unstubAllGlobals()
+		vi.useRealTimers()
+	})
+
+	it("falls back to the poster URL when fetch hangs", async () => {
+		vi.useFakeTimers()
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			return window.setTimeout(() => callback(0), 0) as unknown as number
+		})
+		vi.spyOn(globalThis, "fetch").mockImplementation(
+			(_input, init) =>
+				new Promise<Response>((_resolve, reject) => {
+					init?.signal?.addEventListener("abort", () => {
+						reject(new DOMException("The operation was aborted.", "AbortError"))
+					})
+				}),
+		)
+		const root = document.createElement("div")
+		document.body.appendChild(root)
+		mockBoundingClientRect(root, { left: 0, top: 0, width: 200, height: 200 })
+
+		const video = document.createElement("video")
+		video.muted = false
+		video.poster = "https://cdn.example/cover.png"
+		Object.defineProperty(video, "readyState", {
+			configurable: true,
+			get: () => HTMLMediaElement.HAVE_NOTHING,
+		})
+		Object.defineProperty(video, "videoWidth", {
+			configurable: true,
+			get: () => 0,
+		})
+		root.appendChild(video)
+		mockBoundingClientRect(video, { left: 10, top: 10, width: 120, height: 80 })
+
+		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
+		await vi.advanceTimersByTimeAsync(VIDEO_DATA_WAIT_TIMEOUT_MS * 2 + 400)
+		const restore = await pending
+		const overlay = root.querySelector<HTMLImageElement>("img[data-magic-video-poster-capture]")
+		expect(overlay?.src).toBe("https://cdn.example/cover.png")
+		expect(video.muted).toBe(false)
+		restore()
+		expect(root.contains(video)).toBe(true)
+		root.remove()
+	})
+
+	it("does not overlay the poster when the video already has a frame", async () => {
+		vi.useFakeTimers()
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			return window.setTimeout(() => callback(0), 0) as unknown as number
+		})
+		const root = document.createElement("div")
+		document.body.appendChild(root)
+		mockBoundingClientRect(root, { left: 0, top: 0, width: 200, height: 200 })
+
+		const video = document.createElement("video")
+		video.poster =
+			"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+		Object.defineProperty(video, "readyState", {
+			configurable: true,
+			get: () => HTMLMediaElement.HAVE_CURRENT_DATA,
+		})
+		Object.defineProperty(video, "videoWidth", {
+			configurable: true,
+			get: () => 640,
+		})
+		root.appendChild(video)
+		mockBoundingClientRect(video, { left: 10, top: 10, width: 120, height: 80 })
+
+		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
+		await vi.advanceTimersByTimeAsync(200)
+		const restore = await pending
+		expect(root.querySelector("img[data-magic-video-poster-capture]")).toBeNull()
+		restore()
+		root.remove()
+		vi.useRealTimers()
+	})
+
+	it("restores muted and currentTime after seeking a metadata-only video", async () => {
+		vi.useFakeTimers()
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			return window.setTimeout(() => callback(0), 0) as unknown as number
+		})
+		const root = document.createElement("div")
+		document.body.appendChild(root)
+		mockBoundingClientRect(root, { left: 0, top: 0, width: 200, height: 200 })
+
+		const video = document.createElement("video")
+		video.muted = false
+		video.currentTime = 12
+		Object.defineProperty(video, "readyState", {
+			configurable: true,
+			get: () => HTMLMediaElement.HAVE_METADATA,
+		})
+		Object.defineProperty(video, "duration", {
+			configurable: true,
+			get: () => 30,
+		})
+		root.appendChild(video)
+		mockBoundingClientRect(video, { left: 10, top: 10, width: 120, height: 80 })
+
+		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
+		await vi.advanceTimersByTimeAsync(VIDEO_DATA_WAIT_TIMEOUT_MS * 2 + 400)
+		const restore = await pending
+		expect(video.muted).toBe(true)
+		restore()
+		expect(video.muted).toBe(false)
+		expect(video.currentTime).toBe(12)
 		root.remove()
 		vi.useRealTimers()
 	})
