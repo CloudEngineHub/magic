@@ -209,7 +209,7 @@ export const INSPECTOR_HANDLER_SCRIPT = `
       }
     }
 
-    var rawText = (el.textContent || "").trim();
+    var rawText = getInspectableTextContent(el);
     var textContent = rawText.length > 120 ? rawText.slice(0,120) + "…" : rawText;
 
     var classList = [];

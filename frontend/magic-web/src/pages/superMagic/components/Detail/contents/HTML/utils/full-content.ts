@@ -2019,7 +2019,7 @@ function getInlineInspectorFallbackScript(enable = false): string {
 				if (el.className && typeof el.className === "string") {
 					classList = el.className.trim().split(/\\s+/).filter(Boolean);
 				}
-				var rawText = (el.textContent || "").trim();
+				var rawText = getInspectableTextContent(el);
 				return {
 					selector: getElementSelector(el),
 					tagName: el.tagName.toLowerCase(),

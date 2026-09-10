@@ -1363,7 +1363,16 @@ function ElementInfoCard({
 	}
 
 	const handleSendToAgent = () => {
-		onSendToAgent?.(buildAgentPromptContent(info, t("stylePanel.inspector.agentPromptTitle")))
+		onSendToAgent?.(
+			buildAgentPromptContent(
+				info,
+				t("stylePanel.inspector.agentPromptTitle"),
+				undefined,
+				undefined,
+				undefined,
+				t,
+			),
+		)
 	}
 
 	const importantStyles = [

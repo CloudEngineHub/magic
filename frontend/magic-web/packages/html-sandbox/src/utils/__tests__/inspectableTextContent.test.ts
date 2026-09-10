@@ -1,0 +1,63 @@
+import { describe, expect, it } from "vitest"
+import { getInspectableTextContent } from "../inspectableTextContent"
+
+describe("getInspectableTextContent", () => {
+	it("ignores video fallback copy on the media element itself", () => {
+		const video = document.createElement("video")
+		video.textContent = "您的浏览器不支持视频播放，请升级浏览器。"
+		expect(getInspectableTextContent(video)).toBe("")
+	})
+
+	it("ignores audio fallback copy on the media element itself", () => {
+		const audio = document.createElement("audio")
+		audio.textContent = "您的浏览器不支持音频播放"
+		expect(getInspectableTextContent(audio)).toBe("")
+	})
+
+	it("ignores iframe fallback copy", () => {
+		const iframe = document.createElement("iframe")
+		iframe.textContent = "Your browser does not support iframes."
+		expect(getInspectableTextContent(iframe)).toBe("")
+	})
+
+	it("ignores canvas fallback copy", () => {
+		const canvas = document.createElement("canvas")
+		canvas.textContent = "Your browser does not support HTML canvas."
+		expect(getInspectableTextContent(canvas)).toBe("")
+	})
+
+	it("excludes fallback text nested inside media descendants", () => {
+		const container = document.createElement("div")
+		const video = document.createElement("video")
+		video.textContent = "您的浏览器不支持视频播放，请升级浏览器。"
+		container.appendChild(video)
+		document.body.appendChild(container)
+
+		expect(getInspectableTextContent(container)).toBe("")
+
+		container.remove()
+	})
+
+	it("keeps sibling text while excluding nested media fallback", () => {
+		const container = document.createElement("section")
+		const title = document.createElement("h2")
+		title.textContent = "产品演示"
+		const video = document.createElement("video")
+		video.textContent = "您的浏览器不支持视频播放，请升级浏览器。"
+		container.append(title, video)
+		document.body.appendChild(container)
+
+		expect(getInspectableTextContent(container)).toBe("产品演示")
+
+		container.remove()
+	})
+
+	it("keeps meaningful svg text content", () => {
+		const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+		const label = document.createElementNS("http://www.w3.org/2000/svg", "text")
+		label.textContent = "Play"
+		svg.appendChild(label)
+
+		expect(getInspectableTextContent(svg)).toBe("Play")
+	})
+})

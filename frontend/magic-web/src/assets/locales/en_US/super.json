@@ -6279,6 +6279,14 @@
 			"submit": "Submit",
 			"submitSuccess": "Submitted; waiting for Agent",
 			"submitUnavailable": "Agent submission is not connected on this page",
+			"tagLabel": {
+				"audio": "Audio",
+				"canvas": "Canvas",
+				"embed": "Embedded content",
+				"iframe": "Embedded page",
+				"image": "Image",
+				"video": "Video"
+			},
 			"textContent": "Text Content"
 		},
 		"italic": "Italic",

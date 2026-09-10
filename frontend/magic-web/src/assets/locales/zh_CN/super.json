@@ -6280,6 +6280,14 @@
 			"submit": "提交",
 			"submitSuccess": "已提交，等待 Agent 处理",
 			"submitUnavailable": "当前页面未接入 Agent 提交能力",
+			"tagLabel": {
+				"audio": "音频",
+				"canvas": "画布",
+				"embed": "嵌入内容",
+				"iframe": "嵌入页面",
+				"image": "图片",
+				"video": "视频"
+			},
 			"textContent": "文本内容"
 		},
 		"italic": "斜体",

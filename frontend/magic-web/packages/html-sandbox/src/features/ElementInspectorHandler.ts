@@ -11,6 +11,7 @@
  */
 
 import { getElementSelector, isInjectedElement } from "../utils/dom"
+import { getInspectableTextContent } from "../utils/inspectableTextContent"
 import { getParentOrigin } from "../utils/parentOrigin"
 import {
 	captureScreenshotBlob,
@@ -202,7 +203,9 @@ function getElementLabel(element: Element): string {
 					.join("")
 			: ""
 	const resource = getElementResource(element as HTMLElement)
-	const text = (element.textContent || "").trim().replace(/\s+/g, " ").slice(0, 48)
+	const text = getInspectableTextContent(element as HTMLElement)
+		.replace(/\s+/g, " ")
+		.slice(0, 48)
 	return `${tag}${id}${className}${resource ? ` resource=${resource}` : ""}${text ? ` text=${text}` : ""}`
 }
 
@@ -218,7 +221,7 @@ function sanitizeOuterHTML(element: HTMLElement): string {
 		clone.setAttribute(attribute.name, normalizeAttributeValue(attribute.name, attribute.value))
 	}
 	if (!VOID_TAGS.has(element.tagName.toLowerCase())) {
-		clone.textContent = (element.textContent || "").trim().replace(/\s+/g, " ").slice(0, 120)
+		clone.textContent = getInspectableTextContent(element).replace(/\s+/g, " ").slice(0, 120)
 	}
 	return clone.outerHTML.slice(0, MAX_HTML_LENGTH)
 }
@@ -269,7 +272,7 @@ function collectElementInfo(element: HTMLElement): InspectedElementInfo {
 		}
 	}
 
-	const rawText = element.textContent?.trim() ?? ""
+	const rawText = getInspectableTextContent(element)
 	const textContent =
 		rawText.length > MAX_TEXT_LENGTH ? `${rawText.slice(0, MAX_TEXT_LENGTH)}…` : rawText
 
