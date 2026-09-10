@@ -61,6 +61,18 @@ describe("setElementTextContent", () => {
 		expect(element.querySelector("strong")?.textContent).toBe("World")
 	})
 
+	it("removes trailing direct text when editing block mixed content", () => {
+		const element = document.createElement("p")
+		element.innerHTML = "Hello <strong>World</strong> again"
+
+		expect(getEditableTextContent(element)).toBe("Hello  again")
+		setElementTextContent(element, "Hi there")
+
+		expect(element.textContent).toBe("Hi thereWorld")
+		expect(element.querySelector("strong")?.textContent).toBe("World")
+		expect(getEditableTextContent(element)).toBe("Hi there")
+	})
+
 	it("keeps an empty icon element when updating text", () => {
 		const element = document.createElement("div")
 		const icon = document.createElement("i")

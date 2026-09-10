@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
 import type { LayoutConstraintHint } from "../utils/layoutConstraintHint"
@@ -8,6 +8,10 @@ interface LayoutConstraintHintCardProps {
 	selector?: string
 	editorRef?: React.RefObject<HTMLEditorV2Ref>
 	onApply?: (styles: Record<string, string>) => void
+}
+
+interface PreviewBatch {
+	gen: number
 }
 
 export function LayoutConstraintHintCard({
@@ -20,6 +24,7 @@ export function LayoutConstraintHintCard({
 	const previewGenRef = useRef(0)
 	const previewSessionRef = useRef(false)
 	const previewPromiseRef = useRef<Promise<void> | null>(null)
+	const previewBatchRef = useRef<PreviewBatch | null>(null)
 	const message =
 		hint.kind === "distributed-alignment"
 			? t("stylePanel.layoutHintDistributed")
@@ -38,6 +43,32 @@ export function LayoutConstraintHintCard({
 		previewSessionRef.current = false
 	}
 
+	const cancelPreviewBatch = useCallback(
+		async (batch: PreviewBatch | null = previewBatchRef.current) => {
+			previewBatchRef.current = null
+			previewSessionRef.current = false
+			const editor = editorRef?.current
+			if (!batch || !editor) return
+			try {
+				await editor.cancelBatchOperation()
+			} catch (error) {
+				console.error("[LayoutConstraintHint] Failed to cancel preview batch:", error)
+			}
+		},
+		[editorRef],
+	)
+
+	// Invalidate in-flight previews and cancel any active batch when the
+	// component unmounts (e.g. the panel closes or the selection changes).
+	useEffect(() => {
+		return () => {
+			previewGenRef.current += 1
+			previewSessionRef.current = false
+			previewPromiseRef.current = null
+			void cancelPreviewBatch()
+		}
+	}, [cancelPreviewBatch])
+
 	async function waitForPreview() {
 		const pending = previewPromiseRef.current
 		if (!pending) return
@@ -46,20 +77,27 @@ export function LayoutConstraintHintCard({
 
 	async function runPreview(gen: number) {
 		if (!selector || !editorRef?.current) return
+		let ownsBatch = false
 		try {
+			if (gen !== previewGenRef.current) return
 			await editorRef.current.beginBatchOperation(selector, hint.fix)
+			previewBatchRef.current = { gen }
+			ownsBatch = true
 			if (gen !== previewGenRef.current) {
-				await editorRef.current.cancelBatchOperation()
+				await cancelPreviewBatch()
 				return
 			}
 			await editorRef.current.applyStylesTemporary(selector, hint.fix)
 			if (gen !== previewGenRef.current) {
-				await editorRef.current.cancelBatchOperation()
+				await cancelPreviewBatch()
 				return
 			}
 			previewSessionRef.current = true
 		} catch (error) {
 			console.error("[LayoutConstraintHint] Preview failed:", error)
+			if (ownsBatch) {
+				await cancelPreviewBatch()
+			}
 		}
 	}
 
@@ -77,14 +115,10 @@ export function LayoutConstraintHintCard({
 
 	async function restore() {
 		invalidatePreview()
-		const hadPendingPreview = Boolean(previewPromiseRef.current)
 		await waitForPreview()
 		if (!selector || !editorRef?.current) return
 		try {
-			// In-flight preview cancels its own stale batch after each await.
-			if (!hadPendingPreview) {
-				await editorRef.current.cancelBatchOperation()
-			}
+			await cancelPreviewBatch()
 			await editorRef.current.refreshSelectedElement(selector)
 		} catch (error) {
 			console.error("[LayoutConstraintHint] Restore failed:", error)

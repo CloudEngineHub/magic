@@ -161,4 +161,82 @@ describe("LayoutConstraintHintCard", () => {
 		expect(onApply).not.toHaveBeenCalled()
 		expect(editorRef.current.cancelBatchOperation).not.toHaveBeenCalled()
 	})
+
+	it("cancels the batch when temporary styles fail during preview", async () => {
+		const editorRef = createEditorRef({
+			applyStylesTemporary: vi.fn().mockRejectedValue(new Error("apply failed")),
+		})
+
+		render(
+			<LayoutConstraintHintCard
+				hint={hint}
+				selector=".layout"
+				editorRef={editorRef as never}
+			/>,
+		)
+
+		const applyButton = screen.getByTestId("layout-constraint-hint-apply-distributed-alignment")
+		fireEvent.mouseEnter(applyButton)
+		await waitFor(() => {
+			expect(editorRef.current.cancelBatchOperation).toHaveBeenCalledTimes(1)
+		})
+		expect(editorRef.current.endBatchOperation).not.toHaveBeenCalled()
+	})
+
+	it("cancels the batch when the component unmounts mid-preview", async () => {
+		const applyTemporary = createDeferred<void>()
+		const editorRef = createEditorRef({
+			applyStylesTemporary: vi.fn(() => applyTemporary.promise),
+		})
+
+		const { unmount } = render(
+			<LayoutConstraintHintCard
+				hint={hint}
+				selector=".layout"
+				editorRef={editorRef as never}
+			/>,
+		)
+
+		const applyButton = screen.getByTestId("layout-constraint-hint-apply-distributed-alignment")
+		fireEvent.mouseEnter(applyButton)
+		await waitFor(() => {
+			expect(editorRef.current.beginBatchOperation).toHaveBeenCalledTimes(1)
+		})
+
+		unmount()
+		applyTemporary.resolve()
+
+		await waitFor(() => {
+			expect(editorRef.current.cancelBatchOperation).toHaveBeenCalledTimes(1)
+		})
+		expect(editorRef.current.endBatchOperation).not.toHaveBeenCalled()
+	})
+
+	it("keeps the preview batch active when the parent re-renders", async () => {
+		const editorRef = createEditorRef()
+
+		const { rerender } = render(
+			<LayoutConstraintHintCard
+				hint={hint}
+				selector=".layout"
+				editorRef={editorRef as never}
+			/>,
+		)
+
+		const applyButton = screen.getByTestId("layout-constraint-hint-apply-distributed-alignment")
+		fireEvent.mouseEnter(applyButton)
+		await waitFor(() => {
+			expect(editorRef.current.applyStylesTemporary).toHaveBeenCalledTimes(1)
+		})
+
+		rerender(
+			<LayoutConstraintHintCard
+				hint={hint}
+				selector=".layout"
+				editorRef={editorRef as never}
+			/>,
+		)
+
+		expect(editorRef.current.cancelBatchOperation).not.toHaveBeenCalled()
+	})
 })
