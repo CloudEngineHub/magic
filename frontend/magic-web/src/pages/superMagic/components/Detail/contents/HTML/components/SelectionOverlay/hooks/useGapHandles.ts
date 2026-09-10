@@ -163,80 +163,84 @@ export function useGapHandles({
 		[editorRef, setSelectedInfo],
 	)
 
-	const stopGapDrag = useCallback(async () => {
-		if (!isDraggingRef.current) return
+	const finishGapDrag = useCallback(
+		async (commit = true) => {
+			if (!isDraggingRef.current) return
 
-		const currentSelector = selectedInfoRef.current?.selector
-		isDraggingRef.current = false
-		gapSessionRef.current += 1
-		dragStateRef.current = null
-		setIsGapDragging(false)
-		setGapPreview(null)
-		setLiveLayout(null)
+			const currentSelector = selectedInfoRef.current?.selector
+			isDraggingRef.current = false
+			gapSessionRef.current += 1
+			dragStateRef.current = null
+			setIsGapDragging(false)
+			setGapPreview(null)
+			setLiveLayout(null)
 
-		if (pointerCaptureRef.current) {
-			try {
-				pointerCaptureRef.current.target.releasePointerCapture(
-					pointerCaptureRef.current.pointerId,
-				)
-			} catch {
-				// Pointer capture may already be released.
-			}
-			pointerCaptureRef.current = null
-		}
-
-		if (gapRafRef.current) {
-			window.cancelAnimationFrame(gapRafRef.current)
-			gapRafRef.current = null
-		}
-
-		if (pendingGapRef.current && editorRef?.current) {
-			const { selector, styles } = pendingGapRef.current
-			try {
-				const lastApplied = lastAppliedGapRef.current
-				const alreadyApplied =
-					lastApplied?.selector === selector && sameStyleMap(lastApplied.styles, styles)
-				if (!alreadyApplied) {
-					await editorRef.current.applyStylesTemporary(selector, styles)
+			if (pointerCaptureRef.current) {
+				try {
+					pointerCaptureRef.current.target.releasePointerCapture(
+						pointerCaptureRef.current.pointerId,
+					)
+				} catch {
+					// Pointer capture may already be released.
 				}
-				await editorRef.current.endBatchOperation(selector, styles)
-			} catch (error) {
-				console.error("[useGapHandles] Final gap update failed:", error)
+				pointerCaptureRef.current = null
 			}
-			pendingGapRef.current = null
-			lastAppliedGapRef.current = null
-		} else if (editorRef?.current) {
-			try {
-				await editorRef.current.cancelBatchOperation()
-			} catch (error) {
-				console.error("[useGapHandles] Failed to cancel gap batch:", error)
-			}
-		}
 
-		document.body.style.userSelect = ""
-		document.body.style.cursor = ""
-
-		if (currentSelector && editorRef?.current) {
-			try {
-				await editorRef.current.refreshSelectedElement(currentSelector)
-			} catch (error) {
-				console.error("[useGapHandles] Failed to refresh after gap drag:", error)
+			if (gapRafRef.current) {
+				window.cancelAnimationFrame(gapRafRef.current)
+				gapRafRef.current = null
 			}
-		}
-	}, [editorRef])
+
+			if (commit && pendingGapRef.current && editorRef?.current) {
+				const { selector, styles } = pendingGapRef.current
+				try {
+					const lastApplied = lastAppliedGapRef.current
+					const alreadyApplied =
+						lastApplied?.selector === selector &&
+						sameStyleMap(lastApplied.styles, styles)
+					if (!alreadyApplied) {
+						await editorRef.current.applyStylesTemporary(selector, styles)
+					}
+					await editorRef.current.endBatchOperation(selector, styles)
+				} catch (error) {
+					console.error("[useGapHandles] Final gap update failed:", error)
+				}
+				pendingGapRef.current = null
+				lastAppliedGapRef.current = null
+			} else if (editorRef?.current) {
+				try {
+					await editorRef.current.cancelBatchOperation()
+				} catch (error) {
+					console.error("[useGapHandles] Failed to cancel gap batch:", error)
+				}
+			}
+
+			document.body.style.userSelect = ""
+			document.body.style.cursor = ""
+
+			if (currentSelector && editorRef?.current) {
+				try {
+					await editorRef.current.refreshSelectedElement(currentSelector)
+				} catch (error) {
+					console.error("[useGapHandles] Failed to refresh after gap drag:", error)
+				}
+			}
+		},
+		[editorRef],
+	)
 
 	const updateGapDrag = useCallback(
 		(event: globalThis.PointerEvent) => {
 			if (!isDraggingRef.current) return
 			if (event.buttons === 0) {
-				stopGapDrag()
+				finishGapDrag()
 				return
 			}
 
 			const dragState = dragStateRef.current
 			const current = selectedInfoRef.current
 			if (!dragState || !current) {
-				stopGapDrag()
+				finishGapDrag()
 				return
 			}
 
@@ -256,7 +260,7 @@ export function useGapHandles({
 			onPreviewStylesRef.current(styles)
 			scheduleGapUpdate(current.selector, styles)
 		},
-		[scheduleGapUpdate, stopGapDrag],
+		[scheduleGapUpdate, finishGapDrag],
 	)
 
 	const onGapHandlePointerDown = useCallback(
@@ -266,7 +270,7 @@ export function useGapHandles({
 			event.preventDefault()
 			event.stopPropagation()
 
-			if (isDraggingRef.current) await stopGapDrag()
+			if (isDraggingRef.current) await finishGapDrag()
 
 			gapSessionRef.current += 1
 			lastAppliedGapRef.current = null
@@ -303,7 +307,7 @@ export function useGapHandles({
 			document.body.style.userSelect = "none"
 			document.body.style.cursor = axis === "column" ? "col-resize" : "row-resize"
 		},
-		[editorRef, stopGapDrag],
+		[editorRef, finishGapDrag],
 	)
 
 	useEffect(() => {
@@ -313,13 +317,13 @@ export function useGapHandles({
 			selectedInfoRef.current &&
 			selectedInfo.selector !== selectedInfoRef.current.selector
 		) {
-			stopGapDrag()
+			finishGapDrag()
 		}
 
 		selectedInfoRef.current = selectedInfo
 
-		if (isDraggingRef.current && !selectedInfo) stopGapDrag()
-	}, [selectedInfo, stopGapDrag])
+		if (isDraggingRef.current && !selectedInfo) finishGapDrag()
+	}, [selectedInfo, finishGapDrag])
 
 	useEffect(() => {
 		const handlePointerMove = (event: globalThis.PointerEvent) => {
@@ -330,7 +334,13 @@ export function useGapHandles({
 		const handlePointerUp = (event: globalThis.PointerEvent) => {
 			if (!isDraggingRef.current) return
 			event.preventDefault()
-			stopGapDrag()
+			finishGapDrag()
+		}
+
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape" || !isDraggingRef.current) return
+			event.preventDefault()
+			finishGapDrag(false)
 		}
 
 		document.addEventListener("pointermove", handlePointerMove, {
@@ -342,16 +352,18 @@ export function useGapHandles({
 			capture: true,
 			passive: false,
 		})
-		window.addEventListener("blur", stopGapDrag)
+		document.addEventListener("keydown", handleKeyDown, true)
+		window.addEventListener("blur", finishGapDrag)
 
 		return () => {
 			document.removeEventListener("pointermove", handlePointerMove, true)
 			document.removeEventListener("pointerup", handlePointerUp, true)
 			document.removeEventListener("pointercancel", handlePointerUp, true)
-			window.removeEventListener("blur", stopGapDrag)
+			document.removeEventListener("keydown", handleKeyDown, true)
+			window.removeEventListener("blur", finishGapDrag)
 			if (gapRafRef.current) window.cancelAnimationFrame(gapRafRef.current)
 		}
-	}, [stopGapDrag, updateGapDrag])
+	}, [finishGapDrag, updateGapDrag])
 
 	useEffect(() => {
 		return () => {

@@ -15,4 +15,16 @@ describe("inspector-detail display", () => {
 
 		expect(getInspectorDetailHeaderLabel(t, "   ")).toBe("已选取的元素")
 	})
+
+	it("shows a video label instead of browser fallback copy", () => {
+		const t = (key: string) => {
+			if (key === "stylePanel.inspector.tagLabel.video") return "视频"
+			if (key === "stylePanel.inspector.selectedElement") return "已选取的元素"
+			return key
+		}
+
+		expect(
+			getInspectorDetailHeaderLabel(t, "您的浏览器不支持视频播放，请升级浏览器。", "video"),
+		).toBe("视频")
+	})
 })

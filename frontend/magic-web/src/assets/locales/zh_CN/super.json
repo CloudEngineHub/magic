@@ -2461,8 +2461,8 @@
 		"expandSidebar": "展开侧栏",
 		"favorite": "收藏",
 		"fullscreen": "全屏",
-		"insertAbove": "在上方插入",
-		"insertBelow": "在下方插入",
+		"insertAbove": "在上方插入新页",
+		"insertBelow": "在下方插入新页",
 		"insertSlideFailed": "插入失败",
 		"insertSlideFailedInvalidFolder": "无法确定正确的文件夹位置，请检查PPT文件夹结构",
 		"insertSlideSuccess": "插入成功",
@@ -6227,6 +6227,10 @@
 			"agentPromptPlaceholder": "在此描述你遇到的问题",
 			"agentPromptSuffix": "请对选中元素进行处理：",
 			"agentPromptTitle": "我选中了页面中的一个元素，其详细信息如下：",
+			"aiEditingCaptureAuthorizationAllow": "允许",
+
+			"aiEditingCaptureAuthorizationDescription": "AI 编辑需要获取当前页面内容，请点击“允许”继续。",
+			"aiEditingCaptureAuthorizationTitle": "AI 编辑需要浏览器授权",
 			"cancel": "取消",
 			"collapsePendingTargets": "收起待提交目标列表",
 			"comment": "评论",
@@ -6277,6 +6281,14 @@
 			"submit": "提交",
 			"submitSuccess": "已提交，等待 Agent 处理",
 			"submitUnavailable": "当前页面未接入 Agent 提交能力",
+			"tagLabel": {
+				"audio": "音频",
+				"canvas": "画布",
+				"embed": "嵌入内容",
+				"iframe": "嵌入页面",
+				"image": "图片",
+				"video": "视频"
+			},
 			"textContent": "文本内容"
 		},
 		"italic": "斜体",
@@ -6284,6 +6296,12 @@
 		"justifyItems": "内容水平位置",
 		"justifySelf": "自身水平位置",
 		"layout": "布局",
+		"layoutHintDistributed": "元素之间的空间会自动分配",
+		"layoutHintFixGap": "改为固定元素间距",
+		"layoutHintFixHeight": "改为固定高度",
+		"layoutHintFixWidth": "改为固定宽度",
+		"layoutHintParentHeight": "高度由上级容器决定",
+		"layoutHintParentWidth": "宽度由上级容器决定",
 		"layoutSettings": "布局设置",
 		"layoutStyles": "布局样式",
 		"layoutValues": {
@@ -7162,11 +7180,11 @@
 		"taskSuspended": "任务已终止",
 		"thinking": "正在思考中...",
 		"tokenUsage": {
-			"compressContext": "压缩上下文",
-			"contextUsage": "上下文用量",
-			"contextUsageDescription": "对话记忆用量。进度条满时，AI 可能会遗忘较早的内容。",
-			"highContextWarning": "较高的上下文长度可能会大幅增加每次响应的成本",
-			"tokenCount": "{{used}} / {{max}} Tokens"
+			"compressContext": "整理对话内容",
+			"contextUsage": "对话容量",
+			"contextUsageDescription": "当前对话已占用的容量。接近上限时，AI 可能无法继续参考较早的内容。",
+			"highContextWarning": "对话内容较多，继续发送消息可能会增加响应成本",
+			"tokenCount": "已使用 {{used}} / {{max}}"
 		},
 		"usedImageModel": "图像模型：",
 		"usedModel": "使用模型：",

@@ -218,6 +218,13 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 					),
 				},
 				{
+					find: "@dtyq/html-sandbox/utils/inspectableTextContent",
+					replacement: resolve(
+						__dirname,
+						"packages/html-sandbox/src/utils/inspectableTextContent.ts",
+					),
+				},
+				{
 					find: "@dtyq/html-sandbox/telemetry",
 					replacement: resolve(__dirname, "packages/html-sandbox/src/telemetry/index.ts"),
 				},

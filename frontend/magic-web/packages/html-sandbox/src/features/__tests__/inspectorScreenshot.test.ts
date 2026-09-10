@@ -2,11 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	encodeCanvasToScreenshotBlob,
 	encodeCanvasToPngBlob,
+	findVideosInCaptureClip,
 	IMAGE_ENCODE_TIMEOUT_MS,
 	SCREENSHOT_WEBP_MIME_TYPE,
 	SCREENSHOT_WEBP_QUALITY,
 	SYNC_PNG_ENCODE_MAX_PIXELS,
 	ScreenshotCancelledError,
+	VIDEO_DATA_WAIT_TIMEOUT_MS,
+	waitForCaptureVideosInClip,
 } from "../inspectorScreenshot"
 
 describe("encodeCanvasToPngBlob", () => {
@@ -157,6 +160,98 @@ describe("encodeCanvasToPngBlob", () => {
 		await cancelled
 		expect(toBlob).toHaveBeenCalledTimes(1)
 		expect(toDataURL).not.toHaveBeenCalled()
+	})
+})
+
+function mockBoundingClientRect(
+	element: Element,
+	rect: Pick<DOMRect, "left" | "top" | "width" | "height">,
+) {
+	vi.spyOn(element, "getBoundingClientRect").mockReturnValue({
+		x: rect.left,
+		y: rect.top,
+		left: rect.left,
+		top: rect.top,
+		right: rect.left + rect.width,
+		bottom: rect.top + rect.height,
+		width: rect.width,
+		height: rect.height,
+		toJSON: () => ({}),
+	} as DOMRect)
+}
+
+describe("findVideosInCaptureClip", () => {
+	it("returns only videos intersecting the capture clip", () => {
+		const root = document.createElement("div")
+		document.body.appendChild(root)
+		mockBoundingClientRect(root, { left: 0, top: 0, width: 400, height: 400 })
+
+		const inside = document.createElement("video")
+		root.appendChild(inside)
+		mockBoundingClientRect(inside, { left: 20, top: 20, width: 120, height: 80 })
+
+		const outside = document.createElement("video")
+		root.appendChild(outside)
+		mockBoundingClientRect(outside, { left: 300, top: 300, width: 80, height: 60 })
+
+		const videos = findVideosInCaptureClip(root, { x: 0, y: 0, width: 200, height: 200 })
+		expect(videos).toEqual([inside])
+		root.remove()
+	})
+})
+
+describe("waitForCaptureVideosInClip", () => {
+	afterEach(() => vi.restoreAllMocks())
+
+	it("waits for loadeddata before resolving", async () => {
+		vi.useFakeTimers()
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			return window.setTimeout(() => callback(0), 0) as unknown as number
+		})
+		const root = document.createElement("div")
+		document.body.appendChild(root)
+		mockBoundingClientRect(root, { left: 0, top: 0, width: 200, height: 200 })
+
+		const video = document.createElement("video")
+		Object.defineProperty(video, "readyState", {
+			configurable: true,
+			get: () => HTMLMediaElement.HAVE_NOTHING,
+		})
+		root.appendChild(video)
+		mockBoundingClientRect(video, { left: 10, top: 10, width: 120, height: 80 })
+
+		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
+		await vi.advanceTimersByTimeAsync(0)
+		Object.defineProperty(video, "readyState", {
+			configurable: true,
+			get: () => HTMLMediaElement.HAVE_CURRENT_DATA,
+		})
+		video.dispatchEvent(new Event("loadeddata"))
+		await vi.advanceTimersByTimeAsync(200)
+		await pending
+		root.remove()
+		vi.useRealTimers()
+	})
+
+	it("does not block forever when video loading fails", async () => {
+		vi.useFakeTimers()
+		const root = document.createElement("div")
+		document.body.appendChild(root)
+		mockBoundingClientRect(root, { left: 0, top: 0, width: 200, height: 200 })
+
+		const video = document.createElement("video")
+		Object.defineProperty(video, "readyState", {
+			configurable: true,
+			get: () => HTMLMediaElement.HAVE_NOTHING,
+		})
+		root.appendChild(video)
+		mockBoundingClientRect(video, { left: 10, top: 10, width: 120, height: 80 })
+
+		const pending = waitForCaptureVideosInClip(root, { x: 0, y: 0, width: 200, height: 200 })
+		await vi.advanceTimersByTimeAsync(VIDEO_DATA_WAIT_TIMEOUT_MS + 200)
+		await pending
+		root.remove()
+		vi.useRealTimers()
 	})
 })
 

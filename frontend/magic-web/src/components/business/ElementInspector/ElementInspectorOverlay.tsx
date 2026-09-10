@@ -35,6 +35,7 @@ import { buildAgentPromptContent } from "./agentPrompt"
 import { formatElementSize, getShortSelector } from "./format"
 import { ElementEditPopover } from "./ElementEditPopover"
 import { PendingTargetsPanel } from "./PendingTargetsPanel"
+import { AiEditingCaptureAuthorizationDialog } from "./AiEditingCaptureAuthorizationDialog"
 import {
 	ScreenshotSelectionOverlay,
 	type ScreenshotCapturePhase,
@@ -42,6 +43,7 @@ import {
 import {
 	captureIframeRegion,
 	createCurrentTabCaptureSession,
+	type CurrentTabCaptureAuthorizationContext,
 	type CurrentTabCaptureSession,
 	supportsCurrentTabCapture,
 	suppressCaptureCursor,
@@ -192,6 +194,40 @@ export function ElementInspectorOverlay({
 	const [screenshotCapturePhase, setScreenshotCapturePhase] =
 		useState<ScreenshotCapturePhase>("idle")
 	const [captureUsesCurrentTab, setCaptureUsesCurrentTab] = useState(false)
+	const [captureAuthorization, setCaptureAuthorization] =
+		useState<CurrentTabCaptureAuthorizationContext | null>(null)
+	const captureAuthorizationResolverRef = useRef<{
+		startCapture: () => Promise<string>
+		resolve: (dataUrl: string | null) => void
+		reject: (error: unknown) => void
+	} | null>(null)
+	const requestCurrentTabCaptureAuthorization = useCallback(
+		(context: CurrentTabCaptureAuthorizationContext, startCapture: () => Promise<string>) =>
+			new Promise<string | null>((resolve, reject) => {
+				captureAuthorizationResolverRef.current?.resolve(null)
+				captureAuthorizationResolverRef.current = { startCapture, resolve, reject }
+				setCaptureAuthorization(context)
+			}),
+		[],
+	)
+	const resolveCaptureAuthorization = useCallback((authorized: boolean) => {
+		const pending = captureAuthorizationResolverRef.current
+		captureAuthorizationResolverRef.current = null
+		setCaptureAuthorization(null)
+		if (!pending) return
+		if (!authorized) {
+			pending.resolve(null)
+			return
+		}
+		void pending.startCapture().then(pending.resolve, pending.reject)
+	}, [])
+
+	useEffect(() => {
+		return () => {
+			captureAuthorizationResolverRef.current?.resolve(null)
+			captureAuthorizationResolverRef.current = null
+		}
+	}, [])
 	const [panelPortalHost, setPanelPortalHost] = useState<HTMLDivElement | null>(null)
 	const effectiveSelectionMode = screenshotSupported ? selectionMode : "element"
 	const iframeRectFrameRef = useRef<number | null>(null)
@@ -458,6 +494,7 @@ export function ElementInspectorOverlay({
 					iframeTargetOrigin,
 					beforeCurrentTabCapture,
 					currentTabSession: currentTabCaptureSessionRef.current ?? undefined,
+					requestCurrentTabCaptureAuthorization,
 				})
 				const displaySize = {
 					width: viewportSelection.width,
@@ -473,7 +510,7 @@ export function ElementInspectorOverlay({
 				restoreCaptureCursor()
 			}
 		},
-		[getOverlayGeometry, iframeRef, iframeTargetOrigin],
+		[getOverlayGeometry, iframeRef, iframeTargetOrigin, requestCurrentTabCaptureAuthorization],
 	)
 	const handleCaptureScreenshot = useCallback(
 		async (
@@ -519,14 +556,19 @@ export function ElementInspectorOverlay({
 			return
 		}
 		if (!onCaptureElementScreenshot || !selectBox) return
-		if (elementScreenshotSelectorRef.current === selectedElement.selector) return
+		const captureKey =
+			selectedElement.tagName.toLowerCase() === "video" ||
+			selectedElement.tagName.toLowerCase() === "audio"
+				? `${selectedElement.selector}:${Math.round(selectBox.width)}x${Math.round(selectBox.height)}`
+				: selectedElement.selector
+		if (elementScreenshotSelectorRef.current === captureKey) return
 
 		const selector = selectedElement.selector
-		elementScreenshotSelectorRef.current = selector
+		elementScreenshotSelectorRef.current = captureKey
 		let cancelled = false
 		void captureElementPreview(selectBox)
 			.then((result) => {
-				if (cancelled || elementScreenshotSelectorRef.current !== selector) return
+				if (cancelled || elementScreenshotSelectorRef.current !== captureKey) return
 				onCaptureElementScreenshot(selector, {
 					dataUrl: result.dataUrl,
 					rect: result.rect,
@@ -541,7 +583,7 @@ export function ElementInspectorOverlay({
 		return () => {
 			// Rect refreshes can rerun this effect while the same capture is pending.
 			// Only cancel when the selection itself has changed or was cleared.
-			if (elementScreenshotSelectorRef.current !== selector) cancelled = true
+			if (elementScreenshotSelectorRef.current !== captureKey) cancelled = true
 		}
 	}, [
 		captureElementPreview,
@@ -834,6 +876,7 @@ export function ElementInspectorOverlay({
 
 				if (target.id === activeTarget?.id) return null
 				const box = toOverlayRect(getTargetRect(target))
+
 				return box ? (
 					<Fragment key={target.id}>
 						<ScreenshotHighlight
@@ -964,6 +1007,15 @@ export function ElementInspectorOverlay({
 			{!panelPortalHost && editPopover}
 
 			{pendingPanelContent}
+			<AiEditingCaptureAuthorizationDialog
+				open={captureAuthorization !== null}
+				title={t("stylePanel.inspector.aiEditingCaptureAuthorizationTitle")}
+				description={t("stylePanel.inspector.aiEditingCaptureAuthorizationDescription")}
+				allowText={t("stylePanel.inspector.aiEditingCaptureAuthorizationAllow")}
+				cancelText={t("stylePanel.inspector.cancel")}
+				onAllow={() => resolveCaptureAuthorization(true)}
+				onCancel={() => resolveCaptureAuthorization(false)}
+			/>
 		</div>
 	)
 }
@@ -1316,7 +1368,16 @@ function ElementInfoCard({
 	}
 
 	const handleSendToAgent = () => {
-		onSendToAgent?.(buildAgentPromptContent(info, t("stylePanel.inspector.agentPromptTitle")))
+		onSendToAgent?.(
+			buildAgentPromptContent(
+				info,
+				t("stylePanel.inspector.agentPromptTitle"),
+				undefined,
+				undefined,
+				undefined,
+				t,
+			),
+		)
 	}
 
 	const importantStyles = [
