@@ -258,7 +258,7 @@ export async function runAsyncPublish<TDraft = unknown>(
 		clearPendingPublishTask(resourceType, code)
 		return result
 	} catch (error) {
-		if (error instanceof AsyncPublishError && error.reason !== "aborted") {
+		if (shouldClearPendingPublishOnError(error)) {
 			clearPendingPublishTask(resourceType, code)
 		}
 		throw error
@@ -322,11 +322,20 @@ export async function resumePendingPublish<TDraft = unknown>(
 		clearPendingPublishTask(resourceType, code)
 		return { alreadyReady: false, task }
 	} catch (error) {
-		if (error instanceof AsyncPublishError && error.reason !== "aborted") {
+		if (shouldClearPendingPublishOnError(error)) {
 			clearPendingPublishTask(resourceType, code)
 		}
 		throw error
 	}
+}
+
+/**
+ * Timeout only means this polling round ended; the backend task may still succeed.
+ * Keep publish_task_id so re-entering the panel can resume instead of creating a second task.
+ */
+function shouldClearPendingPublishOnError(error: unknown): boolean {
+	if (!(error instanceof AsyncPublishError)) return false
+	return error.reason === "failed" || error.reason === "expired"
 }
 
 function isPublishTaskMissingError(error: unknown): boolean {

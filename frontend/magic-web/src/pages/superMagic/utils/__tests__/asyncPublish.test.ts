@@ -239,4 +239,66 @@ describe("asyncPublish", () => {
 		expect(progressValues.at(-1)).toBe(100)
 		expect(loadPendingPublishTask("skill", "SK-wait")).toBeNull()
 	})
+
+	it("keeps the pending task on poll timeout so resume can continue", async () => {
+		const draft = { version: "1.0.0" }
+		const promise = runAsyncPublish({
+			resourceType: "agent",
+			code: "SMA-timeout",
+			draft,
+			create: async () => ({
+				publish_task_id: "task-timeout",
+				status: "processing",
+				progress: 10,
+				error: null,
+			}),
+			check: async () => ({
+				publish_task_id: "task-timeout",
+				status: "processing",
+				progress: 10,
+				error: null,
+			}),
+		})
+
+		const pending = promise.catch((error: unknown) => error)
+		for (let attempt = 0; attempt < 100; attempt += 1) {
+			await vi.advanceTimersByTimeAsync(2500)
+		}
+		const error = await pending
+
+		expect(error).toMatchObject({
+			name: "AsyncPublishError",
+			reason: "timeout",
+		})
+		expect(loadPendingPublishTask("agent", "SMA-timeout")).toEqual({
+			publish_task_id: "task-timeout",
+			draft,
+		})
+	})
+
+	it("clears the pending task when poll status is failed", async () => {
+		const promise = runAsyncPublish({
+			resourceType: "skill",
+			code: "SK-failed",
+			draft: { version: "1.0.0" },
+			create: async () => ({
+				publish_task_id: "task-failed",
+				status: "processing",
+				progress: 10,
+				error: null,
+			}),
+			check: async () => ({
+				publish_task_id: "task-failed",
+				status: "failed",
+				progress: 10,
+				error: "zip failed",
+			}),
+		})
+
+		await expect(promise).rejects.toMatchObject({
+			name: "AsyncPublishError",
+			reason: "failed",
+		})
+		expect(loadPendingPublishTask("skill", "SK-failed")).toBeNull()
+	})
 })
