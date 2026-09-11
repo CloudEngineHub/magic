@@ -27,6 +27,8 @@ import {
 	startPptxStreamingExportFromFactory,
 } from "@/pages/superMagic/services/pptxStreamingExport"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
+import { showPptxExportIssues } from "@/pages/superMagic/utils/pptxExportIssues"
+import type { ExportIssue } from "@magic/html2pptx"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import {
 	createPptxSlideConfig,
@@ -322,6 +324,7 @@ function useFileExport({
 		const pageCount = slidePaths.length || 1
 		let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
 		const resourceErrors = createPptxResourceErrorCollector(t)
+		const exportIssues: ExportIssue[] = []
 
 		try {
 			assertPptxExportAvailable({ pageCount })
@@ -371,6 +374,7 @@ function useFileExport({
 					logger: pptxExternalLogger,
 					logLevel: "warn",
 					onResourceLoadError: resourceErrors.onResourceLoadError,
+					onExportIssue: (issue) => exportIssues.push(issue),
 					onProgress: (progress) => {
 						if (progress.pageIndex === undefined || progress.pageCount === undefined)
 							return
@@ -383,6 +387,8 @@ function useFileExport({
 			cancelExportRef.current = handle.cancel
 			onProgress(0)
 			await handle.promise
+			const issueToast = showPptxExportIssues(t, exportIssues)
+			if (issueToast) magicToast.warning(issueToast)
 			endExport()
 		} catch (error: unknown) {
 			await destinationLease?.abort(error).catch(() => undefined)

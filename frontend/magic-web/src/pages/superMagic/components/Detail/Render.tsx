@@ -19,6 +19,8 @@ import {
 } from "@/pages/superMagic/services/pptService"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
+import { showPptxExportIssues } from "@/pages/superMagic/utils/pptxExportIssues"
+import type { ExportIssue } from "@magic/html2pptx"
 import { isFileInPPTMode } from "./utils/file"
 import { prepareHtmlPagesForExport } from "@/utils/htmlExportPrepare"
 import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
@@ -473,6 +475,7 @@ export default function Render(props: any) {
 		let cancelExport: (() => void) | null = null
 		let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
 		const resourceErrors = createPptxResourceErrorCollector(t)
+		const exportIssues: ExportIssue[] = []
 
 		function getExportToastContent(progressText: string) {
 			return (
@@ -544,6 +547,7 @@ export default function Render(props: any) {
 						logger: pptxExternalLogger,
 						logLevel: "warn",
 						onResourceLoadError: resourceErrors.onResourceLoadError,
+						onExportIssue: (issue) => exportIssues.push(issue),
 						onProgress: (progress) => {
 							magicToast.loading({
 								key: toastId,
@@ -560,6 +564,8 @@ export default function Render(props: any) {
 				)
 				cancelExport = streamingHandle.cancel
 				await streamingHandle.promise
+				const issueToast = showPptxExportIssues(t, exportIssues)
+				if (issueToast) magicToast.warning(issueToast)
 				magicToast.success({
 					key: toastId,
 					content: t("topicFiles.exportSuccess"),
