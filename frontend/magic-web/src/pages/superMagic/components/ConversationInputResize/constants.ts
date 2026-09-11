@@ -5,13 +5,13 @@
  * do not raise this shared value unless every consumer has the same layout contract.
  */
 /** Minimum height for the ordinary composer. */
-export const DEFAULT_COMPOSER_MIN_INPUT_HEIGHT = 244
+export const DEFAULT_COMPOSER_MIN_INPUT_HEIGHT = 220
 /** Keep specialized composer controls readable at their larger fixed height. */
 export const SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT = 260
 /** Reserve enough space for video production controls. */
-export const VIDEO_PRODUCTION_COMPOSER_MIN_INPUT_HEIGHT = 268
+export const VIDEO_PRODUCTION_COMPOSER_MIN_INPUT_HEIGHT = 274
 /** Reserve enough vertical space for the PPT editor and its template controls. */
-export const PPT_COMPOSER_MIN_INPUT_HEIGHT = 320
+export const PPT_COMPOSER_MIN_INPUT_HEIGHT = 274
 
 /** Resolve the shared minimum height while keeping PPT's larger control set explicit. */
 export function resolveComposerMinInputHeight({

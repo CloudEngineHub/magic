@@ -67,6 +67,7 @@ import { MessageViewStateProvider } from "./view-state/MessageViewStateContext"
 import type { RevokedMessageEditorContext } from "./revoked-editor-context"
 import type { MessageListScrollAdapter } from "./message-list-scroll-adapter"
 import { useStableArrayReference } from "./hooks/useStableArrayReference"
+import { useConversationCompactMode } from "./hooks/useConversationCompactMode"
 
 export { MessageListProvider }
 
@@ -150,6 +151,7 @@ const revokedActionButton = cn(
 
 /** Collapsed revoked preview keeps a bounded virtual slice before the user expands it. */
 const REVOKED_COLLAPSED_ITEM_LIMIT = 6
+const NO_STICKY_USER_INDICES: Array<number> = []
 
 const MessageList = observer(
 	({
@@ -179,6 +181,7 @@ const MessageList = observer(
 	}: MessageListProps) => {
 		const { t } = useTranslation("super")
 		const isMobile = useIsMobile()
+		const isCompactMode = useConversationCompactMode({ enabled: !isMobile })
 
 		const exportStore = useExportSelectionStore()
 
@@ -915,7 +918,9 @@ const MessageList = observer(
 									<VirtualMessageList
 										topicId={currentTopicKey}
 										items={virtualMessageItems}
-										userIndices={userIndices}
+										userIndices={
+											isCompactMode ? NO_STICKY_USER_INDICES : userIndices
+										}
 										isMobile={isMobile}
 										getScrollElement={getScrollElement}
 										startMargin={isMobile ? 10 : 50}

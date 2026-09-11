@@ -435,6 +435,7 @@ function VirtualMessageListInner({
 	}
 
 	const sequenceSignature = items.map((item) => item.key).join("\u0000")
+	const stickySequenceSignature = `${sequenceSignature}\u0001${userIndices.join("\u0000")}`
 	if (processedSequenceRef.current !== sequenceSignature) {
 		// virtua reads `shift` in the same render that observes the new item count, so this must
 		// be render-phase bookkeeping — an effect would allow one paint at the old coordinate.
@@ -785,10 +786,10 @@ function VirtualMessageListInner({
 	}, [scheduleStickySync, scheduleVirtualizerChange])
 
 	useLayoutEffect(() => {
-		if (lastStickySequenceSignatureRef.current === sequenceSignature) return
-		lastStickySequenceSignatureRef.current = sequenceSignature
+		if (lastStickySequenceSignatureRef.current === stickySequenceSignature) return
+		lastStickySequenceSignatureRef.current = stickySequenceSignature
 		syncSticky()
-	}, [sequenceSignature, syncSticky])
+	}, [stickySequenceSignature, syncSticky])
 
 	/**
 	 * virtua clamps its own render range to the item count but takes `keepMounted` verbatim, so an
