@@ -8,7 +8,6 @@ declare(strict_types=1);
 namespace App\Domain\SuperMagic\Skill\Service;
 
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
-use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\SuperMagic\Skill\Entity\SkillCategoryEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
@@ -18,7 +17,6 @@ use App\Domain\SuperMagic\Skill\Repository\Facade\SkillCategoryRelationRepositor
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillCategoryRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillMarketRepositoryInterface;
 use App\Infrastructure\Core\Embeddings\EmbeddingDimensionPolicy;
-use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGenerator;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInterface;
 use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -246,7 +244,7 @@ final class SkillMarketVectorIndexDomainService
 
     public function isVectorSearchEnabled(): bool
     {
-        return EmbeddingGenerator::isEnabled(AiAbilityCode::KnowledgeBaseEmbeddingModel);
+        return EmbeddingDimensionPolicy::isEnabled();
     }
 
     /** Return whether the first full reconciliation has completed. */

@@ -8,7 +8,6 @@ declare(strict_types=1);
 namespace App\Domain\SuperMagic\Agent\Service;
 
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
-use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\SuperMagic\Agent\Entity\AgentCategoryEntity;
 use App\Domain\SuperMagic\Agent\Entity\AgentMarketEntity;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\AgentCategoryRelationType;
@@ -19,7 +18,6 @@ use App\Domain\SuperMagic\Agent\Repository\Facade\AgentCategoryRelationRepositor
 use App\Domain\SuperMagic\Agent\Repository\Facade\AgentCategoryRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Facade\AgentMarketRepositoryInterface;
 use App\Infrastructure\Core\Embeddings\EmbeddingDimensionPolicy;
-use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGenerator;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInterface;
 use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -232,7 +230,7 @@ final class AgentMarketVectorIndexDomainService
 
     public function isVectorSearchEnabled(): bool
     {
-        return EmbeddingGenerator::isEnabled(AiAbilityCode::KnowledgeBaseEmbeddingModel);
+        return EmbeddingDimensionPolicy::isEnabled();
     }
 
     /** Return whether the first complete Agent Market reconciliation succeeded. */

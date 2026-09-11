@@ -7,21 +7,49 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Core\Embeddings;
 
+use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
+use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGenerator;
 use RuntimeException;
+
+use function Hyperf\Config\config;
 
 /**
  * Keeps collection dimensions consistent with the configured embedding policy.
  *
- * When disabled, the legacy behavior is preserved: model metadata is used for validation and
- * the actual embedding length is used when creating a collection. When enabled, both operations
- * use the configured size and reject model output drift before writing to the vector store.
+ * The switch is the vector search master switch: it is combined with the original AI ability
+ * switch ({@see AiAbilityCode::KnowledgeBaseEmbeddingModel}), so vector search is active only
+ * when both the ability and this switch are on. The switch defaults to on, so nothing changes
+ * unless it is explicitly turned off.
+ *
+ * When vector search is inactive, no embedding is written. When it is active, collection creation
+ * and dimension validation both use the configured size and reject model output drift before
+ * writing to the vector store.
  */
 final class EmbeddingDimensionPolicy
 {
-    /** Return whether the fixed dimension policy is enabled. */
+    /**
+     * 向量搜索总开关（配置层原始值）。
+     *
+     * 默认开启；显式置为 false 即关闭向量搜索，各市场的检索会回落到关键词搜索。
+     */
+    public static function isSwitchOn(): bool
+    {
+        return (bool) config('vector_index.enabled', true);
+    }
+
+    /**
+     * 向量搜索是否生效。
+     *
+     * 在原有「向量搜索 AI 能力」的基础上叠加总开关，两个条件都满足才生效：
+     * 1. AI 能力 KnowledgeBaseEmbeddingModel 已启用（原先的判断依据）；
+     * 2. VECTOR_INDEX_ENABLED 已打开（默认打开）。
+     *
+     * 三个 Domain Service 的 isVectorSearchEnabled() 统一复用本方法，避免两套口径。
+     */
     public static function isEnabled(): bool
     {
-        return (bool) config('vector_index.embedding_dimension.enabled', false);
+        return self::isSwitchOn()
+            && EmbeddingGenerator::isEnabled(AiAbilityCode::KnowledgeBaseEmbeddingModel);
     }
 
     /** Return the configured fixed vector size. */
