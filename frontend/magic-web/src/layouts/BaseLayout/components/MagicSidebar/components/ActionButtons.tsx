@@ -51,34 +51,39 @@ function ActionButtons({ collapsed }: ActionButtonsProps) {
 				{actionItems.map((item) => {
 					const Icon = item.icon
 					return (
-						<Button
+						<MagicTooltip
 							key={item.id}
-							variant="ghost"
-							size={collapsed ? "icon" : "sm"}
-							data-testid={`sidebar-action-${item.id}`}
-							className={cn(
-								"h-8 shrink-0",
-								collapsed ? "w-8" : "w-full justify-start px-2",
-							)}
-							onClick={item.onClick}
+							title={collapsed ? t(item.label) : undefined}
+							placement="right"
 						>
-							<Icon
+							<Button
+								variant="ghost"
+								size={collapsed ? "icon" : "sm"}
+								data-testid={`sidebar-action-${item.id}`}
 								className={cn(
-									"h-4 w-4 text-sidebar-foreground",
-									!collapsed && "mr-2",
+									"h-8 shrink-0",
+									collapsed ? "w-8" : "w-full justify-start px-2",
 								)}
-							/>
-							{!collapsed && (
-								<span className="text-sm text-sidebar-foreground">
-									{t(item.label)}
-								</span>
-							)}
-						</Button>
+								onClick={item.onClick}
+							>
+								<Icon
+									className={cn(
+										"h-4 w-4 text-sidebar-foreground",
+										!collapsed && "mr-2",
+									)}
+								/>
+								{!collapsed && (
+									<span className="text-sm text-sidebar-foreground">
+										{t(item.label)}
+									</span>
+								)}
+							</Button>
+						</MagicTooltip>
 					)
 				})}
 
 				{isDev && (
-					<MagicTooltip title="当前仅在开发环境开启">
+					<MagicTooltip title="当前仅在开发环境开启" placement="right">
 						<Button
 							variant="ghost"
 							size={collapsed ? "icon" : "sm"}

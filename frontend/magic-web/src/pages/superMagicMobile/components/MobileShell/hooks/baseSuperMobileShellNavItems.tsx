@@ -47,12 +47,6 @@ export const BASE_SUPER_MOBILE_SHELL_NAV_ITEMS: SuperMobileShellNavConfigItem[] 
 		requiredPermissionCode: FUNCTION_PERMISSION_CODE.MagicClawAccess,
 	},
 	{
-		key: "apps",
-		icon: LayoutGrid,
-		labelKey: "mobile.shell.navApps",
-		routeName: RouteName.SuperApps,
-	},
-	{
 		key: "microApps",
 		icon: Boxes,
 		labelKey: "mobile.shell.navMicroApps",
@@ -63,5 +57,11 @@ export const BASE_SUPER_MOBILE_SHELL_NAV_ITEMS: SuperMobileShellNavConfigItem[] 
 		icon: Trash2,
 		labelKey: "mobile.shell.navTrash",
 		routeName: RouteName.RecycleBin,
+	},
+	{
+		key: "apps",
+		icon: LayoutGrid,
+		labelKey: "mobile.shell.navApps",
+		routeName: RouteName.SuperApps,
 	},
 ]
