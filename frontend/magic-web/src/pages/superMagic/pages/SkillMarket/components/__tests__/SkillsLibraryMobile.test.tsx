@@ -16,8 +16,12 @@ vi.mock("react-i18next", () => ({
 					return "Upgrade"
 				case "skillsLibrary.updatedAt":
 					return `Updated ${params?.dateTime ?? ""}`.trim()
+				case "skillsLibrary.updatedAtLabel":
+					return "Updated"
 				case "skillsLibrary.installCount":
 					return `${params?.formattedCount ?? ""} installs`.trim()
+				case "skillsLibrary.installCountLabel":
+					return "Installs"
 				case "skillsLibrary.official":
 					return "Official"
 				case "employeeCard.officialBuiltin":
@@ -142,7 +146,10 @@ describe("StoreSkillCardMobile", () => {
 		render(<StoreSkillCardMobile skill={skill} language="en_US" />)
 
 		expect(screen.getByTestId("skills-library-mobile-card-install-count")).toHaveTextContent(
-			"234 installs",
+			"Installs",
+		)
+		expect(screen.getByTestId("skills-library-mobile-card-install-count")).toHaveTextContent(
+			"234",
 		)
 	})
 

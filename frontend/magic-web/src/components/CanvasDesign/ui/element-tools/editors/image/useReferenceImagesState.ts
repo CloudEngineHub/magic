@@ -103,6 +103,7 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 		const items = referenceFileInfos.map((info) => ({
 			name: info.fileName,
 			path: info.path,
+			source: "element-reference" as const,
 		}))
 		return items
 	}, [referenceFileInfos])
@@ -154,10 +155,12 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 		if (!canvas) return
 
 		const elementInstance = canvas.elementManager.getElementInstance(imageElementId)
-		if (!(
-			elementInstance instanceof ImageElementClass ||
-			elementInstance instanceof VideoElementClass
-		)) {
+		if (
+			!(
+				elementInstance instanceof ImageElementClass ||
+				elementInstance instanceof VideoElementClass
+			)
+		) {
 			return
 		}
 
@@ -201,10 +204,12 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 		if (!canvas) return
 
 		const elementInstance = canvas.elementManager.getElementInstance(imageElementId)
-		if (!(
-			elementInstance instanceof ImageElementClass ||
-			elementInstance instanceof VideoElementClass
-		)) {
+		if (
+			!(
+				elementInstance instanceof ImageElementClass ||
+				elementInstance instanceof VideoElementClass
+			)
+		) {
 			return
 		}
 

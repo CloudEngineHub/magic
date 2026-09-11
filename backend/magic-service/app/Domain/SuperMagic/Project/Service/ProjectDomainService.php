@@ -277,7 +277,8 @@ class ProjectDomainService
         int $targetWorkspaceId,
         string $targetProjectName,
         string $userId,
-        string $userOrganizationCode
+        string $userOrganizationCode,
+        ?string $projectMode = null
     ): array {
         // Check if user already has a running fork for this project
         if ($this->projectForkRepository->hasRunningFork($userId, $sourceProjectId)) {
@@ -299,7 +300,8 @@ class ProjectDomainService
             $targetProjectName,
             $userId,
             $userOrganizationCode,
-            $currentTime
+            $currentTime,
+            $projectMode
         );
 
         // Save forked project
@@ -883,7 +885,8 @@ class ProjectDomainService
         string $targetProjectName,
         string $userId,
         string $userOrganizationCode,
-        string $currentTime
+        string $currentTime,
+        ?string $projectMode = null
     ): ProjectEntity {
         $forkedProject = new ProjectEntity();
         $forkedProject->setUserId($userId)
@@ -892,7 +895,7 @@ class ProjectDomainService
             ->setProjectName($targetProjectName)
             ->setProjectDescription($sourceProject->getProjectDescription())
             ->setWorkDir('') // Will be set later during file migration
-            ->setProjectMode($sourceProject->getProjectMode())
+            ->setProjectMode($projectMode ?? $sourceProject->getProjectMode())
             ->setProjectStatus(ProjectStatus::ACTIVE->value)
             ->setCurrentTopicId(null)
             ->setCurrentTopicStatus('')

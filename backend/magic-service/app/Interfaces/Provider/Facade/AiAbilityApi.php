@@ -13,6 +13,7 @@ use App\Application\ModelGateway\Service\AiAbilityConnectivityTestAppService;
 use App\Application\Provider\Service\AiAbilityAppService;
 use App\Application\Provider\Service\AiAbilityConfigAppService;
 use App\Domain\ModelGateway\Entity\Dto\AiAbilityConnectivityTestRequestDTO;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Infrastructure\Util\RequestUtil;
@@ -121,7 +122,7 @@ class AiAbilityApi extends AbstractApi
             'organization_id' => $authorization->getOrganizationCode(),
             'organization_code' => $authorization->getOrganizationCode(),
             'user_id' => $authorization->getId(),
-            'source_id' => 'ai_ability_connectivity_test',
+            'source_id' => SourceId::AI_ABILITY_CONNECTIVITY_TEST,
         ]);
 
         return $this->aiAbilityConnectivityTestAppService->connectivityTest($connectivityTestRequestDTO);

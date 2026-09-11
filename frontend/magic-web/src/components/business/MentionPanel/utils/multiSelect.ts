@@ -1,4 +1,4 @@
-import type { MentionItem, NavigationItem } from "../types"
+import type { AgentMentionData, MentionItem, NavigationItem } from "../types"
 import { MentionItemType, PanelState } from "../types"
 import { MentionPanelBuiltinItemId as BuiltinRootId } from "../runtime/builtin/catalog-ids"
 import { isSelectableBuiltinItemId } from "../runtime/builtin/default-items"
@@ -47,7 +47,9 @@ export function inferRootEntryIdFromItem(item: MentionItem): string | null {
 		case MentionItemType.MCP:
 			return BuiltinRootId.MCP_EXTENSIONS
 		case MentionItemType.AGENT:
-			return BuiltinRootId.AGENTS
+			return (item.data as AgentMentionData | undefined)?.agent_source === "digital_employee"
+				? BuiltinRootId.DIGITAL_EMPLOYEES
+				: BuiltinRootId.AGENTS
 		case MentionItemType.MICRO_APP:
 			return BuiltinRootId.MICRO_APPS
 		case MentionItemType.SKILL:

@@ -116,6 +116,20 @@ class AutoReadFileService:
     """在每次真实模型调用前统一发现并读取声明式自动文件。"""
 
     @classmethod
+    async def resolve_memory_file_candidates(
+        cls,
+        agent_context: "AgentContext",
+    ) -> tuple[AutoReadFileCandidate, ...]:
+        """解析当前 Agent 可访问的全局和项目记忆文件候选。"""
+        candidates = await cls._resolve_candidates(agent_context, None)
+        return tuple(
+            candidate
+            for candidate in candidates
+            if candidate.rule_id
+            in {AutoReadRuleId.GLOBAL_MEMORY, AutoReadRuleId.PROJECT_MEMORY}
+        )
+
+    @classmethod
     async def prepare_before_llm(
         cls,
         agent_context: "AgentContext",

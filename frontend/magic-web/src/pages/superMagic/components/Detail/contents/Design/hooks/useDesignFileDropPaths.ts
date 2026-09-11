@@ -23,6 +23,7 @@ import {
 	getCanvasResourceFileName,
 	isCanvasResourceRootPath,
 	stripCurrentDirectoryPrefix,
+	stripPathEdgeSlashes,
 } from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import {
 	resolveDesignResourceFileItem,
@@ -491,14 +492,25 @@ export function useDesignFileDropPaths(
 				input.sourceFileId ||
 				input.projectPath ||
 				input.sourcePath
-			if (!targetProjectId || !resourceIdentity) return null
+			if (!targetProjectId || !resourceIdentity) {
+				return null
+			}
 			const fileName =
 				input.fileName ||
 				getCanvasResourceFileName(input.sourcePath || resourceIdentity) ||
 				"canvas-clipboard-file"
-			const sameProject = Boolean(
-				input.sourceProjectId && input.sourceProjectId === targetProjectId,
+			const sourceAttachment = input.sourceFileId
+				? attachmentIndex?.byFileId.get(input.sourceFileId) ||
+					flatAttachments?.find((item) => item.file_id === input.sourceFileId)
+				: undefined
+			const inferredSameProject = Boolean(
+				sourceAttachment ||
+				(input.projectPath && getSourceFileIdByWorkspacePath(input.projectPath)) ||
+				(input.sourcePath && getSourceFileIdByWorkspacePath(input.sourcePath)),
 			)
+			const sameProject = input.sourceProjectId
+				? input.sourceProjectId === targetProjectId
+				: inferredSameProject
 			const sameCanvas = Boolean(
 				input.sourceCanvasId &&
 				input.targetCanvasId &&
@@ -557,6 +569,37 @@ export function useDesignFileDropPaths(
 			if (input.target !== "canvas-editor") {
 				return null
 			}
+			if (sameProject && !sameCanvas) {
+				const sourceWorkspacePath =
+					sourceAttachment?.relative_file_path || input.projectPath || undefined
+				if (sourceWorkspacePath) {
+					const workspaceResolution = resolveDesignResourceReference(
+						{ namespace: "workspace-path", path: sourceWorkspacePath },
+						{
+							designProjectBasePath,
+							flatAttachments,
+							attachmentsReady,
+							attachmentIndex,
+						},
+					)
+					if (
+						workspaceResolution.status === "resolved" &&
+						workspaceResolution.storagePath.startsWith("./")
+					) {
+						const result = {
+							kind: "current-canvas" as const,
+							path: workspaceResolution.storagePath,
+							fileId: workspaceResolution.attachmentId,
+							projectPath: workspaceResolution.workspacePath
+								? `/${workspaceResolution.workspacePath.replace(/^\/+/, "")}`
+								: undefined,
+							resourceIdentity,
+							fileName,
+						}
+						return result
+					}
+				}
+			}
 			if (sameCanvas && input.sourcePath) {
 				const current = resolveDesignResourceReference(
 					{
@@ -572,7 +615,7 @@ export function useDesignFileDropPaths(
 						path: current.storagePath,
 						fileId: current.attachmentId,
 						projectPath: current.workspacePath
-							? `/${current.workspacePath}`
+							? `/${current.workspacePath.replace(/^\/+/, "")}`
 							: undefined,
 						resourceIdentity,
 						fileName,
@@ -599,6 +642,30 @@ export function useDesignFileDropPaths(
 			if (!sameProject) {
 				return null
 			}
+
+			// Clipboard may still point at another canvas workspace path even when the
+			// same file name already exists under the current canvas asset directory
+			// (copyFile would then create a "(2)" duplicate). Prefer the local asset.
+			const reuseAuthoritativePath = input.projectPath || input.sourcePath || fileName
+			const reuseSubDir = getUploadSubDir(reuseAuthoritativePath)
+			if (designProjectBasePath) {
+				const existingWorkspacePath = `/${stripPathEdgeSlashes(designProjectBasePath)}/${reuseSubDir}/${fileName}`
+				const existingFileId = getSourceFileIdByWorkspacePath(existingWorkspacePath)
+				if (existingFileId) {
+					const existingPath = formatCanvasRelativeResourcePath(
+						`${reuseSubDir}/${fileName}`,
+					)
+					return {
+						kind: "current-canvas" as const,
+						path: existingPath,
+						fileId: existingFileId,
+						projectPath: existingWorkspacePath,
+						resourceIdentity,
+						fileName,
+					}
+				}
+			}
+
 			const copyCacheKey = [
 				input.sourceProjectId ?? "",
 				input.sourceCanvasId ?? "",

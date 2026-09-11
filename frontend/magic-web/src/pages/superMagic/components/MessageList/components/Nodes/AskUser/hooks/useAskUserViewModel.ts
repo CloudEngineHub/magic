@@ -189,7 +189,8 @@ export function useAskUserViewModel({
 	const askUserNode = getAskUserNode(node as typeof node)
 	const parsedContent = parseAskUserContent(askUserNode?.content)
 	const askUserTool = askUserNode?.tool as
-		{ status?: string; detail?: { data?: Record<string, unknown> } } | undefined
+		| { status?: string; detail?: { data?: Record<string, unknown> } }
+		| undefined
 	const detailData =
 		(askUserTool?.detail?.data as Record<string, unknown> | undefined) || askUserEmptyDetailData
 	const detailStatus = typeof detailData.status === "string" ? detailData.status : ""

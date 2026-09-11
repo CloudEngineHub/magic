@@ -11,8 +11,9 @@ if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
 from app.service.mention.utils.canvas_project_detector import find_parent_canvas_project
 
-_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif"}
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif", ".tif", ".tiff"}
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".webm", ".mkv", ".flv", ".wmv"}
+_DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH = "/mnt/agfs/magicfs/referenced-projects"
 
 _TEMPORARY_FILE_NOTIFICATION = (
     "These files are stored in `.tmp` and will be removed automatically by the expiration policy. "
@@ -89,6 +90,41 @@ def _workspace_relative_path(file_path: str) -> Optional[str]:
     return relative_path
 
 
+def _referenced_project_absolute_path(file_path: str) -> Optional[str]:
+    """验证并保留 Agent 可直接读取的跨项目挂载绝对路径。"""
+    raw_path = file_path.strip()
+    if not raw_path or "\0" in raw_path:
+        return None
+
+    normalized_input = raw_path.replace("\\", "/")
+    if ".." in Path(normalized_input).parts:
+        return None
+
+    mount_base_path = (
+        os.getenv(
+            "AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH",
+            _DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH,
+        ).strip()
+        or _DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH
+    )
+    normalized_mount_base = Path(os.path.normpath(mount_base_path))
+    normalized_path = Path(os.path.normpath(normalized_input))
+    if not normalized_mount_base.is_absolute() or not normalized_path.is_absolute():
+        return None
+
+    try:
+        relative_path = normalized_path.relative_to(normalized_mount_base)
+    except ValueError:
+        return None
+
+    # 第一段是来源 project_id，后续至少还要包含一个文件路径段。
+    if len(relative_path.parts) < 2 or any(
+        not part or part in {".", ".."} for part in relative_path.parts
+    ):
+        return None
+    return normalized_path.as_posix()
+
+
 def _markdown_label(value: str) -> str:
     return " ".join(value.split()).replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
 
@@ -103,18 +139,24 @@ def _encode_markdown_path(path: str) -> Optional[str]:
 
 def _canonical_file_link(file_path: str, file_name: str) -> Optional[str]:
     relative_path = _workspace_relative_path(file_path)
-    if not relative_path:
-        return None
+    if relative_path:
+        destination = f"./{relative_path}"
+        fallback_name = Path(relative_path).name
+    else:
+        absolute_path = _referenced_project_absolute_path(file_path)
+        if not absolute_path:
+            return None
+        destination = absolute_path
+        fallback_name = Path(absolute_path).name
 
-    encoded_path = _encode_markdown_path(relative_path)
+    encoded_path = _encode_markdown_path(destination)
     if not encoded_path:
         return None
 
-    label = _markdown_label(file_name or Path(relative_path).name)
-    destination = f"./{encoded_path}"
-    if " " in destination:
-        return f"[{label}](<{destination}>)"
-    return f"[{label}]({destination})"
+    label = _markdown_label(file_name or fallback_name)
+    if " " in encoded_path:
+        return f"[{label}](<{encoded_path}>)"
+    return f"[{label}]({encoded_path})"
 
 
 class FileHandler(BaseMentionHandler):
@@ -151,6 +193,39 @@ class FileHandler(BaseMentionHandler):
             except Exception as error:
                 logger.warning(f"推送临时文件 Horizon 通知失败: {error}")
         return f"{notification}\n\nRead and understand the referenced files before proceeding."
+
+    async def extract_image_refs(
+        self,
+        mention: Dict[str, Any],
+        agent_context: Optional["AgentContext"] = None,
+    ) -> List[str]:
+        """从文件 mention 中提取可用于原生视觉的图片路径。"""
+        attrs = mention.get("attrs", {})
+        if not isinstance(attrs, dict):
+            attrs = {}
+        data = attrs.get("data", {})
+        if not isinstance(data, dict):
+            data = {}
+
+        file_path = (
+            mention.get("file_path")
+            or mention.get("relative_file_path")
+            or data.get("file_path")
+            or data.get("relative_file_path")
+        )
+        if not isinstance(file_path, str) or not file_path.strip():
+            return []
+        file_path = file_path.strip()
+
+        extension = mention.get("file_extension") or data.get("file_extension")
+        if not isinstance(extension, str) or not extension.strip():
+            file_name = mention.get("file_name") or data.get("file_name") or file_path
+            extension = Path(str(file_name)).suffix
+        extension = str(extension).strip().lower()
+        if extension and not extension.startswith("."):
+            extension = f".{extension}"
+
+        return [file_path] if extension in _IMAGE_EXTS else []
 
     def _build_temporary_file_notification(self) -> str:
         """构建包含临时文件列表的统一英文提示。"""

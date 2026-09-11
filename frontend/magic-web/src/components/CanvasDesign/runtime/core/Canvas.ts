@@ -73,7 +73,7 @@ import { TextFormattingManager } from "../interaction/text-editing/TextFormattin
 import { CanvasInputManager } from "../interaction/input/index"
 import { isCanvasUIComponentNode } from "../shared/dom/domGuards"
 import {
-	buildVirtualResourceScope,
+	buildSharedMediaStorageScope,
 	getCanvasHostResourceReferenceResolver,
 	resolveCanvasStorageResourceReference,
 	type CanvasResourceReferenceResolverChangeOptions,
@@ -122,6 +122,31 @@ function getCanvasConnectionComparable(connections: CanvasDocument["connections"
 			targetElementId,
 		})),
 	)
+}
+
+type ContentViewElement = LayerElement & {
+	activeContentId?: string | null
+	contents?: readonly { contentId: string }[]
+}
+
+function resolveEffectiveContentIdForElement(
+	element: ContentViewElement | undefined,
+	previewContentId?: string,
+): { contentId?: string; previewMatched: boolean } {
+	if (!element || !Array.isArray(element.contents)) {
+		return { contentId: undefined, previewMatched: false }
+	}
+
+	const previewMatched = Boolean(
+		previewContentId &&
+		element.contents.some((content) => content.contentId === previewContentId),
+	)
+	return {
+		contentId: previewMatched
+			? previewContentId
+			: (element.activeContentId ?? element.contents[0]?.contentId),
+		previewMatched,
+	}
 }
 
 function getElementResourceReferencePath(
@@ -363,7 +388,7 @@ export class Canvas {
 			getResolveResourceReference: () =>
 				this.magicConfigManager.config?.methods?.resolveResourceReference,
 			getVirtualResourceScope: () =>
-				buildVirtualResourceScope(
+				buildSharedMediaStorageScope(
 					this.magicConfigManager.config?.methods?.getVirtualResourceScope?.(),
 					this.id,
 				),
@@ -1356,17 +1381,21 @@ export class Canvas {
 	public setAccessContext(update: CanvasAccessUpdate): void {
 		const accessChanged = this.permissionManager.setAccessContext(update)
 		if (!accessChanged) return
-		if (this.permissionManager.can("document.write")) this.clearPreviewContent()
+		const canWrite = this.permissionManager.can("document.write")
+		const canGenerate = this.permissionManager.can("sideEffect.generate")
+		if (canWrite) this.clearPreviewContent()
 		if (!this.permissionManager.can("interaction.playback")) {
 			this.mediaPlaybackCoordinator.pauseAll()
 		}
-		if (!this.permissionManager.can("document.write")) {
+		if (!canWrite) {
 			this.cropManager.cancelCrop()
-			this.extendManager.cancelExtend()
-			this.eraserManager.cancelEraser()
 			this.mediaReplaceController.cancel()
 			this.elementRenameManager.cancelRename()
 			this.toolManager.setActiveToolByType(ToolTypeEnum.Select)
+		}
+		if (!canWrite || !canGenerate) {
+			this.extendManager.cancelExtend()
+			this.eraserManager.cancelEraser()
 		}
 		if (!this.permissionManager.can("interaction.select")) {
 			this.selectionManager.deselectAll()
@@ -1380,19 +1409,14 @@ export class Canvas {
 
 	public getEffectiveContentId(elementId: string): string | undefined {
 		const element = this.elementManager.getElementData(elementId) as
-			| (LayerElement & {
-					activeContentId?: string | null
-					contents?: readonly { contentId: string }[]
-			  })
+			| ContentViewElement
 			| undefined
 		const previewContentId = this.previewContentIds.get(elementId)
-		if (previewContentId && "contents" in (element ?? {})) {
-			if (element?.contents?.some((content) => content.contentId === previewContentId)) {
-				return previewContentId
-			}
+		const resolution = resolveEffectiveContentIdForElement(element, previewContentId)
+		if (previewContentId && !resolution.previewMatched) {
 			this.previewContentIds.delete(elementId)
 		}
-		return element?.activeContentId ?? element?.contents?.[0]?.contentId
+		return resolution.contentId
 	}
 
 	public getEffectiveContent<T extends { contentId: string }>(elementId: string): T | undefined {
@@ -1409,7 +1433,11 @@ export class Canvas {
 	 * 返回值只供下载、复制等外部读取路径使用，不会交给 ElementManager 写回文档。
 	 */
 	public getElementForContentView<T extends LayerElement>(element: T): T {
-		const effectiveContentId = this.getEffectiveContentId(element.id)
+		const previewContentId = this.previewContentIds.get(element.id)
+		const { contentId: effectiveContentId } = resolveEffectiveContentIdForElement(
+			element as ContentViewElement,
+			previewContentId,
+		)
 		if (
 			!effectiveContentId ||
 			effectiveContentId === element.activeContentId ||

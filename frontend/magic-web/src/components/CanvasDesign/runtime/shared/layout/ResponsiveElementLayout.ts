@@ -1,13 +1,7 @@
-import {
-	resolveElementDesignMetrics,
-	type ElementDesignMetrics,
-} from "./ElementDesignTokens"
+import { resolveElementDesignMetrics, type ElementDesignMetrics } from "./ElementDesignTokens"
 
 export type { ElementDesignMetrics } from "./ElementDesignTokens"
-export {
-	ELEMENT_DESIGN_TOKENS,
-	resolveElementDesignMetrics,
-} from "./ElementDesignTokens"
+export { ELEMENT_DESIGN_TOKENS, resolveElementDesignMetrics } from "./ElementDesignTokens"
 
 export interface LayoutSize {
 	width: number

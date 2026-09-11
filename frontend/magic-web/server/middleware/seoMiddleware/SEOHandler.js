@@ -20,7 +20,7 @@ const routes = [
 	["/share/:topicId", seoRoutes.shareTopic],
 	["/share/:topicId/file/:fileId", seoRoutes.shareTopic],
 	// 微应用分享页
-	["/micro-app/:appId", seoRoutes.microApp, { installable: true }],
+	["/micro-app/:appId", seoRoutes.publishedMicroApp, { installable: true }],
 	// 登录
 	["/login", seoRoutes.login],
 	// 微应用编辑页；必须位于 /:clusterCode/super/:projectId/:topicId 之前，避免被通用项目路由匹配。
@@ -39,7 +39,17 @@ const routes = [
 	["/:clusterCode/super/:projectId/:topicId", seoRoutes.personalTopic],
 	// 个人项目
 	["/:clusterCode/super/:projectId", seoRoutes.personalProject],
-	// 审批
+	// 发起审批
+	["/:clusterCode/approval/initiate", seoRoutes.approvalInitiate],
+	// 审批中心
+	["/:clusterCode/approval/center", seoRoutes.approvalCenter],
+	// 智能委托
+	["/:clusterCode/approval/delegate", seoRoutes.approvalDelegate],
+	// 审批代理
+	["/:clusterCode/approval/agent", seoRoutes.approvalAgent],
+	// 审批详情（规范路径）
+	["/:clusterCode/approval/:id", seoRoutes.approval],
+	// 审批中心；seoRoutes.approval 会兼容旧的 query.id 分享链接
 	["/:clusterCode/approval", seoRoutes.approval],
 	// 云文档
 	["/:clusterCode/docx/:fileId", seoRoutes.docx],
@@ -89,15 +99,22 @@ module.exports = (app) => {
 			try {
 				const baseUrl = `${req.protocol}://${req.get("host")}`
 
-				// 获取全局平台信息
-				const platformInfoRaw = await getGlobalPlatformInfo()
+				// 获取全局平台信息；接口不可用时继续使用默认平台信息，
+				// 不能因此跳过页面级 SEO 标题。
+				let platformInfoRaw = {}
+				try {
+					platformInfoRaw = await getGlobalPlatformInfo()
+				} catch (error) {
+					logger.warn("nodeServer", "SEOHandler", "Failed to get global platform info:", error)
+				}
 				const locale = req.getLocale()
 
 				// 提取平台信息（带 fallback）
 				const platformInfo = getPlatformInfo(platformInfoRaw, locale)
 
 				// 获取页面特定的 SEO 信息（useDefaultPlatformTitle 为 true 时用产品名而非工作区名）
-				const seoData = await routeHandler(req, res, next)
+				// 保留实例上下文，审批入口和公开微应用处理器会调用其他 SEO 方法。
+				const seoData = await routeHandler.call(seoRoutes, req, res, next)
 				const { title, keywords, description, useDefaultPlatformTitle } = seoData
 				const platformTitle = useDefaultPlatformTitle
 					? getPlatformInfo({}, locale).title

@@ -5,6 +5,7 @@ import { cn } from "@/utils/cn"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { CardVersionHistoryButton } from "./CardVersionHistoryButton"
 import type { SelfMediaAttachmentNode } from "../types"
+import type { BeforeAction } from "../../../utils/actionGuard"
 
 type CardActionStripTooltipSide = "top" | "right" | "bottom" | "left"
 
@@ -41,7 +42,7 @@ export interface CardActionStripProps {
 	/** 附件列表（用于版本历史内容路径处理） */
 	attachmentList?: SelfMediaAttachmentNode[]
 	/** 打开版本历史前的拦截回调（有未保存内容时弹框询问用户） */
-	onBeforeOpenVersionHistory?: () => Promise<boolean>
+	onBeforeOpenVersionHistory?: BeforeAction
 	tooltipSide?: CardActionStripTooltipSide
 	testId?: string
 	labels?: CardActionStripLabels

@@ -5,11 +5,14 @@ import pytest
 
 from agentlang.config.config import config
 from agentlang.config.models.model_config_manager import model_config_manager
+from agentlang.config.models.model_catalog import ModelCatalog
+from agentlang.config.models.model_config import ModelConfig
 from app.core.model_providers.magic_service_provider import (
     MagicServiceProvider,
     MagicServiceProviderError,
     PROVIDER_TYPE,
 )
+from app.api.routes.models import _to_debug_panel_model
 
 
 class _FakeAsyncClient:
@@ -85,6 +88,30 @@ def _patch_response(monkeypatch: pytest.MonkeyPatch, payload: dict) -> None:
     )
 
 
+def test_local_model_capability_boolean_strings_are_parsed_consistently():
+    profile = ModelCatalog({"mock-model": {"supports_multimodal": "false"}}).resolve(
+        profile="mock-model",
+        api_model="mock-model",
+    )
+    config_value = ModelConfig.from_dict(
+        "mock-model",
+        {"supports_multimodal": "false"},
+    )
+
+    assert profile.supports_multimodal is False
+    assert config_value.supports_multimodal is False
+
+
+def test_local_model_debug_payload_exposes_multimodal_capability():
+    """本地模型调试接口应暴露多模态能力。"""
+    model = ModelConfig.from_dict(
+        "vision-model",
+        {"name": "Vision", "supports_multimodal": True},
+    )
+
+    assert _to_debug_panel_model(model)["info"]["options"]["multi_modal"] is True
+
+
 @pytest.mark.asyncio
 async def test_magic_service_provider_rejects_business_error(monkeypatch: pytest.MonkeyPatch):
     provider = MagicServiceProvider()
@@ -134,6 +161,7 @@ async def test_magic_service_provider_parses_success_payload(monkeypatch: pytest
                             "max_tokens": "200000",
                             "max_output_tokens": "64000",
                             "function_call": True,
+                            "multi_modal": True,
                             "default_temperature": "0.7",
                         },
                         "attributes": {
@@ -155,11 +183,32 @@ async def test_magic_service_provider_parses_success_payload(monkeypatch: pytest
     assert model.api_key == "mock-api-key"
     assert model.api_base_url == "https://llm.example.com/v1"
     assert model.supports_tool_use is True
+    assert model.supports_multimodal is True
     assert model.max_context_tokens == 200000
     assert model.max_output_tokens == 64000
     assert model.metadata["label"] == "Auto"
     assert model.resolved_model_id == "claude-sonnet-4.6"
     assert model.provider_source == PROVIDER_TYPE
+
+
+@pytest.mark.asyncio
+async def test_magic_service_provider_parses_string_false_multimodal_flag(monkeypatch: pytest.MonkeyPatch):
+    provider = MagicServiceProvider()
+    _patch_credentials(monkeypatch, provider)
+    monkeypatch.setenv("MAGIC_API_KEY", "mock-api-key")
+    monkeypatch.setenv("MAGIC_API_BASE_URL", "https://llm.example.com/v1")
+    _patch_response(
+        monkeypatch,
+        {
+            "code": 1000,
+            "message": "ok",
+            "data": [{"id": "text-only", "name": "text-only", "info": {"options": {"multi_modal": "false"}}}],
+        },
+    )
+
+    models = await provider.load()
+
+    assert models[0].supports_multimodal is False
 
 
 @pytest.mark.asyncio

@@ -10,13 +10,13 @@ interface ActionButtonProps {
 	id?: string
 	"data-testid"?: string
 	icon?:
-	| ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<Icon>>
-	| React.ReactNode
-	| null
+		| ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<Icon>>
+		| React.ReactNode
+		| null
 	rightIcon?:
-	| ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<Icon>>
-	| React.ReactNode
-	| null
+		| ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<Icon>>
+		| React.ReactNode
+		| null
 	icon_url?: string
 	element?: React.ReactNode
 	title?: string

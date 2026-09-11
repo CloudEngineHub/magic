@@ -4,12 +4,16 @@ import { CanvasElementClipboard } from "../clipboard/CanvasElementClipboard"
 import type { CanvasFileElement } from "../../document/types"
 import {
 	CanvasClipboardPasteController,
+	configureCanvasClipboardPasteHost,
 	createCanvasClipboardPasteControllerFromMethods,
+	getCanvasClipboardPasteController,
 	hasCanvasClipboardMimeType,
 	hasCanvasClipboardTextOrHtml,
+	releaseCanvasClipboardPasteHost,
 	type CanvasClipboardAsset,
 	type CanvasClipboardTarget,
 } from "../clipboard/CanvasClipboardPasteController"
+import { CanvasClipboardAssetResolver } from "../clipboard/CanvasClipboardAssetResolver"
 
 function createClipboardItem(blob: Blob, ...types: string[]): ClipboardItem {
 	return {
@@ -127,7 +131,7 @@ describe("CanvasClipboardPasteController", () => {
 			mainContentId: "active",
 		} as unknown as CanvasFileElement
 		const metadata = CanvasElementClipboard.createFileMetadata({
-			element: image,
+			element: image as unknown as CanvasFileElement,
 			fileId: "image-1:0",
 			filename: "active.png",
 			mimeType: "image/png",
@@ -289,7 +293,7 @@ describe("CanvasClipboardPasteController", () => {
 			mainContentId: "content-1",
 		} as unknown as CanvasFileElement
 		const metadata = CanvasElementClipboard.createFileMetadata({
-			element: image,
+			element: image as unknown as CanvasFileElement,
 			fileId: "image-without-active:0",
 			filename: "image.png",
 			mimeType: "image/png",
@@ -368,7 +372,7 @@ describe("CanvasClipboardPasteController", () => {
 			mainContentId: "active",
 		} as unknown as CanvasFileElement
 		const metadata = CanvasElementClipboard.createFileMetadata({
-			element: image,
+			element: image as unknown as CanvasFileElement,
 			fileId: "malformed-image:0",
 			filename: "malformed.png",
 			mimeType: "image/png",
@@ -655,6 +659,35 @@ describe("CanvasClipboardPasteController", () => {
 		expect(second.handled).toBe(true)
 		expect(second.accepted).toBe(first.accepted)
 		expect(secondAssets).toEqual([])
+	})
+
+	it("keeps separately configured hosts isolated across mount and unmount", () => {
+		const methodsA = { clipboard: { read: vi.fn(async () => []) } }
+		const methodsB = { clipboard: { read: vi.fn(async () => []) } }
+		const controllerA = configureCanvasClipboardPasteHost(methodsA)
+		const controllerB = configureCanvasClipboardPasteHost(methodsB)
+
+		expect(getCanvasClipboardPasteController(methodsA)).toBe(controllerA)
+		expect(getCanvasClipboardPasteController(methodsB)).toBe(controllerB)
+
+		releaseCanvasClipboardPasteHost(controllerB)
+		expect(getCanvasClipboardPasteController(methodsA)).toBe(controllerA)
+		releaseCanvasClipboardPasteHost(controllerA)
+	})
+
+	it("does not fetch remote references without host materialization", async () => {
+		const fetchSpy = vi.spyOn(globalThis, "fetch")
+		const resolver = new CanvasClipboardAssetResolver()
+
+		await expect(
+			resolver.materializeAsset({
+				sourceRef: { ossUrl: "https://untrusted.example/asset.png" },
+				fileName: "asset.png",
+				mimeType: "image/png",
+			}),
+		).resolves.toBeNull()
+		expect(fetchSpy).not.toHaveBeenCalled()
+		fetchSpy.mockRestore()
 	})
 
 	it("handles external media returned only by Clipboard API", async () => {
@@ -1001,7 +1034,7 @@ describe("CanvasClipboardPasteController", () => {
 		})
 		const bundle = CanvasDesignClipboard.createBundleBlob({
 			payload: CanvasElementClipboard.createPayload({
-				elements: [image],
+				elements: [image as unknown as CanvasFileElement],
 				files: [metadata],
 				operation: "copy-elements",
 				canvasId: "canvas-a",
@@ -1061,7 +1094,7 @@ describe("CanvasClipboardPasteController", () => {
 			contents: [{ contentId: "content-adapter", src: "./images/reused.png" }],
 		}
 		const metadata = CanvasElementClipboard.createFileMetadata({
-			element: image,
+			element: image as unknown as CanvasFileElement,
 			fileId: "file-adapter",
 			filename: "reused.png",
 			mimeType: "image/png",
@@ -1073,7 +1106,7 @@ describe("CanvasClipboardPasteController", () => {
 		})
 		const bundle = CanvasDesignClipboard.createBundleBlob({
 			payload: CanvasElementClipboard.createPayload({
-				elements: [image],
+				elements: [image as unknown as CanvasFileElement],
 				files: [metadata],
 				operation: "copy-elements",
 				canvasId: "canvas-a",
@@ -1117,6 +1150,456 @@ describe("CanvasClipboardPasteController", () => {
 				target: "canvas-editor",
 			}),
 		)
+	})
+
+	it("accepts a MessageEditor project-file mention in an image editor", async () => {
+		const metadata = btoa(
+			encodeURIComponent(
+				JSON.stringify({
+					mentions: [
+						{
+							attrs: {
+								type: "project_file",
+								data: {
+									file_id: "message-file",
+									project_id: "project-a",
+									file_path: "/CanvasA/images/message.png",
+									file_name: "message.png",
+								},
+							},
+						},
+					],
+				}),
+			),
+		)
+		const event = {
+			clipboardData: {
+				types: ["text/html", "text/x-magic-message-mentions"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/html" ? `<div data-magic-clipboard="${metadata}"></div>` : "",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+		const resolver = vi.fn(async () => ({
+			kind: "current-canvas" as const,
+			path: "./images/message.png",
+			resourceIdentity: "message-file",
+			fileName: "message.png",
+		}))
+		const materialize = vi.fn(async () => null)
+		const controller = new CanvasClipboardPasteController({
+			resolveReference: resolver,
+			materialize,
+		})
+
+		const result = await controller.paste(event, {
+			control: "image-editor",
+			acceptedTypes: ["image"],
+			projectId: "project-a",
+			canvasId: "canvas-a",
+			sessionId: "message-reference-test",
+		})
+
+		expect(result.accepted).toHaveLength(1)
+		expect(result.accepted[0]?.reference?.path).toBe("./images/message.png")
+		expect(materialize).not.toHaveBeenCalled()
+		expect(event.preventDefault).toHaveBeenCalled()
+	})
+
+	it("preserves mixed MessageEditor text and media order in rich-text mode", async () => {
+		const metadata = btoa(
+			encodeURIComponent(
+				JSON.stringify({
+					richText: JSON.stringify({
+						type: "doc",
+						content: [
+							{
+								type: "paragraph",
+								content: [
+									{ type: "text", text: "before " },
+									{
+										type: "mention",
+										attrs: {
+											type: "project_file",
+											data: {
+												file_id: "mixed-image",
+												project_id: "project-a",
+												file_path: "images/mixed.png",
+												file_name: "mixed.png",
+											},
+										},
+									},
+									{ type: "text", text: " after" },
+								],
+							},
+						],
+					}),
+				}),
+			),
+		)
+		const event = {
+			clipboardData: {
+				types: ["text/html", "text/x-magic-message-rich-text"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/html" ? `<div data-magic-clipboard="${metadata}"></div>` : "",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+		const onMessageParts = vi.fn()
+		const controller = new CanvasClipboardPasteController({
+			resolveReference: vi.fn(async () => ({
+				kind: "current-canvas" as const,
+				path: "./images/mixed.png",
+				resourceIdentity: "mixed-image",
+				fileName: "mixed.png",
+			})),
+		})
+
+		const result = await controller.paste(
+			event,
+			{
+				control: "image-editor",
+				acceptedTypes: ["image"],
+				messagePasteMode: "rich-text-with-media",
+				sessionId: "mixed-message-test",
+			},
+			{ onMessageParts },
+		)
+
+		expect(result.handled).toBe(true)
+		expect(result.accepted).toHaveLength(1)
+		expect(onMessageParts).toHaveBeenCalledTimes(1)
+		expect(onMessageParts.mock.calls[0][0].map((part: { kind: string }) => part.kind)).toEqual([
+			"text",
+			"asset",
+			"text",
+		])
+		expect(event.preventDefault).toHaveBeenCalledTimes(1)
+	})
+
+	it("invokes onMessageParts before host reference resolve finishes", async () => {
+		const metadata = btoa(
+			encodeURIComponent(
+				JSON.stringify({
+					richText: JSON.stringify({
+						type: "doc",
+						content: [
+							{
+								type: "paragraph",
+								content: [
+									{ type: "text", text: "hi " },
+									{
+										type: "mention",
+										attrs: {
+											type: "project_file",
+											data: {
+												file_id: "early-image",
+												file_path: "images/early.png",
+												file_name: "early.png",
+											},
+										},
+									},
+								],
+							},
+						],
+					}),
+				}),
+			),
+		)
+		const event = {
+			clipboardData: {
+				types: ["text/html"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/html" ? `<div data-magic-clipboard="${metadata}"></div>` : "",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+
+		let releaseResolve!: (value: {
+			kind: "current-canvas"
+			path: string
+			resourceIdentity: string
+			fileName: string
+		}) => void
+		const resolveReference = vi.fn(
+			() =>
+				new Promise<{
+					kind: "current-canvas"
+					path: string
+					resourceIdentity: string
+					fileName: string
+				}>((resolve) => {
+					releaseResolve = resolve
+				}),
+		)
+		const onMessageParts = vi.fn(
+			async (parts: Array<{ kind: string; asset?: { reference?: unknown } }>) => {
+				const assetPart = parts.find((part) => part.kind === "asset")
+				expect(assetPart?.asset?.reference).toBeUndefined()
+			},
+		)
+		const onMessageAssetResolved = vi.fn()
+		const controller = new CanvasClipboardPasteController({ resolveReference })
+
+		const pastePromise = controller.paste(
+			event,
+			{
+				control: "image-editor",
+				acceptedTypes: ["image"],
+				messagePasteMode: "rich-text-with-media",
+				sessionId: "early-message-test",
+			},
+			{ onMessageParts, onMessageAssetResolved },
+		)
+
+		await vi.waitFor(() => expect(onMessageParts).toHaveBeenCalledTimes(1))
+		expect(onMessageAssetResolved).not.toHaveBeenCalled()
+
+		releaseResolve({
+			kind: "current-canvas",
+			path: "./images/early.png",
+			resourceIdentity: "early-image",
+			fileName: "early.png",
+		})
+		await pastePromise
+
+		expect(onMessageAssetResolved).toHaveBeenCalledTimes(1)
+		expect(onMessageAssetResolved.mock.calls[0][1]).toMatchObject({
+			reference: expect.objectContaining({ path: "./images/early.png" }),
+		})
+	})
+
+	it("does not claim malformed MessageEditor metadata", async () => {
+		const event = {
+			clipboardData: {
+				types: ["text/html", "text/x-magic-message-rich-text"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/html"
+						? '<div data-magic-clipboard="not-valid-base64"></div>'
+						: "{not-json",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+		const controller = new CanvasClipboardPasteController()
+
+		const result = await controller.paste(event, {
+			control: "image-editor",
+			acceptedTypes: ["image"],
+			messagePasteMode: "rich-text-with-media",
+			sessionId: "malformed-message-test",
+		})
+
+		expect(result.handled).toBe(false)
+		expect(event.preventDefault).not.toHaveBeenCalled()
+		expect(event.stopPropagation).not.toHaveBeenCalled()
+	})
+
+	it("preserves text when a MessageEditor mention is unsupported by the target", async () => {
+		const metadata = btoa(
+			encodeURIComponent(
+				JSON.stringify({
+					richText: JSON.stringify({
+						type: "doc",
+						content: [
+							{
+								type: "paragraph",
+								content: [
+									{ type: "text", text: "before " },
+									{
+										type: "mention",
+										attrs: {
+											type: "project_file",
+											data: {
+												file_id: "unsupported-video",
+												file_path: "videos/unsupported.mp4",
+												file_name: "unsupported.mp4",
+											},
+										},
+									},
+									{ type: "text", text: " after" },
+								],
+							},
+						],
+					}),
+				}),
+			),
+		)
+		const event = {
+			clipboardData: {
+				types: ["text/html"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/html" ? `<div data-magic-clipboard="${metadata}"></div>` : "",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+		const onMessageParts = vi.fn()
+		const resolveReference = vi.fn()
+		const controller = new CanvasClipboardPasteController({ resolveReference })
+
+		const result = await controller.paste(
+			event,
+			{
+				control: "image-editor",
+				acceptedTypes: ["image"],
+				messagePasteMode: "rich-text-with-media",
+				sessionId: "unsupported-message-test",
+			},
+			{ onMessageParts },
+		)
+
+		expect(result.handled).toBe(true)
+		expect(result.accepted).toHaveLength(0)
+		expect(result.skipped).toEqual([
+			{ reason: "unsupported-type", fileName: "unsupported.mp4" },
+		])
+		expect(resolveReference).not.toHaveBeenCalled()
+		expect(
+			onMessageParts.mock.calls[0][0]
+				.filter((part: { kind: string }) => part.kind === "text")
+				.map((part: { text: string }) => part.text)
+				.join(""),
+		).toBe("before @unsupported.mp4 after")
+	})
+
+	it("reuses resource resolution while preserving repeated mention occurrences", async () => {
+		const metadata = btoa(
+			encodeURIComponent(
+				JSON.stringify({
+					richText: JSON.stringify({
+						type: "doc",
+						content: [
+							{
+								type: "paragraph",
+								content: [
+									{
+										type: "mention",
+										attrs: {
+											type: "project_file",
+											data: {
+												file_id: "repeated-image",
+												file_path: "images/repeated.png",
+												file_name: "repeated.png",
+											},
+										},
+									},
+									{
+										type: "mention",
+										attrs: {
+											type: "project_file",
+											data: {
+												file_id: "repeated-image",
+												file_path: "images/repeated.png",
+												file_name: "repeated.png",
+											},
+										},
+									},
+								],
+							},
+						],
+					}),
+				}),
+			),
+		)
+		const event = {
+			clipboardData: {
+				types: ["text/html"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/html" ? `<div data-magic-clipboard="${metadata}"></div>` : "",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+		const onMessageParts = vi.fn()
+		const resolveReference = vi.fn(async () => ({
+			kind: "current-canvas" as const,
+			path: "./images/repeated.png",
+			resourceIdentity: "repeated-image",
+			fileName: "repeated.png",
+		}))
+		const controller = new CanvasClipboardPasteController({ resolveReference })
+
+		const result = await controller.paste(
+			event,
+			{
+				control: "image-editor",
+				acceptedTypes: ["image"],
+				messagePasteMode: "rich-text-with-media",
+				sessionId: "repeated-message-test",
+			},
+			{ onMessageParts },
+		)
+
+		expect(resolveReference).toHaveBeenCalledTimes(1)
+		expect(result.accepted).toHaveLength(2)
+		expect(
+			onMessageParts.mock.calls[0][0].filter(
+				(part: { kind: string }) => part.kind === "asset",
+			),
+		).toHaveLength(2)
+	})
+
+	it("does not reread the system clipboard for a valid MessageEditor MIME payload", async () => {
+		const event = {
+			clipboardData: {
+				types: ["text/x-magic-message-mentions"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/x-magic-message-mentions"
+						? JSON.stringify([
+								{
+									attrs: {
+										type: "project_file",
+										data: {
+											file_id: "mime-only-image",
+											file_path: "images/mime-only.png",
+											file_name: "mime-only.png",
+										},
+									},
+								},
+							])
+						: "",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+		const read = vi.fn(async () => [])
+		const controller = new CanvasClipboardPasteController({
+			read,
+			resolveReference: vi.fn(async () => ({
+				kind: "current-canvas" as const,
+				path: "./images/mime-only.png",
+				resourceIdentity: "mime-only-image",
+				fileName: "mime-only.png",
+			})),
+		})
+
+		const result = await controller.paste(event, {
+			control: "image-editor",
+			acceptedTypes: ["image"],
+			messagePasteMode: "rich-text-with-media",
+			sessionId: "mime-only-message-test",
+		})
+
+		expect(result.accepted).toHaveLength(1)
+		expect(read).not.toHaveBeenCalled()
 	})
 
 	it("falls back to native media when custom clipboard MIME is unsupported", () => {
@@ -1178,5 +1661,197 @@ describe("CanvasClipboardPasteController", () => {
 		expect(result.accepted).toHaveLength(0)
 		expect(onComplete).not.toHaveBeenCalled()
 		expect(onSettled).toHaveBeenCalledWith(result)
+	})
+
+	it("allows a repeated message-reference paste through count limits when keys already exist", async () => {
+		const metadata = btoa(
+			encodeURIComponent(
+				JSON.stringify({
+					richText: JSON.stringify({
+						type: "doc",
+						content: [
+							{
+								type: "paragraph",
+								content: [
+									{
+										type: "mention",
+										attrs: {
+											type: "project_file",
+											data: {
+												file_id: "file-repeat",
+												file_path: "images/repeat.png",
+												file_name: "repeat.png",
+											},
+										},
+									},
+								],
+							},
+						],
+					}),
+				}),
+			),
+		)
+		const event = {
+			clipboardData: {
+				types: ["text/html"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/html" ? `<div data-magic-clipboard="${metadata}"></div>` : "",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+		const resolveReference = vi.fn(async () => ({
+			kind: "current-canvas" as const,
+			path: "./images/repeat.png",
+			resourceIdentity: "workspace:/canvas-a/images/repeat.png",
+			fileName: "repeat.png",
+			fileId: "file-repeat",
+		}))
+		const controller = new CanvasClipboardPasteController({ resolveReference })
+		const onMessageParts = vi.fn()
+
+		const result = await controller.paste(
+			event,
+			{
+				control: "image-editor",
+				acceptedTypes: ["image"],
+				messagePasteMode: "rich-text-with-media",
+				maxCount: 0,
+				existingResourceKeys: ["file-repeat", "workspace:/canvas-a/images/repeat.png"],
+				sessionId: "existing-message-keys",
+			},
+			{ onMessageParts },
+		)
+
+		expect(result.accepted).toHaveLength(1)
+		expect(result.skipped).toEqual([])
+		expect(onMessageParts).toHaveBeenCalledTimes(1)
+		expect(resolveReference).toHaveBeenCalledTimes(1)
+	})
+
+	it("removes failed message assets from accepted after resolve fails", async () => {
+		const metadata = btoa(
+			encodeURIComponent(
+				JSON.stringify({
+					richText: JSON.stringify({
+						type: "doc",
+						content: [
+							{
+								type: "paragraph",
+								content: [
+									{
+										type: "mention",
+										attrs: {
+											type: "project_file",
+											data: {
+												file_id: "missing-image",
+												file_path: "images/missing.png",
+												file_name: "missing.png",
+											},
+										},
+									},
+								],
+							},
+						],
+					}),
+				}),
+			),
+		)
+		const event = {
+			clipboardData: {
+				types: ["text/html"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/html" ? `<div data-magic-clipboard="${metadata}"></div>` : "",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+		const controller = new CanvasClipboardPasteController({
+			resolveReference: vi.fn(async () => null),
+			materialize: vi.fn(async () => null),
+		})
+
+		const result = await controller.paste(
+			event,
+			{
+				control: "image-editor",
+				acceptedTypes: ["image"],
+				messagePasteMode: "rich-text-with-media",
+				sessionId: "failed-accepted-cleanup",
+			},
+			{ onMessageParts: vi.fn(), onMessageAssetResolved: vi.fn() },
+		)
+
+		expect(result.accepted).toEqual([])
+		expect(result.failed).toEqual([
+			{ reason: "resource-materialize-failed", fileName: "missing.png" },
+		])
+	})
+
+	it("removes failed message assets from accepted in the legacy onAsset path", async () => {
+		const metadata = btoa(
+			encodeURIComponent(
+				JSON.stringify({
+					richText: JSON.stringify({
+						type: "doc",
+						content: [
+							{
+								type: "paragraph",
+								content: [
+									{
+										type: "mention",
+										attrs: {
+											type: "project_file",
+											data: {
+												file_id: "missing-legacy",
+												file_path: "images/missing-legacy.png",
+												file_name: "missing-legacy.png",
+											},
+										},
+									},
+								],
+							},
+						],
+					}),
+				}),
+			),
+		)
+		const event = {
+			clipboardData: {
+				types: ["text/html"],
+				files: [],
+				items: [],
+				getData: (type: string) =>
+					type === "text/html" ? `<div data-magic-clipboard="${metadata}"></div>` : "",
+			},
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as ClipboardEvent
+		const onAsset = vi.fn()
+		const controller = new CanvasClipboardPasteController({
+			resolveReference: vi.fn(async () => null),
+			materialize: vi.fn(async () => null),
+		})
+
+		const result = await controller.paste(
+			event,
+			{
+				control: "image-editor",
+				acceptedTypes: ["image"],
+				messagePasteMode: "rich-text-with-media",
+				sessionId: "failed-accepted-cleanup-legacy",
+			},
+			{ onAsset },
+		)
+
+		expect(result.accepted).toEqual([])
+		expect(result.failed).toEqual([
+			{ reason: "resource-materialize-failed", fileName: "missing-legacy.png" },
+		])
+		expect(onAsset).not.toHaveBeenCalled()
 	})
 })

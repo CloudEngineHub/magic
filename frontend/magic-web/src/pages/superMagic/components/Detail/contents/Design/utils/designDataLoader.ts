@@ -21,6 +21,7 @@ import {
 	MAGIC_PROJECT_VERSION_V2,
 	MAGIC_PROJECT_VERSION_V3,
 } from "./magicProjectCompression"
+import { stringifyUnknownError } from "@/utils/error"
 
 export type DesignDataRuntimeSource =
 	| { content: string; designData?: never }
@@ -133,7 +134,7 @@ export async function loadDesignDataToRuntime(
 		throw new DesignLoadError({
 			kind: "migration-failed",
 			stage: "migrate-elements",
-			message: error instanceof Error ? error.message : String(error),
+			message: stringifyUnknownError(error),
 			sourceVersion: isEnvelopeSource
 				? diagnostics?.sourceVersion
 				: options.designData.version,
@@ -180,7 +181,7 @@ export async function loadDesignDataToRuntime(
 			throw new DesignLoadError({
 				kind: "unsupported-sidecar",
 				stage: "hydrate-sidecar",
-				message: error instanceof Error ? error.message : String(error),
+				message: stringifyUnknownError(error),
 				sourceVersion,
 				fileId: options.fileId,
 			})
@@ -199,7 +200,7 @@ export async function loadDesignDataToRuntime(
 		throw new DesignLoadError({
 			kind: "migration-failed",
 			stage: "normalize-paths",
-			message: error instanceof Error ? error.message : String(error),
+			message: stringifyUnknownError(error),
 			sourceVersion,
 			fileId: options.fileId,
 		})
@@ -213,7 +214,7 @@ export async function loadDesignDataToRuntime(
 		throw new DesignLoadError({
 			kind: "validation-failed",
 			stage: "validate-v3",
-			message: error instanceof Error ? error.message : String(error),
+			message: stringifyUnknownError(error),
 			sourceVersion,
 			fileId: options.fileId,
 		})

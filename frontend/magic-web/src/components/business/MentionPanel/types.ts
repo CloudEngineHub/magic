@@ -83,9 +83,11 @@ export type SkillMentionSource = "system" | "agent" | "mine"
 
 export interface AgentMentionData {
 	agent_id: string
+	agent_code?: string
 	agent_name: string
 	agent_avatar: string
 	agent_description: string
+	agent_source?: "digital_employee"
 }
 
 export interface ToolMentionData {
@@ -112,6 +114,11 @@ export interface ProjectFileMentionData {
 	file_path: string
 	relative_file_path?: string
 	file_extension: string
+	/** File metadata used to prevent stale signed-URL reuse across editor/canvas entry points. */
+	updated_at?: string
+	resource_version?: string | null
+	version?: string | null
+	file_version?: number
 	/** Project that owns this file. Optional for compatibility with historical mention data. */
 	project_id?: string
 	/** Frontend-only source project name used to render cross-project mention chips. */
@@ -177,8 +184,14 @@ export interface UploadFileMentionData {
 	upload_progress?: number // 上传进度 0-100
 	upload_status?: "init" | "uploading" | "done" | "error"
 	upload_error?: string
+	/** Local HTML screenshot identity; not an upload task. */
+	is_html_screenshot?: boolean
+	storage_id?: string
 	/** Internal marker for canvas clipboard attachments; never promote to project mention. */
 	is_canvas_clipboard?: boolean
+	/** IndexedDB screenshot. Region shots stage after confirm; save on send. */
+	is_html_screenshot?: boolean
+	storage_id?: string
 }
 
 export interface CloudFileMentionData {

@@ -167,7 +167,7 @@ describe("SourceList preview", () => {
 
 		const tooltip = await screen.findByRole("tooltip")
 		expect(tooltip).toHaveTextContent("asset://virtual-human-asset-id")
-		const copyButton = screen.getByRole("button", { name: "复制资源路径" })
+		const copyButton = screen.getAllByRole("button", { name: "复制资源路径" })[0]
 		expect(copyButton).toHaveClass("cursor-pointer")
 		fireEvent.click(copyButton)
 		expect(writeText).toHaveBeenCalledWith("asset://virtual-human-asset-id")

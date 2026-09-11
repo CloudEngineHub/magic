@@ -46,6 +46,8 @@ import { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import CommonFooter from "../../components/CommonFooter"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import useExportMenuItems from "./useExportMenuItems"
+import type { BeforeAction } from "../../utils/actionGuard"
+import { runGuardedAction } from "../../utils/actionGuard"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
 import { useCurrentHtmlFileInfo } from "./hooks/useCurrentHtmlFileInfo"
@@ -63,7 +65,6 @@ import {
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, Crosshair, ShieldCheck, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/utils/cn"
 import { env } from "@/utils/env"
 import { logger as Logger } from "@/utils/log"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -122,7 +123,7 @@ interface HTMLProps {
 		fileId?: string,
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
-	) => Promise<void>
+	) => Promise<boolean | void>
 	allowEdit?: boolean
 	// New props for ActionButtons functionality
 	viewMode?: "code" | "desktop" | "phone"
@@ -185,6 +186,7 @@ interface HtmlExportActionProps {
 	showExportPptx?: boolean
 	showExportImage?: boolean
 	showExportRasterPdf?: boolean
+	beforeAction?: BeforeAction
 }
 
 const HtmlExportAction = memo(function HtmlExportAction({
@@ -200,6 +202,7 @@ const HtmlExportAction = memo(function HtmlExportAction({
 	showExportPptx,
 	showExportImage,
 	showExportRasterPdf,
+	beforeAction,
 }: HtmlExportActionProps) {
 	const { ExportDropdownButton } = useExportMenuItems({
 		handleExportSource,
@@ -214,6 +217,7 @@ const HtmlExportAction = memo(function HtmlExportAction({
 		showExportPptx,
 		showExportImage,
 		showExportRasterPdf,
+		beforeAction,
 	})
 
 	return ExportDropdownButton
@@ -505,13 +509,26 @@ export default memo(function HTML(props: HTMLProps) {
 	// IsolatedHTMLRenderer 的 ref，用于获取拦截回调函数
 	const htmlRendererRef = useRef<IsolatedHTMLRendererRef>(null)
 	const fileId = displayData?.file_id as string | undefined
+	const htmlTestIdsEnabled = isTabActive ?? (!activeFileId || activeFileId === fileId)
 	const [isAppendPicking, setIsAppendPicking] = useState(false)
+	const [isQuickSelecting, setIsQuickSelecting] = useState(false)
 	const handleAIEdit = useMemoizedFn(() => {
 		if (isAppendPicking) {
 			htmlRendererRef.current?.stopInspector()
 		} else {
 			htmlRendererRef.current?.startInspectorAppend()
 		}
+	})
+	const handleQuickSelection = useMemoizedFn(async () => {
+		if (isQuickSelecting) {
+			await htmlRendererRef.current?.requestInspectorExit?.()
+			return
+		}
+		if (isAppendPicking) {
+			const canStart = (await htmlRendererRef.current?.requestInspectorExit?.()) ?? true
+			if (!canStart) return
+		}
+		htmlRendererRef.current?.startInspectorQuickSelect()
 	})
 
 	useEffect(() => {
@@ -843,6 +860,10 @@ export default memo(function HTML(props: HTMLProps) {
 			onSave: handleSave,
 			onSaveAndExit: handleSaveAndExit,
 			onCancel: handleCancel,
+			onEscape: () =>
+				htmlRendererRef.current?.consumeInspectorEscape?.() ||
+				htmlRendererRef.current?.closeElementContextPanel?.() ||
+				false,
 		})
 		const virtualStorageMessageHandler = createVirtualStorageMessageHandler()
 
@@ -949,16 +970,19 @@ export default memo(function HTML(props: HTMLProps) {
 		}
 	})
 
-	const performSave = useMemoizedFn(async () => {
+	const performSave = useMemoizedFn(async (): Promise<boolean> => {
 		setIsEditingAfter(true)
 		if (viewMode === "code" && editingCodeContent) {
 			// 保存代码编辑内容
-			await saveEditContent?.(
+			const saveResult = await saveEditContent?.(
 				shadow(editingCodeContent),
 				displayData?.file_id,
 				true,
 				fetchHtmlFileVersions,
 			)
+			// Older integrations do not return a value; only an explicit false means
+			// that the persistence request failed.
+			if (saveResult === false) return false
 			// Code mode saves exactly the editor text, so we can cache it directly.
 			lastLocalSavedContentRef.current = editingCodeContent
 			editSessionBaselineContentRef.current = editingCodeContent
@@ -970,6 +994,7 @@ export default memo(function HTML(props: HTMLProps) {
 			const result = await saveFunction()
 			if (result && !result.success) {
 				console.error("[HTML Editor] 保存失败", result)
+				return false
 			}
 			if (result?.success) {
 				// Visual mode returns the cleaned HTML that will be stored on the server.
@@ -980,6 +1005,7 @@ export default memo(function HTML(props: HTMLProps) {
 		setShowSaveWithUpdateConfirmDialog(false)
 		clearServerUpdate()
 		// 不再退出编辑模式
+		return true
 	})
 
 	const exitEditModeAfterSave = useMemoizedFn(() => {
@@ -1217,17 +1243,24 @@ export default memo(function HTML(props: HTMLProps) {
 		if (isMediaScenario) {
 			return false
 		}
-		return !isMobile && allowEdit && !isEditMode && activeHistory.isNewestVersion
+		return (
+			!isMobile &&
+			!isCodeViewMode &&
+			allowEdit &&
+			!isEditMode &&
+			activeHistory.isNewestVersion
+		)
 	}, [
 		isReadonlyPreview,
 		isMediaScenario,
+		isCodeViewMode,
 		isMobile,
 		allowEdit,
 		isEditMode,
 		activeHistory.isNewestVersion,
 	])
 
-	/** 是否显示 在线编辑 按钮 */
+	/** 是否显示编辑按钮 */
 	const showFileEditButton = useMemo(() => {
 		if (isReadonlyPreview) {
 			return false
@@ -1268,8 +1301,14 @@ export default memo(function HTML(props: HTMLProps) {
 	const { guideTourOpen, setGuideTourOpen, guideTourSteps } = useHTMLGuideTour({
 		isMobile,
 	})
+	const quickSelectionLabel = isQuickSelecting
+		? t("topicFiles.exitSelectElement")
+		: t("topicFiles.selectElement")
+	const quickSelectionTitle = isQuickSelecting
+		? t("topicFiles.exitSelectElementDescription")
+		: t("topicFiles.selectElementDescription")
 
-	// 通知在线编辑按钮已准备好
+	// 通知编辑按钮已准备好
 	useEffect(() => {
 		if (showFileEditButton) {
 			pubsub.publish(
@@ -1295,13 +1334,17 @@ export default memo(function HTML(props: HTMLProps) {
 					key: "html-server-update",
 					zone: "primary",
 					visible: () => Boolean(isEditMode && hasServerUpdate),
-					render: () => (
+					render: (context) => (
 						<Button
 							variant="secondary"
 							size="sm"
-							onClick={handleViewServerUpdate}
+							onClick={() =>
+								void runGuardedAction(context.beforeAction, handleViewServerUpdate)
+							}
 							className="h-6 gap-1.5 rounded-md px-3 text-xs font-normal shadow-xs"
-							data-testid="html-server-update-button"
+							data-testid={
+								htmlTestIdsEnabled ? "html-server-update-button" : undefined
+							}
 						>
 							<AlertTriangle size={16} className="text-amber-600" />
 							<span>{t("ppt.serverUpdateAvailable")}</span>
@@ -1313,49 +1356,59 @@ export default memo(function HTML(props: HTMLProps) {
 					zone: "primary",
 					visible: () => Boolean(showAIOptimizationButton || showFileEditButton),
 					render: () => (
-						<div className="flex items-center gap-1">
+						<div
+							className="flex items-center gap-1"
+							data-testid={
+								htmlTestIdsEnabled ? "html-editor-toolbar-actions" : undefined
+							}
+						>
 							{showAIOptimizationButton && !isEditMode && (
-								<AIEditButton
-									showButtonText
-									attachmentList={attachmentList}
-									fileId={displayData?.file_id}
-									onStartInspector={() => {
-										htmlRendererRef.current?.startInspector()
-									}}
-								/>
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => void handleQuickSelection()}
+									aria-pressed={isQuickSelecting}
+									title={quickSelectionTitle}
+									className="h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal text-foreground shadow-xs"
+									data-testid={
+										htmlTestIdsEnabled ? "html-ai-pick-button" : undefined
+									}
+								>
+									<Crosshair
+										size={16}
+										className={isQuickSelecting ? "text-primary" : undefined}
+									/>
+									<span className={isQuickSelecting ? "text-primary" : undefined}>
+										{quickSelectionLabel}
+									</span>
+								</Button>
 							)}
 							{showFileEditButton && (
 								<FileEditButtons
+									testIdPrefix={htmlTestIdsEnabled ? "html-editor" : undefined}
 									isEditMode={isEditMode}
 									isSaving={false}
 									showButtonText
+									editLabel={t("common.edit")}
 									onEdit={handleEdit}
+									beforeAction={() =>
+										htmlRendererRef.current?.requestInspectorExit?.() ??
+										Promise.resolve(true)
+									}
 									onSave={handleSave}
 									onSaveAndExit={handleSaveAndExit}
 									onCancel={handleCancel}
 								/>
 							)}
-							{showFileEditButton && !isEditMode && (
-								<ActionButton
-									icon={
-										<Crosshair
-											size={16}
-											className={cn(isAppendPicking && "animate-pulse")}
-										/>
-									}
-									onClick={() => {
-										htmlRendererRef.current?.startInspectorAppend()
-									}}
-									title={t(
-										"topicFiles.aiPickTooltip",
-										"点击后选取页面元素，让 AI 对其进行修改",
-									)}
-									text={t("topicFiles.aiPick", "AI 选取")}
-									showText
-									className={cn(
-										isAppendPicking &&
-											"bg-primary/10 text-primary ring-1 ring-primary/30",
-									)}
+							{showAIOptimizationButton && !isEditMode && (
+								<AIEditButton
+									testIdPrefix={htmlTestIdsEnabled ? "html-editor" : undefined}
+									showButtonText
+									maxItems={3}
+									onPrimaryAction={handleAIEdit}
+									isPrimaryActive={isAppendPicking}
+									attachmentList={attachmentList}
+									fileId={displayData?.file_id}
 								/>
 							)}
 						</div>
@@ -1369,11 +1422,18 @@ export default memo(function HTML(props: HTMLProps) {
 					render: (context) => (
 						<ActionButton
 							icon={<ShieldCheck size={16} />}
-							onClick={handleOpenHtmlPermissionManager}
+							onClick={() =>
+								void runGuardedAction(
+									context.beforeAction,
+									handleOpenHtmlPermissionManager,
+								)
+							}
 							title={t("htmlEditor.permissionManager.open")}
 							text={t("htmlEditor.permissionManager.open")}
 							showText={context.showButtonText}
-							data-testid="html-permission-manager-button"
+							data-testid={
+								htmlTestIdsEnabled ? "html-permission-manager-button" : undefined
+							}
 						/>
 					),
 				},
@@ -1396,6 +1456,7 @@ export default memo(function HTML(props: HTMLProps) {
 							showExportPptx={isConvertibleFile(displayData, ["html"])}
 							showExportImage={isConvertibleFile(displayData, ["html"])}
 							showExportRasterPdf
+							beforeAction={context.beforeAction}
 						/>
 					),
 				},
@@ -1405,6 +1466,8 @@ export default memo(function HTML(props: HTMLProps) {
 			attachmentList,
 			displayData?.file_id,
 			handleCancel,
+			handleAIEdit,
+			handleQuickSelection,
 			handleEdit,
 			handleExportPDF,
 			handleExportPPT,
@@ -1416,6 +1479,7 @@ export default memo(function HTML(props: HTMLProps) {
 			handleSaveAndExit,
 			handleViewServerUpdate,
 			hasServerUpdate,
+			htmlTestIdsEnabled,
 			isExporting,
 			isEditMode,
 			isInPPTMode,
@@ -1424,6 +1488,9 @@ export default memo(function HTML(props: HTMLProps) {
 			showExportButton,
 			showFileEditButton,
 			isAppendPicking,
+			isQuickSelecting,
+			quickSelectionLabel,
+			quickSelectionTitle,
 			canManageHtmlPermissions,
 			handleOpenHtmlPermissionManager,
 			isDataAnalysis,
@@ -1434,6 +1501,7 @@ export default memo(function HTML(props: HTMLProps) {
 	)
 
 	const headerContext = {
+		testIdsEnabled: htmlTestIdsEnabled,
 		type,
 		onFullscreen,
 		onDownload: handleDownload,
@@ -1447,6 +1515,8 @@ export default memo(function HTML(props: HTMLProps) {
 				displayData?.file_id,
 			),
 		fileContent: fileContent || processedContent,
+		beforeAction: () =>
+			htmlRendererRef.current?.requestInspectorExit?.() ?? Promise.resolve(true),
 		currentFile,
 		detailMode,
 		showDownload: showDownloadButton && !showExportButton,
@@ -1489,6 +1559,8 @@ export default memo(function HTML(props: HTMLProps) {
 				[styles.immersiveHtmlContainer]: isImmersiveLayout,
 				[styles.documentFlowHtmlContainer]: documentFlowFullscreen,
 			})}
+			data-testid={htmlTestIdsEnabled ? "html-preview" : undefined}
+			data-edit-mode={isEditMode ? "true" : "false"}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
 			{activeHistory.loading ? (
@@ -1508,7 +1580,10 @@ export default memo(function HTML(props: HTMLProps) {
 					</Flex>
 				)
 			) : isCodeViewMode ? (
-				<div className={styles.htmlBody}>
+				<div
+					className={styles.htmlBody}
+					data-testid={htmlTestIdsEnabled ? "html-editor-code-view" : undefined}
+				>
 					<CodeEditor
 						content={data?.content || ""}
 						fileName={data?.file_name || data?.title || "file.html"}
@@ -1521,6 +1596,7 @@ export default memo(function HTML(props: HTMLProps) {
 				</div>
 			) : (
 				<div
+					data-testid={htmlTestIdsEnabled ? "html-preview-container" : undefined}
 					className={cx(styles.previewContainerBase, {
 						[styles.phoneModeContainer]: shouldUsePhonePreviewFrame,
 						[styles.immersivePreviewContainer]: isImmersiveLayout,
@@ -1528,6 +1604,7 @@ export default memo(function HTML(props: HTMLProps) {
 					})}
 				>
 					<div
+						data-testid={htmlTestIdsEnabled ? "html-preview-content" : undefined}
 						className={cx(styles.previewInnerBase, styles.htmlBody, "relative", {
 							[styles.phoneModeInner]: shouldUsePhonePreviewFrame,
 							[styles.immersivePreviewInner]: isImmersiveLayout,
@@ -1588,6 +1665,8 @@ export default memo(function HTML(props: HTMLProps) {
 									permissionController={htmlPermissionController}
 									attachmentList={attachmentList}
 									isPlaybackMode={isPlaybackMode}
+									isVisible={htmlTestIdsEnabled}
+									isTabActive={htmlTestIdsEnabled}
 									onRenderReady={handlePreviewRenderReady}
 									onContentMetrics={(
 										metrics: IsolatedHTMLRendererContentMetrics,
@@ -1604,10 +1683,14 @@ export default memo(function HTML(props: HTMLProps) {
 									}}
 									onDevConsoleClose={() => updateDevConsoleEnabled(false)}
 									onAppendPickingChange={setIsAppendPicking}
+									onQuickSelectionChange={setIsQuickSelecting}
 								/>
 								{/* 跨域 shell 渲染期间用 loading 覆盖层填补"数据已就绪但 iframe 内容未画出"的空窗 */}
 								{!isPreviewRenderReady && !documentFlowFullscreen && (
 									<Flex
+										data-testid={
+											htmlTestIdsEnabled ? "html-preview-loading" : undefined
+										}
 										justify="center"
 										align="center"
 										className="absolute inset-0 z-10 bg-white dark:bg-[#1c1c1c]"
@@ -1667,10 +1750,16 @@ export default memo(function HTML(props: HTMLProps) {
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel onClick={handleDismissSaveWithUpdate}>
+						<AlertDialogCancel
+							data-testid="html-save-with-update-cancel-button"
+							onClick={handleDismissSaveWithUpdate}
+						>
 							{t("common.cancel")}
 						</AlertDialogCancel>
-						<AlertDialogAction onClick={handleConfirmSaveWithUpdate}>
+						<AlertDialogAction
+							data-testid="html-save-with-update-confirm-button"
+							onClick={handleConfirmSaveWithUpdate}
+						>
 							{t("common.save")}
 						</AlertDialogAction>
 					</AlertDialogFooter>

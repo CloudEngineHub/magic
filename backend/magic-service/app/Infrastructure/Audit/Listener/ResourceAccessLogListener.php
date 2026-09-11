@@ -9,6 +9,7 @@ namespace App\Infrastructure\Audit\Listener;
 
 use App\Domain\Audit\ResourceAccess\Entity\ResourceAccessLogEntity;
 use App\Domain\Audit\ResourceAccess\Service\ResourceAccessLogDomainService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Event\SkillMarketInstalledEvent;
@@ -34,8 +35,6 @@ class ResourceAccessLogListener implements ListenerInterface
     private const string INSTALL_OPERATION = 'install';
 
     private const string UNINSTALL_OPERATION = 'uninstall';
-
-    private const string SOURCE_SUPER_MAGIC_TOOL = 'super_magic_tool';
 
     private LoggerInterface $logger;
 
@@ -177,7 +176,7 @@ class ResourceAccessLogListener implements ListenerInterface
 
     private function resolveActorType(string $sourceId): string
     {
-        return trim($sourceId) === self::SOURCE_SUPER_MAGIC_TOOL ? 'tool' : 'user';
+        return trim($sourceId) === SourceId::SUPER_MAGIC_TOOL ? 'tool' : 'user';
     }
 
     private function resolveSource(string $sourceId): string

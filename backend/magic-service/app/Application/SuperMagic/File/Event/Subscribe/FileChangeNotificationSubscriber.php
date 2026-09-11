@@ -28,7 +28,6 @@ use App\Domain\SuperMagic\File\Event\FileUploadedEvent;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
-use App\Infrastructure\Rpc\JsonRpc\Client\Knowledge\ProjectFileRpcClient;
 use App\Infrastructure\SuperMagic\Utils\RelativeFilePathUtil;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\SocketIO\SocketIOUtil;
@@ -56,8 +55,7 @@ use Throwable;
  *   Version rollback may publish FileContentSavedEvent for other subscribers,
  *   but VERSION_ROLLBACK is intentionally ignored by this subscriber.
  * - For batch events, the same project-space rule is applied per entity before
- *   changes, parent refresh IDs, WebSocket messages, and knowledge-base RPCs
- *   are built.
+ *   changes, parent refresh IDs, and WebSocket messages are built.
  */
 #[AsyncListener(driver: 'coroutine')]
 #[Listener(priority: -100)]
@@ -69,7 +67,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
         private readonly ProjectDomainService $projectDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly MagicUserRepository $magicUserRepository,
-        private readonly ProjectFileRpcClient $projectFileRpcClient,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(self::class);
@@ -153,7 +150,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
         );
 
         $this->pushNotification($event->getUserId(), $pushData);
-        $this->notifyKnowledgeProjectFileChange($fileEntity->getFileId());
     }
 
     /**
@@ -187,7 +183,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
         );
 
         $this->pushNotification($event->getUserId(), $pushData);
-        $this->notifyKnowledgeProjectFileChange($fileEntity->getFileId());
     }
 
     /**
@@ -220,7 +215,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
         );
 
         $this->pushNotification($event->getUserId(), $pushData);
-        $this->notifyKnowledgeProjectFileChange($fileEntity->getFileId());
     }
 
     /**
@@ -255,7 +249,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
         );
 
         $this->pushNotification($userAuthorization->getId(), $pushData);
-        $this->notifyKnowledgeProjectFileChange($fileEntity->getFileId());
     }
 
     /**
@@ -299,9 +292,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
         );
 
         $this->pushNotification($userAuthorization->getId(), $pushData);
-        foreach ($fileIds as $fileId) {
-            $this->notifyKnowledgeProjectFileChange((int) $fileId);
-        }
     }
 
     /**
@@ -332,7 +322,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
         );
 
         $this->pushNotification($userAuthorization->getId(), $pushData);
-        $this->notifyKnowledgeProjectFileChange($fileEntity->getFileId());
     }
 
     /**
@@ -352,7 +341,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
 
         $userAuthorization = $event->getUserAuthorization();
         $changes = [];
-        $allNotifyFileIds = [];
 
         // 1. Record delete for the overwritten file (if any)
         $overwrittenFile = $event->getOverwrittenFile();
@@ -361,7 +349,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
                 'operation' => 'delete',
                 'file_id' => (string) $overwrittenFile->getFileId(),
             ];
-            $allNotifyFileIds[] = $overwrittenFile->getFileId();
         }
 
         // 2. Record update for the moved file
@@ -372,7 +359,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
             'file_id' => (string) $fileEntity->getFileId(),
             'file' => $fileDto->toArray(),
         ];
-        $allNotifyFileIds[] = $fileEntity->getFileId();
 
         // 3. Collect refresh_parent_ids: new parent + overwritten file parent + old parent
         $parentIdSet = [];
@@ -403,9 +389,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
         );
 
         $this->pushNotification($userAuthorization->getId(), $pushData);
-        foreach ($allNotifyFileIds as $notifyFileId) {
-            $this->notifyKnowledgeProjectFileChange($notifyFileId);
-        }
     }
 
     /**
@@ -424,7 +407,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
         }
 
         $changes = [];
-        $allNotifyFileIds = [];
 
         // 1. Deletes — entities were captured before soft-delete, no re-query needed
         foreach ($changeSet->getDeletedFileEntities() as $fileEntity) {
@@ -435,7 +417,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
                 'operation' => 'delete',
                 'file_id' => (string) $fileEntity->getFileId(),
             ];
-            $allNotifyFileIds[] = $fileEntity->getFileId();
         }
 
         // 2. Added + Updated — one batch load
@@ -462,7 +443,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
             }
             $fileDto = TaskFileItemDTO::fromEntity($liveEntity, $projectEntity->getWorkDir(), $relPathMap[$liveEntity->getFileId()] ?? null);
             $changes[] = ['operation' => 'add', 'file_id' => (string) $fileId, 'file' => $fileDto->toArray()];
-            $allNotifyFileIds[] = $fileId;
         }
 
         foreach ($updatedFileIds as $fileId) {
@@ -472,7 +452,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
             }
             $fileDto = TaskFileItemDTO::fromEntity($liveEntity, $projectEntity->getWorkDir(), $relPathMap[$liveEntity->getFileId()] ?? null);
             $changes[] = ['operation' => 'update', 'file_id' => (string) $fileId, 'file' => $fileDto->toArray()];
-            $allNotifyFileIds[] = $fileId;
         }
 
         if (empty($changes)) {
@@ -501,9 +480,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
         );
 
         $this->pushNotification($event->getUserId(), $pushData);
-        foreach (array_unique($allNotifyFileIds) as $notifyFileId) {
-            $this->notifyKnowledgeProjectFileChange((int) $notifyFileId);
-        }
     }
 
     /**
@@ -618,9 +594,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
         );
 
         $this->pushNotification($event->getUserId(), $pushData);
-        foreach ($fileEntities as $fileEntity) {
-            $this->notifyKnowledgeProjectFileChange($fileEntity->getFileId());
-        }
     }
 
     private function normalizeFileChangeOperation(mixed $operation): string
@@ -817,22 +790,6 @@ class FileChangeNotificationSubscriber implements ListenerInterface
             ]);
 
             return [];
-        }
-    }
-
-    private function notifyKnowledgeProjectFileChange(int $projectFileId): void
-    {
-        if ($projectFileId <= 0) {
-            return;
-        }
-
-        try {
-            $this->projectFileRpcClient->notifyChange($projectFileId);
-        } catch (Throwable $throwable) {
-            $this->logger->warning('Notify knowledge project file change failed', [
-                'project_file_id' => $projectFileId,
-                'error' => $throwable->getMessage(),
-            ]);
         }
     }
 

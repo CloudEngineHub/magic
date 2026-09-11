@@ -6,7 +6,7 @@ from app.api.http_dto.response import BaseResponse, create_error_response, creat
 from app.api.http_dto.sandbox_task_dto import CreateSandboxTaskRequest, SandboxTaskResponse
 from app.service.sandbox_task.models import SandboxTask
 from app.service.sandbox_task.task_manager import SandboxTaskManager
-from app.service.sandbox_task.video_composition_capability import VideoCompositionCapability
+from app.service.sandbox_task.capability_runner import run_capability
 
 
 router = APIRouter(prefix="/sandbox/tasks", tags=["通用沙箱任务"])
@@ -25,13 +25,6 @@ def _response(task: SandboxTask) -> SandboxTaskResponse:
     )
 
 
-async def _run_capability(task: SandboxTask, update_status):
-    """根据 capability 选择具体任务实现。"""
-    if task.capability == "video_composition":
-        return await VideoCompositionCapability().execute(task, update_status)
-    raise ValueError(f"Unsupported sandbox capability: {task.capability}")
-
-
 @router.post("", response_model=BaseResponse)
 async def create_sandbox_task(request: CreateSandboxTaskRequest = Body(...)) -> BaseResponse:
     """幂等创建并异步执行沙箱任务。"""
@@ -41,7 +34,7 @@ async def create_sandbox_task(request: CreateSandboxTaskRequest = Body(...)) -> 
             capability=request.capability,
             project_path=request.project_path,
             payload=request.payload,
-            worker=_run_capability,
+            worker=run_capability,
         )
         return create_success_response("沙箱任务已提交", _response(task).model_dump())
     except ValueError as error:

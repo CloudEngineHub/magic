@@ -414,11 +414,7 @@ function ProjectRow({
 					</p>
 					{project.is_pinned && <PinnedTag />}
 					{(isWorkspaceShortcutProject(project) || isCollaborationProject(project)) && (
-						<CollaborationProjectTag
-							visible
-							project={project}
-							showText={false}
-						/>
+						<CollaborationProjectTag visible project={project} showText={false} />
 					)}
 				</div>
 			</button>

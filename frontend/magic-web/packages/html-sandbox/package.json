@@ -38,6 +38,18 @@
 			"types": "./src/utils/parentOrigin.ts",
 			"import": "./dist/utils/parentOrigin.js"
 		},
+		"./utils/safeUrl": {
+			"types": "./src/utils/safeUrl.ts",
+			"import": "./dist/utils/safeUrl.js"
+		},
+		"./utils/textContent": {
+			"types": "./src/utils/textContent.ts",
+			"import": "./dist/utils/textContent.js"
+		},
+		"./utils/inspectableTextContent": {
+			"types": "./src/utils/inspectableTextContent.ts",
+			"import": "./dist/utils/inspectableTextContent.js"
+		},
 		"./telemetry": {
 			"types": "./src/telemetry/index.ts",
 			"import": "./dist/telemetry/index.js"
@@ -62,6 +74,9 @@
 		"test": "pnpm exec vitest run --config ./vitest.config.ts",
 		"test:watch": "pnpm exec vitest --config ./vitest.config.ts",
 		"typecheck": "tsc -p tsconfig.json --noEmit"
+	},
+	"dependencies": {
+		"@zumer/snapdom": "^2.24.17"
 	},
 	"devDependencies": {
 		"@types/node": "^22.16.4",

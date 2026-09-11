@@ -13,6 +13,8 @@ class EventType(str, Enum):
     THIRD_PARTY_MESSAGE_RECEIVED = "third_party_message_received"
     BEFORE_LLM_REQUEST = "before_llm_request"  # 请求大模型前的事件 [DEPRECATED: 不再触发]
     AFTER_LLM_REQUEST = "after_llm_request"  # 请求大模型后的事件 [DEPRECATED: 不再触发]
+    BEFORE_LLM_RETRY = "before_llm_retry"  # 大模型失败后、进入重试前的事件，不推前端
+    AFTER_LLM_REQUEST_SUCCEEDED = "after_llm_request_succeeded"  # 大模型请求成功事件，不推前端
     BEFORE_AGENT_THINK = "before_agent_think"  # 智能体思考开始前的事件（思考容器）
     AFTER_AGENT_THINK = "after_agent_think"  # 智能体思考结束后的事件（思考容器）
     BEFORE_AGENT_REPLY = "before_agent_reply"  # 智能体回复前的事件

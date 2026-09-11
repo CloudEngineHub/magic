@@ -237,6 +237,18 @@ describe("slides template state", () => {
 		expect(sizeField?.default_value).toBe("")
 		expect(languageField?.options).not.toEqual([])
 		expect(languageField?.default_value).toBe("")
+		expect(languageField?.options).toHaveLength(18)
+		expect(languageField?.options.slice(0, 4)).toEqual([
+			{ value: "auto", label: { zh_CN: "自动", en_US: "Auto" } },
+			{ value: "de", label: "Deutsch", preset_value: "Deutsch" },
+			{ value: "en", label: "English", preset_value: "English" },
+			{ value: "es", label: "Español", preset_value: "Español" },
+		])
+		expect(languageField?.options.at(-1)).toEqual({
+			value: "hi",
+			label: "हिन्दी",
+			preset_value: "हिन्दी",
+		})
 	})
 
 	it("maps API template fields and removes empty media URLs", () => {

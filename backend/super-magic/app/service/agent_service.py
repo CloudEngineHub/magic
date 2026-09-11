@@ -8,6 +8,7 @@ from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from agentlang.agent.models import AgentRunRequest
 from agentlang.context.tool_context import ToolContext
 from agentlang.event.data import AfterInitEventData, BeforeInitEventData
 from agentlang.environment import Environment
@@ -554,6 +555,9 @@ class AgentService(Base):
         # 追加渠道专属上下文片段（如微信消息携带的媒体文件路径），不支持的渠道返回空串不影响
         query = ChannelContextService.append_channel_context(query, chat_client_message)
 
+        # 原生视觉消费 mention 模块提取出的工作区或挂载目录图片路径。
+        image_refs = await self._mention_builder.extract_image_refs(mentions, agent_context)
+
         if chat_client_message and hasattr(chat_client_message, "attachments") and chat_client_message.attachments:
             query = await self._process_attachments(agent_context, query, chat_client_message.attachments)
 
@@ -585,7 +589,8 @@ class AgentService(Base):
         await CliStatusFactory.wait_initial(agent_context)
 
         try:
-            await agent.run_main_agent(query)
+            request = AgentRunRequest(query=query, image_refs=image_refs)
+            await agent.run_main_agent(request)
         finally:
             # 持久化聊天记录·
             await FileStorageListenerService._archive_and_upload_project(agent_context)

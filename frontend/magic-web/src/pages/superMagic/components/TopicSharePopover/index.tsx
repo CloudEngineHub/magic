@@ -425,7 +425,9 @@ function TopicSharePopoverContent({
 					resource_id: topicId,
 					resource_type: ResourceType.Topic,
 					share_type: settings.shareType,
-					password: settings.password || undefined,
+					...(settings.shareType === ShareType.Organization
+						? {}
+						: { password: settings.password || undefined }),
 					extra: {
 						show_original_info:
 							option === "showOriginalInfo" ? checked : settings.showOriginalInfo,

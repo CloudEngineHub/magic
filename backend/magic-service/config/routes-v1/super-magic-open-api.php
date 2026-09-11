@@ -4,6 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
+use App\Interfaces\MCP\Facade\OpenApi\MCPAuthorizationCredentialApi;
 use App\Interfaces\Middleware\Auth\ApiKeyMiddleware;
 use App\Interfaces\Middleware\Auth\SandboxUserAuthMiddleware;
 use App\Interfaces\SuperMagic\Agent\Facade\OpenApi\OpenSuperMagicAgentApi;
@@ -81,6 +82,9 @@ Router::addGroup(
         Router::addGroup('/ai-abilities', static function () {
             Router::get('/runtime-config', [AiAbilityApi::class, 'runtimeConfig']);
         });
+
+        // MCP Authorization 运行时凭据
+        Router::get('/mcp/authorization/credential/{code}', [MCPAuthorizationCredentialApi::class, 'getCredential']);
 
         // 分享管理相关
         Router::addGroup('/share/resources', static function () {

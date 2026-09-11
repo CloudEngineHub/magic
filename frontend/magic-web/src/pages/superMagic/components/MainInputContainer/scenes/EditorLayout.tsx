@@ -1,9 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import PluginTips from "../components/PluginTips"
 import { AgentCommonModal } from "@/components/Agent/AgentCommonModal"
 import { cn } from "@/utils/cn"
-
-const AgentSettingsLazy = lazy(() => import("@/components/Agent/MCP/AgentSettings"))
+import ConnectorLibrary from "@/pages/superMagic/pages/ConnectorMarket/components/ConnectorLibrary"
 import CurrentSceneBadge from "../components/SelectedSkillBadge"
 import { SCENE_INPUT_IDS, INPUT_CONTAINER_MIN_HEIGHT, SCENE_PANEL_MIN_HEIGHT } from "../constants"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -46,7 +45,8 @@ function EditorLayout({
 	const resolvedMode = mode ?? roleStore.currentRole
 	const editorContainerRef = useRef<HTMLDivElement>(null)
 	const editorRef = useRef<MessageEditorRef>(null)
-	const [mcpModalOpen, setMcpModalOpen] = useState(false)
+	const [connectorMarketOpen, setConnectorMarketOpen] = useState(false)
+	const [connectorMarketNestedOpen, setConnectorMarketNestedOpen] = useState(false)
 
 	const selectedTopic = topicStore.selectedTopic
 	const selectedProject = projectStore.selectedProject
@@ -183,7 +183,7 @@ function EditorLayout({
 								}}
 							/>
 						) : shouldShowPluginTips ? (
-							<PluginTips onConnectClick={() => setMcpModalOpen(true)} />
+							<PluginTips onConnectClick={() => setConnectorMarketOpen(true)} />
 						) : null}
 					</div>
 				</div>
@@ -205,17 +205,19 @@ function EditorLayout({
 				</div>
 			</div>
 			<AgentCommonModal
-				open={mcpModalOpen}
-				onOpenChange={setMcpModalOpen}
-				width={900}
+				open={connectorMarketOpen}
+				onOpenChange={setConnectorMarketOpen}
+				width={1120}
+				keyboard={!connectorMarketNestedOpen}
 				footer={null}
 				closable={false}
 			>
-				{mcpModalOpen ? (
-					<Suspense fallback={null}>
-						<AgentSettingsLazy onClose={() => setMcpModalOpen(false)} />
-					</Suspense>
-				) : null}
+				<ConnectorLibrary
+					embedded
+					activeStorageKey={selectedProject?.id}
+					onClose={() => setConnectorMarketOpen(false)}
+					onNestedPanelOpenChange={setConnectorMarketNestedOpen}
+				/>
 			</AgentCommonModal>
 		</SceneStateProvider>
 	)

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from pydantic import Field, field_validator, model_validator
 
+from agentlang.agent.models import AgentRunRequest
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
@@ -797,7 +798,7 @@ async def _run_subagent(
     current_task = asyncio.current_task()
 
     try:
-        result = await agent.run(prompt)
+        result = await agent.run(AgentRunRequest(query=prompt))
         _mark_done(
             state=state,
             result=result or "",

@@ -83,4 +83,43 @@ describe("Canvas access transitions", () => {
 
 		expect(deselectAll).toHaveBeenCalledTimes(1)
 	})
+
+	it("ends generation editing sessions when generation access is revoked", () => {
+		let canGenerate = true
+		const permissionManager = {
+			can: vi.fn((capability: string) =>
+				capability === "sideEffect.generate" ? canGenerate : true,
+			),
+			setAccessContext: vi.fn(() => {
+				canGenerate = false
+				return true
+			}),
+			getContext: vi.fn(() => ({ mode: "edit", capabilities: new Set(), can: () => false })),
+		}
+		const canvas = Object.create(Canvas.prototype) as Canvas
+		Object.assign(canvas, {
+			permissionManager,
+			mediaPlaybackCoordinator: { pauseAll: vi.fn() },
+			cropManager: { cancelCrop: vi.fn() },
+			extendManager: { cancelExtend: vi.fn() },
+			eraserManager: { cancelEraser: vi.fn() },
+			mediaReplaceController: { cancel: vi.fn() },
+			elementRenameManager: { cancelRename: vi.fn() },
+			toolManager: { setActiveToolByType: vi.fn() },
+			elementManager: { updateAllElementsDraggable: vi.fn() },
+			selectionManager: { deselectAll: vi.fn() },
+			eventEmitter: { emit: vi.fn() },
+			clearPreviewContent: vi.fn(),
+		})
+
+		Canvas.prototype.setAccessContext.call(canvas, {
+			capabilities: { "sideEffect.generate": false },
+		})
+
+		expect(canvas.extendManager.cancelExtend).toHaveBeenCalledTimes(1)
+		expect(canvas.eraserManager.cancelEraser).toHaveBeenCalledTimes(1)
+		expect(canvas.cropManager.cancelCrop).not.toHaveBeenCalled()
+		expect(canvas.mediaReplaceController.cancel).not.toHaveBeenCalled()
+		expect(canvas.elementRenameManager.cancelRename).not.toHaveBeenCalled()
+	})
 })

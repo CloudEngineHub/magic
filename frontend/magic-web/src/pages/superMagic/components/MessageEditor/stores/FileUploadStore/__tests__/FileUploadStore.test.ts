@@ -305,7 +305,13 @@ describe("FileUploadStore", () => {
 				parentId: "tmp-dir-id",
 				nextParentIds: undefined,
 				pageSize: 1000,
-				fileType: ["user_upload", "process", "system_auto_upload", "directory"],
+				fileType: [
+					"user_upload",
+					"user_create",
+					"process",
+					"system_auto_upload",
+					"directory",
+				],
 			})
 			expect(addedFiles?.[0]).toMatchObject({
 				name: "pasted.txt",

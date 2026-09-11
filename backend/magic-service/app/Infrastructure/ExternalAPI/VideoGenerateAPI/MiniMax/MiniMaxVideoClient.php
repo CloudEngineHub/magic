@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\Util\Log\PayloadLogSanitizer;
@@ -22,8 +23,6 @@ readonly class MiniMaxVideoClient
     use HasLogger;
 
     private const int REQUEST_TIMEOUT_SECONDS = 180;
-
-    private const array NON_RETRIABLE_HTTP_STATUSES = [400, 401, 402, 422];
 
     public function __construct(
         private ClientFactory $clientFactory,
@@ -79,9 +78,7 @@ readonly class MiniMaxVideoClient
                 'http_status' => $errorResponse?->getStatusCode(),
                 'error' => $body === '' ? $exception->getMessage() : $body,
             ]);
-            $message = $body === '' ? $exception->getMessage() : $body;
             throw $this->createHttpStatusException(
-                'MiniMax video request failed: ' . substr($message, 0, 1024),
                 $errorResponse?->getStatusCode(),
                 $exception,
             );
@@ -92,7 +89,7 @@ readonly class MiniMaxVideoClient
                 'http_status' => null,
                 'error' => $exception->getMessage(),
             ]);
-            throw ProviderVideoException::retriable('MiniMax video request failed: ' . $exception->getMessage(), $exception);
+            throw new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $exception);
         }
 
         if (! is_array($data)) {
@@ -102,7 +99,7 @@ readonly class MiniMaxVideoClient
                 'http_status' => $response->getStatusCode(),
                 'error' => 'MiniMax video returned invalid json',
             ]);
-            throw ProviderVideoException::retriable('MiniMax video returned invalid json');
+            throw new ProviderVideoException(VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR, VideoGenerateErrorCode::RESPONSE_FORMAT_ERROR->getMessage());
         }
 
         $this->logger->info('minimax video response', [
@@ -137,14 +134,13 @@ readonly class MiniMaxVideoClient
     }
 
     private function createHttpStatusException(
-        string $message,
         ?int $httpStatus,
         Throwable $previous,
     ): ProviderVideoException {
-        if (in_array($httpStatus, self::NON_RETRIABLE_HTTP_STATUSES, true)) {
-            return ProviderVideoException::nonRetriable($message, $previous, $httpStatus);
+        if ($httpStatus !== null && $httpStatus >= 400 && $httpStatus < 500 && ! in_array($httpStatus, [408, 409, 429], true)) {
+            return new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, VideoGenerateErrorCode::INVALID_PARAMETER->getMessage(), $previous);
         }
 
-        return ProviderVideoException::retriable($message, $previous, $httpStatus);
+        return new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $previous);
     }
 }

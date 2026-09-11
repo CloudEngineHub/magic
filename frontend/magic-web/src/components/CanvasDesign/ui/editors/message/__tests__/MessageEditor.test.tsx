@@ -21,6 +21,8 @@ const TestMentionExtension = Node.create({
 		return {
 			type: { default: null },
 			data: { default: null },
+			pending: { default: false },
+			pendingId: { default: null },
 		}
 	},
 	parseHTML() {
@@ -174,6 +176,114 @@ describe("MessageEditor mention synchronization", () => {
 		).toHaveLength(1)
 	})
 
+	it("preserves duplicate mention identities when same-name matchable items expand", async () => {
+		const onMentionChange = vi.fn()
+		const { rerender } = render(
+			<MessageEditor
+				value="@cat.png@cat.png"
+				matchableItems={[{ name: "cat.png", path: "./images/cat.png" }]}
+				mentionExtension={TestMentionExtension}
+				onMentionChange={onMentionChange}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(
+				onMentionChange.mock.calls.some(
+					([paths, , context]) =>
+						context.status === "ready" &&
+						paths.length === 1 &&
+						paths[0] === "./images/cat.png",
+				),
+			).toBe(true)
+		})
+
+		rerender(
+			<MessageEditor
+				value="@cat.png@cat.png"
+				matchableItems={[
+					{ name: "cat.png", path: "./images/cat.png" },
+					{ name: "cat.png", path: "/other/images/cat.png" },
+				]}
+				mentionExtension={TestMentionExtension}
+				onMentionChange={onMentionChange}
+			/>,
+		)
+
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		expect(
+			onMentionChange.mock.calls.some(([paths]) => paths.includes("/other/images/cat.png")),
+		).toBe(false)
+	})
+
+	it("keeps same-name distinct resources when parsing initial text", async () => {
+		const onMentionChange = vi.fn()
+
+		render(
+			<MessageEditor
+				value="@cat.png@cat.png"
+				matchableItems={[
+					{ name: "cat.png", path: "./images/cat.png" },
+					{ name: "cat.png", path: "/other/images/cat.png" },
+				]}
+				mentionExtension={TestMentionExtension}
+				onMentionChange={onMentionChange}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(
+				onMentionChange.mock.calls.some(
+					([paths, , context]) =>
+						context.status === "ready" &&
+						paths[0] === "./images/cat.png" &&
+						paths[1] === "/other/images/cat.png",
+				),
+			).toBe(true)
+		})
+	})
+
+	it("restores repeated same-name mentions from structured path bindings", async () => {
+		const onMentionChange = vi.fn()
+		const editorRef = createRef<MessageEditorRef>()
+
+		render(
+			<MessageEditor
+				ref={editorRef}
+				value="@cat.png@cat.png"
+				matchableItems={[
+					{ name: "cat.png", path: "./images/cat.png" },
+					{ name: "cat.png", path: "/other/images/cat.png" },
+				]}
+				mentionBindings={[
+					{ fileName: "cat.png", path: "./images/cat.png" },
+					{ fileName: "cat.png", path: "./images/cat.png" },
+				]}
+				mentionExtension={TestMentionExtension}
+				onMentionChange={onMentionChange}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(editorRef.current?.getMentionBindings()).toEqual([
+				{ fileName: "cat.png", path: "./images/cat.png" },
+				{ fileName: "cat.png", path: "./images/cat.png" },
+			])
+			expect(
+				onMentionChange.mock.calls.some(
+					([paths, , context]) =>
+						context.status === "ready" &&
+						paths.length === 1 &&
+						paths[0] === "./images/cat.png",
+				),
+			).toBe(true)
+		})
+	})
+
 	it("restores a collapsed editor caret after imperative mention insertion and removal", async () => {
 		const editorRef = createRef<MessageEditorRef>()
 
@@ -262,6 +372,146 @@ describe("MessageEditor mention synchronization", () => {
 			vi.clearAllTimers()
 			vi.useRealTimers()
 		}
+	})
+
+	it("inserts ordered clipboard parts at the captured selection", async () => {
+		const editorRef = createRef<MessageEditorRef>()
+
+		render(
+			<MessageEditor ref={editorRef} value="abcd" mentionExtension={TestMentionExtension} />,
+		)
+		await waitFor(() => expect(editorRef.current).not.toBeNull())
+
+		act(() => {
+			expect(
+				editorRef.current?.insertClipboardParts([{ type: "text", text: "X" }], {
+					selection: { from: 2, to: 4 },
+				}),
+			).toBe(true)
+		})
+
+		expect(editorRef.current?.getCurrentPrompt()).toBe("aXd")
+	})
+
+	it("inserts ordered text and pending clipboard parts without syncing prompt yet", async () => {
+		const editorRef = createRef<MessageEditorRef>()
+		const onChange = vi.fn()
+
+		render(
+			<MessageEditor
+				ref={editorRef}
+				value=""
+				mentionExtension={TestMentionExtension}
+				onChange={onChange}
+			/>,
+		)
+		await waitFor(() => expect(editorRef.current).not.toBeNull())
+
+		act(() => {
+			expect(
+				editorRef.current?.insertClipboardParts([
+					{ type: "text", text: "see " },
+					{
+						type: "pending",
+						item: {
+							pendingId: "clip-1",
+							fileName: "clip.png",
+							status: "init",
+							progress: 0,
+						},
+					},
+				]),
+			).toBe(true)
+		})
+
+		expect(editorRef.current?.getCurrentPrompt()).toBe("see ")
+		expect(editorRef.current?.getPendingUploadMentions()).toEqual([
+			expect.objectContaining({ pendingId: "clip-1", fileName: "clip.png" }),
+		])
+		expect(onChange).not.toHaveBeenCalledWith("@clip.png")
+	})
+
+	it("keeps pending uploads out of prompt sync until they resolve", async () => {
+		const editorRef = createRef<MessageEditorRef>()
+		const onChange = vi.fn()
+		const onMentionChange = vi.fn()
+
+		render(
+			<MessageEditor
+				ref={editorRef}
+				value=""
+				mentionExtension={TestMentionExtension}
+				onChange={onChange}
+				onMentionChange={onMentionChange}
+			/>,
+		)
+		await waitFor(() => expect(editorRef.current).not.toBeNull())
+
+		act(() => {
+			expect(
+				editorRef.current?.insertPendingUploadMentions([
+					{
+						pendingId: "upload-1",
+						fileName: "pending.png",
+						status: "uploading",
+						progress: 25,
+					},
+				]),
+			).toBe(true)
+		})
+		expect(editorRef.current?.getCurrentPrompt()).toBe("")
+		expect(editorRef.current?.getPendingUploadMentions()).toEqual([
+			expect.objectContaining({ pendingId: "upload-1", progress: 25, status: "uploading" }),
+		])
+		expect(onChange).not.toHaveBeenCalledWith("@pending.png")
+
+		act(() => {
+			expect(
+				editorRef.current?.resolvePendingUploadMention(
+					"upload-1",
+					createReferenceResourcePanelItemFromPath("./images/pending.png", "pending.png"),
+				),
+			).toBe(true)
+		})
+		expect(editorRef.current?.getPendingUploadMentions()).toEqual([])
+		expect(editorRef.current?.getCurrentPrompt()).toBe("@pending.png")
+		expect(onChange).toHaveBeenCalledWith("@pending.png")
+	})
+
+	it("updates, fails, and removes pending uploads by pendingId", async () => {
+		const editorRef = createRef<MessageEditorRef>()
+		render(<MessageEditor ref={editorRef} value="" mentionExtension={TestMentionExtension} />)
+		await waitFor(() => expect(editorRef.current).not.toBeNull())
+
+		act(() => {
+			expect(
+				editorRef.current?.insertPendingUploadMentions([
+					{ pendingId: "upload-2", fileName: "failed.png" },
+					{ pendingId: "upload-3", fileName: "removed.png" },
+				]),
+			).toBe(true)
+		})
+		act(() => {
+			expect(
+				editorRef.current?.updatePendingUploadMention("upload-2", { progress: 80 }),
+			).toBe(true)
+			expect(editorRef.current?.failPendingUploadMention("upload-2", "上传失败")).toBe(true)
+		})
+		expect(editorRef.current?.getPendingUploadMentions()).toEqual([
+			expect.objectContaining({
+				pendingId: "upload-2",
+				progress: 80,
+				status: "error",
+				error: "上传失败",
+			}),
+			expect.objectContaining({ pendingId: "upload-3" }),
+		])
+		act(() => {
+			expect(editorRef.current?.removePendingUploadMention("upload-3")).toBe(true)
+		})
+		expect(editorRef.current?.getPendingUploadMentions()).toEqual([
+			expect.objectContaining({ pendingId: "upload-2" }),
+		])
 	})
 
 	it("replaces mentions through an equivalent canvas resource path", async () => {

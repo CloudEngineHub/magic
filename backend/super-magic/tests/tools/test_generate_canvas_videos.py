@@ -26,6 +26,11 @@ from app.tools.media_generator.video_base import VideoGenerationResponse
 from app.tools.video_generation_utils import VideoInputPayloadBuilder
 
 
+def test_canvas_filename_sanitizer_removes_reference_tokens():
+    assert GenerateCanvasVideos._sanitize_filename("[image1]_城市夜景") == "城市夜景"
+    assert GenerateCanvasVideos._sanitize_filename("第[1]章") == "第[1]章"
+
+
 class _FakeMagicServiceResponse:
     def __init__(self, payload, status=200):
         self.payload = payload

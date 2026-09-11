@@ -889,7 +889,7 @@ class HandleUserMessageAppService extends AbstractAppService
         $taskFileEntity->setFileName($fileName);
         $taskFileEntity->setFileExtension(! empty($attachment['file_extension']) ? $attachment['file_extension'] : pathinfo($fileName, PATHINFO_EXTENSION));
         $taskFileEntity->setFileSize(! empty($attachment['file_size']) ? $attachment['file_size'] : 0);
-        $taskFileEntity->setFileType(! empty($attachment['file_tag']) ? $attachment['file_tag'] : FileType::USER_UPLOAD->value);
+        $taskFileEntity->setFileType(FileType::fromValue($attachment['file_tag'] ?? null)->value);
         $taskFileEntity->setStorageType(! empty($attachment['storage_type']) ? $attachment['storage_type'] : StorageType::WORKSPACE->value);
         $taskFileEntity->setSource(TaskFileSource::PROJECT_DIRECTORY);
         $taskFileEntity->setIsDirectory(false);

@@ -76,15 +76,17 @@ export function transformUploadFileToProjectFile(
 	uploadFileData: UploadFileMentionData,
 	saveResult: FileData["saveResult"],
 ): ProjectFileMentionData {
+	// 保存接口未返回路径时沿用该次上传已确定的工作区路径，不使用对象存储 key 猜测。
+	const relativePath = saveResult?.relative_file_path || uploadFileData.relative_file_path || ""
 	return {
 		file_id: saveResult?.file_id || "",
-		file_name: saveResult?.file_name || "",
-		file_path: saveResult?.relative_file_path || "",
-		relative_file_path: saveResult?.relative_file_path || "",
+		file_name: saveResult?.file_name || uploadFileData.file_name,
+		file_path: relativePath,
+		relative_file_path: relativePath,
 		file_extension: uploadFileData.file_extension,
 		project_id: saveResult?.project_id,
 		file_size: saveResult?.file_size,
-		is_hidden: saveResult?.is_hidden,
+		is_hidden: saveResult?.is_hidden ?? uploadFileData.is_hidden,
 	}
 }
 
@@ -137,15 +139,24 @@ export function transformMentionItemToProjectFile(
 	}
 }
 
-/**
- * Recursively transform JSONContent by converting upload_file mentions to project_file mentions
- * @param content - The JSONContent to transform
- * @param saveResultMap - Map of file_key to save results
- * @returns Transformed JSONContent
- */
+function getUploadSaveResult(
+	uploadFile: UploadFileMentionData,
+	saveResultMap: Record<string, SaveUploadFileToProjectResponse | undefined>,
+	storageIdMap?: Record<string, SaveUploadFileToProjectResponse | undefined>,
+): SaveUploadFileToProjectResponse | undefined {
+	if (uploadFile.storage_id && storageIdMap?.[uploadFile.storage_id]) {
+		return storageIdMap[uploadFile.storage_id]
+	}
+	if (uploadFile.file_path && saveResultMap[uploadFile.file_path]) {
+		return saveResultMap[uploadFile.file_path]
+	}
+	return undefined
+}
+
 function transformContentByMentionItems(
 	content: JSONContent,
 	saveResultMap: Record<string, SaveUploadFileToProjectResponse | undefined>,
+	storageIdMap?: Record<string, SaveUploadFileToProjectResponse | undefined>,
 ): JSONContent {
 	if (!content) {
 		return content
@@ -163,16 +174,11 @@ function transformContentByMentionItems(
 			const uploadFile = mentionAttrs.data as UploadFileMentionData
 			if (uploadFile.is_canvas_clipboard) return transformedContent
 
-			// Find corresponding save result
-			if (uploadFile.file_path && saveResultMap[uploadFile.file_path]) {
-				const saveResult = saveResultMap[uploadFile.file_path]
-
-				if (saveResult) {
-					// Transform to project_file mention
-					transformedContent.attrs = {
-						type: MentionItemType.PROJECT_FILE,
-						data: transformUploadFileToProjectFile(uploadFile, saveResult),
-					}
+			const saveResult = getUploadSaveResult(uploadFile, saveResultMap, storageIdMap)
+			if (saveResult) {
+				transformedContent.attrs = {
+					type: MentionItemType.PROJECT_FILE,
+					data: transformUploadFileToProjectFile(uploadFile, saveResult),
 				}
 			}
 		}
@@ -181,7 +187,7 @@ function transformContentByMentionItems(
 	// Recursively transform content array
 	if (content.content && Array.isArray(content.content)) {
 		transformedContent.content = content.content.map((child) =>
-			transformContentByMentionItems(child, saveResultMap),
+			transformContentByMentionItems(child, saveResultMap, storageIdMap),
 		)
 	}
 
@@ -198,28 +204,23 @@ export function transformMentionItemsToProjectFiles(
 	content: JSONContent,
 	mentionItems: MentionListItem[],
 	saveResults: FileData["saveResult"][],
+	storageIdMap?: Record<string, SaveUploadFileToProjectResponse | undefined>,
 ): { mentionItems: MentionListItem[]; content: JSONContent } {
-	// Create a map of file_path to saveResult for efficient lookup
 	const saveResultMap = keyBy(saveResults, "file_key")
 
 	const transformedItems = mentionItems.map((item) => {
-		if (item.attrs.type === MentionItemType.UPLOAD_FILE && hasValidFilePath(item)) {
+		if (item.attrs.type === MentionItemType.UPLOAD_FILE) {
 			const uploadFile = item.attrs.data as UploadFileMentionData
 			if (uploadFile.is_canvas_clipboard) return item
 
-			if (uploadFile.file_path) {
-				const saveResult = saveResultMap[uploadFile.file_path]
-
-				if (saveResult) {
-					return transformMentionItemToProjectFile(item, saveResult)
-				}
-			}
+			const saveResult = getUploadSaveResult(uploadFile, saveResultMap, storageIdMap)
+			if (saveResult) return transformMentionItemToProjectFile(item, saveResult)
 		}
 
 		return item
 	})
 
-	const transformedContent = transformContentByMentionItems(content, saveResultMap)
+	const transformedContent = transformContentByMentionItems(content, saveResultMap, storageIdMap)
 
 	return {
 		mentionItems: transformedItems,
@@ -425,6 +426,26 @@ export function markProjectReferenceMentionForCopy(
 }
 
 export const markProjectFileMentionForCopy = markProjectReferenceMentionForCopy
+
+/** 粘贴与历史消息拖入共用来源处理；只准备引用，不在插入时复制文件内容。 */
+export function prepareCopiedMentionAttrs(
+	attrs: TiptapMentionAttributes,
+	sourceProjectId?: string,
+	dataService?: DataService | null,
+): TiptapMentionAttributes | null {
+	const resolvedSourceProjectId =
+		attrs.type === MentionItemType.PROJECT_FILE && sourceProjectId
+			? (attrs.data as ProjectFileMentionData).source_project_id ||
+				(attrs.data as ProjectFileMentionData).project_id ||
+				sourceProjectId
+			: sourceProjectId
+	const pendingProjectFileMention = markProjectFileMentionForCopy(attrs, resolvedSourceProjectId)
+	if (pendingProjectFileMention) return pendingProjectFileMention
+
+	if (isAllowedMention(attrs, dataService)) return attrs
+
+	return null
+}
 
 export interface CopiedProjectReferenceMentionData {
 	sourceId: string

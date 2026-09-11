@@ -202,14 +202,10 @@ function CollapsedWorkspaceProjectRow({
 				<NavigationStatusIcon
 					itemType="project"
 					status={project.project_status}
-					className={
-						cn(
-							"mr-2",
-							isSelected
-								? "text-sidebar-accent-foreground"
-								: "text-sidebar-foreground",
-						)
-					}
+					className={cn(
+						"mr-2",
+						isSelected ? "text-sidebar-accent-foreground" : "text-sidebar-foreground",
+					)}
 				/>
 				<div className="min-w-0 flex-1">
 					<div className="flex min-w-0 flex-1 items-center gap-1.5">

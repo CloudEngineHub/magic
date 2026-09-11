@@ -870,10 +870,6 @@ class BaseTool(Generic[T], ABC):
             return f"Tool '{tool_name}' parameter validation failed."
 
         result = "Tool call failed\n\n" + "\n\n".join(pretty_msg_parts)
-        result += (
-            "\n\nIf arguments were too long and got truncated, "
-            "break the work into smaller pieces."
-        )
 
         return result
 

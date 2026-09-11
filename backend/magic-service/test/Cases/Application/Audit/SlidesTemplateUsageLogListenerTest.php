@@ -10,6 +10,7 @@ namespace Test\Cases\Application\Audit;
 use App\Domain\Audit\ResourceAccess\Entity\ResourceAccessLogEntity;
 use App\Domain\Audit\ResourceAccess\Repository\Facade\ResourceAccessLogRepositoryInterface;
 use App\Domain\Audit\ResourceAccess\Service\ResourceAccessLogDomainService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Infrastructure\Audit\Listener\ResourceAccessLogListener;
@@ -42,7 +43,7 @@ class SlidesTemplateUsageLogListenerTest extends TestCase
 
         $listener->process(new SlidesTemplateUsedEvent(
             organizationCode: 'DT001',
-            sourceId: 'slides_template_use',
+            sourceId: SourceId::SLIDES_TEMPLATE_USE,
             callTime: 1234567890000,
             userId: 'user-1',
             userName: '张三',

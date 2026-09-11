@@ -39,9 +39,18 @@ import {
 	getCanvasResourceFileName,
 	getCanvasResourceReferenceIdentity,
 } from "../../../../runtime/shared/path/canvasResourcePath"
-import { createReferenceResourcePanelItemFromPath } from "../../../editors/message/reference-assets/createReferenceResourcePanelItem"
+import {
+	createReferenceResourcePanelItemFromPath,
+	createUploadFileResponseFromPanelItem,
+} from "../../../editors/message/reference-assets/createReferenceResourcePanelItem"
 import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
-import MessageEditor, { type MessageEditorRef } from "../../../editors/message/MessageEditor"
+import MessageEditor, {
+	type MessageEditorMentionChangeContext,
+	type MessageEditorRef,
+} from "../../../editors/message/MessageEditor"
+import { applyRichMessageClipboardParts } from "../../../editors/message/applyRichMessageClipboardParts"
+import type { RichMessageClipboardSession } from "../../../editors/message/applyRichMessageClipboardParts"
+import { enrichCanvasMentionForClipboard } from "../../../../runtime/resources/clipboard/enrichCanvasMentionForClipboard"
 import { useCanvasReferenceMention } from "../../../editors/message/useCanvasReferenceMention"
 import VideoEditorControls from "./VideoEditorControls"
 import { useVideoEditorConfig } from "./useVideoEditorConfig"
@@ -115,11 +124,17 @@ import {
 	claimCanvasClipboardPasteEvent,
 	getCanvasClipboardPasteController,
 	hasCanvasClipboardMimeType,
+	hasMessageClipboardData,
 	hasCanvasClipboardTextOrHtml,
 	type CanvasClipboardAsset,
 	type CanvasClipboardMediaType,
 } from "../../../../runtime/resources/clipboard/CanvasClipboardPasteController"
+import { collectVideoEditorExistingClipboardResourceKeys } from "../../../../runtime/resources/clipboard/collectMediaEditorExistingClipboardResourceKeys"
 import { synchronizeLinkedFrameBindings } from "./linkedFrameBindings"
+import {
+	createFrameSlotPromptPlaceholderAllocator,
+	padFrameSlotPromptPlaceholder,
+} from "./frameSlotPromptPlaceholder"
 import {
 	areMediaEditSnapshotsEqual,
 	type MediaEditIntent,
@@ -173,6 +188,11 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const { canvas } = useCanvas()
 	const resolveResourceReference =
 		canvas?.magicConfigManager.config?.methods?.resolveResourceReference
+	const enrichClipboardMentionAttrs = useCallback(
+		(attrs: Parameters<typeof enrichCanvasMentionForClipboard>[0]) =>
+			enrichCanvasMentionForClipboard(attrs, resolveResourceReference),
+		[resolveResourceReference],
+	)
 	const editorRef = useRef<MessageEditorRef>(null)
 	const [hasEditorScrollbar, setHasEditorScrollbar] = useState(false)
 	const [hasSourceListScrollbar, setHasSourceListScrollbar] = useState(false)
@@ -242,6 +262,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	)
 	clipboardSessionIdRef.current = getClipboardSessionId()
 	const clipboardHandlersRef = useRef(handlers)
+	const richClipboardSessionRef = useRef<RichMessageClipboardSession | null>(null)
 	clipboardHandlersRef.current = handlers
 	const sessionStore = canvas?.mediaEditRecoveryManager
 	const sessionKey = useMemo(
@@ -398,6 +419,14 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			onReadyMentionChange: handlers.handleReferenceMentionPathsChange,
 			resolveResourceReference,
 		})
+	const handleMentionChangeWithDebug = useCallback(
+		(paths: string[], currentPrompt: string, context: MessageEditorMentionChangeContext) => {
+			const currentMentionBindings = editorRef.current?.getMentionBindings?.()
+			if (currentMentionBindings) handlers.updateMentionBindings(currentMentionBindings)
+			handleMentionChange(paths, currentPrompt, context)
+		},
+		[editorRef, handleMentionChange, handlers],
+	)
 	const linkedFrameBindingSync = useMemo(
 		() =>
 			synchronizeLinkedFrameBindings({
@@ -538,10 +567,12 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		enabled: Boolean(estimateModelId),
 	})
 
+	const promptMentionsEnabled = config.supportsReferenceAssets && config.modelOptions.length > 0
 	const { matchableItems, mentionDataService, mentionExtension, mentionEnabled } =
 		useCanvasReferenceMention({
-			matchableItems: config.matchableItems,
-			mentionEnabledOverride: config.modelOptions.length > 0,
+			matchableItems: promptMentionsEnabled ? config.matchableItems : [],
+			mentionEnabledOverride: promptMentionsEnabled,
+			includeProjectTreeCandidates: promptMentionsEnabled,
 			maxReferenceFiles: effectiveMaxReferenceFiles,
 			currentReferenceFiles: effectiveReferencePaths,
 			isReferenceFileLimitReached: effectiveReferenceLimitReached,
@@ -901,19 +932,28 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			const files = CanvasDesignClipboard.readEventFilesSnapshot(nativeEvent)
 			const nativeFiles = CanvasDesignClipboard.readAllEventFilesSnapshot(nativeEvent)
 			const hasCanvasMime = hasCanvasClipboardMimeType(nativeEvent)
+			const hasMessageClipboard = hasMessageClipboardData(nativeEvent)
 			const hasTextOrHtml = hasCanvasClipboardTextOrHtml(nativeEvent)
 			// Keep unsupported native files (such as PDFs) on the existing browser
 			// path; this media editor only owns image/video/audio files.
-			if (!hasCanvasMime && nativeFiles.length > 0 && files.length === 0) return
+			if (!hasCanvasMime && nativeFiles.length > 0 && files.length === 0) {
+				return
+			}
 			if (!hasCanvasMime && files.length > 0) {
-				if (!canAcceptLocalFiles(files).accepted) return
-				if (!claimCanvasClipboardPasteEvent(nativeEvent)) return
+				if (!canAcceptLocalFiles(files).accepted) {
+					return
+				}
+				if (!claimCanvasClipboardPasteEvent(nativeEvent)) {
+					return
+				}
 				event.preventDefault()
 				event.stopPropagation()
 				void clipboardHandlersRef.current.uploadReferenceFiles(files)
 				return
 			}
-			if (!hasCanvasMime && files.length === 0 && hasTextOrHtml) return
+			if (!hasCanvasMime && !hasMessageClipboard && files.length === 0 && hasTextOrHtml) {
+				return
+			}
 
 			const selectedSlot = config.selectedResourceSlot
 			const targetInputTab = selectedSlot?.inputTab ?? config.activeInputTab
@@ -1003,21 +1043,103 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 							audio: referenceTypeCapacity("audio"),
 						}
 			let pastedAssetIndex = 0
+			const pasteSessionId = getClipboardSessionId()
+			const pasteSelection = editorRef.current?.getSelectionRange?.() ?? undefined
+			const allocateFramePromptPlaceholder =
+				config.supportsStartFrame || config.supportsEndFrame
+					? createFrameSlotPromptPlaceholderAllocator({
+							frameSlots: config.currentFrameImages,
+							maxFrameImages: config.maxFrameImages,
+							supportsStartFrame: config.supportsStartFrame,
+							supportsEndFrame: config.supportsEndFrame,
+							selectedFrameSlotIndex:
+								selectedSlot?.inputTab === "frame" ? selectedSlot.slotIndex : null,
+							t,
+						})
+					: undefined
+			const existingResourceKeys = collectVideoEditorExistingClipboardResourceKeys({
+				referencePaths: effectiveReferencePaths,
+				referenceAssetInfos: mergedReferenceAssetInfos,
+				framePaths: config.currentFrameImages,
+				mentionBindings: config.mentionBindings,
+				resolveResourceReference,
+			})
 
-			void getCanvasClipboardPasteController().paste(
+			void getCanvasClipboardPasteController(
+				canvas?.magicConfigManager.config?.methods,
+			).paste(
 				nativeEvent,
 				{
 					control: "video-editor",
 					acceptedTypes: [...targetAcceptedTypes],
+					messagePasteMode: "rich-text-with-media",
 					projectId:
 						canvas?.magicConfigManager.config?.methods?.getCanvasClipboardContext?.()
 							.projectId,
 					canvasId: canvas?.id,
 					maxCount,
 					maxCountByType,
-					sessionId: getClipboardSessionId(),
+					existingResourceKeys,
+					sessionId: pasteSessionId,
 				},
 				{
+					onMessageParts: async (parts) => {
+						const selected = selectedSlot
+						const allowPromptMentions = config.supportsReferenceAssets
+						const session = await applyRichMessageClipboardParts({
+							parts,
+							editor: editorRef.current,
+							controller: clipboardHandlersRef.current.uploadMentionController,
+							selection: pasteSelection,
+							resolveAssetDestination: (assetIndex) => {
+								if (selected && assetIndex === 0) return "selected-slot"
+								// 首尾帧模式：资源只进帧槽，不进 MessageEditor @mention
+								if (!allowPromptMentions || targetInputTab === "frame") {
+									return "frame"
+								}
+								return "prompt"
+							},
+							allocateFramePromptPlaceholder,
+							isSessionCurrent: () =>
+								isMountedRef.current &&
+								pasteSessionId === clipboardSessionIdRef.current,
+							registerPendingResourcePath: (path) => {
+								canvas?.canvasFileUploadManager.registerPendingResourcePath(path)
+							},
+							replaceSelectedSlot: selected
+								? (fileInfo, options) => {
+										clipboardHandlersRef.current.replaceSelectedResource(
+											fileInfo,
+											{ retainResourceSlot: options?.retainReferenceSlot },
+										)
+									}
+								: undefined,
+							appendFrameItem: (item) => {
+								clipboardHandlersRef.current.appendFrameImage(
+									createUploadFileResponseFromPanelItem(item),
+								)
+							},
+							uploadFiles: (files, options) =>
+								clipboardHandlersRef.current.uploadReferenceFiles(files, {
+									ignoreSelectedResourceSlot: options.ignoreSelectedReferenceSlot,
+									retainSelectedResourceSlot: options.retainSelectedReferenceSlot,
+									suppressPromptMention: options.suppressPromptMention,
+									pendingMentionHandles: options.pendingMentionHandles,
+									suppressPartialSkippedToast: true,
+									isCurrent: options.isCurrent,
+								}),
+						})
+						richClipboardSessionRef.current = session
+					},
+					onMessageAssetResolved: async (occurrenceKey, asset) => {
+						const session = richClipboardSessionRef.current
+						if (!session) return
+						if (!asset) {
+							session.failOccurrence(occurrenceKey)
+							return
+						}
+						await session.resolveOccurrence(occurrenceKey, asset)
+					},
 					onAsset: async (asset: CanvasClipboardAsset) => {
 						if (asset.reference?.kind === "current-canvas") {
 							if (asset.reference.awaitingAttachmentConfirmation) {
@@ -1028,28 +1150,44 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 							const item = createReferenceResourcePanelItemFromPath(
 								asset.reference.path,
 								asset.reference.fileName,
+								{ fileId: asset.reference.fileId },
 							)
 							const selected = selectedSlot
+							const fileInfo = createUploadFileResponseFromPanelItem(item)
+							const insertFramePlaceholder = (
+								destination: "frame" | "selected-slot",
+							) => {
+								const placeholder = allocateFramePromptPlaceholder?.({
+									destination,
+								})
+								if (!placeholder) return
+								const prompt = editorRef.current?.getCurrentPrompt?.() ?? ""
+								const from = pasteSelection?.from ?? 1
+								const to = pasteSelection?.to ?? from
+								const text = padFrameSlotPromptPlaceholder(placeholder, {
+									isFirst: !prompt || from <= 1,
+									isLast: !prompt || to >= prompt.length + 1,
+								})
+								editorRef.current?.insertClipboardParts([{ type: "text", text }], {
+									selection: pastedAssetIndex === 0 ? pasteSelection : undefined,
+								})
+							}
 							if (selected && pastedAssetIndex === 0) {
-								clipboardHandlersRef.current.replaceSelectedResource(
-									{
-										path: item.data.file_path,
-										src: item.data.file_path,
-										fileName: item.data.file_name,
-									},
-									{ retainResourceSlot: true },
-								)
-							} else {
-								const fileInfo = {
-									path: item.data.file_path,
-									src: item.data.file_path,
-									fileName: item.data.file_name,
-								}
-								if (targetInputTab === "frame") {
+								clipboardHandlersRef.current.replaceSelectedResource(fileInfo, {
+									retainResourceSlot: true,
+								})
+								insertFramePlaceholder("selected-slot")
+							} else if (
+								!config.supportsReferenceAssets ||
+								targetInputTab === "frame"
+							) {
+								const accepted =
 									clipboardHandlersRef.current.appendFrameImage(fileInfo)
-								} else {
-									editorRef.current?.insertMentionItems([item])
+								if (accepted) {
+									insertFramePlaceholder("frame")
 								}
+							} else {
+								editorRef.current?.insertMentionItems([item])
 							}
 							pastedAssetIndex += 1
 							return
@@ -1087,6 +1225,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			effectiveMaxReferenceFiles,
 			config.selectedResourceSlot,
 			config.supportsEndFrame,
+			config.supportsReferenceAssets,
 			config.supportsReferenceAudios,
 			config.supportsReferenceImages,
 			config.supportsReferenceVideos,
@@ -1095,7 +1234,11 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			config.currentFrameImages,
 			effectiveReferencePaths,
 			effectiveReferenceAssetCounts,
+			mergedReferenceAssetInfos,
+			config.mentionBindings,
+			resolveResourceReference,
 			getClipboardSessionId,
+			t,
 		],
 	)
 
@@ -1385,12 +1528,14 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 					onEnter={handleSend}
 					onScrollbarChange={setHasEditorScrollbar}
 					matchableItems={matchableItems}
+					mentionBindings={promptMentionsEnabled ? config.mentionBindings : []}
 					mentionDataService={mentionDataService}
 					mentionExtension={mentionExtension}
 					mentionItemsReady={Boolean(config.hasRestoredRef.current)}
-					onMentionChange={handleMentionChange}
+					onMentionChange={handleMentionChangeWithDebug}
 					onMentionItemHoverChange={setHoveredMentionPath}
 					mentionEnabled={mentionEnabled}
+					enrichClipboardMentionAttrs={enrichClipboardMentionAttrs}
 					onPasteCapture={handlePaste}
 				/>
 				<VideoEditorControls
@@ -1435,7 +1580,13 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 						<Button
 							className={styles.sendButton}
 							onClick={handleSend}
-							disabled={sendButtonBusy || !hasSubmitIntent || !config.selectedModelId}
+							disabled={
+								sendButtonBusy ||
+								config.isUploading ||
+								editorRef.current?.hasPendingUploadMentions?.() === true ||
+								!hasSubmitIntent ||
+								!config.selectedModelId
+							}
 							aria-busy={sendButtonBusy}
 							data-testid="video-generate-editor-send-button"
 						>

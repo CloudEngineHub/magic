@@ -90,6 +90,8 @@ export enum RouteName {
 	CrewMarketCrew = "CrewMarketCrew",
 	/** Crew Market - Skills 子页 */
 	CrewMarketSkills = "CrewMarketSkills",
+	/** Crew Market - Connectors 子页 */
+	CrewMarketMcp = "CrewMarketMcp",
 	/** Crew Edit - 编辑 Crew（创建后跳转或编辑现有） */
 	CrewEdit = "CrewEdit",
 	/** Skill Edit - 编辑 Skill */

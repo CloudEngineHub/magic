@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { UploadSubDir, type UploadFile } from "@/components/CanvasDesign/public/magic-types"
 import type { BatchSaveInfo } from "@/stores/folderUpload/types"
-import { processBatchSavedFiles } from "../uploadCallbacks"
+import { createUploadCallbacks, processBatchSavedFiles } from "../uploadCallbacks"
 
 function createBatchSaveInfo(relativeFilePath?: string): BatchSaveInfo {
 	return {
@@ -79,5 +79,40 @@ describe("processBatchSavedFiles path resolution", () => {
 		expect(result.responses).toEqual([])
 		expect(result.errors).toHaveLength(1)
 		expect(setFileInfoCache).not.toHaveBeenCalled()
+	})
+})
+
+describe("createUploadCallbacks file progress", () => {
+	it("forwards progress to the matching UploadFile callback", () => {
+		const sourceFile = new File(["content"], "x.png", { type: "image/png" })
+		const onUploadProgress = vi.fn()
+		const uploadFile: UploadFile = {
+			file: sourceFile,
+			uploadSubDir: UploadSubDir.Images,
+			onUploadComplete: vi.fn(),
+			onUploadFailed: vi.fn(),
+			onUploadProgress,
+		}
+		const callbacks = createUploadCallbacks({
+			suffixDir: "画布A/images",
+			uploadSubDir: UploadSubDir.Images,
+			showSuccessToast: false,
+			designProjectBasePath: "画布A",
+			fileNameToUploadFileMap: new Map([[sourceFile.name, uploadFile]]),
+			filesToUpload: [sourceFile],
+			processedFileNames: new Set(),
+			pendingGetFileInfoRef: { current: new Map() },
+			getFileInfoById: vi.fn(),
+			setIsUploading: vi.fn(),
+			setUploadProgress: vi.fn(),
+			t: (key) => key,
+			onComplete: vi.fn(),
+			onError: vi.fn(),
+			onCompleteAlways: vi.fn(),
+		})
+
+		callbacks.onFileProgress("task-1", sourceFile, 37.5)
+
+		expect(onUploadProgress).toHaveBeenCalledWith(37.5)
 	})
 })

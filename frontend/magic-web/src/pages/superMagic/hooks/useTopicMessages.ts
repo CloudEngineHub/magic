@@ -1141,23 +1141,23 @@ export function useTopicMessages({
 			const syncGeneration = superMagicStore.beginTopicSync(topicId)
 			inFlightSync = { topicId, generation: syncGeneration }
 			foregroundTopicSyncRef.current = inFlightSync
-		const isCurrentForegroundOwner = () =>
-			foregroundTopicSyncRef.current === inFlightSync &&
-			selectedTopicRef.current?.chat_topic_id === topicId
-		const completeFailedSync = () => {
-			if (!isCurrentForegroundOwner()) return
-			if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) return
-			const currentTopic = selectedTopicRef.current
-			superMagicStore.completeTopicSync(topicId, syncGeneration, {
-				succeeded: false,
-				taskStatus: currentTopic?.task_status || currentTopic?.status,
-				renderStrategy: "foreground-instant",
-			})
-		}
-		const recoveryAnchor = getCurrentTopicRecoveryAnchor(topicId)
-		const activeStreamIdsAtRequestStart = Array.from(
-			superMagicStore.topicMeta.get(topicId)?.content?.keys() || [],
-		)
+			const isCurrentForegroundOwner = () =>
+				foregroundTopicSyncRef.current === inFlightSync &&
+				selectedTopicRef.current?.chat_topic_id === topicId
+			const completeFailedSync = () => {
+				if (!isCurrentForegroundOwner()) return
+				if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) return
+				const currentTopic = selectedTopicRef.current
+				superMagicStore.completeTopicSync(topicId, syncGeneration, {
+					succeeded: false,
+					taskStatus: currentTopic?.task_status || currentTopic?.status,
+					renderStrategy: "foreground-instant",
+				})
+			}
+			const recoveryAnchor = getCurrentTopicRecoveryAnchor(topicId)
+			const activeStreamIdsAtRequestStart = Array.from(
+				superMagicStore.topicMeta.get(topicId)?.content?.keys() || [],
+			)
 			let aggregatedPulledItems: any[] = []
 			let aggregatedStatusItems: any[] = []
 			let latestResponse: any

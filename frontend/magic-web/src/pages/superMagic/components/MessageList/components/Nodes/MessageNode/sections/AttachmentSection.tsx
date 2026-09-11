@@ -8,9 +8,11 @@ import MagicIcon from "@/components/base/MagicIcon"
 import { cn } from "@/utils/cn"
 import { Attachment } from "@/pages/superMagic/components/MessageList/components/MessageAttachment"
 import type { AttachmentProps } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/type"
-import { findAttachmentByPath } from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/helper"
+import { normalizeWorkspacePathForComparison } from "@/pages/superMagic/utils/markdownFileReference"
+import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import {
 	buildFilePathAttachments,
+	findFilePathAttachment,
 	openFileByPath,
 	type FilePathAttachment,
 } from "@/pages/superMagic/components/MessageList/utils/attachmentByFilePath"
@@ -39,6 +41,8 @@ export const AttachmentSection = observer(function AttachmentSection({
 	onSelectDetail,
 	className,
 }: AttachmentSectionProps) {
+	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
+	const resolvedProjectFilesStore = scopedProjectFilesStore ?? projectFilesStore
 	const attachments = resolveAttachmentList(node, fallbackNode) as AttachmentProps[]
 	const rawFilePathAttachments = useMemo(() => {
 		if (!prevSuperMessageId) return []
@@ -49,12 +53,17 @@ export const AttachmentSection = observer(function AttachmentSection({
 			typeof prevMessageNode?.content === "string" ? prevMessageNode.content : ""
 		return prevContent ? buildFilePathAttachments(prevContent) : []
 	}, [prevSuperMessageId])
-	const filePathAttachments = rawFilePathAttachments.filter((attachment) => {
-		const found = findAttachmentByPath(
-			projectFilesStore.workspaceFilesList,
-			attachment.filePath,
+	const filePathAttachments = rawFilePathAttachments.flatMap((attachment) => {
+		const found = findFilePathAttachment(
+			resolvedProjectFilesStore.workspaceFilesList,
+			attachment,
 		)
-		return Boolean(found && found.type !== "directory" && !found.is_directory)
+		if (!found || found.type === "directory" || found.is_directory) return []
+		// 文件打开事件使用已匹配的真实路径，不把旧语法编码留给下游猜测。
+		const filePath = normalizeWorkspacePathForComparison(
+			found.relative_file_path || found.path || attachment.filePath,
+		)
+		return filePath ? [{ ...attachment, filePath }] : []
 	})
 	const onFileClick = useMemoizedFn((item?: unknown) => {
 		openMessageFile(item)

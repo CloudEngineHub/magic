@@ -25,7 +25,7 @@ export interface PPTRootRenderProps {
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
-	) => Promise<void>
+	) => Promise<boolean | void>
 	className?: string
 	updatedAt?: string
 	displayConfig?: any

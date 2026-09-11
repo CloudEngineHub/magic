@@ -535,6 +535,7 @@ class SuperMagicAgentAssembler
         return new AgentListItemDTO(
             id: $agent->getId(),
             code: $agent->getCode(),
+            projectId: $agent->getProjectId() === null ? null : (string) $agent->getProjectId(),
             nameI18n: $agent->getNameI18n() ?? [],
             roleI18n: $agent->getRoleI18n() ?? [],
             descriptionI18n: $agent->getDescriptionI18n() ?? [],

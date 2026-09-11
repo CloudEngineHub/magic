@@ -759,7 +759,10 @@ function renderMcpList() {
         const cfg = mcpServersConfig[name];
         const enabled = !!mcpEnabledStates[name];
         const isHttp = (cfg.type || '').toLowerCase() === 'http';
-        const meta = isHttp ? (cfg.url || '') : (cfg.command || '');
+        const isMagicServiceAuth = Number(cfg.auth_type) === 2;
+        const meta = isMagicServiceAuth
+            ? `Magic Service 授权 · ${cfg.mcp_server_code || '未填写 mcp_server_code'}`
+            : (isHttp ? (cfg.url || '') : (cfg.command || ''));
         const typeLabel = isHttp ? 'HTTP' : 'stdio';
         const typeClass = isHttp ? '' : 'stdio';
 
@@ -814,7 +817,12 @@ function syncJsonToList() {
         // 对每个服务器补全 name 字段
         for (const [k, v] of Object.entries(parsed)) {
             if (typeof v === 'object' && v !== null) {
-                parsed[k] = Object.assign({ name: k }, v);
+                const normalized = Object.assign({ name: k }, v);
+                // 支持面板中的可读别名，发送给后端时统一为 MCP Authorization 的数值类型。
+                if (normalized.auth_type === 'magic_service' || normalized.auth_type === 'mcp_authorization') {
+                    normalized.auth_type = 2;
+                }
+                parsed[k] = normalized;
             }
         }
         mcpServersConfig = parsed;
@@ -834,6 +842,11 @@ function syncJsonToList() {
 
 /** 构建发送用的 mcp_config（只包含启用的服务器），无启用服务器时返回 null */
 function buildMcpConfig() {
+    // JSON 模式下用户可能还没有切回列表，发送前必须先同步最新内容。
+    if (mcpViewMode === 'json' && !syncJsonToList()) {
+        return null;
+    }
+
     const enabledServers = {};
     for (const [name, cfg] of Object.entries(mcpServersConfig)) {
         if (mcpEnabledStates[name]) {
@@ -900,6 +913,13 @@ function initMcpPanel() {
         });
     }
 
+    const magicServiceTemplateBtn = document.getElementById('mcpMagicServiceTemplateBtn');
+    if (magicServiceTemplateBtn) {
+        magicServiceTemplateBtn.addEventListener('click', () => {
+            applyMcpMagicServiceTemplate(jsonInput);
+        });
+    }
+
     // 全屏编辑弹窗
     const expandBtn = document.getElementById('mcpExpandBtn');
     const modal = document.getElementById('mcpJsonModal');
@@ -952,6 +972,31 @@ function initMcpPanel() {
 
     renderMcpList();
     updateMcpBadge();
+}
+
+/**
+ * 将 Magic Service MCP Authorization 配置模板写入 JSON 编辑框。
+ * 仅在编辑框为空时写入，避免覆盖用户正在编辑的配置。
+ */
+function applyMcpMagicServiceTemplate(jsonInput) {
+    if (!jsonInput) return;
+    if (jsonInput.value.trim()) {
+        showSystemMessage('当前已有 MCP 配置，已保留原内容；请清空 JSON 后再插入模板');
+        jsonInput.focus();
+        return;
+    }
+
+    jsonInput.value = JSON.stringify({
+        '服务器名称': {
+            name: '服务器名称',
+            type: 'http',
+            url: 'https://你的-mcp-server.example.com/mcp',
+            auth_type: 2,
+            mcp_server_code: '请填写 magic-service 中的 MCP Server code',
+            headers: {},
+        },
+    }, null, 2);
+    jsonInput.focus();
 }
 
 // ── MCP 配置面板 end ──────────────────────────────────────────────────────────
@@ -2401,6 +2446,7 @@ function createImChatMessage(prompt) {
         message_id: generateImMessageId(currentImChannel, userId),
         type: MessageType.CHAT,
         prompt: prompt,
+        attachments: buildNativeVisionAttachments(prompt),
         metadata: {
             agent_user_id: userId,
         },
@@ -2426,7 +2472,7 @@ function createChatMessage(prompt, contextType = ContextType.NORMAL, remark = nu
         context_type: contextType,
         task_mode: currentTaskMode, // 保留兼容性
         agent_mode: currentAgentMode, // 新的 agent 模式
-        attachments: [],
+        attachments: buildNativeVisionAttachments(prompt),
         metadata: {
             language: currentLanguage
         }
@@ -6109,6 +6155,38 @@ function parsePromptMentions(prompt) {
         mentions.push(mention);
     }
     return mentions;
+}
+
+/** 根据文件路径判断是否为聊天图片。 */
+function isImagePath(path) {
+    const value = String(path || '').split(/[?#]/, 1)[0];
+    const extensionIndex = value.lastIndexOf('.');
+    return extensionIndex >= 0 && IMAGE_UPLOAD_EXTENSIONS.has(value.slice(extensionIndex + 1).toLowerCase());
+}
+
+/** 根据消息中的工作区图片引用生成后端附件描述，触发原生视觉链路。 */
+function buildNativeVisionAttachments(prompt) {
+    const imageMentions = parsePromptMentions(prompt)
+        .filter((mention) => mention.type === 'project_file' && isImagePath(mention.file_path));
+    const seen = new Set();
+    const attachments = [];
+    for (const mention of imageMentions) {
+        const path = normalizeMentionFilePath(mention.file_path);
+        if (!path || seen.has(path)) continue;
+        seen.add(path);
+        const entry = workspaceMentionIndex.find((item) => item.kind === 'file' && item.scope !== 'memory' && item.path === path);
+        const filename = getWorkspaceFileBaseName(path);
+        attachments.push({
+            file_url: debugWorkspaceApi.rawUrl(path, 'workspace'),
+            filename,
+            file_name: filename,
+            file_key: `local-debug/workspace/${path}`,
+            file_tag: 'image',
+            file_size: Number(entry?.size || 0),
+            relative_file_path: path,
+        });
+    }
+    return attachments;
 }
 
 let activeFiletreeContextMenu = null;

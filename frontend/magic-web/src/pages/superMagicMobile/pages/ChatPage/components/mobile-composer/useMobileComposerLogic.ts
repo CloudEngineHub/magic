@@ -51,7 +51,10 @@ import {
 	checkMCPOAuth,
 	MCPOAuthType,
 } from "@/components/Agent/MCP/AgentSettings/AgentPanel/MCPPanel/helpers"
-import { getMCPAccess } from "@/components/Agent/MCP/store/mcp-access"
+import {
+	getMCPAccess,
+	loadMCPWithInstalledConnectorReconciliation,
+} from "@/components/Agent/MCP/store/mcp-access"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import { buildQueueMessageInput } from "@/pages/superMagic/components/MainInputContainer/components/editors/messageParams"
@@ -216,6 +219,8 @@ export default function useMobileComposerLogic({
 			}),
 		[mcpStorageKey, mcpUseTempStorage],
 	)
+	const addedMCPAccess = useCreation(() => getMCPAccess({ storageKey: "__added__" }), [])
+	const activeMCPStorageKey = mcpStorageKey || "__template_project_id__"
 	const selectedPluginCount = mcpAccess.mcpList.length
 
 	const voiceInputRef = useRef<VoiceInputRef>(null)
@@ -508,6 +513,13 @@ export default function useMobileComposerLogic({
 		isMountedRef,
 	})
 
+	const getWorkspaceFilesList = useMemoizedFn(
+		() => editorContext.projectFilesStore?.workspaceFilesList ?? [],
+	)
+	const getCurrentProjectId = useMemoizedFn(
+		() => selectedTopic?.project_id ?? selectedProject?.id ?? draftKey?.projectId,
+	)
+
 	const { tiptapEditor, domRef } = useMessageEditor({
 		value: store.editorStore.value,
 		onSend: handleSend,
@@ -533,6 +545,8 @@ export default function useMobileComposerLogic({
 		isAllowedMention: editorContext.isAllowedMention,
 		shouldSkipRemoveSync: () => shouldSkipMentionRemoveSyncRef.current,
 		shouldRestoreRemovedMention,
+		getWorkspaceFilesList,
+		getCurrentProjectId,
 	})
 
 	const updateContent = useMemoizedFn((content: JSONContent | undefined) => {
@@ -893,8 +907,17 @@ export default function useMobileComposerLogic({
 	})
 
 	useEffect(() => {
-		void mcpAccess.load().catch(console.error)
-	}, [mcpAccess])
+		if (mcpUseTempStorage) {
+			void mcpAccess.load().catch(console.error)
+			return
+		}
+
+		void loadMCPWithInstalledConnectorReconciliation({
+			installedAccess: addedMCPAccess,
+			activeAccess: mcpAccess,
+			activeStorageKey: activeMCPStorageKey,
+		}).catch(console.error)
+	}, [activeMCPStorageKey, addedMCPAccess, mcpAccess, mcpUseTempStorage])
 
 	return {
 		parentStore,

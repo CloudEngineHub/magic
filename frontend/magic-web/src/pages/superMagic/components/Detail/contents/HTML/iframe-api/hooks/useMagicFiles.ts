@@ -3,7 +3,10 @@ import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { runInAction } from "mobx"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { base64ToFile } from "@/pages/superMagic/components/MessageEditor/utils/fileConverter"
+import {
+	arrayBufferToFile,
+	base64ToFile,
+} from "@/pages/superMagic/components/MessageEditor/utils/fileConverter"
 import { resolveUploadPath } from "../../utils/file-utils"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import {
@@ -22,8 +25,8 @@ import type { HtmlPermissionScope } from "../types"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 
 interface MagicUploadFileData {
-	/** File 对象（优先使用，通过 postMessage 结构化克隆直接传输） */
-	file?: File
+	/** 二进制对象（优先使用；ArrayBuffer 可通过 transfer list 转移所有权） */
+	file?: File | Blob | ArrayBuffer
 	/** base64 数据（向后兼容，当 file 字段不存在时使用） */
 	base64?: string
 	filename: string
@@ -183,15 +186,21 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				const batch = files.slice(i, i + CONCURRENCY)
 				const batchResults = await Promise.allSettled(
 					batch.map(async (fileData) => {
-						const { filename, path, fileSize } = fileData
-						// Prefer direct File object (zero-copy via structured clone)
-						// Fall back to base64 decoding for backward compatibility
+						const { filename, path, fileSize, fileType } = fileData
+						// Prefer binary payloads; retain Base64 only for older callers.
+						const incomingFile = fileData.file
 						const file =
-							fileData.file instanceof File
-								? fileData.file
-								: fileData.base64
-									? await base64ToFile(fileData.base64, filename)
-									: null
+							incomingFile instanceof File
+								? incomingFile
+								: incomingFile instanceof ArrayBuffer
+									? arrayBufferToFile(incomingFile, filename, fileType)
+									: incomingFile instanceof Blob
+										? new File([incomingFile], filename, {
+												type: incomingFile.type || fileType,
+											})
+										: fileData.base64
+											? await base64ToFile(fileData.base64, filename)
+											: null
 
 						if (!file) {
 							throw new Error("No file data provided (neither file nor base64)")

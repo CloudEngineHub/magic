@@ -32,6 +32,34 @@ describe("generateSkillsApi", () => {
 		})
 	})
 
+	it("creates and checks async skill publish tasks", async () => {
+		const post = vi.fn().mockResolvedValue({
+			publish_task_id: "100000000000009004",
+			status: "processing",
+			progress: 0,
+		})
+		const get = vi.fn().mockResolvedValue({
+			publish_task_id: "100000000000009004",
+			status: "ready",
+			progress: 100,
+		})
+		const api = generateSkillsApi({ get, post } as unknown as HttpClient)
+		const body = {
+			version: "1.0.0",
+			version_description_i18n: { zh_CN: "说明", en_US: "notes" },
+			publish_target_type: "PRIVATE" as const,
+			publish_target_value: null,
+		}
+
+		await api.publishSkillAsync({ code: "SK-1", ...body })
+		await api.checkSkillPublish({ code: "SK-1", publish_task_id: "100000000000009004" })
+
+		expect(post).toHaveBeenCalledWith("/api/v1/skills/SK-1/publish/async", body)
+		expect(get).toHaveBeenCalledWith(
+			"/api/v1/skills/SK-1/publish/check?publish_task_id=100000000000009004",
+		)
+	})
+
 	it("supports token and file-key official Skill import modes", async () => {
 		const post = vi.fn().mockResolvedValue({})
 		const api = generateSkillsApi({ post } as unknown as HttpClient)

@@ -3302,6 +3302,7 @@ input[type="file"] {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 5px;
+    gap: 8px;
 }
 
 .mcp-json-hint {
@@ -3327,11 +3328,50 @@ input[type="file"] {
     color: var(--wechat-text-dark);
 }
 
+.mcp-json-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.mcp-template-btn {
+    padding: 2px 6px;
+    font-size: 11px;
+    line-height: 1.2;
+    border: 1px solid var(--wechat-border);
+    border-radius: 4px;
+    background-color: #f5f5f5;
+    color: var(--wechat-text-gray);
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.mcp-template-btn:hover {
+    background-color: #e0e0e0;
+    color: var(--wechat-text-dark);
+}
+
 .mcp-json-textarea {
     min-height: 140px;
     font-size: 12px;
     font-family: 'Menlo', 'Consolas', monospace;
     resize: vertical;
+}
+
+.mcp-json-auth-hint {
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--wechat-text-gray);
+}
+
+.mcp-json-auth-hint code {
+    padding: 1px 3px;
+    border-radius: 3px;
+    background-color: #f0f0f0;
+    color: var(--wechat-text-dark);
+    font-family: 'Menlo', 'Consolas', monospace;
 }
 
 /* MCP JSON 全屏编辑弹窗 */

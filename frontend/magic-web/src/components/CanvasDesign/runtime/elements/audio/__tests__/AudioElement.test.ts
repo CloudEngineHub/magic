@@ -104,6 +104,9 @@ function createAudioElementHarness(options?: {
 	const emit = vi.fn()
 	const canvas = {
 		getEffectiveContentId: vi.fn(() => effectiveContentId),
+		getElementForContentView: vi.fn((element: AudioElementData) =>
+			effectiveContentId ? { ...element, activeContentId: effectiveContentId } : element,
+		),
 		audioPlaybackManager: {
 			getSnapshot: vi.fn(() => playbackSnapshot),
 			subscribe: vi.fn(

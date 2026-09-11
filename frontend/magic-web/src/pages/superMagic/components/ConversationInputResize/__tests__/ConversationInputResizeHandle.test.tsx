@@ -65,6 +65,7 @@ describe("ConversationInputResizeHandle", () => {
 		)
 
 		const handle = screen.getByTestId("conversation-input-resize-handle")
+		expect(handle.className).toContain("before:bg-gradient-to-r")
 		dispatchPointerEvent(handle, "pointerdown", {
 			button: 0,
 			clientY: 100,

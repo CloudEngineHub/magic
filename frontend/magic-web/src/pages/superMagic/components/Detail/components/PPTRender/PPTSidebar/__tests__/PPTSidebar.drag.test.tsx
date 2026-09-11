@@ -138,12 +138,6 @@ vi.mock("../hooks/useScreenshotRetry", () => ({
 	}),
 }))
 
-vi.mock("../../hooks/useAIEdit", () => ({
-	useAIEdit: () => ({
-		aiEditItems: [],
-	}),
-}))
-
 vi.mock("@/components/other/SmartTooltip", () => ({
 	default: ({ children }: { children?: ReactNode }) => <>{children}</>,
 }))
@@ -156,9 +150,6 @@ vi.mock("@/components/shadcn-ui/context-menu", () => ({
 		<button {...props}>{children}</button>
 	),
 	ContextMenuSeparator: () => null,
-	ContextMenuSub: ({ children }: { children?: ReactNode }) => <>{children}</>,
-	ContextMenuSubTrigger: ({ children }: { children?: ReactNode }) => <>{children}</>,
-	ContextMenuSubContent: ({ children }: { children?: ReactNode }) => <>{children}</>,
 }))
 
 vi.mock("@/components/shadcn-ui/dialog", () => ({
@@ -282,8 +273,7 @@ function installRafController() {
 		cancel,
 		flushNext() {
 			const entry = callbacks.entries().next().value as
-				| [number, FrameRequestCallback]
-				| undefined
+				[number, FrameRequestCallback] | undefined
 			if (!entry) return false
 			const [id, callback] = entry
 			callbacks.delete(id)
@@ -347,6 +337,15 @@ describe("PPTSidebar drag sorting", () => {
 			"slide-3",
 			"slide-2",
 		])
+	})
+
+	it("exposes duplicate page in the editable context menu", () => {
+		const onDuplicateSlide = vi.fn()
+		render(<PPTSidebar allowEdit onSlideClick={vi.fn()} onDuplicateSlide={onDuplicateSlide} />)
+
+		fireEvent.click(screen.getAllByText("fileViewer.duplicateSlide")[0])
+
+		expect(onDuplicateSlide).toHaveBeenCalledWith(0)
 	})
 
 	it("sorts into whitespace below the final virtual row", async () => {

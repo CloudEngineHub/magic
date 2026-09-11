@@ -85,15 +85,16 @@ function ToolCall(props: NodeProps) {
 			default:
 				break
 		}
-		// 兼容不同版本工具返回的文件 ID 字段，统一进入文件导航。
-		// 直接打开文件 tab 并定位到文件树
+		// Prefer file navigation when the id exists in attachments; otherwise open playback.
 		const fileId = resolveToolFileId(detail?.data)
-		if (fileId) {
+		if (
+			fileId &&
 			selectSourceFileFromTool({
 				detail,
 				fileId,
 				onSelectDetail,
 			})
+		) {
 			return
 		}
 

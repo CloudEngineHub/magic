@@ -102,7 +102,8 @@ class SaveProjectFileRequestDTO implements JsonSerializable
         $instance->fileKey = $data['file_key'] ?? '';
         $instance->fileName = $data['file_name'] ?? '';
         $instance->fileSize = (int) ($data['file_size'] ?? 0);
-        $instance->fileType = $data['file_type'] ?? FileType::USER_UPLOAD->value;
+        // file_type 仅允许 FileType 枚举取值，非法值（含空串）兜底为 user_upload，避免脏数据入库
+        $instance->fileType = FileType::fromValue($data['file_type'] ?? null)->value;
         $instance->isDirectory = (bool) ($data['is_directory'] ?? false);
         $instance->sort = (int) ($data['sort'] ?? 0);
         $instance->parentId = isset($data['parent_id']) ? $data['parent_id'] : '';

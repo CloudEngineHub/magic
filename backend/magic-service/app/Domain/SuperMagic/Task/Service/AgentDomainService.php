@@ -674,7 +674,7 @@ class AgentDomainService
             'task_mode' => $taskContext->getTask()->getTaskMode(),
             'agent_mode' => $agentMode,
             'mentions' => $taskContext->getTask()->getMentions(),
-            'mcp_config' => $taskContext->getMcpConfig(),
+            'mcp_server_count' => count($taskContext->getMcpConfig()['mcpServers'] ?? []),
             'model_id' => $taskContext->getModelId(),
             'dynamic_config' => $taskDynamicConfig,
             'agent' => $agentProfile,

@@ -71,7 +71,10 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 			e.stopPropagation()
 			// 如果双击的是展开/收起箭头，不触发双击事件
 			const target = e.target as HTMLElement
-			if (target.closest(`.${styles.treeNodeToggle}`)) {
+			if (
+				target.closest(`.${styles.treeNodeToggle}`) ||
+				target.closest("[data-media-preview-content]")
+			) {
 				return
 			}
 			if (onDoubleClick) {

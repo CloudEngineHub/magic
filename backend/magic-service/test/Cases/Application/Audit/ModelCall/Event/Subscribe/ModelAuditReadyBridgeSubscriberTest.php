@@ -46,6 +46,12 @@ class ModelAuditReadyBridgeSubscriberTest extends TestCase
         $event->setWidth(1344);
         $event->setHeight(768);
         $event->setHasAudioOutput(false);
+        $event->setThoughtTokens(452);
+        $event->setBillingTokenUsage([
+            'input_tokens' => 528,
+            'output_text_tokens' => 0,
+            'output_video_tokens' => 57920,
+        ]);
         $event->setVideoReferenceMaterial([
             'input_mode' => 'omni_reference',
             'reference_image_count' => 2,
@@ -64,7 +70,7 @@ class ModelAuditReadyBridgeSubscriberTest extends TestCase
         $this->assertCount(1, $repository->entities);
         $usage = $repository->entities[0]->getUsage();
         $this->assertFalse($usage['has_audio_output']);
-        $this->assertSame(1, $usage['video_count']);
+        $this->assertSame(1, $usage['count']);
         $this->assertSame('768p', $usage['resolution']);
         $this->assertSame('1344x768', $usage['size']);
         $this->assertSame(1344, $usage['width']);
@@ -73,6 +79,10 @@ class ModelAuditReadyBridgeSubscriberTest extends TestCase
         $this->assertSame(1, $usage['reference_video_count']);
         $this->assertSame(1, $usage['reference_audio_count']);
         $this->assertSame(10, $usage['input_video_duration_seconds']);
+        $this->assertSame(528, $usage['input_tokens']);
+        $this->assertSame(0, $usage['output_text_tokens']);
+        $this->assertSame(57920, $usage['output_video_tokens']);
+        $this->assertSame(452, $usage['thought_tokens']);
     }
 
     public function testImageGeneratedEventBuiltFromImageFlowCarriesImageSize(): void

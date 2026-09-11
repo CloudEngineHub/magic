@@ -15,7 +15,6 @@ import { configStore } from "@/models/config"
 import SkillActionDropdown from "@/pages/superMagic/components/SkillActionDropdown"
 import { SkillDetailDialog } from "@/pages/superMagic/components/SkillDetailDialog"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
-import { useDelayedVisibility } from "@/pages/superMagic/hooks/useDelayedVisibility"
 import { useSkillCreateMenuItems } from "@/pages/superMagic/hooks/useSkillCreateMenuItems"
 import MarketStickyHeader from "@/pages/superMagic/pages/CrewMarket/components/MarketStickyHeader"
 import SearchBar from "@/pages/superMagic/pages/CrewMarket/components/SearchBar"
@@ -30,18 +29,23 @@ import type { StoreSkillView } from "@/services/skills/SkillsService"
 import { StoreSkillsStore } from "../stores/store-skills"
 import SkillCard from "./SkillCard"
 import SkillCategoryFilter from "./SkillCategoryFilter"
+import SkillMarketTabs, { type SkillMarketTab } from "./SkillMarketTabs"
 
 const SKILLS_SEARCH_DEBOUNCE_MS = 300
 const SKILLS_SEARCH_THROTTLE_MS = 400
 
 interface SkillsLibraryProps {
 	hideMarketingHeadline?: boolean
+	marketTabValue?: SkillMarketTab
+	onMarketTabChange?: (value: SkillMarketTab) => void
 	skillGridClassName?: string
 	scrollViewportRef?: RefObject<HTMLDivElement | null>
 }
 
 function SkillsLibrary({
 	hideMarketingHeadline = false,
+	marketTabValue,
+	onMarketTabChange,
 	skillGridClassName,
 	scrollViewportRef,
 }: SkillsLibraryProps) {
@@ -118,9 +122,6 @@ function SkillsLibrary({
 		rootRef: scrollViewportRef,
 		disabled: skillsStore.loading || skillsStore.loadingMore || !skillsStore.hasMore,
 		onLoadMore: handleAutoLoadMore,
-	})
-	const shouldShowLoadingMoreIndicator = useDelayedVisibility({
-		visible: skillsStore.loadingMore,
 	})
 
 	const handleAdd = useCallback(
@@ -227,19 +228,26 @@ function SkillsLibrary({
 				skillSummary={selectedSkill}
 				primaryAction={detailPrimaryAction}
 			/>
-			<header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+			<header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
 				{hideMarketingHeadline ? null : (
 					<div className="flex min-w-0 flex-1 flex-col gap-2.5">
-						<h1 className="break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-2xl font-bold leading-tight tracking-[-0.035em] text-transparent sm:text-3xl lg:text-4xl">
-							{t("skillsLibrary.title")}
-						</h1>
+						{marketTabValue && onMarketTabChange ? (
+							<SkillMarketTabs
+								value={marketTabValue}
+								onValueChange={onMarketTabChange}
+							/>
+						) : (
+							<h1 className="break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-2xl font-bold leading-tight tracking-[-0.035em] text-transparent sm:text-3xl lg:text-4xl">
+								{t("skillsLibrary.title")}
+							</h1>
+						)}
 						<p className="max-w-2xl break-words text-sm text-muted-foreground">
 							{t("skillsLibrary.subtitle")}
 						</p>
 					</div>
 				)}
 
-				<div className="flex w-full flex-wrap items-center gap-3 lg:w-auto lg:justify-end">
+				<div className="flex w-full flex-wrap items-center gap-3 md:w-auto md:justify-end">
 					<Button
 						variant="outline"
 						className="h-9 flex-1 gap-2 bg-background shadow-xs sm:flex-none"
@@ -307,82 +315,94 @@ function SkillsLibrary({
 				/>
 			</MarketStickyHeader>
 
-			<section className="flex min-w-0 flex-col" data-testid="all-skills-section">
-				{skillsStore.listError ? (
-					<div
-						className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted-foreground"
-						data-testid="skills-library-error"
-					>
-						<span>{t("skillsLibrary.loadFailed")}</span>
-						<Button variant="outline" size="sm" onClick={handleRetrySkills}>
-							{t("skillsLibrary.retrySkills")}
-						</Button>
-					</div>
-				) : skillsStore.loading && skillsStore.list.length === 0 ? (
-					<div
-						className="flex items-center justify-center py-16"
-						data-testid="skills-library-loading"
-					>
-						<Loader2 className="size-5 animate-spin text-muted-foreground" />
-					</div>
-				) : skillsStore.isEmpty ? (
-					<div
-						className="flex items-center justify-center py-16 text-sm text-muted-foreground"
-						data-testid="skills-library-empty"
-					>
-						{hasActiveFilters ? t("noResults") : t("skillsLibrary.noMoreData")}
-					</div>
-				) : (
-					<div className={cn(gridClass, "mt-4")} data-testid="skill-card-grid">
-						{skillsStore.list.map((skill) => (
-							<SkillCard
-								key={skill.id}
-								skill={skill}
-								isAdding={skillsStore.isAddingSkill(skill.id)}
-								onAdd={handleAdd}
-								onOpenDetail={() => handleOpenDetail(skill)}
-							/>
-						))}
-					</div>
-				)}
-			</section>
+			<div className="flex min-w-0 flex-col gap-5 pb-5 sm:gap-6 sm:pb-6">
+				<section className="flex min-w-0 flex-col" data-testid="all-skills-section">
+					{skillsStore.listError ? (
+						<div
+							className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted-foreground"
+							data-testid="skills-library-error"
+						>
+							<span>{t("skillsLibrary.loadFailed")}</span>
+							<Button variant="outline" size="sm" onClick={handleRetrySkills}>
+								{t("skillsLibrary.retrySkills")}
+							</Button>
+						</div>
+					) : skillsStore.loading && skillsStore.list.length === 0 ? (
+						<div
+							className="flex items-center justify-center py-16"
+							data-testid="skills-library-loading"
+						>
+							<Loader2 className="size-5 animate-spin text-muted-foreground" />
+						</div>
+					) : skillsStore.isEmpty ? (
+						<div
+							className="flex items-center justify-center py-16 text-sm text-muted-foreground"
+							data-testid="skills-library-empty"
+						>
+							{hasActiveFilters ? t("noResults") : t("skillsLibrary.noMoreData")}
+						</div>
+					) : (
+						<div className={cn(gridClass, "mt-4")} data-testid="skill-card-grid">
+							{skillsStore.list.map((skill) => (
+								<SkillCard
+									key={skill.id}
+									skill={skill}
+									isAdding={skillsStore.isAddingSkill(skill.id)}
+									onAdd={handleAdd}
+									onOpenDetail={() => handleOpenDetail(skill)}
+								/>
+							))}
+						</div>
+					)}
+				</section>
 
-			<div
-				ref={sentinelRef}
-				className="h-1 w-full"
-				data-testid="skills-library-scroll-sentinel"
-			/>
+				{skillsStore.list.length > 0 ? (
+					<div
+						ref={sentinelRef}
+						className="h-1 w-full"
+						data-testid="skills-library-scroll-sentinel"
+					/>
+				) : null}
 
-			{skillsStore.loadingMoreError ? (
-				<div className="flex items-center justify-center gap-2 py-2 text-xs text-destructive">
-					<span>{t("skillsLibrary.loadFailed")}</span>
-					<Button
-						variant="ghost"
-						size="sm"
-						className="h-7 px-2"
-						onClick={handleAutoLoadMore}
-					>
-						{t("skillsLibrary.retrySkills")}
-					</Button>
-				</div>
-			) : shouldShowLoadingMoreIndicator ? (
-				<div
-					className="flex items-center justify-center py-2"
-					data-testid="skills-library-loading-more"
-				>
-					<Loader2 className="size-4 animate-spin text-muted-foreground" />
-				</div>
-			) : null}
-
-			{!skillsStore.hasMore && skillsStore.list.length > 0 ? (
-				<div
-					className="flex items-center justify-center gap-1 py-2 opacity-30"
-					data-testid="skills-library-no-more"
-				>
-					<Check className="size-4" />
-					<span className="text-xs">{t("skillsLibrary.noMoreData")}</span>
-				</div>
-			) : null}
+				{skillsStore.list.length > 0 ? (
+					<div className="flex items-center justify-center py-2">
+						{skillsStore.loadingMoreError ? (
+							<div className="flex items-center justify-center gap-2 text-xs text-destructive">
+								<span>{t("skillsLibrary.loadFailed")}</span>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-7 px-2"
+									onClick={handleAutoLoadMore}
+								>
+									{t("skillsLibrary.retrySkills")}
+								</Button>
+							</div>
+						) : skillsStore.hasMore ? (
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={handleAutoLoadMore}
+								disabled={skillsStore.loadingMore}
+								data-testid="skills-library-load-more"
+							>
+								{skillsStore.loadingMore ? (
+									<Loader2 className="mr-2 size-4 animate-spin" />
+								) : null}
+								{skillsStore.loadingMore ? t("loadingMore") : t("loadMore")}
+							</Button>
+						) : (
+							<div
+								className="flex items-center justify-center gap-1 opacity-30"
+								data-testid="skills-library-no-more"
+							>
+								<Check className="size-4" />
+								<span className="text-xs">{t("noMoreData")}</span>
+							</div>
+						)}
+					</div>
+				) : null}
+			</div>
 		</div>
 	)
 }

@@ -39,6 +39,7 @@ export class SkillEditRootStore {
 	error: string | null = null
 
 	skillWorkspaceManifest: SkillWorkspaceManifest | null = null
+	skillWorkspaceDir: string | null = null
 	skillWorkspaceManifestLoading = false
 	skillWorkspaceManifestError: string | null = null
 	/** Latest API detail for default-slot PATCH checks */
@@ -82,6 +83,7 @@ export class SkillEditRootStore {
 		this.error = null
 		this.conversation.reset()
 		this.skillWorkspaceManifest = null
+		this.skillWorkspaceDir = null
 		this.skillWorkspaceManifestError = null
 		this.lastFetchedSkillDetail = null
 
@@ -134,13 +136,15 @@ export class SkillEditRootStore {
 		)
 	}
 
-	async syncSkillWorkspaceManifest() {
+	async syncSkillWorkspaceManifest(options?: { syncDefaultSlot?: boolean }) {
+		const syncDefaultSlot = options?.syncDefaultSlot ?? true
 		const code = this.currentSkillCode
 		const list = this.projectFilesStore.workspaceFilesList
 
 		if (!code || !list.length) {
 			runInAction(() => {
-				if (!list.length) this.skillWorkspaceManifest = null
+				this.skillWorkspaceManifest = null
+				this.skillWorkspaceDir = null
 				this.skillWorkspaceManifestLoading = false
 			})
 			return
@@ -156,6 +160,7 @@ export class SkillEditRootStore {
 			if (!configItem?.file_id) {
 				runInAction(() => {
 					this.skillWorkspaceManifest = null
+					this.skillWorkspaceDir = null
 					this.skillWorkspaceManifestLoading = false
 				})
 				return
@@ -169,6 +174,7 @@ export class SkillEditRootStore {
 			if (!dir) {
 				runInAction(() => {
 					this.skillWorkspaceManifest = null
+					this.skillWorkspaceDir = null
 					this.skillWorkspaceManifestLoading = false
 				})
 				return
@@ -179,6 +185,7 @@ export class SkillEditRootStore {
 			if (!mdItem?.file_id) {
 				runInAction(() => {
 					this.skillWorkspaceManifest = null
+					this.skillWorkspaceDir = null
 					this.skillWorkspaceManifestLoading = false
 				})
 				return
@@ -192,8 +199,11 @@ export class SkillEditRootStore {
 
 			runInAction(() => {
 				this.skillWorkspaceManifest = manifest
+				this.skillWorkspaceDir = dir
 				this.skillWorkspaceManifestLoading = false
 			})
+
+			if (!syncDefaultSlot) return
 
 			const detail = this.lastFetchedSkillDetail
 			if (!detail) return
@@ -213,6 +223,7 @@ export class SkillEditRootStore {
 		} catch (error) {
 			runInAction(() => {
 				this.skillWorkspaceManifestError = "sync-failed"
+				this.skillWorkspaceDir = null
 				this.skillWorkspaceManifestLoading = false
 			})
 			logger.report({

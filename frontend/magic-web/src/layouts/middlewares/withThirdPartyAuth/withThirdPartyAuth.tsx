@@ -93,7 +93,7 @@ export function withThirdPartyAuth<T extends object>(
 						context: { tempToken },
 					})
 					// Need to redirect to login route
-						authEventBus.emit(AuthEventName.RequestLogin, {
+					authEventBus.emit(AuthEventName.RequestLogin, {
 						reason: "third-party-auth-failed",
 						source: "third-party",
 						returnTo: window.location.href,

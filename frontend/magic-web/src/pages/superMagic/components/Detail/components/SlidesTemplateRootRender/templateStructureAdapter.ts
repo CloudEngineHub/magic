@@ -44,6 +44,21 @@ function getNextSlideFileName(paths: string[]): string {
 	return `slide-${index}.html`
 }
 
+function getNextDuplicateFileName(sourcePath: string, paths: string[]): string {
+	const sourceFileName = getFileName(sourcePath)
+	const extensionMatch = sourceFileName.match(/(\.html?)$/i)
+	const extension = extensionMatch?.[1] || ".html"
+	const baseName = sourceFileName.slice(0, sourceFileName.length - extension.length)
+	const usedNames = new Set(paths.map(getFileName))
+	let suffix = 1
+	let fileName = `${baseName} (${suffix})${extension}`
+	while (usedNames.has(fileName)) {
+		suffix += 1
+		fileName = `${baseName} (${suffix})${extension}`
+	}
+	return fileName
+}
+
 export function createSlidesTemplateStructureAdapter({
 	project,
 	projectId,
@@ -150,6 +165,67 @@ export function createSlidesTemplateStructureAdapter({
 				filePath,
 				fileId: String(newFile.file_id),
 				content,
+			}
+		},
+
+		async duplicate({ slidePath, position }) {
+			const latestManifest = currentManifest()
+			const resolvedProjectId = requireProjectId()
+			const sourceFile = slideFiles.get(slidePath)
+			const sourceEntry = latestManifest.slides.find((slide) => slide.file === slidePath)
+			if (!sourceFile?.file_id || !sourceEntry) throw new Error("Slide file not found")
+
+			const sourceContent = await getFileContentById(String(sourceFile.file_id), {
+				responseType: "text",
+			})
+			if (typeof sourceContent !== "string") throw new Error("Failed to load source slide")
+
+			const fileName = getNextDuplicateFileName(slidePath, [
+				...latestManifest.slides.map((slide) => slide.file),
+				...slideFiles.keys(),
+			])
+			const filePath = `slides/${fileName}`
+			const insertIndex = Math.min(Math.max(0, position + 1), latestManifest.slides.length)
+			const newFile = (await SuperMagicApi.createFile({
+				project_id: resolvedProjectId,
+				parent_id: project.slidesDirectory.file_id,
+				file_name: fileName,
+				is_directory: false,
+			})) as AttachmentItem
+			if (!newFile?.file_id) throw new Error("Failed to create duplicated slide file")
+
+			try {
+				await SuperMagicApi.saveFileContent([
+					{
+						file_id: String(newFile.file_id),
+						content: sourceContent,
+						enable_shadow: true,
+					},
+				])
+				const slides = [...latestManifest.slides]
+				slides.splice(insertIndex, 0, { ...sourceEntry, file: filePath })
+				await saveManifest({ ...latestManifest, slides })
+			} catch (error) {
+				try {
+					await SuperMagicApi.deleteFile(String(newFile.file_id))
+				} catch (cleanupError) {
+					console.error("Failed to clean up duplicated template slide:", cleanupError)
+				}
+				throw error
+			}
+
+			const normalizedFile: AttachmentItem = {
+				...newFile,
+				file_name: getName(newFile) || fileName,
+				file_extension: newFile.file_extension || "html",
+				parent_id: String(project.slidesDirectory.file_id),
+				relative_file_path: `${project.rootPath}/${filePath}`.replace(/^\//, ""),
+			}
+			slideFiles.set(filePath, normalizedFile)
+			return {
+				filePath,
+				fileId: String(newFile.file_id),
+				content: sourceContent,
 			}
 		},
 

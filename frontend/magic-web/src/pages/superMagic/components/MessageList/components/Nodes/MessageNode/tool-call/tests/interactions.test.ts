@@ -4,6 +4,16 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { getToolDetailSelectionTarget } from "../../../toolDetailSelection"
 import { handleToolCallInteraction } from "../interactions"
 
+const { projectFilesStoreMock } = vi.hoisted(() => ({
+	projectFilesStoreMock: {
+		workspaceFilesList: [] as Array<{ file_id?: string }>,
+	},
+}))
+
+vi.mock("@/stores/projectFiles", () => ({
+	default: projectFilesStoreMock,
+}))
+
 vi.mock("@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo", () => ({
 	getToolDesignProjectInfo: vi.fn(),
 }))
@@ -13,6 +23,11 @@ describe("handleToolCallInteraction", () => {
 
 	beforeEach(() => {
 		publishSpy.mockClear()
+		projectFilesStoreMock.workspaceFilesList = [
+			{ file_id: "file-1" },
+			{ file_id: "file-target" },
+			{ file_id: "file-direct" },
+		]
 	})
 
 	it("marks source-file interactions as file navigation", () => {
@@ -62,6 +77,35 @@ describe("handleToolCallInteraction", () => {
 
 		expect(publishSpy).toHaveBeenCalledWith(PubSubEvents.Open_File_Tab, { fileId })
 		expect(getToolDetailSelectionTarget(onSelectDetail.mock.calls[0][0])).toBe("file")
+	})
+
+	it("falls back to playback when tool file_id is not in attachments", () => {
+		const onSelectDetail = vi.fn()
+		projectFilesStoreMock.workspaceFilesList = [{ file_id: "workspace-md" }]
+
+		handleToolCallInteraction({
+			toolData: {
+				id: "call_f51449c8ea134bc69543e519",
+				name: "browser_open_page",
+				action: "打开网页",
+				attachments: [],
+				detail: {
+					type: "browser",
+					data: {
+						url: "https://www.baidu.com/",
+						file_id: "956201860725010433",
+					},
+				},
+			},
+			onSelectDetail,
+		})
+
+		expect(publishSpy).not.toHaveBeenCalledWith(PubSubEvents.Open_File_Tab, expect.anything())
+		expect(publishSpy).toHaveBeenCalledWith(
+			PubSubEvents.Open_Playback_Tab,
+			expect.objectContaining({ id: "call_f51449c8ea134bc69543e519" }),
+		)
+		expect(getToolDetailSelectionTarget(onSelectDetail.mock.calls[0][0])).toBe("detail")
 	})
 
 	it("marks ordinary tool interactions as detail previews", () => {

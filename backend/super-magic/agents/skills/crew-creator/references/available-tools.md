@@ -84,7 +84,6 @@ tools:
 | `read_file` | Read a single file |
 | `grep_search` | Search file contents by regex |
 | `write_file` | Write content to a file |
-| `append_to_file` | Append content to an existing file |
 | `edit_file` | Edit a file by replacing matched content |
 | `edit_file_range` | Edit a file within a line range |
 | `multi_edit_file` | Apply multiple edits to a file |

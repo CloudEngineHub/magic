@@ -7,68 +7,64 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use GuzzleHttp\Exception\RequestException;
 use RuntimeException;
 use Throwable;
 
 final class ProviderVideoException extends RuntimeException
 {
-    private const int MAX_ORIGINAL_ERROR_MESSAGE_LENGTH = 1000;
-
-    private function __construct(
+    public function __construct(
+        VideoGenerateErrorCode $code,
         string $message,
-        private readonly bool $retriable,
-        private readonly ?int $httpStatus = null,
         ?Throwable $previous = null,
     ) {
-        parent::__construct($message, 0, $previous);
+        parent::__construct($message, $code->value, $previous);
     }
 
-    public static function retriable(string $message, ?Throwable $previous = null, ?int $httpStatus = null): self
+    public function isRetry(): bool
     {
-        return new self($message, true, $httpStatus, $previous);
-    }
-
-    public static function nonRetriable(string $message, ?Throwable $previous = null, ?int $httpStatus = null): self
-    {
-        return new self($message, false, $httpStatus, $previous);
-    }
-
-    public function isRetriable(): bool
-    {
-        return $this->retriable;
+        $status = $this->getHttpStatus();
+        return $status === null || $status < 400 || $status >= 500 || in_array($status, [408, 409, 429], true);
     }
 
     public function getHttpStatus(): ?int
     {
-        return $this->httpStatus;
+        return $this->getRequestException()?->getResponse()?->getStatusCode();
     }
 
-    public function getOriginalErrorMessage(): string
+    public function getRequestException(): ?RequestException
     {
         $previous = $this->getPrevious();
-        $responseBody = $previous instanceof RequestException ? $previous->getResponse()?->getBody() : null;
-        if ($responseBody === null) {
-            return '';
+        return $previous instanceof RequestException ? $previous : null;
+    }
+
+    public function getResponseContent(): ?string
+    {
+        $response = $this->getRequestException()?->getResponse();
+        if ($response === null) {
+            return null;
         }
 
-        try {
-            if ($responseBody->isSeekable()) {
-                $responseBody->rewind();
-            }
-            $originalErrorMessage = (string) $responseBody;
-            if ($responseBody->isSeekable()) {
-                $responseBody->rewind();
-            }
-        } catch (Throwable) {
-            return '';
+        $body = $response->getBody();
+        if ($body->isSeekable()) {
+            $body->rewind();
+        }
+        $content = (string) $body;
+        if ($body->isSeekable()) {
+            $body->rewind();
         }
 
-        $sanitizedErrorMessage = preg_replace('/[\x00-\x1F\x7F]+/', ' ', $originalErrorMessage);
-        if (! is_string($sanitizedErrorMessage)) {
-            return '';
-        }
+        return $content;
+    }
 
-        return mb_substr(trim($sanitizedErrorMessage), 0, self::MAX_ORIGINAL_ERROR_MESSAGE_LENGTH, 'UTF-8');
+    public function getErrorCode(): string
+    {
+        return (string) $this->getCode();
+    }
+
+    public function getVideoErrorCode(): VideoGenerateErrorCode
+    {
+        return VideoGenerateErrorCode::from($this->getCode());
     }
 }

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Iterable
 
 from app.tools.canvas.domain.models.canvas_content import CanvasContent
 from app.tools.canvas.domain.models.element_properties import ElementProperties
+from app.tools.canvas.domain.types import JsonObject
 
 
 @dataclass
@@ -20,6 +22,7 @@ class CanvasElement:
     active_content_id: str | None = None
     main_content_id: str | None = None
     children: list["CanvasElement"] | None = None
+    extra_data: JsonObject = field(default_factory=dict)
 
     def clone(self) -> "CanvasElement":
         """返回当前 Element 的深拷贝。"""
@@ -31,6 +34,7 @@ class CanvasElement:
             active_content_id=self.active_content_id,
             main_content_id=self.main_content_id,
             children=[child.clone() for child in self.children] if self.children is not None else None,
+            extra_data=deepcopy(self.extra_data),
         )
 
     def iter_elements(self) -> Iterable["CanvasElement"]:
@@ -48,6 +52,7 @@ class CanvasElement:
     def to_dict(self) -> dict[str, object]:
         """转换为主协议 Element 字典。"""
         result = {
+            **deepcopy(self.extra_data),
             "id": self.element_id,
             "type": self.element_type,
             **self.properties.to_dict(),

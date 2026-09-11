@@ -11,7 +11,6 @@ import {
 	canDeleteActiveContentVersion,
 	createContentId,
 	deleteActiveContent as deleteContentFromData,
-	getActiveContent,
 	getContentById,
 	getPendingVideoGenerationContent,
 } from "../../document/elementContent"
@@ -504,21 +503,17 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	public deleteActiveContent(): boolean {
 		if (!this.canvas.permissionManager.can("document.delete")) return false
-		const activeContent = getActiveContent<VideoElementContent>(this.data)
-		if (
-			!canDeleteActiveContentVersion(this.data) ||
-			activeContent?.status === GenerationStatus.Pending ||
-			activeContent?.status === GenerationStatus.Processing ||
-			this.hasActiveGeneration()
-		) {
-			return false
-		}
+		if (!canDeleteActiveContentVersion(this.data)) return false
 
 		const result = deleteContentFromData(
 			this.data,
 			(content) => Boolean(content.src) && content.status === GenerationStatus.Completed,
 		)
 		if (!result) return false
+		this.canvas.generationRuntimeManager?.clearTarget(
+			this.data.id,
+			result.deletedContent.contentId,
+		)
 		this.canvas.elementManager.update(
 			this.data.id,
 			{
@@ -1026,9 +1021,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	update(newData: VideoElementData): boolean {
-		const previousContent = this.getVideoContent()
-		const nextViewData = this.canvas?.getElementForContentView?.(newData) ?? newData
-		const nextContent = getActiveContent<VideoElementContent>(nextViewData)
+		const previousContent = this.getVideoContent(this.data)
+		const nextContent = this.getVideoContent(newData)
 		// Effective Content 切换时，预览播放器、资源错误和加载态不能跨版本复用。
 		const contentChanged = previousContent?.contentId !== nextContent?.contentId
 		const srcChanged = previousContent?.src !== nextContent?.src
@@ -1534,8 +1528,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 	}
 
-	private getVideoContent(): VideoElementContent | undefined {
-		return this.getActiveContent<VideoElementContent>()
+	private getVideoContent(data: VideoElementData = this.data): VideoElementContent | undefined {
+		return this.getActiveContent<VideoElementContent>(data)
 	}
 
 	private hasActiveGeneration(contentId?: string): boolean {

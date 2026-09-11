@@ -18,8 +18,12 @@ vi.mock("react-i18next", () => ({
 					return "社区"
 				case "skillsLibrary.updatedAt":
 					return `更新于 ${params?.dateTime ?? ""}`.trim()
+				case "skillsLibrary.updatedAtLabel":
+					return "更新于"
 				case "skillsLibrary.installCount":
 					return `${params?.formattedCount ?? ""} 次安装`.trim()
+				case "skillsLibrary.installCountLabel":
+					return "安装数"
 				case "skillsLibrary.featured":
 					return "精选"
 				default:
@@ -55,10 +59,10 @@ describe("SkillCard", () => {
 
 		expect(screen.getByTestId("skill-thumbnail")).toHaveTextContent("深度研究")
 		expect(screen.getByTestId("skill-card-source-badge")).toHaveTextContent("官方")
-		expect(screen.getByTestId("skill-card-updated-at")).toHaveTextContent(
-			"更新于 2026年8月9日 14:30",
-		)
-		expect(screen.getByTestId("skill-card-install-count")).toHaveTextContent("1,234 次安装")
+		expect(screen.getByTestId("skill-card-updated-at")).toHaveTextContent("更新于")
+		expect(screen.getByTestId("skill-card-updated-at")).toHaveTextContent("2026年8月9日 14:30")
+		expect(screen.getByTestId("skill-card-install-count")).toHaveTextContent("安装数")
+		expect(screen.getByTestId("skill-card-install-count")).toHaveTextContent("1,234")
 		expect(screen.queryByTestId("skill-card-featured")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("skill-card-category")).not.toBeInTheDocument()
 	})

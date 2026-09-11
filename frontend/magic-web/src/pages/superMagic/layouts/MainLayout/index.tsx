@@ -13,6 +13,7 @@ import EditionActivityModal from "@/components/business/EditionActivity/Modal"
 import { MobileImagePreviewProvider } from "@/pages/superMagic/components/MessageEditor/components/AtItem/components/MobileImagePreview"
 import { projectStore, topicStore, workspaceStore } from "../../stores/core"
 import ProjectOrganizationAccessBoundary from "../../components/ProjectOrganizationAccessBoundary"
+import SuperMagicDebugMenu from "../../components/SuperMagicDebugMenu"
 
 const MainLayoutDesktop = lazy(() => import("./index.desktop"))
 const MainLayoutMobile = lazy(() => import("@/pages/superMagicMobile/layout/MainLayout"))
@@ -78,6 +79,7 @@ function MainLayout() {
 			<GuideTourWrapper isMobile={isMobile} />
 			{/* 私有化部署不显示活动弹窗 */}
 			{!isPrivateDeployment() && <EditionActivityModal />}
+			<SuperMagicDebugMenu />
 		</ProjectOrganizationAccessBoundary>
 	)
 }

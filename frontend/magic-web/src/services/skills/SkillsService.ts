@@ -15,6 +15,7 @@ import type {
 	ImportSkillResponse,
 	ParseOfficialSkillResponse,
 	ParseSkillResponse,
+	AsyncPublishTaskResponse,
 	PublishSkillParams,
 	PublishSkillPrefillResponse,
 	PublishSkillResponse,
@@ -78,6 +79,7 @@ export interface StoreSkillView {
 export interface UserSkillView {
 	id: string
 	userSkillId: string
+	projectId?: string | null
 	userRole?: CollaboratorPermission
 	skillCode: string
 	packageName?: string
@@ -242,6 +244,14 @@ export class SkillsService {
 		return SkillsApi.publishSkill({ code, ...params })
 	}
 
+	publishSkillAsync(code: string, params: PublishSkillParams): Promise<AsyncPublishTaskResponse> {
+		return SkillsApi.publishSkillAsync({ code, ...params })
+	}
+
+	checkSkillPublish(code: string, publishTaskId: string): Promise<AsyncPublishTaskResponse> {
+		return SkillsApi.checkSkillPublish({ code, publish_task_id: publishTaskId })
+	}
+
 	getSkillPublishPrefill(code: string): Promise<PublishSkillPrefillResponse> {
 		return SkillsApi.getSkillPublishPrefill({ code })
 	}
@@ -293,6 +303,7 @@ export class SkillsService {
 		return {
 			id: String(item.id),
 			userSkillId: item.id,
+			projectId: item.project_id,
 			userRole: item.user_role,
 			skillCode: item.code,
 			packageName: item.package_name?.trim() || undefined,

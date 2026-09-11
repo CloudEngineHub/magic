@@ -33,6 +33,27 @@ interface UseMentionSyncOptions {
 	mentionSyncAddOnly?: boolean
 }
 
+/** Keep distinct resolver identities; never merge slots by file name. */
+export function collectMentionPathsToAdd(
+	reconciledPaths: string[],
+	currentPathByIdentity: Map<string, string>,
+	getResourceIdentity: (path?: string) => string,
+): string[] {
+	const pathsToAddIdentities = new Set<string>()
+	return reconciledPaths.filter((path) => {
+		const identity = getResourceIdentity(path)
+		if (
+			!identity ||
+			currentPathByIdentity.has(identity) ||
+			pathsToAddIdentities.has(identity)
+		) {
+			return false
+		}
+		pathsToAddIdentities.add(identity)
+		return true
+	})
+}
+
 /**
  * 将编辑器中的 mention 路径同步到元素的参考文件列表的 hook
  *
@@ -74,10 +95,12 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 			}
 
 			const elementInstance = canvas.elementManager.getElementInstance(elementId)
-			if (!(
-				elementInstance instanceof ImageElementClass ||
-				elementInstance instanceof VideoElementClass
-			)) {
+			if (
+				!(
+					elementInstance instanceof ImageElementClass ||
+					elementInstance instanceof VideoElementClass
+				)
+			) {
 				return
 			}
 
@@ -108,19 +131,11 @@ export function useMentionSync(options: UseMentionSyncOptions) {
 				return matchableItems.find((item) => getResourceIdentity(item.path) === identity)
 			}
 
-			const pathsToAddIdentities = new Set<string>()
-			let pathsToAdd = reconciledPaths.filter((path) => {
-				const identity = getResourceIdentity(path)
-				if (
-					!identity ||
-					currentPathByIdentity.has(identity) ||
-					pathsToAddIdentities.has(identity)
-				) {
-					return false
-				}
-				pathsToAddIdentities.add(identity)
-				return true
-			})
+			let pathsToAdd = collectMentionPathsToAdd(
+				reconciledPaths,
+				currentPathByIdentity,
+				getResourceIdentity,
+			)
 			const pathsToRemove = mentionSyncAddOnly
 				? []
 				: currentInfos

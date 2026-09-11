@@ -1,3 +1,4 @@
+import { IDBFactory } from "fake-indexeddb"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	MediaResourceOfflineCacheManager,
@@ -22,7 +23,7 @@ describe("MediaResourceOfflineCacheManager", () => {
 
 		Object.defineProperty(globalThis, "indexedDB", {
 			configurable: true,
-			value: {},
+			value: new IDBFactory(),
 		})
 		Object.defineProperty(globalThis, "caches", {
 			configurable: true,
@@ -78,7 +79,7 @@ describe("MediaResourceOfflineCacheManager", () => {
 		).toBeUndefined()
 	})
 
-	it("reuses the current app service worker registration without registering canvas sw", async () => {
+	it("reuses the current app service worker and does not send duplicate metadata to it", async () => {
 		const register = vi.fn()
 		const postMessage = vi.fn()
 		const controller = {
@@ -122,10 +123,8 @@ describe("MediaResourceOfflineCacheManager", () => {
 		})
 
 		expect(register).not.toHaveBeenCalled()
-		expect(postMessage).toHaveBeenCalledWith(
-			expect.objectContaining({
-				type: "CANVAS_MEDIA_CACHE_REGISTER",
-			}),
+		expect(postMessage).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "CANVAS_MEDIA_CACHE_REGISTER" }),
 		)
 		expect(result?.url).toContain("/sw/canvas-design-media/")
 	})
@@ -174,6 +173,118 @@ describe("MediaResourceOfflineCacheManager", () => {
 		expect(result?.url).toContain("demo%231/image/")
 		expect(new URL(result?.url ?? "").hash).toBe("")
 		expect(new URL(result?.url ?? "").search).toBe("")
+	})
+
+	it("batches metadata in one transaction and keeps the last value for the same resource", async () => {
+		const postMessage = vi.fn()
+		const controller = { postMessage } as unknown as ServiceWorker
+		const registration = { active: controller } as unknown as ServiceWorkerRegistration
+		Object.defineProperty(navigator, "serviceWorker", {
+			configurable: true,
+			value: {
+				controller,
+				ready: Promise.resolve(registration),
+			},
+		})
+		const manager = createOfflineCacheManager({
+			getVirtualResourceScope: () => "workspace/project/design/demo",
+		})
+		const db = await (manager as unknown as { openDb: () => Promise<IDBDatabase> }).openDb()
+		const transactionSpy = vi.spyOn(db, "transaction")
+
+		await Promise.all([
+			manager.rememberResolvedResource({
+				path: "./images/example.png",
+				url: "https://oss.example.com/images/example-v1.png",
+				mediaType: "image",
+				resourceVersion: "v1",
+			}),
+			manager.rememberResolvedResource({
+				path: "./images/example.png",
+				url: "https://oss.example.com/images/example-v2.png",
+				mediaType: "image",
+				resourceVersion: "v2",
+			}),
+			manager.rememberResolvedResource({
+				path: "./images/other.png",
+				url: "https://oss.example.com/images/other.png",
+				mediaType: "image",
+			}),
+		])
+
+		const writeTransactions = transactionSpy.mock.calls.filter(
+			([, mode]) => mode === "readwrite",
+		)
+		expect(writeTransactions).toHaveLength(1)
+		const transaction = db.transaction("resources", "readonly")
+		const request = transaction.objectStore("resources").getAll()
+		const records = await new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
+			request.onsuccess = () => resolve(request.result as Array<Record<string, unknown>>)
+			request.onerror = () => reject(request.error)
+		})
+		expect(records).toHaveLength(2)
+		expect(records).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					sourceUrl: "https://oss.example.com/images/example-v2.png",
+					resourceVersion: "v2",
+				}),
+			]),
+		)
+		expect(records[0]).not.toHaveProperty("url")
+		expect(records[0]).not.toHaveProperty("cacheKey")
+		expect(records[0]).not.toHaveProperty("updatedAt")
+		expect(postMessage).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "CANVAS_MEDIA_CACHE_REGISTER" }),
+		)
+	})
+
+	it("deduplicates CONFIG per worker and coalesces trailing maintenance", async () => {
+		const postMessage = vi.fn()
+		const controller = { postMessage } as unknown as ServiceWorker
+		const registration = { active: controller } as unknown as ServiceWorkerRegistration
+		Object.defineProperty(navigator, "serviceWorker", {
+			configurable: true,
+			value: {
+				controller,
+				ready: Promise.resolve(registration),
+			},
+		})
+		const first = createOfflineCacheManager()
+		const second = createOfflineCacheManager()
+
+		await Promise.all([
+			first.rememberResolvedResource({
+				path: "./images/first.png",
+				url: "https://oss.example.com/images/first.png",
+				mediaType: "image",
+			}),
+			second.rememberResolvedResource({
+				path: "./images/second.png",
+				url: "https://oss.example.com/images/second.png",
+				mediaType: "image",
+			}),
+		])
+		expect(
+			postMessage.mock.calls.filter(
+				([message]) => message.type === "CANVAS_MEDIA_CACHE_CONFIG",
+			),
+		).toHaveLength(1)
+		expect(
+			postMessage.mock.calls.filter(
+				([message]) => message.type === "CANVAS_MEDIA_CACHE_ENFORCE_LIMIT",
+			),
+		).toHaveLength(0)
+		await vi.waitFor(
+			() => {
+				expect(
+					postMessage.mock.calls.filter(
+						([message]) => message.type === "CANVAS_MEDIA_CACHE_ENFORCE_LIMIT",
+					),
+				).toHaveLength(1)
+			},
+			{ timeout: 2000 },
+		)
 	})
 
 	it("falls back to the source url when app service worker mode is disabled", async () => {
@@ -293,16 +404,6 @@ describe("MediaResourceOfflineCacheManager", () => {
 				getEntry: (path: string, mediaType: "image" | "video") => Promise<null>
 			}
 		).getEntry = vi.fn().mockResolvedValue(null)
-		const refreshCachedResource = vi.fn().mockResolvedValue(true)
-		;(
-			manager as unknown as {
-				refreshCachedResource: (
-					path: string,
-					mediaType: "image" | "video",
-				) => Promise<boolean>
-			}
-		).refreshCachedResource = refreshCachedResource
-
 		const sourceUrl = "https://oss.example.com/images/example.png"
 		const result = await manager.resolveResourceUrl({
 			path: "./images/example.png",
@@ -317,17 +418,12 @@ describe("MediaResourceOfflineCacheManager", () => {
 					resolveDirectCount: 1,
 					backgroundRegisterQueuedCount: 1,
 					backgroundRegisterCompletedCount: 1,
-					backgroundWarmQueuedCount: 0,
-					backgroundWarmCompletedCount: 0,
 				}),
 			)
 		})
-		expect(postMessage).toHaveBeenCalledWith(
-			expect.objectContaining({
-				type: "CANVAS_MEDIA_CACHE_REGISTER",
-			}),
+		expect(postMessage).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "CANVAS_MEDIA_CACHE_REGISTER" }),
 		)
-		expect(refreshCachedResource).not.toHaveBeenCalled()
 	})
 
 	it("batches cache-hit access touch after the writeback interval", async () => {
@@ -382,70 +478,6 @@ describe("MediaResourceOfflineCacheManager", () => {
 		} finally {
 			vi.useRealTimers()
 		}
-	})
-
-	it("keeps explicit cache warm as an opt-in path", async () => {
-		const postMessage = vi.fn()
-		const controller = {
-			scriptURL: `${window.location.origin}/sw.js`,
-			postMessage,
-		} as unknown as ServiceWorker
-		const registration = {
-			active: controller,
-			scope: "/",
-		} as unknown as ServiceWorkerRegistration
-
-		Object.defineProperty(navigator, "serviceWorker", {
-			configurable: true,
-			value: {
-				controller,
-				ready: Promise.resolve(registration),
-				register: vi.fn(),
-				getRegistrations: vi.fn().mockResolvedValue([registration]),
-				addEventListener: vi.fn(),
-				removeEventListener: vi.fn(),
-			},
-		})
-
-		const manager = createOfflineCacheManager({
-			getVirtualResourceScope: () => "workspace/project/design/demo",
-		})
-		;(manager as unknown as { saveEntry: (entry: unknown) => Promise<void> }).saveEntry = vi
-			.fn()
-			.mockResolvedValue(undefined)
-		;(
-			manager as unknown as {
-				getEntry: (path: string, mediaType: "image" | "video") => Promise<null>
-			}
-		).getEntry = vi.fn().mockResolvedValue(null)
-		;(
-			manager as unknown as {
-				refreshCachedResource: (
-					path: string,
-					mediaType: "image" | "video",
-				) => Promise<boolean>
-			}
-		).refreshCachedResource = vi.fn().mockResolvedValue(true)
-
-		manager.warmResolvedResourceBodyExplicitly({
-			path: "./images/example.png",
-			url: "https://oss.example.com/images/example.png",
-			mediaType: "image",
-		})
-
-		await vi.waitFor(() => {
-			expect(manager.getSnapshot()).toEqual(
-				expect.objectContaining({
-					backgroundWarmQueuedCount: 1,
-					backgroundWarmCompletedCount: 1,
-				}),
-			)
-		})
-		expect(postMessage).toHaveBeenCalledWith(
-			expect.objectContaining({
-				type: "CANVAS_MEDIA_CACHE_REGISTER",
-			}),
-		)
 	})
 
 	it("falls back to the source url when service worker ready does not settle", async () => {

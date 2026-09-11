@@ -1,11 +1,13 @@
 ---
 name: slide-template
-description: "Browse, select, install, inspect, and apply existing platform slide templates. Use when the user wants template options, provides an exact template code, asks to use an installed template for a new presentation, or needs guidance applying a template package. Do not use for creating, converting, extracting, or updating templates; load slide-template-maker for those tasks."
+description: "Browse, select, install, inspect, and apply existing platform slide templates for new presentations. Use when the user wants template options, provides an exact template code, asks to use an installed template for a new presentation, or needs guidance applying a template package. For changing the template of an existing HTML slide project or a specific slide, load slide-template-replacement. Do not use for creating, converting, extracting, or updating templates; load slide-template-maker for those tasks."
 ---
 
 # Slide Template
 
 Use existing platform templates to create presentations. This skill does not create or modify template packages.
+
+For an existing HTML slide project that needs its template changed, load `slide-template-replacement` instead. That skill owns the whole-deck and single-slide replacement workflows.
 
 ## Responsibility Boundary
 

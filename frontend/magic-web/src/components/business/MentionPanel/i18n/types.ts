@@ -75,6 +75,8 @@ export interface I18nTexts {
 		projectFiles: string
 		otherProjectFiles?: string
 		mcpExtensions: string
+		digitalEmployees: string
+		flows: string
 		agents: string
 		microApps: string
 		skills: string

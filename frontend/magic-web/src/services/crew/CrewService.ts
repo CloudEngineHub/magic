@@ -18,6 +18,7 @@ import {
 	type GetStoreAgentsParams,
 	type GetUnifiedAgentListParams,
 	type CreateAgentParams,
+	type AsyncPublishTaskResponse,
 	type PublishAgentParams,
 	type PublishAgentPrefillResponse,
 	type UpdateAgentInfoParams,
@@ -76,6 +77,7 @@ export interface StoreAgentView {
 export interface MyCrewView {
 	id: string
 	agentCode: string
+	projectId?: string | null
 	userRole?: CollaboratorPermission
 	name: string
 	role: string
@@ -335,6 +337,14 @@ export class CrewService {
 		return CrewApi.publishAgent({ code, ...params })
 	}
 
+	publishAgentAsync(code: string, params: PublishAgentParams): Promise<AsyncPublishTaskResponse> {
+		return CrewApi.publishAgentAsync({ code, ...params })
+	}
+
+	checkAgentPublish(code: string, publishTaskId: string): Promise<AsyncPublishTaskResponse> {
+		return CrewApi.checkAgentPublish({ code, publish_task_id: publishTaskId })
+	}
+
 	getAgentPublishPrefill(code: string): Promise<PublishAgentPrefillResponse> {
 		return CrewApi.getAgentPublishPrefill({ code })
 	}
@@ -466,6 +476,7 @@ export class CrewService {
 		return {
 			id: String(item.id),
 			agentCode: item.code,
+			projectId: item.project_id,
 			userRole: item.user_role,
 			name: this.mapI18nText(item.name_i18n),
 			role: this.mapI18nArrayText(item.role_i18n),

@@ -120,10 +120,7 @@ export function writeAskUserDraftAnswers(
 
 	const normalizedAnswers = normalizeAnswers(answers)
 	const normalizedRemark = typeof remark === "string" ? remark : ""
-	if (
-		!normalizedAnswers ||
-		!hasMeaningfulDraft(normalizedAnswers, normalizedRemark)
-	) {
+	if (!normalizedAnswers || !hasMeaningfulDraft(normalizedAnswers, normalizedRemark)) {
 		clearAskUserDraftAnswers(cacheKey)
 		return
 	}

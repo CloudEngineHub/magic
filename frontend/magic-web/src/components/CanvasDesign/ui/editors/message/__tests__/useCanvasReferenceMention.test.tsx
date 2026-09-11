@@ -381,6 +381,27 @@ describe("useCanvasReferenceMention", () => {
 		expect(mentionNode?.attrs?.data?.file_path).toBe("current/cat.png")
 	})
 
+	it("can exclude project-tree candidates for frame-only editors", () => {
+		renderMention({
+			tree: [folderNode("design-a", "Design A", [fileNode("cat.png", "project/cat.png")])],
+			options: {
+				matchableItems: [],
+				includeProjectTreeCandidates: false,
+				mentionEnabledOverride: false,
+				referenceResourceType: "image",
+			},
+		})
+
+		expect(getMention().matchableItems).toEqual([])
+		expect(getMention().mentionEnabled).toBe(false)
+		const doc = getContentFromString("@cat.png", getMention().matchableItems)
+		const paragraphText = (doc.content?.[0]?.content || [])
+			.map((node) => (node.type === "text" ? node.text || "" : ""))
+			.join("")
+		expect(paragraphText).toBe("@cat.png")
+		expect(doc.content?.[0]?.content?.some((node) => node.type === "mention")).toBe(false)
+	})
+
 	it("deduplicates current-canvas absolute and DSL-relative paths by host identity", () => {
 		renderMention({
 			methods: designAMethods,
@@ -398,7 +419,7 @@ describe("useCanvasReferenceMention", () => {
 		])
 	})
 
-	it("keeps workspace-root and current-canvas resources separate", () => {
+	it("keeps same-name project-tree files with a distinct resolver identity", () => {
 		renderMention({
 			methods: designAMethods,
 			tree: [folderNode("root", "Root", [fileNode("cat.png", "/images/cat.png")])],
@@ -409,8 +430,71 @@ describe("useCanvasReferenceMention", () => {
 		})
 
 		expect(getMention().matchableItems.filter((item) => item.name === "cat.png")).toEqual([
-			expect.objectContaining({ path: "./images/cat.png" }),
-			expect.objectContaining({ path: "/images/cat.png" }),
+			expect.objectContaining({ path: "./images/cat.png", source: "element-reference" }),
+			expect.objectContaining({ path: "/images/cat.png", source: "project-tree" }),
+		])
+	})
+
+	it("keeps relative and absolute spellings when the host resolver is missing", () => {
+		renderMention({
+			tree: [folderNode("root", "Root", [fileNode("cat.png", "/images/cat.png")])],
+			options: {
+				matchableItems: [{ name: "cat.png", path: "./images/cat.png" }],
+				referenceResourceType: "image",
+			},
+		})
+
+		expect(getMention().matchableItems.filter((item) => item.name === "cat.png")).toEqual([
+			expect.objectContaining({ path: "./images/cat.png", source: "element-reference" }),
+			expect.objectContaining({ path: "/images/cat.png", source: "project-tree" }),
+		])
+	})
+
+	it("keeps relative and absolute spellings when the host resolver cannot resolve them", () => {
+		const unresolvedMethods = {
+			resolveResourceReference: ((input) => {
+				const rawReference =
+					input.namespace === "external-url"
+						? input.url
+						: "path" in input
+							? input.path
+							: input.fileId
+				return {
+					status: "not-found",
+					rawReference,
+					candidates: [],
+				}
+			}) as ResolveCanvasResourceReference,
+		} as CanvasDesignMethods
+
+		renderMention({
+			methods: unresolvedMethods,
+			tree: [folderNode("root", "Root", [fileNode("cat.png", "/images/cat.png")])],
+			options: {
+				matchableItems: [{ name: "cat.png", path: "./images/cat.png" }],
+				referenceResourceType: "image",
+			},
+		})
+
+		expect(getMention().matchableItems.filter((item) => item.name === "cat.png")).toEqual([
+			expect.objectContaining({ path: "./images/cat.png", source: "element-reference" }),
+			expect.objectContaining({ path: "/images/cat.png", source: "project-tree" }),
+		])
+	})
+
+	it("keeps distinct project-tree names alongside current references", () => {
+		renderMention({
+			methods: designAMethods,
+			tree: [folderNode("root", "Root", [fileNode("dog.png", "/images/dog.png")])],
+			options: {
+				matchableItems: [{ name: "cat.png", path: "./images/cat.png" }],
+				referenceResourceType: "image",
+			},
+		})
+
+		expect(getMention().matchableItems.map((item) => item.path)).toEqual([
+			"./images/cat.png",
+			"/images/dog.png",
 		])
 	})
 
@@ -419,7 +503,10 @@ describe("useCanvasReferenceMention", () => {
 		const resolveResourceReference = createTestResourceReferenceResolver({
 			attachmentsReady: true,
 		})
-		const methods = { resolveResourceReference, locateProjectFile } as CanvasDesignMethods
+		const methods = {
+			resolveResourceReference,
+			locateProjectFile,
+		} as unknown as CanvasDesignMethods
 		renderMention({ methods, tree: [] })
 		const Renderer =
 			getConfiguredOptions().nodeViewRenderers?.[
@@ -448,8 +535,40 @@ describe("useCanvasReferenceMention", () => {
 
 		const mention = screen.getByTestId("canvas-project-file-mention")
 		expect(mention).toHaveAttribute("data-deleted", "true")
-		expect(mention).toHaveTextContent("@截屏.png（已删除）")
+		expect(mention).toHaveTextContent("截屏.png（已删除）")
 		fireEvent.click(mention)
 		expect(locateProjectFile).not.toHaveBeenCalled()
+	})
+
+	it("uses the shared desktop visual contract for media mentions", () => {
+		renderMention({ methods: designAMethods, tree: [] })
+		const Renderer =
+			getConfiguredOptions().nodeViewRenderers?.[
+				CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile
+			]
+		if (!Renderer) throw new Error("Missing project-file node view renderer")
+
+		render(
+			<Providers methods={designAMethods}>
+				{createElement(Renderer, {
+					node: {
+						attrs: {
+							type: CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile,
+							data: {
+								file_id: "image-1",
+								file_name: "cat.png",
+								file_path: "/images/cat.png",
+								file_extension: "png",
+							},
+						},
+					},
+					extension: { options: {} },
+				})}
+			</Providers>,
+		)
+
+		const visual = document.querySelector(".magic-message-file-mention-visual")
+		expect(visual).toHaveClass("bg-primary-10", "text-primary", "h-[18px]")
+		expect(visual).toHaveClass("inline-flex", "items-center")
 	})
 })

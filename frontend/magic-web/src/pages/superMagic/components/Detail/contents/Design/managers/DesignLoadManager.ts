@@ -19,6 +19,7 @@ import {
 	type DesignSidecarStatus,
 } from "../utils/designDataLoader"
 import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
+import { stringifyUnknownError } from "@/utils/error"
 
 export interface DesignLoadResult {
 	didLoad: boolean
@@ -254,7 +255,7 @@ export class DesignLoadManager {
 					: {
 							kind: "invalid-envelope",
 							stage: "parse-envelope",
-							message: error instanceof Error ? error.message : String(error),
+							message: stringifyUnknownError(error),
 						}
 			if (this.isCurrentLoadRequest(request)) {
 				this.stateBag.setters.setDesignLoadIssue?.(loadIssue)

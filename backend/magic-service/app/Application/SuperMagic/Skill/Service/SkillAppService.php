@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\Skill\Service;
 
 use App\Application\SuperMagic\Project\Service\ProjectAppService;
+use App\Application\SuperMagic\Publish\PublishAsyncStatusManager;
 use App\Application\SuperMagic\Skill\DTO\PublishSkillResultDTO;
 use App\Application\SuperMagic\Skill\Import\SkillPackageParser;
 use App\Domain\Contact\Entity\MagicDepartmentEntity;
@@ -15,6 +16,7 @@ use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType as OperationPermissionResourceType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
@@ -83,6 +85,7 @@ use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -133,6 +136,7 @@ class SkillAppService extends AbstractSkillAppService
         protected SkillCategoryRelationDomainService $skillCategoryRelationDomainService,
         protected SkillCategoryDomainService $skillCategoryDomainService,
         protected SkillPackageParser $skillPackageParser,
+        protected PublishAsyncStatusManager $publishAsyncStatusManager,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
@@ -770,6 +774,185 @@ class SkillAppService extends AbstractSkillAppService
         return $publishResult;
     }
 
+    /** 创建异步 Skill 发布任务。 */
+    public function createAsyncPublishSkill(RequestContext $requestContext, string $code, PublishSkillRequestDTO $requestDTO): array
+    {
+        $authorization = $requestContext->getUserAuthorization();
+        $dataIsolation = $this->createSkillDataIsolation($authorization);
+        $this->assertSkillEditable($dataIsolation, $code);
+        $dataIsolation->disabled();
+        $skillEntity = $this->skillDomainService->findSkillByCode($dataIsolation, $code);
+        $fileKey = $this->resolveSkillFileKeyByProjectId($skillEntity->getProjectId());
+
+        // 同一版本已有发布中任务时复用版本和任务状态，避免重复创建版本。
+        $reusedVersion = null;
+        $existingVersions = $this->skillVersionDomainService->queryVersionsByCode($dataIsolation, $code, null, null, Page::createNoPage(), includePublishing: true)['list'];
+        foreach ($existingVersions as $existingVersion) {
+            if ($existingVersion->getVersion() === $requestDTO->getVersion()
+                && $existingVersion->getPublisherUserId() === $dataIsolation->getCurrentUserId()
+                && $existingVersion->getPublishStatus()->isPublishing()
+                && $existingVersion->getId() !== null
+            ) {
+                $existingTaskId = (string) $existingVersion->getId();
+                $existingStatus = $this->publishAsyncStatusManager->get($existingTaskId);
+                if ($existingStatus !== null && ($existingStatus['status'] ?? '') !== 'failed') {
+                    return $existingStatus;
+                }
+                if ($existingStatus !== null) {
+                    $this->publishAsyncStatusManager->update($existingTaskId, ['status' => 'processing', 'progress' => 0, 'file_key' => null, 'error' => null]);
+                }
+                $reusedVersion = $existingVersion;
+                break;
+            }
+        }
+
+        $versionEntity = $reusedVersion ?? new SkillVersionEntity();
+        if ($reusedVersion === null) {
+            $versionEntity->setVersion($requestDTO->getVersion());
+            $versionEntity->setVersionDescriptionI18n($requestDTO->getVersionDescriptionI18n());
+            $versionEntity->setPublishTargetType($requestDTO->getPublishTargetType());
+            $versionEntity->setPublishTargetValue($requestDTO->toPublishTargetValue());
+            $versionEntity->setCategoryIds($requestDTO->getPublishTargetType() === PublishTargetType::MARKET->value ? $requestDTO->getCategoryIds() : []);
+            $versionEntity->setSkillFileKey($fileKey?->getFileKey());
+
+            Db::beginTransaction();
+            try {
+                $versionEntity = $this->skillVersionDomainService->publishSkill($dataIsolation, $skillEntity, $versionEntity, true);
+                if ($versionEntity->getId() !== null && $requestDTO->getPublishTargetType() === PublishTargetType::MARKET->value) {
+                    $this->skillCategoryRelationDomainService->replaceVersionCategories($dataIsolation->getCurrentOrganizationCode(), $versionEntity->getId(), $versionEntity->getCategoryIds());
+                }
+                Db::commit();
+            } catch (Throwable $e) {
+                Db::rollBack();
+                throw $e;
+            }
+        }
+
+        $taskId = (string) ($versionEntity->getId() ?? IdGenerator::getUniqueId32());
+        $taskKey = 'publish:skill:' . $taskId;
+        $this->publishAsyncStatusManager->initialize($taskId, [
+            'resource_type' => 'skill', 'resource_code' => $code,
+            'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+            'publisher_user_id' => $dataIsolation->getCurrentUserId(),
+            'version_id' => $versionEntity->getId(), 'task_key' => $taskKey,
+        ]);
+
+        if (! $requestDTO->getExportFileFromProject()) {
+            if (empty($skillEntity->getFileKey())) {
+                $this->publishAsyncStatusManager->update($taskId, ['status' => 'failed', 'error' => '技能文件不存在']);
+            } else {
+                $version = $this->skillVersionDomainService->finalizePreparedSkill($dataIsolation, (int) $versionEntity->getId(), (string) $skillEntity->getFileKey());
+                if ($version->getPublishStatus()->isPublished()) {
+                    $this->syncPublishedSkillScope($dataIsolation, $skillEntity, $version);
+                }
+                $this->publishAsyncStatusManager->update($taskId, ['status' => 'ready', 'progress' => 100, 'file_key' => $skillEntity->getFileKey()]);
+            }
+            return $this->publishAsyncStatusManager->get($taskId) ?? ['publish_task_id' => $taskId, 'status' => 'processing'];
+        }
+
+        try {
+            $projectId = $skillEntity->getProjectId();
+            if (empty($projectId)) {
+                throw new RuntimeException('技能项目不存在');
+            }
+            $project = $this->projectDomainService->getProjectNotUserId((int) $projectId);
+            if (! $project) {
+                throw new RuntimeException('技能项目不存在');
+            }
+            $skillConfig = $this->readSkillProjectConfig((int) $projectId, $project);
+            $skillDirName = (string) ($skillConfig['skill']['dir'] ?? '');
+            $skillDirPath = SkillProjectConfigUtil::SKILLS_ROOT_PATH . '/' . $skillDirName;
+            $skillDirEntity = $this->taskFileDomainService->findDirectoryByPath((int) $projectId, $skillDirPath);
+            if ($skillDirEntity === null) {
+                throw new RuntimeException('技能目录不存在');
+            }
+            $sandboxId = $this->initializeSkillPublishSandbox($dataIsolation, $code, $project);
+            $result = $this->skillDomainService->createSkillWorkspaceExportAsync(
+                $dataIsolation,
+                $code,
+                $sandboxId,
+                $skillDirPath,
+                $skillDirName,
+                $code . '_' . $taskId . '.zip',
+                $taskKey
+            );
+            $this->publishAsyncStatusManager->update($taskId, ['sandbox_id' => $sandboxId]);
+            if (($result['status'] ?? '') === 'FAILED' || (($result['code'] ?? 1000) !== 1000 && ($result['code'] ?? -1) !== 4000)) {
+                throw new RuntimeException((string) ($result['message'] ?? 'sandbox export failed'));
+            }
+        } catch (Throwable $e) {
+            $this->logger->error('异步 Skill 发布失败', ['task_id' => $taskId, 'error' => $e->getMessage()]);
+            $this->publishAsyncStatusManager->update($taskId, ['status' => 'failed', 'error' => '发布任务执行失败，请重新发起发布']);
+        }
+        return $this->publishAsyncStatusManager->get($taskId) ?? ['publish_task_id' => $taskId, 'status' => 'processing'];
+    }
+
+    /** 查询并推进异步 Skill 发布任务。 */
+    public function checkAsyncPublishSkill(RequestContext $requestContext, string $code, string $taskId): array
+    {
+        $authorization = $requestContext->getUserAuthorization();
+        $dataIsolation = $this->createSkillDataIsolation($authorization);
+        $this->assertSkillEditable($dataIsolation, $code);
+        $dataIsolation->disabled();
+        $status = $this->publishAsyncStatusManager->get($taskId);
+        if ($status === null) {
+            $version = $this->skillVersionDomainService->findSkillVersionById($dataIsolation, (int) $taskId);
+            if ($version !== null
+                && $version->getCode() === $code
+                && $version->getOrganizationCode() === $dataIsolation->getCurrentOrganizationCode()
+                && $version->getPublisherUserId() === $dataIsolation->getCurrentUserId()
+                && $version->getPublishStatus()->isPublished()
+                && $version->getFileKey() !== null
+            ) {
+                return ['publish_task_id' => $taskId, 'status' => 'ready', 'progress' => 100, 'file_key' => $version->getFileKey()];
+            }
+        }
+        if ($status === null || ($status['resource_type'] ?? '') !== 'skill' || ($status['resource_code'] ?? '') !== $code
+            || ($status['organization_code'] ?? '') !== $dataIsolation->getCurrentOrganizationCode()
+            || ($status['publisher_user_id'] ?? '') !== $dataIsolation->getCurrentUserId()) {
+            return ['publish_task_id' => $taskId, 'status' => 'failed', 'error' => '发布任务不存在或已过期'];
+        }
+        if (in_array($status['status'] ?? '', ['ready', 'failed'], true)) {
+            return $status;
+        }
+        if (empty($status['sandbox_id'])) {
+            return $status;
+        }
+        try {
+            $result = $this->skillDomainService->checkSkillWorkspaceExportAsync($dataIsolation, (string) ($status['sandbox_id'] ?? ''), (string) ($status['task_key'] ?? ('publish:skill:' . $taskId)));
+            $sandboxStatus = strtoupper((string) ($result['status'] ?? ''));
+            if (($result['code'] ?? 1000) === 4004 || $sandboxStatus === 'FAILED') {
+                $this->publishAsyncStatusManager->update($taskId, ['status' => 'failed', 'error' => (string) ($result['message'] ?? 'sandbox export failed')]);
+            } elseif (in_array($sandboxStatus, ['COMPLETED', 'SUCCESS'], true) && ($result['file_key'] ?? '') !== '') {
+                Db::beginTransaction();
+                try {
+                    $version = $this->skillVersionDomainService->finalizePreparedSkill($dataIsolation, (int) $status['version_id'], (string) $result['file_key']);
+                    $skill = $this->skillDomainService->findSkillByCode($dataIsolation, $code);
+                    $packageName = (string) ($result['metadata']['package_name'] ?? '');
+                    if ($packageName !== '') {
+                        $skill->setPackageName($packageName);
+                    }
+                    $skill->setFileKey((string) $result['file_key']);
+                    $this->skillDomainService->saveSkill($dataIsolation, $skill);
+                    if ($version->getPublishStatus()->isPublished()) {
+                        $this->syncPublishedSkillScope($dataIsolation, $skill, $version);
+                    }
+                    Db::commit();
+                } catch (Throwable $e) {
+                    Db::rollBack();
+                    throw $e;
+                }
+                $this->publishAsyncStatusManager->update($taskId, ['status' => 'ready', 'progress' => 100, 'file_key' => $result['file_key']]);
+            } else {
+                $this->publishAsyncStatusManager->update($taskId, ['progress' => (int) ($result['progress'] ?? $status['progress'] ?? 0)]);
+            }
+        } catch (Throwable $e) {
+            $this->logger->error('异步 Skill 发布检查失败', ['task_id' => $taskId, 'error' => $e->getMessage()]);
+            $this->publishAsyncStatusManager->update($taskId, ['status' => 'failed', 'error' => '发布任务检查失败，请重新发起发布']);
+        }
+        return $this->publishAsyncStatusManager->get($taskId) ?? $status;
+    }
+
     /**
      * Query published version records.
      *
@@ -953,7 +1136,7 @@ class SkillAppService extends AbstractSkillAppService
             }
             AsyncEventUtil::dispatch(new SkillUsedEvent(
                 organizationCode: $userAuthorization->getOrganizationCode(),
-                sourceId: 'super_magic_tool',
+                sourceId: SourceId::SUPER_MAGIC_TOOL,
                 callTime: (int) round(microtime(true) * 1000),
                 userId: $userAuthorization->getId(),
                 userName: $userAuthorization->getRealName(),
@@ -1022,7 +1205,7 @@ class SkillAppService extends AbstractSkillAppService
             }
             AsyncEventUtil::dispatch(new SkillUsedEvent(
                 organizationCode: $userAuthorization->getOrganizationCode(),
-                sourceId: 'super_magic_tool',
+                sourceId: SourceId::SUPER_MAGIC_TOOL,
                 callTime: (int) round(microtime(true) * 1000),
                 userId: $userAuthorization->getId(),
                 userName: $userAuthorization->getRealName(),
@@ -2132,6 +2315,14 @@ class SkillAppService extends AbstractSkillAppService
         }
 
         $organizationCode = $latestVersionEntity?->getOrganizationCode() ?? $skillEntity->getOrganizationCode();
+        if ($latestVersionEntity !== null && $taskFileEntity->getFileKey() === $latestVersionEntity->getSkillFileKey()) {
+            return $this->fileDomainService->getLink(
+                $organizationCode,
+                $taskFileEntity->getFileKey(),
+                StorageBucketType::Private,
+            )?->getUrl() ?? '';
+        }
+
         return $this->taskFileDomainService->getFilePreSignedUrl($organizationCode, $taskFileEntity);
     }
 

@@ -642,6 +642,7 @@ export class CanvasFileUploadManager {
 		callbacks?: {
 			onUploadComplete?: (result: UploadFileResponse, index: number) => void
 			onUploadFailed?: (error: Error, index: number) => void
+			onUploadProgress?: (progress: number, index: number) => void
 		},
 		options?: { overwrite?: boolean },
 	): Promise<UploadFileResponse[]> {
@@ -656,6 +657,8 @@ export class CanvasFileUploadManager {
 			file,
 			uploadSubDir: this.getUploadSubDir(file),
 			overwrite: options?.overwrite ?? this.getUploadFileOverwrite(file, files),
+			onUploadStart: () => callbacks?.onUploadProgress?.(0, index),
+			onUploadProgress: (progress) => callbacks?.onUploadProgress?.(progress, index),
 			onUploadComplete: (result) => {
 				const normalizedResult = normalizeCanvasUploadFileResponsePath(result)
 				this.registerPendingResourcePath(normalizedResult.path)
@@ -665,6 +668,7 @@ export class CanvasFileUploadManager {
 				callbacks?.onUploadFailed?.(error, index)
 			},
 		}))
+		uploadFiles.forEach((uploadFile) => uploadFile.onUploadStart?.())
 
 		// 直接上传
 		const uploadResults = await uploadFilesMethod(uploadFiles, referenceImages)

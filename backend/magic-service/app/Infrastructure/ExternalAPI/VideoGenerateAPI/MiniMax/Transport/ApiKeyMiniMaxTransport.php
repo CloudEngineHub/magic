@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Transport;
 
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\MiniMaxVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 
@@ -61,9 +62,7 @@ readonly class ApiKeyMiniMaxTransport
         }
 
         // 未返回预期校验错误说明请求可能被接受，不能视为连通性测试成功。
-        throw ProviderVideoException::nonRetriable(
-            'MiniMax connectivity test did not receive the expected validation error',
-        );
+        throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'MiniMax connectivity test did not receive the expected validation error');
     }
 
     /**

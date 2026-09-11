@@ -6,6 +6,11 @@ export interface PPTSlideStructureAdapter {
 		fileId: string
 		content: string
 	}>
+	duplicate(input: { slidePath: string; position: number }): Promise<{
+		filePath: string
+		fileId: string
+		content: string
+	}>
 	remove(slidePath: string): Promise<void>
 	rename(slidePath: string, nextName: string): Promise<string>
 	/** Optional lookup used to rebind a path after a best-effort rollback creates a replacement file. */

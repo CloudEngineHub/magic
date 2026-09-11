@@ -14,7 +14,7 @@ import { EditorLogger } from "./utils/EditorLogger"
 import { DevToolsCollector, DEVTOOLS_MSG } from "./features/DevToolsCollector"
 import { ElementInspectorHandler } from "./features/ElementInspectorHandler"
 import { installRegisteredRuntimePlugins } from "./runtime/RuntimePlugin"
-import { getParentOrigin } from "./utils/parentOrigin"
+import { getParentOrigin, isFromTrustedParent } from "./utils/parentOrigin"
 
 // ─── Phase 1: Runtime shell setup (always runs) ────────────────────────────
 
@@ -323,6 +323,7 @@ function activateEditorRuntime(scaleRatio: number): void {
 
 function handleRuntimeMessage(event: MessageEvent): void {
 	if (!event.data) return
+	if (!isFromTrustedParent(event)) return
 
 	// Activate editor runtime on demand
 	if (event.data.type === "activateEditorRuntime") {
@@ -338,6 +339,33 @@ function handleRuntimeMessage(event: MessageEvent): void {
 	}
 	if (event.data.type === "MAGIC_INSPECTOR_STOP") {
 		elementInspector.deactivate()
+		return
+	}
+	if (event.data.type === "MAGIC_INSPECTOR_TRACK") {
+		elementInspector.updateTrackedSelectors(event.data.selectors)
+		return
+	}
+	if (event.data.type === "MAGIC_INSPECTOR_SCROLL_TO_SELECTOR") {
+		elementInspector.scrollToSelector(
+			typeof event.data.selector === "string" ? event.data.selector : "",
+		)
+		return
+	}
+	if (event.data.type === "MAGIC_INSPECTOR_SCROLL_TO_POSITION") {
+		elementInspector.scrollToPosition({
+			left: Number(event.data.left),
+			top: Number(event.data.top),
+		})
+		return
+	}
+	if (event.data.type === "MAGIC_INSPECTOR_SCREENSHOT_REQUEST") {
+		void elementInspector.captureScreenshot(event.data)
+		return
+	}
+	if (event.data.type === "MAGIC_INSPECTOR_SCREENSHOT_CANCEL") {
+		elementInspector.cancelScreenshot(
+			typeof event.data.requestId === "string" ? event.data.requestId : "",
+		)
 		return
 	}
 

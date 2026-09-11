@@ -95,7 +95,7 @@ export const generateCommonApi = (fetch: HttpClient) => ({
 	 */
 	async getPrivateConfigure(
 		code: string,
-		options?: Pick<RequestConfig, "skipAppInitWait">,
+		options?: Pick<RequestConfig, "skipAppInitWait" | "enableRequestUnion" | "enableErrorMessagePrompt">,
 	): Promise<{ config: Common.PrivateConfig }> {
 		// 当且仅当 code 为空或不存在则返回当前 magic 部署环境的对应相同环境下 teamshare、keewood 配置
 		if (!code || code === "") {

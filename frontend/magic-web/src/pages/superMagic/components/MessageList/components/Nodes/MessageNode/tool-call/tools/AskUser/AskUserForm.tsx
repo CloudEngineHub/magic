@@ -333,11 +333,7 @@ function AskUserFormImpl({
 
 	useEffect(() => {
 		if (!draftCacheKey || submittedAnswers || isTerminal) return
-		writeAskUserDraftAnswers(
-			draftCacheKey,
-			answersRef.current as AskUserDraftAnswers,
-			remark,
-		)
+		writeAskUserDraftAnswers(draftCacheKey, answersRef.current as AskUserDraftAnswers, remark)
 	}, [draftCacheKey, isTerminal, remark, submittedAnswers])
 
 	const displayRemark = submittedRemark || (isTerminal ? "" : remark)
@@ -381,7 +377,9 @@ function AskUserFormImpl({
 								placeholder={getAskUserRemarkPlaceholder(locale)}
 								value={displayRemark}
 								onChange={setRemark}
-								disabled={Boolean(disabled) || Boolean(submittedAnswers) || isTerminal}
+								disabled={
+									Boolean(disabled) || Boolean(submittedAnswers) || isTerminal
+								}
 								readOnly={Boolean(submittedAnswers) || isTerminal}
 							/>
 						) : null}

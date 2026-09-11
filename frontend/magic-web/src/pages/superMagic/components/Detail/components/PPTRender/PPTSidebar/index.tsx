@@ -41,14 +41,16 @@ function PPTSidebar({
 	onSlideClick,
 	onSortChange,
 	onInsertSlide,
+	onDuplicateSlide,
 	onDeleteSlide,
 	onRenameSlide,
 	onRefreshSlide,
 	onRegenerateScreenshot,
 	onAddToCurrentChat,
 	onAddToNewChat,
-	mainFileId,
+	onReplaceSlideTemplate,
 	allowEdit = false,
+	canReplaceTemplate = false,
 	isMobile = false,
 	sidebarWidth = 200,
 	isCollapsed: externalIsCollapsed,
@@ -350,6 +352,11 @@ function PPTSidebar({
 		onInsertSlide(position, direction)
 	}
 
+	function handleDuplicateSlide(index: number) {
+		if (!onDuplicateSlide) return
+		onDuplicateSlide(index)
+	}
+
 	// Handle delete slide
 	function handleDeleteSlide(index: number) {
 		if (!onDeleteSlide) return
@@ -535,7 +542,6 @@ function PPTSidebar({
 											isActive={item.index === activeIndex}
 											onClick={() => onSlideClick(item.index)}
 											totalSlides={items.length}
-											mainFileId={mainFileId}
 											slideFileId={store.getFileIdByPath(item.path)}
 											slideFullRelativePath={store.getFullRelativePath(
 												item.path,
@@ -547,6 +553,7 @@ function PPTSidebar({
 											onInsertBelow={() =>
 												handleInsertSlide(item.index, "after")
 											}
+											onDuplicate={() => handleDuplicateSlide(item.index)}
 											onDelete={() => handleDeleteSlide(item.index)}
 											onRename={(newFileName) =>
 												handleRenameSlide(item.index, newFileName)
@@ -563,6 +570,11 @@ function PPTSidebar({
 											onAddToNewChat={
 												onAddToNewChat
 													? () => onAddToNewChat(item.index)
+													: undefined
+											}
+											onReplaceTemplate={
+												canReplaceTemplate && onReplaceSlideTemplate
+													? () => onReplaceSlideTemplate(item.index)
 													: undefined
 											}
 											onLocateFile={() => handleLocateFile(item.index)}

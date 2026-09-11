@@ -5,6 +5,8 @@ import type { I18nTexts } from "../../i18n/types"
 import { MentionPanelBuiltinItemId as BuiltinItemId } from "./catalog-ids"
 import PlugIcon from "../../components/icons/PlugIcon"
 import BotIcon from "../../components/icons/BotIcon"
+import DigitalEmployeeIcon from "../../components/icons/DigitalEmployeeIcon.svg"
+import FlowIcon from "../../components/icons/FlowIcon.svg"
 import SkillIcon from "../../components/icons/SkillIcon"
 import ToolIcon from "../../components/icons/ToolIcon"
 import { MentionPanelItemType } from "./panel-item-types"
@@ -18,6 +20,8 @@ export const NON_SELECTABLE_BUILTIN_ITEM_IDS = [
 	BuiltinItemId.OTHER_PROJECT_FILES,
 	BuiltinItemId.CANVAS_ELEMENTS,
 	BuiltinItemId.MCP_EXTENSIONS,
+	BuiltinItemId.DIGITAL_EMPLOYEES,
+	BuiltinItemId.FLOWS,
 	BuiltinItemId.AGENTS,
 	BuiltinItemId.MICRO_APPS,
 ] as const
@@ -56,10 +60,26 @@ export function createDefaultItems(t: I18nTexts): Record<string, MentionItem[]> 
 				isFolder: false,
 			},
 			{
-				id: BuiltinItemId.AGENTS,
+				id: BuiltinItemId.DIGITAL_EMPLOYEES,
 				type: MentionItemType.AGENT,
-				name: t.defaultItems.agents,
-				icon: createElement(BotIcon),
+				name: t.defaultItems.digitalEmployees,
+				icon: createElement("img", {
+					src: DigitalEmployeeIcon as string,
+					alt: "",
+					className: "h-4 w-4",
+				}),
+				hasChildren: true,
+				isFolder: true,
+			},
+			{
+				id: BuiltinItemId.FLOWS,
+				type: MentionItemType.FOLDER,
+				name: t.defaultItems.flows,
+				icon: createElement("img", {
+					src: FlowIcon as string,
+					alt: "",
+					className: "h-4 w-4",
+				}),
 				hasChildren: true,
 				isFolder: true,
 			},
@@ -90,16 +110,29 @@ export function createDefaultItems(t: I18nTexts): Record<string, MentionItem[]> 
 				hasChildren: true,
 				isFolder: true,
 			},
-			{
-				id: BuiltinItemId.TOOLS,
-				type: MentionItemType.TOOL,
-				name: t.defaultItems.tools,
-				icon: createElement(ToolIcon),
-				hasChildren: true,
-				isFolder: true,
-			},
 		],
 	}
+}
+
+export function createFlowItems(t?: I18nTexts): MentionItem[] {
+	return [
+		{
+			id: BuiltinItemId.AGENTS,
+			type: MentionItemType.AGENT,
+			name: t?.defaultItems.agents ?? "智能体",
+			icon: createElement(BotIcon),
+			hasChildren: true,
+			isFolder: true,
+		},
+		{
+			id: BuiltinItemId.TOOLS,
+			type: MentionItemType.TOOL,
+			name: t?.defaultItems.tools ?? "工具",
+			icon: createElement(ToolIcon),
+			hasChildren: true,
+			isFolder: true,
+		},
+	]
 }
 
 export const DEFAULT_ITEMS: Record<string, MentionItem[]> = {

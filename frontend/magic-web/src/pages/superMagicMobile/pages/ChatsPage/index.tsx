@@ -10,11 +10,7 @@ import {
 	useOptionalSuperMobileShellOutlet,
 } from "@/pages/superMagicMobile/components/MobileShell/SuperMobileShellRouteLayout"
 import { MobileOnlyRoute } from "@/routes/components/ViewportRouteGuard"
-import magicToast from "@/components/base/MagicToaster/utils"
 import SuperMagicService from "@/pages/superMagic/services"
-import { roleStore } from "@/pages/superMagic/stores"
-import { resolveProjectModeForCreate } from "@/services/superMagic/DefaultAgentSelectionService"
-import { useChatWorkspace } from "@/pages/superMagic/hooks/useChatWorkspace"
 import { useProjectListActions } from "@/pages/superMagicMobile/components/ProjectList/hooks/useProjectActions"
 import ConversationActionsPopup from "@/pages/superMagicMobile/components/ConversationActionsPopup"
 import type { ActionGroup } from "@/pages/superMagicMobile/components/ActionSheet"
@@ -34,7 +30,6 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 	const { t } = useTranslation(["super", "common", "sidebar"])
 	const location = useLocation()
 	const navigate = useNavigate()
-	const { createProjectInChatWorkspace } = useChatWorkspace()
 	const {
 		items,
 		isLoading,
@@ -48,20 +43,8 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 		optimisticRemove,
 		optimisticUpdatePin,
 	} = useChatConversationList()
-	const currentRole = roleStore.currentRole
-	const [isCreatingChat, setIsCreatingChat] = useState(false)
-	// 同步门闩：避免按钮状态尚未刷新时发生连点重复创建。
-	const isCreatingChatRef = useRef(false)
-	// 创建成功后会跳转离开列表页，避免卸载后仍回写 loading 状态。
-	const isMountedRef = useRef(true)
 	// Route state is a one-shot bridge from detail deletion back to this list.
 	const lastHandledDeletedProjectIdRef = useRef("")
-
-	useEffect(() => {
-		return () => {
-			isMountedRef.current = false
-		}
-	}, [])
 
 	useEffect(() => {
 		const routeState = location.state as Record<string, unknown> | null
@@ -210,36 +193,9 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 		await SuperMagicService.switchChatProject(item.project)
 	})
 
-	/**
-	 * 新建对话统一走 chat workspace 创建链路，避免列表页和抽屉页出现两套创建口径。
-	 * loading 态与首页右上角新建对话对齐，创建完成前禁用按钮并展示旋转图标。
-	 */
-	const handleCreateChat = useMemoizedFn(async () => {
-		if (isCreatingChatRef.current) return
-
-		isCreatingChatRef.current = true
-		setIsCreatingChat(true)
-
-		try {
-			const createdProject = await createProjectInChatWorkspace({
-				projectMode: resolveProjectModeForCreate(currentRole),
-			})
-
-			if (!createdProject?.project || !createdProject.topic) {
-				magicToast.error(t("super:hierarchicalWorkspacePopup.createProjectFailed"))
-				return
-			}
-
-			await reload()
-			await SuperMagicService.switchChatProject(createdProject.project, createdProject.topic)
-		} catch {
-			magicToast.error(t("super:hierarchicalWorkspacePopup.createProjectFailed"))
-		} finally {
-			isCreatingChatRef.current = false
-			if (isMountedRef.current) {
-				setIsCreatingChat(false)
-			}
-		}
+	/** Navigate to the existing blank home composer; project/topic creation remains send-time. */
+	const handleCreateChat = useMemoizedFn(() => {
+		navigate({ name: RouteName.MobileHome })
 	})
 
 	/**
@@ -280,7 +236,6 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 				hasMore={hasMore}
 				onSearchValueChange={setSearchValue}
 				onCreateChat={handleCreateChat}
-				isCreateChatLoading={isCreatingChat}
 				onOpenConversation={handleOpenConversation}
 				onMore={handleMoreConversation}
 				onPin={MOBILE_CHAT_PIN_ENABLED ? handlePinConversation : undefined}

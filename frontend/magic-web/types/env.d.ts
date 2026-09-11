@@ -61,6 +61,8 @@ interface ImportMetaEnv {
 	readonly MAGIC_CDNHOST?: string
 	/** iframe HTML 渲染站地址（跨域时主应用 iframe src 指向此 URL，如 https://localhost:4173 或 http://localhost:4173） */
 	readonly MAGIC_HTML_SANDBOX_URL?: string
+	/** Agent 沙盒中的跨项目文件挂载根路径 */
+	readonly AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH?: string
 	/** 私有化部署环境 ID，用于标识当前编辑的哪一个私有化环境 */
 	readonly MAGIC_DEPLOYMENT_ID?: string
 	/** 云服务商“应用性能全链路监控” */

@@ -557,7 +557,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		}),
 	})
 
-		const { handlePullMoreMessage, isMessagesInitialLoading, isSelectedTopicMessagesReady } =
+	const { handlePullMoreMessage, isMessagesInitialLoading, isSelectedTopicMessagesReady } =
 		useTopicMessages({
 			selectedTopic,
 			topicStore,

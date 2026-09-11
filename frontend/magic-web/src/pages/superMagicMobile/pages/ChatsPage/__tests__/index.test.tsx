@@ -140,6 +140,7 @@ vi.mock("../hooks/useChatConversationList", () => ({
 vi.mock("../components/ChatConversationListView", () => ({
 	ChatConversationListView: ({
 		items,
+		onCreateChat,
 		onOpenSidebar,
 		onPin,
 		onDelete,
@@ -150,11 +151,15 @@ vi.mock("../components/ChatConversationListView", () => ({
 			isPinned: boolean
 			project: { id: string; project_name: string; workspace_id: string }
 		}>
+		onCreateChat: () => void
 		onOpenSidebar: () => void
 		onPin?: (item: (typeof items)[number]) => void
 		onDelete?: (item: (typeof items)[number]) => void
 	}) => (
 		<div>
+			<button type="button" data-testid="chat-list-create" onClick={onCreateChat}>
+				create
+			</button>
 			<button type="button" data-testid="chat-list" onClick={onOpenSidebar}>
 				list
 			</button>
@@ -313,6 +318,17 @@ describe("ChatsPage", () => {
 				viewTransition: false,
 			})
 		})
+	})
+
+	it("navigates to the existing mobile home with the default mobile transition", () => {
+		render(<ChatsPage />)
+
+		fireEvent.click(screen.getByTestId("chat-list-create"))
+
+		expect(navigateMock).toHaveBeenCalledWith({
+			name: "MobileHome",
+		})
+		expect(reloadMock).not.toHaveBeenCalled()
 	})
 
 	it("falls back to its own shell when rendered without route shell context", () => {

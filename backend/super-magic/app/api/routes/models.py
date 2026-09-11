@@ -111,6 +111,7 @@ def _to_debug_panel_model(model_config: ModelConfig) -> Dict[str, Any]:
             "options": {
                 "chat": True,
                 "function_call": model_config.supports_tool_use,
+                "multi_modal": model_config.supports_multimodal,
                 "max_tokens": model_config.max_context_tokens,
                 "max_output_tokens": model_config.max_output_tokens,
                 "default_temperature": model_config.temperature,

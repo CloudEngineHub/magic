@@ -35,16 +35,8 @@ describe("cluster-service-url", () => {
 		expect(getTeamshareServiceUrl("private-demo")).toBe(
 			"https://private-demo.magic_service_teamshare_base_url.test",
 		)
-		expect(env).toHaveBeenCalledWith(
-			"MAGIC_SERVICE_KEEWOOD_BASE_URL",
-			false,
-			"private-demo",
-		)
-		expect(env).toHaveBeenCalledWith(
-			"MAGIC_SERVICE_TEAMSHARE_BASE_URL",
-			false,
-			"private-demo",
-		)
+		expect(env).toHaveBeenCalledWith("MAGIC_SERVICE_KEEWOOD_BASE_URL", false, "private-demo")
+		expect(env).toHaveBeenCalledWith("MAGIC_SERVICE_TEAMSHARE_BASE_URL", false, "private-demo")
 	})
 
 	it("returns both service urls together", () => {

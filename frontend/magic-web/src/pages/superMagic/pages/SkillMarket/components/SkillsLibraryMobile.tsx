@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { InfiniteScroll } from "antd-mobile"
 import { reaction } from "mobx"
 import { configStore } from "@/models/config"
-import { Check, ChevronLeft, Loader2, Search } from "lucide-react"
+import { ChevronLeft, Loader2, Search } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -10,8 +11,6 @@ import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/shadcn-ui/sheet"
 import { Skills } from "@/enhance/lucide-react"
-import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
-import { useDelayedVisibility } from "@/pages/superMagic/hooks/useDelayedVisibility"
 import { SkillDetailDialog } from "@/pages/superMagic/components/SkillDetailDialog"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
@@ -20,8 +19,17 @@ import { StoreSkillsStore } from "../stores/store-skills"
 import SkillCategoryFilter from "./SkillCategoryFilter"
 import { ViewTransitionPresets } from "@/types/viewTransition"
 import type { StoreSkillView } from "@/services/skills/SkillsService"
+import SkillMarketTabs, { SKILL_MARKET_TAB_VALUES, type SkillMarketTab } from "./SkillMarketTabs"
 
-function SkillsLibraryMobile() {
+interface SkillsLibraryMobileProps {
+	activeTab?: SkillMarketTab
+	onTabChange?: (value: SkillMarketTab) => void
+}
+
+function SkillsLibraryMobile({
+	activeTab = SKILL_MARKET_TAB_VALUES.skills,
+	onTabChange = () => undefined,
+}: SkillsLibraryMobileProps) {
 	const { t, i18n } = useTranslation("crew/market")
 	const navigate = useNavigate()
 	const skillsStoreRef = useRef(new StoreSkillsStore())
@@ -69,14 +77,6 @@ function SkillsLibraryMobile() {
 	const handleAutoLoadMore = useCallback(() => {
 		void skillsStore.loadMore()
 	}, [skillsStore])
-	const sentinelRef = useAutoLoadMoreSentinel({
-		rootRef: scrollViewportRef,
-		disabled: skillsStore.loading || skillsStore.loadingMore || !skillsStore.hasMore,
-		onLoadMore: handleAutoLoadMore,
-	})
-	const shouldShowLoadingMoreIndicator = useDelayedVisibility({
-		visible: skillsStore.loadingMore,
-	})
 
 	function handleSearchOpenChange(open: boolean) {
 		setSearchOpen(open)
@@ -190,9 +190,12 @@ function SkillsLibraryMobile() {
 				>
 					<ChevronLeft className="size-6" aria-hidden />
 				</Button>
-				<h1 className="min-w-0 flex-1 truncate text-left text-base font-medium leading-6 text-foreground">
-					{t("tabs.skillsLibrary")}
-				</h1>
+				<SkillMarketTabs
+					value={activeTab}
+					onValueChange={onTabChange}
+					className="min-w-0 flex-1"
+					compact
+				/>
 				<div className="flex shrink-0 items-center gap-1">
 					<Button
 						variant="ghost"
@@ -216,133 +219,128 @@ function SkillsLibraryMobile() {
 				</div>
 			</header>
 
-			<div
-				className="shrink-0 border-b border-border bg-background px-3"
-				data-testid="skills-library-mobile-filter"
-			>
-				<SkillCategoryFilter
-					categories={skillsStore.categories}
-					selectedCategoryIds={skillsStore.categoryIds}
-					selectedIsFeatured={skillsStore.isFeatured}
-					loading={skillsStore.categoriesLoading}
-					error={skillsStore.categoriesError}
-					onChange={handleCategoryChange}
-				/>
-			</div>
-
-			<Sheet open={searchOpen} onOpenChange={handleSearchOpenChange}>
-				<SheetContent side="bottom" className="rounded-t-xl px-4 pb-6">
-					<SheetHeader className="text-left">
-						<SheetTitle>{t("skillsLibrary.searchSheetTitle")}</SheetTitle>
-					</SheetHeader>
-					<div className="flex flex-col gap-3">
-						<Input
-							value={queryDraft}
-							onChange={(e) => setQueryDraft(e.target.value)}
-							placeholder={t("skillsLibrary.aiSearchPlaceholder")}
-							onKeyDown={(e) => {
-								if (e.key !== "Enter" || e.nativeEvent.isComposing) return
-								handleApplySearch()
-							}}
-							data-testid="skills-library-mobile-search-input"
-						/>
-						<Button
-							className="w-full gap-2 shadow-xs"
-							onClick={handleApplySearch}
-							data-testid="skills-library-mobile-search-submit"
-						>
-							<Search className="size-4" />
-							{t("mobile.runSearch")}
-						</Button>
-					</div>
-				</SheetContent>
-			</Sheet>
-
-			<ScrollArea
-				className="min-h-0 flex-1 [&_[data-slot='scroll-area-scrollbar']]:hidden [&_[data-slot='scroll-area-viewport']>div]:!block"
-				viewportRef={scrollViewportRef}
-			>
-				<div className="flex min-w-0 flex-col gap-2.5 px-2 pb-6 pt-2">
-					{skillsStore.listError ? (
-						<div
-							className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted-foreground"
-							data-testid="skills-library-mobile-error"
-						>
-							<span>{t("skillsLibrary.loadFailed")}</span>
-							<Button variant="outline" size="sm" onClick={handleRetrySkills}>
-								{t("skillsLibrary.retrySkills")}
-							</Button>
-						</div>
-					) : skillsStore.loading && skillsStore.list.length === 0 ? (
-						<div
-							className="flex items-center justify-center py-16"
-							data-testid="skills-library-mobile-loading"
-						>
-							<Loader2 className="size-6 animate-spin text-muted-foreground" />
-						</div>
-					) : skillsStore.isEmpty ? (
-						<div
-							className="flex items-center justify-center py-16 text-sm text-muted-foreground"
-							data-testid="skills-library-mobile-empty"
-						>
-							{hasActiveFilters ? t("noResults") : t("skillsLibrary.noMoreData")}
-						</div>
-					) : (
-						<div
-							className="flex flex-col gap-2.5"
-							data-testid="skills-library-mobile-list"
-						>
-							{skillsStore.list.map((skill) => (
-								<StoreSkillCardMobile
-									key={skill.id}
-									skill={skill}
-									language={i18n.language}
-									onAdd={handleAdd}
-									onUpgrade={handleUpgrade}
-									onOpenDetail={handleOpenDetail}
-								/>
-							))}
-						</div>
-					)}
-
+			{activeTab === SKILL_MARKET_TAB_VALUES.skills ? (
+				<>
 					<div
-						ref={sentinelRef}
-						className="h-1 w-full"
-						data-testid="skills-library-mobile-scroll-sentinel"
-					/>
+						className="shrink-0 border-b border-border bg-background px-3"
+						data-testid="skills-library-mobile-filter"
+					>
+						<SkillCategoryFilter
+							categories={skillsStore.categories}
+							selectedCategoryIds={skillsStore.categoryIds}
+							selectedIsFeatured={skillsStore.isFeatured}
+							loading={skillsStore.categoriesLoading}
+							error={skillsStore.categoriesError}
+							onChange={handleCategoryChange}
+						/>
+					</div>
 
-					{skillsStore.loadingMoreError ? (
-						<div className="flex items-center justify-center gap-2 py-2 text-xs text-destructive">
-							<span>{t("skillsLibrary.loadFailed")}</span>
-							<Button
-								variant="ghost"
-								size="sm"
-								className="h-7 px-2"
-								onClick={handleAutoLoadMore}
-							>
-								{t("skillsLibrary.retrySkills")}
-							</Button>
-						</div>
-					) : shouldShowLoadingMoreIndicator ? (
-						<div
-							className="flex items-center justify-center py-2"
-							data-testid="skills-library-mobile-loading-more"
-						>
-							<Loader2 className="size-4 animate-spin text-muted-foreground" />
-						</div>
-					) : null}
+					<Sheet open={searchOpen} onOpenChange={handleSearchOpenChange}>
+						<SheetContent side="bottom" className="rounded-t-xl px-4 pb-6">
+							<SheetHeader className="text-left">
+								<SheetTitle>{t("skillsLibrary.searchSheetTitle")}</SheetTitle>
+							</SheetHeader>
+							<div className="flex flex-col gap-3">
+								<Input
+									value={queryDraft}
+									onChange={(e) => setQueryDraft(e.target.value)}
+									placeholder={t("skillsLibrary.aiSearchPlaceholder")}
+									onKeyDown={(e) => {
+										if (e.key !== "Enter" || e.nativeEvent.isComposing) return
+										handleApplySearch()
+									}}
+									data-testid="skills-library-mobile-search-input"
+								/>
+								<Button
+									className="w-full gap-2 shadow-xs"
+									onClick={handleApplySearch}
+									data-testid="skills-library-mobile-search-submit"
+								>
+									<Search className="size-4" />
+									{t("mobile.runSearch")}
+								</Button>
+							</div>
+						</SheetContent>
+					</Sheet>
 
-					{!skillsStore.hasMore && skillsStore.list.length > 0 ? (
-						<div
-							className="flex items-center justify-center gap-1 py-2 opacity-30"
-							data-testid="skills-library-mobile-no-more"
-						>
-							<Check className="size-4" />
-							<span className="text-xs">{t("skillsLibrary.noMoreData")}</span>
+					<ScrollArea
+						className="min-h-0 flex-1 [&_[data-slot='scroll-area-scrollbar']]:hidden [&_[data-slot='scroll-area-viewport']>div]:!block"
+						viewportRef={scrollViewportRef}
+					>
+						<div className="flex min-w-0 flex-col gap-4 px-2 pb-6 pt-2">
+							{skillsStore.listError ? (
+								<div
+									className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted-foreground"
+									data-testid="skills-library-mobile-error"
+								>
+									<span>{t("skillsLibrary.loadFailed")}</span>
+									<Button variant="outline" size="sm" onClick={handleRetrySkills}>
+										{t("skillsLibrary.retrySkills")}
+									</Button>
+								</div>
+							) : skillsStore.loading && skillsStore.list.length === 0 ? (
+								<div
+									className="flex items-center justify-center py-16"
+									data-testid="skills-library-mobile-loading"
+								>
+									<Loader2 className="size-6 animate-spin text-muted-foreground" />
+								</div>
+							) : skillsStore.isEmpty ? (
+								<div
+									className="flex items-center justify-center py-16 text-sm text-muted-foreground"
+									data-testid="skills-library-mobile-empty"
+								>
+									{hasActiveFilters
+										? t("noResults")
+										: t("skillsLibrary.noMoreData")}
+								</div>
+							) : (
+								<div
+									className="flex flex-col gap-2.5"
+									data-testid="skills-library-mobile-list"
+								>
+									{skillsStore.list.map((skill) => (
+										<StoreSkillCardMobile
+											key={skill.id}
+											skill={skill}
+											language={i18n.language}
+											onAdd={handleAdd}
+											onUpgrade={handleUpgrade}
+											onOpenDetail={handleOpenDetail}
+										/>
+									))}
+								</div>
+							)}
+
+							{skillsStore.loadingMoreError ? (
+								<div className="flex items-center justify-center gap-2 py-2 text-xs text-destructive">
+									<span>{t("skillsLibrary.loadFailed")}</span>
+									<Button
+										variant="ghost"
+										size="sm"
+										className="h-7 px-2"
+										onClick={handleAutoLoadMore}
+									>
+										{t("skillsLibrary.retrySkills")}
+									</Button>
+								</div>
+							) : null}
+
+							{skillsStore.list.length > 0 ? (
+								<InfiniteScroll
+									hasMore={skillsStore.hasMore}
+									loadMore={() => skillsStore.loadMore()}
+								/>
+							) : null}
 						</div>
-					) : null}
-				</div>
-			</ScrollArea>
+					</ScrollArea>
+				</>
+			) : (
+				<div
+					className="flex min-h-96 flex-1 items-center justify-center"
+					data-testid="connector-market-mobile-page"
+				/>
+			)}
 		</div>
 	)
 }

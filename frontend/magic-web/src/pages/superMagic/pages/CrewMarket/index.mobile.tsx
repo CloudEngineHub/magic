@@ -249,7 +249,7 @@ function CrewMarketMobilePanelBase() {
 						className="min-w-0 flex-1 px-2 text-center"
 						data-testid="crew-market-mobile-title"
 					>
-						<h1 className="truncate font-poppins text-[18px] font-medium text-foreground">
+						<h1 className="h-6 truncate font-poppins text-sm font-medium leading-6 text-foreground">
 							{t("title")}
 						</h1>
 					</div>

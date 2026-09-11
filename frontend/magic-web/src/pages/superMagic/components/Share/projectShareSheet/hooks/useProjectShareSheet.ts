@@ -501,9 +501,13 @@ export function useProjectShareSheet({
 	const [userDefaultOpenFileId, setUserDefaultOpenFileId] = useState<string | undefined>()
 	const [defaultOpenFilePickerOpen, setDefaultOpenFilePickerOpen] = useState(false)
 	const activeMode = editingShareMode || effectiveMode
+	const recordingDependencyAnalysisEnabled =
+		isAudioRecordingScene &&
+		Boolean(dependencyAttachments) &&
+		Boolean(dependencyBundleRootPath?.trim())
 
 	useEffect(() => {
-		if (!isAudioRecordingScene || !dependencyAttachments) {
+		if (!recordingDependencyAnalysisEnabled || !dependencyAttachments) {
 			recordingDependencyAnalysisRef.current = null
 			setRecordingDependencyFileIds([])
 			setRecordingDependencyAnalysisLoading(false)
@@ -545,7 +549,13 @@ export function useProjectShareSheet({
 		return () => {
 			cancelled = true
 		}
-	}, [dependencyAttachments, dependencyBundleRootPath, isAudioRecordingScene, selectedFileIds])
+	}, [
+		dependencyAttachments,
+		dependencyBundleRootPath,
+		isAudioRecordingScene,
+		recordingDependencyAnalysisEnabled,
+		selectedFileIds,
+	])
 
 	const shareProject = useShareProject({
 		attachments: shareableAttachments,
@@ -1018,7 +1028,7 @@ export function useProjectShareSheet({
 		try {
 			// Await the current recording analysis so the payload cannot use stale dependency state.
 			let dependencyFileIds = recordingDependencyFileIds
-			if (isAudioRecordingScene && dependencyAttachments) {
+			if (recordingDependencyAnalysisEnabled && dependencyAttachments) {
 				const currentAnalysis = recordingDependencyAnalysisRef.current
 				if (
 					!currentAnalysis ||
@@ -1089,7 +1099,7 @@ export function useProjectShareSheet({
 								target_id: target.target_id,
 							}))
 						: undefined,
-				password,
+				...(formState.shareType === ShareType.Organization ? {} : { password }),
 				file_ids: submittedFileIds,
 				default_open_file_id: isAudioRecordingScene
 					? undefined

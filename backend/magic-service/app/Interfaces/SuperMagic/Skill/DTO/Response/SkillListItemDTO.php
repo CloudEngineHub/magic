@@ -18,6 +18,8 @@ class SkillListItemDTO implements JsonSerializable
 
     private string $code;
 
+    private ?string $projectId;
+
     private array $nameI18n;
 
     private array $descriptionI18n;
@@ -59,6 +61,7 @@ class SkillListItemDTO implements JsonSerializable
     public function __construct(
         string $id,
         string $code,
+        ?string $projectId,
         string $name,
         string $description,
         string $source,
@@ -81,6 +84,7 @@ class SkillListItemDTO implements JsonSerializable
     ) {
         $this->id = $id;
         $this->code = $code;
+        $this->projectId = $projectId;
         $this->name = $name;
         $this->description = $description;
         $this->source = $source;
@@ -107,6 +111,7 @@ class SkillListItemDTO implements JsonSerializable
         return [
             'id' => (string) $this->id,
             'code' => $this->code,
+            'project_id' => $this->projectId,
             'name' => $this->name,
             'description' => $this->description,
             'source' => $this->source,
