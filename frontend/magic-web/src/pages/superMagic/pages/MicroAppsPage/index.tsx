@@ -114,9 +114,14 @@ function MicroAppsPageDesktop() {
 
 	const handleOpenApp = useCallback(
 		(appId: string) => {
+			if (scope === "recent") {
+				const app = apps.find((item) => item.app_id === appId)
+				if (app) itemActions.openInNewWindow(app)
+				return
+			}
 			navigate({ name: RouteName.MicroApp, params: { appId } })
 		},
-		[navigate],
+		[apps, itemActions, navigate, scope],
 	)
 
 	return (

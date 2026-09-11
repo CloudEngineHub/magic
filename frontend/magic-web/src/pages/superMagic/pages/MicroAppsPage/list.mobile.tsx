@@ -68,13 +68,14 @@ export default function MicroAppsListPageMobile() {
 
 	const handleOpenApp = useCallback(
 		(appId: string) => {
-			navigate({
-				name: RouteName.MicroApp,
-				params: { appId },
-				viewTransition: false,
-			})
+			if (scope === "recent") {
+				const app = apps.find((item) => item.app_id === appId)
+				if (app) itemActions.openInNewWindow(app)
+				return
+			}
+			navigate({ name: RouteName.MicroApp, params: { appId }, viewTransition: false })
 		},
-		[navigate],
+		[apps, itemActions, navigate, scope],
 	)
 	const EmptyIllustration = keyword ? MicroAppSearchEmptyIllustration : MicroAppEmptyIllustration
 

@@ -25,7 +25,7 @@ export function useMicroAppListItemActions({
 		const superPathIndex = window.location.pathname.indexOf("/super/")
 		const clusterPath =
 			superPathIndex >= 0 ? window.location.pathname.slice(0, superPathIndex) : ""
-		const appPath = RoutePath.MicroApp.replace(":appId", encodeURIComponent(app.app_id))
+		const appPath = RoutePath.MicroAppShare.replace(":appId", encodeURIComponent(app.app_id))
 		window.open(`${clusterPath}${appPath}`, "_blank", "noopener,noreferrer")
 	}, [])
 

@@ -266,7 +266,7 @@ class MicroAppRepository implements MicroAppRepositoryInterface
             $query->join('magic_super_agent_micro_app_visits as mav', function ($join) use ($userId, $organizationCodes): void {
                 $join->on('mav.micro_app_id', '=', 'ma.id')
                     ->where('mav.user_id', $userId)
-                    ->where('mav.organization_code', (string) ($organizationCodes[0] ?? ''));
+                    ->whereIn('mav.organization_code', $organizationCodes);
             });
         }
 
