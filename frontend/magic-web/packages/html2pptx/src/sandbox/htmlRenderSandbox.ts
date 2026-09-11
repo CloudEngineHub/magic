@@ -141,6 +141,7 @@ export class HtmlRenderSandbox implements SandboxInstance {
 			const renderAbortController = new AbortController()
 			const renderSignal = renderAbortController.signal
 			let pageErrorRecorded = false
+			let renderFailureRecorded = false
 			let rejectPageError: (error: Error) => void = () => {}
 			const pageErrorPromise = new Promise<never>((_, rejectPageErrorPromise) => {
 				rejectPageError = rejectPageErrorPromise
@@ -213,8 +214,9 @@ export class HtmlRenderSandbox implements SandboxInstance {
 				)
 			}
 			const recordRenderFailure = (error: unknown) => {
-				if (pageErrorRecorded || lifecycleState.settled || signal?.aborted) return
-				pageErrorRecorded = true
+				if (renderFailureRecorded || lifecycleState.settled || signal?.aborted) return
+				if (pageErrorRecorded && isExportFidelityError(error)) return
+				renderFailureRecorded = true
 				try {
 					options?.onExportIssue?.({
 						code: "render-error",
