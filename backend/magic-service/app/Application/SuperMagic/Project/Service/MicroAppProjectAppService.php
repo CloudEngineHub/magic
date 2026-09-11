@@ -627,7 +627,8 @@ class MicroAppProjectAppService extends AbstractAppService
             $projects[$project->getId()] = $project;
         }
 
-        $accessibleApps = [];
+        $candidates = [];
+        $resourceIds = [];
         foreach ($records as $record) {
             $project = $projects[$record->getProjectId()] ?? null;
             if ($project === null || ! $this->isMicroAppProject($project)) {
@@ -637,8 +638,31 @@ class MicroAppProjectAppService extends AbstractAppService
                 continue;
             }
 
-            $shareEntity = $this->resourceShareDomainService->getValidShareByResourceId($record->getResourceId());
-            if ($shareEntity === null) {
+            $resourceId = $record->getResourceId();
+            if ($resourceId === '') {
+                continue;
+            }
+            $candidates[] = [
+                'record' => $record,
+                'project' => $project,
+            ];
+            $resourceIds[] = $resourceId;
+        }
+
+        $resourceIds = array_values(array_unique($resourceIds));
+        $sharesByResourceId = [];
+        foreach ($this->resourceShareDomainService->getSharesByResourceIds($resourceIds) as $shareEntity) {
+            $resourceId = $shareEntity->getResourceId();
+            if ($resourceId === '' || isset($sharesByResourceId[$resourceId])) {
+                continue;
+            }
+            $sharesByResourceId[$resourceId] = $shareEntity;
+        }
+
+        $accessibleApps = [];
+        foreach ($candidates as $candidate) {
+            $shareEntity = $sharesByResourceId[$candidate['record']->getResourceId()] ?? null;
+            if ($shareEntity === null || ! $shareEntity->isValid()) {
                 continue;
             }
             if ($excludePasswordProtected && $shareEntity->getShareType() === ShareAccessType::PasswordProtected->value) {
@@ -649,8 +673,8 @@ class MicroAppProjectAppService extends AbstractAppService
             }
 
             $accessibleApps[] = [
-                'record' => $record,
-                'project' => $project,
+                'record' => $candidate['record'],
+                'project' => $candidate['project'],
                 'share' => $shareEntity,
             ];
         }

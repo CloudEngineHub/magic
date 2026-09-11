@@ -402,6 +402,12 @@ class MicroAppProjectAppServiceTest extends TestCase
             ->setResourceId('resource-denied')
             ->setCreatorId('user-4')
             ->setPublishStatus('published');
+        $expiredRecord = (new MicroAppEntity())
+            ->setId(3004)
+            ->setProjectId(4004)
+            ->setResourceId('resource-expired')
+            ->setCreatorId('user-5')
+            ->setPublishStatus('published');
 
         $accessibleProject = (new ProjectEntity())
             ->setId(4001)
@@ -423,38 +429,53 @@ class MicroAppProjectAppServiceTest extends TestCase
             ->setUserOrganizationCode('org-1')
             ->setProjectName('Private App')
             ->setProjectMode(ProjectMode::MICRO_APP->value);
+        $expiredProject = (new ProjectEntity())
+            ->setId(4004)
+            ->setUserId('user-5')
+            ->setUserOrganizationCode('org-1')
+            ->setProjectName('Expired App')
+            ->setProjectMode(ProjectMode::MICRO_APP->value);
 
         $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
         $microAppRepository->expects(self::never())->method('paginateAccessible');
         $microAppRepository->expects(self::once())
             ->method('findPublishedByOrganization')
             ->with('org-1')
-            ->willReturn([$accessibleRecord, $passwordRecord, $deniedRecord]);
+            ->willReturn([$accessibleRecord, $passwordRecord, $deniedRecord, $expiredRecord]);
 
         $projectRepository = $this->createMock(ProjectRepositoryInterface::class);
         $projectRepository->expects(self::once())
             ->method('findByIds')
-            ->with([4001, 4002, 4003])
-            ->willReturn([$accessibleProject, $passwordProject, $deniedProject]);
+            ->with([4001, 4002, 4003, 4004])
+            ->willReturn([$accessibleProject, $passwordProject, $deniedProject, $expiredProject]);
 
         $accessibleShare = (new ResourceShareEntity())
+            ->setResourceId('resource-accessible')
             ->setShareCode('share-accessible')
             ->setShareType(ShareAccessType::TeamShare->value);
         $passwordShare = (new ResourceShareEntity())
+            ->setResourceId('resource-password')
             ->setShareCode('share-password')
             ->setShareType(ShareAccessType::PasswordProtected->value);
         $deniedShare = (new ResourceShareEntity())
+            ->setResourceId('resource-denied')
             ->setShareCode('share-denied')
+            ->setShareType(ShareAccessType::TeamShare->value);
+        $expiredShare = (new ResourceShareEntity())
+            ->setResourceId('resource-expired')
+            ->setShareCode('share-expired')
+            ->setShareType(ShareAccessType::TeamShare->value)
+            ->setExpireAt('2020-01-01 00:00:00');
+        $expiredLaterValidShare = (new ResourceShareEntity())
+            ->setResourceId('resource-expired')
+            ->setShareCode('share-expired-later')
             ->setShareType(ShareAccessType::TeamShare->value);
 
         $shareDomainService = $this->createMock(ResourceShareDomainService::class);
-        $shareDomainService->method('getValidShareByResourceId')
-            ->willReturnCallback(static fn(string $resourceId): ?ResourceShareEntity => match ($resourceId) {
-                'resource-accessible' => $accessibleShare,
-                'resource-password' => $passwordShare,
-                'resource-denied' => $deniedShare,
-                default => null,
-            });
+        $shareDomainService->expects(self::once())
+            ->method('getSharesByResourceIds')
+            ->with(['resource-accessible', 'resource-password', 'resource-denied', 'resource-expired'])
+            ->willReturn([$accessibleShare, $passwordShare, $deniedShare, $expiredShare, $expiredLaterValidShare]);
         $shareDomainService->method('validateShareAccess')
             ->willReturnCallback(function (ResourceShareEntity $shareEntity): void {
                 if ($shareEntity->getShareCode() === 'share-denied') {
@@ -596,11 +617,13 @@ class MicroAppProjectAppServiceTest extends TestCase
             ->setProjectName('Password App')
             ->setProjectMode(ProjectMode::MICRO_APP->value);
         $accessibleShare = (new ResourceShareEntity())
+            ->setResourceId('resource-accessible')
             ->setShareCode('share-accessible')
             ->setShareType(ShareAccessType::TeamShare->value)
             ->setShareRange('all')
             ->setOrganizationCode('org-1');
         $passwordShare = (new ResourceShareEntity())
+            ->setResourceId('resource-password')
             ->setShareCode('share-password')
             ->setShareType(ShareAccessType::PasswordProtected->value)
             ->setOrganizationCode('org-1');
@@ -630,12 +653,10 @@ class MicroAppProjectAppServiceTest extends TestCase
             ->willReturn([$accessibleProject, $passwordProject]);
 
         $shareDomainService = $this->createMock(ResourceShareDomainService::class);
-        $shareDomainService->method('getValidShareByResourceId')
-            ->willReturnCallback(static fn(string $resourceId): ?ResourceShareEntity => match ($resourceId) {
-                'resource-accessible' => $accessibleShare,
-                'resource-password' => $passwordShare,
-                default => null,
-            });
+        $shareDomainService->expects(self::once())
+            ->method('getSharesByResourceIds')
+            ->with(['resource-accessible', 'resource-password'])
+            ->willReturn([$accessibleShare, $passwordShare]);
 
         $projectMemberDomainService = $this->createMock(ProjectMemberDomainService::class);
         $projectMemberDomainService->expects(self::once())
