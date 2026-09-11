@@ -36,7 +36,7 @@ describe("useMicroAppListItemActions", () => {
 		window.history.replaceState({}, "", "/cluster-a/super/micro-apps/list")
 	})
 
-	it("opens the same internal app route in a new window", () => {
+	it("opens the published app route in a new window", () => {
 		const openSpy = vi.spyOn(window, "open").mockImplementation(() => null)
 		const { result } = renderHook(() =>
 			useMicroAppListItemActions({ renameApp: vi.fn(), deleteApp: vi.fn() }),
@@ -45,7 +45,7 @@ describe("useMicroAppListItemActions", () => {
 		act(() => result.current.openInNewWindow(app))
 
 		expect(openSpy).toHaveBeenCalledWith(
-			"/cluster-a/super/micro-app/100000000000009003",
+			"/micro-app/100000000000009003",
 			"_blank",
 			"noopener,noreferrer",
 		)
