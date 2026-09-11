@@ -843,9 +843,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 				)}
 				{loading ? (
 					documentFlowFullscreen ? (
-						<div className="min-h-dvh" />
+						<div className="min-h-0 flex-1" />
 					) : (
-						<div className="flex h-full w-full items-center justify-center bg-background">
+						<div className="flex min-h-0 flex-1 items-center justify-center bg-background">
 							<MagicSpin spinning />
 						</div>
 					)
@@ -888,7 +888,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 									!documentFlowFullscreen &&
 										(internalViewMode === "code"
 											? "overflow-hidden"
-											: "overflow-auto whitespace-pre-wrap"),
+											: "overflow-visible whitespace-pre-wrap"),
 									internalViewMode === "code" && "[&_>_pre]:!bg-background",
 								)}
 								isEditMode={isEditMode}

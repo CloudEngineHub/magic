@@ -245,6 +245,8 @@ function EditorBody({
 						<div className="min-h-dvh" />
 					) : (
 						<div
+							data-testid="editor-body-loading"
+							className="flex min-h-0 flex-1 items-center justify-center"
 							style={{
 								display: "flex",
 								alignItems: "center",

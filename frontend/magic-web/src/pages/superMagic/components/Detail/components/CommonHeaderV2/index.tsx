@@ -610,7 +610,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 		<>
 			<div
 				ref={headerContainerRef}
-				className="relative flex h-11 w-full items-center justify-end gap-2 border-b border-border bg-background px-2.5 text-sm text-muted-foreground"
+				className="relative flex h-11 w-full shrink-0 items-center justify-end gap-2 border-b border-border bg-background px-2.5 text-sm text-muted-foreground"
 				data-testid="detail-header"
 				data-file-id={currentFile?.id}
 			>
