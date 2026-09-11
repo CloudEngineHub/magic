@@ -5,6 +5,7 @@ import { useMicroAppVisit } from "../useMicroAppVisit"
 vi.mock("@/apis", () => ({ SuperMagicApi: { recordMicroAppVisit: vi.fn() } }))
 
 describe("useMicroAppVisit", () => {
+	beforeEach(() => vi.clearAllMocks())
 	it("records each app once and records a new app after appId changes", () => {
 		const record = vi.mocked(SuperMagicApi.recordMicroAppVisit).mockResolvedValue(undefined)
 		const { result, rerender } = renderHook(({ appId }) => useMicroAppVisit(appId), {
