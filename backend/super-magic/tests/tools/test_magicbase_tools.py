@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
@@ -52,6 +52,8 @@ from app.tools.magicbase_tools import (
     QueryMagicbaseTablesParams,
     QueryMagicRows,
     QueryMagicTables,
+    QueryMagicTablesAllMentionedApps,
+    QueryMagicbaseTablesAllMentionedAppsParams,
     UpdateMagicbaseRowParams,
     UpdateMagicColumn,
     UpdateMagicRow,
@@ -62,6 +64,7 @@ from app.utils.async_file_utils import async_read_json
 
 MAGICBASE_TOOL_CLASSES = (
     QueryMagicTables,
+    QueryMagicTablesAllMentionedApps,
     GetMagicTable,
     QueryMagicRows,
     GetMagicRow,
@@ -357,14 +360,107 @@ async def test_magicbase_row_tool_rejects_project_context_mismatch():
     assert "does not match" in result.content
 
 
-@pytest.mark.asyncio
-async def test_micro_app_scope_overrides_conversation_project():
-    tool_context = ToolContext(metadata={"project_id": "123", "micro_app_project_id": "456"})
-    with patch(
-        "app.tools.magicbase_tools.InitClientMessageUtil.get_metadata",
-        return_value={"project_id": "123", "micro_app_project_id": "456"},
+def test_micro_app_scope_overrides_conversation_project():
+    tool_context = ToolContext(metadata={"project_id": "123"})
+    with (
+        patch(
+            "app.tools.magicbase_tools.resolve_magicbase_project_id",
+            return_value="456",
+        ),
+        patch(
+            "app.tools.magicbase_tools.InitClientMessageUtil.get_metadata",
+            return_value={"project_id": "123"},
+        ),
     ):
         assert _get_project_id(tool_context) == "456"
+
+
+def test_get_project_id_requires_app_id_when_multiple_scopes():
+    def resolve(app_id=None):
+        if not app_id:
+            raise ValueError("Pass app_id from the mention on this MagicBase tool call.")
+        return "project-2"
+
+    with patch("app.tools.magicbase_tools.resolve_magicbase_project_id", side_effect=resolve):
+        with pytest.raises(ValueError, match="Pass app_id"):
+            _get_project_id(None, None)
+        assert _get_project_id(None, "app-2") == "project-2"
+
+
+@pytest.mark.asyncio
+async def test_query_magicbase_tables_uses_app_id_for_multi_scope():
+    sdk = MagicMock()
+    sdk.magicbase.query_tables_async = AsyncMock(
+        return_value=type("Result", (), {"to_dict": lambda self: {"tables": []}})()
+    )
+    with (
+        patch(
+            "app.tools.magicbase_tools.resolve_magicbase_project_id",
+            return_value="project-2",
+        ),
+        patch(
+            "app.tools.magicbase_tools.get_magic_service_sdk",
+            return_value=sdk,
+        ),
+        patch(
+            "app.tools.magicbase_tools._reconcile_pending_migrations_with_tables",
+            new=AsyncMock(return_value=0),
+        ),
+    ):
+        result = await QueryMagicTables().execute(
+            None,
+            QueryMagicbaseTablesParams(app_id="app-2"),
+        )
+
+    assert result.ok is True
+    sdk.magicbase.query_tables_async.assert_awaited_once()
+    assert sdk.magicbase.query_tables_async.await_args.args[0].project_id == "project-2"
+
+
+@pytest.mark.asyncio
+async def test_query_magicbase_tables_all_mentioned_apps_requires_multiple_scopes():
+    with patch(
+        "app.tools.magicbase_tools.get_micro_app_project_scopes",
+        return_value={"app-1": {"project_id": "project-1", "app_name": "App One"}},
+    ):
+        result = await QueryMagicTablesAllMentionedApps().execute(
+            None,
+            QueryMagicbaseTablesAllMentionedAppsParams(),
+        )
+    assert result.ok is False
+    assert "at least two" in result.content
+
+
+@pytest.mark.asyncio
+async def test_query_magicbase_tables_all_mentioned_apps_queries_each_scope():
+    scopes = {
+        "app-1": {"project_id": "project-1", "app_name": "App One"},
+        "app-2": {"project_id": "project-2", "app_name": "App Two"},
+    }
+    sdk = MagicMock()
+    sdk.magicbase.query_tables_async = AsyncMock(
+        side_effect=[
+            type("Result", (), {"to_dict": lambda self: {"tables": [{"table_id": "t1"}]}})(),
+            type("Result", (), {"to_dict": lambda self: {"tables": []}})(),
+        ]
+    )
+    with (
+        patch("app.tools.magicbase_tools.get_micro_app_project_scopes", return_value=scopes),
+        patch("app.tools.magicbase_tools.get_magic_service_sdk", return_value=sdk),
+        patch(
+            "app.tools.magicbase_tools._reconcile_pending_migrations_with_tables",
+            new=AsyncMock(return_value=0),
+        ),
+    ):
+        result = await QueryMagicTablesAllMentionedApps().execute(
+            None,
+            QueryMagicbaseTablesAllMentionedAppsParams(),
+        )
+
+    assert result.ok is True
+    assert len(result.data["apps"]) == 2
+    assert result.data["apps"][0]["tables"][0]["table_id"] == "t1"
+    assert sdk.magicbase.query_tables_async.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -393,11 +489,17 @@ async def test_magicbase_delete_tools_require_explicit_confirmation(tool, params
 @pytest.mark.asyncio
 async def test_micro_app_batch_create_requires_confirmation():
     params = BatchCreateMagicbaseRowsParams(table_id="200", rows=[{"name": "Alice"}])
-    with patch(
-        "app.tools.magicbase_tools.InitClientMessageUtil.get_metadata",
-        return_value={"micro_app_project_id": "100"},
-    ), patch("app.tools.magicbase_tools.get_magic_service_sdk", new_callable=AsyncMock) as get_sdk:
-        result = await BatchCreateMagicRows().execute(ToolContext(metadata={"micro_app_project_id": "100"}), params)
+    with (
+        patch(
+            "app.tools.magicbase_tools.has_bound_micro_app_project_scope",
+            return_value=True,
+        ),
+        patch("app.tools.magicbase_tools.get_magic_service_sdk", new_callable=AsyncMock) as get_sdk,
+    ):
+        result = await BatchCreateMagicRows().execute(
+            ToolContext(metadata={"project_id": "100"}),
+            params,
+        )
 
     assert result.ok is False
     assert "ask_user" in result.content
@@ -407,11 +509,11 @@ async def test_micro_app_batch_create_requires_confirmation():
 @pytest.mark.asyncio
 async def test_micro_app_schema_changes_are_rejected():
     with patch(
-        "app.tools.magicbase_tools.InitClientMessageUtil.get_metadata",
-        return_value={"micro_app_project_id": "100"},
+        "app.tools.magicbase_tools.has_bound_micro_app_project_scope",
+        return_value=True,
     ):
         result = await CreateMagicTable().execute(
-            ToolContext(metadata={"micro_app_project_id": "100"}),
+            ToolContext(metadata={"project_id": "100"}),
             CreateMagicbaseTableParams(table_key="demo", table_name="Demo", columns=[]),
         )
 

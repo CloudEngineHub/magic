@@ -163,6 +163,19 @@ owner：     SlideTemplateBuilder
 配置：      `runtime_cleanup.slide_template_maker`（目录最长保留时间和目录数量）。
 实现归属：  owner 自己的目录淘汰 helper，不使用通用 evict_runtime_directories()。
 
+-------------------------------------------------------------------------------
+[10] micro-app
+-------------------------------------------------------------------------------
+路径：      .runtime/micro-app/scope.json
+内容：      当前消息 @micro_app 解析出的 MagicBase project 范围。
+owner：     app/service/mention/utils/micro_app_prompt.py
+立即处理：  无 mention 或 SDK 全部失败时 async_unlink(scope.json)。
+延后处理：  无。0–1 个文件，不接入 runtime_cleanup。
+活动保护：  当前会话正在使用的 scope 即该文件本身。
+淘汰规则：  下一轮 mention 同步覆盖或清空；不按年龄/数量清理。
+配置：      无
+实现归属：  owner 自己的 persist/clear，不使用通用 evict_runtime_files()。
+
 ===============================================================================
 二、目录树与删除单位
 ===============================================================================
@@ -199,8 +212,10 @@ owner：     SlideTemplateBuilder
     │       └── ...
     ├── verification/real_compaction/     owner 自己清理的验证目录
     │   └── <verification-run-id>/
-    └── slide-template-maker/             owner 自己清理的模板工作目录
-        └── <template-id>/
+    ├── slide-template-maker/             owner 自己清理的模板工作目录
+    │   └── <template-id>/
+    └── micro-app/                        当前 @micro_app MagicBase 范围
+        └── scope.json
 
 通用 helper 的扫描范围：
 

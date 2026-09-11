@@ -106,6 +106,13 @@ def build_magicbase_tool_remark(
             return _translated("magicbase.table_count", count=len(tables))
         return _translated("magicbase.current_micro_app")
 
+    if tool_name == "query_magicbase_tables_all_mentioned_apps":
+        apps = data.get("apps")
+        if isinstance(apps, list) and apps:
+            total = sum(len(app.get("tables") or []) for app in apps if isinstance(app, dict))
+            return _translated("magicbase.table_count", count=total)
+        return _translated("magicbase.current_micro_app")
+
     if tool_name == "create_magicbase_table":
         return _table_name(arguments, result)
 

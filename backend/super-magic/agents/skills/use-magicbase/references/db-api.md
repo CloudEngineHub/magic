@@ -1,22 +1,21 @@
 # MagicBase runtime operations
 
-Use the existing runtime database methods. The engine supplies the project and authenticated user context; the
-model supplies only business arguments.
+Use the existing runtime database methods. The engine supplies the project and authenticated user context; the model supplies only business arguments.
 
 | Operation | Required arguments | Safety |
 | --- | --- | --- |
-| `query_magicbase_tables` | none | Read-only discovery |
-| `get_magicbase_table` | `table_id` | Read-only metadata |
-| `query_magicbase_rows` | `table_id`, structured query | Read-only |
-| `get_magicbase_row` | `table_id`, `record_id` | Read-only |
-| `create_magicbase_row` | `table_id`, `data`, `confirmed_by_user=true` | Requires confirmation |
-| `update_magicbase_row` | `table_id`, `record_id`, `data`, `confirmed_by_user=true` | Requires confirmation |
-| `delete_magicbase_row` | `table_id`, `record_id`, `confirm_delete=true` | Requires confirmation |
-| `batch_create_magicbase_rows` | `table_id`, `rows`, `confirmed_by_user=true` | Requires confirmation |
-| `batch_delete_magicbase_rows` | `table_id`, `record_ids`, `confirm_delete=true` | Requires confirmation |
+| `query_magicbase_tables` | optional `app_id` when multiple micro-apps are @'d | Read-only discovery |
+| `query_magicbase_tables_all_mentioned_apps` | none (requires 2+ @'d micro-apps) | Read-only batch discovery |
+| `get_magicbase_table` | `table_id`, optional `app_id` | Read-only metadata |
+| `query_magicbase_rows` | `table_id`, structured query, optional `app_id` | Read-only |
+| `get_magicbase_row` | `table_id`, `record_id`, optional `app_id` | Read-only |
+| `create_magicbase_row` | `table_id`, `data`, `confirmed_by_user=true`, optional `app_id` | Requires confirmation |
+| `update_magicbase_row` | `table_id`, `record_id`, `data`, `confirmed_by_user=true`, optional `app_id` | Requires confirmation |
+| `delete_magicbase_row` | `table_id`, `record_id`, `confirm_delete=true`, optional `app_id` | Requires confirmation |
+| `batch_create_magicbase_rows` | `table_id`, `rows`, `confirmed_by_user=true`, optional `app_id` | Requires confirmation |
+| `batch_delete_magicbase_rows` | `table_id`, `record_ids`, `confirm_delete=true`, optional `app_id` | Requires confirmation |
 
-Always use the real `table_id` returned by `query_magicbase_tables`. Do not pass `project_id`, identity, authorization, or role
-fields as model arguments. Permission failures from MagicBase are final.
+Always use the real `table_id` returned by `query_magicbase_tables`. Do not pass `project_id`, identity, authorization, or role fields as model arguments. When exactly one micro-app is @'d, `app_id` is optional and the Engine selects its project automatically; passing that same `app_id` is also valid. When multiple micro-apps are @'d, pass the canonical `app_id` from the structured Mention on every MagicBase call. Permission failures from MagicBase are final.
 
 ## Examples
 
@@ -103,4 +102,20 @@ For deletion, resolve every real record ID with a read first and use `confirm_de
 
 ### Multiple mentioned applications
 
-When multiple distinct micro-app Mentions are present and the target is unclear, call `ask_user` to ask which application to use. Do not pass `app_id`, `project_id`, identity, or authorization fields to MagicBase tools; the Engine binds the selected structured Mention to the current authenticated request.
+When multiple distinct micro-app Mentions are present, pass the target `app_id` from the Mention on each MagicBase call. Query each app separately for comparison tasks. For initial table discovery across all referenced apps, use `query_magicbase_tables_all_mentioned_apps` once, then pass `app_id` on follow-up reads and writes. Do not pass `project_id`, identity, or authorization fields; the Engine resolves `app_id` to the permitted project. If the business target is still unclear, call `ask_user` before writing.
+
+```python
+from sdk.tool import tool
+
+overview = tool.call("query_magicbase_tables_all_mentioned_apps", {})
+print(overview.content)
+for app in overview.data.get("apps", []):
+    print(app["app_id"], len(app.get("tables") or []))
+    rows = tool.call("query_magicbase_rows", {
+        "app_id": app["app_id"],
+        "table_id": app["tables"][0]["table_id"],
+        "page": 1,
+        "page_size": 20,
+    })
+    print(rows.content)
+```

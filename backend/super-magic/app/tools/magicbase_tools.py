@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -36,6 +37,11 @@ from app.service.html_app_memory_service import (
     upsert_column_model,
     upsert_table_model,
     write_migrations_state,
+)
+from app.service.mention.utils.micro_app_prompt import (
+    get_micro_app_project_scopes,
+    has_bound_micro_app_project_scope,
+    resolve_magicbase_project_id,
 )
 from app.tools.core import BaseTool, BaseToolParams, tool
 from app.tools.magicbase_tool_friendly import MagicBaseFriendlyRemarkMixin
@@ -314,11 +320,28 @@ async def _try_reconcile_pending_migrations(project_id: str) -> int:
         return 0
 
 
-def _get_project_id(tool_context: Optional[ToolContext] = None) -> str:
+class MagicbaseProjectScopedParams(BaseToolParams):
+    app_id: Optional[str] = Field(
+        default=None,
+        description="""<!--zh: 可选。消息 @ 了多个 micro_app 时必填，取 mention 里的 app_id。-->
+Optional micro-app app_id from the mention. Required when multiple micro-apps are referenced.""",
+    )
+
+
+def _get_project_id(
+    tool_context: Optional[ToolContext] = None,
+    app_id: Optional[str] = None,
+) -> str:
     try:
         metadata = InitClientMessageUtil.get_metadata()
     except Exception:
         metadata = {}
+
+    micro_app_project_id = resolve_magicbase_project_id(app_id)
+    if micro_app_project_id:
+        # A micro-app Mention scopes MagicBase operations to its resolved project.
+        # Never fall back to the conversation project once that scope exists.
+        return micro_app_project_id
 
     persisted_project_id = str(metadata.get("project_id") or "").strip()
     context_project_id = ""
@@ -327,27 +350,12 @@ def _get_project_id(tool_context: Optional[ToolContext] = None) -> str:
 
     if context_project_id and persisted_project_id and context_project_id != persisted_project_id:
         raise ValueError("MagicBase project context does not match the current persisted session")
-    resolved_project_id = context_project_id or persisted_project_id
-    micro_app_project_id = str(metadata.get("micro_app_project_id") or "").strip()
-    if tool_context is not None:
-        context_micro_app_project_id = str(tool_context.get_metadata("micro_app_project_id") or "").strip()
-        if context_micro_app_project_id:
-            if micro_app_project_id and context_micro_app_project_id != micro_app_project_id:
-                raise ValueError("MagicBase micro-app project scope does not match the current session")
-            micro_app_project_id = context_micro_app_project_id
-    if micro_app_project_id:
-        # A micro-app Mention scopes MagicBase operations to its resolved project.
-        # Never fall back to the conversation project once that scope exists.
-        return micro_app_project_id
-    return resolved_project_id
+    return context_project_id or persisted_project_id
 
 
 def _requires_micro_app_confirmation(tool_context: ToolContext) -> bool:
     """Only conversational micro-app writes require the interactive confirmation gate."""
-    try:
-        return bool(InitClientMessageUtil.get_metadata().get("micro_app_project_id"))
-    except Exception:
-        return False
+    return has_bound_micro_app_project_scope()
 
 
 def _reject_schema_change_for_micro_app(tool_context: ToolContext) -> Optional[ToolResult]:
@@ -433,7 +441,7 @@ Optional column dynamic permission object. Pass it as an object, not as a JSON s
         return body
 
 
-class QueryMagicbaseTablesParams(BaseToolParams):
+class QueryMagicbaseTablesParams(MagicbaseProjectScopedParams):
     table_key: Optional[str] = Field(
         default=None,
         description="""<!--zh: 可选。按 table_key 精确过滤结果。-->
@@ -446,6 +454,7 @@ Optional exact table_name filter."""
     )
 
 
+# Full model-facing usage guidance: agents/skills/use-magicbase/SKILL.md
 @tool(name="query_magicbase_tables", code_mode_only=True)
 class QueryMagicTables(MagicBaseFriendlyRemarkMixin, BaseTool[QueryMagicbaseTablesParams]):
     """<!--zh
@@ -461,40 +470,134 @@ class QueryMagicTables(MagicBaseFriendlyRemarkMixin, BaseTool[QueryMagicbaseTabl
 
     async def execute(self, tool_context: ToolContext, params: QueryMagicbaseTablesParams) -> ToolResult:
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
             return ToolResult.error("Project ID is not available in the current session. Cannot query MagicBase tables.")
 
         try:
-            result = await get_magic_service_sdk().magicbase.query_tables_async(
-                QueryMagicBaseTablesParameter(project_id=project_id)
+            tables = await _query_magicbase_tables_for_project(
+                project_id,
+                params.table_key,
+                params.table_name,
             )
         except (MagicServiceException, ValueError) as e:
             return ToolResult.error(f"Failed to query MagicBase tables: {e}")
 
-        tables = result.to_dict().get("tables", [])
-        reconciled_count = await _reconcile_pending_migrations_with_tables(tables)
-        if params.table_key:
-            tables = [table for table in tables if table.get("table_key") == params.table_key]
-        if params.table_name:
-            tables = [table for table in tables if table.get("table_name") == params.table_name]
-
         if not tables:
-            suffix = f" Reconciled {reconciled_count} pending MagicBase migration(s)." if reconciled_count else ""
             return ToolResult(
-                content=f"No MagicBase tables matched the current query.{suffix}",
+                content="No MagicBase tables matched the current query.",
                 data={"project_id": project_id, "tables": []},
             )
 
         summaries = "; ".join(_table_summary(table) for table in tables)
-        suffix = f" Reconciled {reconciled_count} pending MagicBase migration(s)." if reconciled_count else ""
-        content = f"Found {len(tables)} MagicBase table(s). {summaries}.{suffix}"
+        content = f"Found {len(tables)} MagicBase table(s). {summaries}."
         return ToolResult(content=content, data={"project_id": project_id, "tables": tables})
 
 
-class GetMagicbaseTableParams(BaseToolParams):
+class QueryMagicbaseTablesAllMentionedAppsParams(BaseToolParams):
+    table_key: Optional[str] = Field(
+        default=None,
+        description="""<!--zh: 可选。按 table_key 精确过滤每个应用的结果。-->
+Optional exact table_key filter applied to each app."""
+    )
+    table_name: Optional[str] = Field(
+        default=None,
+        description="""<!--zh: 可选。按 table_name 精确过滤每个应用的结果。-->
+Optional exact table_name filter applied to each app."""
+    )
+
+
+async def _query_magicbase_tables_for_project(
+    project_id: str,
+    table_key: Optional[str],
+    table_name: Optional[str],
+) -> List[Dict[str, Any]]:
+    result = await get_magic_service_sdk().magicbase.query_tables_async(
+        QueryMagicBaseTablesParameter(project_id=project_id)
+    )
+    tables = result.to_dict().get("tables", [])
+    await _reconcile_pending_migrations_with_tables(tables)
+    if table_key:
+        tables = [table for table in tables if table.get("table_key") == table_key]
+    if table_name:
+        tables = [table for table in tables if table.get("table_name") == table_name]
+    return tables
+
+
+# Full model-facing usage guidance: agents/skills/use-magicbase/SKILL.md
+@tool(name="query_magicbase_tables_all_mentioned_apps", code_mode_only=True)
+class QueryMagicTablesAllMentionedApps(
+    MagicBaseFriendlyRemarkMixin, BaseTool[QueryMagicbaseTablesAllMentionedAppsParams]
+):
+    """<!--zh
+    批量查询当前消息中所有 @micro_app 的 MagicBase 表。
+
+    仅在多个 micro_app 被 @ 时使用；单个 micro_app 请用 query_magicbase_tables。
+    -->
+    List MagicBase tables for every micro-app referenced in the current message.
+
+    Use when multiple micro-apps are @'d. For a single micro-app, use query_magicbase_tables instead.
+    """
+    name = "query_magicbase_tables_all_mentioned_apps"
+
+    async def execute(
+        self,
+        tool_context: ToolContext,
+        params: QueryMagicbaseTablesAllMentionedAppsParams,
+    ) -> ToolResult:
+        scopes = get_micro_app_project_scopes()
+        if len(scopes) < 2:
+            return ToolResult.error(
+                "This tool requires at least two referenced micro-apps. "
+                "Use query_magicbase_tables for a single micro-app."
+            )
+
+        async def query_one(app_id: str, entry: Dict[str, str]) -> Dict[str, Any]:
+            project_id = entry["project_id"]
+            try:
+                tables = await _query_magicbase_tables_for_project(
+                    project_id,
+                    params.table_key,
+                    params.table_name,
+                )
+            except (MagicServiceException, ValueError) as e:
+                return {
+                    "app_id": app_id,
+                    "app_name": entry.get("app_name") or app_id,
+                    "project_id": project_id,
+                    "error": str(e),
+                    "tables": [],
+                }
+            return {
+                "app_id": app_id,
+                "app_name": entry.get("app_name") or app_id,
+                "project_id": project_id,
+                "tables": tables,
+            }
+
+        apps = await asyncio.gather(
+            *[query_one(app_id, entry) for app_id, entry in scopes.items()]
+        )
+        total_tables = sum(len(app.get("tables") or []) for app in apps)
+        summaries = []
+        for app in apps:
+            app_label = app.get("app_name") or app.get("app_id")
+            if app.get("error"):
+                summaries.append(f"{app_label}: failed ({app['error']})")
+                continue
+            table_count = len(app.get("tables") or [])
+            summaries.append(f"{app_label}: {table_count} table(s)")
+        content = (
+            f"Queried {len(apps)} referenced micro-app(s), found {total_tables} table(s) total. "
+            + "; ".join(summaries)
+            + ". Use app_id on later calls to target one app."
+        )
+        return ToolResult(content=content, data={"apps": list(apps)})
+
+
+class GetMagicbaseTableParams(MagicbaseProjectScopedParams):
     table_id: str = Field(
         description="""<!--zh: MagicBase 返回的真实 table.id，不是 table_key 或 table_name。-->
 Real MagicBase table.id returned by MagicBase tools. Do not pass table_key or table_name."""
@@ -512,7 +615,7 @@ class GetMagicTable(MagicBaseFriendlyRemarkMixin, BaseTool[GetMagicbaseTablePara
 
     async def execute(self, tool_context: ToolContext, params: GetMagicbaseTableParams) -> ToolResult:
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -532,7 +635,7 @@ class GetMagicTable(MagicBaseFriendlyRemarkMixin, BaseTool[GetMagicbaseTablePara
         return ToolResult(content=content, data={"project_id": project_id, "table": table})
 
 
-class QueryMagicbaseRowsParams(BaseToolParams):
+class QueryMagicbaseRowsParams(MagicbaseProjectScopedParams):
     table_id: str = Field(description="Real MagicBase table.id in the current project.")
     filter: Dict[str, Any] = Field(
         default_factory=dict,
@@ -554,7 +657,7 @@ class QueryMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[QueryMagicbaseRowsPa
 
     async def execute(self, tool_context: ToolContext, params: QueryMagicbaseRowsParams) -> ToolResult:
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -582,7 +685,7 @@ class QueryMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[QueryMagicbaseRowsPa
         )
 
 
-class CreateMagicbaseRowParams(BaseToolParams):
+class CreateMagicbaseRowParams(MagicbaseProjectScopedParams):
     table_id: str = Field(description="Real MagicBase table.id in the current project.")
     data: Dict[str, Any] = Field(description="Dynamic row values keyed by MagicBase column_key.")
     select: List[str] = Field(
@@ -602,7 +705,7 @@ class CreateMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[CreateMagicbaseRowPa
         if _requires_micro_app_confirmation(tool_context) and not params.confirmed_by_user:
             return ToolResult.error("Creating a MagicBase row requires ask_user confirmation first.")
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -627,7 +730,7 @@ class CreateMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[CreateMagicbaseRowPa
         )
 
 
-class GetMagicbaseRowParams(BaseToolParams):
+class GetMagicbaseRowParams(MagicbaseProjectScopedParams):
     table_id: str = Field(
         description="""<!--zh: 当前项目内的真实 MagicBase table.id。-->
 Real MagicBase table.id in the current project."""
@@ -654,7 +757,7 @@ class GetMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[GetMagicbaseRowParams])
 
     async def execute(self, tool_context: ToolContext, params: GetMagicbaseRowParams) -> ToolResult:
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -679,7 +782,7 @@ class GetMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[GetMagicbaseRowParams])
         )
 
 
-class UpdateMagicbaseRowParams(BaseToolParams):
+class UpdateMagicbaseRowParams(MagicbaseProjectScopedParams):
     table_id: str = Field(
         description="""<!--zh: 当前项目内的真实 MagicBase table.id。-->
 Real MagicBase table.id in the current project."""
@@ -713,7 +816,7 @@ class UpdateMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[UpdateMagicbaseRowPa
         if _requires_micro_app_confirmation(tool_context) and not params.confirmed_by_user:
             return ToolResult.error("Updating a MagicBase row requires ask_user confirmation first.")
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -739,7 +842,7 @@ class UpdateMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[UpdateMagicbaseRowPa
         )
 
 
-class BatchCreateMagicbaseRowsParams(BaseToolParams):
+class BatchCreateMagicbaseRowsParams(MagicbaseProjectScopedParams):
     table_id: str = Field(description="Real MagicBase table.id in the current project.")
     rows: List[Dict[str, Any]] = Field(
         min_length=1,
@@ -762,7 +865,7 @@ class BatchCreateMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[BatchCreateMag
         if _requires_micro_app_confirmation(tool_context) and not params.confirmed_by_user:
             return ToolResult.error("Batch creating MagicBase rows for a micro-app requires ask_user confirmation first.")
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -787,7 +890,7 @@ class BatchCreateMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[BatchCreateMag
         )
 
 
-class DeleteMagicbaseRowParams(BaseToolParams):
+class DeleteMagicbaseRowParams(MagicbaseProjectScopedParams):
     table_id: str = Field(description="Real MagicBase table.id in the current project.")
     record_id: str = Field(description="Real MagicBase row id returned by a query or create operation.")
     confirm_delete: bool = Field(
@@ -808,7 +911,7 @@ class DeleteMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseRowPa
         if _requires_micro_app_confirmation(tool_context) and not params.confirmed_by_user:
             return ToolResult.error("Deleting a MagicBase row for a micro-app requires ask_user confirmation first.")
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -831,7 +934,7 @@ class DeleteMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseRowPa
         )
 
 
-class BatchDeleteMagicbaseRowsParams(BaseToolParams):
+class BatchDeleteMagicbaseRowsParams(MagicbaseProjectScopedParams):
     table_id: str = Field(description="Real MagicBase table.id in the current project.")
     record_ids: List[str] = Field(
         min_length=1,
@@ -856,7 +959,7 @@ class BatchDeleteMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[BatchDeleteMag
         if _requires_micro_app_confirmation(tool_context) and not params.confirmed_by_user:
             return ToolResult.error("Batch deleting MagicBase rows for a micro-app requires ask_user confirmation first.")
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -880,7 +983,7 @@ class BatchDeleteMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[BatchDeleteMag
         )
 
 
-class CreateMagicbaseTableParams(BaseToolParams):
+class CreateMagicbaseTableParams(MagicbaseProjectScopedParams):
     table_key: str = Field(
         description="""<!--zh: 表唯一 key，必须稳定，建议用英文小写加下划线。-->
 Stable unique table key. Use lowercase English with underscores when possible."""
@@ -962,7 +1065,7 @@ HTML 微应用工作流中，create_magicbase_table 会自动维护 MagicBase sc
         if schema_error:
             return schema_error
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -1019,7 +1122,7 @@ HTML 微应用工作流中，create_magicbase_table 会自动维护 MagicBase sc
         return ToolResult(content=content, data={"project_id": project_id, "table": table})
 
 
-class CreateMagicbaseColumnParams(BaseToolParams):
+class CreateMagicbaseColumnParams(MagicbaseProjectScopedParams):
     table_id: str = Field(
         description="""<!--zh: MagicBase 返回的真实 table.id，不是 table_key 或 table_name。-->
 Real MagicBase table.id returned by MagicBase tools. Do not pass table_key or table_name."""
@@ -1095,7 +1198,7 @@ Do not call file-editing tools just to maintain schema migrations. Ordinary proj
         if schema_error:
             return schema_error
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -1158,7 +1261,7 @@ Do not call file-editing tools just to maintain schema migrations. Ordinary proj
         return ToolResult(content=content, data={"project_id": project_id, "table_id": params.table_id, "column": column})
 
 
-class UpdateMagicbaseTablePermissionsParams(BaseToolParams):
+class UpdateMagicbaseTablePermissionsParams(MagicbaseProjectScopedParams):
     table_id: str = Field(
         description="""<!--zh: MagicBase 返回的真实 table.id，不是 table_key 或 table_name。-->
 Real MagicBase table.id returned by MagicBase tools. Do not pass table_key or table_name."""
@@ -1211,7 +1314,7 @@ Before updating an existing table's permissions, confirm the permission intent a
         if schema_error:
             return schema_error
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -1254,7 +1357,7 @@ Before updating an existing table's permissions, confirm the permission intent a
         return ToolResult(content=content, data={"project_id": project_id, "table": table})
 
 
-class DeleteMagicbaseTableParams(BaseToolParams):
+class DeleteMagicbaseTableParams(MagicbaseProjectScopedParams):
     table_id: str = Field(
         description="""<!--zh: 要删除的 MagicBase 真实 table.id。删除表会删除表结构及其字段元数据，属于破坏性操作。-->
 Real MagicBase table.id to delete. This is destructive and removes the table schema and column metadata."""
@@ -1287,7 +1390,7 @@ class DeleteMagicTable(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseTab
             return ToolResult.error("Deleting a MagicBase table requires confirm_delete=true after explicit user confirmation.")
 
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -1325,7 +1428,7 @@ class DeleteMagicTable(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseTab
         return ToolResult(content=content, data={"project_id": project_id, "table_id": params.table_id})
 
 
-class UpdateMagicbaseColumnParams(BaseToolParams):
+class UpdateMagicbaseColumnParams(MagicbaseProjectScopedParams):
     table_id: str = Field(
         description="""<!--zh: MagicBase 返回的真实 table.id。-->
 Real MagicBase table.id returned by MagicBase tools."""
@@ -1391,7 +1494,7 @@ class UpdateMagicColumn(MagicBaseFriendlyRemarkMixin, BaseTool[UpdateMagicbaseCo
         if schema_error:
             return schema_error
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:
@@ -1456,7 +1559,7 @@ class UpdateMagicColumn(MagicBaseFriendlyRemarkMixin, BaseTool[UpdateMagicbaseCo
         return ToolResult(content=content, data={"project_id": project_id, "table_id": params.table_id, "column": column})
 
 
-class DeleteMagicbaseColumnParams(BaseToolParams):
+class DeleteMagicbaseColumnParams(MagicbaseProjectScopedParams):
     table_id: str = Field(
         description="""<!--zh: MagicBase 返回的真实 table.id。-->
 Real MagicBase table.id returned by MagicBase tools."""
@@ -1493,7 +1596,7 @@ class DeleteMagicColumn(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseCo
             return ToolResult.error("Deleting a MagicBase column requires confirm_delete=true after explicit user confirmation.")
 
         try:
-            project_id = _get_project_id(tool_context)
+            project_id = _get_project_id(tool_context, params.app_id)
         except ValueError as e:
             return ToolResult.error(str(e))
         if not project_id:

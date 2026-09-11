@@ -5,13 +5,18 @@
 
 handler 职责：
   1. handle(): 把 mention 摘要写入 <mentions> 上下文（micro_app:// typed link）
-  2. get_tip(): 解析 app_id → project_id 并写入 metadata，推送 horizon 指引
+  2. get_tip(): 在已绑定 scope 后给出 MagicBase 使用指引
 """
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from urllib.parse import quote
 
 from app.service.mention.base import BaseMentionHandler
-from app.service.mention.utils.micro_app_prompt import resolve_and_persist_micro_app_project_scope
+from app.service.mention.utils.micro_app_prompt import (
+    MULTI_MICRO_APP_SCOPE_TIP,
+    get_mentioned_micro_app_ids,
+    get_micro_app_project_scopes,
+    has_bound_micro_app_project_scope,
+)
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
@@ -29,9 +34,22 @@ class MicroAppHandler(BaseMentionHandler):
         app_id = str(mention.get("app_id") or mention.get("id") or "").strip()
         if not app_id:
             return "The referenced micro-app is invalid because app_id is missing. Do not call MagicBase."
-        project_id = await resolve_and_persist_micro_app_project_scope(app_id)
-        if not project_id:
-            return f"Micro-app '{app_id}' could not be resolved. Do not call MagicBase."
+        if not has_bound_micro_app_project_scope():
+            return ""
+
+        scopes = get_micro_app_project_scopes()
+        mentioned_ids = get_mentioned_micro_app_ids()
+        incomplete = bool(mentioned_ids) and set(mentioned_ids) != set(scopes.keys())
+        if len(scopes) > 1 or incomplete:
+            app_list = ", ".join(
+                f"{entry['app_name']} (micro_app://{scope_app_id})"
+                for scope_app_id, entry in scopes.items()
+            )
+            return (
+                f"{MULTI_MICRO_APP_SCOPE_TIP} Referenced: {app_list}. "
+                "Use the use-magicbase skill and do not use display names as authority."
+            )
+
         return (
             f"Micro-app '{app_id}' is explicitly referenced. Use the current authenticated user and "
             "the use-magicbase skill to inspect and operate its permitted data. Do not use display names "
