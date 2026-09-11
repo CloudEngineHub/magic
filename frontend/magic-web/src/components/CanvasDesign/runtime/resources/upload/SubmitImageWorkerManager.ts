@@ -19,6 +19,7 @@ interface CreateEraserMaskInWorkerParams {
 		height: number
 	}
 	strokes: FlattenedEraserStrokes
+	eraseOutside: boolean
 }
 
 interface CreateExtendImagesInWorkerParams {
@@ -82,6 +83,7 @@ export class SubmitImageWorkerManager {
 			sourceDimensions: params.sourceDimensions,
 			ossSrc,
 			strokes: params.strokes,
+			eraseOutside: params.eraseOutside,
 		})
 		if (response.status === "unsupported") {
 			return null

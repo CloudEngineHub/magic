@@ -1,4 +1,5 @@
 import { getNormalizedImageProcessCrop } from "../image/imageCropUtils"
+import { resolveEraserMaskColors } from "../image/eraserMaskMode"
 import { createOrientedImageBitmapFromBlob } from "../image/imageSourceUtils"
 import type {
 	SubmitImageSourceDimensions,
@@ -98,11 +99,12 @@ async function handleErase(
 		throw new Error("获取橡皮结果画布失败")
 	}
 
-	outputContext.fillStyle = "#000"
+	const maskColors = resolveEraserMaskColors(request.eraseOutside)
+	outputContext.fillStyle = maskColors.background
 	outputContext.fillRect(0, 0, outputCanvas.width, outputCanvas.height)
 	outputContext.save()
 	outputContext.scale(sourceCrop.width / elementWidth, sourceCrop.height / elementHeight)
-	outputContext.strokeStyle = "#fff"
+	outputContext.strokeStyle = maskColors.stroke
 	outputContext.lineCap = "round"
 	outputContext.lineJoin = "round"
 
