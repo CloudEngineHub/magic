@@ -27,7 +27,7 @@ import {
 	startPptxStreamingExportFromFactory,
 } from "@/pages/superMagic/services/pptxStreamingExport"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
-import { showPptxExportIssues } from "@/pages/superMagic/utils/pptxExportIssues"
+import { publishPptxExportIssues } from "@/pages/superMagic/utils/pptxExportIssues"
 import type { ExportIssue } from "@magic/html2pptx"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import {
@@ -387,8 +387,7 @@ function useFileExport({
 			cancelExportRef.current = handle.cancel
 			onProgress(0)
 			await handle.promise
-			const issueToast = showPptxExportIssues(t, exportIssues)
-			if (issueToast) magicToast.warning(issueToast)
+			publishPptxExportIssues(exportIssues, { fileId, fileName })
 			endExport()
 		} catch (error: unknown) {
 			await destinationLease?.abort(error).catch(() => undefined)

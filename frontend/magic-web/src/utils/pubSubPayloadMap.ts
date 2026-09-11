@@ -36,6 +36,7 @@ import type {
 	SuperMagicSetContentWhenSlideAddedArgs,
 	SuperMagicSetDemoTextToInputArgs,
 	SuperMagicSetInputMessageArgs,
+	SuperMagicPptxExportIssuesPayload,
 	SuperMagicStreamMessageArgs,
 	SuperMagicSyncMarkersToChatPayload,
 } from "@/pages/superMagic/events/message"
@@ -157,6 +158,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Receive_RecordSummary_Audio_File]: SuperMagicReceiveRecordSummaryAudioFileArgs
 	/** 设置输入框文本：传入字符串消息。 */
 	[PubSubEvents.Set_Input_Message]: SuperMagicSetInputMessageArgs
+	/** PPT 导出问题：供商业化层展示并触发 AI 修复。 */
+	[PubSubEvents.Pptx_Export_Issues]: SuperMagicPptxExportIssuesPayload
 	/** 添加内容到聊天框：传入可选内容与额外信息。 */
 	[PubSubEvents.Add_Content_To_Chat]: SuperMagicAddContentToChatPayload
 	/** 进入编辑状态：传入目标文件 ID。 */

@@ -19,7 +19,7 @@ import {
 } from "@/pages/superMagic/services/pptService"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
-import { showPptxExportIssues } from "@/pages/superMagic/utils/pptxExportIssues"
+import { publishPptxExportIssues } from "@/pages/superMagic/utils/pptxExportIssues"
 import type { ExportIssue } from "@magic/html2pptx"
 import { isFileInPPTMode } from "./utils/file"
 import { prepareHtmlPagesForExport } from "@/utils/htmlExportPrepare"
@@ -564,8 +564,7 @@ export default function Render(props: any) {
 				)
 				cancelExport = streamingHandle.cancel
 				await streamingHandle.promise
-				const issueToast = showPptxExportIssues(t, exportIssues)
-				if (issueToast) magicToast.warning(issueToast)
+				publishPptxExportIssues(exportIssues, { fileId, fileName: exportFileName })
 				magicToast.success({
 					key: toastId,
 					content: t("topicFiles.exportSuccess"),

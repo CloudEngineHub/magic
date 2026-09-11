@@ -8,6 +8,13 @@ import {
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { RawMessage } from "@/types/chat/intermediate_message"
+import type { ExportIssue } from "@magic/html2pptx"
+
+export interface SuperMagicPptxExportIssuesPayload {
+	issues: ExportIssue[]
+	fileId?: string
+	fileName?: string
+}
 
 /**
  * Message_Scroll_To_Bottom 的可选参数结构。
