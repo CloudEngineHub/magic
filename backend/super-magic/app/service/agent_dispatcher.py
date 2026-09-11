@@ -258,7 +258,7 @@ class AgentDispatcher(Base):
 
         initializer_registry = InitInitializerRegistry()
         initializer_registry.register(ModelConfigInitializer())
-        initializer_registry.register(AIAbilityConfigInitializer(init_message))
+        initializer_registry.register(AIAbilityConfigInitializer(init_message.dynamic_config))
         await initializer_registry.run(self.agent_context)
 
         # 从 init_message.metadata 提取并设置关键字段
@@ -697,14 +697,12 @@ class AgentDispatcher(Base):
         # 确保 magic-service AI 能力配置已加载，失败不阻断 chat。
         try:
             from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
-            from app.core.ai_ability_providers.magic_service_provider import MagicServiceAIAbilityProvider
-            dynamic_ai_abilities = (message.dynamic_config or {}).get("ai_abilities")
-            ability_provider = MagicServiceAIAbilityProvider(dynamic_ai_abilities)
-            if isinstance(dynamic_ai_abilities, Mapping) and dynamic_ai_abilities:
-                await ai_ability_config_manager.refresh_provider(ability_provider)
-            else:
-                await ai_ability_config_manager.ensure_provider_loaded(ability_provider)
-            ai_ability_config_manager.maybe_refresh_in_background(ability_provider.provider_type)
+            from app.core.ai_ability_providers.magic_service_provider import PROVIDER_TYPE
+            from app.service.init.config_initializers import AIAbilityConfigInitializer
+
+            await AIAbilityConfigInitializer(message.dynamic_config).run(self.agent_context)
+            # 后台刷新只更新共享 AI 能力配置，不覆盖当前任务已经固定的提示词快照。
+            ai_ability_config_manager.maybe_refresh_in_background(PROVIDER_TYPE)
         except Exception as e:
             logger.warning(f"dispatch_message: AI ability provider check failed, continuing: {e}")
 
