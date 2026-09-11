@@ -316,7 +316,7 @@ function AppConversationPanel({
 			currentTopicStatus={selectedTopic?.task_status}
 			handleSendMsg={handleSendMsg}
 			isMessagesLoading={isMessagesInitialLoading}
-			className="rounded-none bg-sidebar px-2"
+			className="rounded-none bg-sidebar pb-2 pr-2"
 		/>
 	)
 }

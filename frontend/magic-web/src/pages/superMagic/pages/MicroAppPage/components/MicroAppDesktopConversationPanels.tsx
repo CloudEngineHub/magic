@@ -8,6 +8,7 @@ import TopicResizeHandle from "@/pages/superMagic/pages/TopicPage/components/Top
 import AppConversationPanel from "./AppConversationPanel"
 import MicroAppPanelToggleButton from "./MicroAppPanelToggleButton"
 import * as layout from "../layoutConstants"
+import { cn } from "@/utils/cn"
 
 interface MicroAppDesktopConversationPanelsProps {
 	selectedProject: ComponentProps<typeof AppConversationPanel>["selectedProject"]
@@ -56,10 +57,13 @@ export default function MicroAppDesktopConversationPanels({
 				<>
 					<TopicResizeHandle
 						onResizeStart={onMessagePanelResizeStart}
-						className={isMessagePanelDragging ? "before:opacity-100" : undefined}
+						className={cn(
+							isMessagePanelDragging ? "before:opacity-100" : undefined,
+							"border-l border-border !bg-sidebar",
+						)}
 					/>
 					<aside
-						className="h-full shrink-0 overflow-hidden border-l border-border bg-background"
+						className="h-full shrink-0 overflow-hidden bg-background"
 						style={{ width: messagePanelWidthPx }}
 						data-testid="micro-app-conversation-panel"
 					>

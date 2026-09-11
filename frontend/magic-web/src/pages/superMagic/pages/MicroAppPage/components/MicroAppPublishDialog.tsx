@@ -491,7 +491,7 @@ function MicroAppPublishDialog({
 			title={t("microAppPage.publish.title")}
 			onCancel={closeDialog}
 			footer={null}
-			width={560}
+			width={900}
 			classNames={{ body: "!p-0" }}
 			destroyOnClose
 		>
