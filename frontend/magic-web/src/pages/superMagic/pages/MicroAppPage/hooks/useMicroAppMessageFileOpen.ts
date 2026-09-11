@@ -7,6 +7,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import type {
 	OpenFileTabRecord,
 	SuperMagicOpenFileTabPayload,
+	SuperMagicOpenMicroAppTabPayload,
 } from "@/pages/superMagic/events/openFileTab"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
@@ -17,12 +18,19 @@ interface PendingFileOpen {
 	locateFileId?: string
 }
 
+interface PendingMicroAppOpen {
+	appId: string
+	appName?: string
+}
+
 interface UseMicroAppMessageFileOpenOptions {
 	attachmentList: AttachmentItem[]
 	detailRef: RefObject<DetailRef | null>
 	isFilesViewActive: boolean
 	showFilesView: () => void
 }
+
+const MICRO_APP_TAB_OPEN_DELAY_MS = 100
 
 export function useMicroAppMessageFileOpen({
 	attachmentList,
@@ -31,6 +39,7 @@ export function useMicroAppMessageFileOpen({
 	showFilesView,
 }: UseMicroAppMessageFileOpenOptions) {
 	const pendingFileOpenRef = useRef<PendingFileOpen | null>(null)
+	const pendingMicroAppOpenRef = useRef<PendingMicroAppOpen | null>(null)
 
 	const openPendingFile = useMemoizedFn(() => {
 		const pendingFileOpen = pendingFileOpenRef.current
@@ -44,12 +53,24 @@ export function useMicroAppMessageFileOpen({
 		return true
 	})
 
+	const openPendingMicroApp = useMemoizedFn(() => {
+		const pendingMicroAppOpen = pendingMicroAppOpenRef.current
+		if (!pendingMicroAppOpen || !detailRef.current) return false
+
+		window.setTimeout(() => {
+			detailRef.current?.openMicroAppTab?.(pendingMicroAppOpen)
+		}, MICRO_APP_TAB_OPEN_DELAY_MS)
+		pendingMicroAppOpenRef.current = null
+		return true
+	})
+
 	const handleOpenFileTab = useMemoizedFn((payload: SuperMagicOpenFileTabPayload) => {
 		const matchedFile = attachmentList.find((item) => getAttachmentId(item) === payload.fileId)
 		const standaloneFile =
 			payload.fileData && isStandalonePreviewFile(payload.fileData as AttachmentItem)
 				? payload.fileData
 				: undefined
+		pendingMicroAppOpenRef.current = null
 		pendingFileOpenRef.current = {
 			file: standaloneFile ?? matchedFile ?? payload.fileData ?? { file_id: payload.fileId },
 			locateFileId: standaloneFile ? undefined : matchedFile?.file_id,
@@ -59,14 +80,32 @@ export function useMicroAppMessageFileOpen({
 		showFilesView()
 	})
 
+	const handleOpenMicroAppTab = useMemoizedFn((payload: SuperMagicOpenMicroAppTabPayload) => {
+		const appId = payload.appId?.trim()
+		if (!appId) return
+
+		pendingFileOpenRef.current = null
+		pendingMicroAppOpenRef.current = {
+			appId,
+			appName: payload.appName?.trim() || undefined,
+		}
+
+		if (isFilesViewActive && openPendingMicroApp()) return
+		showFilesView()
+	})
+
 	useEffect(() => {
-		if (isFilesViewActive) openPendingFile()
-	}, [isFilesViewActive, openPendingFile])
+		if (!isFilesViewActive) return
+		openPendingFile()
+		openPendingMicroApp()
+	}, [isFilesViewActive, openPendingFile, openPendingMicroApp])
 
 	useEffect(() => {
 		pubsub.subscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
+		pubsub.subscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
+			pubsub.unsubscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
 		}
-	}, [handleOpenFileTab])
+	}, [handleOpenFileTab, handleOpenMicroAppTab])
 }

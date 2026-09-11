@@ -8,7 +8,7 @@ import {
 } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { memo, useMemo } from "react"
 import type { FileItem, TabItem } from "../types"
-import { Globe2 } from "lucide-react"
+import { AppWindow, Globe2 } from "lucide-react"
 import { isWebsiteTab } from "../utils/websiteTabs"
 
 interface FileTabMagicIconProps {
@@ -53,6 +53,10 @@ export const FileTabMagicIcon = memo(function FileTabMagicIcon({
 
 	if (isWebsiteTab(tab)) {
 		return <Globe2 size={size} className={className} />
+	}
+
+	if (tab.type === "micro_app") {
+		return <AppWindow size={size} className={className} data-testid="micro-app-tab-icon" />
 	}
 
 	if (fd.display_config?.type === "slide-template") {

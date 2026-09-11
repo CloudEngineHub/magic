@@ -50,6 +50,7 @@ import PreviewDetailPopup, {
 import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { useMobileFilePreviewPubSub } from "@/pages/superMagic/hooks/useMobileFilePreviewPubSub"
 import { useMobileKnowledgeBasePreview } from "@/pages/superMagic/hooks/useMobileKnowledgeBasePreview"
+import { useMobileMicroAppPreview } from "@/pages/superMagic/hooks/useMobileMicroAppPreview"
 import { cn } from "@/utils/cn"
 import ProjectPageInputContainer from "@/pages/superMagic/components/ProjectPageInputContainer"
 import ChatActions from "../ProjectPage/ProjectPageMain/components/ChatActions"
@@ -88,6 +89,7 @@ import {
 import { useProjectFirstAttachmentRender } from "@/pages/superMagic/hooks/useProjectFirstAttachmentRender"
 import { resolveTopicPageMessageListFallback } from "./components/TopicPageMessageListFallback"
 import KnowledgeBasePreviewPopup from "@/pages/superMagic/components/KnowledgeBasePreviewPopup"
+import MicroAppPreviewPopup from "@/pages/superMagic/components/MicroAppPreviewPopup"
 import { buildMobileFilePreviewDetail } from "./mobileFilePreview"
 
 interface TopicPageProps {
@@ -556,6 +558,7 @@ function TopicPage({
 		onFileClick,
 	})
 	const knowledgeBasePreviewState = useMobileKnowledgeBasePreview()
+	const microAppPreviewState = useMobileMicroAppPreview()
 
 	return (
 		<div className={cn(styles.container, className)} data-testid="topic-page-root">
@@ -718,6 +721,7 @@ function TopicPage({
 				}}
 			/>
 			<KnowledgeBasePreviewPopup state={knowledgeBasePreviewState} />
+			<MicroAppPreviewPopup state={microAppPreviewState} />
 		</div>
 	)
 }

@@ -224,6 +224,7 @@ describe("website tabs", () => {
 		expect(getFileViewerTabType({ id: "file-2", type: "website" })).toBe("website")
 		expect(getFileViewerTabType({ id: `${WEBSITE_TAB_PREFIX}legacy` })).toBe("website")
 		expect(getFileViewerTabType({ id: "__kb__doc" })).toBe("knowledge_base")
+		expect(getFileViewerTabType({ id: "__micro_app__app-1" })).toBe("micro_app")
 		expect(getFileViewerTabType({ id: "__playback__" })).toBe("playback")
 	})
 

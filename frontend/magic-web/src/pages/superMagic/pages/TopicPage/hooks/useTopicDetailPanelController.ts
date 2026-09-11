@@ -192,16 +192,32 @@ export function useTopicDetailPanelController({
 			}, DETAIL_OPEN_DELAY_MS)
 		}
 
+		const handleOpenMicroAppTab = (data: unknown) => {
+			const payload = data as { appId?: string; appName?: string }
+			const appId = payload.appId?.trim()
+			if (!appId) return
+
+			setActiveDetailTabType("micro_app")
+			window.setTimeout(() => {
+				detailRef.current?.openMicroAppTab?.({
+					appId,
+					appName: payload.appName,
+				})
+			}, DETAIL_OPEN_DELAY_MS)
+		}
+
 		pubsub.subscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 		pubsub.subscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 		pubsub.subscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
 		pubsub.subscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
+		pubsub.subscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
 
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 			pubsub.unsubscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
 			pubsub.unsubscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
+			pubsub.unsubscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
 		}
 	}, [detailRef, scheduleFileOpenFallback, setActiveFileId, attachmentList])
 

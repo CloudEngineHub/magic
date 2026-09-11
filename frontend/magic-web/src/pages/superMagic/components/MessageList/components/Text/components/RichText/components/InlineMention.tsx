@@ -9,6 +9,7 @@ import {
 import {
 	DirectoryMentionData,
 	MentionItemType,
+	type MicroAppMentionData,
 	type ProjectFileMentionData,
 	type UploadFileMentionData,
 } from "@/components/business/MentionPanel/types"
@@ -39,6 +40,7 @@ import {
 	FileReference,
 	getFileExtensionFromPath,
 } from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/FileReference"
+import { openMicroAppTab } from "@/pages/superMagic/components/MessageList/utils/openMicroAppTab"
 
 interface InlineMentionProps {
 	data: TiptapMentionAttributes
@@ -128,6 +130,15 @@ function InlineDefaultMention(props: InlineMentionProps) {
 
 			if (data.type === MentionItemType.DESIGN_MARKER) {
 				handleMarkerClick(data)
+				return
+			}
+
+			if (data.type === MentionItemType.MICRO_APP) {
+				const mentionData = data.data as MicroAppMentionData
+				openMicroAppTab({
+					appId: mentionData?.app_id,
+					appName: mentionData?.app_name,
+				})
 				return
 			}
 

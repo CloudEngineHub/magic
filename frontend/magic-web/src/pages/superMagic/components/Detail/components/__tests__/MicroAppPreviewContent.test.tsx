@@ -1,0 +1,136 @@
+import { render, screen } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import MicroAppPreviewContent from "../MicroAppPreviewContent"
+
+const shareDataState = vi.hoisted(() => ({
+	loading: false,
+	error: null as Error | null,
+	isNeedPassword: false,
+	shareData: null as Record<string, unknown> | null,
+	attachmentList: [] as Array<{ file_id: string; file_name: string; file_extension?: string }>,
+	hasConfirmedSafetyNotice: true,
+	emptyStateInfo: null as Record<string, unknown> | null,
+}))
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string) => key,
+	}),
+}))
+
+vi.mock("@/pages/share/microApp/hooks/useMicroAppShareData", () => ({
+	default: () => ({
+		shareData: shareDataState.shareData,
+		resourceId: "resource-1",
+		coverUrl: "",
+		shareMeta: { projectId: "project-1", projectName: "内购", temporaryToken: "" },
+		attachmentsTree: [],
+		attachmentList: shareDataState.attachmentList,
+		loading: shareDataState.loading,
+		error: shareDataState.error,
+		isNeedPassword: shareDataState.isNeedPassword,
+		passwordFromUrl: "",
+		verifiedPassword: undefined,
+		emptyStateInfo: shareDataState.emptyStateInfo,
+		handleSwitchOrganization: vi.fn(),
+		isSwitching: false,
+		getShareData: vi.fn(),
+		setError: vi.fn(),
+		setVerifiedPassword: vi.fn(),
+		reload: vi.fn(),
+	}),
+}))
+
+vi.mock("@/pages/share/microApp/hooks/useMicroAppInstallFlow", () => ({
+	default: () => ({
+		rememberVerifiedPassword: vi.fn(),
+		rememberPasswordControl: {
+			enabled: true,
+			checked: false,
+			onCheckedChange: vi.fn(),
+		},
+	}),
+}))
+
+vi.mock("@/pages/share/microApp/hooks/useMicroAppSafetyNoticeConfirmation", () => ({
+	default: () => ({
+		hasConfirmedSafetyNotice: shareDataState.hasConfirmedSafetyNotice,
+		confirmSafetyNotice: vi.fn(),
+	}),
+}))
+
+vi.mock("@/pages/share/components", () => ({
+	ErrorDisplay: ({ errorMessage }: { errorMessage: string }) => (
+		<div data-testid="micro-app-tab-error">{errorMessage}</div>
+	),
+	PasswordVerification: () => <div data-testid="micro-app-tab-password" />,
+	ShareEmptyState: () => <div data-testid="micro-app-tab-org-empty" />,
+}))
+
+vi.mock("@/pages/share/microApp/components/MicroAppSafetyNotice", () => ({
+	default: () => <div data-testid="micro-app-share-safety-notice" />,
+}))
+
+vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
+	default: () => <div data-testid="mock-html-preview" />,
+}))
+
+vi.mock("@/pages/superMagic/components/MicroAppStateIllustration", () => ({
+	MicroAppPermissionIllustration: () => <div data-testid="micro-app-tab-error-illustration" />,
+}))
+
+vi.mock("@/pages/superMagic/pages/MicroAppPage/utils/microAppFiles", () => ({
+	resolveSelectedHtmlEntry: ({
+		items,
+	}: {
+		items: Array<{ file_id: string; file_name: string }>
+	}) => items[0] || null,
+}))
+
+describe("MicroAppPreviewContent", () => {
+	beforeEach(() => {
+		shareDataState.loading = false
+		shareDataState.error = null
+		shareDataState.isNeedPassword = false
+		shareDataState.shareData = { default_open_file_id: "file-1" }
+		shareDataState.attachmentList = [
+			{ file_id: "file-1", file_name: "index.html", file_extension: "html" },
+		]
+		shareDataState.hasConfirmedSafetyNotice = true
+		shareDataState.emptyStateInfo = null
+	})
+
+	it("renders published html preview without share chrome", () => {
+		render(<MicroAppPreviewContent appId="app-1" appName="内购" />)
+
+		expect(screen.getByTestId("micro-app-tab-preview")).toBeInTheDocument()
+		expect(screen.getByTestId("mock-html-preview")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-share-page")).not.toBeInTheDocument()
+	})
+
+	it("shows loading, password, and error states inside the tab", () => {
+		shareDataState.loading = true
+		const { rerender } = render(<MicroAppPreviewContent appId="app-1" />)
+		expect(screen.getByTestId("micro-app-tab-loading")).toBeInTheDocument()
+
+		shareDataState.loading = false
+		shareDataState.shareData = null
+		shareDataState.attachmentList = []
+		shareDataState.isNeedPassword = true
+		rerender(<MicroAppPreviewContent appId="app-1" />)
+		expect(screen.getByTestId("micro-app-tab-password")).toBeInTheDocument()
+
+		shareDataState.isNeedPassword = false
+		shareDataState.error = new Error("denied")
+		rerender(<MicroAppPreviewContent appId="app-1" />)
+		expect(screen.getByTestId("micro-app-tab-error")).toBeInTheDocument()
+	})
+
+	it("shows the safety notice before previewing", () => {
+		shareDataState.hasConfirmedSafetyNotice = false
+		render(<MicroAppPreviewContent appId="app-1" appName="内购" />)
+
+		expect(screen.getByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
+		expect(screen.queryByTestId("mock-html-preview")).not.toBeInTheDocument()
+	})
+})

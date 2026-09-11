@@ -50,6 +50,7 @@ import type {
 	SuperMagicOpenFileTabPayload,
 	SuperMagicOpenFileTabByPathPayload,
 	SuperMagicOpenKnowledgeBaseTabPayload,
+	SuperMagicOpenMicroAppTabPayload,
 } from "@/pages/superMagic/events/openFileTab"
 import type { SuperMagicOpenPlaybackTabPayload } from "@/pages/superMagic/events/openPlaybackTab"
 import type {
@@ -134,6 +135,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Open_File_Tab_By_Path]: SuperMagicOpenFileTabByPathPayload
 	/** 打开知识库文件预览 tab：由引用点击触发，携带知识库 ID 与文档 code 或文件 key。 */
 	[PubSubEvents.Open_Knowledge_Base_Tab]: SuperMagicOpenKnowledgeBaseTabPayload
+	/** Open a micro-app preview tab from a mention click. */
+	[PubSubEvents.Open_Micro_App_Tab]: SuperMagicOpenMicroAppTabPayload
 	/** 打开 playback tab：当前保留历史透传 payload。 */
 	[PubSubEvents.Open_Playback_Tab]: SuperMagicOpenPlaybackTabPayload
 	/** 展开话题对话面板：无参数。 */

@@ -79,7 +79,9 @@ import {
 	useOptionalSuperMobileShellOutlet,
 } from "@/pages/superMagicMobile/components/MobileShell/SuperMobileShellRouteLayout"
 import { useMobileKnowledgeBasePreview } from "@/pages/superMagic/hooks/useMobileKnowledgeBasePreview"
+import { useMobileMicroAppPreview } from "@/pages/superMagic/hooks/useMobileMicroAppPreview"
 import KnowledgeBasePreviewPopup from "@/pages/superMagic/components/KnowledgeBasePreviewPopup"
+import MicroAppPreviewPopup from "@/pages/superMagic/components/MicroAppPreviewPopup"
 
 interface ClawMobileConversationPanelRef {
 	sendSkillInstallPrompt: (content: JSONContent) => void
@@ -655,6 +657,18 @@ function ClawPlaygroundMobile() {
 		closePlaybackTab: () => {
 			void 0
 		},
+		openKnowledgeBaseTab: () => {
+			void 0
+		},
+		openMicroAppTab: () => {
+			void 0
+		},
+		enterPreviewFullscreen: () => {
+			void 0
+		},
+		exitPreviewFullscreen: () => {
+			void 0
+		},
 	})
 
 	const syncMobileDetailRef = useMemoizedFn(() => {
@@ -735,6 +749,7 @@ function ClawPlaygroundMobile() {
 		attachmentList,
 	})
 	const knowledgeBasePreviewState = useMobileKnowledgeBasePreview()
+	const microAppPreviewState = useMobileMicroAppPreview()
 
 	const resolveTopicFileRowDecoration = useMemoizedFn(
 		createClawPlaygroundFileRowDecorationResolver({
@@ -886,6 +901,7 @@ function ClawPlaygroundMobile() {
 				}}
 			/>
 			<KnowledgeBasePreviewPopup state={knowledgeBasePreviewState} />
+			<MicroAppPreviewPopup state={microAppPreviewState} />
 		</div>
 	)
 

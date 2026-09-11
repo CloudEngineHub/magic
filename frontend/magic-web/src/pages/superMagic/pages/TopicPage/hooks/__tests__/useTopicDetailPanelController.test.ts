@@ -221,6 +221,42 @@ describe("useTopicDetailPanelController", () => {
 		expect(openPlaybackTab).toHaveBeenCalledWith({ toolData, forceActivate: true })
 	})
 
+	it("opens a published micro-app tab from the shared mention event", () => {
+		const openMicroAppTab = vi.fn()
+		const detailRef = {
+			current: {
+				openFileTab: vi.fn(),
+				openPlaybackTab: vi.fn(),
+				openMicroAppTab,
+			},
+		}
+
+		const { result } = renderHook(() =>
+			useTopicDetailPanelController({
+				detailRef,
+				isReadOnly: false,
+				activeFileId: null,
+				setActiveFileId: vi.fn(),
+				handleFileClick: vi.fn(),
+				topicFilesProps: {},
+			}),
+		)
+
+		act(() => {
+			pubsub.publish(PubSubEvents.Open_Micro_App_Tab, {
+				appId: "app-1",
+				appName: "内购",
+			})
+			vi.advanceTimersByTime(101)
+		})
+
+		expect(result.current.shouldShowDetailPanel).toBe(true)
+		expect(openMicroAppTab).toHaveBeenCalledWith({
+			appId: "app-1",
+			appName: "内购",
+		})
+	})
+
 	it("keeps the detail panel when Open_File_Tab fails after file tab desync", () => {
 		// Parent activeFileId stays null after closing playback, while UI is back on a file tab.
 		const detailRef = {

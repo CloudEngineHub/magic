@@ -8,11 +8,13 @@ import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { useFileOpen } from "@/pages/superMagic/components/TopicFilesButton/hooks/useFileOpen"
 import { useMobileFilePreviewPubSub } from "@/pages/superMagic/hooks/useMobileFilePreviewPubSub"
+import { useMobileMicroAppPreview } from "@/pages/superMagic/hooks/useMobileMicroAppPreview"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import PreviewDetailPopup, {
 	type PreviewDetail,
 	type PreviewDetailPopupRef,
 } from "@/pages/superMagicMobile/components/PreviewDetailPopup"
+import MicroAppPreviewPopup from "@/pages/superMagic/components/MicroAppPreviewPopup"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { cn } from "@/utils/cn"
@@ -146,6 +148,7 @@ function MicroAppPageMobileInner({
 		setUserSelectDetail: setPreviewDetail,
 		onFileClick: handlePreviewFile,
 	})
+	const microAppPreviewState = useMobileMicroAppPreview()
 
 	useEffect(() => {
 		setActivePanel("preview")
@@ -301,6 +304,7 @@ function MicroAppPageMobileInner({
 				selectedProject={selectedProject}
 				allowEdit={!isReadOnly}
 			/>
+			<MicroAppPreviewPopup state={microAppPreviewState} />
 		</FileActionVisibilityProvider>
 	)
 }

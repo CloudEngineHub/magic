@@ -37,6 +37,7 @@ import { isAudioProjectMode } from "../AudioRecordings/utils/is-audio-project-mo
 import type {
 	SuperMagicOpenFileTabPayload,
 	SuperMagicOpenKnowledgeBaseTabPayload,
+	SuperMagicOpenMicroAppTabPayload,
 } from "../../events/openFileTab"
 import type { SuperMagicOpenPlaybackTabPayload } from "../../events/openPlaybackTab"
 import { useSlidesTemplateNavigation } from "../../hooks/useSlidesTemplateNavigation"
@@ -131,15 +132,22 @@ function ProjectPage() {
 				detailRef.current?.openKnowledgeBaseTab?.(data)
 			}, 100)
 		}
+		const handleOpenMicroAppTab = (data: SuperMagicOpenMicroAppTabPayload) => {
+			setTimeout(() => {
+				detailRef.current?.openMicroAppTab?.(data)
+			}, 100)
+		}
 
 		pubsub.subscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 		pubsub.subscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 		pubsub.subscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
+		pubsub.subscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
 
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 			pubsub.unsubscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 			pubsub.unsubscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
+			pubsub.unsubscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
 		}
 	}, [])
 
