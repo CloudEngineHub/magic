@@ -2,7 +2,6 @@ import type {
 	ExportProgress,
 	ExportSummary,
 	ExportIssue,
-	ExportIssue,
 	LargeExportOptions,
 	PptxDestination,
 	ResourceLoadError,
