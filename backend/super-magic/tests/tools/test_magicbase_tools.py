@@ -56,6 +56,7 @@ from app.tools.magicbase_tools import (
     UpdateMagicColumn,
     UpdateMagicRow,
     UpdateMagicTablePermissions,
+    _get_project_id,
 )
 from app.utils.async_file_utils import async_read_json
 
@@ -357,6 +358,16 @@ async def test_magicbase_row_tool_rejects_project_context_mismatch():
 
 
 @pytest.mark.asyncio
+async def test_micro_app_scope_overrides_conversation_project():
+    tool_context = ToolContext(metadata={"project_id": "123", "micro_app_project_id": "456"})
+    with patch(
+        "app.tools.magicbase_tools.InitClientMessageUtil.get_metadata",
+        return_value={"project_id": "123", "micro_app_project_id": "456"},
+    ):
+        assert _get_project_id(tool_context) == "456"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("tool", "params"),
     [
@@ -377,6 +388,35 @@ async def test_magicbase_delete_tools_require_explicit_confirmation(tool, params
     assert result.ok is False
     assert "confirm_delete=true" in result.content
     get_sdk.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_micro_app_batch_create_requires_confirmation():
+    params = BatchCreateMagicbaseRowsParams(table_id="200", rows=[{"name": "Alice"}])
+    with patch(
+        "app.tools.magicbase_tools.InitClientMessageUtil.get_metadata",
+        return_value={"micro_app_project_id": "100"},
+    ), patch("app.tools.magicbase_tools.get_magic_service_sdk", new_callable=AsyncMock) as get_sdk:
+        result = await BatchCreateMagicRows().execute(ToolContext(metadata={"micro_app_project_id": "100"}), params)
+
+    assert result.ok is False
+    assert "ask_user" in result.content
+    get_sdk.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_micro_app_schema_changes_are_rejected():
+    with patch(
+        "app.tools.magicbase_tools.InitClientMessageUtil.get_metadata",
+        return_value={"micro_app_project_id": "100"},
+    ):
+        result = await CreateMagicTable().execute(
+            ToolContext(metadata={"micro_app_project_id": "100"}),
+            CreateMagicbaseTableParams(table_key="demo", table_name="Demo", columns=[]),
+        )
+
+    assert result.ok is False
+    assert "schema" in result.content.lower()
 
 
 @pytest.mark.asyncio

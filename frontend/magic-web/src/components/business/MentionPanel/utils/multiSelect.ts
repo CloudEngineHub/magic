@@ -48,6 +48,8 @@ export function inferRootEntryIdFromItem(item: MentionItem): string | null {
 			return BuiltinRootId.MCP_EXTENSIONS
 		case MentionItemType.AGENT:
 			return BuiltinRootId.AGENTS
+		case MentionItemType.MICRO_APP:
+			return BuiltinRootId.MICRO_APPS
 		case MentionItemType.SKILL:
 			return BuiltinRootId.SKILLS
 		case MentionItemType.TOOL:

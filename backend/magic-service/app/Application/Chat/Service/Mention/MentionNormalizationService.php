@@ -10,6 +10,7 @@ namespace App\Application\Chat\Service\Mention;
 use App\Application\Chat\Service\Mention\Normalizer\AgentMentionNormalizer;
 use App\Application\Chat\Service\Mention\Normalizer\AssistantMentionNormalizer;
 use App\Application\Chat\Service\Mention\Normalizer\McpMentionNormalizer;
+use App\Application\Chat\Service\Mention\Normalizer\MicroAppMentionNormalizer;
 use App\Application\Chat\Service\Mention\Normalizer\PassthroughMentionNormalizer;
 use App\Application\Chat\Service\Mention\Normalizer\ToolMentionNormalizer;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MentionType;
@@ -42,6 +43,7 @@ class MentionNormalizationService
         AgentMentionNormalizer $agentNormalizer,
         AssistantMentionNormalizer $assistantNormalizer,
         McpMentionNormalizer $mcpNormalizer,
+        MicroAppMentionNormalizer $microAppNormalizer,
         private readonly PassthroughMentionNormalizer $passthroughNormalizer,
         LoggerFactory $loggerFactory,
     ) {
@@ -51,6 +53,7 @@ class MentionNormalizationService
             MentionType::AGENT->value => $agentNormalizer,
             MentionType::ASSISTANT->value => $assistantNormalizer,
             MentionType::MCP->value => $mcpNormalizer,
+            MentionType::MICRO_APP->value => $microAppNormalizer,
         ];
     }
 

@@ -34,6 +34,7 @@ from app.service.cli_manager.service import CliManagerService
 from app.service.cli_status import CliStatusFactory
 from app.core.base_service import Base
 from app.service.mention import MentionContextBuilder
+from app.service.mention.utils.micro_app_prompt import sync_micro_app_project_scope_from_prompt
 from app.service.topic_persistence import (
     TopicPersistenceManager,
     get_chat_history_excluded_dir_names,
@@ -522,6 +523,7 @@ class AgentService(Base):
         agent_context = agent.agent_context
         chat_client_message = agent_context.get_chat_client_message()
         query = chat_client_message.prompt
+        await sync_micro_app_project_scope_from_prompt(query)
 
         # ASR 录音纪要聊天模式：注入上下文 Diff
         try:
@@ -539,12 +541,12 @@ class AgentService(Base):
             logger.error(f"{ASR_CHAT_LOG_PREFIX} injectContextFailed error={e}")
             # 失败不影响聊天主流程
 
-        # 处理mentions信息（顶部引用区）- 添加到用户prompt中
-        mentions = getattr(chat_client_message, "mentions", [])
+        # Inject structured mentions from the request payload (legacy clients).
+        mentions = getattr(chat_client_message, "mentions", None) or []
         if mentions:
             mentions_context = await self._build_mentions_context(mentions, agent_context)
             query = f"{mentions_context}\n\n---\n\n{query}"
-            logger.info(f"已将{len(mentions)}个mentions添加到用户prompt中")
+            logger.info(f"Injected {len(mentions)} mention(s) into query")
 
         # 处理输入框内联引用（[@file_path:格式）
         query = agent._process_user_input_with_mentions(query, [])

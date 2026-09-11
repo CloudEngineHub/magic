@@ -21,6 +21,7 @@ const DEFAULT_STATE_TRANSITIONS: Record<PanelState, Record<string, StateTransiti
 			MentionPanelCatalogId.MCP_EXTENSIONS,
 		),
 		[BuiltinItemId.AGENTS]: buildCatalogTransition(MentionPanelCatalogId.AGENTS),
+		[BuiltinItemId.MICRO_APPS]: buildCatalogTransition(MentionPanelCatalogId.MICRO_APPS),
 		[BuiltinItemId.SKILLS]: buildCatalogTransition(MentionPanelCatalogId.SKILLS),
 		[BuiltinItemId.TOOLS]: buildCatalogTransition(MentionPanelCatalogId.TOOLS),
 		[BuiltinItemId.UPLOAD_FILES]: buildCatalogTransition(MentionPanelCatalogId.UPLOAD_FILES),

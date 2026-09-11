@@ -48,6 +48,7 @@ export const en: I18nTexts = {
 		otherProjectFiles: "Other Projects/Files",
 		mcpExtensions: "Plugins",
 		agents: "Agents",
+		microApps: "Micro apps",
 		skills: "Skills",
 		tools: "Tools",
 		canvasElements: "Canvas Elements",

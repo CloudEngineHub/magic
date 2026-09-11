@@ -1,5 +1,6 @@
 """Mention handlers"""
 from app.service.mention.handlers.agent_handler import AgentHandler
+from app.service.mention.handlers.micro_app_handler import MicroAppHandler
 from app.service.mention.handlers.assistant_handler import AssistantHandler
 from app.service.mention.handlers.design_marker_handler import DesignMarkerHandler
 from app.service.mention.handlers.file_handler import FileHandler

@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from app.service.mention.base import BaseMentionHandler
 from app.service.mention.handlers import (
     AgentHandler,
+    MicroAppHandler,
     AssistantHandler,
     DesignMarkerHandler,
     FileHandler,
@@ -38,6 +39,7 @@ class MentionContextBuilder:
         # 其他处理器
         handlers['mcp'] = MCPHandler()
         handlers['agent'] = AgentHandler()
+        handlers['micro_app'] = MicroAppHandler()
         handlers['assistant'] = AssistantHandler()
         handlers['tool'] = ToolHandler()
         handlers['design_marker'] = DesignMarkerHandler()

@@ -255,6 +255,8 @@ export function getMentionDisplayName(
 			return (data?.name as string) || "MCP"
 		case MentionItemType.AGENT:
 			return (data?.agent_name as string) || "Agent"
+		case MentionItemType.MICRO_APP:
+			return (data?.app_name as string) || "Micro app"
 		case MentionItemType.SKILL:
 			return (data?.name as string) || "Skill"
 		case MentionItemType.PROJECT_FILE: {

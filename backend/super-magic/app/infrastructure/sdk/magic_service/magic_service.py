@@ -13,6 +13,7 @@ from .api.ai_ability_api import AiAbilityApi
 from .api.agent_api import AgentApi
 from .api.file_api import FileApi  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
 from .api.magicbase_api import MagicBaseApi
+from .api.micro_app_api import MicroAppApi
 from .api.message_schedule_api import MessageScheduleApi
 from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
 from .api.skill_api import SkillApi
@@ -46,6 +47,7 @@ class MagicService:
             'agent': AgentApi,
             'file': FileApi,  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
             'magicbase': MagicBaseApi,
+            'micro_app': MicroAppApi,
             'message_schedule': MessageScheduleApi,
             'oauth2_callback_relay': OAuth2CallbackRelayApi,
             'skill': SkillApi,

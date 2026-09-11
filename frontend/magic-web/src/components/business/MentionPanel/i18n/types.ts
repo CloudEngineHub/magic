@@ -76,6 +76,7 @@ export interface I18nTexts {
 		otherProjectFiles?: string
 		mcpExtensions: string
 		agents: string
+		microApps: string
 		skills: string
 		tools: string
 		canvasElements: string

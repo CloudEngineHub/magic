@@ -48,6 +48,7 @@ export const zhCN: I18nTexts = {
 		otherProjectFiles: "其它项目/文件",
 		mcpExtensions: "插件",
 		agents: "智能体",
+		microApps: "微应用",
 		skills: "技能",
 		tools: "工具",
 		canvasElements: "画布元素",

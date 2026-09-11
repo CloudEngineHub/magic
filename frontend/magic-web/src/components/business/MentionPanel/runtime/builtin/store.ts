@@ -29,6 +29,7 @@ import { MentionPanelMcpStore } from "./domains/mcp"
 import { MentionPanelSkillsStore } from "./domains/skills"
 import { MentionPanelTabsStore } from "./domains/tabs"
 import { MentionPanelToolsStore } from "./domains/tools"
+import { MentionPanelMicroAppsStore } from "./domains/micro-apps"
 import { MentionPanelUploadFilesStore } from "./domains/upload-files"
 import { MentionPanelWorkspaceFilesStore } from "./domains/workspace-files"
 import projectFilesStore from "@/stores/projectFiles"
@@ -49,6 +50,7 @@ export class MentionPanelStore {
 	private readonly agentsStore: MentionPanelAgentsStore
 	private readonly skillsStore: MentionPanelSkillsStore
 	private readonly toolsStore: MentionPanelToolsStore
+	private readonly microAppsStore: MentionPanelMicroAppsStore
 	private readonly uploadFilesStore: MentionPanelUploadFilesStore
 	private readonly workspaceFilesStore: MentionPanelWorkspaceFilesStore
 	private readonly tabsStore: MentionPanelTabsStore
@@ -61,6 +63,7 @@ export class MentionPanelStore {
 		this.agentsStore = new MentionPanelAgentsStore()
 		this.skillsStore = new MentionPanelSkillsStore()
 		this.toolsStore = new MentionPanelToolsStore()
+		this.microAppsStore = new MentionPanelMicroAppsStore()
 		this.uploadFilesStore = new MentionPanelUploadFilesStore()
 		this.workspaceFilesStore = new MentionPanelWorkspaceFilesStore({
 			projectFilesStore,
@@ -265,6 +268,7 @@ export class MentionPanelStore {
 			skillsStore: this.skillsStore,
 			tabsStore: this.tabsStore,
 			toolsStore: this.toolsStore,
+			microAppsStore: this.microAppsStore,
 			uploadFilesStore: this.uploadFilesStore,
 			workspaceFilesStore: this.workspaceFilesStore,
 		}

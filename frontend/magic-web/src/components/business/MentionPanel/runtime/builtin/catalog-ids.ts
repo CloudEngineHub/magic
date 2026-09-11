@@ -6,6 +6,7 @@ export const MentionPanelBuiltinItemId = {
 	OTHER_PROJECT_FILES: "other-project-files",
 	MCP_EXTENSIONS: "mcp-extensions",
 	AGENTS: "agents",
+	MICRO_APPS: "micro-apps",
 	SKILLS: "skills",
 	TOOLS: "tools",
 	UPLOAD_FILES: "upload-files",
@@ -20,6 +21,7 @@ export type MentionPanelBuiltinItemId =
 export const MentionPanelCatalogId = {
 	MCP_EXTENSIONS: MentionPanelBuiltinItemId.MCP_EXTENSIONS,
 	AGENTS: MentionPanelBuiltinItemId.AGENTS,
+	MICRO_APPS: MentionPanelBuiltinItemId.MICRO_APPS,
 	SKILLS: MentionPanelBuiltinItemId.SKILLS,
 	TOOLS: MentionPanelBuiltinItemId.TOOLS,
 	UPLOAD_FILES: MentionPanelBuiltinItemId.UPLOAD_FILES,

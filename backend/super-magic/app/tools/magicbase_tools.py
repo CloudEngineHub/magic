@@ -327,7 +327,34 @@ def _get_project_id(tool_context: Optional[ToolContext] = None) -> str:
 
     if context_project_id and persisted_project_id and context_project_id != persisted_project_id:
         raise ValueError("MagicBase project context does not match the current persisted session")
-    return context_project_id or persisted_project_id
+    resolved_project_id = context_project_id or persisted_project_id
+    micro_app_project_id = str(metadata.get("micro_app_project_id") or "").strip()
+    if tool_context is not None:
+        context_micro_app_project_id = str(tool_context.get_metadata("micro_app_project_id") or "").strip()
+        if context_micro_app_project_id:
+            if micro_app_project_id and context_micro_app_project_id != micro_app_project_id:
+                raise ValueError("MagicBase micro-app project scope does not match the current session")
+            micro_app_project_id = context_micro_app_project_id
+    if micro_app_project_id:
+        # A micro-app Mention scopes MagicBase operations to its resolved project.
+        # Never fall back to the conversation project once that scope exists.
+        return micro_app_project_id
+    return resolved_project_id
+
+
+def _requires_micro_app_confirmation(tool_context: ToolContext) -> bool:
+    """Only conversational micro-app writes require the interactive confirmation gate."""
+    try:
+        return bool(InitClientMessageUtil.get_metadata().get("micro_app_project_id"))
+    except Exception:
+        return False
+
+
+def _reject_schema_change_for_micro_app(tool_context: ToolContext) -> Optional[ToolResult]:
+    """The use-magicbase runtime skill can access rows, never alter schema or permissions."""
+    if _requires_micro_app_confirmation(tool_context):
+        return ToolResult.error("MagicBase schema and permission changes are unavailable for a referenced micro-app.")
+    return None
 
 
 def _column_labels(columns: List[Dict[str, Any]]) -> str:
@@ -562,6 +589,8 @@ class CreateMagicbaseRowParams(BaseToolParams):
         default_factory=list,
         description="Fields to return after creation. System fields such as id and created_by may be included.",
     )
+    confirmed_by_user: bool = Field(default=False, description="Set true only after ask_user explicitly confirms this write.")
+
 
 
 @tool(name="create_magicbase_row", code_mode_only=True)
@@ -570,6 +599,8 @@ class CreateMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[CreateMagicbaseRowPa
     name = "create_magicbase_row"
 
     async def execute(self, tool_context: ToolContext, params: CreateMagicbaseRowParams) -> ToolResult:
+        if _requires_micro_app_confirmation(tool_context) and not params.confirmed_by_user:
+            return ToolResult.error("Creating a MagicBase row requires ask_user confirmation first.")
         try:
             project_id = _get_project_id(tool_context)
         except ValueError as e:
@@ -666,6 +697,7 @@ Fields to update, keyed by MagicBase column_key. Pass only dynamic business fiel
         description="""<!--zh: 更新后返回的字段。-->
 Fields to return after the update.""",
     )
+    confirmed_by_user: bool = Field(default=False, description="Set true only after ask_user explicitly confirms this write.")
 
 
 @tool(name="update_magicbase_row", code_mode_only=True)
@@ -678,6 +710,8 @@ class UpdateMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[UpdateMagicbaseRowPa
     name = "update_magicbase_row"
 
     async def execute(self, tool_context: ToolContext, params: UpdateMagicbaseRowParams) -> ToolResult:
+        if _requires_micro_app_confirmation(tool_context) and not params.confirmed_by_user:
+            return ToolResult.error("Updating a MagicBase row requires ask_user confirmation first.")
         try:
             project_id = _get_project_id(tool_context)
         except ValueError as e:
@@ -713,6 +747,10 @@ class BatchCreateMagicbaseRowsParams(BaseToolParams):
         description="Rows to create, each keyed by MagicBase column_key. Maximum 200 rows per call.",
     )
     select: List[str] = Field(default_factory=list, description="Fields to return for every created row.")
+    confirmed_by_user: bool = Field(
+        default=False,
+        description="Set true only after ask_user explicitly confirms this batch write.",
+    )
 
 
 @tool(name="batch_create_magicbase_rows", code_mode_only=True)
@@ -721,6 +759,8 @@ class BatchCreateMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[BatchCreateMag
     name = "batch_create_magicbase_rows"
 
     async def execute(self, tool_context: ToolContext, params: BatchCreateMagicbaseRowsParams) -> ToolResult:
+        if _requires_micro_app_confirmation(tool_context) and not params.confirmed_by_user:
+            return ToolResult.error("Batch creating MagicBase rows for a micro-app requires ask_user confirmation first.")
         try:
             project_id = _get_project_id(tool_context)
         except ValueError as e:
@@ -754,6 +794,7 @@ class DeleteMagicbaseRowParams(BaseToolParams):
         default=False,
         description="Set to true only after the user explicitly confirms deleting this row.",
     )
+    confirmed_by_user: bool = Field(default=False, description="Set true only after ask_user explicitly confirms this write.")
 
 
 @tool(name="delete_magicbase_row", code_mode_only=True)
@@ -764,6 +805,8 @@ class DeleteMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseRowPa
     async def execute(self, tool_context: ToolContext, params: DeleteMagicbaseRowParams) -> ToolResult:
         if not params.confirm_delete:
             return ToolResult.error("Deleting a MagicBase row requires confirm_delete=true after explicit user confirmation.")
+        if _requires_micro_app_confirmation(tool_context) and not params.confirmed_by_user:
+            return ToolResult.error("Deleting a MagicBase row for a micro-app requires ask_user confirmation first.")
         try:
             project_id = _get_project_id(tool_context)
         except ValueError as e:
@@ -799,6 +842,7 @@ class BatchDeleteMagicbaseRowsParams(BaseToolParams):
         default=False,
         description="Set to true only after the user explicitly confirms the complete deletion scope.",
     )
+    confirmed_by_user: bool = Field(default=False, description="Set true only after ask_user explicitly confirms this write.")
 
 
 @tool(name="batch_delete_magicbase_rows", code_mode_only=True)
@@ -809,6 +853,8 @@ class BatchDeleteMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[BatchDeleteMag
     async def execute(self, tool_context: ToolContext, params: BatchDeleteMagicbaseRowsParams) -> ToolResult:
         if not params.confirm_delete:
             return ToolResult.error("Batch deleting MagicBase rows requires confirm_delete=true after explicit user confirmation.")
+        if _requires_micro_app_confirmation(tool_context) and not params.confirmed_by_user:
+            return ToolResult.error("Batch deleting MagicBase rows for a micro-app requires ask_user confirmation first.")
         try:
             project_id = _get_project_id(tool_context)
         except ValueError as e:
@@ -912,6 +958,9 @@ HTML 微应用工作流中，create_magicbase_table 会自动维护 MagicBase sc
 	"""
 
     async def execute(self, tool_context: ToolContext, params: CreateMagicbaseTableParams) -> ToolResult:
+        schema_error = _reject_schema_change_for_micro_app(tool_context)
+        if schema_error:
+            return schema_error
         try:
             project_id = _get_project_id(tool_context)
         except ValueError as e:
@@ -1042,6 +1091,9 @@ Do not call file-editing tools just to maintain schema migrations. Ordinary proj
 """
 
     async def execute(self, tool_context: ToolContext, params: CreateMagicbaseColumnParams) -> ToolResult:
+        schema_error = _reject_schema_change_for_micro_app(tool_context)
+        if schema_error:
+            return schema_error
         try:
             project_id = _get_project_id(tool_context)
         except ValueError as e:
@@ -1155,6 +1207,9 @@ Before updating an existing table's permissions, confirm the permission intent a
 """
 
     async def execute(self, tool_context: ToolContext, params: UpdateMagicbaseTablePermissionsParams) -> ToolResult:
+        schema_error = _reject_schema_change_for_micro_app(tool_context)
+        if schema_error:
+            return schema_error
         try:
             project_id = _get_project_id(tool_context)
         except ValueError as e:
@@ -1225,6 +1280,9 @@ class DeleteMagicTable(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseTab
     name = "delete_magicbase_table"
 
     async def execute(self, tool_context: ToolContext, params: DeleteMagicbaseTableParams) -> ToolResult:
+        schema_error = _reject_schema_change_for_micro_app(tool_context)
+        if schema_error:
+            return schema_error
         if not params.confirm_delete:
             return ToolResult.error("Deleting a MagicBase table requires confirm_delete=true after explicit user confirmation.")
 
@@ -1329,6 +1387,9 @@ class UpdateMagicColumn(MagicBaseFriendlyRemarkMixin, BaseTool[UpdateMagicbaseCo
     name = "update_magicbase_column"
 
     async def execute(self, tool_context: ToolContext, params: UpdateMagicbaseColumnParams) -> ToolResult:
+        schema_error = _reject_schema_change_for_micro_app(tool_context)
+        if schema_error:
+            return schema_error
         try:
             project_id = _get_project_id(tool_context)
         except ValueError as e:
@@ -1425,6 +1486,9 @@ class DeleteMagicColumn(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseCo
     name = "delete_magicbase_column"
 
     async def execute(self, tool_context: ToolContext, params: DeleteMagicbaseColumnParams) -> ToolResult:
+        schema_error = _reject_schema_change_for_micro_app(tool_context)
+        if schema_error:
+            return schema_error
         if not params.confirm_delete:
             return ToolResult.error("Deleting a MagicBase column requires confirm_delete=true after explicit user confirmation.")
 
