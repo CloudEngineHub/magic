@@ -249,25 +249,17 @@ class AgentDispatcher(Base):
 
         self.agent_context.set_super_magic_product_context(init_message.super_magic_product_context)
 
-        # 阶段二：init_client_message.json 已就绪，触发 magic-service 模型列表加载
-        try:
-            from agentlang.config.models.model_config_manager import model_config_manager
-            from app.core.model_providers.magic_service_provider import MagicServiceProvider
-            await model_config_manager.refresh_provider(MagicServiceProvider())
-        except Exception as e:
-            logger.error(f"MagicServiceProvider refresh failed, continuing without it: {e}")
+        # 阶段二：init_client_message.json 已就绪，执行可注册的动态配置初始化器。
+        from app.service.init.config_initializers import (
+            AIAbilityConfigInitializer,
+            ModelConfigInitializer,
+        )
+        from app.service.init.initializer_registry import InitInitializerRegistry
 
-        # 阶段二：init_client_message.json 已就绪，触发 magic-service AI 能力配置加载
-        try:
-            from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
-            from app.core.ai_ability_providers.magic_service_provider import MagicServiceAIAbilityProvider
-            await ai_ability_config_manager.refresh_provider(
-                MagicServiceAIAbilityProvider(
-                    (init_message.dynamic_config or {}).get("ai_abilities")
-                )
-            )
-        except Exception as e:
-            logger.error(f"MagicServiceAIAbilityProvider refresh failed, continuing without it: {e}")
+        initializer_registry = InitInitializerRegistry()
+        initializer_registry.register(ModelConfigInitializer())
+        initializer_registry.register(AIAbilityConfigInitializer(init_message))
+        await initializer_registry.run(self.agent_context)
 
         # 从 init_message.metadata 提取并设置关键字段
         if init_message.metadata:

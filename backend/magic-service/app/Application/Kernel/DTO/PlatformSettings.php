@@ -42,6 +42,9 @@ class PlatformSettings
     /** @var array<string,string> */
     private array $agentRoleDescriptionI18n = [];
 
+    /** 全局系统提示词。 */
+    private string $globalSystemPrompt = '';
+
     /**
      * [运营规则]
      * 允许配置自定义服务商的组织白名单。
@@ -210,6 +213,18 @@ class PlatformSettings
         $this->agentRoleDescriptionI18n = $agentRoleDescriptionI18n;
     }
 
+    /** 获取全局系统提示词。 */
+    public function getGlobalSystemPrompt(): string
+    {
+        return $this->globalSystemPrompt;
+    }
+
+    /** 设置全局系统提示词。 */
+    public function setGlobalSystemPrompt(string $globalSystemPrompt): void
+    {
+        $this->globalSystemPrompt = $globalSystemPrompt;
+    }
+
     /**
      * @return string[]
      */
@@ -266,6 +281,7 @@ class PlatformSettings
             'description_i18n' => $this->descriptionI18n,
             'agent_role_name_i18n' => $this->agentRoleNameI18n,
             'agent_role_description_i18n' => $this->agentRoleDescriptionI18n,
+            'global_system_prompt' => $this->globalSystemPrompt,
             'custom_service_provider_whitelist' => $this->customServiceProviderWhitelist,
             'footer' => $this->getFooter(),
         ];
@@ -284,6 +300,7 @@ class PlatformSettings
         $i->setDescriptionI18n((array) ($data['description_i18n'] ?? []));
         $i->setAgentRoleNameI18n((array) ($data['agent_role_name_i18n'] ?? []));
         $i->setAgentRoleDescriptionI18n((array) ($data['agent_role_description_i18n'] ?? []));
+        $i->setGlobalSystemPrompt((string) ($data['global_system_prompt'] ?? ''));
         $i->setCustomServiceProviderWhitelist((array) (
             $data['custom_service_provider_whitelist']
             ?? $data['foreign_provider_org_whitelist']

@@ -77,6 +77,9 @@ class PlatformSettingsApi
         if (! empty($payload['agent_role_description_i18n'] ?? [])) {
             $data['agent_role_description_i18n'] = (array) $payload['agent_role_description_i18n'];
         }
+        if (array_key_exists('global_system_prompt', $payload)) {
+            $data['global_system_prompt'] = (string) $payload['global_system_prompt'];
+        }
         if (array_key_exists('custom_service_provider_whitelist', $payload)) {
             $data['custom_service_provider_whitelist'] = (array) ($payload['custom_service_provider_whitelist'] ?? []);
         }
@@ -144,6 +147,7 @@ class PlatformSettingsApi
                 $resp[$key] = (array) $settings[$key];
             }
         }
+        $resp['global_system_prompt'] = (string) ($settings['global_system_prompt'] ?? '');
         $resp['custom_service_provider_whitelist'] = (array) ($settings['custom_service_provider_whitelist'] ?? []);
         return $resp;
     }

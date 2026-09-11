@@ -325,6 +325,7 @@ class AgentContext(BaseAgentContext):
             "attachments": ({}, Dict[str, Attachment]),
             "chat_client_message": (None, Optional[ChatClientMessage]),
             "super_magic_product_context": (None, Optional[SuperMagicProductContext]),
+            "global_system_prompt": ("", str),
             "task_id": (None, Optional[str]),
             "interrupt_queue": (None, Optional[asyncio.Queue]),
             "sandbox_id": ("", str),
@@ -746,6 +747,14 @@ class AgentContext(BaseAgentContext):
     def get_super_magic_product_context(self) -> Optional["SuperMagicProductContext"]:
         """获取本轮最新的 Super Magic 产品上下文。"""
         return self.shared_context.get_field("super_magic_product_context")
+
+    def set_global_system_prompt(self, prompt: str) -> None:
+        """设置平台级全局系统提示词。"""
+        self.shared_context.update_field("global_system_prompt", prompt if isinstance(prompt, str) else "")
+
+    def get_global_system_prompt(self) -> str:
+        """获取平台级全局系统提示词。"""
+        return self.shared_context.get_field("global_system_prompt")
 
     def has_stream(self, stream: Stream) -> bool:
         """检查是否存在指定的通信流
