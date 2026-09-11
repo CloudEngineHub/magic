@@ -3,7 +3,6 @@ import { userStore } from "@/models/user"
 import { LoggerPluginManager, LogType } from "./plugins"
 import type { LogContext, LogData, LoggerPlugin, LoggerEnableConfig } from "./plugins"
 import { configStore } from "@/models/config"
-import { trackLogger } from "./trackLogger"
 import { getAppRelease } from "./release"
 import {
 	createErrorReport,
@@ -139,13 +138,6 @@ class Logger {
 				release,
 				captureSource,
 			)
-
-			try {
-				trackLogger?.error?.(providerInput)
-			} catch (error) {
-				// APM Provider 失败不能阻断独立的自建日志插件链。
-				console.error("[Logger] APM error reporting failed", error)
-			}
 
 			void this.processLog(LogType.ERROR, arg, {
 				release,

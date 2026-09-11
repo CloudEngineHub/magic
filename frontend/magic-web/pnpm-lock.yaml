@@ -109,6 +109,9 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@18.3.1)
+      '@dtyq/browser-apm':
+        specifier: workspace:*
+        version: link:packages/browser-apm
       '@dtyq/es6-template-strings':
         specifier: ~0.0.5
         version: 0.0.6
@@ -1145,6 +1148,46 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@1.21.7)(jsdom@26.1.0(canvas@3.2.3))(less@4.9.0)(lightningcss@1.33.0)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(sass-embedded@1.103.1)(sass@1.103.1)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.0)
+
+  packages/browser-apm:
+    dependencies:
+      '@apmplus/integrations':
+        specifier: ^2.7.2
+        version: 2.7.2
+      '@apmplus/web':
+        specifier: ^2.10.3
+        version: 2.10.3
+      '@arms/rum-browser':
+        specifier: ^0.0.37
+        version: 0.0.37(@babel/runtime@7.29.7)
+      '@cloudcare/browser-rum':
+        specifier: 3.3.6
+        version: 3.3.6
+    devDependencies:
+      '@types/node':
+        specifier: ^22.16.4
+        version: 22.20.1
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^5.36.1
+        version: 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.7.3))(eslint@8.57.1)(typescript@5.7.3)
+      '@typescript-eslint/parser':
+        specifier: ^5.36.1
+        version: 5.62.0(eslint@8.57.1)(typescript@5.7.3)
+      eslint:
+        specifier: 8.57.1
+        version: 8.57.1
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0(canvas@3.2.3)
+      typescript:
+        specifier: ^5.4.5
+        version: 5.7.3
+      vite:
+        specifier: ^8.0.3
+        version: 8.2.2(@types/node@22.20.1)(@vitejs/devtools@0.1.24(@pnpm/logger@1001.0.1)(esbuild@0.24.0)(rolldown@1.2.6)(rollup@4.63.1)(typescript@5.9.3)(vite@8.2.2)(webpack@5.100.2(esbuild@0.24.0)(lightningcss@1.33.0)(postcss@8.5.26)))(esbuild@0.24.0)(jiti@2.7.0)(less@4.9.0)(sass-embedded@1.103.1)(sass@1.103.1)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.0)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(jsdom@26.1.0(canvas@3.2.3))(less@4.9.0)(lightningcss@1.33.0)(msw@2.15.0(@types/node@22.20.1)(typescript@5.7.3))(sass-embedded@1.103.1)(sass@1.103.1)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.0)
 
   packages/html-sandbox:
     dependencies:
@@ -21193,6 +21236,25 @@ snapshots:
     dependencies:
       '@types/node': 22.20.1
     optional: true
+
+  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.7.3))(eslint@8.57.1)(typescript@5.7.3)':
+    dependencies:
+      '@eslint-community/regexpp': 4.12.2
+      '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.7.3)
+      '@typescript-eslint/scope-manager': 5.62.0
+      '@typescript-eslint/type-utils': 5.62.0(eslint@8.57.1)(typescript@5.7.3)
+      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.7.3)
+      debug: 4.4.3(supports-color@5.5.0)
+      eslint: 8.57.1
+      graphemer: 1.4.0
+      ignore: 5.3.2
+      natural-compare-lite: 1.4.0
+      semver: 7.8.5
+      tsutils: 3.21.0(typescript@5.7.3)
+    optionalDependencies:
+      typescript: 5.7.3
+    transitivePeerDependencies:
+      - supports-color
 
   '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.7.3)':
     dependencies:

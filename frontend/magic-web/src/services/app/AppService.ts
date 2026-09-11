@@ -1,6 +1,5 @@
 import { service } from "../index"
-import { v4 } from "uuid"
-import { trackLogger } from "@/utils/log/trackLogger"
+import { initializeBrowserApm } from "@/services/app/browser-apm"
 import { GlobalApi } from "@/apis"
 import { botStore } from "@/stores/bot"
 import { globalConfigStore } from "@/stores/globalConfig"
@@ -444,12 +443,8 @@ class AppService extends AbstractAppService<AppInitResultData> {
 
 			try {
 				this.logger.log("开始应用初始化")
-				const traceId = sessionStorage.getItem("traceId") ?? v4()
-				sessionStorage.setItem("traceId", traceId)
+				const traceId = initializeBrowserApm()
 				this.logger.log("设置会话追踪ID", { traceId })
-				trackLogger.setConfig({
-					sessionId: traceId,
-				})
 
 				this.logger.log("初始化用户服务")
 				await service

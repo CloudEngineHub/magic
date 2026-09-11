@@ -1,9 +1,5 @@
 import { isPlainObject } from "lodash-es"
-import {
-	ErrorCaptureSource,
-	normalizeError,
-	type ProviderErrorInput,
-} from "../../../packages/logger/src"
+import { ErrorCaptureSource, normalizeError, type ProviderErrorInput } from "./errorNormalization"
 
 export { ErrorCaptureSource }
 
