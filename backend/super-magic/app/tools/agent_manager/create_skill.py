@@ -1,7 +1,7 @@
 """Create a skill for the current custom agent."""
 
-import re
 from textwrap import indent
+from typing import Dict
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
@@ -9,14 +9,15 @@ from pydantic import Field
 
 from app.path_manager import PathManager
 from app.tools.core import BaseTool, BaseToolParams, tool
+from app.tools.agent_manager.skill_name import is_valid_skill_name
+from app.utils.async_file_utils import async_exists, async_mkdir, async_write_text
 
 
 class CreateSkillParams(BaseToolParams):
-    skill_name: str = Field(..., description="kebab-case 技能名称")
-    name_cn: str = Field(..., description="技能中文名称")
-    description_en: str = Field(..., description="技能英文描述")
-    description_cn: str = Field(..., description="技能中文描述")
-    content: str = Field(..., description="不含 frontmatter 的 SKILL.md 正文")
+    skill_name: str = Field(..., description="kebab-case skill name")
+    name_i18n: Dict[str, str] = Field(..., description='i18n name dict, e.g. {"zh_CN": "...", "en_US": "..."}')
+    description_i18n: Dict[str, str] = Field(..., description='i18n description dict, e.g. {"zh_CN": "...", "en_US": "..."}')
+    content: str = Field(..., description="SKILL.md body without frontmatter")
 
 
 @tool()
@@ -32,26 +33,30 @@ class CreateSkill(BaseTool[CreateSkillParams]):
 
         agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
         if not agent_context or not agent_context.get_agent_code():
-            return ToolResult(ok=False, content="未找到当前正在编辑的员工编号。")
-        if not re.fullmatch(r"[a-z][a-z0-9]*(-[a-z0-9]+)*", params.skill_name):
-            return ToolResult(ok=False, content="技能名称必须使用 kebab-case。")
+            return ToolResult.error("No agent code found in current context.")
+        if not is_valid_skill_name(params.skill_name):
+            return ToolResult.error("Skill name must be kebab-case.")
 
         skill_dir = PathManager.get_magic_skills_dir() / params.skill_name
         skill_file = skill_dir / "SKILL.md"
-        if skill_file.exists():
-            return ToolResult(ok=False, content=f"技能 {params.skill_name} 已存在。")
+        if await async_exists(skill_file):
+            return ToolResult.error(f"Skill {params.skill_name} already exists.")
 
-        skill_dir.mkdir(parents=True, exist_ok=True)
-        skill_file.write_text(
+        await async_mkdir(skill_dir, parents=True, exist_ok=True)
+        name_en = params.name_i18n.get("en_US", "")
+        name_cn = params.name_i18n.get("zh_CN", "")
+        desc_en = params.description_i18n.get("en_US", "")
+        desc_cn = params.description_i18n.get("zh_CN", "")
+        await async_write_text(
+            skill_file,
             "---\n"
             f"name: {params.skill_name}\n"
             "description: |\n"
-            f"{indent(params.description_en, '  ')}\n"
-            f"name-cn: {params.name_cn}\n"
+            f"{indent(desc_en, '  ')}\n"
+            f"name-cn: {name_cn}\n"
             "description-cn: |\n"
-            f"{indent(params.description_cn, '  ')}\n"
+            f"{indent(desc_cn, '  ')}\n"
             "---\n\n"
             f"{params.content.strip()}\n",
-            encoding="utf-8",
         )
-        return ToolResult(content=f"已创建 .magic/skills/{params.skill_name}/SKILL.md。")
+        return ToolResult(content=f"Skill {params.skill_name} created at .magic/skills/{params.skill_name}/SKILL.md.")

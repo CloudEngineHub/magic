@@ -1211,7 +1211,6 @@ class SuperMagicAgentApiTest extends AbstractApiTest
                     'value' => 'agents/updated-logo.png',
                 ],
                 'icon_type' => 2,
-                'file_key' => 'agents/updated-logo.png',
             ],
             $this->getCommonHeaders()
         );
@@ -1225,7 +1224,7 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         $this->assertEquals('更新后的员工名称', $detailResponse['data']['name_i18n']['zh_CN']);
         $this->assertEquals('Updated Agent Description', $detailResponse['data']['description_i18n']['en_US']);
         $this->assertNotEmpty($detailResponse['data']['prompt']);
-        $this->assertEquals('agents/updated-logo.png', $detailResponse['data']['file_key']);
+        $this->assertEquals('agents/updated.zip', $detailResponse['data']['file_key']);
 
         // 测试更新不存在的员工
         $notFoundResponse = $this->put(

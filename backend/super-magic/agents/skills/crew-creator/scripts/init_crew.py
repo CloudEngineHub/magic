@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -42,15 +41,6 @@ from _shared.bootstrap import get_project_root
 
 REQUIRED_FIELDS = ("name", "role", "description", "instructions", "skill_decomposition_decision")
 VALID_SKILL_DECOMPOSITION_DECISIONS = {"yes", "no"}
-AGENTS_REQUIRED_SECTIONS = {
-    "overview": (r"overview", r"总览", r"概述"),
-    "inputs": (r"inputs?", r"输入"),
-    "outputs": (r"outputs?", r"输出"),
-    "tool_or_skill_calls": (r"tools?", r"skills?", r"工具", r"技能"),
-    "failure_handling": (r"fail(?:ure)?", r"error", r"失败", r"异常"),
-    "completion_criteria": (r"completion", r"done", r"完成条件", r"验收"),
-    "security_constraints": (r"security", r"safety", r"安全", r"权限"),
-}
 
 
 def _resolve_config_path(config_arg: str, project_root: Path) -> tuple[Path | None, list[Path]]:
@@ -105,23 +95,31 @@ def _build_soul(cfg: dict) -> str | None:
 
 
 def _validate_agents_content(content: str) -> list[str]:
-    headings = [
-        match.group(1).strip().lower()
-        for line in content.splitlines()
-        if (match := re.match(r"^#{1,6}\s+(.+?)\s*$", line))
-    ]
-    heading_text = "\n".join(headings)
-    missing = [
-        section
-        for section, patterns in AGENTS_REQUIRED_SECTIONS.items()
-        if not any(re.search(pattern, heading_text, re.IGNORECASE) for pattern in patterns)
-    ]
+    if not content.strip():
+        return ["content"]
 
-    ordered_steps = re.findall(r"^\s*\d+[.)]\s+\S", content, re.MULTILINE)
-    if len(ordered_steps) < 2:
-        missing.append("ordered_sop_steps")
+    ordered_steps = 0
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
 
-    return missing
+        separator_index = 0
+        while separator_index < len(stripped) and stripped[separator_index].isdigit():
+            separator_index += 1
+
+        if separator_index == 0 or separator_index >= len(stripped):
+            continue
+        if stripped[separator_index] not in ".)":
+            continue
+        if not stripped[separator_index + 1 :].strip():
+            continue
+        ordered_steps += 1
+
+    if ordered_steps < 2:
+        return ["executable_steps"]
+
+    return []
 
 
 def main() -> int:
@@ -173,7 +171,7 @@ def main() -> int:
     if invalid_agents_sections:
         print(json.dumps({
             "ok": False,
-            "error": "AGENTS.md instructions do not satisfy the required workflow format.",
+            "error": "AGENTS.md instructions must contain at least two executable ordered steps.",
             "missing_sections": invalid_agents_sections,
         }, ensure_ascii=False))
         return 1

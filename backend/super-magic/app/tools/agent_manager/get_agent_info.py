@@ -10,6 +10,7 @@ from agentlang.utils.shadow_code import ShadowCode
 
 from app.path_manager import PathManager
 from app.tools.core import BaseTool, BaseToolParams, tool
+from app.utils.async_file_utils import async_mkdir, async_write_text
 
 logger = get_logger(__name__)
 
@@ -34,7 +35,7 @@ class GetAgentInfo(BaseTool[GetAgentInfoParams]):
         agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
         agent_code = agent_context.get_agent_code() if agent_context else None
         if not agent_code:
-            return ToolResult(ok=False, content="未找到当前正在编辑的员工编号。")
+            return ToolResult.error("No agent code found in current context.")
 
         try:
             sdk = get_magic_service_sdk()
@@ -62,11 +63,12 @@ class GetAgentInfo(BaseTool[GetAgentInfoParams]):
             }
 
             cache_dir = PathManager.get_magic_dir()
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            (cache_dir / "agent.json").write_text(
-                json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8"
+            await async_mkdir(cache_dir, parents=True, exist_ok=True)
+            await async_write_text(
+                cache_dir / "agent.json",
+                json.dumps(profile, ensure_ascii=False, indent=2),
             )
             return ToolResult(content=json.dumps(profile, ensure_ascii=False, indent=2))
         except Exception as error:
             logger.error(f"Failed to get agent info: {error}")
-            return ToolResult(ok=False, content=f"获取员工信息失败：{error}")
+            return ToolResult.error(f"Failed to get agent info: {error}")

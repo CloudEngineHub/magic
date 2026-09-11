@@ -11,6 +11,12 @@ from pathlib import Path
 import aiofiles
 import yaml
 
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from app.tools.agent_manager.skill_name import is_valid_skill_name
+
 
 async def validate_skill(skill_path):
     """Basic validation of a skill"""
@@ -57,17 +63,8 @@ async def validate_skill(skill_path):
     if not name:
         return False, "Name cannot be empty"
     # Keep the name safe as a single filesystem directory while allowing localized text.
-    if not name[0].isalpha():
-        return False, f"Name '{name}' must start with a Unicode letter"
-    if not all(character.isalnum() or character in '-_' for character in name):
-        return False, f"Name '{name}' may contain only Unicode letters, numbers, hyphens, and underscores"
-    if name.endswith(('-', '_')) or '--' in name or '__' in name or '-_' in name or '_-' in name:
-        return False, f"Name '{name}' cannot end with or contain consecutive separators"
-    # Length limit: 2 to 64 characters.
-    if len(name) < 2:
-        return False, f"Name '{name}' is too short. Minimum length is 2 characters."
-    if len(name) > 64:
-        return False, f"Name is too long ({len(name)} characters). Maximum is 64 characters."
+    if not is_valid_skill_name(name):
+        return False, f"Name '{name}' is not a valid skill directory name"
     # The skill name must match the directory name.
     dir_name = skill_path.name
     if name != dir_name:

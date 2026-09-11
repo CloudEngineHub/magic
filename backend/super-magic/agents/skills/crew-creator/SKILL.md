@@ -146,7 +146,7 @@ If the user chooses skill decomposition in Round 4, after initialization call `s
 
 ### After Initialization
 
-1. Before writing, validate `AGENTS.md` against the workflow format: overview, ordered SOP steps, inputs, outputs, tool/skill calls, failure branches, completion checks, and security constraints must be present.
+1. Before writing, ensure `AGENTS.md` contains a clear executable workflow with at least two ordered steps. The workflow may use any language, wording, and heading structure; do not add fixed section names solely to satisfy validation.
 2. If validation fails, revise the workflow content and validate it again; do not initialize with a plain unstructured checklist.
 3. Show the generated files to the user via `read_files`.
 4. If the user chose skill decomposition, call `skill-creator` for each independent skill and validate the results before reporting completion.
