@@ -6,6 +6,7 @@ import {
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { getProjectFileResourceIdentity } from "@/components/business/MentionPanel/utils/projectReferenceMention"
+import { CANVAS_SELECTION_PENDING_MENTION_LIMIT } from "@/components/business/MentionPanel/runtime/builtin/domains/canvas-elements"
 import {
 	isCanvasSelectionMentionScopeInContext,
 	type CanvasSelectionMentionScope,
@@ -195,15 +196,17 @@ export function useCanvasPendingMentionBridge({
 			const formalMentionIds = collectFormalMentionIds(activeEditor)
 			clearPending()
 
-			const nextItems = payload.items.filter((item, index, items) => {
-				const uniqueId = getMentionResourceKey(item)
-				return (
-					!formalMentionIds.has(uniqueId) &&
-					items.findIndex(
-						(candidate) => getMentionResourceKey(candidate) === uniqueId,
-					) === index
-				)
-			})
+			const nextItems = payload.items
+				.filter((item, index, items) => {
+					const uniqueId = getMentionResourceKey(item)
+					return (
+						!formalMentionIds.has(uniqueId) &&
+						items.findIndex(
+							(candidate) => getMentionResourceKey(candidate) === uniqueId,
+						) === index
+					)
+				})
+				.slice(0, CANVAS_SELECTION_PENDING_MENTION_LIMIT)
 			if (nextItems.length === 0) return
 
 			const insertPosition = Math.min(

@@ -27,6 +27,8 @@ interface UseMentionMediaSourceOptions {
 	/** 编辑器内实时上传文件；用于保留生产 liveFile 优先行为。 */
 	uploadFile?: File | null
 	enabled?: boolean
+	/** Pending canvas chips skip thumbnail ensure to avoid mass NodeView update storms. */
+	loadThumbnail?: boolean
 }
 
 function getMentionFileData(data: TiptapMentionAttributes) {
@@ -47,6 +49,7 @@ export function useMentionMediaSource({
 	data,
 	uploadFile,
 	enabled = true,
+	loadThumbnail = true,
 }: UseMentionMediaSourceOptions): MentionMediaSource {
 	const fileData = getMentionFileData(data)
 	const extension =
@@ -69,18 +72,21 @@ export function useMentionMediaSource({
 		projectData?.resource_version ||
 		(projectData?.version != null ? String(projectData.version) : undefined)
 	const projectScope = useSharedMediaResourceScope()
+	const projectId = projectData?.source_project_id || projectData?.project_id
+	const projectPath = projectData?.file_path
+	// Depend on primitive fields only — TipTap may pass a new attrs.data object each update.
 	const projectRef = useMemo<MediaResourceRef | null>(() => {
 		if (!isProjectFile || !projectFileId || !mediaType) return null
 		return {
 			identity: projectIdentity,
 			provider: "project-file",
 			scope: projectScope,
-			projectId: projectData?.source_project_id || projectData?.project_id,
+			projectId,
 			fileId: projectFileId,
 			fileVersion: projectFileVersion,
 			updatedAt: projectUpdatedAt,
 			resourceVersion: projectResourceVersion,
-			path: projectData?.file_path,
+			path: projectPath,
 			fileName,
 			mediaType,
 		}
@@ -88,10 +94,11 @@ export function useMentionMediaSource({
 		fileName,
 		isProjectFile,
 		mediaType,
-		projectData,
 		projectFileId,
 		projectFileVersion,
+		projectId,
 		projectIdentity,
+		projectPath,
 		projectResourceVersion,
 		projectScope,
 		projectUpdatedAt,
@@ -126,7 +133,7 @@ export function useMentionMediaSource({
 
 	const projectResource = useMediaResourceSnapshot(projectRef, {
 		enabled: enabled && isProjectFile && Boolean(mediaType),
-		loadThumbnail: mediaType === "image",
+		loadThumbnail: loadThumbnail && mediaType === "image",
 		resolver: projectResolver,
 	})
 
