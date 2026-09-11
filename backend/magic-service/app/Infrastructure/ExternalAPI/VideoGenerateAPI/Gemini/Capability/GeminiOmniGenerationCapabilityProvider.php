@@ -75,7 +75,7 @@ readonly class GeminiOmniGenerationCapabilityProvider
                             ],
                         ],
                     )->toArray(),
-                    ['generation_constraints' => ['durations' => []]],
+                    ['generation_constraints' => ['durations' => [],'aspect_ratios' => []]],
                 ),
                 VideoInputMode::OmniReference->value => VideoInputModeDefinition::omniReference(
                     $translate('gemini_omni_reference'),

@@ -356,11 +356,13 @@ final class GeminiOmni1FlashVideoAdapter implements VideoGenerationConnectivityT
         $responseFormat = [
             'type' => 'video',
             'delivery' => 'uri',
-            'aspect_ratio' => $aspectRatio,
             'resolution' => $resolution,
         ];
         if ($includeDuration) {
             $responseFormat['duration'] = $duration . 's';
+        }
+        if ($includeDuration) {
+            $responseFormat['aspect_ratio'] = $aspectRatio;
         }
 
         return $responseFormat;
