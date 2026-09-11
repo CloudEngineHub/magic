@@ -45,7 +45,11 @@ export function publishPptxExportFailure(
 			issue.pageIndex === failure.pageIndex &&
 			issue.message === failure.message,
 	)
-	publishPptxExportIssues(hasSameFailure ? issues : [...issues, failure], context)
+	const hasFatalIssue = issues.some((issue) => issue.severity === "error")
+	publishPptxExportIssues(
+		hasSameFailure || hasFatalIssue ? issues : [...issues, failure],
+		context,
+	)
 }
 
 export function publishPptxExportIssues(
