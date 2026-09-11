@@ -3,48 +3,53 @@ import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { MagicFSApi, type MagicFSFile } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
-import MagicModal from "@/components/base/MagicModal"
 import userFilesStore from "@/stores/userFiles"
-import { validateFilename } from "@/utils/filename-validator"
+import { useFileInfoPanel } from "../../TopicFilesButton/hooks/useFileInfoPanel"
+import {
+	useUploadWithModal,
+	type UploadTarget,
+} from "../../TopicFilesButton/hooks/useUploadWithModal"
+import { useFileOperations } from "../../TopicFilesButton/hooks/useFileOperations"
+import { useVirtualFile } from "../../TopicFilesButton/hooks/useVirtualFile"
+import { useVirtualFolder } from "../../TopicFilesButton/hooks/useVirtualFolder"
+import { useRename } from "../../TopicFilesButton/hooks/useRename"
+import { useMoveFile } from "../../TopicFilesButton/hooks/useMoveFile"
+import { useBatchDownload } from "../../TopicFilesButton/hooks/useBatchDownload"
+import { useContextMenu } from "../../TopicFilesButton/hooks/useContextMenu"
+import { createFileMenuItems } from "../../TopicFilesButton/components/hooks/useFileMenuItems"
+import { getAttachmentKey } from "../../TopicFilesButton/utils/getAttachmentKey"
 import type { AttachmentItem } from "../../TopicFilesButton/hooks/types"
+import type { PresetFileType } from "../../TopicFilesButton/constant"
 import { addFileToCurrentChat } from "../../../utils/topics"
 import { getFileReferenceIdentityKey } from "../../../services/userFileReferenceResolver"
 import { isFixedUserMemoryEntry } from "../../LongTremMemory/components/memoryTreeNodeUtils"
-import {
-	toUserAttachment,
-	userSpaceFileService,
-	USER_FILE_DELETE_BATCH_SIZE,
-} from "../services/userSpaceFileService"
-
-export type UserFileNameAction =
-	| { type: "create"; directory: boolean; parent: () => Promise<MagicFSFile> }
-	| { type: "rename"; file: AttachmentItem }
-export interface UserFileOperationFailure {
-	file: AttachmentItem
-	message: string
-}
+import { toUserAttachment } from "../services/userSpaceFileService"
 
 export function useUserSpaceFileActions(options: {
+	items: AttachmentItem[]
+	resolveParent: () => Promise<MagicFSFile>
+	viewKey: string
 	onOpen?: (file: AttachmentItem) => void
+	onNavigate: (id?: string) => void
 	topicId?: string | null
 }) {
 	const { t } = useTranslation("super")
 	const identity = getFileReferenceIdentityKey()
-	const [info, setInfo] = useState<AttachmentItem | null>(null)
-	const [nameAction, setNameAction] = useState<UserFileNameAction | null>(null)
-	const [name, setName] = useState("")
-	const [nameError, setNameError] = useState("")
-	const [busy, setBusy] = useState(false)
-	const busyRef = useRef(false)
-	const [moveFiles, setMoveFiles] = useState<AttachmentItem[]>([])
-	const [moveRoot, setMoveRoot] = useState<MagicFSFile | null>(null)
-	const [failures, setFailures] = useState<UserFileOperationFailure[]>([])
-	const [successCount, setSuccessCount] = useState(0)
-	const [selection, setSelection] = useState<Set<string>>(new Set())
-	const isCurrent = () => identity === getFileReferenceIdentityKey()
+	const viewKey = options.viewKey
+	const currentView = useRef(viewKey)
+	currentView.current = viewKey
+	useEffect(() => {
+		currentView.current = viewKey
+		return () => {
+			currentView.current = ""
+		}
+	}, [viewKey])
+	const isCurrent = () => Boolean(identity) && identity === getFileReferenceIdentityKey()
 	const assertCurrent = () => {
-		if (!isCurrent()) throw new DOMException("Identity changed", "AbortError")
+		if (!isCurrent()) throw new DOMException("File operation cancelled", "AbortError")
 	}
+	const [selection, setSelection] = useState<Set<string>>(new Set())
+	const info = useFileInfoPanel()
 	const isSelectable = (file: AttachmentItem) =>
 		Boolean(file.file_id) &&
 		!isFixedUserMemoryEntry(
@@ -59,35 +64,16 @@ export function useUserSpaceFileActions(options: {
 				.map((node) => node.name)
 				.join("/"),
 		)
-	useEffect(() => {
-		setInfo(null)
-		setNameAction(null)
-		setMoveFiles([])
-		setMoveRoot(null)
-		setSelection(new Set())
-		setFailures([])
-		setBusy(false)
-		busyRef.current = false
-	}, [identity])
-	const begin = () => {
-		if (busyRef.current) return false
-		busyRef.current = true
-		setBusy(true)
-		return true
-	}
-	const end = () => {
-		if (isCurrent()) {
-			busyRef.current = false
-			setBusy(false)
-		}
-	}
-	const refresh = async (parents: Array<string | null | undefined>) => {
-		assertCurrent()
-		await Promise.all(
+	const refresh = (parents: Array<string | null | undefined>) => {
+		if (!isCurrent()) return
+		userFilesStore.notifyMutation()
+		void Promise.all(
 			[...new Set(parents.filter((id): id is string => Boolean(id)))].map((id) =>
 				userFilesStore.loadDirectory(id, true),
 			),
-		)
+		).catch(() => {
+			if (isCurrent()) magicToast.error(t("userSpace.refreshAfterChangeFailed"))
+		})
 	}
 	const open = useMemoizedFn((file: AttachmentItem) => {
 		if (!file.is_directory) options.onOpen?.(file)
@@ -104,285 +90,259 @@ export function useUserSpaceFileActions(options: {
 			if (isCurrent()) magicToast.error(t("common.fileNotFoundOrLoadFailed"))
 		}
 	})
-	const create = (directory: boolean, parent: () => Promise<MagicFSFile>) => {
-		setNameAction({ type: "create", directory, parent })
-		setName(directory ? t("userSpace.defaultFolder") : t("userSpace.defaultFile"))
-		setNameError("")
-	}
-	const rename = (file: AttachmentItem) => {
-		if (!isSelectable(file)) return
-		setNameAction({ type: "rename", file })
-		setName(file.file_name ?? file.name ?? "")
-		setNameError("")
-	}
-	const submitName = async () => {
-		if (!nameAction || !begin()) return
-		const action = nameAction
-		let committed = false
-		try {
+	const createParent = useRef<{ resolve: () => Promise<MagicFSFile>; id?: string } | null>(null)
+	const operations = useFileOperations({
+		fileScope: "user",
+		attachments: options.items,
+		isCurrent,
+		resolveCreateParent: async () => {
 			assertCurrent()
-			const directory =
-				action.type === "create" ? action.directory : Boolean(action.file.is_directory)
-			const result = validateFilename(name, directory, { t, allowDotStart: true })
-			if (!result.isValid) {
-				setNameError(result.errorMessage ?? t("userSpace.invalidName"))
-				return
-			}
-			if (action.type === "create") {
-				const parent = await action.parent()
-				assertCurrent()
-				const siblings = await userFilesStore.loadDirectory(parent.id, true)
-				assertCurrent()
-				if (siblings.some((file) => file.name === name)) {
-					setNameError(t("userSpace.nameExists"))
-					return
-				}
-				const file = await userSpaceFileService.createNode({
-					name,
-					parentId: parent.id,
-					isDirectory: directory,
+			const source = createParent.current
+			if (!source) throw new Error("Create target is unavailable")
+			const parent = await source.resolve()
+			assertCurrent()
+			source.id = parent.id
+			return parent.id
+		},
+		onUpdateAttachments: () => refresh([createParent.current?.id]),
+		onFileCreated: (file: AttachmentItem) => {
+			void userFilesStore
+				.loadDirectory(file.parent_id ?? undefined, true)
+				.then((children) => {
+					if (!isCurrent()) return
+					const created = children.find((item) => item.id === file.file_id)
+					if (created) open(attachment(created))
 				})
-				committed = true
-				assertCurrent()
-				userFilesStore.notifyMutation()
-				await refresh([parent.id])
-				if (!directory) open(attachment(file))
-			} else {
-				if (!action.file.file_id || !isSelectable(action.file)) return
-				if (name === action.file.file_name) {
-					setNameAction(null)
-					return
-				}
-				const siblings = await userFilesStore.loadDirectory(
-					action.file.parent_id ?? undefined,
-					true,
-				)
-				assertCurrent()
-				if (
-					siblings.some((file) => file.name === name && file.id !== action.file.file_id)
-				) {
-					setNameError(t("userSpace.nameExists"))
-					return
-				}
-				if (
-					!action.file.is_directory &&
-					name.split(".").pop() !== (action.file.file_name ?? "").split(".").pop() &&
-					!(await userFilesStore.confirmFileChanges([action.file.file_id]))
-				)
-					return
-				assertCurrent()
-				await userSpaceFileService.renameNode(action.file.file_id, name)
-				committed = true
-				assertCurrent()
-				userFilesStore.notifyMutation()
-				await refresh([action.file.parent_id])
-			}
+				.catch(() => {
+					if (isCurrent()) magicToast.error(t("userSpace.refreshAfterChangeFailed"))
+				})
+		},
+	})
+	const virtualFile = useVirtualFile({
+		attachments: [],
+		allowDotStart: true,
+		isCurrent,
+		onFileCreate: operations.createFileAndUpload,
+	})
+	const virtualFolder = useVirtualFolder({
+		attachments: [],
+		allowDotStart: true,
+		isCurrent,
+		onFolderCreate: operations.createFolderAndUpload,
+	})
+	const rename = useRename({
+		fileScope: "user",
+		allowDotStart: true,
+		isCurrent,
+		resolveSiblings: async (file) => {
+			const files = await userFilesStore.loadDirectory(file.parent_id ?? undefined, true)
 			assertCurrent()
-			setNameAction(null)
-			magicToast.success(t("userSpace.saved"))
-		} catch {
-			if (isCurrent()) {
-				if (committed) setNameAction(null)
-				setNameError(t("userSpace.operationFailed"))
-				magicToast.error(
-					t(
-						committed
-							? "userSpace.refreshAfterChangeFailed"
-							: "userSpace.operationFailed",
-					),
-				)
-			}
-		} finally {
-			end()
+			return files.map(attachment)
+		},
+		beforeRename: async (file, name) => {
+			if (!file.file_id || !isSelectable(file)) return false
+			if (!file.is_directory && name.split(".").pop() !== file.file_name?.split(".").pop())
+				return userFilesStore.confirmFileChanges([file.file_id])
+			return true
+		},
+		onRenameSuccess: (id) =>
+			refresh([options.items.find((file) => file.file_id === id)?.parent_id]),
+	})
+	const root = userFilesStore.rootId ? userFilesStore.files.get(userFilesStore.rootId) : undefined
+	const move = useMoveFile({
+		attachments: options.items,
+		setSelectedItems: setSelection,
+		isCurrent,
+		directorySource:
+			root && identity
+				? {
+						root: {
+							...attachment(root),
+							file_name: t("userSpace.title"),
+							name: t("userSpace.title"),
+						},
+						identityKey: identity,
+						loadChildren: async (id, signal) => {
+							const { files } = await MagicFSApi.listFiles(
+								{ scope: "user", parent_id: id },
+								{ signal },
+							)
+							assertCurrent()
+							userFilesStore.cacheDirectory(id, files, identity)
+							return files.map(attachment)
+						},
+					}
+				: undefined,
+		onDirectoryMoveComplete: (files, targetId) =>
+			refresh([targetId, ...files.map((file) => file.parent_id)]),
+	})
+	const batch = useBatchDownload({
+		projectId: "0",
+		fileScope: "user",
+		getItemId: getAttachmentKey,
+		selectedItems: selection,
+		setSelectedItems: setSelection,
+		filteredFiles: options.items,
+		isCurrent,
+		resolveDeleteItems: async (selected) => {
+			const trees = await userFilesStore.loadSubtrees(selected)
+			if (viewKey !== currentView.current)
+				throw new DOMException("Directory changed", "AbortError")
+			return trees
+		},
+		beforeDelete: async (ids) =>
+			(await userFilesStore.confirmFileChanges(ids)) && viewKey === currentView.current,
+		onFilesDeleted: userFilesStore.removeFiles,
+		onUpdateAttachments: () => refresh(options.items.map((file) => file.parent_id)),
+		allowShare: false,
+		allowCopy: false,
+	})
+	const uploadParent = useRef<{ resolve: () => Promise<MagicFSFile>; identity: string } | null>(
+		null,
+	)
+	const resolveUploadTarget = useMemoizedFn(async (): Promise<UploadTarget> => {
+		const source = uploadParent.current
+		if (!source || source.identity !== getFileReferenceIdentityKey())
+			throw new DOMException("Upload cancelled", "AbortError")
+		const uploadIdentity = source.identity
+		const parent = await source.resolve()
+		const isUploadCurrent = () => uploadIdentity === getFileReferenceIdentityKey()
+		if (!isUploadCurrent()) throw new DOMException("Identity changed", "AbortError")
+		const children = await userFilesStore.loadDirectory(parent.id, true)
+		if (!isUploadCurrent()) throw new DOMException("Identity changed", "AbortError")
+		return {
+			parentId: parent.id,
+			attachments: [{ ...attachment(parent), children: children.map(attachment) }],
+			isCurrent: isUploadCurrent,
+			onTaskCreated: userFilesStore.trackUpload,
+			onTaskFinished: userFilesStore.finishUpload,
+			onUpdateAttachments: () => {
+				if (isUploadCurrent())
+					void userFilesStore.loadDirectory(parent.id, true).catch(() => {
+						if (isUploadCurrent()) magicToast.error(t("userSpace.loadFailed"))
+					})
+			},
 		}
+	})
+	const upload = useUploadWithModal({
+		projectId: "0",
+		fileScope: "user",
+		title: t("userSpace.title"),
+		resolveUploadTarget,
+	})
+	const resolveParent = (id?: string) =>
+		id
+			? async () => {
+					assertCurrent()
+					const file = userFilesStore.files.get(id)
+					if (!file?.is_directory) throw new Error("Directory is unavailable")
+					return file
+				}
+			: options.resolveParent
+	const create = (type: PresetFileType | true, id?: string) => {
+		if (virtualFile.editingVirtualId || virtualFolder.editingVirtualId) return
+		createParent.current = { resolve: resolveParent(id) }
+		if (type === true) virtualFolder.createVirtualFolder()
+		else virtualFile.createVirtualFile(type)
 	}
+	const uploadFiles = (id?: string) => {
+		if (!identity) return
+		uploadParent.current = { resolve: resolveParent(id), identity }
+		upload.handleCustomUploadFile()
+	}
+	const remove = (files: AttachmentItem[]) =>
+		void batch.deleteWithConfirm(files.filter(isSelectable))
 	const startMove = async (files: AttachmentItem[]) => {
-		const movable = files.filter(isSelectable)
-		if (!movable.length) return
+		const ids = files
+			.filter(isSelectable)
+			.flatMap((file) => (file.file_id ? [file.file_id] : []))
+		if (!ids.length) return
 		try {
-			const root = await userFilesStore.getRoot()
+			await userFilesStore.getRoot()
 			assertCurrent()
-			setMoveRoot(root)
-			setMoveFiles(movable)
-			setFailures([])
+			move.openBatchMoveByFileIds(ids)
 		} catch {
 			if (isCurrent()) magicToast.error(t("userSpace.loadFailed"))
 		}
 	}
-	const submitMove = async (targetId: string) => {
-		if (!begin()) return
-		const succeeded: string[] = []
-		const failed: UserFileOperationFailure[] = []
-		const parents = new Set<string>([targetId])
-		try {
-			const targetPath = userFilesStore.getPath(targetId)
-			for (const file of moveFiles) {
-				assertCurrent()
-				if (!file.file_id || !isSelectable(file)) continue
-				if (file.parent_id === targetId) {
-					succeeded.push(file.file_id)
-					continue
-				}
-				if (
-					file.file_id === targetId ||
-					targetPath.some((node) => node.id === file.file_id)
-				) {
-					failed.push({ file, message: t("userSpace.invalidMoveTarget") })
-					continue
-				}
-				if (file.parent_id) parents.add(file.parent_id)
-				try {
-					const children = await userFilesStore.loadDirectory(targetId, true)
-					assertCurrent()
-					if (children.some((child) => child.name === (file.file_name ?? file.name))) {
-						failed.push({ file, message: t("userSpace.nameExists") })
-						continue
-					}
-					await userSpaceFileService.moveNode(file.file_id, targetId)
-					succeeded.push(file.file_id)
-					if (file.parent_id) parents.add(file.parent_id)
-				} catch {
-					failed.push({ file, message: t("userSpace.operationFailed") })
-				}
-			}
-			assertCurrent()
-			userFilesStore.notifyMutation()
-			setMoveFiles([])
-			setMoveRoot(null)
-			setSuccessCount(succeeded.length)
-			setFailures(failed)
-			setSelection(
-				new Set(failed.flatMap(({ file }) => (file.file_id ? [file.file_id] : []))),
-			)
-			await refresh([...parents])
-			if (!failed.length)
-				magicToast.success(t("userSpace.moveSuccess", { count: succeeded.length }))
-		} catch {
-			if (isCurrent()) magicToast.error(t("userSpace.refreshAfterChangeFailed"))
-		} finally {
-			end()
-		}
-	}
-	const remove = (files: AttachmentItem[]) => {
-		const targets = files.filter(isSelectable)
-		if (!targets.length) return
-		MagicModal.confirm({
-			title: t("userSpace.deleteConfirm"),
-			content: t("userSpace.deleteDescription", { count: targets.length }),
-			okText: t("userSpace.delete"),
-			cancelText: t("common.cancel"),
-			onOk: async () => {
-				if (!begin()) return
-				let committed = false
-				try {
-					assertCurrent()
-					const ids = targets.flatMap((file) => (file.file_id ? [file.file_id] : []))
-					if (!(await userFilesStore.confirmFileChanges(ids))) return
-					assertCurrent()
-					const confirmed = new Set<string>()
-					for (
-						let offset = 0;
-						offset < ids.length;
-						offset += USER_FILE_DELETE_BATCH_SIZE
-					) {
-						assertCurrent()
-						try {
-							const deleted = await userSpaceFileService.deleteNodes(
-								ids.slice(offset, offset + USER_FILE_DELETE_BATCH_SIZE),
-							)
-							assertCurrent()
-							deleted.forEach((id) => confirmed.add(id))
-							userFilesStore.removeFiles(deleted)
-						} catch {
-							assertCurrent()
-						}
-					}
-					committed = confirmed.size > 0
-					userFilesStore.notifyMutation()
-					const failed = targets
-						.filter((file) => !confirmed.has(file.file_id ?? ""))
-						.map((file) => ({ file, message: t("userSpace.operationFailed") }))
-					setFailures(failed)
-					setSuccessCount(confirmed.size)
-					setSelection(
-						new Set(failed.flatMap(({ file }) => (file.file_id ? [file.file_id] : []))),
-					)
-					await refresh(targets.map((file) => file.parent_id))
-					if (!failed.length) magicToast.success(t("userSpace.deleted"))
-				} catch {
-					if (isCurrent())
-						magicToast.error(
-							t(
-								committed
-									? "userSpace.refreshAfterChangeFailed"
-									: "userSpace.operationFailed",
-							),
-						)
-				} finally {
-					end()
-				}
-			},
-		})
-	}
-	const download = async (file: AttachmentItem) => {
-		if (!file.file_id || file.is_directory) return
-		try {
-			await userSpaceFileService.downloadFile(file.file_id, file.file_name ?? file.name ?? "")
-		} catch {
-			if (isCurrent()) magicToast.error(t("topicFiles.downloadFailed"))
-		}
-	}
-	const downloadSelected = (files: AttachmentItem[]) => {
-		void (async () => {
-			for (const file of files) {
-				assertCurrent()
-				await download(file)
-			}
-		})().catch(() => undefined)
-	}
+	const busy =
+		virtualFile.isCreating ||
+		virtualFolder.isCreating ||
+		rename.renamePending ||
+		move.isMoving ||
+		batch.batchLoading
+	const menu = useContextMenu({
+		handleOpenFile: open,
+		handleOpenDirectory: (file) => options.onNavigate(file.file_id),
+		handleDeleteItem: (file) => remove([file]),
+		handleDeleteWithConfirm: (file) => remove([file]),
+		handleStartRename: (file) => {
+			if (isSelectable(file)) rename.handleStartRename(file)
+		},
+		handleAddToCurrentChat: (file) => void addToChat(file),
+		handleMoveFile: (file) => void startMove([file]),
+		handleShowInfo: info.handleShowInfo,
+		handleUploadFile: (file) => uploadFiles(file?.file_id),
+		createVirtualFile: (type, id) => create(type, id),
+		createVirtualFolder: (id) => create(true, id),
+		handleDownloadOriginal: operations.handleDownloadOriginal,
+		handleDownloadPdf: operations.handleDownloadPdf,
+		handleDownloadPpt: operations.handleDownloadPpt,
+		handleDownloadPptx: operations.handleDownloadPptx,
+		shouldUseSingleDownloadEntry: true,
+		isMoving: busy,
+		filterMenuItems: (items, file) =>
+			items.filter((item) => {
+				if (!item) return false
+				if (file?.is_directory && item.key === "downloadFolder") return false
+				return (
+					!file ||
+					isSelectable(file) ||
+					!["rename", "moveFile", "delete"].includes(String(item.key))
+				)
+			}),
+	})
+	const resetActions = useMemoizedFn(() => {
+		info.handleCloseInfoPanel()
+		virtualFile.resetVirtualFile()
+		virtualFolder.resetVirtualFolder()
+		rename.resetRename()
+		move.hideMoveSelector()
+		move.clearFailures()
+		setSelection(new Set())
+	})
+	useEffect(() => {
+		resetActions()
+	}, [identity, resetActions])
+	useEffect(() => {
+		setSelection(new Set())
+	}, [viewKey])
+	const cancelUpload = useMemoizedFn(upload.cancelDirectUpload)
+	useEffect(() => {
+		cancelUpload()
+	}, [identity, cancelUpload])
 	return {
-		info,
-		setInfo,
-		nameAction,
-		setNameAction,
-		name,
-		setName,
-		nameError,
-		busy,
-		submitName,
+		open,
 		create,
 		rename,
-		open,
-		addToChat,
-		startMove,
-		submitMove,
-		moveFiles,
-		moveRoot,
-		closeMove: () => {
-			if (!busy) {
-				setMoveFiles([])
-				setMoveRoot(null)
-			}
-		},
-		failures,
-		successCount,
-		clearFailures: () => setFailures([]),
+		virtualFile,
+		virtualFolder,
+		move,
+		upload,
+		uploadFiles,
 		remove,
-		download,
-		downloadSelected,
-		isSelectable,
+		startMove,
+		busy,
 		selection,
 		setSelection,
-		attachment,
-		loadTargetDirectory: async (id: string, signal: AbortSignal) => {
-			const { files } = await MagicFSApi.listFiles(
-				{ scope: "user", parent_id: id },
-				{ signal },
-			)
-			assertCurrent()
-			// 同步目标父链到共享缓存，提交移动时可校验自身和子孙关系。
-			userFilesStore.cacheDirectory(id, files, identity)
-			return files.filter((file) => file.is_directory).map(attachment)
-		},
+		isSelectable,
+		getMenuItems: menu.getMenuItems,
+		createMenuItems: createFileMenuItems({
+			t,
+			onAddFile: (type) => create(type),
+			onAddFolder: () => create(true),
+		}),
+		fileInfoPanel: info.fileInfoPanel,
+		downloadSelected: operations.downloadSelectedFiles,
 	}
 }

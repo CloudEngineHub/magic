@@ -12,7 +12,7 @@ import type { FileItem } from "../Detail/components/FilesViewer/types"
 import useSaveHandlerRegistration from "../Detail/hooks/useSaveHandlerRegistration"
 import { MemoryEditConflictDialog } from "../LongTremMemory/components/MemoryEditConflictDialog"
 import { getFileReferenceIdentityKey } from "../../services/userFileReferenceResolver"
-import { userSpaceFileService } from "./services/userSpaceFileService"
+import { useFileOperations } from "../TopicFilesButton/hooks/useFileOperations"
 import { useUserFileEditor } from "./hooks/useUserFileEditor"
 
 interface UserTextPreviewProps extends Omit<CommonHeaderV2Props, "isEditMode"> {
@@ -35,6 +35,16 @@ export default observer(function UserTextPreview({
 }: UserTextPreviewProps) {
 	const { t } = useTranslation("super")
 	const identityKey = getFileReferenceIdentityKey()
+	const downloadItem = {
+		file_id: data.file_id,
+		file_name: data.file_name,
+		file_extension: data.file_extension,
+	}
+	const { handleDownloadOriginal } = useFileOperations({
+		fileScope: "user",
+		attachments: [downloadItem],
+		isCurrent: () => identityKey === getFileReferenceIdentityKey(),
+	})
 	const editor = useUserFileEditor(data.file_id, isEditMode, identityKey)
 	const save = useMemoizedFn(async () => {
 		await editor.save()
@@ -50,7 +60,7 @@ export default observer(function UserTextPreview({
 	}
 	const download = async () => {
 		try {
-			await userSpaceFileService.downloadFile(data.file_id, data.file_name)
+			await handleDownloadOriginal(downloadItem)
 		} catch {
 			magicToast.error(t("topicFiles.downloadFailed"))
 		}

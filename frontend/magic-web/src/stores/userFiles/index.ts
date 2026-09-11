@@ -4,7 +4,11 @@ import {
 	getFileReferenceIdentityKey,
 	invalidateFileReferenceCache,
 } from "@/pages/superMagic/services/userFileReferenceResolver"
-import { userSpaceFileService } from "@/pages/superMagic/components/UserSpace/services/userSpaceFileService"
+import {
+	toUserAttachment,
+	userSpaceFileService,
+} from "@/pages/superMagic/components/UserSpace/services/userSpaceFileService"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 
 export interface UserDirectorySnapshot {
 	ids: string[]
@@ -142,6 +146,48 @@ export class UserFilesStore {
 			error: null,
 		})
 		this.changeVersion += 1
+	}
+
+	/** 只补齐所选子树；任何子目录读取或父子关系校验失败都不返回半棵树。 */
+	async loadSubtrees(selected: AttachmentItem[]): Promise<AttachmentItem[]> {
+		const identity = this.currentIdentityKey
+		const trees: AttachmentItem[] = []
+		const selectedIds = new Set(selected.map((item) => item.file_id))
+		const roots = selected.filter(
+			(item) =>
+				item.file_id &&
+				!this.getPath(item.file_id)
+					.slice(0, -1)
+					.some((parent) => selectedIds.has(parent.id)),
+		)
+		const uniqueRoots = [...new Map(roots.map((item) => [item.file_id, item])).values()]
+		const discovered = new Set(uniqueRoots.map((item) => item.file_id))
+		const pending = uniqueRoots.map((item) => ({ item, target: trees }))
+		for (let cursor = 0; cursor < pending.length; cursor += 1) {
+			if (!identity || identity !== this.currentIdentityKey)
+				throw new DOMException("Identity changed", "AbortError")
+			const entry = pending[cursor]
+			if (!entry?.item.file_id) throw new Error("File identity is missing")
+			const { item, target } = entry
+			const node: AttachmentItem = { ...item }
+			target.push(node)
+			if (!node.is_directory) continue
+			const files = await this.loadDirectory(item.file_id, true)
+			if (identity !== this.currentIdentityKey)
+				throw new DOMException("Identity changed", "AbortError")
+			node.children = []
+			for (const file of files) {
+				if (file.parent_id !== item.file_id || discovered.has(file.id))
+					throw new Error("Directory contents changed; reload before continuing")
+				discovered.add(file.id)
+				const path = this.getPath(file.id)
+					.map((part) => part.name)
+					.join("/")
+				if (!path) throw new Error("File parent chain is incomplete")
+				pending.push({ item: toUserAttachment(file, path), target: node.children })
+			}
+		}
+		return trees
 	}
 
 	async getRoot(): Promise<MagicFSFile> {

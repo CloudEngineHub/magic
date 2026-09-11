@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef } from "react"
 import type { AttachmentItem } from "./types"
 import { MenuProps } from "antd"
 import { collectFileIds } from "../utils/collectFileIds"
@@ -38,8 +38,20 @@ import {
 	getClientBatchItemType,
 	runClientBatchDocumentExport,
 } from "../modules/client-batch-export"
+import {
+	detectCanvasProjectOperationRisk,
+	getCanvasProjectOperationImpact,
+} from "../utils/canvasProjectOperationRisk"
+import type { FileScope } from "@/apis/modules/fileScope"
+
+// BatchDeleteFilesRequestDTO 的 file_ids 上限；后代先于父目录，失败后停止后续批次。
+const DELETE_BATCH_SIZE = 500
 
 interface UseBatchDownloadOptions {
+	fileScope?: FileScope
+	resolveDeleteItems?: (items: AttachmentItem[]) => Promise<AttachmentItem[]>
+	beforeDelete?: (ids: string[]) => Promise<boolean>
+	isCurrent?: () => boolean
 	projectId?: string
 	getItemId: (item: AttachmentItem) => string
 	selectedItems: Set<string>
@@ -59,7 +71,8 @@ interface UseBatchDownloadOptions {
 	}
 	// 新增：操作完成回调（用于刷新列表）
 	onUpdateAttachments?: () => void
-	removeFile: (fileId: string) => void
+	removeFile?: (fileId: string) => void
+	onFilesDeleted?: (fileIds: string[]) => void
 	getParentPathByFileId?: (fileId: string) => AttachmentItem[]
 	isMoving?: boolean
 	allowEdit?: boolean
@@ -109,6 +122,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		downloadProgress,
 	} = options
 	const [batchLoading, setBatchLoading] = useState(false)
+	const deletingRef = useRef(false)
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
@@ -194,36 +208,121 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		})
 	}
 
-	// 批量删除（不带确认弹窗，由调用方使用 Popconfirm 处理）
-	const handleBatchDelete = async () => {
-		if (selectedItems.size === 0) return
+	const deleteItems = async (items: AttachmentItem[], keys?: Set<string>) => {
+		if (deletingRef.current) return
+		const isCurrent = options.isCurrent ?? (() => true)
+		if (!isCurrent()) return
+		const ids = [
+			...new Set(
+				collectFileIds({
+					items,
+					selectedItems: keys,
+					getItemId,
+					includeFolderIds: true,
+				}),
+			),
+		].reverse()
+		if (!ids.length) return
+		deletingRef.current = true
 		setBatchLoading(true)
+		const confirmed = new Set<string>()
 		try {
-			const selectedFileIds = collectFileIds({
-				items: filteredFiles,
-				selectedItems,
-				getItemId,
-				includeFolderIds: true, // 删除时需要包含文件夹ID
-			})
-
-			if (selectedFileIds.length > 0) {
-				await SuperMagicApi.deleteFiles({
-					file_ids: selectedFileIds,
-					project_id: projectId,
-				}).catch(() => null)
-				selectedFileIds.forEach((fileId) => {
-					removeFile(fileId)
-				})
+			for (let offset = 0; offset < ids.length; offset += DELETE_BATCH_SIZE) {
+				if (!isCurrent()) return
+				const batch = ids.slice(offset, offset + DELETE_BATCH_SIZE)
+				let unresolved = batch.length
+				try {
+					const result = await SuperMagicApi.deleteFiles({
+						file_ids: batch,
+						project_id: projectId,
+					})
+					if (!isCurrent()) return
+					const returnedIds = new Set(result.file_ids.map(String))
+					const deleted = batch.filter((id) => returnedIds.has(id))
+					for (const id of batch) {
+						if (returnedIds.has(id)) {
+							confirmed.add(id)
+							unresolved -= 1
+						}
+					}
+					if (options.onFilesDeleted) options.onFilesDeleted(deleted)
+					else deleted.forEach((id) => removeFile?.(id))
+					if (unresolved) throw new Error("Incomplete file deletion result")
+				} catch {
+					if (!isCurrent()) return
+					// 写请求失败可能已在服务器执行；不重放，也不继续提交父目录。
+					magicToast.error(
+						t("topicFiles.deleteIncomplete", {
+							success: confirmed.size,
+							unknown: unresolved,
+							pending: ids.length - offset - batch.length,
+						}),
+					)
+					onUpdateAttachments?.()
+					return
+				}
 			}
+			if (!isCurrent()) return
 			pubsub.publish(PubSubEvents.Cancel_File_Selection)
 			onUpdateAttachments?.()
 			magicToast.success(t("topicFiles.contextMenu.deleteFileSuccess"))
 			exitSelectMode()
-		} catch (error) {
-			console.error("Batch delete failed:", error)
-			magicToast.error(t("topicFiles.error.deleteFileFailed"))
 		} finally {
-			setBatchLoading(false)
+			deletingRef.current = false
+			if (isCurrent()) setBatchLoading(false)
+		}
+	}
+
+	// 批量删除（不带确认弹窗，由调用方使用 Popconfirm 处理）
+	const handleBatchDelete = async () => {
+		if (selectedItems.size) await deleteItems(filteredFiles, selectedItems)
+	}
+
+	const deleteWithConfirm = async (selected: AttachmentItem[]) => {
+		if (!selected.length || deletingRef.current) return
+		const isCurrent = options.isCurrent ?? (() => true)
+		try {
+			const items = options.resolveDeleteItems
+				? await options.resolveDeleteItems(selected)
+				: selected
+			if (!isCurrent()) return
+			const ids = collectFileIds({ items, includeFolderIds: true })
+			if (options.beforeDelete && !(await options.beforeDelete(ids))) return
+			if (!isCurrent()) return
+			const keys = new Set(items.map(getItemId))
+			const contentKey = resolveBatchDeleteConfirmContentKey({
+				containsFolders: items.some((item) => item.is_directory),
+				touchesMagicFolder: hasMagicSystemFolderInDeletionSelection(items, keys, getItemId),
+			})
+			const risk =
+				options.fileScope === "user"
+					? undefined
+					: await detectCanvasProjectOperationRisk({
+							attachments,
+							items,
+							operation: "delete",
+						})
+			if (!isCurrent()) return
+			const impact = risk && getCanvasProjectOperationImpact(risk)
+			MagicModal.confirm({
+				title: t("topicFiles.contextMenu.deleteTip"),
+				content: risk?.shouldWarn
+					? t(
+							impact === "open-failure"
+								? "topicFiles.contextMenu.deleteCanvasOpenFailureRiskContent"
+								: impact === "content-loss"
+									? "topicFiles.contextMenu.deleteCanvasContentLossRiskContent"
+									: "topicFiles.contextMenu.deleteCanvasMixedRiskContent",
+						)
+					: t(contentKey, { count: selected.length }),
+				variant: "destructive",
+				okText: t("topicFiles.contextMenu.delete"),
+				cancelText: t("topicFiles.contextMenu.cancel"),
+				onOk: () => (isCurrent() ? deleteItems(items) : undefined),
+			})
+		} catch (error) {
+			if (error instanceof DOMException && error.name === "AbortError") return
+			if (isCurrent()) magicToast.error(t("topicFiles.error.deleteFileFailed"))
 		}
 	}
 
@@ -709,6 +808,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		handleBatchDownload,
 		handleExportPdfOrPpt,
 		handleBatchDelete,
+		deleteWithConfirm,
 		handleMobileBatchDelete,
 		handleBatchShare,
 		hasSelectedFolders,

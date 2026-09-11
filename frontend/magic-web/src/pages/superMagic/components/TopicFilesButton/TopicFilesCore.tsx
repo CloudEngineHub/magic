@@ -127,6 +127,15 @@ import { isSlidesTemplateFolder, toSlidesTemplatePreviewItem } from "./utils/sli
 import { SlidesTemplateFolderIcon } from "./components/SlidesTemplateFolderIcon"
 import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
 import { getAttachmentKey } from "./utils/getAttachmentKey"
+import { FileDirectoryView, type FileDirectoryViewProps } from "./components/FileDirectoryView"
+import { createFileMenuItems } from "./components/hooks/useFileMenuItems"
+import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+	DialogFooter,
+} from "@/components/shadcn-ui/dialog"
 
 export interface TopicFilesExpansionState {
 	hasExpandableFolders: boolean
@@ -134,6 +143,9 @@ export interface TopicFilesExpansionState {
 }
 
 interface TopicFilesCoreProps {
+	directoryView?: Pick<FileDirectoryViewProps, "items" | "path" | "onNavigate"> & {
+		directory?: AttachmentItem
+	}
 	className?: string
 	attachments?: AttachmentItem[]
 	setUserSelectDetail?: (detail: any) => void
@@ -217,6 +229,7 @@ export interface TopicFilesCoreRef {
 const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(function TopicFilesCore(
 	{
 		className,
+		directoryView,
 		attachments = [],
 		setUserSelectDetail,
 		onFileClick,
@@ -331,6 +344,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		renameErrorMessage,
 		handleStartRename,
 		handleRenameConfirm,
+		handleRenameCancel,
+		renamingFileIds,
 		handleRenameKeyDown,
 		getItemId,
 		isFileRenaming,
@@ -366,6 +381,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleShareSave,
 		exportingFiles,
 		createFileAndUpload,
+		creatingFiles,
+		downloadSelectedFiles,
 		createFolderAndUpload,
 		createDesignProject,
 		createSelfMediaProject,
@@ -1064,6 +1081,12 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			: undefined,
 		handleShareItem: capabilities.share ? handleShareItemFromHook : undefined,
 		handleDeleteItem,
+		handleDeleteWithConfirm: directoryView
+			? (item) => void deleteWithConfirm([item])
+			: undefined,
+		handleOpenDirectory: directoryView
+			? (item) => directoryView.onNavigate(item.file_id)
+			: undefined,
 		handleDownloadOriginal,
 		handleDownloadPdf,
 		handleDownloadPpt,
@@ -2078,6 +2101,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		showBatchDownload,
 		batchMenuItems,
 		deleteConfirmNode: batchDeleteConfirmNode,
+		deleteWithConfirm,
 	} = useBatchDownload({
 		projectId,
 		getItemId,
@@ -2175,11 +2199,89 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const handleMountedTreeRowsChange = useMemoizedFn((rows: Array<{ node: TreeNodeData }>) => {
 		imagePreviewManager.setMountedItems(rows.map((row) => row.node.item))
 	})
+	const directoryNameInput = directoryView
+		? [
+				{
+					id: renamingItemId,
+					title: t("userSpace.rename"),
+					value: renameValue,
+					setValue: setRenameValue,
+					inputRef: renameInputRef,
+					error: renameErrorMessage,
+					confirm: handleRenameConfirm,
+					cancel: handleRenameCancel,
+				},
+				{
+					id: editingVirtualFileId,
+					title: t("userSpace.createFile"),
+					value: virtualFileName,
+					setValue: setVirtualFileName,
+					inputRef: virtualFileInputRef,
+					error: fileErrorMessage,
+					confirm: confirmVirtualFile,
+					cancel: cancelVirtualFile,
+				},
+				{
+					id: editingVirtualFolderId,
+					title: t("userSpace.createFolder"),
+					value: virtualFolderName,
+					setValue: setVirtualFolderName,
+					inputRef: virtualFolderInputRef,
+					error: folderErrorMessage,
+					confirm: confirmVirtualFolder,
+					cancel: cancelVirtualFolder,
+				},
+				{
+					id: editingVirtualDesignProjectId,
+					title: t("topicFiles.contextMenu.createSubMenu.designFile"),
+					value: virtualDesignProjectName,
+					setValue: setVirtualDesignProjectName,
+					inputRef: virtualDesignProjectInputRef,
+					error: designProjectErrorMessage,
+					confirm: confirmVirtualDesignProject,
+					cancel: cancelVirtualDesignProject,
+				},
+				{
+					id: editingVirtualSelfMediaProjectId,
+					title: t("topicFiles.contextMenu.createSubMenu.selfMediaFile"),
+					value: virtualSelfMediaProjectName,
+					setValue: setVirtualSelfMediaProjectName,
+					inputRef: virtualSelfMediaProjectInputRef,
+					error: selfMediaProjectErrorMessage,
+					confirm: confirmVirtualSelfMediaProject,
+					cancel: cancelVirtualSelfMediaProject,
+				},
+				{
+					id: editingVirtualAICardProjectId,
+					title: t("topicFiles.contextMenu.createSubMenu.aiCardFile"),
+					value: virtualAICardProjectName,
+					setValue: setVirtualAICardProjectName,
+					inputRef: virtualAICardProjectInputRef,
+					error: aiCardProjectErrorMessage,
+					confirm: confirmVirtualAICardProject,
+					cancel: cancelVirtualAICardProject,
+				},
+			].find((input) => input.id)
+		: undefined
+	const directoryInputBusy = creatingFiles.size > 0 || renamingFileIds.size > 0
+	const canCreateDirectoryProject =
+		capabilities.projectContentCreation &&
+		!directoryView?.directory?.display_config &&
+		!(
+			directoryView?.directory?.file_id &&
+			treeIndex
+				.getParentItemsById(directoryView.directory.file_id)
+				.some((item) => item.display_config)
+		)
 
 	return (
 		<ProjectFileImagePreviewProvider manager={imagePreviewManager}>
 			<div
-				className={cx(className, "flex h-[calc(100%-32px)] overflow-auto flex-col")}
+				className={cx(
+					className,
+					"flex min-h-0 flex-col",
+					directoryView ? "h-full overflow-hidden" : "h-[calc(100%-32px)] overflow-auto",
+				)}
 				data-testid="topic-files-core"
 			>
 				{/* 右键菜单内容 */}
@@ -2188,147 +2290,282 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				{fileInfoPanel}
 				{deleteConfirmNode}
 				{batchDeleteConfirmNode}
-				{/* Content area */}
-				{/* <div className={styles.contentArea}> */}
-				{/* File tree */}
-				<div
-					ref={fileListAreaRef}
-					className={cx(styles.fileListArea, "px-2 pb-2", {
-						[styles.dragTargetFolder]:
-							isDragOverFileListArea || dragState.isDragOverRoot, // 添加拖拽悬停样式
-					})}
-					onScroll={handleFileListScroll}
-					onContextMenu={(e) =>
-						fileListAreaDelegateProps.onDropdownContextMenuClick?.(e, null)
-					}
-					onDragEnter={handleFileListAreaDragEnter}
-					onDragOver={handleFileListAreaDragOver}
-					onDragLeave={handleFileListAreaDragLeave}
-					onDragEnd={handleFileListAreaDragEnd}
-					onDrop={handleFileListAreaDrop}
-					data-testid="topic-files-list-area"
-				>
-					{visibleRows.length > 0 ? (
-						<CustomTree
-							visibleRows={visibleRows}
-							visibleNodes={visibleNodes}
-							visibleNodeIndexByKey={visibleNodeIndexByKey}
-							// draggable={
-							// 	allowEdit
-							// 		? {
-							// 				icon: false,
-							// 		  }
-							// 		: false
-							// }
-							onSelect={handleSelect}
-							expandedKeys={expandedKeys}
-							selectedKeys={effectiveSelectedKeys}
-							titleRender={titleRender}
-							getRowRenderVersion={getRowRenderVersion}
-							rowRenderContextVersion={rowRenderContextVersion}
-							showIcon={false}
-							blockNode
-							scrollElementRef={fileListAreaRef}
-							scrollToKey={locatingFileId}
-							isMobile={isMobile}
-							onMountedRowsChange={handleMountedTreeRowsChange}
-							// height={treeHeight}
-							dragTargetNodeClass={styles.dragTargetFolder}
-							dragTargetKey={dragState.dropTargetFolderId}
-							isDragTargetNode={isDropTargetNode}
-							{...treeNodeDragHandlers}
+				{directoryView ? (
+					<>
+						<FileDirectoryView
+							{...directoryView}
+							compact={false}
+							rootName={t("userSpace.currentProject")}
+							onOpen={handleOpenFile}
+							getMenuItems={getMenuItems}
+							selectedIds={selectedItems}
+							onSelectionChange={setSelectedItems}
+							isSelectable={isItemSelectable}
+							activeFileId={activeFileId}
+							loading={refreshLoading}
+							onRetry={() => onUpdateAttachments?.()}
+							createMenuItems={
+								allowEdit
+									? createFileMenuItems({
+											t,
+											onAddFile: (type) =>
+												createVirtualFile(
+													type,
+													directoryView.directory?.file_id,
+													directoryView.directory?.relative_file_path,
+												),
+											onAddFolder: () =>
+												createVirtualFolder(
+													directoryView.directory?.file_id,
+													directoryView.directory?.relative_file_path,
+												),
+											onAddDesign: canCreateDirectoryProject
+												? () =>
+														createVirtualDesignProject(
+															directoryView.directory?.file_id,
+															directoryView.directory
+																?.relative_file_path,
+														)
+												: undefined,
+											onAddSelfMedia: canCreateDirectoryProject
+												? () =>
+														createVirtualSelfMediaProject(
+															directoryView.directory?.file_id,
+															directoryView.directory
+																?.relative_file_path,
+														)
+												: undefined,
+											onAddAICard: canCreateDirectoryProject
+												? () =>
+														openAICardDialog(
+															directoryView.directory
+																?.relative_file_path,
+														)
+												: undefined,
+										})
+									: undefined
+							}
+							onUpload={
+								allowEdit && capabilities.upload
+									? () => handleUploadFile(directoryView.directory)
+									: undefined
+							}
+							onMove={
+								allowEdit && capabilities.move
+									? (files) => {
+											const ids = files.flatMap((file) =>
+												file.file_id ? [file.file_id] : [],
+											)
+											if (canUseDesktopCrossProjectMove)
+												crossProjectOperation.openMoveModal(
+													ids,
+													ids[0] ? getParentPathByFileId(ids[0]) : [],
+												)
+											else moveFileHook.openBatchMoveByFileIds(ids)
+										}
+									: undefined
+							}
+							onDelete={
+								allowEdit ? (files) => void deleteWithConfirm(files) : undefined
+							}
+							onDownload={allowDownload !== false ? downloadSelectedFiles : undefined}
+							allowDirectoryDownload
 						/>
-					) : refreshLoading ? (
-						<div
-							className="flex h-full w-full items-center justify-center"
-							data-testid="topic-files-list-loading"
+						<Dialog
+							open={Boolean(directoryNameInput)}
+							onOpenChange={(open) => {
+								if (!open && !directoryInputBusy) directoryNameInput?.cancel()
+							}}
 						>
-							<div className="flex flex-col items-center gap-3">
-								<MagicSpin spinning />
-								<p className="text-sm text-muted-foreground">
-									{t("topicFiles.loadingFiles")}
-								</p>
-							</div>
-						</div>
-					) : (
-						<EmptyState
-							onAddFile={createVirtualFile}
-							onAddDesign={createVirtualDesignProject}
-							onUploadFile={() => handleUploadFile()}
-							allowEdit={allowEdit}
-						/>
-					)}
-				</div>
-				{/* </div> */}
-				{/* Batch download layer */}
-				<div
-					className={cx(styles.batchDownloadLayer, {
-						[styles.hidden]:
-							(!isMobile && !showBatchDownload) ||
-							(isMobile && attachments.length <= 0),
-						[styles.pcBatchDownloadLayer]: !isMobile,
-					})}
-				>
-					{!isMobile && showBatchDownload && (
-						<Flex className={styles.batchOperations}>
-							<MagicDropdown
-								menu={{ items: batchMenuItems, style: { width: "100%" } }}
-								placement="topLeft"
-								trigger={["click"]}
-							>
-								<div style={{ width: "100%" }}>
+							<DialogContent>
+								<DialogHeader>
+									<DialogTitle>{directoryNameInput?.title}</DialogTitle>
+								</DialogHeader>
+								<InputWithError
+									ref={directoryNameInput?.inputRef}
+									value={directoryNameInput?.value ?? ""}
+									height={32}
+									onChange={(event) =>
+										directoryNameInput?.setValue(event.target.value)
+									}
+									errorMessage={directoryNameInput?.error}
+									showError
+									disabled={directoryInputBusy}
+									onKeyDown={(event) => {
+										if (event.key === "Enter" && !directoryInputBusy)
+											void directoryNameInput?.confirm()
+									}}
+								/>
+								<DialogFooter>
 									<Button
-										className={styles.batchDownloadButtonPC}
-										data-testid="batch-operations-button"
-										disabled={batchLoading}
-										style={{ flex: 1, width: "100%" }}
+										variant="outline"
+										disabled={directoryInputBusy}
+										onClick={() => directoryNameInput?.cancel()}
 									>
-										<Flex align="center" gap={2} justify="center">
-											{batchLoading ? (
-												<Loader2 className="mr-1 animate-spin" size={16} />
-											) : null}
-											<span className={styles.batchDownloadButtonPCText}>
-												{t("topicFiles.batchOperations")}
-											</span>
-											<IconChevronDown size={16} stroke={1.5} color="#fff" />
-										</Flex>
+										{t("common.cancel")}
 									</Button>
+									<Button
+										disabled={directoryInputBusy}
+										onClick={() => void directoryNameInput?.confirm()}
+									>
+										{t("common.confirm")}
+									</Button>
+								</DialogFooter>
+							</DialogContent>
+						</Dialog>
+					</>
+				) : (
+					<>
+						{/* Content area */}
+						{/* <div className={styles.contentArea}> */}
+						{/* File tree */}
+						<div
+							ref={fileListAreaRef}
+							className={cx(styles.fileListArea, "px-2 pb-2", {
+								[styles.dragTargetFolder]:
+									isDragOverFileListArea || dragState.isDragOverRoot, // 添加拖拽悬停样式
+							})}
+							onScroll={handleFileListScroll}
+							onContextMenu={(e) =>
+								fileListAreaDelegateProps.onDropdownContextMenuClick?.(e, null)
+							}
+							onDragEnter={handleFileListAreaDragEnter}
+							onDragOver={handleFileListAreaDragOver}
+							onDragLeave={handleFileListAreaDragLeave}
+							onDragEnd={handleFileListAreaDragEnd}
+							onDrop={handleFileListAreaDrop}
+							data-testid="topic-files-list-area"
+						>
+							{visibleRows.length > 0 ? (
+								<CustomTree
+									visibleRows={visibleRows}
+									visibleNodes={visibleNodes}
+									visibleNodeIndexByKey={visibleNodeIndexByKey}
+									// draggable={
+									// 	allowEdit
+									// 		? {
+									// 				icon: false,
+									// 		  }
+									// 		: false
+									// }
+									onSelect={handleSelect}
+									expandedKeys={expandedKeys}
+									selectedKeys={effectiveSelectedKeys}
+									titleRender={titleRender}
+									getRowRenderVersion={getRowRenderVersion}
+									rowRenderContextVersion={rowRenderContextVersion}
+									showIcon={false}
+									blockNode
+									scrollElementRef={fileListAreaRef}
+									scrollToKey={locatingFileId}
+									isMobile={isMobile}
+									onMountedRowsChange={handleMountedTreeRowsChange}
+									// height={treeHeight}
+									dragTargetNodeClass={styles.dragTargetFolder}
+									dragTargetKey={dragState.dropTargetFolderId}
+									isDragTargetNode={isDropTargetNode}
+									{...treeNodeDragHandlers}
+								/>
+							) : refreshLoading ? (
+								<div
+									className="flex h-full w-full items-center justify-center"
+									data-testid="topic-files-list-loading"
+								>
+									<div className="flex flex-col items-center gap-3">
+										<MagicSpin spinning />
+										<p className="text-sm text-muted-foreground">
+											{t("topicFiles.loadingFiles")}
+										</p>
+									</div>
 								</div>
-							</MagicDropdown>
-						</Flex>
-					)}
-					{showMobileBatchActions && (
-						<Button
-							variant="secondary"
-							className="h-9 px-8 py-2 text-sm font-medium shadow-xs"
-							data-testid="mobile-cancel-select-button"
-							onClick={handleCancelMobileBatchSelection}
+							) : (
+								<EmptyState
+									onAddFile={createVirtualFile}
+									onAddDesign={createVirtualDesignProject}
+									onUploadFile={() => handleUploadFile()}
+									allowEdit={allowEdit}
+								/>
+							)}
+						</div>
+						{/* </div> */}
+						{/* Batch download layer */}
+						<div
+							className={cx(styles.batchDownloadLayer, {
+								[styles.hidden]:
+									(!isMobile && !showBatchDownload) ||
+									(isMobile && attachments.length <= 0),
+								[styles.pcBatchDownloadLayer]: !isMobile,
+							})}
 						>
-							{t("topicFiles.cancelSelect")}
-						</Button>
-					)}
-					{showMobileBatchActions && (
-						<MagicDropdown
-							menu={{ items: batchMenuItems }}
-							placement="topLeft"
-							trigger={["click"]}
-							disabled={!showBatchDownload || batchLoading}
-						>
-							<Button
-								variant="default"
-								className="h-9 w-[253px] gap-2 px-4 py-2 text-sm font-medium shadow-xs"
-								data-testid="mobile-batch-operations-button"
-								disabled={!showBatchDownload || batchLoading}
-							>
-								{batchLoading ? (
-									<Loader2 className="animate-spin" size={16} />
-								) : null}
-								<span>{t("topicFiles.batchOperation")}</span>
-								<ChevronDown size={16} />
-							</Button>
-						</MagicDropdown>
-					)}
-					{/* {isMobile && attachments.length > 0 && hasLogin && (
+							{!isMobile && showBatchDownload && (
+								<Flex className={styles.batchOperations}>
+									<MagicDropdown
+										menu={{ items: batchMenuItems, style: { width: "100%" } }}
+										placement="topLeft"
+										trigger={["click"]}
+									>
+										<div style={{ width: "100%" }}>
+											<Button
+												className={styles.batchDownloadButtonPC}
+												data-testid="batch-operations-button"
+												disabled={batchLoading}
+												style={{ flex: 1, width: "100%" }}
+											>
+												<Flex align="center" gap={2} justify="center">
+													{batchLoading ? (
+														<Loader2
+															className="mr-1 animate-spin"
+															size={16}
+														/>
+													) : null}
+													<span
+														className={styles.batchDownloadButtonPCText}
+													>
+														{t("topicFiles.batchOperations")}
+													</span>
+													<IconChevronDown
+														size={16}
+														stroke={1.5}
+														color="#fff"
+													/>
+												</Flex>
+											</Button>
+										</div>
+									</MagicDropdown>
+								</Flex>
+							)}
+							{showMobileBatchActions && (
+								<Button
+									variant="secondary"
+									className="h-9 px-8 py-2 text-sm font-medium shadow-xs"
+									data-testid="mobile-cancel-select-button"
+									onClick={handleCancelMobileBatchSelection}
+								>
+									{t("topicFiles.cancelSelect")}
+								</Button>
+							)}
+							{showMobileBatchActions && (
+								<MagicDropdown
+									menu={{ items: batchMenuItems }}
+									placement="topLeft"
+									trigger={["click"]}
+									disabled={!showBatchDownload || batchLoading}
+								>
+									<Button
+										variant="default"
+										className="h-9 w-[253px] gap-2 px-4 py-2 text-sm font-medium shadow-xs"
+										data-testid="mobile-batch-operations-button"
+										disabled={!showBatchDownload || batchLoading}
+									>
+										{batchLoading ? (
+											<Loader2 className="animate-spin" size={16} />
+										) : null}
+										<span>{t("topicFiles.batchOperation")}</span>
+										<ChevronDown size={16} />
+									</Button>
+								</MagicDropdown>
+							)}
+							{/* {isMobile && attachments.length > 0 && hasLogin && (
 					<>
 						<div className={styles.batchDownloadSeparator} />
 						<button
@@ -2345,7 +2582,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						</button>
 					</>
 				)} */}
-				</div>
+						</div>
+					</>
+				)}
 				{/* 文件分享模态框 */}
 				{isMobile ? (
 					<ProjectShareSheet

@@ -26,14 +26,6 @@ class BatchDeleteFilesRequestDTO extends AbstractRequestDTO
      */
     public bool $forceDelete = false;
 
-    /** 用户空间目录删除显式包含后代；项目删除仍遵守原协议。 */
-    public bool $includeDescendants = false;
-
-    public function getIncludeDescendants(): bool
-    {
-        return $this->includeDescendants;
-    }
-
     public function getFileIds(): array
     {
         return $this->fileIds;
@@ -59,7 +51,6 @@ class BatchDeleteFilesRequestDTO extends AbstractRequestDTO
             'file_ids.*' => 'required|integer|min:1',
             'project_id' => 'required|string|max:50',
             'force_delete' => 'nullable|boolean',
-            'include_descendants' => 'nullable|boolean',
         ];
     }
 

@@ -16,9 +16,11 @@ interface VirtualFolderItem {
 }
 
 interface UseVirtualFolderOptions {
+	allowDotStart?: boolean
+	isCurrent?: () => boolean
 	attachments: AttachmentItem[]
-	setExpandedKeys: (expandedKeys: React.Key[]) => void
-	expandedKeys: React.Key[]
+	setExpandedKeys?: (expandedKeys: React.Key[]) => void
+	expandedKeys?: React.Key[]
 	// 修改：文件夹创建回调，允许返回创建结果
 	onFolderCreate?: (folderName: string, parentPath?: string) => Promise<any>
 	// 添加直接更新attachments的回调
@@ -65,13 +67,15 @@ const addFolderToAttachments = (
  */
 export function useVirtualFolder(options: UseVirtualFolderOptions) {
 	const { t } = useTranslation("super")
-	const { attachments, setExpandedKeys, expandedKeys } = options
+	const { attachments, setExpandedKeys, expandedKeys = [] } = options
 	const [virtualFolder, setVirtualFolder] = useState<VirtualFolderItem | null>(null)
 	const [editingVirtualId, setEditingVirtualId] = useState<string | null>(null)
 	const [virtualFolderName, setVirtualFolderName] = useState("")
 	const [errorMessage, setErrorMessage] = useState("")
 	const virtualInputRef = useRef<InputRef>(null)
 	const hasFocusedRef = useRef(false)
+	const creatingRef = useRef(false)
+	const [isCreating, setIsCreating] = useState(false)
 
 	// 聚焦并选择文件夹名的统一处理函数
 	const focusAndSelectFolderName = (inputRef: InputRef) => {
@@ -172,7 +176,9 @@ export function useVirtualFolder(options: UseVirtualFolderOptions) {
 
 	// 确认虚拟文件夹创建
 	const confirmVirtualFolder = async () => {
-		if (!editingVirtualId || !virtualFolder) return
+		if (!editingVirtualId || !virtualFolder || creatingRef.current) return
+		const isCurrent = options.isCurrent ?? (() => true)
+		if (!isCurrent()) return
 
 		const trimmedName = virtualFolderName.trim()
 
@@ -183,7 +189,10 @@ export function useVirtualFolder(options: UseVirtualFolderOptions) {
 		}
 
 		// 文件夹名称校验
-		const validationResult = validateFilename(trimmedName, true, { t })
+		const validationResult = validateFilename(trimmedName, true, {
+			t,
+			allowDotStart: options.allowDotStart,
+		})
 		if (!validationResult.isValid) {
 			setErrorMessage("")
 			setTimeout(() => {
@@ -201,6 +210,8 @@ export function useVirtualFolder(options: UseVirtualFolderOptions) {
 			return
 		}
 
+		creatingRef.current = true
+		setIsCreating(true)
 		try {
 			console.log("创建文件夹:", {
 				name: trimmedName,
@@ -209,6 +220,7 @@ export function useVirtualFolder(options: UseVirtualFolderOptions) {
 
 			// 调用文件夹创建回调
 			const result = await options.onFolderCreate?.(trimmedName, virtualFolder.parentPath)
+			if (!isCurrent()) return
 
 			// 显示成功提示
 			magicToast.success(t("topicFiles.contextMenu.createFolderSuccess"))
@@ -239,9 +251,15 @@ export function useVirtualFolder(options: UseVirtualFolderOptions) {
 			// 创建成功后清理虚拟文件夹
 			clearVirtualFolder()
 		} catch (error) {
+			if (!isCurrent()) return
 			console.error("创建文件夹失败:", error)
-			setErrorMessage("创建文件夹失败，请重试")
+			setErrorMessage(error instanceof Error ? error.message : t("userSpace.operationFailed"))
 			// 失败时不清理虚拟文件夹，让用户可以看到错误并重新尝试
+		} finally {
+			if (isCurrent()) {
+				creatingRef.current = false
+				setIsCreating(false)
+			}
 		}
 	}
 
@@ -325,6 +343,8 @@ export function useVirtualFolder(options: UseVirtualFolderOptions) {
 
 	// 重置虚拟文件夹状态
 	const resetVirtualFolder = () => {
+		creatingRef.current = false
+		setIsCreating(false)
 		setVirtualFolder(null)
 		setEditingVirtualId(null)
 		setVirtualFolderName("")
@@ -332,6 +352,7 @@ export function useVirtualFolder(options: UseVirtualFolderOptions) {
 	}
 
 	return {
+		isCreating,
 		// 状态
 		virtualFolders,
 		editingVirtualId,

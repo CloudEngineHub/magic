@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react"
+import { useMemoizedFn } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "./types"
@@ -27,9 +28,18 @@ import {
 	resolveSingleDocumentStaticDependencies,
 } from "@/pages/superMagic/utils/staticDependencies"
 import type { CanvasProjectPathRepairResult } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
+import type { DirectorySource } from "../../SelectPathModal/components/SelectDirectoryModal/types"
+
+export interface FileMoveFailure {
+	file: AttachmentItem
+	message: string
+}
 
 interface UseMoveFileOptions {
 	projectId?: string
+	directorySource?: DirectorySource
+	isCurrent?: () => boolean
+	onDirectoryMoveComplete?: (files: AttachmentItem[], targetId: string) => void
 	attachments?: AttachmentItem[]
 	attachmentIndex?: AttachmentIndex
 	onMoveSuccess?: () => void
@@ -86,6 +96,10 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 	const folderConflictHandler = useFolderConflictHandler()
 	// 默认路径（被移动文件所在的目录）
 	const [defaultPath, setDefaultPath] = useState<AttachmentItem[]>([])
+	const [failures, setFailures] = useState<FileMoveFailure[]>([])
+	const [successCount, setSuccessCount] = useState(0)
+	const directoryMoveRef = useRef<AbortController | null>(null)
+	const previousSourceIdentity = useRef(options.directorySource?.identityKey)
 
 	const setIsMoving = (moving: boolean) => {
 		console.trace(moving)
@@ -155,6 +169,21 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 	)
 
 	useEffect(() => clearMoveTimers, [clearMoveTimers])
+	useEffect(() => {
+		if (
+			previousSourceIdentity.current &&
+			previousSourceIdentity.current !== options.directorySource?.identityKey
+		) {
+			setVisible(false)
+			setFailures([])
+			setIsMovingFn(false)
+		}
+		previousSourceIdentity.current = options.directorySource?.identityKey
+		return () => {
+			directoryMoveRef.current?.abort()
+			directoryMoveRef.current = null
+		}
+	}, [options.directorySource?.identityKey])
 
 	// Open the move picker.
 	const showMoveSelector = useCallback(
@@ -654,9 +683,88 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 		[attachmentIndex, attachments, batchMoveFiles, folderConflictHandler, moveDuplicateHandler],
 	)
 
+	const moveWithinDirectorySource = useMemoizedFn(async (path: AttachmentItem[]) => {
+		const source = options.directorySource
+		if (!source || directoryMoveRef.current) return
+		const targetId = path.at(-1)?.file_id ?? source.root.file_id
+		if (!targetId) return
+		const controller = new AbortController()
+		directoryMoveRef.current = controller
+		const isCurrent = () => !controller.signal.aborted && (options.isCurrent?.() ?? true)
+		const ids = isBatchMode
+			? batchFileIds
+			: currentMoveItem?.file_id
+				? [currentMoveItem.file_id]
+				: []
+		const items = ids.flatMap((id) => {
+			const file = attachments.find((item) => item.file_id === id)
+			return file ? [file] : []
+		})
+		if (items.length !== ids.length) {
+			directoryMoveRef.current = null
+			magicToast.error(t("topicFiles.error.moveFileFailed"))
+			return
+		}
+		const succeeded: AttachmentItem[] = []
+		const failed: FileMoveFailure[] = []
+		setIsMovingFn(true)
+		try {
+			for (const file of items) {
+				if (!file?.file_id || !isCurrent()) return
+				if (file.parent_id === targetId) {
+					succeeded.push(file)
+					continue
+				}
+				if (
+					file.file_id === targetId ||
+					path.some((parent) => parent.file_id === file.file_id)
+				) {
+					failed.push({ file, message: t("userSpace.invalidMoveTarget") })
+					continue
+				}
+				try {
+					const children = await source.loadChildren(targetId, controller.signal)
+					if (!isCurrent()) return
+					if (checkDuplicateFileName(getItemName(file), children)) {
+						failed.push({ file, message: t("userSpace.nameExists") })
+						continue
+					}
+					await SuperMagicApi.moveFile({
+						file_id: file.file_id,
+						target_parent_id: targetId,
+					})
+					if (!isCurrent()) return
+					succeeded.push(file)
+				} catch {
+					if (!isCurrent()) return
+					failed.push({ file, message: t("topicFiles.error.moveFileFailed") })
+				}
+			}
+			if (!isCurrent()) return
+			hideMoveSelector()
+			setFailures(failed)
+			setSuccessCount(succeeded.length)
+			setSelectedItems?.(
+				new Set(failed.flatMap(({ file }) => (file.file_id ? [file.file_id] : []))),
+			)
+			if (!failed.length) magicToast.success(t("topicFiles.success.fileMoved"))
+		} finally {
+			// 停止后续移动不代表已提交请求回滚，来源与目标目录都要重新读取。
+			options.onDirectoryMoveComplete?.(items, targetId)
+			if (directoryMoveRef.current === controller) {
+				directoryMoveRef.current = null
+				setIsMovingFn(false)
+			}
+		}
+	})
+
 	// 确认移动文件
 	const confirmMove = useCallback(
 		async (data: { path: AttachmentItem[] }) => {
+			if (options.directorySource) {
+				await moveWithinDirectorySource(data.path)
+				return
+			}
 			const targetParentId =
 				data.path.length > 0 ? data.path[data.path.length - 1].file_id || "" : ""
 			const targetFolderPath = getTargetFolderPath(data.path)
@@ -876,6 +984,8 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			executeSingleMove()
 		},
 		[
+			options.directorySource,
+			moveWithinDirectorySource,
 			attachmentIndex,
 			attachments,
 			batchFileIds,
@@ -902,6 +1012,9 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 	)
 
 	return {
+		failures,
+		successCount,
+		clearFailures: () => setFailures([]),
 		// 状态
 		visible,
 		currentMoveItem,
@@ -935,6 +1048,8 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 		// 选择器配置
 		selectorConfig: {
+			directorySource: options.directorySource,
+			isShowCreateDirectory: options.directorySource ? false : undefined,
 			visible,
 			title: t("topicFiles.moveModal.title"),
 			tips: t("topicFiles.moveModal.tips"),

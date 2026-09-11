@@ -3,12 +3,10 @@ import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import userFilesStore from "@/stores/userFiles"
 import { FileDirectoryView } from "../TopicFilesButton/components/FileDirectoryView"
-import { getDirectoryFileMenu } from "../TopicFilesButton/utils/directory-menu"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import { MemoryTreeNodeIcon } from "../LongTremMemory/components/MemoryTreeNodeIcon"
 import { toUserAttachment } from "./services/userSpaceFileService"
 import { useUserSpaceFileActions } from "./hooks/useUserSpaceFileActions"
-import { useUserSpaceUpload } from "./hooks/useUserSpaceUpload"
 import { UserFileActionDialogs } from "./UserFileActionDialogs"
 
 export interface UserSpaceFilesViewProps {
@@ -35,8 +33,6 @@ export default observer(function UserSpaceFilesView({
 	const rootId = userFilesStore.rootId
 	const parentId = directoryId ?? rootId ?? undefined
 	const state = userFilesStore.getDirectory(parentId)
-	const actions = useUserSpaceFileActions({ onOpen: onFileClick, topicId })
-	const upload = useUserSpaceUpload()
 	const path = parentId ? userFilesStore.getPath(parentId) : []
 	const children = userFilesStore.getChildren(parentId)
 	const pathPrefix = path.map((file) => file.name).join("/")
@@ -65,6 +61,14 @@ export default observer(function UserSpaceFilesView({
 		if (!file) throw new Error("Directory is unavailable")
 		return file
 	}
+	const actions = useUserSpaceFileActions({
+		items,
+		resolveParent: parent,
+		viewKey: directoryId ?? "root",
+		onOpen: onFileClick,
+		onNavigate: onDirectoryChange,
+		topicId,
+	})
 	return (
 		<>
 			<FileDirectoryView
@@ -91,8 +95,8 @@ export default observer(function UserSpaceFilesView({
 				selectedIds={actions.selection}
 				onSelectionChange={actions.setSelection}
 				isSelectable={actions.isSelectable}
-				onCreate={(directory) => actions.create(directory, parent)}
-				onUpload={() => upload.upload(parent)}
+				createMenuItems={actions.createMenuItems}
+				onUpload={() => actions.uploadFiles()}
 				onMove={(files) => void actions.startMove(files)}
 				onDelete={actions.remove}
 				loading={state.loading || !parentId}
@@ -100,32 +104,9 @@ export default observer(function UserSpaceFilesView({
 				onRetry={() => {
 					void userFilesStore.loadDirectory(parentId, true).catch(() => undefined)
 				}}
-				getMenuItems={(file) =>
-					getDirectoryFileMenu(
-						file,
-						{
-							open: (item) =>
-								item.is_directory
-									? onDirectoryChange(item.file_id)
-									: actions.open(item),
-							addToChat: (item) => void actions.addToChat(item),
-							download: (item) => void actions.download(item),
-							info: actions.setInfo,
-							...(actions.isSelectable(file)
-								? {
-										rename: actions.rename,
-										move: (item: AttachmentItem) =>
-											void actions.startMove([item]),
-										remove: (item: AttachmentItem) => actions.remove([item]),
-									}
-								: {}),
-						},
-						t,
-						actions.busy,
-					)
-				}
+				getMenuItems={actions.getMenuItems}
 			/>
-			<UserFileActionDialogs actions={actions} upload={upload} />
+			<UserFileActionDialogs actions={actions} />
 		</>
 	)
 })

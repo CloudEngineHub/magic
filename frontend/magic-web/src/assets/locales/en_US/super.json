@@ -6769,6 +6769,7 @@
 		"dataCorrection": "Data Correction",
 		"dataCorrectionDescription": "AI checks for errors in tables and data and corrects them",
 		"dataCorrectionPrompt": "Please check the data in the content through trusted data sources. The data must come from a reliable data source and be cross-verified through multiple sources. Ensure the data is accurate and reliable.",
+		"deleteIncomplete": "Deletion stopped: {{success}} items confirmed deleted, {{unknown}} items with unconfirmed results, and {{pending}} items not submitted. Refresh the list before continuing.",
 		"download": "Download",
 		"downloadAbort": "Cancel Download",
 		"downloadAllTitle": "Download All",

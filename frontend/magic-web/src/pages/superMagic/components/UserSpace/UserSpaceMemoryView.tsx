@@ -8,7 +8,6 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import userFilesStore from "@/stores/userFiles"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import { FileDirectoryView } from "../TopicFilesButton/components/FileDirectoryView"
-import { getDirectoryFileMenu } from "../TopicFilesButton/utils/directory-menu"
 import {
 	getUserMemoryPath,
 	USER_MEMORY_ROOT,
@@ -18,7 +17,6 @@ import {
 import { MemoryTreeNodeIcon } from "../LongTremMemory/components/MemoryTreeNodeIcon"
 import { toUserAttachment, userSpaceFileService } from "./services/userSpaceFileService"
 import { useUserSpaceFileActions } from "./hooks/useUserSpaceFileActions"
-import { useUserSpaceUpload } from "./hooks/useUserSpaceUpload"
 import { UserFileActionDialogs } from "./UserFileActionDialogs"
 
 interface MemoryGroupProps {
@@ -53,8 +51,6 @@ const MemoryGroup = observer(function MemoryGroup({
 	const [retry, setRetry] = useState(0)
 	const segments = useMemo(() => getUserMemoryPath(projectId), [projectId])
 	const scopePath = segments.join("/")
-	const actions = useUserSpaceFileActions({ onOpen: onFileClick, topicId })
-	const upload = useUserSpaceUpload()
 	useEffect(() => {
 		setRoot(null)
 		setDirectoryId(undefined)
@@ -101,6 +97,14 @@ const MemoryGroup = observer(function MemoryGroup({
 		if (!file) throw new Error("Directory is unavailable")
 		return file
 	}
+	const actions = useUserSpaceFileActions({
+		items,
+		resolveParent: destination,
+		viewKey: scopePath + "/" + (directoryId ?? ""),
+		onOpen: onFileClick,
+		onNavigate: setDirectoryId,
+		topicId,
+	})
 	const createEntry = async () => {
 		if (creating) return
 		setCreating(true)
@@ -213,8 +217,8 @@ const MemoryGroup = observer(function MemoryGroup({
 				selectedIds={actions.selection}
 				onSelectionChange={actions.setSelection}
 				isSelectable={actions.isSelectable}
-				onCreate={(directory) => actions.create(directory, destination)}
-				onUpload={() => upload.upload(destination)}
+				createMenuItems={actions.createMenuItems}
+				onUpload={() => actions.uploadFiles()}
 				onMove={(files) => void actions.startMove(files)}
 				onDelete={actions.remove}
 				loading={loading}
@@ -242,32 +246,9 @@ const MemoryGroup = observer(function MemoryGroup({
 						file.file_name
 					)
 				}
-				getMenuItems={(file) =>
-					getDirectoryFileMenu(
-						file,
-						{
-							open: (item) =>
-								item.is_directory
-									? setDirectoryId(item.file_id)
-									: actions.open(item),
-							addToChat: (item) => void actions.addToChat(item),
-							download: (item) => void actions.download(item),
-							info: actions.setInfo,
-							...(actions.isSelectable(file)
-								? {
-										rename: actions.rename,
-										move: (item: AttachmentItem) =>
-											void actions.startMove([item]),
-										remove: (item: AttachmentItem) => actions.remove([item]),
-									}
-								: {}),
-						},
-						t,
-						actions.busy,
-					)
-				}
+				getMenuItems={actions.getMenuItems}
 			/>
-			<UserFileActionDialogs actions={actions} upload={upload} />
+			<UserFileActionDialogs actions={actions} />
 		</section>
 	)
 })

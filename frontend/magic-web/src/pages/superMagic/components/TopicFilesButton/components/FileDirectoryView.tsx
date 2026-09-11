@@ -27,11 +27,12 @@ export interface FileDirectoryViewProps {
 	selectedIds: Set<string>
 	onSelectionChange: (ids: Set<string>) => void
 	isSelectable?: (file: AttachmentItem) => boolean
-	onCreate?: (directory: boolean) => void
+	createMenuItems?: import("antd").MenuProps["items"]
 	onUpload?: () => void
 	onMove?: (files: AttachmentItem[]) => void
 	onDelete?: (files: AttachmentItem[]) => void
 	onDownload?: (files: AttachmentItem[]) => void
+	allowDirectoryDownload?: boolean
 	loading?: boolean
 	error?: boolean
 	onRetry: () => void
@@ -82,11 +83,12 @@ export function FileDirectoryView({
 	selectedIds,
 	onSelectionChange,
 	isSelectable = () => true,
-	onCreate,
+	createMenuItems,
 	onUpload,
 	onMove,
 	onDelete,
 	onDownload,
+	allowDirectoryDownload,
 	loading = false,
 	error = false,
 	onRetry,
@@ -233,11 +235,12 @@ export function FileDirectoryView({
 				selectedIds={selectedIds}
 				onSelectionChange={onSelectionChange}
 				onSearchChange={onSearchChange}
-				onCreate={onCreate}
+				createMenuItems={createMenuItems}
 				onUpload={onUpload}
 				onMove={onMove}
 				onDelete={onDelete}
 				onDownload={onDownload}
+				allowDirectoryDownload={allowDirectoryDownload}
 			/>
 			{!compact && !showGrid && (
 				<div className="grid shrink-0 grid-cols-[minmax(0,1fr)_80px_32px] gap-2 border-b px-4 py-2 text-xs text-muted-foreground sm:grid-cols-[minmax(0,1fr)_80px_176px_32px]">

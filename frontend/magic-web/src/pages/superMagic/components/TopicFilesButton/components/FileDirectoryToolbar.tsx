@@ -1,6 +1,5 @@
 import {
 	FilePlus2,
-	FolderPlus,
 	LayoutGrid,
 	List,
 	Search,
@@ -22,11 +21,12 @@ import type { FileDirectoryViewProps } from "./FileDirectoryView"
 
 interface FileDirectoryToolbarProps extends Pick<
 	FileDirectoryViewProps,
-	| "onCreate"
+	| "createMenuItems"
 	| "onUpload"
 	| "onMove"
 	| "onDelete"
 	| "onDownload"
+	| "allowDirectoryDownload"
 	| "selectedIds"
 	| "onSelectionChange"
 	| "onSearchChange"
@@ -64,11 +64,12 @@ export function FileDirectoryToolbar({
 	selectedIds,
 	onSelectionChange,
 	onSearchChange,
-	onCreate,
+	createMenuItems,
 	onUpload,
 	onMove,
 	onDelete,
 	onDownload,
+	allowDirectoryDownload = false,
 	onRefresh,
 }: FileDirectoryToolbarProps) {
 	const { t } = useTranslation("super")
@@ -94,26 +95,8 @@ export function FileDirectoryToolbar({
 						/>
 					</div>
 				)}
-				{onCreate && (
-					<MagicDropdown
-						trigger={["click"]}
-						menu={{
-							items: [
-								{
-									key: "file",
-									label: t("userSpace.createFile"),
-									icon: <FilePlus2 size={16} />,
-									onClick: () => onCreate(false),
-								},
-								{
-									key: "folder",
-									label: t("userSpace.createFolder"),
-									icon: <FolderPlus size={16} />,
-									onClick: () => onCreate(true),
-								},
-							],
-						}}
-					>
+				{createMenuItems?.length && (
+					<MagicDropdown trigger={["click"]} menu={{ items: createMenuItems }}>
 						<Button
 							variant="ghost"
 							size="icon"
@@ -214,11 +197,13 @@ export function FileDirectoryToolbar({
 							size="icon"
 							variant="ghost"
 							className="size-7"
-							disabled={!selectedFiles.some((file) => !file.is_directory)}
-							aria-label={t("userSpace.downloadSelected")}
-							onClick={() =>
-								onDownload(selectedFiles.filter((file) => !file.is_directory))
+							disabled={
+								!selectedFiles.some(
+									(file) => allowDirectoryDownload || !file.is_directory,
+								)
 							}
+							aria-label={t("userSpace.downloadSelected")}
+							onClick={() => onDownload(selectedFiles)}
 						>
 							<Download size={14} />
 						</Button>

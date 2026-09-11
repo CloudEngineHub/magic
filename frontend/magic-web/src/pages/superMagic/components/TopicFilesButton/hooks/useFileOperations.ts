@@ -16,7 +16,7 @@ import { multiFolderUploadStore } from "@/stores/folderUpload"
 import type { BatchSaveInfo } from "@/stores/folderUpload/types"
 import { DownloadImageMode, ProjectListItem } from "../../../pages/Workspace/types"
 import { useFileOpen } from "./useFileOpen"
-import { SuperMagicApi } from "@/apis"
+import { MagicFSApi, SuperMagicApi } from "@/apis"
 import { useDuplicateFileHandler } from "./useDuplicateFileHandler"
 import { useMemoizedFn } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -53,6 +53,8 @@ import {
 	supportsStaticDependencies,
 } from "@/pages/superMagic/utils/staticDependencies"
 import type { FileScope } from "@/apis/modules/fileScope"
+import { checkDuplicateFileName } from "../utils/checkDuplicateFileName"
+import { toUserAttachment } from "../../UserSpace/services/userSpaceFileService"
 
 // 工具函数：从attachments中递归删除指定ID的文件/文件夹
 const removeItemFromAttachments = (
@@ -104,8 +106,7 @@ const findParentSlideFolder = (
 			// 检查目标文件是否是该文件夹的直接子项
 			if (item.children.some((child) => child.file_id === targetFileId)) {
 				const config = (item.display_config || item.metadata) as
-					| { type?: string; [key: string]: unknown }
-					| undefined
+					{ type?: string; [key: string]: unknown } | undefined
 				if (config?.type === "slide") {
 					return item
 				}
@@ -236,6 +237,8 @@ export interface UseFileOperationsOptions {
 	projectId?: string
 	/** 文件上传凭证所属的特殊空间。 */
 	fileScope?: FileScope
+	resolveCreateParent?: () => Promise<string>
+	isCurrent?: () => boolean
 	getItemId?: (item: AttachmentItem) => string
 	onFileDelete?: (fileId: string) => Promise<void>
 	// 新增：文件创建成功回调
@@ -588,6 +591,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// 创建文件的实际实现 - 供useVirtualFile调用
 	const createFileAndUpload = async (file: File, suffixDir?: string) => {
+		if (fileScope === "user")
+			return createUserNode(file.name, false, suffixDir ? `/${suffixDir}` : undefined)
 		if (!projectId) {
 			throw new Error("项目ID不能为空")
 		}
@@ -647,6 +652,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// 创建文件夹的实际实现 - 供useVirtualFolder调用
 	const createFolderAndUpload = async (folderName: string, parentPath?: string) => {
+		if (fileScope === "user") return createUserNode(folderName, true, parentPath)
 		if (!projectId) {
 			throw new Error("项目ID不能为空")
 		}
@@ -688,6 +694,44 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				return newSet
 			})
 		}
+	}
+
+	const createUserNode = async (
+		name: string,
+		isDirectory: boolean,
+		parentPath?: string,
+	): Promise<AttachmentItem> => {
+		const isCurrent = options.isCurrent ?? (() => true)
+		const assertCurrent = () => {
+			if (!isCurrent()) throw new DOMException("Identity changed", "AbortError")
+		}
+		assertCurrent()
+		const resolvedParentId = options.resolveCreateParent
+			? await options.resolveCreateParent()
+			: getParentIdFromPath(parentPath)
+		assertCurrent()
+		if (!resolvedParentId) throw new Error("User directory is unavailable")
+		const parentId = String(resolvedParentId)
+		const { files } = await MagicFSApi.listFiles({ scope: "user", parent_id: parentId })
+		assertCurrent()
+		if (
+			checkDuplicateFileName(
+				name,
+				files.map((item) => toUserAttachment(item, "")),
+			)
+		)
+			throw new Error(t("topicFiles.contextMenu.newFile.duplicateError"))
+		const { file } = await MagicFSApi.createFile({
+			name,
+			parent_id: parentId,
+			is_directory: isDirectory,
+			space_type: "user",
+		})
+		assertCurrent()
+		const result = toUserAttachment(file, "")
+		onUpdateAttachments?.()
+		if (!isDirectory) onFileCreated?.(result)
+		return result
 	}
 
 	const createDesignProject = async (folderName: string, parentPath?: string) => {
@@ -977,12 +1021,21 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// Registered dependency parsers make linked resources part of the default download.
 	const handleDownloadOriginal = async (item: AttachmentItem, mode?: DownloadImageMode) => {
-		if (supportsStaticDependencies(item)) {
+		if (fileScope !== "user" && supportsStaticDependencies(item)) {
 			await downloadDocumentWithDependencies(item)
 			return
 		}
 
 		await downloadOriginalFile(item, mode)
+	}
+
+	const downloadSelectedFiles = async (files: AttachmentItem[]) => {
+		const isCurrent = options.isCurrent ?? (() => true)
+		for (const file of files) {
+			if (!isCurrent()) return
+			if (fileScope === "user" && file.is_directory) continue
+			await handleDownloadOriginal(file)
+		}
 	}
 
 	// 下载PDF格式（Markdown 走 markdown 导出；HTML 走 exportPDF；仅 display_config.type === "slide" 时传 pptMode）
@@ -999,11 +1052,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			const toastId = createRandomUuidV4()
 			const resourceErrors = documentExporter.createResourceErrorCollector(t)
 			const displayConfig = item.display_config as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const metadata = item.metadata as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			let mergedDisplayConfig = displayConfig || metadata
 			let slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides
@@ -1016,8 +1067,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				if (parentFolder) {
 					isSlideFolder = true
 					const parentConfig = (parentFolder.display_config || parentFolder.metadata) as
-						| { type?: string; slides?: string[]; [key: string]: unknown }
-						| undefined
+						{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 					mergedDisplayConfig = parentConfig
 					slidePaths = [] // 单文件，不走多 slide 路径
 				}
@@ -1224,11 +1274,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 			const toastId = createRandomUuidV4()
 			const displayConfig = item.display_config as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const metadata = item.metadata as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const mergedDisplayConfig = displayConfig || metadata
 			const slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides
@@ -1814,6 +1862,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 	)
 
 	return {
+		downloadSelectedFiles,
 		// 文件操作
 		handleUploadFile,
 		handleUploadFolder,
