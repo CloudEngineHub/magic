@@ -240,7 +240,7 @@ async function runDirectStreamingExport(
 				pageCount: input.pageCount,
 			})
 			try {
-				const result = await prepareStreamingPage(input, page.html)
+				const result = await prepareStreamingPage(input, page.html, page.index)
 				const nodes = serializePptNodes(result.pptNodes)
 				await normalizeNodeMediaSources(nodes)
 				await applyImagePreflight(nodes, input)
@@ -332,7 +332,7 @@ async function runStagedStreamingExport(
 				pageCount: input.pageCount,
 			})
 			try {
-				const result = await prepareStreamingPage(input, page.html)
+				const result = await prepareStreamingPage(input, page.html, page.index)
 				if (input.autoSize && result.totalWidth > MAX_PPT_PAGE_PX) {
 					throw new ExportFidelityError(
 						`[exportPPTXStreaming] Page ${page.index + 1} width ${result.totalWidth}px exceeds PowerPoint's ${MAX_PPT_PAGE_PX}px limit.`,
@@ -475,13 +475,14 @@ async function runStagedStreamingExport(
 	}
 }
 
-async function prepareStreamingPage(input: StreamingExportTaskInput, html: string) {
+async function prepareStreamingPage(input: StreamingExportTaskInput, html: string, pageIndex?: number) {
 	const activePrepare = input.pipeline?.prepareSlideNodes ?? prepareSlideNodes
 	return activePrepare({
 		config: input.config,
 		html,
 		sandbox: input.sandbox,
 		signal: input.signal,
+		pageIndex,
 		onResourceError: input.onResourceError,
 		textMergeMode: DEFAULT_TEXT_MERGE_MODE,
 		onExportIssue: input.onExportIssue,
