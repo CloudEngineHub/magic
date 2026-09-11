@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useRef, useState } from "react"
 import { motion, useReducedMotion } from "framer-motion"
 import { useTranslation } from "react-i18next"
-import { Loader2, Search } from "lucide-react"
+import { Loader2, Plus, Search } from "lucide-react"
 import type { MicroAppListScope } from "@/apis/modules/superMagic"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
@@ -29,6 +29,7 @@ import MicroAppLoadErrorState from "./components/MicroAppLoadErrorState"
 import { useMicroAppListItemActions } from "./hooks/useMicroAppListItemActions"
 import { useMicroAppCollaboratorManagement } from "./hooks/useMicroAppCollaboratorManagement"
 import { useMicroAppsPage } from "./hooks/useMicroAppsPage"
+import { useCreateMicroApp } from "./hooks/useCreateMicroApp"
 
 const MicroAppsPageMobile = lazy(() => import("./index.mobile"))
 const MicroAppsListPageMobile = lazy(() => import("./list.mobile"))
@@ -111,6 +112,11 @@ function MicroAppsPageDesktop() {
 	const heroContentRef = useRef<HTMLDivElement>(null)
 	const cableStartRef = useRef<HTMLSpanElement>(null)
 	const cableEndRef = useRef<HTMLSpanElement>(null)
+	const handleCreated = useCallback(
+		(appId: string) => navigate({ name: RouteName.MicroApp, params: { appId } }),
+		[navigate],
+	)
+	const { createApp, creating } = useCreateMicroApp(workspace?.id, handleCreated)
 
 	const handleOpenApp = useCallback(
 		(appId: string) => {
@@ -175,13 +181,31 @@ function MicroAppsPageDesktop() {
 					>
 						<MicroAppCreatePrompt
 							workspace={workspace}
-							onCreated={handleOpenApp}
+							onCreated={handleCreated}
 							onFocusChange={setPromptFocused}
 							keyboardPortRef={cableEndRef}
 							keyboardConnectorReady={keyboardConnectorReady}
 							keyboardConnectorVisible={keyboardConnectorVisible}
 						/>
 					</motion.div>
+					<div className="mt-6 flex justify-center">
+						<Button
+							type="button"
+							variant="ghost"
+							onClick={createApp}
+							disabled={!workspace?.id || creating}
+							data-testid="micro-apps-direct-create"
+						>
+							{creating ? (
+								<Loader2 className="size-4 animate-spin" aria-hidden />
+							) : (
+								<Plus className="size-4" aria-hidden />
+							)}
+							{creating
+								? t("microAppsPage.creating")
+								: t("microAppsPage.createBlankApp")}
+						</Button>
+					</div>
 				</div>
 			</section>
 
@@ -228,6 +252,24 @@ function MicroAppsPageDesktop() {
 								</TabsTrigger>
 							</TabsList>
 						</Tabs>
+						<Button
+							type="button"
+							variant="default"
+							className="h-9 shrink-0 bg-black px-4 text-white hover:bg-black/90"
+							onClick={createApp}
+							disabled={!workspace?.id || creating}
+							aria-label={t("microAppsPage.createApp")}
+							title={t("microAppsPage.createApp")}
+							aria-busy={creating}
+							data-testid="micro-apps-gallery-create"
+						>
+							{creating ? (
+								<Loader2 className="size-4 animate-spin" aria-hidden />
+							) : (
+								<Plus className="size-4" aria-hidden />
+							)}
+							{creating ? t("microAppsPage.creating") : t("microAppsPage.createApp")}
+						</Button>
 					</div>
 				</div>
 

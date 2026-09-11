@@ -11,8 +11,13 @@ const mocks = vi.hoisted(() => ({
 	loadMore: vi.fn(),
 	renameApp: vi.fn(),
 	deleteApp: vi.fn(),
+	createMicroAppProject: vi.fn(),
 	useMicroAppsPage: vi.fn(),
 	t: vi.fn((key: string) => (key === "microAppsPage.heroTitlePrefix" ? "一句话，" : key)),
+}))
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: { createMicroAppProject: mocks.createMicroAppProject },
 }))
 
 vi.mock("react-i18next", () => ({
@@ -111,6 +116,7 @@ vi.mock("@/components/shadcn-ui/tabs", async () => {
 describe("MicroAppsPage", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		mocks.createMicroAppProject.mockResolvedValue({ app_id: "app-direct" })
 		mocks.t.mockImplementation((key: string) =>
 			key === "microAppsPage.heroTitlePrefix" ? "一句话，" : key,
 		)
@@ -143,6 +149,41 @@ describe("MicroAppsPage", () => {
 			renameApp: mocks.renameApp,
 			deleteApp: mocks.deleteApp,
 		})
+	})
+
+	it.each(["micro-apps-direct-create", "micro-apps-gallery-create"])(
+		"creates and opens an empty app from %s even in recent scope",
+		async (testId) => {
+			mocks.useMicroAppsPage.mockReturnValue({ ...mocks.useMicroAppsPage(), scope: "recent" })
+			render(<MicroAppsPage />)
+			fireEvent.click(screen.getByTestId(testId))
+			await waitFor(() =>
+				expect(mocks.navigate).toHaveBeenCalledWith({
+					name: RouteName.MicroApp,
+					params: { appId: "app-direct" },
+				}),
+			)
+			expect(mocks.createMicroAppProject).toHaveBeenCalledExactlyOnceWith({
+				workspace_id: "workspace-1",
+			})
+		},
+	)
+
+	it("disables both entry points while creating", async () => {
+		let finish: (value: { app_id: string }) => void = () => {}
+		mocks.createMicroAppProject.mockReturnValue(
+			new Promise((resolve) => {
+				finish = resolve
+			}),
+		)
+		render(<MicroAppsPage />)
+		fireEvent.click(screen.getByTestId("micro-apps-direct-create"))
+		expect(screen.getByTestId("micro-apps-direct-create")).toBeDisabled()
+		expect(screen.getByTestId("micro-apps-gallery-create")).toBeDisabled()
+		fireEvent.click(screen.getByTestId("micro-apps-gallery-create"))
+		finish({ app_id: "app-direct" })
+		await waitFor(() => expect(mocks.navigate).toHaveBeenCalled())
+		expect(mocks.createMicroAppProject).toHaveBeenCalledTimes(1)
 	})
 
 	it("hides collaborator management when the public hook is disabled", () => {

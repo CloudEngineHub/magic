@@ -3671,8 +3671,11 @@
 			"renaming": "Saving..."
 		},
 		"backToCreate": "Back to create a micro app",
+		"createApp": "Create app",
+		"createBlankApp": "Create blank app",
 		"createProject": "New Project",
 		"createProjectFailed": "Failed to create the project. Please retry.",
+		"creating": "Creating…",
 		"draftBadge": "In progress",
 		"emptyDescription": "Describe your idea above to create your first micro app.",
 		"emptyTitle": "No micro app projects",

@@ -3671,8 +3671,11 @@
 			"renaming": "保存中..."
 		},
 		"backToCreate": "返回创建微应用",
+		"createApp": "创建应用",
+		"createBlankApp": "创建空白应用",
 		"createProject": "新建项目",
 		"createProjectFailed": "新建项目失败，请重试。",
+		"creating": "创建中…",
 		"draftBadge": "开发中",
 		"emptyDescription": "在上方描述你的想法，创建第一个微应用。",
 		"emptyTitle": "暂无微应用项目",
