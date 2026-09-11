@@ -1,4 +1,4 @@
-"""复用来源 Agent 的 Skill 配置，向 after-run 提供低频说明和当前用量。"""
+"""复用来源 Agent 的 Skill 配置，向 after-run 提供完整维护说明和当前用量。"""
 
 from __future__ import annotations
 
@@ -32,15 +32,16 @@ logger = get_logger(__name__)
 
 class MemoryExtractionPromptProvider:
     """
-    高频主文由 fork 初始化预加载，本请求只增加 after-run 和必要的重组 reference。
+    高频主文由 fork 初始化预加载，本请求在维护任务旁再次提供完整主文、after-run 和必要的重组 reference。
 
     这里是共享记忆能力的后台使用入口，不能将整理能力限定为 after-run 专属。
     主 Agent 需要整体整理时也能通过 Skill 读取同一份 reorganize.md；后台只补一条记忆
     时也无需加载它。完整场景表见 app/service/memory/__init__.py。
     本类提供任务和运行时事实，分类、归档或冲突取舍仍由 Agent 根据 Skill 判断。
 
-    后台模型的任务上下文：原对话及已有状态 + 预加载的主 Skill + 本次 User 任务。
-    User 任务明确要求按 after-run.md 保存新增信息；初始超限才附加 reorganize.md。
+    后台模型的任务上下文：预加载的主 Skill + 原对话及已有状态 + 本次 User 任务。
+    User 任务再次提供完整主 Skill 并要求按 after-run.md 保存新增信息；初始超限才附加 reorganize.md。
+    仅在组装本次任务时重复主文，不在每轮模型调用前追加，也不要求模型再发起读文件调用。
     仅给一份规则文档不足以发起任务，所以规则与「现在执行什么」在这里分别提供。
     """
 
@@ -72,7 +73,11 @@ class MemoryExtractionPromptProvider:
         Topic: Channel A (ID: topic-demo)
 
         <memory_after_run>
-        [本次维护任务、预加载 Skill 路径、可用记忆目录、当前时钟和初始用量]
+        [本次维护任务、可用记忆目录、当前时钟和初始用量]
+
+        <reference path="/app/agents/skills/memory/SKILL.md">
+        [与预加载使用相同加载方式的完整主文，按 XML 文本转义]
+        </reference>
 
         <reference path="/app/agents/skills/memory/references/after-run.md">
         [after-run.md 的完整正文，按 XML 文本转义]
@@ -144,11 +149,12 @@ class MemoryExtractionPromptProvider:
         """
         parts = [
             "<memory_after_run>",
-            "Perform this internal after-run memory task now. Follow the supplied after-run.md rules and the "
-            "preloaded memory skill to maintain the permitted scopes from the source conversation available "
+            "Perform this internal after-run memory task now. Follow the supplied memory SKILL.md and "
+            "after-run.md rules to maintain the permitted scopes from the source conversation available "
             "in this fork. Save missing useful information, fill gaps in existing entries, and apply confirmed "
             "corrections and forget requests. Do not resume the source business task.",
-            f"The fork preloads the daily memory instructions from {loaded.skill_file}.",
+            "The complete memory SKILL.md is supplied again below for this maintenance task. "
+            "Use it directly; no tool call is needed to reload it.",
             build_memory_runtime_context(agent_context),
             self._format_time_context(agent_context),
             self._maintenance_prompt_builder.render_usage(usages, budget),
@@ -159,6 +165,11 @@ class MemoryExtractionPromptProvider:
                 "rules, preserving useful information and bringing each within its stated maximum:\n"
                 + "\n".join(f"- {html.escape(str(path))}" for path in over_budget_files)
             )
+        # 复用上方已读取的完整主文，使维护规则靠近本次任务；不维护摘要副本，也不伪造工具调用。
+        parts.append(
+            f'<reference path="{html.escape(str(loaded.skill_file), quote=True)}">\n'
+            f"{html.escape(loaded.content, quote=False)}\n</reference>"
+        )
         for filename in references:
             path = metadata.skill_dir / "references" / filename
             content = await async_read_text(path)

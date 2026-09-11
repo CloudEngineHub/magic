@@ -1,15 +1,23 @@
 ---
 name: memory
-description: When a task depends on earlier preferences, decisions, or events; when the user asks to remember, correct, or forget information; or when maintaining persistent memory after a run.
+description: Read this skill before answering or acting when a task needs user preferences, project rules, recent project activity or progress, decisions and their reasons, or events from earlier work or conversations that are missing or incomplete in the current context. This includes continuing an earlier task, recalling a discussion, or explaining a previous choice. Also read it before handling a user's request to view stored memory, remember or forget information, correct a saved entry, reorganize memory, change its directory layout, or merge or split memory files. With automatic memory enabled, use it when confirmed information useful for later tasks needs saving or correction, a MEMORY.md exceeds its runtime maximum, or relevant notes or indexes become too large to use effectively. Use it for dedicated after-run memory maintenance. Self-contained tasks with no dependency on earlier context need no memory lookup.
 ---
 
 # Memory
 
 Use the runtime's current automatic-memory setting, scope paths, and token budgets. This skill is normally preloaded; do not call read_skills again for instructions already present. When automatic memory is disabled, act on memory only for an explicit request to view, remember, correct, organize, or forget information; do not initiate memory work for unrelated tasks. Skill knowledge and existing file permissions remain available.
 
+## Task-specific instructions
+
+- The full main skill and references/after-run.md are supplied with dedicated after-run maintenance tasks. Daily work does not need the after-run reference.
+- references/reorganize.md contains the complete reorganization workflow, directory growth and link-update guidance, and core/note/event/index examples. When the user requests overall reorganization, changes to the memory directory layout, or merging/splitting memory files, read it before proposing a plan or changing memory files. Also use it when a core exceeds its maximum or a relevant note/index has become too large to use effectively. A manual reorganization request does not depend on exceeding a budget. A tight context window alone is not a reason to permanently restructure files.
+
+Read a needed reference with read_files, resolving its path from the supplied directory for this Skill. If its complete content is already in the current context, use it without reloading. Preloading SKILL.md does not establish that its references have been read. If the required reference cannot be read, report the failure and preserve the affected memory until it is available.
+
 ## Read what the task needs
 
 - Start with applicable MEMORY.md content already supplied by the runtime. Follow its content-based or time-based pointers when the task needs details, exceptions, procedures, or evidence not already available. If the core provides what the task needs, no additional note read is required. Greetings and self-contained requests do not require a memory search.
+- For questions about recent project activity or progress, start with the dated work context in MEMORY.md across relevant topics. This is the last information recorded from earlier work, not a live project status. Follow pointers for missing detail or updates that could change the answer. Report what was last recorded and when; do not turn an old topic's task, pending decision, or next step into the current task or authorization, and do not imply that all topics or live activity were checked.
 - Each pointer should explain when to read, what the target contains, and its exact path. Describe the task, question, or decision that needs the note, as a Skill description explains when to use the skill. Describe its actual contents, not just its title. When that condition matches the task and the answer depends on the note, read it before deciding. Read known targets directly; batch independent known targets with read_files when useful, respecting returned ranges and truncation. Search relevant keywords only when a target is unknown or a pointer fails. Stop once you have enough information.
 - When the user's request depends on another project's history, search that known project directly within available permissions. If the project is unknown, use precise keywords to locate a small candidate set, then search those projects' notes. Derive actual paths from runtime context or discovered files; do not guess project IDs or browse unrelated projects. Retrieval does not authorize maintenance of those other projects.
 - Use references for current rules, module decisions, their reasons, and exceptions. Use timeline for what happened on a date, the alternatives then considered, and the outcome at that time. Each view should normally answer its common questions without opening the other; follow cross-links for additional detail.
@@ -20,7 +28,7 @@ Use the runtime's current automatic-memory setting, scope paths, and token budge
 
 When asked to remember, correct, or forget something, check the current files and make the targeted change within available permissions. Saying “I will remember” is not persistence. Report an unavailable or failed write instead of claiming success.
 
-With automatic memory enabled, you may also save information without an explicit request. For every addition or correction, require explicit user confirmation or verified source evidence, a clear subject and scope, lasting value, and no accurate equivalent already saved. Task completion, code changes, tool calls, or a summary alone do not justify a write. Keep attention on the current task; do not scan or rewrite the library every turn. Exclude credentials, authentication data, sensitive personal information, guesses, raw tool dumps, routine progress, and temporary execution state.
+With automatic memory enabled, you may also save information without an explicit request. For every addition or correction, require explicit user confirmation or verified source evidence, a clear subject and scope, value for later tasks, including ongoing project work, and no accurate equivalent already saved. Task completion, code changes, tool calls, or a summary alone do not justify a write. Keep attention on the current task; do not scan or rewrite the library every turn. Exclude credentials, authentication data, sensitive personal information, guesses, raw tool dumps, tool-by-tool progress, and temporary execution state.
 
 Before saving, check whether the information is already recoverable from project plans, specifications, code, configuration, datasets, or clarification documents. Keep the facts and rules needed in routine work, with a useful retrieval pointer for other details, instead of copying the whole source. Prioritize valuable conversational context absent from those files: corrections, reasons, scope limits, preferences, and rejected alternatives that explain later decisions.
 
@@ -34,6 +42,8 @@ An existing document with the same keyword is not evidence that it covers the la
 - MEMORY.md holds immediately useful facts, relevant recent context, and actionable pointers, grouped by actual project or subject. Keep useful content here with enough detail to apply it; a small library can remain a single file. Preserve executable conditions and exceptions, not just topic names or bare links; do not create a separate file for each brief fact.
 - Keep information used often in recent work and long-term standards used repeatedly across tasks directly in MEMORY.md. Write out the facts, steps, conditions, exceptions, key values, and reasons needed for those tasks. Use the space this content needs within the runtime budget; do not reduce it to brief summaries or links just to shorten the file.
 - Keep explicit user preferences and requirements in MEMORY.md while they remain applicable, even when old or rarely repeated. For recent decisions, keep the background and conditions that still affect ongoing work.
+- For recent or ongoing project work, keep enough substantive context in MEMORY.md to explain what the project is working on, what meaningfully changed, and where each relevant topic was last recorded. Preserve the objective, last recorded stage and results, important conclusions and reasons, and unresolved questions or next steps supported by sources, with relevant dates and artifact paths. This information can matter across conversations without being permanent, repeatedly mentioned, or finalized. Distinguish confirmed results from proposals and work awaiting review. Use enough connected detail to support follow-up decisions, not only topic names, slogans, or isolated conclusions.
+- Keep this work context here while it supports ongoing work or likely follow-up questions. Do not delete it merely because it is not live, and do not use it as if it were live. When it no longer serves that role, preserve reusable explanations in references and useful event context in timeline under the existing rules. Choose by relevance, not a fixed number of days. Overall reorganization should preserve relevant work represented in the available project sources across topics, not just the conversation performing maintenance.
 - Use notes/references/ for reusable explanations, procedures, and decision context needed for specific questions or too extensive to fit reasonably in MEMORY.md. Content may move here from MEMORY.md or be written directly into a reference. Keep frequently used rules and the details needed for routine work in MEMORY.md. Keep information normally read together in one note, divided by subproblem. Place each conclusion or procedure with its conditions, necessary reasons, and source in the same section; do not split these into files that must always be read together. Do not invent empty fields or sources.
 - Use notes/timeline/ for summaries of decisions and events with independent historical value. Each event section records its background, what happened, the then-current outcome, reasons, unresolved questions, and source. Do not copy every reference update into a diary or present a later decision as the earlier outcome.
 - In ordinary project memory, use notes/topics/<topic_id>.md only when a conversation's lasting background and decisions are best retrieved by that product topic. Use its real topic ID and put its name in the title; do not guess an ID or create a note for every topic. Existing references and timeline notes can carry topic attribution without a separate topic file or duplicate copy.
@@ -42,7 +52,7 @@ An existing document with the same keyword is not evidence that it covers the la
 - Necessary short overlap between references and timeline is useful. Do not duplicate complete documents or make either view only a link list. Not every update needs a timeline entry.
 - For an explicit forget request, remove the information from the relevant core, reference, timeline, topic notes, and index entries within your scope. Do not retain a hidden historical copy of information the user asked to forget.
 
-Before moving content out of MEMORY.md, ask: would an Agent reading only this file have the rules, details, and context needed for recurring tasks? Would it repeatedly need to open the same note? If so, keep that information in MEMORY.md. For infrequently needed details, explain when and where to read them. Judge likely use from the user's work and applicable requirements, not from how often the user repeats a requirement.
+Before moving content out of MEMORY.md, ask: would an Agent reading only this file have the rules, details, and context needed for recurring tasks? Would it repeatedly need to open the same note? If so, keep that information in MEMORY.md. For infrequently needed details, explain when and where to read them. Judge likely use from the user's work and applicable requirements, not from how often the user repeats a requirement. For recent work, could it also explain the latest meaningful changes, the last recorded stage, open questions, and known source topics? Finding keywords or staying below a token limit does not establish that this context is usable.
 
 For example, when monthly sales reports are a recurring task, MEMORY.md can contain:
 
@@ -58,9 +68,26 @@ When a report includes foreign-currency sales or a refund covering several order
 
 The recurring calculation rules stay in MEMORY.md so the Agent can use them for every monthly report. The reference explains occasional calculation cases. Order tables and monthly exports remain in project files; memory may retain important conclusions and the paths to those files.
 
+A recent-work entry can also look like this when the stated facts are supported by its sources. Replace placeholders with known source details and actual project paths; this is an example, not a required template:
+
+```markdown
+## Recent project work
+
+### Monthly sales reports
+Last recorded at <source date and timezone>; source topic: <topic name> (ID: <real topic ID>).
+Refund treatment is settled: deduct refunds in the month they complete, including refunds for earlier orders, so monthly reports reflect refunds actually processed that month. The report draft is ready for user review; approval is not yet recorded. The exchange-rate rule for foreign-currency sales remains undecided.
+Continue from the [report draft](<absolute project file path>); occasional calculation cases are in [special sales calculations](notes/references/special-sales-calculations.md).
+
+### Channel B exports
+Last recorded at <source date and timezone>; source topic: <topic name> (ID: <real topic ID>).
+The user confirmed one worksheet per store because each store reviews its own figures. Store ordering still needs a decision; the source does not establish that the export is implemented. The agreed requirements are in the [export specification](<absolute project file path>).
+```
+
+These entries preserve progress, reasons, and unresolved decisions for follow-up work. They do not replace the recurring rules above or copy the report data or full project documents.
+
 ## Directory structure
 
-A scope may contain only MEMORY.md. The tree below is the organizing direction as useful content grows, not a required initial scaffold. Create files, category/year/month directories, and indexes only when content and retrieval needs justify them. Keep useful existing flat notes readable; do not reorganize them for cosmetic uniformity. Content-based file names use the user's language; optional product-topic notes use the real topic ID for a stable path. Do not invent additional IDs.
+A scope may contain only MEMORY.md. The tree below defines where each content type belongs as useful content grows; it is not a required initial scaffold. Organize reusable explanations by subject and independently useful event summaries by source date; both views may coexist in the same scope. Create files, category/year/month directories, and indexes only when content and retrieval needs justify them. Keep useful existing flat notes readable during targeted updates; do not reorganize unrelated files for cosmetic uniformity. Overall reorganization includes bringing the affected layout into line with the roles and paths below. Content-based file names use the user's language; optional product-topic notes use the real topic ID for a stable path. Do not invent additional IDs.
 
 ```text
 <allowed memory scope>/
@@ -99,7 +126,7 @@ updated_at: "<actual modification time, YYYY-MM-DD HH:mm:ss UTC>"
 ---
 ```
 
-Keep useful source context, conditions, and meaningful source dates beside the facts. When topic attribution helps distinguish cases or retrieve a past discussion, briefly note its name and ID beside the relevant passage. Choose whether and how to annotate; no fixed format, metadata fields, or per-entry labels are required. Do not repeat the project ID in project memory; identify the source project in global memory only when useful. A passage can share one attribution, and reorganizing it does not change its original source.
+Keep useful source context, conditions, and meaningful source dates beside the facts. In recent work summaries, include known source topic names and IDs beside the relevant passage, including in MEMORY.md; a subject heading or project name is not a source topic. For other content, add topic attribution when it helps distinguish cases or retrieve a past discussion. Use a brief sentence or parenthetical note; no fixed format, metadata fields, or per-entry labels are required. Preserve whichever source details are available without guessing missing names or IDs. Do not repeat the project ID in project memory; identify the source project in global memory only when useful. A passage can share one attribution, and reorganizing it does not change its original source.
 
 Changeable facts also state as_of. File creation, modification, event occurrence, and verification are different times. Use unknown for unsupported values; never substitute download time, mtime, or the earliest fact date for creation time, or infer event dates from mtime. Only actual re-verification justifies last_verified_at. Reading a note, editing its parent index, or organizing it today does not verify its facts or justify changing the note's timestamps. Group shared source/time information by section or event; stable preferences do not need re-verification on every use.
 
@@ -139,8 +166,3 @@ Replace placeholders with explicit files in the current permitted memory scope. 
 All requested files measured means ok=True. Missing, unreadable, non-UTF-8, non-file, out-of-scope, or changing targets produce ok=False while retaining successful measurements. Read content to understand which files succeeded and why others failed. data.files provides path, status, estimated_tokens, and size_bytes only for programmatic use; unavailable numeric values are null. Do not print the whole data object when content is sufficient.
 
 Measurement returns no body and creates no Horizon read baseline. It does not authorize an edit that requires reading current content. Cancellation stops work; scope changes are checked again after asynchronous reads. No measurement result proves semantic completeness or permission to discard information.
-
-## Task-specific instructions
-
-- references/after-run.md is injected for dedicated after-run maintenance. Daily work does not need it.
-- references/reorganize.md contains the complete reorganization workflow, directory growth and link-update guidance, and core/note/event/index examples. Use it when a core exceeds its maximum, the user requests overall reorganization, or a relevant note/index has become too large to use effectively. A tight context window alone is not a reason to permanently restructure files. If the runtime already supplied this reference, use it without reloading.
