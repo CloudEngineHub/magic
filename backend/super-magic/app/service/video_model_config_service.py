@@ -85,9 +85,15 @@ class VideoModelConfigService:
         return "|".join(unsupported)
 
     @staticmethod
-    def _build_audio_attrs(video_model_id: str) -> dict[str, str]:
+    def _build_audio_attrs(
+        video_model_id: str,
+        video_generation_config: Dict[str, Any],
+    ) -> dict[str, str]:
         """构建统一音频策略属性，隐藏供应商的具体参数名。"""
-        return VideoAudioPolicyResolver.prompt_attributes(video_model_id)
+        return VideoAudioPolicyResolver.prompt_attributes(
+            video_model_id,
+            video_generation_config,
+        )
 
     @staticmethod
     def _build_reference_attr(video_generation_config: Dict[str, Any]) -> str:
@@ -440,8 +446,8 @@ class VideoModelConfigService:
         if changed:
             lines.append('    changed="true"')
 
-        # 这里按"模型决策真正会用到的字段"逐项输出，缺失字段故意不补默认，
-        # 这样规则层才能把"未声明 = 不支持"稳定传达给 LLM。
+        # 这里按“模型决策真正会用到的字段”逐项输出，缺失字段保留为未知，
+        # 避免把供应商未声明的能力误报为明确不支持。
         def _attr(name: str, value: str) -> None:
             if value:
                 lines.append(f'    {name}="{VideoModelConfigService._xml_attr(value)}"')
@@ -451,7 +457,10 @@ class VideoModelConfigService:
             _attr(attr_name, attr_value)
         _attr("ref", VideoModelConfigService._build_reference_attr(video_generation_config))
         _attr("unsupported", VideoModelConfigService._build_unsupported_attr(video_generation_config))
-        for attr_name, attr_value in VideoModelConfigService._build_audio_attrs(video_model_id).items():
+        for attr_name, attr_value in VideoModelConfigService._build_audio_attrs(
+            video_model_id,
+            video_generation_config,
+        ).items():
             _attr(attr_name, attr_value)
 
         mode_lines = VideoModelConfigService._build_input_mode_lines(video_generation_config)
@@ -473,14 +482,14 @@ class VideoModelConfigService:
             "<media_model_rules>",
             "Use this info only for image/video generation questions or tool calls.",
             "Use declared values only.",
-            "Missing field means unsupported.",
+            "Missing capability fields mean unknown, not unsupported.",
         ]
         if has_video:
             if has_video_config:
                 lines.extend([
                     "Use video resolution, aspect_ratio, and duration only from declared values; if unspecified by the user, infer legal values when the model rules make the choice clear, otherwise omit them.",
                     "Use video modes to choose reference fields and avoid unsupported combinations.",
-                    "Use generation.audio_policy=auto|generate|mute. For mute, use native_mute=true when declared; when mute_fallback=compose, generate first and compose the final video with output.audioPolicy=mute. Never emit provider-specific audio fields.",
+                    "Treat audio_output=supported as model audio generation support, audio_output=unsupported as an explicit limitation, and audio_output=unknown as unverified; an omitted capability must not be presented as unsupported. When users request narration, dialogue, voice-over, music, or sound effects, preserve the request and use generation.audio_policy=generate when audio_output is supported or unknown. native_mute controls silent output only and does not mean audio generation is unavailable. For mute, use native_mute=true when declared; when mute_fallback=compose, generate first and compose the final video with output.audioPolicy=mute. Never emit provider-specific audio fields.",
                     "Before passing reference_*_paths, prompt MUST bind assets by list order: reference_image_paths[0]->[image1], reference_video_paths[0]->[video1], reference_audio_paths[0]->[audio1]. Do not submit references without tokens.",
                     "Canvas width/height are layout size, not generation parameters.",
                 ])

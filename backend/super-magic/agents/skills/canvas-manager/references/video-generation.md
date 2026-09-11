@@ -1,6 +1,6 @@
 # Basic Canvas video generation
 
-Use this reference for a basic Canvas video request when the user has not asked for professional video production or a staged workflow. Requests such as “generate a video”, “make a promotional video”, or “animate this image” stay in this mode unless the user explicitly asks for professional production.
+Use this reference as the default Canvas video path. Requests such as “generate a video”, “make a promotional video”, or “animate this image” stay in this mode even when the user uploads assets, the Canvas already has ordinary images or videos, the user asks to revise a basic video, or the latest message names an explicit ordinary generation mode such as `生成模式: 普通`. Load `references/professional-video-production.md` only when the user explicitly asks for professional or complete video production, names a production stage, names an explicit detailed generation mode such as `生成模式: 精细`, or continues an in-progress professional production.
 
 ## Workflow
 
@@ -14,7 +14,7 @@ Use this reference for a basic Canvas video request when the user has not asked 
 
 Video billing remains in force. Before generating, call `estimate_canvas_content_points`, show the estimated points, and obtain explicit user confirmation. This is a workflow instruction; the estimate tool and generation tool are independent, and generation does not validate an estimate ID.
 
-If the user later asks for professional video production, a storyboard, multiple shots, first frames, staged approvals, Connections, BGM replacement, or final composition, stop the basic path and continue with `references/professional-video-production.md` using the existing results.
+If the user later explicitly asks for professional video production, a storyboard, multiple shots, first frames, staged approvals, Connections, BGM replacement, final composition, or an explicit detailed generation mode, stop the basic path and continue with `references/professional-video-production.md` using the existing results. If the Canvas already has an in-progress professional production and the user continues that work, switch to that reference as well.
 
 ## Tool choice
 
@@ -31,7 +31,9 @@ Read only `result.content` from every Code Mode tool result. Reuse the exact IDs
 
 Fill the point-estimate request with the fields listed by the estimate tool. Do not add `audioPolicy` to the estimate request. For the actual generated video Content, set `content.audioPolicy` only when the requested audio behavior must be explicit; omit it when the user did not specify an audio requirement.
 
-For a generated video Content, the supported generation fields are `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, `watermark`, and the conditional `audioPolicy` field. Use `audioPolicy="mute"` for a silent result or `audioPolicy="generate"` when generated audio is explicitly requested. Use `audioPolicy="auto"` only when the model rules require an explicit default. This field belongs directly under `content`; it is not a prompt instruction and it is not an estimate parameter.
+For a generated video Content, the supported generation fields are `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, `watermark`, and the conditional `audioPolicy` field. Use `audioPolicy="mute"` for a silent result or `audioPolicy="generate"` when generated audio is explicitly requested. Use `audioPolicy="auto"` only when the model rules require an explicit default. Missing audio capability metadata means unknown, not unsupported; do not claim that narration or audio is impossible unless the model explicitly declares audio output unsupported. Distinguish generated voice from recording the user's real voice. This field belongs directly under `content`; it is not a prompt instruction and it is not an estimate parameter.
+
+Before submitting a generated video, check the user request for voiceover, dubbing, narration, spoken lines, dialogue, sound effects, or ambient sound. If any of those are present, keep the complete text, speaker or voice, tone, and sound description in `prompt`, state that the video must include those sounds, and set `content.audioPolicy="generate"`. Do not let the visual description replace or drop those audio requirements, and do not use `mute` or omit the field. If the user asked for a silent result, set `mute`. If no audio behavior was requested, omit `audioPolicy`. Never pass `generate` on `task="compose"`; composition uses `output.audioPolicy` as `preserve` or `mute`.
 
 Before submitting, validate the complete nested shape and keep the operation identity stable:
 
@@ -125,12 +127,13 @@ result = tool.call("add_canvas_elements", {
             "duration_seconds": 5,
             "aspect_ratio": "9:16",
             "resolution": "720p",
-            "audioPolicy": "mute",
         },
     }],
 })
 print(result.content)
 ```
+
+This example omits `audioPolicy` because the request has no audio requirement. When the user asks for narration, dialogue, or sound effects, keep that complete audio text in `prompt` and set `content.audioPolicy="generate"` on the generation call only.
 
 ## Code Mode example: wait and verify
 
