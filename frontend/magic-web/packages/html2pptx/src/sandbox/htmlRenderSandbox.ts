@@ -1,5 +1,6 @@
 import type { SlideConfig } from "../api/options"
 import { ExportFidelityError, isExportFidelityError } from "../errors"
+import type { ExportIssue } from "../api/options"
 import { LogLevel, createScopedLog } from "../logger"
 import { NATIVE_LOAD_WAIT_MS, READY_STATE_POLL_MS } from "../shared/constants"
 import { DEFAULT_CONFIG } from "../shared/unit"
@@ -37,7 +38,7 @@ export interface SandboxInstance {
 	/** Render HTML content */
 	render: (
 		html: string,
-		options?: { signal?: AbortSignal; onResourceError?: (error: ResourceLoadError) => void },
+		options?: { signal?: AbortSignal; onResourceError?: (error: ResourceLoadError) => void; onExportIssue?: (issue: ExportIssue) => void },
 	) => Promise<SandboxRenderResult>
 	/** Destroy the sandbox */
 	destroy: () => void
@@ -175,6 +176,11 @@ export class HtmlRenderSandbox implements SandboxInstance {
 			const recordPageError = (error: unknown) => {
 				if (pageErrorRecorded || lifecycleState.settled) return
 				pageErrorRecorded = true
+				options?.onExportIssue?.({
+					code: "page-script-error",
+					message: error instanceof Error ? error.message : String(error),
+					severity: "error",
+				})
 				if (isExportFidelityError(error)) {
 					rejectPageError(error)
 					return

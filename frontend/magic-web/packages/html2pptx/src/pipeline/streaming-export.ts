@@ -484,6 +484,7 @@ async function prepareStreamingPage(input: StreamingExportTaskInput, html: strin
 		signal: input.signal,
 		onResourceError: input.onResourceError,
 		textMergeMode: DEFAULT_TEXT_MERGE_MODE,
+		onExportIssue: input.onExportIssue,
 		runtime: input.pipeline,
 	})
 }

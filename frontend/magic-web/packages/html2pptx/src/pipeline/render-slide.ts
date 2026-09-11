@@ -1,5 +1,5 @@
 import type { SlideConfig } from "../api/options"
-import type { ResourceLoadError } from "../api/options"
+import type { ExportIssue, ResourceLoadError } from "../api/options"
 import type { PPTNode } from "../ir/node"
 import type { SandboxInstance } from "../sandbox/htmlRenderSandbox"
 import { log, LogLevel } from "../logger"
@@ -21,6 +21,7 @@ export interface PrepareSlideNodesInput {
 	sandbox: SandboxInstance
 	signal: AbortSignal
 	onResourceError?: (error: ResourceLoadError) => void
+	onExportIssue?: (issue: ExportIssue) => void
 	textMergeMode?: TextMergeMode
 	runtime?: RenderSlideRuntime
 }
@@ -48,6 +49,7 @@ export async function prepareSlideNodes({
 	sandbox,
 	signal,
 	onResourceError,
+	onExportIssue,
 	textMergeMode = DEFAULT_TEXT_MERGE_MODE,
 	runtime,
 }: PrepareSlideNodesInput): Promise<PrepareSlideNodesResult> {
@@ -55,6 +57,7 @@ export async function prepareSlideNodes({
 	const { iWindow, iDocument, totalWidth, totalHeight } = await sandbox.render(html, {
 		signal,
 		onResourceError,
+		onExportIssue,
 	})
 	ensureNotAborted(signal)
 

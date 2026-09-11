@@ -40,6 +40,7 @@ export interface StreamingOptionsBase {
 	 * Failed resources do not stop export and are only used for user notification. The same resource may trigger multiple times, so callers should deduplicate if needed.
 	 */
 	onResourceLoadError?: (error: ResourceLoadError) => void
+	onExportIssue?: (issue: ExportIssue) => void
 	/** Minimum output level; logs below this level are ignored. Defaults to "info" */
 	logLevel?: LogLevelLabel
 	/** External logger. Passing console is supported; all methods are optional */
@@ -53,6 +54,14 @@ export interface StreamingOptionsBase {
 	 * - 'fail': throw an error and stop export
 	 */
 	fontMissPolicy?: FontMissPolicy
+}
+
+export interface ExportIssue {
+	pageIndex?: number
+	code: "page-script-error" | "resource-error" | "render-error"
+	message: string
+	severity: "warning" | "error"
+	details?: Record<string, unknown>
 }
 
 /** Output policy used by the forward-only large export entry point. */

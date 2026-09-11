@@ -1,6 +1,8 @@
 import type {
 	ExportProgress,
 	ExportSummary,
+	ExportIssue,
+	ExportIssue,
 	LargeExportOptions,
 	PptxDestination,
 	ResourceLoadError,
@@ -28,6 +30,7 @@ export interface StreamingExportTaskInput {
 	skipFailedPages: boolean
 	autoSize: boolean
 	onResourceError?: (error: ResourceLoadError) => void
+	onExportIssue?: (issue: ExportIssue) => void
 	onProgress?: (progress: ExportProgress) => void
 	fontResolver?: LargeExportOptions["fontResolver"]
 	fontMissPolicy?: LargeExportOptions["fontMissPolicy"]
@@ -117,6 +120,7 @@ async function runStreamingExportPipeline(
 			skipFailedPages: options?.skipFailedPages ?? false,
 			autoSize: options?.autoSize ?? false,
 			onResourceError: options?.onResourceLoadError,
+			onExportIssue: options?.onExportIssue,
 			onProgress: options?.onProgress,
 			fontResolver: options?.fontResolver,
 			fontMissPolicy: options?.fontMissPolicy,
