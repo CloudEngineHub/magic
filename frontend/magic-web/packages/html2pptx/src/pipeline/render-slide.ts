@@ -49,6 +49,7 @@ export async function prepareSlideNodes({
 	html,
 	sandbox,
 	signal,
+	pageIndex,
 	onResourceError,
 	onExportIssue,
 	textMergeMode = DEFAULT_TEXT_MERGE_MODE,
@@ -100,12 +101,12 @@ export async function prepareSlideNodes({
 
 		ensureNotAborted(signal)
 		if (runtime?.resolveCaptures) {
-			await runtime.resolveCaptures(pptNodes, signal, onResourceError)
+			await runtime.resolveCaptures(pptNodes, signal, reportResourceError)
 		}
 		if (runtime?.materializeVideoCoverNodes) {
-			await runtime.materializeVideoCoverNodes(pptNodes, signal, onResourceError)
+			await runtime.materializeVideoCoverNodes(pptNodes, signal, reportResourceError)
 		}
-		await activeMaterializePptImageNodes(pptNodes, signal, onResourceError)
+		await activeMaterializePptImageNodes(pptNodes, signal, reportResourceError)
 		return { pptNodes, totalWidth, totalHeight, bodyBackground }
 	} catch (error) {
 		throw error
