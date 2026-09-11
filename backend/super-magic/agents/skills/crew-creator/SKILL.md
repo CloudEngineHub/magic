@@ -220,6 +220,12 @@ Pure Markdown, no YAML header. Defines this employee's standard operating proced
 - Use if/then/else logic for missing inputs, unsupported formats, and execution failures.
 - Define verifiable completion conditions for every step, along with rules and output quality requirements.
 
+**Image generation in workflows**: When a workflow step requires generating images, always instruct the agent to use the canvas tools rather than `generate_images` directly:
+1. Call `create_canvas` to initialize a canvas project (e.g., `project_path="<topic>/design"`)
+2. Call `generate_canvas_images` with the task list to generate images into the canvas
+
+Reserve `generate_images` only for utility/internal use (e.g., logo generation during initialization). All user-facing image generation tasks in AGENTS.md workflows must go through the canvas tools.
+
 ### SOUL.md — Personality and Behavior
 
 Pure Markdown, no YAML header. Defines the employee's personality and behavior guidelines.
@@ -234,6 +240,7 @@ Contains YAML header (tool whitelist) and optional body (tool usage preferences)
 - Tools can only be selected from the project's available tool list — use `scripts/tools.py` to query dynamically
 - Recommend tool combinations based on employee function
 - Special tool usage preferences go in the body section
+- **For employees with image generation needs**: add `create_canvas` and `generate_canvas_images` to the tool list (not `generate_images`), so the AGENTS.md canvas workflow is executable
 
 ## Tool Management Workflow
 
