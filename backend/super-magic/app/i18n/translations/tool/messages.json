@@ -5475,6 +5475,14 @@
         "zh_CN": "保存业务数据",
         "en_US": "Save app data"
     },
+    "magicbase.update_business_data": {
+        "zh_CN": "更新业务数据",
+        "en_US": "Update app data"
+    },
+    "magicbase.view_record": {
+        "zh_CN": "查看记录详情",
+        "en_US": "View row details"
+    },
     "magicbase.selected_record": {
         "zh_CN": "指定记录",
         "en_US": "Selected row"

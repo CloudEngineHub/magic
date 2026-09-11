@@ -17,10 +17,12 @@ from app.infrastructure.sdk.magic_service.parameter import (
     DeleteMagicBaseColumnParameter,
     DeleteMagicBaseRowParameter,
     DeleteMagicBaseTableParameter,
+    GetMagicBaseRowParameter,
     GetMagicBaseTableParameter,
     QueryMagicBaseRowsParameter,
     QueryMagicBaseTablesParameter,
     UpdateMagicBaseColumnParameter,
+    UpdateMagicBaseRowParameter,
     UpdateMagicBaseTablePermissionsParameter,
 )
 from app.service.html_app_memory_service import (
@@ -417,7 +419,7 @@ Optional exact table_name filter."""
     )
 
 
-@tool(name="query_magicbase_tables")
+@tool(name="query_magicbase_tables", code_mode_only=True)
 class QueryMagicTables(MagicBaseFriendlyRemarkMixin, BaseTool[QueryMagicbaseTablesParams]):
     """<!--zh
     查询当前项目的 MagicBase 表。
@@ -472,7 +474,7 @@ Real MagicBase table.id returned by MagicBase tools. Do not pass table_key or ta
     )
 
 
-@tool(name="get_magicbase_table")
+@tool(name="get_magicbase_table", code_mode_only=True)
 class GetMagicTable(MagicBaseFriendlyRemarkMixin, BaseTool[GetMagicbaseTableParams]):
     """<!--zh
     根据真实 table.id 获取当前项目的 MagicBase 表详情。
@@ -518,7 +520,7 @@ class QueryMagicbaseRowsParams(BaseToolParams):
     )
 
 
-@tool(name="query_magicbase_rows")
+@tool(name="query_magicbase_rows", code_mode_only=True)
 class QueryMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[QueryMagicbaseRowsParams]):
     """Query rows from a MagicBase table in the current project using the current user authorization."""
     name = "query_magicbase_rows"
@@ -562,7 +564,7 @@ class CreateMagicbaseRowParams(BaseToolParams):
     )
 
 
-@tool(name="create_magicbase_row")
+@tool(name="create_magicbase_row", code_mode_only=True)
 class CreateMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[CreateMagicbaseRowParams]):
     """Create one MagicBase row as the current authenticated user."""
     name = "create_magicbase_row"
@@ -594,6 +596,115 @@ class CreateMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[CreateMagicbaseRowPa
         )
 
 
+class GetMagicbaseRowParams(BaseToolParams):
+    table_id: str = Field(
+        description="""<!--zh: 当前项目内的真实 MagicBase table.id。-->
+Real MagicBase table.id in the current project."""
+    )
+    record_id: str = Field(
+        description="""<!--zh: 查询或创建操作返回的真实 MagicBase 记录 id。-->
+Real MagicBase row id returned by a query or create operation."""
+    )
+    select: List[str] = Field(
+        default_factory=list,
+        description="""<!--zh: 返回字段列表。留空时返回动态字段和默认系统字段。-->
+Fields to return. Leave empty to return dynamic fields and default system fields.""",
+    )
+
+
+@tool(name="get_magicbase_row", code_mode_only=True)
+class GetMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[GetMagicbaseRowParams]):
+    """<!--zh
+    使用当前用户授权按真实记录 id 获取单条 MagicBase 数据记录。
+    -->
+    Get one MagicBase row by its real record id using the current user authorization.
+    """
+    name = "get_magicbase_row"
+
+    async def execute(self, tool_context: ToolContext, params: GetMagicbaseRowParams) -> ToolResult:
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
+        if not project_id:
+            return ToolResult.error("Project ID is not available in the current session. Cannot get MagicBase row.")
+
+        try:
+            result = await get_magic_service_sdk().magicbase.get_row_async(
+                GetMagicBaseRowParameter(
+                    project_id=project_id,
+                    table_id=params.table_id,
+                    record_id=params.record_id,
+                    select=params.select,
+                )
+            )
+        except (MagicServiceException, ValueError) as e:
+            return ToolResult.error(f"Failed to get MagicBase row: {e}")
+
+        row = result.to_dict()
+        return ToolResult(
+            content=f"Loaded MagicBase row record_id={params.record_id} from table_id={params.table_id}.",
+            data={"project_id": project_id, "table_id": params.table_id, "row": row},
+        )
+
+
+class UpdateMagicbaseRowParams(BaseToolParams):
+    table_id: str = Field(
+        description="""<!--zh: 当前项目内的真实 MagicBase table.id。-->
+Real MagicBase table.id in the current project."""
+    )
+    record_id: str = Field(
+        description="""<!--zh: 查询或创建操作返回的真实 MagicBase 记录 id。-->
+Real MagicBase row id returned by a query or create operation."""
+    )
+    data: Dict[str, Any] = Field(
+        description="""<!--zh: 待更新的字段，按 MagicBase column_key 组织。只传真实业务字段，不要传 created_by、organization_code、created_at、updated_at 等系统字段。-->
+Fields to update, keyed by MagicBase column_key. Pass only dynamic business fields, not system fields such as created_by, organization_code, created_at, or updated_at."""
+    )
+    select: List[str] = Field(
+        default_factory=list,
+        description="""<!--zh: 更新后返回的字段。-->
+Fields to return after the update.""",
+    )
+
+
+@tool(name="update_magicbase_row", code_mode_only=True)
+class UpdateMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[UpdateMagicbaseRowParams]):
+    """<!--zh
+    以当前登录用户身份更新一条 MagicBase 数据记录。
+    -->
+    Update one MagicBase row as the current authenticated user.
+    """
+    name = "update_magicbase_row"
+
+    async def execute(self, tool_context: ToolContext, params: UpdateMagicbaseRowParams) -> ToolResult:
+        try:
+            project_id = _get_project_id(tool_context)
+        except ValueError as e:
+            return ToolResult.error(str(e))
+        if not project_id:
+            return ToolResult.error("Project ID is not available in the current session. Cannot update MagicBase row.")
+
+        try:
+            result = await get_magic_service_sdk().magicbase.update_row_async(
+                UpdateMagicBaseRowParameter(
+                    project_id=project_id,
+                    table_id=params.table_id,
+                    record_id=params.record_id,
+                    data=params.data,
+                    select=params.select,
+                )
+            )
+        except (MagicServiceException, ValueError) as e:
+            return ToolResult.error(f"Failed to update MagicBase row: {e}")
+
+        row = result.to_dict()
+        return ToolResult(
+            content=f"Updated MagicBase row record_id={params.record_id} in table_id={params.table_id}.",
+            data={"project_id": project_id, "table_id": params.table_id, "row": row},
+        )
+
+
 class BatchCreateMagicbaseRowsParams(BaseToolParams):
     table_id: str = Field(description="Real MagicBase table.id in the current project.")
     rows: List[Dict[str, Any]] = Field(
@@ -604,7 +715,7 @@ class BatchCreateMagicbaseRowsParams(BaseToolParams):
     select: List[str] = Field(default_factory=list, description="Fields to return for every created row.")
 
 
-@tool(name="batch_create_magicbase_rows")
+@tool(name="batch_create_magicbase_rows", code_mode_only=True)
 class BatchCreateMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[BatchCreateMagicbaseRowsParams]):
     """Batch create MagicBase rows as the current authenticated user."""
     name = "batch_create_magicbase_rows"
@@ -645,7 +756,7 @@ class DeleteMagicbaseRowParams(BaseToolParams):
     )
 
 
-@tool(name="delete_magicbase_row")
+@tool(name="delete_magicbase_row", code_mode_only=True)
 class DeleteMagicRow(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseRowParams]):
     """Delete one MagicBase row after explicit user confirmation."""
     name = "delete_magicbase_row"
@@ -690,7 +801,7 @@ class BatchDeleteMagicbaseRowsParams(BaseToolParams):
     )
 
 
-@tool(name="batch_delete_magicbase_rows")
+@tool(name="batch_delete_magicbase_rows", code_mode_only=True)
 class BatchDeleteMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[BatchDeleteMagicbaseRowsParams]):
     """Batch delete MagicBase rows after explicit user confirmation."""
     name = "batch_delete_magicbase_rows"
@@ -763,7 +874,7 @@ Table, row, and column dynamic permissions. Pass this as an object, never as a J
         return _coerce_permission_object(value, "dynamic_permissions")
 
 
-@tool(name="create_magicbase_table")
+@tool(name="create_magicbase_table", code_mode_only=True)
 class CreateMagicTable(MagicBaseFriendlyRemarkMixin, BaseTool[CreateMagicbaseTableParams]):
     """<!--zh
     在当前项目创建 MagicBase 表，并返回真实 table.id。
@@ -903,7 +1014,7 @@ Optional column dynamic permission object. Pass it as an object, not as a JSON s
         return _coerce_permission_object(value, "dynamic_permission")
 
 
-@tool(name="create_magicbase_column")
+@tool(name="create_magicbase_column", code_mode_only=True)
 class CreateMagicColumn(MagicBaseFriendlyRemarkMixin, BaseTool[CreateMagicbaseColumnParams]):
     """<!--zh
     给当前项目内已有 MagicBase 表新增字段。
@@ -1018,7 +1129,7 @@ Full replacement dynamic permissions object for an existing table. Use this to u
         return parsed
 
 
-@tool(name="update_magicbase_table_permissions")
+@tool(name="update_magicbase_table_permissions", code_mode_only=True)
 class UpdateMagicTablePermissions(
     MagicBaseFriendlyRemarkMixin,
     BaseTool[UpdateMagicbaseTablePermissionsParams],
@@ -1100,7 +1211,7 @@ Set to true only after the user explicitly confirms deleting this table."""
     )
 
 
-@tool(name="delete_magicbase_table")
+@tool(name="delete_magicbase_table", code_mode_only=True)
 class DeleteMagicTable(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseTableParams]):
     """<!--zh
     删除当前项目内已有 MagicBase 表。
@@ -1204,7 +1315,7 @@ Optional column dynamic permission after update. To preserve existing permission
         return _coerce_permission_object(value, "dynamic_permission")
 
 
-@tool(name="update_magicbase_column")
+@tool(name="update_magicbase_column", code_mode_only=True)
 class UpdateMagicColumn(MagicBaseFriendlyRemarkMixin, BaseTool[UpdateMagicbaseColumnParams]):
     """<!--zh
     修改当前项目内已有 MagicBase 字段。
@@ -1300,7 +1411,7 @@ Set to true only after the user explicitly confirms deleting this column."""
     )
 
 
-@tool(name="delete_magicbase_column")
+@tool(name="delete_magicbase_column", code_mode_only=True)
 class DeleteMagicColumn(MagicBaseFriendlyRemarkMixin, BaseTool[DeleteMagicbaseColumnParams]):
     """<!--zh
     删除当前项目内已有 MagicBase 字段。

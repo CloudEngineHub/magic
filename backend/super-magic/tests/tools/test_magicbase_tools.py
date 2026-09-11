@@ -14,10 +14,12 @@ from app.infrastructure.sdk.magic_service.parameter import (
     DeleteMagicBaseColumnParameter,
     DeleteMagicBaseRowParameter,
     DeleteMagicBaseTableParameter,
+    GetMagicBaseRowParameter,
     GetMagicBaseTableParameter,
     QueryMagicBaseRowsParameter,
     QueryMagicBaseTablesParameter,
     UpdateMagicBaseColumnParameter,
+    UpdateMagicBaseRowParameter,
     UpdateMagicBaseTablePermissionsParameter,
 )
 from app.infrastructure.sdk.magic_service.result import (
@@ -35,17 +37,50 @@ from app.tools.magicbase_tools import (
     BatchDeleteMagicRows,
     CreateMagicbaseRowParams,
     CreateMagicbaseTableParams,
+    CreateMagicColumn,
     CreateMagicRow,
     CreateMagicTable,
     DeleteMagicbaseRowParams,
+    DeleteMagicColumn,
     DeleteMagicRow,
+    DeleteMagicTable,
+    GetMagicbaseRowParams,
+    GetMagicRow,
+    GetMagicTable,
     MagicbaseColumnDefinition,
     QueryMagicbaseRowsParams,
     QueryMagicbaseTablesParams,
     QueryMagicRows,
     QueryMagicTables,
+    UpdateMagicbaseRowParams,
+    UpdateMagicColumn,
+    UpdateMagicRow,
+    UpdateMagicTablePermissions,
 )
 from app.utils.async_file_utils import async_read_json
+
+MAGICBASE_TOOL_CLASSES = (
+    QueryMagicTables,
+    GetMagicTable,
+    QueryMagicRows,
+    GetMagicRow,
+    CreateMagicRow,
+    UpdateMagicRow,
+    BatchCreateMagicRows,
+    DeleteMagicRow,
+    BatchDeleteMagicRows,
+    CreateMagicTable,
+    CreateMagicColumn,
+    UpdateMagicTablePermissions,
+    DeleteMagicTable,
+    UpdateMagicColumn,
+    DeleteMagicColumn,
+)
+
+
+def test_all_magicbase_tools_are_code_mode_only():
+    for tool_class in MAGICBASE_TOOL_CLASSES:
+        assert tool_class.code_mode_only is True, tool_class.__name__
 
 
 class RecordingMagicBaseApi(MagicBaseApi):
@@ -131,6 +166,25 @@ async def test_magicbase_api_uses_expected_endpoint_paths():
     )
     assert api.call[1:] == ("POST", "/api/v1/magicbase/projects/100/tables/200/rows")
     assert row.to_dict()["id"] == "401"
+
+    api.response = {"id": 401, "title": "Loaded"}
+    loaded = await api.get_row_async(
+        GetMagicBaseRowParameter(project_id="100", table_id="200", record_id="401")
+    )
+    assert api.call[1:] == ("GET", "/api/v1/magicbase/projects/100/tables/200/rows/401")
+    assert loaded.to_dict()["title"] == "Loaded"
+
+    api.response = {"id": 401, "title": "Updated"}
+    updated = await api.update_row_async(
+        UpdateMagicBaseRowParameter(
+            project_id="100",
+            table_id="200",
+            record_id="401",
+            data={"title": "Updated"},
+        )
+    )
+    assert api.call[1:] == ("PATCH", "/api/v1/magicbase/projects/100/tables/200/rows/401")
+    assert updated.to_dict()["title"] == "Updated"
 
     api.response = {
         "created_count": 2,
@@ -341,6 +395,14 @@ async def test_magicbase_row_tools_forward_expected_payloads():
             self.calls.append(("create", parameter))
             return MagicBaseRowResult({"id": 301, **parameter.data})
 
+        async def get_row_async(self, parameter):
+            self.calls.append(("get", parameter))
+            return MagicBaseRowResult({"id": 301, "title": "A"})
+
+        async def update_row_async(self, parameter):
+            self.calls.append(("update", parameter))
+            return MagicBaseRowResult({"id": 301, **parameter.data})
+
         async def batch_create_rows_async(self, parameter):
             self.calls.append(("batch_create", parameter))
             return MagicBaseBatchCreateRowsResult(
@@ -376,6 +438,14 @@ async def test_magicbase_row_tools_forward_expected_payloads():
             tool_context,
             CreateMagicbaseRowParams(table_id="200", data={"title": "A"}, select=["id"]),
         )
+        get_result = await GetMagicRow().execute(
+            tool_context,
+            GetMagicbaseRowParams(table_id="200", record_id="301", select=["id"]),
+        )
+        update_result = await UpdateMagicRow().execute(
+            tool_context,
+            UpdateMagicbaseRowParams(table_id="200", record_id="301", data={"title": "B"}),
+        )
         batch_create_result = await BatchCreateMagicRows().execute(
             tool_context,
             BatchCreateMagicbaseRowsParams(table_id="200", rows=[{"title": "A"}, {"title": "B"}]),
@@ -395,12 +465,16 @@ async def test_magicbase_row_tools_forward_expected_payloads():
 
     assert query_result.ok is True
     assert create_result.data["row"]["id"] == "301"
+    assert get_result.data["row"]["title"] == "A"
+    assert update_result.data["row"]["title"] == "B"
     assert batch_create_result.data["record_ids"] == ["302", "303"]
     assert delete_result.ok is True
     assert batch_delete_result.data["deleted_count"] == 2
     assert [call[0] for call in FakeSdk.magicbase.calls] == [
         "query",
         "create",
+        "get",
+        "update",
         "batch_create",
         "delete",
         "batch_delete",

@@ -124,7 +124,9 @@ def build_magicbase_tool_remark(
 
     message_by_tool = {
         "get_magicbase_table": "magicbase.table_structure",
+        "get_magicbase_row": "magicbase.view_record",
         "create_magicbase_row": "magicbase.save_business_data",
+        "update_magicbase_row": "magicbase.update_business_data",
         "delete_magicbase_row": "magicbase.selected_record",
         "update_magicbase_table_permissions": "magicbase.permission_scope",
         "delete_magicbase_table": "magicbase.selected_table",

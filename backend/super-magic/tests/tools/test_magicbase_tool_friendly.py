@@ -11,10 +11,12 @@ from app.tools.magicbase_tools import (
     DeleteMagicColumn,
     DeleteMagicRow,
     DeleteMagicTable,
+    GetMagicRow,
     GetMagicTable,
     QueryMagicRows,
     QueryMagicTables,
     UpdateMagicColumn,
+    UpdateMagicRow,
     UpdateMagicTablePermissions,
 )
 
@@ -26,7 +28,9 @@ from app.tools.magicbase_tools import (
         (QueryMagicTables, "query_magicbase_tables", "查询数据表", "Query tables"),
         (GetMagicTable, "get_magicbase_table", "查看数据表", "View table"),
         (QueryMagicRows, "query_magicbase_rows", "查询数据记录", "Query rows"),
+        (GetMagicRow, "get_magicbase_row", "查看数据记录", "View row"),
         (CreateMagicRow, "create_magicbase_row", "新增数据记录", "Create row"),
+        (UpdateMagicRow, "update_magicbase_row", "更新数据记录", "Update row"),
         (
             BatchCreateMagicRows,
             "batch_create_magicbase_rows",
@@ -74,7 +78,9 @@ async def test_magicbase_tool_actions_are_localized(tool_class, tool_name, zh_ac
         (QueryMagicTables(), "query_magicbase_tables", {}, "当前微应用"),
         (GetMagicTable(), "get_magicbase_table", {"table_id": "table-1"}, "表结构与权限"),
         (QueryMagicRows(), "query_magicbase_rows", {"table_id": "table-1"}, "表 table-1"),
+        (GetMagicRow(), "get_magicbase_row", {"table_id": "table-1"}, "查看记录详情"),
         (CreateMagicRow(), "create_magicbase_row", {"table_id": "table-1"}, "保存业务数据"),
+        (UpdateMagicRow(), "update_magicbase_row", {"table_id": "table-1"}, "更新业务数据"),
         (
             BatchCreateMagicRows(),
             "batch_create_magicbase_rows",
