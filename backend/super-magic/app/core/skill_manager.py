@@ -19,7 +19,7 @@ from app.core.skill_utils.skillhub import (
     skillhub_install_platform_me,
     skillhub_install_platform_market,
 )
-from app.core.skill_utils.prompt import generate_skills_prompt
+from app.core.skill_utils.prompt import SkillsPromptBuildResult, generate_skills_prompt
 
 # ── 新 API ────────────────────────────────────────────────────────────────────
 from app.core.skill_utils.installer import InstallService, SkillRef, InstallResult, InstallBatchResult
@@ -34,6 +34,7 @@ __all__ = [
     "get_global_skill_manager",
     "find_skill",
     "generate_skills_prompt",
+    "SkillsPromptBuildResult",
     # 安装服务（新）
     "InstallService",
     "SkillRef",

@@ -2215,6 +2215,10 @@
         "zh_CN": "技能装备成功",
         "en_US": "Skill equipped"
     },
+    "read_skills.awaiting_read_confirmation": {
+        "zh_CN": "{{count}} 个 Skill 的说明过大，继续读取前需要确认",
+        "en_US": "{{count}} Skills have unusually large instructions; confirmation is needed before reading further"
+    },
     "read_skills.success_single": {
         "zh_CN": "已装备技能 {{skill_name}}",
         "en_US": "Equipped Skill {{skill_name}}"

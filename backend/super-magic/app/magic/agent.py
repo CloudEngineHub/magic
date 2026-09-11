@@ -512,6 +512,7 @@ class Agent(BaseAgent):
             skills_config,
             agent_name=self.agent_name,
         )
+        self._preloaded_skill_files: tuple[Path, ...] = skills_prompt_content.preloaded_files if skills_prompt_content else ()
         if skills_prompt_content:
             logger.info(f"为 agent {self.agent_name} 生成了 skills prompt，包含 {len(system_skill_names)} 个 system skills")
         else:
@@ -527,7 +528,7 @@ class Agent(BaseAgent):
 
         # 将 skills prompt 追加到 system prompt（在工具提示之前）
         if skills_prompt_content:
-            self.system_prompt += "\n\n---\n\n" + skills_prompt_content
+            self.system_prompt += "\n\n---\n\n" + skills_prompt_content.content
             logger.info("已将 skills prompt 追加到 system prompt")
 
         # 将工具提示追加到 system prompt
@@ -544,14 +545,18 @@ class Agent(BaseAgent):
         static_vars = self._prepare_prompt_static_variables()
         self.system_prompt = self._agent_loader.set_variables(self.system_prompt, static_vars)
 
-        # 在完整 system prompt 末尾统一注入安全规则；大陆环境额外追加内容合规规则
-        self.system_prompt += "\n\n---\n\n" + build_security_guardrails_prompt(
-            is_mainland=Environment.is_mainland(),
-        )
         self.system_prompt = apply_personal_preferences(
             self.system_prompt,
             personal_preferences=self.agent_context.get_personal_preferences(),
             is_magiclaw=self.agent_context.is_magiclaw(),
+        )
+        # Skill 是文件原文，须避开模板和偏好过滤，保留注释及其中的模板示例。
+        if skills_prompt_content and skills_prompt_content.preloaded_content:
+            self.system_prompt += "\n\n---\n\n" + skills_prompt_content.preloaded_content
+
+        # 在完整 system prompt 末尾统一注入安全规则；大陆环境额外追加内容合规规则
+        self.system_prompt += "\n\n---\n\n" + build_security_guardrails_prompt(
+            is_mainland=Environment.is_mainland(),
         )
 
     def _mount_runtime_tools(self, agent_define: AgentDefine) -> None:
@@ -2724,6 +2729,15 @@ Since your subsequent output will be merged with pre-interruption content and di
             ),
         )
 
+        # 压缩会清空文件跟踪；preload 仍在 system prompt，沿原登记和通知入口恢复。
+        if await self._ensure_preloaded_files_tracked() and self.chat_history._is_tool_call_sequence_complete():
+            preload_context = await self._build_horizon_context_update_safely(
+                injection_point="before_llm_preloaded_skills",
+                log_context="preload 恢复后注入",
+            )
+            if preload_context:
+                await self.chat_history.append_user_message(preload_context, show_in_ui=False, source="horizon")
+
         # 压缩可能切换到专属模型，调用前重新解析一次当前文本模型。
         text_model_state = self._resolve_current_text_model()
 
@@ -2914,6 +2928,20 @@ Since your subsequent output will be merged with pre-interruption content and di
             description=description,
         )
 
+    async def _ensure_preloaded_files_tracked(self) -> bool:
+        """仅为缺失的 preload 路径登记文件，不覆盖已有记录或维护另一套恢复状态。"""
+        registered = False
+        horizon = self.agent_context.horizon
+        for file_path in self._preloaded_skill_files:
+            try:
+                if await horizon.is_file_tracked(file_path):
+                    continue
+                await horizon.record_file_observation(file_path, tool_name="skill_preload")
+                registered = await horizon.is_file_tracked(file_path) or registered
+            except Exception as error:
+                logger.warning(f"[AgentHorizon] preload 文件登记失败 {file_path}: {error}")
+        return registered
+
     async def _build_horizon_context_update_safely(
         self,
         injection_point: str,
@@ -2921,6 +2949,7 @@ Since your subsequent output will be merged with pre-interruption content and di
     ) -> Optional[str]:
         """构建 Horizon 注入内容，模型配置错误时静默跳过。"""
         try:
+            await self._ensure_preloaded_files_tracked()
             await self.agent_context.horizon.flush_pending_user_messages()
             self._sync_horizon_llm_model_info()
             return await self.agent_context.horizon.build_context_update(

@@ -1,17 +1,19 @@
 """Render available skill metadata into the agent system prompt."""
 import asyncio
 import concurrent.futures
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
 from typing import Dict
 
 from agentlang.skills.models import SkillMetadata
-from agentlang.skills.loader import SkillLoader
 from agentlang.agent.define import SkillsConfig
 from agentlang.logger import get_logger
 from agentlang.agent.syntax import SyntaxProcessor
 from agentlang.environment import Environment
+from agentlang.utils.token_estimator import num_tokens_from_string
+from app.core.skill_utils.constants import SKILL_MAX_TOKENS, SKILL_READ_LIMIT_NOTICE
 from app.utils.async_file_utils import async_exists, async_read_text, async_try_read_text
 from app.core.skill_utils.manager import GlobalSkillManager, get_global_skill_manager, find_skill
 from app.core.skill_utils.skill_directory_scan import (
@@ -26,10 +28,19 @@ MAX_SKILLS = 150
 MAX_CHARS = 30000
 
 
+@dataclass
+class SkillsPromptBuildResult:
+    """框架说明参与模板处理；preload 原文最后拼入，路径用于现有 Horizon 登记。"""
+
+    content: str = ""
+    preloaded_content: str = ""
+    preloaded_files: tuple[Path, ...] = ()
+
+
 def generate_skills_prompt(
     skills_config: SkillsConfig,
     agent_name: str = "",
-) -> Optional[str]:
+) -> SkillsPromptBuildResult | None:
     """Generate the skills prompt with instructions and available skill metadata.
 
     Args:
@@ -37,10 +48,10 @@ def generate_skills_prompt(
         agent_name: Current agent type, used to locate crew skill directories.
 
     Returns:
-        The complete skills prompt, or None when generation fails.
+        Framework instructions, raw preload content and file paths, or None on failure.
     """
     try:
-        def _run_in_thread():
+        def _run_in_thread() -> SkillsPromptBuildResult | None:
             return asyncio.run(_do_generate(skills_config, agent_name))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
@@ -56,7 +67,7 @@ def generate_skills_prompt(
 async def _do_generate(
     skills_config: SkillsConfig,
     agent_name: str,
-) -> Optional[str]:
+) -> SkillsPromptBuildResult | None:
     """Load skills, build XML, and render the prompt in an isolated event loop."""
     personal_skills = await discover_skills_in_personal()
 
@@ -208,12 +219,14 @@ async def _do_generate(
         logger.warning(f"Skill count exceeds limit ({MAX_SKILLS}); truncating")
         skills_metadata = skills_metadata[:MAX_SKILLS]
 
+    preloaded = await _build_preloaded_skills_xml(skills_metadata, preload_map)
+    preloaded_paths = frozenset(preloaded.preloaded_files)
     skills_xml_parts = []
     total_chars = 0
     degraded = False
     for meta in skills_metadata:
         # Skills whose content is preloaded do not appear in the available_skills list.
-        if meta.name in preload_map:
+        if meta.skill_file in preloaded_paths:
             continue
 
         if not degraded:
@@ -268,13 +281,8 @@ async def _do_generate(
                 crew_skills_dir = str(get_crew_skills_dir(agent_name).relative_to(project_root))
             except (ValueError, Exception):
                 logger.warning(f"Failed to resolve crew skills directory: agent_name={agent_name}")
-        preloaded_skills_content = await _build_preloaded_skills_xml(
-            skills_metadata, preload_map
-        )
-
         syntax_processor.set_variables({
             "skills_content": skills_content,
-            "preloaded_skills_content": preloaded_skills_content,
             "system_skills_dir": system_skills_dir,
             "workspace_skills_dir": workspace_skills_dir,
             "crew_skills_dir": crew_skills_dir,
@@ -298,7 +306,11 @@ async def _do_generate(
                 skills_prompt += notice
                 logger.info(f"Injected SaaS international-platform guidance for skills: {region_filtered_names}")
 
-        return skills_prompt
+        return SkillsPromptBuildResult(
+            content=skills_prompt + preloaded.content,
+            preloaded_content=preloaded.preloaded_content,
+            preloaded_files=preloaded.preloaded_files,
+        )
 
     except Exception as e:
         logger.error(f"Failed to generate skills prompt from template: {e}")
@@ -320,17 +332,19 @@ async def _load_skill_from_path(name: str, path: Path) -> Optional[SkillMetadata
 async def _build_preloaded_skills_xml(
     skills_metadata: List[SkillMetadata],
     preload_map: Dict[str, List[str]],
-) -> str:
+) -> SkillsPromptBuildResult:
     """Build the <preloaded_skills> XML block, not constrained by MAX_CHARS.
 
     Each skill maps to a <skill> block, and each preloaded file becomes one
     <file> child block. Missing files are logged and skipped instead of raising.
     """
     if not preload_map:
-        return ""
+        return SkillsPromptBuildResult()
 
     meta_by_name = {m.name: m for m in skills_metadata}
     skill_parts: List[str] = []
+    preloaded_files: list[Path] = []
+    notices: list[str] = []
 
     for skill_name, files in preload_map.items():
         meta = meta_by_name.get(skill_name)
@@ -342,28 +356,27 @@ async def _build_preloaded_skills_xml(
         for filename in files:
             is_skill_md = filename.upper() == "SKILL.MD"
             if is_skill_md:
-                if not meta.skill_dir:
-                    logger.warning(f"Skill {skill_name} has no skill_dir; cannot read SKILL.md")
+                if not meta.skill_file:
+                    logger.warning(f"Skill {skill_name} has no skill_file; cannot read SKILL.md")
                     continue
-                skill_file_path = meta.skill_file or (meta.skill_dir / "SKILL.md")
-                try:
-                    loaded = await SkillLoader().load_from_file(skill_file_path)
-                    file_content = loaded.content
-                    file_path = loaded.skill_file
-                except Exception as e:
-                    logger.warning(f"Failed to load preloaded SKILL.md for {skill_name}: {e}")
-                    continue
+                file_path = meta.skill_file
             else:
                 if not meta.skill_dir:
                     logger.warning(f"Skill {skill_name} has no skill_dir; cannot read {filename}")
                     continue
                 file_path = meta.skill_dir / filename
-                file_content = await async_try_read_text(file_path)
-                if file_content is None:
-                    logger.warning(f"Preload file does not exist; skipping: {file_path}")
-                    continue
+            file_content = await async_try_read_text(file_path)
+            if file_content is None:
+                logger.warning(f"Preload file could not be read; skipping: {file_path}")
+                continue
+            if is_skill_md and num_tokens_from_string(file_content) > SKILL_MAX_TOKENS:
+                notices.append(
+                    f"Skill '{skill_name}' ({file_path}) was not preloaded. {SKILL_READ_LIMIT_NOTICE}"
+                )
+                continue
 
             file_blocks.append(f'<file location="{file_path}">\n{file_content}\n</file>')
+            preloaded_files.append(file_path)
 
         if not file_blocks:
             continue
@@ -376,9 +389,6 @@ async def _build_preloaded_skills_xml(
         parts.append(f"</skill>")
         skill_parts.append("\n".join(parts))
 
-    if not skill_parts:
-        return ""
-
     header = (
         "IMPORTANT: The `<preloaded_skills>` block contains skill files already injected into this system prompt — use them directly.\n"
         "Each `<skill>` block groups all preloaded files for one skill. `<skill_dir>` is the skill's root directory.\n"
@@ -389,4 +399,11 @@ async def _build_preloaded_skills_xml(
         "- A `<skill>` with no `/SKILL.md` `<file>`: only reference files were preloaded; the main documentation is NOT in context yet.\n"
         "  Call `read_skills({\"skill_names\": [\"<name>\"]})` (using the `name` attribute of the `<skill>` tag) to load the full documentation."
     )
-    return "<preloaded_skills>\n" + header + "\n\n" + "\n\n".join(skill_parts) + "\n\n</preloaded_skills>"
+    return SkillsPromptBuildResult(
+        content="\n\n" + "\n\n".join(notices) if notices else "",
+        preloaded_content=(
+            "<preloaded_skills>\n" + header + "\n\n" + "\n\n".join(skill_parts) + "\n\n</preloaded_skills>"
+            if skill_parts else ""
+        ),
+        preloaded_files=tuple(dict.fromkeys(preloaded_files)),
+    )

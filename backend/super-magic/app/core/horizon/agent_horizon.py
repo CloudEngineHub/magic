@@ -55,7 +55,7 @@ HASH_DETECTION_THRESHOLD = 5 * 1024 * 1024   # 5 MB
 NETWORK_FS_MTIME_BUFFER = 1.0                  # seconds
 VALIDATION_ERROR_NOT_READ = "File must be read before editing. Please read the file first."
 VALIDATION_ERROR_CHANGED = "File changed since last read. Please read the file again."
-FILE_CONTENT_SNAPSHOT_MAX_BYTES = 64 * 1024   # 64 KB — 整文件快照上限
+FILE_CONTENT_SNAPSHOT_MAX_BYTES = 256 * 1024   # 256 KB — 整文件快照上限
 HORIZON_CONTEXT_MAX_CHARS = 32 * 1024          # 32 KB — 单条 horizon 注入上限
 HORIZON_CONTEXT_OVERSIZED_NOTICE = (
     "<system_injected_context>\n"
