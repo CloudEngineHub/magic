@@ -2,10 +2,12 @@ import type { EmbedFontInput, UsedFont } from "../api/font"
 import { preflightPptxExport } from "../api/preflight"
 import type {
 	ExportFailurePhase,
+	ExportIssue,
 	ExportProgress,
 	ExportSummary,
 	MediaPolicy,
 	PptxDestination,
+	ResourceLoadError,
 	SlideConfig,
 	StagingPolicy,
 	StreamingHtmlPage,
@@ -229,7 +231,7 @@ async function runDirectStreamingExport(
 			signal: input.signal,
 			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
-			onResourceError: input.onResourceError,
+			onResourceError: (error) => reportExportResourceError(input, error),
 		})
 		await packager.ready
 		for await (const page of input.pages) {
@@ -420,7 +422,7 @@ async function runStagedStreamingExport(
 			signal: input.signal,
 			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
-			onResourceError: input.onResourceError,
+			onResourceError: (error) => reportExportResourceError(input, error),
 		})
 		await packager.ready
 
@@ -472,6 +474,29 @@ async function runStagedStreamingExport(
 		if (store && shouldCleanupStaging(input.stagingPolicy?.cleanup, exportSucceeded)) {
 			await cleanupStagingSession(store, sessionId)
 		}
+	}
+}
+
+function reportExportResourceError(
+	input: StreamingExportTaskInput,
+	error: ResourceLoadError,
+	pageIndex?: number,
+): void {
+	try {
+		input.onResourceError?.(error)
+	} catch {
+		// Diagnostics must never turn a recoverable resource failure into an export failure.
+	}
+	try {
+		input.onExportIssue?.({
+			pageIndex,
+			code: "resource-error",
+			message: `${error.kind} ${error.reason}`,
+			severity: "warning",
+			details: { kind: error.kind, reason: error.reason },
+		} satisfies ExportIssue)
+	} catch {
+		// Issue listeners are observational and must not affect packaging.
 	}
 }
 
