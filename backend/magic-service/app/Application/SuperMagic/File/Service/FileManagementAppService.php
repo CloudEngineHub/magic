@@ -779,6 +779,12 @@ class FileManagementAppService extends AbstractAppService
                     if ($fileEntity === null || $fileEntity->getProjectId() !== $projectId) {
                         ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.permission_denied');
                     }
+                    if ($requestDTO->getIncludeDescendants()
+                        && ($projectId !== 0 || $fileEntity->getSpaceType() !== 'user'
+                            || $fileEntity->getUserId() !== $userAuthorization->getId()
+                            || $fileEntity->getOrganizationCode() !== $userAuthorization->getOrganizationCode())) {
+                        ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.permission_denied');
+                    }
                     $this->getAccessibleProjectForTaskFile(
                         $fileEntity,
                         $userAuthorization,
@@ -788,7 +794,11 @@ class FileManagementAppService extends AbstractAppService
             }
 
             // MagicFS 在指定作用域内校验并删除文件，返回删除前实体供事件使用。
-            $fileEntities = $this->magicFSFileDomainService->deleteFiles($fileIds, false, $projectId);
+            $fileEntities = $this->magicFSFileDomainService->deleteFiles(
+                $fileIds,
+                $projectId === 0 && $requestDTO->getIncludeDescendants(),
+                $projectId,
+            );
 
             $this->logger->info(sprintf(
                 'Successfully batch deleted files: Project ID: %s, File count: %d',

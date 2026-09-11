@@ -261,7 +261,7 @@ function EditorBody({
 						language={language}
 						isEditMode={isEditMode}
 						isLargeFile={isLargeMarkdown}
-						content={isEditMode ? editContent || content : previewCodeContent}
+						content={isEditMode ? (editContent ?? content) : previewCodeContent}
 						onChange={setEditContent}
 					/>
 				) : isLargeMarkdown ? (
@@ -276,7 +276,9 @@ function EditorBody({
 				) : (
 					<SimpleEditor
 						ref={actualEditorRef}
-						content={isEditMode ? editContent || content : processedContent || content}
+						content={
+							isEditMode ? (editContent ?? content) : processedContent || content
+						}
 						enableCodeBlockWrap
 						enableReadonlySearch={enableSearch}
 						isTabActive={isTabActive}

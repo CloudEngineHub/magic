@@ -18,6 +18,7 @@ export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
 					incomingTab.fileData?.display_config?.previewPolicy?.awaitAttachmentSync ===
 					true
 				const shouldReplaceFileData =
+					incomingTab.type === "file_manager" ||
 					incomingTab.fileData?.space_type === "user" ||
 					incomingTab.fileData?.display_config?.type === DetailType.SelfMedia ||
 					shouldUsePendingAttachmentSyncTab
@@ -29,6 +30,8 @@ export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
 						...tab,
 						active: true,
 						active_at: now,
+						fileManager: incomingTab.fileManager ?? tab.fileManager,
+						returnTabId: incomingTab.returnTabId ?? tab.returnTabId,
 						title: shouldReplaceFileData ? incomingTab.title : tab.title,
 						fileData: shouldReplaceFileData
 							? incomingTab.fileData
@@ -171,6 +174,32 @@ export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
 			const [movedTab] = reorderedState.splice(fromIndex, 1)
 			reorderedState.splice(toIndex, 0, movedTab)
 			return reorderedState
+		}
+
+		case TabActionType.SYNC_USER_FILE_REFERENCES: {
+			const results = action.payload?.userFileResults
+			if (!results) return state
+			return state.map((tab) => {
+				const result = results[tab.fileData.file_id]
+				if (!result || tab.fileData.space_type !== "user") return tab
+				if (result.status !== "resolved") return { ...tab, isDeleted: true }
+				const reference = result.reference
+				if (reference.space_type !== "user") return tab
+				return {
+					...tab,
+					title: reference.file_name,
+					filePath: reference.space_relative_path,
+					isDeleted: false,
+					fileData: {
+						...tab.fileData,
+						...reference,
+						file_reference: reference,
+						filename: reference.file_name,
+						display_filename: reference.file_name,
+						relative_file_path: reference.space_relative_path,
+					},
+				}
+			})
 		}
 
 		case TabActionType.DEACTIVATE_ALL:

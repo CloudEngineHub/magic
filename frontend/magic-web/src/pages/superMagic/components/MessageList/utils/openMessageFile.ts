@@ -5,12 +5,11 @@ interface OpenMessageFileOptions {
 	locateInTree?: boolean
 }
 
-/** 用户资源单独预览；只有记忆目录继续使用原有记忆编辑 API。 */
+/** 用户资源单独预览，文本保存统一使用用户文件的修订号契约。 */
 export function openUserFileReference(
 	reference: Extract<FileReference, { space_type: "user" }>,
 ): void {
 	if (reference.is_directory) return
-	const isMemory = reference.space_relative_path.startsWith(".magic/memory/")
 	openMessageFile(
 		{
 			...reference,
@@ -25,7 +24,7 @@ export function openUserFileReference(
 					syncWithAttachments: false,
 					persistTab: false,
 					restoreAsActive: false,
-					...(isMemory ? { fileScope: "memory" } : { readonly: true }),
+					fileScope: "user",
 				},
 			},
 		},

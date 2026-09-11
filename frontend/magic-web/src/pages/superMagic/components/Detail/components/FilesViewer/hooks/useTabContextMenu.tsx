@@ -103,14 +103,18 @@ export function useTabContextMenu({ tabs, actions }: UseTabContextMenuProps) {
 				: []
 
 		return [
-			{
-				key: "refresh",
-				label: t("fileViewer.tabs.refresh"),
-				onClick: () => {
-					actions.refreshTab(tabId)
-					hideContextMenu()
-				},
-			},
+			...(tab?.type !== "file_manager"
+				? [
+						{
+							key: "refresh",
+							label: t("fileViewer.tabs.refresh"),
+							onClick: () => {
+								actions.refreshTab(tabId)
+								hideContextMenu()
+							},
+						},
+					]
+				: []),
 			...websiteCommonItems,
 			{
 				key: "close",

@@ -1,4 +1,4 @@
-import { Brain, Database, File, Monitor, Timer } from "lucide-react"
+import { Cloud, Database, File, Monitor, Timer } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/shadcn-ui/button"
@@ -7,7 +7,7 @@ import IconShareCog from "@/enhance/tabler/icons-react/icons/iconShareCog"
 import { cn } from "@/utils/cn"
 
 export type MicroAppWorkspaceView =
-	"preview" | "files" | "database" | "scheduledTasks" | "shareManagement" | "longMemory"
+	"preview" | "files" | "database" | "scheduledTasks" | "shareManagement" | "userSpace"
 
 interface MicroAppWorkspaceNavProps {
 	activeView: MicroAppWorkspaceView
@@ -64,11 +64,10 @@ export default function MicroAppWorkspaceNav({
 			disabled: projectPanelDisabled,
 		},
 		{
-			view: "longMemory" as const,
-			label: t("microAppPage.navigation.longMemory"),
-			icon: Brain,
-			testId: "micro-app-nav-long-memory",
-			disabled: projectPanelDisabled,
+			view: "userSpace" as const,
+			label: t("userSpace.title"),
+			icon: Cloud,
+			testId: "micro-app-nav-user-space",
 		},
 	]
 

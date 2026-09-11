@@ -9,6 +9,7 @@ const MAX_REFERENCES = 500
 const CACHE_TTL_MS = 30_000
 
 interface PendingReference {
+	generation: number
 	selector: FileReferenceSelector
 	promise: Promise<FileReferenceResult>
 	resolve: (result: FileReferenceResult) => void
@@ -37,6 +38,7 @@ function cancelled(): DOMException {
 
 class UserFileReferenceResolver {
 	private identity: string | null = null
+	private generation = 0
 	private controller = new AbortController()
 	private pending = new Map<string, PendingReference>()
 	private queued = new Map<string, PendingReference>()
@@ -64,12 +66,20 @@ class UserFileReferenceResolver {
 				resolve = onResolve
 				reject = onReject
 			})
-			pending = { selector, promise, resolve, reject }
+			pending = { selector, promise, resolve, reject, generation: this.generation }
 			this.pending.set(key, pending)
 			this.queued.set(key, pending)
 			if (this.queued.size === 1) queueMicrotask(() => this.flush())
 		}
 		return this.withCancellation(pending.promise, signal)
+	}
+
+	invalidate(): void {
+		this.generation += 1
+		// 已排队的旧读取仍完成各自的 Promise；新的操作不能复用它们或重新缓存旧路径。
+		void this.flush()
+		this.pending.clear()
+		this.cache.clear()
 	}
 
 	private activateIdentity(identity: string | null): void {
@@ -103,7 +113,7 @@ class UserFileReferenceResolver {
 				batch.forEach(([key, pending], index) => {
 					const result = results[index]
 					// 不缓存失败；恢复权限或创建文件后的下一次查询可以立即生效。
-					if (result.status === "resolved") {
+					if (result.status === "resolved" && pending.generation === this.generation) {
 						this.cache.set(key, { result, expiresAt: Date.now() + CACHE_TTL_MS })
 						while (this.cache.size > MAX_REFERENCES) {
 							const oldest = this.cache.keys().next().value
@@ -144,4 +154,8 @@ export function resolveFileReference(
 	signal?: AbortSignal,
 ): Promise<FileReferenceResult> {
 	return resolver.resolve(selector, signal)
+}
+
+export function invalidateFileReferenceCache(): void {
+	resolver.invalidate()
 }

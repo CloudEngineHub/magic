@@ -28,6 +28,8 @@ import type { SlidesTemplateItem } from "@/pages/superMagic/components/MainInput
 import { SaveSlidesTemplateDialog, type SaveSlidesTemplateTarget } from "./components"
 import { buildConvertToSlidesTemplatePayload } from "@/pages/superMagic/utils/slidesTemplateActions"
 import type { TopicFilesSpaceConfig } from "./file-space"
+import { Files } from "lucide-react"
+import { Button } from "@/components/shadcn-ui/button"
 
 export { PRESET_FILE_TYPES, type PresetFileType } from "./constant"
 export type {
@@ -76,6 +78,8 @@ export interface TopicFilesButtonProps {
 	onSaveSlidesTemplate?: (item: AttachmentItem) => void | Promise<void>
 	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
 	headerTrailingAction?: ReactNode
+	/** 仅在已连接 Detail 的项目侧栏提供管理器入口。 */
+	showFileManager?: boolean
 	/** 文件树所属空间及其能力配置。 */
 	spaceConfig?: TopicFilesSpaceConfig
 	/** 判断节点是否允许参与移动和多选等变更操作。 */
@@ -126,6 +130,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			onSaveSlidesTemplate,
 			onConvertToSlidesTemplate,
 			headerTrailingAction,
+			showFileManager = false,
 			spaceConfig,
 			isItemSelectable,
 			operationRoot,
@@ -282,7 +287,41 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					refreshAttachments={refreshAttachments}
 					onSaveSlidesTemplate={handleSaveSlidesTemplate}
 					onConvertToSlidesTemplate={handleConvertToSlidesTemplate}
-					headerTrailingAction={headerTrailingAction}
+					headerTrailingAction={
+						headerTrailingAction ||
+						(showFileManager &&
+							projectId &&
+							!spaceConfig?.scope &&
+							onFileClick &&
+							!shareCode) ? (
+							<>
+								{headerTrailingAction}
+								{showFileManager &&
+									projectId &&
+									!spaceConfig?.scope &&
+									onFileClick &&
+									!shareCode && (
+										<Button
+											variant="ghost"
+											size="icon"
+											className="size-6"
+											aria-label={t("userSpace.openManager")}
+											title={t("userSpace.openManager")}
+											onClick={() =>
+												onFileClick({
+													file_manager: {
+														spaceType: "project",
+														projectId,
+													},
+												})
+											}
+										>
+											<Files size={16} />
+										</Button>
+									)}
+							</>
+						) : undefined
+					}
 					spaceConfig={spaceConfig}
 					isItemSelectable={isItemSelectable}
 					operationRoot={operationRoot}

@@ -10,6 +10,8 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
+import userFilesStore from "@/stores/userFiles"
+import type { AttachmentItem } from "../../../TopicFilesButton/hooks/types"
 import { IconMenu2, IconX } from "@tabler/icons-react"
 import { Tooltip } from "antd"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -433,7 +435,7 @@ const FilesViewer = memo(
 
 				return [
 					currentTab.id,
-					currentTab.refreshKey || "",
+					("refreshKey" in currentTab && currentTab.refreshKey) || "",
 					currentTab.fileData.file_id || "",
 					currentTab.fileData.updated_at || "",
 					String(effectiveIsFullscreen),
@@ -472,6 +474,12 @@ const FilesViewer = memo(
 				}
 			}, [currentTabId, currentRenderCacheKey, addToCache])
 
+			const editingUserFiles = [...userFilesStore.editingFileIds].join(":")
+			const editingUserFileIds = useMemo(
+				() => new Set(editingUserFiles.split(":")),
+				[editingUserFiles],
+			)
+
 			// 判断是否应该渲染某个 tab
 			const shouldRenderTab = useCallback(
 				(tab: any) => {
@@ -479,9 +487,14 @@ const FilesViewer = memo(
 					const isCached = cachedTabIds.includes(tab.id)
 
 					// 只渲染活跃的 tab 和缓存中的 tab
-					return isActive || isCached
+					return (
+						isActive ||
+						isCached ||
+						(tab.fileData.space_type === "user" &&
+							editingUserFileIds.has(tab.fileData.file_id))
+					)
 				},
-				[activeTab?.id, cachedTabIds],
+				[activeTab?.id, cachedTabIds, editingUserFileIds],
 			)
 
 			// 每个 Tab 只生成一个 TabCache。非文档流模式统一放入稳定 body Portal，
@@ -494,9 +507,16 @@ const FilesViewer = memo(
 					const cachedProps = getFromCache(tab.id)
 
 					// 如果没有缓存，使用当前 tab 的属性
-					const renderProps = isActive
-						? currentRenderProps
-						: cachedProps || currentRenderProps
+					const renderProps =
+						tab.fileData.space_type === "user"
+							? {
+									...getRenderProps(tab),
+									isFullscreen: effectiveIsFullscreen,
+									documentFlowFullscreen: isDocumentFlowFullscreen,
+								}
+							: isActive
+								? currentRenderProps
+								: cachedProps || currentRenderProps
 
 					// 判断是否是演示模式tab，如果是则构建playbackProps
 					const isPlayback = isPlaybackTab(tab.id)
@@ -549,6 +569,15 @@ const FilesViewer = memo(
 						isActive,
 						node: (
 							<TabCache
+								managerProps={{
+									attachments: (props.attachments ?? []) as AttachmentItem[],
+									selectedProject: props.selectedProject,
+									selectedTopic: props.selectedTopic,
+									allowEdit: props.allowEdit,
+									allowDownload: props.allowDownload,
+									loading: isAwaitingProjectAttachments,
+									onFileClick: openFileTab,
+								}}
 								key={tab.id}
 								tab={tab as any}
 								isActive={isActive}

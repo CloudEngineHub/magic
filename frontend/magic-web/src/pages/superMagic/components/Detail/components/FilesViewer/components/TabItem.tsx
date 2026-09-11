@@ -161,7 +161,7 @@ const TabItem = memo<TabItemProps>(
 		const handleDragStart = (e: React.DragEvent) => {
 			if (!isPlayback && onDragStart) {
 				onDragStart(e, tab)
-				handleTabDragStartMessageEditor(e, tab)
+				if (tab.type !== "file_manager") handleTabDragStartMessageEditor(e, tab)
 			}
 		}
 

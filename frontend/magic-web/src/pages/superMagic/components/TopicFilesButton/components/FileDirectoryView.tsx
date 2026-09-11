@@ -1,0 +1,415 @@
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
+import { useSize } from "ahooks"
+import { ArrowLeft, ChevronRight, MoreHorizontal } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import { Button } from "@/components/shadcn-ui/button"
+import { Checkbox } from "@/components/shadcn-ui/checkbox"
+import MagicDropdown from "@/components/base/MagicDropdown"
+import { cn } from "@/utils/cn"
+import type { AttachmentItem } from "../hooks/types"
+import type { TopicFilesMenuItem } from "../utils/menu-items"
+import { TopicFileIcon } from "./TopicFileIcon"
+import { FileDirectoryToolbar } from "./FileDirectoryToolbar"
+import { handleAttachmentDragEnd, handleAttachmentDragStart } from "../../MessageEditor/utils/drag"
+
+export interface DirectoryBreadcrumb {
+	id: string
+	name: string
+}
+export interface FileDirectoryViewProps {
+	items: AttachmentItem[]
+	path: DirectoryBreadcrumb[]
+	rootName: string
+	onNavigate: (id?: string) => void
+	onOpen: (file: AttachmentItem) => void
+	getMenuItems: (file: AttachmentItem) => TopicFilesMenuItem[]
+	selectedIds: Set<string>
+	onSelectionChange: (ids: Set<string>) => void
+	isSelectable?: (file: AttachmentItem) => boolean
+	onCreate?: (directory: boolean) => void
+	onUpload?: () => void
+	onMove?: (files: AttachmentItem[]) => void
+	onDelete?: (files: AttachmentItem[]) => void
+	onDownload?: (files: AttachmentItem[]) => void
+	loading?: boolean
+	error?: boolean
+	onRetry: () => void
+	compact?: boolean
+	search?: string
+	onSearchChange?: (value: string) => void
+	activeFileId?: string | null
+	itemLabel?: (item: AttachmentItem) => ReactNode
+	itemIcon?: (item: AttachmentItem, size: number) => ReactNode
+	footer?: ReactNode
+}
+
+/** 明确按当前界面时区展示；无时区的服务端时间按 UTC 解析。 */
+export function formatDirectoryFileTime(
+	value: string | number | undefined,
+	locale?: string,
+): string {
+	if (value === undefined || value === "") return "—"
+	const numeric = typeof value === "number" || /^\d+$/.test(value) ? Number(value) : null
+	const source =
+		numeric !== null
+			? numeric < 1e12
+				? numeric * 1000
+				: numeric
+			: /(?:Z|[+-]\d{2}:?\d{2})$/i.test(String(value))
+				? String(value)
+				: String(value).replace(" ", "T") + "Z"
+	const date = new Date(source)
+	if (Number.isNaN(date.getTime())) return "—"
+	return new Intl.DateTimeFormat(locale, {
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+		timeZoneName: "short",
+	}).format(date)
+}
+
+/** 项目和用户文件共享目录交互；读取与修改由所属空间提供，视图不构造项目身份。 */
+export function FileDirectoryView({
+	items,
+	path,
+	rootName,
+	onNavigate,
+	onOpen,
+	getMenuItems,
+	selectedIds,
+	onSelectionChange,
+	isSelectable = () => true,
+	onCreate,
+	onUpload,
+	onMove,
+	onDelete,
+	onDownload,
+	loading = false,
+	error = false,
+	onRetry,
+	compact = false,
+	search: externalSearch,
+	onSearchChange,
+	activeFileId,
+	itemLabel,
+	itemIcon,
+	footer,
+}: FileDirectoryViewProps) {
+	const { t, i18n } = useTranslation("super")
+	const [search, setSearch] = useState("")
+	const [grid, setGrid] = useState(false)
+	const [selecting, setSelecting] = useState(false)
+	const [sort, setSort] = useState<"name" | "time">("name")
+	const scrollRef = useRef<HTMLDivElement>(null)
+	const size = useSize(scrollRef)
+	const query = (externalSearch ?? search).toLocaleLowerCase()
+	const visible = useMemo(
+		() =>
+			items
+				.filter((file) =>
+					(file.file_name ?? file.name ?? "").toLocaleLowerCase().includes(query),
+				)
+				.sort(
+					(a, b) =>
+						Number(Boolean(b.is_directory)) - Number(Boolean(a.is_directory)) ||
+						(sort === "time"
+							? String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? ""))
+							: (a.file_name ?? a.name ?? "").localeCompare(
+									b.file_name ?? b.name ?? "",
+									i18n.language,
+								)),
+				),
+		[items, query, sort, i18n.language],
+	)
+	const showGrid = grid && !compact
+	const columns = showGrid ? Math.max(1, Math.floor((size?.width ?? 400) / 140)) : 1
+	const rowHeight = showGrid ? 108 : compact ? 36 : 44
+	const virtualizer = useVirtualizer({
+		count: Math.ceil(visible.length / columns),
+		getScrollElement: () => scrollRef.current,
+		estimateSize: () => rowHeight,
+		overscan: 5,
+	})
+	useEffect(() => {
+		virtualizer.measure()
+	}, [columns, rowHeight, virtualizer])
+	const selectedFiles = items.filter((file) => selectedIds.has(String(file.file_id)))
+	const toggle = (file: AttachmentItem) => {
+		if (!file.file_id || !isSelectable(file)) return
+		const next = new Set(selectedIds)
+		if (next.has(file.file_id)) next.delete(file.file_id)
+		else next.add(file.file_id)
+		onSelectionChange(next)
+	}
+	const navigate = (id?: string) => {
+		onSelectionChange(new Set())
+		onNavigate(id)
+	}
+	const keyboard = (
+		event: KeyboardEvent<HTMLButtonElement>,
+		index: number,
+		file: AttachmentItem,
+	) => {
+		if (event.key === " " && selecting) {
+			event.preventDefault()
+			toggle(file)
+			return
+		}
+		const offset =
+			event.key === "ArrowDown"
+				? columns
+				: event.key === "ArrowUp"
+					? -columns
+					: showGrid && event.key === "ArrowRight"
+						? 1
+						: showGrid && event.key === "ArrowLeft"
+							? -1
+							: 0
+		if (!offset) return
+		event.preventDefault()
+		const next = Math.max(0, Math.min(visible.length - 1, index + offset))
+		virtualizer.scrollToIndex(Math.floor(next / columns))
+		requestAnimationFrame(() =>
+			scrollRef.current
+				?.querySelector<HTMLButtonElement>(`[data-file-index="${next}"]`)
+				?.focus(),
+		)
+	}
+	return (
+		<div className="flex h-full min-h-0 flex-col bg-background">
+			<div
+				className={cn(
+					"flex shrink-0 items-center gap-1 overflow-x-auto border-b",
+					compact ? "px-2 py-1" : "px-4 py-3",
+				)}
+			>
+				<Button
+					variant="ghost"
+					size="icon"
+					className="size-7 shrink-0"
+					disabled={!path.length}
+					aria-label={t("userSpace.back")}
+					onClick={() => navigate(path.at(-2)?.id)}
+				>
+					<ArrowLeft size={16} />
+				</Button>
+				<button
+					className="shrink-0 rounded px-1 text-xs hover:bg-accent"
+					onClick={() => navigate()}
+				>
+					{rootName}
+				</button>
+				{path.map((part) => (
+					<span key={part.id} className="flex shrink-0 items-center text-xs">
+						<ChevronRight size={12} />
+						<button
+							className="max-w-40 truncate rounded px-1 hover:bg-accent"
+							title={part.name}
+							onClick={() => navigate(part.id)}
+						>
+							{part.name}
+						</button>
+					</span>
+				))}
+			</div>
+			<FileDirectoryToolbar
+				onRefresh={onRetry}
+				compact={compact}
+				externalSearch={externalSearch}
+				search={search}
+				setSearch={setSearch}
+				grid={grid}
+				setGrid={setGrid}
+				selecting={selecting}
+				setSelecting={setSelecting}
+				loading={loading}
+				error={error}
+				visible={visible}
+				selectedFiles={selectedFiles}
+				isSelectable={isSelectable}
+				selectedIds={selectedIds}
+				onSelectionChange={onSelectionChange}
+				onSearchChange={onSearchChange}
+				onCreate={onCreate}
+				onUpload={onUpload}
+				onMove={onMove}
+				onDelete={onDelete}
+				onDownload={onDownload}
+			/>
+			{!compact && !showGrid && (
+				<div className="grid shrink-0 grid-cols-[minmax(0,1fr)_80px_32px] gap-2 border-b px-4 py-2 text-xs text-muted-foreground sm:grid-cols-[minmax(0,1fr)_80px_176px_32px]">
+					<button className="text-left" onClick={() => setSort("name")}>
+						{t("userSpace.name")}
+					</button>
+					<span>{t("userSpace.type")}</span>
+					<button className="hidden text-left sm:block" onClick={() => setSort("time")}>
+						{t("userSpace.modified")}
+					</button>
+					<span />
+				</div>
+			)}
+			{error && (
+				<div role="alert" className="flex items-center justify-center gap-2 p-3 text-xs">
+					{t("userSpace.loadFailed")}
+					<Button variant="outline" size="sm" onClick={onRetry}>
+						{t("userSpace.retry")}
+					</Button>
+				</div>
+			)}
+			<div ref={scrollRef} className="min-h-0 flex-1 overflow-auto" aria-busy={loading}>
+				{!visible.length ? (
+					<p className="p-4 text-center text-xs text-muted-foreground">
+						{loading
+							? t("userSpace.loading")
+							: error
+								? ""
+								: query
+									? t("userSpace.searchEmpty")
+									: t("userSpace.empty")}
+					</p>
+				) : (
+					<div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+						{virtualizer.getVirtualItems().map((row) => (
+							<div
+								key={row.key}
+								className="absolute left-0 top-0 grid w-full gap-2 px-2"
+								style={{
+									height: rowHeight,
+									transform: `translateY(${row.start}px)`,
+									gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+								}}
+							>
+								{visible
+									.slice(row.index * columns, (row.index + 1) * columns)
+									.map((file, offset) => (
+										<MagicDropdown
+											key={file.file_id}
+											trigger={["contextMenu"]}
+											menu={{ items: getMenuItems(file) }}
+										>
+											<div
+												className={cn(
+													"group relative min-w-0 rounded-md hover:bg-accent",
+													showGrid
+														? "flex flex-col items-center justify-center border p-2"
+														: "flex items-center gap-2 px-1",
+													activeFileId === file.file_id && "bg-accent",
+												)}
+											>
+												<div
+													className={cn(
+														"flex min-w-0 items-center gap-2",
+														showGrid ? "w-full" : "flex-1",
+													)}
+												>
+													{selecting && (
+														<Checkbox
+															disabled={!isSelectable(file)}
+															aria-label={t("userSpace.selectName", {
+																name: file.file_name ?? file.name,
+															})}
+															checked={selectedIds.has(
+																String(file.file_id),
+															)}
+															onCheckedChange={() => toggle(file)}
+														/>
+													)}
+													<button
+														data-file-index={
+															row.index * columns + offset
+														}
+														className={cn(
+															"flex min-w-0 flex-1 items-center gap-2 rounded text-left text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring",
+															showGrid && "flex-col text-center",
+														)}
+														draggable
+														onDragStart={(event) =>
+															handleAttachmentDragStart(event, file)
+														}
+														onDragEnd={handleAttachmentDragEnd}
+														onKeyDown={(event) =>
+															keyboard(
+																event,
+																row.index * columns + offset,
+																file,
+															)
+														}
+														onClick={() =>
+															file.is_directory
+																? navigate(file.file_id)
+																: onOpen(file)
+														}
+														title={file.file_name ?? file.name}
+													>
+														{itemIcon?.(file, showGrid ? 36 : 16) ?? (
+															<TopicFileIcon
+																isDirectory={file.is_directory}
+																fileExtension={file.file_extension}
+																size={showGrid ? 36 : 16}
+															/>
+														)}
+														<span className="min-w-0 max-w-full truncate">
+															{itemLabel?.(file) ??
+																file.file_name ??
+																file.name}
+														</span>
+													</button>
+												</div>
+												{!compact && !showGrid && (
+													<>
+														<span className="w-20 shrink-0 truncate text-xs text-muted-foreground">
+															{file.is_directory
+																? t("userSpace.folder")
+																: file.file_extension?.toUpperCase() ||
+																	t("userSpace.file")}
+														</span>
+														<span
+															className="hidden w-44 shrink-0 truncate text-xs text-muted-foreground sm:block"
+															title={formatDirectoryFileTime(
+																file.updated_at,
+																i18n.language,
+															)}
+														>
+															{formatDirectoryFileTime(
+																file.updated_at,
+																i18n.language,
+															)}
+														</span>
+													</>
+												)}
+												<MagicDropdown
+													trigger={["click"]}
+													menu={{ items: getMenuItems(file) }}
+												>
+													<Button
+														variant="ghost"
+														size="icon"
+														className={cn(
+															"size-7 shrink-0",
+															showGrid && "absolute right-2 top-1",
+														)}
+														aria-label={t("userSpace.actions", {
+															name: file.file_name ?? file.name,
+														})}
+													>
+														<MoreHorizontal size={16} />
+													</Button>
+												</MagicDropdown>
+											</div>
+										</MagicDropdown>
+									))}
+							</div>
+						))}
+					</div>
+				)}
+			</div>
+			<div className="shrink-0 border-t px-3 py-1 text-xs text-muted-foreground">
+				{t("userSpace.itemCount", { count: visible.length })}
+				{footer}
+			</div>
+		</div>
+	)
+}
