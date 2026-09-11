@@ -129,6 +129,7 @@ export function useInspectorToolbarMode(
 						stableFileInfo,
 						undefined,
 						quickSelectionRef.current.captureId,
+						t,
 					),
 				)
 			}
@@ -179,6 +180,9 @@ export function useInspectorToolbarMode(
 			info,
 			t("stylePanel.inspector.agentPromptTitle"),
 			stableFileInfo,
+			undefined,
+			undefined,
+			t,
 		)
 
 		if (!pubsub.hasListeners(PubSubEvents.Create_New_Topic)) {

@@ -20,10 +20,7 @@ function ClusterLayoutBaseComponent(props: ClusterLayoutBaseProps) {
 	const { clusterCode } = useParams()
 	const [searchParams] = useSearchParams()
 	// query 中的集群编码权重优先
-	const targetClusterCode =
-		searchParams.get("thirdPartyAuthDeployCode") ||
-		(clusterCode === defaultClusterCode ? "" : clusterCode) ||
-		""
+	const targetClusterCode = (searchParams.get("thirdPartyAuthDeployCode") === defaultClusterCode ? "" : searchParams.get("thirdPartyAuthDeployCode")) || (clusterCode === defaultClusterCode ? "" : clusterCode) || ""
 
 	const { setClusterCode } = useClusterCode()
 	const { t } = useTranslation("interface")

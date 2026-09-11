@@ -35,6 +35,7 @@ class ResponseMiddleware implements MiddlewareInterface
 
     // 指定的 uri 不打印请求和响应详情
     private array $desensitizeUris = [
+        '/api/v1/sessions',
         '/conversation/chatCompletions',
         '/message',
         // '/file',

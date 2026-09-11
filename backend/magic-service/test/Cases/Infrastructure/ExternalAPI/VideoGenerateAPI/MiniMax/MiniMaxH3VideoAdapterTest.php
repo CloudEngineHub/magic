@@ -105,10 +105,10 @@ class MiniMaxH3VideoAdapterTest extends TestCase
             'resolution' => '2k',
         ], $capability['generation']['sizes'][11]);
         self::assertTrue($capability['generation']['supports_watermark']);
+        self::assertTrue($capability['generation']['supports_generate_audio']);
         foreach ([
             'supports_seed',
             'supports_negative_prompt',
-            'supports_generate_audio',
             'supports_person_generation',
             'supports_enhance_prompt',
             'supports_compression_quality',

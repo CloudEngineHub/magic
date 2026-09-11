@@ -99,11 +99,18 @@ let instance: Logger | null = null
 /**
  * 创建 Logger 实例
  */
-export function createLogger(config: ILoggerConfig): Logger {
+export interface CreateLoggerOptions {
+	/** Skip the automatic init call so a host can choose a lower-priority lifecycle moment. */
+	autoInit?: boolean
+}
+
+export function createLogger(config: ILoggerConfig, options: CreateLoggerOptions = {}): Logger {
 	if (!instance) {
 		instance = new Logger()
 	}
-	instance.init(config)
+	if (options.autoInit !== false) {
+		void instance.init(config)
+	}
 	return instance
 }
 

@@ -65,6 +65,7 @@ readonly class MiniMaxH3GenerationCapabilityProvider
                 'default_duration_seconds' => 5,
                 'default_resolution' => '768p',
                 'supports_watermark' => true,
+                'supports_generate_audio' => true,
             ],
             'constraints' => [
                 'reference_images_max_count' => 9,

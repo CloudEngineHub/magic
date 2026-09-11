@@ -79,6 +79,18 @@ class MCPAuthorizationStateStore
     }
 
     /**
+     * 使指定进行中的授权会话失效：删除 state 本体和 pending 索引。
+     *
+     * 用于 MCP 服务配置变化后丢弃过期授权链接。必须先失效再写入新 pending，
+     * 否则 putPending 的 NX 语义会挡住新会话。
+     */
+    public function invalidatePending(string $organizationCode, string $userId, string $mcpServerCode, string $state): void
+    {
+        $this->delete($state);
+        $this->clearPending($organizationCode, $userId, $mcpServerCode, $state);
+    }
+
+    /**
      * 仅当 pending 索引仍指向指定 state 时删除索引，避免误删并发产生的新会话。
      */
     public function clearPending(string $organizationCode, string $userId, string $mcpServerCode, string $state): void

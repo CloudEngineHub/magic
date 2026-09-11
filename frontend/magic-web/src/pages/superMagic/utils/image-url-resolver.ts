@@ -1,4 +1,6 @@
 import { getTemporaryDownloadUrl } from "./api"
+import { getOptimizedImageUrl, type ImageVariant } from "@/utils/image-optimization"
+import type { ImageProcessOptions } from "@/utils/image-processing"
 
 /**
  * Represents an attachment file in the project
@@ -26,6 +28,36 @@ export interface ResolvedImageData {
  * Type for image URL map
  */
 export type ImageUrlMap = Map<string, ResolvedImageData>
+
+function getBatchImageProcessOptions(fileIdToPaths: Map<string, Set<string>>): ImageProcessOptions {
+	let maxWidth: number | undefined
+	let maxHeight: number | undefined
+	let hasUnspecifiedSize = false
+
+	for (const paths of fileIdToPaths.values()) {
+		for (const path of paths) {
+			const { width, height } = parseImageSize(path)
+			if (width === null && height === null) hasUnspecifiedSize = true
+			if (width !== null) maxWidth = Math.min(2048, Math.max(maxWidth ?? 0, width * 2))
+			if (height !== null) maxHeight = Math.min(2048, Math.max(maxHeight ?? 0, height * 2))
+		}
+	}
+
+	return {
+		// A single batch shares processing parameters. Do not shrink unspecified previews
+		// to the dimensions of another image's thumbnail.
+		...(!hasUnspecifiedSize && (maxWidth || maxHeight)
+			? {
+					resize: {
+						...(maxWidth ? { w: maxWidth } : {}),
+						...(maxHeight ? { h: maxHeight } : {}),
+					},
+				}
+			: {}),
+		quality: 85,
+		format: "webp",
+	}
+}
 
 /**
  * Parse image size from markdown image syntax
@@ -206,6 +238,7 @@ export function resolveRelativePath(documentDir: string, relativePath: string): 
 export function buildImageUrlMapEntries(
 	downloadUrls: Array<{ file_id: string; url: string }>,
 	fileIdToPaths: Map<string, Set<string>>,
+	variant: ImageVariant = "thumbnail",
 ): ImageUrlMap {
 	const resolvedMap: ImageUrlMap = new Map()
 
@@ -220,7 +253,14 @@ export function buildImageUrlMapEntries(
 			// Create resolved entry
 			const resolvedEntry: ResolvedImageData = {
 				fileId: urlInfo.file_id,
-				url: urlInfo.url,
+				url:
+					width || height
+						? getOptimizedImageUrl(urlInfo.url, {
+								variant,
+								width: width ?? undefined,
+								height: height ?? undefined,
+							})
+						: urlInfo.url,
 				width,
 				height,
 				rawPath: path,
@@ -309,6 +349,8 @@ export async function processMarkdownImages(
 	content: string,
 	attachments: AttachmentFile[],
 	documentPath?: string,
+	// Existing batch consumers export images/PDFs. Optimization must be explicitly opted into.
+	variant: ImageVariant = "original",
 ): Promise<{
 	processedContent: string
 	imageUrlMap: ImageUrlMap
@@ -360,10 +402,17 @@ export async function processMarkdownImages(
 		const downloadUrls =
 			(await getTemporaryDownloadUrl({
 				file_ids: Array.from(imagesToProcess),
+				...(variant === "original"
+					? {}
+					: {
+							options: {
+								xMagicImageProcess: getBatchImageProcessOptions(fileIdToPaths),
+							},
+						}),
 			})) || []
 
 		// Build image URL map
-		const resolvedMap = buildImageUrlMapEntries(downloadUrls, fileIdToPaths)
+		const resolvedMap = buildImageUrlMapEntries(downloadUrls, fileIdToPaths, variant)
 
 		return {
 			processedContent: content,
@@ -404,6 +453,14 @@ export async function resolveSingleImageUrl(
 
 	// Normalize path and find file
 	let normalizedRelativePath = normalizeImagePath(relativePath)
+	if (isExternalUrl(normalizedRelativePath)) {
+		const { width, height } = parseImageSize(relativePath)
+		return getOptimizedImageUrl(normalizedRelativePath, {
+			variant: "preview",
+			width: width ?? undefined,
+			height: height ?? undefined,
+		})
+	}
 
 	// Decode URI component if needed (for paths with special characters like Chinese)
 	try {
@@ -423,16 +480,29 @@ export async function resolveSingleImageUrl(
 	const file = findFileByPath(attachments, resolvedPath)
 
 	if (!file?.file_id) {
-		return relativePath
+		return normalizedRelativePath
 	}
 
 	try {
+		const { width, height } = parseImageSize(relativePath)
+		const dprWidth = width ? Math.min(2048, width * 2) : undefined
+		const dprHeight = height ? Math.min(2048, height * 2) : undefined
+
 		// Request temporary download URL
 		const downloadUrls = await getTemporaryDownloadUrl({
 			file_ids: [file.file_id],
 			options: {
-				// 默认获取webp格式，质量85
+				// The sandbox processor owns the transformation, so pass markdown display
+				// dimensions here instead of assuming TOS query parameters are supported.
 				xMagicImageProcess: {
+					...(dprWidth || dprHeight
+						? {
+								resize: {
+									...(dprWidth ? { w: dprWidth } : {}),
+									...(dprHeight ? { h: dprHeight } : {}),
+								},
+							}
+						: {}),
 					quality: 85,
 					format: "webp",
 				},

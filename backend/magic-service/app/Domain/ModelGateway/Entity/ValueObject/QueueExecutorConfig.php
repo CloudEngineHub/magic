@@ -7,8 +7,6 @@ declare(strict_types=1);
 
 namespace App\Domain\ModelGateway\Entity\ValueObject;
 
-use RuntimeException;
-
 readonly class QueueExecutorConfig
 {
     public function __construct(
@@ -20,9 +18,7 @@ readonly class QueueExecutorConfig
     ) {
     }
 
-    /**
-     * 根据服务商配置创建队列执行配置，兼容 url/base_url 与 api_key/apiKey 两种写法。
-     */
+    /** 根据服务商配置创建队列执行配置，provider 私有配置保留在 extraConfig。 */
     public static function fromProviderConfig(
         array $providerConfig,
         int $pollIntervalSeconds = 3,
@@ -30,10 +26,6 @@ readonly class QueueExecutorConfig
     ): self {
         $baseUrl = self::firstNonEmptyString($providerConfig, ['url', 'base_url']);
         $apiKey = self::firstNonEmptyString($providerConfig, ['api_key', 'apiKey']);
-        // 配置字段缺失时提前失败，避免后续请求拿着空地址或空密钥执行。
-        if ($baseUrl === '' || $apiKey === '') {
-            throw new RuntimeException('video service provider config missing');
-        }
 
         return new self(
             baseUrl: $baseUrl,
@@ -73,6 +65,12 @@ readonly class QueueExecutorConfig
 
         $normalized = trim((string) $value);
         return $normalized !== '' ? $normalized : $default;
+    }
+
+    /** @return array<string, mixed> */
+    public function getExtraConfig(): array
+    {
+        return $this->extraConfig;
     }
 
     /**

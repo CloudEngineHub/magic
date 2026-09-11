@@ -902,11 +902,11 @@ class HandleAgentMessageAppService extends AbstractAppService
 
         // Set file type based on attachment type and file_tag
         if ($type === 'tool') {
-            $taskFileEntity->setFileType(! empty($attachment['file_tag']) ? $attachment['file_tag'] : FileType::PROCESS->value);
+            $taskFileEntity->setFileType(FileType::fromValue($attachment['file_tag'] ?? null, FileType::PROCESS)->value);
             $taskFileEntity->setSource(TaskFileSource::AGENT);
         } else {
             // message type
-            $taskFileEntity->setFileType(! empty($attachment['file_tag']) ? $attachment['file_tag'] : FileType::PROCESS->value);
+            $taskFileEntity->setFileType(FileType::fromValue($attachment['file_tag'] ?? null, FileType::PROCESS)->value);
             $taskFileEntity->setSource(TaskFileSource::AGENT);
         }
 

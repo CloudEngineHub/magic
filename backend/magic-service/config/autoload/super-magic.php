@@ -61,6 +61,9 @@ return [
             '/mnt/agfs/magicfs/referenced-projects'
         ),
     ],
+    'publish_async' => [
+        'ttl_seconds' => (int) \Hyperf\Support\env('SUPER_MAGIC_PUBLISH_ASYNC_TTL_SECONDS', 7200),
+    ],
     'statistics' => [
         // Organization codes to exclude from statistics
         'organization_whitelist' => array_filter(explode(',', \Hyperf\Support\env('STATISTICS_ORGANIZATION_WHITELIST', ''))),

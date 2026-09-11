@@ -138,12 +138,6 @@ vi.mock("../hooks/useScreenshotRetry", () => ({
 	}),
 }))
 
-vi.mock("../../hooks/useAIEdit", () => ({
-	useAIEdit: () => ({
-		aiEditItems: [],
-	}),
-}))
-
 vi.mock("@/components/other/SmartTooltip", () => ({
 	default: ({ children }: { children?: ReactNode }) => <>{children}</>,
 }))
@@ -156,9 +150,6 @@ vi.mock("@/components/shadcn-ui/context-menu", () => ({
 		<button {...props}>{children}</button>
 	),
 	ContextMenuSeparator: () => null,
-	ContextMenuSub: ({ children }: { children?: ReactNode }) => <>{children}</>,
-	ContextMenuSubTrigger: ({ children }: { children?: ReactNode }) => <>{children}</>,
-	ContextMenuSubContent: ({ children }: { children?: ReactNode }) => <>{children}</>,
 }))
 
 vi.mock("@/components/shadcn-ui/dialog", () => ({

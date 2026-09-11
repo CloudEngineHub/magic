@@ -57,6 +57,12 @@ class VideoGeneratedEvent extends AbstractEvent
     /** Provider 任务结果 usage 中的 total_tokens；可与 completion 一并用于拆分 prompt/output */
     protected ?int $totalTokens = null;
 
+    /** Provider 任务结果 usage 中的思考 token 数。 */
+    protected int $thoughtTokens = 0;
+
+    /** Provider 任务结果中的 token 明细，用于按输入/输出类型计费。 */
+    protected ?array $billingTokenUsage = null;
+
     /**
      * 视频生成请求的参考素材摘要（来自 raw_request），计费/审计可整包读取。
      *
@@ -288,6 +294,32 @@ class VideoGeneratedEvent extends AbstractEvent
     public function setTotalTokens(?int $totalTokens): void
     {
         $this->totalTokens = $totalTokens !== null && $totalTokens > 0 ? $totalTokens : null;
+    }
+
+    public function getThoughtTokens(): int
+    {
+        return $this->thoughtTokens;
+    }
+
+    public function setThoughtTokens(int $thoughtTokens): void
+    {
+        $this->thoughtTokens = $thoughtTokens;
+    }
+
+    /**
+     * @return ?array{input_tokens?: int, output_text_tokens?: int, output_video_tokens?: int}
+     */
+    public function getBillingTokenUsage(): ?array
+    {
+        return $this->billingTokenUsage;
+    }
+
+    /**
+     * @param ?array{input_tokens?: int, output_text_tokens?: int, output_video_tokens?: int} $billingTokenUsage
+     */
+    public function setBillingTokenUsage(?array $billingTokenUsage): void
+    {
+        $this->billingTokenUsage = $billingTokenUsage;
     }
 
     /**

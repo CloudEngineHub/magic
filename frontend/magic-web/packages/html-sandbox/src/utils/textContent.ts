@@ -62,11 +62,22 @@ function findFirstSignificantTextNode(element: Element): Text | null {
 	return null
 }
 
-function resolveEditableTextTarget(element: Element): Text | "replace-all" | null {
-	if (!shouldPreserveElementChildren(element)) return "replace-all"
+function isBlockTextContainer(element: Element): boolean {
+	const display = element.ownerDocument.defaultView?.getComputedStyle(element).display
+	if (display) return display !== "inline" && display !== "inline-block" && display !== "contents"
 
+	return element.tagName.toLowerCase() === "div"
+}
+
+function resolveEditableTextTarget(element: Element): Text | "replace-all" | null {
 	const directTextNodes = getDirectTextNodes(element)
 	const significant = directTextNodes.filter((node) => node.textContent?.trim())
+
+	if (significant.length > 0 && element.children.length > 0 && isBlockTextContainer(element)) {
+		return significant[0]
+	}
+	if (!shouldPreserveElementChildren(element)) return "replace-all"
+
 	return significant[0] ?? findFirstSignificantTextNode(element)
 }
 
@@ -74,7 +85,14 @@ function resolveEditableTextTarget(element: Element): Text | "replace-all" | nul
 export function getEditableTextContent(element: Element): string {
 	const target = resolveEditableTextTarget(element)
 	if (target === "replace-all") return element.textContent ?? ""
-	return target?.textContent ?? ""
+	if (!target) return ""
+
+	const directTextNodes = getDirectTextNodes(element)
+	if (directTextNodes.includes(target)) {
+		return directTextNodes.map((node) => node.textContent ?? "").join("")
+	}
+
+	return target.textContent ?? ""
 }
 
 /** Replace editable text without removing preserved element children. */

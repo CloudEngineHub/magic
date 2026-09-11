@@ -459,6 +459,26 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
         return $result;
     }
 
+    public function findPublishedWithoutSkillFileByIdCursor(int $afterId = 0, int $limit = 100): array
+    {
+        $models = $this->skillMarketModel::query()
+            ->select('magic_skill_market.*')
+            ->join('magic_skill_versions', 'magic_skill_versions.id', '=', 'magic_skill_market.skill_version_id')
+            ->where('magic_skill_market.publish_status', PublishStatus::PUBLISHED->value)
+            ->whereNull('magic_skill_market.deleted_at')
+            ->whereNull('magic_skill_versions.deleted_at')
+            ->where('magic_skill_versions.is_current_version', 1)
+            ->where(static fn ($query) => $query
+                ->whereNull('magic_skill_versions.skill_file_key')
+                ->orWhere('magic_skill_versions.skill_file_key', ''))
+            ->where('magic_skill_market.id', '>', $afterId)
+            ->orderBy('magic_skill_market.id')
+            ->limit($limit)
+            ->get();
+
+        return array_map(fn (SkillMarketModel $model) => $this->toEntity($model->toArray()), $models->all());
+    }
+
     public function findVectorIndexIds(
         array $categoryIds = [],
         array $codes = [],

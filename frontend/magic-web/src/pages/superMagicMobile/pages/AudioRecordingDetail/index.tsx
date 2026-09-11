@@ -58,6 +58,7 @@ import {
 import type { MobileRecordingGroup } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingGroupSheet"
 import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
 import { buildRecordingShareSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
+import { hasConfiguredRecordingFile } from "@/pages/superMagic/pages/AudioRecordings/utils/recording-detail-files"
 import { downloadRecordingAudioFile } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-audio"
 import { AudioRecordingCopyDialog } from "@/pages/superMagic/pages/AudioRecordings/components/AudioRecordingCopyDialog"
 import { useAudioRecordingCopyToProject } from "@/pages/superMagic/pages/AudioRecordings/hooks/useAudioRecordingCopyToProject"
@@ -975,6 +976,7 @@ export default function MobileAudioRecordingDetailPage() {
 						onContentScroll={handlePlayerContentScroll}
 						searchScopeRef={searchScopeRef}
 						onActiveTabChange={setSourceSubtab}
+						showNotesTab={hasConfiguredRecordingFile(fileMap, "notes")}
 						attachmentTree={attachmentTree as unknown as AttachmentFile[]}
 						notesFilePath={fileMap?.notes?.relative_file_path ?? fileMap?.notes?.path}
 						isGenerating={summaryVisualState.status === "generating"}

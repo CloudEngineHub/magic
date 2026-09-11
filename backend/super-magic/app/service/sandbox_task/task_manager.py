@@ -64,12 +64,22 @@ class SandboxTaskManager:
                 await self._persist(task)
             elif task.capability != capability or task.project_path != project_path:
                 raise ValueError(f"Task ID already belongs to another task: {task_id}")
-
-            if task.status not in {
-                SandboxTaskStatus.COMPLETED,
+            elif task.payload != payload and task.status not in {
                 SandboxTaskStatus.FAILED,
                 SandboxTaskStatus.CANCELLED,
-            } and task_id not in self._workers:
+            }:
+                raise ValueError(f"Task ID already belongs to another task: {task_id}")
+
+            if task.status in {SandboxTaskStatus.FAILED, SandboxTaskStatus.CANCELLED}:
+                task.payload = payload
+                task.status = SandboxTaskStatus.QUEUED
+                task.output = None
+                task.error_message = None
+                task.updated_at = datetime.now()
+                self._tasks[task_id] = task
+                await self._persist(task)
+
+            if task.status != SandboxTaskStatus.COMPLETED and task_id not in self._workers:
                 self._workers[task_id] = asyncio.create_task(self._run(task, worker))
             return task
 

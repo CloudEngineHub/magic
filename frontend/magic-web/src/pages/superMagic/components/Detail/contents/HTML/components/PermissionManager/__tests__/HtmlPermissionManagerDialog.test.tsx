@@ -166,6 +166,31 @@ describe("HtmlPermissionManagerDialog", () => {
 		expect(screen.queryByText("project.message.write")).not.toBeInTheDocument()
 	})
 
+	it("uses the application select layer inside the permission dialog", async () => {
+		render(
+			<HtmlPermissionManagerDialog
+				open
+				onOpenChange={vi.fn()}
+				permissionRevision={0}
+				getPermissionSnapshot={vi.fn().mockResolvedValue(createSnapshot())}
+				onAuthorize={vi.fn().mockResolvedValue(true)}
+				onRevoke={vi.fn().mockResolvedValue(createSnapshot(false))}
+				onUpdateTtl={vi.fn().mockResolvedValue(createSnapshot())}
+				onRevokeAll={vi.fn().mockResolvedValue(createSnapshot(false))}
+			/>,
+		)
+
+		fireEvent.click(
+			await screen.findByRole("combobox", {
+				name: "htmlEditor.permissionManager.durationSelect",
+			}),
+		)
+		const selectContent = document.querySelector('[data-slot="select-content"]')
+
+		expect(selectContent).toHaveClass("z-select")
+		expect(selectContent).not.toHaveClass("!z-[950]")
+	})
+
 	it("hides revoke-all action and keeps diagnostics in one content column without grants", async () => {
 		const snapshot = createSnapshot(false)
 		snapshot.configStatus = "absent"

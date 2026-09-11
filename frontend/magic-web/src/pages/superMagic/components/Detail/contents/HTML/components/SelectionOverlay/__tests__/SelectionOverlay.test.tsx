@@ -42,6 +42,12 @@ vi.mock("../hooks/useScaleSync", () => ({
 	useScaleSync: () => ({ isScaling: false }),
 }))
 
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string) => key,
+	}),
+}))
+
 function lastGapAxesLinked() {
 	const calls = useSelectionHandlesMock.mock.calls
 	return (calls[calls.length - 1]?.[0] as { gapAxesLinked?: boolean } | undefined)?.gapAxesLinked

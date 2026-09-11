@@ -112,6 +112,19 @@ The script generates files based on the config (TOOLS.md and SKILLS.md are inten
 5. **Show quality assessment**: Present the modified content with a quality assessment summary
 6. **Write after confirmation**: After user confirms, use `write_file` or `edit_file` to save
 
+## Pre-completion packaging-scope check
+
+Before concluding an employee-creation or employee-editing session—especially when the user says it is finished or asks to deliver, publish, or package the employee—run a final workspace check:
+
+1. Call `list_dir` with `path="."` to inspect the workspace root.
+2. The digital employee package root is `.magic/`; only files and directories under `.magic/` are packaged as employee content.
+3. Find files and directories outside `.magic/` and report their workspace-relative paths. Include root-level files and directories outside `.magic/`; do not silently discard them.
+4. Tell the user that reported external items are not packaged by default. Some may be intentionally workspace-level files, while others may be employee-related content left outside `.magic/`.
+5. If an external item looks like an employee definition, skill, asset, or configuration, suggest a destination under `.magic/` and let the user move/copy it. Do not perform the move/copy/delete automatically.
+6. If there are no user files outside `.magic/`, state that the check is clear.
+
+This check is a completion safeguard and does not replace the required startup inspection of `.magic/IDENTITY.md` and the other employee definition files.
+
 ### Quality Assessment Summary Format
 
 After each edit, present:

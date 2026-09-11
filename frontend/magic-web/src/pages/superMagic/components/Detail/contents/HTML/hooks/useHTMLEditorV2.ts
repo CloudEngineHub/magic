@@ -206,6 +206,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 				isTextElement: payload.isTextElement,
 				hasDirectTextContent: payload.hasDirectTextContent,
 				textContent: payload.textContent,
+				ancestors: payload.ancestors,
 				inlineStyles: payload.inlineStyles,
 				attributes: payload.attributes,
 				computedStyles: payload.computedStyles,
@@ -433,32 +434,36 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 				)
 			},
 			beginBatchOperation: async (selector: string, styles: Record<string, string>) => {
-				if (!messageBridgeRef.current) return
-				await messageBridgeRef.current.sendCommand(
+				const bridge = messageBridgeRef.current
+				if (!bridge?.isActive()) throw new Error("HTML editor bridge is unavailable")
+				await bridge.sendCommand(
 					EditorMessageType.BEGIN_BATCH_OPERATION,
 					{ selector, styles },
 					{ description: "开始批量操作", canUndo: false },
 				)
 			},
 			endBatchOperation: async (selector: string, styles: Record<string, string>) => {
-				if (!messageBridgeRef.current) return
-				await messageBridgeRef.current.sendCommand(
+				const bridge = messageBridgeRef.current
+				if (!bridge?.isActive()) throw new Error("HTML editor bridge is unavailable")
+				await bridge.sendCommand(
 					EditorMessageType.END_BATCH_OPERATION,
 					{ selector, styles },
 					{ description: "结束批量操作", canUndo: true },
 				)
 			},
 			cancelBatchOperation: async () => {
-				if (!messageBridgeRef.current) return
-				await messageBridgeRef.current.sendCommand(
+				const bridge = messageBridgeRef.current
+				if (!bridge?.isActive()) throw new Error("HTML editor bridge is unavailable")
+				await bridge.sendCommand(
 					EditorMessageType.CANCEL_BATCH_OPERATION,
 					{},
 					{ description: "取消批量操作", canUndo: false },
 				)
 			},
 			applyStylesTemporary: async (selector: string, styles: Record<string, string>) => {
-				if (!messageBridgeRef.current) return
-				return messageBridgeRef.current.sendCommand(
+				const bridge = messageBridgeRef.current
+				if (!bridge?.isActive()) throw new Error("HTML editor bridge is unavailable")
+				return bridge.sendCommand(
 					EditorMessageType.APPLY_STYLES_TEMPORARY,
 					{ selector, styles },
 					{ description: "临时应用样式", canUndo: false },
@@ -500,17 +505,9 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 			},
 			selectElement: async (selector: string) => {
 				if (!messageBridgeRef.current) return
-				const response = await messageBridgeRef.current.request(
-					EditorMessageType.GET_COMPUTED_STYLES,
-					{ selector },
-				)
-				if (response?.styles) {
-					stylePanelStore.selectElement({
-						selector,
-						tagName: "",
-						computedStyles: response.styles,
-					})
-				}
+				await messageBridgeRef.current.request(EditorMessageType.SELECT_ELEMENT, {
+					selector,
+				})
 			},
 			getDomTree: async () => {
 				// DOM structure handlers are registered by EditorRuntime. Returning null
