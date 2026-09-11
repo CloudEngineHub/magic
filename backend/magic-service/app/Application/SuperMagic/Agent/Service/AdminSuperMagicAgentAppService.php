@@ -131,14 +131,19 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
     }
 
     /** Run the full Agent Market vector reconciliation for an administrator. */
-    public function reindexMarketVectors(Authenticatable $authorization): array
+    public function reindexMarketVectors(Authenticatable $authorization, bool $forceReEmbedding = false): array
     {
-        return $this->reconcileMarketVectorIndex($this->createSuperMagicDataIsolation($authorization));
+        return $this->reconcileMarketVectorIndex(
+            $this->createSuperMagicDataIsolation($authorization),
+            $forceReEmbedding,
+        );
     }
 
     /** Clean stale points and queue all eligible Agent Market records. */
-    public function reconcileMarketVectorIndex(SuperMagicAgentDataIsolation $dataIsolation): array
-    {
+    public function reconcileMarketVectorIndex(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        bool $forceReEmbedding = false,
+    ): array {
         $indexedCount = $this->agentMarketVectorIndexDomainService->countIndexedPoints();
         $databaseCount = $this->agentMarketVectorIndexDomainService->countVectorIndexRecords();
         $reconcileSucceeded = true;
@@ -155,7 +160,7 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         $queued = 0;
         try {
-            $result = $this->reindexAllMarketVectors($dataIsolation);
+            $result = $this->reindexAllMarketVectors($dataIsolation, $forceReEmbedding);
             $queued = $result['queued'] ?? 0;
         } catch (Throwable $throwable) {
             $reconcileSucceeded = false;
@@ -174,6 +179,7 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             'queued' => $queued,
             'database_count' => $databaseCount,
             'indexed_count' => $indexedCount,
+            'force_re_embedding' => $forceReEmbedding,
         ]);
 
         return [
