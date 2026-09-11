@@ -4,8 +4,8 @@ Use the existing runtime database methods. The engine supplies the project and a
 
 | Operation | Required arguments | Safety |
 | --- | --- | --- |
-| `query_magicbase_tables` | optional `app_id` when multiple micro-apps are @'d | Read-only discovery |
-| `query_magicbase_tables_all_mentioned_apps` | none (requires 2+ @'d micro-apps) | Read-only batch discovery |
+| `query_magicbase_tables` | optional `app_id` when multiple micro-apps are bound | Read-only discovery |
+| `query_magicbase_tables_all_mentioned_apps` | none (requires 2+ bound micro-apps) | Read-only batch discovery |
 | `get_magicbase_table` | `table_id`, optional `app_id` | Read-only metadata |
 | `query_magicbase_rows` | `table_id`, structured query, optional `app_id` | Read-only |
 | `get_magicbase_row` | `table_id`, `record_id`, optional `app_id` | Read-only |
@@ -15,7 +15,7 @@ Use the existing runtime database methods. The engine supplies the project and a
 | `batch_create_magicbase_rows` | `table_id`, `rows`, `confirmed_by_user=true`, optional `app_id` | Requires confirmation |
 | `batch_delete_magicbase_rows` | `table_id`, `record_ids`, `confirm_delete=true`, optional `app_id` | Requires confirmation |
 
-Always use the real `table_id` returned by `query_magicbase_tables`. Do not pass `project_id`, identity, authorization, or role fields as model arguments. When exactly one micro-app is @'d, `app_id` is optional and the Engine selects its project automatically; passing that same `app_id` is also valid. When multiple micro-apps are @'d, pass the canonical `app_id` from the structured Mention on every MagicBase call. Permission failures from MagicBase are final.
+Always use the real `table_id` returned by `query_magicbase_tables`. Do not pass `project_id`, identity, authorization, or role fields as model arguments. When exactly one micro-app is bound, `app_id` is optional and the Engine selects its project automatically; passing that same `app_id` is also valid. When multiple micro-apps are bound, pass the canonical `app_id` from the typed link on every MagicBase call. Permission failures from MagicBase are final.
 
 ## Examples
 

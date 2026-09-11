@@ -126,6 +126,32 @@ class MentionContextBuilder:
                 # 未知类型的mention
                 context_lines.append(f"{i}. reference: {mention}")
 
+        extra_index = len(mentions) + 1
+        extra_bound = [
+            (app_id, entry)
+            for app_id, entry in bound_scopes.items()
+            if app_id not in mentioned_app_ids
+        ]
+        if extra_bound:
+            handler = handlers["micro_app"]
+            handler_id = id(handler)
+            if handler_id not in used_handler_ids:
+                used_handler_ids.add(handler_id)
+                used_handlers.append(handler)
+            for app_id, entry in extra_bound:
+                synthetic = {
+                    "type": "micro_app",
+                    "app_id": app_id,
+                    "app_name": str(entry.get("app_name") or app_id).strip(),
+                }
+                tip_text = await handler.get_tip(synthetic, agent_context)
+                if tip_text:
+                    tip_texts.append(tip_text)
+                context_lines.extend(
+                    await handler.handle(synthetic, extra_index, agent_context)
+                )
+                extra_index += 1
+
         # handler 完成本轮所有 mention 后，收集需要统一生成的提示文本
         for handler in used_handlers:
             final_tip_text = await handler.get_final_tip(agent_context)

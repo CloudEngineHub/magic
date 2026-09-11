@@ -24,9 +24,15 @@ async def test_micro_app_mention_without_app_id_is_rejected():
 @pytest.mark.asyncio
 async def test_micro_app_mention_tip_requires_bound_scope():
     handler = MicroAppHandler()
-    with patch(
-        "app.service.mention.handlers.micro_app_handler.has_bound_micro_app_project_scope",
-        return_value=True,
+    with (
+        patch(
+            "app.service.mention.handlers.micro_app_handler.has_bound_micro_app_project_scope",
+            return_value=True,
+        ),
+        patch(
+            "app.service.mention.handlers.micro_app_handler.get_micro_app_project_scopes",
+            return_value={"app-1": {"project_id": "project-1", "app_name": "App One"}},
+        ),
     ):
         tip = await handler.get_tip({"type": "micro_app", "app_id": "app-1"})
     assert "app-1" in tip
@@ -69,4 +75,21 @@ async def test_micro_app_mention_without_bound_scope_returns_empty_tip():
                 "project_id": "project-1",
             }
         )
+    assert tip == ""
+
+
+@pytest.mark.asyncio
+async def test_micro_app_mention_tip_skips_unresolved_app_id():
+    handler = MicroAppHandler()
+    with (
+        patch(
+            "app.service.mention.handlers.micro_app_handler.has_bound_micro_app_project_scope",
+            return_value=True,
+        ),
+        patch(
+            "app.service.mention.handlers.micro_app_handler.get_micro_app_project_scopes",
+            return_value={"app-1": {"project_id": "project-1", "app_name": "App One"}},
+        ),
+    ):
+        tip = await handler.get_tip({"type": "micro_app", "app_id": "app-2"})
     assert tip == ""

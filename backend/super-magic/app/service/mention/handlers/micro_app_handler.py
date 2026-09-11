@@ -38,6 +38,9 @@ class MicroAppHandler(BaseMentionHandler):
             return ""
 
         scopes = get_micro_app_project_scopes()
+        if app_id not in scopes:
+            return ""
+
         mentioned_ids = get_mentioned_micro_app_ids()
         incomplete = bool(mentioned_ids) and set(mentioned_ids) != set(scopes.keys())
         if len(scopes) > 1 or incomplete:

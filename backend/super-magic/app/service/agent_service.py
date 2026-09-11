@@ -35,7 +35,10 @@ from app.service.cli_manager.service import CliManagerService
 from app.service.cli_status import CliStatusFactory
 from app.core.base_service import Base
 from app.service.mention import MentionContextBuilder
-from app.service.mention.utils.micro_app_prompt import sync_micro_app_project_scope_from_prompt
+from app.service.mention.utils.micro_app_prompt import (
+    format_bound_micro_app_scope_context,
+    sync_micro_app_project_scope_from_prompt,
+)
 from app.service.topic_persistence import (
     TopicPersistenceManager,
     get_chat_history_excluded_dir_names,
@@ -548,6 +551,11 @@ class AgentService(Base):
             mentions_context = await self._build_mentions_context(mentions, agent_context)
             query = f"{mentions_context}\n\n---\n\n{query}"
             logger.info(f"Injected {len(mentions)} mention(s) into query")
+        else:
+            bound_context = format_bound_micro_app_scope_context()
+            if bound_context:
+                query = f"{bound_context}\n\n---\n\n{query}"
+                logger.info("Injected bound micro-app scope into follow-up query")
 
         # 处理输入框内联引用（[@file_path:格式）
         query = agent._process_user_input_with_mentions(query, [])

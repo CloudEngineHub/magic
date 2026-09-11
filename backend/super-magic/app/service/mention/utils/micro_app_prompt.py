@@ -3,6 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 from app.infrastructure.sdk.magic_service.factory import get_magic_service_sdk
 from app.infrastructure.sdk.magic_service.parameter.resolve_micro_app_parameter import (
@@ -115,6 +116,7 @@ def get_micro_app_project_scopes() -> Dict[str, Dict[str, str]]:
 
 
 def get_mentioned_micro_app_ids() -> List[str]:
+    scopes = get_micro_app_project_scopes()
     raw_ids = _load_scope_document().get("mentioned_app_ids") or []
     if not isinstance(raw_ids, list):
         return []
@@ -123,7 +125,7 @@ def get_mentioned_micro_app_ids() -> List[str]:
     seen: set[str] = set()
     for raw_id in raw_ids:
         app_id = str(raw_id or "").strip()
-        if app_id and app_id not in seen:
+        if app_id and app_id not in seen and app_id in scopes:
             seen.add(app_id)
             found.append(app_id)
     return found
@@ -131,6 +133,62 @@ def get_mentioned_micro_app_ids() -> List[str]:
 
 def has_bound_micro_app_project_scope() -> bool:
     return bool(get_micro_app_project_scopes())
+
+
+def format_bound_micro_app_scope_context() -> str:
+    """Render the currently bound @micro_app scope for follow-up turns."""
+    scopes = get_micro_app_project_scopes()
+    if not scopes:
+        return ""
+
+    lines = ["<mentions>", "Referenced files and resources:"]
+    for index, (app_id, entry) in enumerate(scopes.items(), 1):
+        app_name = str(entry.get("app_name") or app_id).strip()
+        label = app_name.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+        lines.append(f"{index}. [{label}](micro_app://{quote(app_id, safe='-._~')})")
+
+    mentioned_ids = get_mentioned_micro_app_ids()
+    incomplete = bool(mentioned_ids) and set(mentioned_ids) != set(scopes.keys())
+    if len(scopes) > 1 or incomplete:
+        app_list = ", ".join(
+            f"{entry['app_name']} (micro_app://{scope_app_id})"
+            for scope_app_id, entry in scopes.items()
+        )
+        tip = (
+            f"{MULTI_MICRO_APP_SCOPE_TIP} Referenced: {app_list}. "
+            "Use the use-magicbase skill and do not use display names as authority."
+        )
+    else:
+        app_id = next(iter(scopes))
+        tip = (
+            f"Micro-app '{app_id}' is explicitly referenced. Use the current authenticated user and "
+            "the use-magicbase skill to inspect and operate its permitted data. Do not use display names "
+            "or user-supplied identity fields as authority."
+        )
+    lines.extend(["", "</mentions>", "", "Before proceeding: " + tip])
+    return "\n".join(lines)
+
+
+def _accumulated_scope_document(
+    new_scopes: Dict[str, Dict[str, str]],
+    new_mentioned_app_ids: Optional[List[str]] = None,
+) -> tuple[Dict[str, Dict[str, str]], List[str]]:
+    existing_scopes = get_micro_app_project_scopes()
+    existing_ids = get_mentioned_micro_app_ids()
+    merged_scopes = {**existing_scopes, **new_scopes}
+    incoming = [
+        str(app_id).strip()
+        for app_id in (
+            new_mentioned_app_ids if new_mentioned_app_ids is not None else new_scopes.keys()
+        )
+        if str(app_id).strip()
+    ]
+    merged_ids = [
+        app_id
+        for app_id in dict.fromkeys([*existing_ids, *incoming, *merged_scopes.keys()])
+        if app_id in merged_scopes
+    ]
+    return merged_scopes, merged_ids
 
 
 def resolve_magicbase_project_id(app_id: Optional[str] = None) -> str:
@@ -144,7 +202,7 @@ def resolve_magicbase_project_id(app_id: Optional[str] = None) -> str:
             return scopes[normalized_app_id]["project_id"]
         raise ValueError(
             f"Micro-app '{normalized_app_id}' is not in the current mention scope. "
-            "Use an app_id from this message's @micro_app mentions."
+            "Use an app_id from a bound @micro_app mention in this conversation."
         )
 
     if scopes:
@@ -164,13 +222,17 @@ async def persist_micro_app_project_scopes(
     scopes: Dict[str, Dict[str, str]],
     mentioned_app_ids: Optional[List[str]] = None,
 ) -> None:
-    """Persist the trusted micro-app registry for MagicBase operations."""
+    """Write the accumulated micro-app registry for MagicBase operations."""
     normalized_mentioned = [
         str(app_id).strip()
         for app_id in (mentioned_app_ids if mentioned_app_ids is not None else scopes.keys())
         if str(app_id).strip()
     ]
-    mentioned = list(dict.fromkeys(normalized_mentioned))
+    mentioned = [
+        app_id
+        for app_id in dict.fromkeys(normalized_mentioned)
+        if app_id in scopes
+    ]
     document: Dict[str, Any] = {
         "scopes": scopes,
         "mentioned_app_ids": mentioned,
@@ -183,7 +245,7 @@ async def persist_micro_app_project_scopes(
 
 
 async def clear_micro_app_project_scope() -> None:
-    """Remove the current-message MagicBase mention scope file."""
+    """Remove the accumulated MagicBase mention scope file."""
     await async_unlink(_scope_file())
 
 
@@ -221,14 +283,26 @@ async def _scope_entry_from_mention(mention: Dict[str, Any]) -> Optional[MicroAp
     return MicroAppProjectScope(app_id=app_id, project_id=project_id, app_name=app_name)
 
 
+async def _persist_accumulated_scopes(
+    new_scopes: Dict[str, Dict[str, str]],
+    new_mentioned_app_ids: Optional[List[str]] = None,
+) -> Dict[str, Dict[str, str]]:
+    merged_scopes, merged_ids = _accumulated_scope_document(
+        new_scopes, new_mentioned_app_ids
+    )
+    if not merged_scopes:
+        return {}
+    await persist_micro_app_project_scopes(merged_scopes, mentioned_app_ids=merged_ids)
+    return merged_scopes
+
+
 async def sync_micro_app_scope_from_mentions(
     mentions: List[Dict[str, Any]],
 ) -> Dict[str, Dict[str, str]]:
-    """Bind MagicBase scopes for all structured micro_app mentions in one message."""
+    """Merge this message's resolved @micro_app mentions into the bound registry."""
     micro_app_mentions = extract_micro_app_mentions(mentions)
     if not micro_app_mentions:
-        await clear_micro_app_project_scope()
-        return {}
+        return get_micro_app_project_scopes()
 
     mentioned_app_ids: List[str] = []
     scopes: Dict[str, Dict[str, str]] = {}
@@ -242,17 +316,14 @@ async def sync_micro_app_scope_from_mentions(
         scopes[entry.app_id] = entry.to_entry()
 
     if not scopes:
-        await clear_micro_app_project_scope()
-        return {}
+        return get_micro_app_project_scopes()
 
-    await persist_micro_app_project_scopes(scopes, mentioned_app_ids=mentioned_app_ids)
-    return scopes
+    return await _persist_accumulated_scopes(scopes, mentioned_app_ids)
 
 
 async def sync_micro_app_project_scope_from_prompt(prompt: str) -> Optional[str]:
     app_ids = extract_micro_app_app_ids(prompt)
     if not app_ids:
-        await clear_micro_app_project_scope()
         return None
 
     scopes: Dict[str, Dict[str, str]] = {}
@@ -263,10 +334,9 @@ async def sync_micro_app_project_scope_from_prompt(prompt: str) -> Optional[str]
         scopes[app_id] = {"project_id": project_id, "app_name": app_id}
 
     if not scopes:
-        await clear_micro_app_project_scope()
         return None
 
-    await persist_micro_app_project_scopes(scopes, mentioned_app_ids=app_ids)
-    if len(scopes) == 1 and len(app_ids) == 1:
-        return next(iter(scopes.values()))["project_id"]
+    merged = await _persist_accumulated_scopes(scopes, app_ids)
+    if len(merged) == 1:
+        return next(iter(merged.values()))["project_id"]
     return None

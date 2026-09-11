@@ -323,8 +323,8 @@ async def _try_reconcile_pending_migrations(project_id: str) -> int:
 class MagicbaseProjectScopedParams(BaseToolParams):
     app_id: Optional[str] = Field(
         default=None,
-        description="""<!--zh: 可选。消息 @ 了多个 micro_app 时必填，取 mention 里的 app_id。-->
-Optional micro-app app_id from the mention. Required when multiple micro-apps are referenced.""",
+        description="""<!--zh: 可选。会话绑定了多个 micro_app 时必填，取 mention 里的 app_id。-->
+Optional micro-app app_id from the mention. Required when multiple micro-apps are bound.""",
     )
 
 
@@ -532,13 +532,13 @@ class QueryMagicTablesAllMentionedApps(
     MagicBaseFriendlyRemarkMixin, BaseTool[QueryMagicbaseTablesAllMentionedAppsParams]
 ):
     """<!--zh
-    批量查询当前消息中所有 @micro_app 的 MagicBase 表。
+    批量查询本会话已绑定的所有 @micro_app 的 MagicBase 表。
 
-    仅在多个 micro_app 被 @ 时使用；单个 micro_app 请用 query_magicbase_tables。
+    仅在多个 micro_app 已绑定时使用；单个 micro_app 请用 query_magicbase_tables。
     -->
-    List MagicBase tables for every micro-app referenced in the current message.
+    List MagicBase tables for every micro-app bound in this conversation.
 
-    Use when multiple micro-apps are @'d. For a single micro-app, use query_magicbase_tables instead.
+    Use when multiple micro-apps are bound. For a single micro-app, use query_magicbase_tables instead.
     """
     name = "query_magicbase_tables_all_mentioned_apps"
 
