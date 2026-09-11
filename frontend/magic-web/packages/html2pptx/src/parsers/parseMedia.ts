@@ -140,7 +140,7 @@ function parseAudioElement(audio: HTMLAudioElement, base: PPTNodeBase): PPTMedia
 		type: "media",
 		mediaType: "audio",
 		assetKey,
-		 source: createMediaSourceDescriptor(src, { key: assetKey }),
+		source: createMediaSourceDescriptor(src, { key: assetKey }),
 	}
 }
 
