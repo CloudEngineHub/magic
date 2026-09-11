@@ -62,11 +62,10 @@ function mergePreviewBundledMetadata(
  * @returns 处理后的 HTML 内容
  */
 function replaceLocationReload(htmlContent: string): string {
-	// 匹配 window.location.reload() 的各种写法
-	// 包括：window.location.reload()、window.location.reload(true)、window.location.reload(false)
-	// 以及可能的空格变体
+	// 匹配 window.reload() 和 window.location.reload() 的各种写法
+	// 包括 reload()、reload(true)、reload(false) 以及可能的空格变体
 	return htmlContent.replace(
-		/window\.location\.reload\s*\(\s*(?:true|false)?\s*\)/gi,
+		/window(?:\.location)?\.reload\s*\(\s*(?:true|false)?\s*\)/gi,
 		(match) => {
 			// 保存原始代码到注释中，以便保存时恢复
 			return `/*__ORIGINAL_RELOAD__:${match}__*/window.Magic.reload()`
