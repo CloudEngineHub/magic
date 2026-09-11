@@ -42,7 +42,7 @@ import { useDashboardVersioning } from "./dashboard/useDashboardVersioning"
 import AIEditButton from "@/pages/superMagic/components/Detail/components/EditToolbar/AIEditButton"
 import FileEditButtons from "@/pages/superMagic/components/Detail/components/EditToolbar/FileEditButtons"
 import ActionButton from "@/pages/superMagic/components/Detail/components/CommonHeader/components/ActionButton"
-import { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import CommonFooter from "../../components/CommonFooter"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import useExportMenuItems from "./useExportMenuItems"
@@ -148,7 +148,6 @@ interface HTMLProps {
 	exportImage?: (fileId: string, format?: ImageExportFormat) => void
 	isExporting?: boolean
 	selectedProject?: ProjectListItem | null
-	selectedTopic?: Topic | null
 	showFileHeader?: boolean
 	activeFileId?: string | null
 	/** Live tab state, excluded from cached renderProps. */
@@ -253,7 +252,6 @@ export default memo(function HTML(props: HTMLProps) {
 		exportImage,
 		isExporting,
 		selectedProject,
-		selectedTopic,
 		showFileHeader = true,
 		activeFileId,
 		isTabActive,
@@ -827,7 +825,6 @@ export default memo(function HTML(props: HTMLProps) {
 			{
 				postMessageTargetStrategy,
 				projectId: runtimeProjectId,
-				topicId: selectedTopic?.id ?? selectedProject?.current_topic_id,
 				parentTargetOrigin: window.location.origin,
 				onTelemetry: (data) => {
 					htmlRenderLogger.report(HTML_IFRAME_RENDER_LIFECYCLE_EVENT, {
@@ -861,7 +858,7 @@ export default memo(function HTML(props: HTMLProps) {
 			window.removeEventListener("message", virtualStorageMessageHandler)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [attachmentList, displayData?.file_id, runtimeProjectId, selectedTopic?.id])
+	}, [attachmentList, displayData?.file_id, runtimeProjectId])
 
 	const processContent = useMemoizedFn(async () => {
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
@@ -1557,7 +1554,6 @@ export default memo(function HTML(props: HTMLProps) {
 								currentFileId={displayData?.file_id}
 								currentFileName={data?.file_name}
 								projectId={runtimeProjectId}
-								topicId={selectedProject?.current_topic_id}
 							/>
 						) : htmlIsDeleted ? (
 							<Deleted data={displayData} showHeader={false} />
@@ -1588,7 +1584,6 @@ export default memo(function HTML(props: HTMLProps) {
 									selectedProject={selectedProject}
 									projectId={runtimeProjectId}
 									topicStore={topicStore}
-									selectedTopic={selectedTopic}
 									devConsoleEnabled={devConsoleEnabled}
 									permissionController={htmlPermissionController}
 									attachmentList={attachmentList}

@@ -214,7 +214,6 @@ function MicroAppPageMobileInner({
 								projectId={projectId}
 								topicStore={conversation.topicStore}
 								selectedProject={selectedProject}
-								selectedTopic={selectedTopic}
 								allowEdit={!isReadOnly}
 								onOpenFile={handlePreviewFile}
 								isBuilding={hasRunningTopic}

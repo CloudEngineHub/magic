@@ -38,7 +38,6 @@ interface IsolatedHTMLRendererProps {
 	currentFileId?: string
 	currentFileName?: string
 	projectId?: string
-	topicId?: string
 }
 
 const useStyles = createStyles(({ css }) => ({
@@ -73,7 +72,6 @@ function IsolatedHTMLRenderer({
 	currentFileId,
 	currentFileName,
 	projectId,
-	topicId,
 }: IsolatedHTMLRendererProps) {
 	const { styles, cx } = useStyles()
 	const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
@@ -135,7 +133,6 @@ function IsolatedHTMLRenderer({
 		let cancelled = false
 		const namespace = buildHtmlVirtualStorageNamespace({
 			projectId,
-			topicId,
 			fileId: currentFileId,
 		})
 
@@ -150,7 +147,7 @@ function IsolatedHTMLRenderer({
 		return () => {
 			cancelled = true
 		}
-	}, [currentFileId, projectId, topicId])
+	}, [currentFileId, projectId])
 
 	useEffect(() => {
 		if (!virtualStorageContext) return

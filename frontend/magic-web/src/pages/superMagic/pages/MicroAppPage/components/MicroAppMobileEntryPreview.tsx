@@ -1,5 +1,5 @@
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
-import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import MicroAppEntryPreview from "./MicroAppEntryPreview"
 
@@ -10,7 +10,6 @@ interface MicroAppMobileEntryPreviewProps {
 	projectId?: string
 	topicStore?: TopicStore
 	selectedProject: ProjectListItem | null
-	selectedTopic?: Topic | null
 	allowEdit: boolean
 	onOpenFile: (fileItem?: unknown) => void
 	isBuilding?: boolean
@@ -23,7 +22,6 @@ function MicroAppMobileEntryPreview({
 	projectId,
 	topicStore,
 	selectedProject,
-	selectedTopic,
 	allowEdit,
 	onOpenFile,
 	isBuilding = false,
@@ -36,7 +34,6 @@ function MicroAppMobileEntryPreview({
 			projectId={projectId}
 			topicStore={topicStore}
 			selectedProject={selectedProject}
-			selectedTopic={selectedTopic}
 			allowEdit={allowEdit}
 			onOpenFile={onOpenFile}
 			storageMarkerId={entryFile?.file_id}

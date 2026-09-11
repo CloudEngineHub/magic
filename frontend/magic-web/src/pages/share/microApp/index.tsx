@@ -238,7 +238,6 @@ export default function MicroAppSharePage() {
 							attachments={attachmentsTree}
 							attachmentList={attachmentList}
 							allowEdit={false}
-							selectedTopic={null}
 							showFileHeader={false}
 							showFooter={false}
 							viewMode={previewMode}

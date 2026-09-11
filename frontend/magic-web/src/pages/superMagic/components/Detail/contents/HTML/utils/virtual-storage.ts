@@ -68,7 +68,6 @@ interface CreateVirtualStorageContextOptions {
 
 interface BuildNamespaceOptions {
 	projectId?: string
-	topicId?: string
 	fileId?: string
 	markerId?: string
 }
@@ -149,6 +148,14 @@ const DB_NAME = "MagicHtmlVirtualStorage"
 const DB_VERSION = 1
 const STORE_NAME = "namespaces"
 const DEFAULT_CONTEXT_TTL_MS = 30 * 60 * 1000
+const NAMESPACE_ROOT = "magic-html-storage"
+const NAMESPACE_PROJECT_PREFIX = `${NAMESPACE_ROOT}:project:`
+const NAMESPACE_FILE_SEPARATOR = ":file:"
+/**
+ * 旧命名空间曾包含话题段：`magic-html-storage:project:{p}:topic:{t}:file:{f}`。
+ * 虚拟存储现已改为只按 project + file 隔离，这里保留该分隔符用于读取并迁移旧数据。
+ */
+const LEGACY_NAMESPACE_TOPIC_SEPARATOR = ":topic:"
 const RUNTIME_POST_MESSAGE_TARGET_HELPER = `
 function __magicGetVirtualStoragePostMessageTarget() {
 	var strategy = window.__MAGIC_POST_MESSAGE_TARGET_STRATEGY__ || "same-origin-ancestor";
@@ -171,6 +178,8 @@ let memoryStore = new Map<string, PersistedVirtualStorageState>()
 let debugEvents: VirtualStorageDebugEvent[] = []
 let namespaceOperationQueues = new Map<string, Promise<void>>()
 let indexedDBSchemaRepairRequests = new Set<string>()
+/** 已经尝试过旧话题命名空间回退的命名空间，避免每次读取都全表扫 key。 */
+let legacyMigrationChecked = new Set<string>()
 
 const DEBUG_EVENT_LIMIT = 200
 const TOKEN_TAIL_LENGTH = 8
@@ -261,9 +270,47 @@ function normalizeNamespacePart(value: string | undefined, fallback: string): st
 
 export function buildHtmlVirtualStorageNamespace(options: BuildNamespaceOptions): string {
 	const projectPart = normalizeNamespacePart(options.projectId, "no-project")
-	const topicPart = normalizeNamespacePart(options.topicId, "no-topic")
 	const filePart = normalizeNamespacePart(options.fileId || options.markerId, "default")
-	return `magic-html-storage:project:${projectPart}:topic:${topicPart}:file:${filePart}`
+	return `${NAMESPACE_PROJECT_PREFIX}${projectPart}${NAMESPACE_FILE_SEPARATOR}${filePart}`
+}
+
+/** 拆出新命名空间里的 project / file 片段，无法识别时返回 null。 */
+function parseNamespaceScope(namespace: string): { projectPart: string; filePart: string } | null {
+	if (!namespace.startsWith(NAMESPACE_PROJECT_PREFIX)) return null
+	const rest = namespace.slice(NAMESPACE_PROJECT_PREFIX.length)
+	// project / file 片段都可能含 ":"，因此按最后一个 ":file:" 切分。
+	const separatorIndex = rest.lastIndexOf(NAMESPACE_FILE_SEPARATOR)
+	if (separatorIndex <= 0) return null
+	return {
+		projectPart: rest.slice(0, separatorIndex),
+		filePart: rest.slice(separatorIndex + NAMESPACE_FILE_SEPARATOR.length),
+	}
+}
+
+/** 构造匹配同一 project + file 的旧话题命名空间的判定函数，不含自身。 */
+function getLegacyNamespaceMatcher(namespace: string): ((candidate: string) => boolean) | null {
+	const scope = parseNamespaceScope(namespace)
+	if (!scope) return null
+
+	const legacyPrefix = `${NAMESPACE_PROJECT_PREFIX}${scope.projectPart}${LEGACY_NAMESPACE_TOPIC_SEPARATOR}`
+	const legacySuffix = `${NAMESPACE_FILE_SEPARATOR}${scope.filePart}`
+
+	return (candidate: string) =>
+		candidate !== namespace &&
+		candidate.startsWith(legacyPrefix) &&
+		candidate.endsWith(legacySuffix) &&
+		candidate.length > legacyPrefix.length + legacySuffix.length
+}
+
+/** 多个话题都存有同一文件的数据时，以最近写入的一份作为迁移来源。 */
+function pickLatestPersistedState(
+	states: PersistedVirtualStorageState[],
+): PersistedVirtualStorageState | null {
+	return states.reduce<PersistedVirtualStorageState | null>(
+		(latest, state) =>
+			!latest || (state.updatedAt ?? 0) > (latest.updatedAt ?? 0) ? state : latest,
+		null,
+	)
 }
 
 function canUseIndexedDB(): boolean {
@@ -292,37 +339,123 @@ function openDatabase(): Promise<IDBDatabase | null> {
 	return dbPromise
 }
 
-async function readPersistedState(namespace: string): Promise<PersistedVirtualStorageState> {
+function emptyPersistedState(namespace: string): PersistedVirtualStorageState {
+	return { namespace, ...emptySnapshot(), updatedAt: Date.now() }
+}
+
+/** 只读取当前命名空间已持久化的数据，不做任何回退或迁移。 */
+async function readPersistedStateRaw(
+	namespace: string,
+): Promise<PersistedVirtualStorageState | null> {
 	const db = await openDatabase()
-	if (!db) {
-		return (
-			memoryStore.get(namespace) ?? { namespace, ...emptySnapshot(), updatedAt: Date.now() }
-		)
-	}
+	if (!db) return memoryStore.get(namespace) ?? null
 
 	return new Promise((resolve) => {
 		const tx = db.transaction(STORE_NAME, "readonly")
 		const store = tx.objectStore(STORE_NAME)
 		const request = store.get(namespace)
 
-		request.onsuccess = () => {
-			resolve(
-				(request.result as PersistedVirtualStorageState | undefined) ?? {
-					namespace,
-					...emptySnapshot(),
-					updatedAt: Date.now(),
-				},
-			)
-		}
-		request.onerror = () =>
-			resolve(
-				memoryStore.get(namespace) ?? {
-					namespace,
-					...emptySnapshot(),
-					updatedAt: Date.now(),
-				},
-			)
+		request.onsuccess = () =>
+			resolve((request.result as PersistedVirtualStorageState | undefined) ?? null)
+		request.onerror = () => resolve(memoryStore.get(namespace) ?? null)
 	})
+}
+
+/**
+ * 把旧话题命名空间的数据惰性迁移到当前命名空间。
+ * 只在当前命名空间尚无数据时补写一次，且不删除旧记录，因此可重复执行、可回滚。
+ */
+async function migrateLegacyTopicNamespaceState(namespace: string): Promise<void> {
+	const matchesLegacy = getLegacyNamespaceMatcher(namespace)
+	if (!matchesLegacy) return
+
+	const db = await openDatabase()
+	if (!db) {
+		if (memoryStore.has(namespace)) return
+		const latest = pickLatestPersistedState(
+			Array.from(memoryStore.values()).filter((state) => matchesLegacy(state.namespace)),
+		)
+		if (latest) memoryStore.set(namespace, { ...cloneValue(latest), namespace })
+		return
+	}
+
+	await new Promise<void>((resolve) => {
+		let settled = false
+		const finish = () => {
+			if (settled) return
+			settled = true
+			resolve()
+		}
+
+		let tx: IDBTransaction
+		try {
+			// 用单个 readwrite 事务完成「判存 + 选源 + 补写」，避免多标签页并发时相互覆盖。
+			tx = db.transaction(STORE_NAME, "readwrite")
+		} catch {
+			finish()
+			return
+		}
+
+		const store = tx.objectStore(STORE_NAME)
+		tx.oncomplete = finish
+		tx.onerror = finish
+		tx.onabort = finish
+
+		const existingRequest = store.get(namespace)
+		existingRequest.onerror = finish
+		existingRequest.onsuccess = () => {
+			if (existingRequest.result !== undefined) {
+				finish()
+				return
+			}
+
+			const keysRequest = store.getAllKeys()
+			keysRequest.onerror = finish
+			keysRequest.onsuccess = () => {
+				const legacyKeys = (keysRequest.result ?? []).filter(
+					(key): key is string => typeof key === "string" && matchesLegacy(key),
+				)
+				if (legacyKeys.length === 0) {
+					finish()
+					return
+				}
+
+				const states: PersistedVirtualStorageState[] = []
+				let pending = legacyKeys.length
+				const collect = () => {
+					pending -= 1
+					if (pending > 0) return
+					const latest = pickLatestPersistedState(states)
+					// 保留原 updatedAt，避免迁移本身改变数据的时序语义。
+					if (latest) store.put({ ...cloneValue(latest), namespace })
+				}
+
+				for (const key of legacyKeys) {
+					const getRequest = store.get(key)
+					getRequest.onsuccess = () => {
+						const row = getRequest.result as PersistedVirtualStorageState | undefined
+						if (row) states.push(row)
+						collect()
+					}
+					getRequest.onerror = collect
+				}
+			}
+		}
+	})
+}
+
+async function readPersistedState(namespace: string): Promise<PersistedVirtualStorageState> {
+	const persisted = await readPersistedStateRaw(namespace)
+	if (persisted) return persisted
+
+	// 历史数据写在带话题段的旧命名空间下，读取时按 project + file 回退迁移一份。
+	if (!legacyMigrationChecked.has(namespace)) {
+		legacyMigrationChecked.add(namespace)
+		await migrateLegacyTopicNamespaceState(namespace)
+	}
+
+	const migrated = await readPersistedStateRaw(namespace)
+	return migrated ?? emptyPersistedState(namespace)
 }
 
 async function writePersistedState(state: PersistedVirtualStorageState): Promise<void> {
@@ -1921,6 +2054,7 @@ export function resetVirtualStorageForTests(): void {
 	debugEvents = []
 	namespaceOperationQueues = new Map()
 	indexedDBSchemaRepairRequests = new Set()
+	legacyMigrationChecked = new Set()
 	const debugGlobal = getDebugGlobal()
 	if (debugGlobal) debugGlobal.__MAGIC_HTML_VIRTUAL_STORAGE_DEBUG_LOGS__ = []
 	virtualStorageRegistry.reset()

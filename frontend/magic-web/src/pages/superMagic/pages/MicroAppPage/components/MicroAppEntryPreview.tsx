@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { DetailType } from "@/pages/superMagic/components/Detail/types"
-import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { MicroAppEmptyIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import MicroAppBuildingPreview from "./MicroAppBuildingPreview"
@@ -22,7 +22,6 @@ export interface MicroAppEntryPreviewProps {
 	projectId?: string
 	topicStore?: TopicStore
 	selectedProject: ProjectListItem | null
-	selectedTopic?: Topic | null
 	allowEdit: boolean
 	onOpenFile?: (fileItem?: unknown) => void
 	viewMode?: MicroAppEntryPreviewMode
@@ -58,7 +57,6 @@ export default function MicroAppEntryPreview({
 	projectId,
 	topicStore,
 	selectedProject,
-	selectedTopic,
 	allowEdit,
 	onOpenFile,
 	viewMode = "desktop",
@@ -107,7 +105,6 @@ export default function MicroAppEntryPreview({
 			projectId={projectId}
 			topicStore={topicStore}
 			selectedProject={selectedProject}
-			selectedTopic={selectedTopic}
 			activeFileId={entryData.file_id}
 			virtualStorageMarkerId={storageMarkerId}
 			updatedAt={entryData.updated_at}

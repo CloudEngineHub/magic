@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react"
 import { createRef, type ReactNode } from "react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import IsolatedHTMLRenderer, { type IsolatedHTMLRendererRef } from "../IsolatedHTMLRenderer"
 
@@ -383,7 +383,7 @@ const defaultProps = {
 	isVisible: true,
 }
 
-function getSetContentCalls(postMessage: ReturnType<typeof vi.fn>) {
+function getSetContentCalls(postMessage: MockInstance<typeof window.postMessage>) {
 	return postMessage.mock.calls.filter(([message]) => message?.type === "setContent")
 }
 
@@ -491,7 +491,6 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 		expect(virtualStorageMocks.buildNamespace).toHaveBeenCalledWith({
 			projectId: "project-1",
-			topicId: "topic-1",
 			fileId: "index-file",
 		})
 
@@ -507,23 +506,45 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		)
 	})
 
-	it("uses the scoped selected topic for virtual storage", async () => {
-		const scopedTopicStore = { selectedTopic: { id: "topic-from-micro-app" } }
+	it("does not rebuild virtual storage or re-inject content when the selected topic changes", async () => {
+		const firstTopicStore = { selectedTopic: { id: "topic-a" } }
+		const secondTopicStore = { selectedTopic: { id: "topic-b" } }
 
-		render(
+		const { rerender } = render(
 			<IsolatedHTMLRenderer
 				{...defaultProps}
-				selectedProject={{ id: "project-1", current_topic_id: "old-topic" }}
-				topicStore={scopedTopicStore as unknown as TopicStore}
+				selectedProject={{ id: "project-1", current_topic_id: "topic-a" }}
+				topicStore={firstTopicStore as unknown as TopicStore}
 			/>,
 		)
 		await flushReactEffects()
 
-		expect(virtualStorageMocks.buildNamespace).toHaveBeenCalledWith({
-			projectId: "project-1",
-			topicId: "topic-from-micro-app",
-			fileId: "history-file",
-		})
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+		dispatchIframeMessage(iframe, "iframeReady")
+		await flushReactEffects()
+
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+		const namespaceCallsBefore = virtualStorageMocks.buildNamespace.mock.calls.length
+		const contextCallsBefore = virtualStorageMocks.createContext.mock.calls.length
+
+		// 模拟微应用编辑页「新建话题」：仅当前话题变化，入口文件与项目不变。
+		rerender(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				selectedProject={{ id: "project-1", current_topic_id: "topic-b" }}
+				topicStore={secondTopicStore as unknown as TopicStore}
+			/>,
+		)
+		await flushReactEffects()
+		await flushReactEffects()
+
+		expect(virtualStorageMocks.buildNamespace.mock.calls).toHaveLength(namespaceCallsBefore)
+		expect(virtualStorageMocks.createContext.mock.calls).toHaveLength(contextCallsBefore)
+		// 不该因话题切换而再次向 iframe 注入内容。
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
 	})
 
 	it("passes the explicit projectId to Agent actions", async () => {

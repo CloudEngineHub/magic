@@ -1248,12 +1248,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		})
 		const getStorageMarkerId = useMemoizedFn(() => virtualStorageMarkerId || getMarkerId())
 
+		// 虚拟存储按 project + file 隔离，不按话题隔离：切换/新建话题不应重建沙箱存储。
 		useEffect(() => {
 			let cancelled = false
 			const markerId = getStorageMarkerId()
 			const namespace = buildHtmlVirtualStorageNamespace({
 				projectId: runtimeProjectId,
-				topicId: scopedTopicStore?.selectedTopic?.id ?? selectedProject?.current_topic_id,
 				fileId: markerId || fileId,
 			})
 
@@ -1272,8 +1272,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			// attachmentList,
 			fileId,
 			getStorageMarkerId,
-			selectedProject?.current_topic_id,
-			scopedTopicStore?.selectedTopic?.id,
 			runtimeProjectId,
 			virtualStorageMarkerId,
 		])

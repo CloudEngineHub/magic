@@ -43,7 +43,6 @@ export const NESTED_IFRAME_MESSAGE_TYPES = {
 interface NestedIframeContentHandlerOptions {
 	postMessageTargetStrategy?: PostMessageTargetStrategy
 	projectId?: string
-	topicId?: string
 	parentTargetOrigin?: string
 	onTelemetry?: (data: Record<string, unknown>) => void
 }
@@ -386,7 +385,6 @@ export function createNestedIframeContentHandler(
 	const {
 		postMessageTargetStrategy = POST_MESSAGE_TARGET_STRATEGIES.SAME_ORIGIN_ANCESTOR,
 		projectId,
-		topicId,
 		parentTargetOrigin,
 	} = options
 
@@ -536,7 +534,6 @@ export function createNestedIframeContentHandler(
 			const virtualStorageContext = await createVirtualStorageContext({
 				namespace: buildHtmlVirtualStorageNamespace({
 					projectId,
-					topicId,
 					fileId: matchedFile.file_id,
 				}),
 				origin: event.origin || undefined,
