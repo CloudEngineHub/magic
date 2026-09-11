@@ -27,7 +27,7 @@ use Hyperf\Contract\TranslatorInterface;
  *
  * 在统一视频参数设计里，这一层不参与任何业务判断：
  * - 不解析 provider 能力
- * - 不做多 provider 交集
+ * - 不做 provider 择一
  * - 只把 app 层准备好的 featured 配置挂到返回 DTO
  */
 class ModeAssembler
