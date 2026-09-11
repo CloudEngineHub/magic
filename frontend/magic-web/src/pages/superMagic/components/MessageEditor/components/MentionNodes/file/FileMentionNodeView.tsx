@@ -13,6 +13,7 @@ import {
 import {
 	MentionItemType,
 	type ProjectFileMentionData,
+	type UserFileMentionData,
 	type UploadFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -28,7 +29,7 @@ import {
 	MESSAGE_FILE_MENTION_DESKTOP_CLASSES,
 } from "@/components/business/MentionPanel/messageMentionVisual"
 
-type FileMentionData = ProjectFileMentionData | UploadFileMentionData
+type FileMentionData = ProjectFileMentionData | UploadFileMentionData | UserFileMentionData
 
 function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRendererProps) {
 	const isMobile = useIsMobile()
@@ -105,7 +106,10 @@ function FileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeViewRen
 				/>
 			)}
 			<span className="relative z-10 flex shrink-0 items-center">{thumbnail}</span>
-			<span className={MESSAGE_FILE_MENTION_NAME_CLASSES} title={fileName}>
+			<span
+				className={MESSAGE_FILE_MENTION_NAME_CLASSES}
+				title={attrs.type === MentionItemType.USER_FILE ? data.file_path : fileName}
+			>
 				{fileName}
 			</span>
 			{isUploading && (

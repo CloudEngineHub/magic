@@ -300,6 +300,7 @@ Router::addGroup(
         });
 
         Router::addGroup('/file', static function () {
+            Router::post('/resolve-references', [FileApi::class, 'resolveReferences']);
             // 获取项目文件上传STS Token
             Router::get('/project-upload-token', [FileApi::class, 'getProjectUploadToken']);
             // 获取话题文件上传STS Token

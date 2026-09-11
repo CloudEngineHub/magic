@@ -1,4 +1,5 @@
 import type { FileScope } from "@/apis/modules/fileScope"
+import type { FileReference } from "@/apis/modules/superMagic"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import type { AttachmentItem } from "./hooks/types"
@@ -21,7 +22,9 @@ export interface TopicFilesCapabilities {
 export interface TopicFilesChatContext {
 	selectedProject?: ProjectListItem | null
 	selectedWorkspace?: Workspace | null
-	createAttachmentMention?: (item: AttachmentItem) => TiptapMentionAttributes | null
+	createAttachmentMention?: (item: AttachmentItem) => Promise<TiptapMentionAttributes | null>
+	/** 拖拽只携带文件身份，异步引用查询在接收输入框执行。 */
+	fileSpaceType?: FileReference["space_type"]
 }
 
 /** 文件树空间配置。 */

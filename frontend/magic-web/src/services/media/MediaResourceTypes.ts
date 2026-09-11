@@ -1,16 +1,9 @@
-export type MediaResourceProvider = "canvas" | "project-file" | "upload-file"
+export type MediaResourceProvider = "canvas" | "project-file" | "user-file" | "upload-file"
 
 export type MediaResourceRendition = "thumbnail" | "preview"
 
 export type MediaResourceStatus =
-	| "idle"
-	| "loading"
-	| "ready"
-	| "expired"
-	| "deleted"
-	| "forbidden"
-	| "unsupported"
-	| "error"
+	"idle" | "loading" | "ready" | "expired" | "deleted" | "forbidden" | "unsupported" | "error"
 
 export interface MediaResourceRef {
 	identity: string

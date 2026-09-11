@@ -68,8 +68,7 @@ function resolveSlidesTemplateTabFile(
 		isSlidesTemplateFolder(asAttachmentItem(parentDirectory))
 	) {
 		return toSlidesTemplatePreviewItem(asAttachmentItem(parentDirectory)) as
-			| FileItem
-			| AttachmentItem
+			FileItem | AttachmentItem
 	}
 
 	return null
@@ -145,6 +144,7 @@ function resolveProjectTabFile(
 	file: FileItem | AttachmentItem,
 	attachments?: FileItem[] | AttachmentItem[],
 ): FileItem | AttachmentItem {
+	if (file.space_type === "user" || file.file_reference?.space_type === "user") return file
 	const templateTabFile = resolveSlidesTemplateTabFile(file, attachments)
 	if (templateTabFile) return templateTabFile
 	if (isProjectBundleFolder(file)) return file

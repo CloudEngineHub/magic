@@ -8,11 +8,7 @@ import type { TopicFilesMenuItem } from "@/pages/superMagic/components/TopicFile
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { TopicFilesSpaceConfig } from "@/pages/superMagic/components/TopicFilesButton/file-space"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
-import {
-	MentionItemType,
-	type MemoryDirectoryMentionData,
-	type MemoryFileMentionData,
-} from "@/components/business/MentionPanel/types"
+import { createFileReferenceMention } from "@/components/business/MentionPanel/utils/fileReferenceMention"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import memoryFilesStore from "@/stores/memoryFiles"
@@ -63,6 +59,7 @@ function createMemoryPreviewItem(item: AttachmentItem): AttachmentItem {
 	return {
 		...item,
 		project_id: MEMORY_PROJECT_ID,
+		space_type: "user",
 		display_config: {
 			...(item.display_config || {}),
 			previewPolicy: {
@@ -172,37 +169,17 @@ export const MemoryFileTreePanel = observer(function MemoryFileTreePanel({
 
 	/** 将记忆节点转换为独立的记忆 mention。 */
 	const createMemoryAttachmentMention = useCallback(
-		(item: AttachmentItem): TiptapMentionAttributes | null => {
-			const pathSegments = memoryNodePathIndex.get(String(item.file_id || ""))
-			if (!pathSegments?.length) return null
-
-			const memoryPath = `~/.magic/${pathSegments.join("/")}`
-			const normalizedPath = item.is_directory
-				? `${memoryPath.replace(/\/$/, "")}/`
-				: memoryPath
-
-			if (item.is_directory) {
-				return {
-					type: MentionItemType.MEMORY_DIRECTORY,
-					data: {
-						directory_id: String(item.file_id || ""),
-						directory_name: getMemoryTreeNodeName(item),
-						directory_path: normalizedPath,
-					} satisfies MemoryDirectoryMentionData,
-				}
-			}
-
-			return {
-				type: MentionItemType.MEMORY_FILE,
-				data: {
-					file_id: String(item.file_id || ""),
-					file_name: getMemoryTreeNodeName(item),
-					file_path: normalizedPath,
-					file_extension: item.file_extension || "",
-				} satisfies MemoryFileMentionData,
+		async (item: AttachmentItem): Promise<TiptapMentionAttributes | null> => {
+			try {
+				const mention = await createFileReferenceMention({ ...item, space_type: "user" })
+				if (!mention) magicToast.error(t("super:common.fileNotFoundOrLoadFailed"))
+				return mention
+			} catch {
+				magicToast.error(t("super:common.fileNotFoundOrLoadFailed"))
+				return null
 			}
 		},
-		[memoryNodePathIndex],
+		[t],
 	)
 
 	const memorySpaceConfig = useMemo<TopicFilesSpaceConfig>(
@@ -213,6 +190,7 @@ export const MemoryFileTreePanel = observer(function MemoryFileTreePanel({
 				selectedProject,
 				selectedWorkspace,
 				createAttachmentMention: createMemoryAttachmentMention,
+				fileSpaceType: "user",
 			},
 		}),
 		[selectedProject, selectedWorkspace, createMemoryAttachmentMention],

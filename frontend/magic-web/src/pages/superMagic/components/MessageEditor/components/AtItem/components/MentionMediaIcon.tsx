@@ -3,6 +3,7 @@ import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { MediaPreviewThumbnail } from "@/components/base/MediaPreview"
 import type {
 	ProjectFileMentionData,
+	UserFileMentionData,
 	UploadFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
@@ -13,8 +14,8 @@ import {
 } from "../../MentionMedia/useMentionMediaSource"
 
 interface MentionMediaIconProps {
-	type: MentionItemType.PROJECT_FILE | MentionItemType.UPLOAD_FILE
-	data: ProjectFileMentionData | UploadFileMentionData
+	type: (typeof MentionItemType)["PROJECT_FILE" | "UPLOAD_FILE" | "USER_FILE"]
+	data: ProjectFileMentionData | UploadFileMentionData | UserFileMentionData
 	size: number
 	mediaSource?: MentionMediaSource
 }

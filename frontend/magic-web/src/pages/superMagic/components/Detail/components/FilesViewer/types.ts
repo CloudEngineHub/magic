@@ -8,6 +8,7 @@ import type {
 } from "@/pages/superMagic/pages/Workspace/types"
 import { AttachmentSource } from "../../../TopicFilesButton/hooks/types"
 import type { FileScope } from "@/apis/modules/fileScope"
+import type { FileReference } from "@/apis/modules/superMagic"
 import type { HtmlNavigationRequest } from "../../contents/HTML/utils/html-navigation"
 
 // Base interfaces
@@ -54,6 +55,9 @@ export type ActiveDetailTabType = FileViewerTabType | null
 
 // File item interface
 export interface FileItem {
+	/** 文件引用身份独立于 previewPolicy.fileScope 的编辑策略。 */
+	file_reference?: FileReference
+	space_type?: FileReference["space_type"]
 	file_id: string
 	file_name: string
 	file_key?: string

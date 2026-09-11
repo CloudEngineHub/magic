@@ -1,7 +1,36 @@
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import type { FileReference } from "@/apis/modules/superMagic"
 
 interface OpenMessageFileOptions {
 	locateInTree?: boolean
+}
+
+/** 用户资源单独预览；只有记忆目录继续使用原有记忆编辑 API。 */
+export function openUserFileReference(
+	reference: Extract<FileReference, { space_type: "user" }>,
+): void {
+	if (reference.is_directory) return
+	const isMemory = reference.space_relative_path.startsWith(".magic/memory/")
+	openMessageFile(
+		{
+			...reference,
+			file_reference: reference,
+			relative_file_path: "~/" + reference.space_relative_path,
+			display_config: {
+				previewPolicy: {
+					standalone: true,
+					editingPresence: false,
+					allowShare: false,
+					allowVersionHistory: false,
+					syncWithAttachments: false,
+					persistTab: false,
+					restoreAsActive: false,
+					...(isMemory ? { fileScope: "memory" } : { readonly: true }),
+				},
+			},
+		},
+		{ locateInTree: false },
+	)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

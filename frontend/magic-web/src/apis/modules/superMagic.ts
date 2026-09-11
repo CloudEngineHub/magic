@@ -92,6 +92,24 @@ export interface SaveFileContentResponse {
 	completed_at: string
 }
 
+export type FileReferenceSelector =
+	{ file_id: string } | { space_type: "user"; space_relative_path: string }
+
+interface FileReferenceMetadata {
+	file_id: string
+	file_name: string
+	is_directory: boolean
+	file_extension: string
+	space_relative_path: string
+}
+
+export type FileReference =
+	| (FileReferenceMetadata & { space_type: "user"; project_id?: never })
+	| (FileReferenceMetadata & { space_type: "project"; project_id: string })
+
+export type FileReferenceResult =
+	{ status: "resolved"; reference: FileReference } | { status: "unavailable" | "invalid" }
+
 export interface SuperMagicTopicModelExtra {
 	transcription_enabled?: boolean
 	auto_summary_enabled?: boolean
@@ -2895,6 +2913,14 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 				? undefined
 				: { enableErrorMessagePrompt: options.enableErrorMessagePrompt }
 		return fetch.get<FileInfo>(`/api/v1/super-agent/file/${file_id}`, config)
+	},
+
+	resolveFileReferences(references: FileReferenceSelector[], signal?: AbortSignal) {
+		return fetch.post<{ results: FileReferenceResult[] }>(
+			"/api/v1/super-agent/file/resolve-references",
+			{ references },
+			{ signal, enableErrorMessagePrompt: false },
+		)
 	},
 
 	/**

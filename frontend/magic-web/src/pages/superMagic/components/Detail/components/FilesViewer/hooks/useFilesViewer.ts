@@ -102,8 +102,7 @@ function normalizeFileItemForTab(fileItem: unknown): {
 	}
 
 	const recordDisplayConfig = sourceRecord.display_config as
-		| FileItem["display_config"]
-		| undefined
+		FileItem["display_config"] | undefined
 	let hiddenPreviewPolicy = recordDisplayConfig
 	if (sourceRecord.is_hidden === true) {
 		hiddenPreviewPolicy = {
@@ -1513,6 +1512,9 @@ export function useFilesViewer(props: FilesViewerProps) {
 						filename: tab.fileData.filename,
 						display_filename: tab.fileData.display_filename,
 						file_extension: tab.fileData.file_extension,
+						file_reference: tab.fileData.file_reference,
+						space_type: tab.fileData.space_type,
+						project_id: tab.fileData.project_id,
 						relative_file_path: tab.fileData.relative_file_path,
 						url: tab.fileData.url,
 						/** 刷新恢复后解析 custom icon、合并 metadata 等需要 */

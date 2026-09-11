@@ -18,6 +18,7 @@ export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
 					incomingTab.fileData?.display_config?.previewPolicy?.awaitAttachmentSync ===
 					true
 				const shouldReplaceFileData =
+					incomingTab.fileData?.space_type === "user" ||
 					incomingTab.fileData?.display_config?.type === DetailType.SelfMedia ||
 					shouldUsePendingAttachmentSyncTab
 

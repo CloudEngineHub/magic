@@ -1,4 +1,7 @@
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/core"
+import { DOMParser as ProseMirrorDOMParser } from "prosemirror-model"
+import magicToast from "@/components/base/MagicToaster/utils"
+import i18n from "i18next"
 import type {
 	MentionListItem,
 	TiptapMentionAttributes,
@@ -22,20 +25,22 @@ import {
 	normalizeWorkspacePathForComparison,
 } from "@/pages/superMagic/utils/markdownFileReference"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
-import {
-	extractClipboardMetadata,
-	isMagicClipboard,
-	type MagicClipboardMetadata,
-} from "@/utils/clipboard-helpers"
+import { extractClipboardMetadata, type MagicClipboardMetadata } from "@/utils/clipboard-helpers"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { transformInspectorContent } from "./inspector-detail"
 import { prepareCopiedMentionAttrs } from "../utils/mention"
+import {
+	normalizeFileReferenceContent,
+	normalizeFileReferenceMention,
+} from "@/components/business/MentionPanel/utils/fileReferenceMention"
+import { getFileReferenceIdentityKey } from "@/pages/superMagic/services/userFileReferenceResolver"
 import { collectMentionItemsFromContent } from "../services/uploadMentionService"
 import { getHtmlScreenshotStorageId } from "../services/HtmlScreenshotTargetStore"
 import { INSPECTOR_DETAIL_TYPE } from "./inspector-detail/const"
 import {
 	pasteMarkdownFileLinks,
 	replaceWorkspaceLinksInRichText,
+	resolveUserLinksInRichText,
 	type MarkdownFilePasteOptions,
 } from "./pasteMarkdownFileLinks"
 
@@ -339,6 +344,7 @@ function pasteFromMagicMetadata(
 	metadata: MagicClipboardMetadata,
 	attachments: AttachmentItem[],
 	options: PasteMessageClipboardOptions,
+	selection?: { from: number; to: number },
 ): boolean {
 	const mentions = Array.isArray(metadata.mentions) ? metadata.mentions : null
 	const mentionItems = mentions
@@ -379,7 +385,10 @@ function pasteFromMagicMetadata(
 				runActiveEditor(
 					editor,
 					(active) => {
-						if (!active.commands.insertContent(editorContent)) return false
+						const inserted = selection
+							? active.commands.insertContentAt(selection, editorContent)
+							: active.commands.insertContent(editorContent)
+						if (!inserted) return false
 						syncMentions(
 							collectMentionItemsFromContent(editorContent).map((item) => item.attrs),
 						)
@@ -398,6 +407,43 @@ function pasteFromMagicMetadata(
 	return false
 }
 
+function readFileLinkMetadata(editor: Editor, html: string): MagicClipboardMetadata | null {
+	if (!html.includes("data-magic-node-attrs")) return null
+	const container = document.createElement("div")
+	container.innerHTML = html
+	const links = container.querySelectorAll<HTMLElement>(
+		'a[data-magic-node-type="mention"][data-magic-node-attrs]',
+	)
+	if (!links.length) return null
+	for (const link of links) {
+		if (link.closest("code, pre")) continue
+		const span = document.createElement("span")
+		span.textContent = link.textContent
+		try {
+			const attrs: unknown = JSON.parse(link.dataset.magicNodeAttrs || "null")
+			if (
+				attrs &&
+				typeof attrs === "object" &&
+				"type" in attrs &&
+				"data" in attrs &&
+				typeof attrs.type === "string"
+			) {
+				span.className = "magic-mention"
+				span.dataset.type = attrs.type
+				span.dataset.data = JSON.stringify(attrs.data)
+			}
+		} catch {
+			// 损坏的身份只保留文字，不能将其退回当前用户的同名路径查询。
+		}
+		link.replaceWith(span)
+	}
+	return {
+		richText: JSON.stringify(
+			ProseMirrorDOMParser.fromSchema(editor.schema).parse(container).toJSON(),
+		),
+	}
+}
+
 /**
  * SuperMagic paste contract:
  * 1. Structured magic metadata → insert mentions
@@ -412,14 +458,75 @@ export function pasteMessageClipboard(
 	// 显式注入的空列表也属于当前作用域，不能改用另一个项目的全局列表。
 	const attachments = options.getWorkspaceFilesList?.() ?? []
 
-	if (!isMagicClipboard(clipboardData)) {
-		return pasteMarkdownFileLinks(editor, clipboardData, options)
-	}
-
-	const metadata = extractClipboardMetadata(clipboardData)
+	const metadata =
+		extractClipboardMetadata(clipboardData) ??
+		readFileLinkMetadata(editor, clipboardData.getData("text/html"))
 	if (!metadata) {
 		return pasteMarkdownFileLinks(editor, clipboardData, options)
 	}
 
-	return pasteFromMagicMetadata(editor, metadata, attachments, options)
+	const initialDoc = editor.state.doc
+	const selection = { from: editor.state.selection.from, to: editor.state.selection.to }
+	const projectId = options.getCurrentProjectId?.()
+	const identity = getFileReferenceIdentityKey()
+	const fallback = clipboardData.getData("text/plain")
+	void (async () => {
+		try {
+			let unavailableReference = false
+			const [richText, mentions] = await Promise.all([
+				metadata.richText
+					? normalizeFileReferenceContent(JSON.parse(metadata.richText) as JSONContent, {
+							onUnavailable: () => {
+								unavailableReference = true
+							},
+						})
+							.then((content) => resolveUserLinksInRichText(content, attachments))
+							.then((content) => JSON.stringify(content))
+					: undefined,
+				Promise.all(
+					((metadata.mentions ?? []) as MentionListItem[]).map(async (item) => {
+						const attrs = await normalizeFileReferenceMention(item.attrs)
+						if (!attrs) unavailableReference = true
+						return attrs ? { ...item, attrs } : null
+					}),
+				).then((items) => items.filter((item) => item !== null)),
+			])
+			if (
+				identity !== getFileReferenceIdentityKey() ||
+				projectId !== options.getCurrentProjectId?.()
+			)
+				return
+			if (unavailableReference)
+				magicToast.error(i18n.t("super:common.fileNotFoundOrLoadFailed"))
+			runActiveEditor(editor, (active) => {
+				if (!initialDoc.eq(active.state.doc)) {
+					active.commands.insertContent({ type: "text", text: fallback })
+					return
+				}
+				if (
+					!pasteFromMagicMetadata(
+						active,
+						{ ...metadata, richText, mentions },
+						attachments,
+						options,
+						selection,
+					)
+				)
+					active.commands.insertContentAt(selection, { type: "text", text: fallback })
+			})
+		} catch (error) {
+			console.warn("File references in clipboard could not be resolved", error)
+			if (
+				identity !== getFileReferenceIdentityKey() ||
+				projectId !== options.getCurrentProjectId?.()
+			)
+				return
+			runActiveEditor(editor, (active) => {
+				if (initialDoc.eq(active.state.doc))
+					active.commands.insertContentAt(selection, { type: "text", text: fallback })
+				else active.commands.insertContent({ type: "text", text: fallback })
+			})
+		}
+	})()
+	return true
 }
