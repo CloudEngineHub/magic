@@ -30,6 +30,7 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 
 vi.mock("../hooks/useMicroAppsPage", () => ({
 	useMicroAppsPage: mocks.useMicroAppsPage,
+	isPublishedShareScope: (scope: string) => scope === "recent" || scope === "accessible",
 }))
 
 vi.mock("../components/MicroAppCreatePrompt", () => ({
@@ -137,6 +138,7 @@ describe("MicroAppsPage", () => {
 				},
 			],
 			scope: "all",
+			availableScopes: ["all", "created", "collaborated", "accessible", "recent"],
 			setScope: mocks.setScope,
 			keyword: "",
 			setKeyword: mocks.setKeyword,
@@ -298,6 +300,57 @@ describe("MicroAppsPage", () => {
 		expect(mocks.setScope).toHaveBeenCalledWith("collaborated")
 		expect(mocks.setKeyword).toHaveBeenCalledWith("客户")
 		expect(mocks.loadMore).toHaveBeenCalled()
+	})
+
+	it("hides the collaborated scope in a personal organization", () => {
+		mocks.useMicroAppsPage.mockReturnValue({
+			...mocks.useMicroAppsPage(),
+			availableScopes: ["all", "created", "accessible", "recent"],
+		})
+
+		render(<MicroAppsPage />)
+
+		expect(screen.queryByTestId("micro-apps-scope-collaborated")).not.toBeInTheDocument()
+		expect(screen.getByTestId("micro-apps-scope-all")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-apps-scope-created")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-apps-scope-accessible")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-apps-scope-recent")).toBeInTheDocument()
+	})
+
+	it("switches to the accessible scope tab", () => {
+		render(<MicroAppsPage />)
+
+		fireEvent.click(screen.getByTestId("micro-apps-scope-accessible"))
+
+		expect(mocks.setScope).toHaveBeenCalledWith("accessible")
+	})
+
+	it("shows the published empty copy on the accessible tab", () => {
+		mocks.useMicroAppsPage.mockReturnValue({
+			...mocks.useMicroAppsPage(),
+			scope: "accessible",
+			apps: [],
+		})
+
+		render(<MicroAppsPage />)
+
+		expect(screen.getByText("microAppsPage.publishedEmptyTitle")).toBeInTheDocument()
+		expect(screen.getByText("microAppsPage.publishedEmptyDescription")).toBeInTheDocument()
+	})
+
+	it("opens an accessible app in the published share window", () => {
+		const openSpy = vi.spyOn(window, "open").mockImplementation(() => null)
+		mocks.useMicroAppsPage.mockReturnValue({
+			...mocks.useMicroAppsPage(),
+			scope: "accessible",
+		})
+
+		render(<MicroAppsPage />)
+		fireEvent.click(screen.getByTestId("micro-apps-app-app-1"))
+
+		expect(openSpy).toHaveBeenCalledWith("/micro-app/app-1", "_blank", "noopener,noreferrer")
+		expect(mocks.navigate).not.toHaveBeenCalled()
+		openSpy.mockRestore()
 	})
 
 	it("enters the new app after the creation prompt returns app_id", async () => {

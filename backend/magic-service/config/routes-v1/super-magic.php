@@ -4,6 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
+
 use App\Interfaces\Middleware\Auth\OptionalSandboxUserAuthMiddleware;
 use App\Interfaces\Middleware\Auth\SandboxUserAuthMiddleware;
 use App\Interfaces\Middleware\Auth\UserAuthMiddleware;
@@ -171,6 +172,8 @@ Router::addGroup(
         Router::addGroup('/micro-apps', static function () {
             // 获取当前用户可访问的微应用列表
             Router::get('/queries', [MicroAppProjectApi::class, 'list']);
+            // Mention 面板可引用的已发布微应用
+            Router::get('/mention', [MicroAppProjectApi::class, 'mentionList']);
             // 编辑微应用名称和封面
             Router::put('/{appId}', [MicroAppProjectApi::class, 'update']);
             // 删除微应用及其对应项目

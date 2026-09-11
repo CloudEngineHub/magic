@@ -21,6 +21,16 @@ describe("SuperMagic micro app API", () => {
 			keyword: "客户跟进",
 			scope: "collaborated",
 		})
+		await api.getMicroApps({
+			page: 1,
+			page_size: 20,
+			scope: "accessible",
+		})
+		await api.getMentionMicroApps({
+			page: 1,
+			page_size: 100,
+			keyword: "客户",
+		})
 
 		expect(client.get).toHaveBeenNthCalledWith(
 			1,
@@ -29,6 +39,16 @@ describe("SuperMagic micro app API", () => {
 		expect(client.get).toHaveBeenNthCalledWith(
 			2,
 			"/api/v1/super-agent/micro-apps/queries?page=2&page_size=50&keyword=%E5%AE%A2%E6%88%B7%E8%B7%9F%E8%BF%9B&scope=collaborated",
+			{ parseJsonLargeIntAsString: true },
+		)
+		expect(client.get).toHaveBeenNthCalledWith(
+			3,
+			"/api/v1/super-agent/micro-apps/queries?page=1&page_size=20&keyword=&scope=accessible",
+			{ parseJsonLargeIntAsString: true },
+		)
+		expect(client.get).toHaveBeenNthCalledWith(
+			4,
+			"/api/v1/super-agent/micro-apps/mention?page=1&page_size=100&keyword=%E5%AE%A2%E6%88%B7",
 			{ parseJsonLargeIntAsString: true },
 		)
 	})

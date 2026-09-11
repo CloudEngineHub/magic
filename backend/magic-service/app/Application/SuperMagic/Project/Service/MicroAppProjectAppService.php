@@ -23,6 +23,7 @@ use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppListScope;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppPublishStatus;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Event\ProjectUpdatedEvent;
@@ -46,6 +47,8 @@ use Throwable;
 
 class MicroAppProjectAppService extends AbstractAppService
 {
+    private const MENTION_SOURCE_FETCH_LIMIT = 1000;
+
     public function __construct(
         private readonly MicroAppRepositoryInterface $microAppRepository,
         private readonly ProjectRepositoryInterface $projectRepository,
@@ -312,45 +315,23 @@ class MicroAppProjectAppService extends AbstractAppService
     public function publishedList(RequestContext $requestContext, PublishedMicroAppListRequestDTO $requestDTO): array
     {
         $authorization = $requestContext->getUserAuthorization();
-        $records = $this->microAppRepository->findPublishedByOrganization($authorization->getOrganizationCode());
-
-        $projectIds = array_values(array_unique(array_map(
-            static fn (MicroAppEntity $record): int => $record->getProjectId(),
-            $records
-        )));
-        $projects = [];
-        foreach ($this->projectRepository->findByIds($projectIds) as $project) {
-            $projects[$project->getId()] = $project;
-        }
+        $accessibleApps = $this->collectShareAccessiblePublishedApps(
+            $authorization->getOrganizationCode(),
+            $authorization->getId(),
+            $requestDTO->getKeyword(),
+        );
 
         $items = [];
-        $keyword = $requestDTO->getKeyword();
-        foreach ($records as $record) {
-            $project = $projects[$record->getProjectId()] ?? null;
-            if ($project === null || ! $this->isMicroAppProject($project)) {
-                continue;
-            }
-            if ($keyword !== '' && ! $this->containsKeyword($project->getProjectName(), $keyword)) {
-                continue;
-            }
-
-            $shareEntity = $this->resourceShareDomainService->getValidShareByResourceId($record->getResourceId());
-            if ($shareEntity === null) {
-                continue;
-            }
-            if (! $this->canAccessShare($shareEntity, $authorization->getId(), $authorization->getOrganizationCode())) {
-                continue;
-            }
-
+        foreach ($accessibleApps as $accessibleApp) {
             $items[] = [
-                'project' => $this->responseFormatter->formatProject($project),
+                'project' => $this->responseFormatter->formatProject($accessibleApp['project']),
                 'publish' => $this->responseFormatter->formatPublishRecord(
-                    $record,
-                    $project->getProjectName(),
-                    $shareEntity->getExtra(),
-                    $shareEntity->getExpireDays(),
-                    $shareEntity->getExpireAt(),
-                    $shareEntity->getDefaultOpenFileId() !== null ? (string) $shareEntity->getDefaultOpenFileId() : null,
+                    $accessibleApp['record'],
+                    $accessibleApp['project']->getProjectName(),
+                    $accessibleApp['share']->getExtra(),
+                    $accessibleApp['share']->getExpireDays(),
+                    $accessibleApp['share']->getExpireAt(),
+                    $accessibleApp['share']->getDefaultOpenFileId() !== null ? (string) $accessibleApp['share']->getDefaultOpenFileId() : null,
                 ),
             ];
         }
@@ -378,6 +359,56 @@ class MicroAppProjectAppService extends AbstractAppService
             $userId,
             true
         );
+
+        if ($requestDTO->getScope() === MicroAppListScope::Accessible) {
+            $result = $this->paginateShareAccessiblePublishedApps(
+                $authorization,
+                $requestDTO->getKeyword(),
+                $requestDTO->getPage(),
+                $requestDTO->getPageSize(),
+            );
+        } else {
+            $organizationCodes = $this->getAccessibleOrganizationCodes(
+                $userId,
+                $departmentIds,
+                $authorization->getOrganizationCode()
+            );
+            $organizationCodes = array_values(array_unique(array_merge(
+                [$authorization->getOrganizationCode()],
+                $organizationCodes,
+            )));
+
+            $result = $this->microAppRepository->paginateAccessible(
+                $userId,
+                array_map('strval', $departmentIds),
+                $organizationCodes,
+                $requestDTO->getScope(),
+                $requestDTO->getKeyword(),
+                $requestDTO->getPage(),
+                $requestDTO->getPageSize()
+            );
+        }
+
+        return $this->formatAccessibleListResult(
+            $result,
+            $userId,
+            array_map('strval', $departmentIds),
+            $requestDTO->getPage(),
+            $requestDTO->getPageSize(),
+        );
+    }
+
+    public function mentionList(RequestContext $requestContext, PublishedMicroAppListRequestDTO $requestDTO): array
+    {
+        $authorization = $requestContext->getUserAuthorization();
+        $dataIsolation = $this->createDataIsolation($authorization);
+        $userId = $authorization->getId();
+        $departmentIds = $this->departmentUserDomainService->getDepartmentIdsByUserId(
+            $dataIsolation,
+            $userId,
+            true
+        );
+        $stringDepartmentIds = array_map('strval', $departmentIds);
         $organizationCodes = $this->getAccessibleOrganizationCodes(
             $userId,
             $departmentIds,
@@ -388,50 +419,36 @@ class MicroAppProjectAppService extends AbstractAppService
             $organizationCodes,
         )));
 
-        $result = $this->microAppRepository->paginateAccessible(
+        $owned = $this->microAppRepository->paginateAccessible(
             $userId,
-            array_map('strval', $departmentIds),
+            $stringDepartmentIds,
             $organizationCodes,
-            $requestDTO->getScope(),
+            MicroAppListScope::All,
             $requestDTO->getKeyword(),
-            $requestDTO->getPage(),
-            $requestDTO->getPageSize()
+            1,
+            self::MENTION_SOURCE_FETCH_LIMIT,
+            true
         );
+        $shared = $this->paginateShareAccessiblePublishedApps(
+            $authorization,
+            $requestDTO->getKeyword(),
+            1,
+            self::MENTION_SOURCE_FETCH_LIMIT
+        );
+        $merged = $this->mergeMentionListRows($owned['list'] ?? [], $shared['list'] ?? []);
+        $page = $requestDTO->getPage();
+        $pageSize = $requestDTO->getPageSize();
 
-        $coverUrls = $this->responseFormatter->resolveCoverUrls($result['list']);
-        $projectIds = array_values(array_unique(array_map(
-            static fn (array $row): int => (int) ($row['project_id'] ?? 0),
-            $result['list']
-        )));
-        $projectIds = array_values(array_filter($projectIds));
-        $targetIds = array_values(array_unique(array_merge([$userId], array_map('strval', $departmentIds))));
-        $userRoles = $this->projectMemberDomainService->getUserHighestRolesInProjects($projectIds, $targetIds);
-        $items = [];
-        foreach ($result['list'] as $row) {
-            $appId = (string) ($row['app_id'] ?? '');
-            $projectId = (int) ($row['project_id'] ?? 0);
-            $isOwner = (string) ($row['project_owner_id'] ?? '') === $userId;
-            $coverKey = (string) ($row['cover_file_key'] ?? '');
-            $items[] = [
-                'app_id' => $appId,
-                'project_id' => (string) $projectId,
-                'app_name' => (string) ($row['app_name'] ?? ''),
-                'app_description' => (string) ($row['app_description'] ?? ''),
-                'creator_id' => (string) ($row['creator_id'] ?? ''),
-                'cover_url' => $coverUrls[$this->responseFormatter->coverUrlMapKey($row, $coverKey)] ?? '',
-                'publish_status' => (string) ($row['publish_status'] ?? MicroAppPublishStatus::Unpublished->value),
-                'updated_at' => ($row['updated_at'] ?? null) !== null ? (string) $row['updated_at'] : null,
-                'user_role' => $isOwner ? MemberRole::OWNER->value : ($userRoles[$projectId] ?? null),
-                'can_delete' => $isOwner,
-            ];
-        }
-
-        return [
-            'list' => $items,
-            'total' => (int) $result['total'],
-            'page' => $requestDTO->getPage(),
-            'page_size' => $requestDTO->getPageSize(),
-        ];
+        return $this->formatAccessibleListResult(
+            [
+                'total' => count($merged),
+                'list' => array_slice($merged, ($page - 1) * $pageSize, $pageSize),
+            ],
+            $userId,
+            $stringDepartmentIds,
+            $page,
+            $pageSize,
+        );
     }
 
     public function recordVisit(RequestContext $requestContext, int $appId): array
@@ -510,6 +527,183 @@ class MicroAppProjectAppService extends AbstractAppService
         );
 
         return $roles[$project->getId()] ?? null;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $ownedRows
+     * @param array<int, array<string, mixed>> $sharedRows
+     * @return array<int, array<string, mixed>>
+     */
+    private function mergeMentionListRows(array $ownedRows, array $sharedRows): array
+    {
+        $merged = [];
+        foreach ($ownedRows as $row) {
+            if ((string) ($row['publish_status'] ?? '') !== MicroAppPublishStatus::Published->value) {
+                continue;
+            }
+            $appId = (string) ($row['app_id'] ?? '');
+            if ($appId === '') {
+                continue;
+            }
+            $merged[$appId] = $row;
+        }
+        foreach ($sharedRows as $row) {
+            $appId = (string) ($row['app_id'] ?? '');
+            if ($appId === '' || isset($merged[$appId])) {
+                continue;
+            }
+            $merged[$appId] = $row;
+        }
+
+        $rows = array_values($merged);
+        usort($rows, static function (array $left, array $right): int {
+            $updatedCompare = ((string) ($right['updated_at'] ?? '')) <=> ((string) ($left['updated_at'] ?? ''));
+            if ($updatedCompare !== 0) {
+                return $updatedCompare;
+            }
+
+            return ((int) ($right['app_id'] ?? 0)) <=> ((int) ($left['app_id'] ?? 0));
+        });
+
+        return $rows;
+    }
+
+    /**
+     * @return array{total:int,list:array<int,array<string,mixed>>}
+     */
+    private function paginateShareAccessiblePublishedApps(
+        MagicUserAuthorization $authorization,
+        string $keyword,
+        int $page,
+        int $pageSize
+    ): array {
+        $rows = [];
+        foreach ($this->collectShareAccessiblePublishedApps(
+            $authorization->getOrganizationCode(),
+            $authorization->getId(),
+            $keyword,
+            true,
+        ) as $accessibleApp) {
+            $record = $accessibleApp['record'];
+            $project = $accessibleApp['project'];
+            $rows[] = [
+                'app_id' => $record->getId(),
+                'project_id' => $project->getId(),
+                'app_name' => $project->getProjectName(),
+                'app_description' => $project->getProjectDescription(),
+                'creator_id' => $record->getCreatorId(),
+                'cover_file_key' => $record->getCoverFileKey(),
+                'publish_status' => $record->getPublishStatus(),
+                'updated_at' => $project->getUpdatedAt(),
+                'project_owner_id' => $project->getUserId(),
+                'organization_code' => $project->getUserOrganizationCode(),
+            ];
+        }
+
+        $total = count($rows);
+
+        return [
+            'total' => $total,
+            'list' => array_slice($rows, ($page - 1) * $pageSize, $pageSize),
+        ];
+    }
+
+    /**
+     * @return array<int, array{record: MicroAppEntity, project: ProjectEntity, share: ResourceShareEntity}>
+     */
+    private function collectShareAccessiblePublishedApps(
+        string $organizationCode,
+        string $userId,
+        string $keyword,
+        bool $excludePasswordProtected = false,
+    ): array {
+        $records = $this->microAppRepository->findPublishedByOrganization($organizationCode);
+        $projectIds = array_values(array_unique(array_map(
+            static fn (MicroAppEntity $record): int => $record->getProjectId(),
+            $records
+        )));
+        $projects = [];
+        foreach ($this->projectRepository->findByIds($projectIds) as $project) {
+            $projects[$project->getId()] = $project;
+        }
+
+        $accessibleApps = [];
+        foreach ($records as $record) {
+            $project = $projects[$record->getProjectId()] ?? null;
+            if ($project === null || ! $this->isMicroAppProject($project)) {
+                continue;
+            }
+            if ($keyword !== '' && ! $this->containsKeyword($project->getProjectName(), $keyword)) {
+                continue;
+            }
+
+            $shareEntity = $this->resourceShareDomainService->getValidShareByResourceId($record->getResourceId());
+            if ($shareEntity === null) {
+                continue;
+            }
+            if ($excludePasswordProtected && $shareEntity->getShareType() === ShareAccessType::PasswordProtected->value) {
+                continue;
+            }
+            if (! $this->canAccessShare($shareEntity, $userId, $organizationCode)) {
+                continue;
+            }
+
+            $accessibleApps[] = [
+                'record' => $record,
+                'project' => $project,
+                'share' => $shareEntity,
+            ];
+        }
+
+        return $accessibleApps;
+    }
+
+    /**
+     * @param array{total:int,list:array<int,array<string,mixed>>} $result
+     * @param string[] $departmentIds
+     * @return array{list:array<int,array<string,mixed>>,total:int,page:int,page_size:int}
+     */
+    private function formatAccessibleListResult(
+        array $result,
+        string $userId,
+        array $departmentIds,
+        int $page,
+        int $pageSize
+    ): array {
+        $coverUrls = $this->responseFormatter->resolveCoverUrls($result['list']);
+        $projectIds = array_values(array_unique(array_map(
+            static fn (array $row): int => (int) ($row['project_id'] ?? 0),
+            $result['list']
+        )));
+        $projectIds = array_values(array_filter($projectIds));
+        $targetIds = array_values(array_unique(array_merge([$userId], $departmentIds)));
+        $userRoles = $this->projectMemberDomainService->getUserHighestRolesInProjects($projectIds, $targetIds);
+        $items = [];
+        foreach ($result['list'] as $row) {
+            $appId = (string) ($row['app_id'] ?? '');
+            $projectId = (int) ($row['project_id'] ?? 0);
+            $isOwner = (string) ($row['project_owner_id'] ?? '') === $userId;
+            $coverKey = (string) ($row['cover_file_key'] ?? '');
+            $items[] = [
+                'app_id' => $appId,
+                'project_id' => (string) $projectId,
+                'app_name' => (string) ($row['app_name'] ?? ''),
+                'app_description' => (string) ($row['app_description'] ?? ''),
+                'creator_id' => (string) ($row['creator_id'] ?? ''),
+                'cover_url' => $coverUrls[$this->responseFormatter->coverUrlMapKey($row, $coverKey)] ?? '',
+                'publish_status' => (string) ($row['publish_status'] ?? MicroAppPublishStatus::Unpublished->value),
+                'updated_at' => ($row['updated_at'] ?? null) !== null ? (string) $row['updated_at'] : null,
+                'user_role' => $isOwner ? MemberRole::OWNER->value : ($userRoles[$projectId] ?? null),
+                'can_delete' => $isOwner,
+            ];
+        }
+
+        return [
+            'list' => $items,
+            'total' => (int) $result['total'],
+            'page' => $page,
+            'page_size' => $pageSize,
+        ];
     }
 
     private function canAccessShare(ResourceShareEntity $shareEntity, string $userId, string $organizationCode): bool

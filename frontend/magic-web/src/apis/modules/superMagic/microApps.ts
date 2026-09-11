@@ -5,7 +5,7 @@ import { genRequestUrl } from "@/utils/http"
 
 export type MicroAppPublishShareType = 2 | 4 | 5
 export type MicroAppPublishShareRange = "all" | "designated"
-export type MicroAppListScope = "all" | "created" | "collaborated" | "recent"
+export type MicroAppListScope = "all" | "created" | "collaborated" | "accessible" | "recent"
 
 export interface MicroAppShareExtra {
 	pure_mode?: boolean
@@ -178,6 +178,24 @@ export const generateMicroAppApi = (fetch: HttpClient) => ({
 				"/api/v1/super-agent/micro-apps/queries",
 				{},
 				{ page, page_size, keyword, scope },
+			),
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	getMentionMicroApps(
+		params: {
+			page?: number
+			page_size?: number
+			keyword?: string
+		} = {},
+	) {
+		const { page = 1, page_size = 100, keyword = "" } = params
+		return fetch.get<MicroAppListResponse>(
+			genRequestUrl(
+				"/api/v1/super-agent/micro-apps/mention",
+				{},
+				{ page, page_size, keyword },
 			),
 			{ parseJsonLargeIntAsString: true },
 		)

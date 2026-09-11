@@ -49,6 +49,21 @@ class PublishedMicroAppResolver
         return [$record, $shareEntity];
     }
 
+    public function canAccessShare(ResourceShareEntity $shareEntity, string $userId, string $organizationCode): bool
+    {
+        try {
+            $this->resourceShareDomainService->validateShareAccess(
+                $shareEntity,
+                $userId,
+                $organizationCode,
+                $shareEntity->getShareCode()
+            );
+            return true;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
     public function getProjectName(int $appId): string
     {
         $publishedMicroApp = $this->findPublished($appId);

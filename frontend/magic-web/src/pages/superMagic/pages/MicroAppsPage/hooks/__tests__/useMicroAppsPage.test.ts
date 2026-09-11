@@ -1,12 +1,19 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { normalizeMicroAppListResponse, useMicroAppsPage } from "../useMicroAppsPage"
+import {
+	getMicroAppAvailableScopes,
+	normalizeMicroAppListResponse,
+	normalizeMicroAppListScope,
+	isPublishedShareScope,
+	useMicroAppsPage,
+} from "../useMicroAppsPage"
 
 const mocks = vi.hoisted(() => ({
 	getMicroAppWorkspace: vi.fn(),
 	getMicroApps: vi.fn(),
 	updateMicroApp: vi.fn(),
 	deleteMicroApp: vi.fn(),
+	user: { isPersonalOrganization: false },
 }))
 
 vi.mock("@/apis", () => ({
@@ -18,9 +25,16 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
+vi.mock("@/models/user", () => ({
+	userStore: {
+		user: mocks.user,
+	},
+}))
+
 describe("useMicroAppsPage", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		mocks.user.isPersonalOrganization = false
 		mocks.getMicroAppWorkspace.mockResolvedValue({ id: "workspace-1", name: "Micro Apps" })
 		mocks.getMicroApps.mockResolvedValue({
 			list: [
@@ -229,5 +243,69 @@ describe("useMicroAppsPage", () => {
 		await waitFor(() => expect(result.current.loading).toBe(false))
 		expect(result.current.apps).toEqual([])
 		expect(result.current.hasMore).toBe(false)
+	})
+
+	it("treats recent and accessible scopes as published share views", () => {
+		expect(isPublishedShareScope("recent")).toBe(true)
+		expect(isPublishedShareScope("accessible")).toBe(true)
+		expect(isPublishedShareScope("all")).toBe(false)
+		expect(isPublishedShareScope("created")).toBe(false)
+	})
+
+	it("hides collaborated from personal organization scopes", () => {
+		expect(getMicroAppAvailableScopes(true)).toEqual(["all", "created", "accessible", "recent"])
+		expect(getMicroAppAvailableScopes(false)).toContain("collaborated")
+		expect(normalizeMicroAppListScope("collaborated", true)).toBe("all")
+		expect(normalizeMicroAppListScope("collaborated", false)).toBe("collaborated")
+	})
+
+	it("ignores collaborated scope in a personal organization", async () => {
+		mocks.user.isPersonalOrganization = true
+		const { result } = renderHook(() => useMicroAppsPage())
+		await waitFor(() => expect(result.current.loading).toBe(false))
+
+		act(() => {
+			result.current.setScope("collaborated")
+		})
+
+		expect(result.current.scope).toBe("all")
+		expect(result.current.availableScopes).not.toContain("collaborated")
+		expect(mocks.getMicroApps).toHaveBeenLastCalledWith({
+			page: 1,
+			page_size: 20,
+			keyword: "",
+			scope: "all",
+		})
+	})
+
+	it("falls back from collaborated when switching to a personal organization", async () => {
+		const { result, rerender } = renderHook(() => useMicroAppsPage())
+		await waitFor(() => expect(result.current.loading).toBe(false))
+
+		act(() => {
+			result.current.setScope("collaborated")
+		})
+		await waitFor(() =>
+			expect(mocks.getMicroApps).toHaveBeenLastCalledWith({
+				page: 1,
+				page_size: 20,
+				keyword: "",
+				scope: "collaborated",
+			}),
+		)
+
+		mocks.user.isPersonalOrganization = true
+		rerender()
+
+		expect(result.current.scope).toBe("all")
+		expect(result.current.availableScopes).not.toContain("collaborated")
+		await waitFor(() =>
+			expect(mocks.getMicroApps).toHaveBeenLastCalledWith({
+				page: 1,
+				page_size: 20,
+				keyword: "",
+				scope: "all",
+			}),
+		)
 	})
 })

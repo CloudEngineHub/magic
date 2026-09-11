@@ -1,11 +1,10 @@
 import { useCallback } from "react"
+import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { ArrowLeft, Loader2, Search } from "lucide-react"
-import type { MicroAppListScope } from "@/apis/modules/superMagic"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
 import {
 	MicroAppEmptyIllustration,
 	MicroAppSearchEmptyIllustration,
@@ -19,9 +18,10 @@ import useNavigate from "@/routes/hooks/useNavigate"
 import MicroAppCard from "./components/MicroAppCard"
 import MicroAppListActionDialogs from "./components/MicroAppListActionDialogs"
 import MicroAppLoadErrorState from "./components/MicroAppLoadErrorState"
+import MicroAppScopeTabs from "./components/MicroAppScopeTabs"
 import { useMicroAppListItemActions } from "./hooks/useMicroAppListItemActions"
 import { useMicroAppCollaboratorManagement } from "./hooks/useMicroAppCollaboratorManagement"
-import { useMicroAppsPage } from "./hooks/useMicroAppsPage"
+import { isPublishedShareScope, useMicroAppsPage } from "./hooks/useMicroAppsPage"
 
 function formatAppTime(value: string | null | undefined): string {
 	if (!value) return ""
@@ -45,12 +45,13 @@ function MobileGridLoading() {
 	)
 }
 
-export default function MicroAppsListPageMobile() {
+export default observer(function MicroAppsListPageMobile() {
 	const { t } = useTranslation("super")
 	const navigate = useNavigate({ fallbackRoute: { name: RouteName.MicroApps } })
 	const {
 		apps,
 		scope,
+		availableScopes,
 		setScope,
 		keyword,
 		setKeyword,
@@ -68,7 +69,7 @@ export default function MicroAppsListPageMobile() {
 
 	const handleOpenApp = useCallback(
 		(appId: string) => {
-			if (scope === "recent") {
+			if (isPublishedShareScope(scope)) {
 				const app = apps.find((item) => item.app_id === appId)
 				if (app) itemActions.openInNewWindow(app)
 				return
@@ -127,34 +128,16 @@ export default function MicroAppsListPageMobile() {
 								data-testid="micro-apps-mobile-search"
 							/>
 						</div>
-						<Tabs
-							value={scope}
-							onValueChange={(value) => setScope(value as MicroAppListScope)}
-						>
-							<TabsList className="grid h-10 w-full grid-cols-4 rounded-xl">
-								<TabsTrigger value="all" data-testid="micro-apps-mobile-scope-all">
-									{t("microAppsPage.scopeAll")}
-								</TabsTrigger>
-								<TabsTrigger
-									value="created"
-									data-testid="micro-apps-mobile-scope-created"
-								>
-									{t("microAppsPage.scopeCreated")}
-								</TabsTrigger>
-								<TabsTrigger
-									value="collaborated"
-									data-testid="micro-apps-mobile-scope-collaborated"
-								>
-									{t("microAppsPage.scopeCollaborated")}
-								</TabsTrigger>
-								<TabsTrigger
-									value="recent"
-									data-testid="micro-apps-mobile-scope-recent"
-								>
-									{t("microAppsPage.scopeRecent")}
-								</TabsTrigger>
-							</TabsList>
-						</Tabs>
+						<div className="-mx-1 overflow-x-auto">
+							{/* Scroll instead of shrinking tabs on mobile. */}
+							<MicroAppScopeTabs
+								value={scope}
+								availableScopes={availableScopes}
+								onChange={setScope}
+								testIdPrefix="micro-apps-mobile-scope"
+								className="h-10"
+							/>
+						</div>
 					</div>
 
 					{loading ? <MobileGridLoading /> : null}
@@ -176,12 +159,16 @@ export default function MicroAppsListPageMobile() {
 								<p className="text-base font-medium text-foreground">
 									{keyword
 										? t("microAppsPage.noSearchResults")
-										: t("microAppsPage.emptyTitle")}
+										: scope === "accessible"
+											? t("microAppsPage.publishedEmptyTitle")
+											: t("microAppsPage.emptyTitle")}
 								</p>
 								<p className="text-sm text-muted-foreground">
 									{keyword
 										? t("microAppsPage.noSearchResultsDescription")
-										: t("microAppsPage.emptyDescription")}
+										: scope === "accessible"
+											? t("microAppsPage.publishedEmptyDescription")
+											: t("microAppsPage.emptyDescription")}
 								</p>
 							</div>
 						</div>
@@ -263,4 +250,4 @@ export default function MicroAppsListPageMobile() {
 			{collaboratorManagement.CollaboratorUpdatePanel}
 		</div>
 	)
-}
+})

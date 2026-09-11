@@ -39,6 +39,7 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 
 vi.mock("../hooks/useMicroAppsPage", () => ({
 	useMicroAppsPage: mocks.useMicroAppsPage,
+	isPublishedShareScope: (scope: string) => scope === "recent" || scope === "accessible",
 }))
 
 vi.mock("../components/MicroAppCard", () => ({
@@ -128,6 +129,7 @@ describe("MicroAppsListPageMobile", () => {
 				},
 			],
 			scope: "all",
+			availableScopes: ["all", "created", "collaborated", "accessible", "recent"],
 			setScope: mocks.setScope,
 			keyword: "",
 			setKeyword: mocks.setKeyword,
@@ -213,6 +215,29 @@ describe("MicroAppsListPageMobile", () => {
 		expect(mocks.setScope).toHaveBeenCalledWith("collaborated")
 		expect(mocks.setKeyword).toHaveBeenCalledWith("客户")
 		expect(mocks.loadMore).toHaveBeenCalled()
+	})
+
+	it("hides the collaborated scope in a personal organization", () => {
+		mocks.useMicroAppsPage.mockReturnValue({
+			...mocks.useMicroAppsPage(),
+			availableScopes: ["all", "created", "accessible", "recent"],
+		})
+
+		render(<MicroAppsListPageMobile />)
+
+		expect(screen.queryByTestId("micro-apps-mobile-scope-collaborated")).not.toBeInTheDocument()
+		expect(screen.getByTestId("micro-apps-mobile-scope-all")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-apps-mobile-scope-created")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-apps-mobile-scope-accessible")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-apps-mobile-scope-recent")).toBeInTheDocument()
+	})
+
+	it("switches to the accessible scope tab", () => {
+		render(<MicroAppsListPageMobile />)
+
+		fireEvent.click(screen.getByTestId("micro-apps-mobile-scope-accessible"))
+
+		expect(mocks.setScope).toHaveBeenCalledWith("accessible")
 	})
 
 	it("returns to the creation page through history with a route fallback", () => {

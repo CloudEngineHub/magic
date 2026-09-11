@@ -48,6 +48,10 @@ vi.mock("@/apis", () => ({
 	GlobalApi: {
 		getSettingsGlobalData: vi.fn(),
 	},
+	SuperMagicApi: {
+		getCrewList: vi.fn().mockResolvedValue({ list: [] }),
+		getMentionMicroApps: vi.fn().mockResolvedValue({ list: [] }),
+	},
 }))
 
 vi.mock("@/pages/superMagic/components/MessageList/components/MessageAttachment/utils", () => ({
@@ -870,8 +874,10 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 							id: "hero",
 							type: ElementTypeEnum.Image,
 							name: "Hero Layer",
-							src: "./images/hero.png",
 							zIndex: 1,
+							contents: [{ contentId: "main", src: "./images/hero.png" }],
+							activeContentId: "main",
+							mainContentId: "main",
 						},
 					],
 				}),

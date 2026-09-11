@@ -1,6 +1,41 @@
 import { makeAutoObservable } from "mobx"
 import { SuperMagicApi } from "@/apis"
+import type { MicroAppListItem } from "@/apis/modules/superMagic"
 import { MentionItemType, type MentionItem, type MicroAppMentionData } from "../../../types"
+
+const MENTION_PAGE_SIZE = 100
+
+function listFromResponse(response: unknown): MicroAppListItem[] {
+	if (!response || typeof response !== "object") return []
+	const list = (response as { list?: unknown }).list
+	return Array.isArray(list) ? (list as MicroAppListItem[]) : []
+}
+
+function toMentionItem(item: MicroAppListItem): MentionItem | null {
+	if (item.publish_status !== "published") return null
+	const appId = String(item.app_id ?? "")
+	if (!appId) return null
+	return {
+		id: appId,
+		type: MentionItemType.MICRO_APP,
+		name: item.app_name,
+		icon: item.cover_url,
+		hasChildren: false,
+		isFolder: false,
+		data: { app_id: appId, app_name: item.app_name } as MicroAppMentionData,
+	}
+}
+
+function mapMentionItems(response: unknown): MentionItem[] {
+	const seen = new Set<string>()
+	return listFromResponse(response)
+		.map(toMentionItem)
+		.filter((item): item is MentionItem => {
+			if (!item || seen.has(item.id)) return false
+			seen.add(item.id)
+			return true
+		})
+}
 
 export class MentionPanelMicroAppsStore {
 	items: MentionItem[] = []
@@ -14,29 +49,14 @@ export class MentionPanelMicroAppsStore {
 	async fetchItems() {
 		if (this.loaded) return
 		if (this.loading) return this.loading
-		if (typeof SuperMagicApi.getMicroApps !== "function") return
+		if (typeof SuperMagicApi?.getMentionMicroApps !== "function") return
 		this.loading = (async () => {
 			try {
-				const response = await SuperMagicApi.getMicroApps({
+				const response = await SuperMagicApi.getMentionMicroApps({
 					page: 1,
-					page_size: 100,
-					scope: "all",
+					page_size: MENTION_PAGE_SIZE,
 				})
-				const list = Array.isArray(response?.list) ? response.list : []
-				this.items = list
-					.filter((item) => item.publish_status === "published")
-					.map((item) => {
-						const appId = String(item.app_id)
-						return {
-							id: appId,
-							type: MentionItemType.MICRO_APP,
-							name: item.app_name,
-							icon: item.cover_url,
-							hasChildren: false,
-							isFolder: false,
-							data: { app_id: appId, app_name: item.app_name } as MicroAppMentionData,
-						}
-					})
+				this.items = mapMentionItems(response)
 				this.loaded = true
 			} catch {
 				this.items = []
@@ -53,8 +73,21 @@ export class MentionPanelMicroAppsStore {
 		await this.fetchItems()
 		return this.items
 	}
-	searchItems(query: string, matchesQuery: (target: string, query: string) => boolean) {
-		void this.fetchItems().catch(() => undefined)
-		return this.items.filter((item) => matchesQuery(item.name, query))
+
+	async searchItems(query: string, matchesQuery: (target: string, query: string) => boolean) {
+		if (typeof SuperMagicApi?.getMentionMicroApps !== "function") {
+			return this.items.filter((item) => matchesQuery(item.name, query))
+		}
+		try {
+			const response = await SuperMagicApi.getMentionMicroApps({
+				page: 1,
+				page_size: MENTION_PAGE_SIZE,
+				keyword: query,
+			})
+			return mapMentionItems(response).filter((item) => matchesQuery(item.name, query))
+		} catch {
+			await this.fetchItems().catch(() => undefined)
+			return this.items.filter((item) => matchesQuery(item.name, query))
+		}
 	}
 }

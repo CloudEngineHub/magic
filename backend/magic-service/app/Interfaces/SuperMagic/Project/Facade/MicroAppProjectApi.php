@@ -86,6 +86,15 @@ class MicroAppProjectApi extends AbstractApi
         return $this->microAppProjectAppService->list($requestContext, $requestDTO);
     }
 
+    public function mentionList(RequestContext $requestContext): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+
+        $requestDTO = PublishedMicroAppListRequestDTO::fromRequest($this->request);
+
+        return $this->microAppProjectAppService->mentionList($requestContext, $requestDTO);
+    }
+
     public function recordVisit(RequestContext $requestContext, int $appId): array
     {
         $requestContext->setUserAuthorization($this->getAuthorization());

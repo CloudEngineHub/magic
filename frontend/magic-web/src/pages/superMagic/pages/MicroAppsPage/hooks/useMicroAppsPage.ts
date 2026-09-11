@@ -1,15 +1,46 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { SuperMagicApi } from "@/apis"
 import type {
 	MicroAppListItem as ApiMicroAppListItem,
 	MicroAppListResponse as ApiMicroAppListResponse,
 	MicroAppListScope,
 } from "@/apis/modules/superMagic"
+import { userStore } from "@/models/user"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
 
 const MICRO_APP_PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 250
+const PUBLISHED_SHARE_SCOPES = new Set<MicroAppListScope>(["recent", "accessible"])
+const MICRO_APP_LIST_SCOPES: MicroAppListScope[] = [
+	"all",
+	"created",
+	"collaborated",
+	"accessible",
+	"recent",
+]
+const MICRO_APP_PERSONAL_LIST_SCOPES: MicroAppListScope[] = [
+	"all",
+	"created",
+	"accessible",
+	"recent",
+]
+
+export function isPublishedShareScope(scope: MicroAppListScope): boolean {
+	return PUBLISHED_SHARE_SCOPES.has(scope)
+}
+
+export function getMicroAppAvailableScopes(isPersonalOrganization: boolean): MicroAppListScope[] {
+	return isPersonalOrganization ? MICRO_APP_PERSONAL_LIST_SCOPES : MICRO_APP_LIST_SCOPES
+}
+
+export function normalizeMicroAppListScope(
+	scope: MicroAppListScope,
+	isPersonalOrganization: boolean,
+): MicroAppListScope {
+	const availableScopes = getMicroAppAvailableScopes(isPersonalOrganization)
+	return availableScopes.includes(scope) ? scope : "all"
+}
 
 interface MicroAppListItem extends ApiMicroAppListItem {
 	can_delete: boolean
@@ -103,7 +134,7 @@ export function useMicroAppWorkspace(refreshVersion = 0) {
 
 export function useMicroAppsPage() {
 	const [apps, setApps] = useState<MicroAppListItem[]>([])
-	const [scope, setScope] = useState<MicroAppListScope>("all")
+	const [scope, setScopeState] = useState<MicroAppListScope>("all")
 	const [keyword, setKeyword] = useState("")
 	const [page, setPage] = useState(1)
 	const [total, setTotal] = useState(0)
@@ -113,6 +144,22 @@ export function useMicroAppsPage() {
 	const [refreshVersion, setRefreshVersion] = useState(0)
 	const requestIdRef = useRef(0)
 	const workspace = useMicroAppWorkspace(refreshVersion)
+	const isPersonalOrganization = userStore.user.isPersonalOrganization
+	const availableScopes = useMemo(
+		() => getMicroAppAvailableScopes(isPersonalOrganization),
+		[isPersonalOrganization],
+	)
+	const resolvedScope = normalizeMicroAppListScope(scope, isPersonalOrganization)
+
+	useEffect(() => {
+		if (scope === resolvedScope) return
+		setScopeState(resolvedScope)
+	}, [resolvedScope, scope])
+
+	const setScope = useCallback((nextScope: MicroAppListScope) => {
+		setScopeState(normalizeMicroAppListScope(nextScope, userStore.user.isPersonalOrganization))
+	}, [])
+
 	useEffect(() => {
 		const requestId = ++requestIdRef.current
 		let active = true
@@ -127,7 +174,7 @@ export function useMicroAppsPage() {
 					page: 1,
 					page_size: MICRO_APP_PAGE_SIZE,
 					keyword: keyword.trim(),
-					scope,
+					scope: resolvedScope,
 				})
 				if (!active || requestId !== requestIdRef.current) return
 
@@ -149,7 +196,7 @@ export function useMicroAppsPage() {
 			active = false
 			window.clearTimeout(timer)
 		}
-	}, [keyword, refreshVersion, scope])
+	}, [keyword, refreshVersion, resolvedScope])
 
 	const loadMore = useCallback(async () => {
 		if (loading || loadingMore || apps.length >= total) return
@@ -161,7 +208,7 @@ export function useMicroAppsPage() {
 				page: page + 1,
 				page_size: MICRO_APP_PAGE_SIZE,
 				keyword: keyword.trim(),
-				scope,
+				scope: resolvedScope,
 			})
 			if (requestId !== requestIdRef.current) return
 
@@ -174,7 +221,7 @@ export function useMicroAppsPage() {
 		} finally {
 			if (requestId === requestIdRef.current) setLoadingMore(false)
 		}
-	}, [apps.length, keyword, loading, loadingMore, page, scope, total])
+	}, [apps.length, keyword, loading, loadingMore, page, resolvedScope, total])
 
 	const renameApp = useCallback(async (appId: string, appName: string) => {
 		const metadata = await SuperMagicApi.updateMicroApp(appId, { app_name: appName })
@@ -208,7 +255,8 @@ export function useMicroAppsPage() {
 	return {
 		workspace,
 		apps,
-		scope,
+		scope: resolvedScope,
+		availableScopes,
 		setScope,
 		keyword,
 		setKeyword,

@@ -1,13 +1,12 @@
 import { lazy, Suspense, useCallback, useRef, useState } from "react"
 import { motion, useReducedMotion } from "framer-motion"
+import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Loader2, Plus, Search } from "lucide-react"
-import type { MicroAppListScope } from "@/apis/modules/superMagic"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
-import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import {
 	MicroAppEmptyIllustration,
@@ -26,9 +25,10 @@ import MicroAppHeroTitle from "./components/MicroAppHeroTitle"
 import MicroAppKeyboardCable from "./components/MicroAppKeyboardCable"
 import MicroAppListActionDialogs from "./components/MicroAppListActionDialogs"
 import MicroAppLoadErrorState from "./components/MicroAppLoadErrorState"
+import MicroAppScopeTabs from "./components/MicroAppScopeTabs"
 import { useMicroAppListItemActions } from "./hooks/useMicroAppListItemActions"
 import { useMicroAppCollaboratorManagement } from "./hooks/useMicroAppCollaboratorManagement"
-import { useMicroAppsPage } from "./hooks/useMicroAppsPage"
+import { isPublishedShareScope, useMicroAppsPage } from "./hooks/useMicroAppsPage"
 import { useCreateMicroApp } from "./hooks/useCreateMicroApp"
 
 const MicroAppsPageMobile = lazy(() => import("./index.mobile"))
@@ -81,13 +81,14 @@ function MicroAppsGridLoading() {
 	)
 }
 
-function MicroAppsPageDesktop() {
+const MicroAppsPageDesktop = observer(function MicroAppsPageDesktop() {
 	const { t } = useTranslation("super")
 	const navigate = useNavigate()
 	const {
 		workspace,
 		apps,
 		scope,
+		availableScopes,
 		setScope,
 		keyword,
 		setKeyword,
@@ -120,7 +121,7 @@ function MicroAppsPageDesktop() {
 
 	const handleOpenApp = useCallback(
 		(appId: string) => {
-			if (scope === "recent") {
+			if (isPublishedShareScope(scope)) {
 				const app = apps.find((item) => item.app_id === appId)
 				if (app) itemActions.openInNewWindow(app)
 				return
@@ -230,28 +231,12 @@ function MicroAppsPageDesktop() {
 								data-testid="micro-apps-search"
 							/>
 						</div>
-						<Tabs
+						<MicroAppScopeTabs
 							value={scope}
-							onValueChange={(value) => setScope(value as MicroAppListScope)}
-						>
-							<TabsList className="grid w-[420px] grid-cols-4 rounded-xl">
-								<TabsTrigger value="all" data-testid="micro-apps-scope-all">
-									{t("microAppsPage.scopeAll")}
-								</TabsTrigger>
-								<TabsTrigger value="created" data-testid="micro-apps-scope-created">
-									{t("microAppsPage.scopeCreated")}
-								</TabsTrigger>
-								<TabsTrigger
-									value="collaborated"
-									data-testid="micro-apps-scope-collaborated"
-								>
-									{t("microAppsPage.scopeCollaborated")}
-								</TabsTrigger>
-								<TabsTrigger value="recent" data-testid="micro-apps-scope-recent">
-									{t("microAppsPage.scopeRecent")}
-								</TabsTrigger>
-							</TabsList>
-						</Tabs>
+							availableScopes={availableScopes}
+							onChange={setScope}
+							testIdPrefix="micro-apps-scope"
+						/>
 						<Button
 							type="button"
 							variant="default"
@@ -290,12 +275,16 @@ function MicroAppsPageDesktop() {
 						title={
 							keyword
 								? t("microAppsPage.noSearchResults")
-								: t("microAppsPage.emptyTitle")
+								: scope === "accessible"
+									? t("microAppsPage.publishedEmptyTitle")
+									: t("microAppsPage.emptyTitle")
 						}
 						description={
 							keyword
 								? t("microAppsPage.noSearchResultsDescription")
-								: t("microAppsPage.emptyDescription")
+								: scope === "accessible"
+									? t("microAppsPage.publishedEmptyDescription")
+									: t("microAppsPage.emptyDescription")
 						}
 					/>
 				) : null}
@@ -374,7 +363,7 @@ function MicroAppsPageDesktop() {
 			{collaboratorManagement.CollaboratorUpdatePanel}
 		</ScrollArea>
 	)
-}
+})
 
 interface MicroAppsPageProps {
 	mobileView?: "home" | "list"

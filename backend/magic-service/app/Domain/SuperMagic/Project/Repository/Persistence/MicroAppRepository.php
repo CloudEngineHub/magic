@@ -214,7 +214,8 @@ class MicroAppRepository implements MicroAppRepositoryInterface
         MicroAppListScope $scope,
         string $keyword,
         int $page,
-        int $pageSize
+        int $pageSize,
+        bool $publishedOnly = false
     ): array {
         if ($organizationCodes === []) {
             return ['total' => 0, 'list' => []];
@@ -226,7 +227,11 @@ class MicroAppRepository implements MicroAppRepositoryInterface
             ->where('p.project_status', 1)
             ->where('p.is_hidden', 0)
             ->whereNull('ma.deleted_at')
-            ->whereNull('p.deleted_at')
+            ->whereNull('p.deleted_at');
+        if ($publishedOnly) {
+            $query->where('ma.publish_status', MicroAppPublishStatus::Published->value);
+        }
+        $query = $query
             ->where(function ($accessQuery) use ($userId, $departmentIds): void {
                 $accessQuery->where('p.user_id', $userId);
 

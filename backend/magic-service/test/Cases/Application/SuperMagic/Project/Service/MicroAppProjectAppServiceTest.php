@@ -9,6 +9,7 @@ namespace HyperfTest\Cases\Application\SuperMagic\Project\Service;
 
 use App\Application\SuperMagic\Common\Share\Service\ResourceShareAppService;
 use App\Application\SuperMagic\Project\DTO\Request\MicroAppListRequestDTO;
+use App\Application\SuperMagic\Project\DTO\Request\PublishedMicroAppListRequestDTO;
 use App\Application\SuperMagic\Project\DTO\Request\PublishMicroAppRequestDTO;
 use App\Application\SuperMagic\Project\Service\MicroAppProjectAppService;
 use App\Application\SuperMagic\Project\Service\MicroAppProjectResponseFormatter;
@@ -322,7 +323,7 @@ class MicroAppProjectAppServiceTest extends TestCase
             ->willReturn([]);
         $responseFormatter->method('coverUrlMapKey')
             ->willReturnCallback(
-                static fn (array $row, string $coverKey): string => (string) ($row['organization_code'] ?? '') . ':' . $coverKey
+                static fn(array $row, string $coverKey): string => (string) ($row['organization_code'] ?? '') . ':' . $coverKey
             );
 
         $service = $this->createService(
@@ -374,6 +375,368 @@ class MicroAppProjectAppServiceTest extends TestCase
         );
     }
 
+    public function testListAccessibleReturnsOrgShareAppsAndSkipsPasswordProtected(): void
+    {
+        $authorization = (new MagicUserAuthorization())
+            ->setId('user-1')
+            ->setOrganizationCode('org-1');
+        $requestContext = $this->createMock(RequestContext::class);
+        $requestContext->method('getUserAuthorization')->willReturn($authorization);
+
+        $accessibleRecord = (new MicroAppEntity())
+            ->setId(3001)
+            ->setProjectId(4001)
+            ->setResourceId('resource-accessible')
+            ->setCreatorId('user-2')
+            ->setCoverFileKey('cover-accessible')
+            ->setPublishStatus('published');
+        $passwordRecord = (new MicroAppEntity())
+            ->setId(3002)
+            ->setProjectId(4002)
+            ->setResourceId('resource-password')
+            ->setCreatorId('user-3')
+            ->setPublishStatus('published');
+        $deniedRecord = (new MicroAppEntity())
+            ->setId(3003)
+            ->setProjectId(4003)
+            ->setResourceId('resource-denied')
+            ->setCreatorId('user-4')
+            ->setPublishStatus('published');
+
+        $accessibleProject = (new ProjectEntity())
+            ->setId(4001)
+            ->setUserId('user-2')
+            ->setUserOrganizationCode('org-1')
+            ->setProjectName('Org Shared App')
+            ->setProjectDescription('Shared with the org')
+            ->setProjectMode(ProjectMode::MICRO_APP->value)
+            ->setUpdatedAt('2026-09-11 08:00:00');
+        $passwordProject = (new ProjectEntity())
+            ->setId(4002)
+            ->setUserId('user-3')
+            ->setUserOrganizationCode('org-1')
+            ->setProjectName('Password App')
+            ->setProjectMode(ProjectMode::MICRO_APP->value);
+        $deniedProject = (new ProjectEntity())
+            ->setId(4003)
+            ->setUserId('user-4')
+            ->setUserOrganizationCode('org-1')
+            ->setProjectName('Private App')
+            ->setProjectMode(ProjectMode::MICRO_APP->value);
+
+        $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
+        $microAppRepository->expects(self::never())->method('paginateAccessible');
+        $microAppRepository->expects(self::once())
+            ->method('findPublishedByOrganization')
+            ->with('org-1')
+            ->willReturn([$accessibleRecord, $passwordRecord, $deniedRecord]);
+
+        $projectRepository = $this->createMock(ProjectRepositoryInterface::class);
+        $projectRepository->expects(self::once())
+            ->method('findByIds')
+            ->with([4001, 4002, 4003])
+            ->willReturn([$accessibleProject, $passwordProject, $deniedProject]);
+
+        $accessibleShare = (new ResourceShareEntity())
+            ->setShareCode('share-accessible')
+            ->setShareType(ShareAccessType::TeamShare->value);
+        $passwordShare = (new ResourceShareEntity())
+            ->setShareCode('share-password')
+            ->setShareType(ShareAccessType::PasswordProtected->value);
+        $deniedShare = (new ResourceShareEntity())
+            ->setShareCode('share-denied')
+            ->setShareType(ShareAccessType::TeamShare->value);
+
+        $shareDomainService = $this->createMock(ResourceShareDomainService::class);
+        $shareDomainService->method('getValidShareByResourceId')
+            ->willReturnCallback(static fn(string $resourceId): ?ResourceShareEntity => match ($resourceId) {
+                'resource-accessible' => $accessibleShare,
+                'resource-password' => $passwordShare,
+                'resource-denied' => $deniedShare,
+                default => null,
+            });
+        $shareDomainService->method('validateShareAccess')
+            ->willReturnCallback(function (ResourceShareEntity $shareEntity): void {
+                if ($shareEntity->getShareCode() === 'share-denied') {
+                    throw new RuntimeException('permission denied');
+                }
+            });
+
+        $projectMemberDomainService = $this->createMock(ProjectMemberDomainService::class);
+        $projectMemberDomainService->expects(self::never())->method('getProjectIdsByCollaboratorTargets');
+        $projectMemberDomainService->expects(self::once())
+            ->method('getUserHighestRolesInProjects')
+            ->with([4001], ['user-1', 'dept-1'])
+            ->willReturn([]);
+
+        $departmentRepository = $this->createMock(MagicDepartmentUserRepositoryInterface::class);
+        $departmentRepository->expects(self::once())
+            ->method('getDepartmentIdsByUserIds')
+            ->willReturn(['user-1' => ['dept-1']]);
+
+        $accessibleRow = [
+            'app_id' => 3001,
+            'project_id' => 4001,
+            'app_name' => 'Org Shared App',
+            'app_description' => 'Shared with the org',
+            'creator_id' => 'user-2',
+            'cover_file_key' => 'cover-accessible',
+            'publish_status' => 'published',
+            'updated_at' => '2026-09-11 08:00:00',
+            'project_owner_id' => 'user-2',
+            'organization_code' => 'org-1',
+        ];
+        $responseFormatter = $this->createMock(MicroAppProjectResponseFormatter::class);
+        $responseFormatter->expects(self::once())
+            ->method('resolveCoverUrls')
+            ->with([$accessibleRow])
+            ->willReturn(['org-1:cover-accessible' => 'https://cdn.example.com/cover.png']);
+        $responseFormatter->method('coverUrlMapKey')
+            ->willReturnCallback(
+                static fn(array $row, string $coverKey): string => (string) ($row['organization_code'] ?? '') . ':' . $coverKey
+            );
+
+        $service = $this->createService(
+            $microAppRepository,
+            $projectRepository,
+            $this->createMock(ResourceShareAppService::class),
+            $shareDomainService,
+            $this->createMock(ShareUrlBuilder::class),
+            $responseFormatter,
+            projectMemberDomainService: $projectMemberDomainService,
+            departmentUserDomainService: new MagicDepartmentUserDomainService($departmentRepository),
+        );
+
+        $requestDTO = new MicroAppListRequestDTO();
+        $requestDTO->setScope(MicroAppListScope::Accessible->value);
+
+        self::assertSame(
+            [
+                'list' => [
+                    [
+                        'app_id' => '3001',
+                        'project_id' => '4001',
+                        'app_name' => 'Org Shared App',
+                        'app_description' => 'Shared with the org',
+                        'creator_id' => 'user-2',
+                        'cover_url' => 'https://cdn.example.com/cover.png',
+                        'publish_status' => 'published',
+                        'updated_at' => '2026-09-11 08:00:00',
+                        'user_role' => null,
+                        'can_delete' => false,
+                    ],
+                ],
+                'total' => 1,
+                'page' => 1,
+                'page_size' => 20,
+            ],
+            $service->list($requestContext, $requestDTO),
+        );
+    }
+
+    public function testMentionListUnionsPublishedOwnedAndOrgShareApps(): void
+    {
+        $authorization = (new MagicUserAuthorization())
+            ->setId('user-1')
+            ->setOrganizationCode('org-1');
+        $requestContext = $this->createMock(RequestContext::class);
+        $requestContext->method('getUserAuthorization')->willReturn($authorization);
+
+        $ownedRows = [
+            [
+                'app_id' => 1001,
+                'project_id' => 2001,
+                'app_name' => 'Owned App',
+                'app_description' => 'Owned description',
+                'creator_id' => 'user-1',
+                'cover_file_key' => null,
+                'publish_status' => 'published',
+                'updated_at' => '2026-08-28 10:00:00',
+                'project_owner_id' => 'user-1',
+                'organization_code' => 'org-1',
+            ],
+            [
+                'app_id' => 1002,
+                'project_id' => 2002,
+                'app_name' => 'Draft App',
+                'app_description' => 'Unpublished',
+                'creator_id' => 'user-1',
+                'cover_file_key' => null,
+                'publish_status' => 'unpublished',
+                'updated_at' => '2026-08-29 10:00:00',
+                'project_owner_id' => 'user-1',
+                'organization_code' => 'org-1',
+            ],
+        ];
+        $accessibleRecord = (new MicroAppEntity())
+            ->setId(3001)
+            ->setProjectId(4001)
+            ->setResourceId('resource-accessible')
+            ->setCreatorId('user-2')
+            ->setCoverFileKey('cover-accessible')
+            ->setPublishStatus('published');
+        $passwordRecord = (new MicroAppEntity())
+            ->setId(3002)
+            ->setProjectId(4002)
+            ->setResourceId('resource-password')
+            ->setCreatorId('user-3')
+            ->setPublishStatus('published');
+        $accessibleProject = (new ProjectEntity())
+            ->setId(4001)
+            ->setUserId('user-2')
+            ->setUserOrganizationCode('org-1')
+            ->setProjectName('Org Shared App')
+            ->setProjectDescription('Shared with the org')
+            ->setProjectMode(ProjectMode::MICRO_APP->value)
+            ->setUpdatedAt('2026-09-11 08:00:00');
+        $passwordProject = (new ProjectEntity())
+            ->setId(4002)
+            ->setUserId('user-3')
+            ->setUserOrganizationCode('org-1')
+            ->setProjectName('Password App')
+            ->setProjectMode(ProjectMode::MICRO_APP->value);
+        $accessibleShare = (new ResourceShareEntity())
+            ->setShareCode('share-accessible')
+            ->setShareType(ShareAccessType::TeamShare->value)
+            ->setShareRange('all')
+            ->setOrganizationCode('org-1');
+        $passwordShare = (new ResourceShareEntity())
+            ->setShareCode('share-password')
+            ->setShareType(ShareAccessType::PasswordProtected->value)
+            ->setOrganizationCode('org-1');
+
+        $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
+        $microAppRepository->expects(self::once())
+            ->method('paginateAccessible')
+            ->with(
+                'user-1',
+                ['dept-1'],
+                ['org-1'],
+                MicroAppListScope::All,
+                '',
+                1,
+                1000,
+                true,
+            )
+            ->willReturn(['total' => 2, 'list' => $ownedRows]);
+        $microAppRepository->expects(self::once())
+            ->method('findPublishedByOrganization')
+            ->with('org-1')
+            ->willReturn([$accessibleRecord, $passwordRecord]);
+
+        $projectRepository = $this->createMock(ProjectRepositoryInterface::class);
+        $projectRepository->method('findByIds')
+            ->with([4001, 4002])
+            ->willReturn([$accessibleProject, $passwordProject]);
+
+        $shareDomainService = $this->createMock(ResourceShareDomainService::class);
+        $shareDomainService->method('getValidShareByResourceId')
+            ->willReturnCallback(static fn(string $resourceId): ?ResourceShareEntity => match ($resourceId) {
+                'resource-accessible' => $accessibleShare,
+                'resource-password' => $passwordShare,
+                default => null,
+            });
+
+        $projectMemberDomainService = $this->createMock(ProjectMemberDomainService::class);
+        $projectMemberDomainService->expects(self::once())
+            ->method('getProjectIdsByCollaboratorTargets')
+            ->with(['user-1', 'dept-1'])
+            ->willReturn([]);
+        $projectMemberDomainService->expects(self::once())
+            ->method('getUserHighestRolesInProjects')
+            ->with([4001, 2001], ['user-1', 'dept-1'])
+            ->willReturn([]);
+
+        $departmentRepository = $this->createMock(MagicDepartmentUserRepositoryInterface::class);
+        $departmentRepository->expects(self::once())
+            ->method('getDepartmentIdsByUserIds')
+            ->willReturn(['user-1' => ['dept-1']]);
+
+        $projectDomainService = $this->createMock(ProjectDomainService::class);
+        $projectDomainService->expects(self::once())
+            ->method('getOrganizationCodesByProjectIds')
+            ->with([])
+            ->willReturn([]);
+        $packageFilterService = $this->createMock(PackageFilterInterface::class);
+        $packageFilterService->expects(self::once())
+            ->method('filterPaidOrganizations')
+            ->with([])
+            ->willReturn([]);
+
+        $mergedRows = [
+            [
+                'app_id' => 3001,
+                'project_id' => 4001,
+                'app_name' => 'Org Shared App',
+                'app_description' => 'Shared with the org',
+                'creator_id' => 'user-2',
+                'cover_file_key' => 'cover-accessible',
+                'publish_status' => 'published',
+                'updated_at' => '2026-09-11 08:00:00',
+                'project_owner_id' => 'user-2',
+                'organization_code' => 'org-1',
+            ],
+            $ownedRows[0],
+        ];
+        $responseFormatter = $this->createMock(MicroAppProjectResponseFormatter::class);
+        $responseFormatter->expects(self::once())
+            ->method('resolveCoverUrls')
+            ->with($mergedRows)
+            ->willReturn(['org-1:cover-accessible' => 'https://cdn.example.com/cover.png']);
+        $responseFormatter->method('coverUrlMapKey')
+            ->willReturnCallback(
+                static fn(array $row, string $coverKey): string => (string) ($row['organization_code'] ?? '') . ':' . $coverKey
+            );
+
+        $service = $this->createService(
+            $microAppRepository,
+            $projectRepository,
+            $this->createMock(ResourceShareAppService::class),
+            $shareDomainService,
+            $this->createMock(ShareUrlBuilder::class),
+            $responseFormatter,
+            projectMemberDomainService: $projectMemberDomainService,
+            departmentUserDomainService: new MagicDepartmentUserDomainService($departmentRepository),
+            projectDomainService: $projectDomainService,
+            packageFilterService: $packageFilterService,
+        );
+
+        self::assertSame(
+            [
+                'list' => [
+                    [
+                        'app_id' => '3001',
+                        'project_id' => '4001',
+                        'app_name' => 'Org Shared App',
+                        'app_description' => 'Shared with the org',
+                        'creator_id' => 'user-2',
+                        'cover_url' => 'https://cdn.example.com/cover.png',
+                        'publish_status' => 'published',
+                        'updated_at' => '2026-09-11 08:00:00',
+                        'user_role' => null,
+                        'can_delete' => false,
+                    ],
+                    [
+                        'app_id' => '1001',
+                        'project_id' => '2001',
+                        'app_name' => 'Owned App',
+                        'app_description' => 'Owned description',
+                        'creator_id' => 'user-1',
+                        'cover_url' => '',
+                        'publish_status' => 'published',
+                        'updated_at' => '2026-08-28 10:00:00',
+                        'user_role' => 'owner',
+                        'can_delete' => true,
+                    ],
+                ],
+                'total' => 2,
+                'page' => 1,
+                'page_size' => 20,
+            ],
+            $service->mentionList($requestContext, new PublishedMicroAppListRequestDTO()),
+        );
+    }
+
     private function setDatabaseContainer(): void
     {
         $connection = $this->createMock(ConnectionInterface::class);
@@ -392,8 +755,7 @@ class MicroAppProjectAppServiceTest extends TestCase
             public function __construct(
                 private readonly ConnectionResolverInterface $resolver,
                 private readonly ValidatorFactoryInterface $validatorFactory,
-            ) {
-            }
+            ) {}
 
             public function get(string $id): mixed
             {
