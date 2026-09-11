@@ -19,7 +19,10 @@ import {
 } from "@/pages/superMagic/services/pptService"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
-import { publishPptxExportIssues } from "@/pages/superMagic/utils/pptxExportIssues"
+import {
+	publishPptxExportFailure,
+	publishPptxExportIssues,
+} from "@/pages/superMagic/utils/pptxExportIssues"
 import type { ExportIssue } from "@magic/html2pptx"
 import { isFileInPPTMode } from "./utils/file"
 import { prepareHtmlPagesForExport } from "@/utils/htmlExportPrepare"
@@ -583,6 +586,10 @@ export default function Render(props: any) {
 					duration: 1000,
 				})
 			} else {
+				publishPptxExportFailure(exportIssues, error, {
+					fileId,
+					fileName: exportFileName,
+				})
 				magicToast.error({
 					key: toastId,
 					content: isUnavailable

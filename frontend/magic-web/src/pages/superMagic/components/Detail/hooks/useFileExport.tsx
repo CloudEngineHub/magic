@@ -27,7 +27,10 @@ import {
 	startPptxStreamingExportFromFactory,
 } from "@/pages/superMagic/services/pptxStreamingExport"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
-import { publishPptxExportIssues } from "@/pages/superMagic/utils/pptxExportIssues"
+import {
+	publishPptxExportFailure,
+	publishPptxExportIssues,
+} from "@/pages/superMagic/utils/pptxExportIssues"
 import type { ExportIssue } from "@magic/html2pptx"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import {
@@ -318,8 +321,7 @@ function useFileExport({
 			(file as any)?.file_name || (file as any)?.display_filename || "export",
 		).replace(/\.html?$/i, "")
 		const displayConfig = ((file as any)?.display_config || (file as any)?.metadata) as
-			| { type?: string; slides?: string[]; name?: string }
-			| undefined
+			{ type?: string; slides?: string[]; name?: string } | undefined
 		const slidePaths = Array.isArray(displayConfig?.slides) ? displayConfig.slides : []
 		const pageCount = slidePaths.length || 1
 		let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
@@ -396,6 +398,7 @@ function useFileExport({
 				onCanceled()
 				return
 			}
+			publishPptxExportFailure(exportIssues, error, { fileId, fileName })
 			const isUnavailable = error instanceof PptxExportUnavailableError
 			console.error("[filePptxExport] export failed:", error)
 			reportPptxExportError(error, { fileId, fileName, source: "useFileExport" })

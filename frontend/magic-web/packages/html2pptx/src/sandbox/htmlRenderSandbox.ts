@@ -38,7 +38,11 @@ export interface SandboxInstance {
 	/** Render HTML content */
 	render: (
 		html: string,
-		options?: { signal?: AbortSignal; onResourceError?: (error: ResourceLoadError) => void; onExportIssue?: (issue: ExportIssue) => void },
+		options?: {
+			signal?: AbortSignal
+			onResourceError?: (error: ResourceLoadError) => void
+			onExportIssue?: (issue: ExportIssue) => void
+		},
 	) => Promise<SandboxRenderResult>
 	/** Destroy the sandbox */
 	destroy: () => void
@@ -110,7 +114,11 @@ export class HtmlRenderSandbox implements SandboxInstance {
 
 	render(
 		html: string,
-		options?: { signal?: AbortSignal; onResourceError?: (error: ResourceLoadError) => void },
+		options?: {
+			signal?: AbortSignal
+			onResourceError?: (error: ResourceLoadError) => void
+			onExportIssue?: (issue: ExportIssue) => void
+		},
 	): Promise<SandboxRenderResult> {
 		if (this.rendering) {
 			return Promise.reject(new Error("[Sandbox] concurrent render is not supported"))
@@ -176,16 +184,26 @@ export class HtmlRenderSandbox implements SandboxInstance {
 			const recordPageError = (error: unknown) => {
 				if (pageErrorRecorded || lifecycleState.settled) return
 				pageErrorRecorded = true
-				options?.onExportIssue?.({
-					code: "page-script-error",
-					message: error instanceof Error ? error.message : String(error),
-					severity: "error",
-				})
-				if (isExportFidelityError(error)) {
+				const message = error instanceof Error ? error.message : String(error)
+				const fatal = isExportFidelityError(error)
+				try {
+					options?.onExportIssue?.({
+						code: "page-script-error",
+						message,
+						severity: fatal ? "error" : "warning",
+					})
+				} catch {
+					// Diagnostics must never replace the page result.
+				}
+				if (fatal) {
 					rejectPageError(error)
 					return
 				}
-				const message = error instanceof Error ? error.message : String(error)
+				if (options?.onExportIssue) {
+					// A host that subscribes to issues opts into best-effort rendering. Ordinary
+					// page script errors are surfaced as warnings and do not abort the export.
+					return
+				}
 				rejectPageError(
 					new ExportFidelityError(
 						`[Sandbox] page script failed: ${message}`,
@@ -194,15 +212,17 @@ export class HtmlRenderSandbox implements SandboxInstance {
 					),
 				)
 			}
-			const reportUnhandledScriptError = (url: string) => {
+			const recordRenderFailure = (error: unknown) => {
+				if (pageErrorRecorded || lifecycleState.settled || signal?.aborted) return
+				pageErrorRecorded = true
 				try {
-					options?.onResourceError?.({
-						url,
-						kind: "script",
-						reason: "load-error",
+					options?.onExportIssue?.({
+						code: "render-error",
+						message: error instanceof Error ? error.message : String(error),
+						severity: "error",
 					})
 				} catch {
-					// Reporting must not hide the page error that fails the export.
+					// Diagnostics must never replace the render failure.
 				}
 			}
 			const onWindowError = (event: ErrorEvent) => {
@@ -210,7 +230,6 @@ export class HtmlRenderSandbox implements SandboxInstance {
 					if (event.defaultPrevented || lifecycleState.settled) return
 					const error =
 						event.error ?? new Error(event.message || "Unknown page script error")
-					reportUnhandledScriptError(event.filename || "inline-script://window-error")
 					recordPageError(error)
 				})
 			}
@@ -220,7 +239,6 @@ export class HtmlRenderSandbox implements SandboxInstance {
 				const timer = setTimeout(() => {
 					pendingUnhandledRejections.delete(event.promise)
 					if (event.defaultPrevented || lifecycleState.settled) return
-					reportUnhandledScriptError("inline-script://unhandled-rejection")
 					recordPageError(event.reason ?? new Error("Unhandled page promise rejection"))
 				}, 0)
 				pendingUnhandledRejections.set(event.promise, timer)
@@ -311,6 +329,7 @@ export class HtmlRenderSandbox implements SandboxInstance {
 									})
 								})
 								.catch((error) => {
+									recordRenderFailure(error)
 									finish("reject", error)
 								})
 						})
@@ -322,6 +341,7 @@ export class HtmlRenderSandbox implements SandboxInstance {
 				checkLoaded()
 				iframeDocument.addEventListener("DOMContentLoaded", onDomReady, { once: true })
 			} catch (error) {
+				recordRenderFailure(error)
 				finish("reject", error)
 			}
 		})

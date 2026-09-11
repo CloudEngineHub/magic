@@ -15,6 +15,36 @@ afterEach(() => {
 })
 
 describe("sandbox readiness", () => {
+	it("reports an ordinary page script error and continues when an issue handler is provided", async () => {
+		const issues: Array<{ code: string; message: string; severity: string }> = []
+		sandbox = new HtmlRenderSandbox()
+		Object.defineProperty(sandbox.document, "readyState", {
+			configurable: true,
+			get: () => "complete",
+		})
+		sandbox.window.requestAnimationFrame = (callback: FrameRequestCallback): number =>
+			window.setTimeout(() => callback(performance.now()), 0)
+
+		const render = sandbox.render("<html><body>ready</body></html>", {
+			onExportIssue: (issue) => issues.push(issue),
+		})
+		sandbox.window.dispatchEvent(
+			new ErrorEvent("error", {
+				message: "Chart container #invBar was not found",
+				error: new Error("Chart container #invBar was not found"),
+			}),
+		)
+
+		await expect(render).resolves.toBeDefined()
+		expect(issues).toEqual([
+			{
+				code: "page-script-error",
+				message: "Chart container #invBar was not found",
+				severity: "warning",
+			},
+		])
+	})
+
 	it("starts readiness only once when polling and DOMContentLoaded overlap", async () => {
 		let readyCalls = 0
 		const ReadyController = class {
