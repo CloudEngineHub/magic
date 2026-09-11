@@ -72,6 +72,10 @@ export default function ImageCropPanelRender(props: ImageCropPanelRenderProps) {
 		shouldShow: () => !!croppingElementId,
 		positionEventType: "crop:position",
 		trackedElementId: croppingElementId,
+		stickyTopRight: {
+			gap: 8,
+			headerSelector: "[data-canvas-design-header-actions]",
+		},
 	})
 
 	const { containerRef: floatingRef } = useFloatingComponent({
