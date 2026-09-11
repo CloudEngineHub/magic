@@ -2,6 +2,8 @@
 
 Guidance for autonomous or semi-autonomous coding agents contributing to the Magic Web codebase.
 
+Instruction priority: system/developer instructions and the user's request take precedence over this file; this file takes precedence over an applicable Skill; reference documents provide context only. If guidance conflicts, follow the higher-priority instruction and report the conflict when it affects the result.
+
 ## Mission & Responsibilities
 - Deliver changes that align with the existing product vision and user experience.
 - Follow repository conventions for TypeScript, React, styling, and internationalization.
@@ -42,7 +44,7 @@ Guidance for autonomous or semi-autonomous coding agents contributing to the Mag
 ## Implementation Standards
 - Maintain strict TypeScript typing; add or update types when altering APIs or props.
 - Keep React components modular: separate `styles.ts`, `types.ts`, `hooks/`, and `index.tsx` where the pattern already exists.
-- For every file change, explicitly check whether `enterprise/` contains a corresponding implementation, adapter, test, or config that must be updated in sync. Treat this as a required review step before finishing any code change.
+- For changes under an edition-shared or edition-specific module, check whether `enterprise/` has a corresponding implementation, adapter, test, or config that must be updated in sync. Do not scan the whole overlay for unrelated changes.
 - **Styling conventions**:
   - **For new components**: Use Tailwind CSS utility classes and shadcn/ui components from `@/components/shadcn-ui`
   - **For existing components**: Use `createStyles` and `cx` helpers from `antd-style`; never import `classnames` or `clsx`
@@ -64,7 +66,7 @@ Guidance for autonomous or semi-autonomous coding agents contributing to the Mag
 
 
 ## Workflow for Agents
-1. **Orient**: Read the user request, repo instructions (`README.md`, `CLAUDE.local.md`, this file), and any task-specific files.
+1. **Orient**: Read the user request, applicable parent instructions, this file, and task-specific files. Read `README.md` or `CLAUDE.local.md` only when the task depends on their documented workflow or architecture.
 2. **Investigate**: Use `rg`/`pnpm` tooling to locate relevant code; inspect existing patterns before creating new ones.
 3. **Plan**: Outline multi-step approaches for non-trivial work; update plan status as steps progress.
 4. **Implement**: Prefer minimal, targeted diffs. Annotate complex logic with succinct comments when needed.
@@ -72,7 +74,7 @@ Guidance for autonomous or semi-autonomous coding agents contributing to the Mag
 6. **Report**: Summarize changes, reference touched files with line numbers, and call out risks or follow-up work.
 
 ## Testing & Quality Gates
-- Always run `pnpm lint` and relevant `pnpm test` commands when feasible.
+- Run focused lint and relevant tests when feasible. Do not run repository-wide type-check or lint commands by default; use them only when the task explicitly requires full validation or a focused check cannot cover the change.
 - For utility changes, add or update Vitest specs under `__tests__/`.
 - For UI changes, describe manual verification steps (screens navigated, states tested) if automated tests are absent.
 - Keep coverage stable; when adding significant logic, include regression tests.
