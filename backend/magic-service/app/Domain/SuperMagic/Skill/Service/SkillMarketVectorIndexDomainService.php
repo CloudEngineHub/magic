@@ -8,7 +8,6 @@ declare(strict_types=1);
 namespace App\Domain\SuperMagic\Skill\Service;
 
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
-use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\SuperMagic\Skill\Entity\SkillCategoryEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
@@ -17,7 +16,7 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillCategoryRelationRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillCategoryRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillMarketRepositoryInterface;
-use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGenerator;
+use App\Infrastructure\Core\Embeddings\EmbeddingDimensionPolicy;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInterface;
 use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -31,6 +30,9 @@ use Throwable;
 final class SkillMarketVectorIndexDomainService
 {
     private const VECTOR_INDEX_INITIALIZED_KEY = 'vector_index:initialized:skill_market';
+
+    /** Stable business label used in logs and dimension errors. */
+    private const BUSINESS = 'Skill market';
 
     private ?bool $availabilityCache = null;
 
@@ -148,17 +150,22 @@ final class SkillMarketVectorIndexDomainService
 
         $collectionName = $this->collectionName();
         $collection = $this->vectorStore->getCollection($collectionName);
-        $embeddingModel = $this->embeddingGenerator->getDefaultModel(
-            SkillDataIsolation::create($market->getOrganizationCode(), $operatorId),
-        );
-        if ($collection !== null && $collection->vectorSize !== $embeddingModel->getVectorSize()) {
-            $this->logger->error('Skill market vector sync stopped because embedding dimensions do not match', [
-                'resource_id' => $resourceId,
-                'collection_name' => $collectionName,
-                'collection_vector_size' => $collection->vectorSize,
-                'embedding_vector_size' => $embeddingModel->getVectorSize(),
-            ]);
-            throw new RuntimeException('Skill market embedding dimension does not match the vector collection');
+        if ($collection !== null && ! $forceReEmbedding) {
+            $expectedSize = EmbeddingDimensionPolicy::isEnabled()
+                ? EmbeddingDimensionPolicy::fixedSize()
+                : $this->embeddingGenerator->getDefaultModel(
+                    SkillDataIsolation::create($market->getOrganizationCode(), $operatorId),
+                )->getVectorSize();
+            if ($collection->vectorSize !== $expectedSize) {
+                $this->logger->error('Skill market vector sync stopped because embedding dimensions do not match', [
+                    'resource_id' => $resourceId,
+                    'collection_name' => $collectionName,
+                    'collection_vector_size' => $collection->vectorSize,
+                    'embedding_vector_size' => $expectedSize,
+                    'fixed_dimension_enabled' => EmbeddingDimensionPolicy::isEnabled(),
+                ]);
+                EmbeddingDimensionPolicy::assertCollectionSize(self::BUSINESS, $collection->vectorSize, $expectedSize);
+            }
         }
 
         $categories = $this->findCategories($market);
@@ -178,6 +185,8 @@ final class SkillMarketVectorIndexDomainService
                     'forced' => $forceReEmbedding,
                 ]);
                 $embedding = $this->generateEmbedding($market, $semanticText, $operatorId);
+                $collectionSize = EmbeddingDimensionPolicy::resolveCollectionSize(self::BUSINESS, count($embedding));
+                $this->ensureCollection($collectionName, $collectionSize, $forceReEmbedding);
                 $this->vectorStore->storePoint($collectionName, $pointId, $embedding, $payload);
                 $this->availabilityCache = true;
                 return;
@@ -190,15 +199,8 @@ final class SkillMarketVectorIndexDomainService
         }
 
         $embedding = $this->generateEmbedding($market, $semanticText, $operatorId);
-        if ($this->vectorStore->getCollection($collectionName) === null) {
-            try {
-                $this->vectorStore->createCollection($collectionName, count($embedding));
-            } catch (ClientException $exception) {
-                if (! $this->isCollectionAlreadyExists($exception)) {
-                    throw $exception;
-                }
-            }
-        }
+        $collectionSize = EmbeddingDimensionPolicy::resolveCollectionSize(self::BUSINESS, count($embedding));
+        $this->ensureCollection($collectionName, $collectionSize, $forceReEmbedding);
 
         $this->vectorStore->storePoint($collectionName, $pointId, $embedding, $payload);
         $this->availabilityCache = true;
@@ -242,7 +244,7 @@ final class SkillMarketVectorIndexDomainService
 
     public function isVectorSearchEnabled(): bool
     {
-        return EmbeddingGenerator::isEnabled(AiAbilityCode::KnowledgeBaseEmbeddingModel);
+        return EmbeddingDimensionPolicy::isEnabled();
     }
 
     /** Return whether the first full reconciliation has completed. */
@@ -333,6 +335,33 @@ final class SkillMarketVectorIndexDomainService
         $collectionName = $this->collectionName();
         if ($this->vectorStore->getCollection($collectionName) !== null) {
             $this->vectorStore->removePoint($collectionName, $resourceId);
+        }
+    }
+
+    /** Ensure the collection matches the embedding dimension, rebuilding it only for forced migrations. */
+    private function ensureCollection(string $collectionName, int $vectorSize, bool $forceReEmbedding): void
+    {
+        $collection = $this->vectorStore->getCollection($collectionName);
+        if ($collection !== null && $collection->vectorSize !== $vectorSize) {
+            if (! $forceReEmbedding) {
+                EmbeddingDimensionPolicy::assertCollectionSize(self::BUSINESS, $collection->vectorSize, $vectorSize);
+            }
+
+            $this->vectorStore->removeCollection($collectionName);
+            $this->availabilityCache = false;
+            $collection = null;
+        }
+
+        if ($collection !== null) {
+            return;
+        }
+
+        try {
+            $this->vectorStore->createCollection($collectionName, $vectorSize);
+        } catch (ClientException $exception) {
+            if (! $this->isCollectionAlreadyExists($exception)) {
+                throw $exception;
+            }
         }
     }
 
