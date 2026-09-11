@@ -265,6 +265,7 @@ function throwIfStreamingAborted(signal: AbortSignal): void {
 export type {
 	SlideConfig,
 	ResourceLoadError,
+	ExportIssue,
 	ExportPhase,
 	ExportPreflightResult,
 	ExportProgress,
