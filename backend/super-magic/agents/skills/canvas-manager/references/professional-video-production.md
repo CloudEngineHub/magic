@@ -1,18 +1,24 @@
 # Professional video production
 
-Load this reference for any video-production task that creates, continues, revises, or finishes a video from uploaded assets, existing Canvas Elements, generated anchors, a video storyboard, shot videos, audio, or an existing edit. It covers the ordinary direct workflow, direct professional production, and detailed staged production using the current Canvas tools.
+This reference covers ordinary direct production, direct professional production, and detailed staged production with the current Canvas tools. Load it only after the video-intent decision rules in SKILL.md have already selected this workflow.
 
 ## When to use
 
-Use this reference when the user explicitly asks for video production, professional video production, an ordinary/simple/direct video-production workflow, or a production stage such as a storyboard, multiple shots, first frames, staged approvals, Connections, BGM replacement, or final composition.
+Use this reference only when one of these is already true:
 
-For a minimal basic Canvas request such as “generate a video” or “animate this image” with no video-production intent, use `references/video-generation.md` instead. A request that mentions uploaded assets, an existing Canvas production, continuation, revision, or final delivery is a video-production task even when the user says ordinary or direct.
+- The user explicitly asks for professional or complete video production.
+- The user names a production capability such as a storyboard, multiple shots, first frames, staged approvals, Connections, BGM replacement, or final composition.
+- The latest message names an explicit detailed or fine-grained generation mode, including `生成模式: 精细` or `generation mode: detailed`.
+- The current Canvas already has an in-progress professional production and the user is continuing, revising, or finishing that work.
+- This file was preloaded with the Skill as a dedicated video-production agent.
+
+Do not load this reference for ordinary image or video generation. Requests such as “generate a video”, “make a promotional video”, or “animate this image” stay on `references/video-generation.md`, even when the user uploads assets, the Canvas already has ordinary images or videos, the user asks to revise a basic video, or the latest message names an explicit ordinary generation mode such as `生成模式: 普通`. Quality words such as “professional-looking”, “premium”, or “cinematic” describe output quality and never by themselves request this workflow. “Advertisement” alone never selects this workflow.
 
 ## Production modes
 
 Inspect the latest user message for an explicit generation mode before inferring one. Ordinary, simple, or direct versus detailed or fine-grained — including a structured field such as `生成模式: 普通/精细` or `generation mode: ordinary/detailed` — is a hard constraint. It beats “advertisement”, uploaded assets, task complexity, and any Agent role. Never interpret “advertisement” alone as detailed staged mode.
 
-When no explicit mode is present, select exactly one mode from the user's wording and the current task state. When the mode is still unclear, follow the video-intent decision rules in SKILL.md:
+When this reference is already selected and no explicit mode is present, select exactly one mode from the user's wording and the current task state:
 
 - **Ordinary direct mode**: the user explicitly asks for ordinary, simple, or direct video production, or an explicit ordinary generation-mode field is present. Generate one final video directly with no storyboard, initialization images, first frames, `video-edit`, or separate final composition, while preserving direct business predecessors through explicit Connections.
 - **Direct professional mode**: the user asks for professional video production without a detailed or staged workflow. Generate one final professional video directly, preserving direct business predecessors.

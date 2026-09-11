@@ -1,6 +1,6 @@
 ---
 name: canvas-manager
-version: 1.1.1
+version: 1.1.2
 description: "Manage a Canvas through its business tools only — initialize and query projects, create Elements and Content candidates, frame Elements, wait on generation, and process design markers. Use when the user asks to create, edit, or generate anything on a Canvas, such as images, videos, storyboards, video edits, or a final composed video, or when the message contains [@design_canvas_project:...] or [@design_marker:...]. Also use when the user says 'generate an image on my canvas', 'make a video from this canvas project', 'add a new element to my design', or 'edit the marked region of this image'. Layout strategies, Connections, video point estimation, video composition, image search, asset reconciliation, and prompt inspiration live in the references."
 ---
 
@@ -601,29 +601,29 @@ Key points: always pass the original image path in `reference_images`; always se
 
 **Image generation:** When the user asks to generate an image — especially multiple views or angles of the same subject (fashion multi-view sheets, character design sheets, product 360° views) — your first tool call must directly read `references/image-generation.md` using the file-reading capability. Use the exact reference path; do not call any Canvas tool first. Do not answer or draft a prompt until that reference has been read. This is a context-loading requirement only; all image-generation rules, parameters, and the multi-view anchor-then-expand workflow are defined in that reference.
 
-**Video generation:** Decide the mode first, then load exactly one reference.
+**Video generation:** Decide the mode first, then load exactly one reference. Default is ordinary image and video generation.
 
 Video-intent decision rules. Apply the first matching rule:
 
-1. The latest user message names an explicit generation mode — ordinary, simple, or direct versus detailed or fine-grained, including a structured field such as `生成模式: 普通/精细` or `generation mode: ordinary/detailed`. That choice is a hard constraint. It beats “advertisement”, uploaded assets, task complexity, and any Agent role. Never interpret “advertisement” alone as fine-grained mode.
-   - Ordinary plus a video-production task (uploaded assets, an existing Canvas production, continuation, revision, or final delivery) → ordinary direct production; read `references/professional-video-production.md`.
-   - Ordinary with no production intent → basic video generation; read `references/video-generation.md`.
+1. This Skill is already preloaded together with `references/professional-video-production.md` as a dedicated video-production agent → follow that reference by default. If the latest message also names an explicit generation mode, use that mode inside the professional-production reference.
+2. The latest user message names an explicit generation mode — ordinary, simple, or direct versus detailed or fine-grained, including a structured field such as `生成模式: 普通/精细` or `generation mode: ordinary/detailed`. That choice is a hard constraint. It beats “advertisement”, uploaded assets, task complexity, and any Agent role. Never interpret “advertisement” alone as fine-grained mode.
    - Detailed → detailed staged production; read `references/professional-video-production.md`.
-2. The request names storyboards, multiple shots, first frames, staged approvals, Connections, BGM replacement, or final composition → detailed staged production; read `references/professional-video-production.md`.
-3. The request asks for professional or premium production but names none of the above stages → direct professional production; read `references/professional-video-production.md`.
-4. The request only says "generate a video" or "animate this image", with no uploaded-asset production, no existing Canvas production, and no continuation, revision, delivery, or production intent → basic video generation; read `references/video-generation.md`.
-5. The request involves uploaded assets, an existing Canvas production, continuation, revision, or final delivery — even when the user says "simple" or "quick" → video production; read `references/professional-video-production.md`.
-6. The mode is still unclear → ask the user one question: one direct video, or a storyboard with per-shot confirmation.
+   - Ordinary, and the Canvas already has an in-progress professional production that the user is continuing, revising, or finishing → ordinary direct production; read `references/professional-video-production.md`.
+   - Ordinary otherwise → basic video generation; read `references/video-generation.md`.
+3. The current Canvas already has an in-progress professional production — a storyboard, first frames, shot videos, a Video Edit, or production Connections — and the user is continuing, revising, or finishing that work → stay on `references/professional-video-production.md`.
+4. The request names storyboards, multiple shots, first frames, staged approvals, Connections, BGM replacement, or final composition → detailed staged production; read `references/professional-video-production.md`.
+5. The request explicitly asks for professional or complete video production, and names none of the above stages → direct professional production; read `references/professional-video-production.md`.
+6. Otherwise → basic video generation; read `references/video-generation.md`.
 
-Quality words such as "professional-looking", "premium", or "cinematic" describe output quality and never by themselves request the production workflow. "Advertisement" alone never selects detailed staged mode. "Simple" or "quick" never cancels a production workflow that is otherwise present, unless an explicit ordinary generation mode already selected ordinary direct or basic generation above. Use the exact reference path; do not call any Canvas tool first. Do not answer or draft a prompt until the matching reference has been read.
+Uploaded assets, existing ordinary Canvas images or videos, "generate a video", "animate this image", "make a promotional video", or a later revision of a basic video do not load the professional-production reference. Quality words such as "professional-looking", "premium", or "cinematic" describe output quality and never by themselves request the production workflow. "Advertisement" alone never selects detailed staged mode. When the mode is unclear, use basic video generation; do not ask whether to start a storyboard workflow. Use the exact reference path; do not call any Canvas tool first. Do not answer or draft a prompt until the matching reference has been read.
 
 ## Reference routing
 
 Load references only when the matching task appears:
 
 - `references/image-generation.md` — image generation, revision, reference images, or image retry.
-- `references/video-generation.md` — minimal basic Canvas video generation, equivalent to direct Canvas image generation, without uploaded-asset production, professional-production Connections, staged workflow, or continuation/revision orchestration.
-- `references/professional-video-production.md` — the complete video-production workflow, including ordinary direct production, direct professional video with Connections, detailed staged production with storyboards, first frames, shot dependencies, layout strategies, revisions, recovery, audio, and final composition through `add_canvas_elements`.
+- `references/video-generation.md` — default Canvas video generation, equivalent to direct Canvas image generation. Use this for ordinary generate, animate, revise, or reference-asset requests that do not name a professional-production capability, including an explicit ordinary generation mode such as `生成模式: 普通`.
+- `references/professional-video-production.md` — load only for an explicit professional-production request, a named production stage, an explicit detailed generation mode such as `生成模式: 精细`, continuation of an in-progress professional production, or a dedicated video-production agent that already preloaded this file.
 - `references/image-search.md` — the user asks to search and import web images (`search_canvas_image_candidates`).
 - `references/prompt-library.md` — the user asks for prompt inspiration or says they have no idea (`search_canvas_image_prompts`).
 - `references/asset-reconciliation.md` — only when the user reports a mismatch between the Canvas and local `images`/`videos` folders.
