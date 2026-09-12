@@ -1,7 +1,7 @@
 import type { ProjectListItem } from "../pages/Workspace/types"
 import { TopicMode } from "../pages/Workspace/TopicMode"
 
-const SINGLE_TOPIC_HOST_MODES = new Set<string>([TopicMode.MagiClaw, TopicMode.Chat])
+const SINGLE_TOPIC_HOST_MODES = new Set<TopicMode>([TopicMode.MagiClaw, TopicMode.Chat])
 
 export function isSingleTopicHostProject(
 	project?: Pick<ProjectListItem, "project_mode"> | null,
