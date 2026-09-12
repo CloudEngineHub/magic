@@ -257,6 +257,7 @@ export interface MentionCoreItemDataMap {
 export interface MentionBusinessItemDataMap {
 	[MentionBusinessItemType.MCP]: McpMentionData
 	[MentionBusinessItemType.AGENT]: AgentMentionData
+	[MentionBusinessItemType.MICRO_APP]: MicroAppMentionData
 	[MentionBusinessItemType.SKILL]: SkillMentionData
 	[MentionBusinessItemType.TOOL]: ToolMentionData
 	[MentionBusinessItemType.PROJECT]: ProjectMentionData

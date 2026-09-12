@@ -7,6 +7,7 @@ import type { ComponentType } from "react"
 import type {
 	McpMentionData,
 	AgentMentionData,
+	MicroAppMentionData,
 	SkillMentionData,
 	MentionData,
 	MentionItem,
@@ -179,6 +180,8 @@ export function getMentionUniqueId(attrs: TiptapMentionAttributes | null | undef
 			return `mcp:${(data as McpMentionData)?.id || ""}`
 		case MentionItemType.AGENT:
 			return `agent:${(data as AgentMentionData)?.agent_id || ""}`
+		case MentionItemType.MICRO_APP:
+			return `micro-app:${(data as MicroAppMentionData)?.app_id || ""}`
 		case MentionItemType.SKILL:
 			return `skill:${(data as SkillMentionData)?.id || ""}`
 		case MentionItemType.PROJECT_FILE:
@@ -305,6 +308,8 @@ export function getMentionDescription(attrs: TiptapMentionAttributes | null | un
 			return (data?.description as string) || ""
 		case MentionItemType.AGENT:
 			return (data?.agent_description as string) || ""
+		case MentionItemType.MICRO_APP:
+			return ""
 		case MentionItemType.SKILL:
 			return (data?.description as string) || ""
 		case MentionItemType.PROJECT_FILE:
@@ -341,6 +346,9 @@ export function getMentionIcon(attrs: TiptapMentionAttributes | null | undefined
 			return (data as McpMentionData)?.icon as string
 		case MentionItemType.AGENT:
 			return (data as AgentMentionData)?.agent_avatar as string
+		case MentionItemType.MICRO_APP:
+			// Cover URLs are not part of the mention node payload; the renderer provides the fallback icon.
+			return ""
 		case MentionItemType.SKILL:
 			return (data as SkillMentionData)?.icon as string
 		case MentionItemType.PROJECT_FILE:

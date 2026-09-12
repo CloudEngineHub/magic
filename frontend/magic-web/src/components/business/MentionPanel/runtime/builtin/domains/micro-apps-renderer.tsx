@@ -5,7 +5,7 @@ import { getRendererIconSize } from "./shared/render-utils"
 export const microAppsRenderer: MentionItemRenderer = {
 	renderIcon: ({ item, platform }) => {
 		const size = getRendererIconSize(platform)
-		if (typeof item.icon === "string" && item.icon.trim()) {
+		if (typeof item.icon === "string" && item.icon.trim() && item.icon !== "ts-attachment") {
 			return (
 				<img
 					src={item.icon}
