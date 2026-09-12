@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
-import { Brain, Files, Cloud, Search } from "lucide-react"
+import { Brain, Files, FolderTree, Search } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
@@ -9,6 +9,7 @@ import userFilesStore from "@/stores/userFiles"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import type { UserSpaceView } from "../Detail/components/FilesViewer/types"
 import UserSpaceFilesView from "./UserSpaceFilesView"
+import UserSpaceIcon from "./UserSpaceIcon"
 
 const UserSpaceMemoryView = lazy(() => import("./UserSpaceMemoryView"))
 
@@ -54,7 +55,7 @@ export default observer(function UserSpacePanel({
 				className="flex h-9 shrink-0 items-center gap-2 px-3"
 				data-slot="project-panel-header"
 			>
-				<Cloud size={16} />
+				<UserSpaceIcon size={16} />
 				<h2 className="truncate text-sm font-semibold" data-slot="project-panel-title">
 					{t("userSpace.title")}
 				</h2>
@@ -80,7 +81,7 @@ export default observer(function UserSpacePanel({
 						})
 					}
 				>
-					<Files size={16} />
+					<FolderTree size={16} />
 				</Button>
 			</div>
 			<div role="tablist" className="mx-2 flex shrink-0 rounded-md bg-muted p-0.5">

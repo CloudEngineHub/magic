@@ -16,7 +16,6 @@ import type { PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
-import type { CrossProjectOperationSuccessResult } from "./hooks/useCrossProjectFileOperation"
 import magicToast from "@/components/base/MagicToaster/utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
@@ -28,7 +27,8 @@ import type { SlidesTemplateItem } from "@/pages/superMagic/components/MainInput
 import { SaveSlidesTemplateDialog, type SaveSlidesTemplateTarget } from "./components"
 import { buildConvertToSlidesTemplatePayload } from "@/pages/superMagic/utils/slidesTemplateActions"
 import type { TopicFilesSpaceConfig } from "./file-space"
-import { Files } from "lucide-react"
+import type { CrossProjectOperationSuccessResult } from "./hooks/useCrossProjectFileOperation"
+import { FolderTree } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 
 export { PRESET_FILE_TYPES, type PresetFileType } from "./constant"
@@ -316,7 +316,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 												})
 											}
 										>
-											<Files size={16} />
+											<FolderTree size={16} />
 										</Button>
 									)}
 							</>

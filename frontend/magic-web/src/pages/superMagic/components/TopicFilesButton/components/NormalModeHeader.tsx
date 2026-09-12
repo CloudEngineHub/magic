@@ -71,13 +71,7 @@ function NormalModeHeader({
 		: t("fileTree.expandAll")
 
 	return (
-		<div
-			className={cn(
-				"relative flex h-8 w-full items-center pl-4",
-				headerTrailingAction ? "pr-10" : "pr-2",
-				className,
-			)}
-		>
+		<div className={cn("flex h-8 w-full items-center gap-1 pl-4 pr-2", className)}>
 			<p className="shrink-0 whitespace-nowrap text-sm font-semibold leading-4 text-foreground">
 				{title || t("topicFiles.title")}
 			</p>

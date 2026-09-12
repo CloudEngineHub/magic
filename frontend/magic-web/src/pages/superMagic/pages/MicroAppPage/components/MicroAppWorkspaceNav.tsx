@@ -1,10 +1,11 @@
-import { Cloud, Database, File, Monitor, Timer } from "lucide-react"
+import { Database, File, Monitor, Timer } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/shadcn-ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import IconShareCog from "@/enhance/tabler/icons-react/icons/iconShareCog"
 import { cn } from "@/utils/cn"
+import UserSpaceIcon from "../../../components/UserSpace/UserSpaceIcon"
 
 export type MicroAppWorkspaceView =
 	"preview" | "files" | "database" | "scheduledTasks" | "shareManagement" | "userSpace"
@@ -66,7 +67,7 @@ export default function MicroAppWorkspaceNav({
 		{
 			view: "userSpace" as const,
 			label: t("userSpace.title"),
-			icon: Cloud,
+			icon: UserSpaceIcon,
 			testId: "micro-app-nav-user-space",
 		},
 	]

@@ -40,13 +40,7 @@ function SelectModeHeader({
 	}
 
 	return (
-		<div
-			className={cn(
-				"relative flex h-8 w-full shrink-0 items-center px-2",
-				headerTrailingAction ? "pr-10" : undefined,
-				className,
-			)}
-		>
+		<div className={cn("flex h-8 w-full shrink-0 items-center gap-1 px-2", className)}>
 			<label
 				className="flex min-w-0 shrink-0 cursor-pointer items-center gap-2 p-0"
 				data-testid="select-mode-header-label"

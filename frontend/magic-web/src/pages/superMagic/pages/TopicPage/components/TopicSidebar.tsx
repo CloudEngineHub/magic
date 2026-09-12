@@ -1,7 +1,8 @@
 import { memo, useMemo } from "react"
-import { Cloud, Files, Timer } from "lucide-react"
+import { Files, Timer } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import UserSpacePanel from "../../../components/UserSpace/UserSpacePanel"
+import UserSpaceIcon from "../../../components/UserSpace/UserSpaceIcon"
 import IconShareCog from "@/enhance/tabler/icons-react/icons/iconShareCog"
 import ProjectCardContainer from "../../../components/ProjectCardContainer"
 import ProjectSider from "../../../components/ProjectSider"
@@ -96,7 +97,7 @@ function TopicSidebar({
 						{
 							key: "userSpace",
 							title: t("userSpace.title"),
-							icon: <Cloud size={16} />,
+							icon: <UserSpaceIcon size={16} />,
 							content: (
 								<UserSpacePanel
 									projectId={selectedProject?.id}

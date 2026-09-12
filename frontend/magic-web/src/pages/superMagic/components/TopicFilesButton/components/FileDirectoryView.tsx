@@ -7,6 +7,8 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import { cn } from "@/utils/cn"
+import { normalizeLocale } from "@/utils/locale"
+import { createAttachmentNodeComparator } from "@/pages/superMagic/utils/projectAttachments/treeUtils"
 import type { AttachmentItem } from "../hooks/types"
 import type { TopicFilesMenuItem } from "../utils/menu-items"
 import { TopicFileIcon } from "./TopicFileIcon"
@@ -62,7 +64,8 @@ export function formatDirectoryFileTime(
 				: String(value).replace(" ", "T") + "Z"
 	const date = new Date(source)
 	if (Number.isNaN(date.getTime())) return "—"
-	return new Intl.DateTimeFormat(locale, {
+	// 项目语言键使用 zh_CN；浏览器 Intl 需要 zh-CN 格式。
+	return new Intl.DateTimeFormat(normalizeLocale(locale).replaceAll("_", "-"), {
 		year: "numeric",
 		month: "2-digit",
 		day: "2-digit",
@@ -108,23 +111,23 @@ export function FileDirectoryView({
 	const scrollRef = useRef<HTMLDivElement>(null)
 	const size = useSize(scrollRef)
 	const query = (externalSearch ?? search).toLocaleLowerCase()
+	const compareNames = useMemo(
+		() => createAttachmentNodeComparator(i18n.language),
+		[i18n.language],
+	)
 	const visible = useMemo(
 		() =>
 			items
 				.filter((file) =>
 					(file.file_name ?? file.name ?? "").toLocaleLowerCase().includes(query),
 				)
-				.sort(
-					(a, b) =>
-						Number(Boolean(b.is_directory)) - Number(Boolean(a.is_directory)) ||
-						(sort === "time"
-							? String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? ""))
-							: (a.file_name ?? a.name ?? "").localeCompare(
-									b.file_name ?? b.name ?? "",
-									i18n.language,
-								)),
+				.sort((a, b) =>
+					sort === "time"
+						? Number(Boolean(b.is_directory)) - Number(Boolean(a.is_directory)) ||
+							String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? ""))
+						: compareNames(a, b),
 				),
-		[items, query, sort, i18n.language],
+		[items, query, sort, compareNames],
 	)
 	const showGrid = grid && !compact
 	const columns = showGrid ? Math.max(1, Math.floor((size?.width ?? 400) / 140)) : 1
