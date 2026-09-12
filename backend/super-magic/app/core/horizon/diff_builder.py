@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from agentlang.logger import get_logger
-from agentlang.utils.token_estimator import num_tokens_from_string
+from agentlang.utils.token_estimator import TokenEstimateCounter, num_tokens_from_string
 from app.core.horizon.models import FileContextRecord, HorizonDisplayBudget, HorizonState
 from app.utils.async_file_utils import async_read_text
 
@@ -90,9 +90,15 @@ def _build_summary_block(
     )
 
 
-def _is_diff_payload_safe(diff_lines: list[str], max_tokens: int) -> bool:
-    """只用 Token 判断正文大小；行数仍是事实统计，不能再作为折叠门槛。"""
-    return num_tokens_from_string("\n".join(diff_lines)) <= max_tokens
+def _render_unified_diff(diff_lines: list[str]) -> str:
+    """保留原文换行；未终止的原文行单独标记，不能用补换行隐藏文件差异。"""
+    parts: list[str] = []
+    for line in diff_lines:
+        parts.append(line)
+        # 文件头和 hunk 头已有 lineterm；只有原文数据项可能缺少末尾换行。
+        if not line.endswith("\n"):
+            parts.append("\n\\ No newline at end of file\n")
+    return "".join(parts)
 
 
 async def _read_current_file(path: str) -> Optional[str]:
@@ -147,16 +153,50 @@ async def _try_full_read(
         行号后是制表符；body 自带末尾换行，因此闭合标签前还有一个空行。
         body 供模型阅读；缓存的是不带行号的 current_content，不能拿展示文本参与下一次 Diff。
         """
-        return FileChangeBlock(record.path, (
+        change = FileChangeBlock(record.path, (
             f'<file path="{html.escape(record.path, quote=True)}">\n'
             '  <summary>The runtime called read_file. This complete current content replaces the previous file content; scope and authority are unchanged.</summary>\n'
             f"  <read_file_result>\n{html.escape(body, quote=False)}\n  </read_file_result>\n"
             f"{_build_size_tag(record.file_size_bytes, size)}\n"
             f"{_build_mtime_tag(record.file_mtime_ms, mtime)}\n</file>"
         ), current_content)
+        # 正文放得下不代表最终块放得下；路径、行号、标签及转义均计入单文件额度。
+        return change if num_tokens_from_string(change.content) <= max_tokens else None
     except Exception as error:
         logger.debug(f"[AgentHorizon] 全文读取未完成 {record.path}: {error}")
         return None
+
+
+def _build_diff_block(
+    record: FileContextRecord, current_content: str, size: int, mtime: float, diff_text: str,
+) -> FileChangeBlock:
+    """
+    例：1,024 字节的 report.txt 只把首行 csv 改为 tsv，较长的后文未改，完整 Diff 放得下：
+    <file path="/app/report.txt">
+      <diff>
+    --- a/report.txt
+    +++ b/report.txt
+    @@ -1,4 +1,4 @@
+    -format=csv
+    +format=tsv
+     encoding=utf-8
+     currency=USD
+     timezone=UTC
+      </diff>
+      <size>1,024 -> 1,024 bytes</size>
+      <mtime>2026-09-08 06:00:00 UTC -> 2026-09-08 06:01:00 UTC</mtime>
+    </file>
+    @@ 使用 1 起始行号和行数；原文自带换行，不在数据行之间增加额外空行。
+    原文行没有末尾换行时追加独立标记，不改写原文或隐藏换行差异。
+    原文若含 <tag>，此处显示 &lt;tag&gt;，它仍是文件文字，不会成为通知的 XML 节点。
+    外层 Horizon 再将这些 <file> 块放入 <system_injected_context>/<file_changes>。
+    """
+    return FileChangeBlock(record.path, (
+        f'<file path="{html.escape(record.path, quote=True)}">\n'
+        f"  <diff>\n{html.escape(diff_text, quote=False)}  </diff>\n"
+        f"{_build_size_tag(record.file_size_bytes, size)}\n"
+        f"{_build_mtime_tag(record.file_mtime_ms, mtime)}\n</file>"
+    ), current_content)
 
 
 async def _build_file_diff_block(
@@ -173,7 +213,7 @@ async def _build_file_diff_block(
       没有旧全文                 -> 尝试真实读取当前全文，否则只说明已变化。
       Diff 接近或超过当前全文    -> 优先全文，减少模型在新旧文本之间手动合并的负担。
       小 Diff 且放得下           -> 展示完整 Diff，沿用当前全文作为下一次比较基准。
-      两种完整表达都放不下       -> 只给摘要，不能声称模型已经知道新版内容。
+      完整表达都放不下           -> 再尝试一次 n=0 Diff，仍超限才给摘要。
     """
     current_content = await _read_current_file(record.path)
     if current_content is None:
@@ -190,11 +230,11 @@ async def _build_file_diff_block(
         return _notice(record, current_size, current_mtime_ms, "The file version changed; its readable text matches the previous snapshot")
     diff_lines = list(difflib.unified_diff(
         old_lines, new_lines, fromfile=f"a/{Path(record.path).name}",
-        tofile=f"b/{Path(record.path).name}", lineterm="",
+        tofile=f"b/{Path(record.path).name}", n=3, lineterm="\n",
     ))
     if not diff_lines:
         return None
-    diff_text = "\n".join(diff_lines)
+    diff_text = _render_unified_diff(diff_lines)
     diff_tokens = num_tokens_from_string(diff_text)
     file_tokens = num_tokens_from_string(current_content)
     """
@@ -205,38 +245,19 @@ async def _build_file_diff_block(
         full_read = await _try_full_read(record, current_content, current_size, current_mtime_ms, max_tokens)
         if full_read is not None:
             return full_read
-    if _is_diff_payload_safe(diff_lines, max_tokens):
-        """
-        例：1,024 字节的 report.txt 只把首行 csv 改为 tsv，较长的后文未改，完整 Diff 放得下：
-        <file path="/app/report.txt">
-          <diff>
-        --- a/report.txt
-        +++ b/report.txt
-        @@ -1,4 +1,4 @@
-        -format=csv
+    change = _build_diff_block(record, current_content, current_size, current_mtime_ms, diff_text)
+    if num_tokens_from_string(change.content) <= max_tokens:
+        return change
 
-        +format=tsv
-
-         encoding=utf-8
-
-         currency=USD
-
-         timezone=UTC
-
-          </diff>
-          <size>1,024 -> 1,024 bytes</size>
-          <mtime>2026-09-08 06:00:00 UTC -> 2026-09-08 06:01:00 UTC</mtime>
-        </file>
-        @@ 使用 1 起始行号和行数；其后的空行来自保留原换行后再 join 的现有输出。
-        原文若含 <tag>，此处显示 &lt;tag&gt;，它仍是文件文字，不会成为通知的 XML 节点。
-        外层 Horizon 再将这些 <file> 块放入 <system_injected_context>/<file_changes>。
-        """
-        return FileChangeBlock(record.path, (
-            f'<file path="{html.escape(record.path, quote=True)}">\n'
-            f"  <diff>\n{html.escape(diff_text, quote=False)}\n  </diff>\n"
-            f"{_build_size_tag(record.file_size_bytes, current_size)}\n"
-            f"{_build_mtime_tag(record.file_mtime_ms, current_mtime_ms)}\n</file>"
-        ), current_content)
+    # 只省略未变化的周边行，不裁剪实际增删；同一组正文最多再计算一次，不重新读盘。
+    diff_lines = list(difflib.unified_diff(
+        old_lines, new_lines, fromfile=f"a/{Path(record.path).name}",
+        tofile=f"b/{Path(record.path).name}", n=0, lineterm="\n",
+    ))
+    diff_text = _render_unified_diff(diff_lines)
+    change = _build_diff_block(record, current_content, current_size, current_mtime_ms, diff_text)
+    if num_tokens_from_string(change.content) <= max_tokens:
+        return change
     # 行数只是事实摘要；前两行是文件头，其余 +/- 行才计入增删，正文的 +++ 不能误排除。
     added = sum(line.startswith("+") for line in diff_lines[2:])
     removed = sum(line.startswith("-") for line in diff_lines[2:])
@@ -267,46 +288,89 @@ async def detect_file_changes(
     *, budget: HorizonDisplayBudget, max_read_bytes: int,
 ) -> FileChanges:
     """
-    在文件总预算内选择完整表达；外层原有 hash/mtime 并发采集保持不变。
+    在文件总预算内先保留基础摘要，再增加细节；外层原有 hash/mtime 并发采集保持不变。
 
     文件事实由外层采集，这里只决定怎样占用本轮模型上下文，不重新决定文件是否允许编辑。
-    即使重要文件额度较高，也受全体文件预算约束；额度耗尽后保留明确的省略数量。
+    即使重要文件额度较高，也不能占用其它文件的基础摘要预算；只有基础集合超限才省略。
     FileChangeBlock.new_snapshot 只有完整内容可用时才有值，最终是否接纳仍由 Horizon 决定。
     """
     result = FileChanges()
-    used = num_tokens_from_string("<file_changes>\n</file_changes>")
-    reserve = num_tokens_from_string(_omission_notice(len(state.file_records)))
-    # MEMORY.md 和 AGENTS.md 获得较大额度，并优先分配文件展示预算；其它文件保持原顺序。
+    used = TokenEstimateCounter()
+    used.add_text("<file_changes>\n</file_changes>")
+    used.add_text("\n" + _omission_notice(len(state.file_records)))
+    summary_counts: dict[str, TokenEstimateCounter] = {}
+    # MEMORY.md 和 AGENTS.md 获得较大额度，并优先升级详细内容；其它文件保持原顺序。
     records = sorted(state.file_records.values(), key=lambda record: Path(record.path).name.casefold() not in {"memory.md", "agents.md"})
+    # 先覆盖所有变化文件，再用剩余额度增加细节；文件优先级只影响细节升级顺序。
+    # 例：A、B 的详细块会用完预算时，保留 A 详细块、B 摘要、C 摘要，
+    # 不能为了让 A、B 更详细而省略 C。模型先知道哪些文件变了，再按任务需要读取。
+    # 基础摘要只用外层已采集的路径、大小和修改时间，不预读全文或预先计算 Diff；
+    # 增删统计只复用详细阶段已经算出的结果，避免为了分配预算先处理所有正文。
+    # 这里处理已追踪且本轮检测到变化的文件，不扫描整个工作区；正常工作量下，
+    # 先预留短摘要已能保留文件覆盖。不为假设中的极端数量增加清单文件或分页，
+    # 但仍保留现有超限保护，不把预期工作量当成永远不超限的硬性保证。
     for record in records:
         await asyncio.sleep(0)
         cur_hash, cur_size = current_hashes.get(record.path, ("", 0))
         if not cur_hash or cur_hash == record.file_hash:
             continue
         mtime = current_mtimes.get(record.path, 0.0)
-        remaining = budget.file_changes_max_tokens - used - reserve
-        if remaining <= 0:
-            result.omitted += 1
-            continue
         per_file = budget.important_file_change_max_tokens if Path(record.path).name.casefold() in {"memory.md", "agents.md"} else budget.file_change_max_tokens
         if cur_size > max_read_bytes:
             # 大文件沿用外层并发采集得到的 mtime；不能为了 Token 或摘要再扫全文。
             change = _notice(record, cur_size, mtime, "Large-file metadata changed; no new file content has been supplied")
         else:
-            change = await _build_file_diff_block(
-                record, cur_size, mtime,
-                max_tokens=min(per_file, remaining), full_read_ratio=budget.full_read_ratio,
-            )
-        if change is None:
-            continue
-        cost = num_tokens_from_string(change.content)
-        if cost > remaining:
-            change = _notice(record, cur_size, mtime, "The file changed; its complete result exceeds the remaining file display budget")
-            cost = num_tokens_from_string(change.content)
-        if cost > remaining:
+            change = _notice(record, cur_size, mtime, "The file changed; detailed content is not included")
+        count = TokenEstimateCounter()
+        count.add_text(change.content)
+        total = TokenEstimateCounter(
+            chinese_char_count=used.chinese_char_count + count.chinese_char_count,
+            # 每个文件块在最终 join 中新增一个换行；单文件额度本身不含这个分隔符。
+            non_chinese_char_count=used.non_chinese_char_count + count.non_chinese_char_count + 1,
+        )
+        if count.estimated_tokens > per_file or total.estimated_tokens > budget.file_changes_max_tokens:
             result.omitted += 1
             continue
         result.changes.append(change)
-        # 估算器有整体取整，不能把每块独立取整的误差累积成额外额度。
-        used = num_tokens_from_string("\n".join(["<file_changes>", *(item.content for item in result.changes), "</file_changes>"]))
+        summary_counts[record.path] = count
+        used = total
+
+    summaries = result.changes.copy()
+    # 基础集合本身超限时保留既有省略提示，不再花预算升级少数文件。
+    if not result.omitted:
+        for index, summary in enumerate(summaries):
+            await asyncio.sleep(0)
+            remaining = budget.file_changes_max_tokens - used.estimated_tokens
+            if remaining <= 0:
+                break
+            record = state.file_records[summary.path]
+            _, cur_size = current_hashes[summary.path]
+            if cur_size > max_read_bytes:
+                continue
+            per_file = budget.important_file_change_max_tokens if Path(record.path).name.casefold() in {"memory.md", "agents.md"} else budget.file_change_max_tokens
+            previous_count = summary_counts[summary.path]
+            change = await _build_file_diff_block(
+                record, cur_size, current_mtimes.get(summary.path, 0.0),
+                max_tokens=min(per_file, previous_count.estimated_tokens + remaining),
+                full_read_ratio=budget.full_read_ratio,
+            )
+            if change is None:
+                continue
+            count = TokenEstimateCounter()
+            count.add_text(change.content)
+            # 替换自己的摘要，而不是额外追加。累计原始字符后只取整一次，
+            # 避免逐块取整的误差，也避免每次升级都重新扫描整份消息。
+            total = TokenEstimateCounter(
+                chinese_char_count=used.chinese_char_count - previous_count.chinese_char_count + count.chinese_char_count,
+                non_chinese_char_count=used.non_chinese_char_count - previous_count.non_chinese_char_count + count.non_chinese_char_count,
+            )
+            if count.estimated_tokens <= per_file and total.estimated_tokens <= budget.file_changes_max_tokens:
+                result.changes[index] = change
+                used = total
+
+    content = "\n".join(["<file_changes>", *result.blocks, "</file_changes>"])
+    if num_tokens_from_string(content) > budget.file_changes_max_tokens:
+        # 最终计量异常时只撤销细节升级，不能靠删掉基础摘要修正预算偏差。
+        logger.warning("[AgentHorizon] 文件变化最终输出超限，保留基础摘要")
+        result.changes = summaries
     return result
