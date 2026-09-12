@@ -4,6 +4,7 @@ import {
 	getAccessProjectId,
 	getAccessTopicId,
 	getShareAccessToken,
+	isSharePageLocation,
 	type FileAccessContext,
 } from "../fileAccess/fileAccessContext"
 import { getSuperIdState } from "./query"
@@ -20,12 +21,6 @@ function resolveSessionFileIdentity() {
 		projectId: workspaceState?.projectId || superIdState?.projectId || "",
 		topicId: workspaceState?.topicId || superIdState?.topicId || "",
 	}
-}
-
-function isSharePageLocation() {
-	if (typeof window === "undefined") return false
-	const path = window.location.pathname
-	return path.includes("/share/") || path.includes("/micro-app/") || path.includes("magic-share")
 }
 
 function resolveFileRequestIdentity(access?: FileAccessContext) {
