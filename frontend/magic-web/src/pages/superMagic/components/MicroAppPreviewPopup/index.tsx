@@ -26,6 +26,7 @@ function MicroAppPreviewPopup({ state }: MicroAppPreviewPopupProps) {
 					<MicroAppPreviewContent
 						appId={previewData.appId}
 						appName={previewData.appName}
+						onLeave={close}
 					/>
 				</div>
 			) : null}

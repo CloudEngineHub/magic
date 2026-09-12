@@ -40,6 +40,13 @@ export function useMicroAppMessageFileOpen({
 }: UseMicroAppMessageFileOpenOptions) {
 	const pendingFileOpenRef = useRef<PendingFileOpen | null>(null)
 	const pendingMicroAppOpenRef = useRef<PendingMicroAppOpen | null>(null)
+	const microAppOpenTimerRef = useRef<number | null>(null)
+
+	const clearMicroAppOpenTimer = useMemoizedFn(() => {
+		if (microAppOpenTimerRef.current == null) return
+		window.clearTimeout(microAppOpenTimerRef.current)
+		microAppOpenTimerRef.current = null
+	})
 
 	const openPendingFile = useMemoizedFn(() => {
 		const pendingFileOpen = pendingFileOpenRef.current
@@ -57,10 +64,13 @@ export function useMicroAppMessageFileOpen({
 		const pendingMicroAppOpen = pendingMicroAppOpenRef.current
 		if (!pendingMicroAppOpen || !detailRef.current) return false
 
-		window.setTimeout(() => {
-			detailRef.current?.openMicroAppTab?.(pendingMicroAppOpen)
-		}, MICRO_APP_TAB_OPEN_DELAY_MS)
+		const payload = pendingMicroAppOpen
 		pendingMicroAppOpenRef.current = null
+		clearMicroAppOpenTimer()
+		microAppOpenTimerRef.current = window.setTimeout(() => {
+			microAppOpenTimerRef.current = null
+			detailRef.current?.openMicroAppTab?.(payload)
+		}, MICRO_APP_TAB_OPEN_DELAY_MS)
 		return true
 	})
 
@@ -71,6 +81,7 @@ export function useMicroAppMessageFileOpen({
 				? payload.fileData
 				: undefined
 		pendingMicroAppOpenRef.current = null
+		clearMicroAppOpenTimer()
 		pendingFileOpenRef.current = {
 			file: standaloneFile ?? matchedFile ?? payload.fileData ?? { file_id: payload.fileId },
 			locateFileId: standaloneFile ? undefined : matchedFile?.file_id,
@@ -95,10 +106,13 @@ export function useMicroAppMessageFileOpen({
 	})
 
 	useEffect(() => {
-		if (!isFilesViewActive) return
+		if (!isFilesViewActive) {
+			clearMicroAppOpenTimer()
+			return
+		}
 		openPendingFile()
 		openPendingMicroApp()
-	}, [isFilesViewActive, openPendingFile, openPendingMicroApp])
+	}, [clearMicroAppOpenTimer, isFilesViewActive, openPendingFile, openPendingMicroApp])
 
 	useEffect(() => {
 		pubsub.subscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
@@ -106,6 +120,7 @@ export function useMicroAppMessageFileOpen({
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 			pubsub.unsubscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
+			clearMicroAppOpenTimer()
 		}
-	}, [handleOpenFileTab, handleOpenMicroAppTab])
+	}, [clearMicroAppOpenTimer, handleOpenFileTab, handleOpenMicroAppTab])
 }

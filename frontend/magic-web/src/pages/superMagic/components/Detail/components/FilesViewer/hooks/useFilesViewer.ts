@@ -57,7 +57,7 @@ import {
 } from "./previewPolicy"
 import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { buildWebsiteTab, isWebsiteTab } from "../utils/websiteTabs"
-import { getFileViewerTabType } from "../utils/tabType"
+import { getFileViewerTabType, hasActivePreviewTab } from "../utils/tabType"
 import { PLAYBACK_TAB_ID } from "../utils/tabConstants"
 import { tabReducer } from "./tabReducer"
 
@@ -223,8 +223,6 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 	const [dragDirection, setDragDirection] = useState<"left" | "right" | null>(null)
 
-	// 计算当前是否有激活的文件tab
-	const hasActiveFileTab = useMemo(() => tabs.some((tab) => tab.active), [tabs])
 	const viewerProjectId = selectedProject?.id || projectId || ""
 
 	// 文件状态缓存相关 - 需要在 openPlaybackTab 之前声明
@@ -234,22 +232,6 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const [isAwaitingProjectAttachments, setIsAwaitingProjectAttachments] = useState(
 		Boolean(viewerProjectId),
 	)
-
-	// 使用playbackTab hook
-	const {
-		playbackTab,
-		openPlaybackTab: openPlaybackTabOriginal,
-		closePlaybackTab,
-		updatePlaybackTab,
-		isPlaybackTab,
-	} = usePlaybackTab({
-		selectedTopic,
-		topicName, // 传递话题名称（用于分享场景）
-		messages,
-		currentTopicStatus,
-		autoDetail,
-		hasActiveFileTab, // 传递当前是否有激活的文件tab
-	})
 
 	/** Keeps the active preview inside one fullscreen shell without re-entering during tab switches. */
 	const activatePreviewFullscreen = useMemoizedFn((tabId: string, allowAutomaticEntry = true) => {
@@ -272,6 +254,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		deactivateAllKnowledgeBaseTabs,
 	} = useKnowledgeBaseTab()
 
+	// 使用已发布微应用 Tab hook
 	const {
 		publishedMicroAppTabs,
 		openPublishedMicroAppTab: openPublishedMicroAppTabOriginal,
@@ -280,15 +263,36 @@ export function useFilesViewer(props: FilesViewerProps) {
 		deactivateAllPublishedMicroAppTabs,
 	} = usePublishedMicroAppTab()
 
+	// 当前是否有激活的预览 tab（文件 / 知识库 / 微应用）
+	const hasActiveFileTab = useMemo(
+		() => hasActivePreviewTab(tabs, knowledgeBaseTabs, publishedMicroAppTabs),
+		[knowledgeBaseTabs, publishedMicroAppTabs, tabs],
+	)
+
+	// 使用playbackTab hook
+	const {
+		playbackTab,
+		openPlaybackTab: openPlaybackTabOriginal,
+		closePlaybackTab,
+		updatePlaybackTab,
+		isPlaybackTab,
+	} = usePlaybackTab({
+		selectedTopic,
+		topicName,
+		messages,
+		currentTopicStatus,
+		autoDetail,
+		hasActiveFileTab,
+	})
+
 	// 包装openPlaybackTab，在需要激活时将所有文件tab设置为非激活状态
 	const openPlaybackTab = useCallback(
 		(options?: { toolData?: unknown; forceActivate?: boolean }) => {
 			const { toolData, forceActivate } = options || {}
 
-			// 如果用户正在预览文件，且不是强制打开，则不打开playbackTab
-			// 这样切换话题时不会干扰用户当前的文件预览
+			// 如果用户正在预览，且不是强制打开，则不打开 playbackTab
+			// 这样切换话题时不会干扰用户当前的预览
 			if (forceActivate === undefined && hasActiveFileTab) {
-				console.log("🚫 用户正在预览文件，不打开 playbackTab")
 				return
 			}
 

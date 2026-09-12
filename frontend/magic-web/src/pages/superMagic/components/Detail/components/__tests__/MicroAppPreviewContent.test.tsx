@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import MicroAppPreviewContent from "../MicroAppPreviewContent"
 
@@ -68,7 +68,12 @@ vi.mock("@/pages/share/components", () => ({
 }))
 
 vi.mock("@/pages/share/microApp/components/MicroAppSafetyNotice", () => ({
-	default: () => <div data-testid="micro-app-share-safety-notice" />,
+	default: ({ onLeave }: { onLeave: () => void }) => (
+		<div>
+			<div data-testid="micro-app-share-safety-notice" />
+			<button type="button" data-testid="micro-app-share-safety-leave" onClick={onLeave} />
+		</div>
+	),
 }))
 
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
@@ -132,5 +137,14 @@ describe("MicroAppPreviewContent", () => {
 
 		expect(screen.getByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
 		expect(screen.queryByTestId("mock-html-preview")).not.toBeInTheDocument()
+	})
+
+	it("calls onLeave when the safety notice leave action is clicked", () => {
+		shareDataState.hasConfirmedSafetyNotice = false
+		const onLeave = vi.fn()
+		render(<MicroAppPreviewContent appId="app-1" appName="内购" onLeave={onLeave} />)
+
+		fireEvent.click(screen.getByTestId("micro-app-share-safety-leave"))
+		expect(onLeave).toHaveBeenCalledTimes(1)
 	})
 })

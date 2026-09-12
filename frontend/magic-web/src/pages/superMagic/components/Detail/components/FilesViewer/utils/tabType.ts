@@ -19,3 +19,15 @@ export function getFileViewerTabType(
 	if (isWebsiteTab(tab)) return "website"
 	return "file"
 }
+
+export function hasActivePreviewTab(
+	fileTabs: Array<{ active?: boolean }>,
+	knowledgeBaseTabs: Array<{ active?: boolean }> = [],
+	publishedMicroAppTabs: Array<{ active?: boolean }> = [],
+) {
+	return (
+		fileTabs.some((tab) => tab.active) ||
+		knowledgeBaseTabs.some((tab) => tab.active) ||
+		publishedMicroAppTabs.some((tab) => tab.active)
+	)
+}

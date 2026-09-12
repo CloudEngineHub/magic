@@ -569,6 +569,7 @@ const FilesViewer = memo(
 								knowledgeBaseData={knowledgeBaseData}
 								microAppData={microAppData}
 								fillPortalSurface={!isDocumentFlowFullscreen}
+								onCloseTab={handleTabClose}
 							/>
 						),
 					}
@@ -591,6 +592,7 @@ const FilesViewer = memo(
 				props.autoDetail,
 				props.userSelectDetail,
 				openFileTab,
+				handleTabClose,
 			])
 			const inlineCachedTabs = cachedTabRenders
 				.filter(() => isDocumentFlowFullscreen)

@@ -747,6 +747,7 @@ function ClawPlaygroundMobile() {
 		handleFileClick,
 		topicFilesProps,
 		attachmentList,
+		subscribeMicroAppTab: false,
 	})
 	const knowledgeBasePreviewState = useMobileKnowledgeBasePreview()
 	const microAppPreviewState = useMobileMicroAppPreview()

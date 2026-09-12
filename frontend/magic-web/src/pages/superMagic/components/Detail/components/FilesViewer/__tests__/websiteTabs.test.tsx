@@ -14,7 +14,7 @@ import {
 	WEBSITE_TAB_PREFIX,
 	WEBSITE_PRESETS,
 } from "../utils/websiteTabs"
-import { getFileViewerTabType } from "../utils/tabType"
+import { getFileViewerTabType, hasActivePreviewTab } from "../utils/tabType"
 import WebsiteIframeTabContent from "../components/WebsiteIframeTabContent"
 import WebsitePresetMenu from "../components/WebsitePresetMenu"
 import CommonWebsitePresetDialog from "../components/CommonWebsitePresetDialog"
@@ -226,6 +226,21 @@ describe("website tabs", () => {
 		expect(getFileViewerTabType({ id: "__kb__doc" })).toBe("knowledge_base")
 		expect(getFileViewerTabType({ id: "__micro_app__app-1" })).toBe("micro_app")
 		expect(getFileViewerTabType({ id: "__playback__" })).toBe("playback")
+	})
+
+	it("treats knowledge-base and micro-app tabs as active previews", () => {
+		expect(
+			hasActivePreviewTab([{ active: false }], [{ active: true }], [{ active: false }]),
+		).toBe(true)
+		expect(
+			hasActivePreviewTab([{ active: false }], [{ active: false }], [{ active: true }]),
+		).toBe(true)
+		expect(
+			hasActivePreviewTab([{ active: false }], [{ active: false }], [{ active: false }]),
+		).toBe(false)
+		expect(
+			hasActivePreviewTab([{ active: true }], [{ active: false }], [{ active: false }]),
+		).toBe(true)
 	})
 
 	it("reports existing common website presets without overwriting them", () => {

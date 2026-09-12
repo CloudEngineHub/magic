@@ -19,6 +19,8 @@ interface UseTopicDetailPanelControllerOptions {
 	}
 	/** 附件列表，用于 Open_File_Tab_By_Path 事件中按路径查找文件 */
 	attachmentList?: AttachmentItem[]
+	/** 为 false 时由移动端 popup 消费 Open_Micro_App_Tab */
+	subscribeMicroAppTab?: boolean
 }
 
 interface UseTopicDetailPanelControllerReturn {
@@ -45,6 +47,7 @@ export function useTopicDetailPanelController({
 	handleFileClick,
 	topicFilesProps,
 	attachmentList = [],
+	subscribeMicroAppTab = true,
 }: UseTopicDetailPanelControllerOptions): UseTopicDetailPanelControllerReturn {
 	const [activeDetailTabType, setActiveDetailTabType] = useState<DetailTabType>(null)
 	const fileOpenFallbackTimerRef = useRef<number | null>(null)
@@ -210,16 +213,20 @@ export function useTopicDetailPanelController({
 		pubsub.subscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 		pubsub.subscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
 		pubsub.subscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
-		pubsub.subscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
+		if (subscribeMicroAppTab) {
+			pubsub.subscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
+		}
 
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 			pubsub.unsubscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
 			pubsub.unsubscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
-			pubsub.unsubscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
+			if (subscribeMicroAppTab) {
+				pubsub.unsubscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
+			}
 		}
-	}, [detailRef, scheduleFileOpenFallback, setActiveFileId, attachmentList])
+	}, [attachmentList, detailRef, scheduleFileOpenFallback, setActiveFileId, subscribeMicroAppTab])
 
 	const handleActiveDetailTabChange = useMemoizedFn((tabType: DetailTabType) => {
 		setActiveDetailTabType(tabType)

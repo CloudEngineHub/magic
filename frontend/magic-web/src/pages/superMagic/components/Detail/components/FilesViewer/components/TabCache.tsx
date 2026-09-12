@@ -40,6 +40,7 @@ interface TabCacheProps {
 	microAppData?: PublishedMicroAppTabData
 	/** The tab is rendered inside a stable surface that already owns its geometry. */
 	fillPortalSurface?: boolean
+	onCloseTab?: (tabId: string) => void
 }
 
 /**
@@ -60,6 +61,7 @@ const TabCache = memo(
 		knowledgeBaseData,
 		microAppData,
 		fillPortalSurface = false,
+		onCloseTab,
 	}: TabCacheProps) => {
 		const tabType = getFileViewerTabType(tab)
 		const isPlaybackTab = tabType === "playback"
@@ -78,6 +80,10 @@ const TabCache = memo(
 			},
 			[onActiveFileChange],
 		)
+
+		const handleMicroAppLeave = useCallback(() => {
+			onCloseTab?.(tab.id)
+		}, [onCloseTab, tab.id])
 
 		// 监听 tab 激活状态变化，当 tab 变为非激活时暂停音频播放
 		useEffect(() => {
@@ -140,7 +146,7 @@ const TabCache = memo(
 				) : isKnowledgeBaseTab && knowledgeBaseData ? (
 					<KnowledgeBaseTabContent data={knowledgeBaseData} />
 				) : isMicroAppTab && microAppData ? (
-					<MicroAppTabContent data={microAppData} />
+					<MicroAppTabContent data={microAppData} onLeave={handleMicroAppLeave} />
 				) : (
 					<Render
 						key={tab.refreshKey || tab.id}

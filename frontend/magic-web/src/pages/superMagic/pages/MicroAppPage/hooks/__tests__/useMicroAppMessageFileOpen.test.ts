@@ -89,4 +89,70 @@ describe("useMicroAppMessageFileOpen", () => {
 			appName: "报表",
 		})
 	})
+
+	it("does not open a micro-app tab after unmounting before the delay", () => {
+		const openMicroAppTab = vi.fn()
+		const detailRef = {
+			current: {
+				openFileTab: vi.fn(),
+				openMicroAppTab,
+			},
+		}
+
+		const { unmount } = renderHook(() =>
+			useMicroAppMessageFileOpen({
+				attachmentList: [],
+				detailRef,
+				isFilesViewActive: true,
+				showFilesView: vi.fn(),
+			}),
+		)
+
+		act(() => {
+			pubsub.publish(PubSubEvents.Open_Micro_App_Tab, {
+				appId: "app-3",
+				appName: "日历",
+			})
+		})
+		unmount()
+		act(() => {
+			vi.advanceTimersByTime(100)
+		})
+
+		expect(openMicroAppTab).not.toHaveBeenCalled()
+	})
+
+	it("does not open a micro-app tab after leaving files view before the delay", () => {
+		const openMicroAppTab = vi.fn()
+		const detailRef = {
+			current: {
+				openFileTab: vi.fn(),
+				openMicroAppTab,
+			},
+		}
+
+		const { rerender } = renderHook(
+			({ isFilesViewActive }: { isFilesViewActive: boolean }) =>
+				useMicroAppMessageFileOpen({
+					attachmentList: [],
+					detailRef,
+					isFilesViewActive,
+					showFilesView: vi.fn(),
+				}),
+			{ initialProps: { isFilesViewActive: true } },
+		)
+
+		act(() => {
+			pubsub.publish(PubSubEvents.Open_Micro_App_Tab, {
+				appId: "app-4",
+				appName: "报表",
+			})
+		})
+		rerender({ isFilesViewActive: false })
+		act(() => {
+			vi.advanceTimersByTime(100)
+		})
+
+		expect(openMicroAppTab).not.toHaveBeenCalled()
+	})
 })
