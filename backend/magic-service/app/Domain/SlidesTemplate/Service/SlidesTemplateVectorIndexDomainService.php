@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SlidesTemplate\Service;
 
+use App\Domain\Kernel\Service\AbstractVectorIndexDomainService;
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
@@ -19,61 +20,24 @@ use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagMatch;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRelationRepositoryInterface;
-use App\Infrastructure\Core\Embeddings\EmbeddingDimensionPolicy;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInterface;
 use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\ValueObject\Page;
-use GuzzleHttp\Exception\ClientException;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Redis\Redis;
-use Psr\Log\LoggerInterface;
 use RuntimeException;
-use Throwable;
 
-final class SlidesTemplateVectorIndexDomainService
+final class SlidesTemplateVectorIndexDomainService extends AbstractVectorIndexDomainService
 {
-    private const VECTOR_INDEX_INITIALIZED_KEY = 'vector_index:initialized:slides_template';
-
-    /** Stable business label used in logs and dimension errors. */
-    private const BUSINESS = 'Slides template';
-
-    private ?bool $availabilityCache = null;
-
-    private int $availabilityCacheExpiresAt = 0;
-
-    private LoggerInterface $logger;
-
     public function __construct(
         private readonly SlidesTemplateRepositoryInterface $slidesTemplateRepository,
         private readonly SlidesTemplateTagRelationRepositoryInterface $slidesTemplateTagRelationRepository,
-        private readonly VectorStoreInterface $vectorStore,
-        private readonly EmbeddingGeneratorInterface $embeddingGenerator,
-        private readonly Redis $redis,
+        VectorStoreInterface $vectorStore,
+        EmbeddingGeneratorInterface $embeddingGenerator,
+        Redis $redis,
         LoggerFactory $loggerFactory,
     ) {
-        $this->logger = $loggerFactory?->get('vector-index-sync');
-    }
-
-    /** Cache the collection probe briefly to avoid repeated checks during outages. */
-    public function isAvailable(): bool
-    {
-        $now = time();
-        if ($this->availabilityCache !== null && $this->availabilityCacheExpiresAt > $now) {
-            return $this->availabilityCache;
-        }
-
-        try {
-            $available = $this->vectorStore->getCollection($this->collectionName()) !== null;
-        } catch (Throwable) {
-            $available = false;
-        }
-
-        $this->availabilityCache = $available;
-        $this->availabilityCacheExpiresAt = $now + max(
-            0,
-            (int) config('vector_index.availability_cache_seconds', 60),
-        );
-        return $available;
+        parent::__construct($vectorStore, $embeddingGenerator, $redis, $loggerFactory);
     }
 
     /** Remove Qdrant points that no longer represent enabled official templates. */
@@ -174,19 +138,12 @@ final class SlidesTemplateVectorIndexDomainService
         $collectionName = $this->collectionName();
         $collection = $this->vectorStore->getCollection($collectionName);
         if ($collection !== null && ! $forceReEmbedding) {
-            $expectedSize = EmbeddingDimensionPolicy::isEnabled()
-                ? EmbeddingDimensionPolicy::fixedSize()
-                : $this->embeddingGenerator->getDefaultModel($dataIsolation)->getVectorSize();
-            if ($collection->vectorSize !== $expectedSize) {
-                $this->logger->error('Slides template vector sync stopped because embedding dimensions do not match', [
-                    'resource_id' => $resourceId,
-                    'collection_name' => $collectionName,
-                    'collection_vector_size' => $collection->vectorSize,
-                    'embedding_vector_size' => $expectedSize,
-                    'fixed_dimension_enabled' => EmbeddingDimensionPolicy::isEnabled(),
-                ]);
-                EmbeddingDimensionPolicy::assertCollectionSize(self::BUSINESS, $collection->vectorSize, $expectedSize);
-            }
+            $this->assertExistingCollectionSize(
+                $collectionName,
+                $collection->vectorSize,
+                $dataIsolation,
+                $resourceId,
+            );
         }
 
         $tagMap = $this->slidesTemplateTagRelationRepository->findTagsByTemplateIds(
@@ -215,8 +172,7 @@ final class SlidesTemplateVectorIndexDomainService
                     'forced' => $forceReEmbedding,
                 ]);
                 $embedding = $this->generateEmbedding($dataIsolation, $searchText, $operatorId, $template);
-                $collectionSize = EmbeddingDimensionPolicy::resolveCollectionSize(self::BUSINESS, count($embedding));
-                $this->ensureCollection($collectionName, $collectionSize, $forceReEmbedding);
+                $this->ensureCollection($collectionName, $embedding, $forceReEmbedding);
                 $this->vectorStore->storePoint($collectionName, (string) $template->getId(), $embedding, $payload);
                 return;
             }
@@ -228,8 +184,7 @@ final class SlidesTemplateVectorIndexDomainService
 
         // A missing point may indicate a new template or an uncreated collection.
         $embedding = $this->generateEmbedding($dataIsolation, $searchText, $operatorId, $template);
-        $collectionSize = EmbeddingDimensionPolicy::resolveCollectionSize(self::BUSINESS, count($embedding));
-        $this->ensureCollection($collectionName, $collectionSize, $forceReEmbedding);
+        $this->ensureCollection($collectionName, $embedding, $forceReEmbedding);
         $this->vectorStore->storePoint($collectionName, (string) $template->getId(), $embedding, $payload);
         $this->logger->info('Slides template vector stored', ['resource_id' => $resourceId]);
     }
@@ -245,7 +200,7 @@ final class SlidesTemplateVectorIndexDomainService
         }
 
         // Normalize equivalent input so whitespace and case variants share one cache entry.
-        $keyword = $this->normalizeSearchKeyword($query->getKeyword());
+        $keyword = $this->normalizeKeyword($query->getKeyword());
         if ($keyword === '') {
             return [];
         }
@@ -328,74 +283,19 @@ final class SlidesTemplateVectorIndexDomainService
         return $results;
     }
 
-    /** Return whether vector indexing is enabled for SlidesTemplate. */
-    public function isVectorSearchEnabled(): bool
+    protected function collectionName(): string
     {
-        return EmbeddingDimensionPolicy::isEnabled();
+        return (string) config('vector_index.resources.slides_template.collection', 'slides_templates');
     }
 
-    /** Return whether the first full reconciliation has completed. */
-    public function isVectorSearchReady(): bool
+    protected function businessLabel(): string
     {
-        if (! $this->isVectorSearchEnabled()) {
-            return false;
-        }
-
-        return (bool) $this->redis->exists(self::VECTOR_INDEX_INITIALIZED_KEY);
+        return 'Slides template';
     }
 
-    /** Record a successful full reconciliation for subsequent semantic searches. */
-    public function markVectorIndexInitialized(): void
+    protected function initializedKey(): string
     {
-        $this->redis->set(self::VECTOR_INDEX_INITIALIZED_KEY, (string) time());
-    }
-
-    /** Check whether collection creation lost a race to another consumer. */
-    private function isCollectionAlreadyExists(ClientException $exception): bool
-    {
-        $response = $exception->getResponse();
-        if ($response->getStatusCode() !== 409) {
-            return false;
-        }
-
-        return str_contains(strtolower((string) $response->getBody()), 'already exists');
-    }
-
-    /** Ensure the collection matches the embedding dimension, rebuilding it only for forced migrations. */
-    private function ensureCollection(string $collectionName, int $vectorSize, bool $forceReEmbedding): void
-    {
-        $collection = $this->vectorStore->getCollection($collectionName);
-        if ($collection !== null && $collection->vectorSize !== $vectorSize) {
-            if (! $forceReEmbedding) {
-                EmbeddingDimensionPolicy::assertCollectionSize(self::BUSINESS, $collection->vectorSize, $vectorSize);
-            }
-
-            $this->vectorStore->removeCollection($collectionName);
-            $this->availabilityCache = false;
-            $collection = null;
-        }
-
-        if ($collection !== null) {
-            return;
-        }
-
-        try {
-            $this->vectorStore->createCollection($collectionName, $vectorSize);
-        } catch (ClientException $exception) {
-            // Another consumer may create the collection between the probe and create call.
-            if (! $this->isCollectionAlreadyExists($exception)) {
-                throw $exception;
-            }
-        }
-    }
-
-    /** Remove the point when the configured collection exists. */
-    private function removePoint(string $resourceId): void
-    {
-        $collectionName = $this->collectionName();
-        if ($this->vectorStore->getCollection($collectionName) !== null) {
-            $this->vectorStore->removePoint($collectionName, $resourceId);
-        }
+        return 'vector_index:initialized:slides_template';
     }
 
     /** Generate a vector for a new point or changed search text. */
@@ -499,21 +399,6 @@ final class SlidesTemplateVectorIndexDomainService
             ['key' => 'owner_type', 'value' => SlidesTemplateOwnerType::User->value],
             ['key' => 'owner_id', 'value' => $dataIsolation->getCurrentUserId()],
         ];
-    }
-
-    /** Return the configured SlidesTemplate collection name. */
-    private function collectionName(): string
-    {
-        return (string) config('vector_index.resources.slides_template.collection', 'slides_templates');
-    }
-
-    /** Normalize search text so equivalent inputs share one embedding cache entry. */
-    private function normalizeSearchKeyword(string $keyword): string
-    {
-        $keyword = trim($keyword);
-        $keyword = preg_replace('/\s+/u', ' ', $keyword) ?? $keyword;
-
-        return mb_strtolower($keyword, 'UTF-8');
     }
 
     /** Generate embeddings through the shared knowledge-base pipeline. */
