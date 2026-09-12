@@ -77,7 +77,18 @@ vi.mock("@/pages/share/microApp/components/MicroAppSafetyNotice", () => ({
 }))
 
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
-	default: () => <div data-testid="mock-html-preview" />,
+	default: (props: {
+		projectId?: string
+		selectedProject?: { id?: string } | null
+		topicStore?: unknown
+	}) => (
+		<div
+			data-testid="mock-html-preview"
+			data-project-id={props.projectId}
+			data-host-project-id={props.selectedProject?.id}
+			data-has-topic-store={props.topicStore ? "true" : "false"}
+		/>
+	),
 }))
 
 vi.mock("@/pages/superMagic/components/MicroAppStateIllustration", () => ({
@@ -146,5 +157,14 @@ describe("MicroAppPreviewContent", () => {
 
 		fireEvent.click(screen.getByTestId("micro-app-share-safety-leave"))
 		expect(onLeave).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps origin projectId on html preview without host props", () => {
+		render(<MicroAppPreviewContent appId="app-1" appName="内购" />)
+
+		const preview = screen.getByTestId("mock-html-preview")
+		expect(preview).toHaveAttribute("data-project-id", "project-1")
+		expect(preview).not.toHaveAttribute("data-host-project-id")
+		expect(preview).toHaveAttribute("data-has-topic-store", "false")
 	})
 })

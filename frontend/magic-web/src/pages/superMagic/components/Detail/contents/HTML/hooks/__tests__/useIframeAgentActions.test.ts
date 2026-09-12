@@ -1,6 +1,5 @@
 import { renderHook, act } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { PubSubEvents } from "@/utils/pubsub"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
@@ -17,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 	hasListeners: vi.fn(() => false),
 	releaseHtmlScreenshotsAfterSend: vi.fn(),
 	collectMentionItemsFromContent: vi.fn(() => []),
+	processMessageMentions: vi.fn(async (content: unknown) => content),
 }))
 
 vi.mock("ahooks", () => ({
@@ -59,15 +59,6 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
-vi.mock("@/pages/superMagic/stores/core", () => ({
-	projectStore: {
-		selectedProject: { id: "project-1" },
-	},
-	topicStore: {
-		setSelectedTopic: mocks.setSelectedTopic,
-	},
-}))
-
 vi.mock("@/services/superMagic/topicModel", () => ({
 	superMagicTopicModelService: {
 		saveModel: vi.fn(),
@@ -82,7 +73,7 @@ vi.mock("@/pages/superMagic/services/messageSendFlowService", () => ({
 
 vi.mock("@/pages/superMagic/services/messageSendPreparation", () => ({
 	resolveMessageSendContext: (context: unknown) => context,
-	processMessageMentions: async (content: unknown) => content,
+	processMessageMentions: mocks.processMessageMentions,
 	releaseHtmlScreenshotsAfterSend: mocks.releaseHtmlScreenshotsAfterSend,
 }))
 
@@ -103,33 +94,202 @@ describe("useIframeAgentActions", () => {
 		mocks.hasListeners.mockReturnValue(false)
 	})
 
-	it("does not publish a General topicMode when agentId is omitted", async () => {
-		const { result } = renderHook(() => useIframeAgentActions())
+	it("rejects topic creation when the topic store is missing", async () => {
+		const { result } = renderHook(() =>
+			useIframeAgentActions("project-from-preview", undefined, {
+				id: "project-current",
+			} as any),
+		)
 
 		await act(async () => {
-			await result.current.createTopicAndSend({ message: "hello" })
+			await expect(result.current.createTopicAndSend({ message: "hello" })).rejects.toThrow(
+				"No topic store",
+			)
 		})
 
-		expect(mocks.publish).toHaveBeenCalledWith(
-			PubSubEvents.Send_Message_by_Content,
-			expect.not.objectContaining({
-				topicMode: TopicMode.General,
-			}),
-		)
-		expect(mocks.setSelectedTopic).toHaveBeenCalledWith({ id: "topic-1" })
+		expect(mocks.createTopic).not.toHaveBeenCalled()
+		expect(mocks.publish).not.toHaveBeenCalled()
 	})
 
-	it("uses the explicit projectId for topic creation", async () => {
-		const { result } = renderHook(() => useIframeAgentActions("project-from-preview"))
+	it("creates topics in the host project instead of the preview origin", async () => {
+		const topicStore = {
+			topics: [],
+			setTopics: mocks.setScopedTopics,
+			setSelectedTopic: mocks.setScopedSelectedTopic,
+		} as any
+		const { result } = renderHook(() =>
+			useIframeAgentActions("project-from-preview", topicStore, {
+				id: "project-current",
+			} as any),
+		)
 
 		await act(async () => {
 			await result.current.createTopicAndSend({ message: "hello" })
 		})
 
 		expect(mocks.createTopic).toHaveBeenCalledWith({
-			project_id: "project-from-preview",
+			project_id: "project-current",
 			topic_name: "",
 		})
+		expect(mocks.dispatchMessage).toHaveBeenCalled()
+		expect(mocks.publish).not.toHaveBeenCalled()
+	})
+
+	it("sends on the current MagiClaw topic instead of creating a new one", async () => {
+		const currentTopic = {
+			id: "claw-topic-1",
+			chat_topic_id: "chat-claw-topic-1",
+			chat_conversation_id: "conversation-claw-topic-1",
+		} as Topic
+		const topicStore = {
+			topics: [currentTopic],
+			selectedTopic: currentTopic,
+			setTopics: mocks.setScopedTopics,
+			setSelectedTopic: mocks.setScopedSelectedTopic,
+		} as unknown as TopicStore
+		const { result } = renderHook(() =>
+			useIframeAgentActions("project-from-preview", topicStore, {
+				id: "project-current",
+				project_mode: TopicMode.MagiClaw,
+			} as any),
+		)
+
+		await act(async () => {
+			await expect(result.current.createTopicAndSend({ message: "hello" })).resolves.toEqual({
+				topicId: "claw-topic-1",
+			})
+		})
+
+		expect(mocks.createTopic).not.toHaveBeenCalled()
+		expect(mocks.getTopicDetail).not.toHaveBeenCalled()
+		expect(mocks.setScopedSelectedTopic).not.toHaveBeenCalled()
+		expect(mocks.setScopedTopics).not.toHaveBeenCalled()
+		expect(mocks.dispatchMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				options: expect.objectContaining({
+					extra: expect.objectContaining({
+						super_agent: expect.objectContaining({
+							topic_pattern: TopicMode.MagiClaw,
+						}),
+					}),
+				}),
+				context: expect.objectContaining({
+					selectedTopic: expect.objectContaining({ id: "claw-topic-1" }),
+				}),
+			}),
+		)
+	})
+
+	it("sends on the current Chat topic instead of creating a new one", async () => {
+		const currentTopic = {
+			id: "chat-topic-1",
+			chat_topic_id: "chat-chat-topic-1",
+			chat_conversation_id: "conversation-chat-topic-1",
+		} as Topic
+		const topicStore = {
+			topics: [currentTopic],
+			selectedTopic: currentTopic,
+			setTopics: mocks.setScopedTopics,
+			setSelectedTopic: mocks.setScopedSelectedTopic,
+		} as unknown as TopicStore
+		const { result } = renderHook(() =>
+			useIframeAgentActions("project-from-preview", topicStore, {
+				id: "project-current",
+				project_mode: TopicMode.Chat,
+			} as any),
+		)
+
+		await act(async () => {
+			await expect(result.current.createTopicAndSend({ message: "hello" })).resolves.toEqual({
+				topicId: "chat-topic-1",
+			})
+		})
+
+		expect(mocks.createTopic).not.toHaveBeenCalled()
+		expect(mocks.dispatchMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				options: expect.objectContaining({
+					extra: expect.objectContaining({
+						super_agent: expect.objectContaining({
+							topic_pattern: TopicMode.Chat,
+						}),
+					}),
+				}),
+				context: expect.objectContaining({
+					selectedTopic: expect.objectContaining({ id: "chat-topic-1" }),
+				}),
+			}),
+		)
+	})
+
+	it("rejects MagiClaw send when the unique topic is missing", async () => {
+		const topicStore = {
+			topics: [],
+			selectedTopic: null,
+			setTopics: mocks.setScopedTopics,
+			setSelectedTopic: mocks.setScopedSelectedTopic,
+		} as unknown as TopicStore
+		const { result } = renderHook(() =>
+			useIframeAgentActions("project-from-preview", topicStore, {
+				id: "project-current",
+				project_mode: TopicMode.MagiClaw,
+			} as any),
+		)
+
+		await act(async () => {
+			await expect(result.current.createTopicAndSend({ message: "hello" })).rejects.toThrow(
+				"No topic selected",
+			)
+		})
+
+		expect(mocks.createTopic).not.toHaveBeenCalled()
+		expect(mocks.dispatchMessage).not.toHaveBeenCalled()
+	})
+
+	it("rejects topic creation when the host project is missing", async () => {
+		const { result } = renderHook(() => useIframeAgentActions("project-from-preview"))
+
+		await act(async () => {
+			await expect(result.current.createTopicAndSend({ message: "hello" })).rejects.toThrow(
+				"No project selected",
+			)
+		})
+
+		expect(mocks.createTopic).not.toHaveBeenCalled()
+	})
+
+	it("resolves mentions against the origin project when sending in a scoped conversation", async () => {
+		const scopedTopicStore = {
+			topics: [],
+			setTopics: mocks.setScopedTopics,
+			setSelectedTopic: mocks.setScopedSelectedTopic,
+		} as any
+		const { result } = renderHook(() =>
+			useIframeAgentActions("project-from-preview", scopedTopicStore, {
+				id: "project-current",
+			} as any),
+		)
+
+		await act(async () => {
+			await result.current.createTopicAndSend({ message: "hello" })
+		})
+
+		expect(mocks.createTopic).toHaveBeenCalledWith({
+			project_id: "project-current",
+			topic_name: "",
+		})
+		expect(mocks.processMessageMentions).toHaveBeenCalledWith(
+			expect.anything(),
+			"project-from-preview",
+			"topic-1",
+		)
+		expect(mocks.dispatchMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				context: expect.objectContaining({
+					selectedProject: expect.objectContaining({ id: "project-current" }),
+				}),
+			}),
+		)
 	})
 
 	it("updates the scoped topic store after creating a topic", async () => {

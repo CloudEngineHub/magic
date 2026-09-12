@@ -1,7 +1,6 @@
 import { useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
-import { runInAction } from "mobx"
 import magicToast from "@/components/base/MagicToaster/utils"
 import {
 	arrayBufferToFile,
@@ -15,14 +14,14 @@ import {
 } from "@/services/superMagic/DefaultAgentSelectionService"
 import { addMultipleFilesToCurrentChat } from "@/pages/superMagic/utils/topics"
 import { SuperMagicApi } from "@/apis"
-import SuperMagicService from "@/pages/superMagic/services"
-import { topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
+import { workspaceStore } from "@/pages/superMagic/stores/core"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
 import type { HtmlPermissionScope } from "../types"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import { isSingleTopicHostProject } from "@/pages/superMagic/utils/isSingleTopicHostProject"
 
 interface MagicUploadFileData {
 	/** 二进制对象（优先使用；ArrayBuffer 可通过 transfer list 转移所有权） */
@@ -279,8 +278,8 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				return
 			}
 
-			const runtimeProjectId = projectId ?? selectedProject?.id
-			if (!runtimeProjectId) {
+			const hostProjectId = selectedProject?.id
+			if (!hostProjectId) {
 				replyToIframe(replyType, requestId, {
 					success: false,
 					error: projectContextUnavailableError || "No project selected",
@@ -344,8 +343,34 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 					return
 				}
 
+				if (!scopedTopicStore) {
+					replyToIframe(replyType, requestId, {
+						success: false,
+						error: "No topic store",
+					})
+					return
+				}
+
+				// Claw / Chat 只有一个会话，把文件加到当前话题，不要再建一个。
+				if (isSingleTopicHostProject(selectedProject)) {
+					if (!scopedTopicStore.selectedTopic?.id) {
+						replyToIframe(replyType, requestId, {
+							success: false,
+							error: "No topic selected",
+						})
+						return
+					}
+
+					addMultipleFilesToCurrentChat({ fileItems: foundFiles, autoFocus: true })
+					replyToIframe(replyType, requestId, {
+						success: true,
+						result: { foundCount: foundFiles.length, notFoundPaths },
+					})
+					return
+				}
+
 				const newTopic = await SuperMagicApi.createTopic({
-					project_id: runtimeProjectId,
+					project_id: hostProjectId,
 					topic_name: "",
 					project_mode: finalAgentMode as TopicMode,
 				})
@@ -360,28 +385,18 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 
 				const topicWithMode: any = { ...newTopic, topic_mode: finalAgentMode as TopicMode }
 
-				if (scopedTopicStore) {
-					// 微应用编辑页不走全局路由，直接同步独立话题列表和当前话题。
-					scopedTopicStore.setTopics([
-						topicWithMode,
-						...scopedTopicStore.topics.filter((topic) => topic.id !== newTopic.id),
-					])
-					scopedTopicStore.setSelectedTopic(topicWithMode)
-				} else {
-					runInAction(() => {
-						topicStore.setSelectedTopic(topicWithMode)
-					})
-				}
+				// 必须用传入的 store，不能回落到全局 topicStore。
+				scopedTopicStore.setTopics([
+					topicWithMode,
+					...scopedTopicStore.topics.filter((topic) => topic.id !== newTopic.id),
+				])
+				scopedTopicStore.setSelectedTopic(topicWithMode)
 
 				pubsub.publish(PubSubEvents.Super_Magic_Topic_Mode_Changed, {
 					mode: finalAgentMode as TopicMode,
 					workspaceId,
-					projectId: runtimeProjectId,
+					projectId: hostProjectId,
 				})
-
-				if (!scopedTopicStore) {
-					SuperMagicService.route.navigateToState({ topicId: newTopic.id || null })
-				}
 
 				// Wait for navigation before adding files to the message input
 				setTimeout(() => {

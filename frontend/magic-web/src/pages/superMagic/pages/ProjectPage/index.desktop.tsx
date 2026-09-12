@@ -34,6 +34,7 @@ import { loadProjectAttachments } from "../../services"
 import { isAbortError, useLatestAbortableRequest } from "../../hooks/useLatestAbortableRequest"
 import { useProjectFirstAttachmentRender } from "../../hooks/useProjectFirstAttachmentRender"
 import { isAudioProjectMode } from "../AudioRecordings/utils/is-audio-project-mode"
+import { HostConversationProvider } from "../../contexts/HostConversationContext"
 import type {
 	SuperMagicOpenFileTabPayload,
 	SuperMagicOpenKnowledgeBaseTabPayload,
@@ -364,74 +365,79 @@ function ProjectPage() {
 	const renderMessagePanel = useMemoizedFn(() => null)
 
 	return (
-		<TopicDesktopPanels
-			containerClassName={styles.container}
-			detailPanelClassName={styles.detailPanel}
-			isDetailPanelFullscreen={false}
-			sidebar={
-				<div className="flex h-full flex-col gap-2" data-testid="workspace-sidebar-wrapper">
-					{hideProjectCard ? null : (
-						<ProjectCardContainer
-							selectedProject={selectedProject}
-							selectedWorkspace={selectedWorkspace}
+		<HostConversationProvider selectedProject={selectedProject} topicStore={topicStore}>
+			<TopicDesktopPanels
+				containerClassName={styles.container}
+				detailPanelClassName={styles.detailPanel}
+				isDetailPanelFullscreen={false}
+				sidebar={
+					<div
+						className="flex h-full flex-col gap-2"
+						data-testid="workspace-sidebar-wrapper"
+					>
+						{hideProjectCard ? null : (
+							<ProjectCardContainer
+								selectedProject={selectedProject}
+								selectedWorkspace={selectedWorkspace}
+							/>
+						)}
+						<ProjectSider
+							items={[
+								{
+									key: "topicFiles",
+									title: t("topicFiles.title"),
+									icon: <Files size={16} />,
+									content: (
+										<TopicFilesButton
+											attachments={attachments as any}
+											setUserSelectDetail={(detail: any) => {
+												console.log("到顶层了", detail)
+												setUserSelectDetail(detail)
+											}}
+											onFileClick={handleFileClick}
+											projectId={selectedProject?.id}
+											activeFileId={activeFileId}
+											selectedTopic={selectedTopic}
+											onAttachmentsChange={setAttachments}
+											selectedProject={selectedProject}
+											selectedWorkspace={selectedWorkspace}
+											allowEdit={false}
+											isInProject
+										/>
+									),
+								},
+							]}
+							className="flex-1 overflow-hidden rounded-lg border border-border bg-background"
 						/>
-					)}
-					<ProjectSider
-						items={[
-							{
-								key: "topicFiles",
-								title: t("topicFiles.title"),
-								icon: <Files size={16} />,
-								content: (
-									<TopicFilesButton
-										attachments={attachments as any}
-										setUserSelectDetail={(detail: any) => {
-											console.log("到顶层了", detail)
-											setUserSelectDetail(detail)
-										}}
-										onFileClick={handleFileClick}
-										projectId={selectedProject?.id}
-										activeFileId={activeFileId}
-										selectedTopic={selectedTopic}
-										onAttachmentsChange={setAttachments}
-										selectedProject={selectedProject}
-										selectedWorkspace={selectedWorkspace}
-										allowEdit={false}
-										isInProject
-									/>
-								),
-							},
-						]}
-						className="flex-1 overflow-hidden rounded-lg border border-border bg-background"
+					</div>
+				}
+				detailPanel={
+					<Detail
+						ref={detailRef}
+						disPlayDetail={disPlayDetail}
+						userSelectDetail={userSelectDetail}
+						setUserSelectDetail={setUserSelectDetail}
+						attachments={attachments}
+						attachmentList={attachmentList}
+						topicId={selectedTopic?.id}
+						baseShareUrl={`${window.location.origin}/share`}
+						currentTopicStatus={currentTopicStatus}
+						messages={[]}
+						autoDetail={autoDetail}
+						allowEdit={false}
+						selectedTopic={selectedTopic}
+						selectedProject={selectedProject}
+						activeFileId={activeFileId}
+						onActiveFileChange={setActiveFileId}
+						showFallbackWhenEmpty
 					/>
-				</div>
-			}
-			detailPanel={
-				<Detail
-					ref={detailRef}
-					disPlayDetail={disPlayDetail}
-					userSelectDetail={userSelectDetail}
-					setUserSelectDetail={setUserSelectDetail}
-					attachments={attachments}
-					attachmentList={attachmentList}
-					topicId={selectedTopic?.id}
-					baseShareUrl={`${window.location.origin}/share`}
-					currentTopicStatus={currentTopicStatus}
-					messages={[]}
-					autoDetail={autoDetail}
-					allowEdit={false}
-					selectedTopic={selectedTopic}
-					selectedProject={selectedProject}
-					activeFileId={activeFileId}
-					onActiveFileChange={setActiveFileId}
-					showFallbackWhenEmpty
-				/>
-			}
-			isReadOnly={isReadOnly}
-			showProjectResizeHandle={showProjectResizeHandle}
-			shouldShowDetailPanel={shouldShowDetailPanel}
-			renderMessagePanel={renderMessagePanel}
-		/>
+				}
+				isReadOnly={isReadOnly}
+				showProjectResizeHandle={showProjectResizeHandle}
+				shouldShowDetailPanel={shouldShowDetailPanel}
+				renderMessagePanel={renderMessagePanel}
+			/>
+		</HostConversationProvider>
 	)
 }
 

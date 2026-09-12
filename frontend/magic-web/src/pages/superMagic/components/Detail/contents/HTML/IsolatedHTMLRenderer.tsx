@@ -195,7 +195,7 @@ import { ContactApi } from "@/apis"
 import MagicModal from "@/components/base/MagicModal"
 import type { HtmlNavigationRequest } from "./utils/html-navigation"
 import type { HtmlPermissionScope } from "./iframe-api/types"
-import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import { useHostConversation } from "@/pages/superMagic/contexts/HostConversationContext"
 
 interface IsolatedHTMLRendererProps {
 	content: string
@@ -228,11 +228,8 @@ interface IsolatedHTMLRendererProps {
 	/** 当前 HTML 所在目录，用于相对资源解析、上传默认目录等历史逻辑。 */
 	htmlRelativeFolderPath?: string
 	openNewTab: (fileId: string, path: string, autoEdit?: boolean) => void
-	selectedProject?: any
-	/** Host project ID passed by preview or share pages. */
+	/** origin 项目 ID：文件/库所在项目。host 来自 HostConversationProvider。 */
 	projectId?: string
-	/** 微应用编辑页的独立话题 store；未传时回退到全局 store。 */
-	topicStore?: TopicStore
 	attachmentList?: any[]
 	setSlideContents?: (slideContents: Map<number, string>) => void
 	slideIndex?: number
@@ -449,9 +446,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			filePathMapping,
 			openNewTab,
 			htmlRelativeFolderPath,
-			selectedProject,
 			projectId,
-			topicStore: scopedTopicStore,
 			attachmentList,
 			isPlaybackMode,
 			toolbarClassName,
@@ -481,7 +476,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			enableInlineInspectorFallback = false,
 			permissionController,
 		} = props
-		// Share pages inject project_id on window when props omit it.
+		// host：用户当前所在项目。分享页没有 Provider，会话 API 必须失败。
+		const { selectedProject, topicStore: scopedTopicStore } = useHostConversation()
+		// origin：文件/库所在项目。发布预览传微应用原项目，普通预览回落到 host。
 		const runtimeProjectId = projectId ?? selectedProject?.id
 		const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
 		// The shared shell can load the runtime bundle built by this host deployment.
@@ -1317,12 +1314,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				: undefined,
 		})
 
+		// origin + 传入的 store + host 项目；hook 内不再读全局 store
 		const { getAgentList, createTopicAndSend, sendMessage } = useIframeAgentActions(
 			runtimeProjectId,
 			scopedTopicStore,
 			selectedProject,
 		)
 
+		// 会话写操作按 host 鉴权：分享页没有当前项目时不可发消息
 		const { handleAgentMessage } = useIframeAgent({
 			iframeRef,
 			targetOrigin: iframeTargetOrigin,
@@ -1330,8 +1329,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			createTopicAndSend,
 			sendMessage,
 			enableWriteOperations: true,
-			projectId: runtimeProjectId,
-			projectContextUnavailableError: !runtimeProjectId
+			projectId: selectedProject?.id,
+			projectContextUnavailableError: !selectedProject?.id
 				? projectContextUnavailableError
 				: undefined,
 			authorizePermission: authorizeProjectPermission,
@@ -1372,6 +1371,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			}
 		}, [fileId, isDynamicInterceptionEnabled, postMessageTargetStrategy])
 
+		// upload/download 走 origin；addFilesToMessage 走 host + 传入的 store
 		const { handleMagicUploadFiles, handleMagicAddFilesToMessage, handleMagicDownloadFiles } =
 			useMagicFiles({
 				iframeRef,

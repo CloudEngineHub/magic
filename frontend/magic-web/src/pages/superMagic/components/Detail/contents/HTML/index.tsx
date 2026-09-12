@@ -85,7 +85,6 @@ import {
 	shouldShowHtmlPermissionManager,
 	useHtmlAppPermissions,
 } from "./hooks/useHtmlAppPermissions"
-import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { useHtmlDevConsoleState } from "./hooks/useHtmlDevConsoleState"
 import {
 	type HtmlPermissionManagerHandle,
@@ -167,8 +166,6 @@ interface HTMLProps {
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
 	projectId?: string
-	/** 微应用编辑页传入的独立话题 store，供 iframe Agent 操作同步当前话题。 */
-	topicStore?: TopicStore
 	/** 跨多个 HTML 文件共享虚拟存储时使用的稳定标记。 */
 	virtualStorageMarkerId?: string
 }
@@ -271,9 +268,9 @@ export default memo(function HTML(props: HTMLProps) {
 		isInPPTMode = false,
 		allowDownload,
 		projectId,
-		topicStore,
 		virtualStorageMarkerId,
 	} = props
+	// origin：显式传入的项目，缺省时用当前选中项目
 	const runtimeProjectId = projectId ?? selectedProject?.id
 
 	const displayConfig = displayData?.display_config || externalDisplayConfig
@@ -1658,9 +1655,7 @@ export default memo(function HTML(props: HTMLProps) {
 									htmlRelativeFolderPath={
 										currentHtmlFileInfo.htmlRelativeFolderPath
 									}
-									selectedProject={selectedProject}
 									projectId={runtimeProjectId}
-									topicStore={topicStore}
 									devConsoleEnabled={devConsoleEnabled}
 									permissionController={htmlPermissionController}
 									attachmentList={attachmentList}

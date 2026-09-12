@@ -13,6 +13,7 @@ import {
 	FileActionVisibilityProvider,
 	HIDE_CLAW_FILE_ACTIONS,
 } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { ClawConversationPanel } from "./components/ClawConversationPanel"
@@ -130,70 +131,72 @@ function ClawPlaygroundDesktop() {
 	}
 
 	return (
-		<FileActionVisibilityProvider value={HIDE_CLAW_FILE_ACTIONS}>
-			{dialog}
-			<TopicDesktopPanels
-				containerClassName="flex h-full w-full min-w-0 items-center overflow-hidden"
-				detailPanelClassName="flex h-full flex-col"
-				isDetailPanelFullscreen={isDetailPanelFullscreen}
-				sidebar={
-					<ClawPlaygroundSidebar
-						magicClaw={magicClaw}
-						sandboxLatestVersion={store.sandboxLatestVersion}
-						isUpdatingSandbox={store.isUpgradingSandbox}
-						selectedProjectId={selectedProject?.id || null}
-						isReadOnly={isReadOnly}
-						topicFilesProps={topicFilesPropsWithPanel}
-						resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
-						onBack={handleBack}
-						onOpenEditDialog={() => setIsEditDialogOpen(true)}
-						onUpgradeSandbox={handleConfirmUpgradeSandbox}
-						onOpenSkillsPanel={() => setIsSkillsPanelOpen(true)}
-					/>
-				}
-				detailPanel={
-					<ClawPlaygroundDetailPanel
-						isSkillsPanelOpen={isSkillsPanelOpen}
-						onCloseSkillsPanel={() => setIsSkillsPanelOpen(false)}
-						detailRef={detailRef}
-						userSelectDetail={userSelectDetail}
-						setUserSelectDetail={setUserSelectDetail}
-						attachments={attachments}
-						attachmentList={attachmentList}
-						selectedTopic={selectedTopic}
-						selectedProject={selectedProject}
-						activeFileId={activeFileId}
-						setActiveFileId={setActiveFileId}
-						handleActiveDetailTabChange={handleActiveDetailTabChange}
-						setIsDetailPanelFullscreen={setIsDetailPanelFullscreen}
-						isReadOnly={isReadOnly}
-					/>
-				}
-				isReadOnly={false}
-				showProjectResizeHandle
-				shouldShowDetailPanel={shouldShowDetailPanel}
-				keepDetailMountedWhenHidden
-				renderMessagePanel={({
-					isConversationPanelCollapsed,
-					onToggleConversationPanel,
-				}) => (
-					<ClawConversationPanel
-						isConversationPanelCollapsed={isConversationPanelCollapsed}
-						onToggleConversationPanel={onToggleConversationPanel}
-						detailPanelVisible={shouldShowDetailPanel}
-						clawCode={code}
-						onOpenSkillsPanel={() => setIsSkillsPanelOpen(true)}
-						onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
-					/>
-				)}
-			/>
-			<ClawPlaygroundEditDialog
-				open={isEditDialogOpen}
-				claw={magicClaw}
-				onOpenChange={setIsEditDialogOpen}
-				onUpdated={store.setMagicClaw}
-			/>
-		</FileActionVisibilityProvider>
+		<HostConversationProvider selectedProject={selectedProject} topicStore={store.topicStore}>
+			<FileActionVisibilityProvider value={HIDE_CLAW_FILE_ACTIONS}>
+				{dialog}
+				<TopicDesktopPanels
+					containerClassName="flex h-full w-full min-w-0 items-center overflow-hidden"
+					detailPanelClassName="flex h-full flex-col"
+					isDetailPanelFullscreen={isDetailPanelFullscreen}
+					sidebar={
+						<ClawPlaygroundSidebar
+							magicClaw={magicClaw}
+							sandboxLatestVersion={store.sandboxLatestVersion}
+							isUpdatingSandbox={store.isUpgradingSandbox}
+							selectedProjectId={selectedProject?.id || null}
+							isReadOnly={isReadOnly}
+							topicFilesProps={topicFilesPropsWithPanel}
+							resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
+							onBack={handleBack}
+							onOpenEditDialog={() => setIsEditDialogOpen(true)}
+							onUpgradeSandbox={handleConfirmUpgradeSandbox}
+							onOpenSkillsPanel={() => setIsSkillsPanelOpen(true)}
+						/>
+					}
+					detailPanel={
+						<ClawPlaygroundDetailPanel
+							isSkillsPanelOpen={isSkillsPanelOpen}
+							onCloseSkillsPanel={() => setIsSkillsPanelOpen(false)}
+							detailRef={detailRef}
+							userSelectDetail={userSelectDetail}
+							setUserSelectDetail={setUserSelectDetail}
+							attachments={attachments}
+							attachmentList={attachmentList}
+							selectedTopic={selectedTopic}
+							selectedProject={selectedProject}
+							activeFileId={activeFileId}
+							setActiveFileId={setActiveFileId}
+							handleActiveDetailTabChange={handleActiveDetailTabChange}
+							setIsDetailPanelFullscreen={setIsDetailPanelFullscreen}
+							isReadOnly={isReadOnly}
+						/>
+					}
+					isReadOnly={false}
+					showProjectResizeHandle
+					shouldShowDetailPanel={shouldShowDetailPanel}
+					keepDetailMountedWhenHidden
+					renderMessagePanel={({
+						isConversationPanelCollapsed,
+						onToggleConversationPanel,
+					}) => (
+						<ClawConversationPanel
+							isConversationPanelCollapsed={isConversationPanelCollapsed}
+							onToggleConversationPanel={onToggleConversationPanel}
+							detailPanelVisible={shouldShowDetailPanel}
+							clawCode={code}
+							onOpenSkillsPanel={() => setIsSkillsPanelOpen(true)}
+							onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
+						/>
+					)}
+				/>
+				<ClawPlaygroundEditDialog
+					open={isEditDialogOpen}
+					claw={magicClaw}
+					onOpenChange={setIsEditDialogOpen}
+					onUpdated={store.setMagicClaw}
+				/>
+			</FileActionVisibilityProvider>
+		</HostConversationProvider>
 	)
 }
 

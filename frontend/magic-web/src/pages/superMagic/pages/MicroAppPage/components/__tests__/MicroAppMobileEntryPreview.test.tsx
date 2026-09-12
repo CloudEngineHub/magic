@@ -1,7 +1,6 @@
 import type { ReactNode } from "react"
 import { render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 
 import MicroAppEntryPreview from "../MicroAppEntryPreview"
 import MicroAppMobileEntryPreview from "../MicroAppMobileEntryPreview"
@@ -34,7 +33,6 @@ describe("MicroAppMobileEntryPreview", () => {
 
 	it("renders the entry html directly without file viewer chrome", async () => {
 		const onOpenFile = vi.fn()
-		const topicStore = { selectedTopic: { id: "topic-1" } }
 		render(
 			<MicroAppMobileEntryPreview
 				entryFile={{
@@ -45,7 +43,6 @@ describe("MicroAppMobileEntryPreview", () => {
 				attachments={[]}
 				attachmentList={[]}
 				projectId="project-1"
-				topicStore={topicStore as unknown as TopicStore}
 				selectedProject={null}
 				allowEdit
 				onOpenFile={onOpenFile}
@@ -57,7 +54,6 @@ describe("MicroAppMobileEntryPreview", () => {
 			expect.objectContaining({
 				activeFileId: "entry-1",
 				projectId: "project-1",
-				topicStore,
 				virtualStorageMarkerId: "entry-1",
 				updatedAt: "2026-07-20T06:00:00Z",
 				allowEdit: true,
