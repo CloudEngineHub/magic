@@ -30,6 +30,7 @@ interface ReplaceHtmlResourceUrlsOptions {
 interface ReplaceHtmlResourceUrlsResult {
 	content: string
 	filePathMapping: Map<string, string>
+	resourcesResolved: boolean
 }
 
 function escapeHtmlAttributeValue(value: string): string {
@@ -146,8 +147,7 @@ export async function replaceHtmlResourceUrls({
 			if (resourceInfo.type === "geo" || resourceInfo.type === "cleaned_data") {
 				const configItems =
 					(magicProjectConfig[configKey] as
-						| Array<{ name: string; url: string }>
-						| undefined) ?? []
+						Array<{ name: string; url: string }> | undefined) ?? []
 				configItems.push({
 					name: resourceInfo.fileName?.split(".")[0] ?? "",
 					url: item.url,
@@ -217,5 +217,10 @@ export async function replaceHtmlResourceUrls({
 		})
 	}
 
-	return { content, filePathMapping }
+	const resolvedFileIds = new Set(urlData.filter((item) => item.url).map((item) => item.file_id))
+	return {
+		content,
+		filePathMapping,
+		resourcesResolved: fileIds.every((id) => resolvedFileIds.has(id)),
+	}
 }

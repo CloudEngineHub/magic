@@ -149,6 +149,8 @@ export interface ProcessHtmlContentOutput {
 	slidesMap: Map<string, string>
 	/** 原始幻灯片路径数组 */
 	originalSlidesPaths: string[]
+	/** 稳定的引用资源版本；null 表示本次资源不足以支持跨刷新缓存。 */
+	resourceVersionSignature?: string | null
 }
 
 /**
@@ -222,6 +224,7 @@ export async function processHtmlContent(
 		filePathMapping: new Map<string, string>(),
 		slidesMap: new Map<string, string>(),
 		originalSlidesPaths: [],
+		resourceVersionSignature: null,
 	}
 
 	// 如果没有内容，直接返回
@@ -290,9 +293,18 @@ export async function processHtmlContent(
 	// 从已扁平化的 allFiles 构建文件 ID 到更新时间的映射，用于 URL 缓存判断
 	// 复用已扁平化的结果，避免重复扁平化 attachmentList
 	const fileUpdatedAtMap = new Map<string, string>()
+	const fileVersionMap = new Map<string, string>()
 	for (const file of allFiles) {
 		if (file.file_id && file.updated_at) {
 			fileUpdatedAtMap.set(file.file_id, file.updated_at)
+		}
+		const version: unknown = (file as { file_version?: unknown }).file_version
+		if (file.file_id) {
+			if (typeof version === "number" && Number.isFinite(version) && version > 0) {
+				fileVersionMap.set(file.file_id, `version:${version}`)
+			} else if (file.updated_at) {
+				fileVersionMap.set(file.file_id, `updated:${file.updated_at}`)
+			}
 		}
 	}
 
@@ -333,6 +345,21 @@ export async function processHtmlContent(
 		fileIdsToFetch = omitDashboardShellFromFetchPlan(fileIdsToFetch, urlMap)
 	}
 
+	// 复用已解析的资源计划，只纳入本页依赖；页序和临时签名不代表图片内容变化。
+	const resourceVersions: string[][] = []
+	let hasResourceVersions = true
+	for (const id of [...new Set(fileIdsToFetch)].sort()) {
+		if (urlMap.get(id)?.attr === "slides") continue
+		const version = input.resourceFileVersions?.[id]
+		const resourceVersion =
+			typeof version === "number" && Number.isFinite(version) && version > 0
+				? `version:${version}`
+				: fileVersionMap.get(id)
+		if (!resourceVersion) hasResourceVersions = false
+		else resourceVersions.push([id, resourceVersion])
+	}
+	const resourceVersionSignature = hasResourceVersions ? JSON.stringify(resourceVersions) : null
+
 	// If there are resources to replace, fetch their temporary URLs
 	if (fileIdsToFetch.length > 0) {
 		try {
@@ -358,6 +385,9 @@ export async function processHtmlContent(
 
 			result.processedContent = applyPreviewShell(updatedContent)
 			result.filePathMapping = replacedResources.filePathMapping
+			if (replacedResources.resourcesResolved) {
+				result.resourceVersionSignature = resourceVersionSignature
+			}
 		} catch (error) {
 			console.error("Error fetching resource URLs:", error)
 			// 即使出错，也要替换脚本
@@ -368,6 +398,7 @@ export async function processHtmlContent(
 		}
 	} else {
 		// 没有需要替换的资源，但仍需要替换脚本
+		result.resourceVersionSignature = resourceVersionSignature
 		let processedContent = replaceLocationReload(modifiedHtmlContent)
 		// 注入 at() polyfill 脚本
 		processedContent = injectAtPolyfillScript(processedContent)

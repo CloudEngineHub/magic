@@ -25,11 +25,18 @@ import { PPTViewStateManager } from "./PPTViewStateManager"
 import { PPTScreenshotManager } from "./PPTScreenshotManager"
 import { PPTActiveIndexCacheManager } from "./PPTActiveIndexCacheManager"
 import type { AttachmentItem } from "../../../../TopicFilesButton/hooks"
+import type {
+	PPTThumbnailCacheContext,
+	PPTThumbnailCacheMode,
+	PPTThumbnailCacheScope,
+} from "../services/PPTThumbnailCache"
 
 /**
  * Configuration for PPTStore
  */
 export interface PPTStoreConfig {
+	/** 已授权预览的稳定身份；匿名或归属不完整时不使用持久缓存。 */
+	thumbnailCacheScope?: PPTThumbnailCacheScope
 	attachments?: any[]
 	attachmentList?: any[]
 	mainFileId?: string
@@ -1184,6 +1191,7 @@ export class PPTStore {
 				slide.loadingState = "idle"
 				slide.rawContent = undefined
 				slide.content = undefined
+				slide.resourceVersionSignature = null
 				slide.loadingError = undefined
 			})
 		})
@@ -1361,7 +1369,9 @@ export class PPTStore {
 							const currentIndex = this.findSlideIndexByLoadTarget(target)
 							if (currentIndex !== -1 && this.slides[currentIndex]) {
 								this.slides[currentIndex].rawContent = content
-								this.slides[currentIndex].content = processedContent
+								this.slides[currentIndex].content = processedContent.content
+								this.slides[currentIndex].resourceVersionSignature =
+									processedContent.resourceVersionSignature
 								this.slides[currentIndex].loadingState = "loaded"
 								this.slides[currentIndex].lastLoadedAt = Date.now()
 							}
@@ -1563,7 +1573,9 @@ export class PPTStore {
 				}
 
 				this.slides[currentIndex].rawContent = rawContent
-				this.slides[currentIndex].content = processedContent
+				this.slides[currentIndex].content = processedContent.content
+				this.slides[currentIndex].resourceVersionSignature =
+					processedContent.resourceVersionSignature
 				this.slides[currentIndex].loadingState = "loaded"
 				this.slides[currentIndex].lastLoadedAt = Date.now()
 			})
@@ -1574,7 +1586,7 @@ export class PPTStore {
 				slideIndex: this.findSlideIndexByLoadTarget(target),
 			})
 
-			return processedContent
+			return processedContent.content
 		} catch (error) {
 			if (this.isAbortError(error) || !this.isContentLoadCurrent(options)) {
 				this.logger.debug("幻灯片内容加载已取消，丢弃结果", {
@@ -1605,7 +1617,10 @@ export class PPTStore {
 	 * 通过 file_id 刷新幻灯片内容
 	 * 从服务器获取最新 URL 并重新加载内容
 	 */
-	async refreshSlideByFileId(fileId: string): Promise<void> {
+	async refreshSlideByFileId(
+		fileId: string,
+		cacheMode: PPTThumbnailCacheMode = "use",
+	): Promise<void> {
 		const generation = this.contentGeneration
 		this.logger.logOperationStart("refreshSlideByFileId", {
 			metadata: { fileId },
@@ -1685,7 +1700,12 @@ export class PPTStore {
 			)
 			const refreshedSlide = this.slides[refreshedSlideIndex]
 			if (this.config.autoLoadAndGenerate !== false && refreshedSlide?.content) {
-				await this.generateSlideScreenshot(refreshedSlideIndex, refreshedSlide.content)
+				await this.generateSlideScreenshot(
+					refreshedSlideIndex,
+					refreshedSlide.content,
+					"required",
+					cacheMode,
+				)
 			}
 
 			this.logger.logOperationSuccess("refreshSlideByFileId", {
@@ -1750,7 +1770,7 @@ export class PPTStore {
 				slideIndex: index,
 			})
 
-			return processedContent
+			return processedContent.content
 		} catch (error) {
 			if (this.isAbortError(error) || !this.isContentLoadCurrent({ generation, signal })) {
 				return ""
@@ -1989,11 +2009,12 @@ export class PPTStore {
 		// Save both raw and processed content
 		this.slideManager.updateSlideItem(index, {
 			rawContent: content,
-			content: processedContent,
+			content: processedContent.content,
+			resourceVersionSignature: processedContent.resourceVersionSignature,
 			loadingState: "loaded",
 			lastLoadedAt: Date.now(),
 		})
-		return processedContent
+		return processedContent.content
 	}
 
 	updateSlideContents(updates: Map<number, string>): void {
@@ -2105,6 +2126,7 @@ export class PPTStore {
 		index: number,
 		targetContent?: string,
 		requestKind: SlideScreenshotRequestKind = "required",
+		cacheMode: PPTThumbnailCacheMode = "use",
 	): Promise<void> {
 		if (this.disposed) return
 		const slide = this.slides[index]
@@ -2121,18 +2143,49 @@ export class PPTStore {
 						this.getSlideStableKey(candidate, candidateIndex) === generationKey,
 				),
 			requestKind,
+			this.getThumbnailCacheContext(slide, targetContent),
+			cacheMode,
 		)
 	}
 
 	async generateAllScreenshots(): Promise<void> {
 		if (this.disposed) return
-		await this.screenshotManager.generateAllScreenshots(this.slides, (slide, originalIndex) => {
-			const generationKey = this.getSlideStableKey(slide, originalIndex)
-			return this.slides.find(
-				(candidate, candidateIndex) =>
-					this.getSlideStableKey(candidate, candidateIndex) === generationKey,
-			)
-		})
+		await this.screenshotManager.generateAllScreenshots(
+			this.slides,
+			(slide, originalIndex) => {
+				const generationKey = this.getSlideStableKey(slide, originalIndex)
+				return this.slides.find(
+					(candidate, candidateIndex) =>
+						this.getSlideStableKey(candidate, candidateIndex) === generationKey,
+				)
+			},
+			(slide) => this.getThumbnailCacheContext(slide),
+		)
+	}
+
+	private getThumbnailCacheContext(
+		slide: SlideItem,
+		targetContent?: string,
+	): PPTThumbnailCacheContext | undefined {
+		const scope = this.config.thumbnailCacheScope
+		if (
+			!scope ||
+			scope.mainFileId !== this.config.mainFileId ||
+			!slide.rawContent ||
+			typeof slide.resourceVersionSignature !== "string" ||
+			(targetContent && targetContent !== slide.content)
+		)
+			return undefined
+		const fileId = this.getSlideFileId(slide)
+		const path = this.pathMappingService.getFullRelativePath(slide.path)
+		if (!fileId && !path) return undefined
+		return {
+			scope,
+			slideIdentity: fileId ? `file:${fileId}` : `path:${path}`,
+			path: path || slide.path,
+			rawContent: slide.rawContent,
+			resourceVersionSignature: slide.resourceVersionSignature,
+		}
 	}
 
 	/**

@@ -33,6 +33,8 @@ import MagicSpin from "@/components/base/MagicSpin"
 import { useResizableSidebar } from "./hooks/useResizableSidebar"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
+import { userStore } from "@/models/user"
+import { configStore } from "@/models/config"
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -152,7 +154,7 @@ interface PPTRenderProps {
  * PPTRender 包装组件
  * 创建事件总线和 store 实例并提供给子组件
  */
-const PPTRender = function PPTRender(props: PPTRenderProps) {
+const PPTRender = observer(function PPTRender(props: PPTRenderProps) {
 	const {
 		slidePaths,
 		attachments,
@@ -168,6 +170,29 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 
 	const { organizationCode } = useOrganization()
 	const resolvedProjectId = selectedProject?.id || projectId
+	const userId = userStore.user.userInfo?.user_id
+	const clusterCode = configStore.cluster.clusterCode
+	const thumbnailCacheScope = useMemo(
+		() =>
+			userId && organizationCode && resolvedProjectId && mainFileId
+				? {
+						clusterCode,
+						userId,
+						organizationCode,
+						projectId: resolvedProjectId,
+						mainFileId,
+					}
+				: undefined,
+		[clusterCode, userId, organizationCode, resolvedProjectId, mainFileId],
+	)
+	// 身份变化复用 Provider 的卸载清理，旧 HTML／请求不能进入新账号的缓存作用域。
+	const previewScopeKey = JSON.stringify([
+		clusterCode,
+		userId,
+		organizationCode,
+		resolvedProjectId,
+		mainFileId,
+	])
 	const effectiveDisplayConfig = useMemo(() => {
 		if (!slidePaths?.length) return displayConfig
 		return {
@@ -178,6 +203,7 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 
 	const storeConfig = useMemo(
 		() => ({
+			thumbnailCacheScope,
 			attachments,
 			attachmentList,
 			projectId: resolvedProjectId,
@@ -191,6 +217,7 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 			allowDownload,
 		}),
 		[
+			thumbnailCacheScope,
 			attachments,
 			attachmentList,
 			resolvedProjectId,
@@ -205,11 +232,11 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 	)
 
 	return (
-		<PPTProvider storeConfig={storeConfig}>
+		<PPTProvider key={previewScopeKey} storeConfig={storeConfig}>
 			<PPTRenderInner {...props} />
 		</PPTProvider>
 	)
-}
+})
 
 /**
  * PPTRenderInner - PPT 渲染主逻辑

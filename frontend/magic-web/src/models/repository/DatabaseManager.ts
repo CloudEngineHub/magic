@@ -397,6 +397,12 @@ export class DatabaseManager {
 				})
 			})
 
+		// 只追加可重建的 PPT 缩略图；Dexie 继承前序表结构，不重建用户业务数据。
+		db.version(6).stores({
+			"ppt-thumbnail-cache": "&key, scope, lastAccessAt",
+			"ppt-thumbnail-cache-body": "&key",
+		})
+
 		this.globalDatabase = db
 		return this.globalDatabase
 	}

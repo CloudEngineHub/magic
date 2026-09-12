@@ -9,8 +9,18 @@ import {
 	type CanonicalContentDimensions,
 } from "../../../contents/HTML/utils/slide-dimensions"
 import { stabilizeSingleLineTextForSnapdom } from "./snapdomTextStabilizer"
+import {
+	createPPTThumbnailCacheKey,
+	deletePPTThumbnail,
+	readPPTThumbnail,
+	savePPTThumbnail,
+	type PPTThumbnailCacheContext,
+	type PPTThumbnailCacheMode,
+} from "./PPTThumbnailCache"
+import type { PPTThumbnailCacheKey } from "@/services/superMagic/repositories/PPTThumbnailCacheRepository"
 
 const THUMBNAIL_SCALE = 4
+const THUMBNAIL_QUALITY = 0.8
 const MAX_CONCURRENT_SCREENSHOT_GENERATIONS = 2
 const MAX_PRIORITY_GENERATION_BURST = 3
 const SCREENSHOT_PREPARATION_IDLE_TIMEOUT = 32
@@ -34,6 +44,7 @@ interface PendingScreenshotGeneration {
 
 interface LatestScreenshotRequest {
 	requestId: number
+	refreshId?: number
 	content: string
 	requestKind: SlideScreenshotRequestKind
 	contentHash?: string
@@ -41,6 +52,8 @@ interface LatestScreenshotRequest {
 }
 
 interface InFlightScreenshotGeneration {
+	requestId: number
+	persistentKey?: string
 	url: string
 	content: string
 	contentHash: string
@@ -186,6 +199,7 @@ const screenshotGenerationScheduler = new ScreenshotGenerationScheduler(
  * Cache entry for slide screenshot
  */
 interface ScreenshotCacheEntry {
+	persistentKey?: string
 	thumbnailUrl: string
 	timestamp: number
 	contentHash: string
@@ -243,6 +257,8 @@ export class SlideScreenshotService {
 		url: string,
 		content: string,
 		requestKind: SlideScreenshotRequestKind = "required",
+		cacheContext?: PPTThumbnailCacheContext,
+		cacheMode: PPTThumbnailCacheMode = "use",
 	): Promise<string> {
 		if (this.disposed) {
 			throw new ScreenshotGenerationCancelledError()
@@ -250,11 +266,24 @@ export class SlideScreenshotService {
 		if (!content) {
 			throw new Error("Content is required")
 		}
+		if (cacheMode === "refresh") {
+			// 强制刷新不复用旧任务；连同异步缓存读取一起取消，防止同内容的旧图重新写回。
+			this.inFlightGenerations.forEach((bucket, key) => {
+				for (const entry of [...bucket]) {
+					if (entry.url !== url) continue
+					entry.scheduledGeneration.cancel(new ScreenshotGenerationCancelledError())
+					this.clearInFlightGeneration(key, entry)
+				}
+			})
+			this.clearCache(url)
+		}
 
 		const requestEpoch = this.generationEpoch
 		const requestPreviewEpoch = this.previewGenerationEpoch
 		const requestId = ++this.nextRequestId
-		this.latestRequestsByUrl.set(url, { requestId, content, requestKind })
+		const refreshId =
+			cacheMode === "refresh" ? requestId : this.latestRequestsByUrl.get(url)?.refreshId
+		this.latestRequestsByUrl.set(url, { requestId, content, requestKind, refreshId })
 
 		await this.yieldForPreparation()
 		this.throwIfGenerationCancelled(requestEpoch)
@@ -264,10 +293,19 @@ export class SlideScreenshotService {
 
 		const dimensions = resolvePptScaleContentDimensions(content)
 		const contentHash = this.getContentHash(content, dimensions)
-		const generationKey = `${url}\u0000${contentHash}`
+		const persistentKey = cacheContext
+			? createPPTThumbnailCacheKey(cacheContext, {
+					...dimensions,
+					scale: THUMBNAIL_SCALE,
+					mimeType: "image/webp",
+					quality: THUMBNAIL_QUALITY,
+				})
+			: undefined
+		const generationKey = `${url}\u0000${contentHash}\u0000${refreshId ?? ""}`
 		if (this.latestRequestsByUrl.get(url)?.requestId === requestId) {
 			this.latestRequestsByUrl.set(url, {
 				requestId,
+				refreshId,
 				content,
 				requestKind,
 				contentHash,
@@ -277,17 +315,25 @@ export class SlideScreenshotService {
 
 		// Check cache first
 		const cached = this.cache.get(url)
-		if (cached && this.matchesPreparedContent(cached, content, contentHash, dimensions)) {
+		if (
+			cacheMode === "use" &&
+			cached &&
+			cached.persistentKey === persistentKey?.key &&
+			this.matchesPreparedContent(cached, content, contentHash, dimensions)
+		) {
 			return cached.thumbnailUrl
 		}
 
 		// Share the exact same request instead of creating duplicate iframes.
 		const inFlightGeneration = this.inFlightGenerations
 			.get(generationKey)
-			?.find((generation) =>
-				this.matchesPreparedContent(generation, content, contentHash, dimensions),
+			?.find(
+				(generation) =>
+					generation.persistentKey === persistentKey?.key &&
+					this.matchesPreparedContent(generation, content, contentHash, dimensions),
 			)
 		if (inFlightGeneration) {
+			inFlightGeneration.requestId = requestId
 			if (requestKind === "required") inFlightGeneration.hasRequiredConsumer = true
 			return this.waitForGeneration(
 				inFlightGeneration.scheduledGeneration.promise,
@@ -295,57 +341,18 @@ export class SlideScreenshotService {
 			)
 		}
 
-		const scheduledGeneration = screenshotGenerationScheduler.schedule(
-			async (signal, holdSlotUntil) => {
-				let thumbnailUrl: string
-				try {
-					const generation = this.doGenerateScreenshot(
-						content,
-						dimensions,
-						signal,
-						holdSlotUntil,
-					)
-					holdSlotUntil(generation)
-					thumbnailUrl = await this.waitForAbortableOperation(
-						generation,
-						signal,
-						(lateThumbnailUrl) => this.releaseScreenshot(lateThumbnailUrl),
-					)
-				} catch (error) {
-					this.throwIfGenerationCancelled(requestEpoch)
-					throw error
-				}
-
-				if (this.generationEpoch !== requestEpoch) {
-					this.releaseScreenshot(thumbnailUrl)
-					throw new ScreenshotGenerationCancelledError()
-				}
-
-				// Different revisions of the same slide may overlap. Only the most recently
-				// requested revision should become the URL-level cache entry.
-				if (this.isLatestRequestedContent(url, content, contentHash, dimensions)) {
-					this.setCachedScreenshot(url, {
-						thumbnailUrl,
-						timestamp: Date.now(),
-						contentHash,
-						content,
-						dimensions,
-					})
-				}
-
-				return thumbnailUrl
-			},
-		)
-
-		const inFlightEntry: InFlightScreenshotGeneration = {
+		const inFlightEntry = this.createScreenshotRequest({
 			url,
 			content,
 			contentHash,
 			dimensions,
-			epoch: requestEpoch,
-			hasRequiredConsumer: requestKind === "required",
-			scheduledGeneration,
-		}
+			requestEpoch,
+			requestId,
+			requestKind,
+			persistentKey,
+			cacheMode,
+		})
+		const { scheduledGeneration } = inFlightEntry
 		const generationBucket = this.inFlightGenerations.get(generationKey) ?? []
 		generationBucket.push(inFlightEntry)
 		this.inFlightGenerations.set(generationKey, generationBucket)
@@ -355,6 +362,120 @@ export class SlideScreenshotService {
 		)
 
 		return this.waitForGeneration(scheduledGeneration.promise, requestEpoch)
+	}
+
+	/** 缓存读取和原渲染任务共用一个可取消句柄；命中不占用 iframe 截图槽。 */
+	private createScreenshotRequest(options: {
+		url: string
+		content: string
+		contentHash: string
+		dimensions: CanonicalContentDimensions
+		requestEpoch: number
+		requestId: number
+		requestKind: SlideScreenshotRequestKind
+		persistentKey?: PPTThumbnailCacheKey
+		cacheMode: PPTThumbnailCacheMode
+	}): InFlightScreenshotGeneration {
+		const { url, content, contentHash, dimensions, requestEpoch, persistentKey } = options
+		const controller = new AbortController()
+		let renderTask: ScheduledScreenshotGeneration<string> | undefined
+		const shouldCommit = () =>
+			!controller.signal.aborted &&
+			!this.disposed &&
+			this.generationEpoch === requestEpoch &&
+			this.latestRequestsByUrl.get(url)?.requestId === entry.requestId
+		const accept = (thumbnailUrl: string) => {
+			this.throwIfAborted(controller.signal)
+			this.throwIfGenerationCancelled(requestEpoch)
+			// Different revisions of the same slide may overlap. Only the most recently
+			// requested revision should become the URL-level cache entry.
+			if (shouldCommit()) {
+				this.setCachedScreenshot(url, {
+					thumbnailUrl,
+					content,
+					contentHash,
+					dimensions,
+					timestamp: Date.now(),
+					persistentKey: persistentKey?.key,
+				})
+			}
+			return thumbnailUrl
+		}
+		const run = async () => {
+			this.throwIfAborted(controller.signal)
+			if (persistentKey) {
+				if (options.cacheMode === "refresh") {
+					await this.waitForAbortableOperation(
+						deletePPTThumbnail(persistentKey.key),
+						controller.signal,
+					)
+				} else {
+					const blob = await this.waitForAbortableOperation(
+						readPPTThumbnail(persistentKey.key),
+						controller.signal,
+					)
+					this.throwIfAborted(controller.signal)
+					this.throwIfGenerationCancelled(requestEpoch)
+					if (blob) return accept(URL.createObjectURL(blob))
+				}
+			}
+			this.throwIfAborted(controller.signal)
+			renderTask = screenshotGenerationScheduler.schedule(async (signal, holdSlotUntil) => {
+				let persistable = false
+				const generation = this.doGenerateScreenshot(
+					content,
+					dimensions,
+					signal,
+					holdSlotUntil,
+					...(persistentKey
+						? ([
+								(ready: boolean) => {
+									persistable = ready
+								},
+							] as const)
+						: []),
+				)
+				holdSlotUntil(generation)
+				const thumbnailUrl = await this.waitForAbortableOperation(
+					generation,
+					signal,
+					(lateUrl) => this.releaseScreenshot(lateUrl),
+				)
+				try {
+					accept(thumbnailUrl)
+				} catch (error) {
+					this.releaseScreenshot(thumbnailUrl)
+					throw error
+				}
+				if (persistentKey && persistable && shouldCommit()) {
+					void savePPTThumbnail(persistentKey, thumbnailUrl, shouldCommit)
+				}
+				return thumbnailUrl
+			})
+			return renderTask.promise
+		}
+		// 下一微任务才开始读取，使共享请求先登记，取消与 required 升级能覆盖读库阶段。
+		const entry: InFlightScreenshotGeneration = {
+			url,
+			content,
+			contentHash,
+			dimensions,
+			requestId: options.requestId,
+			persistentKey: persistentKey?.key,
+			epoch: requestEpoch,
+			hasRequiredConsumer: options.requestKind === "required",
+			scheduledGeneration: {
+				promise: Promise.resolve().then(run),
+				hasStarted: () => renderTask?.hasStarted() ?? false,
+				cancel: (reason) => {
+					if (controller.signal.aborted) return false
+					controller.abort(reason)
+					renderTask?.cancel(reason)
+					return true
+				},
+			},
+		}
+		return entry
 	}
 
 	/**
@@ -590,6 +711,7 @@ export class SlideScreenshotService {
 		{ width, height }: CanonicalContentDimensions,
 		signal: AbortSignal,
 		holdSlotUntil: HoldScreenshotGenerationSlot,
+		onCacheable?: (cacheable: boolean) => void,
 	): Promise<string> {
 		this.throwIfAborted(signal)
 		// 创建临时容器用于渲染
@@ -641,7 +763,7 @@ export class SlideScreenshotService {
 				throw new Error("Iframe screenshot target not found")
 			}
 
-			await this.waitForRenderingReady(iframeDoc, signal)
+			const renderingReady = await this.waitForRenderingReady(iframeDoc, signal)
 
 			const restoreTextStyles = stabilizeSingleLineTextForSnapdom(screenshotTarget)
 			let restoreImageSources: () => void = () => undefined
@@ -674,16 +796,22 @@ export class SlideScreenshotService {
 					)
 					restoreImageSources = inlineResult.restore
 					if (inlineResult.inlinedCount > 0) {
-						result = await captureWithSnapdom(() => undefined)
+						usedFallbackImage = false
+						result = await captureWithSnapdom(() => {
+							usedFallbackImage = true
+						})
 					}
 				}
 
 				this.throwIfAborted(signal)
 
+				// 当前预览继续沿用原 fallback；已知缺图／字体未就绪的结果不进入长期缓存。
+				onCacheable?.(renderingReady && !usedFallbackImage)
+
 				const webpGeneration = result.toWebp({
 					width: width / THUMBNAIL_SCALE,
 					height: height / THUMBNAIL_SCALE,
-					quality: 0.8,
+					quality: THUMBNAIL_QUALITY,
 				})
 				holdSlotUntil(webpGeneration)
 				thumbnailUrl = await this.waitForAbortableOperation(
@@ -1309,22 +1437,29 @@ export class SlideScreenshotService {
 		element.setAttribute(name, value)
 	}
 
-	private async waitForRenderingReady(doc: Document, signal: AbortSignal): Promise<void> {
-		await Promise.all([this.waitForFonts(doc, signal), this.waitForImages(doc, signal)])
+	private async waitForRenderingReady(doc: Document, signal: AbortSignal): Promise<boolean> {
+		const readiness = await Promise.all([
+			this.waitForFonts(doc, signal),
+			this.waitForImages(doc, signal),
+		])
 		await this.waitForAnimationFrames(doc, 2, signal)
+		return readiness.every(Boolean)
 	}
 
-	private async waitForFonts(doc: Document, signal: AbortSignal): Promise<void> {
+	private async waitForFonts(doc: Document, signal: AbortSignal): Promise<boolean> {
 		const fonts = doc.fonts
-		if (!fonts?.ready) return
+		if (!fonts?.ready) return false
 
 		let timeout: ReturnType<typeof setTimeout> | undefined
 		try {
-			await this.waitForAbortableOperation(
+			return await this.waitForAbortableOperation(
 				Promise.race([
-					fonts.ready.catch(() => undefined),
-					new Promise<void>((resolve) => {
-						timeout = setTimeout(resolve, 3000)
+					fonts.ready.then(
+						() => true,
+						() => false,
+					),
+					new Promise<boolean>((resolve) => {
+						timeout = setTimeout(() => resolve(false), 3000)
 					}),
 				]),
 				signal,
@@ -1360,7 +1495,7 @@ export class SlideScreenshotService {
 		}
 	}
 
-	private async waitForImages(doc: Document, signal: AbortSignal): Promise<void> {
+	private async waitForImages(doc: Document, signal: AbortSignal): Promise<boolean> {
 		const MAX_ATTEMPTS = 3
 		const BASE_TIMEOUT = 400
 		const BACKOFF_DELAYS = [100, 150]
@@ -1368,7 +1503,7 @@ export class SlideScreenshotService {
 		for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
 			this.throwIfAborted(signal)
 			const images = Array.from(doc.images)
-			if (images.length === 0) return
+			if (images.length === 0) return true
 
 			images.forEach((img) => {
 				if (img.loading === "lazy") img.loading = "eager"
@@ -1378,7 +1513,7 @@ export class SlideScreenshotService {
 				(img) => img.naturalWidth === 0 || img.naturalHeight === 0,
 			)
 
-			if (pendingImages.length === 0) return
+			if (pendingImages.length === 0) return true
 
 			await this.waitForImagesOnce(pendingImages, BASE_TIMEOUT + attempt * 150, signal)
 
@@ -1386,13 +1521,14 @@ export class SlideScreenshotService {
 				(img) => img.naturalWidth === 0 || img.naturalHeight === 0,
 			)
 
-			if (remainingImages.length === 0) return
+			if (remainingImages.length === 0) return true
 
 			const backoffDelay = BACKOFF_DELAYS[attempt]
 			if (backoffDelay) {
 				await this.waitForAbortableDelay(backoffDelay, signal)
 			}
 		}
+		return false
 	}
 
 	private async waitForImagesOnce(
