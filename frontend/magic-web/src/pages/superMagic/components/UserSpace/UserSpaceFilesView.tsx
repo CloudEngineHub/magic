@@ -97,7 +97,7 @@ export default observer(function UserSpaceFilesView({
 			</SidebarExpandableItem>
 		) : compact ? (
 			<>
-				<h3 className="shrink-0 break-words px-3 py-2 text-sm font-semibold [overflow-wrap:anywhere]">
+				<h3 className="shrink-0 break-words px-3 py-2 text-[13px] font-medium leading-5 [overflow-wrap:anywhere]">
 					{rootName ?? t("userSpace.allFiles")}
 				</h3>
 				{content}

@@ -805,7 +805,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 							) : (
 								<>
 									{stackedHeader && (
-										<h3 className="shrink-0 break-words px-3 py-2 text-sm font-semibold [overflow-wrap:anywhere]">
+										<h3 className="shrink-0 break-words px-3 py-2 text-[13px] font-medium leading-5 [overflow-wrap:anywhere]">
 											{resolvedTitle}
 										</h3>
 									)}

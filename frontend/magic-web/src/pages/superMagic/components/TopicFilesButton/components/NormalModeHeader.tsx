@@ -289,7 +289,10 @@ function NormalModeHeader({
 				)}
 			>
 				<h3
-					className={cn("min-w-0 flex-1 text-sm font-semibold", overflow && "basis-full")}
+					className={cn(
+						"min-w-0 flex-1 text-[13px] font-medium leading-5",
+						overflow && "basis-full",
+					)}
 				>
 					<span
 						ref={labelRef}
@@ -305,6 +308,7 @@ function NormalModeHeader({
 	return section ? (
 		<SidebarRow
 			label={title || t("topicFiles.title")}
+			labelVariant={section.labelVariant}
 			onClick={section.onClick}
 			isExpanded={section.isExpanded}
 			leading={section.leading}
@@ -318,7 +322,7 @@ function NormalModeHeader({
 		/>
 	) : (
 		<div ref={rowRef} className={cn("flex h-8 w-full items-center gap-1 pl-4 pr-2", className)}>
-			<p className="min-w-0 flex-1 truncate text-sm font-semibold leading-4 text-foreground">
+			<p className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-foreground">
 				<span ref={labelRef} className="inline-block whitespace-nowrap">
 					{title || t("topicFiles.title")}
 				</span>

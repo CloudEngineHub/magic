@@ -52,7 +52,10 @@ export default observer(function UserSpacePanel({
 				data-slot="project-panel-header"
 			>
 				<UserSpaceIcon size={16} />
-				<h2 className="truncate text-sm font-semibold" data-slot="project-panel-title">
+				<h2
+					className="truncate text-[13px] font-medium leading-5"
+					data-slot="project-panel-title"
+				>
 					{t("userSpace.title")}
 				</h2>
 				<Dialog onOpenChange={(open) => open && setHelpVisited(true)}>

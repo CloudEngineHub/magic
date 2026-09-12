@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { cn } from "@/utils/cn"
-import { SidebarRow } from "./SidebarRow"
+import { SidebarRow, type SidebarLabelVariant } from "./SidebarRow"
 
 export { SidebarRow, SidebarSectionToggle } from "./SidebarRow"
 export interface SidebarSectionOptions {
@@ -9,6 +9,7 @@ export interface SidebarSectionOptions {
 	leading?: ReactNode
 	description?: ReactNode
 	wrapLabel?: boolean
+	labelVariant?: SidebarLabelVariant
 }
 
 export function SidebarExpandableItem({
@@ -25,6 +26,7 @@ export function SidebarExpandableItem({
 	children,
 	header,
 	wrapLabel = false,
+	labelVariant,
 }: {
 	label: string
 	onClick: () => void
@@ -39,6 +41,7 @@ export function SidebarExpandableItem({
 	children: ReactNode
 	header?: ReactNode
 	wrapLabel?: boolean
+	labelVariant?: SidebarLabelVariant
 }) {
 	return (
 		<div className={className} data-testid={`${testId}-section`}>
@@ -52,6 +55,7 @@ export function SidebarExpandableItem({
 					trailing={trailing}
 					testId={testId}
 					wrapLabel={wrapLabel}
+					labelVariant={labelVariant}
 				/>
 			)}
 			<div

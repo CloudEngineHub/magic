@@ -2,6 +2,8 @@ import type { ReactNode, RefObject } from "react"
 import { ChevronRight } from "lucide-react"
 import { cn } from "@/utils/cn"
 
+export type SidebarLabelVariant = "default" | "section" | "item"
+
 export function SidebarSectionToggle({
 	label,
 	isExpanded,
@@ -37,6 +39,8 @@ export interface SidebarRowProps {
 	label: string
 	onClick: () => void
 	isActive?: boolean
+	/** 分组与普通项目条目使用不同字重；未指定的调用方保留原样式。 */
+	labelVariant?: SidebarLabelVariant
 	isExpanded?: boolean
 	disabled?: boolean
 	hideChevron?: boolean
@@ -57,6 +61,7 @@ export function SidebarRow({
 	label,
 	onClick,
 	isActive = false,
+	labelVariant = "default",
 	isExpanded = false,
 	disabled = false,
 	hideChevron = false,
@@ -79,6 +84,7 @@ export function SidebarRow({
 				disabled && "cursor-not-allowed opacity-60 hover:bg-transparent",
 				className,
 				wrapLabel && "h-auto min-h-10 py-2",
+				labelVariant === "item" && "h-auto min-h-10 py-2 md:min-h-9",
 				stackTrailing && "grid grid-cols-[minmax(0,1fr)_auto]",
 			)}
 		>
@@ -102,6 +108,8 @@ export function SidebarRow({
 				<div
 					className={cn(
 						"min-w-0 text-sm font-medium text-foreground",
+						labelVariant !== "default" && "text-[13px] leading-5",
+						labelVariant === "item" && "font-normal",
 						!wrapLabel && "truncate",
 					)}
 				>

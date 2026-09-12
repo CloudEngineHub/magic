@@ -8,6 +8,7 @@ import type { MagicFSFile } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import magicToast from "@/components/base/MagicToaster/utils"
 import userFilesStore from "@/stores/userFiles"
+import { cn } from "@/utils/cn"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import {
 	getUserMemoryPath,
@@ -35,12 +36,13 @@ const MemoryGroup = observer(function MemoryGroup({
 	projectName,
 	onFileClick,
 	title: titleOverride,
+	labelVariant = "section",
 	defaultExpanded = true,
 	activeFileId,
 	topicId,
 	compact = true,
 	scrollElementRef,
-}: MemoryGroupProps) {
+}: MemoryGroupProps & { labelVariant?: "section" | "item" }) {
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useState(defaultExpanded)
 	const [visited, setVisited] = useState(defaultExpanded)
@@ -136,6 +138,7 @@ const MemoryGroup = observer(function MemoryGroup({
 	const title =
 		titleOverride ?? (projectId ? t("userSpace.projectMemory") : t("userSpace.globalMemory"))
 	const section: SidebarSectionOptions = {
+		labelVariant,
 		wrapLabel: true,
 		isExpanded: expanded,
 		onClick: () => {
@@ -145,7 +148,7 @@ const MemoryGroup = observer(function MemoryGroup({
 		leading: projectId ? <Folder size={16} /> : <Brain size={16} />,
 		description:
 			projectId && projectName && !titleOverride ? (
-				<p className="break-words px-4 pb-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+				<p className="break-words px-4 pb-2 text-xs font-normal text-muted-foreground [overflow-wrap:anywhere]">
 					{projectName}
 				</p>
 			) : undefined,
@@ -165,7 +168,12 @@ const MemoryGroup = observer(function MemoryGroup({
 		</div>
 	)
 	return (
-		<section className="flex min-h-0 shrink-0 flex-col border-b last:border-0">
+		<section
+			className={cn(
+				"flex min-h-0 shrink-0 flex-col",
+				labelVariant === "item" ? "pl-2" : "border-b last:border-0",
+			)}
+		>
 			{root && !error ? (
 				<UserSpaceFilesView
 					rootId={root.id}
@@ -254,6 +262,7 @@ const OtherProjectMemories = observer(function OtherProjectMemories(props: Memor
 	return (
 		<SidebarExpandableItem
 			label={t("userSpace.otherProjectMemories")}
+			labelVariant="section"
 			wrapLabel
 			isExpanded={expanded}
 			onClick={() => {
@@ -310,6 +319,7 @@ const OtherProjectMemories = observer(function OtherProjectMemories(props: Memor
 										t("userSpace.projectNameUnavailable")
 									}
 									defaultExpanded={false}
+									labelVariant="item"
 								/>
 							))
 						) : (
