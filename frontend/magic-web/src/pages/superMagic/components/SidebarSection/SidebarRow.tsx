@@ -44,6 +44,8 @@ export interface SidebarRowProps {
 	trailing?: ReactNode
 	testId: string
 	className?: string
+	/** 多板块依赖文字区分身份，允许标题换行并撑高；默认行高保持不变。 */
+	wrapLabel?: boolean
 	rowRef?: RefObject<HTMLDivElement>
 	labelRef?: RefObject<HTMLSpanElement>
 }
@@ -59,6 +61,7 @@ export function SidebarRow({
 	trailing,
 	testId,
 	className,
+	wrapLabel = false,
 	rowRef,
 	labelRef,
 }: SidebarRowProps) {
@@ -70,6 +73,7 @@ export function SidebarRow({
 				isActive && "bg-accent/50",
 				disabled && "cursor-not-allowed opacity-60 hover:bg-transparent",
 				className,
+				wrapLabel && "h-auto min-h-10 py-2",
 			)}
 		>
 			{/* 标题与工具按钮并列，避免嵌套 button；操作菜单不会触发分组折叠。 */}
@@ -89,8 +93,21 @@ export function SidebarRow({
 						{leading}
 					</div>
 				)}
-				<p className="min-w-0 truncate text-sm font-medium text-foreground">
-					<span ref={labelRef} className="inline-block whitespace-nowrap">
+				<p
+					className={cn(
+						"min-w-0 text-sm font-medium text-foreground",
+						!wrapLabel && "truncate",
+					)}
+				>
+					<span
+						ref={labelRef}
+						className={cn(
+							"inline-block",
+							wrapLabel
+								? "whitespace-normal break-words text-left [overflow-wrap:anywhere]"
+								: "whitespace-nowrap",
+						)}
+					>
 						{label}
 					</span>
 				</p>

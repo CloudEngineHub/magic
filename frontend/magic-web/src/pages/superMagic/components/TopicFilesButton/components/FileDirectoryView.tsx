@@ -1,5 +1,5 @@
 import { useVirtualScrollMargin } from "../hooks/useVirtualScrollMargin"
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useSize } from "ahooks"
 import { ArrowLeft, ChevronRight, MoreHorizontal } from "lucide-react"
@@ -21,6 +21,7 @@ export interface DirectoryBreadcrumb {
 	name: string
 }
 export interface FileDirectoryViewProps {
+	renderFileIcon?: (file: AttachmentItem, size: number) => ReactNode
 	scrollElementRef?: React.RefObject<HTMLElement>
 	items: AttachmentItem[]
 	path: DirectoryBreadcrumb[]
@@ -75,6 +76,7 @@ export function formatDirectoryFileTime(
 
 /** 项目和用户文件共享目录交互；读取与修改由所属空间提供，视图不构造项目身份。 */
 export function FileDirectoryView({
+	renderFileIcon,
 	scrollElementRef,
 	items,
 	path,
@@ -356,11 +358,15 @@ export function FileDirectoryView({
 														}
 														title={file.file_name ?? file.name}
 													>
-														<TopicFileIcon
-															isDirectory={file.is_directory}
-															fileExtension={file.file_extension}
-															size={grid ? 36 : 16}
-														/>
+														{renderFileIcon ? (
+															renderFileIcon(file, grid ? 36 : 16)
+														) : (
+															<TopicFileIcon
+																isDirectory={file.is_directory}
+																fileExtension={file.file_extension}
+																size={grid ? 36 : 16}
+															/>
+														)}
 														<span className="min-w-0 max-w-full truncate">
 															{file.file_name ?? file.name}
 														</span>

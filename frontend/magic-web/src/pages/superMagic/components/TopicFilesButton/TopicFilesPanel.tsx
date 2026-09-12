@@ -59,6 +59,8 @@ interface TopicFilesPanelProps {
 	title?: string
 	/** 是否显示文件树内部标题。 */
 	showTitle?: boolean
+	/** 多板块视图保留独立标题，搜索／选择只替换下方工具区。 */
+	headerLayout?: "inline" | "stacked"
 	attachments?: AttachmentItem[]
 	setUserSelectDetail?: (detail: any) => void
 	onFileClick?: (fileItem: any) => void
@@ -163,6 +165,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			headerTrailingAction,
 			onOpenFileManager,
 			section,
+			headerLayout = "inline",
 			contentBefore,
 			spaceConfig,
 			isItemSelectable,
@@ -606,6 +609,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			},
 		}))
 
+		const stackedHeader = headerLayout === "stacked"
+		const modeSection = stackedHeader ? undefined : section
 		const header = isSearchMode ? (
 			<SearchModeHeader
 				placeholder={spaceConfig?.directorySource ? t("userSpace.searchLoaded") : undefined}
@@ -616,7 +621,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				onClose={handleCloseSearch}
 				headerTrailingAction={headerTrailingAction}
 				onOpenFileManager={onOpenFileManager}
-				section={section}
+				section={modeSection}
 				className={cn("duration-200 animate-in fade-in", !showTitle && "[&>p]:hidden")}
 			/>
 		) : isSelectMode ? (
@@ -629,11 +634,12 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				onCancel={handleCancelSelect}
 				headerTrailingAction={headerTrailingAction}
 				onOpenFileManager={onOpenFileManager}
-				section={section}
+				section={modeSection}
 				className="duration-200 animate-in fade-in"
 			/>
 		) : (
 			<NormalModeHeader
+				actionsOnly={stackedHeader}
 				expandAllLabel={
 					spaceConfig?.directorySource ? t("userSpace.expandLoaded") : undefined
 				}
@@ -668,7 +674,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				onEnterSelectMode={capabilities.multiSelect ? handleEnterSelectMode : undefined}
 				headerTrailingAction={headerTrailingAction}
 				onOpenFileManager={onOpenFileManager}
-				section={section}
+				section={modeSection}
 				className="duration-200 animate-in fade-in"
 			/>
 		)
@@ -786,14 +792,20 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									label={resolvedTitle}
 									{...section}
 									testId="memory-files-section"
-									header={header}
+									header={stackedHeader ? undefined : header}
 								>
 									{section.description}
+									{stackedHeader && header}
 									{contentBefore}
 									{content}
 								</SidebarExpandableItem>
 							) : (
 								<>
+									{stackedHeader && (
+										<h3 className="shrink-0 break-words px-3 py-2 text-sm font-semibold [overflow-wrap:anywhere]">
+											{resolvedTitle}
+										</h3>
+									)}
 									{header}
 									{contentBefore}
 									{content}

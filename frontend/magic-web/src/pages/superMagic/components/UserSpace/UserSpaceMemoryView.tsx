@@ -136,6 +136,7 @@ const MemoryGroup = observer(function MemoryGroup({
 	const title =
 		titleOverride ?? (projectId ? t("userSpace.projectMemory") : t("userSpace.globalMemory"))
 	const section: SidebarSectionOptions = {
+		wrapLabel: true,
 		isExpanded: expanded,
 		onClick: () => {
 			setExpanded(!expanded)
@@ -144,7 +145,9 @@ const MemoryGroup = observer(function MemoryGroup({
 		leading: projectId ? <Folder size={16} /> : <Brain size={16} />,
 		description:
 			projectId && projectName && !titleOverride ? (
-				<p className="truncate px-4 pb-2 text-xs text-muted-foreground">{projectName}</p>
+				<p className="break-words px-4 pb-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+					{projectName}
+				</p>
 			) : undefined,
 	}
 	const emptyState = !entryExists && (
@@ -251,6 +254,7 @@ const OtherProjectMemories = observer(function OtherProjectMemories(props: Memor
 	return (
 		<SidebarExpandableItem
 			label={t("userSpace.otherProjectMemories")}
+			wrapLabel
 			isExpanded={expanded}
 			onClick={() => {
 				setExpanded(!expanded)

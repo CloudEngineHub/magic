@@ -48,6 +48,7 @@ interface NormalModeHeaderProps {
 	onOpenFileManager?: () => void
 	section?: SidebarSectionOptions
 	className?: string
+	actionsOnly?: boolean
 }
 
 function NormalModeHeader({
@@ -74,6 +75,7 @@ function NormalModeHeader({
 	onOpenFileManager,
 	section,
 	className,
+	actionsOnly = false,
 }: NormalModeHeaderProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -86,7 +88,10 @@ function NormalModeHeader({
 	const actions = (
 		<div
 			ref={actionsRef}
-			className="relative ml-auto flex shrink-0 items-center gap-1 [&>*]:shrink-0 [&_button]:shrink-0"
+			className={cn(
+				"relative ml-auto flex shrink-0 items-center gap-1 [&>*]:shrink-0 [&_button]:shrink-0",
+				actionsOnly && "ml-0 min-w-0 flex-1 flex-wrap",
+			)}
 		>
 			{onSearch && (
 				<MagicTooltip title={t("topicFiles.search")}>
@@ -262,6 +267,18 @@ function NormalModeHeader({
 			)}
 		</div>
 	)
+	// 用户空间将身份标题放在独立一行；这里只复用原工具按钮，不复制操作逻辑。
+	if (actionsOnly) {
+		return (
+			<div
+				ref={rowRef}
+				className={cn("flex min-h-8 w-full items-center px-3 py-1", className)}
+			>
+				<span ref={labelRef} aria-hidden className="sr-only" />
+				{actions}
+			</div>
+		)
+	}
 	return section ? (
 		<SidebarRow
 			label={title || t("topicFiles.title")}

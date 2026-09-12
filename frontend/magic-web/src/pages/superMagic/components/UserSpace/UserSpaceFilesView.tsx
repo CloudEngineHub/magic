@@ -7,7 +7,7 @@ import userFilesStore from "@/stores/userFiles"
 import TopicFilesPanel from "../TopicFilesButton/TopicFilesPanel"
 import TopicFilesCore from "../TopicFilesButton/TopicFilesCore"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
-import { MemoryTreeNodeIcon } from "../LongTremMemory/components/MemoryTreeNodeIcon"
+import UserSpaceFileIcon from "./UserSpaceFileIcon"
 import { toUserAttachment } from "./services/userSpaceFileService"
 import { useUserSpaceFileActions } from "./hooks/useUserSpaceFileActions"
 import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
@@ -86,6 +86,7 @@ export default observer(function UserSpaceFilesView({
 	const renderSection = (content: ReactNode) =>
 		section ? (
 			<SidebarExpandableItem
+				wrapLabel
 				label={rootName ?? t("userSpace.title")}
 				{...section}
 				testId="memory-manager-section"
@@ -93,6 +94,13 @@ export default observer(function UserSpaceFilesView({
 				{section.description}
 				{content}
 			</SidebarExpandableItem>
+		) : compact ? (
+			<>
+				<h3 className="shrink-0 break-words px-3 py-2 text-sm font-semibold [overflow-wrap:anywhere]">
+					{rootName ?? t("userSpace.allFiles")}
+				</h3>
+				{content}
+			</>
 		) : (
 			content
 		)
@@ -127,13 +135,7 @@ export default observer(function UserSpaceFilesView({
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems: filterMenuItems,
 		resolveTopicFileRowDecoration: ({ item }: { item: AttachmentItem }) => ({
-			icon: (
-				<MemoryTreeNodeIcon
-					item={item}
-					size={16}
-					pathSegments={(item.relative_file_path ?? "").split("/")}
-				/>
-			),
+			icon: <UserSpaceFileIcon item={item} size={16} resourceTree={items} />,
 			tag:
 				item.directoryLoadState === "error" ? (
 					<span className="text-xs text-destructive">{t("userSpace.retry")}</span>
@@ -143,6 +145,7 @@ export default observer(function UserSpaceFilesView({
 	if (compact)
 		return (
 			<TopicFilesPanel
+				headerLayout="stacked"
 				key={`${identity}:${parentId}`}
 				{...commonProps}
 				title={rootName ?? t("userSpace.allFiles")}
@@ -165,6 +168,9 @@ export default observer(function UserSpaceFilesView({
 			scrollElementRef={scrollElementRef}
 			onUpdateAttachments={() => void refresh().catch(() => undefined)}
 			directoryView={{
+				renderFileIcon: (item, size) => (
+					<UserSpaceFileIcon item={item} resourceTree={items} size={size} />
+				),
 				directory: operationRoot,
 				items,
 				rootName: rootName ?? t("userSpace.title"),

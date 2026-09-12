@@ -8,6 +8,7 @@ export interface SidebarSectionOptions {
 	onClick: () => void
 	leading?: ReactNode
 	description?: ReactNode
+	wrapLabel?: boolean
 }
 
 export function SidebarExpandableItem({
@@ -23,6 +24,7 @@ export function SidebarExpandableItem({
 	childrenClassName,
 	children,
 	header,
+	wrapLabel = false,
 }: {
 	label: string
 	onClick: () => void
@@ -36,6 +38,7 @@ export function SidebarExpandableItem({
 	childrenClassName?: string
 	children: ReactNode
 	header?: ReactNode
+	wrapLabel?: boolean
 }) {
 	return (
 		<div className={className} data-testid={`${testId}-section`}>
@@ -48,6 +51,7 @@ export function SidebarExpandableItem({
 					leading={leading}
 					trailing={trailing}
 					testId={testId}
+					wrapLabel={wrapLabel}
 				/>
 			)}
 			<div

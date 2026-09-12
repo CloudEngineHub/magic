@@ -146,7 +146,7 @@ export interface TopicFilesExpansionState {
 
 interface TopicFilesCoreProps {
 	directoryView?: Pick<FileDirectoryViewProps, "items" | "path" | "onNavigate"> &
-		Partial<Pick<FileDirectoryViewProps, "rootName" | "error">> & {
+		Partial<Pick<FileDirectoryViewProps, "rootName" | "error" | "renderFileIcon">> & {
 			directory?: AttachmentItem
 		}
 	className?: string
