@@ -1,11 +1,8 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * v1 管理后台虚拟权限目录映射。
- *
- * 只影响 v1 权限树展示，不改变真实权限 key、角色保存或接口鉴权。
+ * Copyright (c) The Magic , Distributed under the software license
  */
 return [
     'fallback_legacy_tree' => false,
