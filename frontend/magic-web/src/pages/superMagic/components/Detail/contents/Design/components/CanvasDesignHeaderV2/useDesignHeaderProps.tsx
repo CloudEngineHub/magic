@@ -21,6 +21,7 @@ import {
 	getZipFileNameFromFiles,
 } from "../../utils/utils"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import ActionButton from "@/pages/superMagic/components/Detail/components/CommonHeader/components/ActionButton"
 import { IconShare3 } from "@tabler/icons-react"
@@ -84,6 +85,8 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 	const { t } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
 	const { hasGlobalAgreement } = useAiWatermarkPreference()
+	// Canvas header ZIP download must carry the ambient share identity too.
+	const fileApi = useFileApi()
 
 	// 刷新状态
 	const [isRefreshing, setIsRefreshing] = useState(false)
@@ -185,6 +188,8 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 				imageFiles,
 				downloadMode,
 				zipFileName,
+				undefined,
+				fileApi,
 			)
 
 			magicToast.success({
@@ -202,6 +207,7 @@ export function useDesignHeaderProps(options: UseDesignHeaderPropsOptions): Comm
 		canShowDesignDownload,
 		currentFile,
 		designDownloadDirectoryInfo,
+		fileApi,
 		hasGlobalAgreement,
 		projectId,
 		t,

@@ -33,6 +33,7 @@ import MagicSpin from "@/components/base/MagicSpin"
 import { useResizableSidebar } from "./hooks/useResizableSidebar"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -167,6 +168,7 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 	} = props
 
 	const { organizationCode } = useOrganization()
+	const fileApi = useFileApi()
 	const resolvedProjectId = selectedProject?.id || projectId
 	const effectiveDisplayConfig = useMemo(() => {
 		if (!slidePaths?.length) return displayConfig
@@ -189,6 +191,7 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 			selectedProjectId: selectedProject?.id,
 			enableCache: true,
 			allowDownload,
+			fileApi,
 		}),
 		[
 			attachments,
@@ -201,6 +204,7 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 			organizationCode,
 			selectedProject?.id,
 			allowDownload,
+			fileApi,
 		],
 	)
 

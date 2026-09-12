@@ -18,6 +18,8 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 import { genFileData } from "@/pages/chatNew/components/MessageEditor/components/InputFiles/utils"
 import { useUpload } from "@/hooks/useUploadFiles"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { useTranslation } from "react-i18next"
 import { addContentToChat } from "@/pages/superMagic/components/Detail/components/AIOptimization/utils"
 import { decodeHTMLEntities, getFullContent } from "./utils/full-content"
@@ -427,6 +429,9 @@ function getContextUserName(user: MagicContextUser): string {
 // Internal component that uses the StylePanelStore context
 const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHTMLRendererProps>(
 	(props, ref) => {
+		const fileAccess = useFileAccess()
+		const fileApi = useFileApi()
+		const getFileAccess = useMemoizedFn(() => fileAccess)
 		const {
 			content,
 			rawSourceCode,
@@ -1295,6 +1300,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						})
 					}),
 			),
+			getFileAccess,
 		})
 
 		const { handleLLMMessage } = useIframeLLM({
@@ -1312,6 +1318,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			projectContextUnavailableError: !runtimeProjectId
 				? projectContextUnavailableError
 				: undefined,
+			getFileAccess,
 		})
 
 		// origin + 传入的 store + host 项目；hook 内不再读全局 store
@@ -2274,7 +2281,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					event.data.type === MEDIA_MESSAGE_TYPES.IMAGE_URL_REQUEST
 				) {
 					// 处理marked.js图片路径解析请求
-					await handleMediaImageUrlRequest(event, attachmentList || [], fileId || "")
+					await handleMediaImageUrlRequest(
+						event,
+						attachmentList || [],
+						fileId || "",
+						fileApi,
+					)
 				} else if (event.data?.type?.startsWith("MAGIC_FS_")) {
 					// 处理 window.Magic.fs.* 请求
 					await handleFSMessage(event.data.type, event.data)

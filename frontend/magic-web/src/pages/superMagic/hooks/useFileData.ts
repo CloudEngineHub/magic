@@ -1,4 +1,7 @@
-import { downloadFileContent, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { isShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { downloadFileContent } from "@/pages/superMagic/utils/api"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useDebounceEffect, useMemoizedFn } from "ahooks"
 import { FileHistoryVersion, Topic } from "@/pages/superMagic/pages/Workspace/types"
@@ -40,7 +43,15 @@ export const useFileData = ({
 }) => {
 	const { t } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
+	const fileAccess = useFileAccess()
+	// Bind the ambient share/session identity once at this boundary; the leaf
+	// download-url calls below must never run without it on share previews.
+	const fileApi = useFileApi()
 	const isShareFilePreview = isShareRoute || isSharePreview
+	const shareAccessKey =
+		fileAccess?.kind === "share"
+			? `${fileAccess.token}:${fileAccess.projectId}:${fileAccess.topicId ?? ""}`
+			: ""
 
 	/** 文件 URL 缓存 - 存储文件 ID 对应的 URL 和更新时间 */
 	const fileUrlCacheRef = useRef<Record<string, FileUrlCache>>({})
@@ -92,11 +103,13 @@ export const useFileData = ({
 	const changeFileVersion = useMemoizedFn(
 		(file_version: number | undefined, fileVersionsList?: FileHistoryVersion[]) => {
 			if (!file_id || (file_version && file_version === fileVersion)) return
+			if (isShareFilePreview && !isShareFileAccess(fileAccess)) return
 			// 获取文件下载地址
-			getTemporaryDownloadUrl({
-				file_ids: [file_id],
-				file_versions: file_version ? { [file_id]: file_version } : undefined,
-			})
+			fileApi
+				.getTemporaryDownloadUrl({
+					file_ids: [file_id],
+					file_versions: file_version ? { [file_id]: file_version } : undefined,
+				})
 				.then((res: any) => {
 					if (res[0]?.url) {
 						setIsDeleted(false)
@@ -243,13 +256,18 @@ export const useFileData = ({
 	/** 针对 分享/工具预览/内容审查 等场景，单独获取文件的最新下载地址 */
 	useEffect(() => {
 		if (!file_id) return
+		if (isShareFilePreview && !isShareFileAccess(fileAccess)) {
+			setLoading(true)
+			return
+		}
 		if (isShareFilePreview || !activeFileId || activeFileId !== file_id) {
 			setLoading(true)
 			setFileData(null)
 			// 获取文件下载地址
-			getTemporaryDownloadUrl({
-				file_ids: [file_id],
-			})
+			fileApi
+				.getTemporaryDownloadUrl({
+					file_ids: [file_id],
+				})
 				.then((res: any) => {
 					// 使用智能更新函数
 					const urlUpdated = updateFileUrlIfNeeded(
@@ -279,7 +297,7 @@ export const useFileData = ({
 					setLoading(false)
 				})
 		}
-	}, [file_id])
+	}, [file_id, isShareFilePreview, shareAccessKey, fileApi])
 
 	useEffect(() => {
 		pubsub.subscribe(PubSubEvents.Change_Preview_File, () => {

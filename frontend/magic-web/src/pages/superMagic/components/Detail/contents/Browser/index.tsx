@@ -1,4 +1,6 @@
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { memo, useEffect, useMemo, useState } from "react"
 import { Flex } from "antd"
 import { IconWorld } from "@tabler/icons-react"
@@ -80,6 +82,8 @@ export default memo(function Browser(props: BrowserProps) {
 	} = props
 	const { styles, cx } = useStyles()
 	const { t } = useTranslation("super")
+	const fileAccess = useFileAccess()
+	const fileApi = useFileApi()
 	const { url, title, page_title, file_id, file_key, detail } = data || {}
 	const hasUrl = typeof url === "string" && url.trim().length > 0
 	const displayUrl = hasUrl ? url : t("browserDetail.addressUnavailable")
@@ -110,6 +114,12 @@ export default memo(function Browser(props: BrowserProps) {
 		setFallbackToDetail(false)
 		setImgSrc("")
 
+		if (shouldWaitForShareAccess(fileAccess)) {
+			return () => {
+				cancelled = true
+			}
+		}
+
 		if (!resolvedFileId) {
 			setImgSrc(snapshotUrl)
 			if (!snapshotUrl && hasDetail) {
@@ -122,7 +132,11 @@ export default memo(function Browser(props: BrowserProps) {
 			}
 		}
 
-		getTemporaryDownloadUrl({ file_ids: [resolvedFileId], enableErrorMessagePrompt: false })
+		fileApi
+			.getTemporaryDownloadUrl({
+				file_ids: [resolvedFileId],
+				enableErrorMessagePrompt: false,
+			})
 			.then((res: Array<{ url?: string }> = []) => {
 				if (cancelled) return
 				const source = res[0]?.url || snapshotUrl
@@ -146,7 +160,7 @@ export default memo(function Browser(props: BrowserProps) {
 		return () => {
 			cancelled = true
 		}
-	}, [hasDetail, onViewModeChange, resolvedFileId, snapshotUrl])
+	}, [fileAccess, fileApi, hasDetail, onViewModeChange, resolvedFileId, snapshotUrl])
 
 	const handleImageError = () => {
 		setImageError(true)

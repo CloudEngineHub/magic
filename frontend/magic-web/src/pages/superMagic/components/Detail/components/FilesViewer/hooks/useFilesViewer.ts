@@ -18,6 +18,7 @@ import type {
 import { TabActionType } from "../types"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { copyFileContent } from "@/pages/superMagic/utils/share"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	convertFileToTabItem,
@@ -197,6 +198,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 	})
 
 	const { t } = useTranslation("super")
+	const fileApi = useFileApi()
 
 	const { shareParams, isShareRoute } = useShareRoute()
 	const [searchParams] = useSearchParams()
@@ -846,7 +848,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 	// File content handlers
 	const handleCopy = useMemoizedFn(
 		async (fileId: string, fileContent?: string, fileVersion?: number) => {
-			copyFileContent(fileList, t, fileId, fileContent, fileVersion)
+			copyFileContent(fileList, t, fileId, fileContent, fileVersion, fileApi)
 		},
 	)
 

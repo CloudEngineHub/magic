@@ -1,5 +1,6 @@
 import { SuperMagicApi } from "@/apis"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { generateBlankSlideContent } from "../../contents/HTML/utils/magicProjectUpdater"
 import type { PPTSlideStructureAdapter } from "../PPTRender/types"
 import type { AttachmentItem } from "../../../TopicFilesButton/hooks/types"
@@ -16,6 +17,8 @@ interface CreateAdapterOptions {
 	getManifest?: () => SlidesTemplateManifest
 	saveManifest?: (manifest: SlidesTemplateManifest) => Promise<void>
 	onManifestChange?: (manifest: SlidesTemplateManifest) => void
+	/** Bound file client for reading slide sources on read-only share previews. */
+	fileApi?: FileApi
 }
 
 function getName(item: AttachmentItem): string {
@@ -65,9 +68,15 @@ export function createSlidesTemplateStructureAdapter({
 	getManifest,
 	saveManifest: saveManifestFromRoot,
 	onManifestChange,
+	fileApi,
 }: CreateAdapterOptions): PPTSlideStructureAdapter {
 	let manifest = project.manifest
 	const slideFiles = new Map(project.slideFiles)
+
+	const readSlideContent = (fileId: string) =>
+		fileApi
+			? fileApi.getFileContentById(fileId, { responseType: "text" })
+			: getFileContentById(fileId, { responseType: "text" })
 
 	const saveManifest = async (nextManifest: SlidesTemplateManifest) => {
 		if (saveManifestFromRoot) {
@@ -175,9 +184,7 @@ export function createSlidesTemplateStructureAdapter({
 			const sourceEntry = latestManifest.slides.find((slide) => slide.file === slidePath)
 			if (!sourceFile?.file_id || !sourceEntry) throw new Error("Slide file not found")
 
-			const sourceContent = await getFileContentById(String(sourceFile.file_id), {
-				responseType: "text",
-			})
+			const sourceContent = await readSlideContent(String(sourceFile.file_id))
 			if (typeof sourceContent !== "string") throw new Error("Failed to load source slide")
 
 			const fileName = getNextDuplicateFileName(slidePath, [
@@ -236,7 +243,7 @@ export function createSlidesTemplateStructureAdapter({
 			const file = slideFiles.get(slidePath)
 			if (!file?.file_id) throw new Error("Slide file not found")
 			const fileId = String(file.file_id)
-			const originalContent = await getFileContentById(fileId, { responseType: "text" })
+			const originalContent = await readSlideContent(fileId)
 			await SuperMagicApi.deleteFile(fileId)
 
 			try {

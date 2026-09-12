@@ -275,8 +275,6 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 				return
 			}
 
-			const temporaryToken =
-				(window as Window & { temporary_token?: string }).temporary_token || ""
 			let didLoad = false
 
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
@@ -284,7 +282,6 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 				projectId,
 				loadProjectAttachments({
 					projectId,
-					temporaryToken,
 				})
 					.then((res) => {
 						store.projectFilesStore.setWorkspaceFileTree(res.tree)

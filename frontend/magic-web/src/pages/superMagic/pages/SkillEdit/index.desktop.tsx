@@ -356,16 +356,12 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 				return
 			}
 
-			const temporaryToken =
-				(window as Window & { temporary_token?: string }).temporary_token || ""
-
 			let didLoad = false
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 			withAttachmentsRefreshWaitersResolved(
 				projectId,
 				loadProjectAttachments({
 					projectId,
-					temporaryToken,
 				})
 					.then((res) => {
 						store.projectFilesStore.setWorkspaceFileTree(res.tree)

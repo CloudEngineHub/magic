@@ -4,8 +4,8 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { DetailRef } from "../../../components/Detail"
 import type { ActiveDetailTabType } from "../../../components/Detail/components/FilesViewer/types"
 import type { AttachmentItem } from "../../../components/TopicFilesButton/hooks/types"
-import { getTemporaryDownloadUrl } from "../../../utils/api"
 import { downloadFileWithAnchor } from "../../../utils/handleFIle"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 interface UseTopicDetailPanelControllerOptions {
 	detailRef: RefObject<DetailRef>
@@ -49,6 +49,7 @@ export function useTopicDetailPanelController({
 	attachmentList = [],
 	subscribeMicroAppTab = true,
 }: UseTopicDetailPanelControllerOptions): UseTopicDetailPanelControllerReturn {
+	const fileApi = useFileApi()
 	const [activeDetailTabType, setActiveDetailTabType] = useState<DetailTabType>(null)
 	const fileOpenFallbackTimerRef = useRef<number | null>(null)
 	const activeFileIdRef = useRef<string | null>(activeFileId)
@@ -142,12 +143,14 @@ export function useTopicDetailPanelController({
 			)
 			if (matched?.file_id) {
 				if (payload.action === "download") {
-					getTemporaryDownloadUrl({
-						file_ids: [matched.file_id],
-						is_download: true,
-					}).then((res: any) => {
-						downloadFileWithAnchor(res[0]?.url)
-					})
+					fileApi
+						.getTemporaryDownloadUrl({
+							file_ids: [matched.file_id],
+							is_download: true,
+						})
+						.then((res: any) => {
+							downloadFileWithAnchor(res[0]?.url)
+						})
 				} else {
 					window.setTimeout(() => {
 						detailRef.current?.openFileTab?.(matched)
@@ -226,7 +229,14 @@ export function useTopicDetailPanelController({
 				pubsub.unsubscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
 			}
 		}
-	}, [attachmentList, detailRef, scheduleFileOpenFallback, setActiveFileId, subscribeMicroAppTab])
+	}, [
+		attachmentList,
+		detailRef,
+		fileApi,
+		scheduleFileOpenFallback,
+		setActiveFileId,
+		subscribeMicroAppTab,
+	])
 
 	const handleActiveDetailTabChange = useMemoizedFn((tabType: DetailTabType) => {
 		setActiveDetailTabType(tabType)

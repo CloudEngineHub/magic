@@ -12,6 +12,8 @@
  *   Main iframe script: iframe.srcdoc = processedHtml
  */
 
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import { processHtmlContent } from "../htmlProcessor"
 import { getFullContent, decodeHTMLEntities } from "./full-content"
@@ -45,6 +47,8 @@ interface NestedIframeContentHandlerOptions {
 	projectId?: string
 	parentTargetOrigin?: string
 	onTelemetry?: (data: Record<string, unknown>) => void
+	access?: FileAccessContext | null
+	fileApi?: FileApi
 }
 
 // 规范化链路文件 ID：去重并补齐当前请求发起文件
@@ -498,10 +502,15 @@ export function createNestedIframeContentHandler(
 				return
 			}
 
-			// 2. Fetch raw HTML content
-			const rawContent = await getFileContentById(matchedFile.file_id, {
-				responseType: "text",
-			})
+			// 2. Fetch raw HTML content. The handler already carries the boundary
+			// access; forward it so nested share previews are not blocked by the guard.
+			const rawContent = await (options.fileApi?.getFileContentById ?? getFileContentById)(
+				matchedFile.file_id,
+				{
+					responseType: "text",
+					access: options.access ?? undefined,
+				},
+			)
 
 			if (typeof rawContent !== "string") {
 				reportNestedIframeFailure("fetch_failed", "Failed to fetch file content", {
@@ -529,6 +538,8 @@ export function createNestedIframeContentHandler(
 				fileId: matchedFile.file_id,
 				fileName: matchedFile.file_name,
 				html_relative_path: nestedFileFolderPath,
+				access: options.access,
+				fileApi: options.fileApi,
 			})
 
 			const virtualStorageContext = await createVirtualStorageContext({

@@ -176,8 +176,6 @@ export function RecordingSummaryFloatPanel() {
 			const res = await loadProjectAttachments({
 				projectId,
 				signal: controller.signal,
-				// @ts-ignore 使用window添加临时的token
-				temporaryToken: window.temporary_token || "",
 				includeHidden: true,
 			})
 			if (
@@ -523,21 +521,6 @@ export function RecordingSummaryFloatPanel() {
 		(recordingSummaryStore.businessData.project as { project_mode?: string | null } | null)
 			?.project_mode,
 	)
-	useEffect(() => {
-		if (!isExpanded || !isVisible) {
-			return
-		}
-		if (selectedProjectId) {
-			// @ts-ignore
-			window.project_id = selectedProjectId
-		}
-
-		return () => {
-			// @ts-ignore
-			window.project_id = ""
-		}
-	}, [selectedProjectId, isExpanded, isVisible])
-
 	const handleSave = useMemoizedFn(() => {
 		recordSummaryService.flushNoteUpdate()
 	})

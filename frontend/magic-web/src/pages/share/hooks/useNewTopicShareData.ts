@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react"
 import { SuperMagicApi } from "@/apis"
 import { AttachmentDataProcessor } from "../../superMagic/utils/attachmentDataProcessor"
+import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
 
 interface UseNewTopicShareDataReturn {
@@ -14,6 +15,7 @@ interface UseNewTopicShareDataReturn {
 		projectId?: string
 		resource_id?: string
 		password?: string
+		temporaryToken?: string
 	}) => void
 	setIsProjectShare: (value: boolean) => void
 }
@@ -115,8 +117,13 @@ export default function useNewTopicShareData(): UseNewTopicShareDataReturn {
 	)
 
 	const updateAttachments = useCallback(
-		(params: { projectId?: string; resource_id?: string; password?: string }) => {
-			const { projectId, resource_id, password } = params
+		(params: {
+			projectId?: string
+			resource_id?: string
+			password?: string
+			temporaryToken?: string
+		}) => {
+			const { projectId, resource_id, password, temporaryToken } = params
 
 			// 优先使用 resource_id（新格式文件分享）
 			if (resource_id) {
@@ -130,8 +137,9 @@ export default function useNewTopicShareData(): UseNewTopicShareDataReturn {
 				// 使用 projectId（旧格式或话题分享）
 				loadProjectAttachments({
 					projectId,
-					// @ts-ignore 使用window添加临时的token
-					temporaryToken: window?.temporary_token || "",
+					access: temporaryToken
+						? createShareFileAccess({ token: temporaryToken, projectId })
+						: undefined,
 				}).then((res) => {
 					setAttachments(res)
 				})

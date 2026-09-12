@@ -1,6 +1,8 @@
 import { SuperMagicApi } from "@/apis"
 import type { FileScope } from "@/apis/modules/fileScope"
 import type { ProjectAttachmentsV2NextParentState } from "@/apis/modules/superMagic"
+import type { FileAccessContext } from "../fileAccess/fileAccessContext"
+import { resolveTemporaryTokenFromAccess } from "../fileAccess/fileAccessContext"
 import type { AttachmentItem } from "../components/TopicFilesButton/hooks"
 import { AttachmentDataProcessor } from "../utils/attachmentDataProcessor"
 import { getProjectFileListScrollIdleDelayMs } from "../utils/fileListScrollActivity"
@@ -34,18 +36,10 @@ import {
 
 export type ProjectAttachmentsSourceVersion = "v1" | "v2"
 export type ProjectAttachmentsLoadStrategy =
-	| "force_v1"
-	| "force_v2"
-	| "count_v1"
-	| "count_v2"
-	| "fallback_v1"
+	"force_v1" | "force_v2" | "count_v1" | "count_v2" | "fallback_v1"
 
 export type ProjectAttachmentsFallbackReason =
-	| "count_failed"
-	| "count_below_threshold"
-	| "v2_fetch_failed"
-	| "bfs_anomaly"
-	| "forced_v1"
+	"count_failed" | "count_below_threshold" | "v2_fetch_failed" | "bfs_anomaly" | "forced_v1"
 
 export interface ProjectAttachmentsDiagnostics extends Partial<ProjectAttachmentsV2Diagnostics> {
 	fallback_reason?: ProjectAttachmentsFallbackReason
@@ -80,7 +74,9 @@ export interface ProjectAttachmentsLoaderOptions {
 	projectId: string
 	/** 特殊文件作用域；为空时保持原项目文件加载行为。 */
 	scope?: FileScope
-	/** Pass null to explicitly disable the share token inherited from window. */
+	/** Share access for published/share file trees. Omitted means session. */
+	access?: FileAccessContext
+	/** Explicit share token. Null/omit means session; never inherits window. */
 	temporaryToken?: string | null
 	threshold?: number
 	pageSize?: number
@@ -120,23 +116,9 @@ type WindowWithIdleCallback = Window & {
 	cancelIdleCallback?: (handle: number) => void
 }
 
-type TemporaryTokenWindow = Window & {
-	temporary_token?: string
-	temporaryToken?: string
-}
-
 function resolveWindowSearchParams() {
 	if (typeof window === "undefined") return new URLSearchParams()
 	return new URLSearchParams(window.location.search)
-}
-
-/** 解析临时访问令牌，显式传入 null 时禁用页面继承的分享令牌。 */
-function resolveTemporaryToken(temporaryToken?: string | null) {
-	if (temporaryToken === null) return ""
-	if (temporaryToken) return temporaryToken
-	if (typeof window === "undefined") return ""
-	const tokenWindow = window as TemporaryTokenWindow
-	return tokenWindow.temporary_token || tokenWindow.temporaryToken || ""
 }
 
 function normalizeNextParentStates(
@@ -569,7 +551,7 @@ export async function loadProjectAttachments(
 	const searchParams = resolveWindowSearchParams()
 	const versionOverride = searchParams.get("attachments_version")
 	const allowFallback = searchParams.get("attachments_fallback") === "v1"
-	const temporaryToken = resolveTemporaryToken(options.temporaryToken)
+	const temporaryToken = resolveTemporaryTokenFromAccess(options.access, options.temporaryToken)
 	const threshold = options.threshold ?? DEFAULT_THRESHOLD
 	const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE
 	const finalizeLoadResult = (result: ProjectAttachmentsLoadResult) => {

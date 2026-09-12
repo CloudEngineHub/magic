@@ -131,7 +131,6 @@ export function MicroAppScheduledTasksModify({
 	const selectedWorkspace = useMemo(() => createWorkspace(context), [context])
 	const selectedProject = useMemo(() => createProject(context), [context])
 
-	const topicId = Form.useWatch("topic_id", form)
 	const deadlineEnabled = Form.useWatch("deadline_enabled", form)
 	const timeConfig = Form.useWatch("time_config", form)
 
@@ -282,16 +281,6 @@ export function MicroAppScheduledTasksModify({
 		})
 		setSelectedTopic(null)
 	}, [context.workspaceId, context.projectId, context.topicId])
-
-	useEffect(() => {
-		const taskContextWindow = window as Window & { project_id?: string; topic_id?: string }
-		taskContextWindow.project_id = context.projectId
-		if (topicId) taskContextWindow.topic_id = topicId
-		return () => {
-			taskContextWindow.project_id = ""
-			taskContextWindow.topic_id = ""
-		}
-	}, [context.projectId, topicId])
 
 	const handleTopicSelect = useMemoizedFn((item?: { value: string; label: string }) => {
 		if (!item) {

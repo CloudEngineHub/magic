@@ -1,7 +1,7 @@
 import type { GetTemporaryDownloadUrlItem } from "@/pages/superMagic/utils/api"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import {
 	getCachedSharedMediaUrls,
-	requestSharedMediaUrls,
 	seedSharedMediaUrls,
 } from "@/pages/superMagic/services/sharedMediaUrlCache"
 import { SHARED_MEDIA_THUMBNAIL_IMAGE_PROCESS } from "@/pages/superMagic/services/sharedMediaImageProcess"
@@ -12,6 +12,7 @@ function buildMentionPreviewOptions(
 	fileUpdatedAtMap?: ReadonlyMap<string, string>,
 	fileResourceVersionMap?: ReadonlyMap<string, string>,
 	fileVersions?: ReadonlyMap<string, number>,
+	identityKey?: string,
 ) {
 	return {
 		imageProcess: MENTION_PREVIEW_IMAGE_PROCESS,
@@ -19,6 +20,9 @@ function buildMentionPreviewOptions(
 		fileUpdatedAtMap,
 		fileResourceVersionMap,
 		fileVersions,
+		// Identity is part of the cache/batch key so host and share previews of the
+		// same file never share a cached URL.
+		identityKey,
 	}
 }
 
@@ -27,6 +31,7 @@ export function getCachedMentionPreviewUrls(params: {
 	fileUpdatedAtMap?: ReadonlyMap<string, string>
 	fileResourceVersionMap?: ReadonlyMap<string, string>
 	fileVersions?: ReadonlyMap<string, number>
+	fileApi: Pick<FileApi, "identityKey">
 }): {
 	cached: GetTemporaryDownloadUrlItem[]
 	missing: string[]
@@ -37,6 +42,7 @@ export function getCachedMentionPreviewUrls(params: {
 			params.fileUpdatedAtMap,
 			params.fileResourceVersionMap,
 			params.fileVersions,
+			params.fileApi.identityKey,
 		),
 	})
 }
@@ -46,6 +52,7 @@ export function updateMentionPreviewUrlCache(params: {
 	fileUpdatedAtMap?: ReadonlyMap<string, string>
 	fileResourceVersionMap?: ReadonlyMap<string, string>
 	fileVersions?: ReadonlyMap<string, number>
+	fileApi: Pick<FileApi, "identityKey">
 }): void {
 	seedSharedMediaUrls({
 		items: params.urlData,
@@ -53,24 +60,27 @@ export function updateMentionPreviewUrlCache(params: {
 			params.fileUpdatedAtMap,
 			params.fileResourceVersionMap,
 			params.fileVersions,
+			params.fileApi.identityKey,
 		),
 	})
 }
 
 export function requestMentionPreviewUrls(
 	fileIds: string[],
-	params?: {
+	params: {
 		fileUpdatedAtMap?: ReadonlyMap<string, string>
 		fileResourceVersionMap?: ReadonlyMap<string, string>
 		fileVersions?: ReadonlyMap<string, number>
+		fileApi: Pick<FileApi, "identityKey" | "requestSharedMediaUrls">
 	},
 ): Promise<GetTemporaryDownloadUrlItem[]> {
-	return requestSharedMediaUrls(
+	return params.fileApi.requestSharedMediaUrls(
 		fileIds,
 		buildMentionPreviewOptions(
-			params?.fileUpdatedAtMap,
-			params?.fileResourceVersionMap,
-			params?.fileVersions,
+			params.fileUpdatedAtMap,
+			params.fileResourceVersionMap,
+			params.fileVersions,
+			params.fileApi.identityKey,
 		),
 	)
 }

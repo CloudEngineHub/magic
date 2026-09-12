@@ -16,6 +16,7 @@ export async function exportSingleFile({
 	fileId,
 	projectId,
 	convertType = "pdf",
+	token,
 	t,
 	onStart,
 	onEnd,
@@ -25,6 +26,7 @@ export async function exportSingleFile({
 	fileId: string | string[]
 	projectId?: string
 	convertType?: "pdf" | "ppt"
+	token?: string
 	t: (key: string) => string
 	onStart?: () => void
 	onEnd?: () => void
@@ -44,6 +46,7 @@ export async function exportSingleFile({
 			project_id: projectId,
 			file_ids: Array.isArray(fileId) ? fileId : [fileId],
 			convert_type: convertType,
+			token,
 		})
 		const target = convertType === "pdf" ? "_blank" : "_self"
 
@@ -58,7 +61,10 @@ export async function exportSingleFile({
 			// 任务处理中，轮询状态
 			const timer = setInterval(async () => {
 				try {
-					const checkData = await SuperMagicApi.checkExportPdfOrPptStatus(data.task_key)
+					const checkData = await SuperMagicApi.checkExportPdfOrPptStatus(
+						data.task_key,
+						token,
+					)
 					if (checkData.status === "processing") {
 						onProgress?.(checkData.conversion_rate)
 					}
@@ -177,6 +183,7 @@ export function exportSingleFileToPpt({
 export async function batchExportFile({
 	projectId,
 	fileIds,
+	token,
 	onEnd,
 	onProgress,
 	onError,
@@ -185,6 +192,7 @@ export async function batchExportFile({
 }: {
 	projectId?: string
 	fileIds: string[]
+	token?: string
 	onEnd?: () => void
 	onProgress?: (progress: number) => void
 	onError?: (error: any) => void
@@ -196,6 +204,7 @@ export async function batchExportFile({
 		const data = await SuperMagicApi.createBatchDownload({
 			project_id: projectId,
 			file_ids: fileIds,
+			token,
 		})
 		onStart?.()
 		if (data.status === "ready" && data.download_url) {
@@ -207,7 +216,10 @@ export async function batchExportFile({
 		if (data.status === "processing") {
 			// 每2秒轮询批量状态
 			const timer = setInterval(async () => {
-				const checkData = await SuperMagicApi.checkBatchDownloadStatus(data.batch_key)
+				const checkData = await SuperMagicApi.checkBatchDownloadStatus(
+					data.batch_key,
+					token,
+				)
 				if (checkData.status === "ready" && checkData.download_url) {
 					downloadFileWithAnchor(checkData.download_url)
 					onEnd?.()

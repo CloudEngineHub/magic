@@ -1,5 +1,6 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
 
 /**
  * 文件图标 URL 缓存 Store
@@ -21,7 +22,10 @@ class FileIconStore {
 	 * @param fileId - 图标文件的 file_id
 	 * @returns 临时下载 URL，失败返回 undefined
 	 */
-	async getFileIconUrl(fileId: string): Promise<string | undefined> {
+	async getFileIconUrl(
+		fileId: string,
+		access?: FileAccessContext | null,
+	): Promise<string | undefined> {
 		if (!fileId) return undefined
 
 		// 1. 检查缓存
@@ -33,7 +37,7 @@ class FileIconStore {
 		if (pending) return pending
 
 		// 3. 发起新请求
-		const request = this.fetchFileIconUrl(fileId)
+		const request = this.fetchFileIconUrl(fileId, access)
 		this.pendingRequests.set(fileId, request)
 
 		try {
@@ -47,9 +51,15 @@ class FileIconStore {
 	/**
 	 * 实际请求并缓存
 	 */
-	private async fetchFileIconUrl(fileId: string): Promise<string | undefined> {
+	private async fetchFileIconUrl(
+		fileId: string,
+		access?: FileAccessContext | null,
+	): Promise<string | undefined> {
 		try {
-			const res = await getTemporaryDownloadUrl({ file_ids: [fileId] })
+			const res = await getTemporaryDownloadUrl({
+				file_ids: [fileId],
+				access: access ?? undefined,
+			})
 			const url = res?.[0]?.url
 			if (typeof url === "string" && url) {
 				runInAction(() => {

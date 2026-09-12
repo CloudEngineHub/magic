@@ -117,6 +117,8 @@ function hasHtmlSlides(slides: string[]): boolean {
 async function prepareTargetSlides(
 	target: ClientBatchExportTarget,
 	attachments: ClientBatchAttachment[],
+	access?: ClientBatchExportRunOptions["access"],
+	fileApi?: ClientBatchExportRunOptions["fileApi"],
 ): Promise<{
 	result: Awaited<ReturnType<typeof prepareSingleSlideExport>>
 	displayConfig?: ClientBatchDisplayConfig
@@ -136,11 +138,15 @@ async function prepareTargetSlides(
 				mainFileId: fileId,
 				mainFileName: fileName,
 				displayConfig,
+				access,
+				fileApi,
 			})
 		: await prepareSingleSlideExport({
 				fileId,
 				fileName,
 				attachmentList: attachments,
+				access,
+				fileApi,
 			})
 
 	return { result, displayConfig, fileId, fileName }
@@ -152,8 +158,10 @@ async function exportPdfTarget(options: {
 	page?: DocumentExport.PdfPageConfig
 	documentExporter: PdfDocumentGenerator
 	addOutput: (data: Uint8Array, fileName: string) => void
+	access?: ClientBatchExportRunOptions["access"]
+	fileApi?: ClientBatchExportRunOptions["fileApi"]
 }): Promise<{ warnings: number }> {
-	const { target, attachments, page, documentExporter, addOutput } = options
+	const { target, attachments, page, documentExporter, addOutput, access, fileApi } = options
 	const entryFile = getTargetEntryFile(target)
 	const displayConfig = getTargetDisplayConfig(target)
 	const isPptMode = isClientBatchSlideDisplayConfig(displayConfig)
@@ -176,7 +184,7 @@ async function exportPdfTarget(options: {
 		return { warnings }
 	}
 
-	const prepared = await prepareTargetSlides(target, attachments)
+	const prepared = await prepareTargetSlides(target, attachments, access, fileApi)
 	if (!hasHtmlSlides(prepared.result.htmlSlides)) {
 		throw new Error("No HTML slides were prepared")
 	}
@@ -188,6 +196,8 @@ async function exportPdfTarget(options: {
 		fileName: prepared.fileName,
 		attachmentList: attachments,
 		displayConfig: prepared.displayConfig,
+		access,
+		fileApi,
 	})
 
 	const exportOptions: DocumentExport.PageExportOptions = {
@@ -207,9 +217,11 @@ async function exportPptxTarget(options: {
 	target: ClientBatchExportTarget
 	attachments: ClientBatchAttachment[]
 	addOutput: (data: Blob, fileName: string) => void
+	access?: ClientBatchExportRunOptions["access"]
+	fileApi?: ClientBatchExportRunOptions["fileApi"]
 }): Promise<{ warnings: number }> {
-	const { target, attachments, addOutput } = options
-	const prepared = await prepareTargetSlides(target, attachments)
+	const { target, attachments, addOutput, access, fileApi } = options
+	const prepared = await prepareTargetSlides(target, attachments, access, fileApi)
 	if (!hasHtmlSlides(prepared.result.htmlSlides)) {
 		throw new Error("No HTML slides were prepared")
 	}
@@ -221,6 +233,8 @@ async function exportPptxTarget(options: {
 		fileName: prepared.fileName,
 		attachmentList: attachments,
 		displayConfig: prepared.displayConfig,
+		access,
+		fileApi,
 	})
 
 	let warnings = 0
@@ -285,7 +299,7 @@ function buildArtifact(
 export async function runClientBatchDocumentExport(
 	options: ClientBatchExportRunOptions,
 ): Promise<ClientBatchExportRunResult> {
-	const { format, targets, attachments, projectName, onProgress } = options
+	const { format, targets, attachments, projectName, onProgress, access, fileApi } = options
 	if (targets.length === 0) {
 		return { successCount: 0, failureCount: 0, failures: [], warnings: 0 }
 	}
@@ -342,6 +356,8 @@ export async function runClientBatchDocumentExport(
 					page,
 					documentExporter,
 					addOutput: (data, fileName) => outputs.push({ data, fileName }),
+					access,
+					fileApi,
 				})
 				warnings += result.warnings
 			} else {
@@ -349,6 +365,8 @@ export async function runClientBatchDocumentExport(
 					target,
 					attachments: attachmentScope,
 					addOutput: (data, fileName) => outputs.push({ data, fileName }),
+					access,
+					fileApi,
 				})
 				warnings += result.warnings
 			}

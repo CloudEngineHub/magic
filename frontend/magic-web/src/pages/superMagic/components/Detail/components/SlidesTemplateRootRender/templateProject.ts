@@ -1,4 +1,5 @@
 import { getFileContentById } from "@/pages/superMagic/utils/api"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import type { AttachmentItem } from "../../../TopicFilesButton/hooks/types"
 import type {
 	SlidesTemplateManifest,
@@ -146,12 +147,19 @@ export function buildSlidesTemplateProject(
 
 export async function loadSlidesTemplateProject(
 	root: AttachmentItem,
+	fileApi?: FileApi,
 ): Promise<SlidesTemplateProjectContext> {
 	const manifestFile = root.children?.find(
 		(item) => !item.is_directory && getName(item) === "template.json",
 	)
 	if (!manifestFile?.file_id) throw new Error("Missing template.json")
-	const content = await getFileContentById(String(manifestFile.file_id), { responseType: "text" })
+	// Share template directories must carry their share identity or the manifest
+	// read is blocked by the leaf guard and the preview hangs on loading.
+	const content = fileApi
+		? await fileApi.getFileContentById(String(manifestFile.file_id), {
+				responseType: "text",
+			})
+		: await getFileContentById(String(manifestFile.file_id), { responseType: "text" })
 	if (typeof content !== "string") throw new Error("Invalid template.json content")
 	return buildSlidesTemplateProject(root, parseSlidesTemplateManifest(content))
 }

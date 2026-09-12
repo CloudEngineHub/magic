@@ -1,5 +1,6 @@
 import { SuperMagicApi } from "@/apis"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { isEqual } from "lodash-es"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignData } from "../types"
@@ -98,15 +99,26 @@ interface ReadElementDetailsResult {
 	unsupported: boolean
 }
 
+function readElementDetailsFileContent(
+	fileId: string,
+	fileApi?: FileApi,
+): Promise<string | ArrayBuffer | Blob> {
+	// Bound FileApi forwarding share/session identity; host-only callers fall back
+	// to the unbound leaf (session identity is the intentional default there).
+	return fileApi
+		? fileApi.getFileContentById(fileId, { responseType: "text" })
+		: getFileContentById(fileId, { responseType: "text" })
+}
+
 async function readElementDetailsByFile(
 	fileItem: FileItem | null,
+	fileApi?: FileApi,
 ): Promise<ReadElementDetailsResult> {
 	if (!fileItem?.file_id)
 		return { doc: emptyElementDetailsDoc(), exists: false, unsupported: false }
 	try {
-		const content = (await getFileContentById(fileItem.file_id, {
-			responseType: "text",
-		})) as string | null
+		const content = (await readElementDetailsFileContent(fileItem.file_id, fileApi)) as
+			string | null
 		if (!content || !content.trim())
 			return { doc: emptyElementDetailsDoc(), exists: true, unsupported: false }
 		const raw = JSON.parse(content)
@@ -122,12 +134,12 @@ async function readElementDetailsByFile(
 
 async function readComparableElementDetailsByFile(
 	fileItem: FileItem | null,
+	fileApi?: FileApi,
 ): Promise<unknown | null> {
 	if (!fileItem?.file_id) return emptyElementDetailsDoc()
 	try {
-		const content = (await getFileContentById(fileItem.file_id, {
-			responseType: "text",
-		})) as string | null
+		const content = (await readElementDetailsFileContent(fileItem.file_id, fileApi)) as
+			string | null
 		if (!content || !content.trim()) return emptyElementDetailsDoc()
 		return JSON.parse(content)
 	} catch {
@@ -140,6 +152,8 @@ export interface ElementDetailsContext {
 	flatAttachments?: FileItem[]
 	mainFileId: string | null
 	projectId?: string
+	/** Bound file client injected at the Design boundary; omitted on host-only paths. */
+	fileApi?: FileApi
 }
 
 export interface HydrateElementDetailsResult {
@@ -163,8 +177,8 @@ export async function getElementDetailsSidecarStatus(
 		ELEMENT_DETAILS_USER_FILENAME,
 	)
 	const [agentResult, userResult] = await Promise.all([
-		readElementDetailsByFile(agentLookup.fileItem),
-		readElementDetailsByFile(userLookup.fileItem),
+		readElementDetailsByFile(agentLookup.fileItem, ctx.fileApi),
+		readElementDetailsByFile(userLookup.fileItem, ctx.fileApi),
 	])
 	if (agentResult.unsupported || userResult.unsupported) return "unsupported"
 	return agentResult.exists || userResult.exists ? "loaded" : "missing"
@@ -200,8 +214,8 @@ export async function hydrateDesignDataDetails(
 	)
 
 	const [agentResult, userResult] = await Promise.all([
-		readElementDetailsByFile(agentLookup.fileItem),
-		readElementDetailsByFile(userLookup.fileItem),
+		readElementDetailsByFile(agentLookup.fileItem, ctx.fileApi),
+		readElementDetailsByFile(userLookup.fileItem, ctx.fileApi),
 	])
 	if (agentResult.unsupported || userResult.unsupported) {
 		setHydratedElementDetailsProvenance(designData, {})
@@ -240,7 +254,7 @@ export async function writeUserElementDetails(
 		ctx.mainFileId,
 		ELEMENT_DETAILS_FILENAME,
 	)
-	const agentBaselineResult = await readElementDetailsByFile(agentLookup.fileItem)
+	const agentBaselineResult = await readElementDetailsByFile(agentLookup.fileItem, ctx.fileApi)
 	if (agentBaselineResult.unsupported) return "blocked-unsupported"
 	const agentBaseline = agentBaselineResult.doc
 
@@ -260,7 +274,10 @@ export async function writeUserElementDetails(
 	if (!userFileId && !hasEntries) return "skipped"
 
 	if (userFileId) {
-		const currentUserRaw = await readComparableElementDetailsByFile(userLookup.fileItem)
+		const currentUserRaw = await readComparableElementDetailsByFile(
+			userLookup.fileItem,
+			ctx.fileApi,
+		)
 		if (currentUserRaw === null) return "failed"
 		if (hasUnsupportedElementDetailsStructure(currentUserRaw)) return "blocked-unsupported"
 		const currentUserDoc = normalizeElementDetailsDoc(currentUserRaw)

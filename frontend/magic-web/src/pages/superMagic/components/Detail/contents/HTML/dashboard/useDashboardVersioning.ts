@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { isShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import { findMatchingFile, flattenAttachments } from "../utils"
-import { downloadFileContent, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { downloadFileContent } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { measureManualPerfOperation } from "@/utils/manualPerfLogger"
 
 interface DashboardVersioningState {
@@ -56,6 +59,12 @@ export function useDashboardVersioning({
 	isSharePreview = false,
 	htmlVersioning,
 }: UseDashboardVersioningParams) {
+	const fileAccess = useFileAccess()
+	const fileApi = useFileApi()
+	const shareAccessKey =
+		fileAccess?.kind === "share"
+			? `${fileAccess.token}:${fileAccess.projectId}:${fileAccess.topicId ?? ""}`
+			: ""
 	const flattenedAttachmentList = useMemo(
 		() =>
 			measureManualPerfOperation(
@@ -144,17 +153,19 @@ export function useDashboardVersioning({
 
 	useEffect(() => {
 		if (!isDashboardHistoryDriven || !dashboardDataJsFile?.file_id) return
+		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 
 		const currentRequestId = requestIdRef.current + 1
 		requestIdRef.current = currentRequestId
 		setIsDashboardContentLoading(true)
 
-		getTemporaryDownloadUrl({
-			file_ids: [dashboardDataJsFile.file_id],
-			file_versions: selectedDashboardVersion
-				? { [dashboardDataJsFile.file_id]: selectedDashboardVersion }
-				: undefined,
-		})
+		fileApi
+			.getTemporaryDownloadUrl({
+				file_ids: [dashboardDataJsFile.file_id],
+				file_versions: selectedDashboardVersion
+					? { [dashboardDataJsFile.file_id]: selectedDashboardVersion }
+					: undefined,
+			})
 			.then(async (response) => {
 				if (requestIdRef.current !== currentRequestId) return
 
@@ -182,7 +193,11 @@ export function useDashboardVersioning({
 	}, [
 		dashboardDataJsFile?.file_id,
 		dashboardDataJsFile?.updated_at,
+		fileApi,
+		fileAccess,
 		isDashboardHistoryDriven,
+		isSharePreview,
+		shareAccessKey,
 		selectedDashboardVersion,
 	])
 

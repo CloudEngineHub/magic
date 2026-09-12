@@ -30,8 +30,7 @@ const fallbackRefreshByProject = new Map<
 >()
 
 function getTemporaryToken() {
-	if (typeof window === "undefined") return ""
-	return (window as Window & { temporary_token?: string }).temporary_token || ""
+	return ""
 }
 
 export function getProjectAttachmentsChangeDedupeMap(store: ProjectFilesStore) {

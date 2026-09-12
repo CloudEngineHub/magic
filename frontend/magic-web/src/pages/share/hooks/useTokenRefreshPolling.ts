@@ -63,8 +63,6 @@ export function useTokenRefreshPolling({
 
 			// 如果需要密码但没有提供密码，抛出错误
 			if (result?.has_password && !password) throw new Error("Password required for refresh")
-			;(window as Window & { temporary_token?: string }).temporary_token =
-				result.temporary_token
 			lastRefreshedAtRef.current = Date.now()
 			onTokenRefreshed?.(result)
 		} catch (error) {

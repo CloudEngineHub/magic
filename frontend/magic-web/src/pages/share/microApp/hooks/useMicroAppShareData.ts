@@ -4,6 +4,10 @@ import { SuperMagicApi } from "@/apis"
 import { userStore } from "@/models/user"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
+import {
+	createShareFileAccess,
+	type FileAccessContext,
+} from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { useSharePermission } from "@/pages/share/hooks/useSharePermission"
 import { useTokenRefreshPolling } from "@/pages/share/hooks/useTokenRefreshPolling"
@@ -22,6 +26,7 @@ interface MicroAppShareMeta {
 	projectId: string
 	projectName: string
 	temporaryToken: string
+	topicId: string
 }
 
 interface ShareRequestContext {
@@ -57,6 +62,7 @@ function resolveShareMeta(shareData: any): MicroAppShareMeta {
 		temporaryToken: readString(
 			shareData?.temporary_token || data.temporary_token || shareData?.data?.temporary_token,
 		),
+		topicId: readString(data.topic_id || shareData?.topic_id),
 	}
 }
 
@@ -83,13 +89,17 @@ function findAppConfigFile(files: AttachmentItem[]): AttachmentItem | null {
 	)
 }
 
-async function loadAppAnonymous(files: AttachmentItem[]): Promise<boolean> {
+async function loadAppAnonymous(
+	files: AttachmentItem[],
+	access?: FileAccessContext,
+): Promise<boolean> {
 	const appConfigFile = findAppConfigFile(files)
 	if (!appConfigFile?.file_id) return false
 
 	const [urlItem] = (await getTemporaryDownloadUrl({
 		file_ids: [appConfigFile.file_id],
 		enableErrorMessagePrompt: false,
+		access,
 	})) as Array<{ url?: string }>
 	if (!urlItem?.url) return false
 
@@ -212,17 +222,15 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 			const processedData = AttachmentDataProcessor.processAttachmentData(
 				unwrapResponse(filesResponse),
 			)
-			// app.json 的下载接口依赖这两个全局值；只允许当前请求在读取配置前写入。
-			if (meta.temporaryToken) {
-				// @ts-ignore 复用现有 HTML 预览读取分享文件的临时 token 约定。
-				window.temporary_token = meta.temporaryToken
-			}
-			if (meta.projectId) {
-				// @ts-ignore 复用 HTML 预览内部对项目 ID 的读取约定。
-				window.project_id = meta.projectId
-			}
-
-			const anonymous = await loadAppAnonymous(processedData.list || [])
+			const fileAccess =
+				meta.temporaryToken && meta.projectId
+					? createShareFileAccess({
+							token: meta.temporaryToken,
+							projectId: meta.projectId,
+							topicId: meta.topicId || "",
+						})
+					: undefined
+			const anonymous = await loadAppAnonymous(processedData.list || [], fileAccess)
 			if (!isRequestCurrent(context)) return
 
 			if (!anonymous && !hasLoginAuthorization()) {
@@ -377,10 +385,6 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 		void loadShare()
 		return () => {
 			requestSequenceRef.current += 1
-			// @ts-ignore 清理分享页写入的临时上下文。
-			window.temporary_token = ""
-			// @ts-ignore
-			window.project_id = ""
 		}
 	}, [loadShare])
 
@@ -389,6 +393,12 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 		password: verifiedPassword,
 		scopeKey: appId,
 		data: shareData,
+		onTokenRefreshed: (tokenInfo) => {
+			if (!tokenInfo.temporary_token) return
+			setShareData((prev) =>
+				prev ? { ...prev, temporary_token: tokenInfo.temporary_token } : prev,
+			)
+		},
 	})
 
 	return {

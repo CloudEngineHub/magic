@@ -14,8 +14,8 @@ import {
 } from "@/services/superMagic/DefaultAgentSelectionService"
 import { addMultipleFilesToCurrentChat } from "@/pages/superMagic/utils/topics"
 import { SuperMagicApi } from "@/apis"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { workspaceStore } from "@/pages/superMagic/stores/core"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
@@ -116,6 +116,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 		authorizePermission,
 	} = options
 	const { t } = useTranslation("super")
+	const fileApi = useFileApi()
 
 	// Keep a stable ref to attachmentList so handlers always see latest value
 	const attachmentListRef = useRef(attachmentList)
@@ -485,7 +486,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 			await Promise.allSettled(
 				foundFiles.map(async ({ fileItem, originalPath }) => {
 					try {
-						const downloadUrls = await getTemporaryDownloadUrl({
+						const downloadUrls = await fileApi.getTemporaryDownloadUrl({
 							file_ids: [fileItem.file_id],
 						})
 

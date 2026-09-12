@@ -17,6 +17,7 @@ import type {
 	SlideScreenshotService,
 } from "../services"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import type { SlideItem } from "../PPTSidebar/types"
 import { getPPTPreviewOverscan } from "../PPTSidebar/utils/devicePerformance"
 import { PPTSlideManager } from "./PPTSlideManager"
@@ -76,6 +77,7 @@ export interface PPTStoreConfig {
 	 * @default PPT_FILE_UPDATE_DEBOUNCE_MS
 	 */
 	fileUpdateDebounceMs?: number
+	fileApi?: FileApi
 }
 
 export const PPT_FILE_UPDATE_DEBOUNCE_MS = 800
@@ -85,6 +87,17 @@ function hasOwnConfigField<K extends keyof PPTStoreConfig>(
 	field: K,
 ): boolean {
 	return Object.prototype.hasOwnProperty.call(config, field)
+}
+
+function isFileApiOnlyConfig(config: Partial<PPTStoreConfig>): boolean {
+	return (
+		hasOwnConfigField(config, "fileApi") &&
+		Object.keys(config).every((key) => key === "fileApi")
+	)
+}
+
+function getFileApiIdentityKey(fileApi?: FileApi): string {
+	return fileApi?.identityKey ?? "none"
 }
 
 export interface PPTExportConfig extends PPTStoreConfig {}
@@ -870,7 +883,9 @@ export class PPTStore {
 				// 2. Fetch temporary download URLs in batch
 				if (fileIds.length > 0) {
 					try {
-						const response = await getTemporaryDownloadUrl({
+						const response = await (
+							this.config.fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl
+						)({
 							file_ids: fileIds,
 						})
 						if (!this.isInitializationCurrent(generation, options.configUpdateVersion))
@@ -1282,7 +1297,9 @@ export class PPTStore {
 			const urlMapping: Map<string, string> = new Map()
 			if (allFileIds.size > 0) {
 				try {
-					const response = await getTemporaryDownloadUrl({
+					const response = await (
+						this.config.fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl
+					)({
 						file_ids: Array.from(allFileIds),
 					})
 					response?.forEach((item: any) => {
@@ -1905,7 +1922,9 @@ export class PPTStore {
 			// 2. Fetch temporary download URLs in batch
 			if (fileIds.length > 0) {
 				try {
-					const response = await getTemporaryDownloadUrl({
+					const response = await (
+						this.config.fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl
+					)({
 						file_ids: fileIds,
 					})
 
@@ -2245,6 +2264,20 @@ export class PPTStore {
 	// ==================== Configuration Updates ====================
 	async updateConfig(config: Partial<PPTStoreConfig>): Promise<void> {
 		if (this.disposed) return
+		if (isFileApiOnlyConfig(config)) {
+			const previousIdentity = getFileApiIdentityKey(this.config.fileApi)
+			const nextIdentity = getFileApiIdentityKey(config.fileApi)
+			this.config = { ...this.config, ...config }
+			this.pathMappingService.updateConfig(config)
+			// Same identity must not bump the config version: host remounts send
+			// this payload after deck init and would abort an in-flight load.
+			if (previousIdentity === nextIdentity) return
+			config = {
+				displayConfig: this.config.displayConfig,
+				attachmentList: this.config.attachmentList,
+				fileApi: this.config.fileApi,
+			}
+		}
 		const configUpdateVersion = ++this.configUpdateVersion
 		this.logger.debug("更新配置", {
 			operation: "updateConfig",

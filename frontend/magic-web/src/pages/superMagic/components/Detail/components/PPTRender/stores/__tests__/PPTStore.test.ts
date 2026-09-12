@@ -400,6 +400,55 @@ describe("PPTStore", () => {
 
 			expect(store).toBeDefined()
 		})
+
+		it("does not abort in-flight init when fileApi identity is unchanged", async () => {
+			let resolveUrls: (value: Array<{ file_id: string; url: string }>) => void = () =>
+				undefined
+			mockState.getTemporaryDownloadUrl.mockImplementation(
+				() =>
+					new Promise<Array<{ file_id: string; url: string }>>((resolve) => {
+						resolveUrls = resolve
+					}),
+			)
+			const fileApi = {
+				identityKey: "none",
+				getTemporaryDownloadUrl: mockState.getTemporaryDownloadUrl,
+				getFileContentById: vi.fn(),
+				getFileContentsByIds: vi.fn(),
+				requestSharedMediaUrls: vi.fn(),
+			}
+
+			const init = store.updateConfig({
+				displayConfig: { type: "slide", slides: ["slide-0.html"] },
+				attachmentList: [
+					{
+						file_id: "main-id",
+						file_name: "index.html",
+						relative_file_path: "deck/index.html",
+						is_directory: false,
+					},
+					{
+						file_id: "file1",
+						file_name: "slide-0.html",
+						relative_file_path: "deck/slide-0.html",
+					},
+				],
+				mainFileId: "main-id",
+				mainFileName: "index.html",
+				fileApi: fileApi as never,
+			})
+			await vi.waitFor(() =>
+				expect(mockState.getTemporaryDownloadUrl).toHaveBeenCalledTimes(1),
+			)
+
+			await store.updateConfig({ fileApi: fileApi as never })
+			resolveUrls([{ file_id: "file1", url: "https://example.com/file1.html" }])
+			await init
+
+			expect(store.slides).toHaveLength(1)
+			expect(store.slides[0]?.url).toBe("https://example.com/file1.html")
+			expect(store.isReady).toBe(true)
+		})
 	})
 
 	describe("reset", () => {

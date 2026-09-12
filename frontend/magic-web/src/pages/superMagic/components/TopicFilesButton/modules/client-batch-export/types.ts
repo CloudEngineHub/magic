@@ -1,3 +1,6 @@
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
+
 export type ClientBatchExportFormat = "pdf" | "pptx"
 
 /** Minimal attachment contract kept local so the exporter is not coupled to a UI hook type. */
@@ -67,4 +70,6 @@ export interface ClientBatchExportRunOptions {
 	attachments: ClientBatchAttachment[]
 	projectName?: string
 	onProgress?: (progress: number) => void
+	access?: FileAccessContext
+	fileApi?: FileApi
 }

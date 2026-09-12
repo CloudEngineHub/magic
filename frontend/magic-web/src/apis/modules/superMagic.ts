@@ -2115,7 +2115,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		return fetch.post("/api/v1/super-agent/file/batch-download/create", {
 			file_ids,
 			project_id,
-			token: token || (window as any).temporary_token || "",
+			token: token || "",
 		})
 	},
 
@@ -2124,8 +2124,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param batch_key The batch task key
 	 * @returns Batch download status and download url if ready
 	 */
-	checkBatchDownloadStatus(batch_key: string) {
-		const token = (window as any).temporary_token
+	checkBatchDownloadStatus(batch_key: string, token?: string) {
 		const url = token
 			? `/api/v1/super-agent/file/batch-download/check?batch_key=${batch_key}&token=${token}`
 			: `/api/v1/super-agent/file/batch-download/check?batch_key=${batch_key}`
@@ -2563,11 +2562,11 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		project_id?: string
 		is_debug?: boolean
 		convert_type?: "pdf" | "ppt"
+		token?: string
 	}) {
 		return fetch.post("/api/v1/super-agent/file-convert/create", {
 			...data,
-			// @ts-ignore
-			token: window.temporary_token,
+			token: data.token || "",
 		})
 	},
 
@@ -2593,8 +2592,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @description 查询文件导出pdf或者ppt的状态
 	 * @param task_key
 	 */
-	checkExportPdfOrPptStatus(task_key: string) {
-		const token = (window as any).temporary_token
+	checkExportPdfOrPptStatus(task_key: string, token?: string) {
 		const url = token
 			? `/api/v1/super-agent/file-convert/check?task_key=${task_key}&token=${token}`
 			: `/api/v1/super-agent/file-convert/check?task_key=${task_key}`

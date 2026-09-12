@@ -15,7 +15,7 @@ vi.mock("@/apis", () => ({
 describe("useTokenRefreshPolling", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		window.temporary_token = "current-token"
+		delete (window as Window & { temporary_token?: string }).temporary_token
 	})
 
 	it("ignores a token response from an inactive share scope", async () => {
@@ -54,10 +54,11 @@ describe("useTokenRefreshPolling", () => {
 			await Promise.resolve()
 		})
 
-		expect(window.temporary_token).toBe("current-token")
+		expect(window.temporary_token).toBeUndefined()
 	})
 
-	it("writes a token returned for the active share scope", async () => {
+	it("notifies the caller of a token returned for the active share scope", async () => {
+		const onTokenRefreshed = vi.fn()
 		mocks.getShareResource.mockResolvedValue({ temporary_token: "refreshed-token" })
 
 		renderHook(() =>
@@ -65,13 +66,17 @@ describe("useTokenRefreshPolling", () => {
 				resourceId: "resource-app-1",
 				scopeKey: "app-1",
 				data: { temporary_token: "loaded-token" },
+				onTokenRefreshed,
 			}),
 		)
 
 		act(() => window.dispatchEvent(new Event("focus")))
 
 		await waitFor(() => {
-			expect(window.temporary_token).toBe("refreshed-token")
+			expect(onTokenRefreshed).toHaveBeenCalledWith({
+				temporary_token: "refreshed-token",
+			})
 		})
+		expect(window.temporary_token).toBeUndefined()
 	})
 })

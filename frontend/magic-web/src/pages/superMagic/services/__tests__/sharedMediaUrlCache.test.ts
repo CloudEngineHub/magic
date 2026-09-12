@@ -5,6 +5,7 @@ import {
 } from "@/pages/superMagic/utils/api"
 import { getFileUrlDownloadModeForNoWatermark } from "@/utils/aiWatermarkPreviewFileUrlMode"
 import type { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
+import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import {
 	clearSharedMediaUrlCache,
 	getCachedSharedMediaUrls,
@@ -177,6 +178,33 @@ describe("shared media URL cache", () => {
 		).resolves.toEqual(expect.objectContaining({ url: "https://oss.test/org-b" }))
 
 		expect(getTemporaryDownloadUrlMock).toHaveBeenCalledTimes(2)
+	})
+
+	it("does not batch or reuse a signed URL across share identities", async () => {
+		const firstAccess = createShareFileAccess({
+			token: "share-token-a",
+			projectId: "project-a",
+		})
+		const secondAccess = createShareFileAccess({
+			token: "share-token-b",
+			projectId: "project-a",
+		})
+		getTemporaryDownloadUrlMock
+			.mockResolvedValueOnce([createUrlItem("file-a", "https://oss.test/share-a")])
+			.mockResolvedValueOnce([createUrlItem("file-a", "https://oss.test/share-b")])
+
+		await expect(requestSharedMediaUrls(["file-a"], { access: firstAccess })).resolves.toEqual([
+			expect.objectContaining({ url: "https://oss.test/share-a" }),
+		])
+		await expect(requestSharedMediaUrls(["file-a"], { access: secondAccess })).resolves.toEqual(
+			[expect.objectContaining({ url: "https://oss.test/share-b" })],
+		)
+
+		expect(getTemporaryDownloadUrlMock).toHaveBeenCalledTimes(2)
+		expect(getTemporaryDownloadUrlMock.mock.calls.map(([params]) => params.access)).toEqual([
+			firstAccess,
+			secondAccess,
+		])
 	})
 
 	it("normalizes image-process property order in cache keys", () => {

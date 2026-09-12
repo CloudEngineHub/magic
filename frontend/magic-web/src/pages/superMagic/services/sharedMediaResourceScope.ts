@@ -21,11 +21,7 @@ export function getSharedMediaResourceScope(): string {
 		}
 
 		if (typeof window !== "undefined" && window.location.pathname.includes("magic-share")) {
-			const topicId =
-				typeof (window as Window & { topic_id?: unknown }).topic_id === "string"
-					? (window as Window & { topic_id?: string }).topic_id
-					: ""
-			return `share:${topicId || window.location.pathname}`
+			return `share:${window.location.pathname}`
 		}
 	} catch {
 		// Cache identity must remain total even while auth state is bootstrapping.

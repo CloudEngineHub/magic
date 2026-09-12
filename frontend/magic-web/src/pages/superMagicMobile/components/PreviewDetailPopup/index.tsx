@@ -17,6 +17,7 @@ import { useDetailActions } from "@/pages/superMagic/components/Detail/hooks/use
 import { isEmpty } from "lodash-es"
 import { useLocation } from "react-router"
 import { copyFileContent } from "@/pages/superMagic/utils/share"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { useMemoizedFn } from "ahooks"
 import { X } from "lucide-react"
@@ -81,6 +82,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 	}, [hideHeaderProp, search])
 
 	const { t } = useTranslation("super")
+	const fileApi = useFileApi()
 	const [previewDetail, setPreviewDetail] = useState<PreviewDetail>()
 	const [visible, setVisible] = useState(false)
 	const [attachments, setAttachments] = useState<AttachmentItem[]>([])
@@ -150,9 +152,10 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 				fileId || previewDetail?.data?.file_id || "",
 				fileContent,
 				fileVersion,
+				fileApi,
 			)
 		},
-		[attachmentList, t, previewDetail?.data?.file_id],
+		[attachmentList, fileApi, t, previewDetail?.data?.file_id],
 	)
 
 	// Handle share functionality for files

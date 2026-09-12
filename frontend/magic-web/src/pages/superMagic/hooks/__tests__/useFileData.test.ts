@@ -1,6 +1,9 @@
+import { createElement, type ReactNode } from "react"
 import { renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
+import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { downloadFileContent, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { useFileData } from "../useFileData"
 
@@ -96,6 +99,35 @@ describe("useFileData", () => {
 
 	it("skips history versions on share routes even without isSharePreview", async () => {
 		isShareRouteState.current = true
+		const access = createShareFileAccess({
+			token: "share-token",
+			projectId: "origin-project",
+			topicId: "share-topic",
+		})
+
+		renderHook(
+			() =>
+				useFileData({
+					file_id: "file-1",
+					activeFileId: "file-1",
+				}),
+			{
+				wrapper: ({ children }: { children: ReactNode }) =>
+					createElement(FileAccessProvider, { value: access }, children),
+			},
+		)
+
+		await waitFor(() => {
+			expect(getTemporaryDownloadUrlMock).toHaveBeenCalledWith({
+				file_ids: ["file-1"],
+				access,
+			})
+		})
+		expect(getFileHistoryVersionsMock).not.toHaveBeenCalled()
+	})
+
+	it("does not request share file urls before share access is ready", async () => {
+		isShareRouteState.current = true
 
 		renderHook(() =>
 			useFileData({
@@ -104,11 +136,42 @@ describe("useFileData", () => {
 			}),
 		)
 
+		await Promise.resolve()
+		expect(getTemporaryDownloadUrlMock).not.toHaveBeenCalled()
+		expect(getFileHistoryVersionsMock).not.toHaveBeenCalled()
+	})
+
+	it("requests share file urls once share access arrives", async () => {
+		isShareRouteState.current = true
+		const access = createShareFileAccess({
+			token: "share-token",
+			projectId: "origin-project",
+			topicId: "share-topic",
+		})
+		let currentAccess: ReturnType<typeof createShareFileAccess> | null = null
+
+		const { rerender } = renderHook(
+			() =>
+				useFileData({
+					file_id: "file-1",
+					activeFileId: "file-1",
+				}),
+			{
+				wrapper: ({ children }: { children: ReactNode }) =>
+					createElement(FileAccessProvider, { value: currentAccess }, children),
+			},
+		)
+
+		expect(getTemporaryDownloadUrlMock).not.toHaveBeenCalled()
+
+		currentAccess = access
+		rerender()
+
 		await waitFor(() => {
 			expect(getTemporaryDownloadUrlMock).toHaveBeenCalledWith({
 				file_ids: ["file-1"],
+				access,
 			})
 		})
-		expect(getFileHistoryVersionsMock).not.toHaveBeenCalled()
 	})
 })

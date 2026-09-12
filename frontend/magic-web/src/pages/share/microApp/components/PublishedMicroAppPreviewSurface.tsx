@@ -4,6 +4,8 @@ import { ErrorDisplay, PasswordVerification, ShareEmptyState } from "@/pages/sha
 import MicroAppSafetyNotice from "@/pages/share/microApp/components/MicroAppSafetyNotice"
 import type { UsePublishedMicroAppPreviewReturn } from "@/pages/share/microApp/hooks/usePublishedMicroAppPreview"
 import { buildPreviewFile } from "@/pages/share/microApp/utils/publishedMicroAppPreview"
+import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import HtmlPreviewContent from "@/pages/superMagic/components/Detail/contents/HTML"
 import { MicroAppPermissionIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 
@@ -77,6 +79,15 @@ function PublishedMicroAppPreviewSurface({
 		defaultEntryFile,
 	} = preview
 
+	const fileAccess =
+		shareMeta.temporaryToken && shareMeta.projectId
+			? createShareFileAccess({
+					token: shareMeta.temporaryToken,
+					projectId: shareMeta.projectId,
+					topicId: shareMeta.topicId || "",
+				})
+			: null
+
 	if (emptyStateInfo) {
 		return (
 			<ShareEmptyState
@@ -92,86 +103,97 @@ function PublishedMicroAppPreviewSurface({
 	}
 
 	return (
-		<div className="h-full min-h-0 w-full overflow-hidden" data-testid={rootTestId}>
-			{loading ? (
-				<div
-					className="flex h-full items-center justify-center"
-					data-testid={`${testIdPrefix}-loading`}
-				>
-					<Loader2 className="size-6 animate-spin text-muted-foreground" />
-				</div>
-			) : null}
+		<FileAccessProvider value={fileAccess}>
+			<div className="h-full min-h-0 w-full overflow-hidden" data-testid={rootTestId}>
+				{loading ? (
+					<div
+						className="flex h-full items-center justify-center"
+						data-testid={`${testIdPrefix}-loading`}
+					>
+						<Loader2 className="size-6 animate-spin text-muted-foreground" />
+					</div>
+				) : null}
 
-			{isNeedPassword && !shareData && !previewFile && !error && !loading ? (
-				<PasswordVerification
-					resourceId={resourceId}
-					initialPassword={passwordFromUrl}
-					onVerifySuccess={handleVerifySuccess}
-					onVerifyFail={() => setError(null)}
-					getShareData={getShareData}
-					isFileShare
-					maxLength={32}
-					uppercase={false}
-					title={t("microAppShare.passwordTitle")}
-					description={t("microAppShare.passwordDescription")}
-					rememberPassword={installFlow.rememberPasswordControl}
-				/>
-			) : null}
-
-			{error && !loading ? (
-				<ErrorDisplay
-					errorMessage={t("microAppShare.errorTitle")}
-					onRetry={reload}
-					isFileShare
-					illustration={
-						<MicroAppPermissionIllustration
-							size="md"
-							className="w-[180px]"
-							testId={`${testIdPrefix}-error-illustration`}
-						/>
-					}
-				/>
-			) : null}
-
-			{!loading && !error && shareData && !previewFile ? (
-				<PublishedMicroAppPreviewEmpty testId={`${testIdPrefix}-empty`} />
-			) : null}
-
-			{!loading && !error && previewFile && !hasConfirmedSafetyNotice ? (
-				<MicroAppSafetyNotice
-					appName={displayAppName}
-					coverUrl={coverUrl}
-					onConfirm={confirmSafetyNotice}
-					onLeave={onLeave ?? NOOP_LEAVE}
-				/>
-			) : null}
-
-			{!loading && !error && previewFile && hasConfirmedSafetyNotice ? (
-				<div
-					className="h-full w-full overflow-hidden bg-background"
-					data-testid={`${testIdPrefix}-preview`}
-				>
-					<HtmlPreviewContent
-						key={previewFile.file_id || previewFile.relative_file_path}
-						data={buildPreviewFile(previewFile)}
-						attachments={attachmentsTree}
-						attachmentList={attachmentList}
-						allowEdit={false}
-						showFileHeader={false}
-						showFooter={false}
-						viewMode={previewMode}
-						onViewModeChange={setPreviewMode}
-						activeFileId={previewFile.file_id}
-						projectId={shareMeta.projectId}
-						virtualStorageMarkerId={defaultEntryFile?.file_id}
-						openFileTab={handleOpenFileTab}
-						onHtmlPermissionManagerChange={onHtmlPermissionManagerChange}
-						isSharePreview
-						className="h-full"
+				{isNeedPassword && !shareData && !previewFile && !error && !loading ? (
+					<PasswordVerification
+						resourceId={resourceId}
+						initialPassword={passwordFromUrl}
+						onVerifySuccess={handleVerifySuccess}
+						onVerifyFail={() => setError(null)}
+						getShareData={getShareData}
+						isFileShare
+						maxLength={32}
+						uppercase={false}
+						title={t("microAppShare.passwordTitle")}
+						description={t("microAppShare.passwordDescription")}
+						rememberPassword={installFlow.rememberPasswordControl}
 					/>
-				</div>
-			) : null}
-		</div>
+				) : null}
+
+				{error && !loading ? (
+					<ErrorDisplay
+						errorMessage={t("microAppShare.errorTitle")}
+						onRetry={reload}
+						isFileShare
+						illustration={
+							<MicroAppPermissionIllustration
+								size="md"
+								className="w-[180px]"
+								testId={`${testIdPrefix}-error-illustration`}
+							/>
+						}
+					/>
+				) : null}
+
+				{!loading && !error && shareData && !previewFile ? (
+					<PublishedMicroAppPreviewEmpty testId={`${testIdPrefix}-empty`} />
+				) : null}
+
+				{!loading && !error && previewFile && !hasConfirmedSafetyNotice ? (
+					<MicroAppSafetyNotice
+						appName={displayAppName}
+						coverUrl={coverUrl}
+						onConfirm={confirmSafetyNotice}
+						onLeave={onLeave ?? NOOP_LEAVE}
+					/>
+				) : null}
+
+				{!loading && !error && previewFile && hasConfirmedSafetyNotice ? (
+					fileAccess ? (
+						<div
+							className="h-full w-full overflow-hidden bg-background"
+							data-testid={`${testIdPrefix}-preview`}
+						>
+							<HtmlPreviewContent
+								key={previewFile.file_id || previewFile.relative_file_path}
+								data={buildPreviewFile(previewFile)}
+								attachments={attachmentsTree}
+								attachmentList={attachmentList}
+								allowEdit={false}
+								showFileHeader={false}
+								showFooter={false}
+								viewMode={previewMode}
+								onViewModeChange={setPreviewMode}
+								activeFileId={previewFile.file_id}
+								projectId={shareMeta.projectId}
+								virtualStorageMarkerId={defaultEntryFile?.file_id}
+								openFileTab={handleOpenFileTab}
+								onHtmlPermissionManagerChange={onHtmlPermissionManagerChange}
+								isSharePreview
+								className="h-full"
+							/>
+						</div>
+					) : (
+						<div
+							className="flex h-full items-center justify-center"
+							data-testid={`${testIdPrefix}-loading`}
+						>
+							<Loader2 className="size-6 animate-spin text-muted-foreground" />
+						</div>
+					)
+				) : null}
+			</div>
+		</FileAccessProvider>
 	)
 }
 

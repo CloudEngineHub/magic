@@ -11,6 +11,12 @@ import { useLocation } from "react-router"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import useStyles from "./style"
 import { SuperMagicApi } from "@/apis"
+import {
+	getAccessProjectId,
+	getAccessTopicId,
+	getShareAccessToken,
+} from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useTranslation } from "react-i18next"
 
@@ -54,6 +60,7 @@ export default function AttachmentList({
 	const { styles, cx } = useStyles()
 	const { pathname } = useLocation()
 	const isMobile = useIsMobile()
+	const fileAccess = useFileAccess()
 
 	const [isFileListCollapsed, setIsFileListCollapsed] = useState(false)
 	const [fileSearchText, setFileSearchText] = useState("")
@@ -107,12 +114,9 @@ export default function AttachmentList({
 	const handleDownloadFile = (file_id: string, e: MouseEvent<HTMLSpanElement>) => {
 		e.stopPropagation()
 		SuperMagicApi.getTemporaryDownloadUrlForAdmin({
-			// @ts-ignore 使用 window 添加临时的 topic_id
-			topic_id: window.topic_id,
-			// @ts-ignore 使用 window 添加临时的 project_id
-			project_id: window.project_id,
-			// @ts-ignore 使用 window 添加临时的 token
-			temporary_token: window.temporary_token,
+			topic_id: getAccessTopicId(fileAccess),
+			project_id: getAccessProjectId(fileAccess),
+			temporary_token: getShareAccessToken(fileAccess),
 			file_ids: [file_id],
 		}).then((res: any) => {
 			window.open(res[0]?.url, "_blank")

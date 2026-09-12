@@ -11,6 +11,7 @@ import {
 	SelectValue,
 } from "@/components/shadcn-ui/select"
 import { userStore } from "@/models/user"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { getIframeDownloadUrl } from "../iframe-api/iframeApi"
 import { htmlMicroAppPreviewLogger } from "../utils/htmlMicroAppPreviewLogger"
 import {
@@ -66,6 +67,7 @@ export function useHtmlAppPermissions({
 	enabled = true,
 }: UseHtmlAppPermissionsOptions) {
 	const { t } = useTranslation("super")
+	const fileAccess = useFileAccess()
 	const { getScopeLabel, getTtlLabel, getUserInfoFieldLabel } = useHtmlPermissionI18n()
 	const [grantRevision, setGrantRevision] = useState(0)
 	// 服务实例包含当前 HTML 的运行指纹，避免切换文件时短暂复用上一应用的授权数量。
@@ -446,7 +448,7 @@ export function useHtmlAppPermissions({
 			return
 		}
 
-		getIframeDownloadUrl([appConfigFileId])
+		getIframeDownloadUrl([appConfigFileId], fileAccess)
 			.then(async (urls) => {
 				const url = urls?.[0]?.url
 				if (!url) throw new Error("Failed to get app.json download URL")

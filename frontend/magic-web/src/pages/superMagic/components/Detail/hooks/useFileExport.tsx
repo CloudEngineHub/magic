@@ -1,6 +1,7 @@
 import { useState, useRef } from "react"
 import { TFunction } from "i18next"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { exportSingleFileToPpt } from "@/pages/superMagic/components/TopicFilesButton/utils/exportSingleFile"
 import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
 import { isFileInPPTMode } from "@/pages/superMagic/components/Detail/utils/file"
@@ -86,6 +87,10 @@ function useFileExport({
 	const [isExporting, setIsExporting] = useState(false)
 	const [exportProgress, setExportProgress] = useState(0)
 	const toastIdRef = useRef<string | number | null>(null)
+	const fileAccess = useFileAccess()
+	// Bind the ambient share/session identity for the direct download-url call; the
+	// export services below still receive the legacy `access` override.
+	const fileApi = useFileApi()
 	const downloadProgress = useDownloadProgress()
 
 	const startExport = () => {
@@ -178,14 +183,16 @@ function useFileExport({
 			})
 		} else {
 			// 单文件直接下载
-			getTemporaryDownloadUrl({
-				file_ids: fileIds,
-				file_versions: fileVersion,
-				download_mode: DownloadImageMode.Download,
-				is_download: true,
-			}).then((res: Array<{ url: string }>) => {
-				downloadFileWithAnchor(res[0]?.url)
-			})
+			fileApi
+				.getTemporaryDownloadUrl({
+					file_ids: fileIds,
+					file_versions: fileVersion,
+					download_mode: DownloadImageMode.Download,
+					is_download: true,
+				})
+				.then((res: Array<{ url: string }>) => {
+					downloadFileWithAnchor(res[0]?.url)
+				})
 		}
 	}
 
@@ -224,6 +231,8 @@ function useFileExport({
 					fileId,
 					fileName,
 					attachmentList: (attachments ?? []) as any[],
+					access: fileAccess ?? undefined,
+					fileApi,
 				})
 
 				if (!result.htmlSlides.some(Boolean)) {
@@ -284,6 +293,8 @@ function useFileExport({
 				fileId,
 				fileName,
 				attachmentList: (attachments ?? []) as any[],
+				access: fileAccess ?? undefined,
+				fileApi,
 			})
 
 			if (!result.htmlSlides.some(Boolean)) {

@@ -17,6 +17,7 @@ import {
 	stitchCardDataUrlsToBlob,
 	stitchWechatCoverImagesToBlob,
 } from "../utils/exportImageUtils"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 const log = rootLogger.createLogger("useExportZip")
 
@@ -67,6 +68,7 @@ const DEFAULT_PIXEL_RATIO = 2
  *    (only succeeds when iframe is same-origin or tainted-canvas tolerated).
  */
 export function useExportZip(): UseExportZipResult {
+	const fileApi = useFileApi()
 	const [progress, setProgress] = useState<ExportProgress>({
 		current: 0,
 		total: 0,
@@ -260,6 +262,7 @@ export function useExportZip(): UseExportZipResult {
 					heroFileId: post.heroCover?.fileId,
 					pixelRatio: effectivePixelRatio,
 					format,
+					fileApi,
 				})
 				saveAs(blob, `${imageName}-wechat-cover.${format}`)
 				setProgress({ current: 1, total: 1, status: "done" })
@@ -280,7 +283,7 @@ export function useExportZip(): UseExportZipResult {
 				runningRef.current = false
 			}
 		},
-		[],
+		[fileApi],
 	)
 
 	return { progress, exportZip, exportLongImage, exportWechatCoverImage }

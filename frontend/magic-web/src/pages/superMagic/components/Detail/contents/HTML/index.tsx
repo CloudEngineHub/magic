@@ -17,6 +17,9 @@ import { createVirtualStorageMessageHandler } from "./utils/virtual-storage"
 import { HTML_IFRAME_RENDER_LIFECYCLE_EVENT } from "./telemetry/iframeRenderLifecycle"
 import type { SaveResult } from "./iframe-bridge/types"
 import { useStyles } from "./styles"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { isShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import { processHtmlContent, type HtmlPreviewBundledTemplateKind } from "./htmlProcessor"
 import { resolveHtmlPreviewBundledTemplate } from "./html-preview-bundled-shell"
@@ -57,11 +60,7 @@ import useServerUpdate from "../../hooks/useServerUpdate"
 import CodeVersionCompareDialog from "../../components/versioning/CodeVersionCompareDialog"
 import VersionCompareDialog from "../../components/versioning/VersionCompareDialog"
 import HistoryVersionCompareDialog from "../../components/PPTRender/components/HistoryVersionCompareDialog"
-import {
-	getFileContentById,
-	getTemporaryDownloadUrl,
-	downloadFileContent,
-} from "@/pages/superMagic/utils/api"
+import { getFileContentById, downloadFileContent } from "@/pages/superMagic/utils/api"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, Crosshair, ShieldCheck, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -223,6 +222,8 @@ const HtmlExportAction = memo(function HtmlExportAction({
 })
 
 export default memo(function HTML(props: HTMLProps) {
+	const fileAccess = useFileAccess()
+	const fileApi = useFileApi()
 	const {
 		data: displayData,
 		attachments,
@@ -610,7 +611,7 @@ export default memo(function HTML(props: HTMLProps) {
 		async (targetVersion: number): Promise<string | null> => {
 			if (!fileId) return null
 			try {
-				const urlRes = await getTemporaryDownloadUrl({
+				const urlRes = await fileApi.getTemporaryDownloadUrl({
 					file_ids: [fileId],
 					file_versions: { [fileId]: targetVersion },
 				})
@@ -639,6 +640,8 @@ export default memo(function HTML(props: HTMLProps) {
 				attachmentList,
 				displayConfig,
 				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+				access: fileAccess,
+				fileApi,
 			})
 			return result.processedContent
 		} catch {
@@ -833,6 +836,8 @@ export default memo(function HTML(props: HTMLProps) {
 			htmlRelativeFolderPath,
 			currentFileId || "",
 			onFetchIntercepted,
+			fileAccess,
+			fileApi,
 		)
 
 		// 处理嵌套 HTML iframe 内容请求
@@ -844,6 +849,8 @@ export default memo(function HTML(props: HTMLProps) {
 			{
 				postMessageTargetStrategy,
 				projectId: runtimeProjectId,
+				access: fileAccess,
+				fileApi,
 				parentTargetOrigin: window.location.origin,
 				onTelemetry: (data) => {
 					htmlRenderLogger.report(HTML_IFRAME_RENDER_LIFECYCLE_EVENT, {
@@ -881,9 +888,10 @@ export default memo(function HTML(props: HTMLProps) {
 			window.removeEventListener("message", virtualStorageMessageHandler)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [attachmentList, displayData?.file_id, runtimeProjectId])
+	}, [attachmentList, displayData?.file_id, runtimeProjectId, fileApi, fileAccess])
 
 	const processContent = useMemoizedFn(async () => {
+		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
 
 		try {
@@ -897,6 +905,8 @@ export default memo(function HTML(props: HTMLProps) {
 				resourceFileVersions,
 				htmlPreviewBundledTemplate,
 				xMagicImageProcess: HTML_PREVIEW_IMAGE_PROCESS,
+				access: fileAccess,
+				fileApi,
 			})
 
 			let finalProcessedContent = result.processedContent
@@ -930,6 +940,7 @@ export default memo(function HTML(props: HTMLProps) {
 
 	useDeepCompareEffect(() => {
 		if (!data?.content) return
+		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
 		processContent()
 	}, [
@@ -939,7 +950,9 @@ export default memo(function HTML(props: HTMLProps) {
 		htmlPreviewBundledTemplate,
 		resourceFileVersions,
 		dashboardDataJsContent,
+		fileAccess,
 		isDataAnalysis,
+		isSharePreview,
 		activeHistory.isPreviewReady,
 	])
 
@@ -948,6 +961,7 @@ export default memo(function HTML(props: HTMLProps) {
 	useDeepCompareEffect(() => {
 		if (isEditMode) return
 		if (!data?.content) return
+		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
 		processContent()
 	}, [
@@ -955,7 +969,9 @@ export default memo(function HTML(props: HTMLProps) {
 		htmlPreviewBundledTemplate,
 		resourceFileVersions,
 		dashboardDataJsContent,
+		fileAccess,
 		isDataAnalysis,
+		isSharePreview,
 		activeHistory.isPreviewReady,
 	])
 

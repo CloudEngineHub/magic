@@ -134,8 +134,6 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 				return
 			}
 
-			const temporaryToken =
-				(window as Window & { temporary_token?: string }).temporary_token || ""
 			let didLoad = false
 
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
@@ -143,7 +141,6 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 				pid,
 				SuperMagicApi.getAttachmentsByProjectId({
 					projectId: pid,
-					temporaryToken,
 				})
 					.then((res) => {
 						const processedData = AttachmentDataProcessor.processAttachmentData(res)
