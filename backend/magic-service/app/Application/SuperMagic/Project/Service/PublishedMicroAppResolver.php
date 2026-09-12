@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\Project\Service;
 
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
 use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
@@ -46,6 +47,25 @@ class PublishedMicroAppResolver
         }
 
         return [$record, $shareEntity];
+    }
+
+    /**
+     * Org/team/internet published shares are visible without membership.
+     * Password shares stay collaborator-only.
+     */
+    public function canAccessPublishedShare(int $appId, string $userId, string $organizationCode): bool
+    {
+        $publishedMicroApp = $this->findPublished($appId);
+        if ($publishedMicroApp === null) {
+            return false;
+        }
+
+        [, $shareEntity] = $publishedMicroApp;
+        if ($shareEntity->getShareType() === ShareAccessType::PasswordProtected->value) {
+            return false;
+        }
+
+        return $this->canAccessShare($shareEntity, $userId, $organizationCode);
     }
 
     public function canAccessShare(ResourceShareEntity $shareEntity, string $userId, string $organizationCode): bool

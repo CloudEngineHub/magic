@@ -265,11 +265,22 @@ class MicroAppProjectAppService extends AbstractAppService
     {
         $authorization = $requestContext->getUserAuthorization();
         [$record, $project] = $this->getValidatedMicroApp($appId);
-        $this->getAccessibleProject(
-            $project->getId(),
-            $authorization->getId(),
-            $authorization->getOrganizationCode()
-        );
+
+        try {
+            $this->getAccessibleProject(
+                $project->getId(),
+                $authorization->getId(),
+                $authorization->getOrganizationCode()
+            );
+        } catch (Throwable) {
+            if (! $this->publishedMicroAppResolver->canAccessPublishedShare(
+                $record->getId(),
+                $authorization->getId(),
+                $authorization->getOrganizationCode()
+            )) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
+            }
+        }
 
         return $this->formatMicroAppResponse($record, $project, $authorization);
     }

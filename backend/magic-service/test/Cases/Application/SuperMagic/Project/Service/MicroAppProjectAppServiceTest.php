@@ -33,6 +33,8 @@ use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
 use App\Domain\SuperMagic\Workspace\Repository\Facade\WorkspaceRepositoryInterface;
+use App\ErrorCode\SuperAgentErrorCode;
+use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\SuperMagic\Utils\ShareUrlBuilder;
 use App\Infrastructure\Util\Context\RequestContext;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
@@ -40,6 +42,8 @@ use App\Interfaces\SuperMagic\Common\Share\DTO\Request\CreateShareRequestDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Response\ShareItemDTO;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
 use Hyperf\Context\ApplicationContext;
+use Hyperf\Contract\ConfigInterface;
+use Hyperf\Contract\TranslatorInterface;
 use Hyperf\Contract\ValidatorInterface;
 use Hyperf\Database\ConnectionInterface;
 use Hyperf\Database\ConnectionResolverInterface;
@@ -239,6 +243,86 @@ class MicroAppProjectAppServiceTest extends TestCase
             ['project' => ['id' => 2001, 'user_role' => 'owner']],
             $service->showByProject($requestContext, 2001),
         );
+    }
+
+    public function testShowAllowsShareVisibleNonMember(): void
+    {
+        [$requestContext, $microAppRepository, $projectRepository, $responseFormatter] = $this->createShowFixtures();
+        $publishedResolver = $this->createMock(PublishedMicroAppResolver::class);
+        $publishedResolver->expects(self::once())
+            ->method('canAccessPublishedShare')
+            ->with(1001, 'user-1', 'org-1')
+            ->willReturn(true);
+        $responseFormatter->expects(self::once())
+            ->method('formatMicroApp')
+            ->willReturn(['project_id' => 2001, 'project' => ['id' => 2001]]);
+
+        $service = $this->createService(
+            $microAppRepository,
+            $projectRepository,
+            $this->createMock(ResourceShareAppService::class),
+            $this->createMock(ResourceShareDomainService::class),
+            $this->createMock(ShareUrlBuilder::class),
+            $responseFormatter,
+            $publishedResolver,
+            denyCollaboration: true,
+        );
+
+        self::assertSame(
+            ['project_id' => 2001, 'project' => ['id' => 2001, 'user_role' => 'owner']],
+            $service->show($requestContext, 1001),
+        );
+    }
+
+    public function testShowUsesCollaborationWithoutShareCheck(): void
+    {
+        [$requestContext, $microAppRepository, $projectRepository, $responseFormatter] = $this->createShowFixtures();
+        $publishedResolver = $this->createMock(PublishedMicroAppResolver::class);
+        $publishedResolver->expects(self::never())->method('canAccessPublishedShare');
+        $responseFormatter->expects(self::once())
+            ->method('formatMicroApp')
+            ->willReturn(['project_id' => 2001, 'project' => ['id' => 2001]]);
+
+        $service = $this->createService(
+            $microAppRepository,
+            $projectRepository,
+            $this->createMock(ResourceShareAppService::class),
+            $this->createMock(ResourceShareDomainService::class),
+            $this->createMock(ShareUrlBuilder::class),
+            $responseFormatter,
+            $publishedResolver,
+        );
+
+        self::assertSame(
+            ['project_id' => 2001, 'project' => ['id' => 2001, 'user_role' => 'owner']],
+            $service->show($requestContext, 1001),
+        );
+    }
+
+    public function testShowDeniesWhenNeitherCollaboratorNorShareVisible(): void
+    {
+        $this->setErrorMessageContainer();
+        [$requestContext, $microAppRepository, $projectRepository, $responseFormatter] = $this->createShowFixtures();
+        $publishedResolver = $this->createMock(PublishedMicroAppResolver::class);
+        $publishedResolver->expects(self::once())
+            ->method('canAccessPublishedShare')
+            ->with(1001, 'user-1', 'org-1')
+            ->willReturn(false);
+
+        $service = $this->createService(
+            $microAppRepository,
+            $projectRepository,
+            $this->createMock(ResourceShareAppService::class),
+            $this->createMock(ResourceShareDomainService::class),
+            $this->createMock(ShareUrlBuilder::class),
+            $responseFormatter,
+            $publishedResolver,
+            denyCollaboration: true,
+        );
+
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionCode(SuperAgentErrorCode::PROJECT_ACCESS_DENIED->value);
+        $service->show($requestContext, 1001);
     }
 
     public function testListReturnsProjectIdAndEffectiveUserRole(): void
@@ -801,6 +885,112 @@ class MicroAppProjectAppServiceTest extends TestCase
         });
     }
 
+    /**
+     * @return array{0: RequestContext, 1: MicroAppRepositoryInterface, 2: ProjectRepositoryInterface, 3: MicroAppProjectResponseFormatter}
+     */
+    private function createShowFixtures(): array
+    {
+        $authorization = (new MagicUserAuthorization())
+            ->setId('user-1')
+            ->setOrganizationCode('org-1');
+        $requestContext = $this->createMock(RequestContext::class);
+        $requestContext->method('getUserAuthorization')->willReturn($authorization);
+
+        $record = (new MicroAppEntity())
+            ->setId(1001)
+            ->setProjectId(2001);
+        $project = (new ProjectEntity())
+            ->setId(2001)
+            ->setUserId('user-1')
+            ->setCreatedUid('user-1')
+            ->setUserOrganizationCode('org-1')
+            ->setProjectMode(ProjectMode::MICRO_APP->value);
+
+        $microAppRepository = $this->createMock(MicroAppRepositoryInterface::class);
+        $microAppRepository->method('findById')->with(1001)->willReturn($record);
+        $projectRepository = $this->createMock(ProjectRepositoryInterface::class);
+        $projectRepository->method('findById')->with(2001)->willReturn($project);
+
+        return [
+            $requestContext,
+            $microAppRepository,
+            $projectRepository,
+            $this->createMock(MicroAppProjectResponseFormatter::class),
+        ];
+    }
+
+    private function setErrorMessageContainer(): void
+    {
+        $this->previousContainer = ApplicationContext::hasContainer()
+            ? ApplicationContext::getContainer()
+            : null;
+
+        ApplicationContext::setContainer(new class implements ContainerInterface {
+            public function get(string $id)
+            {
+                return match ($id) {
+                    ConfigInterface::class => new class implements ConfigInterface {
+                        public function get(string $key, mixed $default = null): mixed
+                        {
+                            return match ($key) {
+                                'app_env' => 'test',
+                                'error_message' => [
+                                    'exception_class' => BusinessException::class,
+                                    'error_code_mapper' => [
+                                        SuperAgentErrorCode::class => [51000, 51299],
+                                    ],
+                                ],
+                                default => $default,
+                            };
+                        }
+
+                        public function has(string $keys): bool
+                        {
+                            return $keys === 'error_message';
+                        }
+
+                        public function set(string $key, mixed $value): void {}
+                    },
+                    TranslatorInterface::class => new class implements TranslatorInterface {
+                        public function trans(string $key, array $replace = [], ?string $locale = null): string
+                        {
+                            return $key;
+                        }
+
+                        public function transChoice(string $key, $number, array $replace = [], ?string $locale = null): string
+                        {
+                            return $key;
+                        }
+
+                        public function getLocale(): string
+                        {
+                            return 'zh_CN';
+                        }
+
+                        public function setLocale(string $locale)
+                        {
+                            return $this;
+                        }
+                    },
+                    default => throw new RuntimeException('Unexpected id: ' . $id),
+                };
+            }
+
+            public function has(string $id): bool
+            {
+                return in_array($id, [ConfigInterface::class, TranslatorInterface::class], true);
+            }
+        });
+    }
+
+    private function createMemberService(): ProjectMemberDomainService
+    {
+        $projectMemberDomainService = $this->createMock(ProjectMemberDomainService::class);
+        $projectMemberDomainService->method('getUserHighestRolesInProjects')->willReturn([]);
+
+        return $projectMemberDomainService;
+    }
+
     private function createService(
         MicroAppRepositoryInterface $microAppRepository,
         ProjectRepositoryInterface $projectRepository,
@@ -813,8 +1003,13 @@ class MicroAppProjectAppServiceTest extends TestCase
         ?MagicDepartmentUserDomainService $departmentUserDomainService = null,
         ?ProjectDomainService $projectDomainService = null,
         ?PackageFilterInterface $packageFilterService = null,
-    ): TestableMicroAppProjectAppService {
-        return new TestableMicroAppProjectAppService(
+        bool $denyCollaboration = false,
+    ): MicroAppProjectAppService {
+        $class = $denyCollaboration
+            ? TestableDeniedCollaborationMicroAppProjectAppService::class
+            : TestableMicroAppProjectAppService::class;
+
+        return new $class(
             $microAppRepository,
             $projectRepository,
             $this->createMock(WorkspaceRepositoryInterface::class),
@@ -823,7 +1018,7 @@ class MicroAppProjectAppServiceTest extends TestCase
             $shareUrlBuilder,
             $projectDomainService ?? $this->createMock(ProjectDomainService::class),
             $this->createMock(ProjectAppService::class),
-            $projectMemberDomainService ?? $this->createMock(ProjectMemberDomainService::class),
+            $projectMemberDomainService ?? $this->createMemberService(),
             $departmentUserDomainService ?? new MagicDepartmentUserDomainService(
                 $this->createMock(MagicDepartmentUserRepositoryInterface::class)
             ),
@@ -855,5 +1050,25 @@ final class TestableMicroAppProjectAppService extends MicroAppProjectAppService
         string $organizationCode,
     ): ProjectEntity {
         return new ProjectEntity();
+    }
+}
+
+final class TestableDeniedCollaborationMicroAppProjectAppService extends MicroAppProjectAppService
+{
+    public function getAccessibleProject(
+        int $projectId,
+        string $userId,
+        string $organizationCode,
+        MemberRole $requiredRole = MemberRole::VIEWER,
+    ): ProjectEntity {
+        throw new RuntimeException('project access denied');
+    }
+
+    public function getAccessibleProjectWithManager(
+        int $projectId,
+        string $userId,
+        string $organizationCode,
+    ): ProjectEntity {
+        throw new RuntimeException('project access denied');
     }
 }
