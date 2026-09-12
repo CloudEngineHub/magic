@@ -1,6 +1,7 @@
 import type { FileReference } from "@/apis/modules/superMagic"
 import type { AttachmentItem } from "../../TopicFilesButton/hooks/types"
 import { MagicFSApi, SuperMagicApi, type MagicFSFile } from "@/apis"
+import type { MagicFSFileTree } from "@/apis/modules/magicFS"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 
 const FILE_CONCURRENT_MODIFICATION_CODE = 51152
@@ -30,6 +31,10 @@ export class UserFileConcurrentModificationError extends Error {
 export const USER_FILE_SCOPE = "user" as const
 
 export class UserSpaceFileService {
+	async readTree(fileId: string, signal?: AbortSignal): Promise<MagicFSFileTree> {
+		return (await MagicFSApi.getFileTree(fileId, signal)).file
+	}
+
 	async listDirectory(parentId?: string, signal?: AbortSignal): Promise<MagicFSFile[]> {
 		const response = await MagicFSApi.listFiles(
 			{ scope: USER_FILE_SCOPE, ...(parentId ? { parent_id: parentId } : {}) },

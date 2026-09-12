@@ -28,8 +28,6 @@ import { SaveSlidesTemplateDialog, type SaveSlidesTemplateTarget } from "./compo
 import { buildConvertToSlidesTemplatePayload } from "@/pages/superMagic/utils/slidesTemplateActions"
 import type { TopicFilesSpaceConfig } from "./file-space"
 import type { CrossProjectOperationSuccessResult } from "./hooks/useCrossProjectFileOperation"
-import { FolderTree } from "lucide-react"
-import { Button } from "@/components/shadcn-ui/button"
 
 export { PRESET_FILE_TYPES, type PresetFileType } from "./constant"
 export type {
@@ -287,40 +285,18 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					refreshAttachments={refreshAttachments}
 					onSaveSlidesTemplate={handleSaveSlidesTemplate}
 					onConvertToSlidesTemplate={handleConvertToSlidesTemplate}
-					headerTrailingAction={
-						headerTrailingAction ||
-						(showFileManager &&
-							projectId &&
-							!spaceConfig?.scope &&
-							onFileClick &&
-							!shareCode) ? (
-							<>
-								{headerTrailingAction}
-								{showFileManager &&
-									projectId &&
-									!spaceConfig?.scope &&
-									onFileClick &&
-									!shareCode && (
-										<Button
-											variant="ghost"
-											size="icon"
-											className="size-6"
-											aria-label={t("userSpace.openManager")}
-											title={t("userSpace.openManager")}
-											onClick={() =>
-												onFileClick({
-													file_manager: {
-														spaceType: "project",
-														projectId,
-													},
-												})
-											}
-										>
-											<FolderTree size={16} />
-										</Button>
-									)}
-							</>
-						) : undefined
+					headerTrailingAction={headerTrailingAction}
+					onOpenFileManager={
+						showFileManager &&
+						projectId &&
+						!spaceConfig?.scope &&
+						onFileClick &&
+						!shareCode
+							? () =>
+									onFileClick({
+										file_manager: { spaceType: "project", projectId },
+									})
+							: undefined
 					}
 					spaceConfig={spaceConfig}
 					isItemSelectable={isItemSelectable}

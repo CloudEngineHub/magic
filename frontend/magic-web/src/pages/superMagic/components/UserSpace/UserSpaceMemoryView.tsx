@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState, useRef } from "react"
+import { useCallback, useEffect, useMemo, useState, useRef } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { ArrowUpRight, FilePlus2 } from "lucide-react"
+import { Brain, Folder, Folders, FilePlus2, RefreshCw } from "lucide-react"
+import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import type { MagicFSFile } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -9,7 +11,8 @@ import userFilesStore from "@/stores/userFiles"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import {
 	getUserMemoryPath,
-	USER_MEMORY_ROOT,
+	USER_PROJECT_MEMORIES_PATH,
+	getMemoryProjectId,
 	USER_MEMORY_ENTRY,
 	USER_MEMORY_NOTES,
 } from "../LongTremMemory/components/memoryTreeNodeUtils"
@@ -20,7 +23,8 @@ interface MemoryGroupProps {
 	projectId?: string | null
 	projectName?: string
 	onFileClick?: (file: AttachmentItem) => void
-	onLocate: (id?: string) => void
+	title?: string
+	defaultExpanded?: boolean
 	activeFileId?: string | null
 	topicId?: string | null
 	compact?: boolean
@@ -30,13 +34,16 @@ const MemoryGroup = observer(function MemoryGroup({
 	projectId,
 	projectName,
 	onFileClick,
-	onLocate,
+	title: titleOverride,
+	defaultExpanded = true,
 	activeFileId,
 	topicId,
 	compact = true,
 	scrollElementRef,
 }: MemoryGroupProps) {
 	const { t } = useTranslation("super")
+	const [expanded, setExpanded] = useState(defaultExpanded)
+	const [visited, setVisited] = useState(defaultExpanded)
 	const identity = userFilesStore.currentIdentityKey
 	const mutationVersion = userFilesStore.mutationVersion
 	const [rootSnapshot, setRootSnapshot] = useState<{
@@ -44,7 +51,10 @@ const MemoryGroup = observer(function MemoryGroup({
 		file: MagicFSFile | null
 	}>()
 	const root = rootSnapshot?.identity === identity ? rootSnapshot.file : null
-	const setRoot = (file: MagicFSFile | null) => setRootSnapshot({ identity, file })
+	const setRoot = useCallback(
+		(file: MagicFSFile | null) => setRootSnapshot({ identity, file }),
+		[identity],
+	)
 	const [directoryId, setDirectoryId] = useState<string>()
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState(false)
@@ -56,13 +66,14 @@ const MemoryGroup = observer(function MemoryGroup({
 		setRoot(null)
 		setDirectoryId(undefined)
 		setLoading(true)
-	}, [identity, scopePath])
+	}, [identity, scopePath, setRoot])
 	useEffect(() => {
+		if (!visited) return
 		let cancelled = false
 		void userFilesStore
 			.findPath(segments)
 			.then(async (file) => {
-				if (file) await userFilesStore.loadDirectory(file.id)
+				if (file) await userFilesStore.loadTree(file.id)
 				if (!cancelled) {
 					setRoot(file)
 					setError(false)
@@ -77,7 +88,7 @@ const MemoryGroup = observer(function MemoryGroup({
 		return () => {
 			cancelled = true
 		}
-	}, [identity, segments, mutationVersion, retry])
+	}, [identity, segments, mutationVersion, retry, visited, setRoot])
 	const entryExists =
 		root &&
 		userFilesStore
@@ -122,87 +133,199 @@ const MemoryGroup = observer(function MemoryGroup({
 			setCreating(false)
 		}
 	}
-	const title = projectId ? t("userSpace.projectMemory") : t("userSpace.globalMemory")
-	const locateAction = (
-		<Button
-			variant="ghost"
-			size="icon"
-			className="size-6 shrink-0"
-			aria-label={t("userSpace.locateAllFiles")}
-			onClick={() => onLocate(directoryId ?? root?.id)}
-		>
-			<ArrowUpRight size={16} />
-		</Button>
+	const title =
+		titleOverride ?? (projectId ? t("userSpace.projectMemory") : t("userSpace.globalMemory"))
+	const section: SidebarSectionOptions = {
+		isExpanded: expanded,
+		onClick: () => {
+			setExpanded(!expanded)
+			setVisited(true)
+		},
+		leading: projectId ? <Folder size={16} /> : <Brain size={16} />,
+		description:
+			projectId && projectName && !titleOverride ? (
+				<p className="truncate px-4 pb-2 text-xs text-muted-foreground">{projectName}</p>
+			) : undefined,
+	}
+	const emptyState = !entryExists && (
+		<div className="flex shrink-0 items-center justify-between px-4 py-2 text-xs text-muted-foreground">
+			<span>{t("userSpace.noMemory")}</span>
+			<Button
+				variant="ghost"
+				size="sm"
+				disabled={creating}
+				onClick={() => void createEntry()}
+			>
+				<FilePlus2 size={16} />
+				{t("userSpace.createMemory")}
+			</Button>
+		</div>
 	)
 	return (
 		<section className="flex min-h-0 shrink-0 flex-col border-b last:border-0">
-			{projectId && projectName && (
-				<p className="truncate px-4 pt-2 text-xs text-muted-foreground">{projectName}</p>
-			)}
-			{!root && (
-				<div className="flex shrink-0 items-center justify-between px-4 py-2 text-sm font-semibold">
-					{title}
-					{locateAction}
-				</div>
-			)}
-			{loading ? (
-				<p className="p-3 text-xs text-muted-foreground">{t("userSpace.loading")}</p>
-			) : error ? (
-				<Button variant="ghost" onClick={() => setRetry((value) => value + 1)}>
-					{t("userSpace.retry")}
-				</Button>
+			{root && !error ? (
+				<UserSpaceFilesView
+					rootId={root.id}
+					rootName={title}
+					resolveParent={destination}
+					directoryId={directoryId}
+					onDirectoryChange={setDirectoryId}
+					onFileClick={onFileClick}
+					activeFileId={activeFileId}
+					topicId={topicId}
+					compact={compact}
+					scrollElementRef={scrollElementRef}
+					section={section}
+					contentBefore={emptyState}
+				/>
 			) : (
-				<>
-					{!entryExists && (
-						<div className="flex shrink-0 items-center justify-between px-4 py-2 text-xs text-muted-foreground">
-							<span>{t("userSpace.noMemory")}</span>
-							<Button
-								variant="ghost"
-								size="sm"
-								disabled={creating}
-								onClick={() => void createEntry()}
-							>
-								<FilePlus2 size={16} />
-								{t("userSpace.createMemory")}
-							</Button>
-						</div>
+				<SidebarExpandableItem label={title} {...section} testId="memory-empty-section">
+					{section.description}
+					{loading ? (
+						<p className="p-3 text-xs text-muted-foreground">
+							{t("userSpace.loading")}
+						</p>
+					) : error ? (
+						<Button variant="ghost" onClick={() => setRetry((value) => value + 1)}>
+							{t("userSpace.retry")}
+						</Button>
+					) : (
+						emptyState
 					)}
-					{root && (
-						<UserSpaceFilesView
-							rootId={root.id}
-							rootName={title}
-							resolveParent={destination}
-							directoryId={directoryId}
-							onDirectoryChange={setDirectoryId}
-							onFileClick={onFileClick}
-							activeFileId={activeFileId}
-							topicId={topicId}
-							compact={compact}
-							scrollElementRef={scrollElementRef}
-							headerTrailingAction={locateAction}
-						/>
-					)}
-				</>
+				</SidebarExpandableItem>
 			)}
 		</section>
 	)
 })
-export default function UserSpaceMemoryView(props: MemoryGroupProps) {
+const OtherProjectMemories = observer(function OtherProjectMemories(props: MemoryGroupProps) {
+	const { t } = useTranslation("super")
+	const identity = userFilesStore.currentIdentityKey
+	const mutationVersion = userFilesStore.mutationVersion
+	const [expanded, setExpanded] = useState(false)
+	const [visited, setVisited] = useState(false)
+	const [rootId, setRootId] = useState<string>()
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState(false)
+	const [loaded, setLoaded] = useState(false)
+	const [refreshVersion, setRefreshVersion] = useState(0)
+	const appliedRefresh = useRef(0)
+	useEffect(() => {
+		// 收起样式本身不阻止请求；首次展开以前不读取名单，也不调用名称接口。
+		if (!visited) return
+		let cancelled = false
+		const force = refreshVersion !== appliedRefresh.current
+		setLoading(true)
+		setError(false)
+		void (async () => {
+			const root = await userFilesStore.findPath(USER_PROJECT_MEMORIES_PATH)
+			if (cancelled || identity !== userFilesStore.currentIdentityKey) return
+			const files = root ? await userFilesStore.loadDirectory(root.id, force) : []
+			if (cancelled || identity !== userFilesStore.currentIdentityKey) return
+			const ids = files.flatMap((file) => {
+				const id = file.is_directory ? getMemoryProjectId(file.name) : null
+				return id && id !== props.projectId ? [id] : []
+			})
+			await userFilesStore.loadProjectNames(ids, force)
+			if (!cancelled && identity === userFilesStore.currentIdentityKey) {
+				setRootId(root?.id)
+				setLoaded(true)
+				appliedRefresh.current = refreshVersion
+			}
+		})()
+			.catch(() => {
+				if (!cancelled) setError(true)
+			})
+			.finally(() => {
+				if (!cancelled) setLoading(false)
+			})
+		return () => {
+			cancelled = true
+		}
+	}, [identity, props.projectId, mutationVersion, visited, refreshVersion])
+	const projects = rootId
+		? userFilesStore.getChildren(rootId).flatMap((file) => {
+				const id = file.is_directory ? getMemoryProjectId(file.name) : null
+				return id && id !== props.projectId ? [{ id, fileId: file.id }] : []
+			})
+		: []
+	return (
+		<SidebarExpandableItem
+			label={t("userSpace.otherProjectMemories")}
+			isExpanded={expanded}
+			onClick={() => {
+				setExpanded(!expanded)
+				setVisited(true)
+			}}
+			leading={<Folders size={16} />}
+			testId="other-project-memories"
+			trailing={
+				loaded && (
+					<MagicTooltip title={t("topicFiles.refreshList")}>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-6 shrink-0"
+							disabled={loading}
+							aria-label={t("topicFiles.refreshList")}
+							onClick={() => setRefreshVersion((value) => value + 1)}
+						>
+							<RefreshCw size={16} />
+						</Button>
+					</MagicTooltip>
+				)
+			}
+		>
+			{error ? (
+				<div role="alert" className="p-3 text-xs">
+					{t("userSpace.projectNamesLoadFailed")}
+					<Button
+						variant="ghost"
+						size="sm"
+						onClick={() => setRefreshVersion((value) => value + 1)}
+					>
+						{t("userSpace.retry")}
+					</Button>
+				</div>
+			) : (
+				<>
+					{loading && (
+						<p className="p-3 text-xs text-muted-foreground">
+							{t("userSpace.loading")}
+						</p>
+					)}
+					{loaded &&
+						(projects.length ? (
+							projects.map(({ id, fileId }) => (
+								<MemoryGroup
+									key={fileId}
+									{...props}
+									projectId={id}
+									projectName={undefined}
+									title={
+										userFilesStore.projectNames.get(id) ??
+										t("userSpace.projectNameUnavailable")
+									}
+									defaultExpanded={false}
+								/>
+							))
+						) : (
+							<p className="p-3 text-xs text-muted-foreground">
+								{t("userSpace.noOtherProjectMemories")}
+							</p>
+						))}
+				</>
+			)}
+		</SidebarExpandableItem>
+	)
+})
+
+export default observer(function UserSpaceMemoryView(props: MemoryGroupProps) {
 	const scrollElementRef = useRef<HTMLDivElement>(null)
 	const { t } = useTranslation("super")
-	const locateOtherProjects = async () => {
-		const identity = userFilesStore.currentIdentityKey
-		try {
-			const directory = await userFilesStore.findPath([...USER_MEMORY_ROOT, "projects"])
-			if (identity === userFilesStore.currentIdentityKey) props.onLocate(directory?.id)
-		} catch {
-			if (identity === userFilesStore.currentIdentityKey)
-				magicToast.error(t("userSpace.loadFailed"))
-		}
-	}
+	const identity = userFilesStore.currentIdentityKey
 	return (
 		<div ref={scrollElementRef} className="h-full min-h-0 overflow-auto">
-			<div className="flex flex-col">
+			<div key={identity} className="flex flex-col">
 				<MemoryGroup {...props} scrollElementRef={scrollElementRef} projectId={undefined} />
 				{props.projectId ? (
 					<MemoryGroup
@@ -215,15 +338,8 @@ export default function UserSpaceMemoryView(props: MemoryGroupProps) {
 						{t("userSpace.enterProject")}
 					</div>
 				)}
-				<Button
-					variant="ghost"
-					size="sm"
-					className="shrink-0"
-					onClick={() => void locateOtherProjects()}
-				>
-					{t("userSpace.otherProjectMemories")}
-				</Button>
+				<OtherProjectMemories {...props} scrollElementRef={scrollElementRef} />
 			</div>
 		</div>
 	)
-}
+})

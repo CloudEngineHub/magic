@@ -2,6 +2,12 @@
 export const USER_MEMORY_ROOT = [".magic", "memory"] as const
 export const USER_MEMORY_ENTRY = "MEMORY.md"
 export const USER_MEMORY_NOTES = "notes"
+export const USER_PROJECT_MEMORIES_PATH = [...USER_MEMORY_ROOT, "projects"] as const
+
+/** 项目目录只解析身份，展示名称不能回写到目录名或文件路径。 */
+export function getMemoryProjectId(directoryName: string): string | null {
+	return /^p_[1-9][0-9]*$/.test(directoryName) ? directoryName.slice(2) : null
+}
 export function getUserMemoryPath(projectId?: string | null): string[] {
 	return projectId
 		? [...USER_MEMORY_ROOT, "projects", `p_${projectId}`]

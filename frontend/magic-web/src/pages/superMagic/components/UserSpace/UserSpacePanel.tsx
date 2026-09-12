@@ -41,10 +41,6 @@ export default observer(function UserSpacePanel({
 		setDirectoryId(undefined)
 		setView("files")
 	}, [identity])
-	const locate = (id?: string) => {
-		setDirectoryId(id)
-		setView("files")
-	}
 	return (
 		<div className={cn("flex h-full min-h-0 flex-col bg-background", className)}>
 			<div
@@ -107,6 +103,7 @@ export default observer(function UserSpacePanel({
 			</div>
 			<div className={cn("min-h-0 flex-1", view !== "files" && "hidden")} role="tabpanel">
 				<UserSpaceFilesView
+					active={view === "files"}
 					directoryId={directoryId}
 					onDirectoryChange={setDirectoryId}
 					onFileClick={onFileClick}
@@ -132,7 +129,6 @@ export default observer(function UserSpacePanel({
 							topicId={topicId}
 							activeFileId={activeFileId}
 							onFileClick={onFileClick}
-							onLocate={locate}
 						/>
 					</Suspense>
 				</div>

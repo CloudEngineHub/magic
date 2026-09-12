@@ -7,6 +7,8 @@ import {
 	SquareCheckBig,
 	ChevronsUpDown,
 	ChevronsDownUp,
+	MoreHorizontal,
+	FolderTree,
 } from "lucide-react"
 import { memo } from "react"
 import type { ReactNode } from "react"
@@ -17,7 +19,10 @@ import FileMenuDropdown from "./FileMenuDropdown"
 import UploadMenuDropdown from "./UploadMenuDropdown"
 import { type PresetFileType } from "../constant"
 import { cn } from "@/utils/cn"
-import HeaderTrailingAction from "./HeaderTrailingAction"
+import HeaderTrailingAction, { FileManagerAction } from "./HeaderTrailingAction"
+import { SidebarRow, type SidebarSectionOptions } from "../../SidebarSection"
+import { useFileHeaderOverflow } from "../hooks/useFileHeaderOverflow"
+import { MagicDropdown } from "@/components/base/MagicDropdown"
 
 interface NormalModeHeaderProps {
 	title?: string
@@ -40,6 +45,8 @@ interface NormalModeHeaderProps {
 	onImportFromOtherProject?: () => void
 	onEnterSelectMode?: () => void
 	headerTrailingAction?: ReactNode
+	onOpenFileManager?: () => void
+	section?: SidebarSectionOptions
 	className?: string
 }
 
@@ -64,78 +71,86 @@ function NormalModeHeader({
 	onImportFromOtherProject,
 	onEnterSelectMode,
 	headerTrailingAction,
+	onOpenFileManager,
+	section,
 	className,
 }: NormalModeHeaderProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
+	const { rowRef, labelRef, actionsRef, overflow } = useFileHeaderOverflow()
+	const hasOverflow = overflow && Boolean(onToggleAllFolders || onOpenFileManager)
 	const toggleAllFoldersLabel = allFoldersExpanded
 		? t("fileTree.collapseAll")
 		: (expandAllLabel ?? t("fileTree.expandAll"))
 
-	return (
-		<div className={cn("flex h-8 w-full items-center gap-1 pl-4 pr-2", className)}>
-			<p className="shrink-0 whitespace-nowrap text-sm font-semibold leading-4 text-foreground">
-				{title || t("topicFiles.title")}
-			</p>
-			<div className="ml-auto flex min-w-0 items-center justify-end gap-1 overflow-hidden">
-				{onSearch && (
-					<MagicTooltip title={t("topicFiles.search")}>
-						<button
-							className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
-							type="button"
-							data-testid="file-header-search-button"
-							onClick={onSearch}
-							aria-label={t("topicFiles.search")}
-						>
-							<Search size={16} className="text-foreground" />
-						</button>
-					</MagicTooltip>
-				)}
-				{allowEdit && onAddFile && (!isMobile || showMobileActions) && (
-					<FileMenuDropdown
-						onAddFile={onAddFile}
-						onAddDesign={onAddDesign}
-						onAddSelfMedia={onAddSelfMedia}
-						onAddAICard={onAddAICard}
-						onAddFolder={onAddFolder}
+	const actions = (
+		<div
+			ref={actionsRef}
+			className="relative ml-auto flex shrink-0 items-center gap-1 [&>*]:shrink-0 [&_button]:shrink-0"
+		>
+			{onSearch && (
+				<MagicTooltip title={t("topicFiles.search")}>
+					<button
+						className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
+						type="button"
+						data-testid="file-header-search-button"
+						onClick={onSearch}
+						aria-label={t("topicFiles.search")}
 					>
-						<span>
-							<MagicTooltip title={t("topicFiles.addFileOrFolder")}>
-								<button
-									className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
-									type="button"
-									data-testid="file-header-add-file-button"
-									aria-label={t("topicFiles.addFileOrFolder")}
-								>
-									<FilePlus size={16} className="text-foreground" />
-								</button>
-							</MagicTooltip>
-						</span>
-					</FileMenuDropdown>
-				)}
-				{allowEdit &&
-					(onUploadFile || onUploadFolder) &&
-					(!isMobile || showMobileActions) && (
-						<UploadMenuDropdown
-							onUploadFile={onUploadFile}
-							onUploadFolder={onUploadFolder}
-							onImportFromOtherProject={onImportFromOtherProject}
-						>
-							<span>
-								<MagicTooltip title={t("topicFiles.upload")}>
-									<button
-										className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
-										type="button"
-										data-testid="file-header-upload-button"
-										aria-label={t("topicFiles.upload")}
-									>
-										<Upload size={16} className="text-foreground" />
-									</button>
-								</MagicTooltip>
-							</span>
-						</UploadMenuDropdown>
+						<Search size={16} className="text-foreground" />
+					</button>
+				</MagicTooltip>
+			)}
+			{allowEdit && onAddFile && (!isMobile || showMobileActions) && (
+				<FileMenuDropdown
+					onAddFile={onAddFile}
+					onAddDesign={onAddDesign}
+					onAddSelfMedia={onAddSelfMedia}
+					onAddAICard={onAddAICard}
+					onAddFolder={onAddFolder}
+				>
+					<span>
+						<MagicTooltip title={t("topicFiles.addFileOrFolder")}>
+							<button
+								className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
+								type="button"
+								data-testid="file-header-add-file-button"
+								aria-label={t("topicFiles.addFileOrFolder")}
+							>
+								<FilePlus size={16} className="text-foreground" />
+							</button>
+						</MagicTooltip>
+					</span>
+				</FileMenuDropdown>
+			)}
+			{allowEdit && (onUploadFile || onUploadFolder) && (!isMobile || showMobileActions) && (
+				<UploadMenuDropdown
+					onUploadFile={onUploadFile}
+					onUploadFolder={onUploadFolder}
+					onImportFromOtherProject={onImportFromOtherProject}
+				>
+					<span>
+						<MagicTooltip title={t("topicFiles.upload")}>
+							<button
+								className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
+								type="button"
+								data-testid="file-header-upload-button"
+								aria-label={t("topicFiles.upload")}
+							>
+								<Upload size={16} className="text-foreground" />
+							</button>
+						</MagicTooltip>
+					</span>
+				</UploadMenuDropdown>
+			)}
+			{onToggleAllFolders && (
+				<div
+					className={cn(
+						"flex shrink-0",
+						hasOverflow && "pointer-events-none invisible absolute",
 					)}
-				{onToggleAllFolders && (
+					aria-hidden={hasOverflow || undefined}
+				>
 					<MagicTooltip title={toggleAllFoldersLabel}>
 						<button
 							className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
@@ -151,42 +166,121 @@ function NormalModeHeader({
 							)}
 						</button>
 					</MagicTooltip>
-				)}
-				{!isShareRoute && (
-					<MagicTooltip title={t("topicFiles.refreshList")}>
-						<button
-							className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
-							type="button"
-							data-testid="file-header-refresh-button"
-							onClick={onRefresh}
-							aria-label={t("topicFiles.refreshList")}
-							disabled={refreshLoading}
-						>
-							{refreshLoading ? (
-								<Loader2 size={16} className="animate-spin text-foreground" />
-							) : (
-								<RefreshCw size={16} className="text-foreground" />
-							)}
-						</button>
-					</MagicTooltip>
-				)}
-				{allowEdit && onEnterSelectMode && (
-					<MagicTooltip title={t("topicFiles.selectFiles")}>
-						<button
-							className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
-							type="button"
-							data-testid="file-header-select-mode-button"
-							onClick={onEnterSelectMode}
-							aria-label={t("topicFiles.selectFiles")}
-						>
-							<SquareCheckBig size={16} className="text-foreground" />
-						</button>
-					</MagicTooltip>
-				)}
-			</div>
+				</div>
+			)}
+			{!isShareRoute && (
+				<MagicTooltip title={t("topicFiles.refreshList")}>
+					<button
+						className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
+						type="button"
+						data-testid="file-header-refresh-button"
+						onClick={onRefresh}
+						aria-label={t("topicFiles.refreshList")}
+						disabled={refreshLoading}
+					>
+						{refreshLoading ? (
+							<Loader2 size={16} className="animate-spin text-foreground" />
+						) : (
+							<RefreshCw size={16} className="text-foreground" />
+						)}
+					</button>
+				</MagicTooltip>
+			)}
+			{allowEdit && onEnterSelectMode && (
+				<MagicTooltip title={t("topicFiles.selectFiles")}>
+					<button
+						className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
+						type="button"
+						data-testid="file-header-select-mode-button"
+						onClick={onEnterSelectMode}
+						aria-label={t("topicFiles.selectFiles")}
+					>
+						<SquareCheckBig size={16} className="text-foreground" />
+					</button>
+				</MagicTooltip>
+			)}
 			{headerTrailingAction ? (
 				<HeaderTrailingAction>{headerTrailingAction}</HeaderTrailingAction>
 			) : null}
+			{onOpenFileManager && (
+				<div
+					className={cn(
+						"flex shrink-0",
+						hasOverflow && "pointer-events-none invisible absolute",
+					)}
+					aria-hidden={hasOverflow || undefined}
+				>
+					<FileManagerAction onClick={onOpenFileManager} />
+				</div>
+			)}
+			{hasOverflow && (
+				<div data-overflow-trigger className="flex shrink-0">
+					<MagicDropdown
+						trigger={["click"]}
+						menu={{
+							items: [
+								...(onToggleAllFolders
+									? [
+											{
+												key: "toggle-folders",
+												label: toggleAllFoldersLabel,
+												icon: allFoldersExpanded ? (
+													<ChevronsDownUp size={16} />
+												) : (
+													<ChevronsUpDown size={16} />
+												),
+												onClick: onToggleAllFolders,
+											},
+										]
+									: []),
+								...(onOpenFileManager
+									? [
+											{
+												key: "file-manager",
+												label: t("userSpace.openManager"),
+												icon: <FolderTree size={16} />,
+												onClick: onOpenFileManager,
+											},
+										]
+									: []),
+							],
+						}}
+					>
+						<span>
+							<MagicTooltip title={t("topicFiles.moreActions")}>
+								<button
+									type="button"
+									className="flex size-6 shrink-0 items-center justify-center rounded-md hover:bg-accent"
+									aria-label={t("topicFiles.moreActions")}
+								>
+									<MoreHorizontal size={16} />
+								</button>
+							</MagicTooltip>
+						</span>
+					</MagicDropdown>
+				</div>
+			)}
+		</div>
+	)
+	return section ? (
+		<SidebarRow
+			label={title || t("topicFiles.title")}
+			onClick={section.onClick}
+			isExpanded={section.isExpanded}
+			leading={section.leading}
+			trailing={actions}
+			testId="file-section-header"
+			rowRef={rowRef}
+			labelRef={labelRef}
+		/>
+	) : (
+		<div ref={rowRef} className={cn("flex h-8 w-full items-center gap-1 pl-4 pr-2", className)}>
+			<p className="min-w-0 flex-1 truncate text-sm font-semibold leading-4 text-foreground">
+				<span ref={labelRef} className="inline-block whitespace-nowrap">
+					{title || t("topicFiles.title")}
+				</span>
+			</p>
+			{actions}
 		</div>
 	)
 }

@@ -7,6 +7,8 @@ import {
 	type IComputedValue,
 } from "mobx"
 import type { MagicFSFile } from "@/apis"
+import { SuperMagicApi } from "@/apis"
+import { MAGIC_FS_TREE_DEPTH } from "@/apis/modules/magicFS"
 import {
 	getFileReferenceIdentityKey,
 	invalidateFileReferenceCache,
@@ -30,6 +32,11 @@ interface DirectoryRequest {
 	promise: Promise<MagicFSFile[]>
 }
 
+interface ProjectNamesRequest {
+	controller: AbortController
+	promise: Promise<void>
+}
+
 const EMPTY_ATTACHMENTS: AttachmentItem[] = []
 const ROOT_QUERY = "root"
 const EMPTY_DIRECTORY: UserDirectorySnapshot = {
@@ -50,6 +57,11 @@ export class UserFilesStore {
 	files = observable.map<string, MagicFSFile>(undefined, { deep: false })
 	directories = observable.map<string, UserDirectorySnapshot>(undefined, { deep: false })
 	expandedKeys = observable.map<string, string[]>(undefined, { deep: false })
+	projectNames = observable.map<string, string>()
+	private loadedProjectNames = new Set<string>()
+	private namesRequests = new Map<string, ProjectNamesRequest>()
+	private loadedTrees = new Set<string>()
+	private treeRequests = new Map<string, DirectoryRequest>()
 	private attachmentViews = new Map<string, IComputedValue<AttachmentItem>>()
 	private requests = new Map<string, DirectoryRequest>()
 	private requestVersion = 0
@@ -58,7 +70,15 @@ export class UserFilesStore {
 	constructor() {
 		makeAutoObservable<
 			this,
-			"attachmentViews" | "requests" | "requestVersion" | "uploadCancellations" | "fileGuards"
+			| "attachmentViews"
+			| "requests"
+			| "requestVersion"
+			| "uploadCancellations"
+			| "fileGuards"
+			| "loadedTrees"
+			| "treeRequests"
+			| "loadedProjectNames"
+			| "namesRequests"
 		>(
 			this,
 			{
@@ -73,6 +93,11 @@ export class UserFilesStore {
 				uploadCancellations: false,
 				fileGuards: false,
 				editingFileIds: false,
+				projectNames: false,
+				loadedProjectNames: false,
+				namesRequests: false,
+				loadedTrees: false,
+				treeRequests: false,
 			},
 			{ autoBind: true },
 		)
@@ -134,6 +159,119 @@ export class UserFilesStore {
 
 	setExpandedKeys(rootId: string, keys: string[]): void {
 		this.expandedKeys.set(rootId, keys)
+	}
+
+	/** 首次激活读取整个范围；后续展开复用目录缓存，只有深度边界继续请求。 */
+	async loadTree(rootId: string, force = false): Promise<MagicFSFile[]> {
+		const identity = this.currentIdentityKey
+		this.activateIdentity(identity)
+		if (!identity) throw new DOMException("User space is unavailable", "AbortError")
+		const previous = this.treeRequests.get(rootId)
+		if (previous && !force) return previous.promise
+		if (!force && this.loadedTrees.has(rootId)) return this.getChildren(rootId)
+		previous?.controller.abort()
+		const controller = new AbortController()
+		const version = ++this.requestVersion
+		const mutationVersion = this.mutationVersion
+		const isCurrent = () =>
+			identity === this.currentIdentityKey &&
+			this.treeRequests.get(rootId)?.version === version &&
+			this.mutationVersion === mutationVersion
+		this.directories.set(rootId, { ...this.getDirectory(rootId), loading: true, error: null })
+		const promise = userSpaceFileService
+			.readTree(rootId, controller.signal)
+			.then((tree) => {
+				if (!isCurrent()) throw new DOMException("Tree request cancelled", "AbortError")
+				runInAction(() => {
+					const pending = [{ file: tree, depth: 0 }]
+					while (pending.length) {
+						const entry = pending.pop()
+						if (!entry) break
+						const { children, ...file } = entry.file
+						this.files.set(file.id, file)
+						if (!file.is_directory || entry.depth >= MAGIC_FS_TREE_DEPTH) continue
+						// 树快照覆盖该目录时取消更早的直接子节点请求，避免旧响应反向覆盖。
+						this.requests.get(file.id)?.controller.abort()
+						this.requests.delete(file.id)
+						this.directories.set(file.id, {
+							ids: (children ?? []).map((child) => child.id),
+							loaded: true,
+							loading: false,
+							error: null,
+						})
+						this.loadedTrees.add(file.id)
+						for (const child of children ?? [])
+							pending.push({ file: child, depth: entry.depth + 1 })
+					}
+					this.changeVersion += 1
+				})
+				return this.getChildren(rootId)
+			})
+			.catch((error: unknown) => {
+				const latest = this.treeRequests.get(rootId)
+				if (identity === this.currentIdentityKey && latest && latest.version !== version)
+					return latest.promise
+				if (isCurrent())
+					runInAction(() => {
+						this.directories.set(rootId, {
+							...this.getDirectory(rootId),
+							loading: false,
+							error: controller.signal.aborted ? null : error,
+						})
+					})
+				throw error
+			})
+			.finally(() => {
+				if (this.treeRequests.get(rootId)?.version === version)
+					this.treeRequests.delete(rootId)
+			})
+		this.treeRequests.set(rootId, { controller, version, promise })
+		return promise
+	}
+
+	/** 仅由已展开的其他项目分组调用；缺失名称也缓存，重复折叠不反复查询。 */
+	async loadProjectNames(projectIds: string[], force = false): Promise<void> {
+		const identity = this.currentIdentityKey
+		this.activateIdentity(identity)
+		if (!identity) throw new DOMException("User space is unavailable", "AbortError")
+		const ids = [...new Set(projectIds)].sort()
+		if (!ids.length || (!force && ids.every((id) => this.loadedProjectNames.has(id)))) return
+		const key = ids.join(",")
+		const previous = this.namesRequests.get(key)
+		if (!force && previous) return previous.promise
+		previous?.controller.abort()
+		const controller = new AbortController()
+		const promise = SuperMagicApi.getProjectNames(ids, controller.signal)
+			.then(({ names }) => {
+				if (
+					identity !== this.currentIdentityKey ||
+					this.namesRequests.get(key)?.controller !== controller
+				)
+					throw new DOMException("Project names request cancelled", "AbortError")
+				runInAction(() => {
+					for (const id of ids) {
+						this.loadedProjectNames.add(id)
+						if (names[id]) this.projectNames.set(id, names[id])
+						else this.projectNames.delete(id)
+					}
+				})
+			})
+			.catch((error: unknown) => {
+				const latest = this.namesRequests.get(key)
+				if (
+					identity === this.currentIdentityKey &&
+					latest &&
+					latest.controller !== controller
+				)
+					return latest.promise
+				throw error
+			})
+			.finally(() => {
+				if (this.namesRequests.get(key)?.controller === controller)
+					this.namesRequests.delete(key)
+			})
+		this.namesRequests.set(key, { controller, promise })
+		return promise
 	}
 
 	async loadDirectory(parentId?: string, force = false): Promise<MagicFSFile[]> {
@@ -320,6 +458,7 @@ export class UserFilesStore {
 
 	/** 删除结果确认后使相关目录失效；旧响应不得重新插入已删除的子树。 */
 	removeFiles(fileIds: readonly string[]): void {
+		this.invalidateTrees()
 		const removed = new Set(fileIds)
 		for (const file of this.files.values()) {
 			if (this.getPath(file.id).some((parent) => removed.has(parent.id))) removed.add(file.id)
@@ -344,6 +483,7 @@ export class UserFilesStore {
 	}
 
 	notifyMutation(): void {
+		this.invalidateTrees()
 		invalidateFileReferenceCache()
 		this.mutationVersion += 1
 	}
@@ -391,8 +531,22 @@ export class UserFilesStore {
 		this.uploadCancellations.delete(id)
 	}
 
+	private invalidateTrees(): void {
+		for (const [id, request] of this.treeRequests) {
+			request.controller.abort()
+			this.directories.set(id, { ...this.getDirectory(id), loading: false })
+		}
+		this.treeRequests.clear()
+		this.loadedTrees.clear()
+	}
+
 	private activateIdentity(identity: string | null): void {
 		if (identity === this.identityKey) return
+		this.invalidateTrees()
+		for (const request of this.namesRequests.values()) request.controller.abort()
+		this.namesRequests.clear()
+		this.projectNames.clear()
+		this.loadedProjectNames.clear()
 		for (const request of this.requests.values()) request.controller.abort()
 		for (const cancel of this.uploadCancellations.values()) void cancel().catch(() => undefined)
 		this.uploadCancellations.clear()

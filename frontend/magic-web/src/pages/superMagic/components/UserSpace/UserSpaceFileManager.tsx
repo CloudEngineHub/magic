@@ -38,10 +38,6 @@ export default function UserSpaceFileManager({
 					projectName={projectName}
 					topicId={topicId}
 					onFileClick={onFileClick}
-					onLocate={(id) => {
-						setDirectoryId(id)
-						setView("files")
-					}}
 				/>
 			) : (
 				<UserSpaceFilesView

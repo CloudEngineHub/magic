@@ -23,6 +23,7 @@ use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetParticipatedProjectsReq
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetProjectAttachmentsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetProjectAttachmentsV2RequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetProjectListRequestDTO;
+use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetProjectNamesRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\GetSidebarTopicsRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\MoveProjectRequestDTO;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\TransferProjectsRequestDTO;
@@ -46,6 +47,17 @@ class ProjectApi extends AbstractApi
         private readonly FileScopeHandlerResolver $fileScopeHandlerResolver,
     ) {
         parent::__construct($request);
+    }
+
+    public function getNames(RequestContext $requestContext): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        $requestDTO = GetProjectNamesRequestDTO::fromRequest($this->request);
+
+        return ['names' => (object) $this->projectAppService->getAccessibleProjectNamesBatch(
+            $requestContext,
+            $requestDTO->getProjectIds(),
+        )];
     }
 
     /**

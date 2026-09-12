@@ -2215,11 +2215,21 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		})
 	},
 
+	/** 按当前访问权限批量查询项目名称。 */
+	getProjectNames(projectIds: string[], signal?: AbortSignal) {
+		return fetch.post<{ names: Record<string, string> }>(
+			"/api/v1/super-agent/projects/names/queries",
+			{ project_ids: projectIds },
+			{ signal, enableErrorMessagePrompt: false },
+		)
+	},
+
 	/**
 	 * 获取项目列表
 	 * @param param0
 	 * @returns
 	 */
+
 	getProjects({
 		workspace_id,
 		project_name,

@@ -49,6 +49,7 @@ import { getMobileAttachmentKey } from "./utils/get-mobile-attachment-key"
 import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
+import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
 
 interface TopicFilesPanelProps {
 	loading?: boolean
@@ -94,6 +95,9 @@ interface TopicFilesPanelProps {
 	onSaveSlidesTemplate?: (item: AttachmentItem) => void
 	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
 	headerTrailingAction?: ReactNode
+	onOpenFileManager?: () => void
+	section?: SidebarSectionOptions
+	contentBefore?: ReactNode
 	/** 文件树所属空间及其能力配置。 */
 	spaceConfig?: TopicFilesSpaceConfig
 	/** 判断节点是否允许参与移动和多选等变更操作。 */
@@ -157,6 +161,9 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			onSaveSlidesTemplate,
 			onConvertToSlidesTemplate,
 			headerTrailingAction,
+			onOpenFileManager,
+			section,
+			contentBefore,
 			spaceConfig,
 			isItemSelectable,
 			operationRoot,
@@ -599,6 +606,122 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			},
 		}))
 
+		const header = isSearchMode ? (
+			<SearchModeHeader
+				placeholder={spaceConfig?.directorySource ? t("userSpace.searchLoaded") : undefined}
+				key="search-header"
+				searchValue={rawSearchValue}
+				onSearchChange={handleSearchChange}
+				onSearchCommit={handleSearchCommit}
+				onClose={handleCloseSearch}
+				headerTrailingAction={headerTrailingAction}
+				onOpenFileManager={onOpenFileManager}
+				section={section}
+				className={cn("duration-200 animate-in fade-in", !showTitle && "[&>p]:hidden")}
+			/>
+		) : isSelectMode ? (
+			<SelectModeHeader
+				key="select-header"
+				selectedCount={selectedCount}
+				totalCount={totalCount}
+				onSelectAll={handleSelectAll}
+				onDeselectAll={handleDeselectAll}
+				onCancel={handleCancelSelect}
+				headerTrailingAction={headerTrailingAction}
+				onOpenFileManager={onOpenFileManager}
+				section={section}
+				className="duration-200 animate-in fade-in"
+			/>
+		) : (
+			<NormalModeHeader
+				expandAllLabel={
+					spaceConfig?.directorySource ? t("userSpace.expandLoaded") : undefined
+				}
+				key="normal-header"
+				title={resolvedTitle}
+				isShareRoute={isShareRoute}
+				refreshLoading={loading || refreshLoading}
+				allowEdit={allowEdit}
+				showMobileActions={showMobileActions}
+				onRefresh={handleRefreshList}
+				onSearch={handleSearch}
+				onAddFile={handleAddFile}
+				onAddDesign={capabilities.projectContentCreation ? handleAddDesign : undefined}
+				onAddSelfMedia={
+					capabilities.projectContentCreation ? handleAddSelfMedia : undefined
+				}
+				onAddAICard={capabilities.projectContentCreation ? handleAddAICard : undefined}
+				onAddFolder={handleAddFolder}
+				allFoldersExpanded={expansionState.allFoldersExpanded}
+				onToggleAllFolders={
+					expansionState.hasExpandableFolders ? handleToggleAllFolders : undefined
+				}
+				onUploadFile={capabilities.upload ? handleUploadFile : undefined}
+				onUploadFolder={
+					capabilities.upload && !spaceConfig?.directorySource
+						? handleUploadFolder
+						: undefined
+				}
+				onImportFromOtherProject={
+					capabilities.importFromOtherProject ? handleImportFromOtherProject : undefined
+				}
+				onEnterSelectMode={capabilities.multiSelect ? handleEnterSelectMode : undefined}
+				headerTrailingAction={headerTrailingAction}
+				onOpenFileManager={onOpenFileManager}
+				section={section}
+				className="duration-200 animate-in fade-in"
+			/>
+		)
+		const content = (
+			<TopicFilesCore
+				ref={coreRef}
+				attachments={attachments}
+				setUserSelectDetail={setUserSelectDetail}
+				onFileClick={onFileClick}
+				projectId={projectId}
+				shareCode={shareCode}
+				sharePassword={sharePassword}
+				onCrossProjectOperationSuccess={onCrossProjectOperationSuccess}
+				fileFilters={fileFilters}
+				handleDownloadAll={handleDownloadAll}
+				allLoading={allLoading}
+				activeFileId={activeFileId}
+				selectedTopic={selectedTopic}
+				isSelectMode={isSelectMode}
+				onExpansionStateChange={isSearchMode ? undefined : handleExpansionStateChange}
+				onSelectionChange={(selectedCount, totalCount) => {
+					setSelectedCount(selectedCount)
+					setTotalCount(totalCount)
+				}}
+				allowEdit={allowEdit}
+				onUpdateAttachments={spaceConfig?.scope ? handleCoreAttachmentsUpdate : undefined}
+				onAttachmentsChange={onAttachmentsChange}
+				onSelectModeChange={setIsSelectMode}
+				selectedProject={selectedProject}
+				handleReplaceFile={handleReplaceFile}
+				duplicateFileHandler={sharedDuplicateHandler}
+				selectedWorkspace={selectedWorkspace}
+				projects={projects}
+				workspaces={workspaces}
+				isInProject={isInProject}
+				externalSearchValue={isSearchMode ? debouncedSearchValue : ""}
+				filterMenuItems={filterMenuItems}
+				filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
+				allowDownload={allowDownload}
+				allowCopyTo={allowCopyTo}
+				allowReadonlySelection={isShareRoute}
+				resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
+				refreshLoading={loading || refreshLoading}
+				onSaveSlidesTemplate={onSaveSlidesTemplate}
+				onConvertToSlidesTemplate={onConvertToSlidesTemplate}
+				spaceConfig={spaceConfig}
+				isItemSelectable={isItemSelectable}
+				operationRoot={operationRoot}
+				fitContent={fitContent}
+				scrollElementRef={scrollElementRef}
+			/>
+		)
+
 		return (
 			<>
 				<div
@@ -658,150 +781,24 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 						/>
 					) : (
 						<>
-							{/* Header Section */}
-							{isSearchMode ? (
-								<SearchModeHeader
-									placeholder={
-										spaceConfig?.directorySource
-											? t("userSpace.searchLoaded")
-											: undefined
-									}
-									key="search-header"
-									searchValue={rawSearchValue}
-									onSearchChange={handleSearchChange}
-									onSearchCommit={handleSearchCommit}
-									onClose={handleCloseSearch}
-									headerTrailingAction={headerTrailingAction}
-									className={cn(
-										"duration-200 animate-in fade-in",
-										!showTitle && "[&>p]:hidden",
-									)}
-								/>
-							) : isSelectMode ? (
-								<SelectModeHeader
-									key="select-header"
-									selectedCount={selectedCount}
-									totalCount={totalCount}
-									onSelectAll={handleSelectAll}
-									onDeselectAll={handleDeselectAll}
-									onCancel={handleCancelSelect}
-									headerTrailingAction={headerTrailingAction}
-									className="duration-200 animate-in fade-in"
-								/>
+							{section ? (
+								<SidebarExpandableItem
+									label={resolvedTitle}
+									{...section}
+									testId="memory-files-section"
+									header={header}
+								>
+									{section.description}
+									{contentBefore}
+									{content}
+								</SidebarExpandableItem>
 							) : (
-								<NormalModeHeader
-									expandAllLabel={
-										spaceConfig?.directorySource
-											? t("userSpace.expandLoaded")
-											: undefined
-									}
-									key="normal-header"
-									title={resolvedTitle}
-									isShareRoute={isShareRoute}
-									refreshLoading={loading || refreshLoading}
-									allowEdit={allowEdit}
-									showMobileActions={showMobileActions}
-									onRefresh={handleRefreshList}
-									onSearch={handleSearch}
-									onAddFile={handleAddFile}
-									onAddDesign={
-										capabilities.projectContentCreation
-											? handleAddDesign
-											: undefined
-									}
-									onAddSelfMedia={
-										capabilities.projectContentCreation
-											? handleAddSelfMedia
-											: undefined
-									}
-									onAddAICard={
-										capabilities.projectContentCreation
-											? handleAddAICard
-											: undefined
-									}
-									onAddFolder={handleAddFolder}
-									allFoldersExpanded={expansionState.allFoldersExpanded}
-									onToggleAllFolders={
-										expansionState.hasExpandableFolders
-											? handleToggleAllFolders
-											: undefined
-									}
-									onUploadFile={
-										capabilities.upload ? handleUploadFile : undefined
-									}
-									onUploadFolder={
-										capabilities.upload && !spaceConfig?.directorySource
-											? handleUploadFolder
-											: undefined
-									}
-									onImportFromOtherProject={
-										capabilities.importFromOtherProject
-											? handleImportFromOtherProject
-											: undefined
-									}
-									onEnterSelectMode={
-										capabilities.multiSelect ? handleEnterSelectMode : undefined
-									}
-									headerTrailingAction={headerTrailingAction}
-									className="duration-200 animate-in fade-in"
-								/>
+								<>
+									{header}
+									{contentBefore}
+									{content}
+								</>
 							)}
-
-							{/* Content Section */}
-							{/* Use TopicFilesCore for content and batch download functionality */}
-							<TopicFilesCore
-								ref={coreRef}
-								attachments={attachments}
-								setUserSelectDetail={setUserSelectDetail}
-								onFileClick={onFileClick}
-								projectId={projectId}
-								shareCode={shareCode}
-								sharePassword={sharePassword}
-								onCrossProjectOperationSuccess={onCrossProjectOperationSuccess}
-								fileFilters={fileFilters}
-								handleDownloadAll={handleDownloadAll}
-								allLoading={allLoading}
-								activeFileId={activeFileId}
-								selectedTopic={selectedTopic}
-								isSelectMode={isSelectMode}
-								onExpansionStateChange={
-									isSearchMode ? undefined : handleExpansionStateChange
-								}
-								onSelectionChange={(selectedCount, totalCount) => {
-									setSelectedCount(selectedCount)
-									setTotalCount(totalCount)
-								}}
-								allowEdit={allowEdit}
-								onUpdateAttachments={
-									spaceConfig?.scope ? handleCoreAttachmentsUpdate : undefined
-								}
-								onAttachmentsChange={onAttachmentsChange}
-								onSelectModeChange={setIsSelectMode}
-								selectedProject={selectedProject}
-								handleReplaceFile={handleReplaceFile}
-								duplicateFileHandler={sharedDuplicateHandler}
-								selectedWorkspace={selectedWorkspace}
-								projects={projects}
-								workspaces={workspaces}
-								isInProject={isInProject}
-								externalSearchValue={isSearchMode ? debouncedSearchValue : ""}
-								filterMenuItems={filterMenuItems}
-								filterBatchDownloadLayerMenuItems={
-									filterBatchDownloadLayerMenuItems
-								}
-								allowDownload={allowDownload}
-								allowCopyTo={allowCopyTo}
-								allowReadonlySelection={isShareRoute}
-								resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
-								refreshLoading={loading || refreshLoading}
-								onSaveSlidesTemplate={onSaveSlidesTemplate}
-								onConvertToSlidesTemplate={onConvertToSlidesTemplate}
-								spaceConfig={spaceConfig}
-								isItemSelectable={isItemSelectable}
-								operationRoot={operationRoot}
-								fitContent={fitContent}
-								scrollElementRef={scrollElementRef}
-							/>
 						</>
 					)}
 				</div>

@@ -53,6 +53,7 @@ Router::addGroup(
 
         // 项目管理
         Router::addGroup('/projects', static function () {
+            Router::post('/names/queries', [ProjectApi::class, 'getNames']);
             // 获取项目列表
             Router::get('/queries', [ProjectApi::class, 'index']);
             // 获取用户参与的项目列表（支持协作项目过滤）

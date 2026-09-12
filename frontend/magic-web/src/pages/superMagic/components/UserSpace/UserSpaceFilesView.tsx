@@ -10,6 +10,7 @@ import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import { MemoryTreeNodeIcon } from "../LongTremMemory/components/MemoryTreeNodeIcon"
 import { toUserAttachment } from "./services/userSpaceFileService"
 import { useUserSpaceFileActions } from "./hooks/useUserSpaceFileActions"
+import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
 
 export interface UserSpaceFilesViewProps {
 	directoryId?: string
@@ -22,6 +23,9 @@ export interface UserSpaceFilesViewProps {
 	rootName?: string
 	resolveParent?: () => Promise<MagicFSFile>
 	headerTrailingAction?: ReactNode
+	section?: SidebarSectionOptions
+	contentBefore?: ReactNode
+	active?: boolean
 	scrollElementRef?: React.RefObject<HTMLElement>
 }
 
@@ -36,10 +40,14 @@ export default observer(function UserSpaceFilesView({
 	rootName,
 	resolveParent,
 	headerTrailingAction,
+	section,
+	contentBefore,
+	active = true,
 	scrollElementRef,
 }: UserSpaceFilesViewProps) {
 	const { t } = useTranslation("super")
 	const identity = userFilesStore.currentIdentityKey
+	const mutationVersion = userFilesStore.mutationVersion
 	const rootId = scopeRootId ?? userFilesStore.rootId ?? undefined
 	const parentId = compact ? rootId : (directoryId ?? rootId)
 	const state = userFilesStore.getDirectory(parentId)
@@ -47,14 +55,15 @@ export default observer(function UserSpaceFilesView({
 	const path = parentId ? userFilesStore.getPath(parentId) : []
 	const items = parentId ? userFilesStore.getTree(parentId) : []
 	useEffect(() => {
+		if (!active) return
 		void userFilesStore
 			.getRoot()
 			.then((root) => {
 				if (identity !== userFilesStore.currentIdentityKey) return
-				return userFilesStore.loadDirectory(parentId ?? scopeRootId ?? root.id)
+				return userFilesStore.loadTree(parentId ?? scopeRootId ?? root.id)
 			})
 			.catch(() => undefined)
-	}, [identity, parentId, scopeRootId])
+	}, [identity, parentId, scopeRootId, active, mutationVersion])
 	const parent = async () => {
 		if (resolveParent && (!directoryId || directoryId === scopeRootId)) return resolveParent()
 		const root = await userFilesStore.getRoot()
@@ -70,10 +79,25 @@ export default observer(function UserSpaceFilesView({
 		topicId,
 	})
 	const refresh = async () => {
-		await userFilesStore.loadDirectory(parentId, true)
+		const root = await userFilesStore.getRoot()
+		if (identity !== userFilesStore.currentIdentityKey) return
+		await userFilesStore.loadTree(parentId ?? root.id, true)
 	}
+	const renderSection = (content: ReactNode) =>
+		section ? (
+			<SidebarExpandableItem
+				label={rootName ?? t("userSpace.title")}
+				{...section}
+				testId="memory-manager-section"
+			>
+				{section.description}
+				{content}
+			</SidebarExpandableItem>
+		) : (
+			content
+		)
 	if (state.error || rootState.error)
-		return (
+		return renderSection(
 			<div role="alert" className="p-3 text-xs">
 				{t("userSpace.loadFailed")}
 				<Button
@@ -83,10 +107,12 @@ export default observer(function UserSpaceFilesView({
 				>
 					{t("userSpace.retry")}
 				</Button>
-			</div>
+			</div>,
 		)
 	if (!parentId || !spaceConfig.directorySource)
-		return <p className="p-3 text-xs text-muted-foreground">{t("userSpace.loading")}</p>
+		return renderSection(
+			<p className="p-3 text-xs text-muted-foreground">{t("userSpace.loading")}</p>,
+		)
 	const file = userFilesStore.files.get(parentId)
 	const operationRoot = file
 		? toUserAttachment(file, path.map((node) => node.name).join("/"))
@@ -125,10 +151,12 @@ export default observer(function UserSpaceFilesView({
 				scrollElementRef={scrollElementRef}
 				refreshAttachments={refresh}
 				headerTrailingAction={headerTrailingAction}
+				section={section}
+				contentBefore={contentBefore}
 			/>
 		)
 	const scopeDepth = scopeRootId ? userFilesStore.getPath(scopeRootId).length : 0
-	return (
+	const content = (
 		<TopicFilesCore
 			key={`${identity}:${parentId}`}
 			{...commonProps}
@@ -144,5 +172,11 @@ export default observer(function UserSpaceFilesView({
 				onNavigate: onDirectoryChange,
 			}}
 		/>
+	)
+	return renderSection(
+		<>
+			{contentBefore}
+			{content}
+		</>,
 	)
 })
