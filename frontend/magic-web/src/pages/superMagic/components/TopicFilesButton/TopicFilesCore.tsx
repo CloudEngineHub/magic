@@ -6,6 +6,7 @@ import { useMemo, useImperativeHandle, forwardRef, useRef, useEffect } from "rea
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import { UnknownFileIcon } from "./components/UnknownFileIcon"
 import MagicSpin from "@/components/base/MagicSpin"
 import MagicIcon from "@/components/base/MagicIcon"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
@@ -1976,6 +1977,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 											item?.file_extension
 										}
 										size={16}
+										fallbackIcon={<UnknownFileIcon file={item} size={16} />}
 									/>
 								}
 							/>

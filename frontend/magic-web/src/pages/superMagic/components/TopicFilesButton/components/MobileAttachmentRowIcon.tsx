@@ -1,4 +1,5 @@
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import { UnknownFileIcon } from "./UnknownFileIcon"
 import {
 	getAttachmentType,
 	getChildrenForCustomMetadataIconPath,
@@ -158,6 +159,7 @@ export function MobileAttachmentRowIcon({
 					magicVariant={magicVariant}
 					hasChildren={getVisibleAttachmentChildren(item).length > 0}
 					fileExtension={item.file_extension}
+					fallbackIcon={<UnknownFileIcon file={item} size={size} className={className} />}
 					className={className}
 					dataTestId={dataTestId}
 				/>

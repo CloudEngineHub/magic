@@ -1352,6 +1352,7 @@
 			}
 		},
 		"backToLatest": "回到最新",
+		"binaryFilePreviewUnavailable": "此文件为二进制，暂不支持预览。",
 		"clickToJumpPage": "点击跳转指定页数",
 		"closeEditingFileContent": "文件正在编辑中，关闭将退出编辑状态，是否继续？",
 		"closeEditingFilePrompt": "正在编辑「{{fileName}}」",
@@ -2338,6 +2339,10 @@
 				"scroll": "长图"
 			}
 		},
+		"unknownFileEncodingUnavailable": "无法以支持的文本编码预览此文件。",
+		"unknownFileLoadFailed": "文件读取失败，请重试。",
+		"unknownFileLoading": "正在读取文件…",
+		"unknownFileTooLarge": "文件超过 {{size}} MiB，无法直接预览。",
 		"unsavedChangesWarning": "您有未保存的更改，确定要离开吗？"
 	},
 	"draftBox": {

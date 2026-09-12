@@ -1,4 +1,5 @@
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import { UnknownFileIcon } from "./UnknownFileIcon"
 import { CustomFolderMagicIcon } from "@/pages/superMagic/components/TopicFilesButton/components/CustomFolderMagicIcon"
 import { MagicSystemFolderIcon } from "@/pages/superMagic/components/TopicFilesButton/components/MagicSystemFolderIcon"
 import { TopicFileIcon } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileIcon"
@@ -122,6 +123,7 @@ export function ProjectResourceIcon({
 				resourceItem.file_extension
 			}
 			size={size}
+			fallbackIcon={<UnknownFileIcon file={resourceItem} size={size} />}
 		/>
 	)
 }

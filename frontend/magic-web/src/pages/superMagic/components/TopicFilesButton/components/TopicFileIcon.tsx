@@ -19,7 +19,8 @@ import fileSkillsIcon from "../assets/file-md-skills.svg"
 import fileSoulIcon from "../assets/file-md-soul.svg"
 import fileToolsIcon from "../assets/file-md-tools.svg"
 import fileUserIcon from "../assets/file-md-user.svg"
-import fileOtherIcon from "../assets/file-other.svg"
+import fileOtherIcon from "@/components/base/MagicFileIcon/assets/other.svg"
+import type { ReactNode } from "react"
 import filePdfIcon from "../assets/file-pdf.svg"
 import filePhpIcon from "../assets/file-php.svg"
 import filePptIcon from "../assets/file-ppt.svg"
@@ -63,6 +64,7 @@ interface TopicFileIconProps {
 	size?: number
 	className?: string
 	dataTestId?: string
+	fallbackIcon?: ReactNode
 }
 
 const FILE_ICON_SRC_MAP: Record<string, string> = {
@@ -174,6 +176,7 @@ export function TopicFileIcon({
 	size,
 	className,
 	dataTestId,
+	fallbackIcon,
 }: TopicFileIconProps) {
 	const resolvedMagicVariant = magicVariant || (isMagicFolder ? "magic-root" : undefined)
 	const resolvedClassName =
@@ -195,6 +198,9 @@ export function TopicFileIcon({
 	}
 
 	const iconSrc = isDirectory ? getFolderIconSrc(hasChildren) : getFileIconSrc(fileExtension)
+	if (!isDirectory && iconSrc === fileOtherIcon && fallbackIcon) {
+		return <>{fallbackIcon}</>
+	}
 
 	return (
 		<img

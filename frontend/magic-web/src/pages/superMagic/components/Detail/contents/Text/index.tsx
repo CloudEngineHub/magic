@@ -17,8 +17,15 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import useExportMenuItems from "../HTML/useExportMenuItems"
 import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
 import { textToHtml } from "../../../../utils/textToHtml"
+import type { TextReadOnlyPreview } from "../../types"
+import {
+	FileActionVisibilityProvider,
+	useFileActionVisibility,
+} from "@/pages/superMagic/providers/file-action-visibility-provider"
 
 export default function Text(props: any) {
+	const readOnlyPreview: TextReadOnlyPreview | undefined = props.readOnlyPreview
+	const inheritedFileActionVisibility = useFileActionVisibility()
 	const {
 		type,
 		data,
@@ -35,7 +42,7 @@ export default function Text(props: any) {
 		fileContent,
 		currentFile,
 		detailMode,
-		isEditMode,
+		isEditMode: requestedEditMode,
 		saveEditContent,
 		setIsEditMode,
 		allowEdit,
@@ -48,7 +55,9 @@ export default function Text(props: any) {
 		attachments,
 		exportFile,
 		isExporting,
+		headerRenderMode,
 	} = props
+	const isEditMode = !readOnlyPreview && requestedEditMode
 
 	const { file_id } = data
 	const { t } = useTranslation("super")
@@ -63,6 +72,7 @@ export default function Text(props: any) {
 		isNewestVersion,
 		isDeleted,
 	} = useFileData({
+		enabled: !readOnlyPreview,
 		file_id,
 		updatedAt,
 		isEditing: isEditMode,
@@ -73,14 +83,16 @@ export default function Text(props: any) {
 	const isMobile = useIsMobile()
 	const textAreaRef = useRef<any>(null)
 
-	const [content, setContent] = useState<string>("")
+	const [localContent, setContent] = useState<string>("")
+	const content = readOnlyPreview?.content ?? localContent
 	const [editingContent, setEditingContent] = useState<string>("")
 
 	// 初始化 content
 	useEffect(() => {
+		if (readOnlyPreview) return
 		const displayContent = fileContent || initialContent
 		setContent(displayContent || "")
-	}, [fileContent, initialContent])
+	}, [fileContent, initialContent, readOnlyPreview])
 
 	// 当进入编辑模式时，自动聚焦到 TextArea
 	useEffect(() => {
@@ -94,6 +106,7 @@ export default function Text(props: any) {
 
 	// 按钮处理函数
 	const handleEdit = useMemoizedFn(() => {
+		if (readOnlyPreview) return
 		if (setIsEditMode) {
 			setIsEditMode(true)
 			// 初始化编辑内容
@@ -102,6 +115,7 @@ export default function Text(props: any) {
 	})
 
 	const handleSave = useMemoizedFn(async () => {
+		if (readOnlyPreview) return
 		if ((editingContent || editingContent === "") && editingContent !== content) {
 			// 保存文本编辑内容，使用 shadow 函数加密
 			const enable_shadow = true
@@ -207,18 +221,23 @@ export default function Text(props: any) {
 		isExporting: isExporting || isExportingImage,
 		showButtonText: true,
 		supportPPT: false,
-		showExportImage: true,
+		showExportImage: !readOnlyPreview,
 		showExportPdf: false,
 	})
 
 	const headerActionConfig = useMemo<HeaderActionConfig>(
 		() => ({
+			overrides: readOnlyPreview
+				? {
+						refresh: { onClick: readOnlyPreview.refresh },
+					}
+				: undefined,
 			customActions: [
 				{
 					key: "text-export-dropdown",
 					zone: "secondary",
 					after: "download",
-					visible: () => !isMobile && allowDownload !== false,
+					visible: () => !readOnlyPreview && !isMobile && allowDownload !== false,
 					render: () => ExportDropdownButton,
 				},
 				{
@@ -226,6 +245,7 @@ export default function Text(props: any) {
 					zone: "primary",
 					visible: () =>
 						Boolean(
+							!readOnlyPreview &&
 							allowEdit &&
 							!isMobile &&
 							data?.file_id &&
@@ -245,7 +265,12 @@ export default function Text(props: any) {
 					zone: "primary",
 					visible: () =>
 						Boolean(
-							setIsEditMode && allowEdit && !isMobile && file_id && isNewestVersion,
+							!readOnlyPreview &&
+							setIsEditMode &&
+							allowEdit &&
+							!isMobile &&
+							file_id &&
+							isNewestVersion,
 						),
 					render: (context) => (
 						<FileEditButtons
@@ -262,6 +287,7 @@ export default function Text(props: any) {
 			],
 		}),
 		[
+			readOnlyPreview,
 			allowDownload,
 			allowEdit,
 			isMobile,
@@ -282,16 +308,16 @@ export default function Text(props: any) {
 	const headerContext = {
 		type,
 		onFullscreen,
-		onDownload: () => onDownload?.(file_id, fileVersion),
+		onDownload: () => onDownload?.(file_id, readOnlyPreview ? data.file_version : fileVersion),
 		isFromNode,
 		isFullscreen,
 		viewMode,
 		onViewModeChange,
-		onCopy,
-		fileContent: fileContent || content,
+		onCopy: readOnlyPreview ? undefined : onCopy,
+		fileContent: readOnlyPreview ? content : fileContent || content,
 		currentFile,
 		detailMode,
-		showDownload: false,
+		showDownload: Boolean(readOnlyPreview) && allowDownload !== false,
 		isEditMode,
 		fileVersion,
 		isNewestFileVersion: isNewestVersion,
@@ -302,9 +328,10 @@ export default function Text(props: any) {
 		allowEdit,
 		actionConfig: headerActionConfig,
 		attachments,
+		renderMode: headerRenderMode,
 	}
 
-	return (
+	const preview = (
 		<div
 			className={cn(
 				documentFlowFullscreen
@@ -350,7 +377,7 @@ export default function Text(props: any) {
 				</div>
 			)}
 			{/* 底部 */}
-			{showFooter && (
+			{showFooter && !readOnlyPreview && (
 				<CommonFooter
 					fileVersion={fileVersion}
 					changeFileVersion={changeFileVersion}
@@ -362,5 +389,16 @@ export default function Text(props: any) {
 				/>
 			)}
 		</div>
+	)
+
+	// 只读仅限制内容修改与历史还原；继承分享、下载等原有权限。
+	return readOnlyPreview ? (
+		<FileActionVisibilityProvider
+			value={{ ...inheritedFileActionVisibility, hideVersionHistory: true }}
+		>
+			{preview}
+		</FileActionVisibilityProvider>
+	) : (
+		preview
 	)
 }

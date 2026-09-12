@@ -1,4 +1,5 @@
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import { UnknownFileIcon } from "@/pages/superMagic/components/TopicFilesButton/components/UnknownFileIcon"
 import { CustomFolderMagicIcon } from "@/pages/superMagic/components/TopicFilesButton/components/CustomFolderMagicIcon"
 import { SlidesTemplateFolderIcon } from "@/pages/superMagic/components/TopicFilesButton/components/SlidesTemplateFolderIcon"
 import { findFileInTree } from "@/pages/superMagic/components/TopicFilesButton/hooks/fileSelectionUtils"
@@ -71,5 +72,12 @@ export const FileTabMagicIcon = memo(function FileTabMagicIcon({
 		)
 	}
 
-	return <MagicFileIcon type={typeFallback} size={size} className={className} />
+	return (
+		<MagicFileIcon
+			type={typeFallback}
+			size={size}
+			className={className}
+			fallbackIcon={<UnknownFileIcon file={fd} size={size} className={className} />}
+		/>
+	)
 })
