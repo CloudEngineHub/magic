@@ -16,6 +16,7 @@ interface VirtualFolderItem {
 }
 
 interface UseVirtualFolderOptions {
+	resolveSiblings?: (parentPath?: string) => Promise<AttachmentItem[]>
 	allowDotStart?: boolean
 	isCurrent?: () => boolean
 	attachments: AttachmentItem[]
@@ -202,7 +203,10 @@ export function useVirtualFolder(options: UseVirtualFolderOptions) {
 		}
 
 		// 检查是否重复
-		if (checkDuplicateFileName(trimmedName, attachments, virtualFolder.parentPath)) {
+		if (
+			!options.resolveSiblings &&
+			checkDuplicateFileName(trimmedName, attachments, virtualFolder.parentPath)
+		) {
 			setErrorMessage("")
 			setTimeout(() => {
 				setErrorMessage(t("topicFiles.contextMenu.newFolder.duplicateError"))
@@ -213,6 +217,14 @@ export function useVirtualFolder(options: UseVirtualFolderOptions) {
 		creatingRef.current = true
 		setIsCreating(true)
 		try {
+			if (options.resolveSiblings) {
+				const siblings = await options.resolveSiblings(virtualFolder.parentPath)
+				if (!isCurrent()) return
+				if (checkDuplicateFileName(trimmedName, siblings)) {
+					setErrorMessage(t("topicFiles.contextMenu.newFolder.duplicateError"))
+					return
+				}
+			}
 			console.log("创建文件夹:", {
 				name: trimmedName,
 				parentPath: virtualFolder.parentPath,

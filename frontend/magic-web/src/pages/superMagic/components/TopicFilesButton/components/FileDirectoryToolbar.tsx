@@ -31,7 +31,6 @@ interface FileDirectoryToolbarProps extends Pick<
 	| "onSelectionChange"
 	| "onSearchChange"
 > {
-	compact: boolean
 	externalSearch?: string
 	search: string
 	setSearch: (search: string) => void
@@ -48,7 +47,6 @@ interface FileDirectoryToolbarProps extends Pick<
 }
 
 export function FileDirectoryToolbar({
-	compact,
 	externalSearch,
 	search,
 	setSearch,
@@ -75,12 +73,7 @@ export function FileDirectoryToolbar({
 	const { t } = useTranslation("super")
 	return (
 		<>
-			<div
-				className={cn(
-					"flex shrink-0 flex-wrap items-center gap-1",
-					compact ? "px-2 py-1" : "border-b px-4 py-2",
-				)}
-			>
+			<div className={cn("flex shrink-0 flex-wrap items-center gap-1", "border-b px-4 py-2")}>
 				{externalSearch === undefined && (
 					<div className="relative min-w-20 flex-1">
 						<Search size={14} className="absolute left-2 top-2 text-muted-foreground" />
@@ -144,28 +137,26 @@ export function FileDirectoryToolbar({
 						<SquareCheck size={16} />
 					</Button>
 				)}
-				{!compact && (
-					<>
-						<Button
-							variant={!grid ? "secondary" : "ghost"}
-							size="icon"
-							className="size-7"
-							aria-label={t("userSpace.listView")}
-							onClick={() => setGrid(false)}
-						>
-							<List size={16} />
-						</Button>
-						<Button
-							variant={grid ? "secondary" : "ghost"}
-							size="icon"
-							className="size-7"
-							aria-label={t("userSpace.gridView")}
-							onClick={() => setGrid(true)}
-						>
-							<LayoutGrid size={16} />
-						</Button>
-					</>
-				)}
+				<>
+					<Button
+						variant={!grid ? "secondary" : "ghost"}
+						size="icon"
+						className="size-7"
+						aria-label={t("userSpace.listView")}
+						onClick={() => setGrid(false)}
+					>
+						<List size={16} />
+					</Button>
+					<Button
+						variant={grid ? "secondary" : "ghost"}
+						size="icon"
+						className="size-7"
+						aria-label={t("userSpace.gridView")}
+						onClick={() => setGrid(true)}
+					>
+						<LayoutGrid size={16} />
+					</Button>
+				</>
 			</div>
 			{selecting && (
 				<div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-1 text-xs">

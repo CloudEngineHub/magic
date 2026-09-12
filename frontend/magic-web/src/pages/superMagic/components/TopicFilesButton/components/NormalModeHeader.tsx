@@ -33,6 +33,7 @@ interface NormalModeHeaderProps {
 	onAddAICard?: () => void
 	onAddFolder?: () => void
 	allFoldersExpanded?: boolean
+	expandAllLabel?: string
 	onToggleAllFolders?: () => void
 	onUploadFile?: () => void
 	onUploadFolder?: () => void
@@ -56,6 +57,7 @@ function NormalModeHeader({
 	onAddAICard,
 	onAddFolder,
 	allFoldersExpanded,
+	expandAllLabel,
 	onToggleAllFolders,
 	onUploadFile,
 	onUploadFolder,
@@ -68,7 +70,7 @@ function NormalModeHeader({
 	const isMobile = useIsMobile()
 	const toggleAllFoldersLabel = allFoldersExpanded
 		? t("fileTree.collapseAll")
-		: t("fileTree.expandAll")
+		: (expandAllLabel ?? t("fileTree.expandAll"))
 
 	return (
 		<div className={cn("flex h-8 w-full items-center gap-1 pl-4 pr-2", className)}>

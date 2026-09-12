@@ -4,7 +4,10 @@ import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEdit
 import type { TiptapMentionAttributes } from "../tiptap-plugin/types"
 import { MentionItemType, type UserFileReferenceMention } from "../types"
 import { resolveFileReference } from "@/pages/superMagic/services/userFileReferenceResolver"
-import { isValidProjectReferenceId } from "@/pages/superMagic/utils/markdownFileReference"
+import {
+	getFileDisplayPath,
+	isValidProjectReferenceId,
+} from "@/pages/superMagic/utils/markdownFileReference"
 import {
 	createDirectoryMentionData,
 	createProjectFileMentionData,
@@ -21,7 +24,7 @@ type ProjectFolderLookup = Parameters<typeof resolveFolderWorkspaceEntryFromProj
 export function createUserFileMention(
 	reference: Extract<FileReference, { space_type: "user" }>,
 ): UserFileReferenceMention {
-	const path = "~/" + reference.space_relative_path
+	const path = getFileDisplayPath({ file_reference: reference })
 	if (reference.is_directory) {
 		return {
 			type: MentionItemType.USER_DIRECTORY,

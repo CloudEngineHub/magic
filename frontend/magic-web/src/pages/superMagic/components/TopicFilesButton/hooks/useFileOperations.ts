@@ -237,7 +237,8 @@ export interface UseFileOperationsOptions {
 	projectId?: string
 	/** 文件上传凭证所属的特殊空间。 */
 	fileScope?: FileScope
-	resolveCreateParent?: () => Promise<string>
+	resolveCreateParent?: (parentPath?: string) => Promise<string>
+	onNodeCreated?: (file: AttachmentItem) => Promise<AttachmentItem>
 	isCurrent?: () => boolean
 	getItemId?: (item: AttachmentItem) => string
 	onFileDelete?: (fileId: string) => Promise<void>
@@ -707,7 +708,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		}
 		assertCurrent()
 		const resolvedParentId = options.resolveCreateParent
-			? await options.resolveCreateParent()
+			? await options.resolveCreateParent(parentPath)
 			: getParentIdFromPath(parentPath)
 		assertCurrent()
 		if (!resolvedParentId) throw new Error("User directory is unavailable")
@@ -728,7 +729,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			space_type: "user",
 		})
 		assertCurrent()
-		const result = toUserAttachment(file, "")
+		const created = toUserAttachment(file, "")
+		const result = options.onNodeCreated ? await options.onNodeCreated(created) : created
 		onUpdateAttachments?.()
 		if (!isDirectory) onFileCreated?.(result)
 		return result

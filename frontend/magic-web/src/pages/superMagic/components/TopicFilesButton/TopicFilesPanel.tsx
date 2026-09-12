@@ -51,7 +51,10 @@ import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWor
 import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
 
 interface TopicFilesPanelProps {
+	loading?: boolean
 	className?: string
+	fitContent?: boolean
+	scrollElementRef?: React.RefObject<HTMLElement>
 	title?: string
 	/** 是否显示文件树内部标题。 */
 	showTitle?: boolean
@@ -121,6 +124,9 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 	function TopicFilesPanel(
 		{
 			className,
+			loading = false,
+			fitContent = false,
+			scrollElementRef,
 			title,
 			showTitle = true,
 			attachments = [],
@@ -487,6 +493,10 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 
 		const handleUploadFile = () => {
 			if (!allowEdit) return
+			if (spaceConfig?.operations) {
+				coreRef.current?.handleUploadFile()
+				return
+			}
 			handleCustomUploadFile()
 		}
 
@@ -503,6 +513,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 					.then(() => {
 						magicToast.success(t("common.refreshSuccess"))
 					})
+					.catch(() => magicToast.error(t("common.refreshFailed")))
 					.finally(() => {
 						setRefreshLoading(false)
 					})
@@ -528,12 +539,14 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		const handleCancelSelect = () => {
 			setIsSelectMode(false)
 			// 清空选择
-			pubsub.publish(PubSubEvents.Deselect_All_Files)
+			if (spaceConfig?.directorySource) coreRef.current?.deselectAll()
+			else pubsub.publish(PubSubEvents.Deselect_All_Files)
 		}
 
 		// 处理全选
 		const handleSelectAll = () => {
-			pubsub.publish(PubSubEvents.Select_All_Files)
+			if (spaceConfig?.directorySource) coreRef.current?.selectAll()
+			else pubsub.publish(PubSubEvents.Select_All_Files)
 		}
 
 		// 处理取消全选
@@ -542,6 +555,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		}
 
 		useEffect(() => {
+			if (spaceConfig?.directorySource) return
 			const handleUpdateAttachmentsLoading = (loading: boolean) => {
 				setRefreshLoading(loading)
 			}
@@ -588,7 +602,11 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		return (
 			<>
 				<div
-					className={cn("flex h-full flex-col gap-0.5", className)}
+					className={cn(
+						"flex flex-col gap-0.5",
+						fitContent ? "min-h-0 shrink-0" : "h-full",
+						className,
+					)}
 					data-testid="topic-files-panel"
 				>
 					{shouldUseProjectDetailMobileView ? (
@@ -597,7 +615,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 							activeFileId={activeFileId}
 							allowEdit={allowEdit}
 							mobileViewVariant={mobileViewVariant}
-							refreshLoading={refreshLoading}
+							refreshLoading={loading || refreshLoading}
 							onRefresh={handleRefreshList}
 							selectionResetKey={projectDetailFilesController.selectionResetKey}
 							setUserSelectDetail={setUserSelectDetail}
@@ -643,6 +661,11 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 							{/* Header Section */}
 							{isSearchMode ? (
 								<SearchModeHeader
+									placeholder={
+										spaceConfig?.directorySource
+											? t("userSpace.searchLoaded")
+											: undefined
+									}
 									key="search-header"
 									searchValue={rawSearchValue}
 									onSearchChange={handleSearchChange}
@@ -667,10 +690,15 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								/>
 							) : (
 								<NormalModeHeader
+									expandAllLabel={
+										spaceConfig?.directorySource
+											? t("userSpace.expandLoaded")
+											: undefined
+									}
 									key="normal-header"
 									title={resolvedTitle}
 									isShareRoute={isShareRoute}
-									refreshLoading={refreshLoading}
+									refreshLoading={loading || refreshLoading}
 									allowEdit={allowEdit}
 									showMobileActions={showMobileActions}
 									onRefresh={handleRefreshList}
@@ -702,7 +730,9 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 										capabilities.upload ? handleUploadFile : undefined
 									}
 									onUploadFolder={
-										capabilities.upload ? handleUploadFolder : undefined
+										capabilities.upload && !spaceConfig?.directorySource
+											? handleUploadFolder
+											: undefined
 									}
 									onImportFromOtherProject={
 										capabilities.importFromOtherProject
@@ -763,12 +793,14 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								allowCopyTo={allowCopyTo}
 								allowReadonlySelection={isShareRoute}
 								resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
-								refreshLoading={refreshLoading}
+								refreshLoading={loading || refreshLoading}
 								onSaveSlidesTemplate={onSaveSlidesTemplate}
 								onConvertToSlidesTemplate={onConvertToSlidesTemplate}
 								spaceConfig={spaceConfig}
 								isItemSelectable={isItemSelectable}
 								operationRoot={operationRoot}
+								fitContent={fitContent}
+								scrollElementRef={scrollElementRef}
 							/>
 						</>
 					)}

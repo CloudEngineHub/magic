@@ -1,136 +1,107 @@
+import { lazy, useEffect, useRef, type ComponentProps } from "react"
 import { observer } from "mobx-react-lite"
-import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
-import { Button } from "@/components/shadcn-ui/button"
-import magicToast from "@/components/base/MagicToaster/utils"
-import CommonHeaderV2 from "../Detail/components/CommonHeaderV2"
-import type { CommonHeaderV2Props } from "../Detail/components/CommonHeaderV2/types"
-import FileEditButtons from "../Detail/components/EditToolbar/FileEditButtons"
-import EditorBody from "../Detail/contents/Md/components/EditorBody"
-import { DetailType } from "../Detail/types"
+import { DetailType, type TextFileSession } from "../Detail/types"
 import type { FileItem } from "../Detail/components/FilesViewer/types"
-import useSaveHandlerRegistration from "../Detail/hooks/useSaveHandlerRegistration"
 import { MemoryEditConflictDialog } from "../LongTremMemory/components/MemoryEditConflictDialog"
-import { getFileReferenceIdentityKey } from "../../services/userFileReferenceResolver"
+import { resolveUserFileHref } from "../../utils/markdownFileReference"
+import { getTemporaryDownloadUrl } from "../../utils/api"
+import {
+	getFileReferenceIdentityKey,
+	resolveFileReference,
+} from "../../services/userFileReferenceResolver"
 import { useFileOperations } from "../TopicFilesButton/hooks/useFileOperations"
 import { useUserFileEditor } from "./hooks/useUserFileEditor"
 
-interface UserTextPreviewProps extends Omit<CommonHeaderV2Props, "isEditMode"> {
+const Md = lazy(() => import("../Detail/contents/Md"))
+const Text = lazy(() => import("../Detail/contents/Text"))
+const Code = lazy(() => import("../Detail/contents/Code"))
+
+type UserTextPreviewProps = Omit<ComponentProps<typeof Md>, "data"> & {
 	data: FileItem
 	isEditMode: boolean
 	setIsEditMode: (value: boolean) => void
-	onRegisterSaveHandler?: (handler: (() => Promise<void>) | null) => void
-	isTabActive?: boolean
-	showFileHeader?: boolean
 }
 
-export default observer(function UserTextPreview({
-	data,
-	isEditMode,
-	setIsEditMode,
-	onRegisterSaveHandler,
-	isTabActive = true,
-	showFileHeader = true,
-	...headerProps
-}: UserTextPreviewProps) {
-	const { t } = useTranslation("super")
+/** 原预览器负责 UI 和关闭保存注册；用户会话只负责稳定快照、草稿和冲突处理。 */
+export default observer(function UserTextPreview({ data, ...props }: UserTextPreviewProps) {
 	const identityKey = getFileReferenceIdentityKey()
-	const downloadItem = {
-		file_id: data.file_id,
-		file_name: data.file_name,
-		file_extension: data.file_extension,
+	const currentFile = useRef<string | null>(data.file_id)
+	currentFile.current = data.file_id
+	useEffect(
+		() => () => {
+			currentFile.current = null
+		},
+		[],
+	)
+	const assertCurrent = () => {
+		if (currentFile.current !== data.file_id || identityKey !== getFileReferenceIdentityKey())
+			throw new DOMException("File changed", "AbortError")
 	}
+	const editor = useUserFileEditor(data.file_id, props.isEditMode, identityKey)
 	const { handleDownloadOriginal } = useFileOperations({
 		fileScope: "user",
-		attachments: [downloadItem],
 		isCurrent: () => identityKey === getFileReferenceIdentityKey(),
 	})
-	const editor = useUserFileEditor(data.file_id, isEditMode, identityKey)
-	const save = useMemoizedFn(async () => {
-		await editor.save()
+	const resolveRelativeFile = useMemoizedFn(async (href: string) => {
+		assertCurrent()
+		const path = data.file_reference?.space_relative_path ?? data.relative_file_path
+		const relativePath = path ? resolveUserFileHref(href, path) : null
+		if (!relativePath) return undefined
+		const result = await resolveFileReference({
+			space_type: "user",
+			space_relative_path: relativePath,
+		})
+		assertCurrent()
+		if (result.status !== "resolved" || result.reference.space_type !== "user") return undefined
+		return {
+			...result.reference,
+			file_reference: result.reference,
+			relative_file_path: result.reference.space_relative_path,
+		}
 	})
-	useSaveHandlerRegistration({ isEditMode, handleSave: save, onRegisterSaveHandler })
-	const saveFromButton = async (exit = false) => {
-		try {
-			await save()
-			if (exit) setIsEditMode(false)
-		} catch {
-			/* 保存服务已展示原因，冲突时保留编辑态。 */
-		}
+	const resolveImageUrl = useMemoizedFn(async (href: string) => {
+		const file = await resolveRelativeFile(href)
+		if (!file || file.is_directory) return href
+		const urls = await getTemporaryDownloadUrl({ file_ids: [file.file_id] })
+		assertCurrent()
+		return urls?.[0]?.url ?? href
+	})
+	const save = useMemoizedFn(() => editor.save())
+	const download = useMemoizedFn(() =>
+		handleDownloadOriginal({
+			file_id: data.file_id,
+			file_name: data.file_name,
+			file_extension: data.file_extension,
+		}),
+	)
+	const textFileSession: TextFileSession = {
+		content: editor.snapshot?.content ?? "",
+		draft: editor.draft,
+		loading: editor.loading,
+		loadError: editor.loadError,
+		saving: editor.saving,
+		setDraft: editor.setDraft,
+		refresh: editor.load,
+		save,
 	}
-	const download = async () => {
-		try {
-			await handleDownloadOriginal(downloadItem)
-		} catch {
-			magicToast.error(t("topicFiles.downloadFailed"))
-		}
-	}
-
+	const Preview = props.type === DetailType.Md ? Md : props.type === DetailType.Text ? Text : Code
 	return (
-		<div className="flex h-full min-h-0 flex-col">
-			{showFileHeader && (
-				<>
-					<CommonHeaderV2
-						{...headerProps}
-						isEditMode={isEditMode}
-						fileContent={editor.snapshot?.content}
-						showRefreshButton={false}
-						onDownload={() => void download()}
-						actionConfig={{
-							hideDefaults: ["viewMode", "versionMenu", "share"],
-							customActions: [
-								{
-									key: "user-edit",
-									zone: "primary",
-									render: () =>
-										headerProps.allowEdit !== false && (
-											<FileEditButtons
-												isEditMode={isEditMode}
-												isSaving={editor.saving}
-												interactionDisabled={editor.loading || !isTabActive}
-												onEdit={() => setIsEditMode(true)}
-												onSave={() => saveFromButton()}
-												onSaveAndExit={() => saveFromButton(true)}
-												onCancel={() => setIsEditMode(false)}
-											/>
-										),
-								},
-							],
-						}}
-					/>
-				</>
-			)}
-			{editor.loadError ? (
-				<div
-					role="alert"
-					className="flex flex-1 flex-col items-center justify-center gap-2 text-sm"
-				>
-					{t("common.fileNotFoundOrLoadFailed")}
-					<Button variant="outline" onClick={() => void editor.load()}>
-						{t("userSpace.retry")}
-					</Button>
-				</div>
-			) : (
-				<EditorBody
-					isLoading={editor.loading}
-					content={editor.snapshot?.content ?? ""}
-					processedContent={editor.snapshot?.content ?? ""}
-					isEditMode={isEditMode}
-					editContent={editor.draft}
-					setEditContent={editor.setDraft}
-					onSave={() => void saveFromButton()}
-					isTabActive={isTabActive}
-					viewMode={
-						isEditMode || headerProps.type !== DetailType.Md ? "code" : "markdown"
-					}
-					language={
-						headerProps.type === DetailType.Md
-							? "markdown"
-							: data.file_extension || "text"
-					}
-					className="min-h-0 flex-1 overflow-auto [&_.simple-editor]:p-4"
-				/>
-			)}
+		<>
+			<Preview
+				{...props}
+				data={data}
+				{...(props.type === DetailType.Code ? { file_name: data.file_name } : {})}
+				textFileSession={textFileSession}
+				resolveRelativeFile={resolveRelativeFile}
+				resolveImageUrl={resolveImageUrl}
+				attachments={undefined}
+				attachmentList={undefined}
+				selectedProject={undefined}
+				onCopy={() => void navigator.clipboard.writeText(textFileSession.content)}
+				onDownload={download}
+				exportFile={download}
+			/>
 			<MemoryEditConflictDialog
 				open={Boolean(editor.conflict)}
 				loading={editor.saving}
@@ -143,6 +114,6 @@ export default observer(function UserTextPreview({
 					})
 				}}
 			/>
-		</div>
+		</>
 	)
 })

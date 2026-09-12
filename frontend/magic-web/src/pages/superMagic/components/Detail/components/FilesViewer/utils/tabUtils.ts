@@ -392,6 +392,7 @@ export function convertFileToTabItem(
 export function calculateCalvedRelativePath(
 	filePath: string | undefined,
 	existingPaths: string[],
+	spaceType?: "user" | "project",
 ): string | undefined {
 	if (!filePath) return undefined
 
@@ -409,6 +410,11 @@ export function calculateCalvedRelativePath(
 	// If no duplicates found, no need for calvedRelativePath
 	if (duplicateFilenames.length === 0) {
 		return undefined
+	}
+
+	if (spaceType === "user") {
+		const parent = pathParts.slice(0, -1).join("/")
+		return parent === "~" ? "~/" : parent
 	}
 
 	// Calculate minimum required parent directories to make paths unique

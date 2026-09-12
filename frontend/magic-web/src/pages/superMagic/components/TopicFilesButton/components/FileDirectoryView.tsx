@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
+import { useVirtualScrollMargin } from "../hooks/useVirtualScrollMargin"
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useSize } from "ahooks"
 import { ArrowLeft, ChevronRight, MoreHorizontal } from "lucide-react"
@@ -20,6 +21,7 @@ export interface DirectoryBreadcrumb {
 	name: string
 }
 export interface FileDirectoryViewProps {
+	scrollElementRef?: React.RefObject<HTMLElement>
 	items: AttachmentItem[]
 	path: DirectoryBreadcrumb[]
 	rootName: string
@@ -38,13 +40,9 @@ export interface FileDirectoryViewProps {
 	loading?: boolean
 	error?: boolean
 	onRetry: () => void
-	compact?: boolean
 	search?: string
 	onSearchChange?: (value: string) => void
 	activeFileId?: string | null
-	itemLabel?: (item: AttachmentItem) => ReactNode
-	itemIcon?: (item: AttachmentItem, size: number) => ReactNode
-	footer?: ReactNode
 }
 
 /** 明确按当前界面时区展示；无时区的服务端时间按 UTC 解析。 */
@@ -77,6 +75,7 @@ export function formatDirectoryFileTime(
 
 /** 项目和用户文件共享目录交互；读取与修改由所属空间提供，视图不构造项目身份。 */
 export function FileDirectoryView({
+	scrollElementRef,
 	items,
 	path,
 	rootName,
@@ -95,13 +94,9 @@ export function FileDirectoryView({
 	loading = false,
 	error = false,
 	onRetry,
-	compact = false,
 	search: externalSearch,
 	onSearchChange,
 	activeFileId,
-	itemLabel,
-	itemIcon,
-	footer,
 }: FileDirectoryViewProps) {
 	const { t, i18n } = useTranslation("super")
 	const [search, setSearch] = useState("")
@@ -110,6 +105,7 @@ export function FileDirectoryView({
 	const [sort, setSort] = useState<"name" | "time">("name")
 	const scrollRef = useRef<HTMLDivElement>(null)
 	const size = useSize(scrollRef)
+	const { ref: rowsRef, scrollMargin } = useVirtualScrollMargin(scrollElementRef)
 	const query = (externalSearch ?? search).toLocaleLowerCase()
 	const compareNames = useMemo(
 		() => createAttachmentNodeComparator(i18n.language),
@@ -129,12 +125,12 @@ export function FileDirectoryView({
 				),
 		[items, query, sort, compareNames],
 	)
-	const showGrid = grid && !compact
-	const columns = showGrid ? Math.max(1, Math.floor((size?.width ?? 400) / 140)) : 1
-	const rowHeight = showGrid ? 108 : compact ? 36 : 44
+	const columns = grid ? Math.max(1, Math.floor((size?.width ?? 400) / 140)) : 1
+	const rowHeight = grid ? 108 : 44
 	const virtualizer = useVirtualizer({
 		count: Math.ceil(visible.length / columns),
-		getScrollElement: () => scrollRef.current,
+		getScrollElement: () => scrollElementRef?.current ?? scrollRef.current,
+		scrollMargin,
 		estimateSize: () => rowHeight,
 		overscan: 5,
 	})
@@ -168,9 +164,9 @@ export function FileDirectoryView({
 				? columns
 				: event.key === "ArrowUp"
 					? -columns
-					: showGrid && event.key === "ArrowRight"
+					: grid && event.key === "ArrowRight"
 						? 1
-						: showGrid && event.key === "ArrowLeft"
+						: grid && event.key === "ArrowLeft"
 							? -1
 							: 0
 		if (!offset) return
@@ -184,11 +180,11 @@ export function FileDirectoryView({
 		)
 	}
 	return (
-		<div className="flex h-full min-h-0 flex-col bg-background">
+		<div className={cn("flex min-h-0 flex-col bg-background", !scrollElementRef && "h-full")}>
 			<div
 				className={cn(
 					"flex shrink-0 items-center gap-1 overflow-x-auto border-b",
-					compact ? "px-2 py-1" : "px-4 py-3",
+					"px-4 py-3",
 				)}
 			>
 				<Button
@@ -222,7 +218,6 @@ export function FileDirectoryView({
 			</div>
 			<FileDirectoryToolbar
 				onRefresh={onRetry}
-				compact={compact}
 				externalSearch={externalSearch}
 				search={search}
 				setSearch={setSearch}
@@ -245,7 +240,7 @@ export function FileDirectoryView({
 				onDownload={onDownload}
 				allowDirectoryDownload={allowDirectoryDownload}
 			/>
-			{!compact && !showGrid && (
+			{!grid && (
 				<div className="grid shrink-0 grid-cols-[minmax(0,1fr)_80px_32px] gap-2 border-b px-4 py-2 text-xs text-muted-foreground sm:grid-cols-[minmax(0,1fr)_80px_176px_32px]">
 					<button className="text-left" onClick={() => setSort("name")}>
 						{t("userSpace.name")}
@@ -265,7 +260,14 @@ export function FileDirectoryView({
 					</Button>
 				</div>
 			)}
-			<div ref={scrollRef} className="min-h-0 flex-1 overflow-auto" aria-busy={loading}>
+			<div
+				ref={scrollRef}
+				className={cn(
+					"min-h-0",
+					scrollElementRef ? "overflow-visible" : "flex-1 overflow-auto",
+				)}
+				aria-busy={loading}
+			>
 				{!visible.length ? (
 					<p className="p-4 text-center text-xs text-muted-foreground">
 						{loading
@@ -277,14 +279,18 @@ export function FileDirectoryView({
 									: t("userSpace.empty")}
 					</p>
 				) : (
-					<div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+					<div
+						ref={rowsRef}
+						className="relative w-full"
+						style={{ height: virtualizer.getTotalSize() }}
+					>
 						{virtualizer.getVirtualItems().map((row) => (
 							<div
 								key={row.key}
 								className="absolute left-0 top-0 grid w-full gap-2 px-2"
 								style={{
 									height: rowHeight,
-									transform: `translateY(${row.start}px)`,
+									transform: `translateY(${row.start - scrollMargin}px)`,
 									gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
 								}}
 							>
@@ -299,7 +305,7 @@ export function FileDirectoryView({
 											<div
 												className={cn(
 													"group relative min-w-0 rounded-md hover:bg-accent",
-													showGrid
+													grid
 														? "flex flex-col items-center justify-center border p-2"
 														: "flex items-center gap-2 px-1",
 													activeFileId === file.file_id && "bg-accent",
@@ -308,7 +314,7 @@ export function FileDirectoryView({
 												<div
 													className={cn(
 														"flex min-w-0 items-center gap-2",
-														showGrid ? "w-full" : "flex-1",
+														grid ? "w-full" : "flex-1",
 													)}
 												>
 													{selecting && (
@@ -329,7 +335,7 @@ export function FileDirectoryView({
 														}
 														className={cn(
 															"flex min-w-0 flex-1 items-center gap-2 rounded text-left text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring",
-															showGrid && "flex-col text-center",
+															grid && "flex-col text-center",
 														)}
 														draggable
 														onDragStart={(event) =>
@@ -350,21 +356,17 @@ export function FileDirectoryView({
 														}
 														title={file.file_name ?? file.name}
 													>
-														{itemIcon?.(file, showGrid ? 36 : 16) ?? (
-															<TopicFileIcon
-																isDirectory={file.is_directory}
-																fileExtension={file.file_extension}
-																size={showGrid ? 36 : 16}
-															/>
-														)}
+														<TopicFileIcon
+															isDirectory={file.is_directory}
+															fileExtension={file.file_extension}
+															size={grid ? 36 : 16}
+														/>
 														<span className="min-w-0 max-w-full truncate">
-															{itemLabel?.(file) ??
-																file.file_name ??
-																file.name}
+															{file.file_name ?? file.name}
 														</span>
 													</button>
 												</div>
-												{!compact && !showGrid && (
+												{!grid && (
 													<>
 														<span className="w-20 shrink-0 truncate text-xs text-muted-foreground">
 															{file.is_directory
@@ -395,7 +397,7 @@ export function FileDirectoryView({
 														size="icon"
 														className={cn(
 															"size-7 shrink-0",
-															showGrid && "absolute right-2 top-1",
+															grid && "absolute right-2 top-1",
 														)}
 														aria-label={t("userSpace.actions", {
 															name: file.file_name ?? file.name,
@@ -414,7 +416,6 @@ export function FileDirectoryView({
 			</div>
 			<div className="shrink-0 border-t px-3 py-1 text-xs text-muted-foreground">
 				{t("userSpace.itemCount", { count: visible.length })}
-				{footer}
 			</div>
 		</div>
 	)

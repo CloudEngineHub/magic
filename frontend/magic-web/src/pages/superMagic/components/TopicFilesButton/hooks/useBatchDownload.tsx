@@ -42,6 +42,7 @@ import {
 	detectCanvasProjectOperationRisk,
 	getCanvasProjectOperationImpact,
 } from "../utils/canvasProjectOperationRisk"
+import { collectSelectedFiles } from "./useSelectedFilesManager"
 import type { FileScope } from "@/apis/modules/fileScope"
 
 // BatchDeleteFilesRequestDTO 的 file_ids 上限；后代先于父目录，失败后停止后续批次。
@@ -49,6 +50,7 @@ const DELETE_BATCH_SIZE = 500
 
 interface UseBatchDownloadOptions {
 	fileScope?: FileScope
+	onDownloadSelected?: (items: AttachmentItem[]) => Promise<void>
 	resolveDeleteItems?: (items: AttachmentItem[]) => Promise<AttachmentItem[]>
 	beforeDelete?: (ids: string[]) => Promise<boolean>
 	isCurrent?: () => boolean
@@ -263,7 +265,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				}
 			}
 			if (!isCurrent()) return
-			pubsub.publish(PubSubEvents.Cancel_File_Selection)
+			if (options.fileScope !== "user") pubsub.publish(PubSubEvents.Cancel_File_Selection)
 			onUpdateAttachments?.()
 			magicToast.success(t("topicFiles.contextMenu.deleteFileSuccess"))
 			exitSelectMode()
@@ -275,7 +277,16 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 	// 批量删除（不带确认弹窗，由调用方使用 Popconfirm 处理）
 	const handleBatchDelete = async () => {
-		if (selectedItems.size) await deleteItems(filteredFiles, selectedItems)
+		if (!selectedItems.size) return
+		if (!options.resolveDeleteItems) return deleteItems(filteredFiles, selectedItems)
+		const selected = collectSelectedFiles(selectedItems, filteredFiles, getItemId)
+		const items = await options.resolveDeleteItems(selected)
+		if (
+			options.beforeDelete &&
+			!(await options.beforeDelete(collectFileIds({ items, includeFolderIds: true })))
+		)
+			return
+		await deleteItems(items)
 	}
 
 	const deleteWithConfirm = async (selected: AttachmentItem[]) => {
@@ -328,12 +339,20 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 	// 批量下载选中文件
 	const handleBatchDownload = async () => {
-		if (!canDownload || selectedItems.size === 0 || !projectId) return
+		if (!canDownload || selectedItems.size === 0 || (!projectId && !options.onDownloadSelected))
+			return
 		setBatchLoading(true)
 		let keepLoadingForPolling = false
 		try {
 			// 收集选中的文件ID（只收集直接选中的项目，不递归展开文件夹）
 			const selectedFileIds = collectSelectedItemIds(filteredFiles, selectedItems, getItemId)
+			if (options.onDownloadSelected) {
+				const files = collectSelectedFiles(selectedItems, filteredFiles, getItemId)
+				await options.onDownloadSelected(files)
+				if (!options.isCurrent || options.isCurrent()) exitSelectMode()
+				return
+			}
+			if (!projectId) return
 
 			if (selectedFileIds.length === 0) {
 				setBatchLoading(false)
@@ -597,7 +616,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		const firstFileId = fileIds[0]
 		const parentPath = firstFileId ? getInitialParentPath(firstFileId) : []
 
-		if (crossProjectOperation && !isMobile && !isChatProject) {
+		if (crossProjectOperation && options.fileScope !== "user" && !isMobile && !isChatProject) {
 			crossProjectOperation.openMoveModal(fileIds, parentPath)
 		} else if (moveFileHook) {
 			// Mobile and chat projects keep the directory selector.
@@ -731,7 +750,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					]
 				: []),
 		// 批量移动（仅在允许编辑时显示）
-		...(isInProject && allowEdit && allowMove && !hideMoveTo
+		...((isInProject || options.fileScope === "user") && allowEdit && allowMove && !hideMoveTo
 			? [
 					{
 						key: "move",
@@ -763,7 +782,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				]
 			: []),
 		// 分隔线
-		...(isInProject && allowEdit
+		...((isInProject || options.fileScope === "user") && allowEdit
 			? [
 					{
 						type: "divider" as const,
@@ -772,7 +791,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				]
 			: []),
 		// 批量删除（仅在允许编辑时显示）
-		...(isInProject && allowEdit
+		...((isInProject || options.fileScope === "user") && allowEdit
 			? [
 					{
 						key: "delete",
@@ -796,7 +815,12 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					},
 				]
 			: []),
-	]) as MenuProps["items"]
+	]).filter(
+		(item) =>
+			options.fileScope !== "user" ||
+			!item ||
+			!["export-pdf", "export-ppt"].includes(String(item.key)),
+	) as MenuProps["items"]
 	const canShowBatchOperations = showBatchDownload && Boolean(batchMenuItems?.length)
 
 	return {

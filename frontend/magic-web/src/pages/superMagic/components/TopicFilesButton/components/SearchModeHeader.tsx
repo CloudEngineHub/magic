@@ -8,6 +8,7 @@ import { cn } from "@/utils/cn"
 import HeaderTrailingAction from "./HeaderTrailingAction"
 
 interface SearchModeHeaderProps {
+	placeholder?: string
 	searchValue: string
 	onSearchChange: (value: string) => void
 	onSearchCommit?: (value: string) => void
@@ -17,6 +18,7 @@ interface SearchModeHeaderProps {
 }
 
 function SearchModeHeader({
+	placeholder,
 	searchValue,
 	onSearchChange,
 	onSearchCommit,
@@ -66,7 +68,7 @@ function SearchModeHeader({
 				</InputGroupAddon>
 				<InputGroupInput
 					className="h-6"
-					placeholder={t("common.searchFiles")}
+					placeholder={placeholder ?? t("common.searchFiles")}
 					data-testid="file-search-input"
 					value={localValue}
 					onChange={handleChange}

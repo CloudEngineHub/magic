@@ -1,3 +1,6 @@
+import MagicSpin from "@/components/base/MagicSpin"
+import type { TextFileSession } from "../../types"
+import DetailEmpty from "../../components/DetailEmpty"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import { cn } from "@/utils/cn"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
@@ -19,6 +22,8 @@ import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image
 import { textToHtml } from "../../../../utils/textToHtml"
 
 export default function Text(props: any) {
+	const textFileSession: TextFileSession | undefined = props.textFileSession
+	const isTabActive: boolean = props.isTabActive ?? true
 	const {
 		type,
 		data,
@@ -54,6 +59,7 @@ export default function Text(props: any) {
 	const { t } = useTranslation("super")
 
 	const {
+		loading: fileLoading,
 		fileData: initialContent,
 		fileVersion,
 		changeFileVersion,
@@ -63,6 +69,7 @@ export default function Text(props: any) {
 		isNewestVersion,
 		isDeleted,
 	} = useFileData({
+		enabled: !textFileSession,
 		file_id,
 		updatedAt,
 		isEditing: isEditMode,
@@ -73,11 +80,16 @@ export default function Text(props: any) {
 	const isMobile = useIsMobile()
 	const textAreaRef = useRef<any>(null)
 
-	const [content, setContent] = useState<string>("")
-	const [editingContent, setEditingContent] = useState<string>("")
+	const [localContent, setContent] = useState<string>("")
+	const content = textFileSession?.content ?? localContent
+	const loading = textFileSession?.loading ?? fileLoading
+	const [localDraft, setLocalDraft] = useState<string>("")
+	const editingContent = textFileSession?.draft ?? localDraft
+	const setEditingContent = textFileSession?.setDraft ?? setLocalDraft
 
 	// 初始化 content
 	useEffect(() => {
+		if (textFileSession) return
 		const displayContent = fileContent || initialContent
 		setContent(displayContent || "")
 	}, [fileContent, initialContent])
@@ -97,11 +109,12 @@ export default function Text(props: any) {
 		if (setIsEditMode) {
 			setIsEditMode(true)
 			// 初始化编辑内容
-			setEditingContent(content || "")
+			if (!textFileSession) setEditingContent(content || "")
 		}
 	})
 
 	const handleSave = useMemoizedFn(async () => {
+		if (textFileSession) return textFileSession.save()
 		if ((editingContent || editingContent === "") && editingContent !== content) {
 			// 保存文本编辑内容，使用 shadow 函数加密
 			const enable_shadow = true
@@ -143,6 +156,7 @@ export default function Text(props: any) {
 
 	// 当 viewMode 变化时，退出编辑模式
 	useEffect(() => {
+		if (textFileSession) return
 		if (setIsEditMode && isEditMode) {
 			setIsEditMode(false)
 		}
@@ -213,6 +227,14 @@ export default function Text(props: any) {
 
 	const headerActionConfig = useMemo<HeaderActionConfig>(
 		() => ({
+			overrides: textFileSession
+				? {
+						refresh: {
+							onClick: textFileSession.refresh,
+							disabled: loading || textFileSession.saving || isEditMode,
+						},
+					}
+				: undefined,
 			customActions: [
 				{
 					key: "text-export-dropdown",
@@ -234,6 +256,7 @@ export default function Text(props: any) {
 						),
 					render: (context) => (
 						<AIOptimization
+							file={textFileSession ? data : undefined}
 							attachmentList={attachmentList}
 							file_id={data?.file_id}
 							showButtonText={context.showButtonText}
@@ -250,11 +273,23 @@ export default function Text(props: any) {
 					render: (context) => (
 						<FileEditButtons
 							isEditMode={isEditMode}
-							isSaving={false}
+							isSaving={textFileSession?.saving ?? false}
+							interactionDisabled={Boolean(
+								textFileSession &&
+								(loading || textFileSession.loadError || !isTabActive),
+							)}
 							showButtonText={context.showButtonText}
 							onEdit={handleEdit}
-							onSave={handleSave}
-							onSaveAndExit={handleSaveAndExit}
+							onSave={
+								textFileSession
+									? () => handleSave().catch(() => undefined)
+									: handleSave
+							}
+							onSaveAndExit={
+								textFileSession
+									? () => handleSaveAndExit().catch(() => undefined)
+									: handleSaveAndExit
+							}
 							onCancel={handleCancel}
 						/>
 					),
@@ -262,6 +297,9 @@ export default function Text(props: any) {
 			],
 		}),
 		[
+			textFileSession,
+			loading,
+			isTabActive,
 			allowDownload,
 			allowEdit,
 			isMobile,
@@ -313,9 +351,17 @@ export default function Text(props: any) {
 			)}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
-			{isEditMode ? (
+			{textFileSession?.loadError ? (
+				<DetailEmpty
+					title={t("common.fileNotFoundOrLoadFailed")}
+					onRetry={textFileSession.refresh}
+				/>
+			) : textFileSession && loading ? (
+				<MagicSpin spinning />
+			) : isEditMode ? (
 				<Input.TextArea
 					ref={textAreaRef}
+					disabled={textFileSession?.saving}
 					value={editingContent}
 					onChange={(e) => {
 						setEditingContent(e.target.value)

@@ -1,3 +1,4 @@
+import type { AttachmentItem } from "../../../../../TopicFilesButton/hooks/types"
 import { memo, useEffect, useMemo, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import MagicSpin from "@/components/base/MagicSpin"
@@ -52,6 +53,7 @@ interface EditorBodyProps {
 	placeholder?: string
 	attachments?: AttachmentFile[]
 	onOpenFile?: (fileItem: { file_id: string }) => void
+	resolveRelativeFile?: (href: string) => Promise<AttachmentItem | undefined>
 	onSave?: (editor: Editor | null) => void
 	"data-testid"?: string
 	/**
@@ -87,6 +89,7 @@ function EditorBody({
 	placeholder,
 	attachments,
 	onOpenFile,
+	resolveRelativeFile,
 	onSave,
 	"data-testid": dataTestId,
 	resolveImagesFolderParentId,
@@ -126,6 +129,15 @@ function EditorBody({
 				// Open external URL in new tab
 				// Browser will handle anchor navigation automatically
 				window.open(href, "_blank", "noopener,noreferrer")
+				return true
+			}
+
+			if (resolveRelativeFile && onOpenFile) {
+				void resolveRelativeFile(filePath)
+					.then((file) => {
+						if (file?.file_id) onOpenFile({ ...file, file_id: file.file_id })
+					})
+					.catch(() => undefined)
 				return true
 			}
 

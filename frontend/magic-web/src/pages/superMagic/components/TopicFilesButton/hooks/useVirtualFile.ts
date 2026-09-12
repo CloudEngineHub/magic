@@ -34,6 +34,7 @@ interface VirtualFileItem {
 }
 
 interface UseVirtualFileOptions {
+	resolveSiblings?: (parentPath?: string) => Promise<AttachmentItem[]>
 	allowDotStart?: boolean
 	isCurrent?: () => boolean
 	attachments: AttachmentItem[]
@@ -223,7 +224,10 @@ export function useVirtualFile(options: UseVirtualFileOptions) {
 		}
 
 		// 检查是否重复
-		if (checkDuplicateFileName(trimmedName, attachments, virtualFile.parentPath)) {
+		if (
+			!options.resolveSiblings &&
+			checkDuplicateFileName(trimmedName, attachments, virtualFile.parentPath)
+		) {
 			setErrorMessage("")
 			setTimeout(() => {
 				setErrorMessage(t("topicFiles.contextMenu.newFile.duplicateError"))
@@ -234,6 +238,14 @@ export function useVirtualFile(options: UseVirtualFileOptions) {
 		creatingRef.current = true
 		setIsCreating(true)
 		try {
+			if (options.resolveSiblings) {
+				const siblings = await options.resolveSiblings(virtualFile.parentPath)
+				if (!isCurrent()) return
+				if (checkDuplicateFileName(trimmedName, siblings)) {
+					setErrorMessage(t("topicFiles.contextMenu.newFile.duplicateError"))
+					return
+				}
+			}
 			// 获取文件内容模板（与移动端项目详情创建共用单一数据源）
 			const extension = PRESET_FILE_EXTENSION_MAP[virtualFile.type]
 			const content = PRESET_FILE_INITIAL_CONTENT[virtualFile.type]
@@ -246,7 +258,7 @@ export function useVirtualFile(options: UseVirtualFileOptions) {
 
 			// 计算上传目录
 			const targetSuffixDir = virtualFile.parentPath
-				? virtualFile.parentPath.substring(1)
+				? virtualFile.parentPath.replace(/^\//, "")
 				: ""
 
 			console.log("创建虚拟文件:", {

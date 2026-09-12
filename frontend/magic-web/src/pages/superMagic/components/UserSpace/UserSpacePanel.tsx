@@ -1,9 +1,8 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
-import { Brain, Files, FolderTree, Search } from "lucide-react"
+import { Brain, Files, FolderTree } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import { Input } from "@/components/shadcn-ui/input"
 import { cn } from "@/utils/cn"
 import userFilesStore from "@/stores/userFiles"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
@@ -36,17 +35,14 @@ export default observer(function UserSpacePanel({
 	const [view, setView] = useState<UserSpaceView>("files")
 	const [memoryVisited, setMemoryVisited] = useState(false)
 	const [directoryId, setDirectoryId] = useState<string>()
-	const [search, setSearch] = useState("")
 	useEffect(() => {
 		if (previousIdentity.current === identity) return
 		previousIdentity.current = identity
 		setDirectoryId(undefined)
-		setSearch("")
 		setView("files")
 	}, [identity])
 	const locate = (id?: string) => {
 		setDirectoryId(id)
-		setSearch("")
 		setView("files")
 	}
 	return (
@@ -101,7 +97,6 @@ export default observer(function UserSpacePanel({
 						)}
 						onClick={() => {
 							setView(key)
-							setSearch("")
 							if (key === "memory") setMemoryVisited(true)
 						}}
 					>
@@ -110,17 +105,6 @@ export default observer(function UserSpacePanel({
 					</button>
 				))}
 			</div>
-			<div className="relative m-2 shrink-0">
-				<Search size={14} className="absolute left-2 top-2 text-muted-foreground" />
-				<Input
-					className="h-7 pl-7 text-xs"
-					value={search}
-					onChange={(event) => setSearch(event.target.value)}
-					placeholder={t(
-						view === "memory" ? "userSpace.searchMemory" : "userSpace.searchDirectory",
-					)}
-				/>
-			</div>
 			<div className={cn("min-h-0 flex-1", view !== "files" && "hidden")} role="tabpanel">
 				<UserSpaceFilesView
 					directoryId={directoryId}
@@ -128,7 +112,6 @@ export default observer(function UserSpacePanel({
 					onFileClick={onFileClick}
 					topicId={topicId}
 					activeFileId={activeFileId}
-					search={view === "files" ? search : ""}
 				/>
 			</div>
 			{memoryVisited && (
@@ -150,7 +133,6 @@ export default observer(function UserSpacePanel({
 							activeFileId={activeFileId}
 							onFileClick={onFileClick}
 							onLocate={locate}
-							search={view === "memory" ? search : ""}
 						/>
 					</Suspense>
 				</div>

@@ -683,80 +683,86 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 		[attachmentIndex, attachments, batchMoveFiles, folderConflictHandler, moveDuplicateHandler],
 	)
 
-	const moveWithinDirectorySource = useMemoizedFn(async (path: AttachmentItem[]) => {
-		const source = options.directorySource
-		if (!source || directoryMoveRef.current) return
-		const targetId = path.at(-1)?.file_id ?? source.root.file_id
-		if (!targetId) return
-		const controller = new AbortController()
-		directoryMoveRef.current = controller
-		const isCurrent = () => !controller.signal.aborted && (options.isCurrent?.() ?? true)
-		const ids = isBatchMode
-			? batchFileIds
-			: currentMoveItem?.file_id
-				? [currentMoveItem.file_id]
-				: []
-		const items = ids.flatMap((id) => {
-			const file = attachments.find((item) => item.file_id === id)
-			return file ? [file] : []
-		})
-		if (items.length !== ids.length) {
-			directoryMoveRef.current = null
-			magicToast.error(t("topicFiles.error.moveFileFailed"))
-			return
-		}
-		const succeeded: AttachmentItem[] = []
-		const failed: FileMoveFailure[] = []
-		setIsMovingFn(true)
-		try {
-			for (const file of items) {
-				if (!file?.file_id || !isCurrent()) return
-				if (file.parent_id === targetId) {
-					succeeded.push(file)
-					continue
-				}
-				if (
-					file.file_id === targetId ||
-					path.some((parent) => parent.file_id === file.file_id)
-				) {
-					failed.push({ file, message: t("userSpace.invalidMoveTarget") })
-					continue
-				}
-				try {
-					const children = await source.loadChildren(targetId, controller.signal)
-					if (!isCurrent()) return
-					if (checkDuplicateFileName(getItemName(file), children)) {
-						failed.push({ file, message: t("userSpace.nameExists") })
+	const moveWithinDirectorySource = useMemoizedFn(
+		async (path: AttachmentItem[], fileIds?: string[]) => {
+			const source = options.directorySource
+			if (!source || directoryMoveRef.current) return
+			const targetId = path.at(-1)?.file_id ?? source.root.file_id
+			if (!targetId) return
+			const controller = new AbortController()
+			directoryMoveRef.current = controller
+			const isCurrent = () => !controller.signal.aborted && (options.isCurrent?.() ?? true)
+			const ids =
+				fileIds ??
+				(isBatchMode
+					? batchFileIds
+					: currentMoveItem?.file_id
+						? [currentMoveItem.file_id]
+						: [])
+			const items = ids.flatMap((id) => {
+				const file =
+					attachmentIndex?.getItemById(id) ??
+					attachments.find((item) => item.file_id === id)
+				return file ? [file] : []
+			})
+			if (items.length !== ids.length) {
+				directoryMoveRef.current = null
+				magicToast.error(t("topicFiles.error.moveFileFailed"))
+				return
+			}
+			const succeeded: AttachmentItem[] = []
+			const failed: FileMoveFailure[] = []
+			setIsMovingFn(true)
+			try {
+				for (const file of items) {
+					if (!file?.file_id || !isCurrent()) return
+					if (file.parent_id === targetId) {
+						succeeded.push(file)
 						continue
 					}
-					await SuperMagicApi.moveFile({
-						file_id: file.file_id,
-						target_parent_id: targetId,
-					})
-					if (!isCurrent()) return
-					succeeded.push(file)
-				} catch {
-					if (!isCurrent()) return
-					failed.push({ file, message: t("topicFiles.error.moveFileFailed") })
+					if (
+						file.file_id === targetId ||
+						path.some((parent) => parent.file_id === file.file_id)
+					) {
+						failed.push({ file, message: t("userSpace.invalidMoveTarget") })
+						continue
+					}
+					try {
+						const children = await source.loadChildren(targetId, controller.signal)
+						if (!isCurrent()) return
+						if (checkDuplicateFileName(getItemName(file), children)) {
+							failed.push({ file, message: t("userSpace.nameExists") })
+							continue
+						}
+						await SuperMagicApi.moveFile({
+							file_id: file.file_id,
+							target_parent_id: targetId,
+						})
+						if (!isCurrent()) return
+						succeeded.push(file)
+					} catch {
+						if (!isCurrent()) return
+						failed.push({ file, message: t("topicFiles.error.moveFileFailed") })
+					}
+				}
+				if (!isCurrent()) return
+				hideMoveSelector()
+				setFailures(failed)
+				setSuccessCount(succeeded.length)
+				setSelectedItems?.(
+					new Set(failed.flatMap(({ file }) => (file.file_id ? [file.file_id] : []))),
+				)
+				if (!failed.length) magicToast.success(t("topicFiles.success.fileMoved"))
+			} finally {
+				// 停止后续移动不代表已提交请求回滚，来源与目标目录都要重新读取。
+				options.onDirectoryMoveComplete?.(items, targetId)
+				if (directoryMoveRef.current === controller) {
+					directoryMoveRef.current = null
+					setIsMovingFn(false)
 				}
 			}
-			if (!isCurrent()) return
-			hideMoveSelector()
-			setFailures(failed)
-			setSuccessCount(succeeded.length)
-			setSelectedItems?.(
-				new Set(failed.flatMap(({ file }) => (file.file_id ? [file.file_id] : []))),
-			)
-			if (!failed.length) magicToast.success(t("topicFiles.success.fileMoved"))
-		} finally {
-			// 停止后续移动不代表已提交请求回滚，来源与目标目录都要重新读取。
-			options.onDirectoryMoveComplete?.(items, targetId)
-			if (directoryMoveRef.current === controller) {
-				directoryMoveRef.current = null
-				setIsMovingFn(false)
-			}
-		}
-	})
+		},
+	)
 
 	// 确认移动文件
 	const confirmMove = useCallback(
@@ -1047,6 +1053,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 		handleFolderConflictCancel: folderConflictHandler.handleCancel,
 
 		// 选择器配置
+		moveWithinDirectorySource,
 		selectorConfig: {
 			directorySource: options.directorySource,
 			isShowCreateDirectory: options.directorySource ? false : undefined,

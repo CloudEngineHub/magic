@@ -1,4 +1,11 @@
-import { makeAutoObservable, observable, reaction, runInAction } from "mobx"
+import {
+	computed,
+	makeAutoObservable,
+	observable,
+	reaction,
+	runInAction,
+	type IComputedValue,
+} from "mobx"
 import type { MagicFSFile } from "@/apis"
 import {
 	getFileReferenceIdentityKey,
@@ -23,6 +30,7 @@ interface DirectoryRequest {
 	promise: Promise<MagicFSFile[]>
 }
 
+const EMPTY_ATTACHMENTS: AttachmentItem[] = []
 const ROOT_QUERY = "root"
 const EMPTY_DIRECTORY: UserDirectorySnapshot = {
 	ids: [],
@@ -41,6 +49,8 @@ export class UserFilesStore {
 	private fileGuards = new Map<string, { path: string; check: () => Promise<boolean> }>()
 	files = observable.map<string, MagicFSFile>(undefined, { deep: false })
 	directories = observable.map<string, UserDirectorySnapshot>(undefined, { deep: false })
+	expandedKeys = observable.map<string, string[]>(undefined, { deep: false })
+	private attachmentViews = new Map<string, IComputedValue<AttachmentItem>>()
 	private requests = new Map<string, DirectoryRequest>()
 	private requestVersion = 0
 	private uploadCancellations = new Map<string, () => Promise<void>>()
@@ -48,12 +58,16 @@ export class UserFilesStore {
 	constructor() {
 		makeAutoObservable<
 			this,
-			"requests" | "requestVersion" | "uploadCancellations" | "fileGuards"
+			"attachmentViews" | "requests" | "requestVersion" | "uploadCancellations" | "fileGuards"
 		>(
 			this,
 			{
+				attachmentViews: false,
 				files: false,
 				directories: false,
+				expandedKeys: false,
+				getAttachment: false,
+				getTree: false,
 				requests: false,
 				requestVersion: false,
 				uploadCancellations: false,
@@ -79,6 +93,47 @@ export class UserFilesStore {
 			const file = this.files.get(id)
 			return file ? [file] : []
 		})
+	}
+
+	/** 只派生已加载节点；子节点变化沿父链更新，未变化的节点继续复用。 */
+	getAttachment = (id: string): AttachmentItem => {
+		let view = this.attachmentViews.get(id)
+		if (!view) {
+			view = computed((): AttachmentItem => {
+				const file = this.files.get(id)
+				if (!file) throw new Error("User file is unavailable")
+				const path = this.getPath(id)
+					.map((node) => node.name)
+					.join("/")
+				const item = toUserAttachment(file, path)
+				if (!file.is_directory) return item
+				const directory = this.getDirectory(id)
+				return {
+					...item,
+					directoryLoadState: directory.loading
+						? "loading"
+						: directory.error
+							? "error"
+							: directory.loaded
+								? "loaded"
+								: "unloaded",
+					children: directory.ids
+						.filter((child) => this.files.has(child))
+						.map((child) => this.getAttachment(child)),
+				}
+			})
+			this.attachmentViews.set(id, view)
+		}
+		return view.get()
+	}
+
+	getTree = (parentId: string): AttachmentItem[] =>
+		this.files.has(parentId)
+			? (this.getAttachment(parentId).children ?? EMPTY_ATTACHMENTS)
+			: EMPTY_ATTACHMENTS
+
+	setExpandedKeys(rootId: string, keys: string[]): void {
+		this.expandedKeys.set(rootId, keys)
 	}
 
 	async loadDirectory(parentId?: string, force = false): Promise<MagicFSFile[]> {
@@ -275,6 +330,7 @@ export class UserFilesStore {
 			this.requests.delete(id)
 			this.directories.delete(id)
 			this.files.delete(id)
+			this.attachmentViews.delete(id)
 		}
 		for (const [id, directory] of this.directories) {
 			if (directory.ids.some((child) => removed.has(child))) {
@@ -345,6 +401,8 @@ export class UserFilesStore {
 		this.requests.clear()
 		this.files.clear()
 		this.directories.clear()
+		this.expandedKeys.clear()
+		this.attachmentViews.clear()
 		this.rootId = null
 		this.identityKey = identity
 	}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { ArrowUpRight, FilePlus2 } from "lucide-react"
@@ -7,17 +7,14 @@ import { Button } from "@/components/shadcn-ui/button"
 import magicToast from "@/components/base/MagicToaster/utils"
 import userFilesStore from "@/stores/userFiles"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
-import { FileDirectoryView } from "../TopicFilesButton/components/FileDirectoryView"
 import {
 	getUserMemoryPath,
 	USER_MEMORY_ROOT,
 	USER_MEMORY_ENTRY,
 	USER_MEMORY_NOTES,
 } from "../LongTremMemory/components/memoryTreeNodeUtils"
-import { MemoryTreeNodeIcon } from "../LongTremMemory/components/MemoryTreeNodeIcon"
 import { toUserAttachment, userSpaceFileService } from "./services/userSpaceFileService"
-import { useUserSpaceFileActions } from "./hooks/useUserSpaceFileActions"
-import { UserFileActionDialogs } from "./UserFileActionDialogs"
+import UserSpaceFilesView from "./UserSpaceFilesView"
 
 interface MemoryGroupProps {
 	projectId?: string | null
@@ -26,10 +23,9 @@ interface MemoryGroupProps {
 	onLocate: (id?: string) => void
 	activeFileId?: string | null
 	topicId?: string | null
-	search?: string
 	compact?: boolean
+	scrollElementRef?: React.RefObject<HTMLElement>
 }
-
 const MemoryGroup = observer(function MemoryGroup({
 	projectId,
 	projectName,
@@ -37,13 +33,18 @@ const MemoryGroup = observer(function MemoryGroup({
 	onLocate,
 	activeFileId,
 	topicId,
-	search,
 	compact = true,
+	scrollElementRef,
 }: MemoryGroupProps) {
 	const { t } = useTranslation("super")
 	const identity = userFilesStore.currentIdentityKey
-	const cacheVersion = userFilesStore.changeVersion
-	const [root, setRoot] = useState<MagicFSFile | null>(null)
+	const mutationVersion = userFilesStore.mutationVersion
+	const [rootSnapshot, setRootSnapshot] = useState<{
+		identity: string | null
+		file: MagicFSFile | null
+	}>()
+	const root = rootSnapshot?.identity === identity ? rootSnapshot.file : null
+	const setRoot = (file: MagicFSFile | null) => setRootSnapshot({ identity, file })
 	const [directoryId, setDirectoryId] = useState<string>()
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState(false)
@@ -54,14 +55,14 @@ const MemoryGroup = observer(function MemoryGroup({
 	useEffect(() => {
 		setRoot(null)
 		setDirectoryId(undefined)
+		setLoading(true)
 	}, [identity, scopePath])
 	useEffect(() => {
 		let cancelled = false
-		setLoading(true)
 		void userFilesStore
 			.findPath(segments)
 			.then(async (file) => {
-				if (file) await userFilesStore.loadDirectory(directoryId ?? file.id)
+				if (file) await userFilesStore.loadDirectory(file.id)
 				if (!cancelled) {
 					setRoot(file)
 					setError(false)
@@ -76,35 +77,13 @@ const MemoryGroup = observer(function MemoryGroup({
 		return () => {
 			cancelled = true
 		}
-	}, [identity, segments, directoryId, cacheVersion, retry])
-	const parentId = directoryId ?? root?.id
-	const parentPath = parentId ? userFilesStore.getPath(parentId) : []
-	const visiblePath = parentPath.slice(segments.length)
-	const prefix = parentPath.map((file) => file.name).join("/")
-	const items = parentId
-		? userFilesStore
-				.getChildren(parentId)
-				.map((file) => toUserAttachment(file, `${prefix}/${file.name}`))
-		: []
+	}, [identity, segments, mutationVersion, retry])
 	const entryExists =
 		root &&
 		userFilesStore
 			.getChildren(root.id)
 			.some((file) => file.name === USER_MEMORY_ENTRY && !file.is_directory)
-	const destination = async () => {
-		if (!directoryId) return userFilesStore.ensureDirectory([...segments, USER_MEMORY_NOTES])
-		const file = userFilesStore.files.get(directoryId)
-		if (!file) throw new Error("Directory is unavailable")
-		return file
-	}
-	const actions = useUserSpaceFileActions({
-		items,
-		resolveParent: destination,
-		viewKey: scopePath + "/" + (directoryId ?? ""),
-		onOpen: onFileClick,
-		onNavigate: setDirectoryId,
-		topicId,
-	})
+	const destination = () => userFilesStore.ensureDirectory([...segments, USER_MEMORY_NOTES])
 	const createEntry = async () => {
 		if (creating) return
 		setCreating(true)
@@ -135,7 +114,7 @@ const MemoryGroup = observer(function MemoryGroup({
 			userFilesStore.notifyMutation()
 			await userFilesStore.loadDirectory(directory.id, true)
 			if (identity === userFilesStore.currentIdentityKey)
-				actions.open(toUserAttachment(file, `${scopePath}/${USER_MEMORY_ENTRY}`))
+				onFileClick?.(toUserAttachment(file, `${scopePath}/${USER_MEMORY_ENTRY}`))
 		} catch {
 			if (identity === userFilesStore.currentIdentityKey)
 				magicToast.error(t("userSpace.operationFailed"))
@@ -144,116 +123,72 @@ const MemoryGroup = observer(function MemoryGroup({
 		}
 	}
 	const title = projectId ? t("userSpace.projectMemory") : t("userSpace.globalMemory")
+	const locateAction = (
+		<Button
+			variant="ghost"
+			size="icon"
+			className="size-6 shrink-0"
+			aria-label={t("userSpace.locateAllFiles")}
+			onClick={() => onLocate(directoryId ?? root?.id)}
+		>
+			<ArrowUpRight size={16} />
+		</Button>
+	)
 	return (
-		<section className="flex min-h-0 flex-1 flex-col border-b last:border-0">
-			<div className="flex shrink-0 items-center justify-between gap-1 px-3 py-2">
-				<div className="min-w-0">
-					<h3 className="truncate text-xs font-semibold">{title}</h3>
-					{projectId && (
-						<p className="truncate text-xs text-muted-foreground">
-							{projectName ?? t("userSpace.projectNameUnavailable")}
-						</p>
-					)}
-				</div>
-				<Button
-					variant="ghost"
-					size="icon"
-					className="size-6 shrink-0"
-					aria-label={t("userSpace.locateAllFiles")}
-					onClick={() => onLocate(parentId)}
-				>
-					<ArrowUpRight size={14} />
-				</Button>
-			</div>
-			{!loading && !error && !entryExists && (
-				<div className="flex shrink-0 items-center justify-between gap-1 px-3 pb-2 text-xs text-muted-foreground">
-					<span>{t("userSpace.noMemory")}</span>
-					<Button
-						variant="ghost"
-						size="sm"
-						disabled={creating}
-						onClick={() => void createEntry()}
-					>
-						<FilePlus2 size={14} />
-						{t("userSpace.createMemory")}
-					</Button>
+		<section className="flex min-h-0 shrink-0 flex-col border-b last:border-0">
+			{projectId && projectName && (
+				<p className="truncate px-4 pt-2 text-xs text-muted-foreground">{projectName}</p>
+			)}
+			{!root && (
+				<div className="flex shrink-0 items-center justify-between px-4 py-2 text-sm font-semibold">
+					{title}
+					{locateAction}
 				</div>
 			)}
-			<FileDirectoryView
-				itemIcon={(file, size) => (
-					<MemoryTreeNodeIcon
-						size={size}
-						item={file}
-						pathSegments={(
-							file.file_reference?.space_relative_path ??
-							file.relative_file_path ??
-							""
-						).split("/")}
-					/>
-				)}
-				items={items}
-				path={visiblePath.map((file) => ({ id: file.id, name: file.name }))}
-				rootName={title}
-				footer={
-					<div
-						className="truncate py-1"
-						title={t("userSpace.destination", {
-							path:
-								"~/" + (directoryId ? prefix : scopePath + "/" + USER_MEMORY_NOTES),
-						})}
-					>
-						{t("userSpace.destination", {
-							path:
-								"~/" + (directoryId ? prefix : scopePath + "/" + USER_MEMORY_NOTES),
-						})}
-					</div>
-				}
-				onDownload={actions.downloadSelected}
-				onNavigate={setDirectoryId}
-				onOpen={actions.open}
-				activeFileId={activeFileId}
-				compact={compact}
-				search={search}
-				selectedIds={actions.selection}
-				onSelectionChange={actions.setSelection}
-				isSelectable={actions.isSelectable}
-				createMenuItems={actions.createMenuItems}
-				onUpload={() => actions.uploadFiles()}
-				onMove={(files) => void actions.startMove(files)}
-				onDelete={actions.remove}
-				loading={loading}
-				error={error}
-				onRetry={() => {
-					if (parentId)
-						void userFilesStore.loadDirectory(parentId, true).catch(() => undefined)
-					setRetry((value) => value + 1)
-				}}
-				itemLabel={(file) =>
-					file.parent_id === root?.id &&
-					file.file_name === USER_MEMORY_ENTRY &&
-					!file.is_directory ? (
-						<span className="flex flex-col truncate">
-							<span>{t("userSpace.memoryContent")}</span>
-							<span className="text-[10px] text-muted-foreground">
-								{USER_MEMORY_ENTRY}
-							</span>
-						</span>
-					) : file.parent_id === root?.id &&
-					  file.is_directory &&
-					  file.file_name === USER_MEMORY_NOTES ? (
-						t("userSpace.relatedFiles")
-					) : (
-						file.file_name
-					)
-				}
-				getMenuItems={actions.getMenuItems}
-			/>
-			<UserFileActionDialogs actions={actions} />
+			{loading ? (
+				<p className="p-3 text-xs text-muted-foreground">{t("userSpace.loading")}</p>
+			) : error ? (
+				<Button variant="ghost" onClick={() => setRetry((value) => value + 1)}>
+					{t("userSpace.retry")}
+				</Button>
+			) : (
+				<>
+					{!entryExists && (
+						<div className="flex shrink-0 items-center justify-between px-4 py-2 text-xs text-muted-foreground">
+							<span>{t("userSpace.noMemory")}</span>
+							<Button
+								variant="ghost"
+								size="sm"
+								disabled={creating}
+								onClick={() => void createEntry()}
+							>
+								<FilePlus2 size={16} />
+								{t("userSpace.createMemory")}
+							</Button>
+						</div>
+					)}
+					{root && (
+						<UserSpaceFilesView
+							rootId={root.id}
+							rootName={title}
+							resolveParent={destination}
+							directoryId={directoryId}
+							onDirectoryChange={setDirectoryId}
+							onFileClick={onFileClick}
+							activeFileId={activeFileId}
+							topicId={topicId}
+							compact={compact}
+							scrollElementRef={scrollElementRef}
+							headerTrailingAction={locateAction}
+						/>
+					)}
+				</>
+			)}
 		</section>
 	)
 })
-
 export default function UserSpaceMemoryView(props: MemoryGroupProps) {
+	const scrollElementRef = useRef<HTMLDivElement>(null)
 	const { t } = useTranslation("super")
 	const locateOtherProjects = async () => {
 		const identity = userFilesStore.currentIdentityKey
@@ -266,23 +201,29 @@ export default function UserSpaceMemoryView(props: MemoryGroupProps) {
 		}
 	}
 	return (
-		<div className="flex h-full min-h-0 flex-col">
-			<MemoryGroup {...props} projectId={undefined} />
-			{props.projectId ? (
-				<MemoryGroup key={props.projectId} {...props} />
-			) : (
-				<div className="p-4 text-xs text-muted-foreground">
-					{t("userSpace.enterProject")}
-				</div>
-			)}
-			<Button
-				variant="ghost"
-				size="sm"
-				className="shrink-0"
-				onClick={() => void locateOtherProjects()}
-			>
-				{t("userSpace.otherProjectMemories")}
-			</Button>
+		<div ref={scrollElementRef} className="h-full min-h-0 overflow-auto">
+			<div className="flex flex-col">
+				<MemoryGroup {...props} scrollElementRef={scrollElementRef} projectId={undefined} />
+				{props.projectId ? (
+					<MemoryGroup
+						key={props.projectId}
+						{...props}
+						scrollElementRef={scrollElementRef}
+					/>
+				) : (
+					<div className="p-4 text-xs text-muted-foreground">
+						{t("userSpace.enterProject")}
+					</div>
+				)}
+				<Button
+					variant="ghost"
+					size="sm"
+					className="shrink-0"
+					onClick={() => void locateOtherProjects()}
+				>
+					{t("userSpace.otherProjectMemories")}
+				</Button>
+			</div>
 		</div>
 	)
 }

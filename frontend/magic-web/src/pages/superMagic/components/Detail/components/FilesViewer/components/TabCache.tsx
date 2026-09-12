@@ -22,8 +22,6 @@ const ProjectFileManager = lazy(
 )
 const UserSpaceFileManager = lazy(() => import("../../../../UserSpace/UserSpaceFileManager"))
 
-const UserFilePreview = lazy(() => import("../../../../UserSpace/UserFilePreview"))
-
 type CachedTab = Partial<TabItem> & {
 	id: string
 	refreshKey?: string
@@ -171,15 +169,6 @@ const TabCache = memo(
 					<WebsiteIframeTabContent {...getWebsiteTabData(tab)} isActive={isActive} />
 				) : isKnowledgeBaseTab && knowledgeBaseData ? (
 					<KnowledgeBaseTabContent data={knowledgeBaseData} />
-				) : tab.fileData?.space_type === "user" ? (
-					<Suspense fallback={null}>
-						<UserFilePreview
-							file={tab.fileData}
-							topicId={managerProps.selectedTopic?.id}
-						>
-							{renderContent}
-						</UserFilePreview>
-					</Suspense>
 				) : (
 					renderContent
 				)}
