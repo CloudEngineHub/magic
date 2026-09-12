@@ -1,3 +1,4 @@
+import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { useTranslation } from "react-i18next"
 import { HelpArticle } from "@/components/shadcn-composed/context-help/HelpArticle"
 import type { HelpDefinition } from "@/components/shadcn-composed/context-help"
@@ -21,7 +22,8 @@ export type ClawFileHelpKind =
 /** 匹配器只决定用途；标签在组件中翻译，语言切换时不保留旧文案。 */
 export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 	const { t } = useTranslation("super")
-	const system = useSystemFileHelp(kind === "prompts" ? "instructions" : undefined)
+	const brand = getClawBrandTranslationValues()
+	const system = useSystemFileHelp(kind === "prompts" ? "clawInstructions" : undefined)
 	if (kind === "prompts") return system ? <TopicFileTag {...system} /> : null
 	const entries: Record<Exclude<ClawFileHelpKind, "prompts">, () => HelpDefinition> = {
 		scheduledTasks: () => ({
@@ -91,13 +93,13 @@ export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 			),
 		}),
 		guidelines: () => ({
-			title: t("topicFiles.clawPlaygroundTags.guidelines"),
-			summary: t("topicFiles.clawPlaygroundHelp.guidelines"),
+			title: t("topicFiles.clawPlaygroundTags.guidelines", brand),
+			summary: t("topicFiles.clawPlaygroundHelp.guidelines", brand),
 			renderBody: () => (
 				<HelpArticle
-					usage={t("topicFiles.clawPlaygroundDetails.guidelines.usage")}
-					example={t("topicFiles.clawPlaygroundDetails.guidelines.example")}
-					note={t("topicFiles.clawPlaygroundDetails.guidelines.note")}
+					usage={t("topicFiles.clawPlaygroundDetails.guidelines.usage", brand)}
+					example={t("topicFiles.clawPlaygroundDetails.guidelines.example", brand)}
+					note={t("topicFiles.clawPlaygroundDetails.guidelines.note", brand)}
 				/>
 			),
 		}),

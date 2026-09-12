@@ -1,6 +1,8 @@
+import type { FileHelpContext } from "./utils/magic-system-folder"
 import {
 	memo,
 	useState,
+	useMemo,
 	useRef,
 	useEffect,
 	forwardRef,
@@ -52,6 +54,8 @@ import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./fil
 import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
 
 interface TopicFilesPanelProps {
+	/** 所属定义工作区；用户挂载文件仍以自己的空间身份为准。 */
+	fileHelpContext?: FileHelpContext
 	loading?: boolean
 	className?: string
 	fitContent?: boolean
@@ -158,6 +162,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			allowDownload,
 			allowCopyTo = false,
 			resolveTopicFileRowDecoration,
+			fileHelpContext,
 			mobileViewVariant = "default",
 			refreshAttachments,
 			onSaveSlidesTemplate,
@@ -176,6 +181,19 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		const { t } = useTranslation("super")
 		const resolvedTitle = title || t("topicFiles.title")
 		const isMobile = useIsMobile()
+		const helpProjectId = String(selectedProject?.id || projectId || "")
+		const helpOwner = fileHelpContext?.kind ?? (helpProjectId ? "project" : "unknown")
+		const helpOwnerId =
+			fileHelpContext && "projectId" in fileHelpContext
+				? fileHelpContext.projectId
+				: helpProjectId
+		const resolvedFileHelpContext = useMemo<FileHelpContext>(
+			() =>
+				helpOwner === "user" || helpOwner === "unknown"
+					? { kind: helpOwner }
+					: { kind: helpOwner, projectId: helpOwnerId },
+			[helpOwner, helpOwnerId],
+		)
 		const capabilities = resolveTopicFilesCapabilities(spaceConfig?.capabilities)
 		const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 		const { isShareRoute } = useShareRoute()
@@ -720,6 +738,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				allowCopyTo={allowCopyTo}
 				allowReadonlySelection={isShareRoute}
 				resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
+				fileHelpContext={resolvedFileHelpContext}
 				refreshLoading={loading || refreshLoading}
 				onSaveSlidesTemplate={onSaveSlidesTemplate}
 				onConvertToSlidesTemplate={onConvertToSlidesTemplate}
@@ -743,6 +762,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				>
 					{shouldUseProjectDetailMobileView ? (
 						<MobileProjectDetailFilesView
+							fileHelpContext={resolvedFileHelpContext}
 							attachments={attachments}
 							activeFileId={activeFileId}
 							allowEdit={allowEdit}

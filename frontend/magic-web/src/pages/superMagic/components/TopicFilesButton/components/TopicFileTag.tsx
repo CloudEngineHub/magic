@@ -3,10 +3,9 @@ import { badgeVariants } from "@/components/shadcn-ui/badge"
 import { cn } from "@/utils/cn"
 import type { AttachmentItem } from "../hooks/types"
 import { useSystemFileHelp, type FileHelpPresentation } from "../hooks/useSystemFileHelp"
-import {
-	isMagicSystemFolder,
-	resolveProjectInstructionsFileKind,
-} from "../utils/magic-system-folder"
+import { useSkillFileHelp } from "../hooks/useSkillFileHelp"
+import type { SkillFileKind } from "../utils/skill-file-structure"
+import { resolveSystemFileHelpKind, type FileHelpContext } from "../utils/magic-system-folder"
 
 /** 标签只解释用途；点击、键盘和触屏操作不能冒泡为文件打开或目录折叠。 */
 export function TopicFileTag({ label, help }: FileHelpPresentation) {
@@ -31,12 +30,22 @@ export function TopicFileTag({ label, help }: FileHelpPresentation) {
 	)
 }
 
-export function ProjectFileTag({ item }: { item: AttachmentItem }) {
-	const kind = isMagicSystemFolder(item)
-		? "magic"
-		: resolveProjectInstructionsFileKind(item)
-			? "instructions"
-			: undefined
-	const presentation = useSystemFileHelp(kind)
+export function ProjectFileTag({
+	item,
+	skillKind,
+	path,
+	context,
+}: {
+	item: AttachmentItem
+	skillKind?: SkillFileKind
+	path?: string
+	context?: FileHelpContext
+}) {
+	// Skill 里的同名示例属于资料，不进入项目规则说明。
+	const system = useSystemFileHelp(
+		skillKind ? undefined : resolveSystemFileHelpKind(item, path, context),
+	)
+	const skill = useSkillFileHelp(skillKind)
+	const presentation = skill ?? system
 	return presentation ? <TopicFileTag {...presentation} /> : null
 }

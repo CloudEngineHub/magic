@@ -1,3 +1,6 @@
+import { buildSkillFileKinds } from "./utils/skill-file-structure"
+import { SkillFileIcon, hasSkillFileIcon } from "./components/SkillFileIcon"
+import { resolveSystemFileHelpKind, type FileHelpContext } from "./utils/magic-system-folder"
 import { ProjectFileTag } from "./components/TopicFileTag"
 import { IconChevronDown, IconChevronRight, IconDots } from "@tabler/icons-react"
 import { Loader2, ChevronDown } from "lucide-react"
@@ -114,10 +117,6 @@ import { DetailType } from "../Detail/types"
 import SelfMediaPostRowPlatformIcon from "../Detail/components/SelfMediaRootRender/components/SelfMediaPostRowPlatformIcon"
 import { useSelfMediaTreeNavigation } from "./hooks/useSelfMediaTreeNavigation"
 import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
-import {
-	isMagicSystemFolder,
-	resolveProjectInstructionsFileKind,
-} from "./utils/magic-system-folder"
 import { useAICardCreateDialog } from "../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
 import { isNoHoverCoarsePointer } from "@/utils/devices"
 import { useActiveTreeSelection } from "./hooks/useActiveTreeSelection"
@@ -146,6 +145,8 @@ export interface TopicFilesExpansionState {
 }
 
 interface TopicFilesCoreProps {
+	/** 所属定义工作区；用户挂载文件仍以自己的空间身份为准。 */
+	fileHelpContext?: FileHelpContext
 	directoryView?: Pick<FileDirectoryViewProps, "items" | "path" | "onNavigate"> &
 		Partial<
 			Pick<FileDirectoryViewProps, "rootName" | "error" | "renderFileIcon" | "renderFileTag">
@@ -281,6 +282,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		allowCopyTo = false,
 		allowReadonlySelection = false,
 		resolveTopicFileRowDecoration,
+		fileHelpContext,
 		refreshLoading = false,
 		onSaveSlidesTemplate,
 		onConvertToSlidesTemplate,
@@ -697,6 +699,26 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			refreshLoading,
 			selectedProjectId: selectedProject?.id || projectId,
 		})
+
+	const helpProjectId = String(selectedProject?.id || projectId || "")
+	const helpOwner = fileHelpContext?.kind ?? (helpProjectId ? "project" : "unknown")
+	const helpOwnerId =
+		fileHelpContext && "projectId" in fileHelpContext
+			? fileHelpContext.projectId
+			: helpProjectId
+	const resolvedFileHelpContext = useMemo<FileHelpContext>(
+		() =>
+			helpOwner === "user" || helpOwner === "unknown"
+				? { kind: helpOwner }
+				: { kind: helpOwner, projectId: helpOwnerId },
+		[helpOwner, helpOwnerId],
+	)
+	// treeIndex 已经过搜索过滤，可能不含包入口；用途必须基于已加载原始快照，不能随搜索变更。
+	const skillFiles = useMemo(
+		() => buildSkillFileKinds(attachments, resolvedFileHelpContext),
+		[attachments, resolvedFileHelpContext],
+	)
+	const fileHelpVersion = `${resolvedFileHelpContext.kind}:${"projectId" in resolvedFileHelpContext ? resolvedFileHelpContext.projectId : ""}`
 
 	// 复用现有索引收集非空目录，避免在大文件树上再次递归 attachments。
 	useEffect(() => {
@@ -1448,6 +1470,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		},
 	})
 
+	const getFileRowRenderVersion = useMemoizedFn(
+		(row: Parameters<typeof getRowRenderVersion>[0]) =>
+			`${getRowRenderVersion(row)}:${skillFiles.kinds.get(String(row.node.key)) ?? ""}:${skillFiles.paths.get(String(row.node.key)) ?? ""}:${fileHelpVersion}`,
+	)
+
 	// 在树形数据中查找文件的辅助函数
 	// 在树形数据中查找文件的辅助函数
 	const findFileInTree = useMemoizedFn((fileId: string): AttachmentItem | undefined => {
@@ -1519,11 +1546,34 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				node,
 				isVirtual: !!node.isVirtual,
 			}) || undefined
+		const skillKind = node.isVirtual ? undefined : skillFiles.kinds.get(String(node.key))
+		const filePath = skillFiles.paths.get(String(node.key))
+		const systemKind =
+			node.isVirtual || skillKind
+				? undefined
+				: resolveSystemFileHelpKind(item, filePath, resolvedFileHelpContext)
+		const systemIconVariant =
+			systemKind === "crewIdentity" || systemKind === "clawIdentity"
+				? "magic-file-identity"
+				: systemKind === "crewSoul" || systemKind === "clawSoul"
+					? "magic-file-soul"
+					: systemKind && !item.is_directory
+						? "magic-file-agent"
+						: undefined
+		const skillIcon =
+			!display_config?.type && hasSkillFileIcon(skillKind, item.is_directory) ? (
+				<SkillFileIcon kind={skillKind} isDirectory={item.is_directory} />
+			) : undefined
 		const tag = node.isVirtual
 			? undefined
 			: (decoration?.tag ??
-				(isMagicSystemFolder(item) || resolveProjectInstructionsFileKind(item) ? (
-					<ProjectFileTag item={item} />
+				(skillKind || systemKind ? (
+					<ProjectFileTag
+						item={item}
+						skillKind={skillKind}
+						path={filePath}
+						context={resolvedFileHelpContext}
+					/>
 				) : undefined))
 		const renderDecorationTag = () => {
 			if (!tag) return null
@@ -1950,12 +2000,14 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								<Loader2 className="mr-1 animate-spin" size={16} />
 							) : decoration?.icon && !isFolderBusy ? (
 								decoration.icon
+							) : skillIcon && !isFolderBusy ? (
+								skillIcon
 							) : selfMediaRowPlatform && !isFolderBusy ? (
 								<SelfMediaPostRowPlatformIcon
 									platform={selfMediaRowPlatform}
 									size={16}
 								/>
-							) : !isFolderBusy && isMagicSystemFolder(item) ? (
+							) : !isFolderBusy && systemKind ? (
 								<MagicSystemFolderIcon size={16} />
 							) : isSlidesTemplate ? (
 								<SlidesTemplateFolderIcon size={16} />
@@ -2195,8 +2247,10 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						) : null}
 						{decoration?.icon && !isFileBusy ? (
 							decoration.icon
-						) : resolveProjectInstructionsFileKind(item) ? (
-							<TopicFileIcon magicVariant="magic-file-agent" size={16} />
+						) : skillIcon && !isFileBusy ? (
+							skillIcon
+						) : systemIconVariant ? (
+							<TopicFileIcon magicVariant={systemIconVariant} size={16} />
 						) : item?.display_config?.type === "custom" ||
 						  (item?.display_config?.type === "micro-app" && item?.is_directory) ? (
 							<CustomFolderMagicIcon
@@ -2467,6 +2521,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						<FileDirectoryView
 							scrollElementRef={scrollElementRef}
 							{...directoryView}
+							skillFiles={skillFiles}
+							fileHelpContext={resolvedFileHelpContext}
 							rootName={directoryView.rootName ?? t("userSpace.currentProject")}
 							onOpen={handleOpenFile}
 							getMenuItems={getMenuItems}
@@ -2629,11 +2685,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									expandedKeys={expandedKeys}
 									selectedKeys={effectiveSelectedKeys}
 									titleRender={titleRender}
-									getRowRenderVersion={getRowRenderVersion}
+									getRowRenderVersion={getFileRowRenderVersion}
 									rowRenderContextVersion={
 										directorySource
-											? `${rowRenderContextVersion}:${renamePending}:${isCreatingFile}:${isCreatingFolder}`
-											: rowRenderContextVersion
+											? `${rowRenderContextVersion}:${fileHelpVersion}:${renamePending}:${isCreatingFile}:${isCreatingFolder}`
+											: `${rowRenderContextVersion}:${fileHelpVersion}`
 									}
 									showIcon={false}
 									blockNode

@@ -56,7 +56,7 @@ function ClawPlaygroundDesktop() {
 	useDefaultModeModelListRefreshOnMount()
 
 	const resolveTopicFileRowDecoration = useMemoizedFn(
-		createClawPlaygroundFileRowDecorationResolver(),
+		createClawPlaygroundFileRowDecorationResolver(selectedProject?.id),
 	)
 
 	const { activeFileId, handleFileClick, topicFilesProps, setActiveFileId } = useTopicFiles({
@@ -140,7 +140,12 @@ function ClawPlaygroundDesktop() {
 						isUpdatingSandbox={store.isUpgradingSandbox}
 						selectedProjectId={selectedProject?.id || null}
 						isReadOnly={isReadOnly}
-						topicFilesProps={topicFilesPropsWithPanel}
+						topicFilesProps={{
+							...topicFilesPropsWithPanel,
+							fileHelpContext: selectedProject?.id
+								? { kind: "claw", projectId: String(selectedProject.id) }
+								: { kind: "unknown" },
+						}}
 						resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 						onBack={handleBack}
 						onOpenEditDialog={() => setIsEditDialogOpen(true)}

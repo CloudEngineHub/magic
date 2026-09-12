@@ -1,3 +1,4 @@
+import { resolveFileHelpPath } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import type { ReactNode } from "react"
 import { ClawFileHelpTag, type ClawFileHelpKind } from "./components/ClawFileHelpTag"
 import type { TopicFileRowDecorationResolver } from "@/pages/superMagic/components/TopicFilesButton"
@@ -98,16 +99,23 @@ const fileDecorationMatchers: FileDecorationMatcher[] = [
 	},
 ]
 
-export function createClawPlaygroundFileRowDecorationResolver(): TopicFileRowDecorationResolver {
+export function createClawPlaygroundFileRowDecorationResolver(
+	projectId?: string,
+): TopicFileRowDecorationResolver {
 	return function resolveTopicFileRowDecoration({ item, isVirtual }) {
-		if (isVirtual) return
+		if (isVirtual || (item.file_reference?.space_type ?? item.space_type) === "user") return
+		if (
+			item.file_reference?.space_type === "project" &&
+			item.file_reference.project_id !== projectId
+		)
+			return
 
 		const itemName = (item.file_name || item.name || "").trim()
 		if (!itemName) return
 
 		const matchContext: DecorationMatchContext = {
 			itemName,
-			isInMagicDirectory: isInMagicDirectory(item.relative_file_path || item.path),
+			isInMagicDirectory: isInMagicDirectory(resolveFileHelpPath(item)),
 		}
 		const decoration = item.is_directory
 			? folderDecorationMatchers.find((matcher) => matcher.matches(matchContext))
@@ -155,8 +163,5 @@ function isInMagicDirectory(path: string | undefined) {
 	if (!normalizedPath) return false
 
 	const segments = normalizedPath.split("/").filter(Boolean)
-	const magicDirectoryIndex = segments.lastIndexOf(MAGIC_FOLDER_NAME)
-	if (magicDirectoryIndex === -1) return false
-
-	return segments.length === magicDirectoryIndex + 2
+	return segments.length === 2 && segments[0] === MAGIC_FOLDER_NAME
 }

@@ -1,8 +1,5 @@
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
-import {
-	isMagicSystemFolder,
-	resolveProjectInstructionsFileKind,
-} from "../TopicFilesButton/utils/magic-system-folder"
+import { resolveSystemFileHelpKind } from "../TopicFilesButton/utils/magic-system-folder"
 import {
 	getMemoryProjectId,
 	isFixedUserMemoryEntry,
@@ -95,8 +92,9 @@ export function getUserResourceKind(item: AttachmentItem): UserResourceKind | un
 		.split("/")
 		.filter(Boolean)
 	const path = segments.join("/")
-	if (isMagicSystemFolder(item)) return "magic"
-	if (resolveProjectInstructionsFileKind(item)) return "instructions"
+	if (item.is_directory && path === ".magic") return "magic"
+	if (resolveSystemFileHelpKind(item, path, { kind: "user" }) === "instructionFile")
+		return "instructions"
 	if (item.is_directory) {
 		if (path === ".magic/memory") return "memory"
 		const kind = Object.hasOwn(DIRECTORY_KINDS, path) ? DIRECTORY_KINDS[path] : undefined

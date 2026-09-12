@@ -6616,9 +6616,9 @@
 				"usage": "USER.md records preferences and background that help AI work with you. Ask AI to update this information when it changes."
 			},
 			"guidelines": {
-				"example": "“Be direct and concise. State uncertainty when evidence is missing, and do not invent conclusions.”",
-				"note": "Describe specific behaviors and avoid vague or conflicting requirements. These principles do not replace service permissions.",
-				"usage": "SOUL.md describes how AI should behave and work, including its communication style and how to handle uncertain information."
+				"example": "For example, specify concise answers, detailed explanations, or a preferred communication style.",
+				"note": "AGENTS.md describes workspace and session rules; IDENTITY.md describes identity.",
+				"usage": "SOUL.md stores personality and expression style as part of the definition read at runtime."
 			},
 			"identityInfo": {
 				"example": "“You are my research assistant, helping organize information and record decisions.”",
@@ -6668,7 +6668,7 @@
 		},
 		"clawPlaygroundHelp": {
 			"aboutYou": "Your preferences and relevant information that help AI work with you.",
-			"guidelines": "Behavior and working principles that help AI maintain a consistent style.",
+			"guidelines": "Describes this {{clawBrand}}’s personality and communication style.",
 			"identityInfo": "The name, role, and identity of this AI assistant.",
 			"initialSetup": "Guidance for AI to complete its initial setup and preparation.",
 			"installedSkills": "Installed skills that guide AI through specialized tasks.",
@@ -6681,7 +6681,7 @@
 		},
 		"clawPlaygroundTags": {
 			"aboutYou": "About You",
-			"guidelines": "Guidelines",
+			"guidelines": "Personality and expression",
 			"identityInfo": "Identity Info",
 			"initialSetup": "Initial Setup",
 			"installedSkills": "Installed Skills",
@@ -7070,11 +7070,223 @@
 		"selectElement": "Select",
 		"selectElementDescription": "Click an element to capture it and insert its info into the input",
 		"selectFiles": "Select",
+		"skillStructure": {
+			"details": {
+				"agents": {
+					"example": "For example, agents/grader.md can describe how to assess an output against case expectations.",
+					"note": "These are skill resources, not project development rules or evidence of a running collaboration task.",
+					"usage": "Provides instructions for collaboration steps such as evaluation or analysis."
+				},
+				"assets": {
+					"example": "For example, assets/cover.png can serve as a report cover.",
+					"note": "Files retain their format icons or thumbnails; the role label does not change the file type.",
+					"usage": "Contains images, documents, and other reusable resources described by the skill."
+				},
+				"entry": {
+					"example": "For example, it can define report triggers, required inputs, and expected deliverables.",
+					"note": "The label does not mean the contents have been read. Loading depends on the feature using the skill.",
+					"usage": "SKILL.md is the skill entry file. It describes when the skill applies and how to perform its work."
+				},
+				"evalCases": {
+					"example": "A case might ask for a report containing specific information from supplied materials.",
+					"note": "This is a case definition, not an evaluation result or proof of success.",
+					"usage": "Stores case inputs, expectations, and related information for an evaluation workflow."
+				},
+				"evalInputs": {
+					"example": "For example, evals/files/sample.pdf can supply source material for a report case.",
+					"note": "These are evaluation inputs, not generated deliverables.",
+					"usage": "Contains documents, images, or other files required by evaluation tasks."
+				},
+				"evals": {
+					"example": "evals.json describes cases, while files holds their input resources.",
+					"note": "This is an evaluation convention. The directory does not indicate that evaluation has run or passed.",
+					"usage": "Concrete tasks help assess whether skill outputs meet expectations."
+				},
+				"examples": {
+					"example": "For example, examples/example.md can show a task input and delivery format.",
+					"note": "Instruction files within examples remain sample material, not active project rules.",
+					"usage": "Concrete examples show how to use the skill and what its output should look like."
+				},
+				"library": {
+					"example": "A report skill might contain SKILL.md, reference material, and generation scripts.",
+					"note": "This directory organizes files; it does not confirm that every skill is installed or runnable.",
+					"usage": "Each skill usually has its own directory containing instructions and supporting resources."
+				},
+				"license": {
+					"example": "For example, check which notices must remain when distributing the skill.",
+					"note": "The filename alone does not establish a license or permission scope.",
+					"usage": "Read the document for the stated terms of use, modification, and distribution."
+				},
+				"publishConfig": {
+					"example": "For example, skill.dir set to report-helper selects that skill for publishing.",
+					"note": "This is a project publishing convention, not a required Agent Skills file. Editing it does not publish the skill.",
+					"usage": "This Magic configuration uses skill.dir to identify the skill selected for publication."
+				},
+				"readme": {
+					"example": "For example, it can explain input requirements and common usage steps.",
+					"note": "README.md supplements the package; SKILL.md remains the skill entry file.",
+					"usage": "Contains installation, usage, or background information about the package."
+				},
+				"references": {
+					"example": "For example, references/style-guide.md can describe report formatting.",
+					"note": "These resources are consulted as needed; their presence does not mean all contents are loaded.",
+					"usage": "Contains detailed specifications, field descriptions, or background material for particular skill steps."
+				},
+				"scripts": {
+					"example": "For example, scripts/build_report.py can generate a report from input files.",
+					"note": "A script being present does not mean it has run. Consult its instructions for parameters and prerequisites.",
+					"usage": "Scripts handle repeatable processing, conversion, or calculation according to the skill instructions."
+				},
+				"skill": {
+					"example": "Start with SKILL.md, then consult the resources its instructions call for.",
+					"note": "The label describes the directory; incomplete metadata cannot establish whether the skill is valid.",
+					"usage": "Open the directory to find its entry file, references, scripts, and assets. Some packages have an outer wrapper directory."
+				},
+				"support": {
+					"example": "Examples include creation notes, supporting documents, or custom resources.",
+					"note": "The filename does not establish automatic loading, execution, or publication.",
+					"usage": "This material has no more specific directory convention. Consult it or the skill instructions to understand its role."
+				},
+				"templates": {
+					"example": "For example, assets/templates/report.docx can provide a report layout.",
+					"note": "Templates are a common convention, not a required directory for every skill.",
+					"usage": "Contains structures, layouts, or starter content used to produce a result."
+				}
+			},
+			"help": {
+				"agents": "Describes supporting roles used by the skill.",
+				"assets": "Resources used while processing or creating content.",
+				"entry": "Describes when and how to use this skill.",
+				"evalCases": "Defines tasks used to evaluate the skill.",
+				"evalInputs": "Resources supplied to evaluation cases.",
+				"evals": "Contains cases and resources for checking skill performance.",
+				"examples": "Illustrates skill inputs, outputs, or usage.",
+				"library": "Stores skill files for this project.",
+				"license": "Describes licensing for the skill or its contents.",
+				"publishConfig": "Selects the skill directory to publish from this project.",
+				"readme": "Additional information about the skill and its use.",
+				"references": "Supporting information to consult when needed.",
+				"scripts": "Programs the skill can call to perform work.",
+				"skill": "Contains a skill and its supporting files.",
+				"support": "Other material stored in the skill library or package.",
+				"templates": "Reusable starting points for content or files."
+			},
+			"labels": {
+				"agents": "Collaboration instructions",
+				"assets": "Assets",
+				"entry": "Skill instructions",
+				"evalCases": "Evaluation cases",
+				"evalInputs": "Evaluation inputs",
+				"evals": "Skill evaluation",
+				"examples": "Examples",
+				"library": "Skill library",
+				"license": "License",
+				"publishConfig": "Publish configuration",
+				"readme": "Usage notes",
+				"references": "References",
+				"scripts": "Scripts",
+				"skill": "Skill",
+				"support": "Skill resources",
+				"templates": "Templates"
+			}
+		},
 		"source": "Source File",
 		"success": {
 			"fileCopied": "File copied successfully",
 			"fileImported": "File imported successfully",
 			"fileMoved": "File moved successfully"
+		},
+		"systemFiles": {
+			"details": {
+				"agentInstructions": {
+					"example": "An Agent definition might use it to describe working requirements.",
+					"note": "It is excluded from the ordinary nested project-rule index. Its path alone does not identify a {{clawBrand}}, employee, or automatic loader.",
+					"usage": "This file is under the project .magic directory. The Agent feature that consumes it determines its role."
+				},
+				"clawInstructions": {
+					"example": "For example, specify what to read before a session and when to maintain memory.",
+					"note": "This differs from ordinary project directory rules. SOUL.md describes personality and expression.",
+					"usage": "Part of the {{clawBrand}} definition, covering startup preparation, memory use, and collaboration. It belongs to the required runtime startup files."
+				},
+				"clawMagic": {
+					"example": "AGENTS.md describes session behavior, while SOUL.md describes personality and expression.",
+					"note": "These files belong to this {{clawBrand}} workspace. Mounted user-space files remain personal configuration.",
+					"usage": "Contains identity, behavioral rules, skills, and memory for this {{clawBrand}}."
+				},
+				"crewIdentity": {
+					"example": "For example, describe its role, expertise, and work objectives.",
+					"note": "AGENTS.md defines work steps; SOUL.md defines personality and expression. Editing a definition does not publish it.",
+					"usage": "IDENTITY.md defines identity and responsibilities and is included in the compiled employee identity."
+				},
+				"crewInstructions": {
+					"example": "For example, gather source material, call a report skill, then check the deliverable.",
+					"note": "SOUL.md describes personality. Saving this file does not publish it or guarantee immediate updates to all running instances.",
+					"usage": "AGENTS.md describes steps, skill invocation, inputs, outputs, and completion criteria. Compilation includes it in the employee’s work instructions."
+				},
+				"crewMagic": {
+					"example": "AGENTS.md describes its workflow, while IDENTITY.md describes its identity.",
+					"note": "This is the employee definition workspace. An ordinary project using an employee is not an employee definition.",
+					"usage": "Identity, work instructions, personality, tools, and skills define the employee for configuration and distribution."
+				},
+				"crewSoul": {
+					"example": "For example, specify concise communication or a preference for detailed explanations.",
+					"note": "AGENTS.md still defines the workflow. Saving the file does not guarantee immediate updates to all running instances.",
+					"usage": "SOUL.md defines expression style and behavioral tendencies included in the compiled employee personality."
+				},
+				"directoryInstructions": {
+					"example": "For example, reports/AGENTS.md can define formatting inside reports.",
+					"note": "These are scoped rules, not project-wide rules or a claim that all nested contents have already been read.",
+					"usage": "Nested AGENTS.md files are discovered through a path index. Before working in their scope, the AI reads applicable rules from the shallowest directory to the deepest."
+				},
+				"instructionFile": {
+					"example": "Consult the contents and owning feature to understand which tasks use these instructions.",
+					"note": "Automatic loading is not established. A file in personal storage is not necessarily a global rule.",
+					"usage": "The filename indicates instruction content. Its source and consuming feature determine its audience and scope."
+				},
+				"projectInstructions": {
+					"example": "For example, define report structure, collaboration practices, or project conventions.",
+					"note": "These rules belong to this project. More specific rules live in subdirectories, not in personal global preferences.",
+					"usage": "The root AGENTS.md describes project-wide requirements. The current auto-read mechanism delivers its contents when the file exists and is readable."
+				},
+				"projectMagic": {
+					"example": "For example, .magic/skills holds project skills and .magic/cron holds scheduled tasks.",
+					"note": "This is separate from personal configuration. Each feature determines how its files are used.",
+					"usage": "These files belong to the current project and are retained with it for the features that use them."
+				},
+				"userMagic": {
+					"example": "For example, a personal tool configuration can remain available in another project.",
+					"note": "This belongs to user space, not the current project. Not every file is loaded automatically.",
+					"usage": "The user-space .magic directory holds personal tool settings, memory, and other assets retained across workspaces."
+				}
+			},
+			"help": {
+				"agentInstructions": "Stores Agent instructions in this workspace.",
+				"clawInstructions": "Defines workspace rules and session behavior for this {{clawBrand}}.",
+				"clawMagic": "Stores this {{clawBrand}}’s definition and ongoing workspace resources.",
+				"crewIdentity": "Describes who this employee is and what it is responsible for.",
+				"crewInstructions": "Defines how this digital employee performs its work.",
+				"crewMagic": "Stores this digital employee’s definition and resources.",
+				"crewSoul": "Describes this employee’s personality and communication style.",
+				"directoryInstructions": "Working requirements for this directory and its descendants.",
+				"instructionFile": "Contains instructions for the feature that uses it.",
+				"projectInstructions": "Shared working conventions for this project.",
+				"projectMagic": "Stores Agent definitions, skills, and settings for this project.",
+				"userMagic": "Stores personal settings and assets reusable across projects."
+			},
+			"labels": {
+				"agentInstructions": "Agent instructions",
+				"clawInstructions": "Behavior rules",
+				"clawMagic": "{{clawBrand}} configuration",
+				"crewIdentity": "Employee identity",
+				"crewInstructions": "Work instructions",
+				"crewMagic": "Employee configuration",
+				"crewSoul": "Personality and expression",
+				"directoryInstructions": "Directory rules",
+				"instructionFile": "Instruction file",
+				"projectInstructions": "Project rules",
+				"projectMagic": "Project configuration",
+				"userMagic": "Personal configuration"
+			}
 		},
 		"textOmitted": "Text Omitted Here",
 		"title": "Files",
@@ -7308,20 +7520,10 @@
 				"note": "The index helps locate information; it does not contain every detail. Check the corresponding records for important conclusions.",
 				"usage": "Brief descriptions help you and AI find related records in this folder. Use the index to locate a subject, then open the source record for details."
 			},
-			"instructions": {
-				"example": "“Start reports with the conclusion, then show the evidence. State when something is uncertain.”",
-				"note": "Whether this file is used for a task depends on its location and the feature involved. These instructions guide AI; they do not change access permissions for files or services.",
-				"usage": "Use AGENTS.md to record context and requirements you want AI to follow, such as response language, report format, working conventions, and practices to avoid. Keep instructions specific and consistent."
-			},
 			"lark": {
 				"example": "“Explain the Lark tool settings and what is needed to use its features.”",
 				"note": "The folder does not prove that the connection is still valid. Access depends on actual authorization. Changing connection settings may require signing in again; do not share credentials.",
 				"usage": "The Lark tool stores personal settings and connection information used by features you authorize. These files are usually maintained by the tool."
-			},
-			"magic": {
-				"example": "“Explain what is stored in this system folder and which files relate to my tool settings.”",
-				"note": "The folder name .magic is a system convention. Changing or deleting its settings may affect tool connections or features. Understand a file before changing it.",
-				"usage": "This folder holds settings, memory, and supporting files used by AI. When you need to adjust a feature, ask AI to explain the relevant files before making changes."
 			},
 			"memory": {
 				"example": "“Remember that I prefer concise reports with conclusions first and evidence afterward.”",
@@ -7385,9 +7587,7 @@
 			"dingtalk": "Personal settings and connection information used for the DingTalk features you authorize.",
 			"event": "The background, events, and outcome recorded at the time; undated records are kept separately.",
 			"index": "A guide to the contents of this folder, helping you and AI find relevant records.",
-			"instructions": "Instructions that guide how AI works, including requirements and preferences.",
 			"lark": "Personal settings and connection information used for the Lark features you authorize.",
-			"magic": "Settings, memory, and tool files used by AI, usually maintained by AI or the system.",
 			"memory": "Information AI can refer to in later tasks to retain useful context about you.",
 			"month": "Important event records organized by month.",
 			"notes": "Detailed explanations and records that supplement the core memory.",
@@ -7406,9 +7606,7 @@
 			"dingtalk": "DingTalk",
 			"event": "Event record",
 			"index": "Contents",
-			"instructions": "AI instructions",
 			"lark": "Lark",
-			"magic": "System files",
 			"memory": "Long-term memory",
 			"month": "By month",
 			"notes": "Detailed notes",

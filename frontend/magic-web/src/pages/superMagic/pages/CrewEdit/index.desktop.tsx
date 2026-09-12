@@ -641,6 +641,14 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 							filesContent={
 								<TopicFilesButton
 									{...topicFilesPropsWithPanel}
+									fileHelpContext={
+										selectedProject?.id
+											? {
+													kind: "crew",
+													projectId: String(selectedProject.id),
+												}
+											: { kind: "unknown" }
+									}
 									className="h-full"
 									title={tSuper("topicFiles.fileTitle")}
 								/>

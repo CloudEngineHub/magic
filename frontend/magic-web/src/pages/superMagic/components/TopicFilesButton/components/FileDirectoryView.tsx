@@ -1,3 +1,7 @@
+import type { FileHelpContext } from "../utils/magic-system-folder"
+import type { SkillFileStructure } from "../utils/skill-file-structure"
+import { getAttachmentKey } from "../utils/getAttachmentKey"
+import { SkillFileIcon } from "./SkillFileIcon"
 import { useVirtualScrollMargin } from "../hooks/useVirtualScrollMargin"
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
@@ -25,6 +29,8 @@ export interface DirectoryBreadcrumb {
 	name: string
 }
 export interface FileDirectoryViewProps {
+	skillFiles?: SkillFileStructure
+	fileHelpContext?: FileHelpContext
 	renderFileIcon?: (file: AttachmentItem, size: number) => ReactNode
 	renderFileTag?: (file: AttachmentItem) => ReactNode
 	scrollElementRef?: React.RefObject<HTMLElement>
@@ -81,6 +87,8 @@ export function formatDirectoryFileTime(
 
 /** 项目和用户文件共享目录交互；读取与修改由所属空间提供，视图不构造项目身份。 */
 export function FileDirectoryView({
+	skillFiles,
+	fileHelpContext,
 	renderFileIcon,
 	renderFileTag,
 	scrollElementRef,
@@ -371,10 +379,23 @@ export function FileDirectoryView({
 														{renderFileIcon ? (
 															renderFileIcon(file, grid ? 36 : 16)
 														) : (
-															<TopicFileIcon
+															<SkillFileIcon
+																kind={skillFiles?.kinds.get(
+																	getAttachmentKey(file),
+																)}
 																isDirectory={file.is_directory}
-																fileExtension={file.file_extension}
 																size={grid ? 36 : 16}
+																fallback={
+																	<TopicFileIcon
+																		isDirectory={
+																			file.is_directory
+																		}
+																		fileExtension={
+																			file.file_extension
+																		}
+																		size={grid ? 36 : 16}
+																	/>
+																}
 															/>
 														)}
 														<span className="min-w-0 max-w-full truncate">
@@ -390,7 +411,16 @@ export function FileDirectoryView({
 														{renderFileTag ? (
 															renderFileTag(file)
 														) : (
-															<ProjectFileTag item={file} />
+															<ProjectFileTag
+																item={file}
+																skillKind={skillFiles?.kinds.get(
+																	getAttachmentKey(file),
+																)}
+																path={skillFiles?.paths.get(
+																	getAttachmentKey(file),
+																)}
+																context={fileHelpContext}
+															/>
 														)}
 													</div>
 												</div>

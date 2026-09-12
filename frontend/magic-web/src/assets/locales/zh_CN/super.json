@@ -6627,9 +6627,9 @@
 				"usage": "USER.md 保存与你有关的偏好和背景，帮助 AI 更好地配合你的工作方式。信息变化后可以请 AI 更新。"
 			},
 			"guidelines": {
-				"example": "「表达直接、简洁；没有依据时说明不确定，不要编造结论。」",
-				"note": "把期望写成具体行为，避免模糊或相互矛盾的要求。文件中的原则不替代实际服务权限。",
-				"usage": "SOUL.md 描述 AI 的行为方式和做事原则，例如如何表达、怎样处理不确定的信息，以及希望保持的工作风格。"
+				"example": "例如约定回答简洁、解释充分，或采用适合你的沟通方式。",
+				"note": "工作区与会话规则由 AGENTS.md 描述，身份由 IDENTITY.md 描述。",
+				"usage": "SOUL.md 保存性格与表达风格，是{{clawBrand}}运行时需要读取的自身定义。"
 			},
 			"identityInfo": {
 				"example": "「你是我的资料整理助手，主要帮助我归纳信息和记录决定。」",
@@ -6679,7 +6679,7 @@
 		},
 		"clawPlaygroundHelp": {
 			"aboutYou": "记录你的偏好和相关信息，帮助 AI 更好地配合你。",
-			"guidelines": "说明 AI 的行为方式和做事原则，让它保持一致的工作风格。",
+			"guidelines": "描述这只{{clawBrand}}的性格与沟通方式。",
 			"identityInfo": "介绍这个 AI 助手的名字、角色和身份。",
 			"initialSetup": "引导 AI 完成首次使用时的设置和准备。",
 			"installedSkills": "保存已安装的技能，帮助 AI 按照专业方法完成相关任务。",
@@ -6692,7 +6692,7 @@
 		},
 		"clawPlaygroundTags": {
 			"aboutYou": "关于你",
-			"guidelines": "指南",
+			"guidelines": "性格与表达",
 			"identityInfo": "身份信息",
 			"initialSetup": "初始化设置",
 			"installedSkills": "已安装技能",
@@ -7080,11 +7080,223 @@
 		"selectElement": "选取",
 		"selectElementDescription": "点击页面元素，自动截图并将元素信息插入输入框",
 		"selectFiles": "多选",
+		"skillStructure": {
+			"details": {
+				"agents": {
+					"example": "例如 agents/grader.md 描述如何检查输出是否符合用例要求。",
+					"note": "这是技能内部资料，不是项目开发规则；文件存在也不表示已创建协作任务。",
+					"usage": "为评估、分析等协作步骤提供角色说明和操作指引。"
+				},
+				"assets": {
+					"example": "例如 assets/cover.png 用作报告封面。",
+					"note": "文件仍使用原有格式图标或缩略图；用途标签不改变文件类型。",
+					"usage": "保存图片、文档及其它可复用资源，具体用途由技能说明或目录内容确定。"
+				},
+				"entry": {
+					"example": "例如，说明什么时候生成报告、需要什么输入，以及应交付什么结果。",
+					"note": "标签不代表正文已被读取。具体加载方式由使用该技能的功能决定。",
+					"usage": "SKILL.md 是技能入口，帮助 AI 判断何时使用技能，并提供执行所需说明。"
+				},
+				"evalCases": {
+					"example": "例如，一个用例要求根据给定资料生成包含指定内容的报告。",
+					"note": "它是用例定义，不是评估结果或通过证明。",
+					"usage": "保存评估输入、期望结果及相关用例信息，供评估流程使用。"
+				},
+				"evalInputs": {
+					"example": "例如 evals/files/sample.pdf 是某个报告用例的来源资料。",
+					"note": "这些是评估输入，不代表技能已生成的交付结果。",
+					"usage": "保存用例依赖的文档、图片或其它文件，供对应评估任务读取。"
+				},
+				"evals": {
+					"example": "evals.json 描述用例，files 目录保存用例需要的输入文件。",
+					"note": "这是常见评估约定。目录存在不代表已经运行评估或评估通过。",
+					"usage": "通过具体任务检查技能输出是否达到预期。"
+				},
+				"examples": {
+					"example": "例如 examples/example.md 展示一次任务的输入与交付格式。",
+					"note": "示例中的同名指令文件属于示例资料，不因此成为当前项目规则。",
+					"usage": "通过具体例子理解技能应怎样使用，以及预期结果是什么。"
+				},
+				"library": {
+					"example": "例如，一个报告技能可以包含 SKILL.md、参考资料和生成脚本。",
+					"note": "目录用于组织技能文件，不表示其中所有技能都已安装或可运行。",
+					"usage": "每个技能通常使用独立目录，包含技能说明和所需资料。"
+				},
+				"license": {
+					"example": "例如确认分发技能时需要保留哪些声明。",
+					"note": "不能仅根据文件名判断具体许可或授权范围。",
+					"usage": "查看正文了解作者声明的使用、修改和分发条件。"
+				},
+				"publishConfig": {
+					"example": "例如 skill.dir 为 report-helper 时，发布流程选择对应技能。",
+					"note": "它是项目发布约定，不是 Agent Skills 必需文件；修改配置不等于已经发布。",
+					"usage": "这是 Magic 的技能发布配置，skill.dir 指向要发布的技能目录。"
+				},
+				"readme": {
+					"example": "例如说明输入文件要求和常见使用步骤。",
+					"note": "README.md 是补充文档，技能入口仍是 SKILL.md。",
+					"usage": "保存安装、使用或背景说明，帮助理解技能包。"
+				},
+				"references": {
+					"example": "例如 references/style-guide.md 说明报告格式。",
+					"note": "资料按需使用，目录存在不代表所有正文都已进入 AI 上下文。",
+					"usage": "保存详细规范、字段说明、背景资料等，帮助完成技能中的具体步骤。"
+				},
+				"scripts": {
+					"example": "例如 scripts/build_report.py 根据输入生成报告。",
+					"note": "文件存在不表示已经执行；运行条件和参数以技能及脚本说明为准。",
+					"usage": "将重复处理、转换或计算放在脚本中，按技能说明选择运行方式。"
+				},
+				"skill": {
+					"example": "先查看 SKILL.md 了解用途，再按说明查阅需要的资料。",
+					"note": "标签表示目录用途；尚未加载完整内容时，不能据此判断技能是否有效。",
+					"usage": "打开目录可查看技能入口，以及参考资料、脚本和素材。部分包可能有外层包装目录。"
+				},
+				"support": {
+					"example": "例如创作记录、补充文档或自定义资源。",
+					"note": "不根据文件名猜测其是否会自动加载、执行或发布。",
+					"usage": "这类内容没有进一步约定的目录用途，可以查看正文或技能说明了解它的作用。"
+				},
+				"templates": {
+					"example": "例如 assets/templates/report.docx 是报告模板。",
+					"note": "模板是常见组织方式，不是每个技能都必须具备的目录。",
+					"usage": "保存技能生成结果时使用的结构、版式或初始内容。"
+				}
+			},
+			"help": {
+				"agents": "描述技能中协作角色的任务和要求。",
+				"assets": "技能处理或生成内容时使用的素材。",
+				"entry": "介绍技能的用途、使用条件和操作方法。",
+				"evalCases": "描述用于检查技能表现的具体任务。",
+				"evalInputs": "评估用例需要使用的输入资料。",
+				"evals": "保存检查技能表现的用例和资料。",
+				"examples": "展示技能的输入、输出或使用方式。",
+				"library": "当前项目的技能文件存放在这里。",
+				"license": "说明技能或相关内容的使用许可。",
+				"publishConfig": "指定本项目准备发布的技能目录。",
+				"readme": "补充介绍这个技能及其使用方式。",
+				"references": "供执行技能时按需查阅的补充资料。",
+				"scripts": "技能可以调用的辅助程序。",
+				"skill": "保存一个技能的说明及其相关文件。",
+				"support": "保存在技能库或技能目录中的其它资料。",
+				"templates": "可复用的内容或文件起点。"
+			},
+			"labels": {
+				"agents": "协作说明",
+				"assets": "素材资源",
+				"entry": "技能说明",
+				"evalCases": "评估用例",
+				"evalInputs": "评估输入",
+				"evals": "技能评估",
+				"examples": "使用示例",
+				"library": "技能库",
+				"license": "许可说明",
+				"publishConfig": "发布配置",
+				"readme": "使用说明",
+				"references": "参考资料",
+				"scripts": "执行脚本",
+				"skill": "技能",
+				"support": "技能资料",
+				"templates": "模板"
+			}
+		},
 		"source": "源文件",
 		"success": {
 			"fileCopied": "复制文件成功",
 			"fileImported": "文件导入成功",
 			"fileMoved": "移动文件成功"
+		},
+		"systemFiles": {
+			"details": {
+				"agentInstructions": {
+					"example": "例如某个 Agent 定义可以使用它描述工作要求。",
+					"note": "它不进入普通子目录规则索引；仅凭路径不能判断属于{{clawBrand}}、数字员工或是否自动加载。",
+					"usage": "这个文件位于项目 .magic 中，具体用途由使用它的 Agent 功能决定。"
+				},
+				"clawInstructions": {
+					"example": "例如约定开始会话前查看哪些资料，以及何时维护记忆。",
+					"note": "它不等同于普通项目目录规则；性格与表达方式由 SOUL.md 描述。",
+					"usage": "它是{{clawBrand}}自身定义的一部分，用于规定启动准备、记忆使用、协作方式等行为，并纳入运行期启动必读文件。"
+				},
+				"clawMagic": {
+					"example": "例如 AGENTS.md 约定会话行为，SOUL.md 描述性格与表达。",
+					"note": "这些内容属于当前{{clawBrand}}工作区；挂载的用户空间仍使用个人配置。",
+					"usage": "这里保存当前{{clawBrand}}的身份、行为规则、技能和记忆。"
+				},
+				"crewIdentity": {
+					"example": "例如说明员工的岗位职责、专业范围和工作目标。",
+					"note": "工作步骤写在 AGENTS.md，性格与表达写在 SOUL.md；修改定义不等于已经发布。",
+					"usage": "IDENTITY.md 保存员工身份和职责等定义，编译时进入员工身份部分。"
+				},
+				"crewInstructions": {
+					"example": "例如先收集资料，再调用报告技能，最后检查交付内容。",
+					"note": "它不是员工性格；性格由 SOUL.md 描述。保存文件不表示已发布，也不保证所有运行实例立即更新。",
+					"usage": "AGENTS.md 描述工作步骤、技能调用时机、输入输出和完成标准，编译时进入员工的工作指令部分。"
+				},
+				"crewMagic": {
+					"example": "例如 AGENTS.md 描述工作步骤，IDENTITY.md 描述员工身份。",
+					"note": "这是员工定义工作区；使用员工对话的普通项目不会因此变成员工定义。",
+					"usage": "身份、工作指令、性格、工具和技能共同描述这个员工，并用于员工配置与分发。"
+				},
+				"crewSoul": {
+					"example": "例如希望员工表达简洁、解释充分，或使用某种沟通风格。",
+					"note": "工作流程仍由 AGENTS.md 描述；保存文件不保证所有运行实例立即更新。",
+					"usage": "SOUL.md 定义表达风格和行为倾向，编译时进入员工性格部分。"
+				},
+				"directoryInstructions": {
+					"example": "例如 reports/AGENTS.md 规定 reports 目录内报告的格式。",
+					"note": "这不是全项目规则，也不代表目录中的规则正文都已自动读取。",
+					"usage": "子目录 AGENTS.md 先作为路径索引被发现；处理对应目录前，AI 按从浅到深的顺序读取适用规则。"
+				},
+				"instructionFile": {
+					"example": "例如查看文件正文和所属功能，确认这些要求会用于什么任务。",
+					"note": "当前没有足够信息确认它会自动生效，不能仅因文件在个人空间就称为全局规则。",
+					"usage": "文件名表明它用于描述指令；具体服务对象和作用范围应结合它的来源及使用入口理解。"
+				},
+				"projectInstructions": {
+					"example": "例如约定报告结构、协作方式和项目内应遵循的工作规范。",
+					"note": "它属于当前项目；更具体的目录约定保存在对应子目录，不会因此变成个人全局偏好。",
+					"usage": "项目根 AGENTS.md 描述项目范围的要求。文件存在且可读取时，当前自动读取机制会交付正文。"
+				},
+				"projectMagic": {
+					"example": "例如 .magic/skills 保存项目技能，.magic/cron 保存项目定时任务。",
+					"note": "它与用户空间的个人配置不同；各文件如何使用由对应功能决定。",
+					"usage": "这里的内容属于当前项目，随项目保留，供相关功能使用。"
+				},
+				"userMagic": {
+					"example": "例如个人工具配置可以在另一个项目中继续使用。",
+					"note": "这是个人空间，不是当前项目的配置目录；目录内各文件不一定都会自动加载。",
+					"usage": "用户空间中的 .magic 保存个人工具设置、记忆及其它需要跨工作区保留的内容。"
+				}
+			},
+			"help": {
+				"agentInstructions": "保存当前工作区中的 Agent 指令。",
+				"clawInstructions": "规定这只{{clawBrand}}的工作区规则和会话行为。",
+				"clawMagic": "保存这只{{clawBrand}}的定义与持续运行资料。",
+				"crewIdentity": "描述这个数字员工是谁、负责什么。",
+				"crewInstructions": "定义这个数字员工如何完成工作。",
+				"crewMagic": "保存当前数字员工的定义文件和相关资源。",
+				"crewSoul": "描述这个数字员工的性格与沟通方式。",
+				"directoryInstructions": "约定当前目录及其下级内容的工作要求。",
+				"instructionFile": "存放供相关功能使用的指令说明。",
+				"projectInstructions": "当前项目共同遵守的工作约定。",
+				"projectMagic": "保存当前项目使用的 Agent、技能和相关配置。",
+				"userMagic": "保存可供不同项目复用的个人配置和资产。"
+			},
+			"labels": {
+				"agentInstructions": "Agent 指令",
+				"clawInstructions": "行为规则",
+				"clawMagic": "{{clawBrand}}配置",
+				"crewIdentity": "员工身份",
+				"crewInstructions": "工作指令",
+				"crewMagic": "员工配置",
+				"crewSoul": "性格与表达",
+				"directoryInstructions": "目录规则",
+				"instructionFile": "指令文件",
+				"projectInstructions": "项目规则",
+				"projectMagic": "项目配置",
+				"userMagic": "个人配置"
+			}
 		},
 		"textOmitted": "此处文本已省略",
 		"title": "项目文件",
@@ -7318,20 +7530,10 @@
 				"note": "索引是查找入口，不包含全部资料。重要结论应继续核对对应正文。",
 				"usage": "用简短介绍帮助你和 AI 找到目录中的相关记录。可以先看索引定位主题，再打开正文了解细节。"
 			},
-			"instructions": {
-				"example": "「整理报告时先给结论，再列依据；不确定的内容要说明。」",
-				"note": "文件是否参与某次任务，由所在位置和功能决定。它用于指导 AI 的工作，不会改变文件或服务的访问权限。",
-				"usage": "把希望 AI 长期参考的背景和要求写在 AGENTS.md 中，例如回答语言、报告格式、工作约定和需要避免的做法。要求应具体、清楚，避免相互矛盾。"
-			},
 			"lark": {
 				"example": "「解释飞书工具的设置用途，告诉我使用相关功能需要做哪些准备。」",
 				"note": "目录存在不代表连接仍然有效。权限由实际授权决定；修改连接配置可能需要重新登录，不要分享其中的凭据。",
 				"usage": "飞书工具在这里保存个人设置和连接资料，供你授权使用的飞书功能读取。通常由工具维护。"
-			},
-			"magic": {
-				"example": "「帮我解释这个系统目录里有哪些内容，哪些与我的工具设置有关。」",
-				"note": "目录名 .magic 是系统约定。修改或删除其中的配置可能影响工具连接或功能使用；不清楚用途时，先了解再操作。",
-				"usage": "这里集中保存 AI 工作时需要的配置、记忆和工具资料。想了解某项功能的设置时，可以先让 AI 解释对应文件的用途，再决定是否调整。"
 			},
 			"memory": {
 				"example": "「记住我偏好简洁的报告；以后先给结论，再给详细依据。」",
@@ -7395,9 +7597,7 @@
 			"dingtalk": "钉钉工具保存的个人设置和连接信息，帮助 AI 使用你授权的钉钉能力。",
 			"event": "记录一件事的背景、经过和当时的结果；日期不明确时会单独保存。",
 			"index": "简要介绍这个目录里的内容，帮助你和 AI 找到需要的记录。",
-			"instructions": "告诉 AI 应该怎样完成工作，例如要遵守的要求和你的偏好。",
 			"lark": "飞书工具保存的个人设置和连接信息，帮助 AI 使用你授权的飞书能力。",
-			"magic": "保存 AI 工作时使用的配置、记忆和工具资料，通常由 AI 或系统维护。",
 			"memory": "保存可供后续任务参考的信息，让 AI 延续对你的了解。",
 			"month": "按月份整理重要事件记录。",
 			"notes": "保存展开说明和详细记录，补充核心记忆中放不下的内容。",
@@ -7416,9 +7616,7 @@
 			"dingtalk": "钉钉",
 			"event": "事件记录",
 			"index": "内容索引",
-			"instructions": "AI 指令",
 			"lark": "飞书",
-			"magic": "系统文件",
 			"memory": "长期记忆",
 			"month": "按月归档",
 			"notes": "详细记忆",

@@ -4,7 +4,6 @@ import type { HelpDefinition } from "@/components/shadcn-composed/context-help"
 import {
 	useSystemFileHelp,
 	type FileHelpPresentation,
-	type SystemFileHelpKind,
 } from "../TopicFilesButton/hooks/useSystemFileHelp"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import { getUserResourceKind, type UserResourceKind } from "./userSpaceFilePresentation"
@@ -13,10 +12,15 @@ import { getUserResourceKind, type UserResourceKind } from "./userSpaceFilePrese
 export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | undefined {
 	const { t } = useTranslation("super")
 	const kind = getUserResourceKind(item)
-	const system = useSystemFileHelp(kind === "magic" || kind === "instructions" ? kind : undefined)
+	const system = useSystemFileHelp(
+		kind === "magic" ? "userMagic" : kind === "instructions" ? "instructionFile" : undefined,
+	)
 	if (!kind || kind === "magic" || kind === "instructions") return system
 	// 只求值当前分类；详细正文等到打开面板后再创建。
-	const entries: Record<Exclude<UserResourceKind, SystemFileHelpKind>, () => HelpDefinition> = {
+	const entries: Record<
+		Exclude<UserResourceKind, "magic" | "instructions">,
+		() => HelpDefinition
+	> = {
 		memory: () => ({
 			title: t("userSpace.fileLabels.memory"),
 			summary: t("userSpace.fileHelp.memory"),

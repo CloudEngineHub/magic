@@ -16,7 +16,7 @@ const EXAMPLE_FOLDERS: AttachmentItem[] = [
 export default function UserSpaceHelpContent() {
 	const { t } = useTranslation("super")
 	const descriptions = [
-		t("userSpace.fileHelp.magic"),
+		t("topicFiles.systemFiles.help.userMagic"),
 		t("userSpace.fileHelp.memory"),
 		t("userSpace.fileHelp.dingtalk"),
 		t("userSpace.fileHelp.lark"),

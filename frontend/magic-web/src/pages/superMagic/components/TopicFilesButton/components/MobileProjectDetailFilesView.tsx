@@ -1,3 +1,6 @@
+import { buildSkillFileKinds } from "../utils/skill-file-structure"
+import type { FileHelpContext } from "../utils/magic-system-folder"
+import { ProjectFileTag } from "./TopicFileTag"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import MagicPullToRefresh from "@/components/base-mobile/MagicPullToRefresh"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
@@ -46,6 +49,7 @@ import {
 } from "./ProjectFileImagePreviewProvider"
 
 interface MobileProjectDetailFilesViewProps {
+	fileHelpContext?: FileHelpContext
 	attachments: AttachmentItem[]
 	activeFileId?: string | null
 	allowEdit?: boolean
@@ -221,6 +225,7 @@ function renderAttachmentIconCell(icon: ReactNode) {
  * 新移动端文件区：只负责目录浏览、搜索与轻量添加入口，业务写操作通过父层回调下沉。
  */
 function MobileProjectDetailFilesView({
+	fileHelpContext,
 	attachments,
 	activeFileId,
 	allowEdit = true,
@@ -246,6 +251,10 @@ function MobileProjectDetailFilesView({
 	onBatchDelete,
 }: MobileProjectDetailFilesViewProps) {
 	const { t } = useTranslation("super")
+	const skillFiles = useMemo(
+		() => buildSkillFileKinds(attachments, fileHelpContext),
+		[attachments, fileHelpContext],
+	)
 	const isChatSheetVariant = mobileViewVariant === "chat-sheet"
 	const [pathStackKeys, setPathStackKeys] = useState<string[]>([])
 	const [searchValue, setSearchValue] = useState("")
@@ -722,6 +731,9 @@ function MobileProjectDetailFilesView({
 							<MobileAttachmentRowIcon
 								item={item}
 								attachments={attachments}
+								skillKind={skillFiles.kinds.get(key)}
+								filePath={skillFiles.paths.get(key)}
+								fileHelpContext={fileHelpContext}
 								size={MOBILE_ATTACHMENT_ROW_ICON_SIZE}
 							/>,
 						)}
@@ -743,6 +755,15 @@ function MobileProjectDetailFilesView({
 							</p>
 						</div>
 					</button>
+					{/* 用途按钮与打开、选择按钮并列，避免触屏查看说明时触发文件操作。 */}
+					<div className="max-w-[30%] shrink-0 empty:hidden">
+						<ProjectFileTag
+							item={item}
+							skillKind={skillFiles.kinds.get(key)}
+							path={skillFiles.paths.get(key)}
+							context={fileHelpContext}
+						/>
+					</div>
 					{renderSelectionButton(item)}
 				</div>
 			</div>
@@ -783,6 +804,9 @@ function MobileProjectDetailFilesView({
 							<MobileAttachmentRowIcon
 								item={item}
 								attachments={attachments}
+								skillKind={skillFiles.kinds.get(key)}
+								filePath={skillFiles.paths.get(key)}
+								fileHelpContext={fileHelpContext}
 								size={MOBILE_ATTACHMENT_ROW_ICON_SIZE}
 							/>,
 						)}
@@ -804,6 +828,15 @@ function MobileProjectDetailFilesView({
 							</p>
 						</div>
 					</button>
+					{/* 用途按钮与打开、选择按钮并列，避免触屏查看说明时触发文件操作。 */}
+					<div className="max-w-[30%] shrink-0 empty:hidden">
+						<ProjectFileTag
+							item={item}
+							skillKind={skillFiles.kinds.get(key)}
+							path={skillFiles.paths.get(key)}
+							context={fileHelpContext}
+						/>
+					</div>
 					{renderSelectionButton(item)}
 				</div>
 			</div>

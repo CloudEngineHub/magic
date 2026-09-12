@@ -1,3 +1,4 @@
+import type { FileHelpContext } from "./utils/magic-system-folder"
 import {
 	forwardRef,
 	useCallback,
@@ -37,6 +38,8 @@ export type {
 } from "./topic-file-row-decoration.types"
 
 export interface TopicFilesButtonProps {
+	/** 所属定义工作区；用户挂载文件仍以自己的空间身份为准。 */
+	fileHelpContext?: FileHelpContext
 	className?: string
 	title?: string
 	/** 是否显示文件树内部标题。 */
@@ -123,6 +126,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			allowDownload,
 			allowCopyTo = false,
 			resolveTopicFileRowDecoration,
+			fileHelpContext,
 			mobileViewVariant = "default",
 			refreshAttachments,
 			onSaveSlidesTemplate,
@@ -281,6 +285,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					allowDownload={effectiveAllowDownload}
 					allowCopyTo={allowCopyTo}
 					resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
+					fileHelpContext={fileHelpContext}
 					mobileViewVariant={mobileViewVariant}
 					refreshAttachments={refreshAttachments}
 					onSaveSlidesTemplate={handleSaveSlidesTemplate}

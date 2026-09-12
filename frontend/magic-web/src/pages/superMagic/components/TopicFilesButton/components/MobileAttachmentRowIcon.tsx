@@ -13,12 +13,19 @@ import { isEmpty } from "lodash-es"
 import { CustomFolderMagicIcon } from "./CustomFolderMagicIcon"
 import { ProjectFileImageThumbnailIcon } from "./ProjectFileImageThumbnailIcon"
 import { TopicFileIcon, type TopicFileMagicVariant } from "./TopicFileIcon"
+import { SkillFileIcon } from "./SkillFileIcon"
+import { resolveSkillLibraryKind, type SkillFileKind } from "../utils/skill-file-structure"
 import {
 	isMagicSystemFolder,
 	resolveProjectInstructionsFileKind,
+	resolveSystemFileHelpKind,
+	type FileHelpContext,
 } from "../utils/magic-system-folder"
 
 interface MobileAttachmentRowIconProps {
+	filePath?: string
+	fileHelpContext?: FileHelpContext
+	skillKind?: SkillFileKind
 	item: AttachmentItem
 	attachments: AttachmentItem[]
 	size?: number
@@ -28,7 +35,6 @@ interface MobileAttachmentRowIconProps {
 
 const MAGIC_CHILD_FOLDER_VARIANTS: Record<string, TopicFileMagicVariant> = {
 	cron: "magic-cron",
-	skills: "magic-skills",
 	memory: "magic-memory",
 }
 
@@ -108,6 +114,9 @@ function findAttachmentInTree(
 
 /** Shares the mobile file-row icon rules between project detail and share default-file picker. */
 export function MobileAttachmentRowIcon({
+	filePath,
+	fileHelpContext,
+	skillKind,
 	item,
 	attachments,
 	size = 24,
@@ -144,22 +153,43 @@ export function MobileAttachmentRowIcon({
 		)
 	}
 
-	const magicVariant = resolveAttachmentMagicVariant(item)
+	const resolvedSkillKind = skillKind ?? resolveSkillLibraryKind(item)
+	const systemKind = resolveSystemFileHelpKind(item, filePath, fileHelpContext)
+	let magicVariant: TopicFileMagicVariant | undefined
+	if (!resolvedSkillKind) {
+		if (filePath === undefined) magicVariant = resolveAttachmentMagicVariant(item)
+		else if (systemKind && item.is_directory) magicVariant = "magic-root"
+		else if (systemKind === "crewIdentity" || systemKind === "clawIdentity")
+			magicVariant = "magic-file-identity"
+		else if (systemKind === "crewSoul" || systemKind === "clawSoul")
+			magicVariant = "magic-file-soul"
+		else if (systemKind) magicVariant = "magic-file-agent"
+		else if (filePath.startsWith(".magic/") && filePath.split("/").length === 2)
+			magicVariant = resolveAttachmentMagicVariant(item)
+	}
 
 	return (
-		<ProjectFileImageThumbnailIcon
-			item={item}
+		<SkillFileIcon
+			kind={resolvedSkillKind}
+			isDirectory={item.is_directory}
 			size={size}
 			className={className}
-			dataTestId={dataTestId}
 			fallback={
-				<TopicFileIcon
-					isDirectory={item.is_directory}
-					magicVariant={magicVariant}
-					hasChildren={getVisibleAttachmentChildren(item).length > 0}
-					fileExtension={item.file_extension}
+				<ProjectFileImageThumbnailIcon
+					item={item}
+					size={size}
 					className={className}
 					dataTestId={dataTestId}
+					fallback={
+						<TopicFileIcon
+							isDirectory={item.is_directory}
+							magicVariant={magicVariant}
+							hasChildren={getVisibleAttachmentChildren(item).length > 0}
+							fileExtension={item.file_extension}
+							className={className}
+							dataTestId={dataTestId}
+						/>
+					}
 				/>
 			}
 		/>
