@@ -2956,6 +2956,7 @@
 			},
 			"title": "确认{{operation}}项目文件"
 		},
+		"specifiedAgentUnavailable": "当前无法使用指定员工，已沿用本会话员工",
 		"userInfoAuthorizationConfirm": {
 			"allow": "允许",
 			"appConfigUnavailableContent": "该 HTML 微应用的 app.json 暂不可用，正在按旧版方式请求读取：{{fields}}。",

@@ -2956,6 +2956,7 @@
 			},
 			"title": "Confirm Project File {{operation}}"
 		},
+		"specifiedAgentUnavailable": "This conversation cannot use the specified agent. Using the current one.",
 		"userInfoAuthorizationConfirm": {
 			"allow": "Allow",
 			"appConfigUnavailableContent": "This HTML micro-app's app.json is temporarily unavailable and is requesting access to: {{fields}} through the legacy flow.",

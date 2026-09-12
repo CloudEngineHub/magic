@@ -29,6 +29,7 @@ import {
 	isSingleTopicHostProject,
 	resolveIframeHostTopicMode,
 } from "@/pages/superMagic/utils/isSingleTopicHostProject"
+import { notifySpecifiedAgentUnavailable } from "@/pages/superMagic/utils/notifySpecifiedAgentUnavailable"
 
 /**
  * @param projectId 原项目（origin）：文件/库所在项目，用于 mention 解析
@@ -155,6 +156,10 @@ export function useIframeAgentActions(
 		},
 	)
 
+	/**
+	 * 发送消息。多话题宿主会新建话题；单话题宿主（龙虾/对话）复用当前话题。
+	 * 单话题路径忽略 agentId，始终由当前 claw/chat 自己的 agent 发送。
+	 */
 	const createTopicAndSend = useMemoizedFn(
 		async (params: {
 			message: string | TiptapJSONContent
@@ -164,10 +169,10 @@ export function useIframeAgentActions(
 			if (!hostProjectId) throw new Error("No project selected")
 			if (!topicStore) throw new Error("No topic store")
 
-			// Single-topic hosts reuse the current topic instead of creating.
 			if (isSingleTopicHostProject(selectedProject)) {
 				const currentTopic = topicStore.selectedTopic
 				if (!currentTopic?.id) throw new Error("No topic selected")
+				notifySpecifiedAgentUnavailable(params.agentId, selectedProject)
 				await sendMessage({ message: params.message, model: params.model })
 				return { topicId: currentTopic.id }
 			}

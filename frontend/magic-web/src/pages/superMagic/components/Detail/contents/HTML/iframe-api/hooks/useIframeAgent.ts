@@ -17,7 +17,7 @@ export interface UseIframeAgentOptions {
 	targetOrigin: string
 	/** 获取当前 Agent 列表的函数 */
 	getAgentList: () => AgentInfo[]
-	/** 创建话题并发送消息 */
+	/** 发送消息。单话题宿主发到当前话题，并忽略 agentId。 */
 	createTopicAndSend: (params: {
 		message: string | TiptapJSONContent
 		agentId?: string

@@ -17,10 +17,20 @@ const mocks = vi.hoisted(() => ({
 	releaseHtmlScreenshotsAfterSend: vi.fn(),
 	collectMentionItemsFromContent: vi.fn(() => []),
 	processMessageMentions: vi.fn(async (content: unknown) => content),
+	notifySpecifiedAgentUnavailable: vi.fn(),
 }))
 
 vi.mock("ahooks", () => ({
 	useMemoizedFn: <T extends (...args: never[]) => unknown>(fn: T) => fn,
+}))
+
+vi.mock("@/pages/superMagic/utils/isChatWorkspaceProject", () => ({
+	isCachedChatWorkspaceProject: (project?: { workspace_id?: string } | null) =>
+		project?.workspace_id === "chat-ws",
+}))
+
+vi.mock("@/pages/superMagic/utils/notifySpecifiedAgentUnavailable", () => ({
+	notifySpecifiedAgentUnavailable: mocks.notifySpecifiedAgentUnavailable,
 }))
 
 vi.mock("@/utils/pubsub", () => ({
@@ -220,6 +230,100 @@ describe("useIframeAgentActions", () => {
 				}),
 			}),
 		)
+	})
+
+	it("reuses the current Chat workspace topic even without Chat project_mode", async () => {
+		const currentTopic = {
+			id: "chat-topic-2",
+			chat_topic_id: "chat-chat-topic-2",
+			chat_conversation_id: "conversation-chat-topic-2",
+		} as Topic
+		const topicStore = {
+			topics: [currentTopic],
+			selectedTopic: currentTopic,
+			setTopics: mocks.setScopedTopics,
+			setSelectedTopic: mocks.setScopedSelectedTopic,
+		} as unknown as TopicStore
+		const { result } = renderHook(() =>
+			useIframeAgentActions("project-from-preview", topicStore, {
+				id: "project-current",
+				project_mode: TopicMode.General,
+				workspace_id: "chat-ws",
+			} as any),
+		)
+
+		await act(async () => {
+			await expect(
+				result.current.createTopicAndSend({
+					message: "hello",
+					agentId: TopicMode.General,
+				}),
+			).resolves.toEqual({
+				topicId: "chat-topic-2",
+			})
+		})
+
+		expect(mocks.createTopic).not.toHaveBeenCalled()
+		expect(mocks.dispatchMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				options: expect.objectContaining({
+					extra: expect.objectContaining({
+						super_agent: expect.objectContaining({
+							topic_pattern: TopicMode.Chat,
+						}),
+					}),
+				}),
+			}),
+		)
+	})
+
+	it("ignores agentId when sending on MagiClaw", async () => {
+		const currentTopic = {
+			id: "claw-topic-2",
+			chat_topic_id: "chat-claw-topic-2",
+			chat_conversation_id: "conversation-claw-topic-2",
+		} as Topic
+		const topicStore = {
+			topics: [currentTopic],
+			selectedTopic: currentTopic,
+			setTopics: mocks.setScopedTopics,
+			setSelectedTopic: mocks.setScopedSelectedTopic,
+		} as unknown as TopicStore
+		const { result } = renderHook(() =>
+			useIframeAgentActions("project-from-preview", topicStore, {
+				id: "project-current",
+				project_mode: TopicMode.MagiClaw,
+			} as any),
+		)
+
+		await act(async () => {
+			await expect(
+				result.current.createTopicAndSend({
+					message: "hello",
+					agentId: TopicMode.General,
+				}),
+			).resolves.toEqual({
+				topicId: "claw-topic-2",
+			})
+		})
+
+		expect(mocks.createTopic).not.toHaveBeenCalled()
+		expect(mocks.notifySpecifiedAgentUnavailable).toHaveBeenCalledWith(
+			TopicMode.General,
+			expect.objectContaining({ project_mode: TopicMode.MagiClaw }),
+		)
+		expect(mocks.dispatchMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				options: expect.objectContaining({
+					extra: expect.objectContaining({
+						super_agent: expect.objectContaining({
+							topic_pattern: TopicMode.MagiClaw,
+						}),
+					}),
+				}),
+			}),
+		)
+		expect(mocks.dispatchMessage.mock.calls[0][0].options.extra.agent_code).toBeUndefined()
 	})
 
 	it("rejects MagiClaw send when the unique topic is missing", async () => {

@@ -22,6 +22,7 @@ import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/project
 import type { HtmlPermissionScope } from "../types"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { isSingleTopicHostProject } from "@/pages/superMagic/utils/isSingleTopicHostProject"
+import { notifySpecifiedAgentUnavailable } from "@/pages/superMagic/utils/notifySpecifiedAgentUnavailable"
 
 interface MagicUploadFileData {
 	/** 二进制对象（优先使用；ArrayBuffer 可通过 transfer list 转移所有权） */
@@ -322,6 +323,32 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 					return
 				}
 
+				// 龙虾/对话只有一个会话，把文件加到当前话题；忽略 agentMode。
+				if (isSingleTopicHostProject(selectedProject)) {
+					if (!scopedTopicStore) {
+						replyToIframe(replyType, requestId, {
+							success: false,
+							error: "No topic store",
+						})
+						return
+					}
+					if (!scopedTopicStore.selectedTopic?.id) {
+						replyToIframe(replyType, requestId, {
+							success: false,
+							error: "No topic selected",
+						})
+						return
+					}
+
+					notifySpecifiedAgentUnavailable(agentMode, selectedProject)
+					addMultipleFilesToCurrentChat({ fileItems: foundFiles, autoFocus: true })
+					replyToIframe(replyType, requestId, {
+						success: true,
+						result: { foundCount: foundFiles.length, notFoundPaths },
+					})
+					return
+				}
+
 				const selection = resolveAgentSelection(agentMode)
 				if (!isAgentSelectionAvailable(selection.modeIdentifier, selection.agentCode)) {
 					replyToIframe(replyType, requestId, {
@@ -347,24 +374,6 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 					replyToIframe(replyType, requestId, {
 						success: false,
 						error: "No topic store",
-					})
-					return
-				}
-
-				// Claw / Chat 只有一个会话，把文件加到当前话题，不要再建一个。
-				if (isSingleTopicHostProject(selectedProject)) {
-					if (!scopedTopicStore.selectedTopic?.id) {
-						replyToIframe(replyType, requestId, {
-							success: false,
-							error: "No topic selected",
-						})
-						return
-					}
-
-					addMultipleFilesToCurrentChat({ fileItems: foundFiles, autoFocus: true })
-					replyToIframe(replyType, requestId, {
-						success: true,
-						result: { foundCount: foundFiles.length, notFoundPaths },
 					})
 					return
 				}

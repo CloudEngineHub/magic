@@ -21,6 +21,7 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 		loading: vi.fn(),
 		success: vi.fn(),
 		error: vi.fn(),
+		warning: vi.fn(),
 		destroy: vi.fn(),
 	},
 }))
@@ -63,6 +64,11 @@ vi.mock("@/pages/superMagic/services", () => ({
 			navigateToState: vi.fn(),
 		},
 	},
+}))
+
+vi.mock("@/pages/superMagic/utils/isChatWorkspaceProject", () => ({
+	isCachedChatWorkspaceProject: (project?: { workspace_id?: string } | null) =>
+		project?.workspace_id === "chat-ws",
 }))
 
 vi.mock("@/pages/superMagic/stores/core", () => ({
@@ -878,6 +884,65 @@ describe("useMagicFiles", () => {
 				)
 			},
 		)
+
+		it("adds files to the current Chat workspace topic even without Chat project_mode", async () => {
+			const { SuperMagicApi } = await import("@/apis")
+			const { addMultipleFilesToCurrentChat } =
+				await import("@/pages/superMagic/utils/topics")
+			const { default: pubsub } = await import("@/utils/pubsub")
+			const setSelectedTopic = vi.fn()
+			const setTopics = vi.fn()
+			const currentTopic = { id: "host-topic-2" }
+			defaultAgentSelectionMock.isAvailable = false
+
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					selectedProject: {
+						id: "proj-1",
+						workspace_id: "chat-ws",
+						project_mode: TopicMode.General,
+					},
+					topicStore: makeTopicStore({
+						topics: [currentTopic],
+						selectedTopic: currentTopic as never,
+						setTopics,
+						setSelectedTopic,
+					}),
+					attachmentList: [{ relative_file_path: "a.csv", file_id: "f-1" }],
+					uploadImageFileToProject,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicAddFilesToMessage({
+					type: "MAGIC_ADD_FILES_TO_MESSAGE_REQUEST",
+					requestId: "req-chat-ws-reuse",
+					filePaths: ["a.csv"],
+					agentMode: "invalid-agent",
+				})
+			})
+
+			expect(SuperMagicApi.createTopic).not.toHaveBeenCalled()
+			expect(setSelectedTopic).not.toHaveBeenCalled()
+			expect(setTopics).not.toHaveBeenCalled()
+			expect(pubsub.publish).not.toHaveBeenCalled()
+			expect(addMultipleFilesToCurrentChat).toHaveBeenCalledOnce()
+			expect(magicToast.warning).toHaveBeenCalledWith(
+				expect.objectContaining({
+					key: "html-iframe-specified-agent-unavailable",
+				}),
+			)
+			expect(iframePostMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "MAGIC_ADD_FILES_TO_MESSAGE_RESPONSE",
+					requestId: "req-chat-ws-reuse",
+					success: true,
+				}),
+				targetOrigin,
+			)
+		})
 
 		it("rejects MagiClaw addFilesToMessage when the unique topic is missing", async () => {
 			const { SuperMagicApi } = await import("@/apis")
