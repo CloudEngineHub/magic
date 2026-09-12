@@ -87,8 +87,26 @@ export async function savePPTThumbnail(
 ): Promise<void> {
 	if (!shouldCommit() || !/^(blob:|data:image\/)/.test(thumbnailUrl)) return
 	try {
-		const response = await fetch(thumbnailUrl)
-		const blob = await response.blob()
+		let blob: Blob
+		if (thumbnailUrl.startsWith("data:")) {
+			// Data URL 已包含图片字节；交给全局 fetch 会让请求监控正则扫描整段 Base64，阻塞主线程。
+			// 只匹配短头部，图片体直接解码；不能用隐藏的 fetch 实例绕过监控。
+			const separatorIndex = thumbnailUrl.indexOf(",")
+			if (separatorIndex === -1) return
+			const mimeType = /^data:(image\/[^;,]+);base64$/i.exec(
+				thumbnailUrl.slice(0, separatorIndex),
+			)?.[1]
+			if (!mimeType) return
+			const binary = atob(thumbnailUrl.slice(separatorIndex + 1))
+			const bytes = new Uint8Array(binary.length)
+			for (let index = 0; index < binary.length; index++) {
+				bytes[index] = binary.charCodeAt(index)
+			}
+			blob = new Blob([bytes], { type: mimeType })
+		} else {
+			const response = await fetch(thumbnailUrl)
+			blob = await response.blob()
+		}
 		if (!shouldCommit()) return
 		await pptThumbnailCacheRepository.putThumbnail(identity, blob, shouldCommit)
 	} catch {
