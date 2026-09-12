@@ -27,7 +27,6 @@ import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
 
 function ClawPlaygroundDesktop() {
 	const { t } = useTranslation("sidebar")
-	const { t: tSuper } = useTranslation("super")
 	const clawBrandValues = getClawBrandTranslationValues()
 	const navigate = useNavigate()
 	const {
@@ -57,9 +56,7 @@ function ClawPlaygroundDesktop() {
 	useDefaultModeModelListRefreshOnMount()
 
 	const resolveTopicFileRowDecoration = useMemoizedFn(
-		createClawPlaygroundFileRowDecorationResolver({
-			t: tSuper,
-		}),
+		createClawPlaygroundFileRowDecorationResolver(),
 	)
 
 	const { activeFileId, handleFileClick, topicFilesProps, setActiveFileId } = useTopicFiles({

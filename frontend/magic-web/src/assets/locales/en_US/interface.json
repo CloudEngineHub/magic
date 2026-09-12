@@ -1481,6 +1481,15 @@
 			"title": "Address book"
 		}
 	},
+	"contextHelp": {
+		"close": "Got it",
+		"example": "Example",
+		"loadFailed": "This guide could not be loaded. Please try opening it again later.",
+		"loading": "Loading",
+		"more": "Learn more",
+		"note": "Good to know",
+		"usage": "How to use it"
+	},
 	"createOrganization": "Create Team",
 	"deleteConfirm": "Confirm deletion",
 	"deleteConfirmTip1": "To ensure data security, if you need to delete it, please",

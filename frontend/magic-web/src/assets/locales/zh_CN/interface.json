@@ -1483,6 +1483,15 @@
 			"title": "通讯录"
 		}
 	},
+	"contextHelp": {
+		"close": "知道了",
+		"example": "例如",
+		"loadFailed": "说明暂时无法加载，请稍后再打开。",
+		"loading": "加载中",
+		"more": "查看更多",
+		"note": "使用说明",
+		"usage": "可以怎么用？"
+	},
 	"createOrganization": "创建团队",
 	"deleteConfirm": "确认删除",
 	"deleteConfirmTip1": "为确保数据的安全，如需删除请将",

@@ -737,9 +737,7 @@ function ClawPlaygroundMobile() {
 	const knowledgeBasePreviewState = useMobileKnowledgeBasePreview()
 
 	const resolveTopicFileRowDecoration = useMemoizedFn(
-		createClawPlaygroundFileRowDecorationResolver({
-			t: tSuper,
-		}),
+		createClawPlaygroundFileRowDecorationResolver(),
 	)
 
 	useEffect(() => {

@@ -6609,6 +6609,63 @@
 			"renameProjectNameSyncFailed": "Renamed successfully, but the canvas name could not be synchronized",
 			"title": "Canvas Project Risk"
 		},
+		"clawPlaygroundDetails": {
+			"aboutYou": {
+				"example": "“I prefer concise explanations. When discussing a proposal, explain its impact before implementation details.”",
+				"note": "This is background for AI, not an account settings page. Keep useful work context and avoid unrelated sensitive information.",
+				"usage": "USER.md records preferences and background that help AI work with you. Ask AI to update this information when it changes."
+			},
+			"guidelines": {
+				"example": "“Be direct and concise. State uncertainty when evidence is missing, and do not invent conclusions.”",
+				"note": "Describe specific behaviors and avoid vague or conflicting requirements. These principles do not replace service permissions.",
+				"usage": "SOUL.md describes how AI should behave and work, including its communication style and how to handle uncertain information."
+			},
+			"identityInfo": {
+				"example": "“You are my research assistant, helping organize information and record decisions.”",
+				"note": "This defines an assistant role, not a signed-in account, organization membership, or access permissions.",
+				"usage": "IDENTITY.md describes this assistant’s name, role, and identity so it can maintain a consistent introduction and understanding of its responsibilities."
+			},
+			"initialSetup": {
+				"example": "“When getting started, first ask what work I want this assistant to help with.”",
+				"note": "Reading this file does not reset the assistant or automatically rerun setup. Execution depends on the feature’s current workflow.",
+				"usage": "BOOTSTRAP.md guides AI through first-use preparation, such as understanding your needs, establishing an assistant role, and agreeing on basic conventions."
+			},
+			"installedSkills": {
+				"example": "“Explain the installed skills and which ones can help analyze my materials.”",
+				"note": "This guide explains the folder; it is not a skill installation screen. Availability also depends on configuration and required tools.",
+				"usage": "Skills provide methods and instructions for particular kinds of work. This folder holds installed skill resources so AI can find a suitable approach for a task."
+			},
+			"memoryFile": {
+				"example": "“Keep lasting preferences and key decisions. Update related memory when information changes.”",
+				"note": "These are memory management rules; actual records live in the memory folder. This differs from core memory in User Space, which stores important information itself.",
+				"usage": "MEMORY.md describes how AI should save, organize, and use memory. It can define what is worth keeping, how to arrange records, and when to update them."
+			},
+			"memoryFolder": {
+				"example": "“Find the saved project background and identify information that needs updating.”",
+				"note": "Files in this folder contain memory information. MEMORY.md describes how to save, organize, and use memory; the two serve different purposes.",
+				"usage": "This folder contains memory records left by AI for later work. Ask AI to find relevant records when revisiting background information or correcting it."
+			},
+			"proactiveExecution": {
+				"example": "“During proactive checks, look for pending work and notify me only when I need to act.”",
+				"note": "The file describes what to check; it does not mean AI runs continuously in the background. Checks depend on whether the feature is enabled and scheduled.",
+				"usage": "HEARTBEAT.md describes what AI should check during periodic proactive work, such as pending tasks or changes in a relevant status."
+			},
+			"scheduledTasks": {
+				"example": "“Review my scheduled tasks and explain what each one does and when it runs.”",
+				"note": "Reading this guide does not create, enable, or run a task. Execution depends on the task’s settings and status.",
+				"usage": "This folder holds tasks that run on a schedule, such as daily progress summaries or weekly reports. Ask AI to explain their schedules and instructions."
+			},
+			"skillList": {
+				"example": "“Use the skill list to explain which methods might help with this research task.”",
+				"note": "The list is a usage guide; skill folders hold the actual resources. A description does not prove that all requirements for running a skill are currently met.",
+				"usage": "SKILLS.md describes available skills so AI can find relevant methods and instructions. Start with this list before exploring a particular skill."
+			},
+			"toolList": {
+				"example": "“Explain what these tools do and what environment information is needed before using them.”",
+				"note": "This is usage guidance, not proof of installation or authorization. Do not put keys or passwords in instructions that may be shared.",
+				"usage": "TOOLS.md records instructions and environment information that help AI understand tool purposes and working conventions."
+			}
+		},
 		"clawPlaygroundHelp": {
 			"aboutYou": "Your preferences and relevant information that help AI work with you.",
 			"guidelines": "Behavior and working principles that help AI maintain a consistent style.",
@@ -6618,7 +6675,6 @@
 			"memoryFile": "Instructions for how AI should save, organize, and use memory.",
 			"memoryFolder": "Memory notes saved by AI for reference in future work.",
 			"proactiveExecution": "Instructions for what AI should look for and handle during periodic check-ins.",
-			"prompts": "Instructions that explain how AI should work and which requirements to follow.",
 			"scheduledTasks": "Tasks that run on a schedule, such as organizing information or sending reminders.",
 			"skillList": "A list of skills that helps AI find a suitable approach to a task.",
 			"toolList": "Instructions and environment details AI needs when using tools."
@@ -6632,7 +6688,6 @@
 			"memoryFile": "Memory Config",
 			"memoryFolder": "Memory Store",
 			"proactiveExecution": "Proactive Execution",
-			"prompts": "Prompts",
 			"scheduledTasks": "Scheduled Tasks",
 			"skillList": "Skill List",
 			"toolList": "Tool List"
@@ -7227,6 +7282,103 @@
 		"enterProject": "Open a project to view its memory",
 		"expandLoaded": "Expand loaded folders",
 		"file": "File",
+		"fileDetails": {
+			"cli": {
+				"example": "“Explain which tasks these extension tools are intended to handle.”",
+				"note": "A folder does not guarantee that every tool is callable. Availability depends on installation, configuration, and authorization.",
+				"usage": "This folder holds extension tools and related files available for AI to use. Ask AI to consult a tool’s instructions to explain what it can do."
+			},
+			"coreMemory": {
+				"example": "“Report preference: conclusions first, then evidence. See detailed memory for examples.”",
+				"note": "Core memory contains actual saved information. It differs from a file defining how memory should be managed. Keep the fixed directory structure when editing its contents.",
+				"usage": "This file keeps frequently needed highlights and points to more detailed records. Use it for concise, lasting information and keep longer explanations in the linked records."
+			},
+			"dingtalk": {
+				"example": "“Explain the purpose of the DingTalk configuration and what setup is needed to use it.”",
+				"note": "A folder does not prove that you are signed in or have every permission. Changing connection settings may require signing in again. Do not share stored credentials.",
+				"usage": "The DingTalk tool stores personal settings and connection information here. Features you have authorized may use these files."
+			},
+			"event": {
+				"example": "“Find the record of that plan change and explain its reasons and outcome.”",
+				"note": "The record describes what happened then, which may differ from the current situation. Events with unclear dates may be recorded separately.",
+				"usage": "Record the circumstances, course, and outcome of an event. Ask AI to find the relevant date when tracing a discussion or decision."
+			},
+			"index": {
+				"example": "“Check the folder index first and find records about my writing preferences.”",
+				"note": "The index helps locate information; it does not contain every detail. Check the corresponding records for important conclusions.",
+				"usage": "Brief descriptions help you and AI find related records in this folder. Use the index to locate a subject, then open the source record for details."
+			},
+			"instructions": {
+				"example": "“Start reports with the conclusion, then show the evidence. State when something is uncertain.”",
+				"note": "Whether this file is used for a task depends on its location and the feature involved. These instructions guide AI; they do not change access permissions for files or services.",
+				"usage": "Use AGENTS.md to record context and requirements you want AI to follow, such as response language, report format, working conventions, and practices to avoid. Keep instructions specific and consistent."
+			},
+			"lark": {
+				"example": "“Explain the Lark tool settings and what is needed to use its features.”",
+				"note": "The folder does not prove that the connection is still valid. Access depends on actual authorization. Changing connection settings may require signing in again; do not share credentials.",
+				"usage": "The Lark tool stores personal settings and connection information used by features you authorize. These files are usually maintained by the tool."
+			},
+			"magic": {
+				"example": "“Explain what is stored in this system folder and which files relate to my tool settings.”",
+				"note": "The folder name .magic is a system convention. Changing or deleting its settings may affect tool connections or features. Understand a file before changing it.",
+				"usage": "This folder holds settings, memory, and supporting files used by AI. When you need to adjust a feature, ask AI to explain the relevant files before making changes."
+			},
+			"memory": {
+				"example": "“Remember that I prefer concise reports with conclusions first and evidence afterward.”",
+				"note": "Memory keeps useful information, not a complete backup of every chat. Ask AI to correct or update information when it changes.",
+				"usage": "Ask AI to retain information useful for later tasks, such as preferences, working agreements, or project context. Global memory supports work across projects; project memory applies to its project."
+			},
+			"month": {
+				"example": "“Use this month’s event records to summarize progress and unresolved issues.”",
+				"note": "A month folder is an archive grouping, not an existing monthly report. Use the records it actually contains as evidence.",
+				"usage": "Group events from the same month to review their progress, decisions, and outcomes by date."
+			},
+			"notes": {
+				"example": "“Find why I previously chose this report template and explain the background.”",
+				"note": "Core memory summarizes; detailed memory expands. Keep them consistent and ask AI to update both when information changes.",
+				"usage": "Detailed memory provides the background, reasons, and examples that do not fit in core memory. Ask AI to consult these records when revisiting a preference or decision."
+			},
+			"references": {
+				"example": "“Organize my preferences for article structure as a reference for future writing.”",
+				"note": "Reference material may include older agreements. Consider current requirements before applying an earlier record.",
+				"usage": "Organize lasting information by subject, such as writing preferences, collaboration agreements, and reasons for decisions. Find information by topic without remembering its date."
+			},
+			"settings": {
+				"example": "“Explain the purpose of each setting without showing keys or login credentials.”",
+				"note": "Settings may contain sensitive information. Do not copy them to shared conversations. A settings file does not prove that a connection succeeded.",
+				"usage": "These files contain personal settings for tools or service connections and are usually managed by AI or the tool. Understand an option and its impact before changing it."
+			},
+			"subject": {
+				"example": "“Read this topic record and explain my previous requirements for report formatting.”",
+				"note": "The file contains the details, its folder groups related records, and an index helps locate them. An index description is not the full text.",
+				"usage": "This file describes one topic in detail, including its context, methods, or preferences. Read it directly or ask AI to find it by subject."
+			},
+			"teamshare": {
+				"example": "“Explain what each of these Teamshare tool files is used for.”",
+				"note": "The folder does not establish the current account, connection, or permissions. Do not copy configuration containing credentials to a shared location.",
+				"usage": "The Teamshare tool stores related settings and working files here. Ask AI to explain a file before changing unfamiliar configuration."
+			},
+			"timeline": {
+				"example": "“Review recent decisions in this project and explain the changes in chronological order.”",
+				"note": "A record reflects circumstances at the time. Consider later records and current requirements before applying an old decision.",
+				"usage": "Review important events, their circumstances, and decisions by date. Ask AI to follow the records over time to explain how a situation developed."
+			},
+			"tools": {
+				"example": "“Explain this tool data folder and which files the tool uses while running.”",
+				"note": "Tools may need these files to keep working. Understand their purpose before deleting them; automatically generated files are not necessarily disposable cache.",
+				"usage": "Tools save information they need while running. Usually you do not need to organize every file manually. Ask which tool creates and uses unfamiliar files."
+			},
+			"topics": {
+				"example": "“Use our previous discussion about report structure to continue improving this outline.”",
+				"note": "These records retain selected discussion context, not a complete backup of all conversations. Follow newer requirements when circumstances change.",
+				"usage": "Keep useful context, questions, and conclusions from a discussion so you can continue later without explaining the entire background again."
+			},
+			"year": {
+				"example": "“Find records from this year related to changes in the project goals.”",
+				"note": "A year folder is a date grouping, not an automatically generated annual summary. Ask AI to summarize the actual records when needed.",
+				"usage": "Group events from the same year so you can browse by month or review significant changes over that year."
+			}
+		},
 		"fileHelp": {
 			"cli": "Additional tools available to AI and their supporting files.",
 			"coreMemory": "Important information AI refers to regularly, with links to more detailed notes.",
@@ -7235,9 +7387,9 @@
 			"index": "A guide to the contents of this folder, helping you and AI find relevant records.",
 			"instructions": "Instructions that guide how AI works, including requirements and preferences.",
 			"lark": "Personal settings and connection information used for the Lark features you authorize.",
-			"magic": "Settings and supporting files used by Magic, usually maintained by AI or the system.",
+			"magic": "Settings, memory, and tool files used by AI, usually maintained by AI or the system.",
 			"memory": "Information AI can refer to in later tasks to retain useful context about you.",
-			"month": "Important records grouped by month.",
+			"month": "Important event records organized by month.",
 			"notes": "Detailed explanations and records that supplement the core memory.",
 			"references": "Reusable information organized by subject, such as preferences, procedures, and reasons behind decisions.",
 			"settings": "Personal settings needed to connect services or use tools, usually managed by AI or the tools.",
@@ -7246,7 +7398,7 @@
 			"timeline": "Important events and decisions organized by date, so you can look back at how things developed.",
 			"tools": "Data automatically saved by tools, usually without requiring manual organization.",
 			"topics": "Useful context from a conversation, so you can continue the discussion later.",
-			"year": "Important records grouped by year."
+			"year": "Important event records organized by year."
 		},
 		"fileLabels": {
 			"cli": "Installed tools",
@@ -7254,9 +7406,9 @@
 			"dingtalk": "DingTalk",
 			"event": "Event record",
 			"index": "Contents",
-			"instructions": "Instructions",
+			"instructions": "AI instructions",
 			"lark": "Lark",
-			"magic": "Magic settings",
+			"magic": "System files",
 			"memory": "Long-term memory",
 			"month": "By month",
 			"notes": "Detailed notes",
@@ -7274,7 +7426,6 @@
 		"globalMemory": "Global memory",
 		"gridView": "Icon view",
 		"help": {
-			"close": "Got it",
 			"examplesTitle": "What can you do with it?",
 			"filesExample": "“Use the materials I saved in User Space to prepare a report.”",
 			"foldersTitle": "Common contents",
