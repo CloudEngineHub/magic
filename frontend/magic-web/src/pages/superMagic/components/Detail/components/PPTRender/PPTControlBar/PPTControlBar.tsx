@@ -7,9 +7,9 @@ import {
 	Home,
 	Maximize,
 	Minimize,
-	RefreshCcw,
+	RefreshCw,
 	RotateCw,
-	LayoutTemplate,
+	PanelsTopLeft,
 } from "lucide-react"
 import type { PPTControlBarProps } from "./types"
 import { PPTZoomControl } from "./PPTZoomControl"
@@ -52,15 +52,16 @@ export function PPTControlBar({
 	const templateBarSize = useSize(templateBarRef)
 	const zoomBarSize = useSize(zoomBarRef)
 	const barClassName =
-		"pointer-events-auto flex w-max max-w-full items-center gap-2 rounded-lg border border-border/60 bg-white/95 p-2 shadow-md backdrop-blur-sm supports-[backdrop-filter]:bg-white/80 dark:border-white/[0.08] dark:bg-zinc-900/95 dark:supports-[backdrop-filter]:bg-zinc-900/85"
-	// 两侧按较宽的一组对称预留空间，模板是否显示都不移动中间操作区。
-	// 按实际文案宽度换行，避免英文或窄预览下侧边按钮与中间重叠。
-	const sideWidth = Math.max(templateBarSize?.width ?? 0, zoomBarSize?.width ?? 0)
+		"pointer-events-auto flex w-max max-w-full items-center gap-1 rounded-[9px] border border-[#dfe2e7]/50 bg-white p-[5px] text-[#252830] shadow-[0_1px_2px_#17213b08,0_3px_8px_#17213b08] dark:border-[#4b515b]/55 dark:bg-[#292c33] dark:text-[#eef0f4] dark:shadow-[0_1px_2px_#00000020,0_3px_8px_#00000015] [&_button]:rounded-[5px] [&_button]:text-[13px] [&_button]:font-normal [&_button]:leading-[1.5] [&_button]:text-inherit [&_button:hover]:bg-[#f0f2f6] dark:[&_button:hover]:bg-[#3a3f49] [&_svg]:stroke-[1.7]"
+	// 三块作为整体居中，以实际文案宽度决定换行；窄预览中两块辅助操作仍靠拢。
+	// 40px 常规高度由 28px 控件、上下 5px 留白和边框组成，避免默认按钮样式改变视觉尺寸。
+	const sideWidth =
+		(onReplaceTemplate ? (templateBarSize?.width ?? 0) : 0) + (zoomBarSize?.width ?? 0)
 	const separateRows =
 		!isMobile &&
 		(!containerSize ||
 			!mainBarSize ||
-			containerSize.width < mainBarSize.width + 2 * (sideWidth + 8))
+			containerSize.width < mainBarSize.width + sideWidth + (onReplaceTemplate ? 16 : 8))
 
 	// Handle page jump
 	function handleJumpToPage(pageNum: string) {
@@ -101,23 +102,29 @@ export function PPTControlBar({
 			ref={containerRef}
 			data-testid="ppt-control-bar"
 			className={cn(
-				"pointer-events-none absolute inset-x-2 bottom-2 z-50 grid items-end gap-2",
-				separateRows ? "grid-cols-2" : "grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]",
+				"pointer-events-none absolute inset-x-2 bottom-[18px] z-50 grid items-center justify-center gap-2",
+				separateRows || !onReplaceTemplate
+					? "grid-cols-[auto_auto]"
+					: "grid-cols-[auto_auto_auto]",
 				isMobile ? "bottom-[20px]" : "",
 				className,
 			)}
 		>
 			<div
 				ref={mainBarRef}
+				// 显式约束主块宽度，防止 auto 网格轨道被英文按钮撑出预览区。
+				style={{ maxWidth: containerSize?.width }}
 				className={cn(
 					barClassName,
 					"flex-wrap justify-center justify-self-center",
 					separateRows || isMobile
 						? "col-span-full row-start-2"
-						: "col-start-2 row-start-1",
+						: onReplaceTemplate
+							? "col-start-2 row-start-1"
+							: "col-start-1 row-start-1",
 				)}
 			>
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-1">
 					{/* Previous button */}
 					<MagicTooltip title={isMobile ? undefined : t("fileViewer.previousPage")}>
 						<span>
@@ -140,7 +147,7 @@ export function PPTControlBar({
 					</MagicTooltip>
 
 					{/* Page indicator and jump input */}
-					<div className="flex flex-shrink-0 items-center gap-2 max-md:gap-1.5">
+					<div className="flex shrink-0 items-center gap-1">
 						{isPageInputVisible ? (
 							<input
 								ref={pageInputRef}
@@ -177,7 +184,7 @@ export function PPTControlBar({
 							>
 								<span
 									data-testid="ppt-control-bar-page-indicator"
-									className="flex-shrink-0 cursor-pointer whitespace-nowrap rounded-md px-2 py-1 text-sm font-medium text-foreground transition-colors hover:bg-accent max-md:text-xs"
+									className="flex h-7 min-w-[46px] shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[5px] px-[5px] text-[13px] font-normal tabular-nums leading-[1.5] transition-colors hover:bg-accent"
 									onClick={() => {
 										setIsPageInputVisible(true)
 										setJumpPageInput("")
@@ -187,7 +194,11 @@ export function PPTControlBar({
 										}, 0)
 									}}
 								>
-									{activeIndex + 1} / {totalSlides}
+									{activeIndex + 1}
+									<span className="whitespace-pre text-muted-foreground">
+										{" "}
+										/ {totalSlides}
+									</span>
 								</span>
 							</MagicTooltip>
 						)}
@@ -235,12 +246,12 @@ export function PPTControlBar({
 						</span>
 					</MagicTooltip>
 				</div>
-				<div className="flex items-center gap-1 border-l border-border/60 pl-2">
+				<div className="flex items-center gap-1 before:mx-[3px] before:h-4 before:w-px before:shrink-0 before:bg-[#e8ebf0] dark:before:bg-[#424650]">
 					<Button
 						variant="ghost"
 						size="sm"
 						data-testid="ppt-control-bar-refresh-current-button"
-						className="h-7 gap-1.5 px-2 text-xs font-normal"
+						className="h-7 gap-[5px] px-[7px] text-[13px] font-normal"
 						onClick={(event) => {
 							event.stopPropagation()
 							event.currentTarget.blur()
@@ -263,7 +274,7 @@ export function PPTControlBar({
 								variant="ghost"
 								size="sm"
 								data-testid="ppt-control-bar-refresh-button"
-								className="h-7 gap-1.5 px-2 text-xs font-normal text-foreground"
+								className="h-7 gap-[5px] px-[7px] text-[13px] font-normal text-foreground"
 								onClick={(e) => {
 									e.stopPropagation()
 									e.currentTarget.blur()
@@ -272,7 +283,7 @@ export function PPTControlBar({
 								aria-label={t("ppt.reloadAllSlides")}
 								disabled={isTransitioning}
 							>
-								<RefreshCcw className="h-4 w-4" />
+								<RefreshCw className="h-4 w-4" />
 								{t("ppt.reloadAllSlides")}
 							</Button>
 						</span>
@@ -320,8 +331,8 @@ export function PPTControlBar({
 					ref={zoomBarRef}
 					className={cn(
 						barClassName,
-						"row-start-1 justify-self-end",
-						separateRows ? "col-start-2" : "col-start-3",
+						"row-start-1 justify-self-start",
+						separateRows || !onReplaceTemplate ? "col-start-2" : "col-start-3",
 					)}
 				>
 					<PPTZoomControl
@@ -338,7 +349,7 @@ export function PPTControlBar({
 				<div
 					ref={templateBarRef}
 					data-testid="ppt-control-bar-template-group"
-					className={cn(barClassName, "col-start-1 row-start-1 justify-self-start")}
+					className={cn(barClassName, "col-start-1 row-start-1 justify-self-end")}
 				>
 					<MagicTooltip title={t("ppt.templateReplacement.button")}>
 						<span>
@@ -346,7 +357,7 @@ export function PPTControlBar({
 								variant="ghost"
 								size="sm"
 								data-testid="ppt-control-bar-template-button"
-								className="h-7 gap-1.5 px-2 text-xs font-normal text-foreground"
+								className="h-7 gap-[5px] px-[7px] text-[13px] font-normal text-foreground"
 								onClick={(e) => {
 									e.stopPropagation()
 									e.currentTarget.blur()
@@ -354,7 +365,7 @@ export function PPTControlBar({
 								}}
 								aria-label={t("ppt.templateReplacement.button")}
 							>
-								<LayoutTemplate className="h-4 w-4" />
+								<PanelsTopLeft className="h-4 w-4" />
 								<span>{t("ppt.templateReplacement.button")}</span>
 							</Button>
 						</span>

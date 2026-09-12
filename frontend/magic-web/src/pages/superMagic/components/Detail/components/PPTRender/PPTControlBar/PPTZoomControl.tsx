@@ -31,19 +31,19 @@ export function PPTZoomControl({
 				<Button
 					variant="ghost"
 					size="sm"
-					className="h-7 gap-1 px-2 font-normal tabular-nums"
+					className="h-7 min-w-[58px] gap-[5px] rounded-[5px] px-[5px] text-[13px] font-normal tabular-nums leading-[1.5]"
 					data-testid="ppt-control-bar-scale-trigger"
 					aria-label={t("ppt.zoomSettings")}
 				>
 					<span data-testid="ppt-control-bar-scale-value">{scalePercentage}%</span>
-					<ChevronDown className="size-4" />
+					<ChevronDown className="size-3" />
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent
 				side="top"
 				align="end"
 				sideOffset={12}
-				className="w-52 p-2"
+				className="w-[198px] rounded-[9px] border-[#e1e4e9] bg-white p-[7px] text-[13px] text-[#252830] shadow-[0_4px_20px_#17213b20] dark:border-[#424650] dark:bg-[#292c33] dark:text-[#eef0f4] dark:shadow-[0_4px_20px_#00000045] [&_button]:rounded-[5px] [&_button]:font-normal [&_svg]:stroke-[1.7]"
 				aria-label={t("ppt.zoomSettings")}
 				// 弹层挂到 PPT 预览容器，随文件预览进入全屏，并避开底栏毛玻璃的定位影响。
 				container={portalContainer}
@@ -52,7 +52,7 @@ export function PPTZoomControl({
 				<Button
 					variant="ghost"
 					size="sm"
-					className="w-full justify-start px-2 font-normal"
+					className="w-full justify-start px-2 text-[13px] font-normal"
 					data-testid="ppt-control-bar-scale-reset"
 					aria-pressed={isAutoScale}
 					onClick={() => {
@@ -78,7 +78,7 @@ export function PPTZoomControl({
 					>
 						<Minus className="size-4" />
 					</Button>
-					<span className="text-sm tabular-nums" aria-live="polite">
+					<span className="text-[13px] tabular-nums" aria-live="polite">
 						{scalePercentage}%
 					</span>
 					<Button
