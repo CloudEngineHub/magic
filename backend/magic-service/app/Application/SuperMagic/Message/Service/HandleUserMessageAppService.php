@@ -16,6 +16,9 @@ use App\Application\SuperMagic\Message\DTO\TaskMessageDTO;
 use App\Application\SuperMagic\Message\DTO\UserMessageDTO;
 use App\Application\SuperMagic\Task\DTO\InterruptClientNotification;
 use App\Application\SuperMagic\Task\Service\AgentAppService;
+use App\Application\SuperMagic\Task\Service\ReferencedProjectMount;
+use App\Application\SuperMagic\Task\Service\ReferencedProjectMountGuard;
+use App\Application\SuperMagic\Task\Service\ReferencedProjectMountPlanner;
 use App\Application\SuperMagic\Task\Service\TaskContextMentionsResolver;
 use App\Application\SuperMagic\Task\Service\TopicTaskAppService;
 use App\Application\SuperMagic\Topic\Service\TopicAgentConfigResolver;
@@ -93,6 +96,8 @@ class HandleUserMessageAppService extends AbstractAppService
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly ProjectMcpConfigService $projectMcpConfigService,
         private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
+        private readonly ReferencedProjectMountPlanner $referencedProjectMountPlanner,
+        private readonly ReferencedProjectMountGuard $referencedProjectMountGuard,
         private readonly Redis $redis,
         LoggerFactory $loggerFactory
     ) {
@@ -630,12 +635,12 @@ class HandleUserMessageAppService extends AbstractAppService
 
         // 挂载引用项目（全有或全无——任一失败则中止）
         $mentions = Json::decode($taskContext->getTask()->getMentions() ?: '[]') ?: [];
-        $crossProjectIds = $this->extractCrossProjectIds($mentions, $projectEntity->getId());
-        if (! empty($crossProjectIds)) {
+        $crossProjectMounts = $this->referencedProjectMountPlanner->plan($mentions, $projectEntity->getId());
+        if ($crossProjectMounts !== []) {
             $this->mountReferencedProjectsWithAccessControl(
                 $dataIsolation,
                 $sandboxId,
-                $crossProjectIds
+                $crossProjectMounts
             );
         }
 
@@ -932,69 +937,42 @@ class HandleUserMessageAppService extends AbstractAppService
     }
 
     /**
-     * Extract unique cross-project IDs from mentions that differ from the
-     * current project.
-     *
-     * @return string[]
-     */
-    private function extractCrossProjectIds(array $mentions, int $currentProjectId): array
-    {
-        $ids = [];
-        foreach ($mentions as $mention) {
-            $pid = $mention['project_id'] ?? null;
-            if ($pid === null || $pid === '') {
-                continue;
-            }
-            $pidStr = (string) $pid;
-            if ((int) $pidStr !== $currentProjectId) {
-                $ids[$pidStr] = true;
-            }
-        }
-        return array_map('strval', array_keys($ids));
-    }
-
-    /**
      * Mount referenced projects with access control — all-or-nothing.
      *
      * Phase 1: validate whether the current user can access ALL target projects.
      * Phase 2: delegate to Domain layer to mount every validated project.
      *
-     * A single denied access or mount failure aborts the entire operation with
-     * a RuntimeException, which is caught by handleChatMessage() to notify the
-     * user and prevent the message from reaching the agent.
+     * A single denied access or mount failure aborts the entire operation.
+     * Collaboration denials become a RuntimeException, which is caught by
+     * handleChatMessage() to notify the user and prevent the message from
+     * reaching the agent. Published-share denials keep their BusinessException.
+     * Password-protected @micro_app mentions are planned as collaboration.
      *
-     * @param string[] $projectIds
+     * @param list<ReferencedProjectMount> $mounts
      * @throws RuntimeException
      */
     private function mountReferencedProjectsWithAccessControl(
         DataIsolation $dataIsolation,
         string $sandboxId,
-        array $projectIds
+        array $mounts
     ): void {
         // Phase 1: validate access for all target projects
-        $denied = [];
-        foreach ($projectIds as $projectId) {
-            try {
-                $this->getAccessibleProject(
-                    (int) $projectId,
-                    $dataIsolation->getCurrentUserId(),
-                    $dataIsolation->getCurrentOrganizationCode()
-                );
-            } catch (Throwable) {
-                $denied[] = $projectId;
-            }
-        }
-        if (! empty($denied)) {
-            throw new RuntimeException(sprintf(
-                'Cannot mount referenced projects [%s]: access denied',
-                implode(', ', $denied)
-            ));
-        }
+        $this->referencedProjectMountGuard->assertAllAccessible(
+            $mounts,
+            $dataIsolation,
+            fn(int $projectId) => $this->getAccessibleProject(
+                $projectId,
+                $dataIsolation->getCurrentUserId(),
+                $dataIsolation->getCurrentOrganizationCode()
+            )
+        );
 
         // Phase 2: mount validated projects
+        $projectIds = [];
         $projectRootFileIds = [];
-        foreach ($projectIds as $projectId) {
-            $projectRootFileIds[(int) $projectId] = (string) $this->taskFileDomainService->getProjectRootFileId((int) $projectId);
+        foreach ($mounts as $mount) {
+            $projectIds[] = $mount->projectId;
+            $projectRootFileIds[(int) $mount->projectId] = (string) $this->taskFileDomainService->getProjectRootFileId((int) $mount->projectId);
         }
         $this->agentDomainService->mountReferencedProjects(
             $dataIsolation,

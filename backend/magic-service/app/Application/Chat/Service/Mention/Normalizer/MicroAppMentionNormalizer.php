@@ -8,27 +8,27 @@ declare(strict_types=1);
 namespace App\Application\Chat\Service\Mention\Normalizer;
 
 use App\Application\Chat\Service\Mention\AbstractMentionNormalizer;
-use App\Application\SuperMagic\Project\Service\MicroAppProjectAppService;
 use App\Application\SuperMagic\Project\Service\PublishedMicroAppResolver;
+use App\Application\SuperMagic\Task\Service\ReferencedProjectAccessKind;
+use App\Application\SuperMagic\Task\Service\ReferencedProjectCollaborationAccess;
 use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
-use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
+use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use Hyperf\Logger\LoggerFactory;
-use Throwable;
 
 /**
  * @micro_app mention 规范化：补全 app_name / project_id。
  *
- * 已发布且当前用户可访问时补全 app_name / project_id。
- * 组织分享可见但不是项目成员时，仍按分享权限补全，不要求协作成员身份。
+ * 组织/团队分享：分享可见即可补全，不要求协作成员。
+ * 密码分享：仅创建者/协作者补全，并标记 collaboration，供 Planner 走协作挂载。
+ * 前端 @微应用 只传 app_id / app_name，project_id 必须在这里补。
  */
 class MicroAppMentionNormalizer extends AbstractMentionNormalizer
 {
     public function __construct(
         LoggerFactory $loggerFactory,
-        private readonly MicroAppRepositoryInterface $microAppRepository,
-        private readonly MicroAppProjectAppService $microAppProjectAppService,
         private readonly PublishedMicroAppResolver $publishedMicroAppResolver,
+        private readonly ReferencedProjectCollaborationAccess $collaborationAccess,
     ) {
         parent::__construct($loggerFactory);
     }
@@ -40,40 +40,54 @@ class MicroAppMentionNormalizer extends AbstractMentionNormalizer
             return [];
         }
 
-        $record = $this->microAppRepository->findById($appId);
-        if ($record === null) {
-            return [];
-        }
-
         $publishedMicroApp = $this->publishedMicroAppResolver->findPublished($appId);
         if ($publishedMicroApp === null) {
             return [];
         }
 
-        [, $shareEntity] = $publishedMicroApp;
+        [$record, $shareEntity] = $publishedMicroApp;
         $userId = $dataIsolation->getCurrentUserId();
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
-        $appName = '';
 
-        try {
-            $project = $this->microAppProjectAppService->getAccessibleProject(
-                $record->getProjectId(),
-                $userId,
-                $organizationCode,
-            );
-            $appName = trim($project->getProjectName());
-        } catch (Throwable) {
-            if (
-                $shareEntity->getShareType() === ShareAccessType::PasswordProtected->value
-                || ! $this->publishedMicroAppResolver->canAccessShare($shareEntity, $userId, $organizationCode)
-            ) {
-                return [];
-            }
+        if ($shareEntity->getShareType() === ShareAccessType::PasswordProtected->value) {
+            return $this->enrichPasswordShare($record, $appId, $item, $userId, $organizationCode);
         }
 
-        if ($appName === '') {
-            $appName = $this->publishedMicroAppResolver->getProjectName($appId);
+        if (! $this->publishedMicroAppResolver->canAccessShare($shareEntity, $userId, $organizationCode)) {
+            return [];
         }
+
+        return $this->enrichedFields($record, $appId, $item);
+    }
+
+    /**
+     * @param array<string, mixed> $item
+     * @return array<string, string>
+     */
+    private function enrichPasswordShare(
+        MicroAppEntity $record,
+        int $appId,
+        array $item,
+        string $userId,
+        string $organizationCode,
+    ): array {
+        if (! $this->collaborationAccess->canAccess($record->getProjectId(), $userId, $organizationCode)) {
+            return [];
+        }
+
+        return [
+            ...$this->enrichedFields($record, $appId, $item),
+            'access_kind' => ReferencedProjectAccessKind::Collaboration->value,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $item
+     * @return array<string, string>
+     */
+    private function enrichedFields(MicroAppEntity $record, int $appId, array $item): array
+    {
+        $appName = $this->publishedMicroAppResolver->getProjectNameFromRecord($record);
         if ($appName === '') {
             $appName = (string) ($item['app_name'] ?? $appId);
         }

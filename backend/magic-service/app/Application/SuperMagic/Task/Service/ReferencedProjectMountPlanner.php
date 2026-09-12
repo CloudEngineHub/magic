@@ -1,0 +1,110 @@
+<?php
+
+declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
+
+namespace App\Application\SuperMagic\Task\Service;
+
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MentionType;
+
+/**
+ * Extract unique cross-project mount targets from mentions that differ
+ * from the current project.
+ *
+ * Collaboration mentions (@project / file / directory) and published-share
+ * mentions (@micro_app) share the same project mount, but keep distinct
+ * access kinds so authorization can stay on the correct axis.
+ */
+final class ReferencedProjectMountPlanner
+{
+    private const COLLABORATION_TYPES = [
+        MentionType::PROJECT->value,
+        MentionType::PROJECT_FILE->value,
+        MentionType::PROJECT_DIRECTORY->value,
+    ];
+
+    /**
+     * @param array<int, mixed> $mentions
+     * @return list<ReferencedProjectMount>
+     */
+    public function plan(array $mentions, int $currentProjectId): array
+    {
+        $mountsByProjectId = [];
+
+        foreach ($mentions as $mention) {
+            if (! is_array($mention)) {
+                continue;
+            }
+
+            $mount = $this->toMount($mention, $currentProjectId);
+            if ($mount === null) {
+                continue;
+            }
+
+            $existing = $mountsByProjectId[$mount->projectId] ?? null;
+            if ($existing === null || $this->shouldReplace($existing, $mount)) {
+                $mountsByProjectId[$mount->projectId] = $mount;
+            }
+        }
+
+        return array_values($mountsByProjectId);
+    }
+
+    /**
+     * @param array<string, mixed> $mention
+     */
+    private function toMount(array $mention, int $currentProjectId): ?ReferencedProjectMount
+    {
+        $type = (string) ($mention['type'] ?? '');
+        $accessKind = $this->resolveAccessKind($type, $mention);
+        if ($accessKind === null) {
+            return null;
+        }
+
+        $projectId = trim((string) ($mention['project_id'] ?? ''));
+        if ($projectId === '' || $projectId === (string) $currentProjectId) {
+            return null;
+        }
+
+        $appId = trim((string) ($mention['app_id'] ?? ''));
+        // Do not mount @micro_app from leftover project_id after enrich fails.
+        if ($accessKind === ReferencedProjectAccessKind::PublishedShare && $appId === '') {
+            return null;
+        }
+
+        return new ReferencedProjectMount(
+            projectId: $projectId,
+            accessKind: $accessKind,
+            sourceType: $type,
+            appId: $appId !== '' ? $appId : null,
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $mention
+     */
+    private function resolveAccessKind(string $type, array $mention): ?ReferencedProjectAccessKind
+    {
+        if ($type === MentionType::MICRO_APP->value) {
+            // Password-share owners/collaborators are marked by the normalizer.
+            if (($mention['access_kind'] ?? '') === ReferencedProjectAccessKind::Collaboration->value) {
+                return ReferencedProjectAccessKind::Collaboration;
+            }
+
+            return ReferencedProjectAccessKind::PublishedShare;
+        }
+        if (in_array($type, self::COLLABORATION_TYPES, true)) {
+            return ReferencedProjectAccessKind::Collaboration;
+        }
+
+        return null;
+    }
+
+    private function shouldReplace(ReferencedProjectMount $existing, ReferencedProjectMount $candidate): bool
+    {
+        return $existing->accessKind === ReferencedProjectAccessKind::PublishedShare
+            && $candidate->accessKind === ReferencedProjectAccessKind::Collaboration;
+    }
+}
