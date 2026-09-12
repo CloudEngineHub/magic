@@ -38,6 +38,7 @@ interface TestHtmlPreviewProps {
 	projectId?: string
 	openFileTab?: (file: TestPreviewFile) => void
 	virtualStorageMarkerId?: string
+	isSharePreview?: boolean
 	onHtmlPermissionManagerChange?: (manager: { open: () => void } | null) => void
 }
 
@@ -232,6 +233,7 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 		projectId,
 		openFileTab,
 		virtualStorageMarkerId,
+		isSharePreview,
 		onHtmlPermissionManagerChange,
 	}: TestHtmlPreviewProps) {
 		const [mountedFileId] = useState(data.file_id)
@@ -251,6 +253,7 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 				data-testid="mock-html-preview"
 				data-project-id={projectId}
 				data-virtual-storage-marker-id={virtualStorageMarkerId}
+				data-is-share-preview={isSharePreview ? "true" : "false"}
 			>
 				<span>{data.file_name}</span>
 				<span data-testid="mock-mounted-file-id">{mountedFileId}</span>

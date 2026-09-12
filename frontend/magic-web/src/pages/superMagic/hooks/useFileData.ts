@@ -25,6 +25,7 @@ export const useFileData = ({
 	isFromNode = false,
 	content,
 	disabledUrlCache = false,
+	isSharePreview = false,
 }: {
 	file_id: string
 	responseType?: "text" | "arrayBuffer" | "blob"
@@ -34,9 +35,12 @@ export const useFileData = ({
 	isFromNode?: boolean
 	content?: string
 	disabledUrlCache?: boolean
+	/** 分享预览不拉项目文件版本，走分享下载 */
+	isSharePreview?: boolean
 }) => {
 	const { t } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
+	const isShareFilePreview = isShareRoute || isSharePreview
 
 	/** 文件 URL 缓存 - 存储文件 ID 对应的 URL 和更新时间 */
 	const fileUrlCacheRef = useRef<Record<string, FileUrlCache>>({})
@@ -206,19 +210,31 @@ export const useFileData = ({
 	useDebounceEffect(
 		() => {
 			// 如果正在编辑但文件数据还没有加载，需要先加载文件
-			if (isEditing && !fileData && file_id && activeFileId === file_id && !isShareRoute) {
+			if (
+				isEditing &&
+				!fileData &&
+				file_id &&
+				activeFileId === file_id &&
+				!isShareFilePreview
+			) {
 				getFileVersion(file_id)
 				return
 			}
 			// 非编辑模式下的正常逻辑
-			if (!file_id || isEditing || !activeFileId || activeFileId !== file_id || isShareRoute)
+			if (
+				!file_id ||
+				isEditing ||
+				!activeFileId ||
+				activeFileId !== file_id ||
+				isShareFilePreview
+			)
 				return
 			// 是否正在查看历史版本
 			const isViewingHistoryVersion = fileVersion !== undefined
 			// 如果用户正在查看历史版本，只更新版本列表，不自动切换到最新版本
 			getFileVersion(file_id, !isViewingHistoryVersion)
 		},
-		[activeFileId, updatedAt, file_id, isEditing, isShareRoute, fileData],
+		[activeFileId, updatedAt, file_id, isEditing, isShareFilePreview, fileData],
 		{
 			wait: 100,
 		},
@@ -227,7 +243,7 @@ export const useFileData = ({
 	/** 针对 分享/工具预览/内容审查 等场景，单独获取文件的最新下载地址 */
 	useEffect(() => {
 		if (!file_id) return
-		if (isShareRoute || !activeFileId || activeFileId !== file_id) {
+		if (isShareFilePreview || !activeFileId || activeFileId !== file_id) {
 			setLoading(true)
 			setFileData(null)
 			// 获取文件下载地址
@@ -284,14 +300,14 @@ export const useFileData = ({
 	// 因此这里监听 Topic 级终态事件，而不是单条 Assistant Final。
 	useEffect(() => {
 		const unregister = superMagicStore.subscribe("topic.execution.ended", () => {
-			if (activeFileId !== file_id) return
+			if (isShareFilePreview || activeFileId !== file_id) return
 			getFileVersion(file_id)
 		})
 
 		return () => {
 			unregister()
 		}
-	}, [activeFileId])
+	}, [activeFileId, file_id, isShareFilePreview])
 
 	return {
 		loading,

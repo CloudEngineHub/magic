@@ -24,6 +24,7 @@ interface UseDashboardVersioningParams {
 	displayConfig?: any
 	isFromNode?: boolean
 	isPlaybackMode?: boolean
+	isSharePreview?: boolean
 	htmlVersioning: DashboardVersioningState
 }
 
@@ -52,6 +53,7 @@ export function useDashboardVersioning({
 	displayConfig,
 	isFromNode,
 	isPlaybackMode,
+	isSharePreview = false,
 	htmlVersioning,
 }: UseDashboardVersioningParams) {
 	const flattenedAttachmentList = useMemo(
@@ -120,6 +122,7 @@ export function useDashboardVersioning({
 		isFromNode,
 		content: "",
 		disabledUrlCache: isPlaybackMode,
+		isSharePreview,
 	})
 
 	const isDashboardHistoryDriven = Boolean(isDataAnalysis && dashboardDataJsFile?.file_id)

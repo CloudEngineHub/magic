@@ -77,6 +77,10 @@ describe("MicroAppSharePage", () => {
 			"data-project-id",
 			"project-1",
 		)
+		expect(screen.getByTestId("mock-html-preview")).toHaveAttribute(
+			"data-is-share-preview",
+			"true",
+		)
 		expect(screen.queryByTestId("micro-app-share-safety-notice")).not.toBeInTheDocument()
 	})
 

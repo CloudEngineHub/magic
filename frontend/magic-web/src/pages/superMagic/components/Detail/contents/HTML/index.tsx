@@ -168,6 +168,8 @@ interface HTMLProps {
 	projectId?: string
 	/** 跨多个 HTML 文件共享虚拟存储时使用的稳定标记。 */
 	virtualStorageMarkerId?: string
+	/** 分享预览不拉项目文件版本，走分享下载 */
+	isSharePreview?: boolean
 }
 
 interface HtmlExportActionProps {
@@ -269,6 +271,7 @@ export default memo(function HTML(props: HTMLProps) {
 		allowDownload,
 		projectId,
 		virtualStorageMarkerId,
+		isSharePreview = false,
 	} = props
 	// origin：显式传入的项目，缺省时用当前选中项目
 	const runtimeProjectId = projectId ?? selectedProject?.id
@@ -332,6 +335,7 @@ export default memo(function HTML(props: HTMLProps) {
 		isFromNode,
 		content: displayData?.content || "",
 		disabledUrlCache: isPlaybackMode,
+		isSharePreview,
 	})
 
 	const {
@@ -349,6 +353,7 @@ export default memo(function HTML(props: HTMLProps) {
 		displayConfig,
 		isFromNode,
 		isPlaybackMode,
+		isSharePreview,
 		htmlVersioning: {
 			fileVersion: htmlFileVersion,
 			changeFileVersion: changeHtmlFileVersion,

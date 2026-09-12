@@ -166,6 +166,7 @@ function PublishedMicroAppPreviewSurface({
 						virtualStorageMarkerId={defaultEntryFile?.file_id}
 						openFileTab={handleOpenFileTab}
 						onHtmlPermissionManagerChange={onHtmlPermissionManagerChange}
+						isSharePreview
 						className="h-full"
 					/>
 				</div>

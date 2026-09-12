@@ -81,12 +81,14 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 		projectId?: string
 		selectedProject?: { id?: string } | null
 		topicStore?: unknown
+		isSharePreview?: boolean
 	}) => (
 		<div
 			data-testid="mock-html-preview"
 			data-project-id={props.projectId}
 			data-host-project-id={props.selectedProject?.id}
 			data-has-topic-store={props.topicStore ? "true" : "false"}
+			data-is-share-preview={props.isSharePreview ? "true" : "false"}
 		/>
 	),
 }))
@@ -121,6 +123,10 @@ describe("MicroAppPreviewContent", () => {
 
 		expect(screen.getByTestId("micro-app-tab-preview")).toBeInTheDocument()
 		expect(screen.getByTestId("mock-html-preview")).toBeInTheDocument()
+		expect(screen.getByTestId("mock-html-preview")).toHaveAttribute(
+			"data-is-share-preview",
+			"true",
+		)
 		expect(screen.queryByTestId("micro-app-share-page")).not.toBeInTheDocument()
 	})
 
