@@ -1368,7 +1368,6 @@
 		"goToFirstPage": "回到第一页",
 		"joinEditFailed": "加入编辑失败",
 		"pleaseDownloadToView": "请下载文件后查看内容",
-		"refreshSlides": "重新加载",
 		"saveAndClose": "保存并关闭",
 		"selfMedia": {
 			"analysis": {
@@ -4424,6 +4423,7 @@
 		"exportSelected": "导出选中页面",
 		"exportSpecificPages": "指定页面",
 		"fileNotFound": "文件找不到",
+		"fitToWindow": "适应窗口",
 		"fullscreen": "全屏",
 		"initializing": "正在初始化...",
 		"loadError": "加载失败",
@@ -4434,6 +4434,8 @@
 		"pageNumber": "第 {{page}} 页",
 		"pleaseSelectSlides": "请选择至少一页幻灯片",
 		"refreshCurrentSlide": "刷新",
+		"reloadAllSlides": "重载全部",
+		"reloadCurrentSlide": "重载当前",
 		"saveAndNavigate": "保存",
 		"saveChanges": "保存更改",
 		"saveWithServerUpdate": "检测到服务端有新版本，保存将覆盖服务端的最新版本，是否继续？",
@@ -4475,7 +4477,8 @@
 			"useHistoryVersion": "使用历史版本",
 			"useLatestVersion": "使用最新版本"
 		},
-		"viewServerUpdate": "查看更新"
+		"viewServerUpdate": "查看更新",
+		"zoomSettings": "缩放设置"
 	},
 	"project": {
 		"addCollaborators": "添加协作者",
