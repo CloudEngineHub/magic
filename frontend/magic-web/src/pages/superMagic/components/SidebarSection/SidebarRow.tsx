@@ -46,6 +46,9 @@ export interface SidebarRowProps {
 	className?: string
 	/** 多板块依赖文字区分身份，允许标题换行并撑高；默认行高保持不变。 */
 	wrapLabel?: boolean
+	/** 工具区在窄面板另起一行，标题和交互节点保持原位置与状态。 */
+	stackTrailing?: boolean
+	description?: ReactNode
 	rowRef?: RefObject<HTMLDivElement>
 	labelRef?: RefObject<HTMLSpanElement>
 }
@@ -62,6 +65,8 @@ export function SidebarRow({
 	testId,
 	className,
 	wrapLabel = false,
+	stackTrailing = false,
+	description,
 	rowRef,
 	labelRef,
 }: SidebarRowProps) {
@@ -74,6 +79,7 @@ export function SidebarRow({
 				disabled && "cursor-not-allowed opacity-60 hover:bg-transparent",
 				className,
 				wrapLabel && "h-auto min-h-10 py-2",
+				stackTrailing && "grid grid-cols-[minmax(0,1fr)_auto]",
 			)}
 		>
 			{/* 标题与工具按钮并列，避免嵌套 button；操作菜单不会触发分组折叠。 */}
@@ -93,7 +99,7 @@ export function SidebarRow({
 						{leading}
 					</div>
 				)}
-				<p
+				<div
 					className={cn(
 						"min-w-0 text-sm font-medium text-foreground",
 						!wrapLabel && "truncate",
@@ -110,11 +116,15 @@ export function SidebarRow({
 					>
 						{label}
 					</span>
-				</p>
+					{description && <div className="[&>p]:p-0">{description}</div>}
+				</div>
 			</button>
 			{trailing && (
 				<div
-					className="flex shrink-0 items-center gap-1"
+					className={cn(
+						"flex shrink-0 items-center gap-1",
+						stackTrailing && "col-span-2 row-start-2 min-w-0",
+					)}
 					onClick={(event) => event.stopPropagation()}
 					data-testid="sidebar-row"
 				>

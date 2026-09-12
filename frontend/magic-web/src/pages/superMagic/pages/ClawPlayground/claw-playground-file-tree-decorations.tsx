@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { Badge } from "@/components/shadcn-ui/badge"
+import { TopicFileTag } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileTag"
 import type { TopicFileRowDecorationResolver } from "@/pages/superMagic/components/TopicFilesButton"
 import {
 	AgentsFileIcon,
@@ -17,12 +17,28 @@ import {
 } from "./components/file-tree-icons"
 
 interface ClawPlaygroundFileDecorationOptions {
-	t: (key: string) => string
+	t: (
+		key:
+			| `topicFiles.clawPlaygroundTags.${FileDecorationDefinition["tagKey"]}`
+			| `topicFiles.clawPlaygroundHelp.${FileDecorationDefinition["tagKey"]}`,
+	) => string
 }
 
 interface FileDecorationDefinition {
 	icon: ReactNode
-	tagKey: string
+	tagKey:
+		| "scheduledTasks"
+		| "installedSkills"
+		| "memoryFolder"
+		| "skillList"
+		| "prompts"
+		| "proactiveExecution"
+		| "identityInfo"
+		| "guidelines"
+		| "toolList"
+		| "aboutYou"
+		| "initialSetup"
+		| "memoryFile"
 }
 
 interface FileDecorationMatcher extends FileDecorationDefinition {
@@ -105,6 +121,59 @@ const fileDecorationMatchers: FileDecorationMatcher[] = [
 export function createClawPlaygroundFileRowDecorationResolver({
 	t,
 }: ClawPlaygroundFileDecorationOptions): TopicFileRowDecorationResolver {
+	const labels: Record<
+		FileDecorationDefinition["tagKey"],
+		{ label: string; description: string }
+	> = {
+		scheduledTasks: {
+			label: t("topicFiles.clawPlaygroundTags.scheduledTasks"),
+			description: t("topicFiles.clawPlaygroundHelp.scheduledTasks"),
+		},
+		installedSkills: {
+			label: t("topicFiles.clawPlaygroundTags.installedSkills"),
+			description: t("topicFiles.clawPlaygroundHelp.installedSkills"),
+		},
+		memoryFolder: {
+			label: t("topicFiles.clawPlaygroundTags.memoryFolder"),
+			description: t("topicFiles.clawPlaygroundHelp.memoryFolder"),
+		},
+		skillList: {
+			label: t("topicFiles.clawPlaygroundTags.skillList"),
+			description: t("topicFiles.clawPlaygroundHelp.skillList"),
+		},
+		prompts: {
+			label: t("topicFiles.clawPlaygroundTags.prompts"),
+			description: t("topicFiles.clawPlaygroundHelp.prompts"),
+		},
+		proactiveExecution: {
+			label: t("topicFiles.clawPlaygroundTags.proactiveExecution"),
+			description: t("topicFiles.clawPlaygroundHelp.proactiveExecution"),
+		},
+		identityInfo: {
+			label: t("topicFiles.clawPlaygroundTags.identityInfo"),
+			description: t("topicFiles.clawPlaygroundHelp.identityInfo"),
+		},
+		guidelines: {
+			label: t("topicFiles.clawPlaygroundTags.guidelines"),
+			description: t("topicFiles.clawPlaygroundHelp.guidelines"),
+		},
+		toolList: {
+			label: t("topicFiles.clawPlaygroundTags.toolList"),
+			description: t("topicFiles.clawPlaygroundHelp.toolList"),
+		},
+		aboutYou: {
+			label: t("topicFiles.clawPlaygroundTags.aboutYou"),
+			description: t("topicFiles.clawPlaygroundHelp.aboutYou"),
+		},
+		initialSetup: {
+			label: t("topicFiles.clawPlaygroundTags.initialSetup"),
+			description: t("topicFiles.clawPlaygroundHelp.initialSetup"),
+		},
+		memoryFile: {
+			label: t("topicFiles.clawPlaygroundTags.memoryFile"),
+			description: t("topicFiles.clawPlaygroundHelp.memoryFile"),
+		},
+	}
 	return function resolveTopicFileRowDecoration({ item, isVirtual }) {
 		if (isVirtual) return
 
@@ -122,14 +191,7 @@ export function createClawPlaygroundFileRowDecorationResolver({
 
 		return {
 			icon: decoration.icon,
-			tag: (
-				<Badge
-					variant="outline"
-					className="h-5 rounded-md border-border bg-background px-2 py-0.5 text-[10px] font-normal leading-3 text-muted-foreground shadow-none"
-				>
-					{t(`topicFiles.clawPlaygroundTags.${decoration.tagKey}`)}
-				</Badge>
-			),
+			tag: <TopicFileTag {...labels[decoration.tagKey]} />,
 		}
 	}
 }

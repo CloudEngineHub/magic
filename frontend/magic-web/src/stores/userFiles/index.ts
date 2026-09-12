@@ -18,6 +18,7 @@ import {
 	userSpaceFileService,
 } from "@/pages/superMagic/components/UserSpace/services/userSpaceFileService"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import { compareMagicFolderPriority } from "@/pages/superMagic/utils/projectAttachments/treeUtils"
 
 export interface UserDirectorySnapshot {
 	ids: string[]
@@ -144,7 +145,8 @@ export class UserFilesStore {
 								: "unloaded",
 					children: directory.ids
 						.filter((child) => this.files.has(child))
-						.map((child) => this.getAttachment(child)),
+						.map((child) => this.getAttachment(child))
+						.sort(compareMagicFolderPriority),
 				}
 			})
 			this.attachmentViews.set(id, view)

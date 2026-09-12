@@ -1,3 +1,4 @@
+import { ProjectFileTag } from "./components/TopicFileTag"
 import { IconChevronDown, IconChevronRight, IconDots } from "@tabler/icons-react"
 import { Loader2, ChevronDown } from "lucide-react"
 import { Flex, message } from "antd"
@@ -146,7 +147,9 @@ export interface TopicFilesExpansionState {
 
 interface TopicFilesCoreProps {
 	directoryView?: Pick<FileDirectoryViewProps, "items" | "path" | "onNavigate"> &
-		Partial<Pick<FileDirectoryViewProps, "rootName" | "error" | "renderFileIcon">> & {
+		Partial<
+			Pick<FileDirectoryViewProps, "rootName" | "error" | "renderFileIcon" | "renderFileTag">
+		> & {
 			directory?: AttachmentItem
 		}
 	className?: string
@@ -1516,9 +1519,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				node,
 				isVirtual: !!node.isVirtual,
 			}) || undefined
+		const tag = node.isVirtual
+			? undefined
+			: (decoration?.tag ??
+				(isMagicSystemFolder(item) || resolveProjectInstructionsFileKind(item) ? (
+					<ProjectFileTag item={item} />
+				) : undefined))
 		const renderDecorationTag = () => {
-			if (!decoration?.tag) return null
-			return <div className={styles.rowTagSlot}>{decoration.tag}</div>
+			if (!tag) return null
+			return <div className={styles.rowTagSlot}>{tag}</div>
 		}
 
 		// 渲染展开/折叠图标
@@ -1590,6 +1599,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				<div
 					className={cx(
 						styles.fileItem,
+						Boolean(tag) && styles.fileItemWithTag,
 						decoration?.className,
 						contextMenuItemId === itemId && styles.contextMenuActiveItem,
 					)}
@@ -1607,6 +1617,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					<div
 						className={cx(
 							styles.fileTitle,
+							Boolean(tag) && styles.fileTitleWithTag,
 							showVirtualError && styles.fileTitleTopAligned,
 						)}
 						style={{
@@ -1802,6 +1813,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				<div
 					className={cx(
 						styles.fileItem,
+						Boolean(tag) && styles.fileItemWithTag,
 						decoration?.className,
 						(shouldHighlightFolder || isActiveFile) && styles.activeFileItemWrapper,
 						isActiveFile && "bg-blue-500/10",
@@ -1901,6 +1913,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					<div
 						className={cx(
 							styles.fileTitle,
+							Boolean(tag) && styles.fileTitleWithTag,
 							renamingItemId === itemId &&
 								!!renameErrorMessage &&
 								styles.fileTitleTopAligned,
@@ -2078,6 +2091,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			<div
 				className={cx(
 					styles.fileItem,
+					Boolean(tag) && styles.fileItemWithTag,
 					decoration?.className,
 					isLocating && styles.locatingFileItem,
 					isActiveFile && "bg-blue-500/10",
@@ -2157,6 +2171,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				<div
 					className={cx(
 						styles.fileTitle,
+						Boolean(tag) && styles.fileTitleWithTag,
 						renamingItemId === itemId &&
 							!!renameErrorMessage &&
 							styles.fileTitleTopAligned,

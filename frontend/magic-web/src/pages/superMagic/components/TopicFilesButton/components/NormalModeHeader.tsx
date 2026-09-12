@@ -48,7 +48,7 @@ interface NormalModeHeaderProps {
 	onOpenFileManager?: () => void
 	section?: SidebarSectionOptions
 	className?: string
-	actionsOnly?: boolean
+	adaptive?: boolean
 }
 
 function NormalModeHeader({
@@ -75,12 +75,12 @@ function NormalModeHeader({
 	onOpenFileManager,
 	section,
 	className,
-	actionsOnly = false,
+	adaptive = false,
 }: NormalModeHeaderProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
-	const { rowRef, labelRef, actionsRef, overflow } = useFileHeaderOverflow()
-	const hasOverflow = overflow && Boolean(onToggleAllFolders || onOpenFileManager)
+	const { rowRef, labelRef, actionsRef, overflow } = useFileHeaderOverflow(adaptive)
+	const hasOverflow = (adaptive || overflow) && Boolean(onToggleAllFolders || onOpenFileManager)
 	const toggleAllFoldersLabel = allFoldersExpanded
 		? t("fileTree.collapseAll")
 		: (expandAllLabel ?? t("fileTree.expandAll"))
@@ -90,7 +90,8 @@ function NormalModeHeader({
 			ref={actionsRef}
 			className={cn(
 				"relative ml-auto flex shrink-0 items-center gap-1 [&>*]:shrink-0 [&_button]:shrink-0",
-				actionsOnly && "ml-0 min-w-0 flex-1 flex-wrap",
+				adaptive && "rounded-md bg-muted/50 p-1",
+				adaptive && overflow && "ml-0 min-w-0 flex-1 flex-wrap",
 			)}
 		>
 			{onSearch && (
@@ -147,6 +148,16 @@ function NormalModeHeader({
 						</MagicTooltip>
 					</span>
 				</UploadMenuDropdown>
+			)}
+			{adaptive && (
+				<span
+					data-toolbar-divider
+					aria-hidden
+					className={cn(
+						"min-w-2 self-stretch border-r border-border/60",
+						overflow && "flex-1 border-0",
+					)}
+				/>
 			)}
 			{onToggleAllFolders && (
 				<div
@@ -267,14 +278,26 @@ function NormalModeHeader({
 			)}
 		</div>
 	)
-	// 用户空间将身份标题放在独立一行；这里只复用原工具按钮，不复制操作逻辑。
-	if (actionsOnly) {
+	if (adaptive && !section) {
 		return (
 			<div
 				ref={rowRef}
-				className={cn("flex min-h-8 w-full items-center px-3 py-1", className)}
+				className={cn(
+					"flex min-h-10 w-full items-center gap-2 px-3 py-1",
+					overflow && "flex-wrap",
+					className,
+				)}
 			>
-				<span ref={labelRef} aria-hidden className="sr-only" />
+				<h3
+					className={cn("min-w-0 flex-1 text-sm font-semibold", overflow && "basis-full")}
+				>
+					<span
+						ref={labelRef}
+						className="inline-block break-words [overflow-wrap:anywhere]"
+					>
+						{title || t("topicFiles.title")}
+					</span>
+				</h3>
 				{actions}
 			</div>
 		)
@@ -285,7 +308,10 @@ function NormalModeHeader({
 			onClick={section.onClick}
 			isExpanded={section.isExpanded}
 			leading={section.leading}
-			trailing={actions}
+			trailing={adaptive && !section.isExpanded ? undefined : actions}
+			wrapLabel={adaptive || section.wrapLabel}
+			stackTrailing={adaptive && overflow}
+			description={adaptive && section.isExpanded ? section.description : undefined}
 			testId="file-section-header"
 			rowRef={rowRef}
 			labelRef={labelRef}

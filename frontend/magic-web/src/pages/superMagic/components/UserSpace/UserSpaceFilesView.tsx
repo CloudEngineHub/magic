@@ -7,7 +7,8 @@ import userFilesStore from "@/stores/userFiles"
 import TopicFilesPanel from "../TopicFilesButton/TopicFilesPanel"
 import TopicFilesCore from "../TopicFilesButton/TopicFilesCore"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
-import UserSpaceFileIcon from "./UserSpaceFileIcon"
+import UserSpaceFileIcon, { UserSpaceFileTag } from "./UserSpaceFileIcon"
+import { getUserResourceKind } from "./userSpaceFilePresentation"
 import { toUserAttachment } from "./services/userSpaceFileService"
 import { useUserSpaceFileActions } from "./hooks/useUserSpaceFileActions"
 import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
@@ -134,18 +135,34 @@ export default observer(function UserSpaceFilesView({
 		isItemSelectable: isSelectable,
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems: filterMenuItems,
-		resolveTopicFileRowDecoration: ({ item }: { item: AttachmentItem }) => ({
-			icon: <UserSpaceFileIcon item={item} size={16} resourceTree={items} />,
-			tag:
-				item.directoryLoadState === "error" ? (
-					<span className="text-xs text-destructive">{t("userSpace.retry")}</span>
-				) : undefined,
-		}),
+		resolveTopicFileRowDecoration: ({
+			item,
+			isVirtual,
+		}: {
+			item: AttachmentItem
+			isVirtual: boolean
+		}) =>
+			isVirtual
+				? undefined
+				: {
+						icon: <UserSpaceFileIcon item={item} size={16} resourceTree={items} />,
+						tag:
+							getUserResourceKind(item) || item.directoryLoadState === "error" ? (
+								<>
+									<UserSpaceFileTag item={item} />
+									{item.directoryLoadState === "error" ? (
+										<span className="text-xs text-destructive">
+											{t("userSpace.retry")}
+										</span>
+									) : null}
+								</>
+							) : undefined,
+					},
 	}
 	if (compact)
 		return (
 			<TopicFilesPanel
-				headerLayout="stacked"
+				headerLayout="adaptive"
 				key={`${identity}:${parentId}`}
 				{...commonProps}
 				title={rootName ?? t("userSpace.allFiles")}
@@ -168,6 +185,7 @@ export default observer(function UserSpaceFilesView({
 			scrollElementRef={scrollElementRef}
 			onUpdateAttachments={() => void refresh().catch(() => undefined)}
 			directoryView={{
+				renderFileTag: (item) => <UserSpaceFileTag item={item} />,
 				renderFileIcon: (item, size) => (
 					<UserSpaceFileIcon item={item} resourceTree={items} size={size} />
 				),

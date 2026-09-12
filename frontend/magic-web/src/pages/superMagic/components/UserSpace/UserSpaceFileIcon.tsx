@@ -1,5 +1,15 @@
 import type { ReactNode } from "react"
-import { FolderCog, Settings, Terminal } from "lucide-react"
+import {
+	BookOpen,
+	CalendarDays,
+	FolderCog,
+	History,
+	ListTree,
+	NotebookPen,
+	Settings,
+	Terminal,
+	MessageSquare,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import DingTalkIcon from "@/components/base/MagicFileIcon/assets/dingtalk-logo.svg"
 import LarkIcon from "@/components/base/MagicFileIcon/assets/feishu-logo.svg"
@@ -8,49 +18,62 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/
 import { ProjectResourceIcon } from "../TopicFilesButton/components/ProjectResourceIcon"
 import { TopicFileIcon } from "../TopicFilesButton/components/TopicFileIcon"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
-import {
-	isMagicSystemFolder,
-	resolveProjectInstructionsFileKind,
-} from "../TopicFilesButton/utils/magic-system-folder"
-import { isFixedUserMemoryEntry } from "../LongTremMemory/components/memoryTreeNodeUtils"
+import { TopicFileTag } from "../TopicFilesButton/components/TopicFileTag"
+import { getUserResourceKind, type UserResourceKind } from "./userSpaceFilePresentation"
 
-type UserResourceKind =
-	| "magic"
-	| "instructions"
-	| "memory"
-	| "dingtalk"
-	| "lark"
-	| "teamshare"
-	| "tools"
-	| "cli"
-	| "settings"
-
-const DIRECTORY_KINDS: Readonly<Record<string, UserResourceKind>> = {
-	".dws": "dingtalk",
-	".local/share/dws-cli": "dingtalk",
-	".lark-cli": "lark",
-	".local/share/lark-cli": "lark",
-	".magic/teamshare-cli": "teamshare",
-	".local": "tools",
-	".local/share": "tools",
-	".magic/cli": "cli",
+/** 图标和用途标签共用分类与解释；翻译保留静态键以支持提取和语言切换。 */
+function useUserFilePresentation(item: AttachmentItem) {
+	const { t } = useTranslation("super")
+	const kind = getUserResourceKind(item)
+	if (!kind) return undefined
+	const labels: Record<UserResourceKind, () => string> = {
+		magic: () => t("userSpace.fileLabels.magic"),
+		instructions: () => t("userSpace.fileLabels.instructions"),
+		memory: () => t("userSpace.fileLabels.memory"),
+		coreMemory: () => t("userSpace.fileLabels.coreMemory"),
+		notes: () => t("userSpace.fileLabels.notes"),
+		references: () => t("userSpace.fileLabels.references"),
+		timeline: () => t("userSpace.fileLabels.timeline"),
+		year: () => t("userSpace.fileLabels.year"),
+		month: () => t("userSpace.fileLabels.month"),
+		index: () => t("userSpace.fileLabels.index"),
+		subject: () => t("userSpace.fileLabels.subject"),
+		event: () => t("userSpace.fileLabels.event"),
+		topics: () => t("userSpace.fileLabels.topics"),
+		dingtalk: () => t("userSpace.fileLabels.dingtalk"),
+		lark: () => t("userSpace.fileLabels.lark"),
+		teamshare: () => t("userSpace.fileLabels.teamshare"),
+		tools: () => t("userSpace.fileLabels.tools"),
+		cli: () => t("userSpace.fileLabels.cli"),
+		settings: () => t("userSpace.fileLabels.settings"),
+	}
+	const descriptions: Record<UserResourceKind, () => string> = {
+		magic: () => t("userSpace.fileHelp.magic"),
+		instructions: () => t("userSpace.fileHelp.instructions"),
+		memory: () => t("userSpace.fileHelp.memory"),
+		coreMemory: () => t("userSpace.fileHelp.coreMemory"),
+		notes: () => t("userSpace.fileHelp.notes"),
+		references: () => t("userSpace.fileHelp.references"),
+		timeline: () => t("userSpace.fileHelp.timeline"),
+		year: () => t("userSpace.fileHelp.year"),
+		month: () => t("userSpace.fileHelp.month"),
+		index: () => t("userSpace.fileHelp.index"),
+		subject: () => t("userSpace.fileHelp.subject"),
+		event: () => t("userSpace.fileHelp.event"),
+		topics: () => t("userSpace.fileHelp.topics"),
+		dingtalk: () => t("userSpace.fileHelp.dingtalk"),
+		lark: () => t("userSpace.fileHelp.lark"),
+		teamshare: () => t("userSpace.fileHelp.teamshare"),
+		tools: () => t("userSpace.fileHelp.tools"),
+		cli: () => t("userSpace.fileHelp.cli"),
+		settings: () => t("userSpace.fileHelp.settings"),
+	}
+	return { kind, label: labels[kind](), description: descriptions[kind]() }
 }
 
-/** 固定目录按用户根下的完整路径识别；例如资料/cli 仍是普通目录。 */
-function getResourceKind(item: AttachmentItem): UserResourceKind | undefined {
-	const path = (item.file_reference?.space_relative_path ?? item.relative_file_path ?? "")
-		.split("/")
-		.filter(Boolean)
-		.join("/")
-	if (isMagicSystemFolder(item)) return "magic"
-	if (resolveProjectInstructionsFileKind(item)) return "instructions"
-	if (item.is_directory) {
-		if (path === ".magic/memory") return "memory"
-		return DIRECTORY_KINDS[path]
-	}
-	if (isFixedUserMemoryEntry(path, false)) return "memory"
-	if (path === ".magic/super-magic.env") return "settings"
-	return undefined
+export function UserSpaceFileTag({ item }: { item: AttachmentItem }) {
+	const presentation = useUserFilePresentation(item)
+	return presentation ? <TopicFileTag {...presentation} /> : null
 }
 
 /** 树、列表和网格共享用户空间特例，其余文件直接复用项目资源图标。 */
@@ -63,19 +86,41 @@ export default function UserSpaceFileIcon({
 	resourceTree: AttachmentItem[]
 	size?: number
 }) {
-	const { t } = useTranslation("super")
-	const kind = getResourceKind(item)
+	const presentation = useUserFilePresentation(item)
+	const kind = presentation?.kind
 	let icon: ReactNode = (
 		<ProjectResourceIcon item={item} resourceTree={resourceTree} size={size} />
 	)
 	switch (kind) {
 		case "memory":
+		case "coreMemory":
 			icon = (
 				<TopicFileIcon
 					magicVariant={item.is_directory ? "magic-memory" : "magic-file-memory"}
 					size={size}
 				/>
 			)
+			break
+		case "notes":
+			icon = <NotebookPen size={size} className="text-muted-foreground" />
+			break
+		case "references":
+		case "subject":
+			icon = <BookOpen size={size} className="text-muted-foreground" />
+			break
+		case "timeline":
+		case "event":
+			icon = <History size={size} className="text-muted-foreground" />
+			break
+		case "year":
+		case "month":
+			icon = <CalendarDays size={size} className="text-muted-foreground" />
+			break
+		case "index":
+			icon = <ListTree size={size} className="text-muted-foreground" />
+			break
+		case "topics":
+			icon = <MessageSquare size={size} className="text-muted-foreground" />
 			break
 		case "dingtalk":
 			icon = <img src={DingTalkIcon} alt="" width={size} height={size} />
@@ -96,30 +141,19 @@ export default function UserSpaceFileIcon({
 			icon = <Settings size={size} className="text-muted-foreground" />
 			break
 	}
-	if (!kind) return icon
-	const descriptions: Record<UserResourceKind, string> = {
-		magic: t("userSpace.fileHelp.magic"),
-		instructions: t("userSpace.fileHelp.instructions"),
-		memory: t("userSpace.fileHelp.memory"),
-		dingtalk: t("userSpace.fileHelp.dingtalk"),
-		lark: t("userSpace.fileHelp.lark"),
-		teamshare: t("userSpace.fileHelp.teamshare"),
-		tools: t("userSpace.fileHelp.tools"),
-		cli: t("userSpace.fileHelp.cli"),
-		settings: t("userSpace.fileHelp.settings"),
-	}
+	if (!presentation) return icon
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
 				<span
 					className="inline-flex shrink-0 items-center justify-center"
-					aria-label={descriptions[kind]}
+					aria-label={presentation.description}
 				>
 					{icon}
 				</span>
 			</TooltipTrigger>
 			<TooltipContent side="right" className="max-w-64">
-				{descriptions[kind]}
+				{presentation.description}
 			</TooltipContent>
 		</Tooltip>
 	)

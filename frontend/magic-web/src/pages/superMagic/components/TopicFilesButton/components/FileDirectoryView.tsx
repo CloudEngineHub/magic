@@ -9,10 +9,14 @@ import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import { cn } from "@/utils/cn"
 import { normalizeLocale } from "@/utils/locale"
-import { createAttachmentNodeComparator } from "@/pages/superMagic/utils/projectAttachments/treeUtils"
+import {
+	compareMagicFolderPriority,
+	createAttachmentNodeComparator,
+} from "@/pages/superMagic/utils/projectAttachments/treeUtils"
 import type { AttachmentItem } from "../hooks/types"
 import type { TopicFilesMenuItem } from "../utils/menu-items"
 import { TopicFileIcon } from "./TopicFileIcon"
+import { ProjectFileTag } from "./TopicFileTag"
 import { FileDirectoryToolbar } from "./FileDirectoryToolbar"
 import { handleAttachmentDragEnd, handleAttachmentDragStart } from "../../MessageEditor/utils/drag"
 
@@ -22,6 +26,7 @@ export interface DirectoryBreadcrumb {
 }
 export interface FileDirectoryViewProps {
 	renderFileIcon?: (file: AttachmentItem, size: number) => ReactNode
+	renderFileTag?: (file: AttachmentItem) => ReactNode
 	scrollElementRef?: React.RefObject<HTMLElement>
 	items: AttachmentItem[]
 	path: DirectoryBreadcrumb[]
@@ -77,6 +82,7 @@ export function formatDirectoryFileTime(
 /** 项目和用户文件共享目录交互；读取与修改由所属空间提供，视图不构造项目身份。 */
 export function FileDirectoryView({
 	renderFileIcon,
+	renderFileTag,
 	scrollElementRef,
 	items,
 	path,
@@ -119,11 +125,13 @@ export function FileDirectoryView({
 				.filter((file) =>
 					(file.file_name ?? file.name ?? "").toLocaleLowerCase().includes(query),
 				)
-				.sort((a, b) =>
-					sort === "time"
-						? Number(Boolean(b.is_directory)) - Number(Boolean(a.is_directory)) ||
-							String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? ""))
-						: compareNames(a, b),
+				.sort(
+					(a, b) =>
+						compareMagicFolderPriority(a, b) ||
+						(sort === "time"
+							? Number(Boolean(b.is_directory)) - Number(Boolean(a.is_directory)) ||
+								String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? ""))
+							: compareNames(a, b)),
 				),
 		[items, query, sort, compareNames],
 	)
@@ -289,9 +297,11 @@ export function FileDirectoryView({
 						{virtualizer.getVirtualItems().map((row) => (
 							<div
 								key={row.key}
+								data-index={row.index}
+								ref={virtualizer.measureElement}
 								className="absolute left-0 top-0 grid w-full gap-2 px-2"
 								style={{
-									height: rowHeight,
+									minHeight: rowHeight,
 									transform: `translateY(${row.start - scrollMargin}px)`,
 									gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
 								}}
@@ -315,7 +325,7 @@ export function FileDirectoryView({
 											>
 												<div
 													className={cn(
-														"flex min-w-0 items-center gap-2",
+														"flex min-w-0 flex-wrap items-center gap-2 py-1",
 														grid ? "w-full" : "flex-1",
 													)}
 												>
@@ -336,7 +346,7 @@ export function FileDirectoryView({
 															row.index * columns + offset
 														}
 														className={cn(
-															"flex min-w-0 flex-1 items-center gap-2 rounded text-left text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring",
+															"flex min-w-[min(8ch,100%)] flex-[1_1_8ch] items-center gap-2 rounded text-left text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring",
 															grid && "flex-col text-center",
 														)}
 														draggable
@@ -371,6 +381,18 @@ export function FileDirectoryView({
 															{file.file_name ?? file.name}
 														</span>
 													</button>
+													<div
+														className={cn(
+															"ml-auto flex max-w-full shrink-0 empty:hidden",
+															grid && "w-full justify-center",
+														)}
+													>
+														{renderFileTag ? (
+															renderFileTag(file)
+														) : (
+															<ProjectFileTag item={file} />
+														)}
+													</div>
 												</div>
 												{!grid && (
 													<>

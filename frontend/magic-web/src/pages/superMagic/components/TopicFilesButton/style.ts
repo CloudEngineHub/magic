@@ -363,9 +363,26 @@ export const useStyles = createStyles(({ token }) => ({
 	rowTagSlot: {
 		display: "flex",
 		alignItems: "center",
+		flexWrap: "wrap",
+		gap: 4,
+		maxWidth: "100%",
 		flexShrink: 0,
 		marginLeft: "auto",
 		marginRight: "4px",
+	},
+	// 标签放不下时另起一行；保留文件名的阅读宽度，树沿用真实行高测量。
+	fileTitleWithTag: {
+		flexWrap: "wrap",
+		"[data-testid='folder-name'], [data-testid='file-name']": {
+			flexBasis: "8ch",
+			minWidth: "min(8ch, 100%)",
+		},
+	},
+	fileItemWithTag: {
+		"@media (max-width: 768px)": {
+			height: "auto",
+			minHeight: 40,
+		},
 	},
 	activeFileItemWrapper: {
 		// backgroundColor: "#EEF3FD",

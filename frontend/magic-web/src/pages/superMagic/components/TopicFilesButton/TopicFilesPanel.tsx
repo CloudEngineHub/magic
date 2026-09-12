@@ -60,7 +60,7 @@ interface TopicFilesPanelProps {
 	/** 是否显示文件树内部标题。 */
 	showTitle?: boolean
 	/** 多板块视图保留独立标题，搜索／选择只替换下方工具区。 */
-	headerLayout?: "inline" | "stacked"
+	headerLayout?: "inline" | "adaptive"
 	attachments?: AttachmentItem[]
 	setUserSelectDetail?: (detail: any) => void
 	onFileClick?: (fileItem: any) => void
@@ -609,7 +609,10 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			},
 		}))
 
-		const stackedHeader = headerLayout === "stacked"
+		const adaptiveHeader = headerLayout === "adaptive"
+		// 搜索和选择状态保持独立标题。
+		// 用户空间将身份标题放在独立一行；这里只复用原工具按钮，不复制操作逻辑。
+		const stackedHeader = adaptiveHeader && (isSearchMode || isSelectMode)
 		const modeSection = stackedHeader ? undefined : section
 		const header = isSearchMode ? (
 			<SearchModeHeader
@@ -639,7 +642,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			/>
 		) : (
 			<NormalModeHeader
-				actionsOnly={stackedHeader}
+				adaptive={adaptiveHeader}
 				expandAllLabel={
 					spaceConfig?.directorySource ? t("userSpace.expandLoaded") : undefined
 				}
@@ -794,7 +797,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 									testId="memory-files-section"
 									header={stackedHeader ? undefined : header}
 								>
-									{section.description}
+									{(!adaptiveHeader || stackedHeader) && section.description}
 									{stackedHeader && header}
 									{contentBefore}
 									{content}
