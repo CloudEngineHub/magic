@@ -233,28 +233,26 @@ export function useTopicDesktopPanelMotion({
 	const canShowFixedTopicHistory =
 		!isReadOnly &&
 		isTopicHistoryPanelOpen &&
-		(historyResize
-			? historyFixedMaxWidth >= TOPIC_HISTORY_RESIZE.min
-			: !shouldShowDetailPanel || middleContainerWidth >= FIXED_TOPIC_HISTORY_REQUIRED_WIDTH)
+		(!shouldShowDetailPanel || middleContainerWidth >= FIXED_TOPIC_HISTORY_REQUIRED_WIDTH)
+	// 调宽只改变列宽，不改变原显示模式：无预览时始终独立成列，有预览时沿用原断点。
 	const topicHistoryMode: TopicHistoryMode =
-		historyResize && !isReadOnly && isTopicHistoryPanelOpen
-			? historyResize.lockedMode ||
-				(canShowFixedTopicHistory
-					? shouldShowDetailPanel
-						? "fixed"
-						: "full-right"
-					: "drawer")
-			: getTopicHistoryMode({
-					isReadOnly,
-					isTopicHistoryPanelOpen,
-					shouldShowDetailPanel,
-					canShowFixedTopicHistory,
-				})
+		(!isReadOnly && isTopicHistoryPanelOpen && historyResize?.lockedMode) ||
+		getTopicHistoryMode({
+			isReadOnly,
+			isTopicHistoryPanelOpen,
+			shouldShowDetailPanel,
+			canShowFixedTopicHistory,
+		})
 	const historyMaxWidth = Math.max(
 		0,
 		Math.min(
 			TOPIC_HISTORY_RESIZE.max,
-			topicHistoryMode === "drawer" ? middleContainerWidth : historyFixedMaxWidth,
+			middleContainerWidth,
+			topicHistoryMode === "drawer"
+				? middleContainerWidth
+				: topicHistoryMode === "full-right"
+					? Math.max(TOPIC_HISTORY_PANEL_WIDTH, historyFixedMaxWidth)
+					: historyFixedMaxWidth,
 		),
 	)
 	const topicHistoryPanelWidth =
