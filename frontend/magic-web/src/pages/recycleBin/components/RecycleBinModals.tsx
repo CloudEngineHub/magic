@@ -22,6 +22,7 @@ import {
 } from "./recycle-bin-domain"
 
 interface RecycleBinModalsProps {
+	requireDeleteConfirmation?: boolean
 	items: RecycleBinItem[]
 	restoreTarget: RestoreTarget | null
 	restoreCheckResult: RestoreCheckResult | null
@@ -59,6 +60,7 @@ interface RecycleBinModalsProps {
 }
 
 export function RecycleBinModals({
+	requireDeleteConfirmation = false,
 	items,
 	restoreTarget,
 	restoreCheckResult,
@@ -86,6 +88,10 @@ export function RecycleBinModals({
 	onSelectPathSubmit,
 	t,
 }: RecycleBinModalsProps) {
+	const deleteItems =
+		deleteTarget?.kind === "item"
+			? [deleteTarget.item]
+			: items.filter((item) => deleteTarget?.itemIds.includes(item.id))
 	return (
 		<>
 			<RestoreModal
@@ -101,6 +107,12 @@ export function RecycleBinModals({
 			/>
 
 			<DeleteModal
+				items={requireDeleteConfirmation ? deleteItems : undefined}
+				confirmationPhrase={
+					requireDeleteConfirmation
+						? t("fileManager.recycle.permanentPhrase", { count: deleteItems.length })
+						: undefined
+				}
 				open={deleteTarget !== null}
 				onOpenChange={onDeleteOpenChange}
 				title={getDeleteModalTitle(deleteTarget, t)}

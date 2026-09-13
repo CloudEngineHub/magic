@@ -8,7 +8,6 @@ import {
 	ChevronsUpDown,
 	ChevronsDownUp,
 	MoreHorizontal,
-	FolderTree,
 } from "lucide-react"
 import { memo } from "react"
 import type { ReactNode } from "react"
@@ -19,7 +18,7 @@ import FileMenuDropdown from "./FileMenuDropdown"
 import UploadMenuDropdown from "./UploadMenuDropdown"
 import { type PresetFileType } from "../constant"
 import { cn } from "@/utils/cn"
-import HeaderTrailingAction, { FileManagerAction } from "./HeaderTrailingAction"
+import HeaderTrailingAction from "./HeaderTrailingAction"
 import { SidebarRow, type SidebarSectionOptions } from "../../SidebarSection"
 import { useFileHeaderOverflow } from "../hooks/useFileHeaderOverflow"
 import { MagicDropdown } from "@/components/base/MagicDropdown"
@@ -45,7 +44,6 @@ interface NormalModeHeaderProps {
 	onImportFromOtherProject?: () => void
 	onEnterSelectMode?: () => void
 	headerTrailingAction?: ReactNode
-	onOpenFileManager?: () => void
 	section?: SidebarSectionOptions
 	className?: string
 	adaptive?: boolean
@@ -72,7 +70,6 @@ function NormalModeHeader({
 	onImportFromOtherProject,
 	onEnterSelectMode,
 	headerTrailingAction,
-	onOpenFileManager,
 	section,
 	className,
 	adaptive = false,
@@ -80,7 +77,7 @@ function NormalModeHeader({
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 	const { rowRef, labelRef, actionsRef, overflow } = useFileHeaderOverflow(adaptive)
-	const hasOverflow = (adaptive || overflow) && Boolean(onToggleAllFolders || onOpenFileManager)
+	const hasOverflow = (adaptive || overflow) && Boolean(onToggleAllFolders)
 	const toggleAllFoldersLabel = allFoldersExpanded
 		? t("fileTree.collapseAll")
 		: (expandAllLabel ?? t("fileTree.expandAll"))
@@ -218,17 +215,6 @@ function NormalModeHeader({
 			{headerTrailingAction ? (
 				<HeaderTrailingAction>{headerTrailingAction}</HeaderTrailingAction>
 			) : null}
-			{onOpenFileManager && (
-				<div
-					className={cn(
-						"flex shrink-0",
-						hasOverflow && "pointer-events-none invisible absolute",
-					)}
-					aria-hidden={hasOverflow || undefined}
-				>
-					<FileManagerAction onClick={onOpenFileManager} />
-				</div>
-			)}
 			{hasOverflow && (
 				<div data-overflow-trigger className="flex shrink-0">
 					<MagicDropdown
@@ -246,16 +232,6 @@ function NormalModeHeader({
 													<ChevronsUpDown size={16} />
 												),
 												onClick: onToggleAllFolders,
-											},
-										]
-									: []),
-								...(onOpenFileManager
-									? [
-											{
-												key: "file-manager",
-												label: t("userSpace.openManager"),
-												icon: <FolderTree size={16} />,
-												onClick: onOpenFileManager,
 											},
 										]
 									: []),

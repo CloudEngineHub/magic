@@ -9,6 +9,8 @@ import {
 	useImperativeHandle,
 	type ReactNode,
 } from "react"
+import { FolderTree, ArrowUpRight } from "lucide-react"
+import { Button } from "@/components/shadcn-ui/button"
 import { useTranslation } from "react-i18next"
 import TopicFilesCore, {
 	type TopicFilesCoreRef,
@@ -641,7 +643,6 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				onSearchCommit={handleSearchCommit}
 				onClose={handleCloseSearch}
 				headerTrailingAction={headerTrailingAction}
-				onOpenFileManager={onOpenFileManager}
 				section={modeSection}
 				className={cn("duration-200 animate-in fade-in", !showTitle && "[&>p]:hidden")}
 			/>
@@ -654,7 +655,6 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				onDeselectAll={handleDeselectAll}
 				onCancel={handleCancelSelect}
 				headerTrailingAction={headerTrailingAction}
-				onOpenFileManager={onOpenFileManager}
 				section={modeSection}
 				className="duration-200 animate-in fade-in"
 			/>
@@ -694,7 +694,6 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				}
 				onEnterSelectMode={capabilities.multiSelect ? handleEnterSelectMode : undefined}
 				headerTrailingAction={headerTrailingAction}
-				onOpenFileManager={onOpenFileManager}
 				section={modeSection}
 				className="duration-200 animate-in fade-in"
 			/>
@@ -754,7 +753,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			<>
 				<div
 					className={cn(
-						"flex flex-col gap-0.5",
+						"flex min-h-0 flex-col gap-0.5",
 						fitContent ? "min-h-0 shrink-0" : "h-full",
 						className,
 					)}
@@ -835,6 +834,19 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								</>
 							)}
 						</>
+					)}
+					{!isMobile && onOpenFileManager && (
+						<div className="shrink-0 border-t border-border/60 p-2">
+							<Button
+								variant="ghost"
+								className="h-9 w-full justify-start gap-2 rounded-lg px-3 text-xs text-muted-foreground hover:text-foreground"
+								onClick={onOpenFileManager}
+							>
+								<FolderTree size={15} />
+								{t("userSpace.openManager")}
+								<ArrowUpRight size={14} className="ml-auto" />
+							</Button>
+						</div>
 					)}
 				</div>
 				{projectDetailFilesController.deleteConfirmNode}

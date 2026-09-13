@@ -1,9 +1,8 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
-import { Brain, CircleHelp, Files, FolderTree } from "lucide-react"
+import { Brain, CircleHelp, Files, FolderTree, ArrowUpRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import MagicTooltip from "@/components/base/MagicTooltip"
 import { ContextHelp } from "@/components/shadcn-composed/context-help"
 import { cn } from "@/utils/cn"
 import userFilesStore from "@/stores/userFiles"
@@ -76,28 +75,6 @@ export default observer(function UserSpacePanel({
 						<CircleHelp size={16} />
 					</Button>
 				</ContextHelp>
-				<MagicTooltip title={t("userSpace.openManager")}>
-					<Button
-						variant="ghost"
-						size="icon"
-						className="size-6 shrink-0"
-						aria-label={t("userSpace.openManager")}
-						onClick={() =>
-							onFileClick?.({
-								file_manager: {
-									spaceType: "user",
-									view,
-									directoryId: view === "files" ? directoryId : undefined,
-									projectId: projectId ?? undefined,
-									projectName,
-									topicId,
-								},
-							})
-						}
-					>
-						<FolderTree size={16} />
-					</Button>
-				</MagicTooltip>
 			</div>
 			<div role="tablist" className="mx-2 flex shrink-0 rounded-md bg-muted p-0.5">
 				{(
@@ -154,6 +131,30 @@ export default observer(function UserSpacePanel({
 							onFileClick={onFileClick}
 						/>
 					</Suspense>
+				</div>
+			)}
+			{onFileClick && (
+				<div className="shrink-0 border-t border-border/60 p-2">
+					<Button
+						variant="ghost"
+						className="h-9 w-full justify-start gap-2 rounded-lg px-3 text-xs text-muted-foreground hover:text-foreground"
+						onClick={() =>
+							onFileClick?.({
+								file_manager: {
+									spaceType: "user",
+									view,
+									directoryId: view === "files" ? directoryId : undefined,
+									projectId: projectId ?? undefined,
+									projectName,
+									topicId,
+								},
+							})
+						}
+					>
+						<FolderTree size={15} />
+						{t("userSpace.openManager")}
+						<ArrowUpRight size={14} className="ml-auto" />
+					</Button>
 				</div>
 			)}
 		</div>

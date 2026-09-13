@@ -187,6 +187,7 @@ function parseRestoreCheckResponse(data: {
 }
 
 interface UseRecycleBinActionsParams {
+	onMutationComplete?: () => void
 	items: RecycleBinItem[]
 	setItems: React.Dispatch<React.SetStateAction<RecycleBinItem[]>>
 	selectedIds: string[]
@@ -200,6 +201,7 @@ export function useRecycleBinActions({
 	selectedIds,
 	hasMixedSelectionTypes,
 	onRefresh,
+	onMutationComplete,
 }: UseRecycleBinActionsParams) {
 	const { t } = useTranslation("super")
 	const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null)
@@ -331,6 +333,7 @@ export function useRecycleBinActions({
 					count,
 				}),
 			)
+		onMutationComplete?.()
 		refreshSidebarAfterRestore()
 		onRefresh()
 	}
@@ -705,6 +708,7 @@ export function useRecycleBinActions({
 				magicToast.error(t("operationFailed"))
 			}
 			if (successIdStrings.length > 0) {
+				onMutationComplete?.()
 				magicToast.success(
 					t("recycleBin.deleteSuccess.content", { count: successIdStrings.length }),
 				)
