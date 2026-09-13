@@ -2774,11 +2774,13 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		topic_id,
 		message_type,
 		message_content,
+		process_immediately,
 	}: {
 		project_id: string
 		topic_id: string
 		message_type: string
 		message_content: any
+		process_immediately?: boolean
 	}) {
 		return fetch.post<{ queue_id: string; status: number }>(
 			"/api/v1/super-agent/message-queue",
@@ -2787,6 +2789,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 				topic_id,
 				message_type,
 				message_content,
+				process_immediately,
 			},
 		)
 	},

@@ -72,7 +72,10 @@ class MessageQueueAppService extends AbstractAppService
         $topicId = (int) $requestDTO->getTopicId();
 
         // Validate topic status and ownership (only running topics can add messages) and get TopicEntity
-        $topicEntity = $this->validateQueueScope($dataIsolation, $projectId, $topicId);
+        $topicEntity = $this->topicDomainService->validateTopicForMessageQueue(
+            $dataIsolation,
+            $topicId
+        );
 
         // Validate message type against ChatMessageType enum
         $chatMessageType = ChatMessageType::tryFrom($requestDTO->getMessageType());
@@ -113,7 +116,9 @@ class MessageQueueAppService extends AbstractAppService
             'topic_id' => $topicId,
         ]);
 
-        $this->messageQueueProcessAppService->processTopicMessageQueue($topicId);
+        if ($requestDTO->processImmediately) {
+            $this->messageQueueProcessAppService->processTopicMessageQueue($topicId);
+        }
 
         return [
             'queue_id' => (string) $messageEntity->getId(),
@@ -421,7 +426,8 @@ class MessageQueueAppService extends AbstractAppService
     private function validateQueueScope(DataIsolation $isolation, int $projectId, int $topicId): TopicEntity
     {
         $topic = $this->topicDomainService->validateTopicForMessageQueue($isolation, $topicId);
-        $project = $this->projectDomainService->getProject($projectId, $isolation->getCurrentUserId());
+        // 队列沿用话题归属鉴权；项目存在和归属一致不等于要求操作者是项目创建人。
+        $project = $this->projectDomainService->getProjectNotUserId($projectId);
         if ($topic->getProjectId() !== $projectId
             || $topic->getUserOrganizationCode() !== $isolation->getCurrentOrganizationCode()
             || $project->getUserOrganizationCode() !== $isolation->getCurrentOrganizationCode()) {

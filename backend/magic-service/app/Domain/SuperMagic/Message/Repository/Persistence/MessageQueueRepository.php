@@ -12,6 +12,7 @@ use App\Domain\SuperMagic\Message\Entity\ValueObject\MessageQueueStatus;
 use App\Domain\SuperMagic\Message\Repository\Facade\MessageQueueRepositoryInterface;
 use App\Domain\SuperMagic\Message\Repository\Model\MessageQueueModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use Hyperf\Database\Model\Builder;
 use Hyperf\DbConnection\Db;
 
 class MessageQueueRepository implements MessageQueueRepositoryInterface
@@ -386,7 +387,10 @@ class MessageQueueRepository implements MessageQueueRepositoryInterface
             ->where('organization_code', $organizationCode)
             ->where('project_id', $projectId)
             ->where('topic_id', $topicId)
-            ->where('message_content->extra->super_agent->client_queue_sync_id', $syncId)
+            ->where(static function (Builder $query) use ($syncId): void {
+                $query->where('message_content->extra->super_agent->client_queue_sync_id', $syncId)
+                    ->orWhere('message_content->extra->super_agent->client_queue_create_sync_id', $syncId);
+            })
             ->first();
         return $model ? $this->convertToEntity($model) : null;
     }

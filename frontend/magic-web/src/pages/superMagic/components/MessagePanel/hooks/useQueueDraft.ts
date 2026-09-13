@@ -289,6 +289,7 @@ export default function useQueueDraft({
 						topic_id: draft.topicId,
 						message_type: "rich_text",
 						message_content: messageContent,
+						process_immediately: true,
 					})
 					if (!result.queue_id) throw new Error("queue_submission_unconfirmed")
 				}

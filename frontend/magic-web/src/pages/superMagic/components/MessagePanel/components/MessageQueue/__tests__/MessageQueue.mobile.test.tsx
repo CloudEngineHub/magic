@@ -181,8 +181,12 @@ describe("MessageQueue mobile variant", () => {
 			/>,
 		)
 
-		expect(screen.getByText("Mock queued task alpha")).toBeInTheDocument()
-		expect(screen.getByText("Mock queued task beta")).toBeInTheDocument()
+		expect(screen.getByTitle("Mock queued task alpha")).toHaveTextContent(
+			"Mock queued task alpha",
+		)
+		expect(screen.getByTitle("Mock queued task beta")).toHaveTextContent(
+			"Mock queued task beta",
+		)
 	})
 
 	it("disables queue actions while a queue operation is saving", () => {
@@ -242,6 +246,6 @@ describe("MessageQueue mobile variant", () => {
 			/>,
 		)
 
-		expect(screen.getByText("@File")).toBeInTheDocument()
+		expect(screen.getByTitle("@File")).toHaveTextContent("@File")
 	})
 })

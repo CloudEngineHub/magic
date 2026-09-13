@@ -3,7 +3,7 @@ import { LocalStorageDraftService } from "../LocalStorageDraftService"
 import type { DraftKey, DraftData } from "../../../types"
 
 // Mock user store
-vi.mock("@/opensource/models/user", () => ({
+vi.mock("@/models/user", () => ({
 	userStore: {
 		user: {
 			userInfo: {

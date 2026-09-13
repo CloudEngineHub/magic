@@ -54,6 +54,8 @@ class MessageQueueDomainService
         $lockKey = $this->getTopicLockKey($topicId);
 
         return $this->executeWithLock($lockKey, function () use ($dataIsolation, $projectId, $topicId, $messageContent, $messageType) {
+            // 首次创建标识由服务端在恢复时保留，不能由新建请求指定其他消息的来源。
+            unset($messageContent['extra']['super_agent']['client_queue_create_sync_id']);
             $syncId = $messageContent['extra']['super_agent']['client_queue_sync_id'] ?? '';
             if (is_string($syncId) && $syncId !== '') {
                 $existing = $this->messageQueueRepository->getByClientSyncId(
@@ -190,7 +192,8 @@ class MessageQueueDomainService
                     ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_ACCESS_DENIED, 'topic.topic_access_denied');
                 }
                 $syncId = $messageContent['extra']['super_agent']['client_queue_sync_id'] ?? '';
-                $currentSyncId = $message->getMessageContentAsArray()['extra']['super_agent']['client_queue_sync_id'] ?? '';
+                $currentExtra = $message->getMessageContentAsArray()['extra']['super_agent'] ?? [];
+                $currentSyncId = $currentExtra['client_queue_sync_id'] ?? '';
                 // 同一提交即使已经消费也只返回受理结果，不再次恢复或覆盖内容。
                 if ($syncId !== '' && $syncId === $currentSyncId) {
                     return new MessageQueueWriteResult($message, false);
@@ -200,6 +203,10 @@ class MessageQueueDomainService
                     ExceptionBuilder::throw(SuperAgentErrorCode::MESSAGE_STATUS_NOT_MODIFIABLE, trans('message_queue.status_not_modifiable'));
                 }
                 $ids = $this->positionMessage($message, $beforeId, $afterId, $originalIndex);
+                // 创建请求 A → 编辑恢复 B → A 的迟到重试：仍须找到同一条记录。
+                // 当前标识用于本次恢复和旧删除校验；首次创建标识只保留一次，不积累历史列表。
+                $messageContent['extra']['super_agent']['client_queue_create_sync_id'] =
+                    $currentExtra['client_queue_create_sync_id'] ?? $currentSyncId;
                 $message->setMessageContent(json_encode($messageContent, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR))
                     ->setMessageType($messageType->value);
                 if (! $this->messageQueueRepository->restore($message)) {
