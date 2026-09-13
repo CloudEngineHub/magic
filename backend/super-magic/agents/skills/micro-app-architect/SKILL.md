@@ -91,6 +91,7 @@ When one exact Skill file is required, the message may still include an explicit
 - Before designing, classify the app as showcase, tool, form, CRUD admin, or dashboard, and define the primary task, primary action, data area, and feedback area.
 - The first screen must explain the app purpose and primary action. Use consistent spacing, type hierarchy, radii, borders, shadows, and colors; mobile layouts must not overflow or become cramped.
 - All states need real representations: `loading`, `empty`, `error`, `success`, `disabled`, `hover`, and `focus`. Buttons, filters, tabs, charts, and lists must be functional rather than decorative placeholders.
+- By default, add a Refresh button on lists and other views whose data may change, so the user can reload the current data manually.
 - Do not use inline events; bind all events with `addEventListener`. Buttons rendered through `innerHTML` must use delegated events on a stable parent with `data-action` and `data-id`.
 - When using `FormData(form).get("field")`, the control must have a matching `name`; otherwise read the value through a stable element ID.
 - Calls to `window.Magic.llm` must always pass `model`; the page should display available models and select the first one by default. Database API parameters must be validated.

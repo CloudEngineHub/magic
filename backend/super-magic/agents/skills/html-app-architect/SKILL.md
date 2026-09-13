@@ -195,6 +195,7 @@ The HTML layer has access to `window.Magic.*` APIs (pre-injected, no imports nee
     - **Simple tasks** (short text extraction, single-field parsing, brief summarization where file content fits in a few thousand tokens): acceptable to `readFile` + `window.Magic.llm.chat/stream` directly in HTML.
     - **Complex tasks** (long documents, multi-step analysis, cross-file reasoning, structured report generation, tasks needing tool use): strongly prefer the topic + skill pattern — (1) save file to workspace via `writeFile`/`uploadFiles`, (2) send the task with `createTopicAndSend` and explicitly attach the required skill or file mentions. The agent has longer context, file parsing tools, and can orchestrate multi-step workflows. HTML app handles UI only (file picker, progress, result display) and watches output via `watchFile`.
 16. **Error logging and user feedback** — every `catch` block and error callback must call `console.error` with useful operation context; never silently swallow errors. Errors that block the user from completing the current task must be surfaced in the UI with a clear, actionable message. Non-blocking errors may degrade gracefully but must still be logged.
+17. **Refresh button on lists and volatile data (default)** — add a Refresh button on lists and other views whose data may change, so the user can reload the current data manually.
 
 ---
 

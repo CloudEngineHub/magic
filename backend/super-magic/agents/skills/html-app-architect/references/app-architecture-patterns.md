@@ -9,6 +9,7 @@ Condensed architecture patterns for Simple, Medium, and Complex micro-apps. Focu
 **Characteristics:** All logic in `<script>`, no companion skill, uses `window.Magic.fs` and/or `window.Magic.llm` directly.
 
 **Directory structure:**
+
 ```
 <app-directory>/
 ├── index.html          (all UI + logic)
@@ -18,6 +19,7 @@ Condensed architecture patterns for Simple, Medium, and Complex micro-apps. Focu
 ```
 
 **Key code pattern:**
+
 ```javascript
 // Load list projection, then read detail on demand
 async function loadAndRender() {
@@ -29,6 +31,9 @@ async function loadAndRender() {
   renderRows(rows);
 }
 
+document.getElementById("refresh-btn").addEventListener("click", () => {
+  loadAndRender();
+});
 loadAndRender();
 window.Magic.fs.watchDir("data/records/", () => loadAndRender());
 ```
@@ -40,6 +45,7 @@ window.Magic.fs.watchDir("data/records/", () => loadAndRender());
 **Characteristics:** HTML handles UI, companion skill handles complex backend logic triggered via `createTopicAndSend()` (new topic + @file SKILL.md).
 
 **Directory structure:**
+
 ```
 <workspace-root>/
 ├── .magic/
@@ -55,6 +61,7 @@ window.Magic.fs.watchDir("data/records/", () => loadAndRender());
 ```
 
 **Key code pattern — trigger skill + watch progress:**
+
 ```javascript
 // Trigger companion skill via new topic
 generateBtn.addEventListener("click", async () => {
@@ -105,12 +112,14 @@ window.Magic.fs.watchFile("data/report.json", async () => {
 ```
 
 **Companion skill structure** (generated via skill-creator):
+
 ```yaml
 ---
 name: report_writer
 description: "Analyzes input data and generates comprehensive reports."
 ---
 ```
+
 Workflow: read input → update status (25%) → analyze → update (50%) → generate report → update (75%) → write result → complete (100%).
 
 ---
@@ -120,6 +129,7 @@ Workflow: read input → update status (25%) → analyze → update (50%) → ge
 **Characteristics:** HTML acts as a control panel dispatching tasks to different agents, tracking multiple concurrent workflows.
 
 **Directory structure:**
+
 ```
 <workspace-root>/
 ├── .magic/
@@ -192,6 +202,7 @@ function waitForFile(path) {
 ```
 
 **task record schema:**
+
 ```json
 {
   "id": "task-001",
@@ -210,7 +221,7 @@ function waitForFile(path) {
 ## Pattern Selection Cheat Sheet
 
 | User Request | Pattern | Key APIs Used |
-|--------------|---------|---------------|
+| --- | --- | --- |
 | "Make a calculator" | Simple | (pure JS, no Magic API) |
 | "Make a todo list" | Simple | `fs.listDir`, `fs.watchDir`, `fs.readFile`, `fs.writeFile`, `fs.renameFile`, `fs.deleteFile` |
 | "Make an AI chat interface" | Simple | `llm.stream`, `llm.getModels` |
@@ -239,6 +250,7 @@ async function initializeData() {
 ```
 
 Or generate initial data files alongside the HTML:
+
 ```
 app-dir/
 ├── index.html
