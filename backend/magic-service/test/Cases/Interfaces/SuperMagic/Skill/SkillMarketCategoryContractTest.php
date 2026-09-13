@@ -295,7 +295,9 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertSame('English name', $payload['name']);
         $this->assertSame('English description', $payload['description']);
         $this->assertSame('English source', $payload['source']);
-        $this->assertSame(['default' => 'Default source', 'en_US' => 'English source'], $payload['source_i18n']);
+        $this->assertArrayNotHasKey('name_i18n', $payload);
+        $this->assertArrayNotHasKey('description_i18n', $payload);
+        $this->assertArrayNotHasKey('source_i18n', $payload);
     }
 
     public function testMarketInstalledListItemResolvesI18nWithDefaultFallback(): void
@@ -480,7 +482,7 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertSame('10', $tree[0]['children'][0]['parent_id']);
     }
 
-    public function testMarketListResponseExposesLocalizedSourceAndLegacyI18nFields(): void
+    public function testMarketListResponseUsesResolvedFieldsWithoutLegacyI18nFields(): void
     {
         $payload = (new SkillMarketListItemDTO(
             id: 1,
@@ -489,9 +491,6 @@ final class SkillMarketCategoryContractTest extends TestCase
             name: 'Skill name',
             description: 'Skill description',
             source: 'Skill source',
-            nameI18n: ['default' => 'Skill name'],
-            descriptionI18n: ['default' => 'Skill description'],
-            sourceI18n: ['default' => 'Skill source'],
             logo: '',
             publisherType: 'OFFICIAL',
             publisher: [],
@@ -507,10 +506,12 @@ final class SkillMarketCategoryContractTest extends TestCase
             installCount: 42,
         ))->jsonSerialize();
 
+        $this->assertSame('Skill name', $payload['name']);
+        $this->assertSame('Skill description', $payload['description']);
         $this->assertSame('Skill source', $payload['source']);
-        $this->assertSame(['default' => 'Skill name'], $payload['name_i18n']);
-        $this->assertSame(['default' => 'Skill description'], $payload['description_i18n']);
-        $this->assertSame(['default' => 'Skill source'], $payload['source_i18n']);
+        $this->assertArrayNotHasKey('name_i18n', $payload);
+        $this->assertArrayNotHasKey('description_i18n', $payload);
+        $this->assertArrayNotHasKey('source_i18n', $payload);
         $this->assertSame(42, $payload['install_count']);
         $this->assertSame('temp/skills/example.zip', $payload['file_key']);
         $this->assertSame('https://example.com/skill.zip', $payload['file_url']);

@@ -82,6 +82,8 @@ export interface MyCrewView {
 	name: string
 	role: string
 	description: string
+	/** Canonical source value returned by agent query list endpoints. */
+	source: string
 	icon: string | null
 	playbooks: CrewPlaybookView[]
 	sourceType: CrewSourceType
@@ -478,9 +480,10 @@ export class CrewService {
 			agentCode: item.code,
 			projectId: item.project_id,
 			userRole: item.user_role,
-			name: this.mapI18nText(item.name_i18n),
+			name: item.name,
 			role: this.mapI18nArrayText(item.role_i18n),
-			description: this.mapI18nText(item.description_i18n),
+			description: item.description,
+			source: item.source,
 			icon: iconUrl,
 			playbooks: item?.playbooks?.map((f) => ({
 				name: this.mapI18nText(f.name_i18n),

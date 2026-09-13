@@ -171,11 +171,9 @@ class SkillAssembler
         ?string $fileUrl = null,
         string $packageName = '',
         string $latestVersion = '',
-        array $sourceI18n = [],
+        string $source = '',
     ): SkillMarketListItemDTO {
         $language = CoContext::getLanguage();
-        $nameI18n = $entity->getNameI18n() ?? [];
-        $descriptionI18n = $entity->getDescriptionI18n() ?? [];
         $name = $entity->getI18nName($language);
         $description = $entity->getI18nDescription($language);
 
@@ -185,9 +183,7 @@ class SkillAssembler
             userSkillCode: $entity->getSkillCode(),
             name: $name,
             description: $description,
-            nameI18n: $nameI18n,
-            descriptionI18n: $descriptionI18n,
-            sourceI18n: $sourceI18n,
+            source: $source,
             logo: $entity->getLogo() ?? '',
             publisherType: $entity->getPublisherType()->value,
             publisher: $publisher,
@@ -424,7 +420,7 @@ class SkillAssembler
             $fileUrl = $version?->getFileUrl();
             $packageName = (string) ($version?->getPackageName() ?? '');
             $latestVersion = (string) ($version?->getVersion() ?? '');
-            $sourceI18n = $version?->getSourceI18n() ?? [];
+            $source = self::resolveLocalizedText($version?->getSourceI18n(), $language);
 
             $listItems[] = self::createMarketListItemDTO(
                 $skillMarketEntity,
@@ -436,7 +432,7 @@ class SkillAssembler
                 fileUrl: $fileUrl,
                 packageName: $packageName,
                 latestVersion: $latestVersion,
-                sourceI18n: $sourceI18n,
+                source: $source,
             );
         }
 

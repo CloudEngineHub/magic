@@ -118,14 +118,10 @@ export interface StoreSkillItem {
 	name?: string
 	description?: string
 	source?: string
-	source_i18n?: Record<string, string> | string[]
 	is_featured?: boolean | 0 | 1
 	install_count?: number
 	/** Latest published version; empty string if unavailable */
 	latest_version?: string
-	/** Deprecated compatibility fields; use the resolved display fields above. */
-	name_i18n?: SkillI18nText
-	description_i18n?: SkillI18nText
 	logo: string
 	file_key?: string | null
 	file_url?: string | null

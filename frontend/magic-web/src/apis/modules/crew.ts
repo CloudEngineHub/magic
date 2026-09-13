@@ -226,15 +226,19 @@ export interface AgentItem {
 	/** Crew unique code (magic_super_magic_agents.code) */
 	code: string
 	user_role?: CollaboratorPermission
-	name_i18n: CrewI18nText
+	/** Display name returned by agent query list endpoints. */
+	name: string
 	role_i18n: CrewI18nArrayText
-	description_i18n: CrewI18nText
+	/** Display description returned by agent query list endpoints. */
+	description: string
 	/** Agent icon object (url, type, color) */
 	icon: CrewIconObject | null
 	/** Icon type: 1=icon, 2=image */
 	icon_type: CrewIconType
 	playbooks: CrewPlayBookBaseData[]
 	source_type: CrewSourceType
+	/** Canonical source value returned by agent query list endpoints. */
+	source: string
 	/** Current user's display source for this agent (returned by list endpoints). */
 	origin: CrewAgentOrigin
 	/** Publish visibility for the current agent. */
