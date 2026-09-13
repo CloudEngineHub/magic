@@ -1,7 +1,6 @@
 import { useRef, type ChangeEventHandler, type ComponentProps, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { IconSearch, IconX } from "@tabler/icons-react"
-import { Grip } from "lucide-react"
 import type { DialogWindowOptions } from "@/hooks/use-dialog-window"
 import {
 	Dialog,
@@ -65,7 +64,8 @@ export function ProjectsPanel({
 					showCloseButton={false}
 					windowOptions={windowOptions}
 					className={cn(
-						"flex flex-col gap-0 overflow-hidden rounded-xl p-0",
+						"flex flex-col gap-0 rounded-xl p-0",
+						windowOptions ? "overflow-visible" : "overflow-hidden",
 						!windowOptions &&
 							"h-[min(680px,calc(100dvh_-_32px))] !w-[min(960px,calc(100vw_-_32px))] !max-w-none",
 					)}
@@ -85,7 +85,7 @@ export function ProjectsPanel({
 					{/* Dialog header */}
 					<div
 						className={cn(
-							"flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-3.5",
+							"flex min-h-[52px] shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5",
 							windowOptions?.draggable &&
 								"cursor-grab touch-none select-none active:cursor-grabbing",
 						)}
@@ -94,7 +94,7 @@ export function ProjectsPanel({
 					>
 						{titleIcon && (
 							<div
-								className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-400/10 dark:text-violet-400"
+								className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
 								aria-hidden="true"
 							>
 								{titleIcon}
@@ -102,7 +102,7 @@ export function ProjectsPanel({
 						)}
 						<div className="flex min-w-0 flex-1 flex-col gap-1">
 							<div
-								className="overflow-hidden text-ellipsis whitespace-nowrap text-base font-semibold leading-[22px] text-foreground/80"
+								className="overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium leading-5 text-foreground"
 								data-testid="shared-workspace-dialog-title"
 							>
 								{title}
@@ -136,7 +136,7 @@ export function ProjectsPanel({
 					</div>
 
 					{/* 高度从窗口逐层传到滚动区；缩放时标题、搜索和工具栏仍保持可见。 */}
-					<div className="flex min-h-0 min-w-0 flex-1">
+					<div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-b-xl">
 						{sidebar}
 						<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 							{location && (
@@ -166,11 +166,13 @@ export function ProjectsPanel({
 						</div>
 					</div>
 					{windowOptions?.resizable && (
-						<Grip
-							size={12}
+						<span
 							aria-hidden="true"
-							className="pointer-events-none absolute bottom-0.5 right-0.5 text-muted-foreground/60"
-						/>
+							className="pointer-events-none absolute bottom-1 right-1 size-3 text-muted-foreground/60"
+						>
+							<span className="absolute bottom-1 right-0 h-px w-3 -rotate-45 bg-current" />
+							<span className="absolute bottom-0.5 right-0 h-px w-1.5 -rotate-45 bg-current" />
+						</span>
 					)}
 				</DialogContent>
 			)}

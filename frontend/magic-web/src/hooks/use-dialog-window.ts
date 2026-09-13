@@ -91,21 +91,38 @@ export function useDialogWindow(options?: DialogWindowOptions) {
 	const [rect, setRect] = useState<WindowRect | null>(null)
 	const rectRef = useRef<WindowRect | null>(null)
 	const gestureRef = useRef<Gesture | null>(null)
+	const frameRef = useRef<number | null>(null)
 	const preferredSizeRef = useRef<DialogWindowSize | null>(null)
 	const lastStorageKeyRef = useRef(options?.sizeStorageKey)
 	const open = options?.open ?? false
 	const storageKey = options?.sizeStorageKey
 
-	const updateRect = useMemoizedFn((next: WindowRect) => {
-		rectRef.current = next
-		setRect(next)
+	const cancelFrame = useMemoizedFn(() => {
+		if (frameRef.current === null) return
+		cancelAnimationFrame(frameRef.current)
+		frameRef.current = null
 	})
-	const endGesture = useMemoizedFn((cancel: boolean) => {
+	const updateRect = useMemoizedFn((next: WindowRect, deferred = false) => {
+		rectRef.current = next
+		if (!deferred) {
+			cancelFrame()
+			setRect(next)
+			return
+		}
+		// 连续移动只保留最新矩形，每帧提交一次；打开和取消手势仍立即更新。
+		if (frameRef.current !== null) return
+		frameRef.current = requestAnimationFrame(() => {
+			frameRef.current = null
+			setRect(rectRef.current)
+		})
+	})
+	const endGesture = useMemoizedFn((cancel: boolean, render = true) => {
+		cancelFrame()
 		const gesture = gestureRef.current
 		if (!gesture) return false
 		gestureRef.current = null
 		if (cancel) {
-			if (options) updateRect(constrainRect(gesture.start, options.minSize))
+			if (options) rectRef.current = constrainRect(gesture.start, options.minSize)
 		} else if (
 			gesture.direction !== "move" &&
 			rectRef.current &&
@@ -123,6 +140,8 @@ export function useDialogWindow(options?: DialogWindowOptions) {
 				}
 			}
 		}
+		// 松手提交最后坐标，取消恢复起点；关闭或卸载只清理，不触发新的渲染。
+		if (render) setRect(rectRef.current)
 		if (gesture.target.hasPointerCapture(gesture.pointerId))
 			gesture.target.releasePointerCapture(gesture.pointerId)
 		return true
@@ -159,7 +178,7 @@ export function useDialogWindow(options?: DialogWindowOptions) {
 		window.visualViewport?.addEventListener("resize", constrain)
 		window.visualViewport?.addEventListener("scroll", constrain)
 		return () => {
-			endGesture(true)
+			endGesture(true, false)
 			window.removeEventListener("resize", constrain)
 			window.visualViewport?.removeEventListener("resize", constrain)
 			window.visualViewport?.removeEventListener("scroll", constrain)
@@ -207,6 +226,7 @@ export function useDialogWindow(options?: DialogWindowOptions) {
 					{ ...start, left: start.left + dx, top: start.top + dy },
 					options.minSize,
 				),
+				true,
 			)
 			return
 		}
@@ -223,10 +243,13 @@ export function useDialogWindow(options?: DialogWindowOptions) {
 		if (direction.includes("s"))
 			bottom = clamp(bottom + dy, top + minHeight, viewport.top + viewport.height)
 		if (direction.includes("n")) top = clamp(top + dy, viewport.top, bottom - minHeight)
-		updateRect({ left, top, width: right - left, height: bottom - top })
+		updateRect({ left, top, width: right - left, height: bottom - top }, true)
 	})
 	const onPointerUp = useMemoizedFn((event: PointerEvent<HTMLDivElement>) => {
-		if (gestureRef.current?.pointerId === event.pointerId) endGesture(false)
+		if (gestureRef.current?.pointerId === event.pointerId) {
+			onPointerMove(event)
+			endGesture(false)
+		}
 	})
 	const onPointerCancel = useMemoizedFn((event: PointerEvent<HTMLDivElement>) => {
 		if (gestureRef.current?.pointerId === event.pointerId) endGesture(true)

@@ -60,14 +60,14 @@ const DialogOverlay = React.forwardRef<
 })
 
 const resizeHandles: Record<DialogResizeDirection, string> = {
-	n: "inset-x-3 top-0 h-1.5 cursor-ns-resize",
-	s: "inset-x-3 bottom-0 h-1.5 cursor-ns-resize",
-	e: "inset-y-3 right-0 w-1.5 cursor-ew-resize",
-	w: "inset-y-3 left-0 w-1.5 cursor-ew-resize",
-	ne: "right-0 top-0 size-3 cursor-nesw-resize",
-	nw: "left-0 top-0 size-3 cursor-nwse-resize",
-	se: "bottom-0 right-0 size-3 cursor-nwse-resize",
-	sw: "bottom-0 left-0 size-3 cursor-nesw-resize",
+	n: "inset-x-2 -top-2 h-2 cursor-ns-resize after:h-0.5 after:w-7",
+	s: "inset-x-2 -bottom-2 h-2 cursor-ns-resize after:h-0.5 after:w-7",
+	e: "inset-y-2 -right-2 w-2 cursor-ew-resize after:h-7 after:w-0.5",
+	w: "inset-y-2 -left-2 w-2 cursor-ew-resize after:h-7 after:w-0.5",
+	ne: "-right-2 -top-2 size-4 cursor-nesw-resize",
+	nw: "-left-2 -top-2 size-4 cursor-nwse-resize",
+	se: "-bottom-2 -right-2 size-4 cursor-nwse-resize",
+	sw: "-bottom-2 -left-2 size-4 cursor-nesw-resize",
 }
 
 type DialogContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
@@ -118,8 +118,10 @@ const DialogContent = React.forwardRef<
 					// PROJECT OVERRIDE — retain when merging upstream shadcn/ui dialog.
 					// Keyframes use (0,0) translate; layout centers with -50% on the box.
 					// --tw-* vars align anim translate with centering; avoids corner skew.
+					// 窗口几何必须立即跟手；transition-none 不影响开关时的淡入淡出 animation。
+					// 边缘热区向外延伸，避免覆盖内容滚动条；内容裁剪由窗口内部布局负责。
 					windowOptions
-						? "fixed z-modal grid gap-4 rounded-lg border bg-background p-4 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+						? "fixed z-modal grid gap-4 rounded-lg border bg-background p-4 shadow-lg transition-none duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
 						: "fixed left-[50%] top-[50%] z-modal grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-4 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:[--tw-enter-translate-x:-50%] data-[state=open]:[--tw-enter-translate-y:-50%] data-[state=closed]:[--tw-exit-translate-x:-50%] data-[state=closed]:[--tw-exit-translate-y:-50%] sm:max-w-lg",
 					className,
 				)}
@@ -159,7 +161,10 @@ const DialogContent = React.forwardRef<
 							key={direction}
 							aria-hidden="true"
 							data-dialog-resize-handle={direction}
-							className={cn("absolute z-10 touch-none select-none", handleClassName)}
+							className={cn(
+								"absolute z-10 flex touch-none select-none items-center justify-center after:pointer-events-none after:rounded-full after:bg-muted-foreground/60 after:opacity-0 hover:after:opacity-100",
+								handleClassName,
+							)}
 							onPointerDown={(event) =>
 								windowInteraction.startGesture(
 									event,
