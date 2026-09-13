@@ -6745,52 +6745,6 @@
 				"scope": "当前助手",
 				"usage": "这里引导助手完成首次使用时需要确认的事项。"
 			},
-			"installedSkills": {
-				"example": "「介绍已安装的技能，哪些适合帮助我分析资料。」",
-				"exampleRoot": ".magic/skills",
-				"files": [
-					{
-						"directory": false,
-						"path": ".magic/skills/report-helper/SKILL.md"
-					},
-					{
-						"directory": true,
-						"path": ".magic/skills/report-helper/references"
-					},
-					{
-						"directory": true,
-						"path": ".magic/skills/report-helper/scripts"
-					}
-				],
-				"guide": {
-					"actions": "想了解能力时，可以让 AI 概括技能清单，再展开与你的任务相关的一项。安装和配置请使用对应功能入口；不要用手动移动目录代替安装，也不要把说明存在视为运行成功。",
-					"context": "你可以根据经常需要的工作准备相应技能，让助手遇到任务时有方法可用。",
-					"diagramTitle": "从目录找到可用方法",
-					"exampleContent": "技能目录示意\nreport-helper/\n├── SKILL.md\n└── references/",
-					"result": "例如整理研究资料时，助手可以先查看报告技能，了解需要哪些输入和输出什么格式。如果技能依赖某项外部服务，还需要确认服务工具具备实际访问条件。",
-					"steps": [
-						{
-							"description": "保存当前助手安装的技能资料。",
-							"title": "技能目录"
-						},
-						{
-							"description": "把一种能力的入口与辅助文件放在一起。",
-							"title": "具体技能"
-						},
-						{
-							"description": "说明适用场景、步骤与交付要求。",
-							"title": "SKILL.md"
-						}
-					]
-				},
-				"note": "技能教做事方法，实际执行仍需要相应工具和授权。",
-				"preview": [
-					"你可以根据经常需要的工作准备相应技能，让助手遇到任务时有方法可用。",
-					"技能教做事方法，实际执行仍需要相应工具和授权。"
-				],
-				"scope": "当前助手",
-				"usage": "这里保存这只助手已经安装的技能文件。"
-			},
 			"memoryFile": {
 				"example": "「保留长期有效的偏好和关键决定；发现信息变化时更新相关记忆。」",
 				"guide": {
@@ -6990,7 +6944,6 @@
 			"guidelines": "这里说明你希望助手以怎样的方式交流。",
 			"identityInfo": "这里介绍这只AI助手的名字、角色和职责。",
 			"initialSetup": "这里引导助手完成首次使用时需要确认的事项。",
-			"installedSkills": "这里保存这只助手已经安装的技能文件。",
 			"memoryFile": "这里说明助手应该怎样保存、整理和使用记忆。",
 			"memoryFolder": "这里保存助手已经整理的记忆资料。",
 			"proactiveExecution": "这里写明助手定期主动检查时应该关注什么。",
@@ -7003,7 +6956,6 @@
 			"guidelines": "性格与表达",
 			"identityInfo": "身份信息",
 			"initialSetup": "初始化设置",
-			"installedSkills": "已安装技能",
 			"memoryFile": "记忆配置",
 			"memoryFolder": "记忆库",
 			"proactiveExecution": "主动执行",
@@ -7364,13 +7316,18 @@
 		"helpDirectoryExample": "目录示例",
 		"helpGuide": {
 			"groups": {
-				"assistant": "助手",
-				"assistants": "助手与员工",
-				"content": "录音与内容",
-				"crew": "员工",
+				"assistant": "{{clawBrand}}",
+				"crew": "数字员工",
+				"current": "当前文件",
 				"personal": "个人空间",
-				"project": "项目与配置",
-				"skills": "技能与资源"
+				"project": "项目文件",
+				"skills": "编写技能"
+			},
+			"paths": {
+				"directory": "〈子目录〉",
+				"overview": "空间概览",
+				"recording": "录音纪要",
+				"skill": "〈技能名〉"
 			},
 			"reasons": {
 				"assistantRules": "了解助手的规则与行为约定。",
@@ -9316,7 +9273,7 @@
 					],
 					"title": "把常用背景留下，下次不必从头解释"
 				},
-				"note": "记忆保存的是有用的重点，不是所有聊天的完整备份。个人记忆与项目共同约定分别保存；过去的事实也可能随时间变化。",
+				"note": "记忆保存的是有用的重点，不是所有聊天的完整备份。个人记忆与项目共同约定分别保存；过去的事实也可能随时间变化。 目录示意中的「…」代表 global/ 或 projects/〈项目编号〉/，分别用于个人通用记忆和按项目整理的个人记忆；它不是实际文件夹名。",
 				"preview": [
 					"帮助 AI 在相关任务中继续利用已有背景。",
 					"过时的信息可以更新，详细经过另行记录。"

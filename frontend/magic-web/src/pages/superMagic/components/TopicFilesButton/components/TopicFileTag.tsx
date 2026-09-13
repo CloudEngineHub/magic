@@ -18,7 +18,13 @@ import { type FileHelpContext } from "../utils/magic-system-folder"
 const FileHelpBrowser = lazy(() => import("./FileHelpBrowser"))
 
 /** 标签只解释用途；点击、键盘和触屏操作不能冒泡为文件打开或目录折叠。 */
-export function TopicFileTag({ label, help, articleId, sourceKey }: FileHelpPresentation) {
+export function TopicFileTag({
+	label,
+	help,
+	articleId,
+	sourceKey,
+	fileLocation,
+}: FileHelpPresentation) {
 	return (
 		<ContextHelp
 			help={help}
@@ -30,6 +36,7 @@ export function TopicFileTag({ label, help, articleId, sourceKey }: FileHelpPres
 								key={sourceKey ?? articleId}
 								{...props}
 								initialArticleId={articleId}
+								fileLocation={fileLocation}
 							/>
 						)
 					: undefined

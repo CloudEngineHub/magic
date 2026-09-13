@@ -5,7 +5,7 @@ import {
 	type HelpArticleProps,
 } from "@/components/shadcn-composed/context-help/HelpArticle"
 import type { HelpDefinition } from "@/components/shadcn-composed/context-help"
-import type { SystemFileHelpKind } from "../utils/magic-system-folder"
+import type { FileHelpContext, SystemFileHelpKind } from "../utils/magic-system-folder"
 import type { FilePresentation } from "../utils/file-presentation"
 import type { AttachmentItem } from "./types"
 import { FileResourceIcon } from "../components/FileResourceIcon"
@@ -19,6 +19,7 @@ export interface FileHelpPresentation {
 	help: HelpDefinition
 	articleId?: FileHelpArticleId
 	sourceKey?: string
+	fileLocation?: { path: string; context: FileHelpContext["kind"] }
 }
 export interface FileHelpDetail extends Omit<HelpArticleProps, "visual"> {
 	preview?: string[]
@@ -105,6 +106,9 @@ export function createFileHelpPresentation(
 	return {
 		label,
 		articleId,
+		fileLocation: presentation
+			? { path: presentation.path, context: presentation.context.kind }
+			: undefined,
 		sourceKey: presentation
 			? JSON.stringify([
 					articleId,

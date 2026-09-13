@@ -6734,52 +6734,6 @@
 				"scope": "This assistant",
 				"usage": "This file guides the assistant through matters to confirm when first used."
 			},
-			"installedSkills": {
-				"example": "“Explain the installed skills and which ones can help analyze my materials.”",
-				"exampleRoot": ".magic/skills",
-				"files": [
-					{
-						"directory": false,
-						"path": ".magic/skills/report-helper/SKILL.md"
-					},
-					{
-						"directory": true,
-						"path": ".magic/skills/report-helper/references"
-					},
-					{
-						"directory": true,
-						"path": ".magic/skills/report-helper/scripts"
-					}
-				],
-				"guide": {
-					"actions": "Ask AI to summarize skills and expand the one relevant to your task. Use the appropriate feature for installation and configuration; moving folders manually is not an installation flow, and instructions are not proof of a successful run.",
-					"context": "Prepare skills for recurring work so the assistant has a method available when a suitable task appears.",
-					"diagramTitle": "Find a method through the folder",
-					"exampleContent": "Skill folder illustration\nreport-helper/\n├── SKILL.md\n└── references/",
-					"result": "For research material, the assistant can consult a reporting skill to understand required inputs and output format. A skill that depends on an external service also needs a tool with valid access.",
-					"steps": [
-						{
-							"description": "Stores skills installed for the current assistant.",
-							"title": "Skill directory"
-						},
-						{
-							"description": "Groups an entry with supporting files for a capability.",
-							"title": "Individual skill"
-						},
-						{
-							"description": "Explains applicability, steps and output requirements.",
-							"title": "SKILL.md"
-						}
-					]
-				},
-				"note": "Skills explain methods; execution still needs the relevant tools and permissions.",
-				"preview": [
-					"Prepare skills for recurring work so the assistant has a method available when a suitable task appears.",
-					"Skills explain methods; execution still needs the relevant tools and permissions."
-				],
-				"scope": "This assistant",
-				"usage": "This folder holds the skill files installed for this assistant."
-			},
 			"memoryFile": {
 				"example": "“Keep lasting preferences and key decisions. Update related memory when information changes.”",
 				"guide": {
@@ -6979,7 +6933,6 @@
 			"guidelines": "This file describes how you want the assistant to communicate.",
 			"identityInfo": "This file introduces the assistant’s name, role and responsibilities.",
 			"initialSetup": "This file guides the assistant through matters to confirm when first used.",
-			"installedSkills": "This folder holds the skill files installed for this assistant.",
 			"memoryFile": "This file explains how the assistant should retain, organize and use memory.",
 			"memoryFolder": "This folder keeps information the assistant has retained for later work.",
 			"proactiveExecution": "This file describes what the assistant should check during periodic proactive work.",
@@ -6992,7 +6945,6 @@
 			"guidelines": "Personality and expression",
 			"identityInfo": "Identity Info",
 			"initialSetup": "Initial Setup",
-			"installedSkills": "Installed Skills",
 			"memoryFile": "Memory Config",
 			"memoryFolder": "Memory Store",
 			"proactiveExecution": "Proactive Execution",
@@ -7354,13 +7306,18 @@
 		"helpDirectoryExample": "Directory example",
 		"helpGuide": {
 			"groups": {
-				"assistant": "Assistants",
-				"assistants": "Assistants and crew",
-				"content": "Audio and content",
+				"assistant": "{{clawBrand}}",
 				"crew": "Crew",
+				"current": "Current file",
 				"personal": "Personal space",
-				"project": "Projects and configuration",
-				"skills": "Skills and resources"
+				"project": "Project files",
+				"skills": "Writing skills"
+			},
+			"paths": {
+				"directory": "<subfolder>",
+				"overview": "Space overview",
+				"recording": "Recording notes",
+				"skill": "<skill name>"
 			},
 			"reasons": {
 				"assistantRules": "Understand the assistant’s rules and behavior.",
@@ -9309,7 +9266,7 @@
 					],
 					"title": "Keep useful background so the next task needs less explanation"
 				},
-				"note": "Memory preserves useful highlights, not a complete backup of all conversations. Personal memory and shared project conventions are separate, and past facts may change.",
+				"note": "Memory preserves useful highlights, not a complete backup of all conversations. Personal memory and shared project conventions are separate, and past facts may change. In the guide paths, “…” stands for global/ or projects/<project ID>/, which organize general personal memory and personal memory by project. It is not an actual folder name.",
 				"preview": [
 					"Helps AI use relevant background in later tasks.",
 					"Update stale information and keep detailed history separately."

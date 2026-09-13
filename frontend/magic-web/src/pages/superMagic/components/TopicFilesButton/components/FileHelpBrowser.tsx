@@ -9,39 +9,49 @@ import type {
 	HelpDialogProps,
 } from "@/components/shadcn-composed/context-help/types"
 import { useFileHelpArticle, useFileHelpCatalog } from "../hooks/useFileHelpArticle"
+import type { FileHelpPresentation } from "../hooks/useSystemFileHelp"
+import type { FileHelpContext } from "../utils/magic-system-folder"
 import {
 	getFileHelpMetadata,
 	getFileHelpRelations,
 	isFileHelpArticleId,
 	type FileHelpArticleId,
+	type FileHelpGroupId,
 	type FileHelpReadingLink,
 } from "../utils/file-help-catalog"
 
 interface FileHelpBrowserProps extends HelpDialogProps {
 	initialArticleId: FileHelpArticleId
+	fileLocation?: FileHelpPresentation["fileLocation"]
 }
 
-function ancestorGroups(id: FileHelpArticleId): string[] {
-	const group = getFileHelpMetadata(id).group
-	return group === "assistant" || group === "crew" ? ["assistants", group] : [group]
+const contextGroups: Record<FileHelpContext["kind"], FileHelpGroupId> = {
+	project: "project",
+	claw: "assistant",
+	crew: "crew",
+	user: "personal",
+	unknown: "current",
 }
 
 /** 一个打开会话只管理当前文章；文件、空间和应用路由都不参与文章跳转。 */
 export default function FileHelpBrowser({
 	initialArticleId,
+	fileLocation,
 	help: initialHelp,
 	...dialogProps
 }: FileHelpBrowserProps) {
 	const { t } = useTranslation("interface")
+	const catalog = useFileHelpCatalog()
+	const initialMetadata = getFileHelpMetadata(initialArticleId)
+	const initialGroup = fileLocation ? contextGroups[fileLocation.context] : initialMetadata.group
 	const [articleId, setArticleId] = useState(initialArticleId)
 	const [expanded, setExpanded] = useState<ReadonlySet<string>>(
-		() => new Set(ancestorGroups(initialArticleId)),
+		() => new Set([...catalog.ancestors[initialArticleId], initialGroup]),
 	)
 	const contentRef = useRef<HTMLDivElement>(null)
 	const previousArticleId = useRef(articleId)
 	const article = useFileHelpArticle(articleId)
-	const catalog = useFileHelpCatalog()
-	const help: HelpDefinition =
+	const baseHelp: HelpDefinition =
 		articleId === initialArticleId
 			? { ...initialHelp, tone: getFileHelpMetadata(articleId).tone }
 			: (article ?? {
@@ -49,6 +59,47 @@ export default function FileHelpBrowser({
 					summary: t("contextHelp.loadFailed"),
 					renderBody: () => <p role="alert">{t("contextHelp.loadFailed")}</p>,
 				})
+	const isInitial = articleId === initialArticleId
+	const location =
+		isInitial && fileLocation
+			? [catalog.groupLabels[initialGroup], fileLocation.path || initialHelp.identity?.name]
+					.filter(Boolean)
+					.join(" · ")
+			: catalog.labels[articleId]
+	const identity = baseHelp.identity ?? article?.identity
+	const help: HelpDefinition = {
+		...baseHelp,
+		identity: identity
+			? {
+					...identity,
+					name:
+						isInitial && initialHelp.identity
+							? initialHelp.identity.name
+							: catalog.names[articleId],
+					scope: [location, identity.scope].filter(Boolean).join(" · "),
+				}
+			: undefined,
+	}
+	// 具体文件和项目类型仍可从原入口进入；只在本次阅读中展示，不扩张常驻分类。
+	const metadata = getFileHelpMetadata(articleId)
+	if (!metadata.path) {
+		const groupId = isInitial && fileLocation ? initialGroup : metadata.group
+		let group = catalog.groups.find((item) => item.id === groupId)
+		if (!group) {
+			group = { id: groupId, label: catalog.groupLabels[groupId], items: [] }
+			catalog.groups.push(group)
+		}
+		const parent = metadata.navigationParent
+			? catalog.articleNodes.get(metadata.navigationParent)
+			: undefined
+		const items = parent?.children ?? group.items
+		items.push({
+			id: articleId,
+			articleId,
+			label: help.identity?.name ?? catalog.names[articleId],
+			icon: help.identity?.renderIcon(16),
+		})
+	}
 	useLayoutEffect(() => {
 		const changed = previousArticleId.current !== articleId
 		previousArticleId.current = articleId
@@ -70,7 +121,14 @@ export default function FileHelpBrowser({
 	function select(id: string) {
 		if (!isFileHelpArticleId(id) || id === articleId) return
 		setArticleId(id)
-		setExpanded((previous) => new Set([...previous, ...ancestorGroups(id)]))
+		setExpanded(
+			(previous) =>
+				new Set([
+					...previous,
+					...catalog.ancestors[id],
+					...(id === initialArticleId ? [initialGroup] : []),
+				]),
+		)
 	}
 	const seen = new Set<FileHelpArticleId>([articleId])
 	function unique(links: FileHelpReadingLink[] = []) {

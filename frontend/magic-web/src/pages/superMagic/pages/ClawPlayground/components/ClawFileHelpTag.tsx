@@ -8,6 +8,8 @@ import {
 	type FileHelpPresentation,
 } from "@/pages/superMagic/components/TopicFilesButton/hooks/useSystemFileHelp"
 import type { FilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import { useSkillFileHelp } from "@/pages/superMagic/components/TopicFilesButton/hooks/useSkillFileHelp"
+
 export type ClawFileHelpKind =
 	| "scheduledTasks"
 	| "installedSkills"
@@ -29,10 +31,21 @@ export function useClawFileHelp(
 	const { t } = useTranslation("super")
 	const brand = getClawBrandTranslationValues()
 	const system = useSystemFileHelp(
-		kind === "prompts" ? "clawInstructions" : undefined,
+		kind === "prompts"
+			? "clawInstructions"
+			: kind === "identityInfo"
+				? "clawIdentity"
+				: kind === "guidelines"
+					? "clawSoul"
+					: undefined,
 		presentation,
 	)
-	if (kind === "prompts") return system
+	const skill = useSkillFileHelp(
+		kind === "installedSkills" ? "library" : undefined,
+		presentation,
+		"claw",
+	)
+	if (system || skill) return system ?? skill
 	switch (kind) {
 		case "scheduledTasks":
 			return createFileHelpPresentation(
@@ -44,18 +57,6 @@ export function useClawFileHelp(
 					...brand,
 				}) as FileHelpDetail,
 				"flow",
-				presentation,
-			)
-		case "installedSkills":
-			return createFileHelpPresentation(
-				"claw.installedSkills",
-				t("topicFiles.clawPlaygroundTags.installedSkills", brand),
-				t("topicFiles.clawPlaygroundHelp.installedSkills", brand),
-				t("topicFiles.clawPlaygroundDetails.installedSkills", {
-					returnObjects: true,
-					...brand,
-				}) as FileHelpDetail,
-				"tree",
 				presentation,
 			)
 		case "memoryFolder":
@@ -92,30 +93,6 @@ export function useClawFileHelp(
 					...brand,
 				}) as FileHelpDetail,
 				"flow",
-				presentation,
-			)
-		case "identityInfo":
-			return createFileHelpPresentation(
-				"claw.identityInfo",
-				t("topicFiles.clawPlaygroundTags.identityInfo", brand),
-				t("topicFiles.clawPlaygroundHelp.identityInfo", brand),
-				t("topicFiles.clawPlaygroundDetails.identityInfo", {
-					returnObjects: true,
-					...brand,
-				}) as FileHelpDetail,
-				"document",
-				presentation,
-			)
-		case "guidelines":
-			return createFileHelpPresentation(
-				"claw.guidelines",
-				t("topicFiles.clawPlaygroundTags.guidelines", brand),
-				t("topicFiles.clawPlaygroundHelp.guidelines", brand),
-				t("topicFiles.clawPlaygroundDetails.guidelines", {
-					returnObjects: true,
-					...brand,
-				}) as FileHelpDetail,
-				"document",
 				presentation,
 			)
 		case "toolList":
