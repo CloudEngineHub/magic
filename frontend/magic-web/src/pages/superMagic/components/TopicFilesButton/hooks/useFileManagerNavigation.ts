@@ -18,10 +18,13 @@ function createLocation(directoryId: string): FileManagerLocationState {
 }
 
 /** 访问历史与父目录是两种导航；每个位置只保存 ID 和视图状态，不复制附件树。 */
-export function useFileManagerNavigation(initialDirectoryId: string) {
+export function useFileManagerNavigation(
+	initialDirectoryId: string,
+	initialView: FileManagerView = "grid",
+) {
 	const [location, setLocation] = useState(() => createLocation(initialDirectoryId))
 	const [history, setHistory] = useState({ ids: [initialDirectoryId], cursor: 0 })
-	const [view, setView] = useState<FileManagerView>("grid")
+	const [view, setView] = useState<FileManagerView>(initialView)
 	const [sort, setSort] = useState<FileManagerSort>("name")
 	const savedLocations = useRef(new Map<string, FileManagerLocationState>())
 	const scrollTop = useRef(0)

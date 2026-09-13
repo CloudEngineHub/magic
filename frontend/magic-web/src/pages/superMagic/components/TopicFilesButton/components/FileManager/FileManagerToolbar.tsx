@@ -12,7 +12,9 @@ import {
 	Search,
 	Upload,
 	RefreshCw,
+	Trash2,
 } from "lucide-react"
+import { Fragment } from "react"
 import { useTranslation } from "react-i18next"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { Button } from "@/components/shadcn-ui/button"
@@ -26,6 +28,7 @@ import type {
 } from "./types"
 
 interface Props {
+	onOpenRecycle: () => void
 	path: FileManagerPathItem[]
 	canBack: boolean
 	canForward: boolean
@@ -77,7 +80,7 @@ export function FileManagerToolbar(props: Props) {
 	] as const
 	return (
 		<>
-			<div className="flex shrink-0 flex-wrap items-center gap-1 border-b px-3 py-2">
+			<div className="flex shrink-0 flex-wrap items-center gap-1 px-3 pb-1 pt-2">
 				{navigation.map(({ label, Icon, run, disabled }) => (
 					<MagicTooltip
 						key={label}
@@ -87,7 +90,7 @@ export function FileManagerToolbar(props: Props) {
 						<Button
 							variant="ghost"
 							size="icon"
-							className="size-8"
+							className="size-7"
 							aria-label={label}
 							onClick={run}
 							disabled={disabled}
@@ -116,7 +119,7 @@ export function FileManagerToolbar(props: Props) {
 									variant="ghost"
 									size="sm"
 									className={cn(
-										"h-8 max-w-44 truncate px-2",
+										"h-7 max-w-44 truncate px-2 text-xs font-normal",
 										"data-[manager-drop-target=true]:bg-blue-500/10 data-[manager-drop-target=true]:ring-1 data-[manager-drop-target=true]:ring-inset data-[manager-drop-target=true]:ring-blue-500",
 									)}
 									aria-current={
@@ -131,44 +134,48 @@ export function FileManagerToolbar(props: Props) {
 						</div>
 					))}
 				</nav>
-				<div className="relative w-44 min-w-24">
-					<Search
-						size={16}
-						className="pointer-events-none absolute left-2 top-2 text-muted-foreground"
-					/>
-					<Input
-						value={props.query}
-						onChange={(event) => props.onQuery(event.target.value)}
-						placeholder={t("userSpace.searchDirectory")}
-						aria-label={t("userSpace.searchDirectory")}
-						className="h-8 bg-muted/30 pl-8 text-xs"
-					/>
-				</div>
+				<Button
+					variant="ghost"
+					size="sm"
+					className="ml-auto h-7 gap-1.5 text-xs font-normal text-muted-foreground"
+					onClick={props.onOpenRecycle}
+				>
+					<Trash2 size={14} />
+					{t("fileManager.recycle.title")}
+				</Button>
 			</div>
-			<div className="flex shrink-0 flex-wrap items-center gap-1 border-b px-3 py-2">
+			<div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border/60 px-3 pb-2 pt-1">
 				{commands.map(({ command, label, Icon, ...option }) => (
-					<MagicTooltip
-						key={command}
-						title={label}
-						getPopupContainer={props.getPopupContainer}
-					>
-						<Button
-							variant="ghost"
-							size="sm"
-							className={cn("h-8 gap-2 text-xs", !("text" in option) && "w-8 px-0")}
-							disabled={!props.actions?.canExecute(command)}
-							onClick={() => props.actions?.execute(command)}
-							aria-label={label}
+					<Fragment key={command}>
+						{command === "cut" && (
+							<span aria-hidden className="mx-1 h-4 w-px bg-border/60" />
+						)}
+						<MagicTooltip
+							key={command}
+							title={label}
+							getPopupContainer={props.getPopupContainer}
 						>
-							<Icon size={16} />
-							{"text" in option && label}
-						</Button>
-					</MagicTooltip>
+							<Button
+								variant="ghost"
+								size="sm"
+								className={cn(
+									"h-7 gap-1.5 rounded-md px-2 text-xs font-normal",
+									!("text" in option) && "w-7 px-0",
+								)}
+								disabled={!props.actions?.canExecute(command)}
+								onClick={() => props.actions?.execute(command)}
+								aria-label={label}
+							>
+								<Icon size={16} />
+								{"text" in option && label}
+							</Button>
+						</MagicTooltip>
+					</Fragment>
 				))}
 				<div className="flex-1" />
 				<select
 					aria-label={t("fileManager.sort")}
-					className="h-8 max-w-28 rounded-md bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					className="h-7 max-w-28 rounded-md bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					value={props.sort}
 					onChange={(event) => props.onSort(event.target.value as FileManagerSort)}
 				>
@@ -176,29 +183,48 @@ export function FileManagerToolbar(props: Props) {
 					<option value="modified">{t("fileManager.sortModified")}</option>
 					<option value="type">{t("fileManager.sortType")}</option>
 				</select>
-				{(
-					[
-						{ view: "grid", Icon: LayoutGrid, label: t("userSpace.gridView") },
-						{ view: "list", Icon: List, label: t("userSpace.listView") },
-					] as const
-				).map(({ view, Icon, label }) => (
-					<MagicTooltip
-						key={view}
-						title={label}
-						getPopupContainer={props.getPopupContainer}
-					>
-						<Button
-							variant={props.view === view ? "secondary" : "ghost"}
-							size="icon"
-							className="size-8"
-							aria-label={label}
-							aria-pressed={props.view === view}
-							onClick={() => props.onView(view)}
+				<div className="flex items-center gap-0.5 rounded-lg bg-muted/60 p-0.5">
+					{(
+						[
+							{ view: "grid", Icon: LayoutGrid, label: t("userSpace.gridView") },
+							{ view: "list", Icon: List, label: t("userSpace.listView") },
+						] as const
+					).map(({ view, Icon, label }) => (
+						<MagicTooltip
+							key={view}
+							title={label}
+							getPopupContainer={props.getPopupContainer}
 						>
-							<Icon size={16} />
-						</Button>
-					</MagicTooltip>
-				))}
+							<Button
+								variant="ghost"
+								size="icon"
+								className={cn(
+									"h-6 w-7 rounded-md",
+									props.view === view &&
+										"bg-background shadow-sm hover:bg-background",
+								)}
+								aria-label={label}
+								aria-pressed={props.view === view}
+								onClick={() => props.onView(view)}
+							>
+								<Icon size={16} />
+							</Button>
+						</MagicTooltip>
+					))}
+				</div>
+				<div className="relative w-40 min-w-24">
+					<Search
+						size={16}
+						className="pointer-events-none absolute left-2 top-1.5 text-muted-foreground"
+					/>
+					<Input
+						value={props.query}
+						onChange={(event) => props.onQuery(event.target.value)}
+						placeholder={t("userSpace.searchDirectory")}
+						aria-label={t("userSpace.searchDirectory")}
+						className="h-7 rounded-md bg-muted/30 pl-8 text-xs"
+					/>
+				</div>
 				<MagicTooltip
 					title={t("fileViewer.tabs.refresh")}
 					getPopupContainer={props.getPopupContainer}
@@ -206,7 +232,7 @@ export function FileManagerToolbar(props: Props) {
 					<Button
 						variant="ghost"
 						size="icon"
-						className="size-8"
+						className="size-7"
 						aria-label={t("fileViewer.tabs.refresh")}
 						onClick={props.onRefresh}
 						disabled={props.loading}

@@ -17,9 +17,16 @@ import type { useFileManagerSelection } from "../../hooks/useFileManagerSelectio
 import type { useFileManagerGestures } from "../../hooks/useFileManagerGestures"
 import type { useFileManagerCommands } from "../../hooks/useFileManagerCommands"
 import { FileManagerItem } from "./FileManagerItem"
-import type { FileManagerActions, FileManagerLayout, FileManagerView } from "./types"
+import type {
+	FileManagerActions,
+	FileManagerLayout,
+	FileManagerView,
+	FileManagerTreeRow,
+} from "./types"
 
 interface Props {
+	rowDetails: ReadonlyMap<string, FileManagerTreeRow>
+	onToggleFolder: (file: AttachmentItem, all?: boolean) => void
 	viewport: RefObject<HTMLDivElement>
 	gestures: ReturnType<typeof useFileManagerGestures>
 	directoryId: string
@@ -46,16 +53,17 @@ export function FileManagerContent(props: Props) {
 	const { t } = useTranslation("super")
 	const viewport = props.viewport
 	const [width, setWidth] = useState(0)
+	const [keyboardFocus, setKeyboardFocus] = useState(false)
 	const listId = useId()
 	const grid = props.view === "grid"
-	const padding = grid ? 18 : 12
-	const columns = grid ? Math.max(1, Math.floor((width - padding * 2 + 12) / 116)) : 1
+	const padding = grid ? 13 : 10
+	const columns = grid ? Math.max(1, Math.floor((width - padding * 2 + 8) / 110)) : 1
 	const layout: FileManagerLayout = {
 		columns,
-		columnWidth: Math.max(0, (width - padding * 2 + (grid ? 12 : 0)) / columns),
-		rowHeight: grid ? 124 : 44,
-		itemHeight: grid ? 112 : 43,
-		gap: grid ? 12 : 0,
+		columnWidth: Math.max(0, (width - padding * 2 + (grid ? 8 : 0)) / columns),
+		rowHeight: grid ? 118 : 34,
+		itemHeight: grid ? 110 : 33,
+		gap: grid ? 8 : 0,
 		padding,
 	}
 	props.gestures.setLayout(layout)
@@ -107,6 +115,7 @@ export function FileManagerContent(props: Props) {
 			)
 		)
 			return
+		setKeyboardFocus(true)
 		const mod = event.metaKey || event.ctrlKey
 		const mac = /Mac|iPhone|iPad/.test(navigator.platform)
 		const key = event.key.toLowerCase()
@@ -178,6 +187,34 @@ export function FileManagerContent(props: Props) {
 		const current = props.selection.focusedId
 			? (props.selection.positions.get(props.selection.focusedId) ?? 0)
 			: -1
+		if (
+			!grid &&
+			!props.query &&
+			!mod &&
+			(key === "arrowleft" || key === "arrowright") &&
+			current >= 0
+		) {
+			event.preventDefault()
+			const file = props.items[current].item
+			const detail = props.rowDetails.get(file.file_id ?? "")
+			if (
+				detail?.expandable &&
+				((key === "arrowright" && !detail.expanded) ||
+					(key === "arrowleft" && detail.expanded))
+			)
+				props.onToggleFolder(file, event.altKey)
+			else if (key === "arrowright" && detail?.expanded) selectIndex(current + 1, event)
+			else if (key === "arrowleft" && detail) {
+				for (let position = current - 1; position >= 0; position -= 1) {
+					const parent = props.rowDetails.get(props.items[position].item.file_id ?? "")
+					if (parent && parent.level < detail.level) {
+						selectIndex(position, event)
+						break
+					}
+				}
+			}
+			return
+		}
 		const offsets: Record<string, number> = {
 			arrowleft: -1,
 			arrowright: 1,
@@ -203,7 +240,7 @@ export function FileManagerContent(props: Props) {
 			{!grid && (
 				<div
 					aria-hidden
-					className="grid shrink-0 grid-cols-[minmax(0,1fr)_80px] gap-2 border-b bg-muted/30 px-6 py-1.5 text-xs text-muted-foreground sm:grid-cols-[minmax(0,1fr)_80px_170px]"
+					className="grid shrink-0 grid-cols-[minmax(0,1fr)_80px] gap-2 border-b bg-muted/20 px-[22px] py-1.5 text-[11px] text-muted-foreground sm:grid-cols-[minmax(0,1fr)_80px_170px]"
 				>
 					<span>{t("fileManager.name")}</span>
 					<span>{t("fileManager.type")}</span>
@@ -232,7 +269,10 @@ export function FileManagerContent(props: Props) {
 					className="relative min-h-0 flex-1 overflow-auto overscroll-contain outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
 					onKeyDown={onKeyDown}
 					onScroll={(event) => props.onScroll(event.currentTarget.scrollTop)}
-					onPointerDown={props.gestures.onPointerDown}
+					onPointerDown={(event) => {
+						setKeyboardFocus(false)
+						props.gestures.onPointerDown(event)
+					}}
 					onPointerMove={props.gestures.onPointerMove}
 					onPointerUp={props.gestures.onPointerUp}
 					onPointerCancel={props.gestures.onPointerCancel}
@@ -290,6 +330,11 @@ export function FileManagerContent(props: Props) {
 									.slice(row.index * columns, (row.index + 1) * columns)
 									.map((resource) => (
 										<FileManagerItem
+											row={props.rowDetails.get(resource.item.file_id ?? "")}
+											striped={row.index % 2 === 1}
+											onToggleFolder={(all) =>
+												props.onToggleFolder(resource.item, all)
+											}
 											key={resource.item.file_id}
 											id={`${listId}-${resource.item.file_id}`}
 											presentation={resource}
@@ -298,6 +343,7 @@ export function FileManagerContent(props: Props) {
 												resource.item.file_id ?? "",
 											)}
 											focused={
+												keyboardFocus &&
 												props.selection.focusedId === resource.item.file_id
 											}
 											cut={props.actions.cutIds.has(
@@ -323,7 +369,7 @@ export function FileManagerContent(props: Props) {
 					{props.gestures.rectangle && (
 						<div
 							aria-hidden
-							className="pointer-events-none absolute z-10 border border-primary bg-primary/15"
+							className="pointer-events-none absolute z-10 rounded-sm border border-blue-500/50 bg-blue-500/10"
 							style={props.gestures.rectangle}
 						/>
 					)}

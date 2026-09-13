@@ -1,8 +1,13 @@
-import { useEffect, useMemo, useRef, useDeferredValue } from "react"
+import { useEffect, useMemo, useRef, useDeferredValue, useState, lazy, Suspense } from "react"
+import { ArrowLeft } from "lucide-react"
+import { Button } from "@/components/shadcn-ui/button"
+import { cn } from "@/utils/cn"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import { buildAttachmentIndex } from "../../utils/attachmentIndex"
 import { getFilePresentationIndex, resolveFilePresentation } from "../../utils/file-presentation"
+import { useTreeUI } from "../../hooks/useTreeUI"
+import { useVisibleTreeRows } from "../../hooks/useVisibleTreeRows"
 import { useFileManagerNavigation } from "../../hooks/useFileManagerNavigation"
 import { useFileManagerSelection } from "../../hooks/useFileManagerSelection"
 import { useFileManagerOperations } from "../../hooks/useFileManagerOperations"
@@ -16,12 +21,26 @@ import { FileManagerContent } from "./FileManagerContent"
 import { FileManagerDialogs } from "./FileManagerDialogs"
 import type { FileManagerProps } from "./types"
 
+const RecycleBinContent = lazy(() =>
+	import("@/pages/recycleBin/components/RecycleBinContent").then((module) => ({
+		default: module.RecycleBinContent,
+	})),
+)
+
+const noExpandedKeys: React.Key[] = []
+
 /** 完整管理器负责桌面交互；附件索引仍由原文件数据提供，不另建 store。 */
 export function FileManager(props: FileManagerProps) {
 	const { t, i18n } = useTranslation("super")
+	const [recycle, setRecycle] = useState(false)
+	const [recycleCount, setRecycleCount] = useState(0)
+	const activeProps = { ...props, isActive: props.isActive && !recycle }
 	const container = useRef<HTMLDivElement>(null)
 	const viewport = useRef<HTMLDivElement>(null)
-	const navigation = useFileManagerNavigation(props.initialDirectoryId ?? props.rootId)
+	const navigation = useFileManagerNavigation(
+		props.initialDirectoryId ?? props.rootId,
+		props.defaultView,
+	)
 	const { location } = navigation
 	const index = useMemo(() => buildAttachmentIndex(props.attachments), [props.attachments])
 	const presentationIndex = useMemo(
@@ -40,47 +59,133 @@ export function FileManager(props: FileManagerProps) {
 		directory?.directoryLoadState === "loading" ||
 		directory?.directoryLoadState === "unloaded",
 	)
-	const items = useMemo(() => {
-		const children =
-			location.directoryId === props.rootId ? props.attachments : (directory?.children ?? [])
+	const listTree = useTreeUI({ enableCache: false })
+	const sorted = useMemo(() => {
 		const collator = new Intl.Collator(i18n.language.replaceAll("_", "-"), {
 			numeric: true,
 			sensitivity: "base",
 		})
-		return children
-			.filter((item) => !item.is_hidden && Boolean(item.file_id))
-			.map((item) =>
-				resolveFilePresentation(item, { context: props.context, index: presentationIndex }),
-			)
-			.filter((item) => !query || item.name.toLocaleLowerCase().includes(query))
-			.sort((a, b) => {
-				if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
-				if (navigation.sort === "modified") {
-					const difference = String(b.item.updated_at ?? "").localeCompare(
-						String(a.item.updated_at ?? ""),
+		const children = new Map<string, AttachmentItem[]>()
+		const sortChildren = (files: AttachmentItem[]) =>
+			files
+				.filter((item) => !item.is_hidden && item.file_id)
+				.map((item) =>
+					item.is_directory
+						? { ...item, children: children.get(item.file_id ?? "") ?? [] }
+						: item,
+				)
+				.sort((a, b) => {
+					if (Boolean(a.is_directory) !== Boolean(b.is_directory))
+						return a.is_directory ? -1 : 1
+					if (navigation.sort === "modified") {
+						const difference = String(b.updated_at ?? "").localeCompare(
+							String(a.updated_at ?? ""),
+						)
+						if (difference) return difference
+					}
+					if (navigation.sort === "type") {
+						const difference = collator.compare(
+							a.file_extension ?? "",
+							b.file_extension ?? "",
+						)
+						if (difference) return difference
+					}
+					return collator.compare(
+						resolveFilePresentation(a, {
+							context: props.context,
+							index: presentationIndex,
+						}).name,
+						resolveFilePresentation(b, {
+							context: props.context,
+							index: presentationIndex,
+						}).name,
 					)
-					if (difference) return difference
-				}
-				if (navigation.sort === "type") {
-					const difference = collator.compare(
-						a.item.file_extension ?? "",
-						b.item.file_extension ?? "",
-					)
-					if (difference) return difference
-				}
-				return collator.compare(a.name, b.name)
-			})
-	}, [
-		location.directoryId,
-		props.rootId,
-		props.attachments,
-		directory,
-		i18n.language,
-		props.context,
-		presentationIndex,
-		query,
-		navigation.sort,
-	])
+				})
+		// 后代先排序，一次生成展示投影；展开和选择只计算可见行，不重新扫描全部附件。
+		for (const key of [...index.allKeys].reverse()) {
+			const file = index.getItemByKey(key)
+			if (file?.is_directory && file.file_id)
+				children.set(file.file_id, sortChildren(file.children ?? []))
+		}
+		return { roots: sortChildren(props.attachments), children }
+	}, [index, props.attachments, props.context, presentationIndex, navigation.sort, i18n.language])
+	const currentChildren = useMemo(() => {
+		const children =
+			location.directoryId === props.rootId
+				? sorted.roots
+				: (sorted.children.get(location.directoryId) ?? [])
+		return query
+			? children.filter((item) =>
+					resolveFilePresentation(item, {
+						context: props.context,
+						index: presentationIndex,
+					})
+						.name.toLocaleLowerCase()
+						.includes(query),
+				)
+			: children
+	}, [location.directoryId, props.rootId, sorted, query, props.context, presentationIndex])
+	const visible = useVisibleTreeRows({
+		attachmentTree: currentChildren,
+		expandedKeys: navigation.view === "list" && !query ? listTree.expandedKeys : noExpandedKeys,
+	})
+	const items = useMemo(
+		() =>
+			visible.visibleNodes.flatMap(({ item }) =>
+				item
+					? [
+							resolveFilePresentation(item, {
+								context: props.context,
+								index: presentationIndex,
+							}),
+						]
+					: [],
+			),
+		[visible.visibleNodes, props.context, presentationIndex],
+	)
+	const rowDetails = useMemo(
+		() =>
+			new Map(
+				visible.visibleNodes.map((node) => [
+					node.item?.file_id ?? "",
+					{
+						level: node.level,
+						expanded: visible.expandedKeySet.has(String(node.key)),
+						expandable: !node.isLeaf,
+					},
+				]),
+			),
+		[visible.visibleNodes, visible.expandedKeySet],
+	)
+	const toggleListFolder = (file: AttachmentItem, all = false) => {
+		if (!file.file_id || file.directoryLoadState === "loading") return
+		const id = file.file_id
+		const opening = !visible.expandedKeySet.has(id) || file.directoryLoadState === "error"
+		const keys = all
+			? [
+					id,
+					...index
+						.getDescendantKeysById(id)
+						.filter((key) => index.getItemByKey(key)?.is_directory),
+				]
+			: [id]
+		listTree.setExpandedKeys((previous) =>
+			opening
+				? [...new Set([...previous, ...keys])]
+				: previous.filter((key) => !keys.includes(String(key))),
+		)
+		if (file.directoryLoadState === "error")
+			void props.spaceConfig?.directorySource?.loadDirectory(id).catch(() => undefined)
+	}
+	useEffect(() => {
+		if (!props.spaceConfig?.directorySource) return
+		for (const key of listTree.expandedKeys) {
+			if (index.getItemById(String(key))?.directoryLoadState === "unloaded")
+				void props.spaceConfig.directorySource
+					.loadDirectory(String(key))
+					.catch(() => undefined)
+		}
+	}, [index, listTree.expandedKeys, props.spaceConfig?.directorySource])
 	const ids = useMemo(() => items.map(({ item }) => item.file_id ?? ""), [items])
 	const selection = useFileManagerSelection({
 		ids,
@@ -93,7 +198,7 @@ export function FileManager(props: FileManagerProps) {
 		else props.onOpen(file)
 	})
 	const operations = useFileManagerOperations({
-		props,
+		props: activeProps,
 		index,
 		directory,
 		selectedIds: selection.selectedIds,
@@ -102,7 +207,7 @@ export function FileManager(props: FileManagerProps) {
 		onMoveComplete: (fileIds) => fileManagerTransfer.completeMove(props.scopeKey, fileIds),
 	})
 	const commands = useFileManagerCommands({
-		props,
+		props: activeProps,
 		index,
 		directoryId: location.directoryId,
 		selectedIds: selection.selectedIds,
@@ -115,7 +220,7 @@ export function FileManager(props: FileManagerProps) {
 		scopeKey: props.scopeKey,
 		rootId: props.rootId,
 		directoryId: location.directoryId,
-		isActive: props.isActive,
+		isActive: activeProps.isActive && !operations.confirmation.state,
 		container,
 		viewport,
 		index,
@@ -151,18 +256,7 @@ export function FileManager(props: FileManagerProps) {
 			presentationIndex,
 		],
 	)
-	const folders = useMemo(
-		() =>
-			props.attachments
-				.filter((file) => file.is_directory && !file.is_hidden)
-				.map((file) =>
-					resolveFilePresentation(file, {
-						context: props.context,
-						index: presentationIndex,
-					}),
-				),
-		[props.attachments, props.context, presentationIndex],
-	)
+
 	const dragging = fileManagerTransfer.getDragging()
 	const targetFile = gestures.dropTarget ? index.getItemById(gestures.dropTarget) : undefined
 	const targetName =
@@ -212,21 +306,64 @@ export function FileManager(props: FileManagerProps) {
 			onDrop={gestures.onDrop}
 			className="flex h-full min-h-0 flex-col bg-background text-foreground"
 		>
-			<div className="shrink-0 border-b px-4 py-3 text-sm font-semibold">
-				{props.rootName}
-			</div>
-			<div className="flex min-h-0 flex-1">
-				<FileManagerPlaces
-					rootId={props.rootId}
-					rootName={props.rootName}
-					directoryId={location.directoryId}
-					folders={folders}
-					onNavigate={navigation.navigate}
-					before={props.placesBefore}
-					getPopupContainer={getPopupContainer}
-				/>
+			{recycle && (
+				<div className="flex h-12 shrink-0 items-center gap-2 border-b border-border/60 bg-muted/20 px-4 text-sm font-medium">
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-7"
+						aria-label={t("fileManager.recycle.back")}
+						onClick={() => setRecycle(false)}
+					>
+						<ArrowLeft size={15} />
+					</Button>
+					<span className="truncate">{t("fileManager.recycle.title")}</span>
+				</div>
+			)}
+			{recycle && props.isActive && (
+				<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4">
+					<p className="text-xs text-muted-foreground">
+						{t("fileManager.recycle.scope")}
+					</p>
+					<Suspense
+						fallback={
+							<p className="p-4 text-xs text-muted-foreground">
+								{t("userSpace.loading")}
+							</p>
+						}
+					>
+						<RecycleBinContent
+							key={props.identityKey}
+							activeTab={{ id: "files", count: recycleCount }}
+							requireDeleteConfirmation
+							onMutationComplete={props.onRefresh}
+							onTabCountChange={(id, count) => {
+								if (id === "files") setRecycleCount(count)
+							}}
+						/>
+					</Suspense>
+				</div>
+			)}
+			<div className={cn("flex min-h-0 flex-1", recycle && "hidden")}>
+				{!props.hidePlaces && (
+					<FileManagerPlaces
+						rootId={props.rootId}
+						rootName={props.rootName}
+						directoryId={location.directoryId}
+						attachments={sorted.roots}
+						index={index}
+						context={props.context}
+						presentationIndex={presentationIndex}
+						directorySource={props.spaceConfig?.directorySource}
+						onOpen={props.onOpen}
+						onNavigate={navigation.navigate}
+						before={props.placesBefore}
+						getPopupContainer={getPopupContainer}
+					/>
+				)}
 				<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 					<FileManagerToolbar
+						onOpenRecycle={() => setRecycle(true)}
 						actions={commands}
 						path={path}
 						canBack={navigation.canBack}
@@ -249,6 +386,8 @@ export function FileManager(props: FileManagerProps) {
 						getPopupContainer={getPopupContainer}
 					/>
 					<FileManagerContent
+						rowDetails={rowDetails}
+						onToggleFolder={toggleListFolder}
 						viewport={viewport}
 						gestures={gestures}
 						actions={commands}
@@ -262,7 +401,7 @@ export function FileManager(props: FileManagerProps) {
 						onBack={navigation.back}
 						onForward={navigation.forward}
 						onUp={() => parentId !== undefined && navigation.navigate(parentId)}
-						isActive={props.isActive}
+						isActive={activeProps.isActive}
 						loading={loading}
 						error={error}
 						onRefresh={props.onRefresh}
@@ -273,7 +412,7 @@ export function FileManager(props: FileManagerProps) {
 					<div
 						role="status"
 						aria-live="polite"
-						className="flex min-h-9 shrink-0 items-center justify-between gap-3 border-t px-4 py-2 text-xs text-muted-foreground"
+						className="flex min-h-8 shrink-0 items-center justify-between gap-3 border-t border-border/60 bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground"
 					>
 						<span>
 							{selection.selectedIds.size

@@ -3,16 +3,19 @@ import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import MagicDropdown from "@/components/base/MagicDropdown"
-import { MoreHorizontal } from "lucide-react"
+import { MoreHorizontal, ChevronRight, Loader2, RotateCw } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import type { TopicFilesMenuItem } from "../../utils/menu-items"
 import { FileResourceIcon } from "../FileResourceIcon"
 import { ProjectFileTag } from "../TopicFileTag"
 import { normalizeLocale } from "@/utils/locale"
 import type { FilePresentation } from "../../utils/file-presentation"
-import type { FileManagerView } from "./types"
+import type { FileManagerView, FileManagerTreeRow } from "./types"
 
 interface Props {
+	row?: FileManagerTreeRow
+	striped?: boolean
+	onToggleFolder: (all?: boolean) => void
 	id: string
 	presentation: FilePresentation
 	view: FileManagerView
@@ -27,6 +30,9 @@ interface Props {
 }
 
 export const FileManagerItem = memo(function FileManagerItem({
+	row,
+	striped,
+	onToggleFolder,
 	id,
 	presentation,
 	view,
@@ -72,34 +78,83 @@ export const FileManagerItem = memo(function FileManagerItem({
 						onOpen()
 				}}
 				className={cn(
-					"group relative h-full w-full min-w-0 cursor-default select-none rounded-md border border-transparent text-xs hover:bg-muted/60",
+					"group relative h-full w-full min-w-0 cursor-default select-none rounded-md text-xs transition-colors duration-150 motion-reduce:transition-none",
 					grid
 						? "flex flex-col items-center gap-1 px-1 py-2"
-						: "grid grid-cols-[24px_minmax(0,1fr)_80px] items-center gap-2 px-3 sm:grid-cols-[24px_minmax(0,1fr)_80px_170px]",
-					selected && "border-primary/40 bg-primary/10 hover:bg-primary/10",
-					focused && "ring-1 ring-inset ring-ring",
+						: "grid grid-cols-[minmax(0,1fr)_80px] items-center gap-2 px-3 sm:grid-cols-[minmax(0,1fr)_80px_170px]",
+					!grid &&
+						(selected
+							? "bg-blue-500 text-white"
+							: striped
+								? "bg-muted/35 hover:bg-muted/60"
+								: "hover:bg-muted/40"),
+					!grid && focused && "ring-1 ring-inset ring-blue-500",
 					cut && "opacity-45",
 					"data-[manager-drop-target=true]:bg-blue-500/10 data-[manager-drop-target=true]:ring-1 data-[manager-drop-target=true]:ring-inset data-[manager-drop-target=true]:ring-blue-500",
 				)}
 			>
-				<span
-					className={cn("flex shrink-0 items-center justify-center", grid && "h-12 w-12")}
-				>
-					<FileResourceIcon presentation={presentation} size={grid ? 36 : 16} />
-				</span>
 				<div
 					className={cn(
-						"min-w-0 max-w-full",
-						!grid && "flex items-center gap-2 overflow-hidden",
+						"flex min-w-0",
+						grid ? "flex-col items-center gap-1.5" : "items-center gap-1.5",
 					)}
+					style={!grid ? { paddingLeft: (row?.level ?? 0) * 16 } : undefined}
 				>
+					{!grid && (
+						<button
+							tabIndex={-1}
+							className={cn(
+								"flex size-4 shrink-0 items-center justify-center rounded",
+								!row?.expandable && "invisible",
+							)}
+							disabled={!row?.expandable || item.directoryLoadState === "loading"}
+							aria-expanded={row?.expanded}
+							aria-label={t(
+								item.directoryLoadState === "error"
+									? "userSpace.retry"
+									: row?.expanded
+										? "fileTree.collapseAll"
+										: "fileTree.expandAll",
+							)}
+							onDoubleClick={(event) => event.stopPropagation()}
+							onClick={(event) => {
+								event.stopPropagation()
+								onToggleFolder(event.altKey)
+							}}
+						>
+							{item.directoryLoadState === "loading" ? (
+								<Loader2 size={12} className="animate-spin" />
+							) : item.directoryLoadState === "error" ? (
+								<RotateCw size={12} />
+							) : (
+								<ChevronRight
+									size={12}
+									className={cn(
+										"transition-transform duration-150 motion-reduce:transition-none",
+										row?.expanded && "rotate-90",
+									)}
+								/>
+							)}
+						</button>
+					)}
+					<span
+						className={cn(
+							"flex shrink-0 items-center justify-center rounded-md",
+							grid && "h-[53px] w-[66px] group-hover:bg-muted/60",
+							grid && selected && "bg-muted/80",
+							grid && focused && "ring-1 ring-blue-500",
+						)}
+					>
+						<FileResourceIcon presentation={presentation} size={grid ? 44 : 16} />
+					</span>
 					<MagicTooltip title={name} getPopupContainer={getPopupContainer}>
 						<span
 							className={cn(
 								"min-w-0 max-w-full",
 								grid
-									? "line-clamp-2 break-words text-center leading-4"
+									? "line-clamp-2 rounded px-1.5 py-0.5 text-center leading-4 [overflow-wrap:anywhere]"
 									: "truncate",
+								grid && selected && "bg-blue-500 text-white",
 							)}
 						>
 							{name}
@@ -115,13 +170,23 @@ export const FileManagerItem = memo(function FileManagerItem({
 					)
 				) : (
 					<>
-						<span className="truncate text-muted-foreground">
+						<span
+							className={cn(
+								"truncate text-[11px]",
+								selected ? "text-white/85" : "text-muted-foreground",
+							)}
+						>
 							{isDirectory
 								? t("userSpace.folder")
 								: item.file_extension?.toUpperCase() || t("userSpace.file")}
 						</span>
 						<MagicTooltip title={date} getPopupContainer={getPopupContainer}>
-							<span className="hidden truncate text-muted-foreground sm:block">
+							<span
+								className={cn(
+									"hidden truncate text-[11px] sm:block",
+									selected ? "text-white/85" : "text-muted-foreground",
+								)}
+							>
 								{date}
 							</span>
 						</MagicTooltip>
