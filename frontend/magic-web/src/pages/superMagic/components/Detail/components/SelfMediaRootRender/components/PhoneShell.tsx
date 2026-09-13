@@ -1,5 +1,6 @@
 import { forwardRef, type ReactNode, type CSSProperties, useState, useEffect } from "react"
 import { cn } from "@/utils/cn"
+import PhoneShellContent, { type PhoneShellContentProps } from "./PhoneShellContent"
 
 export interface PhoneShellProps {
 	children: ReactNode
@@ -11,6 +12,15 @@ export interface PhoneShellProps {
 	style?: CSSProperties
 	/** 状态栏主题色：dark (黑字, 用于浅色背景), light (白字, 用于深色背景) */
 	theme?: "dark" | "light"
+	/** 文件预览使用精确内容尺寸；默认 screen 保留既有平台预览的尺寸语义。 */
+	sizing?: "screen" | "content"
+	profile?: PhoneShellContentProps["profile"]
+	showFrame?: boolean
+	enabled?: boolean
+	landscape?: boolean
+	posture?: PhoneShellContentProps["posture"]
+	rotated?: boolean
+	contentRef?: PhoneShellContentProps["contentRef"]
 }
 
 /**
@@ -27,12 +37,21 @@ const PhoneShell = forwardRef<HTMLDivElement, PhoneShellProps>(function PhoneShe
 		innerClassName,
 		style,
 		theme = "dark",
+		sizing = "screen",
+		profile,
+		showFrame,
+		enabled,
+		landscape,
+		posture,
+		rotated,
+		contentRef,
 	},
 	ref,
 ) {
 	const [time, setTime] = useState<string>("")
 
 	useEffect(() => {
+		if (sizing === "content") return
 		const updateTime = () => {
 			const now = new Date()
 			const hours = now.getHours().toString()
@@ -42,10 +61,30 @@ const PhoneShell = forwardRef<HTMLDivElement, PhoneShellProps>(function PhoneShe
 		updateTime()
 		const timer = setInterval(updateTime, 1000)
 		return () => clearInterval(timer)
-	}, [])
+	}, [sizing])
 
 	const isDark = theme === "dark"
 	const textColor = isDark ? "text-black" : "text-white"
+	if (sizing === "content") {
+		return (
+			<PhoneShellContent
+				ref={ref}
+				width={width}
+				height={height}
+				profile={profile}
+				showFrame={showFrame}
+				enabled={enabled}
+				landscape={landscape}
+				posture={posture}
+				rotated={rotated}
+				contentRef={contentRef}
+				className={className}
+				style={style}
+			>
+				{children}
+			</PhoneShellContent>
+		)
+	}
 
 	return (
 		<div

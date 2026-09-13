@@ -61,19 +61,21 @@ function DialogContent({
 	showCloseButton = true,
 	closeButtonTestId,
 	style,
+	container,
 	...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
 	showCloseButton?: boolean
 	closeButtonTestId?: string
 	overlayClassName?: string
 	overlayStyle?: React.CSSProperties
+	container?: React.ComponentProps<typeof DialogPrimitive.Portal>["container"]
 }) {
 	// PROJECT OVERRIDE — sync overlay z-index with content style for stacking.
 	const zIndex = style?.zIndex
 	const overlayScopeAttributes = useOverlayInteractionScopeContentAttributes()
 
 	return (
-		<DialogPortal data-slot="dialog-portal">
+		<DialogPortal data-slot="dialog-portal" container={container}>
 			<DialogOverlay className={overlayClassName} style={{ ...overlayStyle, zIndex }} />
 			<DialogPrimitive.Content
 				data-slot="dialog-content"

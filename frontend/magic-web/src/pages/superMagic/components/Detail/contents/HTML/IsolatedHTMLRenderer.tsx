@@ -73,6 +73,9 @@ import {
 	ElementInspectorOverlay,
 } from "@/components/business/ElementInspector"
 import type { CanonicalContentDimensions } from "./utils/slide-dimensions"
+import { DevicePreviewViewport } from "../../components/DevicePreview/DevicePreviewViewport"
+import { DEFAULT_DEVICE_PREVIEW } from "../../components/DevicePreview/constants"
+import type { DevicePreviewControls } from "../../components/DevicePreview/types"
 
 /**
  * Nested HTML documents may relay navigation directly to the host window. Check
@@ -197,7 +200,11 @@ import type { HtmlNavigationRequest } from "./utils/html-navigation"
 import type { HtmlPermissionScope } from "./iframe-api/types"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 
+const ignoreDevicePreviewChange = () => undefined
+
 interface IsolatedHTMLRendererProps {
+	devicePreview?: DevicePreviewControls & { enabled: boolean }
+	onDeviceContentScaledChange?: (scaled: boolean) => void
 	content: string
 	/** API 返回的最原始 HTML 内容（未经 processHtmlContent 处理） */
 	rawSourceCode?: string
@@ -431,6 +438,8 @@ function getContextUserName(user: MagicContextUser): string {
 const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHTMLRendererProps>(
 	(props, ref) => {
 		const {
+			devicePreview,
+			onDeviceContentScaledChange,
 			content,
 			rawSourceCode,
 			sandboxType = "iframe",
@@ -536,6 +545,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		// Keep the scaling viewport limited to the canvas column. The DOM tree is a
 		// sibling column and must not be included in PPT auto-fit measurements.
 		const canvasViewportRef = useRef<HTMLDivElement>(null)
+		const deviceContentRef = useRef<HTMLDivElement>(null)
+		const [deviceDisplayScale, setDeviceDisplayScale] = useState(1)
+		const devicePreviewEnabled = devicePreview?.enabled === true
 		const contentWrapperRef = useRef<HTMLDivElement>(null)
 		const scrollContainerRef = useRef<HTMLDivElement>(null)
 		const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -699,7 +711,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			getIframeStyle,
 		} = useZoomControls({
 			containerRef,
-			measurementRef: canvasViewportRef,
+			measurementRef: devicePreviewEnabled ? deviceContentRef : canvasViewportRef,
 			iframeRef,
 			isPptRender,
 			isFullscreen,
@@ -717,6 +729,17 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			manualScale,
 			onManualScaleChange,
 		})
+		// 内容适配仍用原 scaleRatio；宿主指针与浮层使用内容比例 × 设备显示比例。
+		const effectiveScaleRatio = devicePreviewEnabled
+			? (shouldApplyScaling ? scaleRatio : 1) * deviceDisplayScale
+			: scaleRatio
+		const deviceLayoutKey =
+			devicePreviewEnabled && devicePreview
+				? `${devicePreview.config.width}:${devicePreview.config.height}:${devicePreview.config.showFrame}:${devicePreview.config.profile}:${devicePreview.config.fold?.posture}:${deviceDisplayScale}`
+				: ""
+		useEffect(() => {
+			onDeviceContentScaledChange?.(shouldApplyScaling)
+		}, [shouldApplyScaling, onDeviceContentScaledChange])
 
 		useEffect(() => {
 			if (isPptRender && isScaleReady) {
@@ -862,7 +885,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			iframeLoaded,
 			contentInjected,
 			targetOrigin: iframeTargetOrigin,
-			scaleRatio,
+			scaleRatio: effectiveScaleRatio,
 			saveEditContent: saveEditContentWithOriginalTrailingNewline,
 			fileId,
 			filePathMapping,
@@ -1169,7 +1192,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const { isDragOver, isGlobalDragActive, dragOverHandlers } = useImageDrop({
 			iframeRef,
 			isEditMode,
-			scaleRatio,
+			scaleRatio: effectiveScaleRatio,
 			relative_file_path: htmlRelativeFolderPath,
 			attachmentList,
 			filePathMapping,
@@ -2596,191 +2619,221 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 												: "relative min-h-0 min-w-0 flex-1"
 										}
 									>
-										{/* 内容包装器，使用 flex 居中 iframe */}
-										<div
-											ref={contentWrapperRef}
-											className={
-												documentFlowFullscreen
-													? "relative w-full"
-													: "relative min-h-0 w-full flex-1"
+										<DevicePreviewViewport
+											enabled={devicePreviewEnabled}
+											config={devicePreview?.config ?? DEFAULT_DEVICE_PREVIEW}
+											setConfig={
+												devicePreview?.setConfig ??
+												ignoreDevicePreviewChange
 											}
-											style={
-												documentFlowFullscreen
-													? undefined
-													: getContentWrapperStyle()
+											active={
+												devicePreviewEnabled &&
+												devicePreview?.active !== false &&
+												isTabActive !== false &&
+												isVisible !== false
 											}
+											identity={devicePreview?.identity || fileId || ""}
+											contentRef={deviceContentRef}
+											onDisplayScaleChange={setDeviceDisplayScale}
 										>
-											{sandboxType === "iframe" ? (
-												<>
-													{/*
-													 * 远程 shell URL 不能携带业务 query，因为 shell 服务可能会校验这些参数。
-													 * 每次导航状态变化时重新创建 shell：复用同一个 iframe 并调用
-													 * document.open/document.write 可能保留旧的 History URL，导致下一个
-													 * HTML 文档仍然读取到之前的 query。
-													 */}
-													<iframe
-														key={`${htmlSandboxShellUrl}:${htmlNavigationKey}`}
-														ref={iframeRef}
-														className={cn(
-															styles.iframe,
-															documentFlowFullscreen
-																? "w-full flex-shrink-0 border-none"
-																: "h-full w-full flex-shrink-0 border-none",
-															iframeClassName,
-														)}
-														title="Isolated HTML Content"
-														src={htmlSandboxShellUrl}
-														onLoad={handleIframeElementLoad}
-														onError={handleIframeElementError}
-														sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock allow-orientation-lock allow-presentation"
-														allow="fullscreen; autoplay; picture-in-picture; encrypted-media; web-share; clipboard-write"
-														allowFullScreen
+											{/* 内容包装器，使用 flex 居中 iframe */}
+											<div
+												ref={contentWrapperRef}
+												className={
+													documentFlowFullscreen
+														? "relative w-full"
+														: "relative min-h-0 w-full flex-1"
+												}
+												style={
+													documentFlowFullscreen
+														? undefined
+														: getContentWrapperStyle()
+												}
+											>
+												{sandboxType === "iframe" ? (
+													<>
+														{/*
+														 * 远程 shell URL 不能携带业务 query，因为 shell 服务可能会校验这些参数。
+														 * 每次导航状态变化时重新创建 shell：复用同一个 iframe 并调用
+														 * document.open/document.write 可能保留旧的 History URL，导致下一个
+														 * HTML 文档仍然读取到之前的 query。
+														 */}
+														<iframe
+															key={`${htmlSandboxShellUrl}:${htmlNavigationKey}`}
+															ref={iframeRef}
+															className={cn(
+																styles.iframe,
+																documentFlowFullscreen
+																	? "w-full flex-shrink-0 border-none"
+																	: "h-full w-full flex-shrink-0 border-none",
+																iframeClassName,
+															)}
+															title="Isolated HTML Content"
+															src={htmlSandboxShellUrl}
+															onLoad={handleIframeElementLoad}
+															onError={handleIframeElementError}
+															sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock allow-orientation-lock allow-presentation"
+															allow="fullscreen; autoplay; picture-in-picture; encrypted-media; web-share; clipboard-write"
+															allowFullScreen
+															translate="no"
+															style={
+																documentFlowIframeStyle ||
+																getIframeStyle(
+																	hasRenderedOnceRef.current,
+																)
+															}
+															data-testid={
+																isVisible !== false
+																	? "isolated-html-content-iframe"
+																	: undefined
+															}
+														/>
+														{/* 拖拽放置覆盖层 - 拖拽图片时显示 */}
+														{isEditMode &&
+															isVisible !== false &&
+															isGlobalDragActive && (
+																<DropOverlay
+																	visible={isDragOver}
+																	onDragEnter={
+																		dragOverHandlers.onDragEnter
+																	}
+																	onDragOver={
+																		dragOverHandlers.onDragOver
+																	}
+																	onDragLeave={
+																		dragOverHandlers.onDragLeave
+																	}
+																	onDrop={dragOverHandlers.onDrop}
+																/>
+															)}
+													</>
+												) : (
+													<div
+														className={styles.shadowHost}
 														translate="no"
-														style={
-															documentFlowIframeStyle ||
-															getIframeStyle(
-																hasRenderedOnceRef.current,
-															)
+													/>
+												)}
+											</div>
+										</DevicePreviewViewport>
+										{sandboxType === "iframe" && (
+											<>
+												{/* 选择覆盖层 - 在父窗口中渲染元素高亮 */}
+												{isEditMode && isVisible !== false && (
+													<SelectionOverlay
+														containerRef={
+															devicePreviewEnabled
+																? canvasViewportRef
+																: contentWrapperRef
 														}
-														data-testid={
-															isVisible !== false
-																? "isolated-html-content-iframe"
-																: undefined
+														scrollContainerRef={scrollContainerRef}
+														iframeRef={iframeRef}
+														editorRef={editorRef}
+														scaleRatio={effectiveScaleRatio}
+														isPptRender={
+															shouldApplyScaling ||
+															devicePreviewEnabled
+														}
+														layoutKey={deviceLayoutKey}
+														disabled={isSaving}
+														onSelectedElementChange={
+															setSelectedElementRect
+														}
+														onSelectedElementViewportChange={
+															setSelectedElementViewportRect
+														}
+														onElementMoveStart={() =>
+															setIsContextPanelDismissed(true)
+														}
+														onElementMoveEnd={() =>
+															setIsContextPanelDismissed(true)
 														}
 													/>
-													{/* 选择覆盖层 - 在父窗口中渲染元素高亮 */}
-													{isEditMode && isVisible !== false && (
-														<SelectionOverlay
-															containerRef={contentWrapperRef}
-															scrollContainerRef={scrollContainerRef}
-															iframeRef={iframeRef}
-															editorRef={editorRef}
-															scaleRatio={scaleRatio}
-															isPptRender={shouldApplyScaling}
-															disabled={isSaving}
-															onSelectedElementChange={
-																setSelectedElementRect
-															}
-															onSelectedElementViewportChange={
-																setSelectedElementViewportRect
-															}
-															onElementMoveStart={() =>
-																setIsContextPanelDismissed(true)
-															}
-															onElementMoveEnd={() =>
-																setIsContextPanelDismissed(true)
-															}
-														/>
-													)}
-													{/* 拖拽放置覆盖层 - 拖拽图片时显示 */}
-													{isEditMode &&
-														isVisible !== false &&
-														isGlobalDragActive && (
-															<DropOverlay
-																visible={isDragOver}
-																onDragEnter={
-																	dragOverHandlers.onDragEnter
-																}
-																onDragOver={
-																	dragOverHandlers.onDragOver
-																}
-																onDragLeave={
-																	dragOverHandlers.onDragLeave
-																}
-																onDrop={dragOverHandlers.onDrop}
-															/>
-														)}
-													{/* 元素检查覆盖层 - 独立于编辑模式 */}
-													{isVisible !== false && (
-														<ElementInspectorOverlay
-															active={elementInspector.active}
-															iframeRef={iframeRef}
-															hoveredElement={
-																elementInspector.hoveredElement
-															}
-															selectedElement={
-																elementInspector.selectedElement
-															}
-															trackedRects={
-																elementInspector.trackedRects
-															}
-															iframeScrollOffset={
-																elementInspector.iframeScrollOffset ??
-																undefined
-															}
-															onClearSelection={
-																elementInspector.clearSelection
-															}
-															onInsertToConsole={(code) => {
-																devConsole.executeCode(code)
-															}}
-															onSendToAgent={(content) => {
-																pubsub.publish(
-																	PubSubEvents.Set_Input_Message,
-																	content,
-																)
-															}}
-															hideInfoCard={inspectorHideInfoCard}
-															multiSelectionActive={isAppendPicking}
-															activeTarget={inspectorActiveTarget}
-															draftInstruction={
-																inspectorDraftInstruction
-															}
-															onDraftInstructionChange={
-																setInspectorDraftInstruction
-															}
-															onConfirmTarget={confirmInspectorTarget}
-															onCancelTarget={cancelInspectorTarget}
-															pendingTargets={inspectorPendingTargets}
-															submitState={inspectorSubmitState}
-															submitError={inspectorSubmitError}
-															onEditPendingTarget={
-																isAppendPicking
-																	? editInspectorPendingTarget
-																	: undefined
-															}
-															onRemovePendingTarget={
-																isAppendPicking
-																	? removeInspectorPendingTarget
-																	: undefined
-															}
-															onSubmitPendingTargets={
-																isAppendPicking
-																	? submitInspectorPendingTargets
-																	: undefined
-															}
-															selectionMode={inspectorSelectionMode}
-															onSelectionModeChange={
-																updateInspectorSelectionMode
-															}
-															pendingPanelTopOffset={16}
-															panelContainerRef={inspectorViewportRef}
-															iframeTargetOrigin={iframeTargetOrigin}
-															screenshotSupported
-															onCaptureScreenshot={
-																captureInspectorScreenshotTarget
-															}
-															onCaptureElementScreenshot={
-																isAppendPicking || isQuickSelecting
-																	? attachInspectorElementScreenshot
-																	: undefined
-															}
-															onCapturePrewarmReady={
-																registerInspectorCapturePrewarm
-															}
-															onExitMultiSelection={
-																isAppendPicking
-																	? resetInspectorSelection
-																	: undefined
-															}
-															scaleRatio={scaleRatio}
-														/>
-													)}
-												</>
-											) : (
-												<div className={styles.shadowHost} translate="no" />
-											)}
-										</div>
+												)}
+												{/* 元素检查覆盖层 - 独立于编辑模式 */}
+												{isVisible !== false && (
+													<ElementInspectorOverlay
+														layoutKey={deviceLayoutKey}
+														active={elementInspector.active}
+														iframeRef={iframeRef}
+														hoveredElement={
+															elementInspector.hoveredElement
+														}
+														selectedElement={
+															elementInspector.selectedElement
+														}
+														trackedRects={elementInspector.trackedRects}
+														iframeScrollOffset={
+															elementInspector.iframeScrollOffset ??
+															undefined
+														}
+														onClearSelection={
+															elementInspector.clearSelection
+														}
+														onInsertToConsole={(code) => {
+															devConsole.executeCode(code)
+														}}
+														onSendToAgent={(content) => {
+															pubsub.publish(
+																PubSubEvents.Set_Input_Message,
+																content,
+															)
+														}}
+														hideInfoCard={inspectorHideInfoCard}
+														multiSelectionActive={isAppendPicking}
+														activeTarget={inspectorActiveTarget}
+														draftInstruction={inspectorDraftInstruction}
+														onDraftInstructionChange={
+															setInspectorDraftInstruction
+														}
+														onConfirmTarget={confirmInspectorTarget}
+														onCancelTarget={cancelInspectorTarget}
+														pendingTargets={inspectorPendingTargets}
+														submitState={inspectorSubmitState}
+														submitError={inspectorSubmitError}
+														onEditPendingTarget={
+															isAppendPicking
+																? editInspectorPendingTarget
+																: undefined
+														}
+														onRemovePendingTarget={
+															isAppendPicking
+																? removeInspectorPendingTarget
+																: undefined
+														}
+														onSubmitPendingTargets={
+															isAppendPicking
+																? submitInspectorPendingTargets
+																: undefined
+														}
+														selectionMode={inspectorSelectionMode}
+														onSelectionModeChange={
+															updateInspectorSelectionMode
+														}
+														pendingPanelTopOffset={16}
+														panelContainerRef={inspectorViewportRef}
+														iframeTargetOrigin={iframeTargetOrigin}
+														screenshotSupported
+														onCaptureScreenshot={
+															captureInspectorScreenshotTarget
+														}
+														onCaptureElementScreenshot={
+															isAppendPicking || isQuickSelecting
+																? attachInspectorElementScreenshot
+																: undefined
+														}
+														onCapturePrewarmReady={
+															registerInspectorCapturePrewarm
+														}
+														onExitMultiSelection={
+															isAppendPicking
+																? resetInspectorSelection
+																: undefined
+														}
+														scaleRatio={effectiveScaleRatio}
+													/>
+												)}
+											</>
+										)}
 									</div>
 								</div>
 								{/* DevTools 调试台 - 根据用户选择停靠在 iframe 底部或右侧 */}

@@ -142,6 +142,8 @@ interface ElementInspectorOverlayProps {
 	panelContainerRef?: React.RefObject<HTMLDivElement | null>
 	/** Scale ratio of the iframe (for coordinate conversion) */
 	scaleRatio?: number
+	/** 设备尺寸或外观改变时，比例不变也要更新 iframe 的宿主位置。 */
+	layoutKey?: string
 	/** Latest iframe viewport rects for selected and pending element targets. */
 	trackedRects?: Record<string, InspectedElementRect>
 	/** Scroll offset reported by a cross-origin iframe runtime. */
@@ -183,6 +185,7 @@ export function ElementInspectorOverlay({
 	pendingPanelTopOffset,
 	panelContainerRef,
 	scaleRatio = 1,
+	layoutKey,
 	trackedRects = {},
 	iframeScrollOffset: reportedIframeScrollOffset,
 }: ElementInspectorOverlayProps) {
@@ -327,7 +330,7 @@ export function ElementInspectorOverlay({
 				iframeRectFrameRef.current = null
 			}
 		}
-	}, [iframeRef, active])
+	}, [iframeRef, active, scaleRatio, layoutKey])
 
 	useEffect(() => {
 		// Cross-origin pages can now answer screenshot requests from inside the iframe.
