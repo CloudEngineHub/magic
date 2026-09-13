@@ -1,5 +1,5 @@
-import { ArrowLeft, BookOpen, PanelLeft, X } from "lucide-react"
-import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { BookOpen, PanelLeft, X } from "lucide-react"
+import { Suspense, useLayoutEffect, useState } from "react"
 import { ErrorBoundary } from "react-error-boundary"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -32,29 +32,29 @@ export function HelpDialog({
 	help,
 	onCloseAutoFocus,
 	navigation,
-	onBack,
 	articleKey,
 	reading,
 	contentRef,
-	onContentScroll,
 }: HelpDialogProps) {
 	const { t, i18n } = useTranslation("interface")
-	const layoutRef = useRef<HTMLDivElement>(null)
+	const [layoutElement, setLayoutElement] = useState<HTMLDivElement | null>(null)
 	const [narrow, setNarrow] = useState(true)
 	const [desktopNavigation, setDesktopNavigation] = useState(true)
 	const [mobileNavigation, setMobileNavigation] = useState(false)
 	const hasNavigation = Boolean(navigation)
 	const showNavigation = hasNavigation && (narrow ? mobileNavigation : desktopNavigation)
 	useLayoutEffect(() => {
-		const element = layoutRef.current
+		const element = layoutElement
 		if (!element || !hasNavigation) return
+		// Portal 会晚于父组件挂载内容；由实际节点驱动监听，避免首次 ref 为空后一直按窄屏显示。
 		// 224px 目录会挤压窄容器；按弹窗实际宽度切换，避免误用整页桌面状态。
 		const resize = new ResizeObserver(([entry]) => setNarrow(entry.contentRect.width < 880))
 		setNarrow(element.clientWidth < 880)
 		resize.observe(element)
 		return () => resize.disconnect()
-	}, [hasNavigation])
-	useEffect(() => setMobileNavigation(false), [articleKey])
+	}, [hasNavigation, layoutElement])
+	// 先让窄屏正文可见，再执行文章切换后的滚动和聚焦。
+	useLayoutEffect(() => setMobileNavigation(false), [articleKey])
 	return (
 		<DialogContent
 			id={id}
@@ -116,7 +116,7 @@ export function HelpDialog({
 				</DialogClose>
 			</DialogHeader>
 			{/* 标题和关闭操作始终可见，长说明只在正文区域滚动。 */}
-			<div ref={layoutRef} className="flex min-h-0 flex-1">
+			<div ref={setLayoutElement} className="flex min-h-0 flex-1">
 				{navigation && (
 					<aside
 						id={`${id}-contents`}
@@ -135,26 +135,8 @@ export function HelpDialog({
 						narrow && showNavigation && "hidden",
 					)}
 				>
-					{navigation && (
-						<div className="flex min-h-11 shrink-0 items-center gap-3 border-b px-5 py-2">
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={onBack}
-								disabled={!onBack}
-								className="h-8 gap-1 text-xs [@media(pointer:coarse)]:min-h-11"
-							>
-								<ArrowLeft size={14} aria-hidden />
-								{t("contextHelp.back")}
-							</Button>
-							<span className="min-w-0 break-words text-xs text-muted-foreground">
-								{help.title}
-							</span>
-						</div>
-					)}
 					<div
 						ref={contentRef}
-						onScroll={onContentScroll}
 						className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
 					>
 						{/* 外框提供留白，正文保持适中行长；窄屏按可用宽度排版。 */}

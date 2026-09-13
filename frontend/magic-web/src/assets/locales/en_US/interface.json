@@ -1483,7 +1483,6 @@
 	},
 	"contextHelp": {
 		"actions": "When should you make changes?",
-		"back": "Back",
 		"catalogHint": "Guide topics, not the files in your current space",
 		"close": "Got it",
 		"contents": "Guide contents",

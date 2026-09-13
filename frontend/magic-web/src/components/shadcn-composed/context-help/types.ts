@@ -1,4 +1,4 @@
-import type { ReactElement, ReactNode, RefObject, UIEventHandler } from "react"
+import type { ReactElement, ReactNode, RefObject } from "react"
 
 export type HelpTone = "neutral" | "indigo" | "red" | "amber" | "teal"
 
@@ -23,11 +23,9 @@ export interface HelpDialogProps {
 	help: HelpDefinition
 	onCloseAutoFocus: (event: Event) => void
 	navigation?: ReactNode
-	onBack?: () => void
 	articleKey?: string
 	reading?: HelpReadingLinks
 	contentRef?: RefObject<HTMLDivElement>
-	onContentScroll?: UIEventHandler<HTMLDivElement>
 }
 
 export interface ContextHelpProps {
