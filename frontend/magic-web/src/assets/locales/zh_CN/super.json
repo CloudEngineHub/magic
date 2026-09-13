@@ -4621,6 +4621,7 @@
 		"loadMore": "加载更多",
 		"loading": "正在加载…",
 		"openManager": "打开项目管理器",
+		"openRecentManager": "在项目管理器中打开最近项目",
 		"openWorkspaceManager": "打开「{{name}}」项目管理器",
 		"recent": "最近项目",
 		"resizeSections": "调整导航与项目区域高度",

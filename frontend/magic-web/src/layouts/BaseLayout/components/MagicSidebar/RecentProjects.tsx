@@ -9,6 +9,8 @@ import { openProjectInNewTab } from "@/pages/superMagic/utils/project"
 import superMagicService from "@/pages/superMagic/services"
 import useProjectItemActionProps from "@/pages/superMagic/components/EmptyWorkspacePanel/hooks/useProjectItemActionProps"
 import { formatRelativeTime } from "@/utils/string"
+import { cn } from "@/utils/cn"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { useVirtualProjectList } from "./hooks/useVirtualProjectList"
 import CollapsedWorkspaceProjectRow from "./CollapsedWorkspaceProjectRow"
 
@@ -73,14 +75,28 @@ const RecentProjectRow = observer(function RecentProjectRow({
 
 function RecentProjects({
 	active,
+	fitContent = false,
 	onSelect,
 	onBusyChange,
 }: {
 	active: boolean
+	fitContent?: boolean
 	onSelect?: () => void
 	onBusyChange?: (busy: boolean) => void
 }) {
 	const { t } = useTranslation("super")
+	const contentRef = useRef<HTMLDivElement>(null)
+	const [contentHeight, setContentHeight] = useState(0)
+	useLayoutEffect(() => {
+		const content = contentRef.current
+		if (!fitContent || !active || !content) return
+		// 浮层按完整虚拟高度和状态区收缩；只测内容，避免受限视口反过来缩短列表。
+		const measure = () => setContentHeight(content.offsetHeight)
+		measure()
+		const observer = new ResizeObserver(measure)
+		observer.observe(content)
+		return () => observer.disconnect()
+	}, [active, fitContent])
 	const { items, stale, loading, error, hasMore } = recentProjectsStore
 	const list = useVirtualProjectList({
 		projects: items,
@@ -119,60 +135,70 @@ function RecentProjects({
 		[setListInteraction],
 	)
 	return (
-		<div
-			ref={list.scrollRef}
-			className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1"
+		<ScrollArea
+			viewportRef={list.scrollRef}
+			className={cn(
+				"min-h-0 overflow-hidden [&>[data-slot=scroll-area-scrollbar]]:w-1.5 [&>[data-slot=scroll-area-scrollbar]]:border-l-0",
+				fitContent ? "shrink" : "flex-1",
+			)}
+			style={fitContent ? { height: contentHeight } : undefined}
+			viewportClassName="overscroll-contain [&>div]:!block"
 			onFocusCapture={list.onFocusCapture}
 			onBlurCapture={list.onBlurCapture}
 			data-testid="sidebar-recent-projects-list"
 		>
-			<div className="relative w-full" style={{ height: list.virtualizer.getTotalSize() }}>
-				{list.rows.map((row) => (
-					<div
-						key={row.key}
-						ref={list.virtualizer.measureElement}
-						data-index={row.index}
-						data-virtual-project-id={items[row.index].id}
-						className="absolute left-0 top-0 w-full pb-1"
-						style={{ transform: `translateY(${row.start}px)` }}
-					>
-						<RecentProjectRow
-							project={items[row.index]}
-							onSelect={onSelect}
-							onInteractionChange={onInteractionChange}
-						/>
+			<div ref={contentRef} className={cn("px-1", fitContent && "min-h-[76px]")}>
+				<div
+					className="relative w-full"
+					style={{ height: list.virtualizer.getTotalSize() }}
+				>
+					{list.rows.map((row) => (
+						<div
+							key={row.key}
+							ref={list.virtualizer.measureElement}
+							data-index={row.index}
+							data-virtual-project-id={items[row.index].id}
+							className="absolute left-0 top-0 w-full pb-1"
+							style={{ transform: `translateY(${row.start}px)` }}
+						>
+							<RecentProjectRow
+								project={items[row.index]}
+								onSelect={onSelect}
+								onInteractionChange={onInteractionChange}
+							/>
+						</div>
+					))}
+				</div>
+				{loading && (
+					<div className="p-2 text-xs text-muted-foreground">
+						{t("projectNavigation.loading")}
 					</div>
-				))}
+				)}
+				{!loading && !error && !stale && items.length === 0 && (
+					<div className="p-2 text-xs text-muted-foreground">
+						{t("projectNavigation.emptyRecent")}
+					</div>
+				)}
+				{error && (
+					<button
+						type="button"
+						className="w-full p-2 text-left text-xs text-muted-foreground"
+						onClick={recentProjectsStore.loadMore}
+					>
+						{t("projectNavigation.retry")}
+					</button>
+				)}
+				{!loading && !error && hasMore && items.length > 0 && (
+					<button
+						type="button"
+						className="w-full p-2 text-left text-xs text-muted-foreground"
+						onClick={recentProjectsStore.loadMore}
+					>
+						{t("projectNavigation.loadMore")}
+					</button>
+				)}
 			</div>
-			{loading && (
-				<div className="p-2 text-xs text-muted-foreground">
-					{t("projectNavigation.loading")}
-				</div>
-			)}
-			{!loading && !error && !stale && items.length === 0 && (
-				<div className="p-2 text-xs text-muted-foreground">
-					{t("projectNavigation.emptyRecent")}
-				</div>
-			)}
-			{error && (
-				<button
-					type="button"
-					className="w-full p-2 text-left text-xs text-muted-foreground"
-					onClick={recentProjectsStore.loadMore}
-				>
-					{t("projectNavigation.retry")}
-				</button>
-			)}
-			{!loading && !error && hasMore && items.length > 0 && (
-				<button
-					type="button"
-					className="w-full p-2 text-left text-xs text-muted-foreground"
-					onClick={recentProjectsStore.loadMore}
-				>
-					{t("projectNavigation.loadMore")}
-				</button>
-			)}
-		</div>
+		</ScrollArea>
 	)
 }
 

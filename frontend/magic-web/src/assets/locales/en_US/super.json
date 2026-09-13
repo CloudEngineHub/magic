@@ -4620,6 +4620,7 @@
 		"loadMore": "Load more",
 		"loading": "Loading…",
 		"openManager": "Open project manager",
+		"openRecentManager": "Open recent projects in project manager",
 		"openWorkspaceManager": "Open project manager for {{name}}",
 		"recent": "Recent projects",
 		"resizeSections": "Resize navigation and project sections",

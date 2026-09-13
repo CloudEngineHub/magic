@@ -1,9 +1,10 @@
 import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useState } from "react"
 import { observer } from "mobx-react-lite"
-import { Box, Clock3, AppWindow, UsersRound } from "lucide-react"
+import { Box, Clock3, AppWindow, SquareArrowUpRight, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
+import { Button } from "@/components/shadcn-ui/button"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/shadcn-ui/sidebar"
 import { SidebarExpandableItem, SidebarRow } from "@/pages/superMagic/components/SidebarSection"
 import type { ProjectBrowserSource } from "@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"
@@ -85,15 +86,29 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 										</SidebarMenuButton>
 									</span>
 								</PopoverTrigger>
+								{/* 少量项目随内容缩短；多项目受窗口比例、阅读上限和屏幕边界共同约束。 */}
 								<PopoverContent
 									side="right"
 									align="start"
-									className="flex h-[360px] max-h-[var(--radix-popover-content-available-height)] w-72 flex-col p-1"
+									collisionPadding={12}
+									className="flex max-h-[min(70dvh,640px,var(--radix-popover-content-available-height))] w-72 flex-col overflow-hidden p-1"
 								>
-									<div className="shrink-0 px-2 py-2 text-sm font-medium">
-										{t("projectNavigation.recent")}
+									<div className="flex shrink-0 items-center justify-between gap-2 px-2 py-1 text-sm font-medium">
+										<span>{t("projectNavigation.recent")}</span>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon-sm"
+											title={t("projectNavigation.openManager")}
+											aria-label={t("projectNavigation.openRecentManager")}
+											disabled={workspaceBusy || recentBusy}
+											onClick={() => openManager({ type: "recent" })}
+										>
+											<SquareArrowUpRight size={16} />
+										</Button>
 									</div>
 									<RecentProjects
+										fitContent
 										active={popover === "recent"}
 										onSelect={closePopover}
 										onBusyChange={setRecentBusy}
