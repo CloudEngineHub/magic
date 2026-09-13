@@ -487,7 +487,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			permissionController,
 		} = props
 		// host：用户当前所在项目。分享页没有 Provider，会话 API 必须失败。
-		const { selectedProject, topicStore: scopedTopicStore } = useHostConversation()
+		const {
+			selectedProject,
+			topicStore: scopedTopicStore,
+			ensureConversation,
+			requestPreviewMode,
+		} = useHostConversation()
 		// origin：文件/库所在项目。发布预览传微应用原项目，普通预览回落到 host。
 		const runtimeProjectId = projectId ?? selectedProject?.id
 		const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
@@ -1220,7 +1225,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const { htmlAppConfig, authorizeHtmlPermission, authorizeHtmlPermissions } =
 			permissionController || fallbackPermissionController
 		const projectContextUnavailableError = t("htmlEditor.projectContextUnavailable")
+		const previewModeCancelledError = t("microAppPage.conversation.switchToPreviewCancelled")
 		const authorizeProjectPermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
+			if (scope === "project.message.write" && requestPreviewMode) {
+				if (!(await requestPreviewMode())) throw new Error(previewModeCancelledError)
+				return true
+			}
 			// 分享页没有可授权的项目上下文，先返回明确原因，避免先弹授权再失败。
 			if (!runtimeProjectId && isProjectScopedPermission(scope)) {
 				throw new Error(projectContextUnavailableError)
@@ -1332,6 +1342,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			scopedTopicStore,
 			selectedProject,
 			{ microAppId, microAppName },
+			ensureConversation,
 		)
 
 		// 会话写操作按 host 鉴权：分享页没有当前项目时不可发消息
@@ -1342,10 +1353,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			createTopicAndSend,
 			sendMessage,
 			enableWriteOperations: true,
-			projectId: selectedProject?.id,
-			projectContextUnavailableError: !selectedProject?.id
-				? projectContextUnavailableError
-				: undefined,
+			projectId: selectedProject?.id || (ensureConversation ? "runtime-pending" : undefined),
+			projectContextUnavailableError:
+				!selectedProject?.id && !ensureConversation
+					? projectContextUnavailableError
+					: undefined,
 			authorizePermission: authorizeProjectPermission,
 		})
 
@@ -1395,6 +1407,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					? projectContextUnavailableError
 					: undefined,
 				topicStore: scopedTopicStore,
+				ensureConversation,
 				attachmentList,
 				htmlRelativeFolderPath,
 				uploadImageFileToProject,

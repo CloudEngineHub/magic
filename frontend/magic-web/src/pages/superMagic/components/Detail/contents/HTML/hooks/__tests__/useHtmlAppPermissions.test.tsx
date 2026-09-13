@@ -105,6 +105,7 @@ describe("useHtmlAppPermissions", () => {
 		const selectContent = container.querySelector('[data-slot="select-content"]')
 
 		expect(selectContent).toHaveClass("z-select")
+		expect(selectContent).toHaveClass("!z-[calc(var(--z-index-modal)+100)]")
 		expect(selectContent).not.toHaveClass("!z-[950]")
 	})
 

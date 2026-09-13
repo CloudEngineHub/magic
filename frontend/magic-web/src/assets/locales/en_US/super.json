@@ -2547,6 +2547,13 @@
 			"loadFallbackDescription": "If the page is not fully visible, the site may restrict iframe embedding or the network may be loading slowly.",
 			"loadFallbackTitle": "This page is taking longer to load",
 			"menuTitle": "Common websites",
+			"microApps": {
+				"empty": "No micro apps available",
+				"loading": "Loading micro apps...",
+				"loadingMore": "Loading more...",
+				"searchPlaceholder": "Search micro apps",
+				"title": "Micro apps"
+			},
 			"openCustom": "Open",
 			"openExternal": "Open externally",
 			"presets": {
@@ -3257,8 +3264,21 @@
 	},
 	"microAppPage": {
 		"conversation": {
+			"collapse": "Collapse message panel",
+			"defaultAppName": "Micro app",
+			"development": "Development project",
 			"emptyDescription": "Describe it and I’ll update this micro app.",
-			"emptyTitle": "What would you like to change?"
+			"emptyTitle": "What would you like to change?",
+			"expand": "Expand message panel",
+			"switchToPreviewCancel": "Cancel",
+			"switchToPreviewCancelled": "Action cancelled",
+			"switchToPreviewConfirm": "Switch",
+			"switchToPreviewDescription": "Creating topics and sending messages require Preview mode. Switch now?",
+			"switchToPreviewTitle": "Switch to Preview mode",
+			"title": "Micro-app messages",
+			"usage": "Usage project",
+			"usageEmptyDescription": "Messages will appear here after you run the micro-app.",
+			"usageEmptyTitle": "No usage project yet"
 		},
 		"databasePanel": {
 			"accessPermissions": "Access permissions",
@@ -3537,6 +3557,11 @@
 			"files": "Files",
 			"preview": "Preview"
 		},
+		"mode": {
+			"ariaLabel": "Micro-app work mode",
+			"development": "Development mode",
+			"preview": "Preview mode"
+		},
 		"navigation": {
 			"ariaLabel": "Micro app editor",
 			"database": "Data",
@@ -3544,7 +3569,8 @@
 			"longMemory": "Long-term memory",
 			"preview": "Preview",
 			"scheduledTasks": "Scheduled tasks",
-			"shareManagement": "Share management"
+			"shareManagement": "Share management",
+			"skills": "Skills"
 		},
 		"preview": {
 			"buildingDescription": "The preview will appear here as soon as the page is ready.",
@@ -3625,6 +3651,26 @@
 			"unpublishFailed": "Failed to unpublish. Please retry.",
 			"unpublishSuccess": "Micro app unpublished",
 			"update": "Save settings"
+		},
+		"skills": {
+			"cancel": "Cancel",
+			"contentEmpty": "This skill has no SKILL.md content",
+			"detailEmpty": "Select a skill to view its SKILL.md",
+			"edit": "Edit",
+			"empty": "No skills in this project",
+			"loadFailed": "Failed to load skills. Please try again.",
+			"loading": "Loading skills...",
+			"noDescription": "No description",
+			"save": "Save",
+			"saveFailed": "Failed to save skill. Please try again.",
+			"saveSuccess": "Skill saved",
+			"saving": "Saving...",
+			"subtitle": "Choose a skill to add it to the current conversation editor.",
+			"title": "Project skills",
+			"trigger": "Skills",
+			"use": "Use",
+			"usePrompt": "Use the {{skill}} skill",
+			"workspaceSubtitle": "Browse project skills and their SKILL.md files"
 		}
 	},
 	"microAppShare": {

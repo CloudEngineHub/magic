@@ -18,7 +18,11 @@ import {
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
-import { canManageProject, isReadOnlyProject } from "@/pages/superMagic/utils/permission"
+import {
+	canEditProject,
+	canManageProject,
+	isReadOnlyProject,
+} from "@/pages/superMagic/utils/permission"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
@@ -40,6 +44,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	const { t } = useTranslation("super")
 	const store = useAppStore()
 	const { conversation } = store
+	const conversationType = store.conversationType
 	const navigate = useNavigate()
 	const [isInitialAttachmentsLoaded, setIsInitialAttachmentsLoaded] = useState(false)
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
@@ -55,11 +60,18 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	const detailRef = useRef<DetailRef>(null)
 	const defaultEntryOpenedKeyRef = useRef<string | null>(null)
 	const recordVisit = useMicroAppVisit(appId)
-	const selectedProject = conversation.selectedProject
-	const selectedTopic = conversation.topicStore.selectedTopic
+	// Files, database and publish configuration always belong to the development
+	// project. The active conversation may point at the usage project.
+	const selectedProject = store.developmentConversation.selectedProject
+	const selectedTopic = store.developmentConversation.topicStore.selectedTopic
+	const canUseDevelopment = canEditProject(
+		store.developmentConversation.selectedProject?.user_role,
+	)
 	const hasRunningTopic =
 		selectedTopic?.task_status === TaskStatus.RUNNING ||
-		conversation.topicStore.topics.some((topic) => topic.task_status === TaskStatus.RUNNING)
+		store.developmentConversation.topicStore.topics.some(
+			(topic) => topic.task_status === TaskStatus.RUNNING,
+		)
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
 	const canEdit = canEditMicroAppMetadata(selectedProject)
 	const canPublish = canPublishMicroApp(selectedProject)
@@ -85,7 +97,16 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		if (projectId && store.projectId !== projectId) {
 			store.initFromProjectId(projectId)
 		}
-	}, [projectId, store])
+		if (appId && typeof store.loadRuntimeProject === "function") {
+			void store.loadRuntimeProject(appId)
+		}
+	}, [appId, projectId, store])
+
+	useEffect(() => {
+		if (selectedProject && !canUseDevelopment && conversationType === "development") {
+			store.setConversationType("usage")
+		}
+	}, [canUseDevelopment, conversationType, selectedProject, store])
 
 	useEffect(() => {
 		setActiveFileId(null)
@@ -122,7 +143,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	useDefaultModeModelListRefreshOnMount()
 	useCreateTopicListener({
 		selectedProject,
-		topicStore: conversation.topicStore,
+		topicStore: store.developmentConversation.topicStore,
 	})
 
 	const updateAttachments = useDebounceFn(
@@ -335,7 +356,7 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 
 	const handleProjectNameChange = useMemoizedFn((projectName: string) => {
 		if (!selectedProject) return
-		conversation.setSelectedProject({
+		store.developmentConversation.setSelectedProject({
 			...selectedProject,
 			project_name: projectName,
 		})
@@ -377,9 +398,19 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 		}
 	})
 
+	const handleConversationTypeChange = useMemoizedFn((type: "development" | "usage") => {
+		store.setConversationType(type)
+	})
+
 	return {
 		store,
 		conversation,
+		conversationType: store.conversationType,
+		canUseDevelopment,
+		runtimeProject: store.runtimeProject,
+		runtimeProjectState: store.runtimeProjectState,
+		ensureUsageProject: () => store.ensureUsageProject(appId),
+		handleConversationTypeChange,
 		selectedProject,
 		selectedTopic,
 		hasRunningTopic,

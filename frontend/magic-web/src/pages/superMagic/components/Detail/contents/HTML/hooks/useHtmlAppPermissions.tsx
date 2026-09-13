@@ -266,7 +266,12 @@ export function useHtmlAppPermissions({
 								<SelectTrigger className="mt-3 w-full">
 									<SelectValue />
 								</SelectTrigger>
-								<SelectContent>
+								{/*
+								 * MagicModal.confirm keeps the desktop dialog implementation on mobile
+								 * and raises its content layer dynamically. Keep this permission menu
+								 * above that content layer instead of letting it render behind the dialog.
+								 */}
+								<SelectContent className="!z-[calc(var(--z-index-modal)+100)]">
 									{ttlOptions.map((option) => (
 										<SelectItem
 											key={serializeHtmlPermissionTtl(option.ttlMs)}

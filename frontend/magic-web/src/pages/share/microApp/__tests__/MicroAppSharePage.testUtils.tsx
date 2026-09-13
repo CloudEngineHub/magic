@@ -84,6 +84,8 @@ vi.mock("@/apis", () => ({
 		checkShareResourcePassword: mocks.checkShareResourcePassword,
 		getShareResource: mocks.getShareResource,
 		getShareResourceFiles: mocks.getShareResourceFiles,
+		getMicroAppRuntimeProject: vi.fn().mockResolvedValue({ exists: false }),
+		ensureMicroAppRuntimeProject: vi.fn(),
 	},
 }))
 
@@ -225,6 +227,10 @@ vi.mock("@/pages/share/components", () => ({
 	),
 	PasswordVerification: () => <div data-testid="mock-password-verification" />,
 	ShareEmptyState: () => <div data-testid="mock-share-empty-state" />,
+}))
+
+vi.mock("@/pages/superMagic/pages/MicroAppPage/components/AppConversationPanel", () => ({
+	default: () => <div data-testid="app-conversation-panel" />,
 }))
 
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({

@@ -43,16 +43,23 @@ export function useIframeAgentActions(
 	topicStore?: TopicStore,
 	selectedProject?: ProjectListItem | null,
 	microAppContext?: MicroAppMessageContext,
+	ensureConversation?: () => Promise<{
+		selectedProject: ProjectListItem
+		topicStore: TopicStore
+	} | null>,
 ) {
 	// origin：发布预览嵌在别的项目时，仍指向微应用原项目
 	const originProjectId = projectId
 	// host：消息必须发到用户当前所在项目，不能回落到 origin
-	const hostProjectId = selectedProject?.id
-	const selectCreatedTopic = useMemoizedFn((topic: Topic) => {
-		if (!topicStore) return
-		// 同步传入的 store，避免后续发送仍读到旧话题
-		topicStore.setTopics([topic, ...topicStore.topics.filter((item) => item.id !== topic.id)])
-		topicStore.setSelectedTopic(topic)
+	const ensureHostConversation = useMemoizedFn(async () => {
+		if (ensureConversation) {
+			const conversation = await ensureConversation()
+			if (!conversation) throw new Error("No project selected")
+			return conversation
+		}
+		if (!selectedProject) throw new Error("No project selected")
+		if (!topicStore) throw new Error("No topic store")
+		return { selectedProject, topicStore }
 	})
 	/**
 	 * 将 message 参数转换为 tiptap jsonContent。
@@ -76,22 +83,27 @@ export function useIframeAgentActions(
 			extra,
 			topicMode,
 			targetTopic,
+			conversation,
 		}: {
 			jsonContent: TiptapJSONContent
 			model?: string
 			extra?: Record<string, unknown>
 			topicMode?: TopicMode
 			targetTopic?: Topic | null
+			conversation?: { selectedProject: ProjectListItem; topicStore: TopicStore }
 		}) => {
-			if (!topicStore || !hostProjectId) return false
+			const activeTopicStore = conversation?.topicStore ?? topicStore
+			const activeProject = conversation?.selectedProject ?? selectedProject
+			const activeHostProjectId = activeProject?.id
+			if (!activeTopicStore || !activeHostProjectId) return false
 
 			const messageContent = prependMicroAppMention(jsonContent, microAppContext)
 			const screenshotMentions = collectMentionItemsFromContent(messageContent as JSONContent)
 			// mention / 截图解析走 origin：文件仍在原微应用项目
 			const processedJsonContent = (await processMessageMentions(
 				messageContent as JSONContent,
-				originProjectId ?? hostProjectId,
-				targetTopic?.id ?? topicStore.selectedTopic?.id,
+				originProjectId ?? activeHostProjectId,
+				targetTopic?.id ?? activeTopicStore.selectedTopic?.id,
 			)) as TiptapJSONContent
 			const superAgentExtra = {
 				mentions: [],
@@ -110,9 +122,10 @@ export function useIframeAgentActions(
 				showLoading: false,
 				options: { extra: { super_agent: superAgentExtra } } as any,
 				context: resolveMessageSendContext({
-					selectedProject: selectedProject ?? ({ id: hostProjectId } as ProjectListItem),
-					selectedTopic: targetTopic ?? topicStore.selectedTopic,
-					topicStore,
+					selectedProject:
+						activeProject ?? ({ id: activeHostProjectId } as ProjectListItem),
+					selectedTopic: targetTopic ?? activeTopicStore.selectedTopic,
+					topicStore: activeTopicStore,
 				}),
 			})
 
@@ -139,12 +152,13 @@ export function useIframeAgentActions(
 
 	const sendMessage = useMemoizedFn(
 		async (params: { message: string | TiptapJSONContent; model?: string }): Promise<void> => {
-			if (!hostProjectId) throw new Error("No project selected")
-			if (!topicStore) throw new Error("No topic store")
+			const conversation = await ensureHostConversation()
+			const activeProjectId = conversation.selectedProject.id
+			const activeTopicStore = conversation.topicStore
 
-			const targetTopic = topicStore.selectedTopic
+			const targetTopic = activeTopicStore.selectedTopic
 			if (params.model && targetTopic?.id) {
-				await superMagicTopicModelService.saveModel(targetTopic.id, hostProjectId, {
+				await superMagicTopicModelService.saveModel(targetTopic.id, activeProjectId, {
 					model_id: params.model,
 				} as any)
 			}
@@ -154,7 +168,8 @@ export function useIframeAgentActions(
 				jsonContent,
 				model: params.model,
 				targetTopic,
-				topicMode: resolveIframeHostTopicMode(selectedProject),
+				topicMode: resolveIframeHostTopicMode(conversation.selectedProject),
+				conversation,
 			})
 			if (!sent) throw new Error("Failed to send message")
 		},
@@ -170,13 +185,15 @@ export function useIframeAgentActions(
 			agentId?: string
 			model?: string
 		}): Promise<{ topicId: string }> => {
-			if (!hostProjectId) throw new Error("No project selected")
-			if (!topicStore) throw new Error("No topic store")
+			const conversation = await ensureHostConversation()
+			const activeProject = conversation.selectedProject
+			const activeTopicStore = conversation.topicStore
+			const activeHostProjectId = activeProject.id
 
-			if (isSingleTopicHostProject(selectedProject)) {
-				const currentTopic = topicStore.selectedTopic
+			if (isSingleTopicHostProject(activeProject)) {
+				const currentTopic = activeTopicStore.selectedTopic
 				if (!currentTopic?.id) throw new Error("No topic selected")
-				notifySpecifiedAgentUnavailable(params.agentId, selectedProject)
+				notifySpecifiedAgentUnavailable(params.agentId, activeProject)
 				await sendMessage({ message: params.message, model: params.model })
 				return { topicId: currentTopic.id }
 			}
@@ -196,7 +213,7 @@ export function useIframeAgentActions(
 
 			// 话题建在 host：发布预览时用户当前项目，而不是微应用原项目
 			const createdTopic = await SuperMagicApi.createTopic({
-				project_id: hostProjectId,
+				project_id: activeHostProjectId,
 				topic_name: "",
 			})
 			if (!createdTopic?.id) throw new Error("Failed to create topic")
@@ -212,7 +229,11 @@ export function useIframeAgentActions(
 				isCustomAgent && requestedAgentId
 					? { ...newTopic, agent_code: requestedAgentId }
 					: newTopic
-			selectCreatedTopic(topicWithAgent)
+			activeTopicStore.setTopics([
+				topicWithAgent,
+				...activeTopicStore.topics.filter((item) => item.id !== topicWithAgent.id),
+			])
+			activeTopicStore.setSelectedTopic(topicWithAgent)
 
 			const jsonContent = toJsonContent(params.message)
 
@@ -220,7 +241,7 @@ export function useIframeAgentActions(
 			await new Promise((resolve) => setTimeout(resolve, 300))
 
 			if (params.model) {
-				await superMagicTopicModelService.saveModel(newTopic.id, hostProjectId, {
+				await superMagicTopicModelService.saveModel(newTopic.id, activeHostProjectId, {
 					model_id: params.model,
 				} as any)
 			}
@@ -246,6 +267,7 @@ export function useIframeAgentActions(
 						? TopicMode.CustomAgent
 						: (requestedAgentId as TopicMode)
 					: TopicMode.General,
+				conversation,
 			})
 			if (!sent) throw new Error("Failed to send message")
 

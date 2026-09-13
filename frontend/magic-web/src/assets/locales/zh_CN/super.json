@@ -2547,6 +2547,13 @@
 			"loadFallbackDescription": "如果页面未完整显示，可能是站点限制 iframe 嵌入，或当前网络加载较慢。",
 			"loadFallbackTitle": "网页加载时间较长",
 			"menuTitle": "常用网站",
+			"microApps": {
+				"empty": "暂无可用微应用",
+				"loading": "正在加载微应用...",
+				"loadingMore": "正在加载更多...",
+				"searchPlaceholder": "搜索微应用",
+				"title": "微应用"
+			},
 			"openCustom": "打开",
 			"openExternal": "新窗口打开",
 			"presets": {
@@ -3256,8 +3263,21 @@
 	},
 	"microAppPage": {
 		"conversation": {
+			"collapse": "收起消息面板",
+			"defaultAppName": "微应用",
+			"development": "开发项目",
 			"emptyDescription": "描述需求，我会直接修改这个微应用。",
-			"emptyTitle": "说说你想改什么"
+			"emptyTitle": "说说你想改什么",
+			"expand": "展开消息面板",
+			"switchToPreviewCancel": "取消",
+			"switchToPreviewCancelled": "已取消本次操作",
+			"switchToPreviewConfirm": "切换",
+			"switchToPreviewDescription": "创建话题、发送消息等操作需要在预览模式下执行。是否切换到预览模式？",
+			"switchToPreviewTitle": "切换到预览模式",
+			"title": "微应用消息",
+			"usage": "使用项目",
+			"usageEmptyDescription": "运行微应用后，消息会显示在这里。",
+			"usageEmptyTitle": "还没有使用项目"
 		},
 		"databasePanel": {
 			"accessPermissions": "访问权限",
@@ -3536,6 +3556,11 @@
 			"files": "文件",
 			"preview": "预览"
 		},
+		"mode": {
+			"ariaLabel": "微应用工作模式",
+			"development": "开发模式",
+			"preview": "预览模式"
+		},
 		"navigation": {
 			"ariaLabel": "微应用编辑区域",
 			"database": "数据",
@@ -3543,7 +3568,8 @@
 			"longMemory": "长期记忆",
 			"preview": "预览",
 			"scheduledTasks": "定时任务",
-			"shareManagement": "分享管理"
+			"shareManagement": "分享管理",
+			"skills": "技能"
 		},
 		"preview": {
 			"buildingDescription": "页面生成后会自动显示在这里。",
@@ -3624,6 +3650,26 @@
 			"unpublishFailed": "下架失败，请重试",
 			"unpublishSuccess": "微应用已下架",
 			"update": "保存设置"
+		},
+		"skills": {
+			"cancel": "取消",
+			"contentEmpty": "该技能暂无 SKILL.md 内容",
+			"detailEmpty": "选择一个技能查看 SKILL.md",
+			"edit": "编辑",
+			"empty": "当前项目暂无技能",
+			"loadFailed": "技能加载失败，请稍后重试。",
+			"loading": "正在加载技能...",
+			"noDescription": "暂无描述",
+			"save": "保存",
+			"saveFailed": "技能保存失败，请稍后重试。",
+			"saveSuccess": "技能已保存",
+			"saving": "保存中...",
+			"subtitle": "选择技能后，将自动填入当前对话编辑器。",
+			"title": "项目技能",
+			"trigger": "技能",
+			"use": "使用",
+			"usePrompt": "使用 {{skill}} 技能",
+			"workspaceSubtitle": "查看项目技能及其 SKILL.md 内容"
 		}
 	},
 	"microAppShare": {

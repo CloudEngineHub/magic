@@ -60,6 +60,10 @@ interface UseMagicFilesOptions {
 	selectedProject?: any
 	projectId?: string
 	topicStore?: TopicStore
+	ensureConversation?: () => Promise<{
+		selectedProject: any
+		topicStore: TopicStore
+	} | null>
 	projectContextUnavailableError?: string
 	attachmentList?: any[]
 	htmlRelativeFolderPath?: string
@@ -109,6 +113,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 		selectedProject,
 		projectId,
 		topicStore: scopedTopicStore,
+		ensureConversation,
 		projectContextUnavailableError,
 		attachmentList,
 		htmlRelativeFolderPath,
@@ -280,7 +285,25 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				return
 			}
 
-			const hostProjectId = selectedProject?.id
+			let ensuredConversation:
+				| {
+						selectedProject: any
+						topicStore: TopicStore
+				  }
+				| null
+				| undefined
+			try {
+				ensuredConversation = await ensureConversation?.()
+			} catch (error) {
+				replyToIframe(replyType, requestId, {
+					success: false,
+					error: error instanceof Error ? error.message : "No project selected",
+				})
+				return
+			}
+			const activeSelectedProject = ensuredConversation?.selectedProject ?? selectedProject
+			const activeTopicStore = ensuredConversation?.topicStore ?? scopedTopicStore
+			const hostProjectId = activeSelectedProject?.id
 			if (!hostProjectId) {
 				replyToIframe(replyType, requestId, {
 					success: false,
@@ -325,15 +348,15 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				}
 
 				// 龙虾/对话只有一个会话，把文件加到当前话题；忽略 agentMode。
-				if (isSingleTopicHostProject(selectedProject)) {
-					if (!scopedTopicStore) {
+				if (isSingleTopicHostProject(activeSelectedProject)) {
+					if (!activeTopicStore) {
 						replyToIframe(replyType, requestId, {
 							success: false,
 							error: "No topic store",
 						})
 						return
 					}
-					if (!scopedTopicStore.selectedTopic?.id) {
+					if (!activeTopicStore.selectedTopic?.id) {
 						replyToIframe(replyType, requestId, {
 							success: false,
 							error: "No topic selected",
@@ -341,7 +364,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 						return
 					}
 
-					notifySpecifiedAgentUnavailable(agentMode, selectedProject)
+					notifySpecifiedAgentUnavailable(agentMode, activeSelectedProject)
 					addMultipleFilesToCurrentChat({ fileItems: foundFiles, autoFocus: true })
 					replyToIframe(replyType, requestId, {
 						success: true,
@@ -361,7 +384,9 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				const finalAgentMode = selection.modeIdentifier as TopicMode
 
 				const workspaceId =
-					selectedProject?.workspace_id || workspaceStore.selectedWorkspace?.id || ""
+					activeSelectedProject?.workspace_id ||
+					workspaceStore.selectedWorkspace?.id ||
+					""
 
 				if (!workspaceId) {
 					replyToIframe(replyType, requestId, {
@@ -371,7 +396,7 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 					return
 				}
 
-				if (!scopedTopicStore) {
+				if (!activeTopicStore) {
 					replyToIframe(replyType, requestId, {
 						success: false,
 						error: "No topic store",
@@ -396,11 +421,11 @@ export function useMagicFiles(options: UseMagicFilesOptions): UseMagicFilesRetur
 				const topicWithMode: any = { ...newTopic, topic_mode: finalAgentMode as TopicMode }
 
 				// 必须用传入的 store，不能回落到全局 topicStore。
-				scopedTopicStore.setTopics([
+				activeTopicStore.setTopics([
 					topicWithMode,
-					...scopedTopicStore.topics.filter((topic) => topic.id !== newTopic.id),
+					...activeTopicStore.topics.filter((topic) => topic.id !== newTopic.id),
 				])
-				scopedTopicStore.setSelectedTopic(topicWithMode)
+				activeTopicStore.setSelectedTopic(topicWithMode)
 
 				pubsub.publish(PubSubEvents.Super_Magic_Topic_Mode_Changed, {
 					mode: finalAgentMode as TopicMode,

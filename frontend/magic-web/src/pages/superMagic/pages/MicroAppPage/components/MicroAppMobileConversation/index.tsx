@@ -23,7 +23,6 @@ import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { userStore } from "@/models/user"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
-
 import MicroAppTopicPicker from "./MicroAppTopicPicker"
 import { resolveMicroAppModelSelectionMode } from "../../utils/microAppModelMode"
 

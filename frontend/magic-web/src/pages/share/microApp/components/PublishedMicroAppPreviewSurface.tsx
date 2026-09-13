@@ -8,6 +8,8 @@ import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProv
 import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import HtmlPreviewContent from "@/pages/superMagic/components/Detail/contents/HTML"
 import { MicroAppPermissionIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
+import MicroAppSkillsPanel from "@/pages/superMagic/components/MicroAppSkillsPanel"
+import PublishedMicroAppConversationProvider from "./PublishedMicroAppConversationProvider"
 
 const NOOP_LEAVE = () => undefined
 
@@ -161,31 +163,49 @@ function PublishedMicroAppPreviewSurface({
 
 				{!loading && !error && previewFile && hasConfirmedSafetyNotice ? (
 					fileAccess ? (
-						<div
-							className="h-full w-full overflow-hidden bg-background"
-							data-testid={`${testIdPrefix}-preview`}
+						<PublishedMicroAppConversationProvider
+							appId={appId}
+							enabled={testIdPrefix === "micro-app-share"}
 						>
-							<HtmlPreviewContent
-								key={previewFile.file_id || previewFile.relative_file_path}
-								data={buildPreviewFile(previewFile)}
-								attachments={attachmentsTree}
-								attachmentList={attachmentList}
-								allowEdit={false}
-								showFileHeader={false}
-								showFooter={false}
-								viewMode={previewMode}
-								onViewModeChange={setPreviewMode}
-								activeFileId={previewFile.file_id}
-								projectId={shareMeta.projectId}
-								microAppId={appId}
-								microAppName={displayAppName}
-								virtualStorageMarkerId={defaultEntryFile?.file_id}
-								openFileTab={handleOpenFileTab}
-								onHtmlPermissionManagerChange={onHtmlPermissionManagerChange}
-								isSharePreview
-								className="h-full"
-							/>
-						</div>
+							<div
+								className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background"
+								data-testid={`${testIdPrefix}-preview`}
+							>
+								{testIdPrefix === "micro-app-tab" ? (
+									<header className="flex h-10 shrink-0 items-center justify-end border-b border-border bg-background px-3">
+										<MicroAppSkillsPanel
+											attachmentList={attachmentList}
+											microAppId={appId}
+											microAppName={displayAppName}
+										/>
+									</header>
+								) : null}
+								<div className="min-h-0 flex-1 overflow-hidden">
+									<HtmlPreviewContent
+										key={previewFile.file_id || previewFile.relative_file_path}
+										data={buildPreviewFile(previewFile)}
+										attachments={attachmentsTree}
+										attachmentList={attachmentList}
+										allowEdit={false}
+										showFileHeader={false}
+										showFooter={false}
+										viewMode={previewMode}
+										onViewModeChange={setPreviewMode}
+										activeFileId={previewFile.file_id}
+										projectId={shareMeta.projectId}
+										microAppId={appId}
+										microAppName={displayAppName}
+										virtualStorageMarkerId={defaultEntryFile?.file_id}
+										openFileTab={handleOpenFileTab}
+										onHtmlPermissionManagerChange={
+											onHtmlPermissionManagerChange
+										}
+										isSharePreview
+										className="h-full"
+									/>
+								</div>
+							</div>
+						</PublishedMicroAppConversationProvider>
 					) : (
 						<div
 							className="flex h-full items-center justify-center"

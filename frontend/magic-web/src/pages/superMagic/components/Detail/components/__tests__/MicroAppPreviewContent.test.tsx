@@ -13,6 +13,7 @@ const shareDataState = vi.hoisted(() => ({
 }))
 
 vi.mock("react-i18next", () => ({
+	initReactI18next: { type: "3rdParty", init: vi.fn() },
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
@@ -95,6 +96,14 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 			data-is-share-preview={props.isSharePreview ? "true" : "false"}
 		/>
 	),
+}))
+
+vi.mock("@/pages/share/microApp/components/PublishedMicroAppConversationProvider", () => ({
+	default: ({ children }: { children: React.ReactNode }) => children,
+}))
+
+vi.mock("@/pages/superMagic/components/MicroAppSkillsPanel", () => ({
+	default: () => <div data-testid="micro-app-skills-panel" />,
 }))
 
 vi.mock("@/pages/superMagic/components/MicroAppStateIllustration", () => ({

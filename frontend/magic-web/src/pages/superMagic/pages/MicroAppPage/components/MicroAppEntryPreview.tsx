@@ -25,6 +25,8 @@ export interface MicroAppEntryPreviewProps {
 	viewMode?: MicroAppEntryPreviewMode
 	refreshKey?: number
 	storageMarkerId?: string
+	microAppId?: string
+	microAppName?: string
 	onRegisterAIEdit?: (handler: (() => void) | null) => void
 	onAIEditActiveChange?: (active: boolean) => void
 	onRegisterDevConsoleToggle?: (handler: (() => void) | null) => void
@@ -59,6 +61,8 @@ export default function MicroAppEntryPreview({
 	viewMode = "desktop",
 	refreshKey = 0,
 	storageMarkerId,
+	microAppId,
+	microAppName,
 	onRegisterAIEdit,
 	onAIEditActiveChange,
 	onRegisterDevConsoleToggle,
@@ -103,6 +107,8 @@ export default function MicroAppEntryPreview({
 			selectedProject={selectedProject}
 			activeFileId={entryData.file_id}
 			virtualStorageMarkerId={storageMarkerId}
+			microAppId={microAppId}
+			microAppName={microAppName}
 			updatedAt={entryData.updated_at}
 			allowEdit={allowEdit}
 			// 自己模拟手机壳，不复用原来的viewMode

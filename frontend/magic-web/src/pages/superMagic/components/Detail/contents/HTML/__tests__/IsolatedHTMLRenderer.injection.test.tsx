@@ -624,6 +624,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 			undefined,
 			defaultHostProject,
 			{ microAppId: undefined, microAppName: undefined },
+			undefined,
 		)
 	})
 
@@ -640,6 +641,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 			undefined,
 			undefined,
 			{ microAppId: undefined, microAppName: undefined },
+			undefined,
 		)
 	})
 
@@ -659,6 +661,7 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 			scopedTopicStore,
 			defaultHostProject,
 			{ microAppId: undefined, microAppName: undefined },
+			undefined,
 		)
 	})
 

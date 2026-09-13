@@ -5,6 +5,12 @@ import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 export interface HostConversationContextValue {
 	selectedProject?: ProjectListItem | null
 	topicStore?: TopicStore
+	ensureConversation?: () => Promise<{
+		selectedProject: ProjectListItem
+		topicStore: TopicStore
+	} | null>
+	/** Request the host editor to switch from development to preview mode. */
+	requestPreviewMode?: () => Promise<boolean> | boolean
 }
 
 const HostConversationContext = createContext<HostConversationContextValue | null>(null)
@@ -12,6 +18,8 @@ const HostConversationContext = createContext<HostConversationContextValue | nul
 interface HostConversationProviderProps {
 	selectedProject?: ProjectListItem | null
 	topicStore?: TopicStore
+	ensureConversation?: HostConversationContextValue["ensureConversation"]
+	requestPreviewMode?: HostConversationContextValue["requestPreviewMode"]
 	children: ReactNode
 }
 
@@ -22,9 +30,14 @@ interface HostConversationProviderProps {
 export function HostConversationProvider({
 	selectedProject,
 	topicStore,
+	ensureConversation,
+	requestPreviewMode,
 	children,
 }: HostConversationProviderProps) {
-	const value = useMemo(() => ({ selectedProject, topicStore }), [selectedProject, topicStore])
+	const value = useMemo(
+		() => ({ selectedProject, topicStore, ensureConversation, requestPreviewMode }),
+		[ensureConversation, requestPreviewMode, selectedProject, topicStore],
+	)
 
 	return (
 		<HostConversationContext.Provider value={value}>

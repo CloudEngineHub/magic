@@ -30,6 +30,7 @@ const resolverMocks = vi.hoisted(() => ({
 const controllerMocks = vi.hoisted(() => ({
 	initLoading: false,
 	isReadOnly: false,
+	canUseDevelopment: true,
 	checkAttachmentsNowDebounced: vi.fn(),
 	attachmentList: [
 		{ file_id: "entry-1", file_name: "index.html", relative_file_path: "index.html" },
@@ -192,6 +193,20 @@ vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
 
 vi.mock("../context", () => ({
 	AppStoreProvider: ({ children }: { children: ReactNode }) => children,
+	useAppStore: () => ({
+		conversation: {
+			selectedProject: null,
+			topicStore: {},
+			loadProjectContext: vi.fn(),
+			reset: vi.fn(),
+		},
+	}),
+}))
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: {
+		getMicroAppRuntimeProject: vi.fn().mockResolvedValue({ exists: false, project: null }),
+	},
 }))
 
 vi.mock("../hooks/useMicroAppPageController", () => ({
@@ -214,6 +229,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 			workspace_name: "Workspace",
 		},
 		selectedTopic: { id: "topic-1", topic_name: "Topic" },
+		canUseDevelopment: controllerMocks.canUseDevelopment,
 		hasRunningTopic: true,
 		isReadOnly: controllerMocks.isReadOnly,
 		canEdit: false,
@@ -382,6 +398,7 @@ describe("MicroAppPageDesktop", () => {
 		}
 		controllerMocks.initLoading = false
 		controllerMocks.isReadOnly = false
+		controllerMocks.canUseDevelopment = true
 		controllerMocks.attachmentList = [
 			{ file_id: "entry-1", file_name: "index.html", relative_file_path: "index.html" },
 			{ file_id: "admin-1", file_name: "admin.html", relative_file_path: "admin.html" },
@@ -451,6 +468,7 @@ describe("MicroAppPageDesktop", () => {
 
 	it("hides the conversation panel for read-only projects", async () => {
 		controllerMocks.isReadOnly = true
+		controllerMocks.canUseDevelopment = false
 
 		render(<MicroAppPageDesktop />)
 		await screen.findByTestId("desktop-entry-preview")

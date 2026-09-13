@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
+import MagicModal from "@/components/base/MagicModal"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { useFileOpen } from "@/pages/superMagic/components/TopicFilesButton/hooks/useFileOpen"
 import { useMobileFilePreviewPubSub } from "@/pages/superMagic/hooks/useMobileFilePreviewPubSub"
@@ -23,8 +24,10 @@ import { cn } from "@/utils/cn"
 import MicroAppConversationFloatingButton from "./components/MicroAppMobileConversation/MicroAppConversationFloatingButton"
 import MicroAppFallbackState from "./components/MicroAppFallbackState"
 import MicroAppMobileHeader from "./components/MicroAppMobileHeader"
+import MicroAppMobileModeBar from "./components/MicroAppMobileModeBar"
 import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
 import MicroAppPageLoadingState from "./components/MicroAppPageLoadingState"
+import type { MicroAppPageMode } from "./components/MicroAppModeSwitcher"
 import { AppStoreProvider } from "./context"
 import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
 import { useMicroAppProjectResolver } from "./hooks/useMicroAppProjectResolver"
@@ -85,12 +88,18 @@ function MicroAppPageMobileInner({
 	const [activePanel, setActivePanel] = useState<MobileMicroAppPanel>("preview")
 	const [conversationOpen, setConversationOpen] = useState(false)
 	const [previewFileId, setPreviewFileId] = useState<string | null>(null)
+	const [pageMode, setPageMode] = useState<MicroAppPageMode>("development")
+	const pageModeRef = useRef<MicroAppPageMode>("development")
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const linkPreviewPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const controller = useMicroAppPageController(appId, projectId)
 	const {
 		store,
 		conversation,
+		conversationType,
+		canUseDevelopment,
+		ensureUsageProject,
+		handleConversationTypeChange,
 		selectedProject,
 		selectedTopic,
 		hasRunningTopic,
@@ -121,6 +130,70 @@ function MicroAppPageMobileInner({
 		handleCaptureCover,
 		handleEditMicroApp,
 	} = controller
+	const panelSelectedProject = conversation.selectedProject
+	const previewModeRequestRef = useRef<Promise<boolean> | null>(null)
+
+	useEffect(() => {
+		if (selectedProject?.id && !canUseDevelopment) {
+			pageModeRef.current = "preview"
+			setPageMode("preview")
+		}
+	}, [canUseDevelopment, selectedProject?.id])
+
+	const handlePageModeChange = useMemoizedFn((nextMode: MicroAppPageMode) => {
+		if (nextMode === "development" && !canUseDevelopment) return
+		pageModeRef.current = nextMode
+		setPageMode(nextMode)
+		setConversationOpen(false)
+		if (nextMode === "preview") {
+			setActivePanel("preview")
+			handleConversationTypeChange("usage")
+		} else {
+			handleConversationTypeChange("development")
+		}
+	})
+
+	const requestPreviewMode = useMemoizedFn(async () => {
+		if (pageModeRef.current === "preview" || conversationType === "usage") return true
+		if (previewModeRequestRef.current) return previewModeRequestRef.current
+
+		const request = new Promise<boolean>((resolve) => {
+			const modal = MagicModal.confirm({
+				title: t("microAppPage.conversation.switchToPreviewTitle"),
+				content: t("microAppPage.conversation.switchToPreviewDescription"),
+				okText: t("microAppPage.conversation.switchToPreviewConfirm"),
+				cancelText: t("microAppPage.conversation.switchToPreviewCancel"),
+				closable: false,
+				maskClosable: false,
+				centered: true,
+				onOk: () => {
+					pageModeRef.current = "preview"
+					setPageMode("preview")
+					setConversationOpen(false)
+					setActivePanel("preview")
+					handleConversationTypeChange("usage")
+					modal.destroy()
+					resolve(true)
+				},
+				onCancel: () => {
+					modal.destroy()
+					resolve(false)
+				},
+			})
+		})
+		previewModeRequestRef.current = request
+		try {
+			return await request
+		} finally {
+			previewModeRequestRef.current = null
+		}
+	})
+	const ensureMobileHostConversation = useMemoizedFn(async () => {
+		if (conversationType !== "usage" && !(await requestPreviewMode())) {
+			throw new Error(t("microAppPage.conversation.switchToPreviewCancelled"))
+		}
+		return ensureUsageProject()
+	})
 
 	const setPreviewDetail = useMemoizedFn((detail: unknown) => {
 		if (!detail || typeof detail !== "object") return
@@ -155,6 +228,8 @@ function MicroAppPageMobileInner({
 		setActivePanel("preview")
 		setConversationOpen(false)
 		setPreviewFileId(null)
+		pageModeRef.current = "development"
+		setPageMode("development")
 	}, [projectId])
 
 	if (store.initLoading) {
@@ -167,8 +242,10 @@ function MicroAppPageMobileInner({
 
 	return (
 		<HostConversationProvider
-			selectedProject={selectedProject}
+			selectedProject={panelSelectedProject}
 			topicStore={conversation.topicStore}
+			ensureConversation={ensureMobileHostConversation}
+			requestPreviewMode={requestPreviewMode}
 		>
 			<FileActionVisibilityProvider>
 				<div
@@ -190,32 +267,14 @@ function MicroAppPageMobileInner({
 						onManageCollaborators={handleManageCollaborators}
 					/>
 
-					<div
-						className="grid shrink-0 grid-cols-2 border-b border-border bg-background px-3"
-						role="tablist"
-						aria-label={t("microAppPage.mobileTabs.ariaLabel")}
-					>
-						<MobilePanelTab
-							active={activePanel === "preview"}
-							label={t("microAppPage.mobileTabs.preview")}
-							onClick={() => setActivePanel("preview")}
-							testId="micro-app-mobile-tab-preview"
-						/>
-						<MobilePanelTab
-							active={activePanel === "files"}
-							label={t("microAppPage.mobileTabs.files")}
-							onClick={() => setActivePanel("files")}
-							testId="micro-app-mobile-tab-files"
-						/>
-					</div>
+					{canUseDevelopment ? (
+						<MicroAppMobileModeBar value={pageMode} onChange={handlePageModeChange} />
+					) : null}
 
-					<div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+					{pageMode === "preview" ? (
 						<div
-							className={cn(
-								"absolute inset-0",
-								activePanel !== "preview" && "hidden",
-							)}
-							data-testid="micro-app-mobile-preview-panel"
+							className="relative min-h-0 flex-1 overflow-hidden bg-background"
+							data-testid="micro-app-mobile-runtime-preview-workspace"
 						>
 							<Suspense fallback={null}>
 								<MicroAppMobileEntryPreview
@@ -224,29 +283,73 @@ function MicroAppPageMobileInner({
 									attachmentList={attachmentList}
 									projectId={projectId}
 									selectedProject={selectedProject}
-									allowEdit={!isReadOnly}
+									allowEdit={false}
 									onOpenFile={handlePreviewFile}
-									isBuilding={hasRunningTopic}
+									isBuilding={false}
 								/>
 							</Suspense>
 						</div>
-
-						{activePanel === "files" ? (
+					) : (
+						<>
 							<div
-								className="absolute inset-0 overflow-hidden py-1"
-								data-testid="micro-app-mobile-files-panel"
+								className="grid shrink-0 grid-cols-2 border-b border-border bg-background px-3"
+								role="tablist"
+								aria-label={t("microAppPage.mobileTabs.ariaLabel")}
 							>
-								<TopicFilesButton
-									{...topicFilesProps}
-									title={t("microAppPage.header.codeFiles")}
-									activeFileId={previewFileId}
-									onFileClick={handlePreviewFile}
+								<MobilePanelTab
+									active={activePanel === "preview"}
+									label={t("microAppPage.mobileTabs.preview")}
+									onClick={() => setActivePanel("preview")}
+									testId="micro-app-mobile-tab-preview"
+								/>
+								<MobilePanelTab
+									active={activePanel === "files"}
+									label={t("microAppPage.mobileTabs.files")}
+									onClick={() => setActivePanel("files")}
+									testId="micro-app-mobile-tab-files"
 								/>
 							</div>
-						) : null}
-					</div>
 
-					{!isReadOnly ? (
+							<div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+								<div
+									className={cn(
+										"absolute inset-0",
+										activePanel !== "preview" && "hidden",
+									)}
+									data-testid="micro-app-mobile-preview-panel"
+								>
+									<Suspense fallback={null}>
+										<MicroAppMobileEntryPreview
+											entryFile={defaultEntryFile}
+											attachments={attachments}
+											attachmentList={attachmentList}
+											projectId={projectId}
+											selectedProject={selectedProject}
+											allowEdit={!isReadOnly}
+											onOpenFile={handlePreviewFile}
+											isBuilding={hasRunningTopic}
+										/>
+									</Suspense>
+								</div>
+
+								{activePanel === "files" ? (
+									<div
+										className="absolute inset-0 overflow-hidden py-1"
+										data-testid="micro-app-mobile-files-panel"
+									>
+										<TopicFilesButton
+											{...topicFilesProps}
+											title={t("microAppPage.header.codeFiles")}
+											activeFileId={previewFileId}
+											onFileClick={handlePreviewFile}
+										/>
+									</div>
+								) : null}
+							</div>
+						</>
+					)}
+
+					{!isReadOnly || conversationType === "usage" ? (
 						<MicroAppConversationFloatingButton
 							onClick={() => setConversationOpen(true)}
 						/>
@@ -280,11 +383,11 @@ function MicroAppPageMobileInner({
 						/>
 					</Suspense>
 				) : null}
-				{conversationOpen && !isReadOnly ? (
+				{conversationOpen && (!isReadOnly || conversationType === "usage") ? (
 					<Suspense fallback={null}>
 						<MicroAppMobileConversation
 							open={conversationOpen}
-							selectedProject={selectedProject}
+							selectedProject={panelSelectedProject}
 							topicStore={conversation.topicStore}
 							mentionPanelStore={store.mentionPanelStore}
 							projectFilesStore={store.projectFilesStore}
