@@ -158,8 +158,9 @@ export default function MicroAppPublishDialogContent({
 			data-mobile={mobile ? "true" : undefined}
 			onPaste={handleCoverPaste}
 		>
+			{/* 顶部发布状态和下方设置共用单列轨道，避免跨列元素生成隐式空白列。 */}
 			{!mobile ? (
-				<div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
+				<div className="grid min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
 					{loading ? (
 						<div
 							className="h-[156px] rounded-lg border border-emerald-200/70 bg-emerald-50/40"
@@ -167,7 +168,6 @@ export default function MicroAppPublishDialogContent({
 						/>
 					) : hasPublished ? (
 						<MicroAppPublishedSection
-							className="col-span-2"
 							mobile={false}
 							publishedAtText={publishedAtText}
 							accessUrl={accessUrl}

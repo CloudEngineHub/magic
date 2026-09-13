@@ -43,6 +43,8 @@ describe("MicroAppPublishDialog", () => {
 		const publishedSection = screen.getByTestId("micro-app-published-section")
 		const basicSettings = screen.getByTestId("micro-app-publish-basic-settings")
 		expect(publishedSection).toHaveClass("border-emerald-200", "bg-emerald-50/60")
+		expect(publishedSection).not.toHaveClass("col-span-2")
+		expect(publishedSection.parentElement).toHaveClass("grid-cols-1")
 		expect(publishedSection.nextElementSibling).toBe(basicSettings)
 	})
 
