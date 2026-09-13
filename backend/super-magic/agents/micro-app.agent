@@ -22,14 +22,14 @@ tools:
 skills:
   preload:
     - name: micro-app-architect
+    - name: html-api-sdk
+    - name: magicbase
   system_skills:
     - name: download
     - name: skill-vetter
     - name: using-mcp
     - name: env-manager
     - name: user-info
-    - name: html-api-sdk
-    - name: magicbase
     - name: skill-creator
     - name: use-magicbase
   workspace_skills: "*"
