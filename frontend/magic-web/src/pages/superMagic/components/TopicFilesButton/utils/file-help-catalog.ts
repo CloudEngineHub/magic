@@ -1,9 +1,15 @@
+import {
+	MAGIC_PROJECT_TYPES,
+	type MagicProjectKind,
+	type MagicProjectHelpKind,
+} from "@/constants/magicProjectTypes"
 import type { HelpTone } from "@/components/shadcn-composed/context-help/types"
 import type { TopicFileMagicVariant } from "../components/TopicFileIcon"
 import type { SkillFileKind } from "./skill-file-structure"
 import type { UserResourceKind } from "../../UserSpace/userSpaceFilePresentation"
 
-export type FileHelpGroupId = "project" | "skills" | "personal" | "assistant" | "crew" | "current"
+export type FileHelpGroupId =
+	"projectTypes" | "project" | "skills" | "personal" | "assistant" | "crew" | "current"
 export type FileHelpIcon =
 	| TopicFileMagicVariant
 	| `skill:${SkillFileKind}`
@@ -13,10 +19,12 @@ export type FileHelpIcon =
 	| "file:json"
 	| "file:yaml"
 	| "file:txt"
-	| "file:audio"
+	| `file:${MagicProjectKind}`
 
 interface FileHelpMetadata {
 	group: FileHelpGroupId
+	/** 类型文章常驻逻辑分类，不用虚构磁盘路径建立目录。 */
+	projectKind?: MagicProjectKind
 	name?: string
 	/** 静态示意路径决定目录层级；缺省时只保留真实入口，不常驻目录。 */
 	path?: string
@@ -24,6 +32,24 @@ interface FileHelpMetadata {
 	icon: FileHelpIcon
 	tone: HelpTone
 }
+
+const projectArticles = Object.fromEntries(
+	MAGIC_PROJECT_TYPES.flatMap((definition) =>
+		definition.helpKind
+			? [
+					[
+						definition.helpKind,
+						{
+							group: "projectTypes",
+							projectKind: definition.kind,
+							icon: `file:${definition.kind}`,
+							tone: "teal",
+						},
+					],
+				]
+			: [],
+	),
+) as Record<MagicProjectHelpKind, FileHelpMetadata>
 
 /** 文章身份不依赖翻译或真实文件；目录只登记说明，不表示文件存在、技能安装或权限状态。 */
 export const FILE_HELP_CATALOG = {
@@ -422,7 +448,7 @@ export const FILE_HELP_CATALOG = {
 		icon: "magic-file-memory",
 		tone: "amber",
 	},
-	"recording.project": { group: "project", icon: "file:audio", tone: "teal" },
+	...projectArticles,
 } as const satisfies Record<string, FileHelpMetadata>
 
 export type FileHelpArticleId = keyof typeof FILE_HELP_CATALOG

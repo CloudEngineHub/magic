@@ -1,3 +1,4 @@
+import { getMagicProjectType, type MagicProjectKind } from "@/constants/magicProjectTypes"
 import type { AttachmentItem } from "../hooks/types"
 import { buildAttachmentIndex, resolveAttachmentKey, type AttachmentIndex } from "./attachmentIndex"
 import {
@@ -21,6 +22,7 @@ import {
 	getChildrenForCustomMetadataIconPath,
 	getFileTreeIconType,
 	getFileIconType,
+	isMagicProjectConfigFile,
 } from "../../MessageList/components/MessageAttachment/utils"
 
 export interface FilePresentationIndex {
@@ -63,6 +65,7 @@ export interface FilePresentation {
 	context: FileHelpContext
 	isDirectory: boolean
 	type: string
+	projectKind?: MagicProjectKind
 	magicVariant?: TopicFileMagicVariant
 	systemKind?: SystemFileHelpKind
 	skillKind?: SkillFileKind
@@ -199,6 +202,11 @@ export function resolveFilePresentation(
 		userKind,
 		clawKind,
 		magicVariant,
+		projectKind: isMagicProjectConfigFile(
+			item.file_name || item.display_filename || item.filename || item.name,
+		)
+			? undefined
+			: getMagicProjectType(normalizedItem.display_config?.type)?.kind,
 		type:
 			getFileTreeIconType(normalizedItem) ||
 			getFileIconType(normalizedItem) ||

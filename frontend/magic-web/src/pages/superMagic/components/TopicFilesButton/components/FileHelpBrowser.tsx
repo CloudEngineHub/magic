@@ -2,12 +2,12 @@ import { useLayoutEffect, useRef, useState } from "react"
 import { ArrowRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import { HelpDialog } from "@/components/shadcn-composed/context-help/HelpDialog"
+import { HelpDialogContent } from "@/components/shadcn-composed/context-help/HelpDialog"
 import { HelpLocation } from "@/components/shadcn-composed/context-help/HelpLocation"
 import { HelpNavigation } from "@/components/shadcn-composed/context-help/HelpNavigation"
 import type {
 	HelpDefinition,
-	HelpDialogProps,
+	HelpDialogContentProps,
 } from "@/components/shadcn-composed/context-help/types"
 import { useFileHelpArticle, useFileHelpCatalog } from "../hooks/useFileHelpArticle"
 import type { FileHelpPresentation } from "../hooks/useSystemFileHelp"
@@ -21,7 +21,7 @@ import {
 	type FileHelpReadingLink,
 } from "../utils/file-help-catalog"
 
-interface FileHelpBrowserProps extends HelpDialogProps {
+interface FileHelpBrowserProps extends HelpDialogContentProps {
 	initialArticleId: FileHelpArticleId
 	fileLocation?: FileHelpPresentation["fileLocation"]
 }
@@ -85,7 +85,7 @@ export default function FileHelpBrowser({
 	}
 	// 具体文件和项目类型仍可从原入口进入；只在本次阅读中展示，不扩张常驻分类。
 	const metadata = getFileHelpMetadata(articleId)
-	if (!metadata.path) {
+	if (!metadata.path && !metadata.projectKind) {
 		const groupId = isInitial && fileLocation ? initialGroup : metadata.group
 		let group = catalog.groups.find((item) => item.id === groupId)
 		if (!group) {
@@ -146,7 +146,7 @@ export default function FileHelpBrowser({
 	const further = unique(relations.further)
 	const recommended = unique(relations.recommended)
 	return (
-		<HelpDialog
+		<HelpDialogContent
 			{...dialogProps}
 			help={help}
 			articleKey={articleId}

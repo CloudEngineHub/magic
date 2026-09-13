@@ -26,7 +26,7 @@ import {
 	useOverlayInteractionScopeAttributes,
 	useOverlayInteractionScopeContentAttributes,
 } from "@/components/shadcn-ui/overlay-interaction-scope"
-import { HelpDialog } from "./HelpDialog"
+import { HelpDialogContent, HelpDialogFrame } from "./HelpDialog"
 import type { ContextHelpProps, HelpDialogProps } from "./types"
 
 export type { ContextHelpProps, HelpDefinition, HelpDialogProps } from "./types"
@@ -35,8 +35,6 @@ export type { ContextHelpProps, HelpDefinition, HelpDialogProps } from "./types"
 export function ContextHelp({ help, mode, children, renderDialog }: ContextHelpProps) {
 	const { t } = useTranslation("interface")
 	const [layer, setLayer] = useState<"closed" | "preview" | "dialog">("closed")
-	const dialogOpen = useRef(false)
-	dialogOpen.current = layer === "dialog"
 	const suppressFocusPreview = useRef(false)
 	const titleId = useId()
 	const dialogId = useId()
@@ -198,8 +196,6 @@ export function ContextHelp({ help, mode, children, renderDialog }: ContextHelpP
 					renderDialog={renderDialog}
 					onCloseAutoFocus={(event) => {
 						event.preventDefault()
-						// lazy 阅读界面替换初始说明不是关闭；仅真正退出时恢复文件入口焦点。
-						if (dialogOpen.current) return
 						// 简介关闭时不恢复焦点；完整面板关闭后才返回原入口，且不立即重开简介。
 						suppressFocusPreview.current = true
 						const triggerElement = refs.domReference.current
@@ -217,10 +213,33 @@ function CompleteHelpDialog({
 	renderDialog,
 	...props
 }: HelpDialogProps & Pick<ContextHelpProps, "renderDialog">) {
-	const fallback = <HelpDialog {...props} />
+	const { t } = useTranslation("interface")
+	const navigation = renderDialog ? (
+		<p className="p-5" role="status">
+			{t("contextHelp.loading")}
+		</p>
+	) : undefined
+	const fallback = <HelpDialogContent {...props} navigation={navigation} />
 	return (
-		<ErrorBoundary fallback={fallback}>
-			<Suspense fallback={fallback}>{renderDialog ? renderDialog(props) : fallback}</Suspense>
-		</ErrorBoundary>
+		<HelpDialogFrame {...props} hasNavigation={Boolean(renderDialog)}>
+			<ErrorBoundary
+				fallback={
+					<HelpDialogContent
+						{...props}
+						navigation={
+							renderDialog ? (
+								<p className="p-5" role="alert">
+									{t("contextHelp.loadFailed")}
+								</p>
+							) : undefined
+						}
+					/>
+				}
+			>
+				<Suspense fallback={fallback}>
+					{renderDialog ? renderDialog(props) : fallback}
+				</Suspense>
+			</ErrorBoundary>
+		</HelpDialogFrame>
 	)
 }

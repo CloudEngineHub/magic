@@ -28,22 +28,6 @@ export interface FileHelpDetail extends Omit<HelpArticleProps, "visual"> {
 	files?: Array<{ path: string; directory?: boolean; description?: string; type?: string }>
 }
 
-export function useRecordingFileHelp(
-	presentation?: FilePresentation,
-	enabled = true,
-): FileHelpPresentation | undefined {
-	const { t } = useTranslation("super")
-	if (!enabled) return
-	return createFileHelpPresentation(
-		"recording.project",
-		t("topicFiles.recordingProject.label"),
-		t("topicFiles.recordingProject.summary"),
-		t("topicFiles.recordingProject.detail", { returnObjects: true }) as FileHelpDetail,
-		"flow",
-		presentation,
-	)
-}
-
 /** 静态教学目录只适配既有列表的数据结构；不读取用户文件或连接文件操作。 */
 function FileHelpDirectory({
 	detail,

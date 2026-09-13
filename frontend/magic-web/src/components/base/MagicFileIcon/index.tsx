@@ -1,3 +1,4 @@
+import { getMagicProjectType } from "@/constants/magicProjectTypes"
 import { createStyles, cx } from "antd-style"
 import type React from "react"
 import { memo, useEffect, useState } from "react"
@@ -35,7 +36,6 @@ const iconNameMap: Record<string, string> = {
 	m4a: "audio",
 	flac: "audio",
 	aac: "audio",
-	audio: "audio-project",
 	mp4: "video",
 	webm: "video",
 	avi: "video",
@@ -91,16 +91,10 @@ const iconNameMap: Record<string, string> = {
 	kotlin: "code",
 	dart: "code",
 	rust: "code",
-	dashboard: "dashboard",
 	mysql: "mysql",
-	design: "design",
 	replay: "replay",
 	playback: "replay",
-	custom: "custom",
 	customfile: "custom",
-	"self-media": "self-media",
-	"ai-card": "ai-sparkle",
-	"micro-app": "micro-app",
 }
 
 function normalizeExtension(fileExtension?: string): string | null {
@@ -110,7 +104,7 @@ function normalizeExtension(fileExtension?: string): string | null {
 
 function getIconName(caseType?: string | null): string {
 	if (!caseType) return "other"
-	return iconNameMap[caseType] ?? "other"
+	return getMagicProjectType(caseType)?.iconName ?? iconNameMap[caseType] ?? "other"
 }
 
 /**

@@ -1,3 +1,4 @@
+import { useProjectFileHelp, useProjectTypeNames } from "./useProjectFileHelp"
 import {
 	BookOpen,
 	CalendarDays,
@@ -40,7 +41,7 @@ import {
 } from "../utils/file-help-catalog"
 import type { FileHelpContext, SystemFileHelpKind } from "../utils/magic-system-folder"
 import type { SkillFileKind } from "../utils/skill-file-structure"
-import { useSystemFileHelp, useRecordingFileHelp } from "./useSystemFileHelp"
+import { useSystemFileHelp } from "./useSystemFileHelp"
 import { useSkillFileHelp } from "./useSkillFileHelp"
 
 const USER_SYMBOLS = {
@@ -115,14 +116,14 @@ export function useFileHelpArticle(id: FileHelpArticleId) {
 		id.startsWith("claw.") ? (id.slice(5) as ClawFileHelpKind) : undefined,
 	)
 	const overview = useUserSpaceOverviewHelp()
-	const recording = useRecordingFileHelp(undefined, id === "recording.project")
+	const project = useProjectFileHelp(getFileHelpMetadata(id).projectKind)
 	const result =
 		system ??
 		skill ??
 		user ??
 		claw ??
 		(id === "user.overview" ? overview : undefined) ??
-		recording
+		project
 	if (!result) return undefined
 	const metadata = getFileHelpMetadata(id)
 	return {
@@ -137,6 +138,7 @@ export function useFileHelpArticle(id: FileHelpArticleId) {
 }
 
 export function useFileHelpCatalog() {
+	const projectNames = useProjectTypeNames()
 	const { t } = useTranslation("super")
 	const brand = getClawBrandTranslationValues()
 	const reasons: Record<FileHelpReadingReason, string> = {
@@ -152,6 +154,7 @@ export function useFileHelpCatalog() {
 		crewRules: t("topicFiles.helpGuide.reasons.crewRules"),
 	}
 	const groupLabels: Record<FileHelpGroupId, string> = {
+		projectTypes: t("topicFiles.helpGuide.groups.projectTypes"),
 		project: t("topicFiles.helpGuide.groups.project"),
 		skills: t("topicFiles.helpGuide.groups.skills"),
 		personal: t("topicFiles.helpGuide.groups.personal"),
@@ -171,7 +174,7 @@ export function useFileHelpCatalog() {
 			.map((segment) => placeholders[segment] ?? segment)
 			.join("/")
 	const groups: HelpNavigationGroup[] = (
-		["project", "assistant", "crew", "personal", "skills"] as const
+		["projectTypes", "project", "assistant", "crew", "personal", "skills"] as const
 	).map((id) => ({ id, label: groupLabels[id], items: [] }))
 	const nodes = new Map<string, HelpNavigationItem>()
 	const articleNodes = new Map<FileHelpArticleId, HelpNavigationItem>()
@@ -183,6 +186,7 @@ export function useFileHelpCatalog() {
 		const metadata = getFileHelpMetadata(articleId)
 		const path = metadata.path
 		names[articleId] =
+			(metadata.projectKind ? projectNames[metadata.projectKind] : undefined) ??
 			metadata.name ??
 			(articleId === "recording.project"
 				? t("topicFiles.helpGuide.paths.recording")
@@ -194,6 +198,17 @@ export function useFileHelpCatalog() {
 			path: path ? translatePath(path) : names[articleId],
 		}
 		ancestors[articleId] = [metadata.group]
+		if (metadata.projectKind) {
+			const node: HelpNavigationItem = {
+				id: articleId,
+				articleId,
+				label: names[articleId],
+				icon: renderFileHelpIcon(metadata.icon, 16),
+			}
+			groups.find((group) => group.id === metadata.group)?.items.push(node)
+			articleNodes.set(articleId, node)
+			continue
+		}
 		if (!path) continue
 		const group = groups.find((item) => item.id === metadata.group)
 		if (!group) continue

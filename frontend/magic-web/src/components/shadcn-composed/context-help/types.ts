@@ -28,19 +28,23 @@ export interface HelpDefinition {
 	renderBody: (reading?: HelpReadingLinks, identity?: HelpDefinition["identity"]) => ReactNode
 }
 
-export interface HelpDialogProps {
+export interface HelpDialogContentProps {
 	id: string
 	help: HelpDefinition
-	onCloseAutoFocus: (event: Event) => void
 	navigation?: ReactNode
 	articleKey?: string
 	reading?: HelpReadingLinks
 	contentRef?: RefObject<HTMLDivElement>
 }
 
+export interface HelpDialogProps extends HelpDialogContentProps {
+	onCloseAutoFocus: (event: Event) => void
+}
+
 export interface ContextHelpProps {
 	help: HelpDefinition
 	mode: "preview" | "dialog"
 	children: ReactElement
-	renderDialog?: (props: HelpDialogProps) => ReactNode
+	/** 在已挂载的对话框内渲染目录与正文，不能再创建 DialogContent。 */
+	renderDialog?: (props: HelpDialogContentProps) => ReactNode
 }

@@ -1550,7 +1550,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				systemKind ||
 				presentation.userKind ||
 				presentation.clawKind ||
-				presentation.type === "audio" ? (
+				presentation.projectKind ? (
 					<ProjectFileTag
 						presentation={presentation}
 						item={item}

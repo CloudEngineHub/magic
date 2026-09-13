@@ -1,5 +1,6 @@
 import { BookOpen, PanelLeft, X } from "lucide-react"
 import { Suspense, useLayoutEffect, useRef, useState } from "react"
+import type { ReactNode } from "react"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { ErrorBoundary } from "react-error-boundary"
 import { useTranslation } from "react-i18next"
@@ -18,7 +19,13 @@ import {
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
 import { cn } from "@/utils/cn"
-import type { HelpDefinition, HelpDialogProps, HelpReadingLinks, HelpTone } from "./types"
+import type {
+	HelpDefinition,
+	HelpDialogProps,
+	HelpDialogContentProps,
+	HelpReadingLinks,
+	HelpTone,
+} from "./types"
 import { HelpLocation } from "./HelpLocation"
 
 const NAVIGATION_DEFAULT_WIDTH = 280
@@ -39,15 +46,79 @@ function HelpBody({ help, reading }: { help: HelpDefinition; reading?: HelpReadi
 	return <>{help.renderBody(reading, help.identity)}</>
 }
 
-export function HelpDialog({
+/** 外层模态容器不参与懒加载切换，加载和失败只替换容器内部。 */
+export function HelpDialogFrame({
 	id,
 	help,
 	onCloseAutoFocus,
+	hasNavigation,
+	children,
+}: Pick<HelpDialogProps, "id" | "help" | "onCloseAutoFocus"> & {
+	hasNavigation: boolean
+	children: ReactNode
+}) {
+	const { t } = useTranslation("interface")
+	return (
+		<DialogContent
+			id={id}
+			showCloseButton={false}
+			className={cn(
+				"flex h-[82dvh] max-h-[900px] flex-col gap-0 overflow-hidden rounded-[18px] p-0",
+				hasNavigation
+					? "sm:max-w-[min(1120px,calc(100%-3rem))]"
+					: "sm:max-w-[min(960px,calc(100%-3rem))]",
+				TONE_CLASSES[help.tone ?? "neutral"],
+			)}
+			onCloseAutoFocus={onCloseAutoFocus}
+			onPointerDown={(event) => event.stopPropagation()}
+			onClick={(event) => event.stopPropagation()}
+			onDoubleClick={(event) => event.stopPropagation()}
+			onKeyDown={(event) => event.stopPropagation()}
+		>
+			<DialogHeader className="flex h-16 shrink-0 flex-row items-center gap-3 space-y-0 border-b px-5 text-left sm:h-[68px] sm:px-6">
+				<span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[var(--help-soft)] text-[var(--help-accent)]">
+					<BookOpen size={18} aria-hidden />
+				</span>
+				<div className="min-w-0 flex-1 space-y-0.5 pr-12">
+					<DialogTitle className="text-sm leading-5">
+						{t("contextHelp.guideTitle")}
+					</DialogTitle>
+					<DialogDescription className="text-xs">
+						{t("contextHelp.guideSubtitle")}
+					</DialogDescription>
+				</div>
+				<DialogClose asChild>
+					<Button
+						variant="ghost"
+						size="icon-lg"
+						aria-label={t("contextHelp.dismiss")}
+						className="group size-10 shrink-0 cursor-pointer rounded-lg bg-muted/40 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:bg-accent motion-reduce:transition-none [@media(pointer:coarse)]:size-11"
+					>
+						<X
+							className="size-5 transition-transform duration-150 group-active:scale-90 motion-reduce:transition-none"
+							aria-hidden
+						/>
+					</Button>
+				</DialogClose>
+			</DialogHeader>
+			{children}
+			<DialogFooter className="shrink-0 border-t px-5 py-3">
+				<DialogClose asChild>
+					<Button>{t("contextHelp.close")}</Button>
+				</DialogClose>
+			</DialogFooter>
+		</DialogContent>
+	)
+}
+
+export function HelpDialogContent({
+	id,
+	help,
 	navigation,
 	articleKey,
 	reading,
 	contentRef,
-}: HelpDialogProps) {
+}: HelpDialogContentProps) {
 	const { t, i18n } = useTranslation("interface")
 	const [layoutElement, setLayoutElement] = useState<HTMLDivElement | null>(null)
 	const [layoutWidth, setLayoutWidth] = useState(0)
@@ -99,65 +170,25 @@ export function HelpDialog({
 	// 先让窄屏正文可见，再执行文章切换后的滚动和聚焦。
 	useLayoutEffect(() => setMobileNavigation(false), [articleKey])
 	return (
-		<DialogContent
-			id={id}
-			showCloseButton={false}
-			className={cn(
-				"flex h-[82dvh] max-h-[900px] flex-col gap-0 overflow-hidden rounded-[18px] p-0",
-				navigation
-					? "sm:max-w-[min(1120px,calc(100%-3rem))]"
-					: "sm:max-w-[min(960px,calc(100%-3rem))]",
-				TONE_CLASSES[help.tone ?? "neutral"],
+		<div className={cn("flex min-h-0 flex-1 flex-col", TONE_CLASSES[help.tone ?? "neutral"])}>
+			{/* 目录控制与阅读布局共用状态；定位到固定标题栏，为外层关闭按钮保留空间。 */}
+			{navigation && (
+				<Button
+					variant="ghost"
+					size="icon-lg"
+					className="absolute right-[72px] top-3 size-10 shrink-0 sm:top-3.5 [@media(pointer:coarse)]:size-11"
+					aria-label={t("contextHelp.contents")}
+					aria-controls={`${id}-contents`}
+					aria-expanded={showNavigation}
+					onClick={() =>
+						narrow
+							? setMobileNavigation((value) => !value)
+							: setDesktopNavigation((value) => !value)
+					}
+				>
+					<PanelLeft size={20} aria-hidden />
+				</Button>
 			)}
-			onCloseAutoFocus={onCloseAutoFocus}
-			onPointerDown={(event) => event.stopPropagation()}
-			onClick={(event) => event.stopPropagation()}
-			onDoubleClick={(event) => event.stopPropagation()}
-			onKeyDown={(event) => event.stopPropagation()}
-		>
-			<DialogHeader className="flex h-16 shrink-0 flex-row items-center gap-3 space-y-0 border-b px-5 text-left sm:h-[68px] sm:px-6">
-				<span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[var(--help-soft)] text-[var(--help-accent)]">
-					<BookOpen size={18} aria-hidden />
-				</span>
-				<div className="min-w-0 flex-1 space-y-0.5">
-					<DialogTitle className="text-sm leading-5">
-						{t("contextHelp.guideTitle")}
-					</DialogTitle>
-					<DialogDescription className="text-xs">
-						{t("contextHelp.guideSubtitle")}
-					</DialogDescription>
-				</div>
-				{navigation && (
-					<Button
-						variant="ghost"
-						size="icon-lg"
-						className="size-10 shrink-0 [@media(pointer:coarse)]:size-11"
-						aria-label={t("contextHelp.contents")}
-						aria-controls={`${id}-contents`}
-						aria-expanded={showNavigation}
-						onClick={() =>
-							narrow
-								? setMobileNavigation((value) => !value)
-								: setDesktopNavigation((value) => !value)
-						}
-					>
-						<PanelLeft size={20} aria-hidden />
-					</Button>
-				)}
-				<DialogClose asChild>
-					<Button
-						variant="ghost"
-						size="icon-lg"
-						aria-label={t("contextHelp.dismiss")}
-						className="group size-10 shrink-0 cursor-pointer rounded-lg bg-muted/40 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:bg-accent motion-reduce:transition-none [@media(pointer:coarse)]:size-11"
-					>
-						<X
-							className="size-5 transition-transform duration-150 group-active:scale-90 motion-reduce:transition-none"
-							aria-hidden
-						/>
-					</Button>
-				</DialogClose>
-			</DialogHeader>
 			{/* 标题和关闭操作始终可见，长说明只在正文区域滚动。 */}
 			<div ref={setLayoutElement} className="flex min-h-0 flex-1">
 				<ResizablePanelGroup direction="horizontal">
@@ -268,11 +299,6 @@ export function HelpDialog({
 					</ResizablePanel>
 				</ResizablePanelGroup>
 			</div>
-			<DialogFooter className="shrink-0 border-t px-5 py-3">
-				<DialogClose asChild>
-					<Button>{t("contextHelp.close")}</Button>
-				</DialogClose>
-			</DialogFooter>
-		</DialogContent>
+		</div>
 	)
 }
