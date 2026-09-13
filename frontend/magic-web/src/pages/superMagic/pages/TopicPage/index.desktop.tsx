@@ -544,7 +544,9 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 
 	useDeepCompareEffect(() => {
 		setUserSelectDetail(null)
-		clearActiveDetailTabType()
+		// Published micro-app tabs belong to the project rather than a topic. Keep
+		// their preview open when createTopicAndSend selects a new host topic.
+		clearActiveDetailTabType({ preservePublishedMicroApp: true })
 	}, [selectedTopic?.id, selectedTopic?.chat_topic_id])
 
 	useProjectAttachmentsChangeRealtime({

@@ -61,6 +61,7 @@ import { buildWebsiteTab, isWebsiteTab } from "../utils/websiteTabs"
 import { getFileViewerTabType, hasActivePreviewTab } from "../utils/tabType"
 import { PLAYBACK_TAB_ID } from "../utils/tabConstants"
 import { tabReducer } from "./tabReducer"
+import { resolvePlaybackTabFallback } from "../utils/playbackTabFallback"
 
 function normalizeFileId(value: unknown): string | undefined {
 	if (typeof value === "string" && value.trim()) return value.trim()
@@ -632,17 +633,21 @@ export function useFilesViewer(props: FilesViewerProps) {
 		// 如果是关闭playback tab
 		if (tabId === PLAYBACK_TAB_ID) {
 			closePlaybackTab()
-			// 关闭playback tab后，如果有文件tabs，激活最近使用的文件tab
-			if (tabs.length > 0) {
-				const mostRecentTab = tabs.reduce((mostRecent, current) => {
-					const currentActiveAt = current.active_at || current.create_at || 0
-					const mostRecentActiveAt = mostRecent.active_at || mostRecent.create_at || 0
-					return currentActiveAt > mostRecentActiveAt ? current : mostRecent
-				})
+			// 关闭回放后，恢复最近使用的其他预览，避免所有标签都处于非激活状态。
+			const fallback = resolvePlaybackTabFallback({
+				fileTabs: tabs,
+				knowledgeBaseTabs,
+				publishedMicroAppTabs,
+			})
+			if (fallback?.type === "file") {
 				dispatchTabs({
 					type: TabActionType.SWITCH_TAB,
-					payload: { tabId: mostRecentTab.id },
+					payload: { tabId: fallback.tab.id },
 				})
+			} else if (fallback?.type === "knowledge_base") {
+				openKnowledgeBaseTabOriginal(fallback.tab.data)
+			} else if (fallback?.type === "micro_app") {
+				openPublishedMicroAppTabOriginal(fallback.tab.data)
 			}
 			return
 		}

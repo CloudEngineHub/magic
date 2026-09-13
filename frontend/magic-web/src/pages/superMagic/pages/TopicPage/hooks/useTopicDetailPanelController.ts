@@ -31,7 +31,7 @@ interface UseTopicDetailPanelControllerReturn {
 		[key: string]: unknown
 	}
 	handleActiveDetailTabChange: (tabType: DetailTabType) => void
-	clearActiveDetailTabType: () => void
+	clearActiveDetailTabType: (options?: { preservePublishedMicroApp?: boolean }) => void
 }
 
 type DetailTabType = ActiveDetailTabType
@@ -242,9 +242,19 @@ export function useTopicDetailPanelController({
 		setActiveDetailTabType(tabType)
 	})
 
-	const clearActiveDetailTabType = useMemoizedFn(() => {
-		setActiveDetailTabType(null)
-	})
+	const clearActiveDetailTabType = useMemoizedFn(
+		(options?: { preservePublishedMicroApp?: boolean }) => {
+			// Published micro-app previews are project-scoped, so keep them visible
+			// when a host topic changes while still clearing other preview types.
+			if (
+				options?.preservePublishedMicroApp &&
+				activeDetailTabTypeRef.current === "micro_app"
+			) {
+				return
+			}
+			setActiveDetailTabType(null)
+		},
+	)
 
 	return {
 		shouldShowDetailPanel,

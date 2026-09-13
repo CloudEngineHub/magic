@@ -54,6 +54,28 @@ describe("useTopicDetailPanelController", () => {
 		expect(result.current.shouldShowDetailPanel).toBe(false)
 	})
 
+	it("keeps a published micro-app preview open when preserving it across topic changes", () => {
+		const { result } = renderHook(() =>
+			useTopicDetailPanelController({
+				detailRef: { current: { openFileTab: vi.fn(), openPlaybackTab: vi.fn() } },
+				isReadOnly: false,
+				activeFileId: null,
+				setActiveFileId: vi.fn(),
+				handleFileClick: vi.fn(),
+				topicFilesProps: {},
+			}),
+		)
+
+		act(() => {
+			result.current.handleActiveDetailTabChange("micro_app")
+		})
+		act(() => {
+			result.current.clearActiveDetailTabType({ preservePublishedMicroApp: true })
+		})
+
+		expect(result.current.shouldShowDetailPanel).toBe(true)
+	})
+
 	it("keeps the detail panel visible for non-file preview tab types", () => {
 		const detailRef = {
 			current: {
