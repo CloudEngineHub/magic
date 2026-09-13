@@ -12,15 +12,19 @@ import { cn } from "@/utils/cn"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import {
 	getUserMemoryPath,
-	USER_PROJECT_MEMORIES_PATH,
-	getMemoryProjectId,
 	USER_MEMORY_ENTRY,
 	USER_MEMORY_NOTES,
 } from "../LongTremMemory/components/memoryTreeNodeUtils"
 import { toUserAttachment, userSpaceFileService } from "./services/userSpaceFileService"
+import { useUserMemoryProjects } from "./hooks/useUserMemoryProjects"
+import { useFileManagerConfirmation } from "../TopicFilesButton/hooks/useFileManagerConfirmation"
+import { FileManagerConfirmationDialog } from "../TopicFilesButton/components/FileManager/FileManagerConfirmationDialog"
+import { buildAttachmentIndex } from "../TopicFilesButton/utils/attachmentIndex"
 import UserSpaceFilesView from "./UserSpaceFilesView"
 
 interface MemoryGroupProps {
+	manager?: boolean
+	active?: boolean
 	projectId?: string | null
 	projectName?: string
 	onFileClick?: (file: AttachmentItem) => void
@@ -32,7 +36,11 @@ interface MemoryGroupProps {
 	onBrowseDirectory?: (id: string) => void
 	scrollElementRef?: React.RefObject<HTMLElement>
 }
-const MemoryGroup = observer(function MemoryGroup({
+const emptyIndex = buildAttachmentIndex([])
+
+export const MemoryGroup = observer(function MemoryGroup({
+	manager = false,
+	active = true,
 	projectId,
 	projectName,
 	onFileClick,
@@ -66,13 +74,21 @@ const MemoryGroup = observer(function MemoryGroup({
 	const [retry, setRetry] = useState(0)
 	const segments = useMemo(() => getUserMemoryPath(projectId), [projectId])
 	const scopePath = segments.join("/")
+	const confirmation = useFileManagerConfirmation({
+		scopeKey: `${identity}:${scopePath}`,
+		isActive: manager && active,
+		rootName:
+			projectName || t(projectId ? "userSpace.projectMemory" : "userSpace.globalMemory"),
+		index: emptyIndex,
+		attachments: [],
+	})
 	useEffect(() => {
 		setRoot(null)
 		setDirectoryId(undefined)
 		setLoading(true)
 	}, [identity, scopePath, setRoot])
 	useEffect(() => {
-		if (!visited) return
+		if (!visited || !active) return
 		let cancelled = false
 		void userFilesStore
 			.findPath(segments)
@@ -92,7 +108,7 @@ const MemoryGroup = observer(function MemoryGroup({
 		return () => {
 			cancelled = true
 		}
-	}, [identity, segments, mutationVersion, retry, visited, setRoot])
+	}, [identity, segments, mutationVersion, retry, visited, active, setRoot])
 	const entryExists =
 		root &&
 		userFilesStore
@@ -100,9 +116,19 @@ const MemoryGroup = observer(function MemoryGroup({
 			.some((file) => file.name === USER_MEMORY_ENTRY && !file.is_directory)
 	const destination = () => userFilesStore.ensureDirectory([...segments, USER_MEMORY_NOTES])
 	const createEntry = async () => {
-		if (creating) return
+		if (creating || confirmation.state) return
 		setCreating(true)
 		try {
+			if (
+				manager &&
+				!(await confirmation.confirm({
+					operation: "create",
+					names: [USER_MEMORY_ENTRY],
+					targetPath: scopePath,
+				}))
+			)
+				return
+			if (identity !== userFilesStore.currentIdentityKey) return
 			const directory = await userFilesStore.ensureDirectory(segments)
 			if (identity !== userFilesStore.currentIdentityKey) return
 			const children = await userFilesStore.loadDirectory(directory.id, true)
@@ -183,6 +209,50 @@ const MemoryGroup = observer(function MemoryGroup({
 			</Button>
 		</div>
 	)
+	if (manager)
+		return (
+			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+				{root && !error ? (
+					<UserSpaceFilesView
+						rootId={root.id}
+						rootName={projectName || title}
+						resolveParent={destination}
+						defaultWritePath={`${scopePath}/${USER_MEMORY_NOTES}`}
+						hidePlaces
+						defaultView="list"
+						directoryId={directoryId}
+						onDirectoryChange={setDirectoryId}
+						onFileClick={onFileClick}
+						activeFileId={activeFileId}
+						topicId={topicId}
+						compact={false}
+						active={active}
+						contentBefore={emptyState}
+					/>
+				) : (
+					<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6">
+						<Brain size={32} className="text-muted-foreground/50" />
+						<p className="text-sm font-medium">{projectName || title}</p>
+						{loading ? (
+							<p className="text-xs text-muted-foreground">
+								{t("userSpace.loading")}
+							</p>
+						) : error ? (
+							<Button
+								variant="outline"
+								onClick={() => setRetry((value) => value + 1)}
+							>
+								{t("userSpace.retry")}
+							</Button>
+						) : (
+							emptyState
+						)}
+					</div>
+				)}
+				<FileManagerConfirmationDialog controller={confirmation} />
+			</div>
+		)
+
 	return (
 		<section
 			className={cn(
@@ -227,55 +297,12 @@ const MemoryGroup = observer(function MemoryGroup({
 })
 const OtherProjectMemories = observer(function OtherProjectMemories(props: MemoryGroupProps) {
 	const { t } = useTranslation("super")
-	const identity = userFilesStore.currentIdentityKey
-	const mutationVersion = userFilesStore.mutationVersion
 	const [expanded, setExpanded] = useState(false)
 	const [visited, setVisited] = useState(false)
-	const [rootId, setRootId] = useState<string>()
-	const [loading, setLoading] = useState(false)
-	const [error, setError] = useState(false)
-	const [loaded, setLoaded] = useState(false)
-	const [refreshVersion, setRefreshVersion] = useState(0)
-	const appliedRefresh = useRef(0)
-	useEffect(() => {
-		// 收起样式本身不阻止请求；首次展开以前不读取名单，也不调用名称接口。
-		if (!visited) return
-		let cancelled = false
-		const force = refreshVersion !== appliedRefresh.current
-		setLoading(true)
-		setError(false)
-		void (async () => {
-			const root = await userFilesStore.findPath(USER_PROJECT_MEMORIES_PATH)
-			if (cancelled || identity !== userFilesStore.currentIdentityKey) return
-			const files = root ? await userFilesStore.loadDirectory(root.id, force) : []
-			if (cancelled || identity !== userFilesStore.currentIdentityKey) return
-			const ids = files.flatMap((file) => {
-				const id = file.is_directory ? getMemoryProjectId(file.name) : null
-				return id && id !== props.projectId ? [id] : []
-			})
-			await userFilesStore.loadProjectNames(ids, force)
-			if (!cancelled && identity === userFilesStore.currentIdentityKey) {
-				setRootId(root?.id)
-				setLoaded(true)
-				appliedRefresh.current = refreshVersion
-			}
-		})()
-			.catch(() => {
-				if (!cancelled) setError(true)
-			})
-			.finally(() => {
-				if (!cancelled) setLoading(false)
-			})
-		return () => {
-			cancelled = true
-		}
-	}, [identity, props.projectId, mutationVersion, visited, refreshVersion])
-	const projects = rootId
-		? userFilesStore.getChildren(rootId).flatMap((file) => {
-				const id = file.is_directory ? getMemoryProjectId(file.name) : null
-				return id && id !== props.projectId ? [{ id, fileId: file.id }] : []
-			})
-		: []
+	const { projects, loading, error, loaded, refresh } = useUserMemoryProjects(
+		props.projectId,
+		visited,
+	)
 	return (
 		<SidebarExpandableItem
 			label={t("userSpace.otherProjectMemories")}
@@ -297,7 +324,7 @@ const OtherProjectMemories = observer(function OtherProjectMemories(props: Memor
 							className="size-6 shrink-0"
 							disabled={loading}
 							aria-label={t("topicFiles.refreshList")}
-							onClick={() => setRefreshVersion((value) => value + 1)}
+							onClick={() => refresh()}
 						>
 							<RefreshCw size={16} />
 						</Button>
@@ -308,11 +335,7 @@ const OtherProjectMemories = observer(function OtherProjectMemories(props: Memor
 			{error ? (
 				<div role="alert" className="p-3 text-xs">
 					{t("userSpace.projectNamesLoadFailed")}
-					<Button
-						variant="ghost"
-						size="sm"
-						onClick={() => setRefreshVersion((value) => value + 1)}
-					>
+					<Button variant="ghost" size="sm" onClick={() => refresh()}>
 						{t("userSpace.retry")}
 					</Button>
 				</div>

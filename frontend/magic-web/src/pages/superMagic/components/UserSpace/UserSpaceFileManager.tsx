@@ -4,7 +4,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import type { FileManagerContext } from "../Detail/components/FilesViewer/types"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import UserSpaceFilesView from "./UserSpaceFilesView"
-import UserSpaceMemoryView from "./UserSpaceMemoryView"
+import UserSpaceMemoryManager from "./UserSpaceMemoryManager"
 
 export default function UserSpaceFileManager({
 	context,
@@ -55,12 +55,8 @@ export default function UserSpaceFileManager({
 				</Button>
 			</div>
 			{view === "memory" ? (
-				<UserSpaceMemoryView
-					compact
-					onBrowseDirectory={(id) => {
-						setDirectoryId(id)
-						setView("files")
-					}}
+				<UserSpaceMemoryManager
+					active={isActive}
 					projectId={projectId}
 					projectName={projectName}
 					topicId={topicId}

@@ -19,6 +19,9 @@ import { useUserSpaceFileActions } from "./hooks/useUserSpaceFileActions"
 import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
 
 export interface UserSpaceFilesViewProps {
+	hidePlaces?: boolean
+	defaultView?: "list" | "grid"
+	defaultWritePath?: string
 	directoryId?: string
 	onDirectoryChange: (id?: string) => void
 	onFileClick?: (file: AttachmentItem) => void
@@ -36,6 +39,9 @@ export interface UserSpaceFilesViewProps {
 }
 
 export default observer(function UserSpaceFilesView({
+	hidePlaces,
+	defaultView,
+	defaultWritePath,
 	directoryId,
 	onDirectoryChange,
 	onFileClick,
@@ -199,6 +205,9 @@ export default observer(function UserSpaceFilesView({
 		)
 	const content = (
 		<FileManager
+			hidePlaces={hidePlaces}
+			defaultView={defaultView}
+			defaultWritePath={defaultWritePath}
 			key={`${identity}:${rootId}`}
 			scopeKey={`${identity}:user:${rootId}`}
 			identityKey={identity ?? ""}
