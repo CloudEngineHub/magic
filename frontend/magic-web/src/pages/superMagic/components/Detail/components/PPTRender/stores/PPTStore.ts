@@ -1,3 +1,4 @@
+import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import { makeAutoObservable, reaction, runInAction } from "mobx"
 import {
 	SlideLoaderService,
@@ -30,6 +31,8 @@ import type { AttachmentItem } from "../../../../TopicFilesButton/hooks"
  * Configuration for PPTStore
  */
 export interface PPTStoreConfig {
+	attachmentLoadState?: AttachmentLoadState
+	projectId?: string
 	attachments?: any[]
 	attachmentList?: any[]
 	mainFileId?: string
@@ -1065,6 +1068,36 @@ export class PPTStore {
 			indexHint: index,
 			path: slide.path,
 			fileId: this.getSlideFileId(slide),
+		}
+
+		const attachmentLoadState = this.config.attachmentLoadState
+		if (
+			!target.fileId &&
+			!slide.url &&
+			!this.pathMappingService.getUrlByPath(slide.path) &&
+			attachmentLoadState &&
+			attachmentLoadState.projectId ===
+				(this.config.projectId || this.config.selectedProjectId)
+		) {
+			// 首批可能只有 PPT 配置，页文件尚未到达；等待附件不占用内容下载队列。
+			if (attachmentLoadState.status === "idle" || attachmentLoadState.status === "loading") {
+				runInAction(() => {
+					slide.loadingState = "loading"
+					slide.loadingError = undefined
+				})
+			} else {
+				this.markSlideLoadError(
+					target,
+					new Error(
+						attachmentLoadState.status === "ready"
+							? "Slide file not found"
+							: "Failed to load project files",
+					),
+					{ generation },
+				)
+			}
+			if (previousDemandIndex !== null) this.resumeContentDemand(previousDemandIndex)
+			return false
 		}
 
 		const loadPromise = this.contentScheduler.schedule(key, priority, async (signal) => {
@@ -2333,7 +2366,12 @@ export class PPTStore {
 		configUpdateVersion: number,
 	): Promise<void> {
 		if (!this.isConfigUpdateCurrent(configUpdateVersion)) return
-		if (!config.displayConfig && !config.attachmentList && !mainFileChanged) {
+		if (
+			!config.displayConfig &&
+			!config.attachmentList &&
+			!mainFileChanged &&
+			!hasOwnConfigField(config, "attachmentLoadState")
+		) {
 			return
 		}
 
@@ -2509,8 +2547,6 @@ export class PPTStore {
 			.filter((slide) => !slide.fileId || !slide.url)
 
 		let recoveredCount = 0
-		const recoveredIndices: number[] = []
-		const recoveredDemandKeys = new Map<number, string>()
 
 		if (pendingSlides.length > 0) {
 			const fileIdsToFetch: string[] = []
@@ -2546,31 +2582,29 @@ export class PPTStore {
 						if (!target || target.path !== pending.path) return
 						target.url = recoveredUrl
 						this.pathMappingService.setPathUrlMapping(pending.path, recoveredUrl)
-						recoveredIndices.push(targetIndex)
-						recoveredDemandKeys.set(targetIndex, pending.demandKey)
+						recoveredCount++
 					})
 				})
-
-				recoveredCount += recoveredIndices.length
 			}
 		}
 
 		if (this.isConfigUpdateCurrent(configUpdateVersion)) {
-			this.resumeRecoveredSlideDemand(recoveredIndices, recoveredDemandKeys)
+			// 最终批次可能没有新增页文件；已有可见需求也要重新判断缺失或加载失败。
+			this.resumePendingSlideDemand(pendingSlides)
 			this.scheduleActiveSlide()
 		}
 
 		return recoveredCount
 	}
 
-	private resumeRecoveredSlideDemand(
-		recoveredIndices: number[],
-		previousDemandKeys: Map<number, string>,
+	private resumePendingSlideDemand(
+		pendingSlides: Array<{ path: string; fileId?: string; demandKey: string }>,
 	): void {
-		recoveredIndices.forEach((index) => {
+		pendingSlides.forEach((pending) => {
+			const index = this.findSlideIndexByLoadTarget(pending)
 			const slide = this.slides[index]
 			if (!slide) return
-			const previousKey = previousDemandKeys.get(index)
+			const previousKey = pending.demandKey
 			const nextKey = this.getSlideStableKey(slide, index)
 			const candidateKeys = [previousKey, nextKey, slide.path, slide.id]
 			const wasVisible = candidateKeys.some(

@@ -445,6 +445,8 @@ const FilesViewer = memo(
 					currentTab.fileData.htmlNavigation?.hash || "",
 					currentTab.fileData.htmlNavigation?.anchor || "",
 					props.activeFileId || "",
+					props.attachmentLoadState?.projectId || "",
+					props.attachmentLoadState?.status || "",
 					props.showFileFooter ? "1" : "0",
 				].join("|")
 			}, [
@@ -458,6 +460,8 @@ const FilesViewer = memo(
 				currentTab?.fileData.htmlNavigation?.hash,
 				currentTab?.fileData.htmlNavigation?.anchor,
 				props.activeFileId,
+				props.attachmentLoadState?.projectId,
+				props.attachmentLoadState?.status,
 				props.showFileFooter,
 			])
 			const shouldShowDetailEmpty =

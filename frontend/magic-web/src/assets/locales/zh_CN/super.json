@@ -4410,8 +4410,6 @@
 			"fileNotFoundDesc": "第 {{index}} 页对应的文件不存在或已被删除",
 			"network": "网络错误",
 			"networkDesc": "第 {{index}} 页加载时网络连接失败，请检查网络后重试",
-			"noUrl": "页面找不到",
-			"noUrlDesc": "第 {{index}} 页可能正在制作中，请稍等片刻",
 			"permission": "权限不足",
 			"permissionDesc": "第 {{index}} 页没有访问权限",
 			"technicalDetails": "查看详细信息",

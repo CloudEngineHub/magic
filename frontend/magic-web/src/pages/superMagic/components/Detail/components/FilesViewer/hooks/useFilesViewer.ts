@@ -102,8 +102,7 @@ function normalizeFileItemForTab(fileItem: unknown): {
 	}
 
 	const recordDisplayConfig = sourceRecord.display_config as
-		| FileItem["display_config"]
-		| undefined
+		FileItem["display_config"] | undefined
 	let hiddenPreviewPolicy = recordDisplayConfig
 	if (sourceRecord.is_hidden === true) {
 		hiddenPreviewPolicy = {
@@ -1786,6 +1785,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 				data: renderData,
 				updatedAt: fileDetail.updatedAt,
 				attachments,
+				attachmentLoadState: props.attachmentLoadState,
 				setUserSelectDetail,
 				currentIndex: 0,
 				onPrevious: () => {

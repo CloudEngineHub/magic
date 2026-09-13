@@ -1,5 +1,6 @@
 import { makeAutoObservable, observable } from "mobx"
 import { WorkspaceFolder } from "./types"
+import type { AttachmentLoadState, AttachmentLoadStatus } from "./types"
 import { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { createFileTreePerfScope } from "@/pages/superMagic/utils/fileTreePerf"
@@ -26,6 +27,7 @@ export class ProjectFilesStore {
 				workspaceFileTree: observable.ref,
 				workspaceFilesList: observable.ref,
 				currentSelectedProject: observable.ref,
+				attachmentLoadState: observable.ref,
 			},
 			{ autoBind: true },
 		)
@@ -34,6 +36,7 @@ export class ProjectFilesStore {
 	workspaceFileTree: AttachmentItem[] = []
 	workspaceFilesList: AttachmentItem[] = []
 	currentSelectedProject: ProjectListItem | null = null
+	attachmentLoadState: AttachmentLoadState | undefined = undefined
 
 	isSameProject(project1: ProjectListItem | null, project2: ProjectListItem | null) {
 		return project1?.id === project2?.id
@@ -43,8 +46,18 @@ export class ProjectFilesStore {
 		if (!selectedProject || !this.isSameProject(this.currentSelectedProject, selectedProject)) {
 			this.workspaceFileTree = []
 			this.workspaceFilesList = []
+			this.attachmentLoadState = selectedProject
+				? { projectId: selectedProject.id, status: "idle" }
+				: undefined
 		}
 		this.currentSelectedProject = selectedProject
+	}
+
+	// 分批快照仍可能缺文件；只有当前项目的完整请求成功，才允许据此判断文件缺失。
+	setAttachmentLoadStatus(projectId: string, status: AttachmentLoadStatus) {
+		if (this.currentSelectedProject?.id !== projectId) return
+		if (this.attachmentLoadState?.status === status) return
+		this.attachmentLoadState = { projectId, status }
 	}
 
 	hasFolder(fileId: string) {

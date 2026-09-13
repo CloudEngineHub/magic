@@ -4410,8 +4410,6 @@
 			"fileNotFoundDesc": "The file for slide {{index}} does not exist or has been deleted",
 			"network": "Network Error",
 			"networkDesc": "Network connection failed while loading slide {{index}}, please check your network and try again",
-			"noUrl": "Page Not Found",
-			"noUrlDesc": "The file URL for slide {{index}} may be being prepared, please wait a moment",
 			"permission": "Permission Denied",
 			"permissionDesc": "You do not have permission to access slide {{index}}",
 			"technicalDetails": "View Detailed Information",
