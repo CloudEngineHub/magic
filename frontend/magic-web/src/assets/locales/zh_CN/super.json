@@ -5251,6 +5251,7 @@
 		"nextGroups": "查看后面的搜索组",
 		"previousGroups": "查看前面的搜索组",
 		"queryReadOnly": "已执行的搜索内容",
+		"queryUnavailable": "此记录未保存独立搜索词",
 		"resultCount": "返回 {{count}} 条结果"
 	},
 	"selectPathModal": {

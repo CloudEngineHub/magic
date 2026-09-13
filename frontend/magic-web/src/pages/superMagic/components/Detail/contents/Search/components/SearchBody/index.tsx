@@ -82,17 +82,17 @@ export default memo(function SearchBody({ currentGroup }: SearchBodyProps) {
 	}
 
 	return (
-		<div className="min-h-0 flex-1 overflow-y-auto px-7 pb-6 pt-5 max-md:px-4">
-			<div className="flex max-w-[800px] flex-col gap-7">
+		<div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3">
+			<div className="flex max-w-[800px] flex-col gap-[18px]">
 				{results.map((item, index) => {
 					const title = parseHTML(item.title)
 					const info = parseHTML(item.snippet)
 					let source = item.url
-					let visibleUrl = item.url
+					let sourcePath = ""
 					try {
 						const url = new URL(item.url)
 						source = url.hostname
-						visibleUrl = `${url.hostname}${url.pathname}`
+						sourcePath = url.pathname
 					} catch {
 						// 外部结果的 URL 不可解析时仍显示原文，不让单条来源异常打断整组结果。
 					}
@@ -103,11 +103,11 @@ export default memo(function SearchBody({ currentGroup }: SearchBodyProps) {
 								href={item.url}
 								target="_blank"
 								rel="noopener noreferrer"
-								className="mb-1.5 flex w-fit max-w-full items-center gap-2.5 text-foreground no-underline hover:no-underline"
+								className="mb-1 flex w-fit max-w-full items-center gap-2 text-foreground no-underline hover:no-underline"
 								title={item.url}
 								data-testid="search-body-link-2"
 							>
-								<span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
+								<span className="flex size-4 shrink-0 items-center justify-center overflow-hidden">
 									<MagicImage
 										src={item.icon_url}
 										width={16}
@@ -122,20 +122,20 @@ export default memo(function SearchBody({ currentGroup }: SearchBodyProps) {
 										}
 									/>
 								</span>
-								<span className="min-w-0">
-									<span className="block truncate text-[13px] leading-5">
-										{source}
-									</span>
-									<span className="block truncate text-[11px] leading-4 text-muted-foreground">
-										{visibleUrl}
-									</span>
+								<span className="min-w-0 truncate text-xs leading-5">
+									<span>{source}</span>
+									{sourcePath && (
+										<span className="ml-1.5 text-muted-foreground">
+											{sourcePath}
+										</span>
+									)}
 								</span>
 							</a>
 							<a
 								href={item.url}
 								target="_blank"
 								rel="noopener noreferrer"
-								className="mb-1.5 block break-words text-xl font-normal leading-[1.45] text-blue-700 no-underline hover:underline dark:text-blue-300 max-md:text-lg"
+								className="mb-1 block break-words text-lg font-normal leading-[1.45] text-blue-700 no-underline hover:underline dark:text-blue-300"
 								title={title}
 								data-testid="search-body-link"
 							>

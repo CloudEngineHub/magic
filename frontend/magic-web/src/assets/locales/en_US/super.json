@@ -5251,6 +5251,7 @@
 		"nextGroups": "Show next search groups",
 		"previousGroups": "Show previous search groups",
 		"queryReadOnly": "Executed search query",
+		"queryUnavailable": "No separate search query was saved for this record",
 		"resultCount_one": "{{count}} result returned",
 		"resultCount_other": "{{count}} results returned"
 	},

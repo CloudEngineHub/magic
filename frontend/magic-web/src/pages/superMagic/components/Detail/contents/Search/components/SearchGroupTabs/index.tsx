@@ -44,21 +44,12 @@ export default function SearchGroupTabs({
 	}, [value])
 
 	if (groups.length <= 1) {
-		return (
-			<>
-				{groups.length === 1 && (
-					<div className="shrink-0 px-7 pt-4 text-xs text-muted-foreground max-md:px-4">
-						{t("search.resultCount", { count: totalResults })}
-					</div>
-				)}
-				{children}
-			</>
-		)
+		return <>{children}</>
 	}
 
 	return (
 		<Tabs value={value} onValueChange={onValueChange} className="min-h-0 flex-1 gap-0">
-			<div className="mx-7 mt-3 flex shrink-0 items-center gap-4 border-b border-border max-md:mx-4">
+			<div className="mx-4 flex shrink-0 items-center gap-4 border-b border-border">
 				<HeadlessHorizontalScroll
 					className="min-w-0 flex-1 rounded-none"
 					scrollContainerRef={scrollContainerRef}
@@ -90,14 +81,14 @@ export default function SearchGroupTabs({
 				>
 					<TabsList
 						aria-label={t("search.batchSummary", { count: groups.length })}
-						className="h-11 justify-start gap-6 rounded-none bg-transparent px-1 py-0"
+						className="h-9 justify-start gap-6 rounded-none bg-transparent p-0 [@media(pointer:coarse)]:h-11"
 					>
 						{groups.map((group, index) => (
 							<TabsTrigger
 								key={group.keyword}
 								value={group.keyword}
-								title={group.query || group.keyword}
-								className="relative h-full flex-none gap-2 rounded-none border-0 px-0.5 py-3 font-normal text-muted-foreground shadow-none after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-t after:bg-transparent data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:after:bg-foreground dark:data-[state=active]:bg-transparent"
+								title={group.query?.trim() || undefined}
+								className="relative h-full flex-none gap-2 rounded-none border-0 px-0 py-2 font-normal text-muted-foreground shadow-none after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-t after:bg-transparent data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:after:bg-foreground dark:data-[state=active]:bg-transparent"
 								data-testid="set-selected-keyword"
 							>
 								{t("search.groupLabel", { index: index + 1 })}

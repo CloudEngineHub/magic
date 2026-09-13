@@ -367,35 +367,8 @@ class WebSearch(BaseTool[WebSearchParams]):
             }
 
         # 处理成功情况
-        if not arguments or "requirements_xml" not in arguments:
-            return {
-                "action": i18n.translate("web_search", category="tool.actions"),
-                "remark": i18n.translate("web_search.completed", category="tool.messages")
-            }
-
-        try:
-            # Get requirement names from extra_info (stored during execute) to avoid reparsing XML
-            requirement_names = result.extra_info.get('requirement_names', [])
-            if not requirement_names:
-                # Fallback: parse XML if extra_info is not available
-                requirements_data, _ = _parse_search_requirements_xml(arguments["requirements_xml"])
-                requirement_names = [req['name'] for req in requirements_data]
-
-            if len(requirement_names) > 1:
-                names_str = ', '.join(requirement_names[:3])
-                if len(requirement_names) > 3:
-                    names_str += i18n.translate("web_search.more_items", category="tool.messages")
-                return {
-                    "action": i18n.translate("web_search", category="tool.actions"),
-                    "remark": i18n.translate("web_search.requirements", category="tool.messages", requirements=names_str)
-                }
-            else:
-                return {
-                    "action": i18n.translate("web_search", category="tool.actions"),
-                    "remark": i18n.translate("web_search.requirement", category="tool.messages", requirement=requirement_names[0])
-                }
-        except Exception:
-            return {
-                "action": i18n.translate("web_search", category="tool.actions"),
-                "remark": i18n.translate("web_search.completed", category="tool.messages")
-            }
+        # 需求名称用于模型关联结果，不作为用户搜索内容；真实查询由搜索详情展示。
+        return {
+            "action": i18n.translate("web_search", category="tool.actions"),
+            "remark": i18n.translate("web_search.completed", category="tool.messages")
+        }

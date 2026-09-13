@@ -1,5 +1,5 @@
 import { Search as SearchIcon } from "lucide-react"
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 // import BrowserHeader from "../../components/BrowserHeader"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
@@ -80,57 +80,47 @@ export default memo(function Search(props: SearchProps) {
 		setSelectedKeyword(currentKeyword)
 	}, [currentKeyword])
 
-	const headerActionConfig = useMemo(
-		() => ({
-			customActions: [
-				{
-					key: "search-summary",
-					zone: "primary" as const,
-					render: () => (
-						<div className={styles.summary}>
-							<SearchIcon size={16} aria-hidden />
-							<span>{t("search.internetSearch")}</span>
-							<span className={styles.batchSummary}>
-								{t("search.batchSummary", { count: groups.length })}
-							</span>
-						</div>
-					),
-				},
-			],
-		}),
-		[groups.length, styles.summary, styles.batchSummary, t],
-	)
-
 	return (
 		<div className={cx(styles.searchContainer, className)}>
-			<CommonHeaderV2
-				type={type}
-				onFullscreen={onFullscreen}
-				onDownload={onDownload}
-				isFromNode={isFromNode}
-				isFullscreen={isFullscreen}
-				// Pass new props for ActionButtons functionality
-				viewMode={viewMode}
-				onViewModeChange={onViewModeChange}
-				onCopy={onCopy}
-				fileContent={fileContent || currentKeyword}
-				// File sharing props
-				currentFile={currentFile}
-				allowEdit={allowEdit}
-				actionConfig={headerActionConfig}
-			/>
-			{currentGroup && (
-				<div className={styles.queryArea}>
+			<div className={styles.queryArea}>
+				{currentGroup && (
 					<div
 						className={styles.query}
 						role="group"
 						aria-label={t("search.queryReadOnly")}
 					>
-						<SearchIcon size={16} aria-hidden />
-						<span>{currentGroup.query || currentGroup.keyword}</span>
+						<span className={styles.queryIcon} aria-hidden>
+							<SearchIcon size={16} />
+						</span>
+						<span className={styles.queryText}>
+							{currentGroup.query?.trim() || t("search.queryUnavailable")}
+						</span>
 					</div>
+				)}
+				{groups.length === 1 && (
+					<span className={styles.resultCount}>
+						{t("search.resultCount", { count: groups[0].results.length })}
+					</span>
+				)}
+				<div className={styles.headerActions}>
+					<CommonHeaderV2
+						renderMode="actions"
+						type={type}
+						onFullscreen={onFullscreen}
+						onDownload={onDownload}
+						isFromNode={isFromNode}
+						isFullscreen={isFullscreen}
+						// Pass new props for ActionButtons functionality
+						viewMode={viewMode}
+						onViewModeChange={onViewModeChange}
+						onCopy={onCopy}
+						fileContent={fileContent || currentKeyword}
+						// File sharing props
+						currentFile={currentFile}
+						allowEdit={allowEdit}
+					/>
 				</div>
-			)}
+			</div>
 			<SearchGroupTabs
 				groups={groups}
 				value={currentKeyword}
