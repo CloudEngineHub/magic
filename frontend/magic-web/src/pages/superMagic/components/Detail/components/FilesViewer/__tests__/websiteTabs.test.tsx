@@ -20,6 +20,16 @@ import WebsitePresetMenu from "../components/WebsitePresetMenu"
 import CommonWebsitePresetDialog from "../components/CommonWebsitePresetDialog"
 import { useTabContextMenu } from "../hooks/useTabContextMenu"
 
+const { getMentionMicroAppsMock } = vi.hoisted(() => ({
+	getMentionMicroAppsMock: vi.fn(),
+}))
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: {
+		getMentionMicroApps: getMentionMicroAppsMock,
+	},
+}))
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
@@ -849,7 +859,7 @@ describe("website tabs", () => {
 		expect(getCommonWebsitePresets()).toEqual([])
 	})
 
-	it("keeps the menu header and custom url input sticky above a scrollable preset list", () => {
+	it("keeps both website and micro-app filters sticky within the scroll list", () => {
 		const onOpenWebsiteTab = vi.fn()
 		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
 
@@ -861,5 +871,8 @@ describe("website tabs", () => {
 		expect(header).toHaveClass("sticky")
 		expect(header).toHaveClass("top-0")
 		expect(list).toHaveClass("overflow-y-auto")
+		const microAppsFilter = screen.queryByTestId("micro-app-filter-header")
+		expect(microAppsFilter).toBeInTheDocument()
+		expect(microAppsFilter).toHaveStyle({ top: "76px" })
 	})
 })

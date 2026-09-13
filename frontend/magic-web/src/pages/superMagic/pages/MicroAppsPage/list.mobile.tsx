@@ -2,6 +2,7 @@ import { useCallback } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { ArrowLeft, Loader2, Search } from "lucide-react"
+import type { MicroAppListItem } from "@/apis/modules/superMagic"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
@@ -21,7 +22,7 @@ import MicroAppLoadErrorState from "./components/MicroAppLoadErrorState"
 import MicroAppScopeTabs from "./components/MicroAppScopeTabs"
 import { useMicroAppListItemActions } from "./hooks/useMicroAppListItemActions"
 import { useMicroAppCollaboratorManagement } from "./hooks/useMicroAppCollaboratorManagement"
-import { isPublishedShareScope, useMicroAppsPage } from "./hooks/useMicroAppsPage"
+import { shouldOpenPublishedShare, useMicroAppsPage } from "./hooks/useMicroAppsPage"
 
 function formatAppTime(value: string | null | undefined): string {
 	if (!value) return ""
@@ -65,18 +66,22 @@ export default observer(function MicroAppsListPageMobile() {
 		deleteApp,
 	} = useMicroAppsPage()
 	const itemActions = useMicroAppListItemActions({ renameApp, deleteApp })
+	const { openInNewWindow } = itemActions
 	const collaboratorManagement = useMicroAppCollaboratorManagement()
 
 	const handleOpenApp = useCallback(
-		(appId: string) => {
-			if (isPublishedShareScope(scope)) {
-				const app = apps.find((item) => item.app_id === appId)
-				if (app) itemActions.openInNewWindow(app)
+		(app: MicroAppListItem) => {
+			if (shouldOpenPublishedShare(scope, app.publish_status)) {
+				openInNewWindow(app)
 				return
 			}
-			navigate({ name: RouteName.MicroApp, params: { appId }, viewTransition: false })
+			navigate({
+				name: RouteName.MicroApp,
+				params: { appId: app.app_id },
+				viewTransition: false,
+			})
 		},
-		[apps, itemActions, navigate, scope],
+		[navigate, openInNewWindow, scope],
 	)
 	const EmptyIllustration = keyword ? MicroAppSearchEmptyIllustration : MicroAppEmptyIllustration
 
@@ -196,7 +201,7 @@ export default observer(function MicroAppsListPageMobile() {
 											? t("microAppsPage.statusPublished")
 											: t("microAppsPage.statusUnpublished")
 									}
-									onClick={() => handleOpenApp(app.app_id)}
+									onClick={() => handleOpenApp(app)}
 									variant="mobile"
 									onOpenInNewWindow={() => itemActions.openInNewWindow(app)}
 									onRename={() => itemActions.openRename(app)}

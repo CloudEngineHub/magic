@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from "framer-motion"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Loader2, Plus, Search } from "lucide-react"
+import type { MicroAppListItem } from "@/apis/modules/superMagic"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
@@ -28,7 +29,7 @@ import MicroAppLoadErrorState from "./components/MicroAppLoadErrorState"
 import MicroAppScopeTabs from "./components/MicroAppScopeTabs"
 import { useMicroAppListItemActions } from "./hooks/useMicroAppListItemActions"
 import { useMicroAppCollaboratorManagement } from "./hooks/useMicroAppCollaboratorManagement"
-import { isPublishedShareScope, useMicroAppsPage } from "./hooks/useMicroAppsPage"
+import { shouldOpenPublishedShare, useMicroAppsPage } from "./hooks/useMicroAppsPage"
 import { useCreateMicroApp } from "./hooks/useCreateMicroApp"
 
 const MicroAppsPageMobile = lazy(() => import("./index.mobile"))
@@ -102,6 +103,7 @@ const MicroAppsPageDesktop = observer(function MicroAppsPageDesktop() {
 		deleteApp,
 	} = useMicroAppsPage()
 	const itemActions = useMicroAppListItemActions({ renameApp, deleteApp })
+	const { openInNewWindow } = itemActions
 	const collaboratorManagement = useMicroAppCollaboratorManagement()
 	const [promptFocused, setPromptFocused] = useState(false)
 	const reduceMotion = Boolean(useReducedMotion())
@@ -120,15 +122,14 @@ const MicroAppsPageDesktop = observer(function MicroAppsPageDesktop() {
 	const { createApp, creating } = useCreateMicroApp(workspace?.id, handleCreated)
 
 	const handleOpenApp = useCallback(
-		(appId: string) => {
-			if (isPublishedShareScope(scope)) {
-				const app = apps.find((item) => item.app_id === appId)
-				if (app) itemActions.openInNewWindow(app)
+		(app: MicroAppListItem) => {
+			if (shouldOpenPublishedShare(scope, app.publish_status)) {
+				openInNewWindow(app)
 				return
 			}
-			navigate({ name: RouteName.MicroApp, params: { appId } })
+			navigate({ name: RouteName.MicroApp, params: { appId: app.app_id } })
 		},
-		[apps, itemActions, navigate, scope],
+		[navigate, openInNewWindow, scope],
 	)
 
 	return (
@@ -313,7 +314,7 @@ const MicroAppsPageDesktop = observer(function MicroAppsPageDesktop() {
 										? t("microAppsPage.statusPublished")
 										: t("microAppsPage.statusUnpublished")
 								}
-								onClick={() => handleOpenApp(app.app_id)}
+								onClick={() => handleOpenApp(app)}
 								onOpenInNewWindow={() => itemActions.openInNewWindow(app)}
 								onRename={() => itemActions.openRename(app)}
 								onDelete={() => itemActions.openDelete(app)}

@@ -30,7 +30,8 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 
 vi.mock("../hooks/useMicroAppsPage", () => ({
 	useMicroAppsPage: mocks.useMicroAppsPage,
-	isPublishedShareScope: (scope: string) => scope === "recent" || scope === "accessible",
+	shouldOpenPublishedShare: (scope: string, publishStatus: string) =>
+		scope === "accessible" || (scope === "recent" && publishStatus === "published"),
 }))
 
 vi.mock("../components/MicroAppCreatePrompt", () => ({
@@ -350,6 +351,30 @@ describe("MicroAppsPage", () => {
 
 		expect(openSpy).toHaveBeenCalledWith("/micro-app/app-1", "_blank", "noopener,noreferrer")
 		expect(mocks.navigate).not.toHaveBeenCalled()
+		openSpy.mockRestore()
+	})
+
+	it("opens an unpublished recent app in the editor", () => {
+		const openSpy = vi.spyOn(window, "open").mockImplementation(() => null)
+		mocks.useMicroAppsPage.mockReturnValue({
+			...mocks.useMicroAppsPage(),
+			scope: "recent",
+			apps: [
+				{
+					...mocks.useMicroAppsPage().apps[0],
+					publish_status: "unpublished",
+				},
+			],
+		})
+
+		render(<MicroAppsPage />)
+		fireEvent.click(screen.getByTestId("micro-apps-app-app-1"))
+
+		expect(mocks.navigate).toHaveBeenCalledWith({
+			name: RouteName.MicroApp,
+			params: { appId: "app-1" },
+		})
+		expect(openSpy).not.toHaveBeenCalled()
 		openSpy.mockRestore()
 	})
 

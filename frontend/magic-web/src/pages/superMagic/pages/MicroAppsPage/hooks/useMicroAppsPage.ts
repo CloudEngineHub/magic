@@ -11,7 +11,6 @@ import type { CollaboratorPermission } from "@/pages/superMagic/types/collaborat
 
 const MICRO_APP_PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 250
-const PUBLISHED_SHARE_SCOPES = new Set<MicroAppListScope>(["recent", "accessible"])
 const MICRO_APP_LIST_SCOPES: MicroAppListScope[] = [
 	"all",
 	"created",
@@ -26,8 +25,9 @@ const MICRO_APP_PERSONAL_LIST_SCOPES: MicroAppListScope[] = [
 	"recent",
 ]
 
-export function isPublishedShareScope(scope: MicroAppListScope): boolean {
-	return PUBLISHED_SHARE_SCOPES.has(scope)
+export function shouldOpenPublishedShare(scope: MicroAppListScope, publishStatus: string): boolean {
+	// 可访问列表只包含发布内容；最近访问同时包含发布内容和开发中的应用。
+	return scope === "accessible" || (scope === "recent" && publishStatus === "published")
 }
 
 export function getMicroAppAvailableScopes(isPersonalOrganization: boolean): MicroAppListScope[] {

@@ -4,7 +4,7 @@ import {
 	getMicroAppAvailableScopes,
 	normalizeMicroAppListResponse,
 	normalizeMicroAppListScope,
-	isPublishedShareScope,
+	shouldOpenPublishedShare,
 	useMicroAppsPage,
 } from "../useMicroAppsPage"
 
@@ -245,11 +245,12 @@ describe("useMicroAppsPage", () => {
 		expect(result.current.hasMore).toBe(false)
 	})
 
-	it("treats recent and accessible scopes as published share views", () => {
-		expect(isPublishedShareScope("recent")).toBe(true)
-		expect(isPublishedShareScope("accessible")).toBe(true)
-		expect(isPublishedShareScope("all")).toBe(false)
-		expect(isPublishedShareScope("created")).toBe(false)
+	it("opens published share pages according to scope and publish status", () => {
+		expect(shouldOpenPublishedShare("recent", "published")).toBe(true)
+		expect(shouldOpenPublishedShare("recent", "unpublished")).toBe(false)
+		expect(shouldOpenPublishedShare("accessible", "unpublished")).toBe(true)
+		expect(shouldOpenPublishedShare("all", "published")).toBe(false)
+		expect(shouldOpenPublishedShare("created", "published")).toBe(false)
 	})
 
 	it("hides collaborated from personal organization scopes", () => {

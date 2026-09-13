@@ -39,7 +39,8 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 
 vi.mock("../hooks/useMicroAppsPage", () => ({
 	useMicroAppsPage: mocks.useMicroAppsPage,
-	isPublishedShareScope: (scope: string) => scope === "recent" || scope === "accessible",
+	shouldOpenPublishedShare: (scope: string, publishStatus: string) =>
+		scope === "accessible" || (scope === "recent" && publishStatus === "published"),
 }))
 
 vi.mock("../components/MicroAppCard", () => ({
@@ -201,6 +202,25 @@ describe("MicroAppsListPageMobile", () => {
 				viewTransition: false,
 			})
 		})
+	})
+
+	it("opens an unpublished recent app in the editor", () => {
+		const openSpy = vi.spyOn(window, "open").mockImplementation(() => null)
+		mocks.useMicroAppsPage.mockReturnValue({
+			...mocks.useMicroAppsPage(),
+			scope: "recent",
+		})
+
+		render(<MicroAppsListPageMobile />)
+		fireEvent.click(screen.getByTestId("micro-apps-mobile-app-app-1"))
+
+		expect(mocks.navigate).toHaveBeenCalledWith({
+			name: RouteName.MicroApp,
+			params: { appId: "app-1" },
+			viewTransition: false,
+		})
+		expect(openSpy).not.toHaveBeenCalled()
+		openSpy.mockRestore()
 	})
 
 	it("changes scope, searches, and loads more", () => {

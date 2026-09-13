@@ -647,7 +647,10 @@ const FilesViewer = memo(
 									{tabs.map((tab, index) => renderTabItem(tab, index))}
 								</HeadlessHorizontalScroll>
 
-								<WebsitePresetMenu onOpenWebsiteTab={openWebsiteTab} />
+								<WebsitePresetMenu
+									onOpenWebsiteTab={openWebsiteTab}
+									onOpenMicroAppTab={openMicroAppTab}
+								/>
 
 								{/* 展开按钮 */}
 								<DropdownMenu
