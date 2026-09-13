@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangle, Crosshair, Maximize, Minimize, RefreshCw, Share2 } from "lucide-react"
+import {
+	AlertTriangle,
+	Crosshair,
+	DownloadIcon,
+	Maximize,
+	Minimize,
+	RefreshCw,
+	Share2,
+} from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
@@ -534,6 +542,7 @@ function EditToolbar({
 		attachments,
 	})
 
+	const isCodeViewMode = viewMode === "code"
 	const showViewModeSwitcher = !isEditMode && onViewModeChange
 	const showServerUpdateButton = isEditMode && hasServerUpdate
 	const showAIOptimizationButton = showAIOptimization && !isEditMode
@@ -551,6 +560,13 @@ function EditToolbar({
 		},
 		[beforeAction],
 	)
+	const handleDownloadSource = (): void => {
+		if (!fileId || interactionDisabled) return
+		// 源码下载当前页的已保存版本，不使用主文稿 ID，也不导出预览加工后的 HTML。
+		runToolbarAction(() =>
+			exportFile([fileId], fileVersion !== undefined ? { [fileId]: fileVersion } : undefined),
+		)
+	}
 
 	return (
 		<div
@@ -634,6 +650,7 @@ function EditToolbar({
 					{/* AI 选取按钮 */}
 					{showFileEditButtons &&
 						!isEditMode &&
+						!isCodeViewMode &&
 						(onStartInspectorQuickSelect || onStartInspectorAppend) && (
 							<ConditionalTooltip
 								showText={shouldShowButtonText}
@@ -685,7 +702,7 @@ function EditToolbar({
 							testIdPrefix={testIdsEnabled ? "ppt-edit-toolbar" : undefined}
 							showButtonText={shouldShowButtonText}
 							maxItems={3}
-							onPrimaryAction={onStartInspectorAppend}
+							onPrimaryAction={isCodeViewMode ? undefined : onStartInspectorAppend}
 							isPrimaryActive={isAppendPicking}
 							attachmentList={attachmentList}
 							fileId={fileId}
@@ -742,7 +759,22 @@ function EditToolbar({
 						/>
 					)}
 
-					{showDownload && (
+					{showDownload && isCodeViewMode && (
+						<ActionButton
+							data-testid={
+								testIdsEnabled
+									? "ppt-edit-toolbar-download-source-button"
+									: undefined
+							}
+							icon={<DownloadIcon size={16} />}
+							title={t("ppt.download")}
+							text={t("ppt.download")}
+							showText={shouldShowButtonText}
+							disabled={!fileId || interactionDisabled}
+							onClick={handleDownloadSource}
+						/>
+					)}
+					{showDownload && !isCodeViewMode && (
 						<ExportDropdown
 							showText={shouldShowButtonText}
 							isExporting={isExporting || isEditableExporting}

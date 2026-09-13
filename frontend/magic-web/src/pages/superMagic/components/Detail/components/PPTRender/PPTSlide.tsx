@@ -852,6 +852,16 @@ const PPTSlide = observer(function PPTSlide({
 			rendererRef.current?.startInspectorQuickSelect?.()
 		}
 	})
+	const handleViewModeChange = useMemoizedFn(
+		(mode: NonNullable<EditToolbarProps["viewMode"]>) => {
+			// 工具栏已通过选取退出确认；源码会卸载渲染器，在此同步清除本页激活态。
+			if (mode === "code") {
+				setIsAppendPicking(false)
+				setIsQuickSelecting(false)
+			}
+			setViewMode(mode)
+		},
+	)
 	const resolvedToolbarOwnerKey = toolbarOwnerKey || `${fileId || "missing-file"}:${index}`
 	const toolbarModel = useMemo<PPTSlideToolbarModel | null>(() => {
 		if (!showEditToolbar) return null
@@ -880,7 +890,7 @@ const PPTSlide = observer(function PPTSlide({
 				hasServerUpdate,
 				onViewServerUpdate: handleViewServerUpdate,
 				viewMode,
-				onViewModeChange: setViewMode,
+				onViewModeChange: handleViewModeChange,
 				showVersionHistory: allowEdit,
 				fileVersion,
 				fileVersionsList,
@@ -921,6 +931,7 @@ const PPTSlide = observer(function PPTSlide({
 		handleAIEdit,
 		handleQuickSelect,
 		handleVersionChange,
+		handleViewModeChange,
 		handleViewServerUpdate,
 		hasServerUpdate,
 		isAppendPicking,
