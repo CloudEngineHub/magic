@@ -557,15 +557,13 @@ class SuperMagicAgentAssembler
         return new AgentListItemDTO(
             id: $agent->getId(),
             code: $agent->getCode(),
-            name: $agent->getName(),
+            nameI18n: $agent->getNameI18n() ?? [],
             roleI18n: $agent->getRoleI18n() ?? [],
-            description: $agent->getDescription(),
+            descriptionI18n: $agent->getDescriptionI18n() ?? [],
             icon: $agent->getIcon(),
             iconType: $agent->getIconType(),
             playbooks: $features,
             sourceType: $agent->getSourceType()->value,
-            // `source` is the scalar replacement for the removed source_i18n field; keep source_type for compatibility.
-            source: $agent->getSourceType()->value,
             enabled: $agent->getEnabled() ?? false,
             isStoreOffline: false,
             latestVersionCode: $latestVersionCode,

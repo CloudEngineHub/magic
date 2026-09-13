@@ -18,11 +18,11 @@ class AgentListItemDTO extends AbstractDTO
 
     private string $code;
 
-    private string $name;
+    private array $nameI18n;
 
     private ?array $roleI18n;
 
-    private string $description;
+    private ?array $descriptionI18n;
 
     /**
      * Agent图标对象，包含 type 和 value.
@@ -39,8 +39,6 @@ class AgentListItemDTO extends AbstractDTO
     private array $playbooks;
 
     private string $sourceType;
-
-    private string $source;
 
     private bool $enabled;
 
@@ -80,14 +78,13 @@ class AgentListItemDTO extends AbstractDTO
     public function __construct(
         int $id,
         string $code,
-        string $name,
+        array $nameI18n,
         ?array $roleI18n,
-        string $description,
+        ?array $descriptionI18n,
         ?array $icon,
         int $iconType,
         array $playbooks,
         string $sourceType,
-        string $source,
         bool $enabled,
         ?bool $isStoreOffline,
         ?string $latestVersionCode,
@@ -107,14 +104,13 @@ class AgentListItemDTO extends AbstractDTO
     ) {
         $this->id = $id;
         $this->code = $code;
-        $this->name = $name;
+        $this->nameI18n = $nameI18n;
         $this->roleI18n = $roleI18n;
-        $this->description = $description;
+        $this->descriptionI18n = $descriptionI18n;
         $this->icon = $icon;
         $this->iconType = $iconType;
         $this->playbooks = $playbooks;
         $this->sourceType = $sourceType;
-        $this->source = $source;
         $this->enabled = $enabled;
         $this->isStoreOffline = $isStoreOffline;
         $this->latestVersionCode = $latestVersionCode;
@@ -141,14 +137,13 @@ class AgentListItemDTO extends AbstractDTO
         return [
             'id' => (string) $this->id,
             'code' => $this->code,
-            'name' => $this->name,
+            'name_i18n' => $this->nameI18n,
             'role_i18n' => $this->roleI18n,
-            'description' => $this->description,
+            'description_i18n' => $this->descriptionI18n,
             'icon' => $this->icon,
             'icon_type' => $this->iconType,
             'playbooks' => $this->playbooks,
             'source_type' => $this->sourceType,
-            'source' => $this->source,
             'enabled' => $this->enabled,
             'is_store_offline' => $this->isStoreOffline,
             'latest_version_code' => $this->latestVersionCode,
