@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent } from "react"
+import { useEffect, useRef, useState, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { Ellipsis } from "lucide-react"
 import { cn } from "@/utils/cn"
@@ -32,6 +32,7 @@ function ProjectItem({
 	onCancelWorkspaceShortcut,
 	onDeleteProject,
 	onRenameProject,
+	onInteractionChange,
 }: ProjectItemProps) {
 	const { t } = useTranslation("super")
 	const isSelected = projectStore.selectedProject?.id === project.id
@@ -40,6 +41,7 @@ function ProjectItem({
 	const showCollaborationTag = isWorkspaceShortcut || isCollaborationProjectStatus
 	const [isHovered, setIsHovered] = useState(false)
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const [isRenamePending, setIsRenamePending] = useState(false)
 	const suppressItemClickRef = useRef(false)
 
 	const canRename = canManageProject(project.user_role) && !!onRenameProject
@@ -54,6 +56,14 @@ function ProjectItem({
 		item: project,
 		onRenameProject: canRename ? onRenameProject : undefined,
 	})
+
+	useEffect(() => {
+		onInteractionChange?.(project.id, isMenuOpen || isEditing || isRenamePending)
+	}, [project.id, isMenuOpen, isEditing, isRenamePending, onInteractionChange])
+	useEffect(
+		() => () => onInteractionChange?.(project.id, false),
+		[project.id, onInteractionChange],
+	)
 
 	const blockItemClickTemporarily = () => {
 		suppressItemClickRef.current = true
@@ -97,8 +107,10 @@ function ProjectItem({
 
 	const handleRenameStart = () => {
 		if (!canRename) return
+		setIsRenamePending(true)
 		setTimeout(() => {
 			setIsEditing(true)
+			setIsRenamePending(false)
 		}, 200)
 	}
 

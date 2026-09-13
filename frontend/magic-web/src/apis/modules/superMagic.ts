@@ -2308,19 +2308,30 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			page,
 			page_size,
 			show_collaboration = 1,
+			sort_mode,
 		}: {
 			workspace_id?: string
 			project_name?: string
 			page: number
 			page_size: number
 			show_collaboration?: number
+			sort_mode?: "workspace" | "recent"
 		},
 		options?: Omit<RequestConfig, "url">,
 	) {
 		return fetch.post<WithPage<ProjectListItem>>(
 			genRequestUrl("/api/v1/super-agent/projects/participated"),
-			{ workspace_id, project_name, page, page_size, show_collaboration },
+			{ workspace_id, project_name, page, page_size, show_collaboration, sort_mode },
 			options,
+		)
+	},
+
+	/** 记录用户进入项目；后台详情读取不调用此接口。 */
+	recordProjectVisit(id: string) {
+		return fetch.post<{ id: string; last_active_at: string }>(
+			genRequestUrl(`/api/v1/super-agent/projects/${id}/visit`),
+			undefined,
+			{ enableErrorMessagePrompt: false },
 		)
 	},
 

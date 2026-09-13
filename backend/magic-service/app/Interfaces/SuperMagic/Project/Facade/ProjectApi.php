@@ -386,6 +386,13 @@ class ProjectApi extends AbstractApi
         return $this->projectMemberAppService->getParticipatedProjects($requestContext, $requestDTO);
     }
 
+    public function visit(RequestContext $requestContext, string $id): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+
+        return $this->projectMemberAppService->recordProjectVisit($requestContext, (int) $id);
+    }
+
     /**
      * Transfer projects to another user.
      *

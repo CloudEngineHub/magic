@@ -4615,6 +4615,17 @@
 		"swipePin": "Pin",
 		"swipeUnpin": "Unpin"
 	},
+	"projectNavigation": {
+		"emptyRecent": "No recently used projects",
+		"loadMore": "Load more",
+		"loading": "Loading…",
+		"openManager": "Open project manager",
+		"openWorkspaceManager": "Open project manager for {{name}}",
+		"recent": "Recent projects",
+		"retry": "Could not load. Click to retry",
+		"viewAll": "View all in project manager",
+		"workspaces": "Workspaces"
+	},
 	"projectShare": {
 		"advancedSettings": "Advanced settings",
 		"copyLink": "Copy link",

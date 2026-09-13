@@ -453,7 +453,8 @@ class ProjectMemberAppService extends AbstractAppService
             $paidOrganizationCodes,
             'last_active_at',
             'desc',
-            $requestDTO->getShowHidden()
+            $requestDTO->getShowHidden(),
+            $requestDTO->getSortMode()
         );
 
         // 2. 提取工作区ID并获取名称
@@ -487,6 +488,20 @@ class ProjectMemberAppService extends AbstractAppService
         );
 
         return $listResponseDTO->toArray();
+    }
+
+    /** @return array{id: string, last_active_at: string} */
+    public function recordProjectVisit(RequestContext $requestContext, int $projectId): array
+    {
+        $authorization = $requestContext->getUserAuthorization();
+        $project = $this->getAccessibleProject($projectId, $authorization->getId(), $authorization->getOrganizationCode());
+        $lastActiveAt = $this->projectMemberDomainService->recordProjectVisit(
+            $authorization->getId(),
+            $projectId,
+            $project->getUserOrganizationCode()
+        );
+
+        return ['id' => (string) $projectId, 'last_active_at' => $lastActiveAt];
     }
 
     /**

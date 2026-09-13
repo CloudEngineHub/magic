@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
-import { ChevronRight, Loader2Icon, Plus, EllipsisIcon } from "lucide-react"
+import { ChevronRight, Loader2Icon, Plus, EllipsisIcon, SquareArrowOutUpRight } from "lucide-react"
 import { cn } from "@/utils/cn"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
@@ -20,7 +20,15 @@ import { getWorkspaceRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
 import { shouldIgnoreSelectionAfterWorkspaceRename } from "@/pages/superMagic/utils/workspaceRenameSelectionGuard"
 
-function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: WorkspaceItemProps) {
+function WorkspaceItem({
+	active,
+	workspace,
+	className,
+	searchProjects,
+	dndDisabled,
+	scrollRef,
+	onOpenManager,
+}: WorkspaceItemProps) {
 	const { t } = useTranslation(["super"])
 	const workspaceIdSegment = toTestIdSegment(workspace.id)
 	const workspaceNameTestId = `sidebar-workspace-item-name-${workspaceIdSegment}`
@@ -78,13 +86,14 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 	 */
 	useEffect(() => {
 		if (
+			active &&
 			searchProjects === undefined &&
 			isExpanded &&
 			!projectStore.hasLoadedWorkspace(workspace.id)
 		) {
 			projectStore.loadProjectsForWorkspace(workspace.id)
 		}
-	}, [isExpanded, searchProjects, workspace.id])
+	}, [active, isExpanded, searchProjects, workspace.id])
 
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (
@@ -124,9 +133,7 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 		e.preventDefault()
 		e.stopPropagation()
 		if (isExpanded && workspaceHeaderRef.current) {
-			const scrollContainer = workspaceHeaderRef.current.closest<HTMLElement>(
-				"[data-testid='sidebar-content-root']",
-			)
+			const scrollContainer = scrollRef.current
 			if (scrollContainer) {
 				collapseScrollAnchorRef.current = {
 					scrollContainer,
@@ -230,6 +237,29 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 								>
 									{workspace.name || t("super:workspace.unnamedWorkspace")}
 								</span>
+								<span
+									role="button"
+									tabIndex={0}
+									title={t("projectNavigation.openManager")}
+									aria-label={t("projectNavigation.openWorkspaceManager", {
+										name: workspace.name,
+									})}
+									className="flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-sidebar-accent"
+									onClick={(event) => {
+										event.preventDefault()
+										event.stopPropagation()
+										onOpenManager()
+									}}
+									onKeyDown={(event) => {
+										if (event.key === "Enter" || event.key === " ") {
+											event.preventDefault()
+											event.stopPropagation()
+											onOpenManager()
+										}
+									}}
+								>
+									<SquareArrowOutUpRight size={16} />
+								</span>
 								{isLoading && (
 									<Loader2Icon
 										className="h-4 w-4 shrink-0 animate-spin text-[#a3a3a3]"
@@ -289,7 +319,10 @@ function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: Wo
 
 				{isExpanded && (
 					<ProjectList
+						isSearchResult={searchProjects !== undefined}
+						active={active}
 						workspace={workspace}
+						onOpenManager={onOpenManager}
 						projects={projects}
 						workspaceId={workspace.id}
 						isLoading={isLoading}

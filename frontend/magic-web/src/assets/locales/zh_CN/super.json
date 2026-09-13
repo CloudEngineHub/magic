@@ -4616,6 +4616,17 @@
 		"swipePin": "置顶",
 		"swipeUnpin": "取消置顶"
 	},
+	"projectNavigation": {
+		"emptyRecent": "暂无最近使用的项目",
+		"loadMore": "加载更多",
+		"loading": "正在加载…",
+		"openManager": "打开项目管理器",
+		"openWorkspaceManager": "打开「{{name}}」项目管理器",
+		"recent": "最近项目",
+		"retry": "加载失败，点击重试",
+		"viewAll": "在项目管理器中查看全部",
+		"workspaces": "工作空间"
+	},
 	"projectShare": {
 		"advancedSettings": "高级设置",
 		"copyLink": "复制链接",

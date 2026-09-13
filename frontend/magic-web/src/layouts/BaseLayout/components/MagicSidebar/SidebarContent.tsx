@@ -1,9 +1,8 @@
-import { Suspense, lazy, useState, type MouseEvent } from "react"
+import { type MouseEvent } from "react"
 import { useLocation } from "react-router"
-import { ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucide-react"
+import { ChevronRight, Home, LayoutGrid, MessageCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { WorkspaceList } from "./WorkspaceList"
-import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
+import ProjectNavigation from "./ProjectNavigation"
 import { MicroAppsSidebarMenuItem } from "./MicroAppsSidebarMenuItem"
 import { SidebarMarketMenuItem } from "./SidebarMarketMenuItem"
 import type { SidebarContentProps } from "./types"
@@ -14,8 +13,6 @@ import {
 	SidebarMenuButton,
 	SidebarMenuItem,
 } from "@/components/shadcn-ui/sidebar"
-import workspaceStore from "@/pages/superMagic/stores/core/workspace"
-import { isCollaborationWorkspace } from "@/pages/superMagic/constants"
 import AppsSubMenu from "./AppsSubMenu"
 import ChatsSubMenu from "./ChatsSubMenu"
 import useNavigate from "@/routes/hooks/useNavigate"
@@ -30,18 +27,11 @@ import { useNavigateToSuperHome } from "./hooks/useNavigateToSuperHome"
 import { isMagicApp } from "@/utils/devices"
 import { openAudioRecordingsInMagicApp } from "@/layouts/BaseLayout/utils/magicAppNavigation"
 
-const WorkspaceProjectsPanel = lazy(
-	() => import("@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"),
-)
-
 function SidebarContent({ collapsed }: SidebarContentProps) {
 	const { t } = useTranslation(["sidebar", "super"])
 	useResourceStatusPolling()
 	const clawBrandValues = getClawBrandTranslationValues()
-	const [shareProjectsPanelOpen, setShareProjectsPanelOpen] = useState(false)
 	const location = useLocation()
-	const selectedWorkspace = workspaceStore.selectedWorkspace
-	const isShareWorkspaceActive = isCollaborationWorkspace(selectedWorkspace)
 	const navigate = useNavigate()
 	const sidebarMarketMenuItems = useSidebarMarketMenuItems()
 	const { superRouteUrl, handleNavigateToSuperHome } = useNavigateToSuperHome()
@@ -71,7 +61,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 
 	return (
 		<div
-			className="no-scrollbar flex min-h-0 w-full flex-1 touch-pan-y flex-col gap-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
+			className="no-scrollbar flex min-h-0 w-full flex-1 touch-pan-y flex-col gap-1 overflow-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
 			data-testid="sidebar-content-root"
 		>
 			<SidebarGroup className="w-full shrink-0 p-2" data-testid="sidebar-content-apps-group">
@@ -153,33 +143,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 
 			<Divider direction="horizontal" className="mx-auto !w-[calc(100%-16px)] shrink-0" />
 
-			{collapsed ? (
-				<CollapsedWorkspaceMenu />
-			) : (
-				<div className="flex min-h-40 flex-1 flex-col gap-1">
-					<WorkspaceList
-						beforeItems={
-							<SidebarMenuItem
-								className="mb-1"
-								data-testid="sidebar-content-share-workspace-group"
-							>
-								<SidebarMenuButton
-									isActive={isShareWorkspaceActive}
-									onClick={() => setShareProjectsPanelOpen(true)}
-									data-testid="sidebar-content-share-workspace-button"
-									className="text-sidebar-foreground"
-								>
-									<UsersRound className="ml-6 h-4 w-4 shrink-0" />
-									<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-										{t("super:workspace.shareWorkspaceName")}
-									</span>
-									<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
-								</SidebarMenuButton>
-							</SidebarMenuItem>
-						}
-					/>
-				</div>
-			)}
+			<ProjectNavigation collapsed={collapsed} />
 
 			{/* <SidebarGroup className="w-full px-2 py-0">
 				<SidebarGroupContent>
@@ -195,16 +159,6 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 					</SidebarMenu>
 				</SidebarGroupContent>
 			</SidebarGroup> */}
-
-			{shareProjectsPanelOpen && (
-				<Suspense fallback={null}>
-					<WorkspaceProjectsPanel
-						open={shareProjectsPanelOpen}
-						initialSource={{ type: "collaboration" }}
-						onClose={() => setShareProjectsPanelOpen(false)}
-					/>
-				</Suspense>
-			)}
 		</div>
 	)
 }

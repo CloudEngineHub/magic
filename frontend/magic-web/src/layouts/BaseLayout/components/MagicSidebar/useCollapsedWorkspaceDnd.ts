@@ -18,7 +18,6 @@ import {
 	getPredecessorId,
 	getProjectPinBoundaryAction,
 	isProjectPinGroupBoundaryInsertion,
-	getRenderedProjectIds,
 	getSuccessorId,
 	insertAtPosition,
 	INSERT_LINE_COLOR,
@@ -195,7 +194,17 @@ export function useCollapsedWorkspaceDnd({
 		)
 		const indicatorContainer = projectList || workspaceList
 		const listTop = workspaceList?.getBoundingClientRect().top ?? -Infinity
-		const lineY = Math.max(getIndicatorLineY(target, position, indicatorContainer), listTop + 4)
+		const viewport = target
+			.closest<HTMLElement>("[data-project-scroll-container]")
+			?.getBoundingClientRect()
+		const lineY = Math.min(
+			Math.max(
+				getIndicatorLineY(target, position, indicatorContainer),
+				listTop + 4,
+				(viewport?.top ?? -Infinity) + 4,
+			),
+			(viewport?.bottom ?? Infinity) - 4,
+		)
 		const width = Math.max(8, targetRect.width)
 
 		indicator.style.display = "block"
@@ -240,7 +249,9 @@ export function useCollapsedWorkspaceDnd({
 
 	const getScrollContainer = useCallback((target: EventTarget | null) => {
 		if (target instanceof Element) {
-			const localContainer = target.closest<HTMLElement>("[data-slot='scroll-area-viewport']")
+			const localContainer = target.closest<HTMLElement>(
+				"[data-project-scroll-container], [data-slot='scroll-area-viewport']",
+			)
 			if (localContainer) return localContainer
 		}
 		return rootRef.current?.querySelector<HTMLElement>("[data-slot='scroll-area-viewport']")
@@ -370,6 +381,7 @@ export function useCollapsedWorkspaceDnd({
 					}
 				}
 
+				if (projectListTarget.dataset.collapsedSidebarDndDropEmpty !== "true") return null
 				const workspaceId = projectListTarget.dataset.collapsedSidebarDndWorkspaceId
 				if (!workspaceId) return null
 				if (workspaceId === active.workspaceId) {
@@ -709,6 +721,15 @@ export function useCollapsedWorkspaceDnd({
 				}
 				if (active.type !== "project") return
 
+				if (
+					preview.type === "project" &&
+					!(await projectStore.ensureProjectDropNeighbors(
+						preview.workspaceId,
+						preview.projectId,
+						preview.position !== "before",
+					))
+				)
+					throw new Error("Project drop neighbors are unavailable")
 				const sourceProjects = projectStore.getProjectsByWorkspace(active.workspaceId)
 				const project = sourceProjects.find((item) => item.id === active.projectId)
 				if (!project) return
@@ -731,19 +752,7 @@ export function useCollapsedWorkspaceDnd({
 					if (next.every((item, index) => item.id === sourceProjects[index]?.id)) {
 						return
 					}
-					const renderedOrder = getRenderedProjectIds(
-						preview.target.closest<HTMLElement>(
-							'[data-collapsed-sidebar-dnd-drop-type="project-list"]',
-						),
-						'[data-collapsed-sidebar-dnd-drop-type="project"]',
-						"collapsedSidebarDndProjectId",
-					)
-					const storeOrder = sourceProjects.map((item) => item.id)
-					const decisionOrder =
-						renderedOrder.length === storeOrder.length &&
-						new Set(renderedOrder).size === storeOrder.length
-							? renderedOrder
-							: storeOrder
+					const decisionOrder = sourceProjects.map((item) => item.id)
 					const projectDropPosition = preview.position || "after"
 					const projectTargetId =
 						preview.type === "project" ? preview.projectId : undefined
@@ -808,19 +817,7 @@ export function useCollapsedWorkspaceDnd({
 
 				const targetProjects = projectStore.getProjectsByWorkspace(preview.workspaceId)
 				// A workspace-row drop moves the project without specifying an order anchor.
-				const renderedTargetOrder = getRenderedProjectIds(
-					preview.target.closest<HTMLElement>(
-						'[data-collapsed-sidebar-dnd-drop-type="project-list"]',
-					),
-					'[data-collapsed-sidebar-dnd-drop-type="project"]',
-					"collapsedSidebarDndProjectId",
-				)
-				const targetStoreOrder = targetProjects.map((item) => item.id)
-				const targetDecisionOrder =
-					renderedTargetOrder.length === targetStoreOrder.length &&
-					new Set(renderedTargetOrder).size === targetStoreOrder.length
-						? renderedTargetOrder
-						: targetStoreOrder
+				const targetDecisionOrder = targetProjects.map((item) => item.id)
 				const projectDropPosition = preview.position || "after"
 				const projectTargetId = preview.type === "project" ? preview.projectId : undefined
 				const isPinnedWorkspaceDrop = preview.type === "workspace" && project.is_pinned

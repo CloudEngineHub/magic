@@ -33,6 +33,56 @@ export class SidebarStore {
 	// Workspace expanded state (for lazy loading)
 	expandedWorkspaces: Set<string> = new Set()
 
+	// 栏目偏好属于账号和组织；窄栏临时浮层不改写这两个值。
+	recentProjectsExpanded = false
+	workspacesExpanded = true
+	private navigationIdentity: string | null = null
+	// 滚动位置只保留于当次身份会话；滚动不触发 MobX 渲染或写本地存储。
+	navigationScrollPositions = new Map<string, number>()
+
+	setNavigationIdentity(userId?: string, organizationCode?: string) {
+		const identity =
+			userId && organizationCode ? JSON.stringify([userId, organizationCode]) : null
+		if (identity === this.navigationIdentity) return
+		this.navigationIdentity = identity
+		this.navigationScrollPositions.clear()
+		this.recentProjectsExpanded = false
+		this.workspacesExpanded = true
+		if (!identity) return
+		try {
+			const saved: unknown = JSON.parse(
+				localStorage.getItem(`sidebar-navigation:${identity}`) ?? "null",
+			)
+			if (!saved || typeof saved !== "object") return
+			if (
+				"recentProjectsExpanded" in saved &&
+				typeof saved.recentProjectsExpanded === "boolean"
+			)
+				this.recentProjectsExpanded = saved.recentProjectsExpanded
+			if ("workspacesExpanded" in saved && typeof saved.workspacesExpanded === "boolean")
+				this.workspacesExpanded = saved.workspacesExpanded
+		} catch {
+			/* 无效或不可用的存储采用缺省布局。 */
+		}
+	}
+
+	toggleNavigationSection(section: "recent" | "workspaces") {
+		if (section === "recent") this.recentProjectsExpanded = !this.recentProjectsExpanded
+		else this.workspacesExpanded = !this.workspacesExpanded
+		if (!this.navigationIdentity) return
+		try {
+			localStorage.setItem(
+				`sidebar-navigation:${this.navigationIdentity}`,
+				JSON.stringify({
+					recentProjectsExpanded: this.recentProjectsExpanded,
+					workspacesExpanded: this.workspacesExpanded,
+				}),
+			)
+		} catch {
+			/* 持久化失败不阻止当次栏目操作。 */
+		}
+	}
+
 	constructor() {
 		makeAutoObservable(
 			this,
@@ -40,6 +90,7 @@ export class SidebarStore {
 				collapsedSizePercent: computed,
 				// Width reads from a non-observable cache, so it must not be memoized as computed.
 				width: false,
+				navigationScrollPositions: false,
 			},
 			{ autoBind: true },
 		)

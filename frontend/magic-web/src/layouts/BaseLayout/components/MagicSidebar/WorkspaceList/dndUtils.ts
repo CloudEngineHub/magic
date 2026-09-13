@@ -63,6 +63,16 @@ export function getIndicatorLineY(
 		return position === "before" ? targetRect.top : targetRect.bottom
 	}
 
+	// 保留的离屏交互行可能成为 DOM 邻居；只有真实相邻的虚拟行才能共用间隙坐标。
+	const rowIndex = target.closest<HTMLElement>("[data-index]")?.dataset.index
+	const siblingIndex = sibling.closest<HTMLElement>("[data-index]")?.dataset.index
+	if (
+		rowIndex !== undefined &&
+		siblingIndex !== undefined &&
+		Math.abs(Number(rowIndex) - Number(siblingIndex)) !== 1
+	)
+		return position === "before" ? targetRect.top : targetRect.bottom
+
 	const siblingRect = sibling.getBoundingClientRect()
 	return position === "before"
 		? (siblingRect.bottom + targetRect.top) / 2
@@ -77,6 +87,11 @@ export function getNearestProjectTarget(
 	rowSelector: string,
 	projectIdKey: string,
 ) {
+	const viewport = (
+		projectList.closest<HTMLElement>("[data-project-scroll-container]") ??
+		projectList.querySelector<HTMLElement>("[data-project-scroll-container]")
+	)?.getBoundingClientRect()
+	if (viewport && (clientY < viewport.top || clientY > viewport.bottom)) return null
 	const projectTargets = Array.from(
 		projectList.querySelectorAll<HTMLElement>(rowSelector),
 	).filter((target) => target.dataset[projectIdKey] !== excludedProjectId)
@@ -85,6 +100,7 @@ export function getNearestProjectTarget(
 	let nearestDistance = Number.POSITIVE_INFINITY
 	for (const target of projectTargets) {
 		const rect = target.getBoundingClientRect()
+		if (viewport && (rect.bottom <= viewport.top || rect.top >= viewport.bottom)) continue
 		if (clientY >= rect.top && clientY <= rect.bottom) return target
 		const distance = Math.abs(clientY - (rect.top + rect.height / 2))
 		if (distance < nearestDistance) {
@@ -93,18 +109,6 @@ export function getNearestProjectTarget(
 		}
 	}
 	return nearestTarget
-}
-
-/** Returns the rendered project order for a project list when all rows are present. */
-export function getRenderedProjectIds(
-	projectList: HTMLElement | null,
-	rowSelector: string,
-	projectIdKey: string,
-) {
-	if (!projectList) return []
-	return Array.from(projectList.querySelectorAll<HTMLElement>(rowSelector))
-		.map((target) => target.dataset[projectIdKey])
-		.filter((id): id is string => Boolean(id))
 }
 
 /** Returns the nearest workspace row when the pointer is in a row gap. */

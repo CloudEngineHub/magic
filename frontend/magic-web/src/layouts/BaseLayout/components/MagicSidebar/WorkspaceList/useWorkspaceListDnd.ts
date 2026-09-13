@@ -18,7 +18,6 @@ import {
 	getPredecessorId,
 	getProjectPinBoundaryAction,
 	isProjectPinGroupBoundaryInsertion,
-	getRenderedProjectIds,
 	getSuccessorId,
 	insertAtPosition,
 	INSERT_LINE_COLOR,
@@ -40,6 +39,7 @@ interface DropPreview {
 
 interface UseWorkspaceListDndOptions {
 	workspaces: Workspace[]
+	scrollRef: RefObject<HTMLDivElement>
 	disabled: boolean
 	requestPinBoundaryConfirmation: (request: {
 		action: ProjectPinBoundaryAction
@@ -104,6 +104,7 @@ function resolveDropTarget(
 
 export function useWorkspaceListDnd({
 	workspaces,
+	scrollRef,
 	disabled,
 	requestPinBoundaryConfirmation,
 }: UseWorkspaceListDndOptions) {
@@ -227,7 +228,13 @@ export function useWorkspaceListDnd({
 		)
 		const stickyHeaderBottom = stickyHeader?.getBoundingClientRect().bottom ?? -Infinity
 		// Keep the indicator's 4px radius below the sticky header instead of covering its controls.
-		const lineY = Math.max(requestedLineY, stickyHeaderBottom + 4)
+		const viewport = target
+			.closest<HTMLElement>("[data-project-scroll-container]")
+			?.getBoundingClientRect()
+		const lineY = Math.min(
+			Math.max(requestedLineY, stickyHeaderBottom + 4, (viewport?.top ?? -Infinity) + 4),
+			(viewport?.bottom ?? Infinity) - 4,
+		)
 		const width = Math.max(8, targetRect.width)
 		indicator.style.display = "block"
 		indicator.style.position = "absolute"
@@ -305,14 +312,14 @@ export function useWorkspaceListDnd({
 				dropTarget.dataset.sidebarDropType === "project-list" &&
 				dropTarget.dataset.sidebarDropEmpty !== "true"
 			) {
-				dropTarget =
-					getNearestProjectTarget(
-						dropTarget,
-						clientY,
-						active.projectId,
-						'[data-sidebar-drop-type="project"]',
-						"sidebarDropProjectId",
-					) || dropTarget
+				dropTarget = getNearestProjectTarget(
+					dropTarget,
+					clientY,
+					active.projectId,
+					'[data-sidebar-drop-type="project"]',
+					"sidebarDropProjectId",
+				)
+				if (!dropTarget) return null
 			}
 
 			const dropType = dropTarget.dataset.sidebarDropType
@@ -494,14 +501,24 @@ export function useWorkspaceListDnd({
 		pointerRef.current = null
 	}, [])
 
+	const getScrollContainer = useCallback(
+		(target: EventTarget | null) => {
+			// 指针位于项目窗口时只滚动项目；其它位置由工作空间滚动区处理。
+			if (target instanceof Element) {
+				const local = target.closest<HTMLElement>("[data-project-scroll-container]")
+				if (local && rootRef.current?.contains(local)) return local
+			}
+			return scrollRef.current
+		},
+		[scrollRef],
+	)
+
 	const runAutoScroll = useCallback(
 		function scrollFrame() {
 			autoScrollFrameRef.current = null
 			const pointer = pointerRef.current
 			const active = activeDragRef.current
-			const scrollContainer = rootRef.current?.closest<HTMLElement>(
-				"[data-testid='sidebar-content-root']",
-			)
+			const scrollContainer = getScrollContainer(pointer?.target ?? null)
 			if (!pointer || !active || !scrollContainer) return
 
 			const speed = getEdgeScrollSpeed(scrollContainer, pointer.clientY)
@@ -516,15 +533,13 @@ export function useWorkspaceListDnd({
 			applyPreview(buildPreview(target, pointer.clientY, active), true)
 			autoScrollFrameRef.current = window.requestAnimationFrame(scrollFrame)
 		},
-		[applyPreview, buildPreview],
+		[applyPreview, buildPreview, getScrollContainer],
 	)
 
 	const updateAutoScroll = useCallback(
 		(frame: DragFrame) => {
 			pointerRef.current = frame
-			const scrollContainer = rootRef.current?.closest<HTMLElement>(
-				"[data-testid='sidebar-content-root']",
-			)
+			const scrollContainer = getScrollContainer(frame.target)
 			if (!scrollContainer || getEdgeScrollSpeed(scrollContainer, frame.clientY) === 0) {
 				stopAutoScroll()
 				return
@@ -533,7 +548,7 @@ export function useWorkspaceListDnd({
 				autoScrollFrameRef.current = window.requestAnimationFrame(runAutoScroll)
 			}
 		},
-		[runAutoScroll, stopAutoScroll],
+		[runAutoScroll, stopAutoScroll, getScrollContainer],
 	)
 
 	const handleDragStart = useCallback(
@@ -705,6 +720,15 @@ export function useWorkspaceListDnd({
 				}
 				if (active.type !== "project") return
 
+				if (
+					preview.type === "project" &&
+					!(await projectStore.ensureProjectDropNeighbors(
+						preview.workspaceId,
+						preview.projectId,
+						preview.position !== "before",
+					))
+				)
+					throw new Error("Project drop neighbors are unavailable")
 				const sourceProjects = projectStore.getProjectsByWorkspace(active.workspaceId)
 				const project = sourceProjects.find((item) => item.id === active.projectId)
 				if (!project) return
@@ -727,19 +751,7 @@ export function useWorkspaceListDnd({
 					if (next.every((item, index) => item.id === sourceProjects[index]?.id)) {
 						return
 					}
-					const renderedOrder = getRenderedProjectIds(
-						preview.target.closest<HTMLElement>(
-							'[data-sidebar-drop-type="project-list"]',
-						),
-						'[data-sidebar-drop-type="project"]',
-						"sidebarDropProjectId",
-					)
-					const storeOrder = sourceProjects.map((item) => item.id)
-					const decisionOrder =
-						renderedOrder.length === storeOrder.length &&
-						new Set(renderedOrder).size === storeOrder.length
-							? renderedOrder
-							: storeOrder
+					const decisionOrder = sourceProjects.map((item) => item.id)
 					const projectDropPosition = preview.position || "after"
 					const projectTargetId =
 						preview.type === "project" ? preview.projectId : undefined
@@ -802,17 +814,7 @@ export function useWorkspaceListDnd({
 
 				const targetProjects = projectStore.getProjectsByWorkspace(preview.workspaceId)
 				// A workspace-row drop moves the project without specifying an order anchor.
-				const renderedTargetOrder = getRenderedProjectIds(
-					preview.target.closest<HTMLElement>('[data-sidebar-drop-type="project-list"]'),
-					'[data-sidebar-drop-type="project"]',
-					"sidebarDropProjectId",
-				)
-				const targetStoreOrder = targetProjects.map((item) => item.id)
-				const targetDecisionOrder =
-					renderedTargetOrder.length === targetStoreOrder.length &&
-					new Set(renderedTargetOrder).size === targetStoreOrder.length
-						? renderedTargetOrder
-						: targetStoreOrder
+				const targetDecisionOrder = targetProjects.map((item) => item.id)
 				const projectDropPosition = preview.position || "after"
 				const projectTargetId = preview.type === "project" ? preview.projectId : undefined
 				const isPinnedWorkspaceDrop = preview.type === "workspace" && project.is_pinned

@@ -1,17 +1,19 @@
+import WorkspaceListHeader from "./WorkspaceListHeader"
+import { SidebarExpandableItem } from "@/pages/superMagic/components/SidebarSection"
 import {
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
-	type CSSProperties,
 	type ReactNode,
 } from "react"
 import { observer } from "mobx-react-lite"
 import { toJS } from "mobx"
 import { useRequest } from "ahooks"
 import { useImmer } from "use-immer"
-import { Loader2, Plus, RefreshCw, Search, X } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { sidebarStore } from "@/stores/layout"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
@@ -24,27 +26,24 @@ import {
 } from "@/pages/superMagic/pages/Workspace/types"
 import WorkspaceItem from "./WorkspaceItem"
 import CreateWorkspaceInput from "./CreateWorkspaceInput"
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
-import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import { toTestIdSegment } from "@/utils/testid"
-import {
-	SidebarGroup,
-	SidebarGroupContent,
-	SidebarGroupLabel,
-	SidebarMenu,
-} from "@/components/shadcn-ui/sidebar"
+import { SidebarMenu } from "@/components/shadcn-ui/sidebar"
 import { useWorkspaceListDnd } from "./useWorkspaceListDnd"
 import { useProjectPinBoundaryConfirmation } from "./ProjectPinBoundaryConfirmDialog"
 
 const SEARCH_PAGE_SIZE = 20
 
 interface WorkspaceListProps {
+	icon: ReactNode
 	beforeItems?: ReactNode
+	onOpenManager: (workspace: Workspace) => void
 }
 
-function WorkspaceList({ beforeItems }: WorkspaceListProps) {
+function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps) {
 	const { t } = useTranslation()
+	const isExpanded = sidebarStore.workspacesExpanded
+	const scrollRef = useRef<HTMLDivElement>(null)
 	const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isSearchMode, setIsSearchMode] = useState(false)
@@ -54,6 +53,8 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 		projects: [] as ProjectListItem[],
 		page: 1,
 		hasMoreWorkspaces: true,
+		hasMoreProjects: true,
+		failed: false,
 	})
 	const [isLoadingMoreWorkspaces, setIsLoadingMoreWorkspaces] = useState(false)
 	const [workspacePage, setWorkspacePage] = useState(1)
@@ -63,6 +64,9 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 	const isInitialWorkspaceListLoading =
 		workspaceStore.isWorkspaceListLoading && workspaces.length === 0
 	const selectedWorkspaceId = workspaceStore.selectedWorkspace?.id
+	const lastLocatedWorkspace = useRef(
+		sidebarStore.navigationScrollPositions.has("workspaces") ? selectedWorkspaceId : undefined,
+	)
 	const workspaceListRef = useRef<HTMLDivElement>(null)
 	const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 	const isLoadingMoreWorkspacesRef = useRef(false)
@@ -127,9 +131,29 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 		handleDragEnd,
 	} = useWorkspaceListDnd({
 		workspaces,
-		disabled: isSearchMode,
+		scrollRef,
+		disabled: isSearchMode || !isExpanded,
 		requestPinBoundaryConfirmation: requestConfirmation,
 	})
+
+	useEffect(() => {
+		const element = scrollRef.current
+		if (!element) return
+		const observer = new ResizeObserver(() => {
+			element.style.setProperty(
+				"--workspace-project-max-height",
+				`${element.clientHeight * 0.45}px`,
+			)
+		})
+		observer.observe(element)
+		return () => observer.disconnect()
+	}, [])
+
+	useLayoutEffect(() => {
+		if (!isSearchMode && scrollRef.current)
+			scrollRef.current.scrollTop =
+				sidebarStore.navigationScrollPositions.get("workspaces") ?? 0
+	}, [isSearchMode])
 
 	function handleStartCreateWorkspace() {
 		setIsCreatingWorkspace(true)
@@ -202,9 +226,9 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 							workspace_name: searchName,
 						})
 					: Promise.resolve(null),
-				!append
+				searchState.hasMoreProjects || !append
 					? SuperMagicApi.getProjectsWithCollaboration({
-							page: 1,
+							page,
 							page_size: 100,
 							project_name: searchName,
 						})
@@ -225,12 +249,28 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 					draft.workspaces = append
 						? [...draft.workspaces, ...workspaceList]
 						: workspaceList
-					draft.projects = append ? [...draft.projects, ...projectList] : projectList
+					draft.projects = Array.from(
+						new Map(
+							[...(append ? draft.projects : []), ...projectList].map((project) => [
+								project.id,
+								project,
+							]),
+						).values(),
+					)
+					draft.hasMoreProjects = Boolean(
+						projectResponse &&
+						page * 100 < projectResponse.total &&
+						projectList.length > 0,
+					)
+					draft.failed = false
 					draft.page = page
 				})
 			},
 			onError: (_error, [{ append }]) => {
 				isSearchPendingRef.current = false
+				updateSearchState((draft) => {
+					draft.failed = true
+				})
 				if (!append) {
 					updateSearchState((draft) => {
 						draft.workspaces = []
@@ -249,6 +289,8 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 				updateSearchState((draft) => {
 					draft.page = 1
 					draft.hasMoreWorkspaces = true
+					draft.hasMoreProjects = true
+					draft.failed = false
 					draft.workspaces = toJS(workspaces)
 					draft.projects = []
 				})
@@ -261,6 +303,8 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 			updateSearchState((draft) => {
 				draft.page = 1
 				draft.hasMoreWorkspaces = true
+				draft.hasMoreProjects = true
+				draft.failed = false
 			})
 			runSearch({ keyword: workspaceName, page: 1, append: false })
 		},
@@ -277,7 +321,8 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 			!searchState.value.trim() ||
 			isSearchLoading ||
 			isSearchPendingRef.current ||
-			!searchState.hasMoreWorkspaces
+			(!searchState.hasMoreWorkspaces && !searchState.hasMoreProjects) ||
+			searchState.failed
 		)
 			return
 
@@ -288,6 +333,8 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 		isSearchMode,
 		loadMoreWorkspaces,
 		searchState.hasMoreWorkspaces,
+		searchState.hasMoreProjects,
+		searchState.failed,
 		searchState.page,
 		searchState.value,
 		runSearch,
@@ -295,10 +342,8 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 
 	useEffect(() => {
 		const sentinel = loadMoreSentinelRef.current
-		if (!sentinel || typeof IntersectionObserver === "undefined") return
-		const scrollContainer = sentinel.closest<HTMLElement>(
-			"[data-testid='sidebar-content-root']",
-		)
+		if (!isExpanded || !sentinel || typeof IntersectionObserver === "undefined") return
+		const scrollContainer = scrollRef.current
 		if (!scrollContainer) return
 
 		const observer = new IntersectionObserver(
@@ -311,7 +356,7 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 		)
 		observer.observe(sentinel)
 		return () => observer.disconnect()
-	}, [displayedWorkspaces.length, loadNextPage])
+	}, [displayedWorkspaces.length, loadNextPage, isExpanded])
 
 	const handleSearchOpen = useCallback(() => {
 		updateSearchState((draft) => {
@@ -319,6 +364,8 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 			draft.projects = []
 			draft.page = 1
 			draft.hasMoreWorkspaces = true
+			draft.hasMoreProjects = true
+			draft.failed = false
 		})
 		setIsSearchMode(true)
 	}, [updateSearchState, workspaces])
@@ -332,6 +379,8 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 			draft.projects = []
 			draft.page = 1
 			draft.hasMoreWorkspaces = true
+			draft.hasMoreProjects = true
+			draft.failed = false
 		})
 		setIsSearchMode(false)
 	}, [cancelSearch, updateSearchState])
@@ -351,7 +400,13 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 	}, [workspaces.length])
 
 	useEffect(() => {
-		if (!selectedWorkspaceId) return
+		if (
+			!selectedWorkspaceId ||
+			!isExpanded ||
+			lastLocatedWorkspace.current === selectedWorkspaceId
+		)
+			return
+		lastLocatedWorkspace.current = selectedWorkspaceId
 
 		sidebarStore.setActiveWorkspace(selectedWorkspaceId)
 		sidebarStore.setWorkspaceExpanded(selectedWorkspaceId, true)
@@ -370,7 +425,7 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 		})
 
 		return () => window.cancelAnimationFrame(animationFrameId)
-	}, [selectedWorkspaceId])
+	}, [selectedWorkspaceId, isExpanded])
 
 	return (
 		<div
@@ -384,111 +439,50 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
 			onDragEnd={handleDragEnd}
-			className="relative"
+			className={cn("relative flex min-h-0 flex-col", isExpanded ? "flex-[3]" : "shrink-0")}
 		>
 			{confirmationDialog}
-			<SidebarGroup
-				className="flex w-full shrink-0 flex-col py-0 pl-2 pr-0"
-				data-testid="sidebar-workspace-list"
-				style={
-					{
-						"--workspace-list-sticky-top": isSearchMode ? "2.25rem" : "2rem",
-					} as CSSProperties
+			<SidebarExpandableItem
+				label={t("super:projectNavigation.workspaces")}
+				onClick={() => sidebarStore.toggleNavigationSection("workspaces")}
+				isExpanded={isExpanded}
+				fill
+				className="min-h-0 flex-1"
+				testId="sidebar-workspaces"
+				header={
+					<WorkspaceListHeader
+						icon={icon}
+						isExpanded={isExpanded}
+						isSearchMode={isSearchMode}
+						searchValue={searchState.value}
+						isInitialWorkspaceListLoading={isInitialWorkspaceListLoading}
+						isRefreshing={isRefreshing}
+						onToggle={() => sidebarStore.toggleNavigationSection("workspaces")}
+						onSearchValueChange={(value) =>
+							updateSearchState((draft) => {
+								draft.value = value
+							})
+						}
+						searchWorkspaces={searchWorkspaces}
+						handleSearchOpen={handleSearchOpen}
+						handleSearchClose={handleSearchClose}
+						handleRefresh={handleRefresh}
+						handleStartCreateWorkspace={handleStartCreateWorkspace}
+					/>
 				}
 			>
 				<div
-					className="sticky top-0 z-20 -ml-2 bg-sidebar pl-2"
-					data-testid="sidebar-workspace-list-sticky-header"
+					ref={scrollRef}
+					className="min-h-0 flex-1 overflow-y-auto overscroll-contain pl-2 [--workspace-list-sticky-top:0px]"
+					data-workspaces-scroll-container
+					onScroll={(event) => {
+						if (!isSearchMode)
+							sidebarStore.navigationScrollPositions.set(
+								"workspaces",
+								event.currentTarget.scrollTop,
+							)
+					}}
 				>
-					{isSearchMode ? (
-						<div className="flex h-9 items-center gap-1 px-2 pr-3 duration-200 animate-in fade-in">
-							<InputGroup className="h-7 flex-1 rounded-md bg-sidebar duration-300 animate-in fade-in slide-in-from-left-4 [&:has([data-slot=input-group-control]:focus-visible)]:border-sidebar-border [&:has([data-slot=input-group-control]:focus-visible)]:ring-0">
-								<InputGroupAddon align="inline-start">
-									<Search size={16} />
-								</InputGroupAddon>
-								<InputGroupInput
-									className="h-6"
-									placeholder={t("super:workspace.searchWorkspace")}
-									value={searchState.value}
-									onChange={(event) => {
-										const value = event.target.value
-										updateSearchState((draft) => {
-											draft.value = value
-										})
-									}}
-									onValueChangeAfterComposition={searchWorkspaces}
-									autoFocus
-									data-testid="sidebar-workspace-list-search-input"
-								/>
-							</InputGroup>
-							<Button
-								type="button"
-								size="icon-sm"
-								className="size-7 border bg-white text-foreground duration-300 animate-in fade-in hover:bg-accent"
-								onClick={handleSearchClose}
-								aria-label={t("common.cancel")}
-								data-testid="sidebar-workspace-list-search-close"
-							>
-								<X className="size-4" />
-							</Button>
-						</div>
-					) : (
-						<SidebarGroupLabel className="h-8 px-2 text-xs font-medium leading-4 text-[#737373] opacity-70 dark:text-[#a3a3a3] dark:opacity-100">
-							{t("sidebar:workspace.title")}
-						</SidebarGroupLabel>
-					)}
-					<div
-						className={cn(
-							"absolute right-3.5 top-1.5 z-10 flex items-center gap-0.5 opacity-70",
-							"group-data-[collapsible=icon]:hidden",
-							isSearchMode && "hidden",
-						)}
-						data-testid="sidebar-workspace-list-actions"
-					>
-						<button
-							type="button"
-							aria-label={t("super:workspace.searchWorkspace")}
-							data-testid="sidebar-workspace-list-search"
-							className="outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4"
-							onClick={handleSearchOpen}
-						>
-							<Search className="h-4 w-4" />
-						</button>
-						{isInitialWorkspaceListLoading && (
-							<Loader2
-								className="h-4 w-4 shrink-0 animate-spin text-[rgb(var(--muted-foreground-rgb))] opacity-70"
-								aria-hidden
-								data-testid="sidebar-workspace-list-loading"
-							/>
-						)}
-						<button
-							type="button"
-							aria-label={t("sidebar:workspace.refresh")}
-							data-testid="sidebar-workspace-list-refresh"
-							disabled={isRefreshing}
-							className={cn(
-								"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
-								"after:absolute after:-inset-2 md:after:hidden",
-							)}
-							onClick={() => void handleRefresh()}
-						>
-							<RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-						</button>
-						<button
-							type="button"
-							aria-label={t("sidebar:workspace.add")}
-							data-testid="sidebar-workspace-list-add"
-							className={cn(
-								"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
-								"after:absolute after:-inset-2 md:after:hidden",
-							)}
-							onClick={handleStartCreateWorkspace}
-						>
-							<Plus className="h-4 w-4" />
-						</button>
-					</div>
-				</div>
-				<SidebarGroupContent>
 					<SidebarMenu>
 						<div className="w-full pr-3">
 							{beforeItems}
@@ -503,8 +497,11 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 								)}
 								{displayedWorkspaces.map((workspace, index) => (
 									<WorkspaceItem
+										active={isExpanded}
 										key={workspace.id}
 										workspace={workspace}
+										scrollRef={scrollRef}
+										onOpenManager={() => onOpenManager(workspace)}
 										dndDisabled={isSearchMode}
 										searchProjects={
 											isSearchMode && projectsByWorkspaceId.has(workspace.id)
@@ -527,6 +524,29 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 										<Loader2 className="size-4 animate-spin" />
 									</div>
 								)}
+								{isSearchMode && searchState.failed && (
+									<button
+										type="button"
+										className="w-full p-2 text-left text-xs text-muted-foreground"
+										onClick={() => {
+											isSearchPendingRef.current = true
+											runSearch({
+												keyword: searchState.value,
+												page:
+													searchState.projects.length ||
+													searchState.workspaces.length
+														? searchState.page + 1
+														: 1,
+												append: Boolean(
+													searchState.projects.length ||
+													searchState.workspaces.length,
+												),
+											})
+										}}
+									>
+										{t("super:projectNavigation.retry")}
+									</button>
+								)}
 								<div
 									ref={loadMoreSentinelRef}
 									className="h-px"
@@ -535,8 +555,8 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 							</div>
 						</div>
 					</SidebarMenu>
-				</SidebarGroupContent>
-			</SidebarGroup>
+				</div>
+			</SidebarExpandableItem>
 			<svg
 				ref={dropIndicatorRef}
 				aria-hidden="true"

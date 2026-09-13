@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent } from "react"
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react"
 import { Ellipsis } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
@@ -19,6 +19,8 @@ type ProjectRowActionHandler = (project: ProjectListItem) => void | Promise<void
 
 interface CollapsedWorkspaceProjectRowProps {
 	project: ProjectListItem
+	dndDisabled?: boolean
+	description?: ReactNode
 	workspaceId: string
 	isSelected: boolean
 	projectMenuContentRef?: React.RefObject<HTMLDivElement | null>
@@ -32,10 +34,13 @@ interface CollapsedWorkspaceProjectRowProps {
 	onCancelWorkspaceShortcut?: ProjectRowActionHandler
 	onDeleteProject?: ProjectRowActionHandler
 	onRenameProject?: (params: HandleRenameProjectParams) => Promise<void>
+	onInteractionChange?: (id: string, active: boolean) => void
 }
 
 function CollapsedWorkspaceProjectRow({
 	project,
+	dndDisabled,
+	description,
 	workspaceId,
 	isSelected,
 	projectMenuContentRef,
@@ -49,14 +54,16 @@ function CollapsedWorkspaceProjectRow({
 	onCancelWorkspaceShortcut,
 	onDeleteProject,
 	onRenameProject,
+	onInteractionChange,
 }: CollapsedWorkspaceProjectRowProps) {
 	const { t } = useTranslation("super")
 	const [isHovered, setIsHovered] = useState(false)
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const [isRenamePending, setIsRenamePending] = useState(false)
 	const suppressProjectItemClickRef = useRef(false)
 
 	const canRename = canManageProject(project.user_role) && !!onRenameProject
-	const canDrag = canDragSidebarProject(project)
+	const canDrag = canDragSidebarProject(project, dndDisabled)
 
 	const {
 		isEditing,
@@ -69,6 +76,14 @@ function CollapsedWorkspaceProjectRow({
 		onRenameProject: canRename ? onRenameProject : undefined,
 	})
 
+	useEffect(() => {
+		onInteractionChange?.(project.id, isMenuOpen || isEditing || isRenamePending)
+	}, [project.id, isMenuOpen, isEditing, isRenamePending, onInteractionChange])
+	useEffect(
+		() => () => onInteractionChange?.(project.id, false),
+		[project.id, onInteractionChange],
+	)
+
 	const blockProjectItemClickTemporarily = () => {
 		suppressProjectItemClickRef.current = true
 		setTimeout(() => {
@@ -78,8 +93,10 @@ function CollapsedWorkspaceProjectRow({
 
 	const handleRenameStart = () => {
 		if (!canRename) return
+		setIsRenamePending(true)
 		setTimeout(() => {
 			setIsEditing(true)
+			setIsRenamePending(false)
 		}, 200)
 	}
 
@@ -165,7 +182,10 @@ function CollapsedWorkspaceProjectRow({
 		triggerContextMenu?: (e: React.MouseEvent<HTMLElement>) => void,
 	) => (
 		<div
-			className={cn("h-8 w-full rounded-md", isSelected && "bg-sidebar-accent")}
+			className={cn(
+				description ? "h-12 w-full rounded-md" : "h-8 w-full rounded-md",
+				isSelected && "bg-sidebar-accent",
+			)}
 			draggable={canDrag}
 			data-collapsed-sidebar-dnd-source={canDrag ? "project" : undefined}
 			data-collapsed-sidebar-dnd-workspace-id={workspaceId}
@@ -228,6 +248,9 @@ function CollapsedWorkspaceProjectRow({
 							/>
 						)}
 					</div>
+					{description && (
+						<div className="truncate text-xs text-muted-foreground">{description}</div>
+					)}
 				</div>
 				{threeDotTrigger(open, triggerContextMenu)}
 			</a>
