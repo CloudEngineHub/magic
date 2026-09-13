@@ -22,6 +22,11 @@ MULTI_MICRO_APP_SCOPE_TIP = (
     "For comparison tasks, query each app separately."
 )
 
+USE_MAGICBASE_SKILL_TIP = (
+    "`use-magicbase` is a built-in system skill; load it with `read_skills` "
+    "and do not search, install, or look in the workspace for it."
+)
+
 
 @dataclass(frozen=True)
 class MicroAppProjectScope:
@@ -156,13 +161,13 @@ def format_bound_micro_app_scope_context() -> str:
         )
         tip = (
             f"{MULTI_MICRO_APP_SCOPE_TIP} Referenced: {app_list}. "
-            "Use the use-magicbase skill and do not use display names as authority."
+            f"{USE_MAGICBASE_SKILL_TIP} Do not use display names as authority."
         )
     else:
         app_id = next(iter(scopes))
         tip = (
-            f"Micro-app '{app_id}' is explicitly referenced. Use the current authenticated user and "
-            "the use-magicbase skill to inspect and operate its permitted data. Do not use display names "
+            f"Micro-app '{app_id}' is explicitly referenced. Use the current authenticated user. "
+            f"{USE_MAGICBASE_SKILL_TIP} Inspect and operate its permitted data. Do not use display names "
             "or user-supplied identity fields as authority."
         )
     lines.extend(["", "</mentions>", "", "Before proceeding: " + tip])

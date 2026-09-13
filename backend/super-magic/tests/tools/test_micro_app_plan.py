@@ -58,9 +58,10 @@ def test_micro_app_agent_delegates_magicbase_tools_to_code_mode():
     assert declared_magicbase_tools == []
     assert agent_define.skills_config is not None
     assert [entry.name for entry in agent_define.skills_config.preload] == [
-        "micro-app-architect"
+        "micro-app-architect",
+        "html-api-sdk",
+        "magicbase",
     ]
-    assert "magicbase" in agent_define.skills_config.get_system_skill_names()
     assert "use-magicbase" in agent_define.skills_config.get_system_skill_names()
     assert agent_define.code_execution is True
 

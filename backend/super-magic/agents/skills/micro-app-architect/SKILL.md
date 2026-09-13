@@ -55,8 +55,9 @@ Data-oriented micro-apps use MagicBase by default. Use files only for file-shape
 - If a rule only hides buttons, disables inputs, or filters in the frontend, mark it `ui_only_not_secure`; if it requires state transitions, cross-table checks, hierarchy, time windows, quotas, or sensitive validation, mark it `requires_backend` and tell the user first.
 - Query and describe the scope of real data before deletion, then obtain explicit confirmation before using `confirm_delete=true`. Never forge `project_id`, `authorization`, `organization_code`, or `created_by`.
 - Admin pages must call `window.Magic.db.getProjectAdminAccess()` before requesting data and render management data only when `is_admin === true`. A share token does not represent the share creator.
+- `use-magicbase` is a built-in system skill. Load it with `read_skills(skill_names=["use-magicbase"])`; do not search, install, or look in the workspace for it.
 - Agent queries and mutations against MagicBase must use `use-magicbase` and preserve its preview, confirmation, authentication, and permission flow.
-- When writing a business Skill that reads or writes the database, load `use-magicbase` and its `references/db-api.md` as needed. Follow the real tool names, parameters, and preview → confirmation → execution flow; do not invent a runtime database protocol.
+- When writing a business Skill that reads or writes the database, load `use-magicbase` as needed. Follow the real tool names, parameters, and preview → confirmation → execution flow; do not invent a runtime database protocol.
 
 ## Companion business skills
 
@@ -64,7 +65,7 @@ Medium and complex micro-apps must use `skill-creator` to generate a business wo
 
 - Business goals, inputs, outputs, and failure handling;
 - that data belongs to the current micro-app's MagicBase;
-- that all database reads and writes use `use-magicbase`;
+- that all database reads and writes load the built-in system skill `use-magicbase` with `read_skills` (do not search the workspace);
 - steps requiring user preview, confirmation, or permission checks;
 - verifiable completion conditions.
 

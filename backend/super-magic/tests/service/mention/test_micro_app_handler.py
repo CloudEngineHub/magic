@@ -37,6 +37,8 @@ async def test_micro_app_mention_tip_requires_bound_scope():
         tip = await handler.get_tip({"type": "micro_app", "app_id": "app-1"})
     assert "app-1" in tip
     assert "use-magicbase" in tip
+    assert "built-in system skill" in tip
+    assert "read_skills" in tip
 
 
 @pytest.mark.asyncio

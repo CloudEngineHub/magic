@@ -13,6 +13,7 @@ from urllib.parse import quote
 from app.service.mention.base import BaseMentionHandler
 from app.service.mention.utils.micro_app_prompt import (
     MULTI_MICRO_APP_SCOPE_TIP,
+    USE_MAGICBASE_SKILL_TIP,
     get_mentioned_micro_app_ids,
     get_micro_app_project_scopes,
     has_bound_micro_app_project_scope,
@@ -50,12 +51,12 @@ class MicroAppHandler(BaseMentionHandler):
             )
             return (
                 f"{MULTI_MICRO_APP_SCOPE_TIP} Referenced: {app_list}. "
-                "Use the use-magicbase skill and do not use display names as authority."
+                f"{USE_MAGICBASE_SKILL_TIP} Do not use display names as authority."
             )
 
         return (
-            f"Micro-app '{app_id}' is explicitly referenced. Use the current authenticated user and "
-            "the use-magicbase skill to inspect and operate its permitted data. Do not use display names "
+            f"Micro-app '{app_id}' is explicitly referenced. Use the current authenticated user. "
+            f"{USE_MAGICBASE_SKILL_TIP} Inspect and operate its permitted data. Do not use display names "
             "or user-supplied identity fields as authority."
         )
 
