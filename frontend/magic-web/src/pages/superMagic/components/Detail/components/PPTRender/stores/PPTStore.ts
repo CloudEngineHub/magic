@@ -557,7 +557,7 @@ export class PPTStore {
 	private async waitForCurrentActiveSlideToSettle(
 		generation: number,
 		configUpdateVersion: number | undefined,
-	): Promise<void> {
+	): Promise<boolean> {
 		while (this.isInitializationCurrent(generation, configUpdateVersion)) {
 			const activeIndex = this.activeIndex
 			const activeSlide = this.slides[activeIndex]
@@ -566,11 +566,17 @@ export class PPTStore {
 				activeSlide.loadingState === "loaded" ||
 				activeSlide.loadingState === "error"
 			) {
-				return
+				return true
 			}
 
-			await this.ensureSlideContent(activeIndex, "active")
+			const loaded = await this.ensureSlideContent(activeIndex, "active")
+			// 缺少附件时会立即返回未完成；同一页不能连续重试，否则微任务会阻塞绘制和附件回调。
+			// 保留初始化状态，由后续 updateConfig 继续；等待期间切页则跟随新的活动页。
+			if (!loaded && this.activeIndex === activeIndex) {
+				return this.slides[activeIndex]?.loadingState === "error"
+			}
 		}
+		return false
 	}
 
 	private async settlePendingInitialization(configUpdateVersion: number): Promise<void> {
@@ -585,7 +591,11 @@ export class PPTStore {
 		// A newer same-deck config update adopts readiness from the stale initializer. Wait for the
 		// current active page to settle so the loading overlay cannot remain stuck or close too early.
 		if (this.config.autoLoadAndGenerate !== false) {
-			await this.waitForCurrentActiveSlideToSettle(generation, configUpdateVersion)
+			const settled = await this.waitForCurrentActiveSlideToSettle(
+				generation,
+				configUpdateVersion,
+			)
+			if (!settled) return
 		}
 
 		if (
@@ -923,10 +933,11 @@ export class PPTStore {
 				this.slideManager.setActiveIndex(initialActiveIndex)
 
 				if (this.config.autoLoadAndGenerate !== false) {
-					await this.waitForCurrentActiveSlideToSettle(
+					const settled = await this.waitForCurrentActiveSlideToSettle(
 						generation,
 						options.configUpdateVersion,
 					)
+					if (!settled) return
 				}
 				if (!this.isInitializationCurrent(generation, options.configUpdateVersion)) return
 
