@@ -1,5 +1,13 @@
 import { sidebarStore } from "@/stores/layout/SidebarStore"
-import { useCallback, useEffect, useRef, useState, type FocusEvent } from "react"
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+	type FocusEvent,
+	type RefObject,
+} from "react"
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 
@@ -10,6 +18,7 @@ export function useVirtualProjectList({
 	enabled = true,
 	loadEnabled = true,
 	scrollKey,
+	externalScrollRef,
 	hasMore = false,
 	loading = false,
 	error = false,
@@ -20,12 +29,46 @@ export function useVirtualProjectList({
 	enabled?: boolean
 	loadEnabled?: boolean
 	scrollKey: string
+	externalScrollRef?: RefObject<HTMLDivElement>
 	hasMore?: boolean
 	loading?: boolean
 	error?: boolean
 	onLoadMore?: () => void
 }) {
 	const scrollRef = useRef<HTMLDivElement>(null)
+	// scrollRef 始终指向本列表；宽栏另用共享视口，窄栏与最近列表继续自有滚动。
+	const [scrollMargin, setScrollMargin] = useState(0)
+	useLayoutEffect(() => {
+		const viewport = externalScrollRef?.current
+		const list = scrollRef.current
+		if (!viewport || !list) return
+		const measure = () => {
+			setScrollMargin(
+				list.getBoundingClientRect().top -
+					viewport.getBoundingClientRect().top +
+					viewport.scrollTop,
+			)
+		}
+		measure()
+		const observer = new ResizeObserver(measure)
+		observer.observe(viewport)
+		// 前面的工作区展开、续页或创建输入都会改变本列表起点；标题自身保持挂载和 sticky。
+		let ancestor: Element | null = list
+		while (ancestor && ancestor !== viewport) {
+			observer.observe(ancestor)
+			let sibling = ancestor.previousElementSibling
+			while (sibling) {
+				observer.observe(sibling)
+				sibling = sibling.previousElementSibling
+			}
+			ancestor = ancestor.parentElement
+		}
+		viewport.addEventListener("scroll", measure, { passive: true })
+		return () => {
+			observer.disconnect()
+			viewport.removeEventListener("scroll", measure)
+		}
+	}, [externalScrollRef, projects.length, loadEnabled])
 	const [interactingIds, setInteractingIds] = useState<Set<string>>(new Set())
 	const [draggedId, setDraggedId] = useState<string | null>(null)
 	const [focusedId, setFocusedId] = useState<string | null>(null)
@@ -40,13 +83,17 @@ export function useVirtualProjectList({
 	}, [])
 	const virtualizer = useVirtualizer({
 		count: projects.length,
-		getScrollElement: () => scrollRef.current,
+		getScrollElement: () => externalScrollRef?.current ?? scrollRef.current,
+		scrollMargin,
 		estimateSize: () => rowHeight,
 		getItemKey: (index) => projects[index].id,
 		overscan: 4,
-		initialOffset: () => sidebarStore.navigationScrollPositions.get(scrollKey) ?? 0,
+		initialOffset: () =>
+			externalScrollRef?.current?.scrollTop ??
+			sidebarStore.navigationScrollPositions.get(scrollKey) ??
+			0,
 		onChange: (instance) => {
-			if (instance.scrollElement)
+			if (!externalScrollRef && instance.scrollElement)
 				sidebarStore.navigationScrollPositions.set(scrollKey, instance.scrollOffset ?? 0)
 		},
 		enabled,
@@ -64,10 +111,18 @@ export function useVirtualProjectList({
 		},
 	})
 	const rows = virtualizer.getVirtualItems()
-	const lastIndex = rows.at(-1)?.index ?? -1
+	// 保留的编辑／拖动行不代表视口已经到页尾。
+	const lastIndex = virtualizer.range?.endIndex ?? -1
+	const viewportStart = virtualizer.scrollOffset ?? 0
+	const viewportHeight = virtualizer.scrollRect?.height ?? 0
+	const listIntersectsViewport =
+		viewportHeight > 0 &&
+		scrollMargin <= viewportStart + viewportHeight &&
+		scrollMargin + virtualizer.getTotalSize() >= viewportStart
 	useEffect(() => {
 		if (
 			enabled &&
+			listIntersectsViewport &&
 			loadEnabled &&
 			hasMore &&
 			!loading &&
@@ -75,7 +130,17 @@ export function useVirtualProjectList({
 			lastIndex >= projects.length - 5
 		)
 			onLoadMore?.()
-	}, [enabled, loadEnabled, hasMore, loading, error, lastIndex, projects.length, onLoadMore])
+	}, [
+		enabled,
+		listIntersectsViewport,
+		loadEnabled,
+		hasMore,
+		loading,
+		error,
+		lastIndex,
+		projects.length,
+		onLoadMore,
+	])
 	useEffect(() => {
 		const onDragStart = (event: DragEvent) => {
 			const target = event.target instanceof Element ? event.target : null
@@ -121,6 +186,7 @@ export function useVirtualProjectList({
 		scrollRef,
 		virtualizer,
 		rows,
+		scrollMargin,
 		onInteractionChange,
 		onFocusCapture,
 		onBlurCapture,

@@ -9,7 +9,9 @@ import { Button } from "@/components/shadcn-ui/button"
 import CreateProjectInput from "@/layouts/BaseLayout/components/MagicSidebar/WorkspaceList/CreateProjectInput"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import projectStore from "@/pages/superMagic/stores/core/project"
-import { ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
+import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
+import RecentProjectItem from "./RecentProjectItem"
+import { SortType, ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
 import useProjectItemActionProps from "../../EmptyWorkspacePanel/hooks/useProjectItemActionProps"
 import { ViewToggle } from "./CollaborationProjectsPanel/components"
 import { useViewTogglePersistValue } from "./CollaborationProjectsPanel/components/ViewToggle/hooks"
@@ -19,7 +21,8 @@ interface WorkspaceProjectsContentProps {
 	searchValue: string
 	onClearSearch: () => void
 	open: boolean
-	workspace: Workspace
+	/** 不指定目录时浏览跨工作区最近项目；查询状态仍由本窗口独立持有。 */
+	workspace?: Workspace
 	onClose: () => void
 }
 
@@ -33,13 +36,15 @@ export default function WorkspaceProjectsContent({
 	onClose,
 }: WorkspaceProjectsContentProps) {
 	const { t } = useTranslation("super")
+	const workspaceId = workspace?.id
+	const recent = !workspace
 	const debouncedSearchValue = useDebounce(searchValue, { wait: 500 })
 	const { viewMode, setViewMode } = useViewTogglePersistValue({
 		localStorageKey: "workspace_projects_panel_view_toggle_value",
 		defaultValue: ViewMode.LIST,
 	})
 	const [projects, setProjects] = useState<ProjectListItem[]>(() =>
-		projectStore.getProjectsByWorkspace(workspace.id),
+		workspaceId ? projectStore.getProjectsByWorkspace(workspaceId) : [],
 	)
 	const [loading, setLoading] = useState(open)
 	const [failed, setFailed] = useState(false)
@@ -49,22 +54,30 @@ export default function WorkspaceProjectsContent({
 	const [creating, setCreating] = useState(false)
 	const requestId = useRef(0)
 	const isOpenRef = useRef(open)
-	const actions = useProjectItemActionProps({ selectedWorkspace: workspace })
+	const actions = useProjectItemActionProps({ selectedWorkspace: workspace ?? null })
+	const request = useRef<AbortController | null>(null)
 
 	const load = useMemoizedFn(async (nextPage = 1) => {
 		if (!isOpenRef.current) return
 		const id = ++requestId.current
+		request.current?.abort()
+		const controller = new AbortController()
+		request.current = controller
 		setLoading(true)
 		setFailed(false)
 		try {
-			const result = await SuperMagicApi.getProjectsWithCollaboration({
-				workspace_id: workspace.id,
-				project_name: debouncedSearchValue,
-				page: nextPage,
-				page_size: PAGE_SIZE,
-				show_collaboration: 1,
-			})
-			if (id !== requestId.current) return
+			const result = await SuperMagicApi.getProjectsWithCollaboration(
+				{
+					workspace_id: workspaceId,
+					sort_mode: recent ? "recent" : "workspace",
+					project_name: debouncedSearchValue,
+					page: nextPage,
+					page_size: PAGE_SIZE,
+					show_collaboration: 1,
+				},
+				{ signal: controller.signal },
+			)
+			if (id !== requestId.current || controller.signal.aborted) return
 			// 搜索和分页只更新本面板；全局导航缓存继续由项目 service 维护。
 			setProjects((previous) =>
 				nextPage === 1
@@ -79,7 +92,7 @@ export default function WorkspaceProjectsContent({
 			setPage(nextPage)
 			setTotal(result.total)
 		} catch {
-			if (id === requestId.current) {
+			if (id === requestId.current && !controller.signal.aborted) {
 				failedPageRef.current = nextPage
 				setFailed(true)
 			}
@@ -91,35 +104,45 @@ export default function WorkspaceProjectsContent({
 	useEffect(() => {
 		isOpenRef.current = open
 		if (!open) return
-		setProjects(debouncedSearchValue ? [] : projectStore.getProjectsByWorkspace(workspace.id))
+		setProjects(
+			debouncedSearchValue || !workspaceId
+				? []
+				: projectStore.getProjectsByWorkspace(workspaceId),
+		)
 		setTotal(undefined)
 		void load()
 		return () => {
 			requestId.current += 1
+			request.current?.abort()
 			isOpenRef.current = false
 		}
-	}, [open, workspace.id, debouncedSearchValue, load])
+	}, [open, workspaceId, debouncedSearchValue, load])
 
-	// 移动、删除等弹窗仍由原 hook 完成；其 service 刷新工作区后同步面板查询。
+	// 普通目录订阅自己的缓存；最近分类订阅 service 的失效版本，搜索／分页不会改写侧栏快照。
 	useEffect(() => {
 		if (!open) return
 		return reaction(
 			() =>
-				projectStore
-					.getProjectsByWorkspace(workspace.id)
-					.map((item) =>
-						[item.id, item.project_name, item.is_pinned, item.updated_at].join(":"),
-					)
-					.join("|"),
+				workspaceId
+					? projectStore
+							.getProjectsByWorkspace(workspaceId)
+							.map((item) =>
+								[item.id, item.project_name, item.is_pinned, item.updated_at].join(
+									":",
+								),
+							)
+							.join("|")
+					: recentProjectsStore.revision,
 			() => {
 				void load()
 			},
 		)
-	}, [open, workspace.id, load])
+	}, [open, workspaceId, load])
 
 	const close = useMemoizedFn(() => {
 		isOpenRef.current = false
 		requestId.current += 1
+		request.current?.abort()
 		setCreating(false)
 		onClose()
 	})
@@ -142,24 +165,27 @@ export default function WorkspaceProjectsContent({
 				}
 				loading={loading}
 				viewMode={viewMode}
+				renderItem={recent ? (props) => <RecentProjectItem {...props} /> : undefined}
 				toolbar={
 					<>
-						{creating ? (
-							<CreateProjectInput
-								workspaceId={workspace.id}
-								onCancel={() => setCreating(false)}
-								onCreated={close}
-							/>
-						) : (
-							<Button onClick={() => setCreating(true)}>
-								<Plus size={16} />
-								{t("sidebarPanels.createProject")}
-							</Button>
-						)}
+						{workspace &&
+							(creating ? (
+								<CreateProjectInput
+									workspaceId={workspace.id}
+									onCancel={() => setCreating(false)}
+									onCreated={close}
+								/>
+							) : (
+								<Button onClick={() => setCreating(true)}>
+									<Plus size={16} />
+									{t("sidebarPanels.createProject")}
+								</Button>
+							))}
 						<ViewToggle value={viewMode} onChange={setViewMode} />
 					</>
 				}
 				itemProps={{
+					sortType: recent ? SortType.MY_LAST_ACTIVE_TIME : SortType.PROJECT_UPDATE_TIME,
 					onClick: (project) => {
 						if (project.id !== projectStore.selectedProject?.id)
 							actions.handleProjectClick(project)
@@ -196,6 +222,7 @@ export default function WorkspaceProjectsContent({
 					)
 				}
 				footer={
+					!failed &&
 					total !== undefined &&
 					projects.length < total && (
 						<div className="flex justify-center py-4">

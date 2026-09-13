@@ -1,5 +1,6 @@
 import IconWorkspaceProjectFolder from "@/enhance/tabler/icons-react/icons/IconWorkspaceProjectFolder"
 import { cn } from "@/utils/cn"
+import { formatRelativeTime } from "@/utils/string"
 import { useHover, useMemoizedFn } from "ahooks"
 import { useMemo, useRef } from "react"
 import useProjectRename from "@/pages/superMagic/hooks/useProjectRename"
@@ -51,6 +52,8 @@ interface ProjectItemProps<T extends ProjectListItem | CollaborationProjectListI
 	onAddWorkspaceShortcut?: (project: T) => void
 	onShortcutNavigateToWorkspace?: (project: T) => void
 	onMouseEnter?: () => void
+	locationName?: string
+	relativeActiveTime?: boolean
 }
 
 // View mode enum
@@ -85,10 +88,12 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	onCancelWorkspaceShortcut,
 	onShortcutNavigateToWorkspace,
 	onMouseEnter,
+	locationName,
+	relativeActiveTime = false,
 }: ProjectItemProps<T>) {
 	const ref = useRef<HTMLDivElement>(null)
 	const isHover = useHover(ref)
-	const { t } = useTranslation("super")
+	const { t, i18n } = useTranslation("super")
 
 	const isListMode = viewMode === ViewMode.LIST
 	const isCompact = variant === "compact"
@@ -169,7 +174,11 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	const time = useMemo(() => {
 		switch (sortType) {
 			case SortType.MY_LAST_ACTIVE_TIME: {
-				const value = item.last_active_at?.replaceAll("-", "/")
+				const rawValue = item.last_active_at?.replaceAll("-", "/")
+				const value =
+					rawValue && relativeActiveTime
+						? formatRelativeTime(i18n.language)(item.last_active_at)
+						: rawValue
 				return {
 					value: value || t("common.noActiveTime"),
 					label: value
@@ -187,7 +196,15 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 				return { value, label: t("common.lastUpdatedAt", { time: value }) }
 			}
 		}
-	}, [item.updated_at, item.created_at, item.last_active_at, sortType, t])
+	}, [
+		item.updated_at,
+		item.created_at,
+		item.last_active_at,
+		sortType,
+		relativeActiveTime,
+		i18n.language,
+		t,
+	])
 
 	return (
 		<>
@@ -306,6 +323,11 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 										}
 									>
 										{item.project_name || t("project.unnamedProject")}
+										{locationName && (
+											<span className="block truncate text-xs font-normal text-muted-foreground">
+												{locationName}
+											</span>
+										)}
 									</SmartTooltip>
 								</FlexBox>
 							)}

@@ -229,7 +229,7 @@ export function useWorkspaceListDnd({
 		const stickyHeaderBottom = stickyHeader?.getBoundingClientRect().bottom ?? -Infinity
 		// Keep the indicator's 4px radius below the sticky header instead of covering its controls.
 		const viewport = target
-			.closest<HTMLElement>("[data-project-scroll-container]")
+			.closest<HTMLElement>("[data-workspaces-scroll-container]")
 			?.getBoundingClientRect()
 		const lineY = Math.min(
 			Math.max(requestedLineY, stickyHeaderBottom + 4, (viewport?.top ?? -Infinity) + 4),
@@ -503,9 +503,9 @@ export function useWorkspaceListDnd({
 
 	const getScrollContainer = useCallback(
 		(target: EventTarget | null) => {
-			// 指针位于项目窗口时只滚动项目；其它位置由工作空间滚动区处理。
+			// 工作区标题与虚拟项目共用一个视口，指针位置不再切换内部滚动容器。
 			if (target instanceof Element) {
-				const local = target.closest<HTMLElement>("[data-project-scroll-container]")
+				const local = target.closest<HTMLElement>("[data-workspaces-scroll-container]")
 				if (local && rootRef.current?.contains(local)) return local
 			}
 			return scrollRef.current

@@ -33,9 +33,17 @@ export class SidebarStore {
 	// Workspace expanded state (for lazy loading)
 	expandedWorkspaces: Set<string> = new Set()
 
-	// 栏目偏好属于账号和组织；窄栏临时浮层不改写这两个值。
-	recentProjectsExpanded = false
-	workspacesExpanded = true
+	// 栏目偏好属于账号和组织；同一时刻最多展开一个栏目，窄栏浮层不改写偏好。
+	expandedNavigationSection: "recent" | "workspaces" | "none" = "workspaces"
+	navigationAppsHeight: number | null = null
+
+	get recentProjectsExpanded() {
+		return this.expandedNavigationSection === "recent"
+	}
+
+	get workspacesExpanded() {
+		return this.expandedNavigationSection === "workspaces"
+	}
 	private navigationIdentity: string | null = null
 	// 滚动位置只保留于当次身份会话；滚动不触发 MobX 渲染或写本地存储。
 	navigationScrollPositions = new Map<string, number>()
@@ -46,8 +54,8 @@ export class SidebarStore {
 		if (identity === this.navigationIdentity) return
 		this.navigationIdentity = identity
 		this.navigationScrollPositions.clear()
-		this.recentProjectsExpanded = false
-		this.workspacesExpanded = true
+		this.expandedNavigationSection = "workspaces"
+		this.navigationAppsHeight = null
 		if (!identity) return
 		try {
 			const saved: unknown = JSON.parse(
@@ -55,27 +63,43 @@ export class SidebarStore {
 			)
 			if (!saved || typeof saved !== "object") return
 			if (
-				"recentProjectsExpanded" in saved &&
-				typeof saved.recentProjectsExpanded === "boolean"
+				"expandedSection" in saved &&
+				(saved.expandedSection === "recent" ||
+					saved.expandedSection === "workspaces" ||
+					saved.expandedSection === "none")
 			)
-				this.recentProjectsExpanded = saved.recentProjectsExpanded
-			if ("workspacesExpanded" in saved && typeof saved.workspacesExpanded === "boolean")
-				this.workspacesExpanded = saved.workspacesExpanded
+				this.expandedNavigationSection = saved.expandedSection
+			if (
+				"appsHeight" in saved &&
+				typeof saved.appsHeight === "number" &&
+				Number.isFinite(saved.appsHeight) &&
+				saved.appsHeight > 0
+			)
+				this.navigationAppsHeight = saved.appsHeight
 		} catch {
 			/* 无效或不可用的存储采用缺省布局。 */
 		}
 	}
 
 	toggleNavigationSection(section: "recent" | "workspaces") {
-		if (section === "recent") this.recentProjectsExpanded = !this.recentProjectsExpanded
-		else this.workspacesExpanded = !this.workspacesExpanded
+		this.expandedNavigationSection =
+			this.expandedNavigationSection === section ? "none" : section
+		this.saveNavigationPreferences()
+	}
+
+	setNavigationAppsHeight(height: number) {
+		this.navigationAppsHeight = height
+		this.saveNavigationPreferences()
+	}
+
+	private saveNavigationPreferences() {
 		if (!this.navigationIdentity) return
 		try {
 			localStorage.setItem(
 				`sidebar-navigation:${this.navigationIdentity}`,
 				JSON.stringify({
-					recentProjectsExpanded: this.recentProjectsExpanded,
-					workspacesExpanded: this.workspacesExpanded,
+					expandedSection: this.expandedNavigationSection,
+					appsHeight: this.navigationAppsHeight,
 				}),
 			)
 		} catch {

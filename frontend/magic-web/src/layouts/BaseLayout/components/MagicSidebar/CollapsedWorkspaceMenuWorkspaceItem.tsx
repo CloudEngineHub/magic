@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react"
-import { ChevronRight, CirclePlus, Ellipsis, Home, SquareArrowOutUpRight } from "lucide-react"
+import { ChevronRight, CirclePlus, Ellipsis, Home, AppWindow } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
@@ -370,7 +370,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 								})}
 								onClick={onOpenManager}
 							>
-								<SquareArrowOutUpRight size={16} />
+								<AppWindow size={16} />
 							</Button>
 						</div>
 						<Button

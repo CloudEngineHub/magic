@@ -26,7 +26,7 @@ export interface ProjectListProps {
 	onCancelCreate?: () => void
 	onProjectCreated?: () => void
 	dndDisabled?: boolean
-	onOpenManager?: () => void
+	scrollRef: RefObject<HTMLDivElement>
 }
 
 export interface ProjectItemProps {

@@ -4622,8 +4622,8 @@
 		"openManager": "Open project manager",
 		"openWorkspaceManager": "Open project manager for {{name}}",
 		"recent": "Recent projects",
+		"resizeSections": "Resize navigation and project sections",
 		"retry": "Could not load. Click to retry",
-		"viewAll": "View all in project manager",
 		"workspaces": "Workspaces"
 	},
 	"projectShare": {

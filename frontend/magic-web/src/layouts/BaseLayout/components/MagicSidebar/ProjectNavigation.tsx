@@ -1,7 +1,7 @@
 import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useState } from "react"
 import { observer } from "mobx-react-lite"
-import { Box, Clock3, PanelsTopLeft, UsersRound } from "lucide-react"
+import { Box, Clock3, AppWindow, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/shadcn-ui/sidebar"
@@ -33,7 +33,7 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 	const recentExpanded = sidebarStore.recentProjectsExpanded
 	const workspaceIcon = <Box size={16} />
 	const recentIcon = <Clock3 size={16} />
-	const managerIcon = <PanelsTopLeft size={16} />
+	const managerIcon = <AppWindow size={16} />
 	useLayoutEffect(() => {
 		sidebarStore.setNavigationIdentity(userId, organizationCode)
 		recentProjectsStore.setIdentity(userId, organizationCode)
@@ -50,84 +50,134 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 	const closePopover = useCallback(() => setPopover(null), [])
 	const openManager = (next?: ProjectBrowserSource) => {
 		if (workspaceBusy || recentBusy) return
-		const workspace =
-			selectedWorkspace?.workspace_type === "default"
-				? selectedWorkspace
-				: workspaceStore.workspaces.find((item) => item.workspace_type === "default")
 		setPopover(null)
-		setSource(
-			next ??
-				(!isCollaborationWorkspace(selectedWorkspace) && workspace
-					? { type: "workspace", workspace }
-					: { type: "collaboration" }),
-		)
+		setSource(next ?? { type: "recent" })
 	}
 	return (
-		<div className={collapsed ? "shrink-0 p-2" : "flex min-h-0 flex-1 flex-col px-2"}>
-			{collapsed ? (
-				<SidebarMenu>
-					<SidebarMenuItem>
-						<SidebarMenuButton
-							tooltip={t("sidebarPanels.projectManager")}
-							aria-label={t("sidebarPanels.projectManager")}
-							disabled={workspaceBusy || recentBusy}
-							onClick={() => openManager()}
-							data-testid="sidebar-project-manager-icon"
-						>
-							{managerIcon}
-						</SidebarMenuButton>
-					</SidebarMenuItem>
-					<SidebarMenuItem>
-						<Popover
-							open={popover === "recent"}
-							onOpenChange={(open) => {
-								if (!workspaceBusy && !recentBusy)
-									setPopover(open ? "recent" : null)
-							}}
-						>
-							<PopoverTrigger asChild>
-								{/* React 18 下 SidebarMenuButton 不转发 ref，使用 DOM 节点承接浮层定位。 */}
-								<span>
-									<SidebarMenuButton
-										tooltip={t("projectNavigation.recent")}
-										aria-label={t("projectNavigation.recent")}
-										disabled={workspaceBusy}
-										data-testid="sidebar-recent-projects-icon"
-									>
-										{recentIcon}
-									</SidebarMenuButton>
-								</span>
-							</PopoverTrigger>
-							<PopoverContent
-								side="right"
-								align="start"
-								className="flex h-[360px] max-h-[var(--radix-popover-content-available-height)] w-72 flex-col p-1"
+		<div className="flex h-full min-h-0 flex-1 flex-col">
+			<div
+				className={
+					collapsed
+						? "min-h-0 flex-1 overflow-y-auto p-2"
+						: "flex min-h-0 flex-1 flex-col px-2"
+				}
+			>
+				{collapsed ? (
+					<SidebarMenu>
+						<SidebarMenuItem>
+							<Popover
+								open={popover === "recent"}
+								onOpenChange={(open) => {
+									if (!workspaceBusy && !recentBusy)
+										setPopover(open ? "recent" : null)
+								}}
 							>
-								<div className="shrink-0 px-2 py-2 text-sm font-medium">
-									{t("projectNavigation.recent")}
-								</div>
-								<RecentProjects
-									active={popover === "recent"}
-									onSelect={closePopover}
-									onBusyChange={setRecentBusy}
+								<PopoverTrigger asChild>
+									{/* React 18 下 SidebarMenuButton 不转发 ref，使用 DOM 节点承接浮层定位。 */}
+									<span>
+										<SidebarMenuButton
+											tooltip={t("projectNavigation.recent")}
+											aria-label={t("projectNavigation.recent")}
+											disabled={workspaceBusy}
+											data-testid="sidebar-recent-projects-icon"
+										>
+											{recentIcon}
+										</SidebarMenuButton>
+									</span>
+								</PopoverTrigger>
+								<PopoverContent
+									side="right"
+									align="start"
+									className="flex h-[360px] max-h-[var(--radix-popover-content-available-height)] w-72 flex-col p-1"
+								>
+									<div className="shrink-0 px-2 py-2 text-sm font-medium">
+										{t("projectNavigation.recent")}
+									</div>
+									<RecentProjects
+										active={popover === "recent"}
+										onSelect={closePopover}
+										onBusyChange={setRecentBusy}
+									/>
+								</PopoverContent>
+							</Popover>
+						</SidebarMenuItem>
+						<SidebarMenuItem>
+							<CollapsedWorkspaceMenu
+								open={popover === "workspaces"}
+								onOpenChange={(open) => {
+									if (!recentBusy) setPopover(open ? "workspaces" : null)
+								}}
+								onOpenManager={openManager}
+								onBusyChange={setWorkspaceBusy}
+								icon={workspaceIcon}
+							/>
+						</SidebarMenuItem>
+					</SidebarMenu>
+				) : (
+					<>
+						<SidebarExpandableItem
+							label={t("projectNavigation.recent")}
+							leading={recentIcon}
+							isExpanded={sidebarStore.recentProjectsExpanded}
+							onClick={() => sidebarStore.toggleNavigationSection("recent")}
+							testId="sidebar-recent-projects"
+							fill
+							className={sidebarStore.recentProjectsExpanded ? "flex-1" : "shrink-0"}
+							header={
+								<SidebarRow
+									label={t("projectNavigation.recent")}
+									leading={recentIcon}
+									isExpanded={sidebarStore.recentProjectsExpanded}
+									onClick={() => sidebarStore.toggleNavigationSection("recent")}
+									testId="sidebar-recent-projects-toggle"
+									className="h-8 shrink-0"
 								/>
-							</PopoverContent>
-						</Popover>
-					</SidebarMenuItem>
-					<SidebarMenuItem>
-						<CollapsedWorkspaceMenu
-							open={popover === "workspaces"}
-							onOpenChange={(open) => {
-								if (!recentBusy) setPopover(open ? "workspaces" : null)
-							}}
-							onOpenManager={openManager}
-							onBusyChange={setWorkspaceBusy}
+							}
+						>
+							{(recentVisited || sidebarStore.recentProjectsExpanded) && (
+								<RecentProjects active={sidebarStore.recentProjectsExpanded} />
+							)}
+						</SidebarExpandableItem>
+						<WorkspaceList
 							icon={workspaceIcon}
+							onOpenManager={(workspace) =>
+								openManager({ type: "workspace", workspace })
+							}
+							beforeItems={
+								<SidebarMenuItem>
+									<SidebarMenuButton
+										isActive={isCollaborationWorkspace(selectedWorkspace)}
+										onClick={() => openManager({ type: "collaboration" })}
+										data-testid="sidebar-content-share-workspace-button"
+									>
+										<UsersRound size={16} className="ml-6" />
+										<span>{t("workspace.shareWorkspaceName")}</span>
+									</SidebarMenuButton>
+								</SidebarMenuItem>
+							}
 						/>
-					</SidebarMenuItem>
-				</SidebarMenu>
-			) : (
-				<>
+					</>
+				)}
+			</div>
+			<div
+				className="shrink-0 border-y border-sidebar-border/60 px-2 py-1"
+				data-testid="sidebar-project-manager-dock"
+			>
+				{collapsed ? (
+					<SidebarMenu>
+						<SidebarMenuItem>
+							<SidebarMenuButton
+								tooltip={t("sidebarPanels.projectManager")}
+								aria-label={t("sidebarPanels.projectManager")}
+								disabled={workspaceBusy || recentBusy}
+								onClick={() => openManager()}
+								data-testid="sidebar-project-manager-icon"
+							>
+								{managerIcon}
+							</SidebarMenuButton>
+						</SidebarMenuItem>
+					</SidebarMenu>
+				) : (
 					<SidebarRow
 						label={t("sidebarPanels.projectManager")}
 						leading={managerIcon}
@@ -136,47 +186,8 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 						testId="sidebar-project-manager"
 						className="h-8 shrink-0"
 					/>
-					<SidebarExpandableItem
-						label={t("projectNavigation.recent")}
-						leading={recentIcon}
-						isExpanded={sidebarStore.recentProjectsExpanded}
-						onClick={() => sidebarStore.toggleNavigationSection("recent")}
-						testId="sidebar-recent-projects"
-						fill
-						className={sidebarStore.recentProjectsExpanded ? "flex-[2]" : "shrink-0"}
-						header={
-							<SidebarRow
-								label={t("projectNavigation.recent")}
-								leading={recentIcon}
-								isExpanded={sidebarStore.recentProjectsExpanded}
-								onClick={() => sidebarStore.toggleNavigationSection("recent")}
-								testId="sidebar-recent-projects-toggle"
-								className="h-8 shrink-0"
-							/>
-						}
-					>
-						{(recentVisited || sidebarStore.recentProjectsExpanded) && (
-							<RecentProjects active={sidebarStore.recentProjectsExpanded} />
-						)}
-					</SidebarExpandableItem>
-					<WorkspaceList
-						icon={workspaceIcon}
-						onOpenManager={(workspace) => openManager({ type: "workspace", workspace })}
-						beforeItems={
-							<SidebarMenuItem>
-								<SidebarMenuButton
-									isActive={isCollaborationWorkspace(selectedWorkspace)}
-									onClick={() => openManager({ type: "collaboration" })}
-									data-testid="sidebar-content-share-workspace-button"
-								>
-									<UsersRound size={16} className="ml-6" />
-									<span>{t("workspace.shareWorkspaceName")}</span>
-								</SidebarMenuButton>
-							</SidebarMenuItem>
-						}
-					/>
-				</>
-			)}
+				)}
+			</div>
 			{source && (
 				<Suspense fallback={null}>
 					<WorkspaceProjectsPanel

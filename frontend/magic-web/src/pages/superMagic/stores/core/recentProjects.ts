@@ -20,6 +20,11 @@ class RecentProjectsStore {
 		makeAutoObservable(this, { request: false } as Record<string, false>, { autoBind: true })
 	}
 
+	/** 查询失效版本供独立管理器订阅，不共享搜索结果或分页游标。 */
+	get revision(): number {
+		return this.generation
+	}
+
 	setIdentity(userId?: string, organizationCode?: string) {
 		const identity =
 			userId && organizationCode ? JSON.stringify([userId, organizationCode]) : null

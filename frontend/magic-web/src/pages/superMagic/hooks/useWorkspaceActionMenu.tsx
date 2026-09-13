@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import { MenuProps } from "antd"
 import { useTranslation } from "react-i18next"
-import { Pencil, Trash2 } from "lucide-react"
+import { AppWindow, Pencil, Trash2 } from "lucide-react"
 import type { Workspace } from "../pages/Workspace/types"
 import { suppressSelectionAfterWorkspaceRename } from "@/pages/superMagic/utils/workspaceRenameSelectionGuard"
 
@@ -12,6 +12,7 @@ interface UseWorkspaceActionMenuParams {
 	onRename: (workspaceId: string) => void
 	onMenuClose?: () => void
 	onTransferStart?: () => void
+	onOpenManager?: () => void
 }
 
 interface UseWorkspaceActionMenuReturn {
@@ -33,6 +34,7 @@ export function useWorkspaceActionMenu({
 	onDelete,
 	onRename,
 	onMenuClose,
+	onOpenManager,
 }: UseWorkspaceActionMenuParams): UseWorkspaceActionMenuReturn {
 	const { t } = useTranslation("super")
 
@@ -40,6 +42,21 @@ export function useWorkspaceActionMenu({
 		if (!workspace) return []
 
 		const items: MenuProps["items"] = []
+
+		if (onOpenManager)
+			items.push({
+				key: "project-manager",
+				label: (
+					<div className="flex items-center gap-2">
+						<AppWindow size={16} />
+						<span>{t("projectNavigation.openManager")}</span>
+					</div>
+				),
+				onClick: () => {
+					onMenuClose?.()
+					onOpenManager()
+				},
+			})
 
 		items.push({
 			key: "rename",
@@ -79,7 +96,7 @@ export function useWorkspaceActionMenu({
 		})
 
 		return items
-	}, [workspace, onDelete, onRename, onMenuClose, t])
+	}, [workspace, onDelete, onRename, onMenuClose, onOpenManager, t])
 
 	return {
 		menuItems,

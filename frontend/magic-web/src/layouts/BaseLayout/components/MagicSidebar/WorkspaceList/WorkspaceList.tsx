@@ -136,19 +136,6 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 		requestPinBoundaryConfirmation: requestConfirmation,
 	})
 
-	useEffect(() => {
-		const element = scrollRef.current
-		if (!element) return
-		const observer = new ResizeObserver(() => {
-			element.style.setProperty(
-				"--workspace-project-max-height",
-				`${element.clientHeight * 0.45}px`,
-			)
-		})
-		observer.observe(element)
-		return () => observer.disconnect()
-	}, [])
-
 	useLayoutEffect(() => {
 		if (!isSearchMode && scrollRef.current)
 			scrollRef.current.scrollTop =
@@ -156,6 +143,7 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 	}, [isSearchMode])
 
 	function handleStartCreateWorkspace() {
+		if (!sidebarStore.workspacesExpanded) sidebarStore.toggleNavigationSection("workspaces")
 		setIsCreatingWorkspace(true)
 	}
 
@@ -359,6 +347,7 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 	}, [displayedWorkspaces.length, loadNextPage, isExpanded])
 
 	const handleSearchOpen = useCallback(() => {
+		if (!sidebarStore.workspacesExpanded) sidebarStore.toggleNavigationSection("workspaces")
 		updateSearchState((draft) => {
 			draft.workspaces = toJS(workspaces)
 			draft.projects = []
@@ -439,7 +428,10 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
 			onDragEnd={handleDragEnd}
-			className={cn("relative flex min-h-0 flex-col", isExpanded ? "flex-[3]" : "shrink-0")}
+			className={cn(
+				"relative flex min-h-0 flex-col border-t border-sidebar-border/60",
+				isExpanded ? "flex-1" : "shrink-0",
+			)}
 		>
 			{confirmationDialog}
 			<SidebarExpandableItem

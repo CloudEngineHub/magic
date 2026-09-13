@@ -89,7 +89,8 @@ export function getNearestProjectTarget(
 ) {
 	const viewport = (
 		projectList.closest<HTMLElement>("[data-project-scroll-container]") ??
-		projectList.querySelector<HTMLElement>("[data-project-scroll-container]")
+		projectList.querySelector<HTMLElement>("[data-project-scroll-container]") ??
+		projectList.closest<HTMLElement>("[data-workspaces-scroll-container]")
 	)?.getBoundingClientRect()
 	if (viewport && (clientY < viewport.top || clientY > viewport.bottom)) return null
 	const projectTargets = Array.from(

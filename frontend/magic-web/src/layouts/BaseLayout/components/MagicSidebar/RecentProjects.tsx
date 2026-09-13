@@ -2,14 +2,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
-import { projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
-import {
-	WorkspaceStatus,
-	type ProjectListItem,
-	type Workspace,
-} from "@/pages/superMagic/pages/Workspace/types"
-import { SHARE_WORKSPACE_DATA, SHARE_WORKSPACE_ID } from "@/pages/superMagic/constants"
-import { isOwner } from "@/pages/superMagic/utils/permission"
+import { projectStore } from "@/pages/superMagic/stores/core"
+import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import useProjectWorkspace from "@/pages/superMagic/hooks/useProjectWorkspace"
 import { openProjectInNewTab } from "@/pages/superMagic/utils/project"
 import superMagicService from "@/pages/superMagic/services"
 import useProjectItemActionProps from "@/pages/superMagic/components/EmptyWorkspacePanel/hooks/useProjectItemActionProps"
@@ -26,32 +21,13 @@ const RecentProjectRow = observer(function RecentProjectRow({
 	onSelect?: () => void
 	onInteractionChange: (id: string, active: boolean) => void
 }) {
-	const { t, i18n } = useTranslation("super")
+	const { i18n } = useTranslation("super")
 	const [rowBusy, setRowBusy] = useState(false)
 	const onRowInteractionChange = useCallback(
 		(_id: string, active: boolean) => setRowBusy(active),
 		[],
 	)
-	const owner = isOwner(project.user_role)
-	// 菜单使用快捷入口实际绑定的本方工作区；位置标签仍将他人项目显示为共享项目。
-	const workspaceId = owner
-		? project.workspace_id
-		: project.is_bind_workspace && project.bind_workspace_id
-			? project.bind_workspace_id
-			: SHARE_WORKSPACE_ID
-	const workspace: Workspace =
-		workspaceId === SHARE_WORKSPACE_ID
-			? SHARE_WORKSPACE_DATA(t)
-			: (workspaceStore.getWorkspaceById(workspaceId) ?? {
-					id: workspaceId,
-					name: owner ? project.workspace_name : t("workspace.unnamedWorkspace"),
-					workspace_type: "default",
-					is_archived: 0,
-					workspace_status: WorkspaceStatus.WAITING,
-					project_count: 0,
-					current_project_id: project.id,
-					current_topic_id: project.current_topic_id ?? "",
-				})
+	const { workspace, locationName } = useProjectWorkspace(project)
 
 	const actions = useProjectItemActionProps({ selectedWorkspace: workspace })
 	const modalWasOpen = useRef(false)
@@ -72,10 +48,7 @@ const RecentProjectRow = observer(function RecentProjectRow({
 				dndDisabled
 				description={
 					<>
-						{owner
-							? workspace.name || t("workspace.unnamedWorkspace")
-							: t("workspace.shareWorkspaceName")}{" "}
-						· {formatRelativeTime(i18n.language)(project.last_active_at)}
+						{locationName} · {formatRelativeTime(i18n.language)(project.last_active_at)}
 					</>
 				}
 				onInteractionChange={onRowInteractionChange}

@@ -21,7 +21,7 @@ function ProjectList({
 	onCancelCreate,
 	onProjectCreated,
 	dndDisabled,
-	onOpenManager,
+	scrollRef: workspaceScrollRef,
 }: ProjectListProps) {
 	const { t } = useTranslation(["super", "sidebar"])
 	const {
@@ -42,17 +42,25 @@ function ProjectList({
 	const loadMore = useCallback(() => {
 		void projectStore.loadMoreProjectsForWorkspace(workspaceId)
 	}, [workspaceId])
-	const { scrollRef, virtualizer, rows, onInteractionChange, onFocusCapture, onBlurCapture } =
-		useVirtualProjectList({
-			loadEnabled: active,
-			scrollKey: `workspace-projects:${workspaceId}`,
-			projects,
-			rowHeight: 32,
-			hasMore: page?.hasMore,
-			loading: isLoading || page?.loadingMore,
-			error: page?.error,
-			onLoadMore: loadMore,
-		})
+	const {
+		scrollRef,
+		virtualizer,
+		rows,
+		scrollMargin,
+		onInteractionChange,
+		onFocusCapture,
+		onBlurCapture,
+	} = useVirtualProjectList({
+		loadEnabled: active,
+		externalScrollRef: workspaceScrollRef,
+		scrollKey: `workspace-projects:${workspaceId}`,
+		projects,
+		rowHeight: 32,
+		hasMore: page?.hasMore,
+		loading: isLoading || page?.loadingMore,
+		error: page?.error,
+		onLoadMore: loadMore,
+	})
 
 	return (
 		<>
@@ -85,11 +93,7 @@ function ProjectList({
 				) : (
 					<div
 						ref={scrollRef}
-						className="w-full overflow-y-auto overscroll-contain"
-						style={{
-							maxHeight: "min(12rem, var(--workspace-project-max-height, 12rem))",
-						}}
-						data-project-scroll-container
+						className="w-full"
 						onFocusCapture={onFocusCapture}
 						onBlurCapture={onBlurCapture}
 					>
@@ -106,7 +110,9 @@ function ProjectList({
 										data-virtual-project-id={project.id}
 										ref={virtualizer.measureElement}
 										className="absolute left-0 top-0 w-full pb-1"
-										style={{ transform: `translateY(${row.start}px)` }}
+										style={{
+											transform: `translateY(${row.start - scrollMargin}px)`,
+										}}
 									>
 										<ProjectItem
 											project={project}
@@ -142,15 +148,6 @@ function ProjectList({
 							: page.loadingMore
 								? t("sidebar:project.loading")
 								: t("super:projectNavigation.loadMore")}
-					</button>
-				)}
-				{onOpenManager && (
-					<button
-						type="button"
-						className="w-full truncate px-2 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
-						onClick={onOpenManager}
-					>
-						{t("super:projectNavigation.viewAll")}
 					</button>
 				)}
 				{/* Border line with fade-in animation */}

@@ -78,6 +78,9 @@ export function SidebarRow({
 	return (
 		<div
 			ref={rowRef}
+			onClick={(event) => {
+				if (!disabled && event.target === event.currentTarget) onClick()
+			}}
 			className={cn(
 				"flex h-10 w-full items-center gap-2 overflow-hidden px-2.5 text-left transition-[background-color,box-shadow] duration-200 ease-out hover:bg-accent/40",
 				isActive && "bg-accent/50",

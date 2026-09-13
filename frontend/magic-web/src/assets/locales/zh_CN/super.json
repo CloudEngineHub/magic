@@ -4623,8 +4623,8 @@
 		"openManager": "打开项目管理器",
 		"openWorkspaceManager": "打开「{{name}}」项目管理器",
 		"recent": "最近项目",
+		"resizeSections": "调整导航与项目区域高度",
 		"retry": "加载失败，点击重试",
-		"viewAll": "在项目管理器中查看全部",
 		"workspaces": "工作空间"
 	},
 	"projectShare": {

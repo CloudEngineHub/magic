@@ -195,6 +195,7 @@ interface ProjectsPanelListProps<T extends ProjectListItem> {
 	viewMode: ViewMode
 	toolbar: ReactNode
 	itemProps: Omit<ComponentProps<typeof ProjectItem<T>>, "project" | "index" | "viewMode">
+	renderItem?: (props: ComponentProps<typeof ProjectItem<T>>) => ReactNode
 	tabType?: CollaborationProjectType
 	error?: ReactNode
 	footer?: ReactNode
@@ -209,6 +210,7 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 	viewMode,
 	toolbar,
 	itemProps,
+	renderItem,
 	tabType,
 	error,
 	footer,
@@ -297,14 +299,25 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 								)}
 								data-project-name={item.project_name || t("project.unnamedProject")}
 							>
-								<ProjectItem<T>
-									{...itemProps}
-									project={item}
-									index={index}
-									viewMode={viewMode}
-									variant="compact"
-									collaborationType={tabType}
-								/>
+								{renderItem ? (
+									renderItem({
+										...itemProps,
+										project: item,
+										index,
+										viewMode,
+										variant: "compact",
+										collaborationType: tabType,
+									})
+								) : (
+									<ProjectItem<T>
+										{...itemProps}
+										project={item}
+										index={index}
+										viewMode={viewMode}
+										variant="compact"
+										collaborationType={tabType}
+									/>
+								)}
 							</div>
 						))}
 					</div>

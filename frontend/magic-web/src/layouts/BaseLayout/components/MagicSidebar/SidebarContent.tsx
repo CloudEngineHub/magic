@@ -18,7 +18,7 @@ import ChatsSubMenu from "./ChatsSubMenu"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { routesPathMatch } from "@/routes/history/helpers"
-import Divider from "@/components/other/Divider"
+import SidebarContentLayout from "./SidebarContentLayout"
 import { useSidebarMarketMenuItems } from "./hooks/useSidebarMarketMenuItems"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { observer } from "mobx-react-lite"
@@ -60,89 +60,90 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 	}
 
 	return (
-		<div
-			className="no-scrollbar flex min-h-0 w-full flex-1 touch-pan-y flex-col gap-1 overflow-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
-			data-testid="sidebar-content-root"
+		<SidebarContentLayout
+			collapsed={collapsed}
+			apps={
+				<SidebarGroup
+					className="w-full shrink-0 p-2"
+					data-testid="sidebar-content-apps-group"
+				>
+					<SidebarGroupContent>
+						<SidebarMenu>
+							<SidebarMenuItem key={RouteName.Super}>
+								<SidebarMenuButton
+									asChild
+									tooltip={collapsed ? t("sidebar:home.title") : undefined}
+									data-testid="sidebar-content-home-button"
+									className="text-sidebar-foreground"
+								>
+									<a
+										href={superRouteUrl}
+										onClick={handleNavigateToSuperHome}
+										className="text-current no-underline"
+									>
+										<Home className="h-4 w-4 shrink-0" />
+										<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+											{t("sidebar:home.title")}
+										</span>
+									</a>
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+							<SidebarMenuItem>
+								<ChatsSubMenu>
+									<SidebarMenuButton
+										tooltip={collapsed ? t("sidebar:chats.title") : undefined}
+										data-testid="sidebar-content-chats-button"
+										className="text-sidebar-foreground"
+									>
+										<MessageCircle className="h-4 w-4 shrink-0" />
+										<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+											{t("sidebar:chats.title")}
+										</span>
+										{!collapsed && (
+											<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
+										)}
+									</SidebarMenuButton>
+								</ChatsSubMenu>
+							</SidebarMenuItem>
+							{sidebarMarketMenuItems.map((item) => {
+								const title =
+									item.titleKey === "sidebar:superLobster.title"
+										? t(item.titleKey, clawBrandValues)
+										: t(item.titleKey)
+
+								return (
+									<SidebarMarketMenuItem
+										key={item.routeName}
+										item={item}
+										title={title}
+										collapsed={collapsed}
+										onNavigate={handleNavigateToRoute}
+									/>
+								)
+							})}
+							<SidebarMenuItem>
+								<AppsSubMenu>
+									<SidebarMenuButton
+										tooltip={collapsed ? t("appsMenu.apps") : undefined}
+										data-testid="sidebar-content-apps-button"
+										className="text-sidebar-foreground"
+									>
+										<LayoutGrid className="h-4 w-4 shrink-0" />
+										<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+											{t("appsMenu.apps")}
+										</span>
+										{!collapsed && (
+											<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
+										)}
+									</SidebarMenuButton>
+								</AppsSubMenu>
+							</SidebarMenuItem>
+							<MicroAppsSidebarMenuItem collapsed={collapsed} />
+						</SidebarMenu>
+					</SidebarGroupContent>
+				</SidebarGroup>
+			}
 		>
-			<SidebarGroup className="w-full shrink-0 p-2" data-testid="sidebar-content-apps-group">
-				<SidebarGroupContent>
-					<SidebarMenu>
-						<SidebarMenuItem key={RouteName.Super}>
-							<SidebarMenuButton
-								asChild
-								tooltip={collapsed ? t("sidebar:home.title") : undefined}
-								data-testid="sidebar-content-home-button"
-								className="text-sidebar-foreground"
-							>
-								<a
-									href={superRouteUrl}
-									onClick={handleNavigateToSuperHome}
-									className="text-current no-underline"
-								>
-									<Home className="h-4 w-4 shrink-0" />
-									<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-										{t("sidebar:home.title")}
-									</span>
-								</a>
-							</SidebarMenuButton>
-						</SidebarMenuItem>
-						<SidebarMenuItem>
-							<ChatsSubMenu>
-								<SidebarMenuButton
-									tooltip={collapsed ? t("sidebar:chats.title") : undefined}
-									data-testid="sidebar-content-chats-button"
-									className="text-sidebar-foreground"
-								>
-									<MessageCircle className="h-4 w-4 shrink-0" />
-									<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-										{t("sidebar:chats.title")}
-									</span>
-									{!collapsed && (
-										<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
-									)}
-								</SidebarMenuButton>
-							</ChatsSubMenu>
-						</SidebarMenuItem>
-						{sidebarMarketMenuItems.map((item) => {
-							const title =
-								item.titleKey === "sidebar:superLobster.title"
-									? t(item.titleKey, clawBrandValues)
-									: t(item.titleKey)
-
-							return (
-								<SidebarMarketMenuItem
-									key={item.routeName}
-									item={item}
-									title={title}
-									collapsed={collapsed}
-									onNavigate={handleNavigateToRoute}
-								/>
-							)
-						})}
-						<SidebarMenuItem>
-							<AppsSubMenu>
-								<SidebarMenuButton
-									tooltip={collapsed ? t("appsMenu.apps") : undefined}
-									data-testid="sidebar-content-apps-button"
-									className="text-sidebar-foreground"
-								>
-									<LayoutGrid className="h-4 w-4 shrink-0" />
-									<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-										{t("appsMenu.apps")}
-									</span>
-									{!collapsed && (
-										<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
-									)}
-								</SidebarMenuButton>
-							</AppsSubMenu>
-						</SidebarMenuItem>
-						<MicroAppsSidebarMenuItem collapsed={collapsed} />
-					</SidebarMenu>
-				</SidebarGroupContent>
-			</SidebarGroup>
-
-			<Divider direction="horizontal" className="mx-auto !w-[calc(100%-16px)] shrink-0" />
-
 			<ProjectNavigation collapsed={collapsed} />
 
 			{/* <SidebarGroup className="w-full px-2 py-0">
@@ -159,7 +160,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 					</SidebarMenu>
 				</SidebarGroupContent>
 			</SidebarGroup> */}
-		</div>
+		</SidebarContentLayout>
 	)
 }
 

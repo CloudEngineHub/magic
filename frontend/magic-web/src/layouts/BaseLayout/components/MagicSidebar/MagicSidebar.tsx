@@ -10,7 +10,6 @@ import {
 import MagicSidebarHeader from "./SidebarHeader"
 import MagicSidebarContent from "./SidebarContent"
 import MagicSidebarFooter from "./SidebarFooter"
-import Divider from "@/components/other/Divider"
 
 const MagicSidebar = observer(() => {
 	const { collapsed, toggleCollapsed, setCollapsed } = sidebarStore
@@ -37,12 +36,11 @@ const MagicSidebar = observer(() => {
 					/>
 				</ShadcnSidebarHeader>
 				<ShadcnSidebarContent
-					className="min-h-0 flex-1 gap-0 overflow-hidden p-0 pb-1"
+					className="min-h-0 flex-1 gap-0 overflow-hidden p-0"
 					data-testid="sidebar-content"
 				>
 					<MagicSidebarContent collapsed={collapsed} />
 				</ShadcnSidebarContent>
-				<Divider direction="horizontal" className="mx-auto !w-[calc(100%-16px)]" />
 				<ShadcnSidebarFooter className="shrink-0 p-0" data-testid="sidebar-footer">
 					<MagicSidebarFooter collapsed={collapsed} />
 				</ShadcnSidebarFooter>

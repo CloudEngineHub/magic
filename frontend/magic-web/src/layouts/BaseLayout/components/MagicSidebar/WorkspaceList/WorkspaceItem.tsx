@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
-import { ChevronRight, Loader2Icon, Plus, EllipsisIcon, SquareArrowOutUpRight } from "lucide-react"
+import { ChevronRight, Loader2Icon, Plus, EllipsisIcon } from "lucide-react"
 import { cn } from "@/utils/cn"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
@@ -56,6 +56,7 @@ function WorkspaceItem({
 		onRename: openRenameModal,
 		onMenuClose: () => setIsMenuOpen(false),
 		onTransferStart: () => setIsHovered(false),
+		onOpenManager,
 	})
 
 	const { isCreatingProject, handleCreateProject, handleCancelCreate, handleProjectCreated } =
@@ -204,7 +205,7 @@ function WorkspaceItem({
 							asChild
 							size="default"
 							isActive={isActive}
-							className="h-8 gap-2 px-2 text-sidebar-foreground"
+							className="group/workspace-row relative h-8 gap-2 px-2 text-sidebar-foreground"
 							onMouseEnter={() => setIsHovered(true)}
 							onMouseLeave={() => setIsHovered(false)}
 						>
@@ -237,81 +238,63 @@ function WorkspaceItem({
 								>
 									{workspace.name || t("super:workspace.unnamedWorkspace")}
 								</span>
-								<span
-									role="button"
-									tabIndex={0}
-									title={t("projectNavigation.openManager")}
-									aria-label={t("projectNavigation.openWorkspaceManager", {
-										name: workspace.name,
-									})}
-									className="flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-sidebar-accent"
-									onClick={(event) => {
-										event.preventDefault()
-										event.stopPropagation()
-										onOpenManager()
-									}}
-									onKeyDown={(event) => {
-										if (event.key === "Enter" || event.key === " ") {
-											event.preventDefault()
-											event.stopPropagation()
-											onOpenManager()
-										}
-									}}
-								>
-									<SquareArrowOutUpRight size={16} />
-								</span>
 								{isLoading && (
 									<Loader2Icon
 										className="h-4 w-4 shrink-0 animate-spin text-[#a3a3a3]"
 										data-testid={workspaceLoadingTestId}
 									/>
 								)}
-								{/* Keep action controls mounted; no-hover makes them visible on iPad desktop touch input. */}
 								<div
 									className={cn(
-										"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
+										"absolute inset-y-0 right-2 flex items-center gap-2 bg-gradient-to-l from-sidebar from-70% to-transparent pl-4 transition-opacity group-focus-within/workspace-row:pointer-events-auto group-focus-within/workspace-row:opacity-100 no-hover:pointer-events-auto no-hover:opacity-100",
 										isHovered || isMenuOpen
 											? "opacity-100"
-											: "pointer-events-none opacity-0 [@media(hover:hover)_and_(pointer:fine)]:w-0 [@media(hover:hover)_and_(pointer:fine)]:overflow-hidden",
-										"no-hover:pointer-events-auto no-hover:opacity-100",
+											: "pointer-events-none opacity-0",
 									)}
-									onClick={handleCreateProjectClick}
-									onPointerDown={(e) => {
-										e.stopPropagation()
-									}}
-									onMouseDown={(e) => {
-										e.stopPropagation()
-									}}
-									data-testid="workspace-item-create-project"
 								>
-									<Plus className="h-4 w-4" />
-								</div>
-								<MagicDropdown
-									menu={{ items: menuProps.items }}
-									trigger={["click"]}
-									placement={menuProps.placement}
-									onOpenChange={setIsMenuOpen}
-								>
+									{/* Keep action controls mounted; no-hover makes them visible on iPad desktop touch input. */}
 									<div
 										className={cn(
 											"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
-											isHovered || isMenuOpen
-												? "opacity-100"
-												: "pointer-events-none opacity-0 [@media(hover:hover)_and_(pointer:fine)]:w-0 [@media(hover:hover)_and_(pointer:fine)]:overflow-hidden",
+
 											"no-hover:pointer-events-auto no-hover:opacity-100",
 										)}
-										onClick={handleMoreClick}
+										onClick={handleCreateProjectClick}
 										onPointerDown={(e) => {
 											e.stopPropagation()
 										}}
 										onMouseDown={(e) => {
 											e.stopPropagation()
 										}}
-										data-testid="workspace-item-more"
+										data-testid="workspace-item-create-project"
 									>
-										<EllipsisIcon className="h-4 w-4" />
+										<Plus className="h-4 w-4" />
 									</div>
-								</MagicDropdown>
+									<MagicDropdown
+										menu={{ items: menuProps.items }}
+										trigger={["click"]}
+										placement={menuProps.placement}
+										onOpenChange={setIsMenuOpen}
+									>
+										<div
+											className={cn(
+												"flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
+
+												"no-hover:pointer-events-auto no-hover:opacity-100",
+											)}
+											onClick={handleMoreClick}
+											onPointerDown={(e) => {
+												e.stopPropagation()
+											}}
+											onMouseDown={(e) => {
+												e.stopPropagation()
+											}}
+											data-testid="workspace-item-more"
+										>
+											<EllipsisIcon className="h-4 w-4" />
+										</div>
+									</MagicDropdown>
+								</div>
 							</a>
 						</SidebarMenuButton>
 					</MagicDropdown>
@@ -322,7 +305,7 @@ function WorkspaceItem({
 						isSearchResult={searchProjects !== undefined}
 						active={active}
 						workspace={workspace}
-						onOpenManager={onOpenManager}
+						scrollRef={scrollRef}
 						projects={projects}
 						workspaceId={workspace.id}
 						isLoading={isLoading}
