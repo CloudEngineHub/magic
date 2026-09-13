@@ -1844,7 +1844,13 @@ export class PPTStore {
 		}
 		// Always claim active priority, even when content is cached, so rapid navigation can safely
 		// demote/cancel the previous active request before the fullscreen window is refilled.
-		void this.ensureSlideContent(activeIndex, "active")
+		const generation = this.contentGeneration
+		const configUpdateVersion = this.configUpdateVersion
+		void this.ensureSlideContent(activeIndex, "active").then(() => {
+			// 等待附件期间切到可用页，也要结束初始化；复用现有判断，旧请求不能结束新 PPT 的加载。
+			if (!this.isInitializationCurrent(generation, configUpdateVersion)) return
+			return this.settlePendingInitialization(configUpdateVersion)
+		})
 
 		fullscreenDemands.forEach(({ index, priority }) => {
 			void this.ensureSlideContent(index, priority)
