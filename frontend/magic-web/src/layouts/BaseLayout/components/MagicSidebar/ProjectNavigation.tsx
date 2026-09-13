@@ -86,14 +86,17 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 							}}
 						>
 							<PopoverTrigger asChild>
-								<SidebarMenuButton
-									tooltip={t("projectNavigation.recent")}
-									aria-label={t("projectNavigation.recent")}
-									disabled={workspaceBusy}
-									data-testid="sidebar-recent-projects-icon"
-								>
-									{recentIcon}
-								</SidebarMenuButton>
+								{/* React 18 下 SidebarMenuButton 不转发 ref，使用 DOM 节点承接浮层定位。 */}
+								<span>
+									<SidebarMenuButton
+										tooltip={t("projectNavigation.recent")}
+										aria-label={t("projectNavigation.recent")}
+										disabled={workspaceBusy}
+										data-testid="sidebar-recent-projects-icon"
+									>
+										{recentIcon}
+									</SidebarMenuButton>
+								</span>
 							</PopoverTrigger>
 							<PopoverContent
 								side="right"
