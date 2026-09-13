@@ -43,6 +43,7 @@ export default function useMessageSendHandler({
 	isMountedRef,
 }: UseMessageSendHandlerParams) {
 	return useMemoizedFn(async () => {
+		if (store.draftStore.isDraftSwitching) return
 		if (voiceInputRef.current?.isRecording) voiceInputRef.current.stopRecording()
 		// Sending is also an explicit confirmation path when the editor never received focus.
 		promoteCanvasPendingMentions?.()

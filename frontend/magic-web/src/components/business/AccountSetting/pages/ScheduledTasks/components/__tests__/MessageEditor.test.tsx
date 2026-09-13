@@ -18,8 +18,10 @@ vi.mock(
 		) {
 			const editorApi = {
 				getDraftKey: () => null,
+				beginDraftSwitch: vi.fn(async () => true),
+				endDraftSwitch: vi.fn(),
 				prepareQueueDraft: vi.fn(async () => undefined),
-				restoreQueueDraft: vi.fn(async () => undefined),
+				restoreQueueDraft: vi.fn(async () => "activated" as const),
 				getQueueDraft: () => null,
 				subscribeQueueDraft: vi.fn(() => () => undefined),
 				keepQueueDraft: vi.fn(async () => undefined),

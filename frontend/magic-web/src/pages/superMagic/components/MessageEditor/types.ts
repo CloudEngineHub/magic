@@ -231,8 +231,13 @@ export interface SendMessageByContentPayload {
 // Component Ref
 export interface MessageEditorRef {
 	getDraftKey: () => DraftKey | null
+	beginDraftSwitch: () => Promise<boolean>
+	endDraftSwitch: () => void
 	prepareQueueDraft: (draft: QueueDraftSnapshot) => Promise<void>
-	restoreQueueDraft: (draft: QueueDraftSnapshot, activate?: boolean) => Promise<void>
+	restoreQueueDraft: (
+		draft: QueueDraftSnapshot,
+		activate?: boolean,
+	) => Promise<"activated" | "saved">
 	getQueueDraft: () => QueueDraftSnapshot | null
 	subscribeQueueDraft: (listener: (draft: QueueDraftSnapshot | null) => void) => () => void
 	keepQueueDraft: () => Promise<void>
@@ -314,6 +319,8 @@ export interface DraftKey {
 }
 
 export interface DraftData {
+	/** 当前输入快照；无此标记的旧记录仍按历史版本恢复。 */
+	isCurrentSnapshot?: boolean
 	queueDraft?: QueueDraftMetadata
 	/** Workspace id to scope drafts per workspace */
 	workspaceId: string

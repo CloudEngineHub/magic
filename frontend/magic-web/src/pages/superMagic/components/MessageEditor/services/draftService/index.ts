@@ -38,56 +38,19 @@ export class DraftManager {
 		value?: JSONContent | null
 		mentionItems?: MentionListItem[]
 		queueDraft?: QueueDraftMetadata
-	}): Promise<DraftQueueEntry> {
-		const draftKey = {
-			workspaceId: data.workspaceId,
-			projectId: data.projectId,
-			topicId: data.topicId,
-		}
-		const compositeKey = this.getCompositeKey(
-			draftKey.workspaceId,
-			draftKey.projectId,
-			draftKey.topicId,
+	}): Promise<void> {
+		// 已发送正文与空输入按同一队列顺序保存，避免旧自动保存恢复已发送内容。
+		await this.saveDraftStrict({
+			...data,
+			value: data.value ?? undefined,
+			mentionItems: data.mentionItems ?? [],
+			versionId: `${genDraftVersionId(Date.now())}/sent`,
+		})
+		await this.saveDraftStrict(
+			{ ...data, value: undefined, mentionItems: [], queueDraft: undefined },
+			true,
+			true,
 		)
-		const entry = this.entries.get(compositeKey) ?? {
-			inFlight: null,
-			pending: null,
-			pendingVersion: 0,
-		}
-
-		// Append a new empty version as the latest without altering existing versions
-		// Use a unique versionId to avoid overwriting time-based keys
-		const versionTimestamp = Date.now()
-		const uniqueVersionId = `${genDraftVersionId(versionTimestamp)}/sent`
-		// 与 prepareSavePayload 一致：编辑器 value 可能含 MobX 代理或不可结构化克隆的嵌套对象，IndexedDB put 前必须落成纯 JSON 树
-		const sentSnapshotPayload = cloneDeep({
-			workspaceId: data.workspaceId,
-			projectId: data.projectId,
-			topicId: data.topicId,
-			mentionItems: data.mentionItems || [],
-			value: data.value || undefined,
-			isAutoSaved: false,
-			versionId: uniqueVersionId,
-			versionTimestamp,
-		})
-		const clearedEditorPayload = cloneDeep({
-			workspaceId: data.workspaceId,
-			projectId: data.projectId,
-			topicId: data.topicId,
-			mentionItems: [],
-			value: undefined,
-		})
-		entry.inFlight = Promise.all([
-			// 发送出去的内容保存一个版本
-			this.storage.saveDraftVersion(draftKey, sentSnapshotPayload, true),
-			// 把最新版本设置为空
-			this.storage.saveDraftVersion(draftKey, clearedEditorPayload, true),
-		]).finally(() => {
-			entry.inFlight = null
-		})
-
-		this.entries.set(compositeKey, entry)
-		return entry
 	}
 
 	/**
@@ -144,6 +107,10 @@ export class DraftManager {
 				try {
 					// Always overwrite existing draft since we removed auto-save versioning
 					await this.storage.saveDraftVersion(draftKey, next.draftData)
+					await this.storage.saveDraft(draftKey, {
+						...next.draftData,
+						isCurrentSnapshot: true,
+					})
 
 					// If a clear happened during the save, ensure the draft is not resurrected
 					const latestAfterSave = this.versionByKey.get(compositeKey) ?? 0
@@ -174,6 +141,7 @@ export class DraftManager {
 	async saveDraftStrict(
 		data: Omit<DraftData, "createdAt" | "updatedAt">,
 		newVersion = false,
+		current = false,
 	): Promise<void> {
 		const key = this.getCompositeKey(data.workspaceId, data.projectId, data.topicId)
 		const entry: DraftQueueEntry = this.entries.get(key) ?? {
@@ -182,11 +150,11 @@ export class DraftManager {
 			pendingVersion: 0,
 		}
 		const snapshot = cloneDeep(data)
+		delete snapshot.isCurrentSnapshot
 		snapshot.versionTimestamp = this.nextSaveTimestamp()
 		snapshot.isAutoSaved = false
-		if (newVersion) snapshot.versionId = `saved/${crypto.randomUUID()}`
-		else if (snapshot.queueDraft)
-			snapshot.versionId = `queue/${snapshot.queueDraft.clientSyncId}`
+		if (snapshot.queueDraft) snapshot.versionId = `queue/${snapshot.queueDraft.clientSyncId}`
+		else if (newVersion) snapshot.versionId = `saved/${crypto.randomUUID()}`
 		// 严格保存是顺序边界：此前的自动保存先完成，此后的输入不能被旧快照覆盖。
 		const previous = entry.inFlight
 		const previousPending = entry.pending
@@ -194,12 +162,19 @@ export class DraftManager {
 		entry.strictDepth = (entry.strictDepth ?? 0) + 1
 		const write = (async () => {
 			await previous?.catch(() => undefined)
-			if (previousPending)
+			if (previousPending) {
 				await this.storage.saveDraftVersion(
 					previousPending.draftData,
 					previousPending.draftData,
 				)
+				await this.storage.saveDraft(previousPending.draftData, {
+					...previousPending.draftData,
+					isCurrentSnapshot: true,
+				})
+			}
 			await this.storage.saveDraftVersion(data, snapshot, true)
+			if (current)
+				await this.storage.saveDraft(data, { ...snapshot, isCurrentSnapshot: true })
 		})()
 		entry.inFlight = write
 		this.entries.set(key, entry)
@@ -310,6 +285,8 @@ export class DraftManager {
 	 * Load latest draft version
 	 */
 	async loadLatestDraftVersion(key: DraftKey): Promise<DraftData | null> {
+		const current = await this.storage.loadDraft(key)
+		if (current?.isCurrentSnapshot) return current
 		const draft = await this.storage.loadLatestDraftVersion(key)
 		if (!draft) {
 			// 如果draft不存在，则尝试从legacyDraft中迁移数据
@@ -396,7 +373,7 @@ interface PreparedSavePayload {
 
 interface DraftQueueEntry {
 	strictDepth?: number
-	inFlight: Promise<void | [void, void]> | null
+	inFlight: Promise<void> | null
 	pending: PreparedSavePayload | null
 	pendingVersion: number
 }

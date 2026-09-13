@@ -11,6 +11,7 @@ import {
 } from "../../utils/mention"
 import { cloneDeep, isEqual } from "lodash-es"
 import i18next from "i18next"
+import MagicModal from "@/components/base/MagicModal"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { userStore } from "@/models/user"
 import { transformInspectorContent } from "../../extensions/inspector-detail"
@@ -55,12 +56,17 @@ export class DraftStore {
 	drafts: DraftData[] = []
 	queueDraft: QueueDraftMetadata | undefined = undefined
 
+	isDraftSwitching = false
+	private switchEditable = true
 	private loadRevision = 0
 
 	private clearContentHandler: (() => void) | null = null
 	private mentionPanelStore: MentionPanelStoreLike | null = null
 
-	constructor(editorStore: EditorStore) {
+	constructor(
+		editorStore: EditorStore,
+		private readonly areFilesUploaded: () => boolean = () => true,
+	) {
 		this.editorStore = editorStore
 
 		makeAutoObservable(
@@ -118,11 +124,13 @@ export class DraftStore {
 		mentionPanelStore?: DataService
 		isComposing: boolean
 	}) {
-		if (!this.isDraftReady || this.isSendingGuard || isComposing) return
+		if (!this.isDraftReady || this.isSendingGuard || this.isDraftSwitching || isComposing)
+			return
 		this.saveDraft({ value, mentionPanelStore })
 	}
 
 	saveDraft({ value, mentionPanelStore, shouldReloadDraftBox = true }: SaveDraftOptions) {
+		if (this.isDraftSwitching) return
 		if (hasLoadingMarkerInContent(value)) return
 
 		const draftKey = this.getDraftKey()
@@ -150,7 +158,8 @@ export class DraftStore {
 	}
 
 	async saveDraftOnBlur({ value, mentionPanelStore, onError }: SaveDraftOnBlurOptions) {
-		if (this.isSendingGuard || (this.queueDraft && !this.isDraftReady)) return
+		if (this.isSendingGuard || this.isDraftSwitching || (this.queueDraft && !this.isDraftReady))
+			return
 		if (hasLoadingMarkerInContent(value)) return
 
 		const draftKey = this.getDraftKey()
@@ -216,47 +225,126 @@ export class DraftStore {
 		return this.loadDraftPromise ?? Promise.resolve()
 	}
 
-	async useDraft(selectedDraft: DraftData, mentionPanelStore?: MentionPanelStoreLike) {
-		let draft = selectedDraft
-		if (draft.queueDraft) {
-			if (
-				!this.matchesDraftScope(
-					this.pinQueueDraft({ ...draft, queueDraft: draft.queueDraft }),
-				)
-			) {
-				magicToast.warning(i18next.t("messageQueue.draftTopicMismatch", { ns: "super" }))
-				return
-			}
-			const canonical = await draftManager.loadDraftByVersion(
-				this.pinQueueDraft({ ...draft, queueDraft: draft.queueDraft }),
-				`queue/${draft.queueDraft.clientSyncId}`,
-			)
-			// 历史版本可以复用正文，但提交状态以这一份队列草稿的最新记录为准。
-			if (canonical) draft = { ...draft, queueDraft: canonical.queueDraft }
+	/** 主动替换共用同一确认：取消不保存、不取出；确认后暂停输入直到交接结束。 */
+	async beginDraftSwitch(): Promise<boolean> {
+		const requestedScope = this.getDraftKey()
+		await this.waitForLoadDraft()
+		if (!requestedScope || !this.matchesDraftScope(requestedScope)) return false
+		if (
+			this.isDraftSwitching ||
+			this.isSendingGuard ||
+			(this.queueDraft && this.queueDraft.phase !== "detached")
+		) {
+			magicToast.warning(i18next.t("messageQueue.operationInProgress", { ns: "super" }))
+			return false
 		}
-		if (draft.queueDraft && this.draftKey) {
-			if (
-				!this.matchesDraftScope(
-					this.pinQueueDraft({ ...draft, queueDraft: draft.queueDraft }),
+		if (!this.areFilesUploaded()) {
+			magicToast.warning(i18next.t("messageEditor.waitForFileUpload", { ns: "super" }))
+			return false
+		}
+		if (hasLoadingMarkerInContent(this.editorStore.value)) {
+			magicToast.warning(i18next.t("messageEditor.waitForMarkerLoad", { ns: "super" }))
+			return false
+		}
+		this.isDraftSwitching = true
+		const scope = this.getDraftKey()
+		const revision = this.loadRevision
+		const hasInput = hasMeaningfulData({
+			value: this.editorStore.value,
+			queueDraft: this.queueDraft,
+		})
+		const confirmed =
+			!hasInput ||
+			(await new Promise<boolean>((resolve) => {
+				MagicModal.confirm({
+					title: i18next.t("messageQueue.switchDraftTitle", { ns: "super" }),
+					content: i18next.t("messageQueue.switchDraftContent", { ns: "super" }),
+					okText: i18next.t("messageQueue.switchDraftConfirm", { ns: "super" }),
+					cancelText: i18next.t("messageQueue.switchDraftCancel", { ns: "super" }),
+					centered: true,
+					onOk: () => {
+						resolve(true)
+					},
+					onCancel: () => {
+						resolve(false)
+					},
+				})
+			}))
+		if (
+			!confirmed ||
+			!scope ||
+			!this.matchesDraftScope(scope) ||
+			revision !== this.loadRevision
+		) {
+			this.isDraftSwitching = false
+			return false
+		}
+		const editor = this.editorStore.tiptapEditor
+		this.switchEditable = editor?.isEditable ?? true
+		if (editor && !editor.isDestroyed) editor.setEditable(false)
+		return true
+	}
+
+	endDraftSwitch() {
+		if (!this.isDraftSwitching) return
+		this.isDraftSwitching = false
+		if (this.isDraftReady)
+			this.saveDraft({ value: this.editorStore.value, shouldReloadDraftBox: false })
+		void this.loadDraftVersions({ loading: false })
+		const editor = this.editorStore.tiptapEditor
+		if (editor && !editor.isDestroyed)
+			editor.setEditable(this.switchEditable && this.queueDraft?.phase !== "removing")
+	}
+
+	async useDraft(
+		selectedDraft: DraftData,
+		mentionPanelStore?: MentionPanelStoreLike,
+	): Promise<boolean> {
+		if (!(await this.beginDraftSwitch())) return false
+		const scope = this.getDraftKey()
+		try {
+			if (!scope) return false
+			let draft = selectedDraft
+			if (draft.queueDraft) {
+				const pinned = this.pinQueueDraft({ ...draft, queueDraft: draft.queueDraft })
+				if (!this.matchesDraftScope(pinned)) {
+					magicToast.warning(
+						i18next.t("messageQueue.draftTopicMismatch", { ns: "super" }),
+					)
+					return false
+				}
+				const canonical = await draftManager.loadDraftByVersion(
+					pinned,
+					`queue/${draft.queueDraft.clientSyncId}`,
 				)
-			)
-				throw new Error("queue_draft_scope_changed")
+				// 历史版本可以复用正文，但提交状态以这一份队列草稿的最新记录为准。
+				if (canonical) draft = { ...draft, queueDraft: canonical.queueDraft }
+			}
 			await draftManager.saveDraftStrict(
 				{
-					...this.draftKey,
+					...scope,
 					value: this.editorStore.value,
 					mentionItems: collectMentionItemsFromContent(this.editorStore.value),
 					queueDraft: this.queueDraft,
 				},
 				true,
+				true,
 			)
+			if (!this.matchesDraftScope(scope)) return false
+			const loaded = await this.activateDraft(
+				{ ...draft, ...scope },
+				{
+					isClearContent: false,
+					replaceDirectly: false,
+					mentionPanelStore,
+				},
+			)
+			if (!loaded) return false
+			this.editorStore.focus()
+			return true
+		} finally {
+			this.endDraftSwitch()
 		}
-		await this.loadDraft(draft, {
-			isClearContent: false,
-			replaceDirectly: false,
-			mentionPanelStore,
-		})
-		this.editorStore.focus()
 	}
 
 	async loadDraftVersions(options: { loading?: boolean } = { loading: true }) {
@@ -292,7 +380,18 @@ export class DraftStore {
 
 			allDrafts.sort((a, b) => b.updatedAt - a.updatedAt)
 			runInAction(() => {
-				this.drafts = allDrafts
+				// 同一队列来源只展示 canonical 版本；不同消息即使正文相同也不合并。
+				const canonicalIds = new Set(
+					allDrafts
+						.filter((draft) => draft.versionId?.startsWith("queue/"))
+						.map((draft) => draft.versionId),
+				)
+				this.drafts = allDrafts.filter(
+					(draft) =>
+						!draft.queueDraft ||
+						draft.versionId === `queue/${draft.queueDraft.clientSyncId}` ||
+						!canonicalIds.has(`queue/${draft.queueDraft.clientSyncId}`),
+				)
 			})
 		} catch (error) {
 			console.error("Failed to load drafts:", error)
@@ -356,11 +455,16 @@ export class DraftStore {
 				queueDraft: this.queueDraft,
 			},
 			true,
+			true,
 		)
 		await draftManager.saveDraftStrict(this.pinQueueDraft(draft))
+		await this.loadDraftVersions({ loading: false })
 	}
 
-	async restoreQueueDraft(draft: QueueDraftSnapshot, activate = true): Promise<void> {
+	async restoreQueueDraft(
+		draft: QueueDraftSnapshot,
+		activate = true,
+	): Promise<"activated" | "saved"> {
 		const previousValue = cloneDeep(this.editorStore.value)
 		if (
 			!activate &&
@@ -369,15 +473,27 @@ export class DraftStore {
 		) {
 			this.queueDraft = cloneDeep(draft.queueDraft)
 		}
-		await draftManager.saveDraftStrict(this.pinQueueDraft(draft))
+		await draftManager.saveDraftStrict(
+			this.pinQueueDraft(draft),
+			false,
+			!activate &&
+				this.matchesDraftScope(draft) &&
+				this.queueDraft?.clientSyncId === draft.queueDraft.clientSyncId,
+		)
 		if (
 			!this.matchesDraftScope(draft) ||
 			!activate ||
 			!isEqual(previousValue, this.editorStore.value)
 		)
-			return
-		await this.loadDraft({ ...draft, createdAt: Date.now(), updatedAt: Date.now() })
+			return "saved"
+		const loaded = await this.activateDraft({
+			...draft,
+			createdAt: Date.now(),
+			updatedAt: Date.now(),
+		})
+		if (!loaded) return "saved"
 		this.editorStore.focus()
+		return "activated"
 	}
 
 	async keepQueueDraft(): Promise<void> {
@@ -393,6 +509,7 @@ export class DraftStore {
 		// 保留已有版本，再写空输入；不调用任何重新入队接口。
 		await draftManager.saveDraftStrict(
 			{ ...draft, value: undefined, mentionItems: [], queueDraft: undefined },
+			true,
 			true,
 		)
 		if (!this.matchesDraftScope(draft) || !isEqual(this.editorStore.value, draft.value)) return
@@ -433,6 +550,7 @@ export class DraftStore {
 			await draftManager.saveDraftStrict(
 				{ ...draft, value: undefined, mentionItems: [], queueDraft: undefined },
 				true,
+				true,
 			)
 			return (
 				this.matchesDraftScope(draft) &&
@@ -447,8 +565,38 @@ export class DraftStore {
 				queueDraft: undefined,
 			},
 			true,
+			true,
 		)
 		return false
+	}
+
+	/** 只有实际加载且当前记录写入成功才完成切换；保存失败恢复原输入。 */
+	private async activateDraft(
+		draft: DraftData,
+		options: LoadDraftOptions = {},
+	): Promise<boolean> {
+		const scope = this.getDraftKey()
+		if (!scope) return false
+		const previousValue = cloneDeep(this.editorStore.value)
+		const previousQueueDraft = cloneDeep(this.queueDraft)
+		if (!(await this.loadDraft(draft, options))) return false
+		const activatedValue = cloneDeep(this.editorStore.value)
+		try {
+			await draftManager.saveDraftStrict(
+				{ ...draft, ...scope, value: activatedValue },
+				false,
+				true,
+			)
+			return this.matchesDraftScope(scope) && isEqual(activatedValue, this.editorStore.value)
+		} catch (error) {
+			if (this.matchesDraftScope(scope) && isEqual(activatedValue, this.editorStore.value)) {
+				runInAction(() => {
+					this.queueDraft = previousQueueDraft
+				})
+				this.editorStore.updateContent(previousValue, { preserveMentionValidation: true })
+			}
+			throw error
+		}
 	}
 
 	private pinQueueDraft(draft: QueueDraftSnapshot): QueueDraftSnapshot {
@@ -497,7 +645,7 @@ export class DraftStore {
 				this.clearContentHandler?.()
 			}
 			this.isDraftReady = true
-			return
+			return true
 		}
 
 		const loadScope = this.draftKey
@@ -529,7 +677,7 @@ export class DraftStore {
 			!this.matchesDraftScope(this.pinQueueDraft({ ...draft, queueDraft: draft.queueDraft }))
 		)
 			return
-		if (replaceDirectly ? draft.value : true) {
+		if (replaceDirectly ? draft.value || draft.isCurrentSnapshot : true) {
 			await syncDraftMarkersToSuperMagicManager(draft)
 			if (!this.matchesDraftScope(loadScope) || this.loadRevision !== revision) return
 
@@ -540,13 +688,15 @@ export class DraftStore {
 							preserveMentionValidation: true,
 						})
 					: valueWithoutPending
-			if (draft.queueDraft && !isEqual(previousValue, this.editorStore.value)) {
+			if (!isEqual(previousValue, this.editorStore.value)) {
 				this.markDraftReady()
 				return
 			}
 			runInAction(() => {
 				this.queueDraft = draft.queueDraft ? cloneDeep(draft.queueDraft) : undefined
 			})
+			// 来源变更会通知队列恢复模型；切换完成前仍保持输入暂停。
+			if (this.isDraftSwitching) this.editorStore.tiptapEditor?.setEditable(false)
 			this.editorStore.updateContent(
 				draft.queueDraft && filteredContent
 					? transformInspectorContent(filteredContent)
@@ -559,6 +709,7 @@ export class DraftStore {
 			if (!draft.queueDraft) this.queueDraft = undefined
 			this.isDraftReady = true
 		})
+		return true
 	}
 
 	getDraftKey() {

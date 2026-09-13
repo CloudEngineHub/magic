@@ -178,6 +178,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		const messageQueueNode = messageQueue.queue.length > 0 && !isEmptyStatus && (
 			<MessageQueue
 				queue={messageQueue.queue}
+				editorRef={messageQueue.editorRef}
 				queueStats={messageQueue.queueStats}
 				onRemoveMessage={messageQueue.removeFromQueue}
 				onSendMessage={messageQueue.sendQueuedMessage}

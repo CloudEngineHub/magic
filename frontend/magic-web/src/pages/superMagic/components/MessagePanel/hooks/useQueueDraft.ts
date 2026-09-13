@@ -4,6 +4,7 @@ import { cloneDeep, isEqual } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import { userStore } from "@/models/user"
+import MagicModal from "@/components/base/MagicModal"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
 import type {
@@ -89,7 +90,7 @@ export default function useQueueDraft({
 		async (id: string, returnPosition: "original" | "tail") => {
 			const editor = editorRef.current
 			const key = editor?.getDraftKey()
-			const item = queueRef.current?.find((message) => message.id === id)
+			let item = queueRef.current?.find((message) => message.id === id)
 			if (
 				!editor ||
 				!key ||
@@ -114,58 +115,66 @@ export default function useQueueDraft({
 			pendingRef.current = true
 			setIsQueueOperationPending(true)
 			const operationScope = scopeRef.current
-			const previousValue = cloneDeep(editor.getValue())
-			const pending = (queueRef.current ?? []).filter(
-				(message) => message.status === "pending",
-			)
-			const index = pending.findIndex((message) => message.id === id)
-			const { content, mentionItems, ...source } = item
-			const snapshot: QueueDraftSnapshot = {
-				...key,
-				value: cloneDeep(content),
-				mentionItems: cloneDeep(mentionItems),
-				queueDraft: {
-					selectedModel: source.selectedModel,
-					selectedImageModel: source.selectedImageModel,
-					selectedVideoModel: source.selectedVideoModel,
-					topicMode: source.topicMode,
-					agentCode: source.agentCode,
-					dynamicParams: source.dynamicParams,
-					sourceId: id,
-					userId: userStore.user.userInfo?.user_id ?? "",
-					organizationCode: userStore.user.userInfo?.organization_code ?? "",
-					returnPosition,
-					beforeId:
-						pending.slice(index + 1).find((message) => !message.syncState)?.id ?? null,
-					afterId:
-						pending
-							.slice(0, index)
-							.reverse()
-							.find((message) => !message.syncState)?.id ?? null,
-					originalIndex: index,
-					phase: "removing",
-					clientSyncId: crypto.randomUUID(),
-					expectedSyncId: item.clientSyncId ?? "",
-					localSource: item.syncState === "local",
-				},
-			}
+			let switching = false
 			try {
+				switching = await editor.beginDraftSwitch()
+				if (!switching || operationScope !== scopeRef.current) return
+				item = queueRef.current?.find((message) => message.id === id)
+				if (!item || item.status !== "pending" || item.syncState === "submitted")
+					throw new Error("queue_source_unavailable")
+				const previousValue = cloneDeep(editor.getValue())
+				const pending = (queueRef.current ?? []).filter(
+					(message) => message.status === "pending",
+				)
+				const index = pending.findIndex((message) => message.id === id)
+				const { content, mentionItems, ...source } = item
+				const snapshot: QueueDraftSnapshot = {
+					...key,
+					value: cloneDeep(content),
+					mentionItems: cloneDeep(mentionItems),
+					queueDraft: {
+						selectedModel: source.selectedModel,
+						selectedImageModel: source.selectedImageModel,
+						selectedVideoModel: source.selectedVideoModel,
+						topicMode: source.topicMode,
+						agentCode: source.agentCode,
+						dynamicParams: source.dynamicParams,
+						sourceId: id,
+						userId: userStore.user.userInfo?.user_id ?? "",
+						organizationCode: userStore.user.userInfo?.organization_code ?? "",
+						returnPosition,
+						beforeId:
+							pending.slice(index + 1).find((message) => !message.syncState)?.id ??
+							null,
+						afterId:
+							pending
+								.slice(0, index)
+								.reverse()
+								.find((message) => !message.syncState)?.id ?? null,
+						originalIndex: index,
+						phase: "removing",
+						clientSyncId: crypto.randomUUID(),
+						expectedSyncId: item.clientSyncId ?? "",
+						localSource: item.syncState === "local",
+					},
+				}
 				await editor.prepareQueueDraft(snapshot)
 				if (operationScope !== scopeRef.current) return
 				await removeForDraft(item)
 				snapshot.queueDraft.phase = "detached"
 				const activate =
 					operationScope === scopeRef.current && isEqual(previousValue, editor.getValue())
-				await editor.restoreQueueDraft(snapshot, activate)
+				const result = await editor.restoreQueueDraft(snapshot, activate)
 				if (operationScope === scopeRef.current && snapshot.queueDraft.localSource)
 					await finalizeLocalRemoval(id)
-				if (!activate && operationScope === scopeRef.current)
-					magicToast.success(t("messageQueue.savedToDraftBox"))
+				if (result === "saved" && operationScope === scopeRef.current)
+					MagicModal.info({ content: t("messageQueue.savedToDraftBox"), centered: true })
 				await fetchQueueList()
 			} catch {
 				if (operationScope === scopeRef.current)
 					magicToast.error(t("messageQueue.takeOutFailed"))
 			} finally {
+				if (switching) editor.endDraftSwitch()
 				releaseLock(id)
 				pendingRef.current = false
 				setIsQueueOperationPending(false)

@@ -620,6 +620,8 @@ export default function useMobileComposerLogic({
 	useEffect(() => {
 		tiptapEditorRef.current = {
 			getDraftKey: store.draftStore.getDraftKey,
+			beginDraftSwitch: store.draftStore.beginDraftSwitch,
+			endDraftSwitch: store.draftStore.endDraftSwitch,
 			prepareQueueDraft: store.draftStore.prepareQueueDraft,
 			restoreQueueDraft: store.draftStore.restoreQueueDraft,
 			getQueueDraft: store.draftStore.getQueueDraft,

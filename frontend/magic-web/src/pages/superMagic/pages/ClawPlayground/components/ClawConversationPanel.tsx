@@ -193,6 +193,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 				<div className="mb-2">
 					<MessageQueue
 						queue={messageQueue.queue}
+						editorRef={messageQueue.editorRef}
 						queueStats={messageQueue.queueStats}
 						onRemoveMessage={messageQueue.removeFromQueue}
 						onSendMessage={messageQueue.sendQueuedMessage}

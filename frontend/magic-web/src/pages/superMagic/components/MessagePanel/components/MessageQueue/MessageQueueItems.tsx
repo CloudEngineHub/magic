@@ -1,32 +1,32 @@
 import { useLayoutEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import {
 	DndContext,
+	DragOverlay,
 	PointerSensor,
 	KeyboardSensor,
 	closestCenter,
+	pointerWithin,
+	useDroppable,
 	useSensor,
 	useSensors,
+	type CollisionDetection,
 	type DragEndEvent,
 } from "@dnd-kit/core"
 import {
 	SortableContext,
-	useSortable,
 	verticalListSortingStrategy,
 	sortableKeyboardCoordinates,
 	arrayMove,
 } from "@dnd-kit/sortable"
-import { CSS } from "@dnd-kit/utilities"
-import { CircleArrowUp, CircleArrowDown, GripVertical, Loader2, Pencil, Trash } from "lucide-react"
-import type { LucideIcon } from "lucide-react"
-import { cn } from "@/utils/cn"
-import SmartTooltip from "@/components/other/SmartTooltip"
+import { GripVertical } from "lucide-react"
 import type { QueuedMessage } from "../../hooks/useMessageQueue"
 import type { MessageQueueProps } from "./index"
-import CollapsibleText from "./components/CollapsibleText"
-import { normalizeQueuePreviewText, trimQueueContent } from "./utils"
+import MessageQueueRow from "./MessageQueueRow"
+import { normalizeQueuePreviewText } from "./utils"
 
-type QueueActions = Pick<
+export type QueueActions = Pick<
 	MessageQueueProps,
 	| "onRemoveMessage"
 	| "onSendMessage"
@@ -35,13 +35,41 @@ type QueueActions = Pick<
 	| "onMove"
 	| "isOperationPending"
 	| "variant"
+	| "editorRef"
 >
+const EDITOR_DROP_ID = "queue-editor-drop"
+
+/** 指针只在真实目标内命中；队列外松手不吸附最近的消息。键盘仍沿用原排序坐标。 */
+const detectCollision: CollisionDetection = (args) => {
+	const rows = args.droppableContainers.filter((container) => container.id !== EDITOR_DROP_ID)
+	if (!args.pointerCoordinates) return closestCenter({ ...args, droppableContainers: rows })
+	const hits = pointerWithin(args)
+	const editor = hits.find((hit) => hit.id === EDITOR_DROP_ID)
+	if (editor) return [editor]
+	const rects = rows.flatMap((row) => {
+		const rect = args.droppableRects.get(row.id)
+		return rect ? [rect] : []
+	})
+	const { x, y } = args.pointerCoordinates
+	if (
+		!rects.length ||
+		x < Math.min(...rects.map((rect) => rect.left)) ||
+		x > Math.max(...rects.map((rect) => rect.right)) ||
+		y < Math.min(...rects.map((rect) => rect.top)) ||
+		y > Math.max(...rects.map((rect) => rect.bottom))
+	)
+		return []
+	return closestCenter({ ...args, droppableContainers: rows })
+}
 
 export default function MessageQueueItems({
 	queue,
 	...props
 }: QueueActions & { queue: QueuedMessage[] }) {
+	const { t } = useTranslation("super")
 	const [isSaving, setIsSaving] = useState(false)
+	const [activeItem, setActiveItem] = useState<QueuedMessage | null>(null)
+	const [savedOrder, setSavedOrder] = useState<string[] | null>(null)
 	const dragItemsRef = useRef<QueuedMessage[]>([])
 	const sensors = useSensors(
 		useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -50,16 +78,33 @@ export default function MessageQueueItems({
 	const sortableItems = queue.filter((item) => item.status === "pending" && !item.syncState)
 	const disabled =
 		isSaving || props.isOperationPending || queue.some((item) => Boolean(item.syncState))
+	const displayedQueue = savedOrder
+		? [...queue].sort((a, b) => {
+				const aIndex = savedOrder.indexOf(a.id)
+				const bIndex = savedOrder.indexOf(b.id)
+				return (
+					(aIndex < 0 ? savedOrder.length : aIndex) -
+					(bIndex < 0 ? savedOrder.length : bIndex)
+				)
+			})
+		: queue
 
 	async function handleDragEnd({ active, over }: DragEndEvent) {
+		setActiveItem(null)
 		if (!over || active.id === over.id || disabled) return
+		if (over.id === EDITOR_DROP_ID) {
+			await props.onWithdraw(String(active.id))
+			return
+		}
 		const items = dragItemsRef.current
 		const from = items.findIndex((item) => item.id === active.id)
 		const to = items.findIndex((item) => item.id === over.id)
 		if (from < 0 || to < 0) return
 		const moved = arrayMove(items, from, to)
+		setSavedOrder(moved.map((item) => item.id))
 		setIsSaving(true)
 		try {
+			// 松手后保持预览顺序直到服务端刷新完成，避免先跳回旧位置再移动一次。
 			// 仅提交一次移动的邻项，不用拖动开始时的全队列覆盖期间的消费或新增。
 			await props.onMove(
 				String(active.id),
@@ -67,6 +112,7 @@ export default function MessageQueueItems({
 				moved[to - 1]?.id ?? null,
 			)
 		} finally {
+			setSavedOrder(null)
 			setIsSaving(false)
 		}
 	}
@@ -74,20 +120,24 @@ export default function MessageQueueItems({
 	return (
 		<DndContext
 			sensors={sensors}
-			collisionDetection={closestCenter}
-			onDragStart={() => {
+			collisionDetection={detectCollision}
+			onDragStart={({ active }) => {
 				dragItemsRef.current = sortableItems
+				setActiveItem(sortableItems.find((item) => item.id === active.id) ?? null)
 			}}
 			onDragEnd={handleDragEnd}
 			onDragCancel={() => {
+				setActiveItem(null)
 				dragItemsRef.current = []
 			}}
 		>
 			<SortableContext
-				items={sortableItems.map((item) => item.id)}
+				items={displayedQueue
+					.filter((item) => item.status === "pending" && !item.syncState)
+					.map((item) => item.id)}
 				strategy={verticalListSortingStrategy}
 			>
-				{queue.map((message) => (
+				{displayedQueue.map((message) => (
 					<MessageQueueRow
 						key={message.id}
 						{...props}
@@ -97,209 +147,63 @@ export default function MessageQueueItems({
 					/>
 				))}
 			</SortableContext>
+			<EditorDropTarget editorRef={props.editorRef} active={Boolean(activeItem)} />
+			{typeof document !== "undefined" &&
+				createPortal(
+					<DragOverlay dropAnimation={null}>
+						{activeItem && (
+							<div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+								<GripVertical size={16} className="shrink-0" />
+								<span className="truncate">
+									{normalizeQueuePreviewText(activeItem.content) ||
+										t("messageQueue.mobile.emptyContent")}
+								</span>
+							</div>
+						)}
+					</DragOverlay>,
+					document.body,
+				)}
 		</DndContext>
 	)
 }
 
-interface QueueAction {
-	label: string
-	icon: LucideIcon
-	onClick: () => void
-	loading?: boolean
-	testId: string
-}
-
-function MessageQueueRow({
-	message,
-	dragDisabled,
-	...props
-}: QueueActions & { message: QueuedMessage; dragDisabled?: boolean }) {
+/** 复用当前编辑器真实节点作为落点；高亮通过 portal 展示，不改写 contenteditable 内容。 */
+function EditorDropTarget({
+	editorRef,
+	active,
+}: Pick<MessageQueueProps, "editorRef"> & { active: boolean }) {
 	const { t } = useTranslation("super")
-	const mobile = props.variant === "mobile"
-	const rowRef = useRef<HTMLDivElement | null>(null)
-	const handleRef = useRef<HTMLButtonElement | null>(null)
-	const actionsMeasureRef = useRef<HTMLDivElement | null>(null)
-	const textMeasureRef = useRef<HTMLSpanElement | null>(null)
-	const [compact, setCompact] = useState(true)
-	const {
-		attributes,
-		listeners,
-		setNodeRef,
-		setActivatorNodeRef,
-		transform,
-		transition,
-		isDragging,
-	} = useSortable({
-		id: message.id,
-		disabled: dragDisabled || message.status !== "pending" || Boolean(message.syncState),
-	})
-	const disabled = Boolean(
-		props.isOperationPending ||
-		message.status !== "pending" ||
-		message.syncState === "submitted" ||
-		message.isDeletingLoading ||
-		message.isSendingLoading ||
-		message.isEditingLoading,
-	)
-	const previewText =
-		normalizeQueuePreviewText(message.content) || t("messageQueue.mobile.emptyContent")
-	const actions: QueueAction[] = [
-		{
-			label: t("messageQueue.edit"),
-			icon: Pencil,
-			onClick: () => props.onStartEdit(message.id),
-			testId: "on-start-edit",
-		},
-		{
-			label: t("messageQueue.withdraw"),
-			icon: CircleArrowDown,
-			onClick: () => props.onWithdraw(message.id),
-			testId: "on-withdraw-message",
-		},
-		{
-			label: t("messageQueue.submitNow"),
-			icon: CircleArrowUp,
-			onClick: () => props.onSendMessage(message.id),
-			loading: message.isSendingLoading,
-			testId: "on-send-message",
-		},
-		{
-			label: t("messageQueue.delete"),
-			icon: Trash,
-			onClick: () => props.onRemoveMessage(message.id),
-			loading: message.isDeletingLoading,
-			testId: "on-remove-message",
-		},
-	]
-	const labels = actions.map((action) => action.label).join("/")
-	const buttonClass = cn(
-		"inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap text-xs leading-4 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
-		mobile
-			? "h-8 min-w-8 rounded-lg border border-border bg-card px-2 shadow-sm"
-			: "h-6 min-w-6 rounded-sm px-1 text-foreground/80 hover:bg-fill hover:text-foreground",
-	)
-
+	const { setNodeRef, isOver } = useDroppable({ id: EDITOR_DROP_ID, disabled: !active })
+	const [rect, setRect] = useState<DOMRect | null>(null)
 	useLayoutEffect(() => {
-		const row = rowRef.current
-		const handle = handleRef.current
-		const actionsNode = actionsMeasureRef.current
-		const text = textMeasureRef.current
-		if (!row || !handle || !actionsNode || !text) return
-		const measure = () => {
-			const style = getComputedStyle(row)
-			const available =
-				row.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-			const gap = parseFloat(style.columnGap) || 0
-			// 短文本按实宽；长文本的测量预算最多占行宽三分之一，正文实际仍占剩余空间。
-			// 始终测完整文字版，避免隐藏标签后尺寸变小又反复展开；没有固定面板断点。
-			const preview = Math.min(text.getBoundingClientRect().width, available / 3)
-			setCompact(
-				handle.getBoundingClientRect().width +
-					actionsNode.getBoundingClientRect().width +
-					preview +
-					gap * 2 >
-					available,
-			)
+		const editor = editorRef?.current?.editor
+		const node = active && editor && !editor.isDestroyed ? editor.view.dom : null
+		setNodeRef(node)
+		if (!node) {
+			setRect(null)
+			return
 		}
-		const observer = new ResizeObserver(measure)
-		observer.observe(row)
-		observer.observe(actionsNode)
-		observer.observe(text)
-		measure()
-		return () => observer.disconnect()
-	}, [labels, previewText, mobile])
-
-	return (
+		const update = () => setRect(node.getBoundingClientRect())
+		update()
+		const observer = new ResizeObserver(update)
+		observer.observe(node)
+		window.addEventListener("scroll", update, true)
+		window.addEventListener("resize", update)
+		return () => {
+			observer.disconnect()
+			window.removeEventListener("scroll", update, true)
+			window.removeEventListener("resize", update)
+			setNodeRef(null)
+		}
+	}, [active, editorRef, setNodeRef])
+	if (!active || !rect) return null
+	return createPortal(
 		<div
-			ref={(node) => {
-				rowRef.current = node
-				setNodeRef(node)
-			}}
-			className={cn(
-				"relative flex shrink-0 items-center gap-2 [&_p]:m-0",
-				mobile ? "px-3 py-2" : "rounded",
-				isDragging && "z-10 bg-card shadow-sm",
-			)}
-			style={{ transform: CSS.Transform.toString(transform), transition }}
-			data-testid={mobile ? "mobile-message-queue-item" : "message-queue-item"}
+			className={`pointer-events-none fixed z-[1000] flex items-center justify-center rounded-lg border-2 border-dashed border-primary text-sm text-primary ${isOver ? "bg-primary/15" : "bg-primary/5"}`}
+			style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
 		>
-			<button
-				ref={(node) => {
-					handleRef.current = node
-					setActivatorNodeRef(node)
-				}}
-				type="button"
-				className={cn(
-					"flex shrink-0 touch-none items-center justify-center text-muted-foreground disabled:opacity-30",
-					mobile ? "size-8" : "size-4",
-				)}
-				{...attributes}
-				{...listeners}
-				aria-label={t("messageQueue.dragToSort")}
-				disabled={disabled || dragDisabled || Boolean(message.syncState)}
-			>
-				<GripVertical size={16} />
-			</button>
-			<div
-				className={cn(
-					"min-w-0 flex-1",
-					mobile
-						? "text-sm leading-5"
-						: "text-xs leading-4 [&_.magic-mention]:!text-[10px] [&_p]:!text-xs [&_p]:!leading-4",
-				)}
-			>
-				{mobile ? (
-					<p className="truncate" title={previewText}>
-						{previewText}
-					</p>
-				) : (
-					<CollapsibleText content={trimQueueContent(message.content)} maxLines={1} />
-				)}
-			</div>
-			<div className="flex shrink-0 items-center gap-1">
-				{actions.map(({ label, icon: Icon, onClick, loading, testId }) => (
-					<SmartTooltip key={testId} content={label} forceShowTooltip>
-						<button
-							type="button"
-							className={cn(buttonClass, compact && mobile && "w-8 px-0")}
-							aria-label={label}
-							disabled={disabled}
-							onClick={onClick}
-							data-testid={testId}
-						>
-							{loading ? (
-								<Loader2 size={16} className="animate-spin" />
-							) : (
-								<Icon size={16} />
-							)}
-							{!compact && <span>{label}</span>}
-						</button>
-					</SmartTooltip>
-				))}
-			</div>
-			{/* 测量副本只有不可交互的 span，对无障碍树隐藏，不参与行高或焦点顺序。 */}
-			<div
-				aria-hidden="true"
-				className="pointer-events-none invisible absolute inset-0 overflow-hidden"
-			>
-				<span
-					ref={textMeasureRef}
-					className={cn(
-						"absolute w-max whitespace-nowrap",
-						mobile ? "text-sm" : "text-xs",
-					)}
-				>
-					{previewText}
-				</span>
-				<div ref={actionsMeasureRef} className="absolute flex w-max items-center gap-1">
-					{actions.map(({ label, icon: Icon, testId }) => (
-						<span key={testId} className={buttonClass}>
-							<Icon size={16} />
-							<span>{label}</span>
-						</span>
-					))}
-				</div>
-			</div>
-		</div>
+			<span className="rounded bg-card/95 px-2 py-1">{t("messageQueue.dropToEditor")}</span>
+		</div>,
+		document.body,
 	)
 }

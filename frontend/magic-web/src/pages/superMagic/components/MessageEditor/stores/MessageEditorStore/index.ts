@@ -39,7 +39,10 @@ export class MessageEditorStore {
 	constructor(options: MessageEditorStoreOptions = {}) {
 		// Initialize sub-stores
 		this.editorStore = new EditorStore()
-		this.draftStore = new DraftStore(this.editorStore)
+		this.draftStore = new DraftStore(
+			this.editorStore,
+			() => this.fileUploadStore.isAllFilesUploaded,
+		)
 		this.fileUploadStore = new FileUploadStore({
 			projectFilesStore: options.projectFilesStore,
 		})

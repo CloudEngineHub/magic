@@ -223,6 +223,8 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 	useImperativeHandle(ref, () => {
 		return {
 			getDraftKey: () => editorStore.draftStore.getDraftKey(),
+			beginDraftSwitch: editorStore.draftStore.beginDraftSwitch,
+			endDraftSwitch: editorStore.draftStore.endDraftSwitch,
 			prepareQueueDraft: (draft) => editorStore.draftStore.prepareQueueDraft(draft),
 			restoreQueueDraft: (draft, activate) =>
 				editorStore.draftStore.restoreQueueDraft(draft, activate),

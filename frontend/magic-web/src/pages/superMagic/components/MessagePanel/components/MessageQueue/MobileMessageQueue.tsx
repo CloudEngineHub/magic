@@ -16,6 +16,7 @@ function MobileMessageQueue({
 	onStartEdit,
 	onWithdraw,
 	onMove,
+	editorRef,
 	isOperationPending,
 	className,
 }: MessageQueueProps) {
@@ -76,6 +77,7 @@ function MobileMessageQueue({
 						onStartEdit={onStartEdit}
 						onWithdraw={onWithdraw}
 						onMove={onMove}
+						editorRef={editorRef}
 						isOperationPending={isOperationPending}
 						variant="mobile"
 					/>

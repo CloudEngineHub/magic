@@ -1,12 +1,14 @@
-import { useState } from "react"
+import { useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { IconChevronUp, IconChevronDown } from "@tabler/icons-react"
 import { cn } from "@/utils/cn"
+import type { MessageEditorRef } from "../../../MessageEditor/types"
 import type { QueuedMessage } from "../../hooks/useMessageQueue"
 import MobileMessageQueue from "./MobileMessageQueue"
 import MessageQueueItems from "./MessageQueueItems"
 
 export interface MessageQueueProps {
+	editorRef?: RefObject<MessageEditorRef | null>
 	queue: QueuedMessage[]
 	queueStats: {
 		total: number
@@ -33,6 +35,7 @@ function MessageQueue({
 	onStartEdit,
 	onWithdraw,
 	onMove,
+	editorRef,
 	isOperationPending,
 	className,
 	variant = "default",
@@ -54,6 +57,7 @@ function MessageQueue({
 				onStartEdit={onStartEdit}
 				onWithdraw={onWithdraw}
 				onMove={onMove}
+				editorRef={editorRef}
 				isOperationPending={isOperationPending}
 				className={className}
 				variant={variant}
@@ -100,6 +104,7 @@ function MessageQueue({
 						onStartEdit={onStartEdit}
 						onWithdraw={onWithdraw}
 						onMove={onMove}
+						editorRef={editorRef}
 						isOperationPending={isOperationPending}
 						variant="default"
 					/>

@@ -460,58 +460,60 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	)
 
 	return (
-		<>
+		<div className={cn("flex min-h-0 flex-col gap-1", shouldFillHeight && "h-full")}>
 			<QueueDraftNotice context={queueContext} />
-			<MessageEditor
-				ref={bindEditorRef}
-				{...editorStyleProps}
-				placeholder={placeholder}
-				promptCarousel={editorContext?.promptCarousel}
-				onSend={handleSend}
-				isTaskRunning={effectiveIsTaskRunning}
-				onInterrupt={editorContext?.handleInterrupt}
-				stopEventLoading={editorContext?.stopEventLoading}
-				selectedTopic={selectedTopic}
-				selectedProject={selectedProject}
-				selectedWorkspace={selectedWorkspace}
-				draftKey={draftKey}
-				topicMode={effectiveTopicMode}
-				modelTopicMode={editorContext?.modelTopicMode}
-				size={editorContext?.size ?? "default"}
-				modules={editorContext?.modules}
-				isSending={isSending}
-				sendButtonLoading={isHomePreparingSend}
-				onFocus={handleFocus}
-				onBlur={handleBlur}
-				onReady={handleEditorReady}
-				onFileClick={editorContext?.onFileClick}
-				onEnsureProject={handleEnsureProject}
-				attachments={editorContext?.attachments}
-				projectFilesStore={editorContext?.projectFilesStore}
-				topicModelStore={editorContext?.topicModelStore}
-				isEditingQueueItem={!!queueContext?.editingQueueItem}
-				onCreateTopic={() =>
-					createTopicForMessageContext({
-						selectedProject,
-						selectedTopic,
-						selectedWorkspace,
-						setSelectedProject: editorContext?.setSelectedProject,
-						setSelectedTopic: editorContext?.setSelectedTopic,
-						setSelectedWorkspace: editorContext?.setSelectedWorkspace,
-						topicStore: editorContext?.topicStore,
-					})
-				}
-				showLoading={showLoading}
-				editorModeSwitch={editorContext?.editorModeSwitch}
-				modelSwitch={editorContext?.modelSwitch}
-				mentionPanelStore={mentionPanelStore}
-				isAllowedMention={editorContext?.isAllowedMention}
-				layoutConfig={editorContext?.layoutConfig}
-				enableMessageSendByContent={editorContext?.enableMessageSendByContent ?? false}
-				skipInitialDraftRestore={editorContext?.skipInitialDraftRestore}
-			/>
+			<div className={cn("min-h-0", shouldFillHeight && "flex-1")}>
+				<MessageEditor
+					ref={bindEditorRef}
+					{...editorStyleProps}
+					placeholder={placeholder}
+					promptCarousel={editorContext?.promptCarousel}
+					onSend={handleSend}
+					isTaskRunning={effectiveIsTaskRunning}
+					onInterrupt={editorContext?.handleInterrupt}
+					stopEventLoading={editorContext?.stopEventLoading}
+					selectedTopic={selectedTopic}
+					selectedProject={selectedProject}
+					selectedWorkspace={selectedWorkspace}
+					draftKey={draftKey}
+					topicMode={effectiveTopicMode}
+					modelTopicMode={editorContext?.modelTopicMode}
+					size={editorContext?.size ?? "default"}
+					modules={editorContext?.modules}
+					isSending={isSending}
+					sendButtonLoading={isHomePreparingSend}
+					onFocus={handleFocus}
+					onBlur={handleBlur}
+					onReady={handleEditorReady}
+					onFileClick={editorContext?.onFileClick}
+					onEnsureProject={handleEnsureProject}
+					attachments={editorContext?.attachments}
+					projectFilesStore={editorContext?.projectFilesStore}
+					topicModelStore={editorContext?.topicModelStore}
+					isEditingQueueItem={!!queueContext?.editingQueueItem}
+					onCreateTopic={() =>
+						createTopicForMessageContext({
+							selectedProject,
+							selectedTopic,
+							selectedWorkspace,
+							setSelectedProject: editorContext?.setSelectedProject,
+							setSelectedTopic: editorContext?.setSelectedTopic,
+							setSelectedWorkspace: editorContext?.setSelectedWorkspace,
+							topicStore: editorContext?.topicStore,
+						})
+					}
+					showLoading={showLoading}
+					editorModeSwitch={editorContext?.editorModeSwitch}
+					modelSwitch={editorContext?.modelSwitch}
+					mentionPanelStore={mentionPanelStore}
+					isAllowedMention={editorContext?.isAllowedMention}
+					layoutConfig={editorContext?.layoutConfig}
+					enableMessageSendByContent={editorContext?.enableMessageSendByContent ?? false}
+					skipInitialDraftRestore={editorContext?.skipInitialDraftRestore}
+				/>
+			</div>
 			{editorContext?.showTopicExamplesPortal ? topicExamplesPortalNode : null}
-		</>
+		</div>
 	)
 }
 
