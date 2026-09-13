@@ -12,12 +12,14 @@ import { stabilizeSingleLineTextForSnapdom } from "./snapdomTextStabilizer"
 import {
 	createPPTThumbnailCacheKey,
 	deletePPTThumbnail,
-	readPPTThumbnail,
 	savePPTThumbnail,
 	type PPTThumbnailCacheContext,
 	type PPTThumbnailCacheMode,
 } from "./PPTThumbnailCache"
-import type { PPTThumbnailCacheKey } from "@/services/superMagic/repositories/PPTThumbnailCacheRepository"
+import {
+	pptThumbnailCacheRepository,
+	type PPTThumbnailCacheKey,
+} from "@/services/superMagic/repositories/PPTThumbnailCacheRepository"
 
 const THUMBNAIL_SCALE = 4
 const THUMBNAIL_QUALITY = 0.8
@@ -410,8 +412,9 @@ export class SlideScreenshotService {
 						controller.signal,
 					)
 				} else {
+					// 沿用 Repository 的故障超时；正常读取排队不应提前触发昂贵的重复截图。
 					const blob = await this.waitForAbortableOperation(
-						readPPTThumbnail(persistentKey.key),
+						pptThumbnailCacheRepository.getThumbnail(persistentKey.key),
 						controller.signal,
 					)
 					this.throwIfAborted(controller.signal)

@@ -44,6 +44,18 @@ function isExpired(record: ThumbnailMetadata, now: number): boolean {
 	)
 }
 
+function isValidBody(
+	record: ThumbnailMetadata,
+	body: ThumbnailBody | undefined,
+): body is ThumbnailBody {
+	return (
+		body?.bytes instanceof ArrayBuffer &&
+		body.bytes.byteLength === record.byteSize &&
+		record.byteSize <= PPT_THUMBNAIL_CACHE_POLICY.maxEntryBytes &&
+		record.mimeType === "image/webp"
+	)
+}
+
 function isQuotaError(error: unknown): boolean {
 	if (!error || typeof error !== "object") return false
 	return (
@@ -56,46 +68,53 @@ function isQuotaError(error: unknown): boolean {
 export class PPTThumbnailCacheRepository extends GlobalBaseRepository<ThumbnailMetadata> {
 	static readonly tableName = "ppt-thumbnail-cache"
 	static readonly bodyTableName = "ppt-thumbnail-cache-body"
-	private sweepStarted = false
+	private sweepPending = true
+	private pendingReads = 0
+	private pendingAccessTimes = new Map<string, number>()
+	private readonly invalidKeys = new Set<string>()
+	private maintenanceScheduled = false
+	private maintenanceRunning = false
 
 	constructor() {
 		super(PPTThumbnailCacheRepository.tableName)
 	}
 
 	async getThumbnail(key: string): Promise<Blob | null> {
-		if (!this.sweepStarted) {
-			this.sweepStarted = true
-			void this.prune()
-		}
+		this.pendingReads += 1
 		try {
 			return await this.executeWithErrorHandling("getThumbnail", async () => {
 				const db = await this.getDB()
 				const tables = this.tables(db)
-				return db.transaction("rw", tables.metadata, tables.bodies, async () => {
+				// 多页命中可以并发读取；访问时间和损坏记录维护不能让读取申请写事务。
+				return db.transaction("r", tables.metadata, tables.bodies, async () => {
 					const record = await tables.metadata.get(key)
+					if (!record) return null
 					const now = Date.now()
-					if (!record || isExpired(record, now)) {
-						await this.remove(tables, [key])
+					const body = isExpired(record, now) ? undefined : await tables.bodies.get(key)
+					if (!isValidBody(record, body)) {
+						if (this.invalidKeys.size < PPT_THUMBNAIL_CACHE_POLICY.maxEntries) {
+							this.invalidKeys.add(key)
+						}
 						return null
 					}
-					const body = await tables.bodies.get(key)
 					if (
-						!(body?.bytes instanceof ArrayBuffer) ||
-						body.bytes.byteLength !== record.byteSize ||
-						record.byteSize > PPT_THUMBNAIL_CACHE_POLICY.maxEntryBytes ||
-						record.mimeType !== "image/webp"
+						now - record.lastAccessAt >= PPT_THUMBNAIL_CACHE_POLICY.touchIntervalMs &&
+						(this.pendingAccessTimes.has(key) ||
+							this.pendingAccessTimes.size < PPT_THUMBNAIL_CACHE_POLICY.maxEntries)
 					) {
-						await this.remove(tables, [key])
-						return null
-					}
-					if (now - record.lastAccessAt >= PPT_THUMBNAIL_CACHE_POLICY.touchIntervalMs) {
-						await tables.metadata.update(key, { lastAccessAt: now })
+						this.pendingAccessTimes.set(
+							key,
+							Math.max(now, this.pendingAccessTimes.get(key) ?? now),
+						)
 					}
 					return new Blob([body.bytes], { type: record.mimeType })
 				})
 			})
 		} catch {
 			return null
+		} finally {
+			this.pendingReads -= 1
+			this.scheduleMaintenance()
 		}
 	}
 
@@ -169,18 +188,93 @@ export class PPTThumbnailCacheRepository extends GlobalBaseRepository<ThumbnailM
 		}
 	}
 
-	async prune(): Promise<void> {
+	private scheduleMaintenance(): void {
+		if (
+			this.pendingReads > 0 ||
+			this.maintenanceScheduled ||
+			this.maintenanceRunning ||
+			(!this.sweepPending &&
+				this.pendingAccessTimes.size === 0 &&
+				this.invalidKeys.size === 0)
+		)
+			return
+
+		this.maintenanceScheduled = true
+		const run = () => {
+			this.maintenanceScheduled = false
+			// 等待期间若又开始读图，由最后一个读取的 finally 重新安排，不循环占用空闲帧。
+			if (this.pendingReads === 0) void this.runMaintenance()
+		}
+		if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+			window.requestIdleCallback(run)
+		} else {
+			setTimeout(run, 0)
+		}
+	}
+
+	private async runMaintenance(): Promise<void> {
+		if (this.maintenanceRunning || this.pendingReads > 0) return
+		this.maintenanceRunning = true
+		let completed = false
 		try {
-			await this.executeWithErrorHandling("pruneThumbnails", async () => {
+			await this.executeWithErrorHandling("maintainThumbnails", async () => {
 				const db = await this.getDB()
+				if (this.pendingReads > 0) return
 				const tables = this.tables(db)
-				await db.transaction("rw", tables.metadata, tables.bodies, () =>
-					this.pruneTables(tables),
-				)
+				const invalidKeys = [...this.invalidKeys]
+				const shouldSweep = this.sweepPending
+				this.invalidKeys.clear()
+				this.sweepPending = false
+				await db.transaction("rw", tables.metadata, tables.bodies, async () => {
+					await this.flushAccessTimes(tables)
+					await this.removeInvalidRecords(tables, invalidKeys)
+					if (shouldSweep) await this.pruneTables(tables)
+				})
 			})
+			completed = true
 		} catch {
 			// 浏览器可能禁止持久存储；清理与读取失败都不改变预览可用性。
+		} finally {
+			this.maintenanceRunning = false
+			// 失败不自动重试；成功后只处理执行期间新增的维护需求。
+			if (completed) this.scheduleMaintenance()
 		}
+	}
+
+	private async flushAccessTimes(tables: ThumbnailTables): Promise<void> {
+		if (this.pendingAccessTimes.size === 0) return
+		// 先取走本批。await 期间的新访问进入新 Map，不能在提交后整批 clear 而丢失。
+		const accessTimes = this.pendingAccessTimes
+		this.pendingAccessTimes = new Map()
+		const records = await tables.metadata.bulkGet([...accessTimes.keys()])
+		const updates = records.flatMap((record) => {
+			if (!record) return []
+			const accessedAt = accessTimes.get(record.key)
+			if (
+				accessedAt === undefined ||
+				!Number.isFinite(record.lastAccessAt) ||
+				accessedAt - record.lastAccessAt < PPT_THUMBNAIL_CACHE_POLICY.touchIntervalMs
+			)
+				return []
+			return [{ ...record, lastAccessAt: accessedAt }]
+		})
+		// 调用方持有写事务：只更新仍存在的记录，不复活已删除的缓存，也不倒退新记录的时间。
+		if (updates.length > 0) await tables.metadata.bulkPut(updates)
+	}
+
+	private async removeInvalidRecords(tables: ThumbnailTables, keys: string[]): Promise<void> {
+		const invalidKeys: string[] = []
+		for (const key of keys) {
+			// 例：读取发现损坏后，同 key 已重新生成；必须检查当前字节，不能按旧结论删除。
+			const record = await tables.metadata.get(key)
+			if (!record || isExpired(record, Date.now())) {
+				invalidKeys.push(key)
+				continue
+			}
+			const body = await tables.bodies.get(key)
+			if (!isValidBody(record, body)) invalidKeys.push(key)
+		}
+		await this.remove(tables, invalidKeys)
 	}
 
 	private tables(db: Dexie): ThumbnailTables {
@@ -202,6 +296,8 @@ export class PPTThumbnailCacheRepository extends GlobalBaseRepository<ThumbnailM
 		replacingKey?: string,
 		budgetRatio = 1,
 	): Promise<void> {
+		// 新图片写入和空闲清理都先合并访问时间，避免按旧 LRU 时间淘汰刚刚命中的图。
+		await this.flushAccessTimes(tables)
 		const records = await tables.metadata.orderBy("lastAccessAt").toArray()
 		const now = Date.now()
 		const expired = records.filter((record) => isExpired(record, now))

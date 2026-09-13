@@ -6,7 +6,6 @@ import {
 
 /** 仅随截图算法／注入逻辑变化更新，不随产品发版失效。 */
 const RENDERER_VERSION = 1
-const CACHE_READ_BUDGET_MS = 200
 
 export type PPTThumbnailCacheMode = "use" | "refresh"
 
@@ -59,23 +58,6 @@ export function createPPTThumbnailCacheKey(
 		scope,
 		slideIdentity: context.slideIdentity,
 		path: context.path,
-	}
-}
-
-/** 慢数据库只放弃本次加速；迟到读取不创建 URL，也不会覆盖新页面。 */
-export async function readPPTThumbnail(key: string): Promise<Blob | null> {
-	let timer: ReturnType<typeof setTimeout> | undefined
-	try {
-		return await Promise.race([
-			pptThumbnailCacheRepository.getThumbnail(key),
-			new Promise<null>((resolve) => {
-				timer = setTimeout(() => resolve(null), CACHE_READ_BUDGET_MS)
-			}),
-		])
-	} catch {
-		return null
-	} finally {
-		if (timer !== undefined) clearTimeout(timer)
 	}
 }
 
