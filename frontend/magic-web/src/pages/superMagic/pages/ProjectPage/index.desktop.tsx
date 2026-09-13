@@ -360,10 +360,13 @@ function ProjectPage() {
 			containerClassName={styles.container}
 			detailPanelClassName={styles.detailPanel}
 			isDetailPanelFullscreen={false}
-			sidebar={
+			enableProjectCollapse={!hideProjectCard}
+			sidebar={({ onCollapse, isCollapsed }) => (
 				<div className="flex h-full flex-col gap-2" data-testid="workspace-sidebar-wrapper">
 					{hideProjectCard ? null : (
 						<ProjectCardContainer
+							onCollapse={onCollapse}
+							isPanelVisible={!isCollapsed}
 							selectedProject={selectedProject}
 							selectedWorkspace={selectedWorkspace}
 						/>
@@ -397,7 +400,7 @@ function ProjectPage() {
 						className="flex-1 overflow-hidden rounded-lg border border-border bg-background"
 					/>
 				</div>
-			}
+			)}
 			detailPanel={
 				<Detail
 					ref={detailRef}

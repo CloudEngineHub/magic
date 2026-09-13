@@ -229,11 +229,16 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		clearUserSelectDetail,
 	})
 
-	const { isTopicHistoryPanelOpen, closeTopicHistoryPanel, toggleTopicHistoryPanel } =
-		useTopicHistoryLayoutState({
-			storageKey: TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.topicPage,
-			isEnabled: !isReadOnly && !isSingleTopicChat,
-		})
+	const {
+		isTopicHistoryPanelOpen,
+		closeTopicHistoryPanel,
+		toggleTopicHistoryPanel,
+		topicHistoryWidth,
+		commitTopicHistoryWidth,
+	} = useTopicHistoryLayoutState({
+		storageKey: TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.topicPage,
+		isEnabled: !isReadOnly && !isSingleTopicChat,
+	})
 
 	const activeFileIdRef = useRef<string | null>(activeFileId)
 	activeFileIdRef.current = activeFileId
@@ -818,8 +823,11 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			containerClassName={styles.container}
 			detailPanelClassName={styles.detailPanel}
 			isDetailPanelFullscreen={isDetailPanelFullscreen}
-			sidebar={
+			enableProjectCollapse={!isReadOnly && !hideProjectCard}
+			sidebar={({ onCollapse, isCollapsed }) => (
 				<TopicSidebar
+					onCollapse={onCollapse}
+					isCollapsed={isCollapsed}
 					selectedProject={selectedProject}
 					selectedWorkspace={selectedWorkspace}
 					selectedTopic={selectedTopic}
@@ -828,7 +836,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					hideProjectCard={hideProjectCard}
 					siderVariant={isSingleTopicChat ? "chat" : "default"}
 				/>
-			}
+			)}
 			detailPanel={
 				<Detail
 					ref={detailRef}
@@ -859,6 +867,14 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					? undefined
 					: {
 							isOpen: isTopicHistoryPanelOpen,
+							resize:
+								!isReadOnly && !hideProjectCard
+									? {
+											width: topicHistoryWidth,
+											onWidthCommit: commitTopicHistoryWidth,
+											projectId: selectedProject?.id || "",
+										}
+									: undefined,
 							onClose: closeTopicHistoryPanel,
 							onToggle: toggleTopicHistoryPanel,
 							renderPanel: ({
@@ -866,8 +882,12 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 								onExpandConversationPanel,
 								onClose,
 								closeButtonRef,
+								onCollapse,
+								isPanelVisible,
 							}) => (
 								<MessageHeaderTopicHistoryPanel
+									onCollapse={onCollapse}
+									isPanelVisible={isPanelVisible}
 									selectedProject={selectedProject}
 									topicStore={topicStore}
 									topicActions={topicActions}

@@ -5,6 +5,7 @@ import {
 	type PointerEvent as ReactPointerEvent,
 } from "react"
 import ReactDOM from "react-dom"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 
 interface TopicResizeHandleProps {
@@ -12,6 +13,10 @@ interface TopicResizeHandleProps {
 	disabled?: boolean
 	onResizeStart: (clientX: number) => void
 	style?: CSSProperties
+	dragging?: boolean
+	collapseProgress?: number
+	collapseArmed?: boolean
+	collapseDirection?: -1 | 1
 }
 
 /** Keeps the layout divider narrow while exposing a wider pointer target for reliable resizing. */
@@ -20,8 +25,14 @@ function TopicResizeHandle({
 	disabled = false,
 	onResizeStart,
 	style,
+	dragging,
+	collapseProgress = 0,
+	collapseArmed = false,
+	collapseDirection = 1,
 }: TopicResizeHandleProps) {
-	const [isDragging, setIsDragging] = useState(false)
+	const { t } = useTranslation("super")
+	const [localDragging, setIsDragging] = useState(false)
+	const isDragging = dragging ?? localDragging
 
 	/** Starts resize from a unified pointer event so mouse, trackpad, and touch share one path. */
 	const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -72,6 +83,27 @@ function TopicResizeHandle({
 					data-testid="resize-handle-hit-area"
 					aria-hidden="true"
 				/>
+				{collapseProgress > 0 && (
+					<div
+						aria-hidden="true"
+						className="pointer-events-none absolute inset-y-0 w-1 rounded bg-primary"
+						style={{
+							opacity: collapseProgress,
+							transform: `translateX(${collapseDirection * collapseProgress * 8}px)`,
+						}}
+					/>
+				)}
+				{collapseArmed && (
+					<span
+						role="status"
+						className="pointer-events-none absolute top-1/2 z-30 whitespace-nowrap rounded bg-popover px-2 py-1 text-xs text-popover-foreground shadow"
+						style={{
+							transform: `translate(${collapseDirection < 0 ? "25%" : "-25%"}, -200%)`,
+						}}
+					>
+						{t("sidebarPanels.releaseToCollapse")}
+					</span>
+				)}
 				<div className="pointer-events-none relative z-10 flex h-5 shrink-0 items-center justify-center gap-0.5 data-[panel-group-direction=vertical]:h-auto data-[panel-group-direction=vertical]:w-5 data-[panel-group-direction=vertical]:flex-col">
 					<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />
 					<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />

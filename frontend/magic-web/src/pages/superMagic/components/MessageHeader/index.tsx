@@ -93,6 +93,8 @@ export interface MessageHeaderTopicActions {
 }
 
 interface MessageHeaderTopicHistoryPanelProps {
+	onCollapse?: () => void
+	isPanelVisible?: boolean
 	selectedProject: ProjectListItem | null
 	topicStore: TopicStore
 	topicActions: MessageHeaderTopicActions
@@ -274,6 +276,8 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 	onExpandConversationPanel,
 	hideTopicListModeIcon = false,
 	onClose,
+	onCollapse,
+	isPanelVisible,
 	closeButtonRef,
 }: MessageHeaderTopicHistoryPanelProps) {
 	const {
@@ -299,6 +303,8 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 
 	return (
 		<TopicHistoryPanelContent
+			onCollapse={onCollapse}
+			isPanelVisible={isPanelVisible}
 			topics={topics}
 			projectId={selectedProject?.id || ""}
 			selectedTopicId={selectedTopic?.id}

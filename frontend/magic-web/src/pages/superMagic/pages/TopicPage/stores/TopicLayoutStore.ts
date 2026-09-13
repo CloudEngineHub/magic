@@ -1,6 +1,8 @@
 import { makeAutoObservable } from "mobx"
 import {
 	DEFAULT_MAX_WIDTH,
+	PROJECT_SIDER_PANEL_STORAGE_KEY,
+	TOPIC_HISTORY_RESIZE,
 	DEFAULT_MIN_WIDTH,
 	DEFAULT_WIDTH,
 	LOW_RESOLUTION_VIEWPORT_WIDTH_PX,
@@ -8,7 +10,7 @@ import {
 	PROJECT_SIDER_WIDTH_STORAGE_KEY,
 } from "../../../constants/resizablePanel"
 
-type DragType = "project" | "message" | null
+type DragType = "project" | "message" | "history" | null
 
 interface ConversationPanelState {
 	collapsed?: boolean
@@ -20,6 +22,12 @@ interface TopicLayoutStoreOptions {
 	persistConversationPanelState?: boolean
 }
 
+export interface HistoryDragResult {
+	width: number
+	collapsed: boolean
+}
+const SIDEBAR_COLLAPSE_BUFFER = { ratio: 0.2, min: 40, max: 64, disarmRatio: 0.75 } as const
+
 const CONVERSATION_PANEL_STORAGE_KEY = "supermagic-topic-conversation-panel"
 
 export class TopicLayoutStore {
@@ -30,6 +38,16 @@ export class TopicLayoutStore {
 	isDraggingProjectSider = false
 	isDraggingMessagePanel = false
 	containerWidthPx = 0
+	isProjectSiderCollapsed = false
+	lastExpandedProjectSiderWidthPx = DEFAULT_WIDTH.PROJECT_SIDER
+	isDraggingHistoryPanel = false
+	historyDragWidthPx: number = TOPIC_HISTORY_RESIZE.default
+	collapseProgress = 0
+	isCollapseArmed = false
+	private bufferedProjectDrag = false
+	private dragStartHistoryWidthPx = 0
+	private historyPreferredWidthPx = 0
+	private historyMaxWidthPx: number = TOPIC_HISTORY_RESIZE.max
 
 	readonly COLLAPSED_MESSAGE_PANEL_WIDTH = 24
 	readonly COLLAPSE_TRIGGER_SIZE_EPSILON = 0.2
@@ -69,6 +87,19 @@ export class TopicLayoutStore {
 			minWidth: DEFAULT_MIN_WIDTH.MESSAGE_PANEL,
 			maxWidth: DEFAULT_MAX_WIDTH.MESSAGE_PANEL,
 		})
+		try {
+			const saved = JSON.parse(
+				localStorage.getItem(PROJECT_SIDER_PANEL_STORAGE_KEY) || "null",
+			) as ConversationPanelState | null
+			this.isProjectSiderCollapsed = saved?.collapsed === true
+			this.lastExpandedProjectSiderWidthPx =
+				typeof saved?.lastExpandedSize === "number" &&
+				Number.isFinite(saved.lastExpandedSize)
+					? this.clampProjectWidth(saved.lastExpandedSize)
+					: this.projectSiderWidthPx
+		} catch {
+			this.lastExpandedProjectSiderWidthPx = this.projectSiderWidthPx
+		}
 		if (this.persistConversationPanelState) {
 			this.loadConversationPanelState()
 		}
@@ -79,8 +110,9 @@ export class TopicLayoutStore {
 		this.containerWidthPx = width
 	}
 
-	startDragProjectSider(clientX: number) {
+	startDragProjectSider(clientX: number, buffered = false) {
 		if (!Number.isFinite(clientX)) return
+		this.bufferedProjectDrag = buffered
 		this.activeDrag = "project"
 		this.isDraggingProjectSider = true
 		this.dragStartX = clientX
@@ -102,9 +134,20 @@ export class TopicLayoutStore {
 
 		if (this.activeDrag === "project") {
 			const deltaX = clientX - this.dragStartX
-			this.projectSiderWidthPx = this.clampProjectWidth(
-				this.dragStartProjectSiderWidthPx + deltaX,
+			const rawWidth = this.dragStartProjectSiderWidthPx + deltaX
+			this.projectSiderWidthPx = this.clampProjectWidth(rawWidth)
+			if (this.bufferedProjectDrag)
+				this.updateCollapseIntent(rawWidth, DEFAULT_MIN_WIDTH.PROJECT_SIDER)
+			return
+		}
+
+		if (this.activeDrag === "history") {
+			const rawWidth = this.dragStartHistoryWidthPx - (clientX - this.dragStartX)
+			this.historyDragWidthPx = Math.max(
+				TOPIC_HISTORY_RESIZE.min,
+				Math.min(this.historyMaxWidthPx, rawWidth),
 			)
+			this.updateCollapseIntent(rawWidth, TOPIC_HISTORY_RESIZE.min)
 			return
 		}
 
@@ -143,7 +186,78 @@ export class TopicLayoutStore {
 		this.lastExpandedMessagePanelWidthPx = nextWidth
 	}
 
-	endDrag() {
+	startDragHistoryPanel(
+		clientX: number,
+		width: number,
+		preferredWidth: number,
+		maxWidth: number,
+	) {
+		if (!Number.isFinite(clientX)) return
+		this.activeDrag = "history"
+		this.isDraggingHistoryPanel = true
+		this.dragStartX = clientX
+		this.dragStartHistoryWidthPx = width
+		this.historyPreferredWidthPx = preferredWidth
+		this.historyDragWidthPx = width
+		this.historyMaxWidthPx = maxWidth
+	}
+
+	private updateCollapseIntent(rawWidth: number, minWidth: number) {
+		// 内容停在最小宽度；越界距离只表达意图，松开才提交收起。
+		const threshold = Math.max(
+			SIDEBAR_COLLAPSE_BUFFER.min,
+			Math.min(SIDEBAR_COLLAPSE_BUFFER.max, minWidth * SIDEBAR_COLLAPSE_BUFFER.ratio),
+		)
+		const overshoot = Math.max(0, minWidth - rawWidth)
+		this.collapseProgress = Math.min(1, overshoot / threshold)
+		if (overshoot >= threshold) this.isCollapseArmed = true
+		else if (overshoot < threshold * SIDEBAR_COLLAPSE_BUFFER.disarmRatio)
+			this.isCollapseArmed = false
+	}
+
+	collapseProjectSider() {
+		if (this.isProjectSiderCollapsed) return
+		this.lastExpandedProjectSiderWidthPx = this.projectSiderWidthPx
+		this.isProjectSiderCollapsed = true
+		this.saveProjectPanelState()
+	}
+
+	expandProjectSider() {
+		this.projectSiderWidthPx = this.clampProjectWidth(this.lastExpandedProjectSiderWidthPx)
+		this.isProjectSiderCollapsed = false
+		this.saveProjectPanelState()
+	}
+
+	private saveProjectPanelState() {
+		try {
+			localStorage.setItem(
+				PROJECT_SIDER_PANEL_STORAGE_KEY,
+				JSON.stringify({
+					collapsed: this.isProjectSiderCollapsed,
+					lastExpandedSize: this.lastExpandedProjectSiderWidthPx,
+				}),
+			)
+			this.saveWidth(PROJECT_SIDER_WIDTH_STORAGE_KEY, this.projectSiderWidthPx)
+		} catch (error) {
+			console.error("Failed to save project panel state:", error)
+		}
+	}
+
+	endDrag(): HistoryDragResult | undefined {
+		if (this.activeDrag === "history") {
+			const result = {
+				width: this.isCollapseArmed
+					? this.historyPreferredWidthPx
+					: this.historyDragWidthPx,
+				collapsed: this.isCollapseArmed,
+			}
+			this.clearDragState()
+			return result
+		}
+		if (this.activeDrag === "project" && this.bufferedProjectDrag && this.isCollapseArmed) {
+			this.projectSiderWidthPx = this.dragStartProjectSiderWidthPx
+			this.collapseProjectSider()
+		}
 		if (!this.isDraggingProjectSider && !this.isDraggingMessagePanel) {
 			return
 		}
@@ -154,6 +268,9 @@ export class TopicLayoutStore {
 	}
 
 	cancelDrag() {
+		if (this.activeDrag === "project" && this.bufferedProjectDrag)
+			this.projectSiderWidthPx = this.dragStartProjectSiderWidthPx
+		if (this.activeDrag === "history") this.historyDragWidthPx = this.dragStartHistoryWidthPx
 		// Browser-cancelled gestures should stop resizing without committing transient widths.
 		this.clearDragState()
 	}
@@ -307,6 +424,9 @@ export class TopicLayoutStore {
 	}
 
 	private clearDragState() {
+		this.isDraggingHistoryPanel = false
+		this.collapseProgress = 0
+		this.isCollapseArmed = false
 		this.activeDrag = null
 		this.isDraggingProjectSider = false
 		this.isDraggingMessagePanel = false

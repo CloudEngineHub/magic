@@ -5790,6 +5790,17 @@
 		"uploadingFiles": "正在上传文件，请稍后...",
 		"viewShortcuts": "查看快捷键"
 	},
+	"sidebarPanels": {
+		"collapseFiles": "收起文件栏",
+		"collapseHistory": "收起话题列表",
+		"createProject": "新建项目",
+		"expandFiles": "展开文件栏",
+		"expandHistory": "展开话题列表",
+		"loadMore": "加载更多",
+		"projectsLoadFailed": "项目加载失败",
+		"releaseToCollapse": "松开收起",
+		"retry": "重试"
+	},
 	"siderDashboard": {
 		"addDirectory": "添加目录",
 		"addFavorite": "添加收藏",

@@ -5789,6 +5789,17 @@
 		"uploadingFiles": "Uploading files, please wait...",
 		"viewShortcuts": "View Shortcuts"
 	},
+	"sidebarPanels": {
+		"collapseFiles": "Collapse files",
+		"collapseHistory": "Collapse topics",
+		"createProject": "New project",
+		"expandFiles": "Expand files",
+		"expandHistory": "Expand topics",
+		"loadMore": "Load more",
+		"projectsLoadFailed": "Failed to load projects",
+		"releaseToCollapse": "Release to collapse",
+		"retry": "Retry"
+	},
 	"siderDashboard": {
 		"addDirectory": "Add directory",
 		"addFavorite": "Add to favorites",

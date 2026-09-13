@@ -1,8 +1,25 @@
-import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react"
+import {
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+	type ReactNode,
+	type RefObject,
+} from "react"
 import { createPortal } from "react-dom"
+import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { cn } from "@/utils/cn"
-import { TOPIC_HISTORY_PANEL_WIDTH } from "../../../constants/resizablePanel"
+import {
+	TOPIC_HISTORY_PANEL_WIDTH,
+	SIDEBAR_COLLAPSED_WIDTH,
+	SIDEBAR_TRANSITION_MS,
+} from "../../../constants/resizablePanel"
+import { useTranslation } from "react-i18next"
+import { PanelLeftOpen } from "lucide-react"
+import { useReducedMotion } from "framer-motion"
+import TopicHistorySidebar from "./TopicHistorySidebar"
 import TopicResizeHandle from "./TopicResizeHandle"
 import { useTopicDesktopLayout } from "../hooks/useTopicDesktopLayout"
 import { useTopicDesktopPanelMotion } from "../hooks/useTopicDesktopPanelMotion"
@@ -15,10 +32,13 @@ const topicHistorySafeAreaDrawerClassName =
 
 export interface TopicDesktopPanelsHistoryLayout {
 	isOpen: boolean
+	resize?: { width: number; onWidthCommit: (width: number) => void; projectId: string }
 	onClose: () => void
 	onToggle: () => void
 	renderPanel: (params: {
 		mode: "full-right" | "fixed" | "drawer"
+		isPanelVisible?: boolean
+		onCollapse?: () => void
 		onClose: () => void
 		closeButtonRef?: RefObject<HTMLButtonElement | null>
 		isConversationPanelCollapsed: boolean
@@ -30,7 +50,9 @@ interface TopicDesktopPanelsProps {
 	containerClassName: string
 	detailPanelClassName: string
 	isDetailPanelFullscreen: boolean
-	sidebar: ReactNode
+	sidebar:
+		ReactNode | ((controller: { onCollapse?: () => void; isCollapsed: boolean }) => ReactNode)
+	enableProjectCollapse?: boolean
 	detailPanel: ReactNode
 	isReadOnly: boolean
 	showProjectSidebar?: boolean
@@ -56,6 +78,7 @@ function TopicDesktopPanels({
 	detailPanelClassName,
 	isDetailPanelFullscreen,
 	sidebar,
+	enableProjectCollapse = false,
 	detailPanel,
 	isReadOnly,
 	showProjectSidebar = true,
@@ -67,12 +90,27 @@ function TopicDesktopPanels({
 	shouldShowDetailPanel,
 	renderMessagePanel,
 }: TopicDesktopPanelsProps) {
+	const { t } = useTranslation("super")
+	const reducedMotion = useReducedMotion()
+	const projectContentRef = useRef<HTMLDivElement>(null)
+	const projectRailRef = useRef<HTMLButtonElement>(null)
+	const [historyDragMode, setHistoryDragMode] = useState<"full-right" | "fixed" | "drawer">()
+	const historyResize = isReadOnly ? undefined : historyLayout?.resize
 	const topicHistoryCloseButtonRef = useRef<HTMLButtonElement>(null)
 	const isTopicHistoryPanelOpen = historyLayout?.isOpen ?? false
 	const onCloseTopicHistoryPanel = historyLayout?.onClose
 	const onToggleTopicHistoryPanel = historyLayout?.onToggle
 	const renderTopicHistoryPanel = historyLayout?.renderPanel
 	const {
+		isProjectSiderCollapsed,
+		collapseProjectSider,
+		expandProjectSider,
+		isDraggingHistoryPanel,
+		historyDragWidthPx,
+		startDragHistoryPanel,
+		cancelDrag,
+		collapseProgress,
+		isCollapseArmed,
 		containerRef,
 		containerWidthPx,
 		projectSiderWidthPx: storedProjectSiderWidthPx,
@@ -90,10 +128,24 @@ function TopicDesktopPanels({
 		isReadOnly,
 		allowProjectSiderResize: showProjectSidebar && showProjectResizeHandle,
 		persistConversationPanelState,
+		enableProjectCollapse,
+		onHistoryDragEnd: (result) => {
+			historyResize?.onWidthCommit(result.width)
+			if (result.collapsed) onCloseTopicHistoryPanel?.()
+		},
 	})
 	// Preserve the stored project width while removing both its visual slot and resize affordance.
-	const projectSiderWidthPx = showProjectSidebar ? storedProjectSiderWidthPx : 0
-	const shouldShowProjectResizeHandle = showProjectSidebar && showProjectResizeHandle
+	const projectSiderWidthPx = showProjectSidebar
+		? isProjectSiderCollapsed
+			? SIDEBAR_COLLAPSED_WIDTH
+			: storedProjectSiderWidthPx
+		: 0
+	const shouldShowProjectResizeHandle =
+		showProjectSidebar && showProjectResizeHandle && !isProjectSiderCollapsed
+	const sidebarTransition =
+		reducedMotion || isDraggingProjectSider || isDraggingHistoryPanel
+			? "none"
+			: `width ${SIDEBAR_TRANSITION_MS}ms ease, min-width ${SIDEBAR_TRANSITION_MS}ms ease`
 	const {
 		panelResizeTransition,
 		messageTransform,
@@ -102,10 +154,27 @@ function TopicDesktopPanels({
 		detailContentTransition,
 		middleContainerWidth,
 		topicHistoryMode,
+		topicHistoryPanelWidth,
+		historyMaxWidth,
 		targetMessagePanelWidth,
 		targetRightHandleWidth,
 		targetDetailPanelWidth,
 	} = useTopicDesktopPanelMotion({
+		sidebarMotion:
+			enableProjectCollapse || historyResize
+				? {
+						key: `${isProjectSiderCollapsed}:${isTopicHistoryPanelOpen}`,
+						transition: sidebarTransition,
+						duration: reducedMotion ? 0 : SIDEBAR_TRANSITION_MS,
+					}
+				: undefined,
+		historyResize: historyResize
+			? {
+					width: isDraggingHistoryPanel ? historyDragWidthPx : historyResize.width,
+					lockedMode: isDraggingHistoryPanel ? historyDragMode : undefined,
+				}
+			: undefined,
+		isDraggingHistoryPanel,
 		isReadOnly,
 		isTopicHistoryPanelOpen,
 		showProjectResizeHandle: shouldShowProjectResizeHandle,
@@ -141,7 +210,7 @@ function TopicDesktopPanels({
 	])
 	const messagePanel = renderMessagePanel({
 		isConversationPanelCollapsed: visibleConversationPanelCollapsed,
-		isDraggingPanel: isDraggingProjectSider || isDraggingMessagePanel,
+		isDraggingPanel: isDraggingProjectSider || isDraggingMessagePanel || isDraggingHistoryPanel,
 		onToggleConversationPanel: handleToggleConversationPanel,
 		onExpandConversationPanel: expandConversationPanel,
 		historyTriggerMode: historyLayout ? "layout" : "dropdown",
@@ -157,23 +226,38 @@ function TopicDesktopPanels({
 	const isDrawerTopicHistory = isTopicHistoryReady && topicHistoryMode === "drawer"
 	const isFixedTopicHistory =
 		isTopicHistoryReady && (topicHistoryMode === "fixed" || topicHistoryMode === "full-right")
-	const topicHistoryPanelContent = useMemo(() => {
-		if (!visibleTopicHistoryMode || !renderTopicHistoryPanel || !onCloseTopicHistoryPanel)
-			return null
-		return renderTopicHistoryPanel({
-			mode: visibleTopicHistoryMode,
-			onClose: onCloseTopicHistoryPanel,
-			closeButtonRef: topicHistoryCloseButtonRef,
-			isConversationPanelCollapsed: visibleConversationPanelCollapsed,
-			onExpandConversationPanel: expandConversationPanel,
-		})
-	}, [
-		expandConversationPanel,
-		onCloseTopicHistoryPanel,
-		renderTopicHistoryPanel,
-		visibleConversationPanelCollapsed,
-		visibleTopicHistoryMode,
-	])
+	const topicHistoryPanelContent =
+		!historyResize &&
+		visibleTopicHistoryMode &&
+		renderTopicHistoryPanel &&
+		onCloseTopicHistoryPanel
+			? renderTopicHistoryPanel({
+					mode: visibleTopicHistoryMode,
+					onClose: onCloseTopicHistoryPanel,
+					closeButtonRef: topicHistoryCloseButtonRef,
+					isConversationPanelCollapsed: visibleConversationPanelCollapsed,
+					onExpandConversationPanel: expandConversationPanel,
+				})
+			: null
+	const previousProjectCollapsed = useRef(isProjectSiderCollapsed)
+	useLayoutEffect(() => {
+		if (projectContentRef.current) projectContentRef.current.inert = isProjectSiderCollapsed
+		if (previousProjectCollapsed.current !== isProjectSiderCollapsed) {
+			if (isProjectSiderCollapsed) projectRailRef.current?.focus()
+			else
+				projectContentRef.current
+					?.querySelector<HTMLButtonElement>('[data-testid="project-card-collapse"]')
+					?.focus()
+		}
+		previousProjectCollapsed.current = isProjectSiderCollapsed
+	}, [isProjectSiderCollapsed])
+	const cancelListDrag = useMemoizedFn(() => {
+		if (isDraggingHistoryPanel || (enableProjectCollapse && isDraggingProjectSider))
+			cancelDrag()
+	})
+	useEffect(() => {
+		cancelListDrag()
+	}, [cancelListDrag, isDetailPanelFullscreen, historyResize?.projectId, shouldShowDetailPanel])
 
 	useEffect(() => {
 		if (!isDrawerTopicHistory) return
@@ -235,15 +319,52 @@ function TopicDesktopPanels({
 				{showProjectSidebar ? (
 					<div
 						className="shrink-0"
-						style={{ width: projectSiderWidthPx }}
+						style={{
+							width: projectSiderWidthPx,
+							transition: enableProjectCollapse ? sidebarTransition : undefined,
+							overflow: isProjectSiderCollapsed ? "hidden" : undefined,
+							position: "relative",
+						}}
 						data-testid="topic-project-sidebar-slot"
 					>
-						{sidebar}
+						{isProjectSiderCollapsed && (
+							<button
+								ref={projectRailRef}
+								type="button"
+								className="absolute inset-0 z-10 flex w-6 items-start justify-center rounded border border-border bg-background pt-3 hover:bg-fill"
+								aria-label={t("sidebarPanels.expandFiles")}
+								onClick={expandProjectSider}
+							>
+								<PanelLeftOpen size={16} />
+							</button>
+						)}
+						<div
+							ref={projectContentRef}
+							className="h-full"
+							aria-hidden={isProjectSiderCollapsed}
+							style={{
+								width: storedProjectSiderWidthPx,
+								visibility: isProjectSiderCollapsed ? "hidden" : undefined,
+							}}
+						>
+							{typeof sidebar === "function"
+								? sidebar({
+										onCollapse: enableProjectCollapse
+											? collapseProjectSider
+											: undefined,
+										isCollapsed: isProjectSiderCollapsed,
+									})
+								: sidebar}
+						</div>
 					</div>
 				) : null}
 
 				{shouldShowProjectResizeHandle && (
 					<TopicResizeHandle
+						dragging={isDraggingProjectSider}
+						collapseProgress={isDraggingProjectSider ? collapseProgress : 0}
+						collapseArmed={isDraggingProjectSider && isCollapseArmed}
+						collapseDirection={-1}
 						onResizeStart={(clientX) => {
 							startDragProjectSider(clientX)
 						}}
@@ -319,6 +440,7 @@ function TopicDesktopPanels({
 							}}
 						>
 							<TopicResizeHandle
+								dragging={isDraggingMessagePanel}
 								disabled={isConversationPanelCollapsed || !shouldShowDetailPanel}
 								onResizeStart={(clientX) => {
 									startDragMessagePanel(clientX)
@@ -351,7 +473,47 @@ function TopicDesktopPanels({
 						</div>
 					)}
 
-					{isFixedTopicHistory && visibleTopicHistoryMode ? (
+					{historyResize && historyLayout && (
+						<>
+							<div
+								className="shrink-0"
+								aria-hidden="true"
+								style={{
+									width: !isTopicHistoryPanelOpen
+										? SIDEBAR_COLLAPSED_WIDTH
+										: isFixedTopicHistory
+											? topicHistoryPanelWidth
+											: 0,
+									transition: sidebarTransition,
+								}}
+							/>
+							<TopicHistorySidebar
+								key={historyResize.projectId}
+								layout={historyLayout}
+								mode={topicHistoryMode}
+								width={topicHistoryPanelWidth}
+								maxWidth={historyMaxWidth}
+								isFullscreen={isDetailPanelFullscreen}
+								transition={sidebarTransition}
+								isDragging={isDraggingHistoryPanel}
+								collapseProgress={isDraggingHistoryPanel ? collapseProgress : 0}
+								collapseArmed={isDraggingHistoryPanel && isCollapseArmed}
+								onResizeStart={(clientX, mode) => {
+									setHistoryDragMode(mode)
+									startDragHistoryPanel(
+										clientX,
+										topicHistoryPanelWidth,
+										historyResize.width,
+										historyMaxWidth,
+									)
+								}}
+								isConversationPanelCollapsed={visibleConversationPanelCollapsed}
+								onExpandConversationPanel={expandConversationPanel}
+							/>
+						</>
+					)}
+
+					{!historyResize && isFixedTopicHistory && visibleTopicHistoryMode ? (
 						<>
 							{/* 占位符，用来推开对话区和详情区 */}
 							<div
@@ -370,7 +532,7 @@ function TopicDesktopPanels({
 						</>
 					) : null}
 
-					{isDrawerTopicHistory
+					{!historyResize && isDrawerTopicHistory
 						? createPortal(
 								<div className="pointer-events-none fixed inset-0 z-50">
 									<div
