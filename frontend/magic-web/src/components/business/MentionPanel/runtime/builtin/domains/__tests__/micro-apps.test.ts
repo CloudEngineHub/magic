@@ -14,7 +14,7 @@ vi.mock("@/apis", () => ({
 
 describe("MentionPanelMicroAppsStore", () => {
 	beforeEach(() => {
-		vi.clearAllMocks()
+		mocks.getMentionMicroApps.mockReset()
 	})
 
 	it("loads published mention apps from the dedicated endpoint", async () => {
@@ -87,6 +87,62 @@ describe("MentionPanelMicroAppsStore", () => {
 				},
 			],
 		})
+
+		await expect(store.getItems()).resolves.toEqual([
+			expect.objectContaining({ id: "owned-1", name: "Owned App" }),
+		])
+		expect(mocks.getMentionMicroApps).toHaveBeenCalledTimes(2)
+	})
+
+	it("refetches mention apps when the catalog is opened again", async () => {
+		mocks.getMentionMicroApps
+			.mockResolvedValueOnce({
+				list: [
+					{
+						app_id: "owned-1",
+						app_name: "Owned App",
+						cover_url: "",
+						publish_status: "published",
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				list: [
+					{
+						app_id: "owned-2",
+						app_name: "New App",
+						cover_url: "",
+						publish_status: "published",
+					},
+				],
+			})
+
+		const store = new MentionPanelMicroAppsStore()
+		await expect(store.getItems()).resolves.toEqual([
+			expect.objectContaining({ id: "owned-1", name: "Owned App" }),
+		])
+		await expect(store.getItems()).resolves.toEqual([
+			expect.objectContaining({ id: "owned-2", name: "New App" }),
+		])
+		expect(mocks.getMentionMicroApps).toHaveBeenCalledTimes(2)
+	})
+
+	it("keeps the last catalog when a later request fails", async () => {
+		mocks.getMentionMicroApps
+			.mockResolvedValueOnce({
+				list: [
+					{
+						app_id: "owned-1",
+						app_name: "Owned App",
+						cover_url: "",
+						publish_status: "published",
+					},
+				],
+			})
+			.mockRejectedValueOnce(new Error("unavailable"))
+
+		const store = new MentionPanelMicroAppsStore()
+		await store.getItems()
 
 		await expect(store.getItems()).resolves.toEqual([
 			expect.objectContaining({ id: "owned-1", name: "Owned App" }),

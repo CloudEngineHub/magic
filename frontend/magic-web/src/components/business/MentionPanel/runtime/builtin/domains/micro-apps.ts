@@ -46,8 +46,8 @@ export class MentionPanelMicroAppsStore {
 		makeAutoObservable(this, {}, { autoBind: true })
 	}
 
-	async fetchItems() {
-		if (this.loaded) return
+	async fetchItems({ force = false }: { force?: boolean } = {}) {
+		if (!force && this.loaded) return
 		if (this.loading) return this.loading
 		if (typeof SuperMagicApi?.getMentionMicroApps !== "function") return
 		this.loading = (async () => {
@@ -59,7 +59,7 @@ export class MentionPanelMicroAppsStore {
 				this.items = mapMentionItems(response)
 				this.loaded = true
 			} catch {
-				this.items = []
+				if (!this.loaded) this.items = []
 			}
 		})()
 		try {
@@ -70,7 +70,8 @@ export class MentionPanelMicroAppsStore {
 	}
 
 	async getItems() {
-		await this.fetchItems()
+		// Reopen must refetch so newly published apps appear.
+		await this.fetchItems({ force: true })
 		return this.items
 	}
 
