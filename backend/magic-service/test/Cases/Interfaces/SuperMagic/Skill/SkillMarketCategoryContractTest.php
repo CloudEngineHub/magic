@@ -11,6 +11,7 @@ use App\Application\SuperMagic\Skill\Service\AdminSkillCategoryAppService;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\SuperMagic\Agent\Entity\AgentVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillCategoryEntity;
+use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
@@ -516,6 +517,26 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertSame('temp/skills/example.zip', $payload['file_key']);
         $this->assertSame('https://example.com/skill.zip', $payload['file_url']);
         $this->assertArrayNotHasKey('category_ids', $payload);
+    }
+
+    public function testUserSkillListResponseUsesResolvedFieldsWithoutLegacyI18nFields(): void
+    {
+        CoContext::setLanguage('zh_CN');
+        $skill = new SkillEntity([
+            'code' => 'skill-code',
+            'name_i18n' => ['default' => 'Default name', 'zh_CN' => '中文名称'],
+            'description_i18n' => ['default' => 'Default description', 'zh_CN' => '中文描述'],
+            'source_i18n' => ['default' => 'Default source', 'zh_CN' => '中文来源'],
+        ]);
+
+        $payload = SkillAssembler::createListItemDTO($skill)->jsonSerialize();
+
+        $this->assertSame('中文名称', $payload['name']);
+        $this->assertSame('中文描述', $payload['description']);
+        $this->assertSame('中文来源', $payload['source']);
+        $this->assertArrayNotHasKey('name_i18n', $payload);
+        $this->assertArrayNotHasKey('description_i18n', $payload);
+        $this->assertArrayNotHasKey('source_i18n', $payload);
     }
 
     public function testSkillVersionResponseExposesLocalizedDescriptionAndCategories(): void

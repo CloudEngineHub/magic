@@ -22,7 +22,7 @@ class AgentListItemDTO extends AbstractDTO
 
     private string $name;
 
-    private ?array $roleI18n;
+    private string $role;
 
     private string $description;
 
@@ -36,7 +36,7 @@ class AgentListItemDTO extends AbstractDTO
     /**
      * Playbook 列表（feature）.
      *
-     * @var array<int, array{name_i18n: array, icon: null|string, theme_color: null|string}>
+     * @var array<int, array{name: string, icon: null|string, theme_color: null|string}>
      */
     private array $playbooks;
 
@@ -84,7 +84,7 @@ class AgentListItemDTO extends AbstractDTO
         string $code,
         ?string $projectId,
         string $name,
-        ?array $roleI18n,
+        string $role,
         string $description,
         ?array $icon,
         int $iconType,
@@ -112,7 +112,7 @@ class AgentListItemDTO extends AbstractDTO
         $this->code = $code;
         $this->projectId = $projectId;
         $this->name = $name;
-        $this->roleI18n = $roleI18n;
+        $this->role = $role;
         $this->description = $description;
         $this->icon = $icon;
         $this->iconType = $iconType;
@@ -147,7 +147,7 @@ class AgentListItemDTO extends AbstractDTO
             'code' => $this->code,
             'project_id' => $this->projectId,
             'name' => $this->name,
-            'role_i18n' => $this->roleI18n,
+            'role' => $this->role,
             'description' => $this->description,
             'icon' => $this->icon,
             'icon_type' => $this->iconType,

@@ -519,7 +519,7 @@ class SuperMagicAgentAssembler
         $features = [];
         foreach ($playbooks as $playbook) {
             $features[] = [
-                'name_i18n' => $playbook->getNameI18n(),
+                'name' => $playbook->getI18nName($language),
                 'icon' => $playbook->getIcon(),
                 'theme_color' => $playbook->getThemeColor(),
             ];
@@ -539,7 +539,7 @@ class SuperMagicAgentAssembler
             code: $agent->getCode(),
             projectId: $agent->getProjectId() === null ? null : (string) $agent->getProjectId(),
             name: $agent->getI18nName($language),
-            roleI18n: $agent->getRoleI18n() ?? [],
+            role: $agent->getI18nRole($language),
             description: $agent->getI18nDescription($language),
             icon: $agent->getIcon(),
             iconType: $agent->getIconType(),

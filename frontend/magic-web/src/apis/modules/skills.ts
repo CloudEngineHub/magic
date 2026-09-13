@@ -169,10 +169,6 @@ export interface SkillItem {
 	description?: string
 	/** Resolved source for the current locale. */
 	source?: string
-	/** Deprecated compatibility fields; use the resolved display fields above. */
-	name_i18n?: SkillI18nText
-	description_i18n?: SkillI18nText
-	source_i18n?: SkillI18nText
 	logo: string
 	source_type: SkillSourceType
 	/** 0=disabled, 1=enabled */

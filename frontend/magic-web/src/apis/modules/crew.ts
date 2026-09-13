@@ -106,7 +106,10 @@ export function resolveCrewIconUrl(icon: CrewIconObject | null | undefined): str
 
 /** A single playbook base data (used in list views) */
 export interface CrewPlayBookBaseData {
-	name_i18n: CrewI18nText
+	/** Resolved display name returned by agent query list endpoints. */
+	name?: string
+	/** Legacy localized name retained for detail/compatibility payloads. */
+	name_i18n?: CrewI18nText
 	/** Emoji or icon key */
 	icon: string | null
 	theme_color: string | null
@@ -155,9 +158,10 @@ export interface StoreAgentItem {
 	agent_code: string
 	user_code?: string | null
 	is_featured?: boolean
-	name_i18n: CrewI18nText
-	role_i18n: CrewI18nArrayText
-	description_i18n: CrewI18nText
+	/** Resolved display fields returned by the market query endpoint. */
+	name: string
+	role: string
+	description: string
 	/** Agent icon object (url, type, color) */
 	icon: CrewIconObject | null
 	/** Icon type: 1=icon, 2=image */
@@ -228,7 +232,8 @@ export interface AgentItem {
 	user_role?: CollaboratorPermission
 	/** Display name returned by agent query list endpoints. */
 	name: string
-	role_i18n: CrewI18nArrayText
+	/** Resolved role returned by agent query list endpoints. */
+	role: string
 	/** Display description returned by agent query list endpoints. */
 	description: string
 	/** Agent icon object (url, type, color) */

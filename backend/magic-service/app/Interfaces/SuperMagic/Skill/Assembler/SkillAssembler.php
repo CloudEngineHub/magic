@@ -44,7 +44,8 @@ class SkillAssembler
         SkillEntity $entity,
         ?MagicUserEntity $creator = null,
         ?SkillVersionEntity $latestVersionEntity = null,
-        ?Operation $operation = null
+        ?Operation $operation = null,
+        bool $includeI18n = false
     ): SkillListItemDTO {
         $language = self::getLanguage();
 
@@ -60,9 +61,6 @@ class SkillAssembler
             name: $entity->getI18nName($language),
             description: $entity->getI18nDescription($language),
             source: $entity->getI18nSource($language),
-            nameI18n: $entity->getNameI18n() ?? [],
-            descriptionI18n: $entity->getDescriptionI18n() ?? [],
-            sourceI18n: $entity->getSourceI18n() ?? [],
             logo: $entity->getLogo() ?? '',
             sourceType: $entity->getSourceType()->value,
             isEnabled: $entity->getIsEnabled() ? 1 : 0,
@@ -74,6 +72,9 @@ class SkillAssembler
             packageName: $entity->getPackageName(),
             creatorInfo: $creatorInfo,
             userRole: $operation?->toAlias(),
+            nameI18n: $includeI18n ? ($entity->getNameI18n() ?? []) : null,
+            descriptionI18n: $includeI18n ? ($entity->getDescriptionI18n() ?? []) : null,
+            sourceI18n: $includeI18n ? ($entity->getSourceI18n() ?? []) : null,
         );
     }
 
@@ -83,7 +84,8 @@ class SkillAssembler
         ?MagicUserEntity $creator = null,
         ?SkillVersionEntity $latestVersionEntity = null,
         ?string $publisherType = null,
-        ?array $publisher = null
+        ?array $publisher = null,
+        bool $includeI18n = false
     ): SkillListItemDTO {
         $language = self::getLanguage();
 
@@ -99,9 +101,6 @@ class SkillAssembler
             name: $entity->getI18nName($language),
             description: $entity->getI18nDescription($language),
             source: $entity->getI18nSource($language),
-            nameI18n: $entity->getNameI18n() ?? [],
-            descriptionI18n: $entity->getDescriptionI18n() ?? [],
-            sourceI18n: $entity->getSourceI18n() ?? [],
             logo: $entity->getLogo() ?? '',
             sourceType: $sourceType ?? $entity->getSourceType()->value,
             isEnabled: 1,
@@ -113,7 +112,10 @@ class SkillAssembler
             packageName: $entity->getPackageName(),
             creatorInfo: $creatorInfo,
             publisherType: $publisherType,
-            publisher: $publisher
+            publisher: $publisher,
+            nameI18n: $includeI18n ? ($entity->getNameI18n() ?? []) : null,
+            descriptionI18n: $includeI18n ? ($entity->getDescriptionI18n() ?? []) : null,
+            sourceI18n: $includeI18n ? ($entity->getSourceI18n() ?? []) : null,
         );
     }
 
@@ -220,6 +222,7 @@ class SkillAssembler
         array $creatorUserMap = [],
         array $latestVersionMap = [],
         array $skillOperations = [],
+        bool $includeI18n = false,
     ): SkillListResponseDTO {
         $listItems = [];
         foreach ($skillEntities as $entity) {
@@ -228,6 +231,7 @@ class SkillAssembler
                 $creatorUserMap[$entity->getCreatorId()] ?? null,
                 $latestVersionMap[$entity->getCode()] ?? null,
                 $skillOperations[$entity->getCode()] ?? null,
+                $includeI18n,
             );
         }
 
@@ -248,7 +252,8 @@ class SkillAssembler
         array $creatorUserMap = [],
         array $latestVersionMap = [],
         array $marketEntityMap = [],
-        array $publisherUserMap = []
+        array $publisherUserMap = [],
+        bool $includeI18n = false
     ): SkillListResponseDTO {
         $listItems = [];
         foreach ($skillVersionEntities as $entity) {
@@ -271,7 +276,8 @@ class SkillAssembler
                 $creatorUserMap[$entity->getCreatorId()] ?? null,
                 $latestVersionMap[$entity->getCode()] ?? null,
                 $publisherType,
-                $publisher
+                $publisher,
+                $includeI18n
             );
         }
 
