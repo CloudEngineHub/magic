@@ -11,20 +11,17 @@ use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\SuperMagic\Domain\RecycleBin\Enum\RecycleBinResourceType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\DeleteEventSource;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileRepositoryInterface;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\WorkspaceRepositoryInterface;
 use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
 use Hyperf\DbConnection\Db;
+use InvalidArgumentException;
 
-/** 删除、替换与事件回调共用同一文件记录规则；调用方事务同时保护删除状态与回收记录。 */
-class FileRecycleBinDomainService
+/** 个人文件沿用回收站的记录接口；项目删除事件继续由原订阅者处理。 */
+class UserFileRecycleBinDomainService
 {
     public function __construct(
         private readonly RecycleBinDomainService $recycleBinDomainService,
         private readonly TaskFileRepositoryInterface $taskFileRepository,
-        private readonly ProjectRepositoryInterface $projectRepository,
-        private readonly WorkspaceRepositoryInterface $workspaceRepository,
     ) {
     }
 
@@ -36,10 +33,9 @@ class FileRecycleBinDomainService
         }
         $first = $files[0];
         $groupId = $groupId !== '' ? $groupId : (string) IdGenerator::getSnowId();
-        $rootId = $first->isProjectFile() ? null : $this->taskFileRepository->findUserSpaceRootDirectory($first->getUserId(), $first->getOrganizationCode())?->getFileId();
         $paths = $this->buildRelativePathMap($files, $first->getProjectId());
         foreach ($files as $file) {
-            $this->recordFileDeletion($file, $deletedBy, $source, $paths[$file->getFileId()] ?? null, $groupId, $rootId);
+            $this->recordFileDeletion($file, $deletedBy, $source, $paths[$file->getFileId()] ?? null, $groupId);
         }
     }
 
@@ -49,31 +45,24 @@ class FileRecycleBinDomainService
         DeleteEventSource $source,
         ?string $relativeFilePath = null,
         string $groupId = '',
-        ?int $rootId = null,
     ): void {
+        if ($fileEntity->isProjectFile() || $fileEntity->getSpaceType() !== 'user') {
+            throw new InvalidArgumentException('Only personal files use this recycle bin adapter');
+        }
         $fileId = (int) $fileEntity->getFileId();
         if ($fileId <= 0) {
             return;
         }
 
-        Db::transaction(function () use ($fileEntity, $deletedBy, $source, $relativeFilePath, $groupId, $rootId, $fileId): void {
-            // 文件行是删除与回收记录的共同互斥点，事件重放不能插入第二条活跃记录。
+        Db::transaction(function () use ($fileEntity, $deletedBy, $source, $relativeFilePath, $groupId, $fileId): void {
+            // 个人文件的删除记录与恢复共用文件行锁，避免并发写出重复回收记录。
             $locked = $this->taskFileRepository->lockByIds([$fileId]);
             if (! isset($locked[$fileId]) || $locked[$fileId]->getDeletedAt() === null) {
                 return;
             }
-            if (! $fileEntity->isProjectFile() && $rootId === null) {
-                $rootId = $this->taskFileRepository->findUserSpaceRootDirectory($fileEntity->getUserId(), $fileEntity->getOrganizationCode())?->getFileId();
-            }
             $existing = $this->recycleBinDomainService->findByResource(RecycleBinResourceType::File, $fileId);
             if ($existing !== null) {
                 return;
-            }
-
-            $project = $fileEntity->isProjectFile() ? $this->projectRepository->findById($fileEntity->getProjectId()) : null;
-            $workspace = null;
-            if ($project !== null && $project->getWorkspaceId() !== null) {
-                $workspace = $this->workspaceRepository->getWorkspaceById($project->getWorkspaceId());
             }
 
             $originalParentId = $fileEntity->getParentId();
@@ -91,12 +80,10 @@ class FileRecycleBinDomainService
                 resourceName: $fileEntity->getFileName(),
                 ownerId: $fileEntity->getUserId(),
                 deletedBy: $deletedBy,
-                parentId: $fileEntity->isProjectFile() ? $fileEntity->getProjectId() : null,
+                parentId: null,
                 extraData: [
-                    'space_type' => $fileEntity->isProjectFile() ? 'project' : 'user',
+                    'space_type' => 'user',
                     'organization_code' => $fileEntity->getOrganizationCode(),
-                    'owner_id' => $fileEntity->getUserId(),
-                    'space_root_id' => $rootId,
                     'deletion_group_id' => $groupId !== '' ? $groupId : (string) IdGenerator::getSnowId(),
                     'delete_source' => $source->value,
                     'is_directory' => $fileEntity->getIsDirectory(),
@@ -106,10 +93,6 @@ class FileRecycleBinDomainService
                     'original_parent_id' => $originalParentId,
                     'original_parent_name' => $originalParentName,
                     'relative_file_path' => $relativeFilePath,
-                    'project_id' => $fileEntity->getProjectId(),
-                    'project_name' => $project?->getProjectName() ?? '',
-                    'workspace_id' => $project?->getWorkspaceId(),
-                    'workspace_name' => $workspace?->getName() ?? '',
                 ]
             );
         });

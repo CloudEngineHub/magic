@@ -39,6 +39,7 @@ use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
+
 use function Hyperf\Translation\trans;
 
 class RecycleBinAppService extends AbstractAppService
@@ -238,7 +239,6 @@ class RecycleBinAppService extends AbstractAppService
             $userId,
             $requestDTO->getConflictResolutions(),
             $userAuthorization->getOrganizationCode(),
-            $requestDTO->shouldExpandDirectories(),
         );
 
         $resultDTOs = [];

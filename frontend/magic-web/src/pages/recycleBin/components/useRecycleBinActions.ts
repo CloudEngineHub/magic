@@ -153,7 +153,8 @@ function parseRestoreCheckResponse(data: {
 		oldNoNeedMove.length > 0 ? toResourceIds(oldNoNeedMove) : toResourceIds(noConflict)
 	directResourceIds.push(...noConflictResourceIds)
 	const allItems = [...withConflict, ...noConflict]
-	const parentById = new Map(allItems.map((item) => [String(item.resource_id), item.parent_id]))
+	const userItems = allItems.filter((item) => item.space_type === "user")
+	const parentById = new Map(userItems.map((item) => [String(item.resource_id), item.parent_id]))
 	const pendingById = new Map(pendingNameConflictItems.map((item) => [item.resourceId, item]))
 	const blockedIds = new Set(mustSkipResourceIds)
 	const deferredIds = new Set<string>()
@@ -169,7 +170,7 @@ function parseRestoreCheckResponse(data: {
 		return ancestors
 	}
 	// 目录先确认再恢复后代；跳过目录时，不会把其下文件单独移到空间根目录。
-	for (const item of allItems) {
+	for (const item of userItems) {
 		const id = String(item.resource_id)
 		const ancestors = ancestorsOf(id)
 		if (ancestors.some((parent) => blockedIds.has(parent))) {
@@ -445,7 +446,6 @@ export function useRecycleBinActions({
 			const data = await restoreRecycleBinResources({
 				resource_ids: resourceIds,
 				resource_type: resourceType,
-				expand_directories: resourceType !== RESOURCE_TYPE.FILE,
 				...(hasConflictResolutions ? { conflict_resolutions: conflictResolutions } : {}),
 			})
 			const successResourceIds = extractSuccessResourceIds(data.results)

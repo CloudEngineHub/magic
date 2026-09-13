@@ -23,7 +23,7 @@ use Dtyq\SuperMagic\Application\SuperAgent\Event\Publish\FileBatchMovePublisher;
 use Dtyq\SuperMagic\Domain\FileCollection\Service\FileCollectionDomainService;
 use Dtyq\SuperMagic\Domain\MagicFS\Service\MagicFSFileDomainService;
 use Dtyq\SuperMagic\Domain\MagicFS\Service\UpsertProjectFileNodeDTO;
-use Dtyq\SuperMagic\Domain\RecycleBin\Service\FileRecycleBinDomainService;
+use Dtyq\SuperMagic\Domain\RecycleBin\Service\UserFileRecycleBinDomainService;
 use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
 use Dtyq\SuperMagic\Domain\Share\Entity\ResourceShareEntity;
 use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
@@ -81,6 +81,7 @@ use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
+
 use function event_dispatch;
 use function Hyperf\Translation\trans;
 
@@ -103,7 +104,7 @@ class FileManagementAppService extends AbstractAppService
         private readonly MagicFSFileDomainService $magicFSFileDomainService,
         private readonly FileDomainService $fileDomainService,
         private readonly UserFileCopyAppService $userFileCopyAppService,
-        private readonly FileRecycleBinDomainService $fileRecycleBinDomainService,
+        private readonly UserFileRecycleBinDomainService $userFileRecycleBinDomainService,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
@@ -655,12 +656,14 @@ class FileManagementAppService extends AbstractAppService
             // 3. Soft-delete the entry itself only.
             //    For directories, descendants are intentionally left intact: this endpoint
             //    is a single-node deletion and does not propagate to children.
-            Db::transaction(function () use ($fileId, $fileEntity, $userAuthorization): void {
+            if ($fileEntity->isProjectFile()) {
                 $this->magicFSFileDomainService->deleteFile((string) $fileId);
-                if (! $fileEntity->isProjectFile()) {
-                    $this->fileRecycleBinDomainService->recordFiles([$fileEntity], $userAuthorization->getId(), DeleteEventSource::User);
-                }
-            });
+            } else {
+                Db::transaction(function () use ($fileId, $fileEntity, $userAuthorization): void {
+                    $this->magicFSFileDomainService->deleteFile((string) $fileId);
+                    $this->userFileRecycleBinDomainService->recordFiles([$fileEntity], $userAuthorization->getId(), DeleteEventSource::User);
+                });
+            }
 
             if ($fileEntity->isProjectFile()) {
                 // 4. Dispatch the matching event so notification / asset subscribers can react.
@@ -714,12 +717,14 @@ class FileManagementAppService extends AbstractAppService
             );
 
             // 3. 调用 MagicFS 删除目录
-            Db::transaction(function () use ($fileId, $fileEntity, $userAuthorization): void {
+            if ($fileEntity->isProjectFile()) {
                 $this->magicFSFileDomainService->deleteFile((string) $fileId);
-                if (! $fileEntity->isProjectFile()) {
-                    $this->fileRecycleBinDomainService->recordFiles([$fileEntity], $userAuthorization->getId(), DeleteEventSource::User);
-                }
-            });
+            } else {
+                Db::transaction(function () use ($fileId, $fileEntity, $userAuthorization): void {
+                    $this->magicFSFileDomainService->deleteFile((string) $fileId);
+                    $this->userFileRecycleBinDomainService->recordFiles([$fileEntity], $userAuthorization->getId(), DeleteEventSource::User);
+                });
+            }
 
             if ($fileEntity->isProjectFile()) {
                 // Dispatch directory deleted event
@@ -789,13 +794,15 @@ class FileManagementAppService extends AbstractAppService
             }
 
             // MagicFS 在指定作用域内校验并删除文件，返回删除前实体供事件使用。
-            $fileEntities = Db::transaction(function () use ($fileIds, $projectId, $requestDTO, $userAuthorization): array {
-                $deleted = $this->magicFSFileDomainService->deleteFiles($fileIds, false, $projectId);
-                if ($projectId === 0 || $requestDTO->getDeletionGroupId() !== '') {
-                    $this->fileRecycleBinDomainService->recordFiles($deleted, $userAuthorization->getId(), DeleteEventSource::User, $requestDTO->getDeletionGroupId());
-                }
-                return $deleted;
-            });
+            if ($projectId === 0) {
+                $fileEntities = Db::transaction(function () use ($fileIds, $projectId, $requestDTO, $userAuthorization): array {
+                    $deleted = $this->magicFSFileDomainService->deleteFiles($fileIds, false, $projectId);
+                    $this->userFileRecycleBinDomainService->recordFiles($deleted, $userAuthorization->getId(), DeleteEventSource::User, $requestDTO->getDeletionGroupId());
+                    return $deleted;
+                });
+            } else {
+                $fileEntities = $this->magicFSFileDomainService->deleteFiles($fileIds, false, $projectId);
+            }
 
             $this->logger->info(sprintf(
                 'Successfully batch deleted files: Project ID: %s, File count: %d',
@@ -1685,12 +1692,11 @@ class FileManagementAppService extends AbstractAppService
         $targetProject = null;
 
         try {
-            $sourceIds = array_values(array_unique(array_map('intval', $requestDTO->getFileIds())));
-            $source = $this->taskFileDomainService->getById($sourceIds[0] ?? 0);
-            if ($source !== null && ! $source->isProjectFile()) {
-                if ((int) $requestDTO->getProjectId() !== 0 || $requestDTO->getPreFileId() !== '' || $requestDTO->shouldPreserveParentPath()) {
+            if ((int) $requestDTO->getProjectId() === 0) {
+                if ($requestDTO->getPreFileId() !== '' || $requestDTO->shouldPreserveParentPath()) {
                     ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.permission_denied');
                 }
+                $sourceIds = array_values(array_unique(array_map('intval', $requestDTO->getFileIds())));
                 return $this->userFileCopyAppService->copy($userAuthorization, $sourceIds, (int) $requestDTO->getTargetParentId(), $requestDTO->getTargetProjectId() === '' ? null : (int) $requestDTO->getTargetProjectId(), $requestDTO->getKeepBothFileIds());
             }
             // 1. Get source project and verify permission

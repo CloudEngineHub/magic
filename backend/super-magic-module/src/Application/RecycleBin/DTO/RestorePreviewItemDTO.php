@@ -30,9 +30,13 @@ class RestorePreviewItemDTO
             'resource_id' => $this->resourceId,
             'resource_name' => $this->resourceName,
             'is_directory' => $this->isDirectory,
-            'space_type' => $this->spaceType,
-            'parent_id' => $this->parentId,
         ];
+
+        // 个人目录预检需要父子关系来处理冲突；项目响应保持原有字段。
+        if ($this->spaceType === 'user') {
+            $data['space_type'] = $this->spaceType;
+            $data['parent_id'] = $this->parentId;
+        }
 
         if ($this->conflict !== null) {
             $data['conflict'] = $this->conflict->toArray();

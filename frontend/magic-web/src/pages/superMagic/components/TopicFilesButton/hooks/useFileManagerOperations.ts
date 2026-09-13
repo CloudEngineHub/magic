@@ -156,7 +156,6 @@ export function useFileManagerOperations({
 		operations.setShareModalVisible(true)
 	}
 	const batch = useBatchDownload({
-		recordDeletionGroup: true,
 		fileScope: spaceConfig?.scope,
 		projectId,
 		getItemId: getAttachmentKey,

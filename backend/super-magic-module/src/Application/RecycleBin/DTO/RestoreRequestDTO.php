@@ -11,6 +11,7 @@ use Dtyq\SuperMagic\Domain\RecycleBin\Enum\RecycleBinResourceType;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use InvalidArgumentException;
 use ValueError;
+
 use function Hyperf\Translation\trans;
 
 /**
@@ -25,8 +26,6 @@ class RestoreRequestDTO
 {
     private array $resourceIds = [];
 
-    private bool $expandDirectories = true;
-
     private RecycleBinResourceType $resourceType;
 
     /**
@@ -39,7 +38,6 @@ class RestoreRequestDTO
 
     public function __construct(array $data)
     {
-        $this->expandDirectories = ($data['expand_directories'] ?? true) !== false;
         if (! isset($data['resource_ids']) || ! is_array($data['resource_ids'])) {
             throw new InvalidArgumentException(trans('recycle_bin.validation.resource_ids_must_be_array'));
         }
@@ -75,11 +73,6 @@ class RestoreRequestDTO
         return $this->resourceIds;
     }
 
-    public function shouldExpandDirectories(): bool
-    {
-        return $this->expandDirectories;
-    }
-
     public function getResourceType(): RecycleBinResourceType
     {
         return $this->resourceType;
@@ -100,7 +93,6 @@ class RestoreRequestDTO
     {
         return [
             'resource_ids' => $this->resourceIds,
-            'expand_directories' => $this->expandDirectories,
             'resource_type' => $this->resourceType->value,
             'conflict_resolutions' => $this->conflictResolutions,
         ];

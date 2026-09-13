@@ -48,6 +48,7 @@ use Psr\Log\LoggerInterface;
 use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
 use Throwable;
+
 use function Hyperf\Translation\trans;
 
 class TaskFileDomainService
@@ -3732,105 +3733,106 @@ class TaskFileDomainService
         $targetOrganizationCode = $targetParentFile?->getOrganizationCode() ?? $sourceFile->getOrganizationCode();
         $targetUserId = $targetParentFile?->getUserId() ?? $sourceFile->getUserId();
 
-        // 个人空间没有项目对象；来源和目标必须属于同一组织、同一 owner，不能借 project_id=0 跨空间复制。
-        if (! $sourceFile->isProjectFile()) {
-            if ($sourceFile->getSpaceType() !== 'user' || $targetParentFile === null
+        // 个人空间没有项目对象；在原复制流程前确认源和目标属于同一用户、同一组织。
+        if (! $sourceFile->isProjectFile()
+            && ($sourceFile->getSpaceType() !== 'user' || $targetParentFile === null
                 || $targetParentFile->getSpaceType() !== 'user' || $targetParentFile->isProjectFile()
-                || $targetUserId !== $sourceFile->getUserId() || $targetOrganizationCode !== $sourceFile->getOrganizationCode()) {
-                ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.permission_denied');
+                || $targetUserId !== $sourceFile->getUserId() || $targetOrganizationCode !== $sourceFile->getOrganizationCode())) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.permission_denied');
+        }
+
+        // 冲突处理
+        $existingTarget = $this->taskFileRepository->getByProjectParentAndName(
+            $targetProjectId,
+            $targetParentIdInt,
+            $targetFileName
+        );
+
+        if ($overwrite) {
+            if ($existingTarget !== null && $existingTarget->getFileId() === $sourceFile->getFileId()) {
+                return $sourceFile;
             }
-            $workDir = WorkDirectoryUtil::getUserWorkDir($targetUserId);
+
+            if ($existingTarget !== null) {
+                if (! $existingTarget->getIsDirectory()) {
+                    $this->taskFileRepository->deleteById($existingTarget->getFileId(), false);
+                } else {
+                    ExceptionBuilder::throw(SuperAgentErrorCode::FILE_EXIST, trans('file.file_exist'));
+                }
+            }
         } else {
+            $targetFileName = $this->generateUniqueFileNameInParent(
+                $targetProjectId,
+                $targetParentIdInt ?? 0,
+                $targetFileName
+            );
+        }
+
+        if ($sourceFile->isProjectFile()) {
             $project = $this->projectRepository->findById($targetProjectId);
             if ($project === null) {
                 ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, trans('project.project_not_found'));
             }
             $workDir = $project->getWorkDir();
+        } else {
+            $workDir = WorkDirectoryUtil::getUserWorkDir($targetUserId);
         }
 
-        // 对象复制失败时回滚元数据删除；外部存储本身仍按原复制接口处理。
-        return Db::transaction(function () use ($sourceFile, $targetFileName, $targetParentIdInt, $targetProjectId, $targetOrganizationCode, $targetUserId, $targetParentFile, $overwrite, $workDir): TaskFileEntity {
-            // 冲突处理
-            $existingTarget = $this->taskFileRepository->getByProjectParentAndName(
-                $targetProjectId,
-                $targetParentIdInt,
-                $targetFileName
+        $newFileId = IdGenerator::getSnowId();
+        $fullPrefix = $this->cloudFileRepository->getFullPrefix($targetOrganizationCode);
+        $newFileKey = WorkDirectoryUtil::getFullFileKey($fullPrefix, $workDir, (string) $newFileId);
+
+        try {
+            $prefix = WorkDirectoryUtil::getPrefix($workDir);
+            $this->cloudFileRepository->copyObjectByCredential(
+                $prefix,
+                $targetOrganizationCode,
+                $sourceFile->getFileKey(),
+                $newFileKey,
+                StorageBucketType::SandBox
             );
+        } catch (Throwable $e) {
+            throw new RuntimeException(
+                sprintf('Failed to copy file in object storage: %s', $e->getMessage()),
+                $e->getCode(),
+                $e
+            );
+        }
 
-            if ($overwrite) {
-                if ($existingTarget !== null && $existingTarget->getFileId() === $sourceFile->getFileId()) {
-                    return $sourceFile;
-                }
+        $newFileEntity = new TaskFileEntity();
+        $newFileEntity->setFileId($newFileId);
+        $newFileEntity->setUserId($targetUserId);
+        if (! $sourceFile->isProjectFile()) {
+            $newFileEntity->setSpaceType($sourceFile->getSpaceType());
+        }
+        $newFileEntity->setOrganizationCode($targetOrganizationCode);
+        $newFileEntity->setProjectId($targetProjectId);
+        $newFileEntity->setFileName($targetFileName);
+        $newFileEntity->setFileKey($newFileKey);
+        $newFileEntity->setFileExtension(pathinfo($targetFileName, PATHINFO_EXTENSION));
+        $newFileEntity->setFileSize($sourceFile->getFileSize());
+        $newFileEntity->setIsDirectory(false);
+        $newFileEntity->setParentId($targetParentIdInt);
+        $newFileEntity->setIsHidden($this->determineIsHidden($targetFileName, $targetParentIdInt, $targetProjectId));
+        $newFileEntity->setStorageType($sourceFile->getStorageType());
+        $newFileEntity->setSource(TaskFileSource::COPY);
+        $newFileEntity->setLatestVersion(1);
+        $newFileEntity->setMetadataVersion(1);
+        $newFileEntity->setFileType($sourceFile->getFileType());
+        $newFileEntity->setMetadata($sourceFile->getMetadata());
+        $newFileEntity->setDisplayConfig($sourceFile->getDisplayConfig());
 
-                if ($existingTarget !== null) {
-                    if (! $existingTarget->getIsDirectory()) {
-                        $this->taskFileRepository->deleteById($existingTarget->getFileId(), false);
-                    } else {
-                        ExceptionBuilder::throw(SuperAgentErrorCode::FILE_EXIST, trans('file.file_exist'));
-                    }
-                }
-            } else {
-                $targetFileName = $this->generateUniqueFileNameInParent(
-                    $targetProjectId,
-                    $targetParentIdInt ?? 0,
-                    $targetFileName
-                );
-            }
+        $now = date('Y-m-d H:i:s');
+        $newFileEntity->setCreatedAt($now);
+        $newFileEntity->setUpdatedAt($now);
 
-            $newFileId = IdGenerator::getSnowId();
-            $fullPrefix = $this->cloudFileRepository->getFullPrefix($targetOrganizationCode);
-            $newFileKey = WorkDirectoryUtil::getFullFileKey($fullPrefix, $workDir, (string) $newFileId);
+        $newFileEntity = $this->taskFileRepository->insert($newFileEntity);
 
-            try {
-                $prefix = WorkDirectoryUtil::getPrefix($workDir);
-                $this->cloudFileRepository->copyObjectByCredential(
-                    $prefix,
-                    $targetOrganizationCode,
-                    $sourceFile->getFileKey(),
-                    $newFileKey,
-                    StorageBucketType::SandBox
-                );
-            } catch (Throwable $e) {
-                throw new RuntimeException(
-                    sprintf('Failed to copy file in object storage: %s', $e->getMessage()),
-                    $e->getCode(),
-                    $e
-                );
-            }
+        if ($targetParentIdInt !== null) {
+            $this->incrementVersionChain((string) $targetParentIdInt);
+        }
 
-            $newFileEntity = new TaskFileEntity();
-            $newFileEntity->setFileId($newFileId);
-            $newFileEntity->setUserId($targetUserId);
-            $newFileEntity->setSpaceType($targetParentFile?->getSpaceType() ?? $sourceFile->getSpaceType());
-            $newFileEntity->setOrganizationCode($targetOrganizationCode);
-            $newFileEntity->setProjectId($targetProjectId);
-            $newFileEntity->setFileName($targetFileName);
-            $newFileEntity->setFileKey($newFileKey);
-            $newFileEntity->setFileExtension(pathinfo($targetFileName, PATHINFO_EXTENSION));
-            $newFileEntity->setFileSize($sourceFile->getFileSize());
-            $newFileEntity->setIsDirectory(false);
-            $newFileEntity->setParentId($targetParentIdInt);
-            $newFileEntity->setIsHidden($this->determineIsHidden($targetFileName, $targetParentIdInt, $targetProjectId));
-            $newFileEntity->setStorageType($sourceFile->getStorageType());
-            $newFileEntity->setSource(TaskFileSource::COPY);
-            $newFileEntity->setLatestVersion(1);
-            $newFileEntity->setMetadataVersion(1);
-            $newFileEntity->setFileType($sourceFile->getFileType());
-            $newFileEntity->setMetadata($sourceFile->getMetadata());
-            $newFileEntity->setDisplayConfig($sourceFile->getDisplayConfig());
-
-            $now = date('Y-m-d H:i:s');
-            $newFileEntity->setCreatedAt($now);
-            $newFileEntity->setUpdatedAt($now);
-
-            $newFileEntity = $this->taskFileRepository->insert($newFileEntity);
-
-            if ($targetParentIdInt !== null) {
-                $this->incrementVersionChain((string) $targetParentIdInt);
-            }
-
-            return $newFileEntity;
-        });
+        return $newFileEntity;
     }
 
     /**

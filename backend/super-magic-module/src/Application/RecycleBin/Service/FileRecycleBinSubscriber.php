@@ -7,11 +7,17 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Application\RecycleBin\Service;
 
-use Dtyq\SuperMagic\Domain\RecycleBin\Service\FileRecycleBinDomainService;
+use Dtyq\SuperMagic\Domain\RecycleBin\Enum\RecycleBinResourceType;
+use Dtyq\SuperMagic\Domain\RecycleBin\Service\RecycleBinDomainService;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\DeleteEventSource;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\DirectoryDeletedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileDeletedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FilesBatchDeletedEvent;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
+use Dtyq\SuperMagic\Domain\SuperAgent\Service\WorkspaceDomainService;
+use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
 use Hyperf\Logger\LoggerFactory;
@@ -27,7 +33,10 @@ class FileRecycleBinSubscriber implements ListenerInterface
     private readonly LoggerInterface $logger;
 
     public function __construct(
-        private readonly FileRecycleBinDomainService $fileRecycleBinDomainService,
+        private readonly RecycleBinDomainService $recycleBinDomainService,
+        private readonly TaskFileDomainService $taskFileDomainService,
+        private readonly ProjectDomainService $projectDomainService,
+        private readonly WorkspaceDomainService $workspaceDomainService,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(self::class);
@@ -66,7 +75,7 @@ class FileRecycleBinSubscriber implements ListenerInterface
             return;
         }
 
-        $this->fileRecycleBinDomainService->recordFileDeletion(
+        $this->recordFileDeletion(
             $event->getFileEntity(),
             $event->getUserId(),
             $event->getSource()
@@ -79,7 +88,7 @@ class FileRecycleBinSubscriber implements ListenerInterface
             return;
         }
 
-        $this->fileRecycleBinDomainService->recordFileDeletion(
+        $this->recordFileDeletion(
             $event->getDirectoryEntity(),
             $event->getUserAuthorization()->getId(),
             $event->getSource()
@@ -92,11 +101,113 @@ class FileRecycleBinSubscriber implements ListenerInterface
             return;
         }
 
-        $this->fileRecycleBinDomainService->recordFiles($event->getAllEntities(), $event->getUserId(), $event->getSource());
+        $fileEntities = $event->getAllEntities();
+        $relativePathMap = $this->buildRelativePathMap($fileEntities, $event->getProjectId());
+
+        foreach ($fileEntities as $fileEntity) {
+            $this->recordFileDeletion(
+                $fileEntity,
+                $event->getUserId(),
+                $event->getSource(),
+                $relativePathMap[$fileEntity->getFileId()] ?? null
+            );
+        }
     }
 
     private function shouldRecordSource(DeleteEventSource $source): bool
     {
         return in_array($source, [DeleteEventSource::User, DeleteEventSource::Agent], true);
+    }
+
+    private function recordFileDeletion(
+        TaskFileEntity $fileEntity,
+        string $deletedBy,
+        DeleteEventSource $source,
+        ?string $relativeFilePath = null
+    ): void {
+        $fileId = (int) $fileEntity->getFileId();
+        if ($fileId <= 0) {
+            return;
+        }
+
+        $existing = $this->recycleBinDomainService->findByResource(RecycleBinResourceType::File, $fileId);
+        if ($existing !== null) {
+            return;
+        }
+
+        $project = $this->projectDomainService->getProjectNotUserId($fileEntity->getProjectId());
+        $workspace = null;
+        if ($project !== null && $project->getWorkspaceId() !== null) {
+            $workspace = $this->workspaceDomainService->getWorkspaceDetail($project->getWorkspaceId());
+        }
+
+        $originalParentId = $fileEntity->getParentId();
+        $originalParentName = '';
+        if ($originalParentId !== null && $originalParentId > 0) {
+            $parent = $this->taskFileDomainService->getByIdWithTrash($originalParentId);
+            $originalParentName = $parent?->getFileName() ?? '';
+        }
+
+        $relativeFilePath ??= $this->buildRelativeFilePath($fileEntity);
+
+        $this->recycleBinDomainService->recordDeletion(
+            resourceType: RecycleBinResourceType::File,
+            resourceId: $fileId,
+            resourceName: $fileEntity->getFileName(),
+            ownerId: $fileEntity->getUserId(),
+            deletedBy: $deletedBy,
+            parentId: $fileEntity->getProjectId(),
+            extraData: [
+                'delete_source' => $source->value,
+                'is_directory' => $fileEntity->getIsDirectory(),
+                'file_key' => $fileEntity->getFileKey(),
+                'storage_type' => $fileEntity->getStorageType()->value,
+                'source' => $fileEntity->getSource()->value,
+                'original_parent_id' => $originalParentId,
+                'original_parent_name' => $originalParentName,
+                'relative_file_path' => $relativeFilePath,
+                'project_id' => $fileEntity->getProjectId(),
+                'project_name' => $project?->getProjectName() ?? '',
+                'workspace_id' => $project?->getWorkspaceId(),
+                'workspace_name' => $workspace?->getName() ?? '',
+            ]
+        );
+    }
+
+    private function buildRelativeFilePath(TaskFileEntity $fileEntity): string
+    {
+        $pathMap = $this->buildRelativePathMap([$fileEntity], $fileEntity->getProjectId());
+
+        return $pathMap[$fileEntity->getFileId()] ?? '/';
+    }
+
+    /**
+     * @param TaskFileEntity[] $fileEntities
+     * @return array<int, string>
+     */
+    private function buildRelativePathMap(array $fileEntities, int $projectId): array
+    {
+        if (empty($fileEntities)) {
+            return [];
+        }
+
+        $parentIds = [];
+        foreach ($fileEntities as $fileEntity) {
+            $parentId = $fileEntity->getParentId();
+            if ($parentId !== null && $parentId > 0) {
+                $parentIds[$parentId] = $parentId;
+            }
+        }
+
+        $filesWithParents = empty($parentIds)
+            ? []
+            : $this->taskFileDomainService->getFilesWithParentsByIds(array_values($parentIds), $projectId);
+        $fileMap = RelativeFilePathUtil::indexByFileId($filesWithParents);
+
+        foreach ($fileEntities as $fileEntity) {
+            $fileMap[$fileEntity->getFileId()] = $fileEntity;
+        }
+
+        return RelativeFilePathUtil::buildPathMapByParentChain($fileEntities, $fileMap);
     }
 }

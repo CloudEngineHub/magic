@@ -12,7 +12,7 @@ use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Locker\LockerInterface;
 use Dtyq\SuperMagic\Domain\MagicFS\Service\MagicFSFileDomainService;
-use Dtyq\SuperMagic\Domain\RecycleBin\Service\FileRecycleBinDomainService;
+use Dtyq\SuperMagic\Domain\RecycleBin\Service\UserFileRecycleBinDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\FileSpaceType;
@@ -38,6 +38,7 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
+
 use function Hyperf\Translation\trans;
 
 /**
@@ -95,7 +96,7 @@ class FileBatchCopySubscriber extends ConsumerMessage
         private readonly FileBatchOperationStatusManager $statusManager,
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly LockerInterface $locker,
-        private readonly FileRecycleBinDomainService $fileRecycleBinDomainService,
+        private readonly UserFileRecycleBinDomainService $userFileRecycleBinDomainService,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get('FileBatchCopy');
@@ -237,19 +238,25 @@ class FileBatchCopySubscriber extends ConsumerMessage
                 if ($isSyntheticParent && $targetProject === null) {
                     throw new RuntimeException('Personal files cannot use synthetic project paths');
                 }
-                $newTargetEntity = $isSyntheticParent
-                    ? $this->resolveSyntheticParentDirectory(
-                        $node,
-                        $targetProject,
-                        $targetParentEntity->getFileId()
-                    )
-                    : $this->handleDirectory(
-                        $node,
-                        $sourceProject,
-                        $targetProject,
-                        $targetParentEntity->getFileId(),
-                        $keepBothFileIds
-                    );
+                if ($targetProject === null) {
+                    $newTargetEntity = Db::transaction(fn (): TaskFileEntity => $this->handleDirectory(
+                        $node, $sourceProject, $targetProject, $targetParentEntity->getFileId(), $keepBothFileIds
+                    ));
+                } else {
+                    $newTargetEntity = $isSyntheticParent
+                        ? $this->resolveSyntheticParentDirectory(
+                            $node,
+                            $targetProject,
+                            $targetParentEntity->getFileId()
+                        )
+                        : $this->handleDirectory(
+                            $node,
+                            $sourceProject,
+                            $targetProject,
+                            $targetParentEntity->getFileId(),
+                            $keepBothFileIds
+                        );
+                }
                 if (! $isSyntheticParent && $newTargetEntity->getFileId() === $fileId && ! in_array((string) $fileId, $keepBothFileIds, true)) {
                     $this->logger->info('Skipped directory copy because target directory is source directory itself', [
                         'source_id' => $fileId,
@@ -280,7 +287,7 @@ class FileBatchCopySubscriber extends ConsumerMessage
                             ! in_array((string) $fileEntity->getFileId(), $keepBothFileIds, true)
                         );
                         if ($existing !== null) {
-                            $this->fileRecycleBinDomainService->recordFileDeletion($existing, $dataIsolation->getCurrentUserId(), DeleteEventSource::User);
+                            $this->userFileRecycleBinDomainService->recordFileDeletion($existing, $dataIsolation->getCurrentUserId(), DeleteEventSource::User);
                         }
                         return $copied;
                     });
@@ -354,82 +361,80 @@ class FileBatchCopySubscriber extends ConsumerMessage
             throw new RuntimeException('Source directory entity not found');
         }
 
-        return Db::transaction(function () use ($oldFileEntity, $targetProject, $parentId, $keepBothFileIds): TaskFileEntity {
-            $sourceFileId = $oldFileEntity->getFileId();
-            $sourceFileIdStr = (string) $sourceFileId;
-            $sourceFileName = $oldFileEntity->getFileName();
-            $shouldKeepBoth = in_array($sourceFileIdStr, $keepBothFileIds, true);
+        $sourceFileId = $oldFileEntity->getFileId();
+        $sourceFileIdStr = (string) $sourceFileId;
+        $sourceFileName = $oldFileEntity->getFileName();
+        $shouldKeepBoth = in_array($sourceFileIdStr, $keepBothFileIds, true);
 
-            $targetFileEntity = $this->taskFileDomainService->getByProjectParentAndName(
+        $targetFileEntity = $this->taskFileDomainService->getByProjectParentAndName(
+            ($targetProject?->getId() ?? 0),
+            $parentId,
+            $sourceFileName
+        );
+
+        if ($targetFileEntity !== null && $targetFileEntity->getFileId() === $sourceFileId) {
+            if (! $shouldKeepBoth) {
+                return $oldFileEntity;
+            }
+        }
+
+        $newDirName = $sourceFileName;
+        if ($targetFileEntity !== null && $shouldKeepBoth) {
+            $newDirName = $this->generateUniqueDirectoryName(
+                $sourceFileName,
                 ($targetProject?->getId() ?? 0),
-                $parentId,
-                $sourceFileName
+                $parentId
             );
+            $targetFileEntity = null;
+        }
 
-            if ($targetFileEntity !== null && $targetFileEntity->getFileId() === $sourceFileId) {
-                if (! $shouldKeepBoth) {
-                    return $oldFileEntity;
-                }
-            }
-
-            $newDirName = $sourceFileName;
-            if ($targetFileEntity !== null && $shouldKeepBoth) {
-                $newDirName = $this->generateUniqueDirectoryName(
-                    $sourceFileName,
-                    ($targetProject?->getId() ?? 0),
-                    $parentId
-                );
-                $targetFileEntity = null;
-            }
-
-            if (! $shouldKeepBoth && $targetFileEntity !== null) {
-                // When the existing target with the same name is also a directory, reuse it
-                // (merge into it) instead of deleting and recreating. This preserves the
-                // target directory's existing children and lets inner file conflicts be
-                // resolved per-file (e.g. keep-both renames source copies to "name(1).ext").
-                if ($targetFileEntity->getIsDirectory()) {
-                    $this->logger->info('Reusing existing target directory for merge copy', [
-                        'source_id' => $sourceFileId,
-                        'existing_id' => $targetFileEntity->getFileId(),
-                        'target_parent_id' => $parentId,
-                    ]);
-
-                    return $targetFileEntity;
-                }
-
-                // Type mismatch: existing target is a file while source is a directory.
-                // Keep the original overwrite behavior by deleting the conflicting file first.
-                $this->logger->info('Deleting existing target before directory copy overwrite', [
+        if (! $shouldKeepBoth && $targetFileEntity !== null) {
+            // When the existing target with the same name is also a directory, reuse it
+            // (merge into it) instead of deleting and recreating. This preserves the
+            // target directory's existing children and lets inner file conflicts be
+            // resolved per-file (e.g. keep-both renames source copies to "name(1).ext").
+            if ($targetFileEntity->getIsDirectory()) {
+                $this->logger->info('Reusing existing target directory for merge copy', [
                     'source_id' => $sourceFileId,
                     'existing_id' => $targetFileEntity->getFileId(),
                     'target_parent_id' => $parentId,
-                    'existing_is_directory' => $targetFileEntity->getIsDirectory(),
                 ]);
 
-                $this->magicFSFileDomainService->deleteFile(
-                    (string) $targetFileEntity->getFileId(),
-                    $targetFileEntity->getIsDirectory()
-                );
-                if (! $oldFileEntity->isProjectFile()) {
-                    $this->fileRecycleBinDomainService->recordFileDeletion($targetFileEntity, $oldFileEntity->getUserId(), DeleteEventSource::User);
-                }
-                $targetFileEntity = null;
+                return $targetFileEntity;
             }
 
-            $createdDirectory = $this->magicFSFileDomainService->createFile(
-                $newDirName,
-                (string) $parentId,
-                true,
-                null,
-                $oldFileEntity->getSort(),
-                null,
-                TaskFileSource::COPY,
-                spaceType: $oldFileEntity->getSpaceType(),
+            // Type mismatch: existing target is a file while source is a directory.
+            // Keep the original overwrite behavior by deleting the conflicting file first.
+            $this->logger->info('Deleting existing target before directory copy overwrite', [
+                'source_id' => $sourceFileId,
+                'existing_id' => $targetFileEntity->getFileId(),
+                'target_parent_id' => $parentId,
+                'existing_is_directory' => $targetFileEntity->getIsDirectory(),
+            ]);
+
+            $this->magicFSFileDomainService->deleteFile(
+                (string) $targetFileEntity->getFileId(),
+                $targetFileEntity->getIsDirectory()
             );
-            $createdDirectory->setMetadata($oldFileEntity->getMetadata());
-            $createdDirectory->setDisplayConfig($oldFileEntity->getDisplayConfig());
-            return $this->taskFileDomainService->updateById($createdDirectory);
-        });
+            if (! $oldFileEntity->isProjectFile()) {
+                $this->userFileRecycleBinDomainService->recordFileDeletion($targetFileEntity, $oldFileEntity->getUserId(), DeleteEventSource::User);
+            }
+            $targetFileEntity = null;
+        }
+
+        $createdDirectory = $this->magicFSFileDomainService->createFile(
+            $newDirName,
+            (string) $parentId,
+            true,
+            null,
+            $oldFileEntity->getSort(),
+            null,
+            TaskFileSource::COPY,
+            spaceType: $targetProject === null ? FileSpaceType::User->value : '',
+        );
+        $createdDirectory->setMetadata($oldFileEntity->getMetadata());
+        $createdDirectory->setDisplayConfig($oldFileEntity->getDisplayConfig());
+        return $this->taskFileDomainService->updateById($createdDirectory);
     }
 
     /**

@@ -176,7 +176,7 @@ class FileBatchCopyEvent
             'target_parent_id' => $this->targetParentId,
             'keep_both_file_ids' => $this->keepBothFileIds,
             'preserve_parent_path' => $this->preserveParentPath,
-            'space_type' => $this->spaceType->value,
+            ...($this->spaceType === FileSpaceType::User ? ['space_type' => $this->spaceType->value] : []),
         ];
     }
 

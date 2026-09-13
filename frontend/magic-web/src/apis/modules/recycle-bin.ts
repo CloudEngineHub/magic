@@ -78,8 +78,6 @@ export namespace RecycleBin {
 	}
 
 	export interface RestoreParams {
-		/** 冲突预检已经展开目录；确认后的列表不再自动扩展跳过项。 */
-		expand_directories?: boolean
 		resource_ids: string[]
 		resource_type: number
 		conflict_resolutions?: Record<
