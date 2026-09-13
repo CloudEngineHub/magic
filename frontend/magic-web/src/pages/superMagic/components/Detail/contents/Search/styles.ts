@@ -1,64 +1,45 @@
 import { createStyles } from "antd-style"
 
-export const useStyles = createStyles(({ css, token }) => ({
+export const useStyles = createStyles(({ token }) => ({
 	searchContainer: {
 		overflow: "hidden",
 		height: "100%",
+		minHeight: 0,
 		display: "flex",
 		flexDirection: "column",
 		backgroundColor: token.colorBgContainer,
 	},
-
-	searchHeader: {
+	summary: {
 		display: "flex",
 		alignItems: "center",
-		// padding: "px 10px",
-		padding: 10,
-		// borderBottom: `1px solid ${token.colorBorder}`,
-		position: "relative",
-		justifyContent: "center",
-		flex: "none",
-		backgroundColor: token.colorFillQuaternary,
+		gap: 8,
+		minWidth: 0,
+		fontSize: 13,
+		whiteSpace: "nowrap",
+		"& svg": { flexShrink: 0 },
 	},
-
-	searchInput: {
-		height: 32,
-		borderRadius: 1000,
-		// border: "none !important",
-		border: `1px solid ${token.colorBorder} !important`,
-		outline: "none !important",
-		boxShadow: "none !important",
-		padding: "6px 20px 6px 10px",
-		// backgroundColor: `${token.colorFillTertiary} !important`,
-		backgroundColor: token.magicColorUsages.bg[1],
+	batchSummary: {
+		color: token.colorTextSecondary,
+		fontSize: 12,
 	},
-
-	suffixContainer: css`
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		flex-shrink: 1;
-		min-width: 0;
-		margin-left: 8px;
-	`,
-
-	suffix: css`
-		padding: 2px 10px;
-		height: 20px;
-		white-space: nowrap;
-		font-size: 12px;
-		line-height: 16px;
-		flex-shrink: 1;
-		border-radius: 1000px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	`,
-	suffixSelected: css`
-		background: #eef3fd;
-		color: ${token.colorPrimary};
-	`,
-	suffixDefault: css`
-		background: rgba(46, 47, 56, 0.05);
-		color: ${token.colorText};
-	`,
+	queryArea: {
+		padding: "20px 28px 0",
+		flexShrink: 0,
+		"@media (max-width: 768px)": { padding: "16px 16px 0" },
+	},
+	query: {
+		display: "flex",
+		alignItems: "flex-start",
+		gap: 12,
+		padding: "12px 16px",
+		border: `1px solid ${token.colorBorderSecondary}`,
+		borderRadius: 22,
+		color: token.colorText,
+		fontSize: 15,
+		lineHeight: 1.6,
+		// 详情面板可以独立变窄；完整查询允许折行，不通过字符串裁剪丢失检索条件。
+		overflowWrap: "anywhere",
+		"& svg": { flexShrink: 0, marginTop: 4, color: token.colorTextSecondary },
+		"& span": { minWidth: 0 },
+	},
 }))

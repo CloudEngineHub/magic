@@ -309,9 +309,11 @@ class WebSearch(BaseTool[WebSearchParams]):
     def _handle_requirements_results(self, requirements_data: List[Dict[str, Any]], all_results) -> WebSearchToolResult:
         """格式化多个需求的搜索结果"""
         result = WebSearchToolResult(content="")
+        query_by_keyword: dict[str, str] = {}
 
         for req_data, search_results in zip(requirements_data, all_results):
             result_key = f"{req_data['name']} ({req_data['query']})"
+            query_by_keyword[result_key] = req_data['query']
             # 驱动返回 List[SearchResultItem]，直接转为 SearchResult
             output_models = [
                 SearchResult(
@@ -334,6 +336,8 @@ class WebSearch(BaseTool[WebSearchParams]):
             result.output_results[result_key] = output_models
             result.search_results[result_key] = search_models
 
+        # 详情显示真实查询词，分组身份仍保留 name(query)；不改模型输出，也不重新解析请求。
+        result.extra_info['search_queries'] = query_by_keyword
         return result
 
     async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None) -> Optional[ToolDetail]:
@@ -347,6 +351,7 @@ class WebSearch(BaseTool[WebSearchParams]):
 
             return ToolDetailFactory.create_search_detail_from_search_results(
                 search_results=result.search_results,
+                query_by_keyword=result.extra_info.get('search_queries'),
             )
         except Exception as e:
             logger.error(f"生成工具详情失败: {e!s}")
