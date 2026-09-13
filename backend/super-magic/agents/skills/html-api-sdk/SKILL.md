@@ -360,7 +360,7 @@ Requires `project.message.write` in `app.json.permissions.scopes`.
 
 Creates new topic. `message`: plain text or tiptap JSON (see [tiptap ref](references/tiptap-json-format.md)).
 
-When this API is called from a published micro-app preview, the host automatically prepends the current micro-app as a trusted `@micro_app` mention. The referenced project is mounted read-only for Agent-side companion workflows under `.magic/skills/`. Name the companion skill in the task message, for example `createTopicAndSend("Use the inventory_manager Skill to find low-stock products and generate replenishment suggestions.", { model: selectedModelId })`, where `selectedModelId` is chosen by the page model selector and defaults to the first available model. When a task needs one exact skill file, the app may still include an explicit `@file` mention.
+When this API is called from a published micro-app preview, the host automatically prepends the current micro-app as a trusted `@micro_app` mention. The referenced project is mounted read-only. Name the companion skill in the task message, for example `createTopicAndSend("Use the inventory_manager Skill to find low-stock products and generate replenishment suggestions.", { model: selectedModelId })`, where `selectedModelId` is chosen by the page model selector and defaults to the first available model. The Agent loads that skill with `read_skills(skill_names=["inventory_manager"], project_id=...)` using the mention's `project_id`. When a task needs one exact skill file, the app may still include an explicit `@file` mention.
 
 ```javascript
 // Plain text

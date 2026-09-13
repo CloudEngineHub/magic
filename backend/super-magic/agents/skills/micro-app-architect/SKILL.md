@@ -82,7 +82,7 @@ window.Magic.project.createTopicAndSend(
 
 When a published micro-app calls `createTopicAndSend` or `sendMessage`, the host automatically prepends the current micro-app's trusted `@micro_app` mention. The micro-app only describes the task and Skill name in the message; it does not pass `skillName`, `appId`, or `projectId` through the public API and cannot forge the micro-app identity.
 
-After receiving the mention, the Agent treats the referenced project as a read-only source and checks its `.magic/skills/` directory first to select a matching Skill from the task message. If the directory, target Skill, or share permission is unavailable, it continues as a normal task without bypassing permissions or writing to the source project.
+After receiving the mention, load a matching companion Skill with `read_skills(skill_names=[...], project_id=...)` using the `project_id` printed under that mention. Companion skills live on the mounted source project's `.magic/skills/` and are not listed in `<available_skills>`. If the directory, target Skill, or share permission is unavailable, continue as a normal task without falling back to a same-named workspace skill, bypassing permissions, or writing to the source project.
 
 When one exact Skill file is required, the message may still include an explicit `@file` mention for `.magic/skills/<skill-name>/SKILL.md`; this supplements rather than replaces the host-provided `@micro_app` identity context.
 

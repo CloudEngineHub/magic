@@ -143,6 +143,7 @@ class MentionContextBuilder:
                     "type": "micro_app",
                     "app_id": app_id,
                     "app_name": str(entry.get("app_name") or app_id).strip(),
+                    "project_id": str(entry.get("project_id") or "").strip(),
                 }
                 tip_text = await handler.get_tip(synthetic, agent_context)
                 if tip_text:

@@ -85,6 +85,7 @@ The referenced project is mounted read-only for Agent-side companion skills. The
 ## `@skill` vs `@file .magic/skills/<name>/SKILL.md`
 - `@skill` → platform-registered skill, resolved by platform
 - `@file` with `.magic/skills/<name>/SKILL.md` → workspace companion skill, agent reads as instructions
+- Host-prepended `@micro_app` is the identity for published-app tasks; companion skills on the source project are loaded with `read_skills(..., project_id=...)` from that mention, not via `@skill`
 
 ## Example
 ```javascript

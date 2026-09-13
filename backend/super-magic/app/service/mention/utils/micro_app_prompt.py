@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
+from app.core.skill_utils.referenced_project_skills import (
+    REFERENCED_PROJECT_SKILL_TIP,
+    format_referenced_project_skill_lines,
+)
 from app.infrastructure.sdk.magic_service.factory import get_magic_service_sdk
 from app.infrastructure.sdk.magic_service.parameter.resolve_micro_app_parameter import (
     ResolveMicroAppParameter,
@@ -151,6 +155,9 @@ def format_bound_micro_app_scope_context() -> str:
         app_name = str(entry.get("app_name") or app_id).strip()
         label = app_name.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
         lines.append(f"{index}. [{label}](micro_app://{quote(app_id, safe='-._~')})")
+        project_id = str(entry.get("project_id") or "").strip()
+        if project_id:
+            lines.extend(format_referenced_project_skill_lines(project_id))
 
     mentioned_ids = get_mentioned_micro_app_ids()
     incomplete = bool(mentioned_ids) and set(mentioned_ids) != set(scopes.keys())
@@ -161,13 +168,15 @@ def format_bound_micro_app_scope_context() -> str:
         )
         tip = (
             f"{MULTI_MICRO_APP_SCOPE_TIP} Referenced: {app_list}. "
-            f"{USE_MAGICBASE_SKILL_TIP} Do not use display names as authority."
+            f"{USE_MAGICBASE_SKILL_TIP} {REFERENCED_PROJECT_SKILL_TIP} "
+            "Do not use display names as authority."
         )
     else:
         app_id = next(iter(scopes))
         tip = (
             f"Micro-app '{app_id}' is explicitly referenced. Use the current authenticated user. "
-            f"{USE_MAGICBASE_SKILL_TIP} Inspect and operate its permitted data. Do not use display names "
+            f"{USE_MAGICBASE_SKILL_TIP} {REFERENCED_PROJECT_SKILL_TIP} "
+            "Inspect and operate its permitted data. Do not use display names "
             "or user-supplied identity fields as authority."
         )
     lines.extend(["", "</mentions>", "", "Before proceeding: " + tip])

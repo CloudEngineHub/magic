@@ -532,6 +532,8 @@ def test_format_bound_micro_app_scope_context_renders_typed_links(tmp_path, monk
 
     context = format_bound_micro_app_scope_context()
     assert "[App One](micro_app://app-1)" in context
+    assert "project_id: project-1" in context
     assert "use-magicbase" in context
     assert "built-in system skill" in context
     assert "read_skills" in context
+    assert "project_id" in context
