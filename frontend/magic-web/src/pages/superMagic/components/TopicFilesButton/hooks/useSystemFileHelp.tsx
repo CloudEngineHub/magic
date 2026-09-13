@@ -1,7 +1,15 @@
+import { UserRound, Users, FileText, Headphones, ListChecks } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { HelpArticle, type HelpGuide } from "@/components/shadcn-composed/context-help/HelpArticle"
-import type { SystemFileHelpKind } from "../utils/magic-system-folder"
+import {
+	HelpArticle,
+	type HelpArticleProps,
+} from "@/components/shadcn-composed/context-help/HelpArticle"
 import type { HelpDefinition } from "@/components/shadcn-composed/context-help"
+import type { SystemFileHelpKind } from "../utils/magic-system-folder"
+import type { FilePresentation } from "../utils/file-presentation"
+import type { AttachmentItem } from "./types"
+import { FileResourceIcon } from "../components/FileResourceIcon"
+import { FileDirectoryView } from "../components/FileDirectoryView"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 export type { SystemFileHelpKind } from "../utils/magic-system-folder"
 
@@ -9,372 +17,296 @@ export interface FileHelpPresentation {
 	label: string
 	help: HelpDefinition
 }
+export interface FileHelpDetail extends Omit<HelpArticleProps, "visual"> {
+	preview?: string[]
+	scope?: string
+	exampleRoot?: string
+	files?: Array<{ path: string; directory?: boolean; description?: string; type?: string }>
+}
+
+/** 静态教学目录只适配既有列表的数据结构；不读取用户文件或连接文件操作。 */
+function FileHelpDirectory({
+	detail,
+	presentation,
+}: {
+	detail: FileHelpDetail
+	presentation?: FilePresentation
+}) {
+	const { t } = useTranslation("super")
+	const items: AttachmentItem[] = []
+	const nodes = new Map<string, AttachmentItem>()
+	const descriptions: Record<string, string> = {}
+	for (const file of detail.files ?? []) {
+		const segments = file.path.split("/")
+		let siblings = items
+		for (let i = 0; i < segments.length; i++) {
+			const path = segments.slice(0, i + 1).join("/")
+			let node = nodes.get(path)
+			if (!node) {
+				node = {
+					file_id: path,
+					file_name: segments[i],
+					relative_file_path: path,
+					is_directory: i < segments.length - 1 || file.directory,
+					file_extension: segments[i].split(".").at(-1),
+					children: [],
+				}
+				nodes.set(path, node)
+				siblings.push(node)
+			}
+			if (i === segments.length - 1 && file.type) node.display_config = { type: file.type }
+			siblings = node.children ?? []
+		}
+		descriptions[file.path] = file.description ?? ""
+	}
+	const exampleRoot = detail.exampleRoot ? nodes.get(detail.exampleRoot) : undefined
+	return (
+		<section className="space-y-3">
+			<h3 className="font-semibold">{detail.guide.diagramTitle}</h3>
+			<FileDirectoryView
+				mode="example"
+				items={exampleRoot ? [exampleRoot] : items}
+				rootName={t("topicFiles.helpDirectoryExample")}
+				fileHelpContext={presentation?.context ?? { kind: "unknown" }}
+				descriptions={descriptions}
+			/>
+		</section>
+	)
+}
+
+/** 共同组装文件身份、悬浮要点与延迟正文，通用帮助组件不依赖文件业务。 */
+export function createFileHelpPresentation(
+	label: string,
+	summary: string,
+	detail: FileHelpDetail,
+	visual: HelpArticleProps["visual"],
+	presentation?: FilePresentation,
+): FileHelpPresentation {
+	return {
+		label,
+		help: {
+			title: label,
+			summary,
+			points: detail.preview,
+			identity: presentation
+				? {
+						name: presentation.name,
+						scope: detail.scope,
+						renderIcon: (size) => (
+							<FileResourceIcon presentation={presentation} size={size} />
+						),
+					}
+				: undefined,
+			renderBody: () => (
+				<HelpArticle
+					{...detail}
+					visual={visual}
+					guide={{
+						...detail.guide,
+						steps: detail.guide.steps.map((step, index) => ({
+							...step,
+							icon:
+								presentation?.systemKind === "projectInstructions" ? (
+									index === 1 ? (
+										<FileResourceIcon presentation={presentation} size={24} />
+									) : index === 0 ? (
+										<UserRound size={20} />
+									) : (
+										<Users size={20} />
+									)
+								) : presentation?.type === "audio" ? (
+									index === 0 ? (
+										<Headphones size={20} />
+									) : index === 1 ? (
+										<FileText size={20} />
+									) : (
+										<ListChecks size={20} />
+									)
+								) : index === 0 && presentation ? (
+									<FileResourceIcon presentation={presentation} size={20} />
+								) : undefined,
+						})),
+					}}
+					illustration={
+						detail.files?.length ? (
+							<FileHelpDirectory detail={detail} presentation={presentation} />
+						) : undefined
+					}
+					sampleIdentity={
+						presentation ? (
+							<>
+								<FileResourceIcon presentation={presentation} size={16} />
+								<span>{presentation.name}</span>
+							</>
+						) : undefined
+					}
+				/>
+			),
+		},
+	}
+}
 
 /** 相同交互复用帮助组件；用途、作用范围与读取方式按真实场景区分。 */
 export function useSystemFileHelp(
 	kind: SystemFileHelpKind | undefined,
+	presentation?: FilePresentation,
 ): FileHelpPresentation | undefined {
 	const { t } = useTranslation("super")
 	const brand = getClawBrandTranslationValues()
 	switch (kind) {
 		case "clawSoul":
-			return {
-				label: t("topicFiles.clawPlaygroundTags.guidelines", brand),
-				help: {
-					title: t("topicFiles.clawPlaygroundTags.guidelines", brand),
-					summary: t("topicFiles.clawPlaygroundHelp.guidelines", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.clawPlaygroundDetails.guidelines.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.clawPlaygroundDetails.guidelines.usage", brand)}
-							example={t(
-								"topicFiles.clawPlaygroundDetails.guidelines.example",
-								brand,
-							)}
-							note={t("topicFiles.clawPlaygroundDetails.guidelines.note", brand)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.clawPlaygroundTags.guidelines", brand),
+				t("topicFiles.clawPlaygroundHelp.guidelines", brand),
+				t("topicFiles.clawPlaygroundDetails.guidelines", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 		case "clawIdentity":
-			return {
-				label: t("topicFiles.clawPlaygroundTags.identityInfo", brand),
-				help: {
-					title: t("topicFiles.clawPlaygroundTags.identityInfo", brand),
-					summary: t("topicFiles.clawPlaygroundHelp.identityInfo", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.clawPlaygroundDetails.identityInfo.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.clawPlaygroundDetails.identityInfo.usage", brand)}
-							example={t(
-								"topicFiles.clawPlaygroundDetails.identityInfo.example",
-								brand,
-							)}
-							note={t("topicFiles.clawPlaygroundDetails.identityInfo.note", brand)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.clawPlaygroundTags.identityInfo", brand),
+				t("topicFiles.clawPlaygroundHelp.identityInfo", brand),
+				t("topicFiles.clawPlaygroundDetails.identityInfo", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 		case "projectMagic":
-			return {
-				label: t("topicFiles.systemFiles.labels.projectMagic", brand),
-				help: {
-					title: t("topicFiles.systemFiles.labels.projectMagic", brand),
-					summary: t("topicFiles.systemFiles.help.projectMagic", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="tree"
-							guide={
-								t("topicFiles.systemFiles.details.projectMagic.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.systemFiles.details.projectMagic.usage", brand)}
-							example={t(
-								"topicFiles.systemFiles.details.projectMagic.example",
-								brand,
-							)}
-							note={t("topicFiles.systemFiles.details.projectMagic.note", brand)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.systemFiles.labels.projectMagic", brand),
+				t("topicFiles.systemFiles.help.projectMagic", brand),
+				t("topicFiles.systemFiles.details.projectMagic", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
 		case "userMagic":
-			return {
-				label: t("topicFiles.systemFiles.labels.userMagic", brand),
-				help: {
-					title: t("topicFiles.systemFiles.labels.userMagic", brand),
-					summary: t("topicFiles.systemFiles.help.userMagic", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="tree"
-							guide={
-								t("topicFiles.systemFiles.details.userMagic.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.systemFiles.details.userMagic.usage", brand)}
-							example={t("topicFiles.systemFiles.details.userMagic.example", brand)}
-							note={t("topicFiles.systemFiles.details.userMagic.note", brand)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.systemFiles.labels.userMagic", brand),
+				t("topicFiles.systemFiles.help.userMagic", brand),
+				t("topicFiles.systemFiles.details.userMagic", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
 		case "clawMagic":
-			return {
-				label: t("topicFiles.systemFiles.labels.clawMagic", brand),
-				help: {
-					title: t("topicFiles.systemFiles.labels.clawMagic", brand),
-					summary: t("topicFiles.systemFiles.help.clawMagic", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="tree"
-							guide={
-								t("topicFiles.systemFiles.details.clawMagic.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.systemFiles.details.clawMagic.usage", brand)}
-							example={t("topicFiles.systemFiles.details.clawMagic.example", brand)}
-							note={t("topicFiles.systemFiles.details.clawMagic.note", brand)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.systemFiles.labels.clawMagic", brand),
+				t("topicFiles.systemFiles.help.clawMagic", brand),
+				t("topicFiles.systemFiles.details.clawMagic", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
 		case "crewMagic":
-			return {
-				label: t("topicFiles.systemFiles.labels.crewMagic", brand),
-				help: {
-					title: t("topicFiles.systemFiles.labels.crewMagic", brand),
-					summary: t("topicFiles.systemFiles.help.crewMagic", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="tree"
-							guide={
-								t("topicFiles.systemFiles.details.crewMagic.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.systemFiles.details.crewMagic.usage", brand)}
-							example={t("topicFiles.systemFiles.details.crewMagic.example", brand)}
-							note={t("topicFiles.systemFiles.details.crewMagic.note", brand)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.systemFiles.labels.crewMagic", brand),
+				t("topicFiles.systemFiles.help.crewMagic", brand),
+				t("topicFiles.systemFiles.details.crewMagic", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
 		case "projectInstructions":
-			return {
-				label: t("topicFiles.systemFiles.labels.projectInstructions", brand),
-				help: {
-					title: t("topicFiles.systemFiles.labels.projectInstructions", brand),
-					summary: t("topicFiles.systemFiles.help.projectInstructions", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="flow"
-							guide={
-								t("topicFiles.systemFiles.details.projectInstructions.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t(
-								"topicFiles.systemFiles.details.projectInstructions.usage",
-								brand,
-							)}
-							example={t(
-								"topicFiles.systemFiles.details.projectInstructions.example",
-								brand,
-							)}
-							note={t(
-								"topicFiles.systemFiles.details.projectInstructions.note",
-								brand,
-							)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.systemFiles.labels.projectInstructions", brand),
+				t("topicFiles.systemFiles.help.projectInstructions", brand),
+				t("topicFiles.systemFiles.details.projectInstructions", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"flow",
+				presentation,
+			)
 		case "directoryInstructions":
-			return {
-				label: t("topicFiles.systemFiles.labels.directoryInstructions", brand),
-				help: {
-					title: t("topicFiles.systemFiles.labels.directoryInstructions", brand),
-					summary: t("topicFiles.systemFiles.help.directoryInstructions", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="tree"
-							guide={
-								t("topicFiles.systemFiles.details.directoryInstructions.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t(
-								"topicFiles.systemFiles.details.directoryInstructions.usage",
-								brand,
-							)}
-							example={t(
-								"topicFiles.systemFiles.details.directoryInstructions.example",
-								brand,
-							)}
-							note={t(
-								"topicFiles.systemFiles.details.directoryInstructions.note",
-								brand,
-							)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.systemFiles.labels.directoryInstructions", brand),
+				t("topicFiles.systemFiles.help.directoryInstructions", brand),
+				t("topicFiles.systemFiles.details.directoryInstructions", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
 		case "clawInstructions":
-			return {
-				label: t("topicFiles.systemFiles.labels.clawInstructions", brand),
-				help: {
-					title: t("topicFiles.systemFiles.labels.clawInstructions", brand),
-					summary: t("topicFiles.systemFiles.help.clawInstructions", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.systemFiles.details.clawInstructions.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t(
-								"topicFiles.systemFiles.details.clawInstructions.usage",
-								brand,
-							)}
-							example={t(
-								"topicFiles.systemFiles.details.clawInstructions.example",
-								brand,
-							)}
-							note={t("topicFiles.systemFiles.details.clawInstructions.note", brand)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.systemFiles.labels.clawInstructions", brand),
+				t("topicFiles.systemFiles.help.clawInstructions", brand),
+				t("topicFiles.systemFiles.details.clawInstructions", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 		case "crewInstructions":
-			return {
-				label: t("topicFiles.systemFiles.labels.crewInstructions", brand),
-				help: {
-					title: t("topicFiles.systemFiles.labels.crewInstructions", brand),
-					summary: t("topicFiles.systemFiles.help.crewInstructions", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.systemFiles.details.crewInstructions.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t(
-								"topicFiles.systemFiles.details.crewInstructions.usage",
-								brand,
-							)}
-							example={t(
-								"topicFiles.systemFiles.details.crewInstructions.example",
-								brand,
-							)}
-							note={t("topicFiles.systemFiles.details.crewInstructions.note", brand)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.systemFiles.labels.crewInstructions", brand),
+				t("topicFiles.systemFiles.help.crewInstructions", brand),
+				t("topicFiles.systemFiles.details.crewInstructions", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 		case "agentInstructions":
-			return {
-				label: t("topicFiles.systemFiles.labels.agentInstructions", brand),
-				help: {
-					title: t("topicFiles.systemFiles.labels.agentInstructions", brand),
-					summary: t("topicFiles.systemFiles.help.agentInstructions", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.systemFiles.details.agentInstructions.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t(
-								"topicFiles.systemFiles.details.agentInstructions.usage",
-								brand,
-							)}
-							example={t(
-								"topicFiles.systemFiles.details.agentInstructions.example",
-								brand,
-							)}
-							note={t("topicFiles.systemFiles.details.agentInstructions.note", brand)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.systemFiles.labels.agentInstructions", brand),
+				t("topicFiles.systemFiles.help.agentInstructions", brand),
+				t("topicFiles.systemFiles.details.agentInstructions", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 		case "instructionFile":
-			return {
-				label: t("topicFiles.systemFiles.labels.instructionFile", brand),
-				help: {
-					title: t("topicFiles.systemFiles.labels.instructionFile", brand),
-					summary: t("topicFiles.systemFiles.help.instructionFile", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.systemFiles.details.instructionFile.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.systemFiles.details.instructionFile.usage", brand)}
-							example={t(
-								"topicFiles.systemFiles.details.instructionFile.example",
-								brand,
-							)}
-							note={t("topicFiles.systemFiles.details.instructionFile.note", brand)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.systemFiles.labels.instructionFile", brand),
+				t("topicFiles.systemFiles.help.instructionFile", brand),
+				t("topicFiles.systemFiles.details.instructionFile", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 		case "crewIdentity":
-			return {
-				label: t("topicFiles.systemFiles.labels.crewIdentity", brand),
-				help: {
-					title: t("topicFiles.systemFiles.labels.crewIdentity", brand),
-					summary: t("topicFiles.systemFiles.help.crewIdentity", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.systemFiles.details.crewIdentity.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.systemFiles.details.crewIdentity.usage", brand)}
-							example={t(
-								"topicFiles.systemFiles.details.crewIdentity.example",
-								brand,
-							)}
-							note={t("topicFiles.systemFiles.details.crewIdentity.note", brand)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.systemFiles.labels.crewIdentity", brand),
+				t("topicFiles.systemFiles.help.crewIdentity", brand),
+				t("topicFiles.systemFiles.details.crewIdentity", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 		case "crewSoul":
-			return {
-				label: t("topicFiles.systemFiles.labels.crewSoul", brand),
-				help: {
-					title: t("topicFiles.systemFiles.labels.crewSoul", brand),
-					summary: t("topicFiles.systemFiles.help.crewSoul", brand),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.systemFiles.details.crewSoul.guide", {
-									returnObjects: true,
-									...brand,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.systemFiles.details.crewSoul.usage", brand)}
-							example={t("topicFiles.systemFiles.details.crewSoul.example", brand)}
-							note={t("topicFiles.systemFiles.details.crewSoul.note", brand)}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.systemFiles.labels.crewSoul", brand),
+				t("topicFiles.systemFiles.help.crewSoul", brand),
+				t("topicFiles.systemFiles.details.crewSoul", {
+					returnObjects: true,
+					...brand,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 	}
 }

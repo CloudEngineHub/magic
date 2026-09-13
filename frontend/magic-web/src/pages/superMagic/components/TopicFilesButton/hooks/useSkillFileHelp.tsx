@@ -1,349 +1,211 @@
 import { useTranslation } from "react-i18next"
-import { HelpArticle, type HelpGuide } from "@/components/shadcn-composed/context-help/HelpArticle"
 import type { SkillFileKind } from "../utils/skill-file-structure"
-import type { FileHelpPresentation } from "./useSystemFileHelp"
+import type { FilePresentation } from "../utils/file-presentation"
+import {
+	createFileHelpPresentation,
+	type FileHelpDetail,
+	type FileHelpPresentation,
+} from "./useSystemFileHelp"
 
 /** 相同交互复用帮助组件；用途、作用范围与读取方式按真实场景区分。 */
 export function useSkillFileHelp(
 	kind: SkillFileKind | undefined,
+	presentation?: FilePresentation,
 ): FileHelpPresentation | undefined {
 	const { t } = useTranslation("super")
+	if (kind === "library") {
+		const owner = presentation?.context.kind
+		if (!owner || owner === "unknown")
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.libraryScopes.unknown.label"),
+				t("topicFiles.skillStructure.libraryScopes.unknown.summary"),
+				t("topicFiles.skillStructure.libraryScopes.unknown", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
+		if (owner === "user")
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.libraryScopes.user.label"),
+				t("topicFiles.skillStructure.libraryScopes.user.summary"),
+				t("topicFiles.skillStructure.libraryScopes.user", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
+		if (owner === "crew")
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.libraryScopes.crew.label"),
+				t("topicFiles.skillStructure.libraryScopes.crew.summary"),
+				t("topicFiles.skillStructure.libraryScopes.crew", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
+		if (owner === "claw")
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.libraryScopes.claw.label"),
+				t("topicFiles.skillStructure.libraryScopes.claw.summary"),
+				t("topicFiles.skillStructure.libraryScopes.claw", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
+	}
 	switch (kind) {
 		case "library":
-			return {
-				label: t("topicFiles.skillStructure.labels.library"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.library"),
-					summary: t("topicFiles.skillStructure.help.library"),
-					renderBody: () => (
-						<HelpArticle
-							visual="tree"
-							guide={
-								t("topicFiles.skillStructure.details.library.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.library.usage")}
-							example={t("topicFiles.skillStructure.details.library.example")}
-							note={t("topicFiles.skillStructure.details.library.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.library"),
+				t("topicFiles.skillStructure.help.library"),
+				t("topicFiles.skillStructure.details.library", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
 		case "skill":
-			return {
-				label: t("topicFiles.skillStructure.labels.skill"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.skill"),
-					summary: t("topicFiles.skillStructure.help.skill"),
-					renderBody: () => (
-						<HelpArticle
-							visual="tree"
-							guide={
-								t("topicFiles.skillStructure.details.skill.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.skill.usage")}
-							example={t("topicFiles.skillStructure.details.skill.example")}
-							note={t("topicFiles.skillStructure.details.skill.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.skill"),
+				t("topicFiles.skillStructure.help.skill"),
+				t("topicFiles.skillStructure.details.skill", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
 		case "entry":
-			return {
-				label: t("topicFiles.skillStructure.labels.entry"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.entry"),
-					summary: t("topicFiles.skillStructure.help.entry"),
-					renderBody: () => (
-						<HelpArticle
-							visual="flow"
-							guide={
-								t("topicFiles.skillStructure.details.entry.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.entry.usage")}
-							example={t("topicFiles.skillStructure.details.entry.example")}
-							note={t("topicFiles.skillStructure.details.entry.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.entry"),
+				t("topicFiles.skillStructure.help.entry"),
+				t("topicFiles.skillStructure.details.entry", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"flow",
+				presentation,
+			)
 		case "references":
-			return {
-				label: t("topicFiles.skillStructure.labels.references"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.references"),
-					summary: t("topicFiles.skillStructure.help.references"),
-					renderBody: () => (
-						<HelpArticle
-							visual="tree"
-							guide={
-								t("topicFiles.skillStructure.details.references.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.references.usage")}
-							example={t("topicFiles.skillStructure.details.references.example")}
-							note={t("topicFiles.skillStructure.details.references.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.references"),
+				t("topicFiles.skillStructure.help.references"),
+				t("topicFiles.skillStructure.details.references", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
 		case "scripts":
-			return {
-				label: t("topicFiles.skillStructure.labels.scripts"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.scripts"),
-					summary: t("topicFiles.skillStructure.help.scripts"),
-					renderBody: () => (
-						<HelpArticle
-							visual="flow"
-							guide={
-								t("topicFiles.skillStructure.details.scripts.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.scripts.usage")}
-							example={t("topicFiles.skillStructure.details.scripts.example")}
-							note={t("topicFiles.skillStructure.details.scripts.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.scripts"),
+				t("topicFiles.skillStructure.help.scripts"),
+				t("topicFiles.skillStructure.details.scripts", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"flow",
+				presentation,
+			)
 		case "assets":
-			return {
-				label: t("topicFiles.skillStructure.labels.assets"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.assets"),
-					summary: t("topicFiles.skillStructure.help.assets"),
-					renderBody: () => (
-						<HelpArticle
-							visual="tree"
-							guide={
-								t("topicFiles.skillStructure.details.assets.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.assets.usage")}
-							example={t("topicFiles.skillStructure.details.assets.example")}
-							note={t("topicFiles.skillStructure.details.assets.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.assets"),
+				t("topicFiles.skillStructure.help.assets"),
+				t("topicFiles.skillStructure.details.assets", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
 		case "templates":
-			return {
-				label: t("topicFiles.skillStructure.labels.templates"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.templates"),
-					summary: t("topicFiles.skillStructure.help.templates"),
-					renderBody: () => (
-						<HelpArticle
-							visual="flow"
-							guide={
-								t("topicFiles.skillStructure.details.templates.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.templates.usage")}
-							example={t("topicFiles.skillStructure.details.templates.example")}
-							note={t("topicFiles.skillStructure.details.templates.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.templates"),
+				t("topicFiles.skillStructure.help.templates"),
+				t("topicFiles.skillStructure.details.templates", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"flow",
+				presentation,
+			)
 		case "examples":
-			return {
-				label: t("topicFiles.skillStructure.labels.examples"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.examples"),
-					summary: t("topicFiles.skillStructure.help.examples"),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.skillStructure.details.examples.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.examples.usage")}
-							example={t("topicFiles.skillStructure.details.examples.example")}
-							note={t("topicFiles.skillStructure.details.examples.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.examples"),
+				t("topicFiles.skillStructure.help.examples"),
+				t("topicFiles.skillStructure.details.examples", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 		case "evals":
-			return {
-				label: t("topicFiles.skillStructure.labels.evals"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.evals"),
-					summary: t("topicFiles.skillStructure.help.evals"),
-					renderBody: () => (
-						<HelpArticle
-							visual="tree"
-							guide={
-								t("topicFiles.skillStructure.details.evals.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.evals.usage")}
-							example={t("topicFiles.skillStructure.details.evals.example")}
-							note={t("topicFiles.skillStructure.details.evals.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.evals"),
+				t("topicFiles.skillStructure.help.evals"),
+				t("topicFiles.skillStructure.details.evals", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
 		case "evalCases":
-			return {
-				label: t("topicFiles.skillStructure.labels.evalCases"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.evalCases"),
-					summary: t("topicFiles.skillStructure.help.evalCases"),
-					renderBody: () => (
-						<HelpArticle
-							visual="flow"
-							guide={
-								t("topicFiles.skillStructure.details.evalCases.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.evalCases.usage")}
-							example={t("topicFiles.skillStructure.details.evalCases.example")}
-							note={t("topicFiles.skillStructure.details.evalCases.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.evalCases"),
+				t("topicFiles.skillStructure.help.evalCases"),
+				t("topicFiles.skillStructure.details.evalCases", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"flow",
+				presentation,
+			)
 		case "evalInputs":
-			return {
-				label: t("topicFiles.skillStructure.labels.evalInputs"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.evalInputs"),
-					summary: t("topicFiles.skillStructure.help.evalInputs"),
-					renderBody: () => (
-						<HelpArticle
-							visual="tree"
-							guide={
-								t("topicFiles.skillStructure.details.evalInputs.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.evalInputs.usage")}
-							example={t("topicFiles.skillStructure.details.evalInputs.example")}
-							note={t("topicFiles.skillStructure.details.evalInputs.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.evalInputs"),
+				t("topicFiles.skillStructure.help.evalInputs"),
+				t("topicFiles.skillStructure.details.evalInputs", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"tree",
+				presentation,
+			)
 		case "agents":
-			return {
-				label: t("topicFiles.skillStructure.labels.agents"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.agents"),
-					summary: t("topicFiles.skillStructure.help.agents"),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.skillStructure.details.agents.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.agents.usage")}
-							example={t("topicFiles.skillStructure.details.agents.example")}
-							note={t("topicFiles.skillStructure.details.agents.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.agents"),
+				t("topicFiles.skillStructure.help.agents"),
+				t("topicFiles.skillStructure.details.agents", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 		case "readme":
-			return {
-				label: t("topicFiles.skillStructure.labels.readme"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.readme"),
-					summary: t("topicFiles.skillStructure.help.readme"),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.skillStructure.details.readme.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.readme.usage")}
-							example={t("topicFiles.skillStructure.details.readme.example")}
-							note={t("topicFiles.skillStructure.details.readme.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.readme"),
+				t("topicFiles.skillStructure.help.readme"),
+				t("topicFiles.skillStructure.details.readme", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 		case "license":
-			return {
-				label: t("topicFiles.skillStructure.labels.license"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.license"),
-					summary: t("topicFiles.skillStructure.help.license"),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.skillStructure.details.license.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.license.usage")}
-							example={t("topicFiles.skillStructure.details.license.example")}
-							note={t("topicFiles.skillStructure.details.license.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.license"),
+				t("topicFiles.skillStructure.help.license"),
+				t("topicFiles.skillStructure.details.license", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 		case "publishConfig":
-			return {
-				label: t("topicFiles.skillStructure.labels.publishConfig"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.publishConfig"),
-					summary: t("topicFiles.skillStructure.help.publishConfig"),
-					renderBody: () => (
-						<HelpArticle
-							visual="flow"
-							guide={
-								t("topicFiles.skillStructure.details.publishConfig.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.publishConfig.usage")}
-							example={t("topicFiles.skillStructure.details.publishConfig.example")}
-							note={t("topicFiles.skillStructure.details.publishConfig.note")}
-						/>
-					),
-				},
-			}
-		case "support":
-			return {
-				label: t("topicFiles.skillStructure.labels.support"),
-				help: {
-					title: t("topicFiles.skillStructure.labels.support"),
-					summary: t("topicFiles.skillStructure.help.support"),
-					renderBody: () => (
-						<HelpArticle
-							visual="document"
-							guide={
-								t("topicFiles.skillStructure.details.support.guide", {
-									returnObjects: true,
-								}) as HelpGuide
-							}
-							usage={t("topicFiles.skillStructure.details.support.usage")}
-							example={t("topicFiles.skillStructure.details.support.example")}
-							note={t("topicFiles.skillStructure.details.support.note")}
-						/>
-					),
-				},
-			}
+			return createFileHelpPresentation(
+				t("topicFiles.skillStructure.labels.publishConfig"),
+				t("topicFiles.skillStructure.help.publishConfig"),
+				t("topicFiles.skillStructure.details.publishConfig", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"flow",
+				presentation,
+			)
 	}
 }

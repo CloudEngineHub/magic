@@ -5,7 +5,7 @@ import {
 	type HelpStep,
 } from "@/components/shadcn-composed/context-help/HelpIllustration"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
-import UserSpaceFileIcon from "./UserSpaceFileIcon"
+import { FileDirectoryView } from "../TopicFilesButton/components/FileDirectoryView"
 
 // 说明中的固定目录示例只渲染图标，不查询用户文件或推断其是否存在。
 const EXAMPLE_FOLDERS: AttachmentItem[] = [
@@ -47,21 +47,21 @@ export default function UserSpaceHelpContent() {
 			<section className="space-y-2">
 				<h3 className="font-semibold">{t("userSpace.help.foldersTitle")}</h3>
 				<p className="text-muted-foreground">{t("userSpace.help.foldersDescription")}</p>
-				<ul className="divide-y rounded-lg border px-3">
-					{EXAMPLE_FOLDERS.map((item, index) => (
-						<li key={item.relative_file_path} className="flex items-start gap-3 py-2.5">
-							<span className="mt-1 inline-flex shrink-0">
-								<UserSpaceFileIcon item={item} resourceTree={EXAMPLE_FOLDERS} />
-							</span>
-							<div className="min-w-0">
-								<p className="font-medium">{item.name}</p>
-								<p className="text-xs leading-5 text-muted-foreground">
-									{descriptions[index]}
-								</p>
-							</div>
-						</li>
-					))}
-				</ul>
+				<FileDirectoryView
+					mode="example"
+					items={[
+						{ ...EXAMPLE_FOLDERS[0], children: [EXAMPLE_FOLDERS[1]] },
+						...EXAMPLE_FOLDERS.slice(2),
+					]}
+					rootName={t("topicFiles.helpDirectoryExample")}
+					fileHelpContext={{ kind: "user" }}
+					descriptions={Object.fromEntries(
+						EXAMPLE_FOLDERS.map((item, index) => [
+							item.relative_file_path ?? "",
+							descriptions[index],
+						]),
+					)}
+				/>
 			</section>
 			<section className="space-y-4">
 				<h3 className="flex items-center gap-2 font-semibold">

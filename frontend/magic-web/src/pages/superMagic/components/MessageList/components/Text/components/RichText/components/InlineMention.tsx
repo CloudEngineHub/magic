@@ -1,3 +1,5 @@
+import { observer } from "mobx-react-lite"
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { memo, useCallback, type MouseEvent } from "react"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import TSIcon from "@/components/base/TSIcon"
@@ -73,7 +75,7 @@ function InlineMarkerMention(props: InlineMentionProps) {
 	)
 }
 
-function InlineDefaultMention(props: InlineMentionProps) {
+const InlineDefaultMention = observer(function InlineDefaultMention(props: InlineMentionProps) {
 	const {
 		data,
 		onFileClick,
@@ -92,6 +94,12 @@ function InlineDefaultMention(props: InlineMentionProps) {
 	const fileData = isFileMention
 		? (data.data as ProjectFileMentionData | UploadFileMentionData)
 		: null
+	const presentation = fileData
+		? resolveFilePresentation(fileData, {
+				context: projectFilesStore?.filePresentationContext,
+				index: projectFilesStore?.filePresentationIndex,
+			})
+		: undefined
 	const mediaSource = useMentionMediaSource({
 		data,
 		uploadFile:
@@ -225,6 +233,7 @@ function InlineDefaultMention(props: InlineMentionProps) {
 			>
 				<span className="flex shrink-0 items-center" data-testid="inline-file-mention-icon">
 					<MentionMediaIcon
+						presentation={presentation}
 						type={
 							data.type as
 								| typeof MentionItemType.PROJECT_FILE
@@ -248,6 +257,7 @@ function InlineDefaultMention(props: InlineMentionProps) {
 				onMouseDown={(event) => event.preventDefault()}
 			>
 				<FileReference
+					presentation={presentation}
 					label={fileLabel}
 					fileType={fileData?.file_extension || getFileExtensionFromPath(filePath)}
 					title={fileLabel}
@@ -266,6 +276,7 @@ function InlineDefaultMention(props: InlineMentionProps) {
 		>
 			{data.type === MentionItemType.FOLDER ? (
 				<ProjectDirectoryMentionIcon
+					context={projectFilesStore?.filePresentationContext}
 					data={data.data as DirectoryMentionData}
 					workspaceFilesList={projectFilesStore?.workspaceFilesList ?? []}
 					size={16}
@@ -305,7 +316,7 @@ function InlineDefaultMention(props: InlineMentionProps) {
 			{fileVisual}
 		</MentionTooltipWrapper>
 	)
-}
+})
 
 function InlineMention(props: InlineMentionProps) {
 	if (needsFileReferenceNormalization(props.data)) {

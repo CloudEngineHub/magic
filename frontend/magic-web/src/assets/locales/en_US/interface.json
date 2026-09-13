@@ -1484,7 +1484,10 @@
 	"contextHelp": {
 		"actions": "When should you make changes?",
 		"close": "Got it",
+		"dismiss": "Close file guide",
 		"example": "Example",
+		"guideSubtitle": "Purpose, usage and things to know",
+		"guideTitle": "File guide",
 		"illustration": "Illustration",
 		"loadFailed": "This guide could not be loaded. Please try opening it again later.",
 		"loading": "Loading",

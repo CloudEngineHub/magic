@@ -6614,7 +6614,7 @@
 				"example": "“I prefer concise explanations. When discussing a proposal, explain its impact before implementation details.”",
 				"guide": {
 					"actions": "Ask AI to update outdated preferences and clarify scope. Unrelated identity details, secrets and private material need not be included. Use the relevant settings feature to change accounts, organizations or login information.",
-					"context": "User background helps the assistant collaborate with you through preferred report structure, communication habits and relevant work context. It differs from the assistant’s identity and is not an account-profile editor. Relevant information keeps future tasks focused.",
+					"context": "Include your preferred form of address, language and working habits to reduce repeated questions.",
 					"diagramTitle": "How background supports collaboration",
 					"exampleContent": "USER.md\n\nWorking preferences\n- Explain impact before implementation steps\n- Preserve sources in reports\n- Follow task-specific formatting when requested",
 					"result": "A preference for impact first can shape proposal explanations. A different format explicitly requested today must also be considered; an old preference is not an unchangeable rule.",
@@ -6633,14 +6633,19 @@
 						}
 					]
 				},
-				"note": "This is background for AI, not an account settings page. Keep useful work context and avoid unrelated sensitive information.",
-				"usage": "USER.md records preferences and background that help AI work with you. Ask AI to update this information when it changes."
+				"note": "Keep information that is actually needed and update preferences when they change.",
+				"preview": [
+					"Include your preferred form of address, language and working habits to reduce repeated questions.",
+					"Keep information that is actually needed and update preferences when they change."
+				],
+				"scope": "This assistant",
+				"usage": "This file records preferences and background relevant to working with you."
 			},
 			"guidelines": {
 				"example": "For example, specify concise answers, detailed explanations, or a preferred communication style.",
 				"guide": {
 					"actions": "Edit the communication behavior you want to change instead of adding a long list of adjectives. Keep identity, workflow and style consistent. Inspect existing guidance before adding more requirements for a style issue.",
-					"context": "Personality and expression guidance helps {{clawBrand}} communicate consistently. It can explain how to discuss problems, handle uncertainty and choose explanation depth. Keep it separate from preparation and memory-management expectations so one file does not carry every responsibility.",
+					"context": "For example, lead with the main point, avoid unnecessary jargon and explain with examples when useful. Concrete requirements are easier to follow.",
 					"diagramTitle": "Make style actionable",
 					"exampleContent": "SOUL.md\n\nExpression guidelines\n- Answer first, then explain evidence\n- Use concrete examples for abstract ideas\n- State uncertainty directly",
 					"result": "“Professional” is abstract, whereas “support conclusions with relevant evidence” gives an actionable direction. Requirements about which files to read before a session belong in AGENTS.md.",
@@ -6659,14 +6664,19 @@
 						}
 					]
 				},
-				"note": "AGENTS.md describes workspace and session rules; IDENTITY.md describes identity.",
-				"usage": "SOUL.md stores personality and expression style as part of the definition read at runtime."
+				"note": "Communication can have a style, while facts and conclusions still need evidence.",
+				"preview": [
+					"For example, lead with the main point, avoid unnecessary jargon and explain with examples when useful.",
+					"Communication can have a style, while facts and conclusions still need evidence."
+				],
+				"scope": "This assistant",
+				"usage": "This file describes how you want the assistant to communicate."
 			},
 			"identityInfo": {
 				"example": "“You are my research assistant, helping organize information and record decisions.”",
 				"guide": {
 					"actions": "Ask AI to explain its current role before changing it. A definition cannot grant system access; actual tool capabilities still depend on installation, configuration and authorization.",
-					"context": "Identity gives the assistant a consistent role and explains who it is and what it helps with. Names and responsibilities here are assistant definitions, not login details or system permissions. Other files cover workflow, communication and user background.",
+					"context": "Explain what you want it to help with, such as organizing everyday material, then prepare relevant methods.",
 					"diagramTitle": "Identity and related definitions",
 					"exampleContent": "IDENTITY.md\n\nRole: Information organizer\nWork: Summarize material and preserve decisions\nBoundary: Explain sources and uncertainty",
 					"result": "A focus on organizing information belongs in identity, while shorter replies belong in communication style. Keeping them separate avoids changing working methods merely to rename the assistant.",
@@ -6685,14 +6695,19 @@
 						}
 					]
 				},
-				"note": "This defines an assistant role, not a signed-in account, organization membership, or access permissions.",
-				"usage": "IDENTITY.md describes this assistant’s name, role, and identity so it can maintain a consistent introduction and understanding of its responsibilities."
+				"note": "Identity describes its role; it does not replace skills, tools or account permissions.",
+				"preview": [
+					"Explain what you want it to help with, such as organizing everyday material, then prepare relevant methods.",
+					"Identity describes its role; it does not replace skills, tools or account permissions."
+				],
+				"scope": "This assistant",
+				"usage": "This file introduces the assistant’s name, role and responsibilities."
 			},
 			"initialSetup": {
 				"example": "“When getting started, first ask what work I want this assistant to help with.”",
 				"guide": {
 					"actions": "For established roles or preferences, edit their corresponding definitions. Confirm the feature’s procedure and impact before resetting setup; changing the guide does not prove initialization ran again.",
-					"context": "Initial preparation establishes working background, such as desired tasks, forms of address and recurring expectations. This file describes initialization; feature state determines whether setup is active. Opening the file does not establish a first-use state.",
+					"context": "Establish your main goals and communication preferences to give later work a shared starting point.",
 					"diagramTitle": "Possible initial preparation steps",
 					"exampleContent": "BOOTSTRAP.md\n\nInitial preparation\n1. Understand primary work needs\n2. Confirm the assistant’s role\n3. Record recurring expectations",
 					"result": "An initial conversation may distinguish information organization from scheduling needs and establish a suitable role. Viewing these instructions does not clear existing material or automatically restart an assistant already in use.",
@@ -6711,14 +6726,34 @@
 						}
 					]
 				},
-				"note": "Reading this file does not reset the assistant or automatically rerun setup. Execution depends on the feature’s current workflow.",
-				"usage": "BOOTSTRAP.md guides AI through first-use preparation, such as understanding your needs, establishing an assistant role, and agreeing on basic conventions."
+				"note": "Initial preparation is separate from daily rules and does not mean all external tools are connected.",
+				"preview": [
+					"Establish your main goals and communication preferences to give later work a shared starting point.",
+					"Initial preparation is separate from daily rules and does not mean all external tools are connected."
+				],
+				"scope": "This assistant",
+				"usage": "This file guides the assistant through matters to confirm when first used."
 			},
 			"installedSkills": {
 				"example": "“Explain the installed skills and which ones can help analyze my materials.”",
+				"exampleRoot": ".magic/skills",
+				"files": [
+					{
+						"directory": false,
+						"path": ".magic/skills/report-helper/SKILL.md"
+					},
+					{
+						"directory": true,
+						"path": ".magic/skills/report-helper/references"
+					},
+					{
+						"directory": true,
+						"path": ".magic/skills/report-helper/scripts"
+					}
+				],
 				"guide": {
 					"actions": "Ask AI to summarize skills and expand the one relevant to your task. Use the appropriate feature for installation and configuration; moving folders manually is not an installation flow, and instructions are not proof of a successful run.",
-					"context": "Skills organize methods, input requirements and supporting material for a class of tasks. The folder can explain installed skill content, while task execution still depends on tools, material, configuration and authorization.",
+					"context": "Prepare skills for recurring work so the assistant has a method available when a suitable task appears.",
 					"diagramTitle": "Find a method through the folder",
 					"exampleContent": "Skill folder illustration\nreport-helper/\n├── SKILL.md\n└── references/",
 					"result": "For research material, the assistant can consult a reporting skill to understand required inputs and output format. A skill that depends on an external service also needs a tool with valid access.",
@@ -6737,14 +6772,19 @@
 						}
 					]
 				},
-				"note": "This guide explains the folder; it is not a skill installation screen. Availability also depends on configuration and required tools.",
-				"usage": "Skills provide methods and instructions for particular kinds of work. This folder holds installed skill resources so AI can find a suitable approach for a task."
+				"note": "Skills explain methods; execution still needs the relevant tools and permissions.",
+				"preview": [
+					"Prepare skills for recurring work so the assistant has a method available when a suitable task appears.",
+					"Skills explain methods; execution still needs the relevant tools and permissions."
+				],
+				"scope": "This assistant",
+				"usage": "This folder holds the skill files installed for this assistant."
 			},
 			"memoryFile": {
 				"example": "“Keep lasting preferences and key decisions. Update related memory when information changes.”",
 				"guide": {
 					"actions": "Edit this file to change how the assistant manages memory. Edit memory records to correct saved facts. Do not collect all history in the rule file or treat saving a rule as proof that a particular memory was written.",
-					"context": "This MEMORY.md defines memory management: what deserves preservation, how to organize it and when to update it. It differs from core memory in personal space, which stores frequently useful information. Identical names can serve different roles, so establish location and content first.",
+					"context": "Describe which information is worth keeping and when records should be updated.",
 					"diagramTitle": "Management rules and actual facts",
 					"exampleContent": "MEMORY.md\n\nMemory management\n- Preserve lasting preferences and decision reasons\n- Keep detailed background in related records\n- Update existing content when facts change",
 					"result": "“Preserve reasons for important decisions” is a management rule. “This report used a brief structure because readers needed fast decisions” is actual memory. Correct the latter in the record that stores it.",
@@ -6763,14 +6803,26 @@
 						}
 					]
 				},
-				"note": "These are memory management rules; actual records live in the memory folder. This differs from core memory in User Space, which stores important information itself.",
-				"usage": "MEMORY.md describes how AI should save, organize, and use memory. It can define what is worth keeping, how to arrange records, and when to update them."
+				"note": "Memory-management rules are separate from the memory records themselves. Editing a rule does not rewrite an existing remembered fact.",
+				"preview": [
+					"Describe which information is worth keeping and when records should be updated.",
+					"Memory-management rules are separate from the memory records themselves."
+				],
+				"scope": "This assistant",
+				"usage": "This file explains how the assistant should retain, organize and use memory."
 			},
 			"memoryFolder": {
 				"example": "“Find the saved project background and identify information that needs updating.”",
+				"exampleRoot": ".magic/memory",
+				"files": [
+					{
+						"directory": true,
+						"path": ".magic/memory"
+					}
+				],
 				"guide": {
 					"actions": "Ask AI to find relevant topics and identify outdated information. State new facts and scope when updating, and keep related records consistent. The folder is neither a complete chat backup nor proof of current runtime state.",
-					"context": "This folder stores actual memories left during work: background, recurring agreements or decisions worth revisiting. Records support future work but may not reflect the current state. Distinguish saved information from MEMORY.md, which explains how the assistant manages it.",
+					"context": "Ask it to find useful background when continuing a task or to update a record that has become outdated.",
 					"diagramTitle": "Memory rules and content",
 					"exampleContent": "Memory responsibilities\nMEMORY.md → How to manage memory\nmemory/   → Information actually remembered",
 					"result": "MEMORY.md may ask the assistant to retain reasons for lasting decisions, while records in memory contain particular decisions and background. To correct an old conclusion, edit the actual record rather than only the management rules.",
@@ -6789,14 +6841,19 @@
 						}
 					]
 				},
-				"note": "Files in this folder contain memory information. MEMORY.md describes how to save, organize, and use memory; the two serve different purposes.",
-				"usage": "This folder contains memory records left by AI for later work. Ask AI to find relevant records when revisiting background information or correcting it."
+				"note": "Memory records describe saved information and are separate from instructions about how to manage memory.",
+				"preview": [
+					"Ask it to find useful background when continuing a task or to update a record that has become outdated.",
+					"Memory records describe saved information and are separate from instructions about how to manage memory."
+				],
+				"scope": "This assistant",
+				"usage": "This folder keeps information the assistant has retained for later work."
 			},
 			"proactiveExecution": {
 				"example": "“During proactive checks, look for pending work and notify me only when I need to act.”",
 				"guide": {
 					"actions": "Specify the subject, criteria and notification conditions. To change frequency or disable the feature, inspect its settings and scheduling state; editing this file does not establish that a switch was changed.",
-					"context": "Proactive checks describe recurring concerns and notification conditions, such as pending work or state changes. The file says what to do when checking; it neither proves continuous background execution nor establishes actual frequency. Clear conditions for involving you can reduce unnecessary notifications.",
+					"context": "For example, check whether an item needs your attention and specify when a notification is useful.",
 					"diagramTitle": "A proactive check",
 					"exampleContent": "HEARTBEAT.md\n\nConcern: Pending work\nNotify when: A problem needs the user’s decision\nExplain: The issue, evidence and next step",
 					"result": "If only decision-relevant changes matter, write that condition clearly. A listed concern is not proof that it was checked. Actual run records establish what happened and what was found.",
@@ -6815,14 +6872,19 @@
 						}
 					]
 				},
-				"note": "The file describes what to check; it does not mean AI runs continuously in the background. Checks depend on whether the feature is enabled and scheduled.",
-				"usage": "HEARTBEAT.md describes what AI should check during periodic proactive work, such as pending tasks or changes in a relevant status."
+				"note": "What to check and when checks are scheduled are separate. Review the feature’s settings to change its frequency or turn it off.",
+				"preview": [
+					"For example, check whether an item needs your attention and specify when a notification is useful.",
+					"What to check and when checks are scheduled are separate."
+				],
+				"scope": "This assistant",
+				"usage": "This file describes what the assistant should check during periodic proactive work."
 			},
 			"scheduledTasks": {
 				"example": "“Review my scheduled tasks and explain what each one does and when it runs.”",
 				"guide": {
 					"actions": "Use the task feature to inspect or adjust arrangements. State goals and completion requirements when changing content, and confirm task state when stopping automatic execution. This help does not create, reschedule or run a task.",
-					"context": "Scheduled tasks combine explicit work with a timetable for recurring organization, checks or reports. Task content defines the scope and expected output; scheduling defines when it is triggered. Files help explain the arrangement, while actual task state and records establish execution.",
+					"context": "For example, arrange a daily summary or a weekly report, stating the time, content and expected result.",
 					"diagramTitle": "From schedule to result",
 					"exampleContent": "Scheduled task illustration\nWork: Summarize project progress\nTiming: An agreed weekly time\nOutput: Progress, issues and next steps\nEvidence: Actual settings and run records",
 					"result": "A weekly report needs clear sources and outputs. Saving configuration is not enough: check whether the task is enabled, ran and produced complete results. Scheduled is different from completed.",
@@ -6841,14 +6903,19 @@
 						}
 					]
 				},
-				"note": "Reading this guide does not create, enable, or run a task. Execution depends on the task’s settings and status.",
-				"usage": "This folder holds tasks that run on a schedule, such as daily progress summaries or weekly reports. Ask AI to explain their schedules and instructions."
+				"note": "An arrangement is not proof of execution. Check the task state and actual result to see what happened.",
+				"preview": [
+					"For example, arrange a daily summary or a weekly report, stating the time, content and expected result.",
+					"An arrangement is not proof of execution."
+				],
+				"scope": "This assistant",
+				"usage": "This folder stores arrangements for work to perform on a schedule."
 			},
 			"skillList": {
 				"example": "“Use the skill list to explain which methods might help with this research task.”",
 				"guide": {
 					"actions": "Check the list after adding or removing skills. Focus descriptions on when to use a capability and what it solves. Keep detailed processes in skills and confirm actual prerequisites before claiming a capability is ready.",
-					"context": "A skill list helps the assistant see available methods before opening a relevant skill. It is navigation, not a place to duplicate every skill’s body. Short entries make capabilities findable while detailed steps remain in their own entries.",
+					"context": "List skills by task type with their purpose and location so instructions are easy to find.",
 					"diagramTitle": "From list to skill",
 					"exampleContent": "SKILLS.md\n\nReporting skill\nUse for: Organizing material into a report\nContinue: The skill’s SKILL.md",
 					"result": "A list can point to reporting as a method for organizing sources; the entry explains required inputs. A short description cannot establish dependency readiness or replace execution guidance.",
@@ -6867,14 +6934,19 @@
 						}
 					]
 				},
-				"note": "The list is a usage guide; skill folders hold the actual resources. A description does not prove that all requirements for running a skill are currently met.",
-				"usage": "SKILLS.md describes available skills so AI can find relevant methods and instructions. Start with this list before exploring a particular skill."
+				"note": "The list helps with selection and navigation; each skill’s full method is in SKILL.md.",
+				"preview": [
+					"List skills by task type with their purpose and location so instructions are easy to find.",
+					"The list helps with selection and navigation; each skill’s full method is in SKILL."
+				],
+				"scope": "This assistant",
+				"usage": "This file introduces available skills and helps the assistant find a suitable method."
 			},
 			"toolList": {
 				"example": "“Explain what these tools do and what environment information is needed before using them.”",
 				"guide": {
 					"actions": "Maintain accurate recurring guidance and leave connection settings to the relevant tool. Update stale environment notes. Troubleshooting can describe setting purposes and errors without exposing passwords or complete credentials.",
-					"context": "Tool notes record useful environment conventions: suitable tasks, expected output locations and parameters that need care. They help the assistant use tools correctly but do not install them or manage account authorization.",
+					"context": "Explain which tasks a tool handles and any recurring usage requirements.",
 					"diagramTitle": "Notes, configuration and calls",
 					"exampleContent": "TOOLS.md\n\nDocument tool\nPurpose: Find documents within authorized scope\nBefore use: Confirm the search scope\nAfter use: Preserve source information",
 					"result": "You can document a required search scope without placing secrets in readable, shareable notes. Valid login must be established through actual settings and calls.",
@@ -6893,22 +6965,27 @@
 						}
 					]
 				},
-				"note": "This is usage guidance, not proof of installation or authorization. Do not put keys or passwords in instructions that may be shared.",
-				"usage": "TOOLS.md records instructions and environment information that help AI understand tool purposes and working conventions."
+				"note": "Tool descriptions do not install programs, connect accounts or grant permissions.",
+				"preview": [
+					"Explain which tasks a tool handles and any recurring usage requirements.",
+					"Tool descriptions do not install programs, connect accounts or grant permissions."
+				],
+				"scope": "This assistant",
+				"usage": "This file keeps instructions and environment information the assistant needs when using tools."
 			}
 		},
 		"clawPlaygroundHelp": {
-			"aboutYou": "Your preferences and relevant information that help AI work with you.",
-			"guidelines": "Describes this {{clawBrand}}’s personality and communication style.",
-			"identityInfo": "The name, role, and identity of this AI assistant.",
-			"initialSetup": "Guidance for AI to complete its initial setup and preparation.",
-			"installedSkills": "Installed skills that guide AI through specialized tasks.",
-			"memoryFile": "Instructions for how AI should save, organize, and use memory.",
-			"memoryFolder": "Memory notes saved by AI for reference in future work.",
-			"proactiveExecution": "Instructions for what AI should look for and handle during periodic check-ins.",
-			"scheduledTasks": "Tasks that run on a schedule, such as organizing information or sending reminders.",
-			"skillList": "A list of skills that helps AI find a suitable approach to a task.",
-			"toolList": "Instructions and environment details AI needs when using tools."
+			"aboutYou": "This file records preferences and background relevant to working with you.",
+			"guidelines": "This file describes how you want the assistant to communicate.",
+			"identityInfo": "This file introduces the assistant’s name, role and responsibilities.",
+			"initialSetup": "This file guides the assistant through matters to confirm when first used.",
+			"installedSkills": "This folder holds the skill files installed for this assistant.",
+			"memoryFile": "This file explains how the assistant should retain, organize and use memory.",
+			"memoryFolder": "This folder keeps information the assistant has retained for later work.",
+			"proactiveExecution": "This file describes what the assistant should check during periodic proactive work.",
+			"scheduledTasks": "This folder stores arrangements for work to perform on a schedule.",
+			"skillList": "This file introduces available skills and helps the assistant find a suitable method.",
+			"toolList": "This file keeps instructions and environment information the assistant needs when using tools."
 		},
 		"clawPlaygroundTags": {
 			"aboutYou": "About You",
@@ -7274,6 +7351,7 @@
 		"fileUploadSuccess": "File uploaded successfully",
 		"fileUploading": "File is uploading, please wait",
 		"filterTitle": "Filter",
+		"helpDirectoryExample": "Directory example",
 		"layoutCorrection": "Layout Correction",
 		"layoutCorrectionDescription": "AI detects and corrects layout problems in the page",
 		"layoutCorrectionPrompt": "Please check the layout of the page. If the layout is unreasonable, please provide suggestions and modify it.",
@@ -7294,6 +7372,55 @@
 		"pdf": "PDF File",
 		"ppt": "PPT File",
 		"questPlaceholder": "Please input the description of the problem",
+		"recordingProject": {
+			"detail": {
+				"example": "Organize this recording. Start with the main content and conclusions, then list questions that still need clarification. Separate any follow-up arrangements explicitly mentioned in the recording.",
+				"guide": {
+					"benefits": [
+						{
+							"description": "Use the audio and transcript to understand what was said.",
+							"title": "Review the original"
+						},
+						{
+							"description": "Start with the main topics and conclusions.",
+							"title": "Find the highlights"
+						},
+						{
+							"description": "Organize minutes, questions or follow-up items as needed.",
+							"title": "Continue working"
+						}
+					],
+					"context": "Meeting notes may focus on decisions and tasks; interviews on questions and answers; research conversations on themes. Explain the result you need.",
+					"diagramTitle": "From the original recording to useful notes",
+					"exampleContent": "Main content: what was discussed.\nKey conclusions: what was agreed.\nOpen questions: what is still unclear.\nFollow-up items: only arrangements explicitly stated.",
+					"result": "Use the summary for a quick review and the transcript or audio for detail. Check important numbers, names and decisions against the original recording.",
+					"steps": [
+						{
+							"description": "Use the audio and transcript to understand what was said.",
+							"title": "Original audio"
+						},
+						{
+							"description": "Start with the main topics and conclusions.",
+							"title": "Transcript"
+						},
+						{
+							"description": "Organize minutes, questions or follow-up items as needed.",
+							"title": "Summary and further work"
+						}
+					],
+					"title": "Turn a recording into material you can review and use"
+				},
+				"note": "Different recordings need different summaries. Transcription and summarization can omit or misrecognize content. Do not treat a conclusion as confirmed if it was not stated in the recording.",
+				"preview": [
+					"Useful for meetings, interviews and other recordings.",
+					"Continue organizing highlights, questions and follow-up items."
+				],
+				"scope": "Meetings, interviews and other recorded conversations",
+				"usage": "A recording project brings together the original audio, a transcript and a summary. Listen to the original words, or start with the text and highlights before organizing them further.\nUse it for meetings, interviews, research conversations and other recordings; name it for its actual purpose."
+			},
+			"label": "Recording project",
+			"summary": "Keeps audio, a transcript and a summary together."
+		},
 		"refreshList": "Refresh List",
 		"resourceLoadFailed": "{{count}} resource(s) timed out and downloads were skipped",
 		"search": "Search Files",
@@ -7307,7 +7434,7 @@
 					"example": "For example, agents/grader.md can describe how to assess an output against case expectations.",
 					"guide": {
 						"actions": "Check how the entry references these roles. Keep input and output expectations aligned after edits. Do not promote evaluation-specific role instructions into rules for every project.",
-						"context": "Some skills assign analysis, evaluation or checking to separate roles. This folder can hold their task instructions. These describe collaborators, not global project development rules, and their presence does not automatically create assistants or parallel tasks.",
+						"context": "For example, one role organizes material and another checks sources before a report is assembled. Prepare roles only when the task benefits from a division of work.",
 						"diagramTitle": "A collaborating role’s instructions",
 						"exampleContent": "agents/grader.md\n\nRole: Check output against requirements\nInput: Task requirements and actual output\nReturn: Met criteria, gaps and evidence",
 						"result": "A grading role can check requirements while an analysis role explains differences. Clear ownership reduces duplicate work, but the skill’s execution flow still determines whether a role is called.",
@@ -7326,14 +7453,30 @@
 							}
 						]
 					},
-					"note": "These are skill resources, not project development rules or evidence of a running collaboration task.",
-					"usage": "Provides instructions for collaboration steps such as evaluation or analysis."
+					"note": "Describing roles in files does not mean collaborators have already been started.",
+					"preview": [
+						"For example, one role organizes material and another checks sources before a report is assembled.",
+						"Describing roles in files does not mean collaborators have already been started."
+					],
+					"scope": "Inside a skill",
+					"usage": "This folder describes the responsibilities of collaborating roles used by a skill."
 				},
 				"assets": {
 					"example": "For example, assets/cover.png can serve as a report cover.",
+					"exampleRoot": ".magic/skills/report-helper",
+					"files": [
+						{
+							"directory": false,
+							"path": ".magic/skills/report-helper/assets/logo.png"
+						},
+						{
+							"directory": false,
+							"path": ".magic/skills/report-helper/assets/templates/report.md"
+						}
+					],
 					"guide": {
 						"actions": "Before replacing an asset, check its consumers and required dimensions or format. Use a copy in the task output when preserving a reusable original; do not overwrite it with task-specific content.",
-						"context": "Assets can include covers, icons, documents or other reusable resources. They supply material rather than define the whole workflow. They are usually inputs to generation, distinct from final outputs. The skill explains whether to copy, edit or preserve them.",
+						"context": "A report might use a team logo or an existing template. Keep reusable material alongside the skill so it is easy to find.",
 						"diagramTitle": "From assets to output",
 						"exampleContent": "assets/\n├── cover.png\n└── templates/\n    └── report.docx",
 						"result": "When an existing cover is used for a report, the cover is an input and the newly generated report is the deliverable. A purpose label neither changes image format nor establishes a completed report.",
@@ -7352,40 +7495,104 @@
 							}
 						]
 					},
-					"note": "Files retain their format icons or thumbnails; the role label does not change the file type.",
-					"usage": "Contains images, documents, and other reusable resources described by the skill."
+					"note": "Assets support content creation and processing; they do not all need to be read as prompt text.",
+					"preview": [
+						"A report might use a team logo or an existing template.",
+						"Assets support content creation and processing; they do not all need to be read as prompt text."
+					],
+					"scope": "Inside a skill",
+					"usage": "This folder contains images, data and other material used to create an output."
 				},
 				"entry": {
-					"example": "For example, it can define report triggers, required inputs, and expected deliverables.",
+					"example": "Turn our report-writing process into a skill. Explain when to use it, what information to request, the main steps and the expected report. Put specialist rules in references and explain when to read them.",
+					"exampleRoot": ".magic/skills/report-helper",
+					"files": [
+						{
+							"description": "AI settings and capability files",
+							"directory": true,
+							"path": ".magic"
+						},
+						{
+							"description": "Skills for this space",
+							"directory": true,
+							"path": ".magic/skills"
+						},
+						{
+							"description": "Example report skill",
+							"directory": true,
+							"path": ".magic/skills/report-helper"
+						},
+						{
+							"description": "Main instructions",
+							"path": ".magic/skills/report-helper/SKILL.md"
+						},
+						{
+							"description": "On-demand guidance",
+							"directory": true,
+							"path": ".magic/skills/report-helper/references"
+						},
+						{
+							"description": "Read for industry analysis",
+							"path": ".magic/skills/report-helper/references/industry-analysis.md"
+						},
+						{
+							"description": "Read for financial analysis",
+							"path": ".magic/skills/report-helper/references/financial-analysis.md"
+						},
+						{
+							"description": "Executable programs",
+							"directory": true,
+							"path": ".magic/skills/report-helper/scripts"
+						},
+						{
+							"description": "Process input material",
+							"path": ".magic/skills/report-helper/scripts/extract.py"
+						},
+						{
+							"description": "Reusable material",
+							"directory": true,
+							"path": ".magic/skills/report-helper/assets"
+						},
+						{
+							"description": "Image asset",
+							"path": ".magic/skills/report-helper/assets/banner.png"
+						}
+					],
 					"guide": {
-						"actions": "Keep applicability, key steps and output requirements clear. Match references to real package paths. Put infrequent detail in supporting material and link to it from the entry.",
-						"context": "The entry helps AI decide whether a capability fits the task and explains what to do when using it. Readers should understand required material, expected results and which details to look up, without putting every field and long example on the first page.",
-						"diagramTitle": "From request to delivery",
-						"exampleContent": "SKILL.md\n\nPurpose: Build a report from sources\nInput: Topic, sources, audience\nSteps: Read → Organize → Write\nOutput: Report and source notes",
-						"result": "“Generate a report” alone does not explain use. Inputs, steps and output requirements help AI identify missing material and determine completion. Detailed formatting can live in a referenced file.",
-						"steps": [
+						"benefits": [
 							{
-								"description": "Compare the task with the skill’s intended scenarios.",
-								"title": "Check fit"
+								"description": "Explain the tasks this method is intended for.",
+								"title": "Clear applicability"
 							},
 							{
-								"description": "Gather inputs, consult relevant material and follow the steps.",
-								"title": "Prepare and execute"
+								"description": "Keep the main workflow and essential requirements together.",
+								"title": "Reusable steps"
 							},
 							{
-								"description": "Check output against the entry’s requirements.",
-								"title": "Deliver"
+								"description": "Point to specialist guidance only when it is needed.",
+								"title": "Relevant detail"
 							}
-						]
+						],
+						"context": "SKILL.md describes the main method. Optional guidance, scripts and assets support particular steps; they do not all have to be read for every task.",
+						"diagramTitle": "The main instructions connect the skill’s resources",
+						"exampleContent": "When to use: turn source material into a report.\nBefore starting: confirm the topic, audience and available sources.\nMain steps: compare information, separate facts from uncertainty, then organize conclusions.\nOutput: conclusions, supporting evidence and next steps.",
+						"result": "The skill gives AI a method to follow while your current request supplies the topic and material. Update the method when your recurring requirements change.",
+						"steps": [],
+						"title": "Teach AI a reusable way to complete a type of work"
 					},
-					"note": "The label does not mean the contents have been read. Loading depends on the feature using the skill.",
-					"usage": "SKILL.md is the skill entry file. It describes when the skill applies and how to perform its work."
+					"note": "The standard filename is SKILL.md. On case-sensitive file systems, lowercase or mixed-case variants may not be loaded by the current skill scanner. Scripts perform operations; assets provide material for the output. If a directory contains multiple case variants, keep one clearly identified standard entry.",
+					"preview": [
+						"Keeps the workflow and expected result clear.",
+						"The standard filename is SKILL.md."
+					],
+					"scope": "Inside a skill",
+					"usage": "SKILL.md is the main instruction file for a skill. It explains when to use the skill, what to prepare, how to do the work and what the result should contain.\nA skill turns a useful method into instructions that AI can refer to again, instead of learning the whole method from scratch in each task."
 				},
 				"evalCases": {
 					"example": "A case might ask for a report containing specific information from supplied materials.",
 					"guide": {
 						"actions": "Read task, material and expectations separately. Check input paths when updating a case. Changing expectations does not improve an output or establish that evaluation passed.",
-						"context": "A case states the task, source material and criteria for acceptable output. It is a task definition, not an execution record. Clear expectations help compare skill behavior before and after changes instead of relying on a general impression.",
+						"context": "For example: generate a report from three sources, preserving citations and separating unconfirmed information. Clear tasks make comparisons meaningful.",
 						"diagramTitle": "From case to judgment",
 						"exampleContent": "Case illustration\nTask: Summarize supplied material\nInput: sample.pdf\nRequirement: Preserve main findings and identify the source",
 						"result": "A source requirement can be checked in the produced summary. “Write a high-quality summary” is harder to judge consistently and less useful for identifying changes.",
@@ -7404,14 +7611,30 @@
 							}
 						]
 					},
-					"note": "This is a case definition, not an evaluation result or proof of success.",
-					"usage": "Stores case inputs, expectations, and related information for an evaluation workflow."
+					"note": "These are evaluation requirements, not evaluation results.",
+					"preview": [
+						"For example: generate a report from three sources, preserving citations and separating unconfirmed information.",
+						"These are evaluation requirements, not evaluation results."
+					],
+					"scope": "Inside a skill",
+					"usage": "This file defines tasks used to check a skill and the requirements for judging the output."
 				},
 				"evalInputs": {
 					"example": "For example, evals/files/sample.pdf can supply source material for a report case.",
+					"exampleRoot": ".magic/skills/report-helper",
+					"files": [
+						{
+							"directory": false,
+							"path": ".magic/skills/report-helper/evals/files/source.txt"
+						},
+						{
+							"directory": false,
+							"path": ".magic/skills/report-helper/evals/files/data.csv"
+						}
+					],
 					"guide": {
 						"actions": "Replacing input changes the basis of a task, so check that related cases remain meaningful. Maintain references when moving files. Do not overwrite original inputs with evaluation outputs, which would prevent consistent comparisons.",
-						"context": "These files supply evaluation material, such as documents to summarize or images to analyze. Read a case together with the files it references. Inputs are not the skill’s completed conclusions or ordinary task deliverables.",
+						"context": "Using the same input documents makes it easier to compare the effects of a change in method.",
 						"diagramTitle": "Cases and input files",
 						"exampleContent": "evals/files/\n├── sample.pdf\n└── chart.png",
 						"result": "If a case asks for findings from a PDF, the PDF is the input and the generated summary is the output. Quality review should compare the summary against its source.",
@@ -7430,14 +7653,30 @@
 							}
 						]
 					},
-					"note": "These are evaluation inputs, not generated deliverables.",
-					"usage": "Contains documents, images, or other files required by evaluation tasks."
+					"note": "Keep inputs separate from outputs, and do not substitute example answers for the actual input.",
+					"preview": [
+						"Using the same input documents makes it easier to compare the effects of a change in method.",
+						"Keep inputs separate from outputs, and do not substitute example answers for the actual input."
+					],
+					"scope": "Inside a skill",
+					"usage": "This folder holds the material supplied to AI during an evaluation task."
 				},
 				"evals": {
 					"example": "evals.json describes cases, while files holds their input resources.",
+					"exampleRoot": ".magic/skills/report-helper",
+					"files": [
+						{
+							"directory": false,
+							"path": ".magic/skills/report-helper/evals/evals.json"
+						},
+						{
+							"directory": false,
+							"path": ".magic/skills/report-helper/evals/files/source.txt"
+						}
+					],
 					"guide": {
 						"actions": "Read the case goal and match input material to actual results. Use representative tasks and important boundaries when maintaining cases. Base conclusions on observed outputs rather than directory completeness.",
-						"context": "Evaluation uses concrete tasks to help authors assess output quality after skill changes. Cases define expectations, input files provide material and actual execution produces results to judge. This file layout does not establish that checks ran automatically.",
+						"context": "Prepare several common report tasks and compare whether a revised skill produces more complete results that meet the requirements.",
 						"diagramTitle": "Evaluation material",
 						"exampleContent": "evals/\n├── evals.json\n└── files/\n    └── sample.pdf",
 						"result": "A report case may require source notes. After execution, inspect whether the report meets that requirement. A case file alone proves neither report generation nor acceptable skill quality.",
@@ -7456,14 +7695,19 @@
 							}
 						]
 					},
-					"note": "This is an evaluation convention. The directory does not indicate that evaluation has run or passed.",
-					"usage": "Concrete tasks help assess whether skill outputs meet expectations."
+					"note": "Evaluation files do not prove that an evaluation ran or passed. Ordinary use does not require you to write evaluations.",
+					"preview": [
+						"Prepare several common report tasks and compare whether a revised skill produces more complete results that meet the requirements.",
+						"Evaluation files do not prove that an evaluation ran or passed."
+					],
+					"scope": "Inside a skill",
+					"usage": "This folder holds tasks and material for checking how well a skill works."
 				},
 				"examples": {
 					"example": "For example, examples/example.md can show a task input and delivery format.",
 					"guide": {
 						"actions": "Choose the closest example and identify reusable versus task-specific parts. Maintain representative inputs and outputs with a clear scenario instead of accumulating finished files without context.",
-						"context": "Examples explain abstract instructions through concrete inputs and results. They illustrate one use without covering every case. Topics, paths and data usually need to be replaced with material from the current task.",
+						"context": "Before using an unfamiliar skill, a complete example can help you understand which material to prepare.",
 						"diagramTitle": "Three things to look for",
 						"exampleContent": "Example task\nInput: A collection of research sources\nRequest: Compare different views\nResult: Findings, evidence and open questions",
 						"result": "A report example can demonstrate connecting claims to sources. Real work must use your material, without treating example data, bundled instructions or conclusions as current project facts.",
@@ -7482,40 +7726,109 @@
 							}
 						]
 					},
-					"note": "Instruction files within examples remain sample material, not active project rules.",
-					"usage": "Concrete examples show how to use the skill and what its output should look like."
+					"note": "An example teaches the method; it does not mean the current task has been completed.",
+					"preview": [
+						"Before using an unfamiliar skill, a complete example can help you understand which material to prepare.",
+						"An example teaches the method; it does not mean the current task has been completed."
+					],
+					"scope": "Inside a skill",
+					"usage": "Examples show how to ask for work, what inputs to supply and what a result might look like."
 				},
 				"library": {
-					"example": "A report skill might contain SKILL.md, reference material, and generation scripts.",
+					"example": "Look for a report-organizing skill suitable for this project. Consider installing an existing one first, or create one if it does not meet our needs. Configure personal account access in user space.",
+					"exampleRoot": ".magic/skills",
+					"files": [
+						{
+							"description": "AI settings and capability files",
+							"directory": true,
+							"path": ".magic"
+						},
+						{
+							"description": "Skills for this space",
+							"directory": true,
+							"path": ".magic/skills"
+						},
+						{
+							"description": "Example report skill",
+							"directory": true,
+							"path": ".magic/skills/report-helper"
+						},
+						{
+							"description": "Main instructions",
+							"path": ".magic/skills/report-helper/SKILL.md"
+						},
+						{
+							"description": "On-demand guidance",
+							"directory": true,
+							"path": ".magic/skills/report-helper/references"
+						},
+						{
+							"description": "Read for industry analysis",
+							"path": ".magic/skills/report-helper/references/industry-analysis.md"
+						},
+						{
+							"description": "Read for financial analysis",
+							"path": ".magic/skills/report-helper/references/financial-analysis.md"
+						},
+						{
+							"description": "Executable programs",
+							"directory": true,
+							"path": ".magic/skills/report-helper/scripts"
+						},
+						{
+							"description": "Process input material",
+							"path": ".magic/skills/report-helper/scripts/extract.py"
+						},
+						{
+							"description": "Reusable material",
+							"directory": true,
+							"path": ".magic/skills/report-helper/assets"
+						},
+						{
+							"description": "Image asset",
+							"path": ".magic/skills/report-helper/assets/banner.png"
+						}
+					],
 					"guide": {
-						"actions": "Check for an existing suitable skill before adding one. Understand relative references before reorganizing folders, and update references when moving entries or scripts. Folder count is not a count of runnable skills.",
-						"context": "A skill library keeps different capabilities organized. Each skill has instructions and may include references, scripts or assets, so mixing their files at one level makes ownership unclear. Labels explain organization; installation, loading and readiness are established by the relevant feature.",
-						"diagramTitle": "Find an entry through the library",
-						"exampleContent": "skills/\n├── report-helper/\n│   └── SKILL.md\n└── image-helper/\n    └── SKILL.md",
-						"result": "A report task starts with a reporting skill, while image work uses a relevant image skill. Separate inputs and workflows reduce the need to search unrelated material.",
-						"steps": [
+						"benefits": [
 							{
-								"description": "Contains folders for different capabilities.",
-								"title": "Skill library"
+								"description": "Bring in prepared methods and resources.",
+								"title": "Install an existing skill"
 							},
 							{
-								"description": "One skill and its supporting files.",
-								"title": "report-helper"
+								"description": "Capture the specialist methods your project needs.",
+								"title": "Create a project skill"
 							},
 							{
-								"description": "Read the entry before choosing supporting material.",
-								"title": "SKILL.md"
+								"description": "Use the same skills for work in the shared project.",
+								"title": "Reuse across the team"
 							}
-						]
+						],
+						"context": "In this example, report-helper organizes reports. SKILL.md explains the main method; references holds on-demand guidance, scripts contains programs and assets contains reusable material.",
+						"diagramTitle": "Each folder in the library contains a skill",
+						"exampleContent": "Source 1: install an existing report skill.\nSource 2: create a skill for the team’s requirements.\nBoth: store it in this project for project tasks.",
+						"result": "Check what a skill is for and which material and tools it needs. Its source and its audience are separate: a skill installed in a project serves project work, while personal and employee skills have their own scopes.",
+						"steps": [],
+						"tips": [
+							"Project members may read skill instructions, scripts and settings. Do not embed personal keys in these files or include them in uploaded or published skills.",
+							"Use personal sign-in or configuration flows in user space. The skill should explain the required setup and usage without containing secret values."
+						],
+						"tipsTitle": "Share skills without packaging personal credentials",
+						"title": "Find the skills available for project work here"
 					},
-					"note": "This directory organizes files; it does not confirm that every skill is installed or runnable.",
-					"usage": "Each skill usually has its own directory containing instructions and supporting resources."
+					"note": "Project skills are the skills stored here, not a complete list of everything AI can do. Installation does not sign in to external accounts or grant access; complete any required service setup separately.",
+					"preview": [
+						"Project members can use these skills for project tasks.",
+						"Configure personal credentials in user space."
+					],
+					"scope": "Current project · Project members",
+					"usage": "This folder holds skills installed into or created within the current project. A skill is a set of instructions for a type of work and may include programs, assets and specialist material.\nYou can install an existing skill or create one for the project. Members can use these skills when working on tasks in this project."
 				},
 				"license": {
 					"example": "For example, check which notices must remain when distributing the skill.",
 					"guide": {
 						"actions": "Preserve the author’s original notices and check their stated scope. Clarify ambiguous or consequential authorization questions before acting. This purpose description does not provide a legal conclusion about a particular license.",
-						"context": "License material explains conditions stated by an author. Packages may differ, and assets or dependencies may have separate notices. This label helps locate the text; it does not replace reading it or establish that a particular use is authorized.",
+						"context": "Read the terms before sharing an external skill with a team or using it for a particular purpose.",
 						"diagramTitle": "What to look for",
 						"exampleContent": "Reading prompts\nWhat content is covered?\nWhat use and modification are described?\nWhat must accompany distribution?",
 						"result": "Before sharing a skill package, read its actual notices and those attached to included assets. The presence of LICENSE does not establish identical terms for every file.",
@@ -7534,14 +7847,19 @@
 							}
 						]
 					},
-					"note": "The filename alone does not establish a license or permission scope.",
-					"usage": "Read the document for the stated terms of use, modification, and distribution."
+					"note": "The actual text determines the conditions. A filename alone does not grant every permission.",
+					"preview": [
+						"Read the terms before sharing an external skill with a team or using it for a particular purpose.",
+						"The actual text determines the conditions."
+					],
+					"scope": "Inside a skill",
+					"usage": "This document states how the author permits the skill and related content to be used, modified or distributed."
 				},
 				"publishConfig": {
 					"example": "For example, skill.dir set to report-helper selects that skill for publishing.",
 					"guide": {
 						"actions": "Confirm that the directory exists and contains the intended entry. Check configuration after moving or renaming it. Establish success from the publishing result rather than from saving the configuration.",
-						"context": "Publishing configuration tells Magic which skill directory to select. An explicit path helps when a project has multiple folders or an outer package. It is an input to publishing, not evidence that publication ran, and is not a universal skill-standard file.",
+						"context": "Choose the intended skill before publishing so temporary content does not enter the published package.",
 						"diagramTitle": "From configuration to publication",
 						"exampleContent": "skill:\n  dir: report-helper",
 						"result": "With report-helper alongside other project material, the configuration selects the reporting skill. Changing the path selects different content but does not itself publish it.",
@@ -7560,14 +7878,19 @@
 							}
 						]
 					},
-					"note": "This is a project publishing convention, not a required Agent Skills file. Editing it does not publish the skill.",
-					"usage": "This Magic configuration uses skill.dir to identify the skill selected for publication."
+					"note": "Selecting publication content and completing publication are separate actions.",
+					"preview": [
+						"Choose the intended skill before publishing so temporary content does not enter the published package.",
+						"Selecting publication content and completing publication are separate actions."
+					],
+					"scope": "Inside a skill",
+					"usage": "This file selects the skill content intended for publication with the project."
 				},
 				"readme": {
 					"example": "For example, it can explain input requirements and common usage steps.",
 					"guide": {
 						"actions": "Keep the user-facing introduction accurate. When setup or usage changes, check whether the entry also needs updating. Refer to existing detailed guidance to prevent conflicting copies of the same requirements.",
-						"context": "A README helps people understand a package through setup, background, usage and common questions. It can help you decide whether to use the package, while SKILL.md remains the execution entry. Cross-reference the files instead of duplicating the entire workflow.",
+						"context": "To decide whether a skill suits your needs, read what it can do, which inputs it needs and its usage examples.",
 						"diagramTitle": "Two kinds of guidance",
 						"exampleContent": "README.md\n\nReport helper\nPurpose: Turn source material into a report\nPreparation: Supply a topic and source files\nStart: Read SKILL.md",
 						"result": "A README can explain preparation while SKILL.md explains how AI processes the material. A polished README cannot compensate for missing execution steps in the entry.",
@@ -7586,40 +7909,86 @@
 							}
 						]
 					},
-					"note": "README.md supplements the package; SKILL.md remains the skill entry file.",
-					"usage": "Contains installation, usage, or background information about the package."
+					"note": "README helps people use the skill; SKILL.md mainly teaches AI to perform it.",
+					"preview": [
+						"To decide whether a skill suits your needs, read what it can do, which inputs it needs and its usage examples.",
+						"README helps people use the skill; SKILL."
+					],
+					"scope": "Inside a skill",
+					"usage": "This introduction helps people understand a skill’s purpose, required material and starting steps."
 				},
 				"references": {
-					"example": "For example, references/style-guide.md can describe report formatting.",
+					"example": "Keep the steps used for every report in SKILL.md. Put industry analysis and financial analysis rules into separate files in references, and explain in SKILL.md when each should be read.",
+					"exampleRoot": ".magic/skills/report-helper",
+					"files": [
+						{
+							"description": "AI settings and capability files",
+							"directory": true,
+							"path": ".magic"
+						},
+						{
+							"description": "Skills for this space",
+							"directory": true,
+							"path": ".magic/skills"
+						},
+						{
+							"description": "Example report skill",
+							"directory": true,
+							"path": ".magic/skills/report-helper"
+						},
+						{
+							"description": "Main instructions",
+							"path": ".magic/skills/report-helper/SKILL.md"
+						},
+						{
+							"description": "On-demand guidance",
+							"directory": true,
+							"path": ".magic/skills/report-helper/references"
+						},
+						{
+							"description": "Read for industry analysis",
+							"path": ".magic/skills/report-helper/references/industry-analysis.md"
+						},
+						{
+							"description": "Read for financial analysis",
+							"path": ".magic/skills/report-helper/references/financial-analysis.md"
+						}
+					],
 					"guide": {
-						"actions": "When updating a reference, check its entry link remains clear. Avoid contradictory versions. Distinguish background material from requirements the task must follow.",
-						"context": "References hold detailed requirements such as field explanations, formatting or background outside the entry. This keeps the entry readable while making detail available at the step that needs it. The folder’s presence does not automatically load all its contents.",
-						"diagramTitle": "Entry and detailed references",
-						"exampleContent": "references/\n├── style-guide.md\n└── data-schema.md",
-						"result": "An entry can instruct AI to follow the report guide, with detailed formatting in style-guide.md. AI consults it when formatting instead of processing every infrequent detail at the start.",
-						"steps": [
+						"benefits": [
 							{
-								"description": "States when to consult a particular reference.",
-								"title": "SKILL.md"
+								"description": "Keep steps required every time in SKILL.md.",
+								"title": "Clear main instructions"
 							},
 							{
-								"description": "Expands format, writing and evaluation criteria.",
-								"title": "references/style-guide.md"
+								"description": "Explain industry rules and special formats separately.",
+								"title": "A place for specialist detail"
 							},
 							{
-								"description": "Explains fields and data boundaries when needed.",
-								"title": "references/data-schema.md"
+								"description": "Ordinary tasks need not read every specialist rule.",
+								"title": "Less irrelevant context"
 							}
-						]
+						],
+						"context": "SKILL.md explains the shared workflow. Industry and financial analysis instructions in references support their respective tasks; AI chooses relevant material rather than reading everything at once.",
+						"diagramTitle": "Report skill example: separate the common method from specialist rules",
+						"exampleContent": "All reports: confirm the topic, audience and sources, then organize conclusions.\n\nFor industry analysis: read references/industry-analysis.md.\nFor financial analysis: read references/financial-analysis.md.\nFor a general source summary: follow the main workflow without those specialist files.",
+						"result": "This keeps necessary instructions at the right level. AI can process only a limited amount of context at once. Saving currently irrelevant detail for later leaves more room for the present task and makes specialist content easier to maintain.",
+						"steps": [],
+						"title": "Read the common method first, specialist details when needed"
 					},
-					"note": "These resources are consulted as needed; their presence does not mean all contents are loaded.",
-					"usage": "Contains detailed specifications, field descriptions, or background material for particular skill steps."
+					"note": "SKILL.md must say which file to read under which conditions. Creating a references folder alone does not define loading behavior. Requirements that apply to every task still belong in the main instructions.",
+					"preview": [
+						"Read the main method first, then relevant detail.",
+						"SKILL.md explains when to read each file."
+					],
+					"scope": "Inside a skill · Read when relevant",
+					"usage": "This folder holds instructions for infrequent, specialist or more specific skill scenarios. AI follows pointers in SKILL.md to read them when the current task calls for them.\nThis is progressive loading: learn the main method first, then read the relevant detail when it is needed."
 				},
 				"scripts": {
 					"example": "For example, scripts/build_report.py can generate a report from input files.",
 					"guide": {
 						"actions": "Read skill and script instructions before execution. Confirm input paths, output location and dependencies. Keep parameter examples aligned when editing, and avoid using machine-specific temporary paths as general instructions.",
-						"context": "Scripts turn repeated calculation, conversion or generation into explicit processing steps. The skill explains when to run them, what inputs to provide and how to interpret outputs. Dependencies, network access or authorization may be required. A file alone does not prove readiness.",
+						"context": "A program can repeatedly combine a set of tables using defined steps. SKILL.md explains when to run it and what inputs it needs.",
 						"diagramTitle": "A script within a task",
 						"exampleContent": "scripts/build_report.py\n\nInput: Organized source material\nProcess: Generate a document from a template\nOutput: Report file",
 						"result": "A script may write a document from organized material, while selecting evidence and explaining findings still require judgment. A finished process does not prove the report satisfies the request.",
@@ -7638,14 +8007,38 @@
 							}
 						]
 					},
-					"note": "A script being present does not mean it has run. Consult its instructions for parameters and prerequisites.",
-					"usage": "Scripts handle repeatable processing, conversion, or calculation according to the skill instructions."
+					"note": "Programs perform operations; on-demand guidance provides knowledge to read. A script’s presence does not mean it has run.",
+					"preview": [
+						"A program can repeatedly combine a set of tables using defined steps.",
+						"Programs perform operations; on-demand guidance provides knowledge to read."
+					],
+					"scope": "Inside a skill",
+					"usage": "This folder contains programs AI can run for concrete operations such as calculations and batch file processing."
 				},
 				"skill": {
 					"example": "Start with SKILL.md, then consult the resources its instructions call for.",
+					"exampleRoot": ".magic/skills/report-helper",
+					"files": [
+						{
+							"directory": false,
+							"path": ".magic/skills/report-helper/SKILL.md"
+						},
+						{
+							"directory": true,
+							"path": ".magic/skills/report-helper/references"
+						},
+						{
+							"directory": true,
+							"path": ".magic/skills/report-helper/scripts"
+						},
+						{
+							"directory": true,
+							"path": ".magic/skills/report-helper/assets"
+						}
+					],
 					"guide": {
 						"actions": "Ask AI to outline purpose, inputs and outputs before using a skill. Maintain the overall process in the entry and referenced detail separately. Complete files do not establish installation, authorization or environment readiness.",
-						"context": "A skill package combines a method with the material needed for a class of tasks. The entry explains the overall workflow; supporting files supply detail or processing. Simple skills may only need an entry, while other packages have an additional outer folder.",
+						"context": "A report skill may include a workflow, specialist rules and templates. Start by capturing a method from a task that went well.",
 						"diagramTitle": "Reading a skill package",
 						"exampleContent": "report-helper/\n├── SKILL.md\n├── references/\n└── scripts/",
 						"result": "Start a report by checking required inputs, then follow the entry to formatting guidance or a relevant script. Neither you nor AI needs to read every file before identifying what the task requires.",
@@ -7664,40 +8057,19 @@
 							}
 						]
 					},
-					"note": "The label describes the directory; incomplete metadata cannot establish whether the skill is valid.",
-					"usage": "Open the directory to find its entry file, references, scripts, and assets. Some packages have an outer wrapper directory."
-				},
-				"support": {
-					"example": "Examples include creation notes, supporting documents, or custom resources.",
-					"guide": {
-						"actions": "Ask AI to explain content and references. Do not delete a file or claim automatic loading or publishing based only on its name. Decide on removal only after understanding its role in skill maintenance.",
-						"context": "A skill package may include authoring notes, extra documents or custom resources. This classification identifies supporting material without assigning a more specific universal purpose. Use content and entry references to understand it instead of forcing every file into a fixed layout.",
-						"diagramTitle": "Understand supporting material",
-						"exampleContent": "Inspection approach\nContent: Supplementary notes\nReferences: Check the skill entry\nEstablish purpose before deciding to edit",
-						"result": "Authoring notes may explain a template decision without being mandatory reading for each run. A custom data file could be a required script input; references establish the distinction.",
-						"steps": [
-							{
-								"description": "Establish what information or resource the file holds.",
-								"title": "Read content"
-							},
-							{
-								"description": "Find whether the entry or supporting files use it.",
-								"title": "Check references"
-							},
-							{
-								"description": "Distinguish input, background, tool material and output.",
-								"title": "Identify its role"
-							}
-						]
-					},
-					"note": "The filename does not establish automatic loading, execution, or publication.",
-					"usage": "This material has no more specific directory convention. Consult it or the skill instructions to understand its role."
+					"note": "One skill addresses a type of work; a skill library collects several skills.",
+					"preview": [
+						"A report skill may include a workflow, specialist rules and templates.",
+						"One skill addresses a type of work; a skill library collects several skills."
+					],
+					"scope": "Inside a skill",
+					"usage": "A skill folder holds the main instructions and related material for one type of work."
 				},
 				"templates": {
 					"example": "For example, assets/templates/report.docx can provide a report layout.",
 					"guide": {
 						"actions": "Edit the template to change future outputs, and edit a generated report for a one-off change. After a template update, check that skill instructions and content-filling steps still match its sections.",
-						"context": "Templates provide a repeatable layout, section structure or starting point. A task supplies current content while the template supplies reusable structure. Templates can be documents, spreadsheets or other formats, and are optional for skills.",
+						"context": "For reports with conclusions, evidence and recommendations, prepare that structure once and fill it with the current task’s real content.",
 						"diagramTitle": "Turning a template into a result",
 						"exampleContent": "Report template\nTitle: Current topic\n1. Main findings\n2. Evidence and explanation\n3. Next steps",
 						"result": "Weekly reports can reuse a structure while drawing each week’s data and conclusions from new material. Placeholder text in a template must not be mistaken for real findings in the output.",
@@ -7716,27 +8088,31 @@
 							}
 						]
 					},
-					"note": "Templates are a common convention, not a required directory for every skill.",
-					"usage": "Contains structures, layouts, or starter content used to produce a result."
+					"note": "A template supplies structure. Example figures and conclusions are not facts for the current task.",
+					"preview": [
+						"For reports with conclusions, evidence and recommendations, prepare that structure once and fill it with the current task’s real content.",
+						"A template supplies structure."
+					],
+					"scope": "Inside a skill",
+					"usage": "A template is a starting structure you can fill in or adapt repeatedly."
 				}
 			},
 			"help": {
-				"agents": "Describes supporting roles used by the skill.",
-				"assets": "Resources used while processing or creating content.",
-				"entry": "Describes when and how to use this skill.",
-				"evalCases": "Defines tasks used to evaluate the skill.",
-				"evalInputs": "Resources supplied to evaluation cases.",
-				"evals": "Contains cases and resources for checking skill performance.",
-				"examples": "Illustrates skill inputs, outputs, or usage.",
-				"library": "Stores skill files for this project.",
-				"license": "Describes licensing for the skill or its contents.",
-				"publishConfig": "Selects the skill directory to publish from this project.",
-				"readme": "Additional information about the skill and its use.",
-				"references": "Supporting information to consult when needed.",
-				"scripts": "Programs the skill can call to perform work.",
-				"skill": "Contains a skill and its supporting files.",
-				"support": "Other material stored in the skill library or package.",
-				"templates": "Reusable starting points for content or files."
+				"agents": "This folder describes the responsibilities of collaborating roles used by a skill.",
+				"assets": "This folder contains images, data and other material used to create an output.",
+				"entry": "The main instructions for when and how to use a skill.",
+				"evalCases": "This file defines tasks used to check a skill and the requirements for judging the output.",
+				"evalInputs": "This folder holds the material supplied to AI during an evaluation task.",
+				"evals": "This folder holds tasks and material for checking how well a skill works.",
+				"examples": "Examples show how to ask for work, what inputs to supply and what a result might look like.",
+				"library": "Stores externally installed or project-created skills.",
+				"license": "This document states how the author permits the skill and related content to be used, modified or distributed.",
+				"publishConfig": "This file selects the skill content intended for publication with the project.",
+				"readme": "This introduction helps people understand a skill’s purpose, required material and starting steps.",
+				"references": "Holds infrequent, specialist or scenario-specific skill guidance.",
+				"scripts": "This folder contains programs AI can run for concrete operations such as calculations and batch file processing.",
+				"skill": "A skill folder holds the main instructions and related material for one type of work.",
+				"templates": "A template is a starting structure you can fill in or adapt repeatedly."
 			},
 			"labels": {
 				"agents": "Collaboration instructions",
@@ -7746,15 +8122,373 @@
 				"evalInputs": "Evaluation inputs",
 				"evals": "Skill evaluation",
 				"examples": "Examples",
-				"library": "Skill library",
+				"library": "Project skills",
 				"license": "License",
 				"publishConfig": "Publish configuration",
 				"readme": "Usage notes",
-				"references": "References",
+				"references": "On-demand guidance",
 				"scripts": "Scripts",
 				"skill": "Skill",
-				"support": "Skill resources",
 				"templates": "Templates"
+			},
+			"libraryScopes": {
+				"claw": {
+					"example": "“Explain the installed skills and which ones can help analyze my materials.”",
+					"exampleRoot": ".magic/skills",
+					"files": [
+						{
+							"description": "AI settings and capability files",
+							"directory": true,
+							"path": ".magic"
+						},
+						{
+							"description": "Skills for this space",
+							"directory": true,
+							"path": ".magic/skills"
+						},
+						{
+							"description": "Example report skill",
+							"directory": true,
+							"path": ".magic/skills/report-helper"
+						},
+						{
+							"description": "Main instructions",
+							"path": ".magic/skills/report-helper/SKILL.md"
+						},
+						{
+							"description": "On-demand guidance",
+							"directory": true,
+							"path": ".magic/skills/report-helper/references"
+						},
+						{
+							"description": "Read for industry analysis",
+							"path": ".magic/skills/report-helper/references/industry-analysis.md"
+						},
+						{
+							"description": "Read for financial analysis",
+							"path": ".magic/skills/report-helper/references/financial-analysis.md"
+						},
+						{
+							"description": "Executable programs",
+							"directory": true,
+							"path": ".magic/skills/report-helper/scripts"
+						},
+						{
+							"description": "Process input material",
+							"path": ".magic/skills/report-helper/scripts/extract.py"
+						},
+						{
+							"description": "Reusable material",
+							"directory": true,
+							"path": ".magic/skills/report-helper/assets"
+						},
+						{
+							"description": "Image asset",
+							"path": ".magic/skills/report-helper/assets/banner.png"
+						}
+					],
+					"guide": {
+						"actions": "Ask AI to summarize skills and expand the one relevant to your task. Use the appropriate feature for installation and configuration; moving folders manually is not an installation flow, and instructions are not proof of a successful run.",
+						"context": "Prepare skills for recurring work so the assistant has a method available when a suitable task appears.",
+						"diagramTitle": "Find a method through the folder",
+						"exampleContent": "Skill folder illustration\nreport-helper/\n├── SKILL.md\n└── references/",
+						"result": "For research material, the assistant can consult a reporting skill to understand required inputs and output format. A skill that depends on an external service also needs a tool with valid access.",
+						"steps": [
+							{
+								"description": "Stores skills installed for the current assistant.",
+								"title": "Skill directory"
+							},
+							{
+								"description": "Groups an entry with supporting files for a capability.",
+								"title": "Individual skill"
+							},
+							{
+								"description": "Explains applicability, steps and output requirements.",
+								"title": "SKILL.md"
+							}
+						]
+					},
+					"label": "Assistant skills",
+					"note": "Skills explain methods; execution still needs the relevant tools and permissions.",
+					"preview": [
+						"Prepare skills for recurring work so the assistant has a method available when a suitable task appears.",
+						"Skills explain methods; execution still needs the relevant tools and permissions."
+					],
+					"scope": "This assistant",
+					"summary": "This folder holds the skill files installed for this assistant.",
+					"usage": "This folder holds the skill files installed for this assistant."
+				},
+				"crew": {
+					"example": "Add a report-organizing skill to this research assistant. Explain how to compare sources, cite evidence and present conclusions, then configure the skill for this employee.",
+					"exampleRoot": ".magic/skills",
+					"files": [
+						{
+							"description": "AI settings and capability files",
+							"directory": true,
+							"path": ".magic"
+						},
+						{
+							"description": "Skills for this space",
+							"directory": true,
+							"path": ".magic/skills"
+						},
+						{
+							"description": "Example report skill",
+							"directory": true,
+							"path": ".magic/skills/report-helper"
+						},
+						{
+							"description": "Main instructions",
+							"path": ".magic/skills/report-helper/SKILL.md"
+						},
+						{
+							"description": "On-demand guidance",
+							"directory": true,
+							"path": ".magic/skills/report-helper/references"
+						},
+						{
+							"description": "Read for industry analysis",
+							"path": ".magic/skills/report-helper/references/industry-analysis.md"
+						},
+						{
+							"description": "Read for financial analysis",
+							"path": ".magic/skills/report-helper/references/financial-analysis.md"
+						},
+						{
+							"description": "Executable programs",
+							"directory": true,
+							"path": ".magic/skills/report-helper/scripts"
+						},
+						{
+							"description": "Process input material",
+							"path": ".magic/skills/report-helper/scripts/extract.py"
+						},
+						{
+							"description": "Reusable material",
+							"directory": true,
+							"path": ".magic/skills/report-helper/assets"
+						},
+						{
+							"description": "Image asset",
+							"path": ".magic/skills/report-helper/assets/banner.png"
+						}
+					],
+					"guide": {
+						"benefits": [
+							{
+								"description": "Prepare methods around the employee’s responsibilities.",
+								"title": "Fit the role"
+							},
+							{
+								"description": "A published employee can use its configured skills.",
+								"title": "Available when used"
+							},
+							{
+								"description": "Dedicated skills add specialist methods to existing abilities.",
+								"title": "Work with built-in capabilities"
+							}
+						],
+						"context": "This is a skill-package example. The employee’s actual skills depend on what has been configured and published.",
+						"diagramTitle": "What an employee skill contains",
+						"exampleContent": "Responsibility: organize research material.\nDedicated skill: report organization.\nUsage: follow the main workflow and consult specialist guidance for relevant questions.",
+						"result": "When you use this employee for a report task, it can reuse its configured method. You do not need to teach the same process at the start of every task.",
+						"steps": [],
+						"tips": [
+							"Files in a skill package may be delivered to employee users. Keep personal keys, passwords and login credentials out of skills and employee definitions.",
+							"For external services, explain the required access and let users configure it through the corresponding tool in their own personal space."
+						],
+						"tipsTitle": "Check for personal credentials before publishing",
+						"title": "Give a digital employee methods suited to its role"
+					},
+					"label": "Employee skills",
+					"note": "The editing area is for preparing changes. Other users work with the published employee version. Putting files in a folder does not complete skill configuration or publication.",
+					"preview": [
+						"Configured, published skills work alongside built-in capabilities.",
+						"Organize skills around the employee’s role."
+					],
+					"scope": "Digital employee · Dedicated skills",
+					"summary": "Holds professional skills for this digital employee.",
+					"usage": "These skills teach this digital employee how to do specialist work. Select an existing skill or create a dedicated one: a research assistant may need source analysis, while an operations assistant may need content planning.\nAfter skills are configured and the employee is published, it can use those skills alongside its built-in capabilities."
+				},
+				"unknown": {
+					"example": "Explain the purpose of the skills here, which space owns them and which tasks can use them.",
+					"exampleRoot": ".magic/skills",
+					"files": [
+						{
+							"description": "AI settings and capability files",
+							"directory": true,
+							"path": ".magic"
+						},
+						{
+							"description": "Skills for this space",
+							"directory": true,
+							"path": ".magic/skills"
+						},
+						{
+							"description": "Example report skill",
+							"directory": true,
+							"path": ".magic/skills/report-helper"
+						},
+						{
+							"description": "Main instructions",
+							"path": ".magic/skills/report-helper/SKILL.md"
+						},
+						{
+							"description": "On-demand guidance",
+							"directory": true,
+							"path": ".magic/skills/report-helper/references"
+						},
+						{
+							"description": "Read for industry analysis",
+							"path": ".magic/skills/report-helper/references/industry-analysis.md"
+						},
+						{
+							"description": "Read for financial analysis",
+							"path": ".magic/skills/report-helper/references/financial-analysis.md"
+						},
+						{
+							"description": "Executable programs",
+							"directory": true,
+							"path": ".magic/skills/report-helper/scripts"
+						},
+						{
+							"description": "Process input material",
+							"path": ".magic/skills/report-helper/scripts/extract.py"
+						},
+						{
+							"description": "Reusable material",
+							"directory": true,
+							"path": ".magic/skills/report-helper/assets"
+						},
+						{
+							"description": "Image asset",
+							"path": ".magic/skills/report-helper/assets/banner.png"
+						}
+					],
+					"guide": {
+						"benefits": [
+							{
+								"description": "Choose a skill for the type of work.",
+								"title": "Find a method"
+							},
+							{
+								"description": "Check the skill’s instructions before starting.",
+								"title": "Prepare inputs"
+							},
+							{
+								"description": "Check the space that owns the files.",
+								"title": "Confirm the audience"
+							}
+						],
+						"context": "Read a skill’s main instructions to understand its purpose and required inputs.",
+						"diagramTitle": "Each folder in the library contains a skill",
+						"exampleContent": "Skill: report organization\nPurpose: organize source material into a report\nBefore use: confirm inputs, tools and the owning space",
+						"result": "Choose a suitable method after checking its intended task and required tools.",
+						"steps": [],
+						"title": "Find reusable methods in one place"
+					},
+					"label": "Skill library",
+					"note": "Folder contents do not establish installation status, account access or a published employee version.",
+					"preview": [
+						"Each skill provides a reusable working method.",
+						"The owning space determines its audience."
+					],
+					"scope": "The space that owns these files",
+					"summary": "A collection of skills and their instructions.",
+					"usage": "This directory groups skills. Each skill contains a method for a type of work, with optional programs, material and specialist instructions. Check which space owns these files to understand who can use them."
+				},
+				"user": {
+					"example": "Save my usual source-organizing process as a personal skill so I can use it for similar work across projects.",
+					"exampleRoot": ".magic/skills",
+					"files": [
+						{
+							"description": "AI settings and capability files",
+							"directory": true,
+							"path": ".magic"
+						},
+						{
+							"description": "Skills for this space",
+							"directory": true,
+							"path": ".magic/skills"
+						},
+						{
+							"description": "Example report skill",
+							"directory": true,
+							"path": ".magic/skills/report-helper"
+						},
+						{
+							"description": "Main instructions",
+							"path": ".magic/skills/report-helper/SKILL.md"
+						},
+						{
+							"description": "On-demand guidance",
+							"directory": true,
+							"path": ".magic/skills/report-helper/references"
+						},
+						{
+							"description": "Read for industry analysis",
+							"path": ".magic/skills/report-helper/references/industry-analysis.md"
+						},
+						{
+							"description": "Read for financial analysis",
+							"path": ".magic/skills/report-helper/references/financial-analysis.md"
+						},
+						{
+							"description": "Executable programs",
+							"directory": true,
+							"path": ".magic/skills/report-helper/scripts"
+						},
+						{
+							"description": "Process input material",
+							"path": ".magic/skills/report-helper/scripts/extract.py"
+						},
+						{
+							"description": "Reusable material",
+							"directory": true,
+							"path": ".magic/skills/report-helper/assets"
+						},
+						{
+							"description": "Image asset",
+							"path": ".magic/skills/report-helper/assets/banner.png"
+						}
+					],
+					"guide": {
+						"benefits": [
+							{
+								"description": "Use one personal method for different tasks.",
+								"title": "Reuse across projects"
+							},
+							{
+								"description": "Turn a recurring workflow into a skill.",
+								"title": "Keep your working preferences"
+							},
+							{
+								"description": "Combine the method with the current project’s conventions.",
+								"title": "Respect project requirements"
+							}
+						],
+						"context": "Location determines who uses a skill. Its package still contains main instructions and optional programs, assets and on-demand guidance.",
+						"diagramTitle": "Personal skills use the same package structure",
+						"exampleContent": "Personal skill: organize source material.\nUse for: turning several sources into a readable report.\nPreference: conclusions first, then evidence.\nProject-specific requirements: follow the current task instructions.",
+						"result": "Build a set of skills that suit your work while each project keeps its own shared team methods.",
+						"steps": [],
+						"tips": [
+							"Joining a shared project does not automatically share your personal space. Store account credentials through the relevant tool’s sign-in or setup flow.",
+							"Copying settings or skills into a shared project, conversation or publication package may also copy sensitive content. Remove personal credentials before sharing."
+						],
+						"tipsTitle": "Keep personal configuration in personal space",
+						"title": "Reuse your methods when you move to another project"
+					},
+					"label": "Personal skills",
+					"note": "Personal skills belong to the current organization and account. They are not automatically shared with people who join a project. Put team methods in the project or configure them for a digital employee.",
+					"preview": [
+						"Combines your recurring preferences with the current task.",
+						"Project membership does not automatically share personal skills."
+					],
+					"scope": "User space · Current organization and account",
+					"summary": "Keeps personal methods you can reuse across projects.",
+					"usage": "Personal skills keep methods and capabilities you want to use across projects. They may be installed externally or created by you, such as a report skill or a source-organizing workflow.\nThey belong to your personal space, so you do not need a separate copy for each project."
+				}
 			}
 		},
 		"source": "Source File",
@@ -7769,7 +8503,7 @@
 					"example": "An Agent definition might use it to describe working requirements.",
 					"guide": {
 						"actions": "Ask AI to explain the file’s origin and consumers before editing its requirements. Until its use is established, preserve the content rather than treating it as personal global instructions or ordinary directory rules.",
-						"context": "Project .magic folders can contain instructions used by different Agent features. The name AGENTS.md alone cannot identify an employee workflow, an assistant definition or another feature’s material. Use its location, content and consuming entry point to determine who reads it.",
+						"context": "Organize recurring steps, output requirements and constraints so tasks can follow a consistent method.",
 						"diagramTitle": "Find how the file is used",
 						"exampleContent": "Inspection approach\nFile: .magic/…/AGENTS.md\nIdentify the owning feature\nThen establish audience and reading behavior",
 						"result": "Task steps in the body establish that it contains instructions. Finding the Agent definition that consumes it establishes who an edit can affect. The filename alone cannot prove automatic activation.",
@@ -7788,14 +8522,19 @@
 							}
 						]
 					},
-					"note": "It is excluded from the ordinary nested project-rule index. Its path alone does not identify a {{clawBrand}}, employee, or automatic loader.",
-					"usage": "This file is under the project .magic directory. The Agent feature that consumes it determines its role."
+					"note": "Which tasks use it depends on the workspace and the file’s contents. Its name alone does not establish automatic reading by all AI.",
+					"preview": [
+						"Organize recurring steps, output requirements and constraints so tasks can follow a consistent method.",
+						"Which tasks use it depends on the workspace and the file’s contents."
+					],
+					"scope": "Current workspace",
+					"usage": "This file provides instructions AI needs when working in this workspace."
 				},
 				"clawInstructions": {
 					"example": "For example, specify what to read before a session and when to maintain memory.",
 					"guide": {
 						"actions": "State when an instruction applies, what to do and what counts as completion. Update outdated entries rather than accumulating temporary tasks in startup rules. Interpret behavior changes in light of what a subsequent run actually reads.",
-						"context": "This file defines preparation, memory use and collaboration for the assistant. It is part of {{clawBrand}}’s own behavior definition, distinct from rules for an ordinary folder. Keep recurring session expectations here and one-off requests in the conversation.",
+						"context": "For example, explain uncertainty, report useful progress during a long task and deliver the result when finished. Save requirements you otherwise repeat often.",
 						"diagramTitle": "From preparation to completion",
 						"exampleContent": "AGENTS.md\n\nWorking expectations\n- Understand relevant background first\n- State what information is missing\n- Preserve decisions worth keeping",
 						"result": "A recurring instruction to check background before advising belongs here. Whether the advice should sound concise or detailed belongs with communication style.",
@@ -7814,14 +8553,45 @@
 							}
 						]
 					},
-					"note": "This differs from ordinary project directory rules. SOUL.md describes personality and expression.",
-					"usage": "Part of the {{clawBrand}} definition, covering startup preparation, memory use, and collaboration. It belongs to the required runtime startup files."
+					"note": "Explain a one-off goal in the current conversation.",
+					"preview": [
+						"For example, explain uncertainty, report useful progress during a long task and deliver the result when finished.",
+						"Explain a one-off goal in the current conversation."
+					],
+					"scope": "Current workspace",
+					"usage": "This file sets the assistant’s recurring ways of working."
 				},
 				"clawMagic": {
 					"example": "AGENTS.md describes session behavior, while SOUL.md describes personality and expression.",
+					"files": [
+						{
+							"directory": false,
+							"path": ".magic/IDENTITY.md"
+						},
+						{
+							"directory": false,
+							"path": ".magic/AGENTS.md"
+						},
+						{
+							"directory": false,
+							"path": ".magic/HEARTBEAT.md"
+						},
+						{
+							"directory": true,
+							"path": ".magic/cron"
+						},
+						{
+							"directory": false,
+							"path": ".magic/skills/report-helper/SKILL.md"
+						},
+						{
+							"directory": true,
+							"path": ".magic/memory"
+						}
+					],
 					"guide": {
 						"actions": "Describe the behavior you want to change and ask AI to locate the responsible file. Avoid repeating identity, workflow and task records across several definitions. A role description alone cannot provide tool installation or authorization.",
-						"context": "These files describe the assistant’s identity, working expectations, communication style and saved material. Together they support the current {{clawBrand}}, with a separate responsibility for each file. Preferences and connection settings in your personal space remain personal material.",
+						"context": "For example, retain your preferences, prepare frequently used skills and arrange recurring tasks.",
 						"diagramTitle": "Responsibilities within the assistant definition",
 						"exampleContent": ".magic/\n├── IDENTITY.md\n├── SOUL.md\n├── AGENTS.md\n└── memory/",
 						"result": "Check SOUL.md to change communication style and AGENTS.md to change session preparation or collaboration requirements. Keeping these distinct makes the relevant behavior easier to maintain.",
@@ -7840,14 +8610,19 @@
 							}
 						]
 					},
-					"note": "These files belong to this {{clawBrand}} workspace. Mounted user-space files remain personal configuration.",
-					"usage": "Contains identity, behavioral rules, skills, and memory for this {{clawBrand}}."
+					"note": "Identity, memory, proactive checks and scheduled tasks have separate purposes. Enable only the features you need.",
+					"preview": [
+						"For example, retain your preferences, prepare frequently used skills and arrange recurring tasks.",
+						"Identity, memory, proactive checks and scheduled tasks have separate purposes."
+					],
+					"scope": "Current workspace",
+					"usage": "These files keep this assistant’s identity, working rules, skills and material for ongoing work."
 				},
 				"crewIdentity": {
 					"example": "For example, describe its role, expertise, and work objectives.",
 					"guide": {
 						"actions": "Use concise responsibilities rather than unrelated backstory. When the role changes, check that working instructions still fit. Confirm the version through employee configuration and publishing after editing.",
-						"context": "Identity tells the employee which work it serves, what it specializes in and where its responsibilities end. It supports a consistent role but does not grant account permissions, install tools or authorize external actions. Each task still needs a user goal.",
+						"context": "For example: organize research material for project members and answer questions with source evidence. Define the role before choosing skills.",
 						"diagramTitle": "Identity, process and style",
 						"exampleContent": "IDENTITY.md\n\nRole: Research assistant\nResponsibilities: Organize sources, compare views, summarize findings\nScope: Explain evidence and uncertainty",
 						"result": "A research focus belongs in identity. Requiring a source list with every report belongs in working instructions. Separate files let you adjust the role and delivery requirements independently.",
@@ -7866,14 +8641,19 @@
 							}
 						]
 					},
-					"note": "AGENTS.md defines work steps; SOUL.md defines personality and expression. Editing a definition does not publish it.",
-					"usage": "IDENTITY.md defines identity and responsibilities and is included in the compiled employee identity."
+					"note": "A role description does not grant account permissions or replace a working method.",
+					"preview": [
+						"For example: organize research material for project members and answer questions with source evidence.",
+						"A role description does not grant account permissions or replace a working method."
+					],
+					"scope": "Current workspace",
+					"usage": "This file explains who a digital employee is, what it is responsible for and whom it serves."
 				},
 				"crewInstructions": {
 					"example": "For example, gather source material, call a report skill, then check the deliverable.",
 					"guide": {
 						"actions": "Replace vague requirements with observable actions, such as listing evidence for each conclusion. After editing, check definition and publishing status through the employee feature; a successful save does not mean running instances update immediately.",
-						"context": "This file explains how the employee completes work: handling missing material, choosing skills, producing deliverables and judging completion. Keep role responsibilities in the identity file and tone in the personality file so these remain maintainable.",
+						"context": "A research assistant might confirm the topic, compare sources and present evidence-based conclusions. Concrete steps are easier to use than vague descriptions such as being responsible.",
 						"diagramTitle": "An instruction’s working structure",
 						"exampleContent": "AGENTS.md\n\nReport workflow\n1. Confirm topic and source scope\n2. Review sources and mark uncertain information\n3. Deliver the report with source notes",
 						"result": "The same workflow can guide reports on different topics, supplied by each task. Clear steps show the employee when to proceed, when information is missing and what to deliver.",
@@ -7892,14 +8672,37 @@
 							}
 						]
 					},
-					"note": "SOUL.md describes personality. Saving this file does not publish it or guarantee immediate updates to all running instances.",
-					"usage": "AGENTS.md describes steps, skill invocation, inputs, outputs, and completion criteria. Compilation includes it in the employee’s work instructions."
+					"note": "Identity explains the role; instructions explain the method. Provide changes to users through the employee’s publishing flow.",
+					"preview": [
+						"A research assistant might confirm the topic, compare sources and present evidence-based conclusions.",
+						"Identity explains the role; instructions explain the method."
+					],
+					"scope": "Current workspace",
+					"usage": "This file teaches a digital employee how to do its work."
 				},
 				"crewMagic": {
 					"example": "AGENTS.md describes its workflow, while IDENTITY.md describes its identity.",
+					"files": [
+						{
+							"directory": false,
+							"path": ".magic/IDENTITY.md"
+						},
+						{
+							"directory": false,
+							"path": ".magic/AGENTS.md"
+						},
+						{
+							"directory": false,
+							"path": ".magic/SOUL.md"
+						},
+						{
+							"directory": false,
+							"path": ".magic/skills/report-helper/SKILL.md"
+						}
+					],
 					"guide": {
 						"actions": "Decide whether the change concerns role, process or style before editing. Then confirm configuration and publishing status in the employee feature. Saving a definition does not establish that every active instance has received it.",
-						"context": "A digital employee needs a clear role, working method and communication style. Separate files store these definitions alongside tools and skills used in its configuration. Editing an employee definition is different from using that employee in an ordinary project.",
+						"context": "For a research assistant, describe its responsibilities first, then configure methods for analyzing sources. Explain the employee you want in ordinary language and let AI organize the definition.",
 						"diagramTitle": "Parts of an employee definition",
 						"exampleContent": ".magic/\n├── IDENTITY.md\n├── AGENTS.md\n└── SOUL.md",
 						"result": "A reporting employee needs to know its responsibilities, how to gather material and how to present findings. Separate definitions let you change tone without accidentally changing the workflow.",
@@ -7918,14 +8721,19 @@
 							}
 						]
 					},
-					"note": "This is the employee definition workspace. An ordinary project using an employee is not an employee definition.",
-					"usage": "Identity, work instructions, personality, tools, and skills define the employee for configuration and distribution."
+					"note": "Editing prepares a change; publishing makes that version available to users. Published employees work with the version they use.",
+					"preview": [
+						"For a research assistant, describe its responsibilities first, then configure methods for analyzing sources.",
+						"Editing prepares a change; publishing makes that version available to users."
+					],
+					"scope": "Current workspace",
+					"usage": "These files define a digital employee: its role, methods, communication style, skills and tools."
 				},
 				"crewSoul": {
 					"example": "For example, specify concise communication or a preference for detailed explanations.",
 					"guide": {
 						"actions": "Describe the difference a reader should observe rather than using vague words such as professional or smart. Check consistency with identity and workflow, then confirm configuration and publishing status.",
-						"context": "This file supports a consistent way of communicating: leading with conclusions, explaining terminology or acknowledging uncertainty. It shapes the interaction but does not replace responsibilities, workflows or permissions. Observable instructions are more useful than a list of adjectives.",
+						"context": "For example, give concise answers, explain specialist terms and state uncertainty. Observable communication habits are clearer than a list of personality adjectives.",
 						"diagramTitle": "Express style as concrete behavior",
 						"exampleContent": "SOUL.md\n\nCommunication style\n- Use short sentences and concrete examples\n- Support conclusions with relevant evidence\n- State missing information when uncertain",
 						"result": "The same report can become easier to read by changing order and explanation depth. Changing which sections it must include belongs in working instructions.",
@@ -7944,14 +8752,33 @@
 							}
 						]
 					},
-					"note": "AGENTS.md still defines the workflow. Saving the file does not guarantee immediate updates to all running instances.",
-					"usage": "SOUL.md defines expression style and behavioral tendencies included in the compiled employee personality."
+					"note": "Style is separate from responsibilities and must not override facts or the current task requirements.",
+					"preview": [
+						"For example, give concise answers, explain specialist terms and state uncertainty.",
+						"Style is separate from responsibilities and must not override facts or the current task requirements."
+					],
+					"scope": "Current workspace",
+					"usage": "This file describes a digital employee’s communication style and expression preferences."
 				},
 				"directoryInstructions": {
 					"example": "For example, reports/AGENTS.md can define formatting inside reports.",
+					"files": [
+						{
+							"directory": false,
+							"path": "AGENTS.md"
+						},
+						{
+							"directory": false,
+							"path": "reports/AGENTS.md"
+						},
+						{
+							"directory": false,
+							"path": "reports/report.md"
+						}
+					],
 					"guide": {
 						"actions": "Maintain instructions at the scope they describe. Edit the root file for project-wide requirements and a directory file for local ones. Before moving an instruction file, check which tasks the new location would affect.",
-						"context": "Reports, designs and code may need different conventions in one project. Directory instructions express local requirements without imposing them on unrelated folders. A purpose label identifies the file; it does not mean AI has already read every instruction.",
+						"context": "For example, all project reports may need sources, while a customer-material folder also requires names to be hidden. Keep that local requirement in this folder’s instructions.",
 						"diagramTitle": "From project to directory",
 						"exampleContent": "reports/AGENTS.md\n\nReports in this folder\n- Name the report topic in the title\n- Include progress, issues and next steps\n- Preserve sources for cited material",
 						"result": "A report folder may require citations while an asset folder defines image naming. AI should read the applicable instructions before working on a report, instead of treating every directory’s requirements as relevant.",
@@ -7970,14 +8797,19 @@
 							}
 						]
 					},
-					"note": "These are scoped rules, not project-wide rules or a claim that all nested contents have already been read.",
-					"usage": "Nested AGENTS.md files are discovered through a path index. Before working in their scope, the AI reads applicable rules from the shallowest directory to the deepest."
+					"note": "Project-wide conventions belong at the project root; local requirements follow their directory. The AI discovers nested instruction paths and reads applicable instructions before working there.",
+					"preview": [
+						"For example, all project reports may need sources, while a customer-material folder also requires names to be hidden.",
+						"Project-wide conventions belong at the project root; local requirements follow their directory."
+					],
+					"scope": "Current workspace",
+					"usage": "This file describes special requirements for a folder and the content beneath it."
 				},
 				"instructionFile": {
 					"example": "Consult the contents and owning feature to understand which tasks use these instructions.",
 					"guide": {
 						"actions": "Ask AI to explain the source, content and consuming feature before editing. Do not assume all future conversations follow the file solely because of its name or placement in personal space.",
-						"context": "An instruction filename can mean project rules, directory conventions, an assistant definition or a supplied example. This label does not have enough context to choose among them. Establish the source and audience before deciding how the content applies.",
+						"context": "For example, explain the goal first, process the material and deliver a usable result. Read the file to understand its intended audience and tasks.",
 						"diagramTitle": "Locate before interpreting",
 						"exampleContent": "Questions to establish\nWho owns this file?\nWhich tasks does it govern?\nWhich entry point reads it?",
 						"result": "An AGENTS.md bundled in a skill example does not govern all your projects. A real root-level project instruction file may have a defined reading mechanism; location and usage matter.",
@@ -7996,66 +8828,133 @@
 							}
 						]
 					},
-					"note": "Automatic loading is not established. A file in personal storage is not necessarily a global rule.",
-					"usage": "The filename indicates instruction content. Its source and consuming feature determine its audience and scope."
+					"note": "Files with the same name can have different purposes in different locations. Personal instructions do not automatically become shared project requirements.",
+					"preview": [
+						"For example, explain the goal first, process the material and deliver a usable result.",
+						"Files with the same name can have different purposes in different locations."
+					],
+					"scope": "Current workspace",
+					"usage": "This is a work-instruction file for AI, describing how you want it to handle tasks."
 				},
 				"projectInstructions": {
-					"example": "For example, define report structure, collaboration practices, or project conventions.",
+					"example": "For future reports in this project, give the conclusion first, identify sources and list next steps. Please organize these recurring requirements in the root AGENTS.md.",
 					"guide": {
-						"actions": "Write concrete, recurring requirements first, then clarify important boundaries. Ask AI to explain existing project and directory rules before editing. Update an outdated requirement in place so conflicting instructions do not accumulate.",
-						"context": "Use this file for recurring project expectations: deliverable structure, source checking and actions that need confirmation. Shared requirements help future tasks start with the same expectations. A request that applies only to today’s task belongs in the conversation.",
-						"diagramTitle": "How rules guide a task",
-						"exampleContent": "AGENTS.md\n\nReport requirements\n- Start with conclusions and recommendations\n- Include source and date for data\n- Identify uncertain information",
-						"result": "For a research report, project rules can define the common format while your message supplies the topic. A later report can reuse the format without storing every report’s content in the instructions.",
+						"benefits": [
+							{
+								"description": "Keep recurring report formats and working requirements.",
+								"title": "Less repetition"
+							},
+							{
+								"description": "Different members’ AI tasks refer to the same project instructions.",
+								"title": "Shared conventions"
+							},
+							{
+								"description": "Change an agreement in one place when requirements evolve.",
+								"title": "Easy to update"
+							}
+						],
+						"context": "The project root file provides shared requirements. The current conversation provides the goal and material for this particular task.",
+						"diagramTitle": "One set of conventions for the same project",
+						"exampleContent": "1. Start with the main conclusion.\n2. Identify sources for important data.\n3. Finish with suggested next steps.",
+						"result": "The next report can follow the same structure with a different topic. Collaborators working in this shared project can use the same conventions without copying them into every conversation.",
 						"steps": [
 							{
-								"description": "Provides shared requirements for this project.",
+								"description": "Keep recurring report formats and working requirements.",
+								"title": "Your task"
+							},
+							{
+								"description": "Different members’ AI tasks refer to the same project instructions.",
 								"title": "Root AGENTS.md"
 							},
 							{
-								"description": "Read more specific requirements before working in that path.",
-								"title": "Applicable directory rules"
-							},
-							{
-								"description": "Combine your current goal with the applicable instructions.",
-								"title": "Current task"
+								"description": "Change an agreement in one place when requirements evolve.",
+								"title": "A collaborator’s task"
 							}
-						]
+						],
+						"title": "Write once so AI work in the project follows shared requirements"
 					},
-					"note": "These rules belong to this project. More specific rules live in subdirectories, not in personal global preferences.",
-					"usage": "The root AGENTS.md describes project-wide requirements. The current auto-read mechanism delivers its contents when the file exists and is readable."
+					"note": "Keep recurring conventions here and one-off requirements in the current conversation. A nested AGENTS.md applies to its directory, not automatically to the entire project. Instructions do not change member permissions or guarantee that every AI response complies perfectly.",
+					"preview": [
+						"You and collaborators can reuse the same project conventions.",
+						"Useful for recurring report formats and ways of working."
+					],
+					"scope": "Current project · Root directory",
+					"usage": "Keep recurring project requirements here. When you or a collaborator starts a task in this project, Super Magic AI automatically reads the root AGENTS.md, so you do not need to repeat the same instructions each time."
 				},
 				"projectMagic": {
-					"example": "For example, .magic/skills holds project skills and .magic/cron holds scheduled tasks.",
+					"example": "Explain what is in this project’s .magic directory and which features use it. If a personal account or key is needed, guide me through setup in user space. Do not save credentials in project files or display secret values in the conversation.",
+					"files": [
+						{
+							"description": "AI settings and capability files",
+							"directory": true,
+							"path": ".magic"
+						},
+						{
+							"description": "Skills for this space",
+							"directory": true,
+							"path": ".magic/skills"
+						},
+						{
+							"description": "Example report skill",
+							"directory": true,
+							"path": ".magic/skills/report-helper"
+						},
+						{
+							"description": "Main instructions",
+							"path": ".magic/skills/report-helper/SKILL.md"
+						}
+					],
 					"guide": {
-						"actions": "Ask which feature uses a subfolder before changing it. Keep deliverables in suitable document folders and maintain feature settings through their relevant entry points. Avoid moving required paths merely to tidy the file list.",
-						"context": "This folder stores material used by project features. It can coexist with ordinary reports and images, but primarily supports features such as skills and scheduled tasks. Another project has its own configuration; these files are not shared settings for every project.",
-						"diagramTitle": "Feature files for this project",
-						"exampleContent": ".magic/\n├── skills/\n│   └── report-helper/\n└── cron/",
-						"result": "For recurring reports, skill instructions explain how to prepare the report and task settings describe when to work. Opening this help does not install a skill or start a task.",
-						"steps": [
+						"benefits": [
 							{
-								"description": "The current project’s feature folder.",
-								"title": ".magic"
+								"description": "Keep skills installed or created for this project.",
+								"title": "Skills and capabilities"
 							},
 							{
-								"description": "Skill files associated with the project.",
-								"title": "skills"
+								"description": "Configure the AI features used by the project.",
+								"title": "Feature settings"
 							},
 							{
-								"description": "Material related to project schedules.",
-								"title": "cron"
+								"description": "Retain files that these features use and maintain.",
+								"title": "Related working material"
 							}
-						]
+						],
+						"context": "This example shows only skills. The skills folder may contain installed or locally created skills; .magic can also contain settings and material for other AI features.",
+						"diagramTitle": "One example: skills used by the project",
+						"exampleContent": "Project skills: stored in .magic/skills.\nSkill sources: installed externally or created in this project.\nProject settings: suitable shared settings without personal credentials.\nPersonal accounts and keys: configured through the relevant tool in user space.",
+						"result": "You do not need to understand every file before using AI. For unfamiliar content, ask which feature maintains it and what a change would affect. Shared working content belongs in the project; personal credentials belong in personal space.",
+						"steps": [],
+						"tips": [
+							"Members who can read project files may also read .magic. Do not put personal keys, passwords or login credentials in project settings or skill files.",
+							"A leaked credential may let someone access services, read data or consume quota on your account, depending on its permissions.",
+							"Use the relevant tool’s sign-in or configuration flow to keep personal credentials in user space. Share instructions without secret values, and do not copy credentials into shared conversations."
+						],
+						"tipsTitle": "Where should personal keys go in a shared project?",
+						"title": "AI settings, capabilities and working files for the project"
 					},
-					"note": "This is separate from personal configuration. Each feature determines how its files are used.",
-					"usage": "These files belong to the current project and are retained with it for the features that use them."
+					"note": ".magic is still part of the project. A leading dot does not make it private. Directories with the same name in other spaces have their own roles, such as personal settings or a digital employee’s definition.",
+					"preview": [
+						"Skills can be installed externally or created in the project.",
+						"Project permissions apply; personal credentials belong in user space."
+					],
+					"scope": "Current project",
+					"usage": ".magic is a project directory for files related to its AI features. Some files configure features, some extend what AI can do, and others support ongoing work by those features.\nIt may include skills installed from external sources or created in this project, along with feature settings and related working material. Keep everyday deliverables such as reports and images in the project folders you normally use."
 				},
 				"userMagic": {
 					"example": "For example, a personal tool configuration can remain available in another project.",
+					"files": [
+						{
+							"directory": false,
+							"path": ".magic/skills/report-helper/SKILL.md"
+						},
+						{
+							"directory": false,
+							"path": ".magic/memory/global/MEMORY.md"
+						}
+					],
 					"guide": {
 						"actions": "Confirm whether you are editing personal or project files before asking AI to inspect their purpose. Configuration can contain credentials; explaining a setting does not require revealing its value. Check the destination’s access scope before copying content into shared files or conversations.",
-						"context": "This folder belongs to your personal space in the current organization and can hold material needed across projects. A project folder with the same name belongs to that project. Settings, saved memories and tool data each have their own reading behavior; the whole folder is not automatically injected into AI.",
+						"context": "For example, keep a writing method as a personal skill to reuse across projects, and recurring preferences as personal memory.",
 						"diagramTitle": "Personal material across projects",
 						"exampleContent": ".magic/\n└── memory/\n    └── …",
 						"result": "A preference for conclusions first can help reports across projects. A format specific to one project belongs with that project’s requirements, keeping personal habits distinct from project rules.",
@@ -8074,23 +8973,28 @@
 							}
 						]
 					},
-					"note": "This belongs to user space, not the current project. Not every file is loaded automatically.",
-					"usage": "The user-space .magic directory holds personal tool settings, memory, and other assets retained across workspaces."
+					"note": "This belongs to your account in the current organization. Skills, memory and tool connections serve different purposes and are not automatically shared with project members. Copies moved into shared projects, conversations or publication packages follow the destination’s access scope; remove personal credentials before sharing.",
+					"preview": [
+						"For example, keep a writing method as a personal skill to reuse across projects, and recurring preferences as personal memory.",
+						"This belongs to your account in the current organization."
+					],
+					"scope": "Current workspace",
+					"usage": "Personal AI settings, skills and lasting material are kept here."
 				}
 			},
 			"help": {
-				"agentInstructions": "Stores Agent instructions in this workspace.",
-				"clawInstructions": "Defines workspace rules and session behavior for this {{clawBrand}}.",
-				"clawMagic": "Stores this {{clawBrand}}’s definition and ongoing workspace resources.",
-				"crewIdentity": "Describes who this employee is and what it is responsible for.",
-				"crewInstructions": "Defines how this digital employee performs its work.",
-				"crewMagic": "Stores this digital employee’s definition and resources.",
-				"crewSoul": "Describes this employee’s personality and communication style.",
-				"directoryInstructions": "Working requirements for this directory and its descendants.",
-				"instructionFile": "Contains instructions for the feature that uses it.",
-				"projectInstructions": "Shared working conventions for this project.",
-				"projectMagic": "Stores Agent definitions, skills, and settings for this project.",
-				"userMagic": "Stores personal settings and assets reusable across projects."
+				"agentInstructions": "This file provides instructions AI needs when working in this workspace.",
+				"clawInstructions": "This file sets the assistant’s recurring ways of working.",
+				"clawMagic": "These files keep this assistant’s identity, working rules, skills and material for ongoing work.",
+				"crewIdentity": "This file explains who a digital employee is, what it is responsible for and whom it serves.",
+				"crewInstructions": "This file teaches a digital employee how to do its work.",
+				"crewMagic": "These files define a digital employee: its role, methods, communication style, skills and tools.",
+				"crewSoul": "This file describes a digital employee’s communication style and expression preferences.",
+				"directoryInstructions": "This file describes special requirements for a folder and the content beneath it.",
+				"instructionFile": "This is a work-instruction file for AI, describing how you want it to handle tasks.",
+				"projectInstructions": "AI automatically reads this file at the project root.",
+				"projectMagic": "Stores AI settings, capability files and related working material.",
+				"userMagic": "Personal AI settings, skills and lasting material are kept here."
 			},
 			"labels": {
 				"agentInstructions": "Agent instructions",
@@ -8318,7 +9222,7 @@
 				"example": "“Explain which tasks these extension tools are intended to handle.”",
 				"guide": {
 					"actions": "Start by asking what the tool can do rather than editing its files. For connection problems, ask which installation, setup or permission is missing. Explain credential purpose or presence without displaying secret values.",
-					"context": "CLI means command-line interface: a tool invoked with commands to find material, process files or access an authorized service. AI can compose commands for a task so you do not need to memorize syntax. Extension files and personal connection settings serve different roles; installation, setup and authorization still matter.",
+					"context": "Describe a goal such as batch processing files or using an authorized service. You usually do not need to memorize the commands.",
 					"diagramTitle": "How AI uses a command-line tool",
 					"exampleContent": "Task illustration\nYou: Find material with the configured tool.\nAI: Check purpose and required parameters.\nTool: Return results or explain missing configuration.",
 					"result": "To find a document, AI may choose an appropriate CLI and use its existing service connection. Related files do not establish a valid login or access to every resource.",
@@ -8337,40 +9241,64 @@
 						}
 					]
 				},
-				"note": "A folder does not guarantee that every tool is callable. Availability depends on installation, configuration, and authorization.",
-				"usage": "This folder holds extension tools and related files available for AI to use. Ask AI to consult a tool’s instructions to explain what it can do."
+				"note": "The program, its connection settings and account authorization serve different purposes. Follow the tool’s sign-in guidance when needed.",
+				"preview": [
+					"Describe a goal such as batch processing files or using an authorized service.",
+					"The program, its connection settings and account authorization serve different purposes."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "Command-line tools perform operations through text commands that AI can run for you."
 			},
 			"coreMemory": {
-				"example": "“Report preference: conclusions first, then evidence. See detailed memory for examples.”",
+				"example": "Remember that I prefer ordinary work reports to start with conclusions, followed by evidence. For special tasks, follow the requirements I give at the time.",
 				"guide": {
-					"actions": "Keep entries concise and lasting. Put extensive background in detailed records with clear pointers. After changing a highlight, check related records so the summary and body do not contradict each other.",
-					"context": "Core memory keeps frequently useful information easy to scan and points to material that needs explanation. It works as a concise working-background summary, with detailed history stored separately. Excessive length makes recurring information harder to find.",
-					"diagramTitle": "Highlights and detailed records",
-					"exampleContent": "Core memory illustration\nPreference: Findings first, then evidence in reports.\nScope: Routine reports.\nMore detail: Related writing preference records.",
-					"result": "A highlight can summarize report preferences while a detailed record explains why they matter. AI can scan the highlight for routine work and consult background for a special case. This stores information itself, not instructions for managing memory.",
+					"benefits": [
+						{
+							"description": "Retain recurring writing and communication preferences.",
+							"title": "Remember preferences"
+						},
+						{
+							"description": "Relevant work can use information organized earlier.",
+							"title": "Continue with context"
+						},
+						{
+							"description": "Revise preferences and conclusions when they become outdated.",
+							"title": "Update what changes"
+						}
+					],
+					"context": "Memory supplies background. Your current requirements and the present facts still guide the task.",
+					"diagramTitle": "Use remembered context alongside the current request",
+					"exampleContent": "Writing preference: conclusions first, then evidence.\nScope: routine work reports.\nException: follow the current task’s specific requirements.",
+					"result": "You can explain a recurring preference once and use it again for similar work. When it changes, ask AI to update the original record so old and new instructions do not conflict.",
 					"steps": [
 						{
-							"description": "Preferences and stable background that often affect tasks.",
-							"title": "Recurring highlights"
+							"description": "Retain recurring writing and communication preferences.",
+							"title": "Core memory"
 						},
 						{
-							"description": "Where to find reasons or examples.",
-							"title": "Pointers"
+							"description": "Relevant work can use information organized earlier.",
+							"title": "Detailed records"
 						},
 						{
-							"description": "Facts and discussion history to consult when needed.",
-							"title": "Detailed memory"
+							"description": "Revise preferences and conclusions when they become outdated.",
+							"title": "Current task"
 						}
-					]
+					],
+					"title": "Keep useful background so the next task needs less explanation"
 				},
-				"note": "Core memory contains actual saved information. It differs from a file defining how memory should be managed. Keep the fixed directory structure when editing its contents.",
-				"usage": "This file keeps frequently needed highlights and points to more detailed records. Use it for concise, lasting information and keep longer explanations in the linked records."
+				"note": "Memory preserves useful highlights, not a complete backup of all conversations. Personal memory and shared project conventions are separate, and past facts may change.",
+				"preview": [
+					"Helps AI use relevant background in later tasks.",
+					"Update stale information and keep detailed history separately."
+				],
+				"scope": "User space · Personal memory",
+				"usage": "This file stores lasting personal preferences, important background and concise conclusions. AI can consult them for relevant future tasks, reducing how often you need to explain the same background.\nKeep the highlights here and detailed history in related records."
 			},
 			"dingtalk": {
 				"example": "“Explain the purpose of the DingTalk configuration and what setup is needed to use it.”",
 				"guide": {
 					"actions": "You usually do not need to organize these files manually. Ask AI to explain field purposes without revealing credentials. Reconfigure or authorize through supported tool methods when necessary. Copies placed in shared projects or conversations follow the destination’s access permissions.",
-					"context": "These folders usually appear after the relevant tool is used; not every user has one. The DingTalk tool can save personal connection information for later authorized tasks. CLI means command-line interface. AI can invoke the tool according to its instructions without requiring you to memorize commands.",
+					"context": "After authorizing the relevant tool, describe the task in ordinary language and let AI use its available features.",
 					"diagramTitle": "DingTalk and personal configuration",
 					"exampleContent": ".dws\n\nPurpose illustration\nConnection settings: Used by the relevant tool\nLogin credentials: May be present; actual values are not displayed",
 					"result": "When AI searches for DingTalk material, the tool may use saved settings to connect. Missing setup, expired login or insufficient permissions must be handled according to actual feedback; a folder is not proof of a working connection.",
@@ -8389,14 +9317,19 @@
 						}
 					]
 				},
-				"note": "A folder does not prove that you are signed in or have every permission. Changing connection settings may require signing in again. Do not share stored credentials.",
-				"usage": "The DingTalk tool stores personal settings and connection information here. Features you have authorized may use these files."
+				"note": "Available actions depend on sign-in status and account permissions. You do not need to paste credentials into the conversation.",
+				"preview": [
+					"After authorizing the relevant tool, describe the task in ordinary language and let AI use its available features.",
+					"Available actions depend on sign-in status and account permissions."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This folder stores personal settings used to connect to and use DingTalk tools."
 			},
 			"event": {
 				"example": "“Find the record of that plan change and explain its reasons and outcome.”",
 				"guide": {
 					"actions": "Separate facts, reasoning, completed outcomes and future arrangements. Ask AI to check current status before continuing work. A historical record does not automatically execute or complete its follow-ups.",
-					"context": "An event record preserves context around a particular discussion or decision. It helps answer why something was done then, rather than set permanent rules for every future task. Look at background, reasoning and later changes.",
+					"context": "Keep the time, reasoning at that time and important evidence so later work can understand the history.",
 					"diagramTitle": "What an event record explains",
 					"exampleContent": "Event illustration\nBackground: A report has a new audience\nDecision: Add terminology explanations\nReason: Readers lack domain background\nFollow-up: Observe feedback on the next report",
 					"result": "Terminology explanations may have been added for unfamiliar readers. For an expert audience, use the original reason to reconsider rather than applying that decision to every report.",
@@ -8415,14 +9348,19 @@
 						}
 					]
 				},
-				"note": "The record describes what happened then, which may differ from the current situation. Events with unclear dates may be recorded separately.",
-				"usage": "Record the circumstances, course, and outcome of an event. Ask AI to find the relevant date when tracing a discussion or decision."
+				"note": "Check later records before acting on an old decision that may have changed.",
+				"preview": [
+					"Keep the time, reasoning at that time and important evidence so later work can understand the history.",
+					"Check later records before acting on an old decision that may have changed."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This record describes what happened in an event, discussion or decision."
 			},
 			"index": {
 				"example": "“Check the folder index first and find records about my writing preferences.”",
 				"guide": {
 					"actions": "Ask AI to update an index after adding or moving material. Keep entries concise and findable. An index edit does not update the body, so check both when important content changes.",
-					"context": "An index connects topic names and short descriptions to relevant records. It answers where to look, but cannot replace the body’s conditions, evidence and detail. Open the underlying record before making important judgments.",
+					"context": "When records accumulate, start with the index to locate the relevant material instead of opening every file.",
 					"diagramTitle": "From index to supported answer",
 					"exampleContent": "Index illustration\nReport structure → Topic record\nCollaboration expectations → Detailed material\nPlan changes → Event records",
 					"result": "An entry called report format does not list the required sections. AI must read the underlying content to explain requirements and scope instead of guessing from a title.",
@@ -8441,14 +9379,19 @@
 						}
 					]
 				},
-				"note": "The index helps locate information; it does not contain every detail. Check the corresponding records for important conclusions.",
-				"usage": "Brief descriptions help you and AI find related records in this folder. Use the index to locate a subject, then open the source record for details."
+				"note": "The index provides directions; detailed facts remain in the referenced records.",
+				"preview": [
+					"When records accumulate, start with the index to locate the relevant material instead of opening every file.",
+					"The index provides directions; detailed facts remain in the referenced records."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This file lists records, briefly describes their subjects and points to further reading."
 			},
 			"lark": {
 				"example": "“Explain the Lark tool settings and what is needed to use its features.”",
 				"guide": {
 					"actions": "You usually do not need to organize these files manually. Ask AI to explain field purposes without revealing credentials. Reconfigure or authorize through supported tool methods when necessary. Copies placed in shared projects or conversations follow the destination’s access permissions.",
-					"context": "These folders usually appear after the relevant tool is used; not every user has one. The Feishu tool can save personal connection information for later authorized tasks. CLI means command-line interface. AI can invoke the tool according to its instructions without requiring you to memorize commands.",
+					"context": "After setup, ask AI to use the tool for Lark tasks within the access you have authorized.",
 					"diagramTitle": "Feishu and personal configuration",
 					"exampleContent": ".lark-cli\n\nPurpose illustration\nConnection settings: Used by the relevant tool\nLogin credentials: May be present; actual values are not displayed",
 					"result": "When AI searches for Feishu material, the tool may use saved settings to connect. Missing setup, expired login or insufficient permissions must be handled according to actual feedback; a folder is not proof of a working connection.",
@@ -8467,14 +9410,19 @@
 						}
 					]
 				},
-				"note": "The folder does not prove that the connection is still valid. Access depends on actual authorization. Changing connection settings may require signing in again; do not share credentials.",
-				"usage": "The Lark tool stores personal settings and connection information used by features you authorize. These files are usually maintained by the tool."
+				"note": "These files are not a copy of all Lark data and do not mean every feature is authorized.",
+				"preview": [
+					"After setup, ask AI to use the tool for Lark tasks within the access you have authorized.",
+					"These files are not a copy of all Lark data and do not mean every feature is authorized."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This folder stores personal connection settings for Lark tools."
 			},
 			"memory": {
 				"example": "“Remember that I prefer concise reports with conclusions first and evidence afterward.”",
 				"guide": {
 					"actions": "Ask AI to remember a lasting preference or update an earlier agreement. Include scope and reasons. Correct outdated records rather than accumulating contradictory versions.",
-					"context": "Memory can preserve preferences, reasons for decisions and background that may matter again. Future tasks can refer to it instead of requiring repeated explanations, but it does not replace current instructions. Global and project memories differ in scope, so establish who and what a record concerns.",
+					"context": "Keep useful preferences and background so relevant future tasks can build on them.",
 					"diagramTitle": "From experience to useful memory",
 					"exampleContent": "A preference to preserve\nStart reports with findings, then supporting evidence.\nScope: Routine work reports.\nFollow special formatting requested for the current task.",
 					"result": "You need not explain the same writing habit in every project. If today’s request explicitly asks for the detailed process first, AI should consider that request instead of mechanically repeating an old preference.",
@@ -8493,14 +9441,30 @@
 						}
 					]
 				},
-				"note": "Memory keeps useful information, not a complete backup of every chat. Ask AI to correct or update information when it changes.",
-				"usage": "Ask AI to retain information useful for later tasks, such as preferences, working agreements, or project context. Global memory supports work across projects; project memory applies to its project."
+				"note": "Memory is not a complete conversation backup and should be updated as circumstances change.",
+				"preview": [
+					"Keep useful preferences and background so relevant future tasks can build on them.",
+					"Memory is not a complete conversation backup and should be updated as circumstances change."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This directory brings together lasting information AI may consult in later work."
 			},
 			"month": {
 				"example": "“Use this month’s event records to summarize progress and unresolved issues.”",
+				"exampleRoot": ".magic/memory/global",
+				"files": [
+					{
+						"directory": false,
+						"path": ".magic/memory/global/notes/timeline/2026/09/2026-09-01.md"
+					},
+					{
+						"directory": false,
+						"path": ".magic/memory/global/notes/timeline/2026/09/2026-09-02.md"
+					}
+				],
 				"guide": {
 					"actions": "Ask AI to list relevant records before drafting the report. State the evidence scope and missing information. The presence of an archive folder cannot establish actual progress.",
-					"context": "A month groups nearby records for reviewing short-term progress and changes. File count tells you how many records were saved, not everything that happened. A monthly report must be assembled from actual records and may need current task material.",
+					"context": "Review a month’s important discussions and decisions, then open the relevant day for detail.",
 					"diagramTitle": "From month to event",
 					"exampleContent": "Month illustration\nA month/\n├── Proposal discussion\n└── Plan adjustment",
 					"result": "A monthly review can use events to explain progress and changes, then compare current status to identify remaining issues. An old pending item may already be complete today.",
@@ -8519,14 +9483,38 @@
 						}
 					]
 				},
-				"note": "A month folder is an archive grouping, not an existing monthly report. Use the records it actually contains as evidence.",
-				"usage": "Group events from the same month to review their progress, decisions, and outcomes by date."
+				"note": "Organizing records by month does not mean a monthly report has been generated.",
+				"preview": [
+					"Review a month’s important discussions and decisions, then open the relevant day for detail.",
+					"Organizing records by month does not mean a monthly report has been generated."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This folder groups dated records for a particular month."
 			},
 			"notes": {
 				"example": "“Find why I previously chose this report template and explain the background.”",
+				"exampleRoot": ".magic/memory/global",
+				"files": [
+					{
+						"directory": false,
+						"path": ".magic/memory/global/MEMORY.md"
+					},
+					{
+						"directory": false,
+						"path": ".magic/memory/global/notes/index.md"
+					},
+					{
+						"directory": false,
+						"path": ".magic/memory/global/notes/references/preferences.md"
+					},
+					{
+						"directory": true,
+						"path": ".magic/memory/global/notes/timeline"
+					}
+				],
 				"guide": {
 					"actions": "Ask AI to retain context and applicability for important decisions. When a decision changes, update its reasons and check the core summary. Avoid copying the same long passage into several files.",
-					"context": "Detailed memory keeps the context that a short summary cannot hold: reasons, alternatives and conditions. It helps AI explain why, rather than retain only a conclusion. Background is especially useful when deciding whether an old agreement fits a new task.",
+					"context": "Keep recurring preferences, background on a topic and important decisions in suitable records so they are easier to find later.",
 					"diagramTitle": "From highlights to background",
 					"exampleContent": "Detailed record illustration\nTopic: Conclusions first in reports\nReason: Readers need to decide whether to act\nScope: Progress reports\nException: Teaching material may explain the process first",
 					"result": "Knowing you prefer short reports is less useful without knowing whether the goal is faster decisions or less text. Reasons support better judgment for a teaching document with different needs.",
@@ -8545,14 +9533,30 @@
 						}
 					]
 				},
-				"note": "Core memory summarizes; detailed memory expands. Keep them consistent and ask AI to update both when information changes.",
-				"usage": "Detailed memory provides the background, reasons, and examples that do not fit in core memory. Ask AI to consult these records when revisiting a preference or decision."
+				"note": "You do not need to copy every conversation into notes. Retain what is useful for later work.",
+				"preview": [
+					"Keep recurring preferences, background on a topic and important decisions in suitable records so they are easier to find later.",
+					"You do not need to copy every conversation into notes."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This directory organizes memory notes, connecting concise highlights with detailed records."
 			},
 			"references": {
 				"example": "“Organize my preferences for article structure as a reference for future writing.”",
+				"exampleRoot": ".magic/memory/global",
+				"files": [
+					{
+						"directory": false,
+						"path": ".magic/memory/global/notes/references/index.md"
+					},
+					{
+						"directory": false,
+						"path": ".magic/memory/global/notes/references/preferences.md"
+					}
+				],
 				"guide": {
 					"actions": "Place new material under clear existing topics where possible. Avoid many duplicate categories for similar questions. Preserve necessary context when updating conclusions, including historical applicability when it matters.",
-					"context": "Topic-based material helps answer questions such as what was agreed and why a method was chosen. It complements dated event records: topics gather one issue, while timelines explain change. Check current requirements after finding older material.",
+					"context": "It can explain the reasons behind a writing preference or the background to ongoing work. Core memory gives the highlights and points here for detail.",
 					"diagramTitle": "Find memory by question",
 					"exampleContent": "Topic illustration\nWriting preferences\n  ├─ Report structure\n  └─ Citation style\nCollaboration agreements",
 					"result": "You can find writing requirements without remembering the date of the conversation. Start with the topic and its applicability, then follow related event records if you need to understand a change.",
@@ -8571,14 +9575,19 @@
 						}
 					]
 				},
-				"note": "Reference material may include older agreements. Consider current requirements before applying an earlier record.",
-				"usage": "Organize lasting information by subject, such as writing preferences, collaboration agreements, and reasons for decisions. Find information by topic without remembering its date."
+				"note": "These are detailed memory records, separate from a skill’s on-demand guidance. Interpret the same folder name in its actual location.",
+				"preview": [
+					"It can explain the reasons behind a writing preference or the background to ongoing work.",
+					"These are detailed memory records, separate from a skill’s on-demand guidance."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This folder organizes detailed background and explanations by topic."
 			},
 			"settings": {
 				"example": "“Explain the purpose of each setting without showing keys or login credentials.”",
 				"guide": {
 					"actions": "Check field meanings and supported configuration methods before editing. Describe errors and setting purposes instead of pasting complete configuration into project files or shared conversations. Use the service’s authorization flow when needed.",
-					"context": "Settings can include service addresses, preferences, account selection and credentials. Personal space is separated by organization and account, reducing automatic sharing through project membership, but it is not an absolute security guarantee. AI and tools may use these files for tasks; copying or displaying content changes exposure.",
+					"context": "Ask AI to explain an option, such as the service a feature uses, before adjusting it.",
 					"diagramTitle": "Three layers of configuration",
 					"exampleContent": "Configuration explanation\nService address: Connects to the intended service\nAccount selection: Chooses a configuration\nCredentials: Explain purpose without showing values",
 					"result": "To change a default account, first understand the setting and then use the tool’s supported method. A settings file does not establish that an account is still valid; actual requests reveal connection status.",
@@ -8597,14 +9606,19 @@
 						}
 					]
 				},
-				"note": "Settings may contain sensitive information. Do not copy them to shared conversations. A settings file does not prove that a connection succeeded.",
-				"usage": "These files contain personal settings for tools or service connections and are usually managed by AI or the tool. Understand an option and its impact before changing it."
+				"note": "Settings may contain private connection information. Explaining their purpose does not require revealing secret values.",
+				"preview": [
+					"Ask AI to explain an option, such as the service a feature uses, before adjusting it.",
+					"Settings may contain private connection information."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This file holds settings for your personal working environment."
 			},
 			"subject": {
 				"example": "“Read this topic record and explain my previous requirements for report formatting.”",
 				"guide": {
 					"actions": "Ask AI to summarize the record and its scope before using it. Update the same topic and its index when a new requirement replaces an old one; changing an index title alone leaves stale content behind.",
-					"context": "This record develops one topic, such as report format or collaboration expectations. It can contain conclusions, reasons and examples beyond a directory index. Read both what it says and its conditions, then consider later requirements.",
+					"context": "For example, keep report-writing preferences, current agreements and necessary explanations in a single note.",
 					"diagramTitle": "Read a topic record",
 					"exampleContent": "Topic: Report format\nAgreement: Findings, evidence, next steps\nReason: Help readers decide on action\nScope: Work progress reports",
 					"result": "A topic may require next actions in progress reports. For a task that only archives source material, AI should judge whether that format still fits rather than applying it indiscriminately.",
@@ -8623,14 +9637,19 @@
 						}
 					]
 				},
-				"note": "The file contains the details, its folder groups related records, and an index helps locate them. An index description is not the full text.",
-				"usage": "This file describes one topic in detail, including its context, methods, or preferences. Read it directly or ask AI to find it by subject."
+				"note": "Update the corresponding record when things change so several notes do not contradict each other.",
+				"preview": [
+					"For example, keep report-writing preferences, current agreements and necessary explanations in a single note.",
+					"Update the corresponding record when things change so several notes do not contradict each other."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This note describes one topic so future work can understand its background."
 			},
 			"teamshare": {
 				"example": "“Explain what each of these Teamshare tool files is used for.”",
 				"guide": {
 					"actions": "You usually do not need to organize these files manually. Ask AI to explain field purposes without revealing credentials. Reconfigure or authorize through supported tool methods when necessary. Copies placed in shared projects or conversations follow the destination’s access permissions.",
-					"context": "These folders usually appear after the relevant tool is used; not every user has one. The Teamshare tool can save personal connection information for later authorized tasks. Follow the tool’s documentation for its usage.",
+					"context": "The settings help the tool connect and work with shared content. Ask AI to explain unfamiliar settings before changing them.",
 					"diagramTitle": "Teamshare and personal configuration",
 					"exampleContent": "Tool configuration folder\n\nPurpose illustration\nConnection settings: Used by the relevant tool\nLogin credentials: May be present; actual values are not displayed",
 					"result": "When AI searches for Teamshare material, the tool may use saved settings to connect. Missing setup, expired login or insufficient permissions must be handled according to actual feedback; a folder is not proof of a working connection.",
@@ -8649,14 +9668,19 @@
 						}
 					]
 				},
-				"note": "The folder does not establish the current account, connection, or permissions. Do not copy configuration containing credentials to a shared location.",
-				"usage": "The Teamshare tool stores related settings and working files here. Ask AI to explain a file before changing unfamiliar configuration."
+				"note": "The folder name does not mean your entire personal space is shared. Actual feature settings determine sharing.",
+				"preview": [
+					"The settings help the tool connect and work with shared content.",
+					"The folder name does not mean your entire personal space is shared."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This folder stores personal settings needed by the Teamshare tool."
 			},
 			"timeline": {
 				"example": "“Review recent decisions in this project and explain the changes in chronological order.”",
 				"guide": {
 					"actions": "Give AI an approximate period and the question to investigate. Record what happened and why it changed. Be explicit about uncertain dates instead of inventing a timestamp for sorting.",
-					"context": "A timeline explains how work changed over time. Records of discussions and decisions distinguish earlier context from the current state. It is useful for tracing plan changes or problem resolution; the earliest record is not necessarily the latest conclusion.",
+					"context": "Use it to review changes during a period, then read the relevant record to understand why they happened.",
 					"diagramTitle": "Understand change over time",
 					"exampleContent": "Timeline illustration\nFirst discussion: Choose the report topic\nLater discussion: Add audience requirements\nLatest decision: Adjust the structure",
 					"result": "An initial plan for a long report may later become a brief because the audience changed. A timeline explains the reason; reading only the first decision gives an incomplete answer.",
@@ -8675,14 +9699,29 @@
 						}
 					]
 				},
-				"note": "A record reflects circumstances at the time. Consider later records and current requirements before applying an old decision.",
-				"usage": "Review important events, their circumstances, and decisions by date. Ask AI to follow the records over time to explain how a situation developed."
+				"note": "Dated records describe what happened at the time. Current circumstances may have changed.",
+				"preview": [
+					"Use it to review changes during a period, then read the relevant record to understand why they happened.",
+					"Dated records describe what happened at the time."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This folder keeps important events and decisions by date."
 			},
 			"tools": {
 				"example": "“Explain this tool data folder and which files the tool uses while running.”",
+				"files": [
+					{
+						"directory": true,
+						"path": ".local/share/dws-cli"
+					},
+					{
+						"directory": true,
+						"path": ".local/share/lark-cli"
+					}
+				],
 				"guide": {
 					"actions": "Ask AI to explain directory purpose and file types before organizing. When freeing space, identify what can be regenerated safely. Do not bulk-delete files merely because they are unfamiliar or automatically created.",
-					"context": "Tools can save runtime data, downloaded resources and reusable local files. Some can be regenerated; others may hold state or existing work. Unfamiliar folders should not all be treated as cache. Establish their purpose through the tool that created them.",
+					"context": "Some tools need these files to continue working later and normally maintain them themselves.",
 					"diagramTitle": "Identify the consumer first",
 					"exampleContent": "Tool data illustration\nTool folder/\n├── Resource files\n└── Runtime material",
 					"result": "A downloaded resource may be reused and need downloading again after deletion. Another file may store settings. Both are tool-generated but may require different handling.",
@@ -8701,14 +9740,19 @@
 						}
 					]
 				},
-				"note": "Tools may need these files to keep working. Understand their purpose before deleting them; automatically generated files are not necessarily disposable cache.",
-				"usage": "Tools save information they need while running. Usually you do not need to organize every file manually. Ask which tool creates and uses unfamiliar files."
+				"note": "You need not configure every file manually. Unfamiliar tool data is not necessarily disposable cache.",
+				"preview": [
+					"Some tools need these files to continue working later and normally maintain them themselves.",
+					"You need not configure every file manually."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This directory holds programs or working data retained by tools you use."
 			},
 			"topics": {
 				"example": "“Use our previous discussion about report structure to continue improving this outline.”",
 				"guide": {
 					"actions": "State which conclusions still apply and which conditions changed. Separate established facts from open questions. Preserving context does not require copying full conversations or unrelated sensitive information.",
-					"context": "Discussion context preserves background, options and conclusions useful for continuing the same question. It helps later tasks understand where work reached, but does not cover every message or guarantee verbatim history. Consult source material when exact evidence is needed.",
+					"context": "After a planning discussion, record why a method was chosen so later work can understand the decision.",
 					"diagramTitle": "Continue an existing discussion",
 					"exampleContent": "Discussion illustration\nGoal: Improve a report outline\nAgreed: Write for business readers\nOpen: Whether to add a glossary\nOn continuation: Consider new audience feedback",
 					"result": "AI can understand why a report structure was chosen before adjusting it to new feedback. A tentative proposal in an old record should remain tentative, not be presented as a final decision.",
@@ -8727,14 +9771,26 @@
 						}
 					]
 				},
-				"note": "These records retain selected discussion context, not a complete backup of all conversations. Follow newer requirements when circumstances change.",
-				"usage": "Keep useful context, questions, and conclusions from a discussion so you can continue later without explaining the entire background again."
+				"note": "Separate ideas from confirmed decisions. Old discussion records do not automatically describe the current state.",
+				"preview": [
+					"After a planning discussion, record why a method was chosen so later work can understand the decision.",
+					"Separate ideas from confirmed decisions."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This folder retains background, decisions and follow-up context from discussions."
 			},
 			"year": {
 				"example": "“Find records from this year related to changes in the project goals.”",
+				"exampleRoot": ".magic/memory/global",
+				"files": [
+					{
+						"directory": false,
+						"path": ".magic/memory/global/notes/timeline/2026/09/2026-09-01.md"
+					}
+				],
 				"guide": {
 					"actions": "Search with a goal, project or decision as a clue instead of opening every month. Keep original records distinct from a newly generated annual summary; a summary is not a complete history.",
-					"context": "A year groups events over a broad period so you can narrow down to months and records. It is an archive level, not an automatically generated annual review, and it does not establish that every month has records.",
+					"context": "For an annual review, narrow your search by year and then by month.",
 					"diagramTitle": "Locate records through a year",
 					"exampleContent": "Archive illustration\nA year/\n├── A month/\n│   └── Event record\n└── Other months/",
 					"result": "To review goal changes in a year, ask AI to find relevant events and summarize actual material. Missing months should be identified as gaps rather than filled with invented progress.",
@@ -8753,28 +9809,33 @@
 						}
 					]
 				},
-				"note": "A year folder is a date grouping, not an automatically generated annual summary. Ask AI to summarize the actual records when needed.",
-				"usage": "Group events from the same year so you can browse by month or review significant changes over that year."
+				"note": "A year is a way to find records; it does not mean every month has an entry.",
+				"preview": [
+					"For an annual review, narrow your search by year and then by month.",
+					"A year is a way to find records; it does not mean every month has an entry."
+				],
+				"scope": "User space · Personal records and settings",
+				"usage": "This folder groups dated records for a particular year."
 			}
 		},
 		"fileHelp": {
-			"cli": "Additional tools available to AI and their supporting files.",
-			"coreMemory": "Important information AI refers to regularly, with links to more detailed notes.",
-			"dingtalk": "Personal settings and connection information used for the DingTalk features you authorize.",
-			"event": "The background, events, and outcome recorded at the time; undated records are kept separately.",
-			"index": "A guide to the contents of this folder, helping you and AI find relevant records.",
-			"lark": "Personal settings and connection information used for the Lark features you authorize.",
-			"memory": "Information AI can refer to in later tasks to retain useful context about you.",
-			"month": "Important event records organized by month.",
-			"notes": "Detailed explanations and records that supplement the core memory.",
-			"references": "Reusable information organized by subject, such as preferences, procedures, and reasons behind decisions.",
-			"settings": "Personal settings needed to connect services or use tools, usually managed by AI or the tools.",
-			"subject": "Detailed information about a subject, available for future related questions.",
-			"teamshare": "Settings and data saved by the Teamshare tool for its features.",
-			"timeline": "Important events and decisions organized by date, so you can look back at how things developed.",
-			"tools": "Data automatically saved by tools, usually without requiring manual organization.",
-			"topics": "Useful context from a conversation, so you can continue the discussion later.",
-			"year": "Important event records organized by year."
+			"cli": "Command-line tools perform operations through text commands that AI can run for you.",
+			"coreMemory": "Keeps lasting preferences, background and concise conclusions.",
+			"dingtalk": "This folder stores personal settings used to connect to and use DingTalk tools.",
+			"event": "This record describes what happened in an event, discussion or decision.",
+			"index": "This file lists records, briefly describes their subjects and points to further reading.",
+			"lark": "This folder stores personal connection settings for Lark tools.",
+			"memory": "This directory brings together lasting information AI may consult in later work.",
+			"month": "This folder groups dated records for a particular month.",
+			"notes": "This directory organizes memory notes, connecting concise highlights with detailed records.",
+			"references": "This folder organizes detailed background and explanations by topic.",
+			"settings": "This file holds settings for your personal working environment.",
+			"subject": "This note describes one topic so future work can understand its background.",
+			"teamshare": "This folder stores personal settings needed by the Teamshare tool.",
+			"timeline": "This folder keeps important events and decisions by date.",
+			"tools": "This directory holds programs or working data retained by tools you use.",
+			"topics": "This folder retains background, decisions and follow-up context from discussions.",
+			"year": "This folder groups dated records for a particular year."
 		},
 		"fileLabels": {
 			"cli": "Installed tools",
@@ -8827,9 +9888,10 @@
 			"filesResult": "Identify the source material and the report’s purpose. Personal source files and generated reports may live in different locations. Before sharing a result with project members, check whether it contains personal content that should remain private.",
 			"foldersDescription": "These are examples of directory purposes, not a listing of your files. Contents depend on the features and tools you have used. DingTalk or Feishu settings usually appear after using the relevant tool; not everyone has them, and you do not need to create folders to match this illustration.",
 			"foldersTitle": "What might appear here?",
-			"introduction": "Personal space stores your files, tool settings and long-term memory in the current organization. It is separate from a project’s files: projects hold material and deliverables for that work, while personal space keeps content you may need across projects.",
+			"introduction": "This is your personal file space in the current organization. Keep material, settings and memory you need across projects, such as recurring writing preferences and methods for organizing sources.",
 			"memoryExample": "“Remember my preferred writing style and refer to it when writing for me.”",
 			"memoryResult": "Lasting habits can be organized into memory for later reference. State a different requirement in the relevant conversation when needed. If your preferences change, ask AI to update older records instead of preserving contradictory copies.",
+			"personalScope": "Current organization and account",
 			"privacy": "User Space is scoped to your organization and account. Access is not automatically shared with project members. AI can use these files as needed when working on your tasks.",
 			"privacyTitle": "What does private mean?",
 			"sharedContent": "If you copy content into a project file or shared conversation, the copy follows the access permissions of that destination.",

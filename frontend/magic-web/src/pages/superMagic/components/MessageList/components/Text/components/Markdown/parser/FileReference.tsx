@@ -1,9 +1,12 @@
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import type { FilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import type { ReactNode, MouseEvent } from "react"
-import MagicFileIcon from "@/components/base/MagicFileIcon"
-import { Folder, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 
 export interface FileReferenceProps {
+	presentation?: FilePresentation
 	label: ReactNode
 	href?: string
 	fileType?: string
@@ -22,6 +25,7 @@ export function getFileExtensionFromPath(path: string): string {
 }
 
 export function FileReference({
+	presentation,
 	label,
 	href,
 	fileType,
@@ -55,10 +59,18 @@ export function FileReference({
 		>
 			{loading ? (
 				<Loader2 size={16} className="shrink-0 animate-spin" />
-			) : isDirectory ? (
-				<Folder size={16} className="shrink-0" />
 			) : (
-				<MagicFileIcon type={fileType} size={16} className="shrink-0" />
+				<FileResourceIcon
+					presentation={
+						presentation ??
+						resolveFilePresentation({
+							file_extension: fileType,
+							is_directory: isDirectory,
+						})
+					}
+					size={16}
+					className="shrink-0"
+				/>
 			)}
 			<span
 				data-file-reference-label

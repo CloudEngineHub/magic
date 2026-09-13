@@ -61,6 +61,11 @@ export default observer(function UserSpacePanel({
 					mode="dialog"
 					help={{
 						title: t("userSpace.help.title"),
+						identity: {
+							name: t("userSpace.title"),
+							scope: t("userSpace.help.personalScope"),
+							renderIcon: (size) => <UserSpaceIcon size={size} />,
+						},
 						summary: t("userSpace.help.tooltip"),
 						subtitle: t("userSpace.help.subtitle"),
 						renderBody: () => <UserSpaceHelpContent />,

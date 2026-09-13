@@ -1,13 +1,13 @@
-import {
-	BookOpen,
-	FlaskConical,
-	FolderCode,
-	FolderInput,
-	Images,
-	LayoutTemplate,
-	Lightbulb,
-	Users,
-} from "lucide-react"
+import agentsIcon from "../assets/folder-skill-agents-icon.svg"
+import evalInputsIcon from "../assets/folder-skill-eval-inputs-icon.svg"
+import evalsIcon from "../assets/folder-skill-evals-icon.svg"
+import examplesIcon from "../assets/folder-skill-examples-icon.svg"
+import templatesIcon from "../assets/folder-skill-templates-icon.svg"
+import libraryIcon from "../assets/folder-skill-library-icon.svg"
+import referencesIcon from "../assets/folder-skill-references-icon.svg"
+import scriptsIcon from "../assets/folder-skill-scripts-icon.svg"
+import assetsIcon from "../assets/folder-skill-assets-icon.svg"
+import folderIcon from "../assets/folder-skill-icon.svg"
 import type { ReactNode } from "react"
 import type { SkillFileKind } from "../utils/skill-file-structure"
 import { TopicFileIcon } from "./TopicFileIcon"
@@ -34,28 +34,24 @@ export function SkillFileIcon({
 	fallback = null,
 }: SkillFileIconProps) {
 	if (!hasSkillFileIcon(kind, isDirectory)) return fallback
-	if (kind === "library" || kind === "skill" || kind === "entry")
-		return (
-			<TopicFileIcon
-				magicVariant={kind === "entry" ? "magic-file-skills" : "magic-skills"}
-				size={size}
-				className={className}
-			/>
-		)
-	const icons = {
-		references: BookOpen,
-		scripts: FolderCode,
-		assets: Images,
-		templates: LayoutTemplate,
-		examples: Lightbulb,
-		evals: FlaskConical,
-		evalInputs: FolderInput,
-		agents: Users,
+	if (kind === "entry")
+		return <TopicFileIcon magicVariant="magic-file-skills" size={size} className={className} />
+	const folderSources: Partial<Record<SkillFileKind, string>> = {
+		library: libraryIcon,
+		skill: folderIcon,
+		references: referencesIcon,
+		scripts: scriptsIcon,
+		assets: assetsIcon,
+		agents: agentsIcon,
+		evalInputs: evalInputsIcon,
+		evals: evalsIcon,
+		examples: examplesIcon,
+		templates: templatesIcon,
 	}
-	const Icon = kind && Object.hasOwn(icons, kind) ? icons[kind as keyof typeof icons] : undefined
-	return Icon ? (
-		<Icon size={size} className={className ?? "shrink-0 text-muted-foreground"} aria-hidden />
-	) : (
-		fallback
-	)
+	const source = kind ? folderSources[kind] : undefined
+	if (source)
+		return (
+			<img src={source} alt="" width={size} height={size} className={className} aria-hidden />
+		)
+	return fallback
 }

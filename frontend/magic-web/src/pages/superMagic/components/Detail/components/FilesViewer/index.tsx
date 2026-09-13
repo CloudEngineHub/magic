@@ -1,3 +1,4 @@
+import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import {
 	memo,
 	useRef,
@@ -92,6 +93,15 @@ const FilesViewer = memo(
 		forwardRef<FilesViewerRef, FilesViewerProps>((props, ref) => {
 			// Props are passed directly to hook
 			const tabAttachments = props.attachments ?? props.attachmentList
+			const ownerId = props.selectedProject?.id ?? props.projectId
+			const fileHelpContext = useMemo<FileHelpContext>(
+				() =>
+					props.fileHelpContext ??
+					(ownerId
+						? { kind: "project", projectId: String(ownerId) }
+						: { kind: "unknown" }),
+				[props.fileHelpContext, ownerId],
+			)
 			const { t } = useTranslation("super")
 			const isUrlFullscreenMode = useFullscreenMode()
 			const isFullscreenMode = Boolean(props.forceFullscreenMode) || isUrlFullscreenMode
@@ -355,6 +365,7 @@ const FilesViewer = memo(
 						isPlayback={isPlayback}
 						contextMenuState={contextMenuState}
 						attachments={tabAttachments}
+						context={fileHelpContext}
 						onSwitchToTab={switchToTab}
 						onCloseTab={handleTabClose}
 						onDragStart={handleTabDragStart}
@@ -389,6 +400,7 @@ const FilesViewer = memo(
 							<FileTabMagicIcon
 								tab={tab}
 								attachments={tabAttachments}
+								context={fileHelpContext}
 								isPlayback={isPlayback}
 								size={12}
 							/>

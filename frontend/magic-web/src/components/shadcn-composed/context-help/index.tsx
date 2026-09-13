@@ -140,7 +140,7 @@ export function ContextHelp({ help, mode, children }: ContextHelpProps) {
 						<div
 							ref={refs.setFloating}
 							style={floatingStyles}
-							className="z-tooltip w-72 max-w-[calc(100vw-2rem)] space-y-2 rounded-md border bg-popover p-3 text-sm text-popover-foreground shadow-md outline-none"
+							className="z-tooltip w-80 max-w-[calc(100vw-2rem)] space-y-2 rounded-md border bg-popover p-3 text-sm text-popover-foreground shadow-md outline-none"
 							{...getFloatingProps({
 								onPointerDown: (event) => event.stopPropagation(),
 								onClick: (event) => event.stopPropagation(),
@@ -150,12 +150,34 @@ export function ContextHelp({ help, mode, children }: ContextHelpProps) {
 							{...contentScope}
 							aria-labelledby={titleId}
 						>
-							<p id={titleId} className="font-medium">
-								{help.title}
-							</p>
+							<div className="flex items-center gap-3">
+								{help.identity && (
+									<span className="inline-flex shrink-0">
+										{help.identity.renderIcon(28)}
+									</span>
+								)}
+								<div className="min-w-0">
+									<p id={titleId} className="break-all font-medium">
+										{help.identity?.name ?? help.title}
+									</p>
+									{help.identity && (
+										<p className="text-xs text-muted-foreground">
+											{help.title}
+											{help.identity.scope ? " · " + help.identity.scope : ""}
+										</p>
+									)}
+								</div>
+							</div>
 							<p className="text-xs leading-5 text-muted-foreground">
 								{help.summary}
 							</p>
+							{help.points?.length ? (
+								<ul className="list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
+									{help.points.map((point) => (
+										<li key={point}>{point}</li>
+									))}
+								</ul>
+							) : null}
 							<div className="flex justify-end">
 								<Button variant="ghost" size="sm" onClick={openDialog}>
 									{t("contextHelp.more")}

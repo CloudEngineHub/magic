@@ -41,12 +41,6 @@ interface SkillDirectory {
 
 const SKILLS_ROOT = ".magic/skills"
 
-/** 未接入完整分类的旧图标调用方仍可识别技能库，规则与新文件视图共用。 */
-export function resolveSkillLibraryKind(item: AttachmentItem): SkillFileKind | undefined {
-	if ((item.file_reference?.space_type ?? item.space_type) === "user") return
-	return item.is_directory && resolveFileHelpPath(item) === SKILLS_ROOT ? "library" : undefined
-}
-
 const RESOURCE_DIRECTORIES: Readonly<Record<string, SkillFileKind>> = {
 	references: "references",
 	reference: "references",
@@ -104,19 +98,22 @@ export function buildSkillFileKinds(
 
 	for (const entry of getEntries(attachments)) {
 		const { item, key, parentKey } = entry
+		const isDirectory = item.is_directory === true || item.type === "directory"
 		const path = resolveFileHelpPath(item, parentKey === null ? "" : paths.get(parentKey))
 		paths.set(key, path)
 		const space = item.file_reference?.space_type ?? item.space_type ?? context?.kind
-		if (space === "user" || !path) continue
+		if (!path) continue
 		if (path !== SKILLS_ROOT && !path.startsWith(`${SKILLS_ROOT}/`)) continue
 		const scope =
 			item.file_reference?.space_type === "project"
 				? item.file_reference.project_id
 				: context && "projectId" in context
 					? context.projectId
-					: ""
+					: space === "user"
+						? "user"
+						: ""
 		skillEntries.push({ ...entry, path, scope })
-		if (!item.is_directory && path.endsWith("/SKILL.md")) {
+		if (!isDirectory && path.toLowerCase().endsWith("/skill.md")) {
 			candidates.add(`${scope}:${path.slice(0, -"/SKILL.md".length)}`)
 		}
 	}
@@ -167,8 +164,14 @@ export function buildSkillFileKinds(
 	}
 
 	for (const { item, key, path, scope } of skillEntries) {
-		if (item.is_directory) {
-			kinds.set(key, getDirectory(path, scope).kind)
+		if (item.is_directory === true || item.type === "directory") {
+			const directory = getDirectory(path, scope)
+			kinds.set(
+				key,
+				directory.resourceRoot && path !== directory.resourceRoot
+					? "support"
+					: directory.kind,
+			)
 			continue
 		}
 		const separator = path.lastIndexOf("/")
@@ -179,10 +182,10 @@ export function buildSkillFileKinds(
 			continue
 		}
 		const directory = getDirectory(parent, scope)
-		let kind: SkillFileKind = directory.resourceRoot ? directory.kind : "support"
+		let kind: SkillFileKind = "support"
 		if (path === `${directory.root}/evals/evals.json`) kind = "evalCases"
 		else if (parent === directory.root) {
-			if (name === "SKILL.md") kind = "entry"
+			if (name.toLowerCase() === "skill.md") kind = "entry"
 			else if (name === "README.md") kind = "readme"
 			else if (/^LICEN[CS]E(?:\.(?:md|txt))?$/.test(name)) kind = "license"
 		}

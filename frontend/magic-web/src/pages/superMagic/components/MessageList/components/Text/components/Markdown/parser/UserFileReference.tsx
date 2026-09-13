@@ -1,3 +1,4 @@
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { observer } from "mobx-react-lite"
 import { useEffect, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
@@ -79,6 +80,14 @@ export const UserFileReference = observer(function UserFileReference({
 
 	return (
 		<FileReference
+			presentation={
+				reference
+					? resolveFilePresentation(
+							{ ...reference, file_reference: reference },
+							{ context: { kind: "user" } },
+						)
+					: undefined
+			}
 			label={reference?.file_name || label}
 			href={canonicalHref}
 			mentionAttrs={attrs ?? mentionAttrs}

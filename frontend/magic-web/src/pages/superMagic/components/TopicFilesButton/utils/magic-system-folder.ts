@@ -35,6 +35,8 @@ export function resolveFileHelpPath(item: AttachmentItem, parentPath?: string): 
 		const parts = normalized.split("/")
 		if (parts.some((part) => part === ".." || part.includes("\0"))) return ""
 		if (parts[0] === ".workspace" && item.file_reference?.space_type !== "user") parts.shift()
+		if (parts[0] === "~" && (item.file_reference?.space_type ?? item.space_type) === "user")
+			parts.shift()
 		return parts.filter((part) => part && part !== ".").join("/")
 	}
 	if (parentPath === undefined) return ""

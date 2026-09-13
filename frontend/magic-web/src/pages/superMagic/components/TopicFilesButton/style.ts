@@ -363,20 +363,16 @@ export const useStyles = createStyles(({ token }) => ({
 	rowTagSlot: {
 		display: "flex",
 		alignItems: "center",
-		flexWrap: "wrap",
+		flexWrap: "nowrap",
 		gap: 4,
 		maxWidth: "100%",
 		flexShrink: 0,
 		marginLeft: "auto",
 		marginRight: "4px",
 	},
-	// 标签放不下时另起一行；保留文件名的阅读宽度，树沿用真实行高测量。
+	// 文件名和标签保持单行；实际宽度由列表统一测量，放不下时隐藏用途。
 	fileTitleWithTag: {
-		flexWrap: "wrap",
-		"[data-testid='folder-name'], [data-testid='file-name']": {
-			flexBasis: "8ch",
-			minWidth: "min(8ch, 100%)",
-		},
+		flexWrap: "nowrap",
 	},
 	fileItemWithTag: {
 		"@media (max-width: 768px)": {

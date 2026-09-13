@@ -1,16 +1,16 @@
+import { useFileTagVisibility } from "../hooks/useFileTagVisibility"
 import type { FileHelpContext } from "../utils/magic-system-folder"
 import type { SkillFileStructure } from "../utils/skill-file-structure"
 import { getAttachmentKey } from "../utils/getAttachmentKey"
-import { SkillFileIcon } from "./SkillFileIcon"
+import { getFilePresentationIndex, resolveFilePresentation } from "../utils/file-presentation"
+import { FileDirectoryRow } from "./FileDirectoryRow"
 import { useVirtualScrollMargin } from "../hooks/useVirtualScrollMargin"
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useSize } from "ahooks"
-import { ArrowLeft, ChevronRight, MoreHorizontal } from "lucide-react"
+import { ArrowLeft, ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import MagicDropdown from "@/components/base/MagicDropdown"
 import { cn } from "@/utils/cn"
 import { normalizeLocale } from "@/utils/locale"
 import {
@@ -19,16 +19,15 @@ import {
 } from "@/pages/superMagic/utils/projectAttachments/treeUtils"
 import type { AttachmentItem } from "../hooks/types"
 import type { TopicFilesMenuItem } from "../utils/menu-items"
-import { TopicFileIcon } from "./TopicFileIcon"
 import { ProjectFileTag } from "./TopicFileTag"
 import { FileDirectoryToolbar } from "./FileDirectoryToolbar"
-import { handleAttachmentDragEnd, handleAttachmentDragStart } from "../../MessageEditor/utils/drag"
 
 export interface DirectoryBreadcrumb {
 	id: string
 	name: string
 }
 export interface FileDirectoryViewProps {
+	mode?: "files"
 	skillFiles?: SkillFileStructure
 	fileHelpContext?: FileHelpContext
 	renderFileIcon?: (file: AttachmentItem, size: number) => ReactNode
@@ -86,7 +85,7 @@ export function formatDirectoryFileTime(
 }
 
 /** 项目和用户文件共享目录交互；读取与修改由所属空间提供，视图不构造项目身份。 */
-export function FileDirectoryView({
+function InteractiveFileDirectoryView({
 	skillFiles,
 	fileHelpContext,
 	renderFileIcon,
@@ -120,6 +119,7 @@ export function FileDirectoryView({
 	const [selecting, setSelecting] = useState(false)
 	const [sort, setSort] = useState<"name" | "time">("name")
 	const scrollRef = useRef<HTMLDivElement>(null)
+	useFileTagVisibility(scrollRef)
 	const size = useSize(scrollRef)
 	const { ref: rowsRef, scrollMargin } = useVirtualScrollMargin(scrollElementRef)
 	const query = (externalSearch ?? search).toLocaleLowerCase()
@@ -317,155 +317,55 @@ export function FileDirectoryView({
 								{visible
 									.slice(row.index * columns, (row.index + 1) * columns)
 									.map((file, offset) => (
-										<MagicDropdown
+										<FileDirectoryRow
 											key={file.file_id}
-											trigger={["contextMenu"]}
-											menu={{ items: getMenuItems(file) }}
-										>
-											<div
-												className={cn(
-													"group relative min-w-0 rounded-md hover:bg-accent",
-													grid
-														? "flex flex-col items-center justify-center border p-2"
-														: "flex items-center gap-2 px-1",
-													activeFileId === file.file_id && "bg-accent",
-												)}
-											>
-												<div
-													className={cn(
-														"flex min-w-0 flex-wrap items-center gap-2 py-1",
-														grid ? "w-full" : "flex-1",
-													)}
-												>
-													{selecting && (
-														<Checkbox
-															disabled={!isSelectable(file)}
-															aria-label={t("userSpace.selectName", {
-																name: file.file_name ?? file.name,
-															})}
-															checked={selectedIds.has(
-																String(file.file_id),
-															)}
-															onCheckedChange={() => toggle(file)}
-														/>
-													)}
-													<button
-														data-file-index={
-															row.index * columns + offset
-														}
-														className={cn(
-															"flex min-w-[min(8ch,100%)] flex-[1_1_8ch] items-center gap-2 rounded text-left text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring",
-															grid && "flex-col text-center",
+											mode="files"
+											presentation={resolveFilePresentation(file, {
+												context: fileHelpContext,
+												index: getFilePresentationIndex(items),
+												skillKind: skillFiles?.kinds.get(
+													getAttachmentKey(file),
+												),
+												path: skillFiles?.paths.get(getAttachmentKey(file)),
+											})}
+											grid={grid}
+											index={row.index * columns + offset}
+											active={activeFileId === file.file_id}
+											selecting={selecting}
+											selected={selectedIds.has(String(file.file_id))}
+											selectable={isSelectable(file)}
+											modified={formatDirectoryFileTime(
+												file.updated_at,
+												i18n.language,
+											)}
+											menuItems={getMenuItems(file)}
+											onToggle={() => toggle(file)}
+											onOpen={() =>
+												file.is_directory
+													? navigate(file.file_id)
+													: onOpen(file)
+											}
+											onKeyDown={(event) =>
+												keyboard(event, row.index * columns + offset, file)
+											}
+											icon={renderFileIcon?.(file, grid ? 36 : 16)}
+											tag={
+												renderFileTag ? (
+													renderFileTag(file)
+												) : (
+													<ProjectFileTag
+														item={file}
+														skillKind={skillFiles?.kinds.get(
+															getAttachmentKey(file),
 														)}
-														draggable
-														onDragStart={(event) =>
-															handleAttachmentDragStart(event, file)
-														}
-														onDragEnd={handleAttachmentDragEnd}
-														onKeyDown={(event) =>
-															keyboard(
-																event,
-																row.index * columns + offset,
-																file,
-															)
-														}
-														onClick={() =>
-															file.is_directory
-																? navigate(file.file_id)
-																: onOpen(file)
-														}
-														title={file.file_name ?? file.name}
-													>
-														{renderFileIcon ? (
-															renderFileIcon(file, grid ? 36 : 16)
-														) : (
-															<SkillFileIcon
-																kind={skillFiles?.kinds.get(
-																	getAttachmentKey(file),
-																)}
-																isDirectory={file.is_directory}
-																size={grid ? 36 : 16}
-																fallback={
-																	<TopicFileIcon
-																		isDirectory={
-																			file.is_directory
-																		}
-																		fileExtension={
-																			file.file_extension
-																		}
-																		size={grid ? 36 : 16}
-																	/>
-																}
-															/>
+														path={skillFiles?.paths.get(
+															getAttachmentKey(file),
 														)}
-														<span className="min-w-0 max-w-full truncate">
-															{file.file_name ?? file.name}
-														</span>
-													</button>
-													<div
-														className={cn(
-															"ml-auto flex max-w-full shrink-0 empty:hidden",
-															grid && "w-full justify-center",
-														)}
-													>
-														{renderFileTag ? (
-															renderFileTag(file)
-														) : (
-															<ProjectFileTag
-																item={file}
-																skillKind={skillFiles?.kinds.get(
-																	getAttachmentKey(file),
-																)}
-																path={skillFiles?.paths.get(
-																	getAttachmentKey(file),
-																)}
-																context={fileHelpContext}
-															/>
-														)}
-													</div>
-												</div>
-												{!grid && (
-													<>
-														<span className="w-20 shrink-0 truncate text-xs text-muted-foreground">
-															{file.is_directory
-																? t("userSpace.folder")
-																: file.file_extension?.toUpperCase() ||
-																	t("userSpace.file")}
-														</span>
-														<span
-															className="hidden w-44 shrink-0 truncate text-xs text-muted-foreground sm:block"
-															title={formatDirectoryFileTime(
-																file.updated_at,
-																i18n.language,
-															)}
-														>
-															{formatDirectoryFileTime(
-																file.updated_at,
-																i18n.language,
-															)}
-														</span>
-													</>
-												)}
-												<MagicDropdown
-													trigger={["click"]}
-													menu={{ items: getMenuItems(file) }}
-												>
-													<Button
-														variant="ghost"
-														size="icon"
-														className={cn(
-															"size-7 shrink-0",
-															grid && "absolute right-2 top-1",
-														)}
-														aria-label={t("userSpace.actions", {
-															name: file.file_name ?? file.name,
-														})}
-													>
-														<MoreHorizontal size={16} />
-													</Button>
-												</MagicDropdown>
-											</div>
-										</MagicDropdown>
+														context={fileHelpContext}
+													/>
+												)
+											}
+										/>
 									))}
 							</div>
 						))}
@@ -476,5 +376,70 @@ export function FileDirectoryView({
 				{t("userSpace.itemCount", { count: visible.length })}
 			</div>
 		</div>
+	)
+}
+
+export interface FileDirectoryExampleProps {
+	mode: "example"
+	items: AttachmentItem[]
+	rootName: string
+	fileHelpContext: FileHelpContext
+	descriptions?: Readonly<Record<string, string>>
+}
+
+function FileDirectoryExample({
+	items,
+	rootName,
+	fileHelpContext,
+	descriptions,
+}: FileDirectoryExampleProps) {
+	const { t } = useTranslation("super")
+	const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+	const index = getFilePresentationIndex(items)
+	const entries = [...index.attachments.entriesByKey.values()].filter(
+		(entry) =>
+			!index.attachments
+				.getPathKeys(entry.key)
+				.slice(0, -1)
+				.some((key) => collapsed.has(key)),
+	)
+	return (
+		<div className="overflow-hidden rounded-lg border bg-background">
+			<div className="border-b px-4 py-2 text-xs text-muted-foreground">{rootName}</div>
+			<div className="px-2 py-1">
+				{entries.map(({ key, item, level }) => (
+					<FileDirectoryRow
+						key={key}
+						mode="example"
+						presentation={resolveFilePresentation(item, {
+							context: fileHelpContext,
+							index,
+						})}
+						depth={level}
+						description={descriptions?.[index.skills.paths.get(key) ?? ""]}
+						expanded={!collapsed.has(key)}
+						onExpand={() =>
+							setCollapsed((previous) => {
+								const next = new Set(previous)
+								if (next.has(key)) next.delete(key)
+								else next.add(key)
+								return next
+							})
+						}
+					/>
+				))}
+			</div>
+			<div className="border-t px-4 py-2 text-xs text-muted-foreground">
+				{t("userSpace.itemCount", { count: entries.length })}
+			</div>
+		</div>
+	)
+}
+
+export function FileDirectoryView(props: FileDirectoryViewProps | FileDirectoryExampleProps) {
+	return props.mode === "example" ? (
+		<FileDirectoryExample {...props} />
+	) : (
+		<InteractiveFileDirectoryView {...props} />
 	)
 }

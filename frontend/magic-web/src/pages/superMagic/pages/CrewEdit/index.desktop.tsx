@@ -540,6 +540,11 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 		<StepDetailPanel />
 	) : (
 		<Detail
+			fileHelpContext={
+				selectedProject?.id
+					? { kind: "crew", projectId: String(selectedProject.id) }
+					: { kind: "unknown" }
+			}
 			ref={detailRef}
 			disPlayDetail={userSelectDetail}
 			userSelectDetail={userSelectDetail}

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { ArrowDown, ArrowRight, FileText, FolderTree } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
@@ -5,6 +6,7 @@ import { cn } from "@/utils/cn"
 export interface HelpStep {
 	title: string
 	description: string
+	icon?: ReactNode
 }
 
 export interface HelpIllustrationProps {
@@ -60,13 +62,14 @@ export function HelpIllustration({ title, steps, variant }: HelpIllustrationProp
 									className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-xs text-primary"
 									aria-hidden
 								>
-									{variant === "tree" ? (
-										<FolderTree size={16} />
-									) : variant === "document" ? (
-										<FileText size={16} />
-									) : (
-										index + 1
-									)}
+									{step.icon ??
+										(variant === "tree" ? (
+											<FolderTree size={16} />
+										) : variant === "document" ? (
+											<FileText size={16} />
+										) : (
+											index + 1
+										))}
 								</span>
 								<span className="min-w-0 break-words">{step.title}</span>
 							</div>

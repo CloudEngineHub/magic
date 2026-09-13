@@ -1,3 +1,4 @@
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { observer } from "mobx-react-lite"
 import { useEffect, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
@@ -163,6 +164,14 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 			: undefined
 		return (
 			<FileReference
+				presentation={resolveFilePresentation(resolvedFileInfo, {
+					context: referencedProjectId
+						? { kind: "project", projectId: referencedProjectId }
+						: resolvedProjectFilesStore.filePresentationContext,
+					index: referencedProjectId
+						? undefined
+						: resolvedProjectFilesStore.filePresentationIndex,
+				})}
 				label={children}
 				href={normalizedHref}
 				mentionAttrs={mentionAttrs}
