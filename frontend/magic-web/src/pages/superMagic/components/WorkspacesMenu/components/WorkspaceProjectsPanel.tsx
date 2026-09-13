@@ -22,8 +22,10 @@ interface WorkspaceProjectsPanelProps {
 	onClose: () => void
 }
 
-type ProjectBrowserSource = { type: "workspace"; workspace: Workspace } | { type: "collaboration" }
+export type ProjectBrowserSource =
+	{ type: "workspace"; workspace: Workspace } | { type: "collaboration" }
 const WORKSPACE_PAGE_SIZE = 20
+const DEFAULT_WINDOW_WIDTH_RATIO = 0.85
 
 function getInitialWorkspaces(source: ProjectBrowserSource): Workspace[] {
 	return Array.from(
@@ -158,7 +160,12 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 				open,
 				draggable: true,
 				resizable: true,
-				defaultSize: { width: 960, height: 680 },
+				defaultSize: {
+					width:
+						(window.visualViewport?.width ?? window.innerWidth) *
+						DEFAULT_WINDOW_WIDTH_RATIO,
+					height: 680,
+				},
 				minSize: { width: 720, height: 480 },
 				// 所有项目入口共用尺寸偏好；账号未就绪时不使用 undefined 组成共享键。
 				sizeStorageKey:
@@ -190,7 +197,7 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 										: undefined
 								}
 								className={cn(
-									"mb-0.5 flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-muted-foreground hover:bg-accent",
+									"mb-0.5 flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-accent",
 									source.type === "workspace" &&
 										source.workspace.id === item.id &&
 										"bg-accent font-medium text-accent-foreground ring-1 ring-inset ring-border",
@@ -229,30 +236,27 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 								{loading ? t("common.loading") : t("sidebarPanels.loadMore")}
 							</Button>
 						)}
-					</div>
-					{/* 普通目录独立滚动；协作入口固定在底部，目录再长也能直接切换。 */}
-					<div className="mt-3 shrink-0 border-t border-border pt-3">
-						<div className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">
-							{t("sidebarPanels.collaboration")}
-						</div>
-						<button
-							type="button"
-							aria-current={source.type === "collaboration" ? true : undefined}
-							className={cn(
-								"flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-muted-foreground hover:bg-accent",
-								source.type === "collaboration" &&
-									"bg-accent font-medium text-accent-foreground",
-							)}
-							onClick={() => selectSource({ type: "collaboration" })}
-						>
-							<Users size={16} className="shrink-0" />
-							<span
-								className="min-w-0 flex-1 truncate"
-								title={t("workspace.collaborationProjectsTitle")}
+						{/* 共享紧随普通目录；两类入口一起滚动，少量目录时不会留下大段空白。 */}
+						<div className="mt-2 border-t border-border pt-2">
+							<button
+								type="button"
+								aria-current={source.type === "collaboration" ? true : undefined}
+								className={cn(
+									"flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-accent",
+									source.type === "collaboration" &&
+										"bg-accent font-medium text-accent-foreground",
+								)}
+								onClick={() => selectSource({ type: "collaboration" })}
 							>
-								{t("workspace.collaborationProjectsTitle")}
-							</span>
-						</button>
+								<Users size={16} className="shrink-0" />
+								<span
+									className="min-w-0 flex-1 truncate"
+									title={t("workspace.collaborationProjectsTitle")}
+								>
+									{t("workspace.collaborationProjectsTitle")}
+								</span>
+							</button>
+						</div>
 					</div>
 				</nav>
 			}

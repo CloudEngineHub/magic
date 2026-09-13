@@ -1,7 +1,7 @@
 import IconWorkspaceProjectFolder from "@/enhance/tabler/icons-react/icons/IconWorkspaceProjectFolder"
 import { cn } from "@/utils/cn"
 import { useHover, useMemoizedFn } from "ahooks"
-import { useMemo, useRef, lazy } from "react"
+import { useMemo, useRef } from "react"
 import useProjectRename from "@/pages/superMagic/hooks/useProjectRename"
 import { Input } from "antd"
 import SmartTooltip from "@/components/other/SmartTooltip"
@@ -9,16 +9,12 @@ import { useTranslation } from "react-i18next"
 import {
 	ProjectListItem,
 	CollaborationProjectListItem,
+	CollaborationProjectType,
 } from "@/pages/superMagic/pages/Workspace/types"
 import { IconDots, IconLink } from "@tabler/icons-react"
 import { HandleRenameProjectParams } from "@/pages/superMagic/hooks/useProjects"
 import { openProjectInNewTab } from "@/pages/superMagic/utils/project"
 import SuperMagicService from "@/pages/superMagic/services"
-import MagicAvatar from "@/components/base/MagicAvatar"
-import type {
-	Collaborator,
-	CollaborationProjectListItem as ShareItem,
-} from "@/pages/superMagic/pages/Workspace/types"
 import CollaborationProjectTag from "../../../CollaborationProjectTag"
 import {
 	isCollaborationProject,
@@ -29,7 +25,7 @@ import FlexBox from "@/components/base/FlexBox"
 import { observer } from "mobx-react-lite"
 import MagicButton from "@/components/base/MagicButton"
 import MagicIcon from "@/components/base/MagicIcon"
-import AddCollaborators from "./components/AddCollaborators"
+import ProjectCollaborators from "./components/ProjectCollaborators"
 import PinnedTag from "./components/PinnedTag"
 import { isOwner } from "@/pages/superMagic/utils/permission"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -42,6 +38,7 @@ interface ProjectItemProps<T extends ProjectListItem | CollaborationProjectListI
 	variant?: "default" | "compact"
 	sortType?: SortType
 	inCollaborationPanel?: boolean
+	collaborationType?: CollaborationProjectType
 	onClick: (project: T) => void
 	onRenameProject?: (params: HandleRenameProjectParams) => Promise<void>
 	onDeleteProject?: (project: T) => void
@@ -75,6 +72,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	variant = "default",
 	sortType = SortType.PROJECT_UPDATE_TIME,
 	inCollaborationPanel = false,
+	collaborationType,
 	onClick,
 	onRenameProject,
 	onDeleteProject,
@@ -94,6 +92,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 
 	const isListMode = viewMode === ViewMode.LIST
 	const isCompact = variant === "compact"
+	const isCompactList = isCompact && isListMode
 
 	// Use custom hook for rename functionality
 	const {
@@ -133,120 +132,60 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	/** 是否是工作区快捷项目 */
 	const isWorkspaceShortcutProjectStatus = isWorkspaceShortcutProject(item)
 
-	const WithCollaborators = useMemo(() => {
-		if ((!isCompact && isListMode) || !isCollaborationProjectStatus || !inCollaborationPanel)
-			return null
+	const showCollaborators =
+		(isCompact || !isListMode) && isCollaborationProjectStatus && inCollaborationPanel
+	const copyLinkButton = isSelfCollaborationProjectStatus && (
+		<MagicButton
+			className={cn(
+				"flex h-7 items-center gap-1 rounded-lg border border-border px-2 py-1.5",
+				!isCompactList && "mt-auto",
+			)}
+			onClick={(event) => {
+				event.stopPropagation()
+				handleCopyCollaborationLink(item)
+			}}
+			data-testid="project-item-copy-link-button"
+		>
+			<MagicIcon component={IconLink} size={14} />
+			{t("project.copyLink")}
+		</MagicButton>
+	)
+	const WithCollaborators = showCollaborators ? (
+		<ProjectCollaborators<T>
+			project={item}
+			compact={isCompact}
+			list={isCompactList}
+			showCreator={
+				isCompactList && collaborationType
+					? collaborationType === CollaborationProjectType.Received
+					: !isOwner(item.user_role)
+			}
+			selfShared={isSelfCollaborationProjectStatus}
+			onAddCollaborators={onAddCollaborators}
+			copyLinkButton={isCompactList ? undefined : copyLinkButton}
+		/>
+	) : null
 
-		const shareItem = item as ShareItem
-		const creatorName = shareItem.creator?.nickname
-		const creatorAvatar = shareItem.creator?.avatar_url || undefined
-		const members: Collaborator[] = shareItem.members || []
-		const memberCount: number = shareItem.member_count ?? members.length
-
-		return (
-			<div
-				className={cn(
-					"flex flex-row items-start justify-between gap-2 border-t border-border pt-2.5",
-					isCompact && "col-span-3 row-start-2 items-center pt-2",
-					isCompact && isListMode && "col-span-1 col-start-3 row-start-1 border-t-0 pt-0",
-				)}
-				data-testid="project-item-collaborators"
-			>
-				{!isOwner(item.user_role) && (
-					<div
-						className="flex w-full flex-col justify-center gap-1.5"
-						style={{ maxWidth: "calc(100% - 90px)" }}
-						data-testid="project-item-creator-section"
-					>
-						<div
-							className={cn(
-								"text-[10px] font-normal leading-[13px] text-muted-foreground empty:block",
-								isCompact && "hidden",
-							)}
-							data-testid="project-item-creator-label"
-						>
-							{t("collaborators.creator")}
-						</div>
-						<div className="flex w-full items-center gap-1">
-							<MagicAvatar src={creatorAvatar} size={20} shape="circle">
-								{creatorName}
-							</MagicAvatar>
-							<SmartTooltip className="flex-1 shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-xs font-normal leading-4 text-foreground">
-								{creatorName}
-							</SmartTooltip>
-						</div>
-					</div>
-				)}
-				<div
-					className="flex shrink-0 flex-col justify-center gap-1.5"
-					style={{ maxWidth: 80 }}
-					data-testid="project-item-members-section"
-				>
-					<div
-						className={cn(
-							"text-[10px] font-normal leading-[13px] text-muted-foreground empty:block",
-							isCompact && "hidden",
-						)}
-						data-testid="project-item-members-label"
-					>
-						{t("collaborators.collaborator")}
-					</div>
-					<AddCollaborators<T>
-						members={members}
-						totalCount={memberCount}
-						isSelfCollaborationProjectStatus={isSelfCollaborationProjectStatus}
-						selectedProject={item}
-						onAddCollaborators={onAddCollaborators}
-					/>
-				</div>
-				{isSelfCollaborationProjectStatus && (
-					<MagicButton
-						className="mt-auto flex h-7 items-center gap-1 rounded-lg border border-border px-2 py-1.5"
-						onClick={(e) => {
-							e.stopPropagation()
-							handleCopyCollaborationLink(item)
-						}}
-						data-testid="project-item-copy-link-button"
-					>
-						<MagicIcon component={IconLink} size={14} />
-						{t("project.copyLink")}
-					</MagicButton>
-				)}
-			</div>
-		)
-	}, [
-		isListMode,
-		isCompact,
-		isCollaborationProjectStatus,
-		inCollaborationPanel,
-		item,
-		t,
-		isSelfCollaborationProjectStatus,
-		onAddCollaborators,
-		handleCopyCollaborationLink,
-	])
-
-	const timeRender = useMemo(() => {
+	const time = useMemo(() => {
 		switch (sortType) {
-			case SortType.PROJECT_UPDATE_TIME:
-				return t("common.lastUpdatedAt", {
-					time: (item.last_active_at || item.updated_at).replaceAll("-", "/"),
-				})
-			case SortType.MY_LAST_ACTIVE_TIME:
-				if (!item.last_active_at) {
-					return t("common.noActiveTime")
+			case SortType.MY_LAST_ACTIVE_TIME: {
+				const value = item.last_active_at?.replaceAll("-", "/")
+				return {
+					value: value || t("common.noActiveTime"),
+					label: value
+						? t("common.lastActiveAt", { time: value })
+						: t("common.noActiveTime"),
 				}
-				return t("common.lastActiveAt", {
-					time: item.last_active_at?.replaceAll("-", "/"),
-				})
-			case SortType.PROJECT_CREATE_TIME:
-				return t("common.createdAt", {
-					time: item.created_at.replaceAll("-", "/"),
-				})
-			default:
-				return t("common.lastUpdatedAt", {
-					time: (item.last_active_at || item.updated_at).replaceAll("-", "/"),
-				})
+			}
+			case SortType.PROJECT_CREATE_TIME: {
+				const value = item.created_at.replaceAll("-", "/")
+				return { value, label: t("common.createdAt", { time: value }) }
+			}
+			default: {
+				// 保留原更新时间的回退顺序；列表仅去掉已有列标题重复表达的前缀。
+				const value = (item.last_active_at || item.updated_at).replaceAll("-", "/")
+				return { value, label: t("common.lastUpdatedAt", { time: value }) }
+			}
 		}
 	}, [item.updated_at, item.created_at, item.last_active_at, sortType, t])
 
@@ -281,11 +220,9 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 								"h-14 w-full flex-row items-center justify-start [&_.project-item-actions]:right-2 [&_.project-item-actions]:top-2 [&_.project-item-actions]:border-none [&_.project-item-actions]:bg-muted [&_.project-item-actions]:text-foreground [&_.project-item-content]:max-w-[calc(100%-50px)] [&_.project-item-content]:flex-1 [&_.project-item-icon]:h-10 [&_.project-item-icon]:w-10 [&_.project-item-icon]:flex-none [&_.project-item-title]:pr-5 [&_.project-item-updated-at]:overflow-hidden [&_.project-item-updated-at]:text-ellipsis [&_.project-item-updated-at]:whitespace-nowrap",
 							isCompact &&
 								"grid grid-cols-[16px_minmax(0,1fr)_24px] items-center gap-x-3 gap-y-1 px-3 py-2 hover:bg-accent/50",
-							isCompact && (isListMode ? "min-h-14" : "min-h-[88px]"),
-							isCompact &&
-								isListMode &&
-								!!WithCollaborators &&
-								"grid-cols-[16px_minmax(0,1fr)_auto_24px]",
+							isCompact && !isListMode && "min-h-[88px]",
+							isCompactList &&
+								"min-h-12 grid-cols-[16px_minmax(0,1fr)_auto] rounded-none border-0 border-b bg-transparent [@container_(min-width:800px)]:[grid-template-columns:var(--project-list-columns)]",
 						)}
 						onClick={() => onClick(item)}
 						onMouseEnter={onMouseEnter}
@@ -315,6 +252,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 							className={cn(
 								"project-item-content flex max-w-full flex-col gap-1",
 								isCompact && "col-start-2 row-start-1 min-w-0 gap-0.5",
+								isCompactList && "contents",
 							)}
 							data-testid="project-item-content"
 						>
@@ -322,7 +260,10 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 							{isEditing && !isWorkspaceShortcutProjectStatus && onRenameProject ? (
 								<Input
 									autoFocus
-									className="h-5"
+									className={cn(
+										"h-5",
+										isCompactList && "col-start-2 row-start-1",
+									)}
 									onClick={(e) => e.stopPropagation()}
 									value={editingProjectName}
 									onChange={handleProjectNameChange}
@@ -334,7 +275,10 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 								<FlexBox
 									align="center"
 									gap={4}
-									className="min-w-0"
+									className={cn(
+										"min-w-0",
+										isCompactList && "col-start-2 row-start-1",
+									)}
 									data-testid="project-item-title-wrapper"
 								>
 									{item.is_pinned && <PinnedTag className="" showText={false} />}
@@ -369,37 +313,48 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 								className={cn(
 									"project-item-updated-at text-[10px] font-normal leading-[13px] text-muted-foreground",
 									isCompact && "truncate text-xs leading-4",
+									isCompactList &&
+										"col-start-2 row-start-2 [@container_(min-width:800px)]:col-start-[time] [@container_(min-width:800px)]:row-start-1",
 								)}
 								data-testid="project-item-time"
 								data-sort-type={sortType}
 							>
-								{timeRender}
+								{isCompactList ? time.value : time.label}
 							</SmartTooltip>
 						</div>
 
-						<button
-							type="button"
-							aria-label={t("common.moreActions")}
+						<div
 							className={cn(
-								"project-item-actions absolute right-5 top-5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg border border-border bg-black/50 text-white",
-								isListMode && "right-2 top-2 border-none bg-muted text-foreground",
-								isCompact &&
-									"static col-start-3 row-start-1 rounded-md border-none bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
-								isCompact && isListMode && !!WithCollaborators && "col-start-4",
+								isCompactList
+									? "col-start-3 row-span-2 row-start-1 flex items-center justify-end gap-2 [@container_(min-width:800px)]:col-start-[actions] [@container_(min-width:800px)]:row-span-1"
+									: "contents",
 							)}
-							style={{
-								opacity: (isCompact || isHover || open) && !isEditing ? 1 : 0,
-								visibility:
-									(isCompact || isHover || open) && !isEditing
-										? "visible"
-										: "hidden",
-							}}
-							onClick={triggerContextMenu}
-							data-testid="project-item-more-button"
-							data-visible={isHover || open}
 						>
-							<IconDots size={16} />
-						</button>
+							{isCompactList && showCollaborators && copyLinkButton}
+							<button
+								type="button"
+								aria-label={t("common.moreActions")}
+								className={cn(
+									"project-item-actions absolute right-5 top-5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg border border-border bg-black/50 text-white",
+									isListMode &&
+										"right-2 top-2 border-none bg-muted text-foreground",
+									isCompact &&
+										"static col-start-3 row-start-1 rounded-md border-none bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
+								)}
+								style={{
+									opacity: (isCompact || isHover || open) && !isEditing ? 1 : 0,
+									visibility:
+										(isCompact || isHover || open) && !isEditing
+											? "visible"
+											: "hidden",
+								}}
+								onClick={triggerContextMenu}
+								data-testid="project-item-more-button"
+								data-visible={isHover || open}
+							>
+								<IconDots size={16} />
+							</button>
+						</div>
 						{WithCollaborators}
 					</div>
 				)}

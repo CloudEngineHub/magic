@@ -1,4 +1,10 @@
-import { useRef, type ChangeEventHandler, type ComponentProps, type ReactNode } from "react"
+import {
+	useRef,
+	type ChangeEventHandler,
+	type ComponentProps,
+	type CSSProperties,
+	type ReactNode,
+} from "react"
 import { useTranslation } from "react-i18next"
 import { IconSearch, IconX } from "@tabler/icons-react"
 import type { DialogWindowOptions } from "@/hooks/use-dialog-window"
@@ -13,8 +19,11 @@ import MagicIcon from "@/components/base/MagicIcon"
 import MagicSpin from "@/components/base/MagicSpin"
 import MagicEmpty from "@/components/base/MagicEmpty"
 import { cn } from "@/utils/cn"
-import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
-import ProjectItem, { ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
+import {
+	CollaborationProjectType,
+	type ProjectListItem,
+} from "@/pages/superMagic/pages/Workspace/types"
+import ProjectItem, { SortType, ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
 
 const contentClassName = cn(
 	"min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-muted/20 p-3",
@@ -186,7 +195,7 @@ interface ProjectsPanelListProps<T extends ProjectListItem> {
 	viewMode: ViewMode
 	toolbar: ReactNode
 	itemProps: Omit<ComponentProps<typeof ProjectItem<T>>, "project" | "index" | "viewMode">
-	tabType?: string
+	tabType?: CollaborationProjectType
 	error?: ReactNode
 	footer?: ReactNode
 	emptyContent?: ReactNode
@@ -208,6 +217,23 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 	total,
 }: ProjectsPanelListProps<T>) {
 	const { t } = useTranslation("super")
+	const isList = viewMode === ViewMode.LIST
+	const isShared = !!itemProps.inCollaborationPanel
+	const showCreator = isShared && tabType === CollaborationProjectType.Received
+	// 表头与条目共用列宽；800px 可容纳最完整的人员列和至少 120px 名称，窄容器改为多行。
+	const listStyle: CSSProperties & { "--project-list-columns": string } = {
+		"--project-list-columns": showCreator
+			? "16px minmax(120px,1fr) [creator] 144px [members] 128px [time] 176px [actions] 32px"
+			: isShared
+				? "16px minmax(120px,1fr) [members] 128px [time] 176px [actions] 128px"
+				: "16px minmax(120px,1fr) [time] 176px [actions] 32px",
+	}
+	const timeHeading =
+		itemProps.sortType === SortType.MY_LAST_ACTIVE_TIME
+			? t("sidebarPanels.lastActiveTime")
+			: itemProps.sortType === SortType.PROJECT_CREATE_TIME
+				? t("sidebarPanels.createdTime")
+				: t("sidebarPanels.updatedTime")
 	return (
 		<MagicSpin
 			section
@@ -232,14 +258,26 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 					</div>
 				</div>
 				{/* Project list */}
-				<div className={contentClassName}>
+				<div
+					className={cn(contentClassName, isList && "[container-type:inline-size]")}
+					style={isList ? listStyle : undefined}
+				>
 					{error}
+					{isList && projects.length > 0 && (
+						<div className="hidden items-center gap-x-3 border-b border-border px-3 py-2 text-xs text-muted-foreground [grid-template-columns:var(--project-list-columns)] [@container_(min-width:800px)]:grid">
+							<span className="col-span-2">{t("sidebarPanels.projectName")}</span>
+							{showCreator && <span>{t("collaborators.creator")}</span>}
+							{isShared && <span>{t("collaborators.collaborator")}</span>}
+							<span>{timeHeading}</span>
+							<span className="sr-only">{t("common.moreActions")}</span>
+						</div>
+					)}
 					<div
 						className={cn(
-							"grid gap-2",
+							"grid",
 							viewMode === ViewMode.LIST
 								? "grid-cols-1"
-								: "[grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr))]",
+								: "gap-2 [grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr))]",
 						)}
 						data-testid="shared-workspace-dialog-project-list-layout"
 						data-view-mode={viewMode}
@@ -253,7 +291,9 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 								aria-current={selectedProjectId === item.id ? true : undefined}
 								className={cn(
 									selectedProjectId === item.id &&
-										"rounded-lg [&_[data-testid=project-item]]:border-primary [&_[data-testid=project-item]]:bg-primary/5",
+										(isList
+											? "[&_[data-testid=project-item]]:bg-primary/5"
+											: "rounded-lg [&_[data-testid=project-item]]:border-primary [&_[data-testid=project-item]]:bg-primary/5"),
 								)}
 								data-project-name={item.project_name || t("project.unnamedProject")}
 							>
@@ -263,6 +303,7 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 									index={index}
 									viewMode={viewMode}
 									variant="compact"
+									collaborationType={tabType}
 								/>
 							</div>
 						))}
