@@ -235,6 +235,8 @@ class HorizonState:
     pending_resumptions: list[PendingResumption] = field(default_factory=list)
     browser_pages: dict[str, BrowserPageObservation] = field(default_factory=dict)
     loaded_skills: list[str] = field(default_factory=list)
+    # 记录本上下文已入队的建议，不表示已经阅读；模型忽略后也不重复提醒。fork 随上下文继承。
+    suggested_skill_names: list[str] = field(default_factory=list)
     image_model: ImageModelState = field(default_factory=ImageModelState)
     video_model: VideoModelState = field(default_factory=VideoModelState)
     manual_context_windows: dict[str, ManualContextWindowState] = field(default_factory=dict)

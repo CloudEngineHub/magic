@@ -205,6 +205,7 @@ def _encode_state(state: HorizonState) -> dict:
         "version": CURRENT_VERSION,
         "agent_id": state.agent_id,
         "loaded_skills": state.loaded_skills,
+        "suggested_skill_names": state.suggested_skill_names,
         "pending_notifications": [_notif_to_dict(n) for n in state.pending_notifications],
         "pending_resumptions": [_resumption_to_dict(r) for r in state.pending_resumptions],
         "browser_pages": {
@@ -252,6 +253,7 @@ def _decode_state(data: dict) -> HorizonState:
         "pending_resumptions",
         "browser_pages",
         "loaded_skills",
+        "suggested_skill_names",
         "image_model",
         "video_model",
         "manual_context_windows",
@@ -274,6 +276,7 @@ def _decode_state(data: dict) -> HorizonState:
 
     state = HorizonState(agent_id=data.get("agent_id", ""))
     state.loaded_skills = data.get("loaded_skills", [])
+    state.suggested_skill_names = data.get("suggested_skill_names", [])
     state.pending_notifications = [
         _notif_from_dict(notification)
         for notification in data.get("pending_notifications", [])
