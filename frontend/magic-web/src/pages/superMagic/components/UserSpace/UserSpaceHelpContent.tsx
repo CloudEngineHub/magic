@@ -1,5 +1,9 @@
-import { LockKeyhole } from "lucide-react"
+import { LockKeyhole, MessageSquare, Terminal } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import {
+	HelpIllustration,
+	type HelpStep,
+} from "@/components/shadcn-composed/context-help/HelpIllustration"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import UserSpaceFileIcon from "./UserSpaceFileIcon"
 
@@ -25,16 +29,24 @@ export default function UserSpaceHelpContent() {
 	return (
 		<>
 			<p>{t("userSpace.help.introduction")}</p>
-			<section className="space-y-2 rounded-lg border bg-muted/30 p-3">
+			<HelpIllustration
+				title={t("userSpace.help.workspaceTitle")}
+				steps={t("userSpace.help.workspaceSteps", { returnObjects: true }) as HelpStep[]}
+				variant="flow"
+			/>
+			<p>{t("userSpace.help.workspaceDescription")}</p>
+			<section className="space-y-3 rounded-xl border bg-muted/30 p-5">
 				<h3 className="flex items-center gap-2 font-semibold">
 					<LockKeyhole size={16} className="shrink-0" />
 					{t("userSpace.help.privacyTitle")}
 				</h3>
 				<p>{t("userSpace.help.privacy")}</p>
 				<p className="text-muted-foreground">{t("userSpace.help.sharedContent")}</p>
+				<p className="text-muted-foreground">{t("userSpace.help.credentials")}</p>
 			</section>
 			<section className="space-y-2">
 				<h3 className="font-semibold">{t("userSpace.help.foldersTitle")}</h3>
+				<p className="text-muted-foreground">{t("userSpace.help.foldersDescription")}</p>
 				<ul className="divide-y rounded-lg border px-3">
 					{EXAMPLE_FOLDERS.map((item, index) => (
 						<li key={item.relative_file_path} className="flex items-start gap-3 py-2.5">
@@ -51,10 +63,37 @@ export default function UserSpaceHelpContent() {
 					))}
 				</ul>
 			</section>
+			<section className="space-y-4">
+				<h3 className="flex items-center gap-2 font-semibold">
+					<Terminal size={16} aria-hidden />
+					{t("userSpace.help.cliTitle")}
+				</h3>
+				<p>{t("userSpace.help.cliDescription")}</p>
+				<HelpIllustration
+					title={t("userSpace.help.cliFlowTitle")}
+					steps={t("userSpace.help.cliSteps", { returnObjects: true }) as HelpStep[]}
+					variant="flow"
+				/>
+				<p>{t("userSpace.help.cliConfiguration")}</p>
+				<p className="text-muted-foreground">{t("userSpace.help.cliAvailability")}</p>
+			</section>
 			<section className="space-y-2">
 				<h3 className="font-semibold">{t("userSpace.help.examplesTitle")}</h3>
-				<p className="rounded-md bg-muted px-3 py-2">{t("userSpace.help.memoryExample")}</p>
-				<p className="rounded-md bg-muted px-3 py-2">{t("userSpace.help.filesExample")}</p>
+				<div className="space-y-3 rounded-lg border p-5">
+					<MessageSquare size={16} aria-hidden className="text-primary" />
+					<p className="font-medium">{t("userSpace.help.memoryExample")}</p>
+					<p className="text-muted-foreground">{t("userSpace.help.memoryResult")}</p>
+				</div>
+				<div className="space-y-3 rounded-lg border p-5">
+					<MessageSquare size={16} aria-hidden className="text-primary" />
+					<p className="font-medium">{t("userSpace.help.filesExample")}</p>
+					<p className="text-muted-foreground">{t("userSpace.help.filesResult")}</p>
+				</div>
+				<div className="space-y-3 rounded-lg border p-5">
+					<MessageSquare size={16} aria-hidden className="text-primary" />
+					<p className="font-medium">{t("userSpace.help.configExample")}</p>
+					<p className="text-muted-foreground">{t("userSpace.help.configResult")}</p>
+				</div>
 			</section>
 			<section className="space-y-1">
 				<h3 className="font-semibold">{t("userSpace.help.unfamiliarTitle")}</h3>

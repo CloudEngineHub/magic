@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { HelpArticle } from "@/components/shadcn-composed/context-help/HelpArticle"
+import { HelpArticle, type HelpGuide } from "@/components/shadcn-composed/context-help/HelpArticle"
 import type { SystemFileHelpKind } from "../utils/magic-system-folder"
 import type { HelpDefinition } from "@/components/shadcn-composed/context-help"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
@@ -25,6 +25,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.clawPlaygroundHelp.guidelines", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="document"
+							guide={
+								t("topicFiles.clawPlaygroundDetails.guidelines.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t("topicFiles.clawPlaygroundDetails.guidelines.usage", brand)}
 							example={t(
 								"topicFiles.clawPlaygroundDetails.guidelines.example",
@@ -43,6 +50,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.clawPlaygroundHelp.identityInfo", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="document"
+							guide={
+								t("topicFiles.clawPlaygroundDetails.identityInfo.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t("topicFiles.clawPlaygroundDetails.identityInfo.usage", brand)}
 							example={t(
 								"topicFiles.clawPlaygroundDetails.identityInfo.example",
@@ -61,6 +75,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.systemFiles.help.projectMagic", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="tree"
+							guide={
+								t("topicFiles.systemFiles.details.projectMagic.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t("topicFiles.systemFiles.details.projectMagic.usage", brand)}
 							example={t(
 								"topicFiles.systemFiles.details.projectMagic.example",
@@ -79,6 +100,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.systemFiles.help.userMagic", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="tree"
+							guide={
+								t("topicFiles.systemFiles.details.userMagic.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t("topicFiles.systemFiles.details.userMagic.usage", brand)}
 							example={t("topicFiles.systemFiles.details.userMagic.example", brand)}
 							note={t("topicFiles.systemFiles.details.userMagic.note", brand)}
@@ -94,6 +122,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.systemFiles.help.clawMagic", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="tree"
+							guide={
+								t("topicFiles.systemFiles.details.clawMagic.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t("topicFiles.systemFiles.details.clawMagic.usage", brand)}
 							example={t("topicFiles.systemFiles.details.clawMagic.example", brand)}
 							note={t("topicFiles.systemFiles.details.clawMagic.note", brand)}
@@ -109,6 +144,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.systemFiles.help.crewMagic", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="tree"
+							guide={
+								t("topicFiles.systemFiles.details.crewMagic.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t("topicFiles.systemFiles.details.crewMagic.usage", brand)}
 							example={t("topicFiles.systemFiles.details.crewMagic.example", brand)}
 							note={t("topicFiles.systemFiles.details.crewMagic.note", brand)}
@@ -124,6 +166,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.systemFiles.help.projectInstructions", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="flow"
+							guide={
+								t("topicFiles.systemFiles.details.projectInstructions.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t(
 								"topicFiles.systemFiles.details.projectInstructions.usage",
 								brand,
@@ -148,6 +197,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.systemFiles.help.directoryInstructions", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="tree"
+							guide={
+								t("topicFiles.systemFiles.details.directoryInstructions.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t(
 								"topicFiles.systemFiles.details.directoryInstructions.usage",
 								brand,
@@ -172,6 +228,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.systemFiles.help.clawInstructions", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="document"
+							guide={
+								t("topicFiles.systemFiles.details.clawInstructions.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t(
 								"topicFiles.systemFiles.details.clawInstructions.usage",
 								brand,
@@ -193,6 +256,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.systemFiles.help.crewInstructions", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="document"
+							guide={
+								t("topicFiles.systemFiles.details.crewInstructions.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t(
 								"topicFiles.systemFiles.details.crewInstructions.usage",
 								brand,
@@ -214,6 +284,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.systemFiles.help.agentInstructions", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="document"
+							guide={
+								t("topicFiles.systemFiles.details.agentInstructions.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t(
 								"topicFiles.systemFiles.details.agentInstructions.usage",
 								brand,
@@ -235,6 +312,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.systemFiles.help.instructionFile", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="document"
+							guide={
+								t("topicFiles.systemFiles.details.instructionFile.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t("topicFiles.systemFiles.details.instructionFile.usage", brand)}
 							example={t(
 								"topicFiles.systemFiles.details.instructionFile.example",
@@ -253,6 +337,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.systemFiles.help.crewIdentity", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="document"
+							guide={
+								t("topicFiles.systemFiles.details.crewIdentity.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t("topicFiles.systemFiles.details.crewIdentity.usage", brand)}
 							example={t(
 								"topicFiles.systemFiles.details.crewIdentity.example",
@@ -271,6 +362,13 @@ export function useSystemFileHelp(
 					summary: t("topicFiles.systemFiles.help.crewSoul", brand),
 					renderBody: () => (
 						<HelpArticle
+							visual="document"
+							guide={
+								t("topicFiles.systemFiles.details.crewSoul.guide", {
+									returnObjects: true,
+									...brand,
+								}) as HelpGuide
+							}
 							usage={t("topicFiles.systemFiles.details.crewSoul.usage", brand)}
 							example={t("topicFiles.systemFiles.details.crewSoul.example", brand)}
 							note={t("topicFiles.systemFiles.details.crewSoul.note", brand)}

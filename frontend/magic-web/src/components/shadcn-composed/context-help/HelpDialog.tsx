@@ -28,24 +28,27 @@ export function HelpDialog({ id, help, onCloseAutoFocus }: HelpDialogProps) {
 	return (
 		<DialogContent
 			id={id}
-			className="flex max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-[560px]"
+			className="flex h-[82dvh] max-h-[900px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(960px,calc(100%-3rem))]"
 			onCloseAutoFocus={onCloseAutoFocus}
 			onPointerDown={(event) => event.stopPropagation()}
 			onClick={(event) => event.stopPropagation()}
 			onDoubleClick={(event) => event.stopPropagation()}
 			onKeyDown={(event) => event.stopPropagation()}
 		>
-			<DialogHeader className="shrink-0 px-5 pb-4 pt-5 text-left">
+			<DialogHeader className="shrink-0 border-b px-6 py-5 text-left sm:px-8">
 				<DialogTitle className="pr-7 leading-6">{help.title}</DialogTitle>
 				<DialogDescription>{help.subtitle ?? help.summary}</DialogDescription>
 			</DialogHeader>
 			{/* 标题和关闭操作始终可见，长说明只在正文区域滚动。 */}
-			<div className="min-h-0 space-y-5 overflow-y-auto px-5 pb-5 text-sm leading-6">
-				<ErrorBoundary fallback={<p role="alert">{t("contextHelp.loadFailed")}</p>}>
-					<Suspense fallback={<p role="status">{t("contextHelp.loading")}</p>}>
-						<HelpBody help={help} />
-					</Suspense>
-				</ErrorBoundary>
+			<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+				{/* 外框提供留白，正文保持适中行长；窄屏按可用宽度排版。 */}
+				<div className="mx-auto max-w-[720px] space-y-8 break-words px-5 py-8 text-sm leading-7 sm:px-8 sm:py-10">
+					<ErrorBoundary fallback={<p role="alert">{t("contextHelp.loadFailed")}</p>}>
+						<Suspense fallback={<p role="status">{t("contextHelp.loading")}</p>}>
+							<HelpBody help={help} />
+						</Suspense>
+					</ErrorBoundary>
+				</div>
 			</div>
 			<DialogFooter className="shrink-0 border-t px-5 py-3">
 				<DialogClose asChild>

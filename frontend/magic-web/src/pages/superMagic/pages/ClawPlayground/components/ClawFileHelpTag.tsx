@@ -1,6 +1,6 @@
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { useTranslation } from "react-i18next"
-import { HelpArticle } from "@/components/shadcn-composed/context-help/HelpArticle"
+import { HelpArticle, type HelpGuide } from "@/components/shadcn-composed/context-help/HelpArticle"
 import type { HelpDefinition } from "@/components/shadcn-composed/context-help"
 import { TopicFileTag } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileTag"
 import { useSystemFileHelp } from "@/pages/superMagic/components/TopicFilesButton/hooks/useSystemFileHelp"
@@ -31,6 +31,12 @@ export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 			summary: t("topicFiles.clawPlaygroundHelp.scheduledTasks"),
 			renderBody: () => (
 				<HelpArticle
+					visual="flow"
+					guide={
+						t("topicFiles.clawPlaygroundDetails.scheduledTasks.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("topicFiles.clawPlaygroundDetails.scheduledTasks.usage")}
 					example={t("topicFiles.clawPlaygroundDetails.scheduledTasks.example")}
 					note={t("topicFiles.clawPlaygroundDetails.scheduledTasks.note")}
@@ -42,6 +48,12 @@ export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 			summary: t("topicFiles.clawPlaygroundHelp.installedSkills"),
 			renderBody: () => (
 				<HelpArticle
+					visual="tree"
+					guide={
+						t("topicFiles.clawPlaygroundDetails.installedSkills.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("topicFiles.clawPlaygroundDetails.installedSkills.usage")}
 					example={t("topicFiles.clawPlaygroundDetails.installedSkills.example")}
 					note={t("topicFiles.clawPlaygroundDetails.installedSkills.note")}
@@ -53,6 +65,12 @@ export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 			summary: t("topicFiles.clawPlaygroundHelp.memoryFolder"),
 			renderBody: () => (
 				<HelpArticle
+					visual="tree"
+					guide={
+						t("topicFiles.clawPlaygroundDetails.memoryFolder.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("topicFiles.clawPlaygroundDetails.memoryFolder.usage")}
 					example={t("topicFiles.clawPlaygroundDetails.memoryFolder.example")}
 					note={t("topicFiles.clawPlaygroundDetails.memoryFolder.note")}
@@ -64,6 +82,12 @@ export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 			summary: t("topicFiles.clawPlaygroundHelp.skillList"),
 			renderBody: () => (
 				<HelpArticle
+					visual="flow"
+					guide={
+						t("topicFiles.clawPlaygroundDetails.skillList.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("topicFiles.clawPlaygroundDetails.skillList.usage")}
 					example={t("topicFiles.clawPlaygroundDetails.skillList.example")}
 					note={t("topicFiles.clawPlaygroundDetails.skillList.note")}
@@ -75,6 +99,12 @@ export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 			summary: t("topicFiles.clawPlaygroundHelp.proactiveExecution"),
 			renderBody: () => (
 				<HelpArticle
+					visual="flow"
+					guide={
+						t("topicFiles.clawPlaygroundDetails.proactiveExecution.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("topicFiles.clawPlaygroundDetails.proactiveExecution.usage")}
 					example={t("topicFiles.clawPlaygroundDetails.proactiveExecution.example")}
 					note={t("topicFiles.clawPlaygroundDetails.proactiveExecution.note")}
@@ -86,6 +116,12 @@ export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 			summary: t("topicFiles.clawPlaygroundHelp.identityInfo"),
 			renderBody: () => (
 				<HelpArticle
+					visual="document"
+					guide={
+						t("topicFiles.clawPlaygroundDetails.identityInfo.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("topicFiles.clawPlaygroundDetails.identityInfo.usage")}
 					example={t("topicFiles.clawPlaygroundDetails.identityInfo.example")}
 					note={t("topicFiles.clawPlaygroundDetails.identityInfo.note")}
@@ -97,6 +133,13 @@ export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 			summary: t("topicFiles.clawPlaygroundHelp.guidelines", brand),
 			renderBody: () => (
 				<HelpArticle
+					visual="document"
+					guide={
+						t("topicFiles.clawPlaygroundDetails.guidelines.guide", {
+							returnObjects: true,
+							...brand,
+						}) as HelpGuide
+					}
 					usage={t("topicFiles.clawPlaygroundDetails.guidelines.usage", brand)}
 					example={t("topicFiles.clawPlaygroundDetails.guidelines.example", brand)}
 					note={t("topicFiles.clawPlaygroundDetails.guidelines.note", brand)}
@@ -108,6 +151,12 @@ export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 			summary: t("topicFiles.clawPlaygroundHelp.toolList"),
 			renderBody: () => (
 				<HelpArticle
+					visual="document"
+					guide={
+						t("topicFiles.clawPlaygroundDetails.toolList.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("topicFiles.clawPlaygroundDetails.toolList.usage")}
 					example={t("topicFiles.clawPlaygroundDetails.toolList.example")}
 					note={t("topicFiles.clawPlaygroundDetails.toolList.note")}
@@ -119,6 +168,12 @@ export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 			summary: t("topicFiles.clawPlaygroundHelp.aboutYou"),
 			renderBody: () => (
 				<HelpArticle
+					visual="document"
+					guide={
+						t("topicFiles.clawPlaygroundDetails.aboutYou.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("topicFiles.clawPlaygroundDetails.aboutYou.usage")}
 					example={t("topicFiles.clawPlaygroundDetails.aboutYou.example")}
 					note={t("topicFiles.clawPlaygroundDetails.aboutYou.note")}
@@ -130,6 +185,12 @@ export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 			summary: t("topicFiles.clawPlaygroundHelp.initialSetup"),
 			renderBody: () => (
 				<HelpArticle
+					visual="flow"
+					guide={
+						t("topicFiles.clawPlaygroundDetails.initialSetup.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("topicFiles.clawPlaygroundDetails.initialSetup.usage")}
 					example={t("topicFiles.clawPlaygroundDetails.initialSetup.example")}
 					note={t("topicFiles.clawPlaygroundDetails.initialSetup.note")}
@@ -141,6 +202,12 @@ export function ClawFileHelpTag({ kind }: { kind: ClawFileHelpKind }) {
 			summary: t("topicFiles.clawPlaygroundHelp.memoryFile"),
 			renderBody: () => (
 				<HelpArticle
+					visual="document"
+					guide={
+						t("topicFiles.clawPlaygroundDetails.memoryFile.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("topicFiles.clawPlaygroundDetails.memoryFile.usage")}
 					example={t("topicFiles.clawPlaygroundDetails.memoryFile.example")}
 					note={t("topicFiles.clawPlaygroundDetails.memoryFile.note")}

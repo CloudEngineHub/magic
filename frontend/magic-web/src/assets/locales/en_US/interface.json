@@ -1482,12 +1482,15 @@
 		}
 	},
 	"contextHelp": {
+		"actions": "When should you make changes?",
 		"close": "Got it",
 		"example": "Example",
+		"illustration": "Illustration",
 		"loadFailed": "This guide could not be loaded. Please try opening it again later.",
 		"loading": "Loading",
 		"more": "Learn more",
 		"note": "Good to know",
+		"sampleContent": "Example content · Not an actual file",
 		"usage": "How to use it"
 	},
 	"createOrganization": "Create Team",

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { HelpArticle } from "@/components/shadcn-composed/context-help/HelpArticle"
+import { HelpArticle, type HelpGuide } from "@/components/shadcn-composed/context-help/HelpArticle"
 import type { HelpDefinition } from "@/components/shadcn-composed/context-help"
 import {
 	useSystemFileHelp,
@@ -26,6 +26,12 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.memory"),
 			renderBody: () => (
 				<HelpArticle
+					visual="flow"
+					guide={
+						t("userSpace.fileDetails.memory.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.memory.usage")}
 					example={t("userSpace.fileDetails.memory.example")}
 					note={t("userSpace.fileDetails.memory.note")}
@@ -37,6 +43,12 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.coreMemory"),
 			renderBody: () => (
 				<HelpArticle
+					visual="document"
+					guide={
+						t("userSpace.fileDetails.coreMemory.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.coreMemory.usage")}
 					example={t("userSpace.fileDetails.coreMemory.example")}
 					note={t("userSpace.fileDetails.coreMemory.note")}
@@ -48,6 +60,10 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.notes"),
 			renderBody: () => (
 				<HelpArticle
+					visual="tree"
+					guide={
+						t("userSpace.fileDetails.notes.guide", { returnObjects: true }) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.notes.usage")}
 					example={t("userSpace.fileDetails.notes.example")}
 					note={t("userSpace.fileDetails.notes.note")}
@@ -59,6 +75,12 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.references"),
 			renderBody: () => (
 				<HelpArticle
+					visual="tree"
+					guide={
+						t("userSpace.fileDetails.references.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.references.usage")}
 					example={t("userSpace.fileDetails.references.example")}
 					note={t("userSpace.fileDetails.references.note")}
@@ -70,6 +92,12 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.subject"),
 			renderBody: () => (
 				<HelpArticle
+					visual="document"
+					guide={
+						t("userSpace.fileDetails.subject.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.subject.usage")}
 					example={t("userSpace.fileDetails.subject.example")}
 					note={t("userSpace.fileDetails.subject.note")}
@@ -81,6 +109,12 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.timeline"),
 			renderBody: () => (
 				<HelpArticle
+					visual="flow"
+					guide={
+						t("userSpace.fileDetails.timeline.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.timeline.usage")}
 					example={t("userSpace.fileDetails.timeline.example")}
 					note={t("userSpace.fileDetails.timeline.note")}
@@ -92,6 +126,10 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.year"),
 			renderBody: () => (
 				<HelpArticle
+					visual="tree"
+					guide={
+						t("userSpace.fileDetails.year.guide", { returnObjects: true }) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.year.usage")}
 					example={t("userSpace.fileDetails.year.example")}
 					note={t("userSpace.fileDetails.year.note")}
@@ -103,6 +141,10 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.month"),
 			renderBody: () => (
 				<HelpArticle
+					visual="tree"
+					guide={
+						t("userSpace.fileDetails.month.guide", { returnObjects: true }) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.month.usage")}
 					example={t("userSpace.fileDetails.month.example")}
 					note={t("userSpace.fileDetails.month.note")}
@@ -114,6 +156,10 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.event"),
 			renderBody: () => (
 				<HelpArticle
+					visual="document"
+					guide={
+						t("userSpace.fileDetails.event.guide", { returnObjects: true }) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.event.usage")}
 					example={t("userSpace.fileDetails.event.example")}
 					note={t("userSpace.fileDetails.event.note")}
@@ -125,6 +171,10 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.index"),
 			renderBody: () => (
 				<HelpArticle
+					visual="flow"
+					guide={
+						t("userSpace.fileDetails.index.guide", { returnObjects: true }) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.index.usage")}
 					example={t("userSpace.fileDetails.index.example")}
 					note={t("userSpace.fileDetails.index.note")}
@@ -136,6 +186,12 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.topics"),
 			renderBody: () => (
 				<HelpArticle
+					visual="document"
+					guide={
+						t("userSpace.fileDetails.topics.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.topics.usage")}
 					example={t("userSpace.fileDetails.topics.example")}
 					note={t("userSpace.fileDetails.topics.note")}
@@ -147,6 +203,12 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.dingtalk"),
 			renderBody: () => (
 				<HelpArticle
+					visual="flow"
+					guide={
+						t("userSpace.fileDetails.dingtalk.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.dingtalk.usage")}
 					example={t("userSpace.fileDetails.dingtalk.example")}
 					note={t("userSpace.fileDetails.dingtalk.note")}
@@ -158,6 +220,10 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.lark"),
 			renderBody: () => (
 				<HelpArticle
+					visual="flow"
+					guide={
+						t("userSpace.fileDetails.lark.guide", { returnObjects: true }) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.lark.usage")}
 					example={t("userSpace.fileDetails.lark.example")}
 					note={t("userSpace.fileDetails.lark.note")}
@@ -169,6 +235,12 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.teamshare"),
 			renderBody: () => (
 				<HelpArticle
+					visual="flow"
+					guide={
+						t("userSpace.fileDetails.teamshare.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.teamshare.usage")}
 					example={t("userSpace.fileDetails.teamshare.example")}
 					note={t("userSpace.fileDetails.teamshare.note")}
@@ -180,6 +252,10 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.tools"),
 			renderBody: () => (
 				<HelpArticle
+					visual="tree"
+					guide={
+						t("userSpace.fileDetails.tools.guide", { returnObjects: true }) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.tools.usage")}
 					example={t("userSpace.fileDetails.tools.example")}
 					note={t("userSpace.fileDetails.tools.note")}
@@ -191,6 +267,10 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.cli"),
 			renderBody: () => (
 				<HelpArticle
+					visual="flow"
+					guide={
+						t("userSpace.fileDetails.cli.guide", { returnObjects: true }) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.cli.usage")}
 					example={t("userSpace.fileDetails.cli.example")}
 					note={t("userSpace.fileDetails.cli.note")}
@@ -202,6 +282,12 @@ export function useUserFileHelp(item: AttachmentItem): FileHelpPresentation | un
 			summary: t("userSpace.fileHelp.settings"),
 			renderBody: () => (
 				<HelpArticle
+					visual="document"
+					guide={
+						t("userSpace.fileDetails.settings.guide", {
+							returnObjects: true,
+						}) as HelpGuide
+					}
 					usage={t("userSpace.fileDetails.settings.usage")}
 					example={t("userSpace.fileDetails.settings.example")}
 					note={t("userSpace.fileDetails.settings.note")}
