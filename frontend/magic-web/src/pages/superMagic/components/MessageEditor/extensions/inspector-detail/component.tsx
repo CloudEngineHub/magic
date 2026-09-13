@@ -127,7 +127,19 @@ export function InspectorDetailView({ attrs, selected = false, editor }: Inspect
 			draggable={false}
 			data-testid="inspector-detail-trigger"
 		>
-			{headerLabelContent}
+			{/* 标签悬浮预览截图，点击打开详情；详情打开后不再叠加悬浮预览。 */}
+			{!open && screenshotMention ? (
+				<InspectorScreenshotPreview
+					mention={screenshotMention}
+					trigger={
+						<span className="inline-flex min-w-0 items-center gap-1">
+							{headerLabelContent}
+						</span>
+					}
+				/>
+			) : (
+				headerLabelContent
+			)}
 			<ChevronRight size={12} className="flex-shrink-0 text-primary/70" />
 		</button>
 	)
