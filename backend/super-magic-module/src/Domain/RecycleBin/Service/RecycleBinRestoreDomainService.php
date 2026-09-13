@@ -17,7 +17,6 @@ use Dtyq\SuperMagic\Domain\RecycleBin\Repository\Facade\RecycleBinRepositoryInte
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\DeleteEventSource;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\MicroAppRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectMemberRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
@@ -44,7 +43,6 @@ class RecycleBinRestoreDomainService
 
     public function __construct(
         protected RecycleBinRepositoryInterface $recycleBinRepository,
-        protected UserFileRecycleBinDomainService $userFileRecycleBinDomainService,
         protected WorkspaceRepositoryInterface $workspaceRepository,
         protected ProjectRepositoryInterface $projectRepository,
         protected TopicRepositoryInterface $topicRepository,
@@ -132,7 +130,6 @@ class RecycleBinRestoreDomainService
             $userId,
             $organizationCode,
         );
-        $entities = $this->expandUserFileDirectories($entities, $userId, $organizationCode);
         $entities = $this->sortRecycleBinEntitiesByDeletedAtDesc($entities);
         $batchContext = $this->buildFileBatchContext($entities);
         $filesById = $batchContext['filesById'];
@@ -160,7 +157,6 @@ class RecycleBinRestoreDomainService
                     resourceName: $file->getFileName(),
                     isDirectory: $file->getIsDirectory(),
                     spaceType: $file->getSpaceType(),
-                    parentId: $file->getParentId() !== null ? (string) $file->getParentId() : null,
                     conflict: new RestoreConflictDTO(
                         type: RestoreConflictType::ProjectMissing,
                     ),
@@ -181,7 +177,6 @@ class RecycleBinRestoreDomainService
                         resourceName: $file->getFileName(),
                         isDirectory: $file->getIsDirectory(),
                         spaceType: $file->getSpaceType(),
-                        parentId: $file->getParentId() !== null ? (string) $file->getParentId() : null,
                         conflict: new RestoreConflictDTO(
                             type: RestoreConflictType::ParentMissing,
                             originalParentId: $parentId,
@@ -199,7 +194,6 @@ class RecycleBinRestoreDomainService
                     resourceName: $file->getFileName(),
                     isDirectory: $file->getIsDirectory(),
                     spaceType: $file->getSpaceType(),
-                    parentId: $file->getParentId() !== null ? (string) $file->getParentId() : null,
                     conflict: new RestoreConflictDTO(
                         type: RestoreConflictType::DuplicateRestoreTarget,
                     ),
@@ -221,7 +215,6 @@ class RecycleBinRestoreDomainService
                     resourceName: $file->getFileName(),
                     isDirectory: $file->getIsDirectory(),
                     spaceType: $file->getSpaceType(),
-                    parentId: $file->getParentId() !== null ? (string) $file->getParentId() : null,
                     conflict: new RestoreConflictDTO(
                         type: RestoreConflictType::NameConflict,
                         existingFileId: $existing->getFileId(),
@@ -236,7 +229,6 @@ class RecycleBinRestoreDomainService
                 resourceName: $file->getFileName(),
                 isDirectory: $file->getIsDirectory(),
                 spaceType: $file->getSpaceType(),
-                parentId: $file->getParentId() !== null ? (string) $file->getParentId() : null,
             );
         }
 
@@ -791,13 +783,9 @@ class RecycleBinRestoreDomainService
                 throw new RuntimeException(trans('recycle_bin.restore.file_project_missing'));
             }
 
-            if (! $file->isProjectFile()) {
-                $locked = $this->taskFileRepository->lockByIds([$fileId]);
-                $file = $locked[$fileId] ?? null;
-                if ($file === null || $file->getSpaceType() !== 'user' || $file->isProjectFile()
-                    || $file->getUserId() !== $userId || $file->getOrganizationCode() !== $organizationCode) {
-                    throw new RuntimeException(trans('file.permission_denied'));
-                }
+            if (! $file->isProjectFile()
+                && ($file->getSpaceType() !== 'user' || $file->getUserId() !== $userId || $file->getOrganizationCode() !== $organizationCode)) {
+                throw new RuntimeException(trans('file.permission_denied'));
             }
 
             // 3. Already restored — just clean up recycle bin record
@@ -822,9 +810,6 @@ class RecycleBinRestoreDomainService
                 if ($nameResolution === RestoreConflictResolution::Overwrite) {
                     // Soft-delete the conflicting entry (self only, no recursive)
                     $this->taskFileRepository->deleteById($existing->getFileId(), false);
-                    if (! $file->isProjectFile()) {
-                        $this->userFileRecycleBinDomainService->recordFiles([$existing], $userId, DeleteEventSource::User);
-                    }
                     $this->logger->info('Overwrote conflicting file during restore', [
                         'existing_file_id' => $existing->getFileId(),
                         'restore_file_id' => $fileId,
@@ -909,45 +894,5 @@ class RecycleBinRestoreDomainService
         return $file->isProjectFile()
             ? $this->taskFileRepository->findRootDirectoryByProjectId($file->getProjectId())
             : $this->taskFileRepository->findUserSpaceRootDirectory($file->getUserId(), $file->getOrganizationCode());
-    }
-
-    /** @param RecycleBinEntity[] $entities @return RecycleBinEntity[] */
-    private function expandUserFileDirectories(array $entities, string $userId, string $organizationCode): array
-    {
-        $selected = [];
-        $frontier = [];
-        foreach ($entities as $entity) {
-            $selected[$entity->getResourceId()] = $entity;
-            $extra = $entity->getExtraData() ?? [];
-            if (($extra['space_type'] ?? '') === 'user' && ($extra['is_directory'] ?? false) && ! empty($extra['deletion_group_id'])) {
-                $frontier[(string) $extra['deletion_group_id']][] = $entity->getResourceId();
-            }
-        }
-        if ($frontier === []) {
-            return $entities;
-        }
-        // 只沿本次删除记录的原父目录向下展开。例如更早单独删除的草稿不会随文件夹恢复。
-        $children = [];
-        foreach ($this->recycleBinRepository->findFileDeletionGroups(array_keys($frontier), $userId, $organizationCode) as $entity) {
-            $extra = $entity->getExtraData() ?? [];
-            $children[(string) $extra['deletion_group_id']][(int) ($extra['original_parent_id'] ?? 0)][] = $entity;
-        }
-        foreach ($frontier as $groupId => $parentIds) {
-            $visited = [];
-            for ($index = 0; $index < count($parentIds); ++$index) {
-                $parentId = $parentIds[$index];
-                if (isset($visited[$parentId])) {
-                    continue;
-                }
-                $visited[$parentId] = true;
-                foreach ($children[$groupId][$parentId] ?? [] as $child) {
-                    $selected[$child->getResourceId()] = $child;
-                    if ($child->getExtraData()['is_directory'] ?? false) {
-                        $parentIds[] = $child->getResourceId();
-                    }
-                }
-            }
-        }
-        return array_values($selected);
     }
 }

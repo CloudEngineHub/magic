@@ -2190,7 +2190,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @description 新增：批量删除文件
 	 * @param data
 	 */
-	deleteFiles(data: { file_ids: string[]; project_id?: string; deletion_group_id?: string }) {
+	deleteFiles(data: { file_ids: string[]; project_id?: string }) {
 		return fetch.post<{ file_ids: string[]; project_id: number; count: number }>(
 			`/api/v1/super-agent/file/batch-delete`,
 			data,

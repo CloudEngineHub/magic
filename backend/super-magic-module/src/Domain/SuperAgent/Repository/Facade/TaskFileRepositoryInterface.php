@@ -29,12 +29,6 @@ interface TaskFileRepositoryInterface
      */
     public function getByIdsWithTrash(array $ids): array;
 
-    /** 在调用方事务中按主键顺序锁定文件，用于删除记录与有条件撤销。
-     * @param list<int> $ids
-     * @return array<int, TaskFileEntity>
-     */
-    public function lockByIds(array $ids): array;
-
     /**
      * 根据ID批量获取文件.
      * @return TaskFileEntity[]

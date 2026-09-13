@@ -228,7 +228,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		deletingRef.current = true
 		setBatchLoading(true)
 		const confirmed = new Set<string>()
-		const deletionGroupId = options.fileScope === "user" ? createRandomUuidV4() : undefined
 		try {
 			for (let offset = 0; offset < ids.length; offset += DELETE_BATCH_SIZE) {
 				if (!isCurrent()) return
@@ -238,7 +237,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					const result = await SuperMagicApi.deleteFiles({
 						file_ids: batch,
 						project_id: options.fileScope === "user" ? "0" : projectId,
-						...(deletionGroupId ? { deletion_group_id: deletionGroupId } : {}),
 					})
 					if (!isCurrent()) return
 					const returnedIds = new Set(result.file_ids.map(String))

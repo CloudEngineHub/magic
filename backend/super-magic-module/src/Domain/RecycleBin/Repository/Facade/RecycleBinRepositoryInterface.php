@@ -15,9 +15,6 @@ use Dtyq\SuperMagic\Domain\RecycleBin\Enum\RecycleBinResourceType;
  */
 interface RecycleBinRepositoryInterface
 {
-    /** @return RecycleBinEntity[] 同一次删除的可见文件；不包含已永久移除记录。 */
-    public function findFileDeletionGroups(array $groupIds, string $userId, string $organizationCode): array;
-
     /**
      * 插入回收站记录.
      */

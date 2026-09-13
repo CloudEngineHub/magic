@@ -15,7 +15,6 @@ class RestorePreviewItemDTO
         public readonly bool $isDirectory,
         public readonly ?RestoreConflictDTO $conflict = null,
         public readonly string $spaceType = 'project',
-        public readonly ?string $parentId = null,
     ) {
     }
 
@@ -32,10 +31,9 @@ class RestorePreviewItemDTO
             'is_directory' => $this->isDirectory,
         ];
 
-        // 个人目录预检需要父子关系来处理冲突；项目响应保持原有字段。
+        // 个人文件需要标明恢复位置所属空间；项目响应保持原有字段。
         if ($this->spaceType === 'user') {
             $data['space_type'] = $this->spaceType;
-            $data['parent_id'] = $this->parentId;
         }
 
         if ($this->conflict !== null) {

@@ -12,12 +12,10 @@ use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Locker\LockerInterface;
 use Dtyq\SuperMagic\Domain\MagicFS\Service\MagicFSFileDomainService;
-use Dtyq\SuperMagic\Domain\RecycleBin\Service\UserFileRecycleBinDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\FileSpaceType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskFileSource;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\DeleteEventSource;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileBatchCopyEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileUploadedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
@@ -30,7 +28,6 @@ use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Response\TaskFileItemDTO;
 use Hyperf\Amqp\Annotation\Consumer;
 use Hyperf\Amqp\Message\ConsumerMessage;
 use Hyperf\Amqp\Result;
-use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Wire\AMQPTable;
@@ -96,7 +93,6 @@ class FileBatchCopySubscriber extends ConsumerMessage
         private readonly FileBatchOperationStatusManager $statusManager,
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly LockerInterface $locker,
-        private readonly UserFileRecycleBinDomainService $userFileRecycleBinDomainService,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get('FileBatchCopy');
@@ -238,25 +234,19 @@ class FileBatchCopySubscriber extends ConsumerMessage
                 if ($isSyntheticParent && $targetProject === null) {
                     throw new RuntimeException('Personal files cannot use synthetic project paths');
                 }
-                if ($targetProject === null) {
-                    $newTargetEntity = Db::transaction(fn (): TaskFileEntity => $this->handleDirectory(
-                        $node, $sourceProject, $targetProject, $targetParentEntity->getFileId(), $keepBothFileIds
-                    ));
-                } else {
-                    $newTargetEntity = $isSyntheticParent
-                        ? $this->resolveSyntheticParentDirectory(
-                            $node,
-                            $targetProject,
-                            $targetParentEntity->getFileId()
-                        )
-                        : $this->handleDirectory(
-                            $node,
-                            $sourceProject,
-                            $targetProject,
-                            $targetParentEntity->getFileId(),
-                            $keepBothFileIds
-                        );
-                }
+                $newTargetEntity = $isSyntheticParent
+                    ? $this->resolveSyntheticParentDirectory(
+                        $node,
+                        $targetProject,
+                        $targetParentEntity->getFileId()
+                    )
+                    : $this->handleDirectory(
+                        $node,
+                        $sourceProject,
+                        $targetProject,
+                        $targetParentEntity->getFileId(),
+                        $keepBothFileIds
+                    );
                 if (! $isSyntheticParent && $newTargetEntity->getFileId() === $fileId && ! in_array((string) $fileId, $keepBothFileIds, true)) {
                     $this->logger->info('Skipped directory copy because target directory is source directory itself', [
                         'source_id' => $fileId,
@@ -280,17 +270,12 @@ class FileBatchCopySubscriber extends ConsumerMessage
                     ? $this->taskFileDomainService->copyProjectFile(
                         $dataIsolation, $fileEntity, $sourceProject, $targetProject, $targetParentEntity->getFileId(), $keepBothFileIds
                     )
-                    : Db::transaction(function () use ($fileEntity, $targetParentEntity, $keepBothFileIds, $dataIsolation): TaskFileEntity {
-                        $existing = $this->taskFileDomainService->getByProjectParentAndName(0, $targetParentEntity->getFileId(), $fileEntity->getFileName());
-                        $copied = $this->taskFileDomainService->copyFileToParent(
-                            (string) $fileEntity->getFileId(), (string) $targetParentEntity->getFileId(), null,
-                            ! in_array((string) $fileEntity->getFileId(), $keepBothFileIds, true)
-                        );
-                        if ($existing !== null) {
-                            $this->userFileRecycleBinDomainService->recordFileDeletion($existing, $dataIsolation->getCurrentUserId(), DeleteEventSource::User);
-                        }
-                        return $copied;
-                    });
+                    : $this->taskFileDomainService->copyFileToParent(
+                        (string) $fileEntity->getFileId(),
+                        (string) $targetParentEntity->getFileId(),
+                        null,
+                        ! in_array((string) $fileEntity->getFileId(), $keepBothFileIds, true)
+                    );
 
                 if ($copiedFileEntity->getFileId() === $fileEntity->getFileId()) {
                     $this->logger->info('Skipped file copy because target file is source file itself', [
@@ -416,9 +401,6 @@ class FileBatchCopySubscriber extends ConsumerMessage
                 (string) $targetFileEntity->getFileId(),
                 $targetFileEntity->getIsDirectory()
             );
-            if (! $oldFileEntity->isProjectFile()) {
-                $this->userFileRecycleBinDomainService->recordFileDeletion($targetFileEntity, $oldFileEntity->getUserId(), DeleteEventSource::User);
-            }
             $targetFileEntity = null;
         }
 

@@ -48,8 +48,6 @@ type ConflictResolutions = Record<string, ConflictResolution>
 type PendingNameConflictItem = {
 	resourceId: string
 	fileName: string
-	dependentResourceIds?: string[]
-	ancestorConflictIds?: string[]
 }
 
 type PendingNameConflictRestore = {
@@ -78,13 +76,12 @@ function parseRestoreCheckResponse(data: {
 	items_with_conflict?: Array<{
 		resource_id: string
 		resource_name?: string
-		parent_id?: string | null
 		space_type?: "user" | "project"
 		conflict?: {
 			type?: string
 		}
 	}>
-	items_no_conflict?: Array<{ resource_id: string; parent_id?: string | null }>
+	items_no_conflict?: Array<{ resource_id: string }>
 }) {
 	const oldNeedMove = Array.isArray(data?.items_need_move) ? data.items_need_move : []
 	const oldNoNeedMove = Array.isArray(data?.items_no_need_move) ? data.items_no_need_move : []
@@ -152,49 +149,6 @@ function parseRestoreCheckResponse(data: {
 	const noConflictResourceIds =
 		oldNoNeedMove.length > 0 ? toResourceIds(oldNoNeedMove) : toResourceIds(noConflict)
 	directResourceIds.push(...noConflictResourceIds)
-	const allItems = [...withConflict, ...noConflict]
-	const userItems = allItems.filter((item) => item.space_type === "user")
-	const parentById = new Map(userItems.map((item) => [String(item.resource_id), item.parent_id]))
-	const pendingById = new Map(pendingNameConflictItems.map((item) => [item.resourceId, item]))
-	const blockedIds = new Set(mustSkipResourceIds)
-	const deferredIds = new Set<string>()
-	const ancestorsOf = (id: string) => {
-		const ancestors: string[] = []
-		const visited = new Set([id])
-		let parent = parentById.get(id)
-		while (parent && !visited.has(parent)) {
-			visited.add(parent)
-			ancestors.push(parent)
-			parent = parentById.get(parent)
-		}
-		return ancestors
-	}
-	// 目录先确认再恢复后代；跳过目录时，不会把其下文件单独移到空间根目录。
-	for (const item of userItems) {
-		const id = String(item.resource_id)
-		const ancestors = ancestorsOf(id)
-		if (ancestors.some((parent) => blockedIds.has(parent))) {
-			blockedIds.add(id)
-			deferredIds.add(id)
-			continue
-		}
-		const ancestorConflicts = ancestors.filter((parent) => pendingById.has(parent))
-		const pending = pendingById.get(id)
-		if (pending) pending.ancestorConflictIds = ancestorConflicts
-		else if (ancestorConflicts.length) {
-			const owner = pendingById.get(ancestorConflicts[0])
-			if (!owner) continue
-			owner.dependentResourceIds = [...(owner.dependentResourceIds ?? []), id]
-			deferredIds.add(id)
-		}
-	}
-	for (let index = pendingNameConflictItems.length - 1; index >= 0; index -= 1) {
-		if (blockedIds.has(pendingNameConflictItems[index].resourceId))
-			pendingNameConflictItems.splice(index, 1)
-	}
-	pendingNameConflictItems.sort(
-		(a, b) => ancestorsOf(a.resourceId).length - ancestorsOf(b.resourceId).length,
-	)
 	const rootSpaceTypes = Array.from(
 		new Set(
 			withConflict
@@ -202,9 +156,7 @@ function parseRestoreCheckResponse(data: {
 				.map((item) => item.space_type ?? "project"),
 		),
 	)
-	const uniqueDirectResourceIds = Array.from(new Set(directResourceIds)).filter(
-		(id) => !deferredIds.has(id) && !blockedIds.has(id),
-	)
+	const uniqueDirectResourceIds = Array.from(new Set(directResourceIds))
 	const uniqueMustSkipResourceIds = Array.from(new Set(mustSkipResourceIds))
 
 	return {
@@ -222,7 +174,7 @@ function parseRestoreCheckResponse(data: {
 		directResourceIds: uniqueDirectResourceIds,
 		conflictResolutions,
 		pendingNameConflictItems,
-		mustSkipResourceIds: Array.from(new Set([...uniqueMustSkipResourceIds, ...blockedIds])),
+		mustSkipResourceIds: uniqueMustSkipResourceIds,
 		rootSpaceTypes,
 		skippedNameConflictCount: pendingNameConflictItems.length,
 		skippedNameConflictNames,
@@ -487,17 +439,14 @@ export function useRecycleBinActions({
 		return pendingNameConflictRestore.items[pendingNameConflictRestore.currentIndex] ?? null
 	}
 
-	function advancePendingNameConflictQueue(skippedId?: string) {
+	function advancePendingNameConflictQueue() {
 		setPendingNameConflictRestore((prev) => {
 			if (!prev) return null
-			const remaining = prev.items
-				.slice(prev.currentIndex + 1)
-				.filter((item) => !skippedId || !item.ancestorConflictIds?.includes(skippedId))
-			if (!remaining.length) return null
+			const nextIndex = prev.currentIndex + 1
+			if (nextIndex >= prev.items.length) return null
 			return {
 				...prev,
-				items: remaining,
-				currentIndex: 0,
+				currentIndex: nextIndex,
 			}
 		})
 	}
@@ -507,7 +456,7 @@ export function useRecycleBinActions({
 		if (!currentConflict) return
 
 		if (strategy === "skip") {
-			advancePendingNameConflictQueue(currentConflict.resourceId)
+			advancePendingNameConflictQueue()
 			return
 		}
 		if (!pendingNameConflictRestore) return
@@ -515,10 +464,7 @@ export function useRecycleBinActions({
 		const { resourceType, conflictResolutions } = pendingNameConflictRestore
 		const restored = await restoreResources({
 			resourceType,
-			resourceIds: [
-				currentConflict.resourceId,
-				...(currentConflict.dependentResourceIds ?? []),
-			],
+			resourceIds: [currentConflict.resourceId],
 			conflictResolutions: {
 				...(conflictResolutions ?? {}),
 				[currentConflict.resourceId]: {
@@ -568,10 +514,7 @@ export function useRecycleBinActions({
 			)
 			const result = await restoreResources({
 				resourceType,
-				resourceIds: remainingItems.flatMap((item) => [
-					item.resourceId,
-					...(item.dependentResourceIds ?? []),
-				]),
+				resourceIds: remainingItems.map((item) => item.resourceId),
 				conflictResolutions: {
 					...(conflictResolutions ?? {}),
 					...overwriteConflictResolutions,
@@ -678,7 +621,7 @@ export function useRecycleBinActions({
 					resourceType,
 					conflictResolutions,
 					items: nameConflictItems.map((item) => ({
-						...item,
+						resourceId: item.resourceId,
 						fileName: item.fileName || t("common.untitledFile"),
 					})),
 					currentIndex: 0,
@@ -934,7 +877,12 @@ export function useRecycleBinActions({
 				setPendingNameConflictRestore({
 					resourceType: target.item.resourceType,
 					conflictResolutions,
-					items: pendingNameConflictItems,
+					items: [
+						{
+							resourceId: target.item.resourceId,
+							fileName: skippedNameConflictNames[0] || target.item.title,
+						},
+					],
 					currentIndex: 0,
 				})
 				setRestoreTarget(null)

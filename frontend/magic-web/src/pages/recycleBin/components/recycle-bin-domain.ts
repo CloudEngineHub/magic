@@ -72,8 +72,6 @@ export interface RestoreCheckResult {
 	pendingNameConflictItems?: Array<{
 		resourceId: string
 		fileName: string
-		dependentResourceIds?: string[]
-		ancestorConflictIds?: string[]
 	}>
 	/** 必须跳过的资源 ID，例如 project_missing / duplicate_restore_target */
 	mustSkipResourceIds?: string[]
@@ -87,8 +85,6 @@ export interface RestoreCheckResult {
 	skippedNameConflictItems?: Array<{
 		resourceId: string
 		fileName: string
-		dependentResourceIds?: string[]
-		ancestorConflictIds?: string[]
 	}>
 	/** 文件所属项目不存在或已删除的数量（终止型冲突，仅提示） */
 	projectMissingCount?: number
@@ -476,9 +472,7 @@ export function getRestoreStatusMessage(
 	if (result.status === "skipped") return t("recycleBin.restoreCheck.skippedMessage")
 
 	const resourceType = target ? getRestoreTargetResourceType({ target, items }) : undefined
-	const conflictCount = Object.values(result.conflictResolutions ?? {}).filter(
-		(resolution) => resolution.parent_missing,
-	).length
+	const conflictCount = Object.keys(result.conflictResolutions ?? {}).length
 	const rootSpaceTypes = result.rootSpaceTypes ?? ["project"]
 	const rootLocation = t(
 		rootSpaceTypes.length > 1

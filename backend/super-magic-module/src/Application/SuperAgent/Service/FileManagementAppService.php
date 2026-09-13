@@ -656,13 +656,9 @@ class FileManagementAppService extends AbstractAppService
             // 3. Soft-delete the entry itself only.
             //    For directories, descendants are intentionally left intact: this endpoint
             //    is a single-node deletion and does not propagate to children.
-            if ($fileEntity->isProjectFile()) {
-                $this->magicFSFileDomainService->deleteFile((string) $fileId);
-            } else {
-                Db::transaction(function () use ($fileId, $fileEntity, $userAuthorization): void {
-                    $this->magicFSFileDomainService->deleteFile((string) $fileId);
-                    $this->userFileRecycleBinDomainService->recordFiles([$fileEntity], $userAuthorization->getId(), DeleteEventSource::User);
-                });
+            $this->magicFSFileDomainService->deleteFile((string) $fileId);
+            if (! $fileEntity->isProjectFile()) {
+                $this->userFileRecycleBinDomainService->recordFiles([$fileEntity], $userAuthorization->getId(), DeleteEventSource::User);
             }
 
             if ($fileEntity->isProjectFile()) {
@@ -717,13 +713,9 @@ class FileManagementAppService extends AbstractAppService
             );
 
             // 3. 调用 MagicFS 删除目录
-            if ($fileEntity->isProjectFile()) {
-                $this->magicFSFileDomainService->deleteFile((string) $fileId);
-            } else {
-                Db::transaction(function () use ($fileId, $fileEntity, $userAuthorization): void {
-                    $this->magicFSFileDomainService->deleteFile((string) $fileId);
-                    $this->userFileRecycleBinDomainService->recordFiles([$fileEntity], $userAuthorization->getId(), DeleteEventSource::User);
-                });
+            $this->magicFSFileDomainService->deleteFile((string) $fileId);
+            if (! $fileEntity->isProjectFile()) {
+                $this->userFileRecycleBinDomainService->recordFiles([$fileEntity], $userAuthorization->getId(), DeleteEventSource::User);
             }
 
             if ($fileEntity->isProjectFile()) {
@@ -794,14 +786,9 @@ class FileManagementAppService extends AbstractAppService
             }
 
             // MagicFS 在指定作用域内校验并删除文件，返回删除前实体供事件使用。
+            $fileEntities = $this->magicFSFileDomainService->deleteFiles($fileIds, false, $projectId);
             if ($projectId === 0) {
-                $fileEntities = Db::transaction(function () use ($fileIds, $projectId, $requestDTO, $userAuthorization): array {
-                    $deleted = $this->magicFSFileDomainService->deleteFiles($fileIds, false, $projectId);
-                    $this->userFileRecycleBinDomainService->recordFiles($deleted, $userAuthorization->getId(), DeleteEventSource::User, $requestDTO->getDeletionGroupId());
-                    return $deleted;
-                });
-            } else {
-                $fileEntities = $this->magicFSFileDomainService->deleteFiles($fileIds, false, $projectId);
+                $this->userFileRecycleBinDomainService->recordFiles($fileEntities, $userAuthorization->getId(), DeleteEventSource::User);
             }
 
             $this->logger->info(sprintf(

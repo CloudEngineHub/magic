@@ -24,31 +24,6 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
     {
     }
 
-    public function findFileDeletionGroups(array $groupIds, string $userId, string $organizationCode): array
-    {
-        if ($groupIds === []) {
-            return [];
-        }
-        $table = $this->model->getTable();
-        $models = $this->model::query()
-            ->where($table . '.resource_type', RecycleBinResourceType::File->value)
-            ->where($table . '.owner_id', $userId)
-            ->where($table . '.extra_data->space_type', 'user')
-            ->where($table . '.extra_data->organization_code', $organizationCode)
-            ->whereIn($table . '.extra_data->deletion_group_id', $groupIds)
-            ->whereNull($table . '.removed_at')
-            ->whereNull($table . '.purged_at')
-            ->select($table . '.*')->get();
-        $entities = [];
-        foreach ($models as $model) {
-            $entity = $this->modelToEntity($model);
-            if ($entity !== null) {
-                $entities[] = $entity;
-            }
-        }
-        return $entities;
-    }
-
     /**
      * 插入回收站记录.
      */
