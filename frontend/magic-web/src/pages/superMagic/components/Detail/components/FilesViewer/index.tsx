@@ -11,6 +11,11 @@ import {
 import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
 import { IconMenu2, IconX } from "@tabler/icons-react"
+import { PanelLeftClose } from "lucide-react"
+import { clipboard } from "@/utils/clipboard-helpers"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { useFileInfoPanel } from "../../../TopicFilesButton/hooks/useFileInfoPanel"
+import { copyAttachmentPath } from "../../../TopicFilesButton/utils/attachmentPath"
 import { Tooltip } from "antd"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/utils/cn"
@@ -133,7 +138,37 @@ const FilesViewer = memo(
 				enterPreviewFullscreen,
 				exitPreviewFullscreen,
 				getCheckBeforeClose,
+				getTabFileContext,
 			} = useFilesViewer(props)
+			const tabsRef = useRef(tabs)
+			tabsRef.current = tabs
+			const closingLeftTabsRef = useRef(false)
+			const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()
+
+			const handleFileInfo = (tabId: string) => {
+				const context = getTabFileContext(tabId)
+				if (context?.canShowInfo) handleShowInfo(context.item)
+			}
+			const handleCopyFileName = async (tabId: string) => {
+				const context = getTabFileContext(tabId)
+				if (!context?.fileName) return
+				try {
+					await clipboard.writeText(context.fileName)
+					magicToast.success(t("fileViewer.tabs.copyFileNameSuccess"))
+				} catch {
+					magicToast.error(t("fileViewer.tabs.copyFileNameFailed"))
+				}
+			}
+			const handleCopyFilePath = async (tabId: string) => {
+				const context = getTabFileContext(tabId)
+				if (context?.canCopyPath) await copyAttachmentPath({ item: context.item, t })
+			}
+			const handleLocateFile = (tabId: string) => {
+				const context = getTabFileContext(tabId)
+				if (context?.canLocate) {
+					pubsub.publish(PubSubEvents.Locate_File_In_Tree, context.item.file_id)
+				}
+			}
 
 			// 使用缓存 Hook
 			const {
@@ -210,6 +245,40 @@ const FilesViewer = memo(
 				clearCache()
 			}
 
+			const handleCloseTabsToLeft = async (tabId: string) => {
+				if (closingLeftTabsRef.current) return
+				const targetIndex = tabsRef.current.findIndex((tab) => tab.id === tabId)
+				if (targetIndex <= 0) return
+				const candidates = tabsRef.current
+					.slice(0, targetIndex)
+					.filter((tab) => tab.closeable !== false)
+					.map((tab) => tab.id)
+				if (candidates.length === 0) return
+				closingLeftTabsRef.current = true
+				try {
+					// 先完成这一批的编辑确认；取消时不关闭前面已确认的标签。
+					for (const candidateId of candidates) {
+						if (!tabsRef.current.some((tab) => tab.id === tabId)) return
+						const candidate = tabsRef.current.find((tab) => tab.id === candidateId)
+						if (!candidate || candidate.closeable === false) continue
+						const checkBeforeClose = getCheckBeforeClose(candidateId)
+						if (checkBeforeClose && !(await checkBeforeClose())) return
+					}
+					if (!tabsRef.current.some((tab) => tab.id === tabId)) return
+					for (const candidateId of candidates) {
+						const candidate = tabsRef.current.find((tab) => tab.id === candidateId)
+						if (!candidate || candidate.closeable === false) continue
+						closeFileTab(candidateId)
+						removeFromCache(candidateId)
+					}
+					switchToTab(tabId)
+				} catch {
+					magicToast.error(t("fileViewer.tabs.closeFailed"))
+				} finally {
+					closingLeftTabsRef.current = false
+				}
+			}
+
 			// Handle refresh tab action
 			const handleRefreshTab = useCallback(
 				(tabId: string) => {
@@ -268,15 +337,27 @@ const FilesViewer = memo(
 				hideContextMenu,
 			} = useTabContextMenu({
 				tabs,
+				getFileContext: getTabFileContext,
 				actions: {
 					closeFileTab: handleTabClose,
 					closeOtherTabs,
+					closeTabsToLeft: handleCloseTabsToLeft,
 					closeTabsToRight,
 					clearAllTabs: handleClearAllTabs,
 					refreshTab: handleRefreshTab,
 					addWebsiteToCommon: handleAddWebsiteToCommon,
+					showFileInfo: handleFileInfo,
+					copyFileName: handleCopyFileName,
+					copyFilePath: handleCopyFilePath,
+					locateFile: handleLocateFile,
 				},
 			})
+
+			const handlePreviewCollapse = () => {
+				setExpandPanelVisible(false)
+				hideContextMenu()
+				props.onPreviewCollapse?.()
+			}
 
 			// 暴露组件方法
 			useImperativeHandle(ref, () => ({
@@ -642,11 +723,26 @@ const FilesViewer = memo(
 									open={expandPanelVisible}
 									onOpenChange={setExpandPanelVisible}
 								>
-									<DropdownMenuTrigger asChild>
-										<div className="relative mx-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10">
-											<MagicIcon component={IconMenu2} size={18} />
-										</div>
-									</DropdownMenuTrigger>
+									<Tooltip
+										title={
+											expandPanelVisible
+												? null
+												: t("fileViewer.tabs.openTabs")
+										}
+										placement="bottom"
+										trigger={["hover", "focus"]}
+										mouseEnterDelay={0.3}
+									>
+										<DropdownMenuTrigger asChild>
+											<button
+												type="button"
+												aria-label={t("fileViewer.tabs.openTabs")}
+												className="relative mx-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+											>
+												<MagicIcon component={IconMenu2} size={18} />
+											</button>
+										</DropdownMenuTrigger>
+									</Tooltip>
 									<DropdownMenuContent
 										align="end"
 										className="max-h-[300px] w-[180px] overflow-y-auto p-1"
@@ -655,13 +751,31 @@ const FilesViewer = memo(
 									</DropdownMenuContent>
 								</DropdownMenu>
 
-								{/* 关闭所有 tab 按钮 */}
-								{hasCloseableTabs ? (
+								{props.onPreviewCollapse ? (
+									<Tooltip
+										title={t("fileViewer.tabs.collapsePreview")}
+										placement="bottom"
+										trigger={["hover", "focus"]}
+										mouseEnterDelay={0.3}
+									>
+										<button
+											type="button"
+											className="relative mr-1 flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+											aria-label={t("fileViewer.tabs.collapsePreview")}
+											aria-expanded={true}
+											onClick={handlePreviewCollapse}
+											data-files-viewer-collapse-preview
+										>
+											<PanelLeftClose size={16} />
+										</button>
+									</Tooltip>
+								) : hasCloseableTabs ? (
 									<Tooltip
 										title={t("shortcut.closeAllTabs")}
 										placement="bottom"
 										mouseEnterDelay={0.3}
 									>
+										{/* 关闭所有 tab 按钮 */}
 										<div
 											className="relative mr-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10"
 											onClick={handleClearAllTabs}
@@ -751,11 +865,12 @@ const FilesViewer = memo(
 						enabled={Boolean(currentTab) && !isRestoringFileTabs && hasStableTabs}
 						isFullscreen={effectiveIsFullscreen}
 						isPpt={isActivePptPreview}
-						visible={hasActiveStableTab}
+						visible={hasActiveStableTab && !props.isPreviewCollapsed}
 					>
 						{stableCachedTabs}
 					</StablePreviewPortalSurface>
 					{viewerLayer}
+					{fileInfoPanel}
 				</>
 			)
 		}),

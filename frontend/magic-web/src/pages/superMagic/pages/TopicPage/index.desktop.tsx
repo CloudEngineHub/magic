@@ -203,6 +203,9 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 
 	const {
 		shouldShowDetailPanel,
+		isDetailPanelCollapsed,
+		collapseDetailPanel,
+		expandDetailPanel,
 		handleFileClickWithPanel,
 		topicFilesPropsWithPanel,
 		handleActiveDetailTabChange,
@@ -856,6 +859,10 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					activeFileId={activeFileId}
 					onActiveFileChange={setActiveFileId}
 					onActiveTabChange={handleActiveDetailTabChange}
+					onPreviewCollapse={isReadOnly ? undefined : collapseDetailPanel}
+					onPreviewOpen={expandDetailPanel}
+					isPreviewCollapsed={isDetailPanelCollapsed}
+					canLocateFile={!isReadOnly}
 					onFullscreenChange={setIsDetailPanelFullscreen}
 					onFileTabsCacheLoaded={onFileTabsCacheLoaded}
 				/>
@@ -900,6 +907,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 						}
 			}
 			shouldShowDetailPanel={shouldShowDetailPanel}
+			isDetailPanelCollapsed={isDetailPanelCollapsed}
+			onExpandDetailPanel={expandDetailPanel}
 			renderMessagePanel={renderMessagePanel}
 		/>
 	)
