@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { HelpDialog } from "@/components/shadcn-composed/context-help/HelpDialog"
+import { HelpLocation } from "@/components/shadcn-composed/context-help/HelpLocation"
 import { HelpNavigation } from "@/components/shadcn-composed/context-help/HelpNavigation"
 import type {
 	HelpDefinition,
@@ -55,17 +56,19 @@ export default function FileHelpBrowser({
 		articleId === initialArticleId
 			? { ...initialHelp, tone: getFileHelpMetadata(articleId).tone }
 			: (article ?? {
-					title: catalog.labels[articleId],
+					title: catalog.names[articleId],
 					summary: t("contextHelp.loadFailed"),
 					renderBody: () => <p role="alert">{t("contextHelp.loadFailed")}</p>,
 				})
 	const isInitial = articleId === initialArticleId
 	const location =
 		isInitial && fileLocation
-			? [catalog.groupLabels[initialGroup], fileLocation.path || initialHelp.identity?.name]
-					.filter(Boolean)
-					.join(" · ")
-			: catalog.labels[articleId]
+			? {
+					scope: catalog.groupLabels[initialGroup],
+					path:
+						fileLocation.path || initialHelp.identity?.name || catalog.names[articleId],
+				}
+			: catalog.locations[articleId]
 	const identity = baseHelp.identity ?? article?.identity
 	const help: HelpDefinition = {
 		...baseHelp,
@@ -76,7 +79,7 @@ export default function FileHelpBrowser({
 						isInitial && initialHelp.identity
 							? initialHelp.identity.name
 							: catalog.names[articleId],
-					scope: [location, identity.scope].filter(Boolean).join(" · "),
+					location,
 				}
 			: undefined,
 	}
@@ -97,6 +100,7 @@ export default function FileHelpBrowser({
 			id: articleId,
 			articleId,
 			label: help.identity?.name ?? catalog.names[articleId],
+			path: location.path,
 			icon: help.identity?.renderIcon(16),
 		})
 	}
@@ -176,7 +180,7 @@ export default function FileHelpBrowser({
 								className="h-auto justify-start whitespace-normal p-0 text-left text-sm text-[var(--help-accent)]"
 								onClick={() => select(link.id)}
 							>
-								{catalog.labels[link.id]}
+								<HelpLocation {...catalog.locations[link.id]} />
 								<ArrowRight size={14} aria-hidden />
 							</Button>
 						))}
@@ -196,7 +200,7 @@ export default function FileHelpBrowser({
 									className="h-auto min-w-0 flex-col items-start gap-2 whitespace-normal rounded-xl p-4 text-left hover:border-[var(--help-accent)] hover:bg-[var(--help-soft)]"
 								>
 									<span className="flex w-full items-start justify-between gap-2 text-sm font-medium">
-										{catalog.labels[link.id]}
+										<HelpLocation {...catalog.locations[link.id]} />
 										<ArrowRight size={16} className="shrink-0" aria-hidden />
 									</span>
 									<span className="text-xs font-normal leading-5 text-muted-foreground">

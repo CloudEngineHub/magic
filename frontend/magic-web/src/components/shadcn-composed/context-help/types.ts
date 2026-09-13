@@ -7,11 +7,21 @@ export interface HelpReadingLinks {
 	recommended?: ReactNode
 }
 
+export interface HelpLocation {
+	scope: string
+	path: string
+}
+
 export interface HelpDefinition {
 	title: string
 	summary: string
 	subtitle?: string
-	identity?: { name: string; scope?: string; renderIcon: (size: number) => ReactNode }
+	identity?: {
+		name: string
+		scope?: string
+		location?: HelpLocation
+		renderIcon: (size: number) => ReactNode
+	}
 	points?: readonly string[]
 	tone?: HelpTone
 	/** 仅在打开完整说明后调用，避免文件列表提前创建所有正文。 */

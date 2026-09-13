@@ -15,6 +15,7 @@ import MagicFileIcon from "@/components/base/MagicFileIcon"
 import DingTalkIcon from "@/components/base/MagicFileIcon/assets/dingtalk-logo.svg"
 import LarkIcon from "@/components/base/MagicFileIcon/assets/feishu-logo.svg"
 import IconSuperTeamshare from "@/enhance/tabler/icons-react/icons/IconSuperTeamshare"
+import type { HelpLocation } from "@/components/shadcn-composed/context-help/types"
 import type {
 	HelpNavigationGroup,
 	HelpNavigationItem,
@@ -175,7 +176,7 @@ export function useFileHelpCatalog() {
 	const nodes = new Map<string, HelpNavigationItem>()
 	const articleNodes = new Map<FileHelpArticleId, HelpNavigationItem>()
 	const ancestors = {} as Record<FileHelpArticleId, string[]>
-	const labels = {} as Record<FileHelpArticleId, string>
+	const locations = {} as Record<FileHelpArticleId, HelpLocation>
 	const names = {} as Record<FileHelpArticleId, string>
 	// 目录按静态示意路径组织，节点键不含翻译；切换语言不会丢失展开状态。
 	for (const articleId of FILE_HELP_ARTICLE_IDS) {
@@ -188,10 +189,10 @@ export function useFileHelpCatalog() {
 				: articleId === "user.overview"
 					? placeholders.$overview
 					: groupLabels.current)
-		labels[articleId] = [
-			groupLabels[metadata.group],
-			path ? translatePath(path) : names[articleId],
-		].join(" · ")
+		locations[articleId] = {
+			scope: groupLabels[metadata.group],
+			path: path ? translatePath(path) : names[articleId],
+		}
 		ancestors[articleId] = [metadata.group]
 		if (!path) continue
 		const group = groups.find((item) => item.id === metadata.group)
@@ -209,6 +210,7 @@ export function useFileHelpCatalog() {
 						(placeholders[segments[index]] ?? segments[index]) +
 						(!last || path.endsWith("/") ? "/" : ""),
 					icon: <Folder size={16} aria-hidden />,
+					path: translatePath(segments.slice(0, index + 1).join("/")),
 					children: [],
 				}
 				nodes.set(id, node)
@@ -234,5 +236,5 @@ export function useFileHelpCatalog() {
 			]
 		}
 	}
-	return { labels, names, reasons, groups, ancestors, groupLabels, articleNodes }
+	return { locations, names, reasons, groups, ancestors, groupLabels, articleNodes }
 }
