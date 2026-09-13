@@ -22,19 +22,23 @@ import MessageEditorSkeleton from "../../components/MainInputContainer/component
 // 	)
 // }
 
-function TopicSidebarSkeleton() {
+function TopicSidebarSkeleton({ compactHeader }: { compactHeader: boolean }) {
 	return (
 		<div className="flex h-full flex-col gap-2" data-testid="workspace-sidebar-wrapper">
 			<div className="rounded-lg border border-border bg-background p-2">
 				<div className="flex items-center gap-2">
-					<Skeleton className="size-4 shrink-0 rounded-sm" />
+					<Skeleton
+						className={
+							compactHeader ? "size-4 shrink-0 rounded-sm" : "size-8 rounded-lg"
+						}
+					/>
 					<div className="flex min-w-0 flex-1 flex-col gap-1">
 						<Skeleton className="h-4 w-4/5 rounded-sm" />
 						<Skeleton className="h-3 w-3/5 rounded-sm" />
 					</div>
 					<Skeleton className="size-5 rounded-sm" />
 					<Skeleton className="size-5 rounded-sm" />
-					<Skeleton className="size-5 rounded-sm" />
+					{compactHeader && <Skeleton className="size-5 rounded-sm" />}
 				</div>
 				<div className="mt-2 flex items-center justify-between border-t border-border pt-2">
 					<Skeleton className="h-4 w-24 rounded-sm" />
@@ -109,7 +113,7 @@ export function TopicPageDesktopSkeletonBase({
 				{collapsed ? (
 					<Skeleton className="h-full w-6 rounded border border-border" />
 				) : (
-					<TopicSidebarSkeleton />
+					<TopicSidebarSkeleton compactHeader={useSidebarPreferences} />
 				)}
 			</div>
 

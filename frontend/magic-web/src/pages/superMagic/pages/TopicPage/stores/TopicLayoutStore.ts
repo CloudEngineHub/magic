@@ -47,6 +47,7 @@ export class TopicLayoutStore {
 	private bufferedProjectDrag = false
 	private dragStartHistoryWidthPx = 0
 	private historyPreferredWidthPx = 0
+	private historyDragPointerX = 0
 	private historyMaxWidthPx: number = TOPIC_HISTORY_RESIZE.max
 
 	readonly COLLAPSED_MESSAGE_PANEL_WIDTH = 24
@@ -142,6 +143,7 @@ export class TopicLayoutStore {
 		}
 
 		if (this.activeDrag === "history") {
+			this.historyDragPointerX = clientX
 			const rawWidth = this.dragStartHistoryWidthPx - (clientX - this.dragStartX)
 			this.historyDragWidthPx = Math.max(
 				TOPIC_HISTORY_RESIZE.min,
@@ -196,6 +198,7 @@ export class TopicLayoutStore {
 		this.activeDrag = "history"
 		this.isDraggingHistoryPanel = true
 		this.dragStartX = clientX
+		this.historyDragPointerX = clientX
 		this.dragStartHistoryWidthPx = width
 		this.historyPreferredWidthPx = preferredWidth
 		this.historyDragWidthPx = width
@@ -245,10 +248,12 @@ export class TopicLayoutStore {
 
 	endDrag(): HistoryDragResult | undefined {
 		if (this.activeDrag === "history") {
+			// 仅点击手柄时，不把窗口限制后的显示宽度覆盖为用户的新偏好。
 			const result = {
-				width: this.isCollapseArmed
-					? this.historyPreferredWidthPx
-					: this.historyDragWidthPx,
+				width:
+					this.isCollapseArmed || this.historyDragPointerX === this.dragStartX
+						? this.historyPreferredWidthPx
+						: this.historyDragWidthPx,
 				collapsed: this.isCollapseArmed,
 			}
 			this.clearDragState()
