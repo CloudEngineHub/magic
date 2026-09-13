@@ -85,7 +85,7 @@ export interface MagicProjectIconContext {
 	filename?: string
 	name?: string
 	file_extension?: string
-	display_config?: { type?: unknown } | null
+	display_config?: { type?: unknown } | Record<string, unknown> | null
 }
 
 function resolveMagicProjectIconType(item?: MagicProjectIconContext): string | undefined {
