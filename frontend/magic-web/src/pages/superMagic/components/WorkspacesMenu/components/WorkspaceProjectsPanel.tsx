@@ -3,6 +3,7 @@ import { useMemoizedFn } from "ahooks"
 import { reaction } from "mobx"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
+import MagicEmpty from "@/components/base/MagicEmpty"
 import { Button } from "@/components/shadcn-ui/button"
 import CreateProjectInput from "@/layouts/BaseLayout/components/MagicSidebar/WorkspaceList/CreateProjectInput"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
@@ -129,6 +130,17 @@ export default function WorkspaceProjectsPanel({
 		>
 			<ProjectsPanelList
 				projects={projects}
+				selectedProjectId={projectStore.selectedProject?.id}
+				emptyContent={
+					debouncedSearchValue ? (
+						<div className="flex flex-col items-center gap-2 py-4">
+							<MagicEmpty description={t("sidebarPanels.noMatchingProjects")} />
+							<Button variant="outline" onClick={() => setSearchValue("")}>
+								{t("sidebarPanels.clearSearch")}
+							</Button>
+						</div>
+					) : undefined
+				}
 				loading={loading}
 				viewMode={viewMode}
 				toolbar={
@@ -149,7 +161,8 @@ export default function WorkspaceProjectsPanel({
 				}
 				itemProps={{
 					onClick: (project) => {
-						actions.handleProjectClick(project)
+						if (project.id !== projectStore.selectedProject?.id)
+							actions.handleProjectClick(project)
 						close()
 					},
 					onRenameProject: async (params) => {

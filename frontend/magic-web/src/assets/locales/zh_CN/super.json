@@ -5791,12 +5791,15 @@
 		"viewShortcuts": "查看快捷键"
 	},
 	"sidebarPanels": {
+		"clearSearch": "清除搜索",
+
 		"collapseFiles": "收起文件栏",
 		"collapseHistory": "收起话题列表",
 		"createProject": "新建项目",
 		"expandFiles": "展开文件栏",
 		"expandHistory": "展开话题列表",
 		"loadMore": "加载更多",
+		"noMatchingProjects": "未找到匹配项目",
 		"projectsLoadFailed": "项目加载失败",
 		"releaseToCollapse": "松开收起",
 		"retry": "重试"

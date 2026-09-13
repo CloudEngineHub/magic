@@ -117,12 +117,12 @@ function ProjectCard({
 			{/* Project Selector Section */}
 			<div
 				className={cn(
-					"flex w-full shrink-0 items-start gap-1.5 p-2",
+					"flex w-full shrink-0 items-start gap-1.5 p-3",
 					isEditing && "flex-wrap",
 				)}
 			>
 				<div className={cn("flex min-w-0 grow flex-col gap-0.5", isEditing && "w-full")}>
-					<div className="flex min-w-0 items-center gap-1">
+					<div className="flex min-w-0 items-center gap-1.5">
 						<span className="flex size-4 shrink-0 items-center justify-center">
 							<IconWorkspaceProjectFolder size={16} isHovered={false} />
 						</span>
@@ -167,15 +167,18 @@ function ProjectCard({
 							showText={false}
 						/>
 					</div>
-					<button
-						type="button"
-						className="max-w-full self-start truncate rounded px-0.5 text-left text-xs leading-4 text-muted-foreground hover:bg-fill"
-						title={workspaceName}
-						onClick={onWorkspaceProjectsOpen}
-						data-testid="project-card-workspace"
-					>
-						{workspaceName}
-					</button>
+					<div className="min-w-0 pl-[22px]">
+						{" "}
+						<button
+							type="button"
+							className="max-w-full self-start truncate rounded px-0.5 text-left text-xs leading-4 text-muted-foreground hover:bg-fill"
+							title={workspaceName}
+							onClick={onWorkspaceProjectsOpen}
+							data-testid="project-card-workspace"
+						>
+							{workspaceName}
+						</button>
+					</div>
 				</div>
 
 				{/* Action Icons */}
@@ -188,6 +191,7 @@ function ProjectCard({
 							className="h-7 w-7 shadow-xs"
 							onClick={onShareClick}
 							aria-label={t("common.share")}
+							title={t("common.share")}
 							data-testid="share-button"
 						>
 							<IconShare3 size={16} className="text-foreground" />
@@ -219,6 +223,7 @@ function ProjectCard({
 								size="icon"
 								className="h-7 w-7 shadow-xs"
 								aria-label={t("common.moreActions")}
+								title={t("common.moreActions")}
 								data-testid="project-card-more-button"
 							>
 								<Ellipsis size={16} className="text-foreground" />
@@ -233,6 +238,7 @@ function ProjectCard({
 							className="h-7 w-7 shadow-xs"
 							onClick={onCollapse}
 							aria-label={t("sidebarPanels.collapseFiles")}
+							title={t("sidebarPanels.collapseFiles")}
 							data-testid="project-card-collapse"
 						>
 							<PanelLeftClose size={16} />

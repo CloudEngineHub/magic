@@ -146,6 +146,8 @@ interface ProjectsPanelListProps<T extends ProjectListItem> {
 	tabType?: string
 	error?: ReactNode
 	footer?: ReactNode
+	emptyContent?: ReactNode
+	selectedProjectId?: string
 }
 
 export function ProjectsPanelList<T extends ProjectListItem>({
@@ -157,6 +159,8 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 	tabType,
 	error,
 	footer,
+	emptyContent,
+	selectedProjectId,
 }: ProjectsPanelListProps<T>) {
 	const { t } = useTranslation("super")
 	return (
@@ -194,6 +198,11 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 								data-testid="shared-workspace-dialog-project-item"
 								data-tab-type={tabType}
 								data-project-id={item.id}
+								aria-current={selectedProjectId === item.id ? true : undefined}
+								className={cn(
+									selectedProjectId === item.id &&
+										"rounded-lg ring-1 ring-primary",
+								)}
 								data-project-name={item.project_name || t("project.unnamedProject")}
 							>
 								<ProjectItem<T>
@@ -210,7 +219,7 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 							data-testid="shared-workspace-dialog-project-empty"
 							data-tab-type={tabType}
 						>
-							<MagicEmpty description={t("project.noProjects")} />
+							{emptyContent || <MagicEmpty description={t("project.noProjects")} />}
 						</div>
 					)}
 					{footer}

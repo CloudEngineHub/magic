@@ -5790,12 +5790,15 @@
 		"viewShortcuts": "View Shortcuts"
 	},
 	"sidebarPanels": {
+		"clearSearch": "Clear search",
+
 		"collapseFiles": "Collapse files",
 		"collapseHistory": "Collapse topics",
 		"createProject": "New project",
 		"expandFiles": "Expand files",
 		"expandHistory": "Expand topics",
 		"loadMore": "Load more",
+		"noMatchingProjects": "No matching projects",
 		"projectsLoadFailed": "Failed to load projects",
 		"releaseToCollapse": "Release to collapse",
 		"retry": "Retry"

@@ -121,9 +121,10 @@ function ProjectCardContainer({
 							SuperMagicService.workspace.fetchWorkspaces(params)
 						}
 						fetchProjects={(params) => SuperMagicService.project.fetchProjects(params)}
-						onCollaborationProjectClick={(project) =>
-							SuperMagicService.switchProjectInDesktop(project)
-						}
+						onCollaborationProjectClick={(project) => {
+							if (project.id !== selectedProject.id)
+								void SuperMagicService.switchProjectInDesktop(project)
+						}}
 					/>
 				) : (
 					<WorkspaceProjectsPanel
