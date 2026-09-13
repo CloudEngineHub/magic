@@ -186,9 +186,17 @@ class SuperMagicAgentMarketAssembler
      */
     private static function resolveLocalizedText(?array $i18n, string $fallback, string $language): string
     {
-        $localizedValue = $i18n[$language] ?? $i18n[LanguageEnum::DEFAULT->value] ?? null;
-        if (is_string($localizedValue) && $localizedValue !== '') {
-            return $localizedValue;
+        foreach ([$language, LanguageEnum::DEFAULT->value, 'en_US', 'zh_CN'] as $key) {
+            $localizedValue = $i18n[$key] ?? null;
+            if (is_string($localizedValue) && $localizedValue !== '') {
+                return $localizedValue;
+            }
+        }
+
+        foreach ($i18n ?? [] as $localizedValue) {
+            if (is_string($localizedValue) && $localizedValue !== '') {
+                return $localizedValue;
+            }
         }
 
         return $fallback;

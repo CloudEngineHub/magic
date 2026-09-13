@@ -143,8 +143,10 @@ export interface GetStoreAgentsParams {
 	page?: number
 	page_size?: number
 	keyword?: string
-	/** Filter by category ID; omit for all */
+	/** Filter by category ID in the UI; converted to category_ids for the API. */
 	category_id?: string
+	/** API query field; supports multiple category IDs. */
+	category_ids?: Array<string | number>
 	/** Filter by market source; omit to include both public and organization markets. */
 	market_type?: StoreAgentMarketType
 }
@@ -173,7 +175,9 @@ export interface StoreAgentItem {
 	publisher?: CrewPublisher | null
 	/** Market source returned by the store-agent query. */
 	market_type: StoreAgentMarketType
-	category_id: string | null
+	category_ids?: string[]
+	/** Legacy response field retained for older servers. */
+	category_id?: string | null
 	/** Whether the current user has added this agent */
 	is_added: boolean
 	/** Latest market version code */
@@ -680,19 +684,19 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 
 	/**
 	 * Get store agents list (marketplace).
-	 * POST with body: page, page_size, keyword, category_id, market_type.
+	 * POST with body: page, page_size, keyword, category_ids, market_type.
 	 * Results include is_added and allow_delete flags for each agent.
 	 * @param params Request body
 	 */
 	getStoreAgents(params: GetStoreAgentsParams = {}) {
-		const { page = 1, page_size = 20, keyword, category_id, market_type } = params
+		const { page = 1, page_size = 20, keyword, category_id, category_ids, market_type } = params
 		return fetch.post<GetStoreAgentsResponse>(
 			genRequestUrl("/api/v2/super-magic/agent-market/queries"),
 			{
 				page,
 				page_size,
 				keyword,
-				category_id,
+				category_ids: category_ids ?? (category_id ? [category_id] : undefined),
 				...(market_type ? { market_type } : {}),
 			},
 		)

@@ -21,14 +21,14 @@ trait ResolvesI18nText
         // Keep one deterministic fallback order for every domain entity that exposes localized text.
         foreach ([$language, LanguageEnum::DEFAULT->value, LanguageEnum::EN_US->value, LanguageEnum::ZH_CN->value] as $key) {
             $value = $i18n[$key] ?? null;
-            if (is_scalar($value) && (string) $value !== '') {
-                return (string) $value;
+            if (is_string($value) && $value !== '') {
+                return $value;
             }
         }
 
         foreach ($i18n as $value) {
-            if (is_scalar($value) && (string) $value !== '') {
-                return (string) $value;
+            if (is_string($value) && $value !== '') {
+                return $value;
             }
         }
 

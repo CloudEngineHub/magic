@@ -643,16 +643,22 @@ class SuperMagicAgentEntity extends AbstractEntity
     /**
      * Get localized role string.
      * roleI18n format: {"zh_CN": ["角色1", "角色2"], "en_US": ["Role1", "Role2"]}.
-     * Falls back to default language, then to getPromptString().
+     * Falls back through the standard locale order, then to getPromptString().
      */
     public function getI18nRole(string $language): string
     {
-        if (! empty($this->roleI18n[$language])) {
-            return $this->formatRoleArray($this->roleI18n[$language]);
+        foreach ([$language, LanguageEnum::DEFAULT->value, LanguageEnum::EN_US->value, LanguageEnum::ZH_CN->value] as $key) {
+            $role = $this->formatRoleArray($this->roleI18n[$key] ?? null);
+            if ($role !== '') {
+                return $role;
+            }
         }
 
-        if (! empty($this->roleI18n[LanguageEnum::DEFAULT->value])) {
-            return $this->formatRoleArray($this->roleI18n[LanguageEnum::DEFAULT->value]);
+        foreach ($this->roleI18n ?? [] as $roles) {
+            $role = $this->formatRoleArray($roles);
+            if ($role !== '') {
+                return $role;
+            }
         }
 
         return $this->getPromptString();

@@ -444,7 +444,7 @@ export class CrewService {
 			publisherType: item.publisher_type,
 			publisherName: item.publisher?.name?.trim() || null,
 			marketType: item.market_type,
-			categoryId: item.category_id,
+			categoryId: item.category_ids?.[0] ?? item.category_id ?? null,
 			isAdded: item.is_added,
 			allowDelete: item.allow_delete,
 			updatedAt: item.updated_at,
