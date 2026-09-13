@@ -14,6 +14,8 @@ class RestorePreviewItemDTO
         public readonly string $resourceName,
         public readonly bool $isDirectory,
         public readonly ?RestoreConflictDTO $conflict = null,
+        public readonly string $spaceType = 'project',
+        public readonly ?string $parentId = null,
     ) {
     }
 
@@ -28,6 +30,8 @@ class RestorePreviewItemDTO
             'resource_id' => $this->resourceId,
             'resource_name' => $this->resourceName,
             'is_directory' => $this->isDirectory,
+            'space_type' => $this->spaceType,
+            'parent_id' => $this->parentId,
         ];
 
         if ($this->conflict !== null) {

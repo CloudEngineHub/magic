@@ -49,6 +49,7 @@ import type { FileScope } from "@/apis/modules/fileScope"
 const DELETE_BATCH_SIZE = 500
 
 interface UseBatchDownloadOptions {
+	recordDeletionGroup?: boolean
 	fileScope?: FileScope
 	onDownloadSelected?: (items: AttachmentItem[]) => Promise<void>
 	resolveDeleteItems?: (items: AttachmentItem[]) => Promise<AttachmentItem[]>
@@ -228,6 +229,10 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		deletingRef.current = true
 		setBatchLoading(true)
 		const confirmed = new Set<string>()
+		const deletionGroupId =
+			options.recordDeletionGroup || options.fileScope === "user"
+				? createRandomUuidV4()
+				: undefined
 		try {
 			for (let offset = 0; offset < ids.length; offset += DELETE_BATCH_SIZE) {
 				if (!isCurrent()) return
@@ -236,7 +241,8 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				try {
 					const result = await SuperMagicApi.deleteFiles({
 						file_ids: batch,
-						project_id: projectId,
+						project_id: options.fileScope === "user" ? "0" : projectId,
+						deletion_group_id: deletionGroupId,
 					})
 					if (!isCurrent()) return
 					const returnedIds = new Set(result.file_ids.map(String))
@@ -766,7 +772,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				]
 			: []),
 		// 批量复制（仅在允许编辑时显示）
-		...(((isInProject && allowEdit) || allowCopyTo) && !hideCopyTo
+		...(((isInProject && allowEdit) || allowCopyTo) && allowCopy && !hideCopyTo
 			? [
 					{
 						key: "copy",

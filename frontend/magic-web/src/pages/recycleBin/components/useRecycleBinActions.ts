@@ -36,10 +36,7 @@ interface SelectPathSubmitPayload {
 }
 
 type ConflictType =
-	| "parent_missing"
-	| "name_conflict"
-	| "project_missing"
-	| "duplicate_restore_target"
+	"parent_missing" | "name_conflict" | "project_missing" | "duplicate_restore_target"
 
 type ConflictResolution = {
 	parent_missing?: "restore_to_root"
@@ -51,6 +48,8 @@ type ConflictResolutions = Record<string, ConflictResolution>
 type PendingNameConflictItem = {
 	resourceId: string
 	fileName: string
+	dependentResourceIds?: string[]
+	ancestorConflictIds?: string[]
 }
 
 type PendingNameConflictRestore = {
@@ -79,11 +78,13 @@ function parseRestoreCheckResponse(data: {
 	items_with_conflict?: Array<{
 		resource_id: string
 		resource_name?: string
+		parent_id?: string | null
+		space_type?: "user" | "project"
 		conflict?: {
 			type?: string
 		}
 	}>
-	items_no_conflict?: Array<{ resource_id: string }>
+	items_no_conflict?: Array<{ resource_id: string; parent_id?: string | null }>
 }) {
 	const oldNeedMove = Array.isArray(data?.items_need_move) ? data.items_need_move : []
 	const oldNoNeedMove = Array.isArray(data?.items_no_need_move) ? data.items_no_need_move : []
@@ -151,7 +152,58 @@ function parseRestoreCheckResponse(data: {
 	const noConflictResourceIds =
 		oldNoNeedMove.length > 0 ? toResourceIds(oldNoNeedMove) : toResourceIds(noConflict)
 	directResourceIds.push(...noConflictResourceIds)
-	const uniqueDirectResourceIds = Array.from(new Set(directResourceIds))
+	const allItems = [...withConflict, ...noConflict]
+	const parentById = new Map(allItems.map((item) => [String(item.resource_id), item.parent_id]))
+	const pendingById = new Map(pendingNameConflictItems.map((item) => [item.resourceId, item]))
+	const blockedIds = new Set(mustSkipResourceIds)
+	const deferredIds = new Set<string>()
+	const ancestorsOf = (id: string) => {
+		const ancestors: string[] = []
+		const visited = new Set([id])
+		let parent = parentById.get(id)
+		while (parent && !visited.has(parent)) {
+			visited.add(parent)
+			ancestors.push(parent)
+			parent = parentById.get(parent)
+		}
+		return ancestors
+	}
+	// 目录先确认再恢复后代；跳过目录时，不会把其下文件单独移到空间根目录。
+	for (const item of allItems) {
+		const id = String(item.resource_id)
+		const ancestors = ancestorsOf(id)
+		if (ancestors.some((parent) => blockedIds.has(parent))) {
+			blockedIds.add(id)
+			deferredIds.add(id)
+			continue
+		}
+		const ancestorConflicts = ancestors.filter((parent) => pendingById.has(parent))
+		const pending = pendingById.get(id)
+		if (pending) pending.ancestorConflictIds = ancestorConflicts
+		else if (ancestorConflicts.length) {
+			const owner = pendingById.get(ancestorConflicts[0])
+			if (!owner) continue
+			owner.dependentResourceIds = [...(owner.dependentResourceIds ?? []), id]
+			deferredIds.add(id)
+		}
+	}
+	for (let index = pendingNameConflictItems.length - 1; index >= 0; index -= 1) {
+		if (blockedIds.has(pendingNameConflictItems[index].resourceId))
+			pendingNameConflictItems.splice(index, 1)
+	}
+	pendingNameConflictItems.sort(
+		(a, b) => ancestorsOf(a.resourceId).length - ancestorsOf(b.resourceId).length,
+	)
+	const rootSpaceTypes = Array.from(
+		new Set(
+			withConflict
+				.filter((item) => item.conflict?.type === "parent_missing")
+				.map((item) => item.space_type ?? "project"),
+		),
+	)
+	const uniqueDirectResourceIds = Array.from(new Set(directResourceIds)).filter(
+		(id) => !deferredIds.has(id) && !blockedIds.has(id),
+	)
 	const uniqueMustSkipResourceIds = Array.from(new Set(mustSkipResourceIds))
 
 	return {
@@ -169,7 +221,8 @@ function parseRestoreCheckResponse(data: {
 		directResourceIds: uniqueDirectResourceIds,
 		conflictResolutions,
 		pendingNameConflictItems,
-		mustSkipResourceIds: uniqueMustSkipResourceIds,
+		mustSkipResourceIds: Array.from(new Set([...uniqueMustSkipResourceIds, ...blockedIds])),
+		rootSpaceTypes,
 		skippedNameConflictCount: pendingNameConflictItems.length,
 		skippedNameConflictNames,
 		skippedNameConflictResourceIds: pendingNameConflictResourceIds,
@@ -392,6 +445,7 @@ export function useRecycleBinActions({
 			const data = await restoreRecycleBinResources({
 				resource_ids: resourceIds,
 				resource_type: resourceType,
+				expand_directories: resourceType !== RESOURCE_TYPE.FILE,
 				...(hasConflictResolutions ? { conflict_resolutions: conflictResolutions } : {}),
 			})
 			const successResourceIds = extractSuccessResourceIds(data.results)
@@ -433,14 +487,17 @@ export function useRecycleBinActions({
 		return pendingNameConflictRestore.items[pendingNameConflictRestore.currentIndex] ?? null
 	}
 
-	function advancePendingNameConflictQueue() {
+	function advancePendingNameConflictQueue(skippedId?: string) {
 		setPendingNameConflictRestore((prev) => {
 			if (!prev) return null
-			const nextIndex = prev.currentIndex + 1
-			if (nextIndex >= prev.items.length) return null
+			const remaining = prev.items
+				.slice(prev.currentIndex + 1)
+				.filter((item) => !skippedId || !item.ancestorConflictIds?.includes(skippedId))
+			if (!remaining.length) return null
 			return {
 				...prev,
-				currentIndex: nextIndex,
+				items: remaining,
+				currentIndex: 0,
 			}
 		})
 	}
@@ -450,7 +507,7 @@ export function useRecycleBinActions({
 		if (!currentConflict) return
 
 		if (strategy === "skip") {
-			advancePendingNameConflictQueue()
+			advancePendingNameConflictQueue(currentConflict.resourceId)
 			return
 		}
 		if (!pendingNameConflictRestore) return
@@ -458,7 +515,10 @@ export function useRecycleBinActions({
 		const { resourceType, conflictResolutions } = pendingNameConflictRestore
 		const restored = await restoreResources({
 			resourceType,
-			resourceIds: [currentConflict.resourceId],
+			resourceIds: [
+				currentConflict.resourceId,
+				...(currentConflict.dependentResourceIds ?? []),
+			],
 			conflictResolutions: {
 				...(conflictResolutions ?? {}),
 				[currentConflict.resourceId]: {
@@ -508,7 +568,10 @@ export function useRecycleBinActions({
 			)
 			const result = await restoreResources({
 				resourceType,
-				resourceIds: remainingItems.map((item) => item.resourceId),
+				resourceIds: remainingItems.flatMap((item) => [
+					item.resourceId,
+					...(item.dependentResourceIds ?? []),
+				]),
 				conflictResolutions: {
 					...(conflictResolutions ?? {}),
 					...overwriteConflictResolutions,
@@ -615,7 +678,7 @@ export function useRecycleBinActions({
 					resourceType,
 					conflictResolutions,
 					items: nameConflictItems.map((item) => ({
-						resourceId: item.resourceId,
+						...item,
 						fileName: item.fileName || t("common.untitledFile"),
 					})),
 					currentIndex: 0,
@@ -859,6 +922,7 @@ export function useRecycleBinActions({
 				projectMissingCount,
 				projectMissingFileNames,
 				duplicateRestoreTargetCount,
+				rootSpaceTypes,
 			} = parseRestoreCheckResponse(data)
 
 			if (
@@ -870,12 +934,7 @@ export function useRecycleBinActions({
 				setPendingNameConflictRestore({
 					resourceType: target.item.resourceType,
 					conflictResolutions,
-					items: [
-						{
-							resourceId: target.item.resourceId,
-							fileName: skippedNameConflictNames[0] || target.item.title,
-						},
-					],
+					items: pendingNameConflictItems,
 					currentIndex: 0,
 				})
 				setRestoreTarget(null)
@@ -896,6 +955,7 @@ export function useRecycleBinActions({
 				projectMissingCount,
 				projectMissingFileNames,
 				duplicateRestoreTargetCount,
+				rootSpaceTypes,
 				shouldBlockRestore: false,
 				status: "success",
 			})

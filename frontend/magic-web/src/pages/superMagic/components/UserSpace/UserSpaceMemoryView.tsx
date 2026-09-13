@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { Brain, Folder, Folders, FilePlus2, RefreshCw } from "lucide-react"
+import { Brain, Folder, Folders, FolderOpen, FilePlus2, RefreshCw } from "lucide-react"
 import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import type { MagicFSFile } from "@/apis"
@@ -29,6 +29,7 @@ interface MemoryGroupProps {
 	activeFileId?: string | null
 	topicId?: string | null
 	compact?: boolean
+	onBrowseDirectory?: (id: string) => void
 	scrollElementRef?: React.RefObject<HTMLElement>
 }
 const MemoryGroup = observer(function MemoryGroup({
@@ -41,6 +42,7 @@ const MemoryGroup = observer(function MemoryGroup({
 	activeFileId,
 	topicId,
 	compact = true,
+	onBrowseDirectory,
 	scrollElementRef,
 }: MemoryGroupProps & { labelVariant?: "section" | "item" }) {
 	const { t } = useTranslation("super")
@@ -153,6 +155,20 @@ const MemoryGroup = observer(function MemoryGroup({
 				</p>
 			) : undefined,
 	}
+	const browseAction =
+		root && onBrowseDirectory ? (
+			<MagicTooltip title={t("fileManager.browseFolder")}>
+				<Button
+					variant="ghost"
+					size="icon"
+					className="size-6"
+					aria-label={t("fileManager.browseFolder")}
+					onClick={() => onBrowseDirectory(root.id)}
+				>
+					<FolderOpen size={16} />
+				</Button>
+			</MagicTooltip>
+		) : undefined
 	const emptyState = !entryExists && (
 		<div className="flex shrink-0 items-center justify-between px-4 py-2 text-xs text-muted-foreground">
 			<span>{t("userSpace.noMemory")}</span>
@@ -187,6 +203,7 @@ const MemoryGroup = observer(function MemoryGroup({
 					compact={compact}
 					scrollElementRef={scrollElementRef}
 					section={section}
+					headerTrailingAction={browseAction}
 					contentBefore={emptyState}
 				/>
 			) : (

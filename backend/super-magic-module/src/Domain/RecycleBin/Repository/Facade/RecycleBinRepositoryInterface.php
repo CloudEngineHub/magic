@@ -15,6 +15,9 @@ use Dtyq\SuperMagic\Domain\RecycleBin\Enum\RecycleBinResourceType;
  */
 interface RecycleBinRepositoryInterface
 {
+    /** @return RecycleBinEntity[] 同一次删除的可见文件；不包含已永久移除记录。 */
+    public function findFileDeletionGroups(array $groupIds, string $userId, string $organizationCode): array;
+
     /**
      * 插入回收站记录.
      */
@@ -81,7 +84,8 @@ interface RecycleBinRepositoryInterface
         ?string $keyword = null,
         string $order = 'desc',
         int $page = 1,
-        int $pageSize = 20
+        int $pageSize = 20,
+        string $organizationCode = '',
     ): array;
 
     /**
@@ -89,7 +93,7 @@ interface RecycleBinRepositoryInterface
      *
      * @return array<int, int> key 为 RecycleBinResourceType->value，value 为数量
      */
-    public function getCountsByTypeVisibleToUser(string $userId, ?string $keyword = null): array;
+    public function getCountsByTypeVisibleToUser(string $userId, ?string $keyword = null, string $organizationCode = ''): array;
 
     /**
      * 批量查询当前用户可访问的回收站记录（带类型过滤）.
@@ -100,7 +104,7 @@ interface RecycleBinRepositoryInterface
      * @param string $userId 当前用户ID
      * @return RecycleBinEntity[] 回收站实体数组
      */
-    public function findByIdsAndTypeVisibleToUser(array $ids, int $resourceType, string $userId): array;
+    public function findByIdsAndTypeVisibleToUser(array $ids, int $resourceType, string $userId, string $organizationCode = ''): array;
 
     /**
      * 批量查询回收站记录（不过滤类型）.
@@ -109,7 +113,7 @@ interface RecycleBinRepositoryInterface
      * @param string $userId 用户ID（权限校验）
      * @return RecycleBinEntity[] 回收站实体数组
      */
-    public function findByIds(array $ids, string $userId): array;
+    public function findByIds(array $ids, string $userId, string $organizationCode = ''): array;
 
     /**
      * 批量删除回收站记录（物理删除）.
@@ -137,7 +141,7 @@ interface RecycleBinRepositoryInterface
      * @param string $userId 用户ID（权限校验）
      * @return RecycleBinEntity[] 回收站实体数组
      */
-    public function findLatestByResourceIds(array $resourceIds, RecycleBinResourceType $resourceType, string $userId): array;
+    public function findLatestByResourceIds(array $resourceIds, RecycleBinResourceType $resourceType, string $userId, string $organizationCode = ''): array;
 
     /**
      * 查找过期的回收站记录ID（系统定时任务使用）.

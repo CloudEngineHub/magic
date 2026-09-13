@@ -119,8 +119,6 @@ import {
 import { isSlidesTemplateFolder, toSlidesTemplatePreviewItem } from "./utils/slides-template-folder"
 import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
 import { getAttachmentKey } from "./utils/getAttachmentKey"
-import { FileDirectoryView, type FileDirectoryViewProps } from "./components/FileDirectoryView"
-import { createFileMenuItems } from "./components/hooks/useFileMenuItems"
 import {
 	Dialog,
 	DialogContent,
@@ -138,12 +136,6 @@ export interface TopicFilesExpansionState {
 interface TopicFilesCoreProps {
 	/** 所属定义工作区；用户挂载文件仍以自己的空间身份为准。 */
 	fileHelpContext?: FileHelpContext
-	directoryView?: Pick<FileDirectoryViewProps, "items" | "path" | "onNavigate"> &
-		Partial<
-			Pick<FileDirectoryViewProps, "rootName" | "error" | "renderFileIcon" | "renderFileTag">
-		> & {
-			directory?: AttachmentItem
-		}
 	className?: string
 	fitContent?: boolean
 	scrollElementRef?: React.RefObject<HTMLElement>
@@ -233,7 +225,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		className,
 		fitContent = false,
 		scrollElementRef,
-		directoryView,
 		attachments = [],
 		setUserSelectDetail,
 		onFileClick,
@@ -354,8 +345,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		renameErrorMessage,
 		handleStartRename,
 		handleRenameConfirm,
-		handleRenameCancel,
-		renamingFileIds,
 		handleRenameKeyDown,
 		getItemId,
 		isFileRenaming,
@@ -397,7 +386,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleShareSave,
 		exportingFiles,
 		createFileAndUpload,
-		creatingFiles,
 		downloadSelectedFiles,
 		createFolderAndUpload,
 		createDesignProject,
@@ -486,7 +474,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		errorMessage: fileErrorMessage,
 		virtualInputRef: virtualFileInputRef,
 		createVirtualFile: createVirtualFileInternal,
-		cancelVirtualFile,
 		handleVirtualFileKeyDown,
 		mergeVirtualFiles,
 		confirmVirtualFile,
@@ -510,7 +497,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		errorMessage: folderErrorMessage,
 		virtualInputRef: virtualFolderInputRef,
 		createVirtualFolder: createVirtualFolderInternal,
-		cancelVirtualFolder,
 		handleVirtualFolderKeyDown,
 		mergeVirtualFolders,
 		confirmVirtualFolder,
@@ -610,7 +596,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		errorMessage: designProjectErrorMessage,
 		virtualInputRef: virtualDesignProjectInputRef,
 		createVirtualDesignProject,
-		cancelVirtualDesignProject,
 		handleVirtualDesignProjectKeyDown,
 		mergeVirtualDesignProjects,
 		confirmVirtualDesignProject,
@@ -630,7 +615,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		errorMessage: selfMediaProjectErrorMessage,
 		virtualInputRef: virtualSelfMediaProjectInputRef,
 		createVirtualSelfMediaProject,
-		cancelVirtualSelfMediaProject,
 		handleVirtualSelfMediaProjectKeyDown,
 		mergeVirtualSelfMediaProjects,
 		confirmVirtualSelfMediaProject,
@@ -650,7 +634,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		errorMessage: aiCardProjectErrorMessage,
 		virtualInputRef: virtualAICardProjectInputRef,
 		createVirtualAICardProject,
-		cancelVirtualAICardProject,
 		handleVirtualAICardProjectKeyDown,
 		mergeVirtualAICardProjects,
 		confirmVirtualAICardProject,
@@ -876,6 +859,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		useDetailedDuplicateConflict: !capabilities.crossProject,
 	})
 	const copyFileHook = useCopyFileSelector({
+		directorySource,
 		projectId,
 		attachments,
 		onCopySuccess: () => onUpdateAttachments?.(),
@@ -1036,11 +1020,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	)
 
 	const handleCopyConfirm = useMemoizedFn(async ({ path }: { path: AttachmentItem[] }) => {
-		if (!projectId) return
+		if (!projectId && !directorySource) return
 		await crossProjectOperation.executeCopyOperation({
 			fileIds: copyFileHook.pendingCopyFileIds,
-			targetProjectId: projectId,
-			targetPath: path,
+			targetProjectId: projectId ?? "",
+			targetPath: path.length || !directorySource ? path : [directorySource.root],
 			targetAttachments: attachments,
 			sourceAttachments: attachments,
 		})
@@ -1049,6 +1033,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 
 	// 跨项目文件操作 Hook
 	const crossProjectOperation = useCrossProjectFileOperation({
+		isCurrent: operations?.isCurrent,
+		fileScope: spaceConfig?.scope,
 		projectId,
 		shareCode,
 		sharePassword,
@@ -1282,11 +1268,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			: undefined,
 		handleShareItem: capabilities.share ? handleShareItemFromHook : undefined,
 		handleDeleteItem,
-		handleDeleteWithConfirm:
-			directoryView || operations ? (item) => void deleteWithConfirm([item]) : undefined,
-		handleOpenDirectory: directoryView
-			? (item) => directoryView.onNavigate(item.file_id)
-			: undefined,
+		handleDeleteWithConfirm: operations ? (item) => void deleteWithConfirm([item]) : undefined,
 		handleDownloadOriginal,
 		handleDownloadPdf,
 		handleDownloadPpt,
@@ -2367,85 +2349,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const handleMountedTreeRowsChange = useMemoizedFn((rows: Array<{ node: TreeNodeData }>) => {
 		imagePreviewManager.setMountedItems(rows.map((row) => row.node.item))
 	})
-	const directoryNameInput = directoryView
-		? [
-				{
-					id: renamingItemId,
-					title: t("userSpace.rename"),
-					value: renameValue,
-					setValue: setRenameValue,
-					inputRef: renameInputRef,
-					error: renameErrorMessage,
-					confirm: handleRenameConfirm,
-					cancel: handleRenameCancel,
-				},
-				{
-					id: editingVirtualFileId,
-					title: t("userSpace.createFile"),
-					value: virtualFileName,
-					setValue: setVirtualFileName,
-					inputRef: virtualFileInputRef,
-					error: fileErrorMessage,
-					confirm: confirmVirtualFile,
-					cancel: cancelVirtualFile,
-				},
-				{
-					id: editingVirtualFolderId,
-					title: t("userSpace.createFolder"),
-					value: virtualFolderName,
-					setValue: setVirtualFolderName,
-					inputRef: virtualFolderInputRef,
-					error: folderErrorMessage,
-					confirm: confirmVirtualFolder,
-					cancel: cancelVirtualFolder,
-				},
-				{
-					id: editingVirtualDesignProjectId,
-					title: t("topicFiles.contextMenu.createSubMenu.designFile"),
-					value: virtualDesignProjectName,
-					setValue: setVirtualDesignProjectName,
-					inputRef: virtualDesignProjectInputRef,
-					error: designProjectErrorMessage,
-					confirm: confirmVirtualDesignProject,
-					cancel: cancelVirtualDesignProject,
-				},
-				{
-					id: editingVirtualSelfMediaProjectId,
-					title: t("topicFiles.contextMenu.createSubMenu.selfMediaFile"),
-					value: virtualSelfMediaProjectName,
-					setValue: setVirtualSelfMediaProjectName,
-					inputRef: virtualSelfMediaProjectInputRef,
-					error: selfMediaProjectErrorMessage,
-					confirm: confirmVirtualSelfMediaProject,
-					cancel: cancelVirtualSelfMediaProject,
-				},
-				{
-					id: editingVirtualAICardProjectId,
-					title: t("topicFiles.contextMenu.createSubMenu.aiCardFile"),
-					value: virtualAICardProjectName,
-					setValue: setVirtualAICardProjectName,
-					inputRef: virtualAICardProjectInputRef,
-					error: aiCardProjectErrorMessage,
-					confirm: confirmVirtualAICardProject,
-					cancel: cancelVirtualAICardProject,
-				},
-			].find((input) => input.id)
-		: undefined
-	const directoryInputBusy =
-		creatingFiles.size > 0 ||
-		renamingFileIds.size > 0 ||
-		renamePending ||
-		isCreatingFile ||
-		isCreatingFolder
-	const canCreateDirectoryProject =
-		capabilities.projectContentCreation &&
-		!directoryView?.directory?.display_config &&
-		!(
-			directoryView?.directory?.file_id &&
-			treeIndex
-				.getParentItemsById(directoryView.directory.file_id)
-				.some((item) => item.display_config)
-		)
 
 	return (
 		<ProjectFileImagePreviewProvider manager={imagePreviewManager}>
@@ -2453,11 +2356,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				className={cx(
 					className,
 					"flex min-h-0 flex-col",
-					fitContent
-						? "flex-none overflow-visible"
-						: directoryView
-							? "h-full overflow-hidden"
-							: "h-[calc(100%-32px)] overflow-auto",
+					fitContent ? "flex-none overflow-visible" : "h-[calc(100%-32px)] overflow-auto",
 				)}
 				ref={shortcutContainerRef}
 				data-topic-files-shortcuts
@@ -2469,306 +2368,176 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				{fileInfoPanel}
 				{deleteConfirmNode}
 				{batchDeleteConfirmNode}
-				{directoryView ? (
-					<>
-						<FileDirectoryView
-							scrollElementRef={scrollElementRef}
-							{...directoryView}
-							skillFiles={skillFiles}
-							fileHelpContext={resolvedFileHelpContext}
-							rootName={directoryView.rootName ?? t("userSpace.currentProject")}
-							onOpen={handleOpenFile}
-							getMenuItems={getMenuItems}
-							selectedIds={selectedItems}
-							onSelectionChange={setSelectedItems}
-							isSelectable={isItemSelectable}
-							activeFileId={activeFileId}
-							loading={refreshLoading}
-							onRetry={() => onUpdateAttachments?.()}
-							createMenuItems={
-								allowEdit
-									? createFileMenuItems({
-											t,
-											onAddFile: (type) =>
-												createVirtualFile(
-													type,
-													directoryView.directory?.file_id,
-													directoryView.directory?.relative_file_path,
-												),
-											onAddFolder: () =>
-												createVirtualFolder(
-													directoryView.directory?.file_id,
-													directoryView.directory?.relative_file_path,
-												),
-											onAddDesign: canCreateDirectoryProject
-												? () =>
-														createVirtualDesignProject(
-															directoryView.directory?.file_id,
-															directoryView.directory
-																?.relative_file_path,
-														)
-												: undefined,
-											onAddSelfMedia: canCreateDirectoryProject
-												? () =>
-														createVirtualSelfMediaProject(
-															directoryView.directory?.file_id,
-															directoryView.directory
-																?.relative_file_path,
-														)
-												: undefined,
-											onAddAICard: canCreateDirectoryProject
-												? () =>
-														openAICardDialog(
-															directoryView.directory
-																?.relative_file_path,
-														)
-												: undefined,
-										})
-									: undefined
-							}
-							onUpload={
-								allowEdit && capabilities.upload
-									? () => handleUploadFile(directoryView.directory)
-									: undefined
-							}
-							onMove={
-								allowEdit && capabilities.move
-									? (files) => {
-											const ids = files.flatMap((file) =>
-												file.file_id ? [file.file_id] : [],
-											)
-											if (canUseDesktopCrossProjectMove)
-												crossProjectOperation.openMoveModal(
-													ids,
-													ids[0] ? getParentPathByFileId(ids[0]) : [],
-												)
-											else moveFileHook.openBatchMoveByFileIds(ids)
-										}
-									: undefined
-							}
-							onDelete={
-								allowEdit ? (files) => void deleteWithConfirm(files) : undefined
-							}
-							onDownload={allowDownload !== false ? downloadSelectedFiles : undefined}
-							allowDirectoryDownload={!directorySource}
-						/>
-						<Dialog
-							open={Boolean(directoryNameInput)}
-							onOpenChange={(open) => {
-								if (!open && !directoryInputBusy) directoryNameInput?.cancel()
-							}}
-						>
-							<DialogContent>
-								<DialogHeader>
-									<DialogTitle>{directoryNameInput?.title}</DialogTitle>
-								</DialogHeader>
-								<InputWithError
-									ref={directoryNameInput?.inputRef}
-									value={directoryNameInput?.value ?? ""}
-									height={32}
-									onChange={(event) =>
-										directoryNameInput?.setValue(event.target.value)
-									}
-									errorMessage={directoryNameInput?.error}
-									showError
-									disabled={directoryInputBusy}
-									onKeyDown={(event) => {
-										if (event.key === "Enter" && !directoryInputBusy)
-											void directoryNameInput?.confirm()
-									}}
-								/>
-								<DialogFooter>
-									<Button
-										variant="outline"
-										disabled={directoryInputBusy}
-										onClick={() => directoryNameInput?.cancel()}
-									>
-										{t("common.cancel")}
-									</Button>
-									<Button
-										disabled={directoryInputBusy}
-										onClick={() => void directoryNameInput?.confirm()}
-									>
-										{t("common.confirm")}
-									</Button>
-								</DialogFooter>
-							</DialogContent>
-						</Dialog>
-					</>
-				) : (
-					<>
-						{/* Content area */}
-						{/* <div className={styles.contentArea}> */}
-						{/* File tree */}
-						<div
-							ref={fileListAreaRef}
-							className={cx(styles.fileListArea, "px-2 pb-2", {
-								[styles.dragTargetFolder]:
-									isDragOverFileListArea || dragState.isDragOverRoot, // 添加拖拽悬停样式
-							})}
-							onScroll={handleFileListScroll}
-							onContextMenu={(e) =>
-								fileListAreaDelegateProps.onDropdownContextMenuClick?.(e, null)
-							}
-							onDragEnter={handleFileListAreaDragEnter}
-							onDragOver={handleFileListAreaDragOver}
-							onDragLeave={handleFileListAreaDragLeave}
-							onDragEnd={handleFileListAreaDragEnd}
-							onDrop={handleFileListAreaDrop}
-							data-testid="topic-files-list-area"
-							style={
-								fitContent
-									? { flex: "none", overflow: "visible", maxHeight: "none" }
-									: undefined
-							}
-						>
-							{visibleRows.length > 0 ? (
-								<CustomTree
-									visibleRows={visibleRows}
-									visibleNodes={visibleNodes}
-									visibleNodeIndexByKey={visibleNodeIndexByKey}
-									// draggable={
-									// 	allowEdit
-									// 		? {
-									// 				icon: false,
-									// 		  }
-									// 		: false
-									// }
-									onSelect={handleSelect}
-									expandedKeys={expandedKeys}
-									selectedKeys={effectiveSelectedKeys}
-									titleRender={titleRender}
-									getRowRenderVersion={getFileRowRenderVersion}
-									rowRenderContextVersion={
-										directorySource
-											? `${rowRenderContextVersion}:${fileHelpVersion}:${renamePending}:${isCreatingFile}:${isCreatingFolder}`
-											: `${rowRenderContextVersion}:${fileHelpVersion}`
-									}
-									showIcon={false}
-									blockNode
-									scrollElementRef={scrollElementRef ?? fileListAreaRef}
-									sharedScroll={Boolean(scrollElementRef)}
-									scrollToKey={directorySource?.locateFileId ?? locatingFileId}
-									isMobile={isMobile}
-									onMountedRowsChange={handleMountedTreeRowsChange}
-									// height={treeHeight}
-									dragTargetNodeClass={styles.dragTargetFolder}
-									dragTargetKey={dragState.dropTargetFolderId}
-									isDragTargetNode={isDropTargetNode}
-									{...treeNodeDragHandlers}
-								/>
-							) : refreshLoading ? (
-								<div
-									className="flex h-full w-full items-center justify-center"
-									data-testid="topic-files-list-loading"
-								>
-									<div className="flex flex-col items-center gap-3">
-										<MagicSpin spinning />
-										<p className="text-sm text-muted-foreground">
-											{t("topicFiles.loadingFiles")}
-										</p>
-									</div>
+				<>
+					{/* Content area */}
+					{/* <div className={styles.contentArea}> */}
+					{/* File tree */}
+					<div
+						ref={fileListAreaRef}
+						className={cx(styles.fileListArea, "px-2 pb-2", {
+							[styles.dragTargetFolder]:
+								isDragOverFileListArea || dragState.isDragOverRoot, // 添加拖拽悬停样式
+						})}
+						onScroll={handleFileListScroll}
+						onContextMenu={(e) =>
+							fileListAreaDelegateProps.onDropdownContextMenuClick?.(e, null)
+						}
+						onDragEnter={handleFileListAreaDragEnter}
+						onDragOver={handleFileListAreaDragOver}
+						onDragLeave={handleFileListAreaDragLeave}
+						onDragEnd={handleFileListAreaDragEnd}
+						onDrop={handleFileListAreaDrop}
+						data-testid="topic-files-list-area"
+						style={
+							fitContent
+								? { flex: "none", overflow: "visible", maxHeight: "none" }
+								: undefined
+						}
+					>
+						{visibleRows.length > 0 ? (
+							<CustomTree
+								visibleRows={visibleRows}
+								visibleNodes={visibleNodes}
+								visibleNodeIndexByKey={visibleNodeIndexByKey}
+								// draggable={
+								// 	allowEdit
+								// 		? {
+								// 				icon: false,
+								// 		  }
+								// 		: false
+								// }
+								onSelect={handleSelect}
+								expandedKeys={expandedKeys}
+								selectedKeys={effectiveSelectedKeys}
+								titleRender={titleRender}
+								getRowRenderVersion={getFileRowRenderVersion}
+								rowRenderContextVersion={
+									directorySource
+										? `${rowRenderContextVersion}:${fileHelpVersion}:${renamePending}:${isCreatingFile}:${isCreatingFolder}`
+										: `${rowRenderContextVersion}:${fileHelpVersion}`
+								}
+								showIcon={false}
+								blockNode
+								scrollElementRef={scrollElementRef ?? fileListAreaRef}
+								sharedScroll={Boolean(scrollElementRef)}
+								scrollToKey={directorySource?.locateFileId ?? locatingFileId}
+								isMobile={isMobile}
+								onMountedRowsChange={handleMountedTreeRowsChange}
+								// height={treeHeight}
+								dragTargetNodeClass={styles.dragTargetFolder}
+								dragTargetKey={dragState.dropTargetFolderId}
+								isDragTargetNode={isDropTargetNode}
+								{...treeNodeDragHandlers}
+							/>
+						) : refreshLoading ? (
+							<div
+								className="flex h-full w-full items-center justify-center"
+								data-testid="topic-files-list-loading"
+							>
+								<div className="flex flex-col items-center gap-3">
+									<MagicSpin spinning />
+									<p className="text-sm text-muted-foreground">
+										{t("topicFiles.loadingFiles")}
+									</p>
 								</div>
-							) : (
-								<EmptyState
-									title={
-										directorySource && externalSearchValue?.trim()
-											? t("userSpace.searchLoadedEmpty")
-											: undefined
-									}
-									onAddFile={createVirtualFile}
-									onAddDesign={
-										capabilities.projectContentCreation
-											? createVirtualDesignProject
-											: undefined
-									}
-									onUploadFile={() => handleUploadFile()}
-									allowEdit={
-										allowEdit &&
-										!(directorySource && externalSearchValue?.trim())
-									}
-								/>
-							)}
-						</div>
-						{/* </div> */}
-						{/* Batch download layer */}
-						<div
-							className={cx(styles.batchDownloadLayer, {
-								[styles.hidden]:
-									(!isMobile && !showBatchDownload) ||
-									(isMobile && attachments.length <= 0),
-								[styles.pcBatchDownloadLayer]: !isMobile,
-							})}
-						>
-							{!isMobile && showBatchDownload && (
-								<Flex className={styles.batchOperations}>
-									<MagicDropdown
-										menu={{ items: batchMenuItems, style: { width: "100%" } }}
-										placement="topLeft"
-										trigger={["click"]}
-									>
-										<div style={{ width: "100%" }}>
-											<Button
-												className={styles.batchDownloadButtonPC}
-												data-testid="batch-operations-button"
-												disabled={batchLoading}
-												style={{ flex: 1, width: "100%" }}
-											>
-												<Flex align="center" gap={2} justify="center">
-													{batchLoading ? (
-														<Loader2
-															className="mr-1 animate-spin"
-															size={16}
-														/>
-													) : null}
-													<span
-														className={styles.batchDownloadButtonPCText}
-													>
-														{t("topicFiles.batchOperations")}
-													</span>
-													<IconChevronDown
-														size={16}
-														stroke={1.5}
-														color="#fff"
-													/>
-												</Flex>
-											</Button>
-										</div>
-									</MagicDropdown>
-								</Flex>
-							)}
-							{showMobileBatchActions && (
-								<Button
-									variant="secondary"
-									className="h-9 px-8 py-2 text-sm font-medium shadow-xs"
-									data-testid="mobile-cancel-select-button"
-									onClick={handleCancelMobileBatchSelection}
-								>
-									{t("topicFiles.cancelSelect")}
-								</Button>
-							)}
-							{showMobileBatchActions && (
+							</div>
+						) : (
+							<EmptyState
+								title={
+									directorySource && externalSearchValue?.trim()
+										? t("userSpace.searchLoadedEmpty")
+										: undefined
+								}
+								onAddFile={createVirtualFile}
+								onAddDesign={
+									capabilities.projectContentCreation
+										? createVirtualDesignProject
+										: undefined
+								}
+								onUploadFile={() => handleUploadFile()}
+								allowEdit={
+									allowEdit && !(directorySource && externalSearchValue?.trim())
+								}
+							/>
+						)}
+					</div>
+					{/* </div> */}
+					{/* Batch download layer */}
+					<div
+						className={cx(styles.batchDownloadLayer, {
+							[styles.hidden]:
+								(!isMobile && !showBatchDownload) ||
+								(isMobile && attachments.length <= 0),
+							[styles.pcBatchDownloadLayer]: !isMobile,
+						})}
+					>
+						{!isMobile && showBatchDownload && (
+							<Flex className={styles.batchOperations}>
 								<MagicDropdown
-									menu={{ items: batchMenuItems }}
+									menu={{ items: batchMenuItems, style: { width: "100%" } }}
 									placement="topLeft"
 									trigger={["click"]}
+								>
+									<div style={{ width: "100%" }}>
+										<Button
+											className={styles.batchDownloadButtonPC}
+											data-testid="batch-operations-button"
+											disabled={batchLoading}
+											style={{ flex: 1, width: "100%" }}
+										>
+											<Flex align="center" gap={2} justify="center">
+												{batchLoading ? (
+													<Loader2
+														className="mr-1 animate-spin"
+														size={16}
+													/>
+												) : null}
+												<span className={styles.batchDownloadButtonPCText}>
+													{t("topicFiles.batchOperations")}
+												</span>
+												<IconChevronDown
+													size={16}
+													stroke={1.5}
+													color="#fff"
+												/>
+											</Flex>
+										</Button>
+									</div>
+								</MagicDropdown>
+							</Flex>
+						)}
+						{showMobileBatchActions && (
+							<Button
+								variant="secondary"
+								className="h-9 px-8 py-2 text-sm font-medium shadow-xs"
+								data-testid="mobile-cancel-select-button"
+								onClick={handleCancelMobileBatchSelection}
+							>
+								{t("topicFiles.cancelSelect")}
+							</Button>
+						)}
+						{showMobileBatchActions && (
+							<MagicDropdown
+								menu={{ items: batchMenuItems }}
+								placement="topLeft"
+								trigger={["click"]}
+								disabled={!showBatchDownload || batchLoading}
+							>
+								<Button
+									variant="default"
+									className="h-9 w-[253px] gap-2 px-4 py-2 text-sm font-medium shadow-xs"
+									data-testid="mobile-batch-operations-button"
 									disabled={!showBatchDownload || batchLoading}
 								>
-									<Button
-										variant="default"
-										className="h-9 w-[253px] gap-2 px-4 py-2 text-sm font-medium shadow-xs"
-										data-testid="mobile-batch-operations-button"
-										disabled={!showBatchDownload || batchLoading}
-									>
-										{batchLoading ? (
-											<Loader2 className="animate-spin" size={16} />
-										) : null}
-										<span>{t("topicFiles.batchOperation")}</span>
-										<ChevronDown size={16} />
-									</Button>
-								</MagicDropdown>
-							)}
-							{/* {isMobile && attachments.length > 0 && hasLogin && (
+									{batchLoading ? (
+										<Loader2 className="animate-spin" size={16} />
+									) : null}
+									<span>{t("topicFiles.batchOperation")}</span>
+									<ChevronDown size={16} />
+								</Button>
+							</MagicDropdown>
+						)}
+						{/* {isMobile && attachments.length > 0 && hasLogin && (
 					<>
 						<div className={styles.batchDownloadSeparator} />
 						<button
@@ -2785,9 +2554,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						</button>
 					</>
 				)} */}
-						</div>
-					</>
-				)}
+					</div>
+				</>
 				{/* 文件分享模态框 */}
 				{isMobile ? (
 					<ProjectShareSheet
@@ -2942,7 +2710,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						}}
 					/>
 				}
-				{!capabilities.crossProject && isInProject ? (
+				{!capabilities.crossProject && (isInProject || directorySource) ? (
 					<SelectDirectoryModal
 						{...copyFileHook.selectorConfig}
 						onSubmit={handleCopyConfirm}

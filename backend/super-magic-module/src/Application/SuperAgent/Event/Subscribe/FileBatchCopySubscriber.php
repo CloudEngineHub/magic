@@ -12,9 +12,12 @@ use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Locker\LockerInterface;
 use Dtyq\SuperMagic\Domain\MagicFS\Service\MagicFSFileDomainService;
+use Dtyq\SuperMagic\Domain\RecycleBin\Service\FileRecycleBinDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\FileSpaceType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskFileSource;
+use Dtyq\SuperMagic\Domain\SuperAgent\Event\DeleteEventSource;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileBatchCopyEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\FileUploadedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
@@ -22,10 +25,12 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileBatchOperationStatusManager;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileOperationTreeUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileTreeUtil;
+use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Response\TaskFileItemDTO;
 use Hyperf\Amqp\Annotation\Consumer;
 use Hyperf\Amqp\Message\ConsumerMessage;
 use Hyperf\Amqp\Result;
+use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Wire\AMQPTable;
@@ -33,7 +38,6 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
-
 use function Hyperf\Translation\trans;
 
 /**
@@ -91,6 +95,7 @@ class FileBatchCopySubscriber extends ConsumerMessage
         private readonly FileBatchOperationStatusManager $statusManager,
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly LockerInterface $locker,
+        private readonly FileRecycleBinDomainService $fileRecycleBinDomainService,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get('FileBatchCopy');
@@ -126,7 +131,7 @@ class FileBatchCopySubscriber extends ConsumerMessage
             ]);
 
             // Step 2: Validate required parameters
-            if (empty($batchKey) || empty($event->getUserId()) || empty($event->getFileIds()) || ! $event->getProjectId()) {
+            if (empty($batchKey) || empty($event->getUserId()) || empty($event->getFileIds()) || ($event->getSpaceType() === FileSpaceType::Project && ! $event->getProjectId())) {
                 $this->logger->error('Invalid batch copy event data: missing required parameters', [
                     'batch_key' => $batchKey,
                     'user_id' => $event->getUserId(),
@@ -210,8 +215,8 @@ class FileBatchCopySubscriber extends ConsumerMessage
     public function copyFile(
         DataIsolation $dataIsolation,
         array $node,
-        ProjectEntity $sourceProject,
-        ProjectEntity $targetProject,
+        ?ProjectEntity $sourceProject,
+        ?ProjectEntity $targetProject,
         TaskFileEntity $targetParentEntity,
         array $keepBothFileIds = []
     ): void {
@@ -229,6 +234,9 @@ class FileBatchCopySubscriber extends ConsumerMessage
 
             if ($isDirectory) {
                 $isSyntheticParent = (bool) ($node['is_synthetic_parent'] ?? false);
+                if ($isSyntheticParent && $targetProject === null) {
+                    throw new RuntimeException('Personal files cannot use synthetic project paths');
+                }
                 $newTargetEntity = $isSyntheticParent
                     ? $this->resolveSyntheticParentDirectory(
                         $node,
@@ -261,14 +269,21 @@ class FileBatchCopySubscriber extends ConsumerMessage
                 }
 
                 // Always use copyProjectFile which handles conflict resolution
-                $copiedFileEntity = $this->taskFileDomainService->copyProjectFile(
-                    $dataIsolation,
-                    $fileEntity,
-                    $sourceProject,
-                    $targetProject,
-                    $targetParentEntity->getFileId(),
-                    $keepBothFileIds
-                );
+                $copiedFileEntity = $sourceProject !== null && $targetProject !== null
+                    ? $this->taskFileDomainService->copyProjectFile(
+                        $dataIsolation, $fileEntity, $sourceProject, $targetProject, $targetParentEntity->getFileId(), $keepBothFileIds
+                    )
+                    : Db::transaction(function () use ($fileEntity, $targetParentEntity, $keepBothFileIds, $dataIsolation): TaskFileEntity {
+                        $existing = $this->taskFileDomainService->getByProjectParentAndName(0, $targetParentEntity->getFileId(), $fileEntity->getFileName());
+                        $copied = $this->taskFileDomainService->copyFileToParent(
+                            (string) $fileEntity->getFileId(), (string) $targetParentEntity->getFileId(), null,
+                            ! in_array((string) $fileEntity->getFileId(), $keepBothFileIds, true)
+                        );
+                        if ($existing !== null) {
+                            $this->fileRecycleBinDomainService->recordFileDeletion($existing, $dataIsolation->getCurrentUserId(), DeleteEventSource::User);
+                        }
+                        return $copied;
+                    });
 
                 if ($copiedFileEntity->getFileId() === $fileEntity->getFileId()) {
                     $this->logger->info('Skipped file copy because target file is source file itself', [
@@ -283,15 +298,15 @@ class FileBatchCopySubscriber extends ConsumerMessage
                 $this->syncTreeAfterProjectCopy(
                     $copiedFileEntity,
                     $targetParentEntity->getFileId(),
-                    $targetProject->getUserOrganizationCode()
+                    ($targetProject?->getUserOrganizationCode() ?? $dataIsolation->getCurrentOrganizationCode())
                 );
 
                 // Dispatch file uploaded event for the new copy so clients get notified
-                $this->eventDispatcher->dispatch(new FileUploadedEvent(
-                    $copiedFileEntity,
-                    $dataIsolation->getCurrentUserId(),
-                    $dataIsolation->getCurrentOrganizationCode()
-                ));
+                if ($copiedFileEntity->isProjectFile()) {
+                    $this->eventDispatcher->dispatch(new FileUploadedEvent(
+                        $copiedFileEntity, $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode()
+                    ));
+                }
 
                 // Update fine-grained progress after each individual file is copied
                 ++$this->processedFiles;
@@ -301,15 +316,15 @@ class FileBatchCopySubscriber extends ConsumerMessage
             $this->logger->info('Copying file/directory in batch operation', [
                 'file_id' => $fileId,
                 'target_parent_id' => $targetParentEntity->getFileId(),
-                'source_project' => $sourceProject->getId(),
-                'target_project' => $targetProject->getId(),
+                'source_project' => ($sourceProject?->getId() ?? 0),
+                'target_project' => ($targetProject?->getId() ?? 0),
                 'is_directory' => $isDirectory,
             ]);
         } catch (Throwable $e) {
             $this->logger->error('Failed to copy file in batch operation', [
                 'node' => $node,
-                'source_project' => $sourceProject->getId(),
-                'target_project' => $targetProject->getId(),
+                'source_project' => ($sourceProject?->getId() ?? 0),
+                'target_project' => ($targetProject?->getId() ?? 0),
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -329,8 +344,8 @@ class FileBatchCopySubscriber extends ConsumerMessage
      */
     private function handleDirectory(
         array $file,
-        ProjectEntity $sourceProject,
-        ProjectEntity $targetProject,
+        ?ProjectEntity $sourceProject,
+        ?ProjectEntity $targetProject,
         int $parentId,
         array $keepBothFileIds = []
     ): TaskFileEntity {
@@ -339,76 +354,82 @@ class FileBatchCopySubscriber extends ConsumerMessage
             throw new RuntimeException('Source directory entity not found');
         }
 
-        $sourceFileId = $oldFileEntity->getFileId();
-        $sourceFileIdStr = (string) $sourceFileId;
-        $sourceFileName = $oldFileEntity->getFileName();
-        $shouldKeepBoth = in_array($sourceFileIdStr, $keepBothFileIds, true);
+        return Db::transaction(function () use ($oldFileEntity, $targetProject, $parentId, $keepBothFileIds): TaskFileEntity {
+            $sourceFileId = $oldFileEntity->getFileId();
+            $sourceFileIdStr = (string) $sourceFileId;
+            $sourceFileName = $oldFileEntity->getFileName();
+            $shouldKeepBoth = in_array($sourceFileIdStr, $keepBothFileIds, true);
 
-        $targetFileEntity = $this->taskFileDomainService->getByProjectParentAndName(
-            $targetProject->getId(),
-            $parentId,
-            $sourceFileName
-        );
-
-        if ($targetFileEntity !== null && $targetFileEntity->getFileId() === $sourceFileId) {
-            if (! $shouldKeepBoth) {
-                return $oldFileEntity;
-            }
-        }
-
-        $newDirName = $sourceFileName;
-        if ($targetFileEntity !== null && $shouldKeepBoth) {
-            $newDirName = $this->generateUniqueDirectoryName(
-                $sourceFileName,
-                $targetProject->getId(),
-                $parentId
+            $targetFileEntity = $this->taskFileDomainService->getByProjectParentAndName(
+                ($targetProject?->getId() ?? 0),
+                $parentId,
+                $sourceFileName
             );
-            $targetFileEntity = null;
-        }
 
-        if (! $shouldKeepBoth && $targetFileEntity !== null) {
-            // When the existing target with the same name is also a directory, reuse it
-            // (merge into it) instead of deleting and recreating. This preserves the
-            // target directory's existing children and lets inner file conflicts be
-            // resolved per-file (e.g. keep-both renames source copies to "name(1).ext").
-            if ($targetFileEntity->getIsDirectory()) {
-                $this->logger->info('Reusing existing target directory for merge copy', [
+            if ($targetFileEntity !== null && $targetFileEntity->getFileId() === $sourceFileId) {
+                if (! $shouldKeepBoth) {
+                    return $oldFileEntity;
+                }
+            }
+
+            $newDirName = $sourceFileName;
+            if ($targetFileEntity !== null && $shouldKeepBoth) {
+                $newDirName = $this->generateUniqueDirectoryName(
+                    $sourceFileName,
+                    ($targetProject?->getId() ?? 0),
+                    $parentId
+                );
+                $targetFileEntity = null;
+            }
+
+            if (! $shouldKeepBoth && $targetFileEntity !== null) {
+                // When the existing target with the same name is also a directory, reuse it
+                // (merge into it) instead of deleting and recreating. This preserves the
+                // target directory's existing children and lets inner file conflicts be
+                // resolved per-file (e.g. keep-both renames source copies to "name(1).ext").
+                if ($targetFileEntity->getIsDirectory()) {
+                    $this->logger->info('Reusing existing target directory for merge copy', [
+                        'source_id' => $sourceFileId,
+                        'existing_id' => $targetFileEntity->getFileId(),
+                        'target_parent_id' => $parentId,
+                    ]);
+
+                    return $targetFileEntity;
+                }
+
+                // Type mismatch: existing target is a file while source is a directory.
+                // Keep the original overwrite behavior by deleting the conflicting file first.
+                $this->logger->info('Deleting existing target before directory copy overwrite', [
                     'source_id' => $sourceFileId,
                     'existing_id' => $targetFileEntity->getFileId(),
                     'target_parent_id' => $parentId,
+                    'existing_is_directory' => $targetFileEntity->getIsDirectory(),
                 ]);
 
-                return $targetFileEntity;
+                $this->magicFSFileDomainService->deleteFile(
+                    (string) $targetFileEntity->getFileId(),
+                    $targetFileEntity->getIsDirectory()
+                );
+                if (! $oldFileEntity->isProjectFile()) {
+                    $this->fileRecycleBinDomainService->recordFileDeletion($targetFileEntity, $oldFileEntity->getUserId(), DeleteEventSource::User);
+                }
+                $targetFileEntity = null;
             }
 
-            // Type mismatch: existing target is a file while source is a directory.
-            // Keep the original overwrite behavior by deleting the conflicting file first.
-            $this->logger->info('Deleting existing target before directory copy overwrite', [
-                'source_id' => $sourceFileId,
-                'existing_id' => $targetFileEntity->getFileId(),
-                'target_parent_id' => $parentId,
-                'existing_is_directory' => $targetFileEntity->getIsDirectory(),
-            ]);
-
-            $this->magicFSFileDomainService->deleteFile(
-                (string) $targetFileEntity->getFileId(),
-                $targetFileEntity->getIsDirectory()
+            $createdDirectory = $this->magicFSFileDomainService->createFile(
+                $newDirName,
+                (string) $parentId,
+                true,
+                null,
+                $oldFileEntity->getSort(),
+                null,
+                TaskFileSource::COPY,
+                spaceType: $oldFileEntity->getSpaceType(),
             );
-            $targetFileEntity = null;
-        }
-
-        $createdDirectory = $this->magicFSFileDomainService->createFile(
-            $newDirName,
-            (string) $parentId,
-            true,
-            null,
-            $oldFileEntity->getSort(),
-            null,
-            TaskFileSource::COPY
-        );
-        $createdDirectory->setMetadata($oldFileEntity->getMetadata());
-        $createdDirectory->setDisplayConfig($oldFileEntity->getDisplayConfig());
-        return $this->taskFileDomainService->updateById($createdDirectory);
+            $createdDirectory->setMetadata($oldFileEntity->getMetadata());
+            $createdDirectory->setDisplayConfig($oldFileEntity->getDisplayConfig());
+            return $this->taskFileDomainService->updateById($createdDirectory);
+        });
     }
 
     /**
@@ -574,20 +595,42 @@ class FileBatchCopySubscriber extends ConsumerMessage
         $this->updateProgress(5, 'Loading and preparing file entities');
 
         // Get source and target projects
-        $sourceProject = $this->projectDomainService->getProjectNotUserId($sourceProjectId);
-        $targetProject = $this->projectDomainService->getProjectNotUserId($targetProjectId);
+        $personal = $event->getSpaceType() === FileSpaceType::User;
+        $sourceProject = $personal ? null : $this->projectDomainService->getProjectNotUserId($sourceProjectId);
+        $targetProject = $personal ? null : $this->projectDomainService->getProjectNotUserId($targetProjectId);
+        if ($personal) {
+            if ($sourceProjectId !== 0 || $targetProjectId !== 0 || $event->shouldPreserveParentPath()) {
+                throw new RuntimeException('Invalid personal file copy scope');
+            }
+            $entities = $this->taskFileDomainService->getFilesByIds(array_values(array_unique([...$fileIds, $targetParentId])));
+            if (count($entities) !== count(array_unique([...$fileIds, $targetParentId]))) {
+                throw new RuntimeException(trans('file.file_not_found'));
+            }
+            foreach ($entities as $entity) {
+                if ($entity->getSpaceType() !== FileSpaceType::User->value || $entity->isProjectFile()
+                    || $entity->getUserId() !== $userId || $entity->getOrganizationCode() !== $organizationCode) {
+                    throw new RuntimeException(trans('file.permission_denied'));
+                }
+            }
+            $sourceIds = array_fill_keys($fileIds, true);
+            foreach ($this->taskFileDomainService->getFilesWithParentsByIds([$targetParentId], 0) as $ancestor) {
+                if (isset($sourceIds[$ancestor->getFileId()])) {
+                    throw new RuntimeException(trans('file.operation_failed'));
+                }
+            }
+        }
 
         $this->logger->info('Batch copy project context', [
             'source_project_id' => $sourceProjectId,
             'target_project_id' => $targetProjectId,
-            'source_org' => $sourceProject->getUserOrganizationCode(),
-            'target_org' => $targetProject->getUserOrganizationCode(),
+            'source_org' => ($sourceProject?->getUserOrganizationCode() ?? $organizationCode),
+            'target_org' => ($targetProject?->getUserOrganizationCode() ?? $dataIsolation->getCurrentOrganizationCode()),
             'is_cross_project' => $sourceProjectId !== $targetProjectId,
-            'is_cross_organization' => $sourceProject->getUserOrganizationCode() !== $targetProject->getUserOrganizationCode(),
+            'is_cross_organization' => ($sourceProject?->getUserOrganizationCode() ?? $organizationCode) !== ($targetProject?->getUserOrganizationCode() ?? $dataIsolation->getCurrentOrganizationCode()),
         ]);
 
         $this->fileEntitiesCache = [];
-        $fileTree = $this->prepareCopyTree($fileIds, $sourceProject, $preserveParentPath);
+        $fileTree = $this->prepareCopyTree($fileIds, $sourceProject, $preserveParentPath, $userId);
         $syntheticParentIds = $this->collectSyntheticParentIds($fileTree);
 
         $this->logger->info('Prepared batch copy operation tree', [
@@ -624,7 +667,9 @@ class FileBatchCopySubscriber extends ConsumerMessage
 
         try {
             // Dispatch only after actual batch copy success.
-            $this->eventDispatcher->dispatch($event);
+            if (! $personal) {
+                $this->eventDispatcher->dispatch($event);
+            }
         } catch (Throwable $e) {
             // Keep copy task success state even if downstream notification/logging fails.
             $this->logger->warning('Batch copy succeeded but event dispatch failed', [
@@ -642,13 +687,16 @@ class FileBatchCopySubscriber extends ConsumerMessage
     private function copyFileByTree(
         DataIsolation $dataIsolation,
         array $fileTree,
-        ProjectEntity $sourceProject,
-        ProjectEntity $targetProject,
+        ?ProjectEntity $sourceProject,
+        ?ProjectEntity $targetProject,
         int $targetParentId,
         array $keepBothFileIds = []
     ) {
         $targetParentEntity = $this->taskFileDomainService->getById($targetParentId);
         if ($targetParentEntity === null) {
+            if ($targetProject === null) {
+                throw new RuntimeException(trans('file.file_not_found'));
+            }
             $this->logger->warning('Target parent entity not found during batch copy', [
                 'target_parent_id' => $targetParentId,
             ]);
@@ -690,19 +738,20 @@ class FileBatchCopySubscriber extends ConsumerMessage
      */
     private function prepareCopyTree(
         array $fileIds,
-        ProjectEntity $sourceProject,
-        bool $preserveParentPath
+        ?ProjectEntity $sourceProject,
+        bool $preserveParentPath,
+        string $userId,
     ): array {
-        $sourceProjectId = $sourceProject->getId();
+        $sourceProjectId = ($sourceProject?->getId() ?? 0);
         $fileEntities = $preserveParentPath
             ? $this->taskFileDomainService->getFilesWithParentsByIds($fileIds, $sourceProjectId)
-            : $this->taskFileDomainService->getProjectFilesByIds($sourceProjectId, $fileIds);
+            : ($sourceProject === null ? $this->taskFileDomainService->getFilesByIds($fileIds) : $this->taskFileDomainService->getProjectFilesByIds($sourceProjectId, $fileIds));
 
         $files = [];
         $fileDebugArr = [];
         foreach ($fileEntities as $fileEntity) {
             $this->fileEntitiesCache[$fileEntity->getFileId()] = $fileEntity;
-            $files[] = TaskFileItemDTO::fromEntity($fileEntity, $sourceProject->getWorkDir())->toArray();
+            $files[] = TaskFileItemDTO::fromEntity($fileEntity, ($sourceProject?->getWorkDir() ?? WorkDirectoryUtil::getUserWorkDir($userId)))->toArray();
             $fileDebugArr[] = [
                 'id' => $fileEntity->getFileId(),
                 'key' => $fileEntity->getFileKey(),

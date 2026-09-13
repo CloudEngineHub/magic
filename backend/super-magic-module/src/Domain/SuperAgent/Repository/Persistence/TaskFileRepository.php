@@ -62,6 +62,21 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         return $result;
     }
 
+    public function lockByIds(array $ids): array
+    {
+        $result = [];
+        $ids = array_values(array_unique($ids));
+        sort($ids, SORT_NUMERIC);
+        foreach (array_chunk($ids, 500) as $chunk) {
+            $models = $this->model::withTrashed()->whereIn('file_id', $chunk)->orderBy('file_id')->lockForUpdate()->get();
+            foreach ($models as $model) {
+                $file = new TaskFileEntity($model->toArray());
+                $result[$file->getFileId()] = $file;
+            }
+        }
+        return $result;
+    }
+
     public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $storageType = null): array
     {
         // 如果 ID 列表为空，直接返回空数组

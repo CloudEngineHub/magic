@@ -26,6 +26,14 @@ class BatchDeleteFilesRequestDTO extends AbstractRequestDTO
      */
     public bool $forceDelete = false;
 
+    /** 同一次批量删除的分批请求共用此标识，恢复目录只包含本次删除的后代。 */
+    public string $deletionGroupId = '';
+
+    public function getDeletionGroupId(): string
+    {
+        return $this->deletionGroupId;
+    }
+
     public function getFileIds(): array
     {
         return $this->fileIds;
@@ -51,6 +59,7 @@ class BatchDeleteFilesRequestDTO extends AbstractRequestDTO
             'file_ids.*' => 'required|integer|min:1',
             'project_id' => 'required|string|max:50',
             'force_delete' => 'nullable|boolean',
+            'deletion_group_id' => 'nullable|string|max:64|regex:/^[A-Za-z0-9_-]+$/',
         ];
     }
 

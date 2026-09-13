@@ -1,4 +1,5 @@
-import { createElement, useState, useCallback } from "react"
+import { createElement, useState, useCallback, useEffect, useRef } from "react"
+import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "./index"
 import type { ProjectListItem, Workspace } from "../../../pages/Workspace/types"
@@ -24,16 +25,20 @@ import {
 } from "@/pages/superMagic/utils/staticDependencies"
 import { useCanvasFileOperationGuard } from "./useCanvasFileOperationGuard"
 import type { CanvasProjectPathRepairResult } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 export interface CrossProjectOperationSuccessResult {
 	operationType: "move" | "copy"
 	fileIds: string[]
 	targetProjectId: string
+	targetParentId?: string
 	targetWorkspaceId?: string
 	targetProjectName?: string
 }
 
 interface UseCrossProjectFileOperationOptions {
+	isCurrent?: () => boolean
+	fileScope?: FileScope
 	projectId?: string
 	shareCode?: string
 	sharePassword?: string
@@ -93,10 +98,32 @@ async function resolveEffectiveOperationFileIds({
 }
 
 export function useCrossProjectFileOperation(options: UseCrossProjectFileOperationOptions) {
-	const { projectId, shareCode, sharePassword, onSuccess } = options
+	const { projectId, shareCode, sharePassword, onSuccess, fileScope } = options
 	const { t } = useTranslation("super")
 	const { runCanvasFileOperationPreflight, commitCanvasFileOperationRepair } =
 		useCanvasFileOperationGuard()
+
+	const mounted = useRef(true)
+	const pollingTimers = useRef(new Set<ReturnType<typeof setInterval>>())
+	const isCurrent = useMemoizedFn(
+		() => (fileScope !== "user" || mounted.current) && (options.isCurrent?.() ?? true),
+	)
+	const stopPolling = useMemoizedFn((timer: ReturnType<typeof setInterval>) => {
+		clearInterval(timer)
+		pollingTimers.current.delete(timer)
+	})
+	// 个人复制关闭页面后停止轮询；项目流程保留原有轮询，以完成 Canvas 等后续处理。
+	useEffect(() => {
+		mounted.current = true
+		const timers = pollingTimers.current
+		return () => {
+			mounted.current = false
+			if (fileScope === "user") {
+				for (const timer of timers) clearInterval(timer)
+				timers.clear()
+			}
+		}
+	}, [fileScope])
 
 	const [visible, setVisible] = useState(false)
 	const [operationType, setOperationType] = useState<"move" | "copy">("move")
@@ -136,14 +163,23 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			completedFileIds: string[],
 			target: {
 				targetProjectId: string
+				targetParentId?: string
 				targetWorkspaceId?: string
 				targetProjectName?: string
 			},
 			repairPlan: CanvasProjectPathRepairResult | null,
 		) => {
 			const timer = setInterval(async () => {
+				if (!isCurrent()) {
+					stopPolling(timer)
+					return
+				}
 				try {
 					const checkData = await SuperMagicApi.checkBatchOperationStatus(batchKey)
+					if (!isCurrent()) {
+						stopPolling(timer)
+						return
+					}
 
 					if (checkData.status === "processing") {
 						const progress = checkData.progress ? parseInt(checkData.progress) : 0
@@ -158,8 +194,9 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 									: t("topicFiles.success.fileCopied"),
 							)
 						}
-						clearInterval(timer)
+						stopPolling(timer)
 						setTimeout(() => {
+							if (!isCurrent()) return
 							setIsOperating(false)
 							setOperationProgress(0)
 							closeModal()
@@ -172,28 +209,41 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 									? t("topicFiles.error.moveFileFailed")
 									: t("topicFiles.error.copyFileFailed")),
 						)
-						clearInterval(timer)
+						stopPolling(timer)
 						setIsOperating(false)
 						setOperationProgress(0)
 					} else {
-						clearInterval(timer)
+						stopPolling(timer)
 						setIsOperating(false)
 						setOperationProgress(0)
 					}
 				} catch (error) {
+					if (!isCurrent()) {
+						stopPolling(timer)
+						return
+					}
 					console.error("检查操作状态失败:", error)
 					magicToast.error(
 						operationType === "move"
 							? t("topicFiles.error.moveFileFailed")
 							: t("topicFiles.error.copyFileFailed"),
 					)
-					clearInterval(timer)
+					stopPolling(timer)
 					setIsOperating(false)
 					setOperationProgress(0)
 				}
 			}, 2000)
+			pollingTimers.current.add(timer)
 		},
-		[closeModal, commitCanvasFileOperationRepair, onSuccess, shareCode, t],
+		[
+			closeModal,
+			commitCanvasFileOperationRepair,
+			onSuccess,
+			shareCode,
+			t,
+			isCurrent,
+			stopPolling,
+		],
 	)
 
 	const confirmCanvasProjectRisk = useCallback(
@@ -455,20 +505,22 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				await resolveEffectiveOperationFileIds({
 					fileIds: data.fileIds ?? fileIds,
 					sourceAttachments: data.sourceAttachments,
-					includeDocumentDependencies: data.includeDocumentDependencies,
+					includeDocumentDependencies:
+						fileScope === "user" ? false : data.includeDocumentDependencies,
 					documentDependencyFileIds: data.documentDependencyFileIds,
 				})
+			if (!isCurrent()) return
 			if (dependencyAnalysisFailed) {
 				magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
 			}
-			if (!projectId || effectiveFileIds.length === 0) return
+			if ((!projectId && fileScope !== "user") || effectiveFileIds.length === 0) return
 			const shouldPreserveParentPath =
 				data.preserveParentPath === true &&
 				data.targetProjectId !== projectId &&
 				(data.fileIds ?? fileIds).length > 1
 
 			let keepBothIds =
-				data.targetProjectId === projectId
+				fileScope === "user" || data.targetProjectId === projectId
 					? collectSameParentOperationIds(
 							effectiveFileIds,
 							data.sourceAttachments,
@@ -516,6 +568,8 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				keepBothIds = [...keepBothIds, ...userChoice.keepBothIds]
 			}
 
+			if (!isCurrent()) return
+
 			// 4. 执行复制操作
 			setIsOperating(true)
 			setOperationProgress(0)
@@ -539,20 +593,23 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						})
 					: await SuperMagicApi.copyFiles({
 							file_ids: effectiveFileIds,
-							project_id: projectId,
-							target_project_id: data.targetProjectId,
+							project_id: fileScope === "user" ? "0" : projectId,
+							target_project_id:
+								fileScope === "user" ? undefined : data.targetProjectId,
 							target_parent_id: targetParentId,
 							pre_file_id: "",
 							keep_both_file_ids: keepBothIds,
 							...(shouldPreserveParentPath ? { preserve_parent_path: true } : {}),
 						})
 
+				if (!isCurrent()) return
 				if (result.status === "success") {
 					setOperationProgress(100)
 					if (!shareCode) {
 						magicToast.success(t("topicFiles.success.fileCopied"))
 					}
 					setTimeout(() => {
+						if (!isCurrent()) return
 						setIsOperating(false)
 						setOperationProgress(0)
 						closeModal()
@@ -560,6 +617,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 							operationType: "copy",
 							fileIds: effectiveFileIds,
 							targetProjectId: data.targetProjectId,
+							targetParentId,
 							targetWorkspaceId:
 								data.targetWorkspaceId || data.targetProject?.workspace_id,
 							targetProjectName: data.targetProject?.project_name,
@@ -569,14 +627,22 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				}
 
 				if (result.status === "processing" && result.batch_key) {
-					handleOperationPolling(result.batch_key, "copy", effectiveFileIds, {
-						targetProjectId: data.targetProjectId,
-						targetWorkspaceId:
-							data.targetWorkspaceId || data.targetProject?.workspace_id,
-						targetProjectName: data.targetProject?.project_name,
-					})
+					handleOperationPolling(
+						result.batch_key,
+						"copy",
+						effectiveFileIds,
+						{
+							targetProjectId: data.targetProjectId,
+							targetParentId,
+							targetWorkspaceId:
+								data.targetWorkspaceId || data.targetProject?.workspace_id,
+							targetProjectName: data.targetProject?.project_name,
+						},
+						null,
+					)
 				}
 			} catch (error) {
+				if (!isCurrent()) return
 				console.error("复制文件失败:", error)
 				magicToast.error(t("topicFiles.error.copyFileFailed"))
 				setIsOperating(false)
@@ -584,9 +650,11 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			}
 		},
 		[
+			isCurrent,
 			fileIds,
 			projectId,
 			shareCode,
+			fileScope,
 			sharePassword,
 			closeModal,
 			onSuccess,

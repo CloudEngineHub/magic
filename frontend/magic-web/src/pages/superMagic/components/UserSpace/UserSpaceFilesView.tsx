@@ -5,7 +5,7 @@ import type { MagicFSFile } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import userFilesStore from "@/stores/userFiles"
 import TopicFilesPanel from "../TopicFilesButton/TopicFilesPanel"
-import TopicFilesCore from "../TopicFilesButton/TopicFilesCore"
+import { FileManager } from "../TopicFilesButton/components/FileManager/FileManager"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import { FileResourceIcon } from "../TopicFilesButton/components/FileResourceIcon"
 import { UserSpaceFileTag } from "../TopicFilesButton/components/TopicFileTag"
@@ -66,10 +66,19 @@ export default observer(function UserSpaceFilesView({
 			.getRoot()
 			.then((root) => {
 				if (identity !== userFilesStore.currentIdentityKey) return
-				return userFilesStore.loadTree(parentId ?? scopeRootId ?? root.id)
+				const baseId = scopeRootId ?? root.id
+				return userFilesStore.loadTree(compact ? (parentId ?? baseId) : baseId).then(() => {
+					if (
+						identity !== userFilesStore.currentIdentityKey ||
+						!parentId ||
+						parentId === baseId
+					)
+						return
+					return userFilesStore.loadTree(parentId)
+				})
 			})
 			.catch(() => undefined)
-	}, [identity, parentId, scopeRootId, active, mutationVersion])
+	}, [identity, parentId, scopeRootId, active, mutationVersion, compact])
 	const parent = async () => {
 		if (resolveParent && (!directoryId || directoryId === scopeRootId)) return resolveParent()
 		const root = await userFilesStore.getRoot()
@@ -110,7 +119,7 @@ export default observer(function UserSpaceFilesView({
 		) : (
 			content
 		)
-	if (state.error || rootState.error)
+	if ((state.error || rootState.error) && (compact || !parentId))
 		return renderSection(
 			<div role="alert" className="p-3 text-xs">
 				{t("userSpace.loadFailed")}
@@ -188,32 +197,27 @@ export default observer(function UserSpaceFilesView({
 				contentBefore={contentBefore}
 			/>
 		)
-	const scopeDepth = scopeRootId ? userFilesStore.getPath(scopeRootId).length : 0
 	const content = (
-		<TopicFilesCore
-			key={`${identity}:${parentId}`}
-			{...commonProps}
-			refreshLoading={state.loading}
-			fitContent={Boolean(scopeRootId)}
-			scrollElementRef={scrollElementRef}
-			onUpdateAttachments={() => void refresh().catch(() => undefined)}
-			directoryView={{
-				renderFileTag: (item) => <UserSpaceFileTag item={item} />,
-				renderFileIcon: (item, size) => (
-					<FileResourceIcon
-						presentation={resolveFilePresentation(item, {
-							context: { kind: "user" },
-							index: getFilePresentationIndex(items),
-						})}
-						size={size}
-					/>
-				),
-				directory: operationRoot,
-				items,
-				rootName: rootName ?? t("userSpace.title"),
-				path: path.slice(scopeDepth).map((node) => ({ id: node.id, name: node.name })),
-				onNavigate: onDirectoryChange,
-			}}
+		<FileManager
+			key={`${identity}:${rootId}`}
+			scopeKey={`${identity}:user:${rootId}`}
+			identityKey={identity ?? ""}
+			rootId={rootId ?? parentId}
+			rootName={rootName ?? t("userSpace.title")}
+			initialDirectoryId={directoryId}
+			attachments={userFilesStore.getTree(rootId ?? parentId)}
+			context={{ kind: "user" }}
+			isActive={active}
+			loading={state.loading || !state.loaded}
+			error={Boolean(state.error || rootState.error)}
+			onRefresh={() => void refresh().catch(() => undefined)}
+			onOpen={(item) => onFileClick?.(item)}
+			onDirectoryChange={onDirectoryChange}
+			renderTag={(item) => <UserSpaceFileTag item={item} />}
+			spaceConfig={spaceConfig}
+			isItemMutable={isSelectable}
+			allowEdit
+			allowDownload
 		/>
 	)
 	return renderSection(

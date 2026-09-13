@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/shadcn-ui/button"
 import type { FileManagerContext } from "../Detail/components/FilesViewer/types"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import UserSpaceFilesView from "./UserSpaceFilesView"
@@ -11,12 +12,14 @@ export default function UserSpaceFileManager({
 	projectId,
 	projectName,
 	topicId,
+	isActive = true,
 }: {
 	context: Extract<FileManagerContext, { spaceType: "user" }>
 	onFileClick: (file: AttachmentItem) => void
 	projectId?: string
 	projectName?: string
 	topicId?: string
+	isActive?: boolean
 }) {
 	const { t } = useTranslation("super")
 	const [view, setView] = useState(context.view)
@@ -27,13 +30,37 @@ export default function UserSpaceFileManager({
 	}, [context])
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-background">
-			<div className="shrink-0 border-b px-4 py-3 text-sm font-semibold">
-				{t("userSpace.title")} /{" "}
-				{t(view === "memory" ? "userSpace.memory" : "userSpace.allFiles")}
+			<div
+				className="flex shrink-0 gap-1 border-b px-3 py-1"
+				role="tablist"
+				aria-label={t("userSpace.title")}
+			>
+				<Button
+					role="tab"
+					aria-selected={view === "files"}
+					variant={view === "files" ? "secondary" : "ghost"}
+					size="sm"
+					onClick={() => setView("files")}
+				>
+					{t("userSpace.allFiles")}
+				</Button>
+				<Button
+					role="tab"
+					aria-selected={view === "memory"}
+					variant={view === "memory" ? "secondary" : "ghost"}
+					size="sm"
+					onClick={() => setView("memory")}
+				>
+					{t("userSpace.memory")}
+				</Button>
 			</div>
 			{view === "memory" ? (
 				<UserSpaceMemoryView
-					compact={false}
+					compact
+					onBrowseDirectory={(id) => {
+						setDirectoryId(id)
+						setView("files")
+					}}
 					projectId={projectId}
 					projectName={projectName}
 					topicId={topicId}
@@ -42,6 +69,7 @@ export default function UserSpaceFileManager({
 			) : (
 				<UserSpaceFilesView
 					compact={false}
+					active={isActive}
 					directoryId={directoryId}
 					onDirectoryChange={setDirectoryId}
 					topicId={topicId}

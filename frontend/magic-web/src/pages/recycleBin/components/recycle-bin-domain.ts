@@ -15,6 +15,7 @@ export type ResourceType = (typeof RESOURCE_TYPE)[keyof typeof RESOURCE_TYPE]
 
 /** Parent location snapshot stored in recycle-bin list `extra_data.parent_info`. */
 export interface RecycleBinParentInfo {
+	space_type?: "user" | "project"
 	workspace_id?: number
 	workspace_name?: string
 	project_id?: number
@@ -52,6 +53,7 @@ export type DeleteTarget = ActionTarget
 export type SelectPathTarget = { type: "topic"; target: RestoreTarget }
 
 export interface RestoreCheckResult {
+	rootSpaceTypes?: Array<"user" | "project">
 	/** 需移动的 resource_id（父级不存在） */
 	itemsNeedMove: string[]
 	/** 无需移动的 resource_id（父级存在可直接恢复） */
@@ -70,6 +72,8 @@ export interface RestoreCheckResult {
 	pendingNameConflictItems?: Array<{
 		resourceId: string
 		fileName: string
+		dependentResourceIds?: string[]
+		ancestorConflictIds?: string[]
 	}>
 	/** 必须跳过的资源 ID，例如 project_missing / duplicate_restore_target */
 	mustSkipResourceIds?: string[]
@@ -83,6 +87,8 @@ export interface RestoreCheckResult {
 	skippedNameConflictItems?: Array<{
 		resourceId: string
 		fileName: string
+		dependentResourceIds?: string[]
+		ancestorConflictIds?: string[]
 	}>
 	/** 文件所属项目不存在或已删除的数量（终止型冲突，仅提示） */
 	projectMissingCount?: number
@@ -151,9 +157,13 @@ export function toResourceType(value?: number): ResourceType {
 export function mapRecycleBinItem(item: RecycleBinListItemDto, t: TFunction): RecycleBinItem {
 	const parentInfo = item.extra_data?.parent_info
 	const workspaceName =
-		parentInfo?.workspace_name?.trim() || item.extra_data?.workspace_name?.trim() || ""
+		item.extra_data?.space_type === "user"
+			? t("userSpace.title")
+			: parentInfo?.workspace_name?.trim() || item.extra_data?.workspace_name?.trim() || ""
 	const projectName =
-		parentInfo?.project_name?.trim() || item.extra_data?.project_name?.trim() || ""
+		item.extra_data?.space_type === "user"
+			? ""
+			: parentInfo?.project_name?.trim() || item.extra_data?.project_name?.trim() || ""
 	const relativeFilePath = item.extra_data?.relative_file_path?.trim() || ""
 	const resourceType = toResourceType(item.resource_type)
 	const path =
@@ -268,6 +278,13 @@ export function buildRecycleBinPathParts(props: {
 	t: TFunction
 }) {
 	const { resourceType, parentInfo, resourceName, t } = props
+	if (resourceType === RESOURCE_TYPE.FILE && parentInfo?.space_type === "user") {
+		const path = resolveRecycleBinParentPath({
+			relativeFilePath: parentInfo.relative_file_path,
+			resourceName,
+		})
+		return path ? [path.replace(/^\/+|\/+$/g, "")] : []
+	}
 	if (resourceType === RESOURCE_TYPE.WORKSPACE) return []
 	if (resourceType === RESOURCE_TYPE.PROJECT) {
 		return [
@@ -326,7 +343,11 @@ export function buildRecycleBinPathLabel(props: {
 	if (props.resourceType === RESOURCE_TYPE.MICRO_APP) {
 		return props.t("mobile.recycleBin.pathScopes.microApps")
 	}
-	const head = props.t("mobile.recycleBin.pathScopes.workspaces")
+	const head = props.t(
+		props.parentInfo?.space_type === "user"
+			? "userSpace.title"
+			: "mobile.recycleBin.pathScopes.workspaces",
+	)
 	const parts = buildRecycleBinPathParts({
 		resourceType: props.resourceType,
 		parentInfo: props.parentInfo,
@@ -455,7 +476,17 @@ export function getRestoreStatusMessage(
 	if (result.status === "skipped") return t("recycleBin.restoreCheck.skippedMessage")
 
 	const resourceType = target ? getRestoreTargetResourceType({ target, items }) : undefined
-	const conflictCount = Object.keys(result.conflictResolutions ?? {}).length
+	const conflictCount = Object.values(result.conflictResolutions ?? {}).filter(
+		(resolution) => resolution.parent_missing,
+	).length
+	const rootSpaceTypes = result.rootSpaceTypes ?? ["project"]
+	const rootLocation = t(
+		rootSpaceTypes.length > 1
+			? "recycleBin.restoreCheck.spaceRoots"
+			: rootSpaceTypes[0] === "user"
+				? "recycleBin.restoreCheck.userRoot"
+				: "recycleBin.restoreCheck.projectRoot",
+	)
 	const skippedCount = result.skippedNameConflictCount ?? 0
 	const projectMissingCount = result.projectMissingCount ?? 0
 	const projectMissingFileNames = result.projectMissingFileNames ?? []
@@ -508,12 +539,14 @@ export function getRestoreStatusMessage(
 			if (!conflictNames) {
 				baseMessage = t("recycleBin.restoreCheck.fileConflictCountConfirmMessage", {
 					parentMissingCount: conflictCount,
+					rootLocation,
 					nameConflictCount: skippedCount,
 				})
 				return [baseMessage, ...terminalConflictMessages].filter(Boolean).join("\n")
 			}
 			baseMessage = t("recycleBin.restoreCheck.fileConflictConfirmMessage", {
 				parentMissingCount: conflictCount,
+				rootLocation,
 				nameConflictCount: skippedCount,
 				conflictNames,
 			})
@@ -534,6 +567,7 @@ export function getRestoreStatusMessage(
 		}
 		if (conflictCount > 0) {
 			baseMessage = t("recycleBin.restoreCheck.parentMissingConfirmMessage", {
+				rootLocation,
 				count: conflictCount,
 			})
 			return [baseMessage, ...terminalConflictMessages].filter(Boolean).join("\n")

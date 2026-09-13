@@ -24,6 +24,28 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
     {
     }
 
+    public function findFileDeletionGroups(array $groupIds, string $userId, string $organizationCode): array
+    {
+        if ($groupIds === []) {
+            return [];
+        }
+        $table = $this->model->getTable();
+        $models = $this->applyVisibleToUserScope($this->model::query(), $userId, $organizationCode)
+            ->where($table . '.resource_type', RecycleBinResourceType::File->value)
+            ->whereIn($table . '.extra_data->deletion_group_id', $groupIds)
+            ->whereNull($table . '.removed_at')
+            ->whereNull($table . '.purged_at')
+            ->select($table . '.*')->get();
+        $entities = [];
+        foreach ($models as $model) {
+            $entity = $this->modelToEntity($model);
+            if ($entity !== null) {
+                $entities[] = $entity;
+            }
+        }
+        return $entities;
+    }
+
     /**
      * 插入回收站记录.
      */
@@ -123,10 +145,11 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
         ?string $keyword = null,
         string $order = 'desc',
         int $page = 1,
-        int $pageSize = 20
+        int $pageSize = 20,
+        string $organizationCode = '',
     ): array {
         $table = $this->model->getTable();
-        $ownerQuery = $this->buildOwnerVisibleQuery($userId, $resourceType, $keyword);
+        $ownerQuery = $this->buildOwnerVisibleQuery($userId, $resourceType, $keyword, $organizationCode);
         $total = (clone $ownerQuery)->count($table . '.id');
         $includeCollaborativeFiles = $resourceType === null
             || $resourceType === RecycleBinResourceType::File->value;
@@ -185,18 +208,18 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
      *
      * @return array<int, int>
      */
-    public function getCountsByTypeVisibleToUser(string $userId, ?string $keyword = null): array
+    public function getCountsByTypeVisibleToUser(string $userId, ?string $keyword = null, string $organizationCode = ''): array
     {
         $counts = [];
 
         foreach (RecycleBinResourceType::cases() as $type) {
             if ($type === RecycleBinResourceType::File) {
-                $counts[$type->value] = $this->countOwnerVisibleByType($type, $userId, $keyword)
+                $counts[$type->value] = $this->countOwnerVisibleByType($type, $userId, $keyword, $organizationCode)
                     + $this->countCollaborativeFilesExcludingOwner($userId, $keyword);
                 continue;
             }
 
-            $counts[$type->value] = $this->countOwnerVisibleByType($type, $userId, $keyword);
+            $counts[$type->value] = $this->countOwnerVisibleByType($type, $userId, $keyword, $organizationCode);
         }
 
         return $counts;
@@ -211,14 +234,14 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
      * @param string $userId 当前用户ID
      * @return RecycleBinEntity[] 回收站实体数组
      */
-    public function findByIdsAndTypeVisibleToUser(array $ids, int $resourceType, string $userId): array
+    public function findByIdsAndTypeVisibleToUser(array $ids, int $resourceType, string $userId, string $organizationCode = ''): array
     {
         if (empty($ids)) {
             return [];
         }
 
         $table = $this->model->getTable();
-        $models = $this->applyVisibleToUserScope($this->model::query(), $userId)
+        $models = $this->applyVisibleToUserScope($this->model::query(), $userId, $organizationCode)
             ->whereIn($table . '.id', $ids)
             ->where($table . '.resource_type', $resourceType)
             ->whereNull($table . '.removed_at')
@@ -243,14 +266,14 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
      * @param string $userId 用户ID（权限校验）
      * @return RecycleBinEntity[] 回收站实体数组
      */
-    public function findByIds(array $ids, string $userId): array
+    public function findByIds(array $ids, string $userId, string $organizationCode = ''): array
     {
         if (empty($ids)) {
             return [];
         }
 
         $table = $this->model->getTable();
-        $models = $this->applyVisibleToUserScope($this->model::query(), $userId)
+        $models = $this->applyVisibleToUserScope($this->model::query(), $userId, $organizationCode)
             ->whereIn($table . '.id', $ids)
             ->whereNull($table . '.removed_at')
             ->select($table . '.*')
@@ -310,7 +333,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
      * @param string $userId 用户ID（权限校验）
      * @return RecycleBinEntity[] 回收站实体数组
      */
-    public function findLatestByResourceIds(array $resourceIds, RecycleBinResourceType $resourceType, string $userId): array
+    public function findLatestByResourceIds(array $resourceIds, RecycleBinResourceType $resourceType, string $userId, string $organizationCode = ''): array
     {
         if (empty($resourceIds)) {
             return [];
@@ -318,7 +341,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
 
         $table = $this->model->getTable();
         // 直接查询：每个资源在回收站中只有一条记录
-        $models = $this->applyVisibleToUserScope($this->model::query(), $userId)
+        $models = $this->applyVisibleToUserScope($this->model::query(), $userId, $organizationCode)
             ->whereIn($table . '.resource_id', $resourceIds)
             ->where($table . '.resource_type', $resourceType->value)
             ->whereNull($table . '.removed_at')
@@ -423,7 +446,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
      * 应用「当前用户可访问」条件：本人创建 或（文件类型且为项目成员）.
      * 与列表、检查父级等共用，仅文件类型走项目成员，避免话题被协作者看到.
      */
-    protected function applyVisibleToUserScope(Builder $query, string $userId): Builder
+    protected function applyVisibleToUserScope(Builder $query, string $userId, string $organizationCode): Builder
     {
         $table = $this->model->getTable();
         $query->leftJoin('magic_super_agent_project_members as pm', function ($join) use ($table, $userId): void {
@@ -439,6 +462,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
                         ->whereNotNull('pm.id');
                 });
         });
+        $this->applyPersonalFileScope($query, $table, $userId, $organizationCode);
         return $query;
     }
 
@@ -471,7 +495,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
         return $entity;
     }
 
-    private function buildOwnerVisibleQuery(string $userId, ?int $resourceType, ?string $keyword): QueryBuilder
+    private function buildOwnerVisibleQuery(string $userId, ?int $resourceType, ?string $keyword, string $organizationCode): QueryBuilder
     {
         $table = $this->model->getTable();
         $query = $this->model::query()
@@ -479,6 +503,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
             ->whereNull($table . '.removed_at')
             ->where($table . '.owner_id', $userId);
 
+        $this->applyPersonalFileScope($query, $table, $userId, $organizationCode);
         if ($resourceType !== null) {
             $query->where($table . '.resource_type', $resourceType);
         }
@@ -503,19 +528,21 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
             ->where('rb.resource_type', RecycleBinResourceType::File->value)
             ->whereNull('rb.removed_at')
             ->where('rb.owner_id', '<>', $userId);
+        $this->applyPersonalFileScope($query, 'rb', $userId, '');
 
         $this->applyKeywordFilter($query, 'rb.resource_name', $keyword);
 
         return $query;
     }
 
-    private function countOwnerVisibleByType(RecycleBinResourceType $type, string $userId, ?string $keyword): int
+    private function countOwnerVisibleByType(RecycleBinResourceType $type, string $userId, ?string $keyword, string $organizationCode): int
     {
         $query = $this->model::query()
             ->where('resource_type', $type->value)
             ->whereNull('removed_at')
             ->where('owner_id', $userId);
 
+        $this->applyPersonalFileScope($query, $this->model->getTable(), $userId, $organizationCode);
         $this->applyKeywordFilter($query, 'resource_name', $keyword);
 
         return (int) $query->count('id');
@@ -535,6 +562,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
             ->where('rb.resource_type', RecycleBinResourceType::File->value)
             ->whereNull('rb.removed_at')
             ->where('rb.owner_id', '<>', $userId);
+        $this->applyPersonalFileScope($query, 'rb', $userId, '');
 
         $this->applyKeywordFilter($query, 'rb.resource_name', $keyword);
 
@@ -548,5 +576,20 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
         }
 
         $query->where($column, 'like', '%' . $keyword . '%');
+    }
+
+    /** 个人文件必须同时匹配当前组织与 owner；其余回收资源沿用原可见规则。 */
+    private function applyPersonalFileScope(Builder|QueryBuilder $query, string $table, string $userId, string $organizationCode): void
+    {
+        $query->where(static function (Builder|QueryBuilder $scope) use ($table, $userId, $organizationCode): void {
+            $scope->where($table . '.resource_type', '<>', RecycleBinResourceType::File->value)
+                ->orWhereNull($table . '.extra_data->space_type')
+                ->orWhere($table . '.extra_data->space_type', '<>', 'user')
+                ->orWhere(static function (Builder|QueryBuilder $personal) use ($table, $userId, $organizationCode): void {
+                    $personal->where($table . '.extra_data->space_type', 'user')
+                        ->where($table . '.owner_id', $userId)
+                        ->where($table . '.extra_data->organization_code', $organizationCode);
+                });
+        });
     }
 }

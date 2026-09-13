@@ -87,7 +87,7 @@ export function useUserSpaceFileActions(options: {
 			share: false,
 			addToChat: Boolean(options.topicId),
 			crossProject: false,
-			copy: false,
+			copy: true,
 			importFromOtherProject: false,
 			projectContentCreation: false,
 		},

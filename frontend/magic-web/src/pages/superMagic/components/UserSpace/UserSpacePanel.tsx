@@ -3,6 +3,7 @@ import { observer } from "mobx-react-lite"
 import { Brain, CircleHelp, Files, FolderTree } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import { ContextHelp } from "@/components/shadcn-composed/context-help"
 import { cn } from "@/utils/cn"
 import userFilesStore from "@/stores/userFiles"
@@ -75,27 +76,28 @@ export default observer(function UserSpacePanel({
 						<CircleHelp size={16} />
 					</Button>
 				</ContextHelp>
-				<Button
-					variant="ghost"
-					size="icon"
-					className="size-6 shrink-0"
-					aria-label={t("userSpace.openManager")}
-					title={t("userSpace.openManager")}
-					onClick={() =>
-						onFileClick?.({
-							file_manager: {
-								spaceType: "user",
-								view,
-								directoryId: view === "files" ? directoryId : undefined,
-								projectId: projectId ?? undefined,
-								projectName,
-								topicId,
-							},
-						})
-					}
-				>
-					<FolderTree size={16} />
-				</Button>
+				<MagicTooltip title={t("userSpace.openManager")}>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-6 shrink-0"
+						aria-label={t("userSpace.openManager")}
+						onClick={() =>
+							onFileClick?.({
+								file_manager: {
+									spaceType: "user",
+									view,
+									directoryId: view === "files" ? directoryId : undefined,
+									projectId: projectId ?? undefined,
+									projectName,
+									topicId,
+								},
+							})
+						}
+					>
+						<FolderTree size={16} />
+					</Button>
+				</MagicTooltip>
 			</div>
 			<div role="tablist" className="mx-2 flex shrink-0 rounded-md bg-muted p-0.5">
 				{(
