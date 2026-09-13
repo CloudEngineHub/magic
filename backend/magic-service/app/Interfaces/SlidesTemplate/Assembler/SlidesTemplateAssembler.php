@@ -281,14 +281,16 @@ class SlidesTemplateAssembler
 
     private static function fillPublicListItemDTO(
         SlidesTemplatePublicListItemDTO $dto,
+        SlidesTemplateEntity $template,
         bool $isFavorite
     ): void {
         $dto->setId($template->getId());
         $dto->setCode($template->getCode());
         $dto->setSourceType($template->getSourceType()->value);
         $dto->setCategoryCode($template->getCategoryCode());
-        $dto->setLabel(self::resolveLocalizedText($template->getLabel()));
-        $dto->setDescription(self::resolveLocalizedText($template->getDescription()));
+        $language = CoContext::getLanguage();
+        $dto->setLabel($template->getI18nLabel($language));
+        $dto->setDescription($template->getI18nDescription($language));
         $dto->setThumbnailUrl($template->getThumbnailUrl());
         $dto->setColors($template->getColors());
         $dto->setCollageUrl($template->getCollageUrl());
@@ -316,12 +318,4 @@ class SlidesTemplateAssembler
             && OfficialOrganizationUtil::isOfficialOrganization($template->getOrganizationCode());
     }
 
-    /** @param array<string, mixed> $texts */
-    private static function resolveLocalizedText(array $texts): string
-    {
-        $language = CoContext::getLanguage();
-        $value = $texts[$language] ?? $texts['default'] ?? reset($texts);
-
-        return is_scalar($value) ? (string) $value : '';
-    }
 }
