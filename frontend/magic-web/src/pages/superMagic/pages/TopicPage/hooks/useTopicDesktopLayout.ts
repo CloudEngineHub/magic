@@ -37,7 +37,7 @@ interface UseTopicDesktopLayoutReturn {
 	isDraggingProjectSider: boolean
 	isDraggingMessagePanel: boolean
 	startDragProjectSider: (clientX: number) => void
-	startDragMessagePanel: (clientX: number) => void
+	startDragMessagePanel: (clientX: number, visibleWidth?: number) => void
 	toggleConversationPanel: () => void
 	expandConversationPanel: () => void
 	collapseConversationPanel: () => void
@@ -76,9 +76,9 @@ export function useTopicDesktopLayout({
 		onHistoryDragEnd?.(result),
 	)
 
-	const startDragMessagePanel = useMemoizedFn((clientX: number) => {
+	const startDragMessagePanel = useMemoizedFn((clientX: number, visibleWidth?: number) => {
 		if (isReadOnly || !allowConversationPanelResize) return
-		store.startDragMessagePanel(clientX)
+		store.startDragMessagePanel(clientX, visibleWidth)
 	})
 
 	const toggleConversationPanel = useMemoizedFn(() => {

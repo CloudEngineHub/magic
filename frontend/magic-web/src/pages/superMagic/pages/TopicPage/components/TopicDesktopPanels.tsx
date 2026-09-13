@@ -574,7 +574,10 @@ function TopicDesktopPanels({
 								}
 								disabled={isConversationPanelCollapsed || !shouldShowDetailPanel}
 								onResizeStart={(clientX) => {
-									startDragMessagePanel(clientX)
+									startDragMessagePanel(
+										clientX,
+										enableProjectCollapse ? targetMessagePanelWidth : undefined,
+									)
 								}}
 								className={cn(
 									"h-full w-full shrink-0",

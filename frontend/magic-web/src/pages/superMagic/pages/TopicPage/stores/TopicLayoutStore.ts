@@ -60,6 +60,8 @@ export class TopicLayoutStore {
 	private dragStartX = 0
 	private dragStartProjectSiderWidthPx = 0
 	private dragStartMessagePanelWidthPx = 0
+	private dragStartVisibleMessageWidthPx = 0
+	private messageDragPointerX = 0
 	private minSizeReachedPointerX: number | null = null
 	private minSizeReachedPanelWidthPx: number | null = null
 	private readonly persistConversationPanelState: boolean
@@ -139,7 +141,7 @@ export class TopicLayoutStore {
 		this.dragStartProjectSiderWidthPx = this.projectSiderWidthPx
 	}
 
-	startDragMessagePanel(clientX: number) {
+	startDragMessagePanel(clientX: number, visibleWidth = this.messagePanelWidthPx) {
 		if (
 			!Number.isFinite(clientX) ||
 			this.isConversationPanelCollapsed ||
@@ -150,6 +152,9 @@ export class TopicLayoutStore {
 		this.isDraggingMessagePanel = true
 		this.dragStartX = clientX
 		this.dragStartMessagePanelWidthPx = this.messagePanelWidthPx
+		// 话题列可能压缩显示宽度；拖拽从可见边界起算，取消时仍恢复原偏好。
+		this.dragStartVisibleMessageWidthPx = this.clampMessageWidth(visibleWidth)
+		this.messageDragPointerX = clientX
 		this.minSizeReachedPointerX = null
 		this.minSizeReachedPanelWidthPx = null
 	}
@@ -185,7 +190,11 @@ export class TopicLayoutStore {
 		}
 
 		const deltaX = clientX - this.dragStartX
-		const rawWidth = this.dragStartMessagePanelWidthPx - deltaX
+		this.messageDragPointerX = clientX
+		const startWidth = this.bufferedMessageCollapse
+			? this.dragStartVisibleMessageWidthPx
+			: this.dragStartMessagePanelWidthPx
+		const rawWidth = startWidth - deltaX
 		const nextWidth = this.clampMessageWidth(rawWidth)
 		this.messagePanelWidthPx = nextWidth
 		if (this.bufferedMessageCollapse) {
@@ -299,6 +308,8 @@ export class TopicLayoutStore {
 			this.bufferedMessageCollapse &&
 			this.allowConversationPanelResize
 		) {
+			if (this.messageDragPointerX === this.dragStartX)
+				this.messagePanelWidthPx = this.dragStartMessagePanelWidthPx
 			if (this.isCollapseArmed) {
 				this.messagePanelWidthPx = this.dragStartMessagePanelWidthPx
 				this.lastExpandedMessagePanelWidthPx = this.dragStartMessagePanelWidthPx
