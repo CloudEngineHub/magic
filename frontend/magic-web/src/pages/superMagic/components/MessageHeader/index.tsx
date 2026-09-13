@@ -558,6 +558,8 @@ function MessageHeader({
 				className={cn(
 					"absolute z-[30] mb-2.5 flex h-10 w-full items-center justify-between gap-2 px-1.5 py-2",
 					"bg-sidebar",
+					// 预览可见时与 44px 文件标签栏等高，保证两侧按钮的中心线一致。
+					detailPanelVisible && !isConversationPanelCollapsed && "h-11",
 					isConversationPanelCollapsed && "h-full flex-col px-0 py-1.5",
 				)}
 				data-testid="message-header-container"
@@ -642,10 +644,11 @@ function MessageHeader({
 						)}
 						{detailPanelVisible && (
 							<MagicTooltip title={t("messageHeader.collapseConversationPanel")}>
-								<span>
+								<span className="flex">
 									<Button
 										variant="ghost"
 										size="icon-sm"
+										className={headerIconButtonClassName}
 										onClick={handleToggleConversationPanel}
 										data-testid="message-header-toggle-conversation-panel-button"
 									>

@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
 import { IconMenu2, IconX } from "@tabler/icons-react"
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { PanelLeftOpen } from "lucide-react"
 import { clipboard } from "@/utils/clipboard-helpers"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useFileInfoPanel } from "../../../TopicFilesButton/hooks/useFileInfoPanel"
@@ -794,7 +794,7 @@ const FilesViewer = memo(
 											onClick={handlePreviewCollapse}
 											data-files-viewer-collapse-preview
 										>
-											<PanelLeftClose size={16} />
+											<MagicIcon component={IconX} size={16} />
 										</button>
 									</Tooltip>
 								) : hasCloseableTabs ? (
