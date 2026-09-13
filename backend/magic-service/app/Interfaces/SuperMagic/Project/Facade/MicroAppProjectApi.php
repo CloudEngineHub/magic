@@ -118,6 +118,18 @@ class MicroAppProjectApi extends AbstractApi
         return $this->microAppProjectAppService->show($requestContext, $appId);
     }
 
+    public function getRuntimeProject(RequestContext $requestContext, int $appId): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        return $this->microAppProjectAppService->getRuntimeProject($requestContext, $appId);
+    }
+
+    public function ensureRuntimeProject(RequestContext $requestContext, int $appId): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        return $this->microAppProjectAppService->ensureRuntimeProject($requestContext, $appId);
+    }
+
     public function showByProject(RequestContext $requestContext, int $projectId): array
     {
         $requestContext->setUserAuthorization($this->getAuthorization());

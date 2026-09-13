@@ -127,6 +127,19 @@ export interface CreateMicroAppProjectResponse {
 	topic: Topic
 }
 
+export type MicroAppRuntimeProject = Pick<ProjectListItem, "id"> &
+	Partial<Omit<ProjectListItem, "id">>
+
+export interface MicroAppRuntimeProjectResponse {
+	exists: boolean
+	project: MicroAppRuntimeProject | null
+}
+
+export interface EnsureMicroAppRuntimeProjectResponse {
+	project: MicroAppRuntimeProject
+	is_existing: boolean
+}
+
 export interface ResolvedPublishedMicroApp {
 	app_id: string
 	resource_id: string
@@ -236,6 +249,25 @@ export const generateMicroAppApi = (fetch: HttpClient) => ({
 			genRequestUrl("/api/v1/super-agent/micro-app-projects/by-project/${projectId}", {
 				projectId,
 			}),
+			{ parseJsonLargeIntAsString: true },
+		)
+	},
+
+	getMicroAppRuntimeProject(appId: string, options?: { enableErrorMessagePrompt?: boolean }) {
+		return fetch.get<MicroAppRuntimeProjectResponse>(
+			genRequestUrl("/api/v1/super-agent/micro-app-projects/${appId}/runtime-project", {
+				appId,
+			}),
+			{ parseJsonLargeIntAsString: true, ...options },
+		)
+	},
+
+	ensureMicroAppRuntimeProject(appId: string) {
+		return fetch.post<EnsureMicroAppRuntimeProjectResponse>(
+			genRequestUrl("/api/v1/super-agent/micro-app-projects/${appId}/runtime-project", {
+				appId,
+			}),
+			undefined,
 			{ parseJsonLargeIntAsString: true },
 		)
 	},

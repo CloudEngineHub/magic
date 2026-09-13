@@ -49,6 +49,8 @@ class MicroAppProjectAppService extends AbstractAppService
 {
     private const MENTION_SOURCE_FETCH_LIMIT = 1000;
 
+    private const RUNTIME_PROJECT_KEY_PREFIX = 'micro-app-runtime_';
+
     public function __construct(
         private readonly MicroAppRepositoryInterface $microAppRepository,
         private readonly ProjectRepositoryInterface $projectRepository,
@@ -285,6 +287,37 @@ class MicroAppProjectAppService extends AbstractAppService
         return $this->formatMicroAppResponse($record, $project, $authorization);
     }
 
+    /** Query the current user's runtime project without creating it. */
+    public function getRuntimeProject(RequestContext $requestContext, int $appId): array
+    {
+        $this->assertRuntimeProjectAccess($requestContext, $appId);
+        $project = $this->projectAppService->findSpecialProject(
+            $requestContext,
+            self::RUNTIME_PROJECT_KEY_PREFIX . $appId,
+        );
+
+		return [
+            'exists' => $project !== null,
+            'project' => $project === null ? null : $this->responseFormatter->formatProject($project),
+        ];
+    }
+
+    /** Create or get the current user's runtime project. */
+    public function ensureRuntimeProject(RequestContext $requestContext, int $appId): array
+    {
+        $this->assertRuntimeProjectAccess($requestContext, $appId);
+        $result = $this->projectAppService->ensureMicroAppRuntimeProject(
+            $requestContext,
+            self::RUNTIME_PROJECT_KEY_PREFIX . $appId,
+        );
+        $project = $this->projectRepository->findById((int) ($result['project']['id'] ?? 0));
+
+        return [
+            'project' => $project === null ? $result['project'] : $this->responseFormatter->formatProject($project),
+            'is_existing' => (bool) $result['is_existing'],
+        ];
+    }
+
     public function showByProject(RequestContext $requestContext, int $projectId): array
     {
         $authorization = $requestContext->getUserAuthorization();
@@ -492,6 +525,29 @@ class MicroAppProjectAppService extends AbstractAppService
         }
 
         return [$record, $project];
+    }
+
+    private function assertRuntimeProjectAccess(RequestContext $requestContext, int $appId): void
+    {
+        $authorization = $requestContext->getUserAuthorization();
+        [$record, $project] = $this->getValidatedMicroApp($appId);
+
+        try {
+            $this->getAccessibleProject(
+                $project->getId(),
+                $authorization->getId(),
+                $authorization->getOrganizationCode(),
+            );
+            return;
+        } catch (Throwable) {
+            if (! $this->publishedMicroAppResolver->canAccessPublishedShare(
+                $record->getId(),
+                $authorization->getId(),
+                $authorization->getOrganizationCode(),
+            )) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
+            }
+        }
     }
 
     private function isMicroAppProject(ProjectEntity $project): bool

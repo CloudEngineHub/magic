@@ -458,6 +458,64 @@ class ProjectAppService extends AbstractAppService
         }
     }
 
+    /** Query a user-scoped special project without creating it. */
+    public function findSpecialProject(RequestContext $requestContext, string $specialKey): ?ProjectEntity
+    {
+        $dataIsolation = $this->createDataIsolation($requestContext->getUserAuthorization());
+        $setting = $this->magicUserSettingDomainService->get(
+            $dataIsolation,
+            UserSettingKey::genSuperMagicSpecialProject($specialKey),
+        );
+        $projectId = (int) ($setting?->getValue()['project_id'] ?? 0);
+        if ($projectId <= 0) {
+            return null;
+        }
+
+        $project = $this->projectRepository->findById($projectId);
+        return $project !== null && $project->getUserId() === $dataIsolation->getCurrentUserId()
+            ? $project
+            : null;
+    }
+
+    /** Create or get a micro-app runtime project with server-owned defaults. */
+    public function ensureMicroAppRuntimeProject(RequestContext $requestContext, string $specialKey): array
+    {
+        $requestDTO = CreateSpecialProjectRequestDTO::fromArray([
+            'key' => $specialKey,
+            'project_name' => $specialKey,
+            'dynamic_params' => ['agent_mode' => 'micro-app', 'message_version' => 'v2'],
+        ]);
+        $result = $this->createOrGetSpecialProject($requestContext, $requestDTO);
+        $projectId = (int) ($result['project']['id'] ?? 0);
+        $project = $projectId > 0 ? $this->projectRepository->findById($projectId) : null;
+        if ($project === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_PROJECT_FAILED, 'project.create_project_failed');
+        }
+
+        $project = $this->normalizeMicroAppRuntimeProject($project);
+
+        return [
+            'project' => ProjectItemDTO::fromEntity($project)->toArray(),
+            'is_existing' => (bool) ($result['is_existing'] ?? false),
+        ];
+    }
+
+    public function normalizeMicroAppRuntimeProject(ProjectEntity $project): ProjectEntity
+    {
+        if (! $project->getIsHidden()
+            || $project->getHiddenType() !== HiddenType::MICRO_APP_RUNTIME->value
+            || $project->getSource() !== CreationSource::SYSTEM_CREATED->value) {
+            $project->setIsHidden(true)
+                ->setHiddenTypeEnum(HiddenType::MICRO_APP_RUNTIME)
+                ->setSource(CreationSource::SYSTEM_CREATED->value)
+                ->setUpdatedUid($project->getUserId())
+                ->setUpdatedAt(date('Y-m-d H:i:s'));
+            return $this->projectDomainService->saveProjectEntity($project);
+        }
+
+        return $project;
+    }
+
     /**
      * 更新项目.
      */

@@ -160,6 +160,8 @@ Router::addGroup(
             Router::get('/published/queries', [MicroAppProjectApi::class, 'publishedList']);
             // 根据项目 ID 获取或补建微应用映射
             Router::get('/by-project/{projectId}', [MicroAppProjectApi::class, 'showByProject']);
+            Router::get('/{appId}/runtime-project', [MicroAppProjectApi::class, 'getRuntimeProject']);
+            Router::post('/{appId}/runtime-project', [MicroAppProjectApi::class, 'ensureRuntimeProject']);
             // 根据 app_id 获取微应用项目映射
             Router::get('/{appId}', [MicroAppProjectApi::class, 'show']);
             // 发布微应用
