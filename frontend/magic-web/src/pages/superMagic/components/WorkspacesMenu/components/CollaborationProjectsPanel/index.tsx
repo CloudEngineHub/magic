@@ -12,7 +12,6 @@ import SuperMagicService from "@/pages/superMagic/services"
 import { useDebounce, useMemoizedFn } from "ahooks"
 import { CreatorFilter, SortSelector, ViewToggle } from "./components"
 import { SortType, ViewMode } from "../../../EmptyWorkspacePanel/components/ProjectItem"
-import useSearchValue from "@/pages/superMagic/pages/Assistant/components/TopicPanel/hooks/useSearchValue"
 import { Tabs } from "antd"
 import useCollaboratorUpdatePanel from "../../../WithCollaborators/hooks/useCollaboratorUpdatePanel"
 import useAddCollaborationToWorkspaceModal from "../AddCollaborationToWorkspaceModal/hooks/useAddCollaborationToWorkspaceModal"
@@ -22,11 +21,12 @@ import { useViewTogglePersistValue } from "./components/ViewToggle/hooks"
 import routeManageService from "@/pages/superMagic/services/routeManageService"
 import { userStore } from "@/models/user"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { MagicModalProps } from "@/components/base/MagicModal"
 
-import { ProjectsPanel, ProjectsPanelList } from "../ProjectsPanel"
+import { ProjectsPanelList } from "../ProjectsPanel"
 
-interface CollaborationProjectsPanelProps extends MagicModalProps {
+interface CollaborationProjectsContentProps {
+	open: boolean
+	searchValue: string
 	onClose?: () => void
 	onCollaborationProjectClick: (project: CollaborationProjectListItem) => void
 	workspaces: Workspace[]
@@ -98,9 +98,7 @@ function SharedProjectList({
 	)
 }
 
-export function CollaborationProjectsContent(
-	props: CollaborationProjectsPanelProps & { searchValue: string },
-) {
+export function CollaborationProjectsContent(props: CollaborationProjectsContentProps) {
 	const { workspaces, fetchWorkspaces, selectedWorkspace, fetchProjects } = props
 	const { t } = useTranslation("super")
 	const { isPersonalOrganization } = userStore.user
@@ -367,7 +365,7 @@ export function CollaborationProjectsContent(
 			<Tabs
 				activeKey={currentTab}
 				onChange={(key) => setCurrentTab(key as CollaborationProjectType)}
-				className="[&_.magic-tabs-nav]:!mb-0 [&_.magic-tabs-nav]:!pl-5"
+				className="min-h-0 flex-1 [&_.magic-tabs-content-holder]:flex [&_.magic-tabs-content-holder]:min-h-0 [&_.magic-tabs-content-holder]:flex-1 [&_.magic-tabs-content]:flex [&_.magic-tabs-content]:min-h-0 [&_.magic-tabs-content]:flex-1 [&_.magic-tabs-nav]:!mb-0 [&_.magic-tabs-nav]:shrink-0 [&_.magic-tabs-nav]:!pl-5 [&_.magic-tabs-tabpane-active]:flex [&_.magic-tabs-tabpane-active]:min-h-0 [&_.magic-tabs-tabpane-active]:flex-1 [&_.magic-tabs-tabpane-active]:flex-col"
 				destroyOnHidden={false}
 				data-testid="shared-workspace-dialog-tabs"
 				items={[
@@ -415,25 +413,4 @@ export function CollaborationProjectsContent(
 	)
 }
 
-function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
-	const { t } = useTranslation("super")
-	const { searchValue, onSearchValueChange, setSearchValue } = useSearchValue()
-	const close = useMemoizedFn(() => {
-		setSearchValue("")
-		props.onClose?.()
-	})
-	return (
-		<ProjectsPanel
-			open={props.open}
-			title={t("workspace.collaborationProjectsTitle")}
-			description={t("workspace.collaborationProjectsDesc")}
-			searchValue={searchValue}
-			onSearchValueChange={onSearchValueChange}
-			onClose={close}
-		>
-			<CollaborationProjectsContent {...props} searchValue={searchValue} onClose={close} />
-		</ProjectsPanel>
-	)
-}
-
-export default memo(CollaborationProjectsPanel)
+export default memo(CollaborationProjectsContent)

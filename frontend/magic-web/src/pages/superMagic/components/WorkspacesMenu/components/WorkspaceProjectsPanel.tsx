@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
-import { Layers, Users } from "lucide-react"
+import { Layers, Users, PanelsTopLeft } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
+import { platformKey } from "@/utils/storage"
+import { useUserInfo } from "@/models/user/hooks"
 import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import SuperMagicService from "@/pages/superMagic/services"
@@ -16,38 +18,33 @@ import { CollaborationProjectsContent } from "./CollaborationProjectsPanel"
 
 interface WorkspaceProjectsPanelProps {
 	open: boolean
-	workspace: Workspace
-	initialSource?: "workspace" | "collaboration"
+	initialSource: ProjectBrowserSource
 	onClose: () => void
 }
 
 type ProjectBrowserSource = { type: "workspace"; workspace: Workspace } | { type: "collaboration" }
 const WORKSPACE_PAGE_SIZE = 20
 
-function WorkspaceProjectsPanel({
-	open,
-	workspace,
-	initialSource = "workspace",
-	onClose,
-}: WorkspaceProjectsPanelProps) {
-	const { t } = useTranslation("super")
-	const { searchValue, onSearchValueChange, setSearchValue } = useSearchValue()
-	const [source, setSource] = useState<ProjectBrowserSource>(() =>
-		initialSource === "collaboration"
-			? { type: "collaboration" }
-			: { type: "workspace", workspace },
+function getInitialWorkspaces(source: ProjectBrowserSource): Workspace[] {
+	return Array.from(
+		new Map(
+			[
+				...workspaceStore.workspaces,
+				...(source.type === "workspace" ? [source.workspace] : []),
+			]
+				.filter((item) => item.id && item.workspace_type === "default")
+				.map((item) => [item.id, item]),
+		).values(),
 	)
+}
+
+function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProjectsPanelProps) {
+	const { t } = useTranslation("super")
+	const { userInfo } = useUserInfo()
+	const { searchValue, onSearchValueChange, setSearchValue } = useSearchValue()
+	const [source, setSource] = useState<ProjectBrowserSource>(initialSource)
 	const [workspaces, setWorkspaces] = useState<Workspace[]>(() =>
-		Array.from(
-			new Map(
-				[
-					...workspaceStore.workspaces,
-					...(initialSource === "workspace" ? [workspace] : []),
-				]
-					.filter((item) => item.id && item.workspace_type === "default")
-					.map((item) => [item.id, item]),
-			).values(),
-		),
+		getInitialWorkspaces(initialSource),
 	)
 	const [loading, setLoading] = useState(false)
 	const [failed, setFailed] = useState(false)
@@ -101,15 +98,23 @@ function WorkspaceProjectsPanel({
 		}
 	})
 
+	const resetSource = useMemoizedFn(() => {
+		setSource(initialSource)
+		setSearchValue("")
+		setWorkspaces(getInitialWorkspaces(initialSource))
+	})
 	useEffect(() => {
 		isOpen.current = open
-		if (open) void loadWorkspaces(1)
+		if (open) {
+			resetSource()
+			void loadWorkspaces(1)
+		}
 		return () => {
 			isOpen.current = false
 			requestId.current += 1
 			pending.current = false
 		}
-	}, [open, loadWorkspaces])
+	}, [open, loadWorkspaces, resetSource])
 
 	const selectSource = (next: ProjectBrowserSource) => {
 		if (
@@ -127,7 +132,7 @@ function WorkspaceProjectsPanel({
 		setSearchValue("")
 		onClose()
 	})
-	const title =
+	const locationName =
 		source.type === "workspace"
 			? source.workspace.name || t("workspace.unnamedWorkspace")
 			: t("workspace.collaborationProjectsTitle")
@@ -135,19 +140,64 @@ function WorkspaceProjectsPanel({
 	return (
 		<ProjectsPanel
 			open={open}
-			title={title}
+			title={t("sidebarPanels.projectManager")}
+			titleIcon={<PanelsTopLeft size={16} />}
+			location={
+				<>
+					{source.type === "workspace" ? (
+						<Layers size={16} className="text-muted-foreground" />
+					) : (
+						<Users size={16} className="text-muted-foreground" />
+					)}
+					<span className="truncate" title={locationName}>
+						{locationName}
+					</span>
+				</>
+			}
+			windowOptions={{
+				open,
+				draggable: true,
+				resizable: true,
+				defaultSize: { width: 960, height: 680 },
+				minSize: { width: 720, height: 480 },
+				// 所有项目入口共用尺寸偏好；账号未就绪时不使用 undefined 组成共享键。
+				sizeStorageKey:
+					userInfo?.organization_code && userInfo.user_id
+						? platformKey(
+								`super_magic/project_manager_size/${userInfo.organization_code}/${userInfo.user_id}`,
+							)
+						: undefined,
+			}}
 			searchValue={searchValue}
 			onSearchValueChange={onSearchValueChange}
 			onClose={close}
 			sidebar={
 				<nav
 					aria-label={t("sidebarPanels.browseWorkspaces")}
-					className="flex w-[180px] shrink-0 flex-col border-r border-border bg-muted/20 p-2 max-sm:w-[128px]"
+					className="flex min-h-0 w-[180px] shrink-0 flex-col border-r border-border bg-muted/20 p-2 max-sm:w-[128px]"
 				>
 					<div className="px-2 py-2 text-xs font-medium text-muted-foreground">
 						{t("sidebarPanels.browseWorkspaces")}
 					</div>
-					<div className="max-h-[55vh] flex-1 overflow-y-auto">
+					<div className="min-h-0 flex-1 overflow-y-auto">
+						<button
+							type="button"
+							aria-current={source.type === "collaboration" ? true : undefined}
+							className={cn(
+								"mb-0.5 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent",
+								source.type === "collaboration" &&
+									"bg-accent text-accent-foreground",
+							)}
+							onClick={() => selectSource({ type: "collaboration" })}
+						>
+							<Users size={16} className="shrink-0" />
+							<span
+								className="truncate"
+								title={t("workspace.collaborationProjectsTitle")}
+							>
+								{t("workspace.collaborationProjectsTitle")}
+							</span>
+						</button>
 						{workspaces.map((item) => (
 							<button
 								type="button"
@@ -166,7 +216,10 @@ function WorkspaceProjectsPanel({
 								onClick={() => selectSource({ type: "workspace", workspace: item })}
 							>
 								<Layers size={16} className="shrink-0" />
-								<span className="min-w-0 flex-1 truncate">
+								<span
+									className="min-w-0 flex-1 truncate"
+									title={item.name || t("workspace.unnamedWorkspace")}
+								>
 									{item.name || t("workspace.unnamedWorkspace")}
 								</span>
 							</button>
@@ -195,20 +248,6 @@ function WorkspaceProjectsPanel({
 							</Button>
 						)}
 					</div>
-					<button
-						type="button"
-						aria-current={source.type === "collaboration" ? true : undefined}
-						className={cn(
-							"mt-2 flex items-center gap-2 rounded-md border-t border-border px-2 py-2 text-left text-xs hover:bg-accent",
-							source.type === "collaboration" && "bg-accent text-accent-foreground",
-						)}
-						onClick={() => selectSource({ type: "collaboration" })}
-					>
-						<Users size={16} className="shrink-0" />
-						<span className="truncate">
-							{t("workspace.collaborationProjectsTitle")}
-						</span>
-					</button>
 				</nav>
 			}
 		>

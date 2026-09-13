@@ -5812,6 +5812,7 @@
 		"loadMore": "加载更多",
 		"loadedProjects": "已显示 {{count}} / {{total}} 个项目",
 		"noMatchingProjects": "未找到匹配项目",
+		"projectManager": "项目管理器",
 		"projectsLoadFailed": "项目加载失败",
 		"pullToCollapse": "继续拉动以收起",
 		"releaseToCollapse": "松开收起，回拉可取消",

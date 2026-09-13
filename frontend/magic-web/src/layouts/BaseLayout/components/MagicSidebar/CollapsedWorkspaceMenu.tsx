@@ -16,9 +16,8 @@ import { SidebarMenuButton } from "@/components/shadcn-ui/sidebar"
 import { useCollapsedWorkspaceDnd } from "./useCollapsedWorkspaceDnd"
 import { useProjectPinBoundaryConfirmation } from "./WorkspaceList/ProjectPinBoundaryConfirmDialog"
 
-const CollaborationProjectsPanel = lazy(
-	() =>
-		import("@/pages/superMagic/components/WorkspacesMenu/components/CollaborationProjectsPanel"),
+const WorkspaceProjectsPanel = lazy(
+	() => import("@/pages/superMagic/components/WorkspacesMenu/components/WorkspaceProjectsPanel"),
 )
 
 const WORKSPACE_PAGE_SIZE = 20
@@ -301,18 +300,10 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 
 			{shareProjectsPanelOpen && (
 				<Suspense fallback={null}>
-					<CollaborationProjectsPanel
+					<WorkspaceProjectsPanel
 						open={shareProjectsPanelOpen}
+						initialSource={{ type: "collaboration" }}
 						onClose={() => setShareProjectsPanelOpen(false)}
-						onCollaborationProjectClick={(project) =>
-							superMagicService.switchProjectInDesktop(project)
-						}
-						workspaces={workspaces}
-						selectedWorkspace={selectedWorkspace}
-						fetchProjects={(params) => superMagicService.project.fetchProjects(params)}
-						fetchWorkspaces={(params) =>
-							superMagicService.workspace.fetchWorkspaces(params)
-						}
 					/>
 				</Suspense>
 			)}

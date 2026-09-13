@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn, useDebounce } from "ahooks"
 import { reaction } from "mobx"
 import { useTranslation } from "react-i18next"
+import { Plus } from "lucide-react"
 import { SuperMagicApi } from "@/apis"
 import MagicEmpty from "@/components/base/MagicEmpty"
 import { Button } from "@/components/shadcn-ui/button"
@@ -150,7 +151,8 @@ export default function WorkspaceProjectsContent({
 								onCreated={close}
 							/>
 						) : (
-							<Button variant="outline" onClick={() => setCreating(true)}>
+							<Button onClick={() => setCreating(true)}>
+								<Plus size={16} />
 								{t("sidebarPanels.createProject")}
 							</Button>
 						)}

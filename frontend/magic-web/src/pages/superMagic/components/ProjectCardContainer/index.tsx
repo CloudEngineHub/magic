@@ -111,8 +111,11 @@ function ProjectCardContainer({
 				<WorkspaceProjectsPanel
 					key={currentWorkspaceId}
 					open
-					workspace={workspaceForProjectActions}
-					initialSource={isReceivedCollaboration ? "collaboration" : "workspace"}
+					initialSource={
+						isReceivedCollaboration
+							? { type: "collaboration" }
+							: { type: "workspace", workspace: workspaceForProjectActions }
+					}
 					onClose={() => setProjectsOpen(false)}
 				/>
 			)}

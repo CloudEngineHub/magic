@@ -5811,6 +5811,7 @@
 		"loadMore": "Load more",
 		"loadedProjects": "Showing {{count}} / {{total}} projects",
 		"noMatchingProjects": "No matching projects",
+		"projectManager": "Project manager",
 		"projectsLoadFailed": "Failed to load projects",
 		"pullToCollapse": "Keep dragging to collapse",
 		"releaseToCollapse": "Release to collapse; drag back to cancel",

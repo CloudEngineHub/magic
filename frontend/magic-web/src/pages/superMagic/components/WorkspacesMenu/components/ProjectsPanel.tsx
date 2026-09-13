@@ -1,6 +1,8 @@
 import { useRef, type ChangeEventHandler, type ComponentProps, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { IconSearch, IconX } from "@tabler/icons-react"
+import { Grip } from "lucide-react"
+import type { DialogWindowOptions } from "@/hooks/use-dialog-window"
 import {
 	Dialog,
 	DialogContent,
@@ -16,7 +18,7 @@ import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import ProjectItem, { ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
 
 const contentClassName = cn(
-	"h-[min(55vh,520px)] overflow-y-auto overflow-x-hidden bg-muted/20 p-3",
+	"min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-muted/20 p-3",
 	"[&::-webkit-scrollbar]:w-[6px]",
 	"[&::-webkit-scrollbar-thumb]:rounded-[4px] [&::-webkit-scrollbar-thumb]:bg-border",
 	"[&::-webkit-scrollbar-track]:bg-transparent",
@@ -25,6 +27,9 @@ const contentClassName = cn(
 interface ProjectsPanelProps {
 	open?: boolean
 	title: string
+	titleIcon?: ReactNode
+	location?: ReactNode
+	windowOptions?: DialogWindowOptions
 	description?: string
 	searchValue: string
 	onSearchValueChange: ChangeEventHandler<HTMLInputElement>
@@ -36,6 +41,9 @@ interface ProjectsPanelProps {
 export function ProjectsPanel({
 	open,
 	title,
+	titleIcon,
+	location,
+	windowOptions,
 	description,
 	searchValue,
 	onSearchValueChange,
@@ -55,7 +63,12 @@ export function ProjectsPanel({
 			{open && (
 				<DialogContent
 					showCloseButton={false}
-					className="!w-[min(960px,calc(100vw_-_32px))] !max-w-none gap-0 overflow-hidden p-0"
+					windowOptions={windowOptions}
+					className={cn(
+						"flex flex-col gap-0 overflow-hidden rounded-xl p-0",
+						!windowOptions &&
+							"h-[min(680px,calc(100dvh_-_32px))] !w-[min(960px,calc(100vw_-_32px))] !max-w-none",
+					)}
 					onInteractOutside={(event) => event.preventDefault()}
 					onEscapeKeyDown={onClose}
 					onCloseAutoFocus={(event) => {
@@ -71,10 +84,23 @@ export function ProjectsPanel({
 					</DialogDescription>
 					{/* Dialog header */}
 					<div
-						className="flex items-center justify-between gap-3 border-b border-border px-5 py-4"
+						className={cn(
+							"flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-3.5",
+							windowOptions?.draggable &&
+								"cursor-grab touch-none select-none active:cursor-grabbing",
+						)}
+						data-dialog-drag-handle
 						data-testid="shared-workspace-dialog-header"
 					>
-						<div className="flex min-w-0 flex-col gap-1">
+						{titleIcon && (
+							<div
+								className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-400/10 dark:text-violet-400"
+								aria-hidden="true"
+							>
+								{titleIcon}
+							</div>
+						)}
+						<div className="flex min-w-0 flex-1 flex-col gap-1">
 							<div
 								className="overflow-hidden text-ellipsis whitespace-nowrap text-base font-semibold leading-[22px] text-foreground/80"
 								data-testid="shared-workspace-dialog-title"
@@ -109,10 +135,16 @@ export function ProjectsPanel({
 						</div>
 					</div>
 
-					<div className="flex min-h-0 min-w-0">
+					{/* 高度从窗口逐层传到滚动区；缩放时标题、搜索和工具栏仍保持可见。 */}
+					<div className="flex min-h-0 min-w-0 flex-1">
 						{sidebar}
-						<div className="min-w-0 flex-1">
-							<div className="border-b border-border px-4 py-3">
+						<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+							{location && (
+								<div className="flex shrink-0 items-center gap-2 px-4 pt-3 text-sm font-medium [&_svg]:shrink-0">
+									{location}
+								</div>
+							)}
+							<div className="shrink-0 border-b border-border px-4 py-3">
 								<div
 									className="relative"
 									data-testid="shared-workspace-dialog-search"
@@ -133,6 +165,13 @@ export function ProjectsPanel({
 							{children}
 						</div>
 					</div>
+					{windowOptions?.resizable && (
+						<Grip
+							size={12}
+							aria-hidden="true"
+							className="pointer-events-none absolute bottom-0.5 right-0.5 text-muted-foreground/60"
+						/>
+					)}
 				</DialogContent>
 			)}
 		</Dialog>
@@ -168,10 +207,19 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 }: ProjectsPanelListProps<T>) {
 	const { t } = useTranslation("super")
 	return (
-		<MagicSpin section spinning={loading}>
-			<div data-testid="shared-workspace-dialog-project-list" data-tab-type={tabType}>
+		<MagicSpin
+			section
+			spinning={loading}
+			className="flex min-h-0 flex-1 flex-col"
+			innerClassName="flex min-h-0 flex-1 flex-col"
+		>
+			<div
+				className="flex min-h-0 flex-1 flex-col"
+				data-testid="shared-workspace-dialog-project-list"
+				data-tab-type={tabType}
+			>
 				{/* Control bar */}
-				<div className="border-b border-border px-4 py-3">
+				<div className="shrink-0 border-b border-border px-4 py-3">
 					<div className="flex min-w-0 flex-wrap items-center justify-between gap-2.5">
 						<div className="shrink-0 text-sm font-semibold leading-5 text-foreground/80 opacity-80">
 							{t("workspace.projects")} · {total ?? projects.length}
