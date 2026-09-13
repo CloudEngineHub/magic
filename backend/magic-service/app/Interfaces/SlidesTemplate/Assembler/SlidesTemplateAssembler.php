@@ -10,6 +10,7 @@ namespace App\Interfaces\SlidesTemplate\Assembler;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateCategoryEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Infrastructure\Core\ValueObject\Page;
+use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateDetailDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateItemDTO;
@@ -280,15 +281,14 @@ class SlidesTemplateAssembler
 
     private static function fillPublicListItemDTO(
         SlidesTemplatePublicListItemDTO $dto,
-        SlidesTemplateEntity $template,
         bool $isFavorite
     ): void {
         $dto->setId($template->getId());
         $dto->setCode($template->getCode());
         $dto->setSourceType($template->getSourceType()->value);
         $dto->setCategoryCode($template->getCategoryCode());
-        $dto->setLabel(I18nTextDTO::fromArray($template->getLabel()));
-        $dto->setDescription(I18nTextDTO::fromArray($template->getDescription()));
+        $dto->setLabel(self::resolveLocalizedText($template->getLabel()));
+        $dto->setDescription(self::resolveLocalizedText($template->getDescription()));
         $dto->setThumbnailUrl($template->getThumbnailUrl());
         $dto->setColors($template->getColors());
         $dto->setCollageUrl($template->getCollageUrl());
@@ -314,5 +314,14 @@ class SlidesTemplateAssembler
         return $template->getOwnerType()->isOfficial()
             && $template->getOwnerId() === $template->getOrganizationCode()
             && OfficialOrganizationUtil::isOfficialOrganization($template->getOrganizationCode());
+    }
+
+    /** @param array<string, mixed> $texts */
+    private static function resolveLocalizedText(array $texts): string
+    {
+        $language = CoContext::getLanguage();
+        $value = $texts[$language] ?? $texts['default'] ?? reset($texts);
+
+        return is_scalar($value) ? (string) $value : '';
     }
 }

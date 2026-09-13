@@ -13,6 +13,7 @@ use App\Domain\SuperMagic\Agent\Entity\ValueObject\Code;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentTool;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentToolType;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentType;
+use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\ErrorCode\SuperMagicErrorCode;
 use App\Infrastructure\Core\AbstractEntity;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -21,6 +22,8 @@ use DateTime;
 
 class SuperMagicAgentEntity extends AbstractEntity
 {
+    use ResolvesI18nText;
+
     protected ?int $id = null;
 
     protected string $organizationCode = '';
@@ -629,28 +632,12 @@ class SuperMagicAgentEntity extends AbstractEntity
 
     public function getI18nName(string $language): string
     {
-        if (! empty($this->nameI18n[$language])) {
-            return $this->nameI18n[$language];
-        }
-
-        if (! empty($this->nameI18n[LanguageEnum::DEFAULT->value])) {
-            return $this->nameI18n[LanguageEnum::DEFAULT->value];
-        }
-
-        return $this->name;
+        return $this->resolveI18nText($this->nameI18n, $language) ?: $this->name;
     }
 
     public function getI18nDescription(string $language): string
     {
-        if (! empty($this->descriptionI18n[$language])) {
-            return $this->descriptionI18n[$language];
-        }
-
-        if (! empty($this->descriptionI18n[LanguageEnum::DEFAULT->value])) {
-            return $this->descriptionI18n[LanguageEnum::DEFAULT->value];
-        }
-
-        return $this->description;
+        return $this->resolveI18nText($this->descriptionI18n, $language) ?: $this->description;
     }
 
     /**
@@ -833,31 +820,7 @@ class SuperMagicAgentEntity extends AbstractEntity
 
     private function resolveI18nTextFallback(?array $i18n): string
     {
-        $i18n = is_array($i18n) ? $i18n : [];
-        foreach ([LanguageEnum::DEFAULT->value, LanguageEnum::ZH_CN->value, LanguageEnum::EN_US->value] as $languageCode) {
-            $value = $this->normalizeI18nTextValue($i18n[$languageCode] ?? null);
-            if ($value !== '') {
-                return $value;
-            }
-        }
-
-        foreach ($i18n as $value) {
-            $value = $this->normalizeI18nTextValue($value);
-            if ($value !== '') {
-                return $value;
-            }
-        }
-
-        return '';
-    }
-
-    private function normalizeI18nTextValue(mixed $value): string
-    {
-        if (is_string($value) || is_numeric($value)) {
-            return trim((string) $value);
-        }
-
-        return '';
+        return $this->resolveI18nText($i18n, LanguageEnum::DEFAULT->value);
     }
 
     /**

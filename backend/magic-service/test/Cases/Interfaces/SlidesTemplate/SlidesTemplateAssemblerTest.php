@@ -9,11 +9,14 @@ namespace Test\Cases\Interfaces\SlidesTemplate;
 
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateCategoryEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateTagEntity;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateOwnerType;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateSourceType;
 use App\Infrastructure\Core\ValueObject\Page;
+use App\Infrastructure\Util\Context\CoContext;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateAssembler;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateCategoryAssembler;
+use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateTagAssembler;
 use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateDetailDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateCountDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplateFileUrlDTO;
@@ -103,14 +106,8 @@ class SlidesTemplateAssemblerTest extends TestCase
                 'code' => 'PPT-65f2c8a42d7b0-12345678',
                 'source_type' => 'SYSTEM',
                 'category_code' => 'PPT-CATE-business',
-                'label' => [
-                    'zh_CN' => '职场白皮书',
-                    'en_US' => 'Corporate Whitepaper',
-                ],
-                'description' => [
-                    'zh_CN' => '适用于企业汇报。',
-                    'en_US' => 'For business reviews.',
-                ],
+                'label' => '职场白皮书',
+                'description' => '适用于企业汇报。',
                 'thumbnail_url' => 'https://signed.example/thumb.png',
                 'color' => '#112233',
                 'colors' => ['#112233', '#445566'],
@@ -144,6 +141,20 @@ class SlidesTemplateAssemblerTest extends TestCase
         $template->setProjectId(null)->setProjectDirectoryId(null);
         $userItemWithoutProject = SlidesTemplateAssembler::createPublicListPageDTO([$template], new Page(1, 20), [], true)->toArray()['list'][0];
         self::assertNull($userItemWithoutProject['project']);
+    }
+
+    public function testCreatePublicListDTOUsesCurrentLanguageForLocalizedFields(): void
+    {
+        CoContext::setLanguage('en_US');
+
+        try {
+            $item = SlidesTemplateAssembler::createPublicListItemDTO($this->makeTemplate())->toArray();
+
+            self::assertSame('Corporate Whitepaper', $item['label']);
+            self::assertSame('For business reviews.', $item['description']);
+        } finally {
+            CoContext::setLanguage('zh_CN');
+        }
     }
 
     public function testCreatePublicDetailDTOReturnsPublicAssetsWithoutTemplateFileUrl(): void
@@ -378,15 +389,35 @@ class SlidesTemplateAssemblerTest extends TestCase
             'list' => [[
                 'id' => '123',
                 'code' => 'PPT-CATE-business',
-                'name_i18n' => [
-                    'zh_CN' => '商务',
-                    'en_US' => 'Business',
-                ],
+                'name' => '商务',
                 'sort' => 100,
                 'is_official' => true,
             ]],
         ], $dto->toArray());
         $this->assertArrayNotHasKey('template_count', $dto->toArray()['list'][0]);
+        $this->assertArrayNotHasKey('name_i18n', $dto->toArray()['list'][0]);
+    }
+
+    public function testCreatePublicTagGroupsExcludeLocalizedNameFields(): void
+    {
+        $child = (new SlidesTemplateTagEntity())
+            ->setId(2)
+            ->setCode('modern')
+            ->setNameI18n(['zh_CN' => '现代', 'en_US' => 'Modern'])
+            ->setSort(2);
+        $group = (new SlidesTemplateTagEntity())
+            ->setId(1)
+            ->setCode('style')
+            ->setNameI18n(['zh_CN' => '风格', 'en_US' => 'Style'])
+            ->setSort(1)
+            ->setChildren([$child]);
+
+        $item = SlidesTemplateTagAssembler::createGroupListDTO([$group])[0];
+
+        self::assertSame('风格', $item['name']);
+        self::assertArrayNotHasKey('name_i18n', $item);
+        self::assertSame('现代', $item['tags'][0]['name']);
+        self::assertArrayNotHasKey('name_i18n', $item['tags'][0]);
     }
 
     private function makeTemplate(): SlidesTemplateEntity
