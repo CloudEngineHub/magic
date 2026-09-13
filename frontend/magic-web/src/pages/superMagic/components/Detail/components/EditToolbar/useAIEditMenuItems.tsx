@@ -64,7 +64,7 @@ export function useAIEditMenuItems({
 		return [
 			{
 				key: "ai-edit",
-				type: "group",
+				icon: <MousePointerClick size={16} />,
 				label: t("topicFiles.AIOptimization"),
 				children: [
 					...(onPrimaryAction
