@@ -68,6 +68,28 @@ describe("getTemporaryDownloadUrl file access", () => {
 		)
 	})
 
+	it("keeps session identity on host micro-app pages when access is omitted", async () => {
+		const originalPath = window.location.pathname
+		window.history.replaceState(null, "", "/global/super/micro-app/9575893229010228865")
+
+		try {
+			await getTemporaryDownloadUrl({ file_ids: ["file-1"] })
+		} finally {
+			window.history.replaceState(null, "", originalPath)
+		}
+
+		expect(magicClient.post).toHaveBeenCalledWith(
+			"/api/v1/super-agent/tasks/get-file-url",
+			expect.objectContaining({
+				file_ids: ["file-1"],
+				token: "",
+				project_id: "workspace-project",
+				topic_id: "workspace-topic",
+			}),
+			expect.any(Object),
+		)
+	})
+
 	it("does not inherit session identity on share pages when access is omitted", async () => {
 		const originalPath = window.location.pathname
 		window.history.replaceState(null, "", "/share/files/share-1")

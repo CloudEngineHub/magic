@@ -1,3 +1,12 @@
+import { matchPath } from "react-router"
+import { RoutePath } from "@/constants/routes"
+
+const SHARE_PAGE_ROUTE_PATTERNS = [
+	RoutePath.SuperMagicShare,
+	RoutePath.MicroAppShare,
+	RoutePath.MagicShare,
+] as const
+
 export type SessionFileAccess = {
 	kind: "session"
 	projectId?: string
@@ -43,10 +52,8 @@ export function isShareFileAccess(access?: FileAccessContext | null): access is 
 export function isSharePageLocation(
 	pathname = typeof window === "undefined" ? "" : window.location.pathname,
 ): boolean {
-	return (
-		pathname.includes("/share/") ||
-		pathname.includes("/micro-app/") ||
-		pathname.includes("magic-share")
+	return SHARE_PAGE_ROUTE_PATTERNS.some(
+		(pattern) => matchPath({ path: pattern, end: false }, pathname) != null,
 	)
 }
 

@@ -57,11 +57,16 @@ describe("fileAccessContext", () => {
 
 		expect(isSharePageLocation("/share/files/1")).toBe(true)
 		expect(isSharePageLocation("/micro-app/1")).toBe(true)
-		expect(isSharePageLocation("/foo/magic-share")).toBe(true)
+		expect(isSharePageLocation("/magic-share/project-1/topic-1")).toBe(true)
 		expect(isSharePageLocation("/global/super/1/2")).toBe(false)
+		expect(isSharePageLocation("/super/micro-app/1")).toBe(false)
+		expect(isSharePageLocation("/global/super/micro-app/9575893229010228865")).toBe(false)
 		expect(isSharePageLocation("")).toBe(false)
 		expect(shouldWaitForShareAccess(null, "/share/files/1")).toBe(true)
 		expect(shouldWaitForShareAccess(share, "/share/files/1")).toBe(false)
 		expect(shouldWaitForShareAccess(null, "/global/super/1/2")).toBe(false)
+		expect(shouldWaitForShareAccess(null, "/global/super/micro-app/9575893229010228865")).toBe(
+			false,
+		)
 	})
 })
