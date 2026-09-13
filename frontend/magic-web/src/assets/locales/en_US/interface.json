@@ -1483,9 +1483,13 @@
 	},
 	"contextHelp": {
 		"actions": "When should you make changes?",
+		"back": "Back",
+		"catalogHint": "Guide topics, not the files in your current space",
 		"close": "Got it",
+		"contents": "Guide contents",
 		"dismiss": "Close file guide",
 		"example": "Example",
+		"furtherReading": "Further reading",
 		"guideSubtitle": "Purpose, usage and things to know",
 		"guideTitle": "File guide",
 		"illustration": "Illustration",
@@ -1493,6 +1497,7 @@
 		"loading": "Loading",
 		"more": "Learn more",
 		"note": "Good to know",
+		"recommendedReading": "Recommended reading",
 		"sampleContent": "Example content · Not an actual file",
 		"usage": "How to use it"
 	},

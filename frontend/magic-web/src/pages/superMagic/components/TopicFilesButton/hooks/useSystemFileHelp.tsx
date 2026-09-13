@@ -11,17 +11,36 @@ import type { AttachmentItem } from "./types"
 import { FileResourceIcon } from "../components/FileResourceIcon"
 import { FileDirectoryView } from "../components/FileDirectoryView"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
+import type { FileHelpArticleId } from "../utils/file-help-catalog"
 export type { SystemFileHelpKind } from "../utils/magic-system-folder"
 
 export interface FileHelpPresentation {
 	label: string
 	help: HelpDefinition
+	articleId?: FileHelpArticleId
+	sourceKey?: string
 }
 export interface FileHelpDetail extends Omit<HelpArticleProps, "visual"> {
 	preview?: string[]
 	scope?: string
 	exampleRoot?: string
 	files?: Array<{ path: string; directory?: boolean; description?: string; type?: string }>
+}
+
+export function useRecordingFileHelp(
+	presentation?: FilePresentation,
+	enabled = true,
+): FileHelpPresentation | undefined {
+	const { t } = useTranslation("super")
+	if (!enabled) return
+	return createFileHelpPresentation(
+		"recording.project",
+		t("topicFiles.recordingProject.label"),
+		t("topicFiles.recordingProject.summary"),
+		t("topicFiles.recordingProject.detail", { returnObjects: true }) as FileHelpDetail,
+		"flow",
+		presentation,
+	)
 }
 
 /** 静态教学目录只适配既有列表的数据结构；不读取用户文件或连接文件操作。 */
@@ -76,6 +95,7 @@ function FileHelpDirectory({
 
 /** 共同组装文件身份、悬浮要点与延迟正文，通用帮助组件不依赖文件业务。 */
 export function createFileHelpPresentation(
+	articleId: FileHelpArticleId,
 	label: string,
 	summary: string,
 	detail: FileHelpDetail,
@@ -84,9 +104,20 @@ export function createFileHelpPresentation(
 ): FileHelpPresentation {
 	return {
 		label,
+		articleId,
+		sourceKey: presentation
+			? JSON.stringify([
+					articleId,
+					presentation.context.kind,
+					"projectId" in presentation.context ? presentation.context.projectId : "",
+					presentation.item.file_id,
+					presentation.path,
+				])
+			: articleId,
 		help: {
 			title: label,
 			summary,
+			subtitle: detail.scope,
 			points: detail.preview,
 			identity: presentation
 				? {
@@ -97,24 +128,25 @@ export function createFileHelpPresentation(
 						),
 					}
 				: undefined,
-			renderBody: () => (
+			renderBody: (reading, identity) => (
 				<HelpArticle
 					{...detail}
 					visual={visual}
+					reading={reading}
 					guide={{
 						...detail.guide,
 						steps: detail.guide.steps.map((step, index) => ({
 							...step,
 							icon:
-								presentation?.systemKind === "projectInstructions" ? (
+								articleId === "system.projectInstructions" ? (
 									index === 1 ? (
-										<FileResourceIcon presentation={presentation} size={24} />
+										identity?.renderIcon(24)
 									) : index === 0 ? (
 										<UserRound size={20} />
 									) : (
 										<Users size={20} />
 									)
-								) : presentation?.type === "audio" ? (
+								) : articleId === "recording.project" ? (
 									index === 0 ? (
 										<Headphones size={20} />
 									) : index === 1 ? (
@@ -122,8 +154,8 @@ export function createFileHelpPresentation(
 									) : (
 										<ListChecks size={20} />
 									)
-								) : index === 0 && presentation ? (
-									<FileResourceIcon presentation={presentation} size={20} />
+								) : index === 0 ? (
+									identity?.renderIcon(20)
 								) : undefined,
 						})),
 					}}
@@ -133,10 +165,10 @@ export function createFileHelpPresentation(
 						) : undefined
 					}
 					sampleIdentity={
-						presentation ? (
+						identity ? (
 							<>
-								<FileResourceIcon presentation={presentation} size={16} />
-								<span>{presentation.name}</span>
+								{identity.renderIcon(16)}
+								<span>{identity.name}</span>
 							</>
 						) : undefined
 					}
@@ -156,6 +188,7 @@ export function useSystemFileHelp(
 	switch (kind) {
 		case "clawSoul":
 			return createFileHelpPresentation(
+				"system.clawSoul",
 				t("topicFiles.clawPlaygroundTags.guidelines", brand),
 				t("topicFiles.clawPlaygroundHelp.guidelines", brand),
 				t("topicFiles.clawPlaygroundDetails.guidelines", {
@@ -167,6 +200,7 @@ export function useSystemFileHelp(
 			)
 		case "clawIdentity":
 			return createFileHelpPresentation(
+				"system.clawIdentity",
 				t("topicFiles.clawPlaygroundTags.identityInfo", brand),
 				t("topicFiles.clawPlaygroundHelp.identityInfo", brand),
 				t("topicFiles.clawPlaygroundDetails.identityInfo", {
@@ -178,6 +212,7 @@ export function useSystemFileHelp(
 			)
 		case "projectMagic":
 			return createFileHelpPresentation(
+				"system.projectMagic",
 				t("topicFiles.systemFiles.labels.projectMagic", brand),
 				t("topicFiles.systemFiles.help.projectMagic", brand),
 				t("topicFiles.systemFiles.details.projectMagic", {
@@ -189,6 +224,7 @@ export function useSystemFileHelp(
 			)
 		case "userMagic":
 			return createFileHelpPresentation(
+				"system.userMagic",
 				t("topicFiles.systemFiles.labels.userMagic", brand),
 				t("topicFiles.systemFiles.help.userMagic", brand),
 				t("topicFiles.systemFiles.details.userMagic", {
@@ -200,6 +236,7 @@ export function useSystemFileHelp(
 			)
 		case "clawMagic":
 			return createFileHelpPresentation(
+				"system.clawMagic",
 				t("topicFiles.systemFiles.labels.clawMagic", brand),
 				t("topicFiles.systemFiles.help.clawMagic", brand),
 				t("topicFiles.systemFiles.details.clawMagic", {
@@ -211,6 +248,7 @@ export function useSystemFileHelp(
 			)
 		case "crewMagic":
 			return createFileHelpPresentation(
+				"system.crewMagic",
 				t("topicFiles.systemFiles.labels.crewMagic", brand),
 				t("topicFiles.systemFiles.help.crewMagic", brand),
 				t("topicFiles.systemFiles.details.crewMagic", {
@@ -222,6 +260,7 @@ export function useSystemFileHelp(
 			)
 		case "projectInstructions":
 			return createFileHelpPresentation(
+				"system.projectInstructions",
 				t("topicFiles.systemFiles.labels.projectInstructions", brand),
 				t("topicFiles.systemFiles.help.projectInstructions", brand),
 				t("topicFiles.systemFiles.details.projectInstructions", {
@@ -233,6 +272,7 @@ export function useSystemFileHelp(
 			)
 		case "directoryInstructions":
 			return createFileHelpPresentation(
+				"system.directoryInstructions",
 				t("topicFiles.systemFiles.labels.directoryInstructions", brand),
 				t("topicFiles.systemFiles.help.directoryInstructions", brand),
 				t("topicFiles.systemFiles.details.directoryInstructions", {
@@ -244,6 +284,7 @@ export function useSystemFileHelp(
 			)
 		case "clawInstructions":
 			return createFileHelpPresentation(
+				"system.clawInstructions",
 				t("topicFiles.systemFiles.labels.clawInstructions", brand),
 				t("topicFiles.systemFiles.help.clawInstructions", brand),
 				t("topicFiles.systemFiles.details.clawInstructions", {
@@ -255,6 +296,7 @@ export function useSystemFileHelp(
 			)
 		case "crewInstructions":
 			return createFileHelpPresentation(
+				"system.crewInstructions",
 				t("topicFiles.systemFiles.labels.crewInstructions", brand),
 				t("topicFiles.systemFiles.help.crewInstructions", brand),
 				t("topicFiles.systemFiles.details.crewInstructions", {
@@ -266,6 +308,7 @@ export function useSystemFileHelp(
 			)
 		case "agentInstructions":
 			return createFileHelpPresentation(
+				"system.agentInstructions",
 				t("topicFiles.systemFiles.labels.agentInstructions", brand),
 				t("topicFiles.systemFiles.help.agentInstructions", brand),
 				t("topicFiles.systemFiles.details.agentInstructions", {
@@ -277,6 +320,7 @@ export function useSystemFileHelp(
 			)
 		case "instructionFile":
 			return createFileHelpPresentation(
+				"system.instructionFile",
 				t("topicFiles.systemFiles.labels.instructionFile", brand),
 				t("topicFiles.systemFiles.help.instructionFile", brand),
 				t("topicFiles.systemFiles.details.instructionFile", {
@@ -288,6 +332,7 @@ export function useSystemFileHelp(
 			)
 		case "crewIdentity":
 			return createFileHelpPresentation(
+				"system.crewIdentity",
 				t("topicFiles.systemFiles.labels.crewIdentity", brand),
 				t("topicFiles.systemFiles.help.crewIdentity", brand),
 				t("topicFiles.systemFiles.details.crewIdentity", {
@@ -299,6 +344,7 @@ export function useSystemFileHelp(
 			)
 		case "crewSoul":
 			return createFileHelpPresentation(
+				"system.crewSoul",
 				t("topicFiles.systemFiles.labels.crewSoul", brand),
 				t("topicFiles.systemFiles.help.crewSoul", brand),
 				t("topicFiles.systemFiles.details.crewSoul", {

@@ -36,6 +36,7 @@ export function useClawFileHelp(
 	switch (kind) {
 		case "scheduledTasks":
 			return createFileHelpPresentation(
+				"claw.scheduledTasks",
 				t("topicFiles.clawPlaygroundTags.scheduledTasks", brand),
 				t("topicFiles.clawPlaygroundHelp.scheduledTasks", brand),
 				t("topicFiles.clawPlaygroundDetails.scheduledTasks", {
@@ -47,6 +48,7 @@ export function useClawFileHelp(
 			)
 		case "installedSkills":
 			return createFileHelpPresentation(
+				"claw.installedSkills",
 				t("topicFiles.clawPlaygroundTags.installedSkills", brand),
 				t("topicFiles.clawPlaygroundHelp.installedSkills", brand),
 				t("topicFiles.clawPlaygroundDetails.installedSkills", {
@@ -58,6 +60,7 @@ export function useClawFileHelp(
 			)
 		case "memoryFolder":
 			return createFileHelpPresentation(
+				"claw.memoryFolder",
 				t("topicFiles.clawPlaygroundTags.memoryFolder", brand),
 				t("topicFiles.clawPlaygroundHelp.memoryFolder", brand),
 				t("topicFiles.clawPlaygroundDetails.memoryFolder", {
@@ -69,6 +72,7 @@ export function useClawFileHelp(
 			)
 		case "skillList":
 			return createFileHelpPresentation(
+				"claw.skillList",
 				t("topicFiles.clawPlaygroundTags.skillList", brand),
 				t("topicFiles.clawPlaygroundHelp.skillList", brand),
 				t("topicFiles.clawPlaygroundDetails.skillList", {
@@ -80,6 +84,7 @@ export function useClawFileHelp(
 			)
 		case "proactiveExecution":
 			return createFileHelpPresentation(
+				"claw.proactiveExecution",
 				t("topicFiles.clawPlaygroundTags.proactiveExecution", brand),
 				t("topicFiles.clawPlaygroundHelp.proactiveExecution", brand),
 				t("topicFiles.clawPlaygroundDetails.proactiveExecution", {
@@ -91,6 +96,7 @@ export function useClawFileHelp(
 			)
 		case "identityInfo":
 			return createFileHelpPresentation(
+				"claw.identityInfo",
 				t("topicFiles.clawPlaygroundTags.identityInfo", brand),
 				t("topicFiles.clawPlaygroundHelp.identityInfo", brand),
 				t("topicFiles.clawPlaygroundDetails.identityInfo", {
@@ -102,6 +108,7 @@ export function useClawFileHelp(
 			)
 		case "guidelines":
 			return createFileHelpPresentation(
+				"claw.guidelines",
 				t("topicFiles.clawPlaygroundTags.guidelines", brand),
 				t("topicFiles.clawPlaygroundHelp.guidelines", brand),
 				t("topicFiles.clawPlaygroundDetails.guidelines", {
@@ -113,6 +120,7 @@ export function useClawFileHelp(
 			)
 		case "toolList":
 			return createFileHelpPresentation(
+				"claw.toolList",
 				t("topicFiles.clawPlaygroundTags.toolList", brand),
 				t("topicFiles.clawPlaygroundHelp.toolList", brand),
 				t("topicFiles.clawPlaygroundDetails.toolList", {
@@ -124,6 +132,7 @@ export function useClawFileHelp(
 			)
 		case "aboutYou":
 			return createFileHelpPresentation(
+				"claw.aboutYou",
 				t("topicFiles.clawPlaygroundTags.aboutYou", brand),
 				t("topicFiles.clawPlaygroundHelp.aboutYou", brand),
 				t("topicFiles.clawPlaygroundDetails.aboutYou", {
@@ -135,6 +144,7 @@ export function useClawFileHelp(
 			)
 		case "initialSetup":
 			return createFileHelpPresentation(
+				"claw.initialSetup",
 				t("topicFiles.clawPlaygroundTags.initialSetup", brand),
 				t("topicFiles.clawPlaygroundHelp.initialSetup", brand),
 				t("topicFiles.clawPlaygroundDetails.initialSetup", {
@@ -146,6 +156,7 @@ export function useClawFileHelp(
 			)
 		case "memoryFile":
 			return createFileHelpPresentation(
+				"claw.memoryFile",
 				t("topicFiles.clawPlaygroundTags.memoryFile", brand),
 				t("topicFiles.clawPlaygroundHelp.memoryFile", brand),
 				t("topicFiles.clawPlaygroundDetails.memoryFile", {

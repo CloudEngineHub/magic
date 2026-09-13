@@ -7362,6 +7362,29 @@
 		"fileUploading": "文件正在上传中，请稍候",
 		"filterTitle": "筛选",
 		"helpDirectoryExample": "目录示例",
+		"helpGuide": {
+			"groups": {
+				"assistant": "助手",
+				"assistants": "助手与员工",
+				"content": "录音与内容",
+				"crew": "员工",
+				"personal": "个人空间",
+				"project": "项目与配置",
+				"skills": "技能与资源"
+			},
+			"reasons": {
+				"assistantRules": "了解助手的规则与行为约定。",
+				"crewRules": "了解员工的规则与职责约定。",
+				"memoryStructure": "了解核心记忆、主题资料与时间记录的关系。",
+				"personalSpace": "了解个人空间的用途，以及与项目文件的区别。",
+				"progressiveReading": "了解怎样按需读取详细说明，减少无关上下文。",
+				"projectConfig": "区分项目规则、技能与其它配置的用途。",
+				"projectRules": "了解同一项目中的 AI 如何使用共同约定。",
+				"scope": "了解这类技能的作用范围与使用方式。",
+				"skillEntry": "了解如何写清技能的触发条件与使用方法。",
+				"skillStructure": "了解技能入口、说明与资源应如何组织。"
+			}
+		},
 		"layoutCorrection": "布局修正",
 		"layoutCorrectionDescription": "AI 检测并修正页面中的布局问题",
 		"layoutCorrectionPrompt": "请先读取上述文件中元素的内容，现在这块内容的布局有问题，我所观察到的问题是：",

@@ -7352,6 +7352,29 @@
 		"fileUploading": "File is uploading, please wait",
 		"filterTitle": "Filter",
 		"helpDirectoryExample": "Directory example",
+		"helpGuide": {
+			"groups": {
+				"assistant": "Assistants",
+				"assistants": "Assistants and crew",
+				"content": "Audio and content",
+				"crew": "Crew",
+				"personal": "Personal space",
+				"project": "Projects and configuration",
+				"skills": "Skills and resources"
+			},
+			"reasons": {
+				"assistantRules": "Understand the assistant’s rules and behavior.",
+				"crewRules": "Understand the crew member’s rules and responsibilities.",
+				"memoryStructure": "See how core memory, topic references and timelines fit together.",
+				"personalSpace": "Understand personal space and how it differs from project files.",
+				"progressiveReading": "Read detailed guidance when needed and keep unrelated context out.",
+				"projectConfig": "Understand the roles of project rules, skills and configuration.",
+				"projectRules": "Learn how AI uses shared conventions within a project.",
+				"scope": "Understand where these skills apply and how they are used.",
+				"skillEntry": "Learn how to explain when and how a skill should be used.",
+				"skillStructure": "Learn how to organize skill instructions and resources."
+			}
+		},
 		"layoutCorrection": "Layout Correction",
 		"layoutCorrectionDescription": "AI detects and corrects layout problems in the page",
 		"layoutCorrectionPrompt": "Please check the layout of the page. If the layout is unreasonable, please provide suggestions and modify it.",

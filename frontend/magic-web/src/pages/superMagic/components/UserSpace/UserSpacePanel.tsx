@@ -10,9 +10,10 @@ import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import type { UserSpaceView } from "../Detail/components/FilesViewer/types"
 import UserSpaceFilesView from "./UserSpaceFilesView"
 import UserSpaceIcon from "./UserSpaceIcon"
+import { useUserSpaceOverviewHelp } from "./useUserFileHelp"
 
 const UserSpaceMemoryView = lazy(() => import("./UserSpaceMemoryView"))
-const UserSpaceHelpContent = lazy(() => import("./UserSpaceHelpContent"))
+const FileHelpBrowser = lazy(() => import("../TopicFilesButton/components/FileHelpBrowser"))
 
 export interface UserSpacePanelProps {
 	className?: string
@@ -32,6 +33,7 @@ export default observer(function UserSpacePanel({
 	onFileClick,
 }: UserSpacePanelProps) {
 	const { t } = useTranslation("super")
+	const overview = useUserSpaceOverviewHelp()
 	const identity = userFilesStore.currentIdentityKey
 	const previousIdentity = useRef(identity)
 	const [view, setView] = useState<UserSpaceView>("files")
@@ -59,17 +61,10 @@ export default observer(function UserSpacePanel({
 				<ContextHelp
 					key={identity}
 					mode="dialog"
-					help={{
-						title: t("userSpace.help.title"),
-						identity: {
-							name: t("userSpace.title"),
-							scope: t("userSpace.help.personalScope"),
-							renderIcon: (size) => <UserSpaceIcon size={size} />,
-						},
-						summary: t("userSpace.help.tooltip"),
-						subtitle: t("userSpace.help.subtitle"),
-						renderBody: () => <UserSpaceHelpContent />,
-					}}
+					help={overview.help}
+					renderDialog={(props) => (
+						<FileHelpBrowser {...props} initialArticleId="user.overview" />
+					)}
 				>
 					<Button
 						variant="ghost"

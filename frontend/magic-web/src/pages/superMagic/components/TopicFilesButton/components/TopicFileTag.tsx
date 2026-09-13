@@ -1,4 +1,4 @@
-import { useTranslation } from "react-i18next"
+import { lazy } from "react"
 import { useClawFileHelp } from "../../../pages/ClawPlayground/components/ClawFileHelpTag"
 import { resolveFilePresentation, type FilePresentation } from "../utils/file-presentation"
 import { useUserFileHelp } from "../../UserSpace/useUserFileHelp"
@@ -8,18 +8,33 @@ import { cn } from "@/utils/cn"
 import type { AttachmentItem } from "../hooks/types"
 import {
 	useSystemFileHelp,
-	createFileHelpPresentation,
-	type FileHelpDetail,
+	useRecordingFileHelp,
 	type FileHelpPresentation,
 } from "../hooks/useSystemFileHelp"
 import { useSkillFileHelp } from "../hooks/useSkillFileHelp"
 import type { SkillFileKind } from "../utils/skill-file-structure"
 import { type FileHelpContext } from "../utils/magic-system-folder"
 
+const FileHelpBrowser = lazy(() => import("./FileHelpBrowser"))
+
 /** 标签只解释用途；点击、键盘和触屏操作不能冒泡为文件打开或目录折叠。 */
-export function TopicFileTag({ label, help }: FileHelpPresentation) {
+export function TopicFileTag({ label, help, articleId, sourceKey }: FileHelpPresentation) {
 	return (
-		<ContextHelp help={help} mode="preview">
+		<ContextHelp
+			help={help}
+			mode="preview"
+			renderDialog={
+				articleId
+					? (props) => (
+							<FileHelpBrowser
+								key={sourceKey ?? articleId}
+								{...props}
+								initialArticleId={articleId}
+							/>
+						)
+					: undefined
+			}
+		>
 			<button
 				type="button"
 				aria-label={label}
@@ -53,24 +68,12 @@ export function ProjectFileTag({
 	context?: FileHelpContext
 }) {
 	// Skill 里的同名示例属于资料，不进入项目规则说明。
-	const { t } = useTranslation("super")
 	const file = supplied ?? resolveFilePresentation(item, { skillKind, path, context })
 	const system = useSystemFileHelp(file.systemKind, file)
 	const skill = useSkillFileHelp(file.skillKind, file)
-	const user = useUserFileHelp(item, file)
+	const user = useUserFileHelp(file.userKind, file)
 	const claw = useClawFileHelp(file.clawKind, file)
-	const recording =
-		file.type === "audio"
-			? createFileHelpPresentation(
-					t("topicFiles.recordingProject.label"),
-					t("topicFiles.recordingProject.summary"),
-					t("topicFiles.recordingProject.detail", {
-						returnObjects: true,
-					}) as FileHelpDetail,
-					"flow",
-					file,
-				)
-			: undefined
+	const recording = useRecordingFileHelp(file, file.type === "audio")
 	const presentation = skill ?? user ?? claw ?? system ?? recording
 	return presentation ? <TopicFileTag {...presentation} /> : null
 }

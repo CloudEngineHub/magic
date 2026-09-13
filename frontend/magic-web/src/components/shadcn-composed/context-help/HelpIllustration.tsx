@@ -29,7 +29,9 @@ export function HelpIllustration({ title, steps, variant }: HelpIllustrationProp
 			<ol
 				className={cn(
 					"p-5",
-					variant === "flow" ? "grid gap-3 sm:grid-cols-3" : "space-y-3",
+					variant === "flow"
+						? "grid gap-3 [@container_help-article_(min-width:500px)]:grid-cols-3"
+						: "space-y-3",
 				)}
 			>
 				{steps.map((step, index) => (
@@ -39,7 +41,7 @@ export function HelpIllustration({ title, steps, variant }: HelpIllustrationProp
 							"relative flex min-w-0 flex-col",
 							variant === "tree" &&
 								index > 0 &&
-								"ml-5 border-l-2 border-primary/20 pl-4",
+								"ml-5 border-l-2 border-[color-mix(in_srgb,var(--help-accent)_20%,transparent)] pl-4",
 						)}
 					>
 						{variant === "flow" && index > 0 && (
@@ -47,19 +49,19 @@ export function HelpIllustration({ title, steps, variant }: HelpIllustrationProp
 								<ArrowDown
 									size={16}
 									aria-hidden
-									className="mx-auto mb-3 text-muted-foreground sm:hidden"
+									className="mx-auto mb-3 text-muted-foreground [@container_help-article_(min-width:500px)]:hidden"
 								/>
 								<ArrowRight
 									size={16}
 									aria-hidden
-									className="absolute -left-3.5 top-5 z-10 hidden rounded-full bg-background text-muted-foreground sm:block"
+									className="absolute -left-3.5 top-5 z-10 hidden rounded-full bg-background text-muted-foreground [@container_help-article_(min-width:500px)]:block"
 								/>
 							</>
 						)}
 						<div className="flex-1 rounded-lg border bg-background p-4 shadow-sm">
 							<div className="mb-2 flex items-center gap-2 font-medium">
 								<span
-									className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-xs text-primary"
+									className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--help-soft)] text-xs text-[var(--help-accent)]"
 									aria-hidden
 								>
 									{step.icon ??

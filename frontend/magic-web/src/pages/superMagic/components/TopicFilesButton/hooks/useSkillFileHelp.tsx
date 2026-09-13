@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next"
 import type { SkillFileKind } from "../utils/skill-file-structure"
+import type { FileHelpContext } from "../utils/magic-system-folder"
 import type { FilePresentation } from "../utils/file-presentation"
 import {
 	createFileHelpPresentation,
@@ -11,12 +12,14 @@ import {
 export function useSkillFileHelp(
 	kind: SkillFileKind | undefined,
 	presentation?: FilePresentation,
+	scope?: FileHelpContext["kind"],
 ): FileHelpPresentation | undefined {
 	const { t } = useTranslation("super")
 	if (kind === "library") {
-		const owner = presentation?.context.kind
+		const owner = scope ?? presentation?.context.kind
 		if (!owner || owner === "unknown")
 			return createFileHelpPresentation(
+				"skillLibrary.unknown",
 				t("topicFiles.skillStructure.libraryScopes.unknown.label"),
 				t("topicFiles.skillStructure.libraryScopes.unknown.summary"),
 				t("topicFiles.skillStructure.libraryScopes.unknown", {
@@ -27,6 +30,7 @@ export function useSkillFileHelp(
 			)
 		if (owner === "user")
 			return createFileHelpPresentation(
+				"skillLibrary.user",
 				t("topicFiles.skillStructure.libraryScopes.user.label"),
 				t("topicFiles.skillStructure.libraryScopes.user.summary"),
 				t("topicFiles.skillStructure.libraryScopes.user", {
@@ -37,6 +41,7 @@ export function useSkillFileHelp(
 			)
 		if (owner === "crew")
 			return createFileHelpPresentation(
+				"skillLibrary.crew",
 				t("topicFiles.skillStructure.libraryScopes.crew.label"),
 				t("topicFiles.skillStructure.libraryScopes.crew.summary"),
 				t("topicFiles.skillStructure.libraryScopes.crew", {
@@ -47,6 +52,7 @@ export function useSkillFileHelp(
 			)
 		if (owner === "claw")
 			return createFileHelpPresentation(
+				"skillLibrary.claw",
 				t("topicFiles.skillStructure.libraryScopes.claw.label"),
 				t("topicFiles.skillStructure.libraryScopes.claw.summary"),
 				t("topicFiles.skillStructure.libraryScopes.claw", {
@@ -59,6 +65,7 @@ export function useSkillFileHelp(
 	switch (kind) {
 		case "library":
 			return createFileHelpPresentation(
+				"skill.library",
 				t("topicFiles.skillStructure.labels.library"),
 				t("topicFiles.skillStructure.help.library"),
 				t("topicFiles.skillStructure.details.library", {
@@ -69,6 +76,7 @@ export function useSkillFileHelp(
 			)
 		case "skill":
 			return createFileHelpPresentation(
+				"skill.skill",
 				t("topicFiles.skillStructure.labels.skill"),
 				t("topicFiles.skillStructure.help.skill"),
 				t("topicFiles.skillStructure.details.skill", {
@@ -79,6 +87,7 @@ export function useSkillFileHelp(
 			)
 		case "entry":
 			return createFileHelpPresentation(
+				"skill.entry",
 				t("topicFiles.skillStructure.labels.entry"),
 				t("topicFiles.skillStructure.help.entry"),
 				t("topicFiles.skillStructure.details.entry", {
@@ -89,6 +98,7 @@ export function useSkillFileHelp(
 			)
 		case "references":
 			return createFileHelpPresentation(
+				"skill.references",
 				t("topicFiles.skillStructure.labels.references"),
 				t("topicFiles.skillStructure.help.references"),
 				t("topicFiles.skillStructure.details.references", {
@@ -99,6 +109,7 @@ export function useSkillFileHelp(
 			)
 		case "scripts":
 			return createFileHelpPresentation(
+				"skill.scripts",
 				t("topicFiles.skillStructure.labels.scripts"),
 				t("topicFiles.skillStructure.help.scripts"),
 				t("topicFiles.skillStructure.details.scripts", {
@@ -109,6 +120,7 @@ export function useSkillFileHelp(
 			)
 		case "assets":
 			return createFileHelpPresentation(
+				"skill.assets",
 				t("topicFiles.skillStructure.labels.assets"),
 				t("topicFiles.skillStructure.help.assets"),
 				t("topicFiles.skillStructure.details.assets", {
@@ -119,6 +131,7 @@ export function useSkillFileHelp(
 			)
 		case "templates":
 			return createFileHelpPresentation(
+				"skill.templates",
 				t("topicFiles.skillStructure.labels.templates"),
 				t("topicFiles.skillStructure.help.templates"),
 				t("topicFiles.skillStructure.details.templates", {
@@ -129,6 +142,7 @@ export function useSkillFileHelp(
 			)
 		case "examples":
 			return createFileHelpPresentation(
+				"skill.examples",
 				t("topicFiles.skillStructure.labels.examples"),
 				t("topicFiles.skillStructure.help.examples"),
 				t("topicFiles.skillStructure.details.examples", {
@@ -139,6 +153,7 @@ export function useSkillFileHelp(
 			)
 		case "evals":
 			return createFileHelpPresentation(
+				"skill.evals",
 				t("topicFiles.skillStructure.labels.evals"),
 				t("topicFiles.skillStructure.help.evals"),
 				t("topicFiles.skillStructure.details.evals", {
@@ -149,6 +164,7 @@ export function useSkillFileHelp(
 			)
 		case "evalCases":
 			return createFileHelpPresentation(
+				"skill.evalCases",
 				t("topicFiles.skillStructure.labels.evalCases"),
 				t("topicFiles.skillStructure.help.evalCases"),
 				t("topicFiles.skillStructure.details.evalCases", {
@@ -159,6 +175,7 @@ export function useSkillFileHelp(
 			)
 		case "evalInputs":
 			return createFileHelpPresentation(
+				"skill.evalInputs",
 				t("topicFiles.skillStructure.labels.evalInputs"),
 				t("topicFiles.skillStructure.help.evalInputs"),
 				t("topicFiles.skillStructure.details.evalInputs", {
@@ -169,6 +186,7 @@ export function useSkillFileHelp(
 			)
 		case "agents":
 			return createFileHelpPresentation(
+				"skill.agents",
 				t("topicFiles.skillStructure.labels.agents"),
 				t("topicFiles.skillStructure.help.agents"),
 				t("topicFiles.skillStructure.details.agents", {
@@ -179,6 +197,7 @@ export function useSkillFileHelp(
 			)
 		case "readme":
 			return createFileHelpPresentation(
+				"skill.readme",
 				t("topicFiles.skillStructure.labels.readme"),
 				t("topicFiles.skillStructure.help.readme"),
 				t("topicFiles.skillStructure.details.readme", {
@@ -189,6 +208,7 @@ export function useSkillFileHelp(
 			)
 		case "license":
 			return createFileHelpPresentation(
+				"skill.license",
 				t("topicFiles.skillStructure.labels.license"),
 				t("topicFiles.skillStructure.help.license"),
 				t("topicFiles.skillStructure.details.license", {
@@ -199,6 +219,7 @@ export function useSkillFileHelp(
 			)
 		case "publishConfig":
 			return createFileHelpPresentation(
+				"skill.publishConfig",
 				t("topicFiles.skillStructure.labels.publishConfig"),
 				t("topicFiles.skillStructure.help.publishConfig"),
 				t("topicFiles.skillStructure.details.publishConfig", {

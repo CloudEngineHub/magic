@@ -1,4 +1,5 @@
-import { useId, useRef, useState } from "react"
+import { ErrorBoundary } from "react-error-boundary"
+import { Suspense, useId, useRef, useState } from "react"
 import { Slot } from "@radix-ui/react-slot"
 import {
 	autoUpdate,
@@ -26,14 +27,16 @@ import {
 	useOverlayInteractionScopeContentAttributes,
 } from "@/components/shadcn-ui/overlay-interaction-scope"
 import { HelpDialog } from "./HelpDialog"
-import type { ContextHelpProps } from "./types"
+import type { ContextHelpProps, HelpDialogProps } from "./types"
 
-export type { ContextHelpProps, HelpDefinition } from "./types"
+export type { ContextHelpProps, HelpDefinition, HelpDialogProps } from "./types"
 
 /** 同一个入口负责简介和完整说明；业务只提供内容，不复制浮层状态与焦点逻辑。 */
-export function ContextHelp({ help, mode, children }: ContextHelpProps) {
+export function ContextHelp({ help, mode, children, renderDialog }: ContextHelpProps) {
 	const { t } = useTranslation("interface")
 	const [layer, setLayer] = useState<"closed" | "preview" | "dialog">("closed")
+	const dialogOpen = useRef(false)
+	dialogOpen.current = layer === "dialog"
 	const suppressFocusPreview = useRef(false)
 	const titleId = useId()
 	const dialogId = useId()
@@ -189,11 +192,14 @@ export function ContextHelp({ help, mode, children }: ContextHelpProps) {
 				</FloatingPortal>
 			)}
 			{layer === "dialog" && (
-				<HelpDialog
+				<CompleteHelpDialog
 					help={help}
 					id={dialogId}
+					renderDialog={renderDialog}
 					onCloseAutoFocus={(event) => {
 						event.preventDefault()
+						// lazy 阅读界面替换初始说明不是关闭；仅真正退出时恢复文件入口焦点。
+						if (dialogOpen.current) return
 						// 简介关闭时不恢复焦点；完整面板关闭后才返回原入口，且不立即重开简介。
 						suppressFocusPreview.current = true
 						const triggerElement = refs.domReference.current
@@ -203,5 +209,18 @@ export function ContextHelp({ help, mode, children }: ContextHelpProps) {
 				/>
 			)}
 		</Dialog>
+	)
+}
+
+/** 阅读模块加载失败时保留当前单篇说明和关闭入口；边界必须在 lazy 组件外面。 */
+function CompleteHelpDialog({
+	renderDialog,
+	...props
+}: HelpDialogProps & Pick<ContextHelpProps, "renderDialog">) {
+	const fallback = <HelpDialog {...props} />
+	return (
+		<ErrorBoundary fallback={fallback}>
+			<Suspense fallback={fallback}>{renderDialog ? renderDialog(props) : fallback}</Suspense>
+		</ErrorBoundary>
 	)
 }
