@@ -28,8 +28,15 @@ export function FileManagerNameDialog({
 			<DialogContent>
 				<DialogHeader>
 					<DialogTitle>{input?.title}</DialogTitle>
-					<DialogDescription className="sr-only">{input?.title}</DialogDescription>
+					<DialogDescription className="break-words">
+						{t("fileManager.confirmation.location")} {names.location}
+					</DialogDescription>
 				</DialogHeader>
+				{names.originalName && (
+					<p className="break-words text-sm text-muted-foreground">
+						{t("fileManager.confirmation.originalName")} {names.originalName}
+					</p>
+				)}
 				{input && (
 					<InputWithError
 						ref={input.inputRef}

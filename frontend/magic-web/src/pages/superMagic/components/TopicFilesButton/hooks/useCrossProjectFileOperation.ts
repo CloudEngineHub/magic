@@ -26,6 +26,9 @@ import {
 import { useCanvasFileOperationGuard } from "./useCanvasFileOperationGuard"
 import type { CanvasProjectPathRepairResult } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 import type { FileScope } from "@/apis/modules/fileScope"
+import type { ConfirmFileOperation } from "./types"
+import { buildAttachmentIndex } from "../utils/attachmentIndex"
+import { getFileManagerChangedIds, getFileManagerTransferIds } from "../utils/file-manager-transfer"
 
 export interface CrossProjectOperationSuccessResult {
 	operationType: "move" | "copy"
@@ -37,6 +40,7 @@ export interface CrossProjectOperationSuccessResult {
 }
 
 interface UseCrossProjectFileOperationOptions {
+	confirmOperation?: ConfirmFileOperation
 	isCurrent?: () => boolean
 	fileScope?: FileScope
 	projectId?: string
@@ -98,7 +102,7 @@ async function resolveEffectiveOperationFileIds({
 }
 
 export function useCrossProjectFileOperation(options: UseCrossProjectFileOperationOptions) {
-	const { projectId, shareCode, sharePassword, onSuccess, fileScope } = options
+	const { projectId, shareCode, sharePassword, onSuccess, fileScope, confirmOperation } = options
 	const { t } = useTranslation("super")
 	const { runCanvasFileOperationPreflight, commitCanvasFileOperationRepair } =
 		useCanvasFileOperationGuard()
@@ -303,17 +307,46 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			documentDependencyFileIds?: string[]
 			preserveParentPath?: boolean
 		}) => {
-			const { fileIds: effectiveFileIds, dependencyAnalysisFailed } =
-				await resolveEffectiveOperationFileIds({
-					fileIds: data.fileIds || fileIds,
-					sourceAttachments: data.sourceAttachments,
-					includeDocumentDependencies: data.includeDocumentDependencies,
-					documentDependencyFileIds: data.documentDependencyFileIds,
-				})
+			const sourceIndex = confirmOperation
+				? buildAttachmentIndex(data.sourceAttachments)
+				: undefined
+			const requestedIds = data.fileIds ?? fileIds
+			const selectedIds = sourceIndex
+				? getFileManagerTransferIds(requestedIds, sourceIndex)
+				: requestedIds
+			const changedIds =
+				sourceIndex && data.targetProjectId === projectId
+					? getFileManagerChangedIds(
+							selectedIds,
+							sourceIndex,
+							"",
+							data.targetPath.at(-1)?.file_id ?? "",
+							"move",
+						)
+					: selectedIds
+			if (confirmOperation && !changedIds.length) return
+			const resolved = await resolveEffectiveOperationFileIds({
+				fileIds: changedIds,
+				sourceAttachments: data.sourceAttachments,
+				includeDocumentDependencies: data.includeDocumentDependencies,
+				documentDependencyFileIds: data.documentDependencyFileIds,
+			})
+			let effectiveFileIds = resolved.fileIds
+			const { dependencyAnalysisFailed } = resolved
 			if (dependencyAnalysisFailed) {
 				magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
 			}
 			if (!projectId || effectiveFileIds.length === 0) return
+			if (sourceIndex && data.targetProjectId === projectId) {
+				effectiveFileIds = getFileManagerChangedIds(
+					effectiveFileIds,
+					sourceIndex,
+					"",
+					data.targetPath.at(-1)?.file_id ?? "",
+					"move",
+				)
+				if (!effectiveFileIds.length) return
+			}
 			const shouldPreserveParentPath =
 				data.preserveParentPath === true &&
 				data.targetProjectId !== projectId &&
@@ -396,6 +429,19 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				},
 			})
 			if (!preflightResult.ok) return
+			if (
+				confirmOperation &&
+				!(await confirmOperation({
+					operation: "move",
+					fileIds: effectiveFileIds,
+					selectedIds: data.fileIds ?? fileIds,
+					sourceAttachments: data.sourceAttachments,
+					targetPath: data.targetPath,
+					targetName: data.targetProject?.project_name,
+					skippedCount: selectedIds.length - changedIds.length,
+				}))
+			)
+				return
 
 			// 3. 执行移动操作
 			setIsOperating(true)
@@ -485,6 +531,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			folderConflictHandler,
 			commitCanvasFileOperationRepair,
 			runCanvasFileOperationPreflight,
+			confirmOperation,
 		],
 	)
 
@@ -571,6 +618,19 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			if (!isCurrent()) return
 
 			// 4. 执行复制操作
+			if (
+				confirmOperation &&
+				!(await confirmOperation({
+					operation: "copy",
+					fileIds: effectiveFileIds,
+					selectedIds: data.fileIds ?? fileIds,
+					sourceAttachments: data.sourceAttachments,
+					targetPath: data.targetPath,
+					targetName: data.targetProject?.project_name,
+				}))
+			)
+				return
+			if (!isCurrent()) return
 			setIsOperating(true)
 			setOperationProgress(0)
 
@@ -651,6 +711,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 		},
 		[
 			isCurrent,
+			confirmOperation,
 			fileIds,
 			projectId,
 			shareCode,

@@ -19,6 +19,12 @@ export type FileManagerCommand =
 	| "download"
 	| "upload"
 
+export interface FileManagerTreeRow {
+	level: number
+	expanded: boolean
+	expandable: boolean
+}
+
 export interface FileManagerActions {
 	execute: (command: FileManagerCommand) => void
 	canExecute: (command: FileManagerCommand) => boolean
@@ -39,6 +45,9 @@ export interface FileManagerPathItem {
 }
 
 export interface FileManagerProps {
+	hidePlaces?: boolean
+	defaultView?: FileManagerView
+	defaultWritePath?: string
 	/** 包含用户、组织与空间；身份变化时由入口以此 key 重新创建管理器。 */
 	scopeKey: string
 	identityKey: string
@@ -62,7 +71,6 @@ export interface FileManagerProps {
 	allowDownload?: boolean
 	spaceConfig?: TopicFilesSpaceConfig
 	isItemMutable?: (file: AttachmentItem) => boolean
-	handleReplaceFile?: (file: AttachmentItem) => void
 }
 
 /** 内容布局同时用于虚拟行和框选命中，不能从已挂载的 DOM 推断完整选择范围。 */

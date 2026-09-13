@@ -6,6 +6,8 @@ import { useVirtualDesignProject } from "./useVirtualDesignProject"
 import { useVirtualSelfMediaProject } from "./useVirtualSelfMediaProject"
 import type { useFileOperations } from "./useFileOperations"
 import type { FileManagerProps } from "../components/FileManager/types"
+import type { AttachmentIndex } from "../utils/attachmentIndex"
+import type { AttachmentItem } from "./types"
 
 const expandedKeys: React.Key[] = []
 const setExpandedKeys = () => undefined
@@ -14,6 +16,8 @@ const setExpandedKeys = () => undefined
 export function useFileManagerNames(
 	props: FileManagerProps,
 	operations: ReturnType<typeof useFileOperations>,
+	index: AttachmentIndex,
+	directory?: AttachmentItem,
 ) {
 	const { t } = useTranslation("super")
 	const callbacks = props.spaceConfig?.operations
@@ -100,13 +104,44 @@ export function useFileManagerNames(
 			cancel: selfMedia.cancelVirtualSelfMediaProject,
 		},
 	]
+	const current = rename.renamingItemId
+		? (index.getItemById(rename.renamingItemId) ?? index.getItemByKey(rename.renamingItemId))
+		: undefined
+	const input = inputs.find((entry) => entry.id)
+	const originalName = current?.file_name || current?.filename || current?.name
+	const requestedPath =
+		file.virtualFiles[0]?.parentPath ||
+		folder.virtualFolders[0]?.parentPath ||
+		directory?.relative_file_path
+	const rootPath = props.spaceConfig?.directorySource
+		?.getPath(props.rootId)
+		.at(-1)?.relative_file_path
+	const parentPath = current
+		? index
+				.getParentItemsById(current.file_id)
+				.map((item) => item.file_name || item.filename || item.name)
+				.filter(Boolean)
+				.join(" / ")
+		: props.defaultWritePath && (!requestedPath || requestedPath === rootPath)
+			? props.defaultWritePath
+			: requestedPath
 	return {
 		rename,
 		file,
 		folder,
 		design,
 		selfMedia,
-		input: inputs.find((input) => input.id),
+		input: input
+			? {
+					...input,
+					confirm: () =>
+						originalName && input.value.trim() === originalName
+							? input.cancel()
+							: input.confirm(),
+				}
+			: undefined,
+		location: [props.rootName, parentPath].filter(Boolean).join(" / "),
+		originalName,
 		pending:
 			rename.renamePending ||
 			file.isCreating ||

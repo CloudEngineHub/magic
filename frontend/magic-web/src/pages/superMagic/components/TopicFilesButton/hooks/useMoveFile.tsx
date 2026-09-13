@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useTranslation } from "react-i18next"
-import type { AttachmentItem } from "./types"
+import type { AttachmentItem, ConfirmFileOperation } from "./types"
+import { getFileManagerChangedIds } from "../utils/file-manager-transfer"
 import { checkDuplicateFileName } from "../utils/checkDuplicateFileName"
 import MagicModal from "@/components/base/MagicModal"
 import { IconAlertTriangleFilled } from "@tabler/icons-react"
@@ -36,13 +37,15 @@ export interface FileMoveFailure {
 }
 
 interface UseMoveFileOptions {
+	confirmOperation?: ConfirmFileOperation
+	onDirectoryMoveSuccess?: (files: AttachmentItem[]) => void
 	projectId?: string
 	directorySource?: DirectorySource
 	isCurrent?: () => boolean
 	onDirectoryMoveComplete?: (files: AttachmentItem[], targetId: string) => void
 	attachments?: AttachmentItem[]
 	attachmentIndex?: AttachmentIndex
-	onMoveSuccess?: () => void
+	onMoveSuccess?: (fileIds?: string[]) => void
 	handleMoveFile?: (
 		fileId: string,
 		targetParentId: string,
@@ -66,6 +69,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 	const { runCanvasFileOperationPreflight, commitCanvasFileOperationRepair } =
 		useCanvasFileOperationGuard()
 	const {
+		confirmOperation,
 		projectId,
 		attachments = [],
 		attachmentIndex,
@@ -426,12 +430,14 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 	const batchMoveFiles = useCallback(
 		async ({
 			fileIds,
+			selectedIds = fileIds,
 			projectId,
 			targetParentId,
 			targetProjectId,
 			keepBothFileIds = [],
 		}: {
 			fileIds: string[]
+			selectedIds?: string[]
 			projectId: string
 			targetParentId: string
 			targetProjectId?: string
@@ -462,6 +468,16 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			}
 
 			const sameProjectMove = !targetProjectId || targetProjectId === projectId
+			if (confirmOperation && sameProjectMove && attachmentIndex) {
+				effectiveFileIds = getFileManagerChangedIds(
+					effectiveFileIds,
+					attachmentIndex,
+					"",
+					targetParentId,
+					"move",
+				)
+				if (!effectiveFileIds.length) return
+			}
 			const pathOperationFileIds = effectiveFileIds.filter(
 				(fileId) => !keepBothFileIds.includes(fileId),
 			)
@@ -497,6 +513,20 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				repairPlan = preflightResult.repairPlan
 			}
 
+			if (
+				confirmOperation &&
+				!(await confirmOperation({
+					operation: "move",
+					fileIds: effectiveFileIds,
+					selectedIds,
+					skippedCount: selectedIds.filter((id) => !effectiveFileIds.includes(id)).length,
+					sourceAttachments: attachments,
+					targetPath: attachmentIndex
+						? getAttachmentPathByLookupKey(attachmentIndex, targetParentId)
+						: [],
+				}))
+			)
+				return
 			const moveTaskId = beginMoveTask()
 
 			try {
@@ -524,7 +554,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					setMoveProgress(100)
 					magicToast.success(t("topicFiles.success.fileMoved"))
 					hideMoveSelector()
-					onMoveSuccess?.()
+					onMoveSuccess?.(effectiveFileIds)
 					finishMoveTask(moveTaskId, 500)
 					return
 				}
@@ -553,7 +583,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 								setMoveProgress(100)
 								magicToast.success(t("topicFiles.success.fileMoved"))
 								hideMoveSelector()
-								onMoveSuccess?.()
+								onMoveSuccess?.(effectiveFileIds)
 								finishMoveTask(moveTaskId, 500)
 							} else if (checkData.status === "failed") {
 								magicToast.error(
@@ -585,6 +615,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			attachmentIndex,
 			attachments,
 			beginMoveTask,
+			confirmOperation,
 			commitCanvasFileOperationRepair,
 			confirmCanvasProjectRisk,
 			finishMoveTask,
@@ -614,6 +645,21 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			targetAttachments?: AttachmentItem[]
 		}) => {
 			if (!projectId || fileIds.length === 0) return
+			const selectedIds = fileIds
+			if (
+				confirmOperation &&
+				attachmentIndex &&
+				(!targetProjectId || targetProjectId === projectId)
+			) {
+				fileIds = getFileManagerChangedIds(
+					fileIds,
+					attachmentIndex,
+					"",
+					targetParentId,
+					"move",
+				)
+				if (!fileIds.length) return
+			}
 			const resolvedTargetPath =
 				targetPath ??
 				(attachmentIndex
@@ -674,13 +720,21 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 			await batchMoveFiles({
 				fileIds,
+				selectedIds,
 				projectId,
 				targetParentId,
 				targetProjectId,
 				keepBothFileIds,
 			})
 		},
-		[attachmentIndex, attachments, batchMoveFiles, folderConflictHandler, moveDuplicateHandler],
+		[
+			attachmentIndex,
+			attachments,
+			batchMoveFiles,
+			confirmOperation,
+			folderConflictHandler,
+			moveDuplicateHandler,
+		],
 	)
 
 	const moveWithinDirectorySource = useMemoizedFn(
@@ -699,7 +753,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					: currentMoveItem?.file_id
 						? [currentMoveItem.file_id]
 						: [])
-			const items = ids.flatMap((id) => {
+			let items = ids.flatMap((id) => {
 				const file =
 					attachmentIndex?.getItemById(id) ??
 					attachments.find((item) => item.file_id === id)
@@ -712,6 +766,68 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			}
 			const succeeded: AttachmentItem[] = []
 			const failed: FileMoveFailure[] = []
+			if (options.confirmOperation) {
+				const unchanged = items.filter(
+					(file) =>
+						(attachmentIndex?.getParentItemById(file.file_id)?.file_id ??
+							source.root.file_id) === targetId,
+				)
+				items = items.filter((file) => !unchanged.includes(file))
+				if (!items.length) {
+					directoryMoveRef.current = null
+					return
+				}
+				try {
+					const children = await source.loadChildren(targetId, controller.signal)
+					if (!isCurrent()) {
+						directoryMoveRef.current = null
+						return
+					}
+					const names = new Set(children.map(getItemName))
+					items = items.filter((file) => {
+						const invalid =
+							file.file_id === targetId ||
+							path.some((parent) => parent.file_id === file.file_id)
+						const duplicate = names.has(getItemName(file))
+						if (invalid || duplicate) {
+							failed.push({
+								file,
+								message: t(
+									invalid
+										? "userSpace.invalidMoveTarget"
+										: "userSpace.nameExists",
+								),
+							})
+							return false
+						}
+						names.add(getItemName(file))
+						return true
+					})
+					setFailures(failed)
+					if (
+						!items.length ||
+						!(await options.confirmOperation({
+							operation: "move",
+							fileIds: items.flatMap((file) => (file.file_id ? [file.file_id] : [])),
+							selectedIds: ids,
+							sourceAttachments: attachments,
+							targetPath: path,
+							skippedCount: unchanged.length + failed.length,
+						}))
+					) {
+						directoryMoveRef.current = null
+						return
+					}
+				} catch {
+					directoryMoveRef.current = null
+					if (isCurrent()) magicToast.error(t("topicFiles.error.moveFileFailed"))
+					return
+				}
+				if (!isCurrent()) {
+					directoryMoveRef.current = null
+					return
+				}
+			}
 			setIsMovingFn(true)
 			try {
 				for (const file of items) {
@@ -752,10 +868,12 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				setSelectedItems?.(
 					new Set(failed.flatMap(({ file }) => (file.file_id ? [file.file_id] : []))),
 				)
-				if (!failed.length) magicToast.success(t("topicFiles.success.fileMoved"))
+				if (!failed.length && succeeded.length)
+					magicToast.success(t("topicFiles.success.fileMoved"))
 			} finally {
 				// 停止后续移动不代表已提交请求回滚，来源与目标目录都要重新读取。
 				options.onDirectoryMoveComplete?.(items, targetId)
+				options.onDirectoryMoveSuccess?.(succeeded)
 				if (directoryMoveRef.current === controller) {
 					directoryMoveRef.current = null
 					setIsMovingFn(false)
@@ -774,6 +892,19 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			const targetParentId =
 				data.path.length > 0 ? data.path[data.path.length - 1].file_id || "" : ""
 			const targetFolderPath = getTargetFolderPath(data.path)
+			if (confirmOperation) {
+				await batchMoveFilesWithDuplicateCheck({
+					fileIds: isBatchMode
+						? batchFileIds
+						: currentMoveItem?.file_id
+							? [currentMoveItem.file_id]
+							: [],
+					projectId: projectId ?? "",
+					targetParentId,
+					targetPath: data.path,
+				})
+				return
+			}
 
 			const executeBatchMove = (keepBothFileIds: string[] = []) => {
 				// 立即退出多选模式
@@ -991,6 +1122,8 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 		},
 		[
 			options.directorySource,
+			confirmOperation,
+			batchMoveFilesWithDuplicateCheck,
 			moveWithinDirectorySource,
 			attachmentIndex,
 			attachments,

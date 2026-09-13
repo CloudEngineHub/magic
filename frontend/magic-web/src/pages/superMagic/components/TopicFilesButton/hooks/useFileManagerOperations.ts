@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
@@ -18,6 +18,8 @@ import { useUploadWithModal } from "./useUploadWithModal"
 import { useDragUpload } from "./useDragUpload"
 import { useBatchDownload } from "./useBatchDownload"
 import { useFileManagerNames } from "./useFileManagerNames"
+import { useFileManagerConfirmation } from "./useFileManagerConfirmation"
+import { useFileReplace } from "./useFileReplace"
 import { useSelectedFilesManager } from "./useSelectedFilesManager"
 import { useShareFile } from "./useShareFile"
 import { useFileInfoPanel } from "./useFileInfoPanel"
@@ -53,7 +55,46 @@ export function useFileManagerOperations({
 }: Options) {
 	const { t } = useTranslation("super")
 	const { attachments, projectId, spaceConfig, selectedProject, selectedTopic } = props
+	const transferPending = useRef(false)
+	const [preparingTransfer, setPreparingTransfer] = useState(false)
+	const confirmation = useFileManagerConfirmation({
+		scopeKey: props.scopeKey,
+		isActive: props.isActive,
+		rootName: props.rootName,
+		index,
+		attachments,
+	})
 	const callbacks = spaceConfig?.operations
+	const confirmUpload = useMemoizedFn((files: File[], target?: AttachmentItem) =>
+		confirmation.confirm({
+			operation: "upload",
+			files,
+			target,
+			targetPath: [
+				props.rootName,
+				(!target && !directory) || (target ?? directory)?.file_id === props.rootId
+					? (props.defaultWritePath ?? (target ?? directory)?.relative_file_path)
+					: (target ?? directory)?.relative_file_path,
+			]
+				.filter(Boolean)
+				.join(" / "),
+		}),
+	)
+	const replace = useFileReplace({
+		projectId,
+		selectedProject,
+		selectedTopic,
+		fileScope: spaceConfig?.scope,
+		beforeReplace: (target, file) =>
+			confirmation.confirm({
+				operation: "replace",
+				files: [file],
+				target,
+				targetPath: [props.rootName, target.relative_file_path || target.file_name]
+					.filter(Boolean)
+					.join(" / "),
+			}),
+	})
 	const capabilities = resolveTopicFilesCapabilities(spaceConfig?.capabilities)
 	const selectedWorkspace = selectedProject
 		? workspaceStore.getWorkspaceById(selectedProject.workspace_id)
@@ -61,6 +102,7 @@ export function useFileManagerOperations({
 	const downloadProgress = useDownloadProgress()
 	const duplicate = useDuplicateFileHandler({ attachments })
 	const operations = useFileOperations({
+		beforeUpload: confirmUpload,
 		attachments,
 		projectId,
 		selectedProject: selectedProject ?? undefined,
@@ -78,9 +120,10 @@ export function useFileManagerOperations({
 		duplicateFileHandler: duplicate,
 		downloadProgress,
 	})
-	const names = useFileManagerNames(props, operations)
+	const names = useFileManagerNames(props, operations, index, directory)
 	const pendingMoveIds = useRef<string[]>([])
 	const move = useMoveFile({
+		confirmOperation: confirmation.confirm,
 		projectId,
 		attachments,
 		attachmentIndex: index,
@@ -92,17 +135,20 @@ export function useFileManagerOperations({
 		isCurrent: callbacks?.isCurrent,
 		handleMoveFile: operations.handleMoveFile,
 		useDetailedDuplicateConflict: true,
-		onMoveSuccess: () => {
-			onMoveComplete(pendingMoveIds.current)
+		onMoveSuccess: (ids) => {
+			onMoveComplete(ids ?? pendingMoveIds.current)
 			pendingMoveIds.current = []
 			props.onRefresh()
 		},
 		onDirectoryMoveComplete: (files, targetId) => {
 			callbacks?.onDirectoryMoveComplete(files, targetId)
+		},
+		onDirectoryMoveSuccess: (files) => {
 			onMoveComplete(files.flatMap((file) => (file.file_id ? [file.file_id] : [])))
 		},
 	})
 	const crossProject = useCrossProjectFileOperation({
+		confirmOperation: confirmation.confirm,
 		isCurrent: callbacks?.isCurrent,
 		fileScope: spaceConfig?.scope,
 		projectId,
@@ -122,6 +168,8 @@ export function useFileManagerOperations({
 		directorySource: spaceConfig?.directorySource,
 	})
 	const importOperation = useImportFromOtherProject({
+		isCurrent: () => props.isActive && (callbacks?.isCurrent?.() ?? true),
+		confirmOperation: confirmation.confirm,
 		projectId,
 		selectedProject: selectedProject ?? null,
 		selectedWorkspace,
@@ -156,6 +204,7 @@ export function useFileManagerOperations({
 		operations.setShareModalVisible(true)
 	}
 	const batch = useBatchDownload({
+		confirmOperation: confirmation.confirm,
 		fileScope: spaceConfig?.scope,
 		projectId,
 		getItemId: getAttachmentKey,
@@ -197,6 +246,7 @@ export function useFileManagerOperations({
 	})
 	const uploadTarget = useRef<AttachmentItem>()
 	const userUpload = useUploadWithModal({
+		beforeUpload: (files) => confirmUpload(files, uploadTarget.current),
 		projectId,
 		fileScope: spaceConfig?.scope,
 		title: props.rootName,
@@ -226,13 +276,24 @@ export function useFileManagerOperations({
 	const uploadFiles = async (files: File[], target?: AttachmentItem) => {
 		if (callbacks) {
 			uploadTarget.current = target ?? directory
-			await userUpload.handleFilesSelected(files)
+			await userUpload.handleFilesSelected(files, false, true)
 		} else await dragUpload.handleUploadFiles(files, target ?? directory, false)
 	}
 	const externalDrop = async (data: DataTransfer, target?: AttachmentItem) => {
 		const identity = getFileReferenceIdentityKey()
 		try {
 			const dropped = await processDroppedItems(data)
+			if (identity !== getFileReferenceIdentityKey()) return
+			if (
+				!(await confirmUpload(
+					[
+						...dropped.standaloneFiles,
+						...dropped.folders.flatMap((folder) => folder.files),
+					],
+					target,
+				))
+			)
+				return
 			if (identity !== getFileReferenceIdentityKey()) return
 			if (dropped.standaloneFiles.length) await uploadFiles(dropped.standaloneFiles, target)
 			for (const folder of dropped.folders) {
@@ -326,7 +387,7 @@ export function useFileManagerOperations({
 				: undefined,
 		onCopyFile: capabilities.copy ? copyTo : undefined,
 		handleReplaceFile:
-			props.allowEdit && capabilities.replace ? props.handleReplaceFile : undefined,
+			props.allowEdit && capabilities.replace ? replace.handleReplaceFile : undefined,
 		handleImportFromOtherProject:
 			props.allowEdit && capabilities.importFromOtherProject
 				? (file) =>
@@ -395,6 +456,7 @@ export function useFileManagerOperations({
 		importDuplicateHandler: importOperation,
 	})
 	return {
+		confirmation,
 		operations,
 		names,
 		move,
@@ -422,36 +484,48 @@ export function useFileManagerOperations({
 		isMutable,
 		pendingMoveIds,
 		busy:
+			Boolean(confirmation.state) ||
+			preparingTransfer ||
 			move.isMoving ||
 			crossProject.isOperating ||
 			importOperation.isOperating ||
 			batch.batchLoading ||
 			names.pending,
 		transfer: async (ids: string[], targetId: string, mode: "move" | "copy") => {
-			const path = spaceConfig?.directorySource
-				? spaceConfig.directorySource.getPath(targetId)
-				: targetId
-					? [...index.getParentItemsById(targetId), index.getItemById(targetId)].filter(
-							(item): item is AttachmentItem => Boolean(item),
-						)
-					: []
-			if (mode === "move") {
-				pendingMoveIds.current = ids
-				if (spaceConfig?.directorySource) await move.moveWithinDirectorySource(path, ids)
-				else
-					await move.batchMoveFilesWithDuplicateCheck({
+			if (transferPending.current) return
+			transferPending.current = true
+			setPreparingTransfer(true)
+			try {
+				const path = spaceConfig?.directorySource
+					? spaceConfig.directorySource.getPath(targetId)
+					: targetId
+						? [
+								...index.getParentItemsById(targetId),
+								index.getItemById(targetId),
+							].filter((item): item is AttachmentItem => Boolean(item))
+						: []
+				if (mode === "move") {
+					pendingMoveIds.current = ids
+					if (spaceConfig?.directorySource)
+						await move.moveWithinDirectorySource(path, ids)
+					else
+						await move.batchMoveFilesWithDuplicateCheck({
+							fileIds: ids,
+							projectId: projectId ?? "",
+							targetParentId: targetId,
+						})
+				} else if (projectId || spaceConfig?.scope === "user")
+					await crossProject.executeCopyOperation({
 						fileIds: ids,
-						projectId: projectId ?? "",
-						targetParentId: targetId,
+						targetProjectId: projectId ?? "",
+						targetPath: path,
+						sourceAttachments: attachments,
+						targetAttachments: attachments,
 					})
-			} else if (projectId || spaceConfig?.scope === "user")
-				await crossProject.executeCopyOperation({
-					fileIds: ids,
-					targetProjectId: projectId ?? "",
-					targetPath: path,
-					sourceAttachments: attachments,
-					targetAttachments: attachments,
-				})
+			} finally {
+				transferPending.current = false
+				setPreparingTransfer(false)
+			}
 		},
 	}
 }

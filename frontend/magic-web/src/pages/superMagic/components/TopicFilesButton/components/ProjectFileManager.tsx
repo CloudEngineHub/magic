@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next"
 import { getFileReferenceIdentityKey } from "../../../services/userFileReferenceResolver"
 import type { ProjectListItem, Topic } from "../../../pages/Workspace/types"
 import type { AttachmentItem } from "../hooks/types"
-import { useFileReplace } from "../hooks/useFileReplace"
 import { FileManager } from "./FileManager/FileManager"
 import { requestProjectAttachmentsFullRefresh } from "../../../services/attachmentsTopicSync"
 
@@ -30,11 +29,6 @@ export default observer(function ProjectFileManager({
 	const { t } = useTranslation("super")
 	const identityKey = getFileReferenceIdentityKey() ?? ""
 	const scopeKey = `${identityKey}:project:${props.projectId}`
-	const { handleReplaceFile } = useFileReplace({
-		projectId: props.projectId,
-		selectedProject: props.selectedProject,
-		selectedTopic: props.selectedTopic,
-	})
 	return (
 		<FileManager
 			key={scopeKey}
@@ -48,7 +42,6 @@ export default observer(function ProjectFileManager({
 			allowEdit={allowEdit}
 			allowDownload={allowDownload}
 			onOpen={props.onFileClick}
-			handleReplaceFile={handleReplaceFile}
 			onRefresh={() => requestProjectAttachmentsFullRefresh({ projectId: props.projectId })}
 		/>
 	)

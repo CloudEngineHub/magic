@@ -77,7 +77,7 @@ export function useFileManagerCommands({
 		const changed = getFileManagerChangedIds(normalized, index, props.rootId, targetId, mode)
 		if (!changed.length) return
 		void operations
-			.transfer(changed, targetId, mode)
+			.transfer(normalized, targetId, mode)
 			.catch(() => magicToast.error(t("userSpace.operationFailed")))
 	})
 	const canExecute: FileManagerActions["canExecute"] = (command) => {
