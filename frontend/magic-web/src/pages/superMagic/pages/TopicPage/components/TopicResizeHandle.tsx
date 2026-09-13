@@ -5,13 +5,19 @@ import {
 	type PointerEvent as ReactPointerEvent,
 } from "react"
 import ReactDOM from "react-dom"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
+import { useReducedMotion } from "framer-motion"
 
 interface TopicResizeHandleProps {
 	className?: string
 	disabled?: boolean
 	onResizeStart: (clientX: number) => void
 	style?: CSSProperties
+	dragging?: boolean
+	collapseProgress?: number
+	collapseArmed?: boolean
+	collapseDirection?: -1 | 1
 }
 
 /** Keeps the layout divider narrow while exposing a wider pointer target for reliable resizing. */
@@ -20,12 +26,19 @@ function TopicResizeHandle({
 	disabled = false,
 	onResizeStart,
 	style,
+	dragging,
+	collapseProgress = 0,
+	collapseArmed = false,
+	collapseDirection = 1,
 }: TopicResizeHandleProps) {
-	const [isDragging, setIsDragging] = useState(false)
+	const { t } = useTranslation("super")
+	const reducedMotion = useReducedMotion()
+	const [localDragging, setIsDragging] = useState(false)
+	const isDragging = dragging ?? localDragging
 
 	/** Starts resize from a unified pointer event so mouse, trackpad, and touch share one path. */
 	const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-		if (disabled) return
+		if (disabled || event.button !== 0) return
 		event.preventDefault()
 		setIsDragging(true)
 		onResizeStart(event.clientX)
@@ -72,6 +85,43 @@ function TopicResizeHandle({
 					data-testid="resize-handle-hit-area"
 					aria-hidden="true"
 				/>
+				<div
+					aria-hidden="true"
+					className="pointer-events-none absolute inset-y-0 w-1 rounded bg-primary"
+					style={{
+						opacity: collapseProgress,
+						transform: `translateX(${collapseDirection * 14 * (1 - Math.exp(-collapseProgress * 3))}px)`,
+						transition:
+							reducedMotion || isDragging
+								? "none"
+								: "transform 360ms cubic-bezier(.2,1.6,.4,1), opacity 220ms ease",
+					}}
+				/>
+				{isDragging && (collapseProgress > 0 || collapseArmed) && (
+					<span
+						role="status"
+						className={cn(
+							"pointer-events-none absolute top-1/2 z-30 w-40 rounded-md border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md",
+							collapseArmed && "border-primary",
+						)}
+						style={{
+							transform: `translate(${collapseDirection < 0 ? "25%" : "-25%"}, -200%)`,
+						}}
+					>
+						{collapseArmed
+							? t("sidebarPanels.releaseToCollapse")
+							: t("sidebarPanels.pullToCollapse")}
+						<span
+							aria-hidden="true"
+							className="mt-2 block h-0.5 overflow-hidden rounded bg-muted"
+						>
+							<span
+								className="block h-full rounded bg-primary"
+								style={{ width: `${collapseProgress * 100}%` }}
+							/>
+						</span>
+					</span>
+				)}
 				<div className="pointer-events-none relative z-10 flex h-5 shrink-0 items-center justify-center gap-0.5 data-[panel-group-direction=vertical]:h-auto data-[panel-group-direction=vertical]:w-5 data-[panel-group-direction=vertical]:flex-col">
 					<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />
 					<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />

@@ -16,6 +16,7 @@ interface TopicHistorySessionCacheValue {
 }
 
 interface UsePaginatedTopicsOptions {
+	enabled?: boolean
 	projectId: string
 	selectedTopicId?: string
 	storeTopics: Topic[]
@@ -104,6 +105,7 @@ function setTopicHistoryCache(projectId: string, value: TopicHistorySessionCache
 }
 
 function usePaginatedTopics({
+	enabled = true,
 	projectId,
 	selectedTopicId,
 	storeTopics,
@@ -111,6 +113,11 @@ function usePaginatedTopics({
 	topicService,
 	searchKeyword = "",
 }: UsePaginatedTopicsOptions): UsePaginatedTopicsResult {
+	const enabledRef = useRef(enabled)
+	enabledRef.current = enabled
+	const requestGeneration = useRef(0)
+	const resumePendingRef = useRef(false)
+	const lastQueryRef = useRef<string | null>(null)
 	const projectIdRef = useRef(projectId)
 	projectIdRef.current = projectId
 
@@ -135,6 +142,8 @@ function usePaginatedTopics({
 	const initialTopics = initialCacheValue?.topics ?? normalizedStoreTopics
 	const [total, setTotal] = useState(initialCacheValue?.total ?? initialTopics.length)
 	const [remoteTopics, setRemoteTopics] = useState<Topic[]>(initialTopics)
+	const remoteTopicsRef = useRef(remoteTopics)
+	remoteTopicsRef.current = remoteTopics
 	const [isLoading, setIsLoading] = useState(
 		Boolean(projectId) && !initialCacheValue && initialTopics.length === 0,
 	)
@@ -152,6 +161,16 @@ function usePaginatedTopics({
 	}, [storeTopics])
 
 	useEffect(() => {
+		if (!enabled) {
+			resumePendingRef.current = true
+			return
+		}
+		// 同查询恢复时保留当前列表及滚动节点；首次加载、换项目和改搜索仍走原缓存路径。
+		if (
+			resumePendingRef.current &&
+			lastQueryRef.current === JSON.stringify([projectId, searchKeyword])
+		)
+			return
 		if (!projectId) {
 			setRemoteTopics([])
 			setTotal(0)
@@ -179,9 +198,11 @@ function usePaginatedTopics({
 		setRemoteTopics(cachedValue.topics)
 		setTotal(cachedValue.total)
 		setIsLoading(false)
-	}, [normalizedStoreTopics, projectId, searchKeyword])
+	}, [normalizedStoreTopics, projectId, searchKeyword, enabled])
 
 	useEffect(() => {
+		requestGeneration.current += 1
+		if (!enabled) return
 		let isActive = true
 
 		async function loadTopics() {
@@ -201,7 +222,15 @@ function usePaginatedTopics({
 				? []
 				: getNormalizedStoreTopics(currentProjectId, storeTopics)
 
-			if (!cachedValue && storeTopicFallback.length === 0) setIsLoading(true)
+			const queryKey = JSON.stringify([currentProjectId, searchKeywordRef.current])
+			const hasRetainedResults =
+				resumePendingRef.current &&
+				lastQueryRef.current === queryKey &&
+				remoteTopicsRef.current.length > 0
+			resumePendingRef.current = false
+			lastQueryRef.current = queryKey
+			if (!cachedValue && storeTopicFallback.length === 0 && !hasRetainedResults)
+				setIsLoading(true)
 			const service = getService()
 
 			try {
@@ -212,6 +241,7 @@ function usePaginatedTopics({
 					searchKeyword: searchKeywordRef.current,
 				})
 
+				if (!isActive) return
 				let list = Array.isArray(response.list) ? response.list : []
 				injectedTopicIdsRef.current.clear()
 
@@ -219,6 +249,7 @@ function usePaginatedTopics({
 				if (currentSelectedId && !list.some((topic) => topic.id === currentSelectedId)) {
 					try {
 						const detail = await service.getTopicDetail(currentSelectedId)
+						if (!isActive) return
 						if (detail) {
 							const normalizedDetail = normalizeTopicHistoryItem(detail)
 							injectedTopicIdsRef.current.add(normalizedDetail.id)
@@ -229,6 +260,7 @@ function usePaginatedTopics({
 					}
 				}
 
+				if (!isActive) return
 				if (!hasSearchKeyword) {
 					setTopicHistoryCache(currentProjectId, {
 						total: response.total,
@@ -259,7 +291,16 @@ function usePaginatedTopics({
 		return () => {
 			isActive = false
 		}
-	}, [getService, pageSize, projectId, reloadSeed, searchKeyword, selectedTopicId, storeTopics])
+	}, [
+		getService,
+		pageSize,
+		projectId,
+		reloadSeed,
+		searchKeyword,
+		selectedTopicId,
+		storeTopics,
+		enabled,
+	])
 
 	const { displayTopics, resolvedTotal } = useMemo(() => {
 		if (remoteTopics.length === 0) {
@@ -298,6 +339,7 @@ function usePaginatedTopics({
 	}, [remoteTopics, searchKeyword, storeTopics, total])
 
 	const reload = useCallback(() => {
+		if (!enabledRef.current) return
 		setIsReloading(true)
 		// 重置到第 1 页后触发重新加载
 		setCurrentPage(1)
@@ -316,7 +358,9 @@ function usePaginatedTopics({
 	 * 搜索态下禁止加载更多，保持一次性全量搜索行为。
 	 */
 	const loadMore = useCallback(async () => {
-		if (!projectId || isLoading || isLoadingMore || searchKeyword.trim()) return
+		if (!enabledRef.current || !projectId || isLoading || isLoadingMore || searchKeyword.trim())
+			return
+		const generation = requestGeneration.current
 		const nextPage = currentPage + 1
 		setIsLoadingMore(true)
 
@@ -328,6 +372,7 @@ function usePaginatedTopics({
 				pageSize,
 				searchKeyword: "",
 			})
+			if (!enabledRef.current || generation !== requestGeneration.current) return
 			const newTopics = (Array.isArray(response.list) ? response.list : []).map(
 				normalizeTopicHistoryItem,
 			)

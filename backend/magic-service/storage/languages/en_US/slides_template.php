@@ -44,6 +44,7 @@ return [
     'preview_url_max' => 'Preview URL cannot exceed 1024 characters',
     'status_in' => 'Status must be 0 (disabled) or 1 (enabled)',
     'sort_integer' => 'Sort must be an integer',
+    'force_re_embedding_boolean' => 'Force re-embedding must be a boolean',
     'base_usage_count_integer' => 'Base usage count must be an integer',
     'base_usage_count_min' => 'Base usage count cannot be less than 0',
     'page_integer' => 'Page must be an integer',

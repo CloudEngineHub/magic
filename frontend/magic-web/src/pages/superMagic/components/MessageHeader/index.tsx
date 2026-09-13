@@ -1,3 +1,4 @@
+import type { FileSidebarControl } from "../Detail/components/FilesViewer/types"
 import {
 	useState,
 	useCallback,
@@ -22,6 +23,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import {
 	MessageCirclePlus,
 	PanelRightClose,
+	PanelLeftOpen,
 	PanelRightOpen,
 	Ellipsis,
 	PenLine,
@@ -75,6 +77,8 @@ interface MessageHeaderProps {
 	historyTriggerMode?: "dropdown" | "layout"
 	isHistoryPanelOpen?: boolean
 	onToggleHistoryPanel?: () => void
+	historyTriggerRef?: RefObject<HTMLButtonElement>
+	fileSidebarControl?: FileSidebarControl
 	showTopicHistory?: boolean
 	/** Chat detail injects conversation-level overflow actions (share/rename/save/delete). */
 	trailingActions?: ReactNode
@@ -93,6 +97,8 @@ export interface MessageHeaderTopicActions {
 }
 
 interface MessageHeaderTopicHistoryPanelProps {
+	onCollapse?: () => void
+	isPanelVisible?: boolean
 	selectedProject: ProjectListItem | null
 	topicStore: TopicStore
 	topicActions: MessageHeaderTopicActions
@@ -274,6 +280,8 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 	onExpandConversationPanel,
 	hideTopicListModeIcon = false,
 	onClose,
+	onCollapse,
+	isPanelVisible,
 	closeButtonRef,
 }: MessageHeaderTopicHistoryPanelProps) {
 	const {
@@ -299,6 +307,8 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 
 	return (
 		<TopicHistoryPanelContent
+			onCollapse={onCollapse}
+			isPanelVisible={isPanelVisible}
 			topics={topics}
 			projectId={selectedProject?.id || ""}
 			selectedTopicId={selectedTopic?.id}
@@ -331,6 +341,8 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 })
 
 function MessageHeader({
+	historyTriggerRef,
+	fileSidebarControl,
 	isConversationPanelCollapsed = false,
 	onToggleConversationPanel,
 	onExpandConversationPanel,
@@ -464,6 +476,7 @@ function MessageHeader({
 	// Closing the history panel only applies to the collapse action; expanding the
 	// conversation pane should not mutate the persisted history-panel preference.
 	const handleToggleConversationPanel = useMemoizedFn(() => {
+		if (!detailPanelVisible && !isConversationPanelCollapsed) return
 		if (!isConversationPanelCollapsed) {
 			onCloseHistoryPanelWhenCollapsing?.()
 		}
@@ -487,6 +500,7 @@ function MessageHeader({
 	function renderHistoryTrigger(placement: "bottomRight" | "leftBottom") {
 		return (
 			<MessageHeaderHistoryControl
+				triggerRef={historyTriggerRef}
 				historyTriggerMode={historyTriggerMode}
 				isHistoryButtonActive={isHistoryButtonActive}
 				tooltipTitle={t("messageHeader.historyTopics")}
@@ -544,6 +558,8 @@ function MessageHeader({
 				className={cn(
 					"absolute z-[30] mb-2.5 flex h-10 w-full items-center justify-between gap-2 px-1.5 py-2",
 					"bg-sidebar",
+					// 预览可见时与 44px 文件标签栏等高，保证两侧按钮的中心线一致。
+					detailPanelVisible && !isConversationPanelCollapsed && "h-11",
 					isConversationPanelCollapsed && "h-full flex-col px-0 py-1.5",
 				)}
 				data-testid="message-header-container"
@@ -611,12 +627,28 @@ function MessageHeader({
 					</div>
 				) : (
 					<>
+						{fileSidebarControl?.isCollapsed && (
+							<MagicTooltip title={t("sidebarPanels.expandFiles")}>
+								<Button
+									ref={fileSidebarControl.triggerRef}
+									variant="ghost"
+									size="icon-sm"
+									className={headerIconButtonClassName}
+									onClick={fileSidebarControl.onToggle}
+									aria-label={t("sidebarPanels.expandFiles")}
+									data-testid="message-header-expand-files"
+								>
+									<PanelLeftOpen size={16} />
+								</Button>
+							</MagicTooltip>
+						)}
 						{detailPanelVisible && (
 							<MagicTooltip title={t("messageHeader.collapseConversationPanel")}>
-								<span>
+								<span className="flex">
 									<Button
 										variant="ghost"
 										size="icon-sm"
+										className={headerIconButtonClassName}
 										onClick={handleToggleConversationPanel}
 										data-testid="message-header-toggle-conversation-panel-button"
 									>

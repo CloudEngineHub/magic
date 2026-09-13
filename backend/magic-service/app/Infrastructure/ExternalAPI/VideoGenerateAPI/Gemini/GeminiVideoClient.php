@@ -10,7 +10,6 @@ namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\Traits\HasLogger;
-use App\Infrastructure\ExternalAPI\Google\Auth\GoogleServiceAccountTokenProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoErrorMapper;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\Util\File\TemporaryFileManager;
@@ -63,7 +62,6 @@ readonly class GeminiVideoClient
         QueueExecutorConfig $config,
         string $uri,
     ): string {
-
         $url = $this->normalizeMediaUrl($config->getBaseUrl(), $uri);
         try {
             $this->assertAllowedMediaUri($url);

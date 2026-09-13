@@ -14,7 +14,9 @@ import type {
 	WebsitePreset,
 	PlaybackTabItem,
 	ActiveDetailTabType,
+	TabFileContext,
 } from "../types"
+import type { AttachmentItem } from "../../../../TopicFilesButton/hooks/types"
 import { TabActionType } from "../types"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { copyFileContent } from "@/pages/superMagic/utils/share"
@@ -183,6 +185,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		previewMode = "split",
 		previewSessionKey = 0,
 		onPreviewDismiss,
+		onPreviewOpen,
 		persistFileTabs = true,
 	} = props
 	const nonClosableFileIdsKey = (nonClosableFileIds || []).map(String).sort().join("|")
@@ -286,7 +289,10 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 	// 包装openPlaybackTab，在需要激活时将所有文件tab设置为非激活状态
 	const openPlaybackTab = useCallback(
-		(options?: { toolData?: unknown; forceActivate?: boolean }) => {
+		(
+			options?: { toolData?: unknown; forceActivate?: boolean },
+			source: "user" | "restore" = "user",
+		) => {
 			const { toolData, forceActivate } = options || {}
 
 			// 如果用户正在预览文件，且不是强制打开，则不打开playbackTab
@@ -306,6 +312,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 			// 如果需要激活playbackTab，则将所有文件tab设置为非激活状态
 			if (shouldActivate) {
+				// 恢复缓存不展开；加载期间用户主动打开回放仍应立即展开。
+				if (forceActivate === true && source === "user") onPreviewOpen?.()
 				dispatchTabs({ type: TabActionType.DEACTIVATE_ALL })
 				// Only an explicit tool-preview action may automatically promote playback fullscreen.
 				activatePreviewFullscreen(PLAYBACK_TAB_ID, forceActivate === true)
@@ -314,12 +322,19 @@ export function useFilesViewer(props: FilesViewerProps) {
 			// 打开playback tab
 			openPlaybackTabOriginal(options)
 		},
-		[openPlaybackTabOriginal, hasActiveFileTab, setUserSelectDetail, activatePreviewFullscreen],
+		[
+			openPlaybackTabOriginal,
+			hasActiveFileTab,
+			setUserSelectDetail,
+			activatePreviewFullscreen,
+			onPreviewOpen,
+		],
 	)
 
 	// 包装openKnowledgeBaseTab，打开知识库tab时取消其他文件tab的激活
 	const openKnowledgeBaseTab = useCallback(
 		(data: Parameters<typeof openKnowledgeBaseTabOriginal>[0]) => {
+			onPreviewOpen?.()
 			// Keep knowledge-base previews in the configured fullscreen shell when required.
 			activatePreviewFullscreen(buildKnowledgeBaseTabId(data))
 			// 取消所有文件tab的激活
@@ -328,7 +343,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			updatePlaybackTab({ active: false })
 			openKnowledgeBaseTabOriginal(data)
 		},
-		[openKnowledgeBaseTabOriginal, updatePlaybackTab, activatePreviewFullscreen],
+		[openKnowledgeBaseTabOriginal, updatePlaybackTab, activatePreviewFullscreen, onPreviewOpen],
 	)
 
 	// Use ref to track clearing state to avoid race conditions
@@ -444,6 +459,38 @@ export function useFilesViewer(props: FilesViewerProps) {
 		)
 	}, [fileList])
 
+	const getTabFileContext = useMemoizedFn((tabId: string): TabFileContext | undefined => {
+		const tab = tabs.find((item) => item.id === tabId)
+		if (!tab || getFileViewerTabType(tab) !== "file" || isProjectSwitching) return undefined
+
+		// 独立预览有自己的文件空间，不能用当前项目中同 ID 的文件覆盖它。
+		const standalone =
+			isStandalonePreviewFile(tab.fileData) ||
+			Boolean(tab.fileData.display_config?.previewPolicy?.fileScope)
+		const indexedFile = standalone ? undefined : fileById.get(String(tab.fileData.file_id))
+		const file = indexedFile || tab.fileData
+		const item: TabFileContext["item"] = {
+			...file,
+			parent_id: file.parent_id === undefined ? undefined : String(file.parent_id),
+			// 信息面板只读子节点，保留附件引用，避免为打开菜单深拷贝整棵树。
+			children: file.children as AttachmentItem[] | undefined,
+		}
+		const path = file.relative_file_path?.trim()
+		const available = !tab.isDeleted && !tab.isLoading
+		return {
+			item,
+			fileName:
+				file.file_name ||
+				file.filename ||
+				path?.split("/").filter(Boolean).pop() ||
+				file.display_filename ||
+				"",
+			canShowInfo: available,
+			canCopyPath: !tab.isDeleted && Boolean(path),
+			canLocate: Boolean(props.canLocateFile && available && indexedFile),
+		}
+	})
+
 	// 递归查找文件或文件夹（包括文件夹）
 	const findItemInAttachments = useCallback(
 		(items: FileItem[], fileId: string): FileItem | undefined => {
@@ -556,6 +603,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			return
 		}
 		if (newTab.fileData.space_type === "user") newTab.userIdentityKey = userIdentityKey
+		onPreviewOpen?.()
 		newTab.closeable = !(
 			nonClosableFileIdSet.has(newTab.id) ||
 			nonClosableFileIdSet.has(String(newTab.fileData.file_id))
@@ -607,6 +655,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 	})
 
 	const openWebsiteTab = useMemoizedFn((preset: WebsitePreset) => {
+		onPreviewOpen?.()
 		if (playbackTab?.active) {
 			updatePlaybackTab({ active: false })
 		}
@@ -1241,11 +1290,14 @@ export function useFilesViewer(props: FilesViewerProps) {
 					// 检查是否需要恢复playback tab
 					if (cachedState.fileState?.playbackTabExists) {
 						// 恢复playbackTab，根据缓存的激活状态决定是否激活
-						openPlaybackTab({
-							forceActivate:
-								!activeUserTab &&
-								(cachedState.fileState.playbackTabActive || false),
-						})
+						openPlaybackTab(
+							{
+								forceActivate:
+									!activeUserTab &&
+									(cachedState.fileState.playbackTabActive || false),
+							},
+							"restore",
+						)
 					}
 				}
 
@@ -1867,6 +1919,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		handleRefresh,
 
 		// File operations
+		getTabFileContext,
 		handleCopy,
 		handleFavorite,
 		handleShare,

@@ -8,7 +8,6 @@ declare(strict_types=1);
 namespace App\Domain\SlidesTemplate\Service;
 
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
-use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateTagEntity;
@@ -20,7 +19,7 @@ use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagMatch;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateTagStatus;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRelationRepositoryInterface;
-use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGenerator;
+use App\Infrastructure\Core\Embeddings\EmbeddingDimensionPolicy;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInterface;
 use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -34,6 +33,9 @@ use Throwable;
 final class SlidesTemplateVectorIndexDomainService
 {
     private const VECTOR_INDEX_INITIALIZED_KEY = 'vector_index:initialized:slides_template';
+
+    /** Stable business label used in logs and dimension errors. */
+    private const BUSINESS = 'Slides template';
 
     private ?bool $availabilityCache = null;
 
@@ -171,15 +173,20 @@ final class SlidesTemplateVectorIndexDomainService
 
         $collectionName = $this->collectionName();
         $collection = $this->vectorStore->getCollection($collectionName);
-        $embeddingModel = $this->embeddingGenerator->getDefaultModel($dataIsolation);
-        if ($collection !== null && $collection->vectorSize !== $embeddingModel->getVectorSize()) {
-            $this->logger->error('Slides template vector sync stopped because embedding dimensions do not match', [
-                'resource_id' => $resourceId,
-                'collection_name' => $collectionName,
-                'collection_vector_size' => $collection->vectorSize,
-                'embedding_vector_size' => $embeddingModel->getVectorSize(),
-            ]);
-            throw new RuntimeException('Slides template embedding dimension does not match the vector collection');
+        if ($collection !== null && ! $forceReEmbedding) {
+            $expectedSize = EmbeddingDimensionPolicy::isEnabled()
+                ? EmbeddingDimensionPolicy::fixedSize()
+                : $this->embeddingGenerator->getDefaultModel($dataIsolation)->getVectorSize();
+            if ($collection->vectorSize !== $expectedSize) {
+                $this->logger->error('Slides template vector sync stopped because embedding dimensions do not match', [
+                    'resource_id' => $resourceId,
+                    'collection_name' => $collectionName,
+                    'collection_vector_size' => $collection->vectorSize,
+                    'embedding_vector_size' => $expectedSize,
+                    'fixed_dimension_enabled' => EmbeddingDimensionPolicy::isEnabled(),
+                ]);
+                EmbeddingDimensionPolicy::assertCollectionSize(self::BUSINESS, $collection->vectorSize, $expectedSize);
+            }
         }
 
         $tagMap = $this->slidesTemplateTagRelationRepository->findTagsByTemplateIds(
@@ -208,6 +215,8 @@ final class SlidesTemplateVectorIndexDomainService
                     'forced' => $forceReEmbedding,
                 ]);
                 $embedding = $this->generateEmbedding($dataIsolation, $searchText, $operatorId, $template);
+                $collectionSize = EmbeddingDimensionPolicy::resolveCollectionSize(self::BUSINESS, count($embedding));
+                $this->ensureCollection($collectionName, $collectionSize, $forceReEmbedding);
                 $this->vectorStore->storePoint($collectionName, (string) $template->getId(), $embedding, $payload);
                 return;
             }
@@ -219,16 +228,8 @@ final class SlidesTemplateVectorIndexDomainService
 
         // A missing point may indicate a new template or an uncreated collection.
         $embedding = $this->generateEmbedding($dataIsolation, $searchText, $operatorId, $template);
-        if ($this->vectorStore->getCollection($collectionName) === null) {
-            try {
-                $this->vectorStore->createCollection($collectionName, count($embedding));
-            } catch (ClientException $exception) {
-                // Another consumer may create the collection between the probe and create call.
-                if (! $this->isCollectionAlreadyExists($exception)) {
-                    throw $exception;
-                }
-            }
-        }
+        $collectionSize = EmbeddingDimensionPolicy::resolveCollectionSize(self::BUSINESS, count($embedding));
+        $this->ensureCollection($collectionName, $collectionSize, $forceReEmbedding);
         $this->vectorStore->storePoint($collectionName, (string) $template->getId(), $embedding, $payload);
         $this->logger->info('Slides template vector stored', ['resource_id' => $resourceId]);
     }
@@ -330,7 +331,7 @@ final class SlidesTemplateVectorIndexDomainService
     /** Return whether vector indexing is enabled for SlidesTemplate. */
     public function isVectorSearchEnabled(): bool
     {
-        return EmbeddingGenerator::isEnabled(AiAbilityCode::KnowledgeBaseEmbeddingModel);
+        return EmbeddingDimensionPolicy::isEnabled();
     }
 
     /** Return whether the first full reconciliation has completed. */
@@ -358,6 +359,34 @@ final class SlidesTemplateVectorIndexDomainService
         }
 
         return str_contains(strtolower((string) $response->getBody()), 'already exists');
+    }
+
+    /** Ensure the collection matches the embedding dimension, rebuilding it only for forced migrations. */
+    private function ensureCollection(string $collectionName, int $vectorSize, bool $forceReEmbedding): void
+    {
+        $collection = $this->vectorStore->getCollection($collectionName);
+        if ($collection !== null && $collection->vectorSize !== $vectorSize) {
+            if (! $forceReEmbedding) {
+                EmbeddingDimensionPolicy::assertCollectionSize(self::BUSINESS, $collection->vectorSize, $vectorSize);
+            }
+
+            $this->vectorStore->removeCollection($collectionName);
+            $this->availabilityCache = false;
+            $collection = null;
+        }
+
+        if ($collection !== null) {
+            return;
+        }
+
+        try {
+            $this->vectorStore->createCollection($collectionName, $vectorSize);
+        } catch (ClientException $exception) {
+            // Another consumer may create the collection between the probe and create call.
+            if (! $this->isCollectionAlreadyExists($exception)) {
+                throw $exception;
+            }
+        }
     }
 
     /** Remove the point when the configured collection exists. */

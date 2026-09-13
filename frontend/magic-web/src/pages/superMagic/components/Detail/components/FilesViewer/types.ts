@@ -1,4 +1,4 @@
-import type { ReactNode, CSSProperties } from "react"
+import type { ReactNode, CSSProperties, RefObject } from "react"
 import type { MagicWidget } from "@magic-web/widget-sdk"
 import type {
 	DownloadImageMode,
@@ -7,11 +7,18 @@ import type {
 	TaskStatus,
 } from "@/pages/superMagic/pages/Workspace/types"
 import { AttachmentSource } from "../../../TopicFilesButton/hooks/types"
+import type { AttachmentItem } from "../../../TopicFilesButton/hooks/types"
 import type { FileScope } from "@/apis/modules/fileScope"
 import type { FileReference, FileReferenceResult } from "@/apis/modules/superMagic"
 import type { HtmlNavigationRequest } from "../../contents/HTML/utils/html-navigation"
 
 // Base interfaces
+export interface FileSidebarControl {
+	isCollapsed: boolean
+	onToggle: () => void
+	triggerRef: RefObject<HTMLButtonElement>
+}
+
 export interface BaseComponentProps {
 	className?: string
 	style?: CSSProperties
@@ -103,6 +110,15 @@ export interface FileItem {
 	htmlNavigation?: HtmlNavigationRequest
 }
 
+/** 右键操作只读取目标文件的元数据，不改变当前活动标签。 */
+export interface TabFileContext {
+	item: AttachmentItem & { file_id: string }
+	fileName: string
+	canShowInfo: boolean
+	canCopyPath: boolean
+	canLocate: boolean
+}
+
 // Tab item interface
 export interface TabItem {
 	userIdentityKey?: string | null
@@ -185,6 +201,14 @@ export interface FilesViewerProps extends BaseComponentProps {
 	previewSessionKey?: number
 	/** Hides the preview surface while preserving its cached tabs and content. */
 	onPreviewDismiss?: () => void
+	/** 用户收起仅隐藏预览，保留标签及内容实例。 */
+	onPreviewCollapse?: () => void
+	/** 明确打开预览时恢复显示，附件同步和缓存恢复不触发。 */
+	onPreviewOpen?: () => void
+	isPreviewCollapsed?: boolean
+	fileSidebarControl?: FileSidebarControl
+	/** 宿主文件树能够承接项目文件定位时才提供入口。 */
+	canLocateFile?: boolean
 	/** Controls whether project-level preview tabs are restored and persisted across mounts. */
 	persistFileTabs?: boolean
 
