@@ -5,7 +5,7 @@ import { Input } from "antd"
 import { useState, useEffect, useRef, useMemo } from "react"
 import { useMemoizedFn } from "ahooks"
 import { shadow } from "@/utils/shadow"
-import AIOptimization from "@/pages/superMagic/components/Detail/components/AIOptimization"
+import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import CommonFooter from "../../components/CommonFooter"
 import Deleted from "../../components/Deleted"
@@ -41,6 +41,7 @@ export default function Text(props: any) {
 		allowEdit,
 		onRegisterSaveHandler,
 		activeFileId,
+		isTabActive = true,
 		showFooter,
 		showFileHeader = true,
 		isPlaybackMode,
@@ -211,6 +212,12 @@ export default function Text(props: any) {
 		showExportPdf: false,
 	})
 
+	const aiEditMenuItems = useAIEditMenuItems({
+		attachmentList,
+		fileId: data?.file_id,
+		enabled: !!allowEdit && !isMobile && !isEditMode && isNewestVersion && isTabActive,
+	})
+
 	const headerActionConfig = useMemo<HeaderActionConfig>(
 		() => ({
 			customActions: [
@@ -222,27 +229,9 @@ export default function Text(props: any) {
 					render: () => ExportDropdownButton,
 				},
 				{
-					key: "text-ai-optimization",
-					zone: "primary",
-					visible: () =>
-						Boolean(
-							allowEdit &&
-							!isMobile &&
-							data?.file_id &&
-							!isEditMode &&
-							isNewestVersion,
-						),
-					render: (context) => (
-						<AIOptimization
-							attachmentList={attachmentList}
-							file_id={data?.file_id}
-							showButtonText={context.showButtonText}
-						/>
-					),
-				},
-				{
 					key: "text-edit-actions",
-					zone: "primary",
+					zone: "secondary",
+					before: "refresh",
 					visible: () =>
 						Boolean(
 							setIsEditMode && allowEdit && !isMobile && file_id && isNewestVersion,
@@ -301,6 +290,7 @@ export default function Text(props: any) {
 		quitEditMode,
 		allowEdit,
 		actionConfig: headerActionConfig,
+		extraMoreMenuItems: aiEditMenuItems,
 		attachments,
 	}
 

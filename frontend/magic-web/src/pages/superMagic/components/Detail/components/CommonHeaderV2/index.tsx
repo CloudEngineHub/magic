@@ -70,6 +70,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 		extraMoreMenuItems,
 		onCompareVersion,
 		onMoreMenuOpenChange,
+		moreButtonId,
 	} = props
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -430,6 +431,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 						<div data-testid="detail-header-action-more">
 							<ActionButton
 								data-testid="detail-header-action-more-button"
+								id={moreButtonId}
 								icon={
 									<MoreHorizontal
 										size={16}
@@ -544,6 +546,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			onDownload,
 			onFullscreen,
 			onMoreMenuOpenChange,
+			moreButtonId,
 			onOpenUrl,
 			onViewModeChange,
 			beforeAction,

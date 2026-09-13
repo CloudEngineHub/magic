@@ -29,8 +29,7 @@ export interface MarkdownFilePasteOptions {
 }
 
 type PastePart =
-	| { type: "text"; text: string }
-	| { type: "mention"; attrs: TiptapMentionAttributes }
+	{ type: "text"; text: string } | { type: "mention"; attrs: TiptapMentionAttributes }
 
 type ReferencedProjectAttachmentMap = ReadonlyMap<string, ReferencedProjectAttachment | null>
 
@@ -104,12 +103,32 @@ function appendText(parts: PastePart[], text: string): void {
 	}
 }
 
+function hasMagicSelection(text: string): boolean {
+	return /<magic-selection>[\s\S]*?<\/magic-selection>/.test(text)
+}
+
+function extractPasteFileLinks(text: string) {
+	const selectionRanges = [...text.matchAll(/<magic-selection>([\s\S]*?)<\/magic-selection>/g)]
+	return extractMarkdownFileLinks(text).filter((match) => {
+		const selection = selectionRanges.find(
+			(range) =>
+				match.startIndex >= (range.index ?? 0) &&
+				match.endIndex <= (range.index ?? 0) + range[0].length,
+		)
+		if (!selection) return true
+		// 引用原文中的 Markdown 示例仍是资料，只解析 File／Screenshot 的实际附件链接。
+		return /(?:^|\\n)(?:File|Screenshot): $/.test(
+			text.slice((selection.index ?? 0) + "<magic-selection>".length, match.startIndex),
+		)
+	})
+}
+
 function buildPlainTextPasteParts(
 	text: string,
 	attachments: AttachmentItem[],
 	referencedProjectAttachments: ReferencedProjectAttachmentMap = EMPTY_REFERENCED_PROJECT_ATTACHMENTS,
 ): PastePart[] | null {
-	const matches = extractMarkdownFileLinks(text)
+	const matches = extractPasteFileLinks(text)
 	if (matches.length === 0) return null
 
 	const parts: PastePart[] = []
@@ -209,10 +228,12 @@ function extractHtmlMarkdownFileTargets(html: string): MarkdownFileTarget[] {
 }
 
 function getPreferredMarkdownFileTargets(html: string, plainText: string): MarkdownFileTarget[] {
+	if (hasMagicSelection(plainText))
+		return extractPasteFileLinks(plainText).map((match) => match.target)
 	const htmlTargets = extractHtmlMarkdownFileTargets(html)
 	if (htmlTargets.length > 0) return htmlTargets
 
-	return extractMarkdownFileLinks(plainText).map((match) => match.target)
+	return extractPasteFileLinks(plainText).map((match) => match.target)
 }
 
 async function resolveReferencedProjectTargets(
@@ -239,6 +260,8 @@ function buildClipboardPasteParts(
 	attachments: AttachmentItem[],
 	referencedProjectAttachments: ReferencedProjectAttachmentMap = EMPTY_REFERENCED_PROJECT_ATTACHMENTS,
 ): PastePart[] | null {
+	if (hasMagicSelection(plainText))
+		return buildPlainTextPasteParts(plainText, attachments, referencedProjectAttachments)
 	return (
 		buildHtmlPasteParts(html, attachments, referencedProjectAttachments) ||
 		buildPlainTextPasteParts(plainText, attachments, referencedProjectAttachments)
@@ -250,6 +273,7 @@ function hasMentionPart(parts: PastePart[] | null): parts is PastePart[] {
 }
 
 function getClipboardFallbackText(html: string, plainText: string): string {
+	if (hasMagicSelection(plainText)) return plainText
 	const htmlParts = buildHtmlPasteParts(html, [], EMPTY_REFERENCED_PROJECT_ATTACHMENTS)
 	if (!htmlParts) return plainText
 
@@ -314,9 +338,9 @@ export function pasteMarkdownFileLinks(
 
 	if (!hasReferencedProjectTarget && !needsWorkspaceLookup) {
 		const parts = buildClipboardPasteParts(html, plainText, attachments)
-		if (!hasMentionPart(parts)) return false
+		if (!hasMentionPart(parts) && !hasMagicSelection(plainText)) return false
 
-		const paste = buildPasteContent(parts)
+		const paste = buildPasteContent(parts ?? [{ type: "text", text: plainText }])
 		return (
 			runActiveEditor(
 				editor,

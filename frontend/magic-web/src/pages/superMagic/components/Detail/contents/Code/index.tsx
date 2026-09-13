@@ -6,7 +6,7 @@ import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import CodeEditor from "@/components/base/CodeEditor"
 import { shadow } from "@/utils/shadow"
 import { useMemoizedFn } from "ahooks"
-import AIOptimization from "@/pages/superMagic/components/Detail/components/AIOptimization"
+import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
 import CommonFooter from "../../components/CommonFooter"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import Deleted from "../../components/Deleted"
@@ -57,6 +57,7 @@ export default function CodeViewer(props: any) {
 		onRegisterSaveHandler,
 		showFileHeader = true,
 		activeFileId,
+		isTabActive = true,
 		showFooter,
 		isPlaybackMode,
 		allowDownload,
@@ -230,6 +231,12 @@ export default function CodeViewer(props: any) {
 		showExportPdf: false,
 	})
 
+	const aiEditMenuItems = useAIEditMenuItems({
+		attachmentList,
+		fileId: data?.file_id,
+		enabled: !!allowEdit && !isMobile && !isEditMode && isNewestVersion && isTabActive,
+	})
+
 	const headerActionConfig = useMemo<HeaderActionConfig>(
 		() => ({
 			customActions: [
@@ -241,27 +248,9 @@ export default function CodeViewer(props: any) {
 					render: () => ExportDropdownButton,
 				},
 				{
-					key: "code-ai-optimization",
-					zone: "primary",
-					visible: () =>
-						Boolean(
-							allowEdit &&
-							!isMobile &&
-							data?.file_id &&
-							!isEditMode &&
-							isNewestVersion,
-						),
-					render: (context) => (
-						<AIOptimization
-							attachmentList={attachmentList}
-							file_id={data?.file_id}
-							showButtonText={context.showButtonText}
-						/>
-					),
-				},
-				{
 					key: "code-edit-actions",
-					zone: "primary",
+					zone: "secondary",
+					before: "refresh",
 					visible: () =>
 						Boolean(
 							setIsEditMode && allowEdit && !isMobile && file_id && isNewestVersion,
@@ -321,8 +310,10 @@ export default function CodeViewer(props: any) {
 			allowEdit,
 			attachments,
 			actionConfig: headerActionConfig,
+			extraMoreMenuItems: aiEditMenuItems,
 		}),
 		[
+			aiEditMenuItems,
 			allowDownload,
 			allowEdit,
 			attachments,

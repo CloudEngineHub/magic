@@ -79,18 +79,6 @@ export default function useMessageSendHandler({
 							}),
 							projectFilesStore.workspaceFilesList,
 						),
-						{
-							title: t("stylePanel.inspector.agentPromptTitle"),
-							selector: t("stylePanel.inspector.selector"),
-							size: t("stylePanel.inspector.size"),
-							computedStyles: t("stylePanel.inspector.computedStyles"),
-							textContent: t("stylePanel.inspector.textContent"),
-							elementAttributes: t("stylePanel.inspector.elementAttributes"),
-							resource: t("stylePanel.inspector.resource"),
-							domContext: t("stylePanel.inspector.domContext"),
-							elementHtml: t("stylePanel.inspector.elementHtml"),
-							selectorMatchCount: t("stylePanel.inspector.selectorMatchCount"),
-						},
 					)
 				: undefined
 		} catch (error: unknown) {

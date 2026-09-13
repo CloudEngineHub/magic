@@ -1,3 +1,4 @@
+import { createProjectFileMentionData } from "@/components/business/MentionPanel/utils/projectReferenceMention"
 import { useMemo, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -19,12 +20,7 @@ interface AIEditItem {
 }
 
 interface UseAIEditOptions {
-	currentFile?: {
-		file_id?: string
-		file_name?: string
-		relative_file_path?: string
-		file_extension?: string
-	}
+	currentFile?: Parameters<typeof createProjectFileMentionData>[0]
 	onActionComplete?: () => void
 	/** Trigger element inspector (HTML-only). When provided, a "Select Element" item is shown. */
 	onStartInspector?: () => void
@@ -52,12 +48,7 @@ export function useAIEdit(options: UseAIEditOptions = {}) {
 						label: null,
 						mentionSuggestionChar: "@",
 						type: "project_file",
-						data: {
-							file_id: currentFile.file_id,
-							file_name: currentFile.file_name,
-							file_path: currentFile.relative_file_path,
-							file_extension: currentFile.file_extension,
-						},
+						data: createProjectFileMentionData(currentFile),
 					},
 				},
 				{
