@@ -238,8 +238,13 @@ export function FileManagerContent(props: Props) {
 					onPointerCancel={props.gestures.onPointerCancel}
 					onLostPointerCapture={props.gestures.onLostPointerCapture}
 					onContextMenuCapture={(event) => {
+						if (
+							!(event.target instanceof Element) ||
+							!event.currentTarget.contains(event.target)
+						)
+							return
 						const id =
-							event.target instanceof HTMLElement
+							event.target instanceof Element
 								? event.target.closest<HTMLElement>("[data-manager-item]")?.dataset
 										.managerItem
 								: undefined
@@ -298,9 +303,6 @@ export function FileManagerContent(props: Props) {
 											cut={props.actions.cutIds.has(
 												resource.item.file_id ?? "",
 											)}
-											dropTarget={
-												props.gestures.dropTarget === resource.item.file_id
-											}
 											menuItems={props.actions.getMenuItems(resource.item)}
 											onSelect={(event) => {
 												viewport.current?.focus({ preventScroll: true })

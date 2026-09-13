@@ -26,7 +26,6 @@ import type {
 } from "./types"
 
 interface Props {
-	dropTarget: string | null
 	path: FileManagerPathItem[]
 	canBack: boolean
 	canForward: boolean
@@ -118,8 +117,7 @@ export function FileManagerToolbar(props: Props) {
 									size="sm"
 									className={cn(
 										"h-8 max-w-44 truncate px-2",
-										props.dropTarget === part.id &&
-											"ring-2 ring-inset ring-primary",
+										"data-[manager-drop-target=true]:bg-blue-500/10 data-[manager-drop-target=true]:ring-1 data-[manager-drop-target=true]:ring-inset data-[manager-drop-target=true]:ring-blue-500",
 									)}
 									aria-current={
 										index === props.path.length - 1 ? "page" : undefined

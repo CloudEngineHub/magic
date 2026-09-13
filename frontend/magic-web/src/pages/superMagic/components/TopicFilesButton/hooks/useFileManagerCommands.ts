@@ -3,7 +3,11 @@ import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { FileManagerActions, FileManagerProps } from "../components/FileManager/types"
-import { fileManagerTransfer, getFileManagerTransferIds } from "../utils/file-manager-transfer"
+import {
+	fileManagerTransfer,
+	getFileManagerTransferIds,
+	getFileManagerChangedIds,
+} from "../utils/file-manager-transfer"
 import { isDescendantByParentMap, type AttachmentIndex } from "../utils/attachmentIndex"
 import type { TopicFilesMenuItem } from "../utils/menu-items"
 import type { AttachmentItem } from "./types"
@@ -53,26 +57,24 @@ export function useFileManagerCommands({
 				return false
 			if (targetId !== props.rootId && !index.getItemById(targetId)?.is_directory)
 				return false
-			return fileIds.every((id) => {
-				const file = index.getItemById(id)
-				return (
-					file &&
-					(mode === "copy" || operations.isMutable(file)) &&
-					id !== targetId &&
-					!isDescendantByParentMap(index, id, targetId)
-				)
-			})
+			return (
+				getFileManagerChangedIds(fileIds, index, props.rootId, targetId, mode).length > 0 &&
+				fileIds.every((id) => {
+					const file = index.getItemById(id)
+					return (
+						file &&
+						(mode === "copy" || operations.isMutable(file)) &&
+						id !== targetId &&
+						!isDescendantByParentMap(index, id, targetId)
+					)
+				})
+			)
 		},
 	)
 	const transfer = useMemoizedFn((fileIds: string[], targetId: string, mode: "move" | "copy") => {
 		const normalized = getFileManagerTransferIds(fileIds, index)
 		if (!canTransfer(normalized, targetId, mode)) return
-		const changed =
-			mode === "copy"
-				? normalized
-				: normalized.filter(
-						(id) => String(index.getItemById(id)?.parent_id ?? "") !== targetId,
-					)
+		const changed = getFileManagerChangedIds(normalized, index, props.rootId, targetId, mode)
 		if (!changed.length) return
 		void operations
 			.transfer(changed, targetId, mode)

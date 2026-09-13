@@ -59,3 +59,16 @@ export function getFileManagerTransferIds(ids: Iterable<string>, index: Attachme
 		return true
 	})
 }
+
+/** 顶层项的逻辑父级是当前空间根；不把服务端的 0 等根标记与 UI 根 ID 直接比较。 */
+export function getFileManagerChangedIds(
+	ids: Iterable<string>,
+	index: AttachmentIndex,
+	rootId: string,
+	targetId: string,
+	mode: "move" | "copy",
+): string[] {
+	return getFileManagerTransferIds(ids, index).filter(
+		(id) => mode === "copy" || (index.getParentItemById(id)?.file_id ?? rootId) !== targetId,
+	)
+}

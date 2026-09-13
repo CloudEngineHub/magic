@@ -19,7 +19,6 @@ interface Props {
 	selected: boolean
 	focused: boolean
 	cut?: boolean
-	dropTarget: boolean
 	menuItems: TopicFilesMenuItem[]
 	tag?: ReactNode
 	onSelect: (event: MouseEvent<HTMLElement>) => void
@@ -34,7 +33,6 @@ export const FileManagerItem = memo(function FileManagerItem({
 	selected,
 	focused,
 	cut,
-	dropTarget,
 	menuItems,
 	tag,
 	onSelect,
@@ -65,8 +63,14 @@ export const FileManagerItem = memo(function FileManagerItem({
 				draggable
 				data-manager-item={item.file_id}
 				data-manager-target={isDirectory ? item.file_id : undefined}
-				onClick={onSelect}
-				onDoubleClick={onOpen}
+				onClick={(event) => {
+					if (event.target instanceof Node && event.currentTarget.contains(event.target))
+						onSelect(event)
+				}}
+				onDoubleClick={(event) => {
+					if (event.target instanceof Node && event.currentTarget.contains(event.target))
+						onOpen()
+				}}
 				className={cn(
 					"group relative h-full w-full min-w-0 cursor-default select-none rounded-md border border-transparent text-xs hover:bg-muted/60",
 					grid
@@ -75,7 +79,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 					selected && "border-primary/40 bg-primary/10 hover:bg-primary/10",
 					focused && "ring-1 ring-inset ring-ring",
 					cut && "opacity-45",
-					dropTarget && "ring-2 ring-inset ring-primary",
+					"data-[manager-drop-target=true]:bg-blue-500/10 data-[manager-drop-target=true]:ring-1 data-[manager-drop-target=true]:ring-inset data-[manager-drop-target=true]:ring-blue-500",
 				)}
 			>
 				<span

@@ -224,12 +224,10 @@ export function FileManager(props: FileManagerProps) {
 					onNavigate={navigation.navigate}
 					before={props.placesBefore}
 					getPopupContainer={getPopupContainer}
-					dropTarget={gestures.dropTarget}
 				/>
 				<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 					<FileManagerToolbar
 						actions={commands}
-						dropTarget={gestures.dropTarget}
 						path={path}
 						canBack={navigation.canBack}
 						canForward={navigation.canForward}

@@ -60,9 +60,16 @@ export function useFileManagerGestures(options: Options) {
 	const pointer = useRef<{ x: number; y: number } | null>(null)
 	const ownsDrag = useRef(false)
 	const frame = useRef<number | null>(null)
+	const highlightedTarget = useRef<HTMLElement | null>(null)
 	const [rectangle, setRectangle] = useState<Rectangle | null>(null)
 	const [dropTarget, setDropTarget] = useState<string | null>(null)
 	const [dragMode, setDragMode] = useState<"move" | "copy">("move")
+	const highlightTarget = (element: HTMLElement | null) => {
+		if (highlightedTarget.current === element) return
+		highlightedTarget.current?.removeAttribute("data-manager-drop-target")
+		highlightedTarget.current = element
+		element?.setAttribute("data-manager-drop-target", "true")
+	}
 	const autoExpand = useAutoExpandFolder({ delay: 1000, enabled: options.isActive })
 	const position = (client: { x: number; y: number }) => {
 		const element = options.viewport.current
@@ -140,6 +147,7 @@ export function useFileManagerGestures(options: Options) {
 		stopScroll()
 	})
 	const cleanup = useMemoizedFn(() => {
+		highlightTarget(null)
 		clearSelectionGesture()
 		pointer.current = null
 		if (ownsDrag.current) fileManagerTransfer.setDragging(null)
@@ -186,6 +194,12 @@ export function useFileManagerGestures(options: Options) {
 		event.preventDefault()
 		event.dataTransfer.dropEffect = valid ? (external ? "copy" : mode) : "none"
 		setDropTarget(valid ? targetId : null)
+		// 同一目录可同时出现在侧栏和路径栏；只标记鼠标实际命中的那个入口。
+		highlightTarget(
+			valid && event.target instanceof Element
+				? event.target.closest<HTMLElement>("[data-manager-target]")
+				: null,
+		)
 		setDragMode(mode)
 		pointer.current = { x: event.clientX, y: event.clientY }
 		startScroll()
@@ -207,12 +221,18 @@ export function useFileManagerGestures(options: Options) {
 			return active
 		},
 		onPointerDown: (event: PointerEvent<HTMLDivElement>) => {
+			const target = event.target
+			// Portal 的事件仍沿 React 父树冒泡；菜单点击不能被当作文件空白框选。
 			if (
 				!options.isActive ||
+				event.defaultPrevented ||
 				event.button !== 0 ||
 				event.pointerType === "touch" ||
-				(event.target instanceof HTMLElement &&
-					event.target.closest("[data-manager-item],button,input"))
+				!(target instanceof Element) ||
+				!options.viewport.current?.contains(target) ||
+				target.closest(
+					"[data-manager-item],button,input,textarea,select,a,[role=menu],[role=dialog],[contenteditable=true]",
+				)
 			)
 				return
 			const client = { x: event.clientX, y: event.clientY }
@@ -247,7 +267,7 @@ export function useFileManagerGestures(options: Options) {
 		onLostPointerCapture: () => clearSelectionGesture(),
 		onDragStart: (event: DragEvent<HTMLDivElement>) => {
 			const id =
-				event.target instanceof HTMLElement
+				event.target instanceof Element
 					? event.target.closest<HTMLElement>("[data-manager-item]")?.dataset.managerItem
 					: undefined
 			if (!id) return
@@ -290,6 +310,7 @@ export function useFileManagerGestures(options: Options) {
 			)
 				return
 			pointer.current = null
+			highlightTarget(null)
 			setDropTarget(null)
 			autoExpand.cleanup()
 			stopScroll()

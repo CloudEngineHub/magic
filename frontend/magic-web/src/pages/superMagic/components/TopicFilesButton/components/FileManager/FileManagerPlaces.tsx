@@ -15,7 +15,6 @@ export function FileManagerPlaces({
 	onNavigate,
 	before,
 	getPopupContainer,
-	dropTarget,
 }: {
 	rootId: string
 	rootName: string
@@ -24,7 +23,6 @@ export function FileManagerPlaces({
 	onNavigate: (id: string) => void
 	before?: ReactNode
 	getPopupContainer: () => HTMLElement | null
-	dropTarget: string | null
 }) {
 	const { t } = useTranslation("super")
 	const viewport = useRef<HTMLDivElement>(null)
@@ -46,7 +44,7 @@ export function FileManagerPlaces({
 				className={cn(
 					"flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent",
 					directoryId === rootId && "bg-accent text-accent-foreground",
-					dropTarget === rootId && "ring-2 ring-inset ring-primary",
+					"data-[manager-drop-target=true]:bg-blue-500/10 data-[manager-drop-target=true]:ring-1 data-[manager-drop-target=true]:ring-inset data-[manager-drop-target=true]:ring-blue-500",
 				)}
 				onClick={() => onNavigate(rootId)}
 				data-manager-target={rootId}
@@ -81,7 +79,7 @@ export function FileManagerPlaces({
 									className={cn(
 										"my-0.5 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent",
 										directoryId === id && "bg-accent text-accent-foreground",
-										dropTarget === id && "ring-2 ring-inset ring-primary",
+										"data-[manager-drop-target=true]:bg-blue-500/10 data-[manager-drop-target=true]:ring-1 data-[manager-drop-target=true]:ring-inset data-[manager-drop-target=true]:ring-blue-500",
 									)}
 								>
 									<FileResourceIcon presentation={presentation} size={16} />
