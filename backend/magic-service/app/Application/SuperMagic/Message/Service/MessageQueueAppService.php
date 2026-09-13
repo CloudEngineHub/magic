@@ -9,18 +9,23 @@ namespace App\Application\SuperMagic\Message\Service;
 
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Domain\Chat\Entity\ValueObject\MessageType\ChatMessageType;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\Message\Entity\MessageQueueEntity;
 use App\Domain\SuperMagic\Message\Event\MessageQueueCreatedEvent;
 use App\Domain\SuperMagic\Message\Event\MessageQueueDeletedEvent;
 use App\Domain\SuperMagic\Message\Event\MessageQueueUpdatedEvent;
 use App\Domain\SuperMagic\Message\Service\MessageQueueDomainService;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Context\RequestContext;
 use App\Interfaces\SuperMagic\Message\DTO\Request\ConsumeMessageQueueRequestDTO;
 use App\Interfaces\SuperMagic\Message\DTO\Request\CreateMessageQueueRequestDTO;
+use App\Interfaces\SuperMagic\Message\DTO\Request\MoveMessageQueueRequestDTO;
 use App\Interfaces\SuperMagic\Message\DTO\Request\QueryMessageQueueRequestDTO;
+use App\Interfaces\SuperMagic\Message\DTO\Request\RestoreMessageQueueRequestDTO;
 use App\Interfaces\SuperMagic\Message\DTO\Request\UpdateMessageQueueRequestDTO;
 use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -38,6 +43,8 @@ class MessageQueueAppService extends AbstractAppService
     public function __construct(
         private readonly MessageQueueDomainService $messageQueueDomainService,
         private readonly TopicDomainService $topicDomainService,
+        private readonly ProjectDomainService $projectDomainService,
+        private readonly MessageQueueProcessAppService $messageQueueProcessAppService,
         private readonly EventDispatcherInterface $eventDispatcher,
         LoggerFactory $loggerFactory
     ) {
@@ -65,10 +72,7 @@ class MessageQueueAppService extends AbstractAppService
         $topicId = (int) $requestDTO->getTopicId();
 
         // Validate topic status and ownership (only running topics can add messages) and get TopicEntity
-        $topicEntity = $this->topicDomainService->validateTopicForMessageQueue(
-            $dataIsolation,
-            $topicId
-        );
+        $topicEntity = $this->validateQueueScope($dataIsolation, $projectId, $topicId);
 
         // Validate message type against ChatMessageType enum
         $chatMessageType = ChatMessageType::tryFrom($requestDTO->getMessageType());
@@ -80,13 +84,18 @@ class MessageQueueAppService extends AbstractAppService
         }
 
         // Create message queue
-        $messageEntity = $this->messageQueueDomainService->createMessage(
+        $writeResult = $this->messageQueueDomainService->createMessage(
             $dataIsolation,
             $projectId,
             $topicId,
             $requestDTO->getMessageContent(),
             $chatMessageType
         );
+
+        $messageEntity = $writeResult->message;
+        if (! $writeResult->changed) {
+            return ['queue_id' => (string) $messageEntity->getId(), 'status' => $messageEntity->getStatus()->value];
+        }
 
         // Dispatch MessageQueueCreatedEvent
         $this->eventDispatcher->dispatch(
@@ -103,6 +112,8 @@ class MessageQueueAppService extends AbstractAppService
             'project_id' => $projectId,
             'topic_id' => $topicId,
         ]);
+
+        $this->messageQueueProcessAppService->processTopicMessageQueue($topicId);
 
         return [
             'queue_id' => (string) $messageEntity->getId(),
@@ -192,7 +203,7 @@ class MessageQueueAppService extends AbstractAppService
     /**
      * Delete message queue.
      */
-    public function deleteMessage(RequestContext $requestContext, int $messageId): array
+    public function deleteMessage(RequestContext $requestContext, int $messageId, ?string $expectedSyncId = null): array
     {
         $this->logger->info('Deleting message queue', [
             'message_id' => $messageId,
@@ -205,7 +216,8 @@ class MessageQueueAppService extends AbstractAppService
         // Get message and check permissions and status
         $existingMessage = $this->messageQueueDomainService->getMessageForUser(
             $messageId,
-            $dataIsolation->getCurrentUserId()
+            $dataIsolation->getCurrentUserId(),
+            true
         );
 
         // Validate ownership
@@ -228,7 +240,7 @@ class MessageQueueAppService extends AbstractAppService
         );
 
         // Delete message queue
-        $success = $this->messageQueueDomainService->deleteMessage($dataIsolation, $messageId);
+        $success = $this->messageQueueDomainService->deleteMessage($dataIsolation, $messageId, $expectedSyncId);
 
         // Dispatch MessageQueueDeletedEvent after successful deletion
         if ($success) {
@@ -250,6 +262,7 @@ class MessageQueueAppService extends AbstractAppService
 
         return [
             'rows' => $success ? 1 : 0,
+            'removed' => true,
         ];
     }
 
@@ -312,6 +325,7 @@ class MessageQueueAppService extends AbstractAppService
                 'execute_time' => $messageEntity->getExecuteTime(),
                 'err_message' => $messageEntity->getErrMessage(),
                 'created_at' => $messageEntity->getCreatedAt(),
+                'sort_order' => (string) $messageEntity->getSortOrder(),
             ];
         }
 
@@ -361,6 +375,59 @@ class MessageQueueAppService extends AbstractAppService
         return [
             'status' => $messageEntity->getStatus()->value,
         ];
+    }
+
+    public function restoreMessage(RequestContext $requestContext, int $messageId, RestoreMessageQueueRequestDTO $dto): array
+    {
+        $authorization = $requestContext->getUserAuthorization();
+        $isolation = $this->createDataIsolation($authorization);
+        $topic = $this->validateQueueScope($isolation, (int) $dto->projectId, (int) $dto->topicId);
+        $type = ChatMessageType::tryFrom($dto->messageType);
+        if ($type === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::VALIDATE_FAILED, trans('message_queue.invalid_message_type', ['type' => $dto->messageType]));
+        }
+        $result = $this->messageQueueDomainService->restoreMessage(
+            $isolation, $messageId, (int) $dto->projectId, (int) $dto->topicId, $dto->messageContent, $type,
+            $dto->beforeId === null ? null : (int) $dto->beforeId,
+            $dto->afterId === null ? null : (int) $dto->afterId,
+            $dto->originalIndex, $dto->expectedSyncId
+        );
+        if ($result === null) {
+            return ['result' => 'original_unavailable'];
+        }
+        $message = $result->message;
+        if ($result->changed) {
+            $this->eventDispatcher->dispatch(new MessageQueueUpdatedEvent($message, $topic, $authorization->getId(), $authorization->getOrganizationCode()));
+            $this->messageQueueProcessAppService->processTopicMessageQueue($topic->getId());
+        }
+        return ['result' => 'accepted', 'queue_id' => (string) $message->getId(), 'status' => $message->getStatus()->value];
+    }
+
+    public function moveMessage(RequestContext $requestContext, int $messageId, MoveMessageQueueRequestDTO $dto): array
+    {
+        $authorization = $requestContext->getUserAuthorization();
+        $isolation = $this->createDataIsolation($authorization);
+        $existing = $this->messageQueueDomainService->getMessageForUser($messageId, $authorization->getId());
+        $topic = $this->validateQueueScope($isolation, $existing->getProjectId(), $existing->getTopicId());
+        $message = $this->messageQueueDomainService->moveMessage(
+            $isolation, $messageId,
+            $dto->beforeId === null ? null : (int) $dto->beforeId,
+            $dto->afterId === null ? null : (int) $dto->afterId
+        );
+        $this->eventDispatcher->dispatch(new MessageQueueUpdatedEvent($message, $topic, $authorization->getId(), $authorization->getOrganizationCode()));
+        return ['queue_id' => (string) $message->getId(), 'sort_order' => (string) $message->getSortOrder()];
+    }
+
+    private function validateQueueScope(DataIsolation $isolation, int $projectId, int $topicId): TopicEntity
+    {
+        $topic = $this->topicDomainService->validateTopicForMessageQueue($isolation, $topicId);
+        $project = $this->projectDomainService->getProject($projectId, $isolation->getCurrentUserId());
+        if ($topic->getProjectId() !== $projectId
+            || $topic->getUserOrganizationCode() !== $isolation->getCurrentOrganizationCode()
+            || $project->getUserOrganizationCode() !== $isolation->getCurrentOrganizationCode()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_ACCESS_DENIED, 'topic.topic_access_denied');
+        }
+        return $topic;
     }
 
     public function getMessageQueueEntity(int $queueId, string $userId): ?MessageQueueEntity

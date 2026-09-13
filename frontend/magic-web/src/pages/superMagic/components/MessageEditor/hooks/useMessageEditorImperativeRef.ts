@@ -51,6 +51,13 @@ export default function useMessageEditorImperativeRef({
 	useImperativeHandle(
 		ref,
 		() => ({
+			getDraftKey: store.draftStore.getDraftKey,
+			prepareQueueDraft: store.draftStore.prepareQueueDraft,
+			restoreQueueDraft: store.draftStore.restoreQueueDraft,
+			getQueueDraft: store.draftStore.getQueueDraft,
+			subscribeQueueDraft: store.draftStore.subscribeQueueDraft,
+			keepQueueDraft: store.draftStore.keepQueueDraft,
+			completeQueueDraft: store.draftStore.completeQueueDraft,
 			editor: tiptapEditor,
 			canSendMessage: canSendMessage ?? false,
 			getFiles: () => files,
@@ -81,6 +88,7 @@ export default function useMessageEditorImperativeRef({
 			loadDraftReady,
 			files,
 			store.editorStore.value,
+			store.draftStore,
 			saveSuperMagicTopicModel,
 			setModels,
 		],

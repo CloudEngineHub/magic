@@ -72,13 +72,18 @@ export class LocalStorageDraftService implements DraftServiceInterface {
 
 			const latestDraft = await this.loadFirstDifferentTimeVersion(key, now)
 
-			if (!latestDraft && !hasMeaningfulData(data)) {
+			if (!latestDraft && !hasMeaningfulData(data) && !force) {
 				return
 			}
 
 			let deleteVersionId: string | null = null
 
-			if (isEqualData(data, latestDraft) && latestDraft?.versionId) {
+			if (
+				!force &&
+				isEqualData(data, latestDraft) &&
+				latestDraft?.versionId &&
+				latestDraft.versionId !== versionData.versionId
+			) {
 				deleteVersionId = latestDraft?.versionId
 			}
 

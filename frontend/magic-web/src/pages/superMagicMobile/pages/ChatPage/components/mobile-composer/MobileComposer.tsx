@@ -1,3 +1,4 @@
+import QueueDraftNotice from "@/pages/superMagic/components/MessagePanel/components/MessageQueue/QueueDraftNotice"
 import { EditorContent } from "@/infrastructure/editors/tiptap/react"
 import { ArrowUp, Check, Loader2, Plus, Square, X } from "lucide-react"
 import { useDebounceFn } from "ahooks"
@@ -416,6 +417,7 @@ function MobileComposerComponent({
 		<div className="flex flex-col gap-2 [&:empty]:hidden">
 			{editorNodes?.taskDataNode}
 			{editorNodes?.messageQueueNode}
+			<QueueDraftNotice context={editorContext.queueContext} />
 		</div>
 	)
 	const voiceInputNode = (

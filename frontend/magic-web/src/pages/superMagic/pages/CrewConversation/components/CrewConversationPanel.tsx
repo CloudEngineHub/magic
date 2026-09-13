@@ -172,27 +172,19 @@ function CrewConversationPanel({
 					<MessageQueue
 						queue={messageQueue.queue}
 						queueStats={messageQueue.queueStats}
-						editingQueueItem={messageQueue.editingQueueItem}
 						onRemoveMessage={messageQueue.removeFromQueue}
 						onSendMessage={messageQueue.sendQueuedMessage}
 						onStartEdit={messageQueue.startEditQueueItem}
-						onCancelEdit={messageQueue.cancelEditQueueItem}
+						onWithdraw={messageQueue.withdrawQueueItem}
+						onMove={messageQueue.moveQueueItem}
+						isOperationPending={messageQueue.isQueueOperationPending}
 						variant={isMobile ? "mobile" : "default"}
 					/>
 				</div>
 			) : null
 
 		return { messageQueueNode }
-	}, [
-		messageQueue.queue,
-		messageQueue.queueStats,
-		messageQueue.editingQueueItem,
-		messageQueue.removeFromQueue,
-		messageQueue.sendQueuedMessage,
-		messageQueue.startEditQueueItem,
-		messageQueue.cancelEditQueueItem,
-		isMobile,
-	])
+	}, [messageQueue, isMobile])
 
 	const editorContext = useMemo<SceneEditorContext>(() => {
 		return {
@@ -238,11 +230,8 @@ function CrewConversationPanel({
 						},
 					},
 				}),
-			queueContext: {
-				editingQueueItem: messageQueue.editingQueueItem,
-				addToQueue: messageQueue.addToQueue,
-				finishEditQueueItem: messageQueue.finishEditQueueItem,
-			},
+			editorRef: messageQueue.editorRef,
+			queueContext: messageQueue,
 			size: isMobile ? "mobile" : detailPanelVisible ? "small" : "default",
 		}
 	}, [
@@ -250,9 +239,7 @@ function CrewConversationPanel({
 		detailPanelVisible,
 		handleInterrupt,
 		isMobile,
-		messageQueue.addToQueue,
-		messageQueue.editingQueueItem,
-		messageQueue.finishEditQueueItem,
+		messageQueue,
 		messages.length,
 		selectedProject,
 		selectedTopic,

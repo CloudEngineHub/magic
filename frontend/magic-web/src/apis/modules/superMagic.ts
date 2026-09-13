@@ -2761,7 +2761,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 				page_size,
 			},
 			{
-				enableRequestUnion: true,
+				enableRequestUnion: false,
 			},
 		)
 	},
@@ -2794,15 +2794,62 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	/**
 	 * 主动消费队列消息
 	 */
-	consumeQueueMessage({ messageId }: { messageId: string }) {
-		return fetch.post(`/api/v1/super-agent/message-queue/${messageId}/consume`, {})
+	consumeQueueMessage({ messageId, force }: { messageId: string; force: boolean }) {
+		return fetch.post<{ success: boolean; status: string; error_message: string | null }>(
+			`/api/v1/super-agent/message-queue/${messageId}/consume`,
+			{ force },
+		)
 	},
 
 	/**
 	 * 删除队列消息
 	 */
-	deleteQueueMessage({ messageId }: { messageId: string }) {
-		return fetch.delete(`/api/v1/super-agent/message-queue/${messageId}`)
+	deleteQueueMessage({
+		messageId,
+		expectedSyncId,
+	}: {
+		messageId: string
+		expectedSyncId?: string
+	}) {
+		return fetch.delete<{ rows: number; removed: boolean }>(
+			`/api/v1/super-agent/message-queue/${messageId}`,
+			{ expected_sync_id: expectedSyncId },
+		)
+	},
+
+	restoreQueueMessage({
+		messageId,
+		...params
+	}: {
+		messageId: string
+		project_id: string
+		topic_id: string
+		message_type: string
+		message_content: Record<string, unknown>
+		before_id: string | null
+		after_id: string | null
+		original_index: number
+		expected_sync_id: string
+	}) {
+		return fetch.post<
+			| { result: "accepted"; queue_id: string; status: number }
+			| { result: "original_unavailable" }
+		>(`/api/v1/super-agent/message-queue/${messageId}/restore`, params)
+	},
+
+	moveQueueMessage({
+		messageId,
+		before_id,
+		after_id,
+	}: {
+		messageId: string
+		before_id: string | null
+		after_id: string | null
+	}) {
+		return fetch.patch<{ queue_id: string; sort_order: string }>(
+			`/api/v1/super-agent/message-queue/${messageId}/position`,
+			{ before_id, after_id },
+		)
 	},
 
 	/**

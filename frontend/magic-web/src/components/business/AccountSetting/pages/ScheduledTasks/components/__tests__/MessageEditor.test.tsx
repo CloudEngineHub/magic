@@ -17,6 +17,13 @@ vi.mock(
 			ref,
 		) {
 			const editorApi = {
+				getDraftKey: () => null,
+				prepareQueueDraft: vi.fn(async () => undefined),
+				restoreQueueDraft: vi.fn(async () => undefined),
+				getQueueDraft: () => null,
+				subscribeQueueDraft: vi.fn(() => () => undefined),
+				keepQueueDraft: vi.fn(async () => undefined),
+				completeQueueDraft: vi.fn(async () => false),
 				editor: null,
 				canSendMessage: true,
 				getFiles: () => [],

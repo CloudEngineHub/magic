@@ -20,7 +20,9 @@ vi.mock("react-i18next", () => ({
 				"messageQueue.mobile.title": "队列中",
 				"messageQueue.mobile.count": `${values?.count ?? 0} 条`,
 				"messageQueue.mobile.emptyContent": "⋯",
-				"messageQueue.editMessage": "编辑消息",
+				"messageQueue.edit": "编辑消息",
+				"messageQueue.withdraw": "撤下",
+				"messageQueue.delete": "从队列移除",
 				"messageQueue.exitEdit": "退出编辑",
 				"messageQueue.submitNow": "立即发送",
 				"messageQueue.removeFromQueue": "从队列移除",
@@ -90,11 +92,11 @@ describe("MessageQueue mobile variant", () => {
 					createQueueItem("queue-item-gamma", "Mock queued task gamma"),
 				]}
 				queueStats={queueStats}
-				editingQueueItem={null}
 				onRemoveMessage={vi.fn()}
 				onSendMessage={vi.fn()}
 				onStartEdit={vi.fn()}
-				onCancelEdit={vi.fn()}
+				onWithdraw={vi.fn()}
+				onMove={vi.fn()}
 			/>,
 		)
 
@@ -120,11 +122,11 @@ describe("MessageQueue mobile variant", () => {
 					createQueueItem("queue-item-gamma", "Mock queued task gamma"),
 				]}
 				queueStats={queueStats}
-				editingQueueItem={null}
 				onRemoveMessage={onRemoveMessage}
 				onSendMessage={onSendMessage}
 				onStartEdit={onStartEdit}
-				onCancelEdit={vi.fn()}
+				onWithdraw={vi.fn()}
+				onMove={vi.fn()}
 			/>,
 		)
 
@@ -138,9 +140,9 @@ describe("MessageQueue mobile variant", () => {
 
 		const rowScope = within(firstRow as HTMLElement)
 		const actions = [
-			rowScope.getByTestId("mobile-message-queue-edit-button"),
-			rowScope.getByTestId("mobile-message-queue-send-button"),
-			rowScope.getByTestId("mobile-message-queue-remove-button"),
+			rowScope.getByTestId("on-start-edit"),
+			rowScope.getByTestId("on-send-message"),
+			rowScope.getByTestId("on-remove-message"),
 		]
 		expect(actions.map((button) => button.getAttribute("aria-label"))).toEqual([
 			"编辑消息",
@@ -171,11 +173,11 @@ describe("MessageQueue mobile variant", () => {
 					processing: 0,
 					failed: 0,
 				}}
-				editingQueueItem={null}
 				onRemoveMessage={vi.fn()}
 				onSendMessage={vi.fn()}
 				onStartEdit={vi.fn()}
-				onCancelEdit={vi.fn()}
+				onWithdraw={vi.fn()}
+				onMove={vi.fn()}
 			/>,
 		)
 
@@ -183,8 +185,8 @@ describe("MessageQueue mobile variant", () => {
 		expect(screen.getByText("Mock queued task beta")).toBeInTheDocument()
 	})
 
-	it("disables cancel editing while the edited queue item is saving", () => {
-		const onCancelEdit = vi.fn()
+	it("disables queue actions while a queue operation is saving", () => {
+		const onStartEdit = vi.fn()
 		const editingItem = {
 			...createQueueItem("queue-item-alpha", "Mock queued task alpha"),
 			isEditingLoading: true,
@@ -200,20 +202,20 @@ describe("MessageQueue mobile variant", () => {
 					processing: 0,
 					failed: 0,
 				}}
-				editingQueueItem={editingItem}
+				isOperationPending
 				onRemoveMessage={vi.fn()}
 				onSendMessage={vi.fn()}
-				onStartEdit={vi.fn()}
-				onCancelEdit={onCancelEdit}
+				onStartEdit={onStartEdit}
+				onWithdraw={vi.fn()}
+				onMove={vi.fn()}
 			/>,
 		)
 
-		const cancelButton = screen.getByTestId("mobile-message-queue-cancel-edit-button")
-		expect(cancelButton).toBeDisabled()
-		expect(screen.getByTestId("mobile-message-queue-editing-loading")).toBeInTheDocument()
+		const editButton = screen.getByTestId("on-start-edit")
+		expect(editButton).toBeDisabled()
 
-		fireEvent.click(cancelButton)
-		expect(onCancelEdit).not.toHaveBeenCalled()
+		fireEvent.click(editButton)
+		expect(onStartEdit).not.toHaveBeenCalled()
 	})
 
 	it("shows mention fallback preview text when mention data has no display name", () => {
@@ -232,11 +234,11 @@ describe("MessageQueue mobile variant", () => {
 					processing: 0,
 					failed: 0,
 				}}
-				editingQueueItem={null}
 				onRemoveMessage={vi.fn()}
 				onSendMessage={vi.fn()}
 				onStartEdit={vi.fn()}
-				onCancelEdit={vi.fn()}
+				onWithdraw={vi.fn()}
+				onMove={vi.fn()}
 			/>,
 		)
 

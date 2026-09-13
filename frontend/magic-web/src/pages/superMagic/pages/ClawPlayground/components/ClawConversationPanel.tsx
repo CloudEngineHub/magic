@@ -194,25 +194,18 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 					<MessageQueue
 						queue={messageQueue.queue}
 						queueStats={messageQueue.queueStats}
-						editingQueueItem={messageQueue.editingQueueItem}
 						onRemoveMessage={messageQueue.removeFromQueue}
 						onSendMessage={messageQueue.sendQueuedMessage}
 						onStartEdit={messageQueue.startEditQueueItem}
-						onCancelEdit={messageQueue.cancelEditQueueItem}
+						onWithdraw={messageQueue.withdrawQueueItem}
+						onMove={messageQueue.moveQueueItem}
+						isOperationPending={messageQueue.isQueueOperationPending}
 					/>
 				</div>
 			) : null
 
 		return { messageQueueNode }
-	}, [
-		messageQueue.queue,
-		messageQueue.queueStats,
-		messageQueue.editingQueueItem,
-		messageQueue.removeFromQueue,
-		messageQueue.sendQueuedMessage,
-		messageQueue.startEditQueueItem,
-		messageQueue.cancelEditQueueItem,
-	])
+	}, [messageQueue])
 
 	const editorContext = useMemo<SceneEditorContext>(() => {
 		return {
@@ -242,11 +235,8 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 				})
 				return mergedParams
 			},
-			queueContext: {
-				editingQueueItem: messageQueue.editingQueueItem,
-				addToQueue: messageQueue.addToQueue,
-				finishEditQueueItem: messageQueue.finishEditQueueItem,
-			},
+			editorRef: messageQueue.editorRef,
+			queueContext: messageQueue,
 			size: detailPanelVisible ? "small" : "default",
 		}
 	}, [
@@ -262,9 +252,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 		store.workspaceStore.setSelectedWorkspace,
 		topicModelStore,
 		topicStore,
-		messageQueue.editingQueueItem,
-		messageQueue.addToQueue,
-		messageQueue.finishEditQueueItem,
+		messageQueue,
 		detailPanelVisible,
 	])
 

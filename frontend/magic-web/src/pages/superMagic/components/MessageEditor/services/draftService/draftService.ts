@@ -104,7 +104,7 @@ export class DraftService implements DraftServiceInterface {
 		force?: boolean,
 	): Promise<void> {
 		return this.getStorage().then((storage) => {
-			storage.saveDraftVersion(key, data, force)
+			return storage.saveDraftVersion(key, data, force)
 		})
 	}
 

@@ -160,7 +160,27 @@ export default function useMobileComposerLogic({
 	const selectedProject = editorContext.selectedProject ?? projectStore.selectedProject
 	const selectedTopic = editorContext.selectedTopic ?? topicStore.selectedTopic
 	const draftKey = editorContext.draftKey
-	const onReady = editorContext.onReady
+	const appliedDraftModeRef = useRef<string>()
+	useEffect(() => {
+		const metadata = editorContext.queueContext?.queueDraft?.queueDraft
+		if (!metadata) {
+			appliedDraftModeRef.current = undefined
+			return
+		}
+		if (appliedDraftModeRef.current === metadata.clientSyncId) return
+		appliedDraftModeRef.current = metadata.clientSyncId
+		if (metadata.topicMode)
+			(editorContext.recoverTopicMode ?? editorContext.setTopicMode)?.(metadata.topicMode)
+	}, [
+		editorContext.queueContext?.queueDraft,
+		editorContext.recoverTopicMode,
+		editorContext.setTopicMode,
+	])
+
+	const onReady = useMemoizedFn(() => {
+		editorContext.queueContext?.onEditorReady()
+		editorContext.onReady?.()
+	})
 	const skipInitialDraftRestore = editorContext.skipInitialDraftRestore
 	const effectiveTopicMode = editorContext.topicMode ?? roleStore.currentRole
 	const currentAgentCode = editorContext.agentCode ?? selectedTopic?.agent_code
@@ -387,22 +407,6 @@ export default function useMobileComposerLogic({
 		if (isSending || isPreparingSendRef.current) return
 
 		const queueContext = editorContext.queueContext
-		if (queueContext?.editingQueueItem) {
-			if (!params.queueId || params.queueId === queueContext.editingQueueItem.id) {
-				isPreparingSendRef.current = true
-				setIsPreparingSend(true)
-
-				try {
-					queueContext.finishEditQueueItem(nextValue, params.mentionItems)
-					clearContentAfterSend()
-					setIsComposerFocused(false)
-				} finally {
-					isPreparingSendRef.current = false
-					setIsPreparingSend(false)
-				}
-				return
-			}
-		}
 
 		if (!params.value) return
 
@@ -429,6 +433,16 @@ export default function useMobileComposerLogic({
 			const finalParams = customParamsPatch
 				? { ...defaultParams, ...customParamsPatch }
 				: defaultParams
+			if (queueContext && store.draftStore.getQueueDraft()) {
+				const shouldClear = await queueContext.finishEditQueueItem(
+					buildQueueMessageInput(finalParams, params.value),
+				)
+				if (shouldClear) {
+					clearContentAfterSend()
+					setIsComposerFocused(false)
+				}
+				return
+			}
 			if (showLoading && !isWaitingForUser && !params.isFromQueue && queueContext) {
 				const queueId = await queueContext.addToQueue(
 					buildQueueMessageInput(finalParams, params.value),
@@ -505,6 +519,7 @@ export default function useMobileComposerLogic({
 		canSendMessage,
 		hasLoadingMarker,
 		isAllFilesUploaded,
+		isEditingQueueItem: Boolean(editorContext.queueContext?.editingQueueItem),
 		store,
 		t,
 		onSend: handleSendToServer,
@@ -565,29 +580,6 @@ export default function useMobileComposerLogic({
 		})
 	})
 
-	const prevEditingQueueItemRef = useRef(editorContext.queueContext?.editingQueueItem ?? null)
-
-	useEffect(() => {
-		const currentEditingItem = editorContext.queueContext?.editingQueueItem ?? null
-		const prevEditingItem = prevEditingQueueItemRef.current
-		const currentEditingId = currentEditingItem?.id
-		const prevEditingId = prevEditingItem?.id
-
-		if (currentEditingItem) {
-			if (!prevEditingId || currentEditingId !== prevEditingId) {
-				window.setTimeout(() => {
-					updateContent(currentEditingItem.content)
-					focusEditor()
-				}, 100)
-			}
-		} else if (!currentEditingItem && prevEditingItem) {
-			clearContent()
-			setIsComposerFocused(false)
-		}
-
-		prevEditingQueueItemRef.current = currentEditingItem
-	}, [clearContent, editorContext.queueContext?.editingQueueItem, focusEditor, updateContent])
-
 	useEffect(() => {
 		tiptapCoreRef.current = tiptapEditor
 		store.editorStore.setEditor(tiptapEditor)
@@ -627,6 +619,13 @@ export default function useMobileComposerLogic({
 
 	useEffect(() => {
 		tiptapEditorRef.current = {
+			getDraftKey: store.draftStore.getDraftKey,
+			prepareQueueDraft: store.draftStore.prepareQueueDraft,
+			restoreQueueDraft: store.draftStore.restoreQueueDraft,
+			getQueueDraft: store.draftStore.getQueueDraft,
+			subscribeQueueDraft: store.draftStore.subscribeQueueDraft,
+			keepQueueDraft: store.draftStore.keepQueueDraft,
+			completeQueueDraft: store.draftStore.completeQueueDraft,
 			editor: tiptapCoreRef.current,
 			canSendMessage,
 			getFiles: () => files,
@@ -667,6 +666,11 @@ export default function useMobileComposerLogic({
 				)
 			},
 		}
+		if (editorContext.queueContext?.editorRef) {
+			;(
+				editorContext.queueContext.editorRef as MutableRefObject<MessageEditorRef | null>
+			).current = tiptapEditorRef.current
+		}
 		// 同步到外部 ref，使父级的 useRecordSummaryAudioFile 能访问到编辑器方法
 		if (editorContext.editorRef) {
 			;(editorContext.editorRef as MutableRefObject<MessageEditorRef | null>).current =
@@ -679,6 +683,7 @@ export default function useMobileComposerLogic({
 		clearContentAfterSend,
 		clearFiles,
 		editorContext.editorRef,
+		editorContext.queueContext?.editorRef,
 		files,
 		focusEditor,
 		selectedProject?.id,

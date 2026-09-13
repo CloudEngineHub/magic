@@ -2,7 +2,13 @@ import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { cloneDeep, throttle } from "lodash-es"
 import { logger as Logger } from "@/utils/log"
-import { DraftData, DraftKey, DraftServiceInterface, DraftVersionInfo } from "../../types"
+import {
+	DraftData,
+	DraftKey,
+	DraftServiceInterface,
+	DraftVersionInfo,
+	QueueDraftMetadata,
+} from "../../types"
 import { DraftService } from "./draftService"
 import { genDraftVersionId } from "./utils"
 
@@ -15,6 +21,7 @@ const logger = Logger.createLogger("DraftManager")
 export class DraftManager {
 	private storage: DraftServiceInterface
 	private entries = new Map<string, DraftQueueEntry>()
+	private lastSaveTimestamp = 0
 	private versionByKey = new Map<string, number>()
 
 	constructor(storage?: DraftServiceInterface) {
@@ -30,6 +37,7 @@ export class DraftManager {
 		projectId: string
 		value?: JSONContent | null
 		mentionItems?: MentionListItem[]
+		queueDraft?: QueueDraftMetadata
 	}): Promise<DraftQueueEntry> {
 		const draftKey = {
 			workspaceId: data.workspaceId,
@@ -91,8 +99,11 @@ export class DraftManager {
 		projectId: string
 		value?: JSONContent | null
 		mentionItems?: MentionListItem[]
+		queueDraft?: QueueDraftMetadata
 	}): Promise<void> {
 		const draftKey = {
+			userId: data.queueDraft?.userId,
+			organizationCode: data.queueDraft?.organizationCode,
 			workspaceId: data.workspaceId,
 			projectId: data.projectId,
 			topicId: data.topicId,
@@ -115,10 +126,14 @@ export class DraftManager {
 		entry.pendingVersion = currentVersion
 		this.entries.set(compositeKey, entry)
 
-		if (entry.inFlight) return entry.inFlight as Promise<void>
+		if (entry.inFlight)
+			return entry.inFlight.then(
+				() => undefined,
+				() => undefined,
+			)
 
-		entry.inFlight = (async () => {
-			while (entry.pending) {
+		const write = (async () => {
+			while (entry.pending && !entry.strictDepth) {
 				const next = entry.pending
 				const submitVersion = entry.pendingVersion
 				entry.pending = null
@@ -146,10 +161,60 @@ export class DraftManager {
 					// continue loop to try pending saves if any
 				}
 			}
-			entry.inFlight = null
 		})()
+		entry.inFlight = write
+		try {
+			await write
+		} finally {
+			if (entry.inFlight === write) entry.inFlight = null
+		}
+	}
 
-		return entry.inFlight as Promise<void>
+	/** 显式交接必须确认持久化成功；普通自动保存仍沿用原有错误容错。 */
+	async saveDraftStrict(
+		data: Omit<DraftData, "createdAt" | "updatedAt">,
+		newVersion = false,
+	): Promise<void> {
+		const key = this.getCompositeKey(data.workspaceId, data.projectId, data.topicId)
+		const entry: DraftQueueEntry = this.entries.get(key) ?? {
+			inFlight: null,
+			pending: null,
+			pendingVersion: 0,
+		}
+		const snapshot = cloneDeep(data)
+		snapshot.versionTimestamp = this.nextSaveTimestamp()
+		snapshot.isAutoSaved = false
+		if (newVersion) snapshot.versionId = `saved/${crypto.randomUUID()}`
+		else if (snapshot.queueDraft)
+			snapshot.versionId = `queue/${snapshot.queueDraft.clientSyncId}`
+		// 严格保存是顺序边界：此前的自动保存先完成，此后的输入不能被旧快照覆盖。
+		const previous = entry.inFlight
+		const previousPending = entry.pending
+		entry.pending = null
+		entry.strictDepth = (entry.strictDepth ?? 0) + 1
+		const write = (async () => {
+			await previous?.catch(() => undefined)
+			if (previousPending)
+				await this.storage.saveDraftVersion(
+					previousPending.draftData,
+					previousPending.draftData,
+				)
+			await this.storage.saveDraftVersion(data, snapshot, true)
+		})()
+		entry.inFlight = write
+		this.entries.set(key, entry)
+		try {
+			await write
+		} finally {
+			entry.strictDepth = (entry.strictDepth ?? 1) - 1
+			if (entry.inFlight === write) {
+				entry.inFlight = null
+				// 等待存储期间，自动保存可能重新写入 pending。
+				const pending = entry.pending as DraftQueueEntry["pending"]
+				entry.pending = null
+				if (pending) void this.saveDraft(pending.draftData)
+			}
+		}
 	}
 
 	/**
@@ -211,6 +276,11 @@ export class DraftManager {
 		return `${workspaceId || "global"}:${projectId}:${topicId || "default"}`
 	}
 
+	private nextSaveTimestamp(): number {
+		this.lastSaveTimestamp = Math.max(Date.now(), this.lastSaveTimestamp + 1)
+		return this.lastSaveTimestamp
+	}
+
 	/**
 	 * Prepare save payload
 	 */
@@ -220,9 +290,13 @@ export class DraftManager {
 		projectId: string
 		value?: JSONContent | null
 		mentionItems?: MentionListItem[]
+		queueDraft?: QueueDraftMetadata
 	}): PreparedSavePayload {
 		const draftData: Omit<DraftData, "createdAt" | "updatedAt"> = cloneDeep({
+			versionTimestamp: this.nextSaveTimestamp(),
 			value: data.value || undefined,
+			queueDraft: data.queueDraft,
+			...(data.queueDraft && { versionId: `queue/${data.queueDraft.clientSyncId}` }),
 			mentionItems: data.mentionItems || [],
 			workspaceId: data.workspaceId || "global",
 			projectId: data.projectId,
@@ -321,6 +395,7 @@ interface PreparedSavePayload {
 }
 
 interface DraftQueueEntry {
+	strictDepth?: number
 	inFlight: Promise<void | [void, void]> | null
 	pending: PreparedSavePayload | null
 	pendingVersion: number

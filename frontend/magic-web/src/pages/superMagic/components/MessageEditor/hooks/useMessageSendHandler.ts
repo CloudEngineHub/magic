@@ -111,10 +111,11 @@ export default function useMessageSendHandler({
 		}
 
 		onSendStart?.()
-		store.draftStore.startSendingGuard()
+		const isQueueDraft = Boolean(store.draftStore.queueDraft)
+		if (!isQueueDraft) store.draftStore.startSendingGuard()
 		const mentionItems = collectMentionItemsFromEditor()
 
-		onSend?.({
+		const sendResult = onSend?.({
 			value: content,
 			topicMode,
 			mentionItems,
@@ -122,6 +123,12 @@ export default function useMessageSendHandler({
 			selectedImageModel: store.topicModelStore.selectedImageModel,
 			selectedVideoModel,
 		})
+
+		if (isQueueDraft) {
+			// 队列草稿由协调流程确认入队后再清理，失败或超时继续保留。
+			await sendResult
+			return
+		}
 
 		store.draftStore.createSentDraft({
 			value: store.editorStore.value,

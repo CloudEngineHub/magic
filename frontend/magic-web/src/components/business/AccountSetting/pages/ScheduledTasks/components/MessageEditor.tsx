@@ -222,6 +222,15 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 
 	useImperativeHandle(ref, () => {
 		return {
+			getDraftKey: () => editorStore.draftStore.getDraftKey(),
+			prepareQueueDraft: (draft) => editorStore.draftStore.prepareQueueDraft(draft),
+			restoreQueueDraft: (draft, activate) =>
+				editorStore.draftStore.restoreQueueDraft(draft, activate),
+			getQueueDraft: () => editorStore.draftStore.getQueueDraft(),
+			subscribeQueueDraft: (listener) => editorStore.draftStore.subscribeQueueDraft(listener),
+			keepQueueDraft: () => editorStore.draftStore.keepQueueDraft(),
+			completeQueueDraft: (syncId, value) =>
+				editorStore.draftStore.completeQueueDraft(syncId, value),
 			get editor() {
 				return innerRef.current?.editor ?? null
 			},
