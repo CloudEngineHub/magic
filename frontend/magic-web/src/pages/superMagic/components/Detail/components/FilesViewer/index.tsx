@@ -26,6 +26,7 @@ import type { FilesViewerProps, FilesViewerRef, TabItem as TabItemType } from ".
 
 // Hooks
 import { useFilesViewer } from "./hooks/useFilesViewer"
+import { useTabDrag } from "./hooks/useTabDrag"
 import { useTabContextMenu } from "./hooks/useTabContextMenu"
 import { useTabCache } from "./hooks/useTabCache"
 
@@ -115,13 +116,7 @@ const FilesViewer = memo(
 				getRenderProps,
 				fullscreenFileId,
 				handleRefresh,
-				handleTabDragStart,
-				handleTabDragEnd,
-				handleTabDragOver,
-				handleTabDrop,
-				draggedTab,
-				dragOverIndex,
-				dragDirection,
+				reorderTabs,
 				openPlaybackTab,
 				closePlaybackTab,
 				isPlaybackTab,
@@ -134,6 +129,11 @@ const FilesViewer = memo(
 				exitPreviewFullscreen,
 				getCheckBeforeClose,
 			} = useFilesViewer(props)
+			const { isDragging, handleDragStart, handleDragEnd } = useTabDrag({
+				tabs,
+				containerRef: tabsContainerRef,
+				onReorder: reorderTabs,
+			})
 
 			// 使用缓存 Hook
 			const {
@@ -334,31 +334,24 @@ const FilesViewer = memo(
 			}, [activeTab?.id, tabs.length])
 
 			// 渲染tab项
-			const renderTabItem = (tab: TabItemType, index: number) => {
+			const renderTabItem = (tab: TabItemType) => {
 				const isActive = activeTab?.id === tab.id
-				const isDragging = draggedTab?.id === tab.id
-				const isDragOver = dragOverIndex === index
 				const isPlayback = isPlaybackTab(tab.id)
 
 				return (
 					<TabItem
 						key={tab.id}
 						tab={tab}
-						index={index}
 						allTabs={tabs}
 						isActive={isActive}
 						isDragging={isDragging}
-						isDragOver={isDragOver}
-						dragDirection={dragDirection || undefined}
 						isPlayback={isPlayback}
 						contextMenuState={contextMenuState}
 						attachments={tabAttachments}
 						onSwitchToTab={switchToTab}
 						onCloseTab={handleTabClose}
-						onDragStart={handleTabDragStart}
-						onDragEnd={handleTabDragEnd}
-						onDragOver={handleTabDragOver}
-						onDrop={handleTabDrop}
+						onDragStart={handleDragStart}
+						onDragEnd={handleDragEnd}
 					/>
 				)
 			}
@@ -630,9 +623,10 @@ const FilesViewer = memo(
 									controlBackground="rgb(var(--accent-rgb))"
 									scrollContainerClassName="no-scrollbar flex h-full w-full items-center overflow-x-auto overflow-y-hidden px-1 gap-0.5"
 									scrollContainerRef={tabsContainerRef}
+									dragIgnoreSelector="[data-tab-id], button, a, input, [role='button']"
 									onScrollContainerContextMenu={handleContainerContextMenu}
 								>
-									{tabs.map((tab, index) => renderTabItem(tab, index))}
+									{tabs.map(renderTabItem)}
 								</HeadlessHorizontalScroll>
 
 								<WebsitePresetMenu onOpenWebsiteTab={openWebsiteTab} />

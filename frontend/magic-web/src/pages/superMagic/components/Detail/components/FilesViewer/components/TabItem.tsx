@@ -17,12 +17,9 @@ import {
 
 interface TabItemProps {
 	tab: TabItemType
-	index: number
 	allTabs: TabItemType[]
 	isActive: boolean
 	isDragging: boolean
-	isDragOver: boolean
-	dragDirection?: "left" | "right"
 	isPlayback: boolean
 	contextMenuState?: TabContextMenuState
 	/** 用于解析 custom icon（入口文件需父目录子树） */
@@ -31,8 +28,6 @@ interface TabItemProps {
 	onCloseTab: (tabId: string) => void
 	onDragStart?: (e: React.DragEvent, tab: TabItemType) => void
 	onDragEnd?: (e: React.DragEvent) => void
-	onDragOver?: (e: React.DragEvent, index: number) => void
-	onDrop?: (e: React.DragEvent, index: number) => void
 }
 
 // 获取文件路径用作tooltip的工具函数
@@ -64,12 +59,9 @@ const getFileTooltip = (tab: TabItemType, unknownFileText: string) => {
 const TabItem = memo<TabItemProps>(
 	({
 		tab,
-		index,
 		allTabs,
 		isActive,
 		isDragging,
-		isDragOver,
-		dragDirection,
 		isPlayback,
 		contextMenuState,
 		attachments,
@@ -77,8 +69,6 @@ const TabItem = memo<TabItemProps>(
 		onCloseTab,
 		onDragStart,
 		onDragEnd,
-		onDragOver,
-		onDrop,
 	}) => {
 		const { t } = useTranslation("super")
 		const displayConfig = (
@@ -89,11 +79,11 @@ const TabItem = memo<TabItemProps>(
 
 		// 当右键菜单显示且是当前 tab 时，隐藏 Tooltip
 		const tooltipOpen = useMemo(() => {
-			if (contextMenuState?.visible) {
+			if (contextMenuState?.visible || isDragging) {
 				return false
 			}
 			return undefined
-		}, [contextMenuState?.visible])
+		}, [contextMenuState?.visible, isDragging])
 
 		// 获取当前标签页显示的文件名（与渲染逻辑保持一致）
 		const getDisplayFileName = (tabItem: TabItemType) => {
@@ -161,6 +151,7 @@ const TabItem = memo<TabItemProps>(
 		const handleDragStart = (e: React.DragEvent) => {
 			if (!isPlayback && onDragStart) {
 				onDragStart(e, tab)
+				if (e.defaultPrevented) return
 				handleTabDragStartMessageEditor(e, tab)
 			}
 		}
@@ -169,18 +160,6 @@ const TabItem = memo<TabItemProps>(
 			if (!isPlayback && onDragEnd) {
 				onDragEnd(e)
 				handleTabDragEndMessageEditor(e)
-			}
-		}
-
-		const handleDragOver = (e: React.DragEvent) => {
-			if (onDragOver) {
-				onDragOver(e, index)
-			}
-		}
-
-		const handleDrop = (e: React.DragEvent) => {
-			if (onDrop) {
-				onDrop(e, index)
 			}
 		}
 
@@ -196,26 +175,16 @@ const TabItem = memo<TabItemProps>(
 			>
 				<div
 					className={cn(
-						"relative flex h-7 shrink-0 select-none items-center justify-center gap-1 overflow-visible whitespace-nowrap rounded-lg px-2 py-1.5 transition-all duration-200",
+						"relative flex h-7 shrink-0 select-none items-center justify-center gap-1 overflow-visible whitespace-nowrap rounded-lg px-2 py-1.5 transition-colors duration-200",
 						isPlayback ? "cursor-pointer" : "cursor-grab",
 						!isPlayback && "hover:bg-black/5",
 						isActive && "bg-background shadow-sm shadow-black/10 hover:bg-background",
-						isDragging && !isPlayback && "z-10 scale-95 cursor-grabbing opacity-60",
-						isDragOver && "bg-primary-10",
-						isDragOver &&
-							dragDirection === "left" &&
-							"translate-x-[2px] border-l-[3px] border-l-primary",
-						isDragOver &&
-							dragDirection === "right" &&
-							"-translate-x-[2px] border-r-[3px] border-r-primary",
 					)}
 					onClick={handleClick}
 					data-tab-id={tab.id}
 					draggable={!isPlayback}
 					onDragStart={!isPlayback ? handleDragStart : undefined}
 					onDragEnd={!isPlayback ? handleDragEnd : undefined}
-					onDragOver={handleDragOver}
-					onDrop={handleDrop}
 					data-testid="handle-click"
 				>
 					<FileTabMagicIcon
@@ -256,6 +225,13 @@ const TabItem = memo<TabItemProps>(
 								isActive && "text-foreground/80",
 							)}
 							onClick={handleClose}
+							draggable={false}
+							onPointerDown={(event) => {
+								event.stopPropagation()
+								event.preventDefault()
+							}}
+							onDragStart={(event) => event.preventDefault()}
+							data-tab-close
 							data-testid="handle-close"
 						>
 							<IconX size={12} />
