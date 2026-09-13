@@ -17,6 +17,7 @@ from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
 from agentlang.utils.syntax_checker import SyntaxChecker
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.horizon.agent_horizon import VALIDATION_ERROR_NOT_READ
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
@@ -94,12 +95,17 @@ STRONGLY PREFERRED when you need to make multiple edits to the same file.
 This tool is more efficient than calling edit_file multiple times.
 
 Workflow for multiple edits:
-1. Read the file ONCE to identify all locations that need editing
+1. Obtain the exact content needed for all edits; do not repeat a read when a file observation and sufficient context already exist
 2. Plan all edits together (old_string and new_string for each)
 3. Call this tool ONCE with all edits in the edits array
 4. DO NOT read the file again between edits - this is the whole point of this tool
 
 Each edit's requirements are the same as the edit_file tool, please refer to the edit_file tool's hints.
+The file must have a recorded observation from read_file/read_files, grep_search, or a recognized
+single-file shell view. User-provided snippets do not create a record; partial reads do not restrict
+edit locations. If the version changed, every applied edit must request and match exactly one
+replacement in its sequential step. Otherwise follow the error's reading guidance. Read surrounding
+content when needed for your decision; skipped no-ops do not count as replacements.
 
 IMPORTANT: Copy text exactly as it appears in the file, including punctuation style.
 When copying from read_file output, copy only the actual file content after the line-number prefix.
@@ -132,11 +138,11 @@ Never include the line number + tab in any old_string or new_string.
                           "Use write_file to create new files."
                 )
 
-            # Verify file hasn't been modified externally
-            is_valid, error_message = await self.get_horizon(tool_context).validate_file_not_modified(file_path)
-            if not is_valid:
+            # 内部读取只服务本次匹配，不能替代编辑前必须已有的观察记录。
+            horizon = self.get_horizon(tool_context)
+            if not await horizon.is_file_tracked(file_path):
                 tool_context.set_metadata("error_type", "edit_file.error_file_modified")
-                return ToolResult.error(error_message)
+                return ToolResult.error(VALIDATION_ERROR_NOT_READ)
 
             # Read original content
             original_content = await self._read_file(file_path)
@@ -273,6 +279,15 @@ Never include the line number + tab in any old_string or new_string.
                 if ai_warnings:
                     msg += "\n\n" + "\n\n".join(ai_warnings)
                 return ToolResult(content=msg)
+
+            # applied_edits 只含实际执行项，且上面已确认实际次数等于请求次数。
+            # 每项均唯一才允许版本变化；任一多次替换仍要求原版本未变。
+            is_valid, error_message = await horizon.validate_file_not_modified(
+                file_path, allow_changed=all(edit['replacements'] == 1 for edit in applied_edits),
+            )
+            if not is_valid:
+                tool_context.set_metadata("error_type", "edit_file.error_file_modified")
+                return ToolResult.error(error_message)
 
             # Write the final result with file versioning (triggers events and updates timestamp)
             async with self._file_versioning_context(tool_context, file_path):

@@ -588,9 +588,14 @@ class AgentHorizon:
         )
 
     async def validate_file_not_modified(
-        self, file_path: Union[str, Path]
+        self, file_path: Union[str, Path], *, allow_changed: bool = False
     ) -> Tuple[bool, str]:
-        """编辑前校验文件自上次读/写后是否被外部修改。"""
+        """编辑前校验文件观察记录及当前版本。
+
+        allow_changed 仅供已确认唯一精确目标的调用方使用：无关正文变化可以通过，
+        无观察记录、缺历史 hash 或检查失败仍拒绝。范围编辑保留默认严格校验。
+        此处不更新记录，避免失败的编辑尝试成为新的观察依据。
+        """
         await self._ensure_loaded()
         abs_path = _abs(file_path)
 
@@ -607,12 +612,12 @@ class AgentHorizon:
                 if not rec.file_hash:
                     return False, VALIDATION_ERROR_CHANGED
                 current_hash = await calculate_file_hash(abs_path)
-                if current_hash != rec.file_hash:
+                if current_hash != rec.file_hash and not allow_changed:
                     return False, VALIDATION_ERROR_CHANGED
                 return True, ""
             else:
                 # 大文件：mtime 快速校验
-                if mtime_ms > rec.file_mtime_ms:
+                if mtime_ms > rec.file_mtime_ms and not allow_changed:
                     return False, VALIDATION_ERROR_CHANGED
                 return True, ""
         except FileNotFoundError:

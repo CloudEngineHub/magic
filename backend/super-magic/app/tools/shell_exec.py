@@ -14,6 +14,7 @@ from app.tools.core.shell_command_parser import ShellCommandParser
 from app.tools.shell_exec_utils.bg_errors import err_task_limit_reached
 from app.tools.shell_exec_utils.bg_process_manager import BackgroundProcessManager, TooManyBackgroundTasksError
 from app.tools.shell_exec_utils.bg_task_models import BackgroundStartResult
+from app.tools.shell_exec_utils.command_parser import extract_read_file_path
 from app.tools.shell_exec_utils.dispatcher import DISPATCHER
 from app.tools.shell_exec_utils.tool_detail_marker import (
     apply_tool_detail_markers,
@@ -150,6 +151,7 @@ Background mode rules (allow_background=True):
                     logger.warning(f"Failed to dispatch before-execution event: {e}")
 
             extra_env = self._build_shell_extra_env(tool_context)
+            read_file_path = extract_read_file_path(params.command, work_dir)
 
             # ── 后台模式 ──────────────────────────────────────────────────────
             if params.allow_background:
@@ -174,6 +176,16 @@ Background mode rules (allow_background=True):
                     timeout=params.timeout,
                     extra_env=extra_env,
                 )
+
+            # 后台启动已在上面返回；只有实际完成且输出正文的查看命令才登记。
+            # stdout 仅判断有无输出，不当作全文或已读行号；登记失败不重执行命令。
+            if read_file_path is not None and result.exit_code == 0 and result.extra_info.get("stdout"):
+                try:
+                    await self.get_horizon(tool_context).record_file_observation(
+                        read_file_path, tool_name="shell_exec",
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to record shell file observation {read_file_path}: {e}")
 
             # 有 horizon_hint 时通过 horizon 推送引导提示，不写入 tool result content
             if result.horizon_hint:
