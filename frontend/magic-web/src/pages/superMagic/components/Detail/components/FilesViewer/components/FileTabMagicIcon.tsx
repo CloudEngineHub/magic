@@ -10,6 +10,7 @@ import { memo, useMemo } from "react"
 import type { FileItem, TabItem } from "../types"
 import { AppWindow, Globe2 } from "lucide-react"
 import { isWebsiteTab } from "../utils/websiteTabs"
+import { isMicroAppDisplayType } from "@/constants/microApp"
 
 interface FileTabMagicIconProps {
 	tab: TabItem
@@ -63,7 +64,7 @@ export const FileTabMagicIcon = memo(function FileTabMagicIcon({
 		return <SlidesTemplateFolderIcon size={size} className={className} />
 	}
 
-	if (fd.display_config?.type === "custom" || fd.display_config?.type === "micro-app") {
+	if (fd.display_config?.type === "custom" || isMicroAppDisplayType(fd.display_config?.type)) {
 		return (
 			<CustomFolderMagicIcon
 				displayConfig={fd.display_config}

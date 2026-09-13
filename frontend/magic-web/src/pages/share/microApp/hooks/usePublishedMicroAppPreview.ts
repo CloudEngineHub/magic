@@ -77,6 +77,7 @@ export function usePublishedMicroAppPreview({
 	}, [])
 
 	return {
+		appId,
 		...shareDataState,
 		hasConfirmedSafetyNotice,
 		confirmSafetyNotice,

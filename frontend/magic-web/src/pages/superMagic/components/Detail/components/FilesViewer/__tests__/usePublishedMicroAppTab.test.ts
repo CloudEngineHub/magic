@@ -4,7 +4,7 @@ import { usePublishedMicroAppTab } from "../hooks/usePublishedMicroAppTab"
 
 describe("usePublishedMicroAppTab", () => {
 	it("opens a published micro-app tab keyed by app id and reuses it on repeat open", () => {
-		const { result } = renderHook(() => usePublishedMicroAppTab())
+		const { result } = renderHook(() => usePublishedMicroAppTab("project-open"))
 
 		act(() => {
 			result.current.openPublishedMicroAppTab({
@@ -54,8 +54,56 @@ describe("usePublishedMicroAppTab", () => {
 		).toBe(true)
 	})
 
+	it("preserves the active tab when the viewer remounts for the same project", () => {
+		const firstViewer = renderHook(() => usePublishedMicroAppTab("project-persist"))
+
+		act(() => {
+			firstViewer.result.current.openPublishedMicroAppTab({
+				appId: "app-1",
+				appName: "客户看板",
+			})
+		})
+		firstViewer.unmount()
+
+		const nextViewer = renderHook(() => usePublishedMicroAppTab("project-persist"))
+
+		expect(nextViewer.result.current.publishedMicroAppTabs).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "__micro_app__app-1",
+					active: true,
+					data: { appId: "app-1", appName: "客户看板" },
+				}),
+			]),
+		)
+		nextViewer.unmount()
+	})
+
+	it("does not share tabs between projects", () => {
+		const firstViewer = renderHook(() => usePublishedMicroAppTab("project-isolated-a"))
+		act(() => firstViewer.result.current.openPublishedMicroAppTab({ appId: "app-a" }))
+		firstViewer.unmount()
+
+		const secondViewer = renderHook(() => usePublishedMicroAppTab("project-isolated-b"))
+
+		expect(secondViewer.result.current.publishedMicroAppTabs).toEqual([])
+		secondViewer.unmount()
+	})
+
+	it("does not restore a tab after the user closes it", () => {
+		const firstViewer = renderHook(() => usePublishedMicroAppTab("project-closed"))
+		act(() => firstViewer.result.current.openPublishedMicroAppTab({ appId: "app-closed" }))
+		act(() => firstViewer.result.current.closePublishedMicroAppTab("__micro_app__app-closed"))
+		firstViewer.unmount()
+
+		const nextViewer = renderHook(() => usePublishedMicroAppTab("project-closed"))
+
+		expect(nextViewer.result.current.publishedMicroAppTabs).toEqual([])
+		nextViewer.unmount()
+	})
+
 	it("ignores empty app ids", () => {
-		const { result } = renderHook(() => usePublishedMicroAppTab())
+		const { result } = renderHook(() => usePublishedMicroAppTab("project-empty"))
 
 		act(() => {
 			result.current.openPublishedMicroAppTab({ appId: "  " })

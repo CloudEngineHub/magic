@@ -30,16 +30,19 @@ import {
 	resolveIframeHostTopicMode,
 } from "@/pages/superMagic/utils/isSingleTopicHostProject"
 import { notifySpecifiedAgentUnavailable } from "@/pages/superMagic/utils/notifySpecifiedAgentUnavailable"
+import { prependMicroAppMention, type MicroAppMessageContext } from "./microAppMessageMention"
 
 /**
  * @param projectId 原项目（origin）：文件/库所在项目，用于 mention 解析
  * @param topicStore 调用方传入的会话 store；未传则会话类 API 不可用
  * @param selectedProject 宿主项目（host）：用户当前所在项目，用于建话题和发送
+ * @param microAppContext 已发布微应用的可信身份；存在时自动添加 @micro_app mention
  */
 export function useIframeAgentActions(
 	projectId?: string,
 	topicStore?: TopicStore,
 	selectedProject?: ProjectListItem | null,
+	microAppContext?: MicroAppMessageContext,
 ) {
 	// origin：发布预览嵌在别的项目时，仍指向微应用原项目
 	const originProjectId = projectId
@@ -82,10 +85,11 @@ export function useIframeAgentActions(
 		}) => {
 			if (!topicStore || !hostProjectId) return false
 
-			const screenshotMentions = collectMentionItemsFromContent(jsonContent as JSONContent)
+			const messageContent = prependMicroAppMention(jsonContent, microAppContext)
+			const screenshotMentions = collectMentionItemsFromContent(messageContent as JSONContent)
 			// mention / 截图解析走 origin：文件仍在原微应用项目
 			const processedJsonContent = (await processMessageMentions(
-				jsonContent as JSONContent,
+				messageContent as JSONContent,
 				originProjectId ?? hostProjectId,
 				targetTopic?.id ?? topicStore.selectedTopic?.id,
 			)) as TiptapJSONContent
@@ -235,11 +239,13 @@ export function useIframeAgentActions(
 				model: params.model,
 				extra,
 				targetTopic: topicWithAgent,
+				// 未指定 agent 时遵循普通项目约定，使用通用模式；微应用只是消息来源，
+				// 不应限制宿主话题只能使用 micro-app agent。
 				topicMode: requestedAgentId
 					? isCustomAgent
 						? TopicMode.CustomAgent
 						: (requestedAgentId as TopicMode)
-					: TopicMode.MicroApp,
+					: TopicMode.General,
 			})
 			if (!sent) throw new Error("Failed to send message")
 

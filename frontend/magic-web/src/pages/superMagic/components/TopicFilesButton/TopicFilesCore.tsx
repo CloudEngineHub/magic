@@ -90,6 +90,7 @@ import {
 	getFileTreeIconType,
 	getFileIconType,
 } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
+import { isMicroAppDisplayType } from "@/constants/microApp"
 import { isEmpty } from "lodash-es"
 import { Button } from "@/components/shadcn-ui/button"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
@@ -1720,7 +1721,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							) : isSlidesTemplate ? (
 								<SlidesTemplateFolderIcon size={16} />
 							) : display_config?.type ? (
-								["custom", "micro-app"].includes(display_config?.type) &&
+								(display_config?.type === "custom" ||
+									isMicroAppDisplayType(display_config?.type)) &&
 								(display_config?.type === "custom" || item?.is_directory) ? (
 									<CustomFolderMagicIcon
 										displayConfig={item?.display_config}
@@ -1955,7 +1957,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						) : resolveProjectInstructionsFileKind(item) ? (
 							<TopicFileIcon magicVariant="magic-file-agent" size={16} />
 						) : item?.display_config?.type === "custom" ||
-						  (item?.display_config?.type === "micro-app" && item?.is_directory) ? (
+						  (isMicroAppDisplayType(item?.display_config?.type) &&
+								item?.is_directory) ? (
 							<CustomFolderMagicIcon
 								displayConfig={item?.display_config}
 								childrenItems={getChildrenForCustomMetadataIconPath(item, (id) =>

@@ -70,7 +70,8 @@ generateBtn.addEventListener("click", async () => {
 
   // 3. Trigger skill (createTopicAndSend + @file SKILL.md)
   const agentId = document.getElementById("agent-select").value || undefined;
-  const model = document.getElementById("model-select").value || "auto";
+  const model = document.getElementById("model-select").value;
+  if (!model) throw new Error("No available models");
 
   await window.Magic.project.createTopicAndSend({
     type: "doc",
@@ -159,7 +160,7 @@ async function dispatchToAgent(agentId, taskDescription, taskId) {
         }}
       ]
     }]
-  }, { agentId, model: "auto" });
+  }, { agentId, model: selectedModelId });
   return topicId;
 }
 
@@ -176,7 +177,7 @@ async function runPipeline(steps) {
           data: { file_id: `step_${i}`, file_name: `pipeline-step-${i}.md`, file_path: `data/outputs/pipeline-step-${i}.md`, file_extension: "md" }
         }}
       ]}]
-    }, { agentId: step.agentId, model: "auto" });
+    }, { agentId: step.agentId, model: selectedModelId });
     await waitForFile(`data/outputs/pipeline-step-${i}.md`);
   }
 }

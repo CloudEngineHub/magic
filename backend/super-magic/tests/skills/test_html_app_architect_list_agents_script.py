@@ -29,7 +29,7 @@ def install_package_tree(monkeypatch, dotted_name):
         monkeypatch.setitem(sys.modules, name, module)
 
 
-def test_micro_app_architect_list_agents_hides_raw_sdk_errors(monkeypatch, capsys):
+def test_html_app_architect_list_agents_hides_raw_sdk_errors(monkeypatch, capsys):
     install_package_tree(monkeypatch, "_shared")
     install_module(monkeypatch, "_shared.bootstrap")
 
@@ -70,7 +70,7 @@ def test_micro_app_architect_list_agents_hides_raw_sdk_errors(monkeypatch, capsy
         Path(__file__).resolve().parents[2]
         / "agents"
         / "skills"
-        / "micro-app-architect"
+        / "html-app-architect"
         / "scripts"
         / "list_agents.py"
     )

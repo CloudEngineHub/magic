@@ -20,6 +20,7 @@ import {
 import { getCanvasElementSourcePreview } from "../canvas-elements/item-utils"
 import { CanvasElementResourceIcon } from "../canvas-elements/CanvasElementResourceIcon"
 import { MentionFileImagePreviewBox } from "./MentionFileImagePreviewBox"
+import { isMicroAppDisplayType } from "@/constants/microApp"
 
 function getFileRowIconSize(platform: MentionItemRendererContext["platform"]) {
 	return platform === "desktop" ? 16 : 20
@@ -176,7 +177,7 @@ function ProjectMentionPanelFileImageIcon(props: {
 
 		if (
 			fileDisplayConfig?.type === "custom" ||
-			(fileDisplayConfig?.type === "micro-app" && isDirectoryLikeMentionItem(item))
+			(isMicroAppDisplayType(fileDisplayConfig?.type) && isDirectoryLikeMentionItem(item))
 		) {
 			// 优先使用 _customFolderId（入口文件需从原始 custom 文件夹解析 icon_path）
 			const customFolderId = getCustomFolderId(fileDisplayConfig)

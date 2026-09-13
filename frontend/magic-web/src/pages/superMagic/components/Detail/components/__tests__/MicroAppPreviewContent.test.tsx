@@ -23,7 +23,7 @@ vi.mock("@/pages/share/microApp/hooks/useMicroAppShareData", () => ({
 		shareData: shareDataState.shareData,
 		resourceId: "resource-1",
 		coverUrl: "",
-		shareMeta: { projectId: "project-1", projectName: "内购", temporaryToken: "" },
+		shareMeta: { projectId: "project-1", projectName: "内购", temporaryToken: "share-token" },
 		attachmentsTree: [],
 		attachmentList: shareDataState.attachmentList,
 		loading: shareDataState.loading,
@@ -79,6 +79,8 @@ vi.mock("@/pages/share/microApp/components/MicroAppSafetyNotice", () => ({
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 	default: (props: {
 		projectId?: string
+		microAppId?: string
+		microAppName?: string
 		selectedProject?: { id?: string } | null
 		topicStore?: unknown
 		isSharePreview?: boolean
@@ -86,6 +88,8 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 		<div
 			data-testid="mock-html-preview"
 			data-project-id={props.projectId}
+			data-micro-app-id={props.microAppId}
+			data-micro-app-name={props.microAppName}
 			data-host-project-id={props.selectedProject?.id}
 			data-has-topic-store={props.topicStore ? "true" : "false"}
 			data-is-share-preview={props.isSharePreview ? "true" : "false"}
@@ -128,6 +132,14 @@ describe("MicroAppPreviewContent", () => {
 			"true",
 		)
 		expect(screen.queryByTestId("micro-app-share-page")).not.toBeInTheDocument()
+		expect(screen.getByTestId("mock-html-preview")).toHaveAttribute(
+			"data-micro-app-id",
+			"app-1",
+		)
+		expect(screen.getByTestId("mock-html-preview")).toHaveAttribute(
+			"data-micro-app-name",
+			"内购",
+		)
 	})
 
 	it("shows loading, password, and error states inside the tab", () => {

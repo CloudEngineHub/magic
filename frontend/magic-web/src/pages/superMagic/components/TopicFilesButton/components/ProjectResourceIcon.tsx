@@ -14,6 +14,7 @@ import {
 } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
+import { isMicroAppDisplayType } from "@/constants/microApp"
 
 interface ProjectResourceIconProps {
 	item: AttachmentItem
@@ -53,7 +54,7 @@ export function ProjectResourceIcon({
 	const displayConfigType = resourceItem.display_config?.type
 	const projectInstructionsFileKind = resolveProjectInstructionsFileKind(resourceItem)
 	const isCustomMetadata = displayConfigType === "custom"
-	const isMicroAppMetadata = displayConfigType === "micro-app"
+	const isMicroAppMetadata = isMicroAppDisplayType(displayConfigType)
 	const childrenItems =
 		isCustomMetadata || isMicroAppMetadata
 			? getChildrenForCustomMetadataIconPath(resourceItem, (id) =>

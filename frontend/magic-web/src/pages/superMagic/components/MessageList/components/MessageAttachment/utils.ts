@@ -1,3 +1,5 @@
+import { isMicroAppDisplayType } from "@/constants/microApp"
+
 /** magic.project.js 应始终以代码模式打开，图标使用 file_extension，不参与内容类型渲染 */
 const MAGIC_PROJECT_JS = "magic.project.js"
 
@@ -210,11 +212,16 @@ export function getCustomIndexPath(displayConfig: any): string | undefined {
 }
 
 /**
- * custom / micro-app 文件夹图标配置字符串（display_config.icon，兼容旧字段 display_config.icon_path）。
+ * custom / micro-app / html-app 文件夹图标配置字符串（display_config.icon，兼容旧字段 display_config.icon_path）。
  * 可为：相对文件夹根的路径；或以 http(s) / data: 开头的可直接作为 img src 的地址。
  */
 export function getCustomIcon(displayConfig: any): string | undefined {
-	if (!displayConfig || !["custom", "micro-app"].includes(displayConfig.type)) return undefined
+	if (
+		!displayConfig ||
+		(displayConfig.type !== "custom" && !isMicroAppDisplayType(displayConfig.type))
+	) {
+		return undefined
+	}
 	const p = displayConfig.icon ?? displayConfig.icon_path
 	if (typeof p === "string" && p.trim()) return p.trim()
 	return undefined
@@ -235,14 +242,15 @@ export function resolveCustomIconPathToDirectSrc(iconPath: string): string | und
 }
 
 /**
- * 树/列表里「文件」行：合并了 custom/micro-app display_config 时仍可按扩展名作为 MagicFileIcon 回退（无 icon 或远程失败时）
+ * 树/列表里「文件」行：合并了 custom/micro-app/html-app display_config 时仍可按扩展名作为 MagicFileIcon 回退（无 icon 或远程失败时）
  */
 export function getFileTreeIconType(item?: MagicProjectIconContext): string | undefined {
 	const magicProjectIconType = resolveMagicProjectIconType(item)
 	if (magicProjectIconType) return magicProjectIconType
 
 	if (
-		(item?.display_config?.type === "custom" || item?.display_config?.type === "micro-app") &&
+		(item?.display_config?.type === "custom" ||
+			isMicroAppDisplayType(item?.display_config?.type)) &&
 		typeof item?.file_extension === "string" &&
 		item.file_extension.trim()
 	) {

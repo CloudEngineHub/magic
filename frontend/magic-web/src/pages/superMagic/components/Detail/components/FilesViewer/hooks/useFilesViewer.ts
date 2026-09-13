@@ -263,7 +263,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		closePublishedMicroAppTab: closePublishedMicroAppTabOriginal,
 		isPublishedMicroAppTab,
 		deactivateAllPublishedMicroAppTabs,
-	} = usePublishedMicroAppTab()
+	} = usePublishedMicroAppTab(viewerProjectId)
 
 	// 当前是否有激活的预览 tab（文件 / 知识库 / 微应用）
 	const hasActiveFileTab = useMemo(

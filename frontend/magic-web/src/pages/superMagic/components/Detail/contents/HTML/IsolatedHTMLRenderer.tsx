@@ -232,6 +232,9 @@ interface IsolatedHTMLRendererProps {
 	openNewTab: (fileId: string, path: string, autoEdit?: boolean) => void
 	/** origin 项目 ID：文件/库所在项目。host 来自 HostConversationProvider。 */
 	projectId?: string
+	/** 发布微应用身份，由宿主注入，用于自动添加可信 @micro_app mention。 */
+	microAppId?: string
+	microAppName?: string
 	attachmentList?: any[]
 	setSlideContents?: (slideContents: Map<number, string>) => void
 	slideIndex?: number
@@ -452,6 +455,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			openNewTab,
 			htmlRelativeFolderPath,
 			projectId,
+			microAppId,
+			microAppName,
 			attachmentList,
 			isPlaybackMode,
 			toolbarClassName,
@@ -1326,6 +1331,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			runtimeProjectId,
 			scopedTopicStore,
 			selectedProject,
+			{ microAppId, microAppName },
 		)
 
 		// 会话写操作按 host 鉴权：分享页没有当前项目时不可发消息

@@ -76,6 +76,7 @@ function PublishedMicroAppPreviewSurface({
 		attachmentsTree,
 		attachmentList,
 		shareMeta,
+		appId,
 		defaultEntryFile,
 	} = preview
 
@@ -176,6 +177,8 @@ function PublishedMicroAppPreviewSurface({
 								onViewModeChange={setPreviewMode}
 								activeFileId={previewFile.file_id}
 								projectId={shareMeta.projectId}
+								microAppId={appId}
+								microAppName={displayAppName}
 								virtualStorageMarkerId={defaultEntryFile?.file_id}
 								openFileTab={handleOpenFileTab}
 								onHtmlPermissionManagerChange={onHtmlPermissionManagerChange}

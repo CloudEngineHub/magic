@@ -145,6 +145,64 @@ describe("useIframeAgentActions", () => {
 		expect(mocks.publish).not.toHaveBeenCalled()
 	})
 
+	it("prepends the published micro-app mention to Agent messages", async () => {
+		const topicStore = {
+			topics: [],
+			setTopics: mocks.setScopedTopics,
+			setSelectedTopic: mocks.setScopedSelectedTopic,
+		} as any
+		const { result } = renderHook(() =>
+			useIframeAgentActions(
+				"project-from-preview",
+				topicStore,
+				{ id: "project-current" } as any,
+				{ microAppId: "app-1", microAppName: "库存助手" },
+			),
+		)
+
+		await act(async () => {
+			await result.current.sendMessage({ message: "查询库存" })
+		})
+
+		const processedContent = mocks.processMessageMentions.mock.calls[0]?.[0] as any
+		expect(processedContent.content[0].content[0]).toEqual({
+			type: "mention",
+			attrs: {
+				type: "micro_app",
+				data: { app_id: "app-1", app_name: "库存助手" },
+			},
+		})
+	})
+
+	it("prepends the published micro-app mention when creating a topic", async () => {
+		const topicStore = {
+			topics: [],
+			setTopics: mocks.setScopedTopics,
+			setSelectedTopic: mocks.setScopedSelectedTopic,
+		} as any
+		const { result } = renderHook(() =>
+			useIframeAgentActions(
+				"project-from-preview",
+				topicStore,
+				{ id: "project-current" } as any,
+				{ microAppId: "app-1", microAppName: "库存助手" },
+			),
+		)
+
+		await act(async () => {
+			await result.current.createTopicAndSend({ message: "生成补货建议" })
+		})
+
+		const processedContent = mocks.processMessageMentions.mock.calls[0]?.[0] as any
+		expect(processedContent.content[0].content[0]).toEqual({
+			type: "mention",
+			attrs: {
+				type: "micro_app",
+				data: { app_id: "app-1", app_name: "库存助手" },
+			},
+		})
+	})
+
 	it("sends on the current MagiClaw topic instead of creating a new one", async () => {
 		const currentTopic = {
 			id: "claw-topic-1",
@@ -396,7 +454,7 @@ describe("useIframeAgentActions", () => {
 		)
 	})
 
-	it("updates the scoped topic store after creating a topic", async () => {
+	it("defaults micro-app topic creation to the general agent", async () => {
 		let topics = [{ id: "old-topic" }] as Topic[]
 		let selectedTopic: Topic | null = topics[0] ?? null
 		const scopedTopicStore = {
@@ -418,6 +476,7 @@ describe("useIframeAgentActions", () => {
 		const { result } = renderHook(() =>
 			useIframeAgentActions("project-from-preview", scopedTopicStore, {
 				id: "project-from-preview",
+				project_mode: TopicMode.MicroApp,
 			} as any),
 		)
 
@@ -437,7 +496,7 @@ describe("useIframeAgentActions", () => {
 				options: expect.objectContaining({
 					extra: expect.objectContaining({
 						super_agent: expect.objectContaining({
-							topic_pattern: TopicMode.MicroApp,
+							topic_pattern: TopicMode.General,
 						}),
 					}),
 				}),

@@ -165,6 +165,9 @@ interface HTMLProps {
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
 	projectId?: string
+	/** 发布微应用身份，仅由宿主传入。 */
+	microAppId?: string
+	microAppName?: string
 	/** 跨多个 HTML 文件共享虚拟存储时使用的稳定标记。 */
 	virtualStorageMarkerId?: string
 	/** 分享预览不拉项目文件版本，走分享下载 */
@@ -271,6 +274,8 @@ export default memo(function HTML(props: HTMLProps) {
 		isInPPTMode = false,
 		allowDownload,
 		projectId,
+		microAppId,
+		microAppName,
 		virtualStorageMarkerId,
 		isSharePreview = false,
 	} = props
@@ -1677,6 +1682,8 @@ export default memo(function HTML(props: HTMLProps) {
 										currentHtmlFileInfo.htmlRelativeFolderPath
 									}
 									projectId={runtimeProjectId}
+									microAppId={microAppId}
+									microAppName={microAppName}
 									devConsoleEnabled={devConsoleEnabled}
 									permissionController={htmlPermissionController}
 									attachmentList={attachmentList}

@@ -2,6 +2,7 @@ import { formatFileSize } from "@/utils/string"
 import type { AttachmentItem } from "../../hooks/types"
 import { AttachmentSource } from "../../hooks/types"
 import type { FileInfoField, FileInfoModel, FileInfoSpecialSection, FileInfoStats } from "./types"
+import { isMicroAppDisplayType } from "@/constants/microApp"
 
 const KNOWN_SPECIAL_TYPES = new Set([
 	"slide",
@@ -101,6 +102,7 @@ function resolveDisplayConfig(item: AttachmentItem): FileInfoConfig | undefined 
 function resolveSpecialType(item: AttachmentItem): string | undefined {
 	const config = resolveDisplayConfig(item)
 	const type = config?.type
+	if (isMicroAppDisplayType(type)) return "micro-app"
 	return typeof type === "string" && type.trim() ? type.trim() : undefined
 }
 

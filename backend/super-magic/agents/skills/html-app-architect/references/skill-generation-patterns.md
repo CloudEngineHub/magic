@@ -87,7 +87,7 @@ async function triggerSkill(userTask, selectedAgentId, selectedModel) {
     }]
   }, {
     agentId: selectedAgentId || undefined,  // undefined → general mode
-    model: selectedModel || "auto"
+    model: selectedModel
   });
   return topicId;
 }
@@ -95,7 +95,7 @@ async function triggerSkill(userTask, selectedAgentId, selectedModel) {
 
 **Key points:**
 - `agentId`: undefined (no agent selected) → defaults to general mode (`topic_pattern: "general"`)
-- `model`: `"auto"` unless user selects a specific model
+- `model`: the first available model unless user selects a specific model
 - The skill file is attached via @file mention so the agent reads it as context/instructions
 - Each invocation creates a new topic — ensures task isolation
 
@@ -127,7 +127,7 @@ async function triggerWithData(userTask, relativeDataPath) {
         { type: "text", text: "\n\n" + userTask }
       ]
     }]
-  }, { model: "auto" });
+  }, { model: selectedModelId });
   return topicId;
 }
 ```
@@ -177,7 +177,7 @@ The skill writes final results for HTML to consume:
 When the HTML app dispatches companion skills, it **must** provide:
 
 1. **Agent selector** — populated via `getAgents()`, default: none selected (general mode)
-2. **Model selector** — populated via `getModels()`, default: `"auto"`
+2. **Model selector** — populated via `getModels()`, default: the first available model
 3. **Task input** — user describes what they want done
 
 ```javascript
@@ -189,9 +189,9 @@ async function initSelectors() {
   // Agent selector: first item is "General mode (default)" with value ""
   renderAgentSelector([{ id: "", name: "General mode (default)" }, ...agents]);
   
-  // Model selector: first item is "auto"
-  const autoItem = { id: "auto", label: "Auto select (recommended)" };
-  renderModelSelector([autoItem, ...models]);
+  // Model selector: first available model is selected by default
+  renderModelSelector(models);
+  renderModelSelectorValue(models[0]?.id || "");
 }
 ```
 
