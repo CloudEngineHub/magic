@@ -5801,6 +5801,7 @@
 		"viewShortcuts": "查看快捷键"
 	},
 	"sidebarPanels": {
+		"browseWorkspaces": "工作区",
 		"clearSearch": "清除搜索",
 
 		"collapseFiles": "收起文件栏",
@@ -5809,10 +5810,14 @@
 		"expandFiles": "展开文件栏",
 		"expandHistory": "展开话题列表",
 		"loadMore": "加载更多",
+		"loadedProjects": "已显示 {{count}} / {{total}} 个项目",
 		"noMatchingProjects": "未找到匹配项目",
 		"projectsLoadFailed": "项目加载失败",
-		"releaseToCollapse": "松开收起",
-		"retry": "重试"
+		"pullToCollapse": "继续拉动以收起",
+		"releaseToCollapse": "松开收起，回拉可取消",
+		"renameHint": "Enter 保存 · Esc 取消",
+		"retry": "重试",
+		"workspacesLoadFailed": "工作区加载失败"
 	},
 	"siderDashboard": {
 		"addDirectory": "添加目录",

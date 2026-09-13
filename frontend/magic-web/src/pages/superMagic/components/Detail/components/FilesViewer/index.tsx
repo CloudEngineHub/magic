@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
 import { IconMenu2, IconX } from "@tabler/icons-react"
-import { PanelLeftClose } from "lucide-react"
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { clipboard } from "@/utils/clipboard-helpers"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useFileInfoPanel } from "../../../TopicFilesButton/hooks/useFileInfoPanel"
@@ -505,6 +505,25 @@ const FilesViewer = memo(
 				}),
 				[effectiveIsFullscreen, isDocumentFlowFullscreen, otherProps],
 			)
+			const fileSidebarButton = props.fileSidebarControl?.isCollapsed ? (
+				<Tooltip
+					title={t("sidebarPanels.expandFiles")}
+					placement="bottom"
+					trigger={["hover", "focus"]}
+				>
+					<button
+						ref={props.fileSidebarControl.triggerRef}
+						type="button"
+						className="mx-1 flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+						onClick={props.fileSidebarControl.onToggle}
+						aria-label={t("sidebarPanels.expandFiles")}
+						data-testid="file-viewer-expand-files"
+					>
+						<PanelLeftOpen size={16} />
+					</button>
+				</Tooltip>
+			) : null
+
 			const shouldUseSafeAreaFullscreen = shouldUseFileViewerFullscreenSafeArea()
 			const currentRenderPropsRef = useRef(currentRenderProps)
 			currentRenderPropsRef.current = currentRenderProps
@@ -704,8 +723,17 @@ const FilesViewer = memo(
 						)}
 					>
 						{/* Tab Bar — hidden in immersive read-only mode (e.g. audio recording detail) */}
+						{tabs.length === 0 &&
+							fileSidebarButton &&
+							!effectiveIsFullscreen &&
+							!props.hideTabBar && (
+								<div className="flex h-11 shrink-0 items-center border-b border-border bg-accent">
+									{fileSidebarButton}
+								</div>
+							)}
 						{tabs.length > 0 && !effectiveIsFullscreen && !props.hideTabBar && (
-							<div className="relative flex h-11 items-center bg-accent">
+							<div className="relative flex h-11 shrink-0 items-center bg-accent">
+								{fileSidebarButton}
 								<HeadlessHorizontalScroll
 									className="h-full min-w-0 flex-1"
 									controlBackground="rgb(var(--accent-rgb))"

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
 	CollaborationProjectCreator,
@@ -9,7 +9,7 @@ import {
 } from "@/pages/superMagic/pages/Workspace/types"
 import { SuperMagicApi } from "@/apis"
 import SuperMagicService from "@/pages/superMagic/services"
-import { useMemoizedFn } from "ahooks"
+import { useDebounce, useMemoizedFn } from "ahooks"
 import { CreatorFilter, SortSelector, ViewToggle } from "./components"
 import { SortType, ViewMode } from "../../../EmptyWorkspacePanel/components/ProjectItem"
 import useSearchValue from "@/pages/superMagic/pages/Assistant/components/TopicPanel/hooks/useSearchValue"
@@ -98,19 +98,25 @@ function SharedProjectList({
 	)
 }
 
-function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
+export function CollaborationProjectsContent(
+	props: CollaborationProjectsPanelProps & { searchValue: string },
+) {
 	const { workspaces, fetchWorkspaces, selectedWorkspace, fetchProjects } = props
 	const { t } = useTranslation("super")
 	const { isPersonalOrganization } = userStore.user
 
-	const { searchValue, onSearchValueChange, debouncedSearchValue, setSearchValue } =
-		useSearchValue({ debounceWait: 500 })
+	const debouncedSearchValue = useDebounce(props.searchValue, { wait: 500 })
 
 	// Per-tab cached data to avoid stale content when switching tabs
 	const [receivedProjects, setReceivedProjects] = useState<CollaborationProjectListItem[]>([])
 	const [sharedProjects, setSharedProjects] = useState<CollaborationProjectListItem[]>([])
 	const [loadingReceived, setLoadingReceived] = useState(false)
 	const [loadingShared, setLoadingShared] = useState(false)
+	const requestIds = useRef({
+		[CollaborationProjectType.Received]: 0,
+		[CollaborationProjectType.Shared]: 0,
+	})
+	const isOpenRef = useRef(Boolean(props.open))
 
 	const [currentTab, setCurrentTab] = useState<CollaborationProjectType>(
 		CollaborationProjectType.Received,
@@ -123,6 +129,7 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 	// Control bar states
 	const { viewMode, setViewMode } = useViewTogglePersistValue({
 		localStorageKey: "collaboration_projects_panel_view_toggle_value",
+		defaultValue: ViewMode.LIST,
 	})
 	const [sortType, setSortType] = useState<SortType>(SortType.PROJECT_UPDATE_TIME)
 	const [creatorFilter, setCreatorFilter] = useState<CollaborationProjectCreator[]>([])
@@ -141,6 +148,8 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 			tab: CollaborationProjectType,
 			{ resetWhenError = false }: { resetWhenError?: boolean } = {},
 		) => {
+			if (!isOpenRef.current) return
+			const requestId = ++requestIds.current[tab]
 			const setLoading =
 				tab === CollaborationProjectType.Received ? setLoadingReceived : setLoadingShared
 			const setProjects =
@@ -162,11 +171,22 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 						: undefined,
 				join_method: joinType,
 			})
-				.then((res) => setProjects(res?.list || []))
-				.catch(() => {
-					if (resetWhenError) setProjects([])
+				.then((res) => {
+					if (isOpenRef.current && requestIds.current[tab] === requestId)
+						setProjects(res?.list || [])
 				})
-				.finally(() => setLoading(false))
+				.catch(() => {
+					if (
+						isOpenRef.current &&
+						requestIds.current[tab] === requestId &&
+						resetWhenError
+					)
+						setProjects([])
+				})
+				.finally(() => {
+					if (isOpenRef.current && requestIds.current[tab] === requestId)
+						setLoading(false)
+				})
 		},
 	)
 
@@ -184,10 +204,17 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 	})
 
 	useEffect(() => {
+		const requests = requestIds.current
+		isOpenRef.current = Boolean(props.open)
 		if (props.open) {
 			setCurrentTab(CollaborationProjectType.Received)
 			fetchForTab(CollaborationProjectType.Received, { resetWhenError: true })
 			fetchForTab(CollaborationProjectType.Shared, { resetWhenError: true })
+		}
+		return () => {
+			isOpenRef.current = false
+			requests[CollaborationProjectType.Received] += 1
+			requests[CollaborationProjectType.Shared] += 1
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [props.open])
@@ -200,7 +227,7 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 	}, [debouncedSearchValue, creatorFilter, sortType])
 
 	const handleClose = useMemoizedFn(() => {
-		setSearchValue("")
+		isOpenRef.current = false
 		setCurrentTab(CollaborationProjectType.Received)
 		handleSortTypeChange(SortType.PROJECT_UPDATE_TIME)
 		setCreatorFilter([])
@@ -335,14 +362,7 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 	)
 
 	return (
-		<ProjectsPanel
-			open={props.open}
-			title={t("workspace.collaborationProjectsTitle")}
-			description={t("workspace.collaborationProjectsDesc")}
-			searchValue={searchValue}
-			onSearchValueChange={onSearchValueChange}
-			onClose={handleClose}
-		>
+		<>
 			{/* Tabs — both panes stay mounted to avoid remount lag on switch */}
 			<Tabs
 				activeKey={currentTab}
@@ -391,6 +411,27 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 			/>
 			{CollaboratorUpdatePanel}
 			{AddCollaborationToWorkspaceModal}
+		</>
+	)
+}
+
+function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
+	const { t } = useTranslation("super")
+	const { searchValue, onSearchValueChange, setSearchValue } = useSearchValue()
+	const close = useMemoizedFn(() => {
+		setSearchValue("")
+		props.onClose?.()
+	})
+	return (
+		<ProjectsPanel
+			open={props.open}
+			title={t("workspace.collaborationProjectsTitle")}
+			description={t("workspace.collaborationProjectsDesc")}
+			searchValue={searchValue}
+			onSearchValueChange={onSearchValueChange}
+			onClose={close}
+		>
+			<CollaborationProjectsContent {...props} searchValue={searchValue} onClose={close} />
 		</ProjectsPanel>
 	)
 }

@@ -39,6 +39,7 @@ interface ProjectItemProps<T extends ProjectListItem | CollaborationProjectListI
 	project: T
 	index?: number
 	viewMode?: ViewMode
+	variant?: "default" | "compact"
 	sortType?: SortType
 	inCollaborationPanel?: boolean
 	onClick: (project: T) => void
@@ -71,6 +72,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	project: item,
 	index,
 	viewMode = ViewMode.GRID,
+	variant = "default",
 	sortType = SortType.PROJECT_UPDATE_TIME,
 	inCollaborationPanel = false,
 	onClick,
@@ -91,6 +93,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	const { t } = useTranslation("super")
 
 	const isListMode = viewMode === ViewMode.LIST
+	const isCompact = variant === "compact"
 
 	// Use custom hook for rename functionality
 	const {
@@ -131,7 +134,8 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	const isWorkspaceShortcutProjectStatus = isWorkspaceShortcutProject(item)
 
 	const WithCollaborators = useMemo(() => {
-		if (isListMode || !isCollaborationProjectStatus || !inCollaborationPanel) return null
+		if ((!isCompact && isListMode) || !isCollaborationProjectStatus || !inCollaborationPanel)
+			return null
 
 		const shareItem = item as ShareItem
 		const creatorName = shareItem.creator?.nickname
@@ -141,7 +145,11 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 
 		return (
 			<div
-				className="flex flex-row items-start justify-between gap-2 border-t border-border pt-2.5"
+				className={cn(
+					"flex flex-row items-start justify-between gap-2 border-t border-border pt-2.5",
+					isCompact && "col-span-3 row-start-2 items-center pt-2",
+					isCompact && isListMode && "col-span-1 col-start-3 row-start-1 border-t-0 pt-0",
+				)}
 				data-testid="project-item-collaborators"
 			>
 				{!isOwner(item.user_role) && (
@@ -151,7 +159,10 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 						data-testid="project-item-creator-section"
 					>
 						<div
-							className="text-[10px] font-normal leading-[13px] text-muted-foreground empty:block"
+							className={cn(
+								"text-[10px] font-normal leading-[13px] text-muted-foreground empty:block",
+								isCompact && "hidden",
+							)}
 							data-testid="project-item-creator-label"
 						>
 							{t("collaborators.creator")}
@@ -172,7 +183,10 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 					data-testid="project-item-members-section"
 				>
 					<div
-						className="text-[10px] font-normal leading-[13px] text-muted-foreground empty:block"
+						className={cn(
+							"text-[10px] font-normal leading-[13px] text-muted-foreground empty:block",
+							isCompact && "hidden",
+						)}
 						data-testid="project-item-members-label"
 					>
 						{t("collaborators.collaborator")}
@@ -202,6 +216,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 		)
 	}, [
 		isListMode,
+		isCompact,
 		isCollaborationProjectStatus,
 		inCollaborationPanel,
 		item,
@@ -259,33 +274,48 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 						ref={ref}
 						className={cn(
 							"relative flex w-full min-w-0 cursor-pointer flex-col gap-2.5 rounded-lg border border-border bg-card p-2.5",
-							"h-[183px]",
-							!!WithCollaborators && "h-[222px] w-full",
-							isListMode &&
+							!isCompact && "h-[183px]",
+							!isCompact && !!WithCollaborators && "h-[222px] w-full",
+							!isCompact &&
+								isListMode &&
 								"h-14 w-full flex-row items-center justify-start [&_.project-item-actions]:right-2 [&_.project-item-actions]:top-2 [&_.project-item-actions]:border-none [&_.project-item-actions]:bg-muted [&_.project-item-actions]:text-foreground [&_.project-item-content]:max-w-[calc(100%-50px)] [&_.project-item-content]:flex-1 [&_.project-item-icon]:h-10 [&_.project-item-icon]:w-10 [&_.project-item-icon]:flex-none [&_.project-item-title]:pr-5 [&_.project-item-updated-at]:overflow-hidden [&_.project-item-updated-at]:text-ellipsis [&_.project-item-updated-at]:whitespace-nowrap",
+							isCompact &&
+								"grid grid-cols-[16px_minmax(0,1fr)_24px] items-center gap-x-3 gap-y-1 px-3 py-2 hover:bg-accent/50",
+							isCompact && (isListMode ? "min-h-14" : "min-h-[88px]"),
+							isCompact &&
+								isListMode &&
+								!!WithCollaborators &&
+								"grid-cols-[16px_minmax(0,1fr)_auto_24px]",
 						)}
 						onClick={() => onClick(item)}
 						onMouseEnter={onMouseEnter}
 						data-testid="project-item"
 						data-index={index}
 						data-view-mode={viewMode}
+						data-variant={variant}
 						data-pinned={item.is_pinned}
 						data-collaboration={isCollaborationProjectStatus}
 						data-workspace-shortcut={isWorkspaceShortcutProjectStatus}
 						data-project-name={item.project_name || t("project.unnamedProject")}
 					>
 						<div
-							className="project-item-icon relative flex flex-1 items-center justify-center rounded px-2 py-2"
+							className={cn(
+								"project-item-icon relative flex flex-1 items-center justify-center rounded px-2 py-2",
+								isCompact && "col-start-1 row-start-1 size-4 flex-none p-0",
+							)}
 							data-testid="project-item-icon"
 						>
 							<IconWorkspaceProjectFolder
 								isHovered={isHover}
 								wasHovered={!isHover}
-								size={isListMode ? 30 : 60}
+								size={isCompact ? 16 : isListMode ? 30 : 60}
 							/>
 						</div>
 						<div
-							className="project-item-content flex max-w-full flex-col gap-1"
+							className={cn(
+								"project-item-content flex max-w-full flex-col gap-1",
+								isCompact && "col-start-2 row-start-1 min-w-0 gap-0.5",
+							)}
 							data-testid="project-item-content"
 						>
 							{/* 编辑时，只允许编辑非工作区快捷项目 */}
@@ -321,17 +351,25 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 											!onRenameProject && "hover:bg-transparent",
 											isListMode && "cursor-pointer",
 											!isListMode && "cursor-text",
+											isCompact && "cursor-pointer text-[13px] font-medium",
 										)}
-										onClick={isListMode ? undefined : handleNameClick}
+										onClick={
+											isListMode || isCompact ? undefined : handleNameClick
+										}
 										data-testid="project-item-title"
-										data-editable={!isListMode && !!onRenameProject}
+										data-editable={
+											!isListMode && !isCompact && !!onRenameProject
+										}
 									>
 										{item.project_name || t("project.unnamedProject")}
 									</SmartTooltip>
 								</FlexBox>
 							)}
 							<SmartTooltip
-								className="project-item-updated-at text-[10px] font-normal leading-[13px] text-muted-foreground"
+								className={cn(
+									"project-item-updated-at text-[10px] font-normal leading-[13px] text-muted-foreground",
+									isCompact && "truncate text-xs leading-4",
+								)}
 								data-testid="project-item-time"
 								data-sort-type={sortType}
 							>
@@ -339,21 +377,29 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 							</SmartTooltip>
 						</div>
 
-						<div
+						<button
+							type="button"
+							aria-label={t("common.moreActions")}
 							className={cn(
 								"project-item-actions absolute right-5 top-5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg border border-border bg-black/50 text-white",
 								isListMode && "right-2 top-2 border-none bg-muted text-foreground",
+								isCompact &&
+									"static col-start-3 row-start-1 rounded-md border-none bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
+								isCompact && isListMode && !!WithCollaborators && "col-start-4",
 							)}
 							style={{
-								opacity: (isHover || open) && !isEditing ? 1 : 0,
-								visibility: (isHover || open) && !isEditing ? "visible" : "hidden",
+								opacity: (isCompact || isHover || open) && !isEditing ? 1 : 0,
+								visibility:
+									(isCompact || isHover || open) && !isEditing
+										? "visible"
+										: "hidden",
 							}}
 							onClick={triggerContextMenu}
 							data-testid="project-item-more-button"
 							data-visible={isHover || open}
 						>
-							<IconDots size={18} />
-						</div>
+							<IconDots size={16} />
+						</button>
 						{WithCollaborators}
 					</div>
 				)}

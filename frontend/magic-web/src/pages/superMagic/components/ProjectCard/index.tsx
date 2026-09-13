@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react"
-import { Ellipsis, PanelLeftClose } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { ChevronDown, Ellipsis, Layers, PanelLeftClose } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import type { ProjectCardProps, SeparatorProps } from "./types"
@@ -14,7 +14,7 @@ import IconWorkspaceProjectFolder from "@/enhance/tabler/icons-react/icons/IconW
 import ProjectActionsDropdown from "../ProjectActionsDropdown"
 import useProjectItemActionProps from "../EmptyWorkspacePanel/hooks/useProjectItemActionProps"
 import useProjectRename from "../../hooks/useProjectRename"
-import SidebarCreateInput from "@/layouts/BaseLayout/components/MagicSidebar/components/SidebarCreateInput"
+import { Input } from "@/components/shadcn-ui/input"
 import { openProjectInNewTab } from "../../utils/project"
 import type { CollaborationProjectListItem, ProjectListItem } from "../../pages/Workspace/types"
 
@@ -87,6 +87,25 @@ function ProjectCard({
 		onRenameProject: canRename ? handleRenameProject : undefined,
 	})
 
+	const renameFinishedRef = useRef(false)
+	useEffect(() => {
+		if (isEditing) renameFinishedRef.current = false
+	}, [isEditing])
+	// Enter 会连带触发 blur；同一次编辑只提交一次，Esc 的 blur 也不能保存。
+	const finishRename = async (cancel = false) => {
+		if (renameFinishedRef.current) return
+		renameFinishedRef.current = true
+		if (cancel) {
+			setIsEditing(false)
+			return
+		}
+		try {
+			await handleProjectNameBlur()
+		} finally {
+			setIsEditing(false)
+		}
+	}
+
 	const handleRenameStart = useCallback(() => {
 		if (!canRename) return
 		setTimeout(() => setIsEditing(true), 200)
@@ -115,43 +134,36 @@ function ProjectCard({
 			data-testid="project-card"
 		>
 			{/* Project Selector Section */}
-			<div
-				className={cn(
-					"flex w-full shrink-0 items-start gap-1.5 p-3",
-					isEditing && "flex-wrap",
-				)}
-			>
-				<div className={cn("flex min-w-0 grow flex-col gap-0.5", isEditing && "w-full")}>
-					<div className="flex min-w-0 items-center gap-1.5">
-						<span className="flex size-4 shrink-0 items-center justify-center">
-							<IconWorkspaceProjectFolder size={16} isHovered={false} />
-						</span>
-						{isEditing ? (
-							<div className="min-w-0 grow" data-testid="project-card-rename">
-								<SidebarCreateInput
-									value={editingProjectName}
-									onValueChange={(v) =>
-										handleProjectNameChange({
-											target: { value: v },
-										} as React.ChangeEvent<HTMLInputElement>)
-									}
-									onSubmit={async () => {
-										await handleProjectNameBlur()
-									}}
-									onCancel={() => setIsEditing(false)}
-									placeholder={t("project.unnamedProject")}
-									inputTestId="project-card-rename-input"
-									submitButtonTestId="project-card-rename-submit"
-									cancelButtonTestId="project-card-rename-cancel"
-									submitButtonAriaLabel={t("common.confirm")}
-									cancelButtonAriaLabel={t("common.cancel")}
-									stopKeyboardPropagation
-								/>
-							</div>
-						) : (
+			<div className="flex w-full shrink-0 flex-col gap-0.5 px-3 pb-2 pt-2.5">
+				{/* 两行共用 16px 图标列和 6px 间距；工作区入口不再单独缩进。 */}
+				<div className="flex h-7 min-w-0 items-center gap-1.5">
+					{isEditing ? (
+						<Input
+							autoFocus
+							className="h-7 min-w-0 flex-1 px-1.5 text-sm"
+							value={editingProjectName}
+							onChange={handleProjectNameChange}
+							onFocus={(event) => event.currentTarget.select()}
+							onBlur={() => void finishRename()}
+							onKeyDown={(event) => {
+								if (event.nativeEvent.isComposing) return
+								if (event.key === "Enter" || event.key === "Escape") {
+									event.preventDefault()
+									event.stopPropagation()
+									void finishRename(event.key === "Escape")
+								}
+							}}
+							aria-label={t("project.unnamedProject")}
+							data-testid="project-card-rename-input"
+						/>
+					) : (
+						<>
+							<span className="flex size-4 shrink-0 items-center justify-center">
+								<IconWorkspaceProjectFolder size={16} isHovered={false} />
+							</span>
 							<button
 								type="button"
-								className="min-w-0 truncate rounded px-0.5 text-left text-sm font-medium leading-5 hover:bg-fill disabled:cursor-default disabled:hover:bg-transparent"
+								className="min-w-0 truncate rounded p-0 text-left text-sm font-medium leading-5 hover:bg-fill disabled:cursor-default disabled:hover:bg-transparent"
 								disabled={!canRename}
 								title={projectName}
 								onClick={() => setIsEditing(true)}
@@ -159,83 +171,19 @@ function ProjectCard({
 							>
 								{projectName}
 							</button>
-						)}
-						{selectedProject.is_pinned && <PinnedTag />}
-						<CollaborationProjectTag
-							visible={isCollaborationProjectStatus}
-							project={selectedProject}
-							showText={false}
-						/>
-					</div>
-					<div className="min-w-0 pl-[22px]">
-						{" "}
-						<button
-							type="button"
-							className="max-w-full self-start truncate rounded px-0.5 text-left text-xs leading-4 text-muted-foreground hover:bg-fill"
-							title={workspaceName}
-							onClick={onWorkspaceProjectsOpen}
-							data-testid="project-card-workspace"
-						>
-							{workspaceName}
-						</button>
-					</div>
-				</div>
-
-				{/* Action Icons */}
-				<div className="flex shrink-0 items-center gap-1">
-					{/* Share Icon */}
-					{canShare && (
-						<Button
-							variant="outline"
-							size="icon"
-							className="h-7 w-7 shadow-xs"
-							onClick={onShareClick}
-							aria-label={t("common.share")}
-							title={t("common.share")}
-							data-testid="share-button"
-						>
-							<IconShare3 size={16} className="text-foreground" />
-						</Button>
+							{selectedProject.is_pinned && <PinnedTag />}
+							<CollaborationProjectTag
+								visible={isCollaborationProjectStatus}
+								project={selectedProject}
+								showText={false}
+							/>
+						</>
 					)}
-
-					<ProjectActionsDropdown
-						open={isPanelVisible && menuOpen}
-						onOpenChange={setMenuOpen}
-						item={selectedProject}
-						inCollaborationPanel={false}
-						trigger={["click"]}
-						placement="bottomRight"
-						onOpenInNewWindow={openProjectInNewTab}
-						onPinProject={handlePinProject}
-						onCopyCollaborationLink={handleCopyCollaborationLink}
-						onTransferProject={handleTransferProject}
-						onMoveProject={handleMoveProject}
-						onAddCollaborators={onAddCollaborators}
-						onCancelWorkspaceShortcut={handleCancelWorkspaceShortcutForMenu}
-						onDeleteProject={handleDeleteProjectConfirm}
-						onRenameStart={canRename ? handleRenameStart : undefined}
-						onRenameProject={canRename ? handleRenameProject : undefined}
-					>
-						<span>
-							<Button
-								type="button"
-								variant="outline"
-								size="icon"
-								className="h-7 w-7 shadow-xs"
-								aria-label={t("common.moreActions")}
-								title={t("common.moreActions")}
-								data-testid="project-card-more-button"
-							>
-								<Ellipsis size={16} className="text-foreground" />
-							</Button>
-						</span>
-					</ProjectActionsDropdown>
 					{onCollapse && (
 						<Button
-							type="button"
-							variant="outline"
+							variant="ghost"
 							size="icon"
-							className="h-7 w-7 shadow-xs"
+							className="ml-auto h-7 w-7 shrink-0 text-muted-foreground"
 							onClick={onCollapse}
 							aria-label={t("sidebarPanels.collapseFiles")}
 							title={t("sidebarPanels.collapseFiles")}
@@ -243,6 +191,78 @@ function ProjectCard({
 						>
 							<PanelLeftClose size={16} />
 						</Button>
+					)}
+				</div>
+				<div className="flex h-7 min-w-0 items-center gap-1.5">
+					{isEditing ? (
+						<span className="text-xs text-muted-foreground">
+							{t("sidebarPanels.renameHint")}
+						</span>
+					) : (
+						<>
+							<button
+								type="button"
+								className="flex min-w-0 items-center gap-1.5 rounded p-0 text-left text-xs leading-4 text-muted-foreground hover:bg-fill"
+								title={workspaceName}
+								onClick={onWorkspaceProjectsOpen}
+								data-testid="project-card-workspace"
+							>
+								<Layers size={16} className="shrink-0" />
+								<span className="truncate">{workspaceName}</span>
+								<ChevronDown size={16} className="shrink-0" />
+							</button>
+							<span className="flex-1" />
+							{/* Action Icons */}
+							<div className="flex shrink-0 items-center gap-1">
+								{/* Share Icon */}
+								{canShare && (
+									<Button
+										variant="ghost"
+										size="icon"
+										className="h-7 w-7 text-muted-foreground"
+										onClick={onShareClick}
+										aria-label={t("common.share")}
+										title={t("common.share")}
+										data-testid="share-button"
+									>
+										<IconShare3 size={16} className="text-foreground" />
+									</Button>
+								)}
+
+								<ProjectActionsDropdown
+									open={isPanelVisible && menuOpen}
+									onOpenChange={setMenuOpen}
+									item={selectedProject}
+									inCollaborationPanel={false}
+									trigger={["click"]}
+									placement="bottomRight"
+									onOpenInNewWindow={openProjectInNewTab}
+									onPinProject={handlePinProject}
+									onCopyCollaborationLink={handleCopyCollaborationLink}
+									onTransferProject={handleTransferProject}
+									onMoveProject={handleMoveProject}
+									onAddCollaborators={onAddCollaborators}
+									onCancelWorkspaceShortcut={handleCancelWorkspaceShortcutForMenu}
+									onDeleteProject={handleDeleteProjectConfirm}
+									onRenameStart={canRename ? handleRenameStart : undefined}
+									onRenameProject={canRename ? handleRenameProject : undefined}
+								>
+									<span>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											className="h-7 w-7 text-muted-foreground"
+											aria-label={t("common.moreActions")}
+											title={t("common.moreActions")}
+											data-testid="project-card-more-button"
+										>
+											<Ellipsis size={16} className="text-foreground" />
+										</Button>
+									</span>
+								</ProjectActionsDropdown>
+							</div>
+						</>
 					)}
 				</div>
 			</div>

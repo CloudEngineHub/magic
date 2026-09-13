@@ -401,8 +401,9 @@ function ProjectPage() {
 					/>
 				</div>
 			)}
-			detailPanel={
+			detailPanel={(fileSidebarControl) => (
 				<Detail
+					fileSidebarControl={fileSidebarControl}
 					ref={detailRef}
 					disPlayDetail={disPlayDetail}
 					userSelectDetail={userSelectDetail}
@@ -421,7 +422,7 @@ function ProjectPage() {
 					onActiveFileChange={setActiveFileId}
 					showFallbackWhenEmpty
 				/>
-			}
+			)}
 			isReadOnly={isReadOnly}
 			showProjectResizeHandle={showProjectResizeHandle}
 			shouldShowDetailPanel={shouldShowDetailPanel}

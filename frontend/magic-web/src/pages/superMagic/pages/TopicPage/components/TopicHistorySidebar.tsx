@@ -1,9 +1,7 @@
-import { useEffect, useLayoutEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react"
 import { createPortal } from "react-dom"
-import { PanelRightOpen } from "lucide-react"
-import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
-import { SIDEBAR_COLLAPSED_WIDTH, TOPIC_HISTORY_RESIZE } from "../../../constants/resizablePanel"
+import { TOPIC_HISTORY_RESIZE } from "../../../constants/resizablePanel"
 import type { TopicDesktopPanelsHistoryLayout } from "./TopicDesktopPanels"
 import TopicResizeHandle from "./TopicResizeHandle"
 
@@ -15,8 +13,7 @@ interface TopicHistorySidebarProps {
 	isFullscreen: boolean
 	transition: string
 	isDragging: boolean
-	collapseProgress: number
-	collapseArmed: boolean
+	triggerRef: RefObject<HTMLButtonElement>
 	onResizeStart: (clientX: number, mode: "full-right" | "fixed" | "drawer") => void
 	isConversationPanelCollapsed: boolean
 	onExpandConversationPanel: () => void
@@ -31,15 +28,12 @@ export default function TopicHistorySidebar({
 	isFullscreen,
 	transition,
 	isDragging,
-	collapseProgress,
-	collapseArmed,
+	triggerRef,
 	onResizeStart,
 	isConversationPanelCollapsed,
 	onExpandConversationPanel,
 }: TopicHistorySidebarProps) {
-	const { t } = useTranslation("super")
 	const closeButtonRef = useRef<HTMLButtonElement>(null)
-	const railRef = useRef<HTMLButtonElement>(null)
 	const contentRef = useRef<HTMLDivElement>(null)
 	const hasOpenedRef = useRef(false)
 	const lastWidthRef = useRef<number>(TOPIC_HISTORY_RESIZE.default)
@@ -57,10 +51,10 @@ export default function TopicHistorySidebar({
 		if (contentRef.current) contentRef.current.inert = !isVisible
 		if (previousOpenRef.current !== layout.isOpen) {
 			if (layout.isOpen) closeButtonRef.current?.focus()
-			else railRef.current?.focus()
+			else triggerRef.current?.focus()
 		}
 		previousOpenRef.current = layout.isOpen
-	}, [isVisible, layout.isOpen])
+	}, [isVisible, layout.isOpen, triggerRef])
 
 	useEffect(() => {
 		if (!isDrawer) return
@@ -83,22 +77,11 @@ export default function TopicHistorySidebar({
 			<div
 				className="pointer-events-auto absolute bottom-[var(--safe-area-inset-bottom)] right-[var(--safe-area-inset-right)] top-[var(--safe-area-inset-top)]"
 				style={{
-					width: layout.isOpen ? width : SIDEBAR_COLLAPSED_WIDTH,
+					width: isVisible ? width : 0,
 					transition,
 					overflow: layout.isOpen ? "visible" : "hidden",
 				}}
 			>
-				{!layout.isOpen && (
-					<button
-						ref={railRef}
-						type="button"
-						className="absolute inset-0 z-10 flex w-6 items-start justify-center rounded border border-border bg-background pt-3 hover:bg-fill"
-						aria-label={t("sidebarPanels.expandHistory")}
-						onClick={layout.onToggle}
-					>
-						<PanelRightOpen size={16} />
-					</button>
-				)}
 				<div
 					ref={contentRef}
 					aria-hidden={!isVisible}
@@ -117,8 +100,6 @@ export default function TopicHistorySidebar({
 								onResizeStart={(clientX) =>
 									onResizeStart(clientX, lastModeRef.current)
 								}
-								collapseProgress={collapseProgress}
-								collapseArmed={collapseArmed}
 							/>
 							<section
 								className={cn(

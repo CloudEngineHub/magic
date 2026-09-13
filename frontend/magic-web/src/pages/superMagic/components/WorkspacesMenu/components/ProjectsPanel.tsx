@@ -15,17 +15,8 @@ import { cn } from "@/utils/cn"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import ProjectItem, { ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
 
-const gridClassName = cn(
-	"grid gap-2.5",
-	"[grid-template-columns:repeat(6,minmax(0,1fr))]",
-	"max-[1750px]:[grid-template-columns:repeat(5,minmax(0,1fr))]",
-	"max-[1500px]:[grid-template-columns:repeat(4,minmax(0,1fr))]",
-	"max-[1250px]:[grid-template-columns:repeat(3,minmax(0,1fr))]",
-	"max-[1000px]:[grid-template-columns:repeat(2,minmax(0,1fr))]",
-)
-
 const contentClassName = cn(
-	"h-[70vh] overflow-y-auto overflow-x-hidden rounded-b-[12px] bg-gray-50 px-5 pb-5 dark:bg-white/5",
+	"h-[min(55vh,520px)] overflow-y-auto overflow-x-hidden bg-muted/20 p-3",
 	"[&::-webkit-scrollbar]:w-[6px]",
 	"[&::-webkit-scrollbar-thumb]:rounded-[4px] [&::-webkit-scrollbar-thumb]:bg-border",
 	"[&::-webkit-scrollbar-track]:bg-transparent",
@@ -39,6 +30,7 @@ interface ProjectsPanelProps {
 	onSearchValueChange: ChangeEventHandler<HTMLInputElement>
 	onClose: () => void
 	children: ReactNode
+	sidebar?: ReactNode
 }
 
 export function ProjectsPanel({
@@ -49,6 +41,7 @@ export function ProjectsPanel({
 	onSearchValueChange,
 	onClose,
 	children,
+	sidebar,
 }: ProjectsPanelProps) {
 	const { t } = useTranslation("super")
 	const wasOpenRef = useRef(false)
@@ -62,7 +55,7 @@ export function ProjectsPanel({
 			{open && (
 				<DialogContent
 					showCloseButton={false}
-					className="!w-[80vw] !max-w-[2000px] gap-0 overflow-hidden p-0"
+					className="!w-[min(960px,calc(100vw_-_32px))] !max-w-none gap-0 overflow-hidden p-0"
 					onInteractOutside={(event) => event.preventDefault()}
 					onEscapeKeyDown={onClose}
 					onCloseAutoFocus={(event) => {
@@ -78,7 +71,7 @@ export function ProjectsPanel({
 					</DialogDescription>
 					{/* Dialog header */}
 					<div
-						className="flex items-center justify-between gap-2.5 px-5 pb-0 pt-5"
+						className="flex items-center justify-between gap-3 border-b border-border px-5 py-4"
 						data-testid="shared-workspace-dialog-header"
 					>
 						<div className="flex min-w-0 flex-col gap-1">
@@ -88,33 +81,19 @@ export function ProjectsPanel({
 							>
 								{title}
 							</div>
-							<div
-								className="overflow-hidden text-ellipsis whitespace-nowrap text-xs font-normal leading-4 text-foreground/35"
-								data-testid="shared-workspace-dialog-description"
-							>
-								{description}
-							</div>
+							{description && (
+								<div
+									className="overflow-hidden text-ellipsis whitespace-nowrap text-xs font-normal leading-4 text-foreground/35"
+									data-testid="shared-workspace-dialog-description"
+								>
+									{description}
+								</div>
+							)}
 						</div>
 						<div
 							className="flex items-center gap-2.5"
 							data-testid="shared-workspace-dialog-actions"
 						>
-							<div
-								className="relative w-[220px]"
-								data-testid="shared-workspace-dialog-search"
-							>
-								<IconSearch
-									size={16}
-									className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-								/>
-								<Input
-									className="bg-fill pl-9"
-									placeholder={t("project.searchProject")}
-									onChange={onSearchValueChange}
-									value={searchValue}
-									data-testid="shared-workspace-dialog-search-input"
-								/>
-							</div>
 							<button
 								type="button"
 								aria-label={t("button.close", { ns: "interface" })}
@@ -125,12 +104,35 @@ export function ProjectsPanel({
 									onClose()
 								}}
 							>
-								<MagicIcon component={IconX} size={24} />
+								<MagicIcon component={IconX} size={16} />
 							</button>
 						</div>
 					</div>
 
-					{children}
+					<div className="flex min-h-0 min-w-0">
+						{sidebar}
+						<div className="min-w-0 flex-1">
+							<div className="border-b border-border px-4 py-3">
+								<div
+									className="relative"
+									data-testid="shared-workspace-dialog-search"
+								>
+									<IconSearch
+										size={16}
+										className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+									/>
+									<Input
+										className="h-8 bg-fill pl-9"
+										placeholder={t("project.searchProject")}
+										onChange={onSearchValueChange}
+										value={searchValue}
+										data-testid="shared-workspace-dialog-search-input"
+									/>
+								</div>
+							</div>
+							{children}
+						</div>
+					</div>
 				</DialogContent>
 			)}
 		</Dialog>
@@ -148,6 +150,7 @@ interface ProjectsPanelListProps<T extends ProjectListItem> {
 	footer?: ReactNode
 	emptyContent?: ReactNode
 	selectedProjectId?: string
+	total?: number
 }
 
 export function ProjectsPanelList<T extends ProjectListItem>({
@@ -161,16 +164,17 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 	footer,
 	emptyContent,
 	selectedProjectId,
+	total,
 }: ProjectsPanelListProps<T>) {
 	const { t } = useTranslation("super")
 	return (
 		<MagicSpin section spinning={loading}>
 			<div data-testid="shared-workspace-dialog-project-list" data-tab-type={tabType}>
 				{/* Control bar */}
-				<div className="bg-gray-50 px-5 pb-2.5 pt-5 dark:bg-white/5">
+				<div className="border-b border-border px-4 py-3">
 					<div className="flex min-w-0 flex-wrap items-center justify-between gap-2.5">
 						<div className="shrink-0 text-sm font-semibold leading-5 text-foreground/80 opacity-80">
-							{t("workspace.projects")} · {projects.length}
+							{t("workspace.projects")} · {total ?? projects.length}
 						</div>
 						<div className="flex min-w-0 flex-wrap items-center justify-end gap-2.5">
 							{toolbar}
@@ -181,27 +185,25 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 				<div className={contentClassName}>
 					{error}
 					<div
-						className={gridClassName}
+						className={cn(
+							"grid gap-2",
+							viewMode === ViewMode.LIST
+								? "grid-cols-1"
+								: "[grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr))]",
+						)}
 						data-testid="shared-workspace-dialog-project-list-layout"
 						data-view-mode={viewMode}
 					>
 						{projects.map((item, index) => (
 							<div
-								key={[
-									item.id,
-									item.updated_at,
-									item.last_active_at || "",
-									item.is_pinned ? "1" : "0",
-									item.bind_workspace_id || "",
-									viewMode,
-								].join("-")}
+								key={item.id}
 								data-testid="shared-workspace-dialog-project-item"
 								data-tab-type={tabType}
 								data-project-id={item.id}
 								aria-current={selectedProjectId === item.id ? true : undefined}
 								className={cn(
 									selectedProjectId === item.id &&
-										"rounded-lg ring-1 ring-primary",
+										"rounded-lg [&_[data-testid=project-item]]:border-primary [&_[data-testid=project-item]]:bg-primary/5",
 								)}
 								data-project-name={item.project_name || t("project.unnamedProject")}
 							>
@@ -210,6 +212,7 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 									project={item}
 									index={index}
 									viewMode={viewMode}
+									variant="compact"
 								/>
 							</div>
 						))}
@@ -220,6 +223,11 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 							data-tab-type={tabType}
 						>
 							{emptyContent || <MagicEmpty description={t("project.noProjects")} />}
+						</div>
+					)}
+					{total !== undefined && projects.length > 0 && (
+						<div className="pt-3 text-center text-xs text-muted-foreground">
+							{t("sidebarPanels.loadedProjects", { count: projects.length, total })}
 						</div>
 					)}
 					{footer}

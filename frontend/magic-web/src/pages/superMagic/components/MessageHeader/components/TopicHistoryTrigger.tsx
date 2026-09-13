@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { ReactNode, RefObject } from "react"
 import { History } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { MagicTooltip } from "@/components/base"
@@ -10,6 +10,7 @@ export interface TopicHistoryTriggerProps {
 	tooltipTitle: string
 	onToggle?: () => void
 	renderDropdown?: (trigger: ReactNode) => ReactNode
+	triggerRef?: RefObject<HTMLButtonElement>
 }
 
 const headerIconButtonClassName = "!size-6 !min-h-6 !min-w-6 !rounded-md !p-0"
@@ -20,11 +21,14 @@ export function TopicHistoryTrigger({
 	tooltipTitle,
 	onToggle,
 	renderDropdown,
+	triggerRef,
 }: TopicHistoryTriggerProps) {
 	const trigger = (
 		<MagicTooltip title={tooltipTitle}>
 			<span>
 				<Button
+					ref={triggerRef}
+					aria-label={tooltipTitle}
 					variant="ghost"
 					size="icon-sm"
 					className={cn(headerIconButtonClassName, isActive && "bg-accent")}

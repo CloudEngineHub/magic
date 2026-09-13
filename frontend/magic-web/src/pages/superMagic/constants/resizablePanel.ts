@@ -67,7 +67,6 @@ export const FIXED_TOPIC_HISTORY_REQUIRED_WIDTH =
 	TOPIC_HISTORY_PANEL_WIDTH +
 	RESIZABLE_PANEL_HANDLE_WIDTH
 
-export const SIDEBAR_COLLAPSED_WIDTH = 24
 export const SIDEBAR_TRANSITION_MS = 220
 export const PROJECT_SIDER_PANEL_STORAGE_KEY = "supermagic-project-sider-panel"
 export const TOPIC_HISTORY_RESIZE = { min: 240, default: 256, max: 480 } as const

@@ -1,3 +1,4 @@
+import type { FileSidebarControl } from "../Detail/components/FilesViewer/types"
 import {
 	useState,
 	useCallback,
@@ -22,6 +23,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import {
 	MessageCirclePlus,
 	PanelRightClose,
+	PanelLeftOpen,
 	PanelRightOpen,
 	Ellipsis,
 	PenLine,
@@ -75,6 +77,8 @@ interface MessageHeaderProps {
 	historyTriggerMode?: "dropdown" | "layout"
 	isHistoryPanelOpen?: boolean
 	onToggleHistoryPanel?: () => void
+	historyTriggerRef?: RefObject<HTMLButtonElement>
+	fileSidebarControl?: FileSidebarControl
 	showTopicHistory?: boolean
 	/** Chat detail injects conversation-level overflow actions (share/rename/save/delete). */
 	trailingActions?: ReactNode
@@ -337,6 +341,8 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 })
 
 function MessageHeader({
+	historyTriggerRef,
+	fileSidebarControl,
 	isConversationPanelCollapsed = false,
 	onToggleConversationPanel,
 	onExpandConversationPanel,
@@ -470,6 +476,7 @@ function MessageHeader({
 	// Closing the history panel only applies to the collapse action; expanding the
 	// conversation pane should not mutate the persisted history-panel preference.
 	const handleToggleConversationPanel = useMemoizedFn(() => {
+		if (!detailPanelVisible && !isConversationPanelCollapsed) return
 		if (!isConversationPanelCollapsed) {
 			onCloseHistoryPanelWhenCollapsing?.()
 		}
@@ -493,6 +500,7 @@ function MessageHeader({
 	function renderHistoryTrigger(placement: "bottomRight" | "leftBottom") {
 		return (
 			<MessageHeaderHistoryControl
+				triggerRef={historyTriggerRef}
 				historyTriggerMode={historyTriggerMode}
 				isHistoryButtonActive={isHistoryButtonActive}
 				tooltipTitle={t("messageHeader.historyTopics")}
@@ -617,6 +625,21 @@ function MessageHeader({
 					</div>
 				) : (
 					<>
+						{fileSidebarControl?.isCollapsed && (
+							<MagicTooltip title={t("sidebarPanels.expandFiles")}>
+								<Button
+									ref={fileSidebarControl.triggerRef}
+									variant="ghost"
+									size="icon-sm"
+									className={headerIconButtonClassName}
+									onClick={fileSidebarControl.onToggle}
+									aria-label={t("sidebarPanels.expandFiles")}
+									data-testid="message-header-expand-files"
+								>
+									<PanelLeftOpen size={16} />
+								</Button>
+							</MagicTooltip>
+						)}
 						{detailPanelVisible && (
 							<MagicTooltip title={t("messageHeader.collapseConversationPanel")}>
 								<span>

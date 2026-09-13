@@ -5800,6 +5800,7 @@
 		"viewShortcuts": "View Shortcuts"
 	},
 	"sidebarPanels": {
+		"browseWorkspaces": "Workspaces",
 		"clearSearch": "Clear search",
 
 		"collapseFiles": "Collapse files",
@@ -5808,10 +5809,14 @@
 		"expandFiles": "Expand files",
 		"expandHistory": "Expand topics",
 		"loadMore": "Load more",
+		"loadedProjects": "Showing {{count}} / {{total}} projects",
 		"noMatchingProjects": "No matching projects",
 		"projectsLoadFailed": "Failed to load projects",
-		"releaseToCollapse": "Release to collapse",
-		"retry": "Retry"
+		"pullToCollapse": "Keep dragging to collapse",
+		"releaseToCollapse": "Release to collapse; drag back to cancel",
+		"renameHint": "Enter to save · Esc to cancel",
+		"retry": "Retry",
+		"workspacesLoadFailed": "Could not load workspaces"
 	},
 	"siderDashboard": {
 		"addDirectory": "Add directory",

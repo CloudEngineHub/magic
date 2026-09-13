@@ -20,13 +20,15 @@ interface ConversationPanelState {
 interface TopicLayoutStoreOptions {
 	/** Controls whether the conversation collapse state is shared across page mounts. */
 	persistConversationPanelState?: boolean
+	bufferedMessageCollapse?: boolean
+	allowConversationPanelResize?: boolean
 }
 
 export interface HistoryDragResult {
 	width: number
-	collapsed: boolean
 }
-const SIDEBAR_COLLAPSE_BUFFER = { ratio: 0.2, min: 40, max: 64, disarmRatio: 0.75 } as const
+// 到最窄后先容忍轻微越界；继续拉动才反馈意图，达到阈值且松手才收起。
+const SIDEBAR_COLLAPSE_BUFFER = { quietDistance: 32, threshold: 128, disarmRatio: 0.75 } as const
 
 const CONVERSATION_PANEL_STORAGE_KEY = "supermagic-topic-conversation-panel"
 
@@ -61,12 +63,29 @@ export class TopicLayoutStore {
 	private minSizeReachedPointerX: number | null = null
 	private minSizeReachedPanelWidthPx: number | null = null
 	private readonly persistConversationPanelState: boolean
+	private readonly bufferedMessageCollapse: boolean
+	private allowConversationPanelResize: boolean
 
 	/** Creates one layout state container with optional conversation-state persistence. */
-	constructor({ persistConversationPanelState = true }: TopicLayoutStoreOptions = {}) {
+	constructor({
+		persistConversationPanelState = true,
+		bufferedMessageCollapse = false,
+		allowConversationPanelResize = true,
+	}: TopicLayoutStoreOptions = {}) {
 		this.persistConversationPanelState = persistConversationPanelState
+		this.bufferedMessageCollapse = bufferedMessageCollapse
+		this.allowConversationPanelResize = allowConversationPanelResize
 		makeAutoObservable(this, {}, { autoBind: true })
 		this.initFromStorage()
+		if (!allowConversationPanelResize) this.isConversationPanelCollapsed = false
+	}
+
+	setConversationPanelResizeAllowed(allowed: boolean) {
+		this.allowConversationPanelResize = allowed
+		if (allowed) return
+		if (this.activeDrag === "message") this.cancelDrag()
+		// 预览隐藏后消息成为唯一主内容，不能保留一个可被迟到 pointerup 提交的收起意图。
+		this.isConversationPanelCollapsed = false
 	}
 
 	initFromStorage() {
@@ -121,7 +140,12 @@ export class TopicLayoutStore {
 	}
 
 	startDragMessagePanel(clientX: number) {
-		if (!Number.isFinite(clientX) || this.isConversationPanelCollapsed) return
+		if (
+			!Number.isFinite(clientX) ||
+			this.isConversationPanelCollapsed ||
+			!this.allowConversationPanelResize
+		)
+			return
 		this.activeDrag = "message"
 		this.isDraggingMessagePanel = true
 		this.dragStartX = clientX
@@ -149,17 +173,25 @@ export class TopicLayoutStore {
 				TOPIC_HISTORY_RESIZE.min,
 				Math.min(this.historyMaxWidthPx, rawWidth),
 			)
-			this.updateCollapseIntent(rawWidth, TOPIC_HISTORY_RESIZE.min)
 			return
 		}
 
-		if (this.activeDrag !== "message" || this.isConversationPanelCollapsed) {
+		if (
+			this.activeDrag !== "message" ||
+			this.isConversationPanelCollapsed ||
+			!this.allowConversationPanelResize
+		) {
 			return
 		}
 
 		const deltaX = clientX - this.dragStartX
-		const nextWidth = this.clampMessageWidth(this.dragStartMessagePanelWidthPx - deltaX)
+		const rawWidth = this.dragStartMessagePanelWidthPx - deltaX
+		const nextWidth = this.clampMessageWidth(rawWidth)
 		this.messagePanelWidthPx = nextWidth
+		if (this.bufferedMessageCollapse) {
+			this.updateCollapseIntent(rawWidth, DEFAULT_MIN_WIDTH.MESSAGE_PANEL)
+			return
+		}
 
 		const minWidth = DEFAULT_MIN_WIDTH.MESSAGE_PANEL
 		if (nextWidth <= minWidth + this.COLLAPSE_TRIGGER_SIZE_EPSILON) {
@@ -207,12 +239,12 @@ export class TopicLayoutStore {
 
 	private updateCollapseIntent(rawWidth: number, minWidth: number) {
 		// 内容停在最小宽度；越界距离只表达意图，松开才提交收起。
-		const threshold = Math.max(
-			SIDEBAR_COLLAPSE_BUFFER.min,
-			Math.min(SIDEBAR_COLLAPSE_BUFFER.max, minWidth * SIDEBAR_COLLAPSE_BUFFER.ratio),
-		)
+		const { threshold, quietDistance } = SIDEBAR_COLLAPSE_BUFFER
 		const overshoot = Math.max(0, minWidth - rawWidth)
-		this.collapseProgress = Math.min(1, overshoot / threshold)
+		this.collapseProgress = Math.max(
+			0,
+			Math.min(1, (overshoot - quietDistance) / (threshold - quietDistance)),
+		)
 		if (overshoot >= threshold) this.isCollapseArmed = true
 		else if (overshoot < threshold * SIDEBAR_COLLAPSE_BUFFER.disarmRatio)
 			this.isCollapseArmed = false
@@ -251,10 +283,9 @@ export class TopicLayoutStore {
 			// 仅点击手柄时，不把窗口限制后的显示宽度覆盖为用户的新偏好。
 			const result = {
 				width:
-					this.isCollapseArmed || this.historyDragPointerX === this.dragStartX
+					this.historyDragPointerX === this.dragStartX
 						? this.historyPreferredWidthPx
 						: this.historyDragWidthPx,
-				collapsed: this.isCollapseArmed,
 			}
 			this.clearDragState()
 			return result
@@ -262,6 +293,17 @@ export class TopicLayoutStore {
 		if (this.activeDrag === "project" && this.bufferedProjectDrag && this.isCollapseArmed) {
 			this.projectSiderWidthPx = this.dragStartProjectSiderWidthPx
 			this.collapseProjectSider()
+		}
+		if (
+			this.activeDrag === "message" &&
+			this.bufferedMessageCollapse &&
+			this.allowConversationPanelResize
+		) {
+			if (this.isCollapseArmed) {
+				this.messagePanelWidthPx = this.dragStartMessagePanelWidthPx
+				this.lastExpandedMessagePanelWidthPx = this.dragStartMessagePanelWidthPx
+				this.collapseConversationPanel()
+			} else this.lastExpandedMessagePanelWidthPx = this.messagePanelWidthPx
 		}
 		if (!this.isDraggingProjectSider && !this.isDraggingMessagePanel) {
 			return
@@ -276,6 +318,8 @@ export class TopicLayoutStore {
 		if (this.activeDrag === "project" && this.bufferedProjectDrag)
 			this.projectSiderWidthPx = this.dragStartProjectSiderWidthPx
 		if (this.activeDrag === "history") this.historyDragWidthPx = this.dragStartHistoryWidthPx
+		if (this.activeDrag === "message" && this.bufferedMessageCollapse)
+			this.messagePanelWidthPx = this.dragStartMessagePanelWidthPx
 		// Browser-cancelled gestures should stop resizing without committing transient widths.
 		this.clearDragState()
 	}
@@ -299,6 +343,7 @@ export class TopicLayoutStore {
 	}
 
 	collapseConversationPanel() {
+		if (!this.allowConversationPanelResize) return
 		if (!this.isConversationPanelCollapsed) {
 			if (
 				this.messagePanelWidthPx >

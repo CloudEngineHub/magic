@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from "react"
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react"
 import { useMemoizedFn } from "ahooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { TopicLayoutStore, type HistoryDragResult } from "../stores/TopicLayoutStore"
@@ -8,6 +8,7 @@ interface UseTopicDesktopLayoutOptions {
 	allowProjectSiderResize?: boolean
 	enableProjectCollapse?: boolean
 	onHistoryDragEnd?: (result: HistoryDragResult) => void
+	allowConversationPanelResize?: boolean
 	/** Controls whether conversation collapse state survives remounts. */
 	persistConversationPanelState?: boolean
 }
@@ -49,14 +50,22 @@ export function useTopicDesktopLayout({
 	persistConversationPanelState = true,
 	enableProjectCollapse = false,
 	onHistoryDragEnd,
+	allowConversationPanelResize = !isReadOnly,
 }: UseTopicDesktopLayoutOptions): UseTopicDesktopLayoutReturn {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const storeRef = useRef<TopicLayoutStore | null>(null)
 
 	if (!storeRef.current) {
-		storeRef.current = new TopicLayoutStore({ persistConversationPanelState })
+		storeRef.current = new TopicLayoutStore({
+			persistConversationPanelState,
+			bufferedMessageCollapse: enableProjectCollapse,
+			allowConversationPanelResize,
+		})
 	}
 	const store = storeRef.current
+	useLayoutEffect(() => {
+		store.setConversationPanelResizeAllowed(allowConversationPanelResize)
+	}, [store, allowConversationPanelResize])
 
 	const startDragProjectSider = useMemoizedFn((clientX: number) => {
 		if (!allowProjectSiderResize) return
@@ -68,11 +77,12 @@ export function useTopicDesktopLayout({
 	)
 
 	const startDragMessagePanel = useMemoizedFn((clientX: number) => {
-		if (isReadOnly) return
+		if (isReadOnly || !allowConversationPanelResize) return
 		store.startDragMessagePanel(clientX)
 	})
 
 	const toggleConversationPanel = useMemoizedFn(() => {
+		if (!allowConversationPanelResize && !store.isConversationPanelCollapsed) return
 		store.toggleConversationPanel()
 	})
 
@@ -82,6 +92,7 @@ export function useTopicDesktopLayout({
 
 	/** Collapses the conversation panel while preserving its last expanded width. */
 	const collapseConversationPanel = useMemoizedFn(() => {
+		if (!allowConversationPanelResize) return
 		store.collapseConversationPanel()
 	})
 
@@ -113,7 +124,8 @@ export function useTopicDesktopLayout({
 			if (
 				store.containerWidthPx !== containerRef.current.clientWidth &&
 				(store.isDraggingHistoryPanel ||
-					(enableProjectCollapse && store.isDraggingProjectSider))
+					(enableProjectCollapse &&
+						(store.isDraggingProjectSider || store.isDraggingMessagePanel)))
 			)
 				store.cancelDrag()
 			store.setContainerWidth(containerRef.current.clientWidth)
@@ -154,11 +166,12 @@ export function useTopicDesktopLayout({
 		}
 
 		/** Finalizes drag and persists the latest width when the pointer completes normally. */
-		const handlePointerUp = () => {
+		const handlePointerUp = (event: PointerEvent) => {
+			nextClientX = event.clientX
 			if (rafId !== null) {
 				window.cancelAnimationFrame(rafId)
-				flushDragPosition()
 			}
+			flushDragPosition()
 			const result = store.endDrag()
 			if (result) finishHistoryDrag(result)
 		}
@@ -169,13 +182,17 @@ export function useTopicDesktopLayout({
 				window.cancelAnimationFrame(rafId)
 				rafId = null
 			}
+			nextClientX = null
 			store.cancelDrag()
 		}
 
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (
 				event.key !== "Escape" ||
-				(!(enableProjectCollapse && store.isDraggingProjectSider) &&
+				(!(
+					enableProjectCollapse &&
+					(store.isDraggingProjectSider || store.isDraggingMessagePanel)
+				) &&
 					!store.isDraggingHistoryPanel)
 			)
 				return

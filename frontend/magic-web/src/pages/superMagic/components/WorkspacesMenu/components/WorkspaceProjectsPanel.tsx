@@ -1,215 +1,245 @@
 import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
-import { reaction } from "mobx"
+import { observer } from "mobx-react-lite"
+import { Layers, Users } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
-import MagicEmpty from "@/components/base/MagicEmpty"
 import { Button } from "@/components/shadcn-ui/button"
-import CreateProjectInput from "@/layouts/BaseLayout/components/MagicSidebar/WorkspaceList/CreateProjectInput"
-import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
-import projectStore from "@/pages/superMagic/stores/core/project"
+import { cn } from "@/utils/cn"
+import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import { projectStore, workspaceStore } from "@/pages/superMagic/stores/core"
+import SuperMagicService from "@/pages/superMagic/services"
 import useSearchValue from "@/pages/superMagic/pages/Assistant/components/TopicPanel/hooks/useSearchValue"
-import useProjectItemActionProps from "../../EmptyWorkspacePanel/hooks/useProjectItemActionProps"
-import { ViewToggle } from "./CollaborationProjectsPanel/components"
-import { useViewTogglePersistValue } from "./CollaborationProjectsPanel/components/ViewToggle/hooks"
-import { ProjectsPanel, ProjectsPanelList } from "./ProjectsPanel"
+import { ProjectsPanel } from "./ProjectsPanel"
+import WorkspaceProjectsContent from "./WorkspaceProjectsContent"
+import { CollaborationProjectsContent } from "./CollaborationProjectsPanel"
 
 interface WorkspaceProjectsPanelProps {
 	open: boolean
 	workspace: Workspace
+	initialSource?: "workspace" | "collaboration"
 	onClose: () => void
 }
 
-const PAGE_SIZE = 100
+type ProjectBrowserSource = { type: "workspace"; workspace: Workspace } | { type: "collaboration" }
+const WORKSPACE_PAGE_SIZE = 20
 
-export default function WorkspaceProjectsPanel({
+function WorkspaceProjectsPanel({
 	open,
 	workspace,
+	initialSource = "workspace",
 	onClose,
 }: WorkspaceProjectsPanelProps) {
 	const { t } = useTranslation("super")
-	const { searchValue, onSearchValueChange, debouncedSearchValue, setSearchValue } =
-		useSearchValue({ debounceWait: 500 })
-	const { viewMode, setViewMode } = useViewTogglePersistValue({
-		localStorageKey: "workspace_projects_panel_view_toggle_value",
-	})
-	const [projects, setProjects] = useState<ProjectListItem[]>(() =>
-		projectStore.getProjectsByWorkspace(workspace.id),
+	const { searchValue, onSearchValueChange, setSearchValue } = useSearchValue()
+	const [source, setSource] = useState<ProjectBrowserSource>(() =>
+		initialSource === "collaboration"
+			? { type: "collaboration" }
+			: { type: "workspace", workspace },
 	)
-	const [loading, setLoading] = useState(open)
+	const [workspaces, setWorkspaces] = useState<Workspace[]>(() =>
+		Array.from(
+			new Map(
+				[
+					...workspaceStore.workspaces,
+					...(initialSource === "workspace" ? [workspace] : []),
+				]
+					.filter((item) => item.id && item.workspace_type === "default")
+					.map((item) => [item.id, item]),
+			).values(),
+		),
+	)
+	const [loading, setLoading] = useState(false)
 	const [failed, setFailed] = useState(false)
-	const [page, setPage] = useState(1)
-	const failedPageRef = useRef(1)
-	const [total, setTotal] = useState(0)
-	const [creating, setCreating] = useState(false)
+	const [page, setPage] = useState(0)
+	const [hasMore, setHasMore] = useState(true)
 	const requestId = useRef(0)
-	const isOpenRef = useRef(open)
-	const actions = useProjectItemActionProps({ selectedWorkspace: workspace })
+	const pending = useRef(false)
+	const failedPage = useRef(1)
+	const isOpen = useRef(open)
 
-	const load = useMemoizedFn(async (nextPage = 1) => {
-		if (!isOpenRef.current) return
+	const loadWorkspaces = useMemoizedFn(async (nextPage: number) => {
+		if (!isOpen.current || pending.current) return
 		const id = ++requestId.current
+		pending.current = true
 		setLoading(true)
 		setFailed(false)
 		try {
-			const result = await SuperMagicApi.getProjectsWithCollaboration({
-				workspace_id: workspace.id,
-				project_name: debouncedSearchValue,
+			const result: { list: Workspace[]; total: number } = await SuperMagicApi.getWorkspaces({
 				page: nextPage,
-				page_size: PAGE_SIZE,
-				show_collaboration: 1,
+				page_size: WORKSPACE_PAGE_SIZE,
+				workspace_type: "default",
+				auto_create: false,
 			})
 			if (id !== requestId.current) return
-			// 搜索和分页只更新本面板；全局导航缓存继续由项目 service 维护。
-			setProjects((previous) =>
-				nextPage === 1
-					? result.list
-					: [
-							...previous,
-							...result.list.filter(
-								(item) => !previous.some((existing) => existing.id === item.id),
-							),
-						],
-			)
+			// 目录查询不切换全局工作区；第一页也保留尚未分页到的当前工作区入口。
+			setWorkspaces((previous) => {
+				const fresh = new Map(result.list.map((item) => [item.id, item]))
+				const ordered =
+					nextPage === 1
+						? [...result.list, ...previous.filter((item) => !fresh.has(item.id))]
+						: [
+								...previous.map((item) => fresh.get(item.id) || item),
+								...result.list.filter(
+									(item) => !previous.some((existing) => existing.id === item.id),
+								),
+							]
+				return ordered.filter((item) => item.workspace_type === "default")
+			})
 			setPage(nextPage)
-			setTotal(result.total)
+			setHasMore(nextPage * WORKSPACE_PAGE_SIZE < result.total)
 		} catch {
 			if (id === requestId.current) {
-				failedPageRef.current = nextPage
+				failedPage.current = nextPage
 				setFailed(true)
 			}
 		} finally {
-			if (id === requestId.current) setLoading(false)
+			if (id === requestId.current) {
+				pending.current = false
+				setLoading(false)
+			}
 		}
 	})
 
 	useEffect(() => {
-		isOpenRef.current = open
-		if (!open) return
-		setProjects(debouncedSearchValue ? [] : projectStore.getProjectsByWorkspace(workspace.id))
-		setTotal(0)
-		void load()
+		isOpen.current = open
+		if (open) void loadWorkspaces(1)
 		return () => {
+			isOpen.current = false
 			requestId.current += 1
-			isOpenRef.current = false
+			pending.current = false
 		}
-	}, [open, workspace.id, debouncedSearchValue, load])
+	}, [open, loadWorkspaces])
 
-	// 移动、删除等弹窗仍由原 hook 完成；其 service 刷新工作区后同步面板查询。
-	useEffect(() => {
-		if (!open) return
-		return reaction(
-			() =>
-				projectStore
-					.getProjectsByWorkspace(workspace.id)
-					.map((item) =>
-						[item.id, item.project_name, item.is_pinned, item.updated_at].join(":"),
-					)
-					.join("|"),
-			() => {
-				void load()
-			},
+	const selectSource = (next: ProjectBrowserSource) => {
+		if (
+			next.type === source.type &&
+			(next.type === "collaboration" ||
+				(source.type === "workspace" && next.workspace.id === source.workspace.id))
 		)
-	}, [open, workspace.id, load])
-
+			return
+		setSearchValue("")
+		setSource(next)
+	}
 	const close = useMemoizedFn(() => {
-		isOpenRef.current = false
+		isOpen.current = false
 		requestId.current += 1
 		setSearchValue("")
-		setCreating(false)
 		onClose()
 	})
+	const title =
+		source.type === "workspace"
+			? source.workspace.name || t("workspace.unnamedWorkspace")
+			: t("workspace.collaborationProjectsTitle")
 
 	return (
 		<ProjectsPanel
 			open={open}
-			title={workspace.name || t("workspace.unnamedWorkspace")}
+			title={title}
 			searchValue={searchValue}
 			onSearchValueChange={onSearchValueChange}
 			onClose={close}
-		>
-			<ProjectsPanelList
-				projects={projects}
-				selectedProjectId={projectStore.selectedProject?.id}
-				emptyContent={
-					debouncedSearchValue ? (
-						<div className="flex flex-col items-center gap-2 py-4">
-							<MagicEmpty description={t("sidebarPanels.noMatchingProjects")} />
-							<Button variant="outline" onClick={() => setSearchValue("")}>
-								{t("sidebarPanels.clearSearch")}
-							</Button>
-						</div>
-					) : undefined
-				}
-				loading={loading}
-				viewMode={viewMode}
-				toolbar={
-					<>
-						{creating ? (
-							<CreateProjectInput
-								workspaceId={workspace.id}
-								onCancel={() => setCreating(false)}
-								onCreated={close}
-							/>
-						) : (
-							<Button variant="outline" onClick={() => setCreating(true)}>
-								{t("sidebarPanels.createProject")}
+			sidebar={
+				<nav
+					aria-label={t("sidebarPanels.browseWorkspaces")}
+					className="flex w-[180px] shrink-0 flex-col border-r border-border bg-muted/20 p-2 max-sm:w-[128px]"
+				>
+					<div className="px-2 py-2 text-xs font-medium text-muted-foreground">
+						{t("sidebarPanels.browseWorkspaces")}
+					</div>
+					<div className="max-h-[55vh] flex-1 overflow-y-auto">
+						{workspaces.map((item) => (
+							<button
+								type="button"
+								key={item.id}
+								aria-current={
+									source.type === "workspace" && source.workspace.id === item.id
+										? true
+										: undefined
+								}
+								className={cn(
+									"mb-0.5 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent",
+									source.type === "workspace" &&
+										source.workspace.id === item.id &&
+										"bg-accent text-accent-foreground",
+								)}
+								onClick={() => selectSource({ type: "workspace", workspace: item })}
+							>
+								<Layers size={16} className="shrink-0" />
+								<span className="min-w-0 flex-1 truncate">
+									{item.name || t("workspace.unnamedWorkspace")}
+								</span>
+							</button>
+						))}
+						{failed && (
+							<div role="alert" className="px-2 py-2 text-xs text-muted-foreground">
+								{t("sidebarPanels.workspacesLoadFailed")}
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={() => void loadWorkspaces(failedPage.current)}
+								>
+									{t("sidebarPanels.retry")}
+								</Button>
+							</div>
+						)}
+						{!failed && hasMore && (
+							<Button
+								variant="ghost"
+								size="sm"
+								className="w-full"
+								disabled={loading}
+								onClick={() => void loadWorkspaces(page + 1)}
+							>
+								{loading ? t("common.loading") : t("sidebarPanels.loadMore")}
 							</Button>
 						)}
-						<ViewToggle value={viewMode} onChange={setViewMode} />
-					</>
-				}
-				itemProps={{
-					onClick: (project) => {
+					</div>
+					<button
+						type="button"
+						aria-current={source.type === "collaboration" ? true : undefined}
+						className={cn(
+							"mt-2 flex items-center gap-2 rounded-md border-t border-border px-2 py-2 text-left text-xs hover:bg-accent",
+							source.type === "collaboration" && "bg-accent text-accent-foreground",
+						)}
+						onClick={() => selectSource({ type: "collaboration" })}
+					>
+						<Users size={16} className="shrink-0" />
+						<span className="truncate">
+							{t("workspace.collaborationProjectsTitle")}
+						</span>
+					</button>
+				</nav>
+			}
+		>
+			{source.type === "workspace" ? (
+				<WorkspaceProjectsContent
+					key={source.workspace.id}
+					open={open}
+					workspace={source.workspace}
+					searchValue={searchValue}
+					onClearSearch={() => setSearchValue("")}
+					onClose={close}
+				/>
+			) : (
+				<CollaborationProjectsContent
+					open={open}
+					searchValue={searchValue}
+					onClose={close}
+					workspaces={workspaceStore.workspaces}
+					selectedWorkspace={workspaceStore.selectedWorkspace}
+					fetchWorkspaces={(params) =>
+						SuperMagicService.workspace.fetchWorkspaces(params)
+					}
+					fetchProjects={(params) => SuperMagicService.project.fetchProjects(params)}
+					onCollaborationProjectClick={(project) => {
 						if (project.id !== projectStore.selectedProject?.id)
-							actions.handleProjectClick(project)
-						close()
-					},
-					onRenameProject: async (params) => {
-						await actions.handleRenameProject(params)
-						await load()
-					},
-					onPinProject: async (project, pinned) => {
-						await actions.handlePinProject(project, pinned)
-						await load()
-					},
-					onDeleteProject: actions.handleDeleteProjectConfirm,
-					onMoveProject: actions.handleMoveProject,
-					onTransferProject: actions.handleTransferProject,
-					onAddCollaborators: actions.onAddCollaborators,
-					onCancelWorkspaceShortcut: actions.handleCancelWorkspaceShortcut,
-					refetchProjects: () => {
-						void load()
-					},
-				}}
-				error={
-					failed && (
-						<div role="alert" className="flex items-center justify-center gap-2 py-4">
-							<span>{t("sidebarPanels.projectsLoadFailed")}</span>
-							<Button
-								variant="outline"
-								onClick={() => void load(failedPageRef.current)}
-							>
-								{t("sidebarPanels.retry")}
-							</Button>
-						</div>
-					)
-				}
-				footer={
-					projects.length < total && (
-						<div className="flex justify-center py-4">
-							<Button
-								variant="outline"
-								disabled={loading}
-								onClick={() => void load(page + 1)}
-							>
-								{t("sidebarPanels.loadMore")}
-							</Button>
-						</div>
-					)
-				}
-			/>
-			{actions.projectModals}
+							void SuperMagicService.switchProjectInDesktop(project)
+					}}
+				/>
+			)}
 		</ProjectsPanel>
 	)
 }
+
+export default observer(WorkspaceProjectsPanel)

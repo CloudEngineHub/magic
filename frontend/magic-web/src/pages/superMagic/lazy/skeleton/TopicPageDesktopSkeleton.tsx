@@ -1,6 +1,5 @@
 import { useState } from "react"
 import { useParams } from "react-router"
-import { SIDEBAR_COLLAPSED_WIDTH } from "../../constants/resizablePanel"
 import { TopicLayoutStore } from "../../pages/TopicPage/stores/TopicLayoutStore"
 import {
 	readOpenFromStorage,
@@ -101,20 +100,16 @@ export function TopicPageDesktopSkeletonBase({
 		!isAudioProjectMode(project?.project_mode) &&
 		(!showMessagePanel || !isReadOnlyProject(project?.user_role))
 	const collapsed = useSidebarPreferences && layout.isProjectSiderCollapsed
-	const projectSiderWidth = collapsed ? SIDEBAR_COLLAPSED_WIDTH : layout.projectSiderWidthPx
+	const projectSiderWidth = collapsed ? 0 : layout.projectSiderWidthPx
 	const historyStorageKey = TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.topicPage
 	const historyWidth = readOpenFromStorage(historyStorageKey)
 		? readTopicHistoryWidth(historyStorageKey)
-		: SIDEBAR_COLLAPSED_WIDTH
+		: 0
 
 	return (
 		<div className="flex h-full w-full min-w-0" data-testid="main-workspace-container">
-			<div className="shrink-0" style={{ width: projectSiderWidth }}>
-				{collapsed ? (
-					<Skeleton className="h-full w-6 rounded border border-border" />
-				) : (
-					<TopicSidebarSkeleton compactHeader={useSidebarPreferences} />
-				)}
+			<div className="shrink-0 overflow-hidden" style={{ width: projectSiderWidth }}>
+				{!collapsed && <TopicSidebarSkeleton compactHeader={useSidebarPreferences} />}
 			</div>
 
 			{/* <ResizeHandleSkeleton /> */}
@@ -133,7 +128,7 @@ export function TopicPageDesktopSkeletonBase({
 					</>
 				)}
 			</div>
-			{useSidebarPreferences && showMessagePanel && (
+			{useSidebarPreferences && showMessagePanel && historyWidth > 0 && (
 				<div
 					className="h-full shrink-0 overflow-hidden rounded border border-border bg-background"
 					style={{ width: historyWidth }}

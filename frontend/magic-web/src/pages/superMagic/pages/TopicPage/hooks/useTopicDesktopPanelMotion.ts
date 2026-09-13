@@ -3,7 +3,6 @@ import {
 	FIXED_TOPIC_HISTORY_REQUIRED_WIDTH,
 	DEFAULT_MIN_WIDTH,
 	TOPIC_HISTORY_RESIZE,
-	SIDEBAR_COLLAPSED_WIDTH,
 	MIN_DETAIL_PANEL_WIDTH_FOR_FIXED_TOPIC_HISTORY,
 	RESIZABLE_PANEL_HANDLE_WIDTH,
 	TOPIC_HISTORY_PANEL_WIDTH,
@@ -267,7 +266,7 @@ export function useTopicDesktopPanelMotion({
 	const reservedTopicHistoryPanelWidth =
 		historyResize && !isReadOnly
 			? !isTopicHistoryPanelOpen
-				? SIDEBAR_COLLAPSED_WIDTH
+				? 0
 				: topicHistoryMode === "drawer"
 					? 0
 					: topicHistoryPanelWidth
