@@ -135,6 +135,7 @@ class SuperMagicAgentMarketAssembler
         $allowDelete = $isAdded && $userAgent?->getSourceType()->isMarket() === true;
 
         $latestVersionCode = isset($latestVersionsMap[$agentCode]) ? $latestVersionsMap[$agentCode]->getVersion() : null;
+        $latestVersion = $latestVersionsMap[$agentCode] ?? null;
         $publisher = self::buildPublisher(
             $agentMarket->getPublisherType(),
             $publisherUserMap[$agentMarket->getPublisherId()] ?? null
@@ -152,16 +153,16 @@ class SuperMagicAgentMarketAssembler
             userCode: $userAgent?->getAgentCode(),
             name: self::resolveLocalizedText(
                 $agentMarket->getNameI18n(),
-                $latestVersionsMap[$agentCode]?->getI18nName(CoContext::getLanguage()) ?? '',
+                $latestVersion?->getI18nName(CoContext::getLanguage()) ?? '',
                 CoContext::getLanguage()
             ),
             role: self::resolveLocalizedRole(
-                $agentMarket->getRoleI18n() ?? $latestVersionsMap[$agentCode]?->getRoleI18n(),
+                $agentMarket->getRoleI18n() ?? $latestVersion?->getRoleI18n(),
                 CoContext::getLanguage()
             ),
             description: self::resolveLocalizedText(
                 $agentMarket->getDescriptionI18n(),
-                $latestVersionsMap[$agentCode]?->getI18nDescription(CoContext::getLanguage()) ?? '',
+                $latestVersion?->getI18nDescription(CoContext::getLanguage()) ?? '',
                 CoContext::getLanguage()
             ),
             icon: $agentMarket->getIcon(),
