@@ -1,5 +1,5 @@
 export type PhoneShellProfile =
-	"modern" | "home-button" | "notch" | "punch-hole" | "tablet" | "foldable"
+	"modern" | "home-button" | "notch" | "punch-hole" | "tablet" | "foldable" | "flip"
 
 export interface PhoneShellInsets {
 	left: number
@@ -14,7 +14,7 @@ export function getPhoneShellInsets(
 	landscape: boolean,
 	posture?: "folded" | "unfolded",
 ): PhoneShellInsets {
-	if (profile === "foldable")
+	if (profile === "foldable" || profile === "flip")
 		return posture === "unfolded"
 			? { left: 12, right: 12, top: 36, bottom: 24 }
 			: { left: 10, right: 10, top: 44, bottom: 26 }

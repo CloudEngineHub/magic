@@ -46,7 +46,9 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 			? getPhoneShellInsets(profile, landscape, posture)
 			: NO_PHONE_SHELL_INSETS
 		const tablet = profile === "tablet"
-		const foldable = profile === "foldable"
+		const foldable = profile === "foldable" || profile === "flip"
+		// 大折叠左右展开，Flip 上下展开；旋转后转轴方向也随之交换。
+		const horizontalHinge = profile === "flip" ? !rotated : rotated
 		const homeButton = profile === "home-button"
 		const sideCamera = landscape && !tablet && !foldable
 		const radius = tablet
@@ -62,7 +64,7 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 			? 7
 			: homeButton
 				? 53
-				: profile === "punch-hole"
+				: profile === "punch-hole" || profile === "flip"
 					? 14
 					: profile === "notch"
 						? 155
@@ -73,7 +75,7 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 			? 7
 			: homeButton
 				? 5
-				: profile === "punch-hole"
+				: profile === "punch-hole" || profile === "flip"
 					? 14
 					: foldable
 						? 21
@@ -157,7 +159,7 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 							</span>
 						</div>
 					)}
-					{!(foldable && posture === "unfolded") && (
+					{!(profile === "foldable" && posture === "unfolded") && (
 						<div
 							className="absolute bg-[#08090a]"
 							style={{
@@ -206,7 +208,7 @@ const PhoneShellContent = forwardRef<HTMLDivElement, PhoneShellContentProps>(
 								key={String(end)}
 								className="absolute rounded-sm bg-gradient-to-r from-[#43464c] via-[#9a9ca0] to-[#43464c]"
 								style={
-									rotated
+									horizontalHinge
 										? {
 												top: "calc(50% - 6px)",
 												left: end ? undefined : 0,

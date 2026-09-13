@@ -1,4 +1,6 @@
 import type { DeviceDefinition } from "./types"
+import { XIAOMI_DEVICE_PRESETS } from "./xiaomiDevices"
+import { REDMI_DEVICE_PRESETS } from "./redmiDevices"
 
 // 常规预设取自 Chrome DevTools EmulatedDevices.ts（2026-09-14）。
 // 新 iPhone 仅按 Apple 物理分辨率 / 假定 3 倍比例提供参考视口，不能当作 Safari 实测值。
@@ -15,7 +17,6 @@ const definitions = [
 		folded: { width: 466, height: 678 },
 		profile: "foldable",
 		reference: true,
-		common: true,
 	},
 	{
 		id: "iphone-18-pro-max",
@@ -47,7 +48,6 @@ const definitions = [
 		height: 956,
 		profile: "modern",
 		reference: true,
-		common: true,
 	},
 	{
 		id: "iphone-se",
@@ -130,6 +130,8 @@ const definitions = [
 		height: 956,
 		profile: "modern",
 	},
+	...XIAOMI_DEVICE_PRESETS,
+	...REDMI_DEVICE_PRESETS,
 	{
 		id: "pixel-7",
 		name: "Pixel 7",
@@ -156,7 +158,6 @@ const definitions = [
 		width: 412,
 		height: 924,
 		profile: "punch-hole",
-		common: true,
 	},
 	{
 		id: "galaxy-a55",
@@ -219,6 +220,15 @@ const definitions = [
 export type DeviceId = (typeof definitions)[number]["id"]
 export type DevicePreset = DeviceDefinition & { id: DeviceId }
 export const DEVICE_PRESETS: readonly DevicePreset[] = definitions
+
+export function getDefaultDevicePreset(): DevicePreset {
+	// 目录中的 iphone-<代数>-pro-max 是稳定机型 ID；新增一代后自动成为默认，不复制尺寸。
+	const latest = DEVICE_PRESETS.filter(
+		(device) => device.kind === "phone" && /^iphone-\d+-pro-max$/.test(device.id),
+	).sort((left, right) => right.id.localeCompare(left.id, "en", { numeric: true }))[0]
+	if (!latest) throw new Error("The device catalog must include an iPhone Pro Max preset.")
+	return latest
+}
 
 export function getDevicePreset(id: DeviceId | "custom"): DevicePreset | undefined {
 	return DEVICE_PRESETS.find((device) => device.id === id)

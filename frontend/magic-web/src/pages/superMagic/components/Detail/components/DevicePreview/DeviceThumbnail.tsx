@@ -29,7 +29,14 @@ export function DeviceThumbnail({
 				}}
 			>
 				{foldable ? (
-					<span className="absolute inset-y-0 left-1/2 w-px bg-foreground/25" />
+					<span
+						className={cn(
+							"absolute bg-foreground/25",
+							device.profile === "flip"
+								? "inset-x-0 top-1/2 h-px"
+								: "inset-y-0 left-1/2 w-px",
+						)}
+					/>
 				) : (
 					<span
 						className={cn(
