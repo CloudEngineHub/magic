@@ -3,6 +3,7 @@ import { useMemoizedFn } from "ahooks"
 import type {
 	FileManagerLocationState,
 	FileManagerSort,
+	FileManagerSortDirection,
 	FileManagerView,
 } from "../components/FileManager/types"
 
@@ -26,6 +27,21 @@ export function useFileManagerNavigation(
 	const [history, setHistory] = useState({ ids: [initialDirectoryId], cursor: 0 })
 	const [view, setView] = useState<FileManagerView>(initialView)
 	const [sort, setSort] = useState<FileManagerSort>("name")
+	const [sortDirection, setSortDirection] = useState<FileManagerSortDirection>("ascending")
+	const changeSort = useMemoizedFn((next: FileManagerSort, toggle = false) => {
+		setSortDirection(
+			next === sort
+				? toggle
+					? sortDirection === "ascending"
+						? "descending"
+						: "ascending"
+					: sortDirection
+				: next === "modified" || next === "created"
+					? "descending"
+					: "ascending",
+		)
+		setSort(next)
+	})
 	const savedLocations = useRef(new Map<string, FileManagerLocationState>())
 	const scrollTop = useRef(0)
 	const previousInitial = useRef(initialDirectoryId)
@@ -67,7 +83,8 @@ export function useFileManagerNavigation(
 		view,
 		setView,
 		sort,
-		setSort,
+		setSort: changeSort,
+		sortDirection,
 		navigate,
 		back: () => go(-1),
 		forward: () => go(1),

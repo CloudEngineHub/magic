@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
-import { Brain, CircleHelp, Files, FolderTree, ArrowUpRight } from "lucide-react"
+import { Brain, CircleHelp, Files, PanelsTopLeft, ArrowUpRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { ContextHelp } from "@/components/shadcn-composed/context-help"
@@ -151,7 +151,7 @@ export default observer(function UserSpacePanel({
 							})
 						}
 					>
-						<FolderTree size={15} />
+						<PanelsTopLeft size={16} />
 						{t("userSpace.openManager")}
 						<ArrowUpRight size={14} className="ml-auto" />
 					</Button>

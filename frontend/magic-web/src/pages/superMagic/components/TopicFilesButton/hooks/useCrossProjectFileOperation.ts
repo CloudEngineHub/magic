@@ -26,7 +26,7 @@ import {
 import { useCanvasFileOperationGuard } from "./useCanvasFileOperationGuard"
 import type { CanvasProjectPathRepairResult } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 import type { FileScope } from "@/apis/modules/fileScope"
-import type { ConfirmFileOperation } from "./types"
+import type { ConfirmFileOperation, FileOperationPreparation } from "./types"
 import { buildAttachmentIndex } from "../utils/attachmentIndex"
 import { getFileManagerChangedIds, getFileManagerTransferIds } from "../utils/file-manager-transfer"
 
@@ -62,12 +62,15 @@ async function resolveEffectiveOperationFileIds({
 	sourceAttachments,
 	includeDocumentDependencies = true,
 	documentDependencyFileIds,
+	signal,
 }: {
 	fileIds: string[]
 	sourceAttachments: AttachmentItem[]
 	includeDocumentDependencies?: boolean
 	documentDependencyFileIds?: string[]
+	signal?: AbortSignal
 }): Promise<EffectiveOperationFileIdsResult> {
+	signal?.throwIfAborted()
 	if (!includeDocumentDependencies) {
 		return {
 			fileIds: mergeStaticDependencyFileIds(fileIds, [], false),
@@ -86,12 +89,14 @@ async function resolveEffectiveOperationFileIds({
 		const { dependencyTransferFileIds } = await resolveSingleDocumentStaticDependencies({
 			fileIds,
 			attachments: sourceAttachments,
+			signal,
 		})
 		return {
 			fileIds: mergeStaticDependencyFileIds(fileIds, dependencyTransferFileIds, true),
 			dependencyAnalysisFailed: false,
 		}
 	} catch (error) {
+		signal?.throwIfAborted()
 		// Dependency enrichment must not turn an existing file operation into a hard failure.
 		console.error("Failed to resolve document static dependencies for file operation:", error)
 		return {
@@ -251,8 +256,24 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 	)
 
 	const confirmCanvasProjectRisk = useCallback(
-		(canvasRisk: CanvasProjectOperationRisk, repairFailures: string[] = []) =>
+		(
+			canvasRisk: CanvasProjectOperationRisk,
+			repairFailures: string[] = [],
+			signal?: AbortSignal,
+		) =>
 			new Promise<boolean>((resolve) => {
+				if (signal?.aborted) {
+					resolve(false)
+					return
+				}
+				const finish = (accepted: boolean) => {
+					signal?.removeEventListener("abort", abort)
+					resolve(accepted)
+				}
+				const abort = () => {
+					modal.destroy()
+					finish(false)
+				}
 				const impact = getCanvasProjectOperationImpact(canvasRisk)
 				const riskContent =
 					canvasRisk.shouldWarn && impact
@@ -269,7 +290,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 							failures: repairFailures.join("\n"),
 						})
 					: ""
-				MagicModal.confirm({
+				const modal = MagicModal.confirm({
 					title: t("topicFiles.canvasOperationRisk.title"),
 					content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
 					icon: createElement(IconAlertTriangleFilled, {
@@ -287,9 +308,10 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 					},
 					okText: t("topicFiles.moveModal.confirm"),
 					cancelText: t("common.cancel"),
-					onOk: () => resolve(true),
-					onCancel: () => resolve(false),
+					onOk: () => finish(true),
+					onCancel: () => finish(false),
 				})
+				signal?.addEventListener("abort", abort, { once: true })
 			}),
 		[t],
 	)
@@ -306,7 +328,10 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			includeDocumentDependencies?: boolean
 			documentDependencyFileIds?: string[]
 			preserveParentPath?: boolean
+			preparation?: FileOperationPreparation
 		}) => {
+			const preparation = data.preparation
+			preparation?.signal.throwIfAborted()
 			const sourceIndex = confirmOperation
 				? buildAttachmentIndex(data.sourceAttachments)
 				: undefined
@@ -330,7 +355,9 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				sourceAttachments: data.sourceAttachments,
 				includeDocumentDependencies: data.includeDocumentDependencies,
 				documentDependencyFileIds: data.documentDependencyFileIds,
+				signal: preparation?.signal,
 			})
+			preparation?.signal.throwIfAborted()
 			let effectiveFileIds = resolved.fileIds
 			const { dependencyAnalysisFailed } = resolved
 			if (dependencyAnalysisFailed) {
@@ -373,23 +400,30 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 					operation: "move",
 				})
 			}
+			preparation?.signal.throwIfAborted()
 			const preflightResult = await runCanvasFileOperationPreflight({
 				repairOptions: {
 					attachments: data.sourceAttachments,
 					fileIds: effectiveFileIds,
 					operation: "move",
 					projectId,
+					signal: preparation?.signal,
 				},
 				requiresConfirmation: canvasRisk.shouldWarn,
-				confirm: (repairPlan) =>
-					confirmCanvasProjectRisk(
+				confirm: (repairPlan) => {
+					preparation?.signal.throwIfAborted()
+					preparation?.onPhase("awaitingChoice")
+					return confirmCanvasProjectRisk(
 						canvasRisk,
 						repairPlan?.failures.map(
 							(failure) =>
 								`${failure.projectName} / ${failure.fileName}: ${failure.message}`,
 						) ?? [],
-					),
+						preparation?.signal,
+					)
+				},
 				beforeCommit: async () => {
+					preparation?.signal.throwIfAborted()
 					const folderConflicts =
 						conflictDetectionIds.length > 0
 							? detectFolderConflictsForMove(
@@ -400,8 +434,11 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 								)
 							: new Map()
 					if (folderConflicts.size > 0) {
+						preparation?.onPhase("awaitingChoice")
 						const folderChoice =
 							await folderConflictHandler.checkConflicts(folderConflicts)
+						preparation?.signal.throwIfAborted()
+						preparation?.onPhase("checking")
 						if (!folderChoice.shouldProceed) return false
 						keepBothIds = [...keepBothIds, ...folderChoice.keepBothIds]
 					}
@@ -420,7 +457,10 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 							: new Map()
 
 					if (duplicates.size > 0) {
+						preparation?.onPhase("awaitingChoice")
 						const userChoice = await duplicateHandler.checkDuplicates(duplicates)
+						preparation?.signal.throwIfAborted()
+						preparation?.onPhase("checking")
 						if (!userChoice.shouldProceed) return false
 						keepBothIds = [...keepBothIds, ...userChoice.keepBothIds]
 					}
@@ -428,7 +468,9 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 					return true
 				},
 			})
+			preparation?.signal.throwIfAborted()
 			if (!preflightResult.ok) return
+			preparation?.onPhase("awaitingChoice")
 			if (
 				confirmOperation &&
 				!(await confirmOperation({
@@ -444,6 +486,8 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				return
 
 			// 3. 执行移动操作
+			preparation?.signal.throwIfAborted()
+			preparation?.onPhase("executing")
 			setIsOperating(true)
 			setOperationProgress(0)
 
@@ -547,7 +591,10 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			includeDocumentDependencies?: boolean
 			documentDependencyFileIds?: string[]
 			preserveParentPath?: boolean
+			preparation?: FileOperationPreparation
 		}) => {
+			const preparation = data.preparation
+			preparation?.signal.throwIfAborted()
 			const { fileIds: effectiveFileIds, dependencyAnalysisFailed } =
 				await resolveEffectiveOperationFileIds({
 					fileIds: data.fileIds ?? fileIds,
@@ -555,7 +602,9 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 					includeDocumentDependencies:
 						fileScope === "user" ? false : data.includeDocumentDependencies,
 					documentDependencyFileIds: data.documentDependencyFileIds,
+					signal: preparation?.signal,
 				})
+			preparation?.signal.throwIfAborted()
 			if (!isCurrent()) return
 			if (dependencyAnalysisFailed) {
 				magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
@@ -587,7 +636,10 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 					: new Map()
 
 			if (folderConflicts.size > 0) {
+				preparation?.onPhase("awaitingChoice")
 				const folderChoice = await folderConflictHandler.checkConflicts(folderConflicts)
+				preparation?.signal.throwIfAborted()
+				preparation?.onPhase("checking")
 				if (!folderChoice.shouldProceed) {
 					return
 				}
@@ -608,7 +660,10 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 
 			// 2. 如果有同名，显示 Modal 并等待用户选择
 			if (duplicates.size > 0) {
+				preparation?.onPhase("awaitingChoice")
 				const userChoice = await duplicateHandler.checkDuplicates(duplicates)
+				preparation?.signal.throwIfAborted()
+				preparation?.onPhase("checking")
 				if (!userChoice.shouldProceed) {
 					return // 用户取消
 				}
@@ -617,6 +672,8 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 
 			if (!isCurrent()) return
 
+			preparation?.signal.throwIfAborted()
+			preparation?.onPhase("awaitingChoice")
 			// 4. 执行复制操作
 			if (
 				confirmOperation &&
@@ -631,6 +688,8 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			)
 				return
 			if (!isCurrent()) return
+			preparation?.signal.throwIfAborted()
+			preparation?.onPhase("executing")
 			setIsOperating(true)
 			setOperationProgress(0)
 

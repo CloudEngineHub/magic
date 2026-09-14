@@ -2381,6 +2381,14 @@
 	"fileManager": {
 		"back": "后退",
 		"browseFolder": "浏览文件夹",
+		"columns": {
+			"created": "创建时间",
+			"path": "所在位置",
+			"resize": "调整{{name}}列宽",
+			"show": "显示字段",
+			"size": "大小",
+			"source": "来源"
+		},
 		"confirmation": {
 			"backToFiles": "返回文件",
 			"changed": "文件或目录已变化，请重新发起操作并核对范围。",
@@ -2438,6 +2446,12 @@
 		"paste": "粘贴",
 		"path": "文件路径",
 		"places": "位置",
+		"preparation": {
+			"checkingCopy": "正在检查复制内容…",
+			"checkingMove": "正在检查移动内容…",
+			"failed": "检查未完成，文件尚未更改",
+			"target": "已选 {{count}} 项 · 目标：{{target}}"
+		},
 		"processing": "正在处理…",
 		"recycle": {
 			"back": "返回文件",

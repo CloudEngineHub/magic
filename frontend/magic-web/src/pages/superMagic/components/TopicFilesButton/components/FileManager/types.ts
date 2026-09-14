@@ -5,7 +5,8 @@ import type { TopicFilesSpaceConfig } from "../../file-space"
 import type { ProjectListItem, Topic } from "../../../../pages/Workspace/types"
 
 export type FileManagerView = "grid" | "list"
-export type FileManagerSort = "name" | "modified" | "type"
+export type FileManagerSort = "name" | "size" | "type" | "modified" | "created" | "source" | "path"
+export type FileManagerSortDirection = "ascending" | "descending"
 export type FileManagerCommand =
 	| "open"
 	| "rename"

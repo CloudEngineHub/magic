@@ -23,6 +23,12 @@ export type FileOperationConfirmation =
 
 export type ConfirmFileOperation = (request: FileOperationConfirmation) => Promise<boolean>
 
+/** 只控制写入前的读取与确认；进入 executing 后不把取消解释为撤销远端操作。 */
+export interface FileOperationPreparation {
+	signal: AbortSignal
+	onPhase: (phase: "checking" | "awaitingChoice" | "executing") => void
+}
+
 // 附件来源
 export enum AttachmentSource {
 	DEFAULT = 0,

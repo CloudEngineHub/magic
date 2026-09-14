@@ -31,7 +31,7 @@ import { getDuplicateFileModalProps } from "../components/duplicateFileModalProp
 import { resolveTopicFilesCapabilities } from "../file-space"
 import type { FileManagerProps } from "../components/FileManager/types"
 import type { AttachmentIndex } from "../utils/attachmentIndex"
-import type { AttachmentItem } from "./types"
+import type { AttachmentItem, FileOperationPreparation } from "./types"
 
 interface Options {
 	props: FileManagerProps
@@ -41,6 +41,14 @@ interface Options {
 	setSelectedIds: (ids: Set<string>) => void
 	onOpen: (file: AttachmentItem) => void
 	onMoveComplete: (ids: string[]) => void
+}
+
+interface TransferPreparation {
+	fileIds: string[]
+	targetId: string
+	targetName: string
+	mode: "move" | "copy"
+	phase: Parameters<FileOperationPreparation["onPhase"]>[0] | "error"
 }
 
 /** 组合现有文件业务流程。手势和快捷键只调用这里暴露的操作，不直接请求文件 API。 */
@@ -56,7 +64,15 @@ export function useFileManagerOperations({
 	const { t } = useTranslation("super")
 	const { attachments, projectId, spaceConfig, selectedProject, selectedTopic } = props
 	const transferPending = useRef(false)
+	const retryTransfer = useRef<(() => Promise<void>) | null>(null)
 	const [preparingTransfer, setPreparingTransfer] = useState(false)
+	const [transferPreparation, setTransferPreparation] = useState<TransferPreparation | null>(null)
+	const currentTransfer = useRef<{
+		controller: AbortController
+		phase: TransferPreparation["phase"]
+	} | null>(null)
+	const activeScope = useRef({ key: props.scopeKey, active: props.isActive })
+	activeScope.current = { key: props.scopeKey, active: props.isActive }
 	const confirmation = useFileManagerConfirmation({
 		scopeKey: props.scopeKey,
 		isActive: props.isActive,
@@ -120,7 +136,7 @@ export function useFileManagerOperations({
 		duplicateFileHandler: duplicate,
 		downloadProgress,
 	})
-	const names = useFileManagerNames(props, operations, index, directory)
+	const names = useFileManagerNames(props, operations, directory)
 	const pendingMoveIds = useRef<string[]>([])
 	const move = useMoveFile({
 		confirmOperation: confirmation.confirm,
@@ -455,6 +471,163 @@ export function useFileManagerOperations({
 		crossProjectDuplicateHandler: crossProject,
 		importDuplicateHandler: importOperation,
 	})
+	const cancelTransfer = useMemoizedFn(() => {
+		const current = currentTransfer.current
+		if (current?.phase === "executing") return
+		if (current) {
+			current.controller.abort()
+			confirmation.cancel()
+			move.handleDuplicateCancel()
+			move.handleFolderConflictCancel()
+			crossProject.handleDuplicateCancel()
+			crossProject.handleFolderConflictCancel()
+		}
+		currentTransfer.current = null
+		retryTransfer.current = null
+		transferPending.current = false
+		setPreparingTransfer(false)
+		setTransferPreparation(null)
+	})
+	useEffect(() => {
+		if (!props.isActive) cancelTransfer()
+		return cancelTransfer
+	}, [props.scopeKey, props.isActive, cancelTransfer])
+	const runPreparedTransfer = useMemoizedFn(
+		async (
+			requestData: {
+				ids: string[]
+				targetId: string
+				path: AttachmentItem[]
+				mode: "move" | "copy"
+				rootName?: string
+			},
+			execute: (preparation: FileOperationPreparation) => Promise<unknown>,
+		) => {
+			if (transferPending.current || !props.isActive) return
+			const { ids, targetId, path, mode, rootName } = requestData
+			retryTransfer.current = () => runPreparedTransfer(requestData, execute)
+			const controller = new AbortController()
+			const current = { controller, phase: "checking" as TransferPreparation["phase"] }
+			const identity = getFileReferenceIdentityKey()
+			const isCurrent = () =>
+				currentTransfer.current === current &&
+				!controller.signal.aborted &&
+				activeScope.current.active &&
+				activeScope.current.key === props.scopeKey &&
+				identity === getFileReferenceIdentityKey()
+			currentTransfer.current = current
+			transferPending.current = true
+			setPreparingTransfer(true)
+
+			const request: TransferPreparation = {
+				fileIds: [...ids],
+				targetId,
+				mode,
+				phase: "checking",
+				targetName: [
+					rootName ?? props.rootName,
+					...path
+						.filter((file) => file.file_id !== props.rootId)
+						.map((file) => file.file_name || file.filename || file.name),
+				]
+					.filter(Boolean)
+					.join(" / "),
+			}
+			setTransferPreparation(request)
+			const preparation: FileOperationPreparation = {
+				signal: controller.signal,
+				onPhase: (phase) => {
+					if (!isCurrent()) {
+						controller.abort()
+						controller.signal.throwIfAborted()
+					}
+					current.phase = phase
+					setTransferPreparation({ ...request, phase })
+				},
+			}
+			let failed = false
+			try {
+				await execute(preparation)
+			} catch {
+				if (isCurrent()) {
+					failed = true
+					setTransferPreparation({ ...request, phase: "error" })
+				}
+			} finally {
+				// 旧读取结束不能解除后来一次操作的锁，也不能清掉新的准备提示。
+				if (currentTransfer.current === current) {
+					currentTransfer.current = null
+					transferPending.current = false
+					setPreparingTransfer(false)
+					if (!failed) {
+						setTransferPreparation(null)
+						retryTransfer.current = null
+					}
+				}
+			}
+		},
+	)
+
+	const transfer = useMemoizedFn((ids: string[], targetId: string, mode: "move" | "copy") => {
+		const path = spaceConfig?.directorySource
+			? spaceConfig.directorySource.getPath(targetId)
+			: targetId
+				? [...index.getParentItemsById(targetId), index.getItemById(targetId)].filter(
+						(item): item is AttachmentItem => Boolean(item),
+					)
+				: []
+		return runPreparedTransfer({ ids, targetId, path, mode }, async (preparation) => {
+			if (mode === "move") {
+				pendingMoveIds.current = ids
+				if (spaceConfig?.directorySource)
+					await move.moveWithinDirectorySource(path, ids, preparation)
+				else
+					await move.batchMoveFilesWithDuplicateCheck({
+						fileIds: ids,
+						projectId: projectId ?? "",
+						targetParentId: targetId,
+						preparation,
+					})
+			} else if (projectId || spaceConfig?.scope === "user") {
+				await crossProject.executeCopyOperation({
+					fileIds: ids,
+					targetProjectId: projectId ?? "",
+					targetPath: path,
+					sourceAttachments: attachments,
+					targetAttachments: attachments,
+					preparation,
+				})
+			}
+		})
+	})
+	const confirmMoveWithPreparation = (data: { path: AttachmentItem[] }) =>
+		runPreparedTransfer(
+			{
+				ids: move.selectorConfig.pendingMoveFileIds,
+				targetId: data.path.at(-1)?.file_id ?? props.rootId,
+				path: data.path,
+				mode: "move",
+			},
+			(preparation) => move.confirmMove({ ...data, preparation }),
+		)
+	const crossProjectWithPreparation = (
+		mode: "move" | "copy",
+		data: Parameters<typeof crossProject.executeCopyOperation>[0],
+	) =>
+		runPreparedTransfer(
+			{
+				ids: data.fileIds ?? crossProject.fileIds,
+				targetId: data.targetPath.at(-1)?.file_id ?? "",
+				path: data.targetPath,
+				mode,
+				rootName: data.targetProject?.project_name,
+			},
+			(preparation) =>
+				mode === "move"
+					? crossProject.executeMoveOperation({ ...data, preparation })
+					: crossProject.executeCopyOperation({ ...data, preparation }),
+		)
+
 	return {
 		confirmation,
 		operations,
@@ -491,41 +664,11 @@ export function useFileManagerOperations({
 			importOperation.isOperating ||
 			batch.batchLoading ||
 			names.pending,
-		transfer: async (ids: string[], targetId: string, mode: "move" | "copy") => {
-			if (transferPending.current) return
-			transferPending.current = true
-			setPreparingTransfer(true)
-			try {
-				const path = spaceConfig?.directorySource
-					? spaceConfig.directorySource.getPath(targetId)
-					: targetId
-						? [
-								...index.getParentItemsById(targetId),
-								index.getItemById(targetId),
-							].filter((item): item is AttachmentItem => Boolean(item))
-						: []
-				if (mode === "move") {
-					pendingMoveIds.current = ids
-					if (spaceConfig?.directorySource)
-						await move.moveWithinDirectorySource(path, ids)
-					else
-						await move.batchMoveFilesWithDuplicateCheck({
-							fileIds: ids,
-							projectId: projectId ?? "",
-							targetParentId: targetId,
-						})
-				} else if (projectId || spaceConfig?.scope === "user")
-					await crossProject.executeCopyOperation({
-						fileIds: ids,
-						targetProjectId: projectId ?? "",
-						targetPath: path,
-						sourceAttachments: attachments,
-						targetAttachments: attachments,
-					})
-			} finally {
-				transferPending.current = false
-				setPreparingTransfer(false)
-			}
-		},
+		transfer,
+		transferPreparation,
+		retryTransfer: () => retryTransfer.current?.(),
+		confirmMoveWithPreparation,
+		crossProjectWithPreparation,
+		cancelTransfer,
 	}
 }

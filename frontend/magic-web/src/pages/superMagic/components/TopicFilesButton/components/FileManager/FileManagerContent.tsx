@@ -1,7 +1,9 @@
 import {
 	useId,
 	useLayoutEffect,
+	useEffect,
 	useState,
+	useRef,
 	type KeyboardEvent,
 	type ReactNode,
 	type RefObject,
@@ -16,15 +18,26 @@ import type { FilePresentation } from "../../utils/file-presentation"
 import type { useFileManagerSelection } from "../../hooks/useFileManagerSelection"
 import type { useFileManagerGestures } from "../../hooks/useFileManagerGestures"
 import type { useFileManagerCommands } from "../../hooks/useFileManagerCommands"
+import type { useFileManagerColumns } from "../../hooks/useFileManagerColumns"
+import { FileManagerListHeader } from "./FileManagerListHeader"
 import { FileManagerItem } from "./FileManagerItem"
+import type { useRename } from "../../hooks/useRename"
 import type {
 	FileManagerActions,
 	FileManagerLayout,
 	FileManagerView,
 	FileManagerTreeRow,
+	FileManagerSort,
+	FileManagerSortDirection,
 } from "./types"
 
 interface Props {
+	listColumns: ReturnType<typeof useFileManagerColumns>
+	sort: FileManagerSort
+	sortDirection: FileManagerSortDirection
+	onSort: (column: FileManagerSort, toggle?: boolean) => void
+	getColumnText: (file: FilePresentation, column: FileManagerSort) => string
+	rename: ReturnType<typeof useRename>
 	rowDetails: ReadonlyMap<string, FileManagerTreeRow>
 	onToggleFolder: (file: AttachmentItem, all?: boolean) => void
 	viewport: RefObject<HTMLDivElement>
@@ -54,6 +67,25 @@ export function FileManagerContent(props: Props) {
 	const viewport = props.viewport
 	const [width, setWidth] = useState(0)
 	const [keyboardFocus, setKeyboardFocus] = useState(false)
+	const [showActions, setShowActions] = useState(() => window.matchMedia("(hover: none)").matches)
+	const previousRename = useRef(props.rename.renamingItemId)
+	useEffect(() => {
+		const media = window.matchMedia("(hover: none)")
+		const update = () => setShowActions(media.matches)
+		media.addEventListener("change", update)
+		return () => media.removeEventListener("change", update)
+	}, [])
+	useEffect(() => {
+		if (
+			previousRename.current &&
+			!props.rename.renamingItemId &&
+			props.isActive &&
+			(document.activeElement === document.body ||
+				viewport.current?.contains(document.activeElement))
+		)
+			viewport.current?.focus({ preventScroll: true })
+		previousRename.current = props.rename.renamingItemId
+	}, [props.rename.renamingItemId, props.isActive, viewport])
 	const listId = useId()
 	const grid = props.view === "grid"
 	const padding = grid ? 13 : 10
@@ -61,8 +93,8 @@ export function FileManagerContent(props: Props) {
 	const layout: FileManagerLayout = {
 		columns,
 		columnWidth: Math.max(0, (width - padding * 2 + (grid ? 8 : 0)) / columns),
-		rowHeight: grid ? 118 : 34,
-		itemHeight: grid ? 110 : 33,
+		rowHeight: grid ? 138 : 34,
+		itemHeight: grid ? 130 : 33,
 		gap: grid ? 8 : 0,
 		padding,
 	}
@@ -146,7 +178,10 @@ export function FileManagerContent(props: Props) {
 			props.onUp()
 			return
 		}
-		if (key === "f2" || (mac && key === "enter")) return execute("rename")
+		if (key === "f2" || (mac && key === "enter")) {
+			if (!mod && !event.altKey && !event.shiftKey && !event.repeat) execute("rename")
+			return
+		}
 		if (key === "delete" || (mac && event.metaKey && key === "backspace"))
 			return execute("trash")
 		if (
@@ -236,145 +271,173 @@ export function FileManagerContent(props: Props) {
 		}
 	}
 	return (
-		<>
-			{!grid && (
-				<div
-					aria-hidden
-					className="grid shrink-0 grid-cols-[minmax(0,1fr)_80px] gap-2 border-b bg-muted/20 px-[22px] py-1.5 text-[11px] text-muted-foreground sm:grid-cols-[minmax(0,1fr)_80px_170px]"
-				>
-					<span>{t("fileManager.name")}</span>
-					<span>{t("fileManager.type")}</span>
-					<span className="hidden sm:block">{t("fileManager.modified")}</span>
-				</div>
-			)}
-			<MagicDropdown
-				trigger={["contextMenu"]}
-				rootClassName="min-h-0 flex-1"
-				menu={{ items: props.actions.getMenuItems() }}
-				getPopupContainer={() => props.getPopupContainer() ?? document.body}
+		<div
+			ref={props.listColumns.containerRef}
+			className="flex min-h-0 min-w-0 flex-1 overflow-x-auto"
+		>
+			<div
+				className="flex min-h-0 min-w-full flex-1 flex-col"
+				style={!grid ? { minWidth: "var(--manager-list-width)" } : undefined}
 			>
-				<div
-					ref={viewport}
-					role="listbox"
-					aria-label={t("fileManager.files")}
-					aria-multiselectable
-					aria-busy={props.loading}
-					aria-activedescendant={
-						props.selection.focusedId
-							? `${listId}-${props.selection.focusedId}`
-							: undefined
-					}
-					tabIndex={props.isActive ? 0 : -1}
-					data-manager-target={props.directoryId}
-					className="relative min-h-0 flex-1 overflow-auto overscroll-contain outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-					onKeyDown={onKeyDown}
-					onScroll={(event) => props.onScroll(event.currentTarget.scrollTop)}
-					onPointerDown={(event) => {
-						setKeyboardFocus(false)
-						props.gestures.onPointerDown(event)
-					}}
-					onPointerMove={props.gestures.onPointerMove}
-					onPointerUp={props.gestures.onPointerUp}
-					onPointerCancel={props.gestures.onPointerCancel}
-					onLostPointerCapture={props.gestures.onLostPointerCapture}
-					onContextMenuCapture={(event) => {
-						if (
-							!(event.target instanceof Element) ||
-							!event.currentTarget.contains(event.target)
-						)
-							return
-						const id =
-							event.target instanceof Element
-								? event.target.closest<HTMLElement>("[data-manager-item]")?.dataset
-										.managerItem
-								: undefined
-						if (!id) props.selection.clear()
-						else if (!props.selection.selectedIds.has(id))
-							props.selection.replace(new Set([id]))
-					}}
+				{!grid && (
+					<FileManagerListHeader
+						columns={props.listColumns}
+						sort={props.sort}
+						direction={props.sortDirection}
+						onSort={props.onSort}
+						items={props.items}
+						rowDetails={props.rowDetails}
+						getText={props.getColumnText}
+						getPopupContainer={props.getPopupContainer}
+						isActive={props.isActive}
+					/>
+				)}
+				<MagicDropdown
+					trigger={["contextMenu"]}
+					rootClassName="min-h-0 flex-1"
+					menu={{ items: props.actions.getMenuItems() }}
+					getPopupContainer={() => props.getPopupContainer() ?? document.body}
 				>
-					{props.error ? (
-						<div role="alert" className="p-6 text-center text-sm">
-							{t("userSpace.loadFailed")}
-							<Button variant="ghost" size="sm" onClick={props.onRefresh}>
-								{t("userSpace.retry")}
-							</Button>
-						</div>
-					) : !props.items.length ? (
-						<p role="status" className="p-10 text-center text-sm text-muted-foreground">
-							{props.loading
-								? t("userSpace.loading")
-								: props.query
-									? t("fileManager.noMatches")
-									: t("fileManager.empty")}
-						</p>
-					) : null}
 					<div
-						className="relative min-h-full"
-						style={{ height: virtualizer.getTotalSize() }}
+						ref={viewport}
+						role="listbox"
+						aria-label={t("fileManager.files")}
+						aria-multiselectable
+						aria-busy={props.loading}
+						aria-activedescendant={
+							props.selection.focusedId
+								? `${listId}-${props.selection.focusedId}`
+								: undefined
+						}
+						tabIndex={props.isActive ? 0 : -1}
+						data-manager-target={props.directoryId}
+						className="relative min-h-0 flex-1 overflow-auto overscroll-contain outline-none"
+						onKeyDown={onKeyDown}
+						onScroll={(event) => props.onScroll(event.currentTarget.scrollTop)}
+						onPointerDown={(event) => {
+							setKeyboardFocus(false)
+							props.gestures.onPointerDown(event)
+						}}
+						onPointerMove={props.gestures.onPointerMove}
+						onPointerUp={props.gestures.onPointerUp}
+						onPointerCancel={props.gestures.onPointerCancel}
+						onLostPointerCapture={props.gestures.onLostPointerCapture}
+						onContextMenuCapture={(event) => {
+							if (
+								!(event.target instanceof Element) ||
+								!event.currentTarget.contains(event.target)
+							)
+								return
+							const id =
+								event.target instanceof Element
+									? event.target.closest<HTMLElement>("[data-manager-item]")
+											?.dataset.managerItem
+									: undefined
+							if (!id) props.selection.clear()
+							else if (!props.selection.selectedIds.has(id))
+								props.selection.replace(new Set([id]))
+						}}
 					>
-						{virtualizer.getVirtualItems().map((row) => (
-							<div
-								key={row.key}
-								role="presentation"
-								className="absolute left-0 top-0 grid w-full"
-								style={{
-									transform: `translateY(${row.start}px)`,
-									height: layout.itemHeight,
-									paddingInline: padding,
-									gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-									columnGap: layout.gap,
-								}}
-							>
-								{props.items
-									.slice(row.index * columns, (row.index + 1) * columns)
-									.map((resource) => (
-										<FileManagerItem
-											row={props.rowDetails.get(resource.item.file_id ?? "")}
-											striped={row.index % 2 === 1}
-											onToggleFolder={(all) =>
-												props.onToggleFolder(resource.item, all)
-											}
-											key={resource.item.file_id}
-											id={`${listId}-${resource.item.file_id}`}
-											presentation={resource}
-											view={props.view}
-											selected={props.selection.selectedIds.has(
-												resource.item.file_id ?? "",
-											)}
-											focused={
-												keyboardFocus &&
-												props.selection.focusedId === resource.item.file_id
-											}
-											cut={props.actions.cutIds.has(
-												resource.item.file_id ?? "",
-											)}
-											menuItems={props.actions.getMenuItems(resource.item)}
-											onSelect={(event) => {
-												viewport.current?.focus({ preventScroll: true })
-												if (resource.item.file_id)
-													props.selection.select(
-														resource.item.file_id,
-														event,
-													)
-											}}
-											onOpen={() => props.onOpen(resource.item)}
-											tag={props.renderTag?.(resource.item)}
-											getPopupContainer={props.getPopupContainer}
-										/>
-									))}
+						{props.error ? (
+							<div role="alert" className="p-6 text-center text-sm">
+								{t("userSpace.loadFailed")}
+								<Button variant="ghost" size="sm" onClick={props.onRefresh}>
+									{t("userSpace.retry")}
+								</Button>
 							</div>
-						))}
-					</div>
-					{props.gestures.rectangle && (
+						) : !props.items.length ? (
+							<p
+								role="status"
+								className="p-10 text-center text-sm text-muted-foreground"
+							>
+								{props.loading
+									? t("userSpace.loading")
+									: props.query
+										? t("fileManager.noMatches")
+										: t("fileManager.empty")}
+							</p>
+						) : null}
 						<div
-							aria-hidden
-							className="pointer-events-none absolute z-10 rounded-sm border border-blue-500/50 bg-blue-500/10"
-							style={props.gestures.rectangle}
-						/>
-					)}
-				</div>
-			</MagicDropdown>
-		</>
+							className="relative min-h-full"
+							style={{ height: virtualizer.getTotalSize() }}
+						>
+							{virtualizer.getVirtualItems().map((row) => (
+								<div
+									key={row.key}
+									role="presentation"
+									className="absolute left-0 top-0 grid w-full"
+									style={{
+										transform: `translateY(${row.start}px)`,
+										height: layout.itemHeight,
+										paddingInline: padding,
+										gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+										columnGap: layout.gap,
+									}}
+								>
+									{props.items
+										.slice(row.index * columns, (row.index + 1) * columns)
+										.map((resource) => (
+											<FileManagerItem
+												columns={props.listColumns.visibleIds}
+												getColumnText={props.getColumnText}
+												showActions={showActions}
+												rename={
+													props.rename.renamingItemId ===
+													resource.item.file_id
+														? props.rename
+														: undefined
+												}
+												row={props.rowDetails.get(
+													resource.item.file_id ?? "",
+												)}
+												striped={row.index % 2 === 1}
+												onToggleFolder={(all) =>
+													props.onToggleFolder(resource.item, all)
+												}
+												key={resource.item.file_id}
+												id={`${listId}-${resource.item.file_id}`}
+												presentation={resource}
+												view={props.view}
+												selected={props.selection.selectedIds.has(
+													resource.item.file_id ?? "",
+												)}
+												focused={
+													keyboardFocus &&
+													props.selection.focusedId ===
+														resource.item.file_id
+												}
+												cut={props.actions.cutIds.has(
+													resource.item.file_id ?? "",
+												)}
+												menuItems={props.actions.getMenuItems(
+													resource.item,
+												)}
+												onSelect={(event) => {
+													viewport.current?.focus({ preventScroll: true })
+													if (resource.item.file_id)
+														props.selection.select(
+															resource.item.file_id,
+															event,
+														)
+												}}
+												onOpen={() => props.onOpen(resource.item)}
+												tag={props.renderTag?.(resource.item)}
+												getPopupContainer={props.getPopupContainer}
+											/>
+										))}
+								</div>
+							))}
+						</div>
+						{props.gestures.rectangle && (
+							<div
+								aria-hidden
+								className="pointer-events-none absolute z-10 rounded-sm border border-blue-500/50 bg-blue-500/10"
+								style={props.gestures.rectangle}
+							/>
+						)}
+					</div>
+				</MagicDropdown>
+			</div>
+		</div>
 	)
 }

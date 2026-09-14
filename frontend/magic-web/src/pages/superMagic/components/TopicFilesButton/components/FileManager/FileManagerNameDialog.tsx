@@ -32,11 +32,6 @@ export function FileManagerNameDialog({
 						{t("fileManager.confirmation.location")} {names.location}
 					</DialogDescription>
 				</DialogHeader>
-				{names.originalName && (
-					<p className="break-words text-sm text-muted-foreground">
-						{t("fileManager.confirmation.originalName")} {names.originalName}
-					</p>
-				)}
 				{input && (
 					<InputWithError
 						ref={input.inputRef}

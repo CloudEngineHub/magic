@@ -24,6 +24,7 @@ import type {
 	FileManagerActions,
 	FileManagerPathItem,
 	FileManagerSort,
+	FileManagerSortDirection,
 	FileManagerView,
 } from "./types"
 
@@ -42,6 +43,8 @@ interface Props {
 	view: FileManagerView
 	onView: (view: FileManagerView) => void
 	sort: FileManagerSort
+	sortDirection: FileManagerSortDirection
+	sortOptions: Record<FileManagerSort, string>
 	onSort: (sort: FileManagerSort) => void
 	onRefresh: () => void
 	loading: boolean
@@ -179,9 +182,16 @@ export function FileManagerToolbar(props: Props) {
 					value={props.sort}
 					onChange={(event) => props.onSort(event.target.value as FileManagerSort)}
 				>
-					<option value="name">{t("fileManager.sortName")}</option>
-					<option value="modified">{t("fileManager.sortModified")}</option>
-					<option value="type">{t("fileManager.sortType")}</option>
+					{Object.entries(props.sortOptions).map(([id, label]) => (
+						<option key={id} value={id}>
+							{label}
+							{props.sort === id
+								? props.sortDirection === "ascending"
+									? " ↑"
+									: " ↓"
+								: ""}
+						</option>
+					))}
 				</select>
 				<div className="flex items-center gap-0.5 rounded-lg bg-muted/60 p-0.5">
 					{(

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useTranslation } from "react-i18next"
-import type { AttachmentItem, ConfirmFileOperation } from "./types"
+import type { AttachmentItem, ConfirmFileOperation, FileOperationPreparation } from "./types"
 import { getFileManagerChangedIds } from "../utils/file-manager-transfer"
 import { checkDuplicateFileName } from "../utils/checkDuplicateFileName"
 import MagicModal from "@/components/base/MagicModal"
@@ -382,8 +382,24 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 	)
 
 	const confirmCanvasProjectRisk = useCallback(
-		(canvasRisk: CanvasProjectOperationRisk, repairFailures: string[] = []) =>
+		(
+			canvasRisk: CanvasProjectOperationRisk,
+			repairFailures: string[] = [],
+			signal?: AbortSignal,
+		) =>
 			new Promise<boolean>((resolve) => {
+				if (signal?.aborted) {
+					resolve(false)
+					return
+				}
+				const finish = (accepted: boolean) => {
+					signal?.removeEventListener("abort", abort)
+					resolve(accepted)
+				}
+				const abort = () => {
+					modal.destroy()
+					finish(false)
+				}
 				const impact = getCanvasProjectOperationImpact(canvasRisk)
 				const riskContent = canvasRisk.shouldWarn
 					? t(
@@ -399,7 +415,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 							failures: repairFailures.join("\n"),
 						})
 					: ""
-				MagicModal.confirm({
+				const modal = MagicModal.confirm({
 					title: t("topicFiles.canvasOperationRisk.title"),
 					content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
 					icon: (
@@ -419,9 +435,10 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					},
 					okText: t("topicFiles.moveModal.confirm"),
 					cancelText: t("common.cancel"),
-					onOk: () => resolve(true),
-					onCancel: () => resolve(false),
+					onOk: () => finish(true),
+					onCancel: () => finish(false),
 				})
+				signal?.addEventListener("abort", abort, { once: true })
 			}),
 		[t],
 	)
@@ -435,6 +452,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			targetParentId,
 			targetProjectId,
 			keepBothFileIds = [],
+			preparation,
 		}: {
 			fileIds: string[]
 			selectedIds?: string[]
@@ -442,9 +460,11 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			targetParentId: string
 			targetProjectId?: string
 			keepBothFileIds?: string[]
+			preparation?: FileOperationPreparation
 		}) => {
 			if (fileIds.length === 0 || !projectId) return
 
+			preparation?.signal.throwIfAborted()
 			let effectiveFileIds = fileIds
 			try {
 				const { dependencyTransferFileIds } = await resolveSingleDocumentStaticDependencies(
@@ -452,6 +472,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 						fileIds,
 						attachments,
 						attachmentIndex,
+						signal: preparation?.signal,
 					},
 				)
 				effectiveFileIds = mergeStaticDependencyFileIds(
@@ -460,6 +481,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					true,
 				)
 			} catch (error) {
+				preparation?.signal.throwIfAborted()
 				// Keep the legacy move usable if the optional browser-side dependency read fails.
 				console.error(
 					"Failed to resolve document static dependencies before moving:",
@@ -467,6 +489,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				)
 			}
 
+			preparation?.signal.throwIfAborted()
 			const sameProjectMove = !targetProjectId || targetProjectId === projectId
 			if (confirmOperation && sameProjectMove && attachmentIndex) {
 				effectiveFileIds = getFileManagerChangedIds(
@@ -491,6 +514,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 								operation: "move",
 							})
 						: { shouldWarn: false, riskTypes: [], affectedProjectNames: [] }
+				preparation?.signal.throwIfAborted()
 				const preflightResult = await runCanvasFileOperationPreflight({
 					repairOptions: {
 						attachments,
@@ -498,21 +522,29 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 						fileIds: effectiveFileIds,
 						operation: "move",
 						projectId,
+						signal: preparation?.signal,
 					},
 					requiresConfirmation: canvasRisk.shouldWarn,
-					confirm: (repairPlan) =>
-						confirmCanvasProjectRisk(
+					confirm: (repairPlan) => {
+						preparation?.signal.throwIfAborted()
+						preparation?.onPhase("awaitingChoice")
+						return confirmCanvasProjectRisk(
 							canvasRisk,
 							repairPlan?.failures.map(
 								(failure) =>
 									`${failure.projectName} / ${failure.fileName}: ${failure.message}`,
 							) ?? [],
-						),
+							preparation?.signal,
+						)
+					},
 				})
+				preparation?.signal.throwIfAborted()
 				if (!preflightResult.ok) return
 				repairPlan = preflightResult.repairPlan
 			}
 
+			preparation?.signal.throwIfAborted()
+			preparation?.onPhase("awaitingChoice")
 			if (
 				confirmOperation &&
 				!(await confirmOperation({
@@ -527,6 +559,8 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				}))
 			)
 				return
+			preparation?.signal.throwIfAborted()
+			preparation?.onPhase("executing")
 			const moveTaskId = beginMoveTask()
 
 			try {
@@ -631,6 +665,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			fileIds,
 			projectId,
 			targetParentId,
+			preparation,
 			targetPath,
 			targetProjectId,
 			sourceAttachments = attachments,
@@ -639,12 +674,14 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			fileIds: string[]
 			projectId: string
 			targetParentId: string
+			preparation?: FileOperationPreparation
 			targetPath?: AttachmentItem[]
 			targetProjectId?: string
 			sourceAttachments?: AttachmentItem[]
 			targetAttachments?: AttachmentItem[]
 		}) => {
 			if (!projectId || fileIds.length === 0) return
+			preparation?.signal.throwIfAborted()
 			const selectedIds = fileIds
 			if (
 				confirmOperation &&
@@ -694,7 +731,10 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					: new Map()
 
 			if (folderConflicts.size > 0) {
+				preparation?.onPhase("awaitingChoice")
 				const folderChoice = await folderConflictHandler.checkConflicts(folderConflicts)
+				preparation?.signal.throwIfAborted()
+				preparation?.onPhase("checking")
 				if (!folderChoice.shouldProceed) return
 				keepBothFileIds = [...keepBothFileIds, ...folderChoice.keepBothIds]
 			}
@@ -713,7 +753,10 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					: new Map()
 
 			if (duplicates.size > 0) {
+				preparation?.onPhase("awaitingChoice")
 				const userChoice = await moveDuplicateHandler.checkDuplicates(duplicates)
+				preparation?.signal.throwIfAborted()
+				preparation?.onPhase("checking")
 				if (!userChoice.shouldProceed) return
 				keepBothFileIds = [...keepBothFileIds, ...userChoice.keepBothIds]
 			}
@@ -725,6 +768,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				targetParentId,
 				targetProjectId,
 				keepBothFileIds,
+				preparation,
 			})
 		},
 		[
@@ -738,14 +782,24 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 	)
 
 	const moveWithinDirectorySource = useMemoizedFn(
-		async (path: AttachmentItem[], fileIds?: string[]) => {
+		async (
+			path: AttachmentItem[],
+			fileIds?: string[],
+			preparation?: FileOperationPreparation,
+		) => {
+			preparation?.signal.throwIfAborted()
 			const source = options.directorySource
-			if (!source || directoryMoveRef.current) return
+			if (!source || (directoryMoveRef.current && !directoryMoveRef.current.signal.aborted))
+				return
 			const targetId = path.at(-1)?.file_id ?? source.root.file_id
 			if (!targetId) return
 			const controller = new AbortController()
+			preparation?.signal.addEventListener("abort", () => controller.abort(), { once: true })
+			const signal = preparation
+				? AbortSignal.any([controller.signal, preparation.signal])
+				: controller.signal
 			directoryMoveRef.current = controller
-			const isCurrent = () => !controller.signal.aborted && (options.isCurrent?.() ?? true)
+			const isCurrent = () => !signal.aborted && (options.isCurrent?.() ?? true)
 			const ids =
 				fileIds ??
 				(isBatchMode
@@ -760,7 +814,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				return file ? [file] : []
 			})
 			if (items.length !== ids.length) {
-				directoryMoveRef.current = null
+				if (directoryMoveRef.current === controller) directoryMoveRef.current = null
 				magicToast.error(t("topicFiles.error.moveFileFailed"))
 				return
 			}
@@ -774,13 +828,13 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				)
 				items = items.filter((file) => !unchanged.includes(file))
 				if (!items.length) {
-					directoryMoveRef.current = null
+					if (directoryMoveRef.current === controller) directoryMoveRef.current = null
 					return
 				}
 				try {
-					const children = await source.loadChildren(targetId, controller.signal)
+					const children = await source.loadChildren(targetId, signal)
 					if (!isCurrent()) {
-						directoryMoveRef.current = null
+						if (directoryMoveRef.current === controller) directoryMoveRef.current = null
 						return
 					}
 					const names = new Set(children.map(getItemName))
@@ -804,6 +858,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 						return true
 					})
 					setFailures(failed)
+					preparation?.onPhase("awaitingChoice")
 					if (
 						!items.length ||
 						!(await options.confirmOperation({
@@ -815,19 +870,22 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 							skippedCount: unchanged.length + failed.length,
 						}))
 					) {
-						directoryMoveRef.current = null
+						if (directoryMoveRef.current === controller) directoryMoveRef.current = null
 						return
 					}
-				} catch {
-					directoryMoveRef.current = null
+				} catch (error) {
+					if (directoryMoveRef.current === controller) directoryMoveRef.current = null
+					if (preparation && isCurrent()) throw error
 					if (isCurrent()) magicToast.error(t("topicFiles.error.moveFileFailed"))
 					return
 				}
 				if (!isCurrent()) {
-					directoryMoveRef.current = null
+					if (directoryMoveRef.current === controller) directoryMoveRef.current = null
 					return
 				}
 			}
+			preparation?.signal.throwIfAborted()
+			preparation?.onPhase("executing")
 			setIsMovingFn(true)
 			try {
 				for (const file of items) {
@@ -844,7 +902,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 						continue
 					}
 					try {
-						const children = await source.loadChildren(targetId, controller.signal)
+						const children = await source.loadChildren(targetId, signal)
 						if (!isCurrent()) return
 						if (checkDuplicateFileName(getItemName(file), children)) {
 							failed.push({ file, message: t("userSpace.nameExists") })
@@ -884,9 +942,9 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 	// 确认移动文件
 	const confirmMove = useCallback(
-		async (data: { path: AttachmentItem[] }) => {
+		async (data: { path: AttachmentItem[]; preparation?: FileOperationPreparation }) => {
 			if (options.directorySource) {
-				await moveWithinDirectorySource(data.path)
+				await moveWithinDirectorySource(data.path, undefined, data.preparation)
 				return
 			}
 			const targetParentId =
@@ -902,6 +960,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					projectId: projectId ?? "",
 					targetParentId,
 					targetPath: data.path,
+					preparation: data.preparation,
 				})
 				return
 			}

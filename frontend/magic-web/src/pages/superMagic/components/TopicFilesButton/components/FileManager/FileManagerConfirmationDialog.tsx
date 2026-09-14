@@ -21,16 +21,9 @@ export function FileManagerConfirmationDialog({
 }) {
 	const { t } = useTranslation("super")
 	const [text, setText] = useState("")
-	const viewport = useRef<HTMLDivElement>(null)
 	const cancel = useRef<HTMLButtonElement>(null)
 	const state = controller.state
 	const items = state?.items ?? []
-	const rows = useVirtualizer({
-		count: items.length,
-		getScrollElement: () => viewport.current,
-		estimateSize: () => 52,
-		overscan: 4,
-	})
 	const deleting = state?.operation === "delete"
 	const folders = items.filter((item) => item.folder).length
 	const required =
@@ -87,43 +80,15 @@ export function FileManagerConfirmationDialog({
 						</div>
 					)}
 				</div>
-				<div
-					ref={viewport}
-					className="overflow-y-auto rounded-md border"
-					style={{ height: Math.min(260, items.length * 52) }}
-				>
-					<div className="relative" style={{ height: rows.getTotalSize() }}>
-						{rows.getVirtualItems().map((row) => {
-							const item = items[row.index]
-							const Icon = item.folder ? Folder : FileText
-							return (
-								<div
-									key={item.id}
-									className="absolute flex w-full items-center gap-2 px-3 text-xs"
-									style={{ top: row.start, height: row.size }}
-								>
-									<Icon size={16} className="shrink-0 text-muted-foreground" />
-									<div className="min-w-0 flex-1">
-										<div className="truncate">
-											{item.name}
-											{item.dependency && (
-												<span className="ml-2 text-muted-foreground">
-													{t("fileManager.confirmation.dependency")}
-												</span>
-											)}
-										</div>
-										<div
-											className="truncate text-muted-foreground"
-											title={item.path}
-										>
-											{item.path}
-										</div>
-									</div>
-								</div>
-							)
-						})}
+				{items.length * 52 <= 260 ? (
+					<div className="space-y-1">
+						{items.map((item) => (
+							<ConfirmationFileRow key={item.id} item={item} />
+						))}
 					</div>
-				</div>
+				) : (
+					<VirtualConfirmationFiles items={items} />
+				)}
 				{Boolean(state?.skippedCount) && (
 					<p className="text-xs text-muted-foreground">
 						{t("fileManager.confirmation.skipped", { count: state?.skippedCount })}
@@ -165,5 +130,58 @@ export function FileManagerConfirmationDialog({
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
+	)
+}
+
+type ConfirmationItem = NonNullable<
+	ReturnType<typeof useFileManagerConfirmation>["state"]
+>["items"][number]
+
+function ConfirmationFileRow({ item }: { item: ConfirmationItem }) {
+	const { t } = useTranslation("super")
+	const Icon = item.folder ? Folder : FileText
+	return (
+		<div className="flex min-h-[52px] items-center gap-2 px-3 py-2 text-xs">
+			<Icon size={16} className="shrink-0 text-muted-foreground" />
+			<div className="min-w-0 flex-1">
+				<div className="truncate" title={item.name}>
+					{item.name}
+					{item.dependency && (
+						<span className="ml-2 text-muted-foreground">
+							{t("fileManager.confirmation.dependency")}
+						</span>
+					)}
+				</div>
+				<div className="truncate text-[11px] text-muted-foreground" title={item.path}>
+					{item.path}
+				</div>
+			</div>
+		</div>
+	)
+}
+
+/** 短清单直接显示；长清单的 ref 和虚拟器随 Portal 内容一起挂载，避免零尺寸空白。 */
+function VirtualConfirmationFiles({ items }: { items: ConfirmationItem[] }) {
+	const viewport = useRef<HTMLDivElement>(null)
+	const rows = useVirtualizer({
+		count: items.length,
+		getScrollElement: () => viewport.current,
+		estimateSize: () => 52,
+		overscan: 4,
+	})
+	return (
+		<div ref={viewport} className="h-[260px] overflow-y-auto rounded-md border">
+			<div className="relative" style={{ height: rows.getTotalSize() }}>
+				{rows.getVirtualItems().map((row) => (
+					<div
+						key={items[row.index].id}
+						className="absolute left-0 top-0 w-full"
+						style={{ transform: `translateY(${row.start}px)`, height: row.size }}
+					>
+						<ConfirmationFileRow item={items[row.index]} />
+					</div>
+				))}
+			</div>
+		</div>
 	)
 }

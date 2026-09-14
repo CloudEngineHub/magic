@@ -64,13 +64,16 @@ export function FileManagerDialogs({
 			{controller.aiCard.dialogElement}
 			{controller.batch.deleteConfirmNode}
 			{controller.menu.deleteConfirmNode}
-			<SelectDirectoryModal {...move.selectorConfig} />
+			<SelectDirectoryModal
+				{...move.selectorConfig}
+				onSubmit={controller.confirmMoveWithPreparation}
+			/>
 			{directorySource && (
 				<SelectDirectoryModal
 					{...controller.copy.selectorConfig}
 					disabledFolderIds={controller.copy.pendingCopyFileIds}
 					onSubmit={async ({ path }) => {
-						await crossProject.executeCopyOperation({
+						await controller.crossProjectWithPreparation("copy", {
 							fileIds: controller.copy.pendingCopyFileIds,
 							targetProjectId: "",
 							targetPath: path.length ? path : [directorySource.root],
@@ -100,8 +103,8 @@ export function FileManagerDialogs({
 					onClose={crossProject.closeModal}
 					onSubmit={
 						crossProject.operationType === "move"
-							? crossProject.executeMoveOperation
-							: crossProject.executeCopyOperation
+							? (data) => controller.crossProjectWithPreparation("move", data)
+							: (data) => controller.crossProjectWithPreparation("copy", data)
 					}
 				/>
 			)}

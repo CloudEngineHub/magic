@@ -6,17 +6,15 @@ import { useVirtualDesignProject } from "./useVirtualDesignProject"
 import { useVirtualSelfMediaProject } from "./useVirtualSelfMediaProject"
 import type { useFileOperations } from "./useFileOperations"
 import type { FileManagerProps } from "../components/FileManager/types"
-import type { AttachmentIndex } from "../utils/attachmentIndex"
 import type { AttachmentItem } from "./types"
 
 const expandedKeys: React.Key[] = []
 const setExpandedKeys = () => undefined
 
-/** 管理器只把原行内命名流程放到对话框；校验、冲突和提交仍由原 hook 持有。 */
+/** 重命名在文件项内编辑，新建继续使用对话框；校验、冲突和提交仍由原 hook 持有。 */
 export function useFileManagerNames(
 	props: FileManagerProps,
 	operations: ReturnType<typeof useFileOperations>,
-	index: AttachmentIndex,
 	directory?: AttachmentItem,
 ) {
 	const { t } = useTranslation("super")
@@ -53,16 +51,6 @@ export function useFileManagerNames(
 		onSelfMediaProjectCreate: operations.createSelfMediaProject,
 	})
 	const inputs = [
-		{
-			id: rename.renamingItemId,
-			title: t("userSpace.rename"),
-			value: rename.renameValue,
-			setValue: rename.setRenameValue,
-			inputRef: rename.renameInputRef,
-			error: rename.renameErrorMessage,
-			confirm: rename.handleRenameConfirm,
-			cancel: rename.handleRenameCancel,
-		},
 		{
 			id: file.editingVirtualId,
 			title: t("userSpace.createFile"),
@@ -104,11 +92,7 @@ export function useFileManagerNames(
 			cancel: selfMedia.cancelVirtualSelfMediaProject,
 		},
 	]
-	const current = rename.renamingItemId
-		? (index.getItemById(rename.renamingItemId) ?? index.getItemByKey(rename.renamingItemId))
-		: undefined
 	const input = inputs.find((entry) => entry.id)
-	const originalName = current?.file_name || current?.filename || current?.name
 	const requestedPath =
 		file.virtualFiles[0]?.parentPath ||
 		folder.virtualFolders[0]?.parentPath ||
@@ -116,13 +100,8 @@ export function useFileManagerNames(
 	const rootPath = props.spaceConfig?.directorySource
 		?.getPath(props.rootId)
 		.at(-1)?.relative_file_path
-	const parentPath = current
-		? index
-				.getParentItemsById(current.file_id)
-				.map((item) => item.file_name || item.filename || item.name)
-				.filter(Boolean)
-				.join(" / ")
-		: props.defaultWritePath && (!requestedPath || requestedPath === rootPath)
+	const parentPath =
+		props.defaultWritePath && (!requestedPath || requestedPath === rootPath)
 			? props.defaultWritePath
 			: requestedPath
 	return {
@@ -131,17 +110,8 @@ export function useFileManagerNames(
 		folder,
 		design,
 		selfMedia,
-		input: input
-			? {
-					...input,
-					confirm: () =>
-						originalName && input.value.trim() === originalName
-							? input.cancel()
-							: input.confirm(),
-				}
-			: undefined,
+		input,
 		location: [props.rootName, parentPath].filter(Boolean).join(" / "),
-		originalName,
 		pending:
 			rename.renamePending ||
 			file.isCreating ||

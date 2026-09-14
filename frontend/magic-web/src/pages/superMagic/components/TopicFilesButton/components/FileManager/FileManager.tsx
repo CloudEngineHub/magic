@@ -1,13 +1,22 @@
 import { useEffect, useMemo, useRef, useDeferredValue, useState, lazy, Suspense } from "react"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Loader2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import { buildAttachmentIndex } from "../../utils/attachmentIndex"
-import { getFilePresentationIndex, resolveFilePresentation } from "../../utils/file-presentation"
+import {
+	getFilePresentationIndex,
+	resolveFilePresentation,
+	type FilePresentation,
+} from "../../utils/file-presentation"
 import { useTreeUI } from "../../hooks/useTreeUI"
 import { useVisibleTreeRows } from "../../hooks/useVisibleTreeRows"
+import {
+	useFileManagerColumns,
+	getFileManagerColumnText,
+	getFileManagerColumnValue,
+} from "../../hooks/useFileManagerColumns"
 import { useFileManagerNavigation } from "../../hooks/useFileManagerNavigation"
 import { useFileManagerSelection } from "../../hooks/useFileManagerSelection"
 import { useFileManagerOperations } from "../../hooks/useFileManagerOperations"
@@ -19,7 +28,7 @@ import { FileManagerToolbar } from "./FileManagerToolbar"
 import { FileManagerPlaces } from "./FileManagerPlaces"
 import { FileManagerContent } from "./FileManagerContent"
 import { FileManagerDialogs } from "./FileManagerDialogs"
-import type { FileManagerProps } from "./types"
+import type { FileManagerProps, FileManagerSort } from "./types"
 
 const RecycleBinContent = lazy(() =>
 	import("@/pages/recycleBin/components/RecycleBinContent").then((module) => ({
@@ -37,6 +46,10 @@ export function FileManager(props: FileManagerProps) {
 	const activeProps = { ...props, isActive: props.isActive && !recycle }
 	const container = useRef<HTMLDivElement>(null)
 	const viewport = useRef<HTMLDivElement>(null)
+	const listColumns = useFileManagerColumns()
+	const getColumnText = useMemoizedFn((file: FilePresentation, column: FileManagerSort) =>
+		getFileManagerColumnText(file, column, i18n.language, props.rootName),
+	)
 	const navigation = useFileManagerNavigation(
 		props.initialDirectoryId ?? props.rootId,
 		props.defaultView,
@@ -77,28 +90,29 @@ export function FileManager(props: FileManagerProps) {
 				.sort((a, b) => {
 					if (Boolean(a.is_directory) !== Boolean(b.is_directory))
 						return a.is_directory ? -1 : 1
-					if (navigation.sort === "modified") {
-						const difference = String(b.updated_at ?? "").localeCompare(
-							String(a.updated_at ?? ""),
-						)
-						if (difference) return difference
-					}
-					if (navigation.sort === "type") {
-						const difference = collator.compare(
-							a.file_extension ?? "",
-							b.file_extension ?? "",
-						)
-						if (difference) return difference
-					}
-					return collator.compare(
-						resolveFilePresentation(a, {
-							context: props.context,
-							index: presentationIndex,
-						}).name,
-						resolveFilePresentation(b, {
-							context: props.context,
-							index: presentationIndex,
-						}).name,
+					const left = resolveFilePresentation(a, {
+						context: props.context,
+						index: presentationIndex,
+					})
+					const right = resolveFilePresentation(b, {
+						context: props.context,
+						index: presentationIndex,
+					})
+					const leftValue = getFileManagerColumnValue(left, navigation.sort)
+					const rightValue = getFileManagerColumnValue(right, navigation.sort)
+					if (leftValue === null && rightValue !== null) return 1
+					if (rightValue === null && leftValue !== null) return -1
+					const difference =
+						leftValue === null || rightValue === null
+							? 0
+							: typeof leftValue === "number" && typeof rightValue === "number"
+								? leftValue - rightValue
+								: collator.compare(String(leftValue), String(rightValue))
+					if (difference)
+						return difference * (navigation.sortDirection === "ascending" ? 1 : -1)
+					return (
+						collator.compare(left.name, right.name) ||
+						collator.compare(a.file_id ?? "", b.file_id ?? "")
 					)
 				})
 		// 后代先排序，一次生成展示投影；展开和选择只计算可见行，不重新扫描全部附件。
@@ -108,7 +122,15 @@ export function FileManager(props: FileManagerProps) {
 				children.set(file.file_id, sortChildren(file.children ?? []))
 		}
 		return { roots: sortChildren(props.attachments), children }
-	}, [index, props.attachments, props.context, presentationIndex, navigation.sort, i18n.language])
+	}, [
+		index,
+		props.attachments,
+		props.context,
+		presentationIndex,
+		navigation.sort,
+		navigation.sortDirection,
+		i18n.language,
+	])
 	const currentChildren = useMemo(() => {
 		const children =
 			location.directoryId === props.rootId
@@ -206,6 +228,10 @@ export function FileManager(props: FileManagerProps) {
 		onOpen,
 		onMoveComplete: (fileIds) => fileManagerTransfer.completeMove(props.scopeKey, fileIds),
 	})
+	const cancelRename = useMemoizedFn(() => {
+		if (!operations.names.rename.isRenamePending()) operations.names.rename.handleRenameCancel()
+	})
+	useEffect(cancelRename, [location.directoryId, activeProps.isActive, cancelRename])
 	const commands = useFileManagerCommands({
 		props: activeProps,
 		index,
@@ -268,27 +294,35 @@ export function FileManager(props: FileManagerProps) {
 						index: presentationIndex,
 					}).name
 				: ""
-	const status = operations.crossProject.isOperating
-		? t("fileManager.operationProgress", {
-				progress: operations.crossProject.operationProgress,
-			})
-		: operations.move.isMoving
-			? t("fileManager.operationProgress", { progress: operations.move.moveProgress })
-			: operations.busy
-				? t("fileManager.processing")
-				: gestures.dropTarget !== null
-					? !dragging
-						? t("fileManager.uploadTarget", { target: targetName })
-						: gestures.dragMode === "copy"
-							? t("fileManager.copyTarget", {
-									count: dragging.fileIds.length,
-									target: targetName,
-								})
-							: t("fileManager.moveTarget", {
-									count: dragging.fileIds.length,
-									target: targetName,
-								})
-					: t("fileManager.selectionHint")
+	const preparation = operations.transferPreparation
+	const status =
+		preparation?.phase === "checking"
+			? t(
+					preparation.mode === "move"
+						? "fileManager.preparation.checkingMove"
+						: "fileManager.preparation.checkingCopy",
+				)
+			: operations.crossProject.isOperating
+				? t("fileManager.operationProgress", {
+						progress: operations.crossProject.operationProgress,
+					})
+				: operations.move.isMoving
+					? t("fileManager.operationProgress", { progress: operations.move.moveProgress })
+					: operations.busy
+						? t("fileManager.processing")
+						: gestures.dropTarget !== null
+							? !dragging
+								? t("fileManager.uploadTarget", { target: targetName })
+								: gestures.dragMode === "copy"
+									? t("fileManager.copyTarget", {
+											count: dragging.fileIds.length,
+											target: targetName,
+										})
+									: t("fileManager.moveTarget", {
+											count: dragging.fileIds.length,
+											target: targetName,
+										})
+							: t("fileManager.selectionHint")
 	const parentId = path.at(-2)?.id
 	const getPopupContainer = () => container.current
 	const onDirectoryChange = props.onDirectoryChange
@@ -380,12 +414,68 @@ export function FileManager(props: FileManagerProps) {
 						view={navigation.view}
 						onView={navigation.setView}
 						sort={navigation.sort}
+						sortOptions={listColumns.labels}
+						sortDirection={navigation.sortDirection}
 						onSort={navigation.setSort}
 						onRefresh={props.onRefresh}
 						loading={loading}
 						getPopupContainer={getPopupContainer}
 					/>
+					{preparation &&
+						(preparation.phase === "checking" || preparation.phase === "error") && (
+							<div
+								role="status"
+								aria-live="polite"
+								className="flex shrink-0 items-center gap-2 border-b bg-muted/30 px-3 py-2 text-xs"
+							>
+								{preparation.phase === "checking" && (
+									<Loader2 size={16} className="shrink-0 animate-spin" />
+								)}
+								<div className="min-w-0 flex-1">
+									<div>
+										{preparation.phase === "error"
+											? t("fileManager.preparation.failed")
+											: t(
+													preparation.mode === "move"
+														? "fileManager.preparation.checkingMove"
+														: "fileManager.preparation.checkingCopy",
+												)}
+									</div>
+									<div
+										className="truncate text-muted-foreground"
+										title={preparation.targetName}
+									>
+										{t("fileManager.preparation.target", {
+											count: preparation.fileIds.length,
+											target: preparation.targetName,
+										})}
+									</div>
+								</div>
+								{preparation.phase === "error" && (
+									<Button
+										size="sm"
+										variant="ghost"
+										onClick={() => void operations.retryTransfer()}
+									>
+										{t("userSpace.retry")}
+									</Button>
+								)}
+								<Button
+									size="sm"
+									variant="ghost"
+									onClick={operations.cancelTransfer}
+								>
+									{t("common.cancel")}
+								</Button>
+							</div>
+						)}
 					<FileManagerContent
+						listColumns={listColumns}
+						sort={navigation.sort}
+						sortDirection={navigation.sortDirection}
+						onSort={navigation.setSort}
+						getColumnText={getColumnText}
+						rename={operations.names.rename}
 						rowDetails={rowDetails}
 						onToggleFolder={toggleListFolder}
 						viewport={viewport}

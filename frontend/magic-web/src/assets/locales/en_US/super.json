@@ -2381,6 +2381,14 @@
 	"fileManager": {
 		"back": "Back",
 		"browseFolder": "Browse folder",
+		"columns": {
+			"created": "Created",
+			"path": "Location",
+			"resize": "Resize {{name}} column",
+			"show": "Show columns",
+			"size": "Size",
+			"source": "Source"
+		},
 		"confirmation": {
 			"backToFiles": "Back to files",
 			"changed": "Files or folders have changed. Start again and review the scope.",
@@ -2438,6 +2446,12 @@
 		"paste": "Paste",
 		"path": "File path",
 		"places": "Locations",
+		"preparation": {
+			"checkingCopy": "Checking files to copy…",
+			"checkingMove": "Checking files to move…",
+			"failed": "Could not finish checking. No files were changed.",
+			"target": "{{count}} selected · Destination: {{target}}"
+		},
 		"processing": "Processing…",
 		"recycle": {
 			"back": "Back to files",

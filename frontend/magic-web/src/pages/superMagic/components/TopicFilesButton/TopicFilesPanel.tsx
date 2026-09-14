@@ -9,7 +9,7 @@ import {
 	useImperativeHandle,
 	type ReactNode,
 } from "react"
-import { FolderTree, ArrowUpRight } from "lucide-react"
+import { PanelsTopLeft, ArrowUpRight } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { useTranslation } from "react-i18next"
 import TopicFilesCore, {
@@ -842,7 +842,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								className="h-9 w-full justify-start gap-2 rounded-lg px-3 text-xs text-muted-foreground hover:text-foreground"
 								onClick={onOpenFileManager}
 							>
-								<FolderTree size={15} />
+								<PanelsTopLeft size={16} />
 								{t("userSpace.openManager")}
 								<ArrowUpRight size={14} className="ml-auto" />
 							</Button>
