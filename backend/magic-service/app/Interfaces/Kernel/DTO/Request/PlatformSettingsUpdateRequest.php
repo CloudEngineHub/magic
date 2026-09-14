@@ -48,6 +48,11 @@ class PlatformSettingsUpdateRequest extends FormRequest
             'agent_role_description_i18n.*' => 'nullable|string|max:1000',
             'custom_service_provider_whitelist' => 'sometimes|array',
             'custom_service_provider_whitelist.*' => 'string|max:128',
+            'watermark' => 'sometimes|array',
+            'watermark.enabled' => 'sometimes|boolean',
+            'watermark.fields' => 'sometimes|array',
+            'watermark.fields.*' => 'string|min:1|max:64',
+            'watermark.depth' => 'sometimes|string|in:light,standard,strong',
         ];
     }
 
