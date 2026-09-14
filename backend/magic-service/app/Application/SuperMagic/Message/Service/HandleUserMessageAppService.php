@@ -957,7 +957,7 @@ class HandleUserMessageAppService extends AbstractAppService
         array $mounts
     ): void {
         // Phase 1: validate access for all target projects
-        $shareCapabilities = $this->referencedProjectMountGuard->assertAllAccessible(
+        $this->referencedProjectMountGuard->assertAllAccessible(
             $mounts,
             $dataIsolation,
             fn(int $projectId) => $this->getAccessibleProject(
@@ -978,8 +978,7 @@ class HandleUserMessageAppService extends AbstractAppService
             $dataIsolation,
             $sandboxId,
             $projectIds,
-            $projectRootFileIds,
-            $shareCapabilities,
+            $projectRootFileIds
         );
     }
 }

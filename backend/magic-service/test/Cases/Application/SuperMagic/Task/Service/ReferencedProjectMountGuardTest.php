@@ -25,14 +25,12 @@ class ReferencedProjectMountGuardTest extends TestCase
     public function testAssertAllAccessibleAllowsAuthorizedMounts(): void
     {
         $authorizer = $this->createMock(ReferencedProjectMountAuthorizer::class);
-        $authorizer->expects(self::once())
-            ->method('assertPublishedShareAccessible')
-            ->willReturn('share-capability');
+        $authorizer->expects(self::once())->method('assertPublishedShareAccessible');
 
         $guard = new ReferencedProjectMountGuard($authorizer);
         $collaborationChecked = [];
 
-        $shareCapabilities = $guard->assertAllAccessible(
+        $guard->assertAllAccessible(
             [
                 $this->mount('4001', ReferencedProjectAccessKind::PublishedShare, '3001'),
                 $this->mount('4002', ReferencedProjectAccessKind::Collaboration),
@@ -44,7 +42,6 @@ class ReferencedProjectMountGuardTest extends TestCase
         );
 
         self::assertSame([4002], $collaborationChecked);
-        self::assertSame(['4001' => 'share-capability'], $shareCapabilities);
     }
 
     public function testAssertAllAccessibleRethrowsPublishedShareBusinessException(): void

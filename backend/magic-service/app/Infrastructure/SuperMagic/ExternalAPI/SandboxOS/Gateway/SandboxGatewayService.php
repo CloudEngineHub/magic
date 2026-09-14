@@ -1069,8 +1069,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
-        string $projectSpaceRootFileId,
-        string $shareCapability = ''
+        string $projectSpaceRootFileId
     ): GatewayResult {
         if (! $this->isEnabledSandbox()) {
             $this->logger->debug('[Sandbox][Gateway] Local debugging mode: skipping referenced project mount', [
@@ -1085,12 +1084,6 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
             'project_space_root_file_id' => $projectSpaceRootFileId,
             'authorization' => $dataIsolation->getUserAuthorizationToken() ?? '',
         ];
-        if ($shareCapability !== '') {
-            // Keep the caller identity for auditing, but let the downstream
-            // gateway use the scoped share capability for non-member mounts.
-            $payload['share_access_token'] = $shareCapability;
-            $payload['read_only'] = true;
-        }
 
         $this->logger->info('[Sandbox][Gateway] Mounting referenced project', [
             'sandbox_id' => $sandboxId,

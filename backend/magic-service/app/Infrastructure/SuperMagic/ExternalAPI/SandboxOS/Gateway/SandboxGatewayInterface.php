@@ -197,18 +197,12 @@ interface SandboxGatewayInterface
     ): GatewayResult;
 
     /**
-     * 挂载引用项目（被 @ 艾特的外部项目）到指定沙箱作为只读空间。
-     *
-     * When a published micro-app is accessible through a share but the caller
-     * is not a project member, $shareCapability carries the short-lived
-     * read-only token. The sandbox gateway must prefer that capability for
-     * referenced-project file reads and enforce its project/share scope.
+     * 挂载引用项目（被 @ 艾特的外部项目）到指定沙箱作为只读空间.
      */
     public function mountReferencedProject(
         DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
-        string $projectSpaceRootFileId,
-        string $shareCapability = ''
+        string $projectSpaceRootFileId
     ): GatewayResult;
 }
