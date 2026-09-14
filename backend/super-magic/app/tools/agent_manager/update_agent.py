@@ -11,7 +11,7 @@ from pydantic import Field
 
 from app.path_manager import PathManager
 from app.tools.core import BaseTool, BaseToolParams, tool
-from app.utils.async_file_utils import async_exists, async_read_text, async_write_text
+from app.utils.async_file_utils import async_exists, async_read_text, async_write_text, get_s3_key_from_xattr
 
 logger = get_logger(__name__)
 
@@ -28,7 +28,17 @@ class UpdateAgentParams(BaseToolParams):
     )
     prompt: Optional[str] = Field(default=None, description="New system prompt plain text")
     icon_file_key: Optional[str] = Field(
-        default=None, description="Logo file_key returned by generate_images and synced to object storage"
+        default=None,
+        description=(
+            "<!--zh: Logo 图片路径（工作区相对路径）或对象存储 file_key。"
+            "推荐做法：先用 generate_images 生成图片，再将返回的工作区相对路径（如 'avatars/logo.png'）传入此字段；"
+            "工具会自动从 magicfs xattr 读取对象存储键。"
+            "禁止传入不含路径分隔符的裸文件名（如 'logo.jpg'），否则会报错。-->"
+            "Logo image: pass the workspace-relative path returned by generate_images "
+            "(e.g. 'avatars/logo.png'). The tool resolves it to the object-storage key "
+            "via magicfs xattr automatically. Do NOT pass a bare filename without a "
+            "path separator (e.g. 'logo.jpg') — use generate_images first."
+        ),
     )
 
 
@@ -74,7 +84,13 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
         icon = None
         icon_type = None
         if params.icon_file_key is not None:
-            icon = {"type": "Image", "value": params.icon_file_key}
+            resolved_key = await self._resolve_icon_key(params.icon_file_key)
+            if resolved_key is None:
+                return ToolResult.error(
+                    f"图片 '{params.icon_file_key}' 不是有效的工作区路径或对象存储 file_key。"
+                    "请先使用 generate_images 工具生成图片，再将返回的工作区相对路径传入此字段。"
+                )
+            icon = {"type": "Image", "value": resolved_key}
             icon_type = 2
 
         try:
@@ -96,6 +112,44 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
         except Exception as error:
             logger.error(f"Failed to update agent: {error}")
             return ToolResult.error(f"Failed to update agent: {error}")
+
+    @staticmethod
+    async def _resolve_icon_key(icon_file_key: str) -> Optional[str]:
+        """将工作区相对/绝对路径解析为对象存储 s3_key；若已是 file_key 则直接返回。"""
+        workspace_dir = PathManager.get_workspace_dir()
+
+        # 尝试工作区相对路径
+        candidate = workspace_dir / icon_file_key.lstrip("/")
+        if await async_exists(str(candidate)):
+            s3_key = await get_s3_key_from_xattr(str(candidate))
+            if not s3_key:
+                logger.error(
+                    f"文件 '{candidate}' 存在但缺少 magicfs xattr (user.magicfs.s3_key)，"
+                    "可能未被 magicfs 管理，无法获取对象存储 file_key"
+                )
+                return None
+            logger.info(f"从 xattr 解析 icon file_key: {candidate} -> {s3_key}")
+            return s3_key
+
+        # 尝试绝对路径
+        if icon_file_key.startswith("/") and await async_exists(icon_file_key):
+            s3_key = await get_s3_key_from_xattr(icon_file_key)
+            if not s3_key:
+                logger.error(
+                    f"文件 '{icon_file_key}' 存在但缺少 magicfs xattr，无法获取对象存储 file_key"
+                )
+                return None
+            logger.info(f"从 xattr 解析 icon file_key: {icon_file_key} -> {s3_key}")
+            return s3_key
+
+        # 含路径分隔符且非本地文件，视为已是对象存储 key（向后兼容）
+        if "/" in icon_file_key:
+            logger.info(f"icon_file_key 视为对象存储 key（直接使用）: {icon_file_key}")
+            return icon_file_key
+
+        # 裸文件名（无路径分隔符），无法确定来源
+        logger.error(f"icon_file_key '{icon_file_key}' 是裸文件名，既不是工作区路径也不是 file_key")
+        return None
 
     @staticmethod
     async def _update_local_cache(
