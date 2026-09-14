@@ -143,7 +143,7 @@ class PlatformSettingsApi
             'footer' => PlatformSettings::fromArray($settings)->getFooter(),
             'watermark' => (array) ($settings['watermark'] ?? [
                 'enabled' => false,
-                'fields' => [],
+                'fields' => ['real_name'],
                 'depth' => 'light',
             ]),
         ];

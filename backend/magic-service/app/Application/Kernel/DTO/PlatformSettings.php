@@ -75,7 +75,7 @@ class PlatformSettings
      */
     private array $watermark = [
         'enabled' => false,
-        'fields' => [],
+        'fields' => ['real_name'],
         'depth' => 'light',
     ];
 
@@ -351,7 +351,7 @@ class PlatformSettings
     private static function normalizeWatermark(array $watermark): array
     {
         $fields = [];
-        foreach ((array) ($watermark['fields'] ?? []) as $field) {
+        foreach ((array) ($watermark['fields'] ?? ['real_name']) as $field) {
             if (! is_scalar($field) && $field !== null) {
                 continue;
             }
