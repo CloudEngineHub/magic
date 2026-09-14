@@ -4,7 +4,7 @@ import workspaceStore from "../stores/core/workspace"
 import projectStore from "../stores/core/project"
 import { type Workspace } from "../pages/Workspace/types"
 import { SHARE_WORKSPACE_ID } from "../constants"
-import { RequestConfig } from "@/apis/core/HttpClient"
+import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
 import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
 

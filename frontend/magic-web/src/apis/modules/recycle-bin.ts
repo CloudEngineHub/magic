@@ -1,5 +1,4 @@
-import { genRequestUrl } from "@/utils/http"
-import type { HttpClient } from "@/apis/core/HttpClient"
+import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 /** 业务层共用的回收站类型，通过 namespace 统一导出 */
 export namespace RecycleBin {
 	export interface DeletedByUser {
@@ -112,16 +111,17 @@ export namespace RecycleBin {
 	}
 }
 
-export const generateRecycleBinApi = (fetch: HttpClient) => ({
+export const generateRecycleBinApi = (fetch: ServiceHttpClient) => ({
 	getRecycleBinList(params: RecycleBin.ListParams) {
 		return fetch.get<{ total: number; list: RecycleBin.ListItem[] }>(
-			genRequestUrl("/api/v1/recycle-bin/list", {}, params),
+			"/api/v1/recycle-bin/list",
+			{ params: { ...params } },
 		)
 	},
 	getRecycleBinCounts(params?: RecycleBin.CountsParams) {
-		return fetch.get<RecycleBin.CountItem[]>(
-			genRequestUrl("/api/v1/recycle-bin/counts", {}, params),
-		)
+		return fetch.get<RecycleBin.CountItem[]>("/api/v1/recycle-bin/counts", {
+			params: { ...params },
+		})
 	},
 	checkRecycleBinParent(params: RecycleBin.CheckParams) {
 		return fetch.post<{
@@ -133,7 +133,7 @@ export const generateRecycleBinApi = (fetch: HttpClient) => ({
 			items_with_conflict?: RecycleBin.CheckItem[]
 			/** 新版无冲突结构 */
 			items_no_conflict?: RecycleBin.CheckItem[]
-		}>(genRequestUrl("/api/v1/recycle-bin/check"), params)
+		}>("/api/v1/recycle-bin/check", params)
 	},
 	restoreRecycleBinResources(params: RecycleBin.RestoreParams) {
 		return fetch.post<{
@@ -147,13 +147,10 @@ export const generateRecycleBinApi = (fetch: HttpClient) => ({
 				success: boolean
 				error_message?: string
 			}>
-		}>(genRequestUrl("/api/v1/recycle-bin/restore"), params)
+		}>("/api/v1/recycle-bin/restore", params)
 	},
 	moveRecycleBinProject(params: RecycleBin.MoveProjectParams) {
-		return fetch.post<{ success: boolean }>(
-			genRequestUrl("/api/v1/recycle-bin/move-project"),
-			params,
-		)
+		return fetch.post<{ success: boolean }>("/api/v1/recycle-bin/move-project", params)
 	},
 	batchMoveRecycleBinProject(params: RecycleBin.BatchMoveProjectParams) {
 		return fetch.post<{
@@ -161,11 +158,11 @@ export const generateRecycleBinApi = (fetch: HttpClient) => ({
 			success: number
 			failed: number
 			results: Array<{ project_id: string; success: boolean; message: string }>
-		}>(genRequestUrl("/api/v1/recycle-bin/batch-move-project"), params)
+		}>("/api/v1/recycle-bin/batch-move-project", params)
 	},
 	moveRecycleBinTopic(params: RecycleBin.MoveTopicParams) {
 		return fetch.post<{ success: boolean; topic_id: string; message: string }>(
-			genRequestUrl("/api/v1/recycle-bin/move-topic"),
+			"/api/v1/recycle-bin/move-topic",
 			params,
 		)
 	},
@@ -175,7 +172,7 @@ export const generateRecycleBinApi = (fetch: HttpClient) => ({
 			success: number
 			failed: number
 			results: Array<{ topic_id: string; success: boolean; message: string }>
-		}>(genRequestUrl("/api/v1/recycle-bin/batch-move-topic"), params)
+		}>("/api/v1/recycle-bin/batch-move-topic", params)
 	},
 	permanentDeleteRecycleBin(params: RecycleBin.PermanentDeleteParams) {
 		return fetch.post<{
@@ -185,6 +182,6 @@ export const generateRecycleBinApi = (fetch: HttpClient) => ({
 				resource_id: string
 				resource_name: string
 			}>
-		}>(genRequestUrl("/api/v1/recycle-bin/permanent-delete"), params)
+		}>("/api/v1/recycle-bin/permanent-delete", params)
 	},
 })

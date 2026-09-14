@@ -1,5 +1,4 @@
-import type { HttpClient } from "@/apis/core/HttpClient"
-import { genRequestUrl } from "@/utils/http"
+import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 
 export const FUNCTION_PERMISSION_CODE = {
 	SkillCreate: "skill.create",
@@ -24,11 +23,11 @@ export interface PermissionGroupsResponse {
 	permission_key: string[]
 }
 
-export const generateFunctionPermissionApi = (fetch: HttpClient) => ({
+export const generateFunctionPermissionApi = (fetch: ServiceHttpClient) => ({
 	getMe() {
-		return fetch.get<FunctionPermissionMap>(genRequestUrl("/api/v1/function-permissions/me"))
+		return fetch.get<FunctionPermissionMap>("/api/v1/function-permissions/me")
 	},
 	getPermissionGroups() {
-		return fetch.get<PermissionGroupsResponse>(genRequestUrl("/api/v1/permissions/me"))
+		return fetch.get<PermissionGroupsResponse>("/api/v1/permissions/me")
 	},
 })

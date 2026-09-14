@@ -1,6 +1,6 @@
 import { env } from "@/utils/env"
 import { UploadConfig } from "@dtyq/upload-sdk"
-import magicClient from "@/apis/clients/magic"
+import { defaultMagicClient as magicClient } from "@/infrastructure/network/http/runtime"
 import { UploadFileMentionData } from "@/components/business/MentionPanel/types"
 import { cloneDeep } from "lodash-es"
 import { UploadSource } from "../hooks/useFileUpload"

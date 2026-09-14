@@ -1,5 +1,5 @@
 import { AuthApi, CommonApi } from "@/apis"
-import type { RequestConfig } from "@/apis/core/HttpClient"
+import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import { service } from "@/services"
 import { RoutePath } from "@/constants/routes"
 import { baseHistory, history } from "@/routes/history"

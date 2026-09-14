@@ -30,9 +30,7 @@ export class AppLoggerService {
 				fetcher,
 				sessionId,
 				release,
-				console:
-					import.meta.env.DEV ||
-					new URLSearchParams(location.search).get("debug") === "true",
+				console: new URLSearchParams(location.search).get("debug") === "true",
 				// Delivery defaults are identical with or without a Node-provided runtime config.
 				remote: true,
 				getContext: () => this.getContext(),

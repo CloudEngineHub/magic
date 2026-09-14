@@ -21,7 +21,7 @@ export class AccountService {
 	private readonly service: Container
 	private readonly authApi: typeof apis.AuthApi
 
-	constructor(dependencies: typeof apis, service: Container) {
+	constructor(dependencies: Pick<typeof apis, "AuthApi">, service: Container) {
 		this.authApi = dependencies.AuthApi
 		this.service = service
 	}

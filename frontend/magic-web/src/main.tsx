@@ -1,3 +1,4 @@
+import { httpService } from "@/app/services/httpService"
 import "./index.css"
 import { loggerService } from "./app/services/loggerService"
 // 初始化 emoji 缓存
@@ -39,6 +40,7 @@ async function initMock() {
  * but keep rendering concurrent with bootstrap work.
  */
 loggerService.start()
+httpService.init()
 appService.init()
 
 async function bootstrap() {

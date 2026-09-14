@@ -7,7 +7,7 @@ import type { TopicMode } from "../pages/Workspace/TopicMode"
 import { CollaborationProjectType } from "../pages/Workspace/types"
 import { SHARE_WORKSPACE_ID, isOtherCollaborationProject } from "../constants"
 import { generateCollaborationProjectUrl } from "../utils/project"
-import { RequestConfig } from "@/apis/core/HttpClient"
+import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import {
 	shouldSyncChatConversationName,
 	syncChatConversationName,
