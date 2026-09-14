@@ -7,13 +7,28 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.shadow_code import ShadowCode
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app.path_manager import PathManager
 from app.tools.core import BaseTool, BaseToolParams, tool
 from app.utils.async_file_utils import async_exists, async_read_text, async_write_text, get_s3_key_from_xattr
 
 logger = get_logger(__name__)
+
+
+def _parse_i18n_json_string(value: Any) -> Any:
+    """兼容模型将 i18n 字段误传为 JSON 字符串的情况，自动解析为 dict。"""
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                f"expected a JSON object, got an unparsable string: {value!r}"
+            ) from error
+        if not isinstance(parsed, dict):
+            raise ValueError(f"expected a JSON object, got {type(parsed).__name__}: {parsed!r}")
+        return parsed
+    return value
 
 
 class UpdateAgentParams(BaseToolParams):
