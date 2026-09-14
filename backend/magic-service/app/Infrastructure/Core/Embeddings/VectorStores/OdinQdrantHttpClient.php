@@ -13,8 +13,8 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\RequestOptions;
 use Hyperf\Codec\Json;
-use Hyperf\Qdrant\Connection\ClientInterface;
 use Hyperf\Logger\LoggerFactory;
+use Hyperf\Qdrant\Connection\ClientInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
