@@ -231,6 +231,12 @@ class LarkChannel(BaseChannel):
         current_message_at_ms = now_ms()
         self._last_message_at_ms = current_message_at_ms
         KeepaliveRegistry.get_instance().notify_activity(self.key, current_message_at_ms)
+        logger.info(
+            "[LarkChannel] 收到消息: "
+            f"message_type={getattr(msg, 'message_type', '')!r}, "
+            f"message_fields={sorted(vars(msg)) if hasattr(msg, '__dict__') else []}, "
+            f"content_fields={sorted(content_obj)}"
+        )
         from app.channel.lark.media import prepare_lark_message
         prepared = await prepare_lark_message(
             getattr(msg, "message_type", ""), content_obj,

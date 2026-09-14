@@ -123,6 +123,18 @@ class WeComChannel(BaseChannel):
         current_message_at_ms = now_ms()
         self._last_message_at_ms = current_message_at_ms
         KeepaliveRegistry.get_instance().notify_activity(self.key, current_message_at_ms)
+        media_fields = []
+        msgtype = body.get("msgtype") if isinstance(body, dict) else None
+        if isinstance(body, dict):
+            media = body.get(msgtype)
+            if isinstance(media, dict):
+                media_fields = sorted(media)
+        logger.info(
+            "[WeComChannel] 收到消息: "
+            f"msgtype={msgtype!r}, "
+            f"fields={sorted(body) if isinstance(body, dict) else []}, "
+            f"content_fields={media_fields}"
+        )
         from app.channel.wecom.media import prepare_wecom_message
         prepared = await prepare_wecom_message(body, self._ws_client)
         content = prepared.text

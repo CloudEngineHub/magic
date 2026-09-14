@@ -239,10 +239,16 @@ class DingTalkChannel(BaseChannel):
         current_message_at_ms = now_ms()
         self._last_message_at_ms = current_message_at_ms
         KeepaliveRegistry.get_instance().notify_activity(self.key, current_message_at_ms)
-        from app.channel.dingtalk.media import prepare_dingtalk_message
-        prepared = await prepare_dingtalk_message(
-            raw_data if raw_data is not None else incoming_message.to_dict(), self._client
+        payload = raw_data if raw_data is not None else incoming_message.to_dict()
+        content = payload.get("content")
+        logger.info(
+            "[DingTalkChannel] 收到消息: "
+            f"msgtype={payload.get('msgtype')!r}, "
+            f"fields={sorted(payload)}, "
+            f"content_fields={sorted(content) if isinstance(content, dict) else []}"
         )
+        from app.channel.dingtalk.media import prepare_dingtalk_message
+        prepared = await prepare_dingtalk_message(payload, self._client)
         content = prepared.text
         if not content and not prepared.media:
             return
