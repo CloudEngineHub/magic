@@ -1,6 +1,6 @@
 # Basic Canvas video generation
 
-Use this reference as the default Canvas video path. Requests such as “generate a video”, “make a promotional video”, or “animate this image” stay in this mode even when the user uploads assets, the Canvas already has ordinary images or videos, the user asks to revise a basic video, or the latest message names an explicit ordinary generation mode such as `生成模式: 普通`. Load `references/professional-video-production.md` only when the user explicitly asks for professional or complete video production, names a production stage, names an explicit detailed generation mode such as `生成模式: 精细`, or continues an in-progress professional production.
+Use this reference as the default Canvas video path. For video tasks, read and follow only this reference by default. Read and follow `references/professional-video-production.md` only when the user explicitly states that they want to use the professional video-production capabilities in that document.
 
 ## Workflow
 
@@ -14,7 +14,7 @@ Use this reference as the default Canvas video path. Requests such as “generat
 
 Video billing remains in force. Before generating, call `estimate_canvas_content_points`, show the estimated points, and obtain explicit user confirmation. This is a workflow instruction; the estimate tool and generation tool are independent, and generation does not validate an estimate ID.
 
-If the user later explicitly asks for professional video production, a storyboard, multiple shots, first frames, staged approvals, Connections, BGM replacement, final composition, or an explicit detailed generation mode, stop the basic path and continue with `references/professional-video-production.md` using the existing results. If the Canvas already has an in-progress professional production and the user continues that work, switch to that reference as well.
+Continue using this basic video-generation path unless the user explicitly states that they want to use the professional video-production capabilities in `references/professional-video-production.md`.
 
 ## Tool choice
 
