@@ -11,6 +11,7 @@ use App\Application\SuperMagic\Project\Service\PublishedMicroAppResolver;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectAccessKind;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectMount;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectMountAuthorizer;
+use App\Application\SuperMagic\Task\Service\ReferencedProjectMountCapabilityIssuer;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
 use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
@@ -115,12 +116,12 @@ class ReferencedProjectMountAuthorizerTest extends TestCase
             canAccessShare: true,
         );
 
-        $authorizer->assertPublishedShareAccessible(
+        $capability = $authorizer->assertPublishedShareAccessible(
             $this->microAppMount(),
             $this->createDataIsolation(),
         );
 
-        $this->addToAssertionCount(1);
+        self::assertSame('share-capability', $capability);
     }
 
     public function testPublishedShareDeniesWhenShareIsInaccessible(): void
@@ -212,7 +213,10 @@ class ReferencedProjectMountAuthorizerTest extends TestCase
         $resolver->method('findPublished')->willReturn($published);
         $resolver->method('canAccessShare')->willReturn($canAccessShare);
 
-        return new ReferencedProjectMountAuthorizer($resolver);
+        $capabilityIssuer = $this->createMock(ReferencedProjectMountCapabilityIssuer::class);
+        $capabilityIssuer->method('issue')->willReturn('share-capability');
+
+        return new ReferencedProjectMountAuthorizer($resolver, $capabilityIssuer);
     }
 
     private function microAppMount(string $projectId = '4001', ?string $appId = '3001'): ReferencedProjectMount

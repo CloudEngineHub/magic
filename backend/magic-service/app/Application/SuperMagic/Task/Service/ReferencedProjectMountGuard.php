@@ -33,17 +33,22 @@ final class ReferencedProjectMountGuard
     /**
      * @param list<ReferencedProjectMount> $mounts
      * @param callable(int): void $assertCollaborationAccessible
+     * @return array<string, string> short-lived share capabilities by project ID
      */
     public function assertAllAccessible(
         array $mounts,
         DataIsolation $dataIsolation,
         callable $assertCollaborationAccessible,
-    ): void {
+    ): array {
         $denied = [];
+        $shareCapabilities = [];
         foreach ($mounts as $mount) {
             try {
                 if ($mount->accessKind === ReferencedProjectAccessKind::PublishedShare) {
-                    $this->authorizer->assertPublishedShareAccessible($mount, $dataIsolation);
+                    $capability = $this->authorizer->assertPublishedShareAccessible($mount, $dataIsolation);
+                    if ($capability !== null) {
+                        $shareCapabilities[$mount->projectId] = $capability;
+                    }
                     continue;
                 }
                 $assertCollaborationAccessible((int) $mount->projectId);
@@ -62,5 +67,7 @@ final class ReferencedProjectMountGuard
                 implode(', ', $denied)
             ));
         }
+
+        return $shareCapabilities;
     }
 }

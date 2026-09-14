@@ -20,12 +20,13 @@ class ReferencedProjectMountAuthorizer
 {
     public function __construct(
         private readonly PublishedMicroAppResolver $publishedMicroAppResolver,
+        private readonly ReferencedProjectMountCapabilityIssuer $capabilityIssuer,
     ) {}
 
     public function assertPublishedShareAccessible(
         ReferencedProjectMount $mount,
         DataIsolation $dataIsolation,
-    ): void {
+    ): ?string {
         $appId = (int) ($mount->appId ?? '');
         if ($appId <= 0) {
             ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED);
@@ -53,5 +54,11 @@ class ReferencedProjectMountAuthorizer
         if (! $canAccess) {
             ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED);
         }
+
+        // The sandbox cannot use the caller's collaboration token for a project
+        // they only received through a share. Issue a short-lived capability
+        // scoped to this published share; the gateway/agfs must enforce the
+        // share scope and read-only semantics on every downstream file call.
+        return $this->capabilityIssuer->issue($mount, $record, $shareEntity, $dataIsolation);
     }
 }

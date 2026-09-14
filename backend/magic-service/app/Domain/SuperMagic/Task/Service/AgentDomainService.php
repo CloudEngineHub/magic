@@ -1379,14 +1379,21 @@ class AgentDomainService
         DataIsolation $dataIsolation,
         string $sandboxId,
         array $projectIds,
-        array $projectRootFileIds = []
+        array $projectRootFileIds = [],
+        array $shareCapabilities = [],
     ): void {
         if (empty($projectIds)) {
             return;
         }
 
         foreach ($projectIds as $projectId) {
-            $this->mountSingleReferencedProject($dataIsolation, $sandboxId, $projectId, (string) ($projectRootFileIds[(int) $projectId] ?? $projectRootFileIds[$projectId] ?? ''));
+            $this->mountSingleReferencedProject(
+                $dataIsolation,
+                $sandboxId,
+                $projectId,
+                (string) ($projectRootFileIds[(int) $projectId] ?? $projectRootFileIds[$projectId] ?? ''),
+                (string) ($shareCapabilities[(string) $projectId] ?? ''),
+            );
         }
     }
 
@@ -1984,7 +1991,8 @@ class AgentDomainService
         DataIsolation $dataIsolation,
         string $sandboxId,
         string $projectId,
-        string $rootFileId = ''
+        string $rootFileId = '',
+        string $shareCapability = ''
     ): void {
         if ($rootFileId === '') {
             throw new RuntimeException('Missing referenced project root file id');
@@ -1994,7 +2002,8 @@ class AgentDomainService
             $dataIsolation,
             $sandboxId,
             $projectId,
-            $rootFileId
+            $rootFileId,
+            $shareCapability,
         );
 
         if (! $result->isSuccess()) {
