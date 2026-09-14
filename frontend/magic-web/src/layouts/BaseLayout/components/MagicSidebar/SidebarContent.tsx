@@ -64,7 +64,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 			collapsed={collapsed}
 			apps={
 				<SidebarGroup
-					className="w-full shrink-0 p-2"
+					className="w-full shrink-0 px-2 pb-1 pt-2"
 					data-testid="sidebar-content-apps-group"
 				>
 					<SidebarGroupContent>

@@ -29,7 +29,7 @@ import CreateWorkspaceInput from "./CreateWorkspaceInput"
 import { cn } from "@/utils/cn"
 import { toTestIdSegment } from "@/utils/testid"
 import { SidebarMenu } from "@/components/shadcn-ui/sidebar"
-import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import { ScrollArea, SCROLL_HINT_HEIGHT } from "@/components/shadcn-ui/scroll-area"
 import { useWorkspaceListDnd } from "./useWorkspaceListDnd"
 import { useProjectPinBoundaryConfirmation } from "./ProjectPinBoundaryConfirmDialog"
 
@@ -45,6 +45,7 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 	const { t } = useTranslation()
 	const isExpanded = sidebarStore.workspacesExpanded
 	const scrollRef = useRef<HTMLDivElement>(null)
+	const scrollAreaRef = useRef<HTMLDivElement>(null)
 	const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isSearchMode, setIsSearchMode] = useState(false)
@@ -128,13 +129,15 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 		)
 		.join("|")
 	useLayoutEffect(() => {
-		const viewport = scrollRef.current
+		const scrollArea = scrollAreaRef.current
 		const list = workspaceListRef.current
-		if (!viewport || !list) return
+		if (!scrollArea || !list) return
 		const items = Array.from(
 			list.querySelectorAll<HTMLElement>("[data-sidebar-workspace-root]"),
 		)
 		const measure = () => {
+			// 高度预算扣除双向提示的最大占位；提示显隐不再反过来改变项目高度和溢出状态。
+			const availableHeight = Math.max(0, scrollArea.clientHeight - SCROLL_HINT_HEIGHT * 2)
 			const headers = items.map((item) =>
 				item.querySelector<HTMLElement>("[data-sidebar-workspace-header]"),
 			)
@@ -151,13 +154,12 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 				if (
 					next?.dataset.workspaceExpanded === "false" &&
 					items[index + 2] &&
-					viewport.clientHeight - sizes[index] - reserve - sizes[index + 2] >=
-						sizes[index]
+					availableHeight - sizes[index] - reserve - sizes[index + 2] >= sizes[index]
 				)
 					reserve += sizes[index + 2]
 				const workspaceId = item.dataset.sidebarDropWorkspaceId
 				if (!workspaceId) return
-				heights[workspaceId] = Math.max(0, viewport.clientHeight - sizes[index] - reserve)
+				heights[workspaceId] = Math.max(0, availableHeight - sizes[index] - reserve)
 			})
 			setProjectHeights((previous) =>
 				Object.keys(previous).length === items.length &&
@@ -168,7 +170,7 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 		}
 		measure()
 		const observer = new ResizeObserver(measure)
-		observer.observe(viewport)
+		observer.observe(scrollArea)
 		items.forEach((item) => {
 			const header = item.querySelector("[data-sidebar-workspace-header]")
 			if (header) observer.observe(header)
@@ -525,15 +527,15 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 				}
 			>
 				<ScrollArea
+					ref={scrollAreaRef}
 					viewportRef={scrollRef}
 					scrollHints={{
 						variant: "arrows",
-						reserveSpace: true,
 						upLabel: t("super:projectNavigation.scrollUp"),
 						downLabel: t("super:projectNavigation.scrollDown"),
 					}}
 					hideScrollbar
-					className="min-h-0 flex-1 overflow-hidden"
+					className="mt-1 min-h-0 flex-1 overflow-hidden"
 					viewportClassName="overscroll-contain [--workspace-list-sticky-top:0px] [&>div]:!block"
 					viewportProps={{
 						"data-workspaces-scroll-container": true,

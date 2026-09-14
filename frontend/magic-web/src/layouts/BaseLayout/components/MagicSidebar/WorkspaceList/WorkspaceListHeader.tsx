@@ -72,6 +72,7 @@ export default function WorkspaceListHeader({
 				<SidebarRow
 					label={t("super:projectNavigation.workspaces")}
 					labelVariant="navigation"
+					menuHover
 					leading={icon}
 					isExpanded={isExpanded}
 					onClick={() => onToggle()}

@@ -82,7 +82,7 @@ function SidebarContentLayout({
 							downLabel: t("projectNavigation.scrollDown"),
 						}}
 					>
-						<div ref={appsRef} className="flow-root pb-1">
+						<div ref={appsRef} className="flow-root">
 							{apps}
 						</div>
 					</ScrollArea>

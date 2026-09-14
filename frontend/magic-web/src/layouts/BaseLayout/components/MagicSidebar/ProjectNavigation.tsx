@@ -157,6 +157,7 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 								<SidebarRow
 									label={t("projectNavigation.recent")}
 									labelVariant="navigation"
+									menuHover
 									leading={recentIcon}
 									isExpanded={sidebarStore.recentProjectsExpanded}
 									onClick={() => sidebarStore.toggleNavigationSection("recent")}

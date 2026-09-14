@@ -43,7 +43,8 @@ export function useVirtualProjectList({
 	const [scrollMargin, setScrollMargin] = useState(0)
 	useLayoutEffect(() => {
 		const viewport = externalScrollRef?.current ?? (listRef ? scrollRef.current : null)
-		const list = listRef?.current ?? scrollRef.current
+		// 显式列表尚未挂载时不能用视口替代，否则列表起点会被误算为 scrollTop。
+		const list = listRef ? listRef.current : scrollRef.current
 		if (!viewport || !list) return
 		const measure = () => {
 			setScrollMargin(

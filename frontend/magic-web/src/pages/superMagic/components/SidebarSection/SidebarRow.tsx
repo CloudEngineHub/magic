@@ -41,6 +41,8 @@ export interface SidebarRowProps {
 	isActive?: boolean
 	/** 分组与普通项目条目使用不同字重；未指定的调用方保留原样式。 */
 	labelVariant?: SidebarLabelVariant
+	/** 导航栏目沿用应用菜单的背景反馈，不改变标题位置或普通分组外观。 */
+	menuHover?: boolean
 	isExpanded?: boolean
 	disabled?: boolean
 	hideChevron?: boolean
@@ -62,6 +64,7 @@ export function SidebarRow({
 	onClick,
 	isActive = false,
 	labelVariant = "default",
+	menuHover = false,
 	isExpanded = false,
 	disabled = false,
 	hideChevron = false,
@@ -82,7 +85,10 @@ export function SidebarRow({
 				if (!disabled && event.target === event.currentTarget) onClick()
 			}}
 			className={cn(
-				"flex h-10 w-full items-center gap-2 overflow-hidden px-2.5 text-left transition-[background-color,box-shadow] duration-200 ease-out hover:bg-accent/40",
+				"flex h-10 w-full items-center gap-2 overflow-hidden px-2.5 text-left transition-[background-color,box-shadow] duration-200 ease-out",
+				menuHover
+					? "rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+					: "hover:bg-accent/40",
 				isActive && "bg-accent/50",
 				disabled && "cursor-not-allowed opacity-60 hover:bg-transparent",
 				className,

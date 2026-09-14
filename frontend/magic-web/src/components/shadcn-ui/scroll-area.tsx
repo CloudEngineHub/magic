@@ -6,6 +6,8 @@ import { useReducedMotion } from "framer-motion"
 
 import { cn } from "@/utils/cn"
 
+export const SCROLL_HINT_HEIGHT = 18
+
 type ScrollAreaViewportProps = Omit<
 	React.ComponentProps<typeof ScrollAreaPrimitive.Viewport>,
 	"ref" | "className" | "style" | "id" | "children"
@@ -27,8 +29,6 @@ type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
 		variant: "arrows" | "both"
 		upLabel: string
 		downLabel: string
-		/** 内容高度依赖本视口时固定预留提示区，避免显隐反过来改变内容高度。 */
-		reserveSpace?: boolean
 	}
 	scrollbarOrientation?: React.ComponentProps<
 		typeof ScrollAreaPrimitive.ScrollAreaScrollbar
@@ -42,6 +42,7 @@ const ScrollArea = React.forwardRef<
 	(
 		{
 			className,
+			style,
 			children,
 			viewportClassName,
 			viewportStyle,
@@ -58,8 +59,14 @@ const ScrollArea = React.forwardRef<
 	) => {
 		const localViewportRef = React.useRef<HTMLDivElement | null>(null)
 		const reducedMotion = useReducedMotion()
-		const [hasHintSpace, setHasHintSpace] = React.useState(!!scrollHints?.reserveSpace)
 		const [edges, setEdges] = React.useState({ top: false, bottom: false })
+		const edgesRef = React.useRef(edges)
+		const scrollTargetRef = React.useRef<number | null>(null)
+		const pendingScrollRef = React.useRef<{
+			scrollTop: number
+			topInset: number
+			atBottom: boolean
+		} | null>(null)
 		const setViewportRef = React.useCallback(
 			(node: HTMLDivElement | null) => {
 				localViewportRef.current = node
@@ -70,15 +77,23 @@ const ScrollArea = React.forwardRef<
 			[viewportRef],
 		)
 		const showHints = !!scrollHints && scrollbarOrientation === "vertical"
-		const reserveHintSpace = showHints && !!scrollHints?.reserveSpace
 		const showShadows =
 			(scrollHints ? scrollHints.variant === "both" : scrollShadows) &&
 			scrollbarOrientation === "vertical"
 		const observeEdges = showHints || showShadows
 		const scrollPage = (direction: -1 | 1) => {
 			const viewport = localViewportRef.current
-			viewport?.scrollBy({
-				top: direction * viewport.clientHeight * 0.75,
+			if (!viewport) return
+			const top = Math.max(
+				0,
+				Math.min(
+					viewport.scrollHeight - viewport.clientHeight,
+					viewport.scrollTop + direction * viewport.clientHeight * 0.75,
+				),
+			)
+			scrollTargetRef.current = top
+			viewport.scrollTo({
+				top,
 				behavior: reducedMotion ? "auto" : "smooth",
 			})
 		}
@@ -86,21 +101,29 @@ const ScrollArea = React.forwardRef<
 			const viewport = localViewportRef.current
 			if (!observeEdges || !viewport) return
 			const measure = () => {
+				if (
+					scrollTargetRef.current !== null &&
+					Math.abs(viewport.scrollTop - scrollTargetRef.current) <= 1
+				)
+					scrollTargetRef.current = null
 				// 按未扣除提示区的可用高度判断溢出，避免箭头自身导致空列表一直溢出。
 				const contentHeight =
 					viewport.firstElementChild?.getBoundingClientRect().height ?? 0
-				setHasHintSpace(
-					reserveHintSpace ||
-						(showHints &&
-							contentHeight > (viewport.parentElement?.clientHeight ?? 0) + 1),
-				)
+				const overflows =
+					!showHints || contentHeight > (viewport.parentElement?.clientHeight ?? 0) + 1
 				// Fractional scroll offsets can leave a subpixel remainder at either edge.
-				const top = viewport.scrollTop > 1
-				const bottom =
-					viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop > 1
-				setEdges((previous) =>
-					previous.top === top && previous.bottom === bottom ? previous : { top, bottom },
-				)
+				const remaining = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop
+				const top = overflows && viewport.scrollTop > 1
+				const bottom = overflows && remaining > 1
+				if (edgesRef.current.top === top && edgesRef.current.bottom === bottom) return
+				if (showHints)
+					pendingScrollRef.current = {
+						scrollTop: viewport.scrollTop,
+						topInset: viewport.offsetTop,
+						atBottom: remaining <= 1,
+					}
+				edgesRef.current = { top, bottom }
+				setEdges(edgesRef.current)
 			}
 			measure()
 			const observer = new ResizeObserver(measure)
@@ -109,20 +132,59 @@ const ScrollArea = React.forwardRef<
 			// Radix's content wrapper changes size when entries load, expand, or wrap.
 			if (viewport.firstElementChild) observer.observe(viewport.firstElementChild)
 			viewport.addEventListener("scroll", measure, { passive: true })
+			const clearScrollTarget = () => {
+				scrollTargetRef.current = null
+			}
+			// 手动滚动接管后，不再恢复先前箭头点击的平滑滚动目标。
+			viewport.addEventListener("wheel", clearScrollTarget, { passive: true })
+			viewport.addEventListener("pointerdown", clearScrollTarget)
+			viewport.addEventListener("keydown", clearScrollTarget)
+			viewport.addEventListener("scrollend", clearScrollTarget)
 			return () => {
 				observer.disconnect()
 				viewport.removeEventListener("scroll", measure)
+				viewport.removeEventListener("wheel", clearScrollTarget)
+				viewport.removeEventListener("pointerdown", clearScrollTarget)
+				viewport.removeEventListener("keydown", clearScrollTarget)
+				viewport.removeEventListener("scrollend", clearScrollTarget)
 			}
-		}, [observeEdges, showHints, reserveHintSpace])
+		}, [observeEdges, showHints])
+		React.useLayoutEffect(() => {
+			if (edges !== edgesRef.current) return
+			const viewport = localViewportRef.current
+			const anchor = pendingScrollRef.current
+			pendingScrollRef.current = null
+			if (!showHints || !viewport || !anchor) return
+			// 顶部轨道只在上方有内容时占位；显隐时保持内容位置，到边界则完整露出首／末行。
+			viewport.scrollTop = !edges.top
+				? 0
+				: anchor.atBottom
+					? viewport.scrollHeight - viewport.clientHeight
+					: anchor.scrollTop + viewport.offsetTop - anchor.topInset
+			// 位置补偿会打断浏览器的平滑滚动，继续同一次箭头操作的剩余距离。
+			if (scrollTargetRef.current !== null) {
+				const top = Math.max(
+					0,
+					Math.min(
+						viewport.scrollHeight - viewport.clientHeight,
+						scrollTargetRef.current + viewport.offsetTop - anchor.topInset,
+					),
+				)
+				scrollTargetRef.current = top
+				viewport.scrollTo({ top, behavior: reducedMotion ? "auto" : "smooth" })
+			}
+		}, [edges, showHints, reducedMotion])
 		return (
 			<ScrollAreaPrimitive.Root
 				ref={ref}
 				data-slot="scroll-area"
-				className={cn(
-					"relative",
-					className,
-					showHints && hasHintSpace && "grid grid-rows-[18px_minmax(0,1fr)_18px]",
-				)}
+				className={cn("relative", className, showHints && "grid")}
+				style={{
+					...style,
+					...(showHints && {
+						gridTemplateRows: `${edges.top ? SCROLL_HINT_HEIGHT : 0}px minmax(0, 1fr) ${edges.bottom ? SCROLL_HINT_HEIGHT : 0}px`,
+					}),
+				}}
 				{...props}
 			>
 				<ScrollAreaPrimitive.Viewport
@@ -133,7 +195,7 @@ const ScrollArea = React.forwardRef<
 					className={cn(
 						"size-full rounded-[inherit] outline-none transition-[color,box-shadow] focus-visible:outline-1 focus-visible:ring-[3px] focus-visible:ring-ring/50",
 						viewportClassName,
-						showHints && hasHintSpace && "row-start-2 min-h-0",
+						showHints && "row-start-2 min-h-0",
 					)}
 					style={viewportStyle}
 				>
@@ -147,10 +209,10 @@ const ScrollArea = React.forwardRef<
 				/>
 				<ScrollAreaPrimitive.Corner />
 				{showHints &&
-					hasHintSpace &&
 					scrollHints &&
 					([-1, 1] as const).map((direction) => {
 						const visible = direction < 0 ? edges.top : edges.bottom
+						if (!visible) return null
 						const Icon = direction < 0 ? ChevronUp : ChevronDown
 						return (
 							<button
@@ -159,12 +221,11 @@ const ScrollArea = React.forwardRef<
 								aria-label={
 									direction < 0 ? scrollHints.upLabel : scrollHints.downLabel
 								}
-								disabled={!visible}
 								onClick={() => scrollPage(direction)}
+								style={{ height: SCROLL_HINT_HEIGHT }}
 								className={cn(
-									"z-10 flex h-[18px] w-6 items-center justify-center justify-self-center rounded-sm text-muted-foreground opacity-[0.65] outline-none transition-opacity hover:opacity-100 focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none",
+									"z-10 flex w-6 items-center justify-center justify-self-center rounded-sm text-muted-foreground opacity-[0.65] outline-none transition-opacity hover:opacity-100 focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none",
 									direction < 0 ? "row-start-1" : "row-start-3",
-									!visible && "invisible",
 								)}
 							>
 								<Icon className="size-3" strokeWidth={1.5} />
@@ -175,21 +236,25 @@ const ScrollArea = React.forwardRef<
 					<>
 						<div
 							aria-hidden
+							style={showHints && edges.top ? { top: SCROLL_HINT_HEIGHT } : undefined}
 							className={cn(
 								"pointer-events-none absolute inset-x-2 top-0 z-10 h-1 bg-gradient-to-b from-black/[0.04] to-transparent dark:from-black/[0.14]",
 								showHints &&
 									"h-3 from-black/[0.035] transition-opacity [mask-image:linear-gradient(to_right,transparent,black_20%,black_80%,transparent)] motion-reduce:transition-none",
-								showHints && hasHintSpace && "top-[18px]",
 								!edges.top && "invisible",
 							)}
 						/>
 						<div
 							aria-hidden
+							style={
+								showHints && edges.bottom
+									? { bottom: SCROLL_HINT_HEIGHT }
+									: undefined
+							}
 							className={cn(
 								"pointer-events-none absolute inset-x-2 bottom-0 z-10 h-1 bg-gradient-to-t from-black/[0.04] to-transparent dark:from-black/[0.14]",
 								showHints &&
 									"h-3 from-black/[0.035] transition-opacity [mask-image:linear-gradient(to_right,transparent,black_20%,black_80%,transparent)] motion-reduce:transition-none",
-								showHints && hasHintSpace && "bottom-[18px]",
 								!edges.bottom && "invisible",
 							)}
 						/>

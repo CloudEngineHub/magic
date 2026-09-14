@@ -33,8 +33,8 @@ export class SidebarStore {
 	// Workspace expanded state (for lazy loading)
 	expandedWorkspaces: Set<string> = new Set()
 
-	// 栏目偏好属于账号和组织；同一时刻最多展开一个栏目，窄栏浮层不改写偏好。
-	expandedNavigationSection: "recent" | "workspaces" | "none" = "workspaces"
+	// 栏目偏好属于账号和组织；始终展开一个栏目，收起当前栏目即展开另一个，窄栏浮层不改写偏好。
+	expandedNavigationSection: "recent" | "workspaces" = "workspaces"
 	navigationAppsHeight: number | null = null
 
 	get recentProjectsExpanded() {
@@ -64,9 +64,7 @@ export class SidebarStore {
 			if (!saved || typeof saved !== "object") return
 			if (
 				"expandedSection" in saved &&
-				(saved.expandedSection === "recent" ||
-					saved.expandedSection === "workspaces" ||
-					saved.expandedSection === "none")
+				(saved.expandedSection === "recent" || saved.expandedSection === "workspaces")
 			)
 				this.expandedNavigationSection = saved.expandedSection
 			if (
@@ -83,7 +81,11 @@ export class SidebarStore {
 
 	toggleNavigationSection(section: "recent" | "workspaces") {
 		this.expandedNavigationSection =
-			this.expandedNavigationSection === section ? "none" : section
+			this.expandedNavigationSection === section
+				? section === "recent"
+					? "workspaces"
+					: "recent"
+				: section
 		this.saveNavigationPreferences()
 	}
 
