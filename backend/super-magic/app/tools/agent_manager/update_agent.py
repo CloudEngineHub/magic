@@ -31,6 +31,16 @@ def _parse_i18n_json_string(value: Any) -> Any:
     return value
 
 
+def _normalize_role_i18n(value: Any) -> Any:
+    """将角色 i18n 的单个字符串兼容为 Magic Service 要求的数组。"""
+    if not isinstance(value, dict):
+        return value
+    return {
+        locale: [locale_value] if isinstance(locale_value, str) else locale_value
+        for locale, locale_value in value.items()
+    }
+
+
 class UpdateAgentParams(BaseToolParams):
     name_i18n: Optional[Dict[str, str]] = Field(
         default=None, description='i18n name dict, e.g. {"zh_CN": "...", "en_US": "..."}'
@@ -61,6 +71,7 @@ class UpdateAgentParams(BaseToolParams):
         _parse_i18n_json_string
     )
     _parse_role_i18n = field_validator("role_i18n", mode="before")(_parse_i18n_json_string)
+    _normalize_role_i18n = field_validator("role_i18n", mode="after")(_normalize_role_i18n)
 
 
 @tool()

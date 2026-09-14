@@ -96,8 +96,8 @@ export interface CrewIconObject {
 
 /** Resolve CrewIconObject to a display URL string. */
 export function resolveCrewIconUrl(icon: CrewIconObject | null | undefined): string {
-	if (!icon) return ""
-	return icon.url ?? icon.value ?? ""
+	if (icon?.url) return icon.url
+	return icon?.value && /^https?:\/\//i.test(icon.value) ? icon.value : ""
 }
 
 /** A single playbook base data (used in list views) */
