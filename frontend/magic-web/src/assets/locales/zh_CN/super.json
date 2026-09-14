@@ -9546,7 +9546,11 @@
 		"create": "新建",
 		"createFile": "新建文件",
 		"createFolder": "新建文件夹",
-		"createMemory": "创建正文",
+		"createMemory": "手动创建",
+		"createMemoryConfirm": "创建空文件",
+		"createMemoryDescription": "核心记忆通常由 AI 根据你的要求整理。此操作只会在当前范围创建空白 MEMORY.md 并打开编辑器，不会生成记忆内容，也不会覆盖已有文件。",
+		"createMemoryTitle": "手动创建核心记忆",
+		"creatingMemory": "正在创建…",
 		"currentProject": "当前项目",
 		"defaultFile": "新建文件.md",
 		"defaultFolder": "新建文件夹",
@@ -9595,6 +9599,7 @@
 			"coreMemory": {
 				"example": "记住我在常规工作报告中偏好先看结论，再看详细依据。遇到特殊任务时，按我当次提出的要求处理。",
 				"guide": {
+					"actions": "通常先告诉 AI 你希望长期记住什么，由它整理重点。需要自行编写时，可在长期记忆中选择「手动创建」，确认后打开空白 MEMORY.md。文件的重命名、移动和删除与「全部文件」相同；改变名称或移出原位置后，该位置不再具有核心记忆文件，已有内容仍按普通文件保留。",
 					"benefits": [
 						{
 							"description": "例如常用的写作风格和表达习惯。",
@@ -10202,6 +10207,7 @@
 		"fixedEntry": "此路径为固定记忆入口，可编辑正文，不能更改目录结构",
 		"folder": "文件夹",
 		"globalMemory": "全局记忆",
+		"globalMemoryEmptyHint": "可以先告诉 AI 你希望长期记住的偏好和背景，让它整理个人通用记忆；需要自行编写时，再手动创建。",
 		"gridView": "图标视图",
 		"help": {
 			"cliAvailability": "能否调用以工具实际状态为准。看到目录不等于已登录、连接有效或拥有全部权限；打开用途说明也不会执行命令、读取真实配置或展示凭据。",
@@ -10270,12 +10276,14 @@
 		"loading": "加载中",
 		"location": "位置",
 		"memory": "长期记忆",
+		"memoryCreatedOpenFailed": "核心记忆文件已就绪，但刷新或打开失败。请刷新文件列表后打开 MEMORY.md。",
+		"memoryHowToUse": "如何使用",
 		"modified": "修改时间",
 		"move": "移动到",
 		"moveSuccess": "已移动 {{count}} 项",
 		"name": "名称",
 		"nameExists": "此目录已有同名文件，请先更名",
-		"noMemory": "还没有记忆正文",
+		"noMemory": "还没有核心记忆",
 		"noOtherProjectMemories": "暂无其他项目记忆",
 		"open": "打开",
 		"openChatFirst": "请先打开一个对话，再加入文件引用",
@@ -10285,6 +10293,7 @@
 		"partialDescription": "成功 {{success}} 项，失败 {{failed}} 项。已成功的结果会保留。",
 		"partialResult": "部分操作未完成",
 		"projectMemory": "当前项目记忆",
+		"projectMemoryEmptyHint": "可以先告诉 AI 你希望在当前项目长期记住的背景和约定，让它整理项目记忆；需要自行编写时，再手动创建。",
 		"projectNameUnavailable": "项目名称不可用",
 		"projectNamesLoadFailed": "项目名称加载失败",
 		"refreshAfterChangeFailed": "修改已提交，但刷新失败，请重新加载目录确认结果",

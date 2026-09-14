@@ -1,11 +1,21 @@
-import { useCallback, useEffect, useMemo, useState, useRef } from "react"
+import { lazy, useCallback, useEffect, useMemo, useState, useRef } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { Brain, Folder, Folders, FolderOpen, FilePlus2, RefreshCw } from "lucide-react"
+import {
+	Brain,
+	CircleHelp,
+	Folder,
+	Folders,
+	FolderOpen,
+	FilePlus2,
+	Loader2,
+	RefreshCw,
+} from "lucide-react"
 import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import type { MagicFSFile } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
+import { ContextHelp } from "@/components/shadcn-composed/context-help"
 import magicToast from "@/components/base/MagicToaster/utils"
 import userFilesStore from "@/stores/userFiles"
 import { cn } from "@/utils/cn"
@@ -21,6 +31,9 @@ import { useFileManagerConfirmation } from "../TopicFilesButton/hooks/useFileMan
 import { FileManagerConfirmationDialog } from "../TopicFilesButton/components/FileManager/FileManagerConfirmationDialog"
 import { buildAttachmentIndex } from "../TopicFilesButton/utils/attachmentIndex"
 import UserSpaceFilesView from "./UserSpaceFilesView"
+import { useUserFileHelp } from "./useUserFileHelp"
+
+const FileHelpBrowser = lazy(() => import("../TopicFilesButton/components/FileHelpBrowser"))
 
 interface MemoryGroupProps {
 	manager?: boolean
@@ -58,34 +71,49 @@ export const MemoryGroup = observer(function MemoryGroup({
 	const [visited, setVisited] = useState(defaultExpanded)
 	const identity = userFilesStore.currentIdentityKey
 	const mutationVersion = userFilesStore.mutationVersion
+	const segments = useMemo(() => getUserMemoryPath(projectId), [projectId])
+	const scopePath = segments.join("/")
+	const scopeKey = `${identity}:${scopePath}`
+	const currentScope = useRef<string | null>(scopeKey)
+	currentScope.current = active ? scopeKey : null
 	const [rootSnapshot, setRootSnapshot] = useState<{
-		identity: string | null
+		scopeKey: string
 		file: MagicFSFile | null
 	}>()
-	const root = rootSnapshot?.identity === identity ? rootSnapshot.file : null
+	const root = rootSnapshot?.scopeKey === scopeKey ? rootSnapshot.file : null
 	const setRoot = useCallback(
-		(file: MagicFSFile | null) => setRootSnapshot({ identity, file }),
-		[identity],
+		(file: MagicFSFile | null) => setRootSnapshot({ scopeKey, file }),
+		[scopeKey],
 	)
 	const [directoryId, setDirectoryId] = useState<string>()
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState(false)
 	const [creating, setCreating] = useState(false)
+	const pendingCreation = useRef<{ scopeKey: string } | null>(null)
 	const [retry, setRetry] = useState(0)
-	const segments = useMemo(() => getUserMemoryPath(projectId), [projectId])
-	const scopePath = segments.join("/")
+	const help = useUserFileHelp("coreMemory")
 	const confirmation = useFileManagerConfirmation({
-		scopeKey: `${identity}:${scopePath}`,
-		isActive: manager && active,
+		scopeKey,
+		isActive: active,
 		rootName:
 			projectName || t(projectId ? "userSpace.projectMemory" : "userSpace.globalMemory"),
 		index: emptyIndex,
 		attachments: [],
 	})
 	useEffect(() => {
+		currentScope.current = active ? scopeKey : null
+		setCreating(false)
+		pendingCreation.current = null
+		return () => {
+			currentScope.current = null
+			pendingCreation.current = null
+		}
+	}, [scopeKey, active])
+	useEffect(() => {
 		setRoot(null)
 		setDirectoryId(undefined)
 		setLoading(true)
+		setError(false)
 	}, [identity, scopePath, setRoot])
 	useEffect(() => {
 		if (!visited || !active) return
@@ -116,11 +144,16 @@ export const MemoryGroup = observer(function MemoryGroup({
 			.some((file) => file.name === USER_MEMORY_ENTRY && !file.is_directory)
 	const destination = () => userFilesStore.ensureDirectory([...segments, USER_MEMORY_NOTES])
 	const createEntry = async () => {
-		if (creating || confirmation.state) return
-		setCreating(true)
+		if (pendingCreation.current?.scopeKey === scopeKey) return
+		const request = { scopeKey }
+		pendingCreation.current = request
+		const isCurrent = () =>
+			pendingCreation.current === request &&
+			currentScope.current === scopeKey &&
+			identity === userFilesStore.currentIdentityKey
+		let entryReady = false
 		try {
 			if (
-				manager &&
 				!(await confirmation.confirm({
 					operation: "create",
 					names: [USER_MEMORY_ENTRY],
@@ -128,11 +161,12 @@ export const MemoryGroup = observer(function MemoryGroup({
 				}))
 			)
 				return
-			if (identity !== userFilesStore.currentIdentityKey) return
+			if (!isCurrent()) return
+			setCreating(true)
 			const directory = await userFilesStore.ensureDirectory(segments)
-			if (identity !== userFilesStore.currentIdentityKey) return
+			if (!isCurrent()) return
 			const children = await userFilesStore.loadDirectory(directory.id, true)
-			if (identity !== userFilesStore.currentIdentityKey) return
+			if (!isCurrent()) return
 			let file = children.find(
 				(item) => item.name === USER_MEMORY_ENTRY && !item.is_directory,
 			)
@@ -144,23 +178,31 @@ export const MemoryGroup = observer(function MemoryGroup({
 						isDirectory: false,
 					})
 				} catch (error) {
-					if (identity !== userFilesStore.currentIdentityKey) return
+					if (!isCurrent()) return
 					file = (await userFilesStore.loadDirectory(directory.id, true)).find(
 						(item) => item.name === USER_MEMORY_ENTRY && !item.is_directory,
 					)
 					if (!file) throw error
 				}
 			}
-			if (identity !== userFilesStore.currentIdentityKey) return
+			if (!isCurrent()) return
+			entryReady = true
 			userFilesStore.notifyMutation()
 			await userFilesStore.loadDirectory(directory.id, true)
-			if (identity === userFilesStore.currentIdentityKey)
+			if (isCurrent())
 				onFileClick?.(toUserAttachment(file, `${scopePath}/${USER_MEMORY_ENTRY}`))
 		} catch {
-			if (identity === userFilesStore.currentIdentityKey)
-				magicToast.error(t("userSpace.operationFailed"))
+			if (isCurrent())
+				magicToast.error(
+					t(
+						entryReady
+							? "userSpace.memoryCreatedOpenFailed"
+							: "userSpace.operationFailed",
+					),
+				)
 		} finally {
-			setCreating(false)
+			if (isCurrent()) setCreating(false)
+			if (pendingCreation.current === request) pendingCreation.current = null
 		}
 	}
 	const title =
@@ -195,103 +237,97 @@ export const MemoryGroup = observer(function MemoryGroup({
 				</Button>
 			</MagicTooltip>
 		) : undefined
-	const emptyState = !entryExists && (
-		<div className="flex shrink-0 items-center justify-between px-4 py-2 text-xs text-muted-foreground">
-			<span>{t("userSpace.noMemory")}</span>
-			<Button
-				variant="ghost"
-				size="sm"
-				disabled={creating}
-				onClick={() => void createEntry()}
-			>
-				<FilePlus2 size={16} />
-				{t("userSpace.createMemory")}
-			</Button>
+	const emptyState = !loading && !error && (!entryExists || creating) && (
+		<div className="flex shrink-0 flex-col gap-2 px-4 py-3 text-xs text-muted-foreground">
+			<p className="font-medium text-foreground">{t("userSpace.noMemory")}</p>
+			<p className="leading-relaxed">
+				{t(
+					projectId
+						? "userSpace.projectMemoryEmptyHint"
+						: "userSpace.globalMemoryEmptyHint",
+				)}
+			</p>
+			<div className="flex flex-wrap items-center gap-2">
+				{help && (
+					<ContextHelp
+						mode="dialog"
+						help={help.help}
+						renderDialog={(props) => (
+							<FileHelpBrowser {...props} initialArticleId="user.coreMemory" />
+						)}
+					>
+						<Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs">
+							<CircleHelp size={16} />
+							{t("userSpace.memoryHowToUse")}
+						</Button>
+					</ContextHelp>
+				)}
+				<Button
+					variant="ghost"
+					size="sm"
+					className="h-7 gap-1.5 px-2 text-xs"
+					disabled={creating || Boolean(confirmation.state)}
+					onClick={() => void createEntry()}
+				>
+					{creating ? (
+						<Loader2 size={16} className="animate-spin" />
+					) : (
+						<FilePlus2 size={16} />
+					)}
+					<span role={creating ? "status" : undefined}>
+						{t(creating ? "userSpace.creatingMemory" : "userSpace.createMemory")}
+					</span>
+				</Button>
+			</div>
 		</div>
 	)
-	if (manager)
-		return (
-			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
-				{root && !error ? (
-					<UserSpaceFilesView
-						rootId={root.id}
-						rootName={projectName || title}
-						resolveParent={destination}
-						defaultWritePath={`${scopePath}/${USER_MEMORY_NOTES}`}
-						hidePlaces
-						defaultView="list"
-						directoryId={directoryId}
-						onDirectoryChange={setDirectoryId}
-						onFileClick={onFileClick}
-						activeFileId={activeFileId}
-						topicId={topicId}
-						compact={false}
-						active={active}
-						contentBefore={emptyState}
-					/>
-				) : (
-					<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6">
-						<Brain size={32} className="text-muted-foreground/50" />
-						<p className="text-sm font-medium">{projectName || title}</p>
-						{loading ? (
-							<p className="text-xs text-muted-foreground">
-								{t("userSpace.loading")}
-							</p>
-						) : error ? (
-							<Button
-								variant="outline"
-								onClick={() => setRetry((value) => value + 1)}
-							>
-								{t("userSpace.retry")}
-							</Button>
-						) : (
-							emptyState
-						)}
-					</div>
-				)}
-				<FileManagerConfirmationDialog controller={confirmation} />
-			</div>
-		)
 
+	const files = (
+		<UserSpaceFilesView
+			key={scopeKey}
+			scope={{
+				path: scopePath,
+				rootId: root?.id ?? null,
+				loading,
+				error,
+				onRefresh: () => {
+					setLoading(true)
+					setRetry((value) => value + 1)
+				},
+			}}
+			rootName={manager ? projectName || title : title}
+			resolveParent={destination}
+			defaultWritePath={`${scopePath}/${USER_MEMORY_NOTES}`}
+			hidePlaces={manager}
+			defaultView={manager ? "list" : undefined}
+			directoryId={rootSnapshot?.scopeKey === scopeKey ? directoryId : undefined}
+			onDirectoryChange={setDirectoryId}
+			onFileClick={onFileClick}
+			activeFileId={activeFileId}
+			topicId={topicId}
+			compact={manager ? false : compact}
+			active={active && visited}
+			scrollElementRef={scrollElementRef}
+			section={manager ? undefined : section}
+			headerTrailingAction={manager ? undefined : browseAction}
+			contentBefore={emptyState}
+		/>
+	)
 	return (
 		<section
 			className={cn(
-				"flex min-h-0 shrink-0 flex-col",
-				labelVariant === "item" ? "pl-2" : "border-b last:border-0",
+				"flex min-h-0 min-w-0 flex-col",
+				manager ? "flex-1" : "shrink-0",
+				!manager && (labelVariant === "item" ? "pl-2" : "border-b last:border-0"),
 			)}
 		>
-			{root && !error ? (
-				<UserSpaceFilesView
-					rootId={root.id}
-					rootName={title}
-					resolveParent={destination}
-					directoryId={directoryId}
-					onDirectoryChange={setDirectoryId}
-					onFileClick={onFileClick}
-					activeFileId={activeFileId}
-					topicId={topicId}
-					compact={compact}
-					scrollElementRef={scrollElementRef}
-					section={section}
-					headerTrailingAction={browseAction}
-					contentBefore={emptyState}
-				/>
-			) : (
-				<SidebarExpandableItem label={title} {...section} testId="memory-empty-section">
-					{section.description}
-					{loading ? (
-						<p className="p-3 text-xs text-muted-foreground">
-							{t("userSpace.loading")}
-						</p>
-					) : error ? (
-						<Button variant="ghost" onClick={() => setRetry((value) => value + 1)}>
-							{t("userSpace.retry")}
-						</Button>
-					) : (
-						emptyState
-					)}
-				</SidebarExpandableItem>
-			)}
+			{files}
+			<FileManagerConfirmationDialog
+				controller={confirmation}
+				title={t("userSpace.createMemoryTitle")}
+				description={t("userSpace.createMemoryDescription")}
+				confirmText={t("userSpace.createMemoryConfirm")}
+			/>
 		</section>
 	)
 })

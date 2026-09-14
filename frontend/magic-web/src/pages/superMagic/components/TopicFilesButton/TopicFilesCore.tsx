@@ -138,6 +138,7 @@ interface TopicFilesCoreProps {
 	fileHelpContext?: FileHelpContext
 	className?: string
 	fitContent?: boolean
+	showEmptyState?: boolean
 	scrollElementRef?: React.RefObject<HTMLElement>
 	attachments?: AttachmentItem[]
 	setUserSelectDetail?: (detail: any) => void
@@ -224,6 +225,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	{
 		className,
 		fitContent = false,
+		showEmptyState = true,
 		scrollElementRef,
 		attachments = [],
 		setUserSelectDetail,
@@ -2441,7 +2443,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									</p>
 								</div>
 							</div>
-						) : (
+						) : showEmptyState || externalSearchValue?.trim() ? (
 							<EmptyState
 								title={
 									directorySource && externalSearchValue?.trim()
@@ -2459,7 +2461,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									allowEdit && !(directorySource && externalSearchValue?.trim())
 								}
 							/>
-						)}
+						) : null}
 					</div>
 					{/* </div> */}
 					{/* Batch download layer */}

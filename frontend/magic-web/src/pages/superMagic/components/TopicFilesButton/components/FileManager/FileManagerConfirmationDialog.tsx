@@ -16,8 +16,14 @@ import type { useFileManagerConfirmation } from "../../hooks/useFileManagerConfi
 
 export function FileManagerConfirmationDialog({
 	controller,
+	title,
+	description,
+	confirmText,
 }: {
 	controller: ReturnType<typeof useFileManagerConfirmation>
+	title?: string
+	description?: string
+	confirmText?: string
 }) {
 	const { t } = useTranslation("super")
 	const [text, setText] = useState("")
@@ -55,7 +61,7 @@ export function FileManagerConfirmationDialog({
 				}}
 			>
 				<DialogHeader>
-					<DialogTitle>{state && titles[state.operation]}</DialogTitle>
+					<DialogTitle>{title ?? (state && titles[state.operation])}</DialogTitle>
 					<DialogDescription>
 						{t("fileManager.confirmation.scope", {
 							selected: state?.selectedCount ?? 0,
@@ -64,6 +70,7 @@ export function FileManagerConfirmationDialog({
 						})}
 					</DialogDescription>
 				</DialogHeader>
+				{description && <p className="text-sm leading-relaxed">{description}</p>}
 				<div className="space-y-2 rounded-lg bg-muted/50 p-3 text-xs">
 					<div className="break-words">
 						<span className="text-muted-foreground">
@@ -125,7 +132,7 @@ export function FileManagerConfirmationDialog({
 						disabled={Boolean(required && text !== required)}
 						onClick={controller.accept}
 					>
-						{state && titles[state.operation]}
+						{confirmText ?? (state && titles[state.operation])}
 					</Button>
 				</DialogFooter>
 			</DialogContent>

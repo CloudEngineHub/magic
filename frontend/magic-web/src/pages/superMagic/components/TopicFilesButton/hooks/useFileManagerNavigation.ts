@@ -7,7 +7,7 @@ import type {
 	FileManagerView,
 } from "../components/FileManager/types"
 
-function createLocation(directoryId: string): FileManagerLocationState {
+function createLocation(directoryId: string | null): FileManagerLocationState {
 	return {
 		directoryId,
 		selectedIds: new Set(),
@@ -20,11 +20,14 @@ function createLocation(directoryId: string): FileManagerLocationState {
 
 /** 访问历史与父目录是两种导航；每个位置只保存 ID 和视图状态，不复制附件树。 */
 export function useFileManagerNavigation(
-	initialDirectoryId: string,
+	initialDirectoryId: string | null,
 	initialView: FileManagerView = "grid",
 ) {
 	const [location, setLocation] = useState(() => createLocation(initialDirectoryId))
-	const [history, setHistory] = useState({ ids: [initialDirectoryId], cursor: 0 })
+	const [history, setHistory] = useState({
+		ids: initialDirectoryId === null ? [] : [initialDirectoryId],
+		cursor: initialDirectoryId === null ? -1 : 0,
+	})
 	const [view, setView] = useState<FileManagerView>(initialView)
 	const [sort, setSort] = useState<FileManagerSort>("name")
 	const [sortDirection, setSortDirection] = useState<FileManagerSortDirection>("ascending")
@@ -46,6 +49,7 @@ export function useFileManagerNavigation(
 	const scrollTop = useRef(0)
 	const previousInitial = useRef(initialDirectoryId)
 	const saveCurrent = useMemoizedFn(() => {
+		if (location.directoryId === null) return
 		savedLocations.current.set(location.directoryId, {
 			...location,
 			scrollTop: scrollTop.current,
@@ -74,7 +78,17 @@ export function useFileManagerNavigation(
 	})
 	useEffect(() => {
 		if (previousInitial.current === initialDirectoryId) return
+		const wasMissing = previousInitial.current === null
 		previousInitial.current = initialDirectoryId
+		// 首次写入产生真实根时保留搜索等当次交互，不把未创建目录加入访问历史。
+		if (wasMissing || initialDirectoryId === null) {
+			setLocation((current) => ({ ...current, directoryId: initialDirectoryId }))
+			setHistory({
+				ids: initialDirectoryId === null ? [] : [initialDirectoryId],
+				cursor: initialDirectoryId === null ? -1 : 0,
+			})
+			return
+		}
 		navigate(initialDirectoryId)
 	}, [initialDirectoryId, navigate])
 	return {

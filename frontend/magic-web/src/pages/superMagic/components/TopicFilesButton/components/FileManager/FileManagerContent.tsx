@@ -42,7 +42,7 @@ interface Props {
 	onToggleFolder: (file: AttachmentItem, all?: boolean) => void
 	viewport: RefObject<HTMLDivElement>
 	gestures: ReturnType<typeof useFileManagerGestures>
-	directoryId: string
+	directoryId: string | null
 	items: FilePresentation[]
 	view: FileManagerView
 	selection: ReturnType<typeof useFileManagerSelection>
@@ -310,7 +310,7 @@ export function FileManagerContent(props: Props) {
 								: undefined
 						}
 						tabIndex={props.isActive ? 0 : -1}
-						data-manager-target={props.directoryId}
+						data-manager-target={props.directoryId ?? undefined}
 						className="relative min-h-0 flex-1 overflow-auto overscroll-contain outline-none"
 						onKeyDown={onKeyDown}
 						onScroll={(event) => props.onScroll(event.currentTarget.scrollTop)}

@@ -37,8 +37,8 @@ interface SelectionGesture {
 }
 interface Options {
 	scopeKey: string
-	rootId: string
-	directoryId: string
+	rootId: string | null
+	directoryId: string | null
 	isActive: boolean
 	container: RefObject<HTMLDivElement>
 	viewport: RefObject<HTMLDivElement>

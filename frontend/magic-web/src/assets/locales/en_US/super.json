@@ -9554,7 +9554,11 @@
 		"create": "New",
 		"createFile": "New file",
 		"createFolder": "New folder",
-		"createMemory": "Create content",
+		"createMemory": "Create manually",
+		"createMemoryConfirm": "Create empty file",
+		"createMemoryDescription": "AI usually organizes core memory from your instructions. This creates an empty MEMORY.md in the current scope and opens the editor. It does not generate memory content or overwrite an existing file.",
+		"createMemoryTitle": "Create core memory manually",
+		"creatingMemory": "Creating…",
 		"currentProject": "Current project",
 		"defaultFile": "New file.md",
 		"defaultFolder": "New folder",
@@ -9603,6 +9607,7 @@
 			"coreMemory": {
 				"example": "Remember that I prefer ordinary work reports to start with conclusions, followed by evidence. For special tasks, follow the requirements I give at the time.",
 				"guide": {
+					"actions": "Usually, tell AI what to remember and let it organize the highlights. To write it yourself, choose Create manually in Long-term memory and confirm to open an empty MEMORY.md. Renaming, moving and deleting use the same file operations as All files. Renaming the file or moving it elsewhere leaves the original location without core memory; the existing content remains in an ordinary file.",
 					"benefits": [
 						{
 							"description": "Retain recurring writing and communication preferences.",
@@ -10210,6 +10215,7 @@
 		"fixedEntry": "This is a fixed memory entry. You can edit its content, but cannot change its structure.",
 		"folder": "Folder",
 		"globalMemory": "Global memory",
+		"globalMemoryEmptyHint": "Tell AI which lasting preferences and background to remember, and let it organize your general personal memory. Create the file manually when you need to write it yourself.",
 		"gridView": "Icon view",
 		"help": {
 			"cliAvailability": "Actual tool state determines whether a call is possible. A folder is not proof of a valid login, a working connection or full permissions. Opening this help does not run commands, read your configuration or display credentials.",
@@ -10278,12 +10284,14 @@
 		"loading": "Loading",
 		"location": "Location",
 		"memory": "Memory",
+		"memoryCreatedOpenFailed": "The core memory file is ready, but refreshing or opening it failed. Refresh the file list and open MEMORY.md.",
+		"memoryHowToUse": "How to use",
 		"modified": "Modified",
 		"move": "Move to",
 		"moveSuccess": "Moved {{count}} items",
 		"name": "Name",
 		"nameExists": "An item with this name already exists. Rename it first.",
-		"noMemory": "No memory content yet",
+		"noMemory": "No core memory yet",
 		"noOtherProjectMemories": "No other project memories",
 		"open": "Open",
 		"openChatFirst": "Open a conversation before adding file references",
@@ -10293,6 +10301,7 @@
 		"partialDescription": "{{success}} succeeded and {{failed}} failed. Completed changes are kept.",
 		"partialResult": "Some operations were not completed",
 		"projectMemory": "Current project memory",
+		"projectMemoryEmptyHint": "Tell AI which background and conventions to remember for this project, and let it organize the project memory. Create the file manually when you need to write it yourself.",
 		"projectNameUnavailable": "Project name unavailable",
 		"projectNamesLoadFailed": "Failed to load project names",
 		"refreshAfterChangeFailed": "The change was submitted, but the folder could not be refreshed. Reload it to confirm the result.",

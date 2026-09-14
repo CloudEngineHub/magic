@@ -28,7 +28,14 @@ export interface UserSpaceFilesViewProps {
 	activeFileId?: string | null
 	topicId?: string | null
 	compact?: boolean
-	rootId?: string
+	/** 缺失范围仍显示文件 UI；路径是视图身份，null 不得回退到用户根目录。 */
+	scope?: {
+		path: string
+		rootId: string | null
+		loading: boolean
+		error: boolean
+		onRefresh: () => void
+	}
 	rootName?: string
 	resolveParent?: () => Promise<MagicFSFile>
 	headerTrailingAction?: ReactNode
@@ -48,7 +55,7 @@ export default observer(function UserSpaceFilesView({
 	activeFileId,
 	topicId,
 	compact = true,
-	rootId: scopeRootId,
+	scope,
 	rootName,
 	resolveParent,
 	headerTrailingAction,
@@ -60,19 +67,23 @@ export default observer(function UserSpaceFilesView({
 	const { t } = useTranslation("super")
 	const identity = userFilesStore.currentIdentityKey
 	const mutationVersion = userFilesStore.mutationVersion
-	const rootId = scopeRootId ?? userFilesStore.rootId ?? undefined
+	const hasScope = Boolean(scope)
+	const rootId = scope ? scope.rootId : userFilesStore.rootId
 	const parentId = compact ? rootId : (directoryId ?? rootId)
-	const state = userFilesStore.getDirectory(parentId)
+	const state = parentId ? userFilesStore.getDirectory(parentId) : undefined
 	const rootState = userFilesStore.getDirectory()
+	const loading = scope?.loading || (parentId ? !state?.loaded || state.loading : !scope)
+	const error = Boolean(scope?.error || state?.error || rootState.error)
+	const viewKey = scope?.path ?? "root"
 	const path = parentId ? userFilesStore.getPath(parentId) : []
 	const items = parentId ? userFilesStore.getTree(parentId) : []
 	useEffect(() => {
-		if (!active) return
+		if (!active || (hasScope && !rootId)) return
 		void userFilesStore
 			.getRoot()
 			.then((root) => {
 				if (identity !== userFilesStore.currentIdentityKey) return
-				const baseId = scopeRootId ?? root.id
+				const baseId = rootId ?? root.id
 				return userFilesStore.loadTree(compact ? (parentId ?? baseId) : baseId).then(() => {
 					if (
 						identity !== userFilesStore.currentIdentityKey ||
@@ -84,22 +95,29 @@ export default observer(function UserSpaceFilesView({
 				})
 			})
 			.catch(() => undefined)
-	}, [identity, parentId, scopeRootId, active, mutationVersion, compact])
+	}, [identity, parentId, rootId, hasScope, active, mutationVersion, compact])
 	const parent = async () => {
-		if (resolveParent && (!directoryId || directoryId === scopeRootId)) return resolveParent()
+		if (scope && (scope.loading || scope.error)) throw new Error("Directory is unavailable")
+		if (resolveParent && (!directoryId || directoryId === scope?.rootId)) return resolveParent()
+		if (scope && !parentId) throw new Error("Directory is unavailable")
 		const root = await userFilesStore.getRoot()
 		const file = userFilesStore.files.get(parentId ?? root.id)
 		if (!file?.is_directory) throw new Error("Directory is unavailable")
 		return file
 	}
 	const { spaceConfig, isSelectable, filterMenuItems } = useUserSpaceFileActions({
-		rootId: parentId,
+		rootId: parentId ?? undefined,
 		resolveParent: parent,
-		viewKey: parentId ?? "root",
+		viewKey: scope ? `${viewKey}:${directoryId ?? "root"}` : (parentId ?? "root"),
 		locateFileId: compact ? directoryId : undefined,
 		topicId,
 	})
 	const refresh = async () => {
+		if (scope) {
+			scope.onRefresh()
+			if (parentId) await userFilesStore.loadTree(parentId, true)
+			return
+		}
 		const root = await userFilesStore.getRoot()
 		if (identity !== userFilesStore.currentIdentityKey) return
 		await userFilesStore.loadTree(parentId ?? root.id, true)
@@ -125,7 +143,7 @@ export default observer(function UserSpaceFilesView({
 		) : (
 			content
 		)
-	if ((state.error || rootState.error) && (compact || !parentId))
+	if (!scope && error && (compact || !parentId))
 		return renderSection(
 			<div role="alert" className="p-3 text-xs">
 				{t("userSpace.loadFailed")}
@@ -138,11 +156,11 @@ export default observer(function UserSpaceFilesView({
 				</Button>
 			</div>,
 		)
-	if (!parentId || !spaceConfig.directorySource)
+	if (!scope && (!parentId || !spaceConfig.directorySource))
 		return renderSection(
 			<p className="p-3 text-xs text-muted-foreground">{t("userSpace.loading")}</p>,
 		)
-	const file = userFilesStore.files.get(parentId)
+	const file = parentId ? userFilesStore.files.get(parentId) : undefined
 	const operationRoot = file
 		? toUserAttachment(file, path.map((node) => node.name).join("/"))
 		: undefined
@@ -191,16 +209,32 @@ export default observer(function UserSpaceFilesView({
 		return (
 			<TopicFilesPanel
 				headerLayout="adaptive"
-				key={`${identity}:${parentId}`}
+				key={`${identity}:${viewKey}`}
 				{...commonProps}
 				title={rootName ?? t("userSpace.allFiles")}
-				loading={state.loading || !state.loaded}
-				fitContent={Boolean(scopeRootId)}
+				loading={Boolean(loading)}
+				fitContent={Boolean(scope)}
+				showEmptyState={!(scope && (error || contentBefore))}
 				scrollElementRef={scrollElementRef}
 				refreshAttachments={refresh}
 				headerTrailingAction={headerTrailingAction}
 				section={section}
-				contentBefore={contentBefore}
+				contentBefore={
+					error ? (
+						<div role="alert" className="p-3 text-xs">
+							{t("userSpace.loadFailed")}
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={() => void refresh().catch(() => undefined)}
+							>
+								{t("userSpace.retry")}
+							</Button>
+						</div>
+					) : (
+						contentBefore
+					)
+				}
 			/>
 		)
 	const content = (
@@ -208,17 +242,17 @@ export default observer(function UserSpaceFilesView({
 			hidePlaces={hidePlaces}
 			defaultView={defaultView}
 			defaultWritePath={defaultWritePath}
-			key={`${identity}:${rootId}`}
-			scopeKey={`${identity}:user:${rootId}`}
+			key={`${identity}:${viewKey}`}
+			scopeKey={`${identity}:user:${viewKey}`}
 			identityKey={identity ?? ""}
-			rootId={rootId ?? parentId}
+			rootId={rootId}
 			rootName={rootName ?? t("userSpace.title")}
 			initialDirectoryId={directoryId}
-			attachments={userFilesStore.getTree(rootId ?? parentId)}
+			attachments={rootId ? userFilesStore.getTree(rootId) : []}
 			context={{ kind: "user" }}
 			isActive={active}
-			loading={state.loading || !state.loaded}
-			error={Boolean(state.error || rootState.error)}
+			loading={Boolean(loading)}
+			error={error}
 			onRefresh={() => void refresh().catch(() => undefined)}
 			onOpen={(item) => onFileClick?.(item)}
 			onDirectoryChange={onDirectoryChange}
