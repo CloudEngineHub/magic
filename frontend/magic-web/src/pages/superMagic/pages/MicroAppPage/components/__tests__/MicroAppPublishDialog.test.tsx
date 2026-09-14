@@ -131,10 +131,14 @@ describe("MicroAppPublishDialog", () => {
 	it("limits the content height and scrolls overflowing settings", async () => {
 		renderDialog()
 
-		const scrollArea = await screen.findByTestId("micro-app-publish-scroll-area")
-		expect(scrollArea).toHaveAttribute("data-slot", "scroll-area")
-		expect(scrollArea).toHaveClass("min-h-0")
-		expect(scrollArea.querySelector("[data-slot='scroll-area-viewport']")).not.toBeNull()
+		const basicScrollArea = await screen.findByTestId("micro-app-publish-scroll-area")
+		const shareScrollArea = screen.getByTestId("micro-app-publish-share-panel")
+		expect(basicScrollArea).toHaveAttribute("data-slot", "scroll-area")
+		expect(shareScrollArea).toHaveAttribute("data-slot", "scroll-area")
+		expect(basicScrollArea).toHaveClass("h-full", "min-h-0", "min-w-0")
+		expect(shareScrollArea).toHaveClass("h-full", "min-h-0", "min-w-0")
+		expect(basicScrollArea.querySelector("[data-slot='scroll-area-viewport']")).not.toBeNull()
+		expect(shareScrollArea.querySelector("[data-slot='scroll-area-viewport']")).not.toBeNull()
 		expect(screen.getByTestId("micro-app-publish-basic-settings").parentElement).toHaveClass(
 			"p-5",
 		)

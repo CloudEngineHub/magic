@@ -160,7 +160,7 @@ export default function MicroAppPublishDialogContent({
 		>
 			{/* 顶部发布状态和下方设置共用单列轨道，避免跨列元素生成隐式空白列。 */}
 			{!mobile ? (
-				<div className="grid min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
+				<div className="grid h-full min-h-0 min-w-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
 					{loading ? (
 						<div
 							className="h-[156px] rounded-lg border border-emerald-200/70 bg-emerald-50/40"
@@ -177,14 +177,15 @@ export default function MicroAppPublishDialogContent({
 						/>
 					) : null}
 					<div
-						className="grid min-h-0 grid-cols-2 items-start gap-4"
+						className="grid h-full min-h-0 min-w-0 grid-cols-2 items-start gap-4"
 						data-testid="micro-app-publish-basic-settings"
 					>
+						{/* 两个面板共享固定轨道高度，内容只在各自 ScrollArea 内滚动，避免遮挡底部操作区。 */}
 						<ScrollArea
-							className="max-h-[calc(80dvh-240px)] min-h-0 self-start rounded-lg bg-muted/60"
+							className="h-full min-h-0 min-w-0 self-stretch rounded-lg bg-muted/60"
 							data-testid="micro-app-publish-scroll-area"
 						>
-							<div className="space-y-4 p-3">
+							<div className="min-w-0 space-y-4 p-3">
 								<div>
 									<Label htmlFor="micro-app-publish-project-name">
 										{t("microAppPage.publish.projectName")}
@@ -336,10 +337,10 @@ export default function MicroAppPublishDialogContent({
 							</div>
 						</ScrollArea>
 						<ScrollArea
-							className="max-h-[calc(80dvh-240px)] min-h-0 self-start rounded-lg bg-muted/20"
+							className="h-full min-h-0 min-w-0 self-stretch rounded-lg bg-muted/20"
 							data-testid="micro-app-publish-share-panel"
 						>
-							<div className="space-y-5 p-3">
+							<div className="min-w-0 space-y-5 p-3">
 								<div>
 									<ShareTypeField
 										value={formState.shareType as ShareType}
