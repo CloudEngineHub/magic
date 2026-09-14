@@ -16,7 +16,7 @@ use PHPUnit\Framework\TestCase;
  */
 class ReferencedProjectMountPlannerTest extends TestCase
 {
-    public function testPlanMapsMicroAppToPublishedShare(): void
+    public function testPlanSkipsMicroAppWithoutCollaborationAccess(): void
     {
         $planner = new ReferencedProjectMountPlanner();
 
@@ -28,11 +28,7 @@ class ReferencedProjectMountPlannerTest extends TestCase
             ],
         ], 1001);
 
-        self::assertCount(1, $mounts);
-        self::assertSame('4001', $mounts[0]->projectId);
-        self::assertSame(ReferencedProjectAccessKind::PublishedShare, $mounts[0]->accessKind);
-        self::assertSame('micro_app', $mounts[0]->sourceType);
-        self::assertSame('3001', $mounts[0]->appId);
+        self::assertSame([], $mounts);
     }
 
     public function testPlanMapsProjectMentionsToCollaboration(): void

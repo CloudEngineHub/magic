@@ -11,7 +11,6 @@ use App\Application\Chat\Service\Mention\AbstractMentionNormalizer;
 use App\Application\SuperMagic\Project\Service\PublishedMicroAppResolver;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectAccessKind;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectCollaborationAccess;
-use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use Hyperf\Logger\LoggerFactory;
@@ -19,8 +18,7 @@ use Hyperf\Logger\LoggerFactory;
 /**
  * @micro_app mention 规范化：补全 app_name / project_id。
  *
- * 组织/团队分享：分享可见即可补全，不要求协作成员。
- * 密码分享：仅创建者/协作者补全，并标记 collaboration，供 Planner 走协作挂载。
+ * 仅项目创建者/协作者可补全，供 Planner 走协作挂载。
  * 前端 @微应用 只传 app_id / app_name，project_id 必须在这里补。
  */
 class MicroAppMentionNormalizer extends AbstractMentionNormalizer
@@ -45,32 +43,10 @@ class MicroAppMentionNormalizer extends AbstractMentionNormalizer
             return [];
         }
 
-        [$record, $shareEntity] = $publishedMicroApp;
+        [$record] = $publishedMicroApp;
         $userId = $dataIsolation->getCurrentUserId();
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
 
-        if ($shareEntity->getShareType() === ShareAccessType::PasswordProtected->value) {
-            return $this->enrichPasswordShare($record, $appId, $item, $userId, $organizationCode);
-        }
-
-        if (! $this->publishedMicroAppResolver->canAccessShare($shareEntity, $userId, $organizationCode)) {
-            return [];
-        }
-
-        return $this->enrichedFields($record, $appId, $item);
-    }
-
-    /**
-     * @param array<string, mixed> $item
-     * @return array<string, string>
-     */
-    private function enrichPasswordShare(
-        MicroAppEntity $record,
-        int $appId,
-        array $item,
-        string $userId,
-        string $organizationCode,
-    ): array {
         if (! $this->collaborationAccess->canAccess($record->getProjectId(), $userId, $organizationCode)) {
             return [];
         }

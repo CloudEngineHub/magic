@@ -463,7 +463,7 @@ class MicroAppProjectAppService extends AbstractAppService
             $organizationCodes,
         )));
 
-        $owned = $this->microAppRepository->paginateAccessible(
+        $accessible = $this->microAppRepository->paginateAccessible(
             $userId,
             $stringDepartmentIds,
             $organizationCodes,
@@ -473,13 +473,9 @@ class MicroAppProjectAppService extends AbstractAppService
             self::MENTION_SOURCE_FETCH_LIMIT,
             true
         );
-        $shared = $this->paginateShareAccessiblePublishedApps(
-            $authorization,
-            $requestDTO->getKeyword(),
-            1,
-            self::MENTION_SOURCE_FETCH_LIMIT
-        );
-        $merged = $this->mergeMentionListRows($owned['list'] ?? [], $shared['list'] ?? []);
+        // The mention panel only lists projects owned by or collaborated on
+        // by the current user; share-only visibility is excluded.
+        $merged = $this->filterMentionListRows($accessible['list'] ?? []);
         $page = $requestDTO->getPage();
         $pageSize = $requestDTO->getPageSize();
 
@@ -597,14 +593,13 @@ class MicroAppProjectAppService extends AbstractAppService
     }
 
     /**
-     * @param array<int, array<string, mixed>> $ownedRows
-     * @param array<int, array<string, mixed>> $sharedRows
+     * @param array<int, array<string, mixed>> $rows
      * @return array<int, array<string, mixed>>
      */
-    private function mergeMentionListRows(array $ownedRows, array $sharedRows): array
+    private function filterMentionListRows(array $rows): array
     {
-        $merged = [];
-        foreach ($ownedRows as $row) {
+        $filtered = [];
+        foreach ($rows as $row) {
             if ((string) ($row['publish_status'] ?? '') !== MicroAppPublishStatus::Published->value) {
                 continue;
             }
@@ -612,17 +607,10 @@ class MicroAppProjectAppService extends AbstractAppService
             if ($appId === '') {
                 continue;
             }
-            $merged[$appId] = $row;
-        }
-        foreach ($sharedRows as $row) {
-            $appId = (string) ($row['app_id'] ?? '');
-            if ($appId === '' || isset($merged[$appId])) {
-                continue;
-            }
-            $merged[$appId] = $row;
+            $filtered[$appId] = $row;
         }
 
-        $rows = array_values($merged);
+        $rows = array_values($filtered);
         usort($rows, static function (array $left, array $right): int {
             $updatedCompare = ((string) ($right['updated_at'] ?? '')) <=> ((string) ($left['updated_at'] ?? ''));
             if ($updatedCompare !== 0) {

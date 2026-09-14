@@ -13,9 +13,8 @@ use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MentionTy
  * Extract unique cross-project mount targets from mentions that differ
  * from the current project.
  *
- * Collaboration mentions (@project / file / directory) and published-share
- * mentions (@micro_app) share the same project mount, but keep distinct
- * access kinds so authorization can stay on the correct axis.
+ * Collaboration mentions (@project / file / directory) and validated
+ * micro-app mentions share the same project mount.
  */
 final class ReferencedProjectMountPlanner
 {
@@ -88,12 +87,12 @@ final class ReferencedProjectMountPlanner
     private function resolveAccessKind(string $type, array $mention): ?ReferencedProjectAccessKind
     {
         if ($type === MentionType::MICRO_APP->value) {
-            // Password-share owners/collaborators are marked by the normalizer.
+            // Only mentions validated as project collaboration are mountable.
             if (($mention['access_kind'] ?? '') === ReferencedProjectAccessKind::Collaboration->value) {
                 return ReferencedProjectAccessKind::Collaboration;
             }
 
-            return ReferencedProjectAccessKind::PublishedShare;
+            return null;
         }
         if (in_array($type, self::COLLABORATION_TYPES, true)) {
             return ReferencedProjectAccessKind::Collaboration;

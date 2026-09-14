@@ -24,7 +24,7 @@ use Psr\Log\LoggerInterface;
  */
 class MicroAppMentionNormalizerTest extends TestCase
 {
-    public function testNormalizeFillsProjectIdForOrgShareWithoutMembership(): void
+    public function testNormalizeDoesNotFillProjectIdForOrgShareWithoutMembership(): void
     {
         $share = (new ResourceShareEntity())
             ->setShareCode('share-org')
@@ -33,7 +33,7 @@ class MicroAppMentionNormalizerTest extends TestCase
 
         $normalizer = $this->createNormalizer(
             shareEntity: $share,
-            canAccessShare: true,
+            canAccessProject: false,
         );
 
         $result = $normalizer->normalize(
@@ -41,9 +41,10 @@ class MicroAppMentionNormalizerTest extends TestCase
             $this->createDataIsolation(),
         );
 
-        self::assertSame('3001', $result['app_id']);
-        self::assertSame('Org Shared App', $result['app_name']);
-        self::assertSame('4001', $result['project_id']);
+        self::assertSame(
+            ['type' => 'micro_app', 'app_id' => '3001', 'app_name' => 'Org Shared App'],
+            $result,
+        );
     }
 
     public function testNormalizeUsesPublishedProjectName(): void
@@ -55,7 +56,7 @@ class MicroAppMentionNormalizerTest extends TestCase
 
         $normalizer = $this->createNormalizer(
             shareEntity: $share,
-            canAccessShare: true,
+            canAccessProject: true,
             projectName: 'Published Tables',
         );
 
@@ -76,7 +77,6 @@ class MicroAppMentionNormalizerTest extends TestCase
 
         $normalizer = $this->createNormalizer(
             shareEntity: $share,
-            canAccessShare: true,
             canAccessProject: true,
         );
 
@@ -98,7 +98,6 @@ class MicroAppMentionNormalizerTest extends TestCase
 
         $normalizer = $this->createNormalizer(
             shareEntity: $share,
-            canAccessShare: true,
             canAccessProject: false,
         );
 
@@ -106,7 +105,7 @@ class MicroAppMentionNormalizerTest extends TestCase
         self::assertSame($item, $normalizer->normalize($item, $this->createDataIsolation()));
     }
 
-    public function testNormalizeDoesNotEnrichWhenShareInaccessible(): void
+    public function testNormalizeDoesNotEnrichForNonCollaborator(): void
     {
         $share = (new ResourceShareEntity())
             ->setShareCode('share-org')
@@ -115,7 +114,7 @@ class MicroAppMentionNormalizerTest extends TestCase
 
         $normalizer = $this->createNormalizer(
             shareEntity: $share,
-            canAccessShare: false,
+            canAccessProject: false,
         );
 
         $item = ['type' => 'micro_app', 'app_id' => '3001', 'app_name' => 'Hidden App'];
@@ -133,7 +132,6 @@ class MicroAppMentionNormalizerTest extends TestCase
 
     private function createNormalizer(
         ResourceShareEntity $shareEntity,
-        bool $canAccessShare,
         string $projectName = '',
         bool $canAccessProject = false,
     ): MicroAppMentionNormalizer {
@@ -145,7 +143,6 @@ class MicroAppMentionNormalizerTest extends TestCase
 
         $resolver = $this->createMock(PublishedMicroAppResolver::class);
         $resolver->method('findPublished')->with(3001)->willReturn([$record, $shareEntity]);
-        $resolver->method('canAccessShare')->willReturn($canAccessShare);
         $resolver->method('getProjectNameFromRecord')->willReturn($projectName);
 
         $collaborationAccess = $this->createMock(ReferencedProjectCollaborationAccess::class);
