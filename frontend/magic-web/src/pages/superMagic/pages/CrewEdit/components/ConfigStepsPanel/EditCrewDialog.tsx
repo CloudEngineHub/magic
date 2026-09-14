@@ -26,6 +26,7 @@ import {
 	normalizeCrewI18nArrayValue,
 	resolveCrewIconUrl,
 } from "@/apis/modules/crew"
+import { FileApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useUpload } from "@/hooks/useUploadFiles"
 import { cn } from "@/utils/cn"
@@ -271,13 +272,25 @@ function EditCrewDialog({
 		setIsSubmitting(true)
 		try {
 			let iconUrl = draft.iconUrl
+			let iconFileKey: string | undefined
 			if (draft.iconFile) {
 				const { fullfilled } = await upload([
 					{ name: draft.iconFile.name, file: draft.iconFile, status: "init" },
 				])
 				const uploadedIconKey = fullfilled[0]?.value?.key
 				if (!uploadedIconKey) throw new Error("Upload avatar failed")
-				iconUrl = uploadedIconKey
+				iconFileKey = uploadedIconKey
+				const [reportedFile] = await FileApi.reportFileUploads([
+					{
+						file_extension: draft.iconFile.name.split(".").pop() ?? "",
+						file_key: uploadedIconKey,
+						file_size: draft.iconFile.size,
+						file_name: draft.iconFile.name,
+					},
+				])
+				if (!reportedFile?.file_key) throw new Error("Report avatar upload failed")
+				const fileUrl = await FileApi.getFileUrl(reportedFile.file_key)
+				iconUrl = fileUrl.url
 			}
 
 			const nameI18n = buildTextI18n(draft.name, store.identity.name_i18n)
@@ -293,6 +306,7 @@ function EditCrewDialog({
 				description_i18n: descriptionI18n,
 				icon: iconUrl ? { type: "Image", value: iconUrl } : { value: "" },
 				icon_type: iconUrl ? 2 : undefined,
+				file_key: iconFileKey,
 			})
 
 			await store.refreshAgentDetail()

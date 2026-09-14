@@ -123,11 +123,13 @@ class UpdateAgent(BaseTool[UpdateAgentParams]):
                 prompt_shadow=prompt_shadow,
                 icon=icon,
                 icon_type=icon_type,
+                file_key=resolved_key if params.icon_file_key is not None else None,
             )
             await get_magic_service_sdk().agent.update_agent_async(parameter)
             await self._update_local_cache(agent_code, params, icon, icon_type)
             return ToolResult(
                 content=f"Agent {agent_code} profile updated successfully.",
+                data={"code": agent_code},
                 extra_info={"agent_code": agent_code},
             )
         except Exception as error:

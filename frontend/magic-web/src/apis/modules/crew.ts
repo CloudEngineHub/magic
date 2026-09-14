@@ -388,6 +388,8 @@ export interface UpdateAgentInfoParams {
 	/** Icon object; value="" clears the icon */
 	icon?: CrewIconObject
 	icon_type?: CrewIconType
+	/** Object-storage key for an uploaded image. */
+	file_key?: string | null
 }
 
 // ======================== Update Agent Skills (API 6, 6.1, 6.2) ========================
