@@ -64,8 +64,8 @@ When user has no explicit requirements, follow these defaults:
 
 ### Inter-slide Links
 
-- Use a normal `<a>` element with the target slide's project-relative HTML path, for example: `<a href="slides/slide-2.html">查看第二页</a>`.
-- The `href` must match the actual path registered in `magic.project.js`'s `slides` array. Do not use page numbers, display titles, hash conventions, or custom routes.
+- Use a normal `<a>` element with a path relative to the current slide HTML file's directory. For example, when the current page is `slides/slide-1.html`, use `<a href="slide-2.html">查看第二页</a>`; use `../` when crossing directories.
+- The target file must exist in `magic.project.js`'s `slides` array. Do not use page numbers, display titles, hash conventions, custom routes, or absolute local paths.
 - Do not add custom `postMessage`, iframe manipulation, or navigation code for same-deck links; the PPT runtime handles ordinary links specially.
 - Keep links to other projects, ordinary HTML documents, and external websites as normal relative paths or full URLs.
 
