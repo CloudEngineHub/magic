@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { sidebarStore } from "@/stores/layout"
+import useSidebarCollapseDrag from "./useSidebarCollapseDrag"
 
 const SIDEBAR_RESIZE_KEYS = new Set([
 	"ArrowDown",
@@ -47,9 +48,14 @@ function getMinSidebarSizePercent(viewWidth: number): number {
 interface UseSidebarResponsiveParams {
 	sidebarPanelRef: RefObject<ImperativePanelHandle>
 	initialWidth: number
+	enabled?: boolean
 }
 
-function useSidebarResponsive({ sidebarPanelRef, initialWidth }: UseSidebarResponsiveParams) {
+function useSidebarResponsive({
+	sidebarPanelRef,
+	initialWidth,
+	enabled = true,
+}: UseSidebarResponsiveParams) {
 	const isUserResizingRef = useRef(false)
 	const hasPendingUserResizeRef = useRef(false)
 	const keyboardResizeTimerRef = useRef<number>()
@@ -59,6 +65,27 @@ function useSidebarResponsive({ sidebarPanelRef, initialWidth }: UseSidebarRespo
 	const [minSidebarSizePercent, setMinSidebarSizePercent] = useState(() =>
 		getMinSidebarSizePercent(window.innerWidth),
 	)
+	const restoreSidebarWidth = useCallback(
+		(widthPx: number, restorePanel: boolean) => {
+			// 取消或弹性收起恢复拖动起始宽度，不能把停留过的最小宽度写成新偏好。
+			isUserResizingRef.current = false
+			hasPendingUserResizeRef.current = false
+			expandedSidebarWidthPxRef.current = widthPx
+			const sizePercent = convertPxToPercentByViewWidth(widthPx, window.innerWidth)
+			expandedSidebarSizePercentRef.current = sizePercent
+			sidebarStore.setWidth(sizePercent)
+			if (restorePanel && !sidebarStore.collapsed)
+				sidebarPanelRef.current?.resize(sizePercent)
+		},
+		[sidebarPanelRef],
+	)
+	const collapseDrag = useSidebarCollapseDrag({
+		sidebarPanelRef,
+		minSizePercent: minSidebarSizePercent,
+		enabled,
+		onCancel: restoreSidebarWidth,
+	})
+	const { handleDragging: handleCollapseDragging } = collapseDrag
 
 	const getExpandedSidebarSizePercent = useCallback((viewWidth: number) => {
 		const minMainPx = sidebarStore.getMinMainContentWidthPx(viewWidth)
@@ -175,9 +202,15 @@ function useSidebarResponsive({ sidebarPanelRef, initialWidth }: UseSidebarRespo
 			}
 
 			isUserResizingRef.current = isDragging
-			if (!isDragging) commitPendingUserResize()
+			const completedDrag = handleCollapseDragging(isDragging)
+			if (!isDragging) {
+				if (completedDrag?.armed) {
+					restoreSidebarWidth(completedDrag.startWidthPx, false)
+					sidebarStore.setCollapsed(true)
+				} else commitPendingUserResize()
+			}
 		},
-		[commitPendingUserResize],
+		[handleCollapseDragging, commitPendingUserResize, restoreSidebarWidth],
 	)
 
 	const handleSidebarResizeKeyDown = useCallback(
@@ -192,6 +225,7 @@ function useSidebarResponsive({ sidebarPanelRef, initialWidth }: UseSidebarRespo
 	)
 
 	return {
+		collapseDrag,
 		getExpandedSidebarSizePercent,
 		handleSidebarDragging,
 		handleSidebarResize,

@@ -1,4 +1,5 @@
 import { makeAutoObservable } from "mobx"
+import { getResizeCollapseIntent } from "@/utils/resizableCollapse"
 import {
 	DEFAULT_MAX_WIDTH,
 	PROJECT_SIDER_PANEL_STORAGE_KEY,
@@ -27,8 +28,6 @@ interface TopicLayoutStoreOptions {
 export interface HistoryDragResult {
 	width: number
 }
-// 到最窄后先容忍轻微越界；继续拉动才反馈意图，达到阈值且松手才收起。
-const SIDEBAR_COLLAPSE_BUFFER = { quietDistance: 32, threshold: 128, disarmRatio: 0.75 } as const
 
 const CONVERSATION_PANEL_STORAGE_KEY = "supermagic-topic-conversation-panel"
 
@@ -248,15 +247,9 @@ export class TopicLayoutStore {
 
 	private updateCollapseIntent(rawWidth: number, minWidth: number) {
 		// 内容停在最小宽度；越界距离只表达意图，松开才提交收起。
-		const { threshold, quietDistance } = SIDEBAR_COLLAPSE_BUFFER
-		const overshoot = Math.max(0, minWidth - rawWidth)
-		this.collapseProgress = Math.max(
-			0,
-			Math.min(1, (overshoot - quietDistance) / (threshold - quietDistance)),
-		)
-		if (overshoot >= threshold) this.isCollapseArmed = true
-		else if (overshoot < threshold * SIDEBAR_COLLAPSE_BUFFER.disarmRatio)
-			this.isCollapseArmed = false
+		const intent = getResizeCollapseIntent(rawWidth, minWidth, this.isCollapseArmed)
+		this.collapseProgress = intent.progress
+		this.isCollapseArmed = intent.armed
 	}
 
 	collapseProjectSider() {

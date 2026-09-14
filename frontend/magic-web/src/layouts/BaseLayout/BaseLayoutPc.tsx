@@ -12,6 +12,7 @@ import {
 	ResizablePanelGroup,
 	ResizablePanel,
 	ResizableHandle,
+	ResizableCollapseFeedback,
 } from "@/components/shadcn-ui/resizable"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { sidebarStore } from "@/stores/layout"
@@ -25,6 +26,7 @@ import MaintenanceNotice from "@/components/global/MaintenanceNotice"
 import { useLocation } from "react-router-dom"
 import { useMagicWidgetConfig } from "@/providers/MagicWidgetProvider"
 import { resolveMagicWidgetCrewLayout } from "@/providers/MagicWidgetProvider/config"
+import { useTranslation } from "react-i18next"
 
 const isElectron = magic?.env?.isElectron?.()
 
@@ -42,6 +44,7 @@ const ROOT_SAFE_AREA_STYLE: CSSProperties = {
 }
 
 const BaseLayoutPc = observer(() => {
+	const { t } = useTranslation("super")
 	useMetaSet()
 	const { Content } = useKeepAlive()
 	const sidebarPanelRef = useRef<ImperativePanelHandle>(null)
@@ -60,12 +63,17 @@ const BaseLayoutPc = observer(() => {
 	const [initialWidth] = useState(() => sidebarStore.width)
 
 	const {
+		collapseDrag,
 		handleSidebarDragging,
 		handleSidebarResize,
 		handleSidebarResizeKeyDown,
 		minSidebarSizePercent,
 		getExpandedSidebarSizePercent,
-	} = useSidebarResponsive({ sidebarPanelRef, initialWidth })
+	} = useSidebarResponsive({
+		sidebarPanelRef,
+		initialWidth,
+		enabled: showAppSidebar && !sidebarStore.collapsed,
+	})
 
 	// Handle smooth sidebar animation and restore the responsive expanded width.
 	const cancelSidebarAnimation = useSidebarAnimation({
@@ -183,19 +191,32 @@ const BaseLayoutPc = observer(() => {
 				</Observer>
 
 				{/* Resize Handle - hidden when collapsed */}
+				{/* 弹性提示需要显示在主内容上方；仅拖动期间提升手柄层级。 */}
 				<Observer>
 					{() => (
 						<ResizableHandle
-							disabled={!showAppSidebar || sidebarStore.collapsed}
+							disabled={
+								!showAppSidebar || sidebarStore.collapsed || collapseDrag.cancelled
+							}
 							onDragging={handleSidebarDraggingChange}
 							onKeyDownCapture={handleSidebarHandleKeyDown}
 							className={cn(
 								"w-px bg-transparent hover:!bg-transparent",
+								collapseDrag.dragging && "z-20",
 								!showAppSidebar || sidebarStore.collapsed
 									? "pointer-events-none opacity-0"
 									: "opacity-100 hover:bg-primary/30",
 							)}
-						/>
+						>
+							<ResizableCollapseFeedback
+								dragging={collapseDrag.dragging}
+								collapseProgress={collapseDrag.progress}
+								collapseArmed={collapseDrag.armed}
+								collapseDirection={-1}
+								pullLabel={t("sidebarPanels.pullToCollapse")}
+								releaseLabel={t("sidebarPanels.releaseToCollapse")}
+							/>
+						</ResizableHandle>
 					)}
 				</Observer>
 
