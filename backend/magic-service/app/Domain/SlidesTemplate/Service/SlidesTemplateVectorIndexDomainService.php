@@ -157,23 +157,29 @@ final class SlidesTemplateVectorIndexDomainService extends AbstractVectorIndexDo
         if ($existingPoint !== null) {
             // Re-embed only when search text changes or a model migration forces it.
             if ($forceReEmbedding || ($existingPoint->payload['search_text'] ?? null) !== $searchText) {
-                $this->logger->info('Slides template vector re-embedding', [
-                    'resource_id' => $resourceId,
-                    'forced' => $forceReEmbedding,
-                ]);
-                $embedding = $this->generateEmbedding($dataIsolation, $searchText, $operatorId, $template);
+                $embedding = $this->generateEmbedding(
+                    $dataIsolation,
+                    $searchText,
+                    $operatorId,
+                    $template,
+                    $forceReEmbedding ? 'force_re_embedding' : 'search_text_changed',
+                );
                 $this->ensureCollection($collectionName, $embedding, $forceReEmbedding);
                 $this->vectorStore->storePoint($collectionName, (string) $template->getId(), $embedding, $payload);
                 return;
             }
 
             // Keep the existing vector and refresh payload metadata when text is unchanged.
+            $this->logger->info('Slides template vector payload update without re-embedding', [
+                'resource_id' => $resourceId,
+                'reason' => 'search_text_unchanged',
+            ]);
             $this->vectorStore->updatePayload($collectionName, (string) $template->getId(), $payload);
             return;
         }
 
         // A missing point may indicate a new template or an uncreated collection.
-        $embedding = $this->generateEmbedding($dataIsolation, $searchText, $operatorId, $template);
+        $embedding = $this->generateEmbedding($dataIsolation, $searchText, $operatorId, $template, 'point_not_found');
         $this->ensureCollection($collectionName, $embedding, $forceReEmbedding);
         $this->vectorStore->storePoint($collectionName, (string) $template->getId(), $embedding, $payload);
         $this->logger->info('Slides template vector stored', ['resource_id' => $resourceId]);
@@ -296,7 +302,14 @@ final class SlidesTemplateVectorIndexDomainService extends AbstractVectorIndexDo
         string $searchText,
         string $operatorId,
         SlidesTemplateEntity $template,
+        string $reason,
     ): array {
+        $this->logger->info('Slides template embedding generation started', [
+            'resource_id' => (string) $template->getId(),
+            'reason' => $reason,
+            'forced' => $reason === 'force_re_embedding',
+            'text_length' => mb_strlen($searchText),
+        ]);
         $embedding = $this->embedText(
             $dataIsolation,
             $searchText,
@@ -310,6 +323,10 @@ final class SlidesTemplateVectorIndexDomainService extends AbstractVectorIndexDo
         if ($embedding === []) {
             throw new RuntimeException('Slides template embedding is empty');
         }
+        $this->logger->info('Slides template embedding generation completed', [
+            'resource_id' => (string) $template->getId(),
+            'vector_size' => count($embedding),
+        ]);
 
         return $embedding;
     }

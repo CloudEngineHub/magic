@@ -124,24 +124,28 @@ final class SkillMarketVectorIndexDomainService extends AbstractVectorIndexDomai
 
         if ($existingPoint !== null) {
             if ($forceReEmbedding || ($existingPoint->payload['semantic_text'] ?? null) !== $semanticText) {
-                $this->logger->info('Skill market vector re-embedding', [
-                    'resource_id' => $resourceId,
-                    'forced' => $forceReEmbedding,
-                ]);
-                $embedding = $this->generateEmbedding($market, $semanticText, $operatorId);
+                $embedding = $this->generateEmbedding(
+                    $market,
+                    $semanticText,
+                    $operatorId,
+                    $forceReEmbedding ? 'force_re_embedding' : 'semantic_text_changed',
+                );
                 $this->ensureCollection($collectionName, $embedding, $forceReEmbedding);
                 $this->vectorStore->storePoint($collectionName, $pointId, $embedding, $payload);
                 $this->availabilityCache = true;
                 return;
             }
 
+            $this->logger->info('Skill market vector payload update without re-embedding', [
+                'resource_id' => $resourceId,
+                'reason' => 'semantic_text_unchanged',
+            ]);
             $this->vectorStore->updatePayload($collectionName, $pointId, $payload);
             $this->availabilityCache = true;
-            $this->logger->info('Skill market vector payload updated', ['resource_id' => $resourceId]);
             return;
         }
 
-        $embedding = $this->generateEmbedding($market, $semanticText, $operatorId);
+        $embedding = $this->generateEmbedding($market, $semanticText, $operatorId, 'point_not_found');
         $this->ensureCollection($collectionName, $embedding, $forceReEmbedding);
 
         $this->vectorStore->storePoint($collectionName, $pointId, $embedding, $payload);
@@ -245,8 +249,14 @@ final class SkillMarketVectorIndexDomainService extends AbstractVectorIndexDomai
         ];
     }
 
-    private function generateEmbedding(SkillMarketEntity $market, string $semanticText, string $operatorId): array
+    private function generateEmbedding(SkillMarketEntity $market, string $semanticText, string $operatorId, string $reason): array
     {
+        $this->logger->info('Skill market embedding generation started', [
+            'resource_id' => (string) $market->getId(),
+            'reason' => $reason,
+            'forced' => $reason === 'force_re_embedding',
+            'text_length' => mb_strlen($semanticText),
+        ]);
         $embedding = $this->embeddingGenerator->embedText(
             $this->embeddingGenerator->getDefaultModel(
                 SkillDataIsolation::create($market->getOrganizationCode(), $operatorId),
@@ -264,6 +274,10 @@ final class SkillMarketVectorIndexDomainService extends AbstractVectorIndexDomai
         if ($embedding === []) {
             throw new RuntimeException('Skill market embedding is empty');
         }
+        $this->logger->info('Skill market embedding generation completed', [
+            'resource_id' => (string) $market->getId(),
+            'vector_size' => count($embedding),
+        ]);
 
         return $embedding;
     }
