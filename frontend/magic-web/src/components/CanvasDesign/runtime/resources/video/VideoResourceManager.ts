@@ -1,7 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
 import type { AttachmentSourceEnum, GetFileInfoResponse } from "../../../public/magic-types"
 import { ElementTypeEnum } from "../../document/types"
-import { getActiveContent } from "../../document/elementContent"
 import type { ResourceLoadFailureReason } from "../media-common/resourceLoadFailure"
 import {
 	buildVideoResourceSnapshot,
@@ -133,8 +132,7 @@ export class VideoResourceManager {
 			isDestroyed: () => this.destroyed,
 			onStaleRequestDrop: () => this.markStaleRequestDrop(),
 			setFailureReason: (entry, reason) => this.setFailureReason(entry, reason),
-			onResourceDeleted: (resourceIdentity, entry) =>
-				this.handleVideoResourceDeleted(resourceIdentity, entry),
+			onResourceDeleted: (_resourceIdentity, entry) => this.handleVideoResourceDeleted(entry),
 			refreshResource: (path) => this.refreshResource(path),
 			onResourceVersionChanged: (_resourceIdentity, entry) => {
 				entry.resourceNeedsReload = true
@@ -584,7 +582,7 @@ export class VideoResourceManager {
 		this.urlLifecycle.triggerBackgroundMetadataRefresh(path, resourceIdentity, entry)
 	}
 
-	private handleVideoResourceDeleted(resourceIdentity: string, entry: ResourceEntry): void {
+	private handleVideoResourceDeleted(entry: ResourceEntry): void {
 		this.canvas.mediaResourceOfflineCacheManager.removeCachedResource({
 			path: entry.referencePath,
 			mediaType: "video",
@@ -936,9 +934,11 @@ export class VideoResourceManager {
 		const elementsDict = this.canvas.elementManager.getElementsDict()
 		for (const elementData of Object.values(elementsDict)) {
 			if (elementData.type !== ElementTypeEnum.Video) continue
-			const activeContent = getActiveContent(elementData)
-			if (!activeContent?.src) continue
-			usedPaths.add(this.getResourceIdentity(activeContent.src))
+			const effectiveContent = this.canvas.getEffectiveContent(elementData.id) as
+				| { src?: string }
+				| undefined
+			if (!effectiveContent?.src) continue
+			usedPaths.add(this.getResourceIdentity(effectiveContent.src))
 		}
 
 		this.entries.forEach((entry, resourceIdentity) => {

@@ -25,7 +25,11 @@ export function MediaPreviewThumbnail(props: MediaPreviewThumbnailProps) {
 		return (
 			<>
 				{fallback ?? (
-					<LoaderCircle size={12} className="animate-spin text-muted-foreground" />
+					<LoaderCircle
+						size={16}
+						className="size-4 shrink-0 animate-spin text-muted-foreground"
+						aria-label="Loading"
+					/>
 				)}
 			</>
 		)
@@ -45,9 +49,9 @@ export function MediaPreviewThumbnail(props: MediaPreviewThumbnailProps) {
 	}
 
 	if (mediaType === "video") {
+		if (!resolvedPoster) return <>{fallback}</>
 		return (
 			<video
-				src={resolvedSrc ?? undefined}
 				poster={resolvedPoster ?? undefined}
 				muted
 				playsInline

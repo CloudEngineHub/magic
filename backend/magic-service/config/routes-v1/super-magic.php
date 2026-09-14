@@ -77,8 +77,6 @@ Router::addGroup(
             Router::get('/{id}/last-file-updated-time', [ProjectApi::class, 'checkFileListUpdate']);
             // 获取附件列表
             Router::get('/{id}/cloud-files', [ProjectApi::class, 'getCloudFiles']);
-            // 复制项目
-            Router::post('/fork', [ProjectApi::class, 'fork']);
             // 查询复制状态
             Router::get('/{id}/fork-status', [ProjectApi::class, 'forkStatus']);
             // 移动项目到另一个工作区

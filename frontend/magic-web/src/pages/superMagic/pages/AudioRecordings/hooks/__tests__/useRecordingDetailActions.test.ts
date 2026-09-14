@@ -2,7 +2,10 @@ import { act, renderHook } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { toast } from "sonner"
 import { useRecordingDetailActions } from "../useRecordingDetailActions"
-import { resubmitAudioRecordingSummary } from "../../utils/audio-recording-actions"
+import {
+	moveAudioRecordingProjects,
+	resubmitAudioRecordingSummary,
+} from "../../utils/audio-recording-actions"
 import type { AudioProjectListItem } from "@/types/audioProject"
 
 vi.mock("sonner", () => ({
@@ -103,5 +106,28 @@ describe("useRecordingDetailActions", () => {
 			}),
 		)
 		expect(toast.success).not.toHaveBeenCalled()
+	})
+
+	it("shows a completion message after moving a recording to a group", async () => {
+		vi.mocked(moveAudioRecordingProjects).mockResolvedValue(undefined)
+		const onRefresh = vi.fn()
+		const { result } = renderHook(() =>
+			useRecordingDetailActions({
+				projectId: "project-alpha",
+				projectItem: baseProjectItem,
+				fileMap: null,
+				recordingName: "Weekly sync",
+				onProjectItemChange: vi.fn(),
+				onRefresh,
+			}),
+		)
+
+		await act(async () => {
+			await result.current.moveToGroup("group-beta")
+		})
+
+		expect(moveAudioRecordingProjects).toHaveBeenCalledWith(["project-alpha"], "group-beta")
+		expect(toast.success).toHaveBeenCalledWith("card.moveToGroupSuccess")
+		expect(onRefresh).toHaveBeenCalled()
 	})
 })

@@ -5,10 +5,19 @@ import {
 	type RecorderCoreConfig,
 	type RecorderCoreEvents,
 } from "./RecorderCoreAdapter"
-import type { AudioSourceConfig, AudioSourceType } from "./types/RecorderTypes"
+import type {
+	AudioSourceConfig,
+	AudioSourceType,
+	RecordingEncodingSnapshot,
+} from "./types/RecorderTypes"
 import { RecorderInitializationError, InvalidStateError } from "./types/RecorderErrors"
 import { logger as Logger } from "@/utils/log"
+import { DEFAULT_RECORDING_ENCODING_POLICY } from "./encoders/RecordingEncoderResolver"
 import { createRecordingLogger } from "../utils/RecordingLogger"
+import {
+	normalizeRecordingEncodingSnapshot,
+	resolveRecordingAudioProfile,
+} from "./utils/RecordingEncodingProfile"
 
 /**
  * Media recorder service dependencies
@@ -23,7 +32,17 @@ export interface StopRecordingOptions {
 }
 
 const logger = Logger.createLogger("MediaRecorderService")
+
 const diagnosticsLogger = createRecordingLogger("MediaRecorder")
+
+/** Map the public MIME configuration to the recorder's legacy format selector. */
+function resolveRecorderFormat(mimeType?: string): RecorderCoreConfig["type"] {
+	const baseMimeType = mimeType?.split(";")[0].trim().toLowerCase()
+
+	if (baseMimeType === "audio/pcm") return "pcm"
+	if (baseMimeType === "audio/wav" || baseMimeType === "audio/x-wav") return "wav"
+	return "opus"
+}
 
 /**
  * Media recorder service for recording and storing audio chunks
@@ -40,13 +59,14 @@ export class MediaRecorderService {
 	private events: Partial<MediaRecorderEvents>
 	private audioChunkDB: AudioChunkDB
 	private preauthorizedDisplayMedia: MediaStream | null = null
+	private readonly encodingSnapshots = new Map<string, RecordingEncodingSnapshot>()
 
 	public isBrowserSupported = true
 
 	// Default configuration
 	private readonly DEFAULT_CONFIG: MediaRecorderConfig = {
-		mimeType: "audio/wav", // Default WAV format
-		audioBitsPerSecond: 256000, // 16kHz * 16bit = 256 kbps
+		mimeType: "audio/ogg; codecs=opus", // Prefer Ogg/Opus and fall back before the first chunk
+		audioBitsPerSecond: 32000, // Target Opus bitrate; WAV fallback keeps its PCM contract
 		timeslice: 10000, // 10 seconds per chunk
 		enableEchoCancellation: false,
 		enableNoiseSuppression: false,
@@ -193,11 +213,20 @@ export class MediaRecorderService {
 			}
 
 			// Create audio recorder adapter configuration
+			const persistedEncoding =
+				this.config.lockedEncoding ?? this.encodingSnapshots.get(sessionId)
+			const lockedEncoding = persistedEncoding
+				? normalizeRecordingEncodingSnapshot(persistedEncoding)
+				: undefined
+			const audioProfile = resolveRecordingAudioProfile(lockedEncoding)
 			const recorderConfig: Partial<RecorderCoreConfig> = {
-				sampleRate: 16000, // 16kHz
-				bitRate: 16, // 16-bit
+				sampleRate: audioProfile.sampleRate,
+				bitRate: audioProfile.bitsPerSample,
+				audioBitsPerSecond: this.config.audioBitsPerSecond,
 				chunkDuration: (this.config.timeslice || 10000) / 1000, // Convert ms to seconds
-				type: "wav",
+				type: resolveRecorderFormat(this.config.mimeType),
+				encodingPolicy: this.config.encodingPolicy ?? DEFAULT_RECORDING_ENCODING_POLICY,
+				lockedEncoding,
 				audioSource: audioSourceConfig,
 			}
 
@@ -225,6 +254,8 @@ export class MediaRecorderService {
 
 			// Start recording
 			await this.recorderAdapter.start(sessionId, startChunkIndex)
+			const encodingSnapshot = this.recorderAdapter.getEncodingSnapshot()
+			if (encodingSnapshot) this.encodingSnapshots.set(sessionId, encodingSnapshot)
 
 			// Validate audio stream immediately after start
 			const stream = this.recorderAdapter.getMediaStream()
@@ -668,7 +699,7 @@ export class MediaRecorderService {
 			chunkIndex: this.chunkIndex,
 			mediaRecorderState: this.isRecording ? "recording" : "inactive",
 			hasAudioStream: this.isRecording,
-			supportedMimeTypes: ["audio/wav"],
+			supportedMimeTypes: ["audio/ogg; codecs=opus", "audio/wav", "audio/pcm"],
 			audioSource: this.config.audioSource,
 			adapterStatus,
 		}
@@ -758,6 +789,16 @@ export class MediaRecorderService {
 
 	getAudioSource(): AudioSourceConfig | null {
 		return this.config.audioSource || null
+	}
+
+	/** Return the format selected for the active session so history can persist it. */
+	getEncodingSnapshot(): RecordingEncodingSnapshot | null {
+		return this.recorderAdapter?.getEncodingSnapshot() || null
+	}
+
+	/** Seed recovery with the persisted session format before creating a new adapter. */
+	setEncodingSnapshot(sessionId: string, snapshot: RecordingEncodingSnapshot): void {
+		this.encodingSnapshots.set(sessionId, normalizeRecordingEncodingSnapshot(snapshot))
 	}
 
 	/**

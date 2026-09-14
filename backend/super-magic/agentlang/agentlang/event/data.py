@@ -46,6 +46,39 @@ class AfterLlmResponseEventData(BaseEventData):
     token_usage: Optional[TokenUsage] = None
 
 
+class BeforeLlmRetryEventData(BaseEventData):
+    """大模型重试前事件。
+
+    仅在请求失败、准备进入重试决策时抛出。监听器可回写 allow_retry 等字段
+    覆盖默认重试策略。这是内部事件，不推前端。
+    """
+
+    agent_context: Any  # AgentContext，监听器通过 model_context 读写模型状态
+    model_id: str
+    use_stream: bool
+    backoff_retry_count: int
+    streaming_disabled: bool
+    request_contains_native_images: bool
+    supports_multimodal: bool
+    exception: Exception
+    is_context_window_exceeded: bool = False
+    status_code: Optional[int] = None
+
+    # 监听器回写：None 表示沿用重试循环的默认策略
+    allow_retry: Optional[bool] = None
+    disable_streaming: bool = False
+    skip_backoff: bool = False
+    reason: str = ""
+
+
+class AfterLlmRequestSucceededEventData(BaseEventData):
+    """大模型请求成功事件，内部使用，不推前端。"""
+
+    agent_context: Any  # AgentContext，监听器通过 model_context 清理失败计数
+    model_id: str = ""
+    use_stream: bool = False
+
+
 class BeforeAgentThinkEventData(BaseEventData):
     """智能体思考容器开始事件数据（用于标记思考阶段开始）"""
 

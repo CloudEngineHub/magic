@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/shadcn-ui/avat
 import { preloadUserMenus } from "../../Header/utils/preloadUserMenus"
 import DropdownLazyLoadWrapper from "../DropdownLazyLoadWrapper"
 import UserAvatarRender from "@/components/business/UserAvatarRender"
+import { getAvatarUrl } from "@/utils/avatar"
 import UserPlanInfo from "@/layouts/BaseLayout/components/MagicSidebar/components/UserPlanInfo"
 import { useTranslation } from "react-i18next"
 import { userStore } from "@/models/user"
@@ -35,7 +36,11 @@ function UserInfoCard({ collapsed }: UserInfoCardProps) {
 				>
 					<div className="w-full cursor-pointer">
 						<Avatar className="h-8 w-8 rounded-lg">
-							<AvatarImage src={userInfo?.avatar} />
+							<AvatarImage
+								src={
+									userInfo?.avatar ? getAvatarUrl(userInfo.avatar, 32) : undefined
+								}
+							/>
 							<AvatarFallback className="rounded-lg">
 								{userInfo?.nickname?.[0]}
 							</AvatarFallback>

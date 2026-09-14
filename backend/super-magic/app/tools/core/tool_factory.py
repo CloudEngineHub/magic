@@ -743,7 +743,7 @@ class ToolFactory:
                     # 如果是子包，递归扫描
                     if is_pkg:
                         subpackage_name = f"{pkg_name}.{module_name}"
-                        logger.info(f"发现子包: {subpackage_name}")
+                        logger.debug(f"发现子包: {subpackage_name}")
                         try:
                             subpackage = importlib.import_module(subpackage_name)
                             # 检查 subpackage.__file__ 是否存在
@@ -782,7 +782,7 @@ class ToolFactory:
 
                         # 只记录有工具的模块导入信息
                         if tools_found > 0:
-                            logger.info(f"导入模块: {module_fullname} 耗时 {module_import_time:.3f}s")
+                            logger.debug(f"导入模块: {module_fullname} 耗时 {module_import_time:.3f}s")
                     except Exception as e:
                         logger.error(f"加载模块 {module_fullname} 失败: {e!s}")
 

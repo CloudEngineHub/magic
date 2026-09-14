@@ -154,6 +154,14 @@ def test_audio_policy_is_normalized_and_reaches_generation_payload():
     assert GenerateVideo._build_generation(params, config, "veo-3.1")["generate_audio"] is False
 
 
+def test_generate_audio_policy_allows_unknown_capability():
+    GenerateVideo._validate_audio_policy(
+        "generate",
+        {},
+        "unknown-video-model",
+    )
+
+
 @pytest.mark.parametrize(
     ("policy", "capability", "message"),
     [

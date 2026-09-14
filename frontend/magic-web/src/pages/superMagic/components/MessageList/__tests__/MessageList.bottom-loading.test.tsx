@@ -9,6 +9,7 @@ const storeState = vi.hoisted(() => ({
 	activeStreamsByTopic: new Map<string, string[]>(),
 	messageNodesById: new Map<string, Record<string, unknown>>(),
 	streamStatesByTopicAndId: new Map<string, Record<string, unknown>>(),
+	virtualItems: undefined as Array<{ key: string }> | undefined,
 }))
 
 vi.mock("mobx-react-lite", () => ({
@@ -65,14 +66,17 @@ vi.mock("@/pages/superMagic/components/MessageList/components/VirtualMessageList
 		items: Array<{ key: string }>
 		renderNode: (args: { item: any }) => ReactNode
 		footer?: ReactNode
-	}) => (
-		<div data-testid="virtual-message-stream">
-			{items.map((item) => (
-				<div key={item.key}>{renderNode({ item })}</div>
-			))}
-			{footer}
-		</div>
-	),
+	}) => {
+		storeState.virtualItems = items
+		return (
+			<div data-testid="virtual-message-stream">
+				{items.map((item) => (
+					<div key={item.key}>{renderNode({ item })}</div>
+				))}
+				{footer}
+			</div>
+		)
+	},
 }))
 
 vi.mock("@/pages/superMagic/components/MessageList/components/RevokedEditableUserMessage", () => ({
@@ -216,6 +220,7 @@ afterEach(() => {
 	storeState.activeStreamsByTopic.clear()
 	storeState.messageNodesById.clear()
 	storeState.streamStatesByTopicAndId.clear()
+	storeState.virtualItems = undefined
 })
 
 describe("MessageList bottom loading", () => {
@@ -237,6 +242,55 @@ describe("MessageList bottom loading", () => {
 		expect(screen.getByTestId("virtual-message-stream")).toBeInTheDocument()
 		expect(screen.getByTestId("message-user-message")).toBeInTheDocument()
 		expect(screen.getByTestId("message-assistant-virtual")).toBeInTheDocument()
+	})
+
+	it("reuses virtual item references when only the outer data array is recreated", () => {
+		const data = [
+			userMessage,
+			createMessage({
+				appMessageId: "assistant-stable",
+				role: "assistant",
+			}),
+		]
+		const { rerender } = render(<MessageList data={data} selectedTopic={topicA} />)
+		const firstItems = storeState.virtualItems
+
+		rerender(<MessageList data={[...data]} selectedTopic={topicA} />)
+
+		expect(storeState.virtualItems).toBe(firstItems)
+	})
+
+	it("rebuilds the projection when one message element changes", () => {
+		const data = [
+			userMessage,
+			createMessage({ appMessageId: "assistant-changing", role: "assistant" }),
+		]
+		const { rerender } = render(<MessageList data={data} selectedTopic={topicA} />)
+		const firstItems = storeState.virtualItems
+
+		rerender(
+			<MessageList
+				data={[data[0], { ...data[1], content: "updated" }]}
+				selectedTopic={topicA}
+			/>,
+		)
+
+		expect(storeState.virtualItems).not.toBe(firstItems)
+		expect(storeState.virtualItems?.[0]).toBe(firstItems?.[0])
+		expect(storeState.virtualItems?.[1]).not.toBe(firstItems?.[1])
+	})
+
+	it("does not rebuild virtual items for an equivalent selected Topic object", () => {
+		const data = [
+			userMessage,
+			createMessage({ appMessageId: "assistant-topic-stable", role: "assistant" }),
+		]
+		const { rerender } = render(<MessageList data={data} selectedTopic={topicA} />)
+		const firstItems = storeState.virtualItems
+
+		rerender(<MessageList data={data} selectedTopic={{ ...topicA }} />)
+
+		expect(storeState.virtualItems).toBe(firstItems)
 	})
 
 	it("刷新恢复时活跃流不可见则显示 Loading，可见后隐藏，Final 清理后不会重新出现。", () => {

@@ -3,6 +3,8 @@ export interface HtmlNavigationRuntimeRequest {
 	content: string
 	locationSearch: string
 	locationAnchor: string
+	/** Optional runtime bundle owned by the current host deployment. */
+	runtimeUrl?: string
 }
 
 export type HtmlNavigationRuntimeSendResult = "sent" | "queued" | "duplicate"

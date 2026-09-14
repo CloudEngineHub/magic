@@ -7,7 +7,7 @@ import pytest
 import tests.tools.canvas.helpers  # noqa: F401
 from app.tools.canvas.application.commands import ContentCommand
 from app.tools.canvas.bootstrap import CanvasApplicationFactory
-from app.tools.canvas.domain.content_fields import ImageContentFields, TextContentFields
+from app.tools.canvas.domain.content_fields import ImageContentFields, TextContentFields, VideoContentFields
 from app.tools.canvas.domain.errors import CanvasBatchError, CanvasDomainError, CanvasProtocolError
 from app.tools.canvas.domain.models import (
     CanvasConnection,
@@ -88,6 +88,51 @@ def test_codec_rejects_unsupported_version() -> None:
         CanvasCodec.decode(legacy)
 
     assert error.value.code == "UNSUPPORTED_CANVAS_VERSION"
+
+
+def test_codec_preserves_unknown_frontend_fields_when_reading_and_saving() -> None:
+    """读取和保存时保留前端新增字段，不因未知字段让整个画布失败。"""
+    draft = {
+        "version": 1,
+        "request": {
+            "model_id": "minimaxh3",
+            "input_mode": "omni_reference",
+        },
+    }
+    project = CanvasProject(
+        version="3.0.0",
+        project_type="design",
+        name="mock-project",
+        canvas=CanvasDocument(
+            elements=[
+                CanvasElement(
+                    element_id="video-1",
+                    element_type="video",
+                    contents=[
+                        CanvasContent(
+                            "video-1-content",
+                            VideoContentFields(),
+                            extra_data={"videoEditorDraft": draft},
+                        )
+                    ],
+                    active_content_id="video-1-content",
+                    main_content_id="video-1-content",
+                    extra_data={"frontendElementState": {"selected": True}},
+                )
+            ],
+        ),
+    )
+
+    decoded = CanvasCodec.decode(CanvasCodec.encode(project))
+    content = decoded.canvas.elements[0].contents[0]
+    element = decoded.canvas.elements[0]
+
+    assert content.extra_data["videoEditorDraft"] == draft
+    assert element.extra_data == {"frontendElementState": {"selected": True}}
+
+    saved_again = CanvasCodec.decode(CanvasCodec.encode(decoded))
+    assert saved_again.canvas.elements[0].contents[0].extra_data["videoEditorDraft"] == draft
+    assert saved_again.canvas.elements[0].extra_data == {"frontendElementState": {"selected": True}}
 
 
 @pytest.mark.asyncio
@@ -193,6 +238,10 @@ class MockSynchronousGenerationPort:
 
     execution_mode = "sync"
 
+    async def resolve_request_metadata(self, request, tool_context):
+        """返回提交前即可确定的图片模型和生成模式。"""
+        return {"model_id": "mock-image-model", "mode": "generate"}
+
     async def submit(self, request, tool_context):
         """返回固定的工作区相对图片路径。"""
         return GenerationSubmission("sync", "completed", output_uri="mock/images/result.png")
@@ -214,12 +263,31 @@ class MockAsynchronousGenerationPort:
             "processing",
             generation_task_id="canvas-task-1",
             provider_task_id="provider-task-1",
+            request_metadata={"model_id": "mock-video-model", "input_mode": "standard"},
+            result_metadata={
+                "generation_info": {
+                    "input_mode": "standard",
+                    "resolution": "720p",
+                    "duration_seconds": 4,
+                },
+                "runtime": {"started_at": "2026-09-02 10:00:00"},
+            },
         )
 
     async def query(self, request, tool_context):
         """返回固定完成状态和视频路径。"""
         self.query_count += 1
-        return GenerationQueryResult("completed", output_uri="./videos/result.mp4")
+        return GenerationQueryResult(
+            "completed",
+            output_uri="./videos/result.mp4",
+            result_metadata={
+                "runtime": {
+                    "finished_at": "2026-09-02 10:00:04",
+                    "elapsed_seconds": 4,
+                },
+                "billing": {"points": 8},
+            },
+        )
 
 
 class MockVideoMediaProbePort(FakeMediaProbePort):
@@ -322,12 +390,32 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
     image = project.canvas.get_element(image_result["items"][0]["element_id"])
     video = project.canvas.get_element(video_result["items"][0]["element_id"])
     assert image.get_content(image.active_content_id).fields.src == "mock/images/result.png"
+    sidecar = await repository.read_sidecar("mock-project")
+    image_detail = sidecar["elements"][image.element_id]["contentDetails"][image.active_content_id]
+    assert image_detail["generateImageRequest"]["model_id"] == "mock-image-model"
     assert video_result["items"][0]["generation_task_id"] == "canvas-task-1"
     assert waited["items"][0]["status"] == "completed"
     assert waited_again["items"][0]["already_finalized"] is True
     assert video_port.query_count == 1
     assert video.get_content(video.active_content_id).fields.src == "./videos/result.mp4"
     assert (video.properties.width, video.properties.height) == (1080, 1920)
+    sidecar = await repository.read_sidecar("mock-project")
+    video_detail = sidecar["elements"][video.element_id]["contentDetails"][video.active_content_id]
+    assert video_detail["generateVideoRequest"]["model_id"] == "mock-video-model"
+    assert video_detail["generateVideoRequest"]["input_mode"] == "standard"
+    assert video_detail["videoGenerationResultMeta"] == {
+        "generation_info": {
+            "input_mode": "standard",
+            "resolution": "720p",
+            "duration_seconds": 4,
+        },
+        "runtime": {
+            "started_at": "2026-09-02 10:00:00",
+            "finished_at": "2026-09-02 10:00:04",
+            "elapsed_seconds": 4,
+        },
+        "billing": {"points": 8},
+    }
 
 
 @pytest.mark.asyncio

@@ -152,6 +152,8 @@ export function createUploadHandlers(context: UploadHandlersContext): UploadHand
 					saveRes = batchSaveResult
 						? {
 								...batchSaveResult,
+								relative_file_path:
+									batchSaveResult.relative_file_path || file.defaultRelativePath,
 								is_hidden: true,
 							}
 						: undefined

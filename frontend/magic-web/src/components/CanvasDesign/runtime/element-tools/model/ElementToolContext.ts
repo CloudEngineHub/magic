@@ -1,5 +1,9 @@
 import type { Canvas } from "../../core/Canvas"
-import { getContentGenerationState } from "../../document/elementContent"
+import { resolveCanvasAccessContext } from "../../core/CanvasAccessPolicy"
+import {
+	getContentGenerationState,
+	isContentGenerationPending,
+} from "../../document/elementContent"
 import type { LayerElement } from "../../document/types"
 import { createContentIndex } from "../resolver/ElementToolResolver"
 import type {
@@ -49,7 +53,13 @@ export function createElementToolContext(
 	if (!element) return null
 
 	const selectedSnapshots = options.selectedElements.map(toElementSnapshot)
-	const contentIndex = createContentIndex(element as never)
+	const contentIndex = createContentIndex({
+		...(element as unknown as Parameters<typeof createContentIndex>[0]),
+		effectiveContentId:
+			typeof options.canvas?.getEffectiveContentId === "function"
+				? options.canvas.getEffectiveContentId(element.id)
+				: undefined,
+	})
 	const generationState =
 		"contents" in element
 			? getContentGenerationState(element as never)
@@ -80,10 +90,10 @@ export function createElementToolContext(
 	const siblingGeneratingContentIds = generatingContentIds.filter(
 		(contentId) => contentId !== activeContentId,
 	)
-	const activeContentIsGenerating =
-		generationState.activeContentIsGenerating ||
-		(activeContentId ? generatingContentIds.includes(activeContentId) : false)
-	const hasAnyGenerating = generationState.hasAnyGenerating || generatingContentIds.length > 0
+	const activeContentIsGenerating = activeContent
+		? isContentGenerationPending(activeContent) ||
+			(activeContentId ? generatingContentIds.includes(activeContentId) : false)
+		: generationState.activeContentIsGenerating && !activeContentId
 	const attemptsByContentId = new Map<string, GenerationAttemptState>()
 	for (const targetState of runtimeTargetStates) {
 		if (!targetState.contentId) continue
@@ -110,13 +120,20 @@ export function createElementToolContext(
 			...contentIndex,
 			activeResource: activeContent
 				? {
-						src: activeContent.src,
-						width: activeContent.width,
-						height: activeContent.height,
+						src: typeof activeContent.src === "string" ? activeContent.src : undefined,
+						width:
+							typeof activeContent.width === "number"
+								? activeContent.width
+								: undefined,
+						height:
+							typeof activeContent.height === "number"
+								? activeContent.height
+								: undefined,
 					}
 				: undefined,
 			activeRevision: activeContent?.contentRevision ?? activeContent?.revision,
 		},
+		access: options.canvas?.permissionManager?.getContext?.() ?? resolveCanvasAccessContext(),
 		generation: {
 			activeContentIsGenerating,
 			siblingGeneratingContentIds,
@@ -143,7 +160,8 @@ export function createElementToolContext(
 				contentIndex.byId.size > 1 &&
 				!activeContentIsGenerating &&
 				activeContentState === "completed",
-			canDeleteVersion: contentIndex.byId.size > 1 && !hasAnyGenerating,
+			// 版本删除只针对当前 Content；兄弟 Content 的生成状态不参与判断。
+			canDeleteVersion: contentIndex.byId.size > 1 && Boolean(contentIndex.active),
 			canGenerateContent:
 				!activeContentIsGenerating &&
 				(Boolean(contentIndex.active?.src) || element.type === "audio"),

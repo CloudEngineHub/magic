@@ -2396,7 +2396,7 @@ describe("ImageResourceManager image resources", () => {
 		const identity = JSON.stringify([
 			"design/test-canvas",
 			"images/race.png",
-			"image-process:default",
+			"image-process:default:exif-orientation-v1",
 			"low",
 			"v1",
 		])
@@ -2418,7 +2418,7 @@ describe("ImageResourceManager image resources", () => {
 		expect(removeVersion).toHaveBeenCalledWith(
 			"design/test-canvas",
 			"images/race.png",
-			"image-process:default",
+			"image-process:default:exif-orientation-v1",
 			"v1",
 			expect.any(String),
 		)
@@ -2479,13 +2479,19 @@ describe("ImageResourceManager image resources", () => {
 		expect(manager.displayVariantPersistentCache.removeWriteOrder).toHaveBeenCalledWith(
 			"design/test-canvas",
 			path,
-			"image-process:default",
+			"image-process:default:exif-orientation-v1",
 			"v1",
 			writeOrder,
 		)
 		expect(
 			manager.persistentLowReadyKeys.has(
-				JSON.stringify(["design/test-canvas", path, "image-process:default", "low", "v1"]),
+				JSON.stringify([
+					"design/test-canvas",
+					path,
+					"image-process:default:exif-orientation-v1",
+					"low",
+					"v1",
+				]),
 			),
 		).toBe(false)
 	})
@@ -2595,7 +2601,7 @@ describe("ImageResourceManager image resources", () => {
 			JSON.stringify([
 				"design/test-canvas",
 				"images/race.png",
-				"image-process:default",
+				"image-process:default:exif-orientation-v1",
 				"low",
 				"v1",
 			]),
@@ -2982,7 +2988,7 @@ describe("ImageResourceManager image resources", () => {
 			scope: "design/test-canvas",
 			path: "images/generated.png",
 			variant: "low",
-			rendition: "image-process:default",
+			rendition: "image-process:default:exif-orientation-v1",
 			blob: displayBlob,
 			width: 512,
 			height: 384,

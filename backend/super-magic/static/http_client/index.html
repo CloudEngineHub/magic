@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>超级麦吉调试客户端</title>
-    <link rel="stylesheet" href="css/styles.css?v=iteration-IT20260824035-merge-20260825-1">
+    <link rel="stylesheet" href="css/styles.css?v=mcp-authorization-config-1">
     <link rel="stylesheet" href="css/model_picker.css?v=unified-model-picker-6">
 </head>
 
@@ -88,10 +88,14 @@
                     <div id="mcpJsonView" style="display:none">
                         <div class="mcp-json-toolbar">
                             <span class="mcp-json-hint">填写 mcpServers 的值，切换列表模式时自动同步</span>
-                            <button class="mcp-expand-btn" id="mcpExpandBtn" title="全屏编辑">⤢</button>
+                            <div class="mcp-json-toolbar-actions">
+                                <button type="button" class="mcp-template-btn" id="mcpMagicServiceTemplateBtn">Magic Service 授权模板</button>
+                                <button class="mcp-expand-btn" id="mcpExpandBtn" title="全屏编辑">⤢</button>
+                            </div>
                         </div>
                         <textarea id="mcpJsonInput" class="config-textarea mcp-json-textarea"
-                            placeholder='{"服务器名称": {"type": "http", "url": "https://...", "token": ""}}'></textarea>
+                            placeholder='{"服务器名称": {"type": "http", "url": "https://...", "auth_type": 2, "mcp_server_code": "magic-service 中的 MCP Server code"}}'></textarea>
+                        <div class="mcp-json-auth-hint">Magic Service 授权配置：填写 <code>auth_type: 2</code> 和 <code>mcp_server_code</code>，建连时会使用初始化配置中的用户授权向 magic-service 获取运行时 token。初始化配置中的 <code>magic_service_host</code>、<code>metadata.authorization</code> 和 <code>metadata.organization_code</code> 也必须有效。</div>
                     </div>
                 </div>
             </div>
@@ -391,7 +395,7 @@
                 </div>
             </div>
             <textarea id="mcpModalJsonInput" class="mcp-modal-textarea"
-                placeholder='{"服务器名称": {"type": "http", "url": "https://...", "token": ""}}'></textarea>
+                placeholder='{"服务器名称": {"type": "http", "url": "https://...", "auth_type": 2, "mcp_server_code": "magic-service 中的 MCP Server code"}}'></textarea>
         </div>
     </div>
 
@@ -418,7 +422,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="js/micro_app_runtime.js?v=debug-workspace-files-7"></script>
     <script src="js/model_picker.js?v=unified-model-picker-4"></script>
-    <script src="js/client.js?v=iteration-IT20260824035-merge-20260825-1"></script>
+    <script src="js/client.js?v=mcp-authorization-config-1"></script>
 </body>
 
 </html>

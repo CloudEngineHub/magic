@@ -129,11 +129,19 @@ export abstract class BaseElement<T extends LayerElement = LayerElement> {
 		return this.data
 	}
 
-	/** 当前节点的 active Content；所有媒体/编辑字段都应从这里读取。 */
-	protected getActiveContent<TContent extends ElementContentBase>(): TContent | undefined {
-		return isContentElement(this.data)
-			? (getElementActiveContent(this.data) as TContent | undefined)
-			: undefined
+	/**
+	 * 当前节点的 active Content；所有媒体/编辑字段都应从传入快照读取。
+	 *
+	 * 更新流程可能暂时处于“ElementManager 仍持有旧快照、update() 已收到新快照”
+	 * 的窗口，因此这里不能按 elementId 回查 ElementManager。Canvas 的纯投影
+	 * 只读取传入快照和会话 preview 状态，不会把数据写回文档。
+	 */
+	protected getActiveContent<TContent extends ElementContentBase>(
+		data: T = this.data,
+	): TContent | undefined {
+		if (!isContentElement(data)) return undefined
+		const contentView = this.canvas?.getElementForContentView?.(data) ?? data
+		return getElementActiveContent(contentView) as TContent | undefined
 	}
 
 	/** 当前节点的 main Content；连接、导出和下游输入使用该稳定内容。 */
@@ -405,7 +413,7 @@ export abstract class BaseElement<T extends LayerElement = LayerElement> {
 	 *
 	 * 未声明 Transformer 约束时使用默认的全部尺寸锚点；显式声明空锚点
 	 * 则表示元素不支持尺寸编辑。这个能力只描述元素自身的尺寸交互能力，
-	 * 不包含画布 readonly 或元素 locked 等运行态权限限制。
+	 * 不包含画布访问能力或元素 locked 等运行态权限限制。
 	 */
 	public supportsSizeEditing(): boolean {
 		const enabledAnchors = this.getTransformConstraints()?.enabledAnchors

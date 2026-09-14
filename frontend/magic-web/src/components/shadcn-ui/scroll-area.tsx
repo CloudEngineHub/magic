@@ -5,6 +5,7 @@ import { cn } from "@/utils/cn"
 
 type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
 	viewportClassName?: string
+	viewportStyle?: React.CSSProperties
 	viewportRef?: React.Ref<HTMLDivElement>
 	viewportId?: string
 	scrollbarOrientation?: React.ComponentProps<
@@ -21,6 +22,7 @@ const ScrollArea = React.forwardRef<
 			className,
 			children,
 			viewportClassName,
+			viewportStyle,
 			viewportRef,
 			viewportId,
 			scrollbarOrientation = "vertical",
@@ -42,6 +44,7 @@ const ScrollArea = React.forwardRef<
 					"size-full rounded-[inherit] outline-none transition-[color,box-shadow] focus-visible:outline-1 focus-visible:ring-[3px] focus-visible:ring-ring/50",
 					viewportClassName,
 				)}
+				style={viewportStyle}
 			>
 				{children}
 			</ScrollAreaPrimitive.Viewport>

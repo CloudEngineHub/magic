@@ -31,31 +31,31 @@ const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref)
 	}, [])
 
 	return (
-		<MagicProvider
-			readonly={props.readonly}
-			methods={props.magic?.methods}
-			permissions={props.magic?.permissions}
-			hostUiLocale={props.magic?.hostUiLocale}
-			videoPointsEstimateCacheScope={props.magic?.videoPointsEstimateCacheScope}
-			projectAttachmentMentionTree={props.data?.projectAttachmentMentionTree}
-			defaultProjectAttachmentFolderId={props.data?.defaultProjectAttachmentFolderId}
-			defaultProjectAttachmentFolderName={props.data?.defaultProjectAttachmentFolderName}
-			mentionDataServiceCtor={props.data?.mentionDataServiceCtor}
-			mentionExtension={props.data?.mentionExtension}
-			referenceResourcePanelRenderer={props.data?.referenceResourcePanelRenderer}
-		>
-			<UIProvider>
-				<CanvasDesignI18nProvider t={props.t}>
-					<HostUiLocaleProvider locale={props.magic?.hostUiLocale}>
-						<PortalContainerProvider value={portalContainer}>
-							<div
-								ref={setAppContainerRef}
-								className={styles.appContainer}
-								data-canvas-ui-component
-							>
-								<CanvasProvider>
+		<CanvasProvider>
+			<MagicProvider
+				methods={props.magic?.methods}
+				permissions={props.magic?.permissions}
+				hostUiLocale={props.magic?.hostUiLocale}
+				videoPointsEstimateCacheScope={props.magic?.videoPointsEstimateCacheScope}
+				projectAttachmentMentionTree={props.data?.projectAttachmentMentionTree}
+				defaultProjectAttachmentFolderId={props.data?.defaultProjectAttachmentFolderId}
+				defaultProjectAttachmentFolderName={props.data?.defaultProjectAttachmentFolderName}
+				mentionDataServiceCtor={props.data?.mentionDataServiceCtor}
+				mentionExtension={props.data?.mentionExtension}
+				referenceResourcePanelRenderer={props.data?.referenceResourcePanelRenderer}
+			>
+				<UIProvider>
+					<CanvasDesignI18nProvider t={props.t}>
+						<HostUiLocaleProvider locale={props.magic?.hostUiLocale}>
+							<PortalContainerProvider value={portalContainer}>
+								<div
+									ref={setAppContainerRef}
+									className={styles.appContainer}
+									data-canvas-design-app-container
+									data-canvas-ui-component
+								>
 									<ElementToolStateProvider>
-										<CanvasUIProvider readonly={props.readonly}>
+										<CanvasUIProvider>
 											<ElementMenuProvider>
 												<ConnectionMenuProvider>
 													<MediaReplaceMenuProvider>
@@ -70,13 +70,13 @@ const CanvasDesign = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref)
 											</ElementMenuProvider>
 										</CanvasUIProvider>
 									</ElementToolStateProvider>
-								</CanvasProvider>
-							</div>
-						</PortalContainerProvider>
-					</HostUiLocaleProvider>
-				</CanvasDesignI18nProvider>
-			</UIProvider>
-		</MagicProvider>
+								</div>
+							</PortalContainerProvider>
+						</HostUiLocaleProvider>
+					</CanvasDesignI18nProvider>
+				</UIProvider>
+			</MagicProvider>
+		</CanvasProvider>
 	)
 })
 

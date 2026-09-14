@@ -4,6 +4,7 @@ import type { MessageEditorRef } from "@/pages/superMagic/components/MessageEdit
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { mentionItemsProcessor } from "@/pages/superMagic/components/MessageEditor/services/MentionItemsProcessor"
 import { collectMentionItemsFromContent } from "@/pages/superMagic/components/MessageEditor/services/uploadMentionService"
+import { htmlScreenshotUploadService } from "@/pages/superMagic/components/MessageEditor/services/HtmlScreenshotUploadService"
 import { stripProjectResourceMentionDisplayMetadata } from "@/pages/superMagic/components/MessageEditor/utils/mention"
 import { superMagicUploadTokenService } from "@/pages/superMagic/components/MessageEditor/services/UploadTokenService"
 import type {
@@ -98,6 +99,16 @@ export async function processMessageMentions(
 	return stripProjectResourceMentionDisplayMetadata(result.content, result.mentionItems).content
 }
 
+export function releaseHtmlScreenshotsAfterSend(
+	mentionItems: HandleSendParams["mentionItems"],
+): void {
+	void Promise.resolve(
+		htmlScreenshotUploadService.releaseStoredScreenshots(
+			htmlScreenshotUploadService.collectStorageIds(mentionItems),
+		),
+	).catch(() => undefined)
+}
+
 export function resolveMessageSendContext(
 	context?: MessageSendPreparationContext,
 ): ResolvedPreparationContext {
@@ -160,6 +171,7 @@ export function resolveMessageSendContext(
 		selectedProject,
 		selectedTopic,
 		selectedWorkspace,
+		topicStore: context?.topicStore ?? topicStore,
 		workspaceId: selectedWorkspace?.id ?? selectedProject?.workspace_id,
 		updateTopicName,
 		refreshProjectAfterTopicRename: context?.refreshProjectAfterTopicRename,
@@ -281,6 +293,8 @@ export async function preparePanelSend({
 			selectedProject: currentProject,
 			selectedTopic: currentTopic,
 			selectedWorkspace: resolvedContext.selectedWorkspace,
+			// Preserve the scoped store so dispatchMessage can update the visible Topic immediately.
+			topicStore: resolvedContext.topicStore,
 			workspaceId: resolvedContext.workspaceId,
 			updateTopicName: resolvedContext.updateTopicName,
 			refreshProjectAfterTopicRename: resolvedContext.refreshProjectAfterTopicRename,

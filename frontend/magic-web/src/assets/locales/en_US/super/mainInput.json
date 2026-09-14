@@ -2,7 +2,7 @@
 	"addSheet": {
 		"actions": {
 			"mention": "Mention",
-			"plugin": "Plugin",
+			"plugin": "Connector",
 			"skills": "Skills",
 			"webSearch": "Web Search"
 		},

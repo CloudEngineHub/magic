@@ -61,12 +61,9 @@ export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 	const isOfficialPublisher = isOfficialStoreSkillPublisher(skill.publisherType)
 	const packageNameLabel = normalizeDisplayText(skill.packageName)
 	const latestVersionLabel = normalizeDisplayText(skill.latestVersion)
-	const updatedAtLabel = useMemo(
-		() =>
-			t("skillsLibrary.updatedAt", {
-				dateTime: formatSkillUpdatedDateTime(skill.updatedAt, language),
-			}),
-		[language, skill.updatedAt, t],
+	const updatedAtValue = useMemo(
+		() => formatSkillUpdatedDateTime(skill.updatedAt, language),
+		[language, skill.updatedAt],
 	)
 	const installCount = formatSkillInstallCount(skill.installCount, language)
 	const showInstallCount = skill.publisherType !== "OFFICIAL_BUILTIN"
@@ -177,7 +174,7 @@ export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 				{buttonLabel}
 			</Button>
 
-			<div className="flex min-h-6 items-center justify-between gap-2">
+			<div className="flex min-h-8 items-center justify-between gap-3">
 				<div className="flex min-w-0 flex-1 items-center gap-1 text-xs text-muted-foreground">
 					{isOfficialPublisher ? (
 						<ShieldCheck className="size-4 shrink-0" />
@@ -187,16 +184,24 @@ export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 					<span className="truncate">{publisherLabel}</span>
 				</div>
 				{showInstallCount && installCount ? (
-					<span
-						className="shrink-0 text-[11px] text-muted-foreground/80"
+					<div
+						className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight"
 						data-testid="skills-library-mobile-card-install-count"
 					>
-						{t("skillsLibrary.installCount", {
-							formattedCount: installCount,
-						})}
-					</span>
+						<span className="text-[10px] text-muted-foreground/60">
+							{t("skillsLibrary.installCountLabel")}
+						</span>
+						<span className="text-[11px] text-muted-foreground/80">{installCount}</span>
+					</div>
 				) : null}
-				<span className="shrink-0 text-xs text-muted-foreground">{updatedAtLabel}</span>
+				<div className="flex min-w-0 flex-col items-end justify-center gap-0.5 text-right leading-tight">
+					<span className="text-[10px] text-muted-foreground/60">
+						{t("skillsLibrary.updatedAtLabel")}
+					</span>
+					<span className="truncate text-[11px] text-muted-foreground/80">
+						{updatedAtValue}
+					</span>
+				</div>
 			</div>
 		</div>
 	)

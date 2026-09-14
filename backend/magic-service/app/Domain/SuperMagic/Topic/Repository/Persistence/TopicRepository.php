@@ -19,6 +19,7 @@ use App\Domain\SuperMagic\Topic\Repository\Model\TopicModel;
 use App\Domain\SuperMagic\Workspace\Repository\Model\WorkspaceModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Exception;
+use Hyperf\Codec\Json;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
@@ -117,6 +118,15 @@ class TopicRepository implements TopicRepositoryInterface
 
         $data = $this->convertModelToEntityData($model->toArray());
         return new TopicEntity($data);
+    }
+
+    public function getTopicByIdForUpdate(int $id): ?TopicEntity
+    {
+        $model = $this->model::query()->where('id', $id)->lockForUpdate()->first();
+        if (! $model) {
+            return null;
+        }
+        return new TopicEntity($this->convertModelToEntityData($model->toArray()));
     }
 
     public function getTopicBySandboxId(string $sandboxId): ?TopicEntity
@@ -220,6 +230,9 @@ class TopicRepository implements TopicRepositoryInterface
     {
         $topicEntity->setUpdatedAt(date('Y-m-d H:i:s'));
         $entityArray = $topicEntity->toArray();
+        if (isset($entityArray['sandbox_images'])) {
+            $entityArray['sandbox_images'] = Json::encode($entityArray['sandbox_images']);
+        }
 
         return $this->model::query()
             ->where('id', $topicEntity->getId())
@@ -231,6 +244,9 @@ class TopicRepository implements TopicRepositoryInterface
     {
         $topicEntity->setUpdatedAt(date('Y-m-d H:i:s'));
         $entityArray = $topicEntity->toArray();
+        if (isset($entityArray['sandbox_images'])) {
+            $entityArray['sandbox_images'] = Json::encode($entityArray['sandbox_images']);
+        }
         return $this->model::query()
             ->where('id', $topicEntity->getId())
             ->where('updated_at', $updatedAt)
@@ -239,6 +255,9 @@ class TopicRepository implements TopicRepositoryInterface
 
     public function updateTopicByCondition(array $condition, array $data, bool $touchUpdatedAt = true): bool
     {
+        if (isset($data['sandbox_images']) && is_array($data['sandbox_images'])) {
+            $data['sandbox_images'] = Json::encode($data['sandbox_images']);
+        }
         $query = $this->model::query()->where($condition);
 
         if (! $touchUpdatedAt) {
@@ -560,6 +579,24 @@ class TopicRepository implements TopicRepositoryInterface
 
         $data = $this->convertModelToEntityData($model->toArray());
         return new TopicEntity($data);
+    }
+
+    public function findHiddenTopicByProjectUserAndMode(int $projectId, string $userId, string $topicMode): ?TopicEntity
+    {
+        $model = $this->model::query()
+            ->where('project_id', $projectId)
+            ->where('user_id', $userId)
+            ->where('is_hidden', true)
+            ->where('topic_mode', $topicMode)
+            ->whereNull('deleted_at')
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if (! $model) {
+            return null;
+        }
+
+        return new TopicEntity($this->convertModelToEntityData($model->toArray()));
     }
 
     public function findHiddenTopicByProjectUserAndType(int $projectId, string $userId, int $hiddenType): ?TopicEntity

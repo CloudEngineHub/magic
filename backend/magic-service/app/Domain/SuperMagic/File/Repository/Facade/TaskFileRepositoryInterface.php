@@ -42,6 +42,14 @@ interface TaskFileRepositoryInterface
     public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $spaceType = null): array;
 
     /**
+     * 根据文件ID批量获取文件，包含已软删除记录，并支持项目/空间过滤.
+     *
+     * @param array<int|string> $fileIds
+     * @return TaskFileEntity[]
+     */
+    public function getFilesByIdsWithTrash(array $fileIds, int $projectId = 0, ?string $spaceType = null): array;
+
+    /**
      * 根据ID批量获取文件.
      * @return TaskFileEntity[]
      */
@@ -344,6 +352,22 @@ interface TaskFileRepositoryInterface
      * @return TaskFileEntity[] File entity list
      */
     public function getChildrenByParentIdsAndProject(int $projectId, array $parentIds, int $limit = 1000, int $offset = 0): array;
+
+    /**
+     * 获取指定父目录的子节点，包含已软删除记录。
+     *
+     * @param int[] $parentIds
+     * @return TaskFileEntity[]
+     */
+    public function getChildrenByParentIdsAndProjectWithTrash(int $projectId, array $parentIds, int $limit = 1000, int $offset = 0): array;
+
+    /**
+     * 获取目录的全部后代节点，包含已软删除记录。
+     * 目录关系只依据 parent_id，不使用 file_key。
+     *
+     * @return TaskFileEntity[]
+     */
+    public function getAllDescendantEntitiesWithTrash(int $parentId, int $projectId = 0, int $maxDepth = 100): array;
 
     /**
      * Batch update file_key for multiple files.

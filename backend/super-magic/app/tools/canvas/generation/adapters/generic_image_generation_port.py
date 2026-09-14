@@ -11,6 +11,7 @@ from app.tools.canvas.generation.contracts.generation_submission import Generati
 from app.tools.canvas.generation.image_filename import build_image_filename
 from app.tools.canvas.generation.ports.submission_port import GenerationSubmissionPort
 from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
+from app.tools.image_utils.image_generation_utils import resolve_image_model
 
 
 class GenericImageGenerationPort(GenerationSubmissionPort):
@@ -23,6 +24,14 @@ class GenericImageGenerationPort(GenerationSubmissionPort):
         self.workspace = workspace
         self.project_identity_resolver = ProjectIdentityResolver()
         self.asset_path_resolver = ProjectAssetPathResolver(workspace)
+
+    async def resolve_request_metadata(self, request: GenerationRequest, tool_context: ToolContext | None) -> dict[str, object]:
+        """在提交前解析图片最终模型，确保生成中详情可展示。"""
+        model_id = request.parameters.model_id or await resolve_image_model(tool_context)
+        return {
+            "model_id": model_id,
+            "mode": "edit" if request.parameters.effective_reference_images() else "generate",
+        }
 
     async def submit(self, request: GenerationRequest, tool_context: ToolContext | None) -> GenerationSubmission:
         """调用通用生图工具并返回工作区相对结果路径。"""

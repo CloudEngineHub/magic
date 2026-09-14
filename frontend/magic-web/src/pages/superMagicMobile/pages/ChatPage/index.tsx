@@ -22,7 +22,6 @@ import { SceneEditorContext } from "@/pages/superMagic/components/MainInputConta
 import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
 import { useChatWorkspace } from "@/pages/superMagic/hooks/useChatWorkspace"
-import magicToast from "@/components/base/MagicToaster/utils"
 import SuperMagicService from "@/pages/superMagic/services"
 import useAgentCodeModeFromSearch from "@/pages/superMagic/hooks/useAgentCodeModeFromSearch"
 import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
@@ -30,10 +29,7 @@ import { refreshFeaturedModeList } from "@/pages/superMagic/hooks/useFeaturedMod
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import ProjectTopicService from "@/services/superMagic/ProjectTopicService"
-import {
-	getFallbackTopicModeIdentifier,
-	resolveProjectModeForCreate,
-} from "@/services/superMagic/DefaultAgentSelectionService"
+import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 import { useLocation } from "react-router"
 import { MobileTabParam } from "@/pages/mobileTabs/constants"
 import { routesPathMatch } from "@/routes/history/helpers"
@@ -50,12 +46,10 @@ const HierarchicalWorkspacePopup = lazy(
  * 首页面板继续复用既有欢迎区与输入区逻辑，但顶部菜单入口改由共享 MobileShell 注入。
  */
 const ChatPagePanel = observer(function ChatPagePanel() {
-	const { t } = useTranslation(["super", "sidebar"])
 	const location = useLocation()
 	const shellOutlet = useOptionalSuperMobileShellOutlet()
 	const openSidebar = shellOutlet?.openSidebar ?? (() => undefined)
 	const [stopEventLoading, setStopEventLoading] = useState(false)
-	const [isCreatingEmptyChat, setIsCreatingEmptyChat] = useState(false)
 	const [isHierarchicalWorkspacePopupInitialized, setIsHierarchicalWorkspacePopupInitialized] =
 		useState(false)
 	const [homepageModeOverride, setHomepageModeOverride] = useState<TopicMode | null>(null)
@@ -75,10 +69,6 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 		(routesPathMatch(RouteName.MobileTabs, location.pathname) &&
 			activeTab === MobileTabParam.Super) ||
 		isMobileHomeRoute
-	// 记录挂载状态，避免创建完成后跳转离开页面时再回写本页 loading 状态。
-	const isMountedRef = useRef(true)
-	// 额外使用 ref 做同步门闩，避免按钮状态尚未刷新时发生连点重复创建。
-	const isCreatingEmptyChatRef = useRef(false)
 	const { chatWorkspace, createProjectInChatWorkspace } = useChatWorkspace({
 		projectPageSize: 100,
 	})
@@ -87,43 +77,6 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 
 	const initializeHierarchicalWorkspacePopup = useMemoizedFn(() => {
 		setIsHierarchicalWorkspacePopupInitialized((initialized) => initialized || true)
-	})
-
-	useEffect(() => {
-		return () => {
-			isMountedRef.current = false
-		}
-	}, [])
-
-	/**
-	 * 首页右上入口只负责“创建并进入空白对话”，沿用抽屉页同一条创建后切换链路。
-	 */
-	const handleCreateEmptyChat = useMemoizedFn(async () => {
-		if (isCreatingEmptyChatRef.current) return
-
-		isCreatingEmptyChatRef.current = true
-		setIsCreatingEmptyChat(true)
-
-		try {
-			const createdProject = await createProjectInChatWorkspace({
-				projectMode: resolveProjectModeForCreate(currentRole),
-			})
-
-			if (!createdProject?.project || !createdProject.topic) {
-				magicToast.error(t("super:hierarchicalWorkspacePopup.createProjectFailed"))
-				return
-			}
-
-			// 这里显式传入 project + topic，确保进入动态 ChatProjectState 的空白对话页。
-			await SuperMagicService.switchChatProject(createdProject.project, createdProject.topic)
-		} catch {
-			magicToast.error(t("super:hierarchicalWorkspacePopup.createProjectFailed"))
-		} finally {
-			isCreatingEmptyChatRef.current = false
-			if (isMountedRef.current) {
-				setIsCreatingEmptyChat(false)
-			}
-		}
 	})
 
 	useMount(() => {
@@ -321,11 +274,7 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 	return (
 		<>
 			<div className="relative flex size-full flex-col overflow-hidden bg-mobile-background">
-				<ChatPageHeader
-					onMenuClick={openSidebar}
-					onPrimaryAction={handleCreateEmptyChat}
-					isPrimaryActionLoading={isCreatingEmptyChat}
-				/>
+				<ChatPageHeader onMenuClick={openSidebar} />
 
 				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 					{/* Flow layout: bottom inset is owned by GlobalSafeArea, not absolute bottom-0. */}

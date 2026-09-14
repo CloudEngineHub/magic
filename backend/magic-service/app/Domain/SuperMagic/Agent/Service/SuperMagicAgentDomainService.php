@@ -70,6 +70,17 @@ readonly class SuperMagicAgentDomainService
     }
 
     /**
+     * 跨组织按 code 查询 Agent。仅供已经通过公开访问校验的资源上下文解析使用。
+     *
+     * @param array<string> $codes
+     * @return array<string, SuperMagicAgentEntity>
+     */
+    public function findByCodesWithoutOrganizationFilter(array $codes): array
+    {
+        return $this->superMagicAgentRepository->findByCodesWithoutOrganizationFilter($codes);
+    }
+
+    /**
      * @return array{total: int, list: array<SuperMagicAgentEntity>}
      */
     public function queries(SuperMagicAgentDataIsolation $dataIsolation, SuperMagicAgentQuery $query, Page $page): array
@@ -424,6 +435,49 @@ readonly class SuperMagicAgentDomainService
         }
 
         return $response->toArray();
+    }
+
+    /** 创建异步 Agent 工作区导出任务。 */
+    public function createAgentWorkspaceExportAsync(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $code,
+        string $sandboxId,
+        string $sourcePath,
+        string $fileName,
+        string $taskKey
+    ): array {
+        $uploadConfig = $this->cloudFileRepository->getStsTemporaryCredential(
+            $dataIsolation->getCurrentOrganizationCode(),
+            StorageBucketType::Private,
+            '/agent_export',
+            options: ['internal_endpoint' => true]
+        );
+        $request = new ExportWorkspaceRequest(
+            ProjectMode::AGENT_CREATOR->value,
+            $code,
+            $uploadConfig,
+            $sourcePath,
+            $code,
+            $fileName,
+        );
+        $contactDataIsolation = DataIsolation::create(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId()
+        );
+        return $this->workspaceExporter->createAsync($contactDataIsolation, $sandboxId, $request, $taskKey)->toArray();
+    }
+
+    /** 查询异步 Agent 工作区导出任务。 */
+    public function checkAgentWorkspaceExportAsync(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $sandboxId,
+        string $taskKey
+    ): array {
+        $contactDataIsolation = DataIsolation::create(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId()
+        );
+        return $this->workspaceExporter->checkAsync($contactDataIsolation, $sandboxId, $taskKey)->toArray();
     }
 
     /**

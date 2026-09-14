@@ -1,19 +1,36 @@
 import type { DownloadActionOptions, UserAction } from "../types"
 import { getSelectedFileElements, getSelectedImageElements } from "../../shared/ids"
 import type { DownloadImageOptions, CanvasImageSourceDimensions } from "../../../public/magic-types"
-import { getActiveImageContent, getActiveContent } from "../../document/elementContent"
+import { getActiveContent, getActiveImageContent } from "../../document/elementContent"
 import { ElementTypeEnum, type CanvasFileElement, type LayerElement } from "../../document/types"
 import { getCanvasElementChildren } from "../../document/elementIndex"
 import { containsReplacingMedia } from "../mediaReplacementGuards"
 
-function hasReadyMediaSource(fileElements: ReturnType<typeof getSelectedFileElements>): boolean {
+function hasReadyMediaSource(
+	canvas: Parameters<NonNullable<UserAction["execute"]>>[0],
+	fileElements: ReturnType<typeof getSelectedFileElements>,
+): boolean {
 	return fileElements.some((element) => {
-		const src =
-			element.type === "image"
-				? getActiveImageContent(element).src
-				: getActiveContent(element)?.src
+		const effectiveContent =
+			typeof canvas.getEffectiveContent === "function"
+				? (canvas.getEffectiveContent(element.id) as { src?: string } | undefined)
+				: element.type === "image"
+					? getActiveImageContent(element)
+					: getActiveContent(element)
+		const src = effectiveContent?.src
 		return typeof src === "string" && src.trim().length > 0
 	})
+}
+
+function getContentViewElements(
+	canvas: Parameters<NonNullable<UserAction["execute"]>>[0],
+	elements: ReturnType<typeof getSelectedFileElements>,
+) {
+	return elements.map((element) =>
+		typeof canvas.getElementForContentView === "function"
+			? canvas.getElementForContentView(element)
+			: element,
+	)
 }
 
 async function getDownloadImageOptions(
@@ -22,7 +39,11 @@ async function getDownloadImageOptions(
 ): Promise<DownloadImageOptions | undefined> {
 	const entries = await Promise.all(
 		imageElements.map(async (imageElement) => {
-			const src = getActiveImageContent(imageElement).src
+			const src = (
+				typeof canvas.getEffectiveContent === "function"
+					? (canvas.getEffectiveContent(imageElement.id) as { src?: string } | undefined)
+					: getActiveImageContent(imageElement)
+			)?.src
 			if (!imageElement.id || !src) return null
 
 			const resource = await canvas.imageResourceManager
@@ -90,72 +111,82 @@ export const downloadActions: UserAction[] = [
 		id: "download.image",
 		category: "download",
 		canExecute: (canvas) => {
+			if (!canvas.permissionManager.canDownloadFiles()) return false
 			const fileElements = getSelectedFileElements(canvas)
-			if (fileElements.length === 0 || !hasReadyMediaSource(fileElements)) return false
-			if (containsReplacingMedia(canvas, fileElements)) return false
-			if (canvas.magicConfigManager.config?.permissions?.allowFileDownload === false)
+			if (fileElements.length === 0 || !hasReadyMediaSource(canvas, fileElements))
 				return false
+			if (containsReplacingMedia(canvas, fileElements)) return false
 			const methods = canvas.magicConfigManager.config?.methods
 			return !!methods?.downloadFiles
 		},
 		execute: async (canvas, actionOptions?: DownloadActionOptions) => {
+			if (!canvas.permissionManager.canDownloadFiles()) return
 			const fileElements = getSelectedFileElements(canvas)
-			if (fileElements.length === 0 || !hasReadyMediaSource(fileElements)) return
+			if (fileElements.length === 0 || !hasReadyMediaSource(canvas, fileElements)) return
 			if (containsReplacingMedia(canvas, fileElements)) return
-			if (canvas.magicConfigManager.config?.permissions?.allowFileDownload === false) return
 			const methods = canvas.magicConfigManager.config?.methods
 			if (!methods?.downloadFiles) return
 			const options = {
 				...(await getDownloadImageOptions(canvas)),
 				downloadMode: actionOptions?.downloadMode ?? "default",
 			}
-			await methods.downloadFiles(fileElements, false, false, options)
+			await methods.downloadFiles(
+				getContentViewElements(canvas, fileElements),
+				false,
+				false,
+				options,
+			)
 		},
 	},
 	{
 		id: "download.image-no-watermark",
 		category: "download",
 		canExecute: (canvas) => {
+			if (!canvas.permissionManager.canDownloadFiles()) return false
 			const fileElements = getSelectedFileElements(canvas)
-			if (fileElements.length === 0 || !hasReadyMediaSource(fileElements)) return false
-			if (containsReplacingMedia(canvas, fileElements)) return false
-			if (canvas.magicConfigManager.config?.permissions?.allowFileDownload === false)
+			if (fileElements.length === 0 || !hasReadyMediaSource(canvas, fileElements))
 				return false
+			if (containsReplacingMedia(canvas, fileElements)) return false
 			const imageElements = getSelectedImageElements(canvas)
 			if (imageElements.length !== fileElements.length) return false
 			const methods = canvas.magicConfigManager.config?.methods
 			return !!methods?.downloadFiles
 		},
 		execute: async (canvas) => {
+			if (!canvas.permissionManager.canDownloadFiles()) return
 			const imageElements = getSelectedImageElements(canvas)
-			if (imageElements.length === 0 || !hasReadyMediaSource(imageElements)) return
+			if (imageElements.length === 0 || !hasReadyMediaSource(canvas, imageElements)) return
 			if (containsReplacingMedia(canvas, imageElements)) return
-			if (canvas.magicConfigManager.config?.permissions?.allowFileDownload === false) return
 			const fileElements = getSelectedFileElements(canvas)
 			if (imageElements.length !== fileElements.length) return
 			const methods = canvas.magicConfigManager.config?.methods
 			if (!methods?.downloadFiles) return
 			const options = await getDownloadImageOptions(canvas)
-			await methods.downloadFiles(imageElements, true, false, options)
+			await methods.downloadFiles(
+				getContentViewElements(canvas, imageElements),
+				true,
+				false,
+				options,
+			)
 		},
 	},
 	{
 		id: "download.frame",
 		category: "download",
 		canExecute: (canvas) => {
+			if (!canvas.permissionManager.canDownloadFiles()) return false
 			const fileElements = getFrameFileElements(canvas)
-			if (fileElements.length === 0 || !hasReadyMediaSource(fileElements)) return false
-			if (containsReplacingMedia(canvas, fileElements)) return false
-			if (canvas.magicConfigManager.config?.permissions?.allowFileDownload === false)
+			if (fileElements.length === 0 || !hasReadyMediaSource(canvas, fileElements))
 				return false
+			if (containsReplacingMedia(canvas, fileElements)) return false
 			const methods = canvas.magicConfigManager.config?.methods
 			return !!methods?.downloadFiles
 		},
 		execute: async (canvas, actionOptions?: DownloadActionOptions) => {
+			if (!canvas.permissionManager.canDownloadFiles()) return
 			const fileElements = getFrameFileElements(canvas)
-			if (fileElements.length === 0 || !hasReadyMediaSource(fileElements)) return
+			if (fileElements.length === 0 || !hasReadyMediaSource(canvas, fileElements)) return
 			if (containsReplacingMedia(canvas, fileElements)) return
-			if (canvas.magicConfigManager.config?.permissions?.allowFileDownload === false) return
 			const methods = canvas.magicConfigManager.config?.methods
 			if (!methods?.downloadFiles) return
 
@@ -166,7 +197,12 @@ export const downloadActions: UserAction[] = [
 				...(await getDownloadImageOptions(canvas, imageElements)),
 				downloadMode: actionOptions?.downloadMode ?? "default",
 			}
-			await methods.downloadFiles(fileElements, false, false, options)
+			await methods.downloadFiles(
+				getContentViewElements(canvas, fileElements),
+				false,
+				false,
+				options,
+			)
 		},
 	},
 ]

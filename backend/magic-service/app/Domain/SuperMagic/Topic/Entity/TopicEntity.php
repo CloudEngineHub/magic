@@ -10,6 +10,7 @@ namespace App\Domain\SuperMagic\Topic\Entity;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\HiddenType;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Infrastructure\Core\AbstractEntity;
+use Hyperf\Codec\Json;
 use Throwable;
 
 /**
@@ -71,6 +72,9 @@ class TopicEntity extends AbstractEntity
      * @var null|string 沙箱网关 create/upgrade 接口返回的 Agent 镜像版本
      */
     protected ?string $agentImage = null;
+
+    /** @var null|array<string, string> Images recorded from the last successful sandbox operation. */
+    protected ?array $sandboxImages = null;
 
     /**
      * @var string 工作目录
@@ -226,6 +230,7 @@ class TopicEntity extends AbstractEntity
             'sandbox_id' => $this->sandboxId ?? '',
             'sandbox_config' => $this->sandboxConfig,
             'agent_image' => $this->agentImage,
+            'sandbox_images' => $this->sandboxImages,
             'work_dir' => $this->workDir ?? '',
             'topic_name' => $this->topicName ?? '',
             'description' => $this->description,
@@ -414,6 +419,20 @@ class TopicEntity extends AbstractEntity
     public function setSandboxConfig(?string $sandboxConfig): self
     {
         $this->sandboxConfig = $sandboxConfig;
+        return $this;
+    }
+
+    public function getSandboxImages(): ?array
+    {
+        return $this->sandboxImages;
+    }
+
+    public function setSandboxImages(null|array|string $images): self
+    {
+        if (is_string($images)) {
+            $images = Json::decode($images);
+        }
+        $this->sandboxImages = is_array($images) ? $images : null;
         return $this;
     }
 

@@ -55,6 +55,27 @@ class SuperMagicAgentRepository extends SuperMagicAbstractRepository implements 
         return $result;
     }
 
+    public function findByCodesWithoutOrganizationFilter(array $codes): array
+    {
+        $codes = array_values(array_unique(array_filter($codes)));
+        if ($codes === []) {
+            return [];
+        }
+
+        $models = SuperMagicAgentModel::query()
+            ->whereIn('code', $codes)
+            ->whereNull('deleted_at')
+            ->get();
+
+        $result = [];
+        foreach ($models as $model) {
+            $entity = SuperMagicAgentFactory::createEntity($model);
+            $result[$entity->getCode()] = $entity;
+        }
+
+        return $result;
+    }
+
     public function queries(SuperMagicAgentDataIsolation $dataIsolation, SuperMagicAgentQuery $query, Page $page): array
     {
         $builder = $this->createBuilder($dataIsolation, SuperMagicAgentModel::query());

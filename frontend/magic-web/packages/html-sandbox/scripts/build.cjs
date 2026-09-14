@@ -42,6 +42,15 @@ function parseArgs(argv) {
 			result.outFile = arg.slice("--out-file=".length)
 			continue
 		}
+		if (arg === "--runtime-out-file") {
+			result.runtimeOutFile = argv[i + 1]
+			i += 1
+			continue
+		}
+		if (arg.startsWith("--runtime-out-file=")) {
+			result.runtimeOutFile = arg.slice("--runtime-out-file=".length)
+			continue
+		}
 		if (arg === "--watch") {
 			result.watch = true
 		}
@@ -255,23 +264,30 @@ function getFileMtimeMs(filePath) {
 	}
 }
 
-async function buildHtml({ runtimeEntry, outFile }) {
+async function buildHtml({ runtimeEntry, outFile, runtimeOutFile }) {
 	fs.mkdirSync(path.dirname(outFile), { recursive: true })
 
 	const runtimeBundle = await bundleRuntimeSource(runtimeEntry)
 	const builtIndexHtml = buildIndexHtml(runtimeBundle.source)
 
 	fs.writeFileSync(outFile, builtIndexHtml)
+	if (runtimeOutFile) {
+		fs.mkdirSync(path.dirname(runtimeOutFile), { recursive: true })
+		fs.writeFileSync(runtimeOutFile, runtimeBundle.source)
+	}
 
 	console.log("[html-sandbox build] index.html created successfully.", {
 		runtimeEntry: normalizePath(path.relative(projectRoot, runtimeEntry)),
 		outFile: normalizePath(path.relative(projectRoot, outFile)),
+		...(runtimeOutFile
+			? { runtimeOutFile: normalizePath(path.relative(projectRoot, runtimeOutFile)) }
+			: {}),
 	})
 
 	return runtimeBundle.inputPaths
 }
 
-async function watchHtml({ runtimeEntry, outFile }) {
+async function watchHtml({ runtimeEntry, outFile, runtimeOutFile }) {
 	let rebuildTimer = null
 	let pollTimer = null
 	let isBuilding = false
@@ -322,7 +338,7 @@ async function watchHtml({ runtimeEntry, outFile }) {
 
 		isBuilding = true
 		try {
-			const inputPaths = await buildHtml({ runtimeEntry, outFile })
+			const inputPaths = await buildHtml({ runtimeEntry, outFile, runtimeOutFile })
 			const nextWatchPaths = Array.from(new Set([indexHtmlSrc, ...inputPaths]))
 
 			refreshWatchedPaths(nextWatchPaths)
@@ -364,13 +380,14 @@ async function main() {
 	const args = parseArgs(process.argv.slice(2))
 	const runtimeEntry = resolveRuntimeEntry(args.runtimeEntry)
 	const outFile = resolveOutputFile(args.outFile)
+	const runtimeOutFile = args.runtimeOutFile ? resolveOutputFile(args.runtimeOutFile) : undefined
 
 	if (args.watch) {
-		await watchHtml({ runtimeEntry, outFile })
+		await watchHtml({ runtimeEntry, outFile, runtimeOutFile })
 		return
 	}
 
-	await buildHtml({ runtimeEntry, outFile })
+	await buildHtml({ runtimeEntry, outFile, runtimeOutFile })
 }
 
 main().catch((error) => {

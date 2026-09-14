@@ -22,7 +22,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	convertFileToTabItem,
 	getFileTabTitle,
-	normalizeSlideProjectTabItem,
+	normalizeProjectTabItem,
 	dedupeTabsById,
 	mergeAttachmentFileForTab,
 } from "../utils/tabUtils"
@@ -102,7 +102,8 @@ function normalizeFileItemForTab(fileItem: unknown): {
 	}
 
 	const recordDisplayConfig = sourceRecord.display_config as
-		FileItem["display_config"] | undefined
+		| FileItem["display_config"]
+		| undefined
 	let hiddenPreviewPolicy = recordDisplayConfig
 	if (sourceRecord.is_hidden === true) {
 		hiddenPreviewPolicy = {
@@ -1110,14 +1111,14 @@ export function useFilesViewer(props: FilesViewerProps) {
 						})
 						.filter((tab): tab is TabItem => tab !== null)
 					const restoredTabs = dedupeTabsById(
-						processedTabs.map((tab) => normalizeSlideProjectTabItem(tab, attachments)),
+						processedTabs.map((tab) => normalizeProjectTabItem(tab, attachments)),
 					)
 					const cachedActiveTabId = cachedState.fileState?.activeTabId
 					const activeSourceTab = cachedActiveTabId
 						? processedTabs.find((tab) => tab.id === cachedActiveTabId)
 						: undefined
 					const restoredActiveTabId = activeSourceTab
-						? normalizeSlideProjectTabItem(activeSourceTab, attachments).id
+						? normalizeProjectTabItem(activeSourceTab, attachments).id
 						: cachedActiveTabId
 
 					// 如果没有任何可用的 tabs，才清理缓存
@@ -1407,6 +1408,17 @@ export function useFilesViewer(props: FilesViewerProps) {
 			})
 			.filter((tab): tab is TabItem => tab != null)
 
+		const normalizedTabs = dedupeTabsById(
+			updatedTabs.map((tab) => normalizeProjectTabItem(tab, attachments)),
+		)
+		if (
+			normalizedTabs.length !== updatedTabs.length ||
+			normalizedTabs.some((tab, index) => tab.id !== updatedTabs[index]?.id)
+		) {
+			hasUpdates = true
+		}
+		updatedTabs = normalizedTabs
+
 		if (hasUpdates && updatedTabs.length > 0 && !updatedTabs.some((tab) => tab.active)) {
 			const mostRecentTab = updatedTabs.reduce((mostRecent, current) => {
 				const currentActiveAt = current.active_at || current.create_at || 0
@@ -1616,8 +1628,10 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 	// Notify parent when active tab changes
 	useEffect(() => {
-		// 知识库tab和回放tab没有fileId，不需要通知parent文件变更
+		// Playback/KB clear parent activeFileId separately. Reset lastNotified so
+		// switching back to the same file tab re-syncs the parent.
 		if (activeTabType === "knowledge_base" || activeTabType === "playback") {
+			lastNotifiedActiveFileIdRef.current = undefined
 			return
 		}
 

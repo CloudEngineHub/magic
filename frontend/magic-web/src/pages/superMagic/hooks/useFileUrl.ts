@@ -2,7 +2,7 @@ import { useDebounceEffect } from "ahooks"
 import { useEffect, useRef, useState } from "react"
 import type { DownloadImageMode } from "../pages/Workspace/types"
 import type { ImageProcessOptions } from "@/utils/image-processing"
-import { resolveSharedFileUrl } from "@/pages/superMagic/services/sharedFileUrlCache"
+import { resolveSharedMediaUrl } from "@/pages/superMagic/services/sharedMediaUrlCache"
 
 export const useFileUrl = ({
 	file_id,
@@ -39,7 +39,7 @@ export const useFileUrl = ({
 			}
 			setIsLoading(true)
 			setHasError(false)
-			resolveSharedFileUrl({
+			resolveSharedMediaUrl({
 				fileId: file_id,
 				fileVersion: file_version,
 				updatedAt: updated_at,

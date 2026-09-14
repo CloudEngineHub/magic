@@ -80,6 +80,7 @@ export interface SaveAiModelParams {
 export interface AiModelConnectivityTestParams {
 	service_provider_config_id: string
 	model_version: string
+	support_multi_modal?: boolean
 }
 
 export interface AiModelConnectivityTestResult {

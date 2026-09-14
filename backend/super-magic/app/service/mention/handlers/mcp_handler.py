@@ -12,6 +12,7 @@ handler 职责：
      使用 using-mcp skill / mcp.* 工具调用该 server 提供的能力。
 """
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from urllib.parse import quote
 
 from app.service.mention.base import BaseMentionHandler, logger
 
@@ -156,12 +157,17 @@ class MCPHandler(BaseMentionHandler):
         index: int,
         agent_context: Optional["AgentContext"] = None,
     ) -> List[str]:
-        mention_name = str(mention.get("name") or "unknown-mcp").strip()
+        mention_name = str(mention.get("name") or "").strip()
         description = str(mention.get("description") or "").strip()
 
         logger.info(f"用户 prompt 添加 MCP 引用: {mention_name}")
 
-        lines = [f"{index}. [@mcp:{mention_name}]"]
+        if mention_name:
+            target = quote(mention_name, safe="-._~")
+            label = mention_name.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+            lines = [f"{index}. [{label}](mcp://{target})"]
+        else:
+            lines = [f"{index}. MCP reference is missing its canonical name."]
         if description:
             lines.append(f"   - description: {description}")
 

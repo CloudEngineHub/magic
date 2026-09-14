@@ -5,7 +5,12 @@ import { useTranslation } from "react-i18next"
 import { IMAGE_EXTENSIONS } from "@/constants/file"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import projectFilesStore from "@/stores/projectFiles"
-import { decodePathForDisplay, findAttachmentByPath } from "./helper"
+import { decodePathForDisplay } from "./helper"
+import {
+	findAttachmentByPath,
+	parseCanonicalWorkspaceHref,
+} from "@/pages/superMagic/utils/markdownFileReference"
+import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 
 const IMAGE_EXTENSION_SET = new Set(
 	[...IMAGE_EXTENSIONS, "avif", "bmp", "ico", "tif", "tiff"].map((extension) =>
@@ -159,13 +164,13 @@ const ResolvedImage = memo(
 
 export const Image = observer(
 	({ alt, src, title }: { alt?: unknown; src?: unknown; title?: unknown }) => {
+		const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
 		const normalizedAlt = typeof alt === "string" ? alt : undefined
 		const normalizedSrc = typeof src === "string" ? src : ""
 		const normalizedTitle = typeof title === "string" ? title : undefined
-		const attachments = projectFilesStore.workspaceFilesList
-		const fileInfo = normalizedSrc
-			? findAttachmentByPath(attachments, normalizedSrc)
-			: undefined
+		const attachments = (scopedProjectFilesStore ?? projectFilesStore).workspaceFilesList
+		const filePath = parseCanonicalWorkspaceHref(normalizedSrc, { allowWorkspaceRoot: true })
+		const fileInfo = filePath ? findAttachmentByPath(attachments, filePath) : undefined
 		const hasExternalSource = isExternalImageSource(normalizedSrc)
 
 		if (!normalizedSrc) {

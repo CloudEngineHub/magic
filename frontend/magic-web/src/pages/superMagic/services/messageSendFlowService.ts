@@ -31,12 +31,14 @@ import type { ModelItem } from "../components/MessageEditor/types"
 import type { SendMessageOptions } from "../components/MessagePanel/types"
 import {
 	MessageStatus,
+	TaskStatus,
 	type Workspace,
 	type ProjectListItem,
 	type Topic,
 } from "../pages/Workspace/types"
 import { TopicMode } from "../pages/Workspace/TopicMode"
 import { superMagicStore } from "../stores"
+import type { TopicStore } from "../stores/core/topic"
 import { optimisticMessageStore } from "../stores/optimisticMessageStore"
 import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
 import { smartRenameTopicIfUnnamed } from "./topicRename"
@@ -126,6 +128,7 @@ export interface SendRuntimeContext {
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null
 	selectedWorkspace?: Workspace | null
+	topicStore?: TopicStore
 	workspaceId?: string
 	updateTopicName?: (topicId: string, topicName: string) => void | Promise<void>
 	refreshProjectAfterTopicRename?: boolean
@@ -289,6 +292,23 @@ class MessageSendService {
 		})
 
 		const pendingUserMessage = createPendingUserMessage(content)
+		const previousTopicStatus = currentTopic.task_status || currentTopic.status
+		const markLocalExecutionStarted = () => {
+			this.deps.superMagicStore.beginTopicExecution?.(chat_topic_id)
+			context?.topicStore?.mergeTopic(currentTopic.id, {
+				task_status: TaskStatus.RUNNING,
+				status: TaskStatus.RUNNING,
+			})
+		}
+		const markLocalExecutionFailed = () => {
+			this.deps.superMagicStore.failPendingTopicExecution?.(chat_topic_id)
+			if (previousTopicStatus) {
+				context?.topicStore?.mergeTopic(currentTopic.id, {
+					task_status: previousTopicStatus,
+					status: previousTopicStatus,
+				})
+			}
+		}
 
 		// 调用聊天接口发送消息
 		const sendMessage = () => {
@@ -304,6 +324,7 @@ class MessageSendService {
 				pending_message: pendingUserMessage,
 			})
 			if (getNetworkMonitor().isNetworkOffline()) {
+				markLocalExecutionFailed()
 				optimisticMessageStore.markFailed({ chat_topic_id, app_message_id: messageId })
 				return
 			}
@@ -313,13 +334,17 @@ class MessageSendService {
 					const responseSeq =
 						(res as { data?: { seq?: SeqResponse<ConversationQueryMessage> } })?.data
 							?.seq ?? (res as { seq?: SeqResponse<ConversationQueryMessage> })?.seq
-					if (!responseSeq?.message) return
+					if (!responseSeq?.message) {
+						markLocalExecutionFailed()
+						return
+					}
 					// 响应成功后替换 superMagicStore 中对应数据
 					this.deps.superMagicStore.replaceUserMessage(chat_topic_id, responseSeq)
 					optimisticMessageStore.confirm({ chat_topic_id, app_message_id: messageId })
 				})
 				.catch((error) => {
 					console.log("error", error)
+					markLocalExecutionFailed()
 					optimisticMessageStore.markFailed({ chat_topic_id, app_message_id: messageId })
 				})
 		}
@@ -333,6 +358,7 @@ class MessageSendService {
 			if (!isConfirmed) return false
 		}
 
+		markLocalExecutionStarted()
 		sendMessage()
 		if (context?.refreshProjectAfterTopicRename && currentProject && renameTask) {
 			trackProjectRenameTask(currentProject.id, renameTask.completion)

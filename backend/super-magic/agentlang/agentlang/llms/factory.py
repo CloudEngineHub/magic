@@ -57,6 +57,7 @@ class LLMClientConfig(BaseModel):
     extra_params: Dict[str, Any] = Field(default_factory=dict)
     metadata: Dict[str, Any] = Field(default_factory=dict)
     supports_tool_use: bool = True
+    supports_multimodal: bool = False
     type: str = "llm"
     resolved_model_id: Optional[str] = None
 
@@ -72,13 +73,6 @@ class LLMFactory:
     # 价格由 ModelConfigManager 从各 Provider 同步，启动时先使用默认价格表。
     pricing = ModelPricing()
     sandbox_id = os.environ.get("SANDBOX_ID", "default")
-
-    # 初始化 TokenUsageReport
-    _ = TokenUsageReport.get_instance(
-        sandbox_id=sandbox_id,
-        token_tracker=token_tracker,
-        pricing=pricing
-    )
 
     @classmethod
     def register_config(cls, llm_config: LLMClientConfig) -> None:
@@ -423,6 +417,7 @@ class LLMFactory:
                 provider=mc.provider,
                 client_type=mc.client_type,
                 supports_tool_use=mc.supports_tool_use,
+                supports_multimodal=mc.supports_multimodal,
                 max_output_tokens=mc.max_output_tokens,
                 max_context_tokens=mc.max_context_tokens,
                 temperature=mc.temperature,

@@ -6,9 +6,18 @@ import FileMentionNodeView from "../FileMentionNodeView"
 
 const storeMocks = vi.hoisted(() => ({
 	getFileById: vi.fn(),
+	useMediaResourceSnapshot: vi.fn(() => ({
+		snapshot: {
+			identity: "project-file-1",
+			status: "ready",
+			thumbnailUrl: "https://cdn.test/project.png",
+			previewUrl: "https://cdn.test/project.png",
+		},
+		loadPreview: vi.fn(),
+	})),
 }))
 
-vi.mock("@tiptap/react", () => ({
+vi.mock("@/infrastructure/editors/tiptap/react", () => ({
 	NodeViewWrapper: ({
 		as: Component = "div",
 		children,
@@ -40,17 +49,23 @@ vi.mock("@/pages/superMagic/components/MessageEditor/components/AtItem/hooks/use
 	default: () => null,
 }))
 
-vi.mock("@/pages/superMagic/hooks/useFileUrl", () => ({
-	useFileUrl: () => ({
-		fileUrl: "https://cdn.test/project.png",
-		isLoading: false,
-		hasError: false,
-	}),
+vi.mock("@/services/media/MediaResourceRegistry", () => ({
+	mediaResourceRegistry: {
+		ensurePreview: vi.fn(),
+	},
+	useMediaResourceSnapshot: storeMocks.useMediaResourceSnapshot,
 }))
 
 vi.mock("@/components/base/MediaPreview", () => ({
 	MediaPreviewThumbnail: ({ fallback }: { fallback: ReactNode }) => fallback,
 	MediaPreviewTooltip: ({ children }: PropsWithChildren) => children,
+	MediaPreviewTrigger: ({
+		fallback,
+		renderTrigger,
+	}: {
+		fallback: ReactNode
+		renderTrigger: (thumbnail: ReactNode) => ReactNode
+	}) => renderTrigger(fallback),
 }))
 
 function createProps(
@@ -61,12 +76,22 @@ function createProps(
 		attrs: { type, data },
 		selected: false,
 		deleteNode: vi.fn(),
-	} as ComponentProps<typeof FileMentionNodeView>
+	} as unknown as ComponentProps<typeof FileMentionNodeView>
 }
 
 describe("FileMentionNodeView", () => {
 	beforeEach(() => {
 		storeMocks.getFileById.mockReset()
+		storeMocks.useMediaResourceSnapshot.mockReset()
+		storeMocks.useMediaResourceSnapshot.mockReturnValue({
+			snapshot: {
+				identity: "project-file-1",
+				status: "ready",
+				thumbnailUrl: "https://cdn.test/project.png",
+				previewUrl: "https://cdn.test/project.png",
+			},
+			loadPreview: vi.fn(),
+		})
 	})
 
 	it("keeps production upload progress behavior in the shared renderer", () => {
@@ -87,7 +112,7 @@ describe("FileMentionNodeView", () => {
 			/>,
 		)
 
-		expect(screen.getByText("@demo.mov")).toBeInTheDocument()
+		expect(screen.getByText("demo.mov")).toBeInTheDocument()
 		expect(screen.getByTestId("upload-file-mention-visual")).toHaveClass("h-[18px]")
 		expect(screen.getByTestId("upload-file-mention-progress")).toHaveTextContent("42%")
 		expect(screen.getByTestId("upload-file-mention-progress-background")).toHaveStyle({
@@ -107,8 +132,18 @@ describe("FileMentionNodeView", () => {
 			/>,
 		)
 
-		expect(screen.getByText("@project.png")).toBeInTheDocument()
+		expect(screen.getByText("project.png")).toBeInTheDocument()
 		expect(screen.getByTestId("file-mention-visual")).toBeInTheDocument()
+		expect(storeMocks.useMediaResourceSnapshot).toHaveBeenCalledWith(
+			expect.objectContaining({
+				identity: "project-file-1",
+				mediaType: "image",
+			}),
+			expect.objectContaining({
+				enabled: true,
+				loadThumbnail: true,
+			}),
+		)
 	})
 
 	it("renders pending canvas file mentions with reduced opacity", () => {
@@ -126,6 +161,6 @@ describe("FileMentionNodeView", () => {
 			/>,
 		)
 
-		expect(screen.getByText("@project.png").closest(".magic-mention")).toHaveClass("opacity-50")
+		expect(screen.getByText("project.png").closest(".magic-mention")).toHaveClass("opacity-50")
 	})
 })

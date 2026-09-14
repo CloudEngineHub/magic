@@ -47,10 +47,10 @@ class AIImageGenerateParamsVO extends AbstractValueObject
     public int $generateNum = 4;
 
     // 图片来源类型
-    public ImageGenerateSourceEnum $sourceType;
+    public ImageGenerateSourceEnum $sourceType = ImageGenerateSourceEnum::NONE;
 
     // 来源ID
-    public string $sourceId;
+    public string $sourceId = '';
 
     // 图片生成附加配置
     public array $imageGenerationConfig = [];

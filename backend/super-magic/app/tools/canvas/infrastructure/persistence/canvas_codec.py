@@ -36,7 +36,7 @@ class CanvasCodec:
 
     @classmethod
     def decode(cls, source: str) -> CanvasProject:
-        """解码并严格校验 3.0 项目。"""
+        """解码并校验 3.0 项目，保留协议未声明的前端扩展字段。"""
         try:
             match = _ENVELOPE_PATTERN.search(source.strip())
             if match is None:
@@ -110,7 +110,7 @@ class CanvasCodec:
 
     @classmethod
     def _decode_element(cls, data: Any, path: str) -> CanvasElement:
-        """解码单个 Element 并拒绝未知字段。"""
+        """解码单个 Element，并保留前端新增的未知字段。"""
         if not isinstance(data, dict):
             raise CanvasProtocolError("INVALID_ELEMENT", f"{path} must be an object.")
         element_id = data.get("id")
@@ -120,9 +120,11 @@ class CanvasCodec:
         if element_type not in SUPPORTED_ELEMENT_TYPES:
             raise CanvasProtocolError("INVALID_ELEMENT", f"{path}.type is unsupported.")
         allowed = BASE_ELEMENT_FIELDS | ({"children"} if element_type in {"frame", "group"} else set())
-        unexpected = set(data) - allowed
-        if unexpected:
-            raise CanvasProtocolError("INVALID_ELEMENT", f"{path} contains unsupported fields.")
+        extra_data = {
+            key: deepcopy(value)
+            for key, value in data.items()
+            if key not in allowed
+        }
         raw_contents = data.get("contents")
         if not isinstance(raw_contents, list):
             raise CanvasProtocolError("INVALID_ELEMENT", f"{path}.contents must be an array.")
@@ -145,33 +147,43 @@ class CanvasCodec:
             for key, value in data.items()
             if key not in {"id", "type", "contents", "activeContentId", "mainContentId", "children"}
         })
-        return CanvasElement(element_id, element_type, properties, contents, active, main, children)
+        return CanvasElement(element_id, element_type, properties, contents, active, main, children, extra_data)
 
     @classmethod
     def _decode_content(cls, data: Any, element_type: str, path: str) -> CanvasContent:
-        """解码 Element Content 并检查类型字段。"""
+        """解码 Element Content，并保留前端新增的未知字段。"""
         if not isinstance(data, dict):
             raise CanvasProtocolError("INVALID_CONTENT", f"{path} must be an object.")
         content_id = data.get("contentId")
         if not isinstance(content_id, str) or not content_id or "id" in data or "type" in data:
             raise CanvasProtocolError("INVALID_CONTENT", f"{path} has an invalid contentId or forbidden field.")
         allowed = CONTENT_FIELDS[element_type] | {"contentId"}
-        if set(data) - allowed:
-            raise CanvasProtocolError("INVALID_CONTENT", f"{path} contains unsupported fields.")
+        extra_data = {
+            key: deepcopy(value)
+            for key, value in data.items()
+            if key not in allowed
+        }
         fields = ContentFieldsFactory.from_protocol(
             element_type,
-            {key: deepcopy(value) for key, value in data.items() if key != "contentId"},
+            {
+                key: deepcopy(value)
+                for key, value in data.items()
+                if key in allowed and key != "contentId"
+            },
         )
-        return CanvasContent(content_id, fields)
+        return CanvasContent(content_id, fields, extra_data)
 
     @staticmethod
     def _decode_connection(data: Any, path: str) -> CanvasConnection:
-        """解码一条 Element Connection。"""
+        """解码一条 Element Connection，并保留前端新增的未知字段。"""
         if not isinstance(data, dict):
             raise CanvasProtocolError("INVALID_CONNECTION", f"{path} must be an object.")
-        if set(data) != {"id", "sourceElementId", "targetElementId"}:
-            raise CanvasProtocolError("INVALID_CONNECTION", f"{path} contains unsupported fields.")
         values = (data.get("id"), data.get("sourceElementId"), data.get("targetElementId"))
         if not all(isinstance(value, str) and value for value in values):
             raise CanvasProtocolError("INVALID_CONNECTION", f"{path} contains invalid identifiers.")
-        return CanvasConnection(*values)
+        extra_data = {
+            key: deepcopy(value)
+            for key, value in data.items()
+            if key not in {"id", "sourceElementId", "targetElementId"}
+        }
+        return CanvasConnection(*values, extra_data=extra_data)

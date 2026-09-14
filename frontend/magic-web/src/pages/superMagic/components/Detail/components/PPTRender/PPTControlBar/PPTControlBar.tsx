@@ -9,6 +9,7 @@ import {
 	RotateCcw,
 	Minus,
 	Plus,
+	LayoutTemplate,
 } from "lucide-react"
 import type { PPTControlBarProps } from "./types"
 import { cn } from "@/utils/cn"
@@ -27,6 +28,7 @@ export function PPTControlBar({
 	onRefreshSlides,
 	onJumpToPage,
 	onToggleFullscreen,
+	onReplaceTemplate,
 	scaleRatio,
 	onScaleChange,
 	onResetScale,
@@ -305,6 +307,33 @@ export function PPTControlBar({
 									onClick={onResetScale}
 								>
 									<RotateCcw className="h-4 w-4" />
+								</Button>
+							</span>
+						</MagicTooltip>
+					</div>
+				)}
+
+				{!isMobile && onReplaceTemplate && (
+					<div
+						data-testid="ppt-control-bar-template-group"
+						className="ml-1 flex items-center gap-1 border-l border-border/60 pl-2 dark:border-white/[0.08]"
+					>
+						<MagicTooltip title={t("ppt.templateReplacement.button")}>
+							<span>
+								<Button
+									variant="ghost"
+									size="sm"
+									data-testid="ppt-control-bar-template-button"
+									className="h-7 gap-1.5 px-2 text-xs font-normal text-foreground"
+									onClick={(e) => {
+										e.stopPropagation()
+										e.currentTarget.blur()
+										onReplaceTemplate()
+									}}
+									aria-label={t("ppt.templateReplacement.button")}
+								>
+									<LayoutTemplate className="h-4 w-4" />
+									<span>{t("ppt.templateReplacement.button")}</span>
 								</Button>
 							</span>
 						</MagicTooltip>

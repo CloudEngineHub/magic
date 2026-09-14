@@ -139,6 +139,61 @@ describe("slides template structure adapter", () => {
 		})
 	})
 
+	it("duplicates a slide and copies its content and manifest metadata", async () => {
+		mocks.createFile.mockResolvedValue({ file_id: "slide-copy", file_name: "slide-1 (1).html" })
+		mocks.getFileContentById.mockResolvedValue("<html>original</html>")
+		const adapter = createSlidesTemplateStructureAdapter({
+			project: createProject(),
+			projectId: "project-1",
+		})
+
+		const result = await adapter.duplicate({
+			slidePath: "slides/slide-1.html",
+			position: 0,
+		})
+
+		expect(result).toEqual({
+			filePath: "slides/slide-1 (1).html",
+			fileId: "slide-copy",
+			content: "<html>original</html>",
+		})
+		expect(mocks.createFile).toHaveBeenCalledWith({
+			project_id: "project-1",
+			parent_id: "slides-dir",
+			file_name: "slide-1 (1).html",
+			is_directory: false,
+		})
+		expect(mocks.saveFileContent).toHaveBeenNthCalledWith(1, [
+			{ file_id: "slide-copy", content: "<html>original</html>", enable_shadow: true },
+		])
+		expect(getSavedManifest().slides).toEqual([
+			{ file: "slides/slide-1.html", title: "One", layout: "cover", description: "First" },
+			{
+				file: "slides/slide-1 (1).html",
+				title: "One",
+				layout: "cover",
+				description: "First",
+			},
+			{ file: "slides/slide-2.html", title: "Two", layout: "content", description: "Second" },
+		])
+	})
+
+	it("cleans up the copied template file when manifest persistence fails", async () => {
+		mocks.createFile.mockResolvedValue({ file_id: "slide-copy", file_name: "slide-1 (1).html" })
+		mocks.saveFileContent
+			.mockResolvedValueOnce({})
+			.mockRejectedValueOnce(new Error("save failed"))
+		const adapter = createSlidesTemplateStructureAdapter({
+			project: createProject(),
+			projectId: "project-1",
+		})
+
+		await expect(
+			adapter.duplicate({ slidePath: "slides/slide-1.html", position: 0 }),
+		).rejects.toThrow("save failed")
+		expect(mocks.deleteFile).toHaveBeenCalledWith("slide-copy")
+	})
+
 	it("renames the HTML file first and then updates the manifest path", async () => {
 		const adapter = createSlidesTemplateStructureAdapter({ project: createProject() })
 

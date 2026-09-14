@@ -1979,7 +1979,13 @@ export class PPTStore {
 	}
 
 	async updateSlideContent(index: number, content: string): Promise<string> {
-		const processedContent = await this.processorService.processSlide(content, index)
+		const slide = this.slides[index]
+		const relativeFilePath = this.getRelativeFilePathByFileId(this.getSlideFileId(slide))
+		const processedContent = await this.processorService.processSlide(
+			content,
+			index,
+			relativeFilePath,
+		)
 		// Save both raw and processed content
 		this.slideManager.updateSlideItem(index, {
 			rawContent: content,
@@ -2721,9 +2727,10 @@ export class PPTStore {
 	 * Restore cached activeIndex from storage
 	 * 从存储中恢复缓存的 activeIndex
 	 */
-	async restoreCachedActiveIndex(): Promise<void> {
+	async restoreCachedActiveIndex(options: { shouldApply?: () => boolean } = {}): Promise<void> {
 		try {
 			const cachedIndex = await this.cacheManager.restoreActiveIndex()
+			if (options.shouldApply && !options.shouldApply()) return
 			if (cachedIndex !== null && cachedIndex >= 0 && cachedIndex < this.slides.length) {
 				this.logger.debug("Restoring cached activeIndex", {
 					operation: "restoreCachedActiveIndex",

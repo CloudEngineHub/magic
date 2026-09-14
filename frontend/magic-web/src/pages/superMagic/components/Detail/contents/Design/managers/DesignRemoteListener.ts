@@ -17,7 +17,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
 import type { SeqResponse } from "@/types/request"
 import type { DesignData } from "../types"
-import type { DesignProjectManagerOptions } from "./types"
+import { resolveDesignAccessMode, type DesignProjectManagerOptions } from "./types"
 import { isSameDesignProjectPath } from "../utils/toolDesignProjectInfo"
 import {
 	registerWaitForNextAttachmentsRefreshForProject,
@@ -32,6 +32,7 @@ import { resolveDesignCanvasResourceReference } from "../utils/designResourceRef
 import { SuperMagicApi } from "@/apis"
 import { loadDesignDataToRuntime } from "../utils/designDataLoader"
 import type { LoadDesignDataToRuntimeResult } from "../utils/designDataLoader"
+import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
 
 const DESIGN_ELEMENT_TOOL_NAMES = [
 	// "create_canvas_element",
@@ -191,6 +192,8 @@ export type CheckRemoteUpdateFn = () => Promise<{
 }>
 
 export interface DesignRemoteListenerOptions extends DesignProjectManagerOptions {
+	/** Current lifecycle mode resolved by the Design state owner. */
+	getAccessMode?: () => CanvasAccessMode
 	getMagicProjectJsFileId: () => string | null
 	getIsViewingHistory: () => boolean
 	getDesignDataName: () => string
@@ -230,6 +233,14 @@ export class DesignRemoteListener {
 		this.options = options
 		this.projectKey = this.getProjectKey(options)
 		this.initializeMagicProjectJsUpdatedAtFromOptions()
+	}
+
+	private getAccessMode(): CanvasAccessMode {
+		return (
+			this.options.getAccessMode?.() ??
+			this.options.accessMode ??
+			resolveDesignAccessMode(this.options)
+		)
 	}
 
 	updateOptions(options: Partial<DesignRemoteListenerOptions>) {
@@ -779,7 +790,7 @@ export class DesignRemoteListener {
 		const isLatestApply = () => this.isMounted && this.latestRemoteApplyToken === applyToken
 
 		if (this.options.getIsViewingHistory()) {
-			if (this.options.isShareRoute) return
+			if (this.getAccessMode() === "share") return
 
 			try {
 				await this.options.fetchAndSetVersions()
@@ -798,7 +809,7 @@ export class DesignRemoteListener {
 			if (!isLatestApply()) return
 		}
 
-		if (!options?.refreshVersionsAfterApply || this.options.isShareRoute) return
+		if (!options?.refreshVersionsAfterApply || this.getAccessMode() === "share") return
 
 		try {
 			await this.options.fetchAndSetVersions()
@@ -821,7 +832,7 @@ export class DesignRemoteListener {
 	}
 
 	private async fetchLatestMagicProjectJsVersion(): Promise<number | null> {
-		if (this.options.isShareRoute) return null
+		if (this.getAccessMode() === "share") return null
 		const fid = this.options.getMagicProjectJsFileId()
 		if (!fid) return null
 
@@ -868,7 +879,7 @@ export class DesignRemoteListener {
 				return
 			}
 			if (this.options.getIsViewingHistory()) {
-				if (!this.options.isShareRoute) {
+				if (this.getAccessMode() !== "share") {
 					void this.options.fetchAndSetVersions().catch(() => undefined)
 				}
 				this.debounceTimer = null

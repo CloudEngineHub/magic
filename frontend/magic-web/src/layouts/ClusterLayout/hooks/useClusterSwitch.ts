@@ -15,6 +15,7 @@ import { RouteName } from "@/routes/constants"
 import { omit } from "lodash-es"
 import { whiteListRoutes } from "@/routes/const/whiteRoutes"
 import { refreshAccountContextPage } from "@/broadcastChannel/eventFactory/accountContextRefresh"
+import { defaultClusterCode } from "@/routes/helpers"
 
 const clusterConfigLoadedCache = new Set<string>()
 
@@ -45,8 +46,11 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 
 	// 使用 useMemo 避免不必要的初始状态计算
 	const initialSameCluster = useMemo(
-		() => targetClusterCode === configStore.cluster.clusterCode,
-		[targetClusterCode],
+		() => {
+			const code = configStore.cluster.clusterCode === defaultClusterCode ? "" : configStore.cluster.clusterCode
+			return targetClusterCode === code
+		},
+		[targetClusterCode, configStore.cluster.clusterCode],
 	)
 
 	// 预先检查是否为白名单路由（只在 mount 时计算一次）
@@ -69,7 +73,9 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 	const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
 	// 查找匹配的账号（使用 useMemo 缓存）
-	const matchedAccount = useMemo(() => findMatchedAccount(targetClusterCode), [targetClusterCode])
+	const matchedAccount = useMemo(() => {
+		return userStore.account.accounts.find((account) => account.deployCode?.toLowerCase?.() === targetClusterCode?.toLowerCase?.())
+	}, [targetClusterCode, userStore.account.accounts])
 
 	// 稳定的错误处理函数
 	const handleError = useMemoizedFn((error: unknown) => {
@@ -177,8 +183,8 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 		abortControllerRef.current = abortController
 
 		// 快速判断：如果集群已匹配或在白名单中，立即执行（无需防抖）
-		const needsSwitch =
-			targetClusterCode !== configStore.cluster.clusterCode && !isWhiteListRoute
+		const code = configStore.cluster.clusterCode === defaultClusterCode ? "" : configStore.cluster.clusterCode
+		const needsSwitch = targetClusterCode !== code && !isWhiteListRoute
 
 		if (!needsSwitch) {
 			// 无需切换，立即执行
@@ -232,16 +238,6 @@ function isInWhiteList(pathname: string): boolean {
 
 	whiteListCheckCache.set(pathname, result)
 	return result
-}
-
-/**
- * 查找匹配的账号
- * 根据目标集群代码，在已登录账号中查找对应的账号
- */
-function findMatchedAccount(targetClusterCode: string) {
-	return userStore.account.accounts.find(
-		(account) => account.deployCode?.toLowerCase?.() === targetClusterCode?.toLowerCase?.(),
-	)
 }
 
 /**

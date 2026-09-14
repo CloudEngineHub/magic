@@ -9,6 +9,8 @@ ASR 音频合并服务时间配置
 - 任务清理时间
 """
 
+import os
+
 
 class AsrTimeConfig:
     """
@@ -62,6 +64,35 @@ class AsrTimeConfig:
     MAX_UNSTABLE_FILE_TIMEOUT: int = 30
 
     # ==================== FFmpeg 操作配置 ====================
+
+    OGG_REENCODE_BITRATE: str = os.getenv("ASR_OGG_REENCODE_BITRATE", "32k")
+    # finish 后等待分片可见/稳定的最长时间，WAV/Opus 统一使用。
+    FINISH_SHARD_TIMEOUT_SECONDS: int = int(
+        os.getenv("ASR_FINISH_SHARD_TIMEOUT_SECONDS", "300")
+    )
+    # 兼容已有调用方；新逻辑统一使用 FINISH_SHARD_TIMEOUT_SECONDS。
+    OPUS_FINISH_DEADLINE_TIMEOUT: int = FINISH_SHARD_TIMEOUT_SECONDS
+    FINISH_SHARD_POLL_INTERVAL_SECONDS: int = int(
+        os.getenv("ASR_FINISH_SHARD_POLL_INTERVAL_SECONDS", "5")
+    )
+    FINISH_SHARD_STABLE_SCAN_COUNT: int = int(
+        os.getenv("ASR_FINISH_SHARD_STABLE_SCAN_COUNT", "3")
+    )
+    # finish 超时后允许自动收敛的尾部分片最大缺失数
+    FINISH_MAX_TAIL_MISSING_SHARDS: int = int(
+        os.getenv("ASR_FINISH_MAX_TAIL_MISSING_SHARDS", "3")
+    )
+    OPUS_SHARD_SYNC_TIMEOUT: int = int(os.getenv("ASR_OPUS_SHARD_SYNC_TIMEOUT", "900"))
+    OPUS_STAGING_UPLOAD_TIMEOUT: int = int(
+        os.getenv("ASR_OPUS_STAGING_UPLOAD_TIMEOUT", "900")
+    )
+    OPUS_FINISH_FFMPEG_TIMEOUT: int = int(os.getenv("ASR_OPUS_FINISH_FFMPEG_TIMEOUT", "1800"))
+    OPUS_SHARD_SYNC_CONCURRENCY: int = int(
+        os.getenv("ASR_OPUS_SHARD_SYNC_CONCURRENCY", "32")
+    )
+    OPUS_SHARD_PROBE_CONCURRENCY: int = int(
+        os.getenv("ASR_OPUS_SHARD_PROBE_CONCURRENCY", "8")
+    )
 
     # FFmpeg 命令超时时间：执行 FFmpeg 合并命令的最大等待时间
     # 默认 300 秒（5分钟）

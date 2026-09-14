@@ -85,6 +85,8 @@ export interface ProjectAttachmentsLoaderOptions {
 	threshold?: number
 	pageSize?: number
 	signal?: AbortSignal
+	/** 仅调用方明确传入时覆盖全局请求错误提示策略。 */
+	enableErrorMessagePrompt?: boolean
 	onBatchSnapshot?: (payload: ProjectAttachmentsBatchSnapshotPayload) => void
 	/**
 	 * Keep is_hidden files in the processed tree/list for path lookup.
@@ -111,7 +113,7 @@ const DEFAULT_THRESHOLD = 0
 const DEFAULT_PAGE_SIZE = 1000
 const MIDDLE_BATCH_SNAPSHOT_MIN_GAP_MS = 2500
 const MIDDLE_BATCH_SNAPSHOT_IDLE_TIMEOUT_MS = 1200
-const FILE_TYPES = ["user_upload", "process", "system_auto_upload", "directory"]
+const FILE_TYPES = ["user_upload", "user_create", "process", "system_auto_upload", "directory"]
 
 type WindowWithIdleCallback = Window & {
 	requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
@@ -385,6 +387,7 @@ async function loadAttachmentsViaV1(params: {
 	rawTotal?: number
 	fallbackReason?: ProjectAttachmentsFallbackReason
 	signal?: AbortSignal
+	enableErrorMessagePrompt?: boolean
 }): Promise<ProjectAttachmentsLoadResult> {
 	try {
 		throwIfAborted(params.signal)
@@ -394,7 +397,12 @@ async function loadAttachmentsViaV1(params: {
 				scope: params.scope,
 				temporaryToken: params.temporaryToken,
 			},
-			{ signal: params.signal },
+			{
+				signal: params.signal,
+				...(params.enableErrorMessagePrompt !== undefined
+					? { enableErrorMessagePrompt: params.enableErrorMessagePrompt }
+					: {}),
+			},
 		)
 		throwIfAborted(params.signal)
 		const processed = toProcessedResult(response)
@@ -426,6 +434,7 @@ async function loadAttachmentsViaV2(params: {
 	onBatchSnapshot?: ProjectAttachmentsLoaderOptions["onBatchSnapshot"]
 	signal?: AbortSignal
 	includeHidden?: boolean
+	enableErrorMessagePrompt?: boolean
 }): Promise<ProjectAttachmentsLoadResult> {
 	// V2 uses backend cursors for BFS paging; builder emits optional page snapshots.
 	const builder = createProjectAttachmentsV2Builder({
@@ -457,7 +466,12 @@ async function loadAttachmentsViaV2(params: {
 					fileType: FILE_TYPES,
 					temporaryToken: params.temporaryToken,
 				},
-				{ signal: params.signal },
+				{
+					signal: params.signal,
+					...(params.enableErrorMessagePrompt !== undefined
+						? { enableErrorMessagePrompt: params.enableErrorMessagePrompt }
+						: {}),
+				},
 			)
 			recordProjectAttachmentsV2PageFetch(pageFetchStartedAt, {
 				pageIndex,
@@ -573,6 +587,7 @@ export async function loadProjectAttachments(
 				strategy: "force_v1",
 				fallbackReason: "forced_v1",
 				signal: options.signal,
+				enableErrorMessagePrompt: options.enableErrorMessagePrompt,
 			}),
 		)
 	}
@@ -592,6 +607,7 @@ export async function loadProjectAttachments(
 				onBatchSnapshot: options.onBatchSnapshot,
 				signal: options.signal,
 				includeHidden: options.includeHidden,
+				enableErrorMessagePrompt: options.enableErrorMessagePrompt,
 			})
 		} catch (error) {
 			// Abort is normal on user switches; do not swallow it and fallback to V1.
@@ -615,6 +631,7 @@ export async function loadProjectAttachments(
 				rawTotal,
 				fallbackReason,
 				signal: options.signal,
+				enableErrorMessagePrompt: options.enableErrorMessagePrompt,
 			})
 		}
 	}
@@ -633,7 +650,12 @@ export async function loadProjectAttachments(
 				scope: options.scope,
 				temporaryToken,
 			},
-			{ signal: options.signal },
+			{
+				signal: options.signal,
+				...(options.enableErrorMessagePrompt !== undefined
+					? { enableErrorMessagePrompt: options.enableErrorMessagePrompt }
+					: {}),
+			},
 		)
 		throwIfAborted(options.signal)
 		rawTotal = Number(countResponse?.total || 0)
@@ -652,6 +674,7 @@ export async function loadProjectAttachments(
 				strategy: "fallback_v1",
 				fallbackReason: "count_failed",
 				signal: options.signal,
+				enableErrorMessagePrompt: options.enableErrorMessagePrompt,
 			}),
 		)
 	}
@@ -671,6 +694,7 @@ export async function loadProjectAttachments(
 			rawTotal,
 			fallbackReason: "count_below_threshold",
 			signal: options.signal,
+			enableErrorMessagePrompt: options.enableErrorMessagePrompt,
 		}),
 	)
 }

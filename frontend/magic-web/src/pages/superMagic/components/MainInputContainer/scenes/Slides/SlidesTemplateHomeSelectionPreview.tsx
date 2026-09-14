@@ -2,7 +2,6 @@ import { ImageIcon, MousePointerClick, X } from "lucide-react"
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import MagicDropdown from "@/components/base/MagicDropdown"
 import { cn } from "@/utils/cn"
 import { useResolvedTemplateColors } from "@/pages/superMagic/pages/SlidesTemplates/useResolvedTemplateColors"
 import {
@@ -17,6 +16,7 @@ import { isComplexField } from "../../panels/utils"
 import SlidesPresetPreviewDialog from "../../panels/slides-preset/SlidesPresetPreviewDialog"
 import { useFinePointerHover } from "../../panels/slides-preset/useFinePointerHover"
 import AIAutoSelectVisual from "./AIAutoSelectVisual"
+import SlidesTemplateSelectionDialog from "./SlidesTemplateSelectionDialog"
 
 interface SlidesTemplateHomeSelectionPreviewProps {
 	filters: FieldItem[]
@@ -53,6 +53,7 @@ export default function SlidesTemplateHomeSelectionPreview({
 	compactLayout = false,
 }: SlidesTemplateHomeSelectionPreviewProps) {
 	const { t } = useTranslation("crew/create")
+	const { t: tSuper } = useTranslation("super")
 	const lt = useLocaleText()
 	const templateName = template
 		? lt(template.label) || lt(template.value) || String(template.value)
@@ -137,24 +138,19 @@ export default function SlidesTemplateHomeSelectionPreview({
 		if (!onTemplatePickerContainerChange || !isTemplatePickerReady) return trigger
 
 		return (
-			<MagicDropdown
-				trigger={["click"]}
-				open={isTemplatePickerOpen}
-				onOpenChange={handleTemplatePickerOpenChange}
-				keepOpenOnNestedOverlay
-				contentRole="panel"
-				placement="topRight"
-				getPopupContainer={() => document.body}
-				popupRender={() => (
+			<>
+				{trigger}
+				<SlidesTemplateSelectionDialog
+					open={isTemplatePickerOpen}
+					title={tSuper("ppt.templateReplacement.title")}
+					onOpenChange={handleTemplatePickerOpenChange}
+				>
 					<div
 						ref={onTemplatePickerContainerChange}
 						className="flex h-full min-h-0 flex-col overflow-hidden"
 					/>
-				)}
-				overlayClassName="h-[min(70vh,640px)] w-[min(90vw,760px)] min-w-[360px] overflow-hidden rounded-lg border border-border bg-popover p-3 shadow-xl"
-			>
-				{trigger}
-			</MagicDropdown>
+				</SlidesTemplateSelectionDialog>
+			</>
 		)
 	}
 
@@ -244,13 +240,15 @@ export default function SlidesTemplateHomeSelectionPreview({
 									type="button"
 									className="h-7 rounded-md bg-white/95 px-2 text-xs font-medium text-neutral-900 shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
 									aria-label={t("playbook.edit.presets.form.replaceTemplate")}
-									onClick={
-										onTemplatePickerContainerChange
-											? undefined
-											: onClear
-												? handleClear
-												: undefined
-									}
+									aria-haspopup="dialog"
+									aria-expanded={isTemplatePickerOpen}
+									onClick={() => {
+										if (onTemplatePickerContainerChange) {
+											setTemplatePickerOpen(true)
+											return
+										}
+										handleClear()
+									}}
 									disabled={!onTemplatePickerContainerChange && !onClear}
 									data-testid="slides-template-home-replace-selected-template"
 								>
@@ -326,6 +324,13 @@ export default function SlidesTemplateHomeSelectionPreview({
 						compactLayout && "md:h-11 md:min-h-0",
 					)}
 					aria-label={t("playbook.edit.presets.title")}
+					aria-haspopup="dialog"
+					aria-expanded={isTemplatePickerOpen}
+					onClick={
+						onTemplatePickerContainerChange
+							? () => setTemplatePickerOpen(true)
+							: undefined
+					}
 					data-testid="slides-template-home-choose-template"
 				>
 					<AIAutoSelectVisual />

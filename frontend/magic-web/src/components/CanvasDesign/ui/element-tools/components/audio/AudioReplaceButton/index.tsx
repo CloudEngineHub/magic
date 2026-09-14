@@ -49,7 +49,13 @@ export default function AudioReplaceButton() {
 	)
 
 	const handleReplace = (event: MouseEvent<HTMLDivElement>) => {
-		if (!canvas || canvas.readonly || !selectedAudio || isReplacementBusy) return
+		if (
+			!canvas ||
+			!canvas.permissionManager.can("document.write") ||
+			!selectedAudio ||
+			isReplacementBusy
+		)
+			return
 		if (tool) {
 			if (tool.visibility !== "visible") return
 			void tool.execute?.({
@@ -80,7 +86,12 @@ export default function AudioReplaceButton() {
 			onClick={handleReplace}
 			className={styles.imageCropButton}
 			title={label}
-			disabled={!canvas || canvas.readonly || !selectedAudio || isReplacementBusy}
+			disabled={
+				!canvas ||
+				!canvas.permissionManager.can("document.write") ||
+				!selectedAudio ||
+				isReplacementBusy
+			}
 		>
 			<RefreshCw size={16} />
 			<span className={styles.buttonText}>{label}</span>

@@ -111,7 +111,12 @@ describe("share MessageList", () => {
 			<MessageList
 				topicId="share-topic"
 				messageList={[
-					{ app_message_id: "user-1", super_message_id: "user-1", role: "user", content: "q" },
+					{
+						app_message_id: "user-1",
+						super_message_id: "user-1",
+						role: "user",
+						content: "q",
+					},
 				]}
 				onSelectDetail={vi.fn()}
 				currentTopicStatus={TaskStatus.RUNNING}

@@ -1,3 +1,26 @@
+import MarkdownIt from "markdown-it"
+import {
+	parseCanonicalWorkspaceHref,
+	parseMarkdownFileHref,
+	type MarkdownFileTarget,
+} from "./markdownFileReference"
+
+export {
+	classifyMarkdownFileHref,
+	createCanonicalWorkspaceHref,
+	createReferencedProjectHref,
+	getReferencedProjectMountBasePath,
+	isMarkdownFileHrefCandidate,
+	isReferencedProjectHrefCandidate,
+	isWorkspaceHrefCandidate,
+	normalizeWorkspacePathForComparison,
+	normalizeWorkspaceRelativePath,
+	parseCanonicalWorkspaceHref,
+	parseMarkdownFileHref,
+	parseReferencedProjectHref,
+	type MarkdownFileTarget,
+} from "./markdownFileReference"
+
 export const FILE_PATH_MENTION_PREFIX = "[@file_path:"
 
 export interface FilePathMentionMatch {
@@ -5,6 +28,218 @@ export interface FilePathMentionMatch {
 	startIndex: number
 	endIndex: number
 	fullMatch: string
+}
+
+export interface WorkspaceMarkdownLinkMatch extends FilePathMentionMatch {
+	label: string
+	href: string
+}
+
+export interface WorkspaceFileReferenceMatch extends FilePathMentionMatch {
+	source: "markdown" | "legacy"
+	label?: string
+	href?: string
+}
+
+export interface MarkdownFileLinkMatch extends FilePathMentionMatch {
+	label: string
+	href: string
+	target: MarkdownFileTarget
+}
+
+export function escapeMarkdownLinkLabel(label: string): string {
+	return label
+		.replace(/\s+/g, " ")
+		.trim()
+		.replace(/[\\[\]]/g, "\\$&")
+}
+
+export function escapeHtmlText(value: string): string {
+	return value.replace(/[&<>"']/g, (char) => {
+		const entities: Record<string, string> = {
+			"&": "&amp;",
+			"<": "&lt;",
+			">": "&gt;",
+			'"': "&quot;",
+			"'": "&#39;",
+		}
+		return entities[char]
+	})
+}
+
+const markdownLinkParser = new MarkdownIt({ html: false, linkify: false })
+
+interface MarkdownLinkSyntaxMatch {
+	label: string
+	href: string
+	startIndex: number
+	endIndex: number
+	fullMatch: string
+}
+
+function parseMarkdownLinkSyntaxAt(
+	content: string,
+	startIndex: number,
+): MarkdownLinkSyntaxMatch | null {
+	if (content[startIndex] !== "[" || content[startIndex - 1] === "!") return null
+
+	let index = startIndex + 1
+	let labelEnd = -1
+	let labelDepth = 0
+	while (index < content.length) {
+		if (content[index] === "\\") {
+			index += 2
+			continue
+		}
+		if (content[index] === "[") labelDepth++
+		if (content[index] === "]") {
+			if (labelDepth === 0) {
+				labelEnd = index
+				break
+			}
+			labelDepth--
+		}
+		index++
+	}
+	if (labelEnd === -1 || content[labelEnd + 1] !== "(") return null
+
+	index = labelEnd + 2
+	while (/[ \t\r\n]/.test(content[index] || "")) index++
+	// 复用 Markdown 语法规则，只记录原文区间，不重新序列化正文。
+	const destination = markdownLinkParser.helpers.parseLinkDestination(
+		content,
+		index,
+		content.length,
+	)
+	if (!destination.ok) return null
+	index = destination.pos
+	const destinationEnd = index
+	while (/[ \t\r\n]/.test(content[index] || "")) index++
+	if (index > destinationEnd && content[index] !== ")") {
+		const title = markdownLinkParser.helpers.parseLinkTitle(content, index, content.length)
+		if (!title.ok) return null
+		index = title.pos
+		while (/[ \t\r\n]/.test(content[index] || "")) index++
+	}
+	if (content[index] !== ")") return null
+
+	const endIndex = index + 1
+	return {
+		label: markdownLinkParser.utils.unescapeAll(content.slice(startIndex + 1, labelEnd)),
+		href: destination.str,
+		startIndex,
+		endIndex,
+		fullMatch: content.slice(startIndex, endIndex),
+	}
+}
+
+function parseWorkspaceMarkdownLinkAt(
+	content: string,
+	startIndex: number,
+): WorkspaceMarkdownLinkMatch | null {
+	const syntax = parseMarkdownLinkSyntaxAt(content, startIndex)
+	if (!syntax) return null
+
+	const path = parseCanonicalWorkspaceHref(syntax.href)
+	return path ? { ...syntax, path } : null
+}
+
+function parseMarkdownFileLinkAt(
+	content: string,
+	startIndex: number,
+): MarkdownFileLinkMatch | null {
+	const syntax = parseMarkdownLinkSyntaxAt(content, startIndex)
+	if (!syntax) return null
+
+	const target = parseMarkdownFileHref(syntax.href)
+	return target ? { ...syntax, path: target.relativePath, target } : null
+}
+
+function readFenceMarker(
+	content: string,
+	index: number,
+): { marker: string; endIndex: number } | null {
+	const lineStart = index === 0 || content[index - 1] === "\n"
+	if (!lineStart) return null
+
+	let cursor = index
+	let leadingSpaces = 0
+	while (content[cursor] === " " && leadingSpaces < 3) {
+		cursor++
+		leadingSpaces++
+	}
+
+	const markerChar = content[cursor]
+	if (markerChar !== "`" && markerChar !== "~") return null
+
+	let markerEnd = cursor
+	while (content[markerEnd] === markerChar) markerEnd++
+	if (markerEnd - cursor < 3) return null
+
+	return { marker: content.slice(cursor, markerEnd), endIndex: markerEnd }
+}
+
+function extractMarkdownLinks<T extends FilePathMentionMatch>(
+	content: string,
+	parseLinkAt: (content: string, startIndex: number) => T | null,
+): T[] {
+	if (!content.includes("](")) return []
+
+	const matches: T[] = []
+	let index = 0
+	let fenceMarker = ""
+
+	while (index < content.length) {
+		const fence = readFenceMarker(content, index)
+		if (fence && (!fenceMarker || fence.marker[0] === fenceMarker[0])) {
+			if (!fenceMarker) {
+				fenceMarker = fence.marker
+			} else if (fence.marker.length >= fenceMarker.length) {
+				fenceMarker = ""
+			}
+			index = fence.endIndex
+			continue
+		}
+
+		if (fenceMarker) {
+			index++
+			continue
+		}
+
+		if (content[index] === "`") {
+			let runEnd = index
+			while (content[runEnd] === "`") runEnd++
+			const marker = content.slice(index, runEnd)
+			const closeIndex = content.indexOf(marker, runEnd)
+			index = closeIndex === -1 ? runEnd : closeIndex + marker.length
+			continue
+		}
+
+		if (content[index] === "[") {
+			const match = parseLinkAt(content, index)
+			if (match) {
+				matches.push(match)
+				index = match.endIndex
+				continue
+			}
+		}
+		if (content[index] === "\\") {
+			index += 2
+			continue
+		}
+
+		index++
+	}
+
+	return matches
+}
+
+export function extractWorkspaceMarkdownLinks(content: string): WorkspaceMarkdownLinkMatch[] {
+	return extractMarkdownLinks(content, parseWorkspaceMarkdownLinkAt)
+}
+
+export function extractMarkdownFileLinks(content: string): MarkdownFileLinkMatch[] {
+	return extractMarkdownLinks(content, parseMarkdownFileLinkAt)
 }
 
 function parseQuotedFilePath(
@@ -157,6 +392,19 @@ export function extractFilePathMentions(content: string): FilePathMentionMatch[]
 	return matches
 }
 
+export function extractWorkspaceFileReferences(content: string): WorkspaceFileReferenceMatch[] {
+	const markdownMatches: WorkspaceFileReferenceMatch[] = extractWorkspaceMarkdownLinks(
+		content,
+	).map((match) => ({ ...match, source: "markdown" }))
+	const legacyMatches: WorkspaceFileReferenceMatch[] = extractFilePathMentions(content).map(
+		(match) => ({ ...match, source: "legacy" }),
+	)
+
+	return [...markdownMatches, ...legacyMatches].sort(
+		(first, second) => first.startIndex - second.startIndex,
+	)
+}
+
 export function replaceFilePathMentions(
 	content: string,
 	replacer: (path: string, match: FilePathMentionMatch) => string,
@@ -174,5 +422,49 @@ export function replaceFilePathMentions(
 	}
 
 	result += content.slice(lastIndex)
+	return result
+}
+
+export function replaceFilePathMentionsOutsideFencedCode(
+	content: string,
+	replacer: (path: string, match: FilePathMentionMatch) => string,
+): string {
+	const lines = content.split(/(\r?\n)/)
+	let fenceCharacter: "`" | "~" | null = null
+	let fenceLength = 0
+	let outsideBuffer = ""
+	let result = ""
+
+	const flushOutsideBuffer = () => {
+		if (!outsideBuffer) return
+		result += replaceFilePathMentions(outsideBuffer, replacer)
+		outsideBuffer = ""
+	}
+
+	for (const line of lines) {
+		const fenceMatch = line.match(/^(?: {0,3})(`{3,}|~{3,})/)
+		if (fenceMatch) {
+			flushOutsideBuffer()
+			const marker = fenceMatch[1]
+			const markerCharacter = marker[0] as "`" | "~"
+			if (!fenceCharacter) {
+				fenceCharacter = markerCharacter
+				fenceLength = marker.length
+			} else if (markerCharacter === fenceCharacter && marker.length >= fenceLength) {
+				fenceCharacter = null
+				fenceLength = 0
+			}
+			result += line
+			continue
+		}
+
+		if (fenceCharacter) {
+			result += line
+		} else {
+			outsideBuffer += line
+		}
+	}
+
+	flushOutsideBuffer()
 	return result
 }

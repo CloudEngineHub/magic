@@ -1,5 +1,6 @@
 import { memo, useCallback, type MouseEvent } from "react"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
+import TSIcon from "@/components/base/TSIcon"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import {
 	getMentionDescription,
@@ -33,6 +34,11 @@ import {
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { getCanvasMarkerMentionImagePath } from "@/components/business/MentionPanel/utils/canvasMarkerMention"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
+import { ProjectDirectoryMentionIcon } from "@/pages/superMagic/components/MessageEditor/components/MentionNodes/folder/ProjectDirectoryMentionIcon"
+import {
+	FileReference,
+	getFileExtensionFromPath,
+} from "@/pages/superMagic/components/MessageList/components/Text/components/Markdown/parser/FileReference"
 
 interface InlineMentionProps {
 	data: TiptapMentionAttributes
@@ -47,7 +53,13 @@ function InlineMarkerMention(props: InlineMentionProps) {
 	const { data, markerClickScene = "messageList", messageContent, projectFilesStore } = props
 
 	return (
-		<span className="magic-marker-mention inline-flex align-bottom">
+		<span
+			className="magic-marker-mention inline-flex cursor-grab select-none align-bottom active:cursor-grabbing"
+			draggable={false}
+			data-magic-editor-node
+			data-magic-node-type="mention"
+			data-magic-node-attrs={JSON.stringify(data)}
+		>
 			<MarkerAtItem
 				data={data}
 				markerClickScene={markerClickScene}
@@ -168,7 +180,112 @@ function InlineDefaultMention(props: InlineMentionProps) {
 
 	const isDirectory =
 		data.type === MentionItemType.FOLDER || data.type === MentionItemType.MEMORY_DIRECTORY
-	const label = isDirectory ? `@${displayName}/` : `@${displayName}`
+	const label = `@${displayName}`
+	const filePath =
+		fileData?.relative_file_path || fileData?.file_path || fileData?.file_name || ""
+	const fileLabel = fileData?.file_name || displayName
+	// 历史消息可能没存 project_id；只补来源项目，不能用接收输入框的项目替代。
+	const projectData =
+		data.type === MentionItemType.PROJECT_FILE || data.type === MentionItemType.FOLDER
+			? (data.data as ProjectFileMentionData | DirectoryMentionData)
+			: null
+	const dragAttrs = projectData
+		? {
+				...data,
+				data: {
+					...projectData,
+					project_id:
+						projectData.project_id ||
+						projectData.source_project_id ||
+						projectFilesStore?.currentSelectedProject?.id,
+				},
+			}
+		: data
+	const dragSourceProps = {
+		draggable: false as const,
+		"data-magic-editor-node": true as const,
+		"data-magic-node-type": "mention",
+		"data-magic-node-attrs": JSON.stringify(dragAttrs),
+	}
+	const fileVisual = isFileMention ? (
+		shouldRenderIcon && fileData ? (
+			<span
+				className={cn(
+					"magic-mention select-none",
+					"!inline-flex items-center gap-1 !align-middle",
+				)}
+				data-type={data.type}
+				data-data={JSON.stringify(data.data)}
+				{...dragSourceProps}
+				onMouseDown={(event) => event.preventDefault()}
+				onClick={handleClick}
+			>
+				<span className="flex shrink-0 items-center" data-testid="inline-file-mention-icon">
+					<MentionMediaIcon
+						type={
+							data.type as
+								| typeof MentionItemType.PROJECT_FILE
+								| typeof MentionItemType.UPLOAD_FILE
+						}
+						data={fileData}
+						size={16}
+						mediaSource={mediaSource}
+					/>
+				</span>
+				<span className="min-w-0 truncate" title={fileLabel}>
+					{fileLabel}
+				</span>
+			</span>
+		) : (
+			<span
+				className="magic-mention !inline-flex max-w-full select-none !overflow-visible !rounded-none !bg-transparent !p-0 !align-middle"
+				data-type={data.type}
+				data-data={JSON.stringify(data.data)}
+				{...dragSourceProps}
+				onMouseDown={(event) => event.preventDefault()}
+			>
+				<FileReference
+					label={fileLabel}
+					fileType={fileData?.file_extension || getFileExtensionFromPath(filePath)}
+					title={fileLabel}
+					onClick={handleClick}
+				/>
+			</span>
+		)
+	) : isDirectory ? (
+		<span
+			className="magic-mention !inline-flex select-none items-center gap-1 !align-middle"
+			data-type={data.type}
+			data-data={JSON.stringify(data.data)}
+			{...dragSourceProps}
+			onMouseDown={(event) => event.preventDefault()}
+			onClick={handleClick}
+		>
+			{data.type === MentionItemType.FOLDER ? (
+				<ProjectDirectoryMentionIcon
+					data={data.data as DirectoryMentionData}
+					workspaceFilesList={projectFilesStore?.workspaceFilesList ?? []}
+					size={16}
+				/>
+			) : (
+				<TSIcon type="ts-folder" size="16" className="shrink-0" />
+			)}
+			<span className="min-w-0 truncate" title={displayName}>
+				{displayName}
+			</span>
+		</span>
+	) : (
+		<span
+			className="magic-mention select-none"
+			data-type={data.type}
+			data-data={JSON.stringify(data.data)}
+			{...dragSourceProps}
+			onMouseDown={(event) => event.preventDefault()}
+			onClick={handleClick}
+		>
+			{label}
+		</span>
+	)
 
 	return (
 		<MentionTooltipWrapper
@@ -182,34 +299,7 @@ function InlineDefaultMention(props: InlineMentionProps) {
 			mediaSource={mediaSource}
 			fileMentionRenderConfig={fileMentionRenderConfig}
 		>
-			<span
-				className={cn(
-					"magic-mention",
-					shouldRenderIcon && "!inline-flex items-center gap-1 !align-middle",
-				)}
-				data-type={data.type}
-				data-data={JSON.stringify(data.data)}
-				onMouseDown={(event) => event.preventDefault()}
-				onClick={handleClick}
-			>
-				{shouldRenderIcon && fileData ? (
-					<span
-						className="flex shrink-0 items-center"
-						data-testid="inline-file-mention-icon"
-					>
-						<MentionMediaIcon
-							type={
-								data.type as
-									MentionItemType.PROJECT_FILE | MentionItemType.UPLOAD_FILE
-							}
-							data={fileData}
-							size={16}
-							mediaSource={mediaSource}
-						/>
-					</span>
-				) : null}
-				{label}
-			</span>
+			{fileVisual}
 		</MentionTooltipWrapper>
 	)
 }

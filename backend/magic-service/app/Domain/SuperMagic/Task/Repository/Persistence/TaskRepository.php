@@ -39,6 +39,21 @@ class TaskRepository implements TaskRepositoryInterface
         return new TaskEntity($model->toArray());
     }
 
+    public function getTasksByIds(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+        if ($ids === []) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($this->model::query()->whereIn('id', $ids)->get() as $model) {
+            $entity = new TaskEntity($model->toArray());
+            $result[$entity->getId()] = $entity;
+        }
+        return $result;
+    }
+
     /**
      * 通过任务ID(沙箱服务返回的taskId)获取任务
      */

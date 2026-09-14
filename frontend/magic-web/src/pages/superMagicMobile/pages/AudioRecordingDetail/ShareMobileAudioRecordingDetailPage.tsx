@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import Logo from "@/layouts/BaseLayout/components/Header/components/Logo"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { useShareRecordingDetailData } from "@/pages/superMagic/pages/AudioRecordings/hooks/useShareRecordingDetailData"
+import { hasConfiguredRecordingFile } from "@/pages/superMagic/pages/AudioRecordings/utils/recording-detail-files"
 import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
 import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
 import { downloadRecordingAudioFile } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-audio"
@@ -235,6 +236,10 @@ export default function ShareMobileAudioRecordingDetailPage({
 						onSeek={(seconds) => player.seekTo(seconds)}
 						searchScopeRef={searchScopeRef}
 						onActiveTabChange={setSourceSubtab}
+						showNotesTab={
+							hasConfiguredRecordingFile(fileMap, "notes") &&
+							Boolean(fileMap?.notes?.file_id)
+						}
 					/>
 				) : (
 					<MobileRecordingSummaryPanel

@@ -3,7 +3,14 @@ import XMarkdown, {
 	type XMarkdownProps,
 } from "@ant-design/x-markdown"
 import { QRCode } from "antd"
-import { memo, useMemo, useRef, type MutableRefObject, type ReactElement } from "react"
+import {
+	memo,
+	useMemo,
+	useRef,
+	type MutableRefObject,
+	type ReactElement,
+	type ReactNode,
+} from "react"
 import { preprocessMarkdown } from "@/pages/superMagic/utils/handleMarkDown"
 import type { CitationSource } from "@/pages/superMagic/utils/citations"
 import HtmlCodeBlockPreview from "./components/HtmlCodeBlockPreview"
@@ -26,6 +33,8 @@ import styles from "./index.module.css"
 import { CitationBadge } from "../../../Citations"
 import MarkdownCodeBlockToolbar from "./components/MarkdownCodeBlockToolbar"
 import { useCodeBlockWrapPreference } from "@/services/markdown/codeBlockWrapPreference"
+import { extractFilePathMentions } from "@/pages/superMagic/utils/filePathMention"
+import { copySelectedFileReferences } from "@/pages/superMagic/components/MessageList/utils/fileReferenceClipboard"
 
 const MARKDOWN_ALLOWED_URI_REGEXP =
 	/^(?:(?:https?|ftps?|mailto|tel|callto|sms|cid|xmpp|matrix|oa|oa-view|open-action|openaction):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i
@@ -50,6 +59,23 @@ const RAW_HTML_DECLARATION_PATTERN = /<![^>]*>/gi
 // 允许保留的项目自定义标签，避免它们在预处理阶段被误转义。
 const RAW_HTML_ALLOWED_CUSTOM_TAGS = new Set(["file-path", "citation", "references", "ref"])
 const QRCODE_FENCE_LANGUAGE = "qrcode"
+
+function renderLegacyFilePathCode(code: string): ReactNode {
+	const matches = extractFilePathMentions(code)
+	if (matches.length === 0) return code
+
+	const nodes: ReactNode[] = []
+	let lastIndex = 0
+	for (const match of matches) {
+		if (match.startIndex > lastIndex) {
+			nodes.push(code.slice(lastIndex, match.startIndex))
+		}
+		nodes.push(<FilePath key={`${match.startIndex}-${match.endIndex}`} path={match.path} />)
+		lastIndex = match.endIndex
+	}
+	if (lastIndex < code.length) nodes.push(code.slice(lastIndex))
+	return nodes
+}
 
 function isCodeLanguage(className: string | undefined, language: string): boolean {
 	if (!className) return false
@@ -281,7 +307,7 @@ export function useMarkdownComponent({
 								style={normalizedStyle}
 								title={typeof title === "string" ? title : undefined}
 							>
-								{children}
+								{renderLegacyFilePathCode(codeBlockInfo.code)}
 							</pre>
 						</div>
 					)
@@ -405,7 +431,12 @@ function MarkdownComponent({
 	})
 
 	return (
-		<div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} data-testid="on-mouse-enter">
+		<div
+			onMouseEnter={onMouseEnter}
+			onMouseLeave={onMouseLeave}
+			onCopy={copySelectedFileReferences}
+			data-testid="on-mouse-enter"
+		>
 			<XMarkdown
 				className={cn(
 					"!dark:text-white !text-sidebar-foreground",

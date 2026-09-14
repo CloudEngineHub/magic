@@ -10,7 +10,7 @@ import {
 } from "@/components/business/MentionPanel/types"
 import MarkerTooltip from "../../MentionNodes/marker"
 import { MentionTooltipContent } from "./MentionTooltipContent"
-import { MediaPreviewTooltip } from "@/components/base/MediaPreview"
+import { MediaPreviewTrigger, type MediaPreviewSource } from "@/components/base/MediaPreview"
 import {
 	useMentionMediaSource,
 	type MentionMediaSource,
@@ -93,24 +93,39 @@ export function MentionTooltipWrapper(props: MentionTooltipWrapperProps) {
 	}
 
 	const renderType = getFileMentionRenderType(mediaType)
+	const previewSource: MediaPreviewSource | null = mediaType
+		? (mediaSource as MediaPreviewSource)
+		: null
+	const shouldRenderMediaPreview =
+		mediaSource.isLoading ||
+		Boolean(
+			mediaSource.thumbnailUrl ||
+			mediaSource.thumbnailElement ||
+			mediaSource.previewUrl ||
+			mediaSource.poster ||
+			mediaSource.audioUrl,
+		) ||
+		mediaSource.hasError
 
-	if (mediaType && isFileMentionFeatureEnabled("tooltip", renderType, fileMentionRenderConfig)) {
+	if (
+		mediaType &&
+		isFileMentionFeatureEnabled("tooltip", renderType, fileMentionRenderConfig) &&
+		shouldRenderMediaPreview
+	) {
 		return (
-			<MediaPreviewTooltip
-				mediaType={mediaType}
+			<MediaPreviewTrigger
 				fileName={displayName || ""}
-				previewUrl={mediaSource.previewUrl}
-				audioUrl={mediaSource.audioUrl}
-				isLoading={mediaSource.isLoading}
-				hasError={
-					mediaSource.hasError || (!mediaSource.previewUrl && !mediaSource.isLoading)
-				}
-				errorMessage={t("common.fileUrlFetchFailed", "预览加载失败")}
-				closeLabel={t("common.close", "关闭")}
-				audioLabels={{
-					play: t("common.play", "播放"),
-					pause: t("common.pause", "暂停"),
-					progress: t("common.progress", "播放进度"),
+				source={previewSource}
+				fallback={children}
+				renderTrigger={() => children}
+				labels={{
+					errorMessage: t("common.fileNotFoundOrLoadFailed", "文件不存在或加载错误"),
+					audioLabels: {
+						play: t("common.play", "播放"),
+						pause: t("common.pause", "暂停"),
+						loading: t("common.loading", "加载中"),
+						progress: t("common.progress", "播放进度"),
+					},
 				}}
 				side={
 					placement?.startsWith("left")
@@ -121,9 +136,8 @@ export function MentionTooltipWrapper(props: MentionTooltipWrapperProps) {
 								? "bottom"
 								: "top"
 				}
-			>
-				{children}
-			</MediaPreviewTooltip>
+				enableTouchTrigger={false}
+			/>
 		)
 	}
 

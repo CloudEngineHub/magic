@@ -217,14 +217,11 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 						? dayjs(values.deadline).format("YYYY-MM-DD 23:59:59")
 						: "",
 					message_content: messageContent,
-					plugins:
-						mcpTempStorage.mcpList.length > 0
-							? {
-									servers: mcpTempStorage.mcpList.map((item) => ({
-										id: item.id,
-									})),
-								}
-							: undefined,
+					plugins: {
+						servers: mcpTempStorage.mcpList.map((item) => ({
+							id: item.id,
+						})),
+					},
 				})
 			} catch (error) {
 				const errorFields = (

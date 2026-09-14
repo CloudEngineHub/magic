@@ -154,7 +154,11 @@ function SlideSelectionDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] !max-w-[calc(100vw-2rem)] flex-col p-6 xl:!max-w-[1100px]">
+			<DialogContent
+				className="flex max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] !max-w-[calc(100vw-2rem)] flex-col p-6 xl:!max-w-[1100px]"
+				data-testid="slide-selection-dialog"
+				closeButtonTestId="slide-selection-dialog-close-button"
+			>
 				<DialogHeader>
 					<DialogTitle>{t("ppt.selectSlidesToExport")}</DialogTitle>
 					<DialogDescription>
@@ -171,6 +175,7 @@ function SlideSelectionDialog({
 						size="sm"
 						onClick={toggleSelectAll}
 						className="h-8 text-sm"
+						data-testid="slide-selection-dialog-select-all-button"
 					>
 						<Checkbox
 							checked={isAllSelected}
@@ -284,11 +289,16 @@ function SlideSelectionDialog({
 						value={exportFormat}
 						onValueChange={(value) => setExportFormat(value as ExportFormat)}
 						className="mt-2 flex flex-wrap gap-x-4 gap-y-2"
+						data-testid="slide-selection-dialog-format-group"
 					>
 						{supportPPT && (
 							<>
 								<div className="flex items-center space-x-2">
-									<RadioGroupItem value="pptx" id="format-pptx" />
+									<RadioGroupItem
+										value="pptx"
+										id="format-pptx"
+										data-testid="slide-selection-dialog-format-option-pptx"
+									/>
 									<Label
 										htmlFor="format-pptx"
 										className="flex cursor-pointer items-center gap-2 text-sm font-normal"
@@ -298,7 +308,11 @@ function SlideSelectionDialog({
 									</Label>
 								</div>
 								<div className="flex items-center space-x-2">
-									<RadioGroupItem value="ppt" id="format-ppt" />
+									<RadioGroupItem
+										value="ppt"
+										id="format-ppt"
+										data-testid="slide-selection-dialog-format-option-ppt"
+									/>
 									<Label
 										htmlFor="format-ppt"
 										className="flex cursor-pointer items-center gap-2 text-sm font-normal"
@@ -310,7 +324,11 @@ function SlideSelectionDialog({
 							</>
 						)}
 						<div className="flex items-center space-x-2">
-							<RadioGroupItem value="pdf" id="format-pdf" />
+							<RadioGroupItem
+								value="pdf"
+								id="format-pdf"
+								data-testid="slide-selection-dialog-format-option-pdf"
+							/>
 							<Label
 								htmlFor="format-pdf"
 								className="flex cursor-pointer items-center gap-2 text-sm font-normal"
@@ -320,7 +338,11 @@ function SlideSelectionDialog({
 							</Label>
 						</div>
 						<div className="flex items-center space-x-2">
-							<RadioGroupItem value="source" id="format-source" />
+							<RadioGroupItem
+								value="source"
+								id="format-source"
+								data-testid="slide-selection-dialog-format-option-source"
+							/>
 							<Label
 								htmlFor="format-source"
 								className="flex cursor-pointer items-center gap-2 text-sm font-normal"
@@ -330,7 +352,11 @@ function SlideSelectionDialog({
 							</Label>
 						</div>
 						<div className="flex items-center space-x-2">
-							<RadioGroupItem value="image_png" id="format-image-png" />
+							<RadioGroupItem
+								value="image_png"
+								id="format-image-png"
+								data-testid="slide-selection-dialog-format-option-image-png"
+							/>
 							<Label
 								htmlFor="format-image-png"
 								className="flex cursor-pointer items-center gap-2 text-sm font-normal"
@@ -340,7 +366,11 @@ function SlideSelectionDialog({
 							</Label>
 						</div>
 						<div className="flex items-center space-x-2">
-							<RadioGroupItem value="image_jpeg" id="format-image-jpeg" />
+							<RadioGroupItem
+								value="image_jpeg"
+								id="format-image-jpeg"
+								data-testid="slide-selection-dialog-format-option-image-jpeg"
+							/>
 							<Label
 								htmlFor="format-image-jpeg"
 								className="flex cursor-pointer items-center gap-2 text-sm font-normal"
@@ -353,12 +383,18 @@ function SlideSelectionDialog({
 				</div>
 
 				<DialogFooter>
-					<Button variant="outline" onClick={handleClose} disabled={isExporting}>
+					<Button
+						variant="outline"
+						onClick={handleClose}
+						disabled={isExporting}
+						data-testid="slide-selection-dialog-cancel-button"
+					>
 						{t("common.cancel")}
 					</Button>
 					<Button
 						onClick={handleConfirm}
 						disabled={selectedIds.size === 0 || isExporting}
+						data-testid="slide-selection-dialog-export-button"
 					>
 						{isExporting
 							? t("topicFiles.exporting")

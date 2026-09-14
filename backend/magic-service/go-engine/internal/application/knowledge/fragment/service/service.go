@@ -171,6 +171,15 @@ type fragmentAppSuperMagicAgentAccessChecker interface {
 	) (map[string]struct{}, error)
 }
 
+type fragmentAppSuperMagicAgentContextReader interface {
+	ListAccessibleContexts(
+		ctx context.Context,
+		organizationCode string,
+		userID string,
+		codes []string,
+	) (map[string]string, error)
+}
+
 type fragmentAppTeamshareTempCodeMapper interface {
 	LookupBusinessIDs(ctx context.Context, knowledgeCodes []string) (map[string]string, error)
 }

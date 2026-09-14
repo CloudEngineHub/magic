@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import MagicIcon from "@/components/base/MagicIcon"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import MagicEllipseWithTooltip from "@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip"
 import { CustomFolderMagicIcon } from "@/pages/superMagic/components/TopicFilesButton/components/CustomFolderMagicIcon"
 import { SlidesTemplateFolderIcon } from "@/pages/superMagic/components/TopicFilesButton/components/SlidesTemplateFolderIcon"
 import { isSlidesTemplateFolder } from "@/pages/superMagic/components/TopicFilesButton/utils/slides-template-folder"
@@ -62,7 +63,12 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 
 		const lowerSearch = searchValue.toLowerCase()
 		return attachments.filter((file) => {
-			const name = file.name || file.file_name || file.display_filename || ""
+			const name =
+				file.share_display_name ||
+				file.name ||
+				file.file_name ||
+				file.display_filename ||
+				""
 			return name.toLowerCase().includes(lowerSearch)
 		})
 	}, [attachments, searchValue])
@@ -656,16 +662,21 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 							)}
 						</div>
 
-						{/* File name */}
-						<div
+						{/* File name: show full name on hover when ellipsis truncates (PC) */}
+						<MagicEllipseWithTooltip
+							text={
+								item?.share_display_name ||
+								item?.name ||
+								item?.file_name ||
+								item?.display_filename
+							}
 							className={cx(
 								styles.fileName,
 								isMobile && styles.mobileFileName,
 								!fileSupported && "text-muted-foreground/50",
 							)}
-						>
-							{item?.name || item?.file_name}
-						</div>
+							placement="topLeft"
+						/>
 
 						{/* Default open file icon */}
 						{renderDefaultOpenIcon()}

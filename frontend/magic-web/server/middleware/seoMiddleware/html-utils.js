@@ -72,6 +72,26 @@ function cleanSEOString(str) {
 }
 
 /**
+ * 获取 HTML 模板中的 title 文本，用于没有 SEO 标题时的兜底。
+ * @param {string} html
+ * @returns {string}
+ */
+function getHtmlTitle(html) {
+	if (typeof html !== "string") return ""
+
+	const match = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)
+	if (!match) return ""
+
+	return match[1]
+		.trim()
+		.replace(/&amp;/g, "&")
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;/g, "'")
+}
+
+/**
  * 获取 favicon 的 MIME 类型
  * @param {string} faviconUrl
  * @returns {string}
@@ -181,6 +201,7 @@ function processHtmlContent(htmlTemplate, options) {
 	} = options
 
 	let html = htmlTemplate
+	const resolvedTitle = title || getHtmlTitle(htmlTemplate)
 
 	// 1. 替换 favicon（如果有）
 	if (favicon) {
@@ -223,11 +244,11 @@ function processHtmlContent(htmlTemplate, options) {
 	}
 
 	// 3. 构建 meta 标签（内部已经进行了转义）
-	const metaTags = buildMetaTags({ title, keywords, description, ogUrl })
+	const metaTags = buildMetaTags({ title: resolvedTitle, keywords, description, ogUrl })
 
 	// 4. 一次性替换所有内容（性能优化）
 	// ⚠️ title 需要转义，因为它会插入到 <title> 标签中
-	const safeTitle = escapeHtml(title)
+	const safeTitle = escapeHtml(resolvedTitle)
 	html = html
 		.replace(/<title>.*?<\/title>/i, `<title>${safeTitle}</title>`)
 		.replace("<!-- Meta -->", metaTags)
@@ -241,6 +262,7 @@ module.exports = {
 	escapeHtml,
 	escapeUrl,
 	cleanSEOString,
+	getHtmlTitle,
 	getFaviconMimeType,
 	getImageMimeType,
 	buildPreloadLink,

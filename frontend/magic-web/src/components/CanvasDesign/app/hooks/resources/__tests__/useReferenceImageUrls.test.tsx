@@ -41,10 +41,12 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("../../../providers/CanvasProvider", () => ({
 	useCanvas: () => ({ canvas: mocks.canvas }),
+	useOptionalCanvas: () => mocks.canvas,
 }))
 
 vi.mock("../../canvas", () => ({
 	useCanvasEvent: vi.fn(),
+	useCanvasEventWithInstance: vi.fn(),
 }))
 
 describe("useReferenceImageUrls", () => {

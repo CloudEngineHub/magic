@@ -18,9 +18,16 @@ import type { LoadedVideoResource } from "../resources/video/VideoResourceManage
 import type { ResourceLoadFailureReason } from "../resources/media-common/resourceLoadFailure"
 import type { ConnectionOrigin } from "../shared/connectionOrigin"
 import type { GenerationElementToolId } from "../element-tools/model/ElementToolTypes"
+import type { CanvasAccessContext } from "../../public/props"
 
 export type ViewportChangeSource =
-	"wheel" | "gesture" | "minimap" | "programmatic" | "resize" | "restore" | "unknown"
+	| "wheel"
+	| "gesture"
+	| "minimap"
+	| "programmatic"
+	| "resize"
+	| "restore"
+	| "unknown"
 
 export type ViewportChangePhase = "start" | "move" | "end"
 
@@ -299,7 +306,8 @@ export interface CanvasEventMap {
 	"canvas:ready": void
 	"canvas:resize": { width: number; height: number }
 	"canvas:clear": void
-	"canvas:readonly": { readonly: boolean } // 只读状态变化事件
+	"permission:changed": CanvasAccessContext
+	"content:previewChanged": { elementId?: string; contentId?: string }
 	"canvas:devicechange": {
 		previous: CanvasDeviceInfo
 		current: CanvasDeviceInfo
@@ -365,12 +373,13 @@ export interface CanvasEventMap {
 		boundingRect: { x: number; y: number; width: number; height: number } | null
 	}
 	"eraser:sessionUpdate": {
-		// 橡皮擦会话状态变化（半径、撤销栈等）
+		// 橡皮擦会话状态变化（半径、撤销/重做栈等）
 		elementId: string
 		contentId?: string
 		radius: number
 		strokeCount: number
 		canUndo: boolean
+		canRedo: boolean
 	}
 
 	// 键盘事件
@@ -419,6 +428,9 @@ export interface CanvasEventMap {
 	// 上传中的临时元素状态
 	"upload:pending-change": {
 		pendingUndoCount: number
+	}
+	"upload:resource-pending-change": {
+		paths: string[]
 	}
 
 	// 历史记录事件

@@ -12,7 +12,7 @@ import {
 	IconFolder,
 	IconFileSearch,
 } from "@tabler/icons-react"
-import { Box, UsersRound } from "lucide-react"
+import { Bot, Box, Loader2, UsersRound, Wrench } from "lucide-react"
 import { isEmpty, last } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { useMatch } from "react-router"
@@ -31,7 +31,10 @@ import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import EmptyFilesIcon from "@/pages/superMagic/assets/svg/empty-files.svg"
 import { InputWithError } from "@/pages/superMagic/components/TopicFilesButton/components"
 import IconProject from "../../../icons/IconProject"
-import { ProjectResourceIcon } from "../ProjectResourceIcon"
+import { ProjectResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/ProjectResourceIcon"
+import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
+import CollaborationProjectTag from "@/pages/superMagic/components/CollaborationProjectTag"
+import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
 
 import type {
 	ProjectResourceSelection,
@@ -52,7 +55,13 @@ import {
 	SHARE_WORKSPACE_DATA,
 	MY_CLAW_WORKSPACE_ID,
 	MY_CLAW_WORKSPACE_DATA,
+	MY_SKILLS_WORKSPACE_ID,
+	MY_AGENTS_WORKSPACE_ID,
+	MY_SKILLS_WORKSPACE_DATA,
+	MY_AGENTS_WORKSPACE_DATA,
 	isCollaborationWorkspace,
+	isCollaborationProject,
+	isWorkspaceShortcutProject,
 } from "../../../../constants"
 import { MagicClawApi, type MagicClawItem } from "@/apis"
 import { MagiClaw } from "@/enhance/lucide-react"
@@ -73,8 +82,19 @@ import { useCreateProject } from "../../hooks/useCreateProject"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
 import { useSingleDocumentStaticDependencies } from "@/pages/superMagic/hooks/useSingleDocumentStaticDependencies"
+import { skillsService, type UserSkillView } from "@/services/skills/SkillsService"
+import { crewService, type MyCrewView } from "@/services/crew/CrewService"
 
 const FIXED_WORKSPACE_IDS = new Set<string>([SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID])
+const RESOURCE_WORKSPACE_IDS = new Set<string>([MY_SKILLS_WORKSPACE_ID, MY_AGENTS_WORKSPACE_ID])
+/** Align with MySkills / MyCrew list page size; selector loads more on demand. */
+const RESOURCE_PROJECTS_PAGE_SIZE = 20
+
+type ResourceProject = ProjectListItem & {
+	resourceType?: "skill" | "agent"
+	resourceId?: string
+	project_id?: string | null
+}
 
 function EmptyStateBox({ children }: { children: React.ReactNode }) {
 	return (
@@ -91,6 +111,8 @@ function isFixedWorkspace(workspace: Workspace) {
 }
 
 function renderWorkspaceIcon(workspaceId: string) {
+	if (workspaceId === MY_SKILLS_WORKSPACE_ID) return <Wrench className="size-4 text-current" />
+	if (workspaceId === MY_AGENTS_WORKSPACE_ID) return <Bot className="size-4 text-current" />
 	if (workspaceId === SHARE_WORKSPACE_ID) return <UsersRound className="size-4 text-current" />
 	if (workspaceId === MY_CLAW_WORKSPACE_ID)
 		return <MagiClaw className="size-4 text-current" strokeWidth={1.25} />
@@ -155,6 +177,10 @@ function ProjectResourceSelectorModal({
 	const [viewMode, setViewMode] = useState<ViewMode>("workspace")
 	const effectiveViewMode = isProjectOnly && viewMode === "directory" ? "project" : viewMode
 	const [loading, setLoading] = useState(false)
+	const [loadingMoreResources, setLoadingMoreResources] = useState(false)
+	const [resourceProjectsPage, setResourceProjectsPage] = useState(1)
+	const [hasMoreResourceProjects, setHasMoreResourceProjects] = useState(false)
+	const loadingMoreResourcesRef = useRef(false)
 	const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null)
 	const [currentProject, setCurrentProject] = useState<ProjectListItem | null>(null)
 	const [availableWorkspaces, setAvailableWorkspaces] = useState<Workspace[]>(workspaces)
@@ -375,8 +401,101 @@ function ProjectResourceSelectorModal({
 		setLoading(false)
 	})
 
+	const mapResourceProject = useMemoizedFn(
+		(
+			item: UserSkillView | MyCrewView,
+			resourceType: "skill" | "agent",
+			workspaceId: string,
+		): ResourceProject => {
+			const projectId = item.projectId || null
+			return {
+				id: projectId || item.id,
+				project_id: projectId,
+				resourceType,
+				resourceId: item.id,
+				project_status: ProjectStatus.WAITING,
+				project_mode: "",
+				workspace_id: workspaceId,
+				work_dir: "",
+				workspace_name: "",
+				project_name: item.name,
+				current_topic_id: "",
+				current_topic_status: "",
+				created_at: "",
+				updated_at: "",
+				tag: "",
+			}
+		},
+	)
+
+	const resetResourceProjectsPagination = useMemoizedFn(() => {
+		setResourceProjectsPage(1)
+		setHasMoreResourceProjects(false)
+		setLoadingMoreResources(false)
+		loadingMoreResourcesRef.current = false
+	})
+
+	const fetchResourceProjects = useMemoizedFn(async (workspaceId: string, page = 1) => {
+		const isLoadMore = page > 1
+		if (isLoadMore) {
+			if (loadingMoreResourcesRef.current || loading || !hasMoreResourceProjects) return
+			loadingMoreResourcesRef.current = true
+			setLoadingMoreResources(true)
+		} else {
+			setLoading(true)
+			resetResourceProjectsPagination()
+		}
+
+		try {
+			const params = { page, page_size: RESOURCE_PROJECTS_PAGE_SIZE }
+			const isSkillsWorkspace = workspaceId === MY_SKILLS_WORKSPACE_ID
+			const response = isSkillsWorkspace
+				? await skillsService.getCreatedSkills(params)
+				: await crewService.getCreatedAgents(params)
+			const mapped = response.list.map((item) =>
+				mapResourceProject(
+					item,
+					isSkillsWorkspace ? "skill" : "agent",
+					isSkillsWorkspace ? MY_SKILLS_WORKSPACE_ID : MY_AGENTS_WORKSPACE_ID,
+				),
+			)
+
+			setAvailableProjects((prev) => {
+				if (!isLoadMore) return mapped
+				const existingIds = new Set(prev.map((project) => project.id))
+				return [...prev, ...mapped.filter((project) => !existingIds.has(project.id))]
+			})
+			setResourceProjectsPage(response.page)
+			setHasMoreResourceProjects(response.page * response.pageSize < response.total)
+		} catch (error) {
+			console.error("Failed to fetch personal resources:", error)
+			magicToast.error(t("selectPathModal.fetchProjectsFailed"))
+			if (!isLoadMore) {
+				setAvailableProjects([])
+				resetResourceProjectsPagination()
+			}
+		} finally {
+			if (isLoadMore) {
+				loadingMoreResourcesRef.current = false
+				setLoadingMoreResources(false)
+			} else {
+				setLoading(false)
+			}
+		}
+	})
+
+	const handleLoadMoreResourceProjects = useMemoizedFn(async () => {
+		if (!currentWorkspace || !RESOURCE_WORKSPACE_IDS.has(currentWorkspace.id)) return
+		await fetchResourceProjects(currentWorkspace.id, resourceProjectsPage + 1)
+	})
+
 	// 获取工作区的项目列表
 	const fetchProjectsByWorkspace = useMemoizedFn(async (workspaceId: string) => {
+		if (RESOURCE_WORKSPACE_IDS.has(workspaceId)) {
+			await fetchResourceProjects(workspaceId, 1)
+			return
+		}
+		resetResourceProjectsPagination()
 		if (workspaceId === SHARE_WORKSPACE_ID) {
 			await fetchCollaborationProjects()
 			return
@@ -444,6 +563,7 @@ function ProjectResourceSelectorModal({
 		setCurrentWorkspace(null)
 		setCurrentProject(null)
 		setAvailableProjects([])
+		resetResourceProjectsPagination()
 		setAttachments([])
 		setPath([])
 		setDirectories([])
@@ -1192,6 +1312,7 @@ function ProjectResourceSelectorModal({
 			setCurrentWorkspace(null)
 			setCurrentProject(null)
 			setAvailableProjects([])
+			resetResourceProjectsPagination()
 			setAttachments([])
 			setPath([])
 			setDirectories([])
@@ -1312,10 +1433,9 @@ function ProjectResourceSelectorModal({
 		const shareWorkspace = SHARE_WORKSPACE_DATA(t)
 		// 创建我的龙虾工作区对象
 		const myClawWorkspace = MY_CLAW_WORKSPACE_DATA(t)
+		const resourceWorkspaces = [MY_SKILLS_WORKSPACE_DATA(t), MY_AGENTS_WORKSPACE_DATA(t)]
 		// 合并工作区列表和底部固定频道：共享工作区、我的龙虾
-		const allWorkspaces = includeFixedWorkspaces
-			? [...availableWorkspaces, shareWorkspace, myClawWorkspace]
-			: availableWorkspaces.filter((workspace) => !isFixedWorkspace(workspace))
+		const allWorkspaces = availableWorkspaces
 
 		// 根据搜索关键词过滤工作区（使用显示名称进行匹配，支持未命名工作区和共享工作区）
 		const filteredWorkspaces =
@@ -1327,10 +1447,15 @@ function ProjectResourceSelectorModal({
 					)
 				: allWorkspaces
 		const regularWorkspaces = filteredWorkspaces.filter(
-			(workspace) => !isFixedWorkspace(workspace),
+			(workspace) =>
+				!isFixedWorkspace(workspace) && !RESOURCE_WORKSPACE_IDS.has(workspace.id),
 		)
-		const fixedWorkspaces = filteredWorkspaces.filter((workspace) =>
-			isFixedWorkspace(workspace),
+		const fixedWorkspaces = [
+			...(includeFixedWorkspaces ? [myClawWorkspace] : []),
+			...resourceWorkspaces,
+			...(includeFixedWorkspaces ? [shareWorkspace] : []),
+		].filter((workspace) =>
+			getWorkspaceDisplayName(workspace).toLowerCase().includes(fileName.toLowerCase()),
 		)
 
 		const textFolderItemClass =
@@ -1533,8 +1658,21 @@ function ProjectResourceSelectorModal({
 										/>
 									</div>
 									<div className="flex min-w-0 flex-1 items-center gap-1">
+										<NavigationStatusIcon
+											itemType="project"
+											status={project.project_status}
+											showDefaultIcon={false}
+										/>
 										<div className={folderIconClass}>
-											<IconProject />
+											{(project as ResourceProject).resourceType ===
+											"skill" ? (
+												<Wrench className="size-4" />
+											) : (project as ResourceProject).resourceType ===
+											  "agent" ? (
+												<Bot className="size-4" />
+											) : (
+												<IconProject />
+											)}
 										</div>
 										<MagicEllipseWithTooltip
 											title={getProjectDisplayName(project)}
@@ -1544,6 +1682,15 @@ function ProjectResourceSelectorModal({
 										>
 											{getProjectDisplayName(project)}
 										</MagicEllipseWithTooltip>
+										{project.is_pinned && <PinnedTag />}
+										{(isWorkspaceShortcutProject(project) ||
+											isCollaborationProject(project)) && (
+											<CollaborationProjectTag
+												visible
+												project={project}
+												showText={false}
+											/>
+										)}
 									</div>
 									<button
 										type="button"
@@ -1612,7 +1759,15 @@ function ProjectResourceSelectorModal({
 								<div className="flex w-full flex-1 items-center justify-between gap-2.5">
 									<div className="flex flex-1 items-center gap-1">
 										<div className={folderIconClass}>
-											<IconProject />
+											{(project as ResourceProject).resourceType ===
+											"skill" ? (
+												<Wrench className="size-4" />
+											) : (project as ResourceProject).resourceType ===
+											  "agent" ? (
+												<Bot className="size-4" />
+											) : (
+												<IconProject />
+											)}
 										</div>
 										<MagicEllipseWithTooltip
 											title={getProjectDisplayName(project)}
@@ -1661,6 +1816,29 @@ function ProjectResourceSelectorModal({
 						</div>
 					</div>
 				)}
+				{hasMoreResourceProjects &&
+				currentWorkspace &&
+				RESOURCE_WORKSPACE_IDS.has(currentWorkspace.id) ? (
+					<div className="px-1 py-2">
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-8 w-full text-xs text-muted-foreground"
+							onClick={() => void handleLoadMoreResourceProjects()}
+							disabled={loadingMoreResources || loading}
+							data-testid="project-resource-selector-load-more"
+						>
+							{loadingMoreResources ? (
+								<>
+									<Loader2 className="mr-1 size-3.5 animate-spin" />
+									{t("selectPathModal.loadingMore")}
+								</>
+							) : (
+								t("selectPathModal.loadMore")
+							)}
+						</Button>
+					</div>
+				) : null}
 			</>
 		)
 	}

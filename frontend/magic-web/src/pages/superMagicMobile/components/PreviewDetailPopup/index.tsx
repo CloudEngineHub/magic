@@ -432,7 +432,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 					MOBILE_PREVIEW_BODY_CLASSNAME,
 					isShareRoute && previewDetail?.isFromNode
 						? PREVIEW_MOBILE_BOTTOM_GAP_CLASSNAME
-						: "rounded-xl rounded-b-none",
+						: undefined,
 				)}
 				maskClosable
 				data-testid="file-preview-detail-popup-root"

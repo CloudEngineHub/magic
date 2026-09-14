@@ -23,13 +23,13 @@ import { BaseRuntimeBridgeApiPlugin } from "@dtyq/html-sandbox/runtime"
 import { MagicApiLogger } from "./MagicApiLogger"
 
 interface UploadFileItem {
-	file: File
+	file: File | Blob | ArrayBuffer
 	path: string
 	filename: string
 }
 
 interface FileData {
-	file: File
+	file: File | Blob | ArrayBuffer
 	filename: string
 	path: string
 	fileSize: number
@@ -74,10 +74,14 @@ export class MagicWorkspaceApi extends BaseRuntimeBridgeApiPlugin {
 						new Error(`window.Magic.uploadFiles: files[${i}] must be an object`),
 					)
 				}
-				if (!(item["file"] instanceof File)) {
+				if (
+					!(item["file"] instanceof File) &&
+					!(item["file"] instanceof Blob) &&
+					!(item["file"] instanceof ArrayBuffer)
+				) {
 					return Promise.reject(
 						new Error(
-							`window.Magic.uploadFiles: files[${i}].file must be a File object`,
+							`window.Magic.uploadFiles: files[${i}].file must be a File, Blob, or ArrayBuffer`,
 						),
 					)
 				}
@@ -99,15 +103,19 @@ export class MagicWorkspaceApi extends BaseRuntimeBridgeApiPlugin {
 				file: item.file,
 				filename: item.filename,
 				path: item.path,
-				fileSize: item.file.size,
-				fileType: item.file.type,
+				fileSize: item.file instanceof ArrayBuffer ? item.file.byteLength : item.file.size,
+				fileType: item.file instanceof ArrayBuffer ? "" : item.file.type,
 			}))
+			const transfer = fileData
+				.map((item) => item.file)
+				.filter((file): file is ArrayBuffer => file instanceof ArrayBuffer)
 
 			return this.request<unknown>(
 				"MAGIC_UPLOAD_FILES_REQUEST",
 				{ files: fileData },
 				60000, // 60s timeout for large files
 				(data) => data["results"],
+				transfer,
 			)
 		}
 

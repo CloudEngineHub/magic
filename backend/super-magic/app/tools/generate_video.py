@@ -223,6 +223,7 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
 **Prompt 写法**
 - Prompt 是可执行的视频创意简报，至少明确主体、动作、场景、镜头、光线、风格、节奏，以及用户要求时的音频要求
 - 需要控制音频时只使用统一参数 audio_policy=auto、generate 或 mute，不要在 prompt 或 extensions 中传 sound、generateAudio、audio 等供应商字段；普通工具仅支持模型原生静音，需合成静音时改用 Canvas Video Edit
+- 不要把“未声明音频能力”解释为“不支持音频”；只有能力明确标记为不支持时才向用户报告限制。用户要求旁白、对白、配音、音乐或音效时，应保留原文并尝试 audio_policy=generate；如果用户要求录制真人声音，应区分为录音入口或音频素材能力
 - 用户需求模糊时扩写为完整描述；用户已有完整 prompt 时保留原文，只补充必要信息
 - 用户要求旁白或对白、配音、音乐或音效时，必须逐字保留，不得概括、改写或遗漏；注明说话人、语言、声音特征、出现时机，以及口型同步和对应动作
 
@@ -254,6 +255,7 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
 
 **Prompt writing**
 - Treat the prompt as an executable video brief covering at least subject, action, scene, camera, lighting, style, pacing, and audio requirements when requested
+- Do not interpret an undeclared audio capability as unsupported. Report an audio limitation only when the model explicitly declares audio output unsupported. For requested narration, dialogue, voice-over, music, or sound effects, preserve the request and try audio_policy=generate; distinguish generated voice from recording the user's real voice
 - Expand vague requests into a complete description; when the user provides a complete or detailed prompt, preserve their wording and add only necessary details
 - Preserve requested narration, dialogue, voice-over, music, or sound effects verbatim; never summarize, rewrite, or omit them. Specify speaker, language, voice characteristics, timing, lip sync, and matching actions
 
@@ -604,7 +606,7 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
         """校验统一音频策略，避免普通视频工具误产出不符合要求的结果。"""
         if policy is None or policy == "auto":
             return
-        if policy == "generate" and capability.get("supports_generate_audio") is not True:
+        if policy == "generate" and capability.get("supports_generate_audio") is False:
             raise ValueError("The current video model does not support generated audio")
         if policy != "mute":
             return

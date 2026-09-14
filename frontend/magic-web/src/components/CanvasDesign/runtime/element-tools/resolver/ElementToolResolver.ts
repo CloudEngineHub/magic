@@ -1,10 +1,13 @@
 import { ElementTypeEnum } from "../../document/types"
+import { authorizeCanvasTool } from "../../core/CanvasAccessPolicy"
 import { getContentState } from "../../document/elementContent"
 import type {
 	ContentSnapshot,
 	ElementToolContext,
+	ElementToolDefinition,
 	ElementToolResolution,
 	ElementToolSurface,
+	ElementToolType,
 } from "../model/ElementToolTypes"
 import {
 	COMMON_ELEMENT_TOOL_DEFINITIONS,
@@ -22,6 +25,12 @@ export const ELEMENT_TOOL_DEFINITIONS = [
 	...VERSION_TOOL_DEFINITIONS,
 ] as const
 
+export function getElementToolDefinition(
+	toolId: ElementToolType,
+): ElementToolDefinition | undefined {
+	return ELEMENT_TOOL_DEFINITIONS.find((definition) => definition.id === toolId)
+}
+
 export function resolveElementTools(
 	context: ElementToolContext,
 	surface: ElementToolSurface,
@@ -36,6 +45,7 @@ export function resolveElementTools(
 		)
 		if (definition?.surfaces.top && definition.isApplicable(context)) {
 			const resolution = definition.resolve(context)
+			if (!authorizeCanvasTool(context.access, definition).allowed) return []
 			if (
 				resolution.target.contentId === activeSession.contentId &&
 				resolution.visibility !== "hidden"
@@ -91,8 +101,10 @@ export function resolveElementTools(
 		.filter((definition) => definition.isApplicable(context))
 		.map((definition) => {
 			const resolved = definition.resolve(context)
+			const authorization = authorizeCanvasTool(context.access, definition).allowed
 			const resolution = {
 				...resolved,
+				visibility: authorization ? resolved.visibility : "hidden",
 				execution: definition.execution,
 				execute: definition.execution === "display-only" ? undefined : resolved.execute,
 			}
@@ -115,8 +127,8 @@ export function resolveElementTools(
 			return true
 		})
 		.sort((left, right) => {
-			const groupOrder = left.presentation.group.localeCompare(right.presentation.group)
-			return groupOrder || left.presentation.order - right.presentation.order
+			const order = left.presentation.order - right.presentation.order
+			return order || left.presentation.group.localeCompare(right.presentation.group)
 		})
 }
 
@@ -124,15 +136,18 @@ export function createContentIndex(element: {
 	contents?: readonly ContentSnapshot[]
 	activeContentId?: string | null
 	mainContentId?: string | null
+	effectiveContentId?: string | null
 }) {
 	const contents = element.contents ?? []
 	const byId = new Map(contents.map((content) => [content.contentId, content]))
 	const states = new Map(contents.map((content) => [content.contentId, getContentState(content)]))
 	const firstContentId = contents[0]?.contentId
 	const activeContentId =
-		element.activeContentId && byId.has(element.activeContentId)
-			? element.activeContentId
-			: firstContentId
+		element.effectiveContentId && byId.has(element.effectiveContentId)
+			? element.effectiveContentId
+			: element.activeContentId && byId.has(element.activeContentId)
+				? element.activeContentId
+				: firstContentId
 	const mainContentId =
 		element.mainContentId && byId.has(element.mainContentId)
 			? element.mainContentId

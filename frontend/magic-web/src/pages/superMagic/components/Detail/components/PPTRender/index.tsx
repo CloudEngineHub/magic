@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useMemo, useState } from "react"
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useId,
+	useLayoutEffect,
+	useRef,
+	useMemo,
+	useState,
+} from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
@@ -45,6 +55,14 @@ import type { MenuProps } from "antd"
 import type { PPTSlideStructureAdapter } from "./types"
 import { getPPTLiveRenderCacheSize } from "./PPTSidebar/utils/devicePerformance"
 import EditToolbar from "../EditToolbar"
+import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import {
+	buildSlidesTemplateReplacementPayload,
+	type SlidesTemplateReplacementTarget,
+} from "@/pages/superMagic/utils/slidesTemplateReplacementActions"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+
+const SlidesTemplateReplacementDialog = lazy(() => import("./SlidesTemplateReplacementDialog"))
 
 interface ManualSaveResult {
 	fileId?: string
@@ -112,7 +130,7 @@ interface PPTRenderProps {
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
-	) => Promise<void>
+	) => Promise<boolean | void>
 	onSortSave?: (newSlidesUrls: string[]) => void
 	openNewTab?: (fileId: string, path: string) => void
 	onDownload?: ({
@@ -231,6 +249,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 	const [manualScale, setManualScale] = useState<number | null>(null)
 	const [activeSlideScaleRatio, setActiveSlideScaleRatio] = useState(1)
+	const activeInspectorPickingRef = useRef(false)
+	const activeInspectorExitRef = useRef<(() => boolean | Promise<boolean>) | null>(null)
+	const [templateReplacementTarget, setTemplateReplacementTarget] =
+		useState<SlidesTemplateReplacementTarget | null>(null)
 	const activeSlideCloseSaveHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
 	const activeSlideDiscardHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
 
@@ -260,11 +282,18 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		handleCancelNavigation,
 	} = useCheckBeforeNavigate({
 		isAnySlideEditing,
+		isInspectorPicking: () => activeInspectorPickingRef.current,
+		requestInspectorExit: () => activeInspectorExitRef.current?.() ?? Promise.resolve(true),
 		activeIndex: store.activeIndex,
 	})
 
 	// 幻灯片初始化与增量同步
-	useSlideSync({ store, slidePaths, initialActiveIndex })
+	useSlideSync({
+		store,
+		slidePaths,
+		deckKey: mainFileId || mainFileName,
+		initialActiveIndex,
+	})
 
 	// 当激活索引或文件 ID 变化时通知父组件
 	useSyncActiveState({ store, onActiveIndexChange, isTabActive })
@@ -332,6 +361,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		handleSlideClick,
 		handleSortChange,
 		handleInsertSlide,
+		handleDuplicateSlide,
 		handleDeleteSlide,
 		handleRenameSlide,
 		handleAddToCurrentChat,
@@ -469,6 +499,75 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const presentedToolbarModel = scopedPresentedKey
 		? toolbarModels.get(scopedPresentedKey)
 		: undefined
+	// Slide template projects manage their own template manifest and should not
+	// expose the regular PPT template replacement flow.
+	const isSlidesTemplateProject = Boolean(slideStructureAdapter)
+	const canReplaceTemplate =
+		!isSlidesTemplateProject &&
+		effectiveAllowEdit &&
+		(presentedToolbarModel?.props.isNewestVersion ?? true)
+
+	const handleOpenTemplateReplacement = useMemoizedFn(() => {
+		if (!canReplaceTemplate) return
+		setTemplateReplacementTarget({ scope: "deck" })
+	})
+	const handleOpenSlideTemplateReplacement = useMemoizedFn((slideIndex: number) => {
+		if (!canReplaceTemplate) return
+		setTemplateReplacementTarget({ scope: "slide", slideIndex })
+	})
+	const handleConfirmTemplateReplacement = useMemoizedFn(
+		(template: OptionItem, target: SlidesTemplateReplacementTarget) => {
+			if (!mainFileId || !mainFileName || !resolvedProjectId) return
+			const mainFile =
+				attachmentList?.find((item: any) => item.file_id === mainFileId) ||
+				({
+					file_id: mainFileId,
+					file_name: mainFileName,
+					relative_file_path: mainFileName,
+				} as any)
+			const parentFolder = mainFile.parent_id
+				? attachmentList?.find((item: any) => item.file_id === mainFile.parent_id)
+				: undefined
+			const targetSlide =
+				target.scope === "slide"
+					? (() => {
+							const slide = store.slides[target.slideIndex]
+							const slideFileId = slide
+								? store.getFileIdByPath(slide.path)
+								: undefined
+							return slideFileId
+								? attachmentList?.find(
+										(item: any) => item.file_id === slideFileId,
+									) ||
+										({
+											file_id: slideFileId,
+											file_name: slide?.title || slide?.path,
+											relative_file_path: slide?.path,
+										} as any)
+								: undefined
+						})()
+					: undefined
+			const payload = buildSlidesTemplateReplacementPayload({
+				template,
+				target,
+				mainFile,
+				parentFolder,
+				targetSlide,
+			})
+			setTemplateReplacementTarget(null)
+			pubsub.publish(PubSubEvents.Create_New_Topic, payload)
+		},
+	)
+
+	useLayoutEffect(() => {
+		activeInspectorPickingRef.current = Boolean(presentedToolbarModel?.props.isAppendPicking)
+		activeInspectorExitRef.current = presentedToolbarModel?.props.beforeAction ?? null
+
+		return () => {
+			activeInspectorPickingRef.current = false
+			activeInspectorExitRef.current = null
+		}
+	}, [presentedToolbarModel])
 
 	useLayoutEffect(() => {
 		const host = toolbarHostRef.current as (HTMLDivElement & { inert?: boolean }) | null
@@ -683,16 +782,20 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								onSlideClick={handleSlideClick}
 								onSortChange={effectiveAllowEdit ? handleSortChange : undefined}
 								onInsertSlide={effectiveAllowEdit ? handleInsertSlide : undefined}
+								onDuplicateSlide={
+									effectiveAllowEdit ? handleDuplicateSlide : undefined
+								}
 								onDeleteSlide={effectiveAllowEdit ? handleDeleteSlide : undefined}
 								onRenameSlide={effectiveAllowEdit ? handleRenameSlide : undefined}
 								onRefreshSlide={effectiveAllowEdit ? handleRefreshSlide : undefined}
 								onRegenerateScreenshot={handleRegenerateScreenshot}
 								onAddToCurrentChat={handleAddToCurrentChat}
 								onAddToNewChat={handleAddToNewChat}
-								mainFileId={mainFileId}
 								isMobile={isMobile}
 								sidebarWidth={sidebarWidth}
 								allowEdit={effectiveAllowEdit}
+								canReplaceTemplate={canReplaceTemplate}
+								onReplaceSlideTemplate={handleOpenSlideTemplateReplacement}
 								isCollapsed={isSidebarCollapsed}
 								isPreviewLoadingEnabled={
 									!isSidebarCollapsed && !isPresentationFullscreen
@@ -702,11 +805,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						</div>
 					</div>
 
-					{/* 调整宽度的 Handle - 仅在桌面端且侧边栏未折叠/全屏时显示 */}
+					{/* Width handle stays below the canvas stacking context. */}
 					{!isMobile && !isSidebarCollapsed && !isPresentationFullscreen && (
 						<div
 							data-testid="ppt-render-sidebar-resize-handle"
-							className="absolute bottom-0 top-0 z-20 w-4 -translate-x-1/2 cursor-col-resize bg-transparent"
+							className={cn(
+								"absolute bottom-0 top-0 w-4 -translate-x-1/2 cursor-col-resize bg-transparent",
+								TAILWIND_Z_INDEX_CLASSES.BASE.SIDEBAR_RESIZE,
+							)}
 							style={{ left: sidebarWidth }}
 							onMouseDown={handleResizeStart}
 						/>
@@ -716,7 +822,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 					<div
 						ref={slideContainerRef}
 						data-testid="ppt-render-slide-content"
-						className="min-h-0 min-w-0 flex-1"
+						className={cn(
+							"min-h-0 min-w-0 flex-1",
+							!isSidebarCollapsed &&
+								!isPresentationFullscreen &&
+								`relative ${TAILWIND_Z_INDEX_CLASSES.BASE.SLIDE_CANVAS}`,
+						)}
 					>
 						<div
 							className="relative flex h-full w-full flex-col overflow-hidden"
@@ -762,6 +873,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										key={liveRenderScopeKey}
 										{...presentedToolbarModel.props}
 										interactionDisabled={Boolean(pendingKey)}
+										testIdsEnabled={isTabActive !== false}
 									/>
 								</div>
 							)}
@@ -819,6 +931,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											index={index}
 											isActive={index === store.activeIndex}
 											isPresented={key === presentedKey}
+											isTabActive={isTabActive}
 											toolbarOwnerKey={key}
 											onToolbarModelChange={handleToolbarModelChange}
 											content={slide.content || ""}
@@ -854,6 +967,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 												store.updateSlideContents(newContents)
 											}}
 											allowEdit={effectiveAllowEdit}
+											showButtonText={shouldShowButtonText}
 											onEditModeChange={(isEditing) =>
 												handleEditModeChange(slideFileId, isEditing)
 											}
@@ -880,7 +994,6 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											}}
 											onRefreshSlide={handleRefreshSlide}
 											onManualSave={handleManualSave}
-											showButtonText={shouldShowButtonText}
 											mainFileId={mainFileId}
 											mainFileName={mainFileName}
 											allowDownload={allowDownload}
@@ -906,6 +1019,11 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										onRefreshSlides={handleRefreshAllSlides}
 										onJumpToPage={handleJumpToPage}
 										onToggleFullscreen={togglePresentationFullscreen}
+										onReplaceTemplate={
+											canReplaceTemplate
+												? handleOpenTemplateReplacement
+												: undefined
+										}
 										scaleRatio={activeSlideScaleRatio}
 										onScaleChange={handleManualScaleChange}
 										onResetScale={() => handleManualScaleChange(null)}
@@ -916,6 +1034,17 @@ const PPTRenderInner = observer(function PPTRenderInner({
 					</div>
 				</div>
 			</div>
+
+			<Suspense fallback={null}>
+				<SlidesTemplateReplacementDialog
+					open={templateReplacementTarget !== null}
+					target={templateReplacementTarget}
+					onOpenChange={(open) => {
+						if (!open) setTemplateReplacementTarget(null)
+					}}
+					onConfirm={handleConfirmTemplateReplacement}
+				/>
+			</Suspense>
 
 			{/* 导航确认对话框 */}
 			<AlertDialog open={showNavigationDialog} onOpenChange={setShowNavigationDialog}>

@@ -20,6 +20,7 @@ use App\Domain\Design\Entity\ValueObject\DesignGenerationStatus;
 use App\Domain\Design\Factory\DesignVideoInputPayloadPreparer;
 use App\Domain\Design\Service\DesignGenerationTaskDomainService;
 use App\Domain\Design\Service\DesignVideoSubmissionDomainService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
@@ -42,8 +43,6 @@ class DesignVideoAppService extends DesignAppService
 
     // 给 payload builder 的能力标记：允许透传 provider 专用 asset URI。
     private const string REQUEST_KEY_SUPPORTS_PROVIDER_ASSET_URI = 'supports_provider_asset_uri';
-
-    private const string SOURCE_ID_DESIGN_VIDEO_GENERATION = 'design_video_generation';
 
     public function __construct(
         private readonly TaskFileDomainService $taskFileDomainService,
@@ -169,14 +168,9 @@ class DesignVideoAppService extends DesignAppService
         // 检查项目权限
         $this->assertProjectAccess($designDataIsolation, $projectId, MemberRole::EDITOR);
 
-        $modelEntry = $this->findModelOrFail($designDataIsolation, $dto->getModelId());
+        $this->findModelOrFail($designDataIsolation, $dto->getModelId());
         $payload = $dto->toModelGatewayPayload();
-        $payload['inputs'] = $this->prepareEstimateInputs(
-            $designDataIsolation->getCurrentOrganizationCode(),
-            $projectId,
-            $dto,
-            $this->supportsProviderAssetUri($modelEntry),
-        );
+        $payload['inputs'] = DesignVideoInputPayloadPreparer::prepareInputs($dto);
 
         $payload = $this->prepareGatewayPayloadWithBusinessParams(
             $designDataIsolation,
@@ -207,7 +201,7 @@ class DesignVideoAppService extends DesignAppService
             'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
             'user_id' => $dataIsolation->getCurrentUserId(),
             'project_id' => $projectId,
-            'source_id' => self::SOURCE_ID_DESIGN_VIDEO_GENERATION,
+            'source_id' => SourceId::DESIGN_VIDEO_GENERATION,
         ];
 
         if ($videoId !== null && $videoId !== '') {
@@ -257,23 +251,6 @@ class DesignVideoAppService extends DesignAppService
                 ProviderCode::DashScope->value,
             ]
         );
-    }
-
-    /**
-     * 规范化并校验预估请求引用的工作区素材路径，返回可传给模型网关的 inputs。
-     *
-     * @return array<string, mixed>
-     */
-    private function prepareEstimateInputs(
-        string $organizationCode,
-        int $projectId,
-        DesignVideoCreateDTO $dto,
-        bool $supportsProviderAssetUri,
-    ): array {
-        $inputs = DesignVideoInputPayloadPreparer::prepareInputs($dto);
-        $this->assertWorkspaceInputPayloadFilesExist($projectId, $inputs, $supportsProviderAssetUri);
-
-        return $inputs;
     }
 
     /**

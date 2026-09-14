@@ -553,7 +553,9 @@ export const SkillDetailDialog = observer(function SkillDetailDialog({
 																isEditable={false}
 																enableDragHandle={false}
 																className="!h-auto !overflow-visible [&_.simple-editor-content]:!h-auto [&_.simple-editor-content]:!overflow-visible [&_.simple-editor]:!p-2"
-																content={normalizedSkillMarkdown}
+																content={
+																	normalizedSkillMarkdown ?? ""
+																}
 															/>
 														)}
 													</div>

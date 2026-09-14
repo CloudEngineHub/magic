@@ -169,9 +169,11 @@ use App\Domain\MagicBase\Repository\Persistence\MagicBaseProjectStorageRouteRepo
 use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
 use App\Domain\MagicBase\Repository\Persistence\Storage\MongoDB\MagicBaseMongoProjectCleanupRepository;
 use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
+use App\Domain\MCP\Repository\Facade\MCPAuthorizationCredentialRepositoryInterface;
 use App\Domain\MCP\Repository\Facade\MCPServerRepositoryInterface;
 use App\Domain\MCP\Repository\Facade\MCPServerToolRepositoryInterface;
 use App\Domain\MCP\Repository\Facade\MCPUserSettingRepositoryInterface;
+use App\Domain\MCP\Repository\Persistence\MCPAuthorizationCredentialRepository;
 use App\Domain\MCP\Repository\Persistence\MCPServerRepository;
 use App\Domain\MCP\Repository\Persistence\MCPServerToolRepository;
 use App\Domain\MCP\Repository\Persistence\MCPUserSettingRepository;
@@ -308,6 +310,8 @@ use App\Infrastructure\ExternalAPI\Sms\Volcengine\Template;
 use App\Infrastructure\ExternalAPI\Sms\Volcengine\VolceApiClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\DashScopeTransportInterface;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Transport\ApiKeyDashScopeTransport;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportInterface;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoGenerateFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoProviderOperationExecutor;
 use App\Infrastructure\ImageGenerate\DefaultFontProvider;
@@ -368,6 +372,7 @@ $dependencies = [
     // domain 通过这个工厂接口拿到 adapter，保持依赖方向正确。
     VideoGenerationProviderAdapterFactoryInterface::class => VideoGenerateFactory::class,
     DashScopeTransportInterface::class => ApiKeyDashScopeTransport::class,
+    GeminiTransportInterface::class => GeminiTransportRouter::class,
     MagicTokenRepositoryInterface::class => MagicTokenRepository::class,
     TemplateInterface::class => Template::class,
 
@@ -464,6 +469,7 @@ $dependencies = [
     MagicBaseProjectStorageRouteRepositoryInterface::class => MagicBaseProjectStorageRouteRepository::class,
     // mcp
     MCPServerRepositoryInterface::class => MCPServerRepository::class,
+    MCPAuthorizationCredentialRepositoryInterface::class => MCPAuthorizationCredentialRepository::class,
     MCPServerToolRepositoryInterface::class => MCPServerToolRepository::class,
     AuthenticatorInterface::class => ApiKeyProviderAuthenticator::class,
     MCPUserSettingRepositoryInterface::class => MCPUserSettingRepository::class,

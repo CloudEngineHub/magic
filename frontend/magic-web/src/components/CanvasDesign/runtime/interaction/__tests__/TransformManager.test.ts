@@ -20,7 +20,7 @@ interface TransformElementStub {
 
 interface TransformManagerPrivate {
 	canvas: {
-		readonly?: boolean
+		can: ReturnType<typeof vi.fn>
 		eventEmitter?: {
 			emit: ReturnType<typeof vi.fn>
 		}
@@ -131,7 +131,7 @@ function createModifierClickManager(options?: { canSelect?: boolean; isSelected?
 	const canSelect = vi.fn(() => options?.canSelect ?? true)
 	const isSelected = vi.fn(() => options?.isSelected ?? false)
 	const canvas = {
-		readonly: false,
+		can: vi.fn(() => true),
 		stage: {
 			getPointerPosition: vi.fn(() => pointer),
 		},
@@ -147,6 +147,9 @@ function createModifierClickManager(options?: { canSelect?: boolean; isSelected?
 			toggle,
 		},
 		permissionManager: {
+			can: vi.fn((capability: string) =>
+				capability === "interaction.select" ? canSelect() : true,
+			),
 			canSelect,
 		},
 		eventEmitter: {
@@ -181,7 +184,8 @@ function createSingleDragMoveManager() {
 	const manager = Object.create(TransformManager.prototype) as TransformManagerPrivate
 
 	manager.canvas = {
-		readonly: false,
+		can: vi.fn(() => true),
+		permissionManager: { can: vi.fn(() => true) },
 		eventEmitter: { emit },
 		runtimeScheduler: { requestLayerDraw: vi.fn() },
 		isKeepRatioModifierPressed: () => false,
@@ -226,7 +230,8 @@ function createProxySyncManager() {
 	const manager = Object.create(TransformManager.prototype) as TransformManagerPrivate
 
 	manager.canvas = {
-		readonly: false,
+		can: vi.fn(() => true),
+		permissionManager: { can: vi.fn(() => true) },
 		eventEmitter: { emit },
 		runtimeScheduler: { requestLayerDraw },
 		isKeepRatioModifierPressed: () => false,
@@ -311,7 +316,7 @@ function createConstraintManager(elementTypes: Record<string, LayerElement["type
 	}))
 	const getSnappedBox = vi.fn((_oldBox, newBox) => newBox)
 	const canvas = {
-		readonly: false,
+		can: vi.fn(() => true),
 		eventEmitter: { on: vi.fn(), emit: vi.fn() },
 		runtimeScheduler: { requestLayerDraw: vi.fn() },
 		isKeepRatioModifierPressed: () => false,
@@ -328,7 +333,7 @@ function createConstraintManager(elementTypes: Record<string, LayerElement["type
 				}),
 			}),
 		},
-		permissionManager: { canTransform: () => true },
+		permissionManager: { can: () => true, canTransform: () => true },
 		controlsLayer: { add: vi.fn() },
 		selectionManager: { getSelectedIds: () => elementIds },
 		snapGuideManager: { getSnappedBox },
@@ -500,6 +505,7 @@ describe("TransformManager multi-selection proxy sync", () => {
 		}
 		const manager = Object.create(TransformManager.prototype) as TransformManagerPrivate
 		manager.canvas = {
+			permissionManager: { can: vi.fn(() => true) },
 			elementManager: {
 				getNodeAdapter: () => ({
 					getElementsBounds: () => ({ x: 0, y: 0, width: 100, height: 100 }),
@@ -641,6 +647,7 @@ describe("TransformManager multi-selection proxy sync", () => {
 		}
 		const manager = Object.create(TransformManager.prototype) as TransformManagerPrivate
 		manager.canvas = {
+			permissionManager: { can: vi.fn(() => true) },
 			contentLayer,
 			isKeepRatioModifierPressed: () => false,
 			elementManager: {
@@ -722,7 +729,8 @@ describe("TransformManager multi-selection proxy sync", () => {
 		const emit = vi.fn()
 		const manager = Object.create(TransformManager.prototype) as TransformManagerPrivate
 		manager.canvas = {
-			readonly: false,
+			can: vi.fn(() => true),
+			permissionManager: { can: vi.fn(() => true) },
 			eventEmitter: { emit },
 			runtimeScheduler: { requestLayerDraw: vi.fn() },
 			isKeepRatioModifierPressed: () => false,
@@ -775,7 +783,8 @@ describe("TransformManager multi-selection proxy sync", () => {
 		})
 		const manager = Object.create(TransformManager.prototype) as TransformManagerPrivate
 		manager.canvas = {
-			readonly: false,
+			can: vi.fn(() => true),
+			permissionManager: { can: vi.fn(() => true) },
 			eventEmitter: { emit },
 			runtimeScheduler: { requestLayerDraw: vi.fn() },
 			isKeepRatioModifierPressed: () => false,

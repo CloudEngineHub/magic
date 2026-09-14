@@ -87,7 +87,7 @@ export class TransformManager {
 	private readonly handleMultiSelectionProxyModifierClick = (
 		e: Konva.KonvaEventObject<MouseEvent>,
 	): void => {
-		if (this.canvas.readonly || !isMultiSelectEvent(e.evt)) {
+		if (!this.canvas.permissionManager.can("document.write") || !isMultiSelectEvent(e.evt)) {
 			return
 		}
 
@@ -139,10 +139,10 @@ export class TransformManager {
 	 * 设置事件监听
 	 */
 	private setupEventListeners(): void {
-		// 监听只读状态变化
-		this.canvas.eventEmitter.on("canvas:readonly", () => {
-			// 如果切换到只读模式，隐藏 Transformer
-			if (this.canvas.readonly) {
+		// 监听访问能力变化
+		this.canvas.eventEmitter.on("permission:changed", () => {
+			// 失去文档写能力时隐藏 Transformer
+			if (!this.canvas.permissionManager.can("document.write")) {
 				this.hideTransformer()
 			}
 		})
@@ -265,7 +265,12 @@ export class TransformManager {
 	}
 
 	public beginTransformInteractionIntent(elementIds?: string[]): void {
-		if (this.canvas.readonly || this.isDragging || this.isProxyInteractionActive) return
+		if (
+			!this.canvas.permissionManager.can("document.write") ||
+			this.isDragging ||
+			this.isProxyInteractionActive
+		)
+			return
 		this.isTransformIntentActive = true
 		if (elementIds && elementIds.length > 0) {
 			this.pendingTransformerElementIds = elementIds
@@ -307,7 +312,7 @@ export class TransformManager {
 
 	public startMultiSelectionProxyDrag(event: MouseEvent | PointerEvent | TouchEvent): boolean {
 		if (
-			this.canvas.readonly ||
+			!this.canvas.permissionManager.can("document.write") ||
 			!this.multiSelectionProxy ||
 			this.isDragging ||
 			this.isProxyInteractionActive
@@ -445,7 +450,7 @@ export class TransformManager {
 			y: bounds.y,
 			width: bounds.width,
 			height: bounds.height,
-			draggable: !this.canvas.readonly,
+			draggable: this.canvas.permissionManager.can("document.write"),
 			fill: "rgba(0, 0, 0, 0.001)",
 			strokeWidth: 0,
 			listening: true,
@@ -678,7 +683,7 @@ export class TransformManager {
 	 * Transformer dragstart 事件处理：拖动 Transformer 移动选区时触发
 	 */
 	private handleTransformerDragstart(): void {
-		if (this.canvas.readonly) return
+		if (!this.canvas.permissionManager.can("document.write")) return
 
 		this.isTransformIntentActive = false
 		this.isDragging = true
@@ -711,7 +716,7 @@ export class TransformManager {
 	 * Transformer dragmove 事件处理：拖动 Transformer 移动选区过程中持续触发
 	 */
 	private handleTransformerDragmove(): void {
-		if (this.canvas.readonly) return
+		if (!this.canvas.permissionManager.can("document.write")) return
 
 		const elementIds = Array.from(this.transformingElementIds)
 		const isUsingSelectionProxy = this.isUsingSelectionProxy()
@@ -746,7 +751,7 @@ export class TransformManager {
 	 * Transformer dragend 事件处理：拖动 Transformer 移动选区结束时触发
 	 */
 	private handleTransformerDragend(): void {
-		if (this.canvas.readonly) return
+		if (!this.canvas.permissionManager.can("document.write")) return
 
 		const historyManager = this.canvas.historyManager
 		historyManager?.disable()
@@ -803,7 +808,7 @@ export class TransformManager {
 	 * Transformer transformstart 事件处理：拖动 Anchor 缩放时触发（在 transform 之前）
 	 */
 	private handleTransformerTransformstart(): void {
-		if (this.canvas.readonly) return
+		if (!this.canvas.permissionManager.can("document.write")) return
 
 		const elementIds = Array.from(this.transformingElementIds)
 		this.captureInitialAspectRatios(elementIds)
@@ -827,7 +832,7 @@ export class TransformManager {
 	 * Transformer transform 事件处理：拖动 Anchor 缩放过程中持续触发
 	 */
 	private handleTransformerTransform(): void {
-		if (this.canvas.readonly) return
+		if (!this.canvas.permissionManager.can("document.write")) return
 
 		const activeAnchor = this.transformer?.getActiveAnchor()
 		const elementIds = Array.from(this.transformingElementIds)
@@ -850,7 +855,7 @@ export class TransformManager {
 	 * Transformer transformend 事件处理：拖动 Anchor 缩放结束时触发
 	 */
 	private handleTransformerTransformend(): void {
-		if (this.canvas.readonly) {
+		if (!this.canvas.permissionManager.can("document.write")) {
 			this.isAnchorTransformActive = false
 			this.isProxyInteractionActive = false
 			this.schedulePendingTransformerUpdate()
@@ -978,7 +983,7 @@ export class TransformManager {
 				return constraints?.enabledAnchors !== undefined
 			})
 		let enabledAnchors: string[] = []
-		if (!this.canvas.readonly) {
+		if (this.canvas.permissionManager.can("document.write")) {
 			enabledAnchors = multiSelectionContainsResizeRestrictedElement
 				? []
 				: (singleElementConstraints?.enabledAnchors ?? [
@@ -995,7 +1000,7 @@ export class TransformManager {
 		// 限制最小尺寸并防止翻转
 		const boundBoxFunc = (oldBox: Box, newBox: Box): Box => {
 			// 使用 PermissionManager 统一判断：只读模式下禁止变换
-			if (this.canvas.readonly) {
+			if (!this.canvas.permissionManager.can("document.write")) {
 				return oldBox
 			}
 			// 防止翻转：确保宽度和高度始终为正数

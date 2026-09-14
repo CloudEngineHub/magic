@@ -1179,6 +1179,10 @@ export interface UploadFile {
 	onUploadComplete: (result: UploadFileResponse) => void
 	/** 单个文件上传失败回调 */
 	onUploadFailed: (error: Error) => void
+	/** 上传开始回调（可选，保持既有宿主实现兼容） */
+	onUploadStart?: () => void
+	/** 单个文件上传进度回调，值为 0-100（可选） */
+	onUploadProgress?: (progress: number) => void
 }
 
 /**
@@ -1205,6 +1209,17 @@ export interface UploadPrivateFile extends Omit<UploadFile, "overwrite" | "uploa
 export interface UploadFileResponse extends GetFileInfoResponse {
 	/** 文件路径（用于 reference_images 等） */
 	path: string
+	/**
+	 * 宿主附件 id。有则 mention/跨编辑器预览优先使用；
+	 * 无则仅用 path，由 resolveResourceReference 解析身份。
+	 */
+	file_id?: string
+	/** 跨项目粘贴时的源附件 id */
+	source_file_id?: string
+	/** 跨项目粘贴时的源项目 id */
+	source_project_id?: string
+	/** 当前项目 id（可选） */
+	project_id?: string
 }
 
 /**
@@ -1370,6 +1385,20 @@ export interface StoredVideoModeInputDraft {
 }
 
 /**
+ * 编辑器恢复用的有序 mention 绑定。
+ * 按 prompt 中 @ 出现顺序保存，避免同名文件仅靠 fileName 反推导致路径/身份漂移。
+ */
+export interface StoredMentionPathBinding {
+	fileName: string
+	path: string
+	/** 宿主附件 id；有则优先于 path 作为跨编辑器身份 */
+	fileId?: string
+	sourceFileId?: string
+	sourceProjectId?: string
+	projectId?: string
+}
+
+/**
  * 未提交的视频编辑草稿。
  * 与 generateVideoRequest 分离，避免刷新恢复草稿时被误判为已创建的生成任务。
  */
@@ -1377,6 +1406,8 @@ export interface StoredVideoEditorDraft {
 	version: 1
 	request: Partial<GenerateVideoRequest>
 	modeDrafts: Partial<Record<VideoInputMode, StoredVideoModeInputDraft>>
+	/** 按 prompt mention 出现顺序保存的结构化身份，关闭重开后直接重建节点。 */
+	mentionBindings?: StoredMentionPathBinding[]
 	updatedAt: number
 }
 
@@ -1679,6 +1710,46 @@ export interface CanvasDesignMethods {
 	 * 注入后 CanvasDesign 使用注入实现，否则降级到 navigator.clipboard
 	 */
 	clipboard?: CanvasDesignClipboard
+	/**
+	 * 将画布剪贴板中的源资源物化为目标控件可上传的 File。
+	 * 宿主可在此处执行跨项目权限校验、过期 URL 刷新和资源转移。
+	 */
+	materializeCanvasClipboardAsset?: (input: {
+		sourceCanvasId?: string
+		resourceIdentity?: string
+		sourcePath?: string
+		sourceRef?: {
+			src?: string
+			ossUrl?: string
+			expiresAt?: string
+		}
+		fileName: string
+		mimeType: string
+	}) => Promise<File | null>
+	/** 将画布剪贴板资源解析为目标控件可直接引用的规范路径。 */
+	resolveCanvasClipboardReference?: (input: {
+		sourceProjectId?: string
+		sourceCanvasId?: string
+		sourceFileId?: string
+		resourceIdentity?: string
+		sourcePath?: string
+		projectPath?: string
+		fileName?: string
+		targetProjectId?: string
+		targetCanvasId?: string
+		target: "canvas-editor" | "message-editor"
+	}) => Promise<{
+		kind: "current-canvas" | "project"
+		path: string
+		fileId?: string
+		projectPath?: string
+		resourceIdentity: string
+		fileName: string
+		/** 服务端复制已成功，但目标画布附件快照尚未确认该路径。 */
+		awaitingAttachmentConfirmation?: boolean
+	} | null>
+	/** 当前画布所属项目/画布上下文，供剪贴板协议写入来源身份。 */
+	getCanvasClipboardContext?: () => { projectId?: string; canvasId?: string }
 }
 
 /**

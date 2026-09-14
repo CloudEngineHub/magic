@@ -96,7 +96,6 @@ from app.tools.write_file import WriteFile
 from app.tools.manage_cron import ManageCron
 from app.tools.magic_calendar import ManageCalendar, CreateCalendarProject
 from app.tools.abstract_file_tool import AbstractFileTool
-from app.tools.append_to_file import AppendToFile
 from app.tools.document_parse import (
     BuildDocumentIndex,
     ConvertDocumentFormat,
@@ -248,8 +247,9 @@ from app.tools.scheduled_task import (
     ScheduledTaskUpdate,
 )
 
-# Remote 工具集（将 magic-service mention 中的 tool / agent 以本地工具形态转发）
+# Remote 工具集（将 magic-service mention 中的 tool / assistant 以本地工具形态转发）
 from app.tools.remote import (
+    CallAssistant,
     CallSimpleAgent,
     CallSimpleTool,
 )
@@ -274,7 +274,6 @@ __all__ = [
     # 工具类
     "AbstractFileTool",
     "AnalysisSlideWebpage",
-    "AppendToFile",
     "WebSearch",
     "FindAgentsTool",
     "CallSubagent",
@@ -494,6 +493,7 @@ __all__ = [
     "ScheduledTaskUpdate",
 
     # Remote 工具集
+    "CallAssistant",
     "CallSimpleAgent",
     "CallSimpleTool",
 ]

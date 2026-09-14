@@ -37,7 +37,7 @@ class SuperMagicAgentMarketAssembler
         array $playbooksMap,
         int $page,
         int $pageSize,
-        int $total
+        ?int $total
     ): QueryAgentMarketsResponseDTO {
         $list = [];
         foreach ($agentMarkets as $agentMarket) {

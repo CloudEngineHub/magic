@@ -8,16 +8,16 @@ export function convertLayerToTreeNode(
 	layer: LayerElement,
 	canvas?: Canvas | null,
 ): TreeNode<LayerTreeData> {
-	// 使用元素实例的 getRenderName() 方法获取默认名称
-	let defaultName = ""
+	// 使用元素实例的展示名称，确保图片状态后缀与画布名称标签保持一致。
+	let displayName = ""
 	if (canvas) {
 		const element = canvas.elementManager.getElementInstance(layer.id)
 		if (element) {
-			defaultName = element.getRenderName()
+			displayName = element.getNameLabelText()
 		}
 	}
 
-	const label = layer.name || defaultName || ""
+	const label = displayName || layer.name || ""
 	// 保留 LayerElement 判别联合的字段关联；不要再次覆盖 type，否则会把各分支
 	// 折叠成不相关的联合，新增元素类型时容易触发错误收窄。
 	const data: LayerTreeData = {

@@ -29,6 +29,7 @@ Router::addGroup('/api/v2/admin', static function () {
 
         Router::addGroup('/markets', static function () {
             Router::post('/queries', [AdminSuperMagicAgentApi::class, 'queryMarkets']);
+            Router::post('/vector-index/reindex', [AdminSuperMagicAgentApi::class, 'reindexMarketVectors']);
             Router::put('/{id}', [AdminSuperMagicAgentApi::class, 'updateMarket']);
             Router::put('/{id}/category', [AdminSuperMagicAgentApi::class, 'updateMarketCategory']);
             Router::put('/{id}/sort-order', [AdminSuperMagicAgentApi::class, 'updateMarketSortOrder']);
@@ -52,6 +53,7 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::post('/versions/queries', [AdminSkillApi::class, 'queryVersions']);
         Router::post('/markets/queries', [AdminSkillApi::class, 'queryMarkets']);
         Router::post('/markets/vector-index/reindex', [AdminSkillApi::class, 'reindexMarketVectors']);
+        Router::post('/markets/repair-skill-file-urls', [AdminSkillApi::class, 'repairSkillFileUrls']);
         Router::put('/markets/{id}', [AdminSkillApi::class, 'updateMarket']);
         Router::put('/markets/{id}/category', [AdminSkillApi::class, 'updateMarketCategory']);
         Router::put('/markets/{id}/sort-order', [AdminSkillApi::class, 'updateMarketSortOrder']);

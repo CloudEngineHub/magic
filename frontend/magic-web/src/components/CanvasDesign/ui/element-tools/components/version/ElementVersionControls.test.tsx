@@ -106,7 +106,7 @@ describe("ElementVersionControls", () => {
 		})
 	})
 
-	it("hides structural actions for a pending image version", () => {
+	it("allows deleting an active pending image version but keeps set-main hidden", () => {
 		const element = createImageElement({
 			contents: [
 				{ contentId: "version-1", src: "one.png", status: "completed" },
@@ -118,7 +118,19 @@ describe("ElementVersionControls", () => {
 		expect(screen.getByRole("button", { name: "上一个版本" })).not.toBeDisabled()
 		expect(screen.queryByRole("status")).toBeNull()
 		expect(screen.queryByRole("button", { name: "设为主版本" })).toBeNull()
-		expect(screen.queryByRole("button", { name: "删除版本" })).toBeNull()
+		expect(screen.getByRole("button", { name: "删除版本" })).not.toBeDisabled()
+	})
+
+	it("shows deleting for an active failed image version", () => {
+		const element = createImageElement({
+			contents: [
+				{ contentId: "version-1", src: "one.png", status: "completed" },
+				{ contentId: "version-2", status: "failed", errorMessage: "generation failed" },
+			],
+		})
+		render(<ElementVersionControls element={element} tools={getVersionTools(element)} />)
+
+		expect(screen.getByRole("button", { name: "删除版本" })).not.toBeDisabled()
 	})
 
 	it("keeps browsing available after switching away from a generating version", () => {
@@ -132,7 +144,7 @@ describe("ElementVersionControls", () => {
 		render(<ElementVersionControls element={element} tools={getVersionTools(element)} />)
 
 		expect(screen.getByRole("button", { name: "下一个版本" })).not.toBeDisabled()
-		expect(screen.queryByRole("button", { name: "删除版本" })).toBeNull()
+		expect(screen.getByRole("button", { name: "删除版本" })).not.toBeDisabled()
 		fireEvent.click(screen.getByRole("button", { name: "下一个版本" }))
 		expect(mocks.commandBus.execute).toHaveBeenCalledWith({
 			toolId: ElementToolTypeEnum.VersionNext,
@@ -154,6 +166,6 @@ describe("ElementVersionControls", () => {
 		render(<ElementVersionControls element={element} tools={getVersionTools(element)} />)
 
 		expect(screen.getByRole("button", { name: "设为主版本" })).not.toBeDisabled()
-		expect(screen.queryByRole("button", { name: "删除版本" })).toBeNull()
+		expect(screen.getByRole("button", { name: "删除版本" })).not.toBeDisabled()
 	})
 })

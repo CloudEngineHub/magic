@@ -217,15 +217,6 @@ class ChatBusinessMessageService {
 			case SeqRecordType.seq:
 				const seqId = payload?.seq?.seq_id
 
-				console.log(
-					"%c 接收到服务端的消息:",
-					"background-color: green; color: white;",
-					seqId,
-					// @ts-ignore
-					payload?.seq?.message?.type as string,
-					payload,
-				)
-
 				const magicId = userStore.user.userInfo?.magic_id
 				const magicOrganizationCode = userStore.user.organizationCode
 

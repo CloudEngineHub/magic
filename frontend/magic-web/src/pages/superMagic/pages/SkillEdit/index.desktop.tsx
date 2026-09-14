@@ -35,10 +35,18 @@ import { loadProjectAttachments } from "@/pages/superMagic/services"
 import {
 	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
+	resolveAttachmentsRefreshWaitersForProject,
 	type SuperMagicUpdateAttachmentsRequest,
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import PublishPanel, { PublishPanelStore } from "@/pages/superMagic/components/PublishPanel"
+import {
+	AsyncPublishError,
+	loadPendingPublishTask,
+	resolveAsyncPublishErrorMessage,
+	resumePendingPublish,
+	runAsyncPublish,
+} from "@/pages/superMagic/utils/asyncPublish"
 import {
 	FileActionVisibilityProvider,
 	HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS,
@@ -48,6 +56,7 @@ import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { SkillEditStoreProvider, useSkillEditStore } from "./context"
 import QuickActionCards from "./components/QuickActionCards"
 import SkillFilesPanel from "./components/SkillFilesPanel"
+import { MY_SKILLS_WORKSPACE_DATA } from "@/pages/superMagic/constants"
 import SkillCollaboratorsQuickAction from "./components/SkillCollaboratorsQuickAction"
 import ConversationPanel from "./components/ConversationPanel"
 import { useSkillPublishGuard } from "./hooks/useSkillPublishGuard"
@@ -63,9 +72,14 @@ import EditSkillDialog from "@/pages/superMagic/pages/MySkillsPage/components/Ed
 import { convertSearchParams } from "@/routes/history/helpers"
 import type { PublishDraft } from "@/pages/superMagic/components/PublishPanel"
 import type { SkillEditSkillInfo } from "./store/types"
-import { buildDefaultSlotUpdateParams } from "./utils/skill-workspace-manifest"
+import {
+	buildDefaultSlotUpdateParams,
+	findAttachmentByRelativePath,
+	SKILL_CONFIG_RELATIVE_PATH,
+} from "./utils/skill-workspace-manifest"
 import { ensureSkillConfigYamlForPublish } from "./utils/ensureSkillConfigYaml"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
+import { usePublishScopeNotice } from "@/pages/superMagic/hooks/usePublishScopeNotice"
 
 const SKILL_EDIT_PANEL_QUERY_KEY = "panel"
 const SKILL_EDIT_PUBLISH_VIEW_QUERY_KEY = "publishView"
@@ -146,6 +160,7 @@ function SkillEditErrorFallback({ onBack }: { onBack: () => void }) {
 function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	const { t } = useTranslation("crew/market")
 	const { t: tSuper } = useTranslation("super")
+	const skillsWorkspace = useMemo(() => MY_SKILLS_WORKSPACE_DATA(tSuper), [tSuper])
 	const store = useSkillEditStore()
 	const navigate = useNavigate()
 	const location = useLocation()
@@ -157,6 +172,8 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false)
 	const [skillVersions, setSkillVersions] = useState<SkillVersionItem[]>([])
 	const [isPublishPrepareLoading, setIsPublishPrepareLoading] = useState(false)
+	const [isInitialAttachmentsLoaded, setIsInitialAttachmentsLoaded] = useState(false)
+	const [isInitialAttachmentsLoadFailed, setIsInitialAttachmentsLoadFailed] = useState(false)
 	const { isAllowed: canCreateSkill } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.SkillCreate,
 	)
@@ -193,8 +210,9 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		skillCode,
 		refreshSkillVersions,
 		t,
+		publishPanelStore: null as PublishPanelStore | null,
 	})
-	publishPanelActionRef.current = { store, skillCode, refreshSkillVersions, t }
+	const publishAbortRef = useRef<AbortController | null>(null)
 
 	// New panel store when route skill or locale changes (submit uses ref for latest store)
 	const publishPanelStore = useMemo(() => {
@@ -212,7 +230,13 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 					skillCode: code,
 					refreshSkillVersions: rv,
 					t: translate,
+					publishPanelStore: panelStore,
 				} = publishPanelActionRef.current
+
+				publishAbortRef.current?.abort()
+				const abortController = new AbortController()
+				publishAbortRef.current = abortController
+
 				try {
 					const detail = skillStore.lastFetchedSkillDetail
 					if (detail) {
@@ -233,16 +257,45 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 						}
 					}
 
-					await skillsService.publishSkill(code, buildPublishParamsFromDraft(draft))
+					await runAsyncPublish({
+						resourceType: "skill",
+						code,
+						draft,
+						create: () =>
+							skillsService.publishSkillAsync(
+								code,
+								buildPublishParamsFromDraft(draft),
+							),
+						check: (publishTaskId) =>
+							skillsService.checkSkillPublish(code, publishTaskId),
+						onProgress: (progress) => panelStore?.setPublishProgress(progress),
+						signal: abortController.signal,
+					})
 					magicToast.success(translate("skillEditPage.publishPanel.toast.publishSuccess"))
 					await skillStore.refreshSkillDetail()
 					await rv()
-				} catch {
+				} catch (error) {
+					if (error instanceof AsyncPublishError && error.reason === "aborted") {
+						throw error
+					}
+					if (error instanceof AsyncPublishError) {
+						magicToast.error(resolveAsyncPublishErrorMessage(error, translate))
+						throw error
+					}
 					magicToast.error(translate("skillEditPage.publishPanel.toast.publishFailed"))
+					throw error
 				}
 			},
 		})
 	}, [skillCode, t])
+
+	publishPanelActionRef.current = {
+		store,
+		skillCode,
+		refreshSkillVersions,
+		t,
+		publishPanelStore,
+	}
 
 	const attachments = store.projectFilesStore.workspaceFileTree
 	const attachmentList = store.projectFilesStore.workspaceFilesList
@@ -293,17 +346,19 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	}, [store.loading, loadedSkillCode, refreshSkillVersions])
 
 	const updateAttachments = useDebounceFn(
-		(projectId?: string, callback?: () => void) => {
+		(projectId?: string, callback?: (didLoad: boolean) => void) => {
 			if (!projectId) {
 				store.projectFilesStore.setWorkspaceFileTree([])
 				releaseAttachmentsRefreshWaitersWithoutFetch()
-				callback?.()
+				setIsInitialAttachmentsLoaded(false)
+				callback?.(false)
 				return
 			}
 
 			const temporaryToken =
 				(window as Window & { temporary_token?: string }).temporary_token || ""
 
+			let didLoad = false
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 			withAttachmentsRefreshWaitersResolved(
 				projectId,
@@ -314,14 +369,22 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 					.then((res) => {
 						store.projectFilesStore.setWorkspaceFileTree(res.tree)
 						store.mentionPanelStore.finishLoadAttachmentsPromise(projectId)
+						didLoad = true
+						if (store.project?.id === projectId) {
+							setIsInitialAttachmentsLoadFailed(false)
+						}
 					})
 					.catch((error) => {
 						console.error("Failed to fetch attachments:", error)
 						store.projectFilesStore.setWorkspaceFileTree([])
+						if (store.project?.id === projectId) {
+							setIsInitialAttachmentsLoadFailed(true)
+						}
 					})
 					.finally(() => {
+						resolveAttachmentsRefreshWaitersForProject(projectId, didLoad)
 						pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
-						callback?.()
+						callback?.(didLoad)
 					}),
 			)
 		},
@@ -329,6 +392,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	).run
 
 	useEffect(() => {
+		setIsInitialAttachmentsLoaded(false)
 		void store.initFromSkillCode(skillCode)
 	}, [skillCode, store])
 
@@ -362,6 +426,8 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 			({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {
 				const processedData = AttachmentDataProcessor.processAttachmentData({ tree, list })
 				store.projectFilesStore.setWorkspaceFileTree(processedData.tree)
+				setIsInitialAttachmentsLoadFailed(false)
+				setIsInitialAttachmentsLoaded(true)
 			},
 			[store.projectFilesStore],
 		),
@@ -373,19 +439,36 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	useProjectAttachmentsChangeRealtime({
 		projectId: store.project?.id,
 		store: store.projectFilesStore,
+		onAttachmentsChange: undefined,
 		onFallbackError: useMemoizedFn((error: unknown) => {
 			console.error("Failed to refresh realtime skill attachments:", error)
+			setIsInitialAttachmentsLoadFailed(true)
 		}),
 	})
 
 	useDeepCompareEffect(() => {
 		const projectId = store.project?.id
-		if (!projectId) return
+		if (!projectId) {
+			setIsInitialAttachmentsLoaded(false)
+			setIsInitialAttachmentsLoadFailed(false)
+			return
+		}
+
+		let isActive = true
+		setIsInitialAttachmentsLoaded(false)
+		setIsInitialAttachmentsLoadFailed(false)
 
 		store.mentionPanelStore.initLoadAttachments(projectId)
-		updateAttachments(projectId)
+		updateAttachments(projectId, (didLoad) => {
+			if (!isActive) return
+			if (didLoad) {
+				setIsInitialAttachmentsLoadFailed(false)
+				setIsInitialAttachmentsLoaded(true)
+			}
+		})
 
 		return () => {
+			isActive = false
 			store.mentionPanelStore.clearInitLoadAttachmentsPromise(projectId)
 		}
 	}, [store.project?.id])
@@ -465,6 +548,84 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		setIsDetailPanelFullscreen(false)
 	})
 
+	// Resume async publish polling when the user re-opens the publish panel mid-task.
+	// Already-ready tasks settle silently (no loading button / success toast).
+	useEffect(() => {
+		if (!isPublishPanelVisible || !skillCode) return
+		const pending = loadPendingPublishTask<PublishDraft>("skill", skillCode)
+		if (!pending?.publish_task_id) return
+
+		publishAbortRef.current?.abort()
+		const abortController = new AbortController()
+		publishAbortRef.current = abortController
+		let active = true
+		let waitingUiStarted = false
+
+		void (async () => {
+			try {
+				const result = await resumePendingPublish({
+					resourceType: "skill",
+					code: skillCode,
+					publishTaskId: pending.publish_task_id,
+					draft: pending.draft,
+					check: (publishTaskId) =>
+						skillsService.checkSkillPublish(skillCode, publishTaskId),
+					onProgress: (progress) => {
+						if (active && waitingUiStarted) {
+							publishPanelStore.setPublishProgress(progress)
+						}
+					},
+					signal: abortController.signal,
+					onStartWaiting: (draft) => {
+						if (!active) return
+						waitingUiStarted = true
+						publishPanelStore.beginPublishing(0)
+						if (draft) {
+							publishPanelStore.openCreateViewWithDraft(draft)
+						} else {
+							publishPanelStore.openCreateView()
+						}
+					},
+				})
+				if (!active) return
+
+				await store.refreshSkillDetail()
+				await refreshSkillVersions()
+				if (!active) return
+
+				if (result.alreadyReady) {
+					publishPanelStore.openHistoryView()
+					return
+				}
+
+				magicToast.success(t("skillEditPage.publishPanel.toast.publishSuccess"))
+				publishPanelStore.openHistoryView()
+			} catch (error) {
+				if (!active) return
+				if (error instanceof AsyncPublishError && error.reason === "aborted") return
+				if (error instanceof AsyncPublishError) {
+					magicToast.error(resolveAsyncPublishErrorMessage(error, t))
+					return
+				}
+				magicToast.error(t("skillEditPage.publishPanel.toast.publishFailed"))
+			} finally {
+				if (active && waitingUiStarted) publishPanelStore.clearPublishingState()
+			}
+		})()
+
+		return () => {
+			active = false
+			abortController.abort()
+			if (waitingUiStarted) publishPanelStore.clearPublishingState()
+		}
+	}, [isPublishPanelVisible, publishPanelStore, refreshSkillVersions, skillCode, store, t])
+
+	useEffect(() => {
+		return () => {
+			publishAbortRef.current?.abort()
+		}
+	}, [])
+
 	const openPublishCreateView = useMemoizedFn(async () => {
 		flushSync(() => setIsPublishPrepareLoading(true))
 		try {
@@ -513,6 +674,41 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		}
 	})
 
+	const skillPublishPath = useMemo(
+		() =>
+			store.skillWorkspaceDir
+				? `.magic/skills/${store.skillWorkspaceDir}`
+				: ".magic/skills/<skill.dir>",
+		[store.skillWorkspaceDir],
+	)
+	const prepareSkillPublishScope = useMemoizedFn(async () => {
+		const configItem = findAttachmentByRelativePath(
+			store.projectFilesStore.workspaceFilesList,
+			SKILL_CONFIG_RELATIVE_PATH,
+		)
+		if (!configItem?.file_id) return true
+
+		await store.syncSkillWorkspaceManifest({ syncDefaultSlot: false })
+		if (store.skillWorkspaceDir) return true
+		magicToast.error(t("skillEditPage.publishPanel.toast.noValidSkillForPublish"))
+		return false
+	})
+	const { checkBeforeContinue, noticeDialog } = usePublishScopeNotice({
+		projectId: store.project?.id,
+		getAttachmentsStatus: () => ({
+			isLoaded: isInitialAttachmentsLoaded,
+			hasError: isInitialAttachmentsLoadFailed,
+		}),
+		getAttachments: () => store.projectFilesStore.workspaceFilesList,
+		publishPath: () =>
+			store.skillWorkspaceDir ? `.magic/skills/${store.skillWorkspaceDir}` : skillPublishPath,
+		excludedPaths: [SKILL_CONFIG_RELATIVE_PATH],
+		prepareBeforeCheck: prepareSkillPublishScope,
+	})
+	const openPublishPanelWithNotice = useMemoizedFn(async () => {
+		await checkBeforeContinue(openPublishPanel)
+	})
+
 	const {
 		isPublishIdentityDialogOpen,
 		isEnsuringSkillConfigForPublish,
@@ -522,7 +718,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	} = useSkillPublishGuard({
 		store,
 		t,
-		onPublishReady: openPublishPanel,
+		onPublishReady: openPublishPanelWithNotice,
 	})
 
 	useEffect(() => {
@@ -748,6 +944,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 										store.projectFilesStore.setWorkspaceFileTree
 									}
 									selectedProject={store.project}
+									selectedWorkspace={skillsWorkspace}
 								/>
 							</div>
 
@@ -824,6 +1021,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 					isPrePublishMode={isPublishIdentityDialogOpen}
 					defaultNameRequiredMessage={t("skillEditPage.publishNameDialog.required")}
 				/>
+				{noticeDialog}
 			</>
 		</FileActionVisibilityProvider>
 	)

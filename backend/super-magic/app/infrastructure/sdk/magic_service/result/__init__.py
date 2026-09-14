@@ -10,6 +10,7 @@ from .ai_ability_runtime_config_result import AiAbilityRuntimeConfigItem, AiAbil
 from .agent_details_result import AgentDetailsResult, Tool
 from .message_schedule_result import MessageScheduleResult
 from .oauth2_callback_relay_result import OAuth2CallbackRelayResult
+from .mcp_authorization_credential_result import MCPAuthorizationCredentialResult
 from .agent_openapi_result import AgentOpenApiResult, AgentSkillInfo
 from .update_agent_result import UpdateAgentResult
 from .skill_file_urls_result import SkillFileUrlsResult, SkillFileUrlItem
@@ -36,6 +37,7 @@ __all__ = [  # noqa: RUF022 - 保留既有导出顺序
     'Tool',
     'MessageScheduleResult',
     'OAuth2CallbackRelayResult',
+    'MCPAuthorizationCredentialResult',
     'AgentOpenApiResult',
     'AgentSkillInfo',
     'UpdateAgentResult',

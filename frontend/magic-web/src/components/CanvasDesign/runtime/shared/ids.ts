@@ -13,8 +13,21 @@ import { ElementTypeEnum } from "../document/types"
 import type { Canvas } from "../core/Canvas"
 import { ImageElement as ImageElementClass } from "../elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../elements/video/VideoElement"
-import { getActiveContent, getActiveImageContent } from "../document/elementContent"
+import { getActiveContent } from "../document/elementContent"
 import { resolveGridPlacements, resolveHorizontalPlacements } from "./placement/placementMath"
+import {
+	closeImageSource,
+	createImageSourceFromBlob,
+	getImageSourceDimensions,
+} from "../resources/image/imageSourceUtils"
+import { parseImageMetadataFromBlobHeader } from "../resources/image/imageHeaderDimensions"
+
+function getEffectiveContentForRead(canvas: Canvas, element: LayerElement) {
+	if (typeof canvas.getEffectiveContent === "function") {
+		return canvas.getEffectiveContent(element.id) as { src?: string } | undefined
+	}
+	return getActiveContent(element) as { src?: string } | undefined
+}
 
 /**
  * 矩形边界
@@ -785,26 +798,17 @@ export function validateImageFilePaths(filePaths: string[]): {
  * @param file 图片文件对象
  * @returns Promise<{width: number, height: number}> 图片的宽度和高度
  */
-export function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
-	return new Promise((resolve, reject) => {
-		const img = new Image()
-		const url = URL.createObjectURL(file)
+export async function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+	const metadata = await parseImageMetadataFromBlobHeader(file)
+	if (metadata) return { width: metadata.width, height: metadata.height }
 
-		img.onload = () => {
-			URL.revokeObjectURL(url)
-			resolve({
-				width: img.naturalWidth,
-				height: img.naturalHeight,
-			})
-		}
-
-		img.onerror = () => {
-			URL.revokeObjectURL(url)
-			reject(new Error("Failed to load image"))
-		}
-
-		img.src = url
-	})
+	const image = await createImageSourceFromBlob(file)
+	if (!image) throw new Error("Failed to load image")
+	try {
+		return getImageSourceDimensions(image)
+	} finally {
+		closeImageSource(image)
+	}
 }
 
 /**
@@ -1078,8 +1082,8 @@ export function getLoadedImageElements(canvas: Canvas): ImageElement[] {
 
 		const imageElement = elementData as ImageElement
 
-		// 从 ImageElement 实例判断图片是否已加载
-		if (getActiveImageContent(imageElement).src) {
+		// 从 effective Content 和 ImageElement 实例判断图片是否已加载
+		if (getEffectiveContentForRead(canvas, imageElement)?.src) {
 			const elementInstance = canvas.elementManager.getElementInstance(id)
 			if (
 				elementInstance &&
@@ -1103,11 +1107,10 @@ export function getLoadedVideoElements(canvas: Canvas): CanvasFileElement[] {
 
 	for (const id of selectedIds) {
 		const elementData = canvas.elementManager.getElementData(id)
-		if (
-			!elementData ||
-			elementData.type !== ElementTypeEnum.Video ||
-			!getActiveContent(elementData)?.src
-		)
+		const effectiveContent = elementData
+			? getEffectiveContentForRead(canvas, elementData)
+			: undefined
+		if (!elementData || elementData.type !== ElementTypeEnum.Video || !effectiveContent?.src)
 			continue
 
 		const elementInstance = canvas.elementManager.getElementInstance(id)

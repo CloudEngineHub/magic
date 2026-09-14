@@ -305,7 +305,13 @@ describe("FileUploadStore", () => {
 				parentId: "tmp-dir-id",
 				nextParentIds: undefined,
 				pageSize: 1000,
-				fileType: ["user_upload", "process", "system_auto_upload", "directory"],
+				fileType: [
+					"user_upload",
+					"user_create",
+					"process",
+					"system_auto_upload",
+					"directory",
+				],
 			})
 			expect(addedFiles?.[0]).toMatchObject({
 				name: "pasted.txt",
@@ -565,6 +571,30 @@ describe("FileUploadStore", () => {
 			})
 			expect(store.isCurrentSessionUploadFile("completed-upload-1")).toBe(true)
 			expect(store.getUploadMentionItems()).toHaveLength(1)
+		})
+
+		it("preserves the canvas clipboard marker when restoring a pasted upload mention", () => {
+			store.restorePastedUploadFileReferences([
+				{
+					type: MentionItemType.UPLOAD_FILE,
+					data: {
+						file_id: "canvas-upload",
+						file_name: "canvas.png",
+						file_path: "uploads/canvas.png",
+						file_extension: "png",
+						file_size: 12,
+						upload_status: "done",
+						upload_progress: 100,
+						is_canvas_clipboard: true,
+					},
+				},
+			])
+
+			expect(store.files).toHaveLength(1)
+			expect(store.files[0]).toMatchObject({
+				id: "canvas-upload",
+				isCanvasClipboard: true,
+			})
 		})
 
 		it("should only track pasted upload references accepted by the file limit", () => {

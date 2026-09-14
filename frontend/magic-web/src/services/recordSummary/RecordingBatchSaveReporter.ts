@@ -8,6 +8,7 @@ interface RecordingBatchSaveFile {
 	sessionId: string
 	projectId: string
 	topicId: string
+	taskId: string
 	parentId?: string
 	fileKey: string
 	fileName: string
@@ -89,7 +90,7 @@ export class RecordingBatchSaveReporter {
 					{
 						project_id: file.projectId,
 						topic_id: file.topicId,
-						task_id: file.sessionId,
+						task_id: file.taskId,
 						file_key: file.fileKey,
 						file_name: file.fileName,
 						file_size: file.fileSize,

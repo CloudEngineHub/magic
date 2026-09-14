@@ -36,6 +36,12 @@ vi.mock("@/components/base/MagicFileIcon", () => ({
 	default: () => <span data-testid="magic-file-icon" />,
 }))
 
+vi.mock("@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip", () => ({
+	default: ({ text, className }: { text?: string; className?: string }) => (
+		<div className={className}>{text}</div>
+	),
+}))
+
 vi.mock("@/pages/superMagic/components/TopicFilesButton/components/CustomFolderMagicIcon", () => ({
 	CustomFolderMagicIcon: () => <span data-testid="custom-folder-icon" />,
 }))

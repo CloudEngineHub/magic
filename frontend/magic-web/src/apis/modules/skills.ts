@@ -8,7 +8,11 @@ import { SupportLocales } from "@/constants/locale"
 
 /** Publisher type for store skills */
 export type SkillPublisherType =
-	"USER" | "OFFICIAL" | "OFFICIAL_BUILTIN" | "VERIFIED_CREATOR" | "PARTNER"
+	| "USER"
+	| "OFFICIAL"
+	| "OFFICIAL_BUILTIN"
+	| "VERIFIED_CREATOR"
+	| "PARTNER"
 
 /** Source type for user skills */
 export type SkillSourceType =
@@ -28,7 +32,11 @@ export type SkillPublishStatus = "PUBLISHED" | "UNPUBLISHED"
 
 /** Review status for published skill versions */
 export type SkillVersionReviewStatus =
-	"PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "INVALIDATED"
+	| "PENDING"
+	| "UNDER_REVIEW"
+	| "APPROVED"
+	| "REJECTED"
+	| "INVALIDATED"
 
 /**
  * i18n text object for skills.
@@ -156,6 +164,7 @@ export interface GetSkillsParams {
 export interface SkillItem {
 	id: string
 	code: string
+	project_id?: string | null
 	user_role?: CollaboratorPermission
 	package_name?: string
 	/** Resolved name for the current locale. */
@@ -327,7 +336,8 @@ export interface ImportOfficialSkillByFileKeyParams extends OfficialSkillImportF
 }
 
 export type ImportOfficialSkillParams =
-	ImportOfficialSkillByTokenParams | ImportOfficialSkillByFileKeyParams
+	| ImportOfficialSkillByTokenParams
+	| ImportOfficialSkillByFileKeyParams
 
 export interface ImportOfficialSkillResponse {
 	code: string
@@ -464,6 +474,8 @@ export interface SkillVersionItem {
 	/** @deprecated Kept for compatibility with older version responses. */
 	version_description_i18n?: SkillI18nText | null
 	publish_target_value?: SkillPublishTargetValueResolved | null
+	/** Categories selected when this version was published to the skills library. */
+	category_ids?: string[]
 	categories?: Array<{
 		id: string | number
 		name: string
@@ -524,6 +536,31 @@ export interface PublishSkillResponse {
 	is_current_version: boolean
 	published_at: string | null
 	category_ids?: string[]
+}
+
+/** Async publish task lifecycle status (ZIP packing / upload). */
+export type AsyncPublishTaskStatus = "processing" | "ready" | "failed"
+
+/** Response for async skill publish create / check. */
+export interface AsyncPublishTaskResponse {
+	publish_task_id: string
+	status: AsyncPublishTaskStatus
+	progress: number | null
+	resource_type?: "agent" | "skill"
+	resource_code?: string
+	organization_code?: string
+	publisher_user_id?: string
+	version_id?: number | string
+	task_key?: string
+	sandbox_id?: string
+	file_key?: string | null
+	error?: string | null
+	created_at?: number
+	updated_at?: number
+}
+
+export interface CheckSkillPublishParams {
+	publish_task_id: string
 }
 
 // ======================== Update Skill Info ========================
@@ -749,6 +786,26 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 		return fetch.post<PublishSkillResponse>(
 			genRequestUrl("/api/v1/skills/${code}/publish", { code }),
 			body,
+		)
+	},
+
+	/**
+	 * Create an async skill publish task (returns quickly; poll checkSkillPublish for result).
+	 * Request body matches the sync publish endpoint.
+	 */
+	publishSkillAsync({ code, ...body }: { code: string } & PublishSkillParams) {
+		return fetch.post<AsyncPublishTaskResponse>(
+			genRequestUrl("/api/v1/skills/${code}/publish/async", { code }),
+			body,
+		)
+	},
+
+	/**
+	 * Poll async skill publish task status by publish_task_id.
+	 */
+	checkSkillPublish({ code, publish_task_id }: { code: string } & CheckSkillPublishParams) {
+		return fetch.get<AsyncPublishTaskResponse>(
+			genRequestUrl("/api/v1/skills/${code}/publish/check", { code }, { publish_task_id }),
 		)
 	},
 

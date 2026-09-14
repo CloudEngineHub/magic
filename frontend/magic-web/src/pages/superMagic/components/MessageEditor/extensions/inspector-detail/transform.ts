@@ -1,6 +1,10 @@
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
-import { INSPECTOR_DETAIL_MARKER, INSPECTOR_DETAIL_TYPE } from "./const"
+import {
+	INSPECTOR_DETAIL_MARKER,
+	INSPECTOR_DETAIL_TYPE,
+	INSPECTOR_CAPTURE_ID_MARKER,
+} from "./const"
 
 /**
  * Known label prefixes that identify inspector detail lines.
@@ -30,7 +34,10 @@ const KNOWN_LABELS = [
 ]
 
 function isInspectorDetailLine(text: string): boolean {
-	return KNOWN_LABELS.some((label) => text.startsWith(label))
+	return (
+		KNOWN_LABELS.some((label) => text.startsWith(label)) ||
+		text.startsWith(INSPECTOR_CAPTURE_ID_MARKER)
+	)
 }
 
 function getFirstText(node: JSONContent): string {
@@ -80,6 +87,7 @@ function parseInspectorMarker(text: string) {
 		inlineBefore: Boolean(metadataMarkerCount & 1),
 		inlineAfter: Boolean(metadataMarkerCount & 2),
 		hasFileMention: Boolean(metadataMarkerCount & 4),
+		hasScreenshotMention: Boolean(metadataMarkerCount & 8),
 	}
 }
 
@@ -103,6 +111,8 @@ function extractInspectorAttrs(
 	elementHtml: string
 	selectorMatchCount: number
 	fileMention?: TiptapMentionAttributes | null
+	screenshotMention?: TiptapMentionAttributes | null
+	captureId?: string | null
 } {
 	let selector = ""
 	let size = ""
@@ -114,6 +124,7 @@ function extractInspectorAttrs(
 	let domContext = "{}"
 	let elementHtml = ""
 	let selectorMatchCount = -1
+	let captureId = ""
 
 	for (const p of paragraphs) {
 		const text = getFirstText(p)
@@ -174,6 +185,8 @@ function extractInspectorAttrs(
 			selectorMatchCount = Number(
 				text.replace(/^(选择器匹配数|Selector Match Count):\s*/, ""),
 			)
+		} else if (text.startsWith(INSPECTOR_CAPTURE_ID_MARKER)) {
+			captureId = text.slice(INSPECTOR_CAPTURE_ID_MARKER.length)
 		}
 	}
 
@@ -194,6 +207,7 @@ function extractInspectorAttrs(
 		domContext,
 		elementHtml,
 		selectorMatchCount,
+		captureId: captureId || undefined,
 	}
 }
 
@@ -217,7 +231,7 @@ export function transformInspectorContent(doc: JSONContent): JSONContent {
 
 		// Detect the marker at the start of a paragraph
 		if (node.type === "paragraph" && text.startsWith(INSPECTOR_DETAIL_MARKER)) {
-			const { titleText, inlineBefore, inlineAfter, hasFileMention } =
+			const { titleText, inlineBefore, inlineAfter, hasFileMention, hasScreenshotMention } =
 				parseInspectorMarker(text)
 
 			// Collect following detail paragraphs
@@ -249,12 +263,17 @@ export function transformInspectorContent(doc: JSONContent): JSONContent {
 				// Remove preceding plain paragraph if it's a duplicate of the title
 				// (old format stored title as a separate paragraph before the marker)
 				if (newContent.length > 0) {
+					const screenshotMention = getOnlyMention(newContent[newContent.length - 1])
+					if (screenshotMention && hasScreenshotMention) {
+						attrs.screenshotMention = screenshotMention
+						newContent.pop()
+					}
 					const prev = newContent[newContent.length - 1]
 					const fileMention = getOnlyMention(prev)
 					if (fileMention && (hasFileMention || !inlineBefore)) {
 						attrs.fileMention = fileMention
 						newContent.pop()
-					} else if (prev.type === "paragraph" && getFirstText(prev) === titleText) {
+					} else if (prev?.type === "paragraph" && getFirstText(prev) === titleText) {
 						newContent.pop()
 					}
 				}
@@ -346,6 +365,7 @@ export function serializeInspectorContent(
 			elementHtml?: string
 			selectorMatchCount?: number
 			fileMention?: TiptapMentionAttributes | null
+			captureId?: string | null
 		}
 
 		const content: JSONContent[] = []
@@ -358,7 +378,10 @@ export function serializeInspectorContent(
 		const metadataMarkerCount =
 			(inlinePosition.before ? 1 : 0) +
 			(inlinePosition.after ? 2 : 0) +
-			(attrs.fileMention ? 4 : 0)
+			// The file marker is only needed when inline content precedes the
+			// inspector node; standalone file mentions are inferred from the
+			// paragraph immediately before the title for backward compatibility.
+			(attrs.fileMention && inlinePosition.before ? 4 : 0)
 		content.push(
 			para(text(`${INSPECTOR_DETAIL_MARKER.repeat(1 + metadataMarkerCount)}${labels.title}`)),
 		)
@@ -404,6 +427,9 @@ export function serializeInspectorContent(
 		// Text content
 		if (attrs.textContent) {
 			content.push(para(text(`${labels.textContent}: "${attrs.textContent}"`)))
+		}
+		if (attrs.captureId) {
+			content.push(para(text(`${INSPECTOR_CAPTURE_ID_MARKER}${attrs.captureId}`)))
 		}
 		return content
 	}

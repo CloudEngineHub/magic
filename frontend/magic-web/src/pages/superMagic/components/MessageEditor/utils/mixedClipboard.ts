@@ -1,0 +1,164 @@
+import { htmlToClipboardMarkdown } from "../../MessageList/utils/clipboardMarkdown"
+
+export type MixedClipboardPart =
+	| { type: "text"; text: string }
+	| { type: "file"; file: File; originalText: string }
+
+export interface MixedClipboardContent {
+	parts: MixedClipboardPart[]
+	/** false 表示只保留了内容，无法证明附件与正文的穿插位置。 */
+	ordered: boolean
+}
+
+interface FileMarker {
+	start: number
+	end: number
+	file: File
+}
+
+function partsFromMarkers(text: string, markers: FileMarker[]): MixedClipboardPart[] {
+	const parts: MixedClipboardPart[] = []
+	let cursor = 0
+	for (const marker of markers) {
+		if (marker.start > cursor) {
+			parts.push({ type: "text", text: text.slice(cursor, marker.start) })
+		}
+		parts.push({
+			type: "file",
+			file: marker.file,
+			originalText: text.slice(marker.start, marker.end),
+		})
+		cursor = marker.end
+	}
+	if (cursor < text.length) parts.push({ type: "text", text: text.slice(cursor) })
+	return parts
+}
+
+/**
+ * 微信多选复制的纯文本是「发送者、时间、正文」记录序列。
+ * 实际采样确认：浏览器文件列表与其中的附件记录同序；图片正文使用 .dat 别名，
+ * 文件字节则以 PNG 名称提供。因此仅在消息头、完整数量、类型和文件名均符合格式时
+ * 使用这个来源的顺序契约；普通文本不能仅因附件数量相同就按下标配对。
+ */
+export function parseWeChatMixedClipboard(
+	text: string,
+	files: File[],
+): MixedClipboardContent | null {
+	const headers = Array.from(
+		text.matchAll(/^[^\n]+\n\d{4}年\d{1,2}月\d{1,2}日[ \t]+\d{1,2}:\d{2}(?::\d{2})?\n/gm),
+	)
+	if (headers.length === 0 || headers[0].index !== 0) return null
+
+	const markers: FileMarker[] = []
+	for (const [index, header] of headers.entries()) {
+		const start = header.index + header[0].length
+		const body = text.slice(start, headers[index + 1]?.index ?? text.length).trimEnd()
+		const media = body.match(/^\[(图片|文件)\][ \t]+([^\n]+)$/)
+		if (!media) continue
+		const file = files[markers.length]
+		if (!file) return null
+		const name = media[2].trim()
+		const isImage = file.type.toLowerCase().startsWith("image/")
+		if (media[1] === "图片") {
+			if (!isImage || (name !== file.name && !/^微信图片_[\d_]+\.dat$/i.test(name))) {
+				return null
+			}
+		} else if (name !== file.name) {
+			return null
+		}
+		markers.push({ start, end: start + body.length, file })
+	}
+	if (markers.length === 0 || markers.length !== files.length) return null
+	return { parts: partsFromMarkers(text, markers), ordered: true }
+}
+
+function localFileName(source: string): string | null {
+	// 远程图片同名不能证明它就是剪贴板附件；只接受正文明确给出的本地文件引用。
+	if (/^[a-z][a-z\d+.-]*:/i.test(source) && !source.startsWith("file:")) return null
+	try {
+		return decodeURIComponent(source.split(/[?#]/, 1)[0]).split("/").pop() || null
+	} catch {
+		return null
+	}
+}
+
+function parseHtmlFiles(html: string, files: File[]): MixedClipboardContent | null {
+	if (!html) return null
+	const container = new DOMParser().parseFromString(html, "text/html").body
+	container.querySelectorAll("script, style, iframe, object").forEach((node) => node.remove())
+	const prefix = `MAGICCLIPBOARD${crypto.randomUUID().replaceAll("-", "")}`
+	const replacements: Array<{ token: string; file: File; originalText: string }> = []
+	for (const node of container.querySelectorAll("img[src], a[href]")) {
+		if (!container.contains(node)) continue
+		const source = node.getAttribute(node.tagName === "IMG" ? "src" : "href") ?? ""
+		const name = localFileName(source)
+		const matches = files.filter((file) => file.name === name)
+		if (matches.length !== 1) continue
+		const file = matches[0]
+		if (node.tagName === "IMG" && !file.type.startsWith("image/")) continue
+		const token = `${prefix}${replacements.length}END`
+		replacements.push({ token, file, originalText: node.textContent?.trim() || file.name })
+		node.replaceWith(container.ownerDocument.createTextNode(token))
+	}
+	if (replacements.length === 0) return null
+	const markdown = htmlToClipboardMarkdown(container)
+	const markers: FileMarker[] = []
+	for (const { token, file } of replacements) {
+		const start = markdown.indexOf(token)
+		if (start < 0) return null
+		markers.push({ start, end: start + token.length, file })
+	}
+	markers.sort((a, b) => a.start - b.start)
+	const parts = partsFromMarkers(markdown, markers)
+	for (const part of parts) {
+		if (part.type !== "file") continue
+		part.originalText =
+			replacements.find((replacement) => replacement.token === part.originalText)
+				?.originalText ?? part.file.name
+	}
+	const matchedFiles = new Set(markers.map((marker) => marker.file))
+	for (const file of files) {
+		if (matchedFiles.has(file)) continue
+		parts.push({ type: "text", text: "\n" }, { type: "file", file, originalText: "" })
+	}
+	return { parts, ordered: matchedFiles.size === files.length }
+}
+
+export function parseMixedClipboard(
+	text: string,
+	html: string,
+	files: File[],
+): MixedClipboardContent {
+	let normalizedText = text.replace(/\r\n?/g, "\n")
+	// Finder 等文件管理器的文字格式只是文件 URL 列表，不是附带正文。
+	const lines = normalizedText.trim().split("\n")
+	const remainingNames = files.map((file) => file.name)
+	const isFileList =
+		lines.length === files.length &&
+		lines.every((line) => {
+			if (!/^(?:file:|\/)/.test(line.trim())) return false
+			const name = localFileName(line.trim())
+			const index = name ? remainingNames.indexOf(name) : -1
+			if (index < 0) return false
+			remainingNames.splice(index, 1)
+			return true
+		})
+	if (isFileList) normalizedText = ""
+	const wechat = parseWeChatMixedClipboard(normalizedText, files)
+	if (wechat) return wechat
+	const htmlFiles = parseHtmlFiles(html, files)
+	if (htmlFiles) return htmlFiles
+
+	let body = normalizedText
+	if (html) {
+		const container = new DOMParser().parseFromString(html, "text/html").body
+		container.querySelectorAll("script, style, iframe, object").forEach((node) => node.remove())
+		if (container.textContent?.trim()) body = htmlToClipboardMarkdown(container) || body
+	}
+	const parts: MixedClipboardPart[] = body ? [{ type: "text", text: body }] : []
+	for (const file of files) {
+		if (parts.length > 0) parts.push({ type: "text", text: "\n" })
+		parts.push({ type: "file", file, originalText: "" })
+	}
+	return { parts, ordered: !body.trim() }
+}

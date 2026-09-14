@@ -1,4 +1,4 @@
-import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { createEvent, fireEvent, render, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { TooltipProvider } from "../../../primitives/shadcn/tooltip"
@@ -67,6 +67,14 @@ function getTooltipTrigger(container: HTMLElement): HTMLElement {
 	return trigger
 }
 
+async function getTooltipContent(): Promise<HTMLElement> {
+	return waitFor(() => {
+		const content = document.querySelector<HTMLElement>('[data-slot="tooltip-content"]')
+		if (!content) throw new Error("Tooltip content did not open")
+		return content
+	})
+}
+
 function fireTouchPointerDown(target: Element) {
 	const event = createEvent.pointerDown(target)
 	Object.defineProperty(event, "pointerType", { value: "touch" })
@@ -94,11 +102,11 @@ describe("Reference media SourceList tooltip", () => {
 			drawImage: vi.fn(),
 			clearRect: vi.fn(),
 		} as unknown as CanvasRenderingContext2D)
-		vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {})
+		vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined)
 		vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue()
 	})
 
-	it("opens an image preview from a touch press and keeps the file name", () => {
+	it("opens an image preview from a touch press and keeps the file name", async () => {
 		const { container } = renderWithTooltipProvider(
 			<ReferenceImageLowPreview
 				fileName="image.png"
@@ -111,7 +119,7 @@ describe("Reference media SourceList tooltip", () => {
 
 		fireTouchPointerDown(getTooltipTrigger(container))
 
-		const tooltip = screen.getByRole("tooltip")
+		const tooltip = await getTooltipContent()
 		expect(tooltip).not.toHaveAttribute("data-reference-media-tooltip-fullscreen")
 		expect(tooltip).toHaveStyle({ width: "250px", maxWidth: "250px" })
 		expect(tooltip).toHaveTextContent("image.png")
@@ -121,10 +129,14 @@ describe("Reference media SourceList tooltip", () => {
 		)
 		expect(image).not.toBeNull()
 		expect(image).toHaveStyle({ width: "250px", height: "141px" })
-		expect(screen.getByRole("button", { name: "关闭预览" })).toBeInTheDocument()
+		const closeButton = tooltip.querySelector<HTMLButtonElement>(
+			'button[aria-label="关闭预览"]',
+		)
+		expect(closeButton).not.toBeNull()
 
-		fireEvent.click(screen.getByRole("button", { name: "关闭预览" }))
-		expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
+		if (!closeButton) throw new Error("Close button not found")
+		fireEvent.click(closeButton)
+		expect(document.querySelector('[data-slot="tooltip-content"]')).not.toBeInTheDocument()
 	})
 
 	afterEach(() => {
@@ -147,13 +159,16 @@ describe("Reference media SourceList tooltip", () => {
 		fireTouchPointerDown(getTooltipTrigger(container))
 
 		expect(mocks.loadAudio).toHaveBeenCalledOnce()
-		const tooltip = screen.getByRole("tooltip")
+		const tooltip = await getTooltipContent()
 		expect(tooltip).toHaveTextContent("audio.mp3")
 		expectTooltipHeaderBefore(tooltip, "audio")
 		const audio = tooltip.querySelector<HTMLAudioElement>("audio")
 		expect(audio).not.toHaveAttribute("controls")
-		const playButton = screen.getByRole("button", { name: "播放" })
-		const progress = screen.getByRole("slider", { name: "播放进度" })
+		const playButton = tooltip.querySelector<HTMLButtonElement>('button[aria-label="播放"]')
+		const progress = tooltip.querySelector<HTMLInputElement>('input[aria-label="播放进度"]')
+		expect(playButton).not.toBeNull()
+		expect(progress).not.toBeNull()
+		if (!playButton || !progress) throw new Error("Audio controls not found")
 		expect(progress).toHaveValue("0")
 		expect(tooltip).toHaveTextContent("0:00 / 0:00")
 
@@ -169,24 +184,24 @@ describe("Reference media SourceList tooltip", () => {
 		expect(HTMLMediaElement.prototype.play).toHaveBeenCalledOnce()
 		fireEvent.play(audio)
 		await waitFor(() =>
-			expect(screen.getByRole("button", { name: "暂停" })).toBeInTheDocument(),
+			expect(tooltip.querySelector('button[aria-label="暂停"]')).not.toBeNull(),
 		)
 
-		fireEvent.click(screen.getByRole("button", { name: "暂停" }))
+		fireEvent.click(tooltip.querySelector('button[aria-label="暂停"]') as HTMLButtonElement)
 		expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled()
 		fireEvent.pause(audio)
 
-		expect(screen.getByRole("button", { name: "播放" })).toBeInTheDocument()
+		expect(tooltip.querySelector('button[aria-label="播放"]')).not.toBeNull()
 
 		fireEvent.change(progress, { target: { value: "30" } })
 		expect(audio.currentTime).toBe(30)
 		expect(tooltip).toHaveTextContent("0:30 / 2:00")
 
 		fireEvent.pointerDown(document.body)
-		expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
+		expect(document.querySelector('[data-slot="tooltip-content"]')).not.toBeInTheDocument()
 	})
 
-	it("opens a muted looping video preview and pauses it when closed", () => {
+	it("opens a muted looping video preview and pauses it when closed", async () => {
 		const pause = vi.mocked(HTMLMediaElement.prototype.pause)
 		const { container } = renderWithTooltipProvider(
 			<ReferenceVideoPosterPreview
@@ -198,8 +213,9 @@ describe("Reference media SourceList tooltip", () => {
 
 		fireTouchPointerDown(getTooltipTrigger(container))
 
-		const video = screen.getByRole("tooltip").querySelector("video")
-		expectTooltipHeaderBefore(screen.getByRole("tooltip"), "video")
+		const tooltip = await getTooltipContent()
+		const video = tooltip.querySelector("video")
+		expectTooltipHeaderBefore(tooltip, "video")
 		expect(video).not.toBeNull()
 		if (!video) throw new Error("Video preview not found")
 		expect(video.muted).toBe(true)
@@ -208,7 +224,7 @@ describe("Reference media SourceList tooltip", () => {
 
 		fireEvent.pointerDown(document.body)
 		expect(pause).toHaveBeenCalled()
-		expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
+		expect(document.querySelector('[data-slot="tooltip-content"]')).not.toBeInTheDocument()
 	})
 
 	it("keeps rendering while the video poster dimensions are not ready", () => {

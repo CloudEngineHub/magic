@@ -42,11 +42,13 @@ export function collectMentionItemsFromContent(content?: JSONContent): MentionLi
 			if (!attrs.pending) {
 				items.push({ type: "mention", attrs })
 			}
-		} else if (node.type === INSPECTOR_DETAIL_TYPE && node.attrs?.fileMention) {
-			items.push({
-				type: "mention",
-				attrs: node.attrs.fileMention as TiptapMentionAttributes,
-			})
+		} else if (node.type === INSPECTOR_DETAIL_TYPE) {
+			if (node.attrs?.fileMention) {
+				items.push({
+					type: "mention",
+					attrs: node.attrs.fileMention as TiptapMentionAttributes,
+				})
+			}
 		}
 		if (Array.isArray(node.content)) {
 			node.content.forEach((child) => walk(child as JSONContent))
@@ -67,11 +69,13 @@ export function collectMentionItemsFromEditor(editor: Editor | null): MentionLis
 			if (!attrs.pending) {
 				items.push({ type: "mention", attrs })
 			}
-		} else if (node.type.name === INSPECTOR_DETAIL_TYPE && node.attrs.fileMention) {
-			items.push({
-				type: "mention",
-				attrs: node.attrs.fileMention as TiptapMentionAttributes,
-			})
+		} else if (node.type.name === INSPECTOR_DETAIL_TYPE) {
+			if (node.attrs.fileMention) {
+				items.push({
+					type: "mention",
+					attrs: node.attrs.fileMention as TiptapMentionAttributes,
+				})
+			}
 		}
 		return true
 	})
@@ -125,7 +129,7 @@ export function replaceUploadMentionNode({
 		const uploadData = attrs.data as UploadFileMentionData
 		if (uploadData.file_id !== fileId) return true
 
-		if (isProjectContext && saveResult) {
+		if (isProjectContext && saveResult && !uploadData.is_canvas_clipboard) {
 			tr.setNodeMarkup(pos, undefined, {
 				type: MentionItemType.PROJECT_FILE,
 				data: transformUploadFileToProjectFile(uploadData, saveResult),
@@ -145,6 +149,7 @@ export function replaceUploadMentionNode({
 					file: uploadData.file,
 					relative_file_path: uploadData.relative_file_path,
 					is_hidden: uploadData.is_hidden,
+					is_canvas_clipboard: uploadData.is_canvas_clipboard,
 					upload_progress: 100,
 					upload_status: "done",
 					upload_error: undefined,

@@ -64,6 +64,7 @@ export type {
 	InitializeMessagesOptions,
 	HttpToolProjectionPolicy,
 	HttpAssistantSnapshotPolicy,
+	AssistantRenderPhase,
 	LifecycleEventPolicy,
 	CanonicalCommitTrigger,
 	CanonicalCommitContext,
@@ -123,6 +124,7 @@ import type {
 	SharedMessageItem,
 	MessageItem,
 	StreamState,
+	AssistantRenderPhase,
 	ToolCall,
 	ToolStreamStepResult,
 	ToolStreamMessageState,
@@ -155,6 +157,9 @@ const STREAM_RECOVERY_MAX_ATTEMPTS = 3
 
 const STREAM_RECOVERY_TOTAL_BUDGET_MS = 30_000
 
+/** 首个 Agent chunk 丢失时，短暂保留本地执行闸门，随后交给 HTTP recovery。 */
+const TOPIC_PENDING_EXECUTION_TIMEOUT_MS = 30_000
+
 const TERMINAL_TOPIC_TASK_STATUSES = new Set(["finished", "error", "suspended"])
 
 /** progress_snapshot 下只有明确 Topic 终态才自动取得 canonical Final 资格。 */
@@ -162,8 +167,11 @@ const TERMINAL_ASSISTANT_STATUSES = new Set(["finished", "error", "suspended", "
 
 /** 小 chunk 先短窗口合并，降低深序列化和 IndexedDB 事务频率。 */
 const STREAM_PERSISTENCE_BATCH_SIZE = 10
+/** 流式渲染保持约一帧一次；提速只增加单帧字符量。 */
 const STREAM_PERSISTENCE_FLUSH_MS = 200
+/** 流式渲染保持约一帧一次；提速只增加单帧字符量。 */
 const STREAM_PERSISTENCE_MIN_FLUSH_INTERVAL_MS = 100
+/** 流式渲染保持约一帧一次；提速只增加单帧字符量。 */
 const STREAM_PERSISTENCE_MAX_PENDING_RECORDS = 200
 
 /** Inactive Topics keep only a bounded hot window; older pages are reloaded on demand. */
@@ -174,7 +182,9 @@ const STREAM_RENDER_FRAME_MS = 16
 
 /** Final 单独到达时先温和提速，给正文保留自然的连续流式效果。 */
 const FINAL_STREAM_SETTLING_MULTIPLIER = 3
+/** 最终渲染保持约一帧一次；提速只增加单帧字符量。 */
 const FINAL_STREAM_MAX_SETTLING_BATCH = 384
+/** 最终渲染保持约一帧一次；提速只增加单帧字符量。 */
 const FINAL_STREAM_SETTLING_MAX_MS = 4_000
 
 /** 检测到后继 Agent 消息压力后，从压力发生时开始计算快速追赶预算。 */
@@ -183,6 +193,9 @@ const FINAL_STREAM_SAFETY_CATCHUP_BUDGET_MS = 1_000
 const FINAL_STREAM_MAX_CATCHUP_BATCH = 1_024
 const FINAL_STREAM_MIN_VISIBLE_FRAMES = 4
 const FINAL_STREAM_SMALL_TAIL = 32
+
+/** Final 与已推进 transport 交错到达时，给同一流一个短暂尾部收敛窗口。 */
+const FINAL_TRANSPORT_PENDING_TIMEOUT_MS = 5_000
 
 /** Tool response 的 canonical 状态集合；response_missing 是 Store 内部生成的弱终态。 */
 const VALID_TOOL_RESPONSE_STATUSES = new Set([
@@ -337,6 +350,11 @@ interface FinalRenderState {
 	timer: ReturnType<typeof setTimeout> | null
 }
 
+interface PendingCanonicalFinal {
+	input: CanonicalFinalSettlementInput
+	timer: ReturnType<typeof setTimeout> | null
+}
+
 function compareMessageSeqId(left: string, right: string): number {
 	if (left === right) return 0
 	const normalizedLeft = left.replace(/^0+(?=\d)/, "")
@@ -359,6 +377,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private streamTransportBarriers = new Map<string, StreamTransportBarrier>()
 	/** Final-only visual projection; never participates in Topic streaming or lifecycle events. */
 	private finalRenderStates = new Map<string, FinalRenderState>()
+	/** Canonical Final can arrive before the tail transport; keep it pending without closing the stream. */
+	private pendingCanonicalFinals = new Map<string, PendingCanonicalFinal>()
 	private topicSyncGenerationCounter = 0
 	/** HTTP 同步中的 finished assistant 先按代次暂存，只有同步成功且任务 finished 才提升为终态。 */
 	private pendingTopicSyncFinalizations = new Map<
@@ -443,6 +463,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			| "canonicalFinalBarriers"
 			| "streamTransportBarriers"
 			| "finalRenderStates"
+			| "pendingCanonicalFinals"
 			| "onServerMessagesConfirmedCallbacks"
 			| "onStreamRecoveryRequestedCallbacks"
 			| "onStreamRecoveryFailedCallbacks"
@@ -476,6 +497,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				// Keep render-state values referentially stable for timer ownership while
 				// making Map replacements observable to MessageNode.
 				finalRenderStates: observable.shallow,
+				pendingCanonicalFinals: false,
 				onServerMessagesConfirmedCallbacks: false,
 				onStreamRecoveryRequestedCallbacks: false,
 				onStreamRecoveryFailedCallbacks: false,
@@ -772,6 +794,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			if (state.topicId !== topicId) return
 			if (state.timer) clearTimeout(state.timer)
 			this.finalRenderStates.delete(key)
+		})
+		this.pendingCanonicalFinals.forEach((pending, key) => {
+			if (!key.startsWith(topicPrefix)) return
+			if (pending.timer) clearTimeout(pending.timer)
+			this.pendingCanonicalFinals.delete(key)
 		})
 		return true
 	}
@@ -3042,7 +3069,15 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			this.finalizeSynchronizedAssistantSnapshots(topicId, pendingFinalizations.snapshots)
 		}
 
-		if (isFinishedSync) {
+		if (isFinishedSync && this.hasPendingTopicExecution(topicId)) {
+			// The Topic may still report the previous execution as finished while a newly sent
+			// message is waiting for its first chunk or already has an active StreamState. Release
+			// this HTTP generation without treating that stream as terminal.
+			const buffer = this.getTopicBuffer(topicId)
+			buffer.isProcessing = false
+			this.processMessageBuffer(topicId)
+			this.resumeTopicAfterSync(topicId, syncContext?.correlationIds || new Set())
+		} else if (isFinishedSync) {
 			if (succeeded && syncContext?.generation === generation) {
 				this.discardSynchronizedStreamsOutsideSnapshot(topicId, syncContext)
 			}
@@ -3514,6 +3549,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			this.clearStreamRecoveryState(topicId, superMessageId)
 			this.clearStreamChunkLedger(topicId, superMessageId)
 			this.clearStreamCorrelationId(topicId, superMessageId)
+			this.clearPendingCanonicalFinal(topicId, superMessageId)
 			this.setCanonicalFinalBarrier(topicId, superMessageId, {
 				seqId: "",
 				appMessageId: "",
@@ -4653,12 +4689,21 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const taskId = String(messageChunk?.task_id || "").trim()
 		const correlationId = String(messageChunk?.correlation_id || "")
 		if (!topicId || !superMessageId || !correlationId) return
-		this.setStreamCorrelationId(topicId, superMessageId, correlationId)
 		const topicMeta = this.getTopicMetadata(topicId)
 		const chunkIndex =
 			Number.isInteger(messageChunk?.i) && Number(messageChunk.i) >= 0
 				? Number(messageChunk.i)
 				: null
+		const finalBarrier = this.getCanonicalFinalBarrier(topicId, superMessageId)
+		if (finalBarrier) {
+			// Chunk transport carries no persistent revision. A changed correlation alone
+			// cannot prove a higher canonical revision, so only a later IM/HTTP Final with
+			// a higher seq_id may advance this logical Assistant message. Check this before
+			// the transport barrier so late chunks cannot mutate any stream sidecar.
+			this.clearStreamChunkLedger(topicId, superMessageId)
+			return
+		}
+		const pendingFinal = this.getPendingCanonicalFinal(topicId, superMessageId)
 		const transportBarrier = this.getStreamTransportBarrier(topicId, superMessageId)
 		if (transportBarrier) {
 			const startsNewGeneration =
@@ -4673,17 +4718,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			// a successor generation; finish_reason must not become a permanent tombstone.
 			this.clearStreamTransportBarrier(topicId, superMessageId)
 		}
-		const finalBarrier = this.getCanonicalFinalBarrier(topicId, superMessageId)
-		if (finalBarrier) {
-			// Chunk transport carries no persistent revision. A changed correlation alone
-			// cannot prove a higher canonical revision, so only a later IM/HTTP Final with
-			// a higher seq_id may advance this logical Assistant message.
-			this.clearStreamChunkLedger(topicId, superMessageId)
-			return
-		}
-
 		const choiceSelection = this.selectStreamChunkChoice(messageChunk)
 		const choice = choiceSelection.kind === "accepted" ? choiceSelection.choice : undefined
+		if (pendingFinal && !this.isPendingFinalChunkCompatible(topicId, superMessageId, choice)) {
+			// A chunk that diverges from the already received canonical snapshot belongs to an
+			// old/replayed generation. Close the pending Final and do not let that chunk reopen it.
+			this.settlePendingCanonicalFinal(topicId, superMessageId)
+			return
+		}
 		const delta = choice?.delta
 		const toolCalls = Array.isArray(delta?.tool_calls) ? delta.tool_calls : []
 		const hasTextDelta = Boolean(
@@ -4694,12 +4736,21 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		// reach the indexed provisional slot, but only a stable tool id is projectable.
 		const hasCanonicalDelta = hasTextDelta || toolCalls.length > 0
 		const streamStateBeforeChunk = this.getStreamState(topicId, superMessageId)
-
 		if (chunkIndex === null) {
 			// 缺失或非法序号无法安全排序和去重；丢弃当前包，等待后续完整消息兜底收敛。
 			console.error("chunk error")
 			return
 		}
+		if (pendingFinal && choiceSelection.kind !== "rejected") {
+			// Every accepted chunk refreshes the idle fallback. The transport remains open until
+			// finish_reason; the timer only protects against a permanently missing tail.
+			if (pendingFinal.timer) clearTimeout(pendingFinal.timer)
+			this.armPendingCanonicalFinalTimeout(pendingFinal, FINAL_TRANSPORT_PENDING_TIMEOUT_MS)
+			this.pendingCanonicalFinals.set(`${topicId}\u0000${superMessageId}`, pendingFinal)
+		}
+		// Do not let a rejected late chunk recreate correlation sidecar state after Final.
+		// The sidecar is written only after both transport and canonical barriers accept it.
+		this.setStreamCorrelationId(topicId, superMessageId, correlationId)
 		if (hasCanonicalDelta || choice?.finish_reason) {
 			this.promoteActiveFinalStreamForSuccessor(topicId, superMessageId)
 		}
@@ -4881,8 +4932,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				streamState.correlation_id = correlationId
 				streamState.task_id = taskId || streamState.task_id
 				if (streamState.isFinalMessageReceived) {
-					this.clearStreamChunkLedger(topicId, superMessageId)
-					this.clearStreamCorrelationId(topicId, superMessageId)
+					if (this.getPendingCanonicalFinal(topicId, superMessageId)) {
+						this.settlePendingCanonicalFinal(topicId, superMessageId)
+					} else {
+						this.clearStreamChunkLedger(topicId, superMessageId)
+						this.clearStreamCorrelationId(topicId, superMessageId)
+					}
 					break
 				}
 				appliedChunk =
@@ -4895,8 +4950,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						orderedChoice,
 					) || appliedChunk
 				if (streamState.isFinalMessageReceived) {
-					this.clearStreamChunkLedger(topicId, superMessageId)
-					this.clearStreamCorrelationId(topicId, superMessageId)
+					if (this.getPendingCanonicalFinal(topicId, superMessageId)) {
+						this.settlePendingCanonicalFinal(topicId, superMessageId)
+					} else {
+						this.clearStreamChunkLedger(topicId, superMessageId)
+						this.clearStreamCorrelationId(topicId, superMessageId)
+					}
 					break
 				}
 			}
@@ -5263,6 +5322,128 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		this.streamTransportBarriers.delete(`${topicId}\u0000${superMessageId}`)
 	}
 
+	private getPendingCanonicalFinal(topicId: string, superMessageId: string) {
+		return this.pendingCanonicalFinals.get(`${topicId}\u0000${superMessageId}`)
+	}
+
+	private clearPendingCanonicalFinal(topicId: string, superMessageId: string) {
+		const key = `${topicId}\u0000${superMessageId}`
+		const pending = this.pendingCanonicalFinals.get(key)
+		if (pending?.timer) clearTimeout(pending.timer)
+		this.pendingCanonicalFinals.delete(key)
+	}
+
+	/**
+	 * A Final may be a complete canonical snapshot while its transport still has tail chunks.
+	 * Hold only when the snapshot is a safe prefix continuation of the currently observed stream;
+	 * unrelated historical Finals keep the existing immediate-settlement behavior.
+	 */
+	private shouldDeferCanonicalFinal(
+		topicId: string,
+		superMessageId: string,
+		finalNode: RawSuperMagicMessageNode,
+	) {
+		const streamState = this.getStreamState(topicId, superMessageId)
+		const currentNode = this.getAssistantMessageNode(topicId, superMessageId)
+		const ledger = this.getExistingStreamChunkLedger(topicId, superMessageId)
+		const currentContent = String(streamState?.content ?? currentNode?.content ?? "")
+		const currentReasoning = String(
+			streamState?.reasoning_content ?? currentNode?.reasoning_content ?? "",
+		)
+		const targetContent = this.hasDefinedFinalField(finalNode, "content")
+			? String(finalNode.content || "")
+			: undefined
+		const targetReasoning = this.hasDefinedFinalField(finalNode, "reasoning_content")
+			? String(finalNode.reasoning_content || "")
+			: undefined
+		const contentContinues =
+			targetContent === undefined || targetContent.startsWith(currentContent)
+		const reasoningContinues =
+			targetReasoning === undefined || targetReasoning.startsWith(currentReasoning)
+		if (!contentContinues || !reasoningContinues) return false
+
+		// Tool-only streams can have an active ledger and a canonical Final, but there is no
+		// text animation to continue. Keep those Finals authoritative immediately; defer only
+		// when the Final actually contains a longer text/reasoning snapshot.
+		const hasTextContinuation = Boolean(
+			(targetContent !== undefined && targetContent.length > currentContent.length) ||
+			(targetReasoning !== undefined && targetReasoning.length > currentReasoning.length),
+		)
+		if (!hasTextContinuation) return false
+
+		// A non-empty stream ledger with i>0 is the evidence that this Final is interleaved
+		// with the same transport rather than a normal Final-only message.
+		const hasTailEvidence = Boolean(
+			streamState &&
+			ledger &&
+			!ledger.pendingGapFinal &&
+			(ledger.nextChunkIndex > 1 || ledger.pendingChunks.size > 0),
+		)
+		// Require observable transport progress beyond the first chunk so ordinary Final-only
+		// hydration and a single already-rendered chunk keep their immediate settlement semantics.
+		return hasTailEvidence
+	}
+
+	private isPendingFinalChunkCompatible(
+		topicId: string,
+		superMessageId: string,
+		choice: StreamChunkChoice | undefined,
+	) {
+		const pending = this.getPendingCanonicalFinal(topicId, superMessageId)
+		if (!pending || !choice) return true
+		const streamState = this.getStreamState(topicId, superMessageId)
+		const delta = choice.delta
+		const nextContent = `${streamState?.content || ""}${typeof delta?.content === "string" ? delta.content : ""}`
+		const nextReasoning = `${streamState?.reasoning_content || ""}${typeof delta?.reasoning_content === "string" ? delta.reasoning_content : ""}`
+		const finalNode = pending.input.finalNode
+		if (
+			this.hasDefinedFinalField(finalNode, "content") &&
+			!String(finalNode.content || "").startsWith(nextContent)
+		)
+			return false
+		if (
+			this.hasDefinedFinalField(finalNode, "reasoning_content") &&
+			!String(finalNode.reasoning_content || "").startsWith(nextReasoning)
+		)
+			return false
+		return true
+	}
+
+	private deferCanonicalFinalSettlement(input: CanonicalFinalSettlementInput) {
+		const key = `${input.topicId}\u0000${input.superMessageId}`
+		const existing = this.pendingCanonicalFinals.get(key)
+		if (existing) {
+			const existingSeqId = String(existing.input.seqId || "")
+			const incomingSeqId = String(input.seqId || "")
+			if (compareMessageSeqId(incomingSeqId, existingSeqId) <= 0) return
+			if (existing.timer) clearTimeout(existing.timer)
+		}
+
+		const pending: PendingCanonicalFinal = { input, timer: null }
+		this.armPendingCanonicalFinalTimeout(pending, FINAL_TRANSPORT_PENDING_TIMEOUT_MS)
+		this.pendingCanonicalFinals.set(key, pending)
+	}
+
+	private armPendingCanonicalFinalTimeout(pending: PendingCanonicalFinal, timeoutMs: number) {
+		const key = `${pending.input.topicId}\u0000${pending.input.superMessageId}`
+		pending.timer = setTimeout(() => {
+			runInAction(() => {
+				if (this.pendingCanonicalFinals.get(key) !== pending) return
+				this.pendingCanonicalFinals.delete(key)
+				// If finish_reason is missing, the complete Final is still a safe recovery target;
+				// settle it after the grace window instead of leaving the Topic loading forever.
+				this.settleCanonicalAssistantFinal({ ...pending.input, emitEvents: true })
+			})
+		}, timeoutMs)
+	}
+
+	private settlePendingCanonicalFinal(topicId: string, superMessageId: string) {
+		const pending = this.getPendingCanonicalFinal(topicId, superMessageId)
+		if (!pending) return undefined
+		this.clearPendingCanonicalFinal(topicId, superMessageId)
+		return this.settleCanonicalAssistantFinal({ ...pending.input, emitEvents: true })
+	}
+
 	/**
 	 * Topic-level terminal settlement can close a live StreamState before a canonical Final
 	 * arrives. Seal that transport generation before removing its ledger/correlation sidecars,
@@ -5305,6 +5486,28 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (!state) return
 		if (state.timer) clearTimeout(state.timer)
 		this.finalRenderStates.delete(key)
+	}
+
+	private getFinalRenderState(topicId: string, superMessageId: string) {
+		return this.finalRenderStates.get(`${topicId}\u0000${superMessageId}`)
+	}
+
+	private getFinalRenderPhase(state: FinalRenderState): AssistantRenderPhase | undefined {
+		const visibleReasoning = String(state.visibleNode.reasoning_content || "")
+		const targetReasoning = String(state.targetNode.reasoning_content || "")
+		if (targetReasoning.length > visibleReasoning.length) return "reasoning_content"
+
+		const visibleContent = String(state.visibleNode.content || "")
+		const targetContent = String(state.targetNode.content || "")
+		if (targetContent.length > visibleContent.length) return "content"
+
+		const visibleToolCalls = Array.isArray(state.visibleNode.tool_calls)
+			? (state.visibleNode.tool_calls as ToolCall[])
+			: []
+		const targetToolCalls = Array.isArray(state.targetNode.tool_calls)
+			? (state.targetNode.tool_calls as ToolCall[])
+			: []
+		return isToolCallsEqual(visibleToolCalls, targetToolCalls) ? undefined : "tool"
 	}
 
 	/**
@@ -5461,11 +5664,35 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			| RawSuperMagicMessageNode
 			| undefined
 		if (!superMessageId) return canonical
-		const renderState = Array.from(this.finalRenderStates.values()).find(
-			(state) =>
-				state.superMessageId === superMessageId && (!topicId || state.topicId === topicId),
-		)
+		// MessageNode always supplies the Topic. Keyed lookup keeps each observer subscribed to
+		// its own Final visual sidecar instead of iterating the entire observable Map.
+		const renderState = topicId
+			? this.finalRenderStates.get(`${topicId}\u0000${superMessageId}`)
+			: undefined
 		return renderState?.visibleNode || canonical
+	}
+
+	/**
+	 * Final settlement ends transport immediately, but the row can still be visually catching up.
+	 * Prefer that render-only phase over StreamState so the UI does not falsely appear frozen.
+	 */
+	getAssistantRenderPhase(
+		topicId: string,
+		superMessageId: string,
+		correlationId?: string,
+		appMessageId?: string,
+	): AssistantRenderPhase | StreamState["stage"] | undefined {
+		const finalRenderState = this.getFinalRenderState(topicId, superMessageId)
+		if (finalRenderState) return this.getFinalRenderPhase(finalRenderState)
+
+		const identities = [superMessageId, correlationId, appMessageId].filter(
+			(identity): identity is string => Boolean(identity),
+		)
+		for (const identity of identities) {
+			const streamState = this.getStreamState(topicId, identity)
+			if (streamState) return streamState.stage
+		}
+		return undefined
 	}
 
 	/**
@@ -5568,13 +5795,25 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		// Only a live StreamState provides a resumable visual prefix. Historical/refresh
 		// hydration projects the canonical Final immediately instead of replaying animation.
-		this.captureFinalRenderProjection(
-			topicId,
-			superMessageId,
-			streamState ? visibleNode : undefined,
-			canonicalNode,
-		)
+		const existingRenderState = this.getFinalRenderState(topicId, superMessageId)
+		const isSameFinalRevision =
+			revisionDecision === "same" &&
+			existingBarrier?.seqId === normalizedSeqId &&
+			Boolean(existingRenderState)
+		if (!isSameFinalRevision) {
+			this.captureFinalRenderProjection(
+				topicId,
+				superMessageId,
+				streamState ? visibleNode : undefined,
+				canonicalNode,
+			)
+		}
 		this.setAssistantMessageNode(topicId, superMessageId, canonicalNode, appMessageId)
+		// Any authoritative settlement supersedes the deferred transport Final and its timer.
+		this.clearPendingCanonicalFinal(topicId, superMessageId)
+		// A historical HTTP Final without a live StreamState must not consume the marker for
+		// a newer local send in the same Topic. Only an active stream can prove ownership here.
+		if (streamWasActive) this.completePendingTopicExecution(topicId)
 
 		const messages = this.messages.get(topicId) || []
 		const cardIndex = messages.findIndex(
@@ -6562,7 +6801,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			(hasMessage || hasSuperMessageIdMessage || hasBufferMessage)
 		) {
 			if (hasSuperMessageIdMessage && superMessageId && messageNode?.role === "assistant") {
-				const settlement = this.settleCanonicalAssistantFinal({
+				const settlementInput: CanonicalFinalSettlementInput = {
 					source: "im",
 					topicId,
 					appMessageId,
@@ -6573,7 +6812,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					finalMessage: nextMessage,
 					revisionDecision,
 					emitEvents: true,
-				})
+				}
+				if (this.shouldDeferCanonicalFinal(topicId, superMessageId, messageNode)) {
+					this.deferCanonicalFinalSettlement(settlementInput)
+					if (persist) this.queueMessagePersistence(topicId, message, true)
+					return
+				}
+				const settlement = this.settleCanonicalAssistantFinal(settlementInput)
 				if (settlement.canonicalNode.status === "finished")
 					this.fillMissingToolResponses(topicId)
 				if (persist) this.queueMessagePersistence(topicId, message, true)
@@ -6791,7 +7036,19 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		message: MessageItem,
 		messageNode: RawSuperMagicMessageNode,
 	) {
-		const result = this.settleCanonicalAssistantFinal({
+		const existingPending = this.getPendingCanonicalFinal(topicId, superMessageId)
+		if (
+			existingPending &&
+			compareMessageSeqId(
+				String(message.seq_id || ""),
+				String(existingPending.input.seqId || ""),
+			) > 0
+		) {
+			// A newer Final supersedes the pending transport, but the older Final still owns
+			// its already observed lifecycle event and must be committed before replacement.
+			this.settlePendingCanonicalFinal(topicId, superMessageId)
+		}
+		const settlementInput: CanonicalFinalSettlementInput = {
 			source: "im",
 			topicId,
 			appMessageId: rawAppMessageId,
@@ -6808,7 +7065,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			} as RawSuperMagicMessageNode,
 			finalMessage: message,
 			emitEvents: true,
-		})
+		}
+		if (this.shouldDeferCanonicalFinal(topicId, superMessageId, messageNode)) {
+			this.deferCanonicalFinalSettlement(settlementInput)
+			const buffer = this.getTopicBuffer(topicId)
+			buffer.isProcessing = false
+			return
+		}
+		const result = this.settleCanonicalAssistantFinal(settlementInput)
 		if (result.canonicalNode.status === "finished") {
 			this.fillMissingToolResponses(topicId)
 		}
@@ -7322,6 +7586,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			meta.activeRenderSuperMessageId = null
 		}
 		if (superMessageId && completedStreamState?.isFinalMessageReceived) {
+			this.completePendingTopicExecution(topicId)
 			meta.finalizedCorrelationIds.add(superMessageId)
 			this.clearStreamRecoveryState(topicId, superMessageId)
 		}
@@ -7433,8 +7698,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		})
 	}
 
-	private isAskUserToolCall(tc: ToolCall) {
-		return tc.function?.name === ASK_USER_TOOL.name || tc.tool?.name === ASK_USER_TOOL.name
+	private isAskUserToolCall(tc?: ToolCall) {
+		return tc?.function?.name === ASK_USER_TOOL.name || tc?.tool?.name === ASK_USER_TOOL.name
 	}
 
 	private notifyAskUserV2BrowserNotification(
@@ -8172,6 +8437,46 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	}
 
 	/**
+	 * Registers a new local send before the first Agent chunk arrives. The Topic status can
+	 * still contain the previous `finished` value during this window, so polling must use
+	 * this marker as a stronger local execution guard.
+	 */
+	beginTopicExecution(topicId: string) {
+		if (!topicId) return
+		const topicMeta = this.getTopicMetadata(topicId)
+		topicMeta.pendingExecutionCount += 1
+		topicMeta.pendingExecutionStartedAt = Date.now()
+		this.topicMeta.set(topicId, topicMeta)
+	}
+
+	/** Returns true while a recent send is waiting for its first authoritative stream event. */
+	hasPendingTopicExecution(topicId: string): boolean {
+		const topicMeta = this.topicMeta.get(topicId)
+		if (!topicMeta || topicMeta.pendingExecutionCount <= 0) return false
+		const startedAt = topicMeta.pendingExecutionStartedAt || Date.now()
+		if (Date.now() - startedAt > TOPIC_PENDING_EXECUTION_TIMEOUT_MS) {
+			topicMeta.pendingExecutionCount = 0
+			topicMeta.pendingExecutionStartedAt = null
+			this.topicMeta.set(topicId, topicMeta)
+			return false
+		}
+		return true
+	}
+
+	/** Consumes one pending send when its first final/event or a send failure is observed. */
+	completePendingTopicExecution(topicId: string) {
+		const topicMeta = this.topicMeta.get(topicId)
+		if (!topicMeta || topicMeta.pendingExecutionCount <= 0) return
+		topicMeta.pendingExecutionCount -= 1
+		if (topicMeta.pendingExecutionCount === 0) topicMeta.pendingExecutionStartedAt = null
+		this.topicMeta.set(topicId, topicMeta)
+	}
+
+	failPendingTopicExecution(topicId: string) {
+		this.completePendingTopicExecution(topicId)
+	}
+
+	/**
 	 * 返回当前 Topic 的活跃流身份快照，供 UI 判断流式消息是否已经形成可见消息行。
 	 * 始终创建新数组，避免调用方修改 TopicMeta 内部的 StreamState Map。
 	 */
@@ -8189,10 +8494,29 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	}
 
 	private getTopicMetadata(topicId: string): TopicMeta {
-		if (!this.topicMeta.has(topicId)) {
-			this.topicMeta.set(topicId, getDefaultTopicMeta())
+		let topicMeta = this.topicMeta.get(topicId)
+		if (!topicMeta) {
+			topicMeta = getDefaultTopicMeta()
+			this.topicMeta.set(topicId, topicMeta)
+			return this.topicMeta.get(topicId)!
 		}
-		return this.topicMeta.get(topicId)!
+
+		// TopicMeta is runtime state, but older test fixtures or hydrated sessions may not
+		// contain fields added after their creation. Normalize them before the first local
+		// send so `undefined += 1` cannot produce NaN and permanently suppress recovery.
+		if (
+			!Number.isFinite(topicMeta.pendingExecutionCount) ||
+			topicMeta.pendingExecutionCount < 0
+		) {
+			topicMeta.pendingExecutionCount = 0
+		}
+		if (
+			topicMeta.pendingExecutionStartedAt !== null &&
+			!Number.isFinite(topicMeta.pendingExecutionStartedAt)
+		) {
+			topicMeta.pendingExecutionStartedAt = null
+		}
+		return topicMeta
 	}
 
 	private getTopicStreamState(

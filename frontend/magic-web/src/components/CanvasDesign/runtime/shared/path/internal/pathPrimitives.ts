@@ -86,6 +86,20 @@ export function buildVirtualResourceScope(
 }
 
 /**
+ * Namespace for SW offline bodies, persistent low images, and shared compressed bodies.
+ * Host scope already identifies workspace/project; appending a runtime Canvas id would
+ * store the same file once per preview instance.
+ */
+export function buildSharedMediaStorageScope(
+	hostScope: string | undefined,
+	fallbackCanvasId: string,
+): string {
+	return hostScope
+		? buildVirtualResourceScope(hostScope, "")
+		: buildVirtualResourceScope(undefined, fallbackCanvasId)
+}
+
+/**
  * 规范上传接口返回的 path：保留路径命名空间，只合并重复斜杠并修补目录名与文件名之间漏写斜杠的常见拼接错误。
  */
 export function normalizeUploadResultPath(path: string): string {

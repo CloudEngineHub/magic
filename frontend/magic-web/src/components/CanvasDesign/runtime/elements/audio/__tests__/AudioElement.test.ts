@@ -64,7 +64,6 @@ function createStageMock(scale: number): Konva.Stage {
 function createAudioElementHarness(options?: {
 	width?: number
 	snapshot?: AudioPlaybackSnapshot
-	readonly?: boolean
 	src?: string
 	coarsePointer?: boolean
 	temporary?: boolean
@@ -80,9 +79,11 @@ function createAudioElementHarness(options?: {
 	let playbackSnapshot = options?.snapshot ?? READY_PLAYBACK_SNAPSHOT
 	let playbackListener: ((snapshot: AudioPlaybackSnapshot) => void) | undefined
 	let waveformListener: ((snapshot: AudioWaveformSnapshot) => void) | undefined
+	let effectiveContentId: string | undefined
 	const viewportScaleListeners = new Set<(event?: unknown) => void>()
 	const deviceChangeListeners = new Set<(event?: unknown) => void>()
 	const audioReplaceStateListeners = new Set<(event: unknown) => void>()
+	const contentPreviewListeners = new Set<(event: unknown) => void>()
 	let replacementState: {
 		elementId: string
 		contentId: string | null
@@ -92,12 +93,20 @@ function createAudioElementHarness(options?: {
 	const seek = vi.fn()
 	const seekBy = vi.fn(async () => true)
 	const toggle = vi.fn(async () => true)
-	const release = vi.fn()
+	const release = vi.fn((_elementId: string, options?: { preserveMetadata?: boolean }) => {
+		if (options?.preserveMetadata) return
+		playbackSnapshot = DEFAULT_PLAYBACK_SNAPSHOT
+		playbackListener?.(playbackSnapshot)
+	})
 	const requestImmediateAudioLoad = vi.fn()
 	const setTemporary = vi.fn()
 	const restoreToolCursor = vi.fn()
 	const emit = vi.fn()
 	const canvas = {
+		getEffectiveContentId: vi.fn(() => effectiveContentId),
+		getElementForContentView: vi.fn((element: AudioElementData) =>
+			effectiveContentId ? { ...element, activeContentId: effectiveContentId } : element,
+		),
 		audioPlaybackManager: {
 			getSnapshot: vi.fn(() => playbackSnapshot),
 			subscribe: vi.fn(
@@ -137,10 +146,12 @@ function createAudioElementHarness(options?: {
 					eventType === "element:media:replaceStateChanged"
 				)
 					audioReplaceStateListeners.add(listener)
+				if (eventType === "content:previewChanged") contentPreviewListeners.add(listener)
 				return () => {
 					viewportScaleListeners.delete(listener)
 					deviceChangeListeners.delete(listener)
 					audioReplaceStateListeners.delete(listener)
+					contentPreviewListeners.delete(listener)
 				}
 			}),
 			off: vi.fn(),
@@ -158,10 +169,13 @@ function createAudioElementHarness(options?: {
 			replaceSelection: vi.fn(),
 		},
 		hoverManager: { getHoveredElementId: vi.fn(() => null) },
-		permissionManager: { canUseSelectionToolAffordance: vi.fn(() => true) },
+		permissionManager: {
+			can: vi.fn(() => true),
+			canUseSelectionToolAffordance: vi.fn(() => true),
+		},
 		cursorManager: { setTemporary, restoreToolCursor },
 		t: vi.fn((_key: string, fallback: string) => fallback),
-		readonly: options?.readonly ?? false,
+		can: vi.fn(() => true),
 		elementManager: {
 			canDragElement: vi.fn(() => true),
 			canListenElement: vi.fn(() => true),
@@ -193,6 +207,7 @@ function createAudioElementHarness(options?: {
 
 	return {
 		element,
+		canvas,
 		seek,
 		seekBy,
 		toggle,
@@ -237,6 +252,12 @@ function createAudioElementHarness(options?: {
 						phase: status === "uploading" || status === "applying" ? status : undefined,
 					},
 				}),
+			)
+		},
+		setPreviewContent(contentId?: string) {
+			effectiveContentId = contentId
+			contentPreviewListeners.forEach((listener) =>
+				listener({ data: { elementId: "audio-1", contentId } }),
 			)
 		},
 	}
@@ -286,6 +307,36 @@ describe("AudioElement", () => {
 		expect(createAudioElementHarness({ empty: true }).element.getRenderName()).toBe("音频")
 	})
 
+	it("isolates playback and resource state when the effective preview Content changes", () => {
+		const harness = createAudioElementHarness({ src: "./audios/document.mp3" })
+		harness.element.update({
+			...harness.element.getData(),
+			activeContentId: "audio-content-1",
+			contents: [
+				{ contentId: "audio-content-1", src: "./audios/document.mp3" },
+				{ contentId: "audio-content-2", src: "./audios/preview.mp3" },
+			],
+		})
+
+		harness.setPreviewContent("audio-content-2")
+
+		expect(harness.release).toHaveBeenCalledWith("audio-1")
+		expect(harness.canvas.visibilityManager.updateAudioElement).toHaveBeenCalledWith(
+			"audio-1",
+			"./audios/preview.mp3",
+		)
+		expect(harness.element.getRenderName()).toBe("preview")
+		expect(harness.element.exportData().activeContentId).toBe("audio-content-1")
+
+		harness.setPreviewContent()
+
+		expect(harness.canvas.visibilityManager.updateAudioElement).toHaveBeenLastCalledWith(
+			"audio-1",
+			"./audios/document.mp3",
+		)
+		expect(harness.element.getRenderName()).toBe("document")
+	})
+
 	it("preserves playback metadata when the resource resolver is rebound", () => {
 		const harness = createAudioElementHarness({ src: "./audios/voice.mp3" })
 
@@ -308,6 +359,8 @@ describe("AudioElement", () => {
 
 	it("forces latest default dimensions when opening persisted audio", () => {
 		const canvas = {
+			getEffectiveContentId: vi.fn(() => undefined),
+			can: vi.fn(() => true),
 			audioPlaybackManager: {
 				getSnapshot: vi.fn(() => ({
 					duration: 0,
@@ -548,7 +601,6 @@ describe("AudioElement", () => {
 		expect(group.findOne(".audio-status-spinner")).toBeUndefined()
 		expect(group.findOne(".audio-waveform-shape")).toBeUndefined()
 		expect(group.findOne(".decorator-corner-action-replace")).toBeUndefined()
-
 		;(group.findOne(".audio-status-text") as Konva.Text).fire("click", {
 			cancelBubble: false,
 		})
@@ -1572,10 +1624,13 @@ describe("AudioElement", () => {
 		const unregisterPlayback = vi.fn()
 		const unregisterFailure = vi.fn()
 		const unregisterReplaceState = vi.fn()
+		const unregisterPreview = vi.fn()
 		const registerAudioElement = vi.fn()
 		const unregisterAudioElement = vi.fn()
 		const createElement = vi.spyOn(document, "createElement")
 		const canvas = {
+			getEffectiveContentId: vi.fn(() => undefined),
+			can: vi.fn(() => true),
 			audioPlaybackManager: {
 				getSnapshot: vi.fn(() => ({
 					duration: 0,
@@ -1592,7 +1647,9 @@ describe("AudioElement", () => {
 				on: vi.fn((eventType: string) =>
 					eventType === "resource:audio:load-failed"
 						? unregisterFailure
-						: unregisterReplaceState,
+						: eventType === "content:previewChanged"
+							? unregisterPreview
+							: unregisterReplaceState,
 				),
 			},
 			visibilityManager: {
@@ -1620,5 +1677,6 @@ describe("AudioElement", () => {
 		expect(unregisterPlayback).toHaveBeenCalledTimes(1)
 		expect(unregisterFailure).toHaveBeenCalledTimes(1)
 		expect(unregisterReplaceState).toHaveBeenCalledTimes(1)
+		expect(unregisterPreview).toHaveBeenCalledTimes(1)
 	})
 })

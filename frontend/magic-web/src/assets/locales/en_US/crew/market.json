@@ -14,6 +14,112 @@
 		"starCrew": "Star Crew",
 		"techDev": "Tech & Dev"
 	},
+	"connectors": {
+		"add": "Add",
+		"added": "Added",
+		"addedList": "Installed",
+		"available": "Available",
+		"category": "Connector category",
+		"close": "Close connector panel",
+		"create": "Create Connector",
+		"createForm": {
+			"addParameter": "Add parameter",
+			"close": "Close",
+			"descriptionPlaceholder": "e.g., Access an external service",
+			"editTitle": "Edit MCP Connector",
+			"env": "Environment variables",
+			"headersLabel": "Headers",
+			"iconHint": "PNG/JPG, recommended size 100×100",
+			"importToolsRequired": "Imported tools cannot be empty",
+			"jsonHint": "JSON MCP configuration",
+			"key": "Key",
+			"loadFailed": "Failed to load connector configuration",
+			"loading": "Loading…",
+			"mcpAuthorization": "OAuth 2.0 (MCP Service Authorization)",
+			"mcpAuthorizationLabels": {
+				"additionalParams": "Additional Authorization Parameters",
+				"applicationType": "Application Type",
+				"authorizationEndpoint": "Authorization Endpoint",
+				"authorizationServerUrl": "Authorization Server URL",
+				"clientId": "Client ID",
+				"clientMetadataUrl": "Client Metadata URL",
+				"clientSecret": "Client Secret",
+				"registrationEndpoint": "Client Registration Endpoint",
+				"registrationMode": "Client Registration Mode",
+				"resource": "Protected Resource URL (Resource)",
+				"resourceMetadataUrl": "Resource Metadata URL",
+				"scope": "Authorization Scope (Scope)",
+				"tokenEndpoint": "Token Endpoint",
+				"tokenEndpointAuthMethod": "Token Endpoint Authentication Method"
+			},
+			"name": "Name",
+			"namePlaceholder": "e.g., My Connector",
+			"oauthLabels": {
+				"authorizationContentType": "Authorization Content Type",
+				"authorizationUrl": "Authorization URL",
+				"clientId": "Client ID",
+				"clientSecret": "Client Secret",
+				"clientUrl": "Client URL",
+				"scope": "Scope"
+			},
+			"oauthRequired": "Enter {{name}}",
+			"registrationModes": {
+				"auto": "Auto Discovery",
+				"cimd": "Client Metadata (CIMD)",
+				"dcr": "Dynamic Registration (DCR)",
+				"pre_registered": "Pre-registered"
+			},
+			"removeRow": "Remove parameter",
+			"saveFailed": "Failed to save",
+			"saving": "Saving…",
+			"title": "Create MCP Connector",
+			"type": "Type",
+			"uploadIcon": "Upload icon",
+			"uploading": "Uploading…",
+			"url": "Service URL (URL)",
+			"urlPlaceholder": "e.g., https://example.com"
+		},
+		"createMcp": "Create MCP Connector",
+		"createSuccess": "Connector created successfully",
+		"delete": "Delete",
+		"deleteConfirm": {
+			"confirm": "Delete",
+			"description": "This action cannot be undone.",
+			"title": "Delete \"{{name}}\"?"
+		},
+		"deleteFailed": "Failed to delete connector",
+		"deleteSuccess": "Connector deleted successfully",
+		"description": "Description",
+		"descriptionFallback": "No description available",
+		"disable": "Disable",
+		"disabled": "Disabled",
+		"edit": "Edit",
+		"editConfig": "Edit Configuration",
+		"editSuccess": "Connector updated successfully",
+		"empty": "No connectors available",
+		"enable": "Enable",
+		"enabled": "Enabled",
+		"install": "Install connector",
+		"installShort": "Install",
+		"loadFailed": "Failed to load connectors. Please try again.",
+		"mine": "My Connectors",
+		"moreActionsAria": "More actions",
+		"official": "Official Connectors",
+		"offline": "Offline",
+		"remove": "Remove",
+		"retry": "Retry",
+		"saveAndAdd": "Save and Add",
+		"saveConfig": "Save Configuration",
+		"searchAria": "Search connectors",
+		"searchPlaceholder": "Search connectors",
+		"searchSheetTitle": "Search connectors",
+		"status": "Status",
+		"statusUpdateFailed": "Failed to update status",
+		"subtitle": "Explore and manage available AI connectors",
+		"title": "Connectors",
+		"updatedAt": "Updated on {{dateTime}}",
+		"updatedAtLabel": "Updated"
+	},
 	"conversation": "Conversation",
 	"createCrew": "Create Crew",
 	"crewConversation": {
@@ -405,6 +511,17 @@
 		"delivered": "{{marker}} slides delivered",
 		"deliveredPrivate": "{{marker}} decks delivered"
 	},
+	"publishScopeNotice": {
+		"attachmentsLoadFailed": "Project files are still loading, so the publish scope cannot be confirmed. Please try again.",
+		"cancel": "Cancel",
+		"confirm": "Confirm that the files you need are inside this directory.",
+		"continue": "Continue publishing",
+		"intro": "This project contains files outside the publish scope.",
+		"morePaths": "{{count}} more paths not shown",
+		"outsidePathsLabel": "Paths outside the publish scope",
+		"scopeLabel": "Publish scope",
+		"title": "Confirm the publish file scope"
+	},
 	"skillDetailDialog": {
 		"collapse": "Collapse",
 		"emptyName": "Untitled Skill",
@@ -456,7 +573,9 @@
 		"publishPanel": {
 			"actions": {
 				"cancel": "Cancel",
-				"publish": "Publish"
+				"publish": "Publish",
+				"publishing": "Publishing…",
+				"publishingWithProgress": "Publishing {{progress}}%"
 			},
 			"create": {
 				"channelChangeConfirm": {
@@ -589,8 +708,11 @@
 				"ensureSkillConfigFailed": "Could not create skill_config.yaml. Please try again.",
 				"noValidSkillForPublish": "No valid skill found. Add .magic/skills/<name>/SKILL.md before publishing.",
 				"publishFailed": "Publish failed. Please try again.",
+				"publishInProgress": "A publish task is still in progress. Wait for it to finish before submitting different publish settings.",
 				"publishNeedsProject": "No project workspace linked. Publishing is unavailable.",
-				"publishSuccess": "Published successfully"
+				"publishSuccess": "Published successfully",
+				"publishTaskExpired": "The publish task expired or was not found. Please publish again.",
+				"publishTimeout": "Publish is taking longer than expected. Check the version list later, or try publishing again."
 			}
 		},
 		"untitledSkill": "Untitled Skill"
@@ -623,6 +745,7 @@
 		"featuredLoadFailed": "Failed to load featured skills. Please try again.",
 		"featuredSkills": "Featured Skills",
 		"installCount": "{{formattedCount}} installs",
+		"installCountLabel": "Installs",
 		"loadFailed": "Failed to load skills. Please try again.",
 		"mySkills": "My Skills",
 		"noMoreData": "You've seen everything!",
@@ -634,16 +757,18 @@
 		"searchAria": "Search skills",
 		"searchSheetTitle": "Search skills",
 		"subtitle": "Explore and install the right AI skills for you.",
-		"title": "Skills Library",
+		"title": "Skills",
 		"updatedAt": "Updated on {{dateTime}}",
+		"updatedAtLabel": "Updated",
 		"upgrade": "Upgrade",
 		"uploadOfficialSkill": "Upload official Skill"
 	},
 	"subtitle": "Discover and hire your exclusive digital crew.",
 	"tabs": {
+		"connectors": "Connectors",
 		"crewMarket": "Crew Market",
 		"organizationShared": "Organization Shared",
-		"skillsLibrary": "Skills Library"
+		"skillsLibrary": "Skills"
 	},
 	"title": "Crew Market",
 	"updateSkill": {

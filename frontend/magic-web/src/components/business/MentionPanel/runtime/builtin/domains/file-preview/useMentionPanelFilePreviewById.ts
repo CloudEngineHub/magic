@@ -9,16 +9,14 @@ import {
 	hasMentionPanelImagePreviewItems,
 	type MentionFilePreviewSourceRow,
 } from "./preview-utils"
-import {
-	getCachedMentionPreviewUrls,
-	requestMentionPreviewUrls,
-	updateMentionPreviewUrlCache,
-} from "./preview-url-cache"
+import { getCachedMentionPreviewUrls, requestMentionPreviewUrls } from "./preview-url-cache"
 
 const EMPTY_FILE_PREVIEW_BY_ID: Readonly<Record<string, string>> = {}
 const EMPTY_PREVIEW_ROWS: readonly MentionFilePreviewSourceRow[] = []
 const EMPTY_PENDING_IDS: string[] = []
 const EMPTY_UPDATED_AT_MAP = new Map<string, string>()
+const EMPTY_RESOURCE_VERSION_MAP = new Map<string, string>()
+const EMPTY_FILE_VERSION_MAP = new Map<string, number>()
 
 function buildMentionFileUpdatedAtMap(
 	rows: readonly MentionFilePreviewSourceRow[],
@@ -32,6 +30,33 @@ function buildMentionFileUpdatedAtMap(
 	}
 
 	return fileUpdatedAtMap
+}
+
+function buildMentionFileResourceVersionMap(
+	rows: readonly MentionFilePreviewSourceRow[],
+): Map<string, string> {
+	const fileResourceVersionMap = new Map<string, string>()
+	for (const row of rows) {
+		const fileId = row.file_id != null ? String(row.file_id) : ""
+		const version = row.resource_version ?? row.version
+		if (!fileId) continue
+		if (version != null && String(version).trim() !== "") {
+			fileResourceVersionMap.set(fileId, String(version))
+		}
+	}
+	return fileResourceVersionMap
+}
+
+function buildMentionFileVersionMap(
+	rows: readonly MentionFilePreviewSourceRow[],
+): Map<string, number> {
+	const fileVersions = new Map<string, number>()
+	for (const row of rows) {
+		const fileId = row.file_id != null ? String(row.file_id) : ""
+		if (!fileId || row.file_version == null) continue
+		fileVersions.set(fileId, row.file_version)
+	}
+	return fileVersions
 }
 
 export function useMentionPanelFilePreviewById(
@@ -52,6 +77,8 @@ export function useMentionPanelFilePreviewById(
 				syncMap: EMPTY_FILE_PREVIEW_BY_ID,
 				pending: EMPTY_PENDING_IDS,
 				fileUpdatedAtMap: EMPTY_UPDATED_AT_MAP,
+				fileResourceVersionMap: EMPTY_RESOURCE_VERSION_MAP,
+				fileVersions: EMPTY_FILE_VERSION_MAP,
 			}
 		}
 
@@ -60,13 +87,21 @@ export function useMentionPanelFilePreviewById(
 			buildMentionFilePreviewIndexes(tabRows),
 		]
 		const fileUpdatedAtMap = buildMentionFileUpdatedAtMap(workspaceRows)
+		const fileResourceVersionMap = buildMentionFileResourceVersionMap(workspaceRows)
+		const fileVersions = buildMentionFileVersionMap(workspaceRows)
 		buildMentionFileUpdatedAtMap(tabRows).forEach((updatedAt, fileId) => {
 			fileUpdatedAtMap.set(fileId, updatedAt)
+		})
+		buildMentionFileResourceVersionMap(tabRows).forEach((version, fileId) => {
+			fileResourceVersionMap.set(fileId, version)
+		})
+		buildMentionFileVersionMap(tabRows).forEach((version, fileId) => {
+			fileVersions.set(fileId, version)
 		})
 		const syncMap = buildMentionFilePreviewSyncMap(items, sources)
 		const pending = collectMentionImagePreviewFileIds(items, syncMap)
 
-		return { syncMap, pending, fileUpdatedAtMap }
+		return { syncMap, pending, fileUpdatedAtMap, fileResourceVersionMap, fileVersions }
 	}, [hasProjectImageItems, items, tabRows, workspaceRows])
 
 	const [filePreviewById, setFilePreviewById] =
@@ -84,6 +119,8 @@ export function useMentionPanelFilePreviewById(
 		const { cached, missing } = getCachedMentionPreviewUrls({
 			fileIds: batchPlan.pending,
 			fileUpdatedAtMap: batchPlan.fileUpdatedAtMap,
+			fileResourceVersionMap: batchPlan.fileResourceVersionMap,
+			fileVersions: batchPlan.fileVersions,
 		})
 		const cachedMap = cached.reduce(
 			(prev, current) => {
@@ -97,7 +134,11 @@ export function useMentionPanelFilePreviewById(
 
 		if (missing.length === 0) return
 
-		void requestMentionPreviewUrls(missing)
+		void requestMentionPreviewUrls(missing, {
+			fileUpdatedAtMap: batchPlan.fileUpdatedAtMap,
+			fileResourceVersionMap: batchPlan.fileResourceVersionMap,
+			fileVersions: batchPlan.fileVersions,
+		})
 			.then((res) => {
 				if (cancelled) return
 
@@ -107,11 +148,6 @@ export function useMentionPanelFilePreviewById(
 					const previewUrl = row.url?.trim()
 					if (fileId && previewUrl) fromApi[fileId] = previewUrl
 				}
-
-				updateMentionPreviewUrlCache({
-					urlData: res ?? [],
-					fileUpdatedAtMap: batchPlan.fileUpdatedAtMap,
-				})
 
 				setFilePreviewById({ ...nextSyncMap, ...cachedMap, ...fromApi })
 			})

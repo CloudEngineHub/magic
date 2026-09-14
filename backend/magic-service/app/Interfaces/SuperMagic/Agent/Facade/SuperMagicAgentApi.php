@@ -510,6 +510,22 @@ class SuperMagicAgentApi extends AbstractApi
         return $response;
     }
 
+    /** 创建异步发布任务。 */
+    public function publishAgentAsync(string $code): array
+    {
+        $authorization = $this->getAuthorization();
+        $requestDTO = PublishAgentRequestDTO::fromRequest($this->request);
+        return $this->superMagicAgentAppService->createAsyncPublishAgent($authorization, $code, $requestDTO);
+    }
+
+    /** 查询异步发布任务。 */
+    public function checkPublishAsync(string $code): array
+    {
+        $authorization = $this->getAuthorization();
+        $taskId = (string) $this->request->input('publish_task_id', $this->request->input('task_id', ''));
+        return $this->superMagicAgentAppService->checkAsyncPublishAgent($authorization, $code, $taskId);
+    }
+
     public function getPublishPrefill(string $code): array
     {
         $authorization = $this->getAuthorization();

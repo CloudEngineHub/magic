@@ -7,10 +7,12 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Tool\VideoGeneration;
 
+use App\Application\Design\Tool\DesignFileNameSanitizer;
 use App\Application\ModelGateway\MicroAgent\MicroAgentFactory;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -40,7 +42,7 @@ class DesignGeneratedVideoFileNameTool
         DesignGenerationTaskEntity $entity,
         string $prompt,
     ): string {
-        $prompt = trim($prompt);
+        $prompt = DesignFileNameSanitizer::sanitizePrompt($prompt);
         if ($prompt === '') {
             return '';
         }
@@ -75,7 +77,7 @@ class DesignGeneratedVideoFileNameTool
                     businessParams: [
                         'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
                         'user_id' => $dataIsolation->getCurrentUserId(),
-                        'source_id' => 'design_video_file_name_generation',
+                        'source_id' => SourceId::DESIGN_VIDEO_FILE_NAME_GENERATION,
                     ]
                 );
 
@@ -111,14 +113,7 @@ class DesignGeneratedVideoFileNameTool
      */
     public function sanitizeFileName(string $fileName): string
     {
-        $fileName = preg_replace('/[`\'\"]+/', '', $fileName) ?? '';
-        $fileName = preg_replace('/[\/\\\:*?"<>|]+/', '_', $fileName) ?? '';
-        $fileName = trim($fileName);
-        if (mb_strlen($fileName) > 30) {
-            $fileName = mb_substr($fileName, 0, 30);
-        }
-
-        return $fileName;
+        return DesignFileNameSanitizer::sanitize($fileName);
     }
 
     /**

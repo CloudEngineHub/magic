@@ -114,6 +114,17 @@ llm:
   # 第二阶梯：非流式退避重试
   non_stream_timeout_seconds: 600          # 非流式请求超时
   backoff_max_retries: 5                   # 最大退避重试次数
+  # 原生视觉请求连续返回 400 后，当前沙箱将当前模型降级为非视觉；2 表示第三次请求使用非视觉。
+  native_visual_400_failure_threshold: ${LLM_NATIVE_VISUAL_400_FAILURE_THRESHOLD:-2}
+  # Chat 用户消息首批原生视觉图片数；不约束 visual_understanding 追加消息，也不限制整个 Agent 轮次累计数量。
+  # -1 表示 Chat 首批不限制，0 表示 Chat 图片不直接进入原生视觉。
+  native_visual_max_image_refs: ${LLM_NATIVE_VISUAL_MAX_IMAGE_REFS:-10}
+  # 单次原生视觉请求的 Base64 图片总字节数上限；-1 表示不限制。
+  native_visual_max_image_bytes: ${LLM_NATIVE_VISUAL_MAX_IMAGE_BYTES:--1}
+  # 原生视觉 Base64 进程内缓存的最大条目数。
+  native_visual_cache_max_entries: ${LLM_NATIVE_VISUAL_CACHE_MAX_ENTRIES:-32}
+  # 原生视觉 Base64 进程内缓存的最大总字节数。
+  native_visual_cache_max_bytes: ${LLM_NATIVE_VISUAL_CACHE_MAX_BYTES:-134217728}
 
 # 用户可见上下文窗口配置
 #
@@ -468,6 +479,11 @@ sandbox:
   idle_monitor_enabled: "${ENABLE_AGENT_IDLE_MONITOR:-true}"
   agent_idle_timeout: "${AGENT_IDLE_TIMEOUT:-1200}"
   idle_monitor_interval: "${IDLE_MONITOR_INTERVAL:-60}"
+  shutdown:
+    # 优雅退出超时：关闭服务时，等待已有连接和请求正常结束的最长时间。
+    graceful_shutdown_timeout_seconds: "${SANDBOX_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS:-10}"
+    # 强制退出超时：从首次收到退出请求开始计时，到期仍未退出则强制结束进程。
+    force_shutdown_timeout_seconds: "${SANDBOX_FORCE_SHUTDOWN_TIMEOUT_SECONDS:-25}"
   # 是否将 init_client_message 中的 authorization 转发为额外的 USER-Authorization header
   # true: API Key 使用 config.yaml 的 api_key，额外添加 USER-Authorization header（值为 authorization）
   # false: 标准 LLM 认证流程，只使用 config.yaml 的 api_key，不转发 USER-Authorization header
@@ -508,24 +524,71 @@ checkpoint:
   # 是否启用自动清理功能
   auto_cleanup: ${CHECKPOINT_AUTO_CLEANUP:-true}
 
-# 聊天记录统计与清理。默认全部为空，只统计，不删除用户历史。
+# 聊天记录统计与清理。这里的配置只针对 .topic 中的持久化历史。
 chat_history_cleanup:
   completed_subagent_max_age_days: null
   completed_subagent_max_count: null
   compacted_max_age_days: null
   compacted_max_count: null
   total_max_bytes: null
-  llm_request_max_age_days: null
-  llm_request_max_count: null
-  llm_request_max_bytes: null
+
+# .runtime 清理默认值。
+# 容量字段支持 MB、MiB、KB、KiB 等写法；本项目的 MB 和 MiB 都按 1024 进制换算。
+runtime_cleanup:
+  bg_shell:
+    max_age_days: 7
+    max_file_count: 50
+    target_file_count: 40
+    max_total_size: 256MB
+    target_total_size: 192MB
+    max_file_size: 8MB
+    head_keep_size: 1MB
+    tail_keep_size: 1MB
+
+  mcp_outputs:
+    max_age_days: 7
+    max_file_count: 128
+    target_file_count: 96
+    max_total_size: 256MB
+    target_total_size: 192MB
+    result_size_threshold: 8KB
+
+  oauth2_callback:
+    max_age_hours: 24
+    max_file_count: 128
+    target_file_count: 96
+
+  snippets:
+    max_age_days: 7
+    max_file_count: 64
+    target_file_count: 48
+    max_total_size: 16MB
+    target_total_size: 12MB
+
+  llm_request:
+    max_file_count: 10
+
+  background_compact:
+    max_age_days: 7
+
+  memory_after_run:
+    max_age_days: 7
+
+  slide_template_maker:
+    max_age_days: 3
+    max_directory_count: 16
 
 # 文件记忆运行时配置
 memory:
   after_run:
     # 累计达到指定数量的有效主任务后触发一次完整 fork 提取
-    extraction_task_threshold: ${MEMORY_AFTER_RUN_EXTRACTION_TASK_THRESHOLD:-3}
+    extraction_task_threshold: ${MEMORY_AFTER_RUN_EXTRACTION_TASK_THRESHOLD:-5}
     # 未达到阈值时，连续 10 分钟无操作后触发一次完整 fork 提取
     extraction_idle_timeout_seconds: ${MEMORY_AFTER_RUN_EXTRACTION_IDLE_TIMEOUT_SECONDS:-600}
+    # MEMORY.md 达到该大小后触发记忆整理提示；该值是触发条件，不是内容硬上限
+    memory_file_max_size_kb: ${MEMORY_AFTER_RUN_MEMORY_FILE_MAX_SIZE_KB:-32}
+    # 记忆整理时建议参考的目标大小；不要求机械压缩，长期有效内容可以超过该值
+    memory_file_target_size_kb: ${MEMORY_AFTER_RUN_MEMORY_FILE_TARGET_SIZE_KB:-24}
 
 # =====================================================
 # AI Ability Configuration (AI能力配置)

@@ -211,7 +211,8 @@ vi.mock("react-i18next", () => ({
 				"detail.loadFailed": "Load failed",
 				"detail.untitled": "Untitled",
 				"detail.summarizing": "Generating summary...",
-				"detail.summarizingHint": "All summary views will appear when it is ready.",
+				"detail.summarizingHint":
+					"Summarizing now. It will appear automatically when ready.",
 				"detail.notSummarized": "No summary yet",
 				"detail.notSummarizedHint": "Generate a summary to preview it here",
 				"actions.renameTitle": "Rename title",
@@ -603,7 +604,10 @@ describe("MobileAudioRecordingDetailPage", () => {
 				audio: { file_id: "audio-mobile-001", file_name: "recording-mock.mp3" },
 				summaryFiles: [{ type: "summary", fileId: "summary-file", fileName: "summary.md" }],
 				magicProject: { file_id: "magic-project-file-001" },
-				magicProjectConfig: { metadata: { speakers: { "Speaker-1": "Saved Host" } } },
+				magicProjectConfig: {
+					files: { notes: "notes/mock-notes.md" },
+					metadata: { speakers: { "Speaker-1": "Saved Host" } },
+				},
 			},
 			texts: {
 				transcript: { fileId: "transcript-file", content: "Transcript mock" },
@@ -637,7 +641,25 @@ describe("MobileAudioRecordingDetailPage", () => {
 				selectedSpeakerIds: ["Speaker-1"],
 				transcriptContent: "Transcript mock",
 				notesContent: "Notes mock",
+				showNotesTab: true,
 			}),
+		)
+	})
+
+	it("hides notes when the bundle config does not declare them", () => {
+		const detailData = detailDataMock()
+		detailDataMock.mockReturnValue({
+			...detailData,
+			fileMap: {
+				...detailData.fileMap,
+				magicProjectConfig: { metadata: { speakers: {} } },
+			},
+		})
+
+		render(<MobileAudioRecordingDetailPage />)
+
+		expect(sourcePanelPropsMock).toHaveBeenCalledWith(
+			expect.objectContaining({ showNotesTab: false }),
 		)
 	})
 
@@ -871,10 +893,10 @@ describe("MobileAudioRecordingDetailPage", () => {
 		fireEvent.click(screen.getByText("Summary"))
 
 		expect(screen.getByTestId("mobile-recording-summary-placeholder")).toBeInTheDocument()
-		expect(screen.getByText("Generating summary...")).toBeInTheDocument()
 		expect(
-			screen.getByText("All summary views will appear when it is ready."),
+			screen.getByText("Summarizing now. It will appear automatically when ready."),
 		).toBeInTheDocument()
+		expect(screen.queryByText("Generating summary...")).toBeNull()
 	})
 
 	it("navigates back to the recordings list", () => {

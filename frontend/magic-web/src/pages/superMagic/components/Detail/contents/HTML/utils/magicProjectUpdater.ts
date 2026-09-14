@@ -1,6 +1,7 @@
 import { SuperMagicApi } from "@/apis"
 import { flattenAttachments } from "./index"
 import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
+import { getFileContentById } from "@/pages/superMagic/utils/api"
 import { logger } from "@/utils/log"
 import { t } from "i18next"
 import { AttachmentItem } from "../../../../TopicFilesButton/hooks/types"
@@ -128,6 +129,76 @@ export function generateBlankSlideContent({ slideTitle }: { slideTitle?: string 
 	return BLANK_SLIDE_TEMPLATE.replace(/New Slide/g, _slideTitle)
 }
 
+function getFileName(path: string): string {
+	return path.split("/").pop() || path
+}
+
+function getDuplicateFileName(
+	sourcePath: string,
+	currentSlides: string[],
+	attachments?: AttachmentItem[],
+) {
+	const sourceFileName = getFileName(sourcePath)
+	const extensionMatch = sourceFileName.match(/(\.html?)$/i)
+	const extension = extensionMatch?.[1] || ".html"
+	const baseName = sourceFileName.slice(0, sourceFileName.length - extension.length)
+	const directory = sourcePath.slice(0, sourcePath.length - sourceFileName.length)
+	const usedNames = new Set(currentSlides.map(getFileName))
+
+	const collectAttachmentNames = (items: AttachmentItem[]) => {
+		for (const attachment of items) {
+			if (attachment.children?.length) {
+				collectAttachmentNames(attachment.children)
+				continue
+			}
+			if (!attachment.file_name) continue
+			const attachmentPath = attachment.relative_file_path || attachment.file_name
+			const isSameDirectory = directory
+				? attachmentPath.endsWith(`${directory}${attachment.file_name}`)
+				: !attachmentPath.includes("/")
+			if (isSameDirectory) usedNames.add(attachment.file_name)
+		}
+	}
+	collectAttachmentNames(attachments || [])
+
+	let suffix = 1
+	let fileName = `${baseName} (${suffix})${extension}`
+	while (usedNames.has(fileName)) {
+		suffix += 1
+		fileName = `${baseName} (${suffix})${extension}`
+	}
+
+	return { fileName, filePath: `${directory}${fileName}` }
+}
+
+function findAttachmentById(items: AttachmentItem[], fileId: string): AttachmentItem | undefined {
+	for (const item of items) {
+		if (item.file_id === fileId) return item
+		if (item.children) {
+			const match = findAttachmentById(item.children, fileId)
+			if (match) return match
+		}
+	}
+	return undefined
+}
+
+function resolveSlideParentId({
+	parentId,
+	magicProjectFileId,
+	attachments,
+}: {
+	parentId?: string
+	magicProjectFileId: string
+	attachments?: AttachmentItem[]
+}) {
+	let resolvedParentId = parentId
+	if (attachments && magicProjectFileId) {
+		const magicProjectFile = findAttachmentById(attachments, magicProjectFileId)
+		if (magicProjectFile) resolvedParentId = magicProjectFile.parent_id
+	}
+	return resolvedParentId
+}
+
 /**
  * Insert a new slide at the specified position
  */
@@ -138,7 +209,7 @@ export async function insertSlide(params: {
 	direction: "before" | "after"
 	currentSlides: string[]
 	magicProjectFileId: string
-	attachments?: any[]
+	attachments?: AttachmentItem[]
 }): Promise<{
 	newFilePath: string
 	newSlides: string[]
@@ -167,19 +238,11 @@ export async function insertSlide(params: {
 	try {
 		// Determine the correct parent_id for the new slide
 		// The slide should be created in the same directory as magic.project.js
-		let correctParentId = parentId
-
-		if (attachments && magicProjectFileId) {
-			const allFiles = flattenAttachments(attachments)
-			const magicProjectFile = allFiles.find(
-				(file: any) => file.file_id === magicProjectFileId,
-			)
-
-			if (magicProjectFile) {
-				// Use the parent_id of magic.project.js file as the parent for new slides
-				correctParentId = magicProjectFile.parent_id
-			}
-		}
+		const correctParentId = resolveSlideParentId({
+			parentId,
+			magicProjectFileId,
+			attachments,
+		})
 
 		// Validate that we have a valid parent_id
 		// Use a specific error code that can be mapped to i18n message
@@ -328,6 +391,76 @@ export async function insertSlide(params: {
 				},
 			},
 		})
+		throw error
+	}
+}
+
+/** Duplicate an existing slide and insert the copy immediately after it. */
+export async function duplicateSlide(params: {
+	projectId: string
+	parentId?: string
+	slidePath: string
+	position: number
+	currentSlides: string[]
+	magicProjectFileId: string
+	sourceFileId: string
+	attachments?: AttachmentItem[]
+}): Promise<{
+	newFilePath: string
+	newSlides: string[]
+	newFileId: string
+	insertIndex: number
+	newFile: AttachmentItem
+	content: string
+}> {
+	const {
+		projectId,
+		parentId,
+		slidePath,
+		position,
+		currentSlides,
+		magicProjectFileId,
+		sourceFileId,
+		attachments,
+	} = params
+	const parent = resolveSlideParentId({ parentId, magicProjectFileId, attachments })
+	if (!parent) throw new Error("Invalid PPT folder structure")
+
+	const sourceContent = await getFileContentById(sourceFileId, { responseType: "text" })
+	if (typeof sourceContent !== "string") throw new Error("Failed to load source slide")
+
+	const { fileName, filePath } = getDuplicateFileName(slidePath, currentSlides, attachments)
+	const newFile = (await SuperMagicApi.createFile({
+		project_id: projectId,
+		parent_id: parent,
+		file_name: fileName,
+		is_directory: false,
+	})) as AttachmentItem
+	if (!newFile?.file_id) throw new Error("Failed to create duplicated slide file")
+
+	const insertIndex = Math.min(Math.max(0, position + 1), currentSlides.length)
+	const newSlides = [...currentSlides]
+	newSlides.splice(insertIndex, 0, filePath)
+
+	try {
+		await SuperMagicApi.saveFileContent([
+			{ file_id: String(newFile.file_id), content: sourceContent, enable_shadow: true },
+		])
+		await updateSlidesOrder({ fileId: magicProjectFileId, newSlidesOrder: newSlides })
+		return {
+			newFilePath: filePath,
+			newSlides,
+			newFileId: String(newFile.file_id),
+			insertIndex,
+			newFile,
+			content: sourceContent,
+		}
+	} catch (error) {
+		try {
+			await SuperMagicApi.deleteFile(String(newFile.file_id))
+		} catch (cleanupError) {
+			console.error("Failed to clean up duplicated slide:", cleanupError)
+		}
 		throw error
 	}
 }

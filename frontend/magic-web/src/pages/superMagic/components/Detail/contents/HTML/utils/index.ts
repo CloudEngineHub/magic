@@ -18,7 +18,7 @@ interface AttemptHtmlSaveFlowOptions {
 	refreshServerUpdateState: () => Promise<boolean>
 	showConflictDialog: () => void
 	checkServerUpdateBeforeSave: () => boolean
-	performSave: () => Promise<void>
+	performSave: () => Promise<boolean | void>
 	exitEditMode?: () => void
 	onRefreshServerUpdateError?: (error: unknown) => void
 }
@@ -30,7 +30,7 @@ interface AttemptHtmlSaveFlowResult {
 
 interface ConfirmHtmlConflictSaveOptions {
 	shouldExitAfterSave?: boolean
-	performSave: () => Promise<void>
+	performSave: () => Promise<boolean | void>
 	exitEditMode?: () => void
 }
 
@@ -97,11 +97,12 @@ export async function attemptHtmlSaveFlow({
 		}
 	}
 
-	await performSave()
-	if (shouldExitAfterSave) exitEditMode?.()
+	const saveResult = await performSave()
+	const didSave = saveResult !== false
+	if (shouldExitAfterSave && didSave) exitEditMode?.()
 
 	return {
-		didSave: true,
+		didSave,
 		isAwaitingConflictConfirmation: false,
 	}
 }
@@ -111,8 +112,8 @@ export async function confirmHtmlConflictSave({
 	performSave,
 	exitEditMode,
 }: ConfirmHtmlConflictSaveOptions) {
-	await performSave()
-	if (shouldExitAfterSave) exitEditMode?.()
+	const saveResult = await performSave()
+	if (shouldExitAfterSave && saveResult !== false) exitEditMode?.()
 }
 
 // 外部资源URL
@@ -622,6 +623,19 @@ export function rewriteHtmlCdnWithHost(content: string, cdnHost: string): Docume
 			rewrite: (href, parsed) => {
 				const families = parseFontFamilies(parsed)
 				if (families.length === 0) return href.replace(parsed.hostname, "fonts.loli.net")
+
+				// The internal family asset is the full CJK stylesheet. The original CSS2 endpoint
+				// serves unicode-range WOFF2 slices; the legacy mirror can return full TTF files.
+				if (
+					parsed.pathname === "/css2" &&
+					families.some((family) => family.toLowerCase() === "noto sans sc")
+				) {
+					const mirroredUrl = new URL(parsed.toString())
+					mirroredUrl.hostname = "fonts.googleapis.com"
+					mirroredUrl.searchParams.set("display", "swap")
+					return mirroredUrl.toString()
+				}
+
 				return families.map(
 					(f) => cdnHost + "/google-fonts/css/woff2/" + toSafeFontName(f) + "_woff2.css",
 				)
@@ -736,6 +750,18 @@ export function rewriteHtmlCdnWithHost(content: string, cdnHost: string): Docume
 		)
 	}
 
+	function ensureFontDisplaySwap(style: HTMLStyleElement): void {
+		const styleContent = style.textContent || ""
+		if (!styleContent.includes("@font-face")) return
+
+		// Inline author styles are under our control; add the non-blocking fallback only when
+		// the author did not already choose an explicit font-display strategy.
+		style.textContent = styleContent.replace(
+			/(@font-face\s*\{)(?![^}]*font-display\s*:)/gi,
+			"$1\n\tfont-display: swap;",
+		)
+	}
+
 	const parser = new DOMParser()
 	const htmlDoc = parser.parseFromString(content, "text/html")
 
@@ -831,6 +857,7 @@ export function rewriteHtmlCdnWithHost(content: string, cdnHost: string): Docume
 
 	for (let i = 0; i < styleElements.length; i++) {
 		const style = styleElements[i]
+		ensureFontDisplaySwap(style)
 		applyGoogleRewriteToStyle(style)
 	}
 

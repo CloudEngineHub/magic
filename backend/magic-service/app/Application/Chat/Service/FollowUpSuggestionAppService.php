@@ -15,6 +15,7 @@ use App\Domain\Chat\Entity\ValueObject\GeneratedSuggestionType;
 use App\Domain\Chat\Service\MagicGeneratedSuggestionDomainService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\SuperMagic\Message\Entity\TaskMessageEntity;
 use App\Domain\SuperMagic\Message\Service\TaskMessageDomainService;
 use App\Interfaces\Chat\Assembler\MagicGeneratedSuggestionAssembler;
@@ -80,7 +81,7 @@ PROMPT;
                     'organization_id' => $isolation->getCurrentOrganizationCode(),
                     'user_id' => $isolation->getCurrentUserId() ?? '',
                     'business_id' => (string) $topicId,
-                    'source_id' => 'follow_up_suggestions',
+                    'source_id' => SourceId::FOLLOW_UP_SUGGESTIONS,
                     'task_type' => 'text_completion',
                 ],
             );

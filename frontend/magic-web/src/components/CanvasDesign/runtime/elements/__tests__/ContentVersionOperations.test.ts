@@ -27,7 +27,10 @@ describe("media Content version operations", () => {
 		const update = vi.fn()
 		const context = {
 			data: createAudioData(),
-			canvas: { elementManager: { update } },
+			canvas: {
+				elementManager: { update },
+				permissionManager: { can: vi.fn(() => true) },
+			},
 		} as unknown as AudioElement
 
 		expect(AudioElement.prototype.switchActiveContent.call(context, "audio-1")).toBe(true)
@@ -56,7 +59,7 @@ describe("media Content version operations", () => {
 		)
 	})
 
-	it("video refuses deletion while its active Content is processing", () => {
+	it("video deletes its active processing Content", () => {
 		const update = vi.fn()
 		const context = {
 			data: {
@@ -77,15 +80,28 @@ describe("media Content version operations", () => {
 					{ contentId: "processing", status: GenerationStatus.Processing },
 				],
 			},
-			canvas: { elementManager: { update } },
+			canvas: {
+				elementManager: { update },
+				permissionManager: { can: vi.fn(() => true) },
+			},
 			isGenerating: false,
 		} as unknown as VideoElement
 
-		expect(VideoElement.prototype.deleteActiveContent.call(context)).toBe(false)
-		expect(update).not.toHaveBeenCalled()
+		expect(VideoElement.prototype.deleteActiveContent.call(context)).toBe(true)
+		expect(update).toHaveBeenCalledWith(
+			"video-1",
+			{
+				contents: [
+					{ contentId: "completed", src: "one.mp4", status: GenerationStatus.Completed },
+				],
+				activeContentId: "completed",
+				mainContentId: "completed",
+			},
+			{ silent: false },
+		)
 	})
 
-	it("image refuses deleting a completed version while another version is generating", () => {
+	it("image deletes a completed version while another version is generating", () => {
 		const update = vi.fn()
 		const context = {
 			data: {
@@ -108,10 +124,44 @@ describe("media Content version operations", () => {
 			},
 			canvas: {
 				elementManager: { update },
+				permissionManager: { can: vi.fn(() => true) },
+				markerManager: { removeMarkersByImageContent: vi.fn() },
+				generationRuntimeManager: { clearTarget: vi.fn() },
 			},
+			pollingManager: { syncWithElementData: vi.fn() },
 		} as unknown as ImageElement
 
-		expect(ImageElement.prototype.deleteActiveContent.call(context)).toBe(false)
-		expect(update).not.toHaveBeenCalled()
+		expect(ImageElement.prototype.deleteActiveContent.call(context)).toBe(true)
+		expect(update).toHaveBeenCalledWith(
+			"image-1",
+			{
+				contents: [{ contentId: "processing", status: GenerationStatus.Processing }],
+				activeContentId: "processing",
+				mainContentId: "processing",
+			},
+			{ silent: false },
+		)
 	})
+
+	it.each([
+		["image", ImageElement.prototype],
+		["video", VideoElement.prototype],
+		["audio", AudioElement.prototype],
+	] as const)(
+		"rejects document version mutations for readonly %s elements",
+		(_name, prototype) => {
+			const update = vi.fn()
+			const permissionManager = { can: vi.fn(() => false) }
+			const context = {
+				data: createAudioData(),
+				canvas: { elementManager: { update }, permissionManager },
+			} as unknown as AudioElement
+
+			expect(prototype.switchActiveContent.call(context, "audio-1")).toBe(false)
+			expect(prototype.setMainContent.call(context, "audio-1")).toBe(false)
+			expect(prototype.deleteActiveContent.call(context)).toBe(false)
+			expect(update).not.toHaveBeenCalled()
+			expect(permissionManager.can).toHaveBeenCalledWith("document.write")
+		},
+	)
 })

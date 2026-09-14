@@ -39,6 +39,14 @@ class ModelUsageEvent
         return $this->modelId;
     }
 
+    /**
+     * 获取实际发送给服务商的模型版本。
+     */
+    public function getModelVersion(): string
+    {
+        return $this->modelVersion;
+    }
+
     public function getUsage(): Usage
     {
         return $this->usage;

@@ -408,6 +408,7 @@ export interface FileInfo {
 	file_name: string
 	version: number
 	organization_code: string
+	relative_file_path: string
 }
 
 /** 下载图片模式 高清+无水印 */

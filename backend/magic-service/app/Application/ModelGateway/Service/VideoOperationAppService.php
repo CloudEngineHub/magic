@@ -26,6 +26,7 @@ use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoMediaMetadata;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoOperationStatus;
+use App\Domain\ModelGateway\Entity\ValueObject\VideoTaskType;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\Domain\ModelGateway\Event\VideoGeneratedEvent;
 use App\Domain\ModelGateway\Event\VideoGenerateFailedEvent;
@@ -40,14 +41,16 @@ use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\Locker\LockerInterface;
-use App\Infrastructure\Util\SSRF\SSRFUtil;
+use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use DateTime;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
+use Dtyq\CloudFile\Kernel\Utils\SafeRemoteFileDownloader;
 use Hyperf\Amqp\Producer;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use RuntimeException;
@@ -67,10 +70,6 @@ readonly class VideoOperationAppService
     use HasLogger;
 
     private const string INTERNAL_PROBE_RESULT_KEY = '__video_media_probe_result';
-
-    private const int PROBE_DOWNLOAD_MAX_BYTES = 104857600;
-
-    private const int STREAM_BUFFER_BYTES = 8192;
 
     private const string AUDIT_STATUS_SUCCESS = 'SUCCESS';
 
@@ -94,6 +93,8 @@ readonly class VideoOperationAppService
         private FileDomainService $fileDomainService,
         private VideoBillingDetailsResolver $videoBillingDetailsResolver,
         private VideoMediaProbeInterface $videoMediaProbe,
+        private GeminiVideoClient $geminiVideoClient,
+        private SafeRemoteFileDownloader $remoteFileDownloader,
         private VideoInputMediaMetadataResolver $videoInputMediaMetadataResolver,
         private Producer $producer,
         private LockerInterface $locker,
@@ -228,7 +229,7 @@ readonly class VideoOperationAppService
                 $throwable
             );
             $this->videoQueueDomainService->deleteOperation($operation);
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, $throwable->getMessage(), throwable: $throwable);
+            ExceptionBuilder::throw($throwable->getVideoErrorCode(), $throwable->getMessage(), throwable: $throwable);
         } catch (Throwable $throwable) {
             // 非业务异常会中断提交流程，释放槽位避免残留运行态阻塞后续提交。
             $this->videoQueueDomainService->releaseUserActiveOperation($operation);
@@ -295,6 +296,27 @@ readonly class VideoOperationAppService
         $response->setOutput($this->resolveResponseOutput($operation, $response->getOutput()));
 
         return $response;
+    }
+
+    /**
+     * 按 provider 规则把远程媒体下载到本地文件，供计费探测和归档上传共用。
+     */
+    public function downloadOperationMediaToLocalFile(string $operationId, string $url): string
+    {
+        $operation = $this->videoQueueDomainService->findOperation($operationId);
+        if ($operation === null) {
+            throw new RuntimeException('video operation not found');
+        }
+
+        $executorConfig = $this->queueOperationExecutionDomainService->getConfig($operation);
+        if ($operation->getProviderCode() === ProviderCode::Gemini->value) {
+            return $this->geminiVideoClient->downloadMediaToLocalFile(
+                $executorConfig,
+                $url,
+            );
+        }
+
+        return $this->remoteFileDownloader->download($url)->getRealPath();
     }
 
     public function pollOperationById(string $operationId, array $businessParams = []): bool
@@ -514,7 +536,7 @@ readonly class VideoOperationAppService
                 $this->videoQueueDomainService->releaseUserActiveOperationIfDone($operation);
             }
         } catch (ProviderVideoException $throwable) {
-            if ($throwable->isRetriable()) {
+            if ($throwable->isRetry()) {
                 throw $throwable;
             }
             $this->logger->warning('video provider query failed', [
@@ -607,11 +629,15 @@ readonly class VideoOperationAppService
             $providerCode,
             $videoGenerationConfig
         );
-        $outputDetails = $this->videoBillingDetailsResolver->resolveFromRequest($normalizedRequest, $videoGenerationConfig);
         $referenceVideos = is_array($normalizedRequest['inputs']['reference_videos'] ?? null) ? $normalizedRequest['inputs']['reference_videos'] : [];
         $inputMedia = is_array($normalizedRequest['inputs'] ?? null) ? $normalizedRequest['inputs'] : [];
 
         $inputMetadata = $this->resolveEstimateInputMetadata($dataIsolation, $requestDTO, $referenceVideos);
+        if ($requestDTO->getTask() === VideoTaskType::Edit->value) {
+            $normalizedRequest['generation']['duration_seconds'] = (int) $inputMetadata['total_duration_seconds'];
+        }
+
+        $outputDetails = $this->videoBillingDetailsResolver->resolveFromRequest($normalizedRequest, $videoGenerationConfig);
         $hasAudioOutput = $this->videoGenerationConfigDomainService->resolveHasAudioOutput(
             $modelVersion,
             $requestDTO->getModel(),
@@ -765,6 +791,12 @@ readonly class VideoOperationAppService
         if ($usageTokens['total_tokens'] !== null) {
             $businessParams['total_tokens'] = $usageTokens['total_tokens'];
         }
+        if ($usageTokens['thought_tokens'] !== null) {
+            $businessParams['thought_tokens'] = $usageTokens['thought_tokens'];
+        }
+        if ($usageTokens['billing_token_usage'] !== null) {
+            $businessParams['billing_token_usage'] = $usageTokens['billing_token_usage'];
+        }
 
         $event->setOrganizationCode($operation->getOrganizationCode());
         $event->setUserId($operation->getUserId());
@@ -790,6 +822,8 @@ readonly class VideoOperationAppService
         // 与 businessParams 中字段一致，便于 billing-manager 读事件对象直接扣费
         $event->setCompletionTokens($usageTokens['completion_tokens']);
         $event->setTotalTokens($usageTokens['total_tokens']);
+        $event->setThoughtTokens($usageTokens['thought_tokens']);
+        $event->setBillingTokenUsage($usageTokens['billing_token_usage']);
 
         AsyncEventUtil::dispatch($event);
         $this->dispatchOperationUsageFinished($operation, OperationUsageFinishedEvent::STATUS_SUCCESS);
@@ -927,27 +961,63 @@ readonly class VideoOperationAppService
     }
 
     /**
-     * 解析视频任务 provider 回包中的 token 用量（如火山方舟 succeeded 时的 usage.completion_tokens）。
-     * 无字段或非法结构时返回 null，计费侧可回退到按时长等规则。
+     * 按服务商解析视频任务回包中的 token 用量。
      *
-     * @return array{completion_tokens: ?int, total_tokens: ?int}
+     * @return array{completion_tokens: ?int, total_tokens: ?int, thought_tokens: int, billing_token_usage: ?array{input_tokens: int, output_text_tokens: int, output_video_tokens: int}}
      */
     private function resolveVideoProviderUsageTokens(VideoQueueOperationEntity $operation): array
     {
         $providerResult = $operation->getProviderResult();
-        if (! is_array($providerResult)) {
-            return ['completion_tokens' => null, 'total_tokens' => null];
-        }
-        $usage = $providerResult['usage'] ?? null;
+        $usage = is_array($providerResult) ? ($providerResult['usage'] ?? null) : null;
         if (! is_array($usage)) {
-            return ['completion_tokens' => null, 'total_tokens' => null];
+            return ['completion_tokens' => null, 'total_tokens' => null, 'thought_tokens' => 0, 'billing_token_usage' => null];
         }
-        $completion = $usage['completion_tokens'] ?? null;
-        $total = $usage['total_tokens'] ?? null;
+
+        if ($operation->getProviderCode() === ProviderCode::Gemini->value) {
+            return $this->resolveGeminiVideoUsageTokens($usage);
+        }
 
         return [
-            'completion_tokens' => $completion !== null ? max(0, (int) $completion) : null,
-            'total_tokens' => $total !== null ? max(0, (int) $total) : null,
+            'completion_tokens' => isset($usage['completion_tokens']) ? max(0, (int) $usage['completion_tokens']) : null,
+            'total_tokens' => isset($usage['total_tokens']) ? max(0, (int) $usage['total_tokens']) : null,
+            'thought_tokens' => 0,
+            'billing_token_usage' => null,
+        ];
+    }
+
+    /**
+     * 解析 Gemini 视频模型的四类 token 用量。
+     *
+     * @param array<string, mixed> $usage
+     * @return array{completion_tokens: int, total_tokens: int, thought_tokens: int, billing_token_usage: array{input_tokens: int, output_text_tokens: int, output_video_tokens: int}}
+     */
+    private function resolveGeminiVideoUsageTokens(array $usage): array
+    {
+        $modalityTokens = array_column($usage['output_tokens_by_modality'] ?? [], 'tokens', 'modality');
+        $thoughtTokens = (int) ($usage['total_thought_tokens'] ?? 0);
+
+        $billingTokenUsage = [
+            'input_tokens' => (int) ($usage['total_input_tokens'] ?? 0),
+            'output_text_tokens' => (int) ($modalityTokens['text'] ?? 0),
+            'output_video_tokens' => (int) ($modalityTokens['video'] ?? 0),
+        ];
+
+        $completionTokens = isset($usage['total_output_tokens'])
+            ? (int) $usage['total_output_tokens']
+            : (int) ($usage['completion_tokens'] ?? (
+                $billingTokenUsage['output_text_tokens']
+                + $billingTokenUsage['output_video_tokens']
+                + $thoughtTokens
+            ));
+        $totalTokens = isset($usage['total_tokens'])
+            ? (int) $usage['total_tokens']
+            : $billingTokenUsage['input_tokens'] + $completionTokens;
+
+        return [
+            'completion_tokens' => $completionTokens,
+            'total_tokens' => $totalTokens,
+            'thought_tokens' => $thoughtTokens,
+            'billing_token_usage' => $billingTokenUsage,
         ];
     }
 
@@ -1023,7 +1093,9 @@ readonly class VideoOperationAppService
             return $result;
         }
 
-        $result['provider_result'] = $this->stripProviderVideoBytes($providerResult);
+        $result['provider_result'] = PayloadLogSanitizer::sanitizeValue(
+            $this->stripProviderVideoBytes($providerResult),
+        );
         $output = is_array($result['output'] ?? null) ? $result['output'] : [];
         if (trim((string) ($output['video_url'] ?? '')) !== '') {
             return $result;
@@ -1169,21 +1241,9 @@ readonly class VideoOperationAppService
      */
     private function probeVideoFromUrl(VideoQueueOperationEntity $operation, string $url, string $probeSource): ?array
     {
-        $tempPath = tempnam(sys_get_temp_dir(), 'video-probe-');
-        if ($tempPath === false) {
-            $this->logger->warning('video billing probe failed', [
-                'operation_id' => $operation->getId(),
-                'organization_code' => $operation->getOrganizationCode(),
-                'probe_source' => $probeSource,
-                'fallback_used' => false,
-                'error' => 'create temporary probe file failed',
-            ]);
-
-            return null;
-        }
-
+        $tempPath = null;
         try {
-            $this->downloadProbeSourceToTempFile($url, $tempPath);
+            $tempPath = $this->downloadOperationMediaToLocalFile($operation->getId(), $url);
             return $this->probeVideoFromFile($operation, $tempPath, $probeSource);
         } catch (Throwable $throwable) {
             $this->logger->warning('video billing probe failed', [
@@ -1196,56 +1256,9 @@ readonly class VideoOperationAppService
 
             return null;
         } finally {
-            @unlink($tempPath);
-        }
-    }
-
-    private function downloadProbeSourceToTempFile(string $url, string $tempPath): void
-    {
-        // Probe sources come from provider execution results; keep the URL safety checks,
-        // but skip the extra redirect probe so we do not depend on live network behavior here.
-        $safeUrl = SSRFUtil::getSafeUrl($url, replaceIp: false, allowRedirect: true);
-        $context = stream_context_create([
-            'ssl' => [
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-            ],
-        ]);
-        $remoteStream = fopen($safeUrl, 'rb', false, $context);
-        $localStream = fopen($tempPath, 'wb');
-        if (! is_resource($remoteStream) || ! is_resource($localStream)) {
-            if (is_resource($remoteStream)) {
-                fclose($remoteStream);
+            if (is_string($tempPath)) {
+                @unlink($tempPath);
             }
-            if (is_resource($localStream)) {
-                fclose($localStream);
-            }
-            throw new RuntimeException('open video probe stream failed');
-        }
-
-        try {
-            $downloadedBytes = 0;
-            while (! feof($remoteStream)) {
-                $buffer = fread($remoteStream, self::STREAM_BUFFER_BYTES);
-                if ($buffer === false) {
-                    throw new RuntimeException('read video probe stream failed');
-                }
-                if ($buffer === '') {
-                    continue;
-                }
-
-                $downloadedBytes += strlen($buffer);
-                if ($downloadedBytes > self::PROBE_DOWNLOAD_MAX_BYTES) {
-                    throw new RuntimeException('video probe file exceeds max size');
-                }
-
-                if (fwrite($localStream, $buffer) === false) {
-                    throw new RuntimeException('write video probe temp file failed');
-                }
-            }
-        } finally {
-            fclose($remoteStream);
-            fclose($localStream);
         }
     }
 

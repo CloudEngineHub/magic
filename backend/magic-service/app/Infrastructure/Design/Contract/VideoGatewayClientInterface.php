@@ -24,6 +24,8 @@ interface VideoGatewayClientInterface
      */
     public function queryVideo(string $operationId, array $businessParams): array;
 
+    public function downloadMediaToLocalFile(string $operationId, string $url): string;
+
     /**
      * @param array<string, string> $businessParams
      */

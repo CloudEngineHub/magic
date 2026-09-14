@@ -27,7 +27,7 @@ export default function StoryboardVideoBatchButton() {
 		: null
 	const canCreate = Boolean(
 		canvas &&
-		!canvas.readonly &&
+		canvas.permissionManager.can("sideEffect.generate") &&
 		origin &&
 		isStoryboardOutputFrame(canvas, frameId ?? "") &&
 		canCreateStoryboardVideosFromConnection(canvas, origin, videoModelList),
@@ -37,7 +37,7 @@ export default function StoryboardVideoBatchButton() {
 	const handleClick = () => {
 		if (
 			!canvas ||
-			canvas.readonly ||
+			!canvas.permissionManager.can("sideEffect.generate") ||
 			!origin ||
 			!isStoryboardOutputFrame(canvas, frameId ?? "") ||
 			!canCreateStoryboardVideosFromConnection(canvas, origin, videoModelList)

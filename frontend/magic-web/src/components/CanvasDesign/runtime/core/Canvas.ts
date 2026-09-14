@@ -9,7 +9,7 @@ import type {
 } from "../document/types"
 import type { ElementDetailsProvenance } from "../document/elementDetailsProvenance"
 import { ElementTypeEnum, ToolTypeEnum } from "../document/types"
-import { getActiveContent, getActiveImageContent } from "../document/elementContent"
+import { getActiveContent } from "../document/elementContent"
 import { ViewportController } from "../interaction/viewport/ViewportController"
 import { EventEmitter, type CanvasEventMap } from "./EventEmitter"
 import { ElementManager } from "../elements/core/ElementManager"
@@ -29,6 +29,7 @@ import { PermissionManager } from "./PermissionManager"
 import { NameLabelManager } from "../interaction/labels/NameLabelManager"
 import { SizeLabelManager } from "../interaction/labels/SizeLabelManager"
 import type { TFunction } from "../../public/i18n-types"
+import type { CanvasAccessUpdate } from "./CanvasAccessPolicy"
 import { MagicConfigManager } from "./MagicConfigManager"
 import { ClipboardManager } from "../interaction/clipboard/ClipboardManager"
 import { DropOverlayManager } from "../interaction/drop-overlay/DropOverlayManager"
@@ -72,7 +73,7 @@ import { TextFormattingManager } from "../interaction/text-editing/TextFormattin
 import { CanvasInputManager } from "../interaction/input/index"
 import { isCanvasUIComponentNode } from "../shared/dom/domGuards"
 import {
-	buildVirtualResourceScope,
+	buildSharedMediaStorageScope,
 	getCanvasHostResourceReferenceResolver,
 	resolveCanvasStorageResourceReference,
 	type CanvasResourceReferenceResolverChangeOptions,
@@ -123,11 +124,40 @@ function getCanvasConnectionComparable(connections: CanvasDocument["connections"
 	)
 }
 
-function getElementResourceReferencePath(element: LayerElement | undefined): string | undefined {
+type ContentViewElement = LayerElement & {
+	activeContentId?: string | null
+	contents?: readonly { contentId: string }[]
+}
+
+function resolveEffectiveContentIdForElement(
+	element: ContentViewElement | undefined,
+	previewContentId?: string,
+): { contentId?: string; previewMatched: boolean } {
+	if (!element || !Array.isArray(element.contents)) {
+		return { contentId: undefined, previewMatched: false }
+	}
+
+	const previewMatched = Boolean(
+		previewContentId &&
+		element.contents.some((content) => content.contentId === previewContentId),
+	)
+	return {
+		contentId: previewMatched
+			? previewContentId
+			: (element.activeContentId ?? element.contents[0]?.contentId),
+		previewMatched,
+	}
+}
+
+function getElementResourceReferencePath(
+	canvas: Canvas,
+	element: LayerElement | undefined,
+): string | undefined {
 	if (!element) return undefined
-	if (element.type === ElementTypeEnum.Image) return getActiveImageContent(element).src
+	if (element.type === ElementTypeEnum.Image)
+		return (canvas.getEffectiveContent(element.id) as { src?: string } | undefined)?.src
 	if (element.type === ElementTypeEnum.Video || element.type === ElementTypeEnum.Audio) {
-		return getActiveContent(element)?.src as string | undefined
+		return (canvas.getEffectiveContent(element.id) as { src?: string } | undefined)?.src
 	}
 	return undefined
 }
@@ -219,7 +249,7 @@ export class Canvas {
 	public generationAttemptCoordinator: GenerationAttemptCoordinator
 	public elementDetailsRuntimeManager: ElementDetailsRuntimeManager
 
-	public readonly: boolean
+	private readonly previewContentIds = new Map<string, string>()
 	public deviceInfo: CanvasDeviceInfo
 	public id: string
 
@@ -253,8 +283,6 @@ export class Canvas {
 
 		this.t = options.t
 		this.id = options.id
-
-		this.readonly = options.defaultReadyonly ?? false
 
 		this.deviceInfo = options.getDevice ? options.getDevice() : getDefaultCanvasDeviceInfo()
 
@@ -297,14 +325,23 @@ export class Canvas {
 
 		// 创建事件发射器
 		this.eventEmitter = new EventEmitter()
+		// Permission is initialized before all runtime managers so every module
+		// observes the same access context during construction.
+		this.permissionManager = new PermissionManager({
+			canvas: this,
+			accessMode: options.accessMode,
+			capabilities: options.capabilities,
+		})
 		this.mediaEditRecoveryManager = new MediaEditRecoveryManager()
 		this.eventEmitter.on("element:deleted", ({ data }) => {
+			this.previewContentIds.delete(data.elementId)
 			this.mediaEditRecoveryManager.clearElement(data.elementId)
 		})
 		this.eventEmitter.on("element:batchdeleted", ({ data }) => {
-			data.elementIds.forEach((elementId) =>
-				this.mediaEditRecoveryManager.clearElement(elementId),
-			)
+			data.elementIds.forEach((elementId) => {
+				this.previewContentIds.delete(elementId)
+				this.mediaEditRecoveryManager.clearElement(elementId)
+			})
 		})
 		this.eventEmitter.on("element:updated", ({ data }) => {
 			if (!data.previousData) return
@@ -351,7 +388,7 @@ export class Canvas {
 			getResolveResourceReference: () =>
 				this.magicConfigManager.config?.methods?.resolveResourceReference,
 			getVirtualResourceScope: () =>
-				buildVirtualResourceScope(
+				buildSharedMediaStorageScope(
 					this.magicConfigManager.config?.methods?.getVirtualResourceScope?.(),
 					this.id,
 				),
@@ -407,11 +444,6 @@ export class Canvas {
 		})
 
 		this.imageEditingCoordinator = new ImageEditingCoordinator({
-			canvas: this,
-		})
-
-		// 初始化 PermissionManager（需要最早初始化，其他管理器依赖它）
-		this.permissionManager = new PermissionManager({
 			canvas: this,
 		})
 
@@ -1083,6 +1115,7 @@ export class Canvas {
 		doc: CanvasDocument,
 		options?: { elementDetailsProvenance?: ElementDetailsProvenance },
 	): void {
+		this.clearPreviewContent()
 		const normalizedDoc = normalizeStoryboardDocument(doc)
 		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocument")
 		this.elementDetailsRuntimeManager.replace(options?.elementDetailsProvenance)
@@ -1119,6 +1152,7 @@ export class Canvas {
 		doc: CanvasDocument,
 		options?: { elementDetailsProvenance?: ElementDetailsProvenance },
 	): void {
+		this.clearPreviewContent()
 		const normalizedDoc = normalizeStoryboardDocument(doc)
 		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocumentSmart")
 		if (options?.elementDetailsProvenance) {
@@ -1183,6 +1217,10 @@ export class Canvas {
 	 * 清空画布
 	 */
 	public clear(): void {
+		// A document reset must also discard session-only Content previews. Keeping
+		// the map across clear() could pin a reused element id to a Content from the
+		// previous document until the next effective-content lookup happens.
+		this.clearPreviewContent()
 		this.elementManager.clear()
 		this.connectionManager.clear({ emitChange: false })
 		this.markerManager.clear()
@@ -1340,22 +1378,115 @@ export class Canvas {
 		this.deleteSelectedElements()
 	}
 
-	/**
-	 * 设置只读状态
-	 */
-	public setReadonly(readonly: boolean): void {
-		this.readonly = readonly
-
-		// 更新所有元素的拖拽状态
-		this.elementManager.updateAllElementsDraggable()
-
-		// 如果切换到只读模式：保留选区（只读下仍可点选/框选），仅结束重命名并切回选择工具
-		if (readonly) {
+	public setAccessContext(update: CanvasAccessUpdate): void {
+		const accessChanged = this.permissionManager.setAccessContext(update)
+		if (!accessChanged) return
+		const canWrite = this.permissionManager.can("document.write")
+		const canGenerate = this.permissionManager.can("sideEffect.generate")
+		if (canWrite) this.clearPreviewContent()
+		if (!this.permissionManager.can("interaction.playback")) {
+			this.mediaPlaybackCoordinator.pauseAll()
+		}
+		if (!canWrite) {
+			this.cropManager.cancelCrop()
+			this.mediaReplaceController.cancel()
 			this.elementRenameManager.cancelRename()
 			this.toolManager.setActiveToolByType(ToolTypeEnum.Select)
 		}
+		if (!canWrite || !canGenerate) {
+			this.extendManager.cancelExtend()
+			this.eraserManager.cancelEraser()
+		}
+		if (!this.permissionManager.can("interaction.select")) {
+			this.selectionManager.deselectAll()
+		}
+		this.elementManager.updateAllElementsDraggable()
+		this.eventEmitter.emit({
+			type: "permission:changed",
+			data: this.permissionManager.getContext(),
+		})
+	}
 
-		this.eventEmitter.emit({ type: "canvas:readonly", data: { readonly } })
+	public getEffectiveContentId(elementId: string): string | undefined {
+		const element = this.elementManager.getElementData(elementId) as
+			| ContentViewElement
+			| undefined
+		const previewContentId = this.previewContentIds.get(elementId)
+		const resolution = resolveEffectiveContentIdForElement(element, previewContentId)
+		if (previewContentId && !resolution.previewMatched) {
+			this.previewContentIds.delete(elementId)
+		}
+		return resolution.contentId
+	}
+
+	public getEffectiveContent<T extends { contentId: string }>(elementId: string): T | undefined {
+		const element = this.elementManager.getElementData(elementId) as
+			| (LayerElement & { contents?: readonly T[] })
+			| undefined
+		if (!element || !Array.isArray(element.contents)) return undefined
+		const contentId = this.getEffectiveContentId(elementId)
+		return element.contents.find((content) => content.contentId === contentId) as T | undefined
+	}
+
+	/**
+	 * 为只读 Content 预览构造一个临时的元素数据投影。
+	 * 返回值只供下载、复制等外部读取路径使用，不会交给 ElementManager 写回文档。
+	 */
+	public getElementForContentView<T extends LayerElement>(element: T): T {
+		const previewContentId = this.previewContentIds.get(element.id)
+		const { contentId: effectiveContentId } = resolveEffectiveContentIdForElement(
+			element as ContentViewElement,
+			previewContentId,
+		)
+		if (
+			!effectiveContentId ||
+			effectiveContentId === element.activeContentId ||
+			!("contents" in element) ||
+			!element.contents?.some((content) => content.contentId === effectiveContentId)
+		) {
+			return element
+		}
+		return { ...element, activeContentId: effectiveContentId } as T
+	}
+
+	public setPreviewContent(elementId: string, contentId: string): boolean {
+		if (
+			!this.permissionManager.can("interaction.switchContent") ||
+			this.permissionManager.can("document.write")
+		)
+			return false
+		const element = this.elementManager.getElementData(elementId)
+		if (
+			!element ||
+			!("contents" in element) ||
+			!element.contents?.some((c) => c.contentId === contentId)
+		) {
+			return false
+		}
+		if (this.getEffectiveContentId(elementId) === contentId) return true
+		this.previewContentIds.set(elementId, contentId)
+		this.eventEmitter.emit({ type: "content:previewChanged", data: { elementId, contentId } })
+		this.elementManager.getElementInstance(elementId)?.rerender()
+		return true
+	}
+
+	public clearPreviewContent(elementId?: string): void {
+		const affectedElementIds = elementId
+			? this.previewContentIds.has(elementId)
+				? [elementId]
+				: []
+			: [...this.previewContentIds.keys()]
+		if (elementId) this.previewContentIds.delete(elementId)
+		else this.previewContentIds.clear()
+		for (const affectedElementId of affectedElementIds) {
+			this.elementManager.getElementInstance(affectedElementId)?.rerender()
+		}
+		if (affectedElementIds.length > 0) {
+			this.eventEmitter.emit({
+				type: "content:previewChanged",
+				data: { elementId, contentId: undefined },
+			})
+		}
 	}
 
 	/**
@@ -1454,6 +1585,7 @@ export class Canvas {
 		changedWorkspacePaths?: readonly string[]
 	}): void {
 		const changedWorkspacePaths = options?.changedWorkspacePaths
+		this.canvasFileUploadManager?.reconcilePendingResourcePaths(changedWorkspacePaths)
 		let affectedElementIds: Set<string> | undefined
 		let changedResourceIdentities: Set<string> | undefined
 		if (changedWorkspacePaths !== undefined) {
@@ -1476,6 +1608,7 @@ export class Canvas {
 				affectedElementIds = new Set<string>()
 				for (const elementId of this.elementManager.getAllElementIds()) {
 					const path = getElementResourceReferencePath(
+						this,
 						this.elementManager.getElementData?.(elementId) as LayerElement | undefined,
 					)
 					if (!path) continue

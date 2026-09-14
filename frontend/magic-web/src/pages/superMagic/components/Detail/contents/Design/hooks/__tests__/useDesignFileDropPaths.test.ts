@@ -177,6 +177,38 @@ describe("useDesignFileDropPaths", () => {
 		expect(copyFile).not.toHaveBeenCalled()
 	})
 
+	it("infers current-canvas ownership for a project mention without sourceCanvasId", async () => {
+		const flatAttachments = [fileItem("mention-file", `${DESIGN_A}/images/mention.png`)]
+		const { result } = renderHook(() =>
+			useDesignFileDropPaths({
+				projectId: "project-1",
+				currentFile: { id: "canvas-1", name: DESIGN_A },
+				designProjectBasePath: DESIGN_A,
+				flatAttachments,
+				attachmentIndex: buildDesignAttachmentIndex(flatAttachments),
+				updateAttachments: vi.fn(),
+			}),
+		)
+
+		await expect(
+			result.current.resolveCanvasClipboardReference({
+				sourceProjectId: "project-1",
+				sourceFileId: "mention-file",
+				resourceIdentity: "mention-file",
+				projectPath: `/${DESIGN_A}/images/mention.png`,
+				targetProjectId: "project-1",
+				targetCanvasId: "canvas-1",
+				target: "canvas-editor",
+				fileName: "mention.png",
+			}),
+		).resolves.toMatchObject({
+			kind: "current-canvas",
+			path: "./images/mention.png",
+			fileId: "mention-file",
+		})
+		expect(SuperMagicApi.copyFile).not.toHaveBeenCalled()
+	})
+
 	it("returns the copied path when file-info preload fails", async () => {
 		const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
 		vi.mocked(SuperMagicApi.copyFile).mockResolvedValue({
@@ -354,5 +386,84 @@ describe("useDesignFileDropPaths", () => {
 			expect.objectContaining({ file_id: "external-file" }),
 		)
 		expect(paths).toEqual(["./images/external.png"])
+	})
+
+	it("reuses an in-flight same-project cross-canvas copy", async () => {
+		const copyFile = vi.mocked(SuperMagicApi.copyFile)
+		copyFile.mockResolvedValue({
+			status: "success",
+			files: {
+				file_id: "copied-shared",
+				file_name: "shared.png",
+				relative_file_path: `${DESIGN_A}/images/shared.png`,
+			},
+		} as never)
+		const { result } = renderHook(() =>
+			useDesignFileDropPaths({
+				projectId: "project-1",
+				currentFile: { id: "canvas-1", name: DESIGN_A },
+				designProjectBasePath: DESIGN_A,
+				updateAttachments: vi.fn(),
+				getOrCreateImagesDir: vi.fn(async () => ({
+					imagesDirFileId: "images-dir-1",
+					suffixDir: `${DESIGN_A}/images`,
+				})),
+			}),
+		)
+
+		const input = {
+			sourceProjectId: "project-1",
+			sourceCanvasId: "canvas-2",
+			sourceFileId: "source-shared",
+			resourceIdentity: "workspace:/CanvasB/images/shared.png",
+			projectPath: `/${DESIGN_B}/images/shared.png`,
+			targetProjectId: "project-1",
+			targetCanvasId: "canvas-1",
+			target: "canvas-editor" as const,
+			fileName: "shared.png",
+		}
+
+		const [first, second] = await Promise.all([
+			result.current.resolveCanvasClipboardReference(input),
+			result.current.resolveCanvasClipboardReference(input),
+		])
+
+		expect(first).toEqual(second)
+		expect(first).toMatchObject({
+			kind: "current-canvas",
+			path: "./images/shared.png",
+			awaitingAttachmentConfirmation: true,
+		})
+		expect(copyFile).toHaveBeenCalledTimes(1)
+	})
+
+	it("normalizes legacy bare paths from the current canvas without uploading", async () => {
+		const { result } = renderHook(() =>
+			useDesignFileDropPaths({
+				projectId: "project-1",
+				currentFile: { id: "canvas-1", name: DESIGN_A },
+				designProjectBasePath: DESIGN_A,
+				updateAttachments: vi.fn(),
+			}),
+		)
+
+		await expect(
+			result.current.resolveCanvasClipboardReference({
+				sourceProjectId: "project-1",
+				sourceCanvasId: "canvas-1",
+				resourceIdentity: "workspace:/新建画布A/images/a.png",
+				sourcePath: "images/a.png",
+				targetProjectId: "project-1",
+				targetCanvasId: "canvas-1",
+				target: "canvas-editor",
+				fileName: "a.png",
+			}),
+		).resolves.toEqual({
+			kind: "current-canvas",
+			path: "./images/a.png",
+			resourceIdentity: "workspace:/新建画布A/images/a.png",
+			fileName: "a.png",
+		})
+		expect(SuperMagicApi.copyFile).not.toHaveBeenCalled()
 	})
 })

@@ -1,3 +1,8 @@
+import {
+	extractMarkdownFileLinks,
+	parseMarkdownFileHref,
+} from "@/pages/superMagic/utils/filePathMention"
+
 export const LONG_PLAIN_TEXT_PASTE_THRESHOLD = 4000
 const MAGIC_CLIPBOARD_TYPES = new Set([
 	"text/x-magic-message-rich-text",
@@ -30,6 +35,25 @@ export function shouldConvertPastedTextToAttachment(
 	if (hasMagicClipboardData({ clipboardData, types })) return false
 
 	return true
+}
+
+export function containsCanonicalWorkspaceLink(clipboardData: ClipboardDataLike): boolean {
+	const html = clipboardData.getData("text/html")
+	if (html) {
+		const container = document.createElement("div")
+		container.innerHTML = html
+		if (
+			Array.from(container.querySelectorAll("a[href]")).some(
+				(anchor) =>
+					!anchor.closest("code, pre") &&
+					Boolean(parseMarkdownFileHref(anchor.getAttribute("href") || "")),
+			)
+		) {
+			return true
+		}
+	}
+
+	return extractMarkdownFileLinks(clipboardData.getData("text/plain")).length > 0
 }
 
 export function createPastedTextFile({ text, now = new Date() }: CreatePastedTextFileOptions) {

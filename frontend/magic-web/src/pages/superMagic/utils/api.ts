@@ -5,6 +5,7 @@ import { WorkspaceStateCache } from "./superMagicCache"
 import { userStore } from "@/models/user"
 import { ImageProcessOptions, buildImageProcessQuery } from "@/utils/image-processing"
 import { getFileUrlDownloadModeForNoWatermark } from "@/utils/aiWatermarkPreviewFileUrlMode"
+import { stringifyUnknownError } from "@/utils/error"
 
 // import { REMOTE_HTTP_URL } from "../constans"
 // export const getWorkspaces = async ({ page, page_size }: { page: number; page_size: number }) => {
@@ -94,7 +95,7 @@ export const getAttachmentsByThreadId = async ({ id }: { id: string }) => {
 	return magicClient.post(url, {
 		page: 1,
 		page_size: 999,
-		file_type: ["user_upload", "process", "system_auto_upload"],
+		file_type: ["user_upload", "user_create", "process", "system_auto_upload"],
 		// @ts-ignore 使用window添加临时的token
 		token: window.temporary_token || "",
 		topic_id: id,
@@ -106,7 +107,7 @@ export const getAttachmentsByThreadId = async ({ id }: { id: string }) => {
 // 	return magicClient.post(`/api/v1/super-agent/projects/${id}/attachments`, {
 // 		page: 1,
 // 		page_size: 999,
-// 		file_type: ["user_upload", "process", "system_auto_upload", "directory"],
+// 		file_type: ["user_upload", "user_create", "process", "system_auto_upload", "directory"],
 // 		// @ts-ignore 使用window添加临时的token
 // 		token: window.temporary_token || "",
 // 	})
@@ -289,7 +290,10 @@ export const getFileContentsByIds = async (
 				: undefined,
 		})
 	} catch (error) {
-		const failure = error instanceof Error ? error : new Error(String(error))
+		const failure =
+			error instanceof Error
+				? error
+				: Object.assign(new Error(stringifyUnknownError(error)), { cause: error })
 		for (const fileId of uniqueFileIds) failures.set(fileId, failure)
 		return { successes, failures }
 	}
@@ -317,7 +321,11 @@ export const getFileContentsByIds = async (
 		else
 			failures.set(
 				fileId,
-				result.reason instanceof Error ? result.reason : new Error(String(result.reason)),
+				result.reason instanceof Error
+					? result.reason
+					: Object.assign(new Error(stringifyUnknownError(result.reason)), {
+							cause: result.reason,
+						}),
 			)
 	})
 

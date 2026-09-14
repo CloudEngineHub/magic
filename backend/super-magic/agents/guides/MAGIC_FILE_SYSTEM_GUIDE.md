@@ -36,7 +36,7 @@ project_root/
 │   └── chat_history/                       启动交接源（见上文），结构与 .chat_history/ 相同
 ├── .runtime/                              可重新生成的运行数据
 │   ├── background_compact/                后台压缩临时上下文
-│   ├── llm_request/                       LLM 调试日志
+│   ├── llm_requests/                      LLM 调试日志
 │   ├── bg_shell/                          后台 shell 日志
 │   ├── mcp_outputs/                       MCP 自动保存的大结果
 │   └── slide-template-maker/              幻灯片模板作者过程的中间文件
@@ -98,9 +98,10 @@ checkpoint 由主 Agent 创建：每个用户回合开始前登记新 checkpoint
 
 如果一个文件同时满足多类描述，优先按它的持久责任放置，而不是按生成它的 Agent 放置。例如：
 
-- 后台压缩 Agent 的临时 history 放 `.runtime/background_compact/`，不放 `.chat_history/subagents/`。
-- 压缩前的主 Agent 完整历史是用户话题的可检索证据，放 `.chat_history/compacted/`，并随 checkpoint 恢复。
-- LLM 请求调试日志放 `.runtime/llm_request/`，不进入聊天历史归档或 checkpoint。
+- 后台压缩 Agent 的临时 history 放 `.runtime/background_compact/`，不放 `.topic/chat_history/subagents/`。
+- 压缩前的主 Agent 完整历史是用户话题的可检索证据，放 `.topic/chat_history/compacted/`，并随 checkpoint 恢复。
+- LLM 请求调试日志放 `.runtime/llm_requests/`，不进入聊天历史归档或 checkpoint。
+- 旧版本聊天历史中的 `.chat_history/llm_request/` 与当前的 `llm_requests/` 都由迁移和归档逻辑排除；已挂载的 `.topic/chat_history/llm_request/` 会在启动后异步删除，不阻塞启动主链路。
 
 ## subagent 目录和父 Agent
 

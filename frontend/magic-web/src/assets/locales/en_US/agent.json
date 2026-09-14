@@ -44,6 +44,7 @@
 				"createAt": "Published on",
 				"groupTitle": "Contains {{count}} tools",
 				"noQuote": "Not referenced",
+				"remove": "Remove",
 				"toolsCount": "{{count}} tools"
 			},
 			"confirm": "Confirm",
@@ -89,9 +90,13 @@
 	},
 	"mcp": {
 		"button": {
+			"addMoreConnectors": "Add more connectors",
+			"addedConnectors": "Installed connectors",
 			"create": "Add MCP Plugin",
-			"text": "Plugin",
-			"title": "Configure MCP Plugin"
+			"emptyConnectors": "No connectors available",
+			"text": "Connector",
+			"title": "Configure MCP Connector",
+			"toggleConnector": "Enable {{name}}"
 		},
 		"card": {
 			"creatAt": "Created on",
@@ -117,8 +122,13 @@
 			"argsPlaceholder": "Please enter arguments, e.g., -y @modelcontextprotocol/server-sequential-thinking",
 			"auth": "Account Authorization",
 			"authMethod": "Authorization Method",
-			"authToFail": "Account authorization required, click Authorize",
-			"authToSuccess": "Account authorization completed, click Cancel",
+			"authToFail": "Account authorization required\nClick Authorize",
+			"authToFailAction": "Connect",
+			"authToFailTitle": "Account authorization required",
+			"authToSuccess": "Account authorization completed\nClick Cancel",
+			"authToSuccessAction": "Disconnect",
+			"authToSuccessTitle": "Account authorization completed",
+			"authorizationUrlInvalid": "Invalid authorization URL",
 			"cancel": "Cancel",
 			"command": "Command",
 			"commandPlaceholder": "Please enter command, e.g., npx",
@@ -128,6 +138,7 @@
 			"desc": "Description",
 			"env": "Environment Variables",
 			"headers": "Request Headers",
+			"icon": "Icon",
 			"import": "Import",
 			"importTool": "Import Existing Tool",
 			"map": "Custom Parameters",
@@ -189,6 +200,7 @@
 			"desc": "Extend $t(common:platform.name) capabilities using Model Context Protocol (MCP Plugin)",
 			"editTitle": "Edit MCP Plugin Service",
 			"empty": "No Plugins Available",
+			"manageAuth": "Manage Authorization",
 			"noAuth": "No authorization required",
 			"official": "Official Plugin",
 			"openForm": "Create MCP Plugin",
@@ -198,8 +210,7 @@
 			"status": "Query MCP Plugin Status",
 			"title": "MCP Plugin",
 			"tool": "Load Tools",
-			"url": "Modify MCP Plugin Service URL",
-			"manageAuth": "Manage Authorization"
+			"url": "Modify MCP Plugin Service URL"
 		}
 	}
 }

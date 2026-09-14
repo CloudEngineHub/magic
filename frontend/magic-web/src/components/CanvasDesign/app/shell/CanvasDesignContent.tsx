@@ -1,4 +1,4 @@
-import { useRef, forwardRef, useCallback } from "react"
+import { useRef, forwardRef, useCallback, useEffect, useReducer } from "react"
 import { useMount, useUnmount, useUpdateEffect } from "ahooks"
 import ViewportControls from "../../ui/canvas-editor/viewport-controls"
 import Tools from "../../ui/toolbar/index"
@@ -24,6 +24,7 @@ import { FloatingUIProvider } from "../providers/FloatingUIProvider"
 import { BottomFloatingStackProvider } from "../providers/BottomFloatingStackProvider"
 import { useCanvasDesignRef } from "../hooks/canvas/useCanvasDesignRef"
 import { useCanvasEventListeners } from "../hooks/canvas/useCanvasEventListeners"
+import { useCanvasEvent } from "../hooks/canvas/useCanvasEvent"
 import ImageCropPanel from "../../ui/panels/crop/index"
 import ImageExtendPanel from "../../ui/panels/extend/index"
 import ImageEraserPanel from "../../ui/panels/eraser/index"
@@ -31,13 +32,18 @@ import ElementRenameOverlay from "../../ui/panels/rename/index"
 import ElementActionHints from "../../ui/panels/action-hints/index"
 import PluginPanel from "../../ui/panels/plugin/window/index"
 import ElementBottomToolbarHost from "../../ui/canvas-editor/element-bottom-toolbar/ElementBottomToolbarHost"
+import {
+	configureCanvasClipboardPasteHost,
+	releaseCanvasClipboardPasteHost,
+} from "../../runtime/resources/clipboard/CanvasClipboardPasteController"
 
 import styles from "./index.module.css"
 
 const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((props, ref) => {
 	const {
 		id,
-		readonly = false,
+		accessMode,
+		capabilities,
 		data = {},
 		marker = {},
 		viewport = {},
@@ -75,6 +81,16 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	const { width: layersWidth, collapsed: layersCollapsed } = useLayersUI()
 
 	const { methods, permissions } = useMagic()
+	const [, forcePermissionUpdate] = useReducer((value: number) => value + 1, 0)
+	useCanvasEvent("permission:changed", () => forcePermissionUpdate(), [])
+	const resolvedAccessMode = accessMode ?? "edit"
+	const canWrite = canvas?.permissionManager?.can("document.write") ?? false
+	const canGenerate = canvas?.permissionManager?.can("sideEffect.generate") ?? false
+
+	useEffect(() => {
+		const controller = configureCanvasClipboardPasteHost(methods)
+		return () => releaseCanvasClipboardPasteHost(controller)
+	}, [methods])
 
 	const {
 		fullscreenMediaElement,
@@ -93,7 +109,6 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 
 	// 处理所有事件监听（onMarkerRestored 在 restoreMarkers 后直接调用，不通过画布事件）
 	useCanvasEventListeners({
-		readonly,
 		methods,
 		beforeMarkerCreate,
 		onMarkerCreated,
@@ -134,7 +149,8 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			scopeElement:
 				scopeElement instanceof HTMLElement ? scopeElement : canvasContainerRef.current,
 			id: designProjectId,
-			defaultReadyonly: readonly,
+			accessMode: resolvedAccessMode,
+			capabilities,
 			plugins: props.plugins,
 			magic: {
 				methods: methods,
@@ -200,8 +216,11 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 	})
 
 	useUpdateEffect(() => {
-		canvas?.setReadonly(readonly)
-	}, [readonly, canvas])
+		canvas?.setAccessContext({
+			mode: resolvedAccessMode,
+			capabilities: capabilities ?? {},
+		})
+	}, [resolvedAccessMode, capabilities, canvas])
 
 	useUpdateEffect(() => {
 		canvas?.setT(t)
@@ -242,14 +261,14 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 					connectionHints={connectionActionHints}
 					onConnectionAction={onConnectionActionHintAction}
 				/>
-				{!readonly && <ElementRenameOverlay />}
-				{!readonly && <ElementToolTopSurface />}
-				{!readonly && <ImageMessageEditor />}
-				{!readonly && <VideoGenerateEditor />}
-				{!readonly && <ElementBottomToolbarHost />}
-				{!readonly && <ImageCropPanel />}
-				{!readonly && <ImageExtendPanel />}
-				{!readonly && <ImageEraserPanel />}
+				{canWrite && <ElementRenameOverlay />}
+				<ElementToolTopSurface />
+				{canGenerate && <ImageMessageEditor />}
+				{canGenerate && <VideoGenerateEditor />}
+				<ElementBottomToolbarHost />
+				{canWrite && <ImageCropPanel />}
+				{canWrite && <ImageExtendPanel />}
+				{canWrite && <ImageEraserPanel />}
 				<MessageHistory />
 				{fullscreenMediaElement?.type === "video" ? (
 					<VideoFullscreenOverlay
@@ -283,9 +302,9 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 					/>
 				) : null}
 				<Layers />
-				{!readonly && <Tools />}
-				{!readonly && <PluginPanel />}
-				{!readonly && <CanvasTips />}
+				{canWrite && <Tools />}
+				{canGenerate && <PluginPanel />}
+				{canWrite && <CanvasTips />}
 				<ViewportControls shareHostBottomChrome={shareHostBottomChrome} />
 			</BottomFloatingStackProvider>
 		</FloatingUIProvider>

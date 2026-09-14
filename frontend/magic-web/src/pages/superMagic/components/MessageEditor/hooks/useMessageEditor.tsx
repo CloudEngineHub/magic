@@ -27,19 +27,30 @@ import { ChatApi } from "@/apis"
 import { isEmptyJSONContent } from "../utils"
 import { UndoRedo } from "@/infrastructure/editors/tiptap/extensions"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { isAllowedMention as defaultIsAllowedMention } from "../utils/mention"
+import {
+	isAllowedMention as defaultIsAllowedMention,
+	prepareCopiedMentionAttrs,
+} from "../utils/mention"
 import GlobalMentionPanelStore, {
 	MentionPanelStore,
 } from "@/components/business/MentionPanel/builtin-store"
 import { SUPER_PLACEHOLDER_TYPE } from "../extensions/super-placeholder/const"
-import { MentionItemType } from "@/components/business/MentionPanel/types"
+import {
+	MentionItemType,
+	type DirectoryMentionData,
+	type ProjectFileMentionData,
+	type UploadFileMentionData,
+} from "@/components/business/MentionPanel/types"
 import MarkerMentionNodeView from "../components/MentionNodes/marker/MarkerMentionNodeView"
 import FileMentionNodeView from "../components/MentionNodes/file/FileMentionNodeView"
+import FolderMentionNodeView from "../components/MentionNodes/folder/FolderMentionNodeView"
 import { runActiveEditor } from "../utils/editorLifecycle"
 import {
 	tryAcceptPromptCarouselShortcut,
 	tryNavigatePromptCarouselShortcut,
 } from "../utils/promptCarousel"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
+import { getClipboardPlainText } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 
 interface UseMessageEditorProps {
 	value?: JSONContent
@@ -81,6 +92,8 @@ interface UseMessageEditorProps {
 		stillExists: boolean,
 		context?: { deletionInput: MentionDeletionInput },
 	) => boolean
+	getWorkspaceFilesList?: () => AttachmentItem[]
+	getCurrentProjectId?: () => string | undefined
 }
 
 type MentionEditorCommands = {
@@ -154,6 +167,8 @@ export const useMessageEditor = ({
 	isTrustedMention,
 	shouldSkipRemoveSync,
 	shouldRestoreRemovedMention,
+	getWorkspaceFilesList,
+	getCurrentProjectId,
 }: UseMessageEditorProps) => {
 	const domRef = useRef<HTMLDivElement>(null)
 	const { i18n } = useTranslation()
@@ -163,6 +178,54 @@ export const useMessageEditor = ({
 	const lastContentSnapshotRef = useRef<string>(JSON.stringify(value ?? null))
 	// Track whether focus is on SuperPlaceholder to control AI completion
 	const isFocusOnPlaceholderRef = useRef<boolean>(false)
+
+	const prepareCopiedMention = useMemoizedFn(
+		(rawAttrs: Record<string, unknown>): TiptapMentionAttributes | null => {
+			if (
+				!shouldEnableMention ||
+				isOAuthInProgress ||
+				rawAttrs.pending ||
+				typeof rawAttrs.type !== "string" ||
+				!rawAttrs.data ||
+				typeof rawAttrs.data !== "object" ||
+				Array.isArray(rawAttrs.data)
+			)
+				return null
+
+			const attrs = rawAttrs as unknown as TiptapMentionAttributes
+			let sourceProjectId: string | undefined
+			if (
+				attrs.type === MentionItemType.PROJECT_FILE ||
+				attrs.type === MentionItemType.FOLDER
+			) {
+				const data = attrs.data as ProjectFileMentionData | DirectoryMentionData
+				const sourceId =
+					attrs.type === MentionItemType.PROJECT_FILE
+						? (data as ProjectFileMentionData).file_id
+						: (data as DirectoryMentionData).directory_id
+				if (!sourceId) return null
+				sourceProjectId = data.source_project_id || data.project_id
+			} else if (attrs.type === MentionItemType.UPLOAD_FILE) {
+				const data = attrs.data as UploadFileMentionData
+				// 只恢复已完成的远端附件；未完成上传和本地元素截图不属于可复制文件。
+				if (
+					data.upload_status !== "done" ||
+					!data.file_id ||
+					!data.file_name ||
+					!data.file_path ||
+					data.is_html_screenshot ||
+					data.storage_id
+				)
+					return null
+			}
+
+			const prepared = prepareCopiedMentionAttrs(attrs, sourceProjectId, mentionPanelStore)
+			if (!prepared) return null
+			return (isAllowedMention ?? defaultIsAllowedMention)(prepared, mentionPanelStore)
+				? prepared
+				: null
+		},
+	)
 
 	const scrollToBottom = () => {
 		setTimeout(() => {
@@ -308,11 +371,18 @@ export const useMessageEditor = ({
 			Paragraph,
 			Text,
 			HardBlock,
+			CopyMessageExtension.configure({
+				onMentionsInsert: onMentionInsertItems,
+				onContentChange: onChange,
+				dataService: mentionPanelStore,
+				getWorkspaceFilesList,
+				getCurrentProjectId,
+			}),
 			CodeAwarePasteExtension,
 			SuperPlaceholderExtension.configure({
 				size: size || "default",
 			}),
-			InspectorDetailExtension,
+			InspectorDetailExtension.configure({ prepareCopiedMention }),
 			PlaceholderExtension.configure({
 				placeholder,
 			}),
@@ -320,15 +390,20 @@ export const useMessageEditor = ({
 				depth: 100,
 				newGroupDelay: 250,
 			}),
-			CopyMessageExtension.configure({
-				onMentionsInsert: onMentionInsertItems,
-				onContentChange: onChange,
-				dataService: mentionPanelStore,
-			}),
 			...(shouldEnableMention
 				? [
 						MentionExtension.configure({
 							language: i18n.language as Language,
+							// 原生文本序列化也使用文件链接，避免绕过自定义 copy 时退回 @文件名。
+							renderText: ({ node }) =>
+								getClipboardPlainText(
+									{
+										type: "mention",
+										attrs: node.attrs as TiptapMentionAttributes,
+									},
+									getWorkspaceFilesList?.(),
+									getCurrentProjectId?.(),
+								).trim(),
 							getParentContainer: () => document.body,
 							disableKeyboardShortcuts: isOAuthInProgress,
 							onInsert: (item) => {
@@ -354,6 +429,12 @@ export const useMessageEditor = ({
 								[MentionItemType.DESIGN_MARKER]: MarkerMentionNodeView,
 								[MentionItemType.PROJECT_FILE]: FileMentionNodeView,
 								[MentionItemType.UPLOAD_FILE]: FileMentionNodeView,
+								[MentionItemType.FOLDER]: (props) => (
+									<FolderMentionNodeView
+										{...props}
+										getWorkspaceFilesList={getWorkspaceFilesList}
+									/>
+								),
 							},
 							shouldSkipInsertSync,
 							shouldSkipMentionValidation,

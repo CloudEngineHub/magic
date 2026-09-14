@@ -14,6 +14,7 @@ from agentlang.tools.tool_result import ToolResult
 
 from ..config.env_resolver import MCPEnvResolutionError, MCPEnvVarResolver, redact_config_values
 from ..config.models import MCPServerConfig
+from ..credential_provider import MCPAuthorizationCredentialProvider
 from ..tool.models import MCPServerResult, MCPToolInfo, UnavailableToolInfo
 from .client import MCPClient
 
@@ -34,11 +35,12 @@ class MCPServerManager:
     MAX_RETRIES: int = 1
     RETRY_DELAY: float = 1.0
 
-    def __init__(self):
+    def __init__(self, credential_provider: Optional[MCPAuthorizationCredentialProvider] = None):
         self.server_configs: Dict[str, MCPServerConfig] = {}
         self.clients: Dict[str, MCPClient] = {}
         self.tools: Dict[str, List[MCPToolInfo]] = {}  # server_name → 可用工具列表
         self.unavailable_tools: Dict[str, List[UnavailableToolInfo]] = {}  # server_name → 不可用工具列表
+        self.credential_provider = credential_provider or MCPAuthorizationCredentialProvider()
 
         logger.debug("初始化 MCP 服务器管理器")
 
@@ -172,6 +174,22 @@ class MCPServerManager:
 
         config = self.server_configs[server_name]
         start_time = time.time()
+
+        if config.auth_type == 2:
+            config = await self._resolve_authorization_config(config, start_time)
+            if config is None:
+                return MCPServerResult(
+                    name=server_name,
+                    status="failed",
+                    duration=time.time() - start_time,
+                    tools=[],
+                    tool_count=0,
+                    error=(
+                        f"MCP server '{server_name}' authorization is unavailable. "
+                        "Please authorize this MCP server again before reconnecting."
+                    ),
+                    label_name=label_name,
+                )
 
         try:
             resolved_config = MCPEnvVarResolver().resolve_config(config)
@@ -320,6 +338,35 @@ class MCPServerManager:
         if config and config.server_options and isinstance(config.server_options, dict):
             return config.server_options.get("label_name", "")
         return ""
+
+    async def _resolve_authorization_config(
+        self,
+        config: MCPServerConfig,
+        start_time: float,
+    ) -> Optional[MCPServerConfig]:
+        """向 magic-service 获取最新 MCP Authorization 凭据并生成建连配置。"""
+        if not config.mcp_server_code:
+            logger.warning(f"MCP Authorization 配置缺少 server code: {config.name}")
+            return None
+        try:
+            access_token = await self.credential_provider.get_access_token(config.mcp_server_code)
+        except Exception as exc:
+            logger.warning(
+                f"获取 MCP Authorization 凭据失败: server={config.name}, "
+                f"server_code={config.mcp_server_code}, duration={time.time() - start_time:.3f}s, "
+                f"error={exc}"
+            )
+            return None
+        if not access_token:
+            return None
+
+        headers = {
+            key: value
+            for key, value in (config.headers or {}).items()
+            if key.lower() != "authorization"
+        }
+        headers["Authorization"] = f"Bearer {access_token}"
+        return config.model_copy(deep=True, update={"headers": headers})
 
     # ------------------------------------------------------------------ #
     # 内部：工具注册                                                        #

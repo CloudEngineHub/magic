@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Literal
+
+from app.tools.canvas.domain.types import JsonObject
 
 
 @dataclass
@@ -17,10 +20,20 @@ class InteractionConfig:
     stroke_position: Literal["inside", "center", "outside"] | None = None
     aspect_ratio_locked: bool | None = None
     connectable: bool | None = None
+    extra_data: JsonObject = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "InteractionConfig":
         """从已经过 JSON 对象校验的协议字段创建配置。"""
+        known_fields = {
+            "fillTransparent",
+            "fillColorMode",
+            "strokeTransparent",
+            "strokeColorMode",
+            "strokePosition",
+            "aspectRatioLocked",
+            "connectable",
+        }
         return cls(
             fill_transparent=data.get("fillTransparent") if isinstance(data.get("fillTransparent"), bool) else None,
             fill_color_mode=data.get("fillColorMode") if data.get("fillColorMode") in {"hex", "rgb", "hsl"} else None,
@@ -29,11 +42,13 @@ class InteractionConfig:
             stroke_position=data.get("strokePosition") if data.get("strokePosition") in {"inside", "center", "outside"} else None,
             aspect_ratio_locked=data.get("aspectRatioLocked") if isinstance(data.get("aspectRatioLocked"), bool) else None,
             connectable=data.get("connectable") if isinstance(data.get("connectable"), bool) else None,
+            extra_data={key: deepcopy(value) for key, value in data.items() if key not in known_fields},
         )
 
     def to_dict(self) -> dict[str, object]:
         """转换为前端协议字段。"""
         values = {
+            **deepcopy(self.extra_data),
             "fillTransparent": self.fill_transparent,
             "fillColorMode": self.fill_color_mode,
             "strokeTransparent": self.stroke_transparent,

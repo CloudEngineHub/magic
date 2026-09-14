@@ -86,7 +86,10 @@ function getImagePreviewItem(canvas: Canvas, elementId: string): DragPreviewItem
 	const element = canvas.elementManager.getElementData(elementId)
 	if (!element || element.type !== ElementTypeEnum.Image) return null
 	const imageElement = element as ImageElement
-	const activeContent = getActiveImageContent(imageElement)
+	const activeContent =
+		(canvas.getEffectiveContent?.(imageElement.id) as
+			| ReturnType<typeof getActiveImageContent>
+			| undefined) ?? getActiveImageContent(imageElement)
 	if (!activeContent.src) return null
 	return {
 		id: elementId,

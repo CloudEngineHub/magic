@@ -25,6 +25,7 @@ function createShareDetailData() {
 			notes: { file_id: "notes-share-001", file_name: "share-notes.md" },
 			summaryFiles: [{ type: "summary", file: { file_id: "summary-share-001" } }],
 			magicProjectConfig: {
+				files: { notes: "notes/share-notes.md" },
 				metadata: {
 					speakers: { "Speaker-1": "Speaker A" },
 				},
@@ -173,6 +174,39 @@ describe("ShareMobileAudioRecordingDetailPage", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		useShareRecordingDetailDataMock.mockReturnValue(createShareDetailData())
+	})
+
+	it("requires both config declaration and an authorized notes attachment", () => {
+		const configuredDetail = createShareDetailData()
+		useShareRecordingDetailDataMock.mockReturnValue(configuredDetail)
+		const { rerender } = render(
+			<ShareMobileAudioRecordingDetailPage
+				projectId="project-share-001"
+				resourceName="Mock resource"
+				allowDownloadProjectFile
+				attachments={{ tree: [], list: [] }}
+			/>,
+		)
+		fireEvent.click(screen.getByText("Source"))
+		expect(sourcePanelPropsMock).toHaveBeenLastCalledWith(
+			expect.objectContaining({ showNotesTab: true }),
+		)
+
+		useShareRecordingDetailDataMock.mockReturnValue({
+			...configuredDetail,
+			fileMap: { ...configuredDetail.fileMap, notes: undefined },
+		})
+		rerender(
+			<ShareMobileAudioRecordingDetailPage
+				projectId="project-share-002"
+				resourceName="Mock resource"
+				allowDownloadProjectFile
+				attachments={{ tree: [], list: [] }}
+			/>,
+		)
+		expect(sourcePanelPropsMock).toHaveBeenLastCalledWith(
+			expect.objectContaining({ showNotesTab: false }),
+		)
 	})
 
 	it("renders the readonly share header with the brand logo and no direct export button", () => {

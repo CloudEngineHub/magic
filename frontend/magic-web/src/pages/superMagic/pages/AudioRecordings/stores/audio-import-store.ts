@@ -13,7 +13,17 @@ const IMPORT_AUDIO_FILE_SYNC_RETRY_COUNT = 3
 const IMPORT_AUDIO_FILE_SYNC_RETRY_DELAY_MS = 50
 
 // Common audio extensions for validation
-const COMMON_AUDIO_EXTENSIONS = [".raw", ".wav", ".mp3", ".ogg", ".webm", ".m4a"]
+const COMMON_AUDIO_EXTENSIONS = [
+	".raw",
+	".wav",
+	".mp3",
+	".ogg",
+	".opus",
+	".webm",
+	".m4a",
+	".aac",
+	".flac",
+]
 // Some video formats that commonly contain audio and are acceptable
 const AUDIO_COMPATIBLE_VIDEO_EXTENSIONS = [".mp4", ".mov", ".3gp", ".mkv", ".avi"]
 

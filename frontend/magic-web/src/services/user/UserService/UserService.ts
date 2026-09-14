@@ -118,7 +118,7 @@ export class UserService {
 	 * @description 获取当前组织下当前用户信息
 	 */
 	fetchUserInfo = async (
-		options?: Pick<RequestConfig, "skipAppInitWait">,
+		options?: Pick<RequestConfig, "skipAppInitWait" | "headers">,
 	): Promise<StructureUserItem | null> => {
 		const userInfo = await this.contactApi.getAccountUserInfo(undefined, options)
 

@@ -759,7 +759,10 @@ function renderMcpList() {
         const cfg = mcpServersConfig[name];
         const enabled = !!mcpEnabledStates[name];
         const isHttp = (cfg.type || '').toLowerCase() === 'http';
-        const meta = isHttp ? (cfg.url || '') : (cfg.command || '');
+        const isMagicServiceAuth = Number(cfg.auth_type) === 2;
+        const meta = isMagicServiceAuth
+            ? `Magic Service 授权 · ${cfg.mcp_server_code || '未填写 mcp_server_code'}`
+            : (isHttp ? (cfg.url || '') : (cfg.command || ''));
         const typeLabel = isHttp ? 'HTTP' : 'stdio';
         const typeClass = isHttp ? '' : 'stdio';
 
@@ -814,7 +817,12 @@ function syncJsonToList() {
         // 对每个服务器补全 name 字段
         for (const [k, v] of Object.entries(parsed)) {
             if (typeof v === 'object' && v !== null) {
-                parsed[k] = Object.assign({ name: k }, v);
+                const normalized = Object.assign({ name: k }, v);
+                // 支持面板中的可读别名，发送给后端时统一为 MCP Authorization 的数值类型。
+                if (normalized.auth_type === 'magic_service' || normalized.auth_type === 'mcp_authorization') {
+                    normalized.auth_type = 2;
+                }
+                parsed[k] = normalized;
             }
         }
         mcpServersConfig = parsed;
@@ -834,6 +842,11 @@ function syncJsonToList() {
 
 /** 构建发送用的 mcp_config（只包含启用的服务器），无启用服务器时返回 null */
 function buildMcpConfig() {
+    // JSON 模式下用户可能还没有切回列表，发送前必须先同步最新内容。
+    if (mcpViewMode === 'json' && !syncJsonToList()) {
+        return null;
+    }
+
     const enabledServers = {};
     for (const [name, cfg] of Object.entries(mcpServersConfig)) {
         if (mcpEnabledStates[name]) {
@@ -900,6 +913,13 @@ function initMcpPanel() {
         });
     }
 
+    const magicServiceTemplateBtn = document.getElementById('mcpMagicServiceTemplateBtn');
+    if (magicServiceTemplateBtn) {
+        magicServiceTemplateBtn.addEventListener('click', () => {
+            applyMcpMagicServiceTemplate(jsonInput);
+        });
+    }
+
     // 全屏编辑弹窗
     const expandBtn = document.getElementById('mcpExpandBtn');
     const modal = document.getElementById('mcpJsonModal');
@@ -952,6 +972,31 @@ function initMcpPanel() {
 
     renderMcpList();
     updateMcpBadge();
+}
+
+/**
+ * 将 Magic Service MCP Authorization 配置模板写入 JSON 编辑框。
+ * 仅在编辑框为空时写入，避免覆盖用户正在编辑的配置。
+ */
+function applyMcpMagicServiceTemplate(jsonInput) {
+    if (!jsonInput) return;
+    if (jsonInput.value.trim()) {
+        showSystemMessage('当前已有 MCP 配置，已保留原内容；请清空 JSON 后再插入模板');
+        jsonInput.focus();
+        return;
+    }
+
+    jsonInput.value = JSON.stringify({
+        '服务器名称': {
+            name: '服务器名称',
+            type: 'http',
+            url: 'https://你的-mcp-server.example.com/mcp',
+            auth_type: 2,
+            mcp_server_code: '请填写 magic-service 中的 MCP Server code',
+            headers: {},
+        },
+    }, null, 2);
+    jsonInput.focus();
 }
 
 // ── MCP 配置面板 end ──────────────────────────────────────────────────────────
@@ -2401,6 +2446,7 @@ function createImChatMessage(prompt) {
         message_id: generateImMessageId(currentImChannel, userId),
         type: MessageType.CHAT,
         prompt: prompt,
+        attachments: buildNativeVisionAttachments(prompt),
         metadata: {
             agent_user_id: userId,
         },
@@ -2426,7 +2472,7 @@ function createChatMessage(prompt, contextType = ContextType.NORMAL, remark = nu
         context_type: contextType,
         task_mode: currentTaskMode, // 保留兼容性
         agent_mode: currentAgentMode, // 新的 agent 模式
-        attachments: [],
+        attachments: buildNativeVisionAttachments(prompt),
         metadata: {
             language: currentLanguage
         }
@@ -4851,7 +4897,7 @@ function finalizeAskUserCard(wrapper, data) {
     }
 
     // 禁用所有输入和按钮
-    card.querySelectorAll('input, button').forEach(el => { el.disabled = true; });
+    card.querySelectorAll('input, textarea, button').forEach(el => { el.disabled = true; });
 
     // 移除旧结果标签（如果提交后已存在）
     card.querySelectorAll('.ask-user-result').forEach(el => el.remove());
@@ -4877,6 +4923,7 @@ function finalizeAskUserCard(wrapper, data) {
         resultEl.textContent = statusLabel[status] || `状态: ${status}`;
         card.appendChild(resultEl);
     }
+    appendAskUserRemark(card, data.remark);
 
     card.classList.remove('ask-user-card');
     card.classList.add('ask-user-card', status === 'answered' ? 'answered' : 'expired');
@@ -4888,9 +4935,20 @@ function finalizeAskUserCard(wrapper, data) {
     askUserCardRegistry.delete(data.question_id);
 }
 
+/** 展示 ask_user 提交时携带的追加备注。 */
+function appendAskUserRemark(card, remark) {
+    const normalizedRemark = typeof remark === 'string' ? remark.trim() : '';
+    if (!normalizedRemark) return;
+
+    const remarkEl = document.createElement('div');
+    remarkEl.className = 'ask-user-result ask-user-remark-result';
+    remarkEl.textContent = `备注：${normalizedRemark}`;
+    card.appendChild(remarkEl);
+}
+
 /**
  * 渲染 ask_user 交互卡片并挂到 container 上。
- * data: { question_id, questions[], expires_at, status }
+ * data: { question_id, questions[], expires_at, status, answers?, remark? }
  */
 function renderAskUserCard(data, container) {
     const { question_id, questions = [], expires_at, status } = data;
@@ -4902,7 +4960,7 @@ function renderAskUserCard(data, container) {
     // 通用禁用函数（仅操作 DOM，不依赖闭包变量顺序）
     function disableCard() {
         if (card._countdownTimer) clearInterval(card._countdownTimer);
-        card.querySelectorAll('input, button').forEach(el => { el.disabled = true; });
+        card.querySelectorAll('input, textarea, button').forEach(el => { el.disabled = true; });
     }
 
     // 倒计时
@@ -5090,6 +5148,7 @@ function renderAskUserCard(data, container) {
 
     // 如果已有结果（after_tool_call 时 re-render），只展示结果
     if (alreadyDone) {
+        disableCard();
         const resultEl = document.createElement('div');
         resultEl.className = 'ask-user-result' + (status !== 'answered' ? ' skipped' : '');
         const statusLabel = { answered: '✅ 已回答', skipped: '⏭ 已跳过', timeout: '⏰ 已超时', cancelled: '🚫 已取消' };
@@ -5105,9 +5164,21 @@ function renderAskUserCard(data, container) {
             resultEl.textContent = statusLabel[status] || `状态: ${status}`;
         }
         card.appendChild(resultEl);
+        appendAskUserRemark(card, data.remark);
         container.appendChild(card);
         return;
     }
+
+    // 备注属于整张问答卡片的附加上下文，不参与答案 JSON。
+    const remarkLabel = document.createElement('label');
+    remarkLabel.className = 'ask-user-remark-label';
+    remarkLabel.textContent = '补充备注（可选）';
+    const remarkInput = document.createElement('textarea');
+    remarkInput.className = 'ask-user-input ask-user-remark';
+    remarkInput.rows = 2;
+    remarkInput.placeholder = '可补充说明、约束或其他上下文…';
+    remarkLabel.appendChild(remarkInput);
+    card.appendChild(remarkLabel);
 
     // 操作按钮
     const actions = document.createElement('div');
@@ -5133,6 +5204,12 @@ function renderAskUserCard(data, container) {
                 answers[q.sub_id] = getValue();
             });
         }
+        const remark = remarkInput.value.trim();
+        const detail = {
+            response_status,
+            answer: JSON.stringify(answers),
+        };
+        if (remark) detail.remark = remark;
 
         const serverUrl = serverUrlInput.value.trim();
         try {
@@ -5145,10 +5222,7 @@ function renderAskUserCard(data, container) {
                     user_tool_call: {
                         name: 'ask_user',
                         tool_call_id: question_id,
-                        detail: {
-                            response_status,
-                            answer: JSON.stringify(answers)
-                        }
+                        detail,
                     }
                 })
             });
@@ -5158,14 +5232,14 @@ function renderAskUserCard(data, container) {
             resultEl.className = 'ask-user-result' + (response_status === 'skipped' ? ' skipped' : '');
             resultEl.textContent = response_status === 'answered' ? '✅ 已提交' : '⏭ 已跳过';
             card.appendChild(resultEl);
+            appendAskUserRemark(card, remark);
             card.classList.add('answered');
 
             showEventLog({ label: `ask_user 响应: ${json.message || response_status}`, ...json });
         } catch (e) {
             showSystemMessage(`ask_user 提交失败: ${e.message}`);
             // 重新启用按钮允许重试
-            submitBtn.disabled = false;
-            skipBtn.disabled = false;
+            card.querySelectorAll('input, textarea, button').forEach(el => { el.disabled = false; });
         }
     }
 
@@ -6081,6 +6155,38 @@ function parsePromptMentions(prompt) {
         mentions.push(mention);
     }
     return mentions;
+}
+
+/** 根据文件路径判断是否为聊天图片。 */
+function isImagePath(path) {
+    const value = String(path || '').split(/[?#]/, 1)[0];
+    const extensionIndex = value.lastIndexOf('.');
+    return extensionIndex >= 0 && IMAGE_UPLOAD_EXTENSIONS.has(value.slice(extensionIndex + 1).toLowerCase());
+}
+
+/** 根据消息中的工作区图片引用生成后端附件描述，触发原生视觉链路。 */
+function buildNativeVisionAttachments(prompt) {
+    const imageMentions = parsePromptMentions(prompt)
+        .filter((mention) => mention.type === 'project_file' && isImagePath(mention.file_path));
+    const seen = new Set();
+    const attachments = [];
+    for (const mention of imageMentions) {
+        const path = normalizeMentionFilePath(mention.file_path);
+        if (!path || seen.has(path)) continue;
+        seen.add(path);
+        const entry = workspaceMentionIndex.find((item) => item.kind === 'file' && item.scope !== 'memory' && item.path === path);
+        const filename = getWorkspaceFileBaseName(path);
+        attachments.push({
+            file_url: debugWorkspaceApi.rawUrl(path, 'workspace'),
+            filename,
+            file_name: filename,
+            file_key: `local-debug/workspace/${path}`,
+            file_tag: 'image',
+            file_size: Number(entry?.size || 0),
+            relative_file_path: path,
+        });
+    }
+    return attachments;
 }
 
 let activeFiletreeContextMenu = null;

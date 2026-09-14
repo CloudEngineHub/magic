@@ -28,9 +28,21 @@ describe("buildVideoAspectRatioOptions", () => {
 			default_resolution: "1080p",
 			sizes: [
 				{ label: "16:9", value: "1280x720", width: 1280, height: 720, resolution: "720p" },
-				{ label: "16:9", value: "1920x1080", width: 1920, height: 1080, resolution: "1080p" },
+				{
+					label: "16:9",
+					value: "1920x1080",
+					width: 1920,
+					height: 1080,
+					resolution: "1080p",
+				},
 				{ label: "9:16", value: "720x1280", width: 720, height: 1280, resolution: "720p" },
-				{ label: "9:16", value: "1080x1920", width: 1080, height: 1920, resolution: "1080p" },
+				{
+					label: "9:16",
+					value: "1080x1920",
+					width: 1080,
+					height: 1920,
+					resolution: "1080p",
+				},
 			],
 		})
 
@@ -47,7 +59,13 @@ describe("buildVideoAspectRatioOptions", () => {
 		const model = createModel({
 			sizes: [
 				{ label: "16:9", value: "1280x720", width: 1280, height: 720, resolution: "720p" },
-				{ label: "9:16", value: "1080x1920", width: 1080, height: 1920, resolution: "1080p" },
+				{
+					label: "9:16",
+					value: "1080x1920",
+					width: 1080,
+					height: 1920,
+					resolution: "1080p",
+				},
 				{ label: "9:16", value: "720x1280", width: 720, height: 1280, resolution: "720p" },
 			],
 		})

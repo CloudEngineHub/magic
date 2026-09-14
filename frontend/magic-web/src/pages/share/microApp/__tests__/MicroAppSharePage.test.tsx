@@ -73,6 +73,10 @@ describe("MicroAppSharePage", () => {
 		fireEvent.click(screen.getByTestId("micro-app-share-safety-confirm"))
 
 		expect(await screen.findByTestId("mock-html-preview")).toHaveTextContent("index.html")
+		expect(screen.getByTestId("mock-html-preview")).toHaveAttribute(
+			"data-project-id",
+			"project-1",
+		)
 		expect(screen.queryByTestId("micro-app-share-safety-notice")).not.toBeInTheDocument()
 	})
 

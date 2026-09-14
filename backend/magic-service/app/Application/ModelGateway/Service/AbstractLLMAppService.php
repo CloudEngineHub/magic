@@ -19,6 +19,7 @@ use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
 use App\Domain\ModelGateway\Entity\Dto\AbstractRequestDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\AccessTokenType;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\ModelGateway\Event\ImageOperationCompletedEvent;
 use App\Domain\ModelGateway\Service\AccessTokenDomainService;
 use App\Domain\ModelGateway\Service\ApplicationDomainService;
@@ -111,13 +112,13 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
             $dataIsolation->setAppId($accessToken->getRelationId());
             $taskId = $this->getBusinessParam('magic_task_id', '', $businessParams);
             if (! empty($taskId)) {
-                $dataIsolation->setSourceId('super_magic');
+                $dataIsolation->setSourceId(SourceId::SUPER_MAGIC);
                 $dataIsolation->setBusinessId($taskId);
             }
         }
 
         if ($accessToken->getType()->isUser()) {
-            $dataIsolation->setSourceId('api_platform');
+            $dataIsolation->setSourceId(SourceId::API_PLATFORM);
         }
 
         // 设置业务参数

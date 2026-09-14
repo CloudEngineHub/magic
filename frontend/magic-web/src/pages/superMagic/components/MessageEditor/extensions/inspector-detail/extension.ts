@@ -3,6 +3,7 @@ import { ReactNodeViewRenderer } from "@/infrastructure/editors/tiptap/react"
 import { INSPECTOR_DETAIL_TYPE } from "./const"
 import type { InspectorDetailAttrs, InspectorDetailOptions } from "./types"
 import { InspectorDetailComponent } from "./component"
+import { createMagicNodeDragPlugin } from "../node-drag"
 
 /**
  * Renders element-inspector context (selector, size, styles, text preview)
@@ -14,10 +15,17 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 	inline: true,
 	atom: true,
 	selectable: true,
+	// Pointer Events handles custom node dragging; native draggable would show a
+	// browser/system drag cursor and can be mistaken for a file upload.
 	draggable: false,
 
 	addAttributes() {
 		return {
+			title: {
+				default: "",
+				parseHTML: (el) => el.getAttribute("data-title") ?? "",
+				renderHTML: (attrs) => ({ "data-title": attrs.title }),
+			},
 			selector: {
 				default: "",
 				parseHTML: (el) => el.getAttribute("data-selector") ?? "",
@@ -94,6 +102,29 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 						? { "data-file-mention": JSON.stringify(attrs.fileMention) }
 						: {},
 			},
+			screenshotMention: {
+				default: null,
+				parseHTML: (el) => {
+					const raw = el.getAttribute("data-screenshot-mention")
+					if (!raw) return null
+					try {
+						return JSON.parse(raw)
+					} catch {
+						return null
+					}
+				},
+				renderHTML: (attrs) =>
+					attrs.screenshotMention
+						? { "data-screenshot-mention": JSON.stringify(attrs.screenshotMention) }
+						: {},
+			},
+			captureId: {
+				default: null,
+				parseHTML: (el) =>
+					el.getAttribute("data-capture-id") ?? el.getAttribute("data-target-id"),
+				renderHTML: (attrs) =>
+					attrs.captureId ? { "data-capture-id": attrs.captureId } : {},
+			},
 		}
 	},
 
@@ -144,6 +175,10 @@ export const InspectorDetailExtension = Node.create<InspectorDetailOptions>({
 
 	addNodeView() {
 		return ReactNodeViewRenderer(InspectorDetailComponent)
+	},
+
+	addProseMirrorPlugins() {
+		return [createMagicNodeDragPlugin(this.options)]
 	},
 
 	addCommands() {

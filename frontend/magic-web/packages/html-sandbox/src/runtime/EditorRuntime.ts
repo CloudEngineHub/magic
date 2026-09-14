@@ -10,6 +10,7 @@ import { ImageManager } from "../managers/ImageManager"
 import { DragDropManager } from "../managers/DragDropManager"
 import { StyleManager } from "../managers/StyleManager"
 import { TextStyleManager } from "../managers/TextStyleManager"
+import { DomStructureManager } from "../managers/DomStructureManager"
 import { EditorLogger } from "../utils/EditorLogger"
 import { isFromTrustedParent, getParentOrigin } from "../utils/parentOrigin"
 import {
@@ -24,6 +25,7 @@ export class EditorRuntime {
 	private commandHistory: CommandHistory
 	private styleManager: StyleManager
 	private textStyleManager: TextStyleManager
+	private domStructureManager: DomStructureManager
 	private elementSelector: ElementSelector
 	private imageManager: ImageManager
 	private dragDropManager: DragDropManager
@@ -45,6 +47,10 @@ export class EditorRuntime {
 		this.styleManager = new StyleManager(this.commandHistory)
 		this.textStyleManager = new TextStyleManager(this.commandHistory, this.bridge)
 		this.elementSelector = new ElementSelector(this.bridge)
+		this.domStructureManager = new DomStructureManager(
+			this.commandHistory,
+			this.elementSelector,
+		)
 		this.imageManager = new ImageManager(this.commandHistory, this.elementSelector)
 		this.dragDropManager = new DragDropManager(this.commandHistory, this.elementSelector)
 
@@ -53,6 +59,12 @@ export class EditorRuntime {
 
 		// Connect styleManager with textStyleManager for text selection state management
 		this.styleManager.setTextStyleManager(this.textStyleManager)
+		this.styleManager.registerCommandHandler({
+			canHandleCommand: (commandType) =>
+				this.domStructureManager.canHandleCommand(commandType),
+			restoreCommand: (command) => this.domStructureManager.restoreCommand(command),
+			applyCommand: (command) => this.domStructureManager.applyCommand(command),
+		})
 
 		this.styleManager.registerCommandHandler({
 			canHandleCommand: (commandType) => this.imageManager.canHandleCommand(commandType),
@@ -122,6 +134,7 @@ export class EditorRuntime {
 			styleManager: this.styleManager,
 			textStyleManager: this.textStyleManager,
 			elementSelector: this.elementSelector,
+			domStructureManager: this.domStructureManager,
 			onEditModeChange: (isEditMode: boolean) => {
 				this.isEditMode = isEditMode
 				this.notifyEditModeChanged()
@@ -144,6 +157,7 @@ export class EditorRuntime {
 			styleManager: this.styleManager,
 			textStyleManager: this.textStyleManager,
 			imageManager: this.imageManager,
+			domStructureManager: this.domStructureManager,
 		})
 
 		// Register selection handlers

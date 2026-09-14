@@ -21,6 +21,8 @@ const virtualState = vi.hoisted(() => ({
 	scrollSize: 2000,
 	viewportSize: 400,
 	resizeCallbacks: [] as ResizeObserverCallback[],
+	stickySyncCalls: 0,
+	animationFrameCallbacks: [] as Array<FrameRequestCallback>,
 	scrollToIndexCalls: [] as Array<[number, Record<string, unknown> | undefined]>,
 	/** virtua's global origin shift; row offsets are served as `cached - originShift`. */
 	originShift: 0,
@@ -49,8 +51,10 @@ vi.mock("virtua", () => ({
 			get viewportSize() {
 				return virtualState.viewportSize
 			},
-			findItemIndex: (offset: number) =>
-				Math.max(0, Math.floor((offset - (props.startMargin || 0)) / ROW_HEIGHT)),
+			findItemIndex: (offset: number) => {
+				virtualState.stickySyncCalls++
+				return Math.max(0, Math.floor((offset - (props.startMargin || 0)) / ROW_HEIGHT))
+			},
 			getItemOffset: (index: number) => index * ROW_HEIGHT - virtualState.originShift,
 			getItemSize: () => ROW_HEIGHT,
 			scrollTo: vi.fn(),
@@ -96,12 +100,23 @@ vi.mock("react-i18next", async (importOriginal) => {
 })
 
 class ControlledResizeObserver {
+	callback: ResizeObserverCallback
+
 	constructor(callback: ResizeObserverCallback) {
-		virtualState.resizeCallbacks.push(callback)
+		this.callback = callback
 	}
 
-	observe = vi.fn()
-	disconnect = vi.fn()
+	// Rows observe their own content to hold a height floor across a remount. Only the canvas
+	// observer is registered here, so the suite keeps driving layout growth through one callback.
+	observe = vi.fn((target: Element) => {
+		if ((target as HTMLElement).dataset?.testid !== "virtual-message-canvas") return
+		virtualState.resizeCallbacks.push(this.callback)
+	})
+
+	disconnect = vi.fn(() => {
+		const index = virtualState.resizeCallbacks.indexOf(this.callback)
+		if (index !== -1) virtualState.resizeCallbacks.splice(index, 1)
+	})
 }
 
 function message(id: string, role: "user" | "assistant" | "tool"): SuperMagicMessageItem {
@@ -149,11 +164,34 @@ function renderList(
 	)
 }
 
+function flushAnimationFrame() {
+	const callbacks = virtualState.animationFrameCallbacks.splice(0)
+	act(() => {
+		callbacks.forEach((callback) => callback(performance.now()))
+	})
+}
+
+/**
+ * jsdom never lays anything out, so the canvas box the component dedupes on has to be supplied
+ * through the observer entry the same way a browser would report it.
+ */
+function resizeCanvas(box: { width?: number; height: number }) {
+	const entries = [
+		{ contentRect: { width: box.width ?? 600, height: box.height } },
+	] as unknown as Array<ResizeObserverEntry>
+	act(() => {
+		virtualState.resizeCallbacks.forEach((callback) => callback(entries, {} as ResizeObserver))
+	})
+}
+
 function scrollTo(offset: number) {
 	virtualState.scrollOffset = offset
 	act(() => {
 		virtualState.lastProps?.onScroll?.(offset)
 	})
+	// Existing sticky assertions model a completed paint after each user scroll. The scheduler
+	// tests below intentionally call the callback directly so they can inspect the pending frame.
+	flushAnimationFrame()
 }
 
 function pinnedViewportTop(canvas: HTMLElement) {
@@ -168,10 +206,19 @@ describe("VirtualMessageList", () => {
 		virtualState.scrollOffset = 0
 		virtualState.scrollSize = 2000
 		virtualState.resizeCallbacks = []
+		virtualState.stickySyncCalls = 0
+		virtualState.animationFrameCallbacks = []
 		virtualState.scrollToIndexCalls = []
 		virtualState.keepMountedRenders = []
 		virtualState.originShift = 0
 		vi.stubGlobal("ResizeObserver", ControlledResizeObserver)
+		vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+			virtualState.animationFrameCallbacks.push(callback)
+			return virtualState.animationFrameCallbacks.length
+		})
+		vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+			virtualState.animationFrameCallbacks[id - 1] = () => undefined
+		})
 	})
 
 	it("renders one flat row per message without group wrappers", () => {
@@ -519,10 +566,265 @@ describe("VirtualMessageList", () => {
 		})
 
 		expect(onVirtualizerChange).not.toHaveBeenCalled()
-		act(() => {
-			virtualState.resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver))
-		})
+		resizeCanvas({ height: 200 })
+		flushAnimationFrame()
 		expect(onVirtualizerChange).toHaveBeenCalledTimes(1)
+	})
+
+	it("coalesces a growth burst into one virtualizer change per frame", () => {
+		// The consumer answers this signal with a scroll request that virtua keeps re-deriving for
+		// 150ms. Delivering it once per measurement frame would re-arm that request before it can
+		// expire, and the scroll it performs is what produces the next measurement.
+		const onVirtualizerChange = vi.fn()
+		renderList([message("user-0", "user"), message("assistant-1", "assistant")], {
+			onVirtualizerChange,
+		})
+
+		resizeCanvas({ height: 200 })
+		resizeCanvas({ height: 320 })
+		resizeCanvas({ height: 480 })
+		expect(onVirtualizerChange).not.toHaveBeenCalled()
+
+		flushAnimationFrame()
+		expect(onVirtualizerChange).toHaveBeenCalledTimes(1)
+	})
+
+	it("does not report growth for an unchanged canvas box", () => {
+		// `observe()` delivers an entry on subscription and a width-only reflow reports no new
+		// projected size; neither is growth, and answering them re-enters the scroll writer.
+		const onVirtualizerChange = vi.fn()
+		renderList([message("user-0", "user"), message("assistant-1", "assistant")], {
+			onVirtualizerChange,
+		})
+
+		resizeCanvas({ height: 200 })
+		flushAnimationFrame()
+		expect(onVirtualizerChange).toHaveBeenCalledTimes(1)
+
+		resizeCanvas({ height: 200 })
+		resizeCanvas({ height: 200 })
+		flushAnimationFrame()
+		expect(onVirtualizerChange).toHaveBeenCalledTimes(1)
+
+		resizeCanvas({ width: 400, height: 200 })
+		flushAnimationFrame()
+		expect(onVirtualizerChange).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps one canvas observer across a streaming toggle", () => {
+		// Re-subscribing would fire `observe()`'s entry again, which reads as growth that never
+		// happened and fires a scroll write on every toggle of the streaming gate.
+		const projection = buildVirtualMessageProjection([
+			message("user-0", "user"),
+			message("assistant-1", "assistant"),
+		])
+		const viewport = createViewport()
+		const props = {
+			items: projection.items,
+			userIndices: projection.userIndices,
+			isMobile: false,
+			getScrollElement: () => viewport,
+			renderNode: ({ item }: { item: (typeof projection.items)[number] }) => (
+				<span>{item.key}</span>
+			),
+		}
+		const { rerender } = render(<VirtualMessageList {...props} allowResizeStickySync={false} />)
+		expect(virtualState.resizeCallbacks).toHaveLength(1)
+
+		rerender(<VirtualMessageList {...props} allowResizeStickySync />)
+		rerender(<VirtualMessageList {...props} allowResizeStickySync={false} />)
+
+		expect(virtualState.resizeCallbacks).toHaveLength(1)
+	})
+
+	it("coalesces a ResizeObserver burst into one follow-up sticky sync", () => {
+		renderList([message("user-0", "user"), ...assistantTail(5, 1)])
+
+		virtualState.scrollOffset = 100
+		act(() => {
+			virtualState.lastProps?.onScroll?.(100)
+		})
+		const leadingSyncs = virtualState.stickySyncCalls
+
+		act(() => {
+			virtualState.resizeCallbacks[0]?.([], {} as ResizeObserver)
+			virtualState.resizeCallbacks[0]?.([], {} as ResizeObserver)
+			virtualState.resizeCallbacks[0]?.([], {} as ResizeObserver)
+		})
+
+		// The first scroll sync is synchronous. Resize notifications arriving before the next
+		// paint should schedule one, and only one, follow-up geometry read.
+		expect(virtualState.stickySyncCalls).toBe(leadingSyncs)
+		flushAnimationFrame()
+		expect(virtualState.stickySyncCalls).toBe(leadingSyncs + 1)
+	})
+
+	it("coalesces interleaved scroll and resize requests in one frame", () => {
+		const { container } = renderList([
+			message("user-0", "user"),
+			message("assistant-1", "assistant"),
+			message("user-2", "user"),
+			...assistantTail(3, 3),
+		])
+		const canvas = container.querySelector(
+			'[data-testid="virtual-message-canvas"]',
+		) as HTMLElement
+
+		virtualState.scrollOffset = 100
+		act(() => {
+			virtualState.lastProps?.onScroll?.(100)
+		})
+		const leadingSyncs = virtualState.stickySyncCalls
+		act(() => {
+			virtualState.scrollOffset = 140
+			virtualState.lastProps?.onScroll?.(140)
+			virtualState.resizeCallbacks[0]?.([], {} as ResizeObserver)
+			virtualState.lastProps?.onScroll?.(200)
+		})
+
+		expect(virtualState.stickySyncCalls).toBe(leadingSyncs)
+		flushAnimationFrame()
+		expect(virtualState.stickySyncCalls).toBe(leadingSyncs + 1)
+		expect(pinnedViewportTop(canvas)).toBe(-40)
+	})
+
+	it("does not rewrite unchanged sticky geometry during a follow-up sync", () => {
+		const { container } = renderList([message("user-0", "user"), ...assistantTail(5, 1)])
+		const canvas = container.querySelector(
+			'[data-testid="virtual-message-canvas"]',
+		) as HTMLElement
+		const setProperty = vi.spyOn(canvas.style, "setProperty")
+
+		scrollTo(100)
+		const rendersAfterLeadingSync = virtualState.keepMountedRenders.length
+		act(() => {
+			virtualState.resizeCallbacks[0]?.([], {} as ResizeObserver)
+		})
+		flushAnimationFrame()
+
+		expect(setProperty).not.toHaveBeenCalled()
+		expect(virtualState.keepMountedRenders.length).toBe(rendersAfterLeadingSync)
+	})
+
+	it("debounces resize-driven sticky sync while initial measurements settle", () => {
+		vi.useFakeTimers()
+		try {
+			renderList([message("user-0", "user"), ...assistantTail(5, 1)])
+			// Drain the mount request so the following count only measures resize-driven work.
+			flushAnimationFrame()
+			const beforeResize = virtualState.stickySyncCalls
+			const resize = virtualState.resizeCallbacks[0]
+
+			act(() => {
+				resize?.([], {} as ResizeObserver)
+			})
+			expect(virtualState.stickySyncCalls).toBe(beforeResize)
+
+			act(() => {
+				vi.advanceTimersByTime(100)
+			})
+			expect(virtualState.stickySyncCalls).toBe(beforeResize + 1)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("does not run a settled resize debounce after its pending frame was consumed", () => {
+		vi.useFakeTimers()
+		try {
+			// Fake timers replace the browser rAF shim, so restore the deterministic frame queue for
+			// this test and keep the settle timeout independently controllable.
+			vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+				virtualState.animationFrameCallbacks.push(callback)
+				return virtualState.animationFrameCallbacks.length
+			})
+			vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+				virtualState.animationFrameCallbacks[id - 1] = () => undefined
+			})
+			renderList([message("user-0", "user"), ...assistantTail(5, 1)])
+			// Drain the initial sequence sync, then create a known pending frame from a scroll.
+			flushAnimationFrame()
+			virtualState.scrollOffset = 100
+			act(() => {
+				virtualState.lastProps?.onScroll?.(100)
+			})
+			const resize = virtualState.resizeCallbacks[0]
+
+			act(() => {
+				// The mount sync has already queued a frame. A measurement callback joins that frame
+				// and also arms the settle timer.
+				resize?.([], {} as ResizeObserver)
+			})
+			flushAnimationFrame()
+			const afterFrame = virtualState.stickySyncCalls
+
+			act(() => {
+				vi.advanceTimersByTime(100)
+			})
+			expect(virtualState.stickySyncCalls).toBe(afterFrame)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("coalesces cross-frame sticky requests while initial measurements settle", () => {
+		vi.useFakeTimers()
+		try {
+			vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+				virtualState.animationFrameCallbacks.push(callback)
+				return virtualState.animationFrameCallbacks.length
+			})
+			vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+				virtualState.animationFrameCallbacks[id - 1] = () => undefined
+			})
+			renderList([message("user-0", "user"), ...assistantTail(5, 1)])
+			flushAnimationFrame()
+			const beforeChurn = virtualState.stickySyncCalls
+			act(() => {
+				virtualState.resizeCallbacks[0]?.([], {} as ResizeObserver)
+			})
+
+			for (const offset of [0, 0, 0, 0]) {
+				virtualState.scrollOffset = offset
+				act(() => {
+					virtualState.lastProps?.onScroll?.(offset)
+				})
+				flushAnimationFrame()
+			}
+
+			// Virtua can emit scroll callbacks on successive measurement frames after a resize burst.
+			// Those callbacks must not turn into one geometry read per frame.
+			expect(virtualState.stickySyncCalls).toBe(beforeChurn)
+
+			act(() => {
+				vi.advanceTimersByTime(100)
+			})
+			expect(virtualState.stickySyncCalls).toBe(beforeChurn + 1)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("does not let static lists recompute sticky state from measurement callbacks", () => {
+		vi.useFakeTimers()
+		try {
+			renderList([message("user-0", "user"), ...assistantTail(5, 1)], {
+				allowResizeStickySync: false,
+			})
+			flushAnimationFrame()
+			const beforeResize = virtualState.stickySyncCalls
+
+			act(() => {
+				for (let index = 0; index < 20; index += 1) {
+					virtualState.resizeCallbacks[0]?.([], {} as ResizeObserver)
+				}
+				vi.advanceTimersByTime(500)
+			})
+
+			expect(virtualState.stickySyncCalls).toBe(beforeResize)
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	it("exposes the virtualizer handle through the scroll adapter", () => {
@@ -540,19 +842,35 @@ describe("VirtualMessageList", () => {
 	})
 
 	it("folds the space below the virtualizer into a scroll-to-last write", () => {
-		// Two rows of 100 sit after a 50px start margin, so virtua projects 250. The caller's
-		// message column adds 8px of bottom padding below the virtualizer, and without it the
-		// write lands 8px above the scroll end. Only the scroll element knows about that strip —
-		// virtua's own `scrollSize` reports the projected size and nothing else.
-		const viewport = createViewport(258)
+		// The caller's message column adds 8px of bottom padding below the virtualizer, inside the
+		// same scroll element. Without folding it in, a bottom-aligned write on the last row lands
+		// 8px above the scroll end — virtua's own `scrollSize` reports the projected size and
+		// nothing else. The strip is read from the boxes between the canvas and the scroll
+		// element, so the column has to actually be one of them here.
+		const viewport = createViewport()
+		const column = document.createElement("div")
+		column.style.paddingBottom = "8px"
+		viewport.appendChild(column)
+
+		const projection = buildVirtualMessageProjection([
+			message("user-0", "user"),
+			message("assistant-1", "assistant"),
+		])
 		const virtualizerRef = { current: null } as {
 			current: import("../message-list-scroll-adapter").MessageListScrollAdapter | null
 		}
-		renderList([message("user-0", "user"), message("assistant-1", "assistant")], {
-			virtualizerRef,
-			getScrollElement: () => viewport,
-			startMargin: 50,
-		})
+		render(
+			<VirtualMessageList
+				items={projection.items}
+				userIndices={projection.userIndices}
+				isMobile={false}
+				virtualizerRef={virtualizerRef}
+				getScrollElement={() => viewport}
+				startMargin={50}
+				renderNode={({ item }) => <span>{item.key}</span>}
+			/>,
+			{ container: column },
+		)
 
 		virtualizerRef.current?.scrollToIndex(1, { align: "end" })
 		expect(virtualState.scrollToIndexCalls).toEqual([[1, { align: "end", offset: 8 }]])

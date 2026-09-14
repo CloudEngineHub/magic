@@ -128,6 +128,7 @@ export interface AskUserActionDetail {
 	question_id: string
 	response_status: AskUserResponseStatus
 	answer: string
+	remark?: string
 }
 
 export interface AskUserAutoAction {
@@ -141,11 +142,13 @@ interface AskUserToolDetailData {
 	status?: string
 	questions?: AskUserQuestionItem[]
 	answers?: AskUserAnswerContent
+	remark?: string
 }
 
 function getSuperAgentDynamicParams(extra: unknown) {
 	const superAgent = (extra as Record<string, unknown> | undefined)?.super_agent as
-		Record<string, unknown> | undefined
+		| Record<string, unknown>
+		| undefined
 	return superAgent?.dynamic_params
 }
 
@@ -162,7 +165,8 @@ function getAskUserToolReply(item: Record<string, unknown> | null | undefined) {
 		getSuperAgentDynamicParams(rawRichText?.rich_text?.extra)
 
 	const toolReply = (dynamicParams as Record<string, unknown> | undefined)?.tool_reply as
-		Record<string, unknown> | undefined
+		| Record<string, unknown>
+		| undefined
 
 	if (toolReply?.name !== ASK_USER_TOOL.name) return undefined
 	return toolReply
@@ -235,22 +239,31 @@ export function buildAskUserToolReplyDetail({
 	questionId,
 	responseStatus,
 	answer = "",
+	remark = "",
 }: {
 	taskId?: string
 	questionId: string
 	responseStatus: AskUserResponseStatus
 	answer?: string
+	remark?: string
 }): AskUserActionDetail | null {
 	const resolvedTaskId = typeof taskId === "string" ? taskId.trim() : ""
 	const resolvedQuestionId = typeof questionId === "string" ? questionId : ""
 	if (!resolvedTaskId) return null
+
+	const resolvedRemark = typeof remark === "string" ? remark.trim() : ""
 
 	return {
 		task_id: resolvedTaskId,
 		question_id: resolvedQuestionId,
 		response_status: responseStatus,
 		answer,
+		...(resolvedRemark ? { remark: resolvedRemark } : {}),
 	}
+}
+
+export function normalizeAskUserRemark(value: unknown) {
+	return typeof value === "string" ? value.trim() : ""
 }
 
 interface AskUserMessageSnapshot {
@@ -359,7 +372,8 @@ function resolveAskUserMessageStatus(item: SuperMagicMessageItem): AskUserCardSt
 	const node = getAskUserNode(item)
 	const detailData = getAskUserToolDetailData(node as Record<string, unknown> | undefined)
 	const toolStatus = (node as Record<string, unknown> | undefined)?.tool as
-		{ status?: string } | undefined
+		| { status?: string }
+		| undefined
 	const parsedContentStatus = parseAskUserContent(node?.content)?.status
 
 	// 优先级：detail.data.status > node.status > tool.status > content.status

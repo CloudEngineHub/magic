@@ -1,12 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { findMagicProjectJsFile } from "../magicProjectUpdater"
+import { duplicateSlide, findMagicProjectJsFile } from "../magicProjectUpdater"
 
 const mockState = vi.hoisted(() => ({
 	getFileContentById: vi.fn(),
+	createFile: vi.fn(),
+	saveFileContent: vi.fn(),
+	deleteFile: vi.fn(),
 }))
 
 vi.mock("@/apis", () => ({
-	SuperMagicApi: {},
+	SuperMagicApi: {
+		createFile: mockState.createFile,
+		saveFileContent: mockState.saveFileContent,
+		deleteFile: mockState.deleteFile,
+	},
 }))
 
 vi.mock("@/pages/superMagic/utils/api", () => ({
@@ -31,6 +38,11 @@ vi.mock("i18next", () => ({
 describe("findMagicProjectJsFile", () => {
 	beforeEach(() => {
 		mockState.getFileContentById.mockReset()
+		mockState.createFile.mockReset()
+		mockState.saveFileContent.mockReset()
+		mockState.deleteFile.mockReset()
+		mockState.saveFileContent.mockResolvedValue({})
+		mockState.deleteFile.mockResolvedValue({})
 	})
 
 	it("finds the matching magic.project.js for a directory among multiple projects", async () => {
@@ -105,5 +117,73 @@ describe("findMagicProjectJsFile", () => {
 		expect(mockState.getFileContentById).toHaveBeenCalledWith("magic-file", {
 			responseType: "text",
 		})
+	})
+
+	it("duplicates a slide with the next available numbered filename", async () => {
+		mockState.createFile.mockResolvedValue({ file_id: "slide-copy" })
+		mockState.getFileContentById
+			.mockResolvedValueOnce("<html>source</html>")
+			.mockResolvedValueOnce(
+				'window.magicProjectConfig = {"slides":["slides/intro.html","slides/intro (1).html"]}',
+			)
+
+		const result = await duplicateSlide({
+			projectId: "project-1",
+			parentId: "slides-dir",
+			slidePath: "slides/intro.html",
+			position: 0,
+			currentSlides: ["slides/intro.html", "slides/intro (1).html"],
+			magicProjectFileId: "magic-project",
+			sourceFileId: "source-slide",
+			attachments: [
+				{ file_name: "intro (2).html", relative_file_path: "other/intro (2).html" },
+			],
+		})
+
+		expect(result).toMatchObject({
+			newFilePath: "slides/intro (2).html",
+			newFileId: "slide-copy",
+			insertIndex: 1,
+		})
+		expect(mockState.createFile).toHaveBeenCalledWith({
+			project_id: "project-1",
+			parent_id: "slides-dir",
+			file_name: "intro (2).html",
+			is_directory: false,
+		})
+		expect(mockState.saveFileContent).toHaveBeenNthCalledWith(1, [
+			{ file_id: "slide-copy", content: "<html>source</html>", enable_shadow: true },
+		])
+		expect(mockState.saveFileContent).toHaveBeenNthCalledWith(2, [
+			expect.objectContaining({
+				file_id: "magic-project",
+				content: expect.stringContaining(
+					'"slides": [\n        "slides/intro.html",\n        "slides/intro (2).html"',
+				),
+			}),
+		])
+	})
+
+	it("removes the copied file when project order persistence fails", async () => {
+		mockState.createFile.mockResolvedValue({ file_id: "slide-copy" })
+		mockState.getFileContentById
+			.mockResolvedValueOnce("<html>source</html>")
+			.mockResolvedValueOnce('window.magicProjectConfig = {"slides":[]}')
+		mockState.saveFileContent
+			.mockResolvedValueOnce({})
+			.mockRejectedValueOnce(new Error("save failed"))
+
+		await expect(
+			duplicateSlide({
+				projectId: "project-1",
+				parentId: "slides-dir",
+				slidePath: "intro.html",
+				position: 0,
+				currentSlides: ["intro.html"],
+				magicProjectFileId: "magic-project",
+				sourceFileId: "source-slide",
+			}),
+		).rejects.toThrow("save failed")
+		expect(mockState.deleteFile).toHaveBeenCalledWith("slide-copy")
 	})
 })
