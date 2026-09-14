@@ -8,7 +8,9 @@ import useProjectWorkspace from "@/pages/superMagic/hooks/useProjectWorkspace"
 import { openProjectInNewTab } from "@/pages/superMagic/utils/project"
 import superMagicService from "@/pages/superMagic/services"
 import useProjectItemActionProps from "@/pages/superMagic/components/EmptyWorkspacePanel/hooks/useProjectItemActionProps"
-import { formatRelativeTime } from "@/utils/string"
+import dayjs from "@/infrastructure/vendors/dayjs"
+import SmartTooltip from "@/components/other/SmartTooltip"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import { cn } from "@/utils/cn"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { useVirtualProjectList } from "./hooks/useVirtualProjectList"
@@ -16,10 +18,12 @@ import CollapsedWorkspaceProjectRow from "./CollapsedWorkspaceProjectRow"
 
 const RecentProjectRow = observer(function RecentProjectRow({
 	project,
+	referenceNow,
 	onSelect,
 	onInteractionChange,
 }: {
 	project: ProjectListItem
+	referenceNow: number
 	onSelect?: () => void
 	onInteractionChange: (id: string, active: boolean) => void
 }) {
@@ -32,6 +36,10 @@ const RecentProjectRow = observer(function RecentProjectRow({
 	const { workspace, locationName } = useProjectWorkspace(project)
 
 	const actions = useProjectItemActionProps({ selectedWorkspace: workspace })
+	const tooltipDisabled = rowBusy || actions.isProjectModalOpen
+	const lastActive = project.last_active_at ? dayjs(project.last_active_at) : null
+	const activeTime = lastActive?.isValid() ? lastActive : null
+	const locale = i18n.language.toLowerCase().startsWith("zh") ? "zh-cn" : "en"
 	const modalWasOpen = useRef(false)
 	useEffect(() => {
 		if (modalWasOpen.current && !actions.isProjectModalOpen) recentProjectsStore.invalidate()
@@ -48,10 +56,34 @@ const RecentProjectRow = observer(function RecentProjectRow({
 				workspaceId={workspace.id}
 				isSelected={projectStore.selectedProject?.id === project.id}
 				dndDisabled
+				showDefaultIcon={false}
+				tooltipDisabled={actions.isProjectModalOpen}
 				description={
-					<>
-						{locationName} · {formatRelativeTime(i18n.language)(project.last_active_at)}
-					</>
+					<div className="flex min-w-0 items-center gap-2">
+						{tooltipDisabled ? (
+							<span className="min-w-0 flex-1 truncate">{locationName}</span>
+						) : (
+							<SmartTooltip
+								elementType="span"
+								className="min-w-0 flex-1 text-xs leading-4"
+							>
+								{locationName}
+							</SmartTooltip>
+						)}
+						{activeTime && (
+							<MagicTooltip
+								title={activeTime.format("YYYY-MM-DD HH:mm:ss [UTC]Z")}
+								disabled={tooltipDisabled}
+							>
+								<time
+									dateTime={activeTime.toISOString()}
+									className="shrink-0 whitespace-nowrap"
+								>
+									{activeTime.locale(locale).from(referenceNow)}
+								</time>
+							</MagicTooltip>
+						)}
+					</div>
 				}
 				onInteractionChange={onRowInteractionChange}
 				onSelectProject={(item) => {
@@ -85,6 +117,24 @@ function RecentProjects({
 	onBusyChange?: (busy: boolean) => void
 }) {
 	const { t } = useTranslation("super")
+	const [referenceNow, setReferenceNow] = useState(() => Date.now())
+	useEffect(() => {
+		if (!active) return
+		let timer: ReturnType<typeof setInterval> | undefined
+		// 全列表共享显示时钟；隐藏时停止，重新可见立即校时，不请求或重排项目。
+		const updateVisibility = () => {
+			clearInterval(timer)
+			if (document.visibilityState !== "visible") return
+			setReferenceNow(Date.now())
+			timer = setInterval(() => setReferenceNow(Date.now()), 60_000)
+		}
+		updateVisibility()
+		document.addEventListener("visibilitychange", updateVisibility)
+		return () => {
+			clearInterval(timer)
+			document.removeEventListener("visibilitychange", updateVisibility)
+		}
+	}, [active])
 	const contentRef = useRef<HTMLDivElement>(null)
 	const [contentHeight, setContentHeight] = useState(0)
 	useLayoutEffect(() => {
@@ -100,7 +150,7 @@ function RecentProjects({
 	const { items, stale, loading, error, hasMore } = recentProjectsStore
 	const list = useVirtualProjectList({
 		projects: items,
-		rowHeight: 52,
+		rowHeight: 44,
 		loadEnabled: active,
 		scrollKey: "recent-projects",
 		hasMore,
@@ -158,11 +208,12 @@ function RecentProjects({
 							ref={list.virtualizer.measureElement}
 							data-index={row.index}
 							data-virtual-project-id={items[row.index].id}
-							className="absolute left-0 top-0 w-full pb-1"
+							className="absolute left-0 top-0 w-full pb-1 pl-3"
 							style={{ transform: `translateY(${row.start}px)` }}
 						>
 							<RecentProjectRow
 								project={items[row.index]}
+								referenceNow={referenceNow}
 								onSelect={onSelect}
 								onInteractionChange={onInteractionChange}
 							/>

@@ -492,7 +492,7 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 			onDrop={handleDrop}
 			onDragEnd={handleDragEnd}
 			className={cn(
-				"relative flex min-h-0 flex-col border-t border-sidebar-border/60",
+				"relative mt-1 flex min-h-0 flex-col border-t border-sidebar-border/60 pt-1",
 				isExpanded ? "flex-1" : "shrink-0",
 			)}
 		>

@@ -72,6 +72,7 @@ export default function WorkspaceListHeader({
 				<SidebarRow
 					label={t("super:projectNavigation.workspaces")}
 					labelVariant="navigation"
+					labelClassName="font-medium"
 					menuHover
 					leading={icon}
 					isExpanded={isExpanded}

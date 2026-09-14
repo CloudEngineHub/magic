@@ -244,7 +244,7 @@ function ProjectItem({
 									</span>
 									<span
 										className={cn(
-											"min-w-0 max-w-full shrink truncate text-left text-sm leading-5",
+											"min-w-0 max-w-full shrink truncate text-left text-[13px] leading-5",
 											isSelected
 												? "text-sidebar-accent-foreground"
 												: "text-sidebar-foreground",
@@ -252,12 +252,15 @@ function ProjectItem({
 									>
 										{project.project_name || t("project.unnamedProject")}
 									</span>
-									{project.is_pinned && <PinnedTag />}
+									{project.is_pinned && (
+										<PinnedTag className="h-3 w-3 border-0 bg-transparent p-0" />
+									)}
 									{showCollaborationTag && (
 										<CollaborationProjectTag
 											visible={showCollaborationTag}
 											project={project}
 											showText={false}
+											className="h-3 w-3 border-0 bg-transparent p-0"
 										/>
 									)}
 								</div>

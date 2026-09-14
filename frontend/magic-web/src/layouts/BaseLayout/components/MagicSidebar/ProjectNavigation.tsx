@@ -157,6 +157,7 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 								<SidebarRow
 									label={t("projectNavigation.recent")}
 									labelVariant="navigation"
+									labelClassName="font-medium"
 									menuHover
 									leading={recentIcon}
 									isExpanded={sidebarStore.recentProjectsExpanded}
@@ -179,7 +180,7 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 								<SidebarMenuItem>
 									<SidebarMenuButton
 										isActive={isCollaborationWorkspace(selectedWorkspace)}
-										className="mb-1 font-normal leading-5 data-[active=true]:font-normal"
+										className="mb-1 text-[13px] font-normal leading-5 data-[active=true]:font-normal"
 										onClick={() => openManager({ type: "collaboration" })}
 										data-testid="sidebar-content-share-workspace-button"
 									>

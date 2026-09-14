@@ -41,6 +41,7 @@ export interface SidebarRowProps {
 	isActive?: boolean
 	/** 分组与普通项目条目使用不同字重；未指定的调用方保留原样式。 */
 	labelVariant?: SidebarLabelVariant
+	labelClassName?: string
 	/** 导航栏目沿用应用菜单的背景反馈，不改变标题位置或普通分组外观。 */
 	menuHover?: boolean
 	isExpanded?: boolean
@@ -64,6 +65,7 @@ export function SidebarRow({
 	onClick,
 	isActive = false,
 	labelVariant = "default",
+	labelClassName,
 	menuHover = false,
 	isExpanded = false,
 	disabled = false,
@@ -126,6 +128,7 @@ export function SidebarRow({
 						labelVariant === "navigation" &&
 							"text-sm font-normal leading-5 text-sidebar-foreground",
 						!wrapLabel && "truncate",
+						labelClassName,
 					)}
 				>
 					<span

@@ -247,7 +247,7 @@ function WorkspaceItem({
 									status={workspace.workspace_status}
 								/>
 								<span
-									className="min-w-0 flex-1 truncate text-left text-sm leading-5"
+									className="min-w-0 flex-1 truncate text-left text-[13px] font-medium leading-5"
 									data-testid={workspaceNameTestId}
 								>
 									{workspace.name || t("super:workspace.unnamedWorkspace")}

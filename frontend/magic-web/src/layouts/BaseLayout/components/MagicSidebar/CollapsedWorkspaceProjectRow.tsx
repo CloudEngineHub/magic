@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "re
 import { Ellipsis } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
+import SmartTooltip from "@/components/other/SmartTooltip"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { isCollaborationProject, isWorkspaceShortcutProject } from "@/pages/superMagic/constants"
 import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
@@ -21,6 +22,8 @@ interface CollapsedWorkspaceProjectRowProps {
 	project: ProjectListItem
 	dndDisabled?: boolean
 	description?: ReactNode
+	showDefaultIcon?: boolean
+	tooltipDisabled?: boolean
 	workspaceId: string
 	isSelected: boolean
 	projectMenuContentRef?: React.RefObject<HTMLDivElement | null>
@@ -41,6 +44,8 @@ function CollapsedWorkspaceProjectRow({
 	project,
 	dndDisabled,
 	description,
+	showDefaultIcon = true,
+	tooltipDisabled = false,
 	workspaceId,
 	isSelected,
 	projectMenuContentRef,
@@ -102,6 +107,8 @@ function CollapsedWorkspaceProjectRow({
 
 	const showCollaborationTag =
 		isWorkspaceShortcutProject(project) || isCollaborationProject(project)
+	const hideNameTooltip = tooltipDisabled || isMenuOpen || isEditing || isRenamePending
+	const projectName = project.project_name || t("project.unnamedProject")
 
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (
@@ -183,7 +190,7 @@ function CollapsedWorkspaceProjectRow({
 	) => (
 		<div
 			className={cn(
-				description ? "h-12 w-full rounded-md" : "h-8 w-full rounded-md",
+				description ? "h-10 w-full rounded-md" : "h-8 w-full rounded-md",
 				isSelected && "bg-sidebar-accent",
 			)}
 			draggable={canDrag}
@@ -201,7 +208,7 @@ function CollapsedWorkspaceProjectRow({
 				href={getWorkspaceProjectRouteUrl(workspaceId, project.id)}
 				draggable={false}
 				data-testid={`sidebar-collapsed-project-row-${project.id}`}
-				className="relative inline-flex h-full w-full items-center justify-start gap-0 rounded-md px-2 text-sm font-normal leading-5 text-current no-underline outline-none [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent focus-visible:outline-none"
+				className="relative inline-flex h-full w-full items-center justify-start gap-0 rounded-md px-2 text-[13px] font-normal leading-[18px] text-current no-underline outline-none [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent focus-visible:outline-none"
 				onMouseEnter={() => setIsHovered(true)}
 				onMouseLeave={() => setIsHovered(false)}
 				onClick={(event) => {
@@ -219,14 +226,19 @@ function CollapsedWorkspaceProjectRow({
 					onSelectProject(project)
 				}}
 			>
-				<NavigationStatusIcon
-					itemType="project"
-					status={project.project_status}
-					className={cn(
-						"mr-2",
-						isSelected ? "text-sidebar-accent-foreground" : "text-sidebar-foreground",
-					)}
-				/>
+				{/* 保留状态宽度；闲置项目隐藏图标，运行时名称不移动。 */}
+				<span className="mr-2 flex size-4 shrink-0 items-center justify-center">
+					<NavigationStatusIcon
+						itemType="project"
+						status={project.project_status}
+						showDefaultIcon={showDefaultIcon}
+						className={cn(
+							isSelected
+								? "text-sidebar-accent-foreground"
+								: "text-sidebar-foreground",
+						)}
+					/>
+				</span>
 				<div className="min-w-0 flex-1">
 					<div className="flex min-w-0 flex-1 items-center gap-1.5">
 						<span
@@ -237,19 +249,33 @@ function CollapsedWorkspaceProjectRow({
 									: "text-sidebar-foreground",
 							)}
 						>
-							{project.project_name || t("project.unnamedProject")}
+							{hideNameTooltip ? (
+								projectName
+							) : (
+								<SmartTooltip
+									elementType="span"
+									className="block text-[13px] leading-[18px]"
+								>
+									{projectName}
+								</SmartTooltip>
+							)}
 						</span>
-						{project.is_pinned && <PinnedTag />}
+						{project.is_pinned && (
+							<PinnedTag className="h-3 w-3 border-0 bg-transparent p-0" />
+						)}
 						{showCollaborationTag && (
 							<CollaborationProjectTag
 								visible={showCollaborationTag}
 								project={project}
 								showText={false}
+								className="h-3 w-3 border-0 bg-transparent p-0"
 							/>
 						)}
 					</div>
 					{description && (
-						<div className="truncate text-xs text-muted-foreground">{description}</div>
+						<div className="min-w-0 text-xs leading-4 text-muted-foreground">
+							{description}
+						</div>
 					)}
 				</div>
 				{threeDotTrigger(open, triggerContextMenu)}

@@ -12,6 +12,7 @@ function SidebarFooter({ collapsed }: SidebarFooterProps) {
 			)}
 		>
 			<ActionButtons collapsed={collapsed} />
+			<div role="separator" className="my-1 w-full border-t border-sidebar-border/60" />
 			<UserInfoCard collapsed={collapsed} />
 		</div>
 	)
