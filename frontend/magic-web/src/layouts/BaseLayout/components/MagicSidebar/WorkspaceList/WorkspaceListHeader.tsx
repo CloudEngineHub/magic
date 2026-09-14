@@ -71,11 +71,12 @@ export default function WorkspaceListHeader({
 			) : (
 				<SidebarRow
 					label={t("super:projectNavigation.workspaces")}
+					labelVariant="navigation"
 					leading={icon}
 					isExpanded={isExpanded}
 					onClick={() => onToggle()}
 					testId="sidebar-workspaces-toggle"
-					className="h-8 shrink-0"
+					className="h-8 shrink-0 px-2"
 					trailing={
 						<div
 							className={cn(

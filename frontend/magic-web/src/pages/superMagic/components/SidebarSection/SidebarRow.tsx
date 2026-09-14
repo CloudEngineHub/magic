@@ -2,7 +2,7 @@ import type { ReactNode, RefObject } from "react"
 import { ChevronRight } from "lucide-react"
 import { cn } from "@/utils/cn"
 
-export type SidebarLabelVariant = "default" | "section" | "item"
+export type SidebarLabelVariant = "default" | "section" | "item" | "navigation"
 
 export function SidebarSectionToggle({
 	label,
@@ -113,6 +113,7 @@ export function SidebarRow({
 						"min-w-0 text-sm font-medium text-foreground",
 						labelVariant !== "default" && "text-[13px] leading-5",
 						labelVariant === "item" && "font-normal",
+						labelVariant === "navigation" && "font-normal text-sidebar-foreground/70",
 						!wrapLabel && "truncate",
 					)}
 				>

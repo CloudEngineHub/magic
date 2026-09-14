@@ -29,6 +29,7 @@ import CreateWorkspaceInput from "./CreateWorkspaceInput"
 import { cn } from "@/utils/cn"
 import { toTestIdSegment } from "@/utils/testid"
 import { SidebarMenu } from "@/components/shadcn-ui/sidebar"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { useWorkspaceListDnd } from "./useWorkspaceListDnd"
 import { useProjectPinBoundaryConfirmation } from "./ProjectPinBoundaryConfirmDialog"
 
@@ -463,16 +464,19 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 					/>
 				}
 			>
-				<div
-					ref={scrollRef}
-					className="min-h-0 flex-1 overflow-y-auto overscroll-contain pl-2 [--workspace-list-sticky-top:0px]"
-					data-workspaces-scroll-container
-					onScroll={(event) => {
-						if (!isSearchMode)
-							sidebarStore.navigationScrollPositions.set(
-								"workspaces",
-								event.currentTarget.scrollTop,
-							)
+				<ScrollArea
+					viewportRef={scrollRef}
+					className="min-h-0 flex-1 overflow-hidden [&>[data-slot=scroll-area-scrollbar]]:w-1.5 [&>[data-slot=scroll-area-scrollbar]]:border-l-0"
+					viewportClassName="overscroll-contain pl-2 [--workspace-list-sticky-top:0px] [&>div]:!block"
+					viewportProps={{
+						"data-workspaces-scroll-container": true,
+						onScroll: (event) => {
+							if (!isSearchMode)
+								sidebarStore.navigationScrollPositions.set(
+									"workspaces",
+									event.currentTarget.scrollTop,
+								)
+						},
 					}}
 				>
 					<SidebarMenu>
@@ -547,7 +551,7 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 							</div>
 						</div>
 					</SidebarMenu>
-				</div>
+				</ScrollArea>
 			</SidebarExpandableItem>
 			<svg
 				ref={dropIndicatorRef}

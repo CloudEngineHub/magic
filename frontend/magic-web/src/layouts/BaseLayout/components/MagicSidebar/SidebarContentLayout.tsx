@@ -8,6 +8,7 @@ import {
 	ResizablePanelGroup,
 } from "@/components/shadcn-ui/resizable"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 /** 应用入口保留完整顺序；高度不足时独立滚动，将剩余高度交给项目导航。 */
 function SidebarContentLayout({
@@ -62,9 +63,14 @@ function SidebarContentLayout({
 					maxSize={(maximum / available) * 100}
 					defaultSize={32}
 				>
-					<div className="h-full overflow-y-auto overscroll-contain">
+					<ScrollArea
+						className="h-full overflow-hidden [&>[data-slot=scroll-area-scrollbar]]:w-1.5 [&>[data-slot=scroll-area-scrollbar]]:border-l-0"
+						viewportClassName="overscroll-contain [&>div]:!block"
+						hideScrollbar={collapsed}
+						scrollShadows
+					>
 						<div ref={appsRef}>{apps}</div>
-					</div>
+					</ScrollArea>
 				</ResizablePanel>
 				<ResizableHandle
 					withHandle={!collapsed}
