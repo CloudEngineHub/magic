@@ -479,6 +479,11 @@ export default function Render(props: any) {
 		let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
 		const resourceErrors = createPptxResourceErrorCollector(t)
 		const exportIssues: ExportIssue[] = []
+		// Keep these values outside try so early failures can still publish a
+		// diagnostic without triggering a second ReferenceError in catch.
+		const fileItem = attachmentList?.find((item: any) => item.file_id === fileId)
+		const sourceFileName = fileItem?.file_name || data?.file_name
+		const exportFileName = String(sourceFileName || "export").replace(/\.html?$/i, "")
 
 		function getExportToastContent(progressText: string) {
 			return (
@@ -504,9 +509,6 @@ export default function Render(props: any) {
 				duration: 0,
 			})
 
-			const fileItem = attachmentList?.find((item: any) => item.file_id === fileId)
-			const sourceFileName = fileItem?.file_name || data?.file_name
-			const exportFileName = String(sourceFileName || "export").replace(/\.html?$/i, "")
 			assertPptxExportAvailable({ pageCount: 1 })
 			destinationLease = await openPptxDestination({ suggestedName: exportFileName })
 			if (!destinationLease) {

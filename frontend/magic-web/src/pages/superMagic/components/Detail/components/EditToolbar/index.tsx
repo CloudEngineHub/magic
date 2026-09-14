@@ -23,6 +23,11 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { exportHtmlToImage } from "@magic-web/html2image"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
+import {
+	publishPptxExportFailure,
+	publishPptxExportIssues,
+} from "@/pages/superMagic/utils/pptxExportIssues"
+import type { ExportIssue } from "@magic/html2pptx"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import {
 	createPptxSlideConfig,
@@ -461,6 +466,7 @@ function EditToolbar({
 		if (!destinationLease) return
 		let cancelExport: (() => void) | null = null
 		const resourceErrors = createPptxResourceErrorCollector(t)
+		const exportIssues: ExportIssue[] = []
 
 		function getExportToastContent(progressText: string) {
 			return (
@@ -509,6 +515,7 @@ function EditToolbar({
 					logger: pptxExternalLogger,
 					logLevel: "warn",
 					onResourceLoadError: resourceErrors.onResourceLoadError,
+					onExportIssue: (issue) => exportIssues.push(issue),
 					onProgress: (progress) => {
 						magicToast.loading({
 							key: toastId,
@@ -530,6 +537,7 @@ function EditToolbar({
 			setIsEditableExporting(true)
 			streamingHandle.promise
 				.then(() => {
+					publishPptxExportIssues(exportIssues, { fileName: defaultName })
 					magicToast.success({
 						key: toastId,
 						content: t("topicFiles.exportSuccess"),
@@ -546,6 +554,7 @@ function EditToolbar({
 							duration: 1000,
 						})
 					} else {
+						publishPptxExportFailure(exportIssues, error, { fileName: defaultName })
 						magicToast.error({
 							key: toastId,
 							content: t("topicFiles.contextMenu.fileExport.exportFailed"),

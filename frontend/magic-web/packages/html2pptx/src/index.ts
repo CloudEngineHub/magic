@@ -78,6 +78,11 @@ export function createPptxStreamingExporter(runtime: Html2PptxStreamingRuntime =
 /** Export an AsyncIterable page source to a caller-selected streaming destination. */
 export const exportPPTXStreaming = createPptxStreamingExporter()
 
+export {
+	detectImageContentType,
+	validateImageBlobResponse,
+} from "./media/image-response"
+
 async function runStreamingExportPipeline(
 	content: StreamingExportContent,
 	options: LargeExportOptions,

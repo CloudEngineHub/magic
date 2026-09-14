@@ -28,6 +28,11 @@ import {
 } from "@/pages/superMagic/services/pptService"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
+import {
+	publishPptxExportFailure,
+	publishPptxExportIssues,
+} from "@/pages/superMagic/utils/pptxExportIssues"
+import type { ExportIssue } from "@magic/html2pptx"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import { hasPPTMetadata } from "@/pages/superMagic/components/Detail/utils/file"
 import {
@@ -1183,10 +1188,15 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				: []
 			const isSingleFile = !slidePaths.length
 			const autoSize = !hasPPTMetadata(item)
+			const fileId = item.file_id || ""
+			const fileName = String(
+				mergedDisplayConfig?.name || item.file_name || "export",
+			).replace(/\.html?$/i, "")
 			let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
 
 			let cancelExport: (() => void) | null = null
 			const resourceErrors = createPptxResourceErrorCollector(t)
+			const exportIssues: ExportIssue[] = []
 			const getExportToastContent = (progressText: string) =>
 				createElement(
 					"div",
@@ -1224,10 +1234,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					const attachmentScope = folderChildren?.length
 						? folderChildren
 						: (attachments ?? [])
-					const fileId = item.file_id || ""
-					const fileName = String(
-						mergedDisplayConfig?.name || item.file_name || "export",
-					).replace(/\.html?$/i, "")
 					const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
 					const destination = destinationLease.destination
 					const streamingHandle = startPptxStreamingExportFromFactory(
@@ -1270,6 +1276,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 							logger: pptxExternalLogger,
 							logLevel: "warn",
 							onResourceLoadError: resourceErrors.onResourceLoadError,
+							onExportIssue: (issue) => exportIssues.push(issue),
 							onProgress: (progress) => {
 								magicToast.loading({
 									key: toastId,
@@ -1286,6 +1293,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					)
 					cancelExport = streamingHandle.cancel
 					await streamingHandle.promise
+					publishPptxExportIssues(exportIssues, { fileId, fileName })
 					magicToast.success({
 						key: toastId,
 						content: t("topicFiles.exportSuccess"),
@@ -1303,6 +1311,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						duration: 1000,
 					})
 				} else {
+					publishPptxExportFailure(exportIssues, error, { fileId, fileName })
 					magicToast.error({
 						key: toastId,
 						content:
