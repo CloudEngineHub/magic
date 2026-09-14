@@ -155,6 +155,94 @@ function createClipboardManager(): ClipboardManagerTestHarness {
 }
 
 describe("ClipboardManager frame clipboard trees", () => {
+	it("refreshes an expiring source URL before serializing clipboard metadata", async () => {
+		vi.useFakeTimers()
+		vi.setSystemTime(new Date("2026-09-14T10:00:00Z"))
+		const getFileInfo = vi
+			.fn()
+			.mockResolvedValueOnce({
+				src: "https://example.test/image.png?signature=old",
+				fileName: "image.png",
+				expires_at: "2026-09-14T10:00:20Z",
+			})
+			.mockResolvedValueOnce({
+				src: "https://example.test/image.png?signature=fresh",
+				fileName: "image.png",
+				expires_at: "2026-09-14T10:05:00Z",
+			})
+		const manager = createClipboardManager()
+		;(manager.canvas as unknown as { magicConfigManager: unknown }).magicConfigManager = {
+			config: { methods: { getFileInfo } },
+		}
+
+		const metadata = await (
+			manager as unknown as {
+				fetchOriginalFileMetadata: (options: {
+					src: string
+					fallbackFilename: string
+					fallbackMimeType: string
+				}) => Promise<{ sourceRef?: { ossUrl?: string } } | null>
+			}
+		).fetchOriginalFileMetadata({
+			src: "images/image.png",
+			fallbackFilename: "image.png",
+			fallbackMimeType: "image/png",
+		})
+
+		expect(metadata).toMatchObject({
+			sourceRef: {
+				ossUrl: "https://example.test/image.png?signature=fresh",
+			},
+		})
+		expect(getFileInfo).toHaveBeenNthCalledWith(1, "images/image.png", {
+			useImageProcess: false,
+		})
+		expect(getFileInfo).toHaveBeenNthCalledWith(2, "images/image.png", {
+			useImageProcess: false,
+			forceRefresh: true,
+		})
+		vi.useRealTimers()
+	})
+
+	it("does not produce metadata when refresh still returns an expiring URL", async () => {
+		vi.useFakeTimers()
+		vi.setSystemTime(new Date("2026-09-14T10:00:00Z"))
+		const getFileInfo = vi
+			.fn()
+			.mockResolvedValueOnce({
+				src: "https://example.test/image.png?signature=old",
+				fileName: "image.png",
+				expires_at: "2026-09-14T10:00:20Z",
+			})
+			.mockResolvedValueOnce({
+				src: "https://example.test/image.png?signature=still-old",
+				fileName: "image.png",
+				expires_at: "2026-09-14T10:00:25Z",
+			})
+		const manager = createClipboardManager()
+		;(manager.canvas as unknown as { magicConfigManager: unknown }).magicConfigManager = {
+			config: { methods: { getFileInfo } },
+		}
+
+		const metadata = await (
+			manager as unknown as {
+				fetchOriginalFileMetadata: (options: {
+					src: string
+					fallbackFilename: string
+					fallbackMimeType: string
+				}) => Promise<unknown>
+			}
+		).fetchOriginalFileMetadata({
+			src: "images/image.png",
+			fallbackFilename: "image.png",
+			fallbackMimeType: "image/png",
+		})
+
+		expect(metadata).toBeNull()
+		expect(getFileInfo).toHaveBeenCalledTimes(2)
+		vi.useRealTimers()
+	})
+
 	it("starts media metadata lookups concurrently so get-file-url can batch them", async () => {
 		const firstImage = v3<ImageElement>({
 			id: "first-image",

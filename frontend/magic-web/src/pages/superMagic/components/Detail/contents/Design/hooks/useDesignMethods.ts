@@ -39,6 +39,7 @@ import {
 } from "@/components/CanvasDesign/runtime/resources/image/imageCropUtils"
 import { resolveCanvasStorageResourceReference } from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import { clipboard } from "@/utils/clipboard-helpers"
+import { isOssExpiring } from "@/components/CanvasDesign/runtime/resources/offline-cache/ossExpiryUtils"
 import type { UseDesignDownloadPolicyResult } from "./useDesignDownloadPolicy"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { getPreviewFileUrlWatermarkSignature } from "@/utils/aiWatermarkPreviewFileUrlMode"
@@ -633,25 +634,25 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 						: /^https?:\/\//i.test(input.sourcePath ?? "")
 							? input.sourcePath
 							: undefined)
-				const expires = input.sourceRef?.expiresAt
-				const expiresAt = expires ? Date.parse(expires) : Number.NaN
+				let sourceUrlIsExpiring = isOssExpiring(input.sourceRef?.expiresAt)
 				if (
-					(!sourceUrl || (Number.isFinite(expiresAt) && expiresAt <= Date.now())) &&
+					(!sourceUrl || sourceUrlIsExpiring) &&
 					input.sourcePath &&
 					canResolveCurrentCanvasPath
 				) {
 					const refreshed = await getFileInfo(input.sourcePath, {
 						useImageProcess: false,
-						forceRefresh: Number.isFinite(expiresAt) && expiresAt <= Date.now(),
+						forceRefresh: sourceUrlIsExpiring,
 					})
 					sourceUrl = refreshed?.src
+					sourceUrlIsExpiring = isOssExpiring(refreshed?.expires_at)
 				}
 				// A path from another canvas must never be resolved through the current
 				// canvas attachment index: an identical relative path could refer to a
 				// different file. Cross-canvas transfers therefore require an inline
 				// Blob or a still-valid signed source URL until the host supplies a
 				// source-canvas resource resolver.
-				if (!sourceUrl) return null
+				if (!sourceUrl || sourceUrlIsExpiring) return null
 				const response = await fetch(sourceUrl, { cache: "default" })
 				if (!response.ok) return null
 				const blob = await response.blob()

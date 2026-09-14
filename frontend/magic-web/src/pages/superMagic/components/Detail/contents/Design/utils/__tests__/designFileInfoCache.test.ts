@@ -264,6 +264,49 @@ describe("getFileResourceMetaByPath", () => {
 		})
 	})
 
+	it("refreshes a cached URL inside the expiry safety window", async () => {
+		vi.useFakeTimers()
+		vi.setSystemTime(new Date("2026-09-14T10:00:00Z"))
+		const files = [
+			fileItem({
+				file_id: "expiring-file",
+				relative_file_path: "images/expiring.png",
+				file_name: "expiring.png",
+				file_size: 1024,
+			}),
+		]
+		vi.mocked(getTemporaryDownloadUrl)
+			.mockResolvedValueOnce([
+				{
+					file_id: "expiring-file",
+					url: "https://example.test/expiring.png?signature=old",
+					expires_at: "2026-09-14T10:00:20Z",
+				},
+			])
+			.mockResolvedValueOnce([
+				{
+					file_id: "expiring-file",
+					url: "https://example.test/expiring.png?signature=fresh",
+					expires_at: "2026-09-14T10:05:00Z",
+				},
+			])
+
+		const first = getFileInfoByPath("images/expiring.png", files, { priority: "critical" })
+		await vi.advanceTimersByTimeAsync(0)
+		await expect(first).resolves.toMatchObject({
+			src: "https://example.test/expiring.png?signature=old",
+		})
+
+		const refreshed = getFileInfoByPath("images/expiring.png", files, {
+			priority: "critical",
+		})
+		await vi.advanceTimersByTimeAsync(0)
+		await expect(refreshed).resolves.toMatchObject({
+			src: "https://example.test/expiring.png?signature=fresh",
+		})
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledTimes(2)
+	})
+
 	it("does not expose host file id in path-based file info", async () => {
 		vi.useFakeTimers()
 		vi.mocked(getTemporaryDownloadUrl).mockResolvedValueOnce([
