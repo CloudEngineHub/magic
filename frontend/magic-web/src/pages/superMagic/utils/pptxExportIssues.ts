@@ -1,14 +1,16 @@
 import type { ExportIssue } from "@magic/html2pptx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
-export function createPptxRepairPrompt(issues: ExportIssue[]): string {
-	const details = issues
-		.map((issue) => {
-			const page = issue.pageIndex === undefined ? "未知页" : `第 ${issue.pageIndex + 1} 页`
-			return `${page}：${issue.message}`
-		})
-		.join("\n")
-	return `请修复以下页面的 PPT 导出问题，检查 HTML 容器、元素 ID、脚本初始化时机和资源引用，并保留其他正常内容：\n${details}`
+export interface PptxRepairPromptCopy {
+	/** Localized instruction shown before the issue list. */
+	instruction: string
+	/** Localized formatter for one issue line. */
+	formatIssue: (issue: ExportIssue) => string
+}
+
+export function createPptxRepairPrompt(issues: ExportIssue[], copy: PptxRepairPromptCopy): string {
+	const details = issues.map(copy.formatIssue).join("\n")
+	return `${copy.instruction}\n${details}`
 }
 
 /** Convert an export rejection into the same safe issue shape used by page diagnostics. */
