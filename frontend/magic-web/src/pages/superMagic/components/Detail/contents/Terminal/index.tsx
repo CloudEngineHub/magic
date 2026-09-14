@@ -4,9 +4,9 @@ import { Flex } from "antd"
 import { useTranslation } from "react-i18next"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
 import "@xterm/xterm/css/xterm.css"
-import "./index.css"
 import { useStyles } from "./styles"
 import { IconCopy } from "@tabler/icons-react"
+import { Terminal as TerminalIcon } from "lucide-react"
 import { DetailTerminalData } from "../../types"
 import TerminalDisplay from "./components/TerminalDisplay"
 import { ActionButton } from "../../components/CommonHeader/components"
@@ -95,12 +95,24 @@ export default memo(function Terminal(props: TerminalProps) {
 		() => ({
 			customActions: [
 				{
+					key: "terminal-title",
+					zone: "leading" as const,
+					render: () => (
+						<div className={styles.title}>
+							<TerminalIcon size={16} aria-hidden />
+							<span>{t("terminal.title")}</span>
+							<span className={styles.readOnly}>{t("terminal.readOnly")}</span>
+						</div>
+					),
+				},
+				{
 					key: "terminal-copy",
-					zone: "primary" as const,
+					zone: "secondary" as const,
 					render: () => (
 						<Flex gap="small" align="center">
 							<ActionButton
 								icon={IconCopy}
+								size={16}
 								onClick={handleTerminalCopy}
 								title={t("fileViewer.copy")}
 								text={!isMobile ? t("fileViewer.copy") : undefined}
@@ -111,22 +123,25 @@ export default memo(function Terminal(props: TerminalProps) {
 				},
 			],
 		}),
-		[handleTerminalCopy, isMobile, t],
+		[handleTerminalCopy, isMobile, styles.title, styles.readOnly, t],
 	)
 
 	return (
-		<div className={cx(styles.terminalContainer, className)}>
-			<CommonHeaderV2
-				type={type}
-				onFullscreen={onFullscreen}
-				onDownload={onDownload}
-				isFromNode={isFromNode}
-				isFullscreen={isFullscreen}
-				// File sharing props
-				currentFile={currentFile}
-				allowEdit={allowEdit}
-				actionConfig={headerActionConfig}
-			/>
+		<div className={cx(styles.terminalContainer, "dark", className)}>
+			<div className={styles.toolbar}>
+				<CommonHeaderV2
+					renderMode="actions"
+					type={type}
+					onFullscreen={onFullscreen}
+					onDownload={onDownload}
+					isFromNode={isFromNode}
+					isFullscreen={isFullscreen}
+					// File sharing props
+					currentFile={currentFile}
+					allowEdit={allowEdit}
+					actionConfig={headerActionConfig}
+				/>
+			</div>
 			<TerminalDisplay
 				className={styles.terminalContent}
 				command={command}

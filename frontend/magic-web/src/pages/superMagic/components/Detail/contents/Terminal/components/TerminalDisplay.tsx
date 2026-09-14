@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
+import { CircleAlert, CircleCheck } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import "@xterm/xterm/css/xterm.css"
-import { useStyles } from "./style"
-import { isNumber } from "lodash-es"
+import { terminalTheme, useStyles } from "./style"
 
 interface TerminalDisplayProps {
 	command: string
@@ -14,6 +15,9 @@ interface TerminalDisplayProps {
 
 function TerminalDisplay({ command, output, exitCode, className }: TerminalDisplayProps) {
 	const { styles, cx } = useStyles()
+	const { t } = useTranslation("super")
+	const hasExitCode = typeof exitCode === "number" && Number.isFinite(exitCode)
+	const hasError = hasExitCode && exitCode !== 0
 	const terminalRef = useRef<HTMLDivElement>(null)
 	const terminalInstanceRef = useRef<Terminal | null>(null)
 	const fitAddonRef = useRef<FitAddon | null>(null)
@@ -53,31 +57,10 @@ function TerminalDisplay({ command, output, exitCode, className }: TerminalDispl
 
 		const termInstance = new Terminal({
 			disableStdin: true,
-			theme: {
-				// One Dark theme colors from https://github.com/janoamaral/Xresources-themes
-				background: "#1E2127",
-				foreground: "#ABB2BF",
-				cursor: "#5C6370",
-				selectionBackground: "#3A3F4B",
-				// ANSI colors
-				black: "#1E2127",
-				red: "#E06C75",
-				green: "#98C379",
-				yellow: "#D19A66",
-				blue: "#61AFEF",
-				magenta: "#C678DD",
-				cyan: "#56B6C2",
-				white: "#ABB2BF",
-				// Bright ANSI colors
-				brightBlack: "#5C6370",
-				brightRed: "#E06C75",
-				brightGreen: "#98C379",
-				brightYellow: "#D19A66",
-				brightBlue: "#61AFEF",
-				brightMagenta: "#C678DD",
-				brightCyan: "#56B6C2",
-				brightWhite: "#FFFFFF",
-			},
+			fontFamily: '"SF Mono", Menlo, Monaco, Consolas, monospace',
+			fontSize: 14,
+			lineHeight: 1.6,
+			theme: terminalTheme,
 		})
 
 		const fitAddon = new FitAddon()
@@ -159,9 +142,6 @@ function TerminalDisplay({ command, output, exitCode, className }: TerminalDispl
 			const colors = {
 				green: "\x1b[32m", // 绿色 - 用于命令提示符
 				brightBlack: "\x1b[90m", // 亮黑色/灰色 - 用于注释
-				red: "\x1b[31m", // 红色 - 用于错误
-				yellow: "\x1b[33m", // 黄色 - 用于 exit code 标签
-				cyan: "\x1b[36m", // 青色 - 用于输出
 				blue: "\x1b[34m", // 蓝色 - 用于命令
 				reset: "\x1b[0m", // 重置颜色
 			}
@@ -192,14 +172,6 @@ function TerminalDisplay({ command, output, exitCode, className }: TerminalDispl
 				const processedOutput = output.replace(/\n/g, "\r\n")
 				termInstance.writeln(processedOutput)
 			}
-			if (isNumber(exitCode)) {
-				termInstance.write("\r\n")
-				// Exit code 根据结果显示不同颜色
-				const exitCodeColor = exitCode === 0 ? colors.green : colors.red
-				termInstance.writeln(
-					`${colors.yellow}Exit code:${colors.reset} ${exitCodeColor}${exitCode}${colors.reset}`,
-				)
-			}
 
 			// Re-fit after content changes
 			setTimeout(() => {
@@ -212,7 +184,37 @@ function TerminalDisplay({ command, output, exitCode, className }: TerminalDispl
 		}
 	}, [command, output, exitCode, isTerminalReady, fitTerminal])
 
-	return <div className={cx(styles.terminalDisplay, className)} ref={terminalRef} />
+	return (
+		<div className={cx(styles.terminalDisplay, className)}>
+			<div className={styles.terminalBody}>
+				<div className={styles.terminalMount} ref={terminalRef} />
+			</div>
+			<div className={cx(styles.footer, hasError && styles.error)} role="status">
+				{hasExitCode && (
+					<>
+						{/* Exit code 根据结果显示不同颜色 */}
+						{/* 这里只解释本次返回；后台命令仍运行时，工具也可能正常返回。 */}
+						<span className={styles.status}>
+							{hasError ? (
+								<CircleAlert size={16} aria-hidden />
+							) : (
+								<CircleCheck size={16} aria-hidden />
+							)}
+							{hasError
+								? t("terminal.returnedWithError")
+								: t("terminal.returnedNormally")}
+						</span>
+						<span className={styles.exitCode}>
+							{t("terminal.exitCode")}
+							<span className={styles.exitCodeValue} data-terminal-exit-code>
+								{exitCode}
+							</span>
+						</span>
+					</>
+				)}
+			</div>
+		</div>
+	)
 }
 
 export default TerminalDisplay

@@ -6463,8 +6463,12 @@
 		"copy": "Copy",
 		"copyCommand": "Command copied",
 		"copyResult": "Result copied",
+		"exitCode": "Exit code",
 		"noContentToCopy": "No content to copy",
+		"readOnly": "Read-only",
 		"result": "Result",
+		"returnedNormally": "Returned normally",
+		"returnedWithError": "Returned with an error",
 		"title": "Terminal"
 	},
 	"timeoutTips": {

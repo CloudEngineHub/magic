@@ -528,76 +528,88 @@
         "en_US": "Failed to check background task: {{error}}"
     },
     "shell_await.error_task_not_found": {
-        "zh_CN": "找不到这个后台任务，可能已经结束了",
-        "en_US": "Task not found — it may have already finished"
+        "zh_CN": "找不到这条命令，可能已经结束了",
+        "en_US": "Command not found — it may have already finished"
     },
     "shell_await.error_invalid_pattern": {
         "zh_CN": "匹配规则写法有误，请检查后重试",
         "en_US": "Pattern expression has a syntax error — please check and retry"
     },
     "shell_await.error_log_missing": {
-        "zh_CN": "任务日志丢失，无法获取输出",
-        "en_US": "Task output log is missing and can't be retrieved"
+        "zh_CN": "命令日志丢失，无法获取输出",
+        "en_US": "Command output log is missing and can't be retrieved"
     },
     "shell_await.error_exception": {
-        "zh_CN": "等待任务时遇到了问题",
-        "en_US": "Something went wrong while waiting for the task"
+        "zh_CN": "处理时遇到了问题",
+        "en_US": "Something went wrong during this operation"
     },
     "shell_await.error_failed": {
-        "zh_CN": "无法查询到任务状态",
-        "en_US": "Couldn't retrieve task status"
+        "zh_CN": "无法获取命令状态",
+        "en_US": "Couldn't retrieve command status"
     },
     "shell_await.status_completed": {
-        "zh_CN": "任务已完成",
-        "en_US": "Task completed"
+        "zh_CN": "命令已完成",
+        "en_US": "Command completed"
     },
     "shell_await.status_killed": {
-        "zh_CN": "任务已终止",
-        "en_US": "Task stopped"
+        "zh_CN": "命令已停止",
+        "en_US": "Command stopped"
     },
     "shell_await.status_error": {
-        "zh_CN": "任务异常退出",
-        "en_US": "Task exited with an error"
+        "zh_CN": "命令异常退出",
+        "en_US": "Command exited with an error"
     },
     "shell_await.status_timeout": {
-        "zh_CN": "仍在运行中，等待超时",
-        "en_US": "Still running — timed out while waiting"
+        "zh_CN": "命令仍在运行，本次等待已结束",
+        "en_US": "Command is still running — this wait has ended"
     },
     "shell_await.status_running": {
-        "zh_CN": "任务正在运行",
-        "en_US": "Task is running"
+        "zh_CN": "命令仍在运行",
+        "en_US": "Command is still running"
     },
     "shell_await.status_pattern_matched": {
         "zh_CN": "已在输出中匹配到指定内容",
         "en_US": "Pattern matched in output"
     },
     "shell_await.status_waiting_for_input": {
-        "zh_CN": "任务正在等待用户输入",
-        "en_US": "Task is waiting for input"
+        "zh_CN": "命令正在等待输入",
+        "en_US": "Command is waiting for input"
     },
     "shell_await.status_slept": {
-        "zh_CN": "等待完成",
-        "en_US": "Sleep completed"
+        "zh_CN": "已完成",
+        "en_US": "Completed"
     },
     "shell_await.before_sleep": {
-        "zh_CN": "等待 {{seconds}} 秒",
-        "en_US": "Sleeping for {{seconds}} seconds"
+        "zh_CN": "计时中",
+        "en_US": "Waiting"
     },
     "shell_await.before_kill": {
-        "zh_CN": "终止后台任务",
-        "en_US": "Stopping background task"
+        "zh_CN": "正在停止命令",
+        "en_US": "Stopping command"
     },
     "shell_await.before_snapshot": {
-        "zh_CN": "查询任务当前状态",
-        "en_US": "Checking current task status"
+        "zh_CN": "读取当前输出",
+        "en_US": "Reading current output"
     },
     "shell_await.before_send_input": {
-        "zh_CN": "向任务发送输入",
-        "en_US": "Sending input to task"
+        "zh_CN": "向命令发送输入",
+        "en_US": "Sending input to command"
     },
     "shell_await.before_wait": {
-        "zh_CN": "等待任务执行",
-        "en_US": "Waiting for task"
+        "zh_CN": "等待新输出或执行结束",
+        "en_US": "Waiting for new output or completion"
+    },
+    "shell_await.duration_seconds": {
+        "zh_CN": "{{seconds}} 秒",
+        "en_US": "{{seconds}} sec"
+    },
+    "shell_await.duration_minutes": {
+        "zh_CN": "{{minutes}} 分钟",
+        "en_US": "{{minutes}} min"
+    },
+    "shell_await.duration_minutes_seconds": {
+        "zh_CN": "{{minutes}} 分 {{seconds}} 秒",
+        "en_US": "{{minutes}} min {{seconds}} sec"
     },
     "run_sdk_snippet.after_dispatched": {
         "zh_CN": "正在执行",

@@ -6464,8 +6464,12 @@
 		"copy": "复制",
 		"copyCommand": "已复制命令",
 		"copyResult": "已复制结果",
+		"exitCode": "退出码",
 		"noContentToCopy": "没有可复制的内容",
+		"readOnly": "只读",
 		"result": "结果",
+		"returnedNormally": "正常返回",
+		"returnedWithError": "返回异常",
 		"title": "终端"
 	},
 	"timeoutTips": {
