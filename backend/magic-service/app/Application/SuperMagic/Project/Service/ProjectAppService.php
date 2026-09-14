@@ -502,7 +502,7 @@ class ProjectAppService extends AbstractAppService
 
     public function normalizeMicroAppRuntimeProject(ProjectEntity $project): ProjectEntity
     {
-        if (! $project->getIsHidden()
+        if (! $project->isHidden()
             || $project->getHiddenType() !== HiddenType::MICRO_APP_RUNTIME->value
             || $project->getSource() !== CreationSource::SYSTEM_CREATED->value) {
             $project->setIsHidden(true)
