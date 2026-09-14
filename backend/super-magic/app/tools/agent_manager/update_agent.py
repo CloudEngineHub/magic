@@ -56,6 +56,12 @@ class UpdateAgentParams(BaseToolParams):
         ),
     )
 
+    _parse_name_i18n = field_validator("name_i18n", mode="before")(_parse_i18n_json_string)
+    _parse_description_i18n = field_validator("description_i18n", mode="before")(
+        _parse_i18n_json_string
+    )
+    _parse_role_i18n = field_validator("role_i18n", mode="before")(_parse_i18n_json_string)
+
 
 @tool()
 class UpdateAgent(BaseTool[UpdateAgentParams]):
