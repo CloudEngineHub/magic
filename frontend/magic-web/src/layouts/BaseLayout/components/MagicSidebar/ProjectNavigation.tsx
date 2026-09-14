@@ -178,6 +178,7 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 								<SidebarMenuItem>
 									<SidebarMenuButton
 										isActive={isCollaborationWorkspace(selectedWorkspace)}
+										className="mb-1 font-normal leading-5 data-[active=true]:font-normal"
 										onClick={() => openManager({ type: "collaboration" })}
 										data-testid="sidebar-content-share-workspace-button"
 									>
@@ -197,6 +198,7 @@ function ProjectNavigation({ collapsed }: { collapsed: boolean }) {
 				>
 					<SidebarRow
 						label={t("sidebarPanels.projectManager")}
+						labelVariant="navigation"
 						leading={managerIcon}
 						hideChevron
 						onClick={() => openManager()}

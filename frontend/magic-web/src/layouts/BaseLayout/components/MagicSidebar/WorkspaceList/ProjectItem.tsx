@@ -116,11 +116,9 @@ function ProjectItem({
 
 	if (isEditing && canRename) {
 		return (
-			<div
-				className="w-full px-2 py-0.5"
-				data-testid={`sidebar-project-rename-${project.id}`}
-			>
+			<div className="w-full pl-6 pr-2" data-testid={`sidebar-project-rename-${project.id}`}>
 				<SidebarCreateInput
+					inputClassName="px-2"
 					value={editingProjectName}
 					onValueChange={(v) =>
 						handleProjectNameChange({
@@ -212,7 +210,7 @@ function ProjectItem({
 						size="md"
 						isActive={isSelected}
 						className={cn(
-							"relative h-7 px-2",
+							"relative h-8 translate-x-0 px-2 font-normal",
 							isSelected && "bg-[#f5f5f5] dark:bg-[#262626]",
 						)}
 					>
@@ -230,17 +228,20 @@ function ProjectItem({
 							className="w-full min-w-0 text-left text-current no-underline [-webkit-tap-highlight-color:transparent]"
 						>
 							<div className="flex w-full min-w-0 items-center">
-								<div className="flex min-w-0 flex-1 items-center gap-1.5">
-									<NavigationStatusIcon
-										itemType="project"
-										status={project.project_status}
-										showDefaultIcon={false}
-										className={
-											isSelected
-												? "text-sidebar-accent-foreground"
-												: "text-sidebar-foreground"
-										}
-									/>
+								<div className="flex min-w-0 flex-1 items-center gap-2">
+									{/* 状态位始终保留；开始或结束运行只换图标，不移动项目名称。 */}
+									<span className="flex size-4 shrink-0 items-center justify-center">
+										<NavigationStatusIcon
+											itemType="project"
+											status={project.project_status}
+											showDefaultIcon={false}
+											className={
+												isSelected
+													? "text-sidebar-accent-foreground"
+													: "text-sidebar-foreground"
+											}
+										/>
+									</span>
 									<span
 										className={cn(
 											"min-w-0 max-w-full shrink truncate text-left text-sm leading-5",

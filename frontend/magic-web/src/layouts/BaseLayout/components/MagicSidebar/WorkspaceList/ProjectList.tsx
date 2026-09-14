@@ -55,7 +55,8 @@ function ProjectList({
 		externalScrollRef: workspaceScrollRef,
 		scrollKey: `workspace-projects:${workspaceId}`,
 		projects,
-		rowHeight: 32,
+		// 与项目行的 32px 点击高度和 4px 行间距一致，创建／重命名也沿用同一高度。
+		rowHeight: 36,
 		hasMore: page?.hasMore,
 		loading: isLoading || page?.loadingMore,
 		error: page?.error,
@@ -64,8 +65,9 @@ function ProjectList({
 
 	return (
 		<>
+			{/* 每层为 16px 图标加 8px 间距；项目缩进一层后，状态位和名称分别对齐父工作区的图标和名称。 */}
 			<div
-				className="relative flex w-full shrink-0 flex-col items-start gap-1 py-0.5 pl-6 pr-0"
+				className="relative flex w-full shrink-0 flex-col items-start gap-1 pl-6 pr-0 pt-1"
 				data-sidebar-drop-type="project-list"
 				data-sidebar-drop-workspace-id={workspaceId}
 				data-sidebar-drop-empty={projects.length === 0 ? "true" : undefined}

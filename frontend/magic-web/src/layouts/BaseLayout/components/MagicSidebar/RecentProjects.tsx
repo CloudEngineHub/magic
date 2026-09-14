@@ -147,7 +147,7 @@ function RecentProjects({
 			onBlurCapture={list.onBlurCapture}
 			data-testid="sidebar-recent-projects-list"
 		>
-			<div ref={contentRef} className={cn("px-1", fitContent && "min-h-[76px]")}>
+			<div ref={contentRef} className={cn(fitContent && "min-h-[76px] px-1")}>
 				<div
 					className="relative w-full"
 					style={{ height: list.virtualizer.getTotalSize() }}

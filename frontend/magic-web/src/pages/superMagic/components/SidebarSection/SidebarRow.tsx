@@ -103,7 +103,10 @@ export function SidebarRow({
 				{leading && (
 					<div
 						data-header-leading
-						className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground"
+						className={cn(
+							"flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground",
+							labelVariant === "navigation" && "text-sidebar-foreground",
+						)}
 					>
 						{leading}
 					</div>
@@ -111,9 +114,11 @@ export function SidebarRow({
 				<div
 					className={cn(
 						"min-w-0 text-sm font-medium text-foreground",
-						labelVariant !== "default" && "text-[13px] leading-5",
+						(labelVariant === "section" || labelVariant === "item") &&
+							"text-[13px] leading-5",
 						labelVariant === "item" && "font-normal",
-						labelVariant === "navigation" && "font-normal text-sidebar-foreground/70",
+						labelVariant === "navigation" &&
+							"text-sm font-normal leading-5 text-sidebar-foreground",
 						!wrapLabel && "truncate",
 					)}
 				>
@@ -121,6 +126,7 @@ export function SidebarRow({
 						ref={labelRef}
 						className={cn(
 							"inline-block",
+							labelVariant === "navigation" && "block",
 							wrapLabel
 								? "whitespace-normal break-words text-left [overflow-wrap:anywhere]"
 								: "whitespace-nowrap",

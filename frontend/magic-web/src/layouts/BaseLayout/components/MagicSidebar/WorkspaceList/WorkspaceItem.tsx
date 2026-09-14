@@ -205,7 +205,7 @@ function WorkspaceItem({
 							asChild
 							size="default"
 							isActive={isActive}
-							className="group/workspace-row relative h-8 gap-2 px-2 text-sidebar-foreground"
+							className="group/workspace-row relative h-8 gap-2 px-2 font-normal leading-5 text-sidebar-foreground data-[active=true]:font-normal"
 							onMouseEnter={() => setIsHovered(true)}
 							onMouseLeave={() => setIsHovered(false)}
 						>
@@ -217,7 +217,7 @@ function WorkspaceItem({
 								className="text-current no-underline [-webkit-tap-highlight-color:transparent]"
 							>
 								<div
-									className="flex items-center justify-center rounded-xl hover:bg-sidebar-accent "
+									className="flex size-4 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-sidebar-accent"
 									onClick={handleToggle}
 									data-testid={workspaceToggleTestId}
 								>

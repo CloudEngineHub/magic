@@ -80,7 +80,7 @@ export default function WorkspaceListHeader({
 					trailing={
 						<div
 							className={cn(
-								"flex items-center gap-0.5 opacity-70",
+								"flex items-center gap-0.5 text-muted-foreground",
 								"group-data-[collapsible=icon]:hidden",
 								isSearchMode && "hidden",
 							)}
@@ -90,14 +90,14 @@ export default function WorkspaceListHeader({
 								type="button"
 								aria-label={t("super:workspace.searchWorkspace")}
 								data-testid="sidebar-workspace-list-search"
-								className="outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4"
+								className="outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4"
 								onClick={handleSearchOpen}
 							>
 								<Search className="h-4 w-4" />
 							</button>
 							{isInitialWorkspaceListLoading && (
 								<Loader2
-									className="h-4 w-4 shrink-0 animate-spin text-[rgb(var(--muted-foreground-rgb))] opacity-70"
+									className="h-4 w-4 shrink-0 animate-spin"
 									aria-hidden
 									data-testid="sidebar-workspace-list-loading"
 								/>
@@ -108,7 +108,7 @@ export default function WorkspaceListHeader({
 								data-testid="sidebar-workspace-list-refresh"
 								disabled={isRefreshing}
 								className={cn(
-									"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
+									"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
 									"after:absolute after:-inset-2 md:after:hidden",
 								)}
 								onClick={() => void handleRefresh()}
@@ -122,7 +122,7 @@ export default function WorkspaceListHeader({
 								aria-label={t("sidebar:workspace.add")}
 								data-testid="sidebar-workspace-list-add"
 								className={cn(
-									"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
+									"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
 									"after:absolute after:-inset-2 md:after:hidden",
 								)}
 								onClick={handleStartCreateWorkspace}

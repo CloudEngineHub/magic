@@ -467,7 +467,7 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 				<ScrollArea
 					viewportRef={scrollRef}
 					className="min-h-0 flex-1 overflow-hidden [&>[data-slot=scroll-area-scrollbar]]:w-1.5 [&>[data-slot=scroll-area-scrollbar]]:border-l-0"
-					viewportClassName="overscroll-contain pl-2 [--workspace-list-sticky-top:0px] [&>div]:!block"
+					viewportClassName="overscroll-contain [--workspace-list-sticky-top:0px] [&>div]:!block"
 					viewportProps={{
 						"data-workspaces-scroll-container": true,
 						onScroll: (event) => {
@@ -480,7 +480,7 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 					}}
 				>
 					<SidebarMenu>
-						<div className="w-full pr-3">
+						<div className="w-full">
 							{beforeItems}
 							<div ref={workspaceListRef}>
 								{isCreatingWorkspace && (
@@ -505,7 +505,7 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 												: undefined
 										}
 										className={cn(
-											"mb-[2px]",
+											"mb-1",
 											index === displayedWorkspaces.length - 1 && "mb-0",
 										)}
 									/>

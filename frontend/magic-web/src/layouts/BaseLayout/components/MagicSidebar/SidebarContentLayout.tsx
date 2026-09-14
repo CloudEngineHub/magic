@@ -63,11 +63,12 @@ function SidebarContentLayout({
 					maxSize={(maximum / available) * 100}
 					defaultSize={32}
 				>
+					{/* 展开态由细滚动条提示溢出；窄栏隐藏滚动条后才显示轻微边缘提示。 */}
 					<ScrollArea
 						className="h-full overflow-hidden [&>[data-slot=scroll-area-scrollbar]]:w-1.5 [&>[data-slot=scroll-area-scrollbar]]:border-l-0"
 						viewportClassName="overscroll-contain [&>div]:!block"
 						hideScrollbar={collapsed}
-						scrollShadows
+						scrollShadows={collapsed}
 					>
 						<div ref={appsRef}>{apps}</div>
 					</ScrollArea>

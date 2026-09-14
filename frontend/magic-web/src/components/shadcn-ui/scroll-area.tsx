@@ -112,14 +112,14 @@ const ScrollArea = React.forwardRef<
 						<div
 							aria-hidden
 							className={cn(
-								"pointer-events-none absolute inset-x-0 top-0 z-10 h-2 bg-gradient-to-b from-black/10 to-transparent dark:from-black/30",
+								"pointer-events-none absolute inset-x-2 top-0 z-10 h-1 bg-gradient-to-b from-black/[0.04] to-transparent dark:from-black/[0.14]",
 								!edges.top && "invisible",
 							)}
 						/>
 						<div
 							aria-hidden
 							className={cn(
-								"pointer-events-none absolute inset-x-0 bottom-0 z-10 h-2 bg-gradient-to-t from-black/10 to-transparent dark:from-black/30",
+								"pointer-events-none absolute inset-x-2 bottom-0 z-10 h-1 bg-gradient-to-t from-black/[0.04] to-transparent dark:from-black/[0.14]",
 								!edges.bottom && "invisible",
 							)}
 						/>
