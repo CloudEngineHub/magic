@@ -154,13 +154,10 @@ function ResizableCollapseFeedback({
 					<span
 						ref={tooltipRef}
 						role="status"
-						className={cn(
-							"pointer-events-none fixed z-[10000] w-max max-w-[calc(100vw-16px)] rounded-[10px] border border-blue-200/70 bg-blue-50/95 px-3 py-2.5 text-xs text-popover-foreground shadow-sm dark:border-blue-400/25 dark:bg-slate-900",
-							collapseArmed && "border-blue-300 dark:border-blue-400/50",
-						)}
+						className="pointer-events-none fixed z-[10000] w-max max-w-[calc(100vw-16px)] rounded-[10px] border border-border bg-popover px-3 py-2.5 text-xs text-popover-foreground shadow-sm"
 					>
 						<span className="flex items-center gap-2 font-medium">
-							<DirectionIcon className="size-4 shrink-0 text-blue-400" />
+							<DirectionIcon className="size-4 shrink-0 text-muted-foreground" />
 							{collapseArmed ? releaseLabel : pullLabel}
 						</span>
 						<span className="mt-1 block text-muted-foreground">{description}</span>
