@@ -164,7 +164,11 @@ function AddElementMenu({
 	const menuTestId = testId.replace(/-button$/, "")
 	return (
 		<DropdownMenu open={open} onOpenChange={setOpen}>
-			<MagicTooltip title={label} contentZIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}>
+			<MagicTooltip
+				title={label}
+				disabled={open}
+				contentZIndex={HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.TOOLTIP}
+			>
 				<span className="inline-flex">
 					<DropdownMenuTrigger asChild>
 						<Button

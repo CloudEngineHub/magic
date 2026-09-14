@@ -2011,13 +2011,19 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								/>
 							) : (
 								<SmartTooltip
-									placement="right"
+									placement="top"
+									align="start"
 									className={cx(
 										styles.ellipsis,
 										(shouldHighlightFolder || isActiveFile) &&
 											styles.activeFileItem,
 									)}
-									sideOffset={20}
+									sideOffset={4}
+									disabled={
+										contextMenuItemId === itemId ||
+										dragState.isDragging ||
+										dragState.isExternalDrag
+									}
 								>
 									{item?.name}
 								</SmartTooltip>
@@ -2251,12 +2257,18 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									</ProjectFileImageSmartTooltip>
 								) : (
 									<SmartTooltip
-										placement="right"
+										placement="top"
+										align="start"
 										className={cx(
 											styles.ellipsis,
 											isActiveFile && "font-medium",
 										)}
-										sideOffset={20}
+										sideOffset={4}
+										disabled={
+											contextMenuItemId === itemId ||
+											dragState.isDragging ||
+											dragState.isExternalDrag
+										}
 									>
 										{item?.file_name}
 									</SmartTooltip>

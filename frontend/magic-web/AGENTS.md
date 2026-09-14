@@ -40,6 +40,7 @@ Guidance for autonomous or semi-autonomous coding agents contributing to the Mag
 - **Testing**: Vitest with `__tests__/` colocated alongside source.
 
 ## Implementation Standards
+- Before adding or changing tooltips, read [Tooltip usage](src/components/base/MagicTooltip/README.md). Use the existing entries for action labels and truncated text; preserve the interaction and lifecycle of rich content and media previews.
 - Maintain strict TypeScript typing; add or update types when altering APIs or props.
 - Keep React components modular: separate `styles.ts`, `types.ts`, `hooks/`, and `index.tsx` where the pattern already exists.
 - For every file change, explicitly check whether `enterprise/` contains a corresponding implementation, adapter, test, or config that must be updated in sync. Treat this as a required review step before finishing any code change.

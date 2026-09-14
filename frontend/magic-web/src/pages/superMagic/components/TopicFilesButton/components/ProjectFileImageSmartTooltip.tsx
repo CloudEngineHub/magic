@@ -30,7 +30,7 @@ export function ProjectFileImageSmartTooltip({
 	// project-file preview provider.
 	if (!manager || !previewState) {
 		return (
-			<SmartTooltip placement="right" className={className} sideOffset={sideOffset}>
+			<SmartTooltip placement="top" align="start" className={className} sideOffset={4}>
 				{children}
 			</SmartTooltip>
 		)
