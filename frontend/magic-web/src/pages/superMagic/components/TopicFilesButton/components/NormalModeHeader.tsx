@@ -295,6 +295,7 @@ function NormalModeHeader({
 			testId="file-section-header"
 			rowRef={rowRef}
 			labelRef={labelRef}
+			className={section.headerClassName}
 		/>
 	) : (
 		<div ref={rowRef} className={cn("flex h-8 w-full items-center gap-1 pl-4 pr-2", className)}>

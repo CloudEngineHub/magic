@@ -51,6 +51,13 @@ interface MemoryGroupProps {
 }
 const emptyIndex = buildAttachmentIndex([])
 
+// 只调整记忆标题的留白与反馈；文件行密度、工具按钮和其它侧栏栏目沿用原样。
+const memoryHeaderClassName = cn(
+	"mx-2 w-auto rounded-lg px-2 focus-within:bg-accent/60 hover:bg-accent active:bg-foreground/10 motion-reduce:transition-none",
+	"[&_[data-header-chevron]]:transition-colors [&_[data-header-chevron]]:duration-200 hover:[&_[data-header-chevron]]:text-foreground",
+	"motion-reduce:[&_[data-header-chevron]]:transition-none motion-reduce:[&_[data-header-chevron]_svg]:transition-none",
+)
+
 export const MemoryGroup = observer(function MemoryGroup({
 	manager = false,
 	active = true,
@@ -209,6 +216,7 @@ export const MemoryGroup = observer(function MemoryGroup({
 		titleOverride ?? (projectId ? t("userSpace.projectMemory") : t("userSpace.globalMemory"))
 	const section: SidebarSectionOptions = {
 		labelVariant,
+		headerClassName: memoryHeaderClassName,
 		wrapLabel: true,
 		isExpanded: expanded,
 		onClick: () => {
@@ -318,7 +326,10 @@ export const MemoryGroup = observer(function MemoryGroup({
 			className={cn(
 				"flex min-h-0 min-w-0 flex-col",
 				manager ? "flex-1" : "shrink-0",
-				!manager && (labelVariant === "item" ? "pl-2" : "border-b last:border-0"),
+				!manager &&
+					(labelVariant === "item"
+						? "pl-2"
+						: "after:mx-3 after:my-2 after:border-b after:border-border/60 after:content-['']"),
 			)}
 		>
 			{files}
@@ -343,6 +354,7 @@ const OtherProjectMemories = observer(function OtherProjectMemories(props: Memor
 		<SidebarExpandableItem
 			label={t("userSpace.otherProjectMemories")}
 			labelVariant="section"
+			headerClassName={memoryHeaderClassName}
 			wrapLabel
 			isExpanded={expanded}
 			onClick={() => {
@@ -415,7 +427,7 @@ export default observer(function UserSpaceMemoryView(props: MemoryGroupProps) {
 	const identity = userFilesStore.currentIdentityKey
 	return (
 		<div ref={scrollElementRef} className="h-full min-h-0 overflow-auto">
-			<div key={identity} className="flex flex-col">
+			<div key={identity} className="flex flex-col pb-2 pt-3">
 				<MemoryGroup {...props} scrollElementRef={scrollElementRef} projectId={undefined} />
 				{props.projectId ? (
 					<MemoryGroup

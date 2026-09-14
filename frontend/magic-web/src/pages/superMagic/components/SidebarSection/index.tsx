@@ -10,6 +10,8 @@ export interface SidebarSectionOptions {
 	description?: ReactNode
 	wrapLabel?: boolean
 	labelVariant?: SidebarLabelVariant
+	/** 由分组调用方调整标题外观，保留共用行的布局与交互。 */
+	headerClassName?: string
 }
 
 export function SidebarExpandableItem({
@@ -25,6 +27,7 @@ export function SidebarExpandableItem({
 	childrenClassName,
 	children,
 	header,
+	headerClassName,
 	wrapLabel = false,
 	labelVariant,
 }: {
@@ -40,6 +43,7 @@ export function SidebarExpandableItem({
 	childrenClassName?: string
 	children: ReactNode
 	header?: ReactNode
+	headerClassName?: string
 	wrapLabel?: boolean
 	labelVariant?: SidebarLabelVariant
 }) {
@@ -56,6 +60,7 @@ export function SidebarExpandableItem({
 					testId={testId}
 					wrapLabel={wrapLabel}
 					labelVariant={labelVariant}
+					className={headerClassName}
 				/>
 			)}
 			<div
