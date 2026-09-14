@@ -650,6 +650,8 @@ const FilesViewer = memo(
 								<WebsitePresetMenu
 									onOpenWebsiteTab={openWebsiteTab}
 									onOpenMicroAppTab={openMicroAppTab}
+									onOpenFileTab={openFileTab}
+									fileAttachments={tabAttachments}
 								/>
 
 								{/* 展开按钮 */}

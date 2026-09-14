@@ -2527,6 +2527,7 @@
 		"waitForPreviousOperation": "请等待上一次操作结束",
 		"website": {
 			"add": "打开网站",
+			"clearSearch": "清除搜索",
 			"closeLoadFallback": "关闭加载提示",
 			"commonAddTitle": "保存常用链接",
 			"commonAlreadyExists": "这个链接已添加为常用",
@@ -2554,8 +2555,10 @@
 				"searchPlaceholder": "搜索微应用",
 				"title": "微应用"
 			},
+			"noResults": "没有匹配的结果",
 			"openCustom": "打开",
 			"openExternal": "新窗口打开",
+			"openUrl": "打开 {{url}}",
 			"presets": {
 				"baiduImages": {
 					"description": "图片搜索与素材参考",
@@ -2586,8 +2589,17 @@
 					"title": "站酷"
 				}
 			},
+			"quickOpen": "快速打开",
+			"quickOpenDescription": "搜索文件、网站或微应用",
 			"refresh": "刷新",
-			"removeCommon": "移除常用链接"
+			"removeCommon": "移除常用链接",
+			"searchAllPlaceholder": "搜索文件、网站或微应用，或输入网址",
+			"sections": {
+				"all": "全部",
+				"files": "文件",
+				"label": "内容分类",
+				"websites": "网站"
+			}
 		}
 	},
 	"filenameValidator": {

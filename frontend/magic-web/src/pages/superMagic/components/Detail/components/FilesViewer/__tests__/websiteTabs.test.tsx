@@ -1,4 +1,4 @@
-import { act, fireEvent, render, renderHook, screen } from "@testing-library/react"
+import { act, fireEvent, render, renderHook, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import magicToast from "@/components/base/MagicToaster/utils"
 import {
@@ -50,6 +50,12 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 		error: vi.fn(),
 		info: vi.fn(),
 	},
+}))
+
+vi.mock("@/components/base/MagicFileIcon", () => ({
+	default: ({ type, size }: { type?: string; size?: number }) => (
+		<span data-testid="magic-file-icon" data-size={size} data-type={type} />
+	),
 }))
 
 vi.mock("@/components/shadcn-ui/context-menu", () => ({
@@ -105,15 +111,23 @@ vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
 	DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 	DropdownMenuContent: ({
 		children,
+		onOpenAutoFocus: _onOpenAutoFocus,
+		sideOffset: _sideOffset,
 		...props
 	}: {
 		children: React.ReactNode
+		onOpenAutoFocus?: (event: Event) => void
+		sideOffset?: number
 		[key: string]: unknown
-	}) => (
-		<div data-testid="website-preset-menu" {...props}>
-			{children}
-		</div>
-	),
+	}) => {
+		void _onOpenAutoFocus
+		void _sideOffset
+		return (
+			<div data-testid="website-preset-menu" {...props}>
+				{children}
+			</div>
+		)
+	},
 	DropdownMenuItem: ({
 		children,
 		onClick,
@@ -660,11 +674,24 @@ describe("website tabs", () => {
 
 	it("opens the selected preset from the add menu", () => {
 		const onOpenWebsiteTab = vi.fn()
-		const { container } = render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
+		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
 
-		const addButton = screen.getByRole("button", { name: "fileViewer.website.add" })
-		expect(addButton.querySelector("svg")).toBeInTheDocument()
-		expect(container.querySelector(".lucide-plus")).toBeInTheDocument()
+		const addButton = screen.getByRole("button", { name: "fileViewer.website.quickOpen" })
+		expect(addButton.querySelector(".lucide-square-plus")).toBeInTheDocument()
+		expect(addButton).toHaveClass(
+			"h-7",
+			"min-w-7",
+			"max-w-7",
+			"ml-1",
+			"overflow-hidden",
+			"hover:max-w-32",
+		)
+		expect(addButton).not.toHaveClass("mx-1")
+		expect(within(addButton).getByText("fileViewer.website.quickOpen")).toHaveClass(
+			"opacity-0",
+			"group-hover:opacity-100",
+		)
+		expect(addButton.querySelector(".lucide-search")).not.toBeInTheDocument()
 
 		fireEvent.click(
 			screen.getByRole("button", {
@@ -722,9 +749,14 @@ describe("website tabs", () => {
 		const onOpenWebsiteTab = vi.fn()
 		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
 
-		fireEvent.change(screen.getByPlaceholderText("fileViewer.website.customPlaceholder"), {
-			target: { value: "example.com/prompts" },
-		})
+		fireEvent.change(
+			screen.getByRole("textbox", {
+				name: "fileViewer.website.searchAllPlaceholder",
+			}),
+			{
+				target: { value: "example.com/prompts" },
+			},
+		)
 		fireEvent.click(screen.getByRole("button", { name: "fileViewer.website.openCustom" }))
 
 		expect(onOpenWebsiteTab).toHaveBeenCalledWith({
@@ -745,7 +777,7 @@ describe("website tabs", () => {
 		const onOpenWebsiteTab = vi.fn()
 		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
 
-		expect(screen.getByText("fileViewer.website.commonTitle")).toBeInTheDocument()
+		expect(screen.getAllByText("fileViewer.website.sections.websites")).not.toHaveLength(0)
 		fireEvent.click(screen.getByRole("button", { name: "Saved Image Board" }))
 
 		expect(onOpenWebsiteTab).toHaveBeenCalledWith(
@@ -859,7 +891,7 @@ describe("website tabs", () => {
 		expect(getCommonWebsitePresets()).toEqual([])
 	})
 
-	it("keeps both website and micro-app filters sticky within the scroll list", () => {
+	it("uses ScrollArea for results while keeping search and categories fixed", () => {
 		const onOpenWebsiteTab = vi.fn()
 		render(<WebsitePresetMenu onOpenWebsiteTab={onOpenWebsiteTab} />)
 
@@ -868,11 +900,54 @@ describe("website tabs", () => {
 		const list = screen.getByTestId("website-preset-list")
 
 		expect(menu).toHaveClass("overflow-hidden")
-		expect(header).toHaveClass("sticky")
-		expect(header).toHaveClass("top-0")
-		expect(list).toHaveClass("overflow-y-auto")
-		const microAppsFilter = screen.queryByTestId("micro-app-filter-header")
-		expect(microAppsFilter).toBeInTheDocument()
-		expect(microAppsFilter).toHaveStyle({ top: "76px" })
+		expect(menu).toHaveClass("h-[min(620px,75vh)]")
+		expect(menu).not.toHaveClass("max-h-[min(620px,75vh)]")
+		expect(header).toHaveClass("shrink-0")
+		expect(list).toHaveAttribute("data-slot", "scroll-area")
+		expect(list.querySelector("[data-slot='scroll-area-viewport']")).toHaveClass("p-2")
+		expect(
+			screen.getByRole("navigation", { name: "fileViewer.website.sections.label" }),
+		).toBeInTheDocument()
+		expect(
+			screen.getByRole("textbox", {
+				name: "fileViewer.website.searchAllPlaceholder",
+			}),
+		).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-filter-header")).not.toBeInTheDocument()
+	})
+
+	it("searches nested project files and opens the selected file", () => {
+		const onOpenFileTab = vi.fn()
+		const matchingFile = {
+			file_id: "file-2",
+			file_name: "release-plan.md",
+			file_extension: "md",
+			display_filename: "Release plan",
+			relative_file_path: "docs/release-plan.md",
+		}
+		render(
+			<WebsitePresetMenu
+				onOpenWebsiteTab={vi.fn()}
+				onOpenFileTab={onOpenFileTab}
+				fileAttachments={[
+					{
+						file_id: "folder-1",
+						file_name: "docs",
+						is_directory: true,
+						children: [matchingFile, { file_id: "file-3", file_name: "notes.md" }],
+					},
+				]}
+			/>,
+		)
+
+		fireEvent.change(screen.getByTestId("quick-open-search-input"), {
+			target: { value: "release" },
+		})
+
+		expect(screen.queryByRole("button", { name: "notes.md" })).not.toBeInTheDocument()
+		expect(screen.getByTestId("magic-file-icon")).toHaveAttribute("data-type", "md")
+		expect(screen.getByTestId("magic-file-icon")).toHaveAttribute("data-size", "28")
+		fireEvent.click(screen.getByRole("button", { name: "Release plan" }))
+		expect(onOpenFileTab).toHaveBeenCalledWith(matchingFile)
 	})
 })

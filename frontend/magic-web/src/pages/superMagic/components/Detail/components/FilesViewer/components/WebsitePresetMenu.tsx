@@ -1,27 +1,16 @@
-import { Loader2, Plus, X } from "lucide-react"
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import type { MouseEvent, UIEvent } from "react"
-import { Tooltip } from "antd"
+import { Search, SquarePlus, X } from "lucide-react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import type { MicroAppListItem } from "@/apis/modules/superMagic"
 import magicToast from "@/components/base/MagicToaster/utils"
-import MicroAppIcon from "@/components/business/MentionPanel/components/icons/MicroAppIcon"
 import { isMicroAppEnabled } from "@/services/microAppFeature"
-import {
-	ContextMenu,
-	ContextMenuContent,
-	ContextMenuItem,
-	ContextMenuSeparator,
-	ContextMenuTrigger,
-} from "@/components/shadcn-ui/context-menu"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import {
 	buildCustomWebsitePreset,
 	COMMON_WEBSITE_PRESETS_CHANGE_EVENT,
@@ -30,15 +19,26 @@ import {
 	removeCommonWebsitePreset,
 	updateCommonWebsitePreset,
 } from "../utils/websiteTabs"
-import type { WebsitePreset } from "../types"
-import { useTranslation } from "react-i18next"
+import type { FileItem, WebsitePreset } from "../types"
 import CommonWebsitePresetDialog, {
 	type CommonWebsitePresetFormValues,
 } from "./CommonWebsitePresetDialog"
+import { flattenFiles, getFileTitle, looksLikeUrl } from "./QuickOpenItem"
+import {
+	EmptyResults,
+	FileResults,
+	MicroAppResults,
+	QuickOpenSectionNav,
+	type QuickOpenSection,
+	type QuickOpenSectionItem,
+	WebsiteResults,
+} from "./QuickOpenSections"
 
 interface WebsitePresetMenuProps {
 	onOpenWebsiteTab: (preset: WebsitePreset) => void
 	onOpenMicroAppTab?: (data: { appId: string; appName?: string }) => void
+	onOpenFileTab?: (fileItem: FileItem) => void
+	fileAttachments?: FileItem[]
 }
 
 function getTranslatedPreset(preset: WebsitePreset, t: (key: string) => string): WebsitePreset {
@@ -49,46 +49,84 @@ function getTranslatedPreset(preset: WebsitePreset, t: (key: string) => string):
 	}
 }
 
-function WebsitePresetIcon({ iconSrc, presetId }: { iconSrc?: string; presetId: string }) {
-	if (iconSrc) {
-		return (
-			<img
-				data-testid={`website-preset-icon-${presetId}`}
-				className="size-5 shrink-0 rounded-md object-cover"
-				src={iconSrc}
-				alt=""
-				aria-hidden="true"
-			/>
-		)
-	}
-
-	return null
-}
-
 const WebsitePresetMenu = memo(function WebsitePresetMenu({
 	onOpenWebsiteTab,
 	onOpenMicroAppTab,
+	onOpenFileTab,
+	fileAttachments = [],
 }: WebsitePresetMenuProps) {
 	const { t } = useTranslation("super")
 	const [open, setOpen] = useState(false)
-	const [customUrl, setCustomUrl] = useState("")
+	const [activeSection, setActiveSection] = useState<QuickOpenSection>("all")
+	const [searchQuery, setSearchQuery] = useState("")
 	const [commonWebsitePresets, setCommonWebsitePresets] = useState(() =>
 		getCommonWebsitePresets(),
 	)
 	const [editingPreset, setEditingPreset] = useState<WebsitePreset | null>(null)
 	const [microApps, setMicroApps] = useState<MicroAppListItem[]>([])
-	const [microAppsQuery, setMicroAppsQuery] = useState("")
 	const [microAppsLoading, setMicroAppsLoading] = useState(false)
 	const [microAppsLoadingMore, setMicroAppsLoadingMore] = useState(false)
 	const [microAppsHasMore, setMicroAppsHasMore] = useState(false)
-	const [websiteHeaderHeight, setWebsiteHeaderHeight] = useState(76)
-	const websiteHeaderRef = useRef<HTMLDivElement>(null)
+	const searchInputRef = useRef<HTMLInputElement>(null)
+	const scrollViewportRef = useRef<HTMLDivElement>(null)
 	const microAppsPageRef = useRef(0)
 	const microAppsRequestRef = useRef(0)
-	const customPreset = useMemo(
-		() => buildCustomWebsitePreset(customUrl, t("fileViewer.website.customDescription")),
-		[customUrl, t],
+	const flattenedFiles = useMemo(() => flattenFiles(fileAttachments), [fileAttachments])
+	const normalizedQuery = searchQuery.trim().toLowerCase()
+	const matchesQuery = useCallback(
+		(value: string) => !normalizedQuery || value.toLowerCase().includes(normalizedQuery),
+		[normalizedQuery],
 	)
+	const filteredFiles = useMemo(
+		() =>
+			flattenedFiles.filter((file) =>
+				matchesQuery(
+					[getFileTitle(file), file.relative_file_path].filter(Boolean).join(" "),
+				),
+			),
+		[flattenedFiles, matchesQuery],
+	)
+	const websitePresets = useMemo(
+		() =>
+			getWebsitePresets()
+				.map((preset) => getTranslatedPreset(preset, t))
+				.filter((preset) =>
+					matchesQuery([preset.title, preset.description].filter(Boolean).join(" ")),
+				),
+		[matchesQuery, t],
+	)
+	const visibleCommonWebsitePresets = useMemo(
+		() =>
+			commonWebsitePresets.filter((preset) =>
+				matchesQuery(
+					[preset.title, preset.description, preset.url].filter(Boolean).join(" "),
+				),
+			),
+		[commonWebsitePresets, matchesQuery],
+	)
+	const visibleMicroApps = useMemo(
+		() => microApps.filter((microApp) => matchesQuery(microApp.app_name || "")),
+		[microApps, matchesQuery],
+	)
+	const directWebsitePreset = useMemo(
+		() =>
+			looksLikeUrl(searchQuery)
+				? buildCustomWebsitePreset(searchQuery, t("fileViewer.website.customDescription"))
+				: null,
+		[searchQuery, t],
+	)
+	const showFiles = activeSection === "all" || activeSection === "files"
+	const showWebsites = activeSection === "all" || activeSection === "websites"
+	const showMicroApps =
+		isMicroAppEnabled() && (activeSection === "all" || activeSection === "microApps")
+	const displayedFiles = filteredFiles.slice(0, activeSection === "files" ? 100 : 6)
+	const hasVisibleResults =
+		(showFiles && displayedFiles.length > 0) ||
+		(showWebsites &&
+			(Boolean(directWebsitePreset) ||
+				websitePresets.length > 0 ||
+				visibleCommonWebsitePresets.length > 0)) ||
+		(showMicroApps && (visibleMicroApps.length > 0 || microAppsLoading))
 
 	useEffect(() => {
 		const syncCommonWebsitePresets = () => {
@@ -106,8 +144,7 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 		}
 	}, [])
 
-	// Search requests can finish out of order; the request id prevents an older page from
-	// replacing results for a newer keyword while preserving the current scroll position.
+	// Search requests can finish out of order; the request id keeps stale results out.
 	const loadMicroApps = useCallback(async (page: number, keyword: string, append: boolean) => {
 		if (!isMicroAppEnabled() || typeof SuperMagicApi?.getMentionMicroApps !== "function") {
 			return
@@ -145,35 +182,18 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 	}, [])
 
 	useEffect(() => {
-		if (!open || !isMicroAppEnabled()) return
+		if (!open || !showMicroApps) return
 		const timer = window.setTimeout(() => {
 			microAppsPageRef.current = 0
-			void loadMicroApps(1, microAppsQuery.trim(), false)
+			void loadMicroApps(1, searchQuery.trim(), false)
 		}, 200)
 		return () => window.clearTimeout(timer)
-	}, [loadMicroApps, microAppsQuery, open])
-
-	// The second sticky section starts below the first one so both filters remain visible
-	// instead of occupying the same top position when the list reaches that section.
-	useLayoutEffect(() => {
-		const header = websiteHeaderRef.current
-		if (!header) return
-
-		const updateHeaderHeight = () => {
-			const nextHeight = header.getBoundingClientRect().height
-			if (nextHeight > 0) setWebsiteHeaderHeight(nextHeight)
-		}
-		updateHeaderHeight()
-		if (typeof ResizeObserver === "undefined") return
-		const observer = new ResizeObserver(updateHeaderHeight)
-		observer.observe(header)
-		return () => observer.disconnect()
-	}, [])
+	}, [loadMicroApps, open, searchQuery, showMicroApps])
 
 	const handleMicroAppsScroll = useCallback(
-		(event: UIEvent<HTMLDivElement>) => {
-			const target = event.currentTarget
+		(target: HTMLDivElement) => {
 			if (
+				!showMicroApps ||
 				!microAppsHasMore ||
 				microAppsLoading ||
 				microAppsLoadingMore ||
@@ -181,26 +201,30 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 			) {
 				return
 			}
-			void loadMicroApps(microAppsPageRef.current + 1, microAppsQuery.trim(), true)
+			void loadMicroApps(microAppsPageRef.current + 1, searchQuery.trim(), true)
 		},
-		[microAppsHasMore, microAppsLoading, microAppsLoadingMore, microAppsQuery, loadMicroApps],
+		[
+			loadMicroApps,
+			microAppsHasMore,
+			microAppsLoading,
+			microAppsLoadingMore,
+			searchQuery,
+			showMicroApps,
+		],
 	)
 
-	const handleOpenCustomWebsite = () => {
-		if (!customPreset) return
-		onOpenWebsiteTab(customPreset)
-		setCustomUrl("")
-	}
+	useEffect(() => {
+		const viewport = scrollViewportRef.current
+		if (!viewport) return
+
+		const handleScroll = () => handleMicroAppsScroll(viewport)
+		viewport.addEventListener("scroll", handleScroll, { passive: true })
+		return () => viewport.removeEventListener("scroll", handleScroll)
+	}, [handleMicroAppsScroll, open])
 
 	const handleDeleteCommonWebsite = (presetId: string) => {
 		removeCommonWebsitePreset(presetId)
 		setCommonWebsitePresets(getCommonWebsitePresets())
-	}
-
-	const handleCloseCommonWebsite = (event: MouseEvent<HTMLButtonElement>, presetId: string) => {
-		event.preventDefault()
-		event.stopPropagation()
-		handleDeleteCommonWebsite(presetId)
 	}
 
 	const handleSubmitEditCommonWebsite = (values: CommonWebsitePresetFormValues) => {
@@ -220,225 +244,145 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 		magicToast.success(t("fileViewer.website.commonSaved"))
 	}
 
+	const sections: QuickOpenSectionItem[] = [
+		{ id: "all", label: t("fileViewer.website.sections.all") },
+		{
+			id: "files",
+			label: t("fileViewer.website.sections.files"),
+			count: flattenedFiles.length,
+		},
+		{
+			id: "websites",
+			label: t("fileViewer.website.sections.websites"),
+			count: getWebsitePresets().length + commonWebsitePresets.length,
+		},
+	]
+	if (isMicroAppEnabled()) {
+		sections.push({
+			id: "microApps",
+			label: t("fileViewer.website.microApps.title"),
+			count: microApps.length,
+		})
+	}
+
 	return (
-		<DropdownMenu onOpenChange={setOpen}>
-			<Tooltip title={t("fileViewer.website.add")} placement="bottom" mouseEnterDelay={0.3}>
-				<DropdownMenuTrigger asChild>
-					<button
-						type="button"
-						className="relative mx-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md text-foreground transition-all duration-200 hover:bg-black/10"
-						aria-label={t("fileViewer.website.add")}
-						data-testid="website-preset-menu-add-button"
-					>
-						<Plus className="size-4" aria-hidden="true" />
-					</button>
-				</DropdownMenuTrigger>
-			</Tooltip>
+		<DropdownMenu open={open} onOpenChange={setOpen}>
+			<DropdownMenuTrigger asChild>
+				<button
+					type="button"
+					className="group relative ml-1 flex h-7 min-w-7 max-w-7 shrink-0 cursor-pointer select-none items-center gap-1.5 overflow-hidden rounded-md px-1.5 text-xs font-medium text-foreground transition-[max-width,background-color,transform] duration-150 hover:max-w-32 hover:bg-black/10 focus-visible:max-w-32 focus-visible:bg-black/10 active:scale-[0.96] data-[state=open]:bg-black/10 motion-reduce:transition-none"
+					aria-label={t("fileViewer.website.quickOpen")}
+					data-testid="website-preset-menu-add-button"
+				>
+					<SquarePlus className="size-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+					<span className="min-w-0 whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none">
+						{t("fileViewer.website.quickOpen")}
+					</span>
+				</button>
+			</DropdownMenuTrigger>
 			<DropdownMenuContent
 				align="end"
-				className="flex max-h-[420px] w-[260px] flex-col overflow-hidden p-0"
+				sideOffset={8}
+				className="flex h-[min(620px,75vh)] w-[min(600px,calc(100vw-24px))] flex-col overflow-hidden rounded-xl p-0 shadow-lg"
+				onOpenAutoFocus={(event) => {
+					event.preventDefault()
+					searchInputRef.current?.focus()
+				}}
 			>
-				<div
-					data-testid="website-preset-list"
-					className="min-h-0 flex-1 overflow-y-auto px-1 pb-1 pt-0"
-					onScroll={handleMicroAppsScroll}
-				>
-					<div
-						data-testid="website-preset-menu-header"
-						className="sticky top-0 z-10 shrink-0 bg-popover p-1"
-						ref={websiteHeaderRef}
-					>
-						<DropdownMenuLabel className="px-1.5 py-1.5 text-xs font-normal text-muted-foreground">
-							{t("fileViewer.website.menuTitle")}
-						</DropdownMenuLabel>
-						<form
-							className="flex gap-1 px-1.5 py-1"
-							onSubmit={(event) => {
-								event.preventDefault()
-								handleOpenCustomWebsite()
-							}}
-							data-testid="handle-open-custom-website"
-						>
-							<input
-								value={customUrl}
-								onChange={(event) => setCustomUrl(event.target.value)}
-								onKeyDown={(event) => event.stopPropagation()}
-								placeholder={t("fileViewer.website.customPlaceholder")}
-								className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
-								data-testid="set-custom-url"
-							/>
-							<button
-								type="submit"
-								disabled={!customPreset}
-								className="h-8 shrink-0 rounded-md px-2 text-xs text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-								data-testid="submit-button"
-							>
-								{t("fileViewer.website.openCustom")}
-							</button>
-						</form>
+				<div data-testid="website-preset-menu-header" className="shrink-0 border-b p-3">
+					<div className="mb-2.5">
+						<div className="text-sm font-medium text-foreground">
+							{t("fileViewer.website.quickOpen")}
+						</div>
+						<div className="mt-0.5 text-xs text-muted-foreground">
+							{t("fileViewer.website.quickOpenDescription")}
+						</div>
 					</div>
-					{getWebsitePresets().map((preset) => (
-						<DropdownMenuItem
-							key={preset.id}
-							aria-label={getTranslatedPreset(preset, t).title}
-							className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2"
-							onClick={() => onOpenWebsiteTab(getTranslatedPreset(preset, t))}
-						>
-							<WebsitePresetIcon iconSrc={preset.iconSrc} presetId={preset.id} />
-							<span className="min-w-0 flex-1 truncate text-sm leading-5 text-foreground">
-								{getTranslatedPreset(preset, t).title}
-							</span>
-						</DropdownMenuItem>
-					))}
-					{isMicroAppEnabled() && (
-						<>
-							<DropdownMenuSeparator />
-							{/* Keep the filter available while the long micro-app result list scrolls. */}
-							<div
-								className="sticky z-20 -mx-1 bg-popover px-1 pb-1"
-								style={{ top: websiteHeaderHeight }}
-								data-testid="micro-app-filter-header"
+					<form
+						className="flex h-9 items-center gap-2 rounded-md border border-border bg-background px-2.5 transition-[border-color,box-shadow] duration-150 focus-within:border-primary/70 focus-within:ring-2 focus-within:ring-primary/20"
+						onSubmit={(event) => {
+							event.preventDefault()
+							if (directWebsitePreset) {
+								onOpenWebsiteTab(directWebsitePreset)
+								setOpen(false)
+							}
+						}}
+					>
+						<Search
+							className="size-4 shrink-0 text-muted-foreground"
+							aria-hidden="true"
+						/>
+						<input
+							ref={searchInputRef}
+							value={searchQuery}
+							onChange={(event) => setSearchQuery(event.target.value)}
+							onKeyDown={(event) => {
+								if (event.key === "Escape") {
+									setOpen(false)
+									return
+								}
+								event.stopPropagation()
+							}}
+							aria-label={t("fileViewer.website.searchAllPlaceholder")}
+							placeholder={t("fileViewer.website.searchAllPlaceholder")}
+							className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+							data-testid="quick-open-search-input"
+						/>
+						{searchQuery ? (
+							<button
+								type="button"
+								className="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+								onClick={() => setSearchQuery("")}
+								aria-label={t("fileViewer.website.clearSearch")}
 							>
-								<DropdownMenuLabel className="px-1.5 py-1.5 text-xs font-normal text-muted-foreground">
-									{t("fileViewer.website.microApps.title")}
-								</DropdownMenuLabel>
-								<div className="px-1.5">
-									<input
-										value={microAppsQuery}
-										onChange={(event) => setMicroAppsQuery(event.target.value)}
-										onKeyDown={(event) => event.stopPropagation()}
-										placeholder={t(
-											"fileViewer.website.microApps.searchPlaceholder",
-										)}
-										className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
-										data-testid="micro-app-search-input"
-									/>
-								</div>
-							</div>
-							{microAppsLoading ? (
-								<div className="flex items-center justify-center gap-2 px-2 py-4 text-xs text-muted-foreground">
-									<Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-									{t("fileViewer.website.microApps.loading")}
-								</div>
-							) : microApps.length > 0 ? (
-								microApps.map((microApp) => (
-									<DropdownMenuItem
-										key={microApp.app_id}
-										aria-label={microApp.app_name}
-										className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2"
-										onClick={() =>
-											onOpenMicroAppTab?.({
-												appId: microApp.app_id,
-												appName: microApp.app_name,
-											})
-										}
-									>
-										{microApp.cover_url ? (
-											<img
-												src={microApp.cover_url}
-												alt=""
-												className="size-5 shrink-0 rounded-md object-cover"
-											/>
-										) : (
-											<MicroAppIcon size={20} />
-										)}
-										<span className="min-w-0 flex-1 truncate text-sm leading-5 text-foreground">
-											{microApp.app_name}
-										</span>
-									</DropdownMenuItem>
-								))
-							) : (
-								<div className="px-2 py-4 text-center text-xs text-muted-foreground">
-									{t("fileViewer.website.microApps.empty")}
-								</div>
-							)}
-							{microAppsLoadingMore && (
-								<div className="flex items-center justify-center gap-2 px-2 py-2 text-xs text-muted-foreground">
-									<Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-									{t("fileViewer.website.microApps.loadingMore")}
-								</div>
-							)}
-						</>
-					)}
-					{commonWebsitePresets.length > 0 && (
-						<>
-							<DropdownMenuSeparator />
-							<DropdownMenuLabel className="px-2 py-1.5 text-xs font-normal text-muted-foreground">
-								{t("fileViewer.website.commonTitle")}
-							</DropdownMenuLabel>
-							{commonWebsitePresets.map((preset) => {
-								const translatedPreset = getTranslatedPreset(preset, t)
-								return (
-									<ContextMenu key={preset.id}>
-										<ContextMenuTrigger asChild>
-											<div className="flex items-center rounded-md">
-												<DropdownMenuItem
-													aria-label={translatedPreset.title}
-													className="min-w-0 flex-1 cursor-pointer gap-2 rounded-md px-2 py-2"
-													onClick={() =>
-														onOpenWebsiteTab(translatedPreset)
-													}
-												>
-													<span
-														className="flex size-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-semibold leading-none text-primary"
-														aria-hidden="true"
-													>
-														{translatedPreset.title
-															.slice(0, 1)
-															.toUpperCase()}
-													</span>
-													<span className="min-w-0 flex-1 truncate text-sm leading-5 text-foreground">
-														{translatedPreset.title}
-													</span>
-												</DropdownMenuItem>
-												<Tooltip
-													title={t("fileViewer.website.removeCommon")}
-													placement="left"
-												>
-													<button
-														type="button"
-														className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-														aria-label={`${t("fileViewer.website.removeCommon")} ${translatedPreset.title}`}
-														onPointerDown={(event) =>
-															event.stopPropagation()
-														}
-														onClick={(event) =>
-															handleCloseCommonWebsite(
-																event,
-																preset.id,
-															)
-														}
-														data-testid="on-pointer-down"
-													>
-														<X
-															className="size-3.5"
-															aria-hidden="true"
-														/>
-													</button>
-												</Tooltip>
-											</div>
-										</ContextMenuTrigger>
-										<ContextMenuContent>
-											<ContextMenuItem
-												onSelect={() => setEditingPreset(preset)}
-											>
-												{t("fileViewer.website.editCommon")}
-											</ContextMenuItem>
-											<ContextMenuSeparator />
-											<ContextMenuItem
-												className="text-destructive focus:text-destructive"
-												onSelect={() =>
-													handleDeleteCommonWebsite(preset.id)
-												}
-											>
-												{t("fileViewer.website.deleteCommon")}
-											</ContextMenuItem>
-										</ContextMenuContent>
-									</ContextMenu>
-								)
-							})}
-						</>
-					)}
+								<X className="size-3.5" aria-hidden="true" />
+							</button>
+						) : null}
+					</form>
+				</div>
+
+				<div className="grid min-h-0 flex-1 grid-cols-[116px_minmax(0,1fr)]">
+					<QuickOpenSectionNav
+						activeSection={activeSection}
+						onChange={setActiveSection}
+						sections={sections}
+					/>
+
+					<ScrollArea
+						data-testid="website-preset-list"
+						className="min-h-0 min-w-0"
+						viewportClassName="p-2 [&>div]:!block"
+						viewportRef={scrollViewportRef}
+					>
+						{showFiles ? (
+							<FileResults files={displayedFiles} onOpenFile={onOpenFileTab} />
+						) : null}
+						{showWebsites &&
+						(directWebsitePreset ||
+							websitePresets.length > 0 ||
+							visibleCommonWebsitePresets.length > 0) ? (
+							<WebsiteResults
+								commonPresets={visibleCommonWebsitePresets}
+								directPreset={directWebsitePreset}
+								onDeleteCommon={handleDeleteCommonWebsite}
+								onEditCommon={setEditingPreset}
+								onOpenWebsite={onOpenWebsiteTab}
+								presets={websitePresets}
+							/>
+						) : null}
+						{showMicroApps &&
+						(microAppsLoading ||
+							visibleMicroApps.length > 0 ||
+							microAppsLoadingMore) ? (
+							<MicroAppResults
+								items={visibleMicroApps}
+								loading={microAppsLoading}
+								loadingMore={microAppsLoadingMore}
+								onOpenMicroApp={onOpenMicroAppTab}
+							/>
+						) : null}
+						{!hasVisibleResults ? <EmptyResults /> : null}
+					</ScrollArea>
 				</div>
 			</DropdownMenuContent>
 			<CommonWebsitePresetDialog
@@ -449,8 +393,8 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 					url: editingPreset?.url || "",
 					description: editingPreset?.description || "",
 				}}
-				onOpenChange={(open) => {
-					if (!open) setEditingPreset(null)
+				onOpenChange={(dialogOpen) => {
+					if (!dialogOpen) setEditingPreset(null)
 				}}
 				onSubmit={handleSubmitEditCommonWebsite}
 			/>

@@ -2527,6 +2527,7 @@
 		"waitForPreviousOperation": "Please wait for the previous operation to complete",
 		"website": {
 			"add": "Open website",
+			"clearSearch": "Clear search",
 			"closeLoadFallback": "Close loading notice",
 			"commonAddTitle": "Save common link",
 			"commonAlreadyExists": "This link is already saved",
@@ -2554,8 +2555,10 @@
 				"searchPlaceholder": "Search micro apps",
 				"title": "Micro apps"
 			},
+			"noResults": "No matching results",
 			"openCustom": "Open",
 			"openExternal": "Open externally",
+			"openUrl": "Open {{url}}",
 			"presets": {
 				"baiduImages": {
 					"description": "Image search and visual references",
@@ -2586,8 +2589,17 @@
 					"title": "ZCOOL"
 				}
 			},
+			"quickOpen": "Quick open",
+			"quickOpenDescription": "Search files, websites, or micro apps",
 			"refresh": "Refresh",
-			"removeCommon": "Remove common link"
+			"removeCommon": "Remove common link",
+			"searchAllPlaceholder": "Search files, websites, or micro apps, or enter a URL",
+			"sections": {
+				"all": "All",
+				"files": "Files",
+				"label": "Content categories",
+				"websites": "Websites"
+			}
 		}
 	},
 	"filenameValidator": {
