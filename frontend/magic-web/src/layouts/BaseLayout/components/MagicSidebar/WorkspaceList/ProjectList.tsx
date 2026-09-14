@@ -68,10 +68,11 @@ function ProjectList({
 	return (
 		<>
 			{/* 每层为 16px 图标加 8px 间距；项目缩进一层后，状态位和名称分别对齐父工作区的图标和名称。 */}
+			{/* 项目列表到达顶部或底部后，继续纵向滚动交给外层工作空间列表；外层负责限制侧栏边界。 */}
 			<ScrollArea
 				viewportRef={scrollRef}
 				className="relative w-full shrink-0 [&>[data-slot=scroll-area-scrollbar]]:w-[2px] [&>[data-slot=scroll-area-scrollbar]]:border-0 [&>[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-thumb]]:bg-muted-foreground/25"
-				viewportClassName="overscroll-contain [&>div]:!block"
+				viewportClassName="overscroll-x-contain overscroll-y-auto [&>div]:!block"
 				viewportStyle={{ maxHeight: maxProjectHeight }}
 				viewportProps={{
 					"data-project-scroll-container": true,
