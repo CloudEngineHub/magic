@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { extractSlideNotes, upsertSlideNotes } from "../slideNotes"
+import { extractSlideNotes, stripSlideNotes, upsertSlideNotes } from "../slideNotes"
 
 describe("slide notes html contract", () => {
 	it("reads escaped plain text from the inert template", () => {
@@ -29,5 +29,21 @@ describe("slide notes html contract", () => {
 
 	it("returns an empty string when a page has no notes", () => {
 		expect(extractSlideNotes("<main>Slide</main>")).toBe("")
+	})
+
+	it("removes only the inert notes block when comparing visual HTML", () => {
+		const visualHtml = '<main data-value="keep">Slide</main>'
+		const withNotes = `${visualHtml}<template data-magic-slide-notes>Talk track</template>`
+
+		expect(stripSlideNotes(withNotes)).toBe(visualHtml)
+	})
+
+	it("normalizes duplicate notes blocks to one canonical block", () => {
+		const html =
+			"<main>Slide</main><template data-magic-slide-notes>Old 1</template><template data-magic-slide-notes>Old 2</template>"
+
+		expect(upsertSlideNotes(html, "New")).toBe(
+			'<main>Slide</main><template data-magic-slide-notes data-format="plain-text" data-version="1">\nNew\n</template>',
+		)
 	})
 })

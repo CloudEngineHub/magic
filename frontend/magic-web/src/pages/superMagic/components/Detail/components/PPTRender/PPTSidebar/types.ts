@@ -40,6 +40,8 @@ export interface SlideItem {
 	thumbnailError?: Error // Screenshot generation error if any
 	// Expiration tracking
 	lastLoadedAt?: number // Timestamp when content was last loaded
+	/** Increments when raw HTML metadata changes without changing visual content. */
+	rawRevision?: number
 }
 
 export interface SlideScreenshot {

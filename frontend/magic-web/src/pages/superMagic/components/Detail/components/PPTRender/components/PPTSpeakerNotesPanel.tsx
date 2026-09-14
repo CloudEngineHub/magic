@@ -10,6 +10,7 @@ interface PPTSpeakerNotesPanelProps {
 	slideIndex: number
 	rawContent: string
 	fileId: string
+	getLatestRawContent?: () => string
 	allowEdit: boolean
 	saveEditContent?: (
 		content: any,
@@ -23,6 +24,7 @@ interface PPTSpeakerNotesPanelProps {
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error"
+const MAX_NOTE_SAVE_REBASES = 3
 
 /**
  * Notes deliberately own their edit state instead of reusing PPT HTML edit mode.
@@ -32,6 +34,7 @@ export default function PPTSpeakerNotesPanel({
 	slideIndex,
 	rawContent,
 	fileId,
+	getLatestRawContent,
 	allowEdit,
 	saveEditContent,
 	onSaved,
@@ -74,9 +77,27 @@ export default function PPTSpeakerNotesPanel({
 		savingRef.current = true
 		setSaveState("saving")
 		try {
-			const nextContent = upsertSlideNotes(rawContent, draft)
-			const result = await saveEditContent(shadow(nextContent), fileId, true, undefined, true)
-			if (result === false) throw new Error("Failed to save speaker notes")
+			let latestRawContent = getLatestRawContent?.() || rawContent
+			let nextContent = upsertSlideNotes(latestRawContent, draft)
+			for (let attempt = 0; attempt <= MAX_NOTE_SAVE_REBASES; attempt += 1) {
+				const result = await saveEditContent(
+					shadow(nextContent),
+					fileId,
+					true,
+					undefined,
+					true,
+				)
+				if (result === false) throw new Error("Failed to save speaker notes")
+
+				const currentRawContent = getLatestRawContent?.() || latestRawContent
+				if (currentRawContent === latestRawContent || currentRawContent === nextContent)
+					break
+				if (attempt === MAX_NOTE_SAVE_REBASES) {
+					throw new Error("Slide changed repeatedly while saving speaker notes")
+				}
+				latestRawContent = currentRawContent
+				nextContent = upsertSlideNotes(latestRawContent, draft)
+			}
 
 			await onSaved(nextContent, slideIndex)
 			setNotes(draft)

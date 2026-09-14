@@ -630,6 +630,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	}, [isPresentationFullscreen, store, store.isAutomaticLoadingEnabled, warmSlideIndices])
 
 	const hasSlides = store.slideUrls.length > 0
+	const activeSlideIndex = store.activeIndex
 
 	// 识别“待初始化窗口”：slidePaths 已就绪，但 store 还未灌入 slides
 	// 这个窗口出现在首帧渲染到 useDeepCompareEffect 触发之间
@@ -1078,17 +1079,20 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								hasSlides &&
 								store.currentSlide && (
 									<PPTSpeakerNotesPanel
-										slideIndex={store.activeIndex}
+										slideIndex={activeSlideIndex}
 										rawContent={store.currentSlide.rawContent || ""}
 										fileId={
 											store.getFileIdByPath(store.currentSlide.path) || ""
 										}
+										getLatestRawContent={() =>
+											store.slides[activeSlideIndex]?.rawContent || ""
+										}
 										allowEdit={effectiveAllowEdit}
 										saveEditContent={saveEditContent}
 										onSaved={(nextContent, slideIndex) =>
-											store
-												.updateSlideContent(slideIndex, nextContent)
-												.then(() => undefined)
+											Promise.resolve(
+												store.updateSlideNotes(slideIndex, nextContent),
+											).then(() => undefined)
 										}
 										onGenerate={
 											effectiveAllowEdit

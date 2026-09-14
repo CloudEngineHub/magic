@@ -45,6 +45,7 @@ const mockState = vi.hoisted(() => ({
 		getSlideServerUpdate: vi.fn(() => undefined),
 		clearSlideServerUpdate: vi.fn(),
 		updateSlideContent: vi.fn(),
+		updateSlideNotes: vi.fn(),
 		generateSlideScreenshot: vi.fn(),
 		markSlideAsManuallySaved: vi.fn(),
 		updateSlideContents: vi.fn(),

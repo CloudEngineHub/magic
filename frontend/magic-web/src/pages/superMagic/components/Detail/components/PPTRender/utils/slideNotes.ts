@@ -1,6 +1,11 @@
 const NOTES_OPEN_TAG = '<template data-magic-slide-notes data-format="plain-text" data-version="1">'
 const NOTES_BLOCK_PATTERN =
 	/<template\b(?=[^>]*\bdata-magic-slide-notes(?:\s|=|>))[^>]*>[\s\S]*?<\/template\s*>/i
+const NOTES_BLOCK_GLOBAL_PATTERN = new RegExp(NOTES_BLOCK_PATTERN.source, "gi")
+
+export function stripSlideNotes(html: string): string {
+	return html.replace(NOTES_BLOCK_GLOBAL_PATTERN, "")
+}
 
 function escapeSlideNotes(value: string): string {
 	return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -32,7 +37,12 @@ export function extractSlideNotes(html: string): string {
 export function upsertSlideNotes(html: string, notes: string): string {
 	const block = `${NOTES_OPEN_TAG}\n${escapeSlideNotes(notes)}\n</template>`
 	if (NOTES_BLOCK_PATTERN.test(html)) {
-		return html.replace(NOTES_BLOCK_PATTERN, block)
+		let hasWrittenBlock = false
+		return html.replace(NOTES_BLOCK_GLOBAL_PATTERN, () => {
+			if (hasWrittenBlock) return ""
+			hasWrittenBlock = true
+			return block
+		})
 	}
 
 	const bodyCloseIndex = html.search(/<\/body\s*>/i)

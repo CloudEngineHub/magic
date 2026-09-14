@@ -17,3 +17,16 @@ def test_upsert_slide_notes_replaces_only_the_existing_notes_block() -> None:
 
     assert 'data-value="keep"' in updated
     assert _extract_slide_notes(updated) == "New"
+
+
+def test_upsert_slide_notes_normalizes_duplicate_notes_blocks() -> None:
+    content = (
+        "<main>Slide</main>"
+        "<template data-magic-slide-notes>Old 1</template>"
+        "<template data-magic-slide-notes>Old 2</template>"
+    )
+
+    updated = _upsert_slide_notes(content, "New")
+
+    assert updated.count("data-magic-slide-notes") == 1
+    assert _extract_slide_notes(updated) == "New"

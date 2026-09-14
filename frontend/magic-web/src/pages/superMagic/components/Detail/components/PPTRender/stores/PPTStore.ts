@@ -1996,6 +1996,16 @@ export class PPTStore {
 		return processedContent
 	}
 
+	/** Update inert HTML metadata without reprocessing or remounting the slide iframe. */
+	updateSlideNotes(index: number, rawContent: string): void {
+		const slide = this.slides[index]
+		if (!slide) return
+		this.slideManager.updateSlideItem(index, {
+			rawContent,
+			rawRevision: (slide.rawRevision || 0) + 1,
+		})
+	}
+
 	updateSlideContents(updates: Map<number, string>): void {
 		this.slideManager.updateSlideContents(updates)
 	}

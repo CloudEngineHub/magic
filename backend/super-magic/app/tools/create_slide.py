@@ -56,7 +56,16 @@ def _upsert_slide_notes(content: str, notes: str) -> str:
         "</template>"
     )
     if SLIDE_NOTES_PATTERN.search(content):
-        return SLIDE_NOTES_PATTERN.sub(notes_block, content, count=1)
+        has_written_block = False
+
+        def replace_notes_block(_match: re.Match[str]) -> str:
+            nonlocal has_written_block
+            if has_written_block:
+                return ""
+            has_written_block = True
+            return notes_block
+
+        return SLIDE_NOTES_PATTERN.sub(replace_notes_block, content)
 
     for closing_tag in ("</body>", "</html>"):
         index = content.lower().find(closing_tag)
