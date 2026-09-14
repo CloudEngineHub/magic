@@ -62,6 +62,13 @@ When user has no explicit requirements, follow these defaults:
 - **Static fixed page**: Same effect on any device size, no adaptation, responsive design prohibited
 - **Must include** `<script src="slide-bridge.js"></script>` at bottom of page for inter-page communication
 
+### Inter-slide Links
+
+- Use a normal `<a>` element with the target slide's project-relative HTML path, for example: `<a href="slides/slide-2.html">查看第二页</a>`.
+- The `href` must match the actual path registered in `magic.project.js`'s `slides` array. Do not use page numbers, display titles, hash conventions, or custom routes.
+- Do not add custom `postMessage`, iframe manipulation, or navigation code for same-deck links; the PPT runtime handles ordinary links specially.
+- Keep links to other projects, ordinary HTML documents, and external websites as normal relative paths or full URLs.
+
 ### CSS Frameworks and Resources
 
 - **TailwindCSS**: https://cdn.tailwindcss.com/3.4.17 (required, note: this CDN uses JIT browser compilation mode, returns JS code, use `<script>` tag)
