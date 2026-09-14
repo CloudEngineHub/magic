@@ -26,6 +26,10 @@ interface AutoOpenFileCommonParams {
 	activeFileId?: string | null
 	/** 读取最新活跃文件，避免闭包滞后于缓存恢复的 Update_Active_File_Id */
 	getActiveFileId?: () => string | null | undefined
+	/** 主区域是否已有任意类型的活动 tab，不限于项目文件。 */
+	hasActiveTab?: boolean
+	/** 读取最新活动 tab 状态，避免初始化恢复时使用过期闭包。 */
+	getHasActiveTab?: () => boolean
 	/** 当前项目工作区文件树，用于将 magic.project.js 解析为项目目录 */
 	workspaceFileTree?: MagicProjectAttachmentFile[]
 	workspaceFilesList?: MagicProjectAttachmentFile[]
@@ -39,8 +43,25 @@ export interface CheckAndOpenFileByMessagesParams extends AutoOpenFileCommonPara
 export interface CheckAndOpenFileByTopicChangedParams {
 	activeFileId?: string | null
 	getActiveFileId?: () => string | null | undefined
+	hasActiveTab?: boolean
+	getHasActiveTab?: () => boolean
 	workspaceFileTree?: MagicProjectAttachmentFile[]
 	workspaceFilesList?: MagicProjectAttachmentFile[]
+}
+
+export function hasActivePreviewTab({
+	activeFileId,
+	getActiveFileId,
+	hasActiveTab,
+	getHasActiveTab,
+}: Pick<
+	AutoOpenFileCommonParams,
+	"activeFileId" | "getActiveFileId" | "hasActiveTab" | "getHasActiveTab"
+>): boolean {
+	const currentHasActiveTab = getHasActiveTab?.()
+	if (currentHasActiveTab !== undefined) return currentHasActiveTab
+	if (hasActiveTab !== undefined) return hasActiveTab
+	return (getActiveFileId?.() ?? activeFileId ?? null) !== null
 }
 
 type AutoOpenAttachmentCandidate = {
@@ -155,6 +176,8 @@ export function useAutoOpenFile() {
 				hasStatusChanged,
 				activeFileId,
 				getActiveFileId,
+				hasActiveTab,
+				getHasActiveTab,
 				workspaceFileTree = [],
 				workspaceFilesList = [],
 				requireNewMessage = true,
@@ -185,15 +208,28 @@ export function useAutoOpenFile() {
 
 			if (filePathAttachments.length > 0) {
 				const firstPathAttachment = filePathAttachments[0]
-				const currentActive = getActiveFileId?.() ?? activeFileId ?? null
-				if (currentActive != null) {
+				if (
+					hasActivePreviewTab({
+						activeFileId,
+						getActiveFileId,
+						hasActiveTab,
+						getHasActiveTab,
+					})
+				) {
 					lastOpenedMessageIdRef.current = lastDetailMessageNode.message_id
 					return
 				}
 
 				setTimeout(() => {
-					const id = getActiveFileId?.() ?? activeFileId ?? null
-					if (id != null) return
+					if (
+						hasActivePreviewTab({
+							activeFileId,
+							getActiveFileId,
+							hasActiveTab,
+							getHasActiveTab,
+						})
+					)
+						return
 					pubsub.publish(PubSubEvents.Switch_Detail_Mode, "files")
 					pubsub.publish(PubSubEvents.Open_File_Tab_By_Path, {
 						filePath: firstPathAttachment.filePath,
@@ -227,15 +263,28 @@ export function useAutoOpenFile() {
 
 			if (!firstFileId) return
 
-			const currentActive = getActiveFileId?.() ?? activeFileId ?? null
-			if (currentActive != null) {
+			if (
+				hasActivePreviewTab({
+					activeFileId,
+					getActiveFileId,
+					hasActiveTab,
+					getHasActiveTab,
+				})
+			) {
 				lastOpenedMessageIdRef.current = lastDetailMessageNode.message_id
 				return
 			}
 
 			setTimeout(() => {
-				const id = getActiveFileId?.() ?? activeFileId ?? null
-				if (id != null) return
+				if (
+					hasActivePreviewTab({
+						activeFileId,
+						getActiveFileId,
+						hasActiveTab,
+						getHasActiveTab,
+					})
+				)
+					return
 				pubsub.publish(PubSubEvents.Open_File_Tab, {
 					fileId: firstFileId,
 					fileData: firstFileToOpen,
@@ -255,7 +304,14 @@ export function useAutoOpenFile() {
 
 	const checkAndOpenFileByTopicChanged = useMemoizedFn(
 		(params: CheckAndOpenFileByTopicChangedParams) => {
-			const { activeFileId, getActiveFileId, workspaceFileTree, workspaceFilesList } = params
+			const {
+				activeFileId,
+				getActiveFileId,
+				hasActiveTab,
+				getHasActiveTab,
+				workspaceFileTree,
+				workspaceFilesList,
+			} = params
 
 			const topicMessages =
 				superMagicStore.messages?.get(selectedTopic?.chat_topic_id || "") || []
@@ -287,6 +343,8 @@ export function useAutoOpenFile() {
 				requireNewMessage: false,
 				activeFileId,
 				getActiveFileId,
+				hasActiveTab,
+				getHasActiveTab,
 				workspaceFileTree,
 				workspaceFilesList,
 			})

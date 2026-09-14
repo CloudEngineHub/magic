@@ -204,6 +204,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 
 	const {
 		shouldShowDetailPanel,
+		hasActiveDetailTab,
 		handleFileClickWithPanel,
 		topicFilesPropsWithPanel,
 		handleActiveDetailTabChange,
@@ -238,6 +239,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 
 	const activeFileIdRef = useRef<string | null>(activeFileId)
 	activeFileIdRef.current = activeFileId
+	const hasActiveDetailTabRef = useRef(hasActiveDetailTab)
+	hasActiveDetailTabRef.current = hasActiveDetailTab
 
 	// 使用详情模式缓存 hook
 	useDetailModeCache({
@@ -518,6 +521,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 						hasStatusChanged,
 						activeFileId,
 						getActiveFileId: () => activeFileIdRef.current,
+						hasActiveTab: hasActiveDetailTab,
+						getHasActiveTab: () => hasActiveDetailTabRef.current,
 						workspaceFileTree: attachments,
 						workspaceFilesList: attachmentList,
 					})
@@ -590,6 +595,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			checkAndOpenFileByTopicChanged({
 				activeFileId,
 				getActiveFileId: () => activeFileIdRef.current,
+				hasActiveTab: hasActiveDetailTab,
+				getHasActiveTab: () => hasActiveDetailTabRef.current,
 				workspaceFileTree: attachments,
 				workspaceFilesList: attachmentList,
 			})

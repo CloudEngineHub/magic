@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest"
-import { pickPreferredAutoOpenAttachment } from "../useAutoOpenFile"
+import { act, renderHook } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { TaskStatus } from "../../pages/Workspace/types"
+import {
+	hasActivePreviewTab,
+	pickPreferredAutoOpenAttachment,
+	useAutoOpenFile,
+} from "../useAutoOpenFile"
 
 function createTemplateRoot() {
 	return {
@@ -78,5 +85,85 @@ describe("pickPreferredAutoOpenAttachment", () => {
 		])
 
 		expect(preferred?.file_id).toBe("readme")
+	})
+})
+
+describe("hasActivePreviewTab", () => {
+	it("treats non-file tabs as active content", () => {
+		expect(hasActivePreviewTab({ activeFileId: null, hasActiveTab: true })).toBe(true)
+	})
+
+	it("prefers the latest tab state over a stale file id", () => {
+		expect(
+			hasActivePreviewTab({
+				activeFileId: "stale-file",
+				getHasActiveTab: () => false,
+			}),
+		).toBe(false)
+	})
+})
+
+describe("useAutoOpenFile", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+		vi.useRealTimers()
+	})
+
+	it("does not replace an active non-file tab with a message attachment", () => {
+		vi.useFakeTimers()
+		const publishSpy = vi.spyOn(pubsub, "publish")
+		const { result } = renderHook(() => useAutoOpenFile())
+
+		act(() => {
+			result.current.checkAndOpenFileByMessages({
+				lastMessageNode: { status: TaskStatus.FINISHED },
+				lastDetailMessageNode: {
+					message_id: "detail-message",
+					attachments: [
+						{
+							file_id: "generated-file",
+							file_name: "result.md",
+							file_extension: "md",
+						},
+					],
+				},
+				hasStatusChanged: true,
+				activeFileId: null,
+				hasActiveTab: true,
+			})
+			vi.runAllTimers()
+		})
+
+		expect(publishSpy).not.toHaveBeenCalledWith(PubSubEvents.Open_File_Tab, expect.anything())
+	})
+
+	it("rechecks restored tab state before the delayed automatic open", () => {
+		vi.useFakeTimers()
+		const publishSpy = vi.spyOn(pubsub, "publish")
+		const { result } = renderHook(() => useAutoOpenFile())
+		let hasActiveTab = false
+
+		act(() => {
+			result.current.checkAndOpenFileByMessages({
+				lastMessageNode: { status: TaskStatus.FINISHED },
+				lastDetailMessageNode: {
+					message_id: "detail-message",
+					attachments: [
+						{
+							file_id: "generated-file",
+							file_name: "result.md",
+							file_extension: "md",
+						},
+					],
+				},
+				hasStatusChanged: true,
+				activeFileId: null,
+				getHasActiveTab: () => hasActiveTab,
+			})
+			hasActiveTab = true
+			vi.runAllTimers()
+		})
+
+		expect(publishSpy).not.toHaveBeenCalledWith(PubSubEvents.Open_File_Tab, expect.anything())
 	})
 })

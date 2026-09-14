@@ -25,6 +25,7 @@ interface UseTopicDetailPanelControllerOptions {
 
 interface UseTopicDetailPanelControllerReturn {
 	shouldShowDetailPanel: boolean
+	hasActiveDetailTab: boolean
 	handleFileClickWithPanel: (fileItem?: unknown) => void
 	topicFilesPropsWithPanel: {
 		onFileClick?: (fileItem?: unknown) => void
@@ -55,12 +56,11 @@ export function useTopicDetailPanelController({
 	const activeFileIdRef = useRef<string | null>(activeFileId)
 	const activeDetailTabTypeRef = useRef<DetailTabType>(null)
 
-	const shouldShowDetailPanel = useMemo(() => {
-		if (isReadOnly) {
-			return true
-		}
-		return Boolean(activeFileId) || Boolean(activeDetailTabType)
-	}, [activeDetailTabType, activeFileId, isReadOnly])
+	const hasActiveDetailTab = useMemo(
+		() => Boolean(activeFileId) || Boolean(activeDetailTabType),
+		[activeDetailTabType, activeFileId],
+	)
+	const shouldShowDetailPanel = isReadOnly || hasActiveDetailTab
 
 	useEffect(() => {
 		activeFileIdRef.current = activeFileId
@@ -258,6 +258,7 @@ export function useTopicDetailPanelController({
 
 	return {
 		shouldShowDetailPanel,
+		hasActiveDetailTab,
 		handleFileClickWithPanel,
 		topicFilesPropsWithPanel,
 		handleActiveDetailTabChange,

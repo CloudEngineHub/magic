@@ -42,11 +42,13 @@ describe("useTopicDetailPanelController", () => {
 		)
 
 		expect(result.current.shouldShowDetailPanel).toBe(false)
+		expect(result.current.hasActiveDetailTab).toBe(false)
 
 		act(() => {
 			result.current.handleActiveDetailTabChange("playback")
 		})
 		expect(result.current.shouldShowDetailPanel).toBe(true)
+		expect(result.current.hasActiveDetailTab).toBe(true)
 
 		act(() => {
 			result.current.clearActiveDetailTabType()
