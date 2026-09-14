@@ -57,6 +57,13 @@ const ScrollArea = React.forwardRef<
 			[viewportRef],
 		)
 		const showShadows = scrollShadows && scrollbarOrientation === "vertical"
+		const shadowMaskStyle: React.CSSProperties = {
+			// Keep the shadow strongest through the content area while fading it into
+			// the sidebar at both horizontal edges instead of creating a hard strip.
+			maskImage: "linear-gradient(to right, transparent, black 16%, black 84%, transparent)",
+			WebkitMaskImage:
+				"linear-gradient(to right, transparent, black 16%, black 84%, transparent)",
+		}
 		React.useLayoutEffect(() => {
 			const viewport = localViewportRef.current
 			if (!showShadows || !viewport) return
@@ -111,15 +118,20 @@ const ScrollArea = React.forwardRef<
 					<>
 						<div
 							aria-hidden
+							style={shadowMaskStyle}
 							className={cn(
-								"pointer-events-none absolute inset-x-0 top-0 z-10 h-2 bg-gradient-to-b from-black/10 to-transparent dark:from-black/30",
+								// Use a slightly deeper sidebar tone and a longer fade so the edge
+								// remains visible without reading as a black divider.
+								"pointer-events-none absolute inset-x-0 top-0 z-10 h-3.5 bg-gradient-to-b from-sidebar-accent/95 via-sidebar-accent/55 to-transparent brightness-95",
 								!edges.top && "invisible",
 							)}
 						/>
 						<div
 							aria-hidden
+							style={shadowMaskStyle}
 							className={cn(
-								"pointer-events-none absolute inset-x-0 bottom-0 z-10 h-2 bg-gradient-to-t from-black/10 to-transparent dark:from-black/30",
+								// Mirror the top fade so both scroll edges share the same softness.
+								"pointer-events-none absolute inset-x-0 bottom-0 z-10 h-3.5 bg-gradient-to-t from-sidebar-accent/95 via-sidebar-accent/55 to-transparent brightness-95",
 								!edges.bottom && "invisible",
 							)}
 						/>
