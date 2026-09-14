@@ -216,6 +216,8 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions = {}): UseChat
 					project_name: keyword,
 					order_by: CHAT_PROJECT_LIST_ORDER_BY,
 					sort: CHAT_PROJECT_LIST_SORT,
+					// 置顶优先：GET query string 无法传真正的 boolean，后端 boolean 校验规则只接受 1/0
+					pin_priority: 1,
 					page,
 					page_size: pageSize,
 				})
