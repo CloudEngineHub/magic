@@ -390,6 +390,11 @@ function TopicMessagePanel({
 			<MessageHeader
 				historyTriggerRef={historyTriggerRef}
 				fileSidebarControl={fileSidebarControl}
+				alignWithContent={
+					Boolean(fileSidebarControl) &&
+					!detailPanelVisible &&
+					!isConversationPanelCollapsed
+				}
 				isConversationPanelCollapsed={isConversationPanelCollapsed}
 				onToggleConversationPanel={onToggleConversationPanel}
 				onExpandConversationPanel={onExpandConversationPanel}
