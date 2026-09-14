@@ -1,6 +1,6 @@
 import IconWorkspaceProjectFolder from "@/enhance/tabler/icons-react/icons/IconWorkspaceProjectFolder"
 import { cn } from "@/utils/cn"
-import { formatRelativeTime } from "@/utils/string"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { useHover, useMemoizedFn } from "ahooks"
 import { useMemo, useRef } from "react"
 import useProjectRename from "@/pages/superMagic/hooks/useProjectRename"
@@ -190,11 +190,13 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 	const time = useMemo(() => {
 		switch (sortType) {
 			case SortType.MY_LAST_ACTIVE_TIME: {
-				const rawValue = item.last_active_at?.replaceAll("-", "/")
-				const value =
-					rawValue && relativeActiveTime
-						? formatRelativeTime(i18n.language)(item.last_active_at)
-						: rawValue
+				let value = item.last_active_at?.replaceAll("-", "/")
+				if (relativeActiveTime) {
+					const activeTime = item.last_active_at ? dayjs(item.last_active_at) : null
+					const locale = i18n.language.toLowerCase().startsWith("zh") ? "zh-cn" : "en"
+					// 最近项目统一显示相对时间；实例语言避免首行沿用其它组件的全局语言。
+					value = activeTime?.isValid() ? activeTime.locale(locale).fromNow() : undefined
+				}
 				return {
 					value: value || t("common.noActiveTime"),
 					label: value
