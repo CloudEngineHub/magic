@@ -1,6 +1,7 @@
-import { useEffect, useSyncExternalStore } from "react"
+import { useEffect, useSyncExternalStore, type KeyboardEvent } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
+import { isMac } from "@/utils/devices"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { FileManagerActions, FileManagerProps } from "../components/FileManager/types"
 import {
@@ -80,7 +81,7 @@ export function useFileManagerCommands({
 			.transfer(normalized, targetId, mode)
 			.catch(() => magicToast.error(t("userSpace.operationFailed")))
 	})
-	const canExecute: FileManagerActions["canExecute"] = (command) => {
+	const isAvailable: FileManagerActions["canExecute"] = (command) => {
 		switch (command) {
 			case "open":
 				return files.length === 1
@@ -112,8 +113,32 @@ export function useFileManagerCommands({
 				)
 		}
 	}
+	const getDisabledReason: FileManagerActions["getDisabledReason"] = (command) => {
+		if (!props.isActive || !ready) return t("fileManager.clipboard.unavailable")
+		if (operations.busy) return t("fileManager.processing")
+		if (isAvailable(command)) return undefined
+		if (command === "paste" || command === "pasteMove") {
+			if (!clipboard) return t("fileManager.clipboard.empty")
+			if (clipboard.scopeKey !== props.scopeKey) return t("fileManager.clipboard.otherSpace")
+			if (!props.allowEdit) return t("fileManager.clipboard.readOnly")
+			return t("fileManager.clipboard.invalidTarget")
+		}
+		if (!files.length && !["createFolder", "upload"].includes(command))
+			return t("fileManager.clipboard.selectItems")
+		return t("fileManager.clipboard.unavailable")
+	}
+	const canExecute: FileManagerActions["canExecute"] = (command) => !getDisabledReason(command)
+	const shortcuts = {
+		cut: isMac ? "⌘X" : "Ctrl+X",
+		copy: isMac ? "⌘C" : "Ctrl+C",
+		paste: isMac ? "⌘V" : "Ctrl+V",
+	}
 	const execute = useMemoizedFn<FileManagerActions["execute"]>((command) => {
-		if (!canExecute(command)) return
+		const reason = getDisabledReason(command)
+		if (reason) {
+			magicToast.info(reason)
+			return
+		}
 		switch (command) {
 			case "open":
 				onOpen(files[0])
@@ -143,6 +168,11 @@ export function useFileManagerCommands({
 					fileIds: ids,
 					mode: command === "cut" ? "move" : "copy",
 				})
+				magicToast.success(
+					command === "cut"
+						? t("fileManager.clipboard.cut", { count: ids.length })
+						: t("fileManager.clipboard.copied", { count: ids.length }),
+				)
 				break
 			case "paste":
 			case "pasteMove":
@@ -155,22 +185,46 @@ export function useFileManagerCommands({
 				break
 		}
 	})
+	// 仅接管当前管理器的文件快捷键；文本编辑、菜单和弹窗保留自己的键盘语义。
+	const onClipboardKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+		const target = event.target
+		if (
+			!props.isActive ||
+			event.defaultPrevented ||
+			event.nativeEvent.isComposing ||
+			!(target instanceof HTMLElement) ||
+			!event.currentTarget.contains(target) ||
+			target.closest(
+				"input, textarea, select, [contenteditable]:not([contenteditable=false]), [role=dialog], [role=alertdialog], [role=menu]",
+			) ||
+			!(event.metaKey || event.ctrlKey) ||
+			event.shiftKey
+		)
+			return
+		const key = event.key.toLowerCase()
+		if (!["c", "x", "v"].includes(key)) return
+		const movePaste = isMac && event.metaKey && !event.ctrlKey && event.altKey && key === "v"
+		if (event.altKey && !movePaste) return
+		event.preventDefault()
+		if (!event.repeat)
+			execute(key === "c" ? "copy" : key === "x" ? "cut" : movePaste ? "pasteMove" : "paste")
+	}
 	const clipboardMenu = (): TopicFilesMenuItem[] => [
 		{
 			key: "manager-cut",
-			label: t("fileManager.cut"),
+			label: `${t("fileManager.cut")}  ${shortcuts.cut}`,
 			disabled: !canExecute("cut"),
 			onClick: () => execute("cut"),
 		},
 		{
 			key: "manager-copy",
-			label: t("fileManager.copy"),
+			label: `${t("fileManager.copy")}  ${shortcuts.copy}`,
 			disabled: !canExecute("copy"),
 			onClick: () => execute("copy"),
 		},
 		{
 			key: "manager-paste",
-			label: t("fileManager.paste"),
+			label: `${t("fileManager.paste")}  ${shortcuts.paste}`,
 			disabled: !canExecute("paste"),
 			onClick: () => execute("paste"),
 		},
@@ -201,6 +255,9 @@ export function useFileManagerCommands({
 	return {
 		execute,
 		canExecute,
+		getDisabledReason,
+		shortcuts,
+		onClipboardKeyDown,
 		getMenuItems,
 		canTransfer,
 		transfer,

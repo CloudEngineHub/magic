@@ -10,6 +10,7 @@ import {
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
+import SmartTooltip from "@/components/other/SmartTooltip"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import { MoreHorizontal, ChevronRight, Loader2, RotateCw } from "lucide-react"
@@ -70,6 +71,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 	const fileTag = tag ?? <ProjectFileTag item={item} presentation={presentation} />
 	return (
 		<MagicDropdown
+			overlayClassName="[&_[role=menuitem]]:cursor-pointer [&_[data-disabled]]:cursor-not-allowed"
 			trigger={["contextMenu"]}
 			rootClassName="h-full min-w-0"
 			menu={{ items: menuItems }}
@@ -80,7 +82,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 				role="option"
 				aria-selected={selected}
 				aria-label={name}
-				draggable
+				draggable={!rename}
 				data-manager-item={item.file_id}
 				data-manager-target={isDirectory ? item.file_id : undefined}
 				onClick={(event) => {
@@ -93,7 +95,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 				}}
 				style={!grid ? { gridTemplateColumns: "var(--manager-columns)" } : undefined}
 				className={cn(
-					"group relative h-full w-full min-w-0 cursor-default select-none rounded-md text-xs outline-none transition-colors duration-150 motion-reduce:transition-none",
+					"group relative h-full w-full min-w-0 cursor-pointer select-none rounded-md text-xs outline-none transition-colors duration-150 motion-reduce:transition-none",
 					grid ? "flex flex-col items-center gap-1 px-1 py-2" : "grid items-center px-3",
 					!grid &&
 						(selected
@@ -117,7 +119,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 						<button
 							tabIndex={-1}
 							className={cn(
-								"flex size-4 shrink-0 items-center justify-center rounded",
+								"flex size-4 shrink-0 cursor-pointer items-center justify-center rounded disabled:cursor-not-allowed",
 								!row?.expandable && "invisible",
 							)}
 							disabled={!row?.expandable || item.directoryLoadState === "loading"}
@@ -152,7 +154,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 					)}
 					<span
 						className={cn(
-							"flex shrink-0 items-center justify-center rounded-md",
+							"pointer-events-none flex shrink-0 items-center justify-center rounded-md",
 							grid && "h-16 w-[72px] rounded-[9px] group-hover:bg-muted/60",
 							grid && selected && "bg-muted/80",
 							grid && focused && "bg-muted/80",
@@ -176,20 +178,24 @@ export const FileManagerItem = memo(function FileManagerItem({
 							getPopupContainer={getPopupContainer}
 						/>
 					) : (
-						<MagicTooltip title={name} getPopupContainer={getPopupContainer}>
-							<span
-								className={cn(
-									"min-w-0 max-w-full",
-									grid
-										? "line-clamp-2 rounded-[5px] px-1 py-px text-center text-[13px] font-medium leading-[17px] tracking-normal [overflow-wrap:anywhere]"
-										: "truncate",
-									grid && selected && "bg-blue-600 text-white dark:bg-blue-500",
-									focused && !selected && "underline underline-offset-4",
-								)}
-							>
-								{name}
-							</span>
-						</MagicTooltip>
+						<SmartTooltip
+							fileName
+							elementType="span"
+							placement="bottom"
+							sideOffset={4}
+							maxLines={grid ? 2 : 1}
+							getPopupContainer={getPopupContainer}
+							className={cn(
+								"min-w-0 max-w-full",
+								grid
+									? "line-clamp-2 rounded-[5px] px-1 py-px text-center text-[13px] font-medium leading-[17px] tracking-normal [overflow-wrap:anywhere]"
+									: "truncate text-xs leading-4",
+								grid && selected && "bg-blue-600 text-white dark:bg-blue-500",
+								focused && !selected && "underline underline-offset-4",
+							)}
+						>
+							{name}
+						</SmartTooltip>
 					)}
 					{!grid && <span className="ml-auto shrink-0">{fileTag}</span>}
 				</div>
@@ -226,6 +232,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 
 				{showActions && (
 					<MagicDropdown
+						overlayClassName="[&_[role=menuitem]]:cursor-pointer [&_[data-disabled]]:cursor-not-allowed"
 						trigger={["click"]}
 						menu={{ items: menuItems }}
 						getPopupContainer={() => getPopupContainer() ?? document.body}
@@ -233,7 +240,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 						<Button
 							size="icon"
 							variant="ghost"
-							className="absolute right-1 top-1 size-6"
+							className="absolute right-1 top-1 size-6 cursor-pointer"
 							aria-label={t("userSpace.actions", { name })}
 							onClick={(event) => {
 								event.stopPropagation()
@@ -310,6 +317,7 @@ function FileManagerNameInput({
 							readOnly={rename.renamePending}
 							height={grid ? 21 : 20}
 							style={{
+								cursor: "text",
 								textAlign: grid ? "center" : "left",
 								fontSize: grid ? 13 : 12,
 								fontWeight: grid ? 500 : 400,

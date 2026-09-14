@@ -29,6 +29,8 @@ export interface FileManagerTreeRow {
 export interface FileManagerActions {
 	execute: (command: FileManagerCommand) => void
 	canExecute: (command: FileManagerCommand) => boolean
+	getDisabledReason: (command: FileManagerCommand) => string | undefined
+	shortcuts: Record<"cut" | "copy" | "paste", string>
 }
 
 export interface FileManagerLocationState {

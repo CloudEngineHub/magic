@@ -160,9 +160,6 @@ export function FileManagerContent(props: Props) {
 			props.selection.all()
 			return
 		}
-		if (mod && key === "c") return execute("copy")
-		if (mod && key === "x") return execute("cut")
-		if (mod && key === "v") return execute(mac && event.altKey ? "pasteMove" : "paste")
 		if (event.altKey && key === "arrowleft") {
 			event.preventDefault()
 			props.onBack()
@@ -293,6 +290,7 @@ export function FileManagerContent(props: Props) {
 					/>
 				)}
 				<MagicDropdown
+					overlayClassName="[&_[role=menuitem]]:cursor-pointer [&_[data-disabled]]:cursor-not-allowed"
 					trigger={["contextMenu"]}
 					rootClassName="min-h-0 flex-1"
 					menu={{ items: props.actions.getMenuItems() }}

@@ -3,6 +3,7 @@ import {
 	ArrowRight,
 	ArrowUp,
 	ChevronRight,
+	ChevronDown,
 	Copy,
 	FolderPlus,
 	LayoutGrid,
@@ -14,12 +15,15 @@ import {
 	RefreshCw,
 	Trash2,
 } from "lucide-react"
-import { Fragment } from "react"
+import { Fragment, type ComponentProps } from "react"
 import { useTranslation } from "react-i18next"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { cn } from "@/utils/cn"
+import FileMenuDropdown from "../FileMenuDropdown"
+import UploadMenuDropdown from "../UploadMenuDropdown"
+import { isMac } from "@/utils/devices"
 import type {
 	FileManagerActions,
 	FileManagerPathItem,
@@ -30,6 +34,8 @@ import type {
 
 interface Props {
 	onOpenRecycle: () => void
+	createMenu: Omit<ComponentProps<typeof FileMenuDropdown>, "children">
+	uploadMenu: Omit<ComponentProps<typeof UploadMenuDropdown>, "children">
 	path: FileManagerPathItem[]
 	canBack: boolean
 	canForward: boolean
@@ -70,13 +76,6 @@ export function FileManagerToolbar(props: Props) {
 		{ label: t("fileManager.up"), Icon: ArrowUp, run: props.up, disabled: !props.canUp },
 	]
 	const commands = [
-		{
-			command: "createFolder",
-			label: t("fileManager.newFolder"),
-			Icon: FolderPlus,
-			text: true,
-		},
-		{ command: "upload", label: t("userSpace.upload"), Icon: Upload, text: true },
 		{ command: "cut", label: t("fileManager.cut"), Icon: Scissors },
 		{ command: "copy", label: t("fileManager.copy"), Icon: Copy },
 		{ command: "paste", label: t("fileManager.paste"), Icon: ClipboardPaste },
@@ -93,7 +92,7 @@ export function FileManagerToolbar(props: Props) {
 						<Button
 							variant="ghost"
 							size="icon"
-							className="size-7"
+							className="size-7 cursor-pointer disabled:pointer-events-auto disabled:cursor-not-allowed"
 							aria-label={label}
 							onClick={run}
 							disabled={disabled}
@@ -122,7 +121,7 @@ export function FileManagerToolbar(props: Props) {
 									variant="ghost"
 									size="sm"
 									className={cn(
-										"h-7 max-w-44 truncate px-2 text-xs font-normal",
+										"h-7 max-w-44 cursor-pointer truncate px-2 text-xs font-normal disabled:pointer-events-auto disabled:cursor-not-allowed",
 										"data-[manager-drop-target=true]:bg-blue-500/10 data-[manager-drop-target=true]:ring-1 data-[manager-drop-target=true]:ring-inset data-[manager-drop-target=true]:ring-blue-500",
 									)}
 									aria-current={
@@ -140,7 +139,7 @@ export function FileManagerToolbar(props: Props) {
 				<Button
 					variant="ghost"
 					size="sm"
-					className="ml-auto h-7 gap-1.5 text-xs font-normal text-muted-foreground"
+					className="ml-auto h-7 cursor-pointer gap-1.5 text-xs font-normal text-muted-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
 					onClick={props.onOpenRecycle}
 				>
 					<Trash2 size={14} />
@@ -148,37 +147,79 @@ export function FileManagerToolbar(props: Props) {
 				</Button>
 			</div>
 			<div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border/60 px-3 pb-2 pt-1">
-				{commands.map(({ command, label, Icon, ...option }) => (
+				<FileMenuDropdown
+					{...props.createMenu}
+					overlayClassName="[&_[role=menuitem]]:cursor-pointer [&_[data-disabled]]:cursor-not-allowed"
+					disabled={!props.actions?.canExecute("createFolder")}
+					getPopupContainer={() => props.getPopupContainer() ?? document.body}
+				>
+					<Button
+						variant="ghost"
+						size="sm"
+						className="h-7 cursor-pointer gap-1.5 px-2 text-xs font-normal disabled:pointer-events-auto disabled:cursor-not-allowed"
+						disabled={!props.actions?.canExecute("createFolder")}
+					>
+						<FolderPlus size={16} />
+						{t("topicFiles.contextMenu.createFile")}
+						<ChevronDown size={12} />
+					</Button>
+				</FileMenuDropdown>
+				<UploadMenuDropdown
+					{...props.uploadMenu}
+					overlayClassName="[&_[role=menuitem]]:cursor-pointer [&_[data-disabled]]:cursor-not-allowed"
+					disabled={!props.actions?.canExecute("upload")}
+					getPopupContainer={() => props.getPopupContainer() ?? document.body}
+				>
+					<Button
+						variant="ghost"
+						size="sm"
+						className="h-7 cursor-pointer gap-1.5 px-2 text-xs font-normal disabled:pointer-events-auto disabled:cursor-not-allowed"
+						disabled={!props.actions?.canExecute("upload")}
+					>
+						<Upload size={16} />
+						{t("userSpace.upload")}
+						<ChevronDown size={12} />
+					</Button>
+				</UploadMenuDropdown>
+				{commands.map(({ command, label, Icon }) => (
 					<Fragment key={command}>
 						{command === "cut" && (
 							<span aria-hidden className="mx-1 h-4 w-px bg-border/60" />
 						)}
 						<MagicTooltip
 							key={command}
-							title={label}
+							title={
+								props.actions?.getDisabledReason(command) ??
+								`${label} (${props.actions?.shortcuts[command]})`
+							}
 							getPopupContainer={props.getPopupContainer}
 						>
-							<Button
-								variant="ghost"
-								size="sm"
-								className={cn(
-									"h-7 gap-1.5 rounded-md px-2 text-xs font-normal",
-									!("text" in option) && "w-7 px-0",
-								)}
-								disabled={!props.actions?.canExecute(command)}
-								onClick={() => props.actions?.execute(command)}
-								aria-label={label}
+							<span
+								className={
+									props.actions?.canExecute(command)
+										? "inline-flex"
+										: "inline-flex cursor-not-allowed"
+								}
 							>
-								<Icon size={16} />
-								{"text" in option && label}
-							</Button>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-7 w-7 cursor-pointer rounded-md px-0"
+									disabled={!props.actions?.canExecute(command)}
+									onClick={() => props.actions?.execute(command)}
+									aria-label={label}
+									aria-keyshortcuts={`${isMac ? "Meta" : "Control"}+${command === "cut" ? "X" : command === "copy" ? "C" : "V"}`}
+								>
+									<Icon size={16} />
+								</Button>
+							</span>
 						</MagicTooltip>
 					</Fragment>
 				))}
 				<div className="flex-1" />
 				<select
 					aria-label={t("fileManager.sort")}
-					className="h-7 max-w-28 rounded-md bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					className="h-7 max-w-28 cursor-pointer rounded-md bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-auto disabled:cursor-not-allowed"
 					value={props.sort}
 					onChange={(event) => props.onSort(event.target.value as FileManagerSort)}
 				>
@@ -209,7 +250,7 @@ export function FileManagerToolbar(props: Props) {
 								variant="ghost"
 								size="icon"
 								className={cn(
-									"h-6 w-7 rounded-md",
+									"h-6 w-7 cursor-pointer rounded-md disabled:pointer-events-auto disabled:cursor-not-allowed",
 									props.view === view &&
 										"bg-background shadow-sm hover:bg-background",
 								)}
@@ -232,7 +273,7 @@ export function FileManagerToolbar(props: Props) {
 						onChange={(event) => props.onQuery(event.target.value)}
 						placeholder={t("userSpace.searchDirectory")}
 						aria-label={t("userSpace.searchDirectory")}
-						className="h-7 rounded-md bg-muted/30 pl-8 text-xs"
+						className="h-7 cursor-text rounded-md bg-muted/30 pl-8 text-xs"
 					/>
 				</div>
 				<MagicTooltip
@@ -242,7 +283,7 @@ export function FileManagerToolbar(props: Props) {
 					<Button
 						variant="ghost"
 						size="icon"
-						className="size-7"
+						className="size-7 cursor-pointer disabled:pointer-events-auto disabled:cursor-not-allowed"
 						aria-label={t("fileViewer.tabs.refresh")}
 						onClick={props.onRefresh}
 						disabled={props.loading}

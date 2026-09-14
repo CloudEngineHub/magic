@@ -13,6 +13,7 @@ import { generateShareUrl } from "../../../ShareManagement/utils/shareTypeHelper
 import { DuplicateFileModal } from "../DuplicateFileModal"
 import { FolderConflictModal, type FolderConflictModalProps } from "../FolderConflictModal"
 import { FileManagerConfirmationDialog } from "./FileManagerConfirmationDialog"
+import { FileManagerPreparationDialog } from "./FileManagerPreparationDialog"
 import { FileManagerNameDialog } from "./FileManagerNameDialog"
 import type { FileManagerProps } from "./types"
 import type { useFileManagerOperations } from "../../hooks/useFileManagerOperations"
@@ -57,6 +58,7 @@ export function FileManagerDialogs({
 	const success = share.shareSuccessInfo?.shareInfo
 	return (
 		<>
+			<FileManagerPreparationDialog controller={controller} />
 			<FileManagerConfirmationDialog controller={controller.confirmation} />
 			<FileManagerNameDialog names={controller.names} />
 			{controller.info.fileInfoPanel}

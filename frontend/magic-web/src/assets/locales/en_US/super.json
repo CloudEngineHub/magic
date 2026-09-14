@@ -2381,6 +2381,16 @@
 	"fileManager": {
 		"back": "Back",
 		"browseFolder": "Browse folder",
+		"clipboard": {
+			"copied": "Copied {{count}} items. Go to the destination to paste.",
+			"cut": "Cut {{count}} items. Paste to review and confirm the move.",
+			"empty": "Copy or cut files first",
+			"invalidTarget": "These items cannot be pasted here. Choose another folder.",
+			"otherSpace": "Return to the source space to paste",
+			"readOnly": "You do not have write access here",
+			"selectItems": "Select files or folders first",
+			"unavailable": "This action is unavailable in the current state"
+		},
 		"columns": {
 			"created": "Created",
 			"path": "Location",

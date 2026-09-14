@@ -361,6 +361,38 @@ export function useFileManagerOperations({
 	}
 	const isMutable = (file: AttachmentItem) =>
 		Boolean(props.allowEdit && (props.isItemMutable?.(file) ?? true))
+	const onUploadFolder =
+		props.allowEdit && capabilities.upload && !spaceConfig?.directorySource
+			? (file?: AttachmentItem) => operations.handleUploadFolder(file ?? directory)
+			: undefined
+	const onImportFromOtherProject =
+		props.allowEdit && capabilities.importFromOtherProject
+			? (file?: AttachmentItem) =>
+					importOperation.openImportModal(
+						file?.file_id
+							? [...index.getParentItemsById(file.file_id), file]
+							: directory?.file_id
+								? [...index.getParentItemsById(directory.file_id), directory]
+								: [],
+					)
+			: undefined
+	const onAddDesign = capabilities.projectContentCreation
+		? (key?: string, path?: string) =>
+				names.design.createVirtualDesignProject(
+					key ?? directory?.file_id,
+					path ?? directory?.relative_file_path,
+				)
+		: undefined
+	const onAddSelfMedia = capabilities.projectContentCreation
+		? (key?: string, path?: string) =>
+				names.selfMedia.createVirtualSelfMediaProject(
+					key ?? directory?.file_id,
+					path ?? directory?.relative_file_path,
+				)
+		: undefined
+	const onAddAICard = capabilities.projectContentCreation
+		? (_key?: string, path?: string) => aiCard.open(path ?? directory?.relative_file_path)
+		: undefined
 	const menu = useContextMenu({
 		handleOpenFile: onOpen,
 		handleOpenDirectory: onOpen,
@@ -384,10 +416,7 @@ export function useFileManagerOperations({
 			: imageDownload.shouldUseSingleDownloadEntry,
 		handleShowInfo: info.handleShowInfo,
 		handleUploadFile: props.allowEdit && capabilities.upload ? uploadFile : undefined,
-		handleUploadFolder:
-			props.allowEdit && capabilities.upload && !spaceConfig
-				? (file) => operations.handleUploadFolder(file ?? directory)
-				: undefined,
+		handleUploadFolder: onUploadFolder,
 		handleShareItem: capabilities.share ? share.handleShareItem : undefined,
 		handleAddToCurrentChat: capabilities.addToChat ? chat.handleAddToCurrentChat : undefined,
 		handleAddToNewChat: capabilities.addToChat ? chat.handleAddToNewChat : undefined,
@@ -404,36 +433,12 @@ export function useFileManagerOperations({
 		onCopyFile: capabilities.copy ? copyTo : undefined,
 		handleReplaceFile:
 			props.allowEdit && capabilities.replace ? replace.handleReplaceFile : undefined,
-		handleImportFromOtherProject:
-			props.allowEdit && capabilities.importFromOtherProject
-				? (file) =>
-						importOperation.openImportModal(
-							file?.file_id
-								? [...index.getParentItemsById(file.file_id), file]
-								: directory?.file_id
-									? [...index.getParentItemsById(directory.file_id), directory]
-									: [],
-						)
-				: undefined,
+		handleImportFromOtherProject: onImportFromOtherProject,
 		createVirtualFile: createFile,
 		createVirtualFolder: createFolder,
-		createVirtualDesignProject: capabilities.projectContentCreation
-			? (key, path) =>
-					names.design.createVirtualDesignProject(
-						key ?? directory?.file_id,
-						path ?? directory?.relative_file_path,
-					)
-			: undefined,
-		createVirtualSelfMediaProject: capabilities.projectContentCreation
-			? (key, path) =>
-					names.selfMedia.createVirtualSelfMediaProject(
-						key ?? directory?.file_id,
-						path ?? directory?.relative_file_path,
-					)
-			: undefined,
-		createVirtualAICardProject: capabilities.projectContentCreation
-			? (_key, path) => aiCard.open(path ?? directory?.relative_file_path)
-			: undefined,
+		createVirtualDesignProject: onAddDesign,
+		createVirtualSelfMediaProject: onAddSelfMedia,
+		createVirtualAICardProject: onAddAICard,
 		selectedItems: selectedIds,
 		treeIndex: index,
 		attachments,
@@ -550,8 +555,13 @@ export function useFileManagerOperations({
 				await execute(preparation)
 			} catch {
 				if (isCurrent()) {
-					failed = true
-					setTransferPreparation({ ...request, phase: "error" })
+					// 写入开始后的错误交给原执行结果处理，不能通过“重试检查”重放写入。
+					if (current.phase === "executing")
+						magicToast.error(t("userSpace.operationFailed"))
+					else {
+						failed = true
+						setTransferPreparation({ ...request, phase: "error" })
+					}
 				}
 			} finally {
 				// 旧读取结束不能解除后来一次操作的锁，也不能清掉新的准备提示。
@@ -600,33 +610,48 @@ export function useFileManagerOperations({
 			}
 		})
 	})
-	const confirmMoveWithPreparation = (data: { path: AttachmentItem[] }) =>
-		runPreparedTransfer(
-			{
-				ids: move.selectorConfig.pendingMoveFileIds,
-				targetId: data.path.at(-1)?.file_id ?? props.rootId,
-				path: data.path,
-				mode: "move",
+	const confirmMoveWithPreparation = (data: { path: AttachmentItem[] }) => {
+		// 选择器提交后会立即清空状态；检查及重试始终使用提交时的文件集合。
+		const ids = [...move.selectorConfig.pendingMoveFileIds]
+		const targetId = data.path.at(-1)?.file_id ?? props.rootId
+		return runPreparedTransfer(
+			{ ids, targetId, path: data.path, mode: "move" },
+			async (preparation) => {
+				pendingMoveIds.current = ids
+				if (spaceConfig?.directorySource)
+					await move.moveWithinDirectorySource(data.path, ids, preparation)
+				else
+					await move.batchMoveFilesWithDuplicateCheck({
+						fileIds: ids,
+						projectId: projectId ?? "",
+						targetParentId: targetId,
+						targetPath: data.path,
+						preparation,
+					})
 			},
-			(preparation) => move.confirmMove({ ...data, preparation }),
 		)
+	}
 	const crossProjectWithPreparation = (
 		mode: "move" | "copy",
 		data: Parameters<typeof crossProject.executeCopyOperation>[0],
-	) =>
-		runPreparedTransfer(
+	) => {
+		const request = { ...data, fileIds: [...(data.fileIds ?? crossProject.fileIds)] }
+		// 文件集合已保存，关闭选择器后重试不再依赖它的可见状态。
+		crossProject.closeModal()
+		return runPreparedTransfer(
 			{
-				ids: data.fileIds ?? crossProject.fileIds,
-				targetId: data.targetPath.at(-1)?.file_id ?? "",
-				path: data.targetPath,
+				ids: request.fileIds,
+				targetId: request.targetPath.at(-1)?.file_id ?? "",
+				path: request.targetPath,
 				mode,
-				rootName: data.targetProject?.project_name,
+				rootName: request.targetProject?.project_name,
 			},
 			(preparation) =>
 				mode === "move"
-					? crossProject.executeMoveOperation({ ...data, preparation })
-					: crossProject.executeCopyOperation({ ...data, preparation }),
+					? crossProject.executeMoveOperation({ ...request, preparation })
+					: crossProject.executeCopyOperation({ ...request, preparation }),
 		)
+	}
 
 	return {
 		confirmation,
@@ -648,6 +673,11 @@ export function useFileManagerOperations({
 		capabilities,
 		selectedWorkspace,
 		uploadFile,
+		onUploadFolder,
+		onImportFromOtherProject,
+		onAddDesign,
+		onAddSelfMedia,
+		onAddAICard,
 		uploadFiles,
 		externalDrop,
 		createFolder,
@@ -658,6 +688,7 @@ export function useFileManagerOperations({
 		pendingMoveIds,
 		busy:
 			Boolean(confirmation.state) ||
+			Boolean(transferPreparation) ||
 			preparingTransfer ||
 			move.isMoving ||
 			crossProject.isOperating ||

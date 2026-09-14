@@ -51,6 +51,8 @@ interface Options {
 	onExternalDrop: (data: DataTransfer, target?: AttachmentItem) => void
 	allowUpload: boolean
 	onNavigate: (id: string) => void
+	prepareDragImage: (ids: string[]) => HTMLElement | null
+	clearDragImage: () => void
 }
 
 /** 空白 Pointer 框选与原生附件拖动互斥；命中使用虚拟布局，不依赖已挂载行。 */
@@ -147,6 +149,7 @@ export function useFileManagerGestures(options: Options) {
 		stopScroll()
 	})
 	const cleanup = useMemoizedFn(() => {
+		options.clearDragImage()
 		highlightTarget(null)
 		clearSelectionGesture()
 		pointer.current = null
@@ -266,6 +269,10 @@ export function useFileManagerGestures(options: Options) {
 		onPointerCancel: () => clearSelectionGesture(true),
 		onLostPointerCapture: () => clearSelectionGesture(),
 		onDragStart: (event: DragEvent<HTMLDivElement>) => {
+			if (!options.isActive) {
+				event.preventDefault()
+				return
+			}
 			const id =
 				event.target instanceof Element
 					? event.target.closest<HTMLElement>("[data-manager-item]")?.dataset.managerItem
@@ -301,6 +308,8 @@ export function useFileManagerGestures(options: Options) {
 			handleMultipleFilesDragStart(event, files)
 			event.dataTransfer.setData(FILE_MANAGER_DRAG_MIME, JSON.stringify(transfer))
 			event.dataTransfer.effectAllowed = "copyMove"
+			const preview = options.prepareDragImage(ids)
+			if (preview) event.dataTransfer.setDragImage(preview, 20, 20)
 		},
 		onDragOver,
 		onDragLeave: (event: DragEvent<HTMLDivElement>) => {

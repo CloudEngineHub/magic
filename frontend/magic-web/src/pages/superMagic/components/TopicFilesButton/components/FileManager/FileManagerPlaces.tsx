@@ -3,7 +3,7 @@ import { useMemoizedFn } from "ahooks"
 import { ChevronRight, FolderTree, Loader2, RotateCw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
-import MagicTooltip from "@/components/base/MagicTooltip"
+import SmartTooltip from "@/components/other/SmartTooltip"
 import { FileResourceIcon } from "../FileResourceIcon"
 import CustomTree from "../CustomTree/CustomTree"
 import { useTreeUI } from "../../hooks/useTreeUI"
@@ -166,7 +166,7 @@ export function FileManagerPlaces({
 				)}
 			>
 				<button
-					className="flex size-6 shrink-0 items-center justify-center rounded focus-visible:ring-2 focus-visible:ring-ring"
+					className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded focus-visible:ring-2 focus-visible:ring-ring"
 					aria-expanded={rootExpanded}
 					aria-label={t(rootExpanded ? "fileTree.collapseAll" : "fileTree.expandAll")}
 					onClick={() => setRootExpanded(!rootExpanded)}
@@ -180,13 +180,21 @@ export function FileManagerPlaces({
 					/>
 				</button>
 				<button
-					className="flex h-full min-w-0 flex-1 items-center gap-2 rounded pr-2 text-left focus-visible:ring-2 focus-visible:ring-ring"
-					title={rootName}
+					className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 rounded pr-2 text-left focus-visible:ring-2 focus-visible:ring-ring"
 					onClick={() => onNavigate(rootId)}
 					aria-current={directoryId === rootId ? "page" : undefined}
 				>
 					<FolderTree size={15} className="shrink-0" />
-					<span className="truncate">{rootName}</span>
+					<SmartTooltip
+						fileName
+						elementType="span"
+						className="min-w-0 text-xs leading-4"
+						placement="bottom"
+						sideOffset={4}
+						getPopupContainer={getPopupContainer}
+					>
+						{rootName}
+					</SmartTooltip>
 				</button>
 			</div>
 			<div
@@ -225,7 +233,7 @@ export function FileManagerPlaces({
 							>
 								<button
 									className={cn(
-										"flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring",
+										"flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed",
 										isLeaf && "invisible",
 									)}
 									disabled={isLeaf || item.directoryLoadState === "loading"}
@@ -256,24 +264,27 @@ export function FileManagerPlaces({
 										/>
 									)}
 								</button>
-								<MagicTooltip
-									title={presentation.name}
-									placement="right"
-									getPopupContainer={getPopupContainer}
+								<button
+									data-place-key={id}
+									className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded pr-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+									onClick={() =>
+										item.is_directory ? onNavigate(id) : onOpen(item)
+									}
+									onKeyDown={(event) => onKeyDown(event, item)}
+									aria-current={directoryId === id ? "page" : undefined}
 								>
-									<button
-										data-place-key={id}
-										className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pr-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-										onClick={() =>
-											item.is_directory ? onNavigate(id) : onOpen(item)
-										}
-										onKeyDown={(event) => onKeyDown(event, item)}
-										aria-current={directoryId === id ? "page" : undefined}
+									<FileResourceIcon presentation={presentation} size={15} />
+									<SmartTooltip
+										fileName
+										elementType="span"
+										className="min-w-0 text-xs leading-4"
+										placement="bottom"
+										sideOffset={4}
+										getPopupContainer={getPopupContainer}
 									>
-										<FileResourceIcon presentation={presentation} size={15} />
-										<span className="truncate">{presentation.name}</span>
-									</button>
-								</MagicTooltip>
+										{presentation.name}
+									</SmartTooltip>
+								</button>
 							</div>
 						)
 					}}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useDeferredValue, useState, lazy, Suspense } from "react"
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { flushSync } from "react-dom"
+import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import { useTranslation } from "react-i18next"
@@ -27,6 +28,7 @@ import type { AttachmentItem } from "../../hooks/types"
 import { FileManagerToolbar } from "./FileManagerToolbar"
 import { FileManagerPlaces } from "./FileManagerPlaces"
 import { FileManagerContent } from "./FileManagerContent"
+import { FileManagerDragPreview } from "./FileManagerDragPreview"
 import { FileManagerDialogs } from "./FileManagerDialogs"
 import type { FileManagerProps, FileManagerSort } from "./types"
 
@@ -45,6 +47,8 @@ export function FileManager(props: FileManagerProps) {
 	const [recycleCount, setRecycleCount] = useState(0)
 	const activeProps = { ...props, isActive: props.isActive && !recycle }
 	const container = useRef<HTMLDivElement>(null)
+	const dragPreview = useRef<HTMLDivElement>(null)
+	const [dragPreviewIds, setDragPreviewIds] = useState<string[]>([])
 	const viewport = useRef<HTMLDivElement>(null)
 	const listColumns = useFileManagerColumns()
 	const getColumnText = useMemoizedFn((file: FilePresentation, column: FileManagerSort) =>
@@ -246,7 +250,7 @@ export function FileManager(props: FileManagerProps) {
 		scopeKey: props.scopeKey,
 		rootId: props.rootId,
 		directoryId: location.directoryId,
-		isActive: activeProps.isActive && !operations.confirmation.state,
+		isActive: activeProps.isActive && !operations.busy,
 		container,
 		viewport,
 		index,
@@ -258,6 +262,12 @@ export function FileManager(props: FileManagerProps) {
 		onExternalDrop: (data, target) => void operations.externalDrop(data, target),
 		allowUpload: Boolean(props.allowEdit && operations.capabilities.upload),
 		onNavigate: navigation.navigate,
+		prepareDragImage: (fileIds) => {
+			// setDragImage 必须在 dragstart 同步执行，不能等待下一次 React 提交。
+			flushSync(() => setDragPreviewIds(fileIds))
+			return dragPreview.current
+		},
+		clearDragImage: () => setDragPreviewIds((current) => (current.length ? [] : current)),
 	})
 	const path = useMemo(
 		() => [
@@ -333,6 +343,8 @@ export function FileManager(props: FileManagerProps) {
 		<div
 			ref={container}
 			data-file-manager={props.scopeKey}
+			tabIndex={-1}
+			onKeyDown={commands.onClipboardKeyDown}
 			onDragStart={gestures.onDragStart}
 			onDragEnd={gestures.onDragEnd}
 			onDragOver={gestures.onDragOver}
@@ -399,6 +411,18 @@ export function FileManager(props: FileManagerProps) {
 					<FileManagerToolbar
 						onOpenRecycle={() => setRecycle(true)}
 						actions={commands}
+						createMenu={{
+							onAddFile: operations.createFile,
+							onAddFolder: operations.createFolder,
+							onAddDesign: operations.onAddDesign,
+							onAddSelfMedia: operations.onAddSelfMedia,
+							onAddAICard: operations.onAddAICard,
+						}}
+						uploadMenu={{
+							onUploadFile: operations.uploadFile,
+							onUploadFolder: operations.onUploadFolder,
+							onImportFromOtherProject: operations.onImportFromOtherProject,
+						}}
 						path={path}
 						canBack={navigation.canBack}
 						canForward={navigation.canForward}
@@ -421,54 +445,6 @@ export function FileManager(props: FileManagerProps) {
 						loading={loading}
 						getPopupContainer={getPopupContainer}
 					/>
-					{preparation &&
-						(preparation.phase === "checking" || preparation.phase === "error") && (
-							<div
-								role="status"
-								aria-live="polite"
-								className="flex shrink-0 items-center gap-2 border-b bg-muted/30 px-3 py-2 text-xs"
-							>
-								{preparation.phase === "checking" && (
-									<Loader2 size={16} className="shrink-0 animate-spin" />
-								)}
-								<div className="min-w-0 flex-1">
-									<div>
-										{preparation.phase === "error"
-											? t("fileManager.preparation.failed")
-											: t(
-													preparation.mode === "move"
-														? "fileManager.preparation.checkingMove"
-														: "fileManager.preparation.checkingCopy",
-												)}
-									</div>
-									<div
-										className="truncate text-muted-foreground"
-										title={preparation.targetName}
-									>
-										{t("fileManager.preparation.target", {
-											count: preparation.fileIds.length,
-											target: preparation.targetName,
-										})}
-									</div>
-								</div>
-								{preparation.phase === "error" && (
-									<Button
-										size="sm"
-										variant="ghost"
-										onClick={() => void operations.retryTransfer()}
-									>
-										{t("userSpace.retry")}
-									</Button>
-								)}
-								<Button
-									size="sm"
-									variant="ghost"
-									onClick={operations.cancelTransfer}
-								>
-									{t("common.cancel")}
-								</Button>
-							</div>
-						)}
 					<FileManagerContent
 						listColumns={listColumns}
 						sort={navigation.sort}
@@ -491,7 +467,7 @@ export function FileManager(props: FileManagerProps) {
 						onBack={navigation.back}
 						onForward={navigation.forward}
 						onUp={() => parentId !== undefined && navigation.navigate(parentId)}
-						isActive={activeProps.isActive}
+						isActive={activeProps.isActive && !operations.busy}
 						loading={loading}
 						error={error}
 						onRefresh={props.onRefresh}
@@ -515,6 +491,23 @@ export function FileManager(props: FileManagerProps) {
 					</div>
 				</div>
 			</div>
+			{dragPreviewIds.length > 0 && (
+				<FileManagerDragPreview
+					ref={dragPreview}
+					count={dragPreviewIds.length}
+					files={dragPreviewIds.slice(0, 3).flatMap((id) => {
+						const file = index.getItemById(id)
+						return file
+							? [
+									resolveFilePresentation(file, {
+										context: props.context,
+										index: presentationIndex,
+									}),
+								]
+							: []
+					})}
+				/>
+			)}
 			<FileManagerDialogs manager={props} controller={operations} />
 		</div>
 	)

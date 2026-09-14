@@ -1,10 +1,13 @@
-import { memo, ReactNode, useEffect, useRef, useState } from "react"
+import { memo, ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/shadcn-ui/tooltip"
 import { cn } from "@/utils/cn"
 
 type ActionType = "click" | "hover" | "focus" | "contextMenu"
 
 interface SmartTooltipProps {
+	/** Name-only hints never capture clicks and remeasure the actual text box. */
+	fileName?: boolean
+	getPopupContainer?: () => HTMLElement | null
 	children?: ReactNode
 	className?: string
 	style?: React.CSSProperties
@@ -33,6 +36,8 @@ interface SmartTooltipProps {
  */
 const SmartTooltip = memo(function SmartTooltip({
 	children = "",
+	fileName = false,
+	getPopupContainer,
 	className,
 	style,
 	placement = "top",
@@ -56,68 +61,81 @@ const SmartTooltip = memo(function SmartTooltip({
 
 	// Convert trigger array to open state management for shadcn/ui
 	const [open, setOpen] = useState(false)
-	const shouldUseControlled = trigger.includes("click")
+	const dismissed = useRef(false)
+	const shouldUseControlled = fileName || trigger.includes("click")
 	const effectiveShowTooltip = forceShowTooltip || showTooltip
 
-	useEffect(() => {
-		const checkOverflow = () => {
-			if (!textRef.current) return
+	const checkOverflow = useCallback(() => {
+		if (!textRef.current) return false
 
-			const element = textRef.current
-			let isOverflowing = false
-			const nextTooltipTextContent = element.textContent?.trim() ?? ""
-			const descendantOverflow = Array.from(element.querySelectorAll<HTMLElement>("*")).some(
-				(descendant) => {
-					const computedStyle = window.getComputedStyle(descendant)
-					const clipsVertically = ["hidden", "clip", "scroll", "auto"].includes(
-						computedStyle.overflowY,
-					)
-					const clipsHorizontally = ["hidden", "clip", "scroll", "auto"].includes(
-						computedStyle.overflowX,
-					)
+		const element = textRef.current
+		let isOverflowing = false
+		const nextTooltipTextContent = element.textContent?.trim() ?? ""
+		const descendantOverflow = Array.from(element.querySelectorAll<HTMLElement>("*")).some(
+			(descendant) => {
+				const computedStyle = window.getComputedStyle(descendant)
+				const clipsVertically = ["hidden", "clip", "scroll", "auto"].includes(
+					computedStyle.overflowY,
+				)
+				const clipsHorizontally = ["hidden", "clip", "scroll", "auto"].includes(
+					computedStyle.overflowX,
+				)
 
-					return (
-						(clipsVertically && descendant.scrollHeight > descendant.clientHeight) ||
-						(clipsHorizontally && descendant.scrollWidth > descendant.clientWidth)
-					)
-				},
-			)
+				return (
+					(clipsVertically && descendant.scrollHeight > descendant.clientHeight) ||
+					(clipsHorizontally && descendant.scrollWidth > descendant.clientWidth)
+				)
+			},
+		)
 
-			if (maxLines > 1) {
-				// Multi-line clamp: hidden lines increase scrollHeight
-				isOverflowing = element.scrollHeight > element.clientHeight || descendantOverflow
-			} else if (maxLines === 0) {
-				// Wrapped text: overflow when height or width is constrained
-				isOverflowing =
-					element.scrollHeight > element.clientHeight ||
-					element.scrollWidth > element.clientWidth ||
-					descendantOverflow
-			} else {
-				// Single-line: compare scrollWidth and clientWidth
-				isOverflowing = element.scrollWidth > element.clientWidth || descendantOverflow
-			}
-
-			setTooltipTextContent((previousContent) =>
-				previousContent === nextTooltipTextContent
-					? previousContent
-					: nextTooltipTextContent,
-			)
-			setShowTooltip(isOverflowing)
+		if (maxLines > 1) {
+			// Multi-line clamp: hidden lines increase scrollHeight
+			isOverflowing = element.scrollHeight > element.clientHeight || descendantOverflow
+		} else if (maxLines === 0) {
+			// Wrapped text: overflow when height or width is constrained
+			isOverflowing =
+				element.scrollHeight > element.clientHeight ||
+				element.scrollWidth > element.clientWidth ||
+				descendantOverflow
+		} else {
+			// Single-line: compare scrollWidth and clientWidth
+			isOverflowing = element.scrollWidth > element.clientWidth || descendantOverflow
 		}
 
+		setTooltipTextContent((previousContent) =>
+			previousContent === nextTooltipTextContent ? previousContent : nextTooltipTextContent,
+		)
+		setShowTooltip(isOverflowing)
+		return isOverflowing
+	}, [maxLines])
+
+	useEffect(() => {
 		// Delayed detection to ensure DOM rendering is complete
 		const timer = setTimeout(checkOverflow, 100)
+
+		const observer = fileName
+			? new ResizeObserver(() => {
+					if (!checkOverflow()) setOpen(false)
+				})
+			: undefined
+		if (textRef.current) observer?.observe(textRef.current)
+		if (fileName) {
+			setOpen(false)
+			checkOverflow()
+		}
 
 		// Listen for window resize
 		window.addEventListener("resize", checkOverflow)
 
 		return () => {
+			observer?.disconnect()
 			clearTimeout(timer)
 			window.removeEventListener("resize", checkOverflow)
 		}
-	}, [children, maxLines])
+	}, [children, fileName, checkOverflow])
 
 	const handleOpenChange = (nextOpen: boolean) => {
+		if (fileName && nextOpen && (dismissed.current || !checkOverflow())) return
 		if (shouldUseControlled) {
 			setOpen(nextOpen)
 		}
@@ -153,6 +171,28 @@ const SmartTooltip = memo(function SmartTooltip({
 		style: { ...textStyle, ...style },
 		onClick: handleTriggerClick,
 		onDoubleClick,
+		...(fileName && {
+			onPointerEnter: () => {
+				dismissed.current = false
+				checkOverflow()
+			},
+			onFocus: () => {
+				dismissed.current = false
+				checkOverflow()
+			},
+			onPointerDown: () => {
+				dismissed.current = true
+				setOpen(false)
+			},
+			onDragStart: () => {
+				dismissed.current = true
+				setOpen(false)
+			},
+			onPointerLeave: () => {
+				dismissed.current = false
+				setOpen(false)
+			},
+		}),
 		...props,
 	}
 	// Avoid inheriting trigger layout styles into the tooltip body.
@@ -164,6 +204,8 @@ const SmartTooltip = memo(function SmartTooltip({
 
 	return (
 		<Tooltip
+			delayDuration={fileName ? 400 : undefined}
+			disableHoverableContent={fileName || undefined}
 			open={shouldUseControlled ? (effectiveShowTooltip ? open : false) : undefined}
 			onOpenChange={handleOpenChange}
 		>
@@ -183,8 +225,14 @@ const SmartTooltip = memo(function SmartTooltip({
 					className={cn(
 						"z-tooltip max-w-[min(20rem,var(--radix-tooltip-content-available-width,100vw))] whitespace-normal text-wrap break-words",
 						tooltipContentClassName,
+						fileName && "pointer-events-none",
 					)}
-					style={tooltipContentStyle}
+					container={getPopupContainer?.() ?? undefined}
+					style={
+						fileName
+							? { ...tooltipContentStyle, pointerEvents: "none" }
+							: tooltipContentStyle
+					}
 					sideOffset={sideOffset}
 					side={placement}
 				>

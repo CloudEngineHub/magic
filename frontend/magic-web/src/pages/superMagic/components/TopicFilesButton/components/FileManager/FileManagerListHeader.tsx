@@ -128,7 +128,7 @@ export function FileManagerListHeader(props: Props) {
 						>
 							<button
 								type="button"
-								className="flex min-w-0 items-center gap-1 rounded-sm outline-none focus-visible:bg-muted"
+								className="flex min-w-0 cursor-pointer items-center gap-1 rounded-sm outline-none focus-visible:bg-muted"
 								onClick={() => props.onSort(id, true)}
 							>
 								<span className="truncate">{props.columns.labels[id]}</span>
@@ -144,7 +144,7 @@ export function FileManagerListHeader(props: Props) {
 									<button
 										type="button"
 										aria-label={t("fileManager.columns.show")}
-										className="ml-auto rounded p-0.5 outline-none hover:bg-muted focus-visible:bg-muted"
+										className="ml-auto cursor-pointer rounded p-0.5 outline-none hover:bg-muted focus-visible:bg-muted"
 									>
 										<Columns3 size={14} />
 									</button>
@@ -177,6 +177,7 @@ export function FileManagerListHeader(props: Props) {
 				{props.columns.columns.map(({ id }) => (
 					<DropdownMenuCheckboxItem
 						key={id}
+						className="cursor-pointer data-[disabled]:cursor-not-allowed"
 						checked={props.columns.visibleIds.includes(id)}
 						disabled={id === "name"}
 						onSelect={(event) => event.preventDefault()}

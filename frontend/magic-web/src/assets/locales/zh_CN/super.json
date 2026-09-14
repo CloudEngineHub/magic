@@ -2381,6 +2381,16 @@
 	"fileManager": {
 		"back": "后退",
 		"browseFolder": "浏览文件夹",
+		"clipboard": {
+			"copied": "已复制 {{count}} 项，可前往目标位置粘贴",
+			"cut": "已剪切 {{count}} 项，粘贴后确认移动",
+			"empty": "请先复制或剪切文件",
+			"invalidTarget": "此位置不能粘贴所选文件，请选择其他目录",
+			"otherSpace": "请返回文件所在空间粘贴",
+			"readOnly": "当前位置没有写入权限",
+			"selectItems": "请先选择文件或文件夹",
+			"unavailable": "当前状态不支持此操作"
+		},
 		"columns": {
 			"created": "创建时间",
 			"path": "所在位置",
