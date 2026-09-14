@@ -30,7 +30,7 @@ import { useViewTogglePersistValue } from "./components/ViewToggle/hooks"
 import routeManageService from "@/pages/superMagic/services/routeManageService"
 import { userStore } from "@/models/user"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { Dialog, DialogContent } from "@/components/shadcn-ui/dialog"
+import { Dialog, DialogContent, DialogPortal } from "@/components/shadcn-ui/dialog"
 import { MagicModalProps } from "@/components/base/MagicModal"
 import { cn } from "@/utils/cn"
 
@@ -423,8 +423,30 @@ function CollaborationProjectsPanel(props: CollaborationProjectsPanelProps) {
 		[],
 	)
 
+	// modal={false} removes Radix's body scroll lock, so restore it manually while open.
+	useEffect(() => {
+		if (!props.open) return
+		const previousOverflow = document.body.style.overflow
+		document.body.style.overflow = "hidden"
+		return () => {
+			document.body.style.overflow = previousOverflow
+		}
+	}, [props.open])
+
 	return (
-		<Dialog open={props.open}>
+		// modal={false} disables Radix's focus trap and body scroll lock so the nested
+		// AddCollaborationToWorkspaceModal (an Antd Modal portaled to body) can receive focus.
+		// The mask and body scroll lock are restored manually below since modal={false} drops them.
+		<Dialog open={props.open} modal={false}>
+			{props.open && (
+				<DialogPortal>
+					<div
+						aria-hidden="true"
+						className="fixed inset-0 z-modal bg-black/50 duration-200 animate-in fade-in-0"
+						data-testid="shared-workspace-dialog-mask"
+					/>
+				</DialogPortal>
+			)}
 			{props.open && (
 				<DialogContent
 					showCloseButton={false}
