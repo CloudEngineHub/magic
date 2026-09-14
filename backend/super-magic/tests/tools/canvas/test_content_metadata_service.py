@@ -1,7 +1,10 @@
 """Canvas 视频生成请求持久化协议测试。"""
 
+import pytest
+
 from app.tools.canvas.application.commands import GenerationParameters
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
+from app.tools.canvas.infrastructure.persistence.element_details_codec import ElementDetailsCodec
 
 
 def test_build_public_video_request_uses_nested_reference_images():
@@ -205,8 +208,8 @@ def test_new_image_detail_persists_public_request_before_submission():
     assert runtime_detail["generationParameters"]["reference_images"] == ["images/source.png"]
 
 
-def test_new_video_detail_persists_initial_runtime_display_metadata():
-    """新建视频 Content 时应立即保存模式、规格和开始时间。"""
+def test_new_video_detail_keeps_result_metadata_out_of_public_detail():
+    """新建视频详情只保留公共请求，不承载主文件结果元数据。"""
     detail = ContentMetadataService.new_detail(
         "element-video",
         {
@@ -222,14 +225,25 @@ def test_new_video_detail_persists_initial_runtime_display_metadata():
         },
     )
 
-    meta = detail["videoGenerationResultMeta"]
-    assert meta["generation_info"] == {
-        "input_mode": "omni_reference",
-        "resolution": "720p",
-        "duration_seconds": 5,
-    }
-    assert meta["runtime"]["started_at"]
+    assert "videoGenerationResultMeta" not in detail
     assert detail["generateVideoRequest"]["model_id"] == "video-model"
+
+
+def test_public_sidecar_rejects_video_result_metadata():
+    """公共 Sidecar 必须拒绝前端未声明的 Video Content 结果字段。"""
+    document = {
+        "version": "2.0.0",
+        "elements": {
+            "video-1": {
+                "contentDetails": {
+                    "content-1": {"videoGenerationResultMeta": {"billing": {"points": 2}}},
+                },
+            },
+        },
+    }
+
+    with pytest.raises(ValueError, match="UNSUPPORTED_PUBLIC_ELEMENT_DETAILS_STRUCTURE"):
+        ElementDetailsCodec.validate_public(document)
 
 
 def test_video_result_metadata_adds_terminal_runtime_fields():

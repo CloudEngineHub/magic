@@ -13,6 +13,7 @@ from app.tools.canvas.domain.content_fields.generated_media_protocol import (
     find_generation_request,
     generation_request_field,
 )
+from app.tools.canvas.domain.content_fields.video import VideoContentFields
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.generation import (
@@ -178,6 +179,22 @@ class WaitGenerationService:
 
         def finalize(project: CanvasProject, metadata: dict) -> tuple[None, dict]:
             """在同一项目事务中完成异步结果和任务元数据回写。"""
+            result_metadata = None
+            if record.element_type == "video":
+                element = project.canvas.get_element(record.element_id)
+                content = element.get_content(record.content_id) if element is not None else None
+                fields = content.fields if content is not None else None
+                existing = (
+                    fields.video_generation_result_meta
+                    if isinstance(fields, VideoContentFields)
+                    and isinstance(fields.video_generation_result_meta, dict)
+                    else {}
+                )
+                result_metadata = ContentMetadataService.merge_video_result_metadata(
+                    existing,
+                    query_result.result_metadata,
+                    final_status,
+                )
             self.generation_result_applier.apply(
                 project,
                 record.element_id,
@@ -185,6 +202,7 @@ class WaitGenerationService:
                 final_status,
                 query_result.output_uri,
                 query_result.error_message,
+                result_metadata,
             )
             element = project.canvas.get_element(record.element_id)
             if element is not None:
@@ -196,12 +214,6 @@ class WaitGenerationService:
                 "outputUri": query_result.output_uri,
                 "errorMessage": query_result.error_message,
             }
-            if record.element_type == "video":
-                detail_update["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
-                    detail.get("videoGenerationResultMeta") or {},
-                    query_result.result_metadata,
-                    final_status,
-                )
             if find_generation_request(detail) is None:
                 parameters = detail.get("generationParameters") or {}
                 if isinstance(parameters, dict):

@@ -17,7 +17,7 @@ from app.tools.video_generation_utils.provider_asset_uri import normalize_provid
 
 RUNTIME_METADATA_KEY = "__canvas_runtime__"
 RUNTIME_SIDECAR_FILENAME = "element-details-runtime.json"
-PUBLIC_DETAIL_FIELDS = generated_request_fields() | {"videoGenerationResultMeta", "visualUnderstanding"}
+PUBLIC_DETAIL_FIELDS = generated_request_fields() | {"visualUnderstanding"}
 
 
 class ContentMetadataService:
@@ -100,12 +100,6 @@ class ContentMetadataService:
                 detail[request_field] = ContentMetadataService.build_public_generation_request(
                     parameters,
                     str(data.get("contentType") or ""),
-                )
-            if data.get("contentType") == "video":
-                detail["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
-                    {},
-                    ContentMetadataService.build_video_result_metadata(parameters),
-                    "pending",
                 )
         elif data.get("source") == "imported":
             detail["assetPath"] = data.get("assetPath")
@@ -200,12 +194,6 @@ class ContentMetadataService:
             updated[request_field] = ContentMetadataService.build_public_generation_request(
                 cleaned_parameters,
                 element_type or "",
-            )
-        if element_type == "video":
-            updated["videoGenerationResultMeta"] = ContentMetadataService.merge_video_result_metadata(
-                {},
-                ContentMetadataService.build_video_result_metadata(cleaned_parameters),
-                "pending",
             )
         return updated
 
@@ -384,8 +372,8 @@ def _with_generation_start_metadata(parameters: dict[str, Any], element_type: st
 
 
 def _now_text() -> str:
-    """返回前端详情面板兼容的本地时间文本。"""
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    """返回包含明确时区的新生成详情时间文本。"""
+    return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def _diff_seconds(started_at: Any, finished_at: Any) -> int | None:

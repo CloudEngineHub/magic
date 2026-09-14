@@ -16,7 +16,7 @@ class CanvasLayoutResult:
     height: float | None = None
     scale_x: float | None = None
     scale_y: float | None = None
-    z_index: int | None = None
+    z_index: float | None = None
 
     def to_dict(self) -> JsonObject:
         """转换为布局 JSON 对象。"""
