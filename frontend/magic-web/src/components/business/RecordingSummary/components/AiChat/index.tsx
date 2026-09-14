@@ -577,6 +577,9 @@ const LiveRecordingAiChat = observer(function LiveRecordingAiChat(props: AiChatP
 						currentTopicStatus={selectedTopic?.task_status}
 						handleSendMsg={handleSendMsg}
 						className={`${styles.messageList} min-h-0 flex-1`}
+						classNames={{
+							scrollWrapper: "pt-[10px] pr-2",
+						}}
 						onFileClick={onFileClick}
 						stickyMessageClassName="top-0 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
 					/>
