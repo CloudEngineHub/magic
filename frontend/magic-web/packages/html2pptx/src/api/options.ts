@@ -315,4 +315,8 @@ export interface ResourceLoadError {
 	kind: string
 	/** Failure reason: timeout or load error */
 	reason: "timeout" | "load-error"
+	/** Safe, truncated diagnostic suitable for UI/support logs; never contains response bodies. */
+	message?: string
+	status?: number
+	contentType?: string
 }

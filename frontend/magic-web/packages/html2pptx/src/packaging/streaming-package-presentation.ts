@@ -522,9 +522,15 @@ export function createStreamingPresentationPackager(
 			try {
 				input.onExportIssue?.({
 					code: "resource-error",
-					message: `${resourceError.kind} ${resourceError.reason}: ${resourceError.url}`,
+					message: `${resourceError.message || `${resourceError.kind} ${resourceError.reason}`}: ${resourceError.url}`,
 					severity: "warning",
-					details: { kind: resourceError.kind, reason: resourceError.reason, url: resourceError.url },
+					details: {
+						kind: resourceError.kind,
+						reason: resourceError.reason,
+						url: resourceError.url,
+						...(resourceError.status === undefined ? {} : { status: resourceError.status }),
+						...(resourceError.contentType ? { contentType: resourceError.contentType } : {}),
+					},
 				} satisfies ExportIssue)
 			} catch {
 				// Diagnostics are observational and must not affect a successful package.
@@ -774,6 +780,14 @@ function requireOptionalResourceErrors(value: unknown): void {
 		}
 		if (resourceError.reason !== "timeout" && resourceError.reason !== "load-error") {
 			throw new Error("Packaging Worker resource error reason is invalid")
+		}
+		for (const field of ["message", "contentType"] as const) {
+			if (resourceError[field] !== undefined && typeof resourceError[field] !== "string") {
+				throw new Error(`Packaging Worker resource error ${field} must be a string`)
+			}
+		}
+		if (resourceError.status !== undefined && !Number.isSafeInteger(resourceError.status)) {
+			throw new Error("Packaging Worker resource error status must be a safe integer")
 		}
 	}
 }

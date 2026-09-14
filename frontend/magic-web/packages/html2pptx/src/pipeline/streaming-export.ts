@@ -507,9 +507,14 @@ function reportExportResourceError(
 		input.onExportIssue?.({
 			pageIndex,
 			code: "resource-error",
-			message: `${error.kind} ${error.reason}`,
+			message: error.message || `${error.kind} ${error.reason}`,
 			severity: "warning",
-			details: { kind: error.kind, reason: error.reason },
+			details: {
+				kind: error.kind,
+				reason: error.reason,
+				...(error.status === undefined ? {} : { status: error.status }),
+				...(error.contentType ? { contentType: error.contentType } : {}),
+			},
 		} satisfies ExportIssue)
 	} catch {
 		// Issue listeners are observational and must not affect packaging.
