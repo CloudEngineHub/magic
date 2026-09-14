@@ -9,6 +9,8 @@ import type { DataDashboard } from "@admin/types/datadashboard"
 import {
 	AGENT_SOURCE_TYPE,
 	AGENT_TAB_TYPE,
+	ALL_OPTION_VALUE,
+	FILE_TABLE_PAGE_SIZE,
 	CSV_TITLE_BY_VIEW,
 	MEMBER_TAB_TYPE,
 	ORGANIZATION_TAB_TYPE,
@@ -46,6 +48,7 @@ interface DetailTimeRange {
 interface DetailSectionProps {
 	view: DataDashboardView
 	activeTab: DashboardTabType
+	fileCategory?: DataDashboard.FileCategory | typeof ALL_OPTION_VALUE
 	tabData?: DataDashboard.PagedResponse<DashboardRow>
 	timeRange?: DetailTimeRange | null
 	pageSize: number
@@ -59,6 +62,7 @@ interface DetailSectionProps {
 export function DetailSection({
 	view,
 	activeTab,
+	fileCategory,
 	tabData,
 	timeRange,
 	pageSize,
@@ -80,6 +84,7 @@ export function DetailSection({
 			getDetailTabs({
 				view,
 				activeTab,
+				fileCategory,
 				rows,
 				total,
 				page,
@@ -95,6 +100,7 @@ export function DetailSection({
 			}),
 		[
 			activeTab,
+			fileCategory,
 			isMobile,
 			loading,
 			exportingTab,
@@ -129,6 +135,7 @@ export function DetailSection({
 interface getDetailTabsProps {
 	view: DataDashboardView
 	activeTab: DashboardTabType
+	fileCategory?: DataDashboard.FileCategory | typeof ALL_OPTION_VALUE
 	rows: DashboardRow[]
 	total: number
 	page: number
@@ -146,6 +153,7 @@ interface getDetailTabsProps {
 function getDetailTabs({
 	view,
 	activeTab,
+	fileCategory,
 	rows,
 	total,
 	page,
@@ -233,6 +241,68 @@ function getDetailTabs({
 				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.agentDepartments")}`,
 				styles,
 				t,
+				onPageChange,
+				onExport,
+			}),
+		]
+	}
+
+	if (view === VIEW.FileProductionAnalysis) {
+		return [
+			createTabItem({
+				tabType: "file_user",
+				label: t("detail.fileUsers"),
+				activeTab,
+				rows,
+				total,
+				page,
+				pageSize: FILE_TABLE_PAGE_SIZE,
+				loading,
+				exportingTab,
+				columns: fileUserColumns(styles, t, isMobile, fileCategory),
+				scrollX: TABLE_SCROLL_X.File,
+				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.fileUsers")}`,
+				styles,
+				t,
+				showSizeChanger: false,
+				onPageChange,
+				onExport,
+			}),
+			createTabItem({
+				tabType: "file_department",
+				label: t("detail.fileDepartments"),
+				activeTab,
+				rows,
+				total,
+				page,
+				pageSize: FILE_TABLE_PAGE_SIZE,
+				loading,
+				exportingTab,
+				columns: fileDepartmentColumns(styles, t, isMobile, fileCategory),
+				scrollX: TABLE_SCROLL_X.File,
+				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.fileDepartments")}`,
+				styles,
+				t,
+				showSizeChanger: false,
+				onPageChange,
+				onExport,
+			}),
+			createTabItem({
+				tabType: "file_agent",
+				label: t("detail.fileAgents"),
+				activeTab,
+				rows,
+				total,
+				page,
+				pageSize: FILE_TABLE_PAGE_SIZE,
+				loading,
+				exportingTab,
+				columns: fileAgentColumns(styles, t, isMobile, fileCategory),
+				scrollX: TABLE_SCROLL_X.File,
+				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.fileAgents")}`,
+				styles,
+				t,
+				showSizeChanger: false,
 				onPageChange,
 				onExport,
 			}),
@@ -368,6 +438,8 @@ function createTabItem({
 	total,
 	page,
 	pageSize,
+	pageSizeOptions,
+	showSizeChanger = true,
 	loading,
 	exportingTab,
 	columns,
@@ -385,6 +457,8 @@ function createTabItem({
 	total: number
 	page: number
 	pageSize: number
+	pageSizeOptions?: string[]
+	showSizeChanger?: boolean
 	loading: boolean
 	exportingTab: DashboardTabType | null
 	columns: ColumnsType<DashboardRow>
@@ -427,8 +501,12 @@ function createTabItem({
 								current: page,
 								pageSize,
 								total,
-								showSizeChanger: true,
-								pageSizeOptions: [String(TABLE_PAGE_SIZE), "50", "100"],
+								showSizeChanger,
+								pageSizeOptions: pageSizeOptions ?? [
+									String(TABLE_PAGE_SIZE),
+									"50",
+									"100",
+								],
 								onChange: onPageChange,
 							}}
 						/>
@@ -436,6 +514,160 @@ function createTabItem({
 				</div>
 			) : null,
 	}
+}
+
+const FILE_CATEGORY_COLUMNS = [
+	{ key: "doc_count", labelKey: "docCount" },
+	{ key: "spreadsheet_count", labelKey: "spreadsheetCount" },
+	{ key: "image_count", labelKey: "imageCount" },
+	{ key: "video_count", labelKey: "videoCount" },
+	{ key: "ppt_count", labelKey: "pptCount" },
+	{ key: "html_count", labelKey: "htmlCount" },
+	{ key: "md_count", labelKey: "mdCount" },
+	{ key: "other_count", labelKey: "otherCount" },
+] as const
+
+function fileCountColumns(
+	styles: Record<string, string>,
+	t: DashboardT,
+	fileCategory?: DataDashboard.FileCategory | typeof ALL_OPTION_VALUE,
+): ColumnsType<DashboardRow> {
+	const selectedKey = fileCategory && fileCategory !== "__all" ? `${fileCategory}_count` : null
+	const categoryColumns = FILE_CATEGORY_COLUMNS.filter(
+		(column) => !selectedKey || column.key === selectedKey,
+	)
+	return [
+		createDetailColumn(styles, t, {
+			titleKey: "fileOutputCount",
+			dataIndex: "file_output_count",
+			width: 130,
+			render: renderNumber,
+		}),
+		...categoryColumns.map((column) =>
+			createDetailColumn(styles, t, {
+				titleKey: column.labelKey,
+				dataIndex: column.key,
+				width: 120,
+				render: renderNumber,
+			}),
+		),
+	]
+}
+
+function fileUserColumns(
+	styles: Record<string, string>,
+	t: DashboardT,
+	isMobile: boolean,
+	fileCategory?: DataDashboard.FileCategory | typeof ALL_OPTION_VALUE,
+): ColumnsType<DashboardRow> {
+	return [
+		createDetailColumn(styles, t, {
+			titleKey: "member",
+			dataIndex: "user_name",
+			width: 300,
+			fixed: isMobile ? undefined : "left",
+			render: (_, row) =>
+				renderEntity(
+					styles,
+					(row as DataDashboard.FileUserRow).user_name,
+					(row as DataDashboard.FileUserRow).user_id,
+				),
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "department",
+			dataIndex: "department_name_path",
+			width: 280,
+			render: (value) => renderFileDepartment(value, t),
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "departmentId",
+			dataIndex: "department_id",
+			width: 200,
+			render: displayText,
+		}),
+		...fileCountColumns(styles, t, fileCategory),
+	]
+}
+
+function fileDepartmentColumns(
+	styles: Record<string, string>,
+	t: DashboardT,
+	_isMobile: boolean,
+	fileCategory?: DataDashboard.FileCategory | typeof ALL_OPTION_VALUE,
+): ColumnsType<DashboardRow> {
+	return [
+		createDetailColumn(styles, t, {
+			titleKey: "department",
+			dataIndex: "department_name_path",
+			width: 240,
+			render: (value) => renderFileDepartment(value, t),
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "departmentId",
+			dataIndex: "department_id",
+			width: 150,
+			render: displayText,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "memberCount",
+			dataIndex: "member_count",
+			width: 120,
+			render: renderNumber,
+		}),
+		...fileCountColumns(styles, t, fileCategory),
+	]
+}
+
+function fileAgentColumns(
+	styles: Record<string, string>,
+	t: DashboardT,
+	isMobile: boolean,
+	fileCategory?: DataDashboard.FileCategory | typeof ALL_OPTION_VALUE,
+): ColumnsType<DashboardRow> {
+	return [
+		createDetailColumn(styles, t, {
+			titleKey: "digitalEmployee",
+			dataIndex: "agent_name",
+			width: 220,
+			fixed: isMobile ? undefined : "left",
+			render: (_, row) =>
+				renderEntity(
+					styles,
+					(row as DataDashboard.FileAgentRow).agent_name,
+					(row as DataDashboard.FileAgentRow).agent_code,
+				),
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "agentStatus",
+			dataIndex: "agent_status",
+			width: 160,
+			render: (value) => agentStatusLabel(value, t),
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "member",
+			dataIndex: "user_name",
+			width: 300,
+			render: (_, row) =>
+				renderEntity(
+					styles,
+					(row as DataDashboard.FileAgentRow).user_name,
+					(row as DataDashboard.FileAgentRow).user_id,
+				),
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "department",
+			dataIndex: "department_name_path",
+			width: 280,
+			render: (value) => renderFileDepartment(value, t),
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "departmentId",
+			dataIndex: "department_id",
+			width: 150,
+			render: displayText,
+		}),
+		...fileCountColumns(styles, t, fileCategory),
+	]
 }
 
 function agentUsageColumns(
@@ -1061,11 +1293,6 @@ function renderAgent(styles: Record<string, string>, row: DashboardRow) {
 	return renderEntity(styles, agent.agent_name, agent.agent_code)
 }
 
-function renderDepartment(styles: Record<string, string>, row: DashboardRow) {
-	const department = row as Partial<DataDashboard.AgentDepartmentRow>
-	return renderEntity(styles, department.department_name_path, department.department_id)
-}
-
 function renderEntity(styles: Record<string, string>, name?: string | null, meta?: string | null) {
 	const displayName = displayText(name)
 	const avatarText = displayName === EMPTY_TEXT ? EMPTY_TEXT : displayName.slice(0, 1)
@@ -1093,6 +1320,19 @@ function renderResource(styles: Record<string, string>, row: DashboardRow) {
 	)
 }
 
+function renderFileDepartment(value: unknown, t: DashboardT) {
+	return value === null || value === undefined || value === ""
+		? t("noDepartment")
+		: displayText(value as string)
+}
+
+function agentStatusLabel(value: unknown, t: DashboardT) {
+	if (value === "published") return t("agentStatus.published")
+	if (value === "offline") return t("agentStatus.offline")
+	if (value === "deleted") return t("agentStatus.deleted")
+	return displayText(value as string | null)
+}
+
 function renderNumber(value: unknown) {
 	return formatNumber(Number(value))
 }
@@ -1100,7 +1340,7 @@ function renderNumber(value: unknown) {
 function renderDepartmentLevel(value: unknown, t: DashboardT) {
 	const level = Number(value) as DataDashboard.DepartmentLevel
 	const labelKey = DEPARTMENT_LEVEL_LABEL_MAP[level]
-	return labelKey ? t(labelKey) : displayText(value)
+	return labelKey ? t(labelKey) : displayText(value as string | number | null)
 }
 
 function renderDepartmentActivationRate(row: DashboardRow) {
@@ -1168,6 +1408,17 @@ function getAgentSortName(row: DashboardRow) {
 }
 
 function getRowKey(tabType: DashboardTabType, row: DashboardRow) {
+	if (tabType === "file_user") {
+		const item = row as DataDashboard.FileUserRow
+		return `${item.user_id}-${item.department_id || "none"}`
+	}
+	if (tabType === "file_department") {
+		return (row as DataDashboard.FileDepartmentRow).department_id || "no-department"
+	}
+	if (tabType === "file_agent") {
+		const item = row as DataDashboard.FileAgentRow
+		return `${item.agent_code}-${item.user_id}-${item.department_id || "none"}`
+	}
 	if (tabType === AGENT_TAB_TYPE.Usage) {
 		return (row as DataDashboard.AgentUsageRow).agent_code
 	}

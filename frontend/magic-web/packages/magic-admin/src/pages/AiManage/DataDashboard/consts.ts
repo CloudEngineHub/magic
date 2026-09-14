@@ -3,6 +3,7 @@ export const DataDashboardView = {
 	OrganizationAnalysis: "organization-analysis",
 	DigitalEmployeeAnalysis: "digital-employee-analysis",
 	ConsumptionAnalysis: "consumption-analysis",
+	FileProductionAnalysis: "file-production-analysis",
 } as const
 
 export type DataDashboardView = (typeof DataDashboardView)[keyof typeof DataDashboardView]
@@ -14,6 +15,7 @@ export const PAGE_TEXT_KEY_BY_VIEW = {
 	[DataDashboardView.OrganizationAnalysis]: "organization",
 	[DataDashboardView.DigitalEmployeeAnalysis]: "digitalEmployee",
 	[DataDashboardView.ConsumptionAnalysis]: "consumption",
+	[DataDashboardView.FileProductionAnalysis]: "fileProduction",
 } as const satisfies Record<DataDashboardView, string>
 
 export const CHART_SERIES = {
@@ -55,10 +57,16 @@ export const TREND_DATA_KEY = {
 	Tokens: "tokens",
 	ActiveAgents: "activeAgents",
 	ActiveMembers: "activeMembers",
+	FileOutput: "fileOutput",
+	UserCreatedFiles: "userCreatedFiles",
+	AiCreatedFiles: "aiCreatedFiles",
 } as const
 
 export const METRIC_KEY = {
 	ActiveMembers: "activeMembers",
+	FileOutput: "fileOutput",
+	UserCreatedFiles: "userCreatedFiles",
+	AiCreatedFiles: "aiCreatedFiles",
 	ActivationRate: "activationRate",
 	NewMembers: "newMembers",
 	SilentMembers: "silentMembers",
@@ -95,11 +103,15 @@ export const METRIC_KEY = {
 	DepartmentAvgTokens: "departmentAvgTokens",
 	AgentAvgAmount: "agentAvgAmount",
 	AgentAvgTokens: "agentAvgTokens",
+	FileOutputCount: "fileOutputCount",
+	FileUserCreatedCount: "fileUserCreatedCount",
+	FileAiCreatedCount: "fileAiCreatedCount",
 } as const
 
 export type MetricKey = (typeof METRIC_KEY)[keyof typeof METRIC_KEY]
 
 export const TABLE_PAGE_SIZE = 10
+export const FILE_TABLE_PAGE_SIZE = 20
 
 export const ALL_OPTION_VALUE = "__all"
 
@@ -138,6 +150,7 @@ export const DEFAULT_TAB_BY_VIEW = {
 	[VIEW.MemberAnalysis]: MEMBER_TAB_TYPE.Usage,
 	[VIEW.OrganizationAnalysis]: ORGANIZATION_TAB_TYPE.Usage,
 	[VIEW.DigitalEmployeeAnalysis]: AGENT_TAB_TYPE.Usage,
+	[VIEW.FileProductionAnalysis]: "file_user",
 } as const
 
 export const TABLE_SCROLL_X = {
@@ -149,6 +162,7 @@ export const TABLE_SCROLL_X = {
 	MemberAgent: 1400,
 	MemberRecord: 1350,
 	Record: 1120,
+	File: 1700,
 } as const
 
 export const RATIO_BASE = 100
@@ -207,4 +221,5 @@ export const CSV_TITLE_BY_VIEW: Record<DataDashboardView, string> = {
 	[VIEW.OrganizationAnalysis]: VIEW.OrganizationAnalysis,
 	[VIEW.DigitalEmployeeAnalysis]: VIEW.DigitalEmployeeAnalysis,
 	[VIEW.ConsumptionAnalysis]: VIEW.ConsumptionAnalysis,
+	[VIEW.FileProductionAnalysis]: VIEW.FileProductionAnalysis,
 }

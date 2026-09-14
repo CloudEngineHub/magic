@@ -3,6 +3,11 @@
 		"export": "Export",
 		"resetFilters": "Reset Filters"
 	},
+	"agentStatus": {
+		"deleted": "Deleted",
+		"offline": "Offline",
+		"published": "Published"
+	},
 	"buckets": {
 		"highUseAgent": "High-frequency digital employees",
 		"highUseAgentDesc": "Period calls >= 30",
@@ -51,6 +56,7 @@
 		"departmentPenetrationDesc": "Usage coverage by department activation rate.",
 		"departmentPenetrationMeta": "{{active}} / {{employed}} members · {{calls}} calls · {{points}} points",
 		"departmentUsage": "Department Usage Distribution",
+		"fileProductionTrend": "File Production Trend",
 		"memberBucket": "Member Activity Segments",
 		"memberTrend": "Active Member Trend",
 		"memberTrendDesc": "Calls and active members over time.",
@@ -93,34 +99,49 @@
 		"activationRate": "Member Activation Rate",
 		"activeAgents": "Active Digital Employees",
 		"activeMembers": "Active Member Count",
+		"agentStatus": "Digital Employee Status",
 		"amount": "Point Consumption",
 		"averageAmount": "Avg Points per Call",
 		"averageTokens": "Avg Tokens per Call",
 		"businessType": "Business Type",
 		"calls": "Calls",
 		"department": "Department",
+		"departmentId": "Department ID",
 		"departmentLevel": "Department Level",
 		"departments": "Covered Departments",
 		"digitalEmployee": "Digital Employee",
+		"docCount": "Documents",
 		"employeeCount": "Employed Members",
 		"employmentStatus": "Employment status",
 		"favoriteAgent": "Frequent Digital Employee",
+		"fileAiCreatedCount": "AI Created",
+		"fileOutputCount": "File Output Count",
+		"fileUserCreatedCount": "User Created",
+		"htmlCount": "HTML",
+		"imageCount": "Images",
 		"lastUsedAt": "Last Called At",
 		"level1Department": "Level-1 Dept",
 		"level2Department": "Level-2 Dept",
 		"level3Department": "Level-3 Dept",
+		"mdCount": "Markdown",
 		"member": "Member",
+		"memberCount": "Members",
 		"members": "Calling Members",
+		"otherCount": "Other Files",
+		"pptCount": "PPT",
 		"resourceType": "Resource Type",
 		"silentDays": "Silent Days",
 		"source": "Source",
+		"spreadsheetCount": "Spreadsheets",
 		"status": "Status",
 		"taskId": "Task ID",
 		"tokens": "Token Consumption",
 		"topAgent": "Top Digital Employee",
 		"topic": "Call Detail",
 		"updatedAt": "Call Time",
-		"usageDays": "Usage Days"
+		"usageDays": "Usage Days",
+		"userId": "User ID",
+		"videoCount": "Videos"
 	},
 	"detail": {
 		"agentCalls": "Digital Employee Call Details",
@@ -133,6 +154,9 @@
 		"departmentConsumption": "Department Consumption Details",
 		"departmentMembers": "Department Member Details",
 		"departmentUsage": "Department Usage Details",
+		"fileAgents": "Digital Employee Details",
+		"fileDepartments": "Department Details",
+		"fileUsers": "User Details",
 		"lowDepartments": "Low-activation Department Details",
 		"memberAgent": "Member-Digital Employee Details",
 		"memberCalls": "Member Call Details",
@@ -209,6 +233,27 @@
 		"expired": "The export file has expired. Please export it again.",
 		"failed": "Export failed. Please try again.",
 		"timeout": "The export timed out. Please try again later."
+	},
+	"fileProduction": {
+		"allCategories": "All Categories",
+		"categories": {
+			"doc": "Documents",
+			"html": "HTML",
+			"image": "Images",
+			"md": "Markdown",
+			"other": "Other Files",
+			"ppt": "PPT",
+			"spreadsheet": "Spreadsheets",
+			"video": "Videos"
+		},
+		"desc": "Analyze enterprise file production by time, operation type, and file category.",
+		"fileCategory": "File Category",
+		"operationType": "Operation Type",
+		"operationTypes": {
+			"ai": "AI Created",
+			"original": "User Created"
+		},
+		"title": "File Production Analysis"
 	},
 	"filters": {
 		"agentCodePlaceholder": "Enter digital employee code",
@@ -312,6 +357,9 @@
 		"departmentMemberAvgCalls": "Dept Calls per Member",
 		"departmentMemberAvgTokens": "Dept Tokens per Member",
 		"departmentTokens": "Department Tokens",
+		"fileAiCreatedCount": "AI Created",
+		"fileOutputCount": "File Output Count",
+		"fileUserCreatedCount": "User Created",
 		"memberAvgAmount": "Member Avg Points",
 		"memberAvgCalls": "Member Avg Calls",
 		"memberAvgTokens": "Member Avg Tokens",
@@ -322,6 +370,7 @@
 		"totalTokens": "Total Tokens",
 		"uncoveredDepartments": "Uncovered Departments"
 	},
+	"noDepartment": "No Department",
 	"pages": {
 		"consumption": {
 			"desc": "Analyze point and token consumption trends by period, department, and digital employee.",
@@ -334,6 +383,10 @@
 		"digitalEmployee": {
 			"desc": "Analyze call distribution, member coverage, and consumption performance by digital employee.",
 			"title": "Digital Employee Analysis"
+		},
+		"fileProduction": {
+			"desc": "Analyze enterprise file production by time, operation type, and file category.",
+			"title": "File Production Analysis"
 		},
 		"member": {
 			"desc": "Analyze activity, calls, consumption, and silent status by member.",

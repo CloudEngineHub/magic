@@ -3,6 +3,11 @@
 		"export": "导出",
 		"resetFilters": "重置筛选"
 	},
+	"agentStatus": {
+		"deleted": "已删除",
+		"offline": "已下线",
+		"published": "已发布"
+	},
 	"buckets": {
 		"highUseAgent": "高频数字员工",
 		"highUseAgentDesc": "周期调用次数 >= 30",
@@ -51,6 +56,7 @@
 		"departmentPenetrationDesc": "按部门活跃率展示使用覆盖。",
 		"departmentPenetrationMeta": "{{active}} / {{employed}} 人 · {{calls}} 次调用 · {{points}} 积分",
 		"departmentUsage": "部门使用分布",
+		"fileProductionTrend": "文件产出趋势",
 		"memberBucket": "成员活跃分层",
 		"memberTrend": "活跃成员趋势",
 		"memberTrendDesc": "按时间统计调用次数和活跃成员数。",
@@ -93,34 +99,49 @@
 		"activationRate": "成员激活率",
 		"activeAgents": "活跃数字员工",
 		"activeMembers": "活跃成员数",
+		"agentStatus": "数字员工状态",
 		"amount": "积分消耗",
 		"averageAmount": "平均单次积分",
 		"averageTokens": "平均单次 Token",
 		"businessType": "业务类型",
 		"calls": "调用次数",
 		"department": "部门",
+		"departmentId": "部门 ID",
 		"departmentLevel": "部门层级",
 		"departments": "覆盖部门数",
 		"digitalEmployee": "数字员工",
+		"docCount": "文档数",
 		"employeeCount": "在职成员数",
 		"employmentStatus": "在职状态",
 		"favoriteAgent": "常用数字员工",
+		"fileAiCreatedCount": "AI 创建",
+		"fileOutputCount": "文件产出数",
+		"fileUserCreatedCount": "用户原创",
+		"htmlCount": "HTML 数",
+		"imageCount": "图片数",
 		"lastUsedAt": "最近调用时间",
 		"level1Department": "一级部门",
 		"level2Department": "二级部门",
 		"level3Department": "三级部门",
+		"mdCount": "Markdown 数",
 		"member": "成员",
+		"memberCount": "成员数",
 		"members": "调用成员数",
+		"otherCount": "其他文件数",
+		"pptCount": "PPT 数",
 		"resourceType": "资源类型",
 		"silentDays": "沉默天数",
 		"source": "来源",
+		"spreadsheetCount": "表格数",
 		"status": "在职状态",
 		"taskId": "任务 ID",
 		"tokens": "Token 消耗",
 		"topAgent": "高频数字员工",
 		"topic": "调用详情",
 		"updatedAt": "调用时间",
-		"usageDays": "使用天数"
+		"usageDays": "使用天数",
+		"userId": "用户 ID",
+		"videoCount": "视频数"
 	},
 	"detail": {
 		"agentCalls": "数字员工调用明细",
@@ -133,6 +154,9 @@
 		"departmentConsumption": "部门消耗明细",
 		"departmentMembers": "部门成员明细",
 		"departmentUsage": "部门使用明细",
+		"fileAgents": "数字员工明细",
+		"fileDepartments": "部门明细",
+		"fileUsers": "用户明细",
 		"lowDepartments": "低激活部门明细",
 		"memberAgent": "成员-数字员工明细",
 		"memberCalls": "成员调用明细",
@@ -209,6 +233,27 @@
 		"expired": "导出文件已过期，请重新发起导出",
 		"failed": "导出失败，请重新发起",
 		"timeout": "导出等待超时，请稍后重新发起"
+	},
+	"fileProduction": {
+		"allCategories": "全部类别",
+		"categories": {
+			"doc": "文档",
+			"html": "HTML",
+			"image": "图片",
+			"md": "Markdown",
+			"other": "其他文件",
+			"ppt": "PPT",
+			"spreadsheet": "表格",
+			"video": "视频"
+		},
+		"desc": "按时间、操作类型和文件类别分析企业文件产出情况。",
+		"fileCategory": "文件类别",
+		"operationType": "操作类型",
+		"operationTypes": {
+			"ai": "AI 创建",
+			"original": "用户原创"
+		},
+		"title": "文件产出分析"
 	},
 	"filters": {
 		"agentCodePlaceholder": "请输入数字员工编码",
@@ -312,6 +357,9 @@
 		"departmentMemberAvgCalls": "部门人均调用次数",
 		"departmentMemberAvgTokens": "部门人均 Token 消耗",
 		"departmentTokens": "部门 Token 消耗",
+		"fileAiCreatedCount": "AI 创建",
+		"fileOutputCount": "文件产出数",
+		"fileUserCreatedCount": "用户原创",
 		"memberAvgAmount": "成员人均积分消耗",
 		"memberAvgCalls": "成员平均调用次数",
 		"memberAvgTokens": "成员人均 Token 消耗",
@@ -322,6 +370,7 @@
 		"totalTokens": "总 Token 消耗",
 		"uncoveredDepartments": "未覆盖部门数"
 	},
+	"noDepartment": "无部门",
 	"pages": {
 		"consumption": {
 			"desc": "按统计周期、部门和数字员工分析积分与 Token 消耗趋势。",
@@ -334,6 +383,10 @@
 		"digitalEmployee": {
 			"desc": "按数字员工维度分析调用分布、成员覆盖和消耗表现。",
 			"title": "数字员工分析"
+		},
+		"fileProduction": {
+			"desc": "按时间、操作类型和文件类别分析企业文件产出情况。",
+			"title": "文件产出分析"
 		},
 		"member": {
 			"desc": "按成员维度分析活跃、调用、消耗和沉默情况。",

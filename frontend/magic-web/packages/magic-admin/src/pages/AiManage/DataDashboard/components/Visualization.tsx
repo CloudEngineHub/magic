@@ -46,6 +46,9 @@ interface TrendPoint {
 	tokens: number
 	activeAgents: number
 	activeMembers: number
+	fileOutput: number
+	userCreatedFiles: number
+	aiCreatedFiles: number
 }
 
 interface BucketItem {
@@ -84,6 +87,7 @@ type VisualizationSummary =
 	| DataDashboard.MemberSummary
 	| DataDashboard.OrganizationSummary
 	| DataDashboard.ConsumptionAnalysisSummary
+	| DataDashboard.FileAnalysisSummary
 	| null
 
 interface VisualizationProps {
@@ -184,6 +188,24 @@ export function Visualization({
 		)
 	}
 
+	if (view === VIEW.FileProductionAnalysis) {
+		const fileSummary = summary as DataDashboard.FileAnalysisSummary | null
+		return (
+			<div className={styles.analysisGrid}>
+				<ChartPanel
+					key={VIEW.FileProductionAnalysis}
+					title={t("charts.fileProductionTrend")}
+					data={buildFileTrend(fileSummary)}
+					metrics={getFileTrendMetrics(t)}
+					axisLabels={{ left: t("charts.quantityAxis") }}
+					fullWidth
+					loading={loading}
+					styles={styles}
+				/>
+			</div>
+		)
+	}
+
 	if (view === VIEW.ConsumptionAnalysis) {
 		const consumptionSummary = summary as DataDashboard.ConsumptionAnalysisSummary | null
 		return (
@@ -208,6 +230,48 @@ export function Visualization({
 	return null
 }
 
+function buildFileTrend(summary: DataDashboard.FileAnalysisSummary | null): TrendPoint[] {
+	return [...(summary?.file_output_trend ?? [])]
+		.sort((left, right) => left.date.localeCompare(right.date))
+		.map((item) => ({
+			period: item.date,
+			calls: 0,
+			amount: 0,
+			tokens: 0,
+			activeAgents: 0,
+			activeMembers: 0,
+			fileOutput: item.file_output_count,
+			userCreatedFiles: item.user_created_count,
+			aiCreatedFiles: item.ai_created_count,
+		}))
+}
+
+function getFileTrendMetrics(t: DashboardT): ChartMetricConfig[] {
+	return [
+		{
+			dataKey: TREND_DATA_KEY.FileOutput,
+			label: t("columns.fileOutputCount"),
+			chartType: CHART_METRIC_TYPE.Bar,
+			yAxisId: CHART_AXIS.Left,
+			color: CHART_COLORS.calls,
+		},
+		{
+			dataKey: TREND_DATA_KEY.UserCreatedFiles,
+			label: t("columns.fileUserCreatedCount"),
+			chartType: CHART_METRIC_TYPE.Line,
+			yAxisId: CHART_AXIS.Left,
+			color: CHART_COLORS.activeMembers,
+		},
+		{
+			dataKey: TREND_DATA_KEY.AiCreatedFiles,
+			label: t("columns.fileAiCreatedCount"),
+			chartType: CHART_METRIC_TYPE.Line,
+			yAxisId: CHART_AXIS.Left,
+			color: CHART_COLORS.activeAgents,
+		},
+	]
+}
+
 function buildAgentTrend(summary: DataDashboard.AgentSummary | null): TrendPoint[] {
 	return (
 		summary?.usage_trend.map((item) => ({
@@ -217,6 +281,9 @@ function buildAgentTrend(summary: DataDashboard.AgentSummary | null): TrendPoint
 			tokens: 0,
 			activeAgents: item.active_agent_count,
 			activeMembers: 0,
+			fileOutput: 0,
+			userCreatedFiles: 0,
+			aiCreatedFiles: 0,
 		})) ?? []
 	)
 }
@@ -294,6 +361,9 @@ function buildMemberTrend(summary: DataDashboard.MemberSummary | null): TrendPoi
 			tokens: 0,
 			activeAgents: 0,
 			activeMembers: item.active_member_count,
+			fileOutput: 0,
+			userCreatedFiles: 0,
+			aiCreatedFiles: 0,
 		})) ?? []
 	)
 }
@@ -309,6 +379,9 @@ function buildConsumptionTrend(
 		tokens: item.tokens,
 		activeAgents: 0,
 		activeMembers: 0,
+		fileOutput: 0,
+		userCreatedFiles: 0,
+		aiCreatedFiles: 0,
 	}))
 }
 
