@@ -138,6 +138,7 @@ export interface CreateStreamingPresentationPackagerInput {
 	workerFactory?: StreamingWorkerFactory
 	onProgress?: (progress: ExportProgress) => void
 	onResourceError?: (error: ResourceLoadError) => void
+	onExportIssue?: (issue: import("../api/options").ExportIssue) => void
 }
 
 export interface StreamingPresentationPackager {

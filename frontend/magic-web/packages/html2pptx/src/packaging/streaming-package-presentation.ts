@@ -13,6 +13,7 @@ import type {
 } from "./streaming-types"
 import type { EmbedFontInput } from "../api/font"
 import type { ResourceLoadError } from "../api/options"
+import type { ExportIssue } from "../api/options"
 import { descriptorTransferables } from "../media/source-descriptor"
 import {
 	PACKAGING_RUNTIME_IDENTITY,
@@ -517,6 +518,16 @@ export function createStreamingPresentationPackager(
 				input.onResourceError?.(resourceError)
 			} catch {
 				// Resource reporting must never turn a successful package into a failed export.
+			}
+			try {
+				input.onExportIssue?.({
+					code: "resource-error",
+					message: `${resourceError.kind} ${resourceError.reason}: ${resourceError.url}`,
+					severity: "warning",
+					details: { kind: resourceError.kind, reason: resourceError.reason, url: resourceError.url },
+				} satisfies ExportIssue)
+			} catch {
+				// Diagnostics are observational and must not affect a successful package.
 			}
 		}
 	}

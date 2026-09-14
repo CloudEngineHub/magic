@@ -232,6 +232,7 @@ async function runDirectStreamingExport(
 			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
 			onResourceError: (error) => reportExportResourceError(input, error),
+			onExportIssue: input.onExportIssue,
 		})
 		await packager.ready
 		for await (const page of input.pages) {
@@ -423,6 +424,7 @@ async function runStagedStreamingExport(
 			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
 			onResourceError: (error) => reportExportResourceError(input, error),
+			onExportIssue: input.onExportIssue,
 		})
 		await packager.ready
 
