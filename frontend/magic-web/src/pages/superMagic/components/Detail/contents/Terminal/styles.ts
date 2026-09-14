@@ -1,5 +1,4 @@
 import { createStyles } from "antd-style"
-import { terminalColors, terminalTheme } from "./components/style"
 
 export const useStyles = createStyles(({ css, token, isDarkMode }) => {
 	// 为语法高亮定义主题色
@@ -48,10 +47,8 @@ export const useStyles = createStyles(({ css, token, isDarkMode }) => {
 			display: flex;
 			flex-direction: column;
 			box-sizing: border-box;
-			border: 1px solid ${terminalColors.border};
-			border-radius: 10px;
-			background-color: ${terminalTheme.background};
-			color: ${terminalTheme.foreground};
+			background-color: ${token.colorBgContainer};
+			color: ${token.colorText};
 		`,
 
 		toolbar: css`
@@ -60,8 +57,8 @@ export const useStyles = createStyles(({ css, token, isDarkMode }) => {
 			flex-shrink: 0;
 			min-height: 44px;
 			padding: 0 10px 0 16px;
-			border-bottom: 1px solid ${terminalColors.border};
-			background-color: ${terminalColors.bar};
+			border-bottom: 1px solid ${token.colorBorderSecondary};
+			background-color: ${token.colorBgContainer};
 			user-select: none;
 			-webkit-user-select: none;
 		`,
@@ -78,7 +75,7 @@ export const useStyles = createStyles(({ css, token, isDarkMode }) => {
 		readOnly: css`
 			font-size: 12px;
 			font-weight: 400;
-			color: ${terminalColors.muted};
+			color: ${token.colorTextSecondary};
 
 			@media (max-width: 440px) {
 				display: none;

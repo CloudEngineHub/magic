@@ -6460,17 +6460,32 @@
 		"refreshButton": "换一批"
 	},
 	"terminal": {
+		"actualCommand": "实际命令",
+		"collapseCommand": "收起命令",
 		"command": "命令",
 		"copy": "复制",
 		"copyCommand": "已复制命令",
+		"copyCommandAction": "复制命令",
 		"copyResult": "已复制结果",
 		"exitCode": "退出码",
+		"expandCommand": "展开全部",
+		"guide": "使用指南",
+		"nextMatch": "下一个匹配",
 		"noContentToCopy": "没有可复制的内容",
+		"noMatches": "无匹配",
+		"operation": "操作说明",
+		"output": "输出结果",
+		"previousMatch": "上一个匹配",
 		"readOnly": "只读",
+		"renderFailed": "终端内容暂时无法显示，仍可通过顶部复制按钮获取原始内容。",
 		"result": "结果",
 		"returnedNormally": "正常返回",
 		"returnedWithError": "返回异常",
-		"title": "终端"
+		"scrollToEnd": "跳到末尾",
+		"searchMatches": "{{current}} / {{count}}",
+		"searchOutput": "查找输出内容",
+		"title": "终端",
+		"wrap": "自动换行"
 	},
 	"timeoutTips": {
 		"actionList": [

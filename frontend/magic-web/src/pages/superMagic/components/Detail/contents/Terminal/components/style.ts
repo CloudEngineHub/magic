@@ -1,12 +1,6 @@
-import { createStyles } from "antd-style"
+import { createStyles, useTheme } from "antd-style"
+import { useMemo } from "react"
 import type { ITheme } from "@xterm/xterm"
-
-export const terminalColors = {
-	bar: "#23272F",
-	border: "#343A46",
-	muted: "#9199A8",
-	hover: "#343B49",
-}
 
 export const terminalTheme = {
 	// One Dark theme colors from https://github.com/janoamaral/Xresources-themes
@@ -34,7 +28,41 @@ export const terminalTheme = {
 	brightWhite: "#FFFFFF",
 } satisfies ITheme
 
-export const useStyles = createStyles(({ css }) => {
+export function useTerminalTheme(): ITheme {
+	const { isDarkMode } = useTheme()
+	return useMemo(
+		() =>
+			isDarkMode
+				? { ...terminalTheme, background: "#1C2027" }
+				: {
+						...terminalTheme,
+						background: "#F7F8FA",
+						foreground: "#485464",
+						cursor: "#485464",
+						selectionBackground: "#BFDBFE",
+						selectionForeground: "#172554",
+						black: "#485464",
+						red: "#C9333E",
+						green: "#16824B",
+						yellow: "#946200",
+						blue: "#2563EB",
+						magenta: "#9044B8",
+						cyan: "#167D90",
+						white: "#596775",
+						brightBlack: "#737373",
+						brightRed: "#C9333E",
+						brightGreen: "#16824B",
+						brightYellow: "#946200",
+						brightBlue: "#2563EB",
+						brightMagenta: "#9044B8",
+						brightCyan: "#167D90",
+						brightWhite: "#485464",
+					},
+		[isDarkMode],
+	)
+}
+
+export const useStyles = createStyles(({ css, token, isDarkMode }) => {
 	return {
 		terminalDisplay: css`
 			width: 100%;
@@ -45,37 +73,37 @@ export const useStyles = createStyles(({ css }) => {
 			display: flex;
 			flex-direction: column;
 			overflow: hidden;
-			background-color: ${terminalTheme.background};
-			color: ${terminalTheme.foreground};
+			background-color: ${token.colorBgContainer};
+			color: ${token.colorText};
 		`,
 		terminalBody: css`
 			flex: 1;
 			min-width: 0;
 			min-height: 0;
-			padding: 16px 20px;
+			position: relative;
 			overflow: hidden;
 			box-sizing: border-box;
-			background-color: ${terminalTheme.background};
-
-			@media (max-width: 440px) {
-				padding: 14px 12px;
-			}
+			background-color: ${isDarkMode ? "#1C2027" : "#F7F8FA"};
 		`,
-		terminalMount: css`
+		outputEditor: css`
 			width: 100%;
 			height: 100%;
-			position: relative;
-			background-color: ${terminalTheme.background};
-
-			/* 留白由外层负责；字符画布尺寸由 FitAddon 计算，不能强制拉伸。 */
-			& .xterm {
-				height: 100%;
-				background-color: ${terminalTheme.background};
+			/* 只调整当前输出视图的底色，不注册全局 Monaco 主题影响其它文件编辑器。 */
+			& .monaco-editor,
+			& .monaco-editor-background,
+			& .margin {
+				background-color: ${isDarkMode ? "#1C2027" : "#F7F8FA"} !important;
 			}
-
-			& .xterm-viewport {
-				background-color: ${terminalTheme.background};
+			& .view-lines .mtk1 {
+				color: ${isDarkMode ? "#D6DAE2" : "#485464"};
 			}
+		`,
+		searchMatch: css`
+			background-color: ${token.colorWarningBg} !important;
+		`,
+		activeMatch: css`
+			background-color: ${token.colorPrimaryBg} !important;
+			outline: 1px solid ${token.colorPrimaryBorder};
 		`,
 		footer: css`
 			display: flex;
@@ -86,8 +114,8 @@ export const useStyles = createStyles(({ css }) => {
 			min-height: 36px;
 			padding: 6px 14px 6px 16px;
 			box-sizing: border-box;
-			border-top: 1px solid ${terminalColors.border};
-			background-color: ${terminalColors.bar};
+			border-top: 1px solid ${token.colorBorderSecondary};
+			background-color: ${token.colorBgContainer};
 			font-size: 12px;
 			line-height: 1.4;
 		`,
@@ -99,14 +127,14 @@ export const useStyles = createStyles(({ css }) => {
 			white-space: nowrap;
 
 			& svg {
-				color: ${terminalTheme.green};
+				color: ${token.colorSuccess};
 			}
 		`,
 		exitCode: css`
 			display: inline-flex;
 			align-items: center;
 			gap: 7px;
-			color: ${terminalColors.muted};
+			color: ${token.colorTextSecondary};
 			white-space: nowrap;
 		`,
 		exitCodeValue: css`
@@ -117,14 +145,14 @@ export const useStyles = createStyles(({ css }) => {
 			height: 22px;
 			padding: 0 5px;
 			border-radius: 4px;
-			background-color: ${terminalColors.hover};
+			background-color: ${token.colorFillQuaternary};
 			font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
-			color: ${terminalTheme.foreground};
+			color: ${token.colorText};
 		`,
 		error: css`
 			& svg,
 			& [data-terminal-exit-code] {
-				color: ${terminalTheme.red};
+				color: ${token.colorError};
 			}
 		`,
 	}

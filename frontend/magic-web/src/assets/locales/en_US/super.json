@@ -6459,17 +6459,32 @@
 		"refreshButton": "Refresh"
 	},
 	"terminal": {
+		"actualCommand": "Command",
+		"collapseCommand": "Collapse",
 		"command": "Command",
 		"copy": "Copy",
 		"copyCommand": "Command copied",
+		"copyCommandAction": "Copy command",
 		"copyResult": "Result copied",
 		"exitCode": "Exit code",
+		"expandCommand": "Expand all",
+		"guide": "User guide",
+		"nextMatch": "Next match",
 		"noContentToCopy": "No content to copy",
+		"noMatches": "No matches",
+		"operation": "Operation",
+		"output": "Output",
+		"previousMatch": "Previous match",
 		"readOnly": "Read-only",
+		"renderFailed": "Terminal content could not be displayed. You can still copy the original content using the toolbar.",
 		"result": "Result",
 		"returnedNormally": "Returned normally",
 		"returnedWithError": "Returned with an error",
-		"title": "Terminal"
+		"scrollToEnd": "Go to end",
+		"searchMatches": "{{current}} / {{count}}",
+		"searchOutput": "Find in output",
+		"title": "Terminal",
+		"wrap": "Word wrap"
 	},
 	"timeoutTips": {
 		"actionList": [

@@ -3,11 +3,9 @@ import { clipboard } from "@/utils/clipboard-helpers"
 import { Flex } from "antd"
 import { useTranslation } from "react-i18next"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
-import "@xterm/xterm/css/xterm.css"
 import { useStyles } from "./styles"
-import { IconCopy } from "@tabler/icons-react"
-import { Terminal as TerminalIcon } from "lucide-react"
-import { DetailTerminalData } from "../../types"
+import { Copy, Terminal as TerminalIcon } from "lucide-react"
+import { DetailTerminalData, type TerminalToolInfo } from "../../types"
 import TerminalDisplay from "./components/TerminalDisplay"
 import { ActionButton } from "../../components/CommonHeader/components"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -15,6 +13,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 
 interface TerminalProps {
 	data: DetailTerminalData
+	terminalToolInfo?: TerminalToolInfo
 	userSelectDetail: any
 	setUserSelectDetail?: (detail: any) => void
 	isFromNode?: boolean
@@ -58,6 +57,7 @@ interface TerminalProps {
 export default memo(function Terminal(props: TerminalProps) {
 	const {
 		data,
+		terminalToolInfo,
 		isFromNode,
 		// Props from Render component
 		type,
@@ -111,7 +111,7 @@ export default memo(function Terminal(props: TerminalProps) {
 					render: () => (
 						<Flex gap="small" align="center">
 							<ActionButton
-								icon={IconCopy}
+								icon={<Copy size={16} />}
 								size={16}
 								onClick={handleTerminalCopy}
 								title={t("fileViewer.copy")}
@@ -127,7 +127,7 @@ export default memo(function Terminal(props: TerminalProps) {
 	)
 
 	return (
-		<div className={cx(styles.terminalContainer, "dark", className)}>
+		<div className={cx(styles.terminalContainer, className)}>
 			<div className={styles.toolbar}>
 				<CommonHeaderV2
 					renderMode="actions"
@@ -143,6 +143,10 @@ export default memo(function Terminal(props: TerminalProps) {
 				/>
 			</div>
 			<TerminalDisplay
+				showControls
+				recordKey={terminalToolInfo?.id}
+				action={terminalToolInfo?.action}
+				remark={terminalToolInfo?.remark}
 				className={styles.terminalContent}
 				command={command}
 				output={output}
