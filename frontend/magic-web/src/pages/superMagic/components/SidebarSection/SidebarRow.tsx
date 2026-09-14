@@ -9,11 +9,13 @@ export function SidebarSectionToggle({
 	isExpanded,
 	onClick,
 	disabled = false,
+	menuHover = false,
 }: {
 	label: string
 	isExpanded: boolean
 	onClick: () => void
 	disabled?: boolean
+	menuHover?: boolean
 }) {
 	return (
 		<button
@@ -23,7 +25,12 @@ export function SidebarSectionToggle({
 			aria-label={label}
 			aria-expanded={isExpanded}
 			data-header-chevron
-			className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+			className={cn(
+				"flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none",
+				menuHover
+					? "focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground"
+					: "focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+			)}
 		>
 			<ChevronRight
 				className={cn(
@@ -66,7 +73,7 @@ export function SidebarRow({
 	isActive = false,
 	labelVariant = "default",
 	labelClassName,
-	menuHover = false,
+	menuHover = labelVariant === "navigation",
 	isExpanded = false,
 	disabled = false,
 	hideChevron = false,
@@ -80,6 +87,7 @@ export function SidebarRow({
 	rowRef,
 	labelRef,
 }: SidebarRowProps) {
+	// 导航入口默认共用悬停与键盘焦点反馈；窗口关闭后仍可恢复焦点，不用描边模拟选中。
 	return (
 		<div
 			ref={rowRef}
@@ -89,7 +97,7 @@ export function SidebarRow({
 			className={cn(
 				"flex h-10 w-full items-center gap-2 overflow-hidden px-2.5 text-left transition-[background-color,box-shadow] duration-200 ease-out",
 				menuHover
-					? "rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+					? "cursor-pointer rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
 					: "hover:bg-accent/40",
 				isActive && "bg-accent/50",
 				disabled && "cursor-not-allowed opacity-60 hover:bg-transparent",
@@ -106,7 +114,12 @@ export function SidebarRow({
 				onClick={onClick}
 				aria-expanded={hideChevron ? undefined : isExpanded}
 				data-testid={testId}
-				className="flex min-w-0 flex-1 items-center gap-2 self-stretch overflow-hidden rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
+				className={cn(
+					"flex min-w-0 flex-1 items-center gap-2 self-stretch overflow-hidden rounded-sm text-left outline-none",
+					menuHover
+						? "focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground"
+						: "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-ring",
+				)}
 			>
 				{leading && (
 					<div
@@ -164,6 +177,7 @@ export function SidebarRow({
 					disabled={disabled}
 					onClick={onClick}
 					isExpanded={isExpanded}
+					menuHover={menuHover}
 				/>
 			)}
 		</div>

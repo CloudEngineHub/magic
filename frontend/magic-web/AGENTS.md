@@ -40,6 +40,8 @@ Guidance for autonomous or semi-autonomous coding agents contributing to the Mag
 - **Testing**: Vitest with `__tests__/` colocated alongside source.
 
 ## Implementation Standards
+- **Navigation feedback**: Reuse shared navigation components with their complete hover and keyboard-focus behavior. For `SidebarRow`, use `labelVariant="navigation"` to inherit the sidebar hover and `focus-visible` background treatment. Do not copy thick black/gray focus rings into sidebar navigation entries or treat focus as route selection; keep selection in its existing state contract.
+- **Focus preservation**: Removing a focus outline or ring requires a visible, theme-aware keyboard-focus alternative. Do not hide focus problems with `blur()`, blocked focus, removed tab stops, or global outline/ring resets; preserve dialog focus restoration. Inputs and other controls retain their component-specific focus design.
 - Maintain strict TypeScript typing; add or update types when altering APIs or props.
 - Keep React components modular: separate `styles.ts`, `types.ts`, `hooks/`, and `index.tsx` where the pattern already exists.
 - For every file change, explicitly check whether `enterprise/` contains a corresponding implementation, adapter, test, or config that must be updated in sync. Treat this as a required review step before finishing any code change.
