@@ -39,7 +39,7 @@ class MagicUserContactAppServiceTest extends TestCase
         $userDomainService = $this->createMock(MagicUserDomainService::class);
         $userDomainService->expects($this->once())
             ->method('getUsersDetailByAccountFromAuthorization')
-            ->with('account-token', null)
+            ->with('account-token', null, true)
             ->willReturn($users);
 
         $departmentUserRepository = $this->createMock(MagicDepartmentUserRepositoryInterface::class);

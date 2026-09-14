@@ -342,7 +342,7 @@ class MagicUserContactAppService extends AbstractAppService
     public function getUsersDetailByAccountAuthorization(string $authorization, ?string $organizationCode = null): array
     {
         // Get user details list
-        $usersDetailDTOList = $this->userDomainService->getUsersDetailByAccountFromAuthorization($authorization, $organizationCode);
+        $usersDetailDTOList = $this->userDomainService->getUsersDetailByAccountFromAuthorization($authorization, $organizationCode, true);
 
         if (empty($usersDetailDTOList)) {
             return PageListAssembler::pageByMysql([], 0, 0, 0);

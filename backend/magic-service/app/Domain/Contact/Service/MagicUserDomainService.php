@@ -549,23 +549,20 @@ class MagicUserDomainService extends AbstractContactDomainService
      *
      * @param string $authorization Authorization token
      * @param null|string $organizationCode Optional organization code to filter users
+     * @param bool $enforceOrganizationWhitelist Whether to enforce the account organization allowlist
      * @return array<UserDetailDTO> List of user details
      * @throws Throwable
      */
-    public function getUsersDetailByAccountFromAuthorization(string $authorization, ?string $organizationCode = null): array
-    {
-        // Verify if token is of account type
-        $tokenDTO = new MagicTokenEntity();
-        $tokenDTO->setType(MagicTokenType::Account);
-        $tokenDTO->setToken(MagicTokenEntity::getShortToken($authorization));
-        $magicToken = $this->magicTokenRepository->queryTokenEntity($tokenDTO->getType(), $tokenDTO->getToken());
+    public function getUsersDetailByAccountFromAuthorization(
+        string $authorization,
+        ?string $organizationCode = null,
+        bool $enforceOrganizationWhitelist = false
+    ): array {
+        $magicId = $this->getAccountMagicIdByAuthorization($authorization);
 
-        if ($magicToken === null || $magicToken->getType() !== MagicTokenType::Account) {
-            ExceptionBuilder::throw(ChatErrorCode::AUTHORIZATION_INVALID);
+        if ($enforceOrganizationWhitelist) {
+            $this->assertAccountUsersOrganizationAllowed($magicId);
         }
-
-        // Get account's magic_id
-        $magicId = $magicToken->getTypeRelationValue();
 
         // Get users under this account, optionally filtered by organization
         if ($organizationCode) {
@@ -676,6 +673,50 @@ class MagicUserDomainService extends AbstractContactDomainService
     protected function releaseLock(string $lockKey, string $owner): void
     {
         $this->locker->release($lockKey, $owner);
+    }
+
+    /**
+     * Check whether the account belongs to at least one configured organization.
+     * The check is intentionally independent of the requested organization code:
+     * the allowlist controls environment access, not response filtering.
+     */
+    private function assertAccountUsersOrganizationAllowed(string $magicId): void
+    {
+        $organizationWhitelist = config('contact.account_users_organization_whitelist', []);
+        if (! is_array($organizationWhitelist) || $organizationWhitelist === []) {
+            return;
+        }
+
+        $userOrganizationCodes = $this->userRepository->getUserOrganizationsByMagicId($magicId);
+        if (array_intersect($organizationWhitelist, $userOrganizationCodes) !== []) {
+            return;
+        }
+
+        // 2179 is ACCOUNT_NO_PERMISSION in the current web client. Keep this
+        // code so the existing account-unauthorized logout flow is triggered,
+        // while using an organization-specific message for diagnostics/UI.
+        ExceptionBuilder::throw(UserErrorCode::TOKEN_NOT_FOUND, 'user.organization_not_authorize');
+    }
+
+    /**
+     * Resolve and validate an account token.
+     *
+     * @throws Throwable
+     */
+    private function getAccountMagicIdByAuthorization(string $authorization): string
+    {
+        // Verify if token is of account type
+        $tokenDTO = new MagicTokenEntity();
+        $tokenDTO->setType(MagicTokenType::Account);
+        $tokenDTO->setToken(MagicTokenEntity::getShortToken($authorization));
+        $magicToken = $this->magicTokenRepository->queryTokenEntity($tokenDTO->getType(), $tokenDTO->getToken());
+
+        if ($magicToken === null || $magicToken->getType() !== MagicTokenType::Account) {
+            ExceptionBuilder::throw(ChatErrorCode::AUTHORIZATION_INVALID);
+        }
+
+        // Get account's magic_id
+        return $magicToken->getTypeRelationValue();
     }
 
     /**
