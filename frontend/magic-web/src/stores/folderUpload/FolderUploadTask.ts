@@ -1,5 +1,5 @@
 import { makeAutoObservable } from "mobx"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { ossUploadService } from "./uploadService"
 import { SuperMagicApi } from "@/apis"
 import {

@@ -8,7 +8,7 @@ import {
 	type ConversationMessageSend,
 } from "@/types/chat/conversation_message"
 import type { SeqResponse } from "@/types/request"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import GlobalMentionPanelStore, {
 	type MentionPanelStore,

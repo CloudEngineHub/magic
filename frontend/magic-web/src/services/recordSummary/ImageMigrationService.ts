@@ -7,7 +7,7 @@ import type {
 import { loadTipTapModules, type TipTapModules } from "@/infrastructure/editors/tiptap"
 import { ImageStorageDatabase } from "@/services/tiptap-image-storage"
 import { projectImageStorage } from "@/services/tiptap-image-project"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { calculateRelativePath } from "@/utils/path"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 

@@ -1,6 +1,6 @@
 import * as htmlToImage from "html-to-image"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import { logger as rootLogger } from "@/utils/log"
+import { logger as rootLogger } from "@/infrastructure/logger"
 import type { CardFrameRef } from "../components/CardFrame"
 import {
 	WECHAT_COVER_BASE_HEIGHT,

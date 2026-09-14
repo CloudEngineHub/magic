@@ -17,7 +17,7 @@ import StreamMessageApplyServiceV2 from "./MessageApplyServices/StreamMessageApp
 import IntermediateMessageApplyService from "./MessageApplyServices/IntermediateMessageApplyService"
 import { WorkspaceStateCache } from "@/pages/superMagic/utils/superMagicCache"
 import { shouldSuppressRecordSummaryNotification } from "@/services/audioRecordings"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const logger = Logger.createLogger("ChatBusinessMessageService")
 

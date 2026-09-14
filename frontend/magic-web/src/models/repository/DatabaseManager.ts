@@ -1,6 +1,6 @@
 import Dexie from "dexie"
 import type { TableSchema } from "./types"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const logger = Logger.createLogger("database")
 

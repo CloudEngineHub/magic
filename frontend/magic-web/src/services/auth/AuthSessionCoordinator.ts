@@ -5,7 +5,7 @@ import { userStore } from "@/models/user"
 import { authEventBus } from "./AuthEventBus"
 import { AuthEventName } from "./AuthEvents"
 import type { AuthIntent, AuthSessionInvalidationRequest } from "./contracts"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const logger = Logger.createLogger("AuthSessionCoordinator")
 

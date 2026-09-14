@@ -7136,6 +7136,8 @@
 		"processing": "处理中...",
 		"quickStart": "快速开始",
 		"reportConversationRound": "上报本轮会话",
+		"reportConversationRoundFailed": "会话日志准备失败，请重试",
+		"reportConversationRoundSuccess": "上报成功",
 		"slogan": {
 			"rotatingText": {
 				"prefix": "$t(common:platform.name)帮你",

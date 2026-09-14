@@ -1,5 +1,5 @@
 import { getFileContentById } from "@/pages/superMagic/utils/api"
-import { logger as rootLogger } from "@/utils/log"
+import { logger as rootLogger } from "@/infrastructure/logger"
 import { flattenAttachments, resolveRelativePath } from "../../../contents/HTML/utils"
 import type { SelfMediaPlatform } from "../../../types"
 import type { SelfMediaConfig, SelfMediaPost, SelfMediaPostEntry } from "../types"

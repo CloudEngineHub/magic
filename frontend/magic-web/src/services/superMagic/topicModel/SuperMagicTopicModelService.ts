@@ -1,6 +1,6 @@
 import { SuperMagicApi } from "@/apis"
 import type { SuperMagicTopicModelResponse } from "@/apis/modules/superMagic"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import superMagicTopicModelCacheService, {
 	type CachedModelData,
 } from "./SuperMagicTopicModelCacheService"

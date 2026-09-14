@@ -11,7 +11,7 @@ import type {
 	RecordingEncodingSnapshot,
 } from "./types/RecorderTypes"
 import { RecorderInitializationError, InvalidStateError } from "./types/RecorderErrors"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { DEFAULT_RECORDING_ENCODING_POLICY } from "./encoders/RecordingEncoderResolver"
 import { createRecordingLogger } from "../utils/RecordingLogger"
 import {

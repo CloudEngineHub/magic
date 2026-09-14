@@ -8,7 +8,7 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("@/utils/env", () => ({ env: () => "" }))
 vi.mock("@/apis/clients/magic", () => ({ default: { get: vi.fn() } }))
-vi.mock("@/utils/log", () => ({
+vi.mock("@/infrastructure/logger", () => ({
 	logger: {
 		createLogger: () => ({ error: vi.fn(), warn: vi.fn(), log: vi.fn() }),
 	},

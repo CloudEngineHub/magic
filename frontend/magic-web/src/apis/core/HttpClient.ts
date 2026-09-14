@@ -1,5 +1,8 @@
 import { isFunction, pick } from "lodash-es"
 import { UrlUtils } from "../utils"
+import { appendQueryParams, type QueryParams } from "./query"
+
+export type { QueryParams, QueryScalar } from "./query"
 
 /** Request Context */
 interface RequestContext {
@@ -39,6 +42,12 @@ export interface ResponseConfig {
 export interface RequestConfig<T = HeadersInit | ((headers: Headers) => Headers)>
 	extends RequestContext, Omit<RequestInit, "headers"> {
 	headers?: T
+	/**
+	 * Appended after existing query entries (including duplicate keys); arrays use key[].
+	 * Null/undefined and empty arrays are omitted; empty strings, zero and false are kept.
+	 * @example client.get("/items", { params: { page: 1, ids: ["a", "b"] } })
+	 */
+	params?: QueryParams
 }
 
 /** 拦截器上下文 */
@@ -127,9 +136,9 @@ export class HttpClient {
 		}
 	}
 
-	private getFullURL(url: string, baseURL = this.baseURL): string {
-		// If the URL is already fully connected, return directly
-		return UrlUtils.join(baseURL, url)
+	private getFullURL(url: string, baseURL = this.baseURL, params?: QueryParams): string {
+		// Preserve existing base-path and absolute-URL behavior before appending params.
+		return appendQueryParams(UrlUtils.join(baseURL, url), params)
 	}
 
 	/** Run request interceptor */
@@ -190,14 +199,14 @@ export class HttpClient {
 	async retry(config: RequestConfig): Promise<Response> {
 		const requestContext = this.genRequestContext(config)
 
-		const { url, baseURL, ...req } = await this.runRequestInterceptors({
+		const { url, baseURL, params, ...req } = await this.runRequestInterceptors({
 			...config,
 			...requestContext,
 			headers: new Headers(isFunction(config?.headers) ? {} : config?.headers),
 			signal: config?.signal || this.controller.signal,
 			url: config.url || "",
 		})
-		const fullURL = this.getFullURL(url || "", baseURL)
+		const fullURL = this.getFullURL(url || "", baseURL, params)
 
 		if (isFunction(config?.headers)) {
 			req.headers = config?.headers(req.headers as Headers)
@@ -210,14 +219,14 @@ export class HttpClient {
 		try {
 			const requestContext = this.genRequestContext(config)
 
-			const { url, baseURL, ...req } = await this.runRequestInterceptors({
+			const { url, baseURL, params, ...req } = await this.runRequestInterceptors({
 				...config,
 				...requestContext,
 				headers: new Headers(isFunction(config?.headers) ? {} : config?.headers),
 				signal: config?.signal || this.controller.signal,
 				url: config.url || "",
 			})
-			const fullURL = this.getFullURL(url || "", baseURL)
+			const fullURL = this.getFullURL(url || "", baseURL, params)
 
 			if (isFunction(config?.headers)) {
 				req.headers = config?.headers(req.headers as Headers)
@@ -225,6 +234,8 @@ export class HttpClient {
 
 			const res = await fetch(fullURL, req as RequestInit)
 
+			// Params are already in fullURL. Omit them from response context so auth
+			// retries can reuse request without appending the same array values again.
 			const { request, response } = await this.runResponseInterceptors(
 				{ url: fullURL, baseURL, ...req },
 				res,

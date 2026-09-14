@@ -1,4 +1,5 @@
 import "./index.css"
+import { loggerService } from "./app/services/loggerService"
 // 初始化 emoji 缓存
 import "@/components/base/MagicEmojiPanel/cache"
 import { enableMapSet } from "immer"
@@ -37,6 +38,7 @@ async function initMock() {
  * Start app init first so request middleware can await it,
  * but keep rendering concurrent with bootstrap work.
  */
+loggerService.start()
 appService.init()
 
 async function bootstrap() {

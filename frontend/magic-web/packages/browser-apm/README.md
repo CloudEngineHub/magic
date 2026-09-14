@@ -66,7 +66,7 @@ Volcengine defaults to 50% HTTP sampling, 10% resource sampling and 100% JavaScr
 
 Magic Web's `src/services/app/browser-apm` reads startup configuration, creates or reuses the application session, injects the release and synchronizes user, organization and cluster identifiers through one MobX reaction. The initial context synchronization precedes SDK startup, and logout clears user and organization fields. Open-source and enterprise AppService implementations share the same entry point. The application layer also owns scheduling and cleanup.
 
-`src/utils/log` remains responsible for explicit business logging. Changes to its existing automatic collection plugins are outside this package migration.
+`src/infrastructure/logger` owns explicit business logging and self-hosted collection. Its application lifecycle is managed by `src/app/services/loggerService.ts`, independently of this package.
 
 ## Workspace resolution
 

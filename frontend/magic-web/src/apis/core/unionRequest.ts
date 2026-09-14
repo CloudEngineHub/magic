@@ -2,8 +2,9 @@
  * @description Request to remove duplicates
  */
 import { HttpClient, RequestConfig } from "./HttpClient"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { nanoid } from "nanoid"
+import { appendQueryParams } from "./query"
 
 const logger = Logger.createLogger("http")
 
@@ -22,7 +23,8 @@ const generateRequestKey = (config: RequestConfig) => {
 	try {
 		return JSON.stringify({
 			method: method.toLowerCase(),
-			url,
+			// Use the same query representation as transport so pages cannot share a Promise.
+			url: config.params ? appendQueryParams(url || "", config.params) : url,
 			baseURL,
 			unwrapData,
 			enableErrorMessagePrompt,

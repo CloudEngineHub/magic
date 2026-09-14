@@ -1,7 +1,7 @@
 import type { RequestConfig, RequestInterceptor } from "@/apis/core/HttpClient"
 import { appStore } from "@/stores/app"
 import { withTimeout } from "@/utils/promise"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const appInitWaitTimeoutMs = 10000
 const outgoingRequestTimeoutMessage = "http client wait for app init failed or timed out"
