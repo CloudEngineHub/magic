@@ -60,16 +60,17 @@ An existing document with the same keyword is not evidence that it covers the la
 
 Before moving content out of MEMORY.md, ask: would an Agent reading only this file have the rules, details, and context needed for recurring tasks? Would it repeatedly need to open the same note? If so, keep that information in MEMORY.md. For infrequently needed details, explain when and where to read them. For global memory, would relevant user background, explicit requirements, and valuable experiences remain understandable? Do retained facts identify their subject, known time, and context, rather than leaving only inferred personality traits, tastes, or general prohibitions? Judge likely use from the user's work and applicable requirements, not from how often the user repeats a requirement. For recent work, could it also explain the latest meaningful changes, the last recorded stage, open questions, and known source topics? Finding keywords or staying below a token limit does not establish that this context is usable.
 
-For example, when monthly sales reports are a recurring task, MEMORY.md can contain:
+For example, when monthly sales reports are a recurring task, ordinary project MEMORY.md can contain the following. Replace source and path placeholders with verified values from the runtime or source files; never save the placeholders:
 
 ```markdown
 ## Monthly sales reports
+Source topic: <known topic name> (ID: <real topic ID>), <known source date and timezone>.
 Show amounts in yuan, with two decimal places.
 Assign orders to calendar months using payment dates in UTC+08:00.
 Count paid orders; exclude unpaid and test orders.
 Deduct refunds in the month they were completed, including refunds for earlier orders.
 Show gross sales, refunds, and net sales separately; net sales equals gross sales minus refunds.
-When a report includes foreign-currency sales or a refund covering several orders, read [special sales calculations](notes/references/special-sales-calculations.md) for exchange-rate selection, refund allocation, and worked examples.
+When a report includes foreign-currency sales or a refund covering several orders, read [special sales calculations](<absolute user-memory path to notes/references/special-sales-calculations.md>) for exchange-rate selection, refund allocation, and worked examples.
 ```
 
 The recurring calculation rules stay in MEMORY.md so the Agent can use them for every monthly report. The reference explains occasional calculation cases. Order tables and monthly exports remain in project files; memory may retain important conclusions and the paths to those files.
@@ -82,7 +83,7 @@ A recent-work entry can also look like this when the stated facts are supported 
 ### Monthly sales reports
 Last recorded at <source date and timezone>; source topic: <topic name> (ID: <real topic ID>).
 Refund treatment is settled: deduct refunds in the month they complete, including refunds for earlier orders, so monthly reports reflect refunds actually processed that month. The report draft is ready for user review; approval is not yet recorded. The exchange-rate rule for foreign-currency sales remains undecided.
-Continue from the [report draft](<absolute project file path>); occasional calculation cases are in [special sales calculations](notes/references/special-sales-calculations.md).
+Continue from the [report draft](<absolute project file path>); occasional calculation cases are in [special sales calculations](<absolute user-memory path to notes/references/special-sales-calculations.md>).
 
 ### Channel B exports
 Last recorded at <source date and timezone>; source topic: <topic name> (ID: <real topic ID>).
@@ -95,8 +96,8 @@ A global design record can also look like this when supported by its sources. Re
 
 ```markdown
 ## Design discussions
-The user said they recently preferred light colors. When reviewing <page name> on <source date>, they rejected that page's card arrangement and required the brand mark in its footer.
-When comparing design choices for similar pages, read [design discussions](notes/references/design-discussions.md) for the page comparisons, original statements, and reasons from that discussion.
+The user said they recently preferred light colors. When reviewing <page name> in <source project name> (project ID: <real project ID>), topic <source topic name> (ID: <real topic ID>), on <source date and timezone>, they rejected that page's card arrangement and required the brand mark in its footer. The reviewed page is at <verified source project file path>.
+When comparing design choices for similar pages, read [design discussions](<absolute user-memory path to notes/references/design-discussions.md>) for the page comparisons, original statements, and reasons from that discussion.
 ```
 
 This example preserves a stated preference and specific choices. It does not require saving every review or rewriting these facts as a separate list of requirements and prohibitions.
@@ -142,9 +143,15 @@ updated_at: "<actual modification time, YYYY-MM-DD HH:mm:ss UTC>"
 ---
 ```
 
-Keep useful source context, conditions, and meaningful source dates beside the facts. In recent work summaries, include known source topic names and IDs beside the relevant passage, including in MEMORY.md; a subject heading or project name is not a source topic. For other content, add topic attribution when it helps distinguish cases or retrieve a past discussion. Use a brief sentence or parenthetical note; no fixed format, metadata fields, or per-entry labels are required. Preserve whichever source details are available without guessing missing names or IDs. Do not repeat the project ID in project memory; identify the source project in global memory only when useful. A passage can share one attribution, and reorganizing it does not change its original source.
+Keep source context, conditions, and known source dates beside each independently useful passage, including in MEMORY.md:
 
-Changeable facts also state as_of. File creation, modification, event occurrence, and verification are different times. Use unknown for unsupported values; never substitute download time, mtime, or the earliest fact date for creation time, or infer event dates from mtime. Only actual re-verification justifies last_verified_at. Reading a note, editing its parent index, or organizing it today does not verify its facts or justify changing the note's timestamps. Status snapshots and environment failures retain the then-known conditions from their sources. A recorded failure does not establish that a tool or environment still has the same limitation; when a current decision depends on it, use current capability descriptions and relevant facts. Do not turn a past response into a mandatory future path merely to make memory actionable. Group shared source/time information by section or event; stable preferences do not need re-verification on every use.
+- Project-related facts in global memory must identify the real source project ID and its name when known. File references must also identify their actual location; a filename or project name alone is insufficient. Preserve the source topic ID and name when available.
+- Every passage in ordinary project memory must identify its real source topic ID and its name when known. Do not repeat the containing project ID; identify other projects when mentioned. A subject heading or project name is not a source topic.
+- Global personal preferences with no project association need no invented project. Preserve known source topics and times where available; stable long-term preferences may omit time.
+
+Use the runtime's supplied source identity for newly learned facts. Adjacent facts from the same source and event can share one brief sentence or parenthetical attribution; different origins need their own. No fixed format, metadata fields, or per-entry labels are required. Keep original provenance when quoting, merging, or reorganizing; the maintenance conversation cannot replace it. Preserve known facts and mark specific missing IDs, names, paths, dates, or timezones beside them instead of guessing or claiming complete attribution. An instruction with unknown project ownership is not authorization for the current project.
+
+Prefer known source times or dates with their reliable timezone. Changeable facts also state as_of. File creation, modification, event occurrence, and verification are different times. Use unknown for unsupported values; never substitute download time, mtime, or the earliest fact date for creation time, or infer event dates from mtime. Only actual re-verification justifies last_verified_at. Reading a note, editing its parent index, or organizing it today does not verify its facts or justify changing the note's timestamps. Status snapshots and environment failures retain the then-known conditions from their sources. A recorded failure does not establish that a tool or environment still has the same limitation; when a current decision depends on it, use current capability descriptions and relevant facts. Do not turn a past response into a mandatory future path merely to make memory actionable. Group shared source/time information by section or event; stable preferences do not need re-verification on every use.
 
 Dated records also have date and timezone fields. Use the source event's calendar date in notes/timeline/YYYY/MM/YYYY-MM-DD.md. Preserve date-only precision and mark unknown timezones; do not fabricate them. Place useful events without a reliable date in notes/timeline/undated.md with an actionable pointer.
 
@@ -152,7 +159,9 @@ Interpret relative dates from the source message's own time and reliable timezon
 
 Before treating statements as conflicting, check the subject, project, scope, and source. A newer statement from another topic does not replace a valid rule for a different case; a confirmed correction to the same case can apply across topics. Age alone does not invalidate a rule. Unconfirmed options remain historical options. Choices in different situations can coexist; do not merge them into one universal preference or turn past choices into general requirements the user never stated. If an existing memory overgeneralizes the user's words, use available sources to restore the specific facts and known scope. When the original words or context are unavailable, do not guess their meaning or fabricate confirmation. Preserve useful known information and the specific uncertainty; do not interrupt an unrelated task or ask the user to repeat their entire history. Keep a superseded event's then-current outcome and link to its later correction; do not rewrite the old record as though the later decision already existed.
 
-Update only existing indexes and MEMORY.md entries whose summary or route changed; a small edit does not require new indexes or rewriting all ancestors. Relative links resolve from their containing file. Project-document pointers identify their project/workspace base and must remain accessible to future relevant Agents. Directories, filenames, and numbered references in global memory must also be locatable. Use available sources to resolve relative paths with an unknown base or unlocatable identifiers. If no location can be established, retain the known information and identify the missing pointer; do not guess a project path or create a same-named directory in the current project as a substitute.
+Update only existing indexes and MEMORY.md entries whose summary or route changed; a small edit does not require new indexes or rewriting all ancestors. All newly generated links to user-space files use runtime-confirmed absolute paths, in MEMORY.md, notes, indexes, and user replies. This includes both global memory and ordinary project memory physically stored under the user's memory root; a project-memory directory is not the project's workspace. Expand scope paths from the runtime, not a guessed HOME. The directory tree above describes structure, not link destinations.
+
+Only actual files in the current workspace may use workspace-relative links. Cross-project document pointers identify the source project ID and actual workspace base or supplied absolute mount path, and must remain accessible to future relevant Agents. Historical relative links can still be read from their known containing directory; this does not recommend generating more or require a library-wide rewrite. Directories, filenames, and numbered references in global memory must also be locatable. Use available sources to resolve paths with an unknown base or unlocatable identifiers. If no location can be established, retain the known information and identify the missing pointer; do not guess a project path or create a same-named directory in the current project as a substitute.
 
 The runtime may fold old daily paths into month/year groups. This affects visibility, not retention or validity. Inspect changed historical groups only when relevant; do not imitate display folding by deleting or relocating files.
 
