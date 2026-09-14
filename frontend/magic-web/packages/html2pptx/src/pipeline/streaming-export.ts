@@ -220,6 +220,7 @@ async function runDirectStreamingExport(
 	let packager: StreamingPresentationPackager | undefined
 	let successCount = 0
 	let outputSlideCount = 0
+	let currentPageIndex: number | undefined
 
 	try {
 		packager = createPackagerOrThrow(createPackager, {
@@ -232,7 +233,13 @@ async function runDirectStreamingExport(
 			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
 			onResourceError: (error) => reportExportResourceError(input, error),
-			onExportIssue: input.onExportIssue,
+			// Packaging errors arrive after the Worker commit, so retain only the
+			// primitive page index needed to label that diagnostic.
+			onExportIssue: (issue) =>
+				input.onExportIssue?.({
+					...issue,
+					pageIndex: issue.pageIndex ?? currentPageIndex,
+				}),
 		})
 		await packager.ready
 		for await (const page of input.pages) {
@@ -254,6 +261,7 @@ async function runDirectStreamingExport(
 				})
 				const outputPages = [nodes]
 				for (let pageOffset = 0; pageOffset < outputPages.length; pageOffset += 1) {
+					currentPageIndex = page.index
 					const outputNodes = outputPages[pageOffset]
 					await packager.commitSlide({
 						nodes: outputNodes,
@@ -316,6 +324,7 @@ async function runStagedStreamingExport(
 	let successfulSourcePages = 0
 	let exportSucceeded = false
 	let packager: StreamingPresentationPackager | undefined
+	let currentPageIndex: number | undefined
 
 	try {
 		const activeStore = await runStagingOperation(input.signal, () =>
@@ -424,12 +433,17 @@ async function runStagedStreamingExport(
 			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
 			onResourceError: (error) => reportExportResourceError(input, error),
-			onExportIssue: input.onExportIssue,
+			onExportIssue: (issue) =>
+				input.onExportIssue?.({
+					...issue,
+					pageIndex: issue.pageIndex ?? currentPageIndex,
+				}),
 		})
 		await packager.ready
 
 		for (let index = 1; index <= stagedKeys.length; index += 1) {
 			throwIfAborted(input.signal)
+			currentPageIndex = index - 1
 			const record = await runStagingOperation(
 				input.signal,
 				() => activeStore.getSlideIr<StagedSlideRecord>(index, { signal: input.signal }),
