@@ -11,7 +11,11 @@ Create an enterprise self-built app on the Lark Open Platform and obtain:
 Complete the following configuration on the Lark Open Platform:
 1. Event Subscription → Long Connection (WebSocket) → Enable long connection for receiving events
 2. Event Subscription → Add Event → Search and add "Receive Messages v2.0 (im.message.receive_v1)"
-3. App Permissions → Request and enable: `im:message`, `cardkit:card`
+3. App Permissions → Request and enable: `im:message`, `cardkit:card`, and `im:resource` (for incoming attachments)
+
+## Receiving messages
+
+Images, files, audio, video, and rich text posts with multiple images are supported. Enable `im:resource` for message resource downloads, publish the updated app version, and ensure the permission is effective. Missing media permission does not disable text messaging. Merged forwards and interactive cards are described with a placeholder in this version; ask the user to resend the content separately.
 
 ## Credential Collection
 

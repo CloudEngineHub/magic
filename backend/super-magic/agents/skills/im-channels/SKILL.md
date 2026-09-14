@@ -20,9 +20,9 @@ When a user message includes an `<im>` block at the end, the message was relayed
 <!-- Message with media attachments -->
 <im source="WeChat">
   <media>
-    <file type="image" mime="image/jpeg" path="workspace/media/photo_001.jpg" />
-    <file type="voice" mime="audio/silk" path="workspace/media/voice_001.silk" />
-    <file type="image" mime="image/jpeg" path="workspace/media/photo_002.jpg" from="quoted" />
+    <file type="image" mime="image/jpeg" path="uploads/im-channels/wechat/photo_001.jpg" />
+    <file type="voice" mime="audio/silk" path="uploads/im-channels/wechat/voice_001.silk" />
+    <file type="image" mime="image/jpeg" path="uploads/im-channels/wechat/photo_002.jpg" from="quoted" />
   </media>
 </im>
 ```
@@ -34,6 +34,14 @@ When a user message includes an `<im>` block at the end, the message was relayed
 - `type`: media category — `image`, `voice`, `video`, `file`, etc.
 - `mime`: MIME type of the file
 - `from="quoted"`: the file came from a message the user was replying to, not their current message
+
+### Receiving capabilities
+
+- DingTalk: pictures, files, voice, video, and rich text with embedded pictures when the platform supplies download codes.
+- Lark: images, files, audio, video, and rich text posts with multiple images. Resource downloads require `im:resource` permission.
+- WeCom: images, files, video, mixed messages, and voice transcription; an original voice file is available only if the callback includes a download URL and encryption key.
+- WeChat: existing image, file, video, voice, and quoted-media handling remains available.
+- Unsupported forwarded/card content and failed downloads are described in the message. Do not claim to have read an attachment unless a usable `<file>` is present; ask the user to resend if needed.
 
 ### How to respond
 

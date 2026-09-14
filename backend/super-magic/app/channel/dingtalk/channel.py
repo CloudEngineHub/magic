@@ -7,17 +7,24 @@ import asyncio
 import uuid
 from typing import Optional
 
-from dingtalk_stream import AckMessage, ChatbotHandler, ChatbotMessage, CallbackMessage, Credential, DingTalkStreamClient
+from dingtalk_stream import (
+    AckMessage,
+    CallbackMessage,
+    ChatbotHandler,
+    ChatbotMessage,
+    Credential,
+    DingTalkStreamClient,
+)
 from dingtalk_stream.card_instance import AIMarkdownCardInstance
 
 from agentlang.logger import get_logger
 from app.channel.base.channel import BaseChannel
-from app.core.context.execution_source import EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY, SuperMagicExecutionSource
-from app.core.entity.message.client_message import ChatClientMessage, Metadata
 from app.channel.base.third_party_message import dispatch_third_party_message
+from app.channel.config import IMChannelDisplay, IMChannelsConfig
 from app.channel.dingtalk.stream import DingTalkStream
 from app.channel.dingtalk.streaming_driver import DingTalkStreamingDriver
-from app.channel.config import IMChannelsConfig, IMChannelDisplay
+from app.core.context.execution_source import EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY, SuperMagicExecutionSource
+from app.core.entity.message.client_message import ChatClientMessage, Metadata
 from app.core.keepalive_registry import KeepaliveRegistry
 from app.utils.time_utils import now_ms
 
@@ -146,6 +153,7 @@ class DingTalkChannel(BaseChannel):
           - 请求异常 → 不阻塞连接，视为正常
         """
         import uuid as _uuid
+
         import aiohttp
 
         assert self._client is not None
@@ -228,14 +236,16 @@ class DingTalkChannel(BaseChannel):
             logger.error("[DingTalkChannel] agent_context 未初始化，忽略消息")
             return
 
-        text = incoming_message.text
-        content = (text.content or "").strip() if text else ""
-        if not content:
-            return
-
         current_message_at_ms = now_ms()
         self._last_message_at_ms = current_message_at_ms
         KeepaliveRegistry.get_instance().notify_activity(self.key, current_message_at_ms)
+        from app.channel.dingtalk.media import prepare_dingtalk_message
+        prepared = await prepare_dingtalk_message(
+            raw_data if raw_data is not None else incoming_message.to_dict(), self._client
+        )
+        content = prepared.text
+        if not content and not prepared.media:
+            return
         # senderStaffId 是企业内部用户 ID，senderId 是钉钉平台 ID（与 TS 逻辑一致）
         user_id = incoming_message.sender_staff_id or incoming_message.sender_id or "dingtalk_user"
         ctx = dispatcher.agent_context
@@ -295,6 +305,7 @@ class DingTalkChannel(BaseChannel):
         chat_msg = ChatClientMessage(
             message_id=local_id,
             prompt=content,
+            channel_context={"channel_media": [item.model_dump(mode="json") for item in prepared.media]},
             metadata=Metadata(agent_user_id=user_id, channel_name=self.key),
             dynamic_config={
                 EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY: SuperMagicExecutionSource.THIRD_PARTY_IM.value,

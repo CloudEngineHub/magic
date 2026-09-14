@@ -15,16 +15,16 @@ import asyncio
 import json
 import threading
 import uuid
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from agentlang.logger import get_logger
 from app.channel.base.channel import BaseChannel
-from app.core.context.execution_source import EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY, SuperMagicExecutionSource
-from app.core.entity.message.client_message import ChatClientMessage, Metadata
 from app.channel.base.third_party_message import dispatch_third_party_message
+from app.channel.config import IMChannelDisplay, IMChannelsConfig
 from app.channel.lark.stream import LarkStream
 from app.channel.lark.streaming_driver import LarkStreamingDriver
-from app.channel.config import IMChannelsConfig, IMChannelDisplay
+from app.core.context.execution_source import EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY, SuperMagicExecutionSource
+from app.core.entity.message.client_message import ChatClientMessage, Metadata
 from app.core.keepalive_registry import KeepaliveRegistry
 from app.utils.time_utils import now_ms
 
@@ -221,23 +221,24 @@ class LarkChannel(BaseChannel):
         if not msg:
             return
 
-        # 只处理文本消息
-        if getattr(msg, "message_type", None) != "text":
-            logger.debug(f"[LarkChannel] 忽略非文本消息类型: {getattr(msg, 'message_type', 'unknown')}")
-            return
-
         try:
             content_obj = json.loads(getattr(msg, "content", "{}") or "{}")
-            text = (content_obj.get("text") or "").strip()
-        except Exception:
-            text = ""
-
-        if not text:
-            return
+            if not isinstance(content_obj, dict):
+                content_obj = {}
+        except (ValueError, TypeError):
+            content_obj = {}
 
         current_message_at_ms = now_ms()
         self._last_message_at_ms = current_message_at_ms
         KeepaliveRegistry.get_instance().notify_activity(self.key, current_message_at_ms)
+        from app.channel.lark.media import prepare_lark_message
+        prepared = await prepare_lark_message(
+            getattr(msg, "message_type", ""), content_obj,
+            getattr(msg, "message_id", "") or "", self._app_id, self._app_secret,
+        )
+        text = prepared.text
+        if not text and not prepared.media:
+            return
         sender = getattr(event_data, "sender", None)
         sender_id_obj = getattr(sender, "sender_id", None) if sender else None
         user_id = getattr(sender_id_obj, "open_id", None) or "lark_user"
@@ -286,6 +287,7 @@ class LarkChannel(BaseChannel):
         chat_msg = ChatClientMessage(
             message_id=local_id,
             prompt=text,
+            channel_context={"channel_media": [item.model_dump(mode="json") for item in prepared.media]},
             metadata=Metadata(agent_user_id=user_id, channel_name=self.key),
             dynamic_config={
                 EXECUTION_SOURCE_DYNAMIC_CONFIG_KEY: SuperMagicExecutionSource.THIRD_PARTY_IM.value,
