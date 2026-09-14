@@ -202,7 +202,11 @@ export function useRename(options: UseRenameOptions = {}) {
 		const fullName = renameValue
 		const lastDotIndex = fullName.lastIndexOf(".")
 
-		if (lastDotIndex > 0 && lastDotIndex < fullName.length - 1) {
+		if (
+			!renameItemRef.current?.is_directory &&
+			lastDotIndex > 0 &&
+			lastDotIndex < fullName.length - 1
+		) {
 			// 选中文件名部分（不包括扩展名）
 			inputRef.setSelectionRange(0, lastDotIndex)
 		} else {
@@ -248,7 +252,7 @@ export function useRename(options: UseRenameOptions = {}) {
 		renameItemRef.current = item
 		const itemId = getItemId(item)
 		const currentName = item.is_directory
-			? item.name || ""
+			? item.name || item.file_name || item.filename || ""
 			: item.file_name || item.filename || ""
 		setRenamingItemId(itemId)
 		setRenameValue(currentName)
@@ -298,7 +302,7 @@ export function useRename(options: UseRenameOptions = {}) {
 
 			// 获取原始名称
 			const originalName = currentItem.is_directory
-				? currentItem.name || ""
+				? currentItem.name || currentItem.file_name || currentItem.filename || ""
 				: currentItem.file_name || currentItem.filename || ""
 
 			// 如果名称没有变化，直接取消重命名
@@ -550,6 +554,8 @@ export function useRename(options: UseRenameOptions = {}) {
 
 	return {
 		renamePending,
+		// Return 启动异步确认后立即失焦也不能取消；React 的 pending 渲染可能尚未提交。
+		isRenamePending: () => renameConfirmingRef.current,
 		// 状态
 		renamingItemId,
 		renameValue,

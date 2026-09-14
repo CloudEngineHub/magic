@@ -1,5 +1,34 @@
 import type { FileReference } from "@/apis/modules/superMagic"
 
+/** 写入前的实际范围；共享操作只提供事实，是否展示确认由入口决定。 */
+export type FileOperationConfirmation =
+	| {
+			operation: "move" | "copy" | "import" | "delete"
+			fileIds: string[]
+			selectedIds?: string[]
+			sourceAttachments: AttachmentItem[]
+			sourceName?: string
+			targetPath?: AttachmentItem[]
+			targetName?: string
+			skippedCount?: number
+			warning?: string
+	  }
+	| {
+			operation: "upload" | "replace"
+			files: File[]
+			targetPath: string
+			target?: AttachmentItem
+	  }
+	| { operation: "create"; targetPath: string; names: string[] }
+
+export type ConfirmFileOperation = (request: FileOperationConfirmation) => Promise<boolean>
+
+/** 只控制写入前的读取与确认；进入 executing 后不把取消解释为撤销远端操作。 */
+export interface FileOperationPreparation {
+	signal: AbortSignal
+	onPhase: (phase: "checking" | "awaitingChoice" | "executing") => void
+}
+
 // 附件来源
 export enum AttachmentSource {
 	DEFAULT = 0,

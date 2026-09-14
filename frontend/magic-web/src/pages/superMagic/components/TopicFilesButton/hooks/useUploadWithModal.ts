@@ -20,6 +20,7 @@ export interface UploadTarget {
 }
 
 interface UseUploadWithModalOptions {
+	beforeUpload?: (files: File[]) => Promise<boolean>
 	projectId?: string
 	/** 文件上传凭证所属的特殊空间。 */
 	fileScope?: FileScope
@@ -33,6 +34,7 @@ interface UseUploadWithModalOptions {
 }
 
 export function useUploadWithModal({
+	beforeUpload,
 	projectId,
 	fileScope,
 	selectedProject,
@@ -267,11 +269,13 @@ export function useUploadWithModal({
 
 	// 处理文件选择完成后打开 UploadModal
 	const handleFilesSelected = useCallback(
-		async (files: File[], isFolder: boolean = false) => {
+		async (files: File[], isFolder: boolean = false, confirmed: boolean = false) => {
 			if (resolveUploadTarget && !isFolder) {
 				if (preparingUploadRef.current || directUpload) return
 				preparingUploadRef.current = true
 				try {
+					// 目标解析可能创建缺失目录，必须在它之前完成上传确认。
+					if (!confirmed && beforeUpload && !(await beforeUpload(files))) return
 					const target = await resolveUploadTarget()
 					if (target.isCurrent()) setDirectUpload({ files, target })
 				} catch (error) {
@@ -286,7 +290,7 @@ export function useUploadWithModal({
 			setIsUploadingFolder(isFolder)
 			setUploadModalVisible(true)
 		},
-		[resolveUploadTarget, directUpload, t],
+		[resolveUploadTarget, directUpload, beforeUpload, t],
 	)
 
 	// 自定义上传文件处理函数

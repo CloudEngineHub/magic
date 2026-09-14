@@ -24,6 +24,7 @@ export namespace RecycleBin {
 		remaining_days?: number
 		parent_id: string
 		extra_data?: {
+			space_type?: "user" | "project"
 			workspace_name?: string
 			project_name?: string
 			relative_file_path?: string
@@ -63,6 +64,7 @@ export namespace RecycleBin {
 		resource_name: string
 		parent_id: string | null
 		is_directory?: boolean
+		space_type?: "user" | "project"
 		conflict?: {
 			type?: "parent_missing" | "name_conflict" | string
 			existing_file_id?: string

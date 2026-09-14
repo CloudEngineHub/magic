@@ -149,6 +149,7 @@ const TabCache = memo(
 					<Suspense fallback={null}>
 						{tab.fileManager.spaceType === "user" ? (
 							<UserSpaceFileManager
+								isActive={isActive}
 								context={tab.fileManager}
 								onFileClick={managerProps.onFileClick}
 								projectId={managerProps.selectedProject?.id}
@@ -158,6 +159,7 @@ const TabCache = memo(
 						) : (
 							<ProjectFileManager
 								{...managerProps}
+								isActive={isActive}
 								projectId={tab.fileManager.projectId}
 								initialDirectoryId={tab.fileManager.directoryId}
 							/>

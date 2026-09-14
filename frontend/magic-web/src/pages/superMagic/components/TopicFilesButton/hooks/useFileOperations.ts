@@ -230,6 +230,7 @@ const downloadOnlyOfficeFile = async (
 }
 
 export interface UseFileOperationsOptions {
+	beforeUpload?: (files: File[], target?: AttachmentItem) => Promise<boolean>
 	setUserSelectDetail?: (detail: any) => void
 	onFileClick?: (fileItem: any) => void
 	attachments?: AttachmentItem[]
@@ -802,6 +803,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		// 创建隐藏的文件输入框
 		const input = document.createElement("input")
 		input.type = "file"
+		if (options.beforeUpload) input.oncancel = () => input.remove()
 		input.multiple = true
 		input.style.display = "none"
 
@@ -811,6 +813,10 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			if (fileList && fileList.length > 0) {
 				const files = Array.from(fileList)
 
+				if (options.beforeUpload && !(await options.beforeUpload(files, item))) {
+					input.remove()
+					return
+				}
 				console.log("选择的文件:", files)
 				console.log("上传目标路径:", targetPath)
 				console.log("计算的suffixDir:", targetSuffixDir)
@@ -842,6 +848,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		// 创建隐藏的文件输入框
 		const input = document.createElement("input")
 		input.type = "file"
+		if (options.beforeUpload) input.oncancel = () => input.remove()
 		input.multiple = true
 		input.webkitdirectory = true
 		input.style.display = "none"
@@ -853,6 +860,10 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				const files = Array.from(fileList)
 
 				// 通过同名检测处理文件夹上传（使用 processFolderUpload 创建单个任务）
+				if (options.beforeUpload && !(await options.beforeUpload(files, item))) {
+					input.remove()
+					return
+				}
 				await duplicateFileHandler.handleFilesWithDuplicateCheck(
 					files,
 					targetSuffixDir,

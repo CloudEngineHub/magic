@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Domain\SuperAgent\Event;
 
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\FileSpaceType;
 use InvalidArgumentException;
 
 /**
@@ -39,7 +40,8 @@ class FileBatchCopyEvent
         private readonly ?int $preFileId,
         private readonly int $targetParentId,
         private readonly array $keepBothFileIds = [],
-        private readonly bool $preserveParentPath = false
+        private readonly bool $preserveParentPath = false,
+        private readonly FileSpaceType $spaceType = FileSpaceType::Project,
     ) {
     }
 
@@ -130,6 +132,11 @@ class FileBatchCopyEvent
         return $this->preserveParentPath;
     }
 
+    public function getSpaceType(): FileSpaceType
+    {
+        return $this->spaceType;
+    }
+
     /**
      * Create event from array data.
      *
@@ -148,7 +155,8 @@ class FileBatchCopyEvent
             $data['pre_file_id'] ?? null,
             $data['target_parent_id'] ?? 0,
             $data['keep_both_file_ids'] ?? [],
-            (bool) ($data['preserve_parent_path'] ?? false)
+            (bool) ($data['preserve_parent_path'] ?? false),
+            FileSpaceType::from($data['space_type'] ?? FileSpaceType::Project->value),
         );
     }
 
@@ -168,6 +176,7 @@ class FileBatchCopyEvent
             'target_parent_id' => $this->targetParentId,
             'keep_both_file_ids' => $this->keepBothFileIds,
             'preserve_parent_path' => $this->preserveParentPath,
+            ...($this->spaceType === FileSpaceType::User ? ['space_type' => $this->spaceType->value] : []),
         ];
     }
 
@@ -231,7 +240,8 @@ class FileBatchCopyEvent
         ?int $preFileId,
         int $targetParentId,
         array $keepBothFileIds = [],
-        bool $preserveParentPath = false
+        bool $preserveParentPath = false,
+        FileSpaceType $spaceType = FileSpaceType::Project,
     ): self {
         return new self(
             $batchKey,
@@ -243,7 +253,8 @@ class FileBatchCopyEvent
             $preFileId ?? null,
             $targetParentId,
             $keepBothFileIds,
-            $preserveParentPath
+            $preserveParentPath,
+            $spaceType,
         );
     }
 }

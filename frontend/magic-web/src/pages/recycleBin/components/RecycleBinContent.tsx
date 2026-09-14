@@ -21,7 +21,12 @@ import { useRecycleBinActions } from "./useRecycleBinActions"
 import { useRecycleBinSelection } from "./useRecycleBinSelection"
 
 const RECYCLE_BIN_PAGE_SIZE = 50
-export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinContentProps) {
+export function RecycleBinContent({
+	activeTab,
+	onTabCountChange,
+	onMutationComplete,
+	requireDeleteConfirmation = false,
+}: RecycleBinContentProps) {
 	const { t } = useTranslation("super")
 	const getTabLabel = useRecycleBinTabLabel("pc")
 	const [searchValue, setSearchValue] = useState("")
@@ -117,6 +122,7 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 		activeTabId,
 	})
 	const actions = useRecycleBinActions({
+		onMutationComplete,
 		items,
 		setItems,
 		selectedIds: selection.selectedIds,
@@ -167,6 +173,7 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 			</div>
 
 			<RecycleBinModals
+				requireDeleteConfirmation={requireDeleteConfirmation}
 				items={items}
 				restoreTarget={actions.restoreTarget}
 				restoreCheckResult={actions.restoreCheckResult}
@@ -199,6 +206,8 @@ export function RecycleBinContent({ activeTab, onTabCountChange }: RecycleBinCon
 }
 
 interface RecycleBinContentProps {
+	onMutationComplete?: () => void
+	requireDeleteConfirmation?: boolean
 	activeTab: RecycleBinTab | undefined
 	onTabCountChange?: (tabId: string, count: number) => void
 }

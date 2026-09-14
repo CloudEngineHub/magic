@@ -143,7 +143,8 @@ class RecycleBinDomainService
         ?string $keyword = null,
         string $order = 'desc',
         int $page = 1,
-        int $pageSize = 20
+        int $pageSize = 20,
+        string $organizationCode = '',
     ): array {
         return $this->recycleBinRepository->getRecycleBinList(
             userId: $userId,
@@ -151,7 +152,8 @@ class RecycleBinDomainService
             keyword: $keyword,
             order: $order,
             page: $page,
-            pageSize: $pageSize
+            pageSize: $pageSize,
+            organizationCode: $organizationCode,
         );
     }
 
@@ -160,9 +162,9 @@ class RecycleBinDomainService
      *
      * @return array<int, int> key 为 RecycleBinResourceType->value，value 为数量
      */
-    public function getCountsByType(string $userId, ?string $keyword = null): array
+    public function getCountsByType(string $userId, ?string $keyword = null, string $organizationCode = ''): array
     {
-        return $this->recycleBinRepository->getCountsByTypeVisibleToUser($userId, $keyword);
+        return $this->recycleBinRepository->getCountsByTypeVisibleToUser($userId, $keyword, $organizationCode);
     }
 
     /**
@@ -174,9 +176,9 @@ class RecycleBinDomainService
      * @param string $userId 当前用户ID
      * @return RecycleBinEntity[] 回收站实体数组
      */
-    public function findByIdsAndTypeVisibleToUser(array $ids, int $resourceType, string $userId): array
+    public function findByIdsAndTypeVisibleToUser(array $ids, int $resourceType, string $userId, string $organizationCode = ''): array
     {
-        return $this->recycleBinRepository->findByIdsAndTypeVisibleToUser($ids, $resourceType, $userId);
+        return $this->recycleBinRepository->findByIdsAndTypeVisibleToUser($ids, $resourceType, $userId, $organizationCode);
     }
 
     /**
@@ -188,9 +190,9 @@ class RecycleBinDomainService
      * @param string $userId 当前用户ID
      * @return RecycleBinEntity[] 回收站实体数组
      */
-    public function findLatestByResourceIds(array $resourceIds, RecycleBinResourceType $resourceType, string $userId): array
+    public function findLatestByResourceIds(array $resourceIds, RecycleBinResourceType $resourceType, string $userId, string $organizationCode = ''): array
     {
-        return $this->recycleBinRepository->findLatestByResourceIds($resourceIds, $resourceType, $userId);
+        return $this->recycleBinRepository->findLatestByResourceIds($resourceIds, $resourceType, $userId, $organizationCode);
     }
 
     /**
@@ -227,9 +229,9 @@ class RecycleBinDomainService
      * @param string $userId 当前用户ID
      * @return array ['failed' => [...]] 只返回失败项
      */
-    public function permanentDelete(array $ids, string $userId): array
+    public function permanentDelete(array $ids, string $userId, string $organizationCode = ''): array
     {
-        $entities = $this->recycleBinRepository->findByIds($ids, $userId);
+        $entities = $this->recycleBinRepository->findByIds($ids, $userId, $organizationCode);
 
         if (empty($entities)) {
             return ['failed' => []];
