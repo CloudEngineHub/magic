@@ -523,6 +523,10 @@
         "zh_CN": "查询数据记录",
         "en_US": "Query rows"
     },
+    "batch_get_magicbase_rows": {
+        "zh_CN": "批量查看数据记录",
+        "en_US": "Batch view rows"
+    },
     "get_magicbase_row": {
         "zh_CN": "查看数据记录",
         "en_US": "View row"

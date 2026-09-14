@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.i18n import i18n
 from app.infrastructure.sdk.magic_service.factory import get_magic_service_sdk
 from app.infrastructure.sdk.magic_service.kernel.magic_service_exception import MagicServiceException
 from app.infrastructure.sdk.magic_service.parameter import (
@@ -682,6 +684,113 @@ class QueryMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[QueryMagicbaseRowsPa
         return ToolResult(
             content=f"Found {payload['total']} MagicBase row(s); returned {len(payload['rows'])} row(s) on page {payload['page']}.",
             data={"project_id": project_id, "table_id": params.table_id, **payload},
+        )
+
+
+class BatchGetMagicbaseRowsParams(MagicbaseProjectScopedParams):
+    table_id: str = Field(description="Real MagicBase table.id in the current project.")
+    record_ids: List[str] = Field(
+        min_length=1,
+        max_length=100,
+        description="Real MagicBase row IDs to load. Maximum 100 IDs per call.",
+    )
+    select: List[str] = Field(
+        default_factory=list,
+        description="Fields to return for every row in addition to id. Leave empty to return dynamic and supported system fields.",
+    )
+
+    @field_validator("record_ids")
+    @classmethod
+    def _validate_record_ids(cls, values: List[str]) -> List[str]:
+        normalized = [str(value).strip() for value in values]
+        if any(not value.isdigit() for value in normalized):
+            raise ValueError("record_ids must contain numeric strings")
+        # MagicBase normalizes record IDs to integers before filtering and returns canonical strings.
+        # Canonicalize here so rows such as input "0001" are not misclassified as missing when the service returns "1".
+        return [str(int(value)) for value in normalized]
+
+
+# Full model-facing usage guidance: agents/skills/use-magicbase/SKILL.md
+@tool(name="batch_get_magicbase_rows", code_mode_only=True)
+class BatchGetMagicRows(MagicBaseFriendlyRemarkMixin, BaseTool[BatchGetMagicbaseRowsParams]):
+    """Load multiple MagicBase rows in one query while applying normal row permissions."""
+
+    name = "batch_get_magicbase_rows"
+
+    async def execute(self, tool_context: ToolContext, params: BatchGetMagicbaseRowsParams) -> ToolResult:
+        try:
+            project_id = _get_project_id(tool_context, params.app_id)
+        except ValueError as e:
+            return ToolResult.error(str(e))
+        if not project_id:
+            return ToolResult.error(
+                "Project ID is not available in the current session. Cannot batch get MagicBase rows."
+            )
+
+        try:
+            # 批量结果需要依靠稳定的记录 ID 恢复调用方顺序并识别未返回项。
+            # 即使调用方只选择业务字段，也必须在内部查询中保留 id。
+            select = list(dict.fromkeys(["id", *params.select])) if params.select else []
+            result = await get_magic_service_sdk().magicbase.query_rows_async(
+                QueryMagicBaseRowsParameter(
+                    project_id=project_id,
+                    table_id=params.table_id,
+                    filter={"record_id": {"in": params.record_ids}},
+                    page=1,
+                    page_size=len(params.record_ids),
+                    select=select,
+                )
+            )
+        except (MagicServiceException, ValueError) as e:
+            return ToolResult.error(f"Failed to batch get MagicBase rows: {e}")
+
+        payload = result.to_dict()
+        rows_by_id = {
+            str(row.get("id") or row.get("record_id")): row
+            for row in payload["rows"]
+            if row.get("id") is not None or row.get("record_id") is not None
+        }
+        ordered_rows = [rows_by_id[record_id] for record_id in params.record_ids if record_id in rows_by_id]
+        returned = len(ordered_rows)
+        requested = len(params.record_ids)
+        missing_record_ids = [record_id for record_id in params.record_ids if record_id not in rows_by_id]
+        missing_summary = (
+            f" {len(missing_record_ids)} requested row(s) were not found or not readable."
+            if missing_record_ids
+            else ""
+        )
+        return ToolResult(
+            content=(
+                f"Loaded {returned} of {requested} requested MagicBase row(s) "
+                f"from table_id={params.table_id}.{missing_summary}"
+            ),
+            data={
+                "project_id": project_id,
+                "table_id": params.table_id,
+                "requested_record_ids": params.record_ids,
+                "rows": ordered_rows,
+                "returned": returned,
+                "missing_record_ids": missing_record_ids,
+            },
+        )
+
+    async def get_tool_detail(
+        self,
+        tool_context: ToolContext,
+        result: ToolResult,
+        arguments: Dict[str, Any] = None,
+    ) -> Optional[ToolDetail]:
+        if result.ok:
+            return None
+        return ToolDetail(
+            type=DisplayType.MD,
+            data=FileContent(
+                file_name="magicbase-rows.md",
+                content=i18n.translate(
+                    "magicbase.batch_query_rows_detail_error",
+                    category="tool.messages",
+                ),
+            ),
         )
 
 

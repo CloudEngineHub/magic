@@ -10,7 +10,7 @@ Use this skill when an HTML micro-app needs persistent data, current-user identi
 MagicBase has three operation surfaces:
 
 - Schema work runs through Code Mode tools before HTML generation: `query_magicbase_tables`, `get_magicbase_table`, `create_magicbase_table`, `create_magicbase_column`, `update_magicbase_table_permissions`, `delete_magicbase_table`, `update_magicbase_column`, and `delete_magicbase_column`.
-- Explicit agent-side data maintenance runs through Code Mode tools: `query_magicbase_rows`, `get_magicbase_row`, `create_magicbase_row`, `update_magicbase_row`, `batch_create_magicbase_rows`, `delete_magicbase_row`, and `batch_delete_magicbase_rows`.
+- Explicit agent-side data maintenance runs through Code Mode tools: `query_magicbase_rows`, `get_magicbase_row`, `batch_get_magicbase_rows`, `create_magicbase_row`, `update_magicbase_row`, `batch_create_magicbase_rows`, `delete_magicbase_row`, and `batch_delete_magicbase_rows`.
 - Runtime row operations are done inside HTML with `window.Magic.db`, using real table IDs returned by MagicBase tools.
 
 Do not expose schema creation inside HTML pages. HTML code should only read and write rows on tables that already exist.
@@ -85,6 +85,27 @@ updated = tool.call("update_magicbase_row", {
 print(updated.content)
 """)
 ```
+
+`query_magicbase_rows` already returns the selected readable fields; use its `data["rows"]` directly when those fields are sufficient. When several known row IDs need additional fields, use one batch query instead of calling `get_magicbase_row` repeatedly:
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+result = tool.call("batch_get_magicbase_rows", {
+    "table_id": "<table_id>",
+    "record_ids": ["<record_id_1>", "<record_id_2>"],
+    "select": ["id", "status", "created_at"],
+})
+if not result.ok:
+    raise SystemExit(result.content)
+print(result.content)
+rows = result.data["rows"]
+missing = result.data["missing_record_ids"]
+""")
+```
+
+`batch_get_magicbase_rows` accepts at most 100 numeric row IDs, preserves the requested order, and returns readable rows only. Missing IDs can mean the row does not exist or is not readable; do not treat them as an authorization verdict.
 
 
 Project memory uses `MICRO-APP.md` for the latest human-readable app memory and MagicBase data model. Do not edit it directly with file-editing tools. MagicBase schema tools maintain `.magicbase/migrations.json`; after successful table or column changes, they refresh the latest MagicBase data model in `MICRO-APP.md`. If tools report a `Pending` migration at the start of a later task, query MagicBase first so confirmable records can be repaired before more schema work. If a legacy `HTML-APP.md` exists, read it for context and migrate the memory to `MICRO-APP.md` before finishing.
@@ -359,6 +380,7 @@ Agent-side row data operations:
 - Row tool reference:
   - `query_magicbase_rows({"table_id": "<id>", "filter": {...}, "sort": [...], "page": 1, "page_size": 20, "select": [...]})` — `filter` uses operators without `$`, such as `{"status": {"eq": "open"}}`; `sort` uses `{"field": "created_at", "order": "desc"}`. Returns `data.total` and `data.rows`.
   - `get_magicbase_row({"table_id": "<id>", "record_id": "<id>", "select": [...]})` — returns one row.
+  - `batch_get_magicbase_rows({"table_id": "<id>", "record_ids": ["<id>"], "select": [...]})` — returns up to 100 readable rows in requested ID order plus `data.missing_record_ids`; use it instead of repeated `get_magicbase_row` calls.
   - `create_magicbase_row({"table_id": "<id>", "data": {...}, "select": [...]})` — `data` holds only dynamic column keys.
   - `update_magicbase_row({"table_id": "<id>", "record_id": "<id>", "data": {...}, "select": [...]})` — `data` holds only the dynamic column keys that should change; never write system fields.
   - `batch_create_magicbase_rows({"table_id": "<id>", "rows": [...], "select": [...]})` — at most 200 rows per call; all rows are validated before the write begins.

@@ -96,6 +96,7 @@ const iconNameMap: Record<string, string> = {
 	delete_magicbase_column: "delete_field",
 	micro_app_plan: "todo_write",
 	query_magicbase_rows: "query_table",
+	batch_get_magicbase_rows: "query_table",
 	get_magicbase_row: "view_table",
 	create_magicbase_row: "create_table",
 	update_magicbase_row: "update_field",

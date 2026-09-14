@@ -35,6 +35,8 @@ from app.tools.magicbase_tools import (
     BatchCreateMagicRows,
     BatchDeleteMagicbaseRowsParams,
     BatchDeleteMagicRows,
+    BatchGetMagicbaseRowsParams,
+    BatchGetMagicRows,
     CreateMagicbaseRowParams,
     CreateMagicbaseTableParams,
     CreateMagicColumn,
@@ -49,11 +51,11 @@ from app.tools.magicbase_tools import (
     GetMagicTable,
     MagicbaseColumnDefinition,
     QueryMagicbaseRowsParams,
+    QueryMagicbaseTablesAllMentionedAppsParams,
     QueryMagicbaseTablesParams,
     QueryMagicRows,
     QueryMagicTables,
     QueryMagicTablesAllMentionedApps,
-    QueryMagicbaseTablesAllMentionedAppsParams,
     UpdateMagicbaseRowParams,
     UpdateMagicColumn,
     UpdateMagicRow,
@@ -67,6 +69,7 @@ MAGICBASE_TOOL_CLASSES = (
     QueryMagicTablesAllMentionedApps,
     GetMagicTable,
     QueryMagicRows,
+    BatchGetMagicRows,
     GetMagicRow,
     CreateMagicRow,
     UpdateMagicRow,
@@ -85,6 +88,23 @@ MAGICBASE_TOOL_CLASSES = (
 def test_all_magicbase_tools_are_code_mode_only():
     for tool_class in MAGICBASE_TOOL_CLASSES:
         assert tool_class.code_mode_only is True, tool_class.__name__
+
+
+@pytest.mark.parametrize(
+    "record_ids",
+    [
+        ["not-a-record-id"],
+        [str(index) for index in range(101)],
+    ],
+)
+def test_batch_get_magicbase_rows_rejects_invalid_record_ids(record_ids):
+    with pytest.raises(ValidationError):
+        BatchGetMagicbaseRowsParams(table_id="200", record_ids=record_ids)
+
+
+def test_batch_get_magicbase_rows_canonicalizes_numeric_ids():
+    params = BatchGetMagicbaseRowsParams(table_id="200", record_ids=["0001", "2"])
+    assert params.record_ids == ["1", "2"]
 
 
 class RecordingMagicBaseApi(MagicBaseApi):
@@ -529,6 +549,10 @@ async def test_magicbase_row_tools_forward_expected_payloads():
 
         async def query_rows_async(self, parameter):
             self.calls.append(("query", parameter))
+            if parameter.filter.get("record_id"):
+                return MagicBaseRowsResult(
+                    {"page": 1, "page_size": 2, "total": 1, "list": [{"id": 301, "title": "A"}]}
+                )
             return MagicBaseRowsResult(
                 {"page": 1, "page_size": 20, "total": 1, "list": [{"id": 300, "title": "A"}]}
             )
@@ -584,6 +608,10 @@ async def test_magicbase_row_tools_forward_expected_payloads():
             tool_context,
             GetMagicbaseRowParams(table_id="200", record_id="301", select=["id"]),
         )
+        batch_get_result = await BatchGetMagicRows().execute(
+            tool_context,
+            BatchGetMagicbaseRowsParams(table_id="200", record_ids=["301", "302"], select=["title"]),
+        )
         update_result = await UpdateMagicRow().execute(
             tool_context,
             UpdateMagicbaseRowParams(table_id="200", record_id="301", data={"title": "B"}),
@@ -608,6 +636,13 @@ async def test_magicbase_row_tools_forward_expected_payloads():
     assert query_result.ok is True
     assert create_result.data["row"]["id"] == "301"
     assert get_result.data["row"]["title"] == "A"
+    assert batch_get_result.data["rows"] == [{"id": "301", "title": "A"}]
+    assert batch_get_result.data["missing_record_ids"] == ["302"]
+    assert "1 requested row(s) were not found or not readable" in batch_get_result.content
+    batch_query_parameter = FakeSdk.magicbase.calls[3][1]
+    assert batch_query_parameter.filter == {"record_id": {"in": ["301", "302"]}}
+    assert batch_query_parameter.page_size == 2
+    assert batch_query_parameter.select == ["id", "title"]
     assert update_result.data["row"]["title"] == "B"
     assert batch_create_result.data["record_ids"] == ["302", "303"]
     assert delete_result.ok is True
@@ -616,6 +651,7 @@ async def test_magicbase_row_tools_forward_expected_payloads():
         "query",
         "create",
         "get",
+        "query",
         "update",
         "batch_create",
         "delete",

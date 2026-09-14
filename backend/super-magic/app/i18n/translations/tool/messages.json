@@ -5471,6 +5471,14 @@
         "zh_CN": "返回 {{returned}}/{{total}} 条 · {{table}}",
         "en_US": "{{returned}}/{{total}} rows returned · {{table}}"
     },
+    "magicbase.batch_query_rows_result": {
+        "zh_CN": "返回 {{returned}}/{{requested}} 条 · {{table}}",
+        "en_US": "{{returned}}/{{requested}} rows loaded · {{table}}"
+    },
+    "magicbase.batch_query_rows_detail_error": {
+        "zh_CN": "批量查看数据记录失败，请稍后重试或检查记录范围。",
+        "en_US": "Failed to load the selected rows. Try again or check the record scope."
+    },
     "magicbase.save_business_data": {
         "zh_CN": "保存业务数据",
         "en_US": "Save app data"

@@ -202,6 +202,7 @@ from app.tools.get_user_info import GetUserInfo
 from app.tools.magicbase_tools import (
     BatchCreateMagicRows,
     BatchDeleteMagicRows,
+    BatchGetMagicRows,
     CreateMagicColumn,
     CreateMagicTable,
     CreateMagicRow,
@@ -358,6 +359,7 @@ __all__ = [
     "QueryMagicTables",
     "QueryMagicTablesAllMentionedApps",
     "GetMagicTable",
+    "BatchGetMagicRows",
     "CreateMagicTable",
     "CreateMagicColumn",
     "InstallSkillsTool",

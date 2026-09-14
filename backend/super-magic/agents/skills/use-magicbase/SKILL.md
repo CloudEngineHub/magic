@@ -24,6 +24,7 @@ Use the existing runtime database methods. The engine supplies the project and a
 | `get_magicbase_table` | `table_id`, optional `app_id` | Read-only metadata |
 | `query_magicbase_rows` | `table_id`, structured query, optional `app_id` | Read-only |
 | `get_magicbase_row` | `table_id`, `record_id`, optional `app_id` | Read-only |
+| `batch_get_magicbase_rows` | `table_id`, up to 100 `record_ids`, optional `select` and `app_id` | Read-only |
 | `create_magicbase_row` | `table_id`, `data`, `confirmed_by_user=true`, optional `app_id` | Requires confirmation |
 | `update_magicbase_row` | `table_id`, `record_id`, `data`, `confirmed_by_user=true`, optional `app_id` | Requires confirmation |
 | `delete_magicbase_row` | `table_id`, `record_id`, `confirm_delete=true`, optional `app_id` | Requires confirmation |
@@ -59,6 +60,21 @@ else:
 ```
 
 Read `result.content` for status and `result.data` only for exact IDs needed by a later call. Always use a real `table_id` returned by the table query.
+
+`query_magicbase_rows` already returns the selected readable fields. If those fields are sufficient, analyze `rows.data` directly instead of fetching each row again. For “all rows” requests, use `page_size` up to 100 and continue with later pages until the reported total is covered.
+
+When IDs came from another operation, or a previous query intentionally selected only a limited summary, load their readable details in one call instead of repeatedly calling `get_magicbase_row`:
+
+```python
+details = tool.call("batch_get_magicbase_rows", {
+    "table_id": "<real_table_id>",
+    "record_ids": ["<real_record_id_1>", "<real_record_id_2>"],
+    "select": ["id", "status", "created_at"],
+})
+print(details.content)
+```
+
+The result preserves requested ID order. `missing_record_ids` can contain nonexistent or unreadable rows; do not infer which condition applies.
 
 ### Confirm and update one row
 
