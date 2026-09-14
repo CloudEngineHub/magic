@@ -9,6 +9,7 @@ import type {
 	AudioSourceConfig,
 	AudioSourceType,
 	RecordingEncodingSnapshot,
+	RecordingStatus,
 } from "./types/RecorderTypes"
 import { RecorderInitializationError, InvalidStateError } from "./types/RecorderErrors"
 import { logger as Logger } from "@/utils/log"
@@ -691,7 +692,7 @@ export class MediaRecorderService {
 	 * 获取录制状态
 	 */
 	getStatus() {
-		const adapterStatus = this.recorderAdapter?.getStatus() || {}
+		const adapterStatus: Partial<RecordingStatus> = this.recorderAdapter?.getStatus() ?? {}
 
 		return {
 			isRecording: this.isRecording,

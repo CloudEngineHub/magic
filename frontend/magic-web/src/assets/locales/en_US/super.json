@@ -3891,6 +3891,8 @@
 				"browserNotSupported": "This browser does not support recording yet. Please switch to a browser with microphone support.",
 				"camera": "Camera",
 				"cancel": "Cancel recording",
+				"compatibilityModeDescription": "Keep this page and browser in the foreground while recording. Do not switch tabs, minimize the browser, or switch to another app, or the recording may be interrupted.",
+				"compatibilityModeTitle": "Keep browser in foreground",
 				"defaultTitle": "Current recording",
 				"enableTranscription": "Enable transcription",
 				"enableTranscriptionFailed": "Failed to enable transcription. Please try again later.",
@@ -3996,6 +3998,31 @@
 				},
 				"backAria": "Back",
 				"closeAria": "Close",
+				"healthCheck": {
+					"button": "Run check",
+					"checking": "Checking",
+					"description": "Checks whether this browser and page can record audio without requesting microphone permission.",
+					"environment": "Environment",
+					"items": {
+						"audioContext": "AudioContext",
+						"audioWorklet": "AudioWorklet",
+						"getUserMedia": "Microphone API",
+						"processingMode": "Processing mode",
+						"secureContext": "Secure context"
+					},
+					"processingModes": {
+						"script-processor": "Compatibility",
+						"worklet": "AudioWorklet"
+					},
+					"status": {
+						"partial": "Available with compatibility mode",
+						"supported": "Recording supported",
+						"unsupported": "Recording unavailable"
+					},
+					"supported": "Supported",
+					"title": "Audio recording health check",
+					"unsupported": "Unavailable"
+				},
 				"model": {
 					"description": "AI model used to generate summaries",
 					"label": "AI Model",

@@ -52,6 +52,8 @@ import NoteUpdateStatus from "../NoteUpdateStatus"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { isDev } from "@/utils/env"
 import { Switch } from "@/components/shadcn-ui/switch"
+import type { AudioProcessingMode } from "@/services/recordSummary/MediaRecorderService/types/RecorderTypes"
+import { CompatibilityRecordingNotice } from "./CompatibilityRecordingNotice"
 
 export interface PcFloatPanelProps {
 	isWaitingSummarize: boolean
@@ -94,6 +96,7 @@ export interface PcFloatPanelProps {
 	onToggleExpandedAiChat: () => void
 	/** Audio-recordings (`project_mode=audio`) uses a simplified PC panel without legacy chrome. */
 	isAudioProjectMode?: boolean
+	processingMode?: AudioProcessingMode | null
 	projectFilesStore: ProjectFilesStore
 	attachments: AttachmentItem[]
 	attachmentList: AttachmentItem[]
@@ -145,6 +148,7 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 		expandedAiChat,
 		onToggleExpandedAiChat,
 		isAudioProjectMode = false,
+		processingMode,
 		projectFilesStore,
 		attachments,
 		attachmentList,
@@ -450,6 +454,13 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 											<span className={styles.recordingText}>
 												{t("recordingSummary.status.recording")}
 											</span>
+											{!isExpanded && (
+												<CompatibilityRecordingNotice
+													processingMode={processingMode}
+													isAudioProjectMode={isAudioProjectMode}
+													isExpanded={false}
+												/>
+											)}
 										</div>
 										<AudioVisualizer
 											duration={duration}
@@ -594,6 +605,14 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 									</div>
 								</div>
 							</div>
+
+							{isExpanded && (
+								<CompatibilityRecordingNotice
+									processingMode={processingMode}
+									isAudioProjectMode={isAudioProjectMode}
+									isExpanded
+								/>
+							)}
 
 							<MagicSplitter
 								className={cx(styles.messagesContainer, "recording-messages")}
