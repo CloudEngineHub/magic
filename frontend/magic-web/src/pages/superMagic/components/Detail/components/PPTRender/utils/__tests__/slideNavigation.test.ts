@@ -5,6 +5,8 @@ const slides = [
 	{ path: "slides/slide-1.html" },
 	{ path: "slides/slide-2.html" },
 	{ path: "slides/section/slide-3.html" },
+	{ path: "slides/section/slide-2.html" },
+	{ path: "slide-2.html" },
 ]
 
 describe("findPPTSlideIndex", () => {
@@ -16,6 +18,10 @@ describe("findPPTSlideIndex", () => {
 		expect(findPPTSlideIndex(slides, "slides/section/slide-3.html", "../slide-2.html")).toBe(1)
 	})
 
+	it("prefers the current folder over a project-root duplicate", () => {
+		expect(findPPTSlideIndex(slides, "slides/section/slide-3.html", "slide-2.html")).toBe(3)
+	})
+
 	it("ignores query strings and hashes", () => {
 		expect(
 			findPPTSlideIndex(slides, "slides/slide-1.html", "slide-2.html?mode=preview#top"),
@@ -25,5 +31,6 @@ describe("findPPTSlideIndex", () => {
 	it("returns -1 for empty or unknown paths", () => {
 		expect(findPPTSlideIndex(slides, "slides/slide-1.html", "")).toBe(-1)
 		expect(findPPTSlideIndex(slides, "slides/slide-1.html", "other.html")).toBe(-1)
+		expect(findPPTSlideIndex(slides, "slides/slide-1.html", "/slides/slide-2.html")).toBe(-1)
 	})
 })

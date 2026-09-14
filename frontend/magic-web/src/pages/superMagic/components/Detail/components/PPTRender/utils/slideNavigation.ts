@@ -19,7 +19,7 @@ export function findPPTSlideIndex(
 	href: string,
 ): number {
 	const trimmedHref = href.trim()
-	if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(trimmedHref)) return -1
+	if (/^(?:[a-z][a-z\d+.-]*:|\/)/i.test(trimmedHref)) return -1
 	const rawPath = trimmedHref.split(/[?#]/, 1)[0]
 	if (!rawPath) return -1
 
@@ -27,9 +27,11 @@ export function findPPTSlideIndex(
 	const currentFolder = currentPath.includes("/")
 		? currentPath.slice(0, currentPath.lastIndexOf("/") + 1)
 		: ""
-	const candidates = new Set([
-		normalizePath(rawPath),
-		normalizePath(`${currentFolder}${rawPath}`),
-	])
-	return slides.findIndex((slide) => candidates.has(normalizePath(slide.path)))
+	const relativePath = normalizePath(`${currentFolder}${rawPath}`)
+	const relativeIndex = slides.findIndex((slide) => normalizePath(slide.path) === relativePath)
+	if (relativeIndex >= 0) return relativeIndex
+
+	// Keep project-root paths as a compatibility fallback for existing generated decks.
+	const projectRootPath = normalizePath(rawPath)
+	return slides.findIndex((slide) => normalizePath(slide.path) === projectRootPath)
 }
