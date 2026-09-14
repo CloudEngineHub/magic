@@ -5840,6 +5840,7 @@
 		"releaseToCollapse": "Release to collapse",
 		"renameCancel": "Cancel (Esc)",
 		"renameSave": "Save (Enter)",
+		"resizeSidebar": "Resize sidebar",
 		"retry": "Retry",
 		"updatedTime": "Updated",
 		"workspacesLoadFailed": "Could not load workspaces"

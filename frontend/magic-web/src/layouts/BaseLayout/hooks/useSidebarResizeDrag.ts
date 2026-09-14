@@ -3,42 +3,55 @@ import { useMemoizedFn } from "ahooks"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { getResizeCollapseIntent, type ResizeCollapseIntent } from "@/utils/resizableCollapse"
 
-interface SidebarCollapseDrag extends ResizeCollapseIntent {
+export interface SidebarResizeDrag extends ResizeCollapseIntent {
+	kind: "expand" | "resize"
 	pointerId: number
 	startX: number
 	startWidthPx: number
+	startExpandedWidthPx: number
+	rawWidthPx: number
+	expandActivated: boolean
+	shouldExpand: boolean
 	minWidthPx: number
 	released: boolean
 	cancelled: boolean
 }
 
-interface UseSidebarCollapseDragParams {
+interface UseSidebarResizeDragParams {
 	sidebarPanelRef: RefObject<ImperativePanelHandle>
 	minSizePercent: number
 	enabled: boolean
-	onCancel: (widthPx: number, restorePanel: boolean) => void
+	collapsed: boolean
+	getExpandedWidthPx: () => number
+	onExpand: () => void
+	onCancel: (drag: SidebarResizeDrag, restorePanel: boolean) => void
 }
 
 const EMPTY_INTENT: ResizeCollapseIntent = { progress: 0, armed: false }
+const SIDEBAR_EXPAND_DISTANCE_PX = 8
 
-/** 原生分栏负责实际宽度；这里仅跟踪越界意图，并把取消交回同一拖动生命周期。 */
-export default function useSidebarCollapseDrag({
+/** 原生分栏负责实际宽度；这里只判断短拉展开、越界收起，并统一处理取消。 */
+export default function useSidebarResizeDrag({
 	sidebarPanelRef,
 	minSizePercent,
 	enabled,
+	collapsed,
+	getExpandedWidthPx,
+	onExpand,
 	onCancel,
-}: UseSidebarCollapseDragParams) {
+}: UseSidebarResizeDragParams) {
 	const pointerDownRef = useRef<{ pointerId: number; clientX: number } | null>(null)
-	const dragRef = useRef<SidebarCollapseDrag | null>(null)
+	const dragRef = useRef<SidebarResizeDrag | null>(null)
 	const [intent, setIntent] = useState(EMPTY_INTENT)
 	const [dragging, setDragging] = useState(false)
 	const [cancelled, setCancelled] = useState(false)
+	const [expanding, setExpanding] = useState(false)
 
 	const cancelDrag = useMemoizedFn(() => {
 		const drag = dragRef.current
 		if (!drag || drag.cancelled) return
 		drag.cancelled = true
-		onCancel(drag.startWidthPx, true)
+		onCancel(drag, true)
 		setIntent(EMPTY_INTENT)
 		// disabled 会使原生手柄注销并触发 onDragging(false)，终止后续指针改宽。
 		setCancelled(true)
@@ -47,11 +60,19 @@ export default function useSidebarCollapseDrag({
 	const updateIntent = useMemoizedFn((event: PointerEvent) => {
 		const drag = dragRef.current
 		if (!drag || drag.cancelled || event.pointerId !== drag.pointerId) return
-		const next = getResizeCollapseIntent(
-			drag.startWidthPx + event.clientX - drag.startX,
-			drag.minWidthPx,
-			drag.armed,
-		)
+		const distance = event.clientX - drag.startX
+		drag.rawWidthPx = drag.startWidthPx + distance
+		if (drag.kind === "expand") {
+			drag.shouldExpand = distance >= SIDEBAR_EXPAND_DISTANCE_PX
+			if (drag.shouldExpand && !drag.expandActivated) {
+				drag.expandActivated = true
+				setExpanding(true)
+				onExpand()
+			}
+			// 阈值只解除宽度限制，原生起点仍为 48px；回拉也沿同一坐标跟手。
+			return
+		}
+		const next = getResizeCollapseIntent(drag.rawWidthPx, drag.minWidthPx, drag.armed)
 		drag.progress = next.progress
 		drag.armed = next.armed
 		setIntent((previous) =>
@@ -64,11 +85,17 @@ export default function useSidebarCollapseDrag({
 			const pointer = pointerDownRef.current
 			const panel = sidebarPanelRef.current
 			if (!enabled || !pointer || !panel) return null
+			const startWidthPx = (panel.getSize() / 100) * window.innerWidth
 			dragRef.current = {
 				...EMPTY_INTENT,
+				kind: collapsed ? "expand" : "resize",
 				pointerId: pointer.pointerId,
 				startX: pointer.clientX,
-				startWidthPx: (panel.getSize() / 100) * window.innerWidth,
+				startWidthPx,
+				startExpandedWidthPx: getExpandedWidthPx(),
+				rawWidthPx: startWidthPx,
+				expandActivated: false,
+				shouldExpand: false,
 				minWidthPx: (minSizePercent / 100) * window.innerWidth,
 				released: false,
 				cancelled: false,
@@ -83,6 +110,7 @@ export default function useSidebarCollapseDrag({
 		dragRef.current = null
 		pointerDownRef.current = null
 		setDragging(false)
+		setExpanding(false)
 		setCancelled(false)
 		setIntent(EMPTY_INTENT)
 		return drag && !drag.cancelled ? drag : null
@@ -90,10 +118,11 @@ export default function useSidebarCollapseDrag({
 
 	useEffect(() => {
 		function handlePointerDown(event: PointerEvent) {
-			if (dragRef.current) return
+			if (dragRef.current || event.button !== 0 || !event.isPrimary) return
 			pointerDownRef.current = { pointerId: event.pointerId, clientX: event.clientX }
 		}
 		function handlePointerMove(event: PointerEvent) {
+			if (dragRef.current?.pointerId !== event.pointerId) return
 			if (event.buttons === 0) cancelDrag()
 			else updateIntent(event)
 		}
@@ -130,7 +159,7 @@ export default function useSidebarCollapseDrag({
 			window.removeEventListener("resize", cancelDrag)
 			window.removeEventListener("blur", cancelDrag)
 			const drag = dragRef.current
-			if (drag && !drag.cancelled) onCancel(drag.startWidthPx, false)
+			if (drag && !drag.cancelled) onCancel(drag, false)
 			dragRef.current = null
 		}
 	}, [cancelDrag, onCancel, updateIntent])
@@ -139,5 +168,5 @@ export default function useSidebarCollapseDrag({
 		if (!enabled) cancelDrag()
 	}, [cancelDrag, enabled])
 
-	return { ...intent, dragging, cancelled, handleDragging }
+	return { ...intent, dragging, expanding, cancelled, dragRef, handleDragging }
 }

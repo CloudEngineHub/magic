@@ -65,7 +65,8 @@ const BaseLayoutPc = observer(() => {
 	const [initialWidth] = useState(() => sidebarStore.width)
 
 	const {
-		collapseDrag,
+		resizeDrag,
+		isUserResizingRef,
 		handleSidebarDragging,
 		handleSidebarResize,
 		handleSidebarResizeKeyDown,
@@ -74,12 +75,13 @@ const BaseLayoutPc = observer(() => {
 	} = useSidebarResponsive({
 		sidebarPanelRef,
 		initialWidth,
-		enabled: showAppSidebar && !sidebarStore.collapsed,
+		enabled: showAppSidebar,
 	})
 
 	// Handle smooth sidebar animation and restore the responsive expanded width.
 	const cancelSidebarAnimation = useSidebarAnimation({
 		sidebarPanelRef,
+		isUserResizingRef,
 		getExpandedSidebarSizePercent,
 	})
 
@@ -88,13 +90,11 @@ const BaseLayoutPc = observer(() => {
 		handleSidebarDragging(isDragging)
 	})
 
-	const handleSidebarHandleKeyDown = useMemoizedFn(
-		(event: React.KeyboardEvent<HTMLDivElement>) => {
-			if (handleSidebarResizeKeyDown(event)) {
-				cancelSidebarAnimation()
-			}
-		},
-	)
+	const handleSidebarHandleKeyDown = useMemoizedFn((event: React.KeyboardEvent<HTMLElement>) => {
+		if (handleSidebarResizeKeyDown(event)) {
+			cancelSidebarAnimation()
+		}
+	})
 
 	useEffect(() => {
 		const sidebarPanel = sidebarPanelRef.current
@@ -173,7 +173,7 @@ const BaseLayoutPc = observer(() => {
 							minSize={
 								!showAppSidebar
 									? 0
-									: sidebarStore.collapsed
+									: sidebarStore.collapsed || resizeDrag.expanding
 										? sidebarStore.collapsedSizePercent
 										: minSidebarSizePercent
 							}
@@ -184,6 +184,14 @@ const BaseLayoutPc = observer(() => {
 									"h-full",
 									!showAppSidebar && "pointer-events-none invisible",
 								)}
+								// 拖开时按正常最小宽度排内容，由面板裁切露出，避免窄尺寸挤压按钮与文字。
+								style={
+									resizeDrag.expanding
+										? {
+												minWidth: `${(minSidebarSizePercent / 100) * window.innerWidth}px`,
+											}
+										: undefined
+								}
 								aria-hidden={!showAppSidebar}
 							>
 								<MagicSidebar />
@@ -192,36 +200,35 @@ const BaseLayoutPc = observer(() => {
 					)}
 				</Observer>
 
-				{/* Resize Handle - hidden when collapsed */}
+				{/* 收起后仍保留同一把手，短拉可展开；原生拖动生命周期不随展示状态切断。 */}
 				{/* 弹性提示需要显示在主内容上方；仅拖动期间提升手柄层级。 */}
 				<Observer>
 					{() => (
 						<ResizableHandle
-							disabled={
-								!showAppSidebar || sidebarStore.collapsed || collapseDrag.cancelled
-							}
-							data-dragging={collapseDrag.dragging}
+							disabled={!showAppSidebar || resizeDrag.cancelled}
+							aria-label={t("sidebarPanels.resizeSidebar")}
+							data-dragging={resizeDrag.dragging}
 							onDragging={handleSidebarDraggingChange}
 							onKeyDownCapture={handleSidebarHandleKeyDown}
 							className={cn(
 								"group/resize w-px bg-transparent outline-none before:!inset-x-auto before:!left-1/2 before:w-2 before:-translate-x-1/2 after:w-4 hover:!bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:before:opacity-100 dark:[--resize-glow-rgb:52,88,136]",
 								resizeGlowClassName,
-								collapseDrag.dragging && "before:opacity-100",
-								collapseDrag.dragging && "z-20",
-								!showAppSidebar || sidebarStore.collapsed
+								resizeDrag.dragging && "before:opacity-100",
+								resizeDrag.dragging && "z-20",
+								!showAppSidebar
 									? "pointer-events-none opacity-0"
 									: "opacity-100 hover:bg-primary/30",
 							)}
 						>
 							<ResizeGrip orientation="vertical" />
 							<ResizableCollapseFeedback
-								dragging={collapseDrag.dragging}
-								collapseProgress={collapseDrag.progress}
-								collapseArmed={collapseDrag.armed}
+								dragging={resizeDrag.dragging}
+								collapseProgress={resizeDrag.progress}
+								collapseArmed={resizeDrag.armed}
 								collapseDirection={-1}
 								pullLabel={t("sidebarPanels.pullLeftToCollapse")}
 								description={
-									collapseDrag.armed
+									resizeDrag.armed
 										? t("sidebarPanels.pullRightToCancel")
 										: t("sidebarPanels.releaseKeepsOpen")
 								}

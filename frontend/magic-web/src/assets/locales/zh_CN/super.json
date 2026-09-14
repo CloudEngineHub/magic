@@ -5841,6 +5841,7 @@
 		"releaseToCollapse": "松开即可收起",
 		"renameCancel": "取消（Esc）",
 		"renameSave": "保存（Enter）",
+		"resizeSidebar": "调整侧栏宽度",
 		"retry": "重试",
 		"updatedTime": "更新时间",
 		"workspacesLoadFailed": "工作区加载失败"

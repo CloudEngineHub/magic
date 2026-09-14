@@ -1,7 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react"
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+	type KeyboardEvent,
+	type RefObject,
+} from "react"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { sidebarStore } from "@/stores/layout"
-import useSidebarCollapseDrag from "./useSidebarCollapseDrag"
+import useSidebarResizeDrag, { type SidebarResizeDrag } from "./useSidebarResizeDrag"
 
 const SIDEBAR_RESIZE_KEYS = new Set([
 	"ArrowDown",
@@ -56,11 +64,13 @@ function useSidebarResponsive({
 	initialWidth,
 	enabled = true,
 }: UseSidebarResponsiveParams) {
+	const collapsed = sidebarStore.collapsed
 	const isUserResizingRef = useRef(false)
 	const hasPendingUserResizeRef = useRef(false)
 	const keyboardResizeTimerRef = useRef<number>()
 	const expandedSidebarWidthPxRef = useRef(convertPercentToPx(initialWidth))
 	const expandedSidebarSizePercentRef = useRef(initialWidth)
+	const pendingLayoutSizeRef = useRef<number>()
 	const prevWindowWidthRef = useRef(window.innerWidth)
 	const [minSidebarSizePercent, setMinSidebarSizePercent] = useState(() =>
 		getMinSidebarSizePercent(window.innerWidth),
@@ -79,13 +89,54 @@ function useSidebarResponsive({
 		},
 		[sidebarPanelRef],
 	)
-	const collapseDrag = useSidebarCollapseDrag({
+	const restoreCancelledDrag = useCallback(
+		(drag: SidebarResizeDrag, restorePanel: boolean) => {
+			if (drag.kind === "expand") {
+				// 折叠状态先恢复，动画仍由活动手势抑制；48px 只恢复显示，不保存为偏好。
+				sidebarStore.setCollapsed(true)
+				if (restorePanel) pendingLayoutSizeRef.current = sidebarStore.collapsedSizePercent
+				restoreSidebarWidth(drag.startExpandedWidthPx, false)
+			} else restoreSidebarWidth(drag.startWidthPx, restorePanel)
+		},
+		[restoreSidebarWidth],
+	)
+	const getExpandedWidthPx = useCallback(() => expandedSidebarWidthPxRef.current, [])
+	const handleDragExpand = useCallback(() => sidebarStore.setCollapsed(false), [])
+	const resizeDrag = useSidebarResizeDrag({
 		sidebarPanelRef,
 		minSizePercent: minSidebarSizePercent,
 		enabled,
-		onCancel: restoreSidebarWidth,
+		collapsed,
+		getExpandedWidthPx,
+		onExpand: handleDragExpand,
+		onCancel: restoreCancelledDrag,
 	})
-	const { handleDragging: handleCollapseDragging } = collapseDrag
+	const { handleDragging: handleResizeDragging, dragRef } = resizeDrag
+
+	useLayoutEffect(() => {
+		let sizePercent = pendingLayoutSizeRef.current
+		const drag = dragRef.current
+		if (sizePercent === undefined && resizeDrag.expanding && drag && !drag.cancelled) {
+			sizePercent = Math.max(
+				sidebarStore.collapsedSizePercent,
+				Math.min(
+					sidebarStore.MAX_WIDTH_PERCENT,
+					convertPxToPercentByViewWidth(drag.rawWidthPx, window.innerWidth),
+				),
+			)
+		}
+		if (sizePercent === undefined) return
+		// 只在展开约束切换或手势结束后应用一次；后续位移仍由原生分栏按原起点计算。
+		pendingLayoutSizeRef.current = undefined
+		sidebarPanelRef.current?.resize(sizePercent)
+	}, [
+		dragRef,
+		resizeDrag.expanding,
+		resizeDrag.dragging,
+		resizeDrag.cancelled,
+		collapsed,
+		sidebarPanelRef,
+	])
 
 	const getExpandedSidebarSizePercent = useCallback((viewWidth: number) => {
 		const minMainPx = sidebarStore.getMinMainContentWidthPx(viewWidth)
@@ -179,6 +230,8 @@ function useSidebarResponsive({
 	const handleSidebarResize = useCallback(
 		(sizePercent: number) => {
 			if (sidebarStore.collapsed || !isUserResizingRef.current) return
+			// 拖开中的窄尺寸仅供展示；松手后统一提交正常范围内的最终宽度。
+			if (dragRef.current?.kind === "expand") return
 
 			expandedSidebarSizePercentRef.current = sizePercent
 			expandedSidebarWidthPxRef.current = convertPercentToPx(sizePercent)
@@ -191,7 +244,7 @@ function useSidebarResponsive({
 				isUserResizingRef.current = false
 			}
 		},
-		[scheduleKeyboardResizeCommit],
+		[dragRef, scheduleKeyboardResizeCommit],
 	)
 
 	const handleSidebarDragging = useCallback(
@@ -201,31 +254,65 @@ function useSidebarResponsive({
 				keyboardResizeTimerRef.current = undefined
 			}
 
-			isUserResizingRef.current = isDragging
-			const completedDrag = handleCollapseDragging(isDragging)
+			if (isDragging) isUserResizingRef.current = true
+			const completedDrag = handleResizeDragging(isDragging)
 			if (!isDragging) {
-				if (completedDrag?.armed) {
+				if (completedDrag?.kind === "expand") {
+					if (!completedDrag.shouldExpand) restoreCancelledDrag(completedDrag, true)
+					else {
+						const sizePercent = Math.max(
+							minSidebarSizePercent,
+							Math.min(
+								sidebarStore.MAX_WIDTH_PERCENT,
+								convertPxToPercentByViewWidth(
+									completedDrag.rawWidthPx,
+									window.innerWidth,
+								),
+							),
+						)
+						expandedSidebarWidthPxRef.current = convertPercentToPx(sizePercent)
+						expandedSidebarSizePercentRef.current = sizePercent
+						pendingLayoutSizeRef.current = sizePercent
+						hasPendingUserResizeRef.current = false
+						sidebarStore.setWidth(sizePercent)
+					}
+				} else if (completedDrag?.armed) {
 					restoreSidebarWidth(completedDrag.startWidthPx, false)
 					sidebarStore.setCollapsed(true)
 				} else commitPendingUserResize()
+				isUserResizingRef.current = false
 			}
 		},
-		[handleCollapseDragging, commitPendingUserResize, restoreSidebarWidth],
+		[
+			handleResizeDragging,
+			commitPendingUserResize,
+			minSidebarSizePercent,
+			restoreCancelledDrag,
+			restoreSidebarWidth,
+		],
 	)
 
 	const handleSidebarResizeKeyDown = useCallback(
-		(event: KeyboardEvent<HTMLDivElement>) => {
+		(event: KeyboardEvent<HTMLElement>) => {
 			if (!SIDEBAR_RESIZE_KEYS.has(event.key)) return false
+			if (sidebarStore.collapsed) {
+				event.preventDefault()
+				event.stopPropagation()
+				if (enabled && event.key === "ArrowRight") sidebarStore.setCollapsed(false)
+				// 返回 false 保留展开动画；不能被调用方当成普通键盘调宽后立即取消。
+				return false
+			}
 
 			isUserResizingRef.current = true
 			scheduleKeyboardResizeCommit()
 			return true
 		},
-		[scheduleKeyboardResizeCommit],
+		[enabled, scheduleKeyboardResizeCommit],
 	)
 
 	return {
-		collapseDrag,
+		resizeDrag,
+		isUserResizingRef,
 		getExpandedSidebarSizePercent,
 		handleSidebarDragging,
 		handleSidebarResize,
