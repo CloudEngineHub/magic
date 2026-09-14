@@ -480,7 +480,7 @@ class ProjectAppService extends AbstractAppService
     /** Create or get a micro-app runtime project with server-owned defaults. */
     public function ensureMicroAppRuntimeProject(RequestContext $requestContext, string $specialKey): array
     {
-        $requestDTO = CreateSpecialProjectRequestDTO::fromArray([
+        $requestDTO = new CreateSpecialProjectRequestDTO([
             'key' => $specialKey,
             'project_name' => $specialKey,
             'dynamic_params' => ['agent_mode' => 'micro-app', 'message_version' => 'v2'],
