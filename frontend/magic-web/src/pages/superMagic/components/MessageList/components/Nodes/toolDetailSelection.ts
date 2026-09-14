@@ -1,6 +1,24 @@
 import projectFilesStore from "@/stores/projectFiles"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { DisabledDetailToolTypes } from "@/pages/superMagic/components/Detail/constants"
+import { reaction } from "mobx"
+import magicToast from "@/components/base/MagicToaster/utils"
+import i18n from "i18next"
+import type { FileReference } from "@/apis/modules/superMagic"
+import {
+	getFileReferenceIdentityKey,
+	resolveFileReference,
+} from "@/pages/superMagic/services/userFileReferenceResolver"
+import { resolveReferencedProjectAttachment } from "@/pages/superMagic/services/referencedProjectAttachmentResolver"
+import {
+	classifyMarkdownFileHref,
+	findAttachmentByPath,
+} from "@/pages/superMagic/utils/markdownFileReference"
+import {
+	createReferencedProjectPreviewFile,
+	openMessageFile,
+	openUserFileReference,
+} from "../../utils/openMessageFile"
 
 // Internal marker: keeps the single-arg callback shape without colliding with tool fields.
 const TOOL_DETAIL_SELECTION_TARGET = Symbol("toolDetailSelectionTarget")
@@ -14,6 +32,7 @@ export type ToolCardInteractionTarget =
 	| { type: "disabled" }
 	| { type: "playback" }
 	| { type: "file"; fileId: string }
+	| { type: "file-reference"; fileId?: string; filePath?: string }
 	| { type: "design" }
 
 const DESIGN_TOOL_NAMES = new Set([
@@ -76,8 +95,139 @@ export function getToolCardInteractionTarget(
 	if (detailRecord.type === "browser") {
 		return { type: "playback" }
 	}
+	const data = detailRecord.data
+	if (data && typeof data === "object" && !Array.isArray(data)) {
+		const { target_file_id, target_file_path } = data as Record<string, unknown>
+		const fileId =
+			typeof target_file_id === "string" && target_file_id ? target_file_id : undefined
+		const filePath =
+			typeof target_file_path === "string" && target_file_path ? target_file_path : undefined
+		if (fileId || filePath) return { type: "file-reference", fileId, filePath }
+	}
 	const fileId = resolveToolFileId(detailRecord.data)
 	return fileId ? { type: "file", fileId } : { type: "playback" }
+}
+
+let pendingFileSelection: AbortController | null = null
+
+/** 两种消息卡片共用真实目标解析；旧来源字段继续遵守原附件判断。 */
+export function selectToolFile({
+	detail,
+	target,
+	onSelectDetail,
+}: SelectToolDetailOptions & {
+	target: ToolCardInteractionTarget
+}): boolean {
+	if (target.type === "file")
+		return selectSourceFileFromTool({ detail, fileId: target.fileId, onSelectDetail })
+	if (target.type !== "file-reference") return false
+	pendingFileSelection?.abort()
+	void selectReferencedToolFile({ detail, target, onSelectDetail })
+	return true
+}
+
+async function selectReferencedToolFile({
+	detail,
+	target,
+	onSelectDetail,
+}: SelectToolDetailOptions & {
+	target: Extract<ToolCardInteractionTarget, { type: "file-reference" }>
+}): Promise<void> {
+	const controller = new AbortController()
+	pendingFileSelection = controller
+	const identity = getFileReferenceIdentityKey()
+	const projectId = projectFilesStore.currentSelectedProject?.id
+	const cancel = () => controller.abort()
+	const disposeIdentity = reaction(
+		() => [getFileReferenceIdentityKey(), projectFilesStore.currentSelectedProject?.id],
+		cancel,
+	)
+	const selectionEvents = [
+		PubSubEvents.Open_File_Tab,
+		PubSubEvents.Open_Playback_Tab,
+		PubSubEvents.Update_Active_File_Id,
+	] as const
+	selectionEvents.forEach((event) => pubsub.subscribe(event, cancel))
+	const release = () => {
+		disposeIdentity()
+		selectionEvents.forEach((event) => pubsub.unsubscribe(event, cancel))
+		if (pendingFileSelection === controller) pendingFileSelection = null
+	}
+	try {
+		let reference: FileReference | undefined
+		let file: Awaited<ReturnType<typeof resolveReferencedProjectAttachment>> | undefined
+		if (target.fileId) {
+			const result = await resolveFileReference({ file_id: target.fileId }, controller.signal)
+			if (result.status === "resolved") reference = result.reference
+		} else if (target.filePath) {
+			// 工具传回实际 POSIX 路径；只在 href 边界编码一次，百分号属于文件名。
+			const pathTarget = classifyMarkdownFileHref(
+				target.filePath.split("/").map(encodeURIComponent).join("/"),
+			).target
+			if (pathTarget?.scope === "user") {
+				const result = await resolveFileReference(
+					{ space_type: "user", space_relative_path: pathTarget.relativePath },
+					controller.signal,
+				)
+				if (result.status === "resolved") reference = result.reference
+			} else if (pathTarget?.scope === "workspace" && projectId) {
+				const attachment = findAttachmentByPath(
+					projectFilesStore.workspaceFilesList,
+					pathTarget.relativePath,
+				)
+				if (attachment)
+					file = {
+						...attachment,
+						project_id: projectId,
+						relative_file_path: pathTarget.relativePath,
+					}
+			} else if (pathTarget?.scope === "referenced-project") {
+				file = await resolveReferencedProjectAttachment(pathTarget)
+			}
+		}
+		if (reference?.space_type === "project" && !reference.is_directory) {
+			// ID 已完成鉴权；直接使用其元信息，不再通过同路径查找另一个目标。
+			const attachment = projectFilesStore.workspaceFilesList.find(
+				(item) => String(item.file_id) === reference.file_id,
+			)
+			file = {
+				...attachment,
+				...reference,
+				relative_file_path: reference.space_relative_path,
+				display_config: {
+					...attachment?.display_config,
+					previewPolicy: {
+						...attachment?.display_config?.previewPolicy,
+						standalone: true,
+					},
+				},
+			}
+		}
+		if (
+			controller.signal.aborted ||
+			identity !== getFileReferenceIdentityKey() ||
+			projectId !== projectFilesStore.currentSelectedProject?.id
+		)
+			return
+		release()
+		if (reference?.space_type === "user" && !reference.is_directory) {
+			openUserFileReference(reference)
+		} else if (file && !file.is_directory && file.type !== "directory") {
+			openMessageFile(
+				file.project_id === projectId ? file : createReferencedProjectPreviewFile(file),
+				{ locateInTree: file.project_id === projectId },
+			)
+		} else {
+			magicToast.error(i18n.t("super:common.fileNotFoundOrLoadFailed"))
+			return
+		}
+		onSelectDetail?.(markSelectionTarget(detail, "file"))
+	} catch {
+		if (!controller.signal.aborted && identity === getFileReferenceIdentityKey())
+			magicToast.error(i18n.t("super:common.fileNotFoundOrLoadFailed"))
+	} finally {
+		release()
+	}
 }
 
 function isFileInAttachments(fileId: string): boolean {

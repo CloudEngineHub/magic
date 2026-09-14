@@ -3,6 +3,30 @@ import type { AttachmentItem } from "../../TopicFilesButton/hooks/types"
 import { MagicFSApi, SuperMagicApi, type MagicFSFile } from "@/apis"
 import type { MagicFSFileTree } from "@/apis/modules/magicFS"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
+import type { FileItem, FilePreviewPolicy } from "../../Detail/components/FilesViewer/types"
+
+export const USER_FILE_PREVIEW_POLICY: Readonly<FilePreviewPolicy> = {
+	standalone: true,
+	editingPresence: false,
+	allowShare: false,
+	allowVersionHistory: false,
+	fileScope: "user",
+	syncWithAttachments: false,
+	persistTab: true,
+	restoreAsActive: true,
+}
+
+/** 列表、消息和刷新恢复使用同一预览策略，不携带旧正文或下载地址。 */
+export function createUserFilePreview(
+	reference: Extract<FileReference, { space_type: "user" }>,
+): FileItem {
+	return {
+		...reference,
+		file_reference: reference,
+		relative_file_path: reference.space_relative_path,
+		display_config: { previewPolicy: { ...USER_FILE_PREVIEW_POLICY } },
+	}
+}
 
 const FILE_CONCURRENT_MODIFICATION_CODE = 51152
 const STABLE_SNAPSHOT_MAX_ATTEMPTS = 3
@@ -162,16 +186,7 @@ export function toUserAttachment(file: MagicFSFile, path: string): AttachmentIte
 		space_type: "user",
 		file_reference: reference,
 		display_config: {
-			previewPolicy: {
-				standalone: true,
-				editingPresence: false,
-				allowShare: false,
-				allowVersionHistory: false,
-				fileScope: USER_FILE_SCOPE,
-				syncWithAttachments: false,
-				persistTab: false,
-				restoreAsActive: false,
-			},
+			previewPolicy: { ...USER_FILE_PREVIEW_POLICY },
 		},
 	}
 }

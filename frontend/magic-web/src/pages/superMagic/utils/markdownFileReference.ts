@@ -5,6 +5,8 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 const WORKSPACE_ROOT_PREFIX = ".workspace/"
 const MAGIC_ROOT_PREFIX = ".magic/"
 const DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH = "/mnt/agfs/magicfs/referenced-projects"
+// 标准 Agent 镜像的 HOME；自定义镜像通过同名运行配置覆盖，不能使用 Web 服务的 HOME。
+const DEFAULT_USER_HOME_PATH = "/root"
 
 export type MarkdownFileTarget =
 	| { scope: "user"; relativePath: string }
@@ -91,6 +93,19 @@ export function getReferencedProjectMountBasePath(): string {
 	return configuredPath ?? DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH
 }
 
+export function getUserHomePath(): string {
+	const path = env("AGENT_USER_HOME_PATH", true)?.trim().replace(/\/+$/, "") || ""
+	return path.startsWith("/") &&
+		!hasControlCharacters(path) &&
+		!path.includes("\\") &&
+		!path
+			.slice(1)
+			.split("/")
+			.some((segment) => !segment || segment === "." || segment === "..")
+		? path
+		: DEFAULT_USER_HOME_PATH
+}
+
 /** 将内部工作区相对路径规范化为不带 ./ 的比较形式。 */
 export function normalizeWorkspaceRelativePath(path: string): string | null {
 	if (!path) return null
@@ -131,7 +146,9 @@ export function classifyMarkdownFileHref(
 		explicitFileReference: true,
 	}
 	const invalidResult =
-		rawHref.startsWith("~") || rawHref.startsWith(getReferencedProjectMountBasePath() + "/")
+		rawHref.startsWith("~") ||
+		rawHref.startsWith(getUserHomePath() + "/") ||
+		rawHref.startsWith(getReferencedProjectMountBasePath() + "/")
 			? invalidFile
 			: notFile
 	if (
@@ -146,6 +163,15 @@ export function classifyMarkdownFileHref(
 
 	const decodedHref = decodeURIComponentOnce(rawHref)
 	if (decodedHref === null || hasControlCharacters(decodedHref)) return invalidResult
+	const userPrefix = getUserHomePath() + "/"
+	if (decodedHref.startsWith(userPrefix)) {
+		// 用户根必须显式给出；编码斜杠不能改变空间边界，编码反斜杠仍属于 POSIX 文件名。
+		if (!rawHref.startsWith("/") || /%2f/i.test(rawHref)) return invalidFile
+		const relativePath = normalizeUserRelativePath(decodedHref.slice(userPrefix.length))
+		return relativePath
+			? { target: { scope: "user", relativePath }, explicitFileReference: true }
+			: invalidFile
+	}
 	if (
 		decodedHref.startsWith(getReferencedProjectMountBasePath() + "/") &&
 		!rawHref.startsWith("/")
@@ -162,7 +188,7 @@ export function classifyMarkdownFileHref(
 	}
 
 	if (rawHref.startsWith("/")) {
-		// 绝对地址只接受 Agent 已有挂载；项目 ID 不能被编码的分隔符重新切分。
+		// 其余绝对地址按 Agent 已有挂载解释；项目 ID 不能被编码的分隔符重新切分。
 		if (rawHref.includes("\\") || /%(?:2f|5c)/i.test(rawHref)) return invalidResult
 		const mountPrefix = getReferencedProjectMountBasePath() + "/"
 		if (!decodedHref.startsWith(mountPrefix)) {
@@ -251,7 +277,14 @@ export function createCanonicalWorkspaceHref(path: string): string | null {
 }
 
 export function createUserFileHref(path: string, isDirectory = false): string | null {
-	const normalized = normalizeUserRelativePath(path.startsWith("~/") ? path.slice(2) : path)
+	const root = getUserHomePath()
+	const normalized = normalizeUserRelativePath(
+		path.startsWith(root + "/")
+			? path.slice(root.length + 1)
+			: path.startsWith("~/")
+				? path.slice(2)
+				: path,
+	)
 	if (!normalized) return null
 	// 反斜杠按文件名编码，避免 Markdown 将其当作转义符；不改变 POSIX 路径。
 	const encoded = normalized
@@ -263,7 +296,8 @@ export function createUserFileHref(path: string, isDirectory = false): string | 
 			),
 		)
 		.join("/")
-	return `~/${encoded}${isDirectory ? "/" : ""}`
+	const encodedRoot = root.split("/").map(encodeURIComponent).join("/")
+	return `${encodedRoot}/${encoded}${isDirectory ? "/" : ""}`
 }
 
 export function createReferencedProjectHref(
@@ -362,13 +396,14 @@ export function getFileDisplayPath(file: {
 	const reference = file.file_reference
 	const path = reference?.space_relative_path ?? file.relative_file_path
 	if (reference?.space_type === "user" || (!reference && file.space_type === "user"))
-		return path !== undefined ? "~/" + path : (file.file_name ?? "")
+		return path !== undefined ? getUserHomePath() + "/" + path : (file.file_name ?? "")
 	return path || file.file_name || ""
 }
 
-/** 用户 Markdown 的普通链接相对于正文所在目录；只有字面 ~/ 选择用户根。 */
+/** 用户 Markdown 的普通链接相对于正文所在目录；用户根地址由公共解析器解释。 */
 export function resolveUserFileHref(href: string, documentPath: string): string | null {
-	if (href.startsWith("~/")) {
+	// 新链接使用绝对用户根，旧正文仍按原有 ~/ 与包含目录解释。
+	if (href.startsWith("~/") || href.startsWith("/")) {
 		const target = parseMarkdownFileHref(href)
 		return target?.scope === "user" ? target.relativePath : null
 	}

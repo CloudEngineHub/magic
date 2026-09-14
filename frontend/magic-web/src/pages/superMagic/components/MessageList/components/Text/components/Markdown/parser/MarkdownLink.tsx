@@ -14,6 +14,7 @@ import {
 	type ReferencedProjectAttachment,
 } from "@/pages/superMagic/services/referencedProjectAttachmentResolver"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import { createReferencedProjectPreviewFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import { normalizeInlineStyle } from "../normalizeInlineStyle"
 import { FileReference, getFileExtensionFromPath } from "./FileReference"
 import { UserFileReference } from "./UserFileReference"
@@ -46,22 +47,6 @@ export interface MarkdownLinkProps {
 interface ReferencedProjectResolution {
 	href: string
 	file: ReferencedProjectAttachment | null
-}
-
-function createReferencedProjectPreviewFile(file: ReferencedProjectAttachment) {
-	return {
-		...file,
-		display_config: {
-			...(file.display_config || {}),
-			previewPolicy: {
-				...(file.display_config?.previewPolicy || {}),
-				standalone: true,
-				syncWithAttachments: false,
-				persistTab: false,
-				restoreAsActive: false,
-			},
-		},
-	}
 }
 
 export const MarkdownLink = observer((props: MarkdownLinkProps) => {
