@@ -12,6 +12,7 @@ import {
 } from "../../services/userFileReferenceResolver"
 import { useFileOperations } from "../TopicFilesButton/hooks/useFileOperations"
 import { useUserFileEditor } from "./hooks/useUserFileEditor"
+import { createUserFilePreview } from "./services/userSpaceFileService"
 
 const Md = lazy(() => import("../Detail/contents/Md"))
 const Text = lazy(() => import("../Detail/contents/Text"))
@@ -43,23 +44,23 @@ export default observer(function UserTextPreview({ data, ...props }: UserTextPre
 		fileScope: "user",
 		isCurrent: () => identityKey === getFileReferenceIdentityKey(),
 	})
-	const resolveRelativeFile = useMemoizedFn(async (href: string) => {
-		assertCurrent()
-		const path = data.file_reference?.space_relative_path ?? data.relative_file_path
-		const relativePath = path ? resolveUserFileHref(href, path) : null
-		if (!relativePath) return undefined
-		const result = await resolveFileReference({
-			space_type: "user",
-			space_relative_path: relativePath,
-		})
-		assertCurrent()
-		if (result.status !== "resolved" || result.reference.space_type !== "user") return undefined
-		return {
-			...result.reference,
-			file_reference: result.reference,
-			relative_file_path: result.reference.space_relative_path,
-		}
-	})
+	const resolveRelativeFile = useMemoizedFn(
+		async (href: string): Promise<FileItem | undefined> => {
+			assertCurrent()
+			const path = data.file_reference?.space_relative_path ?? data.relative_file_path
+			const relativePath = path ? resolveUserFileHref(href, path) : null
+			if (!relativePath) return undefined
+			const result = await resolveFileReference({
+				space_type: "user",
+				space_relative_path: relativePath,
+			})
+			assertCurrent()
+			if (result.status !== "resolved" || result.reference.space_type !== "user")
+				return undefined
+			// 相对链接与列表、消息使用同一预览策略；用户文件不依赖项目附件树。
+			return createUserFilePreview(result.reference)
+		},
+	)
 	const resolveImageUrl = useMemoizedFn(async (href: string) => {
 		const file = await resolveRelativeFile(href)
 		if (!file || file.is_directory) return href

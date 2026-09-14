@@ -106,6 +106,14 @@ export function getUserHomePath(): string {
 		: DEFAULT_USER_HOME_PATH
 }
 
+/** HOME 变更后仍识别旧绝对地址；完整目录前缀优先匹配更长的根，避免混淆嵌套目录。 */
+function matchUserHomePrefix(path: string): string | undefined {
+	return [...new Set([getUserHomePath(), DEFAULT_USER_HOME_PATH])]
+		.sort((left, right) => right.length - left.length)
+		.map((root) => root + "/")
+		.find((prefix) => path.startsWith(prefix))
+}
+
 /** 将内部工作区相对路径规范化为不带 ./ 的比较形式。 */
 export function normalizeWorkspaceRelativePath(path: string): string | null {
 	if (!path) return null
@@ -147,7 +155,7 @@ export function classifyMarkdownFileHref(
 	}
 	const invalidResult =
 		rawHref.startsWith("~") ||
-		rawHref.startsWith(getUserHomePath() + "/") ||
+		matchUserHomePrefix(rawHref) !== undefined ||
 		rawHref.startsWith(getReferencedProjectMountBasePath() + "/")
 			? invalidFile
 			: notFile
@@ -163,8 +171,8 @@ export function classifyMarkdownFileHref(
 
 	const decodedHref = decodeURIComponentOnce(rawHref)
 	if (decodedHref === null || hasControlCharacters(decodedHref)) return invalidResult
-	const userPrefix = getUserHomePath() + "/"
-	if (decodedHref.startsWith(userPrefix)) {
+	const userPrefix = matchUserHomePrefix(decodedHref)
+	if (userPrefix) {
 		// 用户根必须显式给出；编码斜杠不能改变空间边界，编码反斜杠仍属于 POSIX 文件名。
 		if (!rawHref.startsWith("/") || /%2f/i.test(rawHref)) return invalidFile
 		const relativePath = normalizeUserRelativePath(decodedHref.slice(userPrefix.length))
@@ -387,6 +395,7 @@ export function findLegacyAttachmentByPath(
 }
 
 /** 显示路径保留原文件名，不编码 URL，也不改写 canonical 相对路径。 */
+// 输入可识别实际 HOME 和历史绝对地址；界面与复制路径始终使用 ~/，不暴露沙盒 HOME。
 export function getFileDisplayPath(file: {
 	file_reference?: FileReference
 	space_type?: FileReference["space_type"]
@@ -396,7 +405,7 @@ export function getFileDisplayPath(file: {
 	const reference = file.file_reference
 	const path = reference?.space_relative_path ?? file.relative_file_path
 	if (reference?.space_type === "user" || (!reference && file.space_type === "user"))
-		return path !== undefined ? getUserHomePath() + "/" + path : (file.file_name ?? "")
+		return path !== undefined ? "~/" + path : (file.file_name ?? "")
 	return path || file.file_name || ""
 }
 
