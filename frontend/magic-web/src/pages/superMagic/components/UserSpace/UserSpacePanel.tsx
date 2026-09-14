@@ -68,10 +68,11 @@ export default observer(function UserSpacePanel({
 				>
 					<Button
 						variant="ghost"
-						size="icon"
-						className="ml-auto size-6 shrink-0 text-muted-foreground"
-						aria-label={t("userSpace.help.title")}
+						size="sm"
+						className="ml-auto h-6 shrink-0 gap-1 px-1.5 text-xs text-muted-foreground"
+						aria-label={t("userSpace.help.privateLabel")}
 					>
+						<span>{t("userSpace.help.private")}</span>
 						<CircleHelp size={16} />
 					</Button>
 				</ContextHelp>

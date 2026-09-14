@@ -8086,7 +8086,7 @@
 					"usage": "Examples show how to ask for work, what inputs to supply and what a result might look like."
 				},
 				"library": {
-					"example": "Look for a report-organizing skill suitable for this project. Consider installing an existing one first, or create one if it does not meet our needs. Configure personal account access in user space.",
+					"example": "Look for a report-organizing skill suitable for this project. Consider installing an existing one first, or create one if it does not meet our needs. Configure personal account access in personal space.",
 					"exampleRoot": ".magic/skills",
 					"files": [
 						{
@@ -8162,7 +8162,7 @@
 						"steps": [],
 						"tips": [
 							"Project members may read skill instructions, scripts and settings. Do not embed personal keys in these files or include them in uploaded or published skills.",
-							"Use personal sign-in or configuration flows in user space. The skill should explain the required setup and usage without containing secret values."
+							"Use personal sign-in or configuration flows in personal space. The skill should explain the required setup and usage without containing secret values."
 						],
 						"tipsTitle": "Share skills without packaging personal credentials",
 						"title": "Find the skills available for project work here"
@@ -8170,7 +8170,7 @@
 					"note": "Project skills are the skills stored here, not a complete list of everything AI can do. Installation does not sign in to external accounts or grant access; complete any required service setup separately.",
 					"preview": [
 						"Project members can use these skills for project tasks.",
-						"Configure personal credentials in user space."
+						"Configure personal credentials in personal space."
 					],
 					"scope": "Current project · Project members",
 					"usage": "This folder holds skills installed into or created within the current project. A skill is a set of instructions for a type of work and may include programs, assets and specialist material.\nYou can install an existing skill or create one for the project. Members can use these skills when working on tasks in this project."
@@ -8836,7 +8836,7 @@
 						"Combines your recurring preferences with the current task.",
 						"Project membership does not automatically share personal skills."
 					],
-					"scope": "User space · Current organization and account",
+					"scope": "Personal space · Current organization and account",
 					"summary": "Keeps personal methods you can reuse across projects.",
 					"usage": "Personal skills keep methods and capabilities you want to use across projects. They may be installed externally or created by you, such as a report skill or a source-organizing workflow.\nThey belong to your personal space, so you do not need a separate copy for each project."
 				}
@@ -9233,7 +9233,7 @@
 					"usage": "Keep recurring project requirements here. When you or a collaborator starts a task in this project, Super Magic AI automatically reads the root AGENTS.md, so you do not need to repeat the same instructions each time."
 				},
 				"projectMagic": {
-					"example": "Explain what is in this project’s .magic directory and which features use it. If a personal account or key is needed, guide me through setup in user space. Do not save credentials in project files or display secret values in the conversation.",
+					"example": "Explain what is in this project’s .magic directory and which features use it. If a personal account or key is needed, guide me through setup in personal space. Do not save credentials in project files or display secret values in the conversation.",
 					"files": [
 						{
 							"description": "AI settings and capability files",
@@ -9272,13 +9272,13 @@
 						],
 						"context": "This example shows only skills. The skills folder may contain installed or locally created skills; .magic can also contain settings and material for other AI features.",
 						"diagramTitle": "One example: skills used by the project",
-						"exampleContent": "Project skills: stored in .magic/skills.\nSkill sources: installed externally or created in this project.\nProject settings: suitable shared settings without personal credentials.\nPersonal accounts and keys: configured through the relevant tool in user space.",
+						"exampleContent": "Project skills: stored in .magic/skills.\nSkill sources: installed externally or created in this project.\nProject settings: suitable shared settings without personal credentials.\nPersonal accounts and keys: configured through the relevant tool in personal space.",
 						"result": "You do not need to understand every file before using AI. For unfamiliar content, ask which feature maintains it and what a change would affect. Shared working content belongs in the project; personal credentials belong in personal space.",
 						"steps": [],
 						"tips": [
 							"Members who can read project files may also read .magic. Do not put personal keys, passwords or login credentials in project settings or skill files.",
 							"A leaked credential may let someone access services, read data or consume quota on your account, depending on its permissions.",
-							"Use the relevant tool’s sign-in or configuration flow to keep personal credentials in user space. Share instructions without secret values, and do not copy credentials into shared conversations."
+							"Use the relevant tool’s sign-in or configuration flow to keep personal credentials in personal space. Share instructions without secret values, and do not copy credentials into shared conversations."
 						],
 						"tipsTitle": "Where should personal keys go in a shared project?",
 						"title": "AI settings, capabilities and working files for the project"
@@ -9286,7 +9286,7 @@
 					"note": ".magic is still part of the project. A leading dot does not make it private. Directories with the same name in other spaces have their own roles, such as personal settings or a digital employee’s definition.",
 					"preview": [
 						"Skills can be installed externally or created in the project.",
-						"Project permissions apply; personal credentials belong in user space."
+						"Project permissions apply; personal credentials belong in personal space."
 					],
 					"scope": "Current project",
 					"usage": ".magic is a project directory for files related to its AI features. Some files configure features, some extend what AI can do, and others support ongoing work by those features.\nIt may include skills installed from external sources or created in this project, along with feature settings and related working material. Keep everyday deliverables such as reports and images in the project folders you normally use."
@@ -9564,7 +9564,7 @@
 		"defaultFolder": "New folder",
 		"delete": "Delete",
 		"deleteConfirm": "Delete files",
-		"deleteDescription": "Delete the {{count}} selected items, including all files inside selected folders. User space does not currently offer a trash recovery view.",
+		"deleteDescription": "Delete the {{count}} selected items, including all files inside selected folders. Personal space does not currently offer a trash recovery view.",
 		"deleted": "Deleted",
 		"download": "Download",
 		"downloadSelected": "Download selected files",
@@ -9601,7 +9601,7 @@
 					"Describe a goal such as batch processing files or using an authorized service.",
 					"The program, its connection settings and account authorization serve different purposes."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "Command-line tools perform operations through text commands that AI can run for you."
 			},
 			"coreMemory": {
@@ -9647,7 +9647,7 @@
 					"Helps AI use relevant background in later tasks.",
 					"Update stale information and keep detailed history separately."
 				],
-				"scope": "User space · Personal memory",
+				"scope": "Personal space · Personal memory",
 				"usage": "This file stores lasting personal preferences, important background and concise conclusions. AI can consult them for relevant future tasks, reducing how often you need to explain the same background.\nKeep the highlights here and detailed history in related records."
 			},
 			"dingtalk": {
@@ -9678,7 +9678,7 @@
 					"After authorizing the relevant tool, describe the task in ordinary language and let AI use its available features.",
 					"Available actions depend on sign-in status and account permissions."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This folder stores personal settings used to connect to and use DingTalk tools."
 			},
 			"event": {
@@ -9709,7 +9709,7 @@
 					"Keep the time, reasoning at that time and important evidence so later work can understand the history.",
 					"Check later records before acting on an old decision that may have changed."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This record describes what happened in an event, discussion or decision."
 			},
 			"index": {
@@ -9740,7 +9740,7 @@
 					"When records accumulate, start with the index to locate the relevant material instead of opening every file.",
 					"The index provides directions; detailed facts remain in the referenced records."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This file lists records, briefly describes their subjects and points to further reading."
 			},
 			"lark": {
@@ -9771,7 +9771,7 @@
 					"After setup, ask AI to use the tool for Lark tasks within the access you have authorized.",
 					"These files are not a copy of all Lark data and do not mean every feature is authorized."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This folder stores personal connection settings for Lark tools."
 			},
 			"memory": {
@@ -9802,7 +9802,7 @@
 					"Keep useful preferences and background so relevant future tasks can build on them.",
 					"Memory is not a complete conversation backup and should be updated as circumstances change."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This directory brings together lasting information AI may consult in later work."
 			},
 			"month": {
@@ -9844,7 +9844,7 @@
 					"Review a month’s important discussions and decisions, then open the relevant day for detail.",
 					"Organizing records by month does not mean a monthly report has been generated."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This folder groups dated records for a particular month."
 			},
 			"notes": {
@@ -9894,7 +9894,7 @@
 					"Keep recurring preferences, background on a topic and important decisions in suitable records so they are easier to find later.",
 					"You do not need to copy every conversation into notes."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This directory organizes memory notes, connecting concise highlights with detailed records."
 			},
 			"references": {
@@ -9936,7 +9936,7 @@
 					"It can explain the reasons behind a writing preference or the background to ongoing work.",
 					"These are detailed memory records, separate from a skill’s on-demand guidance."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This folder organizes detailed background and explanations by topic."
 			},
 			"settings": {
@@ -9967,7 +9967,7 @@
 					"Ask AI to explain an option, such as the service a feature uses, before adjusting it.",
 					"Settings may contain private connection information."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This file holds settings for your personal working environment."
 			},
 			"subject": {
@@ -9998,7 +9998,7 @@
 					"For example, keep report-writing preferences, current agreements and necessary explanations in a single note.",
 					"Update the corresponding record when things change so several notes do not contradict each other."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This note describes one topic so future work can understand its background."
 			},
 			"teamshare": {
@@ -10029,7 +10029,7 @@
 					"The settings help the tool connect and work with shared content.",
 					"The folder name does not mean your entire personal space is shared."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This folder stores personal settings needed by the Teamshare tool."
 			},
 			"timeline": {
@@ -10060,7 +10060,7 @@
 					"Use it to review changes during a period, then read the relevant record to understand why they happened.",
 					"Dated records describe what happened at the time."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This folder keeps important events and decisions by date."
 			},
 			"tools": {
@@ -10101,7 +10101,7 @@
 					"Some tools need these files to continue working later and normally maintain them themselves.",
 					"You need not configure every file manually."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This directory holds programs or working data retained by tools you use."
 			},
 			"topics": {
@@ -10132,7 +10132,7 @@
 					"After a planning discussion, record why a method was chosen so later work can understand the decision.",
 					"Separate ideas from confirmed decisions."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This folder retains background, decisions and follow-up context from discussions."
 			},
 			"year": {
@@ -10170,7 +10170,7 @@
 					"For an annual review, narrow your search by year and then by month.",
 					"A year is a way to find records; it does not mean every month has an entry."
 				],
-				"scope": "User space · Personal records and settings",
+				"scope": "Personal space · Personal records and settings",
 				"usage": "This folder groups dated records for a particular year."
 			}
 		},
@@ -10241,7 +10241,7 @@
 			"configResult": "AI can explain field purposes, tool instructions and actual feedback. Use the relevant tool or service flow if renewed login or authorization is needed; you do not need to paste sensitive values into the conversation to prove configuration exists.",
 			"credentials": "Tool settings may contain API keys or login credentials. Private describes the access scope, not an absolute security guarantee. Ask AI to explain a setting’s purpose without displaying secrets, and avoid copying entire configuration files into shared material.",
 			"examplesTitle": "What can you do with it?",
-			"filesExample": "“Use the materials I saved in User Space to prepare a report.”",
+			"filesExample": "“Use the materials I saved in Personal Space to prepare a report.”",
 			"filesResult": "Identify the source material and the report’s purpose. Personal source files and generated reports may live in different locations. Before sharing a result with project members, check whether it contains personal content that should remain private.",
 			"foldersDescription": "These are examples of directory purposes, not a listing of your files. Contents depend on the features and tools you have used. DingTalk or Feishu settings usually appear after using the relevant tool; not everyone has them, and you do not need to create folders to match this illustration.",
 			"foldersTitle": "What might appear here?",
@@ -10249,11 +10249,13 @@
 			"memoryExample": "“Remember my preferred writing style and refer to it when writing for me.”",
 			"memoryResult": "Lasting habits can be organized into memory for later reference. State a different requirement in the relevant conversation when needed. If your preferences change, ask AI to update older records instead of preserving contradictory copies.",
 			"personalScope": "Current organization and account",
-			"privacy": "User Space is scoped to your organization and account. Access is not automatically shared with project members. AI can use these files as needed when working on your tasks.",
+			"privacy": "Personal Space is scoped to your organization and account. Access is not automatically shared with project members. AI can use these files as needed when working on your tasks.",
 			"privacyTitle": "What does private mean?",
+			"private": "Private",
+			"privateLabel": "Private: About personal space",
 			"sharedContent": "If you copy content into a project file or shared conversation, the copy follows the access permissions of that destination.",
 			"subtitle": "Your personal file space in this organization",
-			"title": "What is User Space?",
+			"title": "What is Personal Space?",
 			"tooltip": "Your personal file space in this organization, available across projects. Joining a project does not automatically give collaborators access. Click to learn about its purpose and common files.",
 			"unfamiliar": "Dot-prefixed folders often hold tool settings or data and do not each need manual setup. For an unfamiliar file, establish which tool created it and whether it is still needed. Deleting settings can require login again, while removing runtime material may affect existing work. Not every generated file is disposable cache.",
 			"unfamiliarTitle": "If you see unfamiliar files",
@@ -10317,7 +10319,7 @@
 		"selectName": "Select {{name}}",
 		"selectedCount": "{{count}} selected",
 		"size": "Size",
-		"title": "User space",
+		"title": "Personal space",
 		"type": "Type",
 		"upload": "Upload files",
 		"uploadFailed": "Upload is incomplete. Check the upload task for progress and errors."
