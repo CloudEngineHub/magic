@@ -1751,6 +1751,11 @@ class TopicTaskAppService extends AbstractAppService
         string $appMessageId
     ): ?array {
         try {
+            // project_file attachments belong to the Super Magic workspace and are not
+            // records in magic_chat_file. Keep them in the persisted task message and
+            // Tiptap mentions, but do not send them through the legacy IM file checker.
+            $messageContent = $this->removeProjectFileAttachmentsForIM($messageContent);
+
             // Create MagicSeqEntity
             $seqEntity = new MagicSeqEntity();
             $chatMessageType = ChatMessageType::from($messageType);
@@ -1806,6 +1811,29 @@ class TopicTaskAppService extends AbstractAppService
             ]);
             return null;
         }
+    }
+
+    private function removeProjectFileAttachmentsForIM(array $messageContent): array
+    {
+        $attachments = $messageContent['attachments'] ?? null;
+        if (! is_array($attachments)) {
+            return $messageContent;
+        }
+
+        $chatAttachments = array_values(array_filter(
+            $attachments,
+            static fn (mixed $attachment): bool =>
+                ! is_array($attachment)
+                || ($attachment['type'] ?? '') !== 'project_file'
+        ));
+
+        if ($chatAttachments === []) {
+            unset($messageContent['attachments']);
+        } else {
+            $messageContent['attachments'] = $chatAttachments;
+        }
+
+        return $messageContent;
     }
 
     /**
