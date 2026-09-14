@@ -1517,8 +1517,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				return `${baseName}${this.getText("video.nameSuffix.generating", "(生成中)")}`
 			case "composing":
 				return `${baseName}${this.getText("video.nameSuffix.composing", "(合并中)")}`
-			case "loading":
-				return `${baseName}${this.getText("video.nameSuffix.loading", "(加载中)")}`
 			case "failed":
 				return state.failureSource === "resource"
 					? baseName

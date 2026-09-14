@@ -91,10 +91,7 @@ import { resolveImageDisplayState, type ImageDisplayState } from "./imageDisplay
 const IMAGE_CONTENT_NODE_NAME = "image-content"
 
 type ImageResourceStructureReason =
-	| "missing-image-node"
-	| "cleared-image-node"
-	| "error-to-image"
-	| "resource-failed"
+	"missing-image-node" | "cleared-image-node" | "error-to-image" | "resource-failed"
 
 type ImageResourceMetadataReason = "non-fullsize-full" | "view-priority-blocked"
 
@@ -2050,8 +2047,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				return `${baseName}${this.getGeneratingNameSuffix(displayState)}`
 			case "uploading":
 				return `${baseName}${this.getText("image.nameSuffix.uploading", "(上传中)")}`
-			case "loading":
-				return `${baseName}${this.getText("image.nameSuffix.loading", "(加载中)")}`
 			case "failed":
 				return displayState.failureSource === "resource"
 					? baseName
