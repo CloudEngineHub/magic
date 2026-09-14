@@ -4450,6 +4450,18 @@
 		"slideIdleDescription": "Slide {{index}} is waiting to load",
 		"slideLoadError": "Failed to load slide {{index}}",
 		"slideLoading": "Loading slide {{index}}...",
+		"speakerNotes": {
+			"empty": "Click to add notes for this slide",
+			"generate": "AI speaker notes",
+			"generatePrompt": "Generate speaker notes for this slide that I can use during the presentation.",
+			"generatePromptSuffix": "Write the notes into the slide's notes area without changing the visual content.",
+			"placeholder": "Write what you want to say during this slide…",
+			"save": "Save",
+			"saveFailed": "Save failed. Try again.",
+			"saved": "Saved",
+			"saving": "Saving",
+			"title": "Notes"
+		},
 		"templateReplacement": {
 			"button": "Change Template",
 			"confirm": "Use Template",

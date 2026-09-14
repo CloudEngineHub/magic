@@ -4450,6 +4450,18 @@
 		"slideIdleDescription": "第 {{index}} 页正在等待加载",
 		"slideLoadError": "第 {{index}} 页加载失败",
 		"slideLoading": "正在加载第 {{index}} 页...",
+		"speakerNotes": {
+			"empty": "点击此处添加本页备注",
+			"generate": "AI 演讲稿",
+			"generatePrompt": "请为这页 PPT 生成适合演讲时使用的备注。",
+			"generatePromptSuffix": "备注应写入该页面的备注区域，不要改动页面视觉内容。",
+			"placeholder": "输入本页演讲时要说的内容……",
+			"save": "保存",
+			"saveFailed": "保存失败，请重试",
+			"saved": "已保存",
+			"saving": "保存中",
+			"title": "备注"
+		},
 		"templateReplacement": {
 			"button": "更换模板",
 			"confirm": "确认使用",

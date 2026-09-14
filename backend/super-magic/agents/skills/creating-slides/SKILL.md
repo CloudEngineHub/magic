@@ -62,6 +62,18 @@ When user has no explicit requirements, follow these defaults:
 - **Static fixed page**: Same effect on any device size, no adaptation, responsive design prohibited
 - **Must include** `<script src="slide-bridge.js"></script>` at bottom of page for inter-page communication
 
+### Speaker notes contract
+
+Every generated slide must contain one inert speaker-notes block outside the visual slide DOM:
+
+```html
+<template data-magic-slide-notes data-format="plain-text" data-version="1">
+Speaker notes for this page.
+</template>
+```
+
+Generate concise, presentation-ready notes from the page purpose, visible content, audience, and narrative flow. Keep the block outside the rendered canvas. When editing an existing slide, preserve the block and update it whenever the page's message changes. Do not place speaker notes in visible slide elements or remove an existing block unless the user explicitly asks to clear it.
+
 ### CSS Frameworks and Resources
 
 - **TailwindCSS**: https://cdn.tailwindcss.com/3.4.17 (required, note: this CDN uses JIT browser compilation mode, returns JS code, use `<script>` tag)

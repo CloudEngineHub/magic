@@ -55,6 +55,7 @@ import type { MenuProps } from "antd"
 import type { PPTSlideStructureAdapter } from "./types"
 import { getPPTLiveRenderCacheSize } from "./PPTSidebar/utils/devicePerformance"
 import EditToolbar from "../EditToolbar"
+import PPTSpeakerNotesPanel from "./components/PPTSpeakerNotesPanel"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import {
 	buildSlidesTemplateReplacementPayload,
@@ -389,6 +390,46 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		store,
 		isAnySlideEditing,
 		slideStructureAdapter,
+	})
+
+	const handleGenerateSpeakerNotes = useMemoizedFn(() => {
+		const slide = store.currentSlide
+		if (!slide) return
+
+		const fileId = store.getFileIdByPath(slide.path)
+		const file = attachmentList?.find((item: any) => item.file_id === fileId)
+		if (!fileId || !file) return
+
+		pubsub.publish(PubSubEvents.Add_Content_To_Chat, {
+			content: {
+				type: "doc",
+				content: [
+					{
+						type: "paragraph",
+						content: [
+							{ type: "text", text: t("ppt.speakerNotes.generatePrompt") },
+							{
+								type: "mention",
+								attrs: {
+									id: null,
+									label: null,
+									mentionSuggestionChar: "@",
+									type: "project_file",
+									data: {
+										file_id: fileId,
+										file_name: file.file_name,
+										file_path: file.relative_file_path,
+										file_extension: file.file_extension,
+									},
+								},
+							},
+							{ type: "text", text: t("ppt.speakerNotes.generatePromptSuffix") },
+						],
+					},
+				],
+			},
+			extraData: { hasInput: true },
+		})
 	})
 
 	// 导航函数（上一张/下一张/跳转）
@@ -1000,34 +1041,60 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										/>
 									)
 								})}
+
+								{/* 控制栏只覆盖幻灯片画布，不覆盖画布下方的备注区域。 */}
+								{!isAnySlideEditing &&
+									!isPresentationFullscreen &&
+									store.isReady &&
+									hasSlides && (
+										<PPTControlBar
+											activeIndex={store.activeIndex}
+											totalSlides={store.slideUrls.length}
+											isTransitioning={store.isTransitioning}
+											isMobile={isMobile}
+											isFullscreen={isPresentationFullscreen}
+											onPrevSlide={() => changeSlide("prev")}
+											onNextSlide={() => changeSlide("next")}
+											onGoToFirstSlide={goToFirstSlide}
+											onRefreshSlides={handleRefreshAllSlides}
+											onJumpToPage={handleJumpToPage}
+											onToggleFullscreen={togglePresentationFullscreen}
+											onReplaceTemplate={
+												canReplaceTemplate
+													? handleOpenTemplateReplacement
+													: undefined
+											}
+											scaleRatio={activeSlideScaleRatio}
+											onScaleChange={handleManualScaleChange}
+											onResetScale={() => handleManualScaleChange(null)}
+											t={t}
+										/>
+									)}
 							</div>
 
-							{/* 控制栏 - 在编辑模式和全屏模式下隐藏 */}
-							{!isAnySlideEditing &&
-								!isPresentationFullscreen &&
+							{!isPresentationFullscreen &&
+								!isPlaybackMode &&
 								store.isReady &&
-								hasSlides && (
-									<PPTControlBar
-										activeIndex={store.activeIndex}
-										totalSlides={store.slideUrls.length}
-										isTransitioning={store.isTransitioning}
-										isMobile={isMobile}
-										isFullscreen={isPresentationFullscreen}
-										onPrevSlide={() => changeSlide("prev")}
-										onNextSlide={() => changeSlide("next")}
-										onGoToFirstSlide={goToFirstSlide}
-										onRefreshSlides={handleRefreshAllSlides}
-										onJumpToPage={handleJumpToPage}
-										onToggleFullscreen={togglePresentationFullscreen}
-										onReplaceTemplate={
-											canReplaceTemplate
-												? handleOpenTemplateReplacement
+								hasSlides &&
+								store.currentSlide && (
+									<PPTSpeakerNotesPanel
+										slideIndex={store.activeIndex}
+										rawContent={store.currentSlide.rawContent || ""}
+										fileId={
+											store.getFileIdByPath(store.currentSlide.path) || ""
+										}
+										allowEdit={effectiveAllowEdit}
+										saveEditContent={saveEditContent}
+										onSaved={(nextContent, slideIndex) =>
+											store
+												.updateSlideContent(slideIndex, nextContent)
+												.then(() => undefined)
+										}
+										onGenerate={
+											effectiveAllowEdit
+												? handleGenerateSpeakerNotes
 												: undefined
 										}
-										scaleRatio={activeSlideScaleRatio}
-										onScaleChange={handleManualScaleChange}
-										onResetScale={() => handleManualScaleChange(null)}
-										t={t}
 									/>
 								)}
 						</div>

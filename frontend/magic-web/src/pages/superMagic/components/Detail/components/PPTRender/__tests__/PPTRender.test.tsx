@@ -561,6 +561,10 @@ describe("PPTRender", () => {
 		expect(screen.getByTestId("ppt-render-sidebar")).toHaveStyle({ width: "200px" })
 		expect(screen.getByTestId("ppt-render-sidebar-resize-handle")).toBeInTheDocument()
 		expect(screen.getByTestId("ppt-control-bar")).toBeInTheDocument()
+		expect(screen.getByTestId("ppt-control-bar").parentElement).toHaveAttribute(
+			"data-testid",
+			"ppt-render-slide-stage",
+		)
 		expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
 			expect.objectContaining({ isFullscreen: false }),
 		)
