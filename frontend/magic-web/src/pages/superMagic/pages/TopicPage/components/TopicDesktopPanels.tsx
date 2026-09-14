@@ -443,6 +443,7 @@ function TopicDesktopPanels({
 
 				{shouldShowProjectResizeHandle && (
 					<TopicResizeHandle
+						gripVariant="dots"
 						dragging={isDraggingProjectSider}
 						collapseProgress={isDraggingProjectSider ? collapseProgress : 0}
 						collapseArmed={isDraggingProjectSider && isCollapseArmed}
@@ -561,7 +562,9 @@ function TopicDesktopPanels({
 							}}
 						>
 							<TopicResizeHandle
+								gripVariant="dots"
 								dragging={isDraggingMessagePanel}
+								collapseDirection={1}
 								collapseProgress={
 									enableProjectCollapse && isDraggingMessagePanel
 										? collapseProgress

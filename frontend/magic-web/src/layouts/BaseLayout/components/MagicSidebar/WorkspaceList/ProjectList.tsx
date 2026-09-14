@@ -1,4 +1,5 @@
-import { useCallback } from "react"
+import { useCallback, useRef } from "react"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import { useVirtualProjectList } from "../hooks/useVirtualProjectList"
 import { observer } from "mobx-react-lite"
@@ -21,7 +22,7 @@ function ProjectList({
 	onCancelCreate,
 	onProjectCreated,
 	dndDisabled,
-	scrollRef: workspaceScrollRef,
+	maxProjectHeight,
 }: ProjectListProps) {
 	const { t } = useTranslation(["super", "sidebar"])
 	const {
@@ -38,6 +39,7 @@ function ProjectList({
 		selectedWorkspace: workspace,
 	})
 
+	const listRef = useRef<HTMLUListElement>(null)
 	const page = isSearchResult ? undefined : projectStore.workspacePages.get(workspaceId)
 	const loadMore = useCallback(() => {
 		void projectStore.loadMoreProjectsForWorkspace(workspaceId)
@@ -52,7 +54,7 @@ function ProjectList({
 		onBlurCapture,
 	} = useVirtualProjectList({
 		loadEnabled: active,
-		externalScrollRef: workspaceScrollRef,
+		listRef,
 		scrollKey: `workspace-projects:${workspaceId}`,
 		projects,
 		// 与项目行的 32px 点击高度和 4px 行间距一致，创建／重命名也沿用同一高度。
@@ -66,40 +68,46 @@ function ProjectList({
 	return (
 		<>
 			{/* 每层为 16px 图标加 8px 间距；项目缩进一层后，状态位和名称分别对齐父工作区的图标和名称。 */}
-			<div
-				className="relative flex w-full shrink-0 flex-col items-start gap-1 pl-6 pr-0 pt-1"
-				data-sidebar-drop-type="project-list"
-				data-sidebar-drop-workspace-id={workspaceId}
-				data-sidebar-drop-empty={projects.length === 0 ? "true" : undefined}
-				data-testid={`sidebar-project-list-${workspaceId}`}
+			<ScrollArea
+				viewportRef={scrollRef}
+				className="relative w-full shrink-0 [&>[data-slot=scroll-area-scrollbar]]:w-[2px] [&>[data-slot=scroll-area-scrollbar]]:border-0 [&>[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-thumb]]:bg-muted-foreground/25"
+				viewportClassName="overscroll-contain [&>div]:!block"
+				viewportStyle={{ maxHeight: maxProjectHeight }}
+				viewportProps={{
+					"data-project-scroll-container": true,
+					onFocusCapture,
+					onBlurCapture,
+				}}
 			>
-				{isCreatingProject && onCancelCreate && onProjectCreated && (
-					<div className="w-full duration-150 animate-in fade-in slide-in-from-top-2">
-						<CreateProjectInput
-							workspaceId={workspaceId}
-							onCancel={onCancelCreate}
-							onCreated={onProjectCreated}
-						/>
-					</div>
-				)}
-				{isLoading && projects.length === 0 ? (
-					// Loading text with fade-in animation
-					<div className="px-2 py-1 text-xs text-[#a3a3a3] duration-150 animate-in fade-in slide-in-from-top-2">
-						{t("sidebar:project.loading")}
-					</div>
-				) : projects.length === 0 && !isCreatingProject && !page?.error ? (
-					// Empty state with fade-in animation
-					<div className="px-2 py-1 text-xs text-[#a3a3a3] duration-150 animate-in fade-in slide-in-from-top-2">
-						{t("sidebar:project.empty")}
-					</div>
-				) : (
-					<div
-						ref={scrollRef}
-						className="w-full"
-						onFocusCapture={onFocusCapture}
-						onBlurCapture={onBlurCapture}
-					>
+				<div
+					className="relative flex w-full shrink-0 flex-col items-start gap-1 pl-6 pr-0 pt-1"
+					data-sidebar-drop-type="project-list"
+					data-sidebar-drop-workspace-id={workspaceId}
+					data-sidebar-drop-empty={projects.length === 0 ? "true" : undefined}
+					data-testid={`sidebar-project-list-${workspaceId}`}
+				>
+					{isCreatingProject && onCancelCreate && onProjectCreated && (
+						<div className="w-full duration-150 animate-in fade-in slide-in-from-top-2">
+							<CreateProjectInput
+								workspaceId={workspaceId}
+								onCancel={onCancelCreate}
+								onCreated={onProjectCreated}
+							/>
+						</div>
+					)}
+					{isLoading && projects.length === 0 ? (
+						// Loading text with fade-in animation
+						<div className="px-2 py-1 text-xs text-[#a3a3a3] duration-150 animate-in fade-in slide-in-from-top-2">
+							{t("sidebar:project.loading")}
+						</div>
+					) : projects.length === 0 && !isCreatingProject && !page?.error ? (
+						// Empty state with fade-in animation
+						<div className="px-2 py-1 text-xs text-[#a3a3a3] duration-150 animate-in fade-in slide-in-from-top-2">
+							{t("sidebar:project.empty")}
+						</div>
+					) : (
 						<SidebarMenuSub
+							ref={listRef}
 							className="relative mx-0 block w-full translate-x-0 border-0 px-0 py-0"
 							style={{ height: virtualizer.getTotalSize() }}
 						>
@@ -136,25 +144,25 @@ function ProjectList({
 								)
 							})}
 						</SidebarMenuSub>
-					</div>
-				)}
-				{(page?.hasMore || page?.error) && (
-					<button
-						type="button"
-						className="w-full px-2 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
-						disabled={isLoading || page.loadingMore}
-						onClick={loadMore}
-					>
-						{page.error
-							? t("super:projectNavigation.retry")
-							: page.loadingMore
-								? t("sidebar:project.loading")
-								: t("super:projectNavigation.loadMore")}
-					</button>
-				)}
-				{/* Border line with fade-in animation */}
-				<div className="absolute bottom-0 left-4 top-0 w-0 border-l border-[#e5e5e5] duration-300 animate-in fade-in dark:border-[#404040]" />
-			</div>
+					)}
+					{(page?.hasMore || page?.error) && (
+						<button
+							type="button"
+							className="w-full px-2 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
+							disabled={isLoading || page.loadingMore}
+							onClick={loadMore}
+						>
+							{page.error
+								? t("super:projectNavigation.retry")
+								: page.loadingMore
+									? t("sidebar:project.loading")
+									: t("super:projectNavigation.loadMore")}
+						</button>
+					)}
+					{/* Border line with fade-in animation */}
+					<div className="absolute bottom-0 left-4 top-0 w-0 border-l border-[#e5e5e5] duration-300 animate-in fade-in dark:border-[#404040]" />
+				</div>
+			</ScrollArea>
 			{projectModals}
 		</>
 	)

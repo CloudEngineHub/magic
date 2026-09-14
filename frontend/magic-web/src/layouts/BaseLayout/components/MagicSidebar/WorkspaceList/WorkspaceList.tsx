@@ -120,6 +120,61 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 				).values(),
 			)
 		: workspaces
+	const [projectHeights, setProjectHeights] = useState<Record<string, number>>({})
+	const workspaceLayoutKey = displayedWorkspaces
+		.map(
+			(workspace) =>
+				`${workspace.id}:${(isSearchMode && projectsByWorkspaceId.has(workspace.id)) || sidebarStore.expandedWorkspaces.has(workspace.id)}`,
+		)
+		.join("|")
+	useLayoutEffect(() => {
+		const viewport = scrollRef.current
+		const list = workspaceListRef.current
+		if (!viewport || !list) return
+		const items = Array.from(
+			list.querySelectorAll<HTMLElement>("[data-sidebar-workspace-root]"),
+		)
+		const measure = () => {
+			const headers = items.map((item) =>
+				item.querySelector<HTMLElement>("[data-sidebar-workspace-header]"),
+			)
+			const sizes = items.map(
+				(item, index) =>
+					(headers[index]?.offsetHeight ?? 0) +
+					parseFloat(getComputedStyle(item).marginBottom),
+			)
+			const heights: Record<string, number> = {}
+			items.forEach((item, index) => {
+				const next = items[index + 1]
+				let reserve = next ? sizes[index + 1] : 0
+				// 下一组展开时只预留其标题；折叠且空间足够时，再露出一组标题。
+				if (
+					next?.dataset.workspaceExpanded === "false" &&
+					items[index + 2] &&
+					viewport.clientHeight - sizes[index] - reserve - sizes[index + 2] >=
+						sizes[index]
+				)
+					reserve += sizes[index + 2]
+				const workspaceId = item.dataset.sidebarDropWorkspaceId
+				if (!workspaceId) return
+				heights[workspaceId] = Math.max(0, viewport.clientHeight - sizes[index] - reserve)
+			})
+			setProjectHeights((previous) =>
+				Object.keys(previous).length === items.length &&
+				Object.entries(heights).every(([id, height]) => previous[id] === height)
+					? previous
+					: heights,
+			)
+		}
+		measure()
+		const observer = new ResizeObserver(measure)
+		observer.observe(viewport)
+		items.forEach((item) => {
+			const header = item.querySelector("[data-sidebar-workspace-header]")
+			if (header) observer.observe(header)
+		})
+		return () => observer.disconnect()
+	}, [workspaceLayoutKey, isExpanded])
 	const { requestConfirmation, confirmationDialog } = useProjectPinBoundaryConfirmation()
 	const {
 		rootRef: dndRootRef,
@@ -408,10 +463,15 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 			)
 			// Workspace items use scroll-margin-top for the sticky list header.
 			// Without it, block:start tucks the first project under the workspace title.
-			workspaceElement?.scrollIntoView({
-				behavior: "smooth",
-				block: "start",
-			})
+			const viewport = scrollRef.current
+			if (workspaceElement && viewport)
+				viewport.scrollTo({
+					top:
+						viewport.scrollTop +
+						workspaceElement.getBoundingClientRect().top -
+						viewport.getBoundingClientRect().top,
+					behavior: "smooth",
+				})
 		})
 
 		return () => window.cancelAnimationFrame(animationFrameId)
@@ -466,7 +526,14 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 			>
 				<ScrollArea
 					viewportRef={scrollRef}
-					className="min-h-0 flex-1 overflow-hidden [&>[data-slot=scroll-area-scrollbar]]:w-1.5 [&>[data-slot=scroll-area-scrollbar]]:border-l-0"
+					scrollHints={{
+						variant: "arrows",
+						reserveSpace: true,
+						upLabel: t("super:projectNavigation.scrollUp"),
+						downLabel: t("super:projectNavigation.scrollDown"),
+					}}
+					hideScrollbar
+					className="min-h-0 flex-1 overflow-hidden"
 					viewportClassName="overscroll-contain [--workspace-list-sticky-top:0px] [&>div]:!block"
 					viewportProps={{
 						"data-workspaces-scroll-container": true,
@@ -497,6 +564,7 @@ function WorkspaceList({ beforeItems, onOpenManager, icon }: WorkspaceListProps)
 										key={workspace.id}
 										workspace={workspace}
 										scrollRef={scrollRef}
+										maxProjectHeight={projectHeights[workspace.id]}
 										onOpenManager={() => onOpenManager(workspace)}
 										dndDisabled={isSearchMode}
 										searchProjects={

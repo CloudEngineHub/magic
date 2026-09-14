@@ -196,7 +196,7 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 								type="button"
 								aria-current={source.type === "recent" ? true : undefined}
 								className={cn(
-									"flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-accent",
+									"flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
 									source.type === "recent" &&
 										"bg-accent font-medium text-accent-foreground",
 								)}
@@ -216,7 +216,7 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 										: undefined
 								}
 								className={cn(
-									"mb-0.5 flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-accent",
+									"mb-0.5 flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
 									source.type === "workspace" &&
 										source.workspace.id === item.id &&
 										"bg-accent font-medium text-accent-foreground ring-1 ring-inset ring-border",
@@ -261,7 +261,7 @@ function WorkspaceProjectsPanel({ open, initialSource, onClose }: WorkspaceProje
 								type="button"
 								aria-current={source.type === "collaboration" ? true : undefined}
 								className={cn(
-									"flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-accent",
+									"flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
 									source.type === "collaboration" &&
 										"bg-accent font-medium text-accent-foreground",
 								)}

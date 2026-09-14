@@ -23,7 +23,7 @@ export function SidebarSectionToggle({
 			aria-label={label}
 			aria-expanded={isExpanded}
 			data-header-chevron
-			className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground"
+			className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
 		>
 			<ChevronRight
 				className={cn(
@@ -98,7 +98,7 @@ export function SidebarRow({
 				onClick={onClick}
 				aria-expanded={hideChevron ? undefined : isExpanded}
 				data-testid={testId}
-				className="flex min-w-0 flex-1 items-center gap-2 self-stretch overflow-hidden text-left"
+				className="flex min-w-0 flex-1 items-center gap-2 self-stretch overflow-hidden rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
 			>
 				{leading && (
 					<div

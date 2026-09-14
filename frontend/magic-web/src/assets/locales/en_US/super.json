@@ -4625,6 +4625,8 @@
 		"recent": "Recent projects",
 		"resizeSections": "Resize navigation and project sections",
 		"retry": "Could not load. Click to retry",
+		"scrollDown": "Scroll down",
+		"scrollUp": "Scroll up",
 		"workspaces": "Workspaces"
 	},
 	"projectShare": {
@@ -5830,8 +5832,12 @@
 		"projectManagerDescription": "Browse and manage projects across workspaces",
 		"projectName": "Project name",
 		"projectsLoadFailed": "Failed to load projects",
-		"pullToCollapse": "Keep dragging to collapse",
-		"releaseToCollapse": "Release to collapse; drag back to cancel",
+		"pullLeftToCancel": "Drag back left to cancel",
+		"pullLeftToCollapse": "Keep dragging left to collapse",
+		"pullRightToCancel": "Drag back right to cancel",
+		"pullRightToCollapse": "Keep dragging right to collapse",
+		"releaseKeepsOpen": "Releasing keeps the panel open",
+		"releaseToCollapse": "Release to collapse",
 		"renameCancel": "Cancel (Esc)",
 		"renameSave": "Save (Enter)",
 		"retry": "Retry",

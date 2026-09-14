@@ -27,6 +27,7 @@ function WorkspaceItem({
 	searchProjects,
 	dndDisabled,
 	scrollRef,
+	maxProjectHeight,
 	onOpenManager,
 }: WorkspaceItemProps) {
 	const { t } = useTranslation(["super"])
@@ -66,6 +67,17 @@ function WorkspaceItem({
 		})
 
 	const workspaceHeaderRef = useRef<HTMLDivElement>(null)
+	const locateOnExpandRef = useRef(false)
+	useLayoutEffect(() => {
+		const header = workspaceHeaderRef.current
+		const viewport = scrollRef.current
+		if (!isExpanded || !locateOnExpandRef.current || !header || !viewport) return
+		locateOnExpandRef.current = false
+		const item = header.closest<HTMLElement>("[data-sidebar-workspace-root]")
+		if (!item) return
+		viewport.scrollTop +=
+			item.getBoundingClientRect().top - viewport.getBoundingClientRect().top
+	}, [isExpanded, scrollRef])
 	const collapseScrollAnchorRef = useRef<{
 		scrollContainer: HTMLElement
 		anchorTop: number
@@ -142,6 +154,7 @@ function WorkspaceItem({
 				}
 			}
 		}
+		locateOnExpandRef.current = !isExpanded
 		sidebarStore.toggleWorkspaceExpanded(workspace.id)
 	}
 
@@ -161,6 +174,7 @@ function WorkspaceItem({
 			data-sidebar-drop-type="workspace"
 			data-sidebar-drop-workspace-id={workspace.id}
 			data-sidebar-workspace-root="true"
+			data-workspace-expanded={isExpanded}
 			className={cn(
 				"relative flex w-full max-w-full shrink-0 flex-col items-center",
 				// Selecting a workspace scrolls this item to the top. Reserve the sticky
@@ -305,7 +319,7 @@ function WorkspaceItem({
 						isSearchResult={searchProjects !== undefined}
 						active={active}
 						workspace={workspace}
-						scrollRef={scrollRef}
+						maxProjectHeight={maxProjectHeight}
 						projects={projects}
 						workspaceId={workspace.id}
 						isLoading={isLoading}

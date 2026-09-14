@@ -4626,6 +4626,8 @@
 		"recent": "最近项目",
 		"resizeSections": "调整导航与项目区域高度",
 		"retry": "加载失败，点击重试",
+		"scrollDown": "向下滚动",
+		"scrollUp": "向上滚动",
 		"workspaces": "工作空间"
 	},
 	"projectShare": {
@@ -5831,8 +5833,12 @@
 		"projectManagerDescription": "浏览与管理所有工作区的项目",
 		"projectName": "项目名称",
 		"projectsLoadFailed": "项目加载失败",
-		"pullToCollapse": "继续拉动以收起",
-		"releaseToCollapse": "松开收起，回拉可取消",
+		"pullLeftToCancel": "向左回拉可取消",
+		"pullLeftToCollapse": "继续向左拉动以收起",
+		"pullRightToCancel": "向右回拉可取消",
+		"pullRightToCollapse": "继续向右拉动以收起",
+		"releaseKeepsOpen": "松手后仍保持展开",
+		"releaseToCollapse": "松开即可收起",
 		"renameCancel": "取消（Esc）",
 		"renameSave": "保存（Enter）",
 		"retry": "重试",

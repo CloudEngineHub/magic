@@ -502,11 +502,18 @@ export function useWorkspaceListDnd({
 	}, [])
 
 	const getScrollContainer = useCallback(
-		(target: EventTarget | null) => {
-			// 工作区标题与虚拟项目共用一个视口，指针位置不再切换内部滚动容器。
+		(target: EventTarget | null, clientY: number) => {
+			// 每帧只滚动一个视口；内部沿当前方向到边界后，才交给外层导航。
 			if (target instanceof Element) {
-				const local = target.closest<HTMLElement>("[data-workspaces-scroll-container]")
-				if (local && rootRef.current?.contains(local)) return local
+				const local = target.closest<HTMLElement>("[data-project-scroll-container]")
+				if (local && rootRef.current?.contains(local)) {
+					const speed = getEdgeScrollSpeed(local, clientY)
+					if (
+						(speed < 0 && local.scrollTop > 0) ||
+						(speed > 0 && local.scrollTop + local.clientHeight < local.scrollHeight)
+					)
+						return local
+				}
 			}
 			return scrollRef.current
 		},
@@ -518,7 +525,12 @@ export function useWorkspaceListDnd({
 			autoScrollFrameRef.current = null
 			const pointer = pointerRef.current
 			const active = activeDragRef.current
-			const scrollContainer = getScrollContainer(pointer?.target ?? null)
+			const scrollContainer = getScrollContainer(
+				pointer
+					? document.elementFromPoint(pointer.clientX, pointer.clientY) || pointer.target
+					: null,
+				pointer?.clientY ?? 0,
+			)
 			if (!pointer || !active || !scrollContainer) return
 
 			const speed = getEdgeScrollSpeed(scrollContainer, pointer.clientY)
@@ -539,7 +551,7 @@ export function useWorkspaceListDnd({
 	const updateAutoScroll = useCallback(
 		(frame: DragFrame) => {
 			pointerRef.current = frame
-			const scrollContainer = getScrollContainer(frame.target)
+			const scrollContainer = getScrollContainer(frame.target, frame.clientY)
 			if (!scrollContainer || getEdgeScrollSpeed(scrollContainer, frame.clientY) === 0) {
 				stopAutoScroll()
 				return

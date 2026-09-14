@@ -19,6 +19,7 @@ export function useVirtualProjectList({
 	loadEnabled = true,
 	scrollKey,
 	externalScrollRef,
+	listRef,
 	hasMore = false,
 	loading = false,
 	error = false,
@@ -30,6 +31,8 @@ export function useVirtualProjectList({
 	loadEnabled?: boolean
 	scrollKey: string
 	externalScrollRef?: RefObject<HTMLDivElement>
+	/** 自有视口中的创建行等内容占据起点，但不参与虚拟项目索引。 */
+	listRef?: RefObject<HTMLElement>
 	hasMore?: boolean
 	loading?: boolean
 	error?: boolean
@@ -39,8 +42,8 @@ export function useVirtualProjectList({
 	// scrollRef 始终指向本列表；宽栏另用共享视口，窄栏与最近列表继续自有滚动。
 	const [scrollMargin, setScrollMargin] = useState(0)
 	useLayoutEffect(() => {
-		const viewport = externalScrollRef?.current
-		const list = scrollRef.current
+		const viewport = externalScrollRef?.current ?? (listRef ? scrollRef.current : null)
+		const list = listRef?.current ?? scrollRef.current
 		if (!viewport || !list) return
 		const measure = () => {
 			setScrollMargin(
@@ -68,7 +71,7 @@ export function useVirtualProjectList({
 			observer.disconnect()
 			viewport.removeEventListener("scroll", measure)
 		}
-	}, [externalScrollRef, projects.length, loadEnabled])
+	}, [externalScrollRef, listRef, projects.length, loadEnabled])
 	const [interactingIds, setInteractingIds] = useState<Set<string>>(new Set())
 	const [draggedId, setDraggedId] = useState<string | null>(null)
 	const [focusedId, setFocusedId] = useState<string | null>(null)

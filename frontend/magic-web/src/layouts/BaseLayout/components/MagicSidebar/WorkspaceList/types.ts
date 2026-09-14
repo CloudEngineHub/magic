@@ -7,6 +7,7 @@ type ProjectItemActionHandler = (project: ProjectListItem) => void | Promise<voi
 export interface WorkspaceItemProps {
 	active: boolean
 	scrollRef: RefObject<HTMLDivElement>
+	maxProjectHeight?: number
 	onOpenManager: () => void
 	workspace: Workspace
 	className?: string
@@ -26,7 +27,7 @@ export interface ProjectListProps {
 	onCancelCreate?: () => void
 	onProjectCreated?: () => void
 	dndDisabled?: boolean
-	scrollRef: RefObject<HTMLDivElement>
+	maxProjectHeight?: number
 }
 
 export interface ProjectItemProps {

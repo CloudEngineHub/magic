@@ -67,7 +67,12 @@ export function ProjectsPanel({
 			document.activeElement instanceof HTMLElement ? document.activeElement : null
 	wasOpenRef.current = !!open
 	return (
-		<Dialog open={open}>
+		<Dialog
+			open={open}
+			onOpenChange={(nextOpen) => {
+				if (!nextOpen) onClose()
+			}}
+		>
 			{open && (
 				<DialogContent
 					showCloseButton={false}
@@ -79,11 +84,11 @@ export function ProjectsPanel({
 							"h-[min(680px,calc(100dvh_-_32px))] !w-[min(960px,calc(100vw_-_32px))] !max-w-none",
 					)}
 					onInteractOutside={(event) => event.preventDefault()}
-					onEscapeKeyDown={onClose}
 					onCloseAutoFocus={(event) => {
 						event.preventDefault()
 						const target = returnFocusRef.current
-						if (target?.isConnected && !target.closest("[inert]")) target.focus()
+						if (target?.isConnected && !target.closest("[inert]"))
+							target.focus({ preventScroll: true })
 					}}
 					data-testid="shared-workspace-dialog"
 				>
@@ -132,7 +137,7 @@ export function ProjectsPanel({
 							<button
 								type="button"
 								aria-label={t("button.close", { ns: "interface" })}
-								className="flex cursor-pointer items-center justify-center rounded-[6px] p-1.5 hover:bg-fill active:bg-fill-secondary"
+								className="flex cursor-pointer items-center justify-center rounded-[6px] p-1.5 outline-none hover:bg-fill focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:bg-fill-secondary"
 								data-testid="shared-workspace-dialog-close-button"
 								onClick={(e) => {
 									e.stopPropagation()

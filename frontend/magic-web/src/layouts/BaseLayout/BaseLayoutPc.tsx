@@ -13,6 +13,8 @@ import {
 	ResizablePanel,
 	ResizableHandle,
 	ResizableCollapseFeedback,
+	ResizeGrip,
+	resizeGlowClassName,
 } from "@/components/shadcn-ui/resizable"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { sidebarStore } from "@/stores/layout"
@@ -198,22 +200,31 @@ const BaseLayoutPc = observer(() => {
 							disabled={
 								!showAppSidebar || sidebarStore.collapsed || collapseDrag.cancelled
 							}
+							data-dragging={collapseDrag.dragging}
 							onDragging={handleSidebarDraggingChange}
 							onKeyDownCapture={handleSidebarHandleKeyDown}
 							className={cn(
-								"w-px bg-transparent hover:!bg-transparent",
+								"group/resize w-px bg-transparent outline-none before:!inset-x-auto before:!left-1/2 before:w-2 before:-translate-x-1/2 after:w-4 hover:!bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:before:opacity-100 dark:[--resize-glow-rgb:52,88,136]",
+								resizeGlowClassName,
+								collapseDrag.dragging && "before:opacity-100",
 								collapseDrag.dragging && "z-20",
 								!showAppSidebar || sidebarStore.collapsed
 									? "pointer-events-none opacity-0"
 									: "opacity-100 hover:bg-primary/30",
 							)}
 						>
+							<ResizeGrip orientation="vertical" />
 							<ResizableCollapseFeedback
 								dragging={collapseDrag.dragging}
 								collapseProgress={collapseDrag.progress}
 								collapseArmed={collapseDrag.armed}
 								collapseDirection={-1}
-								pullLabel={t("sidebarPanels.pullToCollapse")}
+								pullLabel={t("sidebarPanels.pullLeftToCollapse")}
+								description={
+									collapseDrag.armed
+										? t("sidebarPanels.pullRightToCancel")
+										: t("sidebarPanels.releaseKeepsOpen")
+								}
 								releaseLabel={t("sidebarPanels.releaseToCollapse")}
 							/>
 						</ResizableHandle>

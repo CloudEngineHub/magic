@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
 	CollaborationProjectCreator,
@@ -114,7 +114,15 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 		[CollaborationProjectType.Received]: 0,
 		[CollaborationProjectType.Shared]: 0,
 	})
-	const isOpenRef = useRef(Boolean(props.open))
+	const controllers = useRef<Partial<Record<CollaborationProjectType, AbortController>>>({})
+	const cancelRequests = useMemoizedFn(() => {
+		for (const tab of [CollaborationProjectType.Received, CollaborationProjectType.Shared]) {
+			requestIds.current[tab] += 1
+			controllers.current[tab]?.abort()
+			delete controllers.current[tab]
+		}
+	})
+	const isOpenRef = useRef(false)
 
 	const [currentTab, setCurrentTab] = useState<CollaborationProjectType>(
 		CollaborationProjectType.Received,
@@ -147,43 +155,46 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 			{ resetWhenError = false }: { resetWhenError?: boolean } = {},
 		) => {
 			if (!isOpenRef.current) return
+			controllers.current[tab]?.abort()
+			const controller = new AbortController()
+			controllers.current[tab] = controller
 			const requestId = ++requestIds.current[tab]
+			const isCurrentRequest = () =>
+				!controller.signal.aborted &&
+				isOpenRef.current &&
+				requestIds.current[tab] === requestId
 			const setLoading =
 				tab === CollaborationProjectType.Received ? setLoadingReceived : setLoadingShared
 			const setProjects =
 				tab === CollaborationProjectType.Received ? setReceivedProjects : setSharedProjects
 
 			setLoading(true)
-			SuperMagicApi.getCollaborationProjects({
-				page: 1,
-				page_size: 99,
-				name: debouncedSearchValue,
-				type: tab,
-				sort_field: sortType,
-				sort_direction: "desc",
-				creator_user_ids:
-					tab === CollaborationProjectType.Received &&
-					joinType === CollaborationJoinMethod.Internal &&
-					creatorFilter.length > 0
-						? creatorFilter.map((item) => item.user_id)
-						: undefined,
-				join_method: joinType,
-			})
+			SuperMagicApi.getCollaborationProjects(
+				{
+					page: 1,
+					page_size: 99,
+					name: debouncedSearchValue,
+					type: tab,
+					sort_field: sortType,
+					sort_direction: "desc",
+					creator_user_ids:
+						tab === CollaborationProjectType.Received &&
+						joinType === CollaborationJoinMethod.Internal &&
+						creatorFilter.length > 0
+							? creatorFilter.map((item) => item.user_id)
+							: undefined,
+					join_method: joinType,
+				},
+				{ signal: controller.signal },
+			)
 				.then((res) => {
-					if (isOpenRef.current && requestIds.current[tab] === requestId)
-						setProjects(res?.list || [])
+					if (isCurrentRequest()) setProjects(res?.list || [])
 				})
 				.catch(() => {
-					if (
-						isOpenRef.current &&
-						requestIds.current[tab] === requestId &&
-						resetWhenError
-					)
-						setProjects([])
+					if (isCurrentRequest() && resetWhenError) setProjects([])
 				})
 				.finally(() => {
-					if (isOpenRef.current && requestIds.current[tab] === requestId)
-						setLoading(false)
+					if (isCurrentRequest()) setLoading(false)
 				})
 		},
 	)
@@ -201,18 +212,14 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 		fetchForTab(CollaborationProjectType.Shared)
 	})
 
-	useEffect(() => {
-		const requests = requestIds.current
-		isOpenRef.current = Boolean(props.open)
+	useLayoutEffect(() => {
+		if (!props.open) isOpenRef.current = false
 		if (props.open) {
 			setCurrentTab(CollaborationProjectType.Received)
-			fetchForTab(CollaborationProjectType.Received, { resetWhenError: true })
-			fetchForTab(CollaborationProjectType.Shared, { resetWhenError: true })
 		}
 		return () => {
 			isOpenRef.current = false
-			requests[CollaborationProjectType.Received] += 1
-			requests[CollaborationProjectType.Shared] += 1
+			cancelRequests()
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [props.open])
@@ -220,12 +227,25 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 	// Refresh all tabs when filter/sort params change
 	useEffect(() => {
 		if (!props.open) return
-		refetchAllTabs()
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [debouncedSearchValue, creatorFilter, sortType])
+		const resetWhenError = !isOpenRef.current
+		isOpenRef.current = true
+		// 打开和参数变化共用一次预取；动作后的刷新仍由原回调显式触发。
+		fetchForTab(CollaborationProjectType.Received, { resetWhenError })
+		fetchForTab(CollaborationProjectType.Shared, { resetWhenError })
+		return cancelRequests
+	}, [
+		props.open,
+		debouncedSearchValue,
+		creatorFilter,
+		sortType,
+		joinType,
+		fetchForTab,
+		cancelRequests,
+	])
 
 	const handleClose = useMemoizedFn(() => {
 		isOpenRef.current = false
+		cancelRequests()
 		setCurrentTab(CollaborationProjectType.Received)
 		handleSortTypeChange(SortType.PROJECT_UPDATE_TIME)
 		setCreatorFilter([])
