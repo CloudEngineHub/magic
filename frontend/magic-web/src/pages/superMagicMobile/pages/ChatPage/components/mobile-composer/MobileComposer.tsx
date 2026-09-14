@@ -417,7 +417,6 @@ function MobileComposerComponent({
 		<div className="flex flex-col gap-2 [&:empty]:hidden">
 			{editorNodes?.taskDataNode}
 			{editorNodes?.messageQueueNode}
-			<QueueDraftNotice context={editorContext.queueContext} />
 		</div>
 	)
 	const voiceInputNode = (
@@ -506,7 +505,7 @@ function MobileComposerComponent({
 		) : null
 
 	const composerInnerContent = (
-		<div className="relative">
+		<div className="relative" data-queue-editor-surface>
 			<div
 				className={cn(
 					shouldShowVoiceRecordingUi &&
@@ -518,6 +517,9 @@ function MobileComposerComponent({
 					files={files}
 					onRemove={logic.handleRemoveUploadedFile}
 				/>
+				<div className="px-4 [&:empty]:hidden">
+					<QueueDraftNotice context={editorContext.queueContext} />
+				</div>
 
 				<div
 					className="px-4 pb-1.5 pt-3"

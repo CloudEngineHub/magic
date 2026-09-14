@@ -24,6 +24,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 interface MessageEditorViewProps {
 	className?: string
 	containerClassName?: string
+	headerContent?: ReactNode
 	size: MessageEditorSize
 	tiptapEditor: Editor | null
 	domRef: RefObject<HTMLDivElement>
@@ -53,6 +54,7 @@ interface MessageEditorViewProps {
 function MessageEditorView({
 	className,
 	containerClassName,
+	headerContent,
 	size,
 	tiptapEditor,
 	domRef,
@@ -96,6 +98,7 @@ function MessageEditorView({
 					onDrop={dragEvents.onDrop}
 					onPasteCapture={onPaste}
 					data-testid="super-message-editor-container"
+					data-queue-editor-surface
 				>
 					<FlexBox
 						vertical
@@ -115,6 +118,7 @@ function MessageEditorView({
 								)}
 							</div>
 						)}
+						{headerContent}
 						<div className={cn(messageEditorTextContainerVariants({ size }))}>
 							<EditorContent
 								ref={domRef}

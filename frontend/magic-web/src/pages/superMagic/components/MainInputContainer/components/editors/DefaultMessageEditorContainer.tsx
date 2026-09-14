@@ -461,10 +461,10 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 
 	return (
 		<div className={cn("flex min-h-0 flex-col gap-1", shouldFillHeight && "h-full")}>
-			<QueueDraftNotice context={queueContext} />
 			<div className={cn("min-h-0", shouldFillHeight && "flex-1")}>
 				<MessageEditor
 					ref={bindEditorRef}
+					headerContent={<QueueDraftNotice context={queueContext} />}
 					{...editorStyleProps}
 					placeholder={placeholder}
 					promptCarousel={editorContext?.promptCarousel}

@@ -125,6 +125,8 @@ export interface MessageEditorProps {
 	className?: string
 	/** Container class name */
 	containerClassName?: string
+	/** 输入框内头部与正文之间的状态内容，不占用工具按钮的布局配置。 */
+	headerContent?: React.ReactNode
 	/** Send callback */
 	onSend?: (content: {
 		value: JSONContent | undefined

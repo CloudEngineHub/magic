@@ -1,4 +1,4 @@
-import { makeAutoObservable, runInAction, reaction } from "mobx"
+import { comparer, makeAutoObservable, runInAction, reaction } from "mobx"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { DraftData, DraftKey, QueueDraftMetadata, QueueDraftSnapshot } from "../../types"
 import type { DataService } from "@/components/business/MentionPanel/types"
@@ -435,10 +435,15 @@ export class DraftStore {
 	}
 
 	subscribeQueueDraft(listener: (draft: QueueDraftSnapshot | null) => void) {
+		// 来源保留重发位置，内容有效性只决定提示是否可见。清空后重写仍属于同一草稿，
+		// 未知操作结果也不能因正文为空而丢失；仅空／非空变化通知，避免每次按键刷新队列。
 		return reaction(
-			() => this.queueDraft,
+			() => ({
+				draft: this.queueDraft,
+				hasContent: Boolean(hasMeaningfulData({ value: this.editorStore.value })),
+			}),
 			() => listener(this.getQueueDraft()),
-			{ fireImmediately: true },
+			{ fireImmediately: true, equals: comparer.shallow },
 		)
 	}
 

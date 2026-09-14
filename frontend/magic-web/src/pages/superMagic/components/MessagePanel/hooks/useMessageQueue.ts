@@ -1,4 +1,12 @@
-import { useState, useCallback, useRef, useEffect, useMemo, type RefObject } from "react"
+import {
+	createElement,
+	useState,
+	useCallback,
+	useRef,
+	useEffect,
+	useMemo,
+	type RefObject,
+} from "react"
 import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { ModelItem, type MessageEditorRef, type QueueMessageInput } from "../../MessageEditor/types"
@@ -12,6 +20,9 @@ import chatWebSocket from "@/apis/clients/chatWebSocket"
 import recordSummaryStore from "@/stores/recordingSummary"
 import { transformMentions } from "../../MessageEditor/utils/mention"
 import magicToast from "@/components/base/MagicToaster/utils"
+import MagicModal from "@/components/base/MagicModal"
+import { Button } from "@/components/shadcn-ui/button"
+import { normalizeQueuePreviewText } from "../components/MessageQueue/utils"
 import localstorage from "@/utils/localstorage"
 import { platformKey } from "@/utils/storage"
 import { userStore } from "@/models/user"
@@ -166,6 +177,9 @@ function useMessageQueue({
 	const queueVersionRef = useRef(0)
 	const currentScopeRef = useRef("")
 	currentScopeRef.current = `${getClientQueueStorageKey()}/${projectId}/${topicId}`
+	const deleteConfirmationRef = useRef<{ destroy: () => void } | null>(null)
+	const deletionScope = currentScopeRef.current
+	useEffect(() => () => deleteConfirmationRef.current?.destroy(), [deletionScope])
 	const [isLoading, setIsLoading] = useState(false)
 	const operationLocksRef = useRef<Set<string>>(new Set())
 	const [isMutating, setIsMutating] = useState(false)
@@ -918,22 +932,112 @@ function useMessageQueue({
 
 	const removeFromQueue = useMemoizedFn(async (messageId: string) => {
 		const item = queueRef.current.find((message) => message.id === messageId)
-		if (!item || !acquireLock(messageId)) return
-		try {
-			setQueue((items) =>
-				items.map((message) =>
-					message.id === messageId ? { ...message, isDeletingLoading: true } : message,
-				),
-			)
-			await removeForDraft(item)
-			if (item.syncState) await finalizeLocalRemoval(item.id)
-			magicToast.success(t("messageQueue.deleteSuccess"))
-		} catch {
-			magicToast.error(t("messageQueue.deleteFailed"))
-		} finally {
-			releaseLock(messageId)
-			await fetchQueueList()
+		if (!item || item.status !== "pending" || item.syncState === "submitted") return
+		if (deleteConfirmationRef.current) return
+		const operationScope = currentScopeRef.current
+		let pending = false
+		let closed = false
+		const close = () => {
+			if (closed) return
+			closed = true
+			modal.destroy()
+			if (deleteConfirmationRef.current?.destroy === close)
+				deleteConfirmationRef.current = null
 		}
+		const content = (error?: string) =>
+			createElement(
+				"div",
+				{ className: "space-y-3" },
+				createElement(
+					"p",
+					{
+						className:
+							"line-clamp-3 break-words rounded-md bg-muted p-2 text-sm text-foreground",
+					},
+					normalizeQueuePreviewText(item.content) ||
+						t("messageQueue.mobile.emptyContent"),
+				),
+				createElement("p", null, t("messageQueue.deleteDescription")),
+				error &&
+					createElement("p", { role: "alert", className: "text-destructive" }, error),
+			)
+		const update = (error?: string) => {
+			if (closed) return
+			modal.update({
+				content: content(error),
+				footer: createElement(
+					"div",
+					{ className: "flex w-full justify-end gap-2" },
+					createElement(
+						Button,
+						{ variant: "outline", disabled: pending, onClick: close },
+						t("messageQueue.switchDraftCancel"),
+					),
+					createElement(
+						Button,
+						{
+							variant: "destructive",
+							disabled: pending,
+							onClick: () => void confirm(),
+						},
+						t("messageQueue.deleteConfirm"),
+					),
+				),
+			})
+		}
+		const confirm = async () => {
+			if (pending || closed) return
+			if (operationScope !== currentScopeRef.current) return close()
+			// 确认不暂停队列；弹窗里的旧快照只供阅读，删除前重新检查当前身份与状态。
+			const current = queueRef.current.find((message) => message.id === messageId)
+			if (
+				!current ||
+				current.clientSyncId !== item.clientSyncId ||
+				current.status !== "pending" ||
+				current.syncState === "submitted"
+			) {
+				close()
+				magicToast.warning(t("messageQueue.deleteTargetChanged"))
+				void fetchQueueList()
+				return
+			}
+			if (!acquireLock(messageId)) {
+				update(t("messageQueue.operationInProgress"))
+				return
+			}
+			pending = true
+			update()
+			try {
+				await removeForDraft(current)
+				if (operationScope !== currentScopeRef.current) return
+				if (current.syncState) await finalizeLocalRemoval(current.id)
+				if (operationScope !== currentScopeRef.current) return
+				close()
+				magicToast.success(t("messageQueue.deleteSuccess"))
+			} catch {
+				pending = false
+				if (operationScope === currentScopeRef.current)
+					update(t("messageQueue.deleteFailed"))
+			} finally {
+				releaseLock(messageId)
+				if (operationScope === currentScopeRef.current) await fetchQueueList()
+			}
+		}
+		// 自定义 footer 只在业务成功后关闭；沿用共享弹窗，不改变其它删除入口的行为。
+		const modal = MagicModal.confirm({
+			title: t("messageQueue.deleteTitle"),
+			content: content(),
+			variant: "destructive",
+			closable: false,
+			maskClosable: false,
+			onCancel: () => {
+				closed = true
+				deleteConfirmationRef.current = null
+			},
+			footer: null,
+		})
+		deleteConfirmationRef.current = { destroy: close }
+		update()
 	})
 
 	const queueDraftState = useQueueDraft({

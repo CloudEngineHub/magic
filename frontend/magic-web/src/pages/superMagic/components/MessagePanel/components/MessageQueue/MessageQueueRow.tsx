@@ -23,6 +23,7 @@ interface QueueAction {
 	icon: LucideIcon
 	onClick: () => void
 	loading?: boolean
+	destructive?: boolean
 	testId: string
 }
 
@@ -83,6 +84,7 @@ export default function MessageQueueRow({
 		{
 			label: t("messageQueue.delete"),
 			icon: Trash,
+			destructive: true,
 			onClick: () => props.onRemoveMessage(message.id),
 			loading: message.isDeletingLoading,
 			testId: "on-remove-message",
@@ -93,7 +95,7 @@ export default function MessageQueueRow({
 		"inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap text-xs leading-4 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
 		mobile
 			? "h-8 min-w-8 rounded-lg border border-border bg-card px-2 shadow-sm"
-			: "h-6 min-w-6 rounded-sm px-1 text-foreground/80 hover:bg-fill hover:text-foreground",
+			: "h-6 min-w-6 rounded-sm px-1",
 	)
 
 	useLayoutEffect(() => {
@@ -174,11 +176,17 @@ export default function MessageQueueRow({
 				)}
 			</div>
 			<div className="flex shrink-0 items-center gap-1">
-				{actions.map(({ label, icon: Icon, onClick, loading, testId }) => (
+				{actions.map(({ label, icon: Icon, onClick, loading, destructive, testId }) => (
 					<SmartTooltip key={testId} content={label} forceShowTooltip>
 						<button
 							type="button"
-							className={cn(buttonClass, compact && mobile && "w-8 px-0")}
+							className={cn(
+								buttonClass,
+								destructive
+									? "text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive active:bg-destructive/20"
+									: "text-foreground/80 hover:bg-fill hover:text-foreground",
+								compact && mobile && "w-8 px-0",
+							)}
 							aria-label={label}
 							disabled={disabled}
 							onClick={onClick}

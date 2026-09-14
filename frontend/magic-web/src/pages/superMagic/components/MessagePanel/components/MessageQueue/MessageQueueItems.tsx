@@ -13,7 +13,9 @@ import {
 	useSensors,
 	type CollisionDetection,
 	type DragEndEvent,
+	type Modifier,
 } from "@dnd-kit/core"
+import { getEventCoordinates } from "@dnd-kit/utilities"
 import {
 	SortableContext,
 	verticalListSortingStrategy,
@@ -21,6 +23,8 @@ import {
 	arrayMove,
 } from "@dnd-kit/sortable"
 import { GripVertical } from "lucide-react"
+import { useReducedMotion } from "framer-motion"
+import { cn } from "@/utils/cn"
 import type { QueuedMessage } from "../../hooks/useMessageQueue"
 import type { MessageQueueProps } from "./index"
 import MessageQueueRow from "./MessageQueueRow"
@@ -38,6 +42,33 @@ export type QueueActions = Pick<
 	| "editorRef"
 >
 const EDITOR_DROP_ID = "queue-editor-drop"
+
+/** 仅移动视觉浮层：贴近手柄指针并限制在窗口内，不改变真实排序和输入落点。 */
+const positionPreview: Modifier = ({
+	activatorEvent,
+	activeNodeRect,
+	overlayNodeRect,
+	windowRect,
+	transform,
+}) => {
+	if (!activeNodeRect || !windowRect) return transform
+	const pointer = activatorEvent ? getEventCoordinates(activatorEvent) : null
+	const width = overlayNodeRect?.width ?? activeNodeRect.width
+	const height = overlayNodeRect?.height ?? activeNodeRect.height
+	const x = transform.x + (pointer ? pointer.x - activeNodeRect.left + 12 : 0)
+	const y = transform.y + (pointer ? pointer.y - activeNodeRect.top + 12 : 0)
+	return {
+		...transform,
+		x: Math.max(
+			windowRect.left - activeNodeRect.left + 12,
+			Math.min(x, windowRect.right - activeNodeRect.left - width - 12),
+		),
+		y: Math.max(
+			windowRect.top - activeNodeRect.top + 12,
+			Math.min(y, windowRect.bottom - activeNodeRect.top - height - 12),
+		),
+	}
+}
 
 /** 指针只在真实目标内命中；队列外松手不吸附最近的消息。键盘仍沿用原排序坐标。 */
 const detectCollision: CollisionDetection = (args) => {
@@ -67,8 +98,10 @@ export default function MessageQueueItems({
 	...props
 }: QueueActions & { queue: QueuedMessage[] }) {
 	const { t } = useTranslation("super")
+	const reducedMotion = useReducedMotion()
 	const [isSaving, setIsSaving] = useState(false)
 	const [activeItem, setActiveItem] = useState<QueuedMessage | null>(null)
+	const [overEditor, setOverEditor] = useState(false)
 	const [savedOrder, setSavedOrder] = useState<string[] | null>(null)
 	const dragItemsRef = useRef<QueuedMessage[]>([])
 	const sensors = useSensors(
@@ -91,6 +124,7 @@ export default function MessageQueueItems({
 
 	async function handleDragEnd({ active, over }: DragEndEvent) {
 		setActiveItem(null)
+		setOverEditor(false)
 		if (!over || active.id === over.id || disabled) return
 		if (over.id === EDITOR_DROP_ID) {
 			await props.onWithdraw(String(active.id))
@@ -126,8 +160,10 @@ export default function MessageQueueItems({
 				setActiveItem(sortableItems.find((item) => item.id === active.id) ?? null)
 			}}
 			onDragEnd={handleDragEnd}
+			onDragOver={({ over }) => setOverEditor(over?.id === EDITOR_DROP_ID)}
 			onDragCancel={() => {
 				setActiveItem(null)
+				setOverEditor(false)
 				dragItemsRef.current = []
 			}}
 		>
@@ -150,14 +186,40 @@ export default function MessageQueueItems({
 			<EditorDropTarget editorRef={props.editorRef} active={Boolean(activeItem)} />
 			{typeof document !== "undefined" &&
 				createPortal(
-					<DragOverlay dropAnimation={null}>
+					<DragOverlay
+						dropAnimation={null}
+						transition={reducedMotion ? "none" : undefined}
+						modifiers={[positionPreview]}
+						style={{
+							width: "max-content",
+							height: "auto",
+							maxWidth: "calc(100vw - 24px)",
+						}}
+					>
 						{activeItem && (
-							<div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg">
+							<div
+								className={cn(
+									"pointer-events-none flex w-max max-w-[min(20rem,calc(100vw-24px))] items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm shadow-lg",
+									overEditor ? "border-info" : "border-border",
+								)}
+							>
 								<GripVertical size={16} className="shrink-0" />
-								<span className="truncate">
-									{normalizeQueuePreviewText(activeItem.content) ||
-										t("messageQueue.mobile.emptyContent")}
-								</span>
+								<div className="min-w-0">
+									<div className="truncate">
+										{normalizeQueuePreviewText(activeItem.content) ||
+											t("messageQueue.mobile.emptyContent")}
+									</div>
+									<div
+										className={cn(
+											"text-xs",
+											overEditor ? "text-info" : "text-muted-foreground",
+										)}
+									>
+										{overEditor
+											? t("messageQueue.dropToEditor")
+											: t("messageQueue.sortPreview")}
+									</div>
+								</div>
 							</div>
 						)}
 					</DragOverlay>,
@@ -172,7 +234,6 @@ function EditorDropTarget({
 	editorRef,
 	active,
 }: Pick<MessageQueueProps, "editorRef"> & { active: boolean }) {
-	const { t } = useTranslation("super")
 	const { setNodeRef, isOver } = useDroppable({ id: EDITOR_DROP_ID, disabled: !active })
 	const [rect, setRect] = useState<DOMRect | null>(null)
 	useLayoutEffect(() => {
@@ -183,10 +244,12 @@ function EditorDropTarget({
 			setRect(null)
 			return
 		}
-		const update = () => setRect(node.getBoundingClientRect())
+		// 落点仍是实际可编辑区；视觉边缘使用它所属的输入框，避免遮盖正文。
+		const surface = node.closest<HTMLElement>("[data-queue-editor-surface]") ?? node
+		const update = () => setRect(surface.getBoundingClientRect())
 		update()
 		const observer = new ResizeObserver(update)
-		observer.observe(node)
+		observer.observe(surface)
 		window.addEventListener("scroll", update, true)
 		window.addEventListener("resize", update)
 		return () => {
@@ -196,14 +259,13 @@ function EditorDropTarget({
 			setNodeRef(null)
 		}
 	}, [active, editorRef, setNodeRef])
-	if (!active || !rect) return null
+	if (!active || !isOver || !rect) return null
 	return createPortal(
 		<div
-			className={`pointer-events-none fixed z-[1000] flex items-center justify-center rounded-lg border-2 border-dashed border-primary text-sm text-primary ${isOver ? "bg-primary/15" : "bg-primary/5"}`}
+			aria-hidden="true"
+			className="pointer-events-none fixed z-[1000] rounded-xl border border-info ring-[3px] ring-info/15"
 			style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
-		>
-			<span className="rounded bg-card/95 px-2 py-1">{t("messageQueue.dropToEditor")}</span>
-		</div>,
+		/>,
 		document.body,
 	)
 }
