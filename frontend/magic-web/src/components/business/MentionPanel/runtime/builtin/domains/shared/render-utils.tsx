@@ -1,18 +1,16 @@
 import TSIcon, { IconParkIconElement } from "@/components/base/TSIcon"
-import MagicFileIcon from "@/components/base/MagicFileIcon"
 import MagicAvatar from "@/components/base/MagicAvatar"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
-import { getAttachmentType } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
-import { CustomFolderMagicIcon } from "@/pages/superMagic/components/TopicFilesButton/components/CustomFolderMagicIcon"
 import { cn } from "@/utils/cn"
 import { ICON_MAPPINGS } from "../../../../constants"
-import type { DirectoryMentionData, MentionItem, ProjectFileMentionData } from "../../../../types"
+import type { DirectoryMentionData, MentionItem } from "../../../../types"
 import type {
 	MentionItemRendererContext,
 	MentionItemRendererPlatform,
 } from "../../../../renderers/types"
 import { MentionPanelFileImageIcon } from "../file-preview/MentionPanelFileImageIcon"
 import projectFilesStore from "@/stores/projectFiles"
+import { MentionPanelResourceIcon } from "./resource-icon"
 
 export function getRendererIconSize(platform: MentionItemRendererPlatform) {
 	return platform === "desktop" ? 16 : 20
@@ -79,21 +77,13 @@ export function renderMentionFolderIcon(context: MentionItemRendererContext) {
 		}
 	}
 
-	if (directoryDisplayConfig?.type === "custom") {
-		return (
-			<CustomFolderMagicIcon
-				displayConfig={directoryDisplayConfig}
-				childrenItems={childrenItems}
-				size={size}
-				typeFallback="folder"
-			/>
-		)
-	}
-
 	if (directoryDisplayConfig?.type) {
 		return (
-			<MagicFileIcon
-				type={getAttachmentType({ display_config: directoryDisplayConfig }) || ""}
+			<MentionPanelResourceIcon
+				displayConfig={directoryDisplayConfig}
+				childrenItems={childrenItems}
+				typeFallback="folder"
+				isDirectoryLike
 				size={size}
 			/>
 		)

@@ -12,7 +12,6 @@ import {
 	isMentionPanelImageFileExtension,
 } from "./preview-utils"
 import projectFilesStore from "@/stores/projectFiles"
-import { CustomFolderMagicIcon } from "@/pages/superMagic/components/TopicFilesButton/components/CustomFolderMagicIcon"
 import {
 	getFileTreeIconType,
 	type MagicProjectIconContext,
@@ -20,7 +19,7 @@ import {
 import { getCanvasElementSourcePreview } from "../canvas-elements/item-utils"
 import { CanvasElementResourceIcon } from "../canvas-elements/CanvasElementResourceIcon"
 import { MentionFileImagePreviewBox } from "./MentionFileImagePreviewBox"
-import { isMicroAppDisplayType } from "@/constants/microApp"
+import { MentionPanelResourceIcon } from "../shared/resource-icon"
 
 function getFileRowIconSize(platform: MentionItemRendererContext["platform"]) {
 	return platform === "desktop" ? 16 : 20
@@ -169,31 +168,26 @@ function ProjectMentionPanelFileImageIcon(props: {
 			})
 
 			if (fileNode) {
-				fileDisplayConfig = fileNode.display_config
+				// Keep the mention payload's config when the workspace cache is stale or incomplete.
+				fileDisplayConfig = fileNode.display_config || fileDisplayConfig
 				parentId = fileNode.parent_id || undefined
 				fileIconSource = fileNode
 			}
 		}
 
-		if (
-			fileDisplayConfig?.type === "custom" ||
-			(isMicroAppDisplayType(fileDisplayConfig?.type) && isDirectoryLikeMentionItem(item))
-		) {
-			// 优先使用 _customFolderId（入口文件需从原始 custom 文件夹解析 icon_path）
-			const customFolderId = getCustomFolderId(fileDisplayConfig)
-			const targetFolderId = customFolderId || parentId
-
-			const targetNode = targetFolderId
-				? projectFilesStore.getFolderData(targetFolderId)
-				: null
-			const childrenItems = (targetNode?.children as unknown[]) || []
-
+		// 优先使用 _customFolderId（入口文件需从原始 custom 文件夹解析 icon_path）
+		const customFolderId = getCustomFolderId(fileDisplayConfig)
+		const targetFolderId = customFolderId || parentId
+		const targetNode = targetFolderId ? projectFilesStore.getFolderData(targetFolderId) : null
+		const childrenItems = (targetNode?.children as unknown[]) || []
+		if (fileDisplayConfig?.type) {
 			return (
-				<CustomFolderMagicIcon
+				<MentionPanelResourceIcon
 					displayConfig={fileDisplayConfig}
 					childrenItems={childrenItems}
+					typeFallback={isDirectoryLikeMentionItem(item) ? "custom" : undefined}
+					isDirectoryLike={isDirectoryLikeMentionItem(item)}
 					size={iconSize}
-					typeFallback="custom"
 				/>
 			)
 		}

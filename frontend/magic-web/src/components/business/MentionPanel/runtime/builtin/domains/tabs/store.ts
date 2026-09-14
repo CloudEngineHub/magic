@@ -86,6 +86,7 @@ export class MentionPanelTabsStore {
 			description,
 			type: MentionItemType.PROJECT_FILE,
 			data: data.data,
+			displayConfig: tab.fileData.display_config,
 			icon,
 			hasChildren: false,
 			isFolder: false,
