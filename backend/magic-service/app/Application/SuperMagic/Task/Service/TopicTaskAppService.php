@@ -1520,6 +1520,7 @@ class TopicTaskAppService extends AbstractAppService
         // @phpstan-ignore-next-line method.notFound - MagicMessageStruct implements TextContentInterface and has getExtra()
         $superAgentExtra = $contentStruct->getExtra()?->getSuperAgent();
         $mentions = $superAgentExtra?->getMentionsJsonStruct();
+        $mentionsJson = ! empty($mentions) ? json_encode($mentions, JSON_UNESCAPED_UNICODE) : null;
 
         // Convert attachments to JSON string if not empty
         $attachmentsJson = ! empty($attachments) ? json_encode($attachments, JSON_UNESCAPED_UNICODE) : '';
@@ -1535,7 +1536,7 @@ class TopicTaskAppService extends AbstractAppService
             'sandbox_id' => $topicEntity->getSandboxId(),
             'prompt' => $prompt,
             'attachments' => $attachmentsJson,
-            'mentions' => $mentions, // Already in correct format (JSON string or null)
+            'mentions' => $mentionsJson,
             'task_status' => TaskStatus::WAITING->value,
             'work_dir' => $topicEntity->getWorkDir() ?? '',
             'created_at' => date('Y-m-d H:i:s'),
