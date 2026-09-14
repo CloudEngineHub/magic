@@ -1018,7 +1018,15 @@ class Agent(BaseAgent):
             logger.warning(f"[AgentHorizon] 注入点1 注入失败: {_horizon_err}")
 
         self.set_agent_state(AgentState.RUNNING)
-        logger.info(f"开始运行 agent: {self.agent_name}, id: {self.id}, query: {query}")
+        # 后台任务可能携带完整 Skill；日志只保留单行预览，模型与历史仍使用完整 query。
+        query_preview_limit: int = 100
+        query_preview: str = repr(query[:query_preview_limit])
+        if len(query) > query_preview_limit:
+            query_preview += "..."
+        logger.info(
+            f"开始运行 agent: {self.agent_name}, id: {self.id}, "
+            f"query_length: {len(query)}, query_preview: {query_preview}"
+        )
 
         # 根据 stream_mode 选择不同的 Agent Loop 方式
         try:

@@ -1120,7 +1120,7 @@ async def async_is_symlink(path: Union[str, Path]) -> bool:
         raise
 
 
-async def async_stat(path: Union[str, Path]):
+async def async_stat(path: Union[str, Path]) -> os.stat_result:
     """
     异步获取文件/目录状态信息
 
@@ -1136,6 +1136,10 @@ async def async_stat(path: Union[str, Path]):
     """
     try:
         return await aiofiles.os.stat(str(path))
+    except FileNotFoundError:
+        # 可选文件尚未创建不一定是业务错误；保留异常，由调用方判断缺失状态。
+        logger.debug(f"路径不存在: {path}")
+        raise
     except Exception as e:
         logger.error(f"获取路径状态失败 {path}: {e}")
         raise
