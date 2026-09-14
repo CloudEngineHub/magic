@@ -31,7 +31,7 @@ const InfoManagementPage = () => {
 	const { siderCollapsed } = useAdminStore()
 	const isMobile = useIsMobile()
 
-	const { styles } = useStyles({ siderCollapsed })
+	const { styles, cx } = useStyles({ siderCollapsed })
 
 	const { PlatformInfoApi } = useApis()
 
@@ -59,7 +59,7 @@ const InfoManagementPage = () => {
 	// 	[PlatformLogoType.FAVICON]: "",
 	// })
 
-	const hasEditRight = useRights(PERMISSION_KEY_MAP.INFO_MANAGEMENT_EDIT)
+	const hasEditRight = useRights(PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_EDIT)
 
 	const [form] = Form.useForm()
 
@@ -110,6 +110,7 @@ const InfoManagementPage = () => {
 						zh_CN: res.agent_role_description_i18n?.zh_CN || "",
 						en_US: res.agent_role_description_i18n?.en_US || "",
 					},
+					global_system_prompt: res.global_system_prompt || "",
 					footer: {
 						copyright_i18n: {
 							zh_CN: res.footer?.copyright_i18n?.zh_CN || "",
@@ -138,12 +139,22 @@ const InfoManagementPage = () => {
 			await form.validateFields()
 			setLoading(true)
 			const values = form.getFieldsValue()
-			const params = {
+			const globalSystemPrompt =
+				typeof values.global_system_prompt === "string" ? values.global_system_prompt : ""
+			if (globalSystemPrompt.length > 5000) {
+				message.error(tPlatform("globalSystemPromptMaxLength"))
+				return
+			}
+			const platformParams = {
 				...values,
 				logo_zh_url: imageUploadUrl[PlatformLogoType.ZH],
 				logo_en_url: imageUploadUrl[PlatformLogoType.EN],
 				minimal_logo_url: imageUploadUrl[PlatformLogoType.MINIMAL],
 				favicon_url: imageUploadUrl[PlatformLogoType.FAVICON],
+			}
+			const params = {
+				...platformParams,
+				global_system_prompt: globalSystemPrompt,
 			}
 			const res = await PlatformInfoApi.updatePlatformInfo(params)
 			if (res) {
@@ -151,7 +162,9 @@ const InfoManagementPage = () => {
 				initPlatformInfo()
 			}
 		} catch (error) {
-			// console.error(`保存平台信息失败: ${error}`)
+			if (!(error && typeof error === "object" && "errorFields" in error)) {
+				message.error(tCommon("message.saveFailed"))
+			}
 		} finally {
 			setLoading(false)
 		}
@@ -373,6 +386,30 @@ const InfoManagementPage = () => {
 							/>
 						</Flex>
 					</div>
+				</Flex>
+				<SubHeader title={tPlatform("globalSystemPrompt")} />
+				<Flex className={cx(styles.formWrapper, styles.formItem)}>
+					<div className={styles.formItemLabel}>{tPlatform("globalSystemPrompt")}</div>
+					<Flex flex={1} className={styles.formItemContent}>
+						<Form.Item
+							name="global_system_prompt"
+							noStyle
+							rules={[
+								{
+									max: 5000,
+									message: tPlatform("globalSystemPromptMaxLength"),
+								},
+							]}
+						>
+							<MagicInput.TextArea
+								rows={8}
+								maxLength={5000}
+								showCount
+								placeholder={tPlatform("globalSystemPromptPlaceholder")}
+								disabled={!hasEditRight}
+							/>
+						</Form.Item>
+					</Flex>
 				</Flex>
 				<SubHeader title={tPlatform("footerConfig")} />
 				<Flex vertical className={styles.formWrapper}>

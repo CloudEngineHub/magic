@@ -32,6 +32,7 @@ export namespace PlatformInfo {
 		description_i18n: Record<SupportLocales, string>
 		agent_role_name_i18n?: Record<SupportLocales, string>
 		agent_role_description_i18n?: Record<SupportLocales, string>
+		global_system_prompt: string
 		footer?: Footer
 	}
 	/** 修改平台信息 */
@@ -48,6 +49,7 @@ export namespace PlatformInfo {
 		description_i18n: Record<SupportLocales, string>
 		agent_role_name_i18n?: Record<SupportLocales, string>
 		agent_role_description_i18n?: Record<SupportLocales, string>
+		global_system_prompt?: string
 		footer?: Footer
 	}
 }
