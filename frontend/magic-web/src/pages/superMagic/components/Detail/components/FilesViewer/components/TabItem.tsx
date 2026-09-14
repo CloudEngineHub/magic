@@ -1,9 +1,3 @@
-import { ProjectFileTag } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileTag"
-import {
-	resolveFilePresentation,
-	getFilePresentationIndex,
-} from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
-import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import { getFileDisplayPath } from "@/pages/superMagic/utils/markdownFileReference"
 import { memo, useMemo } from "react"
@@ -257,22 +251,6 @@ const TabItem = memo<TabItemProps>(
 					>
 						{getDisplayFileName(tab)}
 					</span>
-					{!isPlayback && (!tab.type || tab.type === "file") && (
-						<ProjectFileTag
-							item={tab.fileData as unknown as AttachmentItem}
-							presentation={resolveFilePresentation(
-								tab.fileData as unknown as AttachmentItem,
-								{
-									context,
-									index: attachments
-										? getFilePresentationIndex(
-												attachments as unknown as AttachmentItem[],
-											)
-										: undefined,
-								},
-							)}
-						/>
-					)}
 					{isLoading && <MagicLoadingIcon size={12} />}
 					<span
 						className={cn(
