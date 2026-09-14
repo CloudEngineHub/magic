@@ -58,7 +58,7 @@ class AdminSkillApi extends AbstractApi
     /**
      * 重建 Skill 市场向量索引.
      *
-     * 可选参数 force_re_embedding：为 true 时，若向量集合维度与目标维度不一致，会删除集合并按目标维度重建后全量重灌。
+     * 可选参数 force_re_embedding：为 true 时，若向量集合维度与模型实际输出维度不一致，会删除集合并按实际维度重建后全量重灌。
      */
     #[CheckPermission(MagicResourceEnum::PLATFORM_SKILL_MARKET, MagicOperationEnum::EDIT)]
     public function reindexMarketVectors(RequestContext $requestContext): array

@@ -67,15 +67,6 @@ final class AgentMarketVectorIndexDomainService extends AbstractVectorIndexDomai
         $collectionName = $this->collectionName();
         $pointId = (string) $market->getId();
         $payload = $this->buildPayload($market, $semanticText);
-        $collection = $this->vectorStore->getCollection($collectionName);
-        if ($collection !== null && ! $forceReEmbedding) {
-            $this->assertExistingCollectionSize(
-                $collectionName,
-                $collection->vectorSize,
-                SuperMagicAgentDataIsolation::create($market->getOrganizationCode() ?? '', $operatorId),
-                $resourceId,
-            );
-        }
         $existingPoint = $this->vectorStore->getPoint($collectionName, $pointId);
 
         if ($existingPoint !== null && ! $forceReEmbedding && ($existingPoint->payload['semantic_text'] ?? null) === $semanticText) {
@@ -162,6 +153,8 @@ final class AgentMarketVectorIndexDomainService extends AbstractVectorIndexDomai
         if ($embedding === []) {
             return [];
         }
+
+        $this->assertEmbeddingDimension($this->collectionName(), $embedding);
 
         $pageSize = $page->getPageNum();
         $points = $this->vectorStore->searchPoints(

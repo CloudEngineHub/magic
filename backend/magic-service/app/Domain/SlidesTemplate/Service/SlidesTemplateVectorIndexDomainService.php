@@ -136,16 +136,6 @@ final class SlidesTemplateVectorIndexDomainService extends AbstractVectorIndexDo
         }
 
         $collectionName = $this->collectionName();
-        $collection = $this->vectorStore->getCollection($collectionName);
-        if ($collection !== null && ! $forceReEmbedding) {
-            $this->assertExistingCollectionSize(
-                $collectionName,
-                $collection->vectorSize,
-                $dataIsolation,
-                $resourceId,
-            );
-        }
-
         $tagMap = $this->slidesTemplateTagRelationRepository->findTagsByTemplateIds(
             $dataIsolation,
             [(int) $template->getId()],
@@ -220,6 +210,8 @@ final class SlidesTemplateVectorIndexDomainService extends AbstractVectorIndexDo
         if ($embedding === []) {
             return [];
         }
+
+        $this->assertEmbeddingDimension($this->collectionName(), $embedding);
 
         $pageSize = $page->getPageNum();
         $matchedOffset = $page->getSliceStart();

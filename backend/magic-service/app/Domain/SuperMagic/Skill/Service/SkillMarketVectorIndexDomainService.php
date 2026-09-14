@@ -112,16 +112,6 @@ final class SkillMarketVectorIndexDomainService extends AbstractVectorIndexDomai
         }
 
         $collectionName = $this->collectionName();
-        $collection = $this->vectorStore->getCollection($collectionName);
-        if ($collection !== null && ! $forceReEmbedding) {
-            $this->assertExistingCollectionSize(
-                $collectionName,
-                $collection->vectorSize,
-                SkillDataIsolation::create($market->getOrganizationCode(), $operatorId),
-                $resourceId,
-            );
-        }
-
         $categories = $this->findCategories($market);
         $semanticText = SkillMarketSearchTextBuilder::buildSemanticText($market, $categories);
         if ($semanticText === '') {
@@ -174,6 +164,8 @@ final class SkillMarketVectorIndexDomainService extends AbstractVectorIndexDomai
         if ($embedding === []) {
             return [];
         }
+
+        $this->assertEmbeddingDimension($this->collectionName(), $embedding);
 
         $points = $this->vectorStore->searchPoints(
             $this->collectionName(),
