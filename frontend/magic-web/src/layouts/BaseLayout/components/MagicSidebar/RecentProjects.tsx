@@ -56,7 +56,6 @@ const RecentProjectRow = observer(function RecentProjectRow({
 				workspaceId={workspace.id}
 				isSelected={projectStore.selectedProject?.id === project.id}
 				dndDisabled
-				showDefaultIcon={false}
 				tooltipDisabled={actions.isProjectModalOpen}
 				description={
 					<div className="flex min-w-0 items-center gap-2">

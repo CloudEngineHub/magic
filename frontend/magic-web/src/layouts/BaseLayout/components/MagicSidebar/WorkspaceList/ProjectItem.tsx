@@ -234,7 +234,6 @@ function ProjectItem({
 										<NavigationStatusIcon
 											itemType="project"
 											status={project.project_status}
-											showDefaultIcon={false}
 											className={
 												isSelected
 													? "text-sidebar-accent-foreground"

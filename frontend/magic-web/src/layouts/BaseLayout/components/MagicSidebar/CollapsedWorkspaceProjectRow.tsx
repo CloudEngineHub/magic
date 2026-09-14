@@ -22,7 +22,6 @@ interface CollapsedWorkspaceProjectRowProps {
 	project: ProjectListItem
 	dndDisabled?: boolean
 	description?: ReactNode
-	showDefaultIcon?: boolean
 	tooltipDisabled?: boolean
 	workspaceId: string
 	isSelected: boolean
@@ -44,7 +43,6 @@ function CollapsedWorkspaceProjectRow({
 	project,
 	dndDisabled,
 	description,
-	showDefaultIcon = true,
 	tooltipDisabled = false,
 	workspaceId,
 	isSelected,
@@ -226,12 +224,11 @@ function CollapsedWorkspaceProjectRow({
 					onSelectProject(project)
 				}}
 			>
-				{/* 保留状态宽度；闲置项目隐藏图标，运行时名称不移动。 */}
+				{/* 文件夹与运行状态共用固定宽度，切换状态时不移动项目名称。 */}
 				<span className="mr-2 flex size-4 shrink-0 items-center justify-center">
 					<NavigationStatusIcon
 						itemType="project"
 						status={project.project_status}
-						showDefaultIcon={showDefaultIcon}
 						className={cn(
 							isSelected
 								? "text-sidebar-accent-foreground"
