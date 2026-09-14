@@ -14,20 +14,17 @@ import type {
 	ImageSource,
 	LoadedResource,
 } from "../resources/image/ImageResourceManager"
-import type { LoadedVideoResource } from "../resources/video/VideoResourceManager"
+import type {
+	LoadedVideoResource,
+	VideoPosterSource,
+} from "../resources/video/VideoResourceManager"
 import type { ResourceLoadFailureReason } from "../resources/media-common/resourceLoadFailure"
 import type { ConnectionOrigin } from "../shared/connectionOrigin"
 import type { GenerationElementToolId } from "../element-tools/model/ElementToolTypes"
 import type { CanvasAccessContext } from "../../public/props"
 
 export type ViewportChangeSource =
-	| "wheel"
-	| "gesture"
-	| "minimap"
-	| "programmatic"
-	| "resize"
-	| "restore"
-	| "unknown"
+	"wheel" | "gesture" | "minimap" | "programmatic" | "resize" | "restore" | "unknown"
 
 export type ViewportChangePhase = "start" | "move" | "end"
 
@@ -256,6 +253,12 @@ export interface CanvasEventMap {
 		reason: string
 	} // 图片 decoded/native 资源即将释放；元素必须同步断开 Konva.Image 持有的 image 引用
 	"resource:video:refreshed": { path: string; resource: LoadedVideoResource } // 视频资源替换后刷新完成事件
+	/** 视频 poster 即将被原地释放；消费者必须先解除 Konva.Image 对 source 的引用。 */
+	"resource:video:will-release": {
+		path?: string
+		poster: VideoPosterSource
+		reason: string
+	}
 	"resource:video:load-failed": {
 		path: string
 		reason?: ResourceLoadFailureReason

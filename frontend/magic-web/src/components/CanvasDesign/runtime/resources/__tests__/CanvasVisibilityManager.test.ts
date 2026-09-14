@@ -453,6 +453,30 @@ describe("CanvasVisibilityManager video load requests", () => {
 
 		expect(manager.lastRequestedVideoLoadState.has("video-1")).toBe(false)
 	})
+
+	it("clears requested video state when its poster is released", () => {
+		const { handlers, manager } = createConstructedManager()
+		const scheduleRefresh = vi.fn()
+		;(manager as unknown as { scheduleRefresh: typeof scheduleRefresh }).scheduleRefresh =
+			scheduleRefresh
+
+		manager.registeredVideos.set("video-1", {
+			elementId: "video-1",
+			path: "./videos/a.mp4",
+		})
+		manager.lastRequestedVideoLoadState.set("video-1", {
+			priority: "visible",
+			tier: "poster",
+			requestedAt: 1,
+		})
+
+		handlers.get("resource:video:will-release")?.[0]?.({
+			data: { path: "./videos/a.mp4" },
+		})
+
+		expect(manager.lastRequestedVideoLoadState.has("video-1")).toBe(false)
+		expect(scheduleRefresh).toHaveBeenCalledWith("video:poster-released", true)
+	})
 })
 
 describe("CanvasVisibilityManager audio viewport requests", () => {

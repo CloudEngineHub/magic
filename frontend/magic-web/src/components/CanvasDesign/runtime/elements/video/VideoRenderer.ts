@@ -12,9 +12,10 @@ import {
 } from "../../shared/render/placeholderTextLayout"
 import { ImageStaticLoader } from "../../resources/image/ImageStaticLoader"
 import type { Canvas } from "../../core/Canvas"
-import type {
-	LoadedVideoMetadata,
-	VideoPosterSource,
+import {
+	isUsableVideoPosterSource,
+	type LoadedVideoMetadata,
+	type VideoPosterSource,
 } from "../../resources/video/VideoResourceManager"
 import { VideoMediaState } from "./VideoMediaState"
 import { VideoPlaybackController } from "./VideoPlaybackController"
@@ -134,11 +135,23 @@ export class VideoRenderer {
 	}
 
 	public hasPreview(): boolean {
-		return !!this.previewVideo || !!this.posterSource
+		return !!this.previewVideo || !!this.getUsablePosterSource()
 	}
 
 	public getPreviewSource(): CanvasImageSource | undefined {
-		return this.previewVideo ?? this.posterSource
+		return this.previewVideo ?? this.getUsablePosterSource()
+	}
+
+	private getUsablePosterSource(): VideoPosterSource | undefined {
+		if (!this.posterSource) return undefined
+		if (!isUsableVideoPosterSource(this.posterSource)) {
+			// A released poster can remain in renderer state until the next rerender.
+			// Clear it at the read boundary so no caller can hand it back to Konva.
+			this.posterSource = undefined
+			this.previewMetadata = undefined
+			return undefined
+		}
+		return this.posterSource
 	}
 
 	public play(): void {
@@ -158,6 +171,7 @@ export class VideoRenderer {
 	}
 
 	public loadPoster(poster: VideoPosterSource, metadata: LoadedVideoMetadata): void {
+		if (!isUsableVideoPosterSource(poster)) return
 		this.posterSource = poster
 		this.previewMetadata = metadata
 	}
@@ -190,7 +204,7 @@ export class VideoRenderer {
 		canvas: Canvas,
 		options?: CreatePlayerNodeOptions,
 	): Konva.Group | null {
-		const imageSource = this.previewVideo ?? this.posterSource
+		const imageSource = this.getPreviewSource()
 		if (!imageSource) {
 			return null
 		}

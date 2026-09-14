@@ -516,6 +516,23 @@ export class CanvasVisibilityManager {
 		})
 	}
 
+	private readonly handleVideoPosterWillRelease = (event: { data: { path?: string } }): void => {
+		let affected = false
+		this.registeredVideos.forEach((registered, elementId) => {
+			if (event.data.path && !this.isSameResourcePath(registered.path, event.data.path)) {
+				return
+			}
+			affected = this.lastRequestedVideoLoadState.delete(elementId) || affected
+		})
+
+		// Resource release invalidates the tier/priority dedupe state. Without this,
+		// a visible video can keep its old "poster requested" state and never ask for
+		// a replacement after its Canvas source has been released.
+		if (affected && !this.destroyed) {
+			this.scheduleRefresh("video:poster-released", true)
+		}
+	}
+
 	private readonly handleAudioResourceLoadFailed = (event: {
 		data: { path: string; reason?: ResourceLoadFailureReason }
 	}): void => {
@@ -602,6 +619,10 @@ export class CanvasVisibilityManager {
 		this.canvas.eventEmitter.on(
 			"resource:video:load-failed",
 			this.handleVideoResourceLoadFailed,
+		)
+		this.canvas.eventEmitter.on(
+			"resource:video:will-release",
+			this.handleVideoPosterWillRelease,
 		)
 		this.canvas.eventEmitter.on(
 			"resource:audio:load-failed",
@@ -1030,6 +1051,10 @@ export class CanvasVisibilityManager {
 			this.handleVideoResourceLoadFailed,
 		)
 		this.canvas.eventEmitter.off(
+			"resource:video:will-release",
+			this.handleVideoPosterWillRelease,
+		)
+		this.canvas.eventEmitter.off(
 			"resource:audio:load-failed",
 			this.handleAudioResourceLoadFailed,
 		)
@@ -1136,8 +1161,7 @@ export class CanvasVisibilityManager {
 	): void {
 		if (imageIds.length >= maxImageCount) return
 		const effectiveContent = this.canvas.getEffectiveContent?.(element.id) as
-			| { src?: string }
-			| undefined
+			{ src?: string } | undefined
 		if (
 			element.type !== ElementTypeEnum.Image ||
 			!(effectiveContent?.src ?? getActiveImageContent(element).src)
@@ -2482,8 +2506,7 @@ export class CanvasVisibilityManager {
 				}
 				const registered = this.registeredImages.get(element.id)
 				const effectiveContent = this.canvas.getEffectiveContent?.(element.id) as
-					| { src?: string }
-					| undefined
+					{ src?: string } | undefined
 				const path =
 					registered?.path ?? effectiveContent?.src ?? getActiveImageContent(element).src
 				if (!path) {

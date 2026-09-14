@@ -155,4 +155,18 @@ describe("VideoRenderer player controls", () => {
 
 		renderer.destroy()
 	})
+
+	it("rejects a zero-sized poster instead of creating a Konva image", () => {
+		const renderer = new VideoRenderer()
+		const canvas = createCanvasMock()
+		const poster = document.createElement("canvas")
+		poster.width = 0
+		poster.height = 0
+
+		renderer.loadPoster(poster, POSTER_METADATA)
+
+		expect(renderer.hasPreview()).toBe(false)
+		expect(renderer.createPlayerNode(640, 360, canvas)).toBeNull()
+		renderer.destroy()
+	})
 })
