@@ -43,6 +43,12 @@ def _normalize_text(value: Any) -> Optional[str]:
     return normalized or None
 
 
+def _resolve_topic_id(init_metadata: Any) -> Optional[str]:
+    """优先使用 SuperMagic topic 主键，兼容旧 metadata 的 chat_topic_id。"""
+    return (
+        _normalize_text(getattr(init_metadata, "topic_id", None))
+        or _normalize_text(getattr(init_metadata, "chat_topic_id", None))
+    )
 
 async def _resolve_agent_name(agent_context: Any) -> str:
     """获取真实 agent name。
@@ -216,10 +222,7 @@ class ThirdPartyMessagePayloadBuilder:
 
         authorization = _normalize_text(getattr(init_metadata, "authorization", None))
         project_id = _normalize_text(getattr(init_metadata, "project_id", None))
-        topic_id = (
-            _normalize_text(getattr(init_metadata, "chat_topic_id", None))
-            or _normalize_text(getattr(init_metadata, "topic_id", None))
-        )
+        topic_id = _resolve_topic_id(init_metadata)
         if not authorization or not project_id or not topic_id:
             logger.warning(
                 f"[ThirdPartyMessage] {channel} 缺少持久化所需 metadata "

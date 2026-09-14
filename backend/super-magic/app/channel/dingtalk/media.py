@@ -22,7 +22,10 @@ async def prepare_dingtalk_message(payload: dict, client):
 
         def add_media(item, item_kind):
             code = item.get("downloadCode") or item.get("pictureDownloadCode")
-            media_type = ChannelMediaType.IMAGE
+            media_type = {
+                "picture": ChannelMediaType.IMAGE,
+                "file": ChannelMediaType.FILE,
+            }[item_kind]
             name = item.get("fileName") or ""
 
             async def fetch():
@@ -49,7 +52,7 @@ async def prepare_dingtalk_message(payload: dict, client):
                 )
             )
 
-        if kind == "picture":
+        if kind in ("picture", "file"):
             add_media(content, kind)
         elif kind == "richText":
             for item in content.get("richText", []):
