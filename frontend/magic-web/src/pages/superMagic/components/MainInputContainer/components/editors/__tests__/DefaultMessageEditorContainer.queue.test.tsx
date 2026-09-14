@@ -150,6 +150,52 @@ describe("DefaultMessageEditorContainer queue sending", () => {
 		)
 	})
 
+	it("keeps the employee code when a crew creator message enters the queue", async () => {
+		render(
+			<DefaultMessageEditorContainer
+				editorContext={{
+					selectedProject: { id: "project-1" } as never,
+					selectedTopic: { id: "topic-1" } as never,
+					topicMode: TopicMode.Default,
+					showLoading: true,
+					mergeSendParams: ({ defaultParams }) => ({
+						...defaultParams,
+						topicMode: TopicMode.CrewCreator,
+						extra: { agent_code: "crew-123" },
+					}),
+					queueContext: {
+						editingQueueItem: null,
+						addToQueue: mocks.addToQueue,
+						finishEditQueueItem: vi.fn(),
+					},
+					onMessageSendReady: (sendMessage) => {
+						mocks.handleSend = sendMessage as typeof mocks.handleSend
+					},
+				}}
+			/>,
+		)
+
+		const value: JSONContent = {
+			type: "doc",
+			content: [{ type: "paragraph", content: [{ type: "text", text: "你好" }] }],
+		}
+
+		await act(async () => {
+			await mocks.handleSend?.({
+				value,
+				mentionItems: [],
+				topicMode: TopicMode.Default,
+			})
+		})
+
+		expect(mocks.addToQueue).toHaveBeenCalledWith(
+			expect.objectContaining({
+				topicMode: TopicMode.CrewCreator,
+				agentCode: "crew-123",
+			}),
+		)
+	})
+
 	it("only passes queue-supported fields after merging send params", async () => {
 		render(
 			<DefaultMessageEditorContainer

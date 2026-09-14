@@ -132,6 +132,97 @@ describe("messageSendPreparation", () => {
 		)
 	})
 
+	it("keeps the employee code for direct crew creator sends", async () => {
+		const selectedProject = {
+			id: "project-1",
+			workspace_id: "workspace-1",
+		} as ProjectListItem
+		const selectedTopic = {
+			id: "topic-1",
+			project_id: "project-1",
+			chat_topic_id: "chat-topic-1",
+			chat_conversation_id: "conversation-1",
+			topic_mode: TopicMode.CrewCreator,
+		} as Topic
+
+		const result = await preparePanelSend({
+			params: {
+				value: {
+					type: "doc",
+					content: [{ type: "paragraph", content: [{ type: "text", text: "hello" }] }],
+				},
+				mentionItems: [],
+				topicMode: TopicMode.CrewCreator,
+				extra: { agent_code: "crew-123" },
+			},
+			context: { selectedProject, selectedTopic },
+			tabPattern: TopicMode.CrewCreator,
+			messagesLength: 1,
+		})
+
+		expect(result?.currentTopic).toEqual(
+			expect.objectContaining({
+				topic_mode: TopicMode.CrewCreator,
+				agent_code: "crew-123",
+			}),
+		)
+		expect(result?.params).toEqual(
+			expect.objectContaining({
+				topicMode: TopicMode.CrewCreator,
+				extra: { agent_code: "crew-123" },
+			}),
+		)
+	})
+
+	it("processes inline mentions before direct micro-app sends", async () => {
+		const content = {
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "mention", attrs: { type: "project_file", data: {} } }],
+				},
+			],
+		}
+		const processedContent = { type: "doc", content: [{ type: "paragraph" }] }
+		const processMentionItems = vi.mocked(mentionItemsProcessor.processMentionItems)
+		processMentionItems.mockResolvedValueOnce({
+			content: processedContent,
+			mentionItems: [],
+		})
+
+		await expect(processMessageMentions(content, "project-1", "topic-1")).resolves.toEqual(
+			processedContent,
+		)
+		expect(processMentionItems).toHaveBeenCalledWith(
+			content,
+			expect.arrayContaining([
+				expect.objectContaining({
+					attrs: expect.objectContaining({ type: "project_file" }),
+				}),
+			]),
+			"project-1",
+			"topic-1",
+		)
+	})
+
+	it("releases uploaded region screenshots after send succeeds", () => {
+		const mentionItems = [
+			{
+				type: "mention",
+				attrs: {
+					data: { is_html_screenshot: true, storage_id: "region-1" },
+				},
+			},
+		]
+		screenshotMocks.collectStorageIds.mockReturnValue(["region-1"])
+
+		releaseHtmlScreenshotsAfterSend(mentionItems as never)
+
+		expect(screenshotMocks.collectStorageIds).toHaveBeenCalledWith(mentionItems)
+		expect(screenshotMocks.releaseStoredScreenshots).toHaveBeenCalledWith(["region-1"])
+	})
+
 	it("clears the previous agent_code when switching to a built-in mode", async () => {
 		modeServiceMock.defaultAgentCode = "agent-default"
 		isModeValidMock.mockImplementation((mode) => mode === "agent-default")
