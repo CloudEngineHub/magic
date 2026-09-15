@@ -25,6 +25,7 @@ interface UseClusterSwitchOptions {
 }
 
 interface UseClusterSwitchResult {
+	isInitialing: boolean
 	isSameCluster: boolean
 	loading: boolean
 	setSameCluster: (value: boolean) => void
@@ -60,13 +61,15 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 		[], // 空依赖，只在组件挂载时计算
 	)
 
-	// 优化 loading 初始状态：如果集群匹配或在白名单中，不需要 loading
+	// Bootstrap owns session hydration; only an actual cluster check blocks the view.
 	const initialLoading = useMemo(
-		() => isInitialing || (!initialSameCluster && !isWhiteListRoute),
+		() => !isInitialing && !initialSameCluster && !isWhiteListRoute,
 		[isInitialing, initialSameCluster, isWhiteListRoute],
 	)
 
-	const [isSameCluster, setSameCluster] = useState(initialSameCluster)
+	const [isSameCluster, setSameCluster] = useState(
+		isInitialing || initialSameCluster || isWhiteListRoute,
+	)
 	const [loading, setLoading] = useState(initialLoading)
 
 	// 使用 ref 存储 AbortController，用于取消过期请求
@@ -129,6 +132,9 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 			}
 			// 提前判断：如果目标集群与当前集群一致，或在白名单中，直接通过（无需 loading）
 			if (initialSameCluster || isWhiteListRoute) {
+				// Config synchronization must not unmount an already admitted route.
+				setSameCluster(true)
+				setLoading(false)
 				if (!clustersConfig?.[targetClusterCode]) {
 					try {
 						await ensureClusterConfigReady(targetClusterCode)
@@ -140,9 +146,6 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 						console.warn("whiteList cluster config sync failed", error)
 					}
 				}
-				if (signal.aborted) return
-				setSameCluster(true)
-				setLoading(false)
 				return
 			}
 
@@ -219,11 +222,13 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 		// 创建新的 AbortController
 		const abortController = new AbortController()
 		abortControllerRef.current = abortController
-		// Restored credentials alone do not mean account/cluster hydration is done.
-		// AppService does not depend on this gate, so waiting here cannot block bootstrap.
-		setLoading(true)
-		setSameCluster(false)
-		if (isInitialing) return () => abortController.abort()
+		// Defer account decisions until hydration finishes, while keeping React mounted.
+		// Preserve admission across bootstrap completion so a matching route never remounts.
+		if (isInitialing) {
+			setLoading(false)
+			setSameCluster(true)
+			return () => abortController.abort()
+		}
 
 		// 快速判断：如果集群已匹配或在白名单中，立即执行（无需防抖）
 		const code =
@@ -231,8 +236,15 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 				? ""
 				: configStore.cluster.clusterCode
 		const needsSwitch = targetClusterCode !== code && !isWhiteListRoute
+		const hasPendingSwitch = switchTaskRef.current?.target === targetClusterCode
 
-		if (!needsSwitch || switchTaskRef.current?.target === targetClusterCode) {
+		// A pending switch can already have updated the cluster code; still await it.
+		if (needsSwitch || hasPendingSwitch) {
+			setLoading(true)
+			setSameCluster(false)
+		}
+
+		if (!needsSwitch || hasPendingSwitch) {
 			// 无需切换，立即执行
 			initialize(abortController.signal).catch(console.error)
 		} else {
@@ -261,8 +273,9 @@ export function useClusterSwitch(options: UseClusterSwitchOptions): UseClusterSw
 	])
 
 	return {
+		isInitialing,
 		isSameCluster,
-		loading: isInitialing || loading,
+		loading,
 		setSameCluster,
 	}
 }
