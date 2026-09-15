@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import i18n from "i18next"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { SuperMagicApi } from "@/apis"
 import { FolderUploadTask } from "./FolderUploadTask"
 import { TaskQueue } from "./TaskQueue"

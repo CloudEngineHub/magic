@@ -7,7 +7,7 @@ import {
 	syncSafeAreaCssVars,
 } from "@/utils/safeArea"
 import { useDeepCompareEffect } from "ahooks"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 interface SafeAreaTokens {
 	appEnv: boolean

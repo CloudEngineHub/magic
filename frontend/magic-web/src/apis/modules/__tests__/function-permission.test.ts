@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
-import type { HttpClient } from "@/apis/core/HttpClient"
+import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 import { generateFunctionPermissionApi } from "../function-permission"
 
 describe("generateFunctionPermissionApi", () => {
 	it("loads function permissions and permission groups from their dedicated endpoints", async () => {
 		const get = vi.fn().mockResolvedValue({})
-		const api = generateFunctionPermissionApi({ get } as unknown as HttpClient)
+		const api = generateFunctionPermissionApi({ get } as unknown as ServiceHttpClient)
 
 		await api.getMe()
 		await api.getPermissionGroups()

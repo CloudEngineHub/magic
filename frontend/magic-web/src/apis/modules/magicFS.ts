@@ -1,4 +1,4 @@
-import type { HttpClient, RequestConfig } from "@/apis/core/HttpClient"
+import type { ServiceHttpClient, RequestConfig } from "@/infrastructure/network/http/clients"
 import type { FileScope } from "./fileScope"
 
 /** MagicFS 文件节点。 */
@@ -40,7 +40,7 @@ export interface MagicFSFileResponse {
  *
  * 该 API 只封装通用文件系统元数据操作，正文读取与保存继续复用 Super Agent 文件接口。
  */
-export function generateMagicFSApi(fetch: HttpClient) {
+export function generateMagicFSApi(fetch: ServiceHttpClient) {
 	return {
 		/** 查询指定目录的直接子节点。 */
 		listFiles(params: ListMagicFSFilesParams, config?: Omit<RequestConfig, "url" | "body">) {

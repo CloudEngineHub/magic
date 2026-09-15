@@ -1,5 +1,6 @@
 import Konva from "konva"
 import type { Canvas } from "../../core/Canvas"
+import type { CanvasEvent } from "../../core/EventEmitter"
 import { getDownstreamContent, updateContent } from "../../document/elementContent"
 import {
 	ElementTypeEnum,
@@ -20,6 +21,7 @@ import type {
 	VideoEditControlAction,
 	VideoEditControlState,
 } from "../../interaction/video-edit/VideoEditInteractionManager"
+import { isUsableVideoPosterSource } from "../../resources/video/VideoResourceManager"
 import {
 	canInteractWithElementControls,
 	type ElementControlInteractionPolicy,
@@ -72,6 +74,7 @@ const NODE_NAMES = {
 	videoViewport: "video-edit-video-viewport",
 	videoTrack: "video-edit-video-track",
 	videoCard: "video-edit-video-card",
+	videoCardPreview: "video-edit-video-card-preview",
 	videoScrollbarThumb: "video-edit-video-scrollbar-thumb",
 	audioTitle: "video-edit-audio-title",
 	audioCount: "video-edit-audio-count",
@@ -305,6 +308,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	private previewCanvases = new Map<string, HTMLCanvasElement>()
 	private previewControllers = new Map<string, AbortController>()
 	private previewTokens = new Map<string, number>()
+	private videoPosterWillReleaseUnsubscribe?: () => void
 	private consumerVisibility: CanvasConsumerVisibility = "far"
 	private consumerVisibilityUnsubscribe?: () => void
 	private interactionCleanups: Array<() => void> = []
@@ -315,6 +319,33 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		super(normalizeVideoEditDisplayDimensions(data), canvas)
 		this.playbackManager =
 			canvas.videoEditPlaybackManager ?? new VideoEditPlaybackManager({ canvas })
+		if (this.canvas.eventEmitter?.on) {
+			this.videoPosterWillReleaseUnsubscribe = this.canvas.eventEmitter.on(
+				"resource:video:will-release",
+				this.handleVideoPosterWillRelease,
+			)
+		}
+	}
+
+	private readonly handleVideoPosterWillRelease = ({
+		data,
+	}: CanvasEvent<"resource:video:will-release">): void => {
+		let detached = false
+		this.previewCanvases.forEach((poster, elementId) => {
+			if (poster !== data.poster) return
+			this.previewCanvases.delete(elementId)
+			detached = true
+		})
+
+		this.node?.find(`.${NODE_NAMES.videoCardPreview}`).forEach((candidate) => {
+			if (!(candidate instanceof Konva.Image) || candidate.image() !== data.poster) return
+			candidate.image(undefined)
+			detached = true
+		})
+
+		if (!detached) return
+		this.node?.getLayer()?.batchDraw()
+		if (this.node) this.rerenderWhenTransformIdle()
 	}
 
 	public static getDefaultConfig() {
@@ -543,6 +574,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		this.finishAudioScrub()
 		this.playbackUnsubscribe()
 		this.playbackManager.release(this.data.id)
+		this.videoPosterWillReleaseUnsubscribe?.()
+		this.videoPosterWillReleaseUnsubscribe = undefined
 		this.compositionUnsubscribe()
 		this.consumerVisibilityUnsubscribe?.()
 		this.consumerVisibilityUnsubscribe = undefined
@@ -585,8 +618,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			controlHits.forEach((candidate) => {
 				if (!(candidate instanceof Konva.Rect)) return
 				const metadata = candidate.getAttr("videoEditControlMetadata") as
-					| VideoEditControlMetadata
-					| undefined
+					VideoEditControlMetadata | undefined
 				if (!metadata) return
 				this.interactionCleanups.push(
 					manager.bindControl({
@@ -603,7 +635,10 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		const syncHitTargets = () => this.syncInteractionHitTargets(node)
 		if (this.canvas.eventEmitter) {
 			this.interactionEventUnsubscribers.push(
-				this.canvas.eventEmitter.on("viewport:scale", syncHitTargets),
+				this.canvas.runtimeScheduler.registerViewportScaleLayout(
+					this.data.id,
+					syncHitTargets,
+				),
 				this.canvas.eventEmitter.on("canvas:devicechange", syncHitTargets),
 			)
 		}
@@ -1006,7 +1041,9 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		})
 		const previewHeight = Math.max(0, layout.videoCard.height - layout.videoCard.infoHeight)
 		const gradient = VIDEO_CARD_GRADIENTS[index % VIDEO_CARD_GRADIENTS.length]
-		const preview = this.previewCanvases.get(videoElementId)
+		const cachedPreview = this.previewCanvases.get(videoElementId)
+		const preview = isUsableVideoPosterSource(cachedPreview) ? cachedPreview : undefined
+		if (!preview && cachedPreview) this.previewCanvases.delete(videoElementId)
 		card.add(fill, cardHit)
 		if (preview) {
 			card.add(
@@ -1017,7 +1054,11 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 					listening: false,
 				}),
 			)
-			const image = new Konva.Image({ image: preview, listening: false })
+			const image = new Konva.Image({
+				image: preview,
+				listening: false,
+				name: NODE_NAMES.videoCardPreview,
+			})
 			RenderUtils.updateContainedImageLayout(image, layout.videoCard.width, previewHeight)
 			card.add(image)
 		} else {
@@ -1744,8 +1785,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		group.find(".video-edit-control-hit").forEach((candidate) => {
 			if (!(candidate instanceof Konva.Rect)) return
 			const baseBounds = candidate.getAttr("videoEditBaseHitBounds") as
-				| { x: number; y: number; width: number; height: number }
-				| undefined
+				{ x: number; y: number; width: number; height: number } | undefined
 			if (
 				!baseBounds ||
 				!Number.isFinite(baseBounds.x) ||
@@ -1777,8 +1817,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		group.find(`.${NODE_NAMES.audioProgressThumbHit}`).forEach((candidate) => {
 			if (!(candidate instanceof Konva.Circle)) return
 			const radius = candidate.getAttr("videoEditAudioProgressBaseHitRadius") as
-				| number
-				| undefined
+				number | undefined
 			if (radius === undefined) return
 			syncControlHitCircle(candidate, radius, minimumScreenSize)
 			candidate.moveToTop()
@@ -1797,11 +1836,9 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		state: VideoEditControlState,
 	): void {
 		const background = metadata.visualNode.findOne(".video-edit-control-background") as
-			| Konva.Shape
-			| undefined
+			Konva.Shape | undefined
 		const text = metadata.visualNode.findOne(".video-edit-control-text") as
-			| Konva.Text
-			| undefined
+			Konva.Text | undefined
 		if (!background) return
 
 		if (metadata.kind === "play") {
@@ -1948,6 +1985,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 						? getDownstreamContent<VideoElementContent>(currentSource)?.src
 						: undefined
 				if (currentPath !== path || !loaded) return
+				if (!isUsableVideoPosterSource(loaded.poster)) return
 				this.previewCanvases.set(elementId, loaded.poster)
 				if (this.node) this.rerenderWhenTransformIdle()
 			})
@@ -2087,11 +2125,9 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		if (!(this.node instanceof Konva.Group)) return
 		const isPlaying = !this.playbackSnapshot.paused && !this.playbackSnapshot.ended
 		const button = this.node.findOne(`.${NODE_NAMES.audioPlayButton}`) as
-			| Konva.Group
-			| undefined
+			Konva.Group | undefined
 		const background = button?.findOne(".video-edit-control-background") as
-			| Konva.Shape
-			| undefined
+			Konva.Shape | undefined
 		if (background) {
 			background.fill(VIDEO_EDIT_CONFIG.AUDIO_PLAY_BUTTON)
 			background.opacity(1)
@@ -2122,16 +2158,13 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			text: audioProgressRow.timeLabel,
 		})
 		const track = this.node.findOne(`.${NODE_NAMES.audioProgressTrack}`) as
-			| Konva.Rect
-			| undefined
+			Konva.Rect | undefined
 		const fill = this.node.findOne(`.${NODE_NAMES.audioProgressFill}`) as Konva.Rect | undefined
 		const thumb = this.node.findOne(`.${NODE_NAMES.audioProgressThumb}`) as
-			| Konva.Circle
-			| undefined
+			Konva.Circle | undefined
 		const hit = this.node.findOne(`.${NODE_NAMES.audioProgressHit}`) as Konva.Rect | undefined
 		const thumbHit = this.node.findOne(`.${NODE_NAMES.audioProgressThumbHit}`) as
-			| Konva.Circle
-			| undefined
+			Konva.Circle | undefined
 		if (!track) return
 		const fillWidth = audioProgressRow.progressRect.width * displayedProgress
 		const thumbX = audioProgressRow.progressRect.x + fillWidth
@@ -2154,8 +2187,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			radius: audioProgressRow.thumbRadius,
 		})
 		const baseHitBounds = hit?.getAttr("videoEditAudioProgressBaseHitBounds") as
-			| { height?: number }
-			| undefined
+			{ height?: number } | undefined
 		const hitHeight =
 			baseHitBounds?.height ??
 			hit?.height() ??

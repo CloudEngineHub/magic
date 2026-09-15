@@ -2,6 +2,7 @@
 # standalone install root with its own pnpm-workspace.yaml and pnpm-lock.yaml,
 # so this (open-source) lockfile never references commercial dependencies.
 packages:
+  - "packages/browser-apm"
   - "packages/magic-admin"
   - "packages/html2pptx"
   - "packages/html2image"

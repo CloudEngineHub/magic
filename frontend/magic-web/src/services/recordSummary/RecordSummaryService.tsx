@@ -145,6 +145,13 @@ class RecordSummaryService {
 	// 静音提示的 message key
 	private silenceMessageKey = "recording-silence-detected"
 
+	/** 将录音器实际选择的处理模式同步到面板状态。 */
+	private syncProcessingMode(): void {
+		recordSummaryStore.setProcessingMode(
+			this.mediaRecorderService.getStatus().adapterStatus?.processingMode,
+		)
+	}
+
 	/** Seed the recorder with a persisted compressed/WAV format during session recovery. */
 	private restoreEncodingSnapshot(session: RecordingSession): void {
 		const persistedSnapshot = session.metadata.recordingEncoding
@@ -678,6 +685,7 @@ class RecordSummaryService {
 			try {
 				// 开始录制音频
 				await this.mediaRecorderService.startRecording(session.id)
+				this.syncProcessingMode()
 				const initialEncoding = this.mediaRecorderService.getEncodingSnapshot()
 				if (initialEncoding) {
 					this.sessionManager.updateSessionEncodingSnapshot(initialEncoding)
@@ -707,6 +715,7 @@ class RecordSummaryService {
 				userId: session.userId,
 				audioSource: audioSource,
 				transcriptionEnabled,
+				processingMode: recordSummaryStore.processingMode ?? undefined,
 			})
 
 			// Start duration tracking with AudioContext
@@ -1214,6 +1223,7 @@ class RecordSummaryService {
 				currentSession.id,
 				currentSession.currentChunkIndex,
 			)
+			this.syncProcessingMode()
 			const resumedEncoding = this.mediaRecorderService.getEncodingSnapshot()
 			if (resumedEncoding) {
 				this.sessionManager.updateSessionEncodingSnapshot(resumedEncoding)
@@ -1473,6 +1483,7 @@ class RecordSummaryService {
 				session.id,
 				session.currentChunkIndex || 0,
 			)
+			this.syncProcessingMode()
 			const restoredEncoding = this.mediaRecorderService.getEncodingSnapshot()
 			if (restoredEncoding) {
 				this.sessionManager.updateSessionEncodingSnapshot(restoredEncoding)
@@ -3017,6 +3028,7 @@ class RecordSummaryService {
 				})
 				this.mediaRecorderService.reset()
 				await this.mediaRecorderService.startRecording(sessionId, 0)
+				this.syncProcessingMode()
 
 				logger.log("分片生产监控：录音器已重启，等待分片产出")
 

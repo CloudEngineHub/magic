@@ -51,6 +51,22 @@ describe("RecordingSummaryStore.startRecording", () => {
 		expect(recordSummaryStore.floatPanel.expandedAiChat).toBe(true)
 	})
 
+	it("keeps the selected audio processing mode for the recording panel", () => {
+		recordSummaryStore.startRecording({
+			workspace: null,
+			project: null,
+			model: { model_id: "mock-model" } as never,
+			userId: "mock-user",
+			processingMode: "script-processor",
+		})
+
+		expect(recordSummaryStore.processingMode).toBe("script-processor")
+
+		recordSummaryStore.reset()
+
+		expect(recordSummaryStore.processingMode).toBeNull()
+	})
+
 	it("keeps AI chat closed by default for mobile recordings", () => {
 		recordSummaryStore.floatPanel.isMobile = true
 

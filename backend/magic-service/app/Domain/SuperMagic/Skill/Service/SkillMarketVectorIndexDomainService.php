@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SuperMagic\Skill\Service;
 
+use App\Domain\Kernel\Service\AbstractVectorIndexDomainService;
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\SuperMagic\Skill\Entity\SkillCategoryEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
@@ -16,63 +17,25 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillCategoryRelationRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillCategoryRepositoryInterface;
 use App\Domain\SuperMagic\Skill\Repository\Facade\SkillMarketRepositoryInterface;
-use App\Infrastructure\Core\Embeddings\EmbeddingDimensionPolicy;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInterface;
 use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\ValueObject\Page;
-use GuzzleHttp\Exception\ClientException;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Redis\Redis;
-use Psr\Log\LoggerInterface;
 use RuntimeException;
-use Throwable;
 
-final class SkillMarketVectorIndexDomainService
+final class SkillMarketVectorIndexDomainService extends AbstractVectorIndexDomainService
 {
-    private const VECTOR_INDEX_INITIALIZED_KEY = 'vector_index:initialized:skill_market';
-
-    /** Stable business label used in logs and dimension errors. */
-    private const BUSINESS = 'Skill market';
-
-    private ?bool $availabilityCache = null;
-
-    private int $availabilityCacheExpiresAt = 0;
-
-    private LoggerInterface $logger;
-
     public function __construct(
         private readonly SkillMarketRepositoryInterface $skillMarketRepository,
         private readonly SkillCategoryRelationRepositoryInterface $skillCategoryRelationRepository,
         private readonly SkillCategoryRepositoryInterface $skillCategoryRepository,
-        private readonly VectorStoreInterface $vectorStore,
-        private readonly EmbeddingGeneratorInterface $embeddingGenerator,
-        private readonly Redis $redis,
+        VectorStoreInterface $vectorStore,
+        EmbeddingGeneratorInterface $embeddingGenerator,
+        Redis $redis,
         LoggerFactory $loggerFactory,
     ) {
-        $this->logger = $loggerFactory->get('vector-index-sync');
-    }
-
-    /** Check the SkillMarket collection with a short process-local cache. */
-    public function isAvailable(): bool
-    {
-        $now = time();
-        if ($this->availabilityCache !== null && $this->availabilityCacheExpiresAt > $now) {
-            return $this->availabilityCache;
-        }
-
-        try {
-            $available = $this->vectorStore->getCollection($this->collectionName()) !== null;
-        } catch (Throwable) {
-            $available = false;
-        }
-
-        $this->availabilityCache = $available;
-        $this->availabilityCacheExpiresAt = $now + max(
-            0,
-            (int) config('vector_index.availability_cache_seconds', 60),
-        );
-
-        return $available;
+        parent::__construct($vectorStore, $embeddingGenerator, $redis, $loggerFactory);
     }
 
     /** Remove Qdrant points that no longer represent visible market skills. */
@@ -149,25 +112,6 @@ final class SkillMarketVectorIndexDomainService
         }
 
         $collectionName = $this->collectionName();
-        $collection = $this->vectorStore->getCollection($collectionName);
-        if ($collection !== null && ! $forceReEmbedding) {
-            $expectedSize = EmbeddingDimensionPolicy::isEnabled()
-                ? EmbeddingDimensionPolicy::fixedSize()
-                : $this->embeddingGenerator->getDefaultModel(
-                    SkillDataIsolation::create($market->getOrganizationCode(), $operatorId),
-                )->getVectorSize();
-            if ($collection->vectorSize !== $expectedSize) {
-                $this->logger->error('Skill market vector sync stopped because embedding dimensions do not match', [
-                    'resource_id' => $resourceId,
-                    'collection_name' => $collectionName,
-                    'collection_vector_size' => $collection->vectorSize,
-                    'embedding_vector_size' => $expectedSize,
-                    'fixed_dimension_enabled' => EmbeddingDimensionPolicy::isEnabled(),
-                ]);
-                EmbeddingDimensionPolicy::assertCollectionSize(self::BUSINESS, $collection->vectorSize, $expectedSize);
-            }
-        }
-
         $categories = $this->findCategories($market);
         $semanticText = SkillMarketSearchTextBuilder::buildSemanticText($market, $categories);
         if ($semanticText === '') {
@@ -180,27 +124,29 @@ final class SkillMarketVectorIndexDomainService
 
         if ($existingPoint !== null) {
             if ($forceReEmbedding || ($existingPoint->payload['semantic_text'] ?? null) !== $semanticText) {
-                $this->logger->info('Skill market vector re-embedding', [
-                    'resource_id' => $resourceId,
-                    'forced' => $forceReEmbedding,
-                ]);
-                $embedding = $this->generateEmbedding($market, $semanticText, $operatorId);
-                $collectionSize = EmbeddingDimensionPolicy::resolveCollectionSize(self::BUSINESS, count($embedding));
-                $this->ensureCollection($collectionName, $collectionSize, $forceReEmbedding);
+                $embedding = $this->generateEmbedding(
+                    $market,
+                    $semanticText,
+                    $operatorId,
+                    $forceReEmbedding ? 'force_re_embedding' : 'semantic_text_changed',
+                );
+                $this->ensureCollection($collectionName, $embedding, $forceReEmbedding);
                 $this->vectorStore->storePoint($collectionName, $pointId, $embedding, $payload);
                 $this->availabilityCache = true;
                 return;
             }
 
+            $this->logger->info('Skill market vector payload update without re-embedding', [
+                'resource_id' => $resourceId,
+                'reason' => 'semantic_text_unchanged',
+            ]);
             $this->vectorStore->updatePayload($collectionName, $pointId, $payload);
             $this->availabilityCache = true;
-            $this->logger->info('Skill market vector payload updated', ['resource_id' => $resourceId]);
             return;
         }
 
-        $embedding = $this->generateEmbedding($market, $semanticText, $operatorId);
-        $collectionSize = EmbeddingDimensionPolicy::resolveCollectionSize(self::BUSINESS, count($embedding));
-        $this->ensureCollection($collectionName, $collectionSize, $forceReEmbedding);
+        $embedding = $this->generateEmbedding($market, $semanticText, $operatorId, 'point_not_found');
+        $this->ensureCollection($collectionName, $embedding, $forceReEmbedding);
 
         $this->vectorStore->storePoint($collectionName, $pointId, $embedding, $payload);
         $this->availabilityCache = true;
@@ -223,6 +169,8 @@ final class SkillMarketVectorIndexDomainService
             return [];
         }
 
+        $this->assertEmbeddingDimension($this->collectionName(), $embedding);
+
         $points = $this->vectorStore->searchPoints(
             $this->collectionName(),
             $embedding,
@@ -242,25 +190,19 @@ final class SkillMarketVectorIndexDomainService
         return array_values($this->skillMarketRepository->findVisibleByIds($ids));
     }
 
-    public function isVectorSearchEnabled(): bool
+    protected function collectionName(): string
     {
-        return EmbeddingDimensionPolicy::isEnabled();
+        return (string) config('vector_index.resources.skill_market.collection', 'skill_markets');
     }
 
-    /** Return whether the first full reconciliation has completed. */
-    public function isVectorSearchReady(): bool
+    protected function businessLabel(): string
     {
-        if (! $this->isVectorSearchEnabled()) {
-            return false;
-        }
-
-        return (bool) $this->redis->exists(self::VECTOR_INDEX_INITIALIZED_KEY);
+        return 'Skill market';
     }
 
-    /** Record a successful full reconciliation for subsequent semantic searches. */
-    public function markVectorIndexInitialized(): void
+    protected function initializedKey(): string
     {
-        $this->redis->set(self::VECTOR_INDEX_INITIALIZED_KEY, (string) time());
+        return 'vector_index:initialized:skill_market';
     }
 
     /** @return array<int, SkillCategoryEntity> */
@@ -307,8 +249,14 @@ final class SkillMarketVectorIndexDomainService
         ];
     }
 
-    private function generateEmbedding(SkillMarketEntity $market, string $semanticText, string $operatorId): array
+    private function generateEmbedding(SkillMarketEntity $market, string $semanticText, string $operatorId, string $reason): array
     {
+        $this->logger->info('Skill market embedding generation started', [
+            'resource_id' => (string) $market->getId(),
+            'reason' => $reason,
+            'forced' => $reason === 'force_re_embedding',
+            'text_length' => mb_strlen($semanticText),
+        ]);
         $embedding = $this->embeddingGenerator->embedText(
             $this->embeddingGenerator->getDefaultModel(
                 SkillDataIsolation::create($market->getOrganizationCode(), $operatorId),
@@ -326,62 +274,12 @@ final class SkillMarketVectorIndexDomainService
         if ($embedding === []) {
             throw new RuntimeException('Skill market embedding is empty');
         }
+        $this->logger->info('Skill market embedding generation completed', [
+            'resource_id' => (string) $market->getId(),
+            'vector_size' => count($embedding),
+        ]);
 
         return $embedding;
-    }
-
-    private function removePoint(string $resourceId): void
-    {
-        $collectionName = $this->collectionName();
-        if ($this->vectorStore->getCollection($collectionName) !== null) {
-            $this->vectorStore->removePoint($collectionName, $resourceId);
-        }
-    }
-
-    /** Ensure the collection matches the embedding dimension, rebuilding it only for forced migrations. */
-    private function ensureCollection(string $collectionName, int $vectorSize, bool $forceReEmbedding): void
-    {
-        $collection = $this->vectorStore->getCollection($collectionName);
-        if ($collection !== null && $collection->vectorSize !== $vectorSize) {
-            if (! $forceReEmbedding) {
-                EmbeddingDimensionPolicy::assertCollectionSize(self::BUSINESS, $collection->vectorSize, $vectorSize);
-            }
-
-            $this->vectorStore->removeCollection($collectionName);
-            $this->availabilityCache = false;
-            $collection = null;
-        }
-
-        if ($collection !== null) {
-            return;
-        }
-
-        try {
-            $this->vectorStore->createCollection($collectionName, $vectorSize);
-        } catch (ClientException $exception) {
-            if (! $this->isCollectionAlreadyExists($exception)) {
-                throw $exception;
-            }
-        }
-    }
-
-    private function isCollectionAlreadyExists(ClientException $exception): bool
-    {
-        $response = $exception->getResponse();
-        return $response->getStatusCode() === 409
-            && str_contains(strtolower((string) $response->getBody()), 'already exists');
-    }
-
-    private function collectionName(): string
-    {
-        return (string) config('vector_index.resources.skill_market.collection', 'skill_markets');
-    }
-
-    private function normalizeKeyword(?string $keyword): string
-    {
-        $keyword = trim((string) $keyword);
-        $keyword = preg_replace('/\s+/u', ' ', $keyword) ?? $keyword;
-        return mb_strtolower($keyword, 'UTF-8');
     }
 
     /** Generate the query embedding through the shared embedding pipeline. */

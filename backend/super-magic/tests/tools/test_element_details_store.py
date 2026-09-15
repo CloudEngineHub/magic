@@ -77,6 +77,31 @@ def test_merge_readable_element_details_prefers_tagged_user_entries():
     assert "source" not in merged["elements"]["image-1"]
 
 
+def test_merge_readable_element_details_preserves_video_runtime_metadata():
+    """旧 V2 Element sidecar 读取时保留视频生成运行时间元数据。"""
+    agent_details = {
+        "version": "1.0.0",
+        "elements": {
+            "video-1": {
+                "generateVideoRequest": {"prompt": "video"},
+                "videoGenerationResultMeta": {
+                    "runtime": {
+                        "started_at": "2026-09-14 14:00:14",
+                        "finished_at": "2026-09-14 14:12:11",
+                        "elapsed_seconds": 717,
+                    }
+                },
+            }
+        },
+    }
+
+    merged = merge_readable_element_details(agent_details, {"elements": {}})
+
+    assert merged["elements"]["video-1"]["videoGenerationResultMeta"] == agent_details[
+        "elements"
+    ]["video-1"]["videoGenerationResultMeta"]
+
+
 @pytest.mark.asyncio
 async def test_read_readable_element_details_falls_back_to_user_sidecar(
     monkeypatch,

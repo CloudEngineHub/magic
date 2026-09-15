@@ -55,6 +55,7 @@ import {
 } from "../../resources/clipboard/clipboardResourceReferences"
 import canvasSize from "canvas-size"
 import { createOrientedImageBitmapFromBlob } from "../../resources/image/imageSourceUtils"
+import { isOssExpiring } from "../../resources/offline-cache/ossExpiryUtils"
 
 const PNG_MIME_TYPE = "image/png"
 const PNG_EXTENSION = ".png"
@@ -159,16 +160,15 @@ export class ClipboardManager {
 	private getEffectiveContent(element: CanvasFileElement) {
 		return (
 			(this.canvas.getEffectiveContent(element.id) as
-				| ReturnType<typeof getActiveContent>
-				| undefined) ?? getActiveContent(element)
+				ReturnType<typeof getActiveContent> | undefined) ?? getActiveContent(element)
 		)
 	}
 
 	private getEffectiveImageContent(element: ImageElement) {
 		return (
 			(this.canvas.getEffectiveContent(element.id) as
-				| ReturnType<typeof getActiveImageContent>
-				| undefined) ?? getActiveImageContent(element)
+				ReturnType<typeof getActiveImageContent> | undefined) ??
+			getActiveImageContent(element)
 		)
 	}
 
@@ -445,8 +445,17 @@ export class ClipboardManager {
 		}
 
 		try {
-			const fileInfo = await getFileInfo(options.src, { useImageProcess: false })
-			if (!fileInfo?.src) {
+			let fileInfo = await getFileInfo(options.src, { useImageProcess: false })
+			if (isOssExpiring(fileInfo?.expires_at)) {
+				// A clipboard payload can be consumed after this interaction finishes.
+				// Refresh once rather than serializing a signed URL that cannot complete
+				// the subsequent paste/upload flow.
+				fileInfo = await getFileInfo(options.src, {
+					useImageProcess: false,
+					forceRefresh: true,
+				})
+			}
+			if (!fileInfo?.src || isOssExpiring(fileInfo.expires_at)) {
 				return null
 			}
 
@@ -1063,6 +1072,12 @@ export class ClipboardManager {
 				}),
 			),
 		])
+		// Element media has no inline Blob in the standard copy payload. Writing
+		// the element without a usable source reference would create a clipboard
+		// item that can only fail later during paste, so abort the copy instead.
+		if (mediaMetadataResults.some((result) => !result)) {
+			throw new Error("Unable to prepare a valid media source for clipboard copy")
+		}
 		const metadataList: CanvasElementClipboardFileMetadata[] = []
 		const files: CanvasElementClipboardWriteFile[] = []
 		let native: CanvasElementClipboardNativeExposure | undefined

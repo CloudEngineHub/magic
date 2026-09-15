@@ -53,10 +53,6 @@ vi.mock("../../../../../runtime/document/elementContent", async () => {
 	return actual
 })
 
-vi.mock("../../../../../app/hooks/resources/useImageOssSrc", () => ({
-	useImageOssSrc: () => ({ hasOssSrc: true }),
-}))
-
 vi.mock("../useImageEditorConfig", () => ({
 	useImageEditorConfig: () => ({
 		prompt: "prompt",

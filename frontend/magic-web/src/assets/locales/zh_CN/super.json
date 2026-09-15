@@ -3890,6 +3890,8 @@
 				"browserNotSupported": "当前浏览器暂不支持录音，请更换支持麦克风录制的浏览器",
 				"camera": "相机",
 				"cancel": "取消录音",
+				"compatibilityModeDescription": "录制期间请保持当前页面和浏览器处于前台，不要切换标签页、最小化浏览器或切换到其他应用，以免录音中断。",
+				"compatibilityModeTitle": "请保持浏览器前台",
 				"defaultTitle": "当前录音",
 				"enableTranscription": "开启转写",
 				"enableTranscriptionFailed": "开启转写失败，请稍后重试",
@@ -3995,6 +3997,31 @@
 				},
 				"backAria": "返回",
 				"closeAria": "关闭",
+				"healthCheck": {
+					"button": "立即检查",
+					"checking": "检查中",
+					"description": "检查浏览器和当前页面是否具备录音所需能力，不会请求麦克风权限。",
+					"environment": "运行环境",
+					"items": {
+						"audioContext": "AudioContext",
+						"audioWorklet": "AudioWorklet",
+						"getUserMedia": "麦克风 API",
+						"processingMode": "处理模式",
+						"secureContext": "安全上下文"
+					},
+					"processingModes": {
+						"script-processor": "兼容模式",
+						"worklet": "AudioWorklet"
+					},
+					"status": {
+						"partial": "基本可用（使用兼容模式）",
+						"supported": "支持录音",
+						"unsupported": "不支持录音"
+					},
+					"supported": "支持",
+					"title": "音频录制健康检查",
+					"unsupported": "不支持"
+				},
 				"model": {
 					"description": "用于生成总结的 AI 模型",
 					"label": "AI 模型",
@@ -4162,7 +4189,7 @@
 			"closeSidebar": "关闭侧栏",
 			"currentPage": "当前页面",
 			"menuAria": "打开菜单",
-			"navApps": "应用",
+			"navApps": "更多",
 			"navChats": "对话",
 			"navMagiClaw": "{{clawBrand}}",
 			"navMicroApps": "微应用",
@@ -4506,6 +4533,7 @@
 		"moveProjectTitle": "移动项目",
 		"moveTo": "移动至",
 		"noCreators": "暂无创建人",
+		"noMatchingProjects": "暂无匹配的项目",
 		"noPermissionToTransfer": "无权限转让项目，只有项目所有者才能转让项目",
 		"noProjects": "暂无项目",
 		"openInNewWindow": "新窗口打开",
@@ -7136,6 +7164,8 @@
 		"processing": "处理中...",
 		"quickStart": "快速开始",
 		"reportConversationRound": "上报本轮会话",
+		"reportConversationRoundFailed": "会话日志准备失败，请重试",
+		"reportConversationRoundSuccess": "上报成功",
 		"slogan": {
 			"rotatingText": {
 				"prefix": "$t(common:platform.name)帮你",

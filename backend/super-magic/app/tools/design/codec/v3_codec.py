@@ -71,6 +71,7 @@ CONTENT_FIELDS_BY_TYPE: Dict[str, Set[str]] = {
         "status",
         "errorMessage",
         "generateVideoRequest",
+        "videoEditorDraft",
         "videoGenerationResultMeta",
     },
     "audio": {"src"},

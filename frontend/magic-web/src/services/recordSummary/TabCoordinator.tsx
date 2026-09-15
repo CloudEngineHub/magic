@@ -1,7 +1,7 @@
 import MagicModal from "@/components/base/MagicModal"
 import { RecordSummaryActionButton } from "@/components/business/RecordingSummary/components/RecordSummaryAlertCard"
 import { userStore } from "@/models/user"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { t } from "i18next"
 import { shouldSkipRecordingSessionRestoreOnCurrentRoute } from "./recordingRestoreRouteGuard"
 

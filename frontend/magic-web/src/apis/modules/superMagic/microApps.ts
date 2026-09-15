@@ -1,7 +1,6 @@
-import type { HttpClient } from "@/apis/core/HttpClient"
+import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
-import { genRequestUrl } from "@/utils/http"
 
 export type MicroAppPublishShareType = 2 | 4 | 5
 export type MicroAppPublishShareRange = "all" | "designated"
@@ -130,7 +129,7 @@ export interface ResolvedPublishedMicroApp {
 	extra?: MicroAppShareExtra
 }
 
-export const generateMicroAppApi = (fetch: HttpClient) => ({
+export const generateMicroAppApi = (fetch: ServiceHttpClient) => ({
 	getMicroAppWorkspace() {
 		return fetch.get<Workspace>("/api/v1/super-agent/workspaces/app/micro-app")
 	},
@@ -167,71 +166,56 @@ export const generateMicroAppApi = (fetch: HttpClient) => ({
 		} = {},
 	) {
 		const { page = 1, page_size = 20, keyword = "", scope = "all" } = params
-		return fetch.get<MicroAppListResponse>(
-			genRequestUrl(
-				"/api/v1/super-agent/micro-apps/queries",
-				{},
-				{ page, page_size, keyword, scope },
-			),
-			{ parseJsonLargeIntAsString: true },
-		)
+		return fetch.get<MicroAppListResponse>("/api/v1/super-agent/micro-apps/queries", {
+			params: { page, page_size, keyword, scope },
+			parseJsonLargeIntAsString: true,
+		})
 	},
 
 	updateMicroApp(appId: string, body: UpdateMicroAppBody) {
-		return fetch.put<MicroAppMetadata>(
-			genRequestUrl("/api/v1/super-agent/micro-apps/${appId}", { appId }),
-			body,
-			{ parseJsonLargeIntAsString: true },
-		)
+		return fetch.put<MicroAppMetadata>(`/api/v1/super-agent/micro-apps/${appId}`, body, {
+			parseJsonLargeIntAsString: true,
+		})
 	},
 
 	deleteMicroApp(appId: string) {
 		return fetch.delete<DeleteMicroAppResponse>(
-			genRequestUrl("/api/v1/super-agent/micro-apps/${appId}", { appId }),
+			`/api/v1/super-agent/micro-apps/${appId}`,
 			undefined,
 			{ parseJsonLargeIntAsString: true },
 		)
 	},
 
 	getMicroAppProject(appId: string, options?: { enableErrorMessagePrompt?: boolean }) {
-		return fetch.get<MicroAppProjectDetail>(
-			genRequestUrl("/api/v1/super-agent/micro-app-projects/${appId}", { appId }),
-			{ parseJsonLargeIntAsString: true, ...options },
-		)
+		return fetch.get<MicroAppProjectDetail>(`/api/v1/super-agent/micro-app-projects/${appId}`, {
+			parseJsonLargeIntAsString: true,
+			...options,
+		})
 	},
 
 	getMicroAppProjectByProjectId(projectId: string) {
 		return fetch.get<MicroAppProjectDetail>(
-			genRequestUrl("/api/v1/super-agent/micro-app-projects/by-project/${projectId}", {
-				projectId,
-			}),
+			`/api/v1/super-agent/micro-app-projects/by-project/${projectId}`,
 			{ parseJsonLargeIntAsString: true },
 		)
 	},
 
 	resolvePublishedMicroApp(appId: string) {
-		return fetch.get<ResolvedPublishedMicroApp>(
-			genRequestUrl("/api/v1/share/micro-apps/${appId}", { appId }),
-			{ parseJsonLargeIntAsString: true },
-		)
+		return fetch.get<ResolvedPublishedMicroApp>(`/api/v1/share/micro-apps/${appId}`, {
+			parseJsonLargeIntAsString: true,
+		})
 	},
 
 	publishMicroAppProject(appId: string, body: PublishMicroAppProjectBody) {
 		return fetch.post<PublishedMicroAppProjectItem>(
-			genRequestUrl("/api/v1/super-agent/micro-app-projects/${appId}/publish", {
-				appId,
-			}),
+			`/api/v1/super-agent/micro-app-projects/${appId}/publish`,
 			body,
 			{ parseJsonLargeIntAsString: true },
 		)
 	},
 
 	unpublishMicroAppProject(appId: string) {
-		return fetch.delete<unknown>(
-			genRequestUrl("/api/v1/super-agent/micro-app-projects/${appId}/publish", {
-				appId,
-			}),
-		)
+		return fetch.delete<unknown>(`/api/v1/super-agent/micro-app-projects/${appId}/publish`)
 	},
 
 	getPublishedMicroAppProjects(
@@ -243,12 +227,8 @@ export const generateMicroAppApi = (fetch: HttpClient) => ({
 	) {
 		const { page = 1, page_size = 20, keyword = "" } = params
 		return fetch.get<PublishedMicroAppProjectsResponse>(
-			genRequestUrl(
-				"/api/v1/super-agent/micro-app-projects/published/queries",
-				{},
-				{ page, page_size, keyword },
-			),
-			{ parseJsonLargeIntAsString: true },
+			"/api/v1/super-agent/micro-app-projects/published/queries",
+			{ params: { page, page_size, keyword }, parseJsonLargeIntAsString: true },
 		)
 	},
 })
