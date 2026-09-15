@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
 import MagicTooltip from "@/components/base/MagicTooltip"
+import SmartTooltip from "@/components/other/SmartTooltip"
 import type { MagicFSFile } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import { ContextHelp } from "@/components/shadcn-composed/context-help"
@@ -224,11 +225,17 @@ export const MemoryGroup = observer(function MemoryGroup({
 			setVisited(true)
 		},
 		leading: projectId ? <Folder size={16} /> : <Brain size={16} />,
+		// 项目名只占一行；按工具栏留下的实际宽度省略，由公共提示显示完整名称。
 		description:
 			projectId && projectName && !titleOverride ? (
-				<p className="break-words px-4 pb-2 text-xs font-normal text-muted-foreground [overflow-wrap:anywhere]">
+				<SmartTooltip
+					elementType="span"
+					className="block min-w-0 max-w-full text-xs font-normal leading-4 text-muted-foreground"
+					placement="top"
+					align="start"
+				>
 					{projectName}
-				</p>
+				</SmartTooltip>
 			) : undefined,
 	}
 	const browseAction =
