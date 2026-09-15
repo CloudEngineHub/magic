@@ -8,6 +8,8 @@ interface UseTopicDesktopLayoutOptions {
 	allowProjectSiderResize?: boolean
 	/** Controls whether conversation collapse state survives remounts. */
 	persistConversationPanelState?: boolean
+	/** Initial state used when a page owns a temporary conversation layout. */
+	initialConversationPanelCollapsed?: boolean
 }
 
 interface UseTopicDesktopLayoutReturn {
@@ -31,12 +33,16 @@ export function useTopicDesktopLayout({
 	isReadOnly,
 	allowProjectSiderResize = !isReadOnly,
 	persistConversationPanelState = true,
+	initialConversationPanelCollapsed = false,
 }: UseTopicDesktopLayoutOptions): UseTopicDesktopLayoutReturn {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const storeRef = useRef<TopicLayoutStore | null>(null)
 
 	if (!storeRef.current) {
-		storeRef.current = new TopicLayoutStore({ persistConversationPanelState })
+		storeRef.current = new TopicLayoutStore({
+			persistConversationPanelState,
+			initialConversationPanelCollapsed,
+		})
 	}
 	const store = storeRef.current
 

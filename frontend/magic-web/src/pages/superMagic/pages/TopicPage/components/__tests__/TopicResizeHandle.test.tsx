@@ -13,6 +13,23 @@ describe("TopicResizeHandle", () => {
 		expect(hitArea).toHaveClass("absolute", "w-4")
 	})
 
+	it("supports the shared grip on a gray divider with a left border", () => {
+		render(
+			<TopicResizeHandle
+				gripVariant="dots"
+				className="border-l border-border !bg-sidebar"
+				onResizeStart={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("handle-mouse-down")).toHaveClass(
+			"border-l",
+			"border-border",
+			"!bg-sidebar",
+		)
+		expect(screen.getByTestId("resize-grip")).toHaveAttribute("data-orientation", "vertical")
+	})
+
 	it("starts resizing from the extended pointer target and clears the drag portal", () => {
 		const onResizeStart = vi.fn()
 		render(<TopicResizeHandle onResizeStart={onResizeStart} />)
@@ -52,5 +69,24 @@ describe("TopicResizeHandle", () => {
 			"pointer-events-none",
 			"opacity-0",
 		)
+	})
+
+	it("keeps the requested divider colors while disabled", () => {
+		render(
+			<TopicResizeHandle
+				disabled
+				visibleWhenDisabled
+				className="border-l border-border !bg-sidebar"
+				onResizeStart={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("handle-mouse-down")).toHaveClass(
+			"pointer-events-none",
+			"border-l",
+			"border-border",
+			"!bg-sidebar",
+		)
+		expect(screen.getByTestId("handle-mouse-down")).not.toHaveClass("opacity-0")
 	})
 })

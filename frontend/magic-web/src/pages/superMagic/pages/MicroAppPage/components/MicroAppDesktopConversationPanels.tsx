@@ -61,6 +61,7 @@ export default function MicroAppDesktopConversationPanels({
 				<>
 					<TopicResizeHandle
 						onResizeStart={onMessagePanelResizeStart}
+						gripVariant="dots"
 						className={cn(
 							isMessagePanelDragging ? "before:opacity-100" : undefined,
 							"border-l border-border !bg-sidebar",
@@ -124,7 +125,7 @@ export default function MicroAppDesktopConversationPanels({
 			) : null}
 			{isMessagePanelCollapsed ? (
 				<aside
-					className="flex h-full shrink-0 justify-center border-l border-border bg-background py-2"
+					className="flex h-full shrink-0 justify-center border-l border-border bg-sidebar py-2"
 					style={{ width: layout.COLLAPSED_RAIL_WIDTH_PX }}
 					data-testid="micro-app-conversation-rail"
 				>

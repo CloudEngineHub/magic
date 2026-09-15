@@ -9,6 +9,7 @@ vi.mock("react-i18next", () => ({
 
 const scaffoldMocks = vi.hoisted(() => ({
 	messageListProviderValue: null as Record<string, unknown> | null,
+	messageHeaderProps: null as Record<string, unknown> | null,
 	setSelectedDetail: undefined as ((detail: unknown) => void) | undefined,
 	enableRevokedUserMessageReedit: false,
 	revokedEditorContext: null as Record<string, unknown> | null,
@@ -31,6 +32,7 @@ vi.mock("../../utils/microAppModelMode", () => ({
 vi.mock("@/pages/superMagic/components/ConversationPanelScaffold", () => ({
 	default: ({
 		editor,
+		header,
 		emptyCompact,
 		messageListProviderValue,
 		setSelectedDetail,
@@ -38,6 +40,7 @@ vi.mock("@/pages/superMagic/components/ConversationPanelScaffold", () => ({
 		revokedEditorContext,
 	}: {
 		editor: React.ReactNode
+		header: React.ReactNode
 		emptyCompact: React.ReactNode
 		messageListProviderValue: Record<string, unknown>
 		setSelectedDetail?: (detail: unknown) => void
@@ -50,6 +53,7 @@ vi.mock("@/pages/superMagic/components/ConversationPanelScaffold", () => ({
 		scaffoldMocks.revokedEditorContext = revokedEditorContext ?? null
 		return (
 			<div>
+				{header}
 				{emptyCompact}
 				{editor}
 			</div>
@@ -97,7 +101,12 @@ vi.mock(
 	}),
 )
 
-vi.mock("@/pages/superMagic/components/MessageHeader", () => ({ default: () => null }))
+vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
+	default: (props: Record<string, unknown>) => {
+		scaffoldMocks.messageHeaderProps = props
+		return <div data-testid="message-header">{props.trailingActions as React.ReactNode}</div>
+	},
+}))
 
 vi.mock("@/pages/superMagic/components/MessagePanel/components/MessageQueue", () => ({
 	default: () => null,
@@ -182,6 +191,27 @@ vi.mock("@/models/user", () => ({
 }))
 
 describe("AppConversationPanel", () => {
+	it("forwards page actions to the shared message header", () => {
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "Topic" },
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{ workspaceFileTree: [] } as never}
+				trailingActions={<button data-testid="page-action">attachment</button>}
+			/>,
+		)
+
+		expect(screen.getByTestId("page-action")).toBeInTheDocument()
+		expect(scaffoldMocks.messageHeaderProps?.trailingActions).toBeTruthy()
+	})
+
 	it("uses the micro app conversation illustration and action-oriented copy", () => {
 		const topicStore = {
 			selectedTopic: { id: "topic-1", topic_name: "Topic" },

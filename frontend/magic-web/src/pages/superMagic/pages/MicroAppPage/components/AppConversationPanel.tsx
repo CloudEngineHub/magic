@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, type ReactNode } from "react"
 import { observer } from "mobx-react-lite"
 import { useMemoizedFn } from "ahooks"
 import { JSONContent } from "@/infrastructure/editors/tiptap/react"
@@ -42,8 +42,10 @@ import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTo
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
 import { useAppStore } from "../context"
 import { resolveMicroAppModelSelectionMode } from "../utils/microAppModelMode"
-import MicroAppIssuePromptPanel from "./MicroAppIssuePromptPanel"
 import type { RevokedMessageEditorContext } from "@/pages/superMagic/components/MessageList/revoked-editor-context"
+import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
+import { ModeToggle } from "@/pages/superMagic/components/TopicMode"
+import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 interface AppConversationPanelProps {
 	selectedProject: ProjectListItem | null
@@ -60,6 +62,7 @@ interface AppConversationPanelProps {
 	onTerminalTopicStatusChange?: () => void
 	onSelectDetail?: (detail: unknown) => void
 	hideConversationPanelToggle?: boolean
+	trailingActions?: ReactNode
 }
 
 function AppConversationPanel({
@@ -77,10 +80,18 @@ function AppConversationPanel({
 	onTerminalTopicStatusChange,
 	onSelectDetail,
 	hideConversationPanelToggle = false,
+	trailingActions,
 }: AppConversationPanelProps) {
 	const { conversation } = useAppStore()
 	const selectedTopic = topicStore.selectedTopic
 	const modelTopicMode = resolveMicroAppModelSelectionMode()
+	// Runtime conversations default to MicroApp while still allowing the shared employee selector
+	// to switch the send-time topic mode for a newly created scoped topic.
+	const { topicMode, setTopicMode, recoverTopicMode } = useTopicMode({
+		selectedTopic,
+		selectedProject,
+		fallbackTopicMode: TopicMode.MicroApp,
+	})
 
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 
@@ -127,9 +138,18 @@ function AppConversationPanel({
 
 	const mergeMicroAppSendParams = useMemoizedFn(
 		({ defaultParams }: { defaultParams: HandleSendParams }) => {
+			const selection = resolveAgentSelection(topicMode, selectedTopic?.agent_code)
+			const extra = { ...(defaultParams.extra ?? {}) }
+			delete extra.agent_code
+
 			return {
 				...defaultParams,
-				topicMode: TopicMode.MicroApp,
+				topicMode: selection.topicPattern,
+				extra: selection.agentCode
+					? { ...extra, agent_code: selection.agentCode }
+					: Object.keys(extra).length > 0
+						? extra
+						: undefined,
 			}
 		},
 	)
@@ -199,7 +219,11 @@ function AppConversationPanel({
 			}),
 			selectedTopic,
 			selectedProject,
-			topicMode: modelTopicMode,
+			topicMode,
+			modelTopicMode,
+			agentCode: selectedTopic?.agent_code,
+			setTopicMode,
+			recoverTopicMode,
 			topicStore,
 			setSelectedTopic: topicStore.setSelectedTopic,
 			mentionPanelStore,
@@ -229,7 +253,10 @@ function AppConversationPanel({
 	}, [
 		selectedProject,
 		selectedTopic,
+		topicMode,
 		modelTopicMode,
+		setTopicMode,
+		recoverTopicMode,
 		topicStore,
 		mentionPanelStore,
 		projectFilesStore,
@@ -246,8 +273,11 @@ function AppConversationPanel({
 		return {
 			selectedProject,
 			setSelectedTopic: topicStore.setSelectedTopic,
-			topicMode: modelTopicMode,
+			topicMode,
 			modelTopicMode,
+			agentCode: selectedTopic?.agent_code,
+			setTopicMode,
+			recoverTopicMode,
 			topicStore,
 			mentionPanelStore,
 			projectFilesStore,
@@ -257,7 +287,10 @@ function AppConversationPanel({
 	}, [
 		selectedProject,
 		topicStore,
+		topicMode,
 		modelTopicMode,
+		setTopicMode,
+		recoverTopicMode,
 		mentionPanelStore,
 		projectFilesStore,
 		topicModelStore,
@@ -296,12 +329,22 @@ function AppConversationPanel({
 					historyTriggerMode={historyTriggerMode}
 					isHistoryPanelOpen={isHistoryPanelOpen}
 					onToggleHistoryPanel={onToggleHistoryPanel}
+					trailingActions={trailingActions}
 				/>
 			}
 			emptyHero={<AppConversationEmptyState variant="hero" className="w-full" />}
 			emptyCompact={<AppConversationEmptyState variant="compact" />}
 			editor={
 				<div className="flex h-full min-h-0 w-full flex-col gap-1.5">
+					<div className="flex w-full shrink-0 items-center overflow-hidden">
+						<ModeToggle
+							size={detailPanelVisible ? "small" : "default"}
+							topicMode={topicMode}
+							agentCode={selectedTopic?.agent_code}
+							allowChangeMode={messages.length === 0}
+							onModeChange={setTopicMode}
+						/>
+					</div>
 					{/* Preserve the scaffold height so the editor can fill the manually resized panel. */}
 					{/* <div className="flex px-1">
 						<MicroAppIssuePromptPanel variant="desktop" />

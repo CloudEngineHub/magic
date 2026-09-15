@@ -52,7 +52,7 @@ export default function PublishedMicroAppAttachmentPopover({
 						<Button
 							variant="ghost"
 							size="icon-sm"
-							className="size-7 rounded-md text-muted-foreground hover:text-foreground"
+							className="!size-6 !min-h-6 !min-w-6 !rounded-md !p-0 text-muted-foreground hover:text-foreground"
 							aria-label={t("attachmentList.projectFiles")}
 							data-testid="published-micro-app-attachments-button"
 						>

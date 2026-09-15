@@ -38,6 +38,12 @@ interface TopicDesktopPanelsProps {
 	keepDetailMountedWhenHidden?: boolean
 	autoExpandConversationWhenDetailVisible?: boolean
 	persistConversationPanelState?: boolean
+	initialConversationPanelCollapsed?: boolean
+	conversationResizeHandleClassName?: string
+	conversationResizeHandleGripVariant?: "default" | "dots"
+	keepConversationResizeHandleVisibleWhenCollapsed?: boolean
+	/** Keep overlays inside an embedding page instead of anchoring them to the viewport. */
+	historyOverlayScope?: "viewport" | "container"
 	historyLayout?: TopicDesktopPanelsHistoryLayout
 	shouldShowDetailPanel: boolean
 	renderMessagePanel: (params: {
@@ -63,6 +69,11 @@ function TopicDesktopPanels({
 	keepDetailMountedWhenHidden = false,
 	autoExpandConversationWhenDetailVisible = true,
 	persistConversationPanelState = true,
+	initialConversationPanelCollapsed = false,
+	conversationResizeHandleClassName,
+	conversationResizeHandleGripVariant = "default",
+	keepConversationResizeHandleVisibleWhenCollapsed = false,
+	historyOverlayScope = "viewport",
 	historyLayout,
 	shouldShowDetailPanel,
 	renderMessagePanel,
@@ -90,6 +101,7 @@ function TopicDesktopPanels({
 		isReadOnly,
 		allowProjectSiderResize: showProjectSidebar && showProjectResizeHandle,
 		persistConversationPanelState,
+		initialConversationPanelCollapsed,
 	})
 	// Preserve the stored project width while removing both its visual slot and resize affordance.
 	const projectSiderWidthPx = showProjectSidebar ? storedProjectSiderWidthPx : 0
@@ -225,6 +237,45 @@ function TopicDesktopPanels({
 		)
 	}
 
+	const fixedTopicHistory =
+		isFixedTopicHistory && visibleTopicHistoryMode ? (
+			<div
+				className={
+					historyOverlayScope === "container"
+						? "pointer-events-none absolute inset-y-0 right-0 z-40"
+						: topicHistorySafeAreaPortalClassName
+				}
+			>
+				<div className="pointer-events-auto h-full">
+					{renderTopicHistoryShell(visibleTopicHistoryMode)}
+				</div>
+			</div>
+		) : null
+	const drawerTopicHistory = isDrawerTopicHistory ? (
+		<div
+			className={cn(
+				"pointer-events-none z-50",
+				historyOverlayScope === "container" ? "absolute inset-0" : "fixed inset-0",
+			)}
+		>
+			<div
+				className="pointer-events-auto absolute inset-0 bg-transparent"
+				data-testid="topic-history-panel-dismiss-area"
+				onClick={onCloseTopicHistoryPanel}
+				aria-hidden="true"
+			/>
+			<div
+				className={
+					historyOverlayScope === "container"
+						? "pointer-events-auto absolute inset-y-0 right-0"
+						: topicHistorySafeAreaDrawerClassName
+				}
+			>
+				{renderTopicHistoryShell("drawer")}
+			</div>
+		</div>
+	) : null
+
 	return (
 		<div
 			ref={containerRef}
@@ -320,11 +371,16 @@ function TopicDesktopPanels({
 						>
 							<TopicResizeHandle
 								disabled={isConversationPanelCollapsed || !shouldShowDetailPanel}
+								gripVariant={conversationResizeHandleGripVariant}
+								visibleWhenDisabled={
+									keepConversationResizeHandleVisibleWhenCollapsed
+								}
 								onResizeStart={(clientX) => {
 									startDragMessagePanel(clientX)
 								}}
 								className={cn(
 									"h-full w-full shrink-0",
+									conversationResizeHandleClassName,
 									!isDraggingMessagePanel && "transition-opacity duration-150",
 									(isConversationPanelCollapsed || !shouldShowDetailPanel) &&
 										"pointer-events-none",
@@ -359,32 +415,16 @@ function TopicDesktopPanels({
 								style={{ width: TOPIC_HISTORY_PANEL_WIDTH - 8 }}
 								aria-hidden="true"
 							/>
-							{createPortal(
-								<div className={topicHistorySafeAreaPortalClassName}>
-									<div className="pointer-events-auto h-full">
-										{renderTopicHistoryShell(visibleTopicHistoryMode)}
-									</div>
-								</div>,
-								document.body,
-							)}
+							{historyOverlayScope === "container"
+								? fixedTopicHistory
+								: createPortal(fixedTopicHistory, document.body)}
 						</>
 					) : null}
 
 					{isDrawerTopicHistory
-						? createPortal(
-								<div className="pointer-events-none fixed inset-0 z-50">
-									<div
-										className="pointer-events-auto absolute inset-0 bg-transparent"
-										data-testid="topic-history-panel-dismiss-area"
-										onClick={onCloseTopicHistoryPanel}
-										aria-hidden="true"
-									/>
-									<div className={topicHistorySafeAreaDrawerClassName}>
-										{renderTopicHistoryShell("drawer")}
-									</div>
-								</div>,
-								document.body,
-							)
+						? historyOverlayScope === "container"
+							? drawerTopicHistory
+							: createPortal(drawerTopicHistory, document.body)
 						: null}
 				</div>
 			</div>

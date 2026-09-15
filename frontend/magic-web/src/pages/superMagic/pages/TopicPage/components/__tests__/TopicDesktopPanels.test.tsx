@@ -21,8 +21,21 @@ vi.mock("../../hooks/useTopicDesktopPanelMotion", () => ({
 }))
 
 vi.mock("../TopicResizeHandle", () => ({
-	default: ({ className }: { className?: string }) => (
-		<div className={className} data-testid="mock-topic-resize-handle" />
+	default: ({
+		className,
+		gripVariant,
+		visibleWhenDisabled,
+	}: {
+		className?: string
+		gripVariant?: string
+		visibleWhenDisabled?: boolean
+	}) => (
+		<div
+			className={className}
+			data-grip-variant={gripVariant}
+			data-visible-when-disabled={visibleWhenDisabled ? "true" : undefined}
+			data-testid="mock-topic-resize-handle"
+		/>
 	),
 }))
 
@@ -149,6 +162,29 @@ describe("TopicDesktopPanels", () => {
 		)
 	})
 
+	it("forwards the embedded conversation resize-handle appearance", () => {
+		renderComponent({
+			showProjectSidebar: false,
+			conversationResizeHandleGripVariant: "dots",
+			conversationResizeHandleClassName: "border-l border-border !bg-sidebar",
+			keepConversationResizeHandleVisibleWhenCollapsed: true,
+		})
+
+		expect(screen.getByTestId("mock-topic-resize-handle")).toHaveClass(
+			"border-l",
+			"border-border",
+			"!bg-sidebar",
+		)
+		expect(screen.getByTestId("mock-topic-resize-handle")).toHaveAttribute(
+			"data-grip-variant",
+			"dots",
+		)
+		expect(screen.getByTestId("mock-topic-resize-handle")).toHaveAttribute(
+			"data-visible-when-disabled",
+			"true",
+		)
+	})
+
 	it("switchable layout can disable automatic conversation expansion", () => {
 		renderComponent({ autoExpandConversationWhenDetailVisible: false })
 
@@ -156,6 +192,14 @@ describe("TopicDesktopPanels", () => {
 		motionOptions.ensureExpandedWhenDetailVisible(true)
 
 		expect(layoutState.ensureExpandedWhenDetailVisible).not.toHaveBeenCalled()
+	})
+
+	it("forwards the initial collapsed state to the shared layout store", () => {
+		renderComponent({ initialConversationPanelCollapsed: true })
+
+		expect(mockUseTopicDesktopLayout).toHaveBeenCalledWith(
+			expect.objectContaining({ initialConversationPanelCollapsed: true }),
+		)
 	})
 
 	it("在无预览区且打开历史话题时渲染 full-right 固定面板", () => {
@@ -225,6 +269,26 @@ describe("TopicDesktopPanels", () => {
 		expect(screen.getByTestId("topic-history-panel-fixed")).toBeInTheDocument()
 		expect(screen.queryByTestId("topic-history-panel-drawer")).not.toBeInTheDocument()
 		expect(screen.getAllByTestId("mock-topic-resize-handle")).toHaveLength(2)
+	})
+
+	it("容器级历史面板保持在当前页面布局内", () => {
+		renderComponent({ historyOverlayScope: "container" })
+
+		const mainContent = screen.getByTestId("topic-desktop-main-content")
+		expect(mainContent).toContainElement(screen.getByTestId("topic-history-panel-fixed"))
+	})
+
+	it("容器级抽屉及点击区域保持在当前页面布局内", () => {
+		motionState = createMotionState({
+			topicHistoryMode: "drawer",
+			canShowFixedTopicHistory: false,
+		})
+
+		renderComponent({ historyOverlayScope: "container" })
+
+		const mainContent = screen.getByTestId("topic-desktop-main-content")
+		expect(mainContent).toContainElement(screen.getByTestId("topic-history-panel-drawer"))
+		expect(mainContent).toContainElement(screen.getByTestId("topic-history-panel-dismiss-area"))
 	})
 
 	it("在有预览区且阈值不满足时渲染 256px 抽屉和 backdrop", () => {

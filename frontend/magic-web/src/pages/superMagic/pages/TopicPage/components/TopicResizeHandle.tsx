@@ -5,11 +5,14 @@ import {
 	type PointerEvent as ReactPointerEvent,
 } from "react"
 import ReactDOM from "react-dom"
+import { ResizeGrip } from "@/pages/superMagic/components/ResizeGrip/ResizeGrip"
 import { cn } from "@/utils/cn"
 
 interface TopicResizeHandleProps {
 	className?: string
 	disabled?: boolean
+	gripVariant?: "default" | "dots"
+	visibleWhenDisabled?: boolean
 	onResizeStart: (clientX: number) => void
 	style?: CSSProperties
 }
@@ -18,6 +21,8 @@ interface TopicResizeHandleProps {
 function TopicResizeHandle({
 	className,
 	disabled = false,
+	gripVariant = "default",
+	visibleWhenDisabled = false,
 	onResizeStart,
 	style,
 }: TopicResizeHandleProps) {
@@ -52,6 +57,7 @@ function TopicResizeHandle({
 			<div
 				style={style}
 				data-slot="resizable-handle"
+				data-resizing={isDragging ? "true" : undefined}
 				onPointerDown={handlePointerDown}
 				className={cn(
 					"focus-visible:outline-hidden relative flex w-px items-center justify-center bg-border focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full [&[data-panel-group-direction=vertical]>div]:rotate-90",
@@ -61,7 +67,8 @@ function TopicResizeHandle({
 					"before:opacity-0 before:transition-opacity before:duration-200 hover:before:opacity-100",
 					"data-[panel-group-direction=vertical]:!h-2 data-[panel-group-direction=vertical]:!w-full",
 					"data-[panel-group-direction=vertical]:before:bg-gradient-to-r",
-					disabled && "pointer-events-none opacity-0",
+					disabled && "pointer-events-none",
+					disabled && !visibleWhenDisabled && "opacity-0",
 					className,
 				)}
 				data-testid="handle-mouse-down"
@@ -72,10 +79,14 @@ function TopicResizeHandle({
 					data-testid="resize-handle-hit-area"
 					aria-hidden="true"
 				/>
-				<div className="pointer-events-none relative z-10 flex h-5 shrink-0 items-center justify-center gap-0.5 data-[panel-group-direction=vertical]:h-auto data-[panel-group-direction=vertical]:w-5 data-[panel-group-direction=vertical]:flex-col">
-					<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />
-					<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />
-				</div>
+				{gripVariant === "dots" ? (
+					<ResizeGrip orientation="vertical" />
+				) : (
+					<div className="pointer-events-none relative z-10 flex h-5 shrink-0 items-center justify-center gap-0.5 data-[panel-group-direction=vertical]:h-auto data-[panel-group-direction=vertical]:w-5 data-[panel-group-direction=vertical]:flex-col">
+						<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />
+						<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />
+					</div>
+				)}
 			</div>
 
 			{isDragging &&

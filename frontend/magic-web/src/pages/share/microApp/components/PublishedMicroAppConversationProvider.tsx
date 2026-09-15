@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { observer } from "mobx-react-lite"
-import { PanelRightOpen, PanelRightClose } from "lucide-react"
+import { PanelRightClose } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { SuperMagicApi } from "@/apis"
 import type { MicroAppRuntimeProject } from "@/apis/modules/superMagic/microApps"
 import { createMentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
+import { MessageHeaderTopicHistoryPanel } from "@/pages/superMagic/components/MessageHeader"
+import { useScopedMessageHeaderTopicActions } from "@/pages/superMagic/hooks/useScopedMessageHeaderTopicActions"
 import { AppStoreProvider, useAppStore } from "@/pages/superMagic/pages/MicroAppPage/context"
 import AppConversationPanel from "@/pages/superMagic/pages/MicroAppPage/components/AppConversationPanel"
+import TopicDesktopPanels from "@/pages/superMagic/pages/TopicPage/components/TopicDesktopPanels"
+import {
+	TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS,
+	useTopicHistoryLayoutState,
+} from "@/pages/superMagic/pages/TopicPage/hooks/useTopicHistoryLayoutState"
 import { ProjectFilesStore } from "@/stores/projectFiles"
-import { cn } from "@/utils/cn"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import { userStore } from "@/models/user"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
-import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { cn } from "@/utils/cn"
 
 import PublishedMicroAppAttachmentPopover from "./PublishedMicroAppAttachmentPopover"
 
@@ -39,12 +45,10 @@ const PublishedMicroAppConversationSurface = observer(
 		const { t } = useTranslation("super")
 		const appStore = useAppStore()
 		const { conversation } = appStore
-		const fileAccess = useFileAccess()
 		const [runtimeProject, setRuntimeProject] = useState<ProjectListItem | null>(null)
 		const [runtimeProjectState, setRuntimeProjectState] = useState<
 			"loading" | "absent" | "ready"
 		>("loading")
-		const [isOpen, setIsOpen] = useState(false)
 		const runtimeRequestIdRef = useRef(0)
 		const ensurePromiseRef = useRef<Promise<{
 			selectedProject: ProjectListItem
@@ -56,6 +60,17 @@ const PublishedMicroAppConversationSurface = observer(
 			() => createMentionPanelStore(projectFilesStore),
 			[projectFilesStore],
 		)
+		const topicActions = useScopedMessageHeaderTopicActions({
+			selectedProject: runtimeProject,
+			selectedTopic: conversation.topicStore.selectedTopic,
+			topicStore: conversation.topicStore,
+		})
+		const { isTopicHistoryPanelOpen, closeTopicHistoryPanel, toggleTopicHistoryPanel } =
+			useTopicHistoryLayoutState({
+				storageKey: `${TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.microApp}.published`,
+				isEnabled: runtimeProjectState === "ready",
+				persistOpenState: false,
+			})
 
 		const loadRuntimeProject = useCallback(
 			async (project: Pick<MicroAppRuntimeProject, "id">, isCurrent: () => boolean) => {
@@ -67,7 +82,9 @@ const PublishedMicroAppConversationSurface = observer(
 				try {
 					const attachmentResult = await loadProjectAttachments({
 						projectId: loadedProject.id,
-						access: fileAccess,
+						// Runtime-project files use the authenticated session. The share token
+						// belongs to the published origin project and would force the loader
+						// to read share resource files instead of this runtime project.
 						enableErrorMessagePrompt: false,
 					})
 					if (!isCurrent()) return false
@@ -85,7 +102,7 @@ const PublishedMicroAppConversationSurface = observer(
 				setRuntimeProjectState("ready")
 				return true
 			},
-			[conversation, fileAccess, projectFilesStore],
+			[conversation, projectFilesStore],
 		)
 
 		useEffect(() => {
@@ -149,59 +166,111 @@ const PublishedMicroAppConversationSurface = observer(
 				topicStore={conversation.topicStore}
 				ensureConversation={ensureConversation}
 			>
-				<div className="relative flex h-full min-h-0 w-full overflow-hidden">
-					<div className="min-w-0 flex-1">{children}</div>
-					{runtimeProjectState === "ready" && isOpen ? (
+				<TopicDesktopPanels
+					containerClassName="h-full w-full overflow-hidden"
+					detailPanelClassName="h-full w-full"
+					isDetailPanelFullscreen={false}
+					sidebar={null}
+					detailPanel={children}
+					isReadOnly={runtimeProjectState !== "ready"}
+					showProjectSidebar={false}
+					showProjectResizeHandle={false}
+					autoExpandConversationWhenDetailVisible={false}
+					initialConversationPanelCollapsed
+					persistConversationPanelState={false}
+					conversationResizeHandleGripVariant="dots"
+					conversationResizeHandleClassName="border-l border-border !bg-sidebar"
+					keepConversationResizeHandleVisibleWhenCollapsed
+					historyOverlayScope="container"
+					historyLayout={{
+						isOpen: isTopicHistoryPanelOpen,
+						onClose: closeTopicHistoryPanel,
+						onToggle: toggleTopicHistoryPanel,
+						renderPanel: ({
+							isConversationPanelCollapsed,
+							onExpandConversationPanel,
+							onClose,
+							closeButtonRef,
+						}) => (
+							<MessageHeaderTopicHistoryPanel
+								selectedProject={runtimeProject}
+								topicStore={conversation.topicStore}
+								topicActions={topicActions}
+								isConversationPanelCollapsed={isConversationPanelCollapsed}
+								onExpandConversationPanel={onExpandConversationPanel}
+								hideTopicListModeIcon
+								onClose={onClose}
+								closeButtonRef={closeButtonRef}
+							/>
+						),
+					}}
+					shouldShowDetailPanel
+					renderMessagePanel={({
+						isConversationPanelCollapsed,
+						onToggleConversationPanel,
+						onExpandConversationPanel,
+						historyTriggerMode,
+						isHistoryPanelOpen,
+						onToggleHistoryPanel,
+					}) => (
 						<aside
-							className="absolute inset-0 z-10 flex min-w-0 flex-col bg-background md:relative md:inset-auto md:w-[360px] md:shrink-0 md:border-l md:border-border"
+							className={cn(
+								"flex h-full min-h-0 flex-col",
+								isConversationPanelCollapsed
+									? "border-l border-border bg-sidebar"
+									: "bg-background",
+							)}
 							data-testid="published-micro-app-conversation-panel"
 						>
-							<div className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
-								<span className="min-w-0 text-sm font-medium">
-									{t("microAppPage.conversation.title")}
-								</span>
-								<div className="flex items-center gap-1">
-									<PublishedMicroAppAttachmentPopover
-										attachments={projectFilesStore.workspaceFileTree}
-									/>
-									<button
-										type="button"
-										className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-										onClick={() => setIsOpen(false)}
-										aria-label={t("microAppPage.conversation.collapse")}
-									>
-										<PanelRightClose size={16} />
-									</button>
+							{!isConversationPanelCollapsed ? (
+								<div
+									className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3"
+									data-testid="published-micro-app-conversation-header"
+								>
+									<span className="min-w-0 text-sm font-medium">
+										{t("microAppPage.conversation.title")}
+									</span>
+									<div className="flex items-center gap-1">
+										<PublishedMicroAppAttachmentPopover
+											attachments={projectFilesStore.workspaceFileTree}
+										/>
+										<button
+											type="button"
+											className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+											onClick={onToggleConversationPanel}
+											aria-label={t("microAppPage.conversation.collapse")}
+										>
+											<PanelRightClose size={16} />
+										</button>
+									</div>
 								</div>
-							</div>
+							) : null}
 							<div className="min-h-0 flex-1">
 								<AppConversationPanel
 									selectedProject={runtimeProject}
 									topicStore={conversation.topicStore}
-									hideConversationPanelToggle
 									mentionPanelStore={mentionPanelStore}
 									projectFilesStore={projectFilesStore}
 									detailPanelVisible
-									onExpandConversationPanel={() => setIsOpen(true)}
+									isConversationPanelCollapsed={isConversationPanelCollapsed}
+									onToggleConversationPanel={onToggleConversationPanel}
+									onExpandConversationPanel={onExpandConversationPanel}
+									hideConversationPanelToggle={!isConversationPanelCollapsed}
+									historyTriggerMode={historyTriggerMode}
+									isHistoryPanelOpen={isHistoryPanelOpen}
+									onToggleHistoryPanel={onToggleHistoryPanel}
+									trailingActions={
+										isConversationPanelCollapsed ? (
+											<PublishedMicroAppAttachmentPopover
+												attachments={projectFilesStore.workspaceFileTree}
+											/>
+										) : undefined
+									}
 								/>
 							</div>
 						</aside>
-					) : runtimeProjectState === "ready" ? (
-						<aside className="flex h-full w-10 shrink-0 items-start justify-center border-l border-border bg-background py-2">
-							<button
-								type="button"
-								className={cn(
-									"rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-								)}
-								onClick={() => setIsOpen(true)}
-								aria-label={t("microAppPage.conversation.expand")}
-								data-testid="published-micro-app-conversation-expand"
-							>
-								<PanelRightOpen size={16} />
-							</button>
-						</aside>
-					) : null}
-				</div>
+					)}
+				/>
 			</HostConversationProvider>
 		)
 	},
