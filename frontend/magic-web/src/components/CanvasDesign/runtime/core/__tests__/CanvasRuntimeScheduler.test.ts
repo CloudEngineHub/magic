@@ -3,12 +3,13 @@ import type { Canvas } from "../Canvas"
 import { CanvasRuntimeScheduler } from "../CanvasRuntimeScheduler"
 
 function createCanvasStub() {
-	const stage = { batchDraw: vi.fn() }
-	const contentLayer = { batchDraw: vi.fn() }
-	const selectionLayer = { batchDraw: vi.fn() }
-	const controlsLayer = { batchDraw: vi.fn() }
-	const markersLayer = { batchDraw: vi.fn() }
-	const overlayLayer = { batchDraw: vi.fn() }
+	const createDrawTarget = () => ({ draw: vi.fn(), batchDraw: vi.fn() })
+	const stage = createDrawTarget()
+	const contentLayer = createDrawTarget()
+	const selectionLayer = createDrawTarget()
+	const controlsLayer = createDrawTarget()
+	const markersLayer = createDrawTarget()
+	const overlayLayer = createDrawTarget()
 
 	return {
 		canvas: {
@@ -29,7 +30,7 @@ function createCanvasStub() {
 }
 
 describe("CanvasRuntimeScheduler", () => {
-	it("coalesces multiple draw requests for the same layer into one batchDraw", () => {
+	it("coalesces multiple draw requests for the same layer into one draw", () => {
 		const { canvas, contentLayer } = createCanvasStub()
 		const scheduler = new CanvasRuntimeScheduler({ canvas })
 
@@ -43,7 +44,8 @@ describe("CanvasRuntimeScheduler", () => {
 		})
 		scheduler.flushDraws()
 
-		expect(contentLayer.batchDraw).toHaveBeenCalledTimes(1)
+		expect(contentLayer.draw).toHaveBeenCalledTimes(1)
+		expect(contentLayer.batchDraw).not.toHaveBeenCalled()
 		expect(scheduler.getSnapshot()).toEqual(
 			expect.objectContaining({
 				drawRequestCount: 2,
@@ -75,9 +77,10 @@ describe("CanvasRuntimeScheduler", () => {
 		})
 		scheduler.flushDraws()
 
-		expect(stage.batchDraw).toHaveBeenCalledTimes(1)
-		expect(contentLayer.batchDraw).not.toHaveBeenCalled()
-		expect(controlsLayer.batchDraw).not.toHaveBeenCalled()
+		expect(stage.draw).toHaveBeenCalledTimes(1)
+		expect(stage.batchDraw).not.toHaveBeenCalled()
+		expect(contentLayer.draw).not.toHaveBeenCalled()
+		expect(controlsLayer.draw).not.toHaveBeenCalled()
 		expect(scheduler.getSnapshot()).toEqual(
 			expect.objectContaining({
 				drawRequestCount: 3,
@@ -99,7 +102,7 @@ describe("CanvasRuntimeScheduler", () => {
 		scheduler.destroy()
 		scheduler.flushDraws()
 
-		expect(contentLayer.batchDraw).not.toHaveBeenCalled()
+		expect(contentLayer.draw).not.toHaveBeenCalled()
 		expect(scheduler.getSnapshot()).toEqual(
 			expect.objectContaining({
 				destroyed: true,

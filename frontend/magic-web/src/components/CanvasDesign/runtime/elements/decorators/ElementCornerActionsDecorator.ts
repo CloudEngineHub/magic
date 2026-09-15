@@ -424,7 +424,7 @@ export class ElementCornerActionsDecorator {
 		return touch ? { clientX: touch.clientX, clientY: touch.clientY } : {}
 	}
 
-	public updateButtonScale(): void {
+	public updateButtonScale(options?: { refreshActions?: boolean }): void {
 		if (!this.rootGroup) return
 
 		const stage = this.group.getStage()
@@ -449,7 +449,7 @@ export class ElementCornerActionsDecorator {
 
 		const placementOffsets = new Map<ElementCornerActionPlacement, number>()
 		this.config.actions.forEach((action) => {
-			this.refreshAction(action)
+			if (options?.refreshActions !== false) this.refreshAction(action)
 			const actionGroup = this.actionGroups.get(action.key)
 			if (!actionGroup || !actionGroup.visible()) return
 			const scaledButtonWidth = actionGroup.width() * inverseScaleX
@@ -518,9 +518,9 @@ export class ElementCornerActionsDecorator {
 	private setupViewportScaleListener(): void {
 		if (this.viewportScaleHandler) return
 		this.viewportScaleHandler = () => {
-			this.syncHoverStateFromCanvas()
-			this.updateButtonScale()
-			this.rootGroup?.getLayer()?.batchDraw()
+			// 未展示的控件会在下一次 show() 时同步布局；缩放帧无需遍历其按钮。
+			if (!this.isHovering || !this.rootGroup) return
+			this.updateButtonScale({ refreshActions: false })
 		}
 		this.config.canvas.eventEmitter.on("viewport:scale", this.viewportScaleHandler)
 	}

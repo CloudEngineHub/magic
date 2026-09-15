@@ -183,6 +183,43 @@ describe("ElementCornerActionsDecorator", () => {
 		stage.destroy()
 	})
 
+	it("skips hidden actions and does not request a per-element draw during viewport scaling", () => {
+		const previousAutoDrawEnabled = Konva.autoDrawEnabled
+		Konva.autoDrawEnabled = false
+		try {
+			const { group, stage } = createStageGroup()
+			const { canvas, handlers, setHoveredElementId } = createCanvasMock()
+			const decorator = createDecorator(group, canvas)
+
+			decorator.create()
+			const action = group.findOne<Konva.Group>(".decorator-corner-action-fullscreen")
+			const actionScaleSpy = vi.spyOn(action as Konva.Group, "scale")
+			const layerDrawSpy = vi.spyOn(group.getLayer() as Konva.Layer, "batchDraw")
+
+			stage.scale({ x: 2, y: 2 })
+			handlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
+			expect(actionScaleSpy).not.toHaveBeenCalled()
+			expect(layerDrawSpy).not.toHaveBeenCalled()
+
+			setHoveredElementId("image-1")
+			handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
+			expect(action?.scaleX()).toBe(0.5)
+
+			actionScaleSpy.mockClear()
+			layerDrawSpy.mockClear()
+			stage.scale({ x: 4, y: 4 })
+			handlers.get("viewport:scale")?.[0]?.({ data: { scale: 4 } })
+			expect(actionScaleSpy).toHaveBeenCalledTimes(1)
+			expect(action?.scaleX()).toBe(0.25)
+			expect(layerDrawSpy).not.toHaveBeenCalled()
+
+			decorator.destroy()
+			stage.destroy()
+		} finally {
+			Konva.autoDrawEnabled = previousAutoDrawEnabled
+		}
+	})
+
 	it("keeps actions hidden while a connection drag is active", () => {
 		const { group, stage } = createStageGroup()
 		const { canvas, handlers, setConnectionDragging, setHoveredElementId } = createCanvasMock()

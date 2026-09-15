@@ -648,6 +648,35 @@ export class VideoRenderer {
 		})
 	}
 
+	/**
+	 * 更新视口缩放会影响的播放器属性。
+	 * 宽高、图标路径和圆角在元素尺寸变化时才需要重算，连续缩放只需调整反向缩放和进度条位置。
+	 */
+	public updatePlayerViewportScaleLayout(parentGroup: Konva.Group): void {
+		if (!this.playerRefs) return
+
+		const { group, bufferingOverlay, playButtonGroup, progressGroup, progressBackground } =
+			this.playerRefs
+		const inverseScale = RenderUtils.getInverseScale(parentGroup)
+		const width = group.width()
+		const height = group.height()
+
+		bufferingOverlay.position({ x: width / 2, y: height / 2 })
+		bufferingOverlay.scale(inverseScale)
+		playButtonGroup.position({ x: width / 2, y: height / 2 })
+		playButtonGroup.scale(inverseScale)
+
+		const absoluteScale = parentGroup.getAbsoluteScale()
+		const paddingX = resolveImageControlCanvasOffset(Math.abs(absoluteScale.x))
+		const paddingY = resolveImageControlCanvasOffset(Math.abs(absoluteScale.y))
+		progressGroup.scale(inverseScale)
+		const progressHeight = progressBackground.height() * inverseScale.y
+		progressGroup.position({
+			x: paddingX,
+			y: height - progressHeight - paddingY,
+		})
+	}
+
 	private updatePlayerUi(snapshot: ReturnType<VideoMediaState["getSnapshot"]>): void {
 		if (!this.playerRefs) {
 			return

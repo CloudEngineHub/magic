@@ -143,7 +143,12 @@ export class GeometryCacheManager {
 		options?: { elementIds?: Iterable<string> },
 	): string[] {
 		const queryRect = expandRect(rect, padding)
-		const allowedIds = options?.elementIds ? new Set(options.elementIds) : null
+		const candidateElementIds = options?.elementIds
+		const allowedIds: ReadonlySet<string> | null = candidateElementIds
+			? candidateElementIds instanceof Set
+				? candidateElementIds
+				: new Set(candidateElementIds)
+			: null
 		const estimatedCellCount = this.getCellCountForRect(queryRect)
 
 		if (allowedIds && this.shouldDirectScanAllowedIds(allowedIds, estimatedCellCount)) {
@@ -261,12 +266,15 @@ export class GeometryCacheManager {
 		this.spatialIndexDirty = false
 	}
 
-	private shouldDirectScanAllowedIds(allowedIds: Set<string>, cellCount: number): boolean {
+	private shouldDirectScanAllowedIds(
+		allowedIds: ReadonlySet<string>,
+		cellCount: number,
+	): boolean {
 		if (allowedIds.size === 0) return true
 		return cellCount > allowedIds.size * DIRECT_SCAN_CELL_TO_ALLOWED_RATIO
 	}
 
-	private queryAllowedIdsByRect(allowedIds: Set<string>, queryRect: Rect): string[] {
+	private queryAllowedIdsByRect(allowedIds: ReadonlySet<string>, queryRect: Rect): string[] {
 		const result: string[] = []
 		allowedIds.forEach((elementId) => {
 			if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return

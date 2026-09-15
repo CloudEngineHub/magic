@@ -92,7 +92,9 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private isInlinePlaybackRefreshing = false
 	private isResourceErrorState = false
 	private isGenerationErrorState = false
-	private contentUpdateHandler?: () => void
+	private contentViewportScaleHandler?: () => void
+	private contentTransformHandler?: () => void
+	private contentLayoutGroup?: Konva.Group
 	private contentPreviewUnsubscribe?: () => void
 	private effectiveContentId?: string
 	private effectiveContentSrc?: string
@@ -1401,32 +1403,46 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private setupContentUpdateListener(group: Konva.Group): void {
-		if (this.contentUpdateHandler) {
+		if (this.contentViewportScaleHandler || this.contentTransformHandler) {
 			return
 		}
 
-		this.contentUpdateHandler = () => {
+		const updateViewportContentLayout = () => {
+			const width = this.data.width || 0
+			const height = this.data.height || 0
+			this.renderer.updatePlaceholderContentLayout(group, width, height)
+			this.renderer.updatePlayerViewportScaleLayout(group)
+		}
+		const updateContentLayout = () => {
 			const width = this.data.width || 0
 			const height = this.data.height || 0
 			this.renderer.updatePlaceholderContentLayout(group, width, height)
 			this.renderer.updatePlayerLayout(group, width, height)
+		}
+		this.contentLayoutGroup = group
+		this.contentViewportScaleHandler = updateViewportContentLayout
+		this.contentTransformHandler = () => {
+			updateContentLayout()
 			group.getLayer()?.batchDraw()
 		}
 
-		this.canvas.eventEmitter.on("viewport:scale", this.contentUpdateHandler)
-		group.on("transform", this.contentUpdateHandler)
+		// 缩放帧由 ViewportController 统一绘制；元素 transform 仍需主动请求重绘。
+		this.canvas.eventEmitter.on("viewport:scale", this.contentViewportScaleHandler)
+		group.on("transform", this.contentTransformHandler)
 	}
 
 	private removeContentUpdateListener(): void {
-		if (this.contentUpdateHandler) {
-			this.canvas.eventEmitter.off("viewport:scale", this.contentUpdateHandler)
+		if (this.contentViewportScaleHandler) {
+			this.canvas.eventEmitter.off("viewport:scale", this.contentViewportScaleHandler)
 		}
 
-		if (this.node instanceof Konva.Group && this.contentUpdateHandler) {
-			this.node.off("transform", this.contentUpdateHandler)
+		if (this.contentLayoutGroup && this.contentTransformHandler) {
+			this.contentLayoutGroup.off("transform", this.contentTransformHandler)
 		}
 
-		this.contentUpdateHandler = undefined
+		this.contentViewportScaleHandler = undefined
+		this.contentTransformHandler = undefined
+		this.contentLayoutGroup = undefined
 	}
 
 	private syncRenderLayout(width: number, height: number): void {

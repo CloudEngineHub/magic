@@ -419,6 +419,22 @@ describe("HoverManager", () => {
 		manager.destroy()
 	})
 
+	it("hit-tests once when zoom emits scale and pan in the same update", async () => {
+		const { eventHandlers, getPointerPosition, manager } = createHoverManager({
+			geometryHitIds: ["element-1"],
+		})
+
+		eventHandlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
+
+		expect(getPointerPosition).toHaveBeenCalledTimes(1)
+
+		await Promise.resolve()
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 30, y: 40 } })
+		expect(getPointerPosition).toHaveBeenCalledTimes(2)
+		manager.destroy()
+	})
+
 	it("skips Konva intersection lookup during viewport refresh without connections", () => {
 		const { eventHandlers, getIntersection, manager } = createHoverManager({
 			geometryHitIds: ["element-1"],

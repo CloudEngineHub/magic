@@ -227,7 +227,10 @@ export class CanvasRuntimeScheduler {
 
 			const target = this.getDrawTarget(pending.layerName)
 			if (!target) continue
-			target.batchDraw()
+			// The scheduler has already coalesced requests and entered its RAF callback. Calling
+			// Konva.batchDraw() here would enqueue another RAF, adding a frame of input latency and
+			// making flush duration/count stats describe scheduling instead of the actual draw.
+			target.draw()
 			this.drawnCount += 1
 			this.layerStats[pending.layerName].drawnCount += 1
 			this.layerStats[pending.layerName].lastReasons = getReasonList(pending.reasons)

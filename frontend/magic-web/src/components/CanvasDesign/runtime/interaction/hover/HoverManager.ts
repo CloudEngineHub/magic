@@ -24,6 +24,7 @@ export class HoverManager {
 	private hoverRafId: number | null = null
 	private eventUnsubscribers: Array<() => void> = []
 	private isViewportGestureActive = false
+	private skipNextSynchronousPanRefresh = false
 
 	// Hover 边框样式配置（静态属性，供其他类使用）
 	public static readonly HOVER_STROKE = "#3B82F6"
@@ -84,16 +85,24 @@ export class HoverManager {
 			this.canvas.eventEmitter.on("viewport:scale", () => {
 				if (this.isViewportGestureActive) {
 					this.clearHover()
+					this.markViewportScaleRefreshHandled()
 					return
 				}
 				this.refreshHoverAtCurrentPointer()
 				this.updateHoverStrokeWidth()
+				this.markViewportScaleRefreshHandled()
 			}),
 		)
 
 		// 监听视口平移事件，鼠标未移动时也要重新命中当前指针下的元素
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("viewport:pan", () => {
+				// A zoom update applies its final scale and position before synchronously emitting
+				// scale followed by pan. The scale handler already hit-tested that final viewport.
+				if (this.skipNextSynchronousPanRefresh) {
+					this.skipNextSynchronousPanRefresh = false
+					return
+				}
 				if (this.isViewportGestureActive) {
 					this.clearHover()
 					return
@@ -142,6 +151,13 @@ export class HoverManager {
 				this.clearHover()
 			}),
 		)
+	}
+
+	private markViewportScaleRefreshHandled(): void {
+		this.skipNextSynchronousPanRefresh = true
+		queueMicrotask(() => {
+			this.skipNextSynchronousPanRefresh = false
+		})
 	}
 
 	/**

@@ -178,6 +178,25 @@ interface ContainerRootCache {
 	rootContainers: LayerElement[]
 }
 
+interface ViewportElementQueryResult {
+	rootElementIds: Set<string>
+	renderActiveRootIds: Set<string>
+	visibleConsumerIds: Set<string>
+	nearConsumerIds: Set<string>
+	visibleImageIds: Set<string>
+	nearImageIds: Set<string>
+	visibleVideoIds: Set<string>
+	nearVideoIds: Set<string>
+	visibleAudioIds: Set<string>
+	nearAudioIds: Set<string>
+}
+
+interface VisibleMediaQueryResult {
+	visibleImageIds: Set<string>
+	visibleVideoIds: Set<string>
+	visibleAudioIds: Set<string>
+}
+
 function now(): number {
 	return typeof performance === "undefined" ? Date.now() : performance.now()
 }
@@ -343,6 +362,7 @@ export class CanvasVisibilityManager {
 	private readonly registeredImages = new Map<string, RegisteredImageElement>()
 	private readonly registeredVideos = new Map<string, RegisteredVideoElement>()
 	private readonly registeredAudios = new Map<string, RegisteredAudioElement>()
+	private readonly registeredMediaElementIds = new Set<string>()
 	private readonly lastVisibilityState = new Map<string, VisibilityState>()
 	private readonly lastVideoVisibilityState = new Map<string, VisibilityState>()
 	private readonly lastAudioVisibilityState = new Map<string, VisibilityState>()
@@ -646,6 +666,7 @@ export class CanvasVisibilityManager {
 			return
 		}
 		this.registeredImages.set(elementId, { elementId, path })
+		this.registeredMediaElementIds.add(elementId)
 		if (current) {
 			this.cancelViewportResourceSignalIfUnused("image", current.path, this.registeredImages)
 			this.canvas.imagePresentationScheduler.removeTarget(elementId)
@@ -661,6 +682,7 @@ export class CanvasVisibilityManager {
 		const registered = this.registeredImages.get(elementId)
 		if (!registered) return
 		this.registeredImages.delete(elementId)
+		this.deleteRegisteredMediaElementIdIfUnused(elementId)
 		this.cancelViewportResourceSignalIfUnused("image", registered.path, this.registeredImages)
 		this.lastVisibilityState.delete(elementId)
 		this.lastRequestedLoadState.delete(elementId)
@@ -689,6 +711,7 @@ export class CanvasVisibilityManager {
 			return
 		}
 		this.registeredVideos.set(elementId, { elementId, path })
+		this.registeredMediaElementIds.add(elementId)
 		this.lastVideoVisibilityState.delete(elementId)
 		this.lastRequestedVideoLoadState.delete(elementId)
 		this.scheduleRefresh("video:register", true)
@@ -698,6 +721,7 @@ export class CanvasVisibilityManager {
 		const registered = this.registeredVideos.get(elementId)
 		if (!registered) return
 		this.registeredVideos.delete(elementId)
+		this.deleteRegisteredMediaElementIdIfUnused(elementId)
 		this.cancelViewportResourceSignalIfUnused("video", registered.path, this.registeredVideos)
 		this.lastVideoVisibilityState.delete(elementId)
 		this.lastRequestedVideoLoadState.delete(elementId)
@@ -723,6 +747,7 @@ export class CanvasVisibilityManager {
 			return
 		}
 		this.registeredAudios.set(elementId, { elementId, path })
+		this.registeredMediaElementIds.add(elementId)
 		if (current) {
 			// 等价资源引用也可能从相对路径切换成项目绝对路径。必须更新保存的引用并
 			// 释放旧会话，否则后续刷新会继续使用旧 path 和已完成的请求去重状态。
@@ -738,6 +763,7 @@ export class CanvasVisibilityManager {
 		const registered = this.registeredAudios.get(elementId)
 		if (!registered) return
 		this.registeredAudios.delete(elementId)
+		this.deleteRegisteredMediaElementIdIfUnused(elementId)
 		this.cancelViewportResourceSignalIfUnused("audio", registered.path, this.registeredAudios)
 		this.lastAudioVisibilityState.delete(elementId)
 		this.lastRequestedAudioLoadState.delete(elementId)
@@ -1024,6 +1050,7 @@ export class CanvasVisibilityManager {
 		this.registeredImages.clear()
 		this.registeredVideos.clear()
 		this.registeredAudios.clear()
+		this.registeredMediaElementIds.clear()
 		this.consumerVisibilityListeners.clear()
 		this.lastConsumerVisibilityState.clear()
 		this.lastVisibilityState.clear()
@@ -1267,16 +1294,13 @@ export class CanvasVisibilityManager {
 		scaleBand: number
 	}): boolean {
 		const { reason, force, viewportRect, viewportScale, scaleBand } = options
-		if (
-			isViewportMovementReason(reason) &&
-			this.renderVisibilityController.getCulledCount() > 0
-		) {
-			return false
-		}
 		if (!this.lastQueryCoverRect || this.lastScaleBand !== scaleBand) return false
 		if (!this.canvas.geometryCacheManager.containsRect(this.lastQueryCoverRect, viewportRect)) {
 			return false
 		}
+		// The cover rect is also the render-active window used before far nodes are culled.
+		// A viewport contained by it cannot expose a culled root; crossing the boundary forces
+		// the full query below, which restores newly active roots before they are drawn.
 		if (!force) {
 			return true
 		}
@@ -1383,6 +1407,116 @@ export class CanvasVisibilityManager {
 		return Array.from(this.imageRetentionHints.values(), (hint) => ({ ...hint }))
 	}
 
+	private queryViewportElementIds(
+		viewportRect: Rect,
+		nearPadding: number,
+		includeRenderRoots: boolean,
+	): ViewportElementQueryResult {
+		const rootElementIds = new Set<string>()
+		const queryElementIds = new Set<string>()
+		if (includeRenderRoots) {
+			this.canvas.elementManager.getAllElements().forEach((element) => {
+				rootElementIds.add(element.id)
+				queryElementIds.add(element.id)
+			})
+		}
+		this.registeredMediaElementIds.forEach((elementId) => queryElementIds.add(elementId))
+		this.consumerVisibilityListeners.forEach((_, elementId) => queryElementIds.add(elementId))
+
+		// Query the geometry index once per coverage tier, then partition by media type. This
+		// avoids rebuilding and scanning separate candidate sets for every media registry.
+		const visibleElementIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+			viewportRect,
+			0,
+			{ elementIds: queryElementIds },
+		)
+		const activeElementIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+			viewportRect,
+			nearPadding,
+			{ elementIds: queryElementIds },
+		)
+		const renderActiveRootIds = new Set<string>()
+		const visibleConsumerIds = new Set<string>()
+		const nearConsumerIds = new Set<string>()
+		const visibleImageIds = new Set<string>()
+		const nearImageIds = new Set<string>()
+		const visibleVideoIds = new Set<string>()
+		const nearVideoIds = new Set<string>()
+		const visibleAudioIds = new Set<string>()
+		const nearAudioIds = new Set<string>()
+
+		visibleElementIds.forEach((elementId) => {
+			if (this.consumerVisibilityListeners.has(elementId)) visibleConsumerIds.add(elementId)
+			if (this.registeredImages.has(elementId)) visibleImageIds.add(elementId)
+			if (this.registeredVideos.has(elementId)) visibleVideoIds.add(elementId)
+			if (this.registeredAudios.has(elementId)) visibleAudioIds.add(elementId)
+		})
+		activeElementIds.forEach((elementId) => {
+			if (rootElementIds.has(elementId)) renderActiveRootIds.add(elementId)
+			if (
+				this.consumerVisibilityListeners.has(elementId) &&
+				!visibleConsumerIds.has(elementId)
+			) {
+				nearConsumerIds.add(elementId)
+			}
+			if (this.registeredImages.has(elementId) && !visibleImageIds.has(elementId)) {
+				nearImageIds.add(elementId)
+			}
+			if (this.registeredVideos.has(elementId) && !visibleVideoIds.has(elementId)) {
+				nearVideoIds.add(elementId)
+			}
+			if (this.registeredAudios.has(elementId) && !visibleAudioIds.has(elementId)) {
+				nearAudioIds.add(elementId)
+			}
+		})
+
+		return {
+			rootElementIds,
+			renderActiveRootIds,
+			visibleConsumerIds,
+			nearConsumerIds,
+			visibleImageIds,
+			nearImageIds,
+			visibleVideoIds,
+			nearVideoIds,
+			visibleAudioIds,
+			nearAudioIds,
+		}
+	}
+
+	private queryVisibleMediaElementIds(viewportRect: Rect): VisibleMediaQueryResult {
+		const visibleImageIds = new Set<string>()
+		const visibleVideoIds = new Set<string>()
+		const visibleAudioIds = new Set<string>()
+		if (this.registeredMediaElementIds.size === 0) {
+			return { visibleImageIds, visibleVideoIds, visibleAudioIds }
+		}
+
+		const visibleElementIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+			viewportRect,
+			0,
+			{ elementIds: this.registeredMediaElementIds },
+		)
+		visibleElementIds.forEach((elementId) => {
+			if (this.registeredImages.has(elementId)) visibleImageIds.add(elementId)
+			if (this.registeredVideos.has(elementId)) visibleVideoIds.add(elementId)
+			if (this.registeredAudios.has(elementId)) visibleAudioIds.add(elementId)
+		})
+
+		return { visibleImageIds, visibleVideoIds, visibleAudioIds }
+	}
+
+	private deleteRegisteredMediaElementIdIfUnused(elementId: string): void {
+		if (
+			this.registeredImages.has(elementId) ||
+			this.registeredVideos.has(elementId) ||
+			this.registeredAudios.has(elementId)
+		) {
+			return
+		}
+		this.registeredMediaElementIds.delete(elementId)
+	}
+
 	private refreshVisibility(reason: string, force: boolean): void {
 		if (
 			this.destroyed ||
@@ -1404,6 +1538,8 @@ export class CanvasVisibilityManager {
 		const farDrainReady =
 			reason === "visibility:drain" &&
 			startedAt - this.lastViewportMovementAt >= FAR_VISIBILITY_DRAIN_GRACE_MS
+		const needsRenderVisibilitySync =
+			farDrainReady || this.renderVisibilityController.getCulledCount() > 0
 
 		if (
 			this.shouldSkipViewportMovementQuery({
@@ -1428,71 +1564,19 @@ export class CanvasVisibilityManager {
 		this.lastQueryCoverRect = queryCoverRect
 		this.lastScaleBand = scaleBand
 		this.lastQueryViewportScale = viewportScale
-		const rootElementIds = this.canvas.elementManager
-			.getAllElements()
-			.map((element) => element.id)
-		const renderActiveRootIds = new Set(
-			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
-				viewportRect,
-				nearPadding,
-				{ elementIds: rootElementIds },
-			),
-		)
-		this.refreshConsumerVisibility(viewportRect, nearPadding)
-
-		const registeredImageIds: string[] = []
-		this.registeredImages.forEach((_, elementId) => {
-			registeredImageIds.push(elementId)
-		})
-		const registeredVideoIds: string[] = []
-		this.registeredVideos.forEach((_, elementId) => {
-			registeredVideoIds.push(elementId)
-		})
-		const registeredAudioIds: string[] = []
-		this.registeredAudios.forEach((_, elementId) => {
-			registeredAudioIds.push(elementId)
-		})
-		const visibleIds = new Set(
-			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
-				elementIds: registeredImageIds,
-			}),
-		)
-		const nearIds = new Set(
-			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
-				viewportRect,
-				nearPadding,
-				{ elementIds: registeredImageIds },
-			),
-		)
-		visibleIds.forEach((elementId) => nearIds.delete(elementId))
-
-		const visibleVideoIds = new Set(
-			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
-				elementIds: registeredVideoIds,
-			}),
-		)
-		const nearVideoIds = new Set(
-			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
-				viewportRect,
-				nearPadding,
-				{ elementIds: registeredVideoIds },
-			),
-		)
-		visibleVideoIds.forEach((elementId) => nearVideoIds.delete(elementId))
-
-		const visibleAudioIds = new Set(
-			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
-				elementIds: registeredAudioIds,
-			}),
-		)
-		const nearAudioIds = new Set(
-			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
-				viewportRect,
-				nearPadding,
-				{ elementIds: registeredAudioIds },
-			),
-		)
-		visibleAudioIds.forEach((elementId) => nearAudioIds.delete(elementId))
+		const {
+			rootElementIds,
+			renderActiveRootIds,
+			visibleConsumerIds,
+			nearConsumerIds,
+			visibleImageIds: visibleIds,
+			nearImageIds: nearIds,
+			visibleVideoIds,
+			nearVideoIds,
+			visibleAudioIds,
+			nearAudioIds,
+		} = this.queryViewportElementIds(viewportRect, nearPadding, needsRenderVisibilitySync)
+		this.applyConsumerVisibilityStates(visibleConsumerIds, nearConsumerIds)
 
 		const viewportCenter = getRectCenter(viewportRect)
 		const promoteInitialVisibleLoads = this.shouldPromoteInitialVisibleLoads(reason)
@@ -1741,11 +1825,13 @@ export class CanvasVisibilityManager {
 		if (isViewportMovementReason(reason)) {
 			this.scheduleFarVisibilityDrain()
 		}
-		this.renderVisibilityController.sync({
-			activeElementIds: renderActiveRootIds,
-			allElementIds: rootElementIds,
-			allowCullFar: farDrainReady,
-		})
+		if (needsRenderVisibilitySync) {
+			this.renderVisibilityController.sync({
+				activeElementIds: renderActiveRootIds,
+				allElementIds: rootElementIds,
+				allowCullFar: farDrainReady,
+			})
+		}
 		let farCount = 0
 		this.registeredImages.forEach((_, elementId) => {
 			const state: VisibilityState = visibleIds.has(elementId)
@@ -1861,40 +1947,11 @@ export class CanvasVisibilityManager {
 		const { reason, startedAt, viewportRect, viewportScale } = options
 		if (!isViewportMovementReason(reason)) return
 
-		const registeredImageIds: string[] = []
-		this.registeredImages.forEach((_, elementId) => {
-			registeredImageIds.push(elementId)
-		})
-		const registeredVideoIds: string[] = []
-		this.registeredVideos.forEach((_, elementId) => {
-			registeredVideoIds.push(elementId)
-		})
-		const registeredAudioIds: string[] = []
-		this.registeredAudios.forEach((_, elementId) => {
-			registeredAudioIds.push(elementId)
-		})
-
-		const visibleIds = new Set(
-			registeredImageIds.length > 0
-				? this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
-						elementIds: registeredImageIds,
-					})
-				: [],
-		)
-		const visibleVideoIds = new Set(
-			registeredVideoIds.length > 0
-				? this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
-						elementIds: registeredVideoIds,
-					})
-				: [],
-		)
-		const visibleAudioIds = new Set(
-			registeredAudioIds.length > 0
-				? this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
-						elementIds: registeredAudioIds,
-					})
-				: [],
-		)
+		const {
+			visibleImageIds: visibleIds,
+			visibleVideoIds,
+			visibleAudioIds,
+		} = this.queryVisibleMediaElementIds(viewportRect)
 
 		const viewportCenter = getRectCenter(viewportRect)
 		const promoteInitialVisibleLoads = this.shouldPromoteInitialVisibleLoads(reason)
@@ -2075,8 +2132,14 @@ export class CanvasVisibilityManager {
 				{ elementIds },
 			),
 		)
+		this.applyConsumerVisibilityStates(visibleIds, nearIds)
+	}
 
-		elementIds.forEach((elementId) => {
+	private applyConsumerVisibilityStates(
+		visibleIds: ReadonlySet<string>,
+		nearIds: ReadonlySet<string>,
+	): void {
+		this.consumerVisibilityListeners.forEach((listeners, elementId) => {
 			let state: CanvasConsumerVisibility = "far"
 			if (this.canvas.elementManager.isElementVisibleInDataTree(elementId)) {
 				if (visibleIds.has(elementId)) state = "visible"
@@ -2085,7 +2148,7 @@ export class CanvasVisibilityManager {
 			const previousState = this.lastConsumerVisibilityState.get(elementId)
 			this.lastConsumerVisibilityState.set(elementId, state)
 			if (previousState === state) return
-			this.consumerVisibilityListeners.get(elementId)?.forEach((listener) => listener(state))
+			listeners.forEach((listener) => listener(state))
 		})
 	}
 

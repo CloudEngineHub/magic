@@ -116,7 +116,7 @@ export class MediaMainVersionTagDecorator {
 		)
 	}
 
-	private updateLayout(): void {
+	private updateLayout(options?: { requestDraw?: boolean }): void {
 		if (!this.tag) return
 		const stage = this.elementGroup.getStage()
 		if (!stage) return
@@ -145,12 +145,15 @@ export class MediaMainVersionTagDecorator {
 		)
 		this.tag.opacity(this.config.canvas.permissionManager.can("document.write") ? 1 : 0.55)
 		this.tag.moveToTop()
-		this.tag.getLayer()?.batchDraw()
+		if (options?.requestDraw !== false) {
+			this.tag.getLayer()?.batchDraw()
+		}
 	}
 
 	private setupListeners(): void {
 		if (!this.viewportHandler) {
-			this.viewportHandler = () => this.updateLayout()
+			// ViewportController 已为缩放帧请求整 Stage 绘制，这里只同步布局属性。
+			this.viewportHandler = () => this.updateLayout({ requestDraw: false })
 			this.config.canvas.eventEmitter.on("viewport:scale", this.viewportHandler)
 		}
 		if (!this.transformHandler) {
