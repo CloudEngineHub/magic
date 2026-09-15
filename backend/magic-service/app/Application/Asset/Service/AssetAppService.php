@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Asset\Service;
 
+use App\Application\Asset\Support\ProjectFileMaterializer;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\ValueObject\AssetScope;
@@ -28,6 +29,7 @@ class AssetAppService extends AbstractAssetAppService
     public function __construct(
         private readonly AssetDomainService $assetDomainService,
         ResourceVisibilityDomainService $resourceVisibilityDomainService,
+        private readonly ProjectFileMaterializer $projectFileMaterializer,
     ) {
         parent::__construct($resourceVisibilityDomainService);
     }
@@ -37,6 +39,19 @@ class AssetAppService extends AbstractAssetAppService
         CreateAssetRequestDTO $requestDTO,
     ): AssetEntity {
         $dataIsolation = $this->createAssetDataIsolation($authorization);
+        // 未传私有桶文件键时，从有权限的项目文件生成并补齐 file_key。
+        if ($requestDTO->getAssetKind() === 'ASSET' && trim((string) $requestDTO->getFileKey()) === '') {
+            $projectId = $requestDTO->getProjectId();
+            $projectFilePath = $requestDTO->getProjectFilePath();
+            if ($projectId === null || $projectFilePath === null) {
+                ExceptionBuilder::throw(AssetErrorCode::FILE_REQUIRED);
+            }
+            $fileKey = $this->projectFileMaterializer->materialize($dataIsolation, $projectId, $projectFilePath);
+            if ($fileKey === null || $fileKey === '') {
+                ExceptionBuilder::throw(AssetErrorCode::FILE_REQUIRED);
+            }
+            $requestDTO->setFileKey($fileKey);
+        }
         $asset = $this->createAssetEntity($requestDTO, false, $dataIsolation->getCurrentOrganizationCode());
         // 素材只落在私有桶：创建前解析出 file_url 供第三方拉取；落库后的实体不含该字段，回填给响应。
         $this->resolveAssetFileUrls([$asset]);

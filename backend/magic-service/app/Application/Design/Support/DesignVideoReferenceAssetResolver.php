@@ -216,7 +216,7 @@ final class DesignVideoReferenceAssetResolver
         $dto = new CreateAssetRequestDTO();
         $dto->setAssetKind('ASSET');
         $dto->setAssetBusinessType('GENERAL');
-        $dto->setNameI18n(['default' => $name]);
+        $dto->setName($name);
         $dto->setFileKey($fileKey);
         return $dto;
     }

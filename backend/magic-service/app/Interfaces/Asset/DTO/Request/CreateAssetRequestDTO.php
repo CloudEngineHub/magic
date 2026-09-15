@@ -17,11 +17,15 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
 
     public ?int $parentId = null;
 
-    public array $nameI18n = [];
+    public ?string $name = null;
 
-    public ?array $descriptionI18n = null;
+    public ?string $description = null;
 
     public ?string $fileKey = null;
+
+    public ?int $projectId = null;
+
+    public ?string $projectFilePath = null;
 
     public ?int $status = null;
 
@@ -42,17 +46,27 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
 
     public function getNameI18n(): array
     {
-        return $this->nameI18n;
+        return ['default' => $this->name];
     }
 
-    public function getDescriptionI18n(): ?array
+    public function getDescriptionI18n(): array
     {
-        return $this->descriptionI18n;
+        return ['default' => $this->description];
     }
 
     public function getFileKey(): ?string
     {
         return $this->fileKey;
+    }
+
+    public function getProjectId(): ?int
+    {
+        return $this->projectId;
+    }
+
+    public function getProjectFilePath(): ?string
+    {
+        return $this->projectFilePath;
     }
 
     public function setAssetKind(mixed $value): void
@@ -70,19 +84,29 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
         $this->parentId = $value === null || $value === '' ? null : (int) $value;
     }
 
-    public function setNameI18n(mixed $value): void
+    public function setName(mixed $value): void
     {
-        $this->nameI18n = (array) ($value ?? []);
+        $this->name = $value === null ? null : (string) $value;
     }
 
-    public function setDescriptionI18n(mixed $value): void
+    public function setDescription(mixed $value): void
     {
-        $this->descriptionI18n = $value === null ? null : (array) $value;
+        $this->description = $value === null ? null : (string) $value;
     }
 
     public function setFileKey(mixed $value): void
     {
         $this->fileKey = $value === null ? null : (string) $value;
+    }
+
+    public function setProjectId(mixed $value): void
+    {
+        $this->projectId = $value === null || $value === '' ? null : (int) $value;
+    }
+
+    public function setProjectFilePath(mixed $value): void
+    {
+        $this->projectFilePath = $value === null || $value === '' ? null : (string) $value;
     }
 
     public function setStatus(mixed $value): void
@@ -96,9 +120,11 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
             'asset_kind' => 'nullable|string|in:ASSET,GROUP',
             'asset_business_type' => 'nullable|string|max:64',
             'parent_id' => 'nullable|integer|min:1',
-            'name_i18n' => 'nullable|array',
-            'description_i18n' => 'nullable|array',
-            'file_key' => 'required_if:asset_kind,ASSET|nullable|string|max:512',
+            'name' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'file_key' => 'nullable|string|max:512',
+            'project_id' => 'nullable|integer|min:1|required_with:project_file_path',
+            'project_file_path' => 'nullable|string|max:1024|required_with:project_id',
             'status' => 'nullable|integer|in:0,1',
         ];
     }
@@ -111,9 +137,8 @@ class CreateAssetRequestDTO extends AbstractRequestDTO
             'asset_business_type.max' => __('asset.validation.asset_business_type_max'),
             'parent_id.integer' => __('asset.validation.parent_id_integer'),
             'parent_id.min' => __('asset.validation.parent_id_min'),
-            'name_i18n.array' => __('asset.validation.name_i18n_array'),
-            'description_i18n.array' => __('asset.validation.description_i18n_array'),
-            'file_key.required_if' => __('asset.validation.file_key_required'),
+            'name.string' => __('asset.validation.name_string'),
+            'name.max' => __('asset.validation.name_max'),
             'file_key.string' => __('asset.validation.file_key_string'),
             'file_key.max' => __('asset.validation.file_key_max'),
             'status.integer' => __('asset.validation.status_integer'),

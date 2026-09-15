@@ -13,19 +13,12 @@ use App\Domain\Asset\Entity\ValueObject\AssetVisibility;
  * 保存到「我的素材库」请求。
  *
  * 相比创建资产：素材只落本地库（不做第三方合规同步），并额外携带可见范围。
- * 名称用单语言 `name`，缺省时退回父类的多语言 `name_i18n`。
+ * 名称和描述使用单语言字段，并由父类映射到默认语言。
  */
 class SaveAssetToLibraryRequestDTO extends CreateAssetRequestDTO
 {
-    public ?string $name = null;
-
     /** @var array{user_ids?: array<string>, department_ids?: array<string>} */
     public array $visibility = [];
-
-    public function getName(): ?string
-    {
-        return $this->name;
-    }
 
     public function setName(mixed $value): void
     {
@@ -43,11 +36,6 @@ class SaveAssetToLibraryRequestDTO extends CreateAssetRequestDTO
     public function setVisibility(mixed $value): void
     {
         $this->visibility = (array) ($value ?? []);
-    }
-
-    public function getNameI18n(): array
-    {
-        return $this->name === null ? parent::getNameI18n() : ['default' => $this->name];
     }
 
     /**

@@ -252,9 +252,14 @@ class AssetDomainService
      * 按用户和内容指纹查询个人素材；未找到时返回 null。
      * 查询结果用于读取已有本地记录，不会触发补校验、远程同步或其他写入操作。
      */
-    public function findPersonalAssetByContentHash(string $userId, string $contentHash): ?AssetEntity
+    /** 按用户和内容哈希查询个人资产，可选择包含未完成同步的记录。 */
+    public function findPersonalAssetByContentHash(
+        string $userId,
+        string $contentHash,
+        bool $anySyncStatus = false,
+    ): ?AssetEntity
     {
-        return $this->assets->findPersonalAssetByContentHash($userId, $contentHash);
+        return $this->assets->findPersonalAssetByContentHash($userId, $contentHash, $anySyncStatus);
     }
 
     /**

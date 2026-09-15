@@ -52,6 +52,18 @@ final class AssetRequestDTOTest extends TestCase
         self::assertSame(['default' => null], $dto->getDescriptionI18n());
     }
 
+    public function testCreateAssetDTOAcceptsProjectFileSource(): void
+    {
+        $dto = new CreateAssetRequestDTO([
+            'project_id' => '123',
+            'project_file_path' => '/images/source.png',
+        ]);
+
+        self::assertSame(123, $dto->getProjectId());
+        self::assertSame('/images/source.png', $dto->getProjectFilePath());
+        self::assertNull($dto->getFileKey());
+    }
+
     /**
      * 第三方凭证只由领域服务解析：请求里再出现这三个字段也一律被忽略，DTO 不再暴露。
      */

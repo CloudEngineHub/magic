@@ -9,6 +9,7 @@ namespace HyperfTest\Cases\Unit;
 
 use App\Application\Asset\Service\AdminAssetAppService;
 use App\Application\Asset\Service\AssetAppService;
+use App\Application\Asset\Support\ProjectFileMaterializer;
 use App\Domain\Asset\Contract\AssetProviderInterface;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
@@ -233,7 +234,7 @@ final class AssetAppServiceTest extends TestCase
             'organization_code' => 'org-a',
             'file_key' => 'assets/example.png',
         ]);
-        $service = new class($this->createMock(AssetDomainService::class), $this->visibilityDomainService()) extends AssetAppService {
+        $service = new class($this->createMock(AssetDomainService::class), $this->visibilityDomainService(), $this->projectFileMaterializer()) extends AssetAppService {
             public function resolve(array $assets): void
             {
                 $this->resolveAssetFileUrls($assets);
@@ -258,7 +259,7 @@ final class AssetAppServiceTest extends TestCase
 
     public function testCreateResolvesPrivateFileUrlBeforeEntityIsPersisted(): void
     {
-        $service = new class($this->createMock(AssetDomainService::class), $this->visibilityDomainService()) extends AssetAppService {
+        $service = new class($this->createMock(AssetDomainService::class), $this->visibilityDomainService(), $this->projectFileMaterializer()) extends AssetAppService {
             public function resolveForCreate(CreateAssetRequestDTO $requestDTO): AssetEntity
             {
                 $asset = $this->createAssetEntity($requestDTO, false, 'org-a');
@@ -295,7 +296,7 @@ final class AssetAppServiceTest extends TestCase
 
     public function testCreateLeavesFileUrlNullWhenFileCannotBeResolved(): void
     {
-        $service = new class($this->createMock(AssetDomainService::class), $this->visibilityDomainService()) extends AssetAppService {
+        $service = new class($this->createMock(AssetDomainService::class), $this->visibilityDomainService(), $this->projectFileMaterializer()) extends AssetAppService {
             public function resolveForCreate(CreateAssetRequestDTO $requestDTO): AssetEntity
             {
                 $asset = $this->createAssetEntity($requestDTO, false, 'org-a');
@@ -326,7 +327,7 @@ final class AssetAppServiceTest extends TestCase
             self::callback(static fn (AssetEntity $entity): bool => $entity->getFileKey() === 'images/example.png'),
         )->willReturn($asset);
 
-        $service = new class($domainService, $this->visibilityDomainService()) extends AssetAppService {
+        $service = new class($domainService, $this->visibilityDomainService(), $this->projectFileMaterializer()) extends AssetAppService {
             public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
             {
                 return [
@@ -350,7 +351,7 @@ final class AssetAppServiceTest extends TestCase
 
     public function testAssetCreationRejectsMissingUploadFileWithSemanticError(): void
     {
-        $service = new class($this->createMock(AssetDomainService::class), $this->visibilityDomainService()) extends AssetAppService {
+        $service = new class($this->createMock(AssetDomainService::class), $this->visibilityDomainService(), $this->projectFileMaterializer()) extends AssetAppService {
             public function createForTest(CreateAssetRequestDTO $requestDTO): AssetEntity
             {
                 return $this->createAssetEntity($requestDTO);
@@ -372,7 +373,7 @@ final class AssetAppServiceTest extends TestCase
         $domainService = $this->createMock(AssetDomainService::class);
         $domainService->expects(self::once())->method('signAgreement')->with($authorization);
 
-        $service = new AssetAppService($domainService, $this->visibilityDomainService());
+        $service = new AssetAppService($domainService, $this->visibilityDomainService(), $this->projectFileMaterializer());
         $service->signAgreement($authorization);
     }
 
@@ -556,7 +557,7 @@ final class AssetAppServiceTest extends TestCase
         $repository->method('listExistingPrincipalIdsByResourceAndType')->willReturn([]);
         $repository->method('batchInsertOrIgnore')->willReturn(1);
 
-        $service = new class($domainService, $this->visibilityDomainService($repository)) extends AssetAppService {
+        $service = new class($domainService, $this->visibilityDomainService($repository), $this->projectFileMaterializer()) extends AssetAppService {
             public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
             {
                 return [
@@ -582,7 +583,7 @@ final class AssetAppServiceTest extends TestCase
         $authorization = $this->realAssetDataIsolation('org-a', 'user-1');
         $domainService = $this->createMock(AssetDomainService::class);
         $domainService->expects(self::never())->method('saveToLibrary');
-        $service = new class($domainService, $this->visibilityDomainService()) extends AssetAppService {
+        $service = new class($domainService, $this->visibilityDomainService(), $this->projectFileMaterializer()) extends AssetAppService {
             public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
             {
                 return [];
@@ -794,12 +795,17 @@ final class AssetAppServiceTest extends TestCase
         AssetDomainService $domainService,
         ?ResourceVisibilityRepositoryInterface $repository = null,
     ): AssetAppService {
-        return new class($domainService, $this->visibilityDomainService($repository)) extends AssetAppService {
+        return new class($domainService, $this->visibilityDomainService($repository), $this->projectFileMaterializer()) extends AssetAppService {
             public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
             {
                 return array_fill_keys($fileLinks, new FileLink('', 'https://example.test/asset', 3600));
             }
         };
+    }
+
+    private function projectFileMaterializer(): ProjectFileMaterializer
+    {
+        return $this->createMock(ProjectFileMaterializer::class);
     }
 
     private function adminAssetService(
