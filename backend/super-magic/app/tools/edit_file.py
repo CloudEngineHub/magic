@@ -20,6 +20,7 @@ from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.horizon.agent_horizon import VALIDATION_ERROR_NOT_READ
 from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
 from app.tools.abstract_file_tool import AbstractFileTool
@@ -82,7 +83,8 @@ class EditFile(AbstractFileTool[EditFileParams], WorkspaceTool[EditFileParams]):
         return """\
 <!--zh
 使用编辑工具前：
-- 使用 read_file 工具了解文件的内容和上下文。如果你最近已读过文件且未被他人修改，可以基于你的知识直接编辑
+- 文件必须已有观察记录：read_file/read_files、grep_search 或可识别的单文件 shell 查看均可登记；用户提供片段不等于记录。局部读取不限制编辑位置
+- 已有记录且掌握精确目标时无需重复读取；版本变化后，仅 expected_replacements=1 且目标仍唯一匹配时允许编辑。其它情况按错误提示读取；判断依赖周边内容时也应读取
 - 验证目录路径正确
 - 如果 old_string 匹配多个位置且未指定 expected_replacements，工具将失败
 - 如果指定了 expected_replacements，匹配数量不等于它时工具将失败
@@ -93,13 +95,14 @@ class EditFile(AbstractFileTool[EditFileParams], WorkspaceTool[EditFileParams]):
 重要：完全按照文件中出现的方式复制文本，包括标点符号样式。
 
 多次编辑同一文件时：
-- 开始时读取文件一次以识别所有编辑位置
+- 开始时获取所需的精确内容，已有观察记录与足够上下文时不重复读取
 - 使用 multi_edit_file 在一次操作中应用所有更改（首选）
 - 或按顺序应用编辑而不在编辑之间重新读取文件
 - 不要在每次成功编辑后重新读取文件 - 这会浪费 token
 -->
 Before using edit tool:
-- Use the read_file tool to understand the file's contents and context. If you've already read the file recently and it hasn't been modified by others, you can edit directly based on your knowledge
+- The file must have a recorded observation from read_file/read_files, grep_search, or a recognized single-file shell view; user-provided snippets do not create a record. Partial reads do not restrict edit locations
+- With a record and exact target text, do not read again just to satisfy the tool. If the version changed, editing is allowed only when expected_replacements=1 and the target still matches exactly once. Otherwise follow the error's reading guidance; also read when your decision depends on surrounding content
 - Verify the directory path is correct
 - The tool will fail if old_string matches multiple locations and expected_replacements isn't specified
 - The tool will fail if the number of matches doesn't equal expected_replacements when it's specified
@@ -110,7 +113,7 @@ Before using edit tool:
 IMPORTANT: Copy text exactly as it appears in the file, including punctuation style.
 
 When editing the same file multiple times:
-- Read the file ONCE at the beginning to identify ALL edit locations
+- Obtain the exact content you need at the beginning; do not repeat a read when a record and sufficient context already exist
 - Use multi_edit_file to apply all changes in one operation (preferred)
 - OR apply edits sequentially without re-reading the file between edits
 - DO NOT re-read the file after each successful edit - this wastes tokens
@@ -175,11 +178,11 @@ When editing the same file multiple times:
                           "Use write_file to create new files."
                 )
 
-            # Verify file hasn't been modified externally
-            is_valid, error_message = await self.get_horizon(tool_context).validate_file_not_modified(file_path)
-            if not is_valid:
+            # 内部读取只服务本次匹配，不能替代编辑前必须已有的观察记录。
+            horizon = self.get_horizon(tool_context)
+            if not await horizon.is_file_tracked(file_path):
                 tool_context.set_metadata("error_type", "edit_file.error_file_modified")
-                return ToolResult.error(error_message)
+                return ToolResult.error(VALIDATION_ERROR_NOT_READ)
 
             # Read file content
             original_snapshot = await self._read_file(file_path)
@@ -293,6 +296,14 @@ When editing the same file multiple times:
 
             # Perform replacement
             new_content = original_content.replace(params.old_string, params.new_string, params.expected_replacements)
+
+            # 目标唯一时允许已观察文件的版本变化；多次替换仍要求原版本未变。
+            is_valid, error_message = await horizon.validate_file_not_modified(
+                file_path, allow_changed=occurrences == 1 and params.expected_replacements == 1,
+            )
+            if not is_valid:
+                tool_context.set_metadata("error_type", "edit_file.error_file_modified")
+                return ToolResult.error(error_message)
 
             # Write new content with file versioning (triggers events and updates timestamp)
             async with self._file_versioning_context(tool_context, file_path):

@@ -51,12 +51,12 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
     """<!--zh
     将文件写入本地文件系统。
     - 如果提供的路径中存在现有文件，此工具将覆盖该文件。
-    - 如果这是一个现有文件，您必须先使用读取工具来读取文件内容。如果您没有先读取文件，此工具将失败。
+    - 此工具不要求预先读取，但会替换整份内容；需要保留旧内容时应先读取，局部修改优先使用编辑工具。
     - 总是优先编辑代码库中的现有文件。
     -->
     Write file to local filesystem.
     - If an existing file exists at the provided path, this tool will overwrite it.
-    - If this is an existing file, you must use read tool to read file content first. If you don't read file first, this tool will fail.
+    - No prior read is required, but this replaces the entire content. Read first when existing content must be preserved; prefer edit tools for partial changes.
     - Always prioritize editing existing files in the codebase.
     """
 
