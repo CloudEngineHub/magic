@@ -34,11 +34,12 @@ function MobileGridLoading() {
 	return (
 		<div className="grid grid-cols-1 gap-3" data-testid="micro-apps-mobile-loading">
 			{[1, 2, 3, 4].map((item) => (
-				<div key={item} className="overflow-hidden rounded-2xl border border-border/60">
-					<div className="aspect-[16/10] animate-pulse bg-muted/50" />
-					<div className="space-y-2 p-3">
-						<div className="h-3.5 w-3/4 animate-pulse rounded bg-muted/60" />
-						<div className="h-3 w-1/2 animate-pulse rounded bg-muted/40" />
+				<div key={item} className="rounded-2xl border border-border/60 p-2">
+					<div className="h-[76px] animate-pulse rounded-xl bg-muted/50" />
+					<div className="space-y-3 px-2 pb-2 pt-3">
+						<div className="h-4 w-3/4 animate-pulse rounded bg-muted/60" />
+						<div className="h-4 w-1/2 animate-pulse rounded bg-muted/40" />
+						<div className="h-3 w-3/5 animate-pulse rounded bg-muted/40" />
 					</div>
 				</div>
 			))}

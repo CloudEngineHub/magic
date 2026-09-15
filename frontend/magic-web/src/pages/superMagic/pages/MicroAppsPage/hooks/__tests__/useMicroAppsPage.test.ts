@@ -64,6 +64,48 @@ describe("useMicroAppsPage", () => {
 		})
 	})
 
+	it("keeps panel scopes independent while sharing search and one workspace request", async () => {
+		const { result, rerender } = renderHook(
+			({ keyword }) => ({
+				development: useMicroAppsPage({ initialScope: "created", keyword }),
+				access: useMicroAppsPage({ initialScope: "recent", loadWorkspace: false, keyword }),
+			}),
+			{ initialProps: { keyword: "" } },
+		)
+		await waitFor(() => expect(result.current.access.loading).toBe(false))
+		expect(mocks.getMicroAppWorkspace).toHaveBeenCalledTimes(1)
+		expect(result.current.development.scope).toBe("created")
+		act(() => result.current.access.setScope("accessible"))
+		expect(result.current.access.loading).toBe(true)
+		expect(result.current.development.scope).toBe("created")
+		rerender({ keyword: "客户" })
+		await waitFor(() => expect(result.current.access.loading).toBe(false))
+		expect(mocks.getMicroApps).toHaveBeenCalledWith(
+			expect.objectContaining({ scope: "accessible", keyword: "客户" }),
+		)
+		expect(mocks.getMicroApps).toHaveBeenCalledWith(
+			expect.objectContaining({ scope: "created", keyword: "客户" }),
+		)
+	})
+
+	it("ignores an older panel response after changing scope", async () => {
+		let resolveOld!: (value: unknown) => void
+		mocks.getMicroApps.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveOld = resolve
+				}),
+		)
+		const { result } = renderHook(() =>
+			useMicroAppsPage({ initialScope: "recent", loadWorkspace: false }),
+		)
+		await waitFor(() => expect(mocks.getMicroApps).toHaveBeenCalledTimes(1))
+		act(() => result.current.setScope("accessible"))
+		await waitFor(() => expect(result.current.loading).toBe(false))
+		await act(async () => resolveOld({ list: [{ app_id: "stale" }], total: 1, page: 1 }))
+		expect(result.current.apps[0].app_id).toBe("100000000000009001")
+	})
+
 	it("loads the new app list with the default scope", async () => {
 		const { result } = renderHook(() => useMicroAppsPage())
 

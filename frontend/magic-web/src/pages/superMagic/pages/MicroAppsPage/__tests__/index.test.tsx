@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RouteName } from "@/routes/constants"
 import MicroAppsPage from "../index"
@@ -265,8 +265,8 @@ describe("MicroAppsPage", () => {
 		const appCard = screen.getByTestId("micro-apps-app-app-1")
 		expect(appCard).toHaveAttribute("data-cover-url", "https://example.com/cover.png")
 		expect(appCard).toHaveAttribute("data-can-delete", "false")
-		expect(screen.getByText("客户跟进与提醒工具")).toBeInTheDocument()
-		expect(screen.getByText("microAppsPage.statusPublished")).toBeInTheDocument()
+		expect(within(appCard).getByText("客户跟进与提醒工具")).toBeInTheDocument()
+		expect(within(appCard).getByText("microAppsPage.statusPublished")).toBeInTheDocument()
 		fireEvent.click(appCard)
 
 		await waitFor(() => {
@@ -296,11 +296,38 @@ describe("MicroAppsPage", () => {
 		fireEvent.change(screen.getByTestId("micro-apps-search"), {
 			target: { value: "客户" },
 		})
-		fireEvent.click(screen.getByTestId("micro-apps-load-more"))
+		fireEvent.click(screen.getByTestId("micro-apps-search-results-load-more"))
 
 		expect(mocks.setScope).toHaveBeenCalledWith("collaborated")
-		expect(mocks.setKeyword).toHaveBeenCalledWith("客户")
+		expect(mocks.setKeyword).not.toHaveBeenCalled()
+		expect(mocks.useMicroAppsPage).toHaveBeenCalledWith(
+			expect.objectContaining({ searchAll: true, keyword: "客户", enabled: true }),
+		)
+		expect(screen.getByTestId("micro-apps-scroll")).not.toBeVisible()
+		expect(screen.getByTestId("micro-apps-search-results-scroll")).toBeVisible()
+		fireEvent.keyDown(screen.getByTestId("micro-apps-search"), { key: "Escape" })
+		expect(screen.getByTestId("micro-apps-scroll")).toBeVisible()
+		expect(screen.queryByTestId("micro-apps-search-results-scroll")).not.toBeInTheDocument()
 		expect(mocks.loadMore).toHaveBeenCalled()
+	})
+
+	it("keeps existing apps visible and retries only the failing panel", () => {
+		const development = { ...mocks.useMicroAppsPage(), loadMoreError: new Error("offline") }
+		const access = { ...development, loadMoreError: null, loadMore: vi.fn() }
+		mocks.useMicroAppsPage.mockImplementation((options?: { initialScope?: string }) =>
+			options?.initialScope === "recent" ? access : development,
+		)
+		render(<MicroAppsPage />)
+		expect(screen.getByTestId("micro-apps-app-app-1")).toBeVisible()
+		expect(screen.getByRole("alert")).toHaveTextContent("microAppsPage.loadMoreFailed")
+		fireEvent.click(screen.getByTestId("micro-apps-load-more"))
+		expect(mocks.loadMore).toHaveBeenCalledTimes(1)
+		expect(access.loadMore).not.toHaveBeenCalled()
+		expect(screen.getByTestId("micro-apps-scroll")).toHaveAttribute("data-slot", "scroll-area")
+		expect(screen.getByTestId("micro-apps-access-scroll")).toHaveAttribute(
+			"data-slot",
+			"scroll-area",
+		)
 	})
 
 	it("hides the collaborated scope in a personal organization", () => {
@@ -312,16 +339,16 @@ describe("MicroAppsPage", () => {
 		render(<MicroAppsPage />)
 
 		expect(screen.queryByTestId("micro-apps-scope-collaborated")).not.toBeInTheDocument()
-		expect(screen.getByTestId("micro-apps-scope-all")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-apps-scope-all")).not.toBeInTheDocument()
 		expect(screen.getByTestId("micro-apps-scope-created")).toBeInTheDocument()
-		expect(screen.getByTestId("micro-apps-scope-accessible")).toBeInTheDocument()
-		expect(screen.getByTestId("micro-apps-scope-recent")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-apps-access-scope-accessible")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-apps-access-scope-recent")).toBeInTheDocument()
 	})
 
 	it("switches to the accessible scope tab", () => {
 		render(<MicroAppsPage />)
 
-		fireEvent.click(screen.getByTestId("micro-apps-scope-accessible"))
+		fireEvent.click(screen.getByTestId("micro-apps-access-scope-accessible"))
 
 		expect(mocks.setScope).toHaveBeenCalledWith("accessible")
 	})
@@ -335,8 +362,16 @@ describe("MicroAppsPage", () => {
 
 		render(<MicroAppsPage />)
 
-		expect(screen.getByText("microAppsPage.publishedEmptyTitle")).toBeInTheDocument()
-		expect(screen.getByText("microAppsPage.publishedEmptyDescription")).toBeInTheDocument()
+		expect(
+			within(screen.getByRole("region", { name: "microAppsPage.accessTitle" })).getByText(
+				"microAppsPage.publishedEmptyTitle",
+			),
+		).toBeInTheDocument()
+		expect(
+			within(screen.getByRole("region", { name: "microAppsPage.accessTitle" })).getByText(
+				"microAppsPage.publishedEmptyDescription",
+			),
+		).toBeInTheDocument()
 	})
 
 	it("opens an accessible app in the published share window", () => {

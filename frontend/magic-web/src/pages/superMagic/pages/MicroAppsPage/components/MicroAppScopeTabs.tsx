@@ -19,34 +19,31 @@ function MicroAppScopeTabs({
 	className,
 }: MicroAppScopeTabsProps) {
 	const { t } = useTranslation("super")
-	const showCollaborated = availableScopes.includes("collaborated")
-
+	const labels = {
+		all: t("microAppsPage.scopeAll"),
+		created: t("microAppsPage.scopeCreated"),
+		collaborated: t("microAppsPage.scopeCollaborated"),
+		accessible: t("microAppsPage.scopeAccessible"),
+		recent: t("microAppsPage.scopeRecent"),
+	}
 	return (
 		<Tabs value={value} onValueChange={(nextValue) => onChange(nextValue as MicroAppListScope)}>
 			<TabsList
 				className={cn(
-					"grid rounded-xl",
-					showCollaborated ? "w-[520px] grid-cols-5" : "w-[416px] grid-cols-4",
+					"h-9 w-auto max-w-full rounded-xl border border-border/40 bg-muted/40 p-1",
 					className,
 				)}
 			>
-				<TabsTrigger value="all" data-testid={`${testIdPrefix}-all`}>
-					{t("microAppsPage.scopeAll")}
-				</TabsTrigger>
-				<TabsTrigger value="created" data-testid={`${testIdPrefix}-created`}>
-					{t("microAppsPage.scopeCreated")}
-				</TabsTrigger>
-				{showCollaborated ? (
-					<TabsTrigger value="collaborated" data-testid={`${testIdPrefix}-collaborated`}>
-						{t("microAppsPage.scopeCollaborated")}
+				{availableScopes.map((item) => (
+					<TabsTrigger
+						key={item}
+						value={item}
+						data-testid={`${testIdPrefix}-${item}`}
+						className="rounded-lg px-3 text-xs"
+					>
+						{labels[item]}
 					</TabsTrigger>
-				) : null}
-				<TabsTrigger value="accessible" data-testid={`${testIdPrefix}-accessible`}>
-					{t("microAppsPage.scopeAccessible")}
-				</TabsTrigger>
-				<TabsTrigger value="recent" data-testid={`${testIdPrefix}-recent`}>
-					{t("microAppsPage.scopeRecent")}
-				</TabsTrigger>
+				))}
 			</TabsList>
 		</Tabs>
 	)

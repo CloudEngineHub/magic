@@ -3725,6 +3725,15 @@
 		"user": "Signed-in user"
 	},
 	"microAppsPage": {
+		"searchResultsTitle": "Search results",
+		"searchLoadedCount": "Showing {{count}} apps",
+		"loadedCount": "Showing {{count}} of {{total}} apps",
+		"loadMoreFailed": "Could not load more. You can still use the apps shown.",
+		"retryLoadMore": "Retry loading",
+		"continueDevelopment": "Continue development",
+		"viewProject": "View project",
+		"openApp": "Open app",
+		"clearSearch": "Clear search",
 		"actions": {
 			"collaboratorsFailed": "Failed to load collaborator information. Please retry.",
 			"collaboratorsNoPermission": "You do not have permission to manage collaborators for this app.",
@@ -3757,6 +3766,9 @@
 		"errorDescription": "Failed to load the project list. Please retry.",
 		"errorTitle": "Load failed",
 		"galleryDescription": "Continue building your projects or open apps that have been published.",
+		"resizePanels": "Resize development and access panels",
+		"developmentTitle": "Continue building",
+		"accessTitle": "Open apps",
 		"galleryTitle": "App space",
 		"heroCapabilityAgent": "Agent",
 		"heroCapabilityData": "Database",
