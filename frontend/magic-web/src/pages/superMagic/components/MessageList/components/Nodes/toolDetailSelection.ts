@@ -1,4 +1,4 @@
-import projectFilesStore from "@/stores/projectFiles"
+import defaultProjectFilesStore from "@/stores/projectFiles"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 // Internal marker: keeps the single-arg callback shape without colliding with tool fields.
@@ -12,6 +12,7 @@ type ToolDetail = Record<string, unknown> & {
 interface SelectToolDetailOptions {
 	detail: Record<string, unknown>
 	onSelectDetail?: (detail: ToolDetail) => void
+	filesStore?: { workspaceFilesList: Array<{ file_id?: string | number }> }
 }
 
 interface SelectSourceFileOptions extends SelectToolDetailOptions {
@@ -26,10 +27,11 @@ export function resolveToolFileId(data: unknown): string | undefined {
 	return typeof candidate === "string" && candidate ? candidate : undefined
 }
 
-function isFileInAttachments(fileId: string): boolean {
-	return projectFilesStore.workspaceFilesList.some(
-		(item) => String(item.file_id ?? "") === fileId,
-	)
+function isFileInAttachments(
+	fileId: string,
+	filesStore: NonNullable<SelectToolDetailOptions["filesStore"]>,
+): boolean {
+	return filesStore.workspaceFilesList.some((item) => String(item.file_id ?? "") === fileId)
 }
 
 function markSelectionTarget(
@@ -52,9 +54,10 @@ export function selectSourceFileFromTool({
 	detail,
 	fileId,
 	onSelectDetail,
+	filesStore = defaultProjectFilesStore,
 }: SelectSourceFileOptions): boolean {
 	// Runtime artifacts (e.g. browser screenshots) are not workspace files.
-	if (!isFileInAttachments(fileId)) return false
+	if (!isFileInAttachments(fileId, filesStore)) return false
 
 	pubsub.publish(PubSubEvents.Open_File_Tab, { fileId })
 	pubsub.publish(PubSubEvents.Locate_File_In_Tree, fileId)

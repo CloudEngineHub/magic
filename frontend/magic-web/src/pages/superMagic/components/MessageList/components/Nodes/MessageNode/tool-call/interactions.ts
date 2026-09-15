@@ -30,11 +30,13 @@ const DESIGN_TOOL_NAMES = new Set([
 interface HandleToolCallInteractionOptions {
 	toolData: ToolCallViewModel
 	onSelectDetail?: (detail: unknown) => void
+	filesStore?: { workspaceFilesList: Array<{ file_id?: string | number }> }
 }
 
 export function handleToolCallInteraction({
 	toolData,
 	onSelectDetail,
+	filesStore,
 }: HandleToolCallInteractionOptions) {
 	const toolInfo = pick(toolData, ["name", "url", "action", "remark", "id"])
 	const newDetail = {
@@ -77,6 +79,7 @@ export function handleToolCallInteraction({
 			detail: newDetail,
 			fileId,
 			onSelectDetail,
+			filesStore,
 		})
 	) {
 		return

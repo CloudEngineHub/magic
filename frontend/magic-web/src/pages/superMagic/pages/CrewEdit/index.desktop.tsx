@@ -323,22 +323,46 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 		isReadOnly: isViewer,
 	})
 
-	/** 知识库详情占用了右侧 StepDetailPanel 时 Detail 未挂载，需先清 URL 再打开文件预览 */
-	const handleFileClickWithKnowledgeRouteReset = useMemoizedFn((fileItem?: unknown) => {
-		if (!isCrewEditKnowledgeDetailSearch(location.search)) {
-			handleFileClick(fileItem)
+	/** 右侧被步骤/知识库占用时 Detail 未挂载，打开预览前先关掉步骤面板 */
+	const closeStepPanelForFilePreview = useMemoizedFn((payload?: unknown) => {
+		if (
+			payload &&
+			typeof payload === "object" &&
+			"action" in payload &&
+			(payload as { action?: string }).action === "download"
+		) {
 			return
 		}
+		if (layout.activeDetailKey !== null) layout.setActiveStep(null)
+		if (!isCrewEditKnowledgeDetailSearch(location.search)) return
 		navigate({
 			name: RouteName.CrewEdit,
 			params: { id: crewId },
 			query: buildCrewEditQueryAfterLeavingKnowledgeDetail(location.search),
 			replace: true,
 		})
-		window.setTimeout(() => {
-			handleFileClick(fileItem)
-		}, 120)
 	})
+
+	const handleFileClickWithPreviewPanel = useMemoizedFn((fileItem?: unknown) => {
+		const wasKnowledgeDetail = isCrewEditKnowledgeDetailSearch(location.search)
+		closeStepPanelForFilePreview()
+		if (!wasKnowledgeDetail) {
+			handleFileClick(fileItem)
+			return
+		}
+		window.setTimeout(() => handleFileClick(fileItem), 120)
+	})
+
+	useEffect(() => {
+		pubsub.subscribe(PubSubEvents.Open_File_Tab, closeStepPanelForFilePreview)
+		pubsub.subscribe(PubSubEvents.Open_Playback_Tab, closeStepPanelForFilePreview)
+		pubsub.subscribe(PubSubEvents.Open_File_Tab_By_Path, closeStepPanelForFilePreview)
+		return () => {
+			pubsub.unsubscribe(PubSubEvents.Open_File_Tab, closeStepPanelForFilePreview)
+			pubsub.unsubscribe(PubSubEvents.Open_Playback_Tab, closeStepPanelForFilePreview)
+			pubsub.unsubscribe(PubSubEvents.Open_File_Tab_By_Path, closeStepPanelForFilePreview)
+		}
+	}, [closeStepPanelForFilePreview])
 
 	const { shouldShowDetailPanel, topicFilesPropsWithPanel, handleActiveDetailTabChange } =
 		useCompositeDetailPanelController({
@@ -346,7 +370,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 			isReadOnly: isViewer,
 			activeFileId,
 			setActiveFileId,
-			handleFileClick: handleFileClickWithKnowledgeRouteReset,
+			handleFileClick: handleFileClickWithPreviewPanel,
 			topicFilesProps,
 			extraPanelVisible: shouldShowStepDetailPanel,
 			resetDeps: [selectedProject?.id],
@@ -354,6 +378,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 				setUserSelectDetail(undefined)
 				setIsDetailPanelFullscreen(false)
 			},
+			attachmentList,
 		})
 
 	const { onFileTabsCacheLoaded } = useDeferUntilFileTabsCacheLoaded(selectedProject?.id)
@@ -655,6 +680,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 								topicStore={conversation.topicStore}
 								mentionPanelStore={store.mentionPanelStore}
 								projectFilesStore={store.projectFilesStore}
+								setSelectedDetail={handleUserSelectDetail}
 								onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
 								isConversationPanelCollapsed={
 									shouldShowDetailPanel

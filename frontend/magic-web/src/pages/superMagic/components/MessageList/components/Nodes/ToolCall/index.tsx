@@ -5,6 +5,7 @@ import { isEmpty, pick } from "lodash-es"
 import { Suspense } from "react"
 import { observer } from "mobx-react-lite"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import defaultProjectFilesStore from "@/stores/projectFiles"
 import DefaultTool from "./tools/DefaultTool"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { filterClickableMessageWithoutRevoked } from "@/pages/superMagic/utils/handleMessage"
@@ -14,9 +15,12 @@ import {
 	selectSourceFileFromTool,
 	selectToolDetail,
 } from "../toolDetailSelection"
+import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 
 function ToolCall(props: NodeProps) {
 	const { onSelectDetail } = props
+	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
+	const filesStore = scopedProjectFilesStore ?? defaultProjectFilesStore
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| {
 				tool?: {
@@ -93,6 +97,7 @@ function ToolCall(props: NodeProps) {
 				detail,
 				fileId,
 				onSelectDetail,
+				filesStore,
 			})
 		) {
 			return

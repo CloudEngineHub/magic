@@ -6,6 +6,8 @@ import { handleToolCallInteraction } from "./interactions"
 import { useToolRemarkPreview } from "./preview/useToolRemarkPreview"
 import { ToolCallRenderer } from "./ToolCallRenderer"
 import type { ToolCallContainerProps, ToolCallViewModel, ToolDetail } from "./types"
+import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import defaultProjectFilesStore from "@/stores/projectFiles"
 
 const TERMINAL_TOOL_STATUSES = new Set(["finished", "error", "suspended", "response_missing"])
 
@@ -24,6 +26,8 @@ export const ToolCallContainer = observer(function ToolCallContainer(
 		selectedTopic,
 		isShare,
 	} = props
+	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
+	const filesStore = scopedProjectFilesStore ?? defaultProjectFilesStore
 	const toolResponse = ownerSuperMessageId
 		? (superMagicStore.getToolResponseForRendering?.(topicId, ownerSuperMessageId, toolCall) ??
 			superMagicStore.toolResponseMap.get(topicId)?.get(toolCall.id))
@@ -95,8 +99,8 @@ export const ToolCallContainer = observer(function ToolCallContainer(
 	])
 
 	const onClick = useCallback(() => {
-		handleToolCallInteraction({ toolData, onSelectDetail })
-	}, [onSelectDetail, toolData])
+		handleToolCallInteraction({ toolData, onSelectDetail, filesStore })
+	}, [filesStore, onSelectDetail, toolData])
 
 	return (
 		<MessageViewStateScopeProvider messageKey={toolCall.id}>
