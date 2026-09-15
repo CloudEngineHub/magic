@@ -450,6 +450,7 @@ export class ConnectionDragManager {
 		const candidateIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			{ x: point.x, y: point.y, width: 0, height: 0 },
 			0,
+			{ debugSource: "connection:target" },
 		)
 
 		let topElementId: string | null = null

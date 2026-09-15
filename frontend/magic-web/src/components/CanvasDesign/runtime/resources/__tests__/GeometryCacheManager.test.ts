@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import type { CanvasSpatialPerfDebugApi } from "../../shared/geometry/CanvasSpatialPerfDebug"
 import { GeometryCacheManager } from "../../shared/geometry/GeometryCacheManager"
 
 function createManager(
@@ -65,6 +66,124 @@ describe("GeometryCacheManager", () => {
 		expect(ids.length).toBeGreaterThan(0)
 		expect(ids.length).toBeLessThan(200)
 		expect(durationMs).toBeLessThan(500)
+	})
+
+	it("collects query profiling only during an explicit debug session", () => {
+		const manager = createManager(
+			new Map([
+				["visible", { x: 0, y: 0, width: 100, height: 100 }],
+				["far", { x: 4_000, y: 4_000, width: 100, height: 100 }],
+			]),
+		)
+
+		manager.queryElementIdsByExpandedRect({ x: 0, y: 0, width: 200, height: 200 }, 0, {
+			elementIds: ["visible", "far"],
+			debugSource: "before-start",
+		})
+		expect(manager.getSpatialQueryProfilingSnapshot()).toBeNull()
+
+		manager.startSpatialQueryProfiling()
+		manager.queryElementIdsByExpandedRect({ x: 0, y: 0, width: 200, height: 200 }, 0, {
+			elementIds: ["visible", "far"],
+			debugSource: "test:visible",
+		})
+		const snapshot = manager.stopSpatialQueryProfiling()
+
+		expect(snapshot).toMatchObject({
+			queryCount: 1,
+			indexedQueryCount: 1,
+			directScanQueryCount: 0,
+			filterQueryCount: 1,
+			copiedFilterQueryCount: 1,
+			copiedFilterElementCount: 2,
+			totalResultCount: 1,
+			sources: {
+				"test:visible": {
+					queryCount: 1,
+					indexedQueryCount: 1,
+					directScanQueryCount: 0,
+					totalResultCount: 1,
+				},
+			},
+		})
+		expect(manager.getSpatialQueryProfilingSnapshot()).toBeNull()
+	})
+
+	it("exposes opt-in console controls for a real Canvas target", () => {
+		const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => undefined)
+		const boundsById = new Map([["visible", { x: 0, y: 0, width: 100, height: 100 }]])
+		const elementIds = Array.from(boundsById.keys())
+		const manager = new GeometryCacheManager({
+			canvas: {
+				id: "debug-canvas",
+				elementManager: {
+					getAllElementIds: () => elementIds,
+					getElementInstance: (id: string) => ({
+						getBoundingRect: () => boundsById.get(id) ?? null,
+					}),
+					isElementVisibleInDataTree: () => true,
+				},
+				runtimeScheduler: {
+					getSnapshot: () => ({
+						drawRequestCount: 10,
+						drawnCount: 8,
+						viewportScaleLayouts: {
+							activeElementCount: 1,
+							dispatchCount: 3,
+							registeredElementCount: 1,
+							totalCallbackCount: 3,
+						},
+					}),
+				},
+				stage: { scaleX: () => 0.5 },
+				visibilityManager: {
+					getSnapshot: () => ({
+						lastQueryDurationMs: 0.2,
+						nearAudioCount: 0,
+						nearImageCount: 0,
+						nearVideoCount: 0,
+						queryCount: 4,
+						registeredAudioCount: 0,
+						registeredImageCount: 1,
+						registeredVideoCount: 0,
+						skippedViewportQueryCount: 2,
+						visibleAudioCount: 0,
+						visibleImageCount: 1,
+						visibleVideoCount: 0,
+					}),
+				},
+			} as never,
+		})
+		const debugGlobal = globalThis as typeof globalThis & {
+			__MAGIC_CANVAS_SPATIAL_PERF__?: CanvasSpatialPerfDebugApi
+		}
+
+		try {
+			const debugApi = debugGlobal.__MAGIC_CANVAS_SPATIAL_PERF__
+			expect(debugApi).toBeDefined()
+			debugApi?.start("debug-canvas")
+			manager.queryElementIdsByExpandedRect({ x: 0, y: 0, width: 200, height: 200 }, 0, {
+				debugSource: "test:console",
+			})
+			const result = debugApi?.stop("debug-canvas")
+
+			expect(result).toMatchObject({
+				event: "stop",
+				canvasId: "debug-canvas",
+				elementCount: 1,
+				viewportScale: 0.5,
+				profiling: {
+					queryCount: 1,
+					sources: { "test:console": { queryCount: 1 } },
+				},
+			})
+			expect(consoleLogSpy).toHaveBeenCalledTimes(2)
+			expect(consoleLogSpy.mock.calls[0]?.[0]).toMatch(/^\[CanvasSpatialPerf\] \{/)
+			expect(consoleLogSpy.mock.calls[1]?.[0]).toMatch(/^\[CanvasSpatialPerf\] \{/)
+		} finally {
+			manager.destroy()
+			consoleLogSpy.mockRestore()
+		}
 	})
 
 	it("restricts spatial queries to the provided candidate ids", () => {

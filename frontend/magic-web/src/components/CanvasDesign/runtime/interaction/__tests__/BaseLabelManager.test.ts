@@ -177,7 +177,7 @@ describe("BaseLabelManager candidate cache", () => {
 		expect(queryElementIdsByExpandedRect).toHaveBeenLastCalledWith(
 			expect.any(Object),
 			expect.any(Number),
-			{ elementIds: ["frame-1"] },
+			{ elementIds: new Set(["frame-1"]), debugSource: "labels:visible" },
 		)
 
 		firstManager.destroy()
@@ -281,12 +281,7 @@ describe("BaseLabelManager candidate cache", () => {
 
 		expect(manager.getLabelScaleX("frame-1")).toBe(2)
 		expect(manager.getReorderCount()).toBe(initialReorderCount)
-		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
-		expect(requestLayerDraw).toHaveBeenCalledWith("overlay", {
-			source: "TestLabelManager",
-			reason: "visible-labels:viewport-pan",
-			priority: "input",
-		})
+		expect(requestLayerDraw).not.toHaveBeenCalled()
 
 		manager.destroy()
 	})
@@ -353,7 +348,7 @@ describe("BaseLabelManager candidate cache", () => {
 		const visibilityConfig = {
 			alwaysVisibleTypes: new Set([ElementTypeEnum.Frame]),
 			elementTypes: new Set([ElementTypeEnum.Frame]),
-			hoverOrSelectTypes: new Set(),
+			hoverOrSelectTypes: new Set<string>(),
 		}
 		const firstManager = new TestLabelManager({
 			canvas,

@@ -285,7 +285,7 @@ export class SnapGuideManager implements SnapResolverContext {
 		const candidateIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			draggingRect,
 			this.cachedGuideThreshold,
-			{ elementIds: targetIds },
+			{ elementIds: targetIds, debugSource: "snap:alignment" },
 		)
 		const targetOrder = this.cachedInteractionTargetOrder
 		if (targetOrder) {
@@ -523,7 +523,7 @@ export class SnapGuideManager implements SnapResolverContext {
 		const candidateIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			draggingRect,
 			this.cachedGuideThreshold * 4,
-			{ elementIds: targetIds },
+			{ elementIds: targetIds, debugSource: "snap:spacing" },
 		)
 		const targetOrder = this.cachedInteractionTargetOrder
 		if (targetOrder) {

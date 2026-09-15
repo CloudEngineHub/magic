@@ -1,6 +1,109 @@
 import type { Canvas } from "../../core/Canvas"
 import type { LayerElement } from "../../document/types"
 import type { Rect } from "../ids"
+import {
+	registerCanvasSpatialPerfDebugTarget,
+	type CanvasSpatialPerfActivityCounters,
+} from "./CanvasSpatialPerfDebug"
+
+export interface GeometrySpatialQuerySourceSnapshot {
+	queryCount: number
+	indexedQueryCount: number
+	directScanQueryCount: number
+	totalDurationMs: number
+	averageDurationMs: number
+	maxDurationMs: number
+	totalCandidateCount: number
+	averageCandidateCount: number
+	totalResultCount: number
+	averageResultCount: number
+	filterQueryCount: number
+	totalFilterElementCount: number
+	averageFilterElementCount: number
+	copiedFilterQueryCount: number
+	copiedFilterElementCount: number
+	totalVisitedCellCount: number
+	averageVisitedCellCount: number
+}
+
+export interface GeometrySpatialQueryProfilingSnapshot {
+	elapsedMs: number
+	queryCount: number
+	queriesPerSecond: number
+	indexedQueryCount: number
+	directScanQueryCount: number
+	totalDurationMs: number
+	averageDurationMs: number
+	maxDurationMs: number
+	filterQueryCount: number
+	totalFilterElementCount: number
+	copiedFilterQueryCount: number
+	copiedFilterElementCount: number
+	totalVisitedCellCount: number
+	totalEstimatedCellCount: number
+	totalCandidateCount: number
+	totalResultCount: number
+	spatialIndexBuildCount: number
+	totalSpatialIndexBuildDurationMs: number
+	maxSpatialIndexBuildDurationMs: number
+	lastSpatialIndexBuildElementCount: number
+	sources: Record<string, GeometrySpatialQuerySourceSnapshot>
+}
+
+interface GeometrySpatialQueryOptions {
+	elementIds?: Iterable<string>
+	debugSource?: string
+}
+
+interface MutableGeometrySpatialQuerySourceStats {
+	queryCount: number
+	indexedQueryCount: number
+	directScanQueryCount: number
+	totalDurationMs: number
+	maxDurationMs: number
+	totalCandidateCount: number
+	totalResultCount: number
+	filterQueryCount: number
+	totalFilterElementCount: number
+	copiedFilterQueryCount: number
+	copiedFilterElementCount: number
+	totalVisitedCellCount: number
+}
+
+interface MutableGeometrySpatialQueryProfilingSession {
+	startedAt: number
+	queryCount: number
+	indexedQueryCount: number
+	directScanQueryCount: number
+	totalDurationMs: number
+	maxDurationMs: number
+	filterQueryCount: number
+	totalFilterElementCount: number
+	copiedFilterQueryCount: number
+	copiedFilterElementCount: number
+	totalVisitedCellCount: number
+	totalEstimatedCellCount: number
+	totalCandidateCount: number
+	totalResultCount: number
+	spatialIndexBuildCount: number
+	totalSpatialIndexBuildDurationMs: number
+	maxSpatialIndexBuildDurationMs: number
+	lastSpatialIndexBuildElementCount: number
+	sources: Map<string, MutableGeometrySpatialQuerySourceStats>
+}
+
+interface GeometrySpatialQuerySample {
+	source: string
+	mode: "indexed" | "direct-scan"
+	durationMs: number
+	filterSize: number
+	hasFilter: boolean
+	copiedFilter: boolean
+	estimatedCellCount: number
+	visitedCellCount: number
+	candidateCount: number
+	resultCount: number
+}
 
 function cloneRect(rect: Rect | null): Rect | null {
 	if (!rect) return null
@@ -62,6 +165,38 @@ function intersectsRect(a: Rect, b: Rect): boolean {
 const DEFAULT_SPATIAL_CELL_SIZE = 2048
 const DIRECT_SCAN_CELL_TO_ALLOWED_RATIO = 8
 
+function now(): number {
+	return typeof performance === "undefined" ? Date.now() : performance.now()
+}
+
+function roundMetric(value: number): number {
+	return Number(value.toFixed(4))
+}
+
+function createSpatialQueryProfilingSession(): MutableGeometrySpatialQueryProfilingSession {
+	return {
+		startedAt: now(),
+		queryCount: 0,
+		indexedQueryCount: 0,
+		directScanQueryCount: 0,
+		totalDurationMs: 0,
+		maxDurationMs: 0,
+		filterQueryCount: 0,
+		totalFilterElementCount: 0,
+		copiedFilterQueryCount: 0,
+		copiedFilterElementCount: 0,
+		totalVisitedCellCount: 0,
+		totalEstimatedCellCount: 0,
+		totalCandidateCount: 0,
+		totalResultCount: 0,
+		spatialIndexBuildCount: 0,
+		totalSpatialIndexBuildDurationMs: 0,
+		maxSpatialIndexBuildDurationMs: 0,
+		lastSpatialIndexBuildElementCount: 0,
+		sources: new Map(),
+	}
+}
+
 /**
  * 统一管理元素几何边界缓存。
  *
@@ -76,9 +211,148 @@ export class GeometryCacheManager {
 	private elementSpatialCells: Map<string, string[]> = new Map()
 	private spatialIndexDirty = true
 	private readonly spatialCellSize = DEFAULT_SPATIAL_CELL_SIZE
+	private spatialQueryProfilingSession: MutableGeometrySpatialQueryProfilingSession | null = null
+	private unregisterSpatialPerfDebug: () => void = () => undefined
 
 	constructor(options: { canvas: Canvas }) {
 		this.canvas = options.canvas
+		if (typeof this.canvas.id === "string" && this.canvas.id) {
+			this.unregisterSpatialPerfDebug = registerCanvasSpatialPerfDebugTarget({
+				canvasId: this.canvas.id,
+				geometryCacheManager: this,
+				getElementCount: () => this.canvas.elementManager.getAllElementIds().length,
+				getViewportScale: () => this.canvas.stage.scaleX() || 1,
+				getActivity: () => this.getSpatialPerfActivityCounters(),
+			})
+		}
+	}
+
+	public startSpatialQueryProfiling(): void {
+		this.spatialQueryProfilingSession = createSpatialQueryProfilingSession()
+	}
+
+	public isSpatialQueryProfiling(): boolean {
+		return this.spatialQueryProfilingSession !== null
+	}
+
+	public getSpatialQueryProfilingSnapshot(): GeometrySpatialQueryProfilingSnapshot | null {
+		const session = this.spatialQueryProfilingSession
+		if (!session) return null
+
+		const elapsedMs = Math.max(0, now() - session.startedAt)
+		const sources: Record<string, GeometrySpatialQuerySourceSnapshot> = {}
+		session.sources.forEach((source, sourceName) => {
+			sources[sourceName] = {
+				queryCount: source.queryCount,
+				indexedQueryCount: source.indexedQueryCount,
+				directScanQueryCount: source.directScanQueryCount,
+				totalDurationMs: roundMetric(source.totalDurationMs),
+				averageDurationMs: roundMetric(source.totalDurationMs / source.queryCount),
+				maxDurationMs: roundMetric(source.maxDurationMs),
+				totalCandidateCount: source.totalCandidateCount,
+				averageCandidateCount: roundMetric(source.totalCandidateCount / source.queryCount),
+				totalResultCount: source.totalResultCount,
+				averageResultCount: roundMetric(source.totalResultCount / source.queryCount),
+				filterQueryCount: source.filterQueryCount,
+				totalFilterElementCount: source.totalFilterElementCount,
+				averageFilterElementCount: roundMetric(
+					source.totalFilterElementCount / source.queryCount,
+				),
+				copiedFilterQueryCount: source.copiedFilterQueryCount,
+				copiedFilterElementCount: source.copiedFilterElementCount,
+				totalVisitedCellCount: source.totalVisitedCellCount,
+				averageVisitedCellCount: roundMetric(
+					source.totalVisitedCellCount / source.queryCount,
+				),
+			}
+		})
+
+		return {
+			elapsedMs: roundMetric(elapsedMs),
+			queryCount: session.queryCount,
+			queriesPerSecond: roundMetric(
+				elapsedMs > 0 ? (session.queryCount * 1000) / elapsedMs : 0,
+			),
+			indexedQueryCount: session.indexedQueryCount,
+			directScanQueryCount: session.directScanQueryCount,
+			totalDurationMs: roundMetric(session.totalDurationMs),
+			averageDurationMs: roundMetric(
+				session.queryCount > 0 ? session.totalDurationMs / session.queryCount : 0,
+			),
+			maxDurationMs: roundMetric(session.maxDurationMs),
+			filterQueryCount: session.filterQueryCount,
+			totalFilterElementCount: session.totalFilterElementCount,
+			copiedFilterQueryCount: session.copiedFilterQueryCount,
+			copiedFilterElementCount: session.copiedFilterElementCount,
+			totalVisitedCellCount: session.totalVisitedCellCount,
+			totalEstimatedCellCount: session.totalEstimatedCellCount,
+			totalCandidateCount: session.totalCandidateCount,
+			totalResultCount: session.totalResultCount,
+			spatialIndexBuildCount: session.spatialIndexBuildCount,
+			totalSpatialIndexBuildDurationMs: roundMetric(session.totalSpatialIndexBuildDurationMs),
+			maxSpatialIndexBuildDurationMs: roundMetric(session.maxSpatialIndexBuildDurationMs),
+			lastSpatialIndexBuildElementCount: session.lastSpatialIndexBuildElementCount,
+			sources,
+		}
+	}
+
+	public stopSpatialQueryProfiling(): GeometrySpatialQueryProfilingSnapshot | null {
+		const snapshot = this.getSpatialQueryProfilingSnapshot()
+		this.spatialQueryProfilingSession = null
+		return snapshot
+	}
+
+	private getSpatialPerfActivityCounters(): CanvasSpatialPerfActivityCounters {
+		const visibility = this.canvas.visibilityManager?.getSnapshot?.()
+		const runtime = this.canvas.runtimeScheduler?.getSnapshot?.()
+		const drawLayerRequestCounts: Record<string, number> = {}
+		const drawLayerDrawnCounts: Record<string, number> = {}
+		if (runtime?.layers) {
+			Object.entries(runtime.layers).forEach(([layerName, layer]) => {
+				drawLayerRequestCounts[layerName] = layer.requestedCount
+				drawLayerDrawnCounts[layerName] = layer.drawnCount
+			})
+		}
+		return {
+			visibilityRefreshCount: visibility?.queryCount ?? 0,
+			visibilitySkippedRefreshCount: visibility?.skippedViewportQueryCount ?? 0,
+			drawRequestCount: runtime?.drawRequestCount ?? 0,
+			drawnCount: runtime?.drawnCount ?? 0,
+			drawFlushCount: runtime?.flushCount ?? 0,
+			drawCoalescedRequestCount: runtime?.coalescedDrawRequestCount ?? 0,
+			drawSkippedByStageCount: runtime?.skippedByStageDrawCount ?? 0,
+			lastDrawFlushDurationMs: runtime?.lastFlushDurationMs ?? 0,
+			drawReasonCounts: runtime?.drawReasonCounts ?? {},
+			drawLayerRequestCounts,
+			drawLayerDrawnCounts,
+			viewportScaleDispatchCount: runtime?.viewportScaleLayouts.dispatchCount ?? 0,
+			viewportScaleCallbackCount: runtime?.viewportScaleLayouts.totalCallbackCount ?? 0,
+			viewportScaleActivationCallbackCount:
+				runtime?.viewportScaleLayouts.activationCallbackCount ?? 0,
+			lastVisibilityRefreshDurationMs: visibility?.lastQueryDurationMs ?? 0,
+			registeredMediaCount:
+				(visibility?.registeredImageCount ?? 0) +
+				(visibility?.registeredVideoCount ?? 0) +
+				(visibility?.registeredAudioCount ?? 0),
+			visibleMediaCount:
+				(visibility?.visibleImageCount ?? 0) +
+				(visibility?.visibleVideoCount ?? 0) +
+				(visibility?.visibleAudioCount ?? 0),
+			nearMediaCount:
+				(visibility?.nearImageCount ?? 0) +
+				(visibility?.nearVideoCount ?? 0) +
+				(visibility?.nearAudioCount ?? 0),
+			registeredViewportScaleLayoutElementCount:
+				runtime?.viewportScaleLayouts.registeredElementCount ?? 0,
+			registeredViewportScaleLayoutCallbackCount:
+				runtime?.viewportScaleLayouts.registeredCallbackCount ?? 0,
+			activeViewportScaleLayoutElementCount:
+				runtime?.viewportScaleLayouts.activeElementCount ?? 0,
+			lastViewportScaleLayoutVisitedElementCount:
+				runtime?.viewportScaleLayouts.lastVisitedElementCount ?? 0,
+			lastViewportScaleLayoutCallbackCount:
+				runtime?.viewportScaleLayouts.lastCallbackCount ?? 0,
+		}
 	}
 
 	public getElementBounds(elementId: string): Rect | null {
@@ -140,19 +414,36 @@ export class GeometryCacheManager {
 	public queryElementIdsByExpandedRect(
 		rect: Rect,
 		padding: number,
-		options?: { elementIds?: Iterable<string> },
+		options?: GeometrySpatialQueryOptions,
 	): string[] {
+		const profilingSession = this.spatialQueryProfilingSession
+		const queryStartedAt = profilingSession ? now() : 0
 		const queryRect = expandRect(rect, padding)
 		const candidateElementIds = options?.elementIds
+		const existingSetFilter = candidateElementIds instanceof Set ? candidateElementIds : null
+		const copiedFilter = Boolean(profilingSession && candidateElementIds && !existingSetFilter)
 		const allowedIds: ReadonlySet<string> | null = candidateElementIds
-			? candidateElementIds instanceof Set
-				? candidateElementIds
-				: new Set(candidateElementIds)
+			? (existingSetFilter ?? new Set(candidateElementIds))
 			: null
 		const estimatedCellCount = this.getCellCountForRect(queryRect)
 
 		if (allowedIds && this.shouldDirectScanAllowedIds(allowedIds, estimatedCellCount)) {
-			return this.queryAllowedIdsByRect(allowedIds, queryRect)
+			const result = this.queryAllowedIdsByRect(allowedIds, queryRect)
+			if (profilingSession) {
+				this.recordSpatialQuery(profilingSession, {
+					source: options?.debugSource ?? "unspecified",
+					mode: "direct-scan",
+					durationMs: now() - queryStartedAt,
+					filterSize: allowedIds.size,
+					hasFilter: true,
+					copiedFilter,
+					estimatedCellCount,
+					visitedCellCount: 0,
+					candidateCount: allowedIds.size,
+					resultCount: result.length,
+				})
+			}
+			return result
 		}
 
 		this.ensureSpatialIndex()
@@ -176,6 +467,20 @@ export class GeometryCacheManager {
 				result.push(elementId)
 			}
 		})
+		if (profilingSession) {
+			this.recordSpatialQuery(profilingSession, {
+				source: options?.debugSource ?? "unspecified",
+				mode: "indexed",
+				durationMs: now() - queryStartedAt,
+				filterSize: allowedIds?.size ?? 0,
+				hasFilter: allowedIds !== null,
+				copiedFilter,
+				estimatedCellCount,
+				visitedCellCount: cellKeys.length,
+				candidateCount: candidateIds.size,
+				resultCount: result.length,
+			})
+		}
 		return result
 	}
 
@@ -207,7 +512,68 @@ export class GeometryCacheManager {
 	}
 
 	public destroy(): void {
+		this.unregisterSpatialPerfDebug()
+		this.unregisterSpatialPerfDebug = () => undefined
+		this.spatialQueryProfilingSession = null
 		this.invalidateAll()
+	}
+
+	private recordSpatialQuery(
+		session: MutableGeometrySpatialQueryProfilingSession,
+		sample: GeometrySpatialQuerySample,
+	): void {
+		session.queryCount += 1
+		session.totalDurationMs += sample.durationMs
+		session.maxDurationMs = Math.max(session.maxDurationMs, sample.durationMs)
+		if (sample.mode === "indexed") session.indexedQueryCount += 1
+		else session.directScanQueryCount += 1
+		if (sample.hasFilter) {
+			session.filterQueryCount += 1
+			session.totalFilterElementCount += sample.filterSize
+		}
+		if (sample.copiedFilter) {
+			session.copiedFilterQueryCount += 1
+			session.copiedFilterElementCount += sample.filterSize
+		}
+		session.totalVisitedCellCount += sample.visitedCellCount
+		session.totalEstimatedCellCount += sample.estimatedCellCount
+		session.totalCandidateCount += sample.candidateCount
+		session.totalResultCount += sample.resultCount
+
+		let source = session.sources.get(sample.source)
+		if (!source) {
+			source = {
+				queryCount: 0,
+				indexedQueryCount: 0,
+				directScanQueryCount: 0,
+				totalDurationMs: 0,
+				maxDurationMs: 0,
+				totalCandidateCount: 0,
+				totalResultCount: 0,
+				filterQueryCount: 0,
+				totalFilterElementCount: 0,
+				copiedFilterQueryCount: 0,
+				copiedFilterElementCount: 0,
+				totalVisitedCellCount: 0,
+			}
+			session.sources.set(sample.source, source)
+		}
+		source.queryCount += 1
+		source.totalDurationMs += sample.durationMs
+		source.maxDurationMs = Math.max(source.maxDurationMs, sample.durationMs)
+		if (sample.mode === "indexed") source.indexedQueryCount += 1
+		else source.directScanQueryCount += 1
+		source.totalCandidateCount += sample.candidateCount
+		source.totalResultCount += sample.resultCount
+		if (sample.hasFilter) {
+			source.filterQueryCount += 1
+			source.totalFilterElementCount += sample.filterSize
+		}
+		if (sample.copiedFilter) {
+			source.copiedFilterQueryCount += 1
+			source.copiedFilterElementCount += sample.filterSize
+		}
+		source.totalVisitedCellCount += sample.visitedCellCount
 	}
 
 	private invalidateElementInternal(elementId: string): void {
@@ -255,15 +621,28 @@ export class GeometryCacheManager {
 
 	private ensureSpatialIndex(): void {
 		if (!this.spatialIndexDirty) return
+		const profilingSession = this.spatialQueryProfilingSession
+		const buildStartedAt = profilingSession ? now() : 0
 
 		this.spatialIndex.clear()
 		this.elementSpatialCells.clear()
 
-		for (const elementId of this.canvas.elementManager.getAllElementIds()) {
+		const elementIds = this.canvas.elementManager.getAllElementIds()
+		for (const elementId of elementIds) {
 			this.addElementToSpatialIndex(elementId)
 		}
 
 		this.spatialIndexDirty = false
+		if (profilingSession) {
+			const durationMs = now() - buildStartedAt
+			profilingSession.spatialIndexBuildCount += 1
+			profilingSession.totalSpatialIndexBuildDurationMs += durationMs
+			profilingSession.maxSpatialIndexBuildDurationMs = Math.max(
+				profilingSession.maxSpatialIndexBuildDurationMs,
+				durationMs,
+			)
+			profilingSession.lastSpatialIndexBuildElementCount = elementIds.length
+		}
 	}
 
 	private shouldDirectScanAllowedIds(

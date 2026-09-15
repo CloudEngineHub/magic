@@ -5,6 +5,7 @@ import type { LayerElement } from "../../document/types"
 
 interface HoverManagerPrivate {
 	handleMouseMove: (event: { target: Konva.Node }) => void
+	handleMouseLeave: () => void
 	hoverNode: Konva.Node | null
 	hoveredElementId: string | null
 	destroy: () => void
@@ -175,6 +176,7 @@ describe("HoverManager", () => {
 	})
 
 	afterEach(() => {
+		vi.useRealTimers()
 		vi.unstubAllGlobals()
 		vi.restoreAllMocks()
 	})
@@ -393,7 +395,8 @@ describe("HoverManager", () => {
 		manager.destroy()
 	})
 
-	it("sets hover from geometry when viewport pans an element under a stationary pointer", () => {
+	it("sets hover from geometry after viewport pan settles under a stationary pointer", () => {
+		vi.useFakeTimers()
 		const { eventHandlers, getIntersection, manager, requestLayerDraw } = createHoverManager({
 			geometryHitIds: ["element-1"],
 		})
@@ -401,12 +404,17 @@ describe("HoverManager", () => {
 
 		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
 
+		expect(manager.hoveredElementId).toBeNull()
+		expect(requestLayerDraw).not.toHaveBeenCalled()
+		vi.advanceTimersByTime(160)
+
 		expect(manager.hoveredElementId).toBe("element-1")
 		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
 		manager.destroy()
 	})
 
-	it("sets hover from geometry when viewport scales an element under a stationary pointer", () => {
+	it("sets hover from geometry after viewport scale settles under a stationary pointer", () => {
+		vi.useFakeTimers()
 		const { eventHandlers, getIntersection, manager, requestLayerDraw } = createHoverManager({
 			geometryHitIds: ["element-1"],
 		})
@@ -414,12 +422,17 @@ describe("HoverManager", () => {
 
 		eventHandlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
 
+		expect(manager.hoveredElementId).toBeNull()
+		expect(requestLayerDraw).not.toHaveBeenCalled()
+		vi.advanceTimersByTime(160)
+
 		expect(manager.hoveredElementId).toBe("element-1")
-		expect(requestLayerDraw).toHaveBeenCalled()
+		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
 		manager.destroy()
 	})
 
-	it("hit-tests once when zoom emits scale and pan in the same update", async () => {
+	it("hit-tests once after zoom emits scale and pan in the same update", async () => {
+		vi.useFakeTimers()
 		const { eventHandlers, getPointerPosition, manager } = createHoverManager({
 			geometryHitIds: ["element-1"],
 		})
@@ -427,21 +440,80 @@ describe("HoverManager", () => {
 		eventHandlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
 		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
 
+		expect(getPointerPosition).not.toHaveBeenCalled()
+		vi.advanceTimersByTime(160)
 		expect(getPointerPosition).toHaveBeenCalledTimes(1)
 
 		await Promise.resolve()
 		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 30, y: 40 } })
+		vi.advanceTimersByTime(160)
 		expect(getPointerPosition).toHaveBeenCalledTimes(2)
 		manager.destroy()
 	})
 
+	it("coalesces continuous viewport pan hit tests until movement settles", () => {
+		vi.useFakeTimers()
+		const { eventHandlers, getPointerPosition, manager } = createHoverManager({
+			geometryHitIds: ["element-1"],
+		})
+
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 10, y: 20 } })
+		vi.advanceTimersByTime(100)
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
+		vi.advanceTimersByTime(100)
+
+		expect(getPointerPosition).not.toHaveBeenCalled()
+		vi.advanceTimersByTime(60)
+		expect(getPointerPosition).toHaveBeenCalledTimes(1)
+		manager.destroy()
+	})
+
+	it("refreshes hover immediately when the viewport reports an explicit end", () => {
+		vi.useFakeTimers()
+		const { eventHandlers, getPointerPosition, manager } = createHoverManager({
+			geometryHitIds: ["element-1"],
+		})
+
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
+		expect(getPointerPosition).not.toHaveBeenCalled()
+
+		eventHandlers.get("viewport:changed")?.[0]?.({ data: { phase: "end" } })
+
+		expect(getPointerPosition).toHaveBeenCalledTimes(1)
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(vi.getTimerCount()).toBe(0)
+		manager.destroy()
+	})
+
+	it("does not leave hover suppressed when the viewport moves outside the stage", () => {
+		vi.useFakeTimers()
+		const raf = installRafMock()
+		const { eventHandlers, manager, target } = createHoverManager()
+
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
+		manager.handleMouseMove({ target })
+		expect(raf.count()).toBe(0)
+
+		manager.handleMouseLeave()
+		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 30, y: 40 } })
+		expect(vi.getTimerCount()).toBe(0)
+
+		manager.handleMouseMove({ target })
+		expect(raf.count()).toBe(1)
+		raf.flush()
+		expect(manager.hoveredElementId).toBe("element-1")
+		manager.destroy()
+	})
+
 	it("skips Konva intersection lookup during viewport refresh without connections", () => {
+		vi.useFakeTimers()
 		const { eventHandlers, getIntersection, manager } = createHoverManager({
 			geometryHitIds: ["element-1"],
 			hasConnections: false,
 		})
 
 		eventHandlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
+		vi.advanceTimersByTime(160)
 
 		expect(getIntersection).not.toHaveBeenCalled()
 		expect(manager.hoveredElementId).toBe("element-1")
@@ -449,12 +521,14 @@ describe("HoverManager", () => {
 	})
 
 	it("does not refresh element hover from geometry when the current pointer hits a connection node", () => {
+		vi.useFakeTimers()
 		const { eventHandlers, getIntersection, manager, requestLayerDraw } = createHoverManager({
 			geometryHitIds: ["element-1"],
 		})
 		getIntersection.mockReturnValue(createConnectionHitPathInsideElement())
 
 		eventHandlers.get("viewport:pan")?.[0]?.({ data: { x: 20, y: 30 } })
+		vi.advanceTimersByTime(160)
 
 		expect(manager.hoveredElementId).toBeNull()
 		expect(manager.hoverNode).toBeNull()

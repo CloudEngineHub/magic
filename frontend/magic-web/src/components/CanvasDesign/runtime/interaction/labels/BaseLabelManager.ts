@@ -46,7 +46,7 @@ export interface BaseLabelManagerConfig {
 
 class LabelCandidateIndex {
 	private typeBuckets = new Map<string, Set<string>>()
-	private queryCache = new Map<string, string[]>()
+	private queryCache = new Map<string, ReadonlySet<string>>()
 	private dirty = true
 
 	constructor(private readonly canvas: Canvas) {}
@@ -81,17 +81,17 @@ class LabelCandidateIndex {
 		}
 	}
 
-	public getCandidateIds(elementTypes: Set<string>): string[] {
+	public getCandidateIds(elementTypes: Set<string>): ReadonlySet<string> {
 		this.rebuildIfNeeded()
 		const cacheKey = this.getElementTypesCacheKey(elementTypes)
 		const cached = this.queryCache.get(cacheKey)
 		if (cached) return cached
 
-		const result: string[] = []
+		const result = new Set<string>()
 		for (const elementType of elementTypes) {
 			const bucket = this.typeBuckets.get(elementType)
 			if (bucket) {
-				result.push(...bucket)
+				bucket.forEach((elementId) => result.add(elementId))
 			}
 		}
 		this.queryCache.set(cacheKey, result)
@@ -824,11 +824,11 @@ export abstract class BaseLabelManager {
 		return this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			viewportRect,
 			padding,
-			{ elementIds },
+			{ elementIds, debugSource: "labels:visible" },
 		)
 	}
 
-	private getLabelCandidateElementIds(): string[] {
+	private getLabelCandidateElementIds(): ReadonlySet<string> {
 		return this.labelCandidateIndex.getCandidateIds(this.visibilityConfig.elementTypes)
 	}
 
@@ -861,8 +861,7 @@ export abstract class BaseLabelManager {
 
 		for (const elementId of candidateIds) {
 			if (!this.shouldShowLabel(elementId)) continue
-			if (isViewportScale && existingLabelIds.has(elementId)) {
-				touched = true
+			if ((isViewportScale || isViewportPan) && existingLabelIds.has(elementId)) {
 				continue
 			}
 			const hadLabel = this.labelMap.has(elementId)

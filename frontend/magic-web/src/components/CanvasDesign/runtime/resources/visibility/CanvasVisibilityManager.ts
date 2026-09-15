@@ -1432,12 +1432,12 @@ export class CanvasVisibilityManager {
 		const visibleElementIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			viewportRect,
 			0,
-			{ elementIds: queryElementIds },
+			{ elementIds: queryElementIds, debugSource: "visibility:full-visible" },
 		)
 		const activeElementIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			viewportRect,
 			nearPadding,
-			{ elementIds: queryElementIds },
+			{ elementIds: queryElementIds, debugSource: "visibility:full-active" },
 		)
 		const renderActiveRootIds = new Set<string>()
 		const activeViewportScaleLayoutElementIds = new Set<string>()
@@ -1504,7 +1504,10 @@ export class CanvasVisibilityManager {
 		const visibleElementIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			viewportRect,
 			0,
-			{ elementIds: this.registeredMediaElementIds },
+			{
+				elementIds: this.registeredMediaElementIds,
+				debugSource: "visibility:movement-visible-media",
+			},
 		)
 		visibleElementIds.forEach((elementId) => {
 			if (this.registeredImages.has(elementId)) visibleImageIds.add(elementId)
@@ -2119,13 +2122,13 @@ export class CanvasVisibilityManager {
 		const visible = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			viewportRect,
 			0,
-			{ elementIds: [elementId] },
+			{ elementIds: [elementId], debugSource: "visibility:consumer-initial-visible" },
 		)
 		if (visible.includes(elementId)) return "visible"
 		const near = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			viewportRect,
 			nearPadding,
-			{ elementIds: [elementId] },
+			{ elementIds: [elementId], debugSource: "visibility:consumer-initial-near" },
 		)
 		return near.includes(elementId) ? "near" : "far"
 	}
@@ -2137,13 +2140,14 @@ export class CanvasVisibilityManager {
 		const visibleIds = new Set(
 			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(viewportRect, 0, {
 				elementIds,
+				debugSource: "visibility:movement-consumer-visible",
 			}),
 		)
 		const nearIds = new Set(
 			this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 				viewportRect,
 				nearPadding,
-				{ elementIds },
+				{ elementIds, debugSource: "visibility:movement-consumer-near" },
 			),
 		)
 		this.applyConsumerVisibilityStates(visibleIds, nearIds)
@@ -2546,7 +2550,10 @@ export class CanvasVisibilityManager {
 		const visibleContainerIds = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			options.viewportRect,
 			0,
-			{ elementIds: rootContainers.map((element) => element.id) },
+			{
+				elementIds: rootContainers.map((element) => element.id),
+				debugSource: "visibility:visible-containers",
+			},
 		)
 		if (visibleContainerIds.length === 0) {
 			return { imageCandidates: [], videoCandidates: [], audioCandidates: [] }
