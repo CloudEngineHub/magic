@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import PublishedMicroAppConversationProvider from "../PublishedMicroAppConversationProvider"
 
@@ -14,12 +14,22 @@ vi.mock("@/pages/superMagic/pages/MicroAppPage/components/AppConversationPanel",
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
-		getMicroAppRuntimeProject: vi.fn().mockResolvedValue({ exists: false }),
+		getMicroAppRuntimeProject: vi.fn(),
 		ensureMicroAppRuntimeProject: vi.fn(),
+		getProjectDetail: vi.fn(),
+		getTopicsByProjectId: vi.fn(),
 	},
 }))
 
 describe("PublishedMicroAppConversationProvider", () => {
+	beforeEach(() => {
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockReset()
+		vi.mocked(SuperMagicApi.ensureMicroAppRuntimeProject).mockReset()
+		vi.mocked(SuperMagicApi.getProjectDetail).mockReset()
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockReset()
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockResolvedValue({ exists: false })
+	})
+
 	it("renders children without AppStoreProvider when conversation is disabled", () => {
 		render(
 			<PublishedMicroAppConversationProvider appId="app-1" enabled={false}>
@@ -47,4 +57,54 @@ describe("PublishedMicroAppConversationProvider", () => {
 			})
 		})
 	})
+
+	it("does not render a stale runtime project after switching apps", async () => {
+		const appA = createDeferred<{ exists: boolean; project?: { id: string } }>()
+		const appB = createDeferred<{ exists: boolean; project?: { id: string } }>()
+		vi.mocked(SuperMagicApi.getMicroAppRuntimeProject).mockImplementation(
+			(id) => (id === "app-1" ? appA.promise : appB.promise) as never,
+		)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+
+		const { rerender } = render(
+			<PublishedMicroAppConversationProvider appId="app-1">
+				<div data-testid="preview-child" />
+			</PublishedMicroAppConversationProvider>,
+		)
+		await waitFor(() =>
+			expect(SuperMagicApi.getMicroAppRuntimeProject).toHaveBeenCalledWith(
+				"app-1",
+				expect.anything(),
+			),
+		)
+
+		rerender(
+			<PublishedMicroAppConversationProvider appId="app-2">
+				<div data-testid="preview-child" />
+			</PublishedMicroAppConversationProvider>,
+		)
+		appB.resolve({ exists: false })
+		await waitFor(() =>
+			expect(SuperMagicApi.getMicroAppRuntimeProject).toHaveBeenCalledWith(
+				"app-2",
+				expect.anything(),
+			),
+		)
+
+		appA.resolve({ exists: true, project: { id: "project-a" } })
+		await new Promise((resolve) => setTimeout(resolve, 0))
+		expect(SuperMagicApi.getProjectDetail).not.toHaveBeenCalled()
+		expect(
+			screen.queryByTestId("published-micro-app-conversation-expand"),
+		).not.toBeInTheDocument()
+	})
 })
+
+function createDeferred<T>() {
+	let resolve!: (value: T) => void
+	const promise = new Promise<T>((resolvePromise) => {
+		resolve = resolvePromise
+	})
+
+	return { promise, resolve }
+}

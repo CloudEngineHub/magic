@@ -7,6 +7,8 @@ import type { ProjectListItem } from "../../Workspace/types"
 
 export type MicroAppConversationType = "development" | "usage"
 
+const RUNTIME_PROJECT_LOAD_SUPERSEDED = "Runtime project load superseded"
+
 export class AppRootStore {
 	projectId: string | null = null
 	initLoading = false
@@ -21,6 +23,9 @@ export class AppRootStore {
 		selectedProject: ProjectListItem
 		topicStore: AppConversationStore["topicStore"]
 	}> | null = null
+	runtimeProjectPromiseAppId: string | null = null
+	runtimeProjectAppId: string | null = null
+	runtimeProjectRequestId = 0
 	readonly projectFilesStore: ProjectFilesStore
 	readonly mentionPanelStore: ReturnType<typeof createMentionPanelStore>
 
@@ -36,6 +41,9 @@ export class AppRootStore {
 				developmentConversation: false,
 				usageConversation: false,
 				runtimeProjectPromise: false,
+				runtimeProjectPromiseAppId: false,
+				runtimeProjectAppId: false,
+				runtimeProjectRequestId: false,
 				projectFilesStore: false,
 				mentionPanelStore: false,
 			},
@@ -54,18 +62,27 @@ export class AppRootStore {
 	}
 
 	async loadRuntimeProject(appId: string): Promise<void> {
+		if (this.runtimeProject && this.runtimeProjectAppId === appId) return
+		// A new app invalidates every callback from the previous runtime load.
+		const requestId = ++this.runtimeProjectRequestId
+		const isCurrent = () => this.runtimeProjectRequestId === requestId
+		this.runtimeProject = null
+		this.runtimeProjectAppId = null
 		this.runtimeProjectState = "unknown"
+		this.usageConversation.reset()
 		try {
 			const result = await SuperMagicApi.getMicroAppRuntimeProject(appId, {
 				enableErrorMessagePrompt: false,
 			})
-			if (this.runtimeProject) return
+			if (!isCurrent()) return
 			if (result.exists && result.project) {
-				await this.usageConversation.loadProjectContext(result.project.id)
+				await this.usageConversation.loadProjectContext(result.project.id, { isCurrent })
+				if (!isCurrent()) return
 				const loadedProject = this.usageConversation.selectedProject
 				if (!loadedProject) throw new Error("Runtime project could not be loaded")
 				runInAction(() => {
 					this.runtimeProject = loadedProject
+					this.runtimeProjectAppId = appId
 					this.runtimeProjectState = "ready"
 				})
 			} else {
@@ -75,8 +92,10 @@ export class AppRootStore {
 				})
 			}
 		} catch {
+			if (!isCurrent()) return
 			runInAction(() => {
 				this.runtimeProject = null
+				this.runtimeProjectAppId = null
 				this.runtimeProjectState = "absent"
 			})
 		}
@@ -86,21 +105,34 @@ export class AppRootStore {
 		selectedProject: ProjectListItem
 		topicStore: AppConversationStore["topicStore"]
 	}> {
-		if (this.runtimeProjectPromise) return this.runtimeProjectPromise
-		if (this.runtimeProject) {
+		if (this.runtimeProjectPromise && this.runtimeProjectPromiseAppId === appId) {
+			return this.runtimeProjectPromise
+		}
+		if (this.runtimeProject && this.runtimeProjectAppId === appId) {
 			this.conversationType = "usage"
 			return {
 				selectedProject: this.runtimeProject,
 				topicStore: this.usageConversation.topicStore,
 			}
 		}
-		this.runtimeProjectPromise = (async () => {
+		const requestId = ++this.runtimeProjectRequestId
+		// Ensure and load operations share one version so explicit usage wins over
+		// a background lookup instead of allowing the two hydrations to race.
+		const isCurrent = () => this.runtimeProjectRequestId === requestId
+		this.runtimeProject = null
+		this.runtimeProjectAppId = null
+		this.runtimeProjectState = "unknown"
+		this.usageConversation.reset()
+		const promise = (async () => {
 			const result = await SuperMagicApi.ensureMicroAppRuntimeProject(appId)
-			await this.usageConversation.loadProjectContext(result.project.id)
+			if (!isCurrent()) throw new Error(RUNTIME_PROJECT_LOAD_SUPERSEDED)
+			await this.usageConversation.loadProjectContext(result.project.id, { isCurrent })
+			if (!isCurrent()) throw new Error(RUNTIME_PROJECT_LOAD_SUPERSEDED)
 			const loadedProject = this.usageConversation.selectedProject
 			if (!loadedProject) throw new Error("Runtime project could not be loaded")
 			runInAction(() => {
 				this.runtimeProject = loadedProject
+				this.runtimeProjectAppId = appId
 				this.runtimeProjectState = "ready"
 				this.conversationType = "usage"
 			})
@@ -109,10 +141,15 @@ export class AppRootStore {
 				topicStore: this.usageConversation.topicStore,
 			}
 		})()
+		this.runtimeProjectPromise = promise
+		this.runtimeProjectPromiseAppId = appId
 		try {
-			return await this.runtimeProjectPromise
+			return await promise
 		} finally {
-			this.runtimeProjectPromise = null
+			if (this.runtimeProjectPromise === promise) {
+				this.runtimeProjectPromise = null
+				this.runtimeProjectPromiseAppId = null
+			}
 		}
 	}
 
@@ -150,8 +187,11 @@ export class AppRootStore {
 		this.usageConversation.reset()
 		this.conversationType = "development"
 		this.runtimeProject = null
+		this.runtimeProjectAppId = null
 		this.runtimeProjectState = "unknown"
 		this.runtimeProjectPromise = null
+		this.runtimeProjectPromiseAppId = null
+		this.runtimeProjectRequestId += 1
 		this.projectFilesStore.setSelectedProject(null)
 	}
 

@@ -14,6 +14,8 @@ import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import { userStore } from "@/models/user"
 
+const RUNTIME_PROJECT_LOAD_SUPERSEDED = "Runtime project load superseded"
+
 interface PublishedMicroAppConversationProviderProps {
 	appId: string
 	enabled?: boolean
@@ -34,15 +36,16 @@ const PublishedMicroAppConversationSurface = observer(
 		const appStore = useAppStore()
 		const { conversation } = appStore
 		const [runtimeProject, setRuntimeProject] = useState<ProjectListItem | null>(null)
-		const runtimeProjectRef = useRef<ProjectListItem | null>(null)
 		const [runtimeProjectState, setRuntimeProjectState] = useState<
 			"loading" | "absent" | "ready"
 		>("loading")
 		const [isOpen, setIsOpen] = useState(false)
+		const runtimeRequestIdRef = useRef(0)
 		const ensurePromiseRef = useRef<Promise<{
 			selectedProject: ProjectListItem
 			topicStore: typeof conversation.topicStore
 		}> | null>(null)
+		const ensurePromiseAppIdRef = useRef<string | null>(null)
 		const projectFilesStore = useMemo(() => new ProjectFilesStore(), [])
 		const mentionPanelStore = useMemo(
 			() => createMentionPanelStore(projectFilesStore),
@@ -50,54 +53,71 @@ const PublishedMicroAppConversationSurface = observer(
 		)
 
 		const loadRuntimeProject = useCallback(
-			async (project: Pick<MicroAppRuntimeProject, "id">) => {
-				await conversation.loadProjectContext(project.id)
+			async (project: Pick<MicroAppRuntimeProject, "id">, isCurrent: () => boolean) => {
+				await conversation.loadProjectContext(project.id, { isCurrent })
+				if (!isCurrent()) return false
 				const loadedProject = conversation.selectedProject
 				if (!loadedProject) throw new Error("Runtime project could not be loaded")
 				projectFilesStore.setSelectedProject(loadedProject)
 				setRuntimeProject(loadedProject)
-				runtimeProjectRef.current = loadedProject
 				setRuntimeProjectState("ready")
+				return true
 			},
 			[conversation, projectFilesStore],
 		)
 
 		useEffect(() => {
-			let cancelled = false
+			// Every appId gets a version so old responses cannot update the new preview.
+			const requestId = ++runtimeRequestIdRef.current
+			const isCurrent = () => runtimeRequestIdRef.current === requestId
+			setRuntimeProject(null)
 			setRuntimeProjectState("loading")
 			void SuperMagicApi.getMicroAppRuntimeProject(appId, { enableErrorMessagePrompt: false })
 				.then(async (result) => {
-					if (cancelled) return
-					if (runtimeProjectRef.current) return
-					if (result.exists && result.project) await loadRuntimeProject(result.project)
-					else setRuntimeProjectState("absent")
+					if (!isCurrent()) return
+					if (result.exists && result.project)
+						await loadRuntimeProject(result.project, isCurrent)
+					else if (isCurrent()) setRuntimeProjectState("absent")
 				})
 				.catch(() => {
-					if (!cancelled) setRuntimeProjectState("absent")
+					if (isCurrent()) setRuntimeProjectState("absent")
 				})
 			return () => {
-				cancelled = true
-				runtimeProjectRef.current = null
+				runtimeRequestIdRef.current += 1
+				setRuntimeProject(null)
 				conversation.reset()
 				projectFilesStore.setSelectedProject(null)
 			}
 		}, [appId, conversation, loadRuntimeProject, projectFilesStore])
 
 		const ensureConversation = async () => {
-			if (ensurePromiseRef.current) return ensurePromiseRef.current
+			if (ensurePromiseRef.current && ensurePromiseAppIdRef.current === appId) {
+				return ensurePromiseRef.current
+			}
 			if (!userStore.user.authorization?.trim()) throw new Error("Authentication required")
 			if (runtimeProject && conversation.selectedProject?.id === runtimeProject.id) {
 				return { selectedProject: runtimeProject, topicStore: conversation.topicStore }
 			}
-			ensurePromiseRef.current = (async () => {
+			const requestId = ++runtimeRequestIdRef.current
+			const isCurrent = () => runtimeRequestIdRef.current === requestId
+			setRuntimeProject(null)
+			setRuntimeProjectState("loading")
+			const promise = (async () => {
 				const result = await SuperMagicApi.ensureMicroAppRuntimeProject(appId)
-				await loadRuntimeProject(result.project)
+				if (!isCurrent()) throw new Error(RUNTIME_PROJECT_LOAD_SUPERSEDED)
+				await loadRuntimeProject(result.project, isCurrent)
+				if (!isCurrent()) throw new Error(RUNTIME_PROJECT_LOAD_SUPERSEDED)
 				return { selectedProject: result.project, topicStore: conversation.topicStore }
 			})()
+			ensurePromiseRef.current = promise
+			ensurePromiseAppIdRef.current = appId
 			try {
-				return await ensurePromiseRef.current
+				return await promise
 			} finally {
-				ensurePromiseRef.current = null
+				if (ensurePromiseRef.current === promise) {
+					ensurePromiseRef.current = null
+					ensurePromiseAppIdRef.current = null
+				}
 			}
 		}
 
