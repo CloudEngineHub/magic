@@ -117,7 +117,8 @@ class FileRecycleBinSubscriber implements ListenerInterface
         $this->recordFileDeletion(
             $entity,
             $event->getUserId(),
-            $event->getSource()
+            $event->getSource(),
+            $context
         );
     }
 
@@ -139,7 +140,8 @@ class FileRecycleBinSubscriber implements ListenerInterface
         $this->recordFileDeletion(
             $entity,
             $event->getUserAuthorization()->getId(),
-            $event->getSource()
+            $event->getSource(),
+            $context
         );
     }
 
@@ -154,7 +156,6 @@ class FileRecycleBinSubscriber implements ListenerInterface
         }
 
         $context = $this->buildPolicyContext($fileEntities, $event->getSource());
-        $relativePathMap = $this->buildRelativePathMap($fileEntities, $event->getProjectId());
 
         foreach ($fileEntities as $fileEntity) {
             try {
@@ -172,7 +173,7 @@ class FileRecycleBinSubscriber implements ListenerInterface
                     $fileEntity,
                     $event->getUserId(),
                     $event->getSource(),
-                    $relativePathMap[$fileEntity->getFileId()] ?? null
+                    $context
                 );
             } catch (Throwable $e) {
                 $this->logger->error('单个文件删除策略处理失败，继续处理批次', [
@@ -200,9 +201,14 @@ class FileRecycleBinSubscriber implements ListenerInterface
             return new FileDeletionPolicyContext();
         }
 
+        $files = $this->loadFileMap($entities);
+        $treeContext = new FileDeletionPolicyContext(files: $files);
         $taskIds = [];
         $topicIds = [];
         foreach ($entities as $entity) {
+            if ($treeContext->isUnderRootHiddenDirectory((int) $entity->getFileId())) {
+                continue;
+            }
             if ($entity->getTaskId() > 0) {
                 $taskIds[$entity->getTaskId()] = $entity->getTaskId();
             }
@@ -212,8 +218,9 @@ class FileRecycleBinSubscriber implements ListenerInterface
         }
 
         return new FileDeletionPolicyContext(
-            $this->taskRepository->getTasksByIds(array_values($taskIds)),
-            $this->indexTopics($this->topicDomainService->getTopicsByIds(array_values($topicIds)))
+            $taskIds === [] ? [] : $this->taskRepository->getTasksByIds(array_values($taskIds)),
+            $topicIds === [] ? [] : $this->indexTopics($this->topicDomainService->getTopicsByIds(array_values($topicIds))),
+            $files
         );
     }
 
@@ -231,7 +238,7 @@ class FileRecycleBinSubscriber implements ListenerInterface
         TaskFileEntity $fileEntity,
         string $deletedBy,
         DeleteEventSource $source,
-        ?string $relativeFilePath = null
+        FileDeletionPolicyContext $context
     ): void {
         $fileId = (int) $fileEntity->getFileId();
         if ($fileId <= 0) {
@@ -252,11 +259,11 @@ class FileRecycleBinSubscriber implements ListenerInterface
         $originalParentId = $fileEntity->getParentId();
         $originalParentName = '';
         if ($originalParentId !== null && $originalParentId > 0) {
-            $parent = $this->taskFileDomainService->getByIdWithTrash($originalParentId);
+            $parent = $context->files[$originalParentId] ?? null;
             $originalParentName = $parent?->getFileName() ?? '';
         }
 
-        $relativeFilePath ??= $this->buildRelativeFilePath($fileEntity);
+        $relativeFilePath = RelativeFilePathUtil::buildPathByParentChain($fileEntity, $context->files);
 
         $this->recycleBinDomainService->recordDeletion(
             resourceType: RecycleBinResourceType::File,
@@ -282,40 +289,35 @@ class FileRecycleBinSubscriber implements ListenerInterface
         );
     }
 
-    private function buildRelativeFilePath(TaskFileEntity $fileEntity): string
-    {
-        $pathMap = $this->buildRelativePathMap([$fileEntity], $fileEntity->getProjectId());
-
-        return $pathMap[$fileEntity->getFileId()] ?? '/';
-    }
-
     /**
-     * @param TaskFileEntity[] $fileEntities
-     * @return array<int, string>
+     * @param TaskFileEntity[] $entities
+     * @return array<int, TaskFileEntity>
      */
-    private function buildRelativePathMap(array $fileEntities, int $projectId): array
+    private function loadFileMap(array $entities): array
     {
-        if (empty($fileEntities)) {
-            return [];
-        }
-
-        $parentIds = [];
-        foreach ($fileEntities as $fileEntity) {
-            $parentId = $fileEntity->getParentId();
-            if ($parentId !== null && $parentId > 0) {
-                $parentIds[$parentId] = $parentId;
+        $fileMap = RelativeFilePathUtil::indexByFileId($entities);
+        $frontier = $entities;
+        $requested = [];
+        while ($frontier !== []) {
+            $missing = [];
+            foreach ($frontier as $file) {
+                $parentId = $file->getParentId();
+                if ($parentId !== null && $parentId > 0
+                    && ! isset($fileMap[$parentId]) && ! isset($requested[$parentId])) {
+                    $missing[$parentId] = $parentId;
+                    $requested[$parentId] = true;
+                }
+            }
+            if ($missing === []) {
+                break;
+            }
+            // Deletion events arrive after soft deletion; reuse event entities first.
+            $frontier = $this->taskFileDomainService->getFilesByIdsWithTrash(array_values($missing));
+            foreach ($frontier as $file) {
+                $fileMap[$file->getFileId()] = $file;
             }
         }
 
-        $filesWithParents = empty($parentIds)
-            ? []
-            : $this->taskFileDomainService->getFilesWithParentsByIds(array_values($parentIds), $projectId);
-        $fileMap = RelativeFilePathUtil::indexByFileId($filesWithParents);
-
-        foreach ($fileEntities as $fileEntity) {
-            $fileMap[$fileEntity->getFileId()] = $fileEntity;
-        }
-
-        return RelativeFilePathUtil::buildPathMapByParentChain($fileEntities, $fileMap);
+        return $fileMap;
     }
 }
