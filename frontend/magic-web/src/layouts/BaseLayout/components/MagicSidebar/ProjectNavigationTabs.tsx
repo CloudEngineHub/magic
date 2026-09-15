@@ -44,7 +44,7 @@ function ProjectNavigationTabs({ disabled }: { disabled: boolean }) {
 			<SidebarMenu
 				role="group"
 				aria-label={t("sidebarPanels.projectManager")}
-				className="flex-row gap-1"
+				className="flex-row gap-1 rounded-lg bg-muted p-0.5"
 			>
 				<SidebarMenuItem className="min-w-0 flex-1">
 					<SidebarMenuButton
@@ -54,7 +54,7 @@ function ProjectNavigationTabs({ disabled }: { disabled: boolean }) {
 						tooltip={{ children: recent, hidden: !compact, side: "top" }}
 						disabled={disabled}
 						onClick={() => sidebarStore.selectNavigationSection("recent")}
-						className="relative h-8 justify-center text-sm font-normal focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-0 data-[active=true]:font-normal"
+						className="relative h-7 justify-center text-sm font-normal text-muted-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-0 data-[active=true]:bg-background data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-sm data-[active=true]:ring-1 data-[active=true]:ring-border"
 						data-testid="sidebar-recent-projects-toggle"
 					>
 						<Clock3 size={16} />
@@ -76,7 +76,7 @@ function ProjectNavigationTabs({ disabled }: { disabled: boolean }) {
 						tooltip={{ children: workspaces, hidden: !compact, side: "top" }}
 						disabled={disabled}
 						onClick={() => sidebarStore.selectNavigationSection("workspaces")}
-						className="relative h-8 justify-center text-sm font-normal focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-0 data-[active=true]:font-normal"
+						className="relative h-7 justify-center text-sm font-normal text-muted-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-0 data-[active=true]:bg-background data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-sm data-[active=true]:ring-1 data-[active=true]:ring-border"
 						data-testid="sidebar-workspaces-toggle"
 					>
 						<Box size={16} />
