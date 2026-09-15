@@ -37,6 +37,7 @@ import {
 } from "@/components/shadcn-ui/sidebar"
 import { useWorkspaceListDnd } from "./useWorkspaceListDnd"
 import { useProjectPinBoundaryConfirmation } from "./ProjectPinBoundaryConfirmDialog"
+import { subscribeWorkspaceSearchInvalidation } from "@/pages/superMagic/services/workspaceListSearchInvalidation"
 
 const SEARCH_PAGE_SIZE = 20
 
@@ -267,6 +268,32 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 		},
 		[cancelSearch, runSearch, updateSearchState, workspaces],
 	)
+
+	useEffect(() => {
+		return subscribeWorkspaceSearchInvalidation(() => {
+			if (!isSearchMode) return
+
+			const keyword = searchState.value.trim()
+			if (!keyword) {
+				updateSearchState((draft) => {
+					draft.page = 1
+					draft.hasMoreWorkspaces = true
+					draft.workspaces = toJS(workspaces)
+					draft.projects = []
+				})
+				return
+			}
+
+			// Refetch only after the mutation API has finished so the snapshot matches server state.
+			cancelSearch()
+			isSearchPendingRef.current = true
+			updateSearchState((draft) => {
+				draft.page = 1
+				draft.hasMoreWorkspaces = true
+			})
+			runSearch({ keyword, page: 1, append: false })
+		})
+	}, [cancelSearch, isSearchMode, runSearch, searchState.value, updateSearchState, workspaces])
 
 	const loadNextPage = useCallback(() => {
 		if (!isSearchMode) {
