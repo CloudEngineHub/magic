@@ -11,6 +11,7 @@ from app.tools.canvas.application.commands import GenerationParameters, Generati
 from app.tools.canvas.application.results import RetryContentResultItem, RetryContentsResult
 from app.tools.canvas.application.support import CanvasApplicationOperations
 from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
+from app.tools.canvas.domain.content_fields.video import VideoContentFields
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
@@ -148,7 +149,16 @@ class RetryContentService:
                     parameters,
                     idempotency_key,
                     element_type=element.element_type,
+                    project_path=project_path,
                 )
+                if isinstance(content.fields, VideoContentFields):
+                    retry_parameters = retry_detail.get("generationParameters")
+                    initial_metadata = ContentMetadataService.build_video_result_metadata(
+                        retry_parameters if isinstance(retry_parameters, dict) else {}
+                    )
+                    content.fields.replace_generation_result_metadata(
+                        ContentMetadataService.merge_video_result_metadata({}, initial_metadata, "pending")
+                    )
                 if is_composition:
                     retry_detail["retryResult"] = self._composition_retry_result(
                         item.item_ref,

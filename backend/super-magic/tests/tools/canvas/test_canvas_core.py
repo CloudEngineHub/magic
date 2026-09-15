@@ -131,12 +131,85 @@ def test_codec_preserves_unknown_frontend_fields_when_reading_and_saving() -> No
     content = decoded.canvas.elements[0].contents[0]
     element = decoded.canvas.elements[0]
 
-    assert content.extra_data["videoEditorDraft"] == draft
+    assert content.fields.video_editor_draft == draft
     assert element.extra_data == {"frontendElementState": {"selected": True}}
 
     saved_again = CanvasCodec.decode(CanvasCodec.encode(decoded))
-    assert saved_again.canvas.elements[0].contents[0].extra_data["videoEditorDraft"] == draft
+    assert saved_again.canvas.elements[0].contents[0].fields.video_editor_draft == draft
     assert saved_again.canvas.elements[0].extra_data == {"frontendElementState": {"selected": True}}
+
+
+def test_codec_preserves_frontend_media_fields_and_fractional_z_index() -> None:
+    """前端已声明的媒体字段和小数层级必须由后端显式无损处理。"""
+    project = CanvasProject(
+        version="3.0.0",
+        project_type="design",
+        name="mock-project",
+        canvas=CanvasDocument(elements=[
+            CanvasElement(
+                element_id="video-1",
+                element_type="video",
+                properties=ElementProperties(z_index=1.5),
+                contents=[CanvasContent(
+                    "content-1",
+                    VideoContentFields(
+                        visual_understanding={"summary": "mock visual summary"},
+                        video_editor_draft={"version": 1, "request": {}},
+                        video_generation_result_meta={"billing": {"points": 2}},
+                    ),
+                )],
+                active_content_id="content-1",
+                main_content_id="content-1",
+            ),
+        ]),
+    )
+
+    content = CanvasCodec.decode(CanvasCodec.encode(project)).canvas.elements[0]
+
+    assert content.properties.z_index == 1.5
+    assert content.contents[0].fields.visual_understanding == {"summary": "mock visual summary"}
+    assert content.contents[0].fields.video_editor_draft == {"version": 1, "request": {}}
+    assert content.contents[0].fields.video_generation_result_meta == {"billing": {"points": 2}}
+
+
+@pytest.mark.asyncio
+async def test_repository_splits_public_heavy_fields_from_video_main_content(tmp_path) -> None:
+    """新写数据只把前端公共重字段放入 Sidecar，视频结果字段留在主文件。"""
+    repository = CanvasRepository(tmp_path)
+    await repository.initialize("mock-project")
+
+    def mutate(project, metadata):
+        project.canvas.elements.append(CanvasElement(
+            element_id="video-1",
+            element_type="video",
+            contents=[CanvasContent(
+                "content-1",
+                VideoContentFields(
+                    src="./videos/mock.mp4",
+                    status="completed",
+                    visual_understanding={"summary": "mock visual summary"},
+                    generate_video_request={"prompt": "mock prompt"},
+                    video_editor_draft={"version": 1, "request": {}},
+                    video_generation_result_meta={"billing": {"points": 2}},
+                ),
+            )],
+            active_content_id="content-1",
+            main_content_id="content-1",
+        ))
+        return None, metadata
+
+    await repository.transaction_with_sidecar("mock-project", mutate)
+
+    saved_content = (await repository.read("mock-project")).canvas.elements[0].contents[0].fields
+    detail = (await repository.read_sidecar("mock-project"))["elements"]["video-1"]["contentDetails"]["content-1"]
+    assert saved_content.generate_video_request is None
+    assert saved_content.visual_understanding is None
+    assert saved_content.video_editor_draft == {"version": 1, "request": {}}
+    assert saved_content.video_generation_result_meta == {"billing": {"points": 2}}
+    assert detail == {
+        "generateVideoRequest": {"prompt": "mock prompt"},
+        "visualUnderstanding": {"summary": "mock visual summary"},
+    }
 
 
 def _encode_raw_canvas(name: str, canvas: dict) -> str:
@@ -610,6 +683,13 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
         "mock-project",
         [{"item_ref": "video", "element_type": "video", "content": {"source": "generated", "content_type": "video", "prompt": "mock"}}],
     )
+    pending_project = await repository.read("mock-project")
+    pending_video = pending_project.canvas.get_element(video_result["items"][0]["element_id"])
+    pending_content = pending_video.get_content(pending_video.active_content_id)
+    pending_sidecar = await repository.read_sidecar("mock-project")
+    pending_detail = pending_sidecar["elements"][pending_video.element_id]["contentDetails"][pending_content.content_id]
+    assert pending_content.fields.video_generation_result_meta["generation_info"]["input_mode"] == "standard"
+    assert "videoGenerationResultMeta" not in pending_detail
     waited = await application.wait("mock-project", ["canvas-task-1"], max_wait_seconds=1)
     waited_again = await application.wait("mock-project", ["canvas-task-1"], max_wait_seconds=1)
     project = await repository.read("mock-project")
@@ -630,7 +710,8 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
     video_detail = sidecar["elements"][video.element_id]["contentDetails"][video.active_content_id]
     assert video_detail["generateVideoRequest"]["model_id"] == "mock-video-model"
     assert video_detail["generateVideoRequest"]["input_mode"] == "standard"
-    assert video_detail["videoGenerationResultMeta"] == {
+    assert "videoGenerationResultMeta" not in video_detail
+    assert video.get_content(video.active_content_id).fields.video_generation_result_meta == {
         "generation_info": {
             "input_mode": "standard",
             "resolution": "720p",
