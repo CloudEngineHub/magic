@@ -108,21 +108,13 @@ class GlobalConfigApi extends AbstractApi
 
     public function getAllGlobalConfig(): array
     {
-        $this->logger->info('watermark_debug settings/all enter');
-
         // Try to get from cache
         $cachedData = GlobalConfigCacheUtil::get(GlobalConfigCacheUtil::getGlobalConfigKey());
         if ($cachedData !== false) {
-            $cachedWatermark = $cachedData['platform_settings']['watermark'] ?? null;
-            $this->logger->info('watermark_debug settings/all cache hit', [
-                'has_watermark' => $cachedWatermark !== null,
-                'watermark' => $cachedWatermark,
-            ]);
+            $this->logger->info('Global config - cache hit');
+            $this->logger->info('watermark_debug settings/all cache=' . (isset($cachedData['platform_settings']['watermark']) ? 'hit_with_watermark' : 'hit_no_watermark'));
             return $cachedData;
         }
-
-        $this->logger->info('watermark_debug settings/all cache miss, load platform settings');
-
         $result = [];
         // 合并平台设置
         try {
@@ -131,21 +123,15 @@ class GlobalConfigApi extends AbstractApi
             $parallel = new Parallel();
 
             $magicSettingAppService = $this->magicSettingAppService;
-            $logger = $this->logger;
 
             $parallel->add(function () use ($magicSettingAppService) {
                 $config = $magicSettingAppService->get();
                 return $config->toArray();
             }, 'global_config');
 
-            $parallel->add(function () use ($platformSettingsAppService, $logger) {
+            $parallel->add(function () use ($platformSettingsAppService) {
                 $platform = $platformSettingsAppService->get();
-                $raw = $platform->toArray();
-                $logger->info('watermark_debug platform settings loaded', [
-                    'has_watermark' => isset($raw['watermark']),
-                    'watermark' => $raw['watermark'] ?? null,
-                ]);
-                return self::platformSettingsToResponse($raw);
+                return self::platformSettingsToResponse($platform->toArray());
             }, 'platform_settings');
 
             $fileAppService = $this->fileAppService;
@@ -160,11 +146,7 @@ class GlobalConfigApi extends AbstractApi
             $result = $parallel->wait();
             $result['global_config'] = $this->appendBootstrapState((array) ($result['global_config'] ?? []));
 
-            $mappedWatermark = $result['platform_settings']['watermark'] ?? null;
-            $this->logger->info('watermark_debug settings/all mapped', [
-                'has_watermark' => $mappedWatermark !== null,
-                'watermark' => $mappedWatermark,
-            ]);
+            $this->logger->info('watermark_debug settings/all cache=miss has_watermark=' . (isset($result['platform_settings']['watermark']) ? '1' : '0'));
 
             // Cache the result for 5 minutes (300 seconds) - longer TTL since it's global
             GlobalConfigCacheUtil::setGlobalConfig($result);
