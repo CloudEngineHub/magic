@@ -5,7 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 
-namespace App\Infrastructure\ExternalAPI\Assets;
+namespace App\Infrastructure\ExternalAPI\VolcengineArk\Assets;
 
 use App\Domain\Asset\Contract\AssetProviderInterface;
 use App\ErrorCode\AssetErrorCode;

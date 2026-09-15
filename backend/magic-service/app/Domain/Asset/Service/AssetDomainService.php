@@ -22,7 +22,7 @@ use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\ErrorCode\AssetErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
-use App\Infrastructure\ExternalAPI\Assets\VolcengineArkAssetProvider;
+use App\Infrastructure\ExternalAPI\VolcengineArk\Assets\VolcengineArkAssetProvider;
 use Hyperf\Coroutine\Coroutine;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -53,8 +53,11 @@ class AssetDomainService
         private readonly AssetProviderAssetRepositoryInterface $providerAssets,
         private readonly AssetAgreementRepositoryInterface $agreements,
         private readonly LoggerInterface $logger,
+        ?AssetProviderInterface $provider = null,
     ) {
-        $this->provider = new VolcengineArkAssetProvider(
+        // 适配器默认在构造内装配：它需要运行期的 AI 能力配置，无法由容器直接注入。
+        // 此可选参只作为单测注入替身的口子——Hyperf DI 会跳过可选参数，运行期恒为 null。
+        $this->provider = $provider ?? new VolcengineArkAssetProvider(
             $this->logger,
             di()->get(AiAbilityDomainService::class)->getProviderConfig(AiAbilityCode::VolcengineArkAssets),
         );

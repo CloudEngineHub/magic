@@ -5,7 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 
-namespace App\Infrastructure\ExternalAPI\Assets;
+namespace App\Infrastructure\ExternalAPI\VolcengineArk\Assets;
 
 use DateTimeImmutable;
 use GuzzleHttp\Client;
@@ -17,9 +17,9 @@ use Throwable;
 use Volcengine\Common\Utils;
 
 /**
- * 火山方舟 Ark Assets 接口客户端，仅用于第三方联调，不写入本地素材业务表。
+ * 火山方舟 Ark Assets 接口客户端：承载素材 / 素材组两个资源族的 10 个 OpenAPI Action。
  *
- * 客户端只负责签名与请求，不感知配置来源：凭证由容器从 AI 能力「火山方舟素材服务」读取后注入。
+ * 客户端只负责签名与请求，不感知配置来源：凭证由调用方从 AI 能力「火山方舟素材服务」读取后注入。
  */
 class VolcengineArkAssetsClient
 {
@@ -32,7 +32,8 @@ class VolcengineArkAssetsClient
     private const int REQUEST_TIMEOUT_SECONDS = 30;
 
     /**
-     * @param array<string, mixed> $config 素材服务配置，由容器装配时传入（见 config/autoload/dependencies.php）
+     * @param array<string, mixed> $config 素材服务配置（endpoint/region/version/service/access_key/secret_key），
+     *                                     由 `AssetDomainService` 从 AI 能力「火山方舟素材服务」读取后传入
      */
     public function __construct(
         private readonly ClientFactory $clientFactory,

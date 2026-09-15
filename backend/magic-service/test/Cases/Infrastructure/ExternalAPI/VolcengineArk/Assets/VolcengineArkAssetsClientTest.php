@@ -5,9 +5,9 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 
-namespace HyperfTest\Cases\Infrastructure\ExternalAPI\Assets;
+namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VolcengineArk\Assets;
 
-use App\Infrastructure\ExternalAPI\Assets\VolcengineArkAssetsClient;
+use App\Infrastructure\ExternalAPI\VolcengineArk\Assets\VolcengineArkAssetsClient;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;

@@ -36,6 +36,7 @@ use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\AbstractLogger;
 use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use ReflectionMethod;
 use ReflectionParameter;
 use RuntimeException;
@@ -288,6 +289,7 @@ final class AssetDomainServiceTest extends TestCase
             $repository,
             $this->createMock(AssetProviderAssetRepositoryInterface::class),
             $this->acceptedAgreement(),
+            new NullLogger(),
             $this->createMock(AssetProviderInterface::class),
         );
 
@@ -313,6 +315,7 @@ final class AssetDomainServiceTest extends TestCase
             $repository,
             $this->createMock(AssetProviderAssetRepositoryInterface::class),
             $this->acceptedAgreement(),
+            new NullLogger(),
             $this->createMock(AssetProviderInterface::class),
         );
 
@@ -404,6 +407,7 @@ final class AssetDomainServiceTest extends TestCase
             $this->createMock(AssetRepositoryInterface::class),
             $this->createMock(AssetProviderAssetRepositoryInterface::class),
             $agreement,
+            new NullLogger(),
             $provider,
         );
 
@@ -436,6 +440,7 @@ final class AssetDomainServiceTest extends TestCase
             $assets,
             $this->createMock(AssetProviderAssetRepositoryInterface::class),
             $agreement,
+            new NullLogger(),
             $provider,
         );
 
@@ -461,6 +466,7 @@ final class AssetDomainServiceTest extends TestCase
             $this->createMock(AssetRepositoryInterface::class),
             $this->createMock(AssetProviderAssetRepositoryInterface::class),
             $agreement,
+            new NullLogger(),
             $this->createMock(AssetProviderInterface::class),
         );
 
@@ -1002,6 +1008,7 @@ final class AssetDomainServiceTest extends TestCase
             $repository,
             $this->createMock(AssetProviderAssetRepositoryInterface::class),
             $this->acceptedAgreement(),
+            new NullLogger(),
             $this->createMock(AssetProviderInterface::class),
         );
 
@@ -1021,6 +1028,7 @@ final class AssetDomainServiceTest extends TestCase
             $repository,
             $this->createMock(AssetProviderAssetRepositoryInterface::class),
             $this->acceptedAgreement(),
+            new NullLogger(),
             $this->createMock(AssetProviderInterface::class),
         );
 
@@ -1046,6 +1054,7 @@ final class AssetDomainServiceTest extends TestCase
             $repository,
             $this->createMock(AssetProviderAssetRepositoryInterface::class),
             $this->acceptedAgreement(),
+            new NullLogger(),
             $this->createMock(AssetProviderInterface::class),
         );
 
@@ -1073,6 +1082,7 @@ final class AssetDomainServiceTest extends TestCase
             $repository,
             $providerAssets,
             $this->acceptedAgreement(),
+            new NullLogger(),
             $this->createMock(AssetProviderInterface::class),
         );
 
@@ -1098,6 +1108,7 @@ final class AssetDomainServiceTest extends TestCase
             $repository,
             $providerAssets,
             $this->acceptedAgreement(),
+            new NullLogger(),
             $this->createMock(AssetProviderInterface::class),
         );
 
@@ -1136,7 +1147,7 @@ final class AssetDomainServiceTest extends TestCase
         $provider->expects(self::once())->method('deleteAsset')->with('asset-7', 'default')->willReturn(true);
         $provider->expects(self::once())->method('deleteAssetGroup')->with('group-7', 'default')->willReturn(true);
 
-        $service = new AssetDomainService($repository, $providerAssets, $this->acceptedAgreement(), $provider);
+        $service = new AssetDomainService($repository, $providerAssets, $this->acceptedAgreement(), new NullLogger(), $provider);
 
         self::assertTrue($service->deletePersonal($this->dataIsolation('org-a', 'user-a', ['org-a']), 7));
     }
@@ -1173,7 +1184,7 @@ final class AssetDomainServiceTest extends TestCase
         $provider->expects(self::never())->method('deleteAsset');
         $provider->expects(self::never())->method('deleteAssetGroup');
 
-        $service = new AssetDomainService($repository, $providerAssets, $this->acceptedAgreement(), $provider);
+        $service = new AssetDomainService($repository, $providerAssets, $this->acceptedAgreement(), new NullLogger(), $provider);
 
         self::assertTrue($service->deletePersonal($this->dataIsolation('org-a', 'user-a', ['org-a']), 8));
     }
@@ -1190,7 +1201,7 @@ final class AssetDomainServiceTest extends TestCase
         ?LoggerInterface $logger = null,
         int $pollsBeforeTimeout = PHP_INT_MAX,
     ): AssetDomainService {
-        return new class($assets, $providerAssets, $this->acceptedAgreement(), $provider, $logger, $pollsBeforeTimeout) extends AssetDomainService {
+        return new class($assets, $providerAssets, $this->acceptedAgreement(), $provider, $logger ?? new NullLogger(), $pollsBeforeTimeout) extends AssetDomainService {
             private int $pollCount = 0;
 
             public function __construct(
@@ -1201,7 +1212,7 @@ final class AssetDomainServiceTest extends TestCase
                 ?LoggerInterface $logger,
                 private readonly int $testPollsBeforeTimeout,
             ) {
-                parent::__construct($assets, $providerAssets, $agreements, $provider, $logger);
+                parent::__construct($assets, $providerAssets, $agreements, $logger, $provider);
             }
 
             protected function isComplianceWaitExpired(float $deadline): bool
@@ -1287,6 +1298,7 @@ final class AssetDomainServiceTest extends TestCase
             $repository,
             $this->createMock(AssetProviderAssetRepositoryInterface::class),
             $this->acceptedAgreement(),
+            new NullLogger(),
             $this->createMock(AssetProviderInterface::class),
         );
     }

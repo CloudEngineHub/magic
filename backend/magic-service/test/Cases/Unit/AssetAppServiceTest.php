@@ -40,6 +40,7 @@ use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
+use Psr\Log\NullLogger;
 use ReflectionMethod;
 use ReflectionNamedType;
 use Throwable;
@@ -183,6 +184,7 @@ final class AssetAppServiceTest extends TestCase
             $this->createMock(AssetRepositoryInterface::class),
             $this->createMock(AssetProviderAssetRepositoryInterface::class),
             $agreement,
+            new NullLogger(),
             $provider,
         );
         $authorization = $this->createMock(AssetDataIsolation::class);
