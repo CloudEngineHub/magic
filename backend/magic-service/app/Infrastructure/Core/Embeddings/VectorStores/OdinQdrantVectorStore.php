@@ -41,7 +41,7 @@ class OdinQdrantVectorStore implements VectorStoreInterface
         $this->points = new Points($this->httpClient);
     }
 
-    public function createCollection(string $name, int $vectorSize = 1536): bool
+    public function createCollection(string $name, int $vectorSize): bool
     {
         return $this->collections->createCollection($name, new VectorParams($vectorSize, Distance::COSINE));
     }

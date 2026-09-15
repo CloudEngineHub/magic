@@ -32,6 +32,7 @@ use Hyperf\Context\ApplicationContext;
 use Hyperf\Context\Context;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Logger\LoggerFactory;
+use Hyperf\Redis\Redis;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
@@ -83,6 +84,7 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
             $tagRelationRepository,
             $vectorStore,
             $embeddingGenerator,
+            $this->redisMock(),
             $this->loggerFactory(),
         );
 
@@ -140,6 +142,7 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
             $tagRelationRepository,
             $vectorStore,
             $embeddingGenerator,
+            $this->redisMock(),
             $this->loggerFactory(),
         );
 
@@ -172,6 +175,7 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
             $tagRelationRepository,
             $vectorStore,
             $embeddingGenerator,
+            $this->redisMock(),
             $this->loggerFactory(),
         );
 
@@ -221,6 +225,7 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
             $tagRelationRepository,
             $vectorStore,
             $embeddingGenerator,
+            $this->redisMock(),
             $this->loggerFactory(),
         );
 
@@ -248,6 +253,7 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
             $tagRelationRepository,
             $vectorStore,
             $embeddingGenerator,
+            $this->redisMock(),
             $this->loggerFactory(),
         );
 
@@ -547,6 +553,7 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
             $this->createMock(SlidesTemplateTagRelationRepositoryInterface::class),
             $vectorStore,
             $this->embeddingGenerator,
+            $this->redisMock(),
             $this->loggerFactory(),
         );
     }
@@ -654,5 +661,10 @@ final class SlidesTemplateVectorIndexDomainServiceTest extends TestCase
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn(new NullLogger());
         return $loggerFactory;
+    }
+
+    private function redisMock(): Redis
+    {
+        return $this->createMock(Redis::class);
     }
 }
