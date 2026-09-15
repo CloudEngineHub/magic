@@ -53,14 +53,9 @@ class AssetDomainService
         private readonly AssetProviderAssetRepositoryInterface $providerAssets,
         private readonly AssetAgreementRepositoryInterface $agreements,
         private readonly LoggerInterface $logger,
-        ?AssetProviderInterface $provider = null,
+        private readonly AiAbilityDomainService $abilityDomainService,
     ) {
-        // 适配器默认在构造内装配：它需要运行期的 AI 能力配置，无法由容器直接注入。
-        // 此可选参只作为单测注入替身的口子——Hyperf DI 会跳过可选参数，运行期恒为 null。
-        $this->provider = $provider ?? new VolcengineArkAssetProvider(
-            $this->logger,
-            di()->get(AiAbilityDomainService::class)->getProviderConfig(AiAbilityCode::VolcengineArkAssets),
-        );
+        $this->provider = new VolcengineArkAssetProvider($this->logger, $this->abilityDomainService->getProviderConfig(AiAbilityCode::VolcengineArkAssets));
     }
 
     public function createPersonal(AssetDataIsolation $dataIsolation, AssetEntity $asset): AssetEntity

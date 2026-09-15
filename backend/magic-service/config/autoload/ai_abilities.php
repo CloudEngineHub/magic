@@ -681,12 +681,9 @@ return [
             'sort_order' => 27,
             'status' => env('AI_ABILITY_VOLCENGINE_ARK_ASSETS_STATUS', true),
             'config' => [
-                // version / service / region 均内置默认值，正常（国内站）无需在 env 里配置。
                 'version' => env('VOLCENGINE_ARK_ASSETS_VERSION', '2024-01-01'),
                 'region' => env('VOLCENGINE_ARK_ASSETS_REGION', 'cn-beijing'),
                 'service' => env('VOLCENGINE_ARK_ASSETS_SERVICE', 'ark'),
-                // endpoint 与 region 必须成对切换：国内站为 open.volcengineapi.com + cn-beijing，
-                // 海外站（BytePlus）为 ark.ap-southeast-1.byteplusapi.com + ap-southeast-1，且 AK/SK 需取自对应站点控制台。
                 'endpoint' => env('VOLCENGINE_ARK_ASSETS_ENDPOINT', 'https://open.volcengineapi.com'),
                 'access_key' => env('VOLCENGINE_ACCESS_KEY', ''),
                 'secret_key' => env('VOLCENGINE_SECRET_KEY', ''),
