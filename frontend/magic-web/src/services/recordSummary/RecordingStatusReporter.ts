@@ -1,6 +1,6 @@
 import { RecordingSummaryStatus } from "@/apis/modules/superMagic/recordSummary"
 import { SuperMagicApi } from "@/apis"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import recordSummaryStore from "@/stores/recordingSummary"
 
 const logger = Logger.createLogger("RecordingStatusReporter", {

@@ -9,7 +9,7 @@ import { useRef, useState } from "react"
 import type { ReportFileUploadsResponse } from "@/apis/modules/file"
 import { FileApi, SuperMagicApi } from "@/apis"
 import type { UploadResponse, UseUploadFilesParams, UploadResult, DownloadResponse } from "./types"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { useTranslation } from "react-i18next"
 import magicToast from "@/components/base/MagicToaster/utils"
 

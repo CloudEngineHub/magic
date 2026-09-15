@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
-import type { HttpClient } from "../../core/HttpClient"
+import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 import { generateSlidesTemplateUploadApi } from "../slidesTemplateUpload"
 
 describe("generateSlidesTemplateUploadApi", () => {
 	it("posts a new template code when creating", async () => {
 		const post = vi.fn().mockResolvedValue({})
-		const api = generateSlidesTemplateUploadApi({ post } as unknown as HttpClient)
+		const api = generateSlidesTemplateUploadApi({ post } as unknown as ServiceHttpClient)
 
 		await api.saveFromFolder({
 			projectId: "project-1",
@@ -22,7 +22,7 @@ describe("generateSlidesTemplateUploadApi", () => {
 
 	it("omits code only when the caller explicitly leaves it undefined", async () => {
 		const post = vi.fn().mockResolvedValue({})
-		const api = generateSlidesTemplateUploadApi({ post } as unknown as HttpClient)
+		const api = generateSlidesTemplateUploadApi({ post } as unknown as ServiceHttpClient)
 
 		await api.saveFromFolder({ projectId: "project-1", directoryId: "folder-1" })
 

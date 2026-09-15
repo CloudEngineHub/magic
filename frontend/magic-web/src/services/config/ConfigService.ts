@@ -1,7 +1,7 @@
 import type { ThemeMode } from "antd-style"
 import type { Common } from "@/types/common"
 import type * as apis from "@/apis"
-import type { RequestConfig } from "@/apis/core/HttpClient"
+import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import { ConfigRepository } from "@/models/config/repositories/ConfigRepository"
 import { ClusterRepository } from "@/models/config/repositories/ClusterRepository"
 import { configStore } from "@/models/config/stores"
@@ -16,7 +16,7 @@ import { normalizeThemeMode } from "@/constants/theme"
 export class ConfigService {
 	private readonly commonApi: typeof apis.CommonApi
 
-	constructor(dependencies: typeof apis) {
+	constructor(dependencies: Pick<typeof apis, "CommonApi">) {
 		this.commonApi = dependencies.CommonApi
 	}
 
@@ -171,6 +171,16 @@ export class ConfigService {
 		}
 	}
 
+	/** Read through the injected edition API without writing application-wide configuration. */
+	getInternationalizedSettings(options?: Pick<RequestConfig, "skipAppInitWait">) {
+		return this.commonApi.getInternationalizedSettings(options)
+	}
+
+	/** Configuration discovery uses the injected API, including popup-owned enterprise routing. */
+	getPrivateConfigure(code: string) {
+		return this.commonApi.getPrivateConfigure(code)
+	}
+
 	/**
 	 * 加载语言列表，国际冠号等配置
 	 * @param options 请求配置
@@ -178,7 +188,7 @@ export class ConfigService {
 	 */
 	loadConfig = async (options?: Pick<RequestConfig, "skipAppInitWait">) => {
 		try {
-			const response = await this.commonApi.getInternationalizedSettings(options)
+			const response = await this.getInternationalizedSettings(options)
 			if (response) {
 				configStore.i18n.setLanguages(response.languages)
 				configStore.i18n.setAreaCodes(response.phone_area_codes)

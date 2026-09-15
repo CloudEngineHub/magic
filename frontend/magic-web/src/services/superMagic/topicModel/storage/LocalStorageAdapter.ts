@@ -1,5 +1,5 @@
 import { IStorageAdapter } from "./IStorageAdapter"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 
 const logger = Logger.createLogger("LocalStorageAdapter")
 

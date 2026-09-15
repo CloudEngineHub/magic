@@ -16,7 +16,7 @@ import superMagicCustomModelService from "./SuperMagicCustomModelService"
 import superMagicModeListRepository, {
 	LEGACY_MODE_LIST_LS_PREFIX,
 } from "./repositories/SuperMagicModeListRepository"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { platformKey } from "@/utils/storage"
 import { TFunction } from "i18next"
 import { makeAutoObservable, reaction, runInAction } from "mobx"

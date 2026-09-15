@@ -1,4 +1,4 @@
-import type { HttpClient } from "@/apis/core/HttpClient"
+import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 import type { SlidesTemplateItem } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
 
 const SLIDES_TEMPLATE_UPLOAD_API_PATH = "/api/v1/slides-templates/from-project"
@@ -17,7 +17,7 @@ export class SlidesTemplateUploadApiUnavailableError extends Error {
 	}
 }
 
-export const generateSlidesTemplateUploadApi = (client: HttpClient) => ({
+export const generateSlidesTemplateUploadApi = (client: ServiceHttpClient) => ({
 	enabled: SLIDES_TEMPLATE_UPLOAD_API_ENABLED,
 
 	async saveFromFolder(input: UploadSlidesTemplateFromFolderParams) {

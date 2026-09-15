@@ -7154,6 +7154,8 @@
 		"processing": "Processing...",
 		"quickStart": "Quick Start",
 		"reportConversationRound": "Report Conversation",
+		"reportConversationRoundFailed": "Could not prepare conversation logs. Please try again.",
+		"reportConversationRoundSuccess": "Reported successfully",
 		"slogan": {
 			"rotatingText": {
 				"prefix": "Hire $t(common:platform.name) to",

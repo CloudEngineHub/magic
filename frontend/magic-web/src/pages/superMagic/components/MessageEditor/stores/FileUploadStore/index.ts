@@ -1,6 +1,6 @@
 import { makeAutoObservable } from "mobx"
 import { t } from "i18next"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import type { UploadMentionItem } from "@/components/business/MentionPanel/runtime/builtin/domains/upload-files"

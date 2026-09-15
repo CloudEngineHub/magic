@@ -28,7 +28,7 @@ import {
 	GetFileInfoResponseWithFileId,
 } from "../utils/uploadCallbacks"
 import { resolveDesignProjectBasePathFromAttachments } from "../utils/utils"
-import magicClient from "@/apis/clients/magic"
+import { defaultMagicClient as magicClient } from "@/infrastructure/network/http/runtime"
 
 import { genRequestUrl } from "@/utils/http"
 import { Upload } from "@dtyq/upload-sdk"

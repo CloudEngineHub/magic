@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
-import type { HttpClient } from "@/apis/core/HttpClient"
+import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
 import { generateSuperMagicApi } from "../superMagic"
 
-type MicroAppHttpClientMock = Pick<HttpClient, "get" | "post" | "put" | "delete">
+type MicroAppHttpClientMock = Pick<ServiceHttpClient, "get" | "post" | "put" | "delete">
 
 describe("SuperMagic micro app API", () => {
 	it("uses the workspace and list query endpoints", async () => {
@@ -12,7 +12,7 @@ describe("SuperMagic micro app API", () => {
 			put: vi.fn(),
 			delete: vi.fn(),
 		}
-		const api = generateSuperMagicApi(client as HttpClient)
+		const api = generateSuperMagicApi(client as ServiceHttpClient)
 
 		await api.getMicroAppWorkspace()
 		await api.getMicroApps({
@@ -26,11 +26,10 @@ describe("SuperMagic micro app API", () => {
 			1,
 			"/api/v1/super-agent/workspaces/app/micro-app",
 		)
-		expect(client.get).toHaveBeenNthCalledWith(
-			2,
-			"/api/v1/super-agent/micro-apps/queries?page=2&page_size=50&keyword=%E5%AE%A2%E6%88%B7%E8%B7%9F%E8%BF%9B&scope=collaborated",
-			{ parseJsonLargeIntAsString: true },
-		)
+		expect(client.get).toHaveBeenNthCalledWith(2, "/api/v1/super-agent/micro-apps/queries", {
+			params: { page: 2, page_size: 50, keyword: "客户跟进", scope: "collaborated" },
+			parseJsonLargeIntAsString: true,
+		})
 	})
 
 	it("creates, edits, deletes, and publishes with app fields and string-safe parsing", async () => {
@@ -40,7 +39,7 @@ describe("SuperMagic micro app API", () => {
 			put: vi.fn().mockResolvedValue({ app_id: "933138305533177857" }),
 			delete: vi.fn(),
 		}
-		const api = generateSuperMagicApi(client as HttpClient)
+		const api = generateSuperMagicApi(client as ServiceHttpClient)
 
 		await api.createMicroAppProject({
 			workspace_id: "workspace-1",
