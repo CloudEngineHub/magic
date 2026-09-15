@@ -339,13 +339,14 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 							</Button>
 						</span>
 					</PopoverTrigger>
+					{/* 右侧居中并自动避让屏幕边缘；底部留白减少浏览器链接提示对末行的遮挡。 */}
 					<PopoverContent
 						ref={projectMenuContentRef}
 						side="right"
-						align="start"
-						className="flex max-h-[var(--radix-popover-content-available-height)] w-[240px] flex-col p-1 shadow-xs"
+						align="center"
+						collisionPadding={{ top: 12, right: 12, bottom: 32, left: 12 }}
+						className="flex max-h-[min(70dvh,640px,var(--radix-popover-content-available-height))] w-[240px] flex-col p-1 shadow-xs [&>:not([data-project-scroll-container])]:shrink-0"
 						sideOffset={8}
-						alignOffset={-4}
 						data-testid={projectPopoverTestId}
 						onEscapeKeyDown={(e) => {
 							if (isCreatingProject) {
@@ -441,10 +442,11 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 								/>
 							</div>
 						)}
+						{/* 少量项目按内容收短；窗口不足时只压缩列表，保留标题及操作区高度。 */}
 						<div
 							ref={list.scrollRef}
 							className="min-h-0 w-full overflow-y-auto overscroll-contain"
-							style={{ height: Math.min(300, list.virtualizer.getTotalSize()) }}
+							style={{ height: list.virtualizer.getTotalSize() }}
 							data-project-scroll-container
 							onFocusCapture={list.onFocusCapture}
 							onBlurCapture={list.onBlurCapture}
