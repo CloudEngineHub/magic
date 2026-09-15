@@ -8,7 +8,10 @@ API implementation for file-related operations in Magic Service.
 # Will be simplified or removed once MagicFS handles this automatically.
 """
 
+from typing import Any, Dict
+
 from ..kernel.magic_service_api import MagicServiceAbstractApi
+from ..parameter.get_upload_temporary_credential_parameter import GetUploadTemporaryCredentialParameter
 from ..parameter.scan_wav_parameter import ScanWavParameter
 from ..parameter.update_file_source_parameter import UpdateFileSourceParameter
 from ..result.scan_wav_result import ScanWavResult
@@ -17,6 +20,21 @@ from ..result.update_file_source_result import UpdateFileSourceResult
 
 class FileApi(MagicServiceAbstractApi):
     """File API for Magic Service."""
+
+    async def get_upload_temporary_credential_async(
+        self, parameter: GetUploadTemporaryCredentialParameter
+    ) -> Dict[str, Any]:
+        """
+        Get temporary upload credentials (STS or PostPolicy) from Magic Service.
+
+        Args:
+            parameter: GetUploadTemporaryCredentialParameter with storage type and content type.
+
+        Returns:
+            Dict containing platform, expires, and temporary_credential details.
+        """
+        endpoint_path = "/api/v1/file/temporary-credential"
+        return await self.request_by_parameter_async(parameter, "POST", endpoint_path)
 
     async def update_file_source_async(self, parameter: UpdateFileSourceParameter) -> UpdateFileSourceResult:
         """

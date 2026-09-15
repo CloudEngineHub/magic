@@ -7,8 +7,7 @@ description: |
     Use when users want to edit agent identity, modify workflow instructions, adjust personality,
     add/remove tools, optimize prompts, or initialize a new employee from scratch.
     Trigger signals: 'modify prompt', 'change identity', 'add tool', 'remove tool', 'optimize workflow',
-    'adjust personality', 'initialize employee', '修改提示词', '改身份', '加工具', '去掉工具',
-    '优化能力', '调性格', '初始化员工', '创建员工'.
+    'adjust personality', 'initialize employee', 'create employee'.
     Do NOT use for: skill creation (use skill-creator), skill searching (use find_skills tool).
 ---
 
@@ -128,7 +127,9 @@ Once the definition files exist, use the Agent update operation to synchronize t
 
 Submit the text fields and Logo in one `update_agent` call when the Logo is available. Pass the uploaded object-storage key as `icon_file_key`; the tool binds the update to the current Agent code and sends the same `icon.value` and `icon_type` shape used by the frontend. Do not use `run_sdk_snippet`, invent a browser-side request, or call the frontend API directly.
 
-The update is successful only when the response confirms the current Agent code was updated. If Logo generation/upload fails, retry the update with only `name_i18n`, `role_i18n`, and `description_i18n`; Agent creation must not be rolled back because the optional default Logo failed.
+An update response alone does not prove that synchronization completed. After every successful `update_agent` response, immediately call the `get_agent_info()` tool with no arguments to read the current employee profile back from the service. Text metadata synchronization succeeds only when the read-back succeeds, the returned `code` matches the current Agent code, and `name_i18n`, `role_i18n`, and `description_i18n` match the submitted values. When a Logo was submitted, Logo synchronization succeeds only when `icon.value` matches the submitted `icon_file_key` and `icon_type` is `2`. If the read-back fails, returns no valid employee profile, identifies a different Agent, or contains mismatched fields, record the concrete reason and report that synchronization could not be verified. Never announce successful employee creation based only on the update response or local files.
+
+If Logo generation/upload fails, retry the update with only `name_i18n`, `role_i18n`, and `description_i18n`; Agent creation must not be rolled back because the optional default Logo failed. After the text-only update succeeds, call `get_agent_info()` and apply the same read-back verification requirements.
 
 ### Mandatory Initialization Completion Gate
 
@@ -139,8 +140,9 @@ Creating or validating the definition files is not the end of initialization. Af
 3. Obtain the generated Logo's object-storage `file_key`. A local path is not a valid Agent icon URL. If no `file_key` becomes available, record Logo upload as failed and continue with text-only synchronization.
 4. Call `update_agent` exactly once with text metadata and `icon_file_key` when the Logo is available. The tool must confirm that it updated the current Agent code.
 5. Inspect the update response and confirm that it refers to the current Agent code. If the Logo-bearing update fails, retry once with text metadata only and record the Logo synchronization failure.
+6. After every successful update response, immediately call `get_agent_info()` and verify the returned Agent code, text metadata, and any Logo submitted in that update according to the rules above. Report synchronization as successful only after retrieving the current employee profile and confirming all relevant fields. If retrieval fails or the data does not match, report that synchronization could not be verified, include the concrete reason, and do not announce successful employee creation.
 
-**Do not delete `.crew_init_config.json`, announce completion, or return the final initialization summary until steps 1-5 have been attempted and their outcomes are known.** The final response must separately report `text metadata synchronization` and `Logo synchronization` as succeeded, skipped because an existing icon was preserved, or failed with the concrete reason.
+**Do not delete `.crew_init_config.json`, announce completion, or return the final initialization summary until steps 1-6 have been attempted and their outcomes are known.** A successful update must pass the read-back verification in step 6 before completion can be announced. The final response must separately report `text metadata synchronization` and `Logo synchronization` as succeeded, skipped because an existing icon was preserved, or failed with the concrete reason.
 
 If the user chooses skill decomposition in Round 4, after initialization call `skill-creator` once for each independent workflow. Follow `skill-creator`'s plan, confirmation, creation, and validation process; do not write `SKILL.md` manually.
 
@@ -151,7 +153,7 @@ If the user chooses skill decomposition in Round 4, after initialization call `s
 3. Show the generated files to the user via `read_files`.
 4. If the user chose skill decomposition, call `skill-creator` for each independent skill and validate the results before reporting completion.
 5. Complete the mandatory initialization completion gate above.
-6. Verify the generated files and the Agent update response. Report whether text metadata and Logo synchronization each succeeded.
+6. Verify the generated files and the Agent update response, and require successful `get_agent_info()` read-back verification before reporting synchronization as successful. Report whether text metadata and Logo synchronization each succeeded.
 7. Ask if the user wants any adjustments.
 8. Clean up the temp config only after synchronization has been attempted: `delete_files(path=".crew_init_config.json")`.
 9. Inform the user: TOOLS.md and SKILLS.md were not generated by the initialization script (system defaults apply); custom skills are created under `.magic/skills/` and can be adjusted later through employee management.
