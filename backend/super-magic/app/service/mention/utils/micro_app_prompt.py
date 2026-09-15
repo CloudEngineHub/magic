@@ -140,6 +140,18 @@ def get_mentioned_micro_app_ids() -> List[str]:
     return found
 
 
+def get_current_micro_app_mention_state() -> tuple[List[str], List[str]]:
+    """Return app IDs mentioned in the current request and those unresolved."""
+    document = _load_scope_document()
+    current = document.get("current_mentioned_app_ids") or []
+    unresolved = document.get("unresolved_mentioned_app_ids") or []
+    def normalize(values: Any) -> List[str]:
+        if not isinstance(values, list):
+            return []
+        return list(dict.fromkeys(str(value).strip() for value in values if str(value).strip()))
+    return normalize(current), normalize(unresolved)
+
+
 def has_bound_micro_app_project_scope() -> bool:
     return bool(get_micro_app_project_scopes())
 
@@ -210,13 +222,38 @@ def resolve_magicbase_project_id(app_id: Optional[str] = None) -> str:
     normalized_app_id = str(app_id or "").strip()
     scopes = get_micro_app_project_scopes()
     mentioned_ids = get_mentioned_micro_app_ids()
+    current_ids, unresolved_ids = get_current_micro_app_mention_state()
 
     if normalized_app_id:
+        if current_ids and normalized_app_id not in current_ids:
+            raise ValueError(
+                f"Micro-app '{normalized_app_id}' is not a successfully resolved mention in the current request."
+            )
+        if normalized_app_id in unresolved_ids:
+            raise ValueError(
+                f"Micro-app '{normalized_app_id}' could not be resolved for the current request."
+            )
         if normalized_app_id in scopes:
             return scopes[normalized_app_id]["project_id"]
         raise ValueError(
             f"Micro-app '{normalized_app_id}' is not in the current mention scope. "
             "Use an app_id from a bound @micro_app mention in this conversation."
+        )
+
+    if current_ids:
+        if unresolved_ids:
+            unresolved = ", ".join(unresolved_ids)
+            raise ValueError(
+                f"The current micro-app mention(s) could not be resolved ({unresolved}). "
+                "Pass an app_id from a successfully resolved mention; do not use a historical default."
+            )
+        current_scopes = {key: scopes[key] for key in current_ids if key in scopes}
+        if len(current_scopes) == 1:
+            return next(iter(current_scopes.values()))["project_id"]
+        app_list = ", ".join(sorted(current_ids))
+        raise ValueError(
+            "Multiple micro-apps are referenced "
+            f"({app_list}). Pass app_id from the mention on this MagicBase tool call."
         )
 
     if scopes:
@@ -252,6 +289,18 @@ async def persist_micro_app_project_scopes(
         "mentioned_app_ids": mentioned,
     }
 
+    scope_file = _scope_file()
+    await ensure_runtime_directory(scope_file.parent)
+    await async_write_json(scope_file, document, ensure_ascii=False, indent=2)
+    await async_chmod(scope_file, 0o600)
+
+
+async def _persist_current_micro_app_mention_state(
+    current_app_ids: List[str], unresolved_app_ids: List[str]
+) -> None:
+    document = _load_scope_document()
+    document["current_mentioned_app_ids"] = list(dict.fromkeys(current_app_ids))
+    document["unresolved_mentioned_app_ids"] = list(dict.fromkeys(unresolved_app_ids))
     scope_file = _scope_file()
     await ensure_runtime_directory(scope_file.parent)
     await async_write_json(scope_file, document, ensure_ascii=False, indent=2)
@@ -316,9 +365,11 @@ async def sync_micro_app_scope_from_mentions(
     """Merge this message's resolved @micro_app mentions into the bound registry."""
     micro_app_mentions = extract_micro_app_mentions(mentions)
     if not micro_app_mentions:
+        await _persist_current_micro_app_mention_state([], [])
         return get_micro_app_project_scopes()
 
     mentioned_app_ids: List[str] = []
+    unresolved_app_ids: List[str] = []
     scopes: Dict[str, Dict[str, str]] = {}
     for mention in micro_app_mentions:
         app_id = _mention_app_id(mention)
@@ -326,31 +377,41 @@ async def sync_micro_app_scope_from_mentions(
             mentioned_app_ids.append(app_id)
         entry = await _scope_entry_from_mention(mention)
         if entry is None:
+            if app_id:
+                unresolved_app_ids.append(app_id)
             continue
         scopes[entry.app_id] = entry.to_entry()
 
     if not scopes:
+        await _persist_current_micro_app_mention_state(mentioned_app_ids, unresolved_app_ids)
         return get_micro_app_project_scopes()
 
-    return await _persist_accumulated_scopes(scopes, mentioned_app_ids)
+    merged = await _persist_accumulated_scopes(scopes, mentioned_app_ids)
+    await _persist_current_micro_app_mention_state(mentioned_app_ids, unresolved_app_ids)
+    return merged
 
 
 async def sync_micro_app_project_scope_from_prompt(prompt: str) -> Optional[str]:
     app_ids = extract_micro_app_app_ids(prompt)
     if not app_ids:
+        await _persist_current_micro_app_mention_state([], [])
         return None
 
     scopes: Dict[str, Dict[str, str]] = {}
+    unresolved_app_ids: List[str] = []
     for app_id in app_ids:
         project_id = await resolve_micro_app_project_id(app_id)
         if not project_id:
+            unresolved_app_ids.append(app_id)
             continue
         scopes[app_id] = {"project_id": project_id, "app_name": app_id}
 
     if not scopes:
+        await _persist_current_micro_app_mention_state(app_ids, unresolved_app_ids)
         return None
 
     merged = await _persist_accumulated_scopes(scopes, app_ids)
+    await _persist_current_micro_app_mention_state(app_ids, unresolved_app_ids)
     if len(merged) == 1:
         return next(iter(merged.values()))["project_id"]
     return None

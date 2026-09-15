@@ -1,12 +1,13 @@
+import json
 from unittest.mock import AsyncMock, patch
 
-import json
 import pytest
 
 from app.path_manager import PathManager
 from app.service.mention.utils.micro_app_prompt import (
     clear_micro_app_project_scope,
     extract_micro_app_app_ids,
+    get_current_micro_app_mention_state,
     get_mentioned_micro_app_ids,
     get_micro_app_project_scopes,
     persist_micro_app_project_scopes,
@@ -33,6 +34,11 @@ def _use_tmp_runtime(tmp_path, monkeypatch):
 
 def _read_scope_file(runtime_dir):
     return json.loads((runtime_dir / "micro-app" / "scope.json").read_text(encoding="utf-8"))
+
+
+@pytest.fixture(autouse=True)
+def isolate_runtime_scope(tmp_path, monkeypatch):
+    _use_tmp_runtime(tmp_path, monkeypatch)
 
 
 def test_extract_micro_app_app_ids_from_rich_text():
@@ -375,6 +381,11 @@ async def test_sync_micro_app_scope_from_mentions_keeps_existing_when_new_resolv
 
     assert scopes == existing
     assert get_micro_app_project_scopes() == existing
+    assert get_current_micro_app_mention_state() == (["app-2"], ["app-2"])
+    with pytest.raises(ValueError, match="historical default"):
+        resolve_magicbase_project_id()
+    with pytest.raises(ValueError, match="could not be resolved"):
+        resolve_magicbase_project_id("app-2")
 
 
 @pytest.mark.asyncio
@@ -486,6 +497,9 @@ async def test_sync_micro_app_project_scope_from_prompt_keeps_existing_when_reso
 
     clear_mock.assert_not_called()
     assert get_micro_app_project_scopes() == existing
+    assert get_current_micro_app_mention_state() == (["app-2"], ["app-2"])
+    with pytest.raises(ValueError, match="historical default"):
+        resolve_magicbase_project_id()
 
 
 @pytest.mark.asyncio
