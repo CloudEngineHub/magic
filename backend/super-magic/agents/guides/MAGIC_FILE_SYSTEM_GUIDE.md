@@ -22,18 +22,20 @@
 - `.workspace/` 保存用户需要长期保留、下载或继续编辑的文件。
 - `.checkpoints/` 保存文件 checkpoint 和操作流水、内容帧本身。
 
-## 为什么聊天记录必须在本地运行
+## 活动会话的读写位置
 
 `.topic/` 是网络文件系统挂载。Agent 的一次回合会反复保存消息、会话状态、Horizon 和 token usage；若这些活动文件直接位于 `.topic/`，每次打开、读取、覆盖和关闭文件都可能产生网络往返，累积为明显的运行延迟。文件较小、保留数量较少或使用异步 I/O，都不能消除频繁访问网络文件系统的成本。
 
 | 阶段／用途 | 读写位置 | 约束 |
 |---|---|---|
-| 主 Agent、普通子 Agent 运行 | 本地 `.chat_history/`、`.chat_history/subagents/` | history、session、Horizon 等活动会话文件在本地读写 |
-| 后台压缩、Memory After Run 运行 | 本地 `.runtime/<capability>/` | 临时会话同样不使用网络挂载目录 |
-| 启动恢复 | `.topic/chat_history/` 或远端历史压缩包 → 本地 `.chat_history/` | 恢复到本地后再启动 Agent，不直接从网络目录继续运行 |
+| 主 Agent、普通子 Agent 运行 | 配置的 `.chat_history/`、`.chat_history/subagents/` | 保存 history、session、Horizon 等活动会话文件 |
+| 后台压缩、Memory After Run 运行 | `.runtime/<capability>/` | 保存临时会话，不使用话题持久卷 |
+| 启动恢复 | `.topic/chat_history/` 或远端历史压缩包 → `.chat_history/` | 恢复到活动目录后再启动 Agent |
 | 持久化和排查存档 | 本地生成完整内容 → 由对应 owner 归档上传或低频写入持久卷 | 各能力定义自己的保留和清理规则，不能把活动会话改成逐条网络写入 |
 
-禁止将 `chat_history_dir` 设置为 `.topic/` 下的路径，也禁止把 `.chat_history/` 或其中的活动会话目录软链接到网络挂载。判断依据是文件是否被运行中的 Agent 频繁读写，不能只按文件是否需要跨容器保留来决定运行目录。
+业务代码通过 `PathManager` 获取目录，并使用项目异步文件 API 读写。聊天历史归档通过相同的文件 API 复制、压缩和上传，不区分普通 macOS／Linux 电脑与线上沙盒，不检测挂载，也不读取 inode 或平台 file_id。
+
+禁止将活动 `chat_history_dir` 指向 `.topic/`，包括经软链接指向该目录；平台配置的 `.chat_history/` 根映射由平台管理。`.runtime/` 保存临时运行数据，`.topic/` 用于话题持久数据和低频存档，跨沙盒恢复沿用现有归档流程。
 
 ## 目标目录结构
 

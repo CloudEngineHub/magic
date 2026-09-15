@@ -17,8 +17,8 @@ class PathManager(BasePathManager):
     - project_root/          ← 项目根目录
         .browser/            ← 浏览器数据（父类管理）
         .cache/              ← 缓存（父类管理）
-        .chat_history/       ← 本地活动聊天记录（父类管理）
-            subagents/       ← 普通子 Agent 的本地会话
+        .chat_history/       ← 活动聊天记录（父类管理）
+            subagents/       ← 子 Agent 会话
         .topic/              ← 话题网络持久卷（父类管理）
             chat_history/    ← 启动恢复和交接源，不作活动会话目录
             archives/        ← 各能力有限保留的完整排查档案
@@ -60,12 +60,9 @@ class PathManager(BasePathManager):
       空间挂载的 symlink（/mnt/agfs/localfs/chat_history，gateway 在 bind
       时创建），每次保存由 checkpoint hook 增量记账进 checkpoint；本地开
       发环境（无 agfs 挂载）它是普通本地目录，只是没有帧记账。
-    - `.topic/chat_history/` 是启动恢复源（一次性迁移/兜底恢复用）。
-      聊天活动数据运行期位于本地 `.chat_history/`。
-      `.topic/` 是网络文件系统：消息、session、Horizon 等文件的频繁读写会累积网络
-      往返延迟，异步 I/O 也不能消除该成本。主 Agent、普通子 Agent 和临时 Agent
-      的活动 `chat_history_dir` 必须在本地，不能指向 `.topic/` 或经软链接指回它。
-      恢复时先复制到本地再运行；需要持久保留的内容由 owner 在生成完成后归档。
+    - `.topic/chat_history/` 是启动恢复源；恢复到配置的 `.chat_history/` 后再运行。
+      活动会话不放在 `.topic/`，避免频繁读写话题网络卷；需要持久保留的内容
+      由 owner 在生成完成后归档。不同运行环境的目录映射见文件系统指南。
     - `.topic/tool_detail/content/` 保存已持久化的工具详情长文本；按需创建，不参与 checkpoint 回滚。
     - `.runtime/` 是本地运行数据，源目录不进入归档和 checkpoint；完整失败日志与记忆
       整理会话结束后可另存有限副本，副本不改变活动文件的本地读写边界。

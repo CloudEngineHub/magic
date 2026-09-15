@@ -424,7 +424,7 @@ class AgentService(Base):
                 f"流式写入 {written_bytes} 字节)"
             )
 
-            # .chat_history 是沙盒本地临时目录，不跨沙盒启动持久化。
+            # .chat_history 是活动会话目录，跨沙盒恢复依赖已上传的归档。
             # 调用方在远程恢复前已经通过 _replace_local_chat_history_with_empty()
             # 清空该目录，因此远程归档可以直接解压到正式活动目录。
             target_dir = target_dir or PathManager.get_chat_history_dir()

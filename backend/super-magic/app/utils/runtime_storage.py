@@ -135,9 +135,9 @@ owner：     MemoryExtractionService、ws_server 启动清理
 延后处理：  创建会话目录后触发；服务启动时再次检查；超过 7 天后淘汰。
 活动保护：  当前新建目录通过 protected_paths 保护。
 淘汰规则：  runtime 源按整次运行目录删除，不直接进入持久历史，也不作为 resume 入口。
-持久副本：  整理结束后由 ChatHistoryArchiveService 将完整终态会话复制到本地
-            .chat_history/subagents/ 并上传；ChatHistoryCleanupService 独立保留最近
-            3 次，不按普通历史的年龄和容量规则删除。配置位于
+持久副本：  整理结束后由 ChatHistoryArchiveService 将完整终态会话复制到配置的
+            .chat_history/subagents/；归档上传成功后可跨沙盒恢复。
+            ChatHistoryCleanupService 独立保留最近 3 次，不按普通历史的年龄和容量规则删除。配置位于
             diagnostic_retention.memory_after_run_max_count，不影响 runtime 的 7 天策略。
 配置：      `runtime_cleanup.memory_after_run.max_age_days`。
 实现归属：  通用 evict_runtime_directories()。

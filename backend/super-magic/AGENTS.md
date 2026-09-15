@@ -495,17 +495,17 @@ finally:
 
 `.runtime/` 不得作为用户交付或业务持久存储。只有用户需要长期保留、下载、展示或继续编辑的最终文件才写入当前 `.workspace/`。不要因为路径以点开头、应用层不展示或会执行删除，就假设 MagicFS 不会记录或计费。
 
-### 17.1 Agent 运行期聊天记录必须在本地读写
+### 17.1 Agent 活动会话目录
 
 - `.topic/` 是网络文件系统挂载。Agent 会频繁读写 history、session、Horizon、token usage 等会话文件；每次网络文件操作的往返延迟会累积到运行耗时，异步 I/O 也不能消除这项成本。
-- 主 Agent 和普通子 Agent 使用本地 `.chat_history/`、`.chat_history/subagents/`；后台压缩、Memory After Run 等临时会话使用本地 `.runtime/<capability>/`。禁止把活动 `chat_history_dir` 指向 `.topic/` 的任何子目录，也不能通过软链接把本地会话目录指回网络挂载。
-- `.topic/chat_history/` 只作启动恢复和交接源：先恢复到本地再运行，持久化走既有归档上传流程。需要跨沙盒保留的排查资料由 owner 在内容生成完成后按保留策略低频存档；持久化需求不改变运行期本地读写边界。
+- 主 Agent 和普通子 Agent 使用配置的 `.chat_history/`、`.chat_history/subagents/`；后台压缩、Memory After Run 等临时会话使用 `.runtime/<capability>/`。通过 `PathManager` 获取目录，使用项目异步文件 API 操作；聊天历史归档不识别存储后端，不因平台配置根软链接而拒绝执行。禁止把活动 `chat_history_dir` 指向 `.topic/`，包括经软链接指向该目录。
+- `.topic/chat_history/` 只作启动恢复和交接源：先恢复活动目录再运行，持久化沿用现有 checkpoint 和归档上传流程。需要跨沙盒保留的排查资料由 owner 在内容生成完成后按保留策略低频存档；持久化需求不改变活动目录的用途。
 
 ### 17.2 有限保留的排查档案
 
 - `.topic/archives/<capability>/` 集中保存完整生成的排查资料，各能力只清理自己的目录。LLM 失败日志由 `debug_logger` 直接写入 `archives/llm_requests/`，默认保留最近 3 份完整日志；写入成功后才淘汰旧档案，不使用网络目录内的临时文件替换。
-- Memory After Run 继续在 `.runtime/memory_after_run/` 运行，结束后由 `ChatHistoryArchiveService` 保存整次会话到本地 `.chat_history/subagents/` 并主动上传。`ChatHistoryCleanupService` 独立保留最近 3 次完整终态运行，成功、失败、中断都计入；普通子 Agent 的年龄、数量和总容量规则不淘汰这组档案。
-- runtime 源文件仍按原规则清理。有限副本使用 `diagnostic_retention` 配额，不放宽 runtime helper 的路径边界；本地副本与远端上传结果分别报告。3 份／3 次限制活跃档案数量，不限制 checkpoint 历史和云端累计空间。
+- Memory After Run 继续在 `.runtime/memory_after_run/` 运行，结束后由 `ChatHistoryArchiveService` 保存整次会话到配置的 `.chat_history/subagents/` 并主动上传。`ChatHistoryCleanupService` 独立保留最近 3 次完整终态运行，成功、失败、中断都计入；普通子 Agent 的年龄、数量和总容量规则不淘汰这组档案。
+- runtime 源文件仍按原规则清理。有限副本使用 `diagnostic_retention` 配额，不放宽 runtime helper 的路径边界；会话复制与远端上传结果分别报告。3 份／3 次限制活跃档案数量，不限制 checkpoint 历史和云端累计空间。
 
 ## 18. 工作区文件转 URL 必须走统一入口
 
