@@ -13,7 +13,7 @@ import aiofiles
 from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import DisplayType, ToolDetail
 from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
 from app.tools.abstract_file_tool import AbstractFileTool
@@ -315,7 +315,8 @@ On failure: re-read and verify anchor existence/uniqueness -> increase anchor le
 
         return ToolDetail(
             type=DisplayType.MD,
-            data=FileContent(
+            data=await self._build_file_content(
+                file_path=file_path,
                 file_name=f"{file_name}.diff",
                 content=markdown_content
             )

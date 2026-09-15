@@ -6889,52 +6889,6 @@
 				"scope": "This assistant",
 				"usage": "This file guides the assistant through matters to confirm when first used."
 			},
-			"installedSkills": {
-				"example": "“Explain the installed skills and which ones can help analyze my materials.”",
-				"exampleRoot": ".magic/skills",
-				"files": [
-					{
-						"directory": false,
-						"path": ".magic/skills/report-helper/SKILL.md"
-					},
-					{
-						"directory": true,
-						"path": ".magic/skills/report-helper/references"
-					},
-					{
-						"directory": true,
-						"path": ".magic/skills/report-helper/scripts"
-					}
-				],
-				"guide": {
-					"actions": "Ask AI to summarize skills and expand the one relevant to your task. Use the appropriate feature for installation and configuration; moving folders manually is not an installation flow, and instructions are not proof of a successful run.",
-					"context": "Prepare skills for recurring work so the assistant has a method available when a suitable task appears.",
-					"diagramTitle": "Find a method through the folder",
-					"exampleContent": "Skill folder illustration\nreport-helper/\n├── SKILL.md\n└── references/",
-					"result": "For research material, the assistant can consult a reporting skill to understand required inputs and output format. A skill that depends on an external service also needs a tool with valid access.",
-					"steps": [
-						{
-							"description": "Stores skills installed for the current assistant.",
-							"title": "Skill directory"
-						},
-						{
-							"description": "Groups an entry with supporting files for a capability.",
-							"title": "Individual skill"
-						},
-						{
-							"description": "Explains applicability, steps and output requirements.",
-							"title": "SKILL.md"
-						}
-					]
-				},
-				"note": "Skills explain methods; execution still needs the relevant tools and permissions.",
-				"preview": [
-					"Prepare skills for recurring work so the assistant has a method available when a suitable task appears.",
-					"Skills explain methods; execution still needs the relevant tools and permissions."
-				],
-				"scope": "This assistant",
-				"usage": "This folder holds the skill files installed for this assistant."
-			},
 			"memoryFile": {
 				"example": "“Keep lasting preferences and key decisions. Update related memory when information changes.”",
 				"guide": {
@@ -7134,7 +7088,6 @@
 			"guidelines": "This file describes how you want the assistant to communicate.",
 			"identityInfo": "This file introduces the assistant’s name, role and responsibilities.",
 			"initialSetup": "This file guides the assistant through matters to confirm when first used.",
-			"installedSkills": "This folder holds the skill files installed for this assistant.",
 			"memoryFile": "This file explains how the assistant should retain, organize and use memory.",
 			"memoryFolder": "This folder keeps information the assistant has retained for later work.",
 			"proactiveExecution": "This file describes what the assistant should check during periodic proactive work.",
@@ -7147,7 +7100,6 @@
 			"guidelines": "Personality and expression",
 			"identityInfo": "Identity Info",
 			"initialSetup": "Initial Setup",
-			"installedSkills": "Installed Skills",
 			"memoryFile": "Memory Config",
 			"memoryFolder": "Memory Store",
 			"proactiveExecution": "Proactive Execution",
@@ -7480,15 +7432,17 @@
 			},
 			"title": "Info",
 			"type": {
-				"audio": "Audio Summary",
-				"custom": "Custom App",
+				"ai-card": "AI Cards",
+				"audio": "Recording project",
+				"custom": "Custom Project",
 				"dashboard": "Dashboard",
-				"design": "Design Project",
+				"design": "Design Canvas",
 				"file": "File",
 				"folder": "Folder",
-				"micro-app": "Micro App",
+				"micro-app": "HTML App",
 				"self-media": "Self-media Project",
-				"slide": "PPT Project",
+				"slide": "PPT",
+				"slide-template": "PPT Template",
 				"special": "Special Project",
 				"video": "Video Project"
 			},
@@ -7509,13 +7463,19 @@
 		"helpDirectoryExample": "Directory example",
 		"helpGuide": {
 			"groups": {
-				"assistant": "Assistants",
-				"assistants": "Assistants and crew",
-				"content": "Audio and content",
+				"assistant": "{{clawBrand}}",
 				"crew": "Crew",
+				"current": "Current file",
 				"personal": "Personal space",
-				"project": "Projects and configuration",
-				"skills": "Skills and resources"
+				"project": "Project files",
+				"projectTypes": "Project types",
+				"skills": "Writing skills"
+			},
+			"paths": {
+				"directory": "<subfolder>",
+				"overview": "Space overview",
+				"recording": "Recording notes",
+				"skill": "<skill name>"
 			},
 			"reasons": {
 				"assistantRules": "Understand the assistant’s rules and behavior.",
@@ -7549,6 +7509,280 @@
 		"noFiles": "No Project files",
 		"pdf": "PDF File",
 		"ppt": "PPT File",
+		"projectTypes": {
+			"ai-card": {
+				"detail": {
+					"example": "Turn this learning material into cards. Explain one concept per card with a short description and an example.",
+					"guide": {
+						"actions": "Open the project to read the cards, then request changes to their content, number or order.",
+						"context": "Useful for knowledge points, content outlines and introductions. Define the audience and topic, then give each card one clear focus.",
+						"diagramTitle": "How to use it",
+						"exampleContent": "Card one: definition\nCard two: practical example\nCard three: common confusion",
+						"result": "Each card has a clear topic. The collection supports sequential reading and focused updates to individual points.",
+						"steps": [
+							{
+								"description": "Specify the audience and the focus of each card.",
+								"title": "Choose a topic"
+							},
+							{
+								"description": "Split the material into readable units.",
+								"title": "Organize cards"
+							},
+							{
+								"description": "Check the order, explanations and examples.",
+								"title": "Refine the content"
+							}
+						],
+						"title": "Make a collection of information easier to read"
+					},
+					"note": "Cards reflect the current task and sources. Their format does not verify the content; check sources for external facts and critical data.",
+					"preview": [
+						"Specify the audience and the focus of each card.",
+						"Check the order, explanations and examples."
+					],
+					"usage": "Organize information into a browsable collection of cards."
+				},
+				"summary": "Organize information into a browsable collection of cards."
+			},
+			"custom": {
+				"detail": {
+					"example": "Turn this material into a topic page. Keep its images and resources in one project and set a clear entry page.",
+					"guide": {
+						"actions": "Open the project and ask the Agent to refine its content, interactions or icon.",
+						"context": "Useful for showcase pages, topic pages and other task-specific experiences. The project opens from a designated entry, with images, styles and data kept alongside it.",
+						"diagramTitle": "How to use it",
+						"exampleContent": "Entry page: main content\nResources: images, styles and data\nProject icon: an optional custom image",
+						"result": "The page and resources stay together, with one entry for viewing the content created for the task.",
+						"steps": [
+							{
+								"description": "Keep the page and supporting resources together.",
+								"title": "Organize files"
+							},
+							{
+								"description": "Choose the page shown when the project opens.",
+								"title": "Set an entry"
+							},
+							{
+								"description": "Name the project and optionally set a custom icon.",
+								"title": "Set the appearance"
+							}
+						],
+						"title": "Open a collection of files as one project"
+					},
+					"note": "A custom icon changes appearance, not project type or capabilities. It can reference an image in the project or a valid image URL. Missing files or invalid URLs fall back to the default icon.",
+					"preview": [
+						"Keep the page and supporting resources together.",
+						"Name the project and optionally set a custom icon."
+					],
+					"usage": "Group an entry page and its resources for custom content and interactions."
+				},
+				"summary": "Group an entry page and its resources for custom content and interactions."
+			},
+			"dashboard": {
+				"detail": {
+					"example": "Build a dashboard from this month’s sales table with totals, weekly trends and category comparisons. Include the data cutoff time.",
+					"guide": {
+						"actions": "Open the dashboard and ask the Agent to adjust the view using explicit measurement rules.",
+						"context": "Useful for business reviews, project progress and research. Define the source, measurement rules and comparison dimensions before choosing charts.",
+						"diagramTitle": "How to use it",
+						"exampleContent": "Overview: monthly sales\nTrend: weekly comparison\nBreakdown: category comparison\nNotes: source, definitions and cutoff time",
+						"result": "One page shows totals, changes and category comparisons, with the definitions needed to interpret the data.",
+						"steps": [
+							{
+								"description": "Specify the source, period and field meanings.",
+								"title": "Provide data"
+							},
+							{
+								"description": "Choose the questions and comparisons that matter.",
+								"title": "Define metrics"
+							},
+							{
+								"description": "Check conclusions against charts and data notes.",
+								"title": "Review results"
+							}
+						],
+						"title": "Understand changes through a shared data view"
+					},
+					"note": "Live updates depend on the implementation and data source. A dashboard label does not mean a live connection or scheduled refresh is configured.",
+					"preview": [
+						"Specify the source, period and field meanings.",
+						"Check conclusions against charts and data notes."
+					],
+					"usage": "Bring metrics, charts and data notes together in a browsable view."
+				},
+				"summary": "Bring metrics, charts and data notes together in a browsable view."
+			},
+			"design": {
+				"detail": {
+					"example": "Arrange these images into an event concept. Keep the main headline and establish a clear visual hierarchy.",
+					"guide": {
+						"actions": "Open the canvas and request changes to specific elements, positions, dimensions or content.",
+						"context": "Useful for visual concepts, image layouts and design materials. Specify the purpose, dimensions and content to retain.",
+						"diagramTitle": "How to use it",
+						"exampleContent": "Theme: event design\nFocus: headline and main image\nLayout: primary content first, supporting details grouped",
+						"result": "Images and text form a design you can review as a whole, while later changes target individual canvas elements.",
+						"steps": [
+							{
+								"description": "Specify dimensions, style and key information.",
+								"title": "Define the purpose"
+							},
+							{
+								"description": "Place images, text and other content on the canvas.",
+								"title": "Arrange elements"
+							},
+							{
+								"description": "Review the whole design, then refine individual elements.",
+								"title": "Check the layout"
+							}
+						],
+						"title": "Compare and refine a design in one place"
+					},
+					"note": "A canvas project differs from a single image. Keep referenced assets when moving it. Available editing actions depend on the current canvas interface.",
+					"preview": [
+						"Specify dimensions, style and key information.",
+						"Review the whole design, then refine individual elements."
+					],
+					"usage": "View and organize design content within a shared canvas project."
+				},
+				"summary": "View and organize design content within a shared canvas project."
+			},
+			"micro-app": {
+				"detail": {
+					"example": "Create an event information app showing the introduction, time, location and registration instructions.",
+					"guide": {
+						"actions": "Open the app to inspect its actual functionality, then refine its content or interactions.",
+						"context": "Useful for small tools, information pages and interactive interfaces. Describe the user’s task, then refine the app around its entry page.",
+						"diagramTitle": "How to use it",
+						"exampleContent": "Home: event overview\nContent: time, location and participation\nResources: page styles and images",
+						"result": "App pages are organized around the stated task. Available interactions depend on the pages actually built.",
+						"steps": [
+							{
+								"description": "Specify the users and their intended actions.",
+								"title": "Describe the task"
+							},
+							{
+								"description": "Organize pages, the entry and related resources.",
+								"title": "Build the interface"
+							},
+							{
+								"description": "Open the app and request changes based on the result.",
+								"title": "Use and refine"
+							}
+						],
+						"title": "Build and use a web app within a project"
+					},
+					"note": "Storage, network access and publishing depend on the implementation and available features. A custom project icon is supported; changing it does not add these capabilities.",
+					"preview": [
+						"Specify the users and their intended actions.",
+						"Open the app and request changes based on the result."
+					],
+					"usage": "Organize HTML pages and resources as an app project."
+				},
+				"summary": "Organize HTML pages and resources as an app project."
+			},
+			"slide": {
+				"detail": {
+					"example": "Create an introduction for new colleagues from this material. Cover the background, workflow and common questions.",
+					"guide": {
+						"actions": "Open the project, review each page and ask the Agent to adjust specific content or layouts.",
+						"context": "Useful for reports, lessons and proposals. Specify the audience, length and key points, then refine the same set of pages.",
+						"diagramTitle": "How to use it",
+						"exampleContent": "Opening: background and goals\nBody: the workflow, step by step\nClosing: common questions and next steps",
+						"result": "Pages follow a clear narrative. Later edits can target a specific page without recreating the entire presentation.",
+						"steps": [
+							{
+								"description": "Specify the audience, purpose and key points.",
+								"title": "Outline the content"
+							},
+							{
+								"description": "Organize the material into an ordered presentation.",
+								"title": "Create pages"
+							},
+							{
+								"description": "Check each page and request content or layout changes.",
+								"title": "Review and edit"
+							}
+						],
+						"title": "Turn source material into a presentation"
+					},
+					"note": "A project contains pages and supporting resources. A standalone .pptx is still a regular presentation file. Keep linked resources when moving or sharing the project.",
+					"preview": [
+						"Specify the audience, purpose and key points.",
+						"Check each page and request content or layout changes."
+					],
+					"usage": "Organize presentation pages in one project for previewing and further edits."
+				},
+				"summary": "Organize presentation pages in one project for previewing and further edits."
+			},
+			"slide-template": {
+				"detail": {
+					"example": "Create a simple reporting template with a cover, section divider, text-and-image page and closing page.",
+					"guide": {
+						"actions": "Review the template pages and specify the layouts and style to use in a later presentation.",
+						"context": "Useful when several presentations should share a visual style. Separate reusable layouts from final content and specify which styles to retain.",
+						"diagramTitle": "How to use it",
+						"exampleContent": "Cover: title and subtitle\nSection: section name\nContent: text and image\nClosing: summary and contact details",
+						"result": "Common layouts remain in one template collection for consistent styling in future presentations.",
+						"steps": [
+							{
+								"description": "Specify colors, typography and use cases.",
+								"title": "Choose a style"
+							},
+							{
+								"description": "Create common page structures.",
+								"title": "Prepare layouts"
+							},
+							{
+								"description": "Identify the template to reference when creating a presentation.",
+								"title": "Reuse as needed"
+							}
+						],
+						"title": "Give future presentations a consistent style"
+					},
+					"note": "A template provides page styles; presentation content still needs to be created. It does not automatically restyle all existing presentations.",
+					"preview": [
+						"Specify colors, typography and use cases.",
+						"Identify the template to reference when creating a presentation."
+					],
+					"usage": "Keep presentation layouts and styles for reference and reuse."
+				},
+				"summary": "Keep presentation layouts and styles for reference and reuse."
+			},
+			"video": {
+				"detail": {
+					"example": "Turn these assets into a short product introduction. Start with a use case, then show the main features.",
+					"guide": {
+						"actions": "Open the project to view existing results and request changes to specific clips, pacing or content.",
+						"context": "Useful for scripts, asset organization and video results. Specify duration, aspect ratio and the desired deliverable.",
+						"diagramTitle": "How to use it",
+						"exampleContent": "Opening: use case\nBody: main features\nClosing: full product view",
+						"result": "Scripts, assets and existing results stay together so later production can continue within the same project.",
+						"steps": [
+							{
+								"description": "Specify the topic, duration and visual requirements.",
+								"title": "Define the goal"
+							},
+							{
+								"description": "Collect the script, images and video clips.",
+								"title": "Organize assets"
+							},
+							{
+								"description": "Inspect existing videos and request specific changes.",
+								"title": "Review results"
+							}
+						],
+						"title": "Continue video production in one project"
+					},
+					"note": "A video project does not necessarily contain a finished video. Playback and editing depend on the generated files and project implementation.",
+					"preview": [
+						"Specify the topic, duration and visual requirements.",
+						"Inspect existing videos and request specific changes."
+					],
+					"usage": "Keep video-related content and assets together in a project."
+				},
+				"summary": "Keep video-related content and assets together in a project."
+			}
+		},
 		"questPlaceholder": "Please input the description of the problem",
 		"recordingProject": {
 			"detail": {
@@ -9464,7 +9698,7 @@
 					],
 					"title": "Keep useful background so the next task needs less explanation"
 				},
-				"note": "Memory preserves useful highlights, not a complete backup of all conversations. Personal memory and shared project conventions are separate, and past facts may change.",
+				"note": "Memory preserves useful highlights, not a complete backup of all conversations. Personal memory and shared project conventions are separate, and past facts may change. In the guide paths, “…” stands for global/ or projects/<project ID>/, which organize general personal memory and personal memory by project. It is not an actual folder name.",
 				"preview": [
 					"Helps AI use relevant background in later tasks.",
 					"Update stale information and keep detailed history separately."

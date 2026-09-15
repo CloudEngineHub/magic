@@ -1,3 +1,4 @@
+import { useProjectFileHelp } from "../hooks/useProjectFileHelp"
 import { lazy } from "react"
 import { useClawFileHelp } from "../../../pages/ClawPlayground/components/ClawFileHelpTag"
 import { resolveFilePresentation, type FilePresentation } from "../utils/file-presentation"
@@ -6,11 +7,7 @@ import { ContextHelp } from "@/components/shadcn-composed/context-help"
 import { badgeVariants } from "@/components/shadcn-ui/badge"
 import { cn } from "@/utils/cn"
 import type { AttachmentItem } from "../hooks/types"
-import {
-	useSystemFileHelp,
-	useRecordingFileHelp,
-	type FileHelpPresentation,
-} from "../hooks/useSystemFileHelp"
+import { useSystemFileHelp, type FileHelpPresentation } from "../hooks/useSystemFileHelp"
 import { useSkillFileHelp } from "../hooks/useSkillFileHelp"
 import type { SkillFileKind } from "../utils/skill-file-structure"
 import { type FileHelpContext } from "../utils/magic-system-folder"
@@ -18,7 +15,13 @@ import { type FileHelpContext } from "../utils/magic-system-folder"
 const FileHelpBrowser = lazy(() => import("./FileHelpBrowser"))
 
 /** 标签只解释用途；点击、键盘和触屏操作不能冒泡为文件打开或目录折叠。 */
-export function TopicFileTag({ label, help, articleId, sourceKey }: FileHelpPresentation) {
+export function TopicFileTag({
+	label,
+	help,
+	articleId,
+	sourceKey,
+	fileLocation,
+}: FileHelpPresentation) {
 	return (
 		<ContextHelp
 			help={help}
@@ -30,6 +33,7 @@ export function TopicFileTag({ label, help, articleId, sourceKey }: FileHelpPres
 								key={sourceKey ?? articleId}
 								{...props}
 								initialArticleId={articleId}
+								fileLocation={fileLocation}
 							/>
 						)
 					: undefined
@@ -73,8 +77,8 @@ export function ProjectFileTag({
 	const skill = useSkillFileHelp(file.skillKind, file)
 	const user = useUserFileHelp(file.userKind, file)
 	const claw = useClawFileHelp(file.clawKind, file)
-	const recording = useRecordingFileHelp(file, file.type === "audio")
-	const presentation = skill ?? user ?? claw ?? system ?? recording
+	const project = useProjectFileHelp(file.projectKind, file)
+	const presentation = skill ?? user ?? claw ?? system ?? project
 	return presentation ? <TopicFileTag {...presentation} /> : null
 }
 

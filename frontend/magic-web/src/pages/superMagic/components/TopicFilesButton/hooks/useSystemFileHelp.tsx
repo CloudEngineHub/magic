@@ -5,7 +5,7 @@ import {
 	type HelpArticleProps,
 } from "@/components/shadcn-composed/context-help/HelpArticle"
 import type { HelpDefinition } from "@/components/shadcn-composed/context-help"
-import type { SystemFileHelpKind } from "../utils/magic-system-folder"
+import type { FileHelpContext, SystemFileHelpKind } from "../utils/magic-system-folder"
 import type { FilePresentation } from "../utils/file-presentation"
 import type { AttachmentItem } from "./types"
 import { FileResourceIcon } from "../components/FileResourceIcon"
@@ -19,28 +19,13 @@ export interface FileHelpPresentation {
 	help: HelpDefinition
 	articleId?: FileHelpArticleId
 	sourceKey?: string
+	fileLocation?: { path: string; context: FileHelpContext["kind"] }
 }
 export interface FileHelpDetail extends Omit<HelpArticleProps, "visual"> {
 	preview?: string[]
 	scope?: string
 	exampleRoot?: string
 	files?: Array<{ path: string; directory?: boolean; description?: string; type?: string }>
-}
-
-export function useRecordingFileHelp(
-	presentation?: FilePresentation,
-	enabled = true,
-): FileHelpPresentation | undefined {
-	const { t } = useTranslation("super")
-	if (!enabled) return
-	return createFileHelpPresentation(
-		"recording.project",
-		t("topicFiles.recordingProject.label"),
-		t("topicFiles.recordingProject.summary"),
-		t("topicFiles.recordingProject.detail", { returnObjects: true }) as FileHelpDetail,
-		"flow",
-		presentation,
-	)
 }
 
 /** 静态教学目录只适配既有列表的数据结构；不读取用户文件或连接文件操作。 */
@@ -105,6 +90,9 @@ export function createFileHelpPresentation(
 	return {
 		label,
 		articleId,
+		fileLocation: presentation
+			? { path: presentation.path, context: presentation.context.kind }
+			: undefined,
 		sourceKey: presentation
 			? JSON.stringify([
 					articleId,

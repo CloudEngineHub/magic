@@ -12,7 +12,10 @@ import {
 	getFileReferenceIdentityKey,
 	resolveFileReference,
 } from "@/pages/superMagic/services/userFileReferenceResolver"
-import { createUserFileHref } from "@/pages/superMagic/utils/markdownFileReference"
+import {
+	createUserFileHref,
+	getFileDisplayPath,
+} from "@/pages/superMagic/utils/markdownFileReference"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import { openUserFileReference } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import { FileReference } from "./FileReference"
@@ -104,7 +107,7 @@ export const UserFileReference = observer(function UserFileReference({
 				loading
 					? t("common.loading")
 					: reference
-						? "~/" + reference.space_relative_path
+						? getFileDisplayPath({ file_reference: reference })
 						: t("common.fileNotFoundOrLoadFailed")
 			}
 		/>

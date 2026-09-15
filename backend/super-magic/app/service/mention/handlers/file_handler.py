@@ -143,6 +143,10 @@ def _encode_markdown_path(path: str) -> Optional[str]:
 
 
 def _canonical_file_link(file_path: str, file_name: str, *, is_directory: bool = False) -> Optional[str]:
+    # 用户根使用运行中的沙盒 HOME；不把服务器配置或开发机路径写进引用。
+    user_prefix = Path.home().as_posix().rstrip("/") + "/"
+    if file_path.startswith(user_prefix) and not _workspace_relative_path(file_path):
+        file_path = "~/" + file_path[len(user_prefix):]
     if file_path.startswith("~"):
         if not file_path.startswith("~/"):
             return None
@@ -154,7 +158,7 @@ def _canonical_file_link(file_path: str, file_name: str, *, is_directory: bool =
         ):
             return None
         label = _markdown_label(file_name or Path(relative_user_path).name)
-        destination = "~/" + quote(relative_user_path, safe="/")
+        destination = quote(user_prefix + relative_user_path, safe="/")
         return f"[{label}]({destination}{'/' if is_directory else ''})"
 
     relative_path = _workspace_relative_path(file_path)

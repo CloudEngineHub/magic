@@ -1,7 +1,9 @@
+import { useProjectFileHelp, useProjectTypeNames } from "./useProjectFileHelp"
 import {
 	BookOpen,
 	CalendarDays,
 	FolderCog,
+	Folder,
 	History,
 	ListTree,
 	MessageSquare,
@@ -14,7 +16,11 @@ import MagicFileIcon from "@/components/base/MagicFileIcon"
 import DingTalkIcon from "@/components/base/MagicFileIcon/assets/dingtalk-logo.svg"
 import LarkIcon from "@/components/base/MagicFileIcon/assets/feishu-logo.svg"
 import IconSuperTeamshare from "@/enhance/tabler/icons-react/icons/IconSuperTeamshare"
-import type { HelpNavigationGroup } from "@/components/shadcn-composed/context-help/HelpNavigation"
+import type { HelpLocation } from "@/components/shadcn-composed/context-help/types"
+import type {
+	HelpNavigationGroup,
+	HelpNavigationItem,
+} from "@/components/shadcn-composed/context-help/HelpNavigation"
 import {
 	useClawFileHelp,
 	type ClawFileHelpKind,
@@ -35,7 +41,7 @@ import {
 } from "../utils/file-help-catalog"
 import type { FileHelpContext, SystemFileHelpKind } from "../utils/magic-system-folder"
 import type { SkillFileKind } from "../utils/skill-file-structure"
-import { useSystemFileHelp, useRecordingFileHelp } from "./useSystemFileHelp"
+import { useSystemFileHelp } from "./useSystemFileHelp"
 import { useSkillFileHelp } from "./useSkillFileHelp"
 
 const USER_SYMBOLS = {
@@ -110,14 +116,14 @@ export function useFileHelpArticle(id: FileHelpArticleId) {
 		id.startsWith("claw.") ? (id.slice(5) as ClawFileHelpKind) : undefined,
 	)
 	const overview = useUserSpaceOverviewHelp()
-	const recording = useRecordingFileHelp(undefined, id === "recording.project")
+	const project = useProjectFileHelp(getFileHelpMetadata(id).projectKind)
 	const result =
 		system ??
 		skill ??
 		user ??
 		claw ??
 		(id === "user.overview" ? overview : undefined) ??
-		recording
+		project
 	if (!result) return undefined
 	const metadata = getFileHelpMetadata(id)
 	return {
@@ -132,76 +138,9 @@ export function useFileHelpArticle(id: FileHelpArticleId) {
 }
 
 export function useFileHelpCatalog() {
+	const projectNames = useProjectTypeNames()
 	const { t } = useTranslation("super")
 	const brand = getClawBrandTranslationValues()
-	const labels: Record<FileHelpArticleId, string> = {
-		"system.clawSoul": t("topicFiles.clawPlaygroundTags.guidelines", brand),
-		"system.clawIdentity": t("topicFiles.clawPlaygroundTags.identityInfo", brand),
-		"system.projectMagic": t("topicFiles.systemFiles.labels.projectMagic", brand),
-		"system.userMagic": t("topicFiles.systemFiles.labels.userMagic", brand),
-		"system.clawMagic": t("topicFiles.systemFiles.labels.clawMagic", brand),
-		"system.crewMagic": t("topicFiles.systemFiles.labels.crewMagic", brand),
-		"system.projectInstructions": t("topicFiles.systemFiles.labels.projectInstructions", brand),
-		"system.directoryInstructions": t(
-			"topicFiles.systemFiles.labels.directoryInstructions",
-			brand,
-		),
-		"system.clawInstructions": t("topicFiles.systemFiles.labels.clawInstructions", brand),
-		"system.crewInstructions": t("topicFiles.systemFiles.labels.crewInstructions", brand),
-		"system.agentInstructions": t("topicFiles.systemFiles.labels.agentInstructions", brand),
-		"system.instructionFile": t("topicFiles.systemFiles.labels.instructionFile", brand),
-		"system.crewIdentity": t("topicFiles.systemFiles.labels.crewIdentity", brand),
-		"system.crewSoul": t("topicFiles.systemFiles.labels.crewSoul", brand),
-		"skillLibrary.unknown": t("topicFiles.skillStructure.libraryScopes.unknown.label"),
-		"skillLibrary.user": t("topicFiles.skillStructure.libraryScopes.user.label"),
-		"skillLibrary.crew": t("topicFiles.skillStructure.libraryScopes.crew.label"),
-		"skillLibrary.claw": t("topicFiles.skillStructure.libraryScopes.claw.label"),
-		"skill.library": t("topicFiles.skillStructure.labels.library"),
-		"skill.skill": t("topicFiles.skillStructure.labels.skill"),
-		"skill.entry": t("topicFiles.skillStructure.labels.entry"),
-		"skill.references": t("topicFiles.skillStructure.labels.references"),
-		"skill.scripts": t("topicFiles.skillStructure.labels.scripts"),
-		"skill.assets": t("topicFiles.skillStructure.labels.assets"),
-		"skill.templates": t("topicFiles.skillStructure.labels.templates"),
-		"skill.examples": t("topicFiles.skillStructure.labels.examples"),
-		"skill.evals": t("topicFiles.skillStructure.labels.evals"),
-		"skill.evalCases": t("topicFiles.skillStructure.labels.evalCases"),
-		"skill.evalInputs": t("topicFiles.skillStructure.labels.evalInputs"),
-		"skill.agents": t("topicFiles.skillStructure.labels.agents"),
-		"skill.readme": t("topicFiles.skillStructure.labels.readme"),
-		"skill.license": t("topicFiles.skillStructure.labels.license"),
-		"skill.publishConfig": t("topicFiles.skillStructure.labels.publishConfig"),
-		"user.memory": t("userSpace.fileLabels.memory"),
-		"user.coreMemory": t("userSpace.fileLabels.coreMemory"),
-		"user.notes": t("userSpace.fileLabels.notes"),
-		"user.references": t("userSpace.fileLabels.references"),
-		"user.subject": t("userSpace.fileLabels.subject"),
-		"user.timeline": t("userSpace.fileLabels.timeline"),
-		"user.year": t("userSpace.fileLabels.year"),
-		"user.month": t("userSpace.fileLabels.month"),
-		"user.event": t("userSpace.fileLabels.event"),
-		"user.index": t("userSpace.fileLabels.index"),
-		"user.topics": t("userSpace.fileLabels.topics"),
-		"user.dingtalk": t("userSpace.fileLabels.dingtalk"),
-		"user.lark": t("userSpace.fileLabels.lark"),
-		"user.teamshare": t("userSpace.fileLabels.teamshare"),
-		"user.tools": t("userSpace.fileLabels.tools"),
-		"user.cli": t("userSpace.fileLabels.cli"),
-		"user.settings": t("userSpace.fileLabels.settings"),
-		"claw.scheduledTasks": t("topicFiles.clawPlaygroundTags.scheduledTasks", brand),
-		"claw.installedSkills": t("topicFiles.clawPlaygroundTags.installedSkills", brand),
-		"claw.memoryFolder": t("topicFiles.clawPlaygroundTags.memoryFolder", brand),
-		"claw.skillList": t("topicFiles.clawPlaygroundTags.skillList", brand),
-		"claw.proactiveExecution": t("topicFiles.clawPlaygroundTags.proactiveExecution", brand),
-		"claw.identityInfo": t("topicFiles.clawPlaygroundTags.identityInfo", brand),
-		"claw.guidelines": t("topicFiles.clawPlaygroundTags.guidelines", brand),
-		"claw.toolList": t("topicFiles.clawPlaygroundTags.toolList", brand),
-		"claw.aboutYou": t("topicFiles.clawPlaygroundTags.aboutYou", brand),
-		"claw.initialSetup": t("topicFiles.clawPlaygroundTags.initialSetup", brand),
-		"claw.memoryFile": t("topicFiles.clawPlaygroundTags.memoryFile", brand),
-		"user.overview": t("userSpace.help.title"),
-		"recording.project": t("topicFiles.recordingProject.label"),
-	}
 	const reasons: Record<FileHelpReadingReason, string> = {
 		skillEntry: t("topicFiles.helpGuide.reasons.skillEntry"),
 		skillStructure: t("topicFiles.helpGuide.reasons.skillStructure"),
@@ -215,37 +154,102 @@ export function useFileHelpCatalog() {
 		crewRules: t("topicFiles.helpGuide.reasons.crewRules"),
 	}
 	const groupLabels: Record<FileHelpGroupId, string> = {
+		projectTypes: t("topicFiles.helpGuide.groups.projectTypes"),
 		project: t("topicFiles.helpGuide.groups.project"),
 		skills: t("topicFiles.helpGuide.groups.skills"),
 		personal: t("topicFiles.helpGuide.groups.personal"),
 		assistant: t("topicFiles.helpGuide.groups.assistant", brand),
 		crew: t("topicFiles.helpGuide.groups.crew"),
-		content: t("topicFiles.helpGuide.groups.content"),
+		current: t("topicFiles.helpGuide.groups.current"),
 	}
-	function group(id: FileHelpGroupId): HelpNavigationGroup {
-		return {
-			id,
-			label: groupLabels[id],
-			items: FILE_HELP_ARTICLE_IDS.filter(
-				(articleId) => getFileHelpMetadata(articleId).group === id,
-			).map((articleId) => ({
+	const placeholders: Record<string, string> = {
+		$directory: t("topicFiles.helpGuide.paths.directory"),
+		$skill: t("topicFiles.helpGuide.paths.skill"),
+		$memoryScope: "…",
+		$overview: t("topicFiles.helpGuide.paths.overview"),
+	}
+	const translatePath = (path: string) =>
+		path
+			.split("/")
+			.map((segment) => placeholders[segment] ?? segment)
+			.join("/")
+	const groups: HelpNavigationGroup[] = (
+		["projectTypes", "project", "assistant", "crew", "personal", "skills"] as const
+	).map((id) => ({ id, label: groupLabels[id], items: [] }))
+	const nodes = new Map<string, HelpNavigationItem>()
+	const articleNodes = new Map<FileHelpArticleId, HelpNavigationItem>()
+	const ancestors = {} as Record<FileHelpArticleId, string[]>
+	const locations = {} as Record<FileHelpArticleId, HelpLocation>
+	const names = {} as Record<FileHelpArticleId, string>
+	// 目录按静态示意路径组织，节点键不含翻译；切换语言不会丢失展开状态。
+	for (const articleId of FILE_HELP_ARTICLE_IDS) {
+		const metadata = getFileHelpMetadata(articleId)
+		const path = metadata.path
+		names[articleId] =
+			(metadata.projectKind ? projectNames[metadata.projectKind] : undefined) ??
+			metadata.name ??
+			(articleId === "recording.project"
+				? t("topicFiles.helpGuide.paths.recording")
+				: articleId === "user.overview"
+					? placeholders.$overview
+					: groupLabels.current)
+		locations[articleId] = {
+			scope: groupLabels[metadata.group],
+			path: path ? translatePath(path) : names[articleId],
+		}
+		ancestors[articleId] = [metadata.group]
+		if (metadata.projectKind) {
+			const node: HelpNavigationItem = {
 				id: articleId,
-				label: labels[articleId],
-				icon: renderFileHelpIcon(getFileHelpMetadata(articleId).icon, 18),
-			})),
+				articleId,
+				label: names[articleId],
+				icon: renderFileHelpIcon(metadata.icon, 16),
+			}
+			groups.find((group) => group.id === metadata.group)?.items.push(node)
+			articleNodes.set(articleId, node)
+			continue
+		}
+		if (!path) continue
+		const group = groups.find((item) => item.id === metadata.group)
+		if (!group) continue
+		const segments = path.split("/").filter(Boolean)
+		let items = group.items
+		for (let index = 0; index < segments.length; index++) {
+			const last = index === segments.length - 1
+			const id = `${metadata.group}:${segments.slice(0, index + 1).join("/")}`
+			let node = nodes.get(id)
+			if (!node) {
+				node = {
+					id,
+					label:
+						(placeholders[segments[index]] ?? segments[index]) +
+						(!last || path.endsWith("/") ? "/" : ""),
+					icon: <Folder size={16} aria-hidden />,
+					path: translatePath(segments.slice(0, index + 1).join("/")),
+					children: [],
+				}
+				nodes.set(id, node)
+				items.push(node)
+			}
+			if (last) {
+				node.articleId = articleId
+				node.icon = renderFileHelpIcon(metadata.icon, 16)
+				names[articleId] = node.label
+				articleNodes.set(articleId, node)
+			} else ancestors[articleId].push(id)
+			items = node.children ?? []
 		}
 	}
-	const groups: HelpNavigationGroup[] = [
-		group("project"),
-		group("skills"),
-		group("personal"),
-		{
-			id: "assistants",
-			label: t("topicFiles.helpGuide.groups.assistants"),
-			items: [],
-			children: [group("assistant"), group("crew")],
-		},
-		group("content"),
-	]
-	return { labels, reasons, groups }
+	// 年月、具体笔记只从实际文件打开，并展开所属记忆目录；未知来源不归入项目。
+	for (const articleId of FILE_HELP_ARTICLE_IDS) {
+		const parent = getFileHelpMetadata(articleId).navigationParent
+		if (parent) {
+			const metadata = getFileHelpMetadata(parent)
+			ancestors[articleId] = [
+				...ancestors[parent],
+				`${metadata.group}:${metadata.path?.replace(/\/$/, "")}`,
+			]
+		}
+	}
+	return { locations, names, reasons, groups, ancestors, groupLabels, articleNodes }
 }
