@@ -19,9 +19,10 @@ export const en: I18nTexts = {
 	error: "Failed to load data",
 	retry: "Retry",
 	empty: "No data available",
+	unnamedProject: "Unnamed Project",
 
 	// Hints
-	mcpHint: "@extension only take effect once",
+	mcpHint: "@connector only takes effect once",
 	skillHint: "@skill only takes effect once",
 	skillSources: {
 		system: "System Skill",
@@ -34,7 +35,7 @@ export const en: I18nTexts = {
 		default: "",
 		search: "Search project files",
 		folder: "Folder",
-		mcp: "MCP Extensions",
+		mcp: "Connectors",
 		agent: "Agents",
 		skills: "Skills",
 	},
@@ -44,7 +45,10 @@ export const en: I18nTexts = {
 		personalDrive: "Personal Drive",
 		enterpriseDrive: "Enterprise Drive",
 		projectFiles: "Current Project Files",
-		mcpExtensions: "Plugins",
+		otherProjectFiles: "Other Projects/Files",
+		mcpExtensions: "Connectors",
+		digitalEmployees: "Digital Employees",
+		flows: "Flows",
 		agents: "Agents",
 		skills: "Skills",
 		tools: "Tools",

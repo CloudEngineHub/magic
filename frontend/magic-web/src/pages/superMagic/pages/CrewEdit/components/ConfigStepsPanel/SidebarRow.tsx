@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { ChevronRight } from "lucide-react"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 
 export interface SidebarRowProps {
 	label: string

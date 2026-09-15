@@ -353,6 +353,7 @@ class SuperMagicService {
 		projectId: string,
 		options?: Omit<RequestConfig, "url">,
 		topic_id?: string,
+		navigationState?: Record<string, unknown> | null,
 	) {
 		let project = projectStore.projects.find((p) => p.id === projectId) || null
 
@@ -365,9 +366,9 @@ class SuperMagicService {
 		}
 
 		if (interfaceStore.isMobile) {
-			this.switchProjectInMobile(project, topic_id)
+			return this.switchProjectInMobile(project, topic_id, navigationState)
 		} else {
-			this.switchProjectInDesktop(project, topic_id)
+			return this.switchProjectInDesktop(project, topic_id, navigationState)
 		}
 	}
 
@@ -515,7 +516,11 @@ class SuperMagicService {
 	 * @param project Project to switch to
 	 * @param topic_id Optional topic ID to navigate to
 	 */
-	async switchProjectInMobile(project: ProjectListItem, topic_id?: string) {
+	async switchProjectInMobile(
+		project: ProjectListItem,
+		topic_id?: string,
+		navigationState?: Record<string, unknown> | null,
+	) {
 		this.flushCurrentTopicReadProgress("switch-project")
 
 		let resolvedProject = mergeProjectListItemWithStoreCache(project) ?? project
@@ -574,15 +579,20 @@ class SuperMagicService {
 				workspaceId: navigationWorkspaceId,
 				projectId: resolvedProject.id,
 				topicId: optimisticTopicId,
+				state: navigationState,
 			})
 			navigatedToTopic = true
 		} else {
 			// Navigate to project optimistically
 			this.topicStore.setSelectedTopic(null)
 			if (isOtherCollaborationProject(resolvedProject)) {
-				this.route.navigateToCollaborationProject(resolvedProject)
+				this.route.navigateToCollaborationProject(
+					resolvedProject,
+					undefined,
+					navigationState,
+				)
 			} else {
-				this.route.navigateToProject(resolvedProject)
+				this.route.navigateToProject(resolvedProject, undefined, navigationState)
 			}
 		}
 
@@ -613,9 +623,13 @@ class SuperMagicService {
 						// Topic doesn't belong to this project, navigate back to project
 						this.topicStore.setSelectedTopic(null)
 						if (isOtherCollaborationProject(resolvedProject)) {
-							this.route.navigateToCollaborationProject(resolvedProject, true)
+							this.route.navigateToCollaborationProject(
+								resolvedProject,
+								true,
+								navigationState,
+							)
 						} else {
-							this.route.navigateToProject(resolvedProject, true)
+							this.route.navigateToProject(resolvedProject, true, navigationState)
 						}
 					}
 
@@ -631,9 +645,13 @@ class SuperMagicService {
 					// Topic not found, navigate back to project
 					this.topicStore.setSelectedTopic(null)
 					if (isOtherCollaborationProject(resolvedProject)) {
-						this.route.navigateToCollaborationProject(resolvedProject, true)
+						this.route.navigateToCollaborationProject(
+							resolvedProject,
+							true,
+							navigationState,
+						)
 					} else {
-						this.route.navigateToProject(resolvedProject, true)
+						this.route.navigateToProject(resolvedProject, true, navigationState)
 					}
 				}
 			} else {
@@ -656,7 +674,11 @@ class SuperMagicService {
 	 * 切换项目 - 设置选中项目并导航到项目（乐观路由策略）
 	 * @param project Project to switch to
 	 */
-	async switchProjectInDesktop(project: ProjectListItem, topic_id?: string) {
+	async switchProjectInDesktop(
+		project: ProjectListItem,
+		topic_id?: string,
+		navigationState?: Record<string, unknown> | null,
+	) {
 		this.flushCurrentTopicReadProgress("switch-project")
 		// 1. 同步设置与检查
 		const _isReadOnlyProject = isReadOnlyProject(project.user_role)
@@ -707,15 +729,16 @@ class SuperMagicService {
 				workspaceId: navigationWorkspaceId,
 				projectId: project.id,
 				topicId: optimisticTopicId,
+				state: navigationState,
 			})
 			navigatedToTopic = true
 		} else {
 			// 乐观导航到项目
 			this.topicStore.setSelectedTopic(null)
 			if (isOtherCollaborationProject(project)) {
-				this.route.navigateToCollaborationProject(project)
+				this.route.navigateToCollaborationProject(project, undefined, navigationState)
 			} else {
-				this.route.navigateToProject(project)
+				this.route.navigateToProject(project, undefined, navigationState)
 			}
 		}
 
@@ -747,6 +770,7 @@ class SuperMagicService {
 						workspaceId: finalWorkspaceId,
 						projectId: project.id,
 						topicId: actualTopic.id,
+						state: navigationState,
 						replace: true,
 					})
 				} else if (!navigatedToTopic) {
@@ -755,6 +779,7 @@ class SuperMagicService {
 						workspaceId: finalWorkspaceId,
 						projectId: project.id,
 						topicId: actualTopic.id,
+						state: navigationState,
 						replace: true,
 					})
 				}
@@ -773,9 +798,9 @@ class SuperMagicService {
 					// 之前导航到话题，但实际没有话题，修正到项目路由（使用 replace 替换乐观导航）
 					this.topicStore.setSelectedTopic(null)
 					if (isOtherCollaborationProject(project)) {
-						this.route.navigateToCollaborationProject(project, true)
+						this.route.navigateToCollaborationProject(project, true, navigationState)
 					} else {
-						this.route.navigateToProject(project, true)
+						this.route.navigateToProject(project, true, navigationState)
 					}
 				}
 			}
@@ -1045,6 +1070,7 @@ class SuperMagicService {
 				return
 			}
 			projectStore.setSelectedProject(null)
+			this.topicStore.setSelectedTopic(null)
 			if (!workspaceId) {
 				return
 			}
@@ -1117,6 +1143,8 @@ class SuperMagicService {
 				{
 					workspaceId: workspace.id,
 					page: 1,
+					// Route restoration owns the selected project; a failed or empty sidebar refresh must not clear it.
+					clearWhenNoProjects: false,
 				},
 				{ enableErrorMessagePrompt: false },
 			)
@@ -1142,6 +1170,9 @@ class SuperMagicService {
 			if (!isEqual(current, selectedTopic)) {
 				topicStore.setSelectedTopic(selectedTopic)
 			}
+		} else if (!topicId && !this.route.isCurrentChatProjectRoute()) {
+			// A project/workspace home route must not inherit the previous conversation.
+			this.topicStore.setSelectedTopic(null)
 		}
 
 		if (!interfaceStore.isMobile) {

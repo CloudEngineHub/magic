@@ -8,10 +8,14 @@ declare(strict_types=1);
 namespace App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention;
 
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Agent\AgentData;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Assistant\AssistantData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\DesignMarker\DesignMarkerData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Directory\DirectoryData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\File\FileData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Mcp\McpData;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Memory\Directory\MemoryDirectoryData;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Memory\File\MemoryFileData;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Project\ProjectData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Skill\SkillData;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Tool\ToolData;
 use App\Infrastructure\Core\AbstractDTO;
@@ -55,10 +59,14 @@ final class MentionAttrs extends AbstractDTO
         } else {
             $this->data = match ($this->getType()) {
                 MentionType::PROJECT_FILE, MentionType::UPLOAD_FILE => new FileData($data),
+                MentionType::MEMORY_FILE => new MemoryFileData($data),
+                MentionType::MEMORY_DIRECTORY => new MemoryDirectoryData($data),
                 MentionType::AGENT => new AgentData($data),
+                MentionType::ASSISTANT => new AssistantData($data),
                 MentionType::MCP => new McpData($data),
                 MentionType::TOOL => new ToolData($data),
                 MentionType::PROJECT_DIRECTORY => new DirectoryData($data),
+                MentionType::PROJECT => new ProjectData($data),
                 MentionType::DESIGN_MARKER => new DesignMarkerData($data),
                 MentionType::SKILL => new SkillData($data),
             };

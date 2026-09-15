@@ -32,7 +32,10 @@ function ShareListEmptyState({ resourceType }: ShareListEmptyStateProps) {
 	}
 
 	return (
-		<Empty className="flex h-full items-center justify-center border border-dashed border-border p-6">
+		<Empty
+			className="flex h-full items-center justify-center border border-dashed border-border p-6"
+			data-slot="project-panel-empty"
+		>
 			<EmptyHeader>
 				<EmptyMedia
 					variant="icon"

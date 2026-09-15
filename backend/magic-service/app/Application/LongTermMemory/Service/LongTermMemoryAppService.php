@@ -21,15 +21,15 @@ use App\Domain\LongTermMemory\Entity\LongTermMemoryEntity;
 use App\Domain\LongTermMemory\Entity\ValueObject\MemoryType;
 use App\Domain\LongTermMemory\Service\LongTermMemoryDomainService;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\SuperMagic\Message\Chat\DTO\Message\ChatMessage\Item\ValueObject\MemoryOperationAction;
+use App\Domain\SuperMagic\Message\Chat\DTO\Message\ChatMessage\Item\ValueObject\MemoryOperationScenario;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\ErrorCode\LongTermMemoryErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Util\LLMParse\LLMResponseParseUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
-use Dtyq\SuperMagic\Domain\Chat\DTO\Message\ChatMessage\Item\ValueObject\MemoryOperationAction;
-use Dtyq\SuperMagic\Domain\Chat\DTO\Message\ChatMessage\Item\ValueObject\MemoryOperationScenario;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
 use Hyperf\Odin\Contract\Model\ModelInterface;
 use Hyperf\Odin\Message\SystemMessage;
 use InvalidArgumentException;
@@ -334,14 +334,22 @@ class LongTermMemoryAppService
             $model = $this->getChatModel($authorization);
 
             // 2. 判断是否应该记忆
-            $shouldRemember = $this->shouldRememberContent($model, $dto);
+            $businessParams = [
+                'organization_id' => $authorization->getOrganizationCode(),
+                'user_id' => $authorization->getId(),
+                'app_id' => $dto->appId,
+                'source_id' => $dto->sourceId,
+                'business_id' => $dto->businessId,
+            ];
+
+            $shouldRemember = $this->shouldRememberContent($model, $dto, $businessParams);
 
             if (! $shouldRemember->remember) {
                 return ['status' => MemoryEvaluationStatus::NO_MEMORY_NEEDED->value, 'reason' => $shouldRemember->explanation];
             }
 
             // 3. 如果需要，对记忆进行评分
-            $score = $this->rateMemory($model, $shouldRemember->memory);
+            $score = $this->rateMemory($model, $shouldRemember->memory, $businessParams);
 
             // 4. 如果评分高于阈值，则创建记忆
             if ($score >= self::MEMORY_SCORE_THRESHOLD) {
@@ -375,7 +383,7 @@ class LongTermMemoryAppService
     /**
      * 对记忆进行评分.
      */
-    public function rateMemory(ModelInterface $model, string $memory): int
+    public function rateMemory(ModelInterface $model, string $memory, array $businessParams = []): int
     {
         $promptFile = BASE_PATH . '/app/Application/LongTermMemory/Prompt/MemoryPrompt.text';
         $prompt = $this->loadPromptFile($promptFile);
@@ -384,7 +392,7 @@ class LongTermMemoryAppService
 
         try {
             // 使用系统提示词
-            $response = $model->chat([new SystemMessage($prompt)]);
+            $response = $model->chat([new SystemMessage($prompt)], businessParams: $businessParams);
             $content = $response->getFirstChoice()?->getMessage()->getContent();
         } catch (Throwable $e) {
             ExceptionBuilder::throw(LongTermMemoryErrorCode::EVALUATION_LLM_REQUEST_FAILED, throwable: $e);
@@ -400,7 +408,7 @@ class LongTermMemoryAppService
     /**
      * 判断是否需要记住内容.
      */
-    public function shouldRememberContent(ModelInterface $model, EvaluateConversationRequestDTO $dto): ShouldRememberDTO
+    public function shouldRememberContent(ModelInterface $model, EvaluateConversationRequestDTO $dto, array $businessParams = []): ShouldRememberDTO
     {
         $promptFile = BASE_PATH . '/app/Application/LongTermMemory/Prompt/MemoryRatingPrompt.txt';
         $prompt = $this->loadPromptFile($promptFile);
@@ -409,7 +417,7 @@ class LongTermMemoryAppService
 
         try {
             // 使用系统提示词
-            $response = $model->chat([new SystemMessage($prompt)]);
+            $response = $model->chat([new SystemMessage($prompt)], businessParams: $businessParams);
             $firstChoiceContent = $response->getFirstChoice()?->getMessage()->getContent();
         } catch (Throwable $e) {
             ExceptionBuilder::throw(LongTermMemoryErrorCode::EVALUATION_LLM_REQUEST_FAILED, throwable: $e);

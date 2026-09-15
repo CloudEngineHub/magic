@@ -2,7 +2,7 @@ import { memo } from "react"
 import { observer } from "mobx-react-lite"
 import type { NodeProps } from "@/pages/superMagic/components/MessageList/components/Nodes/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useToolTooltip } from "../../hooks/useToolTooltip"
 import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/components/shared/ToolIconConfig"
 
@@ -28,7 +28,7 @@ function getProgressLabel({
 
 function ToolProgressNode(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave, checkIsLastMessage } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 	const detailData = tool?.detail?.data || {}
 	const progress = getProgressValue(detailData?.progress)

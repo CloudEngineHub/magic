@@ -22,6 +22,7 @@ from agentlang.event.event import EventType
 from agentlang.logger import get_logger
 from agentlang.path_manager import PathManager
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.attachment import AttachmentStorageType
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.core.entity.tool.tool_result_types import ImageToolResult
 from app.i18n import i18n
@@ -36,22 +37,30 @@ from app.tools.core import BaseToolParams, tool
 from app.tools.image_utils import (
     cleanup_temp_files,
     detect_image_file_extension,
+    get_model_valid_sizes,
     resolve_image_model,
     resolve_reference_images_to_urls,
     resolve_safe_save_path,
     resolve_size_from_references,
+    snap_to_nearest_valid_size,
 )
 from app.tools.media_generator import (
     HANDLER_MAGIC_SERVICE,
     GeneratedImage,
     ImageGenerationRequest,
-    ImageGenerationResponse,
     ImageGeneratorDispatcher,
     get_image_generator,
 )
 from app.tools.media_generator.base import ImageGenerationProviderError
 from app.tools.workspace_tool import WorkspaceTool
-from app.utils.async_file_utils import async_copy2, async_exists, async_mkdir, async_stat, async_unlink, get_file_id_from_xattr
+from app.utils.async_file_utils import (
+    async_copy2,
+    async_exists,
+    async_mkdir,
+    async_stat,
+    async_unlink,
+    get_file_id_from_xattr,
+)
 
 logger = get_logger(__name__)
 
@@ -102,8 +111,8 @@ Image generation prompt. Include subject, style, composition, lighting, and colo
     )
     size: Optional[str] = Field(
         None,
-        description="""<!--zh: 输出图片尺寸，格式 'WxH'。有参考图时可省略，系统自动取面积最大的参考图尺寸；无参考图时必须明确填写，常用备选：2048x2048（方）、1440x2560（9:16）、2560x1440（16:9）、1728x2304（2:3）、2304x1728（3:2）。-->
-Output image dimensions in 'WxH' format. Optional when reference_images is non-empty — the system automatically uses the largest reference image's dimensions. Required when reference_images is empty; common options: 2048x2048 (square), 1440x2560 (9:16), 2560x1440 (16:9), 1728x2304 (2:3), 2304x1728 (3:2).""",
+        description="""<!--zh: 输出图片尺寸，格式 'WxH'。有参考图时建议省略——系统会自动取参考图尺寸并 snap 到当前模型的合法尺寸，不要自行按参考图比例计算 size；无参考图时必须明确填写，且只能从当前会话上下文里模型信息（<image model=... sizes=.../>）给出的合法尺寸中选择，不要自己拍一个值。常用备选（仅供无该信息时参考）：2048x2048（方）、1440x2560（9:16）、2560x1440（16:9）、1728x2304（2:3）、2304x1728（3:2）。-->
+Output image dimensions in 'WxH' format. When reference_images is non-empty, prefer omitting this field — the system automatically derives it from the reference image and snaps it to the current model's valid sizes. Do NOT calculate a custom size from the reference image's aspect ratio yourself. When reference_images is empty, this field is required and MUST be chosen from the valid sizes listed in the current model info (the `<image model=... sizes=.../>` context), not a self-calculated value. Fallback options if no such info is available: 2048x2048 (square), 1440x2560 (9:16), 2560x1440 (16:9), 1728x2304 (2:3), 2304x1728 (3:2).""",
     )
     name: str = Field(
         ...,
@@ -248,21 +257,35 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
         await super()._dispatch_file_event(tool_context, filepath, event_type, is_screenshot=False, source=AI_IMAGE_GENERATION_SOURCE)
 
     async def execute_purely(
-        self, tool_context: ToolContext, params: GenerateImagesParams
+        self,
+        tool_context: ToolContext,
+        params: GenerateImagesParams,
+        *,
+        model_id: Optional[str] = None,
     ) -> ImageToolResult:
-        """供其他工具内部调用的纯执行入口，等价于 execute。"""
-        return await self.execute(tool_context, params)
+        """供其他工具内部调用，并允许使用已验证的图片模型覆盖值。"""
+        return await self._execute_with_model(tool_context, params, model_id=model_id)
 
     async def execute(
         self, tool_context: ToolContext, params: GenerateImagesParams
     ) -> ImageToolResult:
         """并发执行所有生成任务，汇总结果。"""
+        return await self._execute_with_model(tool_context, params)
+
+    async def _execute_with_model(
+        self,
+        tool_context: ToolContext,
+        params: GenerateImagesParams,
+        *,
+        model_id: Optional[str] = None,
+    ) -> ImageToolResult:
+        """使用显式模型或当前用户图片模型执行批量生成。"""
         try:
             image_dispatcher = get_image_generator()
-            model = await resolve_image_model(tool_context)
+            model = model_id.strip() if model_id and model_id.strip() else await resolve_image_model(tool_context)
 
             workspace_root = Path(str(self.base_dir))
-            await self._normalize_tasks(params.tasks, workspace_root)
+            await self._normalize_tasks(params.tasks, workspace_root, tool_context)
 
             async def _run_with_delay(
                 idx: int, gen_task: ImageGenerationTask
@@ -347,33 +370,41 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
         )
 
     async def _normalize_tasks(
-        self, tasks: List[ImageGenerationTask], workspace_root: Path
+        self, tasks: List[ImageGenerationTask], workspace_root: Path, tool_context: ToolContext
     ) -> None:
         """
         对所有 task 做参数归一化：
         1. reference_images 去前导 /
         2. size 缺失时从参考图自动推断
+        3. 无论 size 来自 LLM 还是参考图推断，统一 snap 到当前模型的合法尺寸
+           （合法尺寸列表来自平台注入的模型能力，未配置时不做任何改写）
         """
+        valid_sizes = get_model_valid_sizes(tool_context)
+
         for idx, task in enumerate(tasks):
             if task.reference_images:
                 task.reference_images = [p.lstrip("/") for p in task.reference_images]
 
-            if task.size:
-                continue
-            if not task.reference_images:
-                raise ValueError(
-                    f"Task {idx + 1} ({task.prompt[:30]!r}): "
-                    f"size is required when reference_images is empty."
-                )
-            resolved = await resolve_size_from_references(task.reference_images, workspace_root)
-            if resolved is None:
-                raise ValueError(
-                    f"Task {idx + 1} ({task.prompt[:30]!r}): "
-                    f"could not read dimensions from any reference image. "
-                    f"Please provide size explicitly."
-                )
-            task.size = resolved
-            logger.info(f"Task {idx + 1}: auto-resolved size={resolved} from reference images")
+            if not task.size:
+                if not task.reference_images:
+                    raise ValueError(
+                        f"Task {idx + 1} ({task.prompt[:30]!r}): "
+                        f"size is required when reference_images is empty."
+                    )
+                resolved = await resolve_size_from_references(task.reference_images, workspace_root)
+                if resolved is None:
+                    raise ValueError(
+                        f"Task {idx + 1} ({task.prompt[:30]!r}): "
+                        f"could not read dimensions from any reference image. "
+                        f"Please provide size explicitly."
+                    )
+                task.size = resolved
+                logger.info(f"Task {idx + 1}: auto-resolved size={resolved} from reference images")
+
+            snapped = snap_to_nearest_valid_size(task.size, valid_sizes)
+            if snapped != task.size:
+                logger.info(f"Task {idx + 1}: size {task.size} not in valid list, snapped to {snapped}")
+                task.size = snapped
 
     def _make_relative_path(self, saved_path: str) -> str:
         """计算相对于工作区根目录的相对路径，失败时回退到文件名。"""
@@ -483,7 +514,7 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
         save_path = await resolve_safe_save_path(save_dir, filename_stem, extension)
 
         async with self._file_versioning_context(
-            tool_context, save_path, update_timestamp=False
+            tool_context, save_path, track_in_horizon=False
         ) as file_existed:
             await async_copy2(image.temp_file_path, save_path)
 
@@ -542,10 +573,20 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
             logger.error(f"验证图片路径失败 {first_image_path}: {e}")
             return None
 
-        file_name = os.path.basename(first_image_path)
+        try:
+            relative_file_path = safe_path.relative_to(self.base_dir).as_posix()
+        except ValueError:
+            logger.error(f"生成图片不在当前工作区内: {safe_path}")
+            return None
+
         return ToolDetail(
             type=DisplayType.IMAGE,
-            data=FileContent(file_name=file_name, content=file_name),
+            data=FileContent(
+                file_name=safe_path.name,
+                content="",
+                relative_file_path=relative_file_path,
+                storage_type=AttachmentStorageType.WORKSPACE,
+            ),
         )
 
     def _get_remark_content(

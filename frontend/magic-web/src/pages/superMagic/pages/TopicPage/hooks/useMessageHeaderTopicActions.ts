@@ -7,6 +7,10 @@ import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import SuperMagicService, { renameTopicWithChatSync } from "@/pages/superMagic/services"
 import routeManageService from "@/pages/superMagic/services/routeManageService"
 import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
+import {
+	isAgentSelectionAvailable,
+	resolveDefaultAgentSelection,
+} from "@/services/superMagic/DefaultAgentSelectionService"
 
 interface UseMessageHeaderTopicActionsParams {
 	selectedProject: ProjectListItem | null
@@ -20,10 +24,27 @@ export function useMessageHeaderTopicActions({
 	topicStore,
 }: UseMessageHeaderTopicActionsParams): MessageHeaderTopicActions {
 	const createTopic = useMemoizedFn(async () => {
+		let sourceTopic:
+			Pick<Topic, "project_id" | "topic_mode" | "agent_code"> | null | undefined =
+			selectedTopic
+		if (
+			selectedTopic &&
+			(!selectedTopic.topic_mode ||
+				!isAgentSelectionAvailable(selectedTopic.topic_mode, selectedTopic.agent_code))
+		) {
+			const defaultSelection = resolveDefaultAgentSelection()
+			// 顶部按钮创建独立新话题；当前模式已失效时，不应继承历史话题的员工。
+			sourceTopic = {
+				project_id: selectedTopic.project_id,
+				topic_mode: defaultSelection.topicPattern,
+				agent_code: defaultSelection.agentCode,
+			}
+		}
+
 		await SuperMagicService.handleCreateTopic({
 			selectedProject,
-			// 创建请求保持空话题；sourceTopic 只用于前端沿用当前话题选择的员工。
-			sourceTopic: selectedTopic,
+			// 创建请求保持空话题；sourceTopic 只用于前端设置新话题的初始模式。
+			sourceTopic,
 		})
 	})
 

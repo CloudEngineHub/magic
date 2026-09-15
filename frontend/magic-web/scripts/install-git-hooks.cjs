@@ -115,7 +115,7 @@ function createStagedFilesCondition(projectRelativeDir) {
 	// The bridge should only run magic-web checks when the staged set belongs to
 	// this project. Standalone repositories treat any staged file as in-scope.
 	const stagedFilesCommand =
-		'git -C "$magic_web_git_root" diff --cached --name-only --diff-filter=ACMR'
+		'git -C "$magic_web_git_root" diff --cached --name-only --diff-filter=ACMRD'
 
 	if (projectRelativeDir === ".") {
 		return `${stagedFilesCommand} | grep -q .`
@@ -162,6 +162,25 @@ function createCommitMsgBridgeBlock({ projectRelativeDir }) {
 		'\t\t\t*) magic_web_commit_msg_file="$magic_web_git_root/$1" ;;',
 		"\t\tesac",
 		'\t\tsh "$magic_web_hook" "$magic_web_commit_msg_file" || exit $?',
+		"\tfi",
+		"fi",
+		BRIDGE_END_MARKER,
+		"",
+	].join("\n")
+}
+
+function createPreMergeCommitBridgeBlock({ projectRelativeDir }) {
+	// Automatic merge commits invoke pre-merge-commit instead of pre-commit.
+	return [
+		BRIDGE_BEGIN_MARKER,
+		'magic_web_git_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"',
+		'if [ -n "$magic_web_git_root" ] && ' +
+			createStagedFilesCondition(projectRelativeDir) +
+			"; then",
+		createProjectDirLine(projectRelativeDir),
+		'\tmagic_web_hook="$magic_web_project_dir/.husky/pre-merge-commit"',
+		'\tif [ -f "$magic_web_hook" ]; then',
+		'\t\tsh "$magic_web_hook" "$@" || exit $?',
 		"\tfi",
 		"fi",
 		BRIDGE_END_MARKER,
@@ -267,12 +286,18 @@ function createInstallGitHooksController({
 			hookName: "commit-msg",
 			managedBlock: createCommitMsgBridgeBlock({ projectRelativeDir }),
 		})
+		installHookBridge({
+			fsRef,
+			hooksDir,
+			hookName: "pre-merge-commit",
+			managedBlock: createPreMergeCommitBridgeBlock({ projectRelativeDir }),
+		})
 
 		return {
 			status: "configured",
 			hooksDir,
 			projectRelativeDir,
-			installedHooks: ["pre-commit", "commit-msg"],
+			installedHooks: ["pre-commit", "commit-msg", "pre-merge-commit"],
 		}
 	}
 
@@ -314,6 +339,7 @@ module.exports = {
 	PREVIOUS_MANAGED_HOOKS_PATHS,
 	createCommitMsgBridgeBlock,
 	createInstallGitHooksController,
+	createPreMergeCommitBridgeBlock,
 	createProjectDirLine,
 	createPreCommitBridgeBlock,
 	createStagedFilesCondition,

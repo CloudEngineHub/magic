@@ -5,7 +5,7 @@ import type {
 	MobileTabBarMenuKey,
 } from "@/layouts/BaseLayoutMobile/components/MobileTabBar/constants/tabsConfig"
 import { MOBILE_TAB_BAR_APPS_KEY } from "@/layouts/BaseLayoutMobile/components/MobileTabBar/constants/tabsConfig"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { MobileTabBarKey } from "@/pages/mobileTabs/constants"
 
 interface AppsMenuProps {

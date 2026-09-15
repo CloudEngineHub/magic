@@ -23,10 +23,6 @@
         "zh_CN": "写入文件",
         "en_US": "Write file"
     },
-    "append_to_file": {
-        "zh_CN": "更新文件",
-        "en_US": "Append file"
-    },
     "edit_file": {
         "zh_CN": "编辑文件",
         "en_US": "Edit file"
@@ -46,10 +42,6 @@
     "delete_files": {
         "zh_CN": "删除文件",
         "en_US": "Delete file"
-    },
-    "convert_pdf": {
-        "zh_CN": "转换PDF",
-        "en_US": "Convert PDF"
     },
     "inspect_document": {
         "zh_CN": "探测文档",
@@ -71,9 +63,29 @@
         "zh_CN": "转换文档格式",
         "en_US": "Convert document format"
     },
-    "convert_pptx_to_slide_template": {
-        "zh_CN": "转换 PPTX 为幻灯片模板",
-        "en_US": "Convert PPTX to slide template"
+    "create_slide_template_project": {
+        "zh_CN": "创建幻灯片模板结构",
+        "en_US": "Create slide template structure"
+    },
+    "finalize_slide_template": {
+        "zh_CN": "生成幻灯片模板预览",
+        "en_US": "Finalize slide template previews"
+    },
+    "prepare_slide_template_source": {
+        "zh_CN": "准备模板视觉重建素材",
+        "en_US": "Prepare slide template reconstruction source"
+    },
+    "select_slide_template_source_assets": {
+        "zh_CN": "筛选模板原始素材",
+        "en_US": "Select slide template source assets"
+    },
+    "query_slide_template_taxonomy": {
+        "zh_CN": "获取模板分类标签",
+        "en_US": "Fetch template categories and tags"
+    },
+    "review_slide_template_source": {
+        "zh_CN": "回顾模板源页视觉",
+        "en_US": "Review slide template source pages"
     },
     "install_slides_template": {
         "zh_CN": "安装幻灯片模板",
@@ -122,10 +134,6 @@
     "web_search": {
         "zh_CN": "互联网搜索",
         "en_US": "Web search"
-    },
-    "use_browser": {
-        "zh_CN": "使用浏览器",
-        "en_US": "Use browser"
     },
     "read_webpages_as_markdown": {
         "zh_CN": "深度阅读多个网页内容",
@@ -206,6 +214,14 @@
     "generate_images_ing": {
         "zh_CN": "正在生成图像",
         "en_US": "Generating images"
+    },
+    "generate_video": {
+        "zh_CN": "生成视频",
+        "en_US": "Generate video"
+    },
+    "get_video": {
+        "zh_CN": "获取视频",
+        "en_US": "Get video"
     },
     "video_generation_progress": {
         "zh_CN": "视频生成进度通知",
@@ -311,6 +327,46 @@
         "zh_CN": "恢复画布媒体",
         "en_US": "Restore canvas media"
     },
+    "query_canvas_elements": {
+        "zh_CN": "查询画布节点",
+        "en_US": "Query canvas elements"
+    },
+    "get_canvas_overview": {
+        "zh_CN": "查看画布概览",
+        "en_US": "Get canvas overview"
+    },
+    "repair_video_production_connections": {
+        "zh_CN": "修复视频制作连线",
+        "en_US": "Repair video production connections"
+    },
+    "promote_canvas_content": {
+        "zh_CN": "确认画布内容",
+        "en_US": "Confirm canvas content"
+    },
+    "upsert_storyboard": {
+        "zh_CN": "保存视频分镜",
+        "en_US": "Save video storyboard"
+    },
+    "configure_video_edit": {
+        "zh_CN": "配置视频成片",
+        "en_US": "Configure final video"
+    },
+    "import_canvas_assets": {
+        "zh_CN": "导入画布素材",
+        "en_US": "Import canvas assets"
+    },
+    "compose_canvas_video": {
+        "zh_CN": "合成最终视频",
+        "en_US": "Compose final video"
+    },
+    "generate_video_production_images": {
+        "zh_CN": "生成视频素材图片",
+        "en_US": "Generate video production images"
+    },
+    "generate_video_production_videos": {
+        "zh_CN": "生成视频镜头",
+        "en_US": "Generate video production shots"
+    },
     "thinking": {
         "zh_CN": "深度思考",
         "en_US": "Thinking process"
@@ -324,28 +380,24 @@
         "en_US": "Deep write"
     },
     "call_subagent": {
-        "zh_CN": "调用数字员工",
-        "en_US": "Call sub-agent"
+        "zh_CN": "调用智能体",
+        "en_US": "Call Agent"
     },
     "call_subagent.crew": {
         "zh_CN": "调用数字员工",
-        "en_US": "Call digital employee"
+        "en_US": "Call Crew"
     },
-    "agent_list": {
+    "find_agents": {
         "zh_CN": "查找数字员工",
-        "en_US": "Find digital employees"
-    },
-    "prepare_agent": {
-        "zh_CN": "准备数字员工",
-        "en_US": "Prepare digital employee"
+        "en_US": "Find Crew"
     },
     "wait_for_subagents": {
-        "zh_CN": "等待数字员工完成",
-        "en_US": "Wait for sub-agents"
+        "zh_CN": "等待智能体完成任务",
+        "en_US": "Wait for Agents"
     },
     "wait_for_subagents.crew": {
-        "zh_CN": "等待数字员工完成",
-        "en_US": "Waiting for digital employee result"
+        "zh_CN": "等待数字员工完成任务",
+        "en_US": "Wait for Crew"
     },
     "compact_chat_history": {
         "zh_CN": "整理对话内容",
@@ -367,18 +419,6 @@
         "zh_CN": "查看任务列表",
         "en_US": "View task list"
     },
-    "create_memory": {
-        "zh_CN": "创建记忆",
-        "en_US": "Create memory"
-    },
-    "update_memory": {
-        "zh_CN": "更新记忆",
-        "en_US": "Update memory"
-    },
-    "delete_memory": {
-        "zh_CN": "删除记忆",
-        "en_US": "Delete memory"
-    },
     "get_agent_info": {
         "zh_CN": "获取员工信息",
         "en_US": "Get employee info"
@@ -399,9 +439,17 @@
         "zh_CN": "上传技能",
         "en_US": "Upload skill"
     },
+    "get_sandbox_info": {
+        "zh_CN": "查看沙箱信息",
+        "en_US": "Inspect sandbox"
+    },
     "upgrade_sandbox": {
         "zh_CN": "升级沙箱",
         "en_US": "Upgrade sandbox"
+    },
+    "restart_sandbox": {
+        "zh_CN": "重启沙箱",
+        "en_US": "Restart sandbox"
     },
     "manage_cron": {
         "zh_CN": "管理定时任务",
@@ -455,6 +503,66 @@
         "zh_CN": "向用户提问",
         "en_US": "Ask user"
     },
+    "micro_app_plan": {
+        "zh_CN": "确认开发计划",
+        "en_US": "Review implementation plan"
+    },
+    "update_html_app_memory": {
+        "zh_CN": "更新微应用信息",
+        "en_US": "Update micro-app details"
+    },
+    "query_magicbase_tables": {
+        "zh_CN": "查询数据表",
+        "en_US": "Query tables"
+    },
+    "get_magicbase_table": {
+        "zh_CN": "查看数据表",
+        "en_US": "View table"
+    },
+    "query_magicbase_rows": {
+        "zh_CN": "查询数据记录",
+        "en_US": "Query rows"
+    },
+    "create_magicbase_row": {
+        "zh_CN": "新增数据记录",
+        "en_US": "Create row"
+    },
+    "batch_create_magicbase_rows": {
+        "zh_CN": "批量新增数据记录",
+        "en_US": "Batch create rows"
+    },
+    "delete_magicbase_row": {
+        "zh_CN": "删除数据记录",
+        "en_US": "Delete row"
+    },
+    "batch_delete_magicbase_rows": {
+        "zh_CN": "批量删除数据记录",
+        "en_US": "Batch delete rows"
+    },
+    "create_magicbase_table": {
+        "zh_CN": "创建数据表",
+        "en_US": "Create table"
+    },
+    "create_magicbase_column": {
+        "zh_CN": "创建字段",
+        "en_US": "Create field"
+    },
+    "update_magicbase_table_permissions": {
+        "zh_CN": "更新数据表权限",
+        "en_US": "Update table permissions"
+    },
+    "delete_magicbase_table": {
+        "zh_CN": "删除数据表",
+        "en_US": "Delete table"
+    },
+    "update_magicbase_column": {
+        "zh_CN": "更新字段",
+        "en_US": "Update field"
+    },
+    "delete_magicbase_column": {
+        "zh_CN": "删除字段",
+        "en_US": "Delete field"
+    },
     "search_knowledge": {
         "zh_CN": "知识检索",
         "en_US": "Search knowledge"
@@ -468,8 +576,8 @@
         "en_US": "List local skills"
     },
     "find_skills.online": {
-        "zh_CN": "搜索互联网技能",
-        "en_US": "Search online skills"
+        "zh_CN": "搜索技能市场",
+        "en_US": "Search skill marketplace"
     },
     "install_skills": {
         "zh_CN": "安装技能",
@@ -603,8 +711,256 @@
         "zh_CN": "调用工具",
         "en_US": "Use Tool"
     },
-    "call_simple_agent": {
+    "call_assistant": {
         "zh_CN": "调用助理",
-        "en_US": "Consult Agent"
+        "en_US": "Consult Assistant"
+    },
+    "create_file_share": {
+        "zh_CN": "创建文件分享",
+        "en_US": "Create file share"
+    },
+    "inspect_file_share": {
+        "zh_CN": "检查分享文件",
+        "en_US": "Inspect share files"
+    },
+    "create_project_share": {
+        "zh_CN": "创建项目分享",
+        "en_US": "Create project share"
+    },
+    "create_topic_share": {
+        "zh_CN": "创建话题分享",
+        "en_US": "Create topic share"
+    },
+    "list_file_shares": {
+        "zh_CN": "查看文件分享",
+        "en_US": "List file shares"
+    },
+    "list_project_shares": {
+        "zh_CN": "查看项目分享",
+        "en_US": "List project shares"
+    },
+    "list_topic_shares": {
+        "zh_CN": "查看话题分享",
+        "en_US": "List topic shares"
+    },
+    "get_share": {
+        "zh_CN": "查看分享详情",
+        "en_US": "Get share details"
+    },
+    "update_file_share": {
+        "zh_CN": "更新文件分享",
+        "en_US": "Update file share"
+    },
+    "update_project_share": {
+        "zh_CN": "更新项目分享",
+        "en_US": "Update project share"
+    },
+    "update_topic_share": {
+        "zh_CN": "更新话题分享",
+        "en_US": "Update topic share"
+    },
+    "delete_share": {
+        "zh_CN": "删除分享",
+        "en_US": "Delete share"
+    },
+    "canvas.initialize": {
+        "zh_CN": "初始化画布",
+        "en_US": "Initialize canvas"
+    },
+    "canvas.query_overview": {
+        "zh_CN": "查看画布概览",
+        "en_US": "Inspect canvas overview"
+    },
+    "canvas.query_elements": {
+        "zh_CN": "查看画布节点",
+        "en_US": "Inspect canvas elements"
+    },
+  "canvas.add_elements": {
+    "zh_CN": "新增画布节点",
+    "en_US": "Add canvas elements"
+  },
+  "canvas.frame_elements": {
+    "zh_CN": "框选画布节点",
+    "en_US": "Frame canvas elements"
+  },
+  "add_canvas_contents": {
+    "zh_CN": "新增画布内容",
+    "en_US": "Add canvas content"
+  },
+    "canvas.add_generated_content": {
+        "zh_CN": "生成画布内容",
+        "en_US": "Generate canvas content"
+    },
+    "canvas.generate_image": {
+        "zh_CN": "生成图片",
+        "en_US": "Generate images"
+    },
+    "canvas.generate_image_ing": {
+        "zh_CN": "正在生成图片",
+        "en_US": "Generating images"
+    },
+    "canvas.generate_video": {
+        "zh_CN": "生成视频",
+        "en_US": "Generate videos"
+    },
+    "canvas.generate_video_ing": {
+        "zh_CN": "正在生成视频",
+        "en_US": "Generating videos"
+    },
+    "canvas.generate_media": {
+        "zh_CN": "生成图片和视频",
+        "en_US": "Generate images and videos"
+    },
+    "canvas.generate_media_ing": {
+        "zh_CN": "正在生成图片和视频",
+        "en_US": "Generating images and videos"
+    },
+    "canvas.import_content": {
+        "zh_CN": "导入画布素材",
+        "en_US": "Import canvas assets"
+    },
+    "canvas.retry_generation": {
+        "zh_CN": "重试失败内容",
+        "en_US": "Retry failed content"
+    },
+    "canvas.retry_image_generation": {
+        "zh_CN": "重新生成图片",
+        "en_US": "Regenerate images"
+    },
+    "canvas.retry_video_generation": {
+        "zh_CN": "重新生成视频",
+        "en_US": "Regenerate videos"
+    },
+    "canvas.select_main": {
+        "zh_CN": "选择主内容",
+        "en_US": "Select main content"
+    },
+    "canvas.select_image_main": {
+        "zh_CN": "选择图片主版本",
+        "en_US": "Select the main image version"
+    },
+    "canvas.select_video_main": {
+        "zh_CN": "选择视频主版本",
+        "en_US": "Select the main video version"
+    },
+    "canvas.layout": {
+        "zh_CN": "调整画布布局",
+        "en_US": "Adjust canvas layout"
+    },
+    "canvas.remove_connections": {
+        "zh_CN": "移除画布连线",
+        "en_US": "Remove canvas connections"
+    },
+    "canvas.replace_connections": {
+        "zh_CN": "替换画布连线",
+        "en_US": "Replace canvas connections"
+    },
+    "manage_canvas_connections": {
+        "zh_CN": "管理画布连线",
+        "en_US": "Manage canvas connections"
+    },
+    "canvas.wait_generation": {
+        "zh_CN": "等待内容生成",
+        "en_US": "Wait for content generation"
+    },
+    "canvas.wait_image_generation": {
+        "zh_CN": "等待图片生成",
+        "en_US": "Wait for image generation"
+    },
+    "canvas.wait_image_completed": {
+        "zh_CN": "图片生成完成",
+        "en_US": "Image generation completed"
+    },
+    "canvas.wait_image_timeout": {
+        "zh_CN": "等待图片生成超时",
+        "en_US": "Image generation wait timed out"
+    },
+    "canvas.wait_image_partial": {
+        "zh_CN": "查看图片生成进度",
+        "en_US": "Inspect image generation progress"
+    },
+    "canvas.wait_image_processing": {
+        "zh_CN": "图片生成处理中",
+        "en_US": "Image generation processing"
+    },
+    "canvas.wait_image_failed": {
+        "zh_CN": "图片生成失败",
+        "en_US": "Image generation failed"
+    },
+    "canvas.wait_video_generation": {
+        "zh_CN": "等待视频生成",
+        "en_US": "Wait for video generation"
+    },
+    "canvas.wait_video_completed": {
+        "zh_CN": "视频生成完成",
+        "en_US": "Video generation completed"
+    },
+    "canvas.wait_video_timeout": {
+        "zh_CN": "等待视频生成超时",
+        "en_US": "Video generation wait timed out"
+    },
+    "canvas.wait_video_partial": {
+        "zh_CN": "查看视频生成进度",
+        "en_US": "Inspect video generation progress"
+    },
+    "canvas.wait_video_processing": {
+        "zh_CN": "视频生成处理中",
+        "en_US": "Video generation processing"
+    },
+    "canvas.wait_video_failed": {
+        "zh_CN": "视频生成失败",
+        "en_US": "Video generation failed"
+    },
+    "canvas.wait_generation_completed": {
+        "zh_CN": "内容生成完成",
+        "en_US": "Generation completed"
+    },
+    "canvas.wait_generation_timeout": {
+        "zh_CN": "等待内容生成超时",
+        "en_US": "Generation wait timed out"
+    },
+    "canvas.wait_generation_partial": {
+        "zh_CN": "查看内容生成进度",
+        "en_US": "Inspect generation progress"
+    },
+    "canvas.wait_generation_processing": {
+        "zh_CN": "内容生成处理中",
+        "en_US": "Generation tasks processing"
+    },
+    "canvas.wait_generation_failed": {
+        "zh_CN": "处理内容生成失败",
+        "en_US": "Handle generation failure"
+    },
+    "canvas.compose_video": {
+        "zh_CN": "合成最终视频",
+        "en_US": "Compose final video"
+    },
+    "canvas.estimate_content_points": {
+        "zh_CN": "预估内容积分",
+        "en_US": "Estimate content points"
+    },
+    "canvas.estimate_video_points": {
+        "zh_CN": "预估视频生成积分",
+        "en_US": "Estimate video generation points"
+    },
+    "canvas.create_storyboard": {
+        "zh_CN": "创建视频分镜",
+        "en_US": "Create video storyboard"
+    },
+    "canvas.create_video_edit": {
+        "zh_CN": "创建视频编辑方案",
+        "en_US": "Create video edit"
+    },
+    "canvas.create_frame": {
+        "zh_CN": "创建画布分组",
+        "en_US": "Create canvas group"
+    },
+    "canvas.search_images": {
+        "zh_CN": "搜索画布图片",
+        "en_US": "Search canvas images"
+    },
+    "canvas.search_import_reference_images": {
+        "zh_CN": "搜索并导入参考图片",
+        "en_US": "Search and import reference images"
     }
 }

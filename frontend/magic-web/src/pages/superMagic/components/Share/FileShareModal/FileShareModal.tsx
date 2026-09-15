@@ -16,9 +16,10 @@ import {
 } from "../types"
 import useStyles from "./style"
 import { findFileInTree, calculateActualFileCount } from "../FileSelector/utils"
-import { useResponsive, useDebounceFn } from "ahooks"
+import { useDebounceFn } from "ahooks"
 import { handleShareTypeChangeWithConfirm, generateSharePassword } from "../utils"
 import MagicModal from "@/components/base/MagicModal"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { generateShareUrl } from "@/pages/superMagic/components/ShareManagement/utils/shareTypeHelpers"
 import {
 	ShareNameField,
@@ -39,8 +40,8 @@ import { projectStore } from "@/pages/superMagic/stores/core"
 import { userStore } from "@/models/user"
 import { generateShareMessageText } from "../utils/generateShareMessageText"
 import { mergeRecordingShareFileIds } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
-import FileShareHtmlDependenciesOption from "./FileShareHtmlDependenciesOption"
-import { useFileShareHtmlDependencies } from "./hooks/useFileShareHtmlDependencies"
+import FileShareDocumentDependenciesOption from "./FileShareDocumentDependenciesOption"
+import { useFileShareDocumentDependencies } from "./hooks/useFileShareDocumentDependencies"
 interface FileShareModalProps {
 	attachments?: any[] // 可选，如果没有 resourceId 时使用（文件树）
 	attachmentList?: any[] // 可选，扁平化的文件列表
@@ -48,6 +49,8 @@ interface FileShareModalProps {
 	defaultSelectedFileIds?: string[] // 默认选中的文件ID列表
 	requiredFileIds?: string[] // 提交时始终保留的录音依赖文件ID
 	defaultOpenFileId?: string // 默认打开的文件ID
+	displayNameByFileId?: Record<string, string> // UI-only labels keyed by original file ID
+	displayNameByFileName?: Record<string, string> // Fallback labels for refreshed attachment IDs
 	resourceId?: string // 外层传入的资源ID（如从列表管理页面传入）
 	shareMode?: ShareMode // 分享模式：文件或项目
 	projectName?: string // 项目名称（用于项目分享模式）
@@ -81,6 +84,8 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		defaultSelectedFileIds,
 		requiredFileIds = [],
 		defaultOpenFileId: externalDefaultOpenFileId,
+		displayNameByFileId: displayNameByFileIdProp,
+		displayNameByFileName: displayNameByFileNameProp,
 		resourceId: externalResourceId,
 		shareMode,
 		projectName,
@@ -90,11 +95,14 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		onCancelShareSuccess,
 		fileShareUiConfig,
 	} = props
+	const displayNameByFileId =
+		displayNameByFileIdProp ?? fileShareUiConfig?.displayNameByFileId ?? {}
+	const displayNameByFileName =
+		displayNameByFileNameProp ?? fileShareUiConfig?.displayNameByFileName ?? {}
 
 	const { styles } = useStyles()
 	const { t } = useTranslation("super")
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 
 	const isFreePlan = userStore.user.organizationSubscriptionInfo?.is_paid_plan === false
 	const initialLockShareProject = fileShareUiConfig?.lockShareProject ?? false
@@ -150,6 +158,10 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const [attachmentList, setAttachmentList] = useState<any[]>([])
 	const {
 		projectMode,
+		dependencyAttachments,
+		dependencyBundleRootPath,
+		analyzeSelectedDocuments = false,
+		autoIncludeDocumentDependencies = false,
 		hideShareProjectToggle = false,
 		hideShowFileListSetting = false,
 		forceViewFileList,
@@ -304,6 +316,31 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const isFetchingResourceId = useRef(false)
 	// Track if resource data has been fetched for current resourceId
 	const fetchedResourceIds = useRef<Set<string>>(new Set())
+	const latestExternalResourceIdRef = useRef(externalResourceId)
+	const previousExternalResourceIdRef = useRef(externalResourceId)
+
+	useEffect(() => {
+		latestExternalResourceIdRef.current = externalResourceId
+	}, [externalResourceId])
+
+	useEffect(() => {
+		if (previousExternalResourceIdRef.current === externalResourceId) return
+
+		previousExternalResourceIdRef.current = externalResourceId
+		// Clear resource-scoped state before loading the next share to prevent A's selections leaking into B.
+		setResourceId(externalResourceId)
+		setSelectedFileIds([])
+		setSelectedFiles([])
+		setAttachments([])
+		setAttachmentList([])
+		setShareName("")
+		setShareExpiry(null)
+		setShareRange("all")
+		setShareTargets([])
+		setDefaultOpenFileId(externalDefaultOpenFileId || null)
+		setShareProject(initialLockShareProject ? false : shareMode === ShareMode.Project)
+		if (externalResourceId) fetchedResourceIds.current.delete(externalResourceId)
+	}, [externalDefaultOpenFileId, externalResourceId, initialLockShareProject, shareMode])
 
 	// Statistics - 计算实际文件数量（递归统计并去重）
 	const actualFileCount = useMemo(() => {
@@ -314,30 +351,36 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		return calculateActualFileCount(selectedFiles)
 	}, [selectedFiles, effectiveShareProject, attachmentList])
 	const {
-		analysisError: htmlDependencyAnalysisError,
-		dependencyFileCount: htmlDependencyFileCount,
-		fileIdsForSubmission: htmlDependencyFileIdsForSubmission,
+		analysisError: documentDependencyAnalysisError,
+		dependencyFileCount: documentDependencyFileCount,
+		dependencyFileType,
+		fileIdsForSubmission: documentDependencyFileIdsForSubmission,
 		handleFileIdsChange,
-		includeHtmlDependencies,
-		isAnalyzing: isAnalyzingHtmlDependencies,
+		includeDocumentDependencies,
+		isAnalyzing: isAnalyzingDocumentDependencies,
 		showDependencyOption,
-		setIncludeHtmlDependencies,
-	} = useFileShareHtmlDependencies({
+		setIncludeDocumentDependencies,
+	} = useFileShareDocumentDependencies({
 		selectedFileIds,
 		setSelectedFileIds,
 		attachments,
 		shareProject: effectiveShareProject,
+		dependencyAttachments,
+		dependencyBundleRootPath,
+		analyzeSelectedDocuments,
+		autoIncludeDocumentDependencies,
 	})
 	const submittedFileIds = useMemo(
-		() => mergeRecordingShareFileIds(htmlDependencyFileIdsForSubmission, requiredFileIds),
-		[htmlDependencyFileIdsForSubmission, requiredFileIds],
+		() => mergeRecordingShareFileIds(documentDependencyFileIdsForSubmission, requiredFileIds),
+		[documentDependencyFileIdsForSubmission, requiredFileIds],
 	)
-	const htmlDependencyOption = (
-		<FileShareHtmlDependenciesOption
-			analysisError={htmlDependencyAnalysisError}
-			checked={includeHtmlDependencies}
-			dependencyFileCount={htmlDependencyFileCount}
-			onCheckedChange={setIncludeHtmlDependencies}
+	const documentDependencyOption = (
+		<FileShareDocumentDependenciesOption
+			analysisError={documentDependencyAnalysisError}
+			checked={includeDocumentDependencies}
+			dependencyFileCount={documentDependencyFileCount}
+			fileType={dependencyFileType}
+			onCheckedChange={setIncludeDocumentDependencies}
 			visible={showDependencyOption}
 		/>
 	)
@@ -366,14 +409,16 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 					// Just set the confirmed type directly
 					// Public and PasswordProtected are separate types now
 					setShareType(confirmedType)
-					// Update passwordEnabled based on type
+					// Keep passwordEnabled in sync with share type. Switching to
+					// Organization/Public must clear it, otherwise success URL still
+					// embeds the previous password even though the API omits it.
 					if (confirmedType === ShareType.PasswordProtected) {
 						setExtraData((prev) => ({
 							...prev,
 							passwordEnabled: true,
 							password: prev.password || generateSharePassword(),
 						}))
-					} else if (confirmedType === ShareType.Public) {
+					} else {
 						setExtraData((prev) => ({
 							...prev,
 							passwordEnabled: false,
@@ -529,6 +574,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	// If resourceId is provided, fetch share settings and files
 	const fetchResourceData = useCallback(async () => {
 		if (!externalResourceId) return
+		const requestResourceId = externalResourceId
 
 		// Prevent duplicate fetches for the same resourceId
 		if (fetchedResourceIds.current.has(externalResourceId)) {
@@ -541,8 +587,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		try {
 			// Step 1: Get share settings (contains project_id, share_type, extra, etc.)
 			const settingsData = await SuperMagicApi.getShareInfoByCode({
-				code: externalResourceId,
+				code: requestResourceId,
 			})
+			if (latestExternalResourceIdRef.current !== requestResourceId) return
 			const projectIdFromApi = settingsData?.project_id
 			const defaultOpenFileIdFromApi = settingsData?.default_open_file_id
 			const fileIds = settingsData?.file_ids
@@ -610,9 +657,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			}
 
 			// Set selectedFileIds directly from settingsData if available
-			if (fileIds && Array.isArray(fileIds) && fileIds.length > 0) {
-				setSelectedFileIds(fileIds)
-			}
+			setSelectedFileIds(Array.isArray(fileIds) ? fileIds : [])
 
 			const resolvedProjectId = projectIdFromApi || projectId
 
@@ -623,19 +668,31 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 					// @ts-ignore 使用window添加临时的token
 					temporaryToken: window?.temporary_token || "",
 				})
+				if (latestExternalResourceIdRef.current !== requestResourceId) return
 				const fileTree = fileTreeRes.tree || []
 				const fileList = fileTreeRes.list || []
 
 				// Set attachments after selectedFileIds, so the sync effect can find the files
-				setAttachments(fileTree)
-				setAttachmentList(fileList)
+				setAttachments(
+					applyShareDisplayNames(fileTree, displayNameByFileId, displayNameByFileName),
+				)
+				setAttachmentList(
+					applyShareDisplayNames(fileList, displayNameByFileId, displayNameByFileName),
+				)
 			}
 		} catch (error) {
 			console.error("Failed to fetch resource data:", error)
 			// Remove from fetched set on error to allow retry
 			fetchedResourceIds.current.delete(externalResourceId)
 		}
-	}, [externalResourceId, forceViewFileList, lockShareProject, projectId])
+	}, [
+		displayNameByFileId,
+		displayNameByFileName,
+		externalResourceId,
+		forceViewFileList,
+		lockShareProject,
+		projectId,
+	])
 
 	// 防抖版本的 fetchResourceData
 	const { run: debouncedFetchResourceData } = useDebounceFn(fetchResourceData, {
@@ -659,8 +716,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			magicToast.warning(t("share.pleaseSelectFiles"))
 			return
 		}
-		if (htmlDependencyAnalysisError) {
-			magicToast.warning(t("share.htmlDependenciesAnalysisFailed"))
+		if (documentDependencyAnalysisError) {
+			magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
+			return
 		}
 
 		setIsSaving(true)
@@ -696,7 +754,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 								target_id: t.target_id,
 							}))
 						: undefined,
-				password: extraData.passwordEnabled ? extraData.password : undefined,
+				...(shareType === ShareType.Organization
+					? {}
+					: { password: extraData.passwordEnabled ? extraData.password : undefined }),
 				// Recording shares keep hidden runtime files out of the selector but always
 				// send them to the backend so readonly pages can reconstruct the bundle.
 				file_ids: submittedFileIds,
@@ -718,11 +778,12 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				hasResourceIdCreated.current = true
 			}
 
-			const shareUrl = generateShareUrl(
-				currentResourceId as string,
-				extraData.passwordEnabled ? extraData.password : undefined,
-				"files",
-			)
+			// Success URL must follow shareType, not leftover passwordEnabled state.
+			const sharePassword =
+				shareType === ShareType.PasswordProtected && extraData.passwordEnabled
+					? extraData.password
+					: undefined
+			const shareUrl = generateShareUrl(currentResourceId as string, sharePassword, "files")
 
 			// Step 3: Generate share message and copy to clipboard (silently, no toast)
 			try {
@@ -774,7 +835,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				fileCount: actualFileCount,
 				mainFileName: apiResult?.main_file_name || t("share.untitled"),
 				shareUrl,
-				password: extraData.passwordEnabled ? extraData.password : undefined,
+				password: sharePassword,
 				expire_at: apiResult?.data?.expire_at || apiResult?.expire_at, // 使用后端返回的 expire_at
 				shareType: shareType,
 				resourceId: currentResourceId, // 传递 resourceId
@@ -802,7 +863,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		shareExpiry,
 		shareRange,
 		shareTargets,
-		htmlDependencyAnalysisError,
+		documentDependencyAnalysisError,
 		extraData.passwordEnabled,
 		extraData.password,
 		extraData.allowCopy,
@@ -950,7 +1011,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 							{/* Expiry Field */}
 							<ShareExpiryField value={shareExpiry} onChange={setShareExpiry} />
 
-							{htmlDependencyOption}
+							{documentDependencyOption}
 
 							{/* Advanced Settings */}
 							<ShareAdvancedSettings
@@ -976,7 +1037,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 						onSave={handleSave}
 						onCancelShare={handleCancelShare}
 						isSaving={isSaving}
-						isDisabled={selectedFileIds.length === 0 || isAnalyzingHtmlDependencies}
+						isDisabled={selectedFileIds.length === 0 || isAnalyzingDocumentDependencies}
 						hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 					/>
 				</div>
@@ -1113,7 +1174,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 							{/* Expiry Field */}
 							<ShareExpiryField value={shareExpiry} onChange={setShareExpiry} />
 
-							{htmlDependencyOption}
+							{documentDependencyOption}
 
 							{/* Advanced Settings */}
 							<ShareAdvancedSettings
@@ -1143,10 +1204,46 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				isSaving={isSaving}
 				isDisabled={
 					(selectedFileIds.length === 0 && !effectiveShareProject) ||
-					isAnalyzingHtmlDependencies
+					isAnalyzingDocumentDependencies
 				}
 				hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 			/>
 		</div>
 	)
 })
+
+/** Applies recording-specific labels to fetched attachment copies without mutating API data. */
+function applyShareDisplayNames<T extends { file_id?: string; children?: T[] }>(
+	items: T[],
+	displayNameByFileId: Record<string, string>,
+	displayNameByFileName: Record<string, string>,
+): T[] {
+	return items.map((item) => ({
+		...item,
+		...((item.file_id && displayNameByFileId[item.file_id]) ||
+		getShareDisplayNameByFileName(item, displayNameByFileName)
+			? {
+					share_display_name:
+						displayNameByFileId[item.file_id || ""] ||
+						getShareDisplayNameByFileName(item, displayNameByFileName),
+				}
+			: {}),
+		...(item.children
+			? {
+					children: applyShareDisplayNames(
+						item.children,
+						displayNameByFileId,
+						displayNameByFileName,
+					),
+				}
+			: {}),
+	}))
+}
+
+/** Resolves a fallback label by stable attachment filename when an edit refresh changes IDs. */
+function getShareDisplayNameByFileName<
+	T extends { file_name?: string; filename?: string; name?: string },
+>(item: T, displayNameByFileName: Record<string, string>) {
+	const fileName = item.file_name || item.filename || item.name
+	return fileName ? displayNameByFileName[fileName] : undefined
+}

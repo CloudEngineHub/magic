@@ -18,16 +18,23 @@ import { useTranslation } from "react-i18next"
 import MagicSegmented from "@/components/base/MagicSegmented"
 import MagicButton from "../MagicButton"
 import MagicIcon from "../MagicIcon"
-import useScale from "./hooks/useScale"
+import useScale, {
+	scaleToSliderValue,
+	sliderValueToScale,
+	type WheelZoomChange,
+} from "./hooks/useScale"
+import useContentFitScale from "./hooks/useContentFitScale"
+import useVectorContentLayout from "./hooks/useVectorContentLayout"
 import useRotate from "./hooks/useRotate"
-import useOffset from "./hooks/useOffset"
+import useOffset, { calculateZoomAnchoredOffset } from "./hooks/useOffset"
 import useStyles from "./styles"
 import { CompareViewType } from "./constants"
+import getPreviewContentKey from "./utils/getPreviewContentKey"
 import { useDownloadImageMenu } from "@/pages/superMagic/components/Detail/contents/Image/hooks/useDownloadImageMenu"
 import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
 import { observer } from "mobx-react-lite"
 
-const MAX_SCALE = 5
+const MAX_SCALE = 10
 const SCALE_STEP = 0.1
 
 interface Props extends HTMLAttributes<HTMLImageElement> {
@@ -46,6 +53,8 @@ interface Props extends HTMLAttributes<HTMLImageElement> {
 	toolContainerClassName?: string
 	onDownload?: (mode?: DownloadImageMode) => void
 	isAIImage?: boolean
+	/** Vector content is resized at layout time to remain sharp while zooming. */
+	contentType?: "raster" | "vector"
 }
 
 /**
@@ -63,34 +72,77 @@ const MagicImagePreview = (props: Props) => {
 		nextDisabled,
 		prevDisabled,
 		children,
+		src,
 		rootClassName,
 		className,
 		iconSize = 24,
 		toolContainerClassName,
 		onDownload,
 		isAIImage = false,
+		contentType = "raster",
 		...rest
 	} = props
 	const { styles, cx } = useStyles()
 	const { t } = useTranslation("interface")
 
 	const containerRef = useRef<HTMLDivElement>(null)
+	const contentRef = useRef<HTMLDivElement>(null)
+	const fitScale = useContentFitScale(contentRef)
+	const { offset, getOffset, setOffset } = useOffset(containerRef)
 
-	const { scale, addTenPercent, subTenPercent, setScale } = useScale(containerRef, {
-		step: SCALE_STEP,
-		maxScale: MAX_SCALE,
-	})
+	const handleWheelZoom = useMemoizedFn(
+		({ previousScale, nextScale, clientX, clientY }: WheelZoomChange) => {
+			const container = containerRef.current
+			if (!container || previousScale <= 0) return
+
+			const rect = container.getBoundingClientRect()
+			const hasClientPoint = clientX !== 0 || clientY !== 0
+			const anchorX = hasClientPoint ? clientX - rect.left - rect.width / 2 : 0
+			const anchorY = hasClientPoint ? clientY - rect.top - rect.height / 2 : 0
+			const scaleRatio = nextScale / previousScale
+			const currentOffset = getOffset()
+
+			// Keep the content below the gesture centroid stationary while scaling,
+			// matching the anchored feel of macOS Preview/Photos.
+			setOffset(
+				calculateZoomAnchoredOffset(currentOffset, { x: anchorX, y: anchorY }, scaleRatio),
+			)
+		},
+	)
+
+	const { scale, transformScale, minScale, addTenPercent, subTenPercent, setScale, resetScale } =
+		useScale(containerRef, {
+			step: SCALE_STEP,
+			maxScale: MAX_SCALE,
+			fitScale,
+			onWheelZoom: handleWheelZoom,
+		})
 	const { rotate, rotateImage } = useRotate()
+	const previewContentKey = useMemo(() => src ?? getPreviewContentKey(children), [children, src])
+	const isVectorContent = contentType === "vector"
+	useVectorContentLayout(contentRef, isVectorContent, scale, previewContentKey)
+	const sliderValue = useMemo(
+		() => scaleToSliderValue(scale, minScale, MAX_SCALE),
+		[minScale, scale],
+	)
 
-	const { offset, setOffset } = useOffset(containerRef)
-
-	// 重置图片
-	const resetImage = useMemoizedFn(() => {
+	const resetPosition = useMemoizedFn(() => {
 		setOffset({
 			x: 0,
 			y: 0,
 		})
+	})
+
+	// 恢复原图真实物理尺寸（1 个原图像素对应 1 个 CSS 像素）
+	const resetToActualSize = useMemoizedFn(() => {
+		resetPosition()
 		setScale(1)
+	})
+
+	// 切换图片后继续保持完整图片适应预览容器的默认体验
+	const resetImage = useMemoizedFn(() => {
+		resetPosition()
+		resetScale()
 	})
 
 	/** 切换图片时, 重置图片位置 */
@@ -98,7 +150,11 @@ const MagicImagePreview = (props: Props) => {
 		// 如果存在对比模式, 则不重置图片
 		if (hasCompare) return
 		resetImage()
-	}, [children])
+	}, [previewContentKey])
+
+	const handleSliderChange = useMemoizedFn((value: number) => {
+		setScale(sliderValueToScale(value, minScale, MAX_SCALE))
+	})
 
 	const segmentedOptions = useMemo(() => {
 		return [
@@ -121,10 +177,15 @@ const MagicImagePreview = (props: Props) => {
 		<div className={cx(styles.container, rootClassName)}>
 			<div ref={containerRef} className={styles.imageDragWrapper}>
 				<div
+					ref={contentRef}
 					className={cx(styles.imageWrapper, className)}
 					draggable={false}
 					style={{
-						transform: `translate3d(${offset.x}px, ${offset.y}px, 0) rotate(${rotate}deg) scale(${scale})`,
+						transform: isVectorContent
+							? `translate(${offset.x}px, ${offset.y}px) rotate(${rotate}deg)`
+							: `translate3d(${offset.x}px, ${offset.y}px, 0) rotate(${rotate}deg) scale(${transformScale})`,
+						willChange: isVectorContent ? "auto" : undefined,
+						backfaceVisibility: isVectorContent ? "visible" : undefined,
 					}}
 					{...rest}
 				>
@@ -171,15 +232,14 @@ const MagicImagePreview = (props: Props) => {
 					</MagicButton>
 					<Slider
 						className={styles.slider}
-						min={0.1}
-						max={MAX_SCALE}
-						defaultValue={1}
-						value={scale}
-						step={SCALE_STEP}
+						min={0}
+						max={100}
+						value={sliderValue}
+						step={0.5}
 						tooltip={{
 							open: false,
 						}}
-						onChange={setScale}
+						onChange={handleSliderChange}
 					/>
 					<span className={styles.sliderText}>{Math.round(scale * 100)}%</span>
 					<MagicButton type="link" className={styles.toolButton} onClick={addTenPercent}>
@@ -187,7 +247,7 @@ const MagicImagePreview = (props: Props) => {
 					</MagicButton>
 				</Flex>
 				{/* 1:1 */}
-				<MagicButton type="link" className={styles.toolButton} onClick={resetImage}>
+				<MagicButton type="link" className={styles.toolButton} onClick={resetToActualSize}>
 					<MagicIcon
 						color="currentColor"
 						component={IconRelationOneToOne}

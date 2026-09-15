@@ -5,6 +5,13 @@ import { magic } from "@/enhance/magicElectron"
 import { getNativePort } from "@/platform/native"
 import { Common } from "@/types/common"
 
+interface NavigatorWithUserAgentData extends Navigator {
+	userAgentData?: {
+		mobile?: boolean
+		platform?: string
+	}
+}
+
 /** * 是否为mac系统（包含iphone手机） * */
 export const isMac = (() => {
 	return /macintosh|mac os x/i.test(navigator.userAgent)
@@ -42,6 +49,35 @@ export const isMobile = (() => {
 	// Return true if UserAgent indicates mobile OR if it has touch + small viewport
 	return userAgentMobile || (hasTouchScreen && isSmallViewport())
 })()
+
+/**
+ * Determines whether message input should follow desktop Enter behavior.
+ * Only confidently identified desktop systems enable Enter-to-send.
+ */
+export function shouldUseDesktopEnterBehavior(): boolean {
+	if (typeof navigator === "undefined") return false
+
+	const currentNavigator = navigator as NavigatorWithUserAgentData
+	const userAgent = navigator.userAgent
+	const platform = navigator.platform
+	const maxTouchPoints = navigator.maxTouchPoints ?? 0
+
+	// Magic mobile WebViews always retain mobile message input behavior.
+	if (/magic-(ios|android)/i.test(userAgent)) return false
+
+	// Prefer Chromium's explicit mobile hint when the browser exposes it.
+	if (currentNavigator.userAgentData?.mobile === true) return false
+
+	// iPadOS may expose a macOS-like user agent when desktop browsing is enabled.
+	const isIPadOS = /iPad/i.test(userAgent) || (platform === "MacIntel" && maxTouchPoints > 1)
+	if (isIPadOS) return false
+
+	// Known phone and tablet platforms retain newline-on-Enter behavior.
+	if (/Android|iPhone|iPod|Mobile|Tablet/i.test(userAgent)) return false
+
+	// Enable desktop behavior only for known desktop operating systems.
+	return /Windows NT|Macintosh|X11|CrOS/i.test(userAgent)
+}
 
 /**
  * Detects touch-first layouts that cannot rely on CSS hover to reveal row actions.

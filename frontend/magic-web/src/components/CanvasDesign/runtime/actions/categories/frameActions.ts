@@ -1,5 +1,5 @@
 import { ElementTypeEnum } from "../../document/types"
-import type { UserAction } from "../types"
+import type { FrameCreateActionOptions, UserAction } from "../types"
 
 /**
  * 画框操作相关的用户动作
@@ -10,7 +10,7 @@ export const frameActions: UserAction[] = [
 		category: "frame",
 		canExecute: (canvas) => {
 			// 非只读模式
-			if (canvas.readonly) return false
+			if (!canvas.permissionManager.can("document.write")) return false
 
 			// 必须有选中的元素
 			const selectedIds = canvas.selectionManager.getSelectedIds()
@@ -37,16 +37,20 @@ export const frameActions: UserAction[] = [
 
 			return !isParentFrame
 		},
-		execute: (canvas) => {
-			canvas.frameManager.createFrame()
+		execute: (canvas, options?: FrameCreateActionOptions) => {
+			if (options?.boundsExpansion === undefined) {
+				canvas.frameManager.createFrame()
+				return
+			}
+			canvas.frameManager.createFrame(options.boundsExpansion)
 		},
-	},
+	} satisfies UserAction<"frame.create", FrameCreateActionOptions>,
 	{
 		id: "frame.remove",
 		category: "frame",
 		canExecute: (canvas) => {
 			// 非只读模式
-			if (canvas.readonly) return false
+			if (!canvas.permissionManager.can("document.delete")) return false
 
 			// 必须只选中一个元素
 			const selectedIds = canvas.selectionManager.getSelectedIds()

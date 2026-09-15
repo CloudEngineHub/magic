@@ -8,6 +8,7 @@ import type { Canvas } from "../../core/Canvas"
 import { ImageElement } from "../../elements/image/ImageElement"
 import { ElementTypeEnum } from "../../document/types"
 import type { ImageElement as ImageElementData } from "../../document/types"
+import { getImageContents } from "../../document/elementContent"
 import type {
 	ImageResourceDecodeVariant,
 	ImageResourceWorkerRequest,
@@ -28,6 +29,7 @@ import {
 	type MediaDisplayResourceVariant,
 } from "../visibility/CanvasMediaViewingPolicy"
 import { parseImageDimensionsFromBlobHeader } from "./imageHeaderDimensions"
+import type { ImageExifOrientation } from "./imageOrientation"
 import {
 	buildImageResourceSnapshot,
 	createImageResourceDiagnostics,
@@ -54,7 +56,11 @@ import {
 import { SharedAbortableRequest } from "../offline-cache/SharedAbortableRequest"
 import { ImageDisplayVariantPersistentCache } from "./ImageDisplayVariantPersistentCache"
 import type { DecodedImageRetentionHint } from "../visibility/CanvasVisibilityManager"
-import { buildVirtualResourceScope } from "../../shared/path/canvasResourcePath"
+import {
+	buildSharedMediaStorageScope,
+	getCanvasResourceAvailability,
+	type CanvasResourceReferenceResolverChangeOptions,
+} from "../../shared/path/canvasResourcePath"
 
 export type { ImageSource }
 export type ImageResourceVariant = ImageResourceDecodeVariant
@@ -72,6 +78,9 @@ function createImageAbortError(): Error {
 export interface ImageInfo {
 	naturalWidth: number
 	naturalHeight: number
+	orientation?: ImageExifOrientation
+	encodedWidth?: number
+	encodedHeight?: number
 	fileSize: number
 	mimeType: string
 	filename: string
@@ -171,6 +180,10 @@ type ImageDisplayResourceSlots = Record<ImageDisplayResourceVariant, ImageDispla
  * 资源条目接口（统一管理 src(path) 相关的所有状态）
  */
 export interface ImageResourceEntry extends MediaResourceUrlEntry, MediaResourceBodyCacheEntry {
+	/** 外部权威状态代际；上传结果或删除确认会推进，用于淘汰旧 refresh/load。 */
+	resourceStateGeneration: number
+	/** 上传结果尚未被附件快照确认；确认前旧快照中的 deleted 不能覆盖新上传结果。 */
+	awaitingResolverAvailability: boolean
 	/** 换取到的 ossSrc（可能为 null，表示换取失败或还未换取） */
 	ossSrc: string | null
 	/** 当前 ossSrc 是否来自 CacheStorage/virtual URL 兜底 */
@@ -265,7 +278,7 @@ type DecodedBitmapCandidateVariant = ImageDisplayResourceVariant | "full"
 type DecodedBitmapRetentionLevel = "visible" | "near"
 
 interface DecodedBitmapBudgetCandidate {
-	path: string
+	resourceIdentity: string
 	entry: ImageResourceEntry
 	variant: DecodedBitmapCandidateVariant
 	resource: ImageResource
@@ -289,7 +302,7 @@ interface DecodedBitmapRetentionIndex {
 interface PreviewLoadQueueItem {
 	key: string
 	path: string
-	normalizedSrc: string
+	resourceIdentity: string
 	entry: ImageResourceEntry
 	shouldRefreshCached: boolean
 	variant: ImageResourceVariant
@@ -323,6 +336,13 @@ export interface ImageResourceLoadFailedEvent {
 	}
 }
 
+export interface ImageResourceRecoveryStartedEvent {
+	data: {
+		path: string
+		ossSrc: string
+	}
+}
+
 export interface ImageResourceWillCloseEvent {
 	data: {
 		path?: string
@@ -333,6 +353,7 @@ export interface ImageResourceWillCloseEvent {
 }
 
 export type ImageResourceLoadFailedHandler = (event: ImageResourceLoadFailedEvent) => void
+export type ImageResourceRecoveryStartedHandler = (event: ImageResourceRecoveryStartedEvent) => void
 export type ImageResourceWillCloseHandler = (event: ImageResourceWillCloseEvent) => void
 
 /**
@@ -350,21 +371,22 @@ export class ImageResourceManager {
 	private diagnostics = createImageResourceDiagnostics()
 
 	private urlLifecycle!: MediaResourceUrlLifecycle<ImageResourceEntry>
-	private bodyCache = new MediaResourceBodyCache<ImageResourceEntry>({
-		ttlMs: COMPRESSED_BODY_CACHE_TTL_MS,
-		maxBytes: COMPRESSED_BODY_CACHE_MAX_BYTES,
-	})
+	private bodyCache!: MediaResourceBodyCache<ImageResourceEntry>
 	private displayVariantPersistentCache = new ImageDisplayVariantPersistentCache()
 	private persistentLowReadyKeys = new Set<string>()
 	private persistentLowWritePromises = new Map<string, Promise<void>>()
 	private persistentLowGenerationByPath = new Map<string, number>()
 	private persistentLowWriteTimestamp = 0
 	private persistentLowWriteSequence = 0
-	private imageResourceLoadFailedHandlersByPath = new Map<
+	private imageResourceLoadFailedHandlersByIdentity = new Map<
 		string,
 		Set<ImageResourceLoadFailedHandler>
 	>()
-	private imageResourceWillCloseHandlersByPath = new Map<
+	private imageResourceRecoveryStartedHandlersByIdentity = new Map<
+		string,
+		Set<ImageResourceRecoveryStartedHandler>
+	>()
+	private imageResourceWillCloseHandlersByIdentity = new Map<
 		string,
 		Set<ImageResourceWillCloseHandler>
 	>()
@@ -376,61 +398,80 @@ export class ImageResourceManager {
 	private fullDecodedBytes = 0
 	private decodedByteTrackingReady = true
 
-	private canonicalResourcePath(path: string): string {
-		return this.urlLifecycle.canonicalResourcePath(path)
+	private getResourceIdentity(path: string): string {
+		return this.urlLifecycle.getResourceIdentity(path)
 	}
 
 	public onImageResourceLoadFailed(
 		path: string,
 		handler: ImageResourceLoadFailedHandler,
 	): () => void {
-		return this.addPathHandler(this.imageResourceLoadFailedHandlersByPath, path, handler)
+		return this.addResourceIdentityHandler(
+			this.imageResourceLoadFailedHandlersByIdentity,
+			path,
+			handler,
+		)
+	}
+
+	public onImageResourceRecoveryStarted(
+		path: string,
+		handler: ImageResourceRecoveryStartedHandler,
+	): () => void {
+		return this.addResourceIdentityHandler(
+			this.imageResourceRecoveryStartedHandlersByIdentity,
+			path,
+			handler,
+		)
 	}
 
 	public onImageResourceWillClose(
 		path: string,
 		handler: ImageResourceWillCloseHandler,
 	): () => void {
-		return this.addPathHandler(this.imageResourceWillCloseHandlersByPath, path, handler)
+		return this.addResourceIdentityHandler(
+			this.imageResourceWillCloseHandlersByIdentity,
+			path,
+			handler,
+		)
 	}
 
-	private addPathHandler<THandler>(
-		handlersByPath: Map<string, Set<THandler>>,
+	private addResourceIdentityHandler<THandler>(
+		handlersByIdentity: Map<string, Set<THandler>>,
 		path: string,
 		handler: THandler,
 	): () => void {
-		const key = this.canonicalResourcePath(path)
-		let handlers = handlersByPath.get(key)
+		const key = this.getResourceIdentity(path)
+		let handlers = handlersByIdentity.get(key)
 		if (!handlers) {
 			handlers = new Set()
-			handlersByPath.set(key, handlers)
+			handlersByIdentity.set(key, handlers)
 		}
 		handlers.add(handler)
 		return () => {
-			const currentHandlers = handlersByPath.get(key)
+			const currentHandlers = handlersByIdentity.get(key)
 			if (!currentHandlers) return
 			currentHandlers.delete(handler)
 			if (currentHandlers.size === 0) {
-				handlersByPath.delete(key)
+				handlersByIdentity.delete(key)
 			}
 		}
 	}
 
-	private notifyPathHandlers<TEvent>(
-		handlersByPath: Map<string, Set<(event: TEvent) => void>>,
-		path: string,
+	private notifyResourceIdentityHandlers<TEvent>(
+		handlersByIdentity: Map<string, Set<(event: TEvent) => void>>,
+		resourceIdentity: string,
 		event: TEvent,
 	): void {
-		const handlers = handlersByPath.get(this.canonicalResourcePath(path))
+		const handlers = handlersByIdentity.get(resourceIdentity)
 		if (!handlers || handlers.size === 0) return
 		Array.from(handlers).forEach((handler) => handler(event))
 	}
 
-	private notifyAllPathHandlers<TEvent>(
-		handlersByPath: Map<string, Set<(event: TEvent) => void>>,
+	private notifyAllResourceIdentityHandlers<TEvent>(
+		handlersByIdentity: Map<string, Set<(event: TEvent) => void>>,
 		event: TEvent,
 	): void {
-		handlersByPath.forEach((handlers) => {
+		handlersByIdentity.forEach((handlers) => {
 			Array.from(handlers).forEach((handler) => handler(event))
 		})
 	}
@@ -451,26 +492,57 @@ export class ImageResourceManager {
 		this.canvas.eventEmitter.emit(event)
 	}
 
-	private emitImageResourceLoadFailed(data: ImageResourceLoadFailedEvent["data"]): void {
+	private emitImageResourceLoadFailed(
+		data: ImageResourceLoadFailedEvent["data"],
+		resourceIdentity: string,
+	): void {
 		const event = {
 			type: "resource:image:load-failed" as const,
 			data,
 		}
 		this.canvas.eventEmitter.emit(event)
-		this.notifyPathHandlers(this.imageResourceLoadFailedHandlersByPath, data.path, { data })
+		this.notifyResourceIdentityHandlers(
+			this.imageResourceLoadFailedHandlersByIdentity,
+			resourceIdentity,
+			{
+				data,
+			},
+		)
 	}
 
-	private emitImageResourceWillClose(data: ImageResourceWillCloseEvent["data"]): void {
+	private emitImageResourceRecoveryStarted(
+		data: ImageResourceRecoveryStartedEvent["data"],
+		resourceIdentity: string,
+	): void {
+		this.notifyResourceIdentityHandlers(
+			this.imageResourceRecoveryStartedHandlersByIdentity,
+			resourceIdentity,
+			{ data },
+		)
+	}
+
+	private emitImageResourceWillClose(
+		data: ImageResourceWillCloseEvent["data"],
+		resourceIdentity?: string,
+	): void {
 		const event = {
 			type: "resource:image:will-close" as const,
 			data,
 		}
 		this.canvas.eventEmitter.emit(event)
-		if (data.path) {
-			this.notifyPathHandlers(this.imageResourceWillCloseHandlersByPath, data.path, { data })
+		if (resourceIdentity) {
+			this.notifyResourceIdentityHandlers(
+				this.imageResourceWillCloseHandlersByIdentity,
+				resourceIdentity,
+				{
+					data,
+				},
+			)
 			return
 		}
-		this.notifyAllPathHandlers(this.imageResourceWillCloseHandlersByPath, { data })
+		this.notifyAllResourceIdentityHandlers(this.imageResourceWillCloseHandlersByIdentity, {
+			data,
+		})
 	}
 
 	private isAbortError(error: unknown): boolean {
@@ -498,6 +570,34 @@ export class ImageResourceManager {
 		if (!options?.signal?.aborted) return false
 		this.markStaleRequestDrop()
 		return true
+	}
+
+	private advanceResourceStateGeneration(entry: ImageResourceEntry): number {
+		entry.resourceStateGeneration += 1
+		return entry.resourceStateGeneration
+	}
+
+	private isResourceStateGenerationCurrent(
+		entry: ImageResourceEntry,
+		generation: number,
+	): boolean {
+		return entry.resourceStateGeneration === generation
+	}
+
+	private abortEntryLoadingRequests(entry: ImageResourceEntry): void {
+		entry.persistentLowLoadingPromise?.abort()
+		entry.persistentLowLoadingPromise = null
+		for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
+			this.getDisplayLoadingPromise(entry, variant)?.abort()
+			this.setDisplayLoadingPromise(entry, variant, null)
+		}
+		entry.fullLoadingPromise?.abort()
+		entry.fullLoadingPromise = null
+		this.clearEntryBodyPromise(entry)
+	}
+
+	private isPrimedResourceAwaitingResolverSnapshot(entry: ImageResourceEntry): boolean {
+		return entry.awaitingResolverAvailability && Boolean(entry.ossSrc)
 	}
 
 	private clearCachedFallbackOssSrc(entry: ImageResourceEntry): void {
@@ -548,19 +648,25 @@ export class ImageResourceManager {
 
 	constructor(options: { canvas: Canvas }) {
 		this.canvas = options.canvas
+		this.bodyCache = new MediaResourceBodyCache<ImageResourceEntry>({
+			ttlMs: COMPRESSED_BODY_CACHE_TTL_MS,
+			maxBytes: COMPRESSED_BODY_CACHE_MAX_BYTES,
+			shared: true,
+			sharedScope: () => this.getPersistentDisplayScope(),
+		})
 		this.urlLifecycle = new MediaResourceUrlLifecycle<ImageResourceEntry>({
 			canvas: this.canvas,
 			mediaType: "image",
 			useImageProcess: true,
 			isDestroyed: () => this.destroyed,
 			setFailureReason: (entry, reason) => this.setFailureReason(entry, reason),
-			onResourceDeleted: (normalizedSrc, entry) =>
-				this.handleImageResourceDeleted(normalizedSrc, entry),
+			onResourceDeleted: (resourceIdentity, entry) =>
+				this.handleImageResourceDeleted(resourceIdentity, entry),
 			refreshResource: (path) => this.refreshResource(path),
-			onResourceMetadataHydrated: (normalizedSrc, entry) =>
-				this.migrateBodyCacheKeyAfterMetadataHydration(normalizedSrc, entry),
-			onResourceVersionChanged: (normalizedSrc, entry, previousVersion) =>
-				this.handleResourceVersionChanged(normalizedSrc, entry, previousVersion),
+			onResourceMetadataHydrated: (resourceIdentity, entry) =>
+				this.migrateBodyCacheKeyAfterMetadataHydration(resourceIdentity, entry),
+			onResourceVersionChanged: (resourceIdentity, entry, previousVersion) =>
+				this.handleResourceVersionChanged(resourceIdentity, entry, previousVersion),
 			incrementDiagnostic: (counter) => this.diagnostics.increment(counter),
 		})
 		this.workerClient = acquireImageResourceWorkerClient({
@@ -628,7 +734,7 @@ export class ImageResourceManager {
 	): LoadedResource | null {
 		if (entry.staleDecodedVariants.has(variant)) return null
 		const resource = this.getResourceForVariant(entry, variant)
-		if (!resource?.ossSrc) return null
+		if (!resource?.ossSrc || resource.closed) return null
 		this.touchDecodedResource(entry, resource)
 		this.setFailureReason(entry, null)
 		return {
@@ -677,8 +783,8 @@ export class ImageResourceManager {
 		}
 	}
 
-	private getPreviewQueueKey(normalizedSrc: string, variant: ImageResourceVariant): string {
-		return `${normalizedSrc}::${variant}`
+	private getPreviewQueueKey(resourceIdentity: string, variant: ImageResourceVariant): string {
+		return `${resourceIdentity}::${variant}`
 	}
 
 	private getPriorityRank(priority: ImageResourceLoadPriority): number {
@@ -711,11 +817,11 @@ export class ImageResourceManager {
 	}
 
 	private upgradeQueuedPreviewLoad(
-		normalizedSrc: string,
+		resourceIdentity: string,
 		variant: ImageResourceVariant,
 		priority: ImageResourceLoadPriority,
 	): void {
-		const key = this.getPreviewQueueKey(normalizedSrc, variant)
+		const key = this.getPreviewQueueKey(resourceIdentity, variant)
 		const item = this.previewLoadQueueByKey.get(key)
 		if (!item) return
 		if (this.getPriorityRank(priority) >= this.getPriorityRank(item.priority)) return
@@ -725,7 +831,7 @@ export class ImageResourceManager {
 
 	private runPreviewLoadPipelineQueued(
 		path: string,
-		normalizedSrc: string,
+		resourceIdentity: string,
 		entry: ImageResourceEntry,
 		shouldRefreshCached: boolean,
 		variant: ImageResourceVariant,
@@ -736,12 +842,12 @@ export class ImageResourceManager {
 			return Promise.resolve(null)
 		}
 
-		const key = this.getPreviewQueueKey(normalizedSrc, variant)
+		const key = this.getPreviewQueueKey(resourceIdentity, variant)
 		return new Promise<LoadedResource | null>((resolve, reject) => {
 			const item: PreviewLoadQueueItem = {
 				key,
 				path,
-				normalizedSrc,
+				resourceIdentity,
 				entry,
 				shouldRefreshCached,
 				variant,
@@ -793,7 +899,7 @@ export class ImageResourceManager {
 
 			void this.loadImageResourcePipeline(
 				item.path,
-				item.normalizedSrc,
+				item.resourceIdentity,
 				item.entry,
 				item.shouldRefreshCached,
 				item.variant,
@@ -963,7 +1069,7 @@ export class ImageResourceManager {
 		variant: ImageResourceVariant | undefined,
 	): void {
 		if (!variant) return
-		const normalizedPath = this.canonicalResourcePath(hint.path)
+		const normalizedPath = this.getResourceIdentity(hint.path)
 		const key = this.getDecodedBitmapRetentionKey(normalizedPath, variant)
 		if (hint.visibilityState === "visible") {
 			retentionIndex.visiblePinnedKeys.add(key)
@@ -1006,7 +1112,7 @@ export class ImageResourceManager {
 		retentionIndex: DecodedBitmapRetentionIndex,
 	): DecodedBitmapRetentionLevel | null {
 		return this.getDecodedBitmapRetentionLevelForPathVariant(
-			candidate.path,
+			candidate.resourceIdentity,
 			candidate.variant,
 			retentionIndex,
 		)
@@ -1031,13 +1137,13 @@ export class ImageResourceManager {
 			return bytes
 		}
 
-		this.entries.forEach((entry, path) => {
+		this.entries.forEach((entry, resourceIdentity) => {
 			for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
 				const slot = this.getDisplayResourceSlot(entry, variant)
 				if (!slot.resource) continue
 				const bytes = addDecodedBytes(slot.resource)
 				candidates.push({
-					path,
+					resourceIdentity,
 					entry,
 					variant,
 					resource: slot.resource,
@@ -1053,7 +1159,7 @@ export class ImageResourceManager {
 				fullBytes += bytes
 			}
 			candidates.push({
-				path,
+				resourceIdentity,
 				entry,
 				variant: "full",
 				resource: entry.fullResource,
@@ -1143,7 +1249,7 @@ export class ImageResourceManager {
 			| undefined
 
 		visibilityManager?.invalidateImageLoadRequest?.(
-			candidate.path,
+			candidate.entry.referencePath,
 			candidate.variant,
 			"decoded-budget",
 			{
@@ -1169,7 +1275,7 @@ export class ImageResourceManager {
 
 		closedResources.add(candidate.resource)
 		this.closeResourceAfterConsumersSwap(candidate.resource, {
-			path: candidate.path,
+			entry: candidate.entry,
 			reason: `decoded-budget:${reason}`,
 		})
 		this.recordDecodedBitmapEviction(candidate)
@@ -1299,23 +1405,26 @@ export class ImageResourceManager {
 
 	private closeResource(
 		resource: ImageResource | null,
-		options?: { path?: string; reason?: string },
+		options?: { entry?: ImageResourceEntry; reason?: string },
 	): void {
 		if (!resource) return
 		if (resource.closed) return
 		resource.closed = true
-		this.emitImageResourceWillClose({
-			path: options?.path,
-			variant: resource.variant,
-			image: resource.image,
-			reason: options?.reason ?? "resource-close",
-		})
+		this.emitImageResourceWillClose(
+			{
+				path: options?.entry?.referencePath,
+				variant: resource.variant,
+				image: resource.image,
+				reason: options?.reason ?? "resource-close",
+			},
+			options?.entry?.resourceIdentity,
+		)
 		closeImageSource(resource.image)
 	}
 
 	private closeResourceAfterConsumersSwap(
 		resource: ImageResource | null,
-		options?: { path?: string; reason?: string },
+		options?: { entry?: ImageResourceEntry; reason?: string },
 	): void {
 		if (!resource) return
 
@@ -1333,7 +1442,7 @@ export class ImageResourceManager {
 
 	private closeUniqueResources(
 		resources: Array<ImageResource | null>,
-		options?: { path?: string; reason?: string },
+		options?: { entry?: ImageResourceEntry; reason?: string },
 	): void {
 		const closed = new Set<ImageResource>()
 		resources.forEach((resource) => {
@@ -1417,7 +1526,7 @@ export class ImageResourceManager {
 			previousResource !== resource &&
 			!this.isResourceStillReferenced(entry, previousResource)
 		if (shouldClosePrevious) {
-			this.closeResource(previousResource, { reason: "display-slot-replaced" })
+			this.closeResource(previousResource, { entry, reason: "display-slot-replaced" })
 		}
 		return previousResource && previousResource !== resource ? previousResource : null
 	}
@@ -1516,7 +1625,7 @@ export class ImageResourceManager {
 	}
 
 	private getPersistentDisplayScope(): string {
-		return buildVirtualResourceScope(
+		return buildSharedMediaStorageScope(
 			this.canvas.magicConfigManager.config?.methods?.getVirtualResourceScope?.(),
 			this.canvas.id,
 		)
@@ -1526,7 +1635,7 @@ export class ImageResourceManager {
 		const signature =
 			this.canvas.magicConfigManager.config?.methods?.getImageProcessCacheSignature?.() ??
 			"default"
-		return `image-process:${signature}`
+		return `image-process:${signature}:exif-orientation-v1`
 	}
 
 	private getPersistentLowIdentity(path: string, resourceVersion: string): string {
@@ -1569,7 +1678,7 @@ export class ImageResourceManager {
 
 	private async loadPersistentDisplayResource(
 		path: string,
-		normalizedSrc: string,
+		resourceIdentity: string,
 		entry: ImageResourceEntry,
 		shouldRefreshCached: boolean,
 		priority: ImageResourceLoadPriority,
@@ -1585,14 +1694,14 @@ export class ImageResourceManager {
 			return existingRequest.consume(signal)
 		}
 
-		const generation = this.getPersistentLowGeneration(normalizedSrc)
+		const generation = this.getPersistentLowGeneration(resourceIdentity)
 		const scope = this.getPersistentDisplayScope()
 		const rendition = this.getPersistentImageProcessRendition()
 		const request = new SharedAbortableRequest<LoadedResource | null>(
 			async (sharedSignal) => {
 				const record = await this.displayVariantPersistentCache.getLatest({
 					scope,
-					path: normalizedSrc,
+					path: resourceIdentity,
 					variant: "low",
 					rendition,
 					resourceVersion: entry.resourceVersion,
@@ -1600,7 +1709,7 @@ export class ImageResourceManager {
 				if (
 					this.destroyed ||
 					sharedSignal.aborted ||
-					this.getPersistentLowGeneration(normalizedSrc) !== generation ||
+					this.getPersistentLowGeneration(resourceIdentity) !== generation ||
 					this.getPersistentDisplayScope() !== scope ||
 					this.getPersistentImageProcessRendition() !== rendition ||
 					!record
@@ -1626,7 +1735,7 @@ export class ImageResourceManager {
 						source: "image-resource:persistent-low-restore",
 						canvasId: this.canvas.id,
 						managerInstanceId: this.managerInstanceId,
-						path: normalizedSrc,
+						path: resourceIdentity,
 						variant: "low",
 						priority: restorePriority,
 						signal: sharedSignal,
@@ -1635,10 +1744,10 @@ export class ImageResourceManager {
 				if (
 					this.destroyed ||
 					sharedSignal.aborted ||
-					this.getPersistentLowGeneration(normalizedSrc) !== generation ||
+					this.getPersistentLowGeneration(resourceIdentity) !== generation ||
 					this.getPersistentDisplayScope() !== scope ||
 					this.getPersistentImageProcessRendition() !== rendition ||
-					this.entries.get(normalizedSrc) !== entry ||
+					this.entries.get(resourceIdentity) !== entry ||
 					(entry.resourceVersion && entry.resourceVersion !== record.resourceVersion)
 				) {
 					if (image) closeImageSource(image)
@@ -1673,7 +1782,7 @@ export class ImageResourceManager {
 					!this.isResourceStillReferenced(entry, previousResourceToClose)
 				) {
 					this.closeResource(previousResourceToClose, {
-						path: normalizedSrc,
+						entry,
 						reason: "persistent-display-cache-replaced",
 					})
 				}
@@ -1681,18 +1790,18 @@ export class ImageResourceManager {
 				const loadedResource = this.buildLoadedResource(entry, "low")
 				if (!loadedResource) return null
 				this.persistentLowReadyKeys.add(
-					this.getPersistentLowIdentity(normalizedSrc, record.resourceVersion),
+					this.getPersistentLowIdentity(resourceIdentity, record.resourceVersion),
 				)
 				this.enforceDecodedBitmapBudget({
 					reason: "persistent-display-cache-load",
 					exemptResource: resource,
 				})
 				this.emitImageResourceLoaded({
-					path: normalizedSrc,
+					path,
 					resource: loadedResource,
 				})
 				if (shouldRefreshCached) {
-					this.triggerBackgroundMetadataRefresh(path, normalizedSrc, entry)
+					this.triggerBackgroundMetadataRefresh(path, resourceIdentity, entry)
 				}
 				return loadedResource
 			},
@@ -1781,13 +1890,10 @@ export class ImageResourceManager {
 			variant: "low",
 			rendition,
 			blob: persistentDisplay.blob,
-			width: persistentDisplay.width,
-			height: persistentDisplay.height,
 			imageInfo,
 			resourceVersion,
 			sourceUpdatedAt: entry.sourceUpdatedAt,
 			contentLength: entry.contentLength,
-			sourceUrl: entry.sourceUrl ?? entry.ossSrc,
 			maxEdge: this.getMaxEdgeForVariant("low"),
 			writeOrder,
 		})
@@ -1836,7 +1942,7 @@ export class ImageResourceManager {
 			return null
 		}
 		const { width, height } = getImageSourceDimensions(resource.image)
-		const maxEdge = this.getMaxEdgeForVariant("low")
+		const maxEdge = this.getMaxEdgeForVariant("low") ?? 0
 		const largestEdge = Math.max(width, height)
 		const resize =
 			maxEdge > 0 && largestEdge > maxEdge
@@ -2031,15 +2137,16 @@ export class ImageResourceManager {
 	}
 
 	private migrateBodyCacheKeyAfterMetadataHydration(
-		normalizedSrc: string,
+		resourceIdentity: string,
 		entry: ImageResourceEntry,
 	): void {
 		if (!entry.bodyBlob || !entry.bodyCacheKey) return
 		const previousCacheKey = entry.bodyCacheKey
-		if (!previousCacheKey.startsWith(`${normalizedSrc}::`)) return
+		if (!previousCacheKey.startsWith(`${resourceIdentity}::`)) return
 
 		const ossSrc = entry.bodyOssSrc ?? entry.ossSrc ?? entry.sourceUrl ?? ""
-		const hydratedCacheKey = this.getBodyCacheKey(normalizedSrc, ossSrc, entry)
+		const hydratedCacheKey = this.getBodyCacheKey(resourceIdentity, ossSrc, entry)
+		this.bodyCache.rekeyBodyCacheKey(entry, previousCacheKey, hydratedCacheKey)
 		entry.bodyCacheKey = hydratedCacheKey
 		if (entry.bodyPromiseCacheKey === previousCacheKey) {
 			entry.bodyPromiseCacheKey = hydratedCacheKey
@@ -2047,13 +2154,13 @@ export class ImageResourceManager {
 	}
 
 	private handleResourceVersionChanged(
-		normalizedSrc: string,
+		resourceIdentity: string,
 		entry: ImageResourceEntry,
 		previousVersion: string,
 	): void {
 		this.markDecodedVariantsStale(entry)
 		this.clearEntryBody(entry)
-		this.invalidatePersistentLowGeneration(normalizedSrc, entry, previousVersion, {
+		this.invalidatePersistentLowGeneration(resourceIdentity, entry, previousVersion, {
 			removePersistentRecord: false,
 		})
 	}
@@ -2095,14 +2202,14 @@ export class ImageResourceManager {
 		this.bodyCache.evictBudget(this.entries.values(), exemptEntry)
 	}
 
-	private closeEntryResources(
-		entry: ImageResourceEntry,
-		options?: { reason?: string; path?: string },
-	): void {
+	private closeEntryResources(entry: ImageResourceEntry, options?: { reason?: string }): void {
 		const lowResource = this.getDisplayResource(entry, "low")
 		const previewResource = this.getDisplayResource(entry, "preview")
 		const fullResource = entry.fullResource
-		this.closeUniqueResources([lowResource, previewResource, fullResource], options)
+		this.closeUniqueResources([lowResource, previewResource, fullResource], {
+			entry,
+			...options,
+		})
 		this.clearDisplayResources(entry)
 		this.setFullResource(entry, null)
 		this.clearEntryBody(entry)
@@ -2153,11 +2260,23 @@ export class ImageResourceManager {
 		if (this.canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
 			return null
 		}
-		const normalizedSrc = this.canonicalResourcePath(path)
-		const entry = this.getOrCreateEntry(normalizedSrc)
+		const resourceIdentity = this.getResourceIdentity(path)
+		const entry = this.getOrCreateEntry(resourceIdentity, path)
+		const resourceStateGeneration = entry.resourceStateGeneration
 		const shouldRefreshCached = options?.refreshCached !== false
 		const variant = options?.variant ?? DEFAULT_IMAGE_RESOURCE_VARIANT
 		const priority = this.normalizeLoadPriority(options?.priority, variant)
+		const availability = getCanvasResourceAvailability(
+			path,
+			this.canvas.magicConfigManager.config?.methods?.resolveResourceReference,
+		)
+
+		// Attachment existence is authoritative over decoded and persistent caches. Otherwise a
+		// deleted historical reference can be revived from IndexedDB without ever querying the host.
+		if (availability === "deleted" && !this.isPrimedResourceAwaitingResolverSnapshot(entry)) {
+			this.handleImageResourceDeleted(resourceIdentity, entry)
+			return null
+		}
 
 		// 检查 ossSrc 是否过期，过期则清除
 		if (this.clearExpiredOssSrc(entry)) {
@@ -2179,7 +2298,7 @@ export class ImageResourceManager {
 		if (shouldRestorePersistentLow) {
 			const persistentLowPromise = this.loadPersistentDisplayResource(
 				path,
-				normalizedSrc,
+				resourceIdentity,
 				entry,
 				shouldRefreshCached && variant === "low",
 				priority,
@@ -2188,6 +2307,10 @@ export class ImageResourceManager {
 			if (variant === "low") {
 				const persistentDisplayResource = await persistentLowPromise
 				if (this.shouldDropAbortedLoad(options)) return null
+				if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) {
+					this.markStaleRequestDrop()
+					return null
+				}
 				if (persistentDisplayResource) return persistentDisplayResource
 			} else {
 				// low 是 bootstrap surface，不应阻塞 preview/full 的网络与 body 加载。
@@ -2199,20 +2322,24 @@ export class ImageResourceManager {
 		const loadingRequest = this.getLoadingPromiseForVariant(entry, variant)
 		if (loadingRequest && !loadingRequest.isAborted) {
 			this.diagnostics.increment("loadingDedupedCount")
-			this.upgradeQueuedPreviewLoad(normalizedSrc, variant, priority)
+			this.upgradeQueuedPreviewLoad(resourceIdentity, variant, priority)
 			const result = await loadingRequest.consume(options?.signal)
 			if (this.destroyed) return null
 			const wasAborted = this.shouldDropAbortedLoad(options)
-			if (!result && this.emitNotFoundLoadFailedIfNeeded(normalizedSrc, entry)) {
+			if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) {
+				this.markStaleRequestDrop()
+				return null
+			}
+			if (!result && this.emitNotFoundLoadFailedIfNeeded(entry)) {
 				return null
 			}
 			if (wasAborted) return null
 			if (!result) {
 				if (variant === "preview") {
-					this.emitPreviewLoadFailed(normalizedSrc, entry)
+					this.emitPreviewLoadFailed(entry)
 				} else {
 					this.emitVariantLoadFailed(
-						normalizedSrc,
+						entry,
 						variant,
 						entry.lastFailureReason ?? "load-error",
 					)
@@ -2227,7 +2354,7 @@ export class ImageResourceManager {
 				return variant !== "full" && !options?.bypassQueue
 					? this.runPreviewLoadPipelineQueued(
 							path,
-							normalizedSrc,
+							resourceIdentity,
 							entry,
 							shouldRefreshCached,
 							variant,
@@ -2236,7 +2363,7 @@ export class ImageResourceManager {
 						)
 					: this.loadImageResourcePipeline(
 							path,
-							normalizedSrc,
+							resourceIdentity,
 							entry,
 							shouldRefreshCached,
 							variant,
@@ -2263,56 +2390,59 @@ export class ImageResourceManager {
 		const result = await request.consume(options?.signal)
 		if (this.destroyed) return null
 		const wasAborted = this.shouldDropAbortedLoad(options)
-		if (!result && this.emitNotFoundLoadFailedIfNeeded(normalizedSrc, entry)) {
+		if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) {
+			this.markStaleRequestDrop()
+			return null
+		}
+		if (!result && this.emitNotFoundLoadFailedIfNeeded(entry)) {
 			return null
 		}
 		if (wasAborted) return null
 		if (!result) {
 			if (variant === "preview") {
-				this.emitPreviewLoadFailed(normalizedSrc, entry)
+				this.emitPreviewLoadFailed(entry)
 			} else {
-				this.emitVariantLoadFailed(
-					normalizedSrc,
-					variant,
-					entry.lastFailureReason ?? "load-error",
-				)
+				this.emitVariantLoadFailed(entry, variant, entry.lastFailureReason ?? "load-error")
 			}
 		}
 		return result
 	}
 
-	private emitPreviewLoadFailed(normalizedSrc: string, entry: ImageResourceEntry): void {
+	private emitPreviewLoadFailed(entry: ImageResourceEntry): void {
 		const reason = entry.lastFailureReason ?? "load-error"
 		const hasUsableLow =
 			!!this.getDisplayResource(entry, "low") && !entry.staleDecodedVariants.has("low")
-		this.emitImageResourceLoadFailed({
-			path: normalizedSrc,
-			reason,
-			preservePreview: reason !== "not-found" && hasUsableLow,
-		})
+		this.emitImageResourceLoadFailed(
+			{
+				path: entry.referencePath,
+				reason,
+				preservePreview: reason !== "not-found" && hasUsableLow,
+			},
+			entry.resourceIdentity,
+		)
 	}
 
-	private emitNotFoundLoadFailedIfNeeded(
-		normalizedSrc: string,
-		entry: ImageResourceEntry,
-	): boolean {
+	private emitNotFoundLoadFailedIfNeeded(entry: ImageResourceEntry): boolean {
 		if (entry.lastFailureReason !== "not-found") return false
-		this.emitImageResourceLoadFailed({
-			path: normalizedSrc,
-			reason: "not-found",
-		})
+		this.emitImageResourceLoadFailed(
+			{
+				path: entry.referencePath,
+				reason: "not-found",
+			},
+			entry.resourceIdentity,
+		)
 		return true
 	}
 
 	private emitVariantLoadFailed(
-		normalizedSrc: string,
+		entry: ImageResourceEntry,
 		variant: ImageResourceVariant,
 		reason: ResourceLoadFailureReason,
 	): void {
 		this.canvas.eventEmitter.emit({
 			type: "resource:image:variant-load-failed",
 			data: {
-				path: normalizedSrc,
+				path: entry.referencePath,
 				variant,
 				reason,
 			},
@@ -2321,7 +2451,7 @@ export class ImageResourceManager {
 
 	private async loadImageResourcePipeline(
 		path: string,
-		normalizedSrc: string,
+		resourceIdentity: string,
 		entry: ImageResourceEntry,
 		shouldRefreshCached: boolean,
 		variant: ImageResourceVariant,
@@ -2330,12 +2460,12 @@ export class ImageResourceManager {
 	): Promise<LoadedResource | null> {
 		if (this.shouldDropAbortedLoad(options)) return null
 		if (variant === "low") {
-			return this.loadLowResourcePipeline(path, normalizedSrc, entry, priority, options)
+			return this.loadLowResourcePipeline(path, resourceIdentity, entry, priority, options)
 		}
 
 		const cachedResource = await this.loadCachedImageResource(
 			path,
-			normalizedSrc,
+			resourceIdentity,
 			entry,
 			variant,
 		)
@@ -2343,7 +2473,7 @@ export class ImageResourceManager {
 		if (this.shouldDropAbortedLoad(options)) return null
 		if (cachedResource) {
 			if (shouldRefreshCached) {
-				this.triggerBackgroundMetadataRefresh(path, normalizedSrc, entry)
+				this.triggerBackgroundMetadataRefresh(path, resourceIdentity, entry)
 			}
 			return cachedResource
 		}
@@ -2362,19 +2492,24 @@ export class ImageResourceManager {
 			if (this.destroyed) return null
 			if (this.shouldDropAbortedLoad(options)) return null
 			if (!ossSrc) {
-				if (variant === "preview") {
-					this.emitPreviewLoadFailed(normalizedSrc, entry)
-				}
 				return null
 			}
 		}
 
-		return this.loadImageResource(normalizedSrc, ossSrc, entry, variant, priority, 0, options)
+		return this.loadImageResource(
+			resourceIdentity,
+			ossSrc,
+			entry,
+			variant,
+			priority,
+			0,
+			options,
+		)
 	}
 
 	private async loadLowResourcePipeline(
 		path: string,
-		normalizedSrc: string,
+		resourceIdentity: string,
 		entry: ImageResourceEntry,
 		priority?: ImageResourceLoadPriority,
 		options?: ImageResourceLoadOptions,
@@ -2383,7 +2518,7 @@ export class ImageResourceManager {
 		const cachedBodyOssSrc = this.bodyCache.getCachedOssSrc(entry)
 		if (cachedBodyOssSrc) {
 			return this.loadImageResource(
-				normalizedSrc,
+				resourceIdentity,
 				cachedBodyOssSrc,
 				entry,
 				"low",
@@ -2403,7 +2538,7 @@ export class ImageResourceManager {
 			return null
 		}
 
-		return this.loadImageResource(normalizedSrc, ossSrc, entry, "low", priority, 0, options)
+		return this.loadImageResource(resourceIdentity, ossSrc, entry, "low", priority, 0, options)
 	}
 
 	/**
@@ -2434,7 +2569,7 @@ export class ImageResourceManager {
 
 		this.emitImageResourceDisplayLoaded({
 			elementId: options.displayTargetElementId,
-			path: this.canonicalResourcePath(path),
+			path,
 			resource,
 			reason: options.displayTargetReason ?? "display-target",
 		})
@@ -2457,14 +2592,14 @@ export class ImageResourceManager {
 	 * @param path 路径（path）
 	 */
 	public async getLowImageUrl(path: string): Promise<LoadedLowImageUrl | null> {
-		const normalizedSrc = this.canonicalResourcePath(path)
+		const resourceIdentity = this.getResourceIdentity(path)
 		const resource = await this.loadImageInternal(path, {
 			refreshCached: false,
 			variant: "low",
 		})
 		if (!resource) return null
 
-		const entry = this.entries.get(normalizedSrc)
+		const entry = this.entries.get(resourceIdentity)
 		const backingResource = entry ? this.findResourceByLoadedResource(entry, resource) : null
 		if (entry && backingResource?.displayBlob) {
 			const url = URL.createObjectURL(backingResource.displayBlob)
@@ -2489,7 +2624,7 @@ export class ImageResourceManager {
 	 * 读取指定 path 对应的资源条目（无缓存则 undefined）
 	 */
 	public getEntry(path: string): Readonly<ImageResourceEntry> | undefined {
-		const canonical = this.canonicalResourcePath(path)
+		const canonical = this.getResourceIdentity(path)
 		return this.entries.get(canonical)
 	}
 
@@ -2497,26 +2632,29 @@ export class ImageResourceManager {
 		path: string,
 		options?: { variant?: ImageResourceVariant },
 	): LoadedResource | null {
-		const canonical = this.canonicalResourcePath(path)
+		const canonical = this.getResourceIdentity(path)
 		const entry = this.entries.get(canonical)
 		if (!entry) return null
 		return this.buildLoadedResource(entry, options?.variant ?? DEFAULT_IMAGE_RESOURCE_VARIANT)
 	}
 
 	public getFailureReason(path: string): ResourceLoadFailureReason | null {
-		const canonical = this.urlLifecycle.getCanonicalFromAlias(path)
+		const canonical = this.urlLifecycle.getResourceIdentity(path)
 		return this.entries.get(canonical)?.lastFailureReason ?? null
 	}
 
 	public markResourceLoadFailed(path: string, reason: ResourceLoadFailureReason): void {
 		if (this.destroyed) return
-		const normalizedSrc = this.canonicalResourcePath(path)
-		const entry = this.getOrCreateEntry(normalizedSrc)
+		const resourceIdentity = this.getResourceIdentity(path)
+		const entry = this.getOrCreateEntry(resourceIdentity, path)
 		this.setFailureReason(entry, reason)
-		this.emitImageResourceLoadFailed({
-			path: normalizedSrc,
-			reason,
-		})
+		this.emitImageResourceLoadFailed(
+			{
+				path: entry.referencePath,
+				reason,
+			},
+			resourceIdentity,
+		)
 	}
 
 	public getFullAdmissionSnapshot(): ImageFullAdmissionSnapshot {
@@ -2658,8 +2796,8 @@ export class ImageResourceManager {
 		if (this.canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path)) {
 			return null
 		}
-		const normalizedSrc = this.canonicalResourcePath(path)
-		const entry = this.getOrCreateEntry(normalizedSrc)
+		const resourceIdentity = this.getResourceIdentity(path)
+		const entry = this.getOrCreateEntry(resourceIdentity, path)
 		return this.urlLifecycle.ensureFreshOssInfo(path, entry, options)
 	}
 
@@ -2680,17 +2818,23 @@ export class ImageResourceManager {
 			return false
 		}
 		this.diagnostics.increment("refreshResourceCount")
-		const normalizedSrc = this.canonicalResourcePath(path)
-		if (!normalizedSrc) return false
+		const resourceIdentity = this.getResourceIdentity(path)
+		if (!resourceIdentity) return false
 
-		const entry = this.getOrCreateEntry(normalizedSrc)
+		const entry = this.getOrCreateEntry(resourceIdentity, path)
 		const previousRefresh = entry.refreshPromise
+		const resourceStateGeneration = entry.resourceStateGeneration
 		const refreshPromise = (async () => {
 			if (previousRefresh) {
 				await previousRefresh.catch(() => false)
 			}
 			if (this.destroyed) return false
-			return this.refreshImageResourceFromNetwork(path, normalizedSrc, entry)
+			return this.refreshImageResourceFromNetwork(
+				path,
+				resourceIdentity,
+				entry,
+				resourceStateGeneration,
+			)
 		})()
 		entry.refreshPromise = refreshPromise
 
@@ -2705,16 +2849,19 @@ export class ImageResourceManager {
 
 	private async refreshImageResourceFromNetwork(
 		path: string,
-		normalizedSrc: string,
+		resourceIdentity: string,
 		entry: ImageResourceEntry,
+		resourceStateGeneration = entry.resourceStateGeneration,
 	): Promise<boolean> {
 		if (this.destroyed) return false
+		if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) return false
 		for (const variant of MEDIA_DISPLAY_RESOURCE_VARIANTS) {
 			await this.getDisplayLoadingPromise(entry, variant)?.promise.catch(() => null)
 		}
 		if (entry.fullLoadingPromise) {
 			await entry.fullLoadingPromise.promise.catch(() => null)
 		}
+		if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) return false
 		const previousDisplaySlots = this.cloneDisplayResourceSlots(entry)
 		const previousLowResource = previousDisplaySlots.low.resource
 		const previousResource = previousDisplaySlots.preview.resource
@@ -2746,7 +2893,7 @@ export class ImageResourceManager {
 						resource !== previousResource &&
 						resource !== previousFullResource,
 				),
-				{ path: normalizedSrc, reason: "refresh-rollback" },
+				{ entry, reason: "refresh-rollback" },
 			)
 			this.bodyCache.restoreState(entry, previousBodyState)
 			// 保留压缩 body 作为可能的解码复用，但禁止在新 URL 生成前返回旧签名。
@@ -2774,7 +2921,7 @@ export class ImageResourceManager {
 		}
 
 		this.canvas.mediaResourceOfflineCacheManager.removeCachedResource({
-			path: normalizedSrc,
+			path,
 			mediaType: "image",
 		})
 		const ossSrc = await this.exchangeOssSrc(path, entry, {
@@ -2782,20 +2929,24 @@ export class ImageResourceManager {
 			priority: "critical",
 		})
 		if (this.destroyed) return false
+		if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) {
+			this.markStaleRequestDrop()
+			return false
+		}
 		if (!ossSrc) {
 			const reason = entry.lastFailureReason ?? "not-found"
 			// 附件已删除（同路径无文件）：禁止恢复旧位图，否则画布仍显示已删文件内容
 			if (reason === "not-found") {
 				void this.displayVariantPersistentCache.removeByPath(
 					this.getPersistentDisplayScope(),
-					normalizedSrc,
+					resourceIdentity,
 				)
 				this.closeResource(previousLowResource, {
-					path: normalizedSrc,
+					entry,
 					reason: "refresh-deleted",
 				})
 				this.closeResource(previousResource, {
-					path: normalizedSrc,
+					entry,
 					reason: "refresh-deleted",
 				})
 				if (
@@ -2803,7 +2954,7 @@ export class ImageResourceManager {
 					previousFullResource !== previousLowResource
 				) {
 					this.closeResource(previousFullResource, {
-						path: normalizedSrc,
+						entry,
 						reason: "refresh-deleted",
 					})
 				}
@@ -2817,11 +2968,14 @@ export class ImageResourceManager {
 				restorePreviousResourceState()
 				variantsToRefresh.forEach((variant) => entry.staleDecodedVariants.add(variant))
 			}
-			this.emitImageResourceLoadFailed({
-				path: normalizedSrc,
-				reason,
-				preservePreview: reason !== "not-found" && hasPreviousDecodedResource,
-			})
+			this.emitImageResourceLoadFailed(
+				{
+					path: entry.referencePath,
+					reason,
+					preservePreview: reason !== "not-found" && hasPreviousDecodedResource,
+				},
+				resourceIdentity,
+			)
 			return false
 		}
 		const resourceVersionChanged =
@@ -2845,8 +2999,12 @@ export class ImageResourceManager {
 		let loaded = false
 		let loadedResourceOssSrc: string | null = null
 		for (const variant of variantsToReload) {
-			const result = await this.loadImageResource(normalizedSrc, ossSrc, entry, variant)
+			const result = await this.loadImageResource(resourceIdentity, ossSrc, entry, variant)
 			if (this.destroyed) return false
+			if (!this.isResourceStateGenerationCurrent(entry, resourceStateGeneration)) {
+				this.markStaleRequestDrop()
+				return false
+			}
 			if (result) {
 				loaded = true
 				loadedResourceOssSrc = result.ossSrc
@@ -2867,7 +3025,7 @@ export class ImageResourceManager {
 					this.setDisplayResource(entry, "low", null, { closePrevious: false })
 				}
 				this.closeResource(previousLowResource, {
-					path: normalizedSrc,
+					entry,
 					reason: "refresh-replaced",
 				})
 			}
@@ -2878,7 +3036,7 @@ export class ImageResourceManager {
 				this.setFullResource(entry, null)
 			}
 			this.closeResource(previousResource, {
-				path: normalizedSrc,
+				entry,
 				reason: "refresh-replaced",
 			})
 			if (
@@ -2886,7 +3044,7 @@ export class ImageResourceManager {
 				previousFullResource !== previousLowResource
 			) {
 				this.closeResource(previousFullResource, {
-					path: normalizedSrc,
+					entry,
 					reason: "refresh-replaced",
 				})
 			}
@@ -2895,34 +3053,40 @@ export class ImageResourceManager {
 
 		restorePreviousResourceState()
 		variantsToReload.forEach((variant) => entry.staleDecodedVariants.add(variant))
-		this.emitImageResourceLoadFailed({
-			path: normalizedSrc,
-			reason: entry.lastFailureReason ?? "load-error",
-			preservePreview: hasPreviousDecodedResource,
-		})
+		this.emitImageResourceLoadFailed(
+			{
+				path: entry.referencePath,
+				reason: entry.lastFailureReason ?? "load-error",
+				preservePreview: hasPreviousDecodedResource,
+			},
+			resourceIdentity,
+		)
 		return false
 	}
 
 	private triggerBackgroundMetadataRefresh(
 		path: string,
-		normalizedSrc: string,
+		resourceIdentity: string,
 		entry: ImageResourceEntry,
 	): void {
-		this.urlLifecycle.triggerBackgroundMetadataRefresh(path, normalizedSrc, entry)
+		this.urlLifecycle.triggerBackgroundMetadataRefresh(path, resourceIdentity, entry)
 	}
 
-	private handleImageResourceDeleted(normalizedSrc: string, entry: ImageResourceEntry): void {
-		this.invalidatePersistentLowGeneration(normalizedSrc, entry, entry.resourceVersion)
+	private handleImageResourceDeleted(resourceIdentity: string, entry: ImageResourceEntry): void {
+		this.advanceResourceStateGeneration(entry)
+		entry.awaitingResolverAvailability = false
+		this.abortEntryLoadingRequests(entry)
+		this.setFailureReason(entry, "not-found")
+		this.invalidatePersistentLowGeneration(resourceIdentity, entry, entry.resourceVersion)
 		this.canvas.mediaResourceOfflineCacheManager.removeCachedResource({
-			path: normalizedSrc,
+			path: entry.referencePath,
 			mediaType: "image",
 		})
 		void this.displayVariantPersistentCache.removeByPath(
 			this.getPersistentDisplayScope(),
-			normalizedSrc,
+			resourceIdentity,
 		)
 		this.closeEntryResources(entry, {
-			path: normalizedSrc,
 			reason: "resource-deleted",
 		})
 		entry.ossSrc = null
@@ -2932,15 +3096,50 @@ export class ImageResourceManager {
 		entry.resourceVersion = null
 		entry.sourceUpdatedAt = null
 		entry.contentLength = null
-		this.emitImageResourceLoadFailed({
-			path: normalizedSrc,
-			reason: "not-found",
+		this.emitImageResourceLoadFailed(
+			{
+				path: entry.referencePath,
+				reason: "not-found",
+			},
+			resourceIdentity,
+		)
+	}
+
+	/** Reconcile decoded/persistent resources when the host publishes a new attachment snapshot. */
+	public handleResourceReferenceResolverChanged(
+		options?: CanvasResourceReferenceResolverChangeOptions,
+	): void {
+		if (this.destroyed) return
+		const resolveResourceReference =
+			this.canvas.magicConfigManager.config?.methods?.resolveResourceReference
+		if (!resolveResourceReference) return
+		this.entries.forEach((entry, resourceIdentity) => {
+			if (
+				options?.changedResourceIdentities &&
+				!options.changedResourceIdentities.has(resourceIdentity)
+			) {
+				return
+			}
+			const availability = getCanvasResourceAvailability(
+				entry.referencePath,
+				resolveResourceReference,
+			)
+			if (availability === "available") {
+				entry.awaitingResolverAvailability = false
+				return
+			}
+			if (
+				availability === "deleted" &&
+				!this.isPrimedResourceAwaitingResolverSnapshot(entry)
+			) {
+				this.handleImageResourceDeleted(resourceIdentity, entry)
+			}
 		})
 	}
 
 	private async loadCachedImageResource(
 		path: string,
-		normalizedSrc: string,
+		resourceIdentity: string,
 		entry: ImageResourceEntry,
 		variant: ImageResourceVariant,
 	): Promise<LoadedResource | null> {
@@ -2959,7 +3158,7 @@ export class ImageResourceManager {
 			return this.buildLoadedResource(entry, variant)
 		}
 
-		const result = await this.loadImageResource(normalizedSrc, cached.url, entry, variant)
+		const result = await this.loadImageResource(resourceIdentity, cached.url, entry, variant)
 		if (
 			!result &&
 			this.canvas.mediaResourceOfflineCacheManager.isVirtualResourceUrl(entry.ossSrc)
@@ -3246,7 +3445,7 @@ export class ImageResourceManager {
 	 * - 降级：Worker 返回 Blob，主线程使用 createImageSourceFromBlob 创建 ImageSource
 	 */
 	private async loadImageResource(
-		path: string,
+		resourceIdentity: string,
 		ossSrc: string,
 		entry: ImageResourceEntry,
 		variant: ImageResourceVariant,
@@ -3255,7 +3454,7 @@ export class ImageResourceManager {
 		options?: ImageResourceLoadOptions,
 	): Promise<LoadedResource | null> {
 		const body = await this.loadImageBody(
-			path,
+			resourceIdentity,
 			ossSrc,
 			entry,
 			variant,
@@ -3270,7 +3469,7 @@ export class ImageResourceManager {
 		if (this.shouldDropAbortedLoad(options)) return null
 		if (
 			typeof body.resourceGeneration === "number" &&
-			this.getPersistentLowGeneration(path) !== body.resourceGeneration
+			this.getPersistentLowGeneration(resourceIdentity) !== body.resourceGeneration
 		) {
 			return null
 		}
@@ -3293,10 +3492,10 @@ export class ImageResourceManager {
 		}
 
 		const requestId = this.createWorkerRequestId("img")
-		const decodeIdentity = `${path}\u0000${
+		const decodeIdentity = `${resourceIdentity}\u0000${
 			body.resourceGeneration ?? body.cacheKey
 		}\u0000${variant}`
-		const decodePathVariantKey = `${path}\u0000${variant}`
+		const decodePathVariantKey = `${resourceIdentity}\u0000${variant}`
 		try {
 			this.diagnostics.increment("decodeAttemptCount")
 			if (
@@ -3326,7 +3525,7 @@ export class ImageResourceManager {
 					source: "image-resource:decode",
 					canvasId: this.canvas.id,
 					managerInstanceId: this.managerInstanceId,
-					path,
+					path: resourceIdentity,
 					variant,
 					cacheKey: body.cacheKey,
 					url: body.ossSrc,
@@ -3389,7 +3588,7 @@ export class ImageResourceManager {
 			}
 			if (
 				typeof body.resourceGeneration === "number" &&
-				this.getPersistentLowGeneration(path) !== body.resourceGeneration
+				this.getPersistentLowGeneration(resourceIdentity) !== body.resourceGeneration
 			) {
 				if (image) closeImageSource(image)
 				return null
@@ -3440,19 +3639,19 @@ export class ImageResourceManager {
 				isFullSize: resource.isFullSize,
 			}
 			this.persistDisplayResourceFromWorkerResult(
-				path,
+				resourceIdentity,
 				entry,
 				resource.variant,
 				result,
 				result.imageInfo,
 			)
 			if (resource.variant !== "low") {
-				this.ensurePersistentLowFromBody(path, entry, body)
+				this.ensurePersistentLowFromBody(resourceIdentity, entry, body)
 			}
 
 			if (variant !== "full") {
 				this.emitImageResourceLoaded({
-					path,
+					path: entry.referencePath,
 					resource: loadedResource,
 				})
 			}
@@ -3462,7 +3661,7 @@ export class ImageResourceManager {
 				!this.isResourceStillReferenced(entry, previousResourceToClose)
 			) {
 				this.closeResourceAfterConsumersSwap(previousResourceToClose, {
-					path,
+					entry,
 					reason: "resource-replaced",
 				})
 			}
@@ -3500,8 +3699,12 @@ export class ImageResourceManager {
 		)
 	}
 
-	private createEntry(): ImageResourceEntry {
+	private createEntry(referencePath: string, resourceIdentity: string): ImageResourceEntry {
 		return {
+			resourceStateGeneration: 0,
+			awaitingResolverAvailability: false,
+			referencePath,
+			resourceIdentity,
 			ossSrc: null,
 			ossSrcFromCachedFallback: false,
 			sourceUrl: null,
@@ -3532,11 +3735,11 @@ export class ImageResourceManager {
 		}
 	}
 
-	private getOrCreateEntry(normalizedPath: string): ImageResourceEntry {
-		let entry = this.entries.get(normalizedPath)
+	private getOrCreateEntry(resourceIdentity: string, referencePath: string): ImageResourceEntry {
+		let entry = this.entries.get(resourceIdentity)
 		if (!entry) {
-			entry = this.createEntry()
-			this.entries.set(normalizedPath, entry)
+			entry = this.createEntry(referencePath, resourceIdentity)
+			this.entries.set(resourceIdentity, entry)
 		}
 		return entry
 	}
@@ -3559,10 +3762,24 @@ export class ImageResourceManager {
 			| "content_length"
 		>,
 	): void {
-		const normalizedSrc = this.canonicalResourcePath(path)
-		const entry = this.getOrCreateEntry(normalizedSrc)
+		const resourceIdentity = this.getResourceIdentity(path)
+		const entry = this.getOrCreateEntry(resourceIdentity, path)
+		this.advanceResourceStateGeneration(entry)
+		const availability = getCanvasResourceAvailability(
+			path,
+			this.canvas.magicConfigManager.config?.methods?.resolveResourceReference,
+		)
+		entry.awaitingResolverAvailability = availability !== "available"
+		this.abortEntryLoadingRequests(entry)
 		this.urlLifecycle.primeCache(path, entry, fileInfo)
 		this.setFailureReason(entry, null)
+		this.emitImageResourceRecoveryStarted(
+			{
+				path: entry.referencePath,
+				ossSrc: fileInfo.src,
+			},
+			resourceIdentity,
+		)
 	}
 
 	/**
@@ -3602,10 +3819,10 @@ export class ImageResourceManager {
 			if (elementData.type === ElementTypeEnum.Image) {
 				const imageElement = elementData as ImageElementData
 
-				// 添加主图片路径
-				if (imageElement.src) {
-					usedPaths.add(this.canonicalResourcePath(imageElement.src))
-				}
+				// 全部 Contents 都属于文档存活引用；可见性调度仍只注册 active Content。
+				getImageContents(imageElement).forEach((content) => {
+					if (content.src) usedPaths.add(this.getResourceIdentity(content.src))
+				})
 
 				// 添加参考图路径
 				const elementInstance = this.canvas.elementManager.getElementInstance(
@@ -3614,15 +3831,15 @@ export class ImageResourceManager {
 				if (elementInstance && elementInstance instanceof ImageElement) {
 					const referenceImageInfos = elementInstance.getReferenceImageInfos()
 					for (const info of referenceImageInfos) {
-						usedPaths.add(this.canonicalResourcePath(info.path))
+						usedPaths.add(this.getResourceIdentity(info.path))
 					}
 				}
 			}
 		}
 
 		// 遍历所有资源条目，检查是否仍在使用
-		this.entries.forEach((entry, src) => {
-			if (usedPaths.has(src)) return
+		this.entries.forEach((entry, resourceIdentity) => {
+			if (usedPaths.has(resourceIdentity)) return
 			entry.persistentLowLoadingPromise?.abort()
 
 			if (
@@ -3632,12 +3849,11 @@ export class ImageResourceManager {
 				this.bodyCache.hasBody(entry)
 			) {
 				this.closeEntryResources(entry, {
-					path: src,
 					reason: `cleanup:${reason}`,
 				})
 				this.canvas.eventEmitter.emit({
 					type: "resource:released",
-					data: { path: src },
+					data: { path: entry.referencePath },
 				})
 			}
 
@@ -3645,7 +3861,7 @@ export class ImageResourceManager {
 			entry.ossSrcFromCachedFallback = false
 			entry.expiresAt = null
 			this.canvas.mediaResourceOfflineCacheManager.removeCachedResource({
-				path: src,
+				path: entry.referencePath,
 				mediaType: "image",
 			})
 			if (
@@ -3655,7 +3871,7 @@ export class ImageResourceManager {
 				!this.getDisplayLoadingPromise(entry, "low") &&
 				!entry.fullLoadingPromise
 			) {
-				this.entries.delete(src)
+				this.entries.delete(resourceIdentity)
 			}
 		})
 	}
@@ -3686,7 +3902,7 @@ export class ImageResourceManager {
 			clearTimeout(this.cleanupTimer)
 			this.cleanupTimer = null
 		}
-		this.bodyCache.abortAll()
+		this.bodyCache.dispose()
 		this.workerWarmupPromise = null
 		this.displayVariantPersistentCache.destroy()
 		this.persistentLowWritePromises.clear()
@@ -3695,17 +3911,17 @@ export class ImageResourceManager {
 		this.workerClient?.release(pendingError)
 		this.workerClient = null
 		// 释放所有 ImageBitmap 资源
-		this.entries.forEach((entry, path) => {
+		this.entries.forEach((entry) => {
 			this.closeEntryResources(entry, {
-				path,
 				reason: "manager-destroy",
 			})
 		})
 		this.entries.clear()
 		this.clearDecodedByteTracking()
 		this.lastSuccessfulDecodeIdentityByPathVariant.clear()
-		this.imageResourceLoadFailedHandlersByPath.clear()
-		this.imageResourceWillCloseHandlersByPath.clear()
+		this.imageResourceLoadFailedHandlersByIdentity.clear()
+		this.imageResourceRecoveryStartedHandlersByIdentity.clear()
+		this.imageResourceWillCloseHandlersByIdentity.clear()
 		this.canvas.eventEmitter.off("element:deleted", this.handleElementDeleted)
 		this.canvas.eventEmitter.off("element:batchdeleted", this.handleBatchDeleted)
 		this.canvas.eventEmitter.off("canvas:clear", this.handleCanvasClear)

@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import Field
 
@@ -226,6 +226,19 @@ Use the `default` attribute to set a fallback when the user times out or skips.
             ),
         }
 
+    async def execute(
+        self,
+        tool_context: ToolContext,
+        params: AskUserParams,
+    ) -> ToolResult:
+        if not tool_context.arguments.get("parsed_questions"):
+            return ToolResult.error(
+                "The ask_user arguments contain no valid <question> element. "
+                "Retry with one or more valid question blocks.",
+                use_custom_remark=False,
+            )
+        return await super().execute(tool_context, params)
+
     def build_result_builder(self, tool_data: dict) -> ResultBuilder:
         """返回将用户回答转为模型上下文的闭包。
 
@@ -259,9 +272,10 @@ Use the `default` attribute to set a fallback when the user times out or skips.
         """Build the AFTER_TOOL_CALL detail card from result.extra_info."""
         if not result or not result.extra_info:
             return None
-        status = result.extra_info.get("status")
-        answers = result.extra_info.get("answers", {})
-        questions = result.extra_info.get("questions", [])
+        extra_info = result.extra_info
+        status = extra_info.get("status")
+        answers = extra_info.get("answers", {})
+        questions = extra_info.get("questions", [])
         if not status:
             return None
         question_id = tool_context.tool_call_id if tool_context else ""
@@ -272,6 +286,7 @@ Use the `default` attribute to set a fallback when the user times out or skips.
                 status=status,
                 questions=questions,
                 answers=answers,
+                remark=extra_info.get("remark") or None,
             ),
         )
 
@@ -298,9 +313,11 @@ def build_ask_user_result_builder(
 ):
     """返回 ask_user 专属的 result_builder 闭包。
 
-    result_builder(response_status, answer_json) -> (content, extra_info)
+    result_builder(response_status, answer_json, remark) -> (content, extra_info)
     """
-    def result_builder(response_status: str, answer_json: str) -> Tuple[str, Dict[str, Any]]:
+    def result_builder(response_status: str, answer_json: str, remark: str = "") -> Tuple[str, Dict[str, Any]]:
+        # 兼容直接调用 builder 的旧代码，并避免异常类型影响答案解析。
+        normalized_remark = remark.strip() if isinstance(remark, str) else ""
         try:
             answers: dict = json.loads(answer_json) if answer_json else {}
         except (json.JSONDecodeError, TypeError):
@@ -313,7 +330,10 @@ def build_ask_user_result_builder(
                 questions=parsed_questions,
                 response_status=response_status,
                 answers=answers,
+                remark=normalized_remark,
             )
+        if policy_blocked and normalized_remark:
+            content = f"{content}\n<remark>{_xml_escape(normalized_remark)}</remark>"
         extra_info = {
             "status": response_status,
             "answers": answers,
@@ -321,6 +341,8 @@ def build_ask_user_result_builder(
             "policy_blocked": policy_blocked,
             "policy_source": policy_source,
         }
+        if normalized_remark:
+            extra_info["remark"] = normalized_remark
         return content, extra_info
 
     return result_builder
@@ -376,85 +398,58 @@ def build_ask_user_timeout_answer_builder(parsed_questions: List[dict]):
     return timeout_answer_builder
 
 
-def _humanize_single(
-    index: int,
-    question: str,
-    interaction_type: str,
-    answer: Union[str, list],
-) -> str:
-    """Format a single sub-question answer into a clearly delimited line.
-
-    Uses >>> and <<< as answer delimiters to avoid ambiguity when the answer
-    itself contains quotes, dots, or other punctuation.
-    """
-    if interaction_type == "multi_select":
-        ans_str = ", ".join(answer) if isinstance(answer, list) else str(answer)
-    else:
-        ans_str = str(answer)
-    return f"Q{index}: {question}\nA{index}: {ans_str}"
+def _xml_escape(text: str) -> str:
+    """转义 XML 特殊字符，确保用户输入不破坏标签结构。"""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _humanize_batch(
     questions: List[dict],
     response_status: str,
     answers: dict,
+    remark: str = "",
 ) -> str:
-    """Convert multiple sub-question answers into a natural language paragraph
-    that the model can directly reason about.
+    """将用户回答转换为 XML 结构化文本，供模型推理。
 
-    answers is a {sub_id: answer_str} dict.
+    answer 标签按 question 原始顺序一一对应（与模型发出的 questions 位置匹配），
+    不重复 question 文本和 type，模型通过上下文中的 questions 获取对应关系。
+
+    answers 格式为 {sub_id: answer_str}。
     """
-    if response_status == "timeout":
-        parts = []
+    if response_status in ("timeout", "skipped"):
+        lines = [f'<ask_user_result status="{response_status}">']
+        has_no_default = False
         for q in questions:
-            name = q.get("question", "")
             dv = q.get("default_value") or q.get("default")
             if dv is not None:
-                parts.append(f'"{name}" (timed out, used default: {dv})')
+                lines.append(f"<answer>{_xml_escape(str(dv))}</answer>")
             else:
-                parts.append(f'"{name}" (timed out, no default)')
-        has_no_default = any(
-            (q.get("default_value") or q.get("default")) is None for q in questions
-        )
-        summary = "; ".join(parts)
+                has_no_default = True
+                lines.append('<answer missing="true"/>')
+        if remark:
+            lines.append(f"<remark>{_xml_escape(remark)}</remark>")
+        lines.append("</ask_user_result>")
         if has_no_default:
-            return (
-                f"The following questions timed out: {summary}. "
-                "Some have no default value — decide whether to abort the related operation."
-            )
-        return f"The following questions timed out and defaults were applied: {summary}. Continue with the next steps."
-
-    if response_status == "skipped":
-        parts = []
-        for q in questions:
-            name = q.get("question", "")
-            dv = q.get("default_value") or q.get("default")
-            if dv is not None:
-                parts.append(f'"{name}" (used default: {dv})')
-            else:
-                parts.append(f'"{name}" (no default)')
-        has_no_default = any(
-            (q.get("default_value") or q.get("default")) is None for q in questions
-        )
-        summary = "; ".join(parts)
-        if has_no_default:
-            return (
-                f"The user skipped the following questions: {summary}. "
-                "Some have no default value — decide whether to abort the related operation."
-            )
-        return f"The user skipped the following questions and defaults were applied: {summary}. Continue with the next steps."
+            lines.append("Some answers are missing with no default value. Decide whether to abort the related operation.")
+        return "\n".join(lines)
 
     # answered
-    parts = []
+    lines = ['<ask_user_result status="answered">']
     for i, q in enumerate(questions):
-        name = q.get("question", "")
-        interaction_type = q.get("interaction_type", "input")
+        itype = q.get("interaction_type", "input")
         sub_id = q.get("sub_id", "")
-        default = [] if interaction_type == "multi_select" else ""
+        default = [] if itype == "multi_select" else ""
         # 优先用 sub_id（UUID，新前端）查找；找不到时 fallback 到 q-{index}（旧前端兼容格式）
         ans = answers.get(sub_id)
         if ans is None:
             ans = answers.get(f"q-{i}", default)
-        parts.append(_humanize_single(i + 1, name, interaction_type, ans))
-    summary = "\n".join(parts)
-    return f"The user answered the questions (each line after 'An:' is the user's exact raw input):\n{summary}"
+
+        if itype == "multi_select" and isinstance(ans, list):
+            items = ", ".join(_xml_escape(str(a)) for a in ans)
+            lines.append(f"<answer>{items}</answer>")
+        else:
+            lines.append(f"<answer>{_xml_escape(str(ans))}</answer>")
+    if remark:
+        lines.append(f"<remark>{_xml_escape(remark)}</remark>")
+    lines.append("</ask_user_result>")
+    return "\n".join(lines)

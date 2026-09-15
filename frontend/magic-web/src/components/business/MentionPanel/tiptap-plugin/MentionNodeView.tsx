@@ -1,4 +1,4 @@
-import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react"
+import { NodeViewWrapper, type ReactNodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import {
 	Component,
 	memo,
@@ -16,7 +16,8 @@ import SkillIcon from "@/components/business/MentionPanel/components/icons/Skill
 import ToolIcon from "@/components/business/MentionPanel/components/icons/ToolIcon"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { logger as Logger } from "@/utils/log"
-import { MentionItemType } from "../types"
+import type { LocaleInput } from "../i18n"
+import { MentionItemType, type ProjectMentionData } from "../types"
 import {
 	getMentionDisplayName,
 	getMentionIcon,
@@ -41,7 +42,12 @@ class MentionNodeViewErrorBoundary extends Component<
 	}
 
 	componentDidCatch(error: unknown) {
-		logger.error("render error", error)
+		logger.error({
+			eventKey: "mention_node_render_failed",
+			errorKind: "render",
+			error: error,
+			message: "render error",
+		})
 	}
 
 	render() {
@@ -59,7 +65,18 @@ interface MentionNodeIconProps {
 
 interface MentionNodeChipProps {
 	attrs: TiptapMentionAttributes
+	language?: LocaleInput
 	deleteNode?: () => void
+}
+
+function isStaticResourceMention(type: TiptapMentionAttributes["type"]) {
+	return (
+		type === MentionItemType.PROJECT_FILE ||
+		type === MentionItemType.UPLOAD_FILE ||
+		type === MentionItemType.MEMORY_FILE ||
+		type === MentionItemType.FOLDER ||
+		type === MentionItemType.MEMORY_DIRECTORY
+	)
 }
 
 const mentionIconImageClassNameMap: Partial<Record<string, string>> = {
@@ -76,8 +93,29 @@ const mentionIconFallbackMap: Partial<Record<string, ComponentType<{ size: numbe
 	[MentionItemType.TOOL]: ToolIcon,
 }
 
+function getMentionNodeDisplayName(attrs?: TiptapMentionAttributes, language?: LocaleInput) {
+	if (!attrs) return "Unknown"
+
+	if (attrs.type === MentionItemType.PROJECT) {
+		return (
+			(attrs.data as ProjectMentionData | undefined)?.project_name?.trim() ||
+			getMentionDisplayName(attrs, language)
+		)
+	}
+
+	return getMentionDisplayName(attrs, language)
+}
+
 const MentionNodeIcon = memo(({ type, icon }: MentionNodeIconProps) => {
-	if (type === MentionItemType.PROJECT_FILE || type === MentionItemType.UPLOAD_FILE)
+	if (type === MentionItemType.FOLDER || type === MentionItemType.MEMORY_DIRECTORY) {
+		return <TSIcon type="ts-folder" size="16" />
+	}
+
+	if (
+		type === MentionItemType.PROJECT_FILE ||
+		type === MentionItemType.UPLOAD_FILE ||
+		type === MentionItemType.MEMORY_FILE
+	)
 		return <MagicFileIcon type={icon} size={16} />
 
 	const imageClassName = mentionIconImageClassNameMap[type]
@@ -89,8 +127,24 @@ const MentionNodeIcon = memo(({ type, icon }: MentionNodeIconProps) => {
 	return <TSIcon type={icon as IconParkIconElement["name"]} size="16" radius={4} />
 })
 
-function MentionNodeChip({ attrs, deleteNode }: MentionNodeChipProps) {
-	const displayName = getMentionDisplayName(attrs)
+function MentionNodeResource({ attrs, language }: Omit<MentionNodeChipProps, "deleteNode">) {
+	const displayName = getMentionNodeDisplayName(attrs, language)
+	const icon = getMentionIcon(attrs)
+
+	return (
+		<span className="inline-flex min-w-0 max-w-[220px] items-center gap-1 align-middle">
+			<span className="flex shrink-0">
+				<MentionNodeIcon type={attrs.type} icon={icon} />
+			</span>
+			<span className="min-w-0 truncate leading-[inherit]" title={displayName}>
+				{displayName}
+			</span>
+		</span>
+	)
+}
+
+function MentionNodeChip({ attrs, language, deleteNode }: MentionNodeChipProps) {
+	const displayName = getMentionNodeDisplayName(attrs, language)
 	const icon = getMentionIcon(attrs)
 
 	const handleMouseDown = useCallback((event: MouseEvent) => {
@@ -132,10 +186,21 @@ function MentionNodeChip({ attrs, deleteNode }: MentionNodeChipProps) {
 	)
 }
 
-function MentionNodeViewFallback({ attrs }: { attrs?: TiptapMentionAttributes }) {
+function MentionNodeViewFallback({
+	attrs,
+	language,
+}: {
+	attrs?: TiptapMentionAttributes
+	language?: LocaleInput
+}) {
 	let displayName = "@"
+	let isResourceMention = false
+	let icon: string | undefined
 	try {
-		displayName = `@${getMentionDisplayName(attrs!)}`
+		isResourceMention = Boolean(attrs && isStaticResourceMention(attrs.type))
+		icon = attrs ? getMentionIcon(attrs) : undefined
+		const name = getMentionNodeDisplayName(attrs, language)
+		displayName = isResourceMention ? name : `@${name}`
 	} catch {
 		const data = attrs?.data as Record<string, unknown> | undefined
 		displayName = `@${(data?.name as string) || (data?.file_name as string) || "..."}`
@@ -143,10 +208,19 @@ function MentionNodeViewFallback({ attrs }: { attrs?: TiptapMentionAttributes })
 	return (
 		<NodeViewWrapper
 			as="span"
-			className="magic-mention inline-flex px-0.5 align-middle"
+			className={`magic-mention inline-flex cursor-grab px-0.5 align-middle active:cursor-grabbing${attrs?.pending ? " opacity-50" : ""}`}
 			contentEditable={false}
+			draggable
+			data-magic-editor-node
 		>
-			{displayName}
+			{isResourceMention && attrs ? (
+				<span className="inline-flex min-w-0 items-center gap-1">
+					<MentionNodeIcon type={attrs.type} icon={icon} />
+					<span className="min-w-0 truncate leading-[inherit]">{displayName}</span>
+				</span>
+			) : (
+				displayName
+			)}
 		</NodeViewWrapper>
 	)
 }
@@ -161,7 +235,9 @@ function MentionNodeViewInner(props: ReactNodeViewProps) {
 
 	if (Renderer) {
 		return (
-			<MentionNodeViewErrorBoundary fallback={<MentionNodeViewFallback attrs={attrs} />}>
+			<MentionNodeViewErrorBoundary
+				fallback={<MentionNodeViewFallback attrs={attrs} language={options.language} />}
+			>
 				<Renderer {...props} attrs={attrs} />
 			</MentionNodeViewErrorBoundary>
 		)
@@ -170,17 +246,24 @@ function MentionNodeViewInner(props: ReactNodeViewProps) {
 	return (
 		<NodeViewWrapper
 			as="span"
-			className="magic-mention inline-flex px-0.5 align-middle"
+			className={`magic-mention inline-flex cursor-grab px-0.5 align-middle active:cursor-grabbing${attrs.pending ? " opacity-50" : ""}`}
 			data-mention-suggestion-char={attrs.mentionSuggestionChar || "@"}
 			data-type={attrs.type}
 			data-data={JSON.stringify(attrs.data || {})}
 			contentEditable={false}
+			draggable
+			data-magic-editor-node
 		>
 			{isMobile ? (
-				<MentionNodeChip attrs={attrs} deleteNode={props.deleteNode} />
+				<MentionNodeChip
+					attrs={attrs}
+					language={options.language}
+					deleteNode={props.deleteNode}
+				/>
+			) : isStaticResourceMention(attrs.type) ? (
+				<MentionNodeResource attrs={attrs} language={options.language} />
 			) : (
-				`@${getMentionDisplayName(attrs)}` +
-				(attrs.type === MentionItemType.FOLDER ? "/" : "")
+				`@${getMentionNodeDisplayName(attrs, options.language)}`
 			)}
 		</NodeViewWrapper>
 	)
@@ -188,6 +271,7 @@ function MentionNodeViewInner(props: ReactNodeViewProps) {
 
 function MentionNodeView(props: ReactNodeViewProps) {
 	const attrs = props.node.attrs as TiptapMentionAttributes
+	const options = props.extension.options as MentionPanelPluginOptions
 
 	useEffect(() => {
 		logger.log("mounted", { type: attrs.type, data: attrs.data })
@@ -197,7 +281,9 @@ function MentionNodeView(props: ReactNodeViewProps) {
 	}, []) // eslint-disable-line react-hooks/exhaustive-deps
 
 	return (
-		<MentionNodeViewErrorBoundary fallback={<MentionNodeViewFallback attrs={attrs} />}>
+		<MentionNodeViewErrorBoundary
+			fallback={<MentionNodeViewFallback attrs={attrs} language={options.language} />}
+		>
 			<MentionNodeViewInner {...props} />
 		</MentionNodeViewErrorBoundary>
 	)

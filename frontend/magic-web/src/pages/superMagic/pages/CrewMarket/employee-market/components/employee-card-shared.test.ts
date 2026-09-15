@@ -16,7 +16,7 @@ function createT() {
 
 describe("resolvePublisherLabel", () => {
 	it("returns publisher name for user publishers", () => {
-		expect(resolvePublisherLabel("USER", "沈思明", createT())).toBe("沈思明")
+		expect(resolvePublisherLabel("USER", "测试用户", createT())).toBe("测试用户")
 	})
 
 	it("falls back to localized label when publisher name is missing", () => {

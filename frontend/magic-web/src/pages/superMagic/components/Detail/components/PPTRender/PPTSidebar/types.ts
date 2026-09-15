@@ -7,16 +7,20 @@ export interface PPTSidebarProps {
 	onSlideClick: (index: number) => void
 	onSortChange?: (newSlides: SlideItem[]) => void
 	onInsertSlide?: (position: number, direction: "before" | "after") => void
+	onDuplicateSlide?: (index: number) => void
 	onDeleteSlide?: (index: number) => void
 	onRenameSlide?: (index: number, newFileName: string) => void
 	onRefreshSlide?: (index: number) => void
 	onRegenerateScreenshot?: (index: number) => void // Regenerate screenshot only without reloading content
 	onAddToCurrentChat?: (index: number) => void
 	onAddToNewChat?: (index: number) => void
-	mainFileId?: string
+	onReplaceSlideTemplate?: (index: number) => void
 	isMobile?: boolean
+	sidebarWidth?: number
 	allowEdit?: boolean
+	canReplaceTemplate?: boolean
 	isCollapsed?: boolean // External control of collapsed state
+	isPreviewLoadingEnabled?: boolean // Whether the sidebar may request HTML and thumbnails
 	onCollapsedChange?: (collapsed: boolean) => void // Callback when collapsed state changes
 }
 
@@ -53,23 +57,23 @@ export interface SortableSlideItemProps {
 	totalSlides: number
 	onInsertAbove?: () => void
 	onInsertBelow?: () => void
+	onDuplicate?: () => void
 	onDelete?: () => void
 	onRename?: (newFileName: string) => void
 	onAddToCurrentChat?: () => void
 	onAddToNewChat?: () => void
+	onReplaceTemplate?: () => void
 	onLocateFile?: () => void // Callback to locate file in file tree
 	onRefresh?: () => void // Callback to refresh slide content
 	onRegenerateScreenshot?: () => void // Callback to regenerate screenshot only
-	onVisible?: () => void // Callback when slide becomes visible
-	scrollContainerRef?: React.RefObject<HTMLElement> // Scroll container ref for Intersection Observer
-	mainFileId?: string
 	className?: string
 	isMobile?: boolean
 	allowEdit?: boolean
 	slideFileId?: string
 	slideFullRelativePath?: string
-	onSlideDragStart?: (e: React.DragEvent, index: number) => void
-	onSlideDragOver?: (e: React.DragEvent, index: number) => void
-	onSlideDrop?: (e: React.DragEvent, index: number) => void
-	onSlideDragLeave?: (e: React.DragEvent) => void
+	slideDimensions?: {
+		width: number
+		height: number
+	}
+	onSlideDragStart?: (e: React.DragEvent, slideId: string) => void
 }

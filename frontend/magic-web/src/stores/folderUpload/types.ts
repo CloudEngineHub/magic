@@ -1,4 +1,5 @@
 import { UploadSource } from "@/pages/superMagic/components/MessageEditor/hooks/useFileUpload"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 export interface FolderUploadFile {
 	file: File
@@ -82,6 +83,8 @@ export interface FolderUploadState {
 
 export interface FolderUploadOptions {
 	projectId: string
+	/** 文件上传凭证所属的特殊空间。 */
+	fileScope?: FileScope
 	workspaceId?: string // 工作区ID，只有在超级麦吉环境下才有
 	topicId?: string
 	taskId?: string
@@ -230,6 +233,8 @@ export interface BatchSaveInfo {
 
 export interface TaskCallbacks {
 	onProgress?: (taskId: string, state: FolderUploadState) => void
+	/** 逐文件上传进度，progress 为 0-100。 */
+	onFileProgress?: (taskId: string, file: File, progress: number) => void
 	onComplete?: (taskId: string) => void
 	onError?: (taskId: string, error: Error) => void
 	onBatchUploadComplete?: (batchInfo: BatchUploadInfo) => void

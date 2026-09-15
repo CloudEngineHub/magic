@@ -1,11 +1,13 @@
-import { memo, useEffect, useRef } from "react"
+import { memo, useEffect, useMemo, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import MagicSpin from "@/components/base/MagicSpin"
 import EditorErrorBoundary from "./components/EditorErrorBoundary"
-import { SimpleEditor, SimpleEditorRef } from "@/components/tiptap-templates/simple/simple-editor"
+import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor"
+import type { SimpleEditorRef } from "@/components/tiptap-templates/simple/types"
 import { useProjectImageExtensions } from "@/components/tiptap-templates/simple/hooks"
 import { useCustomLinkNode } from "./hooks/useCustomLinkNode"
 import CodeSourceEditor from "./components/CodeSourceEditor"
+import { formatLongCurlDataRawForPreview } from "./components/CodeSourceEditor/preview-content"
 import { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
@@ -15,10 +17,23 @@ import {
 	type AttachmentFile,
 } from "../../utils"
 import { parseAnchorLink, scrollToAnchor } from "@/utils/slug"
-import { Editor } from "@tiptap/react"
+import { Editor } from "@/infrastructure/editors/tiptap/react"
+import type { ProjectImageUrlResolver } from "@/components/tiptap-node/project-image-node/project-image-node-extension"
+import { SafeHtmlDiv, SafeHtmlSpan, SafeHtmlTextBlockStyles } from "./extensions/safe-html-style"
+import { SafeVideo } from "./extensions/safe-video"
+import LargeMarkdownPreview from "./components/LargeMarkdownPreview"
+import { isLargeMarkdownContent } from "./largeMarkdown"
 
 interface EditorBodyProps {
 	isLoading: boolean
+	/** Keeps pure-share loading in the page-level overlay instead of rendering a second spinner. */
+	suppressLoadingIndicator?: boolean
+	/** Lets the markdown editor contribute its full height to the page scroll range. */
+	documentFlowFullscreen?: boolean
+	/** Cached file tabs pass their visibility down so global search is active only on the visible tab. */
+	isTabActive?: boolean
+	/** Disable interactive search for temporary offscreen export renders. */
+	enableSearch?: boolean
 	viewMode: "code" | "desktop" | "phone" | "markdown"
 	language?: string
 	content: string
@@ -29,9 +44,10 @@ interface EditorBodyProps {
 	setEditContent?: (content: string) => void
 	selectedProject?: ProjectListItem | null
 	currentDocumentPath?: string
-	urlResolver?: (relativePath: string) => string | Promise<string>
+	urlResolver?: ProjectImageUrlResolver
 	folderPath?: string
-	onImageUploadSuccess?: (relativePath: string) => void
+	onImageUploadSuccess?: (relativePath: string) => void | Promise<void>
+	onImageUploadError?: (error: Error) => void
 	editorRef?: React.RefObject<SimpleEditorRef>
 	placeholder?: string
 	attachments?: AttachmentFile[]
@@ -40,13 +56,19 @@ interface EditorBodyProps {
 	"data-testid"?: string
 	/**
 	 * Async callback to resolve or create the images folder before upload.
-	 * Should return the file_id of the images folder, or undefined to fall back to root.
+	 * Should return the file_id of the images folder. Recording callers can set
+	 * requireImagesFolderParentId to fail instead of falling back to the project root.
 	 */
 	resolveImagesFolderParentId?: (folderPath: string) => Promise<string | undefined>
+	requireImagesFolderParentId?: boolean
 }
 
 function EditorBody({
 	isLoading,
+	suppressLoadingIndicator = false,
+	documentFlowFullscreen = false,
+	isTabActive = true,
+	enableSearch = true,
 	viewMode,
 	language = "text",
 	content,
@@ -60,6 +82,7 @@ function EditorBody({
 	folderPath,
 	urlResolver,
 	onImageUploadSuccess,
+	onImageUploadError,
 	editorRef,
 	placeholder,
 	attachments,
@@ -67,6 +90,7 @@ function EditorBody({
 	onSave,
 	"data-testid": dataTestId,
 	resolveImagesFolderParentId,
+	requireImagesFolderParentId,
 }: EditorBodyProps) {
 	// Use project image extensions hook
 	const projectImageExtensions = useProjectImageExtensions({
@@ -75,7 +99,9 @@ function EditorBody({
 		folderPath,
 		urlResolver,
 		onSuccess: onImageUploadSuccess,
+		onError: onImageUploadError,
 		resolveImagesFolderParentId,
+		requireImagesFolderParentId,
 	})
 
 	// Handle link click: open external URLs in new tab, or open relative files in tab
@@ -148,14 +174,28 @@ function EditorBody({
 	})
 
 	const isMobile = useIsMobile()
+	const previewCodeContent = useMemo(() => {
+		// Edit mode normalizes once when Monaco mounts. Keeping editContent out of this
+		// dependency list prevents a full-document scan on every Monaco keystroke.
+		if (viewMode !== "code" || isEditMode) return content
+		return formatLongCurlDataRawForPreview(content)
+	}, [content, isEditMode, viewMode])
+	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(content), [content])
+	const shouldUseCodeSourceEditor = viewMode === "code" || (isLargeMarkdown && isEditMode)
 
 	// Combine all extensions
-	const allExtensions = [...projectImageExtensions, customLinkNode]
+	const allExtensions = [
+		...projectImageExtensions,
+		customLinkNode,
+		SafeHtmlDiv,
+		SafeHtmlSpan,
+		SafeHtmlTextBlockStyles,
+		SafeVideo,
+	]
 
 	// 创建内部的 editorRef（如果外部没有传入）
 	const internalEditorRef = useRef<SimpleEditorRef>(null)
 	const actualEditorRef = editorRef || internalEditorRef
-
 	// 当 isEditMode 为 true 且 editContent 变化时，手动更新编辑器内容
 	// 因为 SimpleEditor 在 isEditable=true 时不会自动响应 content prop 的变化
 	useEffect(() => {
@@ -189,39 +229,57 @@ function EditorBody({
 		<EditorErrorBoundary
 			fallbackMode="simple"
 			inputData={{
-				content,
-				processedContent,
+				contentLength: content.length,
+				processedContentLength: processedContent?.length ?? 0,
 				viewMode,
 				isLoading,
 				isEditMode,
-				editContent,
+				editContentLength: editContent?.length ?? 0,
 				language,
 				className,
 			}}
 		>
 			<div className={className} data-testid={dataTestId}>
 				{isLoading ? (
-					<div
-						style={{
-							display: "flex",
-							alignItems: "center",
-							justifyContent: "center",
-							minHeight: 120,
-						}}
-					>
-						<MagicSpin spinning />
-					</div>
-				) : viewMode === "code" ? (
+					suppressLoadingIndicator ? (
+						<div className="min-h-dvh" />
+					) : (
+						<div
+							style={{
+								display: "flex",
+								alignItems: "center",
+								justifyContent: "center",
+								minHeight: 120,
+							}}
+						>
+							<MagicSpin spinning />
+						</div>
+					)
+				) : shouldUseCodeSourceEditor ? (
 					<CodeSourceEditor
+						key={isEditMode ? "edit" : "preview"}
 						language={language}
 						isEditMode={isEditMode}
-						content={isEditMode ? editContent || content : content}
+						isLargeFile={isLargeMarkdown}
+						content={isEditMode ? editContent || content : previewCodeContent}
 						onChange={setEditContent}
+					/>
+				) : isLargeMarkdown ? (
+					<LargeMarkdownPreview
+						content={processedContent || content}
+						documentFlow={documentFlowFullscreen}
+						isTabActive={isTabActive}
+						enableSearch={enableSearch}
+						urlResolver={urlResolver}
+						onLinkClick={handleLinkClick}
 					/>
 				) : (
 					<SimpleEditor
 						ref={actualEditorRef}
 						content={isEditMode ? editContent || content : processedContent || content}
+						enableCodeBlockWrap
+						enableReadonlySearch={enableSearch}
+						isTabActive={isTabActive}
 						onUpdate={({ editor: _editor }) => {
 							const content =
 								(
@@ -232,6 +290,7 @@ function EditorBody({
 						additionalExtensions={allExtensions}
 						isEditable={isEditMode}
 						isMobile={isMobile || viewMode === "phone"}
+						documentFlow={documentFlowFullscreen}
 						placeholder={placeholder}
 						onSave={onSave}
 					/>

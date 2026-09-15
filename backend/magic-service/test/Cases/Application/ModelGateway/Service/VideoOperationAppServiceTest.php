@@ -16,8 +16,10 @@ use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Application\ModelGateway\Service\LLMAppService;
 use App\Application\ModelGateway\Service\Video\VideoInputMediaMetadataResolver;
 use App\Application\ModelGateway\Service\VideoOperationAppService;
+use App\Domain\File\Entity\ValueObject\FileDataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
 use App\Domain\ModelGateway\Contract\QueueOperationExecutorInterface;
 use App\Domain\ModelGateway\Contract\VideoMediaProbeInterface;
 use App\Domain\ModelGateway\Entity\AccessTokenEntity;
@@ -25,17 +27,23 @@ use App\Domain\ModelGateway\Entity\Dto\CreateVideoDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\AccessTokenType;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoMediaMetadata;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoOperationStatus;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\Domain\ModelGateway\Event\VideoGeneratedEvent;
+use App\Domain\ModelGateway\Event\VideoGenerateFailedEvent;
 use App\Domain\ModelGateway\Repository\QueueExecutorConfigRepositoryInterface;
 use App\Domain\ModelGateway\Repository\VideoQueueOperationRepositoryInterface;
 use App\Domain\ModelGateway\Service\QueueOperationExecutionDomainService;
 use App\Domain\ModelGateway\Service\VideoBillingDetailsResolver;
 use App\Domain\ModelGateway\Service\VideoGenerationConfigDomainService;
 use App\Domain\ModelGateway\Service\VideoQueueDomainService;
+use App\Domain\Operation\Event\OperationUsageFinishedEvent;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
+use App\ErrorCode\MagicApiErrorCode;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
 use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
 use App\Infrastructure\Core\DataIsolation\BaseThirdPlatformDataIsolationManager;
@@ -50,15 +58,23 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\CloudswayVeoVideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\CloudswayVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\CloudswayVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\DashScopeVideoAdapterRouter;
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\Wan27VideoAdapter;
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Capability\Wan27GenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\Wan30VideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Capability\Wan30GenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\DashScopeTransportInterface;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiOmni1FlashVideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiVideoAdapterRouter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Capability\GeminiOmniGenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportInterface;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Adapter\KelingOmniVideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Adapter\KelingVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Capability\KelingOmniGenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingTransportFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\KelingVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Transport\ApiKeyKelingTransport;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Adapter\MiniMaxH3VideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Capability\MiniMaxH3GenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\MiniMaxVideoClient;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Transport\ApiKeyMiniMaxTransport;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoGenerateFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoModel;
@@ -71,7 +87,6 @@ use Dtyq\CloudFile\Kernel\Struct\ChunkUploadFile;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\CloudFile\Kernel\Struct\FilePreSignedUrl;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Response;
 use Hyperf\Amqp\Message\ProducerMessageInterface;
@@ -415,8 +430,13 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame('running', $response->getStatus());
         $this->assertSame(0, $executor->queryCalls);
         $this->assertSame(VideoOperationStatus::FAILED, $operationRepository->operations['stale-without-provider-task']->getStatus());
+        $this->assertSame('EXECUTION_FAILED', $operationRepository->operations['stale-without-provider-task']->getErrorCode());
+        $this->assertSame(
+            VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
+            $operationRepository->operations['stale-without-provider-task']->getErrorMessage()
+        );
         $this->assertSame([$response->getId()], $operationRepository->activeSlots['org-test:user-test'] ?? null);
-        $this->assertCount(1, $this->eventDispatcher->events);
+        $this->assertCount(3, $this->eventDispatcher->events);
         $this->assertCount(1, $executor->submittedOperations);
     }
 
@@ -625,7 +645,7 @@ class VideoOperationAppServiceTest extends TestCase
         $operationRepository = new InMemoryVideoQueueOperationRepository();
         $executor = new RecordingQueueOperationExecutor(
             submitResult: 'unused',
-            submitThrowable: new ProviderVideoException('provider submit failed'),
+            submitThrowable: new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'provider submit failed'),
         );
         $service = $this->createVideoOperationAppService($operationRepository, $executor);
 
@@ -637,7 +657,33 @@ class VideoOperationAppServiceTest extends TestCase
             ]));
             $this->fail('Expected provider submit failure to bubble as a business exception.');
         } catch (BusinessException $exception) {
-            $this->assertSame('provider submit failed', $exception->getMessage());
+            $this->assertSame('视频生成失败，请检查输入内容或稍后重试。', $exception->getMessage());
+        }
+
+        $this->assertArrayNotHasKey('org-test:user-test', $operationRepository->activeSlots);
+    }
+
+    public function testEnqueueHidesUnknownSubmitExceptionMessage(): void
+    {
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $service = $this->createVideoOperationAppService(
+            $operationRepository,
+            new RecordingQueueOperationExecutor(
+                submitResult: 'unused',
+                submitThrowable: new RuntimeException('internal database password leaked'),
+            ),
+        );
+
+        try {
+            $service->enqueue('token-submit-internal-error', new CreateVideoDTO([
+                'model_id' => 'veo-3.1-fast-generate-preview',
+                'task' => 'generate',
+                'prompt' => 'make a video',
+            ]));
+            $this->fail('Expected unknown submit failure to bubble as a business exception.');
+        } catch (BusinessException $exception) {
+            $this->assertStringNotContainsString('database password', $exception->getMessage());
+            $this->assertSame(MagicApiErrorCode::ValidateFailed->value, $exception->getCode());
         }
 
         $this->assertArrayNotHasKey('org-test:user-test', $operationRepository->activeSlots);
@@ -648,7 +694,7 @@ class VideoOperationAppServiceTest extends TestCase
         $operationRepository = new InMemoryVideoQueueOperationRepository();
         $failingExecutor = new RecordingQueueOperationExecutor(
             submitResult: 'unused',
-            submitThrowable: new ProviderVideoException('provider submit failed'),
+            submitThrowable: new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'provider submit failed'),
         );
         $failingService = $this->createVideoOperationAppService(
             $operationRepository,
@@ -664,7 +710,7 @@ class VideoOperationAppServiceTest extends TestCase
             ]));
             $this->fail('Expected provider submit failure to bubble as a business exception.');
         } catch (BusinessException $exception) {
-            $this->assertSame('provider submit failed', $exception->getMessage());
+            $this->assertSame('视频生成失败，请检查输入内容或稍后重试。', $exception->getMessage());
         }
 
         $this->assertSame([], $operationRepository->organizationActiveSlots);
@@ -1102,6 +1148,7 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame(8, $event->getDurationSeconds());
         $this->assertSame('720p', $event->getResolution());
         $this->assertSame('1280x720', $event->getSize());
+        $this->assertNull($event->getGeneratedFileKey());
     }
 
     public function testEnqueueAndGetOperationDispatchesCloudswaySeedanceGeneratedEventWithDefaultBillingDetails(): void
@@ -1327,10 +1374,15 @@ class VideoOperationAppServiceTest extends TestCase
                         )
                     ),
                     new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($clientFactory)),
-                    new DashScopeVideoAdapterRouter(new Wan27VideoAdapter(
-                        new Wan27GenerationCapabilityProvider(),
+                    new DashScopeVideoAdapterRouter(new Wan30VideoAdapter(
+                        new Wan30GenerationCapabilityProvider(),
                         $this->createMock(DashScopeTransportInterface::class),
                     )),
+                    new MiniMaxH3VideoAdapter(
+                        new MiniMaxH3GenerationCapabilityProvider(),
+                        new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
+                    ),
+                    $this->createGeminiVideoAdapterRouter(),
                 ),
             ),
         );
@@ -1623,7 +1675,7 @@ class VideoOperationAppServiceTest extends TestCase
         $operation->setStartedAt(date(DATE_ATOM));
         $operation->setTopicId('topic-1');
         $operation->setTaskId('task-1');
-        $operation->setSourceId('design_video_generation');
+        $operation->setSourceId(SourceId::DESIGN_VIDEO_GENERATION);
         $operation->setProjectId(1001);
         $operation->setVideoId('video-1001');
         $operation->setRawRequest([
@@ -1709,7 +1761,7 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame('video-1001', $event->getBusinessParams()['video_id'] ?? null);
         $this->assertSame('topic-1', $event->getTopicId());
         $this->assertSame('task-1', $event->getTaskId());
-        $this->assertSame('design_video_generation', $event->getSourceId());
+        $this->assertSame(SourceId::DESIGN_VIDEO_GENERATION, $event->getSourceId());
 
         $secondResponse = $service->getOperation('token-2', 'op-2', ['organization_id' => 'org-test']);
         $this->assertSame('succeeded', $secondResponse->getStatus());
@@ -1898,6 +1950,125 @@ class VideoOperationAppServiceTest extends TestCase
         );
         $this->assertSame('org-test/open/' . $privateStorageHash . '/open/video-generation', $operationRepository->operations['op-3']->getFileDir());
         $this->assertSame('op-3.mp4', $operationRepository->operations['op-3']->getFileName());
+        $this->assertCount(1, $this->eventDispatcher->events);
+        $event = $this->eventDispatcher->events[0];
+        $this->assertInstanceOf(VideoGeneratedEvent::class, $event);
+        $this->assertSame(
+            'org-test/open/' . $privateStorageHash . '/open/video-generation/op-3.mp4',
+            $event->getGeneratedFileKey()
+        );
+    }
+
+    public function testGetOperationDownloadsProviderOutputVideoUrlToPrivateStorage(): void
+    {
+        $dataIsolation = $this->createDataIsolation();
+        $operation = $this->createOperation('op-output-url');
+        $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $operation->setProviderTaskId('provider-task-output-url');
+        $operation->setStartedAt(date(DATE_ATOM));
+
+        MockHttpsStreamWrapper::setBody('https://example.com/provider-output.mp4', 'downloaded-video-binary');
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $operationRepository->operations[$operation->getId()] = $operation;
+        $executionDomainService = new QueueOperationExecutionDomainService(
+            new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
+            new RecordingQueueOperationExecutor(
+                submitResult: 'unused',
+                queryResult: [
+                    'status' => 'succeeded',
+                    'output' => [
+                        'video_url' => 'https://example.com/provider-output.mp4',
+                    ],
+                ],
+            ),
+        );
+
+        $cloudFileRepository = new InMemoryCloudFileRepository();
+        $llmAppService = $this->createMock(LLMAppService::class);
+        $llmAppService->expects($this->once())
+            ->method('createModelGatewayDataIsolationByAccessToken')
+            ->with('token-output-url', ['organization_id' => 'org-test'])
+            ->willReturn($dataIsolation);
+        $service = new VideoOperationAppService(
+            $llmAppService,
+            new VideoQueueDomainService($operationRepository),
+            $executionDomainService,
+            $this->createMock(PointComponentInterface::class),
+            $this->createMock(ModelGatewayMapper::class),
+            $this->createVideoGenerationConfigDomainService(),
+            new FileDomainService($cloudFileRepository),
+            $this->createVideoBillingDetailsResolver(),
+            $this->createFallbackProbe(),
+            $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
+        );
+
+        $response = $service->getOperation('token-output-url', $operation->getId(), ['organization_id' => 'org-test']);
+
+        $privateStorageHash = md5(StorageBucketType::Private->value);
+        $this->assertSame('succeeded', $response->getStatus());
+        $this->assertSame(
+            'https://cdn.example.com/org-test/open/' . $privateStorageHash . '/open/video-generation/op-output-url.mp4',
+            $response->getOutput()['video_url']
+        );
+        $this->assertCount(1, $cloudFileRepository->uploadRecords);
+        $this->assertSame('video/mp4', $cloudFileRepository->uploadRecords[0]['content_type']);
+        $this->assertSame(
+            'org-test/open/' . $privateStorageHash . '/open/video-generation/op-output-url.mp4',
+            $cloudFileRepository->uploadRecords[0]['file_key']
+        );
+    }
+
+    public function testGetOperationMarksUnsafeProviderOutputVideoUrlAsDownloadFailure(): void
+    {
+        $dataIsolation = $this->createDataIsolation();
+        $operation = $this->createOperation('op-output-url-unsafe');
+        $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $operation->setProviderTaskId('provider-task-output-url-unsafe');
+        $operation->setStartedAt(date(DATE_ATOM));
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $operationRepository->operations[$operation->getId()] = $operation;
+        $executionDomainService = new QueueOperationExecutionDomainService(
+            new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
+            new RecordingQueueOperationExecutor(
+                submitResult: 'unused',
+                queryResult: [
+                    'status' => 'succeeded',
+                    'output' => [
+                        'video_url' => 'file:///etc/passwd',
+                    ],
+                ],
+            ),
+        );
+
+        $llmAppService = $this->createMock(LLMAppService::class);
+        $llmAppService->expects($this->once())
+            ->method('createModelGatewayDataIsolationByAccessToken')
+            ->with('token-output-url-unsafe', ['organization_id' => 'org-test'])
+            ->willReturn($dataIsolation);
+        $service = new VideoOperationAppService(
+            $llmAppService,
+            new VideoQueueDomainService($operationRepository),
+            $executionDomainService,
+            $this->createMock(PointComponentInterface::class),
+            $this->createMock(ModelGatewayMapper::class),
+            $this->createVideoGenerationConfigDomainService(),
+            new FileDomainService(new InMemoryCloudFileRepository()),
+            $this->createVideoBillingDetailsResolver(),
+            $this->createFallbackProbe(),
+            $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
+        );
+
+        $response = $service->getOperation('token-output-url-unsafe', $operation->getId(), ['organization_id' => 'org-test']);
+
+        $this->assertSame('failed', $response->getStatus());
+        $this->assertSame((string) VideoGenerateErrorCode::GENERAL_ERROR->value, $operation->getErrorCode());
+        $this->assertStringNotContainsString('file:///etc/passwd', (string) $operation->getErrorMessage());
     }
 
     public function testGetOperationResignsStoredPrivateVideoUrlForSucceededOperation(): void
@@ -1989,7 +2160,7 @@ class VideoOperationAppServiceTest extends TestCase
                 new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
                 new RecordingQueueOperationExecutor(
                     submitResult: 'unused',
-                    submitThrowable: new ProviderVideoException('provider says duration_seconds=9 is invalid'),
+                    submitThrowable: new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'provider says duration_seconds=9 is invalid'),
                 ),
             ),
             $pointComponent,
@@ -2032,7 +2203,7 @@ class VideoOperationAppServiceTest extends TestCase
                 new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
                 new RecordingQueueOperationExecutor(
                     submitResult: 'unused',
-                    queryThrowable: new ProviderVideoException('provider says operationName is invalid'),
+                    queryThrowable: new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'provider says operationName is invalid'),
                 ),
             ),
             $this->createMock(PointComponentInterface::class),
@@ -2049,11 +2220,132 @@ class VideoOperationAppServiceTest extends TestCase
         $response = $service->getOperation('token-provider-query-error', $operation->getId(), ['organization_id' => 'org-test']);
 
         $this->assertSame('failed', $response->getStatus());
-        $this->assertSame('provider says operationName is invalid', $response->getError()?->getMessage());
+        $this->assertSame('视频生成失败，请检查输入内容或稍后重试。', $response->getError()?->getMessage());
         $this->assertSame(VideoOperationStatus::FAILED, $operationRepository->operations[$operation->getId()]->getStatus());
     }
 
-    public function testManagedPollKeepsOperationRunningWhenProviderQueryThrows(): void
+    public function testGetOperationKeepsOperationRunningWhenProviderQueryIsRetriable(): void
+    {
+        $dataIsolation = $this->createDataIsolation();
+        $operation = $this->createOperation('op-provider-query-retry-get');
+        $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $operation->setProviderTaskId('provider-task-retry-get');
+        $operation->setStartedAt(date(DATE_ATOM));
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $operationRepository->operations[$operation->getId()] = $operation;
+
+        $llmAppService = $this->createMock(LLMAppService::class);
+        $llmAppService->expects($this->once())
+            ->method('createModelGatewayDataIsolationByAccessToken')
+            ->with('token-provider-query-retry', ['organization_id' => 'org-test'])
+            ->willReturn($dataIsolation);
+
+        $service = new VideoOperationAppService(
+            $llmAppService,
+            new VideoQueueDomainService($operationRepository),
+            new QueueOperationExecutionDomainService(
+                new FixedQueueExecutorConfigRepository(new QueueExecutorConfig('https://localhost', 'secret', 3, 20)),
+                new RecordingQueueOperationExecutor(
+                    submitResult: 'unused',
+                    queryThrowable: new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'temporary provider query error'),
+                ),
+            ),
+            $this->createMock(PointComponentInterface::class),
+            $this->createMock(ModelGatewayMapper::class),
+            $this->createVideoGenerationConfigDomainService(),
+            new FileDomainService(new InMemoryCloudFileRepository()),
+            $this->createVideoBillingDetailsResolver(),
+            $this->createFallbackProbe(),
+            $this->createVideoInputMediaMetadataResolver(),
+            new RecordingProducer(),
+            $this->createNoopLocker(),
+        );
+
+        $this->expectException(ProviderVideoException::class);
+        $this->expectExceptionMessage('temporary provider query error');
+
+        try {
+            $service->getOperation('token-provider-query-retry', $operation->getId(), ['organization_id' => 'org-test']);
+        } finally {
+            $this->assertSame(VideoOperationStatus::PROVIDER_RUNNING, $operationRepository->operations[$operation->getId()]->getStatus());
+        }
+    }
+
+    public function testManagedPollMarksOperationFailedWhenProviderQueryIsNonRetriable(): void
+    {
+        $operation = $this->createOperation('op-provider-query-final');
+        $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $operation->setProviderTaskId('provider-task-final');
+        $operation->setStartedAt(date(DATE_ATOM));
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $operationRepository->operations[$operation->getId()] = $operation;
+        $service = $this->createVideoOperationAppService(
+            $operationRepository,
+            new RecordingQueueOperationExecutor(
+                submitResult: 'unused',
+                queryThrowable: new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'provider task id is invalid'),
+            ),
+        );
+
+        $isDone = $service->pollOperationById($operation->getId(), ['organization_id' => 'org-test']);
+
+        $this->assertTrue($isDone);
+        $this->assertSame(VideoOperationStatus::FAILED, $operationRepository->operations[$operation->getId()]->getStatus());
+        $this->assertSame('provider task id is invalid', $operationRepository->operations[$operation->getId()]->getErrorMessage());
+        $this->assertSame([], $operationRepository->activeSlots['org-test:user-test'] ?? []);
+        $this->assertCount(2, $this->eventDispatcher->events);
+    }
+
+    public function testManagedPollDispatchesFailedEventWhenProviderReturnsFailedStatus(): void
+    {
+        $operation = $this->createOperation('op-provider-failed-status');
+        $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $operation->setProviderTaskId('provider-task-failed-status');
+        $operation->setStartedAt(date(DATE_ATOM));
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $operationRepository->operations[$operation->getId()] = $operation;
+        $service = $this->createVideoOperationAppService(
+            $operationRepository,
+            new RecordingQueueOperationExecutor(
+                submitResult: 'unused',
+                queryResult: [
+                    'status' => 'failed',
+                    'error' => [
+                        'code' => 'InvalidParameter.TaskTypeConstraint',
+                        'message' => 'provider rejected the video task',
+                    ],
+                    'provider_result' => [
+                        'status' => 'failed',
+                    ],
+                ],
+            ),
+        );
+
+        $this->assertTrue($service->pollOperationById($operation->getId()));
+        $this->assertSame(VideoOperationStatus::FAILED, $operationRepository->operations[$operation->getId()]->getStatus());
+        $this->assertCount(2, $this->eventDispatcher->events);
+
+        $failedEvents = array_values(array_filter(
+            $this->eventDispatcher->events,
+            static fn (object $event): bool => $event instanceof VideoGenerateFailedEvent,
+        ));
+        $this->assertCount(1, $failedEvents);
+
+        $usageFinishedEvents = array_values(array_filter(
+            $this->eventDispatcher->events,
+            static fn (object $event): bool => $event instanceof OperationUsageFinishedEvent,
+        ));
+        $this->assertCount(1, $usageFinishedEvents);
+        $this->assertTrue($usageFinishedEvents[0]->isFailed());
+        $this->assertSame('provider rejected the video task', $usageFinishedEvents[0]->getFailureReason());
+        $this->assertInstanceOf(VideoGenerateFailedEvent::class, $this->eventDispatcher->events[0]);
+        $this->assertInstanceOf(OperationUsageFinishedEvent::class, $this->eventDispatcher->events[1]);
+    }
+
+    public function testManagedPollKeepsOperationRunningWhenProviderQueryIsRetriable(): void
     {
         $operation = $this->createOperation('op-provider-query-retry');
         $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
@@ -2066,7 +2358,7 @@ class VideoOperationAppServiceTest extends TestCase
             $operationRepository,
             new RecordingQueueOperationExecutor(
                 submitResult: 'unused',
-                queryThrowable: new ProviderVideoException('temporary provider query error'),
+                queryThrowable: new ProviderVideoException(VideoGenerateErrorCode::GENERAL_ERROR, 'temporary provider query error'),
             ),
         );
 
@@ -2078,6 +2370,43 @@ class VideoOperationAppServiceTest extends TestCase
         } finally {
             $this->assertSame(VideoOperationStatus::PROVIDER_RUNNING, $operationRepository->operations[$operation->getId()]->getStatus());
         }
+    }
+
+    public function testManagedPollUsesBusinessTokenTypeForApiPlatformSource(): void
+    {
+        $operation = $this->createOperation('op-managed-api-platform-source');
+        $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $operation->setProviderTaskId('provider-task-api-platform-source');
+        $operation->setStartedAt(date(DATE_ATOM));
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $operationRepository->operations[$operation->getId()] = $operation;
+        $service = $this->createVideoOperationAppService(
+            $operationRepository,
+            new RecordingQueueOperationExecutor(
+                submitResult: 'unused',
+                queryResult: [
+                    'status' => 'succeeded',
+                    'output' => [
+                        'video_url' => 'https://example.com/api-platform-source.mp4',
+                    ],
+                ],
+            ),
+        );
+
+        $isDone = $service->pollOperationById($operation->getId(), [
+            'organization_id' => 'org-test',
+            'access_token_type' => AccessTokenType::User->value,
+        ]);
+
+        $this->assertTrue($isDone);
+        $videoGeneratedEvents = array_values(array_filter(
+            $this->eventDispatcher->events,
+            static fn (object $event): bool => $event instanceof VideoGeneratedEvent
+        ));
+        $this->assertCount(1, $videoGeneratedEvents);
+        $event = $videoGeneratedEvents[0];
+        $this->assertSame(ImageGenerateSourceEnum::API_PLATFORM, $event->getSourceType());
     }
 
     public function testGetOperationRejectsFullProviderTaskIdFallbackWhenStoredOperationIsMissing(): void
@@ -2307,11 +2636,26 @@ class VideoOperationAppServiceTest extends TestCase
                     )
                 ),
                 new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($this->createMock(ClientFactory::class))),
-                new DashScopeVideoAdapterRouter(new Wan27VideoAdapter(
-                    new Wan27GenerationCapabilityProvider(),
+                new DashScopeVideoAdapterRouter(new Wan30VideoAdapter(
+                    new Wan30GenerationCapabilityProvider(),
                     $this->createMock(DashScopeTransportInterface::class),
                 )),
+                new MiniMaxH3VideoAdapter(
+                    new MiniMaxH3GenerationCapabilityProvider(),
+                    new ApiKeyMiniMaxTransport(new MiniMaxVideoClient($this->createMock(ClientFactory::class))),
+                ),
+                $this->createGeminiVideoAdapterRouter(),
             )
+        );
+    }
+
+    private function createGeminiVideoAdapterRouter(): GeminiVideoAdapterRouter
+    {
+        return new GeminiVideoAdapterRouter(
+            new GeminiOmni1FlashVideoAdapter(
+                new GeminiOmniGenerationCapabilityProvider(),
+                $this->createMock(GeminiTransportInterface::class),
+            ),
         );
     }
 }
@@ -2615,7 +2959,7 @@ final class InMemoryCloudFileRepository implements CloudFileRepositoryInterface
     {
     }
 
-    public function getSimpleUploadTemporaryCredential(string $organizationCode, StorageBucketType $storage = StorageBucketType::Private, bool $autoDir = true, ?string $contentType = null, bool $sts = false): array
+    public function getSimpleUploadTemporaryCredential(FileDataIsolation $dataIsolation, StorageBucketType $storage = StorageBucketType::Private, bool $autoDir = true, ?string $contentType = null, bool $sts = false): array
     {
         return [];
     }
@@ -2701,6 +3045,25 @@ final class InMemoryCloudFileRepository implements CloudFileRepositoryInterface
     public function getPreSignedUrlByCredential(string $organizationCode, string $objectKey, StorageBucketType $bucketType = StorageBucketType::Private, array $options = []): string
     {
         return 'https://cdn.example.com/' . ltrim($objectKey, '/');
+    }
+
+    public function getPreSignedUrlsByCredential(
+        string $organizationCode,
+        array $items,
+        StorageBucketType $bucketType = StorageBucketType::Private,
+        int $credentialExpires = 7200,
+        array $options = []
+    ): array {
+        $urls = [];
+        foreach ($items as $item) {
+            $objectKey = is_array($item) ? (string) ($item['object_key'] ?? '') : (string) $item;
+            if ($objectKey === '') {
+                continue;
+            }
+            $urls[$objectKey] = $this->getPreSignedUrlByCredential($organizationCode, $objectKey, $bucketType, $options);
+        }
+
+        return $urls;
     }
 
     public function deleteObjectsByCredential(string $prefix, string $organizationCode, array $objectKeys, StorageBucketType $bucketType = StorageBucketType::Private, array $options = []): array

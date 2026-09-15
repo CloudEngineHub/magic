@@ -32,12 +32,19 @@ return [
     'temperature_value_range_error' => 'nilai temperature mestilah dalam julat 0-2',
     'ai_ability_not_found' => 'Keupayaan AI tidak dijumpai',
     'ai_ability_disabled' => 'Keupayaan AI tidak diaktifkan',
+    'ai_ability_model_unavailable' => 'Model keupayaan AI tidak tersedia',
     'config_disabled' => 'Konfigurasi penyedia perkhidmatan dilumpuhkan',
     'config_not_found' => 'Konfigurasi penyedia perkhidmatan tidak dijumpai',
     'config_load_failed' => 'Pemuatan konfigurasi gagal',
     'connectivity_test_prompt' => 'Menjadikan imej kucing',
     'connectivity_not_supported' => 'Ujian sambungan tidak disokong untuk jenis model ini.',
+    'multimodal_connectivity_test_failed_after_text_success' => 'Ujian sambungan biasa berjaya, tetapi ujian sambungan multimodal gagal: :reason',
     'dynamic_model_config_invalid' => 'Konfigurasi model dinamik tidak sah',
     'dynamic_model_sub_models_empty' => 'Senarai sub-model model dinamik kosong',
     'insufficient_permission_for_model' => 'Langganan semasa tidak menyokong model pintar ini',
+    'provider' => [
+        'support_multi_modal' => [
+            'boolean' => 'Penanda sokongan multimodal mestilah nilai boolean',
+        ],
+    ],
 ];

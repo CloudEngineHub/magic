@@ -26,6 +26,7 @@ return [
         ],
         'limit_exceeded' => 'Đã đạt giới hạn Agent (:limit), không thể tạo thêm',
         'builtin_not_allowed' => 'Thao tác này không được hỗ trợ cho Agent có sẵn',
+        'agent_not_available' => 'Bạn không có quyền sử dụng agent này',
         // Migrated from crew.php
         'validate_failed' => 'Xác thực thất bại',
         'not_found' => 'Không tìm thấy Crew',

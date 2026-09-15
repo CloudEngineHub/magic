@@ -64,11 +64,9 @@ return [
         'query' => 'Query',
         'edit' => 'Edit',
     ],
-    // Top-level generic keys for PermissionErrorCode
     'validate_failed' => 'Validation failed',
     'business_exception' => 'Business exception',
     'access_denied' => 'Access denied',
-    // Organization related
     'organization_code_required' => 'Organization code is required',
     'organization_name_required' => 'Organization name is required',
     'organization_industry_type_required' => 'Organization industry type is required',
@@ -132,5 +130,10 @@ return [
         'visibility_config_invalid' => 'Visibility configuration is invalid',
         'only_organization_admin_can_configure_visibility' => 'Only organization admin can configure visibility',
         'visibility_type_2_requires_users_or_departments' => 'When visibility type is 2 (partial visibility), at least one user or department must be specified',
+        'user_not_in_organization' => 'User is not in the organization',
+        'user_not_organization_admin' => 'User not organization admin: :userId',
     ],
+    'generic_error' => 'Permission error',
+    'invalid_is_display' => 'Invalid value',
+    'invalid_status' => 'Invalid value',
 ];

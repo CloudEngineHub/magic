@@ -88,7 +88,9 @@ async def test_run_python_snippet_injects_project_root_env(tmp_path):
 
     assert result.ok is True
     assert mock_execute.await_args.kwargs["cwd"] == workspace
-    assert mock_execute.await_args.kwargs["extra_env"]["SUPER_MAGIC_PROJECT_ROOT"] == str(project_root)
+    extra_env = mock_execute.await_args.kwargs["extra_env"]
+    assert extra_env["SUPER_MAGIC_PROJECT_ROOT"] == str(project_root)
+    assert extra_env["SUPER_MAGIC_SDK_EXECUTION_ID"] == ""
 
 
 @pytest.mark.asyncio

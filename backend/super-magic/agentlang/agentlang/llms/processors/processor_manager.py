@@ -59,6 +59,11 @@ class ProcessorManager:
         from agentlang.event import get_correlation_manager, EventPairType
         correlation_manager = get_correlation_manager()
         correlation_scope_id = getattr(agent_context, "context_id", None)
+        uses_v2_message_protocol = bool(
+            agent_context
+            and agent_context.get_message_version() == "v2"
+            and enable_llm_response_events
+        )
         active_correlation_id = correlation_manager.get_active_correlation_id(
             EventPairType.AGENT_REPLY,
             correlation_scope_id,
@@ -71,10 +76,9 @@ class ProcessorManager:
             # 标记本次调用进入流式阶段（用于 cancel blocker 管理）
             if agent_context:
                 agent_context.set_metadata("_llm_call_entered_stream_phase", True)
-            # 保存流式 request_id 到 CorrelationIdManager，供降级非流式时恢复 correlation_id 一致性：
-            # V2 流式 chunk 以 request_id 作为 correlation_id 推送给前端，
-            # 若流式中断降级非流式，非流式的最终消息也应携带相同的 correlation_id
-            correlation_manager.set_stream_fallback_cid(request_id)
+            # 仅 V2 需要保存流式 request_id，供失败降级时生成同身份权威消息。
+            if uses_v2_message_protocol:
+                correlation_manager.set_stream_fallback_cid(request_id, correlation_scope_id)
 
             # 流式调用，异常直接抛出，不做任何重试/fallback 决策
             response = await StreamingCallProcessor.call_with_stream(
@@ -88,8 +92,9 @@ class ProcessorManager:
                 correlation_id=correlation_id,
                 enable_llm_response_events=enable_llm_response_events,
             )
-            # 流式成功，清除 fallback 标记，避免影响后续独立的非流式调用
-            correlation_manager.set_stream_fallback_cid(None)
+            # 流式成功后仅清除当前上下文的 fallback 标记。
+            if uses_v2_message_protocol:
+                correlation_manager.set_stream_fallback_cid(None, correlation_scope_id)
             return response
         else:
             # 非流式调用

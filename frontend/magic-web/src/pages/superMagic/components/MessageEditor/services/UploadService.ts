@@ -1,10 +1,12 @@
 import { Upload, type UploadConfig, type UploadCallBack } from "@dtyq/upload-sdk"
+import { SuperMagicApi } from "@/apis"
 import { RequestMethod as OpenSourceRequestMethod } from "@/apis/constant"
 import { userStore } from "@/models/user"
-import { env, isCommercial } from "@/utils/env"
+import { env } from "@/utils/env"
 import { genRequestUrl } from "@/utils/http"
 import { logger as Logger } from "@/utils/log"
 import { groupBy } from "lodash-es"
+import { normalizeUploadProgress } from "../utils/uploadProgress"
 
 export interface UploadResponse {
 	key: string
@@ -17,16 +19,22 @@ export interface UploadResult {
 	rejected: PromiseRejectedResult[]
 }
 
+export type UploadAttemptId = symbol
+
 export interface UploadServiceOptions<F> {
 	storageType?: "private" | "public"
 	sts?: boolean
 	url?: string
 	body?: Record<string, unknown>
 	onBeforeUpload?: () => void
-	onProgress?: (file: F, progress: number) => void
-	onSuccess?: (file: F, response: UploadResponse) => void
-	onFail?: (file: F, error?: unknown) => void
-	onInit?: (file: F, tools: Pick<UploadCallBack, "cancel" | "pause" | "resume">) => void
+	onProgress?: (file: F, progress: number, attemptId: UploadAttemptId) => void
+	onSuccess?: (file: F, response: UploadResponse, attemptId: UploadAttemptId) => void
+	onFail?: (file: F, error: unknown, attemptId: UploadAttemptId) => void
+	onInit?: (
+		file: F,
+		tools: Pick<UploadCallBack, "cancel" | "pause" | "resume">,
+		attemptId: UploadAttemptId,
+	) => void
 	rewriteFileName?: boolean
 	onUploadStateChange?: (isUploading: boolean) => void
 }
@@ -48,13 +56,7 @@ const logger = Logger.createLogger("MessageEditorUploadService")
 
 function resolveUploadUrl(url: string | undefined, organizationCode: string | undefined) {
 	const baseUrl =
-		url ??
-		env("MAGIC_SERVICE_BASE_URL") +
-		genRequestUrl(
-			isCommercial()
-				? "/api/v1/file/temporary-credential"
-				: "/api/v1/file/temporary-credential",
-		)
+		url ?? env("MAGIC_SERVICE_BASE_URL") + genRequestUrl("/api/v1/file/temporary-credential")
 
 	if (!organizationCode) return baseUrl
 	const separator = baseUrl.includes("?") ? "&" : "?"
@@ -89,18 +91,70 @@ export class UploadService<F extends UploadFileLike> {
 		onBeforeUpload?.()
 		onUploadStateChange?.(true)
 
+		let snowflakeIds: string[] = []
+		try {
+			const response = await SuperMagicApi.getSnowflakeIds({
+				count: fileList.length,
+			})
+			snowflakeIds = response.ids ?? []
+		} catch (error) {
+			onUploadStateChange?.(false)
+			logger.error({
+				eventKey: "upload_snowflake_ids_failed",
+				errorKind: "unknown",
+				error,
+				message: "failed to get snowflake ids",
+			})
+			fileList.forEach((fileData) => {
+				if (fileData.status === "done" && fileData.result) return
+				const attemptId: UploadAttemptId = Symbol(fileData.name)
+				onInit?.(fileData, {}, attemptId)
+				onFail?.(fileData, error, attemptId)
+			})
+			return {
+				fullfilled: [],
+				rejected: fileList
+					.filter((fileData) => !(fileData.status === "done" && fileData.result))
+					.map((fileData) => ({
+						status: "rejected" as const,
+						reason: {
+							uploadFile: fileData,
+							message: error instanceof Error ? error.message : String(error),
+						},
+					})),
+			}
+		}
+
 		const promises = fileList.map(
-			(fileData) =>
+			(fileData, fileIndex) =>
 				new Promise<UploadResponse>((resolve, reject) => {
-					const fileName = fileData.name
+					const attemptId: UploadAttemptId = Symbol(fileData.name)
+					const originalFileName = fileData.name
+					const uploadFileName = snowflakeIds[fileIndex]
 					if (fileData.status === "done" && fileData.result) {
 						resolve(fileData.result)
 						return
 					}
 
+					if (!uploadFileName) {
+						const error = new Error("upload missing snowflake id")
+						onInit?.(fileData, {}, attemptId)
+						onFail?.(fileData, error, attemptId)
+						reject({
+							message: error.message,
+							uploadFile: fileData,
+						})
+						return
+					}
+
 					const { organizationCode, authorization } = userStore.user
 					if (!fileData.file) {
-						logger.error("upload missing file body", { fileName })
+						logger.error({
+							eventKey: "upload_missing_file_body_failed",
+							errorKind: "invalid_state",
+							message: "upload missing file body",
+							context: { fileIndex, fileName: originalFileName },
+						})
 						reject(new Error("file is required"))
 						return
 					}
@@ -115,7 +169,7 @@ export class UploadService<F extends UploadFileLike> {
 						{
 							url: uploadUrl,
 							file,
-							fileName,
+							fileName: uploadFileName,
 							method: OpenSourceRequestMethod.POST,
 							headers: {
 								"Content-Type": "application/json",
@@ -139,11 +193,11 @@ export class UploadService<F extends UploadFileLike> {
 
 					const wrappedCancel = () => {
 						cancel?.()
-						logger.warn("upload cancelled", { fileName })
+						logger.warn("upload cancelled", { fileName: originalFileName })
 						reject(new Error("Upload cancelled"))
 					}
 
-					onInit?.(fileData, { cancel: wrappedCancel, pause, resume })
+					onInit?.(fileData, { cancel: wrappedCancel, pause, resume }, attemptId)
 
 					success?.((res) => {
 						if (!res) {
@@ -152,20 +206,22 @@ export class UploadService<F extends UploadFileLike> {
 						}
 						const response = {
 							key: res.data.path,
-							name: fileName,
+							name: originalFileName,
 							size: fileData.file?.size ?? 0,
 						}
-						onSuccess?.(fileData, response)
+						onSuccess?.(fileData, response, attemptId)
 						resolve(response)
 					})
 
 					fail?.((err) => {
-						logger.error("upload failed", {
-							fileName,
-							fileSize: fileData.file?.size,
-							message: err?.message,
+						logger.error({
+							eventKey: "upload_failed",
+							errorKind: "unknown",
+							error: err,
+							message: "upload failed",
+							context: { fileSize: fileData.file?.size, fileName: originalFileName },
 						})
-						onFail?.(fileData, err)
+						onFail?.(fileData, err, attemptId)
 						reject({
 							...err,
 							uploadFile: fileData,
@@ -173,7 +229,10 @@ export class UploadService<F extends UploadFileLike> {
 					})
 
 					progress?.((percent) => {
-						if (percent) onProgress?.(fileData, percent)
+						const normalizedProgress = normalizeUploadProgress(percent)
+						if (normalizedProgress !== undefined) {
+							onProgress?.(fileData, normalizedProgress, attemptId)
+						}
 					})
 				}),
 		)
@@ -186,16 +245,22 @@ export class UploadService<F extends UploadFileLike> {
 			onUploadStateChange?.(false)
 
 			if (rejectedData.length > 0) {
-				logger.error("batch upload finished with rejections", {
-					count: rejectedData.length,
-					files: rejectedData
-						.map((r) => {
-							const reason = (r as PromiseRejectedResult).reason as
-								| { uploadFile?: { name?: string } }
-								| undefined
-							return reason?.uploadFile?.name
-						})
-						.filter(Boolean),
+				logger.error({
+					eventKey: "batch_upload_finished_rejections_failed",
+					errorKind: "unknown",
+					error: rejectedData[0]?.reason,
+					message: "batch upload finished with rejections",
+					// 文件名和 rejection 明细可能含业务数据，仅保留失败数量。
+					context: {
+						count: rejectedData.length,
+						files: rejectedData
+							.map((r) => {
+								const reason = (r as PromiseRejectedResult).reason as
+									{ uploadFile?: { name?: string } } | undefined
+								return reason?.uploadFile?.name
+							})
+							.filter(Boolean),
+					},
 				})
 			}
 

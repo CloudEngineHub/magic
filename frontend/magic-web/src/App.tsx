@@ -6,6 +6,7 @@ import GlobalErrorBoundary from "@/components/fallback/GlobalErrorBoundary"
 import LoadingFallback from "@/components/fallback/LoadingFallback"
 import AppearanceProvider from "./providers/AppearanceProvider"
 import MaintenanceGuard from "@/components/global/MaintenanceGuard"
+import MagicToaster from "./components/base/MagicToaster"
 
 function App() {
 	return (
@@ -17,6 +18,7 @@ function App() {
 							<BrowserRouter>
 								<MaintenanceGuard />
 								<AppRoutes />
+								<MagicToaster />
 							</BrowserRouter>
 						</ClusterProvider>
 					</GlobalErrorBoundary>

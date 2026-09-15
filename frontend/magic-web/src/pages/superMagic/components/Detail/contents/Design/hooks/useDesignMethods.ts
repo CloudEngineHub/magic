@@ -9,6 +9,11 @@ import type {
 	IdentifyImageMarkRequest,
 	RemoveBackgroundRequest,
 } from "@/components/CanvasDesign/public/magic-types"
+import type { CanvasFileElement } from "@/components/CanvasDesign/runtime/document/types"
+import type {
+	CanvasResourceReferenceResolverSnapshot,
+	ResolveCanvasResourceReference,
+} from "@/components/CanvasDesign/public/resource-reference"
 import type { GenerateHightImageResponse as ApiGenerateHightImageResponse } from "@/apis/modules/superMagic"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
@@ -25,31 +30,26 @@ import {
 	useHighImageGeneration,
 	toCanvasGenerateHightImageResponse,
 } from "./useHighImageGeneration"
-import { useDesignFileCopy } from "./useDesignFileCopy"
+import { useDesignFileDropPaths } from "./useDesignFileDropPaths"
 import { resolveDesignImagesFileDirWithSlash } from "./resolveDesignImagesFileDirWithSlash"
 import { resolveDesignProjectBasePathFromAttachments } from "../utils/utils"
-import {
-	isCurrentCanvasResourcePath,
-	isLegacyBareDesignResourcePath,
-	isRelativeDesignPath,
-	resolveDesignPathForOperation,
-	toDesignDslPath,
-	toDesignApiPath,
-	toWorkspaceAbsoluteApiPath,
-	toWorkspaceAbsoluteApiPathForOperation,
-	toWorkspaceRelativeCandidates,
-	toWorkspaceRelativePath,
-} from "../utils/designPath"
 import {
 	buildReferenceImageOptions,
 	getReferenceImageCrop,
 } from "@/components/CanvasDesign/runtime/resources/image/imageCropUtils"
+import { resolveCanvasStorageResourceReference } from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import { clipboard } from "@/utils/clipboard-helpers"
 import type { UseDesignDownloadPolicyResult } from "./useDesignDownloadPolicy"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { getPreviewFileUrlWatermarkSignature } from "@/utils/aiWatermarkPreviewFileUrlMode"
+import {
+	buildDesignResourceReferenceResolverRevision,
+	resolveDesignResourceReference,
+} from "../utils/designResourceReferenceResolver"
 
 interface UseDesignMethodsOptions {
+	/** 将元素投影到当前 Canvas 会话的 effective Content（只读预览时不写回文档） */
+	getContentViewElement?: (element: CanvasFileElement) => CanvasFileElement
 	projectId?: string
 	designProjectId?: string
 	selectedTopic?: Topic | null
@@ -90,10 +90,11 @@ interface UseDesignMethodsOptions {
  * - 使用 useFileInfoProvider 提供文件信息获取功能
  * - 使用 useCanvasStorage 提供本地存储功能
  * - 使用 useConversationAndDownload 提供添加到对话和下载图片功能
- * - 使用 useDesignFileCopy 提供拖拽资源复制到 images / videos 目录
+ * - 使用 useDesignFileDropPaths 将项目文件拖拽路径转换为画布存储路径
  */
 export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesignMethods {
 	const {
+		getContentViewElement,
 		projectId,
 		designProjectId,
 		selectedTopic,
@@ -164,6 +165,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	const { getVideoModelList, generateVideo, estimateVideoPoints, getVideoGenerationResult } =
 		useVideoGeneration({
 			projectId,
+			topicId: selectedTopic?.id,
 			currentFile,
 			flatAttachments,
 			designProjectBasePath,
@@ -184,13 +186,12 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 
 	const { getStorage, saveStorage, getRootStorage, saveRootStorage } = useCanvasStorage({
 		designProjectId,
-		designProjectBasePath,
-		flatAttachments,
-		attachmentIndex,
 	})
 
 	const { addToConversation, downloadFiles } = useConversationAndDownload({
+		getContentViewElement,
 		flatAttachments,
+		attachmentsReady,
 		attachmentIndex,
 		designProjectBasePath,
 		onAddFilesToMessageEditor,
@@ -211,77 +212,85 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		flatAttachments,
 	})
 
+	const getAiAbilityAvailability: NonNullable<CanvasDesignMethods["getAiAbilityAvailability"]> =
+		useCallback(() => SuperMagicApi.getAiAbilityAvailability(), [])
+
 	const generateCanvasHightImage: CanvasDesignMethods["generateHightImage"] = useCallback(
 		(params) =>
 			generateHightImage(params) as ReturnType<CanvasDesignMethods["generateHightImage"]>,
 		[generateHightImage],
 	)
 
-	const { getDataTransferFileInfo } = useDesignFileCopy({
+	const { getDataTransferFileInfo, resolveCanvasClipboardReference } = useDesignFileDropPaths({
 		projectId,
 		currentFile,
 		flatAttachments,
+		attachmentsReady,
 		attachmentIndex,
 		designProjectBasePath,
 		updateAttachments,
 		getOrCreateImagesDir,
+		getFileInfoById,
+		setFileInfoCache,
 	})
 
-	const normalizeComparablePath = useCallback(
-		(path?: string) => {
-			if (!path) return ""
-			const resolvedPath = toWorkspaceRelativePath(path, {
-				designProjectBasePath,
-			})
-			return resolvedPath
-				.replace(/^\/+|\/+$/g, "")
-				.replace(/\\/g, "/")
-				.toLowerCase()
-		},
-		[designProjectBasePath],
+	const resolveResourceReference = useCallback<ResolveCanvasResourceReference>(
+		(input, resolveOptions) =>
+			resolveDesignResourceReference(
+				input,
+				{
+					designProjectBasePath,
+					flatAttachments,
+					attachmentIndex,
+					attachmentsReady,
+				},
+				resolveOptions,
+			),
+		[attachmentIndex, attachmentsReady, designProjectBasePath, flatAttachments],
 	)
-
-	const normalizeComparablePathCandidates = useCallback(
-		(path?: string) => {
-			if (!path) return []
-			return toWorkspaceRelativeCandidates(path, {
+	const resourceReferenceResolverRevision = useMemo(
+		() =>
+			buildDesignResourceReferenceResolverRevision({
+				projectId,
+				designProjectId,
 				designProjectBasePath,
-			}).map((candidate) =>
-				candidate
-					.replace(/^\/+|\/+$/g, "")
-					.replace(/\\/g, "/")
-					.toLowerCase(),
-			)
-		},
-		[designProjectBasePath],
+				attachmentsReady,
+				resourceReferenceSnapshotKey: attachmentIndex?.resourceReferenceSnapshotKey,
+			}),
+		[
+			attachmentIndex?.resourceReferenceSnapshotKey,
+			attachmentsReady,
+			designProjectBasePath,
+			designProjectId,
+			projectId,
+		],
+	)
+	const resourceReferenceResolverSnapshot = useMemo<CanvasResourceReferenceResolverSnapshot>(
+		() => ({
+			revision: resourceReferenceResolverRevision,
+			resolve: resolveResourceReference,
+		}),
+		[resolveResourceReference, resourceReferenceResolverRevision],
 	)
 
 	const locateProjectFile: NonNullable<CanvasDesignMethods["locateProjectFile"]> = useCallback(
 		(params) => {
-			const fallbackFileId = params.fileId?.trim()
-			const comparableTargetPaths = normalizeComparablePathCandidates(params.filePath)
-
-			let matchedFile: FileItem | null =
-				attachmentIndex && fallbackFileId
-					? (() => {
-							const hit = attachmentIndex.byFileId.get(fallbackFileId)
-							return hit && !hit.is_directory ? hit : null
-						})()
+			const requestedFileId = params.fileId?.trim()
+			const requestedPath = params.filePath?.trim()
+			const resolution = requestedFileId
+				? resolveResourceReference({
+						namespace: "attachment",
+						fileId: requestedFileId,
+					})
+				: requestedPath
+					? resolveCanvasStorageResourceReference(
+							requestedPath,
+							resolveResourceReference,
+							{ requireAttachment: true },
+						)
 					: null
 
-			if (!matchedFile) {
-				matchedFile =
-					flatAttachments?.find((item) => {
-						if (item.is_directory) return false
-						if (fallbackFileId && item.file_id === fallbackFileId) return true
-						if (comparableTargetPaths.length === 0) return false
-						return comparableTargetPaths.includes(
-							normalizeComparablePath(item.relative_file_path || ""),
-						)
-					}) || null
-			}
-
-			const fileId = matchedFile?.file_id || fallbackFileId
+			const fileId = resolution?.status === "resolved" ? resolution.attachmentId : undefined
 			if (!fileId) return
 
 			pubsub.publish(PubSubEvents.Update_Active_File_Id, fileId)
@@ -289,12 +298,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				pubsub.publish(PubSubEvents.Locate_File_In_Tree, fileId)
 			}
 		},
-		[
-			attachmentIndex,
-			flatAttachments,
-			normalizeComparablePath,
-			normalizeComparablePathCandidates,
-		],
+		[resolveResourceReference],
 	)
 
 	const confirmModal: NonNullable<CanvasDesignMethods["confirmModal"]> = useCallback(
@@ -313,21 +317,27 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		[],
 	)
 
-	const normalizeRequestApiPath = useCallback(
+	const resolvePrivateUploadApiPath = useCallback(
 		(
 			path: string,
 			errorKey:
-				| "design.errors.designResourcePathUnresolved"
-				| "design.errors.removeBackgroundImagesDirUnresolved"
 				| "design.errors.eraserImagesDirUnresolved"
 				| "design.errors.expandImageImagesDirUnresolved",
-			options?: { ensureTrailingSlash?: boolean },
 		) => {
-			const resolved = toDesignApiPath(path, { designProjectBasePath }, options)
-			if (!resolved) throw new Error(t(errorKey))
-			return resolved
+			const resolution = resolveResourceReference({
+				namespace: "private-upload-path",
+				path,
+			})
+			if (
+				resolution.status !== "resolved" ||
+				(resolution.resourceKind !== "private-upload" &&
+					resolution.resourceKind !== "external")
+			) {
+				throw new Error(t(errorKey))
+			}
+			return resolution.storagePath
 		},
-		[designProjectBasePath, t],
+		[resolveResourceReference, t],
 	)
 
 	/** file_dir / file_path：接口要求带前导 `/` 的工作区 API 路径 */
@@ -341,94 +351,19 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				| "design.errors.expandImageImagesDirUnresolved",
 			options?: { ensureTrailingSlash?: boolean },
 		) => {
-			const resolved =
-				isLegacyBareDesignResourcePath(path) && !options?.ensureTrailingSlash
-					? toWorkspaceAbsoluteApiPathForOperation(
-							path,
-							{
-								designProjectBasePath,
-								flatAttachments,
-								attachmentIndex,
-								attachmentsReady,
-							},
-							options,
-						)
-					: toWorkspaceAbsoluteApiPath(path, { designProjectBasePath }, options)
-			if (!resolved || (isRelativeDesignPath(path) && !resolved.startsWith("/"))) {
+			const resolution = resolveCanvasStorageResourceReference(path, resolveResourceReference)
+			if (
+				resolution.status !== "resolved" ||
+				resolution.resourceKind !== "workspace-file" ||
+				!resolution.workspacePath
+			) {
 				throw new Error(t(errorKey))
 			}
-			return resolved
+			return options?.ensureTrailingSlash
+				? `${resolution.workspacePath.replace(/\/+$/, "")}/`
+				: resolution.workspacePath
 		},
-		[attachmentIndex, attachmentsReady, designProjectBasePath, flatAttachments, t],
-	)
-
-	const resolveAbsolutePath: NonNullable<CanvasDesignMethods["resolveAbsolutePath"]> =
-		useCallback(
-			(path: string) => {
-				if (isLegacyBareDesignResourcePath(path)) {
-					const resolved = toWorkspaceAbsoluteApiPathForOperation(path, {
-						designProjectBasePath,
-						flatAttachments,
-						attachmentIndex,
-						attachmentsReady,
-					})
-					// 这里主要服务于资源同一性和缓存 key。无法唯一确认时保留原值，
-					// 让调用侧不命中，而不是错误地把它折叠到当前画布。
-					return resolved ?? path
-				}
-				return resolveWorkspaceAbsoluteApiPath(
-					path,
-					"design.errors.designResourcePathUnresolved",
-				)
-			},
-			[
-				attachmentIndex,
-				attachmentsReady,
-				designProjectBasePath,
-				flatAttachments,
-				resolveWorkspaceAbsoluteApiPath,
-			],
-		)
-
-	const resolveResourcePathCandidates: NonNullable<
-		CanvasDesignMethods["resolveResourcePathCandidates"]
-	> = useCallback(
-		(path: string) => {
-			const ctx = { designProjectBasePath, flatAttachments, attachmentIndex }
-			const candidates = new Set<string>()
-			const addCandidate = (candidate?: string) => {
-				const normalized = candidate?.trim().replace(/\\/g, "/")
-				if (normalized) candidates.add(normalized)
-			}
-
-			addCandidate(path)
-			const operationResolution = resolveDesignPathForOperation(path, {
-				...ctx,
-				attachmentsReady,
-			})
-			if (operationResolution.status === "found") {
-				addCandidate(operationResolution.resolvedPath)
-				addCandidate(toDesignDslPath(operationResolution.resolvedPath, ctx))
-				return Array.from(candidates)
-			}
-			if (isLegacyBareDesignResourcePath(path)) {
-				return Array.from(candidates)
-			}
-
-			const workspacePath = toWorkspaceRelativePath(path, ctx)
-			addCandidate(workspacePath)
-			addCandidate(toDesignDslPath(workspacePath, ctx))
-
-			toWorkspaceRelativeCandidates(path, ctx).forEach((candidate, index) => {
-				if (index === 0 || isCurrentCanvasResourcePath(candidate, ctx)) {
-					addCandidate(candidate)
-					addCandidate(toDesignDslPath(candidate, ctx))
-				}
-			})
-
-			return Array.from(candidates)
-		},
-		[attachmentIndex, attachmentsReady, designProjectBasePath, flatAttachments],
+		[resolveResourceReference, t],
 	)
 
 	const getVirtualResourceScope = useCallback(() => {
@@ -560,7 +495,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				filePath,
 				"design.errors.eraserImagesDirUnresolved",
 			)
-			const markPathWithSlash = normalizeRequestApiPath(
+			const markApiPath = resolvePrivateUploadApiPath(
 				markPath,
 				"design.errors.eraserImagesDirUnresolved",
 			)
@@ -570,7 +505,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				image_id: imageId,
 				file_dir: fileDirWithSlash,
 				file_path: filePathWithSlash,
-				mark_path: markPathWithSlash,
+				mark_path: markApiPath,
 				size: params.size,
 				reference_image_options: buildReferenceImageOptions({
 					filePath: filePathWithSlash,
@@ -588,7 +523,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			flatAttachments,
 			updateAttachments,
 			resolveWorkspaceAbsoluteApiPath,
-			normalizeRequestApiPath,
+			resolvePrivateUploadApiPath,
 			t,
 		],
 	)
@@ -638,11 +573,11 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				filePath,
 				"design.errors.expandImageImagesDirUnresolved",
 			)
-			const canvasPathWithSlash = normalizeRequestApiPath(
+			const canvasApiPath = resolvePrivateUploadApiPath(
 				canvasPath,
 				"design.errors.expandImageImagesDirUnresolved",
 			)
-			const maskPathWithSlash = normalizeRequestApiPath(
+			const maskApiPath = resolvePrivateUploadApiPath(
 				maskPath,
 				"design.errors.expandImageImagesDirUnresolved",
 			)
@@ -652,8 +587,8 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				image_id: imageId,
 				file_dir: fileDirWithSlash,
 				file_path: filePathWithSlash,
-				canvas_path: canvasPathWithSlash,
-				mask_path: maskPathWithSlash,
+				canvas_path: canvasApiPath,
+				mask_path: maskApiPath,
 				size: params.size,
 				reference_image_options: buildReferenceImageOptions({
 					filePath: filePathWithSlash,
@@ -671,13 +606,63 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			flatAttachments,
 			updateAttachments,
 			resolveWorkspaceAbsoluteApiPath,
-			normalizeRequestApiPath,
+			resolvePrivateUploadApiPath,
 			t,
 		],
 	)
 
 	// 组合所有方法到 CanvasDesignMethods 接口
 	const methods = useMemo<CanvasDesignMethods>(() => {
+		const materializeCanvasClipboardAsset: NonNullable<
+			CanvasDesignMethods["materializeCanvasClipboardAsset"]
+		> = async (input) => {
+			try {
+				const sourceCanvasId = input.sourceCanvasId?.trim()
+				const targetCanvasId = designProjectId?.trim()
+				const isSameCanvas = Boolean(
+					sourceCanvasId && targetCanvasId && sourceCanvasId === targetCanvasId,
+				)
+				// Legacy payloads did not always carry sourceCanvasId. In that case the
+				// path can still be resolved against the current canvas; an explicit
+				// different source canvas remains blocked to avoid path collisions.
+				const canResolveCurrentCanvasPath = !sourceCanvasId || isSameCanvas
+				let sourceUrl =
+					input.sourceRef?.ossUrl ||
+					(/^https?:\/\//i.test(input.sourceRef?.src ?? "")
+						? input.sourceRef?.src
+						: /^https?:\/\//i.test(input.sourcePath ?? "")
+							? input.sourcePath
+							: undefined)
+				const expires = input.sourceRef?.expiresAt
+				const expiresAt = expires ? Date.parse(expires) : Number.NaN
+				if (
+					(!sourceUrl || (Number.isFinite(expiresAt) && expiresAt <= Date.now())) &&
+					input.sourcePath &&
+					canResolveCurrentCanvasPath
+				) {
+					const refreshed = await getFileInfo(input.sourcePath, {
+						useImageProcess: false,
+						forceRefresh: Number.isFinite(expiresAt) && expiresAt <= Date.now(),
+					})
+					sourceUrl = refreshed?.src
+				}
+				// A path from another canvas must never be resolved through the current
+				// canvas attachment index: an identical relative path could refer to a
+				// different file. Cross-canvas transfers therefore require an inline
+				// Blob or a still-valid signed source URL until the host supplies a
+				// source-canvas resource resolver.
+				if (!sourceUrl) return null
+				const response = await fetch(sourceUrl, { cache: "default" })
+				if (!response.ok) return null
+				const blob = await response.blob()
+				if (blob.size > 200 * 1024 * 1024) return null
+				return new File([blob], input.fileName, {
+					type: blob.type || input.mimeType,
+				})
+			} catch {
+				return null
+			}
+		}
 		return {
 			getImageModelList,
 			completeImagePrompt,
@@ -692,6 +677,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			expandImage,
 			generateHightImage: generateCanvasHightImage,
 			getConvertHightConfig,
+			getAiAbilityAvailability,
 			getImageGenerationResult,
 			getImageGenerationResults,
 			getVideoGenerationResult,
@@ -699,8 +685,9 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			uploadFiles,
 			getFileInfo,
 			getFileResourceMeta,
-			resolveAbsolutePath,
-			resolveResourcePathCandidates,
+			resolveResourceReference: resourceReferenceResolverSnapshot.resolve,
+			resourceReferenceResolverSnapshot,
+			resourceReferenceResolverVersion: resourceReferenceResolverSnapshot.revision,
 			getVirtualResourceScope,
 			getImageProcessCacheSignature: getPreviewFileUrlWatermarkSignature,
 			addToConversation,
@@ -715,13 +702,21 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			confirmModal,
 			clipboard: {
 				write: clipboard.write,
-				readText: navigator.clipboard?.readText
-					? navigator.clipboard.readText.bind(navigator.clipboard)
-					: undefined,
-				read: navigator.clipboard?.read
-					? navigator.clipboard.read.bind(navigator.clipboard)
-					: undefined,
+				readText:
+					typeof navigator !== "undefined" && navigator.clipboard?.readText
+						? navigator.clipboard.readText.bind(navigator.clipboard)
+						: undefined,
+				read:
+					typeof navigator !== "undefined" && navigator.clipboard?.read
+						? navigator.clipboard.read.bind(navigator.clipboard)
+						: undefined,
 			},
+			materializeCanvasClipboardAsset,
+			getCanvasClipboardContext: () => ({
+				projectId,
+				canvasId: designProjectId,
+			}),
+			resolveCanvasClipboardReference,
 		}
 	}, [
 		getImageModelList,
@@ -737,6 +732,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		expandImage,
 		generateCanvasHightImage,
 		getConvertHightConfig,
+		getAiAbilityAvailability,
 		getImageGenerationResult,
 		getImageGenerationResults,
 		getVideoGenerationResult,
@@ -744,8 +740,8 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		uploadFiles,
 		getFileInfo,
 		getFileResourceMeta,
-		resolveAbsolutePath,
-		resolveResourcePathCandidates,
+		designProjectId,
+		resourceReferenceResolverSnapshot,
 		getVirtualResourceScope,
 		addToConversation,
 		downloadFiles,
@@ -754,6 +750,8 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		getRootStorage,
 		saveRootStorage,
 		getDataTransferFileInfo,
+		resolveCanvasClipboardReference,
+		projectId,
 		identifyImageMark,
 		uploadPrivateFiles,
 		confirmModal,

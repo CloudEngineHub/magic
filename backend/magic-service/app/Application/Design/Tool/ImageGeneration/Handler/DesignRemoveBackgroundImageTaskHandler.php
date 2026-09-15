@@ -12,8 +12,8 @@ use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Entity\Dto\ImageRemoveBackgroundRequestDTO;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 
 /**
  * 设计侧「去背景」异步任务：取工作区首张参考图，走专用去背景服务（removeBackground，PNG 透明底），并参与规则化输出文件名。
@@ -49,7 +49,7 @@ final class DesignRemoveBackgroundImageTaskHandler extends AbstractDesignImageGe
             'output_format' => 'webp',
         ]);
         $this->applyMagicAccessToken($dto);
-        $dto->setBusinessParams($this->designImageGenerationBusinessParams($dataIsolation));
+        $dto->setBusinessParams($this->designImageGenerationBusinessParams($dataIsolation, $entity->getProjectId()));
         // 通过画布模式-去背景，默认不加水印
         $dto->closeVisibleWatermark();
         $dto->valid();

@@ -1,43 +1,46 @@
 import { BaseProvider } from "../../core/base-provider"
 import type { IVolcengineConfig } from "../../config/types"
 import type { BrowserCommandClient, BrowserInitConfig } from "@apmplus/web"
-import browserClient from "@apmplus/web"
-import { SPALoadPlugin } from "@apmplus/integrations"
-import { blankScreenPlugin } from "@apmplus/integrations/blankScreen"
-import { plugin as jsErrorPlugin } from "./plugins/JSErrorPlugin"
-import { plugin as pageViewPlugin } from "./plugins/PageViewPlugin"
-import { env } from "@/utils/env"
 import { cloneDeep, pickBy, pick, isNil } from "lodash-es"
 import { SensitiveMasker } from "../../SensitiveMasker"
-import { plugin as fetchErrorPlugin } from "./plugins/FetchError"
+import { normalizeVolcengineError, toVolcengineExtra } from "./error"
+import { getAppRelease } from "@/utils/log/release"
 
 /**
  * 火山引擎 APMPlus Provider 实现
  * 基于 @apmplus/web SDK
  */
 export class VolcengineProvider extends BaseProvider {
-	private client: BrowserCommandClient = browserClient
+	private client: BrowserCommandClient | null = null
 
 	async init(config: IVolcengineConfig): Promise<void> {
 		this.validateConfig(config)
 		this.config = config
 
-		// 动态导入火山引擎 SDK
-		// const { default: browserClient } = await import("@apmplus/web")
+		// Keep the optional APM SDK, integrations, and route-aware plugins out of the initial
+		// module graph. They are only evaluated when telemetry is explicitly initialized.
+		const [sdk, integrations, blankScreen, jsError, pageView, fetchError] = await Promise.all([
+			import("@apmplus/web"),
+			import("@apmplus/integrations"),
+			import("@apmplus/integrations/blankScreen"),
+			import("./plugins/JSErrorPlugin"),
+			import("./plugins/PageViewPlugin"),
+			import("./plugins/FetchError"),
+		])
 
-		this.client = browserClient
+		this.client = sdk.default
 
 		// 初始化 APMPlus SDK
 		this.client("init", {
 			aid: +config.appId,
 			token: config.token,
 			env: config.env || "production",
-			release: env("MAGIC_APP_VERSION") || env("MAGIC_APP_SHA"),
+			release: getAppRelease(),
 			// plugins: config.plugins || [],
 			// ...config.extra,
 			plugins: {
-				jsError: jsErrorPlugin(),
-				pageview: pageViewPlugin(),
+				jsError: jsError.plugin(),
+				pageview: pageView.plugin(),
 				breadcrumb: {
 					dom: false,
 					maxBreadcrumbs: 20,
@@ -65,7 +68,11 @@ export class VolcengineProvider extends BaseProvider {
 					autoDetect: true,
 				},
 			},
-			integrations: [SPALoadPlugin(), blankScreenPlugin(), fetchErrorPlugin()],
+			integrations: [
+				integrations.SPALoadPlugin(),
+				blankScreen.blankScreenPlugin(),
+				fetchError.plugin(),
+			],
 
 			// 	aid: number; // 项目唯一标识，必传
 			// 	token: string; // 项目 token，必传
@@ -217,10 +224,11 @@ export class VolcengineProvider extends BaseProvider {
 		)
 	}
 
-	error(error: any): void {
+	error(...args: unknown[]): void {
 		if (!this.client) return
-		// 上报异常信息
-		this.client("captureException", error)
+
+		const normalized = normalizeVolcengineError(args)
+		this.client("captureException", normalized.error, toVolcengineExtra(normalized.attributes))
 	}
 
 	report() {

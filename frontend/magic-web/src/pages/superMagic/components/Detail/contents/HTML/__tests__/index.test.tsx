@@ -9,6 +9,7 @@ import { HTML_PREVIEW_IMAGE_PROCESS } from "../previewImageProcess"
 import HTML from "../index"
 
 const mockIsolatedHTMLRendererProps = vi.hoisted(() => vi.fn())
+const mockResetContent = vi.hoisted(() => vi.fn())
 
 const mockGetFileContentById = vi.fn()
 const mockProcessHtmlContent = vi.fn(async ({ content }: { content?: string }) => ({
@@ -54,6 +55,7 @@ vi.mock("@/pages/superMagic/pages/Workspace/types", () => ({}))
 vi.mock("@dtyq/magic-admin", () => ({
 	RouteName: {
 		Admin: "admin",
+		AdminPlatformAIModel: "admin-platform-ai-model",
 		AdminPlatformPackage: "admin-platform-package",
 	},
 	RoutePath: {
@@ -61,6 +63,10 @@ vi.mock("@dtyq/magic-admin", () => ({
 	},
 	PlatformPackageRoutes: {
 		path: "/admin/platform-package",
+		element: null,
+	},
+	AiManageRoutes: {
+		path: "/admin/ai-manage",
 		element: null,
 	},
 	otherRoutes: [],
@@ -106,8 +112,8 @@ vi.mock("../styles", () => ({
 }))
 
 vi.mock("@/pages/superMagic/hooks/useFileData", () => ({
-	useFileData: () => ({
-		fileData: "<html><body>base</body></html>",
+	useFileData: ({ file_id, content }: { file_id?: string; content?: string }) => ({
+		fileData: file_id ? "<html><body>base</body></html>" : content || "",
 		fileVersion: 1,
 		changeFileVersion: vi.fn(),
 		loading: false,
@@ -156,6 +162,10 @@ vi.mock("../utils/fetchInterceptor", () => ({
 	injectFetchInterceptorScript: (content: string) => content,
 	injectKeyboardInterceptorScript: (content: string) => content,
 	createKeyboardMessageHandler: () => vi.fn(),
+	KEYBOARD_MESSAGE_TYPES: {
+		CANCEL: "MAGIC_KEYBOARD_CANCEL",
+		SOURCE: "magic-html-iframe",
+	},
 	POST_MESSAGE_TARGET_STRATEGIES: {
 		CROSS_ORIGIN_PARENT: "cross-origin-parent",
 		SAME_ORIGIN_ANCESTOR: "same-origin-ancestor",
@@ -216,7 +226,18 @@ vi.mock("@/components/base/MagicSpin", () => ({
 }))
 
 vi.mock("../../../components/EditToolbar/AIEditButton", () => ({
-	default: () => <div data-testid="ai-edit-button" />,
+	default: (props: {
+		maxItems?: number
+		onPrimaryAction?: () => void
+		testIdPrefix?: string
+	}) => (
+		<div
+			data-testid="ai-edit-button"
+			data-max-items={props.maxItems}
+			data-has-primary-action={Boolean(props.onPrimaryAction)}
+			data-test-id-prefix={props.testIdPrefix}
+		/>
+	),
 }))
 
 vi.mock("../../../components/EditToolbar/FileEditButtons", () => ({
@@ -225,15 +246,19 @@ vi.mock("../../../components/EditToolbar/FileEditButtons", () => ({
 		onSave,
 		onSaveAndExit,
 		onCancel,
+		editLabel,
+		testIdPrefix,
 	}: {
 		onEdit?: () => void
 		onSave?: () => void
 		onSaveAndExit?: () => void
 		onCancel?: () => void
+		editLabel?: string
+		testIdPrefix?: string
 	}) => (
-		<div data-testid="file-edit-buttons">
+		<div data-testid="file-edit-buttons" data-test-id-prefix={testIdPrefix}>
 			<button type="button" data-testid="html-edit-button" onClick={onEdit}>
-				edit
+				{editLabel ?? "edit"}
 			</button>
 			<button type="button" data-testid="html-save-button" onClick={onSave}>
 				save
@@ -429,7 +454,7 @@ vi.mock("../IsolatedHTMLRenderer", async () => {
 			React.useImperativeHandle(ref, () => ({
 				getContent: async () => "<html><body>local-visual</body></html>",
 				updateContent: () => undefined,
-				resetContent: () => undefined,
+				resetContent: mockResetContent,
 				getFetchInterceptedCallback: () => () => undefined,
 			}))
 
@@ -532,6 +557,101 @@ describe("HTML", () => {
 		mockGetFileContentById.mockReset()
 		mockProcessHtmlContent.mockClear()
 		mockIsolatedHTMLRendererProps.mockClear()
+		mockResetContent.mockClear()
+	})
+
+	it("should use the HTML-specific edit label and show only three AI edit items", async () => {
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				setIsEditMode={vi.fn()}
+				allowEdit
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("html-preview")).toHaveAttribute("data-edit-mode", "false")
+			expect(screen.getByTestId("html-preview-container")).toBeInTheDocument()
+			expect(screen.getByTestId("html-preview-content")).toBeInTheDocument()
+			expect(screen.getByTestId("file-edit-buttons")).toHaveAttribute(
+				"data-test-id-prefix",
+				"html-editor",
+			)
+			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute("data-max-items", "3")
+			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute(
+				"data-test-id-prefix",
+				"html-editor",
+			)
+			expect(screen.getByTestId("ai-edit-button")).toHaveAttribute(
+				"data-has-primary-action",
+				"true",
+			)
+			expect(screen.getByTestId("html-edit-button")).toHaveTextContent("common.edit")
+		})
+	})
+
+	it("should hide the AI edit button in code preview mode", async () => {
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="code"
+				isEditMode={false}
+				setIsEditMode={vi.fn()}
+				allowEdit
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("ai-edit-button")).not.toBeInTheDocument()
+		})
+	})
+
+	it("should expose fixed HTML test ids only for the active cached preview", async () => {
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				isEditMode={false}
+				setIsEditMode={vi.fn()}
+				allowEdit
+				isTabActive={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("html-preview")).not.toBeInTheDocument()
+			expect(screen.queryByTestId("html-editor-toolbar-actions")).not.toBeInTheDocument()
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ isVisible: false, isTabActive: false }),
+			)
+			expect(screen.getByTestId("file-edit-buttons")).not.toHaveAttribute(
+				"data-test-id-prefix",
+			)
+		})
+	})
+
+	it("should stop preview loading when the html file is empty", async () => {
+		const { rerender } = render(
+			<HTML
+				{...baseProps}
+				data={{
+					...baseProps.data,
+					content: "",
+					display_config: {
+						previewPolicy: { keepLocalContent: true },
+					},
+				}}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("magic-spin")).not.toBeInTheDocument()
+		})
+		expect(screen.getByTestId("isolated-html-renderer")).toBeInTheDocument()
 	})
 
 	it("should use bundled dashboard template for dashboard index entry html", async () => {
@@ -620,6 +740,75 @@ describe("HTML", () => {
 				htmlRelativeFolderPath: "magic-api-devtools/",
 			}),
 		)
+	})
+
+	it("should pass HTML navigation state to the isolated renderer", async () => {
+		const htmlNavigation = {
+			filePath: "page1.html",
+			search: "?name=%E5%BC%A0%E4%B8%89&mode=preview",
+			hash: "#summary",
+			anchor: "summary",
+		}
+
+		render(
+			<HTML
+				{...baseProps}
+				data={{ ...baseProps.data, htmlNavigation }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ htmlNavigation }),
+			)
+		})
+	})
+
+	it("should update the isolated renderer when only the query changes", async () => {
+		const oldNavigation = {
+			filePath: "page1.html",
+			search: "?mode=old",
+			hash: "",
+			anchor: "",
+		}
+		const newNavigation = {
+			filePath: "page1.html",
+			search: "?mode=new",
+			hash: "",
+			anchor: "",
+		}
+
+		const { rerender } = render(
+			<HTML
+				{...baseProps}
+				data={{ ...baseProps.data, htmlNavigation: oldNavigation }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ htmlNavigation: oldNavigation }),
+			)
+		})
+
+		rerender(
+			<HTML
+				{...baseProps}
+				data={{ ...baseProps.data, htmlNavigation: newNavigation }}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(mockIsolatedHTMLRendererProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ htmlNavigation: newNavigation }),
+			)
+		})
 	})
 
 	it("should require an exact relative path match for bundled template entry html", () => {
@@ -746,6 +935,8 @@ describe("HTML", () => {
 		await waitFor(() => {
 			expect(screen.getByTestId("html-save-with-update-dialog")).toBeInTheDocument()
 		})
+		expect(screen.getByTestId("html-save-with-update-cancel-button")).toBeInTheDocument()
+		expect(screen.getByTestId("html-save-with-update-confirm-button")).toBeInTheDocument()
 		expect(mockSaveEditContent).not.toHaveBeenCalled()
 	})
 
@@ -776,7 +967,7 @@ describe("HTML", () => {
 		})
 
 		await act(async () => {
-			fireEvent.click(screen.getByText("common.save"))
+			fireEvent.click(screen.getByTestId("html-save-with-update-confirm-button"))
 		})
 
 		await waitFor(() => {
@@ -817,7 +1008,7 @@ describe("HTML", () => {
 		})
 
 		await act(async () => {
-			fireEvent.click(screen.getByText("common.cancel"))
+			fireEvent.click(screen.getByTestId("html-save-with-update-cancel-button"))
 		})
 
 		expect(screen.queryByTestId("html-save-with-update-dialog")).not.toBeInTheDocument()
@@ -956,6 +1147,29 @@ describe("HTML", () => {
 			expect(mockSetIsEditMode).toHaveBeenCalledWith(false)
 			expect(mockOnRefreshFile).toHaveBeenCalledTimes(1)
 		})
+	})
+
+	it("should reset the iframe content when canceling visual edit", async () => {
+		const mockSetIsEditMode = vi.fn()
+		const mockOnRefreshFile = vi.fn()
+
+		render(
+			<HTML
+				{...baseProps}
+				viewMode="desktop"
+				allowEdit
+				setIsEditMode={mockSetIsEditMode}
+				onRefreshFile={mockOnRefreshFile}
+			/>,
+		)
+
+		await act(async () => {
+			fireEvent.click(screen.getByTestId("html-cancel-button"))
+		})
+
+		expect(mockResetContent).toHaveBeenCalledOnce()
+		expect(mockSetIsEditMode).toHaveBeenCalledWith(false)
+		expect(mockOnRefreshFile).toHaveBeenCalledOnce()
 	})
 
 	it("should not refresh file after regular save succeeds", async () => {

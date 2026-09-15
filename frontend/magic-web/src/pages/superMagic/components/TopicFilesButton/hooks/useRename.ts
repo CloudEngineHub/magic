@@ -12,6 +12,11 @@ import {
 	detectCanvasProjectOperationRisk,
 	getCanvasProjectOperationImpact,
 } from "../utils/canvasProjectOperationRisk"
+import {
+	formatCanvasPathRepairFailures,
+	syncCanvasProjectNameAfterFileOperation,
+} from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
+import { useCanvasFileOperationGuard } from "./useCanvasFileOperationGuard"
 
 export interface UseRenameOptions {
 	projectId?: string
@@ -159,6 +164,8 @@ export function useRename(options: UseRenameOptions = {}) {
 		onAttachmentsChange,
 	} = options
 	const { t } = useTranslation("super")
+	const { runCanvasFileOperationPreflight, commitCanvasFileOperationRepair } =
+		useCanvasFileOperationGuard()
 	// 重命名相关状态
 	const [renamingItemId, setRenamingItemId] = useState<string | null>(null)
 	const [renameValue, setRenameValue] = useState("")
@@ -337,41 +344,62 @@ export function useRename(options: UseRenameOptions = {}) {
 				return
 			}
 
-			const canvasRisk = await detectCanvasProjectOperationRisk({
-				attachments: attachments || [],
-				items: [currentItem],
-				operation: "rename",
-			})
-			if (canvasRisk.shouldWarn) {
-				const impact = getCanvasProjectOperationImpact(canvasRisk)
-				const shouldContinue = await new Promise<boolean>((resolve) => {
-					MagicModal.confirm({
-						title: t("topicFiles.canvasOperationRisk.title"),
-						content: t(
-							impact === "open-failure"
-								? "topicFiles.canvasOperationRisk.renameOpenFailureContent"
-								: impact === "content-loss"
-									? "topicFiles.canvasOperationRisk.renameContentLossContent"
-									: "topicFiles.canvasOperationRisk.renameMixedContent",
-						),
-						okButtonProps: {
-							color: "danger",
-							variant: "solid",
-						},
-						cancelButtonProps: {
-							color: "default",
-							variant: "filled",
-						},
-						okText: t("topicFiles.contextMenu.rename"),
-						cancelText: t("common.cancel"),
-						onOk: () => resolve(true),
-						onCancel: () => resolve(false),
+			const canvasRisk = currentItem.is_directory
+				? await detectCanvasProjectOperationRisk({
+						attachments: attachments || [],
+						items: [currentItem],
+						operation: "rename",
 					})
-				})
-				if (!shouldContinue) {
-					handleRenameCancel()
-					return
-				}
+				: { shouldWarn: false, riskTypes: [], affectedProjectNames: [] }
+			const preflightResult = await runCanvasFileOperationPreflight({
+				repairOptions: currentItem.is_directory
+					? {
+							attachments: attachments || [],
+							items: [currentItem],
+							operation: "rename",
+							projectId: options.projectId,
+						}
+					: undefined,
+				requiresConfirmation: canvasRisk.shouldWarn,
+				confirm: (repairPlan) => {
+					const impact = getCanvasProjectOperationImpact(canvasRisk)
+					const riskContent = canvasRisk.shouldWarn
+						? t(
+								impact === "open-failure"
+									? "topicFiles.canvasOperationRisk.renameOpenFailureContent"
+									: impact === "content-loss"
+										? "topicFiles.canvasOperationRisk.renameContentLossContent"
+										: "topicFiles.canvasOperationRisk.renameMixedContent",
+							)
+						: ""
+					const repairContent = repairPlan?.hasFailures
+						? t("topicFiles.canvasOperationRisk.pathRepairFailureContent", {
+								failures: formatCanvasPathRepairFailures(repairPlan.failures),
+							})
+						: ""
+					return new Promise<boolean>((resolve) => {
+						MagicModal.confirm({
+							title: t("topicFiles.canvasOperationRisk.title"),
+							content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
+							okButtonProps: {
+								color: "danger",
+								variant: "solid",
+							},
+							cancelButtonProps: {
+								color: "default",
+								variant: "filled",
+							},
+							okText: t("topicFiles.contextMenu.rename"),
+							cancelText: t("common.cancel"),
+							onOk: () => resolve(true),
+							onCancel: () => resolve(false),
+						})
+					})
+				},
+			})
+			if (!preflightResult.ok) {
+				handleRenameCancel()
+				return
 			}
 
 			// 添加到重命名中状态
@@ -382,6 +410,36 @@ export function useRename(options: UseRenameOptions = {}) {
 				file_id: fileId,
 				target_name: trimmedName,
 			})
+
+			await commitCanvasFileOperationRepair(preflightResult.repairPlan)
+
+			if (currentItem.is_directory) {
+				try {
+					const nameSyncResult = await syncCanvasProjectNameAfterFileOperation({
+						attachments: attachments || [],
+						items: [currentItem],
+						projectId: options.projectId,
+						newName: trimmedName,
+					})
+					if (nameSyncResult.hasFailures) {
+						console.error("画布名称同步失败:", nameSyncResult.failures)
+						magicToast.warning(
+							t(
+								"topicFiles.canvasOperationRisk.renameProjectNameSyncFailed",
+								"重命名成功，但画布名称同步失败",
+							),
+						)
+					}
+				} catch (error) {
+					console.error("画布名称同步失败:", error)
+					magicToast.warning(
+						t(
+							"topicFiles.canvasOperationRisk.renameProjectNameSyncFailed",
+							"重命名成功，但画布名称同步失败",
+						),
+					)
+				}
+			}
 
 			// 如果有onAttachmentsChange回调，使用本地更新
 			if (onAttachmentsChange && attachments) {

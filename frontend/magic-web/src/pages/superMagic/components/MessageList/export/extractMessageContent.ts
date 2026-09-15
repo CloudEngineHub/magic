@@ -7,8 +7,7 @@ import {
 	getMentionDisplayName,
 	getMentionUniqueId,
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
-import { findAttachmentByPath } from "../components/Text/components/Markdown/parser/helper"
-import { buildFilePathAttachments } from "../utils/attachmentByFilePath"
+import { buildFilePathAttachments, findFilePathAttachment } from "../utils/attachmentByFilePath"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 
 export interface ExportAttachment {
@@ -263,7 +262,7 @@ function pickFilePathAttachments(
 	if (!content) return undefined
 	if (!workspaceFilesList?.length) return undefined
 	const pathAttachments = buildFilePathAttachments(content).filter((attachment) => {
-		const found = findAttachmentByPath(workspaceFilesList, attachment.filePath)
+		const found = findFilePathAttachment(workspaceFilesList, attachment)
 		if (!found) return false
 		if (found.type === "directory" || found.is_directory) return false
 		return true
@@ -329,7 +328,7 @@ function attachmentOnlyPart(
 				type: "attachment",
 				timestamp,
 				attachments,
-				toolCallId,
+				...(toolCallId ? { toolCallId } : {}),
 			}
 		: null
 }
@@ -360,15 +359,15 @@ function extractToolPart(
 		rawToolName === "finish_task" || options?.fallbackRawName === "finish_task"
 	const hiddenSdkSnippet =
 		rawToolName === "run_sdk_snippet" || options?.fallbackRawName === "run_sdk_snippet"
-	const toolCallId = getToolCallId(source, tool, options?.fallbackToolCallId)
 	if (hiddenToolName) {
+		// finish_task is a task-result projection rather than an ordinary tool call;
+		// do not leak its legacy tool_call_id into the exported attachment part.
 		return attachmentOnlyPart(
 			pickDisplayAttachments(source, options?.fallbackAttachmentsSource, {
 				fallbackContent: options?.fallbackAttachmentContent,
 				workspaceFilesList: opts.workspaceFilesList,
 			}),
 			options?.timestamp,
-			toolCallId,
 		)
 	}
 	if (!opts.includeToolCall) {
@@ -377,6 +376,7 @@ function extractToolPart(
 	if (hiddenSdkSnippet) {
 		return null
 	}
+	const toolCallId = getToolCallId(source, tool, options?.fallbackToolCallId)
 
 	const brief =
 		(typeof tool?.remark === "string" && tool.remark) ||
@@ -427,14 +427,14 @@ function extractEmbeddedToolCalls(
 
 export interface ExtractOptions {
 	includeToolCall: boolean
-	resolveNode?: (appMessageId: string) => any
+	resolveNode?: (superMessageId: string) => any
 	workspaceFilesList?: AttachmentItem[]
 }
 
 function getMergedNode(node: SuperMagicMessageItem | undefined, opts: ExtractOptions): any {
 	if (!node) return undefined
-	const appId = (node as any)?.app_message_id
-	const storeNode: any = appId ? opts.resolveNode?.(appId) : undefined
+	const superMessageId = (node as any)?.super_message_id
+	const storeNode: any = superMessageId ? opts.resolveNode?.(superMessageId) : undefined
 	return storeNode || node
 }
 

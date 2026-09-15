@@ -39,7 +39,7 @@ import { AudioRecordingCopyDialog } from "@/pages/superMagic/pages/AudioRecordin
 import { useAudioRecordingCopyToProject } from "@/pages/superMagic/pages/AudioRecordings/hooks/useAudioRecordingCopyToProject"
 import { canCopyAudioProject } from "@/pages/superMagic/pages/AudioRecordings/utils/copy-availability"
 import recordingSummaryStore from "@/stores/recordingSummary"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 /**
  * Mobile recordings list panel: toolbar, pull-to-refresh list, sheets, and FAB placeholder.
@@ -75,6 +75,8 @@ interface ShareSheetState {
 	projectName: string
 	attachments: AttachmentItem[]
 	attachmentList: AttachmentItem[]
+	dependencyAttachments: AttachmentItem[]
+	dependencyBundleRootPath?: string
 	fileMap: RecordingDetailFileMap
 	defaultSelectedFileIds: string[]
 }
@@ -258,6 +260,14 @@ function AudioRecordingListPanel({
 		})
 	}
 
+	/** Navigates mobile recordings to the project entry route; MainLayout restores mobile state. */
+	function handleOpenProject(item: AudioProjectListItem) {
+		navigate({
+			name: RouteName.SuperWorkspaceProjectState,
+			params: { projectId: item.id },
+		})
+	}
+
 	async function handleSummarize(item: AudioProjectListItem) {
 		const result = await store.submitSummary(item)
 		if (result.ok) return true
@@ -382,6 +392,8 @@ function AudioRecordingListPanel({
 				),
 				attachments: shareSelection.shareableFiles,
 				attachmentList: shareSelection.shareableFiles,
+				dependencyAttachments: processed.list,
+				dependencyBundleRootPath: fileMap.bundleRootPath,
 				fileMap,
 				defaultSelectedFileIds: shareSelection.defaultSelectedFileIds,
 			})
@@ -550,6 +562,7 @@ function AudioRecordingListPanel({
 				onClose={handleCloseMore}
 				onRename={handleRename}
 				onDelete={handleDelete}
+				onOpenProject={handleOpenProject}
 				onSummarize={handleSummaryAction}
 				onMoveToGroup={handleOpenMoveGroup}
 				onCopyToProject={(item) => {
@@ -582,6 +595,8 @@ function AudioRecordingListPanel({
 				projectName={shareSheetState?.projectName}
 				attachments={shareSheetState?.attachments ?? []}
 				attachmentList={shareSheetState?.attachmentList ?? []}
+				dependencyAttachments={shareSheetState?.dependencyAttachments ?? []}
+				dependencyBundleRootPath={shareSheetState?.dependencyBundleRootPath}
 				fileMap={shareSheetState?.fileMap}
 				defaultSelectedFileIds={shareSheetState?.defaultSelectedFileIds}
 			/>

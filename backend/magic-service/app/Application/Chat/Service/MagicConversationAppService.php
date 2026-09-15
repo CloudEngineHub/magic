@@ -19,12 +19,13 @@ use App\Domain\Chat\Service\MagicSeqDomainService;
 use App\Domain\Chat\Service\MagicTopicDomainService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
+use App\Domain\SuperMagic\Topic\Service\TopicDomainService as SuperAgentTopicDomainService;
 use App\ErrorCode\AgentErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\SlidingWindow\SlidingWindowUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\Chat\Assembler\MessageAssembler;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService as SuperAgentTopicDomainService;
 use Hyperf\Codec\Json;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Logger\LoggerFactory;
@@ -129,7 +130,7 @@ UserPrompt;
                     'organization_id' => $userAuthorization->getOrganizationCode(),
                     'user_id' => $userAuthorization->getId(),
                     'business_id' => $chatCompletionsDTO->getConversationId(),
-                    'source_id' => 'conversation_chat_completion',
+                    'source_id' => SourceId::CONVERSATION_CHAT_COMPLETION,
                     'task_type' => 'text_completion',
                 ]
             );

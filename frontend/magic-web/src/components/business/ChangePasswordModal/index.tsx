@@ -1,7 +1,6 @@
 import { createElement, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useForm } from "antd/es/form/Form"
-import { has, isNull } from "lodash-es"
 import { IconCheck, IconDeviceMobile, IconMail } from "@tabler/icons-react"
 import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
@@ -10,7 +9,7 @@ import MagicModal from "@/components/base/MagicModal"
 import { ActionDrawer } from "@/components/shadcn-composed/action-drawer"
 import { Button } from "@/components/shadcn-ui/button"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { EmailVerify } from "./EmailVerify"
 import { PhoneVerify } from "./PhoneVerify"
 import type { VerifyForm } from "./types"
@@ -22,6 +21,19 @@ const verifyStrategyMap = {
 }
 
 type VerifyStrategy = keyof typeof verifyStrategyMap
+type SelectableVerifyStrategy = Exclude<VerifyStrategy, "none">
+
+function resolveVerifyStrategy(
+	selectedStrategy: SelectableVerifyStrategy | null,
+	hasPhone: boolean,
+	hasEmail: boolean,
+): VerifyStrategy {
+	if (selectedStrategy === "phone" && hasPhone) return "phone"
+	if (selectedStrategy === "email" && hasEmail) return "email"
+	if (hasPhone) return "phone"
+	if (hasEmail) return "email"
+	return "none"
+}
 
 interface ChangePasswordModalProps {
 	open: boolean
@@ -37,14 +49,14 @@ export function ChangePasswordModal({
 	userEmail,
 }: ChangePasswordModalProps) {
 	const { t } = useTranslation("interface")
+	const { t: tMessage } = useTranslation("message")
 	const isMobile = useIsMobile()
 	const [passwordForm] = useForm<VerifyForm>()
 	const [isSaving, setIsSaving] = useState(false)
-	const [strategy, setStrategy] = useState<VerifyStrategy>(() => {
-		if (has({ phone: userPhone }, "phone") && !isNull(userPhone)) return "phone"
-		if (has({ email: userEmail }, "email") && !isNull(userEmail)) return "email"
-		return "none"
-	})
+	const [selectedStrategy, setSelectedStrategy] = useState<SelectableVerifyStrategy | null>(null)
+	const hasPhone = Boolean(userPhone?.trim())
+	const hasEmail = Boolean(userEmail?.trim())
+	const strategy = resolveVerifyStrategy(selectedStrategy, hasPhone, hasEmail)
 
 	const handleChangePassword = useMemoizedFn(async () => {
 		if (isSaving) return
@@ -53,12 +65,12 @@ export function ChangePasswordModal({
 			setIsSaving(true)
 			const values = await passwordForm.validateFields()
 			await UserApi.changePassword(values.code, values.password, values.password)
-			toast.success(t("setting.changePasswordSuccess", { ns: "message" }))
+			toast.success(tMessage("setting.changePasswordSuccess"))
 			passwordForm.resetFields()
 			onOpenChange(false)
 		} catch (error) {
 			console.error("Failed to change password:", error)
-			toast.error(t("setting.changePasswordFailed", { ns: "message" }))
+			toast.error(tMessage("setting.changePasswordFailed"))
 		} finally {
 			setIsSaving(false)
 		}
@@ -76,9 +88,9 @@ export function ChangePasswordModal({
 
 	const strategySelector = (
 		<div className="flex w-full items-center gap-4">
-			{has({ phone: userPhone }, "phone") && !isNull(userPhone) ? (
+			{hasPhone ? (
 				<div
-					onClick={() => setStrategy("phone")}
+					onClick={() => setSelectedStrategy("phone")}
 					className={cn(
 						"flex cursor-pointer items-center gap-2 rounded-md border border-border p-2",
 						{
@@ -93,9 +105,9 @@ export function ChangePasswordModal({
 					) : null}
 				</div>
 			) : null}
-			{has({ email: userEmail }, "email") && !isNull(userEmail) ? (
+			{hasEmail ? (
 				<div
-					onClick={() => setStrategy("email")}
+					onClick={() => setSelectedStrategy("email")}
 					className={cn(
 						"flex cursor-pointer items-center gap-2 rounded-md border border-border p-2",
 						{
@@ -128,7 +140,7 @@ export function ChangePasswordModal({
 			<Button
 				className={isMobile ? "flex-1" : "px-8"}
 				onClick={handleChangePassword}
-				disabled={isSaving}
+				disabled={isSaving || strategy === "none"}
 			>
 				{t("setting.resetPassword")}
 			</Button>

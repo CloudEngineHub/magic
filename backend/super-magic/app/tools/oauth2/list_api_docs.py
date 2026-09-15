@@ -15,24 +15,21 @@ from app.tools.oauth2._api_docs import BaseOAuth2ApiDocTool
 
 
 class OAuth2ListApiDocsParams(BaseToolParams):
-    """查询 OAuth2 接口文档列表的参数。"""
+    """Parameters for listing OAuth2 API documentation."""
 
-    app_name: str = Field(..., description="""<!--zh: 已注册的 OAuth2 app_name。-->
-Registered OAuth2 app name.""")
-    query: Optional[str] = Field(None, description="""<!--zh: 可选关键词，匹配 operation_id、路径、摘要、说明等字段。-->
-Optional keyword for operation_id, path, summary, description, tags, or notes.""")
-    method: Optional[str] = Field(None, description="""<!--zh: 可选 HTTP 方法过滤。-->
-Optional HTTP method filter.""")
-    path: Optional[str] = Field(None, description="""<!--zh: 可选路径片段过滤。-->
-Optional path fragment filter.""")
-    limit: int = Field(20, description="""<!--zh: 最大返回数量，默认 20，最大 100。-->
-Maximum number of operations to return. Defaults to 20, maximum 100.""")
+    app_name: str = Field(..., description="Registered OAuth2 app name.")
+    query: Optional[str] = Field(
+        None,
+        description="Keyword matching operation_id, path, summary, description, tags, or notes.",
+    )
+    method: Optional[str] = Field(None, description="Optional HTTP method filter.")
+    path: Optional[str] = Field(None, description="Optional path fragment filter.")
+    limit: int = Field(20, description="Maximum results. Defaults to 20 and cannot exceed 100.")
 
 
 @tool(name="oauth2_list_api_docs")
 class OAuth2ListApiDocs(BaseOAuth2ApiDocTool[OAuth2ListApiDocsParams]):
-    """<!--zh: 查询某个 OAuth2 app 已记录的业务接口文档列表。-->
-    List recorded business API documentation for an OAuth2 app."""
+    """List recorded API documentation for an OAuth2 app."""
 
     name = "oauth2_list_api_docs"
 

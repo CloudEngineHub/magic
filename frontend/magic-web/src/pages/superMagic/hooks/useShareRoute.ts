@@ -41,7 +41,28 @@ export default function useShareRoute(): ShareRouteReturn {
 		end: false,
 	})
 
+	// Match standalone micro app share route: /micro-app/{appId}
+	const microAppShareMatch = useMatch({
+		path: RoutePath.MicroAppShare,
+		end: true,
+	})
+
 	return useMemo(() => {
+		// Priority 0: Standalone micro app share route
+		if (microAppShareMatch) {
+			return {
+				isShareRoute: true,
+				isFileShare: true,
+				isMagicShareRoute: !!magicShareMatch,
+				shareParams: {
+					topicId: undefined,
+					fileId: undefined,
+					resourceId: undefined,
+				},
+				isLegacy: false,
+			}
+		}
+
 		// Priority 1: New file share route
 		if (newFileShare.resourceId) {
 			return {
@@ -114,5 +135,12 @@ export default function useShareRoute(): ShareRouteReturn {
 			},
 			isLegacy: false,
 		}
-	}, [newFileShare, newTopicShare, legacyFileShare, legacyTopicShare, magicShareMatch])
+	}, [
+		microAppShareMatch,
+		newFileShare,
+		newTopicShare,
+		legacyFileShare,
+		legacyTopicShare,
+		magicShareMatch,
+	])
 }

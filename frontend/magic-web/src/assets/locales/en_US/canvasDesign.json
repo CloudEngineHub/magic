@@ -1,4 +1,19 @@
 {
+	"audio": {
+		"add": "Add Audio",
+		"adding": "Adding",
+		"defaultName": "Audio",
+		"empty": "No audio content",
+		"fileMissing": "Audio file is missing",
+		"loadFailed": "Failed to load audio. Click retry.",
+		"loading": "Loading audio...",
+		"replace": "Replace",
+		"replaceFailed": "Failed to replace audio. Please try again.",
+		"replaceUnsupported": "Unsupported audio format",
+		"replacing": "Replacing",
+		"uploadFailed": "Failed to upload audio",
+		"uploading": "Uploading..."
+	},
 	"common": {
 		"cancel": "Cancel",
 		"close": "Close",
@@ -20,17 +35,18 @@
 		"useRemote": "Use new"
 	},
 	"connectionEditor": {
-		"linkedMediaActive": "Linked",
+		"includeLinkedMedia": "Include as reference media",
+		"includeLinkedText": "Include in generation",
 		"linkedMediaDuplicate": "Already added",
+		"linkedMediaMentionLocked": "This resource is referenced in the prompt. Remove the @ mention before deselecting it.",
 		"linkedMediaMissingResource": "Missing resource",
 		"linkedMediaOverLimit": "Over limit",
-		"linkedMediaUnavailable": "Unavailable",
 		"linkedMediaUnsupportedMode": "Not supported in current mode",
 		"linkedMediaUnsupportedType": "Unsupported type",
 		"mediaKindAudio": "Audio",
 		"mediaKindImage": "Image",
 		"mediaKindVideo": "Video",
-		"removeConnection": "Remove connection"
+		"reorderLinkedText": "Reorder linked text"
 	},
 	"dropOverlay": {
 		"loading": "Loading",
@@ -43,6 +59,15 @@
 		"unsupportedDropContent": "This dragged content cannot be added as a reference image",
 		"unsupportedReferenceImageType": "Only image files can be added as reference images"
 	},
+	"elementBottomToolbar": {
+		"deleteVersion": "Delete version",
+		"label": "Element bottom toolbar",
+		"mainVersion": "Main version",
+		"nextVersion": "Next version",
+		"previousVersion": "Previous version",
+		"setMainVersion": "Set as main version",
+		"versionCount": "{{current}}/{{total}}"
+	},
 	"elementConflict": {
 		"deleteElement": "Delete element",
 		"description": "This element has new synced content and your current changes.",
@@ -54,6 +79,10 @@
 		"useRemote": "Use new"
 	},
 	"elementTools": {
+		"audioReplace": {
+			"title": "Replace Audio",
+			"upload": "Upload Audio"
+		},
 		"elementAlign": {
 			"bottom": "Bottom",
 			"horizontalCenter": "Center",
@@ -72,6 +101,10 @@
 		},
 		"fontFamily": {
 			"placeholder": "Font"
+		},
+		"fontSize": {
+			"openList": "Open font size list",
+			"placeholder": "Size"
 		},
 		"fontStyle": {
 			"bold": "Blob",
@@ -100,6 +133,26 @@
 		"imageRemoveBackground": {
 			"title": "Remove Background"
 		},
+		"imageReplace": {
+			"title": "Replace Image"
+		},
+		"mediaDownload": {
+			"title": "Download"
+		},
+		"mediaOriginalSize": {
+			"title": "Restore Original Aspect Ratio"
+		},
+		"mediaReplace": {
+			"audio": "Replace Audio",
+			"image": "Replace Image",
+			"replacing": "Replacing",
+			"title": "Replace Media",
+			"upload": "Upload Media",
+			"uploadAudio": "Upload Audio",
+			"uploadImage": "Upload Image",
+			"uploadVideo": "Upload Video",
+			"video": "Replace Video"
+		},
 		"shapeStyle": {
 			"advanced": "Advanced",
 			"cornerRadius": "Corner Radius",
@@ -115,6 +168,9 @@
 			"title": "Edit Size"
 		},
 		"strokeColor": {
+			"center": "Center",
+			"inside": "Inside",
+			"outside": "Outside",
 			"title": "Stroke"
 		},
 		"textAdvanced": {
@@ -143,9 +199,6 @@
 			"center": "Center",
 			"left": "Left",
 			"right": "Right"
-		},
-		"videoOriginalSize": {
-			"title": "Original Video Size"
 		}
 	},
 	"ellipse": {
@@ -159,6 +212,10 @@
 	},
 	"image": {
 		"batchUploadFailed": "{{failed}}/{{total}} files upload failed",
+		"content": {
+			"main": "Main content",
+			"setMain": "Set as main"
+		},
 		"defaultName": "Image Generator",
 		"empty": "Please send an instruction to generate an image",
 		"errorPrefix": "Image generation failed, ",
@@ -179,6 +236,9 @@
 			"uploading": "(Uploading)"
 		},
 		"nameWithIndex": "Image {{index}}",
+		"replaceFailed": "Failed to replace image. Please try again.",
+		"replaceUnsupported": "Unsupported image format",
+		"replacing": "Replacing",
 		"retryEditing": "Please edit your image generation request again",
 		"retryEditingEraser": "Please edit your eraser request again",
 		"retryEditingExpand": "Please edit your expand request again",
@@ -187,6 +247,7 @@
 		"uploading": "Uploading..."
 	},
 	"imageEditor": {
+		"bottomToolbar": "Image element bottom toolbar",
 		"currentImage": "(Current Image)",
 		"custom": "Custom",
 		"editPlaceholder": "Please enter your edit requirements",
@@ -197,6 +258,7 @@
 		"projectFilesRoot": "Current Project Files",
 		"quickEdit": "Quick edit",
 		"reEditFromSaved": "Re-edit",
+		"reEnter": "Re-enter",
 		"referenceImage": "Image",
 		"resolution": "Resolution",
 		"size": "Size"
@@ -214,11 +276,48 @@
 		"trigger": "Extract Prompt",
 		"unavailable": "Image prompt extraction is currently unavailable"
 	},
+	"imageToVideo": {
+		"batchMenu": "Batch images to video"
+	},
 	"layers": {
 		"collapse": "Collapse",
 		"empty": {
 			"description": "Let AI help you easily generate various creative images!",
 			"title": "Canvas is empty"
+		},
+		"filter": {
+			"empty": "No layers match the current filters",
+			"locked": {
+				"all": "All",
+				"label": "Lock status",
+				"locked": "Locked",
+				"unlocked": "Unlocked"
+			},
+			"open": "Filter layers",
+			"reset": "Reset",
+			"title": "Filter",
+			"typeLabel": "Element type",
+			"types": {
+				"all": "All types",
+				"audio": "Audio",
+				"ellipse": "Ellipse",
+				"frame": "Frame",
+				"group": "Group",
+				"image": "Image",
+				"rectangle": "Rectangle",
+				"star": "Star",
+				"storyboard": "Storyboard",
+				"text": "Text",
+				"triangle": "Triangle",
+				"video": "Video",
+				"videoEdit": "Video editing"
+			},
+			"visibility": {
+				"all": "All",
+				"hidden": "Hidden",
+				"label": "Visibility",
+				"visible": "Visible"
+			}
 		},
 		"search": {
 			"clear": "Clear search",
@@ -241,12 +340,17 @@
 		"addFrame": "Add Frame",
 		"addToCurrentConversation": "Add to Current Conversation",
 		"addToNewConversation": "Add to New Topic",
+		"batchDownload": "Batch download",
 		"clipboardSourceUnavailable": "Original file link expired or cannot be accessed. Please copy and paste again.",
 		"copy": "Copy",
 		"copyLoadingDescription": "Preparing media files, please wait...",
 		"copyPng": "Copy as PNG",
 		"copySuccess": "Copy successful",
+		"createImageGenerator": "Image Generation",
+		"createText": "Text",
+		"createVideoGenerator": "Video Generation",
 		"delete": "Delete",
+		"downloadAudio": "Download Audio",
 		"downloadFile": "Download File",
 		"downloadImage": "Download Image",
 		"downloadImageNoWatermark": "Download Image (No Watermark)",
@@ -267,7 +371,10 @@
 	},
 	"messageHistory": {
 		"copyPrompt": "Copy",
+		"copyResourcePath": "Copy resource path",
+		"deletedSuffix": " (Deleted)",
 		"expandPrompt": "Expand",
+		"generationMode": "Generation method",
 		"inputMode": "Input mode",
 		"model": "Model",
 		"noPrompt": "No prompt",
@@ -455,6 +562,35 @@
 	"star": {
 		"defaultName": "Star"
 	},
+	"storyboard": {
+		"addShot": "Add shot",
+		"defaultName": "Storyboard generation",
+		"descriptionPlaceholder": "Describe this shot",
+		"empty": "No shots yet",
+		"emptyDescription": "Enter a description for shot {{index}} first",
+		"generate": "Generate",
+		"generateAll": "Generate all",
+		"generated": "Generated",
+		"imageModel": "Image model",
+		"menuName": "Create storyboard",
+		"modelUnavailable": "No image model is available",
+		"noDescription": "No description",
+		"notGenerated": "Not generated",
+		"pointsCost": "Costs {{count}} points",
+		"referenceImageCount": "{{count}} totals",
+		"referenceImages": "Reference images",
+		"referenceLimit": "This model supports up to {{count}} reference images",
+		"regenerate": "Regenerate",
+		"resolution": "Resolution",
+		"shotList": "Shot list",
+		"shotWithIndex": "Shot {{index}}"
+	},
+	"storyboardVideo": {
+		"executeAll": "Execute all",
+		"menuName": "Create storyboard videos",
+		"menuNameWithCount": "Create storyboard videos ({{count}})",
+		"outputFrameName": "Storyboard video group"
+	},
 	"text": {
 		"defaultName": "Text"
 	},
@@ -473,6 +609,7 @@
 		"unavailable": "Content optimization is currently unavailable"
 	},
 	"tools": {
+		"audioGenerator": "Audio Generator",
 		"frame": "Frame",
 		"hand": "Hand Tool",
 		"imageGenerator": "Image Generator",
@@ -482,6 +619,7 @@
 		"space": "Space",
 		"text": "Text",
 		"upload": "Upload",
+		"uploadAudio": "Upload Audio",
 		"uploadImage": "Upload Image",
 		"uploadVideo": "Upload Video",
 		"videoGenerator": "Video Generator"
@@ -497,29 +635,75 @@
 		"generating": "Generating...",
 		"loadError": "Failed to load video",
 		"loading": "Loading...",
+		"merging": "Merging...",
+		"nameSuffix": {
+			"composing": "(Merging)",
+			"failed": "(Failed)",
+			"generating": "(Generating)",
+			"loading": "(Loading)",
+			"uploading": "(Uploading)"
+		},
+		"replaceFailed": "Failed to replace video. Please try again.",
+		"replaceUnsupported": "Unsupported video format",
 		"retryEditing": "Please edit your video generation request again",
 		"uploading": "Uploading..."
 	},
+	"videoContinuation": {
+		"batchMenu": "Batch Continue Video",
+		"batchSuccess": "Batch continuation completed",
+		"failed": "Failed to continue video. Please try again.",
+		"menu": "Continue Video",
+		"partialSuccess": "Created {{created}}; {{failed}} failed",
+		"processing": "Continuing video, please wait...",
+		"success": "Continuation video created"
+	},
+	"videoEditNode": {
+		"compositionErrors": {
+			"compositionFailed": "Video merge failed. Try again",
+			"missingEditor": "Video editing node not found",
+			"missingVideo": "Link at least one video first",
+			"staleInput": "The input changed. Merge again"
+		},
+		"compositionResultName": "Merged video",
+		"defaultName": "Video Editing",
+		"emptyAudio": "No linked audio",
+		"emptyVideos": "No linked videos",
+		"mergeCancelled": "Merge cancelled",
+		"mergeVideos": "Merge Videos",
+		"unused": "Not used",
+		"usedAudio": "Audio",
+		"usedVideos": "Videos",
+		"videoCount": "{{count}} videos"
+	},
 	"videoEditor": {
 		"aspectRatio": "Aspect ratio",
+		"bottomToolbar": "Video element bottom toolbar",
+		"clearLinkedFrame": "Clear current slot association",
 		"duration": "Duration",
 		"firstFrame": "First frame",
 		"frames": "First & last frame",
 		"generateAgain": "Generate again",
+		"generateAudio": "Audio",
 		"generationSettings": "Generation settings",
 		"generationSettingsAria": "Video generation parameters",
 		"lastFrame": "Last frame",
+		"linkedFrameMedia": "Linked media",
 		"placeholder": "Please enter your video creation requirements",
 		"promptPlaceholderReferenceAudioTokenLabel": "Audio",
 		"promptPlaceholderReferenceImageTokenLabel": "Image",
 		"promptPlaceholderReferenceVideoTokenLabel": "Video",
 		"quality": "Quality",
+		"quickEdit": "Quick edit",
 		"reEditFromSaved": "Re-edit",
+		"reEnter": "Re-enter",
 		"referenceAsset": "Omni Mode",
+		"referenceAssetAllTypesMaxReached": "Image, video, and audio limits have all been reached",
+		"referenceAssetPartialSkipped": "Some media were skipped because they were unsupported, duplicated, or over the limit",
 		"referenceAssetTotalMaxReached": "Up to {{max}} reference assets are allowed",
 		"referenceAssetTotalMinNotMet": "At least {{min}} reference assets are required",
 		"referenceAssetTypeMaxReached": "Up to {{max}} {{assetType}} are allowed",
 		"referenceAssetTypeMinNotMet": "At least {{min}} {{assetType}} are required",
+		"referenceAssetVariantNotMet": "The selected media combination does not meet the model requirements",
 		"referenceImage": "Image",
 		"referenceImageWithIndex": "Image {{index}}",
 		"referenceSourceMaterial": "Sources",
@@ -538,11 +722,15 @@
 		"slotLabelReferenceImage": "Ref",
 		"slotLabelReferenceMedia": "Media",
 		"standard": "Text to video",
+		"useAsEndFrame": "Use as end frame",
+		"useAsStartFrame": "Use as start frame",
 		"videoEdit": "Video Edit",
-		"videoEditRequiresOneVideo": "Video edit mode requires exactly 1 reference video"
+		"videoEditRequiresOneVideo": "Video edit mode requires exactly 1 reference video",
+		"webSearch": "Web Search"
 	},
 	"zoom": {
 		"fitToScreen": "Fit to Screen",
+		"minimap": "Minimap",
 		"zoomIn": "Zoom In",
 		"zoomOut": "Zoom Out",
 		"zoomTo": "Zoom to {{percent}}%"

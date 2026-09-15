@@ -1,6 +1,6 @@
 import { Node } from "@/pages/superMagic/components/MessageList/components/Nodes"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
-import { memo, useMemo } from "react"
+import { memo, type MutableRefObject, type RefObject, useCallback, useMemo } from "react"
 import { useStyles } from "./style"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
@@ -9,18 +9,24 @@ import {
 	messagesConverter,
 	createCheckIsLastMessage,
 } from "@/pages/superMagic/components/MessageList/helpers"
-import { buildMessageKeysAndTurnGroups } from "@/pages/superMagic/components/MessageList/message-turn-groups"
-import { MessageTurnGroupList } from "@/pages/superMagic/components/MessageList/MessageTurnGroupList"
 import { MessageListProvider } from "@/pages/superMagic/components/MessageList/context"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
+import { buildVirtualMessageProjection } from "@/pages/superMagic/components/MessageList/virtual-message-items"
+import { VirtualMessageList } from "@/pages/superMagic/components/MessageList/components/VirtualMessageList"
+import { MessageViewStateProvider } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
+import type { MessageListScrollAdapter } from "@/pages/superMagic/components/MessageList/message-list-scroll-adapter"
 
 function MessageList({
+	topicId,
 	messageList,
 	onSelectDetail,
 	currentTopicStatus,
 	stickyMessageClassName,
 	projectFilesStore,
+	scrollContainerRef,
+	virtualizerRef,
+	onVirtualizerChange,
 }: {
 	topicId: string
 	messageList: any[]
@@ -33,6 +39,20 @@ function MessageList({
 	 */
 	stickyMessageClassName?: string
 	projectFilesStore?: ProjectFilesStore
+	/** Scroll owner supplied by the share shell; virtualization does not create a nested viewport. */
+	scrollContainerRef: RefObject<HTMLDivElement | null>
+	/**
+	 * Handed to the shell so its own scroll writes can address rows instead of guessing at
+	 * `scrollHeight`, which stays an estimate until virtua has measured every row it projects.
+	 */
+	virtualizerRef?: MutableRefObject<MessageListScrollAdapter | null>
+	/**
+	 * Fires once the virtualizer is addressable and again on every canvas resize. The shell
+	 * commits its scroll element after this subtree, so the list mounts a render later than the
+	 * shell's own effects run: a scroll asked for in that window reaches nothing and needs
+	 * re-issuing here.
+	 */
+	onVirtualizerChange?: (virtualizer: MessageListScrollAdapter) => void
 }) {
 	const { styles } = useStyles()
 	const { t } = useTranslation("super")
@@ -45,8 +65,8 @@ function MessageList({
 		[messages],
 	)
 
-	const { messageTurnGroups } = useMemo(
-		() => buildMessageKeysAndTurnGroups(convertedMessages),
+	const virtualProjection = useMemo(
+		() => buildVirtualMessageProjection(convertedMessages),
 		[convertedMessages],
 	)
 
@@ -57,47 +77,57 @@ function MessageList({
 			allowRevoke: false,
 			projectFilesStore,
 		}
-	}, [])
+	}, [projectFilesStore])
+	const getScrollElement = useCallback(() => scrollContainerRef.current, [scrollContainerRef])
+	// Stable identity so the memoized list is not rebuilt on every shell render.
+	const handleVirtualizerChange = useMemoizedFn((virtualizer: MessageListScrollAdapter) =>
+		onVirtualizerChange?.(virtualizer),
+	)
 
 	return (
 		<MessageListProvider value={value}>
-			<div
-				className="flex flex-col gap-2"
-				onClick={() =>
-					console.log(
-						"=====",
-						JSON.parse(JSON.stringify(convertedMessages)),
-						JSON.parse(JSON.stringify(messageTurnGroups)),
-					)
-				}
-			>
-				<MessageTurnGroupList
-					groups={messageTurnGroups}
-					isMobile={isMobile}
-					stickyMessageClassName={stickyMessageClassName}
-					renderNode={({ node, index }) => {
-						return (
-							<Node
-								node={node}
-								onSelectDetail={onSelectDetail}
-								isSelected
-								currentTopicStatus={TaskStatus.FINISHED}
-								role={node?.role || "user"}
-								isFirst={
-									convertedMessages?.[index - 1]?.role === "user" &&
-									convertedMessages?.[index]?.role === "assistant"
-								}
-								checkIsLastMessage={checkIsLastMessage}
-								selectedTopic={null}
-								isShare={true}
-							/>
-						)
-					}}
-				/>
-				{messageList.length > 0 && currentTopicStatus !== TaskStatus.RUNNING && (
-					<div className={styles.aiGeneratedTip}>{t("ui.aiGeneratedTip")}</div>
-				)}
-			</div>
+			<MessageViewStateProvider topicKey={topicId}>
+				<div className="relative flex flex-col gap-2">
+					{/* Topic shares keep mobile positioning while reusing the desktop sticky mask. */}
+					<VirtualMessageList
+						items={virtualProjection.items}
+						userIndices={virtualProjection.userIndices}
+						isMobile={isMobile}
+						useMobileStickyOverlay={false}
+						// The share shell has no header over its scroll viewport, so the pinned
+						// turn parks flush with the top instead of below the workspace's line.
+						stickyTopOffset={0}
+						getScrollElement={getScrollElement}
+						virtualizerRef={virtualizerRef}
+						onVirtualizerChange={handleVirtualizerChange}
+						allowResizeStickySync={false}
+						stickyMessageClassName={stickyMessageClassName}
+						renderNode={({ item }) => {
+							const index = item.sourceIndex
+							const node = item.node
+							return (
+								<Node
+									node={node}
+									onSelectDetail={onSelectDetail}
+									isSelected
+									currentTopicStatus={TaskStatus.FINISHED}
+									role={node?.role || "user"}
+									isFirst={
+										convertedMessages?.[index - 1]?.role === "user" &&
+										convertedMessages?.[index]?.role === "assistant"
+									}
+									checkIsLastMessage={checkIsLastMessage}
+									selectedTopic={null}
+									isShare={true}
+								/>
+							)
+						}}
+					/>
+					{messageList.length > 0 && currentTopicStatus !== TaskStatus.RUNNING && (
+						<div className={styles.aiGeneratedTip}>{t("ui.aiGeneratedTip")}</div>
+					)}
+				</div>
+			</MessageViewStateProvider>
 		</MessageListProvider>
 	)
 }

@@ -79,6 +79,7 @@ abstract class BaseAuthMiddleware implements MiddlewareInterface
             'magic-authorization',
             'api-key',
             'user-authorization',
+            'cookie',
         ];
 
         $result = [];

@@ -1,6 +1,6 @@
 import { memo } from "react"
 import { LayoutGrid, LayoutList } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { type ViewToggleProps } from "../types"
 import { ViewMode } from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem"
 

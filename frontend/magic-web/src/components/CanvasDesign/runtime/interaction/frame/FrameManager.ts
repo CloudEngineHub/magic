@@ -4,6 +4,7 @@ import type { LayerElement, FrameElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import { generateElementId, calculateElementsRect } from "../../shared/ids"
 import { FrameElement as FrameElementClass } from "../../elements/frame/FrameElement"
+import { createContentFrameData, resolveFrameContentLayout } from "./frameCreation"
 
 /**
  * 画框管理器
@@ -35,10 +36,22 @@ export class FrameManager {
 			this.canvas.eventEmitter.on("elements:transform:dragend", () => {
 				this.handleFrameDropDragEnd()
 			}),
-			this.canvas.eventEmitter.on("canvas:readonly", () => {
-				if (this.canvas.readonly) this.cancelFrameDropDrag()
+			this.canvas.eventEmitter.on("permission:changed", () => {
+				if (!this.canvas.permissionManager.can("document.write")) this.cancelFrameDropDrag()
 			}),
 		)
+	}
+
+	/**
+	 * 返回画框换父级拖拽期间的临时目标父级。
+	 *
+	 * 拖拽节点会先临时提升到 contentLayer，文档树要等 dragend 才提交；连线渲染
+	 * 需要这个过渡状态来判断当前应该使用画框内副本、全局副本，还是两者同时使用。
+	 * 返回 undefined 表示元素不在这次换父级拖拽中，null 表示临时目标是根级。
+	 */
+	public getDragTargetParentId(elementId: string): string | null | undefined {
+		if (!this.dragSession?.elementIds.includes(elementId)) return undefined
+		return this.dragSession.targetParentId
 	}
 
 	private handleFrameDropDragStart(elementIds: string[]): void {
@@ -361,10 +374,10 @@ export class FrameManager {
 	/**
 	 * 创建画框
 	 * 将选中的元素组合成一个画框
-	 * @param padding - 画框内边距
+	 * @param boundsExpansion - 显式覆盖默认边距；省略时边距为内容短边的 5%
 	 * @returns 创建的画框 ID，如果创建失败返回 null
 	 */
-	public createFrame(padding: number = 0): string | null {
+	public createFrame(boundsExpansion?: number): string | null {
 		const selectedIds = this.canvas.selectionManager.getSelectedIds()
 		if (selectedIds.length === 0) {
 			return null
@@ -394,25 +407,24 @@ export class FrameManager {
 			return null
 		}
 
-		// 计算画框的位置和尺寸，宽高向上取整
-		const frameX = rect.x - padding
-		const frameY = rect.y - padding
-		const frameWidth = Math.ceil(rect.width + padding * 2)
-		const frameHeight = Math.ceil(rect.height + padding * 2)
+		const layout = resolveFrameContentLayout(rect, { padding: boundsExpansion })
+		const frameX = rect.x - layout.padding
+		const frameY = rect.y - layout.padding
 
 		// 获取选中元素的最大 zIndex，Frame 将使用这个位置
 		const maxSelectedZIndex = Math.max(...selectedElements.map((el) => el.zIndex ?? 0))
 
 		// 创建新的 Frame 元素数据
 		const frameId = generateElementId()
-		const frameData: FrameElement = FrameElementClass.createElementData(
-			frameId,
-			frameX,
-			frameY,
-			frameWidth,
-			frameHeight,
-			maxSelectedZIndex, // Frame 使用选中元素的最大 zIndex
-		)
+		const { frameData } = createContentFrameData({
+			id: frameId,
+			x: frameX,
+			y: frameY,
+			width: rect.width,
+			height: rect.height,
+			zIndex: maxSelectedZIndex,
+			padding: layout.padding,
+		})
 
 		// 禁用历史记录，避免子元素更新时记录多次
 		const historyManager = this.canvas.historyManager
@@ -556,6 +568,7 @@ export class FrameManager {
 
 		// 收集所有需要释放的子元素
 		const elementsToRelease: Array<{ element: FrameElement; children: LayerElement[] }> = []
+		const emptyFrameElements: FrameElement[] = []
 
 		frameElements.forEach((frameElement) => {
 			if (frameElement.children && frameElement.children.length > 0) {
@@ -563,10 +576,12 @@ export class FrameManager {
 					element: frameElement,
 					children: frameElement.children,
 				})
+			} else {
+				emptyFrameElements.push(frameElement)
 			}
 		})
 
-		if (elementsToRelease.length === 0) {
+		if (elementsToRelease.length === 0 && emptyFrameElements.length === 0) {
 			return []
 		}
 
@@ -583,6 +598,14 @@ export class FrameManager {
 		}> = []
 
 		try {
+			emptyFrameElements.forEach((frameElement) => {
+				this.canvas.elementManager.delete(frameElement.id)
+				this.canvas.eventEmitter.emit({
+					type: "frame:removed",
+					data: { frameId: frameElement.id },
+				})
+			})
+
 			elementsToRelease.forEach(({ element: frameElement, children }) => {
 				const frameX = frameElement.x ?? 0
 				const frameY = frameElement.y ?? 0

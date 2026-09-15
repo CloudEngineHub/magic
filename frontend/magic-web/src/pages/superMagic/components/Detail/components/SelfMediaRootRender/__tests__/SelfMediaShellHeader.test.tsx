@@ -134,13 +134,16 @@ describe("SelfMediaShellHeader", () => {
 
 		expect(screen.getByTestId("self-media-shell-header")).toHaveClass("bg-transparent")
 		expect(screen.getByTestId("self-media-shell-header")).not.toHaveClass("border-b")
-		expect(screen.getByTestId("self-media-shell-header")).toHaveClass(
-			"grid-cols-[minmax(14rem,1fr)_auto]",
+		expect(screen.getByTestId("self-media-shell-header")).toHaveClass("flex", "flex-wrap")
+		expect(screen.getByTestId("self-media-shell-title")).toHaveClass(
+			"min-w-[20rem]",
+			"basis-[24rem]",
+			"flex-1",
 		)
-		expect(screen.getByTestId("self-media-shell-header")).toHaveClass(
-			"max-lg:grid-cols-[minmax(0,1fr)_auto]",
+		expect(screen.getByTestId("self-media-shell-title")).toHaveClass(
+			"max-sm:min-w-0",
+			"max-sm:basis-auto",
 		)
-		expect(screen.getByTestId("self-media-shell-header")).not.toHaveClass("max-lg:grid-cols-1")
 		expect(screen.getByTestId("self-media-shell-back-home-button")).toHaveClass(
 			"rounded-[14px]",
 		)

@@ -87,7 +87,7 @@ class UserAuthorizationMiddleware(BaseHTTPMiddleware):
         if _is_bypass_path(request.url.path):
             return await call_next(request)
 
-        expected = _read_expected_authorization()
+        expected = read_expected_authorization()
         if expected is None:
             # metadata.json 不可用 -> sandbox 还没绑定。返回 503 让上游知道
             # 应该等待绑定完成再重试。
@@ -140,8 +140,11 @@ class UserAuthorizationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def _read_expected_authorization() -> str | None:
+def read_expected_authorization() -> str | None:
     """读取 metadata.json 中的 authorization 字段。
+
+    公开入口：HTTP 鉴权中间件与 WebSocket 鉴权中间件共用同一份
+    token 来源，保证两侧的校验口径完全一致。
 
     - 文件缺失 / 不可解析 -> 返回 None（表示 metadata 不可用）
     - 字段缺失或为空字符串 -> 返回空字符串（特殊语义：上层区分处理）

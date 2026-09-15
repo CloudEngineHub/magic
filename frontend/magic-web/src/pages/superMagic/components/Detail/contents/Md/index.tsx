@@ -1,8 +1,8 @@
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
@@ -23,6 +23,7 @@ import {
 	extractImagePaths,
 	isExternalUrl,
 	resolveRelativePath,
+	escapeDangerousInvisibleHtmlTags,
 } from "./utils"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
@@ -36,6 +37,7 @@ import { SuperMagicApi } from "@/apis"
 import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
 import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { documentExportService } from "@/pages/superMagic/services/documentExport"
+import { isLargeMarkdownContent } from "./components/EditorBody/largeMarkdown"
 
 interface TextEditorProps {
 	data?: any
@@ -54,6 +56,8 @@ interface TextEditorProps {
 	onClose?: () => void
 	userSelectDetail?: any
 	isFullscreen?: boolean
+	/** Enables page-level document flow for pure-share previews. */
+	documentFlowFullscreen?: boolean
 	handleShareFile?: () => void
 	allowEdit?: boolean
 	setIsEditMode?: (isEdit: boolean) => void
@@ -94,6 +98,8 @@ interface TextEditorProps {
 	isExporting?: boolean
 	openFileTab?: (fileItem: { file_id: string } & Record<string, any>) => void
 	isPlaybackMode?: boolean
+	/** Cached file tabs use this to gate global preview shortcuts and background work. */
+	isTabActive?: boolean
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
 	/** playback 模式下，由 PlaybackTabContent 提供的 portal 挂载点 */
@@ -142,6 +148,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		onDownload,
 		isFromNode,
 		isFullscreen,
+		documentFlowFullscreen = false,
 		allowEdit,
 		viewMode = "desktop",
 		onViewModeChange,
@@ -164,6 +171,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		isExporting,
 		openFileTab,
 		isPlaybackMode,
+		isTabActive = true,
 		allowDownload,
 		mdToolbarContainer,
 	} = props
@@ -205,9 +213,32 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// 维护一个内部的 viewMode 状态，在数据加载期间保持稳定
 	const [internalViewMode, setInternalViewMode] = useState<"code" | "desktop" | "phone">(viewMode)
+	// The phone frame has fixed dimensions and its own clipping; pure shares need page scrolling.
+	const shouldUsePhoneFrame = !documentFlowFullscreen && internalViewMode === "phone"
 
 	// 计算当前的内容源 - savedContent 优先于 fileData 和 displayData?.content
 	const currentContent = savedContent || displayData?.content || fileData || ""
+	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(currentContent), [currentContent])
+	const wasEditingLargeMarkdownRef = useRef(false)
+
+	// Large documents use the virtual preview while reading and Monaco while editing.
+	// Keep the public view-mode state aligned so the header never advertises rich preview during edits.
+	useEffect(() => {
+		if (isLargeMarkdown && isEditMode) {
+			wasEditingLargeMarkdownRef.current = true
+			if (internalViewMode !== "code") {
+				setInternalViewMode("code")
+				onViewModeChange?.("code")
+			}
+			return
+		}
+
+		if (wasEditingLargeMarkdownRef.current && !isEditMode) {
+			wasEditingLargeMarkdownRef.current = false
+			setInternalViewMode("desktop")
+			onViewModeChange?.("desktop")
+		}
+	}, [internalViewMode, isEditMode, isLargeMarkdown, onViewModeChange])
 
 	// 初始化编辑内容和原始内容
 	useEffect(() => {
@@ -380,7 +411,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			const imagePaths = extractImagePaths(currentContent)
 
 			if (imagePaths.length === 0) {
-				setProcessedContent(currentContent)
+				setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
 				setIsLoading(false)
 				return
 			}
@@ -438,16 +469,16 @@ export default memo(function TextEditor(props: TextEditorProps) {
 					const resolvedMap = buildImageUrlMapEntries(downloadUrls, fileIdToPaths)
 
 					setImageUrlMap(resolvedMap)
-					setProcessedContent(currentContent)
+					setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
 					setIsLoading(false)
 				} catch (error) {
 					console.error("Error fetching download URLs:", error)
-					setProcessedContent(currentContent)
+					setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
 					setImageUrlMap(new Map())
 					setIsLoading(false)
 				}
 			} else {
-				setProcessedContent(currentContent)
+				setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
 				setImageUrlMap(new Map())
 				setIsLoading(false)
 			}
@@ -771,7 +802,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		<>
 			<div
 				className={cn(
-					"flex h-full flex-col overflow-hidden [&_pre]:pl-0 [&_pre_>_pre]:!bg-muted",
+					documentFlowFullscreen
+						? "flex min-h-dvh flex-col overflow-visible [&_pre]:pl-0 [&_pre_>_pre]:!bg-muted"
+						: "flex h-full flex-col overflow-hidden [&_pre]:pl-0 [&_pre_>_pre]:!bg-muted",
 					className,
 				)}
 			>
@@ -806,23 +839,36 @@ export default memo(function TextEditor(props: TextEditorProps) {
 					/>
 				)}
 				{loading ? (
-					<div className="flex h-full w-full items-center justify-center bg-background">
-						<MagicSpin spinning />
-					</div>
+					documentFlowFullscreen ? (
+						<div className="min-h-dvh" />
+					) : (
+						<div className="flex h-full w-full items-center justify-center bg-background">
+							<MagicSpin spinning />
+						</div>
+					)
 				) : isDeleted ? (
 					<Deleted data={displayData} showHeader={false} />
 				) : (
 					<div
 						className={cn(
-							"h-full overflow-auto transition-[background-color_0.4s_cubic-bezier(0.4,0,0.2,1)]",
-							internalViewMode === "phone" &&
+							documentFlowFullscreen
+								? "min-h-dvh flex-1 overflow-visible transition-[background-color_0.4s_cubic-bezier(0.4,0,0.2,1)]"
+								: "min-h-0 flex-1 transition-[background-color_0.4s_cubic-bezier(0.4,0,0.2,1)]",
+							!documentFlowFullscreen &&
+								(internalViewMode === "code" ? "overflow-hidden" : "overflow-auto"),
+							shouldUsePhoneFrame &&
 								"flex w-full items-center justify-center bg-muted",
 						)}
 					>
 						<div
 							className={cn(
-								"m-auto h-full w-full flex-none transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]",
-								internalViewMode === "phone" &&
+								documentFlowFullscreen
+									? "m-auto min-h-dvh w-full flex-none overflow-visible transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]"
+									: "m-auto h-full min-h-0 w-full flex-none transition-[width_0.4s_cubic-bezier(0.4,0,0.2,1),border-radius_0.4s_cubic-bezier(0.4,0,0.2,1),background-color_0.4s_cubic-bezier(0.4,0,0.2,1),box-shadow_0.4s_cubic-bezier(0.4,0,0.2,1)]",
+								!documentFlowFullscreen &&
+									internalViewMode === "code" &&
+									"overflow-hidden",
+								shouldUsePhoneFrame &&
 									"!my-5 h-[calc(100%-40px)] w-[416px] flex-none overflow-hidden rounded-lg border border-border bg-background shadow-[0_4px_14px_0_rgba(0,0,0,0.1),0_0_1px_0_rgba(0,0,0,0.3)]",
 							)}
 						>
@@ -833,7 +879,13 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								content={currentContent}
 								processedContent={processedContent}
 								className={cn(
-									"h-full flex-1 overflow-auto whitespace-pre-wrap bg-background text-base [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-black/15 dark:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5",
+									documentFlowFullscreen
+										? "min-h-dvh flex-1 overflow-visible bg-background text-base"
+										: "h-full min-h-0 flex-1 bg-background text-base [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-black/15 dark:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5",
+									!documentFlowFullscreen &&
+										(internalViewMode === "code"
+											? "overflow-hidden"
+											: "overflow-auto whitespace-pre-wrap"),
 									internalViewMode === "code" && "[&_>_pre]:!bg-background",
 								)}
 								isEditMode={isEditMode}
@@ -846,6 +898,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								onOpenFile={openFileTab}
 								placeholder={t("fileViewer.placeholder.content")}
 								resolveImagesFolderParentId={resolveImagesFolderParentId}
+								suppressLoadingIndicator={documentFlowFullscreen}
+								documentFlowFullscreen={documentFlowFullscreen}
+								isTabActive={isTabActive}
 							/>
 						</div>
 					</div>

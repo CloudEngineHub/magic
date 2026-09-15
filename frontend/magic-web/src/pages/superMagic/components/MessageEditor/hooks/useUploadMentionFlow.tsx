@@ -1,4 +1,4 @@
-import type { Editor, JSONContent } from "@tiptap/react"
+import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useEffect } from "react"
 import { useMemoizedFn } from "ahooks"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
@@ -27,7 +27,6 @@ import {
 	insertUploadMentionNodes as insertUploadMentionNodesService,
 	removeUploadMentionNodes as removeUploadMentionNodesService,
 	replaceUploadMentionNode as replaceUploadMentionNodeService,
-	updateUploadMentionProgress as updateUploadMentionProgressService,
 } from "../services/uploadMentionService"
 import { isPendingProjectFileMention } from "../utils/mention"
 
@@ -72,18 +71,6 @@ export default function useUploadMentionFlow({
 	const insertUploadMentionNodes = useMemoizedFn((fileDatas: FileData[]) => {
 		insertUploadMentionNodesService({ editor: getEditor(), fileDatas })
 	})
-
-	const updateUploadMentionProgress = useMemoizedFn(
-		(fileId: string, progress: number, status: FileData["status"], error?: string) => {
-			updateUploadMentionProgressService({
-				editor: getEditor(),
-				fileId,
-				progress,
-				status,
-				error,
-			})
-		},
-	)
 
 	const replaceUploadMentionNode = useMemoizedFn(
 		(
@@ -148,6 +135,28 @@ export default function useUploadMentionFlow({
 		return ""
 	})
 
+	// 粘贴得到的引用不拥有原文件；删除监听和删除处理必须使用同一判定。
+	const isPastedFileReference = useMemoizedFn((attrs: TiptapMentionAttributes) => {
+		if (isPendingProjectFileMention(attrs)) return true
+		if (attrs.type !== MentionItemType.UPLOAD_FILE) return false
+		return Boolean(
+			fileUploadStore.getFileById((attrs.data as UploadFileMentionData).file_id)
+				?.isVirtualReference,
+		)
+	})
+
+	const isAllowedUploadMention = useMemoizedFn((mentionAttrs: TiptapMentionAttributes) => {
+		if (mentionAttrs.type !== MentionItemType.UPLOAD_FILE) return true
+
+		const uploadData = mentionAttrs.data as UploadFileMentionData
+		const isPendingUpload =
+			uploadData.upload_status === "init" || uploadData.upload_status === "uploading"
+
+		if (!isPendingUpload) return true
+
+		return fileUploadStore.isCurrentSessionUploadFile(uploadData.file_id)
+	})
+
 	const createMentionAttrsFromFile = useMemoizedFn(
 		(file: FileData): TiptapMentionAttributes | null => {
 			if (file.isVirtualReference && file.saveResult?.file_type === "directory") {
@@ -162,14 +171,17 @@ export default function useUploadMentionFlow({
 				}
 			}
 
-			if (file.saveResult?.file_id) {
+			if (file.saveResult?.file_id && !file.isCanvasClipboard) {
 				return {
 					type: MentionItemType.PROJECT_FILE,
 					data: {
 						file_id: file.saveResult.file_id,
 						file_name: file.saveResult.file_name ?? file.name,
 						file_path:
-							file.saveResult.relative_file_path ?? file.saveResult.file_key ?? "",
+							file.saveResult.relative_file_path || file.defaultRelativePath || "",
+						relative_file_path:
+							file.saveResult.relative_file_path || file.defaultRelativePath,
+						is_hidden: file.saveResult.is_hidden ?? file.isHidden,
 						file_extension: file.name.split(".").pop() ?? "",
 						file_size: file.saveResult.file_size ?? file.file.size,
 					},
@@ -187,7 +199,10 @@ export default function useUploadMentionFlow({
 					upload_progress: file.progress,
 					upload_status: file.status,
 					upload_error: file.error,
-					file_path: file.reportResult?.file_key ?? "",
+					file_path: file.reportResult?.file_key ?? file.result?.key ?? "",
+					is_canvas_clipboard: file.isCanvasClipboard,
+					relative_file_path: file.defaultRelativePath,
+					is_hidden: file.isHidden,
 				},
 			}
 		},
@@ -306,7 +321,6 @@ export default function useUploadMentionFlow({
 			maxUploadSize: 1024 * 1024 * 500,
 			onFileUpload,
 			onFileAdded: insertUploadMentionNodes,
-			onFileProgressUpdate: updateUploadMentionProgress,
 			onFileCompleted: replaceUploadMentionNode,
 			onFileRemoved: (fileId) => {
 				const target = fileUploadStore.files.find((file) => file.id === fileId)
@@ -327,7 +341,6 @@ export default function useUploadMentionFlow({
 		replaceUploadMentionNode,
 		selectedProjectId,
 		selectedTopicId,
-		updateUploadMentionProgress,
 	])
 
 	useEffect(() => {
@@ -359,11 +372,7 @@ export default function useUploadMentionFlow({
 				return
 			}
 
-			if (
-				(mentionAttrs.type === MentionItemType.PROJECT_FILE ||
-					mentionAttrs.type === MentionItemType.FOLDER) &&
-				isPendingProjectFileMention(mentionAttrs)
-			) {
+			if (isPastedFileReference(mentionAttrs)) {
 				removeMentionOnly(mentionAttrs)
 				return
 			}
@@ -415,6 +424,9 @@ export default function useUploadMentionFlow({
 			context?: { deletionInput: MentionDeletionInput },
 		) => {
 			if (stillExists) {
+				return false
+			}
+			if (isPastedFileReference(mentionAttrs)) {
 				return false
 			}
 
@@ -474,6 +486,7 @@ export default function useUploadMentionFlow({
 		handleRemoveFile,
 		handleRemoveUploadedFile,
 		handleMentionRemoveItems,
+		isAllowedUploadMention,
 		shouldRestoreRemovedMention,
 	}
 }

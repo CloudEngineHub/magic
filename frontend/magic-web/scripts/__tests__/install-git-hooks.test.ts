@@ -84,7 +84,7 @@ describe("install git hooks script", () => {
 			status: "configured",
 			hooksDir,
 			projectRelativeDir: "frontend/magic-web",
-			installedHooks: ["pre-commit", "commit-msg"],
+			installedHooks: ["pre-commit", "commit-msg", "pre-merge-commit"],
 		})
 		expect(calls).toEqual([
 			{
@@ -119,6 +119,9 @@ describe("install git hooks script", () => {
 		)
 		expect(readHook(hooksDir, "commit-msg")).toContain(
 			"$magic_web_project_dir/.husky/commit-msg",
+		)
+		expect(readHook(hooksDir, "pre-merge-commit")).toContain(
+			"$magic_web_project_dir/.husky/pre-merge-commit",
 		)
 	})
 

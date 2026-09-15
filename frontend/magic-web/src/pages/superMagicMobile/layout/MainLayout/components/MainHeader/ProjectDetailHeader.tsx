@@ -59,7 +59,7 @@ export function ProjectDetailHeader({
 		showActions && actionsLayout === "project-entry" && showActionCapsule
 
 	return (
-		<div className="mobile-page-header pb-0" data-testid="project-detail-header-root">
+		<div className="mobile-page-header z-50 pb-0" data-testid="project-detail-header-root">
 			<button
 				type="button"
 				onClick={onBackClick}

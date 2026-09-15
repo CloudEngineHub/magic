@@ -39,10 +39,11 @@ Router::addGroup('/api/v1/organization/admin', static function () {
         Router::post('/by-category', [OrganizationServiceProviderApi::class, 'getOrganizationProvidersByCategory']);
         Router::get('/templates/queries', [OrganizationServiceProviderApi::class, 'queriesServiceProviderTemplates']);
         Router::get('/office-info', [OrganizationServiceProviderApi::class, 'isCurrentOrganizationOfficial']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
 
-        Router::get('/available-llm', [OrganizationServiceProviderApi::class, 'getAllAvailableLlmProviders']);
-        Router::get('/non-official-llm', [OrganizationServiceProviderApi::class, 'getNonOfficialLlmProviders']);
-        Router::get('/non-official/queries', [OrganizationServiceProviderApi::class, 'queriesServiceProviderTemplates']);
+    Router::addGroup('/provider-models', static function () {
+        Router::post('/queries', [OrganizationServiceProviderApi::class, 'queriesProviderModels']);
+        Router::post('/groups/queries', [OrganizationServiceProviderApi::class, 'queriesProviderModelGroups']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
     // 非官方组织应用菜单管理

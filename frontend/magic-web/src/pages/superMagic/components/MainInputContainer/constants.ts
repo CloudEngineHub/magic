@@ -26,6 +26,7 @@ export const SCENE_INPUT_IDS = {
 export const INPUT_CONTAINER_MIN_HEIGHT = {
 	HomePage: 170,
 	TopicPage: 150,
+	InvalidModeFallback: 96,
 	MobilePage: 132,
 }
 

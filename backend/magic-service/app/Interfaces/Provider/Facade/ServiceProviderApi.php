@@ -28,7 +28,9 @@ use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Infrastructure\Util\Permission\Annotation\CheckProviderModelPermission;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
+use App\Interfaces\Provider\Assembler\AdminProviderModelAssembler;
 use App\Interfaces\Provider\DTO\ConnectivityTestByConfigRequest;
+use App\Interfaces\Provider\DTO\ProviderModelQueryRequest;
 use App\Interfaces\Provider\DTO\SaveProviderConfigRequest;
 use App\Interfaces\Provider\DTO\SaveProviderModelDTO;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
@@ -253,19 +255,6 @@ class ServiceProviderApi extends AbstractApi
     }
 
     /**
-     * 获取所有非官方LLM服务商列表
-     * 直接从数据库中查询category为llm且provider_type不为OFFICIAL的服务商
-     * 不依赖于当前组织，适用于需要添加服务商的场景.
-     */
-    #[CheckPermission(MagicResourceEnum::PLATFORM_MODEL_TEXT, MagicOperationEnum::QUERY)]
-    public function getNonOfficialLlmProviders()
-    {
-        $authenticatable = $this->getAuthorization();
-        // 直接获取所有LLM类型的非官方服务商
-        return $this->adminProviderAppService->queriesServiceProviderTemplates(Category::LLM, $authenticatable->getOrganizationCode());
-    }
-
-    /**
      * 获取所有非官方服务商列表
      * 不依赖于当前组织，适用于需要添加服务商的场景.
      */
@@ -314,17 +303,6 @@ class ServiceProviderApi extends AbstractApi
     }
 
     /**
-     * 获取所有可用的LLM服务商列表（包括官方服务商）.
-     */
-    #[CheckPermission(MagicResourceEnum::PLATFORM_MODEL_TEXT, MagicOperationEnum::QUERY)]
-    public function getAllAvailableLlmProviders()
-    {
-        $authenticatable = $this->getAuthorization();
-        // 获取所有LLM类型的服务商（包括Official）
-        return $this->adminProviderAppService->getAllAvailableLlmProviders(Category::LLM, $authenticatable->getOrganizationCode());
-    }
-
-    /**
      * Get super magic display models and Magic provider models visible to current organization.
      * @return SuperMagicModelDTO[]
      */
@@ -346,6 +324,34 @@ class ServiceProviderApi extends AbstractApi
         $authenticatable = $this->getAuthorization();
         $providerModelQuery = new ProviderModelQuery($request->all());
         return $this->adminProviderAppService->queriesModels($authenticatable, $providerModelQuery);
+    }
+
+    /**
+     * 查询服务商模型明细列表，并返回前端需要的分页结构。
+     */
+    #[CheckPermission(MagicResourceEnum::PLATFORM_MODEL, MagicOperationEnum::QUERY)]
+    public function queriesProviderModels(RequestInterface $request): array
+    {
+        $authenticatable = $this->getAuthorization();
+        $result = $this->adminProviderAppService->queriesProviderModels(
+            $authenticatable,
+            new ProviderModelQueryRequest($request->all())
+        );
+        return AdminProviderModelAssembler::modelRecordsToArray($result);
+    }
+
+    /**
+     * 按模型标识聚合查询模型列表，并返回关联服务商信息。
+     */
+    #[CheckPermission(MagicResourceEnum::PLATFORM_MODEL, MagicOperationEnum::QUERY)]
+    public function queriesProviderModelGroups(RequestInterface $request): array
+    {
+        $authenticatable = $this->getAuthorization();
+        $result = $this->adminProviderAppService->queriesProviderModelGroups(
+            $authenticatable,
+            new ProviderModelQueryRequest($request->all())
+        );
+        return AdminProviderModelAssembler::modelGroupsToArray($result);
     }
 
     // 获取模型详情

@@ -162,6 +162,44 @@ describe("ContentCleaner", () => {
 			expect(cleaned).toContain("Edited text")
 		})
 
+		it("should remove legacy editing attributes while preserving author inline styles", () => {
+			const html = `<!DOCTYPE html><html><body>
+				<p
+					id="placeholder-copy"
+					contenteditable="true"
+					data-text-editing="true"
+					data-previous-content="Previous placeholder"
+					data-previous-user-select="none"
+					data-previous-webkit-user-select="none"
+					style="color: red; user-select: text; -webkit-user-select: text; outline: none; outline-offset: 2px;"
+				>Placeholder copy</p>
+			</body></html>`
+
+			const cleaned = ContentCleaner.cleanDocument(html)
+			const cleanedDocument = new DOMParser().parseFromString(cleaned, "text/html")
+			const element = cleanedDocument.querySelector("#placeholder-copy") as HTMLElement
+
+			expect(element.style.color).toBe("red")
+			expect(element.style.userSelect).toBe("text")
+			expect(element.getAttribute("style")).toContain("-webkit-user-select: text")
+			expect(element.style.outline).toBe("none")
+			expect(element.style.outlineOffset).toBe("2px")
+			expect(cleaned).not.toContain("data-text-editing")
+			expect(cleaned).not.toContain("data-previous-user-select")
+			expect(cleaned).not.toContain("data-previous-webkit-user-select")
+		})
+
+		it("should remove unsafe hrefs and protect blank targets before persistence", () => {
+			const cleaned = ContentCleaner.cleanDocument(
+				"<html><body><a href='javascript:alert(1)' target='_blank'>Unsafe</a><a href=' /safe '>Safe</a></body></html>",
+			)
+			const doc = new DOMParser().parseFromString(cleaned, "text/html")
+
+			expect(doc.querySelector("a")?.hasAttribute("href")).toBe(false)
+			expect(doc.querySelectorAll("a")[0]?.getAttribute("rel")).toBe("noopener noreferrer")
+			expect(doc.querySelectorAll("a")[1]?.getAttribute("href")).toBe("/safe")
+		})
+
 		it("should handle empty document", () => {
 			const html = `<!DOCTYPE html><html><body></body></html>`
 			const cleaned = ContentCleaner.cleanDocument(html)

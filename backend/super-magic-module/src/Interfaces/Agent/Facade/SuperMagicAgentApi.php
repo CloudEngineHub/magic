@@ -13,6 +13,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Context\RequestContext;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Dtyq\SuperMagic\Application\Agent\Service\ImportAgentAppService;
+use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\Request\CreateAgentProjectRequestDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\ProjectAppService;
@@ -20,6 +21,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ProjectMode;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\Interfaces\Agent\Assembler\MentionSkillAssembler;
 use Dtyq\SuperMagic\Interfaces\Agent\Assembler\SuperMagicAgentAssembler;
+use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\CheckAgentAccessRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\CreateAgentRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\PublishAgentRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Agent\DTO\Request\QueryAgentListRequestDTO;
@@ -41,6 +43,9 @@ class SuperMagicAgentApi extends AbstractApi
     protected SuperMagicAgentAppService $superMagicAgentAppService;
 
     #[Inject]
+    protected SuperMagicAgentAccessAppService $superMagicAgentAccessAppService;
+
+    #[Inject]
     protected ImportAgentAppService $importAgentAppService;
 
     #[Inject]
@@ -56,6 +61,18 @@ class SuperMagicAgentApi extends AbstractApi
     public function getFeatured(): array
     {
         return $this->modeAppService->getFeaturedAgent($this->getAuthorization());
+    }
+
+    public function checkAccess(): array
+    {
+        $authorization = $this->getAuthorization();
+        $requestDTO = CheckAgentAccessRequestDTO::fromRequest($this->request);
+
+        return $this->superMagicAgentAccessAppService->checkUsableAgentCode(
+            $authorization->getOrganizationCode(),
+            $authorization->getId(),
+            $requestDTO->getCode()
+        );
     }
 
     /**
@@ -215,16 +232,23 @@ class SuperMagicAgentApi extends AbstractApi
 
         // 调用应用服务层处理业务逻辑
         $result = $this->superMagicAgentAppService->queries($authorization, $requestDTO);
+        $originData = $this->superMagicAgentAppService->getAgentListOriginData(
+            $authorization,
+            $result['user_agents_map'] ?? []
+        );
         $responseDTO = SuperMagicAgentAssembler::createMyAgentsResponseDTO(
             agents: $result['agents'],
             playbooksMap: $result['playbooks_map'],
             storeAgentsMap: $result['agent_market_map'],
             latestVersionsMap: $result['latest_versions_map'],
             userAgentsMap: $result['user_agents_map'] ?? [],
+            currentUserId: $authorization->getId(),
             page: $requestDTO->getPage(),
             pageSize: $requestDTO->getPageSize(),
             total: $result['total'],
-            organizationInfoMap: $result['organization_info_map'] ?? []
+            organizationInfoMap: $result['organization_info_map'] ?? [],
+            officialAgentCodes: $originData['official_agent_codes'],
+            marketSourceMap: $originData['market_source_map']
         );
 
         // 返回数组格式
@@ -240,6 +264,10 @@ class SuperMagicAgentApi extends AbstractApi
         $requestDTO = QueryAgentListRequestDTO::fromRequest($this->request);
 
         $result = $this->superMagicAgentAppService->queryList($authorization, $requestDTO);
+        $originData = $this->superMagicAgentAppService->getAgentListOriginData(
+            $authorization,
+            $result['user_agents_map'] ?? []
+        );
         $responseDTO = SuperMagicAgentAssembler::createExternalAgentsResponseDTO(
             agents: $result['agents'],
             playbooksMap: $result['playbooks_map'],
@@ -253,7 +281,9 @@ class SuperMagicAgentApi extends AbstractApi
             agentOperations: $result['agent_operations'] ?? [],
             publisherUserMap: $result['publisher_user_map'] ?? [],
             creatorUserMap: $result['creator_user_map'] ?? [],
-            organizationInfoMap: $result['organization_info_map'] ?? []
+            organizationInfoMap: $result['organization_info_map'] ?? [],
+            officialAgentCodes: $originData['official_agent_codes'],
+            marketSourceMap: $originData['market_source_map']
         );
 
         return $responseDTO->toArray();
@@ -268,16 +298,23 @@ class SuperMagicAgentApi extends AbstractApi
         $requestDTO = QueryAgentsRequestDTO::fromRequest($this->request);
 
         $result = $this->superMagicAgentAppService->queriesCreated($authorization, $requestDTO);
+        $originData = $this->superMagicAgentAppService->getAgentListOriginData(
+            $authorization,
+            $result['user_agents_map'] ?? []
+        );
         $responseDTO = SuperMagicAgentAssembler::createMyAgentsResponseDTO(
             agents: $result['agents'],
             playbooksMap: $result['playbooks_map'],
             storeAgentsMap: $result['agent_market_map'],
             latestVersionsMap: $result['latest_versions_map'],
             userAgentsMap: $result['user_agents_map'] ?? [],
+            currentUserId: $authorization->getId(),
             page: $requestDTO->getPage(),
             pageSize: $requestDTO->getPageSize(),
             total: $result['total'],
-            organizationInfoMap: $result['organization_info_map'] ?? []
+            organizationInfoMap: $result['organization_info_map'] ?? [],
+            officialAgentCodes: $originData['official_agent_codes'],
+            marketSourceMap: $originData['market_source_map']
         );
 
         return $responseDTO->toArray();
@@ -292,6 +329,10 @@ class SuperMagicAgentApi extends AbstractApi
         $requestDTO = QueryAgentsRequestDTO::fromRequest($this->request);
 
         $result = $this->superMagicAgentAppService->queriesTeamShared($authorization, $requestDTO);
+        $originData = $this->superMagicAgentAppService->getAgentListOriginData(
+            $authorization,
+            $result['user_agents_map'] ?? []
+        );
 
         $responseDTO = SuperMagicAgentAssembler::createExternalAgentsResponseDTO(
             agents: $result['agents'],
@@ -306,7 +347,9 @@ class SuperMagicAgentApi extends AbstractApi
             total: $result['total'],
             publisherUserMap: $result['publisher_user_map'] ?? [],
             creatorUserMap: $result['publisher_user_map'] ?? [],
-            organizationInfoMap: $result['organization_info_map'] ?? []
+            organizationInfoMap: $result['organization_info_map'] ?? [],
+            officialAgentCodes: $originData['official_agent_codes'],
+            marketSourceMap: $originData['market_source_map']
         );
 
         return $responseDTO->toArray();
@@ -321,6 +364,10 @@ class SuperMagicAgentApi extends AbstractApi
         $requestDTO = QueryAgentsRequestDTO::fromRequest($this->request);
 
         $result = $this->superMagicAgentAppService->queriesMarketInstalled($authorization, $requestDTO);
+        $originData = $this->superMagicAgentAppService->getAgentListOriginData(
+            $authorization,
+            $result['user_agents_map'] ?? []
+        );
         $responseDTO = SuperMagicAgentAssembler::createExternalAgentsResponseDTO(
             agents: $result['agents'],
             playbooksMap: $result['playbooks_map'],
@@ -333,7 +380,9 @@ class SuperMagicAgentApi extends AbstractApi
             pageSize: $requestDTO->getPageSize(),
             total: $result['total'],
             publisherUserMap: [],
-            organizationInfoMap: $result['organization_info_map'] ?? []
+            organizationInfoMap: $result['organization_info_map'] ?? [],
+            officialAgentCodes: $originData['official_agent_codes'],
+            marketSourceMap: $originData['market_source_map']
         );
 
         return $responseDTO->toArray();
@@ -363,6 +412,10 @@ class SuperMagicAgentApi extends AbstractApi
         $authorization = $this->getAuthorization();
         $requestDTO = QueryAgentsRequestDTO::fromRequest($this->request);
         $result = $this->superMagicAgentAppService->externalQueries($authorization, $requestDTO);
+        $originData = $this->superMagicAgentAppService->getAgentListOriginData(
+            $authorization,
+            $result['user_agents_map'] ?? []
+        );
         $responseDTO = SuperMagicAgentAssembler::createExternalAgentsResponseDTO(
             agents: $result['agents'],
             playbooksMap: $result['playbooks_map'],
@@ -375,7 +428,9 @@ class SuperMagicAgentApi extends AbstractApi
             pageSize: $requestDTO->getPageSize(),
             total: $result['total'],
             publisherUserMap: $result['publisher_user_map'] ?? [],
-            organizationInfoMap: $result['organization_info_map'] ?? []
+            organizationInfoMap: $result['organization_info_map'] ?? [],
+            officialAgentCodes: $originData['official_agent_codes'],
+            marketSourceMap: $originData['market_source_map']
         );
 
         return $responseDTO->toArray();

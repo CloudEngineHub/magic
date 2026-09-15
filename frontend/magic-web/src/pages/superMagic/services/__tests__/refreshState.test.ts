@@ -9,6 +9,7 @@ const {
 	projectStoreMock,
 	workspaceStoreMock,
 	topicStoreMock,
+	interfaceStoreMock,
 } = vi.hoisted(() => ({
 	projectServiceMock: {
 		getProjectDetail: vi.fn(),
@@ -49,10 +50,13 @@ const {
 		setSelectedTopic: vi.fn(),
 		updateTopicName: vi.fn(),
 	},
+	interfaceStoreMock: {
+		isMobile: false,
+	},
 }))
 
 vi.mock("@/stores/interface", () => ({
-	interfaceStore: { isMobile: false },
+	interfaceStore: interfaceStoreMock,
 }))
 
 vi.mock("i18next", () => ({
@@ -150,6 +154,7 @@ describe("SuperMagicService.refreshState", () => {
 		workspaceStoreMock.workspaces = []
 		projectStoreMock.selectedProject = { id: "project-stale" }
 		projectStoreMock.loadedWorkspaces = new Set<string>()
+		interfaceStoreMock.isMobile = false
 		routeManageServiceMock.getCurrentRouteParams.mockReturnValue({})
 		routeManageServiceMock.isStaleScopedRefresh.mockReturnValue(false)
 		workspaceServiceMock.getWorkspaceDetail.mockResolvedValue({
@@ -177,10 +182,37 @@ describe("SuperMagicService.refreshState", () => {
 			{
 				workspaceId: "workspace-alpha",
 				page: 1,
+				clearWhenNoProjects: false,
 			},
 			{ enableErrorMessagePrompt: false },
 		)
 		expect(routeManageServiceMock.fixRouteParams).toHaveBeenCalled()
+	})
+
+	it("keeps route project selection while refreshing an empty project list", async () => {
+		interfaceStoreMock.isMobile = true
+		routeManageServiceMock.getCurrentRouteParams.mockReturnValue({
+			projectId: "project-route-target",
+		})
+		projectServiceMock.getProjectDetail.mockResolvedValue({
+			id: "project-route-target",
+			workspace_id: "workspace-alpha",
+			user_role: "owner",
+		})
+
+		await SuperMagicService.refreshState({ projectId: "project-route-target" })
+
+		expect(projectServiceMock.fetchProjects).toHaveBeenCalledWith(
+			{
+				workspaceId: "workspace-alpha",
+				page: 1,
+				clearWhenNoProjects: false,
+			},
+			{ enableErrorMessagePrompt: false },
+		)
+		expect(projectStoreMock.setSelectedProject).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "project-route-target" }),
+		)
 	})
 
 	it("uses the provided normal workspace when navigating home from chat workspace", async () => {

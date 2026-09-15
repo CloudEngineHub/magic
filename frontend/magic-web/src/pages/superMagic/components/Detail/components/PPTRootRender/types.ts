@@ -1,5 +1,6 @@
 import type { DetailHTMLData } from "../../types"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { PPTSlideStructureAdapter } from "../PPTRender/types"
 
 export interface PPTRootRenderProps {
 	data: DetailHTMLData
@@ -24,7 +25,7 @@ export interface PPTRootRenderProps {
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
-	) => Promise<void>
+	) => Promise<boolean | void>
 	className?: string
 	updatedAt?: string
 	displayConfig?: any
@@ -42,4 +43,6 @@ export interface PPTRootRenderProps {
 	projectId?: string
 	onRegisterCheckBeforeClose?: (fileId: string, callback: () => Promise<boolean>) => void
 	onUnregisterCheckBeforeClose?: (fileId: string) => void
+	slideStructureAdapter?: PPTSlideStructureAdapter
+	disableMagicProjectLookup?: boolean
 }

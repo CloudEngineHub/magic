@@ -2,9 +2,10 @@ import { useEffect, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { reaction } from "mobx"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
-import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { TaskStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
+import { projectVisibleMessagesByRevokedTail } from "@/pages/superMagic/utils/project-visible-messages-by-revoked-tail"
 import { resolveTopicConversationLoadingState } from "./topic-conversation-loading"
 
 interface TopicMessagesChangePayload<TStatus = unknown> {
@@ -32,15 +33,17 @@ export function useTopicConversationLoading<TStatus = unknown>({
 	selectedTopic,
 }: UseTopicConversationLoadingParams<TStatus>) {
 	const currentTopicId = selectedTopic?.chat_topic_id || ""
+	const selectedTopicStatus = selectedTopic?.task_status || selectedTopic?.status
 	const [showLoading, setShowLoading] = useState(false)
 	const [messageState, setMessageState] = useState<{
 		topicId: string
 		messages: SuperMagicMessageItem[]
 	}>(() => {
+		const canonicalMessages = (superMagicStore.messages?.get(currentTopicId) ||
+			[]) as SuperMagicMessageItem[]
 		return {
 			topicId: currentTopicId,
-			messages: (superMagicStore.messages?.get(currentTopicId) ||
-				[]) as SuperMagicMessageItem[],
+			messages: projectVisibleMessagesByRevokedTail(canonicalMessages),
 		}
 	})
 
@@ -54,11 +57,16 @@ export function useTopicConversationLoading<TStatus = unknown>({
 	})
 
 	const handleTopicMessagesChange = useMemoizedFn((topicMessages: SuperMagicMessageItem[]) => {
-		const { isLoading, lastMessage, lastMessageNode } = resolveTopicConversationLoadingState({
+		const resolvedState = resolveTopicConversationLoadingState({
 			topicMessages,
-			getMessageNode: (appMessageId) => superMagicStore.getMessageNode(appMessageId),
+			getMessageNode: (superMessageId) => superMagicStore.getMessageNode(superMessageId),
 			getOptimisticStatus: getOptimisticMessageStatus,
 		})
+		const { lastMessage, lastMessageNode } = resolvedState
+		// waiting_for_user 表示 Topic 已把控制权交还用户；即使最后一条消息仍保留
+		// running/waiting 的历史节点状态，也不能继续维持全局对话 Loading。
+		const isLoading =
+			selectedTopicStatus === TaskStatus.WAITING_FOR_USER ? false : resolvedState.isLoading
 
 		setShowLoading(isLoading)
 
@@ -75,8 +83,9 @@ export function useTopicConversationLoading<TStatus = unknown>({
 	})
 
 	useEffect(() => {
-		const currentTopicMessages = (superMagicStore.messages?.get(currentTopicId) ||
+		const currentCanonicalMessages = (superMagicStore.messages?.get(currentTopicId) ||
 			[]) as SuperMagicMessageItem[]
+		const currentTopicMessages = projectVisibleMessagesByRevokedTail(currentCanonicalMessages)
 
 		// 调用方依赖返回的 messages 做渲染；
 		// 将 topicId 与 messages 一起存入局部 state，防止切换话题时短暂暴露前一话题的消息缓存。
@@ -85,12 +94,17 @@ export function useTopicConversationLoading<TStatus = unknown>({
 			messages: currentTopicMessages,
 		})
 		handleTopicMessagesChange(currentTopicMessages)
-	}, [handleTopicMessagesChange, currentTopicId])
+	}, [handleTopicMessagesChange, currentTopicId, selectedTopicStatus])
 
 	useEffect(() => {
 		return reaction(
 			() => ({
-				messages: superMagicStore.messages?.get(currentTopicId) || [],
+				// Read the visible projection inside the tracked expression so in-place
+				// revoked-status changes also update UI consumers without mutating Store.
+				messages: projectVisibleMessagesByRevokedTail(
+					(superMagicStore.messages?.get(currentTopicId) ||
+						[]) as SuperMagicMessageItem[],
+				),
 				// 触碰 sidecar map 让 MobX 追踪它作为依赖；
 				// 仅 optimistic 状态变化时，主消息数组引用不变。
 				_sidecar: optimisticMessageStore.topicOptimisticMap[currentTopicId],

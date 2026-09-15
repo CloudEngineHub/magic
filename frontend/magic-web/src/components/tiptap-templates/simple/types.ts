@@ -1,5 +1,10 @@
-import type { Content, EditorEvents, AnyExtension, Editor } from "@tiptap/react"
-import type { CharacterCountOptions } from "@tiptap/extensions"
+import type {
+	Content,
+	EditorEvents,
+	AnyExtension,
+	Editor,
+} from "@/infrastructure/editors/tiptap/react"
+import type { CharacterCountOptions } from "@/infrastructure/editors/tiptap/extensions"
 import type { SlashDropdownMenuProps } from "@/components/tiptap-ui-primitive/SlashDropdownMenu"
 
 export interface SimpleEditorProps {
@@ -29,6 +34,15 @@ export interface SimpleEditorProps {
 	 * @default true
 	 */
 	enableSearchReplace?: boolean
+	/** Enable the read-only search panel and global Cmd/Ctrl+F shortcut. @default false */
+	enableReadonlySearch?: boolean
+	/** Cached tabs pass their visibility down so only the active preview handles global shortcuts. */
+	isTabActive?: boolean
+	/**
+	 * Enable the persisted wrap toggle for read-only code blocks.
+	 * @default false
+	 */
+	enableCodeBlockWrap?: boolean
 	/**
 	 * Enable or disable editor editability
 	 * @default true
@@ -39,6 +53,11 @@ export interface SimpleEditorProps {
 	 * @default false
 	 */
 	isMobile?: boolean
+	/**
+	 * Lets the editor expand with its content so the browser page owns scrolling.
+	 * @default false
+	 */
+	documentFlow?: boolean
 }
 
 export interface SimpleEditorRef {

@@ -11,6 +11,7 @@ use App\Domain\Provider\DTO\Item\AbstractProviderConfigItem;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Infrastructure\Core\AbstractEntity;
+use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use DateTime;
 use Hyperf\Codec\Json;
 
@@ -118,19 +119,29 @@ class ProviderConfigEntity extends AbstractEntity
      */
     public function getLocalizedAlias(string $locale): string
     {
-        if (! empty($this->translate['alias'][$locale] ?? '')) {
-            return $this->translate['alias'][$locale];
-        }
-        if (! empty($this->translate['alias']['zh_CN'] ?? '')) {
-            return $this->translate['alias']['zh_CN'];
-        }
-        if (! empty($this->translate['alias']['en_US'] ?? '')) {
-            return $this->translate['alias']['en_US'];
+        if (! empty($alias = $this->getTranslatedValue('alias', $locale))) {
+            return $alias;
         }
         if (! empty($this->alias)) {
             return $this->alias;
         }
-        return $locale === 'zh_CN' ? '自定义服务商' : 'Custom Provider';
+        return $locale === LanguageEnum::ZH_CN->value ? '自定义服务商' : 'Custom Provider';
+    }
+
+    /**
+     * 获取翻译后的服务商别名，仅读取 translate，不回退原始 alias 或默认文案.
+     */
+    public function getTranslatedAlias(string $locale): string
+    {
+        return $this->getTranslatedValue('alias', $locale);
+    }
+
+    /**
+     * 获取翻译后的服务商配置名称，仅读取 translate.
+     */
+    public function getTranslatedName(string $locale): string
+    {
+        return $this->getTranslatedValue('name', $locale);
     }
 
     public function setAlias(null|int|string $alias): void
@@ -264,5 +275,21 @@ class ProviderConfigEntity extends AbstractEntity
         if (! empty($this->translate['alias'][$languages])) {
             $this->alias = $this->translate['alias'][$languages];
         }
+    }
+
+    private function getTranslatedValue(string $key, string $locale): string
+    {
+        $locale = str_replace('-', '_', $locale);
+        $defaultLocales = LanguageEnum::getAllLanguageCodes();
+
+        if (! empty($this->translate[$key][$locale] ?? '')) {
+            return $this->translate[$key][$locale];
+        }
+        foreach ($defaultLocales as $defaultLocale) {
+            if (! empty($this->translate[$key][$defaultLocale] ?? '')) {
+                return $this->translate[$key][$defaultLocale];
+            }
+        }
+        return '';
     }
 }

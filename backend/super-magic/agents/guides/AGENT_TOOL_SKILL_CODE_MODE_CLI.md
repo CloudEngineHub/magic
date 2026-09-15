@@ -144,7 +144,9 @@ Code Mode 不是免费的。代码执行引入了直接工具调用没有的复�
 
 ## CodeModeOnly 单活
 
-当能力只应该通过 Skill + Code Mode 使用，不应该直接挂载为工具时，工具类声明 `code_mode_only = True`。这类工具仍然使用标准 Tool 实现承载执行逻辑和前端展示，但不会出现在 LLM tools 列表中；如果误挂到 agent 的 `tools:`，执行层会拦截。开发者只需要维护对应 Skill 作为唯一 Agent-facing 入口。
+当能力只应该通过 Skill + Code Mode 使用，不应该直接挂载为工具时，在工具注册处声明 `@tool(code_mode_only=True)`。这类工具仍然使用标准 Tool 实现承载执行逻辑和前端展示，但不会出现在 LLM tools 列表中；如果误写进 agent 的 `tools:`，Agent 会在配置加载阶段抛出致命错误，必须修改代码或配置后才能运行。开发者只需要维护对应 Skill 作为唯一 Agent-facing 入口。
+
+Code Mode Only 工具的 class docstring、参数 `description` 和 `get_prompt_hint()` 使用简洁英文，不维护 `<!--zh -->` 双语说明；完整工作流仍由对应 Skill 负责。
 
 适合场景：
 

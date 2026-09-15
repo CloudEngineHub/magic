@@ -424,6 +424,7 @@ class StreamResponseHandlerV2(StreamResponseHandlerBase):
                                     raise StreamInterruptedError(
                                         chunk_count=state.received_chunk_count,
                                         total_elapsed_seconds=total_elapsed,
+                                        emitted_text_chars=len(state.reasoning_text) + len(state.content_text),
                                     ) from e
                                 else:
                                     StreamingLogger.log_stream_normal_end(
@@ -438,6 +439,7 @@ class StreamResponseHandlerV2(StreamResponseHandlerBase):
                                     chunk_count=state.received_chunk_count,
                                     chunk_timeout_seconds=effective_chunk_timeout,
                                     total_elapsed_seconds=total_elapsed,
+                                    emitted_text_chars=len(state.reasoning_text) + len(state.content_text),
                                 )
                             except STREAMING_PASSTHROUGH_EXCEPTIONS:
                                 raise
@@ -496,6 +498,7 @@ class StreamResponseHandlerV2(StreamResponseHandlerBase):
             raise StreamInterruptedError(
                 chunk_count=state.received_chunk_count,
                 total_elapsed_seconds=total_elapsed,
+                emitted_text_chars=len(state.reasoning_text) + len(state.content_text),
             )
 
         stream_end_time = time.time()
@@ -572,7 +575,7 @@ class StreamResponseHandlerV2(StreamResponseHandlerBase):
                     token_usage.model_id = model_id
                     token_usage.model_name = processor_config.model_name or model_id
                     try:
-                        from agentlang.llms.llm_factory import LLMFactory
+                        from agentlang.llms.factory import LLMFactory
                         _model_config = LLMFactory.get_model_config(model_id)
                         token_usage.resolved_model_id = _model_config.resolved_model_id or None
                         token_usage.max_context_tokens = _model_config.max_context_tokens or None

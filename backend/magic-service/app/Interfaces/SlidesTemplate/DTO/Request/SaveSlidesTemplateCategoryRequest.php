@@ -21,7 +21,7 @@ class SaveSlidesTemplateCategoryRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'code' => 'nullable|string|max:64|regex:/^(PPT|SLIDE)-CATE-[a-z0-9]+(-[a-z0-9]+)*$/',
+            'code' => 'nullable|string|max:64',
             'name_i18n' => 'required|array',
             'name_i18n.zh_CN' => 'required|string|max:100',
             'name_i18n.en_US' => 'required|string|max:100',
@@ -36,7 +36,6 @@ class SaveSlidesTemplateCategoryRequest extends FormRequest
             'code.required' => __('slides_template.category_code_required'),
             'code.string' => __('slides_template.category_code_string'),
             'code.max' => __('slides_template.category_code_max'),
-            'code.regex' => __('slides_template.category_code_regex'),
             'name_i18n.required' => __('slides_template.category_name_required'),
             'name_i18n.array' => __('slides_template.category_name_array'),
             'name_i18n.zh_CN.required' => __('slides_template.category_name_zh_cn_required'),

@@ -5,7 +5,7 @@ import SmartTooltip from "@/components/other/SmartTooltip"
 import FlexBox from "@/components/base/FlexBox"
 import { Button } from "@/components/shadcn-ui/button"
 import { Check, ChevronRight } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import useGeistFont from "@/styles/fonts/geist"
 import { MenuItemProps, MentionItemType } from "../../types"
 import { useMentionItemRenderContextValue, useMentionItemRenderer } from "../../renderers/context"
@@ -13,6 +13,7 @@ import {
 	getMentionItemSkillSourceLabel,
 	shouldRenderMentionItemTypeDescription,
 } from "../../renderers/shared/helpers"
+import { MentionPanelBuiltinItemId } from "../../runtime/builtin/catalog-ids"
 
 const MenuItem = memo(function MenuItem(props: MenuItemProps) {
 	const {
@@ -63,7 +64,9 @@ const MenuItem = memo(function MenuItem(props: MenuItemProps) {
 
 	const hasRightArrow =
 		!item.tags?.includes("history") &&
-		(item.hasChildren || item.type === MentionItemType.FOLDER)
+		(item.hasChildren ||
+			item.type === MentionItemType.FOLDER ||
+			item.id === MentionPanelBuiltinItemId.OTHER_PROJECT_FILES)
 
 	function renderRightArrow() {
 		if (!hasRightArrow) return null

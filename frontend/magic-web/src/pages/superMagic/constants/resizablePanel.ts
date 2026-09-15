@@ -27,7 +27,7 @@ export const DEFAULT_MIN_WIDTH = {
  */
 export const DEFAULT_MAX_WIDTH = {
 	PROJECT_SIDER: 600,
-	MESSAGE_PANEL: 600,
+	MESSAGE_PANEL: 768,
 }
 
 /**
@@ -37,6 +37,11 @@ export const DEFAULT_WIDTH = {
 	PROJECT_SIDER: 320,
 	MESSAGE_PANEL: 420,
 }
+
+/**
+ * 低分辨率布局断点：首次打开 Topic 页面时，优先为中间工作区保留可用空间。
+ */
+export const LOW_RESOLUTION_VIEWPORT_WIDTH_PX = 1280
 
 /**
  * Resize handle 的统一宽度

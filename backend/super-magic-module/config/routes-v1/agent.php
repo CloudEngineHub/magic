@@ -27,16 +27,15 @@ Router::addGroup('/api/v1/super-magic', static function () {
         // 静态路由必须定义在变量路由前，否则会被 /{code} 覆盖。
         // 获取智能体配置可用的内置工具。
         Router::get('/builtin-tools', [SuperMagicAgentOldApi::class, 'tools']);
-        // 获取智能体配置可用的内置技能。
-        Router::get('/builtin-skills', [SuperMagicAgentOldApi::class, 'skills']);
+        // 前端未使用，旧版内置技能接口已下线。
+        // Router::get('/builtin-skills', [SuperMagicAgentOldApi::class, 'skills']);
         // 根据 code 获取旧版智能体详情。
         Router::get('/{code}', [SuperMagicAgentOldApi::class, 'show']);
         // 根据 code 删除智能体。
         Router::delete('/{code}', [SuperMagicAgentApi::class, 'destroy']);
-        // 启用旧版智能体。
-        Router::put('/{code}/enable', [SuperMagicAgentOldApi::class, 'enable']);
-        // 停用旧版智能体。
-        Router::put('/{code}/disable', [SuperMagicAgentOldApi::class, 'disable']);
+        // 前端未使用，旧版启停接口已下线。
+        // Router::put('/{code}/enable', [SuperMagicAgentOldApi::class, 'enable']);
+        // Router::put('/{code}/disable', [SuperMagicAgentOldApi::class, 'disable']);
     });
 }, ['middleware' => [SandboxUserAuthMiddleware::class]]);
 
@@ -46,6 +45,8 @@ Router::addGroup('/api/v2/super-magic', static function () {
         Router::get('/featured/sort-list', [SuperMagicAgentApi::class, 'sortListQueries']);
         // 将智能体标记为高频使用。
         Router::put('/featured/frequent', [SuperMagicAgentApi::class, 'addToFrequent']);
+        // 检查当前用户是否拥有指定员工的使用权限。
+        Router::post('/access-check', [SuperMagicAgentApi::class, 'checkAccess']);
         // 按高级条件查询智能体列表。
         //        Router::post('/queries', [SuperMagicAgentApi::class, 'queries']);
         Router::post('/queries', [SuperMagicAgentApi::class, 'queryList']);

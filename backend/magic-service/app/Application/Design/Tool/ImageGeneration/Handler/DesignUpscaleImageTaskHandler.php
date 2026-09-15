@@ -12,8 +12,8 @@ use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Entity\Dto\ImageConvertHighDTO;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 
 /**
  * 设计侧「转高清」异步任务：取工作区首张参考图，走 Model Gateway 转高清能力（imageConvertHighV2），并参与规则化输出文件名。
@@ -46,7 +46,7 @@ final class DesignUpscaleImageTaskHandler extends AbstractDesignImageGenerationT
 
         $dto = new ImageConvertHighDTO();
         $this->applyMagicAccessToken($dto);
-        $dto->setBusinessParams($this->designImageGenerationBusinessParams($dataIsolation));
+        $dto->setBusinessParams($this->designImageGenerationBusinessParams($dataIsolation, $entity->getProjectId()));
         $dto->setImages([$imageUrl]);
         $dto->setSize($entity->getSize());
 

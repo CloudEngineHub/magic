@@ -11,6 +11,14 @@ const magicWidget: MagicWidget.Global = {
 	open: controller.open,
 	close: controller.close,
 	destroy: controller.destroy,
+	on: controller.on,
+	setInput: controller.setInput,
+	appendInput: controller.appendInput,
+	clearInput: controller.clearInput,
+	getInput: controller.getInput,
+	sendMessage: controller.sendMessage,
+	newConversation: controller.newConversation,
+	updateConfig: controller.updateConfig,
 }
 
 declare global {

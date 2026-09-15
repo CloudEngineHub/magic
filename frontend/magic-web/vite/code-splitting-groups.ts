@@ -3,18 +3,74 @@ function normalizeModuleId(id: string): string {
 	return id.replace(/\\/g, "/")
 }
 
+function getModulePath(id: string): string {
+	return normalizeModuleId(id).split("?", 1)[0]
+}
+
+function hasQuery(id: string, query: string): boolean {
+	return normalizeModuleId(id).split("?", 2)[1]?.split("&").includes(query) ?? false
+}
+
+function isLocaleJsonModule(id: string, locale: "zh_CN" | "en_US"): boolean {
+	// Vite/Rolldown may append query parameters to transformed JSON module ids.
+	const normalizedId = normalizeModuleId(id).split("?", 1)[0]
+
+	// Matching /src/ keeps the rule valid for base, enterprise and customer overlays.
+	return normalizedId.includes(`/src/assets/locales/${locale}/`) && normalizedId.endsWith(".json")
+}
+
 export function createCodeSplittingGroups() {
 	return [
+		{
+			name: "locale-zh-cn",
+			priority: 100,
+			entriesAware: false,
+			test: (id: string) => isLocaleJsonModule(id, "zh_CN"),
+		},
+		{
+			name: "locale-en-us",
+			priority: 100,
+			entriesAware: false,
+			test: (id: string) => isLocaleJsonModule(id, "en_US"),
+		},
 		{
 			name: "antd-colors",
 			priority: 40,
 			test: (id: string) => normalizeModuleId(id).includes("node_modules/@ant-design/colors"),
 		},
 		{
-			name: "lucide-icons",
+			name: "lucide-icons-static",
+			priority: 40,
+			entriesAware: false,
+			test: (id: string) => {
+				const modulePath = getModulePath(id)
+				if (!modulePath.includes("node_modules/lucide-react/dist/esm/")) return false
+				if (hasQuery(id, "lucide-dynamic")) return false
+
+				return (
+					hasQuery(id, "lucide-static") ||
+					modulePath.includes("/createLucideIcon.js") ||
+					modulePath.includes("/Icon.js") ||
+					modulePath.includes("/defaultAttributes.js") ||
+					modulePath.includes("/shared/src/")
+				)
+			},
+		},
+		{
+			name: "lucide-icons-dynamic",
 			priority: 30,
-			test: (id: string) =>
-				normalizeModuleId(id).includes("node_modules/lucide-react/dist/esm/icons"),
+			entriesAware: false,
+			test: (id: string) => {
+				const modulePath = getModulePath(id)
+				if (!modulePath.includes("node_modules/lucide-react/dist/esm/")) return false
+				if (hasQuery(id, "lucide-static")) return false
+
+				return (
+					hasQuery(id, "lucide-dynamic") ||
+					modulePath.includes("/dynamicIconImports.js") ||
+					modulePath.includes("/DynamicIcon.js")
+				)
+			},
 		},
 		{
 			name: "ahooks",
@@ -50,34 +106,25 @@ export function createCodeSplittingGroups() {
 			},
 		},
 		{
-			name: "simple-editor",
-			priority: 20,
-			test: (id: string) =>
-				normalizeModuleId(id).includes("src/components/tiptap-templates/simple"),
-		},
-		{
-			name: "message-editor",
-			priority: 10,
-			test: (id: string) =>
-				normalizeModuleId(id).includes("src/pages/superMagic/components/MessageEditor"),
-		},
-		{
-			name: "hooks",
-			priority: 10,
-			test: (id: string) => normalizeModuleId(id).includes("src/hooks"),
-		},
-		{
-			name: "super-hooks",
-			priority: 10,
-			test: (id: string) => normalizeModuleId(id).includes("src/pages/superMagic/hooks"),
-		},
-		{
 			name: "mention-panel-default-runtime",
 			priority: 10,
 			test: (id: string) =>
 				normalizeModuleId(id).includes(
 					"src/components/business/MentionPanel/runtime/default-runtime",
 				),
+		},
+		{
+			name: "tabler-icons-used",
+			priority: 100,
+			test: (id: string) =>
+				normalizeModuleId(id).includes("node_modules/@tabler/icons-react/dist/esm/"),
+		},
+		{
+			name: "tabler-icons-custom",
+			priority: 100,
+			entriesAware: false,
+			test: (id: string) =>
+				normalizeModuleId(id).includes("/src/enhance/tabler/icons-react/"),
 		},
 	]
 }

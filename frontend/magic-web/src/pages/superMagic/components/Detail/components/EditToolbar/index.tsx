@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, Crosshair, Maximize, Minimize, RefreshCw, Share2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import ViewModeSwitcher from "../ViewModeSwitcher"
 import AIEditButton from "./AIEditButton"
+import ConditionalTooltip from "./ConditionalTooltip"
 import FileEditButtons from "./FileEditButtons"
 import ExportDropdown from "./ExportDropdown"
 import { VersionHistorySelector } from "../PPTRender/components/VersionHistorySelector"
@@ -46,9 +47,15 @@ import {
 	supportsPptxFileStreaming,
 	startPptxStreamingExportFromFactory,
 } from "@/pages/superMagic/services/pptxStreamingExport"
+import { runGuardedAction } from "../../utils/actionGuard"
+import type { BeforeAction } from "../../utils/actionGuard"
 
-interface EditToolbarProps {
+export interface EditToolbarProps {
+	/** Only the active cached preview should expose fixed test ids. */
+	testIdsEnabled?: boolean
 	style?: React.CSSProperties
+	/** 禁用工具栏交互及其全局快捷键，但保持组件实例和内部状态常驻 */
+	interactionDisabled?: boolean
 	/** 主文件ID */
 	mainFileId?: string
 	/** 是否显示AI编辑按钮 */
@@ -130,9 +137,17 @@ interface EditToolbarProps {
 	onStartInspectorAppend?: () => void
 	/** AI 选取是否正在进行中 */
 	isAppendPicking?: boolean
+	/** 触发即时元素选取并写入输入框 */
+	onStartInspectorQuickSelect?: () => void
+	/** 即时元素选取是否正在进行中 */
+	isQuickSelecting?: boolean
+	/** Optional guard run before actions that leave the current selection flow. */
+	beforeAction?: BeforeAction
 }
 
 function EditToolbar({
+	testIdsEnabled = true,
+	interactionDisabled = false,
 	showAIOptimization = false,
 	showFileEdit = false,
 	isEditMode = false,
@@ -168,9 +183,11 @@ function EditToolbar({
 	showDownload = true,
 	style,
 	projectId,
-	onStartInspector,
 	onStartInspectorAppend,
 	isAppendPicking = false,
+	onStartInspectorQuickSelect,
+	isQuickSelecting = false,
+	beforeAction,
 }: EditToolbarProps) {
 	const { t } = useTranslation("super")
 	const { emitFullscreenToggle } = usePPTEventBus()
@@ -583,6 +600,7 @@ function EditToolbar({
 		showSimilarSharesDialog,
 		similarShares,
 		isCheckingShare,
+		shareTarget,
 		handleShare,
 		handleSelectSimilarShare,
 		handleCreateNewShare,
@@ -601,13 +619,26 @@ function EditToolbar({
 	const showServerUpdateButton = isEditMode && hasServerUpdate
 	const showAIOptimizationButton = showAIOptimization && !isEditMode
 	const showFileEditButtons = showFileEdit
+	const quickSelectionLabel = t(
+		isQuickSelecting ? "topicFiles.exitSelectElement" : "topicFiles.selectElement",
+	)
 	const showVersionHistorySelector =
 		showVersionHistory && !isEditMode && fileId && onVersionChange && fetchFileVersions
 	const showRefreshButton = showRefresh && !isEditMode && onRefresh
 	const showShareButton = showShare && !isEditMode && isNewestVersion && allowShare && currentFile
+	const runToolbarAction = useCallback(
+		(action: () => void | Promise<void>) => {
+			void runGuardedAction(beforeAction, action)
+		},
+		[beforeAction],
+	)
 
 	return (
-		<div className={cn("h-12 w-full border-b border-border", className)} style={style}>
+		<div
+			className={cn("h-12 w-full border-b border-border", className)}
+			style={style}
+			data-testid={testIdsEnabled ? "ppt-edit-toolbar-actions" : undefined}
+		>
 			<div className="scrollbar-x-thin h-full w-full overflow-x-auto">
 				<div className="flex h-full w-max min-w-full flex-nowrap items-center justify-end gap-1 px-2">
 					{showVersionHistorySelector && (
@@ -618,6 +649,7 @@ function EditToolbar({
 								fileVersionsList={fileVersionsList}
 								isNewestVersion={isNewestVersion}
 								onVersionChange={onVersionChange}
+								beforeAction={beforeAction}
 								showButtonText={shouldShowButtonText}
 								onRollback={
 									onVersionRollback ||
@@ -639,8 +671,19 @@ function EditToolbar({
 					{showViewModeSwitcher && (
 						<>
 							<ViewModeSwitcher
+								data-testid={
+									testIdsEnabled
+										? "ppt-edit-toolbar-view-mode-switcher"
+										: undefined
+								}
+								testIdsEnabled={testIdsEnabled}
+								testIdPrefix={
+									testIdsEnabled ? "ppt-edit-toolbar-view-mode" : undefined
+								}
 								viewMode={viewMode}
-								onViewModeChange={onViewModeChange}
+								onViewModeChange={(mode) =>
+									runToolbarAction(() => onViewModeChange?.(mode))
+								}
 								isMobile={false}
 								enableMobileMode={false}
 							/>
@@ -656,9 +699,12 @@ function EditToolbar({
 					{/* 服务端更新提示按钮 */}
 					{showServerUpdateButton && (
 						<Button
+							data-testid={
+								testIdsEnabled ? "ppt-edit-toolbar-server-update-button" : undefined
+							}
 							variant="secondary"
 							size="sm"
-							onClick={onViewServerUpdate}
+							onClick={() => runToolbarAction(() => onViewServerUpdate?.())}
 							className="h-6 gap-1.5 rounded-md px-3 text-xs font-normal shadow-xs"
 						>
 							<AlertTriangle size={16} className="text-amber-600" />
@@ -666,62 +712,82 @@ function EditToolbar({
 						</Button>
 					)}
 
-					{/* AI 编辑按钮 */}
-					{showAIOptimizationButton && fileId && (
-						<AIEditButton
-							showButtonText={shouldShowButtonText}
-							attachmentList={attachmentList}
-							fileId={fileId}
-							onStartInspector={onStartInspector}
-						/>
-					)}
+					{/* AI 选取按钮 */}
+					{showFileEditButtons &&
+						!isEditMode &&
+						(onStartInspectorQuickSelect || onStartInspectorAppend) && (
+							<ConditionalTooltip
+								showText={shouldShowButtonText}
+								title={quickSelectionLabel}
+							>
+								<Button
+									data-testid={
+										testIdsEnabled
+											? "ppt-edit-toolbar-quick-select-button"
+											: undefined
+									}
+									variant="outline"
+									size="sm"
+									onClick={onStartInspectorQuickSelect || onStartInspectorAppend}
+									aria-pressed={isQuickSelecting}
+									className={cn(
+										"h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal text-foreground shadow-xs",
+										isQuickSelecting && "text-primary",
+									)}
+								>
+									<Crosshair
+										size={16}
+										className={cn(isQuickSelecting && "animate-pulse")}
+									/>
+									{shouldShowButtonText && <span>{quickSelectionLabel}</span>}
+								</Button>
+							</ConditionalTooltip>
+						)}
 
-					{/* 在线编辑按钮 */}
+					{/* 编辑按钮 */}
 					{showFileEditButtons && (
 						<FileEditButtons
+							testIdPrefix={testIdsEnabled ? "ppt-edit-toolbar" : undefined}
+							interactionDisabled={interactionDisabled}
 							isEditMode={isEditMode}
 							isSaving={isSaving}
 							showButtonText={shouldShowButtonText}
-							onEdit={onEdit}
+							editLabel={t("common.edit")}
+							onEdit={() => runToolbarAction(() => onEdit?.())}
 							onSave={onSave}
 							onSaveAndExit={onSaveAndExit}
 							onCancel={onCancel}
 						/>
 					)}
 
-					{/* AI 选取按钮 */}
-					{showFileEditButtons && !isEditMode && onStartInspectorAppend && (
-						<ActionButton
-							icon={
-								<Crosshair
-									size={16}
-									className={cn(isAppendPicking && "animate-pulse")}
-								/>
-							}
-							onClick={onStartInspectorAppend}
-							title={t(
-								"topicFiles.aiPickTooltip",
-								"点击后选取页面元素，让 AI 对其进行修改",
-							)}
-							text={t("topicFiles.aiPick", "AI 选取")}
-							showText={shouldShowButtonText}
-							className={cn(
-								isAppendPicking &&
-									"bg-primary/10 text-primary ring-1 ring-primary/30",
-							)}
+					{/* AI 编辑按钮 */}
+					{showAIOptimizationButton && fileId && (
+						<AIEditButton
+							testIdPrefix={testIdsEnabled ? "ppt-edit-toolbar" : undefined}
+							showButtonText={shouldShowButtonText}
+							maxItems={3}
+							onPrimaryAction={onStartInspectorAppend}
+							isPrimaryActive={isAppendPicking}
+							attachmentList={attachmentList}
+							fileId={fileId}
 						/>
 					)}
+
+					<div className="mx-1 h-4 w-px bg-border" />
 
 					{/* 刷新按钮 */}
 					{showRefreshButton && (
 						<ActionButton
+							data-testid={
+								testIdsEnabled ? "ppt-edit-toolbar-refresh-button" : undefined
+							}
 							icon={
 								<RefreshCw
 									size={16}
 									className={cn(isRefreshing && "animate-spin")}
 								/>
 							}
-							onClick={onRefresh}
+							onClick={() => runToolbarAction(() => onRefresh?.())}
 							title={t("ppt.refreshCurrentSlide")}
 							text={t("ppt.refreshCurrentSlide")}
 							showText={shouldShowButtonText}
@@ -729,16 +795,19 @@ function EditToolbar({
 						/>
 					)}
 
-					<div className="mx-1 h-4 w-px bg-border" />
-
 					{/* 全屏按钮 */}
 
 					{!isFullscreenMode && (
 						<ActionButton
+							data-testid={
+								testIdsEnabled ? "ppt-edit-toolbar-fullscreen-button" : undefined
+							}
 							icon={isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
 							onClick={() => {
-								emitFullscreenToggle()
-								setIsFullscreen(!isFullscreen)
+								void runGuardedAction(beforeAction, () => {
+									emitFullscreenToggle()
+									setIsFullscreen(!isFullscreen)
+								})
 							}}
 							title={
 								isFullscreen
@@ -759,6 +828,7 @@ function EditToolbar({
 							showText={shouldShowButtonText}
 							isExporting={isExporting || isEditableExporting}
 							supportPptx={supportsPptxFileStreaming()}
+							beforeAction={beforeAction}
 							supportSpecificPages={!!pptStore}
 							slides={pptStore?.slides}
 							onExportPptx={() => {
@@ -810,7 +880,7 @@ function EditToolbar({
 						<ActionButton
 							data-testid="detail-header-action-item-share"
 							icon={<Share2 size={16} />}
-							onClick={() => void handleShare()}
+							onClick={() => runToolbarAction(() => handleShare())}
 							title={t("ppt.share")}
 							text={t("ppt.share")}
 							showText={shouldShowButtonText}
@@ -829,7 +899,7 @@ function EditToolbar({
 							}}
 							showSuccessModal={showSuccessModal}
 							existingShareInfo={existingShareInfo}
-							currentFile={currentFile}
+							currentFile={shareTarget ?? currentFile}
 							shareFileId={shareFileId}
 							attachments={attachments}
 							onCancelShare={handleCancelShare}

@@ -57,17 +57,16 @@ class MagicDepartmentUserRepository implements MagicDepartmentUserRepositoryInte
             return [];
         }
         $query = $this->departmentUserModel->newQuery()
-            ->from('magic_contact_department_users as du')
-            ->select('du.*')
+            ->select('magic_contact_department_users.*')
             ->join('magic_contact_departments as d', function ($join) {
-                $join->on('d.department_id', '=', 'du.department_id')
-                    ->on('d.organization_code', '=', 'du.organization_code')
+                $join->on('d.department_id', '=', 'magic_contact_department_users.department_id')
+                    ->on('d.organization_code', '=', 'magic_contact_department_users.organization_code')
                     ->whereNull('d.deleted_at');
             })
-            ->whereIn('du.user_id', $userIds)
-            ->whereNull('du.deleted_at');
+            ->whereIn('magic_contact_department_users.user_id', $userIds)
+            ->whereNull('magic_contact_department_users.deleted_at');
         if ($organizationCode !== null && $organizationCode !== '') {
-            $query->where('du.organization_code', $organizationCode);
+            $query->where('magic_contact_department_users.organization_code', $organizationCode);
         }
         $departmentUsers = Db::select($query->toSql(), $query->getBindings());
         return $this->getDepartmentUserEntities($departmentUsers);
@@ -189,6 +188,22 @@ class MagicDepartmentUserRepository implements MagicDepartmentUserRepositoryInte
             ->distinct()
             ->pluck('magic_id')
             ->toArray();
+    }
+
+    /**
+     * @return MagicDepartmentUserEntity[]
+     */
+    public function searchDepartmentUsersByEmployeeNo(string $employeeNo, string $organizationCode): array
+    {
+        $departmentUsers = $this->departmentUserModel::query()
+            ->select(['user_id'])
+            ->where('employee_no', '=', $employeeNo)
+            ->where('organization_code', $organizationCode)
+            ->distinct()
+            ->get()
+            ->toArray();
+
+        return $this->getDepartmentUserEntities($departmentUsers);
     }
 
     /**

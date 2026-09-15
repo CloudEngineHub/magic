@@ -4,6 +4,8 @@ import { DownloadIcon } from "lucide-react"
 import SlideSelectionDialog from "./SlideSelectionDialog"
 import type { SlideItem } from "../PPTRender/PPTSidebar/types"
 import ActionButton from "../CommonHeader/components/ActionButton"
+import type { BeforeAction } from "../../utils/actionGuard"
+import { runGuardedAction } from "../../utils/actionGuard"
 
 interface ExportDropdownProps {
 	showText?: boolean
@@ -18,6 +20,7 @@ interface ExportDropdownProps {
 		format: "source" | "pdf" | "pptx" | "image_png" | "image_jpeg",
 	) => void
 	onGenerateScreenshot?: (index: number) => Promise<void>
+	beforeAction?: BeforeAction
 }
 
 function ExportDropdown({
@@ -30,6 +33,7 @@ function ExportDropdown({
 	onExportPptx,
 	onExportSpecificPages,
 	onGenerateScreenshot,
+	beforeAction,
 }: ExportDropdownProps) {
 	const { t } = useTranslation("super")
 	const [slideDialogOpen, setSlideDialogOpen] = useState(false)
@@ -37,12 +41,14 @@ function ExportDropdown({
 
 	const handlePrimaryClick = useCallback(() => {
 		if (isDisabled) return
-		if (supportSpecificPages && onExportSpecificPages) {
-			setSlideDialogOpen(true)
-			return
-		}
-		onExportPptx?.()
-	}, [isDisabled, onExportPptx, onExportSpecificPages, supportSpecificPages])
+		void runGuardedAction(beforeAction, () => {
+			if (supportSpecificPages && onExportSpecificPages) {
+				setSlideDialogOpen(true)
+				return
+			}
+			onExportPptx?.()
+		})
+	}, [beforeAction, isDisabled, onExportPptx, onExportSpecificPages, supportSpecificPages])
 
 	function handleConfirmExport(
 		filePaths: string[],

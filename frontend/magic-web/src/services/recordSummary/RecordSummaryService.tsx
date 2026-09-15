@@ -51,7 +51,14 @@ import { createRecordingLogger } from "./utils/RecordingLogger"
 import { DEFAULT_RECORDING_CONFIG } from "./utils/config"
 import { RECORD_SUMMARY_EVENT_CALLBACK, RECORD_SUMMARY_EVENTS } from "./const/events"
 import { TypedEventEmitter } from "./utils/TypedEventEmitter"
-import { ERROR_CODE_TASK_ENDED, isTaskEndError, defaultErrorManager } from "./RecordingErrorManager"
+import {
+	ERROR_CODE_TASK_ENDED,
+	ERROR_CODES,
+	getBusinessErrorCode,
+	isOverrideSummaryAlreadySettled,
+	isTaskEndError,
+	defaultErrorManager,
+} from "./RecordingErrorManager"
 import { imageMigrationService } from "./ImageMigrationService"
 import { RecordingStatusReporter, RecordingSummaryStatus } from "./RecordingStatusReporter"
 import MagicModal from "@/components/base/MagicModal"
@@ -60,8 +67,20 @@ import VoiceTimeoutChecker from "./VoiceTimeoutChecker"
 import SilenceDetector from "./SilenceDetector"
 import { DurationTracker } from "./DurationTracker"
 import { getSummaryMessageService, SummaryStage } from "./SummaryMessageService"
+import { UploadQueueWatchdog } from "./uploadQueueWatchdog"
+import { runTaskEndCleanup } from "./taskEndCleanup"
+import {
+	runForceOverrideFinalization,
+	type RecordingOverrideContext,
+} from "./recordingOverrideLifecycle"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Button } from "@/components/shadcn-ui/button"
+import type { RecordingEncodingSnapshot } from "./MediaRecorderService/types/RecorderTypes"
+import {
+	createRecordingEncodingSnapshot,
+	inferLegacyRecordingAudioProfile,
+	normalizeRecordingEncodingSnapshot,
+} from "./MediaRecorderService/utils/RecordingEncodingProfile"
 
 const logger = createRecordingLogger("Main")
 
@@ -76,7 +95,12 @@ interface EnsureUploadOptions {
 	topicId?: string
 	projectId?: string
 	allowUserDecision?: boolean
+	maxWaitTimeouts?: number
 }
+
+const MAX_UPLOAD_WAIT_TIMEOUTS = 3
+const FORCE_OVERRIDE_MAX_UPLOAD_WAIT_TIMEOUTS = 1
+const FORCE_OVERRIDE_REQUEST_TIMEOUT_MS = 130_000
 
 class RecordSummaryService {
 	// Duration tracking (using reliable AudioContext-based tracker)
@@ -121,6 +145,37 @@ class RecordSummaryService {
 	// 静音提示的 message key
 	private silenceMessageKey = "recording-silence-detected"
 
+	/** Seed the recorder with a persisted compressed/WAV format during session recovery. */
+	private restoreEncodingSnapshot(session: RecordingSession): void {
+		const persistedSnapshot = session.metadata.recordingEncoding
+		if (persistedSnapshot) {
+			this.mediaRecorderService.setEncodingSnapshot(
+				session.id,
+				normalizeRecordingEncodingSnapshot(persistedSnapshot, session.metadata.sampleRate),
+			)
+			return
+		}
+
+		// Older sessions recorded by recorder-core were labeled webm even though
+		// their persisted chunks are WAV; keep those sessions on the legacy path.
+		const format =
+			session.metadata.audioFormat === "webm" ? "wav" : session.metadata.audioFormat
+		const supportedFormats: RecordingEncodingSnapshot["format"][] = ["wav", "pcm", "ogg-opus"]
+		if (supportedFormats.includes(format as RecordingEncodingSnapshot["format"])) {
+			const profile = inferLegacyRecordingAudioProfile(
+				session.metadata.audioFormat,
+				session.metadata.sampleRate,
+			)
+			this.mediaRecorderService.setEncodingSnapshot(
+				session.id,
+				createRecordingEncodingSnapshot(
+					format as RecordingEncodingSnapshot["format"],
+					profile,
+				),
+			)
+		}
+	}
+
 	/**
 	 * Build the server-side finish-recording title without depending on list-only display helpers.
 	 * Prefer persisted project/topic names first, then fall back to a stable localized placeholder.
@@ -146,16 +201,19 @@ class RecordSummaryService {
 		project,
 		topic,
 		asrStreamContent,
+		fileShardCount,
 	}: {
 		taskKey: string
 		project: ProjectListItem
 		topic: Topic
 		asrStreamContent: string
+		fileShardCount?: number
 	}): Promise<FinishRecordingTaskResponse> {
 		const response = await SuperMagicApi.finishRecordingTask({
 			task_key: taskKey,
 			generated_title: this.resolveFinishRecordingTitle(project, topic),
 			asr_stream_content: asrStreamContent,
+			file_shard_count: fileShardCount,
 		})
 
 		if (response.phase !== "merging") {
@@ -185,42 +243,77 @@ class RecordSummaryService {
 		this.startSilenceDetection()
 	}
 
+	/** Stops realtime transcription resources without touching the media recorder. */
+	private async stopRealtimeTranscription(): Promise<void> {
+		await this.voiceToTextService.stopRecording().catch((error) => {
+			logger.error({
+				eventKey: "stop_voice_recording_failed",
+				errorKind: "unknown",
+				error,
+				message: "Failed to stop voice recording",
+			})
+		})
+
+		this.voiceTimeoutChecker.stop()
+		this.silenceDetector.stop()
+
+		try {
+			this.voiceToTextService.disconnect()
+		} catch (error) {
+			logger.error({
+				eventKey: "release_voice_resources_failed",
+				errorKind: "unknown",
+				error,
+				message: "Failed to release voice resources",
+			})
+		}
+	}
+
 	/**
-	 * Enables realtime transcription for the current recording after the user turns it on.
+	 * Updates realtime transcription for the current recording after the user changes it.
 	 */
-	enableTranscriptionForCurrentSession = async (): Promise<void> => {
+	setTranscriptionEnabledForCurrentSession = async (enabled: boolean): Promise<void> => {
 		const currentSession = this.sessionManager.getCurrentSession()
 		if (!currentSession || recordSummaryStore.status === "init") {
 			throw new Error("No active recording session")
 		}
-		if (currentSession.transcriptionEnabled) {
-			recordSummaryStore.setTranscriptionEnabled(true)
-			return
-		}
+		const isTranscriptionStateUnchanged = currentSession.transcriptionEnabled === enabled
+		if (isTranscriptionStateUnchanged) {
+			recordSummaryStore.setTranscriptionEnabled(enabled)
+		} else {
+			if (recordSummaryStore.isPaused) {
+				// Paused sessions have no active ASR flow to start or stop; resume uses this flag.
+			} else if (enabled) {
+				await this.startRealtimeTranscription(currentSession.id)
+			} else {
+				await this.stopRealtimeTranscription()
+			}
 
-		if (recordSummaryStore.isPaused) {
-			// Paused sessions have no active ASR flow to attach to; resume will start ASR from this flag.
-			const updatedSession = this.sessionManager.updateTranscriptionEnabled(true)
+			if (!enabled) recordSummaryStore.markLastMessageDefinite()
+
+			const updatedSession = this.sessionManager.updateTranscriptionEnabled(enabled)
 			if (updatedSession) {
 				this.recordingPersistence.saveSession(updatedSession)
 			}
-			recordSummaryStore.setTranscriptionEnabled(true)
-			recordSummaryStore.clearVoiceError()
-			return
+			recordSummaryStore.setTranscriptionEnabled(enabled)
+			if (enabled) recordSummaryStore.clearVoiceError()
 		}
+		if (!enabled && isTranscriptionStateUnchanged) recordSummaryStore.markLastMessageDefinite()
+	}
 
-		await this.startRealtimeTranscription(currentSession.id)
-		const updatedSession = this.sessionManager.updateTranscriptionEnabled(true)
-		if (updatedSession) {
-			this.recordingPersistence.saveSession(updatedSession)
-		}
-		recordSummaryStore.setTranscriptionEnabled(true)
-		recordSummaryStore.clearVoiceError()
+	/** Keeps the existing enable-only API for other recording entry points. */
+	enableTranscriptionForCurrentSession = async (): Promise<void> => {
+		await this.setTranscriptionEnabledForCurrentSession(true)
 	}
 	// 用于管理总结过程中的消息提示
 	private summaryMessageService = getSummaryMessageService()
 	// 分片生产监控定时器，用于检测录音是否正常产出分片
 	private chunkProductionWatchdog: NodeJS.Timeout | null = null
+	private uploadQueueWatchdog: UploadQueueWatchdog | null = null
+	private uploadRetryContext: { sessionId: string; topicId: string; projectId: string } | null =
+		null
+	private uploadRetryInFlight = false
+	private forceOverridePreparation: Promise<boolean> | null = null
 	// 录音开始后是否已收到第一个分片
 	private hasReceivedFirstChunk = false
 	// 是否已尝试过自动恢复
@@ -287,8 +380,11 @@ class RecordSummaryService {
 				})
 			})
 			.catch((error) => {
-				logger.error("清理过期会话历史或音频分片失败", {
-					error: error instanceof Error ? error.message : String(error),
+				logger.error({
+					eventKey: "cleanup_session_audio_chunk_failed",
+					errorKind: "lifecycle",
+					error: error,
+					message: "清理过期会话历史或音频分片失败",
 				})
 			})
 		this.batchSaveReporter = new RecordingBatchSaveReporter()
@@ -318,6 +414,7 @@ class RecordSummaryService {
 		})
 		this.statusReporter = new RecordingStatusReporter({
 			onReportError: this.handleStatusReportError,
+			getFileShardCount: () => this.sessionManager.getCurrentSession()?.currentChunkIndex,
 		})
 		this.contentFileManager = new RecordingContentFileManager(
 			this.chunkUploader.getTokenManager(),
@@ -342,7 +439,7 @@ class RecordSummaryService {
 
 		// Register error handler for task end events
 		defaultErrorManager.onTaskEnd((error) => {
-			this.handleTaskEnd(error.sessionId)
+			return this.handleTaskEnd(error.sessionId, error.code)
 		})
 
 		// 监听用户登出事件
@@ -350,6 +447,7 @@ class RecordSummaryService {
 	}
 
 	private eventEmitter = new TypedEventEmitter<RECORD_SUMMARY_EVENT_CALLBACK>()
+	private handlingTaskEndSessions = new Set<string>()
 
 	/**
 	 * 监听事件
@@ -404,7 +502,7 @@ class RecordSummaryService {
 
 		try {
 			// 1. 停止录音服务（不等待上传完成，让上传在后台继续）
-			await this.stopRecordingServices()
+			await this.stopRecordingServices("user_logout")
 
 			// 2. 保存最终会话状态（包含 userId 和组织信息）
 			this.sessionManager.updateSessionStatus("paused") // 标记为暂停状态
@@ -424,11 +522,17 @@ class RecordSummaryService {
 					task_key: currentSession.id,
 					status: RecordingSummaryStatus.Paused,
 					model_id: currentSession.model?.model_id || "",
+					file_shard_count: currentSession.currentChunkIndex,
 					note: recordSummaryStore.note,
 					asr_stream_content: this.getLatestAsrContent(),
 				})
 			} catch (error) {
-				logger.error("上报登出状态失败", error)
+				logger.error({
+					eventKey: "report_logout_status_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "上报登出状态失败",
+				})
 			}
 
 			// 6. 重置 UI 状态但不清除持久化数据
@@ -436,7 +540,12 @@ class RecordSummaryService {
 
 			logger.log("用户登出处理完成，数据已保存")
 		} catch (error) {
-			logger.error("处理用户登出失败", error)
+			logger.error({
+				eventKey: "process_user_logout_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "处理用户登出失败",
+			})
 		}
 	}
 
@@ -453,7 +562,8 @@ class RecordSummaryService {
 		sessionId,
 		transcriptionEnabled = true,
 	}: {
-		workspace: Workspace
+		/** Allow starting without a workspace when the recordings entry is on All / Ungrouped */
+		workspace: Workspace | null
 		model: ModelItem
 		project: ProjectListItem
 		topic?: Topic | null
@@ -539,7 +649,7 @@ class RecordSummaryService {
 			})
 
 			logger.report("开始录音", {
-				workspace: workspace.name,
+				workspace: workspace?.name,
 				project: project.project_name,
 				audioSource: audioSource?.source,
 			})
@@ -551,7 +661,12 @@ class RecordSummaryService {
 					.getToken(session.id, session.topic?.id || "")
 				logger.log(`会话 ${session.id} 的上传凭证预加载成功`)
 			} catch (error) {
-				logger.error("获取上传凭证失败", error)
+				logger.error({
+					eventKey: "upload_token_preload_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "获取上传凭证失败",
+				})
 				throw new Error("无法获取上传凭证，录音启动失败")
 			}
 
@@ -563,6 +678,10 @@ class RecordSummaryService {
 			try {
 				// 开始录制音频
 				await this.mediaRecorderService.startRecording(session.id)
+				const initialEncoding = this.mediaRecorderService.getEncodingSnapshot()
+				if (initialEncoding) {
+					this.sessionManager.updateSessionEncodingSnapshot(initialEncoding)
+				}
 
 				// 更新音频源配置(如果音频源发生变化)
 				const currentAudioSource = this.mediaRecorderService.getAudioSource()
@@ -603,6 +722,11 @@ class RecordSummaryService {
 				session.topic?.id || "",
 				session.project?.id || "",
 			)
+			this.startUploadQueueWatchdog(
+				session.id,
+				session.topic?.id || "",
+				session.project?.id || "",
+			)
 
 			if (transcriptionEnabled) {
 				try {
@@ -629,6 +753,7 @@ class RecordSummaryService {
 				task_key: session.id,
 				status: RecordingSummaryStatus.Start,
 				model_id: model.model_id,
+				file_shard_count: session.currentChunkIndex,
 				note: recordSummaryStore.note,
 				asr_stream_content: this.getLatestAsrContent(),
 			})
@@ -644,11 +769,21 @@ class RecordSummaryService {
 					session.project?.id || "",
 				)
 			} catch (error) {
-				logger.error("初始化内容文件管理器失败", error)
+				logger.error({
+					eventKey: "initialize_content_file_manager_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "初始化内容文件管理器失败",
+				})
 				// Don't block recording on content file initialization failure
 			}
 		} catch (error) {
-			logger.error("启动录音失败", error)
+			logger.error({
+				eventKey: "start_recording_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "启动录音失败",
+			})
 
 			// 重置服务（await 确保 reset 完成后再处理错误，避免并发竞态）
 			await this.reset()
@@ -936,11 +1071,16 @@ class RecordSummaryService {
 
 			// 停止录音并完全清理资源
 			// Stop recording and fully cleanup resources
-			await this.mediaRecorderService.stopRecordingAndCleanup()
+			await this.mediaRecorderService.stopRecordingAndCleanup({ source: "pause_recording" })
 
 			// 暂停语音识别
 			await this.voiceToTextService.stopRecording().catch((error) => {
-				logger.error("Failed to stop voice recording", error)
+				logger.error({
+					eventKey: "stop_voice_recording_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "Failed to stop voice recording",
+				})
 			})
 
 			// 停止语音超时检测
@@ -955,7 +1095,12 @@ class RecordSummaryService {
 				this.voiceToTextService.disconnect()
 				logger.log("All audio resources released during pause")
 			} catch (error) {
-				logger.error("Failed to release resources", error)
+				logger.error({
+					eventKey: "release_resources_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "Failed to release resources",
+				})
 			}
 
 			// Pause duration tracking and save accumulated duration
@@ -975,6 +1120,7 @@ class RecordSummaryService {
 				task_key: currentSession.id,
 				status: RecordingSummaryStatus.Paused,
 				model_id: currentSession.model?.model_id || "",
+				file_shard_count: currentSession.currentChunkIndex,
 				note: recordSummaryStore.note,
 				asr_stream_content: this.getLatestAsrContent(),
 			})
@@ -984,7 +1130,12 @@ class RecordSummaryService {
 
 			recordSummaryStore.setIsPaused(true)
 		} catch (error) {
-			logger.error("Failed to pause recording", error)
+			logger.error({
+				eventKey: "pause_recording_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to pause recording",
+			})
 		} finally {
 			recordSummaryStore.setIsPausing(false)
 		}
@@ -1034,7 +1185,12 @@ class RecordSummaryService {
 					})
 					logger.log("Display media pre-authorized successfully")
 				} catch (error) {
-					logger.error("Failed to pre-authorize display media", error)
+					logger.error({
+						eventKey: "pre_authorize_display_media_failed",
+						errorKind: "permission",
+						error: error,
+						message: "Failed to pre-authorize display media",
+					})
 					recordSummaryStore.setIsContinuing(false)
 					const errorMessage = i18n.t(
 						"recordSummary:audioSource.errors.resumePermissionDenied",
@@ -1050,6 +1206,7 @@ class RecordSummaryService {
 				// Store it temporarily for the recorder to use
 				this.mediaRecorderService.setPreauthorizedDisplayMedia(preauthorizedDisplayMedia)
 			}
+			this.restoreEncodingSnapshot(currentSession)
 
 			// 重新开始录音（需要重新授权音频源）
 			// Restart recording (requires re-authorization of audio source)
@@ -1057,6 +1214,10 @@ class RecordSummaryService {
 				currentSession.id,
 				currentSession.currentChunkIndex,
 			)
+			const resumedEncoding = this.mediaRecorderService.getEncodingSnapshot()
+			if (resumedEncoding) {
+				this.sessionManager.updateSessionEncodingSnapshot(resumedEncoding)
+			}
 
 			// Clean up preauthorized stream reference after use
 			// 使用后清理预授权流引用
@@ -1091,6 +1252,7 @@ class RecordSummaryService {
 				task_key: currentSession.id,
 				status: RecordingSummaryStatus.Recording,
 				model_id: currentSession.model?.model_id || "",
+				file_shard_count: currentSession.currentChunkIndex,
 				note: recordSummaryStore.note,
 				asr_stream_content: this.getLatestAsrContent(),
 			})
@@ -1100,7 +1262,12 @@ class RecordSummaryService {
 
 			recordSummaryStore.setIsPaused(false)
 		} catch (error) {
-			logger.error("Failed to continue recording", error)
+			logger.error({
+				eventKey: "continue_recording_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to continue recording",
+			})
 			// 恢复失败时，确保状态一致
 			recordSummaryStore.setIsPaused(true)
 			throw error
@@ -1187,7 +1354,12 @@ class RecordSummaryService {
 
 			logger.log("Audio source switched successfully", { newSource })
 		} catch (error) {
-			logger.error("Failed to switch audio source", error)
+			logger.error({
+				eventKey: "switch_audio_source_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to switch audio source",
+			})
 			throw error
 		}
 	}
@@ -1243,7 +1415,12 @@ class RecordSummaryService {
 
 			logger.log("Microphone device switched successfully", { deviceId })
 		} catch (error) {
-			logger.error("Failed to switch microphone device", error)
+			logger.error({
+				eventKey: "switch_microphone_device_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to switch microphone device",
+			})
 			throw error
 		}
 	}
@@ -1276,7 +1453,7 @@ class RecordSummaryService {
 				if (isTaskEndError(error)) {
 					logger.warn(`恢复录音前检测到任务已结束，停止恢复会话 ${session.id}`)
 					// Handle task end: stop local instances and reset state
-					await this.handleTaskEnd(session.id)
+					await this.handleTaskEnd(session.id, error.code)
 					return
 				}
 				// If it's not a task end error, log but continue with resume
@@ -1289,12 +1466,17 @@ class RecordSummaryService {
 
 			// Update media recorder config with saved audio source
 			this.mediaRecorderService.updateConfig({ audioSource })
+			this.restoreEncodingSnapshot(session)
 
 			// 恢复音频录制，传递会话ID和当前分片索引
 			await this.mediaRecorderService.startRecording(
 				session.id,
 				session.currentChunkIndex || 0,
 			)
+			const restoredEncoding = this.mediaRecorderService.getEncodingSnapshot()
+			if (restoredEncoding) {
+				this.sessionManager.updateSessionEncodingSnapshot(restoredEncoding)
+			}
 
 			// 更新音频源配置(如果音频源发生变化)
 			const currentAudioSource = this.mediaRecorderService.getAudioSource()
@@ -1330,6 +1512,7 @@ class RecordSummaryService {
 				task_key: session.id,
 				status: RecordingSummaryStatus.Recording,
 				model_id: session.model?.model_id || "",
+				file_shard_count: session.currentChunkIndex,
 				note: recordSummaryStore.note,
 				asr_stream_content: this.getLatestAsrContent(),
 			})
@@ -1339,6 +1522,11 @@ class RecordSummaryService {
 
 			// 恢复录音时会自动上传会话分片
 			this.chunkUploader.uploadSession(
+				session.id,
+				session.topic?.id || "",
+				session.project?.id || "",
+			)
+			this.startUploadQueueWatchdog(
 				session.id,
 				session.topic?.id || "",
 				session.project?.id || "",
@@ -1354,7 +1542,12 @@ class RecordSummaryService {
 				audioSource: audioSource.source,
 			})
 		} catch (error) {
-			logger.error("Failed to resume recording", error)
+			logger.error({
+				eventKey: "resume_recording_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to resume recording",
+			})
 			this.handleMediaRecorderError(error as Error)
 		}
 	}
@@ -1394,7 +1587,12 @@ class RecordSummaryService {
 					},
 				)
 			} catch (error) {
-				logger.error("初始化内容文件管理器失败", error)
+				logger.error({
+					eventKey: "initialize_content_file_manager_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "初始化内容文件管理器失败",
+				})
 				// Don't block recording on content file initialization failure
 			}
 		}
@@ -1429,17 +1627,31 @@ class RecordSummaryService {
 	 * @param waitForUploadComplete 是否等待上传完成，默认为true
 	 */
 	cancelRecording = async (
-		options: { waitForUploadComplete?: boolean; notifyServer?: boolean } = {
+		options: {
+			waitForUploadComplete?: boolean
+			notifyServer?: boolean
+			source?: string
+		} = {
 			waitForUploadComplete: true,
 			notifyServer: true,
 		},
 	) => {
-		const { waitForUploadComplete = true, notifyServer = true } = options
+		const {
+			waitForUploadComplete = true,
+			notifyServer = true,
+			source = "user_cancel",
+		} = options
+		const activeSession = this.sessionManager.getCurrentSession()
 
 		logger.report("取消录音", {
+			sessionId: activeSession?.id,
+			previousStatus: activeSession?.status,
+			previousChunkIndex: activeSession?.currentChunkIndex,
 			waitForUploadComplete,
 			notifyServer,
+			source,
 		})
+		this.stopUploadQueueWatchdog()
 
 		// Stop duration tracking
 		this.durationTracker.stop()
@@ -1457,16 +1669,31 @@ class RecordSummaryService {
 			// 完全清理音频资源，包括音频流
 			this.voiceToTextService.disconnect()
 		} catch (error) {
-			logger.error("Failed to stop voice recording", error)
+			logger.error({
+				eventKey: "stop_voice_recording_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to stop voice recording",
+			})
 		}
 
 		// 停止媒体录制器并请求最终分片
 		try {
 			// 请求最终数据分片
 			this.mediaRecorderService.requestData()
-			await this.mediaRecorderService.stopRecording()
+			await this.mediaRecorderService.stopRecording({ source: `cancel:${source}` })
+			logger.log("Recording media capture stopped during cancellation", {
+				sessionId: activeSession?.id,
+				source,
+			})
 		} catch (error) {
-			logger.error("Failed to stop media recorder", error)
+			logger.error({
+				eventKey: "stop_media_recorder_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to stop media recorder",
+				context: { sessionId: activeSession?.id, source },
+			})
 		}
 
 		const session = this.sessionManager.getCurrentSession()
@@ -1484,28 +1711,73 @@ class RecordSummaryService {
 					const queueStatus = await this.chunkUploader.getQueueStatus(session.id)
 					const pendingCount = queueStatus.pending || 0
 					const dynamicTimeout = Math.min(30000 + pendingCount * 10000, 120000) // 30s base + 10s/chunk, max 120s
-					logger.log(`剩余分片数: ${pendingCount}, 超时时间: ${dynamicTimeout}ms`)
+					logger.log("Cancellation upload wait started", {
+						sessionId: session.id,
+						source,
+						queueStatus,
+						pendingCount,
+						dynamicTimeout,
+					})
 					await this.chunkUploader.waitForAllUploadsCompleted(session.id, dynamicTimeout)
 
-					logger.log("所有分片上传成功")
+					logger.log("Cancellation upload wait completed", {
+						sessionId: session.id,
+						source,
+						queueStatus: await this.chunkUploader.getQueueStatus(session.id),
+					})
 				} catch (error) {
-					logger.warn("取消录音失败，部分分片可能丢失:", error)
+					logger.warn("Cancellation upload wait failed", {
+						sessionId: session.id,
+						source,
+						errorMessage: error instanceof Error ? error.message : String(error),
+					})
 					// 即使上传失败也继续取消流程
 				} finally {
+					try {
+						await this.chunkUploader.clearSessionChunks(session.id, `cancel:${source}`)
+					} catch (error) {
+						logger.error({
+							eventKey: "cancel_chunk_cleanup_failed",
+							errorKind: "storage",
+							error,
+							message: "取消录音时清理待上传分片失败",
+							context: { sessionId: session.id, source },
+						})
+					}
 					// 隐藏上传等待状态
 					recordSummaryStore.hideWaitingUpload()
 				}
 			} else {
 				// 如果不等待上传完成，则暂停所有上传
-				this.chunkUploader.clearSessionChunks(session.id)
+				logger.log("Cancellation clearing pending chunks without waiting", {
+					sessionId: session.id,
+					source,
+				})
+				try {
+					await this.chunkUploader.clearSessionChunks(session.id, `cancel:${source}`)
+				} catch (error) {
+					logger.error({
+						eventKey: "cancel_chunk_cleanup_failed",
+						errorKind: "storage",
+						error,
+						message: "取消录音时清理待上传分片失败",
+						context: { sessionId: session.id, source },
+					})
+				}
 			}
 
 			if (notifyServer) {
 				// 上报取消状态
+				logger.log("Recording cancellation status report requested", {
+					sessionId: session.id,
+					source,
+					status: RecordingSummaryStatus.Canceled,
+				})
 				this.statusReporter.reportStatus({
 					task_key: session.id,
 					status: RecordingSummaryStatus.Canceled,
 					model_id: session.model?.model_id || "",
+					file_shard_count: session.currentChunkIndex,
 					note: recordSummaryStore.note,
 					asr_stream_content: this.getLatestAsrContent(),
 				})
@@ -1517,6 +1789,13 @@ class RecordSummaryService {
 
 		// Cancel current session and clean up persistence data
 		const cancelledSession = this.sessionManager.cancelSession()
+		logger.log("Recording cancellation completed", {
+			sessionId: cancelledSession?.id || activeSession?.id,
+			source,
+			finalStatus: cancelledSession?.status,
+			finalChunkIndex: cancelledSession?.currentChunkIndex,
+			finalDuration: cancelledSession?.totalDuration,
+		})
 
 		// 重置媒体录制器
 		this.mediaRecorderService.reset()
@@ -1544,6 +1823,315 @@ class RecordSummaryService {
 		})
 
 		return cancelledSession
+	}
+
+	/**
+	 * Stop the active recorder for an explicit override, summarize the session,
+	 * then release it while keeping its IndexedDB chunks available for audit/export.
+	 */
+	forceStopRecordingForOverride = async (expectedSessionId?: string): Promise<boolean> => {
+		const activeSession = this.sessionManager.getCurrentSession()
+		if (!activeSession || (expectedSessionId && activeSession.id !== expectedSessionId)) {
+			return false
+		}
+
+		logger.report("用户强制发起新录音，停止上一段录音", {
+			sessionId: activeSession.id,
+			duration: activeSession.totalDuration,
+			chunkCount: activeSession.currentChunkIndex,
+			source: "force_override",
+			previousIssue: {
+				hasRecordingError: recordSummaryStore.errorState.hasRecordingError,
+				hasChunkError: recordSummaryStore.errorState.hasChunkError,
+				hasVoiceError: recordSummaryStore.errorState.hasVoiceError,
+				recordingError: recordSummaryStore.errorState.recordingError?.message,
+				retryCount: recordSummaryStore.errorState.retryInfo.current,
+			},
+		})
+
+		this.stopChunkProductionWatchdog()
+		this.recordStatusChecker.stop()
+
+		let overrideSummaryResult: GetRecordingSummaryResultResponse | null = null
+		try {
+			await runForceOverrideFinalization({
+				stopRecordingServices: () =>
+					this.stopRecordingServices("force_override", {
+						throwOnMediaRecorderError: true,
+					}),
+				flushSessionUploads: () => this.flushSessionUploadsBeforeOverride(activeSession),
+				summarizeSession: async () => {
+					this.statusReporter.stopPeriodicReport()
+					this.stopUploadQueueWatchdog()
+
+					const { project, topic } = await this.ensureProjectAndTopic(activeSession)
+					try {
+						overrideSummaryResult = await this.processSummaryForSession(
+							activeSession,
+							project.id,
+							topic.id,
+							{
+								note: activeSession.note ?? recordSummaryStore.note,
+								asr_stream_content: this.getLatestAsrContent(),
+							},
+						)
+					} catch (error) {
+						if (!isOverrideSummaryAlreadySettled(error)) throw error
+
+						logger.report("总结接口返回会话已在总结中或已结束，视为上一段已结束", {
+							sessionId: activeSession.id,
+							errorCode: getBusinessErrorCode(error),
+						})
+					}
+				},
+				completeSession: () => {
+					// Summary has been accepted by the server; complete only the old local
+					// session and leave its IndexedDB audio chunks available for audit/export.
+					this.cleanupAfterSessionComplete()
+					this.recordingPersistence.deleteSession(activeSession.id)
+					this.emit(RECORD_SUMMARY_EVENTS.UPDATE_EMPTY_WORKSPACE_PANEL_PROJECTS, {
+						topicId: activeSession.topic?.id || "",
+						projectId: activeSession.project?.id || "",
+						workspaceId: activeSession.workspace?.id || "",
+					})
+					this.emit(RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE, { session: activeSession })
+					logger.report("强制发起前上一段录音总结已触发", {
+						sessionId: activeSession.id,
+						taskKey: overrideSummaryResult?.task_key,
+					})
+				},
+			})
+		} catch (error) {
+			this.statusReporter.stopPeriodicReport()
+			this.stopUploadQueueWatchdog()
+			logger.error({
+				eventKey: "force_override_summary_failed",
+				errorKind: "unknown",
+				error,
+				message: "强制发起时上一段录音总结失败，保留原录音锁",
+				context: { sessionId: activeSession.id },
+			})
+			return false
+		}
+		return true
+	}
+
+	private flushSessionUploadsBeforeOverride = async (
+		session: RecordingSession,
+	): Promise<void> => {
+		const topicId = session.topic?.id || ""
+		const projectId = session.project?.id || ""
+		const progress = await this.chunkUploader.getSessionUploadProgress(session.id)
+
+		if (progress.failed > 0) {
+			await this.chunkUploader.retryFailedChunks(session.id, topicId, projectId)
+		}
+
+		this.startUploadQueueWatchdog(session.id, topicId, projectId)
+		await this.chunkUploader.uploadSession(session.id, topicId, projectId)
+		await this.ensureSessionUploadComplete(session, {
+			topicId,
+			projectId,
+			allowUserDecision: false,
+			maxWaitTimeouts: FORCE_OVERRIDE_MAX_UPLOAD_WAIT_TIMEOUTS,
+		})
+
+		logger.report("强制发起前上一段录音分片已全部上传", {
+			sessionId: session.id,
+			chunkCount: session.currentChunkIndex,
+		})
+	}
+
+	/** Describe the recording that must finish before a new one can start. */
+	getRecordingOverrideContext = async (): Promise<RecordingOverrideContext | null> => {
+		const currentSession = this.sessionManager.getCurrentSession()
+		if (currentSession) {
+			return {
+				sessionId: currentSession.id,
+				duration: formatDuration(currentSession.totalDuration || 0),
+				source: "currentTab",
+				status: currentSession.status === "paused" ? "paused" : "recording",
+				startContext: {
+					workspace: currentSession.workspace,
+					project: currentSession.project,
+					topic: currentSession.topic ?? null,
+					model: currentSession.model,
+				},
+			}
+		}
+
+		const hasOtherTabRecording =
+			recordSummaryStore.isOtherTabRecording ||
+			(this.tabCoordinator.isAnyTabRecording() &&
+				!this.tabCoordinator.hasRecordingPermission())
+		if (hasOtherTabRecording) {
+			return {
+				sessionId: recordSummaryStore.multiTabState.activeTabData.sessionId,
+				duration: recordSummaryStore.multiTabState.activeTabData.duration,
+				source: "otherTab",
+				status: "recording",
+			}
+		}
+
+		if (!this.recordingPersistence.hasRecoverableData()) return null
+		const historicalSession = (await this.recordingPersistence.getRestorationData())
+			.currentSession
+		if (!historicalSession) return null
+
+		return {
+			sessionId: historicalSession.id,
+			duration: formatDuration(historicalSession.totalDuration || 0),
+			source: "history",
+			status: historicalSession.status === "paused" ? "paused" : "recording",
+			startContext: {
+				workspace: historicalSession.workspace,
+				project: historicalSession.project,
+				topic: historicalSession.topic ?? null,
+				model: historicalSession.model,
+			},
+		}
+	}
+
+	/** Prepare a new recording after explicitly taking over an existing session. */
+	prepareRecordingOverride = async (expectedSessionId?: string): Promise<boolean> => {
+		if (this.forceOverridePreparation) return this.forceOverridePreparation
+
+		this.forceOverridePreparation = this.prepareRecordingOverrideInternal(expectedSessionId)
+		try {
+			return await this.forceOverridePreparation
+		} finally {
+			this.forceOverridePreparation = null
+		}
+	}
+
+	private prepareRecordingOverrideInternal = async (
+		expectedSessionId?: string,
+	): Promise<boolean> => {
+		const currentSession = this.sessionManager.getCurrentSession()
+		if (currentSession) {
+			const stopped = await this.forceStopRecordingForOverride(
+				expectedSessionId ?? currentSession.id,
+			)
+			if (!stopped) return false
+		}
+
+		const hasOtherTabRecording =
+			recordSummaryStore.isOtherTabRecording ||
+			(this.tabCoordinator.isAnyTabRecording() &&
+				!this.tabCoordinator.hasRecordingPermission())
+		if (hasOtherTabRecording) {
+			const overridden = await this.tabCoordinator.requestRecordingOverride(
+				expectedSessionId ?? recordSummaryStore.multiTabState.activeTabData.sessionId,
+				FORCE_OVERRIDE_REQUEST_TIMEOUT_MS,
+			)
+			if (!overridden) {
+				logger.warn("未能确认其他标签已停止录音", { source: "force_override" })
+				return false
+			}
+
+			return this.tabCoordinator.requestLock()
+		}
+
+		if (!this.recordingPersistence.hasRecoverableData()) return true
+		const historicalSession = (await this.recordingPersistence.getRestorationData())
+			.currentSession
+		if (
+			!historicalSession ||
+			(expectedSessionId && historicalSession.id !== expectedSessionId)
+		) {
+			return false
+		}
+
+		// Historical sessions have no active recorder, but restoring the session lets
+		// the same upload, summary, completion, and persistence path handle them.
+		if (!this.sessionManager.restoreSession(historicalSession)) return false
+		return this.forceStopRecordingForOverride(historicalSession.id)
+	}
+
+	/** Release the confirmed session so a new recording can start without a summary. */
+	releaseOverrideSessionForForceStart = async (expectedSessionId?: string): Promise<boolean> => {
+		const activeSession = this.sessionManager.getCurrentSession()
+		if (activeSession) {
+			if (expectedSessionId && activeSession.id !== expectedSessionId) {
+				logger.warn("仍要发起已取消：当前会话已变化", {
+					expectedSessionId,
+					currentSessionId: activeSession.id,
+				})
+				return false
+			}
+
+			const recorderStopped = await this.stopLeftoverRecordingServicesForForceStart()
+			if (!recorderStopped) {
+				logger.warn("仍要发起已取消：旧录音器仍在运行", {
+					sessionId: activeSession.id,
+				})
+				return false
+			}
+
+			this.cleanupAfterSessionComplete()
+			this.recordingPersistence.deleteSession(activeSession.id)
+			this.emit(RECORD_SUMMARY_EVENTS.UPDATE_EMPTY_WORKSPACE_PANEL_PROJECTS, {
+				topicId: activeSession.topic?.id || "",
+				projectId: activeSession.project?.id || "",
+				workspaceId: activeSession.workspace?.id || "",
+			})
+			this.emit(RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE, { session: activeSession })
+			logger.report("用户选择仍要发起，已释放上一段录音锁", {
+				sessionId: activeSession.id,
+			})
+			return true
+		}
+
+		const otherTabHoldsLock =
+			this.tabCoordinator.isAnyTabRecording() && !this.tabCoordinator.hasRecordingPermission()
+		const otherTabSessionId = recordSummaryStore.multiTabState.activeTabData.sessionId
+		if (
+			expectedSessionId &&
+			otherTabHoldsLock &&
+			otherTabSessionId &&
+			otherTabSessionId !== expectedSessionId
+		) {
+			logger.warn("仍要发起已取消：其他标签会话已变化", {
+				expectedSessionId,
+				otherTabSessionId,
+			})
+			return false
+		}
+
+		this.recordingPersistence.clearAll()
+		recordSummaryStore.completeRecording()
+
+		if (otherTabHoldsLock) {
+			this.tabCoordinator.forceAcquireLock()
+			logger.report("用户选择仍要发起，已强制接管其他标签的录音锁")
+			return true
+		}
+
+		this.tabCoordinator.releaseLock({
+			type: "finish",
+			data: {
+				message: [],
+				duration: "00:00:00",
+				isRecording: false,
+				sessionId: "",
+			},
+		})
+		logger.report("用户选择仍要发起，已清理可恢复的历史录音指针")
+		return true
+	}
+
+	private stopLeftoverRecordingServicesForForceStart = async (): Promise<boolean> => {
+		try {
+			await this.stopRecordingServices("force_override_release")
+		} catch (error) {
+			logger.error({
+				eventKey: "force_override_release_stop_failed",
+				errorKind: "unknown",
+				error,
+				message: "强制发起前停止旧录音服务失败",
+			})
+		}
+		return !this.mediaRecorderService.getStatus().isRecording
 	}
 
 	/**
@@ -1656,7 +2244,7 @@ class RecordSummaryService {
 
 		// 停止录音服务
 		this.summaryMessageService.showStageMessage(SummaryStage.StoppingRecording)
-		await this.stopRecordingServices()
+		await this.stopRecordingServices("finish_recording")
 
 		const sessionId = this.sessionManager.getCurrentSession()?.id || ""
 		const sessionForProjectLogic = {
@@ -1675,7 +2263,12 @@ class RecordSummaryService {
 			finalProject = ensured.project
 			finalTopic = ensured.topic
 		} catch (err) {
-			logger.error("处理项目和话题失败", err)
+			logger.error({
+				eventKey: "process_project_failed",
+				errorKind: "unknown",
+				error: err,
+				message: "处理项目和话题失败",
+			})
 			this.summaryMessageService.showError(
 				i18n.t("recordingSummary.message.missingRequiredParams", { ns: "super" }),
 			)
@@ -1695,6 +2288,7 @@ class RecordSummaryService {
 		try {
 			if (sessionId) {
 				logger.log("等待所有分片上传完成")
+				this.startUploadQueueWatchdog(sessionId, finalTopic.id, finalProject.id)
 				this.summaryMessageService.showStageMessage(SummaryStage.UploadingChunks)
 
 				// 触发上传会话分片
@@ -1711,7 +2305,12 @@ class RecordSummaryService {
 				logger.report("所有分片上传完成")
 			}
 		} catch (err) {
-			logger.error(`${sessionId} 等待所有分片上传完成失败`, err)
+			logger.error({
+				eventKey: "chunk_upload_completion_wait_failed",
+				errorKind: "unknown",
+				error: err,
+				message: `${sessionId} 等待所有分片上传完成失败`,
+			})
 			this.summaryMessageService.showError(
 				i18n.t("recordingSummary.message.uploadChunksPreparingError", { ns: "super" }),
 			)
@@ -1752,7 +2351,12 @@ class RecordSummaryService {
 					", modelId: " +
 					modelId,
 			)
-			logger.error("Missing required parameters for summary", error)
+			logger.error({
+				eventKey: "recording_summary_parameters_missing",
+				errorKind: "invalid_state",
+				error: error,
+				message: "Missing required parameters for summary",
+			})
 			this.summaryMessageService.showError(
 				i18n.t("recordingSummary.message.missingRequiredParams", { ns: "super" }),
 			)
@@ -1769,9 +2373,15 @@ class RecordSummaryService {
 					project: finalProject,
 					topic: finalTopic,
 					asrStreamContent: asr_stream_content || "",
+					fileShardCount: this.sessionManager.getCurrentSession()?.currentChunkIndex,
 				})
 			} catch (err) {
-				logger.error("finish recording task failed", err)
+				logger.error({
+					eventKey: "finish_recording_task_failed",
+					errorKind: "unknown",
+					error: err,
+					message: "finish recording task failed",
+				})
 				this.summaryMessageService.showError(
 					i18n.t("recordingSummary.message.summaryGenerationFailed", { ns: "super" }),
 				)
@@ -1818,10 +2428,12 @@ class RecordSummaryService {
 			// Get model from store or find by model_id
 			const model = recordSummaryStore.businessData.model || this.findModelById(model_id)
 
+			const currentChunkIndex = this.sessionManager.getCurrentSession()?.currentChunkIndex
 			const sessionForSummary = {
 				id: taskKey,
 				model: model,
 				textContent: recordSummaryStore.message,
+				...(currentChunkIndex !== undefined ? { currentChunkIndex } : {}),
 			} as RecordingSession
 
 			// Migrate storage images to project images if asr_stream_content exists
@@ -1837,10 +2449,12 @@ class RecordSummaryService {
 					)
 					logger.log("Storage image migration completed")
 				} catch (migrationError) {
-					logger.error(
-						"Failed to migrate storage images, using original content",
-						migrationError,
-					)
+					logger.error({
+						eventKey: "recording_storage_image_migration_failed",
+						errorKind: "storage",
+						error: migrationError,
+						message: "Failed to migrate storage images, using original content",
+					})
 				}
 			}
 
@@ -1871,7 +2485,12 @@ class RecordSummaryService {
 				workspace_id: workspace?.id || "",
 			})
 		} catch (err) {
-			logger.error("get recording summary result failed", err)
+			logger.error({
+				eventKey: "get_recording_summary_result_failed",
+				errorKind: "unknown",
+				error: err,
+				message: "get recording summary result failed",
+			})
 			this.summaryMessageService.showError(
 				i18n.t("recordingSummary.message.summaryGenerationFailed", { ns: "super" }),
 			)
@@ -1913,13 +2532,13 @@ class RecordSummaryService {
 		onError: (error: Error) => void
 		skipSummary?: boolean
 	}) => {
+		// Workspace may be null for All / Ungrouped audio recordings; project + topic are enough.
 		if (
-			!recordSummaryStore.businessData.workspace ||
 			!recordSummaryStore.businessData.topic ||
 			!recordSummaryStore.businessData.project ||
 			!recordSummaryStore.businessData.model
 		) {
-			onError(new Error("workspace, topic, project, model is required"))
+			onError(new Error("topic, project, model is required"))
 			return
 		}
 
@@ -2017,7 +2636,12 @@ class RecordSummaryService {
 				model_id: model.model_id,
 			})
 		} catch (err) {
-			logger.error("get recording summary result failed", err)
+			logger.error({
+				eventKey: "get_recording_summary_result_failed",
+				errorKind: "unknown",
+				error: err,
+				message: "get recording summary result failed",
+			})
 			onError(err as Error)
 		}
 
@@ -2042,8 +2666,9 @@ class RecordSummaryService {
 			throw new Error("录音会话不能为空")
 		}
 
-		if (!session.workspace || !session.model) {
-			throw new Error("会话中缺少必需的 workspace 或 model")
+		// Workspace can be null when the recording started from All / Ungrouped.
+		if (!session.model) {
+			throw new Error("会话中缺少必需的 model")
 		}
 
 		logger.log("开始完成目标录音会话", {
@@ -2062,7 +2687,7 @@ class RecordSummaryService {
 
 			if (needsRecordingStop) {
 				logger.log("目标会话是当前活跃的录音会话，先停止录音")
-				await this.stopRecordingServices()
+				await this.stopRecordingServices("complete_existing_session")
 			}
 
 			// 2. 处理项目和话题创建逻辑，先确保上传分片能 batch-save 到后端
@@ -2070,6 +2695,7 @@ class RecordSummaryService {
 				await this.ensureProjectAndTopic(session)
 
 			// 3. 等待分片上传完成和一致性检查
+			this.startUploadQueueWatchdog(session.id, finalTopic.id, finalProject.id)
 			await this.chunkUploader.uploadSession(session.id, finalTopic.id, finalProject.id)
 			await this.ensureSessionUploadComplete(session, {
 				topicId: finalTopic.id,
@@ -2114,9 +2740,12 @@ class RecordSummaryService {
 				project_name: session.project?.project_name || "",
 			}
 		} catch (error) {
-			logger.error("目标录音会话完成失败", {
-				sessionId: session.id,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "recording_session_complete_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "目标录音会话完成失败",
+				context: { sessionId: session.id },
 			})
 			throw error
 		}
@@ -2134,6 +2763,7 @@ class RecordSummaryService {
 	 * Reset recording without clearing persisted data
 	 */
 	private resetRecordingWithoutPersistence = async () => {
+		this.stopUploadQueueWatchdog()
 		// 停止语音服务
 		if (this.voiceToTextService) {
 			await this.voiceToTextService.stopRecording()
@@ -2149,7 +2779,9 @@ class RecordSummaryService {
 
 		// Stop media recorder
 		if (this.mediaRecorderService) {
-			await this.mediaRecorderService.stopRecording()
+			await this.mediaRecorderService.stopRecording({
+				source: "reset_without_persistence",
+			})
 		}
 
 		// Stop duration tracking and UI updates
@@ -2195,6 +2827,7 @@ class RecordSummaryService {
 
 		// 停止分片生产监控
 		this.stopChunkProductionWatchdog()
+		this.stopUploadQueueWatchdog()
 
 		// 停止语音服务
 		if (this.voiceToTextService) {
@@ -2211,7 +2844,7 @@ class RecordSummaryService {
 
 		// Stop media recorder
 		if (this.mediaRecorderService) {
-			await this.mediaRecorderService.stopRecording()
+			await this.mediaRecorderService.stopRecording({ source: "reset" })
 		}
 
 		// Stop duration tracking
@@ -2257,6 +2890,8 @@ class RecordSummaryService {
 	 */
 	private handleVoiceResult = (params: VoiceResultParams) => {
 		const { result } = params
+		// Ignore final packets that arrive after the user has disabled realtime transcription.
+		if (recordSummaryStore.businessData.transcriptionEnabled === false) return
 
 		// 记录语音结果并重置超时检测
 		this.voiceTimeoutChecker.recordVoiceResult()
@@ -2311,7 +2946,14 @@ class RecordSummaryService {
 		chunkIndex: number,
 		indexdbSaveSuccess: boolean,
 	) => {
-		logger.log(`${storedChunk.sessionId} 添加了一个分片`, storedChunk)
+		logger.log("Audio chunk persistence result received", {
+			sessionId: storedChunk.sessionId,
+			chunkId: storedChunk.id,
+			chunkIndex,
+			size: storedChunk.size,
+			uploadStatus: storedChunk.uploadStatus,
+			indexdbSaveSuccess,
+		})
 
 		// 标记已收到第一个分片，清除生产监控
 		if (!this.hasReceivedFirstChunk) {
@@ -2370,7 +3012,9 @@ class RecordSummaryService {
 
 			try {
 				// 停止并重启 MediaRecorder，保留同一 session
-				await this.mediaRecorderService.stopRecording()
+				await this.mediaRecorderService.stopRecording({
+					source: "chunk_production_watchdog_recovery",
+				})
 				this.mediaRecorderService.reset()
 				await this.mediaRecorderService.startRecording(sessionId, 0)
 
@@ -2381,13 +3025,21 @@ class RecordSummaryService {
 					this.handleChunkProductionTimeout(sessionId, timeoutMs)
 				}, timeoutMs)
 			} catch (error) {
-				logger.error("分片生产监控：自动重启录音器失败", { error: String(error) })
+				logger.error({
+					eventKey: "chunk_recording_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "分片生产监控：自动重启录音器失败",
+				})
 				this.notifyUserChunkProductionFailed()
 			}
 		} else {
 			// 恢复尝试后仍无分片，通知用户
-			logger.error("分片生产监控：自动恢复失败，录音器无法正常产出分片", {
-				sessionId,
+			logger.error({
+				eventKey: "restored_recording_chunk_production_failed",
+				errorKind: "unknown",
+				message: "分片生产监控：自动恢复失败，录音器无法正常产出分片",
+				context: { sessionId },
 			})
 			this.notifyUserChunkProductionFailed()
 		}
@@ -2408,7 +3060,10 @@ class RecordSummaryService {
 						type="button"
 						onClick={() => {
 							magicToast.destroy("recording-chunk-production-failed")
-							this.cancelRecording({ notifyServer: true })
+							this.cancelRecording({
+								notifyServer: true,
+								source: "chunk_production_watchdog",
+							})
 						}}
 						style={{
 							flexShrink: 0,
@@ -2438,6 +3093,80 @@ class RecordSummaryService {
 		if (this.chunkProductionWatchdog) {
 			clearTimeout(this.chunkProductionWatchdog)
 			this.chunkProductionWatchdog = null
+		}
+	}
+
+	private startUploadQueueWatchdog(sessionId: string, topicId: string, projectId: string) {
+		this.uploadRetryContext = { sessionId, topicId, projectId }
+		this.summaryMessageService.setUploadRetryHandler(this.retryStuckChunkUploads)
+		this.uploadQueueWatchdog?.stop()
+		this.uploadQueueWatchdog = new UploadQueueWatchdog({
+			inspect: () => this.chunkUploader.inspectQueueHealth(sessionId),
+			resume: () => {
+				const ctx = this.uploadRetryContext
+				if (!ctx) return Promise.resolve()
+				return this.chunkUploader.resumeStalledSessionUploads(
+					ctx.sessionId,
+					ctx.topicId,
+					ctx.projectId,
+					{ force: true },
+				)
+			},
+			onRecovered: (health) => {
+				logger.report("Upload queue watchdog recovered stalled uploads", {
+					sessionId,
+					...health,
+				})
+			},
+			onError: (error) => {
+				logger.error({
+					eventKey: "upload_queue_watchdog_failed",
+					errorKind: "unknown",
+					error,
+					message: "Upload queue watchdog check failed",
+					context: { sessionId },
+				})
+			},
+		})
+		this.uploadQueueWatchdog.start()
+	}
+
+	private stopUploadQueueWatchdog() {
+		this.uploadQueueWatchdog?.stop()
+		this.uploadQueueWatchdog = null
+		this.uploadRetryContext = null
+		this.summaryMessageService.setUploadRetryHandler(null)
+	}
+
+	private retryStuckChunkUploads = async () => {
+		const ctx = this.uploadRetryContext
+		if (!ctx || this.uploadRetryInFlight) return
+
+		this.uploadRetryInFlight = true
+		try {
+			const health = await this.chunkUploader.inspectQueueHealth(ctx.sessionId)
+			logger.report("User retried audio chunk uploads", {
+				sessionId: ctx.sessionId,
+				...health,
+			})
+			await this.chunkUploader.resumeStalledSessionUploads(
+				ctx.sessionId,
+				ctx.topicId,
+				ctx.projectId,
+				{ force: true },
+			)
+			const progress = await this.chunkUploader.getSessionUploadProgress(ctx.sessionId)
+			this.summaryMessageService.updateProgress(this.formatUploadProgress(progress))
+		} catch (error) {
+			logger.error({
+				eventKey: "resume_stalled_chunk_upload_failed",
+				errorKind: "unknown",
+				error,
+				message: "Failed to resume stalled chunk uploads",
+				context: { sessionId: ctx.sessionId },
+			})
+		} finally {
+			this.uploadRetryInFlight = false
 		}
 	}
 
@@ -2477,14 +3206,23 @@ class RecordSummaryService {
 	 * 语音识别错误不应该干扰录制服务，只在UI上显示错误和重试选项
 	 */
 	private handleVoiceError = (error: Error) => {
-		logger.error("语音识别服务错误", error)
+		logger.error({
+			eventKey: "speech_recognition_service_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "语音识别服务错误",
+		})
 
 		// 获取重试信息
 		const retryInfo = this.voiceToTextService.getRetryInfo()
 
 		// 如果已经超过最大重试次数，显示重试按钮供用户手动重试
 		if (retryInfo.hasExceededRetries) {
-			logger.error("语音识别重试已经超过最大重试次数，用户可以手动重试")
+			logger.error({
+				eventKey: "speech_recognition_retry_exhausted",
+				errorKind: "unknown",
+				message: "语音识别重试已经超过最大重试次数，用户可以手动重试",
+			})
 			// UI 会显示重试按钮，用户可以点击调用 retryVoiceToTextService 方法
 		}
 
@@ -2506,9 +3244,18 @@ class RecordSummaryService {
 	 * 媒体录制错误需要重置整个录制服务状态
 	 */
 	private handleMediaRecorderError = (error: Error) => {
-		logger.error("Media recorder service error", {
-			error,
-			session: this.sessionManager.getCurrentSession(),
+		const activeSession = this.sessionManager.getCurrentSession()
+		logger.error({
+			eventKey: "media_recorder_service_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "Media recorder service error",
+			context: {
+				sessionId: activeSession?.id,
+				status: activeSession?.status,
+				chunkIndex: activeSession?.currentChunkIndex,
+				totalDuration: activeSession?.totalDuration,
+			},
 		})
 
 		// 设置录制错误状态
@@ -2519,14 +3266,19 @@ class RecordSummaryService {
 		this.wakeLockManager.removeVisibilityChangeListener()
 
 		// 执行完整的取消录音流程，但不等待上传完成（因为是错误情况）
-		this.cancelRecording({ notifyServer: false })
+		this.cancelRecording({ notifyServer: false, source: "media_recorder_error" })
 			.then((cancelledSession) => {
 				if (cancelledSession) {
 					this.emit(RECORD_SUMMARY_EVENTS.RECORDING_ERROR, { session: cancelledSession })
 				}
 			})
 			.catch((cancelError) => {
-				logger.error("Failed to cancel recording after media recorder error", cancelError)
+				logger.error({
+					eventKey: "cancel_recording_after_media_recorder_failed",
+					errorKind: "unknown",
+					error: cancelError,
+					message: "Failed to cancel recording after media recorder error",
+				})
 			})
 	}
 
@@ -2535,17 +3287,18 @@ class RecordSummaryService {
 	 * 状态上报错误不应该影响录制流程，仅记录日志
 	 */
 	private handleStatusReportError = async (error: Error) => {
-		logger.error("状态上报失败", error)
+		logger.error({
+			eventKey: "status_report_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "状态上报失败",
+		})
 		// Silent failure - does not affect recording functionality
 		// Check if error is task end error
 		if (isTaskEndError(error)) {
 			const session = this.sessionManager.getCurrentSession()
-			if (session) {
-				logger.warn(`恢复录音前检测到任务已结束，停止恢复会话 ${session.id}`)
-				// Handle task end: stop local instances and reset state
-				await this.handleTaskEnd(session.id)
-				return
-			}
+			const sessionId = session?.id ?? error.sessionId
+			if (sessionId) await this.handleTaskEnd(sessionId, error.code)
 		}
 	}
 
@@ -2565,7 +3318,12 @@ class RecordSummaryService {
 	 * 内容文件上传错误不应该影响录制流程，仅记录日志
 	 */
 	private handleContentFileUploadError = (fileType: string, error: Error) => {
-		logger.error(`Content file upload failed: ${fileType}`, error)
+		logger.error({
+			eventKey: "content_file_upload_failed",
+			errorKind: "unknown",
+			error: error,
+			message: `Content file upload failed: ${fileType}`,
+		})
 		// Silent failure - does not affect recording functionality
 	}
 
@@ -2608,7 +3366,12 @@ class RecordSummaryService {
 			await this.voiceToTextService.retry()
 			recordSummaryStore.clearVoiceError()
 		} catch (error) {
-			logger.error("手动重试语音识别服务失败", error)
+			logger.error({
+				eventKey: "retry_speech_recognition_service_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "手动重试语音识别服务失败",
+			})
 			recordSummaryStore.setVoiceError(true)
 		} finally {
 			recordSummaryStore.setRetryingState(false)
@@ -2696,18 +3459,22 @@ class RecordSummaryService {
 					}
 				},
 				onError: (error) => {
-					logger.error(
-						"Failed to complete recording after duration limit exceeded",
-						{
-							session: cancelledSession,
-							error: error,
-						},
-						error,
-					)
+					logger.error({
+						eventKey: "complete_recording_duration_limit_exceeded",
+						errorKind: "timeout",
+						error: error,
+						message: "Failed to complete recording after duration limit exceeded",
+						context: { cancelledSession },
+					})
 				},
 			})
 		} catch (error) {
-			logger.error("Failed to cancel recording after duration limit exceeded", error)
+			logger.error({
+				eventKey: "cancel_recording_duration_limit_exceeded",
+				errorKind: "timeout",
+				error: error,
+				message: "Failed to cancel recording after duration limit exceeded",
+			})
 		} finally {
 			this.isDurationLimitExceeded = false
 		}
@@ -2781,7 +3548,12 @@ class RecordSummaryService {
 			try {
 				chunkConsistency = await this.validateChunkIndexConsistency(sessionSummary.id)
 			} catch (error) {
-				logger.error("Failed to get chunk consistency in getStatus", error)
+				logger.error({
+					eventKey: "get_chunk_consistency_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "Failed to get chunk consistency in getStatus",
+				})
 			}
 		}
 
@@ -2831,6 +3603,7 @@ class RecordSummaryService {
 		this.mediaRecorderService.dispose()
 
 		this.sessionManager.clearSession()
+		this.stopUploadQueueWatchdog()
 		this.chunkUploader.pauseAll()
 
 		// Cleanup tab coordinator
@@ -2919,7 +3692,12 @@ class RecordSummaryService {
 				fixed: false,
 			}
 		} catch (error) {
-			logger.error(`${sessionId} 验证分片索引一致性失败`, error)
+			logger.error({
+				eventKey: "validate_chunk_index_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `${sessionId} 验证分片索引一致性失败`,
+			})
 			return {
 				isConsistent: false,
 				actualChunkCount: 0,
@@ -3030,7 +3808,12 @@ class RecordSummaryService {
 				}
 			}
 		} catch (error) {
-			logger.error("恢复之前的会话失败", error)
+			logger.error({
+				eventKey: "restore_previous_session_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "恢复之前的会话失败",
+			})
 		} finally {
 			this.isRestoringSession = false
 		}
@@ -3059,7 +3842,12 @@ class RecordSummaryService {
 				})
 			}
 		} catch (error) {
-			logger.error("Failed to save final session state", error)
+			logger.error({
+				eventKey: "save_final_session_state_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to save final session state",
+			})
 		}
 	}
 	/**
@@ -3099,7 +3887,12 @@ class RecordSummaryService {
 				currentSession.project?.id || "",
 			)
 			.catch((error) => {
-				logger.error("Failed to trigger session upload", error)
+				logger.error({
+					eventKey: "trigger_session_upload_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "Failed to trigger session upload",
+				})
 			})
 	}
 
@@ -3118,7 +3911,12 @@ class RecordSummaryService {
 			this.lastPersistTime = now
 			logger.log("Session state persisted")
 		} catch (error) {
-			logger.error("Failed to persist session state", error)
+			logger.error({
+				eventKey: "persist_session_state_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to persist session state",
+			})
 		}
 	}
 
@@ -3187,7 +3985,11 @@ class RecordSummaryService {
 	 * 处理上传成功事件
 	 */
 	private handleUploadSuccess = (taskId: string, url: string) => {
-		logger.log("Upload successful", { taskId, url })
+		logger.log("Upload successful", {
+			taskId,
+			hasUploadPath: Boolean(url),
+			isAbsoluteUrl: /^https?:\/\//i.test(url),
+		})
 
 		// Update session activity
 		this.sessionManager.updateSessionStatus("recording")
@@ -3200,7 +4002,14 @@ class RecordSummaryService {
 	 * 处理上传错误事件
 	 */
 	private handleUploadError = (taskId: string, error: Error) => {
-		logger.error("Upload failed", { taskId, error: error.message })
+		logger.report({
+			namespace: "recordingUpload",
+			data: {
+				event: "callback_failed",
+				taskId,
+				errorName: error.name,
+			},
+		})
 
 		// TODO: Update UI with error status
 		// TODO: Save failed upload for retry
@@ -3261,9 +4070,11 @@ class RecordSummaryService {
 	 * 处理达到最大重试次数事件
 	 */
 	private handleMaxRetriesReached = (chunkId: string, retryCount: number) => {
-		logger.error("Chunk upload failed after max retries", {
-			chunkId,
-			retryCount,
+		logger.error({
+			eventKey: "chunk_upload_max_retries_failed",
+			errorKind: "unknown",
+			message: "Chunk upload failed after max retries",
+			context: { chunkId, retryCount },
 		})
 
 		// Show error notification to user
@@ -3277,53 +4088,99 @@ class RecordSummaryService {
 	}
 
 	/**
-	 * Handle task end event (error code 43200)
-	 * 处理任务结束事件（错误码 43200）
+	 * Handle server-side task termination events.
+	 * 处理服务端结束任务事件。
 	 * 服务端状态已经结束，只需要强制停止本地的录制相关实例
 	 */
-	private handleTaskEnd = async (sessionId: string) => {
+	private handleTaskEnd = async (sessionId: string, errorCode?: number | string) => {
 		logger.warn(
-			`检测到任务结束（错误码 ${ERROR_CODE_TASK_ENDED}），强制停止本地录制会话 ${sessionId}`,
+			`检测到任务结束（错误码 ${errorCode ?? ERROR_CODE_TASK_ENDED}），停止本地录制会话 ${sessionId}`,
 		)
-
-		const currentSession = this.sessionManager.getCurrentSession()
-		// Only stop if this is the current active session
-		if (!currentSession || currentSession.id !== sessionId) {
-			logger.log(`任务结束事件针对的会话 ${sessionId} 不是当前活跃会话，忽略`)
+		if (this.handlingTaskEndSessions.has(sessionId)) {
+			logger.log("任务结束处理已在进行中，忽略重复事件", { sessionId })
 			return
 		}
+		this.handlingTaskEndSessions.add(sessionId)
 
 		try {
-			// Stop recording services (voice and media recorder)
-			// This includes stopping duration timer
-			await this.stopRecordingServices()
+			const currentSession = this.sessionManager.getCurrentSession()
+			// Never stop a different recording session because of a stale event.
+			if (currentSession && currentSession.id !== sessionId) {
+				logger.log(`任务结束事件针对的会话 ${sessionId} 不是当前活跃会话，忽略`)
+				return
+			}
 
-			// Release wake lock
-			this.wakeLockManager.releaseWakeLock()
-			this.wakeLockManager.removeVisibilityChangeListener()
+			const numericErrorCode =
+				typeof errorCode === "string" && errorCode.trim() === ""
+					? undefined
+					: Number(errorCode)
+			const normalizedErrorCode = Number.isFinite(numericErrorCode)
+				? numericErrorCode
+				: undefined
+			const terminationSource =
+				normalizedErrorCode === ERROR_CODES.TASK_IS_SUMMARIZING
+					? "server_auto_summary"
+					: "server_task_ended"
 
-			// Remove before unload listener
-			this.removeBeforeUnloadListener()
+			await runTaskEndCleanup({
+				stopRecordingServices: () => this.stopRecordingServices("task_end"),
+				stopSessionUploads: () =>
+					this.chunkUploader.stopSessionUploads(sessionId, "task_end"),
+				stopStatusReporter: () => {
+					this.stopChunkProductionWatchdog()
+					this.stopUploadQueueWatchdog()
+					this.statusReporter.stopPeriodicReport()
+					this.batchSaveReporter.clearSession(sessionId)
+				},
+				stopRecordStatusChecker: () => this.recordStatusChecker.stop(),
+				releaseWakeLock: () => this.wakeLockManager.releaseWakeLock(),
+				removeVisibilityChangeListener: () =>
+					this.wakeLockManager.removeVisibilityChangeListener(),
+				removeBeforeUnloadListener: () => this.removeBeforeUnloadListener(),
+				releaseRecordingLock: () =>
+					this.tabCoordinator.releaseLock({
+						type: "finish",
+						data: {
+							message: [],
+							duration: "00:00:00",
+							isRecording: false,
+							sessionId,
+						},
+					}),
+				preserveSession: async () => {
+					const cancelledSession = this.sessionManager.markServerCancelledSession(
+						normalizedErrorCode,
+						terminationSource,
+					)
+					if (!cancelledSession) return
 
-			// Stop periodic reporting (server already knows task ended)
-			this.statusReporter.stopPeriodicReport()
+					this.recordingPersistence.saveSession(cancelledSession)
+					const queueStatus = await this.chunkUploader.getQueueStatus(sessionId)
+					logger.report("服务端自动总结后保留本地录音数据", {
+						sessionId,
+						errorCode: normalizedErrorCode,
+						status: cancelledSession.status,
+						queueStatus,
+						chunkIndex: cancelledSession.currentChunkIndex,
+					})
+				},
+				resetStore: () => {
+					recordSummaryStore.reset()
+				},
+				reportError: (stage, error) => {
+					logger.error({
+						eventKey: "task_end_cleanup_failed",
+						errorKind: "unknown",
+						error,
+						message: `任务结束清理阶段失败：${stage}`,
+						context: { sessionId, errorCode: normalizedErrorCode },
+					})
+				},
+			})
 
-			// Clear chunk upload queue for this session
-			this.chunkUploader.clearSessionChunks(sessionId)
-			this.batchSaveReporter.clearSession(sessionId)
-
-			// Cancel session
-			this.sessionManager.cancelSession()
-
-			// Clear persistence data
-			this.recordingPersistence.clearAll()
-
-			// Reset store state
-			recordSummaryStore.reset()
-
-			logger.log(`任务结束，本地录制实例已停止，会话 ${sessionId}`)
-		} catch (error) {
-			logger.error(`处理任务结束事件失败：`, error)
+			logger.log(`任务结束，本地录制实例已停止，会话 ${sessionId}，已保留本地数据`)
+		} finally {
+			this.handlingTaskEndSessions.delete(sessionId)
 		}
 	}
 
@@ -3350,7 +4207,12 @@ class RecordSummaryService {
 						// Could potentially show a notification to user about potential recording interruption
 					}
 				} catch (error) {
-					logger.error("Error while trying to re-acquire wake lock", error)
+					logger.error({
+						eventKey: "re_acquire_wake_lock_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "Error while trying to re-acquire wake lock",
+					})
 				}
 			}, 100)
 		}
@@ -3434,7 +4296,12 @@ class RecordSummaryService {
 				sessionId: session.id,
 			})
 		} catch (error) {
-			logger.error("Failed to restore session as inactive", error)
+			logger.error({
+				eventKey: "restore_session_as_inactive_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to restore session as inactive",
+			})
 		}
 	}
 
@@ -3477,6 +4344,12 @@ class RecordSummaryService {
 				logger.log("finishHistoricalSession: no session found")
 				return
 			}
+			if (session.status === "server_cancelled") {
+				logger.log("finishHistoricalSession: server-cancelled sessions are export-only", {
+					sessionId: session.id,
+				})
+				return
+			}
 
 			const currentUserId = userStore.user.userInfo?.user_id
 			if (session.userId && currentUserId && session.userId !== currentUserId) {
@@ -3487,8 +4360,9 @@ class RecordSummaryService {
 				return
 			}
 
-			if (!session.workspace || !session.model) {
-				logger.warn("finishHistoricalSession: session missing workspace or model")
+			// Null workspace is valid for ungrouped recordings; only model is required here.
+			if (!session.model) {
+				logger.warn("finishHistoricalSession: session missing model")
 				return
 			}
 
@@ -3513,12 +4387,22 @@ class RecordSummaryService {
 					onSummarizeSuccessDefaultCallback(res)
 				},
 				onError: (error) => {
-					logger.error("finishHistoricalSession summarize failed", error)
+					logger.error({
+						eventKey: "finish_historical_session_summarize_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "finishHistoricalSession summarize failed",
+					})
 					recordSummaryStore.reset()
 				},
 			})
 		} catch (error) {
-			logger.error("finishHistoricalSession 失败", error)
+			logger.error({
+				eventKey: "finish_historical_session_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "finishHistoricalSession 失败",
+			})
 			recordSummaryStore.reset()
 		} finally {
 			this.isRestoringSession = false
@@ -3560,13 +4444,28 @@ class RecordSummaryService {
 	/**
 	 * 停止录音服务
 	 */
-	private async stopRecordingServices(): Promise<void> {
+	private async stopRecordingServices(
+		source: string = "service",
+		options: { throwOnMediaRecorderError?: boolean } = {},
+	): Promise<void> {
+		const session = this.sessionManager.getCurrentSession()
+		logger.log("Recording services stop requested", {
+			sessionId: session?.id,
+			source,
+			previousStatus: session?.status,
+			previousChunkIndex: session?.currentChunkIndex,
+		})
 		// 停止语音服务
 		try {
 			await this.voiceToTextService.stopRecording()
 			this.voiceToTextService.disconnect()
 		} catch (error) {
-			logger.error("停止语音识别服务失败", error)
+			logger.error({
+				eventKey: "stop_speech_recognition_service_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "停止语音识别服务失败",
+			})
 		}
 
 		// 停止语音超时检测
@@ -3578,16 +4477,30 @@ class RecordSummaryService {
 		// 停止媒体录制器并请求最终分片
 		try {
 			this.mediaRecorderService.requestData()
-			await this.mediaRecorderService.stopRecording()
+			await this.mediaRecorderService.stopRecording({ source })
 			this.mediaRecorderService.reset()
+			logger.log("Recording services stopped", {
+				sessionId: session?.id,
+				source,
+				sessionStatusAfterStop: this.sessionManager.getCurrentSession()?.status,
+				mediaRecorderStateAfterStop:
+					this.mediaRecorderService.getStatus().mediaRecorderState,
+				chunkIndexAfterStop: this.sessionManager.getCurrentSession()?.currentChunkIndex,
+			})
 		} catch (error) {
-			logger.error("停止媒体录制器失败", error)
+			logger.error({
+				eventKey: "stop_media_recorder_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "停止媒体录制器失败",
+				context: { sessionId: session?.id, source },
+			})
+			if (options.throwOnMediaRecorderError) throw error
+		} finally {
+			// Keep duration even when the media recorder fails to stop.
+			this.durationTracker.pause()
+			this.stopDurationUpdateTimer()
 		}
-
-		// Pause duration tracking (save current duration)
-		// Note: We don't reset here, just pause to preserve accumulated duration
-		this.durationTracker.pause()
-		this.stopDurationUpdateTimer()
 	}
 
 	/**
@@ -3612,7 +4525,11 @@ class RecordSummaryService {
 			if (session.id) {
 				const topicId = options.topicId ?? session.topic?.id ?? ""
 				const projectId = options.projectId ?? session.project?.id ?? ""
+				this.uploadRetryContext = { sessionId: session.id, topicId, projectId }
+				this.summaryMessageService.setUploadRetryHandler(this.retryStuckChunkUploads)
 				let shouldWaitForUploads = true
+				let stalledTimeouts = 0
+				let lastUploadedCount = -1
 
 				while (shouldWaitForUploads) {
 					logger.log(`${session.id} 等待分片上传结束...`)
@@ -3625,15 +4542,51 @@ class RecordSummaryService {
 						`${session.id} 剩余分片数: ${pendingCount}, 超时时间: ${dynamicTimeout}ms`,
 					)
 
-					const progress = await this.chunkUploader.waitForSessionUploadsSettled(
-						session.id,
-						dynamicTimeout,
-						(uploadProgress) => {
-							this.summaryMessageService.updateProgress(
-								this.formatUploadProgress(uploadProgress),
+					let progress: SessionUploadProgress
+					try {
+						progress = await this.chunkUploader.waitForSessionUploadsSettled(
+							session.id,
+							dynamicTimeout,
+							(uploadProgress) => {
+								this.summaryMessageService.updateProgress(
+									this.formatUploadProgress(uploadProgress),
+								)
+							},
+						)
+					} catch (error) {
+						const isTimeout = error instanceof Error && error.message.includes("超时")
+						if (!isTimeout) throw error
+
+						const health = await this.chunkUploader.inspectQueueHealth(session.id)
+						const timeoutProgress = await this.chunkUploader.getSessionUploadProgress(
+							session.id,
+						)
+						stalledTimeouts =
+							timeoutProgress.uploaded === lastUploadedCount ? stalledTimeouts + 1 : 1
+						lastUploadedCount = timeoutProgress.uploaded
+
+						logger.warn(`${session.id} 等待分片上传超时`, {
+							sessionId: session.id,
+							pendingCount,
+							stalledTimeouts,
+							uploaded: timeoutProgress.uploaded,
+							queueReason: health.reason,
+						})
+
+						if (
+							stalledTimeouts >= (options.maxWaitTimeouts ?? MAX_UPLOAD_WAIT_TIMEOUTS)
+						) {
+							throw error
+						}
+						if (health.stalled) {
+							await this.chunkUploader.resumeStalledSessionUploads(
+								session.id,
+								topicId,
+								projectId,
 							)
-						},
-					)
+						}
+						continue
+					}
 
 					this.summaryMessageService.updateProgress(this.formatUploadProgress(progress))
 
@@ -3731,10 +4684,17 @@ class RecordSummaryService {
 				}
 			}
 		} catch (error) {
-			logger.error(`${session.id} 等待分片上传完成失败`, error)
+			logger.error({
+				eventKey: "wait_chunk_upload_complete_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `${session.id} 等待分片上传完成失败`,
+			})
 			throw new Error(
 				`等待分片上传完成失败: ${error instanceof Error ? error.message : String(error)}`,
 			)
+		} finally {
+			this.stopUploadQueueWatchdog()
 		}
 	}
 
@@ -3906,7 +4866,8 @@ class RecordSummaryService {
 	}> {
 		const workspaceId = session.workspace?.id || ""
 
-		// 如果没有项目ID，创建新项目
+		// Create a project only when a real workspace is available; ungrouped
+		// recordings must already carry a project created at start.
 		if (!session.project && workspaceId) {
 			const res = await SuperMagicApi.createProject({
 				workspace_id: workspaceId,
@@ -3918,8 +4879,8 @@ class RecordSummaryService {
 			session.project = res.project
 			session.topic = res.topic
 		}
-		// 如果有项目但没有话题，创建新话题
-		else if (session.project && !session.topic && workspaceId) {
+		// Topic creation only needs project_id; allow null workspace (ungrouped).
+		else if (session.project && !session.topic) {
 			const res = await SuperMagicApi.createTopic({
 				// workspace_id: workspaceId,
 				project_id: session.project.id,
@@ -3999,6 +4960,9 @@ class RecordSummaryService {
 			topic_id: topicId,
 			model_id: session.model?.model_id || "",
 			asr_stream_content: asrStreamContent,
+			...(typeof session.currentChunkIndex === "number" && {
+				file_shard_count: session.currentChunkIndex,
+			}),
 			...(options?.note && { note: options.note }),
 			...(options?.file_id && { file_id: options.file_id }),
 		})

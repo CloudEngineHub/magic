@@ -37,6 +37,7 @@ interface PromptRichTextLocaleDialogProps {
 	localizeLabel?: string
 	mentionDataService: DataService
 	"data-testid"?: string
+	allowPresetValue?: boolean
 }
 
 function getRawLocaleValue(text: LocaleText, locale: string): string {
@@ -52,6 +53,7 @@ export function PromptRichTextLocaleDialog({
 	localizeLabel,
 	mentionDataService,
 	"data-testid": testId,
+	allowPresetValue = true,
 }: PromptRichTextLocaleDialogProps) {
 	const { t } = useTranslation("crew/create")
 	const [dialogOpen, setDialogOpen] = useState(false)
@@ -105,20 +107,25 @@ export function PromptRichTextLocaleDialog({
 		return (
 			<div className="flex flex-col gap-2">
 				<div className="flex items-center justify-between gap-2">
-					<label className="text-sm font-medium leading-none text-foreground" data-testid="prompt-rich-text-locale-dialog-label">
+					<label
+						className="text-sm font-medium leading-none text-foreground"
+						data-testid="prompt-rich-text-locale-dialog-label"
+					>
 						{label}
 					</label>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						className="h-8 gap-2 px-3 text-xs font-medium text-foreground shadow-xs"
-						onClick={() => handleInsertPresetValue(locale)}
-						data-testid={testId ? `${testId}-insert-preset-value-btn` : undefined}
-					>
-						<CirclePlus className="h-4 w-4" />
-						{t("playbook.edit.presets.form.insertPresetValue")}
-					</Button>
+					{allowPresetValue && (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="h-8 gap-2 px-3 text-xs font-medium text-foreground shadow-xs"
+							onClick={() => handleInsertPresetValue(locale)}
+							data-testid={testId ? `${testId}-insert-preset-value-btn` : undefined}
+						>
+							<CirclePlus className="h-4 w-4" />
+							{t("playbook.edit.presets.form.insertPresetValue")}
+						</Button>
+					)}
 				</div>
 				<PromptRichTextEditor
 					ref={(editor) => setEditorRef(locale, editor)}

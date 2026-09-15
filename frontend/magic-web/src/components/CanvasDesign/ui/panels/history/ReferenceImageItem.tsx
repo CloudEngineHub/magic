@@ -6,13 +6,20 @@ import { useReferenceVideoPoster } from "../../previews/reference-media/useRefer
 import { computeReferenceImageCroppedDisplayLayout } from "../../../runtime/resources/image/imageCropUtils"
 import type { CropConfig } from "../../../runtime/document/types"
 import { getMediaResourcePathKind } from "../../../runtime/resources/media-common/mediaResourcePathKind"
-import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
+import {
+	getCanvasResourceAvailability,
+	getCanvasResourceFileName,
+	isOpaqueAssetReference,
+} from "../../../runtime/shared/path/canvasResourcePath"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
+import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 import {
 	CanvasFileIcon,
 	ReferenceSlotAudioIcon,
 	ReferenceSlotVideoIcon,
 } from "../../primitives/icons/index"
+import { Tooltip, TooltipTrigger } from "../../primitives/shadcn/tooltip"
+import ResourcePathTooltipContent from "../../primitives/custom/ResourcePathTooltipContent"
 import { buildPreviewMediaResourceItem } from "./mediaPreviewItem"
 
 interface ReferenceImageItemProps {
@@ -20,6 +27,7 @@ interface ReferenceImageItemProps {
 	/** 基于源图像素的裁剪区 */
 	sourceCrop?: Pick<CropConfig, "width" | "height" | "x" | "y">
 	onPreviewMediaResource: (resource: MediaResourceFullscreenPreviewItem) => void
+	resolveResourceReference?: ResolveCanvasResourceReference
 }
 
 function useObserveBoxSize(active: boolean) {
@@ -48,17 +56,19 @@ function useObserveBoxSize(active: boolean) {
 function ReferenceImageItemVideo(props: {
 	path: string
 	onPreviewMediaResource: (resource: MediaResourceFullscreenPreviewItem) => void
+	previewEnabled: boolean
 }) {
-	const { path, onPreviewMediaResource } = props
+	const { path, onPreviewMediaResource, previewEnabled } = props
 	const { loadState, posterClone } = useReferenceVideoPoster(path)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const displayName = useMemo(() => getCanvasResourceFileName(path) || path, [path])
 	const previewItem = useMemo(() => buildPreviewMediaResourceItem(path), [path])
+	const interactive = previewEnabled && previewItem != null
 
 	const openPreview = useCallback(() => {
-		if (!previewItem) return
+		if (!interactive || !previewItem) return
 		onPreviewMediaResource(previewItem)
-	}, [previewItem, onPreviewMediaResource])
+	}, [interactive, previewItem, onPreviewMediaResource])
 
 	const handlePreviewKeyDown = useCallback(
 		(e: KeyboardEvent<HTMLDivElement>) => {
@@ -103,12 +113,12 @@ function ReferenceImageItemVideo(props: {
 	return (
 		<div
 			className={styles.image}
-			role="button"
-			tabIndex={0}
-			style={{ cursor: "pointer" }}
-			onClick={openPreview}
-			onKeyDown={handlePreviewKeyDown}
-			aria-label={displayName}
+			role={interactive ? "button" : undefined}
+			tabIndex={interactive ? 0 : undefined}
+			style={{ cursor: interactive ? "pointer" : "default" }}
+			onClick={interactive ? openPreview : undefined}
+			onKeyDown={interactive ? handlePreviewKeyDown : undefined}
+			aria-label={interactive ? displayName : undefined}
 		>
 			<canvas ref={canvasRef} role="img" aria-hidden />
 		</div>
@@ -119,9 +129,12 @@ export default function ReferenceImageItem({
 	path,
 	sourceCrop,
 	onPreviewMediaResource,
+	resolveResourceReference,
 }: ReferenceImageItemProps) {
+	const isOpaqueAsset = isOpaqueAssetReference(path)
 	const fileType = useMemo(() => getMediaResourcePathKind(path), [path])
 	const isImageLike = fileType === "image"
+	const isDeleted = getCanvasResourceAvailability(path, resolveResourceReference) === "deleted"
 	const { lowUrl, isLoading, hasError, imageInfo } = useReferenceImageUrls(path, {
 		enabled: isImageLike,
 	})
@@ -160,9 +173,26 @@ export default function ReferenceImageItem({
 		[openPreview],
 	)
 
+	if (isOpaqueAsset) {
+		return (
+			<Tooltip delayDuration={200}>
+				<TooltipTrigger asChild>
+					<div className={styles.image} role="img" aria-label={path}>
+						<CanvasFileIcon size={28} className="text-muted-foreground" />
+					</div>
+				</TooltipTrigger>
+				<ResourcePathTooltipContent path={path} />
+			</Tooltip>
+		)
+	}
+
 	if (fileType === "video") {
 		return (
-			<ReferenceImageItemVideo path={path} onPreviewMediaResource={onPreviewMediaResource} />
+			<ReferenceImageItemVideo
+				path={path}
+				onPreviewMediaResource={onPreviewMediaResource}
+				previewEnabled={!isDeleted}
+			/>
 		)
 	}
 
@@ -173,7 +203,7 @@ export default function ReferenceImageItem({
 			) : (
 				<CanvasFileIcon size={28} className="text-muted-foreground" />
 			)
-		const interactive = previewItem != null
+		const interactive = !isDeleted && previewItem != null
 		return (
 			<div
 				className={styles.image}
@@ -190,7 +220,7 @@ export default function ReferenceImageItem({
 		)
 	}
 
-	const interactive = previewItem != null
+	const interactive = !isDeleted && previewItem != null
 
 	return (
 		<div

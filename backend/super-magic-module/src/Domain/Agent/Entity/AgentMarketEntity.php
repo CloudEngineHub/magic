@@ -9,6 +9,7 @@ namespace Dtyq\SuperMagic\Domain\Agent\Entity;
 
 use App\Infrastructure\Core\AbstractEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentIconType;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublisherType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishStatus;
 use Hyperf\Codec\Json;
@@ -120,6 +121,9 @@ class AgentMarketEntity extends AbstractEntity
 
     protected ?string $organizationCode = null;
 
+    /** 市场展示范围由该字段显式定义，空值在调用端按不可用处理。 */
+    protected ?AgentMarketType $marketType = null;
+
     public function __construct(array $data = [])
     {
         parent::__construct($data);
@@ -152,6 +156,8 @@ class AgentMarketEntity extends AbstractEntity
             'created_at' => $this->createdAt,
             'updated_at' => $this->updatedAt,
             'deleted_at' => $this->deletedAt,
+            'organization_code' => $this->organizationCode,
+            'market_type' => $this->marketType?->value,
         ];
 
         return array_filter($result, function ($value) {
@@ -452,6 +458,19 @@ class AgentMarketEntity extends AbstractEntity
     public function setOrganizationCode(?string $organizationCode): void
     {
         $this->organizationCode = $organizationCode;
+    }
+
+    public function getMarketType(): ?AgentMarketType
+    {
+        return $this->marketType;
+    }
+
+    public function setMarketType(null|AgentMarketType|string $marketType): void
+    {
+        $this->marketType = match ($marketType) {
+            null, '' => null,
+            default => $marketType instanceof AgentMarketType ? $marketType : AgentMarketType::from($marketType),
+        };
     }
 
     /** @param array<int, null|int|string> $categoryIds */

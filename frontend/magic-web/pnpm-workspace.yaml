@@ -66,6 +66,12 @@ overrides:
   "@tiptap/suggestion": 3.11.1
   "@types/react": 18.3.23
   "@types/react-dom": 18.3.7
+  "lucide-react": "0.577.0"
+  "@tabler/icons-react": "3.46.0"
   esbuild: 0.24.0
+  # @dtyq/eslint-config@0.0.11 still targets ESLint 8 + typescript-eslint 5.
+  # Without this pin, autoInstallPeers pulls eslint@9 into packages that omit
+  # a direct eslint dependency (e.g. magic-admin) and mixes incompatible plugins.
+  eslint: 8.57.1
   katex: 0.16.21
   marked: 15.0.12

@@ -1,11 +1,11 @@
-import { useCallback } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useMount } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { Button } from "@/components/shadcn-ui/button"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import ModeAvatar from "../../ModeAvatar"
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
 import { RouteName } from "@/routes/constants"
@@ -17,6 +17,8 @@ import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import PptModeSwitcherCard from "./PptModeSwitcherCard"
+import { isModeVisibleToCurrentUser } from "../../TopicMode/modeVisibility"
+import styles from "./RoleSwitcher.module.css"
 
 interface ModeSwitcherProps {
 	role: TopicMode
@@ -36,16 +38,22 @@ function RoleSwitcherScrollControl({ direction, onClick }: RoleSwitcherScrollCon
 	return (
 		<div
 			className={cn(
-				"pointer-events-none absolute w-20 overflow-hidden",
+				"pointer-events-none absolute w-14 overflow-hidden",
 				isLeft ? "left-0" : "right-0",
 			)}
 		>
 			<div
 				className={cn(
-					"absolute inset-0",
+					styles.scrollControlCornerCover,
 					isLeft
-						? "bg-[linear-gradient(to_right,_rgb(var(--background-rgb))_0%,_rgb(var(--background-rgb))_70%,_transparent_100%)]"
-						: "bg-[linear-gradient(to_left,_rgb(var(--background-rgb))_0%,_rgb(var(--background-rgb))_70%,_transparent_100%)]",
+						? styles.scrollControlCornerCoverLeft
+						: styles.scrollControlCornerCoverRight,
+				)}
+			/>
+			<div
+				className={cn(
+					styles.scrollControlFade,
+					isLeft ? styles.scrollControlFadeLeft : styles.scrollControlFadeRight,
 				)}
 			/>
 			<div
@@ -69,12 +77,40 @@ function RoleSwitcherScrollControl({ direction, onClick }: RoleSwitcherScrollCon
 }
 
 function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
-	const modeList = superMagicModeService.modeList
+	const availableModeList = superMagicModeService.modeList
+	const modeList = useMemo(
+		() => availableModeList.filter(isModeVisibleToCurrentUser),
+		[availableModeList],
+	)
 	const isModeListLoading = superMagicModeService.isModeListLoading
 	const { scrollContainerRef, setItemRef } = useCenteredHorizontalScroll({
 		activeKey: role,
 		itemCount: modeList.length,
 	})
+	const [isModeListScrolled, setIsModeListScrolled] = useState(false)
+	const isModeListScrolledRef = useRef(false)
+
+	useEffect(() => {
+		const container = scrollContainerRef.current
+		if (!container) return
+
+		const updateScrollState = () => {
+			const nextIsScrolled = container.scrollLeft > 1
+			if (nextIsScrolled === isModeListScrolledRef.current) return
+
+			isModeListScrolledRef.current = nextIsScrolled
+			setIsModeListScrolled(nextIsScrolled)
+		}
+
+		updateScrollState()
+		container.addEventListener("scroll", updateScrollState, { passive: true })
+		window.addEventListener("resize", updateScrollState)
+
+		return () => {
+			container.removeEventListener("scroll", updateScrollState)
+			window.removeEventListener("resize", updateScrollState)
+		}
+	}, [scrollContainerRef, modeList.length])
 	const navigate = useNavigate()
 	const { t } = useTranslation("crew/create")
 
@@ -103,7 +139,7 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 			data-testid="role-switcher"
 		>
 			<HeadlessHorizontalScroll
-				className="-mt-8 h-[76px] min-w-0 flex-1 rounded-[20px] [&>div.absolute]:!top-auto [&>div.absolute]:bottom-0 [&>div.absolute]:z-20 [&>div.absolute]:h-11"
+				className="-mt-8 h-[76px] min-w-0 flex-1 rounded-none [&>div.absolute]:!top-auto [&>div.absolute]:bottom-0 [&>div.absolute]:z-20 [&>div.absolute]:h-10"
 				data-testid="role-switcher-mode-selector"
 				scrollContainerClassName="no-scrollbar flex h-full min-w-0 items-end gap-2 overflow-x-auto overflow-y-hidden"
 				scrollContainerRef={scrollContainerRef}
@@ -126,6 +162,7 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 								<PptModeSwitcherCard
 									modeItem={modeItem}
 									isSelected={isSelected}
+									scrollContainerRef={scrollContainerRef}
 									onSelect={() =>
 										onActionClick?.(modeItem.mode.identifier as TopicMode)
 									}
@@ -182,6 +219,7 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 				<RoleSwitcherOverflowMenu
 					modeList={modeList}
 					role={role}
+					isScrolled={isModeListScrolled}
 					onSelectMode={(modeIdentifier) => onActionClick?.(modeIdentifier)}
 				/>
 			) : (

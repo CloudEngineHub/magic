@@ -1,4 +1,5 @@
 {
+	"backToTop": "Back to top",
 	"broadcastChannel": {
 		"account": {
 			"cancel": "Keep Current",
@@ -90,10 +91,13 @@
 		"calendar": "Calendar",
 		"chat": "Instant Messaging",
 		"chatSettings": "Messaging Settings",
+		"connectors": "Connectors",
 		"contacts": "Contacts",
+		"contactsAiAssistant": "Contacts/AI Assistant",
 		"contactsAssistantAi": "Contacts/AI Assistant",
 		"contactsMy": "Contacts/My Groups",
 		"contactsMyFriends": "Contacts/My Friends",
+		"contactsMyGroups": "Contacts/My Groups",
 		"contactsOrganization": "Contacts/Organization",
 		"crewConversation": "Crew Conversation",
 		"crewEdit": "Edit Crew",

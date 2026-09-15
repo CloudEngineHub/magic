@@ -32,11 +32,13 @@ return [
     'temperature_value_range_error' => 'temperature 值必须在 0-2 范围内',
     'ai_ability_not_found' => 'AI能力不存在',
     'ai_ability_disabled' => 'AI能力未启用',
+    'ai_ability_model_unavailable' => 'AI能力模型不可用',
     'config_disabled' => '服务商配置已禁用',
     'config_not_found' => '服务商配置不存在',
     'config_load_failed' => '配置加载失败',
     'connectivity_test_prompt' => '生成小猫图片',
     'connectivity_not_supported' => '当前模型类型暂不支持连通性测试。',
+    'multimodal_connectivity_test_failed_after_text_success' => '普通连通性测试通过，但多模态连通性测试失败：:reason',
     'dynamic_model_config_invalid' => '动态模型配置无效',
     'dynamic_model_sub_models_empty' => '动态模型子模型列表为空',
     'insufficient_permission_for_model' => '当前套餐不支持该智能模型',
@@ -78,5 +80,14 @@ return [
             'required' => '请填写模型版本',
             'string' => '模型版本必须为字符串',
         ],
+        'support_multi_modal' => [
+            'boolean' => '多模态支持标记必须为布尔值',
+        ],
     ],
+    'model_id_required' => '参数不能为空',
+    'model_version_required' => '参数不能为空',
+    'name_max_length' => '请求处理失败',
+    'office_organization' => '请求处理失败：:label',
+
+    'model_operation_locked' => '请求处理失败',
 ];

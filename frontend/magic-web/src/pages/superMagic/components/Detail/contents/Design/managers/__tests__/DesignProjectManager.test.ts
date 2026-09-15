@@ -2,9 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type {
 	CanvasConnection,
 	LayerElement,
+	RectangleElement,
 } from "@/components/CanvasDesign/runtime/document/types"
+import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
 import { DesignProjectManager } from "../DesignProjectManager"
-import type { DesignConflict, DesignProjectManagerOptions, DesignProjectStateBag } from "../types"
+import type {
+	DesignConflict,
+	DesignProjectManagerOptions,
+	DesignProjectStateBag,
+	PendingDesignUpgrade,
+} from "../types"
 import type { DesignData } from "../../types"
 import {
 	deleteDesignDraft,
@@ -13,6 +20,10 @@ import {
 	type DesignDraftEntry,
 } from "../../utils/designDraftStorage"
 import { hashDesignDataComparable } from "../../utils/designContentHash"
+import {
+	clearPendingDesignUpgrade,
+	writePendingDesignUpgrade,
+} from "../../utils/designUpgradeStorage"
 
 vi.mock("../../utils/designDraftStorage", () => ({
 	getDesignDraftWriteDebounceMs: vi.fn(() => 0),
@@ -21,7 +32,8 @@ vi.mock("../../utils/designDraftStorage", () => ({
 	deleteDesignDraft: vi.fn(),
 }))
 
-function rect(id: string, options: Partial<LayerElement> = {}): LayerElement {
+function rect(id: string, options: Partial<RectangleElement> = {}): RectangleElement {
+	const contentId = `${id}-content-1`
 	return {
 		id,
 		type: "rectangle",
@@ -30,6 +42,9 @@ function rect(id: string, options: Partial<LayerElement> = {}): LayerElement {
 		width: 100,
 		height: 100,
 		zIndex: 1,
+		activeContentId: contentId,
+		mainContentId: contentId,
+		contents: [{ contentId }],
 		...options,
 	}
 }
@@ -50,7 +65,7 @@ function createDesignData(
 	return {
 		type: "design",
 		name,
-		version: "2.0.0",
+		version: "3.0.0",
 		canvas: { elements, ...(connections ? { connections } : {}) },
 	}
 }
@@ -83,10 +98,12 @@ function createManager(
 	let magicProjectJsFileId: string | null = "file-1"
 	let magicProjectJsVersion: number | null = 2
 	let prevDesignDataFingerprint = "initial-fingerprint"
-	let isReadOnly = false
+	let accessMode: CanvasAccessMode = "edit"
+	let pendingDesignUpgrade: PendingDesignUpgrade | null = null
 
 	const stateBag: DesignProjectStateBag = {
 		getDesignData: () => designData,
+		getPendingDesignUpgrade: () => pendingDesignUpgrade,
 		getConflictState: () => conflictState,
 		getMagicProjectJsFileId: () => magicProjectJsFileId,
 		getMagicProjectJsVersion: () => magicProjectJsVersion,
@@ -97,7 +114,7 @@ function createManager(
 		setPrevDesignDataFingerprint: (v) => {
 			prevDesignDataFingerprint = v
 		},
-		getIsReadOnly: () => isReadOnly,
+		getAccessMode: () => accessMode,
 		setters: {
 			setMagicProjectJsFileId: vi.fn((v: string | null) => {
 				magicProjectJsFileId = v
@@ -105,10 +122,13 @@ function createManager(
 			setDesignData: vi.fn((data: DesignData) => {
 				designData = data
 			}),
+			setPendingDesignUpgrade: vi.fn((upgrade: PendingDesignUpgrade | null) => {
+				pendingDesignUpgrade = upgrade
+			}),
 			setIsInitialLoading: vi.fn(),
 			setIsSaving: vi.fn(),
-			setIsReadOnly: vi.fn((v: boolean) => {
-				isReadOnly = v
+			setAccessMode: vi.fn((v: CanvasAccessMode) => {
+				accessMode = v
 			}),
 			setFileVersionsList: vi.fn(),
 			setFileVersion: vi.fn(),
@@ -148,6 +168,7 @@ function createManager(
 			conflictState,
 			magicProjectJsVersion,
 			prevDesignDataFingerprint,
+			pendingDesignUpgrade,
 		}),
 	}
 }
@@ -191,6 +212,98 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(baseDesignData?.name).toBe("remote")
 	})
 
+	it("fully persists a pending legacy DSL upgrade and clears the pending state", async () => {
+		const data = createDesignData("legacy-upgraded")
+		const { manager, stateBag, getState } = createManager(data)
+		stateBag.setters.setPendingDesignUpgrade?.({
+			reason: "legacy-dsl",
+			createdAt: Date.now(),
+			fileId: "file-1",
+			sourceVersion: "2.0.0",
+			targetVersion: "3.0.0",
+		})
+		const managerInternals = manager as unknown as {
+			saveManager: {
+				cancelAutoSave: () => void
+				commitSave: (options?: unknown) => Promise<unknown>
+			}
+		}
+		managerInternals.saveManager.cancelAutoSave = vi.fn()
+		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+			ok: true,
+			savedVersion: 3,
+			savedUpdatedAt: null,
+			fullyPersisted: true,
+			savedDesignData: data,
+			savedFingerprint: hashDesignDataComparable(data),
+		})
+
+		await expect(manager.persistPendingDesignUpgrade()).resolves.toBe(true)
+
+		expect(managerInternals.saveManager.commitSave).toHaveBeenCalledWith({
+			designData: data,
+			updateCurrentDesignData: true,
+			source: "dsl-upgrade",
+		})
+		expect(getState().pendingDesignUpgrade).toBeNull()
+	})
+
+	it("keeps a pending legacy DSL upgrade retryable when sidecar persistence is incomplete", async () => {
+		const data = createDesignData("legacy-upgraded")
+		const { manager, stateBag, getState } = createManager(data)
+		const pendingUpgrade: PendingDesignUpgrade = {
+			reason: "legacy-dsl",
+			createdAt: Date.now(),
+			fileId: "file-1",
+			sourceVersion: "1.0.0",
+			targetVersion: "3.0.0",
+		}
+		stateBag.setters.setPendingDesignUpgrade?.(pendingUpgrade)
+		const managerInternals = manager as unknown as {
+			saveManager: {
+				cancelAutoSave: () => void
+				commitSave: (options?: unknown) => Promise<unknown>
+			}
+		}
+		managerInternals.saveManager.cancelAutoSave = vi.fn()
+		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+			ok: true,
+			savedVersion: 3,
+			savedUpdatedAt: null,
+			fullyPersisted: false,
+			savedDesignData: data,
+			savedFingerprint: hashDesignDataComparable(data),
+		})
+
+		await expect(manager.persistPendingDesignUpgrade()).resolves.toBe(false)
+
+		expect(getState().pendingDesignUpgrade).toMatchObject({
+			...pendingUpgrade,
+			reason: "sidecar-retry",
+		})
+	})
+
+	it("does not persist a pending DSL upgrade while the canvas is read-only", async () => {
+		const data = createDesignData("legacy-upgraded")
+		const { manager, stateBag } = createManager(data)
+		stateBag.setters.setPendingDesignUpgrade?.({
+			reason: "legacy-dsl",
+			createdAt: Date.now(),
+			fileId: "file-1",
+			sourceVersion: "2.0.0",
+			targetVersion: "3.0.0",
+		})
+		stateBag.setters.setAccessMode("readonly")
+		const managerInternals = manager as unknown as {
+			saveManager: { commitSave: (options?: unknown) => Promise<unknown> }
+		}
+		managerInternals.saveManager.commitSave = vi.fn()
+
+		await expect(manager.persistPendingDesignUpgrade()).resolves.toBe(false)
+
+		expect(managerInternals.saveManager.commitSave).not.toHaveBeenCalled()
+	})
+
 	it("writes manual refresh drafts through the emergency fallback", () => {
 		const draftData = createDesignData("manual-refresh", [rect("moved", { x: 120 })])
 		const { manager } = createManager()
@@ -209,10 +322,16 @@ describe("DesignProjectManager conflict boundaries", () => {
 	it("force reloads remote data while preserving local draft recovery", async () => {
 		const { manager } = createManager()
 		const managerInternals = manager as unknown as {
-			loadManager: { resetAndReload: () => Promise<void> }
+			loadManager: {
+				resetAndReload: () => Promise<boolean>
+				getCurrentLoadIdentity: () => string | null
+				isCurrentLoadIdentity: (identity: string | null) => boolean
+			}
 			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
 		}
-		managerInternals.loadManager.resetAndReload = vi.fn().mockResolvedValue(undefined)
+		managerInternals.loadManager.resetAndReload = vi.fn().mockResolvedValue(true)
+		managerInternals.loadManager.getCurrentLoadIdentity = vi.fn().mockReturnValue("request-a")
+		managerInternals.loadManager.isCurrentLoadIdentity = vi.fn().mockReturnValue(true)
 		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
 
 		await manager.reloadPreservingLocalDraft()
@@ -222,13 +341,82 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).toHaveBeenCalledTimes(1)
 	})
 
+	it("publishes a pending DSL upgrade after the remote load lifecycle completes", async () => {
+		const { manager, getState } = createManager()
+		const pendingUpgrade: PendingDesignUpgrade = {
+			reason: "legacy-dsl",
+			createdAt: Date.now(),
+			fileId: "file-1",
+			sourceVersion: "2.0.0",
+			targetVersion: "3.0.0",
+		}
+		const managerInternals = manager as unknown as {
+			loadManager: {
+				loadFromRemote: () => Promise<{ pendingUpgrade: PendingDesignUpgrade | null }>
+			}
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+		}
+		managerInternals.loadManager.loadFromRemote = vi.fn().mockResolvedValue({ pendingUpgrade })
+		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
+
+		await manager.loadFromRemote()
+
+		expect(getState().pendingDesignUpgrade).toEqual(pendingUpgrade)
+		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).toHaveBeenCalledTimes(1)
+	})
+
+	it("restores a persisted sidecar retry after a v3 remote reload", async () => {
+		const { manager, getState } = createManager()
+		const identity = {
+			projectId: "project-1",
+			designProjectId: "design-1",
+			magicProjectJsFileId: "file-1",
+		}
+		await clearPendingDesignUpgrade(identity)
+		await writePendingDesignUpgrade(identity, {
+			reason: "sidecar-retry",
+			fileId: "file-1",
+			sourceVersion: "2.0.0",
+			targetVersion: "3.0.0",
+			createdAt: 1,
+		})
+		const managerInternals = manager as unknown as {
+			loadManager: {
+				loadFromRemote: () => Promise<{
+					pendingUpgrade: PendingDesignUpgrade | null
+					sidecarStatus: "loaded"
+				}>
+			}
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+		}
+		managerInternals.loadManager.loadFromRemote = vi.fn().mockResolvedValue({
+			pendingUpgrade: null,
+			sidecarStatus: "loaded",
+		})
+		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
+
+		await manager.loadFromRemote()
+
+		expect(getState().pendingDesignUpgrade).toMatchObject({
+			reason: "sidecar-retry",
+			fileId: "file-1",
+		})
+		await clearPendingDesignUpgrade(identity)
+	})
+
 	it("force reloads remote data while discarding local drafts for data source switches", async () => {
 		const { manager } = createManager()
 		const managerInternals = manager as unknown as {
-			loadManager: { resetAndReload: () => Promise<void> }
+			loadManager: {
+				resetAndReload: () => Promise<boolean>
+				getCurrentLoadIdentity: () => string | null
+				isCurrentLoadIdentity: (identity: string | null) => boolean
+			}
 			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
 		}
-		managerInternals.loadManager.resetAndReload = vi.fn().mockResolvedValue(undefined)
+		managerInternals.loadManager.resetAndReload = vi.fn().mockResolvedValue(true)
+		managerInternals.loadManager.getCurrentLoadIdentity = vi.fn().mockReturnValue("request-a")
+		managerInternals.loadManager.isCurrentLoadIdentity = vi.fn().mockReturnValue(true)
 		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
 
 		await manager.reloadDiscardingLocalDraft()
@@ -236,6 +424,52 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(managerInternals.loadManager.resetAndReload).toHaveBeenCalledTimes(1)
 		expect(deleteDesignDraft).toHaveBeenCalledTimes(1)
 		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).not.toHaveBeenCalled()
+	})
+
+	it("keeps the initial loading state when remote reload does not produce trusted data", async () => {
+		const { manager, stateBag } = createManager()
+		const managerInternals = manager as unknown as {
+			loadManager: {
+				resetAndReload: () => Promise<boolean>
+				getCurrentLoadIdentity: () => string | null
+				isCurrentLoadIdentity: (identity: string | null) => boolean
+			}
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+		}
+		managerInternals.loadManager.resetAndReload = vi.fn().mockResolvedValue(false)
+		managerInternals.loadManager.getCurrentLoadIdentity = vi.fn().mockReturnValue("request-a")
+		managerInternals.loadManager.isCurrentLoadIdentity = vi.fn().mockReturnValue(true)
+		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
+
+		const didLoad = await manager.reloadPreservingLocalDraft()
+
+		expect(didLoad).toBe(false)
+		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).not.toHaveBeenCalled()
+		expect(stateBag.setters.setIsInitialLoading).toHaveBeenLastCalledWith(true)
+	})
+
+	it("does not restore a draft after the loaded request becomes stale", async () => {
+		const { manager, stateBag } = createManager()
+		let isCurrentLoad = true
+		const managerInternals = manager as unknown as {
+			loadManager: {
+				loadFromRemote: () => Promise<boolean>
+				getCurrentLoadIdentity: () => string | null
+				isCurrentLoadIdentity: (identity: string | null) => boolean
+			}
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+		}
+		managerInternals.loadManager.getCurrentLoadIdentity = vi.fn().mockReturnValue("request-a")
+		managerInternals.loadManager.loadFromRemote = vi.fn().mockImplementation(async () => {
+			isCurrentLoad = false
+			return true
+		})
+		managerInternals.loadManager.isCurrentLoadIdentity = vi.fn(() => isCurrentLoad)
+		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
+
+		expect(await manager.loadFromRemote()).toBe(false)
+		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).not.toHaveBeenCalled()
+		expect(stateBag.setters.setIsInitialLoading).not.toHaveBeenCalledWith(false)
 	})
 
 	it("clears local draft after a fully persisted save", async () => {
@@ -996,6 +1230,45 @@ describe("DesignProjectManager conflict boundaries", () => {
 				reason: "local-edit",
 			}),
 		)
+	})
+
+	it("defers a successful remote merge that would empty a non-empty remote canvas", () => {
+		const baseData = createDesignData("base", [rect("remote")])
+		const localData = createDesignData("base")
+		const remoteData = createDesignData("remote", [rect("remote")])
+		const { manager, stateBag, getState } = createManager(baseData)
+		manager.syncDesignData(baseData)
+		stateBag.setters.setDesignData(localData)
+		const managerInternals = manager as unknown as {
+			applyRemoteDesignDataSafely: (
+				data: DesignData,
+				updateType: "message",
+				options: { remoteVersion: number },
+			) => boolean
+			pendingRemoteDesignData: { data: DesignData; remoteVersion: number } | null
+			saveManager: {
+				hasRemoteConflict: () => boolean
+				scheduleAutoSave: () => void
+			}
+		}
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+		vi.mocked(stateBag.setters.setDesignData).mockClear()
+
+		const applied = managerInternals.applyRemoteDesignDataSafely(remoteData, "message", {
+			remoteVersion: 3,
+		})
+
+		expect(applied).toBe(true)
+		expect(getState().designData).toEqual(localData)
+		expect(stateBag.setters.setDesignData).not.toHaveBeenCalled()
+		expect(getState().conflictState?.reason).toBe("remote-update-with-local-dirty")
+		expect(managerInternals.pendingRemoteDesignData).toEqual({
+			data: remoteData,
+			updateType: "message",
+			remoteVersion: 3,
+		})
+		expect(managerInternals.saveManager.hasRemoteConflict()).toBe(true)
+		expect(managerInternals.saveManager.scheduleAutoSave).not.toHaveBeenCalled()
 	})
 
 	it("creates a connection-level conflict when both sides change the same connection", () => {
@@ -1986,7 +2259,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(managerInternals.saveManager.scheduleAutoSave).toHaveBeenCalledTimes(1)
 	})
 
-	it("keeps an empty restored draft local when the trusted remote base is non-empty", async () => {
+	it("does not apply an empty restored draft when the trusted remote base is non-empty", async () => {
 		const remoteData = createDesignData("remote", [rect("remote")])
 		const draftData = createDesignData("empty-draft")
 		const { manager, getState } = createManager(remoteData)
@@ -2015,7 +2288,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 
 		await managerInternals.tryRestoreLocalDraftAfterRemoteLoad()
 
-		expect(getState().designData).toEqual(draftData)
+		expect(getState().designData).toEqual(remoteData)
 		expect(getState().conflictState).toEqual(
 			expect.objectContaining({
 				reason: "draft-remote-advanced",
@@ -2029,5 +2302,46 @@ describe("DesignProjectManager conflict boundaries", () => {
 			expect.stringContaining("blocked-empty-draft-restore-autosave"),
 		)
 		warnSpy.mockRestore()
+	})
+
+	it("does not apply an empty successful merge when the advanced remote remains non-empty", async () => {
+		const baseData = createDesignData("base", [rect("remote")])
+		const remoteData = createDesignData("remote", [rect("remote")])
+		const draftData = createDesignData("base")
+		const { manager, stateBag, getState } = createManager(remoteData)
+		stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(remoteData))
+		const draft: DesignDraftEntry = {
+			key: "draft-key",
+			schemaVersion: 1,
+			projectId: "project-1",
+			designProjectId: "design-1",
+			magicProjectJsFileId: "file-1",
+			baseRemoteVersion: 1,
+			baseRemoteFingerprint: hashDesignDataComparable(baseData),
+			localFingerprint: hashDesignDataComparable(draftData),
+			localUpdatedAt: 1,
+			reason: "local-edit",
+			designData: draftData,
+			baseRemoteData: baseData,
+		}
+		vi.mocked(readDesignDraft).mockResolvedValue(draft)
+		const managerInternals = manager as unknown as {
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+			saveManager: { scheduleAutoSave: () => void }
+		}
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+
+		await managerInternals.tryRestoreLocalDraftAfterRemoteLoad()
+
+		expect(getState().designData).toEqual(remoteData)
+		expect(stateBag.setters.setDesignData).not.toHaveBeenCalled()
+		expect(getState().conflictState).toEqual(
+			expect.objectContaining({
+				reason: "draft-remote-advanced",
+				localData: expect.objectContaining({ canvas: { elements: [] } }),
+				remoteData,
+			}),
+		)
+		expect(managerInternals.saveManager.scheduleAutoSave).not.toHaveBeenCalled()
 	})
 })

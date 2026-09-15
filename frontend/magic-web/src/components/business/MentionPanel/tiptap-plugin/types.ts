@@ -1,5 +1,8 @@
-import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion"
-import type { Editor, ReactNodeViewProps } from "@tiptap/react"
+import type {
+	SuggestionKeyDownProps,
+	SuggestionProps,
+} from "@/infrastructure/editors/tiptap/suggestion"
+import type { Editor, ReactNodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import type { ComponentType } from "react"
 import type {
 	McpMentionData,
@@ -16,12 +19,17 @@ import type {
 	UploadFileMentionData,
 	CloudFileMentionData,
 	ToolMentionData,
+	ProjectMentionData,
 	DirectoryMentionData,
+	MemoryDirectoryMentionData,
+	MemoryFileMentionData,
 	CanvasMarkerMentionData,
+	TextMentionData,
 	DataService,
 	MentionSelectContext,
 } from "../types"
 import { MentionItemType, ProjectFileMentionData } from "../types"
+import { LANGUAGE_PACKS, normalizeLocale } from "../i18n"
 import type { Language } from "../i18n/types"
 import {
 	getSelectedCanvasMarkerMentionSuggestion,
@@ -33,6 +41,17 @@ import i18n from "i18next"
 export interface TiptapMentionAttributes {
 	type: MentionItem["type"]
 	data: MentionItem["data"]
+	/**
+	 * Marks a Canvas-derived mention as a temporary preview that has not yet
+	 * entered the formal mention lifecycle. Pending mentions are excluded from
+	 * drafts and send payloads, and rendered with reduced opacity until promoted.
+	 */
+	pending?: boolean
+	/**
+	 * Runtime-only owner identifier for a pending mention node. The Canvas bridge
+	 * uses it to replace or promote only the temporary nodes it created.
+	 */
+	pendingId?: string
 }
 
 export interface MentionListItem {
@@ -114,6 +133,10 @@ export interface MentionPanelPluginOptions {
 	nodeViewRenderers?: Partial<Record<MentionItemType, MentionNodeViewRenderer>>
 	/** 恢复内容期间跳过 doc→mentionItems 同步，避免与 restoreMentionItems 冲突 */
 	shouldSkipInsertSync?: () => boolean
+	/** Allows trusted programmatic content restoration to keep existing Mention nodes intact. */
+	shouldSkipMentionValidation?: () => boolean
+	/** Allows trusted restored nodes to survive follow-up ReactNodeView transactions. */
+	isTrustedMention?: (attrs: TiptapMentionAttributes) => boolean
 	/** 程序化清空期间跳过 mention 删除同步，避免误判为用户删除 */
 	shouldSkipRemoveSync?: () => boolean
 	/** 删除后需要先恢复的 mention，用于等待外部确认后再真正删除 */
@@ -162,6 +185,14 @@ export function getMentionUniqueId(attrs: TiptapMentionAttributes | null | undef
 			return `project:${(data as ProjectFileMentionData)?.file_id || ""}/${
 				(data as ProjectFileMentionData)?.file_path || ""
 			}`
+		case MentionItemType.MEMORY_FILE:
+			return `memory-file:${(data as MemoryFileMentionData)?.file_id || ""}/${
+				(data as MemoryFileMentionData)?.file_path || ""
+			}`
+		case MentionItemType.MEMORY_DIRECTORY:
+			return `memory-directory:${(data as MemoryDirectoryMentionData)?.directory_id || ""}/${
+				(data as MemoryDirectoryMentionData)?.directory_path || ""
+			}`
 		case MentionItemType.FOLDER:
 			return `folder:${(data as DirectoryMentionData)?.directory_path || ""}`
 		case MentionItemType.UPLOAD_FILE:
@@ -174,6 +205,8 @@ export function getMentionUniqueId(attrs: TiptapMentionAttributes | null | undef
 			}`
 		case MentionItemType.TOOL:
 			return `tool:${(data as ToolMentionData)?.id || ""}`
+		case MentionItemType.PROJECT:
+			return `project:${(data as ProjectMentionData)?.project_id || ""}`
 		case MentionItemType.DESIGN_MARKER:
 			const canvasMarkData = data as CanvasMarkerMentionData
 			const markerData = normalizeCanvasMarkerMentionData(canvasMarkData)
@@ -185,18 +218,37 @@ export function getMentionUniqueId(attrs: TiptapMentionAttributes | null | undef
 			const markLabel = markerData?.label || ""
 			const result = [markId, markNumber, markLabel].filter(Boolean).join(":")
 			return `marker:${result}`
+		case MentionItemType.TEXT:
+			return `text:${(data as TextMentionData)?.id || ""}`
 		default:
 			return `unknown:${JSON.stringify(attrs.data)}`
 	}
 }
 
+function getProjectDisplayName(data: Record<string, unknown>, language?: string) {
+	const projectName = (data.project_name as string)?.trim()
+	// Keep unnamed project references identifiable instead of silently dropping their project segment.
+	return projectName || LANGUAGE_PACKS[normalizeLocale(language || "")].unnamedProject
+}
+
+function shouldShowProjectPrefix(data: Record<string, unknown>) {
+	// Current-project files also carry project_id; project_name is only attached to cross-project references.
+	return Boolean(data.project_id && typeof data.project_name === "string")
+}
+
 // Get display name for mention
-export function getMentionDisplayName(attrs: TiptapMentionAttributes): string {
+export function getMentionDisplayName(
+	attrs: TiptapMentionAttributes,
+	language = i18n.resolvedLanguage || i18n.language,
+): string {
 	const data = attrs?.data as Record<string, unknown>
 
 	if (!data) return ""
 
 	const t = i18n.t
+	const memoryPrefix = i18n.t("super/longMemory:mentionPrefix", {
+		defaultValue: "Memory",
+	})
 
 	switch (attrs.type) {
 		case MentionItemType.MCP:
@@ -205,19 +257,36 @@ export function getMentionDisplayName(attrs: TiptapMentionAttributes): string {
 			return (data?.agent_name as string) || "Agent"
 		case MentionItemType.SKILL:
 			return (data?.name as string) || "Skill"
-		case MentionItemType.PROJECT_FILE:
+		case MentionItemType.PROJECT_FILE: {
+			const fileName = (data?.file_name as string) || "File"
+			return shouldShowProjectPrefix(data)
+				? `${getProjectDisplayName(data, language)}/${fileName}`
+				: fileName
+		}
+		case MentionItemType.MEMORY_FILE:
+			return `${memoryPrefix}:${(data?.file_name as string) || "File"}`
+		case MentionItemType.MEMORY_DIRECTORY:
+			return `${memoryPrefix}:${(data?.directory_name as string) || "Folder"}`
 		case MentionItemType.UPLOAD_FILE:
 			return (data?.file_name as string) || "File"
 		case MentionItemType.CLOUD_FILE:
 			return (data?.file_name as string) || "Cloud File"
-		case MentionItemType.FOLDER:
-			return (data?.directory_name as string) || "Folder"
+		case MentionItemType.FOLDER: {
+			const directoryName = (data?.directory_name as string) || "Folder"
+			return shouldShowProjectPrefix(data)
+				? `${getProjectDisplayName(data, language)}/${directoryName}`
+				: directoryName
+		}
 		case MentionItemType.TOOL:
 			return (data?.name as string) || "Tool"
+		case MentionItemType.PROJECT:
+			return getProjectDisplayName(data, language)
 		case MentionItemType.DESIGN_MARKER:
 			const markerData = normalizeCanvasMarkerMentionData(data)
 			if (markerData?.loading === true) return t ? t("common.loading", "加载中...") : ""
 			return markerData?.label || "Marker"
+		case MentionItemType.TEXT:
+			return (data?.label as string) || "Text"
 		default:
 			return "Unknown"
 	}
@@ -238,16 +307,22 @@ export function getMentionDescription(attrs: TiptapMentionAttributes | null | un
 			return (data?.description as string) || ""
 		case MentionItemType.PROJECT_FILE:
 		case MentionItemType.UPLOAD_FILE:
+		case MentionItemType.MEMORY_FILE:
 			return (data?.file_path as string) || ""
 		case MentionItemType.FOLDER:
+		case MentionItemType.MEMORY_DIRECTORY:
 			return (data?.directory_path as string) || ""
 		case MentionItemType.TOOL:
 			return (data?.description as string) || ""
+		case MentionItemType.PROJECT:
+			return ""
 		case MentionItemType.DESIGN_MARKER:
 			const markerData = normalizeCanvasMarkerMentionData(data)
 			return markerData
 				? getSelectedCanvasMarkerMentionSuggestion(markerData)?.label || ""
 				: ""
+		case MentionItemType.TEXT:
+			return (data?.text as string) || ""
 		default:
 			return ""
 	}
@@ -268,9 +343,13 @@ export function getMentionIcon(attrs: TiptapMentionAttributes | null | undefined
 			return (data as SkillMentionData)?.icon as string
 		case MentionItemType.PROJECT_FILE:
 		case MentionItemType.UPLOAD_FILE:
+		case MentionItemType.MEMORY_FILE:
 			return (
-				(data as ProjectFileMentionData | UploadFileMentionData)?.file_extension ||
-				(data as ProjectFileMentionData | UploadFileMentionData)?.file_name
+				(data as ProjectFileMentionData | UploadFileMentionData | MemoryFileMentionData)
+					?.file_extension ||
+				(
+					data as ProjectFileMentionData | UploadFileMentionData | MemoryFileMentionData
+				)?.file_name
 					?.split(".")
 					.pop() ||
 				"ts-attachment"
@@ -279,7 +358,9 @@ export function getMentionIcon(attrs: TiptapMentionAttributes | null | undefined
 			return (data as ToolMentionData)?.icon as string
 		case MentionItemType.CLOUD_FILE:
 			return "ts-cloud-doc"
+		case MentionItemType.PROJECT:
 		case MentionItemType.FOLDER:
+		case MentionItemType.MEMORY_DIRECTORY:
 			return "ts-folder"
 		default:
 			return "ts-attachment"
@@ -287,7 +368,7 @@ export function getMentionIcon(attrs: TiptapMentionAttributes | null | undefined
 }
 
 // Command type declarations
-declare module "@tiptap/react" {
+declare module "@/infrastructure/editors/tiptap/react" {
 	interface Commands<ReturnType> {
 		mention: {
 			updateMentionLanguage: (language: string) => ReturnType
@@ -299,7 +380,7 @@ declare module "@tiptap/react" {
 }
 
 // Storage type declarations
-declare module "@tiptap/core" {
+declare module "@/infrastructure/editors/tiptap/core" {
 	interface Storage {
 		mention?: {
 			language: Language

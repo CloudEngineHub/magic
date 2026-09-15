@@ -41,6 +41,7 @@ coverage
 public/config.js
 public/sdk/magic-widget.js
 public/husky.html
+public/husky-runtime.js
 
 CLAUDE.local.md
 
@@ -59,3 +60,8 @@ customer
 
 # Temporary files
 .tmp
+
+# Local implementation plans
+docs/plans/
+docs/superpowers/
+docs/design/

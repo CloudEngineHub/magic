@@ -12,11 +12,12 @@ use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Entity\Dto\AbstractRequestDTO;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use Dtyq\CloudFile\Kernel\Struct\ImageProcessOptions;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 
 /**
  * 设计异步生图 Handler 公共逻辑：业务参数、访问令牌、参考图链接（SandBox / Private、crop）。
@@ -44,14 +45,15 @@ abstract class AbstractDesignImageGenerationTaskHandler implements DesignImageGe
     }
 
     /**
-     * @return array{organization_code: string, user_id: int|string, source_id: string}
+     * @return array{organization_code: string, user_id: int|string, source_id: string, business_id: string}
      */
-    protected function designImageGenerationBusinessParams(DesignDataIsolation $dataIsolation): array
+    protected function designImageGenerationBusinessParams(DesignDataIsolation $dataIsolation, int $projectId): array
     {
         return [
             'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
             'user_id' => $dataIsolation->getCurrentUserId(),
-            'source_id' => 'design_image_generation',
+            'source_id' => SourceId::DESIGN_IMAGE_GENERATION,
+            'business_id' => (string) $projectId,
         ];
     }
 

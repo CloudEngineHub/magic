@@ -3,15 +3,30 @@ import { SuperMagicApi } from "@/apis"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import {
 	loadMagicProjectJsContent,
-	parseMagicProjectJsContent,
 	resolveDesignProjectBasePathFromAttachments,
-	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
-import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
-import { type DesignProjectStateBag, type DesignProjectManagerOptions } from "./types"
+import { getHydratedElementDetailsProvenance } from "../utils/elementDetailsIo"
+import {
+	getDesignBaseAccessMode,
+	type DesignProjectStateBag,
+	type DesignProjectManagerOptions,
+} from "./types"
 import type { DesignData } from "../types"
 import type { DesignSaveManager } from "./DesignSaveManager"
+import {
+	DesignLoadError,
+	loadDesignDataToRuntime,
+	type LoadDesignDataToRuntimeResult,
+} from "../utils/designDataLoader"
+import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
+import { stringifyUnknownError } from "@/utils/error"
+
+export interface DesignVersionLoadResult {
+	data: DesignData | null
+	version: number | null
+	loadResult?: LoadDesignDataToRuntimeResult
+}
 
 export class DesignVersionManager {
 	private stateBag: DesignProjectStateBag
@@ -20,6 +35,14 @@ export class DesignVersionManager {
 
 	private getFileVersionsList: () => FileHistoryVersion[]
 	private getFileVersion: () => number | undefined
+
+	private getBaseAccessMode() {
+		// `stateBag.getAccessMode()` is the transient effective mode and becomes
+		// `history` while a historical version is displayed. The base mode must
+		// come from the stable Design entry options so returning to latest can
+		// restore edit/readonly/share correctly.
+		return getDesignBaseAccessMode(this.options)
+	}
 
 	constructor(
 		stateBag: DesignProjectStateBag,
@@ -43,46 +66,68 @@ export class DesignVersionManager {
 		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
 		if (!magicProjectJsFileId) return null
 
-		const content = await loadMagicProjectJsContent(magicProjectJsFileId, {
-			file_versions: { [magicProjectJsFileId]: version },
-		})
-		const data = parseMagicProjectJsContent(content)
-		if (data) {
-			const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
-			if (dslBase) {
-				normalizeDesignDataPathsAfterLoad(data, dslBase, {
-					flatAttachments: this.options.flatAttachments,
-					attachmentIndex: this.options.attachmentIndex,
-				})
-			}
+		let content: string
+		try {
+			content = await loadMagicProjectJsContent(magicProjectJsFileId, {
+				file_versions: { [magicProjectJsFileId]: version },
+			})
+		} catch (error) {
+			throw new DesignLoadError({
+				kind: "invalid-envelope",
+				stage: "parse-envelope",
+				message: stringifyUnknownError(error),
+				fileId: magicProjectJsFileId,
+			})
 		}
-		return data
+		const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
+		const loaded = await loadDesignDataToRuntime({
+			content,
+			sidecarMode: "none",
+			fileId: magicProjectJsFileId,
+			pathContext: {
+				projectBasePath: dslBase,
+				flatAttachments: this.options.flatAttachments,
+				attachmentIndex: this.options.attachmentIndex,
+			},
+		})
+		return loaded.data
 	}
 
-	async loadLatest(): Promise<{ data: DesignData | null; version: number | null }> {
+	async loadLatest(): Promise<DesignVersionLoadResult> {
 		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
 		if (!magicProjectJsFileId) return { data: null, version: null }
 
-		const content = await loadMagicProjectJsContent(magicProjectJsFileId)
-		const data = parseMagicProjectJsContent(content)
-		if (data) {
-			const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
-			if (dslBase) {
-				normalizeDesignDataPathsAfterLoad(data, dslBase, {
-					flatAttachments: this.options.flatAttachments,
-					attachmentIndex: this.options.attachmentIndex,
-				})
-			}
-			await hydrateDesignDataDetails(data, {
+		let content: string
+		try {
+			content = await loadMagicProjectJsContent(magicProjectJsFileId)
+		} catch (error) {
+			throw new DesignLoadError({
+				kind: "invalid-envelope",
+				stage: "parse-envelope",
+				message: stringifyUnknownError(error),
+				fileId: magicProjectJsFileId,
+			})
+		}
+		const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
+		const loaded = await loadDesignDataToRuntime({
+			content,
+			elementDetailsContext: {
 				attachments: this.options.attachments,
 				flatAttachments: this.options.flatAttachments,
 				mainFileId: magicProjectJsFileId,
 				projectId: this.options.projectId,
-			})
-		}
+			},
+			pathContext: {
+				projectBasePath: dslBase,
+				flatAttachments: this.options.flatAttachments,
+				attachmentIndex: this.options.attachmentIndex,
+			},
+			fileId: magicProjectJsFileId,
+		})
+		const data = loaded.data
 
 		let version: number | null = null
-		if (!this.options.isShareRoute) {
+		if (this.getBaseAccessMode() !== "share") {
 			try {
 				const fileInfo = await SuperMagicApi.getFileInfo({
 					file_id: magicProjectJsFileId,
@@ -95,12 +140,31 @@ export class DesignVersionManager {
 			}
 		}
 
-		return { data, version }
+		return { data, version, loadResult: loaded }
+	}
+
+	/** 重新加载当前正在查看的历史版本，不能退回到最新版本。 */
+	async reloadCurrentVersion(): Promise<void> {
+		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
+		const fileVersion = this.getFileVersion()
+		if (!magicProjectJsFileId || fileVersion === undefined) return
+
+		try {
+			const parsedDesignData = await this.loadWithVersion(fileVersion)
+			if (!parsedDesignData) return
+
+			this.stateBag.setters.setFileVersion(fileVersion)
+			this.applyVersionData(parsedDesignData, true)
+		} catch (error) {
+			if (error instanceof DesignLoadError) {
+				this.stateBag.setters.setDesignLoadIssue?.(error.issue)
+			}
+		}
 	}
 
 	async fetchFileVersions(): Promise<FileHistoryVersion[]> {
 		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
-		if (this.options.isShareRoute || !magicProjectJsFileId) return []
+		if (this.getBaseAccessMode() === "share" || !magicProjectJsFileId) return []
 
 		try {
 			const res = await SuperMagicApi.getFileHistoryVersions({
@@ -120,15 +184,17 @@ export class DesignVersionManager {
 		this.saveManager.clearRemoteConflict()
 		this.stateBag.setters.setConflictState(null)
 		this.stateBag.setters.setIsSaving(false)
-		this.stateBag.setters.setDesignData(parsedDesignData)
-		this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(parsedDesignData))
-		this.stateBag.setters.setIsReadOnly(
-			!this.options.allowEdit ||
-				this.options.isPlaybackMode ||
-				isViewingHistory ||
-				this.options.isShareRoute ||
-				this.options.isMobile,
+		this.stateBag.setters.setElementDetailsProvenance?.(
+			getHydratedElementDetailsProvenance(parsedDesignData) ?? {},
 		)
+		this.stateBag.setters.setDesignData(parsedDesignData)
+		if (isViewingHistory) {
+			this.stateBag.setters.setPendingDesignUpgrade?.(null)
+			this.stateBag.setters.setDesignLoadIssue?.(undefined)
+			this.stateBag.setters.setSidecarStatus?.("skipped-history")
+		}
+		this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(parsedDesignData))
+		this.stateBag.setters.setAccessMode(isViewingHistory ? "history" : this.getBaseAccessMode())
 		this.options.onVersionChange?.(parsedDesignData, isViewingHistory)
 	}
 
@@ -143,10 +209,25 @@ export class DesignVersionManager {
 		try {
 			let parsedDesignData: DesignData | null
 			let latestVersion: number | null = null
+			let latestLoadResult: LoadDesignDataToRuntimeResult | undefined
 			if (isNewestVersionTarget) {
 				const result = await this.loadLatest()
 				parsedDesignData = result.data
 				latestVersion = result.version
+				latestLoadResult = result.loadResult
+				this.stateBag.setters.setDesignLoadIssue?.(result.loadResult?.issue)
+				this.stateBag.setters.setSidecarStatus?.(
+					result.loadResult?.sidecarStatus ?? "missing",
+				)
+				if (result.loadResult?.needsPersist) {
+					this.stateBag.setters.setPendingDesignUpgrade?.({
+						reason: "legacy-dsl",
+						fileId: magicProjectJsFileId,
+						sourceVersion: result.loadResult.sourceVersion,
+						targetVersion: MAGIC_PROJECT_VERSION_V3,
+						createdAt: Date.now(),
+					})
+				}
 			} else {
 				parsedDesignData = await this.loadWithVersion(version)
 			}
@@ -154,12 +235,17 @@ export class DesignVersionManager {
 			if (parsedDesignData) {
 				this.stateBag.setters.setFileVersion(isNewestVersionTarget ? undefined : version)
 				this.applyVersionData(parsedDesignData, !isNewestVersionTarget)
+				if (isNewestVersionTarget && latestLoadResult?.sidecarStatus === "unsupported") {
+					this.stateBag.setters.setAccessMode("readonly")
+				}
 				if (isNewestVersionTarget && latestVersion !== null) {
 					this.stateBag.setMagicProjectJsVersion(latestVersion)
 				}
 			}
-		} catch {
-			// ignore
+		} catch (error) {
+			if (error instanceof DesignLoadError) {
+				this.stateBag.setters.setDesignLoadIssue?.(error.issue)
+			}
 		}
 	}
 
@@ -174,7 +260,7 @@ export class DesignVersionManager {
 
 	async handleVersionRollback(version: number | undefined): Promise<void> {
 		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
-		if (this.options.isShareRoute || !magicProjectJsFileId || !version) return
+		if (this.getBaseAccessMode() === "share" || !magicProjectJsFileId || !version) return
 
 		try {
 			const res = await SuperMagicApi.rollbackFileVersion({
@@ -184,9 +270,14 @@ export class DesignVersionManager {
 			if (res) {
 				await this.fetchFileVersions()
 				this.stateBag.setters.setFileVersion(undefined)
-				const { data, version: latestVersion } = await this.loadLatest()
+				const { data, version: latestVersion, loadResult } = await this.loadLatest()
+				this.stateBag.setters.setDesignLoadIssue?.(loadResult?.issue)
+				this.stateBag.setters.setSidecarStatus?.(loadResult?.sidecarStatus ?? "missing")
 				if (data) {
 					this.applyVersionData(data, false)
+					if (loadResult?.sidecarStatus === "unsupported") {
+						this.stateBag.setters.setAccessMode("readonly")
+					}
 					if (latestVersion !== null) {
 						this.stateBag.setMagicProjectJsVersion(latestVersion)
 					}

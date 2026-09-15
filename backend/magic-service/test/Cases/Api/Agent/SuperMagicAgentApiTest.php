@@ -7,41 +7,40 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Api\Agent;
 
-use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Application\SuperMagic\Agent\Service\AbstractSuperMagicAppService;
+use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType;
 use App\Domain\Permission\Repository\Persistence\Model\MagicOperationPermissionModel;
 use App\Domain\Permission\Repository\Persistence\Model\ResourceVisibilityModel;
+use App\Domain\SuperMagic\Agent\Entity\ValueObject\PublishStatus;
+use App\Domain\SuperMagic\Agent\Repository\Facade\AgentMarketRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Repository\Facade\AgentPlaybookRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Repository\Facade\AgentSkillRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Repository\Facade\AgentVersionRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Repository\Facade\SuperMagicAgentRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Repository\Persistence\Model\AgentCategoryModel;
+use App\Domain\SuperMagic\Agent\Repository\Persistence\Model\AgentMarketModel;
+use App\Domain\SuperMagic\Agent\Repository\Persistence\Model\AgentPlaybookModel;
+use App\Domain\SuperMagic\Agent\Repository\Persistence\Model\AgentSkillModel;
+use App\Domain\SuperMagic\Agent\Repository\Persistence\Model\AgentVersionModel;
+use App\Domain\SuperMagic\Agent\Repository\Persistence\Model\SuperMagicAgentModel;
+use App\Domain\SuperMagic\Agent\Repository\Persistence\Model\UserAgentModel;
+use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentDomainService;
+use App\Domain\SuperMagic\Agent\Service\UserAgentDomainService;
+use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
+use App\Domain\SuperMagic\File\Repository\Model\TaskFileModel;
+use App\Domain\SuperMagic\Project\Repository\Model\ProjectMemberModel;
+use App\Domain\SuperMagic\Project\Repository\Model\ProjectModel;
+use App\Domain\SuperMagic\Skill\Repository\Persistence\Model\SkillModel;
+use App\Domain\SuperMagic\Skill\Repository\Persistence\Model\SkillVersionModel;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Workspace\Request\ExportWorkspaceRequest;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Workspace\Response\ExportWorkspaceResponse;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Workspace\WorkspaceExporterInterface;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
-use Dtyq\SuperMagic\Application\Agent\Service\AbstractSuperMagicAppService;
-use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAppService;
-use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishStatus;
-use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentMarketRepositoryInterface;
-use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentPlaybookRepositoryInterface;
-use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentSkillRepositoryInterface;
-use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\AgentVersionRepositoryInterface;
-use Dtyq\SuperMagic\Domain\Agent\Repository\Facade\SuperMagicAgentRepositoryInterface;
-use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentCategoryModel;
-use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentMarketModel;
-use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentPlaybookModel;
-use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentSkillModel;
-use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\AgentVersionModel;
-use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\SuperMagicAgentModel;
-use Dtyq\SuperMagic\Domain\Agent\Repository\Persistence\Model\UserAgentModel;
-use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentDomainService;
-use Dtyq\SuperMagic\Domain\Agent\Service\UserAgentDomainService;
-use Dtyq\SuperMagic\Domain\Skill\Repository\Persistence\Model\SkillModel;
-use Dtyq\SuperMagic\Domain\Skill\Repository\Persistence\Model\SkillVersionModel;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileRepositoryInterface;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\ProjectMemberModel;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\ProjectModel;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\TaskFileModel;
-use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
-use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Request\ExportWorkspaceRequest;
-use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\Response\ExportWorkspaceResponse;
-use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Workspace\WorkspaceExporterInterface;
 use Hyperf\Context\ApplicationContext;
 use HyperfTest\Cases\Api\SuperAgent\AbstractApiTest;
 use Mockery;
@@ -684,6 +683,89 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         $this->assertNotEmpty($sharedItem['creator_info']['name'] ?? null);
     }
 
+    public function testQueryCollaboratedAgentsScope(): void
+    {
+        $collaboratorUserId = $this->switchUserTest1();
+
+        $this->switchUserTest2();
+        $ownerHeaders = $this->getCommonHeaders();
+        $collaboratedAgentCode = $this->createTestAgent();
+        $visibilityOnlyAgentCode = $this->createTestAgent();
+
+        $addCollaboratorResponse = $this->post(
+            self::BASE_URI . '/' . $collaboratedAgentCode . '/collaborators',
+            [
+                'members' => [
+                    [
+                        'target_type' => 'User',
+                        'target_id' => $collaboratorUserId,
+                        'role' => 'viewer',
+                    ],
+                ],
+            ],
+            $ownerHeaders
+        );
+        $this->assertEquals(1000, $addCollaboratorResponse['code'], $addCollaboratorResponse['message'] ?? '');
+        $this->shareAgentWithUser($visibilityOnlyAgentCode, $ownerHeaders['user-id'], $collaboratorUserId);
+
+        // 已雇佣不应遮蔽协作身份，列表仍须返回该员工。
+        UserAgentModel::query()->create([
+            'id' => IdGenerator::getSnowId(),
+            'organization_code' => $ownerHeaders['organization-code'],
+            'user_id' => $collaboratorUserId,
+            'agent_code' => $collaboratedAgentCode,
+            'source_type' => 'MARKET',
+        ]);
+
+        $this->switchUserTest1();
+        $collaboratorHeaders = $this->getCommonHeaders();
+        $createdAgentCode = $this->createTestAgent();
+
+        $response = $this->post(
+            self::BASE_URI . '/queries',
+            ['scope' => 'collaborated', 'page' => 1, 'page_size' => 20],
+            $collaboratorHeaders
+        );
+
+        $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
+        $codes = array_column($response['data']['list'], 'code');
+        $this->assertContains($collaboratedAgentCode, $codes, '协作者员工应出现在 collaborated 列表');
+        $this->assertNotContains($visibilityOnlyAgentCode, $codes, '仅可见但非协作者的员工不应出现在 collaborated 列表');
+        $this->assertNotContains($createdAgentCode, $codes, '本人创建的员工不应出现在 collaborated 列表');
+
+        $collaboratedItem = null;
+        foreach ($response['data']['list'] as $item) {
+            if (($item['code'] ?? null) === $collaboratedAgentCode) {
+                $collaboratedItem = $item;
+                break;
+            }
+        }
+        $this->assertNotNull($collaboratedItem);
+        $this->assertSame('viewer', $collaboratedItem['user_role']);
+
+        $removeCollaboratorResponse = $this->delete(
+            self::BASE_URI . '/' . $collaboratedAgentCode . '/collaborators',
+            [
+                'members' => [
+                    [
+                        'target_type' => 'User',
+                        'target_id' => $collaboratorUserId,
+                    ],
+                ],
+            ],
+            $ownerHeaders
+        );
+        $this->assertEquals(1000, $removeCollaboratorResponse['code'], $removeCollaboratorResponse['message'] ?? '');
+
+        $response = $this->post(
+            self::BASE_URI . '/queries',
+            ['scope' => 'collaborated', 'page' => 1, 'page_size' => 20],
+            $collaboratorHeaders
+        );
+        $this->assertEquals(1000, $response['code'], $response['message'] ?? '');
+        $this->assertNotContains($collaboratedAgentCode, array_column($response['data']['list'], 'code'));
+    }
+
     public function testQueryMarketInstalledAgentsEndpoint(): void
     {
         $this->switchUserTest2();
@@ -742,6 +824,106 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         $this->assertSame('MARKET', $marketItem['source_type']);
         $this->assertSame('7.0.0', $marketItem['latest_version_code']);
         $this->assertTrue($marketItem['allow_delete']);
+    }
+
+    public function testCheckAgentAccessEndpoint(): void
+    {
+        $this->switchUserTest2();
+        $publisherHeaders = $this->getCommonHeaders();
+        $sharedAgentCode = $this->createTestAgent();
+        $this->shareAgentWithUser($sharedAgentCode, $publisherHeaders['user-id'], env('TEST1_USER_ID'));
+
+        $marketAgentCode = 'market_' . IdGenerator::getUniqueId32();
+        $this->createPublishedAgentVersionRecord($marketAgentCode, '8.0.0', $publisherHeaders, true);
+
+        $this->switchUserTest1();
+        $headers = $this->getCommonHeaders();
+        $createdAgentCode = $this->createTestAgent();
+
+        $createdResponse = $this->post(
+            self::BASE_URI . '/access-check',
+            ['code' => ' ' . $createdAgentCode . ' '],
+            $headers
+        );
+        $this->assertEquals(1000, $createdResponse['code'], $createdResponse['message'] ?? '');
+        $this->assertSame([
+            'code' => $createdAgentCode,
+            'exists' => true,
+            'can_use' => true,
+        ], $createdResponse['data']);
+
+        $sharedResponse = $this->post(
+            self::BASE_URI . '/access-check',
+            ['code' => $sharedAgentCode],
+            $headers
+        );
+        $this->assertEquals(1000, $sharedResponse['code'], $sharedResponse['message'] ?? '');
+        $this->assertSame([
+            'code' => $sharedAgentCode,
+            'exists' => true,
+            'can_use' => false,
+        ], $sharedResponse['data']);
+
+        $unknownAgentCode = 'unknown_' . IdGenerator::getUniqueId32();
+        $unknownResponse = $this->post(
+            self::BASE_URI . '/access-check',
+            ['code' => $unknownAgentCode],
+            $headers
+        );
+        $this->assertEquals(1000, $unknownResponse['code'], $unknownResponse['message'] ?? '');
+        $this->assertSame([
+            'code' => $unknownAgentCode,
+            'exists' => false,
+            'can_use' => false,
+        ], $unknownResponse['data']);
+
+        // 市场已上架但未雇佣：存在但不可用（市场上架与本地/雇佣关系是“或”的关系）。
+        $marketBeforeHireResponse = $this->post(
+            self::BASE_URI . '/access-check',
+            ['code' => $marketAgentCode],
+            $headers
+        );
+        $this->assertEquals(1000, $marketBeforeHireResponse['code'], $marketBeforeHireResponse['message'] ?? '');
+        $this->assertSame([
+            'code' => $marketAgentCode,
+            'exists' => true,
+            'can_use' => false,
+        ], $marketBeforeHireResponse['data']);
+
+        $hireResponse = $this->post(
+            '/api/v2/super-magic/agent-market/' . $marketAgentCode . '/hire',
+            [],
+            $headers
+        );
+        $this->assertEquals(1000, $hireResponse['code'], $hireResponse['message'] ?? '');
+
+        $marketResponse = $this->post(
+            self::BASE_URI . '/access-check',
+            ['code' => $marketAgentCode],
+            $headers
+        );
+        $this->assertEquals(1000, $marketResponse['code'], $marketResponse['message'] ?? '');
+        $this->assertSame([
+            'code' => $marketAgentCode,
+            'exists' => true,
+            'can_use' => true,
+        ], $marketResponse['data']);
+    }
+
+    public function testCheckAgentAccessEndpointValidatesCode(): void
+    {
+        $this->switchUserTest1();
+        $headers = $this->getCommonHeaders();
+
+        foreach ([
+            [],
+            ['code' => '   '],
+            ['code' => str_repeat('A', 51)],
+            ['code' => ['invalid']],
+        ] as $payload) {
+            $response = $this->post(self::BASE_URI . '/access-check', $payload, $headers);
+            $this->assertNotEquals(1000, $response['code'], $response['message'] ?? '');
+        }
     }
 
     public function testQueryAgentMarketReturnsLatestVersionAndAllowDelete(): void

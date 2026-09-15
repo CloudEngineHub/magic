@@ -117,6 +117,7 @@ export const BILLING_TYPE_UNIT_KEY: Record<string, string> = {
 	[AiManage.BillingType.ImageCount]: UNIT_KEY_MAP.PerImage,
 	[AiManage.BillingType.ImageTokens]: UNIT_KEY_MAP.MillionTokens,
 	[AiManage.BillingType.ImageTokensWithThought]: UNIT_KEY_MAP.MillionTokens,
+	[AiManage.BillingType.Seedream5ProImage]: UNIT_KEY_MAP.PerImage,
 	[AiManage.BillingType.VideoDuration]: UNIT_KEY_MAP.PerSecond,
 	[AiManage.BillingType.VideoTokens]: UNIT_KEY_MAP.MillionTokens,
 	[AiManage.BillingType.KelingVideoResolutionMediaConditionDurationPricing]:
@@ -130,6 +131,7 @@ export const BILLING_TYPE_GROUP_LABEL_KEY: Record<string, string> = {
 	[AiManage.BillingType.ImageCount]: "form.imageCountPriceGroup",
 	[AiManage.BillingType.ImageTokens]: "form.imageTokenPriceGroup",
 	[AiManage.BillingType.ImageTokensWithThought]: "form.imageTokenPriceGroup",
+	[AiManage.BillingType.Seedream5ProImage]: "form.imageCountPriceGroup",
 	[AiManage.BillingType.VideoDuration]: "form.videoDurationPriceGroup",
 	[AiManage.BillingType.KelingVideoResolutionMediaConditionDurationPricing]:
 		"form.videoDurationPriceGroup",

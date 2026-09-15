@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { ChevronRight, Loader2Icon, Plus, EllipsisIcon } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
 import ProjectList from "./ProjectList"
@@ -20,7 +20,7 @@ import { getWorkspaceRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
 import { shouldIgnoreSelectionAfterWorkspaceRename } from "@/pages/superMagic/utils/workspaceRenameSelectionGuard"
 
-function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemProps) {
+function WorkspaceItem({ workspace, className, searchProjects, dndDisabled }: WorkspaceItemProps) {
 	const { t } = useTranslation(["super"])
 	const workspaceIdSegment = toTestIdSegment(workspace.id)
 	const workspaceNameTestId = `sidebar-workspace-item-name-${workspaceIdSegment}`
@@ -29,12 +29,12 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 
 	const [isHovered, setIsHovered] = useState(false)
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const suppressItemClickRef = useRef(false)
 	const isExpanded =
 		searchProjects !== undefined || sidebarStore.expandedWorkspaces.has(workspace.id)
 	const projects = searchProjects ?? projectStore.getProjectsByWorkspace(workspace.id)
 	const isLoading = searchProjects === undefined && projectStore.isLoadingWorkspace(workspace.id)
 	const isActive = workspaceStore.selectedWorkspace?.id === workspace.id
-
 	const { openDeleteModal, renderDeleteModal } = useWorkspaceDelete({
 		getDeleteSuccessMessage: () => t("workspace.deleteWorkspaceSuccess"),
 		getFallbackWorkspaceName: () => t("workspace.unnamedWorkspace"),
@@ -58,7 +58,7 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 
 	const workspaceHeaderRef = useRef<HTMLDivElement>(null)
 	const collapseScrollAnchorRef = useRef<{
-		viewport: HTMLElement
+		scrollContainer: HTMLElement
 		anchorTop: number
 	} | null>(null)
 
@@ -70,7 +70,7 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 		const topAfter = workspaceHeaderRef.current.getBoundingClientRect().top
 		const delta = topAfter - pending.anchorTop
 		if (Math.abs(delta) < 0.5) return
-		pending.viewport.scrollTop += delta
+		pending.scrollContainer.scrollTop += delta
 	}, [isExpanded])
 
 	/**
@@ -97,6 +97,11 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 	}
 
 	function handleClick(event: MouseEvent<HTMLAnchorElement>) {
+		if (suppressItemClickRef.current) {
+			event.preventDefault()
+			event.stopPropagation()
+			return
+		}
 		if (!shouldHandleAnchorClick(event)) return
 		if (isMenuOpen) {
 			event.preventDefault()
@@ -119,12 +124,12 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 		e.preventDefault()
 		e.stopPropagation()
 		if (isExpanded && workspaceHeaderRef.current) {
-			const viewport = workspaceHeaderRef.current.closest<HTMLElement>(
-				'[data-slot="scroll-area-viewport"]',
+			const scrollContainer = workspaceHeaderRef.current.closest<HTMLElement>(
+				"[data-testid='sidebar-content-root']",
 			)
-			if (viewport) {
+			if (scrollContainer) {
 				collapseScrollAnchorRef.current = {
-					viewport,
+					scrollContainer,
 					anchorTop: workspaceHeaderRef.current.getBoundingClientRect().top,
 				}
 			}
@@ -145,14 +150,43 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 
 	return (
 		<SidebarMenuItem
-			className={cn("flex w-full max-w-full shrink-0 flex-col items-center", className)}
+			data-sidebar-drop-type="workspace"
+			data-sidebar-drop-workspace-id={workspace.id}
+			data-sidebar-workspace-root="true"
+			className={cn(
+				"relative flex w-full max-w-full shrink-0 flex-col items-center",
+				// Selecting a workspace scrolls this item to the top. Reserve the sticky
+				// "工作区" header height so the workspace title does not stick downward
+				// over the first project.
+				"scroll-mt-[var(--workspace-list-sticky-top)]",
+				className,
+			)}
 			data-testid={`sidebar-workspace-item-${workspace.id}`}
 			data-workspace-id-segment={workspaceIdSegment}
 			data-workspace-name={workspace.name || t("super:workspace.unnamedWorkspace")}
 		>
 			{/* Section wraps header + projects so sticky releases when whole block scrolls out */}
 			<div className="flex w-full min-w-0 flex-col">
-				<div ref={workspaceHeaderRef} className="sticky top-0 z-10 w-full bg-sidebar">
+				<div
+					ref={workspaceHeaderRef}
+					draggable={!dndDisabled}
+					data-sidebar-dnd-source="workspace"
+					data-sidebar-dnd-workspace-id={workspace.id}
+					data-sidebar-dnd-label={workspace.name || t("super:workspace.unnamedWorkspace")}
+					data-sidebar-workspace-header="true"
+					onDragStart={() => {
+						suppressItemClickRef.current = true
+					}}
+					onDragEnd={() => {
+						window.setTimeout(() => {
+							suppressItemClickRef.current = false
+						}, 0)
+					}}
+					className={cn(
+						"sticky top-[var(--workspace-list-sticky-top)] z-10 w-full",
+						"bg-sidebar",
+					)}
+				>
 					<MagicDropdown
 						menu={{ items: menuProps.items }}
 						trigger={["contextMenu"]}
@@ -170,6 +204,8 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 							<a
 								href={getWorkspaceRouteUrl(workspace.id)}
 								onClick={handleClick}
+								draggable={false}
+								data-sidebar-workspace-link="true"
 								className="text-current no-underline [-webkit-tap-highlight-color:transparent]"
 							>
 								<div
@@ -258,6 +294,7 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 						workspaceId={workspace.id}
 						isLoading={isLoading}
 						isCreatingProject={isCreatingProject}
+						dndDisabled={dndDisabled}
 						onCancelCreate={handleCancelCreate}
 						onProjectCreated={handleProjectCreated}
 					/>

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { ModelItem } from "../../MessageEditor/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -16,6 +16,7 @@ import localstorage from "@/utils/localstorage"
 import { platformKey } from "@/utils/storage"
 import { userStore } from "@/models/user"
 import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
+import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 // Local queue only stores items that cannot be submitted to the server while offline; the server queue remains the source of truth after reconnect.
 const CLIENT_MESSAGE_QUEUE_STORAGE_ROOT = "super_magic/message_queue/client"
@@ -24,6 +25,7 @@ export interface QueuedMessage {
 	id: string
 	content: JSONContent
 	mentionItems: MentionListItem[]
+	dynamicParams?: Record<string, unknown>
 	selectedModel?: ModelItem
 	selectedImageModel?: ModelItem
 	selectedVideoModel?: ModelItem
@@ -133,6 +135,7 @@ export interface UseMessageQueueProps {
 	topicId?: string
 	agentCode?: string
 	isTaskRunning?: boolean
+	isWaitingForUser?: boolean
 	isEmptyStatus?: boolean
 	isShowLoadingInit?: boolean
 }
@@ -142,6 +145,7 @@ function useMessageQueue({
 	topicId,
 	agentCode,
 	isTaskRunning,
+	isWaitingForUser,
 	isEmptyStatus,
 	isShowLoadingInit,
 }: UseMessageQueueProps) {
@@ -282,6 +286,7 @@ function useMessageQueue({
 				image_model?: ModelItem
 				video_model?: ModelItem
 				client_queue_sync_id?: string
+				dynamic_params?: Record<string, unknown>
 			}
 		}
 		content: string
@@ -300,6 +305,7 @@ function useMessageQueue({
 			selectedVideoModel?: ModelItem
 			topicMode?: TopicMode
 			agentCode?: string
+			dynamicParams?: Record<string, unknown>
 			clientSyncId?: string
 		} => {
 			try {
@@ -320,9 +326,9 @@ function useMessageQueue({
 					const videoModel = messageContent.extra?.super_agent?.video_model
 					const agentCode = messageContent.extra?.super_agent?.agent_code
 					const clientSyncId = messageContent.extra?.super_agent?.client_queue_sync_id
+					const dynamicParams = messageContent.extra?.super_agent?.dynamic_params
 					const topicPattern = messageContent.extra?.super_agent?.topic_pattern as
-						| TopicMode
-						| undefined
+						TopicMode | undefined
 
 					return {
 						content: jsonContent,
@@ -336,6 +342,7 @@ function useMessageQueue({
 							: undefined,
 						topicMode: topicPattern,
 						agentCode,
+						dynamicParams,
 						clientSyncId,
 					}
 				}
@@ -406,7 +413,7 @@ function useMessageQueue({
 			const queueData =
 				response?.list?.map(
 					(item: {
-						queue_id: number
+						queue_id: string
 						message_content: string
 						status: number
 						execute_time?: string | null
@@ -422,10 +429,11 @@ function useMessageQueue({
 							selectedVideoModel,
 							topicMode,
 							agentCode,
+							dynamicParams,
 							clientSyncId,
 						} = deserializeMessageContent(item.message_content)
 						return {
-							id: item.queue_id.toString(),
+							id: item.queue_id,
 							content,
 							mentionItems,
 							selectedModel,
@@ -433,6 +441,7 @@ function useMessageQueue({
 							selectedVideoModel,
 							topicMode,
 							agentCode,
+							dynamicParams,
 							clientSyncId,
 							timestamp: new Date(item.created_at).getTime(),
 							status: mapStatus(item.status),
@@ -605,24 +614,24 @@ function useMessageQueue({
 		let unsubscribe: (() => void) | undefined
 		let cancelled = false
 
-			; (async () => {
-				try {
-					const { initializeService } =
-						await import("@/services/recordSummary/serviceInstance")
+		;(async () => {
+			try {
+				const { initializeService } =
+					await import("@/services/recordSummary/serviceInstance")
 
-					const recordSummaryService = initializeService()
+				const recordSummaryService = initializeService()
 
-					if (cancelled || !recordSummaryService?.on) return
-					unsubscribe = recordSummaryService.on(
-						RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE,
-						() => {
-							fetchQueueList?.()
-						},
-					)
-				} catch (error) {
-					console.error("Failed to bind recording complete listener", error)
-				}
-			})()
+				if (cancelled || !recordSummaryService?.on) return
+				unsubscribe = recordSummaryService.on(
+					RECORD_SUMMARY_EVENTS.RECORDING_COMPLETE,
+					() => {
+						fetchQueueList?.()
+					},
+				)
+			} catch (error) {
+				console.error("Failed to bind recording complete listener", error)
+			}
+		})()
 
 		return () => {
 			cancelled = true
@@ -641,32 +650,34 @@ function useMessageQueue({
 		agentCode?: string,
 		inputMode?: string,
 		clientSyncId?: string,
+		dynamicParams?: Record<string, unknown>,
 	) => {
 		const modelObj = selectedModel
 			? {
-				model_id: selectedModel.model_id,
-				model_name: selectedModel.model_name,
-				model_icon: selectedModel.model_icon,
-			}
+					model_id: selectedModel.model_id,
+					model_name: selectedModel.model_name,
+					model_icon: selectedModel.model_icon,
+				}
 			: { model_id: "auto" }
 
 		const imageModelObj = selectedImageModel?.model_id
 			? {
-				model_id: selectedImageModel.model_id,
-				model_name: selectedImageModel.model_name,
-				model_icon: selectedImageModel.model_icon,
-			}
+					model_id: selectedImageModel.model_id,
+					model_name: selectedImageModel.model_name,
+					model_icon: selectedImageModel.model_icon,
+				}
 			: undefined
 		const videoModelObj = selectedVideoModel?.model_id
 			? {
-				model_id: selectedVideoModel.model_id,
-				model_name: selectedVideoModel.model_name,
-				model_icon: selectedVideoModel.model_icon,
-			}
+					model_id: selectedVideoModel.model_id,
+					model_name: selectedVideoModel.model_name,
+					model_icon: selectedVideoModel.model_icon,
+				}
 			: undefined
 
 		// 转换 mention items，自定义发送给 agent 的内容
 		const transformedMentionItems = transformMentions(mentionItems)
+		const sendSelection = resolveAgentSelection(topicMode, agentCode)
 
 		return {
 			instructs: [
@@ -680,9 +691,10 @@ function useMessageQueue({
 					mentions: transformedMentionItems,
 					input_mode: inputMode || "plan",
 					chat_mode: "normal",
-					topic_pattern: topicMode || "general",
-					...(agentCode && { agent_code: agentCode }),
+					topic_pattern: sendSelection.topicPattern,
+					...(sendSelection.agentCode && { agent_code: sendSelection.agentCode }),
 					...(clientSyncId && { client_queue_sync_id: clientSyncId }),
+					...(dynamicParams && { dynamic_params: dynamicParams }),
 					model: modelObj,
 					...(imageModelObj && { image_model: imageModelObj }),
 					...(videoModelObj && { video_model: videoModelObj }),
@@ -722,6 +734,7 @@ function useMessageQueue({
 					queueMessage.agentCode,
 					"plan",
 					nextClientSyncId,
+					queueMessage.dynamicParams,
 				)
 
 				await SuperMagicApi.addMessageToQueue({
@@ -793,11 +806,16 @@ function useMessageQueue({
 			selectedImageModel?: ModelItem | null
 			selectedVideoModel?: ModelItem | null
 			topicMode?: TopicMode
+			agentCode?: string | null
+			dynamicParams?: Record<string, unknown>
 		}) => {
 			if (!projectId || !topicId) {
 				magicToast.error(t("messageQueue.missingInfo"))
 				return
 			}
+
+			const selectedAgentCode =
+				params.agentCode === undefined ? agentCode : params.agentCode || undefined
 
 			if (getNetworkMonitor().isNetworkOffline()) {
 				// Cannot call server queue API while offline during a running task; append to local queue first, then re-submit in original order after reconnect.
@@ -810,7 +828,8 @@ function useMessageQueue({
 					selectedImageModel: params.selectedImageModel ?? undefined,
 					selectedVideoModel: params.selectedVideoModel ?? undefined,
 					topicMode: params.topicMode,
-					agentCode,
+					agentCode: selectedAgentCode,
+					dynamicParams: params.dynamicParams,
 					clientSyncId: localQueueId,
 					timestamp: getNextLocalQueueTimestamp(currentTopicContext),
 					status: "pending",
@@ -837,8 +856,10 @@ function useMessageQueue({
 					params.selectedImageModel,
 					params.selectedVideoModel,
 					params.topicMode,
-					agentCode,
+					selectedAgentCode,
 					"plan", // 默认input_mode
+					undefined,
+					params.dynamicParams,
 				)
 
 				// 调用后端API添加到队列
@@ -1047,6 +1068,7 @@ function useMessageQueue({
 			// Scenario: while consuming task 1, user sends 2/3/4 offline; server completes task 1 during disconnect;
 			// after reconnect, 2/3/4 are re-submitted to server queue, but frontend missed the task-end event — need to proactively consume the first pending item.
 			if (!projectId || !topicId || !currentTopicContext) return
+			if (isWaitingForUser) return
 			if (syncLocalQueueLockRef.current && !options?.ignoreSyncLock) return
 			if (getNetworkMonitor().isNetworkOffline()) return
 			if (isTaskRunningRef.current) return
@@ -1316,6 +1338,8 @@ function useMessageQueue({
 					finalTopicMode,
 					finalAgentCode,
 					"plan", // 默认input_mode
+					undefined,
+					editingQueueItem.dynamicParams,
 				)
 
 				// 设置编辑loading状态
@@ -1367,6 +1391,7 @@ function useMessageQueue({
 			editingQueueItem,
 			projectId,
 			topicId,
+			agentCode,
 			fetchQueueList,
 			t,
 			acquireLock,
@@ -1428,7 +1453,7 @@ function useMessageQueue({
 
 	// 任务完成时（isTaskRunning 从 true → false），检查队列并兜底消费。
 	useUpdateEffect(() => {
-		if (!isTaskRunning && projectId && topicId) {
+		if (!isWaitingForUser && !isTaskRunning && projectId && topicId) {
 			const timer = setTimeout(async () => {
 				const latestQueue = await fetchQueueList()
 				if (Array.isArray(latestQueue) && latestQueue.length > 0) {
@@ -1437,7 +1462,7 @@ function useMessageQueue({
 			}, 500)
 			return () => clearTimeout(timer)
 		}
-	}, [isTaskRunning])
+	}, [isTaskRunning, isWaitingForUser])
 
 	// // 当任务完成时，自动处理下一个消息
 	// useUpdateEffect(() => {

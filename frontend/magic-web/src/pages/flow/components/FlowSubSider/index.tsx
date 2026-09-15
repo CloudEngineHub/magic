@@ -12,7 +12,8 @@ import { RouteName } from "@/routes/constants"
 import { baseHistory } from "@/routes/history"
 import { getRoutePath } from "@/routes/history/helpers"
 import type { MagicListItemData as MagicListItemItemType } from "@/components/MagicList/types"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
+import { useMatch } from "react-router-dom"
 
 const useStyles = createStyles(({ css }) => {
 	return {
@@ -30,13 +31,14 @@ const useStyles = createStyles(({ css }) => {
 
 function FlowSubSider() {
 	const { t } = useTranslation()
+	const isAgentRoute = Boolean(useMatch("/:clusterCode/flow/agent/*"))
 
 	const [collapseKey, setCollapseKey] = useState<string>(window.location.pathname)
 
 	const { styles } = useStyles()
 
 	const items = useMemo<Array<MagicListItemItemType>>(() => {
-		return [
+		const menuItems: Array<MagicListItemItemType> = [
 			{
 				id: getRoutePath({ name: RouteName.AgentList }) as string,
 				title: t("common.agent", { ns: "flow" }),
@@ -91,7 +93,11 @@ function FlowSubSider() {
 				},
 				extra: <MagicIcon component={IconChevronRight} />,
 			},
-			{
+		]
+
+		// Agent management pages intentionally omit MCP while other Flow sections keep the entry.
+		if (!isAgentRoute) {
+			menuItems.push({
 				id: getRoutePath({
 					name: RouteName.MCP,
 					params: {
@@ -103,9 +109,11 @@ function FlowSubSider() {
 					src: <img src={IconMcp} alt="" />,
 				},
 				extra: <MagicIcon component={IconChevronRight} />,
-			},
-		]
-	}, [t])
+			})
+		}
+
+		return menuItems
+	}, [isAgentRoute, t])
 
 	return (
 		<SubSiderContainer className={styles.container}>

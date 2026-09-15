@@ -1,7 +1,5 @@
 import { createStyles } from "antd-style"
 import { useState } from "react"
-import AuthSuccessBg from "@/assets/resources/auth-success-bg.png"
-import AuthFailsBg from "@/assets/resources/auth-fail-bg.png"
 import { useCountDown, useThrottleEffect } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { FlowApi } from "@/apis"
@@ -18,14 +16,14 @@ const useStyles = createStyles(({ css, token }) => ({
 		align-items: center;
 	`,
 	icon: css`
-		width: 240px;
-		height: 240px;
+		width: 60px;
+		height: 60px;
 		flex: none;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 	`,
-	image: css`
+	statusIcon: css`
 		width: 100%;
 		height: 100%;
 	`,
@@ -110,11 +108,29 @@ export default function Auth() {
 				</div>
 			) : (
 				<div className={styles.icon}>
-					<img
-						src={isSuccess ? AuthSuccessBg : AuthFailsBg}
-						className={styles.image}
-						alt=""
-					/>
+					{isSuccess ? (
+						<svg
+							className={styles.statusIcon}
+							viewBox="0 0 1024 1024"
+							aria-hidden="true"
+						>
+							<path
+								d="M824.533333 217.770667c-194.901333 124.714667-336.128 281.6-399.786666 360.618666l-155.221334-127.189333-68.821333 57.6 268.458667 285.269333c46.464-123.52 192.853333-365.098667 371.754666-536.746666l-16.384-39.509334zM512 1024C229.248 1024 0 794.794667 0 512S229.248 0 512 0c282.794667 0 512 229.205333 512 512s-229.205333 512-512 512z"
+								fill="#67C23A"
+							/>
+						</svg>
+					) : (
+						<svg
+							className={styles.statusIcon}
+							viewBox="0 0 1024 1024"
+							aria-hidden="true"
+						>
+							<path
+								d="M721.877333 303.104a48.469333 48.469333 0 0 0-68.437333 0l-141.909333 141.909333-136.277334-136.234666a46.933333 46.933333 0 1 0-66.432 66.432l136.277334 136.277333-141.952 141.952a48.384 48.384 0 0 0 68.394666 68.352l141.952-141.909333 137.045334 137.002666a46.933333 46.933333 0 1 0 66.432-66.432l-137.045334-137.002666 141.952-141.952a48.469333 48.469333 0 0 0 0-68.394667M512 1024C229.248 1024 0 794.752 0 512 0 229.205333 229.248 0 512 0c282.794667 0 512 229.205333 512 512 0 282.752-229.205333 512-512 512"
+								fill="#FA5555"
+							/>
+						</svg>
+					)}
 				</div>
 			)}
 			{!loading && (

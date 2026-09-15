@@ -25,7 +25,9 @@ use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Infrastructure\Util\Permission\Annotation\CheckProviderModelPermission;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
+use App\Interfaces\Provider\Assembler\AdminProviderModelAssembler;
 use App\Interfaces\Provider\DTO\ConnectivityTestByConfigRequest;
+use App\Interfaces\Provider\DTO\ProviderModelQueryRequest;
 use App\Interfaces\Provider\DTO\SaveProviderConfigRequest;
 use App\Interfaces\Provider\DTO\SaveProviderModelDTO;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
@@ -91,6 +93,34 @@ class OrganizationServiceProviderApi extends AbstractApi
         $providerConfigAggregateDTO = $this->adminProviderAppService->getProviderModelsByConfigId($authenticatable, $serviceProviderConfigId);
         // 将新格式数据转换为旧格式以保持向后兼容性
         return $this->normalizeLegacyProviderModelsResponse($this->convertToLegacyFormat($providerConfigAggregateDTO));
+    }
+
+    /**
+     * 查询服务商模型明细列表，并返回前端需要的分页结构。
+     */
+    #[CheckPermission(MagicResourceEnum::WORKSPACE_MODEL, MagicOperationEnum::QUERY)]
+    public function queriesProviderModels(RequestInterface $request): array
+    {
+        $authenticatable = $this->getAuthorization();
+        $result = $this->adminProviderAppService->queriesProviderModels(
+            $authenticatable,
+            new ProviderModelQueryRequest($request->all())
+        );
+        return AdminProviderModelAssembler::modelRecordsToArray($result);
+    }
+
+    /**
+     * 按模型标识聚合查询模型列表，并返回关联服务商信息。
+     */
+    #[CheckPermission(MagicResourceEnum::WORKSPACE_MODEL, MagicOperationEnum::QUERY)]
+    public function queriesProviderModelGroups(RequestInterface $request): array
+    {
+        $authenticatable = $this->getAuthorization();
+        $result = $this->adminProviderAppService->queriesProviderModelGroups(
+            $authenticatable,
+            new ProviderModelQueryRequest($request->all())
+        );
+        return AdminProviderModelAssembler::modelGroupsToArray($result);
     }
 
     // 更新服务商
@@ -259,30 +289,6 @@ class OrganizationServiceProviderApi extends AbstractApi
         /** @var MagicUserAuthorization $authenticatable */
         $authenticatable = $this->getAuthorization();
         $this->adminOriginModelAppService->delete($authenticatable, $modelId);
-    }
-
-    /**
-     * 获取所有非官方LLM服务商列表
-     * 直接从数据库中查询category为llm且provider_type不为OFFICIAL的服务商
-     * 不依赖于当前组织，适用于需要添加服务商的场景.
-     */
-    #[CheckPermission(MagicResourceEnum::WORKSPACE_MODEL_TEXT, MagicOperationEnum::QUERY)]
-    public function getNonOfficialLlmProviders()
-    {
-        $authenticatable = $this->getAuthorization();
-        // 直接获取所有LLM类型的非官方服务商
-        return $this->adminProviderAppService->queriesServiceProviderTemplates(Category::LLM, $authenticatable->getOrganizationCode());
-    }
-
-    /**
-     * 获取所有可用的LLM服务商列表（包括官方服务商）.
-     */
-    #[CheckPermission(MagicResourceEnum::WORKSPACE_MODEL_TEXT, MagicOperationEnum::QUERY)]
-    public function getAllAvailableLlmProviders()
-    {
-        $authenticatable = $this->getAuthorization();
-        // 获取所有LLM类型的服务商（包括Official）
-        return $this->adminProviderAppService->getAllAvailableLlmProviders(Category::LLM, $authenticatable->getOrganizationCode());
     }
 
     /**

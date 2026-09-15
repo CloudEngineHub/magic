@@ -16,18 +16,22 @@ import type {
 import type { PluginGenerateAndPlaceParams } from "../runtime-protocol/v1/index"
 import {
 	collectObstacleRects,
-	findGeneratedMediaGridPositions,
 	layerElementToObstacleRect,
 } from "../../../../runtime/shared/placement/findNonOverlappingPlacement"
+import { findGeneratedMediaGridPositions } from "../../../../runtime/shared/placement/placementEngine"
 import {
 	ElementTypeEnum,
 	type ImageElement,
 	type LayerElement,
 } from "../../../../runtime/document/types"
 import {
-	toWeakCanvasResourcePath,
-	areCanvasResourcePathsSame,
-	stripCurrentDirectoryPrefix,
+	getActiveImageContent,
+	isImageElementContent,
+	updateImageContent,
+} from "../../../../runtime/document/elementContent"
+import {
+	areCanvasHostResourceReferencesSame,
+	getCanvasHostResourceReferenceIdentity,
 } from "../../../../runtime/shared/path/canvasResourcePath"
 import type { Rect } from "../../../../runtime/shared/ids"
 import {
@@ -36,7 +40,7 @@ import {
 } from "../window/pluginSourceElements"
 
 const DEFAULT_MAX_OUTPUT_IMAGES = 4
-const PLUGIN_GENERATED_GRID_MAX_COLUMNS = 4
+const PLUGIN_GENERATED_GRID_MAX_COLUMNS = 6
 
 export async function getPluginImageModels(canvas: Canvas) {
 	const getImageModelList = canvas.magicConfigManager.config?.methods?.getImageModelList
@@ -63,8 +67,11 @@ export async function generatePluginImages(
 		sourceElementByAssetKey?: PluginSourceElementMap
 	} = {},
 ) {
-	if (canvas.readonly) {
-		throw new Error("Canvas is readonly.")
+	if (
+		!canvas.permissionManager.can("sideEffect.generate") ||
+		!canvas.permissionManager.can("document.write")
+	) {
+		throw new Error("Canvas does not allow document generation.")
 	}
 	const methods = canvas.magicConfigManager.config?.methods
 	if (!methods?.generateImages || !methods?.getImageGenerationResults) {
@@ -86,13 +93,16 @@ export async function generatePluginImages(
 		model_id: params.model_id,
 		prompt: params.prompt,
 		size: params.size,
+		aspect_ratio: params.aspect_ratio,
 		resolution: params.resolution,
 		reference_images: params.reference_images,
 		reference_image_options: params.reference_image_options,
 		image_generation_config: params.image_generation_config,
 		generate_num: count,
 	}
-	const { image_id, generate_num, ...generateImageRequest } = request
+	const generateImageRequest: GenerateImageRequest & { generate_num?: number } = { ...request }
+	delete generateImageRequest.image_id
+	delete generateImageRequest.generate_num
 
 	const elementIds = await withHistoryManagerAsync(canvas.historyManager, async () => {
 		const imageGeneratorTool = canvas.toolManager.getImageGeneratorTool()
@@ -111,10 +121,12 @@ export async function generatePluginImages(
 		)
 		// 来源元素的障碍矩形
 		const sourceRect = sourceElement ? layerElementToObstacleRect(sourceElement) : null
-		// 没有来源图时，尝试接在同一生成请求的已有输出网格后面，保证多次点击生成能连续排列。
-		const existingGridRects = sourceRect
-			? []
-			: collectMatchingGeneratedGridRects(canvas, allElements, generateImageRequest)
+		// 同配置历史输出会优先延续同一网格；如果没有历史输出，再回到来源图附近找首个落点。
+		const existingGridRects = collectMatchingGeneratedGridRects(
+			canvas,
+			allElements,
+			generateImageRequest,
+		)
 		const positions = findGeneratedMediaGridPositions(obstacles, {
 			count,
 			elementWidth: imageSize.width,
@@ -129,9 +141,20 @@ export async function generatePluginImages(
 		})
 		const nextElementIds = canvas.toolManager
 			.getImageGeneratorTool()
-			.createImageElementsAtPositions(positions, imageSize.width, imageSize.height)
+			.createImageElementsAtPositions(positions, imageSize.width, imageSize.height, {
+				temporary: true,
+			})
+		const targetContentIdByElementId = new Map<string, string>()
+		for (const elementId of nextElementIds) {
+			const element = canvas.elementManager.getElementData(elementId)
+			if (!element || !isImageElementContent(element) || !element.activeContentId) {
+				canvas.elementManager.batchDelete(nextElementIds)
+				throw new Error(`Image Content target ${elementId} not found`)
+			}
+			targetContentIdByElementId.set(elementId, element.activeContentId)
+		}
 
-		// 先创建全部占位元素，再批量绑定同一个 image_id，轮询回填时才能按 outputIndex 对应结果。
+		// 提交确认前只写 Canvas RuntimeManager；Element/DSL/历史/剪贴板均不包含任务身份。
 		nextElementIds.forEach((elementId) => {
 			canvas.eventEmitter.emit({
 				type: "element:image:generate-submit-started",
@@ -139,33 +162,96 @@ export async function generatePluginImages(
 			})
 		})
 
-		nextElementIds.forEach((elementId, index) => {
-			canvas.elementManager.update(
+		const attemptId = canvas.generationRuntimeManager.beginAttempt({
+			operation: "image-batch",
+			phase: "submitting",
+			failurePolicy: "remove-placeholder",
+			targets: nextElementIds.map((elementId, index) => ({
 				elementId,
-				{
-					status: "processing",
-					errorMessage: undefined,
-					generateImageRequest: generateImageRequest,
-					imageGenerationTaskMeta: createBatchImageTaskMeta({
-						imageId: batchImageId,
-						outputIndex: index + 1,
-						outputCount: count,
-					}),
+				contentId: targetContentIdByElementId.get(elementId) as string,
+				outputIndex: index + 1,
+				generateImageRequest: {
+					...generateImageRequest,
+					image_id: batchImageId,
 				},
-				{ silent: false },
+				imageGenerationTaskMeta: createBatchImageTaskMeta({
+					imageId: batchImageId,
+					outputIndex: index + 1,
+					outputCount: count,
+				}),
+			})),
+		})
+
+		try {
+			await generateImages(request)
+		} catch (error) {
+			canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+			throw error
+		}
+
+		const committedElementIds = nextElementIds.filter((elementId) => {
+			const contentId = targetContentIdByElementId.get(elementId)
+			return (
+				canvas.generationRuntimeManager.isCurrent(attemptId, elementId, contentId) &&
+				canvas.elementManager.hasElement(elementId)
 			)
 		})
+		if (committedElementIds.length === 0) {
+			return []
+		}
 
-		await generateImages(request)
-		const batchPollingManager = new ImageBatchPollingManager({
-			canvas,
-			imageId: batchImageId,
-			elementIds: nextElementIds,
-			registry: canvas.imageBatchPollingRegistry,
-		})
-		void batchPollingManager.start()
+		// 只有批量提交成功后，才原子写入正式字段并允许剩余目标进入 DSL。
+		try {
+			const committedContentIds: string[] = []
+			const confirmed = canvas.generationAttemptCoordinator.confirmAttempt(
+				attemptId,
+				committedElementIds.map((elementId) => {
+					const outputIndex = nextElementIds.indexOf(elementId) + 1
+					const element = canvas.elementManager.getElementData(elementId)
+					const contentId = targetContentIdByElementId.get(elementId)
+					if (
+						!contentId ||
+						!element ||
+						!isImageElementContent(element) ||
+						!element.contents.some((content) => content.contentId === contentId)
+					) {
+						throw new Error(`Image Content target ${elementId} not found`)
+					}
+					const nextElement = updateImageContent(element, contentId, {
+						status: "processing",
+						errorMessage: undefined,
+						generateImageRequest,
+						imageGenerationTaskMeta: createBatchImageTaskMeta({
+							imageId: batchImageId,
+							outputIndex,
+							outputCount: count,
+						}),
+					})
+					committedContentIds.push(contentId)
+					return {
+						elementId,
+						contentId,
+						persistedPatch: {
+							contents: nextElement.contents,
+						},
+					}
+				}),
+			)
+			if (!confirmed) return []
+			const batchPollingManager = new ImageBatchPollingManager({
+				canvas,
+				imageId: batchImageId,
+				elementIds: committedElementIds,
+				contentIds: committedContentIds,
+				registry: canvas.imageBatchPollingRegistry,
+			})
+			void batchPollingManager.start()
+		} catch (error) {
+			canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+			throw error
+		}
 
-		return nextElementIds
+		return committedElementIds
 	})
 
 	if (elementIds.length > 0) {
@@ -205,12 +291,20 @@ function isVisibleCanvasElement(canvas: Canvas, element: LayerElement): boolean 
 	return canvas.permissionManager.isVisible(element)
 }
 
+function getEffectiveImageContent(canvas: Canvas, element: ImageElement) {
+	return (
+		(canvas.getEffectiveContent?.(element.id) as
+			| ReturnType<typeof getActiveImageContent>
+			| undefined) ?? getActiveImageContent(element)
+	)
+}
+
 /** 获取画布里可作为引用来源的可见图片元素。 */
 function getImageElements(canvas: Canvas): ImageElement[] {
 	return flattenLayerElements(canvas.elementManager.getAllElements()).filter(
 		(element): element is ImageElement =>
 			element.type === ElementTypeEnum.Image &&
-			Boolean(element.src) &&
+			Boolean(getEffectiveImageContent(canvas, element).src) &&
 			isVisibleCanvasElement(canvas, element),
 	)
 }
@@ -227,35 +321,32 @@ function getImageElementById(canvas: Canvas, elementId: string | undefined): Ima
 		return null
 	}
 	const imageElement = element as ImageElement
-	if (!imageElement.src) return null
+	if (!getEffectiveImageContent(canvas, imageElement).src) return null
 	return imageElement
 }
 
 /** 用路径/URL 反查画布图片，覆盖插件只回传 reference 字符串的场景。 */
 function resolveImageElementByReference(canvas: Canvas, reference: string): ImageElement | null {
-	const resolveAbsolutePath = canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
 	return (
 		getImageElements(canvas).find((element) => {
-			if (!element.src) return false
-			return areCanvasResourcePathsSame(element.src, reference, resolveAbsolutePath)
+			const active = getEffectiveImageContent(canvas, element)
+			if (!active.src) return false
+			return areCanvasHostResourceReferencesSame(canvas, active.src, reference)
 		}) ?? null
 	)
 }
 
 /** 判断图片是否是生成任务产物；这类元素不能作为下一次生成的来源兜底。 */
-function isGeneratedImageElement(element: ImageElement): boolean {
-	return Boolean(
-		element.generateImageRequest ||
-		element.imageGenerationTaskMeta ||
-		element.generateHightImageRequest,
-	)
+function isGeneratedImageElement(canvas: Canvas, element: ImageElement): boolean {
+	const active = getEffectiveImageContent(canvas, element)
+	return Boolean(active.generateImageRequest || active.imageGenerationTaskMeta)
 }
 
 /** 当插件没有带来源映射时，用当前选中的非生成图片作为最后兜底来源。 */
 function getSelectedSourceImageElement(canvas: Canvas): ImageElement | null {
 	const selectedImageId = canvas.selectionManager.getSelectedIds().find((elementId) => {
 		const element = getImageElementById(canvas, elementId)
-		return element && !isGeneratedImageElement(element)
+		return element && !isGeneratedImageElement(canvas, element)
 	})
 	return getImageElementById(canvas, selectedImageId)
 }
@@ -272,15 +363,17 @@ function getPluginReferenceKeys(params: PluginGenerateAndPlaceParams): string[] 
 	return [...referenceImages, ...referenceOptionPaths]
 }
 
-/** 归一化引用 key，避免 "./foo.png" 与 "foo.png" 被识别成两组生成结果。 */
-function normalizePluginReferenceKey(reference: string): string {
-	return stripCurrentDirectoryPrefix(toWeakCanvasResourcePath(reference.trim()))
-}
-
 /** 去重并排序后的引用 key 用于生成稳定的落点分组 key。 */
-function getNormalizedPluginReferenceKeys(params: PluginGenerateAndPlaceParams): string[] {
+function getNormalizedPluginReferenceKeys(
+	canvas: Canvas,
+	params: PluginGenerateAndPlaceParams,
+): string[] {
 	return Array.from(
-		new Set(getPluginReferenceKeys(params).map(normalizePluginReferenceKey).filter(Boolean)),
+		new Set(
+			getPluginReferenceKeys(params)
+				.map((reference) => getCanvasHostResourceReferenceIdentity(canvas, reference))
+				.filter(Boolean),
+		),
 	).sort()
 }
 
@@ -303,34 +396,32 @@ function stableStringify(value: unknown): string {
 	return JSON.stringify(value) ?? "undefined"
 }
 
-/** 提取影响落点续排的生成参数，作为“同一组生成结果”的判断依据。 */
-function getGenerationPlacementKey(request: PluginGenerateAndPlaceParams): string {
+/** 提取影响历史网格续排的生成配置；prompt/model/aspect_ratio 不参与画布排布分组。 */
+function getGenerationPlacementKey(canvas: Canvas, request: PluginGenerateAndPlaceParams): string {
 	return stableStringify({
-		model_id: request.model_id,
-		prompt: request.prompt,
-		size: request.size,
 		resolution: request.resolution,
-		references: getNormalizedPluginReferenceKeys(request),
+		references: getNormalizedPluginReferenceKeys(canvas, request),
 		image_generation_config: request.image_generation_config ?? {},
 	})
 }
 
-/** 收集同一生成请求已创建的结果矩形，供无来源图的再次生成接着原网格摆放。 */
+/** 收集同配置已创建的结果矩形，供再次生成接着原网格摆放。 */
 function collectMatchingGeneratedGridRects(
 	canvas: Canvas,
 	elements: LayerElement[],
 	request: GenerateImageRequest,
 ): Rect[] {
-	const targetPlacementKey = getGenerationPlacementKey(request)
+	const targetPlacementKey = getGenerationPlacementKey(canvas, request)
 	return flattenLayerElements(elements).flatMap((element) => {
 		if (element.type !== ElementTypeEnum.Image || !isVisibleCanvasElement(canvas, element)) {
 			return []
 		}
 		const imageElement = element as ImageElement
-		if (!imageElement.generateImageRequest || !isGeneratedImageElement(imageElement)) {
+		const active = getEffectiveImageContent(canvas, imageElement)
+		if (!active.generateImageRequest || !isGeneratedImageElement(canvas, imageElement)) {
 			return []
 		}
-		if (getGenerationPlacementKey(imageElement.generateImageRequest) !== targetPlacementKey) {
+		if (getGenerationPlacementKey(canvas, active.generateImageRequest) !== targetPlacementKey) {
 			return []
 		}
 		const rect = layerElementToObstacleRect(imageElement)
@@ -352,7 +443,11 @@ function resolvePluginSourceElement(
 	sourceElementByAssetKey?: PluginSourceElementMap,
 ): ImageElement | null {
 	const references = getPluginReferenceKeys(params)
-	const sourceElementId = resolvePluginSourceElementId(sourceElementByAssetKey, references)
+	const sourceElementId = resolvePluginSourceElementId(
+		sourceElementByAssetKey,
+		references,
+		canvas.magicConfigManager.config?.methods?.resolveResourceReference,
+	)
 	const sourceElement = getImageElementById(canvas, sourceElementId)
 	if (sourceElement) return sourceElement
 

@@ -1,9 +1,11 @@
 import i18n from "i18next"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import {
 	DEFAULT_LOCALE_KEY,
 	OptionViewType,
+	type FieldPanelConfig,
 	type FieldItem,
+	type IdentifiedOptionItem,
 	type LocaleText,
 	type OptionGroup,
 	type OptionItem,
@@ -86,6 +88,30 @@ export function localeTextToDisplayString(value: LocaleText | undefined): string
 	)
 }
 
+/** Resolve a localized option value to its configured fallback string. */
+export function getOptionValue(option: Pick<OptionItem, "value">): string {
+	return localeTextToDisplayString(option.value)
+}
+
+/** Narrow editable options to items whose value can safely be used as an identity. */
+export function isIdentifiedOptionItem(option: OptionItem): option is IdentifiedOptionItem {
+	return typeof option.value === "string" && option.value.trim().length > 0
+}
+
+/** Resolve prompt text with compatibility fallbacks for legacy and built-in demo configs. */
+export function resolveDemoPromptText(
+	option: Pick<OptionItem, "prompt" | "description" | "value">,
+	locale: string,
+): string {
+	const prompt = resolveLocaleText(option.prompt, locale)?.trim()
+	if (prompt) return prompt
+
+	const description = resolveLocaleText(option.description, locale)?.trim()
+	if (description) return description
+
+	return resolveLocaleText(option.value, locale)?.trim() ?? ""
+}
+
 export function isImageIconSource(value: string | undefined): value is string {
 	if (!value) return false
 
@@ -97,10 +123,6 @@ export function isImageIconSource(value: string | undefined): value is string {
 		value.startsWith("data:image/") ||
 		value.startsWith("blob:")
 	)
-}
-
-function getOptionValue(option: OptionItem): string {
-	return localeTextToDisplayString(option.value)
 }
 
 function getPresetDisplayValue(field: FieldItem, locale: string): string {
@@ -125,6 +147,29 @@ export function flattenFieldOptions(field: FieldItem): OptionItem[] {
 
 export function hasSelectableOptions(field: FieldItem | undefined): boolean {
 	return Boolean(field && flattenFieldOptions(field).length > 0)
+}
+
+/** Match FieldConfigPanel's visibility rules before creating layout wrappers around it. */
+export function isFieldPanelRenderable(config: FieldPanelConfig): boolean {
+	const fieldItems = config.field?.items ?? []
+	if (fieldItems.length === 0) return false
+
+	const isTemplatePanel =
+		config.field?.view_type === OptionViewType.GRID ||
+		config.field?.view_type === OptionViewType.SLIDES_PRESET
+	return !isTemplatePanel || hasSelectableOptions(findComplexField(fieldItems))
+}
+
+/** Keep mobile scene wrappers mounted while runtime-backed slide templates load their options. */
+export function isMobileScenePanelRenderable(config: FieldPanelConfig): boolean {
+	const fieldItems = config.field?.items ?? []
+	if (fieldItems.length === 0) return false
+
+	if (config.field?.view_type === OptionViewType.SLIDES_PRESET) {
+		return Boolean(findComplexField(fieldItems))
+	}
+
+	return isFieldPanelRenderable(config)
 }
 
 function getSelectedOptionLabel(field: FieldItem, locale: string): string {

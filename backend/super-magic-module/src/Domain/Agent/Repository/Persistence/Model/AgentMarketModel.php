@@ -28,6 +28,7 @@ use Hyperf\Database\Model\SoftDeletes;
  * @property null|int $sort_order 排序值，数值越大越靠前
  * @property bool $is_featured 是否精选
  * @property bool $is_hidden 是否隐藏
+ * @property null|string $market_type 市场类型
  * @property Carbon $created_at 创建时间
  * @property Carbon $updated_at 更新时间
  * @property null|Carbon $deleted_at 软删除时间
@@ -57,6 +58,7 @@ class AgentMarketModel extends AbstractModel
         'is_featured',
         'is_hidden',
         'organization_code',
+        'market_type',
     ];
 
     protected array $casts = [
@@ -74,6 +76,7 @@ class AgentMarketModel extends AbstractModel
         'category_id' => 'integer',
         'publish_status' => 'string',
         'organization_code' => 'string',
+        'market_type' => 'string',
         'install_count' => 'integer',
         'sort_order' => 'integer',
         'is_featured' => 'boolean',

@@ -15,6 +15,11 @@ use JsonSerializable;
 class ProjectUploadTokenRequestDTO implements JsonSerializable
 {
     /**
+     * 文件作用域。
+     */
+    private string $scope = '';
+
+    /**
      * 项目ID.
      */
     private string $projectId = '';
@@ -31,6 +36,7 @@ class ProjectUploadTokenRequestDTO implements JsonSerializable
     {
         $instance = new self();
 
+        $instance->scope = trim((string) ($data['scope'] ?? ''));
         $instance->projectId = $data['project_id'] ?? '';
         $instance->expires = (int) ($data['expires'] ?? 3600);
 
@@ -40,6 +46,22 @@ class ProjectUploadTokenRequestDTO implements JsonSerializable
     public function getProjectId(): string
     {
         return $this->projectId;
+    }
+
+    /**
+     * 获取文件作用域。
+     */
+    public function getScope(): string
+    {
+        return $this->scope;
+    }
+
+    /**
+     * 判断是否指定文件作用域。
+     */
+    public function hasScope(): bool
+    {
+        return $this->scope !== '';
     }
 
     public function setProjectId(string $projectId): self
@@ -65,6 +87,7 @@ class ProjectUploadTokenRequestDTO implements JsonSerializable
     public function jsonSerialize(): array
     {
         return [
+            'scope' => $this->scope,
             'project_id' => $this->projectId,
             'expires' => $this->expires,
         ];

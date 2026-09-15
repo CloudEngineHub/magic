@@ -3,7 +3,7 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { Textarea } from "@/components/shadcn-ui/textarea"
@@ -124,7 +124,7 @@ function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
 	)
 }
 
-function InputGroupInput({ className, ...props }: React.ComponentProps<"input">) {
+function InputGroupInput({ className, ...props }: React.ComponentProps<typeof Input>) {
 	return (
 		<Input
 			data-slot="input-group-control"

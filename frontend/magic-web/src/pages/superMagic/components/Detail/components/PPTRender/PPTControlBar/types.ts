@@ -10,6 +10,7 @@ export interface PPTControlBarProps {
 	onRefreshSlides: () => void
 	onJumpToPage: (index: number) => void
 	onToggleFullscreen: () => void
+	onReplaceTemplate?: () => void
 	scaleRatio: number
 	onScaleChange: (scale: number) => void
 	onResetScale: () => void

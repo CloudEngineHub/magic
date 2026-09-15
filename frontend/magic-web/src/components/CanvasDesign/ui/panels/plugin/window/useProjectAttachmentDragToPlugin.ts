@@ -185,7 +185,6 @@ export function useProjectAttachmentDragToPlugin({
 		const stopPluginDragEvent = (event: DragEvent) => {
 			event.preventDefault()
 			event.stopPropagation()
-			event.stopImmediatePropagation()
 		}
 
 		// 移动阶段只维持会话和 hover，不在这里按文件类型拦截。

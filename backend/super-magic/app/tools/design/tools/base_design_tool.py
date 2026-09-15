@@ -3,7 +3,6 @@
 为所有设计相关工具提供通用功能。
 """
 
-from app.i18n import i18n
 import asyncio
 import re
 from pathlib import Path
@@ -12,10 +11,10 @@ from typing import Any, Dict, Generic, Optional, Tuple, TypeVar
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+from app.i18n import i18n
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams
 from app.tools.design.manager.canvas_manager import CanvasManager
-from app.tools.design.utils.magic_project_design_parser import ImageElement
 from app.tools.workspace_tool import WorkspaceTool
 
 logger = get_logger(__name__)
@@ -42,18 +41,45 @@ class BaseDesignTool(AbstractFileTool[T], WorkspaceTool[T], Generic[T]):
     # images 文件夹名常量
     IMAGES_FOLDER = "images"
 
-    async def _get_project_path(self, project_path_str: str) -> Tuple[Optional[Path], Optional[str]]:
+    def _get_runtime_workspace_dir(self, tool_context: Optional[ToolContext] = None) -> Path:
+        """获取当前工具调用实际使用的工作区目录。
+
+        SDK 调试接口和独立 Agent 可以为每次调用提供隔离工作区，因此不能只使用
+        工具实例在服务启动时固化的 ``base_dir``。缺少运行时上下文时继续回退原有
+        ``base_dir``，兼容测试和直接调用。
+        """
+        if tool_context is not None:
+            agent_context = tool_context.get_extension("agent_context")
+            if agent_context is not None:
+                workspace_dir = agent_context.get_workspace_dir()
+                if workspace_dir:
+                    return Path(workspace_dir)
+            if tool_context.base_dir:
+                return Path(tool_context.base_dir)
+        return Path(self.base_dir)
+
+    async def _get_project_path(
+        self,
+        project_path_str: str,
+        tool_context: Optional[ToolContext] = None,
+    ) -> Tuple[Optional[Path], Optional[str]]:
         """获取安全的项目路径并验证
 
         Args:
             project_path_str: 相对项目路径字符串
+            tool_context: 当前调用上下文，用于解析运行时工作区
 
         Returns:
             (project_path, error_message) 元组
             - 成功时: (Path 对象, None)
             - 失败时: (None, 错误消息)
         """
-        project_path = self.resolve_path(project_path_str)
+        raw_path = Path(project_path_str)
+        project_path = (
+            raw_path
+            if raw_path.is_absolute()
+            else self._get_runtime_workspace_dir(tool_context) / raw_path
+        )
         return project_path, None
 
     async def _validate_project_exists(self, project_path: Path) -> Optional[str]:
@@ -105,7 +131,7 @@ class BaseDesignTool(AbstractFileTool[T], WorkspaceTool[T], Generic[T]):
             error_msg = f"{self.MAGIC_PROJECT_JS} does not exist in {display_path}."
 
             if suggest_create_command:
-                error_msg += f" Please create the project first using create_canvas tool."
+                error_msg += " Please create the project first using create_canvas tool."
 
             return error_msg
 
@@ -151,7 +177,8 @@ class BaseDesignTool(AbstractFileTool[T], WorkspaceTool[T], Generic[T]):
     async def _ensure_project_ready(
         self,
         project_path_str: str,
-        require_magic_project_js: bool = True
+        require_magic_project_js: bool = True,
+        tool_context: Optional[ToolContext] = None,
     ) -> Tuple[Optional[Path], Optional[ToolResult]]:
         """确保项目已准备好进行操作
 
@@ -176,7 +203,7 @@ class BaseDesignTool(AbstractFileTool[T], WorkspaceTool[T], Generic[T]):
             # 现在 project_path 保证是有效的
         """
         # 步骤 1: 获取安全路径
-        project_path, error = await self._get_project_path(project_path_str)
+        project_path, error = await self._get_project_path(project_path_str, tool_context)
         if error:
             return None, ToolResult.error(
                 error,
@@ -207,7 +234,8 @@ class BaseDesignTool(AbstractFileTool[T], WorkspaceTool[T], Generic[T]):
         project_path_str: str,
         require_magic_project_js: bool = True,
         max_retries: int = 3,
-        retry_delay: float = 0.2
+        retry_delay: float = 0.2,
+        tool_context: Optional[ToolContext] = None,
     ) -> Tuple[Optional[Path], Optional[ToolResult]]:
         """确保项目已准备好进行操作（带重试机制）
 
@@ -237,7 +265,7 @@ class BaseDesignTool(AbstractFileTool[T], WorkspaceTool[T], Generic[T]):
             # 现在 project_path 保证是有效的
         """
         # 步骤 1: 获取安全路径（不重试，配置错误）
-        project_path, error = await self._get_project_path(project_path_str)
+        project_path, error = await self._get_project_path(project_path_str, tool_context)
         if error:
             return None, ToolResult.error(
                 error,
@@ -308,7 +336,7 @@ class BaseDesignTool(AbstractFileTool[T], WorkspaceTool[T], Generic[T]):
 
         for attempt in range(max_retries):
             try:
-                workspace_path = Path(self.base_dir)
+                workspace_path = self._get_runtime_workspace_dir(tool_context)
                 width, height = await get_image_info(src, workspace_path)
                 return float(width), float(height)
 
@@ -389,7 +417,13 @@ class BaseDesignTool(AbstractFileTool[T], WorkspaceTool[T], Generic[T]):
         # Windows: < > : " / \ | ? *
         # Unix: /
         # 同时移除控制字符
-        sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name)
+        sanitized = re.sub(
+            r'(?:\[(?:图片|视频|音频|image|video|audio)\s*\d+\]|\{\{(?:image|video|audio)_\d+\}\}|@(?:图片|视频|音频|image|video|audio)\s*\d+)',
+            '',
+            name,
+            flags=re.IGNORECASE,
+        )
+        sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', sanitized)
 
         # 移除首尾空格和点（避免隐藏文件或路径问题）
         sanitized = sanitized.strip('. ')

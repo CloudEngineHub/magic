@@ -27,7 +27,7 @@ import { useOverlayZIndex } from "@/hooks/useOverlayZIndex"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { SkillThumbnail } from "@/pages/superMagic/components/SkillThumbnail"
 import { downloadFileContent } from "@/pages/superMagic/utils/api"
 import {
@@ -42,6 +42,8 @@ import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor
 interface SkillDetailDialogAction {
 	label: string
 	onClick: () => Promise<void> | void
+	/** Called when the action fails; the dialog remains open so the user can retry. */
+	onError?: (error: unknown) => void
 	variant?: VariantProps<typeof buttonVariants>["variant"]
 	/** Merged with base full-width styles (e.g. destructive tint for uninstall). */
 	className?: string
@@ -315,6 +317,8 @@ export const SkillDetailDialog = observer(function SkillDetailDialog({
 		try {
 			await primaryAction.onClick()
 			onOpenChange(false)
+		} catch (error) {
+			primaryAction.onError?.(error)
 		} finally {
 			setIsActionLoading(false)
 		}
@@ -549,7 +553,9 @@ export const SkillDetailDialog = observer(function SkillDetailDialog({
 																isEditable={false}
 																enableDragHandle={false}
 																className="!h-auto !overflow-visible [&_.simple-editor-content]:!h-auto [&_.simple-editor-content]:!overflow-visible [&_.simple-editor]:!p-2"
-																content={normalizedSkillMarkdown}
+																content={
+																	normalizedSkillMarkdown ?? ""
+																}
 															/>
 														)}
 													</div>

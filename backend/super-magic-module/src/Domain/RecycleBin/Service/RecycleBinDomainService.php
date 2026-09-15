@@ -10,6 +10,7 @@ namespace Dtyq\SuperMagic\Domain\RecycleBin\Service;
 use Dtyq\SuperMagic\Domain\RecycleBin\Entity\RecycleBinEntity;
 use Dtyq\SuperMagic\Domain\RecycleBin\Enum\RecycleBinResourceType;
 use Dtyq\SuperMagic\Domain\RecycleBin\Handler\FilePermanentDeleteHandler;
+use Dtyq\SuperMagic\Domain\RecycleBin\Handler\MicroAppPermanentDeleteHandler;
 use Dtyq\SuperMagic\Domain\RecycleBin\Handler\PermanentDeleteHandlerInterface;
 use Dtyq\SuperMagic\Domain\RecycleBin\Handler\ProjectPermanentDeleteHandler;
 use Dtyq\SuperMagic\Domain\RecycleBin\Handler\TopicPermanentDeleteHandler;
@@ -30,12 +31,14 @@ class RecycleBinDomainService
         protected RecycleBinRepositoryInterface $recycleBinRepository,
         WorkspacePermanentDeleteHandler $workspaceHandler,
         ProjectPermanentDeleteHandler $projectHandler,
+        MicroAppPermanentDeleteHandler $microAppHandler,
         TopicPermanentDeleteHandler $topicHandler,
         FilePermanentDeleteHandler $fileHandler
     ) {
         $this->permanentDeleteHandlers = [
             $workspaceHandler,
             $projectHandler,
+            $microAppHandler,
             $topicHandler,
             $fileHandler,
         ];

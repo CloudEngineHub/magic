@@ -3,18 +3,21 @@ import {
 	RefreshCw,
 	Loader2,
 	FilePlus,
-	FolderPlus,
 	Upload,
 	SquareCheckBig,
+	ChevronsUpDown,
+	ChevronsDownUp,
 } from "lucide-react"
 import { memo } from "react"
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { useIsMobile } from "@/hooks/use-mobile"
 import FileMenuDropdown from "./FileMenuDropdown"
 import UploadMenuDropdown from "./UploadMenuDropdown"
 import { type PresetFileType } from "../constant"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
+import HeaderTrailingAction from "./HeaderTrailingAction"
 
 interface NormalModeHeaderProps {
 	title?: string
@@ -26,11 +29,16 @@ interface NormalModeHeaderProps {
 	onSearch?: () => void
 	onAddFile?: (extraType?: PresetFileType) => void
 	onAddDesign?: () => void
+	onAddSelfMedia?: () => void
+	onAddAICard?: () => void
 	onAddFolder?: () => void
+	allFoldersExpanded?: boolean
+	onToggleAllFolders?: () => void
 	onUploadFile?: () => void
 	onUploadFolder?: () => void
 	onImportFromOtherProject?: () => void
 	onEnterSelectMode?: () => void
+	headerTrailingAction?: ReactNode
 	className?: string
 }
 
@@ -44,23 +52,37 @@ function NormalModeHeader({
 	onSearch,
 	onAddFile,
 	onAddDesign,
+	onAddSelfMedia,
+	onAddAICard,
 	onAddFolder,
+	allFoldersExpanded,
+	onToggleAllFolders,
 	onUploadFile,
 	onUploadFolder,
 	onImportFromOtherProject,
 	onEnterSelectMode,
+	headerTrailingAction,
 	className,
 }: NormalModeHeaderProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
+	const toggleAllFoldersLabel = allFoldersExpanded
+		? t("fileTree.collapseAll")
+		: t("fileTree.expandAll")
 
 	return (
-		<div className={cn("flex h-8 w-full items-center justify-between pl-4 pr-2", className)}>
-			<p className="whitespace-nowrap text-sm font-semibold leading-4 text-foreground">
+		<div
+			className={cn(
+				"relative flex h-8 w-full items-center pl-4",
+				headerTrailingAction ? "pr-10" : "pr-2",
+				className,
+			)}
+		>
+			<p className="shrink-0 whitespace-nowrap text-sm font-semibold leading-4 text-foreground">
 				{title || t("topicFiles.title")}
 			</p>
-			<div className="flex items-center gap-1">
-				{allowEdit && onSearch && (
+			<div className="ml-auto flex min-w-0 items-center justify-end gap-1 overflow-hidden">
+				{onSearch && (
 					<MagicTooltip title={t("topicFiles.search")}>
 						<button
 							className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
@@ -74,33 +96,26 @@ function NormalModeHeader({
 					</MagicTooltip>
 				)}
 				{allowEdit && onAddFile && (!isMobile || showMobileActions) && (
-					<FileMenuDropdown onAddFile={onAddFile} onAddDesign={onAddDesign}>
+					<FileMenuDropdown
+						onAddFile={onAddFile}
+						onAddDesign={onAddDesign}
+						onAddSelfMedia={onAddSelfMedia}
+						onAddAICard={onAddAICard}
+						onAddFolder={onAddFolder}
+					>
 						<span>
-							<MagicTooltip title={t("topicFiles.addFile")}>
+							<MagicTooltip title={t("topicFiles.addFileOrFolder")}>
 								<button
 									className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
 									type="button"
 									data-testid="file-header-add-file-button"
-									aria-label={t("topicFiles.addFile")}
+									aria-label={t("topicFiles.addFileOrFolder")}
 								>
 									<FilePlus size={16} className="text-foreground" />
 								</button>
 							</MagicTooltip>
 						</span>
 					</FileMenuDropdown>
-				)}
-				{allowEdit && onAddFolder && (!isMobile || showMobileActions) && (
-					<MagicTooltip title={t("topicFiles.addFolder")}>
-						<button
-							className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
-							type="button"
-							data-testid="file-header-add-folder-button"
-							onClick={onAddFolder}
-							aria-label={t("topicFiles.addFolder")}
-						>
-							<FolderPlus size={16} className="text-foreground" />
-						</button>
-					</MagicTooltip>
 				)}
 				{allowEdit &&
 					(onUploadFile || onUploadFolder) &&
@@ -124,6 +139,23 @@ function NormalModeHeader({
 							</span>
 						</UploadMenuDropdown>
 					)}
+				{onToggleAllFolders && (
+					<MagicTooltip title={toggleAllFoldersLabel}>
+						<button
+							className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
+							type="button"
+							data-testid="file-header-toggle-all-button"
+							onClick={onToggleAllFolders}
+							aria-label={toggleAllFoldersLabel}
+						>
+							{allFoldersExpanded ? (
+								<ChevronsDownUp size={16} className="text-foreground" />
+							) : (
+								<ChevronsUpDown size={16} className="text-foreground" />
+							)}
+						</button>
+					</MagicTooltip>
+				)}
 				{!isShareRoute && (
 					<MagicTooltip title={t("topicFiles.refreshList")}>
 						<button
@@ -156,6 +188,9 @@ function NormalModeHeader({
 					</MagicTooltip>
 				)}
 			</div>
+			{headerTrailingAction ? (
+				<HeaderTrailingAction>{headerTrailingAction}</HeaderTrailingAction>
+			) : null}
 		</div>
 	)
 }

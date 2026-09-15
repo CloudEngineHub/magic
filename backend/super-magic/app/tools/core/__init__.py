@@ -5,7 +5,7 @@
 
 from app.tools.core.base_tool import BaseTool
 from app.tools.core.base_tool_params import BaseToolParams
-from app.tools.core.tool_decorator import tool
+from app.tools.core.tool_decorator import AutoMount, tool
 from app.tools.core.tool_factory import tool_factory
 
 # Register the app metadata provider to agentlang
@@ -16,6 +16,7 @@ register_app_metadata_provider()
 __all__ = [
     "BaseTool",
     "BaseToolParams",
+    "AutoMount",
     "tool",
     "tool_factory"
 ]

@@ -43,10 +43,11 @@ DEFAULT_AGENT_PROFILE = AgentProfile()
 
 
 def get_builtin_agent_profile(agent_mode: str) -> AgentProfile | None:
-    """Return the localized default profile for built-in creation modes."""
+    """Return the localized default profile for built-in modes."""
     profile_keys = {
         "crew-creator": "crew_creator",
         "skill-creator": "skill_creator",
+        "micro-app": "micro_app",
     }
     profile_key = profile_keys.get(agent_mode)
     if profile_key is None:

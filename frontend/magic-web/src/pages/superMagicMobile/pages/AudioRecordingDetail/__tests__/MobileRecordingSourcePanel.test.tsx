@@ -11,8 +11,12 @@ vi.mock("react-i18next", () => ({
 			const labels: Record<string, string> = {
 				"detail.tabs.transcript": "Transcript",
 				"detail.tabs.notes": "Notes",
-				"detail.emptyTranscript": "No transcript",
-				"detail.emptyNotes": "No notes",
+				"detail.emptyTranscript":
+					"Summarizing now. It will appear automatically when ready.",
+				"detail.emptyNotes": "Summarizing now. It will appear automatically when ready.",
+				"detail.emptySummary": "No summary",
+				"detail.summarizingHint":
+					"Summarizing now. It will appear automatically when ready.",
 				"detail.openSpeakerSettings": "Open speaker settings",
 			}
 			return labels[key] ?? key
@@ -86,6 +90,25 @@ vi.mock(
 )
 
 describe("MobileRecordingSourcePanel", () => {
+	it("hides the notes tab when the shared notes file is unavailable", () => {
+		render(
+			<MobileRecordingSourcePanel
+				transcriptContent="[00:05] Mock transcript"
+				notesContent="Mock notes"
+				playing={false}
+				currentTime={0}
+				scrollPaddingBottom={64}
+				speakerNameMap={{}}
+				onOpenSpeakerSettings={vi.fn()}
+				onSeek={vi.fn()}
+				showNotesTab={false}
+			/>,
+		)
+
+		expect(screen.queryByText("Notes")).not.toBeInTheDocument()
+		expect(screen.getByText("Transcript")).toBeInTheDocument()
+	})
+
 	it("keeps the source tab header at the speaker-filter height", () => {
 		render(
 			<MobileRecordingSourcePanel
@@ -117,6 +140,7 @@ describe("MobileRecordingSourcePanel", () => {
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
 				selectedSpeakerIds={["Speaker-1"]}
+				isGenerating
 				speakerNameMap={{}}
 				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
@@ -135,6 +159,31 @@ describe("MobileRecordingSourcePanel", () => {
 		expect(screen.getByTestId("mobile-recording-transcript-item")).toBeInTheDocument()
 	})
 
+	it("uses compact vertical spacing for mobile transcript copy", () => {
+		render(
+			<MobileRecordingSourcePanel
+				transcriptContent="[00:05] Mock transcript"
+				notesContent="Mock notes"
+				playing={false}
+				currentTime={0}
+				scrollPaddingBottom={64}
+				availableSpeakerIds={[]}
+				selectedSpeakerIds={[]}
+				speakerNameMap={{}}
+				onOpenSpeakerSettings={vi.fn()}
+				onSeek={vi.fn()}
+			/>,
+		)
+
+		const transcriptItem = screen.getByTestId("mobile-recording-transcript-item")
+		const transcriptList = transcriptItem.parentElement
+		const transcriptText = screen.getByText("Mock transcript")
+
+		// Keep the regression focused on the visual rhythm that was tightened for mobile.
+		expect(transcriptList).toHaveClass("flex", "flex-col", "gap-3")
+		expect(transcriptText).toHaveClass("text-[16px]", "leading-6")
+	})
+
 	it("keeps the same scroll container when switching to notes", () => {
 		render(
 			<MobileRecordingSourcePanel
@@ -145,6 +194,7 @@ describe("MobileRecordingSourcePanel", () => {
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
 				selectedSpeakerIds={["Speaker-1"]}
+				isGenerating
 				speakerNameMap={{}}
 				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
@@ -173,6 +223,7 @@ describe("MobileRecordingSourcePanel", () => {
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
 				selectedSpeakerIds={["Speaker-1"]}
+				isGenerating
 				speakerNameMap={{}}
 				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
@@ -297,6 +348,7 @@ describe("MobileRecordingSourcePanel", () => {
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
 				selectedSpeakerIds={["Speaker-1"]}
+				isGenerating
 				speakerNameMap={{}}
 				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
@@ -304,9 +356,11 @@ describe("MobileRecordingSourcePanel", () => {
 			/>,
 		)
 
-		expect(screen.getByText("No transcript")).toBeInTheDocument()
+		expect(
+			screen.getByText("Summarizing now. It will appear automatically when ready."),
+		).toBeInTheDocument()
 		expect(screen.getByTestId("recording-detail-region-empty-slot")).toContainElement(
-			screen.getByText("No transcript"),
+			screen.getByText("Summarizing now. It will appear automatically when ready."),
 		)
 	})
 
@@ -320,6 +374,7 @@ describe("MobileRecordingSourcePanel", () => {
 				scrollPaddingBottom={64}
 				availableSpeakerIds={["Speaker-1"]}
 				selectedSpeakerIds={["Speaker-1"]}
+				isGenerating
 				speakerNameMap={{}}
 				onSelectedSpeakerIdsChange={vi.fn()}
 				onOpenSpeakerSettings={vi.fn()}
@@ -329,9 +384,11 @@ describe("MobileRecordingSourcePanel", () => {
 
 		fireEvent.click(screen.getByText("Notes"))
 
-		expect(screen.getByText("No notes")).toBeInTheDocument()
+		expect(
+			screen.getByText("Summarizing now. It will appear automatically when ready."),
+		).toBeInTheDocument()
 		expect(screen.getByTestId("recording-detail-region-empty-slot")).toContainElement(
-			screen.getByText("No notes"),
+			screen.getByText("Summarizing now. It will appear automatically when ready."),
 		)
 	})
 

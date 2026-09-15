@@ -14,17 +14,35 @@ interface ProjectShareSheetFooterProps {
 export function ProjectShareSheetFooter({ controller }: ProjectShareSheetFooterProps) {
 	const { t } = useTranslation("super")
 
-	if (controller.view === "create") {
+	if (controller.view === "create" || controller.view === "edit") {
 		return (
-			<ProjectShareActionFooter testId="project-share-sheet-create-floating-bar">
+			<ProjectShareActionFooter
+				testId={
+					controller.view === "edit"
+						? "project-share-sheet-edit-floating-bar"
+						: "project-share-sheet-create-floating-bar"
+				}
+			>
 				<Button
 					type="button"
 					className="h-12 w-full rounded-xl bg-[#171717] text-[16px] font-medium text-white hover:bg-[#171717] active:opacity-80"
-					disabled={controller.saving || controller.isCheckingShare}
+					disabled={
+						controller.saving ||
+						controller.isCheckingShare ||
+						(controller.view === "edit" && controller.editLoading)
+					}
 					onClick={controller.submitCreateShare}
-					data-testid="project-share-sheet-create-submit-button"
+					data-testid={
+						controller.view === "edit"
+							? "project-share-sheet-edit-submit-button"
+							: "project-share-sheet-create-submit-button"
+					}
 				>
-					{controller.saving ? t("common.saving") : t("projectShare.createLink")}
+					{controller.saving
+						? t("common.saving")
+						: controller.view === "edit"
+							? t("common.save")
+							: t("projectShare.createLink")}
 				</Button>
 			</ProjectShareActionFooter>
 		)
@@ -53,10 +71,21 @@ export function ProjectShareSheetFooter({ controller }: ProjectShareSheetFooterP
 				<Button
 					type="button"
 					className="h-12 w-full rounded-xl bg-[#171717] text-[16px] font-medium text-white hover:bg-[#171717] active:opacity-80"
+					// Wait for the prefetched payload so copying never starts with an iOS-incompatible network request.
+					disabled={!controller.selectedShareMessageText}
 					onClick={controller.copySelectedShareUrl}
 					data-testid="project-share-sheet-copy-link-button"
 				>
 					{t("projectShare.copyLink")}
+				</Button>
+				<Button
+					type="button"
+					variant="secondary"
+					className="h-12 w-full rounded-xl bg-white text-[16px] font-medium text-[#171717] hover:bg-white active:opacity-80"
+					onClick={controller.openEditSelectedShare}
+					data-testid="project-share-sheet-edit-button"
+				>
+					{t("share.editShare")}
 				</Button>
 				<Button
 					type="button"

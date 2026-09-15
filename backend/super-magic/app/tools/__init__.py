@@ -6,19 +6,28 @@
 # 导出工具类
 from app.tools.dummy_tool import DummyTool # DummyTool 必须在第一个位置导入，
 from app.tools.ask_user import AskUserTool
+from app.tools.micro_app_plan import MicroAppPlanTool
 from app.tools.web_search import WebSearch
-from app.tools.agent_list import AgentList
-from app.tools.prepare_agent import PrepareAgent
+from app.tools.find_agents import FindAgentsTool
 from app.tools.call_subagent import CallSubagent
 from app.tools.wait_for_subagents import WaitForSubagents
 from app.tools.compact_chat_history import CompactChatHistory
+from app.tools.list_chat_history import ListChatHistory
+from app.tools.search_chat_history import SearchChatHistory
+from app.tools.read_chat_history import ReadChatHistory
 from app.tools.core import BaseTool, BaseToolParams, tool, tool_factory
 from app.tools.create_slide import CreateSlide
-from app.tools.create_memory import CreateMemory
 from app.tools.create_slide_project import CreateSlideProject
+from app.tools.slide_template_builder import (
+    CreateSlideTemplateProject,
+    FinalizeSlideTemplate,
+    PrepareSlideTemplateSource,
+    QuerySlideTemplateTaxonomy,
+    ReviewSlideTemplateSource,
+    SelectSlideTemplateSourceAssets,
+)
 
 from app.tools.delete_files import DeleteFiles
-from app.tools.delete_memory import DeleteMemory
 from app.tools.download_from_markdown import DownloadFromMarkdown
 from app.tools.download_from_url import DownloadFromUrl
 from app.tools.download_from_urls import DownloadFromUrls
@@ -28,9 +37,12 @@ from app.tools.multi_edit_file import MultiEditFile
 from app.tools.multi_edit_file_range import MultiEditFileRange
 from app.tools.file_search import FileSearch
 from app.tools.get_js_cdn_address import GetJsCdnAddress
+from app.tools.get_sandbox_info import GetSandboxInfo
 from app.tools.grep_search import GrepSearch
 
 from app.tools.generate_images import GenerateImages
+from app.tools.generate_video import GenerateVideo
+from app.tools.get_video import GetVideo
 from app.tools.image_search import ImageSearch
 from app.tools.list_dir import ListDir
 from app.tools.purify import Purify
@@ -49,16 +61,41 @@ from app.tools.thinking import Thinking
 from app.tools.todo_read import TodoRead
 from app.tools.todo_create import TodoCreate
 from app.tools.todo_update import TodoUpdate
-from app.tools.update_memory import UpdateMemory
+from app.tools.restart_sandbox import RestartSandbox
 from app.tools.upgrade_sandbox import UpgradeSandbox
-from app.tools.use_browser import UseBrowser
+from app.tools.browser import (
+    BrowserActivatePage,
+    BrowserAddInitScript,
+    BrowserCheck,
+    BrowserClick,
+    BrowserClosePage,
+    BrowserEvaluate,
+    BrowserFill,
+    BrowserFindVisual,
+    BrowserFind,
+    BrowserReadHtml,
+    BrowserHover,
+    BrowserKeepAlive,
+    BrowserListPages,
+    BrowserListSessions,
+    BrowserNavigate,
+    BrowserOpenPage,
+    BrowserPress,
+    BrowserReadConsole,
+    BrowserReadNetwork,
+    BrowserReadPage,
+    BrowserScreenshot,
+    BrowserScroll,
+    BrowserSelect,
+    BrowserListElements,
+    BrowserUploadFile,
+    BrowserVisualQuery,
+    BrowserWait,
+)
 from app.tools.write_file import WriteFile
 from app.tools.manage_cron import ManageCron
 from app.tools.magic_calendar import ManageCalendar, CreateCalendarProject
 from app.tools.abstract_file_tool import AbstractFileTool
-from app.tools.append_to_file import AppendToFile
-from app.tools.convert_pdf import ConvertPdf
-from app.tools.pptx_to_slide_template.tool import ConvertPptxToSlideTemplate
 from app.tools.document_parse import (
     BuildDocumentIndex,
     ConvertDocumentFormat,
@@ -72,6 +109,20 @@ from app.tools.document_parse import (
 )
 from app.tools.cli_manager import CliManagerApply, CliManagerList, CliManagerRemove
 from app.tools.env_manager import GetEnv, ListEnv, SetEnv, UnsetEnv
+from app.tools.share import (
+    CreateFileShare,
+    CreateProjectShare,
+    CreateTopicShare,
+    DeleteShare,
+    GetShare,
+    InspectFileShare,
+    ListFileShares,
+    ListProjectShares,
+    ListTopicShares,
+    UpdateFileShare,
+    UpdateProjectShare,
+    UpdateTopicShare,
+)
 from app.tools.visual_understanding import VisualUnderstanding
 from app.tools.visual_understanding_webpage import VisualUnderstandingWebpage
 from app.tools.video_understanding import VideoUnderstanding
@@ -102,21 +153,57 @@ from app.tools.audio_understanding import AudioUnderstanding
 from app.tools.setup_audio_project import SetupAudioProject
 from app.tools.analyze_audio_project import AnalyzeAudioProject
 
-# 设计模式工具
+# 设计模式工具（兼容导出）
+# TODO(下一版本): app.tools.canvas 已替代新的 Canvas Agent 工具集，
+# 完成旧调用迁移后移除本段注册。
 import app.tools.design.manager  # pyright: ignore[reportUnusedImport]
 import app.tools.design.utils  # pyright: ignore[reportUnusedImport]
 import app.tools.design  # pyright: ignore[reportUnusedImport]
 from app.tools.design.tools import (
+    ComposeCanvasVideo,
+    ConfigureVideoEdit,
     CreateCanvas,
     GenerateCanvasImages,
     GenerateCanvasVideos,
+    GenerateVideoProductionImages,
+    GenerateVideoProductionVideos,
+    ImportCanvasAssets,
+    PromoteCanvasContent,
+    QueryCanvasElements,
+    GetCanvasOverview,
+    RepairVideoProductionConnections,
     RestoreCanvasMedia,
     SearchCanvasImages,
     SearchImagePrompts,
+    UpsertStoryboard,
+)
+
+# 独立 Canvas Agent 工具集；不复用旧 Design Canvas 工具实现
+from app.tools.canvas import (
+    AddCanvasContents,
+    AddCanvasElements,
+    FrameCanvasElements,
+    InitializeCanvas,
+    LayoutCanvasElements,
+    ManageCanvasConnections,
+    QueryCanvasElementDetails,
+    QueryCanvasOverview,
+    RetryCanvasContentGeneration,
+    SelectCanvasMainContent,
+    WaitCanvasGeneration,
+    EstimateCanvasContentPoints,
+    SearchCanvasImages as CanvasSearchCanvasImages,
+    SearchCanvasImagePrompts,
 )
 
 # 用户信息工具
 from app.tools.get_user_info import GetUserInfo
+from app.tools.magicbase_tools import (
+    CreateMagicColumn,
+    CreateMagicTable,
+    GetMagicTable,
+    QueryMagicTables,
+)
 
 # Skill 管理工具
 from app.tools.find_skills import FindSkillsTool
@@ -126,7 +213,7 @@ from app.tools.run_sdk_snippet import RunSdkSnippet
 from app.tools.search_knowledge import SearchKnowledge
 from app.tools.install_slides_template import InstallSlidesTemplate
 
-# MCP 工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
+# MCP 工具集（@tool(code_mode_only=True)，只允许通过 sdk.tool.call 调用）
 from app.tools.mcp import (
     McpAddServer,
     McpCallTool,
@@ -136,7 +223,7 @@ from app.tools.mcp import (
     McpListTools,
 )
 
-# OAuth2 工具集（code_mode_only=True，只允许通过 sdk.tool.call 调用）
+# OAuth2 工具集（@tool(code_mode_only=True)，只允许通过 sdk.tool.call 调用）
 from app.tools.oauth2 import (
     OAuth2CheckAuthorization,
     OAuth2GetApiDoc,
@@ -160,13 +247,15 @@ from app.tools.scheduled_task import (
     ScheduledTaskUpdate,
 )
 
-# Remote 工具集（将 magic-service mention 中的 tool / agent 以本地工具形态转发）
+# Remote 工具集（将 magic-service mention 中的 tool / assistant 以本地工具形态转发）
 from app.tools.remote import (
+    CallAssistant,
     CallSimpleAgent,
     CallSimpleTool,
 )
 
-# Import design package modules to ensure they are available in encrypted environment
+# 兼容加密环境中的旧 Design 包导入。
+# TODO(下一版本): 旧 Design 目录删除时同步移除这些导入。
 import app.tools.design.manager
 import app.tools.design.utils
 import app.tools.design
@@ -174,6 +263,7 @@ import app.tools.design
 __all__ = [
     "DummyTool",
     "AskUserTool",
+    "MicroAppPlanTool",
 
     # 核心组件
     "BaseTool",
@@ -184,10 +274,8 @@ __all__ = [
     # 工具类
     "AbstractFileTool",
     "AnalysisSlideWebpage",
-    "AppendToFile",
     "WebSearch",
-    "AgentList",
-    "PrepareAgent",
+    "FindAgentsTool",
     "CallSubagent",
     "WaitForSubagents",
     "ConnectDingTalkBot",
@@ -196,8 +284,9 @@ __all__ = [
     "ConnectWechatBot",
     "WaitWechatLogin",
     "CompactChatHistory",
-    "ConvertPdf",
-    "ConvertPptxToSlideTemplate",
+    "ListChatHistory",
+    "SearchChatHistory",
+    "ReadChatHistory",
     "BuildDocumentIndex",
     "ConvertDocumentFormat",
     "ExportDocumentMarkdown",
@@ -214,12 +303,28 @@ __all__ = [
     "ListEnv",
     "SetEnv",
     "UnsetEnv",
+    "CreateFileShare",
+    "CreateProjectShare",
+    "CreateTopicShare",
+    "DeleteShare",
+    "GetShare",
+    "InspectFileShare",
+    "ListFileShares",
+    "ListProjectShares",
+    "ListTopicShares",
+    "UpdateFileShare",
+    "UpdateProjectShare",
+    "UpdateTopicShare",
     "CreateSlide",
     "CreateSlideProject",
-    "CreateMemory",
+    "CreateSlideTemplateProject",
+    "FinalizeSlideTemplate",
+    "PrepareSlideTemplateSource",
+    "QuerySlideTemplateTaxonomy",
+    "ReviewSlideTemplateSource",
+    "SelectSlideTemplateSourceAssets",
     "DeepWrite",
     "DeleteFiles",
-    "DeleteMemory",
     "DownloadFromMarkdown",
     "DownloadFromUrl",
     "DownloadFromUrls",
@@ -229,12 +334,18 @@ __all__ = [
     "MultiEditFileRange",
     "FileSearch",
     "GetJsCdnAddress",
+    "GetSandboxInfo",
     "GrepSearch",
     "ImageSearch",
     "GenerateImages",
+    "GenerateVideo",
     "GetIMChannelStatus",
     "FindSkillsTool",
     "GetUserInfo",
+    "QueryMagicTables",
+    "GetMagicTable",
+    "CreateMagicTable",
+    "CreateMagicColumn",
     "InstallSkillsTool",
     "ListDir",
     "Purify",
@@ -254,8 +365,35 @@ __all__ = [
     "TodoRead",
     "TodoCreate",
     "TodoUpdate",
-    "UpdateMemory",
-    "UseBrowser",
+    "RestartSandbox",
+    "UpgradeSandbox",
+    "BrowserActivatePage",
+    "BrowserAddInitScript",
+    "BrowserCheck",
+    "BrowserClick",
+    "BrowserClosePage",
+    "BrowserEvaluate",
+    "BrowserFill",
+    "BrowserFindVisual",
+    "BrowserFind",
+    "BrowserHover",
+    "BrowserKeepAlive",
+    "BrowserListPages",
+    "BrowserListSessions",
+    "BrowserNavigate",
+    "BrowserOpenPage",
+    "BrowserPress",
+    "BrowserReadConsole",
+    "BrowserReadHtml",
+    "BrowserReadNetwork",
+    "BrowserReadPage",
+    "BrowserScreenshot",
+    "BrowserScroll",
+    "BrowserSelect",
+    "BrowserListElements",
+    "BrowserUploadFile",
+    "BrowserVisualQuery",
+    "BrowserWait",
     "VisualUnderstanding",
     "VisualUnderstandingWebpage",
     "VideoUnderstanding",
@@ -293,12 +431,38 @@ __all__ = [
     "UploadSkill",
 
     # 设计模式工具
+    # 以下旧 Design 工具仅保留兼容导出，下一版本随 app.tools.design 一并移除。
+    "ComposeCanvasVideo",
+    "ConfigureVideoEdit",
     "CreateCanvas",
     "GenerateCanvasImages",
     "GenerateCanvasVideos",
+    "GenerateVideoProductionImages",
+    "GenerateVideoProductionVideos",
+    "ImportCanvasAssets",
+    "PromoteCanvasContent",
+    "QueryCanvasElements",
+    "GetCanvasOverview",
+    "RepairVideoProductionConnections",
     "RestoreCanvasMedia",
     "SearchCanvasImages",
     "SearchImagePrompts",
+    "UpsertStoryboard",
+
+    # 独立 Canvas Agent 工具
+    "AddCanvasContents",
+    "AddCanvasElements",
+    "InitializeCanvas",
+    "LayoutCanvasElements",
+    "ManageCanvasConnections",
+    "QueryCanvasElementDetails",
+    "QueryCanvasOverview",
+    "RetryCanvasContentGeneration",
+    "SelectCanvasMainContent",
+    "WaitCanvasGeneration",
+    "EstimateCanvasContentPoints",
+    "CanvasSearchCanvasImages",
+    "SearchCanvasImagePrompts",
 
     # MCP 工具集
     "McpAddServer",
@@ -329,6 +493,7 @@ __all__ = [
     "ScheduledTaskUpdate",
 
     # Remote 工具集
+    "CallAssistant",
     "CallSimpleAgent",
     "CallSimpleTool",
 ]

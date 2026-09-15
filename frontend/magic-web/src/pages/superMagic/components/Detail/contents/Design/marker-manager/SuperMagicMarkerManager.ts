@@ -1,5 +1,13 @@
-import type { Marker, ImageElement } from "@/components/CanvasDesign/runtime/document/types"
+import type {
+	CropConfig,
+	Marker,
+	ImageElement,
+} from "@/components/CanvasDesign/runtime/document/types"
 import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
+import {
+	getActiveImageContent,
+	isImageElementContent,
+} from "@/components/CanvasDesign/runtime/document/elementContent"
 import type {
 	IdentifyImageMarkRequest,
 	IdentifyImageMarkResponse,
@@ -51,7 +59,7 @@ export function isLikelyAbortError(error: string): boolean {
 export function fromCanvasMarkerMentionData(mentionData: CanvasMarkerMentionData): {
 	marker: Marker
 	designProjectId: string
-	element?: Pick<ImageElement, "src">
+	element?: { src?: string }
 } | null {
 	// Manager 仍以 Marker 为内部状态，消息侧只保存轻量 mention；这里作为边界适配层。
 	const marker = buildMarkerFromCanvasMarkerMentionData(mentionData)
@@ -67,15 +75,33 @@ export function fromCanvasMarkerMentionData(mentionData: CanvasMarkerMentionData
 
 /** 在嵌套的 elements 中查找指定 id 的 Image 元素 */
 function findImageElementById(
-	elements: Array<{ id?: string; type?: string; src?: string; children?: unknown[] }>,
+	elements: Array<{
+		id?: string
+		type?: string
+		contents?: unknown[]
+		activeContentId?: string | null
+		children?: unknown[]
+	}>,
 	elementId: string,
+	preferredContentId?: string,
 ): ImageElement | undefined {
 	for (const el of elements) {
-		if (el.id === elementId && el.type === ElementTypeEnum.Image && el.src) {
-			return el as ImageElement
+		if (el.id === elementId && el.type === ElementTypeEnum.Image) {
+			const image = el as ImageElement
+			const active = preferredContentId
+				? image.contents.find((content) => content.contentId === preferredContentId)
+				: getActiveImageContent(image)
+			if (!active?.src) return undefined
+			return active.contentId === image.activeContentId
+				? image
+				: ({ ...image, activeContentId: active.contentId } as ImageElement)
 		}
 		if (Array.isArray(el.children)) {
-			const found = findImageElementById(el.children as typeof elements, elementId)
+			const found = findImageElementById(
+				el.children as typeof elements,
+				elementId,
+				preferredContentId,
+			)
 			if (found) return found
 		}
 	}
@@ -120,7 +146,7 @@ export class SuperMagicMarkerManager {
 	private static instance: SuperMagicMarkerManager | null = null
 
 	private markersByProject = new Map<string, Marker[]>()
-	/** markerId -> ImageElement.src，画布添加时缓存，支持离画布 fetch */
+	/** markerId -> Image active Content src，画布添加时缓存，支持离画布 fetch */
 	private elementSrcByProject = new Map<string, Record<string, string>>()
 	/** markerId -> 合成图上传路径缓存，刷新后复用，避免重复上传 */
 	private compositePathByProject = new Map<string, Record<string, CompositePathCacheEntry>>()
@@ -217,7 +243,7 @@ export class SuperMagicMarkerManager {
 		}
 	}
 
-	private isElementCropEqual(left?: ImageElement["crop"], right?: ImageElement["crop"]): boolean {
+	private isElementCropEqual(left?: CropConfig, right?: CropConfig): boolean {
 		if (!left && !right) return true
 		if (!left || !right) return false
 
@@ -303,7 +329,7 @@ export class SuperMagicMarkerManager {
 		})
 	}
 
-	addMarker(designProjectId: string, marker: Marker, element?: Pick<ImageElement, "src">): void {
+	addMarker(designProjectId: string, marker: Marker, element?: { src?: string }): void {
 		const markers = this.getMarkers(designProjectId)
 		if (markers.some((m) => m.id === marker.id)) return
 		const updated = this.cloneMarkers([...markers, marker])
@@ -498,23 +524,43 @@ export class SuperMagicMarkerManager {
 			element = {
 				id: marker.elementId,
 				type: ElementTypeEnum.Image,
-				src: cachedSrc,
-				crop: marker.elementCrop,
+				contents: [
+					{
+						contentId: marker.contentId ?? `${marker.elementId}-content-1`,
+						src: cachedSrc,
+						crop: marker.elementCrop,
+					},
+				],
+				activeContentId: marker.contentId ?? `${marker.elementId}-content-1`,
+				mainContentId: marker.contentId ?? `${marker.elementId}-content-1`,
 			} as ImageElement
 		}
 		if (!element) {
 			const elements = getCanvasElements?.(designProjectId)?.elements
 			if (!Array.isArray(elements)) return
 			element = findImageElementById(
-				elements as { id?: string; type?: string; src?: string; children?: unknown[] }[],
+				elements as {
+					id?: string
+					type?: string
+					contents?: unknown[]
+					children?: unknown[]
+				}[],
 				marker.elementId,
+				marker.contentId,
 			)
 		}
-		if (!element?.src) return
+		if (!element) return
+		const activeContent = getActiveImageContent(element)
+		if (!activeContent.src) return
 
 		// 计算 sequence：同元素下 markers 的序号（从 1 起）
+		const activeContentId = isImageElementContent(element) ? activeContent.contentId : undefined
 		const sameElementMarkers = this.getMarkers(designProjectId)
-			.filter((m) => m.elementId === marker.elementId)
+			.filter(
+				(m) =>
+					m.elementId === marker.elementId &&
+					(!activeContentId || m.contentId === activeContentId),
+			)
 			.sort((a, b) => {
 				const ax = a.relativeX + a.relativeY
 				const bx = b.relativeX + b.relativeY
@@ -525,7 +571,7 @@ export class SuperMagicMarkerManager {
 		this.loadingMarkers.add(markerId)
 		this.updateMarker(designProjectId, markerId, { error: undefined })
 
-		const elementSrc = element.src
+		const elementSrc = activeContent.src
 		const invalidationKey = buildMarkerCompositeKey(elementSrc, marker)
 		const cachedComposite = this.getCompositePathCache(designProjectId)[markerId]
 		let canvasImageInfo: Awaited<
@@ -660,10 +706,13 @@ export class SuperMagicMarkerManager {
 				children?: unknown[]
 			}[],
 			marker.elementId,
+			marker.contentId,
 		) as ImageElement | undefined
-		if (!element?.src) return null
+		if (!element) return null
+		const activeContent = getActiveImageContent(element)
+		if (!activeContent.src) return null
 
-		const imagePath = element.src
+		const imagePath = activeContent.src
 
 		const scaleX = element.scaleX ?? 1
 		const scaleY = element.scaleY ?? 1

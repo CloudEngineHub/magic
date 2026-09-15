@@ -347,6 +347,7 @@ function RednoteShell(props: PlatformComponentProps) {
 					pixelRatio,
 					format,
 					getCardRef: (_p, c) => getSubsetCardRef(c),
+					getCardPageNumber: (_p, c) => cardIndexes[c] + 1,
 				})
 			}
 			setExportDialogOpen(false)

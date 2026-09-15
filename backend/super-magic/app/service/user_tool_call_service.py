@@ -1,7 +1,7 @@
 """user_tool_call 通用服务：管理前端工具调用的 pending 状态、超时、持久化与恢复。
 
 各工具注册两个回调来封装自身逻辑：
-- result_builder(response_status, answer_json) -> (content, extra_info)
+- result_builder(response_status, answer_json, remark) -> (content, extra_info)
 - timeout_answer_builder() -> answer_json
 
 崩溃恢复时通过 _RESTORE_FACTORIES[tool_name](tool_data) 重建回调。
@@ -31,8 +31,8 @@ logger = get_logger(__name__)
 ASK_USER_KEEPALIVE_THRESHOLD_SECONDS = 18 * 60
 ASK_USER_KEEPALIVE_INTERVAL_SECONDS = 5 * 60
 
-# (response_status, answer_json) -> (content, extra_info)
-ResultBuilder = Callable[[str, str], Tuple[str, Dict[str, Any]]]
+# (response_status, answer_json, remark) -> (content, extra_info)
+ResultBuilder = Callable[[str, str, str], Tuple[str, Dict[str, Any]]]
 # () -> answer_json（超时时构造默认答案）
 TimeoutAnswerBuilder = Callable[[], str]
 # (tool_data) -> (result_builder, timeout_answer_builder)
@@ -251,6 +251,7 @@ class UserToolCallService:
         pending: PendingToolCall,
         response_status: str,
         answer: str,
+        remark: str = "",
     ) -> None:
         """工具调用完成（answered / skipped / timeout）后的核心恢复流程。
 
@@ -269,12 +270,16 @@ class UserToolCallService:
             return
 
         try:
-            content, extra_info = pending.result_builder(response_status, answer)
+            content, extra_info = pending.result_builder(response_status, answer, remark)
         except Exception as e:
             logger.error(f"user_tool_call result_builder failed: {e}", exc_info=True)
             content, extra_info = str(e), {"status": "error"}
 
-        logger.info(f"user_tool_call result: response_status={response_status}, content={content!r}")
+        # 结果内容可能包含用户答案和备注，不在日志中记录完整正文。
+        logger.info(
+            f"user_tool_call result: tool_call_id={pending.tool_call_id}, "
+            f"response_status={response_status}"
+        )
 
         chat_history = getattr(pending.agent_context, "chat_history", None)
         if chat_history is None:
@@ -382,7 +387,7 @@ class UserToolCallService:
     async def _restore_ask_user_pending_from_latest_history(self, tool_call_id: str) -> Optional[PendingToolCall]:
         """从最新聊天历史里的 ask_user tool_call 重建 pending。
 
-        仅当 `.chat_history` 最后一条消息就是同一个 ask_user 调用时才恢复，
+        仅当 `.topic/chat_history` 最后一条消息就是同一个 ask_user 调用时才恢复，
         避免旧问题在用户已经发送新消息后再次生效。
         """
         try:

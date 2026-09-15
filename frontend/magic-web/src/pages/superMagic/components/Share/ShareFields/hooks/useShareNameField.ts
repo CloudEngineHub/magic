@@ -81,12 +81,9 @@ export function useShareNameField(options: UseShareNameFieldOptions): UseShareNa
 	// 初始化默认值
 	useEffect(() => {
 		// 新建场景：如果 value 为空且有默认值，则使用默认值初始化
-		if (!value && defaultValue && defaultValue !== "") {
+		if (!isInitializedRef.current && !value && defaultValue && defaultValue !== "") {
 			onChange(defaultValue)
-			// 成功设置默认值后才标记为已初始化
-			if (!isInitializedRef.current) {
-				isInitializedRef.current = true
-			}
+			isInitializedRef.current = true
 		}
 		// 编辑场景：如果 value 已经有值，立即标记为已初始化（允许后续动态更新）
 		else if (!isInitializedRef.current && value) {

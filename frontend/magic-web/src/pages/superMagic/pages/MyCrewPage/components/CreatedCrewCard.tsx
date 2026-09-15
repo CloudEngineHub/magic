@@ -18,7 +18,11 @@ import {
 	isInsideMyCrewCardInteractiveTarget,
 	preventMyCrewCardInteractiveClick,
 } from "./my-crew-card-interaction"
-import { formatVersionBadge, resolveMyCrewCreatedFooterBadgeLabel } from "./my-crew-card-shared"
+import {
+	formatVersionBadge,
+	resolveMyCrewCreatedFooterBadgeLabel,
+	resolveMyCrewPublishTargetLabel,
+} from "./my-crew-card-shared"
 
 interface CreatedCrewCardProps {
 	employee: MyCrewView
@@ -46,7 +50,7 @@ function CreatedCrewCard({
 		Boolean(employee.latestPublishedAt?.trim()) && onConversation != null
 	const { t } = useTranslation("crew/market")
 	const { t: tCrewCreate } = useTranslation("crew/create")
-
+	const publishTargetLabel = resolveMyCrewPublishTargetLabel(employee.publishTargetType, t)
 	const createdStatusBadgeLabel = resolveMyCrewCreatedFooterBadgeLabel(
 		employee.sourceType,
 		t,
@@ -62,25 +66,30 @@ function CreatedCrewCard({
 	}
 
 	return (
+		// Keep the avatar offset inside each grid item; Safari can otherwise overlap adjacent rows.
 		<div
-			className="relative flex h-full min-h-0 min-w-0 flex-col text-current"
+			className="relative flex min-h-0 min-w-0 flex-col pt-12 text-current"
 			data-href={href}
 			data-testid="my-crew-card"
 			data-my-crew-card-kind="created"
 			onClick={handleCardRootClick}
 		>
-			<div className="relative flex h-full min-h-0 min-w-0 flex-col rounded-md border border-border bg-popover shadow-sm">
+			<div className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-md border border-border bg-popover shadow-sm">
 				<MyCrewCardMainSection
 					employee={employee}
 					footer={
 						<>
 							<Separator />
 							<div className="flex min-w-0 shrink-0 items-center justify-between gap-2 rounded-b-md bg-sidebar px-4 py-2.5">
-								<CardFooterLabel
-									label={t("myCrewPage.crewType.createdByMe")}
-									withTooltip
-									dataTestId="my-crew-card-footer-created-by"
-								/>
+								{publishTargetLabel ? (
+									<CardFooterLabel
+										label={publishTargetLabel}
+										withTooltip
+										dataTestId="my-crew-card-footer-publish-target"
+									/>
+								) : (
+									<div className="flex-1" aria-hidden />
+								)}
 								<CardFooterBadge
 									label={createdFooterBadgeLabel}
 									className="px-2 py-0.5 text-xs font-semibold"

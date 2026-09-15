@@ -2,9 +2,10 @@ import { IconMusicUp, IconX } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import MagicIcon from "@/components/base/MagicIcon"
 import { InterruptButton } from "@/pages/superMagic/components/MessageEditor/components"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import AudioUploadAction from "@/components/business/RecordingSummary/AudioUploadAction"
 import LoadingIcon from "@/components/business/RecordingSummary/components/LoadingIcon"
+import RecordingIndicator from "@/components/business/RecordingSummary/components/RecordingIndicator"
 import StartRecordingButton from "@/components/business/RecordingSummary/components/StartRecordingButton"
 import { StartRecordingReminderPopup } from "@/components/business/RecordingSummary/internal/editorPanel/StartRecordingReminderPopup"
 import { shouldShowStartRecordingReminder } from "@/components/business/RecordingSummary/internal/editorPanel/shouldShowStartRecordingReminder"
@@ -23,6 +24,10 @@ interface IdleStateViewProps {
 	iconSize: number
 	selectedProjectId?: string
 	isStartingRecord: boolean
+	isModelReady: boolean
+	isRecordingBlocked?: boolean
+	isMediaRecorderNotSupported?: boolean
+	isOtherTabRecording?: boolean
 	uploading: boolean
 	uploadProgress: number
 	leftToolbar: ReactNode
@@ -33,6 +38,8 @@ interface IdleStateViewProps {
 	onStartRecording: (mode: "new" | "current") => Promise<void>
 	onCancelUpload: () => void
 	onUploadFile: (fileList: FileList) => Promise<void>
+	/** Expand the non-recording start surface to the height negotiated by the conversation layout. */
+	fillHeight?: boolean
 }
 
 export function IdleStateView({
@@ -41,6 +48,10 @@ export function IdleStateView({
 	iconSize,
 	selectedProjectId,
 	isStartingRecord,
+	isModelReady,
+	isRecordingBlocked = false,
+	isMediaRecorderNotSupported = false,
+	isOtherTabRecording = false,
 	uploading,
 	uploadProgress,
 	leftToolbar,
@@ -51,6 +62,7 @@ export function IdleStateView({
 	onStartRecording,
 	onCancelUpload,
 	onUploadFile,
+	fillHeight = false,
 }: IdleStateViewProps) {
 	const { t } = useTranslation("super")
 	const { handlePermissionDenied, handlePermissionError } = useMicrophonePermission()
@@ -104,7 +116,7 @@ export function IdleStateView({
 	}
 
 	async function handleStartRecording(mode: "new" | "current") {
-		if (!shouldShowStartRecordingReminder({ size, mode })) {
+		if (isRecordingBlocked || !shouldShowStartRecordingReminder({ size, mode })) {
 			await startRecordingWithPermissionCheck(mode)
 			return
 		}
@@ -113,14 +125,26 @@ export function IdleStateView({
 		setIsReminderOpen(true)
 	}
 
+	const isStartDisabled =
+		isStartingRecord || uploading || isMediaRecorderNotSupported || !isModelReady
+	const warningText = isMediaRecorderNotSupported
+		? t("recordingSummary.superEditorPanel.warning.mediaRecorderNotSupported")
+		: isOtherTabRecording
+			? t("recordingSummary.superEditorPanel.warning.recordingOverrideOtherTab")
+			: isRecordingBlocked
+				? t("recordingSummary.superEditorPanel.warning.recordingOverride")
+				: t("recordingSummary.superEditorPanel.warning.beforeRecording")
+
 	return (
 		<>
 			<div
 				className={cn(
 					"relative flex min-h-[150px] w-full flex-col items-center justify-end gap-2",
 					(size === "small" || size === "mobile") && "items-center gap-2.5",
+					fillHeight && "min-h-0 flex-1",
 				)}
 				data-testid="recording-editor-initial-state"
+				data-mode={isRecordingBlocked ? "blocked" : "idle"}
 			>
 				<div
 					className="flex w-full flex-1 flex-col items-center justify-center gap-2 rounded-lg bg-accent"
@@ -128,15 +152,18 @@ export function IdleStateView({
 				>
 					<StartRecordingButton
 						isLoading={isStartingRecord}
-						disabled={isStartingRecord || uploading}
+						disabled={isStartDisabled}
 						allowSelectProject={!selectedProjectId}
 						onClick={handleStartRecording}
 					/>
 					<div
-						className="text-[10px] leading-[13px] text-[rgba(28,29,35,0.55)]"
+						className="flex items-center justify-center gap-1 text-center text-[10px] leading-[13px] text-[rgba(28,29,35,0.55)]"
 						data-testid="recording-editor-warning-text"
 					>
-						{t("recordingSummary.superEditorPanel.warning.beforeRecording")}
+						{isRecordingBlocked && !isMediaRecorderNotSupported ? (
+							<RecordingIndicator />
+						) : null}
+						<span>{warningText}</span>
 					</div>
 				</div>
 

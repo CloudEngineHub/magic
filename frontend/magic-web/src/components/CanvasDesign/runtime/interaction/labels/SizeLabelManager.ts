@@ -59,6 +59,16 @@ export class SizeLabelManager extends BaseLabelManager {
 	}
 
 	/**
+	 * 尺寸标签只对产品允许展示的元素类型开放，同时要求元素本身支持尺寸编辑。
+	 */
+	protected override shouldShowLabel(elementId: string): boolean {
+		if (!super.shouldShowLabel(elementId)) return false
+
+		const element = this.canvas.elementManager.getElementInstance(elementId)
+		return element?.supportsSizeEditing() ?? false
+	}
+
+	/**
 	 * 获取标签文本
 	 */
 	protected getLabelText(elementId: string): string {

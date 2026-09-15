@@ -323,4 +323,85 @@ describe("CardFrame", () => {
 		expect(fetchSpy).toHaveBeenCalledTimes(1)
 		expect(mockProcessHtmlContent).toHaveBeenCalledTimes(1)
 	})
+
+	it("keeps cached srcDoc isolated by image processing options", async () => {
+		mockGetTemporaryDownloadUrl.mockResolvedValue([{ url: "https://example.com/card.html" }])
+		mockProcessHtmlContent.mockImplementation(async ({ xMagicImageProcess }) => {
+			const variant = xMagicImageProcess
+				? `quality-${xMagicImageProcess.quality}`
+				: "original"
+			return {
+				processedContent: `<html><body>${variant}</body></html>`,
+				filePathMapping: new Map(),
+				hasSlides: false,
+				slidesMap: new Map(),
+				originalSlidesPaths: [],
+			}
+		})
+		const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+			ok: true,
+			text: async () => "<html><body>raw card</body></html>",
+		} as Response)
+		const attachmentList = [
+			{
+				file_id: "file-image-variant-cache",
+				file_name: "01.html",
+				relative_file_path: "posts/post-image-variant/cards/01.html",
+			},
+		]
+
+		const firstRender = render(
+			<CardFrame
+				cardId="card-image-variant-small"
+				fileId="file-image-variant-cache"
+				attachmentList={attachmentList}
+				imageProcessOptions={{
+					resize: { w: 400, m: "lfit" },
+					quality: 80,
+					format: "webp",
+				}}
+			/>,
+		)
+
+		expect(await screen.findByTitle("card-image-variant-small")).toHaveAttribute(
+			"srcdoc",
+			expect.stringContaining("quality-80"),
+		)
+		firstRender.unmount()
+
+		const secondRender = render(
+			<CardFrame
+				cardId="card-image-variant-large"
+				fileId="file-image-variant-cache"
+				attachmentList={attachmentList}
+				imageProcessOptions={{
+					resize: { w: 2160, m: "lfit" },
+					quality: 90,
+					format: "webp",
+				}}
+			/>,
+		)
+
+		expect(await screen.findByTitle("card-image-variant-large")).toHaveAttribute(
+			"srcdoc",
+			expect.stringContaining("quality-90"),
+		)
+		secondRender.unmount()
+
+		render(
+			<CardFrame
+				cardId="card-image-variant-original"
+				fileId="file-image-variant-cache"
+				attachmentList={attachmentList}
+			/>,
+		)
+
+		expect(await screen.findByTitle("card-image-variant-original")).toHaveAttribute(
+			"srcdoc",
+			expect.stringContaining("original"),
+		)
+		expect(mockProcessHtmlContent).toHaveBeenCalledTimes(3)
+		expect(mockGetTemporaryDownloadUrl).toHaveBeenCalledTimes(3)
+		expect(fetchSpy).toHaveBeenCalledTimes(3)
+	})
 })

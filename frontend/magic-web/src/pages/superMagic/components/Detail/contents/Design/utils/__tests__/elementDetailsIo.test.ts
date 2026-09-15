@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/runtime/document/types"
-import { writeUserElementDetails } from "../elementDetailsIo"
+import { hydrateDesignDataDetails, writeUserElementDetails } from "../elementDetailsIo"
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
@@ -16,7 +16,7 @@ vi.mock("@/pages/superMagic/utils/api", () => ({
 }))
 
 const EMPTY_DETAILS_DOC = {
-	version: "1.0.0",
+	version: "2.0.0",
 	elements: {},
 }
 
@@ -33,7 +33,7 @@ function designData(elements: LayerElement[] = []) {
 	return {
 		type: "design",
 		name: "design",
-		version: "2.0.0",
+		version: "3.0.0",
 		canvas: { elements } as CanvasDocument,
 	}
 }
@@ -62,10 +62,12 @@ describe("writeUserElementDetails", () => {
 
 	it("skips saving when an existing user sidecar content is unchanged", async () => {
 		const userDoc = {
-			version: "1.0.0",
+			version: "2.0.0",
 			elements: {
 				"image-1": {
-					generateImageRequest: { prompt: "same" },
+					contentDetails: {
+						"image-1-content-1": { generateImageRequest: { prompt: "same" } },
+					},
 					source: "user",
 				},
 			},
@@ -81,7 +83,14 @@ describe("writeUserElementDetails", () => {
 					y: 0,
 					width: 100,
 					height: 100,
-					generateImageRequest: { prompt: "same" },
+					activeContentId: "image-1-content-1",
+					mainContentId: "image-1-content-1",
+					contents: [
+						{
+							contentId: "image-1-content-1",
+							generateImageRequest: { prompt: "same" },
+						},
+					],
 				} as LayerElement,
 			]),
 			{
@@ -101,10 +110,12 @@ describe("writeUserElementDetails", () => {
 	it("saves one empty document when clearing a previously non-empty user sidecar", async () => {
 		vi.mocked(getFileContentById).mockResolvedValue(
 			JSON.stringify({
-				version: "1.0.0",
+				version: "2.0.0",
 				elements: {
 					"image-1": {
-						generateImageRequest: { prompt: "old" },
+						contentDetails: {
+							"image-1-content-1": { generateImageRequest: { prompt: "old" } },
+						},
 						source: "user",
 					},
 				},
@@ -124,9 +135,71 @@ describe("writeUserElementDetails", () => {
 		expect(SuperMagicApi.saveFileContent).toHaveBeenCalledWith([
 			{
 				file_id: "user-details",
-				content: JSON.stringify(EMPTY_DETAILS_DOC, null, 2),
+				content: JSON.stringify({ version: "2.0.0", elements: {} }, null, 2),
 				enable_shadow: true,
 			},
 		])
+	})
+
+	it("blocks unsupported imageVersionDetails without overwriting the sidecar", async () => {
+		vi.mocked(getFileContentById).mockResolvedValue(
+			JSON.stringify({
+				version: "1.1.0",
+				elements: {
+					"image-1": {
+						imageVersionDetails: {
+							"version-1": { generateImageRequest: { prompt: "legacy" } },
+						},
+						source: "user",
+					},
+				},
+			}) as never,
+		)
+
+		const result = await writeUserElementDetails(designData(), {
+			mainFileId: "main",
+			flatAttachments: [
+				file("main", "magic.project.js", "dir"),
+				file("user-details", "element-details-user.json", "dir"),
+			] as never,
+			projectId: "project-1",
+		})
+
+		expect(result).toBe("blocked-unsupported")
+		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
+	})
+
+	it("marks imageVersionDetails as unsupported while keeping the main DSL loadable", async () => {
+		vi.mocked(getFileContentById).mockResolvedValue(
+			JSON.stringify({
+				version: "1.1.0",
+				elements: {
+					"image-1": {
+						imageVersionDetails: {
+							"version-1": { generateImageRequest: { prompt: "legacy" } },
+						},
+					},
+				},
+			}) as never,
+		)
+		const data = designData([
+			{
+				id: "image-1",
+				type: "image",
+				activeContentId: "image-1-content-1",
+				mainContentId: "image-1-content-1",
+				contents: [{ contentId: "image-1-content-1", src: "./images/a.png" }],
+			} as LayerElement,
+		])
+
+		await expect(
+			hydrateDesignDataDetails(data, {
+				mainFileId: "main",
+				flatAttachments: [
+					file("main", "magic.project.js", "dir"),
+					file("user-details", "element-details-user.json", "dir"),
+				] as never,
+			}),
+		).resolves.toMatchObject({ status: "unsupported", provenance: {} })
 	})
 })

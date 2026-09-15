@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
 import { merge } from "lodash-es"
 import { observer } from "mobx-react-lite"
@@ -33,16 +33,18 @@ import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { isTopicWaitingForUser, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { userStore } from "@/models/user"
 import { Button } from "@/components/shadcn-ui/button"
 import { DEFAULT_LAYOUT_CONFIG } from "@/pages/superMagic/components/MessageEditor/constants/constant"
 import { MOBILE_LAYOUT_CONFIG } from "@/pages/superMagic/components/MainInputContainer/components/editors/constant"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useCrewConversationStore } from "../context"
+import { useMagicWidgetBridge } from "../hooks/useMagicWidgetBridge"
 import CrewAvatar from "./CrewAvatar"
 
 interface CrewConversationPanelProps {
+	widgetContext?: { instanceId: string; hostOrigin: string } | null
 	variant: "desktop" | "mobile"
 	detailPanelVisible?: boolean
 	isConversationPanelCollapsed?: boolean
@@ -51,6 +53,7 @@ interface CrewConversationPanelProps {
 	historyTriggerMode?: "dropdown" | "layout"
 	isHistoryPanelOpen?: boolean
 	onToggleHistoryPanel?: () => void
+	showTopicHistory?: boolean
 	onOpenTopics?: () => void
 	topicActions?: MessageHeaderTopicActions
 	onFileClick?: (fileItem?: unknown) => void
@@ -65,9 +68,11 @@ function CrewConversationPanel({
 	historyTriggerMode = "dropdown",
 	isHistoryPanelOpen = false,
 	onToggleHistoryPanel,
+	showTopicHistory = true,
 	onOpenTopics,
 	topicActions,
 	onFileClick,
+	widgetContext = null,
 }: CrewConversationPanelProps) {
 	const { t } = useTranslation(["crew/market", "super"])
 	const store = useCrewConversationStore()
@@ -77,6 +82,11 @@ function CrewConversationPanel({
 	const topicStore = store.topicStore
 	const isMobile = variant === "mobile"
 	const [stopEventLoading, setStopEventLoading] = useState(false)
+	const { notifyAgentReady } = useMagicWidgetBridge({
+		// Keep the protocol listener alive before a topic exists so early commands receive an explicit response.
+		context: widgetContext,
+		createNewConversation: store.createAndSelectNewTopic,
+	})
 
 	const scopedMessageSendService = useMemo(
 		() =>
@@ -107,6 +117,7 @@ function CrewConversationPanel({
 		topicId: selectedTopic?.id,
 		agentCode,
 		isTaskRunning: showLoading,
+		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
 	})
@@ -203,6 +214,7 @@ function CrewConversationPanel({
 			showLoading,
 			isTaskRunning: canInterruptTask,
 			stopEventLoading,
+			onReady: notifyAgentReady,
 			handleInterrupt,
 			onFileClick,
 			mentionPanelStore: store.mentionPanelStore,
@@ -248,6 +260,7 @@ function CrewConversationPanel({
 		canInterruptTask,
 		stopEventLoading,
 		onFileClick,
+		notifyAgentReady,
 		store.mentionPanelStore,
 		store.projectFilesStore,
 		store.selectedWorkspace,
@@ -310,13 +323,15 @@ function CrewConversationPanel({
 						historyTriggerMode={historyTriggerMode}
 						isHistoryPanelOpen={isHistoryPanelOpen}
 						onToggleHistoryPanel={onToggleHistoryPanel}
+						showTopicHistory={showTopicHistory}
 					/>
 				) : null}
+				{/* Keep the scroll viewport in layout so native scroll anchoring preserves the reading position. */}
 				{selectedTopic ? (
 					<div
 						className={cn(
 							"flex h-full w-full flex-col",
-							isConversationPanelCollapsed && "hidden",
+							isConversationPanelCollapsed && "invisible",
 						)}
 					>
 						<MessageListProvider value={messageListProviderValue}>

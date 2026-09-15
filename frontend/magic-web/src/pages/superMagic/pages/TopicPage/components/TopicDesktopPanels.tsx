@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react"
 import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 import { TOPIC_HISTORY_PANEL_WIDTH } from "../../../constants/resizablePanel"
 import TopicResizeHandle from "./TopicResizeHandle"
 import { useTopicDesktopLayout } from "../hooks/useTopicDesktopLayout"
@@ -33,8 +33,11 @@ interface TopicDesktopPanelsProps {
 	sidebar: ReactNode
 	detailPanel: ReactNode
 	isReadOnly: boolean
+	showProjectSidebar?: boolean
 	showProjectResizeHandle?: boolean
 	keepDetailMountedWhenHidden?: boolean
+	autoExpandConversationWhenDetailVisible?: boolean
+	persistConversationPanelState?: boolean
 	historyLayout?: TopicDesktopPanelsHistoryLayout
 	shouldShowDetailPanel: boolean
 	renderMessagePanel: (params: {
@@ -55,8 +58,11 @@ function TopicDesktopPanels({
 	sidebar,
 	detailPanel,
 	isReadOnly,
+	showProjectSidebar = true,
 	showProjectResizeHandle = !isReadOnly,
 	keepDetailMountedWhenHidden = false,
+	autoExpandConversationWhenDetailVisible = true,
+	persistConversationPanelState = true,
 	historyLayout,
 	shouldShowDetailPanel,
 	renderMessagePanel,
@@ -69,7 +75,7 @@ function TopicDesktopPanels({
 	const {
 		containerRef,
 		containerWidthPx,
-		projectSiderWidthPx,
+		projectSiderWidthPx: storedProjectSiderWidthPx,
 		messagePanelWidthPx,
 		collapsedMessagePanelWidthPx,
 		isConversationPanelCollapsed,
@@ -80,7 +86,14 @@ function TopicDesktopPanels({
 		toggleConversationPanel,
 		expandConversationPanel,
 		ensureExpandedWhenDetailVisible,
-	} = useTopicDesktopLayout({ isReadOnly, allowProjectSiderResize: showProjectResizeHandle })
+	} = useTopicDesktopLayout({
+		isReadOnly,
+		allowProjectSiderResize: showProjectSidebar && showProjectResizeHandle,
+		persistConversationPanelState,
+	})
+	// Preserve the stored project width while removing both its visual slot and resize affordance.
+	const projectSiderWidthPx = showProjectSidebar ? storedProjectSiderWidthPx : 0
+	const shouldShowProjectResizeHandle = showProjectSidebar && showProjectResizeHandle
 	const {
 		panelResizeTransition,
 		messageTransform,
@@ -95,7 +108,7 @@ function TopicDesktopPanels({
 	} = useTopicDesktopPanelMotion({
 		isReadOnly,
 		isTopicHistoryPanelOpen,
-		showProjectResizeHandle,
+		showProjectResizeHandle: shouldShowProjectResizeHandle,
 		shouldShowDetailPanel,
 		containerWidthPx,
 		projectSiderWidthPx,
@@ -104,7 +117,9 @@ function TopicDesktopPanels({
 		isConversationPanelCollapsed,
 		isDraggingProjectSider,
 		isDraggingMessagePanel,
-		ensureExpandedWhenDetailVisible,
+		ensureExpandedWhenDetailVisible: autoExpandConversationWhenDetailVisible
+			? ensureExpandedWhenDetailVisible
+			: () => undefined,
 	})
 	const visibleConversationPanelCollapsed = shouldShowDetailPanel
 		? isConversationPanelCollapsed
@@ -217,11 +232,17 @@ function TopicDesktopPanels({
 			data-testid="main-workspace-container"
 		>
 			<div className="flex h-full w-full min-w-0">
-				<div className="shrink-0" style={{ width: projectSiderWidthPx }}>
-					{sidebar}
-				</div>
+				{showProjectSidebar ? (
+					<div
+						className="shrink-0"
+						style={{ width: projectSiderWidthPx }}
+						data-testid="topic-project-sidebar-slot"
+					>
+						{sidebar}
+					</div>
+				) : null}
 
-				{showProjectResizeHandle && (
+				{shouldShowProjectResizeHandle && (
 					<TopicResizeHandle
 						onResizeStart={(clientX) => {
 							startDragProjectSider(clientX)
@@ -237,7 +258,11 @@ function TopicDesktopPanels({
 					{(isReadOnly || shouldShowDetailPanel || keepDetailMountedWhenHidden) && (
 						<div
 							data-testid="topic-detail-panel-slot"
-							className={cn("h-full min-w-0 overflow-hidden", isReadOnly && "flex-1")}
+							className={cn(
+								"relative h-full min-w-0 overflow-hidden",
+								!isDetailPanelFullscreen && "isolate z-0",
+								isReadOnly && "flex-1",
+							)}
 							aria-hidden={!isReadOnly && !shouldShowDetailPanel}
 							style={
 								isReadOnly
@@ -265,6 +290,11 @@ function TopicDesktopPanels({
 									shouldShowDetailPanel && "opacity-100",
 								)}
 								style={{
+									...(!isDetailPanelFullscreen && {
+										width: "100%",
+										minWidth: 0,
+										maxWidth: "100%",
+									}),
 									transform: isDetailPanelFullscreen
 										? "none"
 										: detailContentTransform,
@@ -280,7 +310,7 @@ function TopicDesktopPanels({
 					{!isReadOnly && shouldShowDetailPanel && (
 						<div
 							data-testid="topic-detail-resize-handle-slot"
-							className="shrink-0 overflow-hidden"
+							className="relative z-20 shrink-0 overflow-visible"
 							style={{
 								width: targetRightHandleWidth,
 								minWidth: targetRightHandleWidth,
@@ -307,7 +337,7 @@ function TopicDesktopPanels({
 					{!isReadOnly && (
 						<div
 							data-testid="topic-conversation-panel-slot"
-							className="h-full min-w-0 shrink-0"
+							className="relative z-10 h-full min-w-0 shrink-0"
 							style={{
 								width: targetMessagePanelWidth,
 								minWidth: targetMessagePanelWidth,

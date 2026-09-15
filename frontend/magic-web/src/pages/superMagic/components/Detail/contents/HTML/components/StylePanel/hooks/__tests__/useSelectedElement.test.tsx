@@ -74,6 +74,10 @@ describe("useSelectedElement", () => {
 				intrinsicWidth: 800,
 				intrinsicHeight: 400,
 				intrinsicAspectRatio: 2,
+				inlineStyles: {
+					width: "240px",
+					height: "120px",
+				},
 				computedStyles: expect.objectContaining({
 					width: "240px",
 					height: "120px",

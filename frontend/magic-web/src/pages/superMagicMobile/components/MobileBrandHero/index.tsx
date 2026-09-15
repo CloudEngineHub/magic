@@ -1,5 +1,5 @@
 import { SupportLocales } from "@/constants/locale"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { globalConfigStore } from "@/stores/globalConfig"
 import { usePoppinsFont } from "@/styles/font"
 import { getAvatarUrl } from "@/utils/avatar"
@@ -49,14 +49,14 @@ const MobileBrandHero = observer(function MobileBrandHero({
 				<img
 					src={logoSrc}
 					alt={brandName}
-					className={cn("h-20 w-20 shrink-0", imageClassName)}
+					className={cn("h-20 w-20 shrink-0 object-contain", imageClassName)}
 					draggable={false}
 					data-testid="mobile-brand-hero-image"
 				/>
 			) : null}
 			<p
 				className={cn(
-					"font-poppins text-muted-foreground shrink-0 text-sm leading-6",
+					"shrink-0 font-poppins text-sm leading-6 text-muted-foreground",
 					subtitleClassName,
 				)}
 			>
@@ -64,7 +64,7 @@ const MobileBrandHero = observer(function MobileBrandHero({
 			</p>
 			<p
 				className={cn(
-					"font-poppins text-foreground shrink-0 text-2xl font-medium leading-[1.18] tracking-[-0.03em]",
+					"shrink-0 font-poppins text-2xl font-medium leading-[1.18] tracking-[-0.03em] text-foreground",
 					titleClassName,
 				)}
 			>

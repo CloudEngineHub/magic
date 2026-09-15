@@ -1,9 +1,15 @@
-import type { ReactNode } from "react"
-import { useEffect, useMemo, useState } from "react"
+import {
+	useEffect,
+	useMemo,
+	useState,
+	type CSSProperties,
+	type ReactNode,
+	type RefObject,
+} from "react"
 import { AlignLeft, Network } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import MagicMarkmap from "@/components/base/MagicMarkmap"
 import IsolatedHTMLRenderer from "@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer"
 import { processHtmlContent } from "@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor"
@@ -19,11 +25,18 @@ interface MobileRecordingSummaryPanelProps {
 	summaryFiles: RecordingDetailFileRef[]
 	summaryContent: Record<string, string | undefined>
 	attachmentList: AttachmentItem[]
-	scrollPaddingBottom: number
+	scrollPaddingBottom: CSSProperties["paddingBottom"]
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
 	onContentScroll?: () => void
+	searchScopeRef?: RefObject<HTMLDivElement | null>
+	searchActive?: boolean
+	onActiveTypeChange?: (type: string) => void
+	/** Hides the nested summary switcher when an embedding preview owns the tab row. */
+	showTypeTabs?: boolean
+	activeType?: string
+	isGenerating?: boolean
 }
 
 /** Renders dynamic completed-summary tabs from the project file map. */
@@ -36,11 +49,23 @@ export function MobileRecordingSummaryPanel({
 	onOpenSpeakerSettings,
 	onTimeClick,
 	onContentScroll,
+	searchScopeRef,
+	searchActive = false,
+	onActiveTypeChange,
+	showTypeTabs = true,
+	activeType: controlledActiveType,
+	isGenerating = false,
 }: MobileRecordingSummaryPanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [activeType, setActiveType] = useState<string>(summaryFiles[0]?.type ?? "")
-	const activeFile = summaryFiles.find((file) => file.type === activeType) ?? summaryFiles[0]
+	const resolvedActiveType = controlledActiveType ?? activeType
+	const activeFile =
+		summaryFiles.find((file) => file.type === resolvedActiveType) ?? summaryFiles[0]
 	const content = activeFile ? summaryContent[activeFile.type] : undefined
+
+	useEffect(() => {
+		onActiveTypeChange?.(activeFile?.type ?? "")
+	}, [activeFile?.type, onActiveTypeChange])
 
 	if (summaryFiles.length === 0) {
 		return (
@@ -53,19 +78,24 @@ export function MobileRecordingSummaryPanel({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-recording-summary-panel">
 			{/* Match the source tab header height so switching between Source and Summary never shifts content vertically. */}
-			<div className="sticky top-0 z-10 flex min-h-[68px] items-center overflow-x-auto bg-[#f7f7f8] px-4 py-3">
-				<div className="flex w-max">
-					{summaryFiles.map((file) => (
-						<SummaryTabButton
-							key={file.type}
-							active={file.type === activeFile?.type}
-							label={resolveSummaryTypeLabel(file.type, t)}
-							type={file.type}
-							onClick={() => setActiveType(file.type)}
-						/>
-					))}
+			{showTypeTabs ? (
+				<div className="sticky top-0 z-10 flex min-h-[68px] items-center overflow-x-auto bg-[#f7f7f8] px-4 py-3">
+					<div className="flex w-max">
+						{summaryFiles.map((file) => (
+							<SummaryTabButton
+								key={file.type}
+								active={file.type === activeFile?.type}
+								label={resolveSummaryTypeLabel(file.type, t)}
+								type={file.type}
+								onClick={() => {
+									setActiveType(file.type)
+									onActiveTypeChange?.(file.type)
+								}}
+							/>
+						))}
+					</div>
 				</div>
-			</div>
+			) : null}
 
 			{/*
 			 * metrics tab: render directly in the panel's flex column so that flex-1
@@ -86,7 +116,9 @@ export function MobileRecordingSummaryPanel({
 							attachmentList={attachmentList}
 						/>
 					) : (
-						<PanelMessage>{t("detail.emptySummaryFile")}</PanelMessage>
+						<PanelMessage>
+							{isGenerating ? t("detail.summarizingHint") : t("detail.emptySummary")}
+						</PanelMessage>
 					)}
 				</div>
 			) : (
@@ -98,14 +130,24 @@ export function MobileRecordingSummaryPanel({
 					contentDeps={[activeType, summaryFiles.length, Boolean(content?.trim())]}
 					onScroll={onContentScroll}
 				>
-					<div className="min-h-full" style={{ paddingBottom: scrollPaddingBottom }}>
+					<div
+						ref={searchScopeRef}
+						data-search-scope="mobile-recording-summary"
+						className="flex min-h-full flex-col"
+						style={{ paddingBottom: scrollPaddingBottom }}
+					>
 						{activeFile ? (
 							<SummaryContent
 								file={activeFile}
 								content={content}
 								attachmentList={attachmentList}
-								emptyText={t("detail.emptySummaryFile")}
+								emptyText={
+									isGenerating
+										? t("detail.summarizingHint")
+										: t("detail.emptySummary")
+								}
 								scrollPaddingBottom={scrollPaddingBottom}
+								searchActive={searchActive}
 								speakerNameMap={speakerNameMap}
 								onOpenSpeakerSettings={onOpenSpeakerSettings}
 								onTimeClick={onTimeClick}
@@ -154,6 +196,7 @@ function SummaryContent({
 	attachmentList,
 	emptyText,
 	scrollPaddingBottom,
+	searchActive,
 	speakerNameMap,
 	onOpenSpeakerSettings,
 	onTimeClick,
@@ -162,12 +205,13 @@ function SummaryContent({
 	content?: string
 	attachmentList: AttachmentItem[]
 	emptyText: string
-	scrollPaddingBottom: number
+	scrollPaddingBottom: CSSProperties["paddingBottom"]
+	searchActive: boolean
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
 }) {
-	if (!content?.trim()) {
+	if (!file.file || !content?.trim()) {
 		return <PanelMessage>{emptyText}</PanelMessage>
 	}
 
@@ -191,6 +235,7 @@ function SummaryContent({
 			<MindmapContent
 				content={content}
 				scrollPaddingBottom={scrollPaddingBottom}
+				searchActive={searchActive}
 				speakerNameMap={speakerNameMap}
 				onOpenSpeakerSettings={onOpenSpeakerSettings}
 				onTimeClick={onTimeClick}
@@ -267,17 +312,23 @@ function MetricsHtmlContent({
 function MindmapContent({
 	content,
 	scrollPaddingBottom,
+	searchActive,
 	speakerNameMap,
 	onOpenSpeakerSettings,
 	onTimeClick,
 }: {
 	content: string
-	scrollPaddingBottom: number
+	scrollPaddingBottom: CSSProperties["paddingBottom"]
+	searchActive: boolean
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
 }) {
 	const [viewMode, setViewMode] = useState<"map" | "markdown">("map")
+
+	useEffect(() => {
+		if (searchActive) setViewMode("markdown")
+	}, [searchActive])
 	const mindmapCanvasContent = useMemo(
 		() => resolveMarkdownSpeakerLabels(content, speakerNameMap),
 		[content, speakerNameMap],
@@ -334,7 +385,7 @@ function MindmapViewSwitch({
 	onChange,
 }: {
 	value: "map" | "markdown"
-	bottom: number
+	bottom: CSSProperties["bottom"]
 	onChange: (value: "map" | "markdown") => void
 }) {
 	const { t } = useTranslation("audioRecordings")
@@ -343,6 +394,7 @@ function MindmapViewSwitch({
 		<div
 			className="fixed right-4 z-20 inline-flex rounded-2xl bg-card p-1 shadow-[0_8px_24px_rgba(0,0,0,0.14)]"
 			style={{ bottom }}
+			data-search-exclude="true"
 		>
 			<button
 				type="button"
@@ -390,7 +442,7 @@ function TopicsContent({
 	)
 
 	if (topics.length === 0 || !activeTopic) {
-		return <PanelMessage>{t("detail.emptySummaryFile")}</PanelMessage>
+		return <PanelMessage>{t("detail.emptySummary")}</PanelMessage>
 	}
 
 	return (
@@ -503,7 +555,7 @@ function TopicsContent({
 /** Lightweight empty/error message panel for individual summary tabs. */
 function PanelMessage({ children }: { children: ReactNode }) {
 	return (
-		<div className="rounded-2xl bg-card px-6 py-16 text-center text-sm text-muted-foreground">
+		<div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
 			{children}
 		</div>
 	)

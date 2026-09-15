@@ -5,6 +5,65 @@ interface StorageValue {
 	value: object
 }
 
+interface StreamRecordValue {
+	__websocket_record__?: {
+		received_at?: unknown
+		writer_sequence?: unknown
+	}
+	message?: {
+		send_time?: unknown
+	}
+	send_time?: unknown
+}
+
+function asStreamRecordValue(value: object): StreamRecordValue {
+	return value as StreamRecordValue
+}
+
+function getReceivedAt(value: object): number | undefined {
+	const receivedAt = asStreamRecordValue(value).__websocket_record__?.received_at
+	return typeof receivedAt === "number" ? receivedAt : undefined
+}
+
+function getSendTime(value: object): number | undefined {
+	const record = asStreamRecordValue(value)
+	const sendTime = record.message?.send_time ?? record.send_time
+	return typeof sendTime === "number" ? sendTime : undefined
+}
+
+function compareNumbers(left: number | undefined, right: number | undefined): number {
+	if (left === undefined && right === undefined) return 0
+	if (left === undefined) return 1
+	if (right === undefined) return -1
+	return left - right
+}
+
+/**
+ * Keep console exports in the same order as the client-side WebSocket receive log.
+ * IndexedDB's `toArray()` order is storage-dependent, so metadata and the outer id
+ * are used as deterministic tie-breakers after the receive timestamp.
+ */
+export function compareStreamRecordsForDisplay(left: StorageValue, right: StorageValue): number {
+	const leftReceivedAt = getReceivedAt(left.value)
+	const rightReceivedAt = getReceivedAt(right.value)
+	const receivedOrder =
+		leftReceivedAt !== undefined && rightReceivedAt !== undefined
+			? leftReceivedAt - rightReceivedAt
+			: compareNumbers(getSendTime(left.value), getSendTime(right.value))
+	if (receivedOrder) return receivedOrder
+
+	const leftWriterSequence = asStreamRecordValue(left.value).__websocket_record__?.writer_sequence
+	const rightWriterSequence = asStreamRecordValue(right.value).__websocket_record__
+		?.writer_sequence
+	const writerOrder = compareNumbers(
+		typeof leftWriterSequence === "number" ? leftWriterSequence : undefined,
+		typeof rightWriterSequence === "number" ? rightWriterSequence : undefined,
+	)
+	if (writerOrder) return writerOrder
+
+	return left.id.localeCompare(right.id)
+}
+
 export class DynamicDatabase extends Dexie {
 	private registeredTables: Set<string> = new Set()
 	private tableSchemas: Record<string, string> = {}
@@ -90,6 +149,34 @@ export class DynamicDatabase extends Dexie {
 		await table.put({ id, value })
 	}
 
+	async addManyToTable(tableName: string, values: StorageValue[]): Promise<void> {
+		await this.init()
+
+		if (!tableName || typeof tableName !== "string") {
+			throw new Error("表名必须是非空字符串")
+		}
+
+		if (!Array.isArray(values) || values.length === 0) return
+		if (
+			values.some(
+				(item) =>
+					!item?.id ||
+					typeof item.id !== "string" ||
+					!item.value ||
+					typeof item.value !== "object",
+			)
+		) {
+			throw new Error("批量写入值必须包含非空字符串 id 和对象 value")
+		}
+
+		if (!this.registeredTables.has(tableName)) {
+			await this.createTable(tableName)
+		}
+
+		const table = this.table<StorageValue>(tableName)
+		await table.bulkPut(values)
+	}
+
 	async queryAllFromTable(tableName: string): Promise<StorageValue[]> {
 		await this.init()
 
@@ -128,12 +215,9 @@ window.getStreamRecords = (tableName: string) => {
 			)
 
 			const messages = res
+				.slice()
+				.sort(compareStreamRecordsForDisplay)
 				.map((o) => o?.value)
-				.sort((a: any, b: any) => {
-					const aa = a?.message?.send_time || a?.send_time
-					const bb = b?.message?.send_time || b?.send_time
-					return aa - bb
-				})
 
 			const agentReplVerify = new Map()
 			const correlationIdMap = new Map()

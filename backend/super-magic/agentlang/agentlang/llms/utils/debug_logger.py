@@ -8,12 +8,13 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from openai.types.chat import ChatCompletion
 
 from agentlang.logger import get_logger
-from agentlang.utils.security import sanitize_api_key
+from agentlang.utils.security import sanitize_api_key, sanitize_log_value
 
 logger = get_logger(__name__)
 
@@ -22,6 +23,14 @@ ENABLE_LLM_SUCCESS_REQUEST_LOG = os.getenv(
     "ENABLE_LLM_SUCCESS_REQUEST_LOG", "false"
 ).lower() in ("true", "1", "yes", "on")
 
+def _get_llm_request_log_max_files() -> int:
+    """读取 LLM 请求日志保留上限。"""
+    from app.utils.runtime_storage import get_runtime_config_int
+
+    return get_runtime_config_int(
+        "runtime_cleanup.llm_request.max_file_count",
+        minimum=0,
+    )
 
 def _sanitize_for_filename(value: str) -> str:
     """将输入字符串转换为可安全用于单个文件名片段的值。"""
@@ -63,6 +72,7 @@ async def save_llm_debug_log(
     注意：
         - 失败的请求总是记录日志
         - 成功的请求只在 ENABLE_LLM_SUCCESS_REQUEST_LOG 环境变量开启时记录
+        - 无论是否写入日志，请求结束后都会异步检查并清理积压日志
 
     Args:
         debug_info: LLM 调试信息
@@ -81,11 +91,10 @@ async def save_llm_debug_log(
         if is_success and not ENABLE_LLM_SUCCESS_REQUEST_LOG:
             return
 
-        # 创建聊天历史目录下的 llm_request 子目录
-        from agentlang.path_manager import PathManager
-        chat_history_dir = PathManager.get_chat_history_dir()
-        llm_request_dir = chat_history_dir / "llm_request"
-        llm_request_dir.mkdir(exist_ok=True)
+        from app.path_manager import PathManager
+        from app.utils.runtime_storage import ensure_runtime_directory
+
+        llm_requests_dir = await ensure_runtime_directory(PathManager.get_llm_requests_dir())
 
         # 计算耗时（毫秒）
         duration_ms = _calculate_duration_ms(start_timestamp, end_timestamp)
@@ -94,7 +103,7 @@ async def save_llm_debug_log(
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 毫秒精度
         safe_model_id = _sanitize_for_filename(debug_info.model_id)
         filename = f"{safe_model_id}_{timestamp}_{duration_ms}_{status}.log"
-        file_path = llm_request_dir / filename
+        file_path = llm_requests_dir / filename
 
         # 构建调试日志内容
         log_content = _build_log_content(
@@ -108,14 +117,61 @@ async def save_llm_debug_log(
             duration_ms=duration_ms
         )
 
-        # 写入文件
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(log_content)
+        from app.utils.async_file_utils import async_write_text
+        await async_write_text(file_path, log_content)
+
+        from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
+        ChatHistoryCleanupService.trigger()
 
         logger.debug(f"已保存调试日志: {file_path}")
 
     except Exception as e:
         logger.warning(f"保存 LLM 调试日志时出错: {e}")
+    finally:
+        await prune_llm_request_logs_if_needed()
+
+
+async def prune_llm_request_logs_if_needed() -> None:
+    """按配置保留 llm_requests 目录下最新的日志文件，清理更旧和积压文件。"""
+    try:
+        max_files = _get_llm_request_log_max_files()
+        if max_files <= 0:
+            return
+
+        from app.path_manager import PathManager
+
+        llm_requests_dir = PathManager.get_llm_requests_dir()
+        await _prune_llm_request_logs(llm_requests_dir, max_files)
+    except Exception as e:
+        logger.warning("清理 LLM 请求日志时出错: %s", e)
+
+
+async def _prune_llm_request_logs(llm_requests_dir: Path, max_files: int) -> None:
+    """保留目录下最新的 max_files 个 .log 文件，删除更旧的。"""
+    if max_files <= 0:
+        return
+
+    try:
+        from app.utils.async_file_utils import async_exists, async_scandir, async_unlink
+
+        # 调试日志目录按需创建；目录尚不存在时没有需要清理的内容
+        if not await async_exists(llm_requests_dir):
+            return
+
+        entries = await async_scandir(llm_requests_dir)
+        log_entries = [
+            entry for entry in entries
+            if entry.is_file() and entry.name.endswith(".log")
+        ]
+        if len(log_entries) <= max_files:
+            return
+
+        log_entries.sort(key=lambda entry: entry.stat().st_mtime, reverse=True)
+        for entry in log_entries[max_files:]:
+            await async_unlink(entry.path)
+            logger.debug("已淘汰最老 LLM 请求日志: %s", entry.path)
+    except Exception as e:
+        logger.warning("清理 LLM 请求日志时出错: %s", e)
 
 
 def _calculate_duration_ms(
@@ -187,7 +243,7 @@ def _build_log_content(
     log_lines.extend([
         "",
         "=== REQUEST PARAMETERS ===",
-        json.dumps(request_params, indent=2, ensure_ascii=False),
+        json.dumps(_sanitize_request_params(request_params), indent=2, ensure_ascii=False),
         ""
     ])
 
@@ -212,11 +268,16 @@ def _build_log_content(
         log_lines.extend([
             "=== EXCEPTION DETAILS ===",
             f"Error Type: {type(exception).__name__}",
-            f"Error Message: {str(exception)}",
-            f"Exception repr: {repr(exception)}",
+            f"Error Message: {exception!s}",
+            f"Exception repr: {exception!r}",
             ""
         ])
 
     log_lines.append("=== END LOG ===")
 
     return '\n'.join(log_lines)
+
+
+def _sanitize_request_params(value: Any) -> Any:
+    """脱敏请求参数，避免失败日志把 header/token 类信息落盘。"""
+    return sanitize_log_value(value)

@@ -21,25 +21,22 @@ logger = get_logger(__name__)
 class ConnectDingTalkBotParams(BaseToolParams):
     client_id: str = Field(
         ...,
-        description="""<!--zh: 钉钉开放平台应用的 Client ID (AppKey)-->
-The DingTalk app Client ID (AppKey).""",
+        description="DingTalk app Client ID (AppKey).",
     )
     client_secret: str = Field(
         ...,
-        description="""<!--zh: 钉钉开放平台应用的 Client Secret (AppSecret)-->
-The DingTalk app Client Secret (AppSecret).""",
+        description="DingTalk app Client Secret (AppSecret).",
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class ConnectDingTalkBot(BaseTool[ConnectDingTalkBotParams]):
-    """<!--zh
-    建立钉钉 Stream 模式 AI Bot 长连接。仅供 SDK snippet 调用，不挂载到 LLM。
-    -->
-    Start the DingTalk stream-mode AI bot connection. Intended for SDK snippets only and not exposed as a normal LLM tool.
-    """
+    """Start the DingTalk stream-mode AI bot connection from an SDK snippet."""
 
     async def execute(self, tool_context: ToolContext, params: ConnectDingTalkBotParams) -> ToolResult:
+        if not tool_context.topic_id:
+            return ToolResult.error("The current topic ID is missing, so the DingTalk channel cannot be bound.")
+
         try:
             manager = DingTalkChannel.get_instance()
             await manager.connect(params.client_id, params.client_secret)
@@ -57,7 +54,7 @@ class ConnectDingTalkBot(BaseTool[ConnectDingTalkBotParams]):
             config.dingtalk = DingTalkCredential(
                 client_id=params.client_id,
                 client_secret=params.client_secret,
-                sandbox_id=tool_context.sandbox_id,
+                topic_id=tool_context.topic_id,
             )
             await save_config(config)
 

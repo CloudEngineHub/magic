@@ -5,6 +5,7 @@ import { getLocalePreferredKeys, resolveLocalizedText } from "@/utils/locale"
 import { resolveCrewAgentPromptText } from "./agent-prompt"
 import {
 	buildCrewI18nText,
+	type CrewAgentOrigin,
 	type CrewI18nArrayText,
 	type CrewI18nText,
 	type CrewIconObject,
@@ -17,6 +18,7 @@ import {
 	type GetStoreAgentsParams,
 	type GetUnifiedAgentListParams,
 	type CreateAgentParams,
+	type AsyncPublishTaskResponse,
 	type PublishAgentParams,
 	type PublishAgentPrefillResponse,
 	type UpdateAgentInfoParams,
@@ -28,8 +30,10 @@ import {
 	type UpdatePlaybookParams,
 	type StoreCategoryItem,
 	type StoreAgentItem,
+	type StoreAgentMarketType,
 	type StoreAgentMarketDetailResponse,
 	type AgentItem,
+	type AgentPublishTargetType,
 	type UnifiedAgentItem,
 	type AgentDetailResponse,
 	type PlaybookItem,
@@ -63,6 +67,7 @@ export interface StoreAgentView {
 	playbooks: CrewPlaybookView[]
 	publisherType: string
 	publisherName: string | null
+	marketType: StoreAgentMarketType
 	categoryId: string | null
 	isAdded: boolean
 	allowDelete: boolean
@@ -72,6 +77,7 @@ export interface StoreAgentView {
 export interface MyCrewView {
 	id: string
 	agentCode: string
+	projectId?: string | null
 	userRole?: CollaboratorPermission
 	name: string
 	role: string
@@ -79,6 +85,9 @@ export interface MyCrewView {
 	icon: string | null
 	playbooks: CrewPlaybookView[]
 	sourceType: CrewSourceType
+	/** Current user's display source for this agent. */
+	origin?: CrewAgentOrigin
+	publishTargetType?: AgentPublishTargetType | null
 	publisherType: CrewPublisherType | null
 	publisherName: string | null
 	enabled: boolean
@@ -91,10 +100,17 @@ export interface MyCrewView {
 	updatedAt: string
 	/** From team-shared API `creator_info.name` */
 	creatorName: string | null
-	/** Unified API scope: identifies the origin category. Undefined when using legacy endpoints. */
+	/** Unified API scope: identifies the queried list category. Undefined for legacy endpoints. */
 	scope?: "created" | "team_shared" | "market_installed"
 	/** Organization name from unified API's organization_info field */
 	organizationName?: string | null
+}
+
+/** Normalized access state consumed by Crew conversation initialization. */
+export interface AgentAccessCheckView {
+	code: string
+	exists: boolean
+	canUse: boolean
 }
 
 export interface AgentDetailView {
@@ -187,6 +203,7 @@ export class CrewService {
 		}
 	}
 
+	/** Hires one market agent for the current user. */
 	hireAgent(code: string) {
 		return CrewApi.hireStoreAgent({ code })
 	}
@@ -242,7 +259,7 @@ export class CrewService {
 		}
 	}
 
-	/** Fetch agents via unified endpoint (mobile). Returns flat list regardless of scope. */
+	/** Fetch agents via the unified endpoint. Returns a flat list regardless of scope. */
 	async getUnifiedAgents(
 		params: GetUnifiedAgentListParams = {},
 	): Promise<PagedResult<MyCrewView>> {
@@ -253,6 +270,14 @@ export class CrewService {
 			pageSize: data.page_size,
 			total: data.total,
 		}
+	}
+
+	/** Fetch agents the current user collaborates on via the unified list endpoint. */
+	async getCollaboratedAgents(params: GetAgentsParams = {}): Promise<PagedResult<MyCrewView>> {
+		return this.getUnifiedAgents({
+			...params,
+			scope: "collaborated",
+		})
 	}
 
 	/**
@@ -280,6 +305,17 @@ export class CrewService {
 		return this.mapAgentDetail(data)
 	}
 
+	/** Maps the agent access response for Crew conversation initialization. */
+	async checkAgentAccess(code: string): Promise<AgentAccessCheckView> {
+		const data = await CrewApi.checkAgentAccess({ code })
+
+		return {
+			code: data.code,
+			exists: data.exists,
+			canUse: data.can_use,
+		}
+	}
+
 	/** Returns raw API response for store hydration (preserves i18n structure). */
 	async getAgentDetailRaw(code: string): Promise<AgentDetailResponse> {
 		return CrewApi.getAgentDetail({ code })
@@ -299,6 +335,14 @@ export class CrewService {
 
 	publishAgent(code: string, params: PublishAgentParams) {
 		return CrewApi.publishAgent({ code, ...params })
+	}
+
+	publishAgentAsync(code: string, params: PublishAgentParams): Promise<AsyncPublishTaskResponse> {
+		return CrewApi.publishAgentAsync({ code, ...params })
+	}
+
+	checkAgentPublish(code: string, publishTaskId: string): Promise<AsyncPublishTaskResponse> {
+		return CrewApi.checkAgentPublish({ code, publish_task_id: publishTaskId })
 	}
 
 	getAgentPublishPrefill(code: string): Promise<PublishAgentPrefillResponse> {
@@ -397,6 +441,7 @@ export class CrewService {
 			})),
 			publisherType: item.publisher_type,
 			publisherName: item.publisher?.name?.trim() || null,
+			marketType: item.market_type,
 			categoryId: item.category_id,
 			isAdded: item.is_added,
 			allowDelete: item.allow_delete,
@@ -431,6 +476,7 @@ export class CrewService {
 		return {
 			id: String(item.id),
 			agentCode: item.code,
+			projectId: item.project_id,
 			userRole: item.user_role,
 			name: this.mapI18nText(item.name_i18n),
 			role: this.mapI18nArrayText(item.role_i18n),
@@ -442,6 +488,8 @@ export class CrewService {
 				themeColor: f.theme_color,
 			})),
 			sourceType: this.normalizeSourceType(item.source_type),
+			origin: item.origin,
+			publishTargetType: item.publish_target_type ?? null,
 			publisherType: item.publisher_type ?? null,
 			publisherName: item.publisher?.name?.trim() || null,
 			enabled: item.enabled,

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
-import { ChevronLeft, Loader2, X } from "lucide-react"
+import { Loader2, X } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { SmoothTabs } from "@/components/shadcn-ui/smooth-tabs"
@@ -21,9 +21,15 @@ interface SceneEditPanelProps {
 	playbookId: string
 	onBack: () => void
 	onClose: () => void
+	readOnly?: boolean
 }
 
-export function SceneEditPanel({ playbookId, onBack, onClose }: SceneEditPanelProps) {
+export function SceneEditPanel({
+	playbookId,
+	onBack,
+	onClose,
+	readOnly = false,
+}: SceneEditPanelProps) {
 	const { t, i18n } = useTranslation("crew/create")
 	const { playbook } = useCrewEditStore()
 	const [activeTab, setActiveTab] = useState<NavTab>("basicInfo")
@@ -38,22 +44,29 @@ export function SceneEditPanel({ playbookId, onBack, onClose }: SceneEditPanelPr
 		error: sceneError,
 		refresh: refreshScene,
 	} = useSceneByPlaybookId(resolvedPlaybookId)
-	const scene = remoteScene ?? localScene
+	// Persisted playbooks must wait for the detail response. Using the list snapshot while loading
+	// would create an editable store that gets replaced, along with unsaved edits, when it arrives.
+	const scene = resolvedPlaybookId ? remoteScene : localScene
 
 	const store = useMemo(
 		() =>
 			scene
-				? new SceneEditStore(scene, async (s) => {
-						try {
-							await playbook.updateScene(s)
-							toast.success(t("playbook.edit.saveSuccess"))
-						} catch {
-							toast.error(t("playbook.edit.saveFailed"))
-						}
-					})
+				? new SceneEditStore(
+						scene,
+						async (s) => {
+							try {
+								if (readOnly) return
+								await playbook.updateScene(s)
+								toast.success(t("playbook.edit.saveSuccess"))
+							} catch {
+								toast.error(t("playbook.edit.saveFailed"))
+							}
+						},
+						readOnly,
+					)
 				: null,
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[scene],
+		[readOnly, scene],
 	)
 
 	const navItems: { id: NavTab; label: string }[] = [

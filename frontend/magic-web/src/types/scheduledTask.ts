@@ -1,10 +1,12 @@
 import { IMCPItem } from "@/components/Agent/MCP"
 import { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 
 /** 定时任务 */
 export namespace ScheduledTask {
+	export type ModelSelection = Partial<ModelItem> & Pick<ModelItem, "model_id">
+
 	export interface GetListParams {
 		page: number
 		page_size: number
@@ -36,8 +38,8 @@ export namespace ScheduledTask {
 				enable_web_search?: boolean
 				dynamic_params?: Record<string, unknown>
 				model?: ModelItem | null
-				image_model?: { model_id: string } | null
-				video_model?: { model_id: string } | null
+				image_model?: ModelSelection | null
+				video_model?: ModelSelection | null
 			}
 		}
 	}

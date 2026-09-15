@@ -1,9 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import PluginTips from "../components/PluginTips"
 import { AgentCommonModal } from "@/components/Agent/AgentCommonModal"
-import { cn } from "@/lib/utils"
-
-const AgentSettingsLazy = lazy(() => import("@/components/Agent/MCP/AgentSettings"))
+import { cn } from "@/utils/cn"
+import ConnectorLibrary from "@/pages/superMagic/pages/ConnectorMarket/components/ConnectorLibrary"
 import CurrentSceneBadge from "../components/SelectedSkillBadge"
 import { SCENE_INPUT_IDS, INPUT_CONTAINER_MIN_HEIGHT, SCENE_PANEL_MIN_HEIGHT } from "../constants"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -38,21 +37,23 @@ interface EditorLayoutProps {
 }
 
 function EditorLayout({
-	mode = TopicMode.General,
+	mode,
 	sceneStateStore = defaultSceneStateStore,
 	autoFocus = false,
 	onAutoFocusHandled,
 }: EditorLayoutProps) {
+	const resolvedMode = mode ?? roleStore.currentRole
 	const editorContainerRef = useRef<HTMLDivElement>(null)
 	const editorRef = useRef<MessageEditorRef>(null)
-	const [mcpModalOpen, setMcpModalOpen] = useState(false)
+	const [connectorMarketOpen, setConnectorMarketOpen] = useState(false)
+	const [connectorMarketNestedOpen, setConnectorMarketNestedOpen] = useState(false)
 
 	const selectedTopic = topicStore.selectedTopic
 	const selectedProject = projectStore.selectedProject
 	const selectedWorkspace = workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace
 
 	const scenes = superMagicModeService.getModeConfigWithLegacy(
-		mode,
+		resolvedMode,
 		undefined,
 		false,
 		selectedTopic?.agent_code,
@@ -71,9 +72,10 @@ function EditorLayout({
 			selectedWorkspace,
 			setSelectedTopic: topicStore.setSelectedTopic,
 			setSelectedProject: projectStore.setSelectedProject,
-			topicMode: mode,
+			topicMode: resolvedMode,
 			setTopicMode: roleStore.setCurrentRole,
-			topicExamplesMode: mode,
+			recoverTopicMode: roleStore.applyResolvedRole,
+			topicExamplesMode: resolvedMode,
 			enableMessageSendByContent: true,
 			autoFocus,
 			onEditorFocus: onAutoFocusHandled,
@@ -93,7 +95,14 @@ function EditorLayout({
 				},
 			},
 		}),
-		[mode, selectedTopic, selectedProject, selectedWorkspace, autoFocus, onAutoFocusHandled],
+		[
+			resolvedMode,
+			selectedTopic,
+			selectedProject,
+			selectedWorkspace,
+			autoFocus,
+			onAutoFocusHandled,
+		],
 	)
 
 	// Automatically scroll to scene panel when scene config loaded
@@ -128,12 +137,12 @@ function EditorLayout({
 	useEffect(() => {
 		sceneStateStore.setInputScopeKey(
 			buildTopicInputScopeKey(
-				String(mode),
+				String(resolvedMode),
 				selectedTopic?.id ?? "",
 				selectedTopic?.agent_code ?? "",
 			),
 		)
-	}, [mode, selectedTopic?.id, selectedTopic?.agent_code, sceneStateStore])
+	}, [resolvedMode, selectedTopic?.id, selectedTopic?.agent_code, sceneStateStore])
 
 	const { currentScene: selectedScene, shouldShowCurrentSceneBadge } = useSceneSelection({
 		scenes,
@@ -174,7 +183,7 @@ function EditorLayout({
 								}}
 							/>
 						) : shouldShowPluginTips ? (
-							<PluginTips onConnectClick={() => setMcpModalOpen(true)} />
+							<PluginTips onConnectClick={() => setConnectorMarketOpen(true)} />
 						) : null}
 					</div>
 				</div>
@@ -184,7 +193,7 @@ function EditorLayout({
 					data-testid="home-scene-config-container"
 					className={cn(
 						"w-full transition-all duration-200 ease-in-out",
-						mode !== TopicMode.PPT && "max-w-4xl",
+						resolvedMode !== TopicMode.PPT && "max-w-4xl",
 						shouldShowSelfMediaConfig ? "px-2 pb-8 pt-0" : "p-2 pb-[40px]",
 					)}
 					style={{
@@ -196,17 +205,19 @@ function EditorLayout({
 				</div>
 			</div>
 			<AgentCommonModal
-				open={mcpModalOpen}
-				onOpenChange={setMcpModalOpen}
-				width={900}
+				open={connectorMarketOpen}
+				onOpenChange={setConnectorMarketOpen}
+				width={1120}
+				keyboard={!connectorMarketNestedOpen}
 				footer={null}
 				closable={false}
 			>
-				{mcpModalOpen ? (
-					<Suspense fallback={null}>
-						<AgentSettingsLazy onClose={() => setMcpModalOpen(false)} />
-					</Suspense>
-				) : null}
+				<ConnectorLibrary
+					embedded
+					activeStorageKey={selectedProject?.id}
+					onClose={() => setConnectorMarketOpen(false)}
+					onNestedPanelOpenChange={setConnectorMarketNestedOpen}
+				/>
 			</AgentCommonModal>
 		</SceneStateProvider>
 	)

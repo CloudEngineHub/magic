@@ -68,6 +68,42 @@ class DesignGeneratedVideoFileNameToolTest extends TestCase
         $this->assertSame('', $result);
     }
 
+    public function testResolveBaseNameWithoutExtensionRemovesReferenceTokenFromAgentResult(): void
+    {
+        $agent = $this->createMock(MicroAgent::class);
+        $agent->method('isEnabled')->willReturn(true);
+        $agent->method('easyCall')->willReturn($this->createChatCompletionResponse('[视频1]'));
+
+        $factory = $this->createMock(MicroAgentFactory::class);
+        $factory->method('getAgent')->willReturn($agent);
+
+        $tool = $this->createTool($factory);
+
+        $result = $tool->resolveBaseNameWithoutExtension(
+            $this->createDesignDataIsolation(),
+            $this->createEntity('城市夜景中的人物移动'),
+            '城市夜景中的人物移动 [图片1]',
+        );
+
+        $this->assertSame('', $result);
+    }
+
+    public function testResolveBaseNameWithoutExtensionDoesNotUseReferenceTokenAsShortPromptFilename(): void
+    {
+        $factory = $this->createMock(MicroAgentFactory::class);
+        $factory->expects($this->never())->method('getAgent');
+
+        $tool = $this->createTool($factory);
+
+        $result = $tool->resolveBaseNameWithoutExtension(
+            $this->createDesignDataIsolation(),
+            $this->createEntity('[图片1]'),
+            '[图片1]',
+        );
+
+        $this->assertSame('', $result);
+    }
+
     private function createLoggerFactory(): LoggerFactory
     {
         $logger = $this->createMock(LoggerInterface::class);

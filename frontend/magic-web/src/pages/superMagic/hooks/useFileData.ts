@@ -280,15 +280,12 @@ export const useFileData = ({
 		}
 	}, [])
 
-	// 由于后端的文件版本生成机制，是在每一轮对话结束时生成，
-	// 因此这里需要监听对话任务完成事件，当对话任务完成时，获取文件的最新版本列表。
+	// 由于后端的文件版本生成机制，是在每一轮 Topic 执行结束时生成，
+	// 因此这里监听 Topic 级终态事件，而不是单条 Assistant Final。
 	useEffect(() => {
-		const unregister = superMagicStore.registerDomainEventListener({
-			matcher: (payload) => payload.type === "task_completed" && activeFileId === file_id,
-			callback: (payload) => {
-				if (payload.type !== "task_completed" || activeFileId !== file_id) return
-				getFileVersion(file_id)
-			},
+		const unregister = superMagicStore.subscribe("topic.execution.ended", () => {
+			if (activeFileId !== file_id) return
+			getFileVersion(file_id)
 		})
 
 		return () => {

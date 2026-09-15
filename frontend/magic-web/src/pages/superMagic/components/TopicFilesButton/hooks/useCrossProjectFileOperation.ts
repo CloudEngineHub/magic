@@ -19,16 +19,28 @@ import {
 	type CanvasProjectOperationRisk,
 } from "../utils/canvasProjectOperationRisk"
 import {
-	mergeHtmlStaticDependencyFileIds,
-	resolveSingleHtmlStaticDependencies,
-} from "@/pages/superMagic/utils/htmlStaticDependencies"
+	mergeStaticDependencyFileIds,
+	resolveSingleDocumentStaticDependencies,
+} from "@/pages/superMagic/utils/staticDependencies"
+import { useCanvasFileOperationGuard } from "./useCanvasFileOperationGuard"
+import type { CanvasProjectPathRepairResult } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
+
+export interface CrossProjectOperationSuccessResult {
+	operationType: "move" | "copy"
+	fileIds: string[]
+	targetProjectId: string
+	targetWorkspaceId?: string
+	targetProjectName?: string
+}
 
 interface UseCrossProjectFileOperationOptions {
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
 	selectedWorkspace: Workspace | null
 	selectedProject: ProjectListItem | null
 	projects: ProjectListItem[]
-	onSuccess?: (result?: { operationType: "move" | "copy"; fileIds: string[] }) => void
+	onSuccess?: (result?: CrossProjectOperationSuccessResult) => void
 }
 
 interface EffectiveOperationFileIdsResult {
@@ -39,50 +51,52 @@ interface EffectiveOperationFileIdsResult {
 async function resolveEffectiveOperationFileIds({
 	fileIds,
 	sourceAttachments,
-	includeHtmlDependencies = true,
-	htmlDependencyFileIds,
+	includeDocumentDependencies = true,
+	documentDependencyFileIds,
 }: {
 	fileIds: string[]
 	sourceAttachments: AttachmentItem[]
-	includeHtmlDependencies?: boolean
-	htmlDependencyFileIds?: string[]
+	includeDocumentDependencies?: boolean
+	documentDependencyFileIds?: string[]
 }): Promise<EffectiveOperationFileIdsResult> {
-	if (!includeHtmlDependencies) {
+	if (!includeDocumentDependencies) {
 		return {
-			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, [], false),
+			fileIds: mergeStaticDependencyFileIds(fileIds, [], false),
 			dependencyAnalysisFailed: false,
 		}
 	}
 
-	if (htmlDependencyFileIds !== undefined) {
+	if (documentDependencyFileIds !== undefined) {
 		return {
-			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, htmlDependencyFileIds, true),
+			fileIds: mergeStaticDependencyFileIds(fileIds, documentDependencyFileIds, true),
 			dependencyAnalysisFailed: false,
 		}
 	}
 
 	try {
-		const { dependencyTransferFileIds } = await resolveSingleHtmlStaticDependencies({
+		const { dependencyTransferFileIds } = await resolveSingleDocumentStaticDependencies({
 			fileIds,
 			attachments: sourceAttachments,
 		})
 		return {
-			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, dependencyTransferFileIds, true),
+			fileIds: mergeStaticDependencyFileIds(fileIds, dependencyTransferFileIds, true),
 			dependencyAnalysisFailed: false,
 		}
 	} catch (error) {
 		// Dependency enrichment must not turn an existing file operation into a hard failure.
-		console.error("Failed to resolve HTML static dependencies for file operation:", error)
+		console.error("Failed to resolve document static dependencies for file operation:", error)
 		return {
-			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, [], false),
+			fileIds: mergeStaticDependencyFileIds(fileIds, [], false),
 			dependencyAnalysisFailed: true,
 		}
 	}
 }
 
 export function useCrossProjectFileOperation(options: UseCrossProjectFileOperationOptions) {
-	const { projectId, onSuccess } = options
+	const { projectId, shareCode, sharePassword, onSuccess } = options
 	const { t } = useTranslation("super")
+	const { runCanvasFileOperationPreflight, commitCanvasFileOperationRepair } =
+		useCanvasFileOperationGuard()
 
 	const [visible, setVisible] = useState(false)
 	const [operationType, setOperationType] = useState<"move" | "copy">("move")
@@ -116,7 +130,17 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 	}, [])
 
 	const handleOperationPolling = useCallback(
-		(batchKey: string, operationType: "move" | "copy", completedFileIds: string[]) => {
+		(
+			batchKey: string,
+			operationType: "move" | "copy",
+			completedFileIds: string[],
+			target: {
+				targetProjectId: string
+				targetWorkspaceId?: string
+				targetProjectName?: string
+			},
+			repairPlan: CanvasProjectPathRepairResult | null,
+		) => {
 			const timer = setInterval(async () => {
 				try {
 					const checkData = await SuperMagicApi.checkBatchOperationStatus(batchKey)
@@ -125,18 +149,21 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						const progress = checkData.progress ? parseInt(checkData.progress) : 0
 						setOperationProgress(progress)
 					} else if (checkData.status === "success") {
+						await commitCanvasFileOperationRepair(repairPlan)
 						setOperationProgress(100)
-						magicToast.success(
-							operationType === "move"
-								? t("topicFiles.success.fileMoved")
-								: t("topicFiles.success.fileCopied"),
-						)
+						if (operationType === "move" || !shareCode) {
+							magicToast.success(
+								operationType === "move"
+									? t("topicFiles.success.fileMoved")
+									: t("topicFiles.success.fileCopied"),
+							)
+						}
 						clearInterval(timer)
 						setTimeout(() => {
 							setIsOperating(false)
 							setOperationProgress(0)
 							closeModal()
-							onSuccess?.({ operationType, fileIds: completedFileIds })
+							onSuccess?.({ operationType, fileIds: completedFileIds, ...target })
 						}, 500)
 					} else if (checkData.status === "failed") {
 						magicToast.error(
@@ -166,22 +193,31 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				}
 			}, 2000)
 		},
-		[closeModal, onSuccess, t],
+		[closeModal, commitCanvasFileOperationRepair, onSuccess, shareCode, t],
 	)
 
 	const confirmCanvasProjectRisk = useCallback(
-		(canvasRisk: CanvasProjectOperationRisk) =>
+		(canvasRisk: CanvasProjectOperationRisk, repairFailures: string[] = []) =>
 			new Promise<boolean>((resolve) => {
 				const impact = getCanvasProjectOperationImpact(canvasRisk)
+				const riskContent =
+					canvasRisk.shouldWarn && impact
+						? t(
+								impact === "open-failure"
+									? "topicFiles.canvasOperationRisk.moveOpenFailureContent"
+									: impact === "content-loss"
+										? "topicFiles.canvasOperationRisk.moveContentLossContent"
+										: "topicFiles.canvasOperationRisk.moveMixedContent",
+							)
+						: ""
+				const repairContent = repairFailures.length
+					? t("topicFiles.canvasOperationRisk.pathRepairFailureContent", {
+							failures: repairFailures.join("\n"),
+						})
+					: ""
 				MagicModal.confirm({
 					title: t("topicFiles.canvasOperationRisk.title"),
-					content: t(
-						impact === "open-failure"
-							? "topicFiles.canvasOperationRisk.moveOpenFailureContent"
-							: impact === "content-loss"
-								? "topicFiles.canvasOperationRisk.moveContentLossContent"
-								: "topicFiles.canvasOperationRisk.moveMixedContent",
-					),
+					content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
 					icon: createElement(IconAlertTriangleFilled, {
 						size: 20,
 						color: "rgba(255,125,0, 1)",
@@ -207,24 +243,31 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 	const executeMoveOperation = useCallback(
 		async (data: {
 			targetProjectId: string
+			targetWorkspaceId?: string
+			targetProject?: ProjectListItem
 			targetPath: AttachmentItem[]
 			targetAttachments: AttachmentItem[]
 			sourceAttachments: AttachmentItem[]
 			fileIds?: string[]
-			includeHtmlDependencies?: boolean
-			htmlDependencyFileIds?: string[]
+			includeDocumentDependencies?: boolean
+			documentDependencyFileIds?: string[]
+			preserveParentPath?: boolean
 		}) => {
 			const { fileIds: effectiveFileIds, dependencyAnalysisFailed } =
 				await resolveEffectiveOperationFileIds({
 					fileIds: data.fileIds || fileIds,
 					sourceAttachments: data.sourceAttachments,
-					includeHtmlDependencies: data.includeHtmlDependencies,
-					htmlDependencyFileIds: data.htmlDependencyFileIds,
+					includeDocumentDependencies: data.includeDocumentDependencies,
+					documentDependencyFileIds: data.documentDependencyFileIds,
 				})
 			if (dependencyAnalysisFailed) {
-				magicToast.warning(t("share.htmlDependenciesAnalysisFailed"))
+				magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
 			}
 			if (!projectId || effectiveFileIds.length === 0) return
+			const shouldPreserveParentPath =
+				data.preserveParentPath === true &&
+				data.targetProjectId !== projectId &&
+				(data.fileIds || fileIds).length > 1
 
 			let keepBothIds =
 				data.targetProjectId === projectId
@@ -235,55 +278,74 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						)
 					: []
 			const conflictDetectionIds = effectiveFileIds.filter((id) => !keepBothIds.includes(id))
-
+			let canvasRisk: CanvasProjectOperationRisk = {
+				shouldWarn: false,
+				riskTypes: [],
+				affectedProjectNames: [],
+			}
 			if (conflictDetectionIds.length > 0) {
-				const canvasRisk = await detectCanvasProjectOperationRisk({
+				canvasRisk = await detectCanvasProjectOperationRisk({
 					attachments: data.sourceAttachments,
 					fileIds: conflictDetectionIds,
 					operation: "move",
 				})
-				if (canvasRisk.shouldWarn) {
-					const shouldContinue = await confirmCanvasProjectRisk(canvasRisk)
-					if (!shouldContinue) return
-				}
 			}
+			const preflightResult = await runCanvasFileOperationPreflight({
+				repairOptions: {
+					attachments: data.sourceAttachments,
+					fileIds: effectiveFileIds,
+					operation: "move",
+					projectId,
+				},
+				requiresConfirmation: canvasRisk.shouldWarn,
+				confirm: (repairPlan) =>
+					confirmCanvasProjectRisk(
+						canvasRisk,
+						repairPlan?.failures.map(
+							(failure) =>
+								`${failure.projectName} / ${failure.fileName}: ${failure.message}`,
+						) ?? [],
+					),
+				beforeCommit: async () => {
+					const folderConflicts =
+						conflictDetectionIds.length > 0
+							? detectFolderConflictsForMove(
+									conflictDetectionIds,
+									data.sourceAttachments,
+									data.targetAttachments,
+									data.targetPath,
+								)
+							: new Map()
+					if (folderConflicts.size > 0) {
+						const folderChoice =
+							await folderConflictHandler.checkConflicts(folderConflicts)
+						if (!folderChoice.shouldProceed) return false
+						keepBothIds = [...keepBothIds, ...folderChoice.keepBothIds]
+					}
 
-			// 1. 检测同名文件（递归检测文件夹内所有子文件）
-			const folderConflicts =
-				conflictDetectionIds.length > 0
-					? detectFolderConflictsForMove(
-							conflictDetectionIds,
-							data.sourceAttachments,
-							data.targetAttachments,
-							data.targetPath,
-						)
-					: new Map()
-			if (folderConflicts.size > 0) {
-				const folderChoice = await folderConflictHandler.checkConflicts(folderConflicts)
-				if (!folderChoice.shouldProceed) return
-				keepBothIds = [...keepBothIds, ...folderChoice.keepBothIds]
-			}
+					const duplicateDetectionIds = effectiveFileIds.filter(
+						(id) => !keepBothIds.includes(id),
+					)
+					const duplicates =
+						duplicateDetectionIds.length > 0
+							? detectDuplicateFilesForMove(
+									duplicateDetectionIds,
+									data.sourceAttachments,
+									data.targetAttachments,
+									data.targetPath,
+								)
+							: new Map()
 
-			// 1. 检测同名文件（递归检测文件夹内所有子文件）
-			const duplicateDetectionIds = effectiveFileIds.filter((id) => !keepBothIds.includes(id))
-			const duplicates =
-				duplicateDetectionIds.length > 0
-					? detectDuplicateFilesForMove(
-							duplicateDetectionIds,
-							data.sourceAttachments,
-							data.targetAttachments,
-							data.targetPath,
-						)
-					: new Map()
+					if (duplicates.size > 0) {
+						const userChoice = await duplicateHandler.checkDuplicates(duplicates)
+						if (!userChoice.shouldProceed) return false
+						keepBothIds = [...keepBothIds, ...userChoice.keepBothIds]
+					}
 
-			// 2. 如果有同名，显示 Modal 并等待用户选择
-			if (duplicates.size > 0) {
-				const userChoice = await duplicateHandler.checkDuplicates(duplicates)
-				if (!userChoice.shouldProceed) {
-					return // 用户取消
-				}
-				keepBothIds = [...keepBothIds, ...userChoice.keepBothIds]
-			}
+					return true
+				},
+			})
+			if (!preflightResult.ok) return
 
 			// 3. 执行移动操作
 			setIsOperating(true)
@@ -316,23 +378,43 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						target_parent_id: targetParentId,
 						pre_file_id: "",
 						keep_both_file_ids: keepBothIds,
+						...(shouldPreserveParentPath ? { preserve_parent_path: true } : {}),
 					})
 				}
 
 				if (result.status === "success") {
+					await commitCanvasFileOperationRepair(preflightResult.repairPlan)
 					setOperationProgress(100)
 					magicToast.success(t("topicFiles.success.fileMoved"))
 					setTimeout(() => {
 						setIsOperating(false)
 						setOperationProgress(0)
 						closeModal()
-						onSuccess?.({ operationType: "move", fileIds: effectiveFileIds })
+						onSuccess?.({
+							operationType: "move",
+							fileIds: effectiveFileIds,
+							targetProjectId: data.targetProjectId,
+							targetWorkspaceId:
+								data.targetWorkspaceId || data.targetProject?.workspace_id,
+							targetProjectName: data.targetProject?.project_name,
+						})
 					}, 500)
 					return
 				}
 
 				if (result.status === "processing" && result.batch_key) {
-					handleOperationPolling(result.batch_key, "move", effectiveFileIds)
+					handleOperationPolling(
+						result.batch_key,
+						"move",
+						effectiveFileIds,
+						{
+							targetProjectId: data.targetProjectId,
+							targetWorkspaceId:
+								data.targetWorkspaceId || data.targetProject?.workspace_id,
+							targetProjectName: data.targetProject?.project_name,
+						},
+						preflightResult.repairPlan,
+					)
 				}
 			} catch (error) {
 				console.error("移动文件失败:", error)
@@ -351,30 +433,39 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			confirmCanvasProjectRisk,
 			duplicateHandler,
 			folderConflictHandler,
+			commitCanvasFileOperationRepair,
+			runCanvasFileOperationPreflight,
 		],
 	)
 
 	const executeCopyOperation = useCallback(
 		async (data: {
 			targetProjectId: string
+			targetWorkspaceId?: string
+			targetProject?: ProjectListItem
 			targetPath: AttachmentItem[]
 			targetAttachments: AttachmentItem[]
 			sourceAttachments: AttachmentItem[]
 			fileIds?: string[]
-			includeHtmlDependencies?: boolean
-			htmlDependencyFileIds?: string[]
+			includeDocumentDependencies?: boolean
+			documentDependencyFileIds?: string[]
+			preserveParentPath?: boolean
 		}) => {
 			const { fileIds: effectiveFileIds, dependencyAnalysisFailed } =
 				await resolveEffectiveOperationFileIds({
 					fileIds: data.fileIds ?? fileIds,
 					sourceAttachments: data.sourceAttachments,
-					includeHtmlDependencies: data.includeHtmlDependencies,
-					htmlDependencyFileIds: data.htmlDependencyFileIds,
+					includeDocumentDependencies: data.includeDocumentDependencies,
+					documentDependencyFileIds: data.documentDependencyFileIds,
 				})
 			if (dependencyAnalysisFailed) {
-				magicToast.warning(t("share.htmlDependenciesAnalysisFailed"))
+				magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
 			}
 			if (!projectId || effectiveFileIds.length === 0) return
+			const shouldPreserveParentPath =
+				data.preserveParentPath === true &&
+				data.targetProjectId !== projectId &&
+				(data.fileIds ?? fileIds).length > 1
 
 			let keepBothIds =
 				data.targetProjectId === projectId
@@ -435,29 +526,55 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						? data.targetPath[data.targetPath.length - 1].file_id || ""
 						: ""
 
-				const result = await SuperMagicApi.copyFiles({
-					file_ids: effectiveFileIds,
-					project_id: projectId,
-					target_project_id: data.targetProjectId,
-					target_parent_id: targetParentId,
-					pre_file_id: "",
-					keep_both_file_ids: keepBothIds,
-				})
+				const result = shareCode
+					? await SuperMagicApi.copyShareFiles({
+							shareCode,
+							pwd: sharePassword,
+							file_ids: effectiveFileIds,
+							target_project_id: data.targetProjectId,
+							target_parent_id: targetParentId,
+							pre_file_id: "",
+							keep_both_file_ids: keepBothIds,
+							...(shouldPreserveParentPath ? { preserve_parent_path: true } : {}),
+						})
+					: await SuperMagicApi.copyFiles({
+							file_ids: effectiveFileIds,
+							project_id: projectId,
+							target_project_id: data.targetProjectId,
+							target_parent_id: targetParentId,
+							pre_file_id: "",
+							keep_both_file_ids: keepBothIds,
+							...(shouldPreserveParentPath ? { preserve_parent_path: true } : {}),
+						})
 
 				if (result.status === "success") {
 					setOperationProgress(100)
-					magicToast.success(t("topicFiles.success.fileCopied"))
+					if (!shareCode) {
+						magicToast.success(t("topicFiles.success.fileCopied"))
+					}
 					setTimeout(() => {
 						setIsOperating(false)
 						setOperationProgress(0)
 						closeModal()
-						onSuccess?.({ operationType: "copy", fileIds: effectiveFileIds })
+						onSuccess?.({
+							operationType: "copy",
+							fileIds: effectiveFileIds,
+							targetProjectId: data.targetProjectId,
+							targetWorkspaceId:
+								data.targetWorkspaceId || data.targetProject?.workspace_id,
+							targetProjectName: data.targetProject?.project_name,
+						})
 					}, 500)
 					return
 				}
 
 				if (result.status === "processing" && result.batch_key) {
-					handleOperationPolling(result.batch_key, "copy", effectiveFileIds)
+					handleOperationPolling(result.batch_key, "copy", effectiveFileIds, {
+						targetProjectId: data.targetProjectId,
+						targetWorkspaceId:
+							data.targetWorkspaceId || data.targetProject?.workspace_id,
+						targetProjectName: data.targetProject?.project_name,
+					})
 				}
 			} catch (error) {
 				console.error("复制文件失败:", error)
@@ -469,6 +586,8 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 		[
 			fileIds,
 			projectId,
+			shareCode,
+			sharePassword,
 			closeModal,
 			onSuccess,
 			t,

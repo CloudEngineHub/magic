@@ -8,6 +8,7 @@ interface RecordingBatchSaveFile {
 	sessionId: string
 	projectId: string
 	topicId: string
+	taskId: string
 	parentId?: string
 	fileKey: string
 	fileName: string
@@ -89,7 +90,7 @@ export class RecordingBatchSaveReporter {
 					{
 						project_id: file.projectId,
 						topic_id: file.topicId,
-						task_id: file.sessionId,
+						task_id: file.taskId,
 						file_key: file.fileKey,
 						file_name: file.fileName,
 						file_size: file.fileSize,
@@ -112,15 +113,20 @@ export class RecordingBatchSaveReporter {
 			})
 			this.markFileAsSaved(file.sessionId, file.fileKey)
 		} catch (error) {
-			logger.error("Batch save failed", {
-				sessionId: file.sessionId,
-				fileKey: file.fileKey,
-				fileName: file.fileName,
-				fileSize: file.fileSize,
-				projectId: file.projectId,
-				topicId: file.topicId,
-				parentId: file.parentId,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "batch_save_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Batch save failed",
+				context: {
+					sessionId: file.sessionId,
+					fileSize: file.fileSize,
+					projectId: file.projectId,
+					topicId: file.topicId,
+					parentId: file.parentId,
+					fileKey: file.fileKey,
+					fileName: file.fileName,
+				},
 			})
 			if (throwOnError) {
 				throw error

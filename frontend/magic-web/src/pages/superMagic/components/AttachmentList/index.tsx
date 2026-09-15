@@ -5,13 +5,14 @@ import topicEmpty from "@/pages/superMagic/assets/svg/topic-empty.svg"
 import type { MouseEvent } from "react"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { IconChevronDown, IconChevronRight, IconDownload } from "@tabler/icons-react"
-import { useResponsive } from "ahooks"
 import { Button, Input, Tooltip, Typography } from "antd"
 import { useMemo, useState } from "react"
 import { useLocation } from "react-router"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import useStyles from "./style"
 import { SuperMagicApi } from "@/apis"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { useTranslation } from "react-i18next"
 
 const { Text } = Typography
 
@@ -49,10 +50,10 @@ export default function AttachmentList({
 	topicId?: string
 	setUserSelectDetail?: (detail: any) => void
 }) {
+	const { t } = useTranslation("super")
 	const { styles, cx } = useStyles()
 	const { pathname } = useLocation()
-	const responsive = useResponsive()
-	const isMobile = !responsive.md
+	const isMobile = useIsMobile()
 
 	const [isFileListCollapsed, setIsFileListCollapsed] = useState(false)
 	const [fileSearchText, setFileSearchText] = useState("")
@@ -152,7 +153,7 @@ export default function AttachmentList({
 			const emptyData = {
 				type: "empty",
 				data: {
-					text: "暂不支持预览该文件,请下载该文件",
+					text: t("attachmentList.previewUnsupported"),
 				},
 			}
 			setUserSelectDetail?.(emptyData)
@@ -227,7 +228,13 @@ export default function AttachmentList({
 									/>
 								</div>
 								<div className={styles.iconWrapper} style={{ marginLeft: "2px" }}>
-									<img src={FoldIcon} alt="folder" width={18} height={18}  data-testid="attachment-list-image"/>
+									<img
+										src={FoldIcon}
+										alt="folder"
+										width={18}
+										height={18}
+										data-testid="attachment-list-image"
+									/>
 								</div>
 								<div className={styles.fileNameContainer}>
 									{renderText(item.name, item.name)}
@@ -337,14 +344,14 @@ export default function AttachmentList({
 							className={styles.iconButton}
 						/>
 					</div>
-					<span>项目文件</span>
+					<span>{t("attachmentList.projectFiles")}</span>
 				</div>
 			</div>
 			{!isFileListCollapsed && (
 				<div className={styles.content}>
 					<div className={styles.searchContainer}>
 						<Input
-							placeholder="搜索文件"
+							placeholder={t("attachmentList.searchFiles")}
 							value={fileSearchText}
 							onChange={(e) => setFileSearchText(e.target.value)}
 							className={styles.searchInput}
@@ -362,14 +369,24 @@ export default function AttachmentList({
 					)}
 					{!!attachments?.length && !filteredFiles.length && fileSearchText && (
 						<div className={styles.emptyText}>
-							<img src={topicEmpty} alt="" className={styles.emptyTextIcon}  data-testid="attachment-list-image-2"/>
-							未找到相关文件
+							<img
+								src={topicEmpty}
+								alt=""
+								className={styles.emptyTextIcon}
+								data-testid="attachment-list-image-2"
+							/>
+							{t("attachmentList.noMatch")}
 						</div>
 					)}
 					{attachments?.length === 0 && (
 						<div className={styles.emptyText}>
-							<img src={topicEmpty} alt="" className={styles.emptyTextIcon}  data-testid="attachment-list-image-3"/>
-							暂无相关文件
+							<img
+								src={topicEmpty}
+								alt=""
+								className={styles.emptyTextIcon}
+								data-testid="attachment-list-image-3"
+							/>
+							{t("attachmentList.empty")}
 						</div>
 					)}
 					{/* {showDownloadAll && (
@@ -391,7 +408,7 @@ export default function AttachmentList({
 									stroke={1.5}
 									color="rgba(28, 29, 35, 0.8)"
 								/>
-								<span>下载全部文件</span>
+								<span>{t("attachmentList.downloadAll")}</span>
 							</button>
 						</div>
 					)} */}

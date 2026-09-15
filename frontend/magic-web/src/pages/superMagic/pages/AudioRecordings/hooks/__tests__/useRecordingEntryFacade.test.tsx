@@ -3,8 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	ALL_RECORDING_GROUP_ID,
+	UNGROUPED_RECORDING_GROUP_ID,
+} from "@/services/audioRecordings/RecordingGroupsConstants"
 import { audioRecordingsStore } from "../../stores/audio-recordings-store"
 import { buildOptimisticRecordingItem } from "../../utils/build-optimistic-recording-item"
+import { writeAudioRecordingsFilterSession } from "../../utils/audio-recordings-filter-session"
 import { useRecordingEntryFacade } from "../useRecordingEntryFacade"
 import {
 	resetRecordingSettingsCacheForTests,
@@ -21,6 +26,7 @@ const {
 	summaryModelListMock,
 	superMagicApiMock,
 	audioRecordingsServiceMock,
+	forceOverrideMock,
 	importTestState,
 } = vi.hoisted(() => {
 	const importTestState = {
@@ -54,6 +60,9 @@ const {
 		},
 		recordSummaryServiceMock: {
 			ensureProjectAndTopic: vi.fn(),
+			getRecordingOverrideContext: vi.fn(),
+			prepareRecordingOverride: vi.fn(),
+			releaseOverrideSessionForForceStart: vi.fn(),
 			pauseRecording: vi.fn(),
 			continueRecording: vi.fn(),
 			updateNote: vi.fn(),
@@ -66,6 +75,7 @@ const {
 			isOtherTabRecording: false,
 			floatPanel: {
 				setExpanded: vi.fn(),
+				setExpandedAiChat: vi.fn(),
 			},
 			message: [] as Array<VoiceResultUtterance & { add_time: number; id: string }>,
 			note: { content: "", file_extension: "md" },
@@ -108,12 +118,16 @@ const {
 		},
 		superMagicApiMock: {
 			getWorkspaces: vi.fn(),
+			getWorkspaceDetail: vi.fn(),
 			createProject: vi.fn(),
 			createAudioProject: vi.fn(),
 			deleteProject: vi.fn(),
 		},
 		audioRecordingsServiceMock: {
 			submitSummary: vi.fn(),
+		},
+		forceOverrideMock: {
+			run: vi.fn(),
 		},
 		importTestState,
 	}
@@ -211,6 +225,10 @@ vi.mock("@/services/recordSummary/serviceInstance", () => ({
 	initializeService: () => recordSummaryServiceMock,
 }))
 
+vi.mock("@/components/business/RecordingSummary/utils/force-recording-override", () => ({
+	runForceRecordingOverride: forceOverrideMock.run,
+}))
+
 vi.mock("@/stores/recordingSummary", () => ({
 	default: recordSummaryStoreMock,
 }))
@@ -284,6 +302,11 @@ describe("useRecordingEntryFacade", () => {
 		runtimeMock.actions.startRecording.mockReset()
 		runtimeMock.actions.finishRecording.mockReset()
 		recordSummaryServiceMock.ensureProjectAndTopic.mockReset()
+		recordSummaryServiceMock.getRecordingOverrideContext.mockReset()
+		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue(null)
+		recordSummaryServiceMock.prepareRecordingOverride.mockReset()
+		recordSummaryServiceMock.prepareRecordingOverride.mockResolvedValue(true)
+		recordSummaryServiceMock.releaseOverrideSessionForForceStart.mockReset()
 		recordSummaryServiceMock.pauseRecording.mockReset()
 		recordSummaryServiceMock.continueRecording.mockReset()
 		recordSummaryServiceMock.updateNote.mockReset()
@@ -293,6 +316,7 @@ describe("useRecordingEntryFacade", () => {
 		recordSummaryStoreMock.status = "init"
 		recordSummaryStoreMock.isVisible = false
 		recordSummaryStoreMock.floatPanel.setExpanded.mockReset()
+		recordSummaryStoreMock.floatPanel.setExpandedAiChat.mockReset()
 		recordSummaryStoreMock.message = []
 		recordSummaryStoreMock.note = { content: "", file_extension: "md" }
 		recordSummaryStoreMock.errorState.recordingError = undefined
@@ -308,7 +332,12 @@ describe("useRecordingEntryFacade", () => {
 		summaryModelListMock.fetchSummaryModelGroups.mockReset()
 		summaryModelListMock.resolveDefaultSummaryModelId.mockReset()
 		audioRecordingsServiceMock.submitSummary.mockReset()
+		forceOverrideMock.run.mockReset()
+		forceOverrideMock.run.mockImplementation(
+			async (_context: unknown, prepare: () => Promise<boolean>) => prepare(),
+		)
 		superMagicApiMock.getWorkspaces.mockReset()
+		superMagicApiMock.getWorkspaceDetail.mockReset()
 		superMagicApiMock.createProject.mockReset()
 		superMagicApiMock.createAudioProject.mockReset()
 		superMagicApiMock.deleteProject.mockReset()
@@ -317,6 +346,15 @@ describe("useRecordingEntryFacade", () => {
 		importTestState.pendingImportContext = null
 		audioImportStoreMock.startAudioImport.mockClear()
 		audioRecordingsStore.optimisticItems = []
+		// Default list filter is All so recording/import stay ungrouped unless a test overrides it.
+		writeAudioRecordingsFilterSession({
+			summaryFilter: "all",
+			datePreset: "all",
+			sortBy: "updated_at",
+			sortOrder: "desc",
+			searchKeyword: "",
+			groupId: ALL_RECORDING_GROUP_ID,
+		})
 
 		// Mock navigator.mediaDevices.getUserMedia for jsdom test environment compatibility
 		if (typeof navigator !== "undefined") {
@@ -359,6 +397,7 @@ describe("useRecordingEntryFacade", () => {
 		} as unknown as Topic
 
 		superMagicApiMock.getWorkspaces.mockResolvedValue({ list: [workspace] })
+		superMagicApiMock.getWorkspaceDetail.mockResolvedValue(workspace)
 		superMagicApiMock.createProject.mockResolvedValue({ project, topic })
 		superMagicApiMock.createAudioProject.mockResolvedValue({ project, topic })
 		superMagicApiMock.deleteProject.mockResolvedValue(undefined)
@@ -389,23 +428,21 @@ describe("useRecordingEntryFacade", () => {
 			await result.current.startRecording()
 		})
 
-		expect(superMagicApiMock.getWorkspaces).toHaveBeenCalledWith({
-			page: 1,
-			page_size: 200,
-			workspace_type: "audio",
-			auto_create: true,
-		})
+		expect(superMagicApiMock.getWorkspaceDetail).not.toHaveBeenCalled()
 		expect(superMagicApiMock.createAudioProject).toHaveBeenCalledWith(
 			expect.objectContaining({
-				workspace_id: "workspace-audio-001",
 				audio_source: "recorded",
 				source: "pc",
+				is_hidden: true,
 				transcription_enabled: true,
 			}),
 		)
+		expect(superMagicApiMock.createAudioProject.mock.calls[0]?.[0]).not.toHaveProperty(
+			"workspace_id",
+		)
 		expect(runtimeMock.actions.startRecording).toHaveBeenCalledWith(
 			expect.objectContaining({
-				workspace: expect.objectContaining({ id: "workspace-audio-001" }),
+				workspace: null,
 				project: expect.objectContaining({ id: "project-audio-001" }),
 				topic: expect.objectContaining({ id: "topic-audio-001" }),
 				model: expect.objectContaining({ model_id: "model-alpha" }),
@@ -413,6 +450,87 @@ describe("useRecordingEntryFacade", () => {
 			}),
 		)
 		expect(result.current.presentation).toBe("list")
+	})
+
+	it("attaches the current real group workspace when starting a recording", async () => {
+		writeAudioRecordingsFilterSession({
+			summaryFilter: "all",
+			datePreset: "all",
+			sortBy: "updated_at",
+			sortOrder: "desc",
+			searchKeyword: "",
+			groupId: "workspace-audio-001",
+		})
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.startRecording()
+		})
+
+		expect(superMagicApiMock.getWorkspaceDetail).toHaveBeenCalledWith({
+			id: "workspace-audio-001",
+		})
+		expect(superMagicApiMock.createAudioProject).toHaveBeenCalledWith(
+			expect.objectContaining({
+				workspace_id: "workspace-audio-001",
+				audio_source: "recorded",
+			}),
+		)
+		expect(runtimeMock.actions.startRecording).toHaveBeenCalledWith(
+			expect.objectContaining({
+				workspace: expect.objectContaining({ id: "workspace-audio-001" }),
+			}),
+		)
+	})
+
+	it("keeps new recordings ungrouped when the shared filter is Ungrouped", async () => {
+		writeAudioRecordingsFilterSession({
+			summaryFilter: "all",
+			datePreset: "all",
+			sortBy: "updated_at",
+			sortOrder: "desc",
+			searchKeyword: "",
+			groupId: UNGROUPED_RECORDING_GROUP_ID,
+		})
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.startRecording()
+		})
+
+		expect(superMagicApiMock.getWorkspaceDetail).not.toHaveBeenCalled()
+		expect(superMagicApiMock.createAudioProject.mock.calls[0]?.[0]).not.toHaveProperty(
+			"workspace_id",
+		)
+		expect(runtimeMock.actions.startRecording).toHaveBeenCalledWith(
+			expect.objectContaining({
+				workspace: null,
+			}),
+		)
+	})
+
+	it("aborts recording startup when the current group detail cannot be resolved", async () => {
+		writeAudioRecordingsFilterSession({
+			summaryFilter: "all",
+			datePreset: "all",
+			sortBy: "updated_at",
+			sortOrder: "desc",
+			searchKeyword: "",
+			groupId: "workspace-missing-group",
+		})
+		superMagicApiMock.getWorkspaceDetail.mockRejectedValue(new Error("group missing"))
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.startRecording()
+		})
+
+		expect(superMagicApiMock.createAudioProject).not.toHaveBeenCalled()
+		expect(runtimeMock.actions.startRecording).not.toHaveBeenCalled()
+		expect(result.current.startupState).toBe("error")
 	})
 
 	it("starts recording without realtime transcription when the recording setting is disabled", async () => {
@@ -464,13 +582,31 @@ describe("useRecordingEntryFacade", () => {
 
 		expect(recordSummaryStoreMock.isVisible).toBe(true)
 		expect(recordSummaryStoreMock.floatPanel.setExpanded).toHaveBeenCalledWith(true)
+		expect(recordSummaryStoreMock.floatPanel.setExpandedAiChat).toHaveBeenCalledWith(true)
 		expect(result.current.presentation).toBe("list")
 	})
 
-	it("re-expands the desktop FloatPanel when startRecording is called during an active session", async () => {
+	it("uses the normal start path directly when no recording needs replacement", async () => {
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.startRecording()
+		})
+
+		expect(forceOverrideMock.run).not.toHaveBeenCalled()
+		expect(recordSummaryServiceMock.prepareRecordingOverride).not.toHaveBeenCalled()
+		expect(runtimeMock.actions.startRecording).toHaveBeenCalledTimes(1)
+	})
+
+	it("confirms and completes the current session before starting a new recording", async () => {
 		recordSummaryStoreMock.status = "recording"
-		recordSummaryStoreMock.isVisible = false
-		recordSummaryStoreMock.floatPanel.setExpanded.mockClear()
+		const overrideContext = {
+			sessionId: "current-session",
+			duration: "00:12:34",
+			source: "currentTab",
+			status: "recording",
+		} as const
+		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue(overrideContext)
 
 		const { result } = renderHook(() => useRecordingEntryFacade())
 
@@ -478,9 +614,167 @@ describe("useRecordingEntryFacade", () => {
 			await result.current.startRecording()
 		})
 
-		expect(recordSummaryStoreMock.isVisible).toBe(true)
-		expect(recordSummaryStoreMock.floatPanel.setExpanded).toHaveBeenCalledWith(true)
-		expect(result.current.presentation).toBe("list")
+		expect(forceOverrideMock.run).toHaveBeenCalledWith(
+			overrideContext,
+			expect.any(Function),
+			expect.any(Function),
+		)
+		expect(recordSummaryServiceMock.prepareRecordingOverride).toHaveBeenCalledWith(
+			"current-session",
+		)
+		expect(runtimeMock.actions.startRecording).toHaveBeenCalledTimes(1)
+	})
+
+	it("uses the same override flow for a recoverable historical session", async () => {
+		const overrideContext = {
+			sessionId: "historical-session",
+			duration: "01:02:03",
+			source: "history",
+			status: "paused",
+		} as const
+		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue(overrideContext)
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.startRecording()
+		})
+
+		expect(forceOverrideMock.run).toHaveBeenCalledWith(
+			overrideContext,
+			expect.any(Function),
+			expect.any(Function),
+		)
+		expect(recordSummaryServiceMock.prepareRecordingOverride).toHaveBeenCalledWith(
+			"historical-session",
+		)
+		expect(runtimeMock.actions.startRecording).toHaveBeenCalledTimes(1)
+	})
+
+	it("uses the same override flow when another tab is recording", async () => {
+		const overrideContext = {
+			sessionId: "other-tab-session",
+			duration: "00:08:15",
+			source: "otherTab",
+			status: "recording",
+		} as const
+		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue(overrideContext)
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.startRecording()
+		})
+
+		expect(forceOverrideMock.run).toHaveBeenCalledWith(
+			overrideContext,
+			expect.any(Function),
+			expect.any(Function),
+		)
+		expect(recordSummaryServiceMock.prepareRecordingOverride).toHaveBeenCalledWith(
+			"other-tab-session",
+		)
+		expect(runtimeMock.actions.startRecording).toHaveBeenCalledTimes(1)
+	})
+
+	it("does not create a new recording when replacement is declined", async () => {
+		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue({
+			sessionId: "current-session",
+			duration: "00:12:34",
+			source: "currentTab",
+			status: "recording",
+		})
+		forceOverrideMock.run.mockResolvedValue(false)
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.startRecording()
+		})
+
+		expect(superMagicApiMock.createAudioProject).not.toHaveBeenCalled()
+		expect(runtimeMock.actions.startRecording).not.toHaveBeenCalled()
+	})
+
+	it("passes the confirmed session id when force-releasing", async () => {
+		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue({
+			sessionId: "current-session",
+			duration: "00:12:34",
+			source: "currentTab",
+			status: "recording",
+		})
+		recordSummaryServiceMock.prepareRecordingOverride.mockResolvedValue(false)
+		forceOverrideMock.run.mockImplementation(
+			async (
+				_context: unknown,
+				prepare: () => Promise<boolean>,
+				forceRelease?: () => Promise<boolean> | boolean,
+			) => {
+				await prepare()
+				await forceRelease?.()
+				return true
+			},
+		)
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.startRecording()
+		})
+
+		expect(recordSummaryServiceMock.releaseOverrideSessionForForceStart).toHaveBeenCalledWith(
+			"current-session",
+		)
+	})
+
+	it("does not create a new recording when replacement preparation fails", async () => {
+		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue({
+			sessionId: "current-session",
+			duration: "00:12:34",
+			source: "currentTab",
+			status: "recording",
+		})
+		recordSummaryServiceMock.prepareRecordingOverride.mockResolvedValue(false)
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.startRecording()
+		})
+
+		expect(recordSummaryServiceMock.prepareRecordingOverride).toHaveBeenCalledWith(
+			"current-session",
+		)
+		expect(superMagicApiMock.createAudioProject).not.toHaveBeenCalled()
+		expect(runtimeMock.actions.startRecording).not.toHaveBeenCalled()
+	})
+
+	it("ignores repeated start clicks while conflict detection is pending", async () => {
+		let resolveContext: ((value: null) => void) | undefined
+		recordSummaryServiceMock.getRecordingOverrideContext.mockImplementation(
+			() =>
+				new Promise<null>((resolve) => {
+					resolveContext = resolve
+				}),
+		)
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		let firstStart: Promise<void>
+		await act(async () => {
+			firstStart = result.current.startRecording()
+			await result.current.startRecording()
+		})
+
+		expect(recordSummaryServiceMock.getRecordingOverrideContext).toHaveBeenCalledTimes(1)
+
+		await act(async () => {
+			resolveContext?.(null)
+			if (!firstStart) throw new Error("first start promise was not created")
+			await firstStart
+		})
+
+		expect(runtimeMock.actions.startRecording).toHaveBeenCalledTimes(1)
 	})
 
 	it("collapses back to list presentation without stopping the shared session", async () => {
@@ -496,20 +790,17 @@ describe("useRecordingEntryFacade", () => {
 		expect(result.current.isSessionActive).toBe(true)
 	})
 
-	it("creates an audio workspace context on demand before starting recording", async () => {
-		superMagicApiMock.getWorkspaces.mockResolvedValue({
-			list: [{ id: "workspace-2", name: "Workspace Two" }],
-		})
+	it("creates an ungrouped audio project context before starting recording from All", async () => {
 		superMagicApiMock.createAudioProject.mockResolvedValue({
 			project: {
 				id: "project-ensured",
 				project_name: "Ensured Project",
-				workspace_id: "workspace-2",
+				workspace_id: null,
 			},
 			topic: {
 				id: "topic-ensured",
 				topic_name: "Ensured Topic",
-				workspace_id: "workspace-2",
+				workspace_id: null,
 			},
 		})
 
@@ -519,15 +810,11 @@ describe("useRecordingEntryFacade", () => {
 			await result.current.startRecording()
 		})
 
-		expect(superMagicApiMock.getWorkspaces).toHaveBeenCalledWith({
-			page: 1,
-			page_size: 200,
-			workspace_type: "audio",
-			auto_create: true,
-		})
+		expect(superMagicApiMock.getWorkspaceDetail).not.toHaveBeenCalled()
 		expect(runtimeMock.actions.startRecording).toHaveBeenCalledWith(
 			expect.objectContaining({
-				workspace: expect.objectContaining({ id: "workspace-2" }),
+				workspace: null,
+				project: expect.objectContaining({ id: "project-ensured" }),
 			}),
 		)
 	})
@@ -671,9 +958,6 @@ describe("useRecordingEntryFacade", () => {
 	})
 
 	it("submits imported audio for summary after upload completes", async () => {
-		superMagicApiMock.getWorkspaces.mockResolvedValue({
-			list: [{ id: "workspace-import", name: "Workspace Import" }],
-		})
 		superMagicApiMock.createAudioProject.mockResolvedValue({
 			project: {
 				id: "project-import",
@@ -693,9 +977,13 @@ describe("useRecordingEntryFacade", () => {
 			)
 		})
 
+		expect(superMagicApiMock.createAudioProject.mock.calls[0]?.[0]).not.toHaveProperty(
+			"workspace_id",
+		)
 		expect(importTestState.queuedFiles).toHaveLength(1)
 		expect(importTestState.pendingImportContext).toMatchObject({
 			autoSummaryEnabled: true,
+			workspaceId: UNGROUPED_RECORDING_GROUP_ID,
 		})
 
 		await act(async () => {
@@ -738,6 +1026,51 @@ describe("useRecordingEntryFacade", () => {
 		})
 	})
 
+	it("imports audio into the currently selected real group", async () => {
+		writeAudioRecordingsFilterSession({
+			summaryFilter: "all",
+			datePreset: "all",
+			sortBy: "updated_at",
+			sortOrder: "desc",
+			searchKeyword: "",
+			groupId: "workspace-audio-001",
+		})
+		superMagicApiMock.createAudioProject.mockResolvedValue({
+			project: {
+				id: "project-import-grouped",
+				project_name: "Grouped Import",
+			},
+			topic: {
+				id: "topic-import-grouped",
+				topic_name: "Grouped Import Topic",
+			},
+		})
+
+		const { result } = renderHook(() => useRecordingEntryFacade())
+
+		await act(async () => {
+			await result.current.importAudioFiles(
+				createFileList([new File(["voice"], "grouped.wav", { type: "audio/wav" })]),
+			)
+		})
+
+		expect(superMagicApiMock.getWorkspaceDetail).toHaveBeenCalledWith({
+			id: "workspace-audio-001",
+		})
+		expect(superMagicApiMock.createAudioProject).toHaveBeenCalledWith(
+			expect.objectContaining({
+				workspace_id: "workspace-audio-001",
+				audio_source: "imported",
+			}),
+		)
+		expect(audioImportStoreMock.startAudioImport).toHaveBeenCalledWith(
+			expect.any(Array),
+			expect.objectContaining({
+				workspaceId: "workspace-audio-001",
+			}),
+		)
+	})
+
 	it("passes disabled auto summary into imported upload context", async () => {
 		seedRecordingSettingsCacheForTests(
 			{
@@ -754,9 +1087,6 @@ describe("useRecordingEntryFacade", () => {
 			},
 		)
 
-		superMagicApiMock.getWorkspaces.mockResolvedValue({
-			list: [{ id: "workspace-import", name: "Workspace Import" }],
-		})
 		superMagicApiMock.createAudioProject.mockResolvedValue({
 			project: {
 				id: "project-import-manual",
@@ -780,6 +1110,7 @@ describe("useRecordingEntryFacade", () => {
 			expect.objectContaining({
 				audio_source: "imported",
 				auto_summary: false,
+				is_hidden: true,
 			}),
 		)
 		expect(audioImportStoreMock.startAudioImport).toHaveBeenCalledWith(

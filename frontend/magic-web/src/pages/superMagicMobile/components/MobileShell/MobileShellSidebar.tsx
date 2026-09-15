@@ -5,9 +5,10 @@ import { useTranslation } from "react-i18next"
 import { InfiniteScroll } from "antd-mobile"
 import { RefreshCw } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/shadcn-ui/avatar"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { userStore } from "@/models/user"
 import { getAvatarColor } from "@/utils/avatar-color"
+import { getAvatarUrl } from "@/utils/avatar"
 import { MobileBrandLogo } from "@/pages/superMagicMobile/components/MobileBrandLogo"
 import { useMobileSettingsController } from "@/pages/superMagicMobile/components/MobileShell/MobileSettingsContext"
 import { useProjectListActions } from "@/pages/superMagicMobile/components/ProjectList/hooks/useProjectActions"
@@ -187,10 +188,7 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 					data-testid={`${MOBILE_SHELL_SHARED_TEST_ID_PREFIX}-brand-button`}
 				>
 					<div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
-						<MobileBrandLogo
-							className="mt-[-6px] h-9 w-9 shrink-0"
-							logoPixelSize={36}
-						/>
+						<MobileBrandLogo className="h-9 w-9 shrink-0" logoPixelSize={36} />
 					</div>
 					<span className="text-[20px] font-medium leading-none text-foreground">
 						{appName}
@@ -303,7 +301,11 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 						{/* Prefer real avatar; colored initial fallback matches prototype when image is missing. */}
 						<Avatar className="size-6">
 							{avatarUrl ? (
-								<AvatarImage src={avatarUrl} alt="" referrerPolicy="no-referrer" />
+								<AvatarImage
+									src={getAvatarUrl(avatarUrl, 24)}
+									alt=""
+									referrerPolicy="no-referrer"
+								/>
 							) : null}
 							<AvatarFallback
 								className="text-[12px] font-semibold"

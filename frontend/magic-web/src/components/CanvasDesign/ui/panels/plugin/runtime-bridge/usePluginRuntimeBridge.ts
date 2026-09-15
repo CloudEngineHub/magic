@@ -65,7 +65,7 @@ interface UsePluginRuntimeBridgeParams {
 	/** 插件来源元素映射 */
 	sourceElementByAssetKeyRef: MutableRefObject<PluginSourceElementMap>
 	/** 设置框架高度 */
-	setFrameHeight: Dispatch<SetStateAction<number>>
+	setFrameHeight: (height: number) => void
 }
 
 export function usePluginRuntimeBridge({
@@ -275,6 +275,7 @@ export function usePluginRuntimeBridge({
 							const filesWithSources = hydratePluginFileAssetSources(
 								sourceElementByAssetKeyRef.current,
 								files,
+								canvas.magicConfigManager.config?.methods?.resolveResourceReference,
 							)
 							postPluginMessage({
 								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.ResolveFileAssets,
@@ -298,10 +299,12 @@ export function usePluginRuntimeBridge({
 							registerPluginClipboardSourceElements(
 								sourceElementByAssetKeyRef.current,
 								result.payload,
+								canvas.magicConfigManager.config?.methods?.resolveResourceReference,
 							)
 							registerPluginFileAssetSources(
 								sourceElementByAssetKeyRef.current,
 								result.uploadedAssets,
+								canvas.magicConfigManager.config?.methods?.resolveResourceReference,
 							)
 							postPluginMessage({
 								type: PLUGIN_RUNTIME_RESULT_MESSAGE_TYPE.ReadCanvasClipboard,

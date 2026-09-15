@@ -1,11 +1,12 @@
 import { TriangleAlert } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { Button } from "@/components/shadcn-ui/button"
 import { Separator } from "@/components/shadcn-ui/separator"
 import type { MessageEditorSize } from "../../types"
 import { observer } from "mobx-react-lite"
+import { formatTokenCount } from "./utils"
 
 /** Max token context window size */
 const MAX_TOKEN_COUNT = 200_000
@@ -37,11 +38,6 @@ const TRIGGER_STYLE_MAP: Record<
 		text: "text-xs leading-4",
 		ring: 16,
 	},
-}
-
-function formatTokenCount(count: number): string {
-	if (count >= 1_000) return `${Math.round(count / 1_000)}K`
-	return String(count)
 }
 
 function formatPercentage(ratio: number): string {

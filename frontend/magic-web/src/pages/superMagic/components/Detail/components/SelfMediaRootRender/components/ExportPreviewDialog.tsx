@@ -11,7 +11,7 @@ import {
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
 import { Label } from "@/components/shadcn-ui/label"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import CardFrame from "./CardFrame"
 import type { CardFrameRef } from "./CardFrame"
 import ExportOptionsSections from "./ExportOptionsSections"
@@ -212,9 +212,8 @@ function ExportPreviewDialog({
 	const hintH = Math.max(0, Math.floor(exportSizeHintCss.height))
 
 	const isWechatOfficialMode = exportMode === "wechatOfficial"
-	const isLongImageReady =
+	const areSelectedCardsReady =
 		isWechatOfficialMode ||
-		exportType !== "longImage" ||
 		orderedCardIndexes.every(
 			(cardIndex) =>
 				Boolean(selectedPost?.cards[cardIndex]?.fileId) &&
@@ -230,7 +229,7 @@ function ExportPreviewDialog({
 	const disableConfirm =
 		isExporting ||
 		(isWechatOfficialMode ? !hasWechatCoverAssets : orderedCardIndexes.length === 0) ||
-		!isLongImageReady
+		!areSelectedCardsReady
 
 	const handleConfirm = useCallback(async () => {
 		if (disableConfirm) return

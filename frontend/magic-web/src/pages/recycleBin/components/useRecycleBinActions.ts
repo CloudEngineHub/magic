@@ -18,6 +18,7 @@ import {
 	isRestorableResourceType,
 	resolveNeedMove,
 	resolvePendingRestore,
+	shouldRestoreMicroAppWithoutMove,
 	type DeleteTarget,
 	type RecycleBinItem,
 	type RestoreCheckResult,
@@ -147,7 +148,8 @@ function parseRestoreCheckResponse(data: {
 		directResourceIds.push(resourceId)
 	})
 
-	const noConflictResourceIds = oldNoNeedMove.length > 0 ? toResourceIds(oldNoNeedMove) : toResourceIds(noConflict)
+	const noConflictResourceIds =
+		oldNoNeedMove.length > 0 ? toResourceIds(oldNoNeedMove) : toResourceIds(noConflict)
 	directResourceIds.push(...noConflictResourceIds)
 	const uniqueDirectResourceIds = Array.from(new Set(directResourceIds))
 	const uniqueMustSkipResourceIds = Array.from(new Set(mustSkipResourceIds))
@@ -155,7 +157,10 @@ function parseRestoreCheckResponse(data: {
 	return {
 		itemsNeedMove:
 			oldNeedMove.length > 0
-				? excludeRestoreResourceIds(toResourceIds(oldNeedMove), pendingNameConflictResourceIds)
+				? excludeRestoreResourceIds(
+						toResourceIds(oldNeedMove),
+						pendingNameConflictResourceIds,
+					)
 				: excludeRestoreResourceIds(needMoveFromConflict, pendingNameConflictResourceIds),
 		itemsNoNeedMove: excludeRestoreResourceIds(
 			oldNoNeedMove.length > 0 ? toResourceIds(oldNoNeedMove) : toResourceIds(noConflict),
@@ -616,6 +621,16 @@ export function useRecycleBinActions({
 					currentIndex: 0,
 				})
 			}
+			return
+		}
+
+		if (
+			shouldRestoreMicroAppWithoutMove(resourceType, restoreCheckResult?.itemsNeedMove ?? [])
+		) {
+			await restoreResources({
+				resourceType,
+				resourceIds: directResourceIds,
+			})
 			return
 		}
 

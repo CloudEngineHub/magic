@@ -14,6 +14,7 @@ use App\Domain\Design\Entity\ValueObject\DesignGenerationStatus;
 use App\Domain\Design\Repository\Facade\DesignGenerationTaskRepositoryInterface;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use DateTime;
 
 use function Hyperf\Translation\trans;
@@ -162,7 +163,7 @@ readonly class DesignGenerationTaskDomainService
             $runtimeStatus,
             $this->resolveProviderMessage($providerResult, $error),
         );
-        $providerPayload[self::PROVIDER_KEY_LAST_PROVIDER_RESULT] = $providerResult;
+        $providerPayload[self::PROVIDER_KEY_LAST_PROVIDER_RESULT] = PayloadLogSanitizer::sanitizeValue($providerResult);
         $providerPayload[self::PROVIDER_KEY_LAST_PROVIDER_RESULT_UPDATED_AT] = $providerResult === [] ? ($providerPayload[self::PROVIDER_KEY_LAST_PROVIDER_RESULT_UPDATED_AT] ?? null) : $now;
         $providerPayload[self::PROVIDER_KEY_PROVIDER_TASK_ID] = $this->resolveProviderTaskId($providerPayload, $providerResult, $output);
 
@@ -200,18 +201,10 @@ readonly class DesignGenerationTaskDomainService
         $this->repository->update($dataIsolation, $entity);
     }
 
-    public function markAsFailed(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity, string $errorMessage, ?string $errorCode = null): void
+    public function markAsFailed(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity, string $errorMessage): void
     {
         $entity->setStatus(DesignGenerationStatus::FAILED);
-
-        $sanitizePublicErrorMessage = null;
-        if ($errorCode) {
-            $sanitizePublicErrorMessage = $this->sanitizePublicErrorCode($errorCode);
-        }
-        if (is_null($sanitizePublicErrorMessage)) {
-            $sanitizePublicErrorMessage = $this->sanitizePublicErrorMessage($errorMessage);
-        }
-        $entity->setErrorMessage($sanitizePublicErrorMessage);
+        $entity->setErrorMessage($errorMessage);
         $entity->setUpdatedAt(new DateTime());
         $this->repository->update($dataIsolation, $entity);
     }
@@ -265,13 +258,6 @@ readonly class DesignGenerationTaskDomainService
         }
 
         return $this->sanitizePublicErrorMessage($message);
-    }
-
-    private function sanitizePublicErrorCode(string $errorCode): ?string
-    {
-        $errorKey = 'video.errors.' . $errorCode;
-        $errorMessage = trans($errorKey);
-        return $errorMessage === $errorKey ? null : $errorMessage;
     }
 
     private function sanitizePublicErrorMessage(?string $message): string

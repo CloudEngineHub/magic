@@ -20,8 +20,9 @@ import {
 	validateMentionItems,
 } from "../utils/mention"
 import { superMagicUploadTokenService } from "./UploadTokenService"
+import { htmlScreenshotUploadService } from "./HtmlScreenshotUploadService"
 import { MentionItemsStatistics } from "./types"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { SuperMagicApi } from "@/apis"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
@@ -132,11 +133,38 @@ export class MentionItemsProcessor {
 			return { mentionItems: processedItems, content }
 		}
 
-		const saveResults = await this.saveTempFilesToProject(validItems, projectId, topicId)
+		const screenshotItems = validItems.filter((item) => {
+			const data = item.attrs.data as UploadFileMentionData
+			return data.is_html_screenshot && Boolean(data.storage_id)
+		})
+		const regularItems = validItems.filter((item) => !screenshotItems.includes(item))
+		const [regularSaveResults, screenshotSaveEntries] = await Promise.all([
+			regularItems.length > 0
+				? this.saveTempFilesToProject(regularItems, projectId, topicId)
+				: Promise.resolve([]),
+			screenshotItems.length > 0
+				? htmlScreenshotUploadService.uploadStoredScreenshots(
+						screenshotItems.map((item) => {
+							const data = item.attrs.data as UploadFileMentionData
+							return {
+								storageId: data.storage_id as string,
+								fileName: data.file_name,
+							}
+						}),
+						{ projectId, topicId },
+					)
+				: Promise.resolve([]),
+		])
+		const screenshotSaveResults = screenshotSaveEntries.map(({ result }) => result)
+		const screenshotSaveByStorageId = Object.fromEntries(
+			screenshotSaveEntries.map(({ storageId, result }) => [storageId, result]),
+		)
+		const saveResults = [...regularSaveResults, ...screenshotSaveResults]
 		const transformedResult = transformMentionItemsToProjectFiles(
 			content,
 			processedItems,
 			saveResults,
+			screenshotSaveByStorageId,
 		)
 
 		return transformedResult

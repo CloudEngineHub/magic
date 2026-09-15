@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { SendMessageByContentPayload } from "@/pages/superMagic/components/MessageEditor/types"
 import {
 	MentionItemType,
@@ -62,6 +62,7 @@ export interface SuperMagicAddContentToChatPayload {
 	content?: JSONContent
 	extraData?: {
 		hasInput?: boolean
+		focusAtEnd?: boolean
 	}
 }
 
@@ -87,6 +88,20 @@ export interface SuperMagicCreateNewTopicPayload {
 		shouldClearEditorAfterSend?: SendMessageByContentPayload["shouldClearEditorAfterSend"]
 		extra?: SendMessageByContentPayload["extra"]
 	}
+}
+
+export type SuperMagicWidgetEditorCommandName =
+	| "setInput"
+	| "appendInput"
+	| "clearInput"
+	| "getInput"
+	| "sendMessage"
+
+/** Carries one Widget-only editor request without exposing editor state to the host page. */
+export interface SuperMagicWidgetEditorCommandPayload {
+	command: SuperMagicWidgetEditorCommandName
+	content?: string | JSONContent
+	respond: (result?: string, error?: string) => void
 }
 
 /**
@@ -300,6 +315,60 @@ export interface SuperMagicAddFileToChatPayload {
 	items: TiptapMentionAttributes[]
 	is_new_topic: boolean
 	autoFocus?: boolean
+}
+
+/** Canvas selection media staged into MessageEditor before editor focus. */
+export interface SuperMagicCanvasSelectionMentionsPayload {
+	scopeKey: string
+	selectionRevision: string
+	/** Whether this snapshot comes from the currently active Canvas source. */
+	active: boolean
+	items: TiptapMentionAttributes[]
+}
+
+export interface CanvasSelectionMentionScope {
+	workspaceId?: string | null
+	projectId?: string | null
+	topicId?: string | null
+	designProjectId?: string | null
+}
+
+/**
+ * Canvas selection is produced by a detail tab but consumed by the shared
+ * MessageEditor. Keep the serialised key in one place so both sides agree on
+ * the workspace/project/topic boundary while retaining the source canvas id.
+ */
+export function createCanvasSelectionMentionScopeKey(scope: CanvasSelectionMentionScope): string {
+	return JSON.stringify([
+		scope.workspaceId ?? "",
+		scope.projectId ?? "",
+		scope.topicId ?? "",
+		scope.designProjectId ?? "",
+	])
+}
+
+/**
+ * The editor is shared by detail tabs and does not own a canvas id. It accepts
+ * snapshots from the active canvas only when their workspace/project/topic
+ * boundary matches the current conversation; the payload's active flag lets it
+ * ignore stale deactivation events from cached sibling canvases.
+ */
+export function isCanvasSelectionMentionScopeInContext(
+	scopeKey: string,
+	scope: Pick<CanvasSelectionMentionScope, "workspaceId" | "projectId" | "topicId">,
+): boolean {
+	try {
+		const parsed = JSON.parse(scopeKey)
+		if (!Array.isArray(parsed) || parsed.length < 3) return false
+		const [workspaceId, projectId, topicId] = parsed
+		return (
+			workspaceId === (scope.workspaceId ?? "") &&
+			projectId === (scope.projectId ?? "") &&
+			topicId === (scope.topicId ?? "")
+		)
+	} catch {
+		return false
+	}
 }
 
 /**

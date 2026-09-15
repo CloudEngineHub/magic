@@ -1,5 +1,11 @@
 import Konva from "konva"
-import type { LayerElement, CanvasDocument, ImageElement } from "../../document/types"
+import type {
+	LayerElement,
+	CanvasDocument,
+	ImageElement,
+	ElementType,
+	ElementUpdatePatch,
+} from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import type {
 	CanvasElementChangePayload,
@@ -16,10 +22,21 @@ import { ImageElement as ImageElementClass } from "../image/ImageElement"
 import { VideoElement as VideoElementClass } from "../video/VideoElement"
 import { exportCanvasDocument, exportLayerElement } from "../../document/exportDocument"
 import { syncCropConfigOnResize } from "../../resources/image/imageCropUtils"
-import { normalizeSize } from "../../shared/normalize/normalizeUtils"
+import { normalizeFrameCreationSize, normalizeSize } from "../../shared/normalize/normalizeUtils"
 import { sanitizeCanvasDocument } from "../../document/temporaryElementUtils"
 import { CanvasDocumentIndex } from "./CanvasDocumentIndex"
 import { resumeImageBatchPollingManagers } from "../../resources/polling/resumeImageBatchPolling"
+import {
+	getActiveImageContent,
+	updateImageContent,
+	getActiveContent,
+	getElementContentFields,
+	updateContent,
+} from "../../document/elementContent"
+import type { UploadFileResponse } from "../../../public/magic-types"
+import { validateElementData } from "../../document/validateElement"
+import { generateUniqueElementName } from "../../shared/ids"
+import { getAllExistingNames } from "../../shared/placement/elementUtils"
 
 /**
  * 更新模式
@@ -32,6 +49,8 @@ export type UpdateMode = "full" | "data-only" | "node-only"
 export interface ElementOperationOptions {
 	/** 不触发 element:updated 事件（不记录历史） */
 	silent?: boolean
+	/** 触发持久化更新事件，但不将本次更新加入用户撤回栈 */
+	historyPolicy?: "include" | "exclude"
 	/** 强制重新渲染 */
 	forceRerender?: boolean
 	/** 批量操作模式（延迟事件触发，需要手动调用 flush） */
@@ -44,6 +63,19 @@ export interface ElementOperationOptions {
 	skipGeometryInvalidate?: boolean
 	/** 跳过 zIndex 变更后的全量同级节点重排；调用方需要自行维护 Konva 节点顺序 */
 	skipZIndexReorder?: boolean
+	/** 批量更新成功后是否发送 element:batchupdated；事务调用方可延后到正式提交后发送 */
+	emitBatchUpdated?: boolean
+}
+
+export interface ElementCreateResult<T extends LayerElement = LayerElement> {
+	elementId: string
+	element: T
+}
+
+export interface ElementLoadIssue {
+	elementId: string
+	elementType: LayerElement["type"]
+	message: string
 }
 
 export interface ElementManagerDocumentPatch {
@@ -74,6 +106,38 @@ export interface ReparentElementsOptions {
 	silent?: boolean
 }
 
+export type TemporaryElementKind = "upload" | "generation-result"
+
+export interface TemporaryElementMetadata {
+	kind: TemporaryElementKind
+	historyPolicy: "include" | "exclude"
+	clipboardPolicy: "include" | "exclude"
+}
+
+const TEMPORARY_ELEMENT_METADATA: Record<TemporaryElementKind, TemporaryElementMetadata> = {
+	upload: {
+		kind: "upload",
+		historyPolicy: "include",
+		clipboardPolicy: "include",
+	},
+	"generation-result": {
+		kind: "generation-result",
+		historyPolicy: "exclude",
+		clipboardPolicy: "exclude",
+	},
+}
+
+export interface CommitGenerationTarget {
+	elementId: string
+	contentId?: string
+	persistedPatch: ElementUpdatePatch
+}
+
+type ElementMutationPatch = ElementUpdatePatch & {
+	id?: string
+	type?: ElementType
+}
+
 /**
  * 元素管理器 - 管理画布上的所有元素实例
  * 职责：
@@ -91,6 +155,7 @@ export class ElementManager {
 	private elementListeningDisabled = false
 	private viewportGestureUnsubscribe?: () => void
 	private batchMode = false
+	private lastLoadIssues: ElementLoadIssue[] = []
 	private isBatchDeleting = false
 	private pendingBatchDeleteChangeIds: Set<string> = new Set()
 	private isContentLayerDrawDeferred = false
@@ -102,8 +167,8 @@ export class ElementManager {
 	public zIndexManager: ZIndexManager
 	private documentIndex: CanvasDocumentIndex = new CanvasDocumentIndex()
 
-	// 临时元素标记集合
-	private temporaryElements: Set<string> = new Set()
+	// 临时元素按来源分类；不同来源拥有独立的历史和剪贴板策略。
+	private temporaryElements: Map<string, TemporaryElementMetadata> = new Map()
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
@@ -124,15 +189,64 @@ export class ElementManager {
 	 * 创建元素
 	 * @param elementData - 元素数据
 	 * @param options - 操作选项
+	 * 主动创建的 Frame 会在此统一规范化宽高；文档加载不经过此入口。
 	 * @throws 如果元素已存在
 	 */
-	public create(elementData: LayerElement, options?: ElementOperationOptions): void {
+	public create<T extends LayerElement>(
+		elementData: T,
+		options?: ElementOperationOptions,
+	): ElementCreateResult<T> | null {
 		if (this.elements.has(elementData.id)) {
 			throw new Error(
 				`Element ${elementData.id} already exists. Use update() or upsert() instead.`,
 			)
 		}
-		this.doCreate(elementData, options || {})
+		const resolvedElement = this.resolveUniqueElementName(
+			this.normalizeCreatedElementData(elementData),
+		)
+		this.doCreate(resolvedElement, options || {})
+		const createdElement = this.elements.get(resolvedElement.id)?.getData()
+		if (!createdElement) {
+			return null
+		}
+		return { elementId: resolvedElement.id, element: createdElement as T }
+	}
+
+	/**
+	 * 创建仅存在于运行时的临时元素。
+	 * 临时标记必须早于 element:created，保证外部 DSL 导出不会包含该元素。
+	 */
+	public createTemporaryElement(
+		elementData: LayerElement,
+		options?: ElementOperationOptions,
+		temporaryKind: TemporaryElementKind = "generation-result",
+	): ElementCreateResult {
+		if (this.elements.has(elementData.id)) {
+			throw new Error(`Element ${elementData.id} already exists`)
+		}
+
+		const elementWithUniqueName = this.resolveUniqueElementName(
+			this.normalizeCreatedElementData(elementData),
+		)
+		this.markElementTemporary(elementWithUniqueName.id, temporaryKind)
+		try {
+			this.doCreate(elementWithUniqueName, options || {})
+			if (!this.elements.has(elementWithUniqueName.id)) {
+				throw new Error(`Element ${elementWithUniqueName.id} could not be created`)
+			}
+		} catch (error) {
+			if (this.elements.has(elementWithUniqueName.id)) {
+				this.doDelete(elementWithUniqueName.id, { suppressEvents: true })
+			} else {
+				this.temporaryElements.delete(elementWithUniqueName.id)
+			}
+			throw error
+		}
+		const createdElement = this.elements.get(elementWithUniqueName.id)?.getData()
+		if (!createdElement) {
+			throw new Error(`Element ${elementWithUniqueName.id} could not be created`)
+		}
+		return { elementId: elementWithUniqueName.id, element: createdElement }
 	}
 
 	/**
@@ -146,21 +260,15 @@ export class ElementManager {
 		elementData: LayerElement,
 		uploadContext: {
 			uploadFiles: File[]
-			onUploadComplete?: (elementId: string) => void
+			onUploadComplete?: (elementId: string, result: UploadFileResponse) => void
 			onUploadFailed?: (elementId: string, error: Error) => void
 		},
 	): string {
-		if (this.elements.has(elementData.id)) {
-			throw new Error(`Element ${elementData.id} already exists`)
-		}
-
-		this.markElementTemporary(elementData.id)
-
 		// 创建元素实例（与正式元素相同的渲染逻辑）
-		this.doCreate(elementData, { silent: false })
+		const createResult = this.createTemporaryElement(elementData, { silent: false }, "upload")
 
 		// 获取元素实例
-		const element = this.elements.get(elementData.id)
+		const element = this.elements.get(createResult.elementId)
 
 		// 如果是 ImageElement，创建 ossSrc Promise
 		if (element instanceof ImageElementClass) {
@@ -171,11 +279,11 @@ export class ElementManager {
 		const { uploadFiles, onUploadComplete, onUploadFailed } = uploadContext
 		if (uploadFiles.length > 0) {
 			this.canvas.canvasFileUploadManager.queueUpload({
-				elementId: elementData.id,
+				elementId: createResult.elementId,
 				file: uploadFiles[0],
 				onUploadComplete: (result) => {
 					// 存储上传结果到元素实例（用于后续处理）
-					const element = this.elements.get(elementData.id)
+					const element = this.elements.get(createResult.elementId)
 					if (
 						element instanceof ImageElementClass ||
 						element instanceof VideoElementClass
@@ -183,24 +291,24 @@ export class ElementManager {
 						element.uploadResult = result
 					}
 					// 触发原始回调
-					onUploadComplete?.(elementData.id)
+					onUploadComplete?.(createResult.elementId, result)
 				},
 				onUploadFailed: (error) => {
 					// 触发原始回调
-					onUploadFailed?.(elementData.id, error)
+					onUploadFailed?.(createResult.elementId, error)
 				},
 			})
 		}
 
-		return elementData.id
+		return createResult.elementId
 	}
 
 	/**
 	 * 将已存在或即将创建的元素标记为临时元素。
 	 * 用于容器子元素先渲染上传态、后续上传完成再转正的场景。
 	 */
-	public markElementTemporary(elementId: string): void {
-		this.temporaryElements.add(elementId)
+	public markElementTemporary(elementId: string, kind: TemporaryElementKind = "upload"): void {
+		this.temporaryElements.set(elementId, TEMPORARY_ELEMENT_METADATA[kind])
 	}
 
 	/**
@@ -211,7 +319,7 @@ export class ElementManager {
 	 */
 	public convertToPermament(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementUpdatePatch,
 		options?: ElementOperationOptions,
 	): void {
 		if (!this.temporaryElements.has(elementId)) {
@@ -232,6 +340,80 @@ export class ElementManager {
 	}
 
 	/**
+	 * 将一个或多个已被后端确认的生成目标一次性写入正式 DSL。
+	 * 目标会先完整校验，再通过单次 batchUpdate 提交，从而只产生一个历史快照和一个 element:change。
+	 */
+	public commitGenerationTargets(targets: CommitGenerationTarget[]): void {
+		if (targets.length === 0) return
+
+		const elementIds = new Set<string>()
+		const convertedElementIds: string[] = []
+		for (const target of targets) {
+			if (elementIds.has(target.elementId)) {
+				throw new Error(`Duplicate generation target ${target.elementId}`)
+			}
+			elementIds.add(target.elementId)
+
+			if (!this.elements.has(target.elementId)) {
+				throw new Error(`Element ${target.elementId} not found`)
+			}
+
+			const temporary = this.temporaryElements.get(target.elementId)
+			if (temporary?.kind === "upload") {
+				throw new Error(`Element ${target.elementId} is an upload temporary element`)
+			}
+			if (temporary?.kind === "generation-result") {
+				convertedElementIds.push(target.elementId)
+			}
+		}
+
+		this.batchUpdate(
+			targets.map((target) => ({
+				id: target.elementId,
+				data: target.persistedPatch,
+			})),
+			{
+				silent: false,
+				emitBatchUpdated: convertedElementIds.length === 0,
+			},
+		)
+
+		// batchUpdate 成功后才登记 user，避免写 DSL 失败时留下虚假的任务所有权。
+		for (const target of targets) {
+			const imagePatch = target.persistedPatch as Record<string, unknown>
+			const request = target.contentId
+				? (
+						imagePatch.contents as
+							| Array<{
+									contentId: string
+									generateImageRequest?: { image_id?: string }
+							  }>
+							| undefined
+					)?.find((content) => content.contentId === target.contentId)
+						?.generateImageRequest
+				: (imagePatch.generateImageRequest as { image_id?: string } | undefined)
+			if (request?.image_id) {
+				this.canvas.elementDetailsRuntimeManager?.markGenerateImageRequestAsUser(
+					target.elementId,
+					request.image_id,
+					target.contentId,
+				)
+			}
+		}
+
+		convertedElementIds.forEach((elementId) => this.temporaryElements.delete(elementId))
+		convertedElementIds.forEach((elementId) => {
+			this.canvas.eventEmitter.emit({
+				type: "element:temporary:converted",
+				data: { elementId },
+			})
+		})
+		if (convertedElementIds.length > 0) {
+			this.canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+		}
+	}
+
+	/**
 	 * 更新元素（统一接口，通过 mode 控制更新行为）
 	 * @param elementId - 元素ID
 	 * @param updates - 要更新的属性
@@ -240,7 +422,7 @@ export class ElementManager {
 	 */
 	public update(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementUpdatePatch,
 		options?: ElementOperationOptions,
 	): void {
 		const element = this.elements.get(elementId)
@@ -280,7 +462,7 @@ export class ElementManager {
 	 */
 	public updateNode(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementUpdatePatch,
 		options?: { forceUpdate?: boolean },
 	): void {
 		this.update(elementId, updates, {
@@ -296,7 +478,7 @@ export class ElementManager {
 	 */
 	public updateData(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementUpdatePatch,
 		options?: ElementOperationOptions,
 	): void {
 		this.update(elementId, updates, {
@@ -323,7 +505,7 @@ export class ElementManager {
 		if (this.elements.has(elementData.id)) {
 			this.doUpdate(elementData.id, elementData, options || {})
 		} else {
-			this.doCreate(elementData, options || {})
+			this.doCreate(this.normalizeCreatedElementData(elementData), options || {})
 		}
 	}
 
@@ -332,21 +514,36 @@ export class ElementManager {
 	 * @param updates - 更新数组，每项包含 id 和要更新的数据
 	 */
 	public batchUpdate(
-		updates: Array<{ id: string; data: Partial<LayerElement> }>,
+		updates: Array<{ id: string; data: ElementUpdatePatch }>,
 		options?: ElementOperationOptions,
 	): void {
+		// 在任何 Element 落入 Runtime 前完成整批校验，避免后续目标非法时留下部分更新。
+		const stagedDataByElementId = new Map<string, LayerElement>()
+		for (const { id, data } of updates) {
+			const element = this.elements.get(id)
+			if (!element) continue
+			const currentData = stagedDataByElementId.get(id) ?? element.getData()
+			const nextData = this.mergeElementData(currentData, data, id)
+			validateElementData(nextData)
+			stagedDataByElementId.set(id, nextData)
+		}
+
 		this.batchMode = true
+		let succeeded = false
 		try {
 			updates.forEach(({ id, data }) => {
 				if (this.elements.has(id)) {
 					this.doUpdate(id, data, { ...options, batch: true })
 				}
 			})
+			succeeded = true
 		} finally {
 			this.batchMode = false
 			this.flush()
-			// 触发批量更新完成事件
-			this.canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+			if (succeeded && options?.emitBatchUpdated !== false) {
+				// 只有全部更新成功后才触发批量完成，避免失败事务污染历史快照。
+				this.canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+			}
 		}
 	}
 
@@ -355,6 +552,11 @@ export class ElementManager {
 	 * @param elementIds - 要删除的元素 ID 数组
 	 */
 	public batchDelete(elementIds: string[]): void {
+		const documentElementIds = elementIds.filter(
+			(elementId) =>
+				this.elements.has(elementId) &&
+				this.temporaryElements.get(elementId)?.kind !== "generation-result",
+		)
 		// 临时禁用历史记录，避免每次删除都记录
 		const historyManager = this.canvas.historyManager
 		historyManager?.disable()
@@ -374,7 +576,9 @@ export class ElementManager {
 			// 重新启用历史记录并立即记录一次
 			if (historyManager) {
 				historyManager.enable()
-				historyManager.recordHistoryImmediate()
+				if (documentElementIds.length > 0) {
+					historyManager.recordHistoryImmediate()
+				}
 			}
 
 			// 触发批量删除完成事件
@@ -397,12 +601,35 @@ export class ElementManager {
 	 */
 	public replaceAll(elementsData: LayerElement[]): void {
 		this.clear()
+		this.lastLoadIssues = []
 		this.batchMode = true
 		try {
 			// 规范化 zIndex：按原有顺序排序后，重新分配连续的 zIndex
 			const normalizedElements = this.normalizeZIndex(elementsData)
 			normalizedElements.forEach((elementData) => {
-				this.doCreate(elementData, { batch: true })
+				const pendingEventCount = this.pendingEvents.length
+				try {
+					this.doCreate(elementData, { batch: true })
+				} catch (error) {
+					// 丢弃该元素失败前产生的批量事件，避免 flush 时发布半成品状态。
+					this.pendingEvents.length = pendingEventCount
+
+					// 单个元素渲染失败不应阻断其他元素和连接的加载。
+					// 如果元素已经部分挂载，先回滚其运行时实例，避免留下半成品。
+					if (this.elements.has(elementData.id)) {
+						try {
+							this.doDelete(elementData.id, { suppressEvents: true })
+						} catch {
+							// 保留原始加载错误，避免清理失败覆盖根因。
+						}
+					}
+
+					this.lastLoadIssues.push({
+						elementId: elementData.id,
+						elementType: elementData.type,
+						message: error instanceof Error ? error.message : String(error),
+					})
+				}
 			})
 		} finally {
 			this.batchMode = false
@@ -410,6 +637,11 @@ export class ElementManager {
 			// 重新排列顶层元素的渲染顺序，确保 Konva 节点顺序与 zIndex 一致
 			this.reorderTopLevelElements()
 		}
+	}
+
+	/** 获取最近一次批量加载中失败的元素。 */
+	public getLastLoadIssues(): ElementLoadIssue[] {
+		return [...this.lastLoadIssues]
 	}
 
 	/**
@@ -492,12 +724,55 @@ export class ElementManager {
 		this.documentIndex.markDirty()
 	}
 
-	private updateChangesDocumentTopology(updates: Partial<LayerElement>): boolean {
+	private updateChangesDocumentTopology(updates: ElementMutationPatch): boolean {
 		return Object.prototype.hasOwnProperty.call(updates, "children")
 	}
 
 	private getElementSrc(data: LayerElement): string | undefined {
-		return "src" in data ? data.src : undefined
+		const content = this.canvas.getEffectiveContent(data.id) ?? getActiveContent(data)
+		return content && "src" in content && typeof content.src === "string"
+			? content.src
+			: undefined
+	}
+
+	private mergeElementData(
+		currentData: LayerElement,
+		updates: ElementMutationPatch,
+		elementId: string,
+	): LayerElement {
+		if (updates.id !== undefined && updates.id !== elementId) {
+			throw new Error(`Element ${elementId} id cannot be changed`)
+		}
+		if (updates.type !== undefined && updates.type !== currentData.type) {
+			throw new Error(`Element ${elementId} type cannot be changed`)
+		}
+		const contentFields = new Set(getElementContentFields(currentData.type))
+		const contentPatch: Record<string, unknown> = {}
+		const elementUpdates: Record<string, unknown> = {
+			...(updates as unknown as Record<string, unknown>),
+		}
+		for (const field of contentFields) {
+			if (!Object.prototype.hasOwnProperty.call(elementUpdates, field)) continue
+			contentPatch[field] = elementUpdates[field]
+			delete elementUpdates[field]
+		}
+
+		const currentRecord = currentData as unknown as Record<string, unknown>
+		const nextContentElement =
+			Object.keys(contentPatch).length > 0
+				? updateContent(
+						currentData as never,
+						(currentRecord.activeContentId as string | null | undefined) ?? undefined,
+						contentPatch as never,
+					)
+				: currentData
+
+		return {
+			...(nextContentElement as unknown as LayerElement),
+			...elementUpdates,
+			id: elementId,
+			type: currentData.type,
+		} as LayerElement
 	}
 
 	private buildElementNameChange(
@@ -521,13 +796,32 @@ export class ElementManager {
 	// ==================== 私有实现方法 ====================
 
 	/**
+	 * 规范化主动创建的元素数据。
+	 * 文档加载使用 replaceAll()/doCreate()，因此不会改写历史 DSL。
+	 */
+	private normalizeCreatedElementData<T extends LayerElement>(elementData: T): T {
+		if (
+			elementData.type !== ElementTypeEnum.Frame ||
+			elementData.width === undefined ||
+			elementData.height === undefined
+		) {
+			return elementData
+		}
+
+		return {
+			...elementData,
+			...normalizeFrameCreationSize(elementData.width, elementData.height),
+		}
+	}
+
+	/**
 	 * 规范化更新数据（提取公共逻辑）
 	 */
 	private normalizeUpdates(
 		element: BaseElement,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		options?: ElementOperationOptions,
-	): Partial<LayerElement> {
+	): ElementMutationPatch {
 		const normalizedUpdates = { ...updates }
 		const currentData = element.getData()
 
@@ -551,15 +845,18 @@ export class ElementManager {
 				currentData.type === ElementTypeEnum.Image
 					? (currentData as ImageElement)
 					: undefined
-			const normalizedImageUpdates = normalizedUpdates as Partial<ImageElement>
+			const normalizedImageUpdates = normalizedUpdates as Record<string, unknown>
+			const activeImageContent = imageData ? getActiveImageContent(imageData) : undefined
 			const hasExplicitCropField = Object.prototype.hasOwnProperty.call(
-				normalizedImageUpdates,
+				normalizedUpdates,
 				"crop",
 			)
 			const shouldSyncCropOnResize =
-				!!imageData?.crop && !hasExplicitCropField && !options?.skipImageCropResizeSync
+				!!activeImageContent?.crop &&
+				!hasExplicitCropField &&
+				!options?.skipImageCropResizeSync
 
-			if (shouldSyncCropOnResize && imageData && imageData.crop) {
+			if (shouldSyncCropOnResize && imageData && activeImageContent?.crop) {
 				const imageInfo =
 					element instanceof ImageElementClass ? element.getImageInfo() : undefined
 				const sourceDimensions = imageInfo
@@ -572,8 +869,8 @@ export class ElementManager {
 							height: imageData.height ?? 0,
 						}
 
-				normalizedImageUpdates.crop = syncCropConfigOnResize({
-					crop: imageData.crop,
+				const nextCrop = syncCropConfigOnResize({
+					crop: activeImageContent.crop,
 					prevElementSize: {
 						width: imageData.width ?? 0,
 						height: imageData.height ?? 0,
@@ -584,6 +881,14 @@ export class ElementManager {
 					},
 					sourceDimensions,
 				})
+				const nextImage = updateImageContent(
+					imageData,
+					imageData.activeContentId ?? undefined,
+					{ crop: nextCrop },
+				)
+				normalizedImageUpdates.contents = nextImage.contents
+				normalizedImageUpdates.activeContentId = nextImage.activeContentId
+				normalizedImageUpdates.mainContentId = nextImage.mainContentId
 			}
 		}
 
@@ -595,7 +900,7 @@ export class ElementManager {
 	 */
 	private updateNodeOnly(
 		element: BaseElement,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		options?: ElementOperationOptions,
 	): void {
 		const node = element.getNode()
@@ -638,12 +943,13 @@ export class ElementManager {
 	 */
 	private updateDataOnly(
 		element: BaseElement,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		options?: ElementOperationOptions,
 	): void {
 		// 获取当前数据并合并更新
 		const currentData = element.getData()
-		const newData = { ...currentData, ...updates, id: element.getId() } as LayerElement
+		const newData = this.mergeElementData(currentData, updates, element.getId())
+		validateElementData(newData)
 		const nameChange = this.buildElementNameChange(currentData, newData)
 
 		// 更新元素的内部数据（不触发 node 更新）
@@ -662,6 +968,7 @@ export class ElementManager {
 					data: newData,
 					previousData: currentData,
 					nameChange,
+					...(options?.historyPolicy ? { historyPolicy: options.historyPolicy } : {}),
 				},
 			})
 			this.emitElementChange([element.getId()], {
@@ -685,6 +992,7 @@ export class ElementManager {
 			const parentId = this.findParentIdForElement(finalElementData.id)
 			finalElementData.zIndex = this.getNextZIndexInLevel(parentId)
 		}
+		validateElementData(finalElementData)
 
 		const element = this.createElementInstance(finalElementData)
 		if (!element) {
@@ -751,7 +1059,7 @@ export class ElementManager {
 	 */
 	private doUpdate(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		options: ElementOperationOptions,
 	): void {
 		const element = this.elements.get(elementId)
@@ -777,7 +1085,8 @@ export class ElementManager {
 			}
 		}
 
-		const newData = { ...currentData, ...updates, id: elementId } as LayerElement
+		const newData = this.mergeElementData(currentData, updates, elementId)
+		validateElementData(newData)
 		const nameChange = this.buildElementNameChange(currentData, newData)
 
 		// 检测 zIndex 是否改变
@@ -811,7 +1120,13 @@ export class ElementManager {
 		if (!options.silent) {
 			this.emitEvent({
 				type: "element:updated",
-				data: { elementId, data: newData, previousData: currentData, nameChange },
+				data: {
+					elementId,
+					data: newData,
+					previousData: currentData,
+					nameChange,
+					...(options.historyPolicy ? { historyPolicy: options.historyPolicy } : {}),
+				},
 			})
 			this.emitElementChange([elementId], {
 				nameChanges: nameChange ? [nameChange] : undefined,
@@ -825,11 +1140,16 @@ export class ElementManager {
 	 * @param elementId - 元素ID
 	 * @param options - 删除选项
 	 */
-	private doDelete(elementId: string, options?: { skipChildren?: boolean }): void {
+	private doDelete(
+		elementId: string,
+		options?: { skipChildren?: boolean; suppressEvents?: boolean },
+	): void {
 		const element = this.elements.get(elementId)
 		if (!element) return
 
 		const elementData = element.getData()
+		const temporaryMetadata = this.temporaryElements.get(elementId)
+		const isRuntimeOnlyGenerationResult = temporaryMetadata?.kind === "generation-result"
 
 		// 如果是临时元素，清理临时标记
 		if (this.temporaryElements.has(elementId)) {
@@ -840,11 +1160,13 @@ export class ElementManager {
 				element.cancelUpload()
 			}
 
-			// 触发临时元素删除事件
-			this.canvas.eventEmitter.emit({
-				type: "element:temporary:deleted",
-				data: { elementId },
-			})
+			if (!options?.suppressEvents) {
+				// 触发临时元素删除事件
+				this.canvas.eventEmitter.emit({
+					type: "element:temporary:deleted",
+					data: { elementId },
+				})
+			}
 		}
 
 		// 如果不跳过子元素删除，则处理子元素
@@ -860,7 +1182,9 @@ export class ElementManager {
 				elementData.children.length > 0
 			) {
 				// 递归删除所有子元素
-				elementData.children.forEach((child: LayerElement) => this.doDelete(child.id))
+				elementData.children.forEach((child: LayerElement) =>
+					this.doDelete(child.id, { suppressEvents: options?.suppressEvents }),
+				)
 
 				// 清空 Frame 的 children，避免删除时递归删除子元素
 				this.doUpdate(
@@ -868,7 +1192,7 @@ export class ElementManager {
 					{ children: [] },
 					{
 						batch: this.batchMode || this.isBatchDeleting,
-						silent: this.isBatchDeleting,
+						silent: this.isBatchDeleting || options?.suppressEvents,
 					},
 				)
 			} else {
@@ -878,7 +1202,9 @@ export class ElementManager {
 					elementData.children &&
 					Array.isArray(elementData.children)
 				) {
-					elementData.children.forEach((child: LayerElement) => this.doDelete(child.id))
+					elementData.children.forEach((child: LayerElement) =>
+						this.doDelete(child.id, { suppressEvents: options?.suppressEvents }),
+					)
 				}
 			}
 		} else {
@@ -932,7 +1258,7 @@ export class ElementManager {
 					{ children: updatedChildren },
 					{
 						batch: this.batchMode || this.isBatchDeleting,
-						silent: this.isBatchDeleting,
+						silent: this.isBatchDeleting || options?.suppressEvents,
 					},
 				)
 			}
@@ -945,8 +1271,20 @@ export class ElementManager {
 		this.invalidateGeometryForElement(elementId)
 
 		this.scheduleContentLayerDraw()
-		this.canvas.eventEmitter.emit({ type: "element:deleted", data: { elementId } })
-		this.emitElementChange([elementId])
+		if (!options?.suppressEvents) {
+			this.canvas.eventEmitter.emit({
+				type: "element:deleted",
+				data: {
+					elementId,
+					...(isRuntimeOnlyGenerationResult
+						? { persistence: "runtime-only" as const }
+						: {}),
+				},
+			})
+			if (!isRuntimeOnlyGenerationResult) {
+				this.emitElementChange([elementId])
+			}
+		}
 	}
 
 	/**
@@ -1057,6 +1395,7 @@ export class ElementManager {
 				case "element:video:generate-submit-started":
 				case "element:video:generate-submit-failed":
 				case "element:video:fullscreenClick":
+				case "element:audio:fullscreenClick":
 				case "element:image:resultUpdated":
 				case "element:image:loaded":
 				case "element:image:ossSrcReady":
@@ -1561,6 +1900,29 @@ export class ElementManager {
 		return dict
 	}
 
+	/** 为通过公开 create 入口进入运行时的新元素统一分配唯一名称。 */
+	private resolveUniqueElementName(elementData: LayerElement): LayerElement {
+		const existingNames = getAllExistingNames(this)
+
+		const resolve = (element: LayerElement): LayerElement => {
+			let resolved = element
+			if (element.name) {
+				const uniqueName = generateUniqueElementName(element.name, existingNames)
+				if (uniqueName !== element.name) resolved = { ...resolved, name: uniqueName }
+				existingNames.add(uniqueName)
+			}
+			if ("children" in element && Array.isArray(element.children)) {
+				const children = element.children.map(resolve)
+				if (children.some((child, index) => child !== element.children?.[index])) {
+					resolved = { ...resolved, children } as LayerElement
+				}
+			}
+			return resolved
+		}
+
+		return resolve(elementData)
+	}
+
 	public exportDocumentPatch(options: {
 		changedElementIds: string[]
 		deletedElementIds?: string[]
@@ -1612,12 +1974,7 @@ export class ElementManager {
 	 * 导出时「无 crop」不会写出 crop 字段，若合并时缺少该键，{ ...current, ...snapshot } 会错误保留旧 crop（撤销裁剪不生效）。
 	 */
 	private normalizeLayerElementFromSnapshot(data: LayerElement): LayerElement {
-		if (data.type !== ElementTypeEnum.Image) {
-			return data
-		}
-		if (!Object.prototype.hasOwnProperty.call(data, "crop")) {
-			return { ...(data as ImageElement), crop: undefined }
-		}
+		// v3 快照会整体替换 contents；Content 内缺失 crop 已能自然表达“撤销裁剪”。
 		return data
 	}
 
@@ -1626,7 +1983,7 @@ export class ElementManager {
 	 * 只更新变化的元素，避免全量重新渲染
 	 * 在加载时创建深拷贝，确保内部数据不受外部影响（如 useImmer 冻结）
 	 */
-	public loadDocumentSmart(doc: CanvasDocument): void {
+	public loadDocumentSmart(doc: CanvasDocument): boolean {
 		// 深拷贝传入的数据，确保内部数据独立，不受外部状态管理工具影响
 		const docCopy = sanitizeCanvasDocument(JSON.parse(JSON.stringify(doc)) as CanvasDocument)
 		const newElements = docCopy.elements || []
@@ -1730,18 +2087,16 @@ export class ElementManager {
 			this.batchMode = false
 			this.flush()
 			resumeImageBatchPollingManagers(this.canvas)
-
-			// 触发文档恢复事件，通知所有管理器更新（如 name labels、hover 等）
-			// 因为批量模式不会触发 element:updated 事件，需要手动通知
-			if (
-				toUpdate.length > 0 ||
-				toCreate.length > 0 ||
-				toDelete.length > 0 ||
-				toMoveTopLevel.length > 0
-			) {
-				this.canvas.eventEmitter.emit({ type: "document:restored", data: undefined })
-			}
 		}
+
+		// 由 Canvas 在元素与连接都恢复完成后统一发出 document:restored。
+		// ElementManager 单独恢复时不能保证连接管理器已经切换到同一份文档。
+		return (
+			toUpdate.length > 0 ||
+			toCreate.length > 0 ||
+			toDelete.length > 0 ||
+			toMoveTopLevel.length > 0
+		)
 	}
 
 	private moveElementToContentLayer(elementId: string): void {
@@ -1826,25 +2181,35 @@ export class ElementManager {
 	 * 导出文档数据
 	 * 在导出边界创建深拷贝，确保外部获得的是独立副本，避免 useImmer 等状态管理工具冻结内部数据
 	 * @param options 导出选项
-	 * @param options.includeTemporary 是否包含临时元素（默认 false）
+	 * @param options.includeTemporary 是否包含允许进入历史的临时元素（默认 false）
 	 */
 	public exportDocument(options?: { includeTemporary?: boolean }): CanvasDocument {
 		const allElements = this.getAllElements()
 
-		// 根据选项决定是否过滤临时元素
-		// 默认递归过滤（用于外部保存），但历史记录可以选择包含
-		const elements = options?.includeTemporary
-			? allElements
-			: this.filterTemporaryElements(allElements)
+		// 外部保存排除所有临时元素；历史快照只保留声明为 history include 的上传占位。
+		const elements = this.filterTemporaryElements(
+			allElements,
+			options?.includeTemporary ? "history" : "external",
+		)
 
 		// 在导出边界按声明白名单导出，既隔离内部引用，也避免透出运行时附加字段
 		return exportCanvasDocument(elements)
 	}
 
-	private filterTemporaryElements(elements: LayerElement[]): LayerElement[] {
+	private filterTemporaryElements(
+		elements: LayerElement[],
+		policy: "external" | "history" | "clipboard",
+	): LayerElement[] {
 		const filterElement = (element: LayerElement): LayerElement | null => {
-			if (this.temporaryElements.has(element.id)) {
-				return null
+			const temporary = this.temporaryElements.get(element.id)
+			if (temporary) {
+				const shouldInclude =
+					policy === "history"
+						? temporary.historyPolicy === "include"
+						: policy === "clipboard"
+							? temporary.clipboardPolicy === "include"
+							: false
+				if (!shouldInclude) return null
 			}
 
 			if (!("children" in element) || !Array.isArray(element.children)) {
@@ -1864,16 +2229,27 @@ export class ElementManager {
 			.filter((element): element is LayerElement => element !== null)
 	}
 
+	/** 复制协议只允许上传临时元素，生成结果占位符必须留在当前 Canvas 运行时。 */
+	public filterElementsForClipboard(elements: LayerElement[]): LayerElement[] {
+		return this.filterTemporaryElements(elements, "clipboard")
+	}
+
 	/**
 	 * 清空所有元素
 	 */
 	public clear(): void {
 		// 先收集所有元素 ID，避免在遍历过程中修改 Map
 		const elementIds = Array.from(this.elements.keys())
+		const runtimeOnlyGenerationElementIds = new Set(
+			Array.from(this.temporaryElements.entries())
+				.filter(([, metadata]) => metadata.kind === "generation-result")
+				.map(([elementId]) => elementId),
+		)
 
 		// 销毁所有元素
 		this.elements.forEach((element) => element.destroy())
 		this.elements.clear()
+		this.temporaryElements.clear()
 		this.documentIndex.clear()
 
 		// 销毁所有子节点，但保留背景
@@ -1898,12 +2274,26 @@ export class ElementManager {
 
 		// 为每个元素触发删除事件
 		elementIds.forEach((elementId) => {
-			this.canvas.eventEmitter.emit({ type: "element:deleted", data: { elementId } })
+			this.canvas.eventEmitter.emit({
+				type: "element:deleted",
+				data: {
+					elementId,
+					...(runtimeOnlyGenerationElementIds.has(elementId)
+						? { persistence: "runtime-only" as const }
+						: {}),
+				},
+			})
 		})
+		const documentElementIds = elementIds.filter(
+			(elementId) => !runtimeOnlyGenerationElementIds.has(elementId),
+		)
 
 		this.canvas.eventEmitter.emit({
 			type: "element:change",
-			data: elementIds.length > 0 ? { elementIds, phase: "commit" } : undefined,
+			data:
+				documentElementIds.length > 0
+					? { elementIds: documentElementIds, phase: "commit" }
+					: undefined,
 		})
 	}
 
@@ -2202,7 +2592,7 @@ export class ElementManager {
 	}
 
 	/**
-	 * 更新所有元素的拖拽状态（当 readonly 状态变化时调用）
+	 * 更新所有元素的拖拽状态（当画布访问能力变化时调用）
 	 */
 	public updateAllElementsDraggable(): void {
 		this.elements.forEach((element) => {
@@ -2256,10 +2646,19 @@ export class ElementManager {
 		return this.temporaryElements.has(elementId)
 	}
 
+	/** 仅正式文档元素可以参与连接等会被单独持久化的关系。 */
+	public canParticipateInDocumentRelations(elementId: string): boolean {
+		return this.elements.has(elementId) && !this.temporaryElements.has(elementId)
+	}
+
+	public getTemporaryElementMetadata(elementId: string): TemporaryElementMetadata | null {
+		return this.temporaryElements.get(elementId) ?? null
+	}
+
 	/**
 	 * 获取所有临时元素 ID
 	 */
 	public getTemporaryElementIds(): string[] {
-		return Array.from(this.temporaryElements)
+		return Array.from(this.temporaryElements.keys())
 	}
 }

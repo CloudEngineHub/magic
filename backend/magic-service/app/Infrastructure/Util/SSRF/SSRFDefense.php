@@ -9,6 +9,8 @@ namespace App\Infrastructure\Util\SSRF;
 
 use App\Infrastructure\Util\SSRF\Exception\SSRFException;
 
+use function Hyperf\Translation\trans;
+
 class SSRFDefense
 {
     private SSRFDefenseOptions $options;
@@ -26,7 +28,10 @@ class SSRFDefense
     public function __construct(string $url, SSRFDefenseOptions $options)
     {
         if (! $this->isUrl($url)) {
-            throw new SSRFException("[{$url}] not a valid URL");
+            throw new SSRFException(
+                $this->translate('ssrf.invalid_url', ['url' => $url]),
+                violation: SSRFViolation::InvalidUrl
+            );
         }
         $this->options = $options;
         $parsedUrl = parse_url($url);
@@ -87,14 +92,23 @@ class SSRFDefense
 
         // 黑名单优先
         if (in_array($this->ip, $this->options->getBlackList())) {
-            throw new SSRFException("{$label} is in black list");
+            throw new SSRFException(
+                $this->translate('ssrf.blacklisted', ['label' => $label]),
+                violation: SSRFViolation::Blacklisted
+            );
         }
         if (in_array($this->host, $this->options->getBlackList())) {
-            throw new SSRFException("{$label} is in black list");
+            throw new SSRFException(
+                $this->translate('ssrf.blacklisted', ['label' => $label]),
+                violation: SSRFViolation::Blacklisted
+            );
         }
 
         if (! in_array($this->scheme, $this->options->getAllowProtocols(), true)) {
-            throw new SSRFException("[{$this->scheme}] is not allowed");
+            throw new SSRFException(
+                $this->translate('ssrf.protocol_not_allowed', ['scheme' => $this->scheme]),
+                violation: SSRFViolation::ProtocolNotAllowed
+            );
         }
 
         if (in_array($this->ip, $this->options->getWhiteList()) || in_array($this->host, $this->options->getWhiteList())) {
@@ -107,13 +121,19 @@ class SSRFDefense
             // Validate if the IP is a public IP
             $ip = filter_var($this->ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
             if ($ip === false) {
-                throw new SSRFException("{$label} is not a public ip");
+                throw new SSRFException(
+                    $this->translate('ssrf.non_public_ip', ['label' => $label]),
+                    violation: SSRFViolation::NonPublicIp
+                );
             }
         }
 
         if (! $allowRedirect) {
             if ($this->isRedirectUrl($this->url)) {
-                throw new SSRFException("[{$label}] cannot be a redirect url");
+                throw new SSRFException(
+                    $this->translate('ssrf.redirect_not_allowed', ['label' => $label]),
+                    violation: SSRFViolation::RedirectNotAllowed
+                );
             }
         }
     }
@@ -125,11 +145,26 @@ class SSRFDefense
             $ip = $this->host;
         } elseif (filter_var($this->host, FILTER_VALIDATE_DOMAIN)) {
             $ip = gethostbyname($this->host);
-            if (empty($ip)) {
-                throw new SSRFException("[{$this->host}] parse ip failed");
+            if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+                throw new SSRFException(
+                    $this->translate('ssrf.resolve_failed', ['host' => $this->host]),
+                    violation: SSRFViolation::ResolveFailed
+                );
             }
         }
         $this->ip = $ip;
+    }
+
+    /**
+     * 翻译 SSRF 校验失败文案。
+     *
+     * @param string $key 翻译键
+     * @param array<string, string> $replace 翻译占位符
+     */
+    private function translate(string $key, array $replace = []): string
+    {
+        $message = trans($key, $replace);
+        return is_array($message) ? implode(' ', $message) : $message;
     }
 
     private function isUrl(string $url): bool

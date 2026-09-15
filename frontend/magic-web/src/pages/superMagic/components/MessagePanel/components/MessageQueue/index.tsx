@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Spin, Tooltip } from "antd"
+import { Spin } from "antd"
 import { CircleArrowUp, Trash } from "lucide-react"
 import {
 	IconHourglassEmpty,
@@ -9,11 +9,13 @@ import {
 	IconChevronDown,
 	IconEdit,
 } from "@tabler/icons-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
+import SmartTooltip from "@/components/other/SmartTooltip"
 import { QueuedMessage } from "../../hooks/useMessageQueue"
 import CollapsibleText from "./components/CollapsibleText"
 import MobileMessageQueue from "./MobileMessageQueue"
+import { trimQueueContent } from "./utils"
 
 export interface MessageQueueProps {
 	queue: QueuedMessage[]
@@ -140,14 +142,14 @@ function MessageQueue({
 										</div>
 										<div
 											className={cn(
-												"min-w-0 flex-1 break-words text-xs font-normal leading-4 text-foreground/80",
+												"w-fit min-w-0 max-w-full break-words text-xs font-normal leading-4 text-foreground/80",
 												"[&>div]:leading-[1.4] [&_p]:!text-xs [&_p]:!leading-4 [&_p]:!text-foreground/80",
 												"[&_.magic-mention]:!text-[10px]",
 											)}
 										>
 											<CollapsibleText
-												content={message.content}
-												maxLines={2}
+												content={trimQueueContent(message.content)}
+												maxLines={1}
 											/>
 										</div>
 									</div>
@@ -164,61 +166,60 @@ function MessageQueue({
 										</Button>
 									) : (
 										<>
-											<Tooltip title={t("messageQueue.removeFromQueue")}>
-												<div
-													className={cn(
-														actionButtonBase,
-														message.isDeletingLoading &&
-															"cursor-not-allowed opacity-60",
-													)}
-													onClick={() => {
-														if (!message.isDeletingLoading)
-															onRemoveMessage(message.id)
-													}}
-													data-testid="on-remove-message"
-												>
-													{message.isDeletingLoading ? (
-														<Spin size="small" />
-													) : (
-														<Trash size={14} />
-													)}
-												</div>
-											</Tooltip>
-											<Tooltip title={t("messageQueue.editMessage")}>
-												<div
-													className={cn(
-														actionButtonBase,
-														isDisabled &&
-															"cursor-not-allowed opacity-40",
-													)}
-													onClick={() => {
-														if (!isDisabled) onStartEdit(message.id)
-													}}
-													data-testid="on-start-edit"
-												>
-													<IconEdit size={14} />
-												</div>
-											</Tooltip>
-											<Tooltip title={t("messageQueue.submitNow")}>
-												<div
-													className={cn(
-														actionButtonBase,
-														message.isSendingLoading &&
-															"cursor-not-allowed opacity-60",
-													)}
-													onClick={() => {
-														if (!message.isSendingLoading)
-															onSendMessage(message.id)
-													}}
-													data-testid="on-send-message"
-												>
-													{message.isSendingLoading ? (
-														<IconArrowUpDashed size={14} />
-													) : (
-														<CircleArrowUp size={14} />
-													)}
-												</div>
-											</Tooltip>
+											<SmartTooltip
+												content={t("messageQueue.removeFromQueue")}
+												forceShowTooltip
+												className={cn(
+													actionButtonBase,
+													message.isDeletingLoading &&
+														"cursor-not-allowed opacity-60",
+												)}
+												onClick={() => {
+													if (!message.isDeletingLoading)
+														onRemoveMessage(message.id)
+												}}
+												data-testid="on-remove-message"
+											>
+												{message.isDeletingLoading ? (
+													<Spin size="small" />
+												) : (
+													<Trash size={14} />
+												)}
+											</SmartTooltip>
+											<SmartTooltip
+												content={t("messageQueue.editMessage")}
+												forceShowTooltip
+												className={cn(
+													actionButtonBase,
+													isDisabled && "cursor-not-allowed opacity-40",
+												)}
+												onClick={() => {
+													if (!isDisabled) onStartEdit(message.id)
+												}}
+												data-testid="on-start-edit"
+											>
+												<IconEdit size={14} />
+											</SmartTooltip>
+											<SmartTooltip
+												content={t("messageQueue.submitNow")}
+												forceShowTooltip
+												className={cn(
+													actionButtonBase,
+													message.isSendingLoading &&
+														"cursor-not-allowed opacity-60",
+												)}
+												onClick={() => {
+													if (!message.isSendingLoading)
+														onSendMessage(message.id)
+												}}
+												data-testid="on-send-message"
+											>
+												{message.isSendingLoading ? (
+													<IconArrowUpDashed size={14} />
+												) : (
+													<CircleArrowUp size={14} />
+												)}
+											</SmartTooltip>
 										</>
 									)}
 								</div>

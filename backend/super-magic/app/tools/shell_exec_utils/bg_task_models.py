@@ -19,18 +19,6 @@ BG_MAX_CONCURRENT_TASKS: int = 10
 # 单任务最长存活时间（秒），超过后 Reaper 协程强制 kill
 BG_MAX_TASK_LIFETIME_SECS: int = 3600
 
-# 单日志文件最大字节数（2MB）
-BG_LOG_MAX_FILE_SIZE_BYTES: int = 2 * 1024 * 1024
-
-# 截断时保留的头部字节数（512KB）
-BG_LOG_HEAD_KEEP_BYTES: int = 512 * 1024
-
-# 截断时保留的尾部字节数（512KB）
-BG_LOG_TAIL_KEEP_BYTES: int = 512 * 1024
-
-# 最多保留的日志文件数量
-BG_LOG_MAX_FILE_COUNT: int = 50
-
 # 交互式 Prompt 静默确认窗口（秒）：正则命中后，须持续此时长无新输出才最终确认
 PROMPT_QUIET_SECS: int = 3
 

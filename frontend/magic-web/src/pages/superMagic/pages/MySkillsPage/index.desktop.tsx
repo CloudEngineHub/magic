@@ -18,7 +18,11 @@ import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMor
 import { useDelayedVisibility } from "@/pages/superMagic/hooks/useDelayedVisibility"
 import type { UserSkillView } from "@/services/skills/SkillsService"
 import MySkillCard from "./components/MySkillCard"
-import { resolveTeamSharedSkillPermissions } from "./components/MySkillCardShared"
+import {
+	resolveTeamSharedSkillPermissions,
+	shouldOpenMySkillEditor,
+	type MySkillCardVariant,
+} from "./components/MySkillCardShared"
 import { UserSkillsStore } from "./stores/user-skills"
 import { useMySkillsTabs } from "./hooks/useMySkillsTabs"
 
@@ -41,6 +45,7 @@ function MySkillsPage() {
 		setCreatedByMeTab,
 		tabCount,
 		isCreatedByMeTab,
+		isCollaboratedTab,
 		isFromSkillsLibraryTab,
 	} = useMySkillsTabs({ variant: "desktop" })
 	const handleAutoLoadMore = useCallback(() => {
@@ -63,7 +68,11 @@ function MySkillsPage() {
 	const shouldShowLoadingMoreIndicator = useDelayedVisibility({
 		visible: userSkillsStore.loadingMore,
 	})
-	const isTeamSharedTab = !isCreatedByMeTab && !isFromSkillsLibraryTab
+	const cardVariant: MySkillCardVariant = isCreatedByMeTab
+		? "created"
+		: isFromSkillsLibraryTab
+			? "library"
+			: "team"
 
 	const handleEdit = useCallback(
 		(code: string) => {
@@ -107,17 +116,14 @@ function MySkillsPage() {
 
 	const handleCardOpen = useCallback(
 		(skill: UserSkillView) => {
-			if (
-				isCreatedByMeTab ||
-				(isTeamSharedTab && resolveTeamSharedSkillPermissions(skill.userRole).canEdit)
-			) {
+			if (shouldOpenMySkillEditor(cardVariant, skill.userRole)) {
 				handleEdit(skill.skillCode)
 				return
 			}
 
 			handleOpenDetail(skill)
 		},
-		[handleEdit, handleOpenDetail, isCreatedByMeTab, isTeamSharedTab],
+		[cardVariant, handleEdit, handleOpenDetail],
 	)
 
 	return (
@@ -159,7 +165,7 @@ function MySkillsPage() {
 							</p>
 						</div>
 						<div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-							{canCreateSkill ? (
+							{isCreatedByMeTab && canCreateSkill ? (
 								<SkillActionDropdown
 									createMenuItems={createSkillMenuItems}
 									onImportSuccess={handleImportSuccess}
@@ -190,7 +196,11 @@ function MySkillsPage() {
 					>
 						<TabsList
 							className={`grid h-9 w-full max-w-[600px] ${
-								tabCount === 2 ? "grid-cols-2" : "grid-cols-3"
+								tabCount === 2
+									? "grid-cols-2"
+									: tabCount === 4
+										? "grid-cols-4"
+										: "grid-cols-3"
 							}`}
 							data-testid="my-skills-tabs-list"
 						>
@@ -235,23 +245,17 @@ function MySkillsPage() {
 									<MySkillCard
 										key={skill.id}
 										skill={skill}
-										cardVariant={
-											isCreatedByMeTab
-												? "created"
-												: isFromSkillsLibraryTab
-													? "library"
-													: "team"
-										}
+										cardVariant={cardVariant}
 										onOpenDetail={handleCardOpen}
 										onEdit={
 											isCreatedByMeTab ||
-											(isTeamSharedTab && teamPermissions.canEdit)
+											(isCollaboratedTab && teamPermissions.canEdit)
 												? handleEdit
 												: undefined
 										}
 										onDelete={
 											isCreatedByMeTab ||
-											(isTeamSharedTab && teamPermissions.canDelete)
+											(isCollaboratedTab && teamPermissions.canDelete)
 												? handleDeleteCreatedSkill
 												: undefined
 										}
@@ -262,7 +266,7 @@ function MySkillsPage() {
 										}
 										canEdit={
 											isCreatedByMeTab ||
-											(isTeamSharedTab && teamPermissions.canEdit)
+											(isCollaboratedTab && teamPermissions.canEdit)
 										}
 										isInteractive
 									/>

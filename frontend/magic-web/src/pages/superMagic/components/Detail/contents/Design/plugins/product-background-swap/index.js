@@ -101,8 +101,8 @@ const PLACEMENT_MODE_DEFINITIONS = [
 		descriptionKey: "placement.background.desc",
 		descriptionFallback: "商品角度和姿态尽量不变，只做背景与光影融合",
 		promptSuffix: {
-			zh: "摆放方式：仅换背景。先判断 {{backgroundReference}} 中是否存在明显主体：若存在，识别该主体并用 {{productReference}} 的外观 1:1 替换，继承原主体的位置、尺度、角度、透视与接触阴影，完全移除原主体，场景其余部分完整保留；若不存在，完整保留 {{backgroundReference}} 的场景，将 {{productReference}} 中的主体融入场景，保持 {{productReference}} 的角度与姿态，仅做光影融合。主体外观始终来自 {{productReference}}，不要使用 {{backgroundReference}} 中主体的外观。",
-			en: "PLACEMENT MODE: background-only replacement. First check whether {{backgroundReference}} contains a clear subject. If it does, identify that subject and replace it 1:1 using the appearance from {{productReference}}. Inherit the original subject's position, scale, orientation, perspective, and contact shadows, remove the original subject completely, and keep the rest of the scene unchanged. If it does not, preserve the scene in {{backgroundReference}} completely, blend in the subject from {{productReference}}, keep the subject angle and pose from {{productReference}}, and harmonize only the lighting and edges. The subject appearance must always come from {{productReference}}, not from any subject visible in {{backgroundReference}}. ",
+			zh: "摆放方式：仅换背景。把 {{backgroundReference}} 只当作背景/场景来源，不把其中的主体当作商品摆放模板。最终主体的数量、轮廓、角度、姿态、可见面与摆放方向必须严格等同于 {{productReference}}；{{productReference}} 中有几个主体，成品就只能有几个主体，禁止因 {{backgroundReference}} 中出现多个同类主体而复制、增加、拆分或重排商品。若 {{backgroundReference}} 中存在商品、人物或其他明显主体，将其视为需要移除的原画面内容，补全其背后的背景，只保留空间、构图、光线、色彩和非主体背景元素；然后将 {{productReference}} 的主体融入该背景，仅允许为适配画布做轻微缩放/平移与光影融合，不继承 {{backgroundReference}} 中主体的位置、数量、尺度、角度、透视、组合关系或接触阴影。主体外观始终来自 {{productReference}}，不要使用 {{backgroundReference}} 中主体的外观。",
+			en: "PLACEMENT MODE: background-only replacement. Treat {{backgroundReference}} only as the background/scene source, not as a product placement template. The final subject count, silhouette, angle, pose, visible side, and orientation must strictly match {{productReference}}. If {{productReference}} contains one subject, the final image must contain exactly one subject; never copy, add, split, or rearrange the product because {{backgroundReference}} contains multiple similar subjects. If {{backgroundReference}} contains products, people, or other clear subjects, treat them as original foreground content to remove, reconstruct the background behind them, and keep only the space, composition, lighting, color palette, and non-subject background elements. Then blend the subject from {{productReference}} into that background, allowing only slight scale/position adjustments and lighting/edge harmonization. Do not inherit subject quantity, position, scale, orientation, perspective, arrangement, or contact shadows from {{backgroundReference}}. The subject appearance must always come from {{productReference}}, not from any subject visible in {{backgroundReference}}. ",
 		},
 	},
 ]
@@ -238,8 +238,8 @@ function buildProductIdentityInstruction({
 	if (MagicPromptLocale.isChinese(locale)) {
 		if (isBackgroundOnlyImageMode) {
 			return (
-				`先读取 ${productReference}，识别主体类型、结构、材质、颜色与图案细节。` +
-				`将 ${productReference} 作为成品中主体外观的唯一来源，不要使用 ${backgroundReference} 中主体的外观，不要改成其他主体。`
+				`先读取 ${productReference}，识别主体类型、主体数量、结构、轮廓比例、可见面、拍摄角度、姿态、摆放方向、材质、颜色与图案细节。` +
+				`将 ${productReference} 作为成品中主体外观、数量和形态的唯一来源，成品主体数量必须与 ${productReference} 完全一致，不要使用 ${backgroundReference} 中主体的外观、数量、位置或组合关系，不要改成其他主体。`
 			)
 		}
 
@@ -251,8 +251,8 @@ function buildProductIdentityInstruction({
 
 	if (isBackgroundOnlyImageMode) {
 		return (
-			`First read ${productReference} and identify the subject type, structure, material, color, and pattern details. ` +
-			`Use ${productReference} as the ONLY source of the subject appearance in the final image. Do not use the subject appearance visible in ${backgroundReference}, and do not turn it into a different subject. `
+			`First read ${productReference} and identify the subject type, subject count, structure, silhouette proportions, visible side, camera angle, pose, orientation, material, color, and pattern details. ` +
+			`Use ${productReference} as the ONLY source of the subject appearance, count, and form in the final image. The final subject count must exactly match ${productReference}. Do not use the subject appearance, quantity, position, or arrangement visible in ${backgroundReference}, and do not turn it into a different subject. `
 		)
 	}
 
@@ -277,8 +277,8 @@ function buildSceneInstruction({
 		if (backgroundMode === BACKGROUND_MODE.IMAGE) {
 			if (isBackgroundOnlyImageMode) {
 				return (
-					`${backgroundReference} 提供场景参考，尽量完整保留其中的空间、构图、光线与背景元素。` +
-					`若其中有主体，仅替换该主体；若无主体，完整保留场景并将 ${productReference} 中的主体融入。`
+					`${backgroundReference} 只提供场景背景参考，尽量完整保留其中的空间、构图、光线、海报文字/标识、装饰图形与非主体背景元素。` +
+					`若其中有商品、人物或其他明显主体，将其视为需要移除的原画面内容，补全其背后的背景；不要把这些主体作为商品位置、数量或姿态参考。`
 				)
 			}
 
@@ -297,8 +297,8 @@ function buildSceneInstruction({
 	if (backgroundMode === BACKGROUND_MODE.IMAGE) {
 		if (isBackgroundOnlyImageMode) {
 			return (
-				`${backgroundReference} provides the scene reference. Preserve its space, composition, lighting, and background elements as completely as possible. ` +
-				`If it contains a subject, replace only that subject. If it does not, keep the scene unchanged and blend in the subject from ${productReference}. `
+				`${backgroundReference} provides only the background scene reference. Preserve its space, composition, lighting, poster text/logos, decorative graphics, and non-subject background elements as completely as possible. ` +
+				`If it contains products, people, or other clear subjects, treat them as original image content to remove and reconstruct the background behind them. Do not use those subjects as references for product position, quantity, or pose. `
 			)
 		}
 

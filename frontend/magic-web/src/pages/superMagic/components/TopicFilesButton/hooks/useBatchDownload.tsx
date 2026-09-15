@@ -51,7 +51,6 @@ interface UseBatchDownloadOptions {
 	attachments?: AttachmentItem[]
 	selectedWorkspace?: any
 	selectedProject?: any
-	projects?: any[]
 	crossProjectOperation?: {
 		openMoveModal: (fileIds: string[], parentPath: AttachmentItem[]) => void
 		openCopyModal: (fileIds: string[], parentPath?: AttachmentItem[]) => void
@@ -65,7 +64,14 @@ interface UseBatchDownloadOptions {
 	getParentPathByFileId?: (fileId: string) => AttachmentItem[]
 	isMoving?: boolean
 	allowEdit?: boolean
+	allowCopyTo?: boolean
 	allowDownload?: boolean
+	/** 是否允许批量移动。 */
+	allowMove?: boolean
+	/** 是否允许批量复制。 */
+	allowCopy?: boolean
+	/** 是否允许批量分享。 */
+	allowShare?: boolean
 	// 新增：批量分享回调
 	onBatchShareClick?: (fileIds: string[]) => void
 	// 是否在项目内
@@ -87,7 +93,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		attachments = [],
 		selectedWorkspace,
 		selectedProject,
-		projects = [],
 		crossProjectOperation,
 		moveFileHook,
 		onUpdateAttachments,
@@ -95,7 +100,11 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		getParentPathByFileId,
 		isMoving = false,
 		allowEdit,
+		allowCopyTo = false,
 		allowDownload,
+		allowMove = true,
+		allowCopy = true,
+		allowShare = true,
 		onBatchShareClick,
 		isInProject,
 		downloadProgress,
@@ -508,7 +517,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		}
 	}
 
-	// 批量移动处理函数
+	// Open the appropriate selector for batch moves.
 	const handleBatchMove = () => {
 		if (!selectedItems || selectedItems.size === 0) return
 
@@ -516,11 +525,10 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		const firstFileId = fileIds[0]
 		const parentPath = firstFileId ? getInitialParentPath(firstFileId) : []
 
-		// 只有桌面普通项目继续走跨项目 Modal；移动端和 chat 项目回退到目录选择器。
-		if (projects.length > 0 && crossProjectOperation && !isMobile && !isChatProject) {
+		if (crossProjectOperation && !isMobile && !isChatProject) {
 			crossProjectOperation.openMoveModal(fileIds, parentPath)
 		} else if (moveFileHook) {
-			// 否则使用原来的 SelectDirectoryModal
+			// Mobile and chat projects keep the directory selector.
 			moveFileHook.openBatchMove()
 		}
 	}
@@ -540,7 +548,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	// 创建下拉菜单项配置
 	const batchMenuItems = normalizeMenuItems([
 		// 分享文件（仅在项目内显示）
-		...(isInProject && allowEdit && !hideShareFile
+		...(isInProject && allowEdit && allowShare && onBatchShareClick && !hideShareFile
 			? [
 					{
 						key: "share",
@@ -651,7 +659,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					]
 				: []),
 		// 批量移动（仅在允许编辑时显示）
-		...(isInProject && allowEdit && !hideMoveTo
+		...(isInProject && allowEdit && allowMove && !hideMoveTo
 			? [
 					{
 						key: "move",
@@ -667,7 +675,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				]
 			: []),
 		// 批量复制（仅在允许编辑时显示）
-		...(isInProject && allowEdit && !hideCopyTo
+		...(((isInProject && allowEdit) || allowCopyTo) && !hideCopyTo
 			? [
 					{
 						key: "copy",

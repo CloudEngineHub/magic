@@ -39,7 +39,6 @@ export interface GetMenuItemsParams {
 	canvas: Canvas
 	selectedIds: string[]
 	currentElementId: string | null
-	readonly?: boolean
 	t?: TFunction
 	/** 由 resolveCanvasDownloadMenuContext(canvas) 得到；省略时不出 AI 子菜单（预计算菜单项数量等场景） */
 	downloadMenuContext?: CanvasDownloadMenuContext | null
@@ -52,12 +51,12 @@ export function getMenuItems({
 	canvas,
 	selectedIds,
 	currentElementId,
-	readonly,
 	t,
 	downloadMenuContext,
 	renameMenuConfig,
 	permissions,
 }: GetMenuItemsParams): MenuItem[] {
+	const canWrite = canvas.permissionManager.can("document.write")
 	const includeConversationMenuItems = permissions?.elementMenuConversationActions !== false
 	// 默认翻译函数
 	const translate = (key: string, fallback: string) => {
@@ -86,20 +85,29 @@ export function getMenuItems({
 	const selectedFileElements = getSelectedFileElements(canvas)
 	const hasSelectedImageElement = selectedFileElements.some((element) => element.type === "image")
 	const hasSelectedVideoElement = selectedFileElements.some((element) => element.type === "video")
+	const hasSelectedAudioElement = selectedFileElements.some((element) => element.type === "audio")
+	const selectedFileTypeCount =
+		Number(hasSelectedImageElement) +
+		Number(hasSelectedVideoElement) +
+		Number(hasSelectedAudioElement)
 
 	const selectionKind =
 		downloadMenuContext?.selectionKind ??
-		(hasSelectedVideoElement && hasSelectedImageElement
+		(selectedFileTypeCount > 1
 			? "mixed"
 			: hasSelectedVideoElement
 				? "video-only"
-				: hasSelectedImageElement
-					? "image-only"
-					: "none")
+				: hasSelectedAudioElement
+					? "audio-only"
+					: hasSelectedImageElement
+						? "image-only"
+						: "none")
 	const downloadLabel =
 		selectionKind === "video-only"
 			? translate("menu.downloadVideo", "下载视频")
-			: translate("menu.downloadFile", "下载文件")
+			: selectionKind === "audio-only"
+				? translate("menu.downloadAudio", "下载音频")
+				: translate("menu.downloadFile", "下载文件")
 
 	const useAiImageSubmenu = downloadMenuContext?.useAiImageSubmenu === true
 
@@ -257,8 +265,8 @@ export function getMenuItems({
 		},
 	}
 
-	// 只读：复制/下载；可选添加至对话（与可编辑菜单一致，由 canExecute 控制显隐）
-	if (readonly) {
+	// 无文档写能力时只提供会话/外部操作；具体能力仍由 UserActionRegistry 控制。
+	if (!canWrite) {
 		if (!includeConversationMenuItems) {
 			return [
 				copyMenuItem,

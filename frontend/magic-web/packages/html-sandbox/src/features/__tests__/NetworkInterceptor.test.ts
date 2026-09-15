@@ -73,6 +73,33 @@ describe("NetworkInterceptor", () => {
 		expect(entries[0].id).toMatch(/^n_/)
 	})
 
+	it("should preserve method, headers, and body from a Request input", async () => {
+		const entries: NetworkEntry[] = []
+		interceptor.onEntry((entry) => entries.push(entry))
+
+		const mockResponse = new Response(JSON.stringify({ ok: true }), {
+			status: 200,
+			statusText: "OK",
+			headers: { "content-type": "application/json" },
+		})
+		window.fetch = vi.fn().mockResolvedValue(mockResponse)
+		interceptor.enable()
+
+		const request = new Request("https://api.example.com/data", {
+			method: "PUT",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ key: "value" }),
+		})
+		await window.fetch(request)
+
+		expect(entries).toHaveLength(1)
+		expect(entries[0].method).toBe("PUT")
+		expect(entries[0].requestHeaders).toEqual({
+			"content-type": "application/json",
+		})
+		expect(entries[0].requestBody).toBe(JSON.stringify({ key: "value" }))
+	})
+
 	it("should capture failed fetch requests", async () => {
 		const entries: NetworkEntry[] = []
 		interceptor.onEntry((e) => entries.push(e))

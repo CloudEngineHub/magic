@@ -1,7 +1,7 @@
 import { useRef, useState, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { Ellipsis } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useTranslation } from "react-i18next"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import type { ProjectItemProps } from "./types"
@@ -18,9 +18,11 @@ import { getWorkspaceProjectRouteUrl } from "@/pages/superMagic/utils/route"
 import { preloadProjectPage } from "@/pages/superMagic/pages/ProjectPage/utils"
 import { preloadTopicPage } from "@/pages/superMagic/pages/TopicPage/utils"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
+import { canDragSidebarProject } from "../projectDndUtils"
 
 function ProjectItem({
 	project,
+	dndDisabled,
 	onOpenInNewWindow,
 	onPinProject,
 	onCopyCollaborationLink,
@@ -41,7 +43,7 @@ function ProjectItem({
 	const suppressItemClickRef = useRef(false)
 
 	const canRename = canManageProject(project.user_role) && !!onRenameProject
-
+	const canDrag = canDragSidebarProject(project, dndDisabled)
 	const {
 		isEditing,
 		setIsEditing,
@@ -172,27 +174,51 @@ function ProjectItem({
 			rootClassName="w-full"
 		>
 			{({ open, triggerContextMenu }) => (
-				<SidebarMenuSubButton
-					asChild
-					size="md"
-					isActive={isSelected}
-					className={cn("h-7 px-2", isSelected && "bg-[#f5f5f5] dark:bg-[#262626]")}
+				<div
+					className="w-full"
+					draggable={canDrag}
+					data-sidebar-dnd-source={canDrag ? "project" : undefined}
+					data-sidebar-dnd-workspace-id={canDrag ? project.workspace_id : undefined}
+					data-sidebar-dnd-project-id={canDrag ? project.id : undefined}
+					data-sidebar-dnd-label={
+						canDrag ? project.project_name || t("project.unnamedProject") : undefined
+					}
+					data-sidebar-drop-type="project"
+					data-sidebar-drop-workspace-id={project.workspace_id}
+					data-sidebar-drop-project-id={project.id}
+					onDragStart={() => {
+						suppressItemClickRef.current = true
+					}}
+					onDragEnd={() => {
+						window.setTimeout(() => {
+							suppressItemClickRef.current = false
+						}, 0)
+					}}
 				>
-					<a
-						href={getWorkspaceProjectRouteUrl(project.workspace_id, project.id)}
-						onClick={handleClick}
-						data-testid={`sidebar-project-item-${project.id}`}
-						onMouseEnter={() => {
-							setIsHovered(true)
-							handlePreloadPage()
-						}}
-						onFocus={handlePreloadPage}
-						onMouseLeave={() => setIsHovered(false)}
-						className="w-full min-w-0 text-left text-current no-underline [-webkit-tap-highlight-color:transparent]"
+					<SidebarMenuSubButton
+						asChild
+						size="md"
+						isActive={isSelected}
+						className={cn(
+							"relative h-7 px-2",
+							isSelected && "bg-[#f5f5f5] dark:bg-[#262626]",
+						)}
 					>
-						<div className="flex w-full min-w-0 items-center">
-							<div className="min-w-0 flex-1">
-								<div className="flex min-w-0 max-w-full items-center gap-1.5">
+						<a
+							href={getWorkspaceProjectRouteUrl(project.workspace_id, project.id)}
+							onClick={handleClick}
+							draggable={false}
+							data-testid={`sidebar-project-item-${project.id}`}
+							onMouseEnter={() => {
+								setIsHovered(true)
+								handlePreloadPage()
+							}}
+							onFocus={handlePreloadPage}
+							onMouseLeave={() => setIsHovered(false)}
+							className="w-full min-w-0 text-left text-current no-underline [-webkit-tap-highlight-color:transparent]"
+						>
+							<div className="flex w-full min-w-0 items-center">
+								<div className="flex min-w-0 flex-1 items-center gap-1.5">
 									<NavigationStatusIcon
 										itemType="project"
 										status={project.project_status}
@@ -205,7 +231,7 @@ function ProjectItem({
 									/>
 									<span
 										className={cn(
-											"min-w-0 max-w-full truncate text-left text-sm leading-5",
+											"min-w-0 max-w-full shrink truncate text-left text-sm leading-5",
 											isSelected
 												? "text-sidebar-accent-foreground"
 												: "text-sidebar-foreground",
@@ -222,33 +248,33 @@ function ProjectItem({
 										/>
 									)}
 								</div>
+								{/* Only reserve space for the menu trigger while it is visible. */}
+								<div
+									data-project-more-trigger="true"
+									className={cn(
+										"flex h-4 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full text-sidebar-foreground transition-[margin,width,opacity] [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
+										isHovered || open
+											? "ml-1 w-4 opacity-100"
+											: "pointer-events-none ml-0 w-0 opacity-0",
+										"no-hover:pointer-events-auto no-hover:ml-1 no-hover:w-4 no-hover:opacity-100",
+									)}
+									onClick={(e) => {
+										blockItemClickTemporarily()
+										e.preventDefault()
+										e.stopPropagation()
+										triggerContextMenu(e)
+									}}
+									onMouseDown={(e) => {
+										blockItemClickTemporarily()
+										e.stopPropagation()
+									}}
+								>
+									<Ellipsis className="h-4 w-4" />
+								</div>
 							</div>
-							{/* The menu trigger must stay tappable on coarse pointer desktop layouts. */}
-							<div
-								data-project-more-trigger="true"
-								className={cn(
-									"ml-1 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-sidebar-foreground transition-opacity [-webkit-tap-highlight-color:transparent] hover:bg-sidebar-accent",
-									isHovered || open
-										? "opacity-100"
-										: "pointer-events-none opacity-0",
-									"no-hover:pointer-events-auto no-hover:opacity-100",
-								)}
-								onClick={(e) => {
-									blockItemClickTemporarily()
-									e.preventDefault()
-									e.stopPropagation()
-									triggerContextMenu(e)
-								}}
-								onMouseDown={(e) => {
-									blockItemClickTemporarily()
-									e.stopPropagation()
-								}}
-							>
-								<Ellipsis className="h-4 w-4" />
-							</div>
-						</div>
-					</a>
-				</SidebarMenuSubButton>
+						</a>
+					</SidebarMenuSubButton>
+				</div>
 			)}
 		</ProjectActionsDropdown>
 	)

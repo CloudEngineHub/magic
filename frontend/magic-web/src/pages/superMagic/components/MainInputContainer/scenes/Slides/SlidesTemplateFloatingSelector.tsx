@@ -6,7 +6,7 @@ import MagicDropdown from "@/components/base/MagicDropdown"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { Button } from "@/components/shadcn-ui/button"
 import { Label } from "@/components/shadcn-ui/label"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ScenePanelVariant } from "../../components/LazyScenePanel/types"
 import FilterBar from "../../panels/FilterBar"
 import { useLocaleText } from "../../panels/hooks/useLocaleText"
@@ -154,13 +154,14 @@ function SlidesTemplateFloatingSelector({
 				ref={setHoverDetailsContainer}
 				className={cn(
 					"relative flex min-h-0 flex-col overflow-hidden",
-					isMobile ? "h-full" : "h-[min(640px,70vh)] min-h-[360px]",
+					isMobile || hideTrigger ? "h-full" : "h-[min(640px,70vh)] min-h-[360px]",
 				)}
 			>
 				<SlidesTemplatePanelContent
 					slidesState={slidesState}
 					selectedTemplate={selectedTemplate}
 					onTemplateClick={handleTemplateClick}
+					showMyTemplates
 					className="h-full"
 					toolbarClassName={isMobile ? "px-2 pt-0" : "px-0 pt-0"}
 					gridClassName={cn(
@@ -176,6 +177,7 @@ function SlidesTemplateFloatingSelector({
 		[
 			handlePreviewOpenChange,
 			handleTemplateClick,
+			hideTrigger,
 			hoverDetailsContainer,
 			isMobile,
 			selectedTemplate,

@@ -143,9 +143,9 @@ export class LoginService {
 	}
 
 	/** 同步当前登录帐号的环境配置 */
-	syncClusterConfig = async (options?: Pick<RequestConfig, "skipAppInitWait">) => {
+	syncClusterConfig = async (options?: Pick<RequestConfig, "skipAppInitWait" | "enableErrorMessagePrompt">) => {
 		try {
-			const { login_code } = await this.authApi.getAccountDeployCode(options)
+			const login_code = ""
 			const config = await this.getClusterConfig(login_code, options)
 			return { clusterCode: login_code, clusterConfig: config }
 		} catch (error: any) {
@@ -204,7 +204,7 @@ export class LoginService {
 				teamshareOrganizationCode,
 			} = params
 
-			const magicOrgs = Object.values(magicOrganizationMap)
+			const magicOrgs = Object.values(magicOrganizationMap ?? {})
 
 			const orgCode =
 				teamshareOrganizationCode || magicOrgs?.[0]?.third_platform_organization_code

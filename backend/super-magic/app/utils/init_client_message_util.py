@@ -5,10 +5,9 @@ Provides utilities for reading and accessing initialization configuration data.
 """
 import json
 import os
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 from agentlang.logger import get_logger
-
 from app.core.entity.message.client_message import User
 from app.path_manager import PathManager
 
@@ -332,10 +331,10 @@ class InitClientMessageUtil:
     @classmethod
     def _sync_chat_metadata_to_init(cls, chat_message) -> None:
         """
-        将 chat_client_message 中的 metadata 覆盖到 init_client_message.json 的 metadata 字段。
+        将 chat_client_message 中明确携带的 metadata 合并到 init_client_message.json。
 
         仅当 chat metadata 含有 super_magic_task_id 时才更新；用于在 init_client_message.json
-        中保留最新的会话上下文，方便其他链路继续读取。
+        中保留最新的会话上下文，同时避免局部 metadata 覆盖初始化阶段的完整配置。
         """
         metadata = getattr(chat_message, "metadata", None)
         if not metadata:
@@ -361,24 +360,36 @@ class InitClientMessageUtil:
                 init_data = json.load(f)
 
             if hasattr(metadata, "model_dump"):
-                chat_metadata = metadata.model_dump()
+                chat_metadata = metadata.model_dump(exclude_unset=True, exclude_none=True)
             elif hasattr(metadata, "dict"):
-                chat_metadata = metadata.dict()
+                chat_metadata = metadata.dict(exclude_unset=True, exclude_none=True)
             elif isinstance(metadata, dict):
-                chat_metadata = metadata
+                chat_metadata = {
+                    key: value
+                    for key, value in metadata.items()
+                    if value is not None
+                }
             else:
                 logger.warning(
                     f"无法识别的 metadata 类型: {type(metadata)}，跳过 init_client_message 同步"
                 )
                 return
 
-            init_data["metadata"] = chat_metadata
+            # 个人偏好是 CHAT 运行时字段，不写入初始化配置文件。
+            chat_metadata.pop("personal_preferences", None)
+            # 兼容尚未迁移的历史 CHAT metadata。
+            chat_metadata.pop("long_term_memory_enabled", None)
+
+            init_metadata = init_data.get("metadata")
+            if not isinstance(init_metadata, dict):
+                init_metadata = {}
+            init_data["metadata"] = {**init_metadata, **chat_metadata}
 
             with open(init_message_file, "w", encoding="utf-8") as f:
                 json.dump(init_data, f, ensure_ascii=False, indent=2)
 
             logger.info(
-                f"已将 chat_client_message 的 metadata 同步到 init_client_message: {init_message_file}"
+                f"已将 chat_client_message 的 metadata 合并到 init_client_message: {init_message_file}"
             )
             logger.debug(f"同步的 metadata 字段: {list(chat_metadata.keys())}")
         except Exception as e:
@@ -429,17 +440,6 @@ class InitClientMessageUtil:
             logger.info(f"已从 {source} 保存 metadata 到: {metadata_file}")
         except Exception as e:
             logger.error(f"保存 metadata.json 失败 (source={source}): {e}")
-
-    @classmethod
-    def get_memory(cls) -> Optional[str]:
-        """
-        从 init_client_message 获取 memory 字段
-
-        Returns:
-            Optional[str]: memory 值
-        """
-        config_data = cls.get_full_config()
-        return config_data.get("memory")
 
     @classmethod
     def get_sts_token_refresh(cls) -> Optional[Dict[str, Any]]:
@@ -504,6 +504,26 @@ class InitClientMessageUtil:
         if env_sandbox_id:
             logger.info(f"Using sandbox_id from environment variable: {env_sandbox_id}")
         return env_sandbox_id
+
+    @classmethod
+    def get_topic_id(cls) -> str:
+        """从正式产品上下文读取稳定话题 ID，并兼容旧 metadata 字段。"""
+        try:
+            config_data = cls.get_full_config()
+            product_context = config_data.get("super_magic_product_context")
+            if isinstance(product_context, dict):
+                topic = product_context.get("topic")
+                if isinstance(topic, dict):
+                    topic_id = str(topic.get("id") or "").strip()
+                    if topic_id:
+                        return topic_id
+
+            metadata = config_data.get("metadata")
+            if isinstance(metadata, dict):
+                return str(metadata.get("topic_id") or "").strip()
+        except Exception as e:
+            logger.info(f"Failed to get topic_id from initialization config: {e}")
+        return ""
 
     @classmethod
     def get_platform_type(cls) -> Optional[str]:

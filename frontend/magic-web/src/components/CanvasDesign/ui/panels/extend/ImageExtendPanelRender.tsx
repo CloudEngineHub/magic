@@ -4,6 +4,7 @@ import type {
 	ImageElement as ImageElementData,
 } from "../../../runtime/document/types"
 import { ElementTypeEnum } from "../../../runtime/document/types"
+import { getActiveImageContent } from "../../../runtime/document/elementContent"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { useCanvasModeUI } from "../../../app/providers/CanvasUIProvider"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
@@ -12,7 +13,6 @@ import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasEvent } from "../../../app/hooks/canvas"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import { useUpdateEffect } from "ahooks"
-import { GenerationStatus } from "../../../public/magic-types"
 import { Button } from "../../primitives/shadcn/button"
 import {
 	Select,
@@ -27,6 +27,7 @@ import {
 	CollapsibleBlindsItem,
 } from "../../primitives/custom/CollapsibleBlindsGroup/index"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
+import { ElementFactory } from "../../../runtime/elements/core/ElementFactory"
 import { createExtendImageFiles } from "../../../runtime/resources/image/extendImageComposer"
 import { createExpandImageTaskMeta } from "../../../runtime/resources/image/imageGenerationTaskMeta"
 import {
@@ -34,6 +35,10 @@ import {
 	getImageProcessRequestPayload,
 } from "../../../runtime/resources/image/imageCropUtils"
 import { generateElementId, generateUUID } from "../../../runtime/shared/ids"
+import {
+	resolveExpandedResultElementGeometry,
+	resolveExtendedImageElementGeometry,
+} from "../../../runtime/interaction/extend/extendElementGeometry"
 import { extendPresetOptions, scaleOptions } from "./constants"
 import {
 	calculateExtendFrameSizeFromControls,
@@ -58,6 +63,7 @@ type ProcessedPresetChild = {
 
 export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProps) {
 	const { imageElement } = props
+	const activeContent = getActiveImageContent(imageElement)
 	const { t } = useCanvasDesignI18n()
 	const { canvas } = useCanvas()
 	const { methods } = useMagic()
@@ -225,12 +231,12 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 		if (!canvas) return
 
 		const imageRect = canvas.extendManager.getImageProxyLocalRect()
-		const imageBounds = canvas.extendManager.getImageBounds()
-		if (imageRect && imageBounds) {
+		const imageOriginInContent = canvas.extendManager.getImageOriginInContent()
+		if (imageRect && imageOriginInContent) {
 			const nextSourcePosition = getUpdatedImageElementPosition({
 				canvas,
 				elementId: imageElement.id,
-				imageBounds,
+				imageOriginInContent,
 				imageRect,
 			})
 			canvas.elementManager.update(imageElement.id, nextSourcePosition)
@@ -244,7 +250,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 			!canvas ||
 			!methods?.uploadPrivateFiles ||
 			!methods?.expandImage ||
-			!imageElement.src ||
+			!activeContent.src ||
 			isSubmitting
 		) {
 			return
@@ -252,15 +258,17 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 
 		const currentSession = canvas.extendManager.getTempSession()
 		const imageRect = canvas.extendManager.getImageProxyLocalRect()
-		const imageBounds = canvas.extendManager.getImageBounds()
-		if (!currentSession || !imageRect || !imageBounds) {
+		const imageOriginInContent = canvas.extendManager.getImageOriginInContent()
+		const frameBounds = canvas.extendManager.getFrameBounds()
+		if (!currentSession || !imageRect || !imageOriginInContent || !frameBounds) {
 			return
 		}
 
 		setIsSubmitting(true)
 
 		let createdElementId: string | undefined
-		const imageSrc = imageElement.src
+		let generationAttemptId: string | undefined
+		const imageSrc = activeContent.src
 
 		void (async () => {
 			try {
@@ -272,44 +280,65 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 				const nextSourcePosition = getUpdatedImageElementPosition({
 					canvas,
 					elementId: imageElement.id,
-					imageBounds,
+					imageOriginInContent,
 					imageRect,
 				})
 				canvas.elementManager.update(imageElement.id, nextSourcePosition)
 
 				const requestImageId = generateUUID()
 				const placeholderTaskMeta = createExpandImageTaskMeta({
+					image_id: requestImageId,
 					file_path: imageSrc,
 					reference_image_options: buildReferenceImageOptions({
 						filePath: imageSrc,
-						crop: imageElement.crop,
+						crop: activeContent.crop,
 					}),
 				})
 				createdElementId = generateElementId()
-				const newImageElement: ImageElementData = {
-					id: createdElementId,
-					type: ElementTypeEnum.Image,
-					x: imageBounds.x + imageBounds.width,
-					y: imageBounds.y,
-					width: currentSession.frame.width,
-					height: currentSession.frame.height,
-					zIndex: canvas.elementManager.getNextZIndexInLevel(),
+				const expandedResultGeometry = resolveExpandedResultElementGeometry(
+					frameBounds,
+					currentSession.frame,
+				)
+				const newImageElement = {
+					...ElementFactory.createElementData(
+						ElementTypeEnum.Image,
+						createdElementId,
+						expandedResultGeometry.x,
+						expandedResultGeometry.y,
+						expandedResultGeometry.width,
+						expandedResultGeometry.height,
+						canvas.elementManager.getNextZIndexInLevel(),
+					),
 					name: `${imageElement.name || elementInstance.getRenderName()} ${t(
 						"elementTools.imageExtend.title",
 						"扩展",
 					)}`,
-					status: GenerationStatus.Pending,
-					imageGenerationTaskMeta: placeholderTaskMeta,
-				}
+				} as ImageElementData
+				const targetContentId = newImageElement.activeContentId
+				if (!targetContentId) return
 
-				canvas.elementManager.create(newImageElement)
+				// 扩图包含本地合成和文件上传，整个提交窗口都不能把占位元素导出。
+				canvas.elementManager.createTemporaryElement(newImageElement, { silent: true })
+				generationAttemptId = canvas.generationRuntimeManager.beginAttempt({
+					operation: "image-extend",
+					originElementId: imageElement.id,
+					phase: "preparing",
+					failurePolicy: "remove-placeholder",
+					targets: [
+						{
+							elementId: createdElementId,
+							contentId: targetContentId,
+							imageGenerationTaskMeta: placeholderTaskMeta,
+						},
+					],
+				})
 				canvas.extendManager.confirmExtend()
 				canvas.selectionManager.select(createdElementId, false)
 
 				const workerResult =
 					await canvas.submitImageWorkerManager.createExtendImagesInWorker({
 						src: imageSrc,
-						crop: imageElement.crop,
+						crop: activeContent.crop,
 						elementSize: {
 							width: imageElement.width,
 							height: imageElement.height,
@@ -355,7 +384,11 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 							}
 
 							const files = await createExtendImageFiles({
-								element: imageElement,
+								element: {
+									width: imageElement.width,
+									height: imageElement.height,
+									crop: activeContent.crop,
+								},
 								image: imageSource,
 								naturalWidth: imageInfo.naturalWidth,
 								naturalHeight: imageInfo.naturalHeight,
@@ -373,7 +406,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 						})()
 
 				const { crop } = getImageProcessRequestPayload({
-					crop: imageElement.crop,
+					crop: activeContent.crop,
 					sourceDimensions: compositeResult.sourceDimensions,
 				})
 
@@ -408,29 +441,39 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 					throw new Error(t("elementTools.imageExtend.submitFailed", "提交失败，请重试"))
 				}
 
-				const success = await newElementInstance.expandImage({
-					image_id: requestImageId,
-					file_path: imageSrc,
-					canvas_path: canvasPath,
-					mask_path: maskPath,
-					size: compositeResult.size,
-					reference_image_options: buildReferenceImageOptions({
-						filePath: imageSrc,
-						crop,
-					}),
-				})
+				const success = await newElementInstance.expandImage(
+					{
+						image_id: requestImageId,
+						file_path: imageSrc,
+						canvas_path: canvasPath,
+						mask_path: maskPath,
+						size: compositeResult.size,
+						reference_image_options: buildReferenceImageOptions({
+							filePath: imageSrc,
+							crop,
+						}),
+					},
+					{ attemptId: generationAttemptId },
+				)
 				if (!success) {
 					throw new Error(t("elementTools.imageExtend.submitFailed", "提交失败，请重试"))
 				}
 			} catch (error) {
 				if (createdElementId) {
-					canvas.elementManager.delete(createdElementId)
+					if (generationAttemptId) {
+						canvas.generationAttemptCoordinator.rejectAttempt(generationAttemptId)
+					} else {
+						canvas.generationAttemptCoordinator.resolveDetachedPlaceholderFailure(
+							createdElementId,
+							"remove-placeholder",
+						)
+					}
 				}
 			} finally {
 				setIsSubmitting(false)
 			}
 		})()
-	}, [canvas, methods, imageElement, isSubmitting, t])
+	}, [activeContent, canvas, methods, imageElement, isSubmitting, t])
 
 	return (
 		<div ref={setRefs} className={styles.imageExtendPanel} data-canvas-ui-component>
@@ -518,38 +561,19 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 function getUpdatedImageElementPosition(params: {
 	canvas: NonNullable<ReturnType<typeof useCanvas>["canvas"]>
 	elementId: string
-	imageBounds: { x: number; y: number; width: number; height: number }
+	imageOriginInContent: { x: number; y: number }
 	imageRect: { x: number; y: number; width: number; height: number }
 }): { x: number; y: number; width: number; height: number } {
-	const { canvas, elementId, imageBounds, imageRect } = params
+	const { canvas, elementId, imageOriginInContent, imageRect } = params
 	const parentId = canvas.elementManager.findParentIdForElement(elementId)
-	if (!parentId) {
-		return {
-			x: imageBounds.x,
-			y: imageBounds.y,
-			width: imageRect.width,
-			height: imageRect.height,
-		}
-	}
+	const parentNode = parentId
+		? canvas.elementManager.getElementInstance(parentId)?.getNode()
+		: null
 
-	const parentNode = canvas.elementManager.getElementInstance(parentId)?.getNode()
-	if (!parentNode) {
-		return {
-			x: imageBounds.x,
-			y: imageBounds.y,
-			width: imageRect.width,
-			height: imageRect.height,
-		}
-	}
-
-	const localPoint = parentNode.getAbsoluteTransform().copy().invert().point({
-		x: imageBounds.x,
-		y: imageBounds.y,
+	return resolveExtendedImageElementGeometry({
+		contentLayer: canvas.contentLayer,
+		parentNode,
+		imageOriginInContent,
+		imageRect,
 	})
-	return {
-		x: localPoint.x,
-		y: localPoint.y,
-		width: imageRect.width,
-		height: imageRect.height,
-	}
 }

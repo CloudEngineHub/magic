@@ -406,7 +406,8 @@ class VirtualStorageRegistry {
 
 	register(context: RegisteredVirtualStorageContext): void {
 		this.cleanup()
-		this.contexts.set(this.getKey(context.renderId, context.token), context)
+		const key = this.getKey(context.renderId, context.token)
+		this.contexts.set(key, context)
 		console.log("[VirtualStorageRegistry] register", {
 			...this.toContextLog(context),
 			contextCount: this.contexts.size,
@@ -418,10 +419,9 @@ class VirtualStorageRegistry {
 			Partial<Pick<RegisteredVirtualStorageContext, "namespace">>,
 	): void {
 		const key = this.getKey(context.renderId, context.token)
-		const existing = this.contexts.get(key)
 		const removed = this.contexts.delete(key)
 		console.log("[VirtualStorageRegistry] unregister", {
-			...this.toContextLog(existing ?? context),
+			...this.toContextLog(context),
 			contextCount: this.contexts.size,
 			removed,
 		})

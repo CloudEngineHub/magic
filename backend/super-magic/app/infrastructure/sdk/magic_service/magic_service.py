@@ -5,17 +5,19 @@ Main API class providing access to all Magic Service APIs.
 """
 
 import hashlib
-from typing import Dict, Any, Optional, TYPE_CHECKING
-from urllib.parse import urlparse
 
 from app.infrastructure.sdk.base import SdkBase, SdkContext
-from .api.ai_ability_api import AiAbilityApi
+
 from .api.agent_api import AgentApi
+from .api.ai_ability_api import AiAbilityApi
 from .api.file_api import FileApi  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
+from .api.magicbase_api import MagicBaseApi
+from .api.mcp_authorization_credential_api import MCPAuthorizationCredentialApi
 from .api.message_schedule_api import MessageScheduleApi
 from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
-from .api.skill_api import SkillApi
 from .api.share_api import ShareApi
+from .api.skill_api import SkillApi
+
 
 class MagicService:
     """Magic Service - Main router for all Magic Service operations"""
@@ -32,7 +34,7 @@ class MagicService:
         # Create unique key for this instance
         config_data = sdk_base.get_config().to_dict()
         self.key = hashlib.md5(
-            f"{self.NAME}{str(config_data)}".encode()
+            f"{self.NAME}{config_data!s}".encode()
         ).hexdigest()
 
         # Register in global context if not already registered
@@ -44,8 +46,10 @@ class MagicService:
             'ai_ability': AiAbilityApi,
             'agent': AgentApi,
             'file': FileApi,  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
+            'magicbase': MagicBaseApi,
             'message_schedule': MessageScheduleApi,
             'oauth2_callback_relay': OAuth2CallbackRelayApi,
+            'mcp_authorization_credential': MCPAuthorizationCredentialApi,
             'skill': SkillApi,
             'share': ShareApi,
         }
@@ -91,6 +95,11 @@ class MagicService:
         return self._fetched_definitions['file']
 
     @property
+    def magicbase(self) -> 'MagicBaseApi':
+        """Get MagicBase API instance"""
+        return self._fetched_definitions['magicbase']
+
+    @property
     def message_schedule(self) -> 'MessageScheduleApi':
         """Get message schedule API instance"""
         return self._fetched_definitions['message_schedule']
@@ -99,6 +108,11 @@ class MagicService:
     def oauth2_callback_relay(self) -> 'OAuth2CallbackRelayApi':
         """获取 OAuth2 callback relay API 实例。"""
         return self._fetched_definitions['oauth2_callback_relay']
+
+    @property
+    def mcp_authorization_credential(self) -> 'MCPAuthorizationCredentialApi':
+        """获取 MCP Authorization 运行时凭据 API 实例。"""
+        return self._fetched_definitions['mcp_authorization_credential']
 
     @property
     def skill(self) -> 'SkillApi':

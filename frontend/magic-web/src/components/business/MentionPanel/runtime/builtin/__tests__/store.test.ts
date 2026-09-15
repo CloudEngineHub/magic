@@ -333,6 +333,22 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 		})
 	})
 
+	describe("default root items", () => {
+		it("should show other project files without a current project", async () => {
+			projectFilesStore.setSelectedProject(null)
+
+			const items = await getDefaultItems()
+			const otherProjectFilesIndex = items.findIndex(
+				(item) => item.id === "other-project-files",
+			)
+			const uploadFilesIndex = items.findIndex((item) => item.id === "upload-files")
+
+			expect(items.some((item) => item.id === "project-files")).toBe(false)
+			expect(uploadFilesIndex).toBe(0)
+			expect(otherProjectFilesIndex).toBe(1)
+		})
+	})
+
 	describe("searchItems sorting algorithm", () => {
 		beforeEach(() => {
 			// Mock API responses
@@ -424,6 +440,45 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 
 			expect(skillMatch).toBeDefined()
 			expect(skillMatch?.type).toBe(MentionItemType.SKILL)
+		})
+
+		it("should prefer the skill identifier over unrelated description matches", async () => {
+			vi.mocked(CrewApi.getMentionSkills).mockResolvedValue([
+				{
+					id: "creating-slides",
+					code: "creating-slides",
+					name: "Create Slides",
+					description:
+						"Slide/PPT creation skill that provides complete slide creation capabilities. CRITICAL - When user message contains [@slide_project:...] mention, load this skill first.",
+					logo: null,
+					mention_source: "system",
+					package_name: "creating-slides",
+				},
+				{
+					id: "canvas-designer",
+					code: "canvas-designer",
+					name: "Canvas Designer",
+					description:
+						"Core canvas design skill covering project management. CRITICAL - When user message contains [@design_canvas_project:...] mention, load this skill first.",
+					logo: null,
+					mention_source: "system",
+					package_name: "canvas-designer",
+				},
+				{
+					id: "skill-creator",
+					code: "skill-creator",
+					name: "Skill Creator",
+					description: "Create and evaluate skills.",
+					logo: null,
+					mention_source: "system",
+					package_name: "skill-creator",
+				},
+			])
+
+			await mentionPanelStore.preLoadList()
+			const results = await searchItems("skill-cre")
+
+			expect(results.map((item) => item.name)).toEqual(["Skill Creator"])
 		})
 
 		it("should prioritize exact matches after HTML priority", async () => {
@@ -757,10 +812,14 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 
 			const items = await getDefaultItems()
 			const projectFilesIndex = items.findIndex((item) => item.id === "project-files")
+			const otherProjectFilesIndex = items.findIndex(
+				(item) => item.id === "other-project-files",
+			)
 			const canvasElementsIndex = items.findIndex((item) => item.id === "canvas-elements")
 
 			expect(projectFilesIndex).toBeGreaterThanOrEqual(0)
-			expect(canvasElementsIndex).toBe(projectFilesIndex + 1)
+			expect(otherProjectFilesIndex).toBe(projectFilesIndex + 1)
+			expect(canvasElementsIndex).toBe(otherProjectFilesIndex + 1)
 			expect(items[canvasElementsIndex]).toMatchObject({
 				type: MentionItemType.FOLDER,
 				name: "画布元素",
@@ -1006,13 +1065,21 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 			expect(CrewApi.getMentionSkills).toHaveBeenCalledWith({})
 		})
 
-		it("should pass topic mode as agent_code", async () => {
+		it("should omit agent_code for non-custom agent topic modes", async () => {
 			mentionPanelStore.setSkillQueryContext("general")
 
 			await getSkillItems()
 
+			expect(CrewApi.getMentionSkills).toHaveBeenCalledWith({})
+		})
+
+		it("should pass the selected employee code for custom agent mode", async () => {
+			mentionPanelStore.setSkillQueryContext(TopicMode.CustomAgent, "SMA-agent-1")
+
+			await getSkillItems()
+
 			expect(CrewApi.getMentionSkills).toHaveBeenCalledWith({
-				agent_code: "general",
+				agent_code: "SMA-agent-1",
 			})
 		})
 

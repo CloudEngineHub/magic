@@ -13,6 +13,8 @@ import { isCollaborationWorkspace } from "@/pages/superMagic/constants"
 import SidebarCreateInput from "./components/SidebarCreateInput"
 import CollapsedWorkspaceMenuWorkspaceItem from "./CollapsedWorkspaceMenuWorkspaceItem"
 import { SidebarMenuButton } from "@/components/shadcn-ui/sidebar"
+import { useCollapsedWorkspaceDnd } from "./useCollapsedWorkspaceDnd"
+import { useProjectPinBoundaryConfirmation } from "./WorkspaceList/ProjectPinBoundaryConfirmDialog"
 
 const CollaborationProjectsPanel = lazy(
 	() =>
@@ -36,6 +38,15 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const workspaces = workspaceStore.workspaces
 	const isShareWorkspaceActive = isCollaborationWorkspace(selectedWorkspace)
+	const { requestConfirmation, confirmationDialog, isConfirmationOpen } =
+		useProjectPinBoundaryConfirmation()
+	const { rootRef: dndRootRef } = useCollapsedWorkspaceDnd({
+		workspaces,
+		enabled: isOpen,
+		openProjectMenuId,
+		onProjectMenuChange: setOpenProjectMenuId,
+		requestPinBoundaryConfirmation: requestConfirmation,
+	})
 
 	function handleProjectClick(projectId: string, workspaceId: string) {
 		const projects = projectStore.getProjectsByWorkspace(workspaceId)
@@ -132,15 +143,36 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 		}
 	}
 
+	const renderWorkspaceItems = () =>
+		workspaces.map((workspace) => {
+			const isActive = selectedWorkspace?.id === workspace.id
+			return (
+				<CollapsedWorkspaceMenuWorkspaceItem
+					key={workspace.id}
+					workspace={workspace}
+					isActive={isActive}
+					onProjectClick={handleProjectClick}
+					openProjectMenuId={openProjectMenuId}
+					onProjectMenuChange={setOpenProjectMenuId}
+					onRequestCloseAll={handleCloseAllPopovers}
+					keepPopoverOpen={isConfirmationOpen}
+				/>
+			)
+		})
+
 	return (
 		<div
 			className="flex shrink-0 flex-col items-center p-2"
 			data-testid="sidebar-collapsed-workspace-menu"
 		>
+			{confirmationDialog}
 			<div className="flex w-8 shrink-0 flex-col items-start gap-1">
 				<Popover
 					open={isOpen}
-					onOpenChange={handleWorkspacePopoverOpenChange}
+					onOpenChange={(open) => {
+						if (!open && isConfirmationOpen) return
+						handleWorkspacePopoverOpenChange(open)
+					}}
 					modal={false}
 				>
 					<PopoverTrigger asChild>
@@ -206,21 +238,12 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 									ref={workspaceScrollRef}
 									className="h-[60vh] max-h-[500px] w-full [&_[data-slot='scroll-area-viewport']>div]:!block"
 								>
-									<div className="space-y-1">
-										{workspaces.map((workspace) => {
-											const isActive = selectedWorkspace?.id === workspace.id
-											return (
-												<CollapsedWorkspaceMenuWorkspaceItem
-													key={workspace.id}
-													workspace={workspace}
-													isActive={isActive}
-													onProjectClick={handleProjectClick}
-													openProjectMenuId={openProjectMenuId}
-													onProjectMenuChange={setOpenProjectMenuId}
-													onRequestCloseAll={handleCloseAllPopovers}
-												/>
-											)
-										})}
+									<div
+										ref={dndRootRef}
+										className="space-y-1"
+										data-collapsed-sidebar-dnd-workspace-list
+									>
+										{renderWorkspaceItems()}
 										{isLoadingMoreWorkspaces && (
 											<div className="flex h-6 items-center justify-center">
 												<Loader2 className="size-4 animate-spin text-muted-foreground" />
@@ -229,21 +252,12 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu() {
 									</div>
 								</ScrollArea>
 							) : (
-								<div className="space-y-1">
-									{workspaces.map((workspace) => {
-										const isActive = selectedWorkspace?.id === workspace.id
-										return (
-											<CollapsedWorkspaceMenuWorkspaceItem
-												key={workspace.id}
-												workspace={workspace}
-												isActive={isActive}
-												onProjectClick={handleProjectClick}
-												openProjectMenuId={openProjectMenuId}
-												onProjectMenuChange={setOpenProjectMenuId}
-												onRequestCloseAll={handleCloseAllPopovers}
-											/>
-										)
-									})}
+								<div
+									ref={dndRootRef}
+									className="space-y-1"
+									data-collapsed-sidebar-dnd-workspace-list
+								>
+									{renderWorkspaceItems()}
 								</div>
 							)
 						) : (

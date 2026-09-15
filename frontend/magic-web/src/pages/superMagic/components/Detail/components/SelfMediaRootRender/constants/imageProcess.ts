@@ -1,9 +1,13 @@
 import type { ImageProcessOptions } from "@/utils/image-processing"
 
-/** Card content images displayed in phone-frame views (feed, detail, scroll). */
+export const WECHAT_ARTICLE_IMAGE_PROCESS: ImageProcessOptions = {
+	format: "webp",
+}
+
+/** Card content images use a 2x source for the 1080px-wide final card output. */
 export const CARD_IMAGE_PROCESS: ImageProcessOptions = {
-	resize: { w: 800, m: "lfit" },
-	quality: 85,
+	resize: { w: 2160, m: "lfit" },
+	quality: 90,
 	format: "webp",
 }
 

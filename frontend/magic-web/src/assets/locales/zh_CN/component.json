@@ -71,6 +71,11 @@
 			"zoomScale": "缩放比例"
 		}
 	},
+	"magicMarpit": {
+		"firstPage": "回到第一页",
+		"nextPage": "下一页",
+		"prevPage": "上一页"
+	},
 	"magicPdfRender": {
 		"dropdown": {
 			"download": "下载",

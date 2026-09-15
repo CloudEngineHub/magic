@@ -9,8 +9,28 @@ import {
 	type TaskEndError,
 } from "./RecordingErrorManager"
 import { recordingLogger } from "./utils/RecordingLogger"
+import { redactUploadErrorMessage } from "./utils/sanitizeUploadError"
 
 const logger = recordingLogger.namespace("Upload:Token")
+
+const toSafeTokenError = (error: unknown): Error => {
+	const source = error instanceof Error ? error : undefined
+	const candidate = error && typeof error === "object" ? error : undefined
+	const message = source?.message || (typeof error === "string" ? error : "Unknown token error")
+	const safeError = new Error(redactUploadErrorMessage(message) || "Unknown token error")
+
+	if (source?.name) safeError.name = source.name
+	if (candidate) {
+		for (const key of ["status", "code", "requestId", "request_id", "sessionId"]) {
+			const value = (candidate as Record<string, unknown>)[key]
+			if (typeof value === "string" || typeof value === "number") {
+				;(safeError as Error & Record<string, unknown>)[key] = value
+			}
+		}
+	}
+
+	return safeError
+}
 
 /**
  * Token cache entry interface
@@ -23,6 +43,8 @@ interface TokenCacheEntry {
 	isRefreshing: boolean // 是否正在刷新
 	directories?: RecordingDirectories // 录音目录信息
 	presetFiles?: PresetFiles // 预设文件信息
+	sandboxTaskId?: string // Sandbox task ID used to associate uploaded recording artifacts
+	sandboxTopicId?: string // Sandbox topic ID used by batch-save file records
 }
 
 /**
@@ -166,11 +188,15 @@ export class UploadTokenManager {
 			})
 			return token
 		} catch (error) {
-			logger.error("Token请求失败", {
-				sessionId,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "token_failed",
+				errorKind: "permission",
+				error: toSafeTokenError(error),
+				message: "Token请求失败",
+				context: { sessionId },
 			})
-			throw error
+			// Always sanitize; task-end code/sessionId stay on the safe error
+			throw toSafeTokenError(error)
 		} finally {
 			this.refreshPromises.delete(cacheKey)
 		}
@@ -234,6 +260,8 @@ export class UploadTokenManager {
 				isRefreshing: false,
 				directories: response.directories,
 				presetFiles: response.preset_files,
+				sandboxTaskId: response.sandbox_task_id,
+				sandboxTopicId: response.sandbox_topic_id,
 			}
 
 			this.tokenCache.set(cacheKey, cacheEntry)
@@ -252,10 +280,12 @@ export class UploadTokenManager {
 		} catch (error) {
 			const taskEndErr = error as TaskEndError
 
-			logger.error("获取Token失败", {
-				topicId,
-				retryCount,
-				error,
+			logger.error({
+				eventKey: "get_token_failed",
+				errorKind: "permission",
+				error: toSafeTokenError(error),
+				message: "获取Token失败",
+				context: { topicId, retryCount },
 			})
 
 			if (isTaskEndError(error)) {
@@ -276,16 +306,22 @@ export class UploadTokenManager {
 					try {
 						this.onTaskEnd(sessionId)
 					} catch (callbackError) {
-						logger.error("任务结束回调执行失败", {
-							error: callbackError,
+						logger.error({
+							eventKey: "task_failed",
+							errorKind: "permission",
+							error: toSafeTokenError(callbackError),
+							message: "任务结束回调执行失败",
 						})
 					}
 				}
 
 				// Notify error manager (unified error handling)
 				defaultErrorManager.handleTaskEnd(taskEndError).catch((handlerError) => {
-					logger.error("错误管理器处理失败", {
-						error: handlerError,
+					logger.error({
+						eventKey: "manager_process_failed",
+						errorKind: "permission",
+						error: toSafeTokenError(handlerError),
+						message: "错误管理器处理失败",
 					})
 				})
 
@@ -306,14 +342,14 @@ export class UploadTokenManager {
 			}
 
 			// Max retries exceeded
-			const errorMessage = error instanceof Error ? error.message : String(error)
+			const safeError = toSafeTokenError(error)
 			logger.report("Token获取重试次数已耗尽", {
 				sessionId,
 				maxRetries: this.refreshConfig.maxRetries,
-				lastError: error,
+				lastError: safeError,
 			})
 			throw new Error(
-				`Failed to fetch token after ${this.refreshConfig.maxRetries} retries: ${errorMessage}`,
+				`Failed to fetch token after ${this.refreshConfig.maxRetries} retries: ${safeError.message}`,
 			)
 		}
 	}
@@ -336,8 +372,13 @@ export class UploadTokenManager {
 
 		const topicId = this.sessionTopicMap.get(sessionId)
 		if (!topicId) {
-			logger.error("后台刷新Token失败：找不到topicId", {
-				sessionId,
+			const error = new Error(`No topicId found for session ${sessionId}`)
+			logger.error({
+				eventKey: "background_token_refresh_topic_missing",
+				errorKind: "permission",
+				error,
+				message: "后台刷新Token失败：找不到topicId",
+				context: { sessionId },
 			})
 			cachedEntry.isRefreshing = false
 			return
@@ -356,9 +397,12 @@ export class UploadTokenManager {
 				sessionId,
 			})
 		} catch (error) {
-			logger.error("后台刷新Token失败", {
-				sessionId,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "refresh_token_failed",
+				errorKind: "permission",
+				error: toSafeTokenError(error),
+				message: "后台刷新Token失败",
+				context: { sessionId },
 			})
 			// Keep the current token and reset refresh flag
 			cachedEntry.isRefreshing = false
@@ -389,10 +433,15 @@ export class UploadTokenManager {
 
 		const topicId = this.sessionTopicMap.get(sessionId)
 		if (!topicId) {
-			logger.error("强制刷新失败：找不到topicId", {
-				sessionId,
+			const error = new Error(`No topicId found for session ${sessionId}`)
+			logger.error({
+				eventKey: "forced_token_refresh_topic_missing",
+				errorKind: "permission",
+				error,
+				message: "强制刷新失败：找不到topicId",
+				context: { sessionId },
 			})
-			throw new Error(`No topicId found for session ${sessionId}`)
+			throw error
 		}
 
 		try {
@@ -403,11 +452,15 @@ export class UploadTokenManager {
 			})
 			return token
 		} catch (error) {
-			logger.error("强制刷新Token失败", {
-				sessionId,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "refresh_token_failed",
+				errorKind: "permission",
+				error: toSafeTokenError(error),
+				message: "强制刷新Token失败",
+				context: { sessionId },
 			})
-			throw error
+			// Always sanitize; task-end code/sessionId stay on the safe error
+			throw toSafeTokenError(error)
 		}
 	}
 
@@ -631,6 +684,20 @@ export class UploadTokenManager {
 	getDirectories(sessionId: string): RecordingDirectories | undefined {
 		const cachedEntry = this.tokenCache.get(sessionId)
 		return cachedEntry?.directories
+	}
+
+	/**
+	 * Get the sandbox task ID returned with the upload token.
+	 */
+	getSandboxTaskId(sessionId: string): string | undefined {
+		const cachedEntry = this.tokenCache.get(sessionId)
+		return cachedEntry?.sandboxTaskId
+	}
+
+	/** Get the sandbox topic ID returned by the upload-token endpoint. */
+	getSandboxTopicId(sessionId: string): string | undefined {
+		const cachedEntry = this.tokenCache.get(sessionId)
+		return cachedEntry?.sandboxTopicId
 	}
 
 	/**

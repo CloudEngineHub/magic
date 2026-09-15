@@ -20,6 +20,11 @@ import {
 	WorkspaceStateCache,
 } from "@/pages/superMagic/utils/superMagicCache"
 import SearchBar from "@/pages/superMagic/pages/CrewMarket/components/SearchBar"
+import MarketStickyHeader from "@/pages/superMagic/pages/CrewMarket/components/MarketStickyHeader"
+import {
+	resolveActiveMarketFilterId,
+	resolveMarketFilterParams,
+} from "@/pages/superMagic/pages/CrewMarket/components/market-filter"
 import {
 	canShowEmployeeMarketDetailPrimaryAction,
 	resolveEmployeeMarketDetailPrimaryActionLabel,
@@ -43,6 +48,7 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 	const storeRef = useRef(new StoreCrewStore())
 	const store = storeRef.current
 	const { confirm, dialog } = useConfirmDialog()
+	const isPersonalOrganization = userStore.user.isPersonalOrganization
 	const { isAllowed: canCreateAgent } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.AgentCreate,
 	)
@@ -78,6 +84,15 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 			},
 		)
 	}, [store])
+
+	useEffect(() => {
+		if (!isPersonalOrganization || store.marketType !== "ORGANIZATION") return
+
+		// A user can switch organizations without remounting the market page. Clear the
+		// organization-only filter so a personal organization never keeps showing its data.
+		setSelectedAgent(null)
+		void store.fetchAgents({ page: 1, market_type: undefined, category_id: undefined })
+	}, [isPersonalOrganization, store, store.marketType])
 
 	// Debounced keyword search; skip while IME is composing (CJK input).
 	useEffect(() => {
@@ -175,17 +190,23 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 		[handleOpenConversation, store],
 	)
 
-	const activeCategoryId = store.categoryId ?? "all"
+	const activeFilterId = resolveActiveMarketFilterId(
+		isPersonalOrganization && store.marketType === "ORGANIZATION"
+			? undefined
+			: store.marketType,
+		store.categoryId,
+	)
 
 	const handleCategoryChange = useCallback(
-		(categoryId: string) => {
-			if (categoryId === activeCategoryId) return
-			store.fetchAgents({
-				category_id: categoryId === "all" ? undefined : categoryId,
+		(filterId: string) => {
+			if (filterId === activeFilterId) return
+			setSelectedAgent(null)
+			void store.fetchAgents({
+				...resolveMarketFilterParams(filterId),
 				page: 1,
 			})
 		},
-		[activeCategoryId, store],
+		[activeFilterId, store],
 	)
 
 	const handleSearch = useCallback(() => {
@@ -211,9 +232,12 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 				primaryAction={
 					selectedAgent && canShowEmployeeMarketDetailPrimaryAction(selectedAgent)
 						? {
-								label: resolveEmployeeMarketDetailPrimaryActionLabel(selectedAgent, t),
+								label: resolveEmployeeMarketDetailPrimaryActionLabel(
+									selectedAgent,
+									t,
+								),
 								variant: selectedAgent.allowDelete ? "destructive" : "default",
-								disabled: false,
+								disabled: store.isAgentActionPending(selectedAgent.id),
 								testId: "crew-market-detail-action-button",
 								onClick: () =>
 									selectedAgent.allowDelete
@@ -224,17 +248,26 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 				}
 			/>
 			{dialog}
-			<div className="mt-5 flex min-w-0 flex-col gap-5 sm:mt-6 sm:gap-6">
-				<div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+			<div className="flex min-w-0 flex-col pt-5 sm:pt-6">
+				<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
 					<div className="flex min-w-0 flex-1 flex-col gap-2">
-						<h1 className="break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-2xl font-bold leading-tight text-transparent sm:text-3xl lg:text-4xl">
+						<h1 className="h-8 break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-lg font-semibold leading-8 text-transparent sm:h-9 sm:text-xl sm:leading-9 lg:h-10 lg:text-2xl lg:leading-10">
 							{t("title")}
 						</h1>
 						<p className="max-w-2xl break-words text-sm text-muted-foreground">
 							{t("subtitle")}
 						</p>
 					</div>
-					<div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+					<div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
+						<Button
+							variant="outline"
+							className="h-9 flex-1 gap-2 bg-background shadow-xs sm:flex-none"
+							onClick={() => navigate({ name: RouteName.MyCrew })}
+							data-testid="crew-market-my-crew-button"
+						>
+							<UserRoundCog className="h-4 w-4" />
+							{t("myCrew")}
+						</Button>
 						{canCreateAgent ? (
 							<Button
 								className="h-9 flex-1 gap-2 shadow-xs sm:flex-none"
@@ -250,107 +283,108 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 								{t("createCrew")}
 							</Button>
 						) : null}
-						<Button
-							variant="outline"
-							className="h-9 flex-1 gap-2 bg-background shadow-xs sm:flex-none"
-							onClick={() => navigate({ name: RouteName.MyCrew })}
-							data-testid="crew-market-my-crew-button"
-						>
-							<UserRoundCog className="h-4 w-4" />
-							{t("myCrew")}
-						</Button>
 					</div>
 				</div>
 
-				<SearchBar
-					value={searchQuery}
-					onChange={setSearchQuery}
-					onSearch={handleSearch}
-					onCompositionStart={onSearchCompositionStart}
-					onCompositionEnd={onSearchCompositionEnd}
-					placeholder={t("aiSearchPlaceholder")}
-					enableSearchSubmit
-					data-testid="crew-market-desktop-search-bar"
-				/>
-
-				<CategoryFilter
-					categories={store.categories}
-					activeCategoryId={activeCategoryId}
-					onCategoryChange={handleCategoryChange}
-				/>
-
-				{store.loading ? (
-					<div
-						className="flex items-center justify-center py-16"
-						data-testid="crew-market-loading"
-					>
-						<Loader2 className="size-6 animate-spin text-muted-foreground" />
-					</div>
-				) : null}
-
-				{store.isEmpty ? (
-					<div
-						className="flex flex-col items-center justify-center py-16 text-center"
-						data-testid="crew-market-empty"
-					>
-						<p className="text-sm text-muted-foreground">
-							{store.keyword ? t("noResults") : t("noMoreData")}
-						</p>
-					</div>
-				) : null}
-
-				{!store.loading && store.list.length > 0 ? (
-					<div
-						className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-h-0"
-						data-testid="employee-card-grid"
-					>
-						{store.list.map((employee) => (
-							<EmployeeCard
-								key={employee.id}
-								employee={employee}
-								onHire={handleHire}
-								onDismiss={handleDismiss}
-								onDetails={handleDetails}
-								onOpenMarketDetail={handleOpenMarketDetail}
-							/>
-						))}
-					</div>
-				) : null}
-
-				{!store.loading && store.list.length > 0 ? (
-					<div
-						ref={loadMoreSentinelRef}
-						className="h-1 w-full"
-						data-testid="crew-market-scroll-sentinel"
+				<MarketStickyHeader
+					className="gap-5 pb-5 pt-5 sm:gap-6 sm:pb-6 sm:pt-6"
+					scrollViewportRef={scrollViewportRef}
+					data-testid="crew-market-sticky-header"
+				>
+					<SearchBar
+						value={searchQuery}
+						onChange={setSearchQuery}
+						onSearch={handleSearch}
+						onCompositionStart={onSearchCompositionStart}
+						onCompositionEnd={onSearchCompositionEnd}
+						placeholder={t("aiSearchPlaceholder")}
+						enableSearchSubmit
+						data-testid="crew-market-desktop-search-bar"
 					/>
-				) : null}
 
-				{!store.loading && store.list.length > 0 ? (
-					<div className="flex items-center justify-center py-2">
-						{store.hasMore ? (
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => store.loadMore()}
-								disabled={store.loadingMore}
-								data-testid="crew-market-load-more"
-							>
-								{store.loadingMore ? (
-									<Loader2 className="mr-2 size-4 animate-spin" />
-								) : null}
-								{store.loadingMore ? t("loadingMore") : t("loadMore")}
-							</Button>
-						) : (
-							<div
-								className="flex items-center justify-center gap-1 opacity-30"
-								data-testid="crew-market-no-more"
-							>
-								<Check className="size-4" />
-								<span className="text-xs">{t("noMoreData")}</span>
-							</div>
-						)}
-					</div>
-				) : null}
+					<CategoryFilter
+						categories={store.categories}
+						activeCategoryId={activeFilterId}
+						onCategoryChange={handleCategoryChange}
+						showOrganizationShared={!isPersonalOrganization}
+					/>
+				</MarketStickyHeader>
+
+				<div className="flex min-w-0 flex-col gap-5 sm:gap-6">
+					{store.loading ? (
+						<div
+							className="flex items-center justify-center py-16"
+							data-testid="crew-market-loading"
+						>
+							<Loader2 className="size-6 animate-spin text-muted-foreground" />
+						</div>
+					) : null}
+
+					{store.isEmpty ? (
+						<div
+							className="flex flex-col items-center justify-center py-16 text-center"
+							data-testid="crew-market-empty"
+						>
+							<p className="text-sm text-muted-foreground">
+								{store.keyword ? t("noResults") : t("noMoreData")}
+							</p>
+						</div>
+					) : null}
+
+					{!store.loading && store.list.length > 0 ? (
+						<div
+							className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-h-0"
+							data-testid="employee-card-grid"
+						>
+							{store.list.map((employee) => (
+								<EmployeeCard
+									key={employee.id}
+									employee={employee}
+									actionPending={store.isAgentActionPending(employee.id)}
+									onHire={handleHire}
+									onDismiss={handleDismiss}
+									onDetails={handleDetails}
+									onOpenMarketDetail={handleOpenMarketDetail}
+								/>
+							))}
+						</div>
+					) : null}
+
+					{!store.loading && store.list.length > 0 ? (
+						<div
+							ref={loadMoreSentinelRef}
+							className="h-1 w-full"
+							data-testid="crew-market-scroll-sentinel"
+						/>
+					) : null}
+
+					{!store.loading && store.list.length > 0 ? (
+						<div className="flex items-center justify-center py-2">
+							{store.hasMore ? (
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={() => store.loadMore()}
+									disabled={store.loadingMore}
+									data-testid="crew-market-load-more"
+								>
+									{store.loadingMore ? (
+										<Loader2 className="mr-2 size-4 animate-spin" />
+									) : null}
+									{store.loadingMore ? t("loadingMore") : t("loadMore")}
+								</Button>
+							) : (
+								<div
+									className="flex items-center justify-center gap-1 opacity-30"
+									data-testid="crew-market-no-more"
+								>
+									<Check className="size-4" />
+									<span className="text-xs">{t("noMoreData")}</span>
+								</div>
+							)}
+						</div>
+					) : null}
+				</div>
 			</div>
 		</>
 	)

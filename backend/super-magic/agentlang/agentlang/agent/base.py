@@ -11,7 +11,9 @@ from typing import Any, Dict, List, Optional
 
 from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
 
+from agentlang.agent.define import AgentDefine
 from agentlang.agent.loader import AgentLoader
+from agentlang.agent.models import AgentRunRequest
 from agentlang.agent.state import AgentState
 from agentlang.chat_history import ToolCall
 from agentlang.context.base_agent_context import BaseAgentContext
@@ -65,7 +67,6 @@ class BaseAgent(ABC):
             agent_id: Agent 唯一标识，如果为 None 则会自动生成
             tool_validator: 工具验证器，用于过滤无效工具，如果为 None 则不进行过滤
         """
-        self.llm_id = None
         self.agent_name = agent_name
         self.agent_context = agent_context
         if self.agent_context:
@@ -103,9 +104,8 @@ class BaseAgent(ABC):
 
         此方法应在构造函数中调用，负责：
         1. 加载 Agent 配置文件
-        2. 初始化 LLM 客户端
-        3. 设置工具集合
-        4. 准备系统提示词
+        2. 设置工具集合
+        3. 准备系统提示词
         """
         pass
 
@@ -121,22 +121,22 @@ class BaseAgent(ABC):
 
 
     @abstractmethod
-    async def run(self, query: str):
+    async def run(self, request: AgentRunRequest):
         """
         运行 Agent 处理查询。
 
         Args:
-            query: 用户查询/指令
+            request: Agent 运行请求，包含用户查询及扩展输入
         """
         pass
 
     @abstractmethod
-    async def run_main_agent(self, query: str):
+    async def run_main_agent(self, request: AgentRunRequest):
         """
         以主 Agent 身份运行，通常包含额外的事件处理和错误管理。
 
         Args:
-            query: 用户查询/指令
+            request: Agent 运行请求，包含用户查询及扩展输入
         """
         pass
 
@@ -284,11 +284,12 @@ class BaseAgent(ABC):
             from agentlang.llms.token_usage.models import TokenUsageCollection
             return TokenUsageCollection.create_summary_report([])
 
-    def load_agent_config(self, agent_name: str) -> None:
+    def load_agent_config(self, agent_name: str) -> AgentDefine:
         """
         从 .agent 文件加载 agent 配置并设置相关属性
 
-        从 .agent 文件中加载模型定义、工具定义和提示词，并设置到实例属性中
+        从 .agent 文件中加载工具定义和提示词，并设置到实例属性中。
+        模型选择由运行时请求、会话配置或 auto fallback 决定。
         """
         logger.info(f"加载 agent 配置: {agent_name}")
 
@@ -305,9 +306,8 @@ class BaseAgent(ABC):
         else:
             self.tools = agent_define.tools_config
 
-        # 保持 llm_id 始终是 Agent 文件中定义的原始模型 ID
-        self.llm_id = agent_define.model_id
-        logger.info(f"加载完成: model_id={agent_define.model_id}, 工具数量={len(self.tools)}")
+        logger.info(f"加载完成: 工具数量={len(self.tools)}")
+        return agent_define
 
     def set_agent_state(self, state: AgentState) -> None:
         """

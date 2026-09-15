@@ -17,7 +17,10 @@ import {
 	IconSquareCheck,
 	IconInfoCircle,
 	IconCopy,
+	IconChevronsDown,
+	IconChevronsUp,
 } from "@tabler/icons-react"
+import { Presentation } from "lucide-react"
 import IconOpenWindow from "@/enhance/tabler/icons-react/icons/IconOpenWindow"
 import MagicIcon from "@/components/base/MagicIcon"
 import { Flex } from "antd"
@@ -47,14 +50,18 @@ import {
 	detectCanvasProjectOperationRisk,
 	getCanvasProjectOperationImpact,
 } from "../utils/canvasProjectOperationRisk"
+import {
+	isConvertiblePresentationFile,
+	isSlidesTemplateFolder,
+} from "../utils/slides-template-folder"
 
 type MenuItem = TopicFilesMenuItem
 
 interface UseContextMenuOptions {
-	handleUploadFile: (item?: AttachmentItem) => void
-	handleUploadFolder: (item?: AttachmentItem) => void
+	handleUploadFile?: (item?: AttachmentItem) => void
+	handleUploadFolder?: (item?: AttachmentItem) => void
 	handleImportFromOtherProject?: (item?: AttachmentItem) => void
-	handleShareItem: (item: AttachmentItem) => void
+	handleShareItem?: (item: AttachmentItem) => void
 	handleDeleteItem: (item: AttachmentItem) => void
 	handleDownloadOriginal: (item: AttachmentItem, mode?: DownloadImageMode) => void
 	handleDownloadPdf: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
@@ -62,8 +69,8 @@ interface UseContextMenuOptions {
 	handleDownloadImage?: (item: AttachmentItem, format: "png" | "jpeg") => void
 	handleOpenFile: (item: AttachmentItem) => void
 	handleStartRename: (item: AttachmentItem) => void
-	handleAddToCurrentChat: (item: AttachmentItem) => void
-	handleAddToNewChat: (item: AttachmentItem) => void
+	handleAddToCurrentChat?: (item: AttachmentItem) => void
+	handleAddToNewChat?: (item: AttachmentItem) => void
 	handleMoveFile?: (item: AttachmentItem) => void
 	handleReplaceFile?: (item: AttachmentItem) => void
 	handleShowInfo?: (item: AttachmentItem) => void
@@ -89,7 +96,7 @@ interface UseContextMenuOptions {
 	shouldUseSingleDownloadEntry?: boolean
 	onCopyFile?: (fileIds: string[]) => void
 	/** 自定义处理菜单渲染 */
-	filterMenuItems?: (menuItems: MenuItem[]) => MenuItem[]
+	filterMenuItems?: (menuItems: MenuItem[], item?: AttachmentItem) => MenuItem[]
 	/** 自定义处理批量菜单渲染 */
 	filterBatchDownloadLayerMenuItems?: (menuItems: MenuItem[]) => MenuItem[]
 	/** 是否允许显示文件下载菜单 */
@@ -102,8 +109,14 @@ interface UseContextMenuOptions {
 	isSelectMode?: boolean
 	/* File tree index for parent checks */
 	treeIndex?: AttachmentIndex
+	isFolderContentsExpanded?: (item: AttachmentItem) => boolean
+	handleToggleFolderContents?: (item: AttachmentItem) => void
 	/** Full attachment tree for mobile hierarchy delete confirmation */
 	attachments?: AttachmentItem[]
+	/** Desktop-only action for a recognized standard slide template folder. */
+	handleSaveSlidesTemplate?: (item: AttachmentItem) => void
+	/** Desktop-only action for converting a slide folder or PPT/PPTX/POTX file. */
+	handleConvertToSlidesTemplate?: (item: AttachmentItem) => void
 }
 
 interface MapDownloadMenuToContextOptions {
@@ -137,6 +150,19 @@ function mapDownloadMenuToContextItems(
 			? mapDownloadMenuToContextItems(entry.children, options)
 			: undefined,
 	}))
+}
+
+function createConvertToSlidesTemplateMenuItem(
+	item: AttachmentItem,
+	onConvert: (item: AttachmentItem) => void,
+	label: string,
+): MenuItem {
+	return {
+		key: "convertToSlidesTemplate",
+		label,
+		icon: <Presentation className="size-4" aria-hidden="true" data-testid="ppt-menu-icon" />,
+		onClick: () => onConvert(item),
+	}
 }
 
 /** Append download entries from the shared builder onto a context menu list. */
@@ -306,7 +332,11 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		handleEnterMultiSelectMode,
 		isSelectMode = false,
 		treeIndex,
+		isFolderContentsExpanded,
+		handleToggleFolderContents,
 		attachments = [],
+		handleSaveSlidesTemplate,
+		handleConvertToSlidesTemplate,
 	} = options
 
 	const openDeleteConfirmWithCanvasRisk = async (item: AttachmentItem) => {
@@ -405,16 +435,20 @@ export function useContextMenu(options: UseContextMenuOptions) {
 				icon: <MagicIcon component={IconFolderPlus} stroke={2} size={18} />,
 				onClick: () => createVirtualFolder(),
 			},
-			{
-				key: "uploadFile",
-				label: t("topicFiles.contextMenu.uploadFile"),
-				icon: <MagicIcon component={IconUpload} stroke={2} size={18} />,
-				onClick: () => handleUploadFile(),
-			},
+			...(handleUploadFile
+				? [
+						{
+							key: "uploadFile",
+							label: t("topicFiles.contextMenu.uploadFile"),
+							icon: <MagicIcon component={IconUpload} stroke={2} size={18} />,
+							onClick: () => handleUploadFile(),
+						},
+					]
+				: []),
 		]
 
 		// 只有当浏览器支持文件夹上传时才显示上传文件夹选项
-		if (supportsFolderUpload(isMobile)) {
+		if (handleUploadFolder && supportsFolderUpload(isMobile)) {
 			menuItems.push({
 				key: "uploadFolder",
 				label: t("topicFiles.contextMenu.uploadFolder"),
@@ -467,7 +501,37 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		if (item.is_directory && "children" in item) {
 			const parentPath = getFolderPath(item)
 			const key = item.file_id
-			// 判断是否允许创建画布：当前项或父级/更父级没有携带 display_config 时才允许
+			const isSlidesTemplate = isSlidesTemplateFolder(item)
+			const slidesTemplateMenuItem: MenuItem | undefined = !isMobile
+				? isSlidesTemplate && handleSaveSlidesTemplate
+					? {
+							key: "saveSlidesTemplate",
+							label: t("topicFiles.contextMenu.saveSlidesTemplate"),
+							icon: (
+								<Presentation
+									className="size-4"
+									aria-hidden="true"
+									data-testid="ppt-menu-icon"
+								/>
+							),
+							onClick: () => handleSaveSlidesTemplate(item),
+						}
+					: item.display_config?.type === "slide" && handleConvertToSlidesTemplate
+						? createConvertToSlidesTemplateMenuItem(
+								item,
+								handleConvertToSlidesTemplate,
+								t("topicFiles.contextMenu.convertToSlidesTemplate"),
+							)
+						: undefined
+				: undefined
+			const folderEntry =
+				treeIndex?.getEntryById(item.file_id) ||
+				treeIndex?.getEntryByKey(getAttachmentKey(item))
+			const hasFolderContents = Boolean(
+				folderEntry && treeIndex?.getChildKeysByKey(folderEntry.key).length,
+			)
+			const folderContentsExpanded = isFolderContentsExpanded?.(item) ?? false
+			// 特殊项目目录内不允许嵌套创建画布、自媒体项目或 AI 卡片。
 			const canCreateDesignProject =
 				!item.display_config && !hasDisplayConfigInAncestors(item, treeIndex)
 
@@ -499,14 +563,18 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					icon: <MagicIcon component={IconFolderPlus} stroke={2} size={18} />,
 					onClick: () => createVirtualFolder(key, parentPath),
 				},
-				{
-					key: "uploadFile",
-					label: t("topicFiles.contextMenu.uploadFile"),
-					icon: <MagicIcon component={IconUpload} stroke={2} size={18} />,
-					onClick: () => handleUploadFile(item),
-				},
+				...(handleUploadFile
+					? [
+							{
+								key: "uploadFile",
+								label: t("topicFiles.contextMenu.uploadFile"),
+								icon: <MagicIcon component={IconUpload} stroke={2} size={18} />,
+								onClick: () => handleUploadFile(item),
+							},
+						]
+					: []),
 				// 只有当浏览器支持文件夹上传时才显示上传文件夹选项
-				...(supportsFolderUpload(isMobile)
+				...(handleUploadFolder && supportsFolderUpload(isMobile)
 					? [
 							{
 								key: "uploadFolder",
@@ -528,6 +596,9 @@ export function useContextMenu(options: UseContextMenuOptions) {
 								onClick: () => handleImportFromOtherProject(item),
 							},
 						]
+					: []),
+				...(slidesTemplateMenuItem
+					? [{ type: "divider" as const }, slidesTemplateMenuItem]
 					: []),
 				{ type: "divider" as const },
 				{
@@ -563,7 +634,10 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					: []),
 				{ type: "divider" as const },
 				// 根据选中状态决定显示单文件还是多文件菜单（文件夹版本）
-				...(selectedItems && selectedItems.size > 1
+				...(handleAddToCurrentChat &&
+				handleAddToNewChat &&
+				selectedItems &&
+				selectedItems.size > 1
 					? [
 							{
 								key: "addSelectedToCurrentChat",
@@ -592,67 +666,74 @@ export function useContextMenu(options: UseContextMenuOptions) {
 						].filter((menuItem) =>
 							hideCreateNewTopic ? menuItem.key !== "addSelectedToNewChat" : true,
 						)
-					: [
-							{
-								key: "addToCurrentChat",
-								label: (
-									<Flex
-										align="center"
-										justify="space-between"
-										style={{ width: "100%" }}
-									>
-										<span>{t("topicFiles.contextMenu.addToCurrentChat")}</span>
-										{getShortcutHint &&
-											!isMobile &&
-											(() => {
-												const shortcut = getShortcutHint("addToCurrentChat")
-												if (!shortcut) return null
-												return (
-													<div className={styles.menuItemShortcut}>
-														{shortcut.modifiers.map((modifier) => (
+					: handleAddToCurrentChat && handleAddToNewChat
+						? [
+								{
+									key: "addToCurrentChat",
+									label: (
+										<Flex
+											align="center"
+											justify="space-between"
+											style={{ width: "100%" }}
+										>
+											<span>
+												{t("topicFiles.contextMenu.addToCurrentChat")}
+											</span>
+											{getShortcutHint &&
+												!isMobile &&
+												(() => {
+													const shortcut =
+														getShortcutHint("addToCurrentChat")
+													if (!shortcut) return null
+													return (
+														<div className={styles.menuItemShortcut}>
+															{shortcut.modifiers.map((modifier) => (
+																<div
+																	key={modifier}
+																	className={
+																		styles.menuItemShortcutItem
+																	}
+																>
+																	{modifier}
+																</div>
+															))}
 															<div
-																key={modifier}
 																className={
 																	styles.menuItemShortcutItem
 																}
 															>
-																{modifier}
+																{shortcut.key}
 															</div>
-														))}
-														<div
-															className={styles.menuItemShortcutItem}
-														>
-															{shortcut.key}
 														</div>
-													</div>
-												)
-											})()}
-									</Flex>
-								),
-								icon: (
-									<MagicIcon
-										component={IconMessageCircleShare}
-										stroke={2}
-										size={18}
-									/>
-								),
-								onClick: () => handleAddToCurrentChat(item),
-							},
-							{
-								key: "addToNewChat",
-								label: t("topicFiles.contextMenu.addToNewChat"),
-								icon: (
-									<MagicIcon
-										component={IconMessageCirclePlus}
-										stroke={2}
-										size={18}
-									/>
-								),
-								onClick: () => handleAddToNewChat(item),
-							},
-						].filter((menuItem) =>
-							hideCreateNewTopic ? menuItem.key !== "addToNewChat" : true,
-						)),
+													)
+												})()}
+										</Flex>
+									),
+									icon: (
+										<MagicIcon
+											component={IconMessageCircleShare}
+											stroke={2}
+											size={18}
+										/>
+									),
+									onClick: () => handleAddToCurrentChat(item),
+								},
+								{
+									key: "addToNewChat",
+									label: t("topicFiles.contextMenu.addToNewChat"),
+									icon: (
+										<MagicIcon
+											component={IconMessageCirclePlus}
+											stroke={2}
+											size={18}
+										/>
+									),
+									onClick: () => handleAddToNewChat(item),
+								},
+							].filter((menuItem) =>
+								hideCreateNewTopic ? menuItem.key !== "addToNewChat" : true,
+							)
+						: []),
 				{ type: "divider" as const },
 				// Folder download menu: single source via buildSingleFileDownloadMenu (avoids duplicate entries)
 				...(() => {
@@ -669,7 +750,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					return downloadMenuItems
 				})(),
 				{ type: "divider" as const },
-				...(!hideShareFile
+				...(handleShareItem && !hideShareFile
 					? [
 							{
 								key: "share",
@@ -700,6 +781,28 @@ export function useContextMenu(options: UseContextMenuOptions) {
 						]
 					: []),
 				...showInfoMenuItems,
+				...(hasFolderContents && isFolderContentsExpanded && handleToggleFolderContents
+					? [
+							{
+								key: "toggleFolderContents",
+								label: folderContentsExpanded
+									? t("topicFiles.contextMenu.collapseAll")
+									: t("topicFiles.contextMenu.expandAll"),
+								icon: (
+									<MagicIcon
+										component={
+											folderContentsExpanded
+												? IconChevronsUp
+												: IconChevronsDown
+										}
+										stroke={2}
+										size={18}
+									/>
+								),
+								onClick: () => handleToggleFolderContents(item),
+							},
+						]
+					: []),
 				{ type: "divider" as const },
 				{
 					key: "delete",
@@ -720,8 +823,16 @@ export function useContextMenu(options: UseContextMenuOptions) {
 				},
 			)
 
-			return normalizeMenuItems(filterMenuItems?.(menuItems) || menuItems)
+			return normalizeMenuItems(filterMenuItems?.(menuItems, item) || menuItems)
 		} else {
+			const convertPresentationMenuItem: MenuItem | undefined =
+				!isMobile && handleConvertToSlidesTemplate && isConvertiblePresentationFile(item)
+					? createConvertToSlidesTemplateMenuItem(
+							item,
+							handleConvertToSlidesTemplate,
+							t("topicFiles.contextMenu.convertToSlidesTemplate"),
+						)
+					: undefined
 			// 文件菜单
 			menuItems.push(
 				{
@@ -730,6 +841,9 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					icon: <MagicIcon component={IconOpenWindow} stroke={2} size={18} />,
 					onClick: () => handleOpenFile(item),
 				},
+				...(convertPresentationMenuItem
+					? [{ type: "divider" as const }, convertPresentationMenuItem]
+					: []),
 				{ type: "divider" as const },
 				{
 					key: "rename",
@@ -775,7 +889,10 @@ export function useContextMenu(options: UseContextMenuOptions) {
 					: []),
 				{ type: "divider" as const },
 				// 根据选中状态决定显示单文件还是多文件菜单（文件版本）
-				...(selectedItems && selectedItems.size > 1
+				...(handleAddToCurrentChat &&
+				handleAddToNewChat &&
+				selectedItems &&
+				selectedItems.size > 1
 					? [
 							{
 								key: "addSelectedToCurrentChat",
@@ -804,67 +921,74 @@ export function useContextMenu(options: UseContextMenuOptions) {
 						].filter((menuItem) =>
 							hideCreateNewTopic ? menuItem.key !== "addSelectedToNewChat" : true,
 						)
-					: [
-							{
-								key: "addToCurrentChat",
-								label: (
-									<Flex
-										align="center"
-										justify="space-between"
-										style={{ width: "100%" }}
-									>
-										<span>{t("topicFiles.contextMenu.addToCurrentChat")}</span>
-										{getShortcutHint &&
-											!isMobile &&
-											(() => {
-												const shortcut = getShortcutHint("addToCurrentChat")
-												if (!shortcut) return null
-												return (
-													<div className={styles.menuItemShortcut}>
-														{shortcut.modifiers.map((modifier) => (
+					: handleAddToCurrentChat && handleAddToNewChat
+						? [
+								{
+									key: "addToCurrentChat",
+									label: (
+										<Flex
+											align="center"
+											justify="space-between"
+											style={{ width: "100%" }}
+										>
+											<span>
+												{t("topicFiles.contextMenu.addToCurrentChat")}
+											</span>
+											{getShortcutHint &&
+												!isMobile &&
+												(() => {
+													const shortcut =
+														getShortcutHint("addToCurrentChat")
+													if (!shortcut) return null
+													return (
+														<div className={styles.menuItemShortcut}>
+															{shortcut.modifiers.map((modifier) => (
+																<div
+																	key={modifier}
+																	className={
+																		styles.menuItemShortcutItem
+																	}
+																>
+																	{modifier}
+																</div>
+															))}
 															<div
-																key={modifier}
 																className={
 																	styles.menuItemShortcutItem
 																}
 															>
-																{modifier}
+																{shortcut.key}
 															</div>
-														))}
-														<div
-															className={styles.menuItemShortcutItem}
-														>
-															{shortcut.key}
 														</div>
-													</div>
-												)
-											})()}
-									</Flex>
-								),
-								icon: (
-									<MagicIcon
-										component={IconMessageCircleShare}
-										stroke={2}
-										size={18}
-									/>
-								),
-								onClick: () => handleAddToCurrentChat(item),
-							},
-							{
-								key: "addToNewChat",
-								label: t("topicFiles.contextMenu.addToNewChat"),
-								icon: (
-									<MagicIcon
-										component={IconMessageCirclePlus}
-										stroke={2}
-										size={18}
-									/>
-								),
-								onClick: () => handleAddToNewChat(item),
-							},
-						].filter((menuItem) =>
-							hideCreateNewTopic ? menuItem.key !== "addToNewChat" : true,
-						)),
+													)
+												})()}
+										</Flex>
+									),
+									icon: (
+										<MagicIcon
+											component={IconMessageCircleShare}
+											stroke={2}
+											size={18}
+										/>
+									),
+									onClick: () => handleAddToCurrentChat(item),
+								},
+								{
+									key: "addToNewChat",
+									label: t("topicFiles.contextMenu.addToNewChat"),
+									icon: (
+										<MagicIcon
+											component={IconMessageCirclePlus}
+											stroke={2}
+											size={18}
+										/>
+									),
+									onClick: () => handleAddToNewChat(item),
+								},
+							].filter((menuItem) =>
+								hideCreateNewTopic ? menuItem.key !== "addToNewChat" : true,
+							)
+						: []),
 				{ type: "divider" as const },
 			)
 
@@ -881,7 +1005,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 
 			menuItems.push(
 				{ type: "divider" as const },
-				...(!hideShareFile
+				...(handleShareItem && !hideShareFile
 					? [
 							{
 								key: "share",
@@ -933,7 +1057,7 @@ export function useContextMenu(options: UseContextMenuOptions) {
 			)
 		}
 
-		return normalizeMenuItems(filterMenuItems?.(menuItems) || menuItems)
+		return normalizeMenuItems(filterMenuItems?.(menuItems, item) || menuItems)
 	}
 
 	return {

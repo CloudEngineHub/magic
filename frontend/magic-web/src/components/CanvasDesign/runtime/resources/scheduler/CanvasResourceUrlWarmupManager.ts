@@ -1,9 +1,11 @@
 import type { Canvas } from "../../core/Canvas"
 import { type CanvasDocument, ElementTypeEnum, type LayerElement } from "../../document/types"
+import { getActiveContent, getActiveImageContent } from "../../document/elementContent"
 import { parseExpiresAt, isOssExpired } from "../offline-cache/ossExpiryUtils"
 import {
-	getCanvasResourcePathInfo,
+	getCanvasHostResourceReferenceIdentity,
 	isRemoteOrSpecialPath,
+	type CanvasResourceReferenceResolverChangeOptions,
 } from "../../shared/path/canvasResourcePath"
 import {
 	getFailureReasonFromGetFileInfoError,
@@ -114,6 +116,7 @@ export class CanvasResourceUrlWarmupManager {
 	private readonly unsubscribers: Array<() => void> = []
 	private timerId: ReturnType<typeof setTimeout> | null = null
 	private warmupAbortController = new AbortController()
+	private resolverGeneration = 0
 	private destroyed = false
 	private statsSnapshot: CanvasResourceUrlWarmupSnapshot = {
 		destroyed: false,
@@ -182,8 +185,45 @@ export class CanvasResourceUrlWarmupManager {
 		return { ...this.statsSnapshot }
 	}
 
+	public handleResourceReferenceResolverChanged(
+		options?: CanvasResourceReferenceResolverChangeOptions,
+	): void {
+		if (this.destroyed) return
+		if (options?.changedResourceIdentities) {
+			let affected = false
+			this.entries.forEach((entry) => {
+				const identity = entry.key.split("\0").slice(1).join("\0")
+				if (!options.changedResourceIdentities?.has(identity)) return
+				affected = true
+				if (entry.status === "warming") return
+				this.queuedKeys.delete(entry.key)
+				entry.status = "idle"
+				entry.lastError = undefined
+				entry.failedAt = undefined
+				entry.retryAfterAt = undefined
+				this.enqueue(entry, "resource-reference-resolver-changed", entry.priority)
+			})
+			if (affected) this.refreshSnapshotCounts()
+			return
+		}
+		this.resolverGeneration += 1
+		this.warmupAbortController.abort()
+		this.warmupAbortController = new AbortController()
+		if (this.timerId !== null) {
+			clearTimeout(this.timerId)
+			this.timerId = null
+		}
+		this.queuedKeys.clear()
+		this.warmingKeys.clear()
+		this.elementPathKeys.clear()
+		this.pathRefCounts.clear()
+		this.entries.clear()
+		this.warmupCurrentDocument("resource-reference-resolver-changed")
+	}
+
 	public destroy(): void {
 		this.destroyed = true
+		this.resolverGeneration += 1
 		this.warmupAbortController.abort()
 		if (this.timerId !== null) {
 			clearTimeout(this.timerId)
@@ -296,17 +336,29 @@ export class CanvasResourceUrlWarmupManager {
 
 	private collectResourceRefs(element: LayerElement): WarmupResourceRef[] {
 		const refs: WarmupResourceRef[] = []
-		if (element.type === ElementTypeEnum.Image && element.src) {
+		const effectiveContent = this.canvas.getEffectiveContent(element.id) as
+			| { src?: string }
+			| undefined
+		// warmupDocument runs before ElementManager has loaded the document, so the
+		// input snapshot is the only available source during initial registration.
+		const imageSrc =
+			effectiveContent?.src ??
+			(element.type === ElementTypeEnum.Image
+				? getActiveImageContent(element).src
+				: undefined)
+		if (element.type === ElementTypeEnum.Image && imageSrc) {
 			refs.push({
 				elementId: element.id,
-				path: element.src,
+				path: imageSrc,
 				mediaType: "image",
 			})
 		}
-		if (element.type === ElementTypeEnum.Video && element.src) {
+		if (element.type === ElementTypeEnum.Video) {
+			const videoSrc = effectiveContent?.src ?? getActiveContent(element)?.src
+			if (!videoSrc) return refs
 			refs.push({
 				elementId: element.id,
-				path: element.src,
+				path: videoSrc,
 				mediaType: "video",
 			})
 		}
@@ -320,10 +372,7 @@ export class CanvasResourceUrlWarmupManager {
 			return null
 		}
 
-		const resolveAbsolutePath =
-			this.canvas.magicConfigManager.config?.methods?.resolveAbsolutePath
-		const pathInfo = getCanvasResourcePathInfo(path, resolveAbsolutePath)
-		const key = `${ref.mediaType}\0${pathInfo.canonicalPath}`
+		const key = `${ref.mediaType}\0${getCanvasHostResourceReferenceIdentity(this.canvas, path)}`
 		let entry = this.entries.get(key)
 		if (!entry) {
 			entry = {
@@ -384,6 +433,8 @@ export class CanvasResourceUrlWarmupManager {
 
 	private async dispatchNextBatch(): Promise<void> {
 		if (this.destroyed) return
+		const resolverGeneration = this.resolverGeneration
+		const signal = this.warmupAbortController.signal
 		const batchKeys = [...this.queuedKeys]
 			.sort((leftKey, rightKey) => {
 				const left = this.entries.get(leftKey)
@@ -423,10 +474,11 @@ export class CanvasResourceUrlWarmupManager {
 			batchKeys.map((key) => {
 				const entry = this.entries.get(key)
 				return entry
-					? this.warmupEntry(entry, this.warmupAbortController.signal)
+					? this.warmupEntry(entry, signal, resolverGeneration)
 					: Promise.resolve()
 			}),
 		)
+		if (resolverGeneration !== this.resolverGeneration) return
 
 		this.statsSnapshot.lastBatchDurationMs = now() - startedAt
 		this.refreshSnapshotCounts()
@@ -447,7 +499,12 @@ export class CanvasResourceUrlWarmupManager {
 		return highestPriority
 	}
 
-	private async warmupEntry(entry: WarmupEntry, signal: AbortSignal): Promise<void> {
+	private async warmupEntry(
+		entry: WarmupEntry,
+		signal: AbortSignal,
+		resolverGeneration: number,
+	): Promise<void> {
+		if (resolverGeneration !== this.resolverGeneration) return
 		if (signal.aborted || !this.pathRefCounts.has(entry.key)) {
 			this.warmingKeys.delete(entry.key)
 			if (!this.pathRefCounts.has(entry.key)) this.entries.delete(entry.key)
@@ -468,6 +525,7 @@ export class CanvasResourceUrlWarmupManager {
 				}),
 				signal,
 			)
+			if (resolverGeneration !== this.resolverGeneration) return
 			if (this.destroyed || signal.aborted || !this.pathRefCounts.has(entry.key)) {
 				this.warmingKeys.delete(entry.key)
 				if (!this.pathRefCounts.has(entry.key)) this.entries.delete(entry.key)
@@ -487,6 +545,7 @@ export class CanvasResourceUrlWarmupManager {
 			entry.resourceVersion = fileInfo.resource_version
 			this.statsSnapshot.successCount += 1
 		} catch (error) {
+			if (resolverGeneration !== this.resolverGeneration) return
 			if (isAbortError(error)) {
 				this.warmingKeys.delete(entry.key)
 				return

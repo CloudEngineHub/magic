@@ -79,6 +79,9 @@ export interface CrewPublisher {
 /** Source type for user agents */
 export type CrewSourceType = "LOCAL_CREATE" | "MARKET"
 
+/** Display origin of an agent in the user's employee lists. */
+export type CrewAgentOrigin = "OFFICIAL" | "CREATED" | "MARKET" | "TEAM_SHARED"
+
 /** Publish status */
 export type CrewPublishStatus = "PUBLISHED" | "OFFLINE" | "DRAFT"
 
@@ -139,7 +142,12 @@ export interface GetStoreAgentsParams {
 	keyword?: string
 	/** Filter by category ID; omit for all */
 	category_id?: string
+	/** Filter by market source; omit to include both public and organization markets. */
+	market_type?: StoreAgentMarketType
 }
+
+/** Market source for store agents. */
+export type StoreAgentMarketType = "MARKET" | "ORGANIZATION"
 
 /** Single store agent item */
 export interface StoreAgentItem {
@@ -159,6 +167,8 @@ export interface StoreAgentItem {
 	playbooks?: CrewPlayBookBaseData[]
 	publisher_type: CrewPublisherType
 	publisher?: CrewPublisher | null
+	/** Market source returned by the store-agent query. */
+	market_type: StoreAgentMarketType
 	category_id: string | null
 	/** Whether the current user has added this agent */
 	is_added: boolean
@@ -212,6 +222,7 @@ export interface CrewAgentCreatorInfo {
 /** Single user agent item */
 export interface AgentItem {
 	id: string
+	project_id?: string | null
 	/** Crew unique code (magic_super_magic_agents.code) */
 	code: string
 	user_role?: CollaboratorPermission
@@ -224,6 +235,10 @@ export interface AgentItem {
 	icon_type: CrewIconType
 	playbooks: CrewPlayBookBaseData[]
 	source_type: CrewSourceType
+	/** Current user's display source for this agent (returned by list endpoints). */
+	origin: CrewAgentOrigin
+	/** Publish visibility for the current agent. */
+	publish_target_type?: AgentPublishTargetType | null
 	publisher_type?: CrewPublisherType
 	publisher?: CrewPublisher | null
 	enabled: boolean
@@ -258,7 +273,12 @@ export interface GetTeamSharedAgentsResponse extends GetCreatedAgentsResponse {}
 // ======================== Unified Agent List (API: POST /api/v2/super-magic/agents/queries) ========================
 
 /** Scope filter for unified agent list query */
-export type UnifiedAgentScope = "all" | "created" | "team_shared" | "market_installed"
+export type UnifiedAgentScope =
+	| "all"
+	| "created"
+	| "team_shared"
+	| "market_installed"
+	| "collaborated"
 
 /** Sort field for unified agent list query */
 export type UnifiedAgentSort = "updated_at" | "created_at"
@@ -283,7 +303,7 @@ export interface AgentOrganizationInfo {
  */
 export interface UnifiedAgentItem extends AgentItem {
 	scope: "created" | "team_shared" | "market_installed"
-	organization_info: AgentOrganizationInfo
+	organization_info: AgentOrganizationInfo | null
 }
 
 /** Paginated response for unified agent list query */
@@ -368,6 +388,31 @@ export interface PublishAgentResponse {
 	publish_target_type: AgentPublishTargetType
 	is_current_version: boolean
 	published_at: string
+}
+
+/** Async publish task lifecycle status (ZIP packing / upload). */
+export type AsyncPublishTaskStatus = "processing" | "ready" | "failed"
+
+/** Response for async agent publish create / check. */
+export interface AsyncPublishTaskResponse {
+	publish_task_id: string
+	status: AsyncPublishTaskStatus
+	progress: number | null
+	resource_type?: "agent" | "skill"
+	resource_code?: string
+	organization_code?: string
+	publisher_user_id?: string
+	version_id?: number | string
+	task_key?: string
+	sandbox_id?: string
+	file_key?: string | null
+	error?: string | null
+	created_at?: number
+	updated_at?: number
+}
+
+export interface CheckAgentPublishParams {
+	publish_task_id: string
 }
 
 // ======================== Update Agent Info (API 5) ========================
@@ -495,6 +540,13 @@ export interface AgentDetailResponse {
 	allowed_publish_target_types?: AgentAllowedPublishTargetType[]
 }
 
+/** Lightweight access result for one agent in the current organization. */
+export interface AgentAccessCheckResponse {
+	code: string
+	exists: boolean
+	can_use: boolean
+}
+
 // ======================== Agent Versions (API 18) ========================
 
 export interface GetAgentVersionsParams {
@@ -619,12 +671,12 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 
 	/**
 	 * Get store agents list (marketplace).
-	 * POST with body: page, page_size, keyword, category_id.
+	 * POST with body: page, page_size, keyword, category_id, market_type.
 	 * Results include is_added and allow_delete flags for each agent.
 	 * @param params Request body
 	 */
 	getStoreAgents(params: GetStoreAgentsParams = {}) {
-		const { page = 1, page_size = 20, keyword, category_id } = params
+		const { page = 1, page_size = 20, keyword, category_id, market_type } = params
 		return fetch.post<GetStoreAgentsResponse>(
 			genRequestUrl("/api/v2/super-magic/agent-market/queries"),
 			{
@@ -632,6 +684,7 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 				page_size,
 				keyword,
 				category_id,
+				...(market_type ? { market_type } : {}),
 			},
 		)
 	},
@@ -735,6 +788,15 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 		)
 	},
 
+	/** Checks whether an agent exists and is usable by the current user. */
+	checkAgentAccess({ code }: { code: string }) {
+		return fetch.post<AgentAccessCheckResponse>(
+			genRequestUrl("/api/v2/super-magic/agents/access-check"),
+			{ code },
+			{ enableErrorMessagePrompt: false },
+		)
+	},
+
 	/**
 	 * Update agent basic display info.
 	 * Only allowed for non-MARKET agents.
@@ -778,6 +840,30 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 		return fetch.post<PublishAgentResponse>(
 			genRequestUrl("/api/v2/super-magic/agents/${code}/publish", { code }),
 			params,
+		)
+	},
+
+	/**
+	 * Create an async agent publish task (returns quickly; poll checkAgentPublish for result).
+	 * Request body matches the sync publish endpoint.
+	 */
+	publishAgentAsync({ code, ...params }: { code: string } & PublishAgentParams) {
+		return fetch.post<AsyncPublishTaskResponse>(
+			genRequestUrl("/api/v2/super-magic/agents/${code}/publish/async", { code }),
+			params,
+		)
+	},
+
+	/**
+	 * Poll async agent publish task status by publish_task_id.
+	 */
+	checkAgentPublish({ code, publish_task_id }: { code: string } & CheckAgentPublishParams) {
+		return fetch.get<AsyncPublishTaskResponse>(
+			genRequestUrl(
+				"/api/v2/super-magic/agents/${code}/publish/check",
+				{ code },
+				{ publish_task_id },
+			),
 		)
 	},
 
@@ -871,11 +957,13 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 	 * Validates that the agent is published and not already hired.
 	 * Also increments the store agent's install_count.
 	 * @param code Store agent code (magic_super_magic_store_agents.agent_code)
+	 * @param options Optional shared HTTP prompt behavior for this call.
 	 */
-	hireStoreAgent({ code }: { code: string }) {
+	hireStoreAgent({ code }: { code: string }, options?: { enableErrorMessagePrompt?: boolean }) {
 		return fetch.post<[]>(
 			genRequestUrl("/api/v2/super-magic/agent-market/${code}/hire", { code }),
 			{},
+			options,
 		)
 	},
 
@@ -978,7 +1066,7 @@ export const generateCrewApi = (fetch: HttpClient) => ({
 	/**
 	 * Get unified agent list (all scopes in one query).
 	 * Endpoint: POST /api/v2/super-magic/agents/queries
-	 * Replaces separate created/hired/team-shared endpoints for mobile.
+	 * Supports the unified mobile list and the desktop collaboration list.
 	 * @param params Request body with scope, sort, pagination
 	 */
 	getUnifiedAgentList(params: GetUnifiedAgentListParams = {}) {

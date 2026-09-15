@@ -201,15 +201,35 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => ({
 		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 4px 8px;
 	`,
-	quickPresetColumns: css`
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+	quickPresetHeader: css`
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
 		gap: 12px;
 	`,
-	quickPresetColumn: css`
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
+	unitSegmented: css`
+		flex-shrink: 0;
+
+		.${prefixCls}-segmented-item-label {
+			min-width: 42px;
+			padding-inline: 8px;
+		}
+	`,
+	quickPresetList: css`
+		display: block;
+	`,
+	quickPresetRow: css`
+		display: block;
+	`,
+	quickPresetUnit: css`
+		display: none;
+	`,
+	quickPresetOptions: css`
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 4px 8px;
+	`,
+	quickPresetButton: css`
 		min-width: 0;
 	`,
 	sideOptionGrid: css`

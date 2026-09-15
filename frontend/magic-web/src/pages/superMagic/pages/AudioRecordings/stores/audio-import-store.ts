@@ -13,7 +13,17 @@ const IMPORT_AUDIO_FILE_SYNC_RETRY_COUNT = 3
 const IMPORT_AUDIO_FILE_SYNC_RETRY_DELAY_MS = 50
 
 // Common audio extensions for validation
-const COMMON_AUDIO_EXTENSIONS = [".raw", ".wav", ".mp3", ".ogg", ".webm", ".m4a"]
+const COMMON_AUDIO_EXTENSIONS = [
+	".raw",
+	".wav",
+	".mp3",
+	".ogg",
+	".opus",
+	".webm",
+	".m4a",
+	".aac",
+	".flac",
+]
 // Some video formats that commonly contain audio and are acceptable
 const AUDIO_COMPATIBLE_VIDEO_EXTENSIONS = [".mp4", ".mov", ".3gp", ".mkv", ".avi"]
 
@@ -206,6 +216,16 @@ export class AudioImportStore {
 				status: "transferring",
 				file: targetFile,
 			})
+		})
+
+		// Remind users not to hard-refresh while SPA navigation remains safe during upload.
+		magicToast.info({
+			content: i18next.t("import.doNotRefreshTip", {
+				ns: "audioRecordings",
+				defaultValue:
+					"Please don't refresh until the import finishes. Switching to other pages won't interrupt it.",
+			}),
+			duration: 5000,
 		})
 
 		try {

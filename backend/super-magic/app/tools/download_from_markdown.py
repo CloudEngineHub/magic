@@ -538,7 +538,7 @@ class DownloadFromMarkdown(AbstractFileTool[DownloadFromMarkdownParams], Workspa
             return None
 
         # 使用 versioning context 处理资源（无需更新时间戳，因为是工具下载的文件）
-        async with self._file_versioning_context(tool_context, target_path, update_timestamp=False):
+        async with self._file_versioning_context(tool_context, target_path, track_in_horizon=False):
             # Handle local files and network resources differently
             if _is_local_path(resource.url):
                 # Local file handling
@@ -603,12 +603,14 @@ class DownloadFromMarkdown(AbstractFileTool[DownloadFromMarkdownParams], Workspa
         download_params = DownloadFromUrlParams(
             url=resource.url,
             file_path=str(target_path),
-            override=OVERRIDE_EXISTING
         )
 
         try:
             # Use download tool
-            result = await self._download_tool.execute_purely(download_params)
+            result = await self._download_tool.execute_purely(
+                download_params,
+                overwrite=OVERRIDE_EXISTING,
+            )
 
             if result.ok:
                 logger.info(f"成功下载: {filename}")

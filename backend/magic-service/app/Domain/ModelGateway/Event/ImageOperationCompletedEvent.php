@@ -9,6 +9,7 @@ namespace App\Domain\ModelGateway\Event;
 
 use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
 use App\Infrastructure\Core\AbstractEvent;
+use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use DateTime;
 
 class ImageOperationCompletedEvent extends AbstractEvent
@@ -18,6 +19,8 @@ class ImageOperationCompletedEvent extends AbstractEvent
     public const string OPERATION_ERASER = 'image_eraser';
 
     public const string OPERATION_EXPAND = 'image_expand';
+
+    protected ?string $eventId = null;
 
     protected string $organizationCode;
 
@@ -50,6 +53,42 @@ class ImageOperationCompletedEvent extends AbstractEvent
     protected ImageGenerateSourceEnum $sourceType;
 
     protected array $businessParams = [];
+
+    /**
+     * @var array<int, array{url: string}>
+     */
+    protected array $generatedImages = [];
+
+    public function __construct(?string $eventId = null)
+    {
+        $this->eventId = $eventId ?: (string) IdGenerator::getSnowId();
+    }
+
+    public function getEventId(): string
+    {
+        return $this->eventId ??= (string) ($this->businessParams['event_id'] ?? IdGenerator::getSnowId());
+    }
+
+    /**
+     * @return array<int, array{url: string}>
+     */
+    public function getGeneratedImages(): array
+    {
+        return $this->generatedImages;
+    }
+
+    public function setGeneratedImages(array $generatedImages): void
+    {
+        $this->generatedImages = [];
+        foreach ($generatedImages as $image) {
+            $url = is_string($image) ? $image : ($image['url'] ?? '');
+            if (! is_string($url) || $url === '' || str_starts_with($url, 'data:')) {
+                continue;
+            }
+
+            $this->generatedImages[] = ['url' => $url];
+        }
+    }
 
     public function getOrganizationCode(): string
     {
@@ -209,5 +248,8 @@ class ImageOperationCompletedEvent extends AbstractEvent
     public function setBusinessParams(array $businessParams): void
     {
         $this->businessParams = $businessParams;
+        if (! empty($businessParams['event_id'])) {
+            $this->eventId = (string) $businessParams['event_id'];
+        }
     }
 }

@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import type { RecordingDetailFileMap, RecordingDetailFileRef } from "../../types/recording-detail"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { RecordingDetailEmptyState } from "./RecordingDetailEmptyState"
@@ -11,11 +12,14 @@ import { RECORDING_DESKTOP_MD_CONTENT_CLASS } from "./recording-detail-layout"
 import { RecordingMarkdownContent } from "./RecordingMarkdownContent"
 import { RecordingSummaryContent } from "./RecordingSummaryContent"
 import { resolveSummaryTypeLabel } from "./resolve-summary-type-label"
+import { hasConfiguredRecordingFile } from "../../utils/recording-detail-files"
 
 interface RecordingDetailRightPanelProps {
 	fileMap: RecordingDetailFileMap | null
 	summaryContent: Record<string, string | undefined>
 	notesContent?: string
+	attachmentTree?: AttachmentFile[]
+	notesFilePath?: string
 	attachmentList: AttachmentItem[]
 	summaryReady: boolean
 	summarizing: boolean
@@ -25,6 +29,8 @@ interface RecordingDetailRightPanelProps {
 	onTimeClick: (seconds: number, end?: number) => void
 	onGenerateSummary?: () => void
 	summarySubmitting?: boolean
+	/** Controls whether the notes source tab is available in readonly share views. */
+	showNotesTab?: boolean
 }
 
 /** Builds the dynamic right-panel tabs and renders summary/notes content or state placeholders. */
@@ -32,6 +38,8 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 	fileMap,
 	summaryContent,
 	notesContent,
+	attachmentTree = [],
+	notesFilePath,
 	attachmentList,
 	summaryReady,
 	summarizing,
@@ -41,11 +49,12 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 	onTimeClick,
 	onGenerateSummary,
 	summarySubmitting = false,
+	showNotesTab = true,
 }: RecordingDetailRightPanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const tabs = useMemo(
-		() => buildRightPanelTabs(fileMap, summaryContent, t),
-		[fileMap, summaryContent, t],
+		() => buildRightPanelTabs(fileMap, summaryContent, t, showNotesTab),
+		[fileMap, showNotesTab, summaryContent, t],
 	)
 	const [activeKey, setActiveKey] = useState<string>(tabs[0]?.key ?? "notes")
 	const prevSummaryReadyRef = useRef(summaryReady)
@@ -66,7 +75,7 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 		const status = summarizing ? "generating" : summaryFailed ? "failed" : "pending"
 		return (
 			<div
-				className="flex h-full min-h-[560px] flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-sm"
+				className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-sm"
 				data-testid="recording-detail-right-panel"
 			>
 				<RecordingDetailSummaryState
@@ -80,7 +89,10 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 
 	if (tabs.length === 0) {
 		return (
-			<div className="flex h-full min-h-[560px] items-center justify-center rounded-[22px] border border-border bg-card shadow-sm">
+			<div
+				className="flex h-full min-h-0 items-center justify-center rounded-[22px] border border-border bg-card shadow-sm"
+				data-testid="recording-detail-right-panel"
+			>
 				<RecordingDetailEmptyState variant="noSummary" />
 			</div>
 		)
@@ -90,7 +102,8 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 
 	return (
 		<div
-			className="flex h-full min-h-[560px] flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-sm"
+			// The panel must shrink with the workbench so focused transcript rows cannot scroll the horizontal viewport vertically.
+			className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-sm"
 			data-testid="recording-detail-right-panel"
 		>
 			<RecordingDetailTabStrip
@@ -105,9 +118,11 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 						file={activeTab.file}
 						content={activeTab.content}
 						attachmentList={attachmentList}
+						attachmentTree={attachmentTree}
 						speakerNameMap={speakerNameMap}
 						onOpenSpeakerSettings={onOpenSpeakerSettings}
 						onTimeClick={onTimeClick}
+						isGenerating={summarizing}
 						layout="desktop"
 					/>
 				</div>
@@ -130,6 +145,8 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 								<RecordingMarkdownContent
 									content={notesContent}
 									layout="desktop"
+									attachments={attachmentTree}
+									relativeFilePath={notesFilePath}
 									speakerNameMap={speakerNameMap}
 									onSpeakerClick={onOpenSpeakerSettings}
 									onTimeClick={(time) => onTimeClick(time)}
@@ -137,7 +154,10 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 							</div>
 						) : (
 							<RecordingDetailRegionEmptySlot>
-								<RecordingDetailEmptyState variant="noNotes" compact />
+								<RecordingDetailEmptyState
+									variant={summarizing ? "summaryGenerating" : "noNotes"}
+									compact
+								/>
 							</RecordingDetailRegionEmptySlot>
 						)
 					) : activeTab ? (
@@ -145,9 +165,11 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 							file={activeTab.file}
 							content={activeTab.content}
 							attachmentList={attachmentList}
+							attachmentTree={attachmentTree}
 							speakerNameMap={speakerNameMap}
 							onOpenSpeakerSettings={onOpenSpeakerSettings}
 							onTimeClick={onTimeClick}
+							isGenerating={summarizing}
 							layout="desktop"
 						/>
 					) : null}
@@ -166,11 +188,12 @@ interface RightPanelTab {
 	badgeCount?: number
 }
 
-/** Assembles summary tabs from fileMap and always appends the notes tab. */
+/** Assembles summary tabs and appends notes when config and access gates allow it. */
 function buildRightPanelTabs(
 	fileMap: RecordingDetailFileMap | null,
 	summaryContent: Record<string, string | undefined>,
 	t: ReturnType<typeof useTranslation>["t"],
+	showNotesTab = true,
 ): RightPanelTab[] {
 	const summaryTabs =
 		fileMap?.summaryFiles.map((file) => ({
@@ -180,6 +203,9 @@ function buildRightPanelTabs(
 			file,
 			content: summaryContent[file.type],
 		})) ?? []
+
+	// Notes follows the same config-driven visibility rule as generated summary tabs.
+	if (!showNotesTab || !hasConfiguredRecordingFile(fileMap, "notes")) return summaryTabs
 
 	const notesTab: RightPanelTab = {
 		key: "notes",

@@ -166,7 +166,10 @@ const CommonListPanel = <T extends TreeNode>({
 						className="shrink-0"
 					/>
 				)}
-				<div className="h-full min-w-0 flex-1" data-testid="user-selector-list-item-content">
+				<div
+					className="h-full min-w-0 flex-1"
+					data-testid="user-selector-list-item-content"
+				>
 					{isMember(item) ? (
 						<MemberItem
 							data={item}

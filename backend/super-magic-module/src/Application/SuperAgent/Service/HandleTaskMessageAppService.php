@@ -24,9 +24,11 @@ use App\Infrastructure\Core\Exception\EventException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\AsyncEvent\AsyncEventUtil;
+use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Dtyq\SuperMagic\Application\Chat\Service\ChatAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\TaskMessageDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\UserMessageDTO;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ScriptTaskEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskMessageEntity;
@@ -42,6 +44,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
 use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
+use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Request\CreateScriptTaskRequestDTO;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Odin\Message\Role;
@@ -70,6 +73,7 @@ class HandleTaskMessageAppService extends AbstractAppService
         private readonly ChatAppService $chatAppService,
         private readonly ModelGatewayMapper $modelGatewayMapper,
         private readonly DynamicConfigManager $dynamicConfigManager,
+        private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
@@ -86,6 +90,21 @@ class HandleTaskMessageAppService extends AbstractAppService
                 ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
             }
             $topicId = $topicEntity->getId();
+
+            // sandbox 初始化也必须按话题模式收口员工和 MagicClaw 权限。
+            [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
+                SuperMagicAgentDataIsolation::create(
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    $dataIsolation->getCurrentUserId()
+                ),
+                trim($userMessageDTO->getTopicMode()) !== ''
+                    ? trim($userMessageDTO->getTopicMode())
+                    : trim($topicEntity->getTopicMode()),
+                trim($topicEntity->getAgentCode())
+            );
+            if (! $allowed) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $errorMessage);
+            }
 
             // Resolve the correct agentUserId and chatConversationId for this topic.
             // The initSandbox path is invoked via API (not IM), so the caller does not supply these.

@@ -9,6 +9,18 @@ interface UseRefreshCrewDetailOnTopicMessageParams {
 	store: CrewEditRootStore
 }
 
+const REFRESH_CREW_DETAIL_TOOL_NAMES = new Set(["update_agent", "update_skill"])
+
+function resolveCrewCodeFromToolDetail(detail: unknown): string | null {
+	if (!detail || typeof detail !== "object" || Array.isArray(detail)) return null
+	const detailRecord = detail as Record<string, unknown>
+	if (typeof detailRecord.code === "string" && detailRecord.code) return detailRecord.code
+	const data = detailRecord.data
+	if (!data || typeof data !== "object" || Array.isArray(data)) return null
+	const code = (data as Record<string, unknown>).code
+	return typeof code === "string" && code ? code : null
+}
+
 export function useRefreshCrewDetailOnTopicMessage({
 	store,
 }: UseRefreshCrewDetailOnTopicMessageParams): void {
@@ -17,28 +29,33 @@ export function useRefreshCrewDetailOnTopicMessage({
 	useEffect(() => {
 		if (!store.crewCode) return
 
-		const unregister = superMagicStore.registerDomainEventListener({
-			matcher: (payload) =>
-				payload.type === "crew_detail_refresh_requested" &&
-				payload.crewCode === store.crewCode,
-			callback: (payload) => {
-				if (payload.type !== "crew_detail_refresh_requested") return
+		const unregister = superMagicStore.subscribe("toolCall.settled", ({ payload }) => {
+			const crewCode = resolveCrewCodeFromToolDetail(payload.response.detail)
+			const isRefreshTool = Boolean(
+				payload.toolCall.name && REFRESH_CREW_DETAIL_TOOL_NAMES.has(payload.toolCall.name),
+			)
+			if (
+				payload.strength !== "strong" ||
+				payload.response.status !== "finished" ||
+				!isRefreshTool ||
+				crewCode !== store.crewCode
+			)
+				return
 
-				if (refreshTaskRef.current) return
+			if (refreshTaskRef.current) return
 
-				refreshTaskRef.current = store
-					.refreshAgentDetail()
-					.catch((error) => {
-						const { message } = resolveCrewEditError({
-							error,
-							fallbackKey: CREW_EDIT_ERROR.loadAgentFailed,
-						})
-						magicToast.error(message)
+			refreshTaskRef.current = store
+				.refreshAgentDetail()
+				.catch((error) => {
+					const { message } = resolveCrewEditError({
+						error,
+						fallbackKey: CREW_EDIT_ERROR.loadAgentFailed,
 					})
-					.finally(() => {
-						refreshTaskRef.current = null
-					})
-			},
+					magicToast.error(message)
+				})
+				.finally(() => {
+					refreshTaskRef.current = null
+				})
 		})
 
 		return unregister

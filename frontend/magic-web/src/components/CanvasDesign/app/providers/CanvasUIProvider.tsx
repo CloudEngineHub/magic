@@ -1,13 +1,28 @@
-import { createContext, useContext, useState, useMemo, useCallback, type ReactNode } from "react"
-import type { LayerElement } from "../../runtime/document/types"
+import {
+	createContext,
+	useContext,
+	useState,
+	useMemo,
+	useCallback,
+	useEffect,
+	useReducer,
+	type ReactNode,
+} from "react"
+import { useUpdateEffect } from "ahooks"
+import type { CropConfig, LayerElement } from "../../runtime/document/types"
 import { useCanvasEvent } from "../hooks/canvas/useCanvasEvent"
 import { useCanvasElements } from "../hooks/canvas/useCanvasElement"
-import { useUpdateEffect } from "ahooks"
-import type { ElementToolType } from "../../public/props"
+import { useCanvas } from "./CanvasProvider"
+import type { ElementToolSession } from "../../runtime/element-tools"
 
 export interface FullscreenMediaElement {
 	elementId: string
-	type: "image" | "video"
+	type: "image" | "video" | "audio"
+}
+
+export interface StoryboardReferenceImagePreview {
+	path: string
+	crop?: CropConfig
 }
 
 interface CanvasUIContextValue {
@@ -38,6 +53,8 @@ interface CanvasUIContextValue {
 	// 当前全屏预览的媒体元素（null 表示不显示）
 	fullscreenMediaElement: FullscreenMediaElement | null
 	setFullscreenMediaElement: (element: FullscreenMediaElement | null) => void
+	storyboardReferenceImagePreview: StoryboardReferenceImagePreview | null
+	setStoryboardReferenceImagePreview: (preview: StoryboardReferenceImagePreview | null) => void
 
 	// 当前正在裁剪的图片元素 ID（null 表示不在裁剪模式）
 	croppingElementId: string | null
@@ -51,12 +68,13 @@ interface CanvasUIContextValue {
 	erasingElementId: string | null
 	setErasingElementId: (id: string | null) => void
 
-	// 画布提示
-	subElementTooltip: ElementToolType | null
-	setSubElementTooltip: (type: ElementToolType | null) => void
+	// 当前正在使用图片/视频编辑器的元素 ID
+	editingElementId: string | null
+	setEditingElementId: (id: string | null) => void
 
-	// 画布是否处于只读模式
-	readonly?: boolean
+	// 当前工具会话
+	activeToolSession: ElementToolSession | null
+	setActiveToolSession: (session: ElementToolSession | null) => void
 }
 
 interface CanvasRenameUIContextValue {
@@ -71,8 +89,8 @@ interface CanvasSelectionUIContextValue {
 	selectedElements: LayerElement[]
 	isDragging: boolean
 	isSelecting: boolean
-	subElementTooltip: ElementToolType | null
-	setSubElementTooltip: (type: ElementToolType | null) => void
+	activeToolSession: ElementToolSession | null
+	setActiveToolSession: (session: ElementToolSession | null) => void
 }
 
 interface CanvasPanelUIContextValue {
@@ -80,6 +98,8 @@ interface CanvasPanelUIContextValue {
 	setMessageHistoryElementId: (id: string | null) => void
 	fullscreenMediaElement: FullscreenMediaElement | null
 	setFullscreenMediaElement: (element: FullscreenMediaElement | null) => void
+	storyboardReferenceImagePreview: StoryboardReferenceImagePreview | null
+	setStoryboardReferenceImagePreview: (preview: StoryboardReferenceImagePreview | null) => void
 }
 
 interface CanvasModeUIContextValue {
@@ -89,7 +109,8 @@ interface CanvasModeUIContextValue {
 	setExtendingElementId: (id: string | null) => void
 	erasingElementId: string | null
 	setErasingElementId: (id: string | null) => void
-	readonly?: boolean
+	editingElementId: string | null
+	setEditingElementId: (id: string | null) => void
 }
 
 const CanvasRenameUIContext = createContext<CanvasRenameUIContextValue | undefined>(undefined)
@@ -98,11 +119,14 @@ const CanvasPanelUIContext = createContext<CanvasPanelUIContextValue | undefined
 const CanvasModeUIContext = createContext<CanvasModeUIContextValue | undefined>(undefined)
 
 interface CanvasUIProviderProps {
-	readonly?: boolean
 	children: ReactNode
 }
 
-export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) {
+export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
+	const { canvas } = useCanvas()
+	const [, forceAccessUpdate] = useReducer((value: number) => value + 1, 0)
+	const canWrite = canvas?.permissionManager?.can("document.write") ?? false
+	const canGenerate = canvas?.permissionManager?.can("sideEffect.generate") ?? false
 	const [layerRenamingElementId, setLayerRenamingElementId] = useState<string | null>(null)
 	const [canvasRenamingElementId, setCanvasRenamingElementId] = useState<string | null>(null)
 
@@ -113,23 +137,28 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 	const [messageHistoryElementId, setMessageHistoryElementId] = useState<string | null>(null)
 	const [fullscreenMediaElement, setFullscreenMediaElement] =
 		useState<FullscreenMediaElement | null>(null)
+	const [storyboardReferenceImagePreview, setStoryboardReferenceImagePreview] =
+		useState<StoryboardReferenceImagePreview | null>(null)
 
 	const [croppingElementId, setCroppingElementId] = useState<string | null>(null)
 	const [extendingElementId, setExtendingElementId] = useState<string | null>(null)
 	const [erasingElementId, setErasingElementId] = useState<string | null>(null)
+	const [editingElementId, setEditingElementId] = useState<string | null>(null)
 
-	const [subElementTooltip, setSubElementTooltip] = useState<ElementToolType | null>(null)
+	const [activeToolSession, setActiveToolSession] = useState<ElementToolSession | null>(null)
 
 	// 监听选中事件
 	useCanvasEvent("element:select", ({ data }) => {
 		setSelectedElementIds(data.elementIds)
-		setSubElementTooltip(null)
+		setActiveToolSession(null)
+		setEditingElementId(null)
 	})
 
 	// 监听取消选中事件
 	useCanvasEvent("element:deselect", () => {
 		setSelectedElementIds([])
-		setSubElementTooltip(null)
+		setActiveToolSession(null)
+		setEditingElementId(null)
 	})
 
 	// 监听拖拽开始事件
@@ -180,6 +209,44 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 		[],
 	)
 
+	useCanvasEvent(
+		"element:audio:fullscreenClick",
+		({ data }) => {
+			setFullscreenMediaElement({ elementId: data.elementId, type: "audio" })
+		},
+		[],
+	)
+
+	useCanvasEvent(
+		"storyboard:reference-image:preview",
+		({ data }) => {
+			setFullscreenMediaElement(null)
+			setStoryboardReferenceImagePreview(data)
+		},
+		[],
+	)
+
+	// 替换会改变媒体资源身份；关闭旧资源的全屏预览、历史和编辑模式，
+	// 避免替换完成后恢复到已经过期的媒体操作界面。
+	useCanvasEvent(
+		"element:media:replaceStateChanged",
+		({ data }) => {
+			if (data.status !== "uploading" && data.status !== "applying") return
+			setActiveToolSession((current) =>
+				current?.elementId === data.elementId ? null : current,
+			)
+			setMessageHistoryElementId((current) => (current === data.elementId ? null : current))
+			setFullscreenMediaElement((current) =>
+				current?.elementId === data.elementId ? null : current,
+			)
+			setCroppingElementId((current) => (current === data.elementId ? null : current))
+			setExtendingElementId((current) => (current === data.elementId ? null : current))
+			setErasingElementId((current) => (current === data.elementId ? null : current))
+			setEditingElementId((current) => (current === data.elementId ? null : current))
+		},
+		[],
+	)
+
 	// 监听进入裁剪模式事件
 	useCanvasEvent("crop:enter", ({ data }) => {
 		setCroppingElementId(data.elementId)
@@ -214,11 +281,22 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 		}
 	}, [selectedElementIds])
 
-	useUpdateEffect(() => {
-		if (!readonly) return
+	useEffect(() => {
+		if (canWrite && canGenerate) return
 		setLayerRenamingElementId(null)
 		setCanvasRenamingElementId(null)
-	}, [readonly])
+		setActiveToolSession(null)
+		setEditingElementId(null)
+		if (!canWrite) {
+			setCroppingElementId(null)
+		}
+		if (!canGenerate) {
+			setExtendingElementId(null)
+			setErasingElementId(null)
+		}
+	}, [canGenerate, canWrite])
+
+	useCanvasEvent("permission:changed", () => forceAccessUpdate(), [])
 
 	// 获取选中的元素列表
 	const selectedElements = useCanvasElements(selectedElementIds)
@@ -238,10 +316,10 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 			selectedElementIds,
 			isDragging,
 			isSelecting,
-			subElementTooltip,
-			setSubElementTooltip,
+			activeToolSession,
+			setActiveToolSession,
 		}
-	}, [selectedElements, selectedElementIds, isDragging, isSelecting, subElementTooltip])
+	}, [selectedElements, selectedElementIds, isDragging, isSelecting, activeToolSession])
 
 	const panelValue = useMemo<CanvasPanelUIContextValue>(() => {
 		return {
@@ -249,8 +327,10 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 			setMessageHistoryElementId,
 			fullscreenMediaElement,
 			setFullscreenMediaElement,
+			storyboardReferenceImagePreview,
+			setStoryboardReferenceImagePreview,
 		}
-	}, [messageHistoryElementId, fullscreenMediaElement])
+	}, [messageHistoryElementId, fullscreenMediaElement, storyboardReferenceImagePreview])
 
 	const modeValue = useMemo<CanvasModeUIContextValue>(() => {
 		return {
@@ -260,9 +340,10 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 			setExtendingElementId,
 			erasingElementId,
 			setErasingElementId,
-			readonly,
+			editingElementId,
+			setEditingElementId,
 		}
-	}, [croppingElementId, extendingElementId, erasingElementId, readonly])
+	}, [croppingElementId, extendingElementId, erasingElementId, editingElementId])
 
 	return (
 		<CanvasRenameUIContext.Provider value={renameValue}>

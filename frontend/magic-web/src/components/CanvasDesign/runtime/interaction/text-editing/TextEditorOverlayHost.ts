@@ -192,6 +192,7 @@ export class TextEditorOverlayHost {
 				if (ev.pointerId !== e.pointerId) {
 					return
 				}
+				stage.setPointersPositions(ev)
 				const dx = ev.clientX - startClient.x
 				const dy = ev.clientY - startClient.y
 				const position = { x: stageStart.x + dx, y: stageStart.y + dy }

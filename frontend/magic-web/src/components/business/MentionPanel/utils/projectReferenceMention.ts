@@ -5,12 +5,17 @@ import { getFolderMentionData } from "./directoryMention"
 
 type ProjectReferenceFileLike = {
 	file_id?: string | number
+	project_id?: string
 	file_name?: string | number
 	display_filename?: string | number
 	filename?: string | number
 	name?: string | number
 	file_extension?: string
 	file_size?: number
+	updated_at?: string
+	resource_version?: string | null
+	version?: string | null
+	file_version?: number
 	relative_file_path?: string
 	type?: string
 	is_directory?: boolean
@@ -48,6 +53,33 @@ export function normalizeProjectReferencePath(path: string | number | null | und
 	if (path === null || path === undefined) return ""
 
 	return String(path).replace(/^\/+/, "")
+}
+
+export function normalizeProjectFileResourcePath(path: string | number | null | undefined): string {
+	return String(path ?? "")
+		.trim()
+		.replace(/\\/g, "/")
+		.replace(/^\.\/+/, "")
+		.replace(/\/+/g, "/")
+		.replace(/\/$/, "")
+}
+
+export function getProjectFileResourceIdentity(
+	file: {
+		file_id?: string | number | null
+		file_path?: string | number | null
+		relative_file_path?: string | number | null
+	},
+	fallbackPath?: string | number | null,
+): string {
+	if (file.file_id !== null && file.file_id !== undefined && String(file.file_id).length > 0) {
+		return `project-file:id:${String(file.file_id)}`
+	}
+
+	const normalizedPath = normalizeProjectFileResourcePath(
+		file.relative_file_path ?? file.file_path ?? fallbackPath,
+	)
+	return normalizedPath ? `project-file:path:${normalizedPath}` : ""
 }
 
 function normalizeComparableProjectReferencePath(path: string | number | null | undefined): string {
@@ -366,8 +398,15 @@ export function createProjectFileMentionData(
 		file_id: String(fileId),
 		file_name: fileName,
 		file_path: normalizeProjectReferencePath(filePath),
+		relative_file_path: normalizeProjectReferencePath(filePath),
+		is_hidden: file.is_hidden,
 		file_extension: file.file_extension || "",
+		...(file.project_id ? { project_id: file.project_id } : {}),
 		file_size: file.file_size,
+		...(file.updated_at !== undefined ? { updated_at: file.updated_at } : {}),
+		...(file.resource_version !== undefined ? { resource_version: file.resource_version } : {}),
+		...(file.version !== undefined ? { version: file.version } : {}),
+		...(file.file_version !== undefined ? { file_version: file.file_version } : {}),
 	}
 }
 

@@ -1,7 +1,6 @@
 import { createContext, useContext } from "react"
 import { makeAutoObservable } from "mobx"
 import type { SceneItem } from "../../types"
-import { localeTextToDisplayString } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
 import {
 	SkillPanelType,
 	type DemoPanelConfig,
@@ -9,68 +8,44 @@ import {
 	type FieldPanelConfig,
 	type GuideItem,
 	type GuidePanelConfig,
+	type IdentifiedOptionItem,
 	type LocaleText,
 	type OptionGroup,
 	type OptionItem,
 	type OptionViewType,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import {
+	createDefaultInspirationGroup,
+	DEFAULT_INSPIRATION_GROUP_KEY,
+	getBaseInspirationConfig,
+	getFallbackGroupKey,
+	patchInspirationGroups,
+} from "./inspirationConfig"
+import {
+	type InspirationItemData,
+	removeInspirationItems,
+	updateInspirationItem,
+} from "./inspirationItems"
 
 function genKey() {
 	return Math.random().toString(36).slice(2)
 }
 
-export const DEFAULT_INSPIRATION_GROUP_KEY = "__default__"
-
-function getBaseInspirationConfig(inspiration: DemoPanelConfig | undefined): DemoPanelConfig {
-	return (
-		inspiration ??
-		({
-			type: "demo" as DemoPanelConfig["type"],
-			demo: { groups: [] },
-		} satisfies DemoPanelConfig)
-	)
-}
-
-function createDefaultInspirationGroup(
-	groupName: LocaleText,
-	children: OptionItem[] = [],
-): OptionGroup {
-	return {
-		group_key: DEFAULT_INSPIRATION_GROUP_KEY,
-		group_name: groupName,
-		children,
-	}
-}
-
-function getFallbackGroupKey(inspiration: DemoPanelConfig | undefined): string {
-	return (
-		inspiration?.demo?.default_selected_group_key ??
-		inspiration?.demo?.groups?.[0]?.group_key ??
-		""
-	)
-}
-
-function patchGroups(
-	inspiration: DemoPanelConfig | undefined,
-	mapFn: (groups: OptionGroup[]) => OptionGroup[],
-): DemoPanelConfig {
-	const base = getBaseInspirationConfig(inspiration)
-	return {
-		...base,
-		demo: {
-			...base.demo,
-			groups: mapFn(base.demo?.groups ?? []),
-		},
-	}
-}
+export { DEFAULT_INSPIRATION_GROUP_KEY } from "./inspirationConfig"
 
 export class SceneEditStore {
 	scene: SceneItem
+	readonly readOnly: boolean
 
 	private _onSave: ((scene: SceneItem) => Promise<void>) | null = null
 
-	constructor(initialScene: SceneItem, onSave?: (scene: SceneItem) => Promise<void>) {
+	constructor(
+		initialScene: SceneItem,
+		onSave?: (scene: SceneItem) => Promise<void>,
+		readOnly = false,
+	) {
 		this.scene = initialScene
+		this.readOnly = readOnly
 		this._onSave = onSave ?? null
 		makeAutoObservable(
 			this,
@@ -82,6 +57,7 @@ export class SceneEditStore {
 
 	/** Explicitly persist the current scene state to the backend. */
 	save(): Promise<void> {
+		if (this.readOnly) return Promise.resolve()
 		return this._onSave?.(this.scene) ?? Promise.resolve()
 	}
 
@@ -104,12 +80,14 @@ export class SceneEditStore {
 	updateBasicInfo(
 		data: Partial<Pick<SceneItem, "name" | "description" | "icon" | "theme_color" | "enabled">>,
 	) {
+		if (this.readOnly) return
 		Object.assign(this.scene, data)
 	}
 
 	// ─── Inspiration config ───────────────────────────────────────────────────
 
 	updateInspirationConfig(data: { title?: LocaleText; view_type?: string }) {
+		if (this.readOnly) return
 		const inspiration = this.scene.configs?.inspiration
 		if (!inspiration) return
 		// `title` lives at the DemoPanelConfig top level
@@ -135,6 +113,7 @@ export class SceneEditStore {
 		data: { group_name: LocaleText; group_icon?: string },
 		defaultGroupName?: LocaleText,
 	): string {
+		if (this.readOnly) return DEFAULT_INSPIRATION_GROUP_KEY
 		const newGroup: OptionGroup = { group_key: genKey(), ...data, children: [] }
 		const base = getBaseInspirationConfig(this.scene.configs?.inspiration)
 		const groups = base.demo.groups ?? []
@@ -161,15 +140,17 @@ export class SceneEditStore {
 	}
 
 	editInspirationGroup(groupKey: string, data: { group_name: LocaleText; group_icon?: string }) {
+		if (this.readOnly) return
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchGroups(this.scene.configs?.inspiration, (gs) =>
+			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (gs) =>
 				gs.map((g) => (g.group_key === groupKey ? { ...g, ...data } : g)),
 			),
 		}
 	}
 
 	deleteInspirationGroup(groupKey: string) {
+		if (this.readOnly) return
 		const base = getBaseInspirationConfig(this.scene.configs?.inspiration)
 		const groups = (base.demo.groups ?? []).filter((group) => group.group_key !== groupKey)
 		const defaultSelectedGroupKey =
@@ -193,11 +174,12 @@ export class SceneEditStore {
 	// ─── Inspiration items ────────────────────────────────────────────────────
 
 	createInspirationItem(
-		data: Partial<OptionItem>,
+		data: InspirationItemData,
 		groupKey: string,
 		defaultGroupName?: LocaleText,
 	) {
-		const newItem: OptionItem = { ...data, value: data.value ?? genKey() }
+		if (this.readOnly) return
+		const newItem: IdentifiedOptionItem = { ...data, value: genKey() }
 		const base = getBaseInspirationConfig(this.scene.configs?.inspiration)
 		const groups = base.demo.groups ?? []
 		const fallbackGroupKey = groupKey || getFallbackGroupKey(base)
@@ -221,7 +203,7 @@ export class SceneEditStore {
 
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchGroups(base, (gs) =>
+			inspiration: patchInspirationGroups(base, (gs) =>
 				gs.map((g) =>
 					g.group_key === fallbackGroupKey
 						? { ...g, children: [...(g.children ?? []), newItem] }
@@ -231,73 +213,33 @@ export class SceneEditStore {
 		}
 	}
 
-	editInspirationItem(value: string, data: Partial<OptionItem>, groupKey: string) {
+	editInspirationItem(value: string, data: InspirationItemData, groupKey: string) {
+		if (this.readOnly) return
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchGroups(this.scene.configs?.inspiration, (gs) => {
-				// Find which group currently holds the item
-				const sourceGroup = gs.find((g) =>
-					(g.children ?? []).some((item) => item.value === value),
-				)
-				const sourceGroupKey = sourceGroup?.group_key
-
-				// Same group (or source not found): update in place
-				if (!sourceGroupKey || sourceGroupKey === groupKey) {
-					return gs.map((g) =>
-						g.group_key === groupKey
-							? {
-								...g,
-								children: (g.children ?? []).map((item) =>
-									item.value === value ? { ...item, ...data } : item,
-								),
-							}
-							: g,
-					)
-				}
-
-				// Group changed: move item from source to target
-				const originalItem = (sourceGroup.children ?? []).find(
-					(item) => item.value === value,
-				)
-				const updatedItem: OptionItem = { value, ...originalItem, ...data }
-
-				return gs.map((g) => {
-					if (g.group_key === sourceGroupKey)
-						return {
-							...g,
-							children: (g.children ?? []).filter((item) => item.value !== value),
-						}
-					if (g.group_key === groupKey)
-						return { ...g, children: [...(g.children ?? []), updatedItem] }
-					return g
-				})
-			}),
+			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
+				updateInspirationItem(groups, value, data, groupKey),
+			),
 		}
 	}
 
 	deleteInspirationItem(value: string) {
+		if (this.readOnly) return
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchGroups(this.scene.configs?.inspiration, (gs) =>
-				gs.map((g) => ({
-					...g,
-					children: (g.children ?? []).filter((item) => item.value !== value),
-				})),
+			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
+				removeInspirationItems(groups, new Set([value])),
 			),
 		}
 	}
 
 	deleteInspirationItems(values: string[]) {
+		if (this.readOnly) return
 		const valueSet = new Set(values)
 		this.scene.configs = {
 			...this.scene.configs,
-			inspiration: patchGroups(this.scene.configs?.inspiration, (gs) =>
-				gs.map((g) => ({
-					...g,
-					children: (g.children ?? []).filter(
-						(item) => !valueSet.has(localeTextToDisplayString(item.value)),
-					),
-				})),
+			inspiration: patchInspirationGroups(this.scene.configs?.inspiration, (groups) =>
+				removeInspirationItems(groups, valueSet),
 			),
 		}
 	}
@@ -305,10 +247,12 @@ export class SceneEditStore {
 	// ─── Presets ──────────────────────────────────────────────────────────────
 
 	updatePresets(config: FieldPanelConfig) {
+		if (this.readOnly) return
 		this.scene.configs = { ...this.scene.configs, presets: config }
 	}
 
 	private patchPresetItems(mapFn: (items: FieldItem[]) => FieldItem[]) {
+		if (this.readOnly) return
 		const base: FieldPanelConfig = this.scene.configs?.presets ?? {
 			type: SkillPanelType.FIELD,
 			field: { items: [] },
@@ -326,6 +270,7 @@ export class SceneEditStore {
 	}
 
 	createPresetItem(data: Partial<FieldItem>) {
+		if (this.readOnly) return
 		const newItem: FieldItem = {
 			data_key: genKey(),
 			label: { default: "", zh_CN: "", en_US: "" },
@@ -338,6 +283,7 @@ export class SceneEditStore {
 	}
 
 	editPresetItem(dataKey: string, data: Partial<FieldItem>) {
+		if (this.readOnly) return
 		this.patchPresetItems((items) =>
 			items.map((item) =>
 				item.data_key === dataKey
@@ -348,15 +294,18 @@ export class SceneEditStore {
 	}
 
 	deletePresetItem(dataKey: string) {
+		if (this.readOnly) return
 		this.patchPresetItems((items) => items.filter((item) => item.data_key !== dataKey))
 	}
 
 	deletePresetItems(dataKeys: string[]) {
+		if (this.readOnly) return
 		const keySet = new Set(dataKeys)
 		this.patchPresetItems((items) => items.filter((item) => !keySet.has(item.data_key)))
 	}
 
 	reorderPresetItems(orderedKeys: string[]) {
+		if (this.readOnly) return
 		this.patchPresetItems((items) => {
 			const itemMap = new Map(items.map((item) => [item.data_key, item]))
 			const reordered = orderedKeys
@@ -369,6 +318,7 @@ export class SceneEditStore {
 	}
 
 	updatePresetsConfig(data: { view_type?: OptionViewType }) {
+		if (this.readOnly) return
 		const base: FieldPanelConfig = this.scene.configs?.presets ?? {
 			type: SkillPanelType.FIELD,
 			field: { items: [] },
@@ -425,6 +375,7 @@ export class SceneEditStore {
 		default_value?: string
 		preset_content?: LocaleText
 	}) {
+		if (this.readOnly) return
 		this.patchPresetItems((items) =>
 			items.map((item) =>
 				item.option_view_type === "grid"
@@ -437,6 +388,7 @@ export class SceneEditStore {
 	// ─── QuickStart helpers ───────────────────────────────────────────────────
 
 	private patchQuickStartItems(mapFn: (items: GuideItem[]) => GuideItem[]) {
+		if (this.readOnly) return
 		const base: GuidePanelConfig = this.scene.configs?.quick_start ?? {
 			type: SkillPanelType.GUIDE,
 			guide: { items: [] },
@@ -453,6 +405,7 @@ export class SceneEditStore {
 	// ─── QuickStart CRUD + reorder ────────────────────────────────────────────
 
 	createQuickStartItem(data: Partial<GuideItem>) {
+		if (this.readOnly) return
 		const newItem: GuideItem = {
 			key: genKey(),
 			title: { default: "", zh_CN: "", en_US: "" },
@@ -465,21 +418,25 @@ export class SceneEditStore {
 	}
 
 	editQuickStartItem(key: string, data: Partial<GuideItem>) {
+		if (this.readOnly) return
 		this.patchQuickStartItems((items) =>
 			items.map((item) => (item.key === key ? { ...item, ...data } : item)),
 		)
 	}
 
 	deleteQuickStartItem(key: string) {
+		if (this.readOnly) return
 		this.patchQuickStartItems((items) => items.filter((item) => item.key !== key))
 	}
 
 	deleteQuickStartItems(keys: string[]) {
+		if (this.readOnly) return
 		const keySet = new Set(keys)
 		this.patchQuickStartItems((items) => items.filter((item) => !keySet.has(item.key)))
 	}
 
 	reorderQuickStartItems(orderedKeys: string[]) {
+		if (this.readOnly) return
 		this.patchQuickStartItems((items) => {
 			const itemMap = new Map(items.map((item) => [item.key, item]))
 			const reordered = orderedKeys
@@ -493,10 +450,12 @@ export class SceneEditStore {
 	}
 
 	updateQuickStart(config: GuidePanelConfig) {
+		if (this.readOnly) return
 		this.scene.configs = { ...this.scene.configs, quick_start: config }
 	}
 
 	updateQuickStartConfig(data: { title?: LocaleText }) {
+		if (this.readOnly) return
 		const base: GuidePanelConfig = this.scene.configs?.quick_start ?? {
 			type: SkillPanelType.GUIDE,
 			guide: { items: [] },

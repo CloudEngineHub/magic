@@ -1,12 +1,45 @@
 import { act, render, screen } from "@testing-library/react"
-import type { ReactNode } from "react"
+import { createRef, type ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import IsolatedHTMLRenderer from "../IsolatedHTMLRenderer"
+import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import IsolatedHTMLRenderer, { type IsolatedHTMLRendererRef } from "../IsolatedHTMLRenderer"
 
 const hookState = vi.hoisted(() => ({
 	editorContentInjectedValues: [] as boolean[],
 	isManualZoom: false,
 	shouldApplyScaling: false,
+}))
+
+const envMock = vi.hoisted(() => vi.fn(() => ""))
+
+const virtualStorageMocks = vi.hoisted(() => ({
+	buildNamespace: vi.fn(() => "magic-html-storage:test"),
+	createContext: vi.fn(async () => ({
+		protocol: "magic-html-virtual-storage",
+		renderId: "render-1",
+		token: "token-1",
+		namespace: "magic-html-storage:test",
+		targetOrigin: "*",
+		snapshot: {
+			localStorage: {},
+			sessionStorage: {},
+			cookies: {},
+			indexedDB: {},
+		},
+	})),
+	getFullContent: vi.fn((content: string) => `<!doctype html>${content}`),
+}))
+
+const iframeMessageMocks = vi.hoisted(() => ({
+	handleAgentMessage: vi.fn(async () => true),
+	handleMagicUploadFiles: vi.fn(),
+	handleMagicAddFilesToMessage: vi.fn(),
+	handleMagicDownloadFiles: vi.fn(),
+}))
+
+const agentActionMocks = vi.hoisted(() => ({
+	useIframeAgentActions: vi.fn(),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -26,7 +59,7 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("@/utils/env", () => ({
-	env: vi.fn(() => ""),
+	env: envMock,
 	isDev: false,
 	isCommercial: vi.fn(() => true),
 	isPrivateDeployment: vi.fn(() => false),
@@ -256,20 +289,8 @@ vi.mock("../hooks/useFetchInterceptionCache", () => ({
 }))
 
 vi.mock("../utils/virtual-storage", () => ({
-	buildHtmlVirtualStorageNamespace: () => "magic-html-storage:test",
-	createVirtualStorageContext: vi.fn(async () => ({
-		protocol: "magic-html-virtual-storage",
-		renderId: "render-1",
-		token: "token-1",
-		namespace: "magic-html-storage:test",
-		targetOrigin: "*",
-		snapshot: {
-			localStorage: {},
-			sessionStorage: {},
-			cookies: {},
-			indexedDB: {},
-		},
-	})),
+	buildHtmlVirtualStorageNamespace: virtualStorageMocks.buildNamespace,
+	createVirtualStorageContext: virtualStorageMocks.createContext,
 	virtualStorageRegistry: {
 		register: vi.fn(),
 		unregister: vi.fn(),
@@ -278,7 +299,7 @@ vi.mock("../utils/virtual-storage", () => ({
 
 vi.mock("../utils/full-content", () => ({
 	decodeHTMLEntities: (content: string) => content,
-	getFullContent: (content: string) => `<!doctype html>${content}`,
+	getFullContent: virtualStorageMocks.getFullContent,
 }))
 
 vi.mock("../hooks/useCurrentHtmlFileInfo", () => ({
@@ -311,7 +332,7 @@ vi.mock("../iframe-api/hooks/useIframeLLM", () => ({
 
 vi.mock("../iframe-api/hooks/useIframeAgent", () => ({
 	useIframeAgent: () => ({
-		handleAgentMessage: vi.fn(async () => false),
+		handleAgentMessage: iframeMessageMocks.handleAgentMessage,
 	}),
 }))
 
@@ -322,18 +343,21 @@ vi.mock("../iframe-api/hooks/useIframeUserInfo", () => ({
 }))
 
 vi.mock("../hooks/useIframeAgentActions", () => ({
-	useIframeAgentActions: () => ({
-		getAgentList: vi.fn(),
-		createTopicAndSend: vi.fn(),
-		sendMessage: vi.fn(),
-	}),
+	useIframeAgentActions: (...args: [string | undefined, unknown?]) => {
+		agentActionMocks.useIframeAgentActions(...args)
+		return {
+			getAgentList: vi.fn(),
+			createTopicAndSend: vi.fn(),
+			sendMessage: vi.fn(),
+		}
+	},
 }))
 
 vi.mock("../iframe-api/hooks/useMagicFiles", () => ({
 	useMagicFiles: () => ({
-		handleMagicUploadFiles: vi.fn(),
-		handleMagicAddFilesToMessage: vi.fn(),
-		handleMagicDownloadFiles: vi.fn(),
+		handleMagicUploadFiles: iframeMessageMocks.handleMagicUploadFiles,
+		handleMagicAddFilesToMessage: iframeMessageMocks.handleMagicAddFilesToMessage,
+		handleMagicDownloadFiles: iframeMessageMocks.handleMagicDownloadFiles,
 	}),
 }))
 
@@ -347,6 +371,10 @@ vi.mock("../components/DropOverlay", () => ({
 
 vi.mock("../components/StylePanel", () => ({
 	StylePanel: () => null,
+}))
+
+vi.mock("../components/ElementContextPanel", () => ({
+	ElementContextPanel: () => <div data-testid="html-editor-context-panel" />,
 }))
 
 vi.mock("../components/StylePanel/controls", () => ({
@@ -371,13 +399,19 @@ function getSetContentCalls(postMessage: ReturnType<typeof vi.fn>) {
 	return postMessage.mock.calls.filter(([message]) => message?.type === "setContent")
 }
 
-function dispatchIframeMessage(iframe: HTMLIFrameElement, type: string) {
+function dispatchIframeMessage(
+	iframe: HTMLIFrameElement,
+	type: string,
+	origin = window.location.origin,
+	extraData: Record<string, unknown> = {},
+	source: Window | null = iframe.contentWindow,
+) {
 	act(() => {
 		window.dispatchEvent(
 			new MessageEvent("message", {
-				data: { type },
-				origin: window.location.origin,
-				source: iframe.contentWindow,
+				data: { type, ...extraData },
+				origin,
+				source,
 			}),
 		)
 	})
@@ -393,9 +427,12 @@ async function flushReactEffects() {
 describe("IsolatedHTMLRenderer iframe injection", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
+		vi.clearAllMocks()
+		envMock.mockReturnValue("")
 		hookState.editorContentInjectedValues = []
 		hookState.isManualZoom = false
 		hookState.shouldApplyScaling = false
+		agentActionMocks.useIframeAgentActions.mockClear()
 	})
 
 	afterEach(() => {
@@ -404,6 +441,59 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		})
 		vi.useRealTimers()
 		vi.restoreAllMocks()
+		delete (window as Window & { project_id?: string }).project_id
+	})
+
+	it("enables presentation and low-risk media capabilities for HTML previews", async () => {
+		render(<IsolatedHTMLRenderer {...defaultProps} />)
+		await flushReactEffects()
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe")
+		expect(screen.getByTestId("html-editor-canvas")).toBeInTheDocument()
+		const sandboxTokens = iframe.getAttribute("sandbox")?.split(/\s+/) ?? []
+		const allowedFeatures = iframe
+			.getAttribute("allow")
+			?.split(";")
+			.map((feature) => feature.trim())
+			.filter(Boolean)
+
+		expect(sandboxTokens).toEqual(
+			expect.arrayContaining(["allow-orientation-lock", "allow-presentation"]),
+		)
+		expect(allowedFeatures).toEqual(
+			expect.arrayContaining([
+				"fullscreen",
+				"autoplay",
+				"picture-in-picture",
+				"encrypted-media",
+				"web-share",
+				"clipboard-write",
+			]),
+		)
+	})
+
+	it("does not expose fixed editor test ids from an inactive cached preview", async () => {
+		render(<IsolatedHTMLRenderer {...defaultProps} isVisible={false} isEditMode />)
+		await flushReactEffects()
+
+		expect(screen.queryByTestId("html-editor-canvas")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("isolated-html-content-iframe")).not.toBeInTheDocument()
+	})
+
+	it("unmounts the portaled context toolbar when the cached tab is inactive", async () => {
+		const { rerender } = render(
+			<IsolatedHTMLRenderer {...defaultProps} isEditMode isVisible isTabActive />,
+		)
+		await flushReactEffects()
+
+		expect(screen.getByTestId("html-editor-context-panel")).toBeInTheDocument()
+
+		rerender(
+			<IsolatedHTMLRenderer {...defaultProps} isEditMode isVisible isTabActive={false} />,
+		)
+		await flushReactEffects()
+
+		expect(screen.queryByTestId("html-editor-context-panel")).not.toBeInTheDocument()
 	})
 
 	it("shows the scrollbar style only while a PPT is manually zoomed", async () => {
@@ -423,6 +513,104 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 
 		await flushReactEffects()
 		expect(getScrollableContent()).not.toBeInTheDocument()
+	})
+
+	it("uses the MicroApp entry marker for storage across html file switches", async () => {
+		render(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				fileId="student-file"
+				virtualStorageMarkerId="index-file"
+				selectedProject={{ id: "project-1", current_topic_id: "topic-1" }}
+			/>,
+		)
+
+		await flushReactEffects()
+
+		expect(virtualStorageMocks.buildNamespace).toHaveBeenCalledWith({
+			projectId: "project-1",
+			topicId: "topic-1",
+			fileId: "index-file",
+		})
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		vi.spyOn(iframe.contentWindow as Window, "postMessage").mockImplementation(vi.fn())
+		dispatchIframeMessage(iframe, "iframeReady")
+		await flushReactEffects()
+
+		expect(virtualStorageMocks.getFullContent).toHaveBeenCalledWith(
+			defaultProps.content,
+			"index-file",
+			expect.any(Object),
+		)
+	})
+
+	it("uses the scoped selected topic for virtual storage", async () => {
+		const scopedTopicStore = { selectedTopic: { id: "topic-from-micro-app" } }
+
+		render(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				selectedProject={{ id: "project-1", current_topic_id: "old-topic" }}
+				topicStore={scopedTopicStore as unknown as TopicStore}
+			/>,
+		)
+		await flushReactEffects()
+
+		expect(virtualStorageMocks.buildNamespace).toHaveBeenCalledWith({
+			projectId: "project-1",
+			topicId: "topic-from-micro-app",
+			fileId: "history-file",
+		})
+	})
+
+	it("passes the explicit projectId to Agent actions", async () => {
+		render(<IsolatedHTMLRenderer {...defaultProps} projectId="project-from-preview" />)
+		await flushReactEffects()
+
+		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
+			"project-from-preview",
+			undefined,
+			defaultProps.selectedProject,
+		)
+	})
+
+	it("does not read window.project_id when host props omit projectId", async () => {
+		;(window as Window & { project_id?: string }).project_id = "share-window-project"
+
+		render(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				selectedProject={undefined}
+				projectId={undefined}
+			/>,
+		)
+		await flushReactEffects()
+
+		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
+			undefined,
+			undefined,
+			undefined,
+		)
+	})
+
+	it("passes the scoped topic store to Agent actions", async () => {
+		const scopedTopicStore = { selectedTopic: { id: "topic-from-micro-app" } }
+
+		render(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				projectId="project-from-preview"
+				topicStore={scopedTopicStore as unknown as TopicStore}
+			/>,
+		)
+		await flushReactEffects()
+
+		expect(agentActionMocks.useIframeAgentActions).toHaveBeenCalledWith(
+			"project-from-preview",
+			scopedTopicStore,
+			defaultProps.selectedProject,
+		)
 	})
 
 	it("does not inject content into a sibling iframe from another iframeReady message", async () => {
@@ -464,5 +652,290 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		await flushReactEffects()
 
 		expect(getSetContentCalls(postMessageB)).toHaveLength(1)
+	})
+
+	it("does not send content twice for iframeReady and pageLoaded", async () => {
+		render(<IsolatedHTMLRenderer {...defaultProps} />)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+
+		dispatchIframeMessage(iframe, "iframeReady")
+		dispatchIframeMessage(iframe, "pageLoaded")
+		await flushReactEffects()
+
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+	})
+
+	it("reloads the original content when resetContent is called", async () => {
+		const rendererRef = createRef<IsolatedHTMLRendererRef>()
+		render(<IsolatedHTMLRenderer {...defaultProps} ref={rendererRef} />)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+
+		dispatchIframeMessage(iframe, "iframeReady")
+		await flushReactEffects()
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+
+		await act(async () => {
+			rendererRef.current?.resetContent()
+			await Promise.resolve()
+		})
+
+		const setContentCalls = getSetContentCalls(postMessage)
+		expect(setContentCalls).toHaveLength(2)
+		expect(setContentCalls[1][0]).toMatchObject({
+			content: setContentCalls[0][0].content,
+		})
+	})
+
+	it("updates location query when the same HTML navigation changes", async () => {
+		const firstNavigation = {
+			filePath: "index.html",
+			search: "?value=123",
+			hash: "",
+			anchor: "",
+		}
+		const secondNavigation = {
+			...firstNavigation,
+			search: "?value=456",
+		}
+
+		const { rerender } = render(
+			<IsolatedHTMLRenderer {...defaultProps} htmlNavigation={firstNavigation} />,
+		)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+
+		dispatchIframeMessage(iframe, "iframeReady")
+		await flushReactEffects()
+
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+		expect(getSetContentCalls(postMessage)[0][0]).toMatchObject({
+			locationSearch: "?value=123",
+		})
+
+		rerender(<IsolatedHTMLRenderer {...defaultProps} htmlNavigation={secondNavigation} />)
+		const nextIframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		await flushReactEffects()
+
+		expect(nextIframe).not.toBe(iframe)
+		expect(nextIframe.src).toBe(iframe.src)
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+
+		const nextPostMessage = vi
+			.spyOn(nextIframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+		dispatchIframeMessage(nextIframe, "iframeReady")
+		await flushReactEffects()
+
+		expect(getSetContentCalls(nextPostMessage)).toHaveLength(1)
+		expect(getSetContentCalls(nextPostMessage)[0][0]).toMatchObject({
+			locationSearch: "?value=456",
+		})
+	})
+
+	it("recreates a cross-origin sandbox shell for query updates", async () => {
+		const externalShellUrl = "https://husky.example/husky.html"
+		envMock.mockReturnValue(externalShellUrl)
+
+		const firstNavigation = {
+			filePath: "index.html",
+			search: "?value=123",
+			hash: "",
+			anchor: "",
+		}
+		const secondNavigation = { ...firstNavigation, search: "?value=456" }
+		const { rerender } = render(
+			<IsolatedHTMLRenderer {...defaultProps} htmlNavigation={firstNavigation} />,
+		)
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+
+		dispatchIframeMessage(iframe, "iframeReady", "https://husky.example")
+		await flushReactEffects()
+
+		rerender(<IsolatedHTMLRenderer {...defaultProps} htmlNavigation={secondNavigation} />)
+		const nextIframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		await flushReactEffects()
+
+		expect(nextIframe).not.toBe(iframe)
+		expect(nextIframe.src).toBe(externalShellUrl)
+		expect(getSetContentCalls(postMessage)).toHaveLength(1)
+
+		const nextPostMessage = vi
+			.spyOn(nextIframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+		dispatchIframeMessage(nextIframe, "iframeReady", "https://husky.example")
+		await flushReactEffects()
+
+		expect(getSetContentCalls(nextPostMessage)).toHaveLength(1)
+		expect(getSetContentCalls(nextPostMessage)[0][0]).toMatchObject({
+			locationSearch: "?value=456",
+		})
+	})
+
+	it("does not open a tab when iframe navigation points at the preview shell", async () => {
+		const openNewTab = vi.fn()
+		const iframeProps = { ...defaultProps, openNewTab, fileId: "cover-file" }
+		render(<IsolatedHTMLRenderer {...iframeProps} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "linkClicked", window.location.origin, {
+			href: "/husky.html",
+		})
+		await flushReactEffects()
+
+		expect(openNewTab).not.toHaveBeenCalled()
+	})
+
+	it("keeps the renderer file identity when a link message contains a forged fileId", async () => {
+		const openNewTab = vi.fn()
+		const iframeProps = { ...defaultProps, openNewTab, fileId: "current-file" }
+		render(<IsolatedHTMLRenderer {...iframeProps} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "linkClicked", window.location.origin, {
+			href: "/target.html",
+			autoEdit: true,
+			fileId: "forged-file",
+		})
+		await flushReactEffects()
+
+		expect(openNewTab).toHaveBeenCalledWith("current-file", "/target.html", true)
+	})
+
+	it("accepts same-origin link messages from a nested iframe of the current preview", async () => {
+		const openNewTab = vi.fn()
+		render(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const nestedSource = {} as Window
+		vi.spyOn(iframe.contentWindow as Window, "frames", "get").mockReturnValue([
+			nestedSource,
+		] as unknown as Window[])
+
+		dispatchIframeMessage(
+			iframe,
+			"linkClicked",
+			window.location.origin,
+			{ href: "/nested-target.html" },
+			nestedSource,
+		)
+		await flushReactEffects()
+
+		expect(openNewTab).toHaveBeenCalledWith("history-file", "/nested-target.html", false)
+	})
+
+	it("ignores same-origin link messages from an unrelated source", async () => {
+		const openNewTab = vi.fn()
+		render(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(
+			iframe,
+			"linkClicked",
+			window.location.origin,
+			{ href: "/target.html" },
+			window,
+		)
+		await flushReactEffects()
+
+		expect(openNewTab).not.toHaveBeenCalled()
+	})
+
+	it("ignores link messages from an unexpected origin", async () => {
+		const openNewTab = vi.fn()
+		render(<IsolatedHTMLRenderer {...defaultProps} openNewTab={openNewTab} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "linkClicked", "https://untrusted.example", {
+			href: "/target.html",
+		})
+		await flushReactEffects()
+
+		expect(openNewTab).not.toHaveBeenCalled()
+	})
+
+	it("ignores input messages from an unexpected source", async () => {
+		const publish = vi.spyOn(pubsub, "publish")
+		render(<IsolatedHTMLRenderer {...defaultProps} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(
+			iframe,
+			"MAGIC_SET_INPUT_MESSAGE",
+			window.location.origin,
+			{ message: "forged input" },
+			window,
+		)
+		await flushReactEffects()
+
+		expect(publish).not.toHaveBeenCalledWith(PubSubEvents.Set_Input_Message, "forged input")
+	})
+
+	it("accepts input messages from the current iframe source", async () => {
+		const publish = vi.spyOn(pubsub, "publish")
+		render(<IsolatedHTMLRenderer {...defaultProps} />)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		dispatchIframeMessage(iframe, "MAGIC_SET_INPUT_MESSAGE", window.location.origin, {
+			message: "trusted input",
+		})
+		await flushReactEffects()
+
+		expect(publish).toHaveBeenCalledWith(PubSubEvents.Set_Input_Message, "trusted input")
+	})
+
+	it("ignores privileged legacy messages from an unexpected source", async () => {
+		const saveEditContent = vi.fn()
+		const publish = vi.spyOn(pubsub, "publish")
+		render(
+			<IsolatedHTMLRenderer {...defaultProps} isEditMode saveEditContent={saveEditContent} />,
+		)
+
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const forgedSource = window
+		dispatchIframeMessage(
+			iframe,
+			"MAGIC_DOWNLOAD_FILES_REQUEST",
+			window.location.origin,
+			{ requestId: "forged-download", filePaths: ["secret.txt"] },
+			forgedSource,
+		)
+		dispatchIframeMessage(
+			iframe,
+			"MAGIC_SEND_MESSAGE_REQUEST",
+			window.location.origin,
+			{ requestId: "forged-send", message: "forged message" },
+			forgedSource,
+		)
+		dispatchIframeMessage(
+			iframe,
+			"saveContent",
+			window.location.origin,
+			{ content: "forged content" },
+			forgedSource,
+		)
+		dispatchIframeMessage(iframe, "MAGIC_SET_INPUT_MESSAGE", "https://untrusted.example", {
+			message: "wrong-origin input",
+		})
+		await flushReactEffects()
+
+		expect(iframeMessageMocks.handleMagicDownloadFiles).not.toHaveBeenCalled()
+		expect(iframeMessageMocks.handleAgentMessage).not.toHaveBeenCalled()
+		expect(saveEditContent).not.toHaveBeenCalled()
+		expect(publish).not.toHaveBeenCalledWith(PubSubEvents.Set_Input_Message, expect.anything())
+		expect(publish).not.toHaveBeenCalledWith(
+			PubSubEvents.Set_Input_Message,
+			"wrong-origin input",
+		)
 	})
 })

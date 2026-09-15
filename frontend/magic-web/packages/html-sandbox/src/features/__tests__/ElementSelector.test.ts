@@ -59,6 +59,13 @@ describe("ElementSelector", () => {
 			selector.disable()
 			expect(document.body.style.cursor).toBe("")
 		})
+
+		it("should inject editor-only text editing styles", () => {
+			const style = document.getElementById("magic-editor-text-editing-style")
+
+			expect(style?.getAttribute("data-injected")).toBe("true")
+			expect(style?.textContent).toContain('[data-text-editing="true"]')
+		})
 	})
 
 	describe("selectElement", () => {
@@ -75,6 +82,43 @@ describe("ElementSelector", () => {
 					tagName: "div",
 				}),
 			)
+		})
+
+		it("should refresh an already selected image without emitting deselection", () => {
+			container.innerHTML = '<img id="image" src="test.jpg" />'
+			const element = container.querySelector("#image") as HTMLElement
+
+			selector.selectElement(element)
+			sendEventSpy.mockClear()
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledTimes(1)
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					isImageElement: true,
+				}),
+			)
+			expect(sendEventSpy).not.toHaveBeenCalledWith("ELEMENTS_DESELECTED", {})
+		})
+
+		it("should reduce a multi-selection to the clicked element in single-select mode", () => {
+			container.innerHTML = '<div id="first">First</div><div id="second">Second</div>'
+			const first = container.querySelector("#first") as HTMLElement
+			const second = container.querySelector("#second") as HTMLElement
+
+			selector.selectElement(first)
+			selector.selectElement(second, true)
+			sendEventSpy.mockClear()
+			selector.selectElement(second)
+
+			expect(sendEventSpy).not.toHaveBeenCalledWith("ELEMENTS_DESELECTED", {})
+			expect(sendEventSpy).toHaveBeenCalledTimes(1)
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({ selector: expect.stringContaining("div#second") }),
+			)
+			expect(selector.getSelectedCount()).toBe(1)
 		})
 
 		it("should ignore body element", () => {
@@ -95,6 +139,29 @@ describe("ElementSelector", () => {
 			expect(sendEventSpy).not.toHaveBeenCalledWith("ELEMENT_SELECTED", expect.anything())
 		})
 
+		it("includes ancestor path for parent selection", () => {
+			container.innerHTML =
+				'<section id="group"><article id="card"><h2 id="title">春季特惠</h2></article></section>'
+			const element = container.querySelector("#title") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					ancestors: expect.arrayContaining([
+						expect.objectContaining({
+							tagName: "article",
+							textContent: expect.stringContaining("春季特惠"),
+						}),
+						expect.objectContaining({
+							tagName: "section",
+						}),
+					]),
+				}),
+			)
+		})
+
 		it("should include computed styles", () => {
 			container.innerHTML = '<div id="styled" style="color: red;">Content</div>'
 			const element = container.querySelector("#styled") as HTMLElement
@@ -111,9 +178,169 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("omits computed offsets when the element has no inline position", () => {
+			container.innerHTML = '<div id="static">Content</div>'
+			const element = container.querySelector("#static") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					computedStyles: expect.not.objectContaining({
+						top: expect.anything(),
+						left: expect.anything(),
+						right: expect.anything(),
+						bottom: expect.anything(),
+					}),
+				}),
+			)
+		})
+
+		it("keeps used offsets for class-positioned absolute elements", () => {
+			const style = document.createElement("style")
+			style.textContent = ".pinned { position: absolute; }"
+			document.head.appendChild(style)
+			container.innerHTML = '<div id="pinned" class="pinned">Content</div>'
+			const element = container.querySelector("#pinned") as HTMLElement
+			const originalGetComputedStyle = window.getComputedStyle
+			const usedOffsets: Record<string, string> = {
+				position: "absolute",
+				top: "48px",
+				left: "24px",
+				right: "16px",
+				bottom: "8px",
+			}
+			window.getComputedStyle = ((target: Element) => {
+				const computed = originalGetComputedStyle(target)
+				if (target !== element) return computed
+				return new Proxy(computed, {
+					get(style, prop) {
+						if (typeof prop === "string" && prop in usedOffsets) {
+							return usedOffsets[prop]
+						}
+						return Reflect.get(style, prop)
+					},
+				})
+			}) as typeof window.getComputedStyle
+
+			try {
+				selector.selectElement(element)
+
+				expect(sendEventSpy).toHaveBeenCalledWith(
+					"ELEMENT_SELECTED",
+					expect.objectContaining({
+						computedStyles: expect.objectContaining({
+							position: "absolute",
+							top: "48px",
+							left: "24px",
+							right: "16px",
+							bottom: "8px",
+						}),
+					}),
+				)
+			} finally {
+				window.getComputedStyle = originalGetComputedStyle
+				style.remove()
+			}
+		})
+
+		it("should ignore inactive media-query line-height rules", () => {
+			const matchMediaSpy = vi.spyOn(window, "matchMedia").mockImplementation((query) => {
+				return {
+					matches: !String(query).includes("max-width"),
+					media: String(query),
+					onchange: null,
+					addListener: vi.fn(),
+					removeListener: vi.fn(),
+					addEventListener: vi.fn(),
+					removeEventListener: vi.fn(),
+					dispatchEvent: vi.fn(),
+				} as MediaQueryList
+			})
+			const style = document.createElement("style")
+			style.textContent = `
+				#title { font-size: 24px; line-height: 1.5; }
+				@media (max-width: 400px) { #title { line-height: 1.1; } }
+			`
+			document.head.appendChild(style)
+			container.innerHTML = '<h1 id="title">Title</h1>'
+			const element = container.querySelector("#title") as HTMLElement
+
+			try {
+				selector.selectElement(element)
+
+				expect(sendEventSpy).toHaveBeenCalledWith(
+					"ELEMENT_SELECTED",
+					expect.objectContaining({
+						computedStyles: expect.objectContaining({
+							lineHeight: "1.5",
+						}),
+					}),
+				)
+			} finally {
+				matchMediaSpy.mockRestore()
+				style.remove()
+			}
+		})
+
+		it("should keep a specified unitless line-height instead of used pixels", () => {
+			const style = document.createElement("style")
+			style.textContent = "#ratio-title { font-size: 92px; line-height: 1.04; }"
+			document.head.appendChild(style)
+			container.innerHTML = '<h1 id="ratio-title">Title</h1>'
+			const element = container.querySelector("#ratio-title") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					computedStyles: expect.objectContaining({
+						lineHeight: "1.04",
+					}),
+				}),
+			)
+			style.remove()
+		})
+
+		it("should keep authored inline width available for the editor", () => {
+			container.innerHTML = '<div id="full-width" style="width: 100%;">Content</div>'
+			const element = container.querySelector("#full-width") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					inlineStyles: expect.objectContaining({
+						width: "100%",
+					}),
+				}),
+			)
+		})
+
+		it("should include editable inline styles", () => {
+			container.innerHTML =
+				'<div id="inline-styled" style="color: red; --card-gap: 12px;">Content</div>'
+			const element = container.querySelector("#inline-styled") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					inlineStyles: {
+						color: "red",
+						"--card-gap": "12px",
+					},
+				}),
+			)
+		})
+
 		it("should include flex item and parent flex context in computed styles", () => {
 			container.innerHTML = `
-				<div id="layout" style="display: flex; flex-direction: row; align-items: stretch;">
+				<div id="layout" style="display: flex; flex-direction: row; justify-content: flex-start; align-items: stretch;">
 					<main id="content" style="flex: 1 1 0%; min-width: 0;">Content</main>
 				</div>
 			`
@@ -125,8 +352,10 @@ describe("ElementSelector", () => {
 				"ELEMENT_SELECTED",
 				expect.objectContaining({
 					computedStyles: expect.objectContaining({
+						parentSelector: expect.stringContaining("div#layout"),
 						parentDisplay: "flex",
 						parentFlexDirection: "row",
+						parentJustifyContent: "flex-start",
 						parentAlignItems: "stretch",
 						flexGrow: "1",
 						flexShrink: "1",
@@ -155,6 +384,33 @@ describe("ElementSelector", () => {
 					}),
 				}),
 			)
+		})
+
+		it("includes in-flow child rects for a flex container", () => {
+			container.innerHTML = `
+				<div id="cards" style="display:flex;gap:20px">
+					<div id="a" style="width:80px;height:40px"></div>
+					<div id="b" style="width:80px;height:40px"></div>
+				</div>
+			`
+			selector.selectElement(container.querySelector("#cards") as HTMLElement)
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					childRects: expect.arrayContaining([
+						expect.objectContaining({
+							width: expect.any(Number),
+							height: expect.any(Number),
+						}),
+					]),
+				}),
+			)
+			const payload = sendEventSpy.mock.calls.find(
+				(call) => call[0] === "ELEMENT_SELECTED",
+			)?.[1] as {
+				childRects: unknown[]
+			}
+			expect(payload.childRects).toHaveLength(2)
 		})
 
 		it("should detect text elements", () => {
@@ -306,6 +562,24 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("should emit a host-requested hover without changing selection", () => {
+			container.innerHTML = "<div id='tree-hover-test'>Content</div>"
+			const element = container.querySelector("#tree-hover-test") as HTMLElement
+
+			selector.enable()
+			selector.hoverElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_HOVERED",
+				expect.objectContaining({ rect: expect.any(Object) }),
+			)
+			expect(selector.getSelectedCount()).toBe(0)
+
+			sendEventSpy.mockClear()
+			selector.clearHoveredElement()
+			expect(sendEventSpy).toHaveBeenCalledWith("ELEMENT_HOVER_END", {})
+		})
+
 		it("should not emit hover when disabled", () => {
 			container.innerHTML = "<div id='hover-test'>Content</div>"
 			const element = container.querySelector("#hover-test") as HTMLElement
@@ -343,6 +617,28 @@ describe("ElementSelector", () => {
 					selector: expect.stringContaining("div#click-test"),
 				}),
 			)
+		})
+
+		it.each([
+			["body", () => document.body],
+			["html", () => document.documentElement],
+		])("should deselect the current element when clicking %s", (_label, getTarget) => {
+			container.innerHTML = "<div id='selected-block'>Content</div>"
+			const element = container.querySelector("#selected-block") as HTMLElement
+
+			selector.enable()
+			selector.selectElement(element)
+			sendEventSpy.mockClear()
+
+			const event = new MouseEvent("click", {
+				bubbles: true,
+				cancelable: true,
+			})
+			Object.defineProperty(event, "target", { value: getTarget(), enumerable: true })
+			document.dispatchEvent(event)
+
+			expect(selector.getSelectedCount()).toBe(0)
+			expect(sendEventSpy).toHaveBeenCalledWith("ELEMENTS_DESELECTED", {})
 		})
 
 		it("should not select element on click when text is selected", () => {
@@ -402,6 +698,26 @@ describe("ElementSelector", () => {
 			document.dispatchEvent(event)
 
 			expect(sendEventSpy).toHaveBeenCalledWith("ELEMENTS_DESELECTED", {})
+		})
+
+		it("should keep selection when Escape was already consumed by the host", () => {
+			container.innerHTML = "<div id='test'>Content</div>"
+			const element = container.querySelector("#test") as HTMLElement
+
+			selector.enable()
+			selector.selectElement(element)
+			sendEventSpy.mockClear()
+
+			const event = new KeyboardEvent("keydown", {
+				key: "Escape",
+				bubbles: true,
+				cancelable: true,
+			})
+			event.preventDefault()
+			document.dispatchEvent(event)
+
+			expect(selector.getSelectedCount()).toBe(1)
+			expect(sendEventSpy).not.toHaveBeenCalledWith("ELEMENTS_DESELECTED", {})
 		})
 	})
 
@@ -525,6 +841,68 @@ describe("ElementSelector", () => {
 				"ELEMENT_SELECTED",
 				expect.objectContaining({
 					isTextElement: true,
+					hasDirectTextContent: false,
+				}),
+			)
+		})
+
+		it("should report direct text separately from descendant text", () => {
+			container.innerHTML = `
+				<div id="mixed">
+					Direct text
+					<span>Descendant text</span>
+				</div>
+			`
+			const element = container.querySelector("#mixed") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					hasDirectTextContent: true,
+				}),
+			)
+		})
+
+		it("reports only the container's own text when it also has an image", () => {
+			container.innerHTML = `
+				<div id="card">
+					<img src="icon.png" alt="" />
+					从低渗透率盆地读向高增长脊线
+					<p>Subtitle</p>
+				</div>
+			`
+			const element = container.querySelector("#card") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					isTextElement: true,
+					hasDirectTextContent: true,
+					textContent: "从低渗透率盆地读向高增长脊线",
+				}),
+			)
+		})
+
+		it("excludes inline child text from a selected block text container", () => {
+			container.innerHTML = `
+				<span id="metric" style="display: block">
+					中国 ·<span style="text-decoration: line-through"> 55%渗透率</span>
+				</span>
+			`
+			const element = container.querySelector("#metric") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					isTextElement: true,
+					hasDirectTextContent: true,
+					textContent: "中国 ·",
 				}),
 			)
 		})
@@ -748,19 +1126,20 @@ describe("ElementSelector", () => {
 
 		it("should not enable text editing in multi-select mode", () => {
 			container.innerHTML = `
-				<p id="text1">Text 1</p>
+				<p id="text1" style="COLOR:red; margin:0  8px!important">Text 1</p>
 				<p id="text2">Text 2</p>
 			`
 			const text1 = container.querySelector("#text1") as HTMLElement
 			const text2 = container.querySelector("#text2") as HTMLElement
+			const originalStyle = text1.getAttribute("style")
 
-			// Single select - should enable text editing
+			// Single selection keeps the existing pre-editing DOM state.
 			selector.selectElement(text1, false)
 			expect(text1.contentEditable).toBe("true")
+			expect(text1.getAttribute("data-text-editing")).toBe("true")
+			expect(text1.getAttribute("style")).toBe(originalStyle)
 
-			// Multi-select - should not enable text editing
 			selector.selectElement(text2, true)
-			// contentEditable should NOT be "true" in multi-select mode
 			expect(text2.contentEditable).not.toBe("true")
 			expect(text2.getAttribute("data-text-editing")).not.toBe("true")
 		})

@@ -21,6 +21,7 @@ import {
 const DEFAULT_VIRTUAL_THRESHOLD = 50
 const DESKTOP_ROW_ESTIMATE = 32
 const MOBILE_ROW_ESTIMATE = 42
+const EMPTY_VIRTUAL_ITEMS: VirtualItem[] = []
 type RowRenderVersion = string | number
 
 interface TreeNodeRowProps {
@@ -250,8 +251,14 @@ function CustomTree({
 		overscan: 8,
 		getItemKey,
 	})
-	const virtualItems = shouldVirtualize ? rowVirtualizer.getVirtualItems() : []
-	const totalSize = visibleNodes.length * rowEstimateSize
+	const virtualItems = shouldVirtualize ? rowVirtualizer.getVirtualItems() : EMPTY_VIRTUAL_ITEMS
+	// Use the virtualizer's measured layout rather than multiplying the estimate.
+	// Rows can be taller than the estimate (for example after a font/layout change),
+	// and the accumulated difference otherwise leaves the rendered rows increasingly
+	// out of sync with the scroll container near the end of a large list.
+	const totalSize = shouldVirtualize
+		? rowVirtualizer.getTotalSize()
+		: visibleNodes.length * rowEstimateSize
 	const dragTargetBlockRange = useMemo(
 		() => getDragTargetBlockRange(visibleRows, dragTargetKey),
 		[dragTargetKey, visibleRows],
@@ -465,7 +472,7 @@ function CustomTree({
 								left: 0,
 								minHeight: `${rowEstimateSize}px`,
 								width: "100%",
-								transform: `translateY(${virtualItem.index * rowEstimateSize}px)`,
+								transform: `translateY(${virtualItem.start}px)`,
 								zIndex: 1,
 							}}
 						>

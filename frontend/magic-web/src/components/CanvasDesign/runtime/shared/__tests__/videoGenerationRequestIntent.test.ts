@@ -1,22 +1,45 @@
 import { describe, expect, it } from "vitest"
 import type { GenerateVideoRequest } from "../../../public/magic-types"
 import {
+	hasVideoGenerationRequestEstimateIntent,
 	hasVideoGenerationRequestMediaIntent,
-	hasVideoGenerationRequestUserIntent,
+	hasVideoGenerationRequestSubmitIntent,
 } from "../videoGenerationRequestIntent"
 
 describe("videoGenerationRequestIntent", () => {
-	it("requires prompt or media input for user intent", () => {
+	it("requires prompt or media input for estimate intent", () => {
 		expect(
-			hasVideoGenerationRequestUserIntent({
+			hasVideoGenerationRequestEstimateIntent({
 				model_id: "video-model",
 				prompt: " ",
 			}),
 		).toBe(false)
 		expect(
-			hasVideoGenerationRequestUserIntent({
+			hasVideoGenerationRequestEstimateIntent({
 				model_id: "video-model",
 				prompt: "make a launch video",
+			}),
+		).toBe(true)
+	})
+
+	it("requires media input for video edit estimate intent", () => {
+		expect(
+			hasVideoGenerationRequestEstimateIntent({
+				model_id: "video-model",
+				input_mode: "video_edit",
+				task: "edit",
+				prompt: "rewrite this clip",
+			}),
+		).toBe(false)
+		expect(
+			hasVideoGenerationRequestEstimateIntent({
+				model_id: "video-model",
+				input_mode: "video_edit",
+				task: "edit",
+				prompt: "rewrite this clip",
+				inputs: {
+					reference_videos: [{ uri: "./videos/linked.mp4" }],
+				},
 			}),
 		).toBe(true)
 	})
@@ -32,7 +55,41 @@ describe("videoGenerationRequestIntent", () => {
 		}
 
 		expect(hasVideoGenerationRequestMediaIntent(request)).toBe(true)
-		expect(hasVideoGenerationRequestUserIntent(request)).toBe(true)
+		expect(hasVideoGenerationRequestEstimateIntent(request)).toBe(true)
+	})
+
+	it("requires a non-empty prompt for submit intent", () => {
+		expect(
+			hasVideoGenerationRequestSubmitIntent({
+				model_id: "video-model",
+				prompt: " ",
+				inputs: {
+					reference_videos: [{ uri: "./videos/linked.mp4" }],
+				},
+			}),
+		).toBe(false)
+		expect(
+			hasVideoGenerationRequestSubmitIntent({
+				model_id: "video-model",
+				prompt: "make a launch video",
+			}),
+		).toBe(true)
+	})
+
+	it("accepts canvas composition without model or prompt", () => {
+		expect(
+			hasVideoGenerationRequestSubmitIntent({
+				generation_type: "canvas_composition",
+				composition: {
+					videos: [{ path: "/新建画布/videos/a.mp4" }],
+				},
+			}),
+		).toBe(true)
+		expect(
+			hasVideoGenerationRequestSubmitIntent({
+				generation_type: "canvas_composition",
+			}),
+		).toBe(false)
 	})
 
 	it("ignores empty media fields and supports legacy request fields", () => {

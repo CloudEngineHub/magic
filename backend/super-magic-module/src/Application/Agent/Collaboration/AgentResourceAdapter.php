@@ -7,13 +7,12 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Application\Agent\Collaboration;
 
-use App\Application\Kernel\AbstractKernelAppService;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType as OperationResourceType;
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
+use Dtyq\SuperMagic\Application\Agent\Service\AbstractSuperMagicAppService;
 use Dtyq\SuperMagic\Application\Collaboration\Contract\CollaborativeResourceAdapterInterface;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
-use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
-use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentDomainService;
 use InvalidArgumentException;
 use Qbhy\HyperfAuth\Authenticatable;
 
@@ -22,16 +21,8 @@ use Qbhy\HyperfAuth\Authenticatable;
  *
  * 负责向共享协作内核提供 Agent 资源的读取和类型映射能力。
  */
-class AgentResourceAdapter extends AbstractKernelAppService implements CollaborativeResourceAdapterInterface
+class AgentResourceAdapter extends AbstractSuperMagicAppService implements CollaborativeResourceAdapterInterface
 {
-    /**
-     * 注入 Agent 资源读取所需依赖。
-     */
-    public function __construct(
-        private readonly SuperMagicAgentDomainService $superMagicAgentDomainService,
-    ) {
-    }
-
     /**
      * 根据 code 读取 Agent 资源实体。
      */
@@ -72,14 +63,13 @@ class AgentResourceAdapter extends AbstractKernelAppService implements Collabora
         return ResourceVisibilityResourceType::SUPER_MAGIC_AGENT;
     }
 
-    /**
-     * 创建 Agent 领域使用的数据隔离对象。
-     */
-    private function createSuperMagicDataIsolation(Authenticatable $authorization): SuperMagicAgentDataIsolation
+    public function afterCollaboratorRemoved(PermissionDataIsolation $permissionIsolation, string $resourceCode): void
     {
-        $dataIsolation = new SuperMagicAgentDataIsolation();
-        $this->handleByAuthorization($authorization, $dataIsolation);
-        return $dataIsolation;
+        $market = $this->marketEligibilityDomainService
+            ->getPublishedOrganizationMarketByAgentCodeForUpdate($permissionIsolation->getCurrentOrganizationCode(), $resourceCode);
+        if ($market !== null) {
+            $this->marketEligibilityDomainService->syncOrganizationMarketHireAccess($permissionIsolation, $market);
+        }
     }
 
     /**

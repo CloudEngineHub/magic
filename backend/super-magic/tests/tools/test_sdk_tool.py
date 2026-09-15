@@ -20,6 +20,7 @@ class _FakeResponse:
 
 def test_tool_sdk_does_not_set_http_timeout(monkeypatch):
     monkeypatch.setenv("SUPER_MAGIC_AGENT_CONTEXT_ID", "agent-context-1")
+    monkeypatch.setenv("SUPER_MAGIC_SDK_EXECUTION_ID", "sdk-execution-1")
     sdk = ToolSDK()
     recorded = {"called": False}
 

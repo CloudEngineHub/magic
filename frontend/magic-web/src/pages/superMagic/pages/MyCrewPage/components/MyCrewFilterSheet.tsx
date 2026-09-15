@@ -144,7 +144,7 @@ export default function MyCrewFilterSheet({
 						</div>
 					</div>
 
-					{/* Type filter section — always shows all three scope options including team shared */}
+					{/* Type filter section. Re-tapping either option restores the all-employees view. */}
 					<div className="flex flex-col gap-2" data-testid="my-crew-filter-type-section">
 						<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
 							{t("myCrewPage.filterSheet.typeLabel")}
@@ -155,13 +155,6 @@ export default function MyCrewFilterSheet({
 								selected={filter.type === "created"}
 								onSelect={() => handleTypeChange("created")}
 								dataTestId="my-crew-filter-type-created"
-							/>
-							<div className="h-px w-full bg-border" />
-							<SelectRow
-								label={t("myCrewPage.filterSheet.type.teamShared")}
-								selected={filter.type === "teamShared"}
-								onSelect={() => handleTypeChange("teamShared")}
-								dataTestId="my-crew-filter-type-team-shared"
 							/>
 							<div className="h-px w-full bg-border" />
 							<SelectRow

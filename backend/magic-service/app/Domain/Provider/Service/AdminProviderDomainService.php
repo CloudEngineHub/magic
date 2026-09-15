@@ -31,6 +31,7 @@ use App\Domain\Provider\Service\ConnectivityTest\ConnectResponse;
 use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
+use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
 use App\Infrastructure\Util\Locker\RedisLocker;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
@@ -396,18 +397,6 @@ class AdminProviderDomainService extends AbstractProviderDomainService
     }
 
     /**
-     * 获取所有可用的服务商列表（包括官方服务商），不依赖于组织编码.
-     *
-     * @param Category $category 服务商类别
-     * @return ProviderConfigModelsDTO[]
-     */
-    public function getAllAvailableProviders(Category $category): array
-    {
-        $serviceProviderEntities = $this->serviceProviderRepository->getByCategory($category);
-        return ProviderAssembler::toDTOs($serviceProviderEntities);
-    }
-
-    /**
      * @return ProviderModelEntity[]
      */
     public function getOfficeModels(Category $category): array
@@ -530,6 +519,22 @@ class AdminProviderDomainService extends AbstractProviderDomainService
         }
 
         return $providerModelEntities;
+    }
+
+    /**
+     * @return array{total: int, list: ProviderModelEntity[]}
+     */
+    public function queriesProviderModels(ProviderDataIsolation $dataIsolation, ProviderModelQuery $providerModelQuery, Page $page): array
+    {
+        return $this->providerModelRepository->queries($dataIsolation, $providerModelQuery, $page);
+    }
+
+    /**
+     * @return array{total: int, list: array<string, ProviderModelEntity[]>}
+     */
+    public function queriesProviderModelGroups(ProviderDataIsolation $dataIsolation, ProviderModelQuery $providerModelQuery, Page $page): array
+    {
+        return $this->providerModelRepository->queriesModelGroups($dataIsolation, $providerModelQuery, $page);
     }
 
     /**

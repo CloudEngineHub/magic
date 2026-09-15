@@ -49,6 +49,7 @@ export interface FileItem {
 	file_id: string
 	relative_file_path: string
 	file_name?: string
+	file_extension?: string
 	updated_at?: string
 }
 
@@ -170,6 +171,30 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 	const urlCache = new Map();
 	// 正在进行的请求缓存，避免同时发起多个相同的请求
 	const pendingRequests = new Map();
+
+	function isCachedUrlFresh(entry) {
+		if (!entry || !entry.url || entry.url === '__NOT_FOUND__') return false;
+		if (!entry.expiresAt) return false;
+		const expireTime = Date.parse(String(entry.expiresAt).replace(/-/g, '/'));
+		return !isNaN(expireTime) && expireTime - Date.now() > 5 * 60 * 1000;
+	}
+
+	function takeFreshCacheEntry(key) {
+		const entry = urlCache.get(key);
+		if (!entry) return null;
+		if (entry.url === '__NOT_FOUND__') return entry;
+		if (isCachedUrlFresh(entry)) return entry;
+		urlCache.delete(key);
+		return null;
+	}
+
+	function cacheResolvedUrl(relativePath, url, expiresAt) {
+		if (!url || !expiresAt) {
+			urlCache.delete(relativePath);
+			return;
+		}
+		urlCache.set(relativePath, { url: url, expiresAt: expiresAt });
+	}
 	
 	${injectedIsRelativePathFunctionSource}
 	
@@ -224,8 +249,8 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 					window.removeEventListener('message', messageHandler);
 					
 					if (event.data.success) {
-						// 缓存结果到urlCache
-						urlCache.set(relativePath, event.data.url);
+						// Skip cache when expires_at is missing; parent also refuses it.
+						cacheResolvedUrl(relativePath, event.data.url, event.data.expires_at);
 						// 清理pending状态
 						pendingRequests.delete(relativePath);
 						resolve(event.data.url);
@@ -250,10 +275,19 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 	}
 	
 	// 重写fetch函数
-	window.fetch = async function(input, init = {}) {
-		// 获取URL
-		let url = typeof input === 'string' ? input : input.url;
+	window.fetch = async function(input, init) {
+		// 原生 fetch 支持 string、URL 和 Request。未改写 URL 时必须透传原始 input，
+		// 否则 Request 中的 method、headers、body 等配置会在退化为 URL 字符串后丢失。
+		const isRequestInput = typeof Request !== 'undefined' && input instanceof Request;
+		let url = typeof input === 'string' ? input : isRequestInput ? input.url : String(input);
 		const originalUrl = url;
+		const executeOriginalFetch = (resolvedUrl) => {
+			let resolvedInput = input;
+			if (resolvedUrl !== originalUrl) {
+				resolvedInput = isRequestInput ? new Request(resolvedUrl, input) : resolvedUrl;
+			}
+			return originalFetch.call(this, resolvedInput, init);
+		};
 		
 		// 如果是相对路径且启用了拦截
 		if (${config.enableRelativePathInterception !== false} && isRelativePath(url)) {
@@ -262,19 +296,18 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 			
 			// 1. 检查已完成的缓存
 			if (urlCache.has(url)) {
-				const cachedUrl = urlCache.get(url);
-				// 如果缓存的是错误标记，返回404响应
-				if (cachedUrl === '__NOT_FOUND__') {
+				const cachedUrl = takeFreshCacheEntry(url);
+				if (cachedUrl && cachedUrl.url === '__NOT_FOUND__') {
 					return Promise.resolve(new Response(null, {
 						status: 404,
 						statusText: 'Not Found',
 						headers: { 'Content-Type': 'text/plain' }
 					}));
 				}
-				url = cachedUrl;
+				if (cachedUrl) url = cachedUrl.url;
 			}
 			// 2. 检查是否有正在进行的请求
-			else if (pendingRequests.has(url)) {
+			if (isRelativePath(url) && pendingRequests.has(url)) {
 				try {
 					// 等待正在进行的请求完成
 					const resolvedUrl = await pendingRequests.get(url);
@@ -289,17 +322,18 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 				}
 			}
 			// 3. 发起新的请求
-			else {
+			else if (isRelativePath(url)) {
 				try {
 					// 创建Promise并缓存到pending中
 					const requestPromise = requestUrlFromParent(url);
 					pendingRequests.set(url, requestPromise);
 					
 					const resolvedUrl = await requestPromise;
+					if (pendingRequests.get(url) === requestPromise) pendingRequests.delete(url);
 					url = resolvedUrl;
 				} catch (error) {
 					// 请求失败，缓存错误标记并返回404响应
-					urlCache.set(url, '__NOT_FOUND__');
+					urlCache.set(url, { url: '__NOT_FOUND__' });
 					return Promise.resolve(new Response(null, {
 						status: 404,
 						statusText: 'Not Found',
@@ -311,7 +345,7 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 			// 如果是 HTML 文件，拦截响应并处理内容
 			if (isHtml) {
 				try {
-					const response = await originalFetch.call(this, url, init);
+					const response = await executeOriginalFetch(url);
 					
 					// 只处理成功的响应
 					if (response.ok) {
@@ -332,13 +366,13 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 				} catch (error) {
 					console.error('处理 HTML 内容失败:', error);
 					// 失败时调用原始 fetch
-					return originalFetch.call(this, url, init);
+					return executeOriginalFetch(url);
 				}
 			}
 		}
 		
 		// 调用原始fetch函数
-		return originalFetch.call(this, url, init);
+		return executeOriginalFetch(url);
 	};
 	
 	// 保持原始fetch的属性 (WebView 中可能不可配置)
@@ -383,10 +417,10 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 		try {
 			// 1. 检查缓存
 			if (urlCache.has(interceptedUrl)) {
-				const cachedUrl = urlCache.get(interceptedUrl);
+				const cachedUrl = takeFreshCacheEntry(interceptedUrl);
 				
 				// 如果缓存的是错误标记，返回404
-				if (cachedUrl === '__NOT_FOUND__') {
+				if (cachedUrl && cachedUrl.url === '__NOT_FOUND__') {
 					try {
 						Object.defineProperty(this, 'status', { value: 404, writable: false });
 						Object.defineProperty(this, 'statusText', { value: 'Not Found', writable: false });
@@ -402,11 +436,13 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 					return;
 				}
 				
-				// 使用缓存的URL重新open
-				const method = this._method || 'GET';
-				const async = this._async !== false;
-				originalOpen.call(this, method, cachedUrl, async);
-				return originalSend.call(this, body);
+				if (cachedUrl) {
+					// 使用缓存的URL重新open
+					const method = this._method || 'GET';
+					const async = this._async !== false;
+					originalOpen.call(this, method, cachedUrl.url, async);
+					return originalSend.call(this, body);
+				}
 			}
 			
 			// 2. 检查pending请求
@@ -439,12 +475,15 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 				pendingRequests.set(interceptedUrl, requestPromise);
 				
 				const resolvedUrl = await requestPromise;
+				if (pendingRequests.get(interceptedUrl) === requestPromise) {
+					pendingRequests.delete(interceptedUrl);
+				}
 				const method = this._method || 'GET';
 				const async = this._async !== false;
 				originalOpen.call(this, method, resolvedUrl, async);
 				return originalSend.call(this, body);
 			} catch (error) {
-				urlCache.set(interceptedUrl, '__NOT_FOUND__');
+				urlCache.set(interceptedUrl, { url: '__NOT_FOUND__' });
 				try {
 					Object.defineProperty(this, 'status', { value: 404, writable: false });
 					Object.defineProperty(this, 'statusText', { value: 'Not Found', writable: false });
@@ -555,7 +594,7 @@ export function createParentMessageHandler(
 					}
 
 					// 发送成功响应，包含 expires_at
-					; (event.source as Window)?.postMessage(
+					;(event.source as Window)?.postMessage(
 						{
 							type: FETCH_MESSAGE_TYPES.RESPONSE,
 							requestId,
@@ -570,7 +609,7 @@ export function createParentMessageHandler(
 			}
 
 			// 发送失败响应
-			; (event.source as Window)?.postMessage(
+			;(event.source as Window)?.postMessage(
 				{
 					type: FETCH_MESSAGE_TYPES.RESPONSE,
 					requestId,
@@ -581,7 +620,7 @@ export function createParentMessageHandler(
 			)
 		} catch (error) {
 			// 发送错误响应
-			; (event.source as Window)?.postMessage(
+			;(event.source as Window)?.postMessage(
 				{
 					type: FETCH_MESSAGE_TYPES.RESPONSE,
 					requestId,
@@ -798,10 +837,11 @@ function generateKeyboardInterceptorScript(): string {
 			}, '*');
 		}
 		
-		// Escape (退出编辑模式)
+		// Escape (交给父窗口按当前编辑上下文处理)
 		if (e.key === 'Escape') {
 			e.preventDefault();
-			e.stopPropagation();
+			// Keep the iframe selection active while the parent closes its local panel.
+			e.stopImmediatePropagation();
 			
 			window.parent.postMessage({
 				type: '${KEYBOARD_MESSAGE_TYPES.CANCEL}',
@@ -852,6 +892,8 @@ export interface KeyboardHandlers {
 	onSave: () => void | Promise<void>
 	onSaveAndExit: () => void | Promise<void>
 	onCancel: () => void | Promise<void>
+	/** Return true when Escape was consumed by a local editor surface. */
+	onEscape?: () => boolean
 }
 
 /**
@@ -872,6 +914,7 @@ export function createKeyboardMessageHandler(handlers: KeyboardHandlers) {
 				void handlers.onSaveAndExit()
 				break
 			case KEYBOARD_MESSAGE_TYPES.CANCEL:
+				if (handlers.onEscape?.()) break
 				void handlers.onCancel()
 				break
 		}

@@ -1,7 +1,6 @@
 import type { ComponentType } from "react"
 import { observer } from "mobx-react-lite"
 import { IconGitBranch, IconLoader2 } from "@tabler/icons-react"
-import { toJS } from "mobx"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { useTranslation } from "react-i18next"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
@@ -11,11 +10,10 @@ import { lazy, memo, Suspense, useMemo, useState } from "react"
 import { MessageStatus, MessageUsageType, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { Button, MenuProps } from "antd"
 import { splitNumber } from "@/utils/number"
-import { Ellipsis, FileText } from "lucide-react"
+import { Ellipsis } from "lucide-react"
 import { MagicDropdown, MagicTooltip } from "@/components/base"
 import { logger as Logger } from "@/utils/log"
 import { StatusBadge } from "./components/StatusBadge"
-import { getCurrentConversationRound } from "./round-log"
 import { useGlobalSuggestion } from "@/components/settings/FollowUpSuggestionItems/hooks"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
@@ -46,7 +44,7 @@ export function withAssistantCard<
 >(WrapperComponent: ComponentType<T>) {
 	const targetComponent = observer((props: T) => {
 		const { node, selectedTopic, classNames, checkIsLastMessage } = props
-		const messageNode = superMagicStore.getMessageNode(node?.app_message_id)
+		const messageNode = superMagicStore.getMessageNode(node?.super_message_id)
 		const { t } = useTranslation("super")
 		const { isShareRoute, isMagicShareRoute } = useShareRoute()
 		const {
@@ -57,7 +55,7 @@ export function withAssistantCard<
 		const { followUpSuggestions, keepUsedFollowUpSuggestions, setFollowUpSuggestions } =
 			useGlobalSuggestion()
 
-		// 评分状态：null=未评分, 'like'=好评, 'dislike'=差评
+		// Rating status: null = unrated, 'like' = positive, 'dislike' = negative.
 		const [rating, setRating] = useState<"like" | "dislike" | null>(null)
 
 		const { loading: copyLoading, runAsync } = useRequest(SuperMagicApi.copyTopicFromMessage, {
@@ -82,15 +80,15 @@ export function withAssistantCard<
 			const messages = superMagicStore.messages.get(topicId)
 			if (!messages || messages.length === 0) return []
 
-			// 找到当前消息在列表中的位置
+			// Find the current message in the list.
 			const currentIdx = messages.findIndex((m) => m.app_message_id === node?.app_message_id)
 			if (currentIdx < 0) return []
 
-			// 从当前消息往前找最近一条 user 消息
+			// Find the nearest user message before the current message.
 			let userNode: any = null
 			for (let i = currentIdx - 1; i >= 0; i--) {
 				if (messages[i].role === "user") {
-					userNode = superMagicStore.getMessageNode(messages[i].app_message_id)
+					userNode = superMagicStore.getMessageNode(messages[i].super_message_id)
 					break
 				}
 			}
@@ -112,7 +110,7 @@ export function withAssistantCard<
 			) => {
 				if (!modelData?.model_id) return
 				const modelId = modelData.model_id
-				// 如果消息中已有 model_icon 和 model_name，直接使用，无需匹配
+				// Use model_icon and model_name directly when they are already present.
 				if (modelData.model_icon && modelData.model_name) {
 					result.push({
 						modelItem: {
@@ -123,7 +121,7 @@ export function withAssistantCard<
 						modelId,
 					})
 				} else {
-					// 没有 model_icon/model_name，尝试匹配；匹配不上则不显示
+					// Otherwise, try to match a model; hide the label when no match is found.
 					const found = getModelList().find((m) => m.model_id === modelId)
 					if (found) {
 						result.push({ modelItem: found, modelId })
@@ -131,17 +129,17 @@ export function withAssistantCard<
 				}
 			}
 
-			// 语言模型
+			// Language model.
 			resolveModel(superAgent.model, () =>
 				superMagicModeService.getModelListByMode(mode, agentCode),
 			)
 
-			// 图像模型
+			// Image model.
 			resolveModel(superAgent.image_model, () =>
 				superMagicModeService.getImageModelListByMode(mode, agentCode),
 			)
 
-			// 视频模型
+			// Video model.
 			resolveModel(superAgent.video_model, () =>
 				superMagicModeService.getVideoModelListByMode(mode, agentCode),
 			)
@@ -202,17 +200,6 @@ export function withAssistantCard<
 					),
 					visible: true,
 				},
-				{
-					key: MenuKey.ReportConversationRound,
-					label: (
-						<div className="flex w-full items-center gap-1.5 text-foreground">
-							<FileText size={16} className="text-foreground" />
-							<span>{t("ui.reportConversationRound")}</span>
-						</div>
-					),
-					"data-testid": "assistant-round-log-report-menu-item",
-					visible: true,
-				},
 			].filter((o) => o.visible)
 		}, [t, roundConsumptionPoints, roundModels])
 
@@ -234,44 +221,14 @@ export function withAssistantCard<
 			}
 		})
 
-		const reportConversationRound = useMemoizedFn(() => {
-			const topicId = selectedTopic?.chat_topic_id
-			const currentMessageId = node?.app_message_id
-			if (!topicId || !currentMessageId) return
-
-			const topicMessages = superMagicStore.messages.get(topicId) || []
-			const roundMessages = getCurrentConversationRound(topicMessages, currentMessageId)
-			if (roundMessages.length === 0) return
-
-			// Use the latest message-map nodes while retaining the topic sequence fields;
-			// this keeps streamed/final metadata in the report instead of stale list snapshots.
-			const messages = toJS(roundMessages).map((message: any) => ({
-				...message,
-				debug: toJS(
-					superMagicStore.getMessageNode(message.app_message_id) || message.debug,
-				),
-			}))
-
-			logger.report("messages", {
-				topic_id: selectedTopic?.id,
-				chat_topic_id: topicId,
-				message_id: currentMessageId,
-				messages,
-			})
-		})
-
-		const onMenuClick = useMemoizedFn(({ key }: { key: string }) => {
-			if (key === MenuKey.ReportConversationRound) {
-				reportConversationRound()
-			}
-		})
+		const onMenuClick = useMemoizedFn(({ key }: { key: string }) => {})
 
 		const handleLike = useMemoizedFn(() => {
 			if (rating === "like") {
 				setRating(null)
 			} else {
 				setRating("like")
-				// TODO: 调用 API
+				// TODO: Call the API.
 			}
 		})
 
@@ -280,7 +237,7 @@ export function withAssistantCard<
 				setRating(null)
 			} else {
 				setRating("dislike")
-				// TODO: 调用 API
+				// TODO: Call the API.
 			}
 		})
 
@@ -323,12 +280,17 @@ export function withAssistantCard<
 
 				{statusList.has(messageNode?.status) && (
 					<>
-						{messageNode?.content && (
-							<div className="mb-1 text-muted-foreground">{messageNode?.content}</div>
+						{messageNode?.role === "tool" && messageNode?.content && (
+							<div className="mb-2 text-muted-foreground">{messageNode?.content}</div>
 						)}
-						<StatusBadge status={messageNode?.status} />
+						<div
+							className="ml-[var(--message-status-offset,0px)] w-fit"
+							data-testid="message-list-status-badge"
+						>
+							<StatusBadge status={messageNode?.status} />
+						</div>
 						{messageNode?.status === "finished" && (
-							<div className="mt-[6px] flex items-center justify-between gap-[4px]">
+							<div className="mb-[6px] mt-[6px] flex items-center justify-between gap-[4px]">
 								<div className="flex items-center gap-1"></div>
 
 								<div className="flex items-center gap-1">
@@ -369,7 +331,7 @@ export function withAssistantCard<
 					<Suspense fallback={null}>
 						<SuggestList
 							messageId={node?.app_message_id}
-							taskId={messageNode.task_id}
+							taskId={messageNode?.task_id}
 							topicId={selectedTopic?.id}
 							showCloseAction={isLastMessage}
 							closeSuggestions={() => setFollowUpSuggestions(false)}

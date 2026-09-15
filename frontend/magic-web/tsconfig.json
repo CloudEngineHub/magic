@@ -1,7 +1,6 @@
 {
 	"compilerOptions": {
 		"allowImportingTsExtensions": true,
-		"baseUrl": ".",
 		"isolatedModules": true,
 		"jsx": "react-jsx",
 		"lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
@@ -37,6 +36,9 @@
 			"@dtyq/magic-admin/locales": ["./packages/magic-admin/src/locales/index.ts"],
 			"@dtyq/magic-admin/provider": [
 				"./packages/magic-admin/src/provider/AdminProvider/index.tsx"
+			],
+			"@dtyq/magic-admin/utils/tablerIconLoader": [
+				"./packages/magic-admin/src/utils/tablerIconLoader.tsx"
 			],
 			"@dtyq/x-markdown": ["./packages/x-markdown/src/index.ts"],
 			"@dtyq/x-markdown/*": ["./packages/x-markdown/src/*"],

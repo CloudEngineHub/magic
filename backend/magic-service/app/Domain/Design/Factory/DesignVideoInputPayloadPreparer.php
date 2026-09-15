@@ -10,6 +10,8 @@ namespace App\Domain\Design\Factory;
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Util\File\ImageBase64DataUriParser;
+use App\Infrastructure\Util\File\ProviderAssetUri;
 
 final class DesignVideoInputPayloadPreparer
 {
@@ -22,8 +24,31 @@ final class DesignVideoInputPayloadPreparer
         self::applyPreparedInputs($dto, self::prepareInputs($dto));
     }
 
+    /** 规范化文件列表合成的输出目录和输入路径。 */
+    public static function sanitizeCanvasCompositionDto(DesignVideoCreateDTO $dto): void
+    {
+        $dto->setFileDir(self::normalizePath($dto->getFileDir(), true, 'file_dir'));
+        $composition = $dto->getComposition();
+        foreach (['videos', 'audios'] as $mediaType) {
+            $items = is_array($composition[$mediaType] ?? null) ? $composition[$mediaType] : [];
+            $composition[$mediaType] = array_map(
+                static function (mixed $item) use ($mediaType): array {
+                    $item = is_array($item) ? $item : [];
+                    $item['path'] = self::normalizePath(
+                        (string) ($item['path'] ?? ''),
+                        false,
+                        'composition.' . $mediaType . '.path'
+                    );
+                    return ['path' => $item['path']];
+                },
+                $items,
+            );
+        }
+        $dto->setComposition($composition);
+    }
+
     /**
-     * 将视频输入素材整理为统一 payload，并拒绝空路径、外部 URL 和目录穿越路径。
+     * 将视频输入素材整理为统一 payload，并拒绝空路径、非受控外部 URL 和目录穿越路径。
      *
      * @return array<string, mixed>
      */
@@ -35,7 +60,7 @@ final class DesignVideoInputPayloadPreparer
 
         $referenceImages = [];
         foreach ($dto->getReferenceImages() as $referenceImage) {
-            $item = ['uri' => self::normalizePath((string) ($referenceImage['uri'] ?? ''), false, 'reference_images.uri')];
+            $item = ['uri' => self::normalizeImageInput($referenceImage, 'reference_images')];
             $type = trim((string) ($referenceImage['type'] ?? ''));
             if ($type !== '') {
                 $item['type'] = $type;
@@ -46,14 +71,14 @@ final class DesignVideoInputPayloadPreparer
         $referenceVideos = [];
         foreach ($dto->getReferenceVideos() as $referenceVideo) {
             $referenceVideos[] = [
-                'uri' => self::normalizePath((string) ($referenceVideo['uri'] ?? ''), false, 'reference_videos.uri'),
+                'uri' => self::normalizeInputUri((string) ($referenceVideo['uri'] ?? ''), 'reference_videos.uri'),
             ];
         }
 
         $referenceAudios = [];
         foreach ($dto->getReferenceAudios() as $referenceAudio) {
             $referenceAudios[] = [
-                'uri' => self::normalizePath((string) ($referenceAudio['uri'] ?? ''), false, 'reference_audios.uri'),
+                'uri' => self::normalizeInputUri((string) ($referenceAudio['uri'] ?? ''), 'reference_audios.uri'),
             ];
         }
 
@@ -61,7 +86,7 @@ final class DesignVideoInputPayloadPreparer
         foreach ($dto->getFrames() as $frame) {
             $frames[] = [
                 'role' => (string) ($frame['role'] ?? ''),
-                'uri' => self::normalizePath((string) ($frame['uri'] ?? ''), false, 'frames.uri'),
+                'uri' => self::normalizeImageInput($frame, 'frames'),
             ];
         }
 
@@ -117,5 +142,41 @@ final class DesignVideoInputPayloadPreparer
         }
 
         return $path;
+    }
+
+    /**
+     * 将 Base64 图片转换为统一 Data URL，否则按原有工作区路径规范化。
+     *
+     * @param array<string, mixed> $input
+     */
+    private static function normalizeImageInput(array $input, string $label): string
+    {
+        $sourceType = trim((string) ($input['source_type'] ?? ''));
+        if ($sourceType === 'base64') {
+            $mimeType = strtolower(trim((string) ($input['mime_type'] ?? '')));
+            $base64Data = preg_replace('/\s+/', '', trim((string) ($input['base64_data'] ?? '')));
+            if ($base64Data === null || $base64Data === '') {
+                ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'common.invalid', ['label' => $label . '.base64_data']);
+            }
+            $binaryData = base64_decode($base64Data, true);
+            if ($binaryData === false || $binaryData === '') {
+                ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'common.invalid', ['label' => $label . '.base64_data']);
+            }
+            return sprintf('data:%s;base64,%s', ImageBase64DataUriParser::normalizeMimeType($mimeType), $base64Data);
+        }
+
+        return self::normalizeInputUri((string) ($input['uri'] ?? ''), $label . '.uri');
+    }
+
+    /**
+     * 规范化模型输入 URI，同时保留受控的 provider 素材 URI。
+     */
+    private static function normalizeInputUri(string $uri, string $label): string
+    {
+        if (ProviderAssetUri::isValid($uri)) {
+            return trim($uri);
+        }
+
+        return self::normalizePath($uri, false, $label);
     }
 }

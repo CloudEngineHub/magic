@@ -64,10 +64,12 @@ vi.mock("../components/DemoItemEditDialog/PromptRichTextLocaleEditor", () => ({
 	PromptRichTextLocaleEditor: ({
 		value,
 		onChange,
+		allowPresetValue,
 		"data-testid": testId,
 	}: {
 		value: { default?: string } | string
 		onChange: (nextValue: { default?: string } | string) => void
+		allowPresetValue?: boolean
 		"data-testid"?: string
 	}) => {
 		const rawValue = typeof value === "string" ? value : (value.default ?? "")
@@ -75,6 +77,7 @@ vi.mock("../components/DemoItemEditDialog/PromptRichTextLocaleEditor", () => ({
 		return (
 			<textarea
 				data-testid={testId}
+				data-allow-preset-value={String(allowPresetValue)}
 				value={rawValue}
 				onChange={(event) =>
 					onChange({
@@ -97,7 +100,7 @@ vi.mock("../components/DemoItemEditDialog/PromptRichTextLocaleEditor", () => ({
 }))
 
 describe("DemoItemEditDialog", () => {
-	it("returns serialized prompt rich text on confirm", () => {
+	it("returns serialized rich text in prompt without changing value", () => {
 		const handleConfirm = vi.fn()
 		const handleOpenChange = vi.fn()
 
@@ -112,6 +115,10 @@ describe("DemoItemEditDialog", () => {
 
 		const confirmButton = screen.getByTestId("demo-item-dialog-confirm")
 		expect(confirmButton).toBeDisabled()
+		expect(screen.getByTestId("demo-item-prompt-input")).toHaveAttribute(
+			"data-allow-preset-value",
+			"false",
+		)
 
 		fireEvent.change(screen.getByTestId("demo-item-title-input"), {
 			target: { value: "Demo title" },
@@ -127,7 +134,7 @@ describe("DemoItemEditDialog", () => {
 		expect(handleConfirm).toHaveBeenCalledTimes(1)
 		expect(handleConfirm.mock.calls[0][0]).toMatchObject({
 			label: "Demo title",
-			description: {
+			prompt: {
 				default: JSON.stringify({
 					type: "doc",
 					content: [
@@ -139,6 +146,22 @@ describe("DemoItemEditDialog", () => {
 				}),
 			},
 		})
+		expect(handleConfirm.mock.calls[0][0]).not.toHaveProperty("value")
+		expect(handleConfirm.mock.calls[0][0]).not.toHaveProperty("description")
 		expect(handleOpenChange).toHaveBeenCalledWith(false)
+	})
+
+	it("loads a legacy description into the prompt editor", () => {
+		render(
+			<DemoItemEditDialog
+				item={{ value: "legacy-id", label: "Legacy", description: "Legacy prompt" }}
+				groups={[]}
+				open
+				onOpenChange={vi.fn()}
+				onConfirm={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("demo-item-prompt-input")).toHaveValue("Legacy prompt")
 	})
 })

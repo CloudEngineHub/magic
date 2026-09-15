@@ -1,7 +1,7 @@
 import { memo } from "react"
-import { useResponsive } from "ahooks"
 import ShareManagementModal from "./ShareManagementModal"
 import MobileShareManagement from "./MobileShareManagement"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { SharedResourceType } from "./types"
 
 interface ShareManagementProps {
@@ -13,8 +13,7 @@ interface ShareManagementProps {
 
 export default memo(function ShareManagement(props: ShareManagementProps) {
 	const { projectId, open, onClose, defaultTab } = props
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 
 	// 移动端使用原有组件
 	if (isMobile) {

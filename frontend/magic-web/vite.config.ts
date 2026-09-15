@@ -12,16 +12,21 @@ import { viteExternalsPlugin } from "vite-plugin-externals"
 import createAppServiceWorkerPlugin from "./plugins/vite-plugin-app-service-worker"
 import vitePluginMagicAdminSource from "./packages/magic-admin/vite/plugins/vite-plugin-magic-admin-source"
 import vitePluginTransformBaseImports from "./plugins/vite-plugin-transform-base-imports"
+import { lucideDynamicAggregatePlugin } from "./plugins/vite-plugin-lucide-dynamic-aggregate"
 import vitePluginCriticalFontPreload from "./plugins/vite-plugin-font-preload"
 import vitePluginMagicApi from "./plugins/vite-plugin-magic-api"
+import { externalGlobalsPlugin } from "./plugins/vite-plugin-external-globals"
 import { getOverlayViteConfig } from "./vite/overlay"
 import { createCodeSplittingGroups } from "./vite/code-splitting-groups"
+import { resolveMicroAppInstallDevProxy } from "./vite/micro-app-install-proxy"
 import Inspect from "vite-plugin-inspect"
 import { codeInspectorPlugin } from "code-inspector-plugin"
 import { getPackagingRuntimeIdentityDefine } from "./packages/html2pptx/vite.config"
+import createHtmlSandboxRuntimePlugin from "./plugins/vite-plugin-html-sandbox-runtime"
 
 /** 环境变量前缀 */
 const ENV_PREFIX = "MAGIC_"
+const requireModule = createRequire(import.meta.url)
 
 function formatLucideComponentImportName(componentName: string): string {
 	return `${componentName
@@ -33,7 +38,7 @@ function formatLucideComponentImportName(componentName: string): string {
 		.toLowerCase()}.js`
 }
 
-function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
+function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string): UserConfig {
 	// Env overlay resolution runs before this factory so every config decision
 	// observes the same winning physical files as import.meta.env and child tasks.
 	const allowedHosts = env.MAGIC_DEV_ALLOWED_HOSTS
@@ -41,7 +46,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 				.map((host) => host.trim())
 				.filter(Boolean)
 		: []
-	const isDev = env.NODE_ENV === "development"
+	const isDev = mode === "development" || env.NODE_ENV === "development"
 	const devServerPort = env.PORT ? Number(env.PORT) : undefined
 	const isHttpsDevServer = isDev && devServerPort === 443
 	const isVisualizer = env.VISUALIZER === "true"
@@ -58,7 +63,8 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 			// Enterprise uses root `enterprise/`; outDir is repo `dist/` (outside root).
 			emptyOutDir: true,
 			reportCompressedSize: false,
-			sourcemap: isEnableSourceMap,
+			// Keep maps in the build artifact without exposing sourceMappingURL in public assets.
+			sourcemap: isEnableSourceMap ? "hidden" : false,
 			target: "es2015",
 			// Lightning CSS currently rejects some existing Tailwind arbitrary values.
 			cssMinify: "esbuild",
@@ -88,7 +94,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 		server: {
 			host: "0.0.0.0", // 监听所有地址
 			allowedHosts,
-			proxy: {},
+			proxy: isDev ? resolveMicroAppInstallDevProxy(env) : {},
 		},
 		preview: {
 			host: "0.0.0.0",
@@ -156,6 +162,15 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 				"react-router-dom",
 				"i18next",
 				"react-i18next",
+				// These libraries expose shared React contexts. The standalone
+				// enterprise install root can otherwise resolve duplicate copies,
+				// making theme/config providers invisible to shared UI components.
+				"antd",
+				"antd-style",
+				"@emotion/react",
+				"@emotion/cache",
+				"lucide-react",
+				"@tabler/icons-react",
 			],
 			alias: [
 				{
@@ -194,6 +209,24 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 					replacement: resolve(__dirname, "packages/html-sandbox/src/runtime/index.ts"),
 				},
 				{
+					find: "@dtyq/html-sandbox/utils/safeUrl",
+					replacement: resolve(__dirname, "packages/html-sandbox/src/utils/safeUrl.ts"),
+				},
+				{
+					find: "@dtyq/html-sandbox/utils/textContent",
+					replacement: resolve(
+						__dirname,
+						"packages/html-sandbox/src/utils/textContent.ts",
+					),
+				},
+				{
+					find: "@dtyq/html-sandbox/utils/inspectableTextContent",
+					replacement: resolve(
+						__dirname,
+						"packages/html-sandbox/src/utils/inspectableTextContent.ts",
+					),
+				},
+				{
 					find: "@dtyq/html-sandbox/telemetry",
 					replacement: resolve(__dirname, "packages/html-sandbox/src/telemetry/index.ts"),
 				},
@@ -219,6 +252,8 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 			],
 		},
 		plugins: [
+			isDev && createHtmlSandboxRuntimePlugin(env),
+			lucideDynamicAggregatePlugin(),
 			createAppServiceWorkerPlugin(),
 			vitePluginMagicApi({ projectRoot: __dirname }),
 			vitePluginMagicAdminSource({
@@ -233,6 +268,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 					{
 						base: "lucide-react",
 						subDirectory: "dist/esm/icons",
+						query: "lucide-static",
 						componentNameFormatter: formatLucideComponentImportName,
 					},
 				],
@@ -258,6 +294,9 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 			codeInspectorPlugin({
 				bundler: "vite", // Automatically detect development or production environment
 				editor: "code",
+				// The inspector injects globals into every JSX module. Keep it opt-in so a
+				// missing inspector runtime cannot break normal local pages.
+				needEnvInspector: true,
 			}),
 			react(),
 			babel({
@@ -309,6 +348,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 					"react-dom": "ReactDOM",
 					"lodash-es": "_",
 				}),
+			!isDev && externalGlobalsPlugin(),
 			vitePluginImp({
 				libList: [
 					{
@@ -326,7 +366,6 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 						// http2Proxy({ quiet: true }),
 					]
 				: []),
-			// optional -- suppress error logging],
 		],
 		css: {
 			preprocessorOptions: {
@@ -345,10 +384,9 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 
 export default defineConfig(({ mode }): UserConfig => {
 	const overlayViteConfig = getOverlayViteConfig({ projectRoot: __dirname, mode })
-	const baseViteConfig = getBaseViteConfig(process.env)
+	const baseViteConfig = getBaseViteConfig(process.env, mode)
 
 	if (process.env.DUMP_VITE_CONFIG === "1") {
-		const requireModule = createRequire(import.meta.url)
 		const { writeViteConfigDumps } = requireModule("./scripts/dump-vite-config.cjs")
 		writeViteConfigDumps(
 			__dirname,

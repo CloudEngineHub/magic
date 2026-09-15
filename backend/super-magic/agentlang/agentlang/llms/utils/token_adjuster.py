@@ -13,6 +13,9 @@ logger = get_logger(__name__)
 
 # 动态调整的 token 限制
 MIN_MAX_TOKENS = 2048  # 最小 max_tokens 值
+# 64000 是长期运行验证后的输出预算经验值，不是对模型能力的猜测。
+# 继续增大没有实际收益，反而会挤占输入上下文可用空间；即使模型声明支持更大输出，也保留此上限。
+# 不要因清理分批提示或对齐模型标称能力而移除、提高该值；调整前须确认既有取舍并获得明确许可。
 MAX_MAX_TOKENS = 64000  # 最大允许的 max_tokens 值 (64000)
 DEFAULT_SAFETY_BUFFER = 100  # token 估算的安全缓冲区
 
@@ -59,7 +62,7 @@ def adjust_max_tokens(
         request_id: 用于日志记录的请求 ID
 
     Returns:
-        调整后的 max tokens 值（不会超过 MAX_MAX_TOKENS）
+        调整后的 max tokens 值（不会超过 MAX_MAX_TOKENS）。
     """
     # 计算可用于输出的 token 数
     available_tokens = max_context_tokens - current_input_tokens - DEFAULT_SAFETY_BUFFER
@@ -82,7 +85,7 @@ def adjust_max_tokens(
             f"[{request_id}] 调整 max_tokens 从 {requested_max_tokens} 到 {adjusted_tokens} "
             f"(输入: {current_input_tokens}, 最大上下文: {max_context_tokens})"
         )
-        # 应用最大限制
+        # 应用最大限制。更大输出窗口需要单独评估退化保护、成本和上下文风险后再调整。
         if adjusted_tokens > MAX_MAX_TOKENS:
             logger.info(
                 f"[{request_id}] 调整后的 max_tokens {adjusted_tokens} 超过限制，"
@@ -91,7 +94,7 @@ def adjust_max_tokens(
             return MAX_MAX_TOKENS
         return adjusted_tokens
 
-    # 不需要调整，但仍需应用最大限制
+    # 不需要调整，但仍需应用最大限制。
     if requested_max_tokens > MAX_MAX_TOKENS:
         logger.info(
             f"[{request_id}] 请求的 max_tokens {requested_max_tokens} 超过限制，"

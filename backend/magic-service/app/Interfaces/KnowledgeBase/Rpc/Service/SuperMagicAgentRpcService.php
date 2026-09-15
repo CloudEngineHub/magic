@@ -7,10 +7,10 @@ declare(strict_types=1);
 
 namespace App\Interfaces\KnowledgeBase\Rpc\Service;
 
+use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAccessAppService;
 use App\Infrastructure\Rpc\Annotation\RpcMethod;
 use App\Infrastructure\Rpc\Annotation\RpcService;
 use App\Infrastructure\Rpc\Method\SvcMethods;
-use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -82,6 +82,40 @@ readonly class SuperMagicAgentRpcService
             ];
         } catch (Throwable $throwable) {
             $this->logger->error('IPC SuperMagicAgent listAccessibleCodes failed', [
+                'organization_code' => $organizationCode,
+                'user_id' => $userId,
+                'agent_codes' => $agentCodes,
+                'error' => $throwable->getMessage(),
+            ]);
+
+            return [
+                'code' => 500,
+                'message' => $throwable->getMessage(),
+            ];
+        }
+    }
+
+    #[RpcMethod(name: SvcMethods::METHOD_LIST_USABLE_CODES)]
+    public function listUsableCodes(array $params): array
+    {
+        ['organization_code' => $organizationCode, 'user_id' => $userId, 'agent_codes' => $agentCodes] = $this->resolveAccessContext($params);
+
+        if ($organizationCode === '' || $userId === '') {
+            return $this->buildMissingIdentityResponse();
+        }
+
+        try {
+            return [
+                'code' => 0,
+                'message' => 'success',
+                'data' => $this->superMagicAgentAccessAppService->listUsableAgentCodes(
+                    $organizationCode,
+                    $userId,
+                    $agentCodes,
+                ),
+            ];
+        } catch (Throwable $throwable) {
+            $this->logger->error('IPC SuperMagicAgent listUsableCodes failed', [
                 'organization_code' => $organizationCode,
                 'user_id' => $userId,
                 'agent_codes' => $agentCodes,

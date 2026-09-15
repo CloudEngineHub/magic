@@ -14,7 +14,7 @@ import { EditorLogger } from "./utils/EditorLogger"
 import { DevToolsCollector, DEVTOOLS_MSG } from "./features/DevToolsCollector"
 import { ElementInspectorHandler } from "./features/ElementInspectorHandler"
 import { installRegisteredRuntimePlugins } from "./runtime/RuntimePlugin"
-import { getParentOrigin } from "./utils/parentOrigin"
+import { getParentOrigin, isFromTrustedParent } from "./utils/parentOrigin"
 
 // ─── Phase 1: Runtime shell setup (always runs) ────────────────────────────
 
@@ -323,6 +323,7 @@ function activateEditorRuntime(scaleRatio: number): void {
 
 function handleRuntimeMessage(event: MessageEvent): void {
 	if (!event.data) return
+	if (!isFromTrustedParent(event)) return
 
 	// Activate editor runtime on demand
 	if (event.data.type === "activateEditorRuntime") {
@@ -338,6 +339,33 @@ function handleRuntimeMessage(event: MessageEvent): void {
 	}
 	if (event.data.type === "MAGIC_INSPECTOR_STOP") {
 		elementInspector.deactivate()
+		return
+	}
+	if (event.data.type === "MAGIC_INSPECTOR_TRACK") {
+		elementInspector.updateTrackedSelectors(event.data.selectors)
+		return
+	}
+	if (event.data.type === "MAGIC_INSPECTOR_SCROLL_TO_SELECTOR") {
+		elementInspector.scrollToSelector(
+			typeof event.data.selector === "string" ? event.data.selector : "",
+		)
+		return
+	}
+	if (event.data.type === "MAGIC_INSPECTOR_SCROLL_TO_POSITION") {
+		elementInspector.scrollToPosition({
+			left: Number(event.data.left),
+			top: Number(event.data.top),
+		})
+		return
+	}
+	if (event.data.type === "MAGIC_INSPECTOR_SCREENSHOT_REQUEST") {
+		void elementInspector.captureScreenshot(event.data)
+		return
+	}
+	if (event.data.type === "MAGIC_INSPECTOR_SCREENSHOT_CANCEL") {
+		elementInspector.cancelScreenshot(
+			typeof event.data.requestId === "string" ? event.data.requestId : "",
+		)
 		return
 	}
 
@@ -475,6 +503,36 @@ declare global {
 		/** 由 full-content.ts 注入的初始语言代码，供 MagicI18nApi 读取 */
 		__MAGIC_INITIAL_LANG__?: string
 		Magic: {
+			db?: {
+				getTables?: () => Promise<unknown[]>
+				getProjectAdminAccess?: () => Promise<{
+					project_id: string
+					is_admin: boolean
+				}>
+				getTable?: (tableId: string) => Promise<unknown>
+				createRow?: (
+					tableId: string,
+					data: Record<string, unknown>,
+					select?: string[],
+				) => Promise<unknown>
+				updateRow?: (
+					tableId: string,
+					rowId: string,
+					data: Record<string, unknown>,
+				) => Promise<unknown>
+				deleteRow?: (tableId: string, rowId: string) => Promise<unknown>
+			}
+			context?: {
+				getContext?: () => Promise<{
+					userId: string
+					userName: string
+					user: {
+						user_id: string
+						magic_id?: string
+						organization_code?: string
+					}
+				}>
+			}
 			// ─── 新命名空间 ──────────────────────────────────────────────
 			agent?: {
 				getAgents?: () => Promise<
@@ -504,6 +562,24 @@ declare global {
 			/** 返回应用在 workspace 中的根目录路径（例如 "个人财务记账/"） */
 			getAppBasePath?: () => Promise<string>
 			// ─── 向后兼容（deprecated）────────────────────────────────────
+			getContext?: () => Promise<{
+				userId: string
+				userName: string
+				user: {
+					user_id: string
+					magic_id?: string
+					organization_code?: string
+					nickname?: string
+					real_name?: string
+					avatar_url?: string
+					phone?: string
+					email?: string | null
+					job_title?: string
+					path_nodes?: unknown[]
+				}
+				organizationCode: string
+				language: string
+			}>
 			reload?: () => void
 			setInputMessage?: (message: string) => void
 			/** @deprecated 使用 window.Magic.project.uploadFiles */

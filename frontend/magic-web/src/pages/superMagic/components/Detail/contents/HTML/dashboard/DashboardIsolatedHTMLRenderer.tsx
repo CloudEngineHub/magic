@@ -14,6 +14,7 @@ import {
 	type DataJsFileInfo,
 } from "./utils"
 import { decodeHTMLEntities } from "../utils/full-content"
+import { getHtmlSandboxRuntimeUrl } from "../utils/html-sandbox-runtime-url"
 import {
 	buildHtmlVirtualStorageNamespace,
 	createVirtualStorageContext,
@@ -77,6 +78,7 @@ function IsolatedHTMLRenderer({
 }: IsolatedHTMLRendererProps) {
 	const { styles, cx } = useStyles()
 	const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
+	const htmlSandboxRuntimeUrl = useMemo(() => getHtmlSandboxRuntimeUrl(), [])
 	const htmlSandboxShellUrl = useMemo(
 		() => externalRenderSiteUrl || "/husky.html",
 		[externalRenderSiteUrl],
@@ -253,11 +255,12 @@ function IsolatedHTMLRenderer({
 			{
 				type: "setContent",
 				content: dashboardContent,
+				runtimeUrl: htmlSandboxRuntimeUrl,
 			},
 			externalRenderSiteOrigin || "*",
 		)
 		lastInjectedContentRef.current = dashboardContent
-	}, [dashboardContent, externalRenderSiteOrigin, iframeLoaded])
+	}, [dashboardContent, externalRenderSiteOrigin, htmlSandboxRuntimeUrl, iframeLoaded])
 
 	// 接收子容器消息
 	useEffect(() => {
@@ -333,8 +336,8 @@ function IsolatedHTMLRenderer({
 				className={styles.iframe}
 				title="HTML Content"
 				src={htmlSandboxShellUrl}
-				sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"
-				allow="fullscreen"
+				sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock allow-orientation-lock allow-presentation"
+				allow="fullscreen; autoplay; picture-in-picture; encrypted-media; web-share; clipboard-write"
 				allowFullScreen
 				data-testid="html-content-iframe"
 			/>

@@ -12,6 +12,8 @@ import type { SelfMediaExportFormat } from "./exportImageFormat"
 
 const log = rootLogger.createLogger("selfMediaExportImageUtils")
 const PER_CARD_TIMEOUT = 20000
+const HIGH_RES_WEBP_TIMEOUT = 45000
+const CAPTURE_ATTEMPTS = 2
 const LONG_IMAGE_SEPARATOR_COLOR = "#e5e7eb"
 
 export function dataUrlToBlob(dataUrl: string): Blob {
@@ -86,14 +88,26 @@ export async function captureCardDataUrl(args: {
 	let dataUrl: string | null = null
 	let usedHostFallback = false
 	if (cardRef) {
-		try {
-			dataUrl = await cardRef.capture({
-				pixelRatio,
-				timeoutMs: PER_CARD_TIMEOUT,
-				format,
-			})
-		} catch (error) {
-			log.warn("⚠️ 卡片截图失败，尝试回退到宿主截图", { postIdx, cardIdx, error })
+		const isHighResWebp = format === "webp" && pixelRatio >= 2
+		const timeoutMs = isHighResWebp ? HIGH_RES_WEBP_TIMEOUT : PER_CARD_TIMEOUT
+		const maxAttempts = isHighResWebp ? CAPTURE_ATTEMPTS : 1
+		for (let attempt = 1; attempt <= maxAttempts && !dataUrl; attempt++) {
+			try {
+				dataUrl = await cardRef.capture({
+					pixelRatio,
+					timeoutMs,
+					format,
+				})
+			} catch (error) {
+				log.warn("⚠️ 卡片截图失败", {
+					postIdx,
+					cardIdx,
+					attempt,
+					maxAttempts,
+					timeoutMs,
+					error,
+				})
+			}
 		}
 		if (!dataUrl) {
 			const iframe = cardRef.getIframeElement()

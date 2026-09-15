@@ -15,12 +15,13 @@ import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from agentlang.logger import get_logger
 from app.path_manager import PathManager
 from app.service.cron.models import (
     CronJob,
+    CronJobPatch,
     CronJobState,
     CronPayload,
     CronRunResult,
@@ -29,11 +30,13 @@ from app.service.cron.models import (
     PayloadKind,
     ScheduleKind,
 )
+from app.service.cron.schema import LEGACY_BASELINE_VERSION, PAYLOAD_VERSION_FIELD
 from app.utils.async_file_utils import (
     async_exists,
     async_mkdir,
     async_read_json,
     async_read_text,
+    async_stat,
     async_scandir,
     async_try_read_markdown,
     async_try_read_text,
@@ -50,6 +53,7 @@ _MAX_RESULT_LINES = 2_000
 
 # 归档文件并发写入锁
 _archive_lock: asyncio.Lock = asyncio.Lock()
+_payload_field_locks: dict[Path, asyncio.Lock] = {}
 
 
 # ── 任务文件扫描 ──────────────────────────────────────────────────────────────
@@ -124,14 +128,7 @@ async def _parse_job_file(path: Path, job_id: str, mtime: float) -> Optional[Cro
             logger.warning(f"cron: unknown schedule kind '{kind_str}' in {path}")
             return None
 
-        schedule = CronSchedule(
-            kind=kind,
-            expr=schedule_cfg.get("expr"),
-            tz=schedule_cfg.get("tz", "UTC"),
-            at=schedule_cfg.get("at"),
-            every_ms=schedule_cfg.get("every_ms"),
-            end_at=schedule_cfg.get("end_at"),
-        )
+        schedule = CronSchedule.from_payload(schedule_cfg)
 
         # 最小调度粒度为 1 分钟，every_ms < 60000 视为无效配置
         if kind == ScheduleKind.EVERY:
@@ -144,20 +141,13 @@ async def _parse_job_file(path: Path, job_id: str, mtime: float) -> Optional[Cro
 
         payload_kind_str = payload_cfg.get("kind", PayloadKind.AGENT_TURN)
         try:
-            payload_kind = PayloadKind(payload_kind_str)
+            PayloadKind(payload_kind_str)
         except ValueError:
             logger.warning(f"cron: unknown payload kind '{payload_kind_str}' in {path}, defaulting to agent_turn")
-            payload_kind = PayloadKind.AGENT_TURN
+            payload_cfg = dict(payload_cfg)
+            payload_cfg["kind"] = PayloadKind.AGENT_TURN.value
 
-        payload = CronPayload(
-            kind=payload_kind,
-            agent_name=payload_cfg.get("agent_name") or None,
-            model_id=payload_cfg.get("model_id"),
-            image_model_id=payload_cfg.get("image_model_id"),
-            video_model_id=payload_cfg.get("video_model_id"),
-            timeout_seconds=payload_cfg.get("timeout_seconds"),
-            notify_user=bool(payload_cfg.get("notify_user", payload_cfg.get("notify_main_agent", True))),
-        )
+        payload = CronPayload.from_payload(payload_cfg)
 
         enabled = meta.get("enabled", True)
         name = meta.get("name")
@@ -257,7 +247,7 @@ async def write_result_file(job: CronJob, result: CronRunResult) -> Path:
     # 时区转换优先于路径构建，目录日期以 job 配置的时区为准，避免跨时区用户看到日期错位
     # 优先级：job.timezone（创建时写入）> schedule.tz（cron 表达式时区）> 系统时区
     from agentlang.utils.timezone_utils import get_system_timezone
-    tz_str = job.timezone or getattr(job.schedule, "tz", None) or get_system_timezone()
+    tz_str = job.timezone or job.schedule.tz or "UTC"
     try:
         import pytz
         tz = pytz.timezone(tz_str)
@@ -278,7 +268,7 @@ async def write_result_file(job: CronJob, result: CronRunResult) -> Path:
         f"finished_at: \"{finished_at_local.isoformat()}\"\n"
         f"status: {result.status}\n"
         f"duration_ms: {result.duration_ms}\n"
-        f"agent_id: cron-{job.id}\n"
+        f"agent_id: {json.dumps(result.agent_id or '-', ensure_ascii=False)}\n"
         f"---\n\n"
         f"{body}\n"
     )
@@ -303,25 +293,12 @@ async def _prune_result_files(job_result_dir: Path, keep: int = 5) -> None:
 
 # ── job MD 文件构建 / 更新 ────────────────────────────────────────────────────
 
-def build_job_md(
-    schedule: Dict[str, Any],
-    payload_kind: str,
-    agent_name: str,
-    model_id: Optional[str],
-    image_model_id: Optional[str],
-    video_model_id: Optional[str],
-    timeout_seconds: Optional[int],
-    enabled: bool,
-    name: Optional[str],
-    body: str,
-    timezone: Optional[str] = None,
-    notify_user: bool = True,
-) -> str:
+def build_job_md(job: CronJob) -> str:
     """构建新 cron job MD 文件内容。"""
     import yaml
     from datetime import datetime, timezone as dt_timezone
     from agentlang.utils.timezone_utils import get_system_timezone
-    _tz_str = timezone or get_system_timezone()
+    _tz_str = job.timezone or get_system_timezone()
     try:
         import pytz
         _tz = pytz.timezone(_tz_str)
@@ -330,44 +307,22 @@ def build_job_md(
         _now = datetime.now(dt_timezone.utc)
     frontmatter: Dict[str, Any] = {
         "created_at": _now.isoformat(),
-        "schedule": schedule,
-        "payload": {
-            "kind": payload_kind,
-            "agent_name": agent_name,
-        },
-        "enabled": enabled,
+        "schedule": job.schedule.to_payload(),
+        "payload": job.payload.to_payload(),
+        "enabled": job.enabled,
     }
-    if name:
-        frontmatter["name"] = name
-    if timezone:
-        frontmatter["timezone"] = timezone
-    if model_id is not None:
-        frontmatter["payload"]["model_id"] = model_id
-    if image_model_id is not None:
-        frontmatter["payload"]["image_model_id"] = image_model_id
-    if video_model_id is not None:
-        frontmatter["payload"]["video_model_id"] = video_model_id
-    if timeout_seconds is not None:
-        frontmatter["payload"]["timeout_seconds"] = timeout_seconds
-    if not notify_user:
-        frontmatter["payload"]["notify_user"] = False
+    if job.name:
+        frontmatter["name"] = job.name
+    if job.timezone:
+        frontmatter["timezone"] = job.timezone
 
     fm_str = yaml.dump(frontmatter, allow_unicode=True, default_flow_style=False).rstrip()
-    return f"---\n{fm_str}\n---\n\n{body.strip()}\n"
+    return f"---\n{fm_str}\n---\n\n{job.body.strip()}\n"
 
 
 def patch_job_md(
     existing: str,
-    schedule: Optional[Dict[str, Any]],
-    payload_kind: Optional[str],
-    agent_name: Optional[str],
-    model_id: Optional[str],
-    image_model_id: Optional[str],
-    video_model_id: Optional[str],
-    timeout_seconds: Optional[int],
-    enabled: Optional[bool],
-    body: Optional[str],
-    notify_user: Optional[bool] = None,
+    patch: CronJobPatch,
 ) -> str:
     """
     对已有 MD 文件进行局部更新。
@@ -391,34 +346,164 @@ def patch_job_md(
     except Exception:
         meta = {}
 
-    if schedule is not None:
-        meta["schedule"] = schedule
-    if enabled is not None:
-        meta["enabled"] = enabled
+    if patch.schedule is not None:
+        meta["schedule"] = patch.schedule.to_payload()
+    if patch.enabled is not None:
+        meta["enabled"] = patch.enabled
 
     payload = meta.get("payload", {}) or {}
-    if payload_kind is not None:
-        payload["kind"] = payload_kind
-    if agent_name is not None:
-        payload["agent_name"] = agent_name
-    if model_id is not None:
-        payload["model_id"] = model_id
-    if image_model_id is not None:
-        payload["image_model_id"] = image_model_id
-    if video_model_id is not None:
-        payload["video_model_id"] = video_model_id
-    if timeout_seconds is not None:
-        payload["timeout_seconds"] = timeout_seconds
-    if notify_user is not None:
-        if not notify_user:
+    if patch.timeout_seconds is not None:
+        payload["timeout_seconds"] = patch.timeout_seconds
+    if patch.notify_user is not None:
+        if not patch.notify_user:
             payload["notify_user"] = False
         else:
             payload.pop("notify_user", None)
+    if patch.fork is not None:
+        payload["fork"] = patch.fork
+        if patch.fork:
+            if patch.context_source is None:
+                raise ValueError("fork cron update requires context_source")
+            payload["context_source"] = patch.context_source.to_payload()
+        else:
+            # fork=false 表示这个任务以后不再从来源聊天创建 Agent，旧来源不能继续残留。
+            payload.pop("context_source", None)
+    if patch.update_agent_id:
+        # None 既可能表示“这次没有修改 agent_id”，也可能表示“明确删除固定 Agent”，
+        # 所以是否修改由 update_agent_id 单独表达。例如只修改每天执行时间时，不能因为
+        # agent_id 没传，就删掉原来用于持续追踪进度的固定 Agent。
+        if patch.agent_id:
+            payload["agent_id"] = patch.agent_id
+        else:
+            payload.pop("agent_id", None)
     meta["payload"] = payload
 
-    new_body = body.strip() if body is not None else old_body
+    new_body = patch.body.strip() if patch.body is not None else old_body
     fm_str = yaml.dump(meta, allow_unicode=True, default_flow_style=False).rstrip()
     return f"---\n{fm_str}\n---\n\n{new_body}\n"
+
+
+async def persist_payload_fields(
+    job: CronJob,
+    field_patch: Mapping[str, object | None],
+) -> CronPayload | None:
+    """幂等写回 payload 字段，并返回文件中的最新 payload。"""
+    import yaml
+
+    if not field_patch:
+        return job.payload
+
+    path = PathManager.get_cron_dir() / f"{job.id}.md"
+    lock = _payload_field_locks.setdefault(path, asyncio.Lock())
+    async with lock:
+        current_stat = await async_stat(path)
+        if job.mtime and current_stat.st_mtime != job.mtime:
+            existing_job = await _parse_job_file(path, job.id, current_stat.st_mtime)
+            if existing_job is None:
+                logger.warning(
+                    f"cron: skip payload field patch for [{job.id}], "
+                    "job file changed and could not be reloaded"
+                )
+                return None
+            job.mtime = current_stat.st_mtime
+            return existing_job.payload
+
+        existing = await async_read_text(path)
+        parts = existing.split("---", 2)
+        if len(parts) < 3:
+            raise ValueError(f"cron job [{job.id}] has invalid frontmatter")
+
+        metadata = yaml.safe_load(parts[1]) or {}
+        if not isinstance(metadata, dict):
+            raise ValueError(f"cron job [{job.id}] frontmatter must be an object")
+        current_payload = metadata.get("payload") or {}
+        if not isinstance(current_payload, dict):
+            raise ValueError(f"cron job [{job.id}] payload must be an object")
+
+        current_agent_name = current_payload.get("agent_name")
+        normalized_current_name = (
+            current_agent_name.strip()
+            if isinstance(current_agent_name, str)
+            else ""
+        )
+        expected_agent_name = (
+            job.payload.agent_name.strip()
+            if isinstance(job.payload.agent_name, str)
+            else ""
+        )
+        if normalized_current_name != expected_agent_name:
+            logger.warning(
+                f"cron: skip payload field patch for [{job.id}], "
+                "agent identity changed while the job was running"
+            )
+            return CronPayload.from_payload(current_payload)
+
+        raw_current_version = current_payload.get(
+            PAYLOAD_VERSION_FIELD,
+            LEGACY_BASELINE_VERSION,
+        )
+        current_version = (
+            raw_current_version
+            if isinstance(raw_current_version, int) and not isinstance(raw_current_version, bool)
+            else LEGACY_BASELINE_VERSION
+        )
+        target_version = field_patch.get(PAYLOAD_VERSION_FIELD)
+        if isinstance(target_version, int) and not isinstance(target_version, bool):
+            if current_version > target_version:
+                return CronPayload.from_payload(current_payload)
+
+        for field_name, field_value in field_patch.items():
+            if field_name == PAYLOAD_VERSION_FIELD:
+                continue
+            if field_name in current_payload and current_payload[field_name] != field_value:
+                logger.warning(
+                    f"cron: skip payload field patch for [{job.id}], "
+                    f"field '{field_name}' changed while the job was running"
+                )
+                return CronPayload.from_payload(current_payload)
+
+        patch_is_applied = all(
+            (
+                field_name not in current_payload
+                if field_value is None
+                else current_payload.get(field_name) == field_value
+            )
+            for field_name, field_value in field_patch.items()
+        )
+        if patch_is_applied:
+            return CronPayload.from_payload(current_payload)
+
+        latest_stat = await async_stat(path)
+        if job.mtime and latest_stat.st_mtime != job.mtime:
+            latest_job = await _parse_job_file(path, job.id, latest_stat.st_mtime)
+            if latest_job is None:
+                logger.warning(
+                    f"cron: skip payload field patch for [{job.id}], "
+                    "job file changed before patch write-back"
+                )
+                return None
+            job.mtime = latest_job.mtime
+            return latest_job.payload
+
+        for field_name, field_value in field_patch.items():
+            if field_value is None:
+                current_payload.pop(field_name, None)
+            else:
+                current_payload[field_name] = field_value
+        metadata["payload"] = current_payload
+        frontmatter = yaml.dump(
+            metadata,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=False,
+        ).rstrip()
+        updated = f"---\n{frontmatter}\n---{parts[2]}"
+        await async_write_text(path, updated)
+        logger.info(
+            f"cron job [{job.id}] persisted payload fields: "
+            f"{', '.join(sorted(field_patch))}"
+        )
+        return CronPayload.from_payload(current_payload)
 
 
 # ── 已完成一次性任务归档 ──────────────────────────────────────────────────────
@@ -443,10 +528,11 @@ async def archive_completed_job(job: CronJob, result: CronRunResult, run_at: dat
         "schedule": {
             "kind": str(job.schedule.kind),
             "at": job.schedule.at,
-            "tz": job.schedule.tz,
+            "tz": job.schedule.tz or "UTC",
         },
         "payload": {
             "kind": str(job.payload.kind),
+            "agent_mode": job.payload.agent_mode,
             "agent_name": job.payload.agent_name,
         },
         "timezone": job.timezone,

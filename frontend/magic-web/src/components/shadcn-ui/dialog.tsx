@@ -5,7 +5,7 @@ import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	useOverlayInteractionScopeAttributes,
 	useOverlayInteractionScopeContentAttributes,
@@ -59,10 +59,12 @@ function DialogContent({
 	overlayStyle,
 	children,
 	showCloseButton = true,
+	closeButtonTestId,
 	style,
 	...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
 	showCloseButton?: boolean
+	closeButtonTestId?: string
 	overlayClassName?: string
 	overlayStyle?: React.CSSProperties
 }) {
@@ -90,6 +92,7 @@ function DialogContent({
 				{showCloseButton && (
 					<DialogPrimitive.Close
 						data-slot="dialog-close"
+						data-testid={closeButtonTestId}
 						className="focus:outline-hidden absolute right-4 top-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
 					>
 						<XIcon />

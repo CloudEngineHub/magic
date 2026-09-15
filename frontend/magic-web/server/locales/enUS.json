@@ -60,6 +60,10 @@
 		}
 	},
 	"approval": {
+		"agent": "Approval Agent",
+		"center": "Approval Center",
+		"delegate": "Smart Delegate",
+		"initiate": "Initiate Approvals",
 		"title": "Approval"
 	},
 	"drive": {
@@ -86,6 +90,7 @@
 	},
 	"superMagic": {
 		"collaborationProject": "Collaboration Project",
+		"microApp": "Micro App",
 		"project": "Project"
 	}
 }

@@ -41,6 +41,8 @@
 	},
 	"emailLogin": "邮箱登录",
 	"enterVerificationCode": "输入手机验证码",
+	"feishuLogin": "飞书登录",
+	"feishuLoginTip": "使用飞书账号登录",
 	"findPassword": "找回密码",
 	"googleLogin": "谷歌登录",
 	"hi": "👋 嗨，我的朋友",

@@ -118,6 +118,32 @@ export const useStyles = createStyles(({ css, token }) => {
 			font-weight: 600;
 			line-height: 20px; /* 142.857% */
 		`,
+		connectorAuthSection: css`
+			flex-direction: column;
+			gap: 8px;
+			padding: 24px 28px;
+			text-align: center;
+			font-weight: 400;
+			line-height: 24px;
+			border: 1px solid ${token.magicColorUsages.border};
+			box-shadow: none;
+			transition: background-color 0.2s ease;
+
+			&& {
+				background-image: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%);
+				cursor: default;
+			}
+
+			&&:hover {
+				background-image: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%);
+			}
+		`,
+		connectorAuthSuccessSection: css`
+			&&,
+			&&:hover {
+				background-image: linear-gradient(120deg, #f8fbff 0%, #eaf3ff 100%);
+			}
+		`,
 		active: css`
 			background-color: ${token.magicColorUsages.primaryLight.default};
 			color: ${token.magicColorUsages.primary.default};

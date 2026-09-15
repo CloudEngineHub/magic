@@ -24,6 +24,8 @@ from agentlang.utils.syntax_checker import SyntaxChecker
 from app.utils.diff_generator import DiffGenerator
 from app.utils.line_number_handler import LineNumberHandler
 from app.utils.replace_range_resolver import ContextRange, resolve_replace_range
+from app.service.html_app_memory_service import is_html_app_memory_path
+from app.utils.async_file_utils import async_exists
 
 logger = get_logger(__name__)
 
@@ -152,7 +154,9 @@ Key constraints:
             resolved = self.resolve_path_fuzzy(params.file_path)
             file_path = resolved.path
             fuzzy_warning = resolved.warning
-            if not file_path.exists():
+            if is_html_app_memory_path(file_path):
+                return ToolResult.error("MICRO-APP.md is managed by update_html_app_memory. Use that tool instead of multi_edit_file_range so MagicBase data model records are not overwritten.")
+            if not await async_exists(file_path):
                 tool_context.set_metadata("error_type", "edit_file.error_file_not_exist")
                 return ToolResult(
                     error=f"File does not exist: {file_path}\n"

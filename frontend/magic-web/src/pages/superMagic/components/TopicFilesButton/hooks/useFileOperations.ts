@@ -61,6 +61,12 @@ import {
 	PptxExportUnavailableError,
 	startPptxStreamingExportFromFactory,
 } from "@/pages/superMagic/services/pptxStreamingExport"
+import {
+	mergeStaticDependencyFileIds,
+	resolveSingleDocumentStaticDependencies,
+	supportsStaticDependencies,
+} from "@/pages/superMagic/utils/staticDependencies"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 // 工具函数：从attachments中递归删除指定ID的文件/文件夹
 const removeItemFromAttachments = (
@@ -242,6 +248,8 @@ export interface UseFileOperationsOptions {
 	attachments?: AttachmentItem[]
 	selectedTopic?: any
 	projectId?: string
+	/** 文件上传凭证所属的特殊空间。 */
+	fileScope?: FileScope
 	getItemId?: (item: AttachmentItem) => string
 	onFileDelete?: (fileId: string) => Promise<void>
 	// 新增：文件创建成功回调
@@ -268,6 +276,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		attachments,
 		selectedTopic,
 		projectId,
+		fileScope,
 		getItemId,
 		onFileDelete,
 		onFileCreated,
@@ -288,6 +297,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			reason: string
 			callback?: () => void
 		}) => {
+			if (fileScope) {
+				options.callback?.()
+				return
+			}
+
 			void waitForProjectAttachmentChange(projectId, {
 				...options,
 				fallback: "full-refresh",
@@ -376,6 +390,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					// 为单个文件创建任务
 					await multiFolderUploadStore.createUploadTask([file], parentId, {
 						projectId: projectId || "",
+						fileScope,
 						workspaceId: workspaceId,
 						projectName: selectedProject?.project_name || t("common.untitledProject"),
 						topicId: selectedTopic?.id,
@@ -441,6 +456,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		},
 		[
 			projectId,
+			fileScope,
 			workspaceId,
 			selectedProject,
 			selectedTopic,
@@ -453,7 +469,12 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// 文件夹上传处理函数（所有文件作为一个任务）
 	const processFolderUpload = useCallback(
-		async (files: File[], suffixDir?: string, parentIdOverride?: string) => {
+		async (
+			files: File[],
+			suffixDir?: string,
+			parentIdOverride?: string,
+			displayName?: string,
+		) => {
 			const refreshCoordinator = createUploadRefreshCoordinator({
 				uploadType: "folder",
 				projectFiles: attachments || [],
@@ -485,12 +506,14 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				// 所有文件作为一个任务
 				await multiFolderUploadStore.createUploadTask(files, parentId, {
 					projectId: projectId || "",
+					fileScope,
 					workspaceId: workspaceId,
 					projectName: selectedProject?.project_name || t("common.untitledProject"),
 					topicId: selectedTopic?.id,
 					taskId: "",
 					storageType: "workspace",
 					source: UploadSource.ProjectFile,
+					displayName,
 					// 文件夹任务完成时的回调
 					onComplete: (taskId: string) => {
 						console.log(`📁 Folder upload task ${taskId} completed`)
@@ -547,6 +570,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		},
 		[
 			projectId,
+			fileScope,
 			workspaceId,
 			selectedProject,
 			selectedTopic,
@@ -943,8 +967,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		return false
 	}
 
-	// 下载原始文件
-	const handleDownloadOriginal = async (item: AttachmentItem, mode?: DownloadImageMode) => {
+	// Download the original file without dependency resolution.
+	const downloadOriginalFile = async (item: AttachmentItem, mode?: DownloadImageMode) => {
 		if (item.is_directory && item.file_id) {
 			// 为文件夹添加下载loading状态
 			setDownloadingFolders((prev) => new Set(prev).add(item.file_id || ""))
@@ -963,6 +987,16 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		} else if (item.file_id) {
 			await handleDownloadFile(item.file_id, mode, item.file_extension)
 		}
+	}
+
+	// Registered dependency parsers make linked resources part of the default download.
+	const handleDownloadOriginal = async (item: AttachmentItem, mode?: DownloadImageMode) => {
+		if (supportsStaticDependencies(item)) {
+			await downloadDocumentWithDependencies(item)
+			return
+		}
+
+		await downloadOriginalFile(item, mode)
 	}
 
 	// 下载PDF格式（Markdown 走 markdown 导出；HTML 走 exportPDF；仅 display_config.type === "slide" 时传 pptMode）
@@ -1649,9 +1683,52 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		},
 	)
 
-	// 移动文件或文件夹
+	const downloadDocumentWithDependencies = useMemoizedFn(async (item: AttachmentItem) => {
+		if (!item.file_id) return
+
+		try {
+			const result = await resolveSingleDocumentStaticDependencies({
+				fileIds: [item.file_id],
+				attachments: attachments || [],
+			})
+			const effectiveFileIds = mergeStaticDependencyFileIds(
+				[item.file_id],
+				result.dependencyFileIds,
+				true,
+			)
+
+			if (effectiveFileIds.length === 1) {
+				await downloadOriginalFile(item, DownloadImageMode.Download)
+				return
+			}
+
+			const baseName = (item.file_name || item.display_filename || "document").replace(
+				/\.[^.]+$/,
+				"",
+			)
+			await handleDownloadFile(
+				effectiveFileIds,
+				undefined,
+				undefined,
+				false,
+				`${baseName}-with-assets.zip`,
+			)
+		} catch (error) {
+			console.error("Failed to resolve document dependencies before download:", error)
+			magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
+			await downloadOriginalFile(item, DownloadImageMode.Download)
+		}
+	})
+
+	// Move a file or folder.
 	const handleMoveFile = useCallback(
-		async (fileId: string, targetParentId: string, preFileId?: string) => {
+		async (
+			fileId: string,
+			targetParentId: string,
+			preFileId?: string,
+			keepBothFileIds?: string[],
+			showLoadingToast = true,
+		) => {
 			if (!fileId) {
 				magicToast.error(t("topicFiles.error.moveFileParamsRequired"))
 				return false
@@ -1661,13 +1738,16 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			let data: any = null
 
 			try {
-				// 显示移动进度
-				magicToast.loading({ content: t("topicFiles.moving"), duration: 0 })
+				// Use Toast unless the caller owns progress UI.
+				if (showLoadingToast) {
+					magicToast.loading({ content: t("topicFiles.moving"), duration: 0 })
+				}
 
 				data = await SuperMagicApi.moveFile({
 					file_id: fileId,
 					target_parent_id: targetParentId || ROOT_FILE_ID,
 					pre_file_id: preFileId,
+					keep_both_file_ids: keepBothFileIds,
 				})
 
 				// 如果直接完成

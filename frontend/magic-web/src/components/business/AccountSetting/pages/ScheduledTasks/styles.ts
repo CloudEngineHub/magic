@@ -113,8 +113,11 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 			color: ${token.magicColorUsages.text[3]};
 		`,
 		tag: css`
+			max-width: 100%;
+			min-width: 0;
 			width: fit-content;
 			height: 18px;
+			overflow: hidden;
 			font-size: 10px;
 			color: ${token.magicColorUsages.text[2]};
 			border-radius: 4px;
@@ -123,10 +126,113 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 			cursor: pointer;
 		`,
 		ellipsisText: css`
-			max-width: 300px;
+			flex: 1;
+			min-width: 0;
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
+		`,
+		tagIcon: css`
+			display: inline-flex;
+			flex-shrink: 0;
+		`,
+		timeCol: css`
+			flex: 0 0 25%;
+			max-width: 25%;
+			white-space: nowrap;
+		`,
+		infoCol: css`
+			flex: 1;
+			min-width: 0;
+			padding: 0 12px;
+		`,
+		resultCol: css`
+			flex: 0 0 auto;
+		`,
+		taskName: css`
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		`,
+		mobileListWrapper: css`
+			height: min(62vh, 520px);
+			min-height: 200px;
+		`,
+		mobileListItem: css`
+			height: auto !important;
+			align-content: unset;
+			padding: 16px 0 !important;
+			border-bottom: 1px solid ${token.magicColorUsages.border} !important;
+			margin-block-end: 0 !important;
+			color: ${token.magicColorUsages.text[1]};
+			font-size: 14px;
+			font-weight: 400;
+
+			&:last-child {
+				border-bottom: none !important;
+			}
+		`,
+		mobileItemWrapper: css`
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+			width: 100%;
+			min-width: 0;
+			padding: 0;
+		`,
+		mobileMetaRow: css`
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 8px;
+			width: 100%;
+		`,
+		mobileTime: css`
+			flex-shrink: 0;
+			white-space: nowrap;
+			font-size: 12px;
+			line-height: 20px;
+			color: ${token.magicColorUsages.text[3]};
+		`,
+		mobileStatus: css`
+			flex-shrink: 0;
+			line-height: 20px;
+		`,
+		mobileTaskName: css`
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			font-size: 15px;
+			font-weight: 600;
+			line-height: 22px;
+			color: ${token.magicColorUsages.text[0]};
+		`,
+		mobilePath: css`
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			width: 100%;
+			min-width: 0;
+			height: 40px;
+			padding: 0 12px;
+			border-radius: 10px;
+			background-color: ${token.magicColorUsages.fill[0]};
+			cursor: pointer;
+			overflow: hidden;
+
+			&:active {
+				background-color: ${token.magicColorUsages.fill[1]};
+			}
+		`,
+		mobilePathText: css`
+			flex: 1;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			font-size: 12px;
+			line-height: 18px;
+			color: ${token.magicColorUsages.text[2]};
 		`,
 		statusTag: css`
 			border: none;
@@ -152,6 +258,8 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 			font-weight: 400;
 		`,
 		itemWrapper: css`
+			width: 100%;
+			min-width: 0;
 			padding: 0 16px;
 		`,
 		headerWrapper: css`

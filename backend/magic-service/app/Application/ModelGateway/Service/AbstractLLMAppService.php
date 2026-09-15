@@ -13,13 +13,13 @@ use App\Application\ModelGateway\Component\Points\PointComponentInterface;
 use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Application\ModelGateway\Request\ModelGatewayRequestCoContext;
 use App\Domain\Contact\Service\MagicUserDomainService;
-use App\Domain\File\Service\FileCleanupDomainService;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ImageGenerate\Contract\WatermarkConfigInterface;
 use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
 use App\Domain\ModelGateway\Entity\Dto\AbstractRequestDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\AccessTokenType;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\ModelGateway\Event\ImageOperationCompletedEvent;
 use App\Domain\ModelGateway\Service\AccessTokenDomainService;
 use App\Domain\ModelGateway\Service\ApplicationDomainService;
@@ -66,7 +66,6 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
         protected ProviderModelDomainService $providerModelDomainService,
         protected AggregateModelResolverService $aggregateModelResolverService,
         protected ModelGatewayModelAccessService $modelGatewayModelAccessService,
-        protected FileCleanupDomainService $fileCleanupDomainService,
         protected TemporaryFileUrlProxyManager $temporaryFileUrlProxyManager,
     ) {
         $this->logger = $this->loggerFactory->get(static::class);
@@ -113,13 +112,13 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
             $dataIsolation->setAppId($accessToken->getRelationId());
             $taskId = $this->getBusinessParam('magic_task_id', '', $businessParams);
             if (! empty($taskId)) {
-                $dataIsolation->setSourceId('super_magic');
+                $dataIsolation->setSourceId(SourceId::SUPER_MAGIC);
                 $dataIsolation->setBusinessId($taskId);
             }
         }
 
         if ($accessToken->getType()->isUser()) {
-            $dataIsolation->setSourceId('api_platform');
+            $dataIsolation->setSourceId(SourceId::API_PLATFORM);
         }
 
         // 设置业务参数
@@ -140,6 +139,7 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
         string $callTime,
         int $responseTime,
         int $operationTime,
+        array $generatedImages,
         int $imageCount = 1,
         array $extraBusinessParams = [],
     ): void {
@@ -182,6 +182,7 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
         $event->setSourceId($dataIsolation->getSourceId());
         $event->setSourceType($this->resolveImageOperationSourceType($dataIsolation, $requestDTO));
         $event->setCreatedAt(new DateTime());
+        $event->setGeneratedImages($generatedImages);
         $event->setBusinessParams($businessParams);
 
         AsyncEventUtil::dispatch($event);

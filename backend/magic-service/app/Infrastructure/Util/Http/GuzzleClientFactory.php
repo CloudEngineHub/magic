@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Util\Http;
 
 use App\Infrastructure\Util\Http\Middleware\ProxyMiddleware;
+use App\Infrastructure\Util\Http\Middleware\ResponseHeaderLogMiddleware;
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\RequestOptions;
@@ -35,9 +36,11 @@ class GuzzleClientFactory
             $stack->push(ProxyMiddleware::create($proxyUrl), 'proxy');
         }
 
+        $stack->before('http_errors', ResponseHeaderLogMiddleware::create(), 'response_header_log');
+
         // 基础默认配置
         $defaultOptions = [
-            RequestOptions::TIMEOUT => 180,
+            RequestOptions::TIMEOUT => 600,
             RequestOptions::CONNECT_TIMEOUT => 5,
             RequestOptions::VERIFY => false,
             RequestOptions::HEADERS => [],

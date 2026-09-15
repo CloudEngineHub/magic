@@ -48,6 +48,18 @@
       "prompt": "Create an HTML page that previews assets/chart.png from the workspace and provides an open-file link.",
       "expected_output": "Generates an HTML file using window.Magic.fs.getFileUrl(\"assets/chart.png\") to get a temporary browser-accessible URL, assigns it to an img src and/or anchor href, handles errors, and uses addEventListener or startup functions instead of inline handlers. Does not use project.downloadFiles unless the user explicitly asks to trigger a browser download.",
       "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "帮我做一个待办微应用，要有 MagicBase，用户可以看到所有人的待办，但是只能编辑自己的待办。",
+      "expected_output": "Generates a MagicBase-backed todo micro-app with row read public and edit/delete private_user. The runtime code has no inline event attributes and uses delegated click handlers with data-action/data-id for list actions. If FormData is used, every FormData field has a matching name attribute. queryRows includes select fields for id, displayed business fields, created_by, created_at, and updated_at. createRow/updateRow request only business fields, and updateRow(TABLE_ID, recordId, data, select) uses the table id as the first argument.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "帮我做一个问卷微应用，普通用户只能看自己的提交，管理员可以进入统计页查看整体数据。",
+      "expected_output": "Generates a login-required MagicBase micro-app with app.json anonymous=false and a shared app.js declaring window.MagicAppConfig.admin_pages for the statistics/admin HTML pages. The home page calls window.Magic.db.getProjectAdminAccess() and hides administrator entry points when is_admin is false. Every administrator page repeats the guard before loading aggregate data and redirects to index.html or shows access denied when the current real user is not an administrator. The implementation does not hard-code user IDs or treat a share token/share creator as the current user, and MagicBase/backend permissions remain the data security boundary.",
+      "files": []
     }
   ]
 }

@@ -27,7 +27,7 @@ export interface AudioContextFactory {
 export interface LoggerInterface {
 	log(message: string, ...args: unknown[]): void
 	warn(message: string, ...args: unknown[]): void
-	error(message: string, ...args: unknown[]): void
+	error(input: StructuredErrorInput): void
 	report(data: { namespace: string; data: Record<string, unknown> }): void
 }
 
@@ -85,3 +85,4 @@ export function createDefaultDependencies(logger: LoggerInterface): RecorderDepe
 		logger,
 	}
 }
+import type { StructuredErrorInput } from "@/utils/log/errorReport"

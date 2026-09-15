@@ -7,14 +7,19 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
-use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterInterface;
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Prompt\AtStylePromptReferenceFormatter;
+use GuzzleHttp\Exception\RequestException;
+use Hyperf\Codec\Json;
 use Hyperf\Contract\TranslatorInterface;
 
-readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProviderAdapterInterface
+use function Hyperf\Translation\__;
+
+readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConnectivityTestableInterface
 {
     // 对齐方舟 Seedance 当前文档里的默认时长，缺省时我们按 5 秒回填。
     private const int DEFAULT_DURATION_SECONDS = 5;
@@ -30,16 +35,23 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
     private const array SUPPORTED_ASPECT_RATIOS = ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'];
 
     /**
-     * 当前按方舟 Seedance 文档支持范围声明，后续如果官方扩容需要同步这里。
-     *
-     * @var list<int>
-     */
-    private const array SUPPORTED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-
-    /**
      * @var list<string>
      */
-    private const array PRO_SUPPORTED_RESOLUTIONS = ['480p', '720p', '1080p'];
+    private const array PRO_SUPPORTED_RESOLUTIONS = ['480p', '720p', '1080p', '4k'];
+
+    /**
+     * 非 Seedance 2.0 Pro 视频模型的兼容分辨率，不开放 4K。
+     *
+     * @var list<string>
+     */
+    private const array STANDARD_SUPPORTED_RESOLUTIONS = ['480p', '720p', '1080p'];
+
+    /**
+     * Seedance 2.5 当前支持到 1080p，但不开放 4K。
+     *
+     * @var list<string>
+     */
+    private const array TWO_POINT_FIVE_SUPPORTED_RESOLUTIONS = ['480p', '720p', '1080p'];
 
     /**
      * 目前根据 provider 实际返回，Seedance 2.0 Fast 的 t2v 仅开放到 720p。
@@ -47,8 +59,6 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
      * @var list<string>
      */
     private const array FAST_SUPPORTED_RESOLUTIONS = ['480p', '720p'];
-
-    private const string FAST_MODEL_KEYWORD = 'seedance-2-0-fast';
 
     /**
      * 当前接入的 Seedance 尺寸基表。
@@ -75,6 +85,12 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         ['label' => '3:4', 'value' => '1252x1668', 'width' => 1252, 'height' => 1668, 'resolution' => '1080p'],
         ['label' => '9:16', 'value' => '1080x1920', 'width' => 1080, 'height' => 1920, 'resolution' => '1080p'],
         ['label' => '21:9', 'value' => '2205x945', 'width' => 2205, 'height' => 945, 'resolution' => '1080p'],
+        ['label' => '16:9', 'value' => '3840x2160', 'width' => 3840, 'height' => 2160, 'resolution' => '4k'],
+        ['label' => '4:3', 'value' => '3328x2496', 'width' => 3328, 'height' => 2496, 'resolution' => '4k'],
+        ['label' => '1:1', 'value' => '2880x2880', 'width' => 2880, 'height' => 2880, 'resolution' => '4k'],
+        ['label' => '3:4', 'value' => '2496x3328', 'width' => 2496, 'height' => 3328, 'resolution' => '4k'],
+        ['label' => '9:16', 'value' => '2160x3840', 'width' => 2160, 'height' => 3840, 'resolution' => '4k'],
+        ['label' => '21:9', 'value' => '4410x1890', 'width' => 4410, 'height' => 1890, 'resolution' => '4k'],
     ];
 
     public function __construct(
@@ -96,6 +112,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         }
 
         $capabilityProfile = $this->resolveCapabilityProfile($modelVersion, $modelId);
+        $referenceLimits = $capabilityProfile['reference_limits'] ?? ['images' => 9, 'videos' => 3, 'audios' => 3];
 
         return new VideoGenerationConfig([
             'supported_inputs' => [
@@ -111,7 +128,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
             ],
             'reference_images' => [
                 // Seedance 2.0 参考图能力按当前产品规格开放到 1~9 张。
-                'max_count' => 9,
+                'max_count' => $referenceLimits['images'],
                 'reference_types' => ['asset'],
                 'style_supported' => false,
             ],
@@ -125,21 +142,29 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
                 ],
                 'image_reference' => [
                     'description' => $this->translateInputMode('image_reference.multiple', [
-                        'max_count' => 9,
+                        'max_count' => $referenceLimits['images'],
                     ]),
                     'supported_fields' => ['reference_images'],
                     'reference_images' => [
-                        'max_count' => 9,
+                        'max_count' => $referenceLimits['images'],
                         'reference_types' => ['asset'],
                         'style_supported' => false,
                     ],
                 ],
                 'omni_reference' => [
                     'description' => $this->translateInputMode('omni_reference', [
-                        'max_count' => 12,
+                        'max_count' => $referenceLimits['images'] + $referenceLimits['videos'] + $referenceLimits['audios'],
                     ]),
                     'supported_fields' => ['reference_images', 'reference_videos', 'reference_audios'],
-                    'max_count' => 12,
+                    'max_count' => $referenceLimits['images'] + $referenceLimits['videos'] + $referenceLimits['audios'],
+                    'variants' => [[
+                        'code' => 'multimodal_reference_limits',
+                        'limits' => [
+                            'reference_images' => ['min' => 0, 'max' => $referenceLimits['images']],
+                            'reference_videos' => ['min' => 0, 'max' => $referenceLimits['videos']],
+                            'reference_audios' => ['min' => 0, 'max' => $referenceLimits['audios']],
+                        ],
+                    ]],
                 ],
                 'keyframe_guided' => [
                     'description' => $this->translateInputMode('keyframe_guided.start_end'),
@@ -258,28 +283,10 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         $modelVersion = $this->firstNonEmptyString($operation->getModelVersion(), $modelId) ?? $modelId;
         $capabilityProfile = $this->resolveCapabilityProfile($modelVersion, $modelId);
         $generationConfig = $capabilityProfile['generation'];
-        $validationConfig = $capabilityProfile['validation'];
         $payload = [
-            'model' => $modelId,
-            'task' => $this->firstNonEmptyString($request['task'] ?? null, 'generate') ?? 'generate',
+            'model' => $modelVersion,
             'content' => $content,
         ];
-        $requestedResolution = $this->firstNonEmptyString($generation['resolution'] ?? null);
-        $resolutionErrorRule = is_string($requestedResolution)
-            ? ($validationConfig['explicit_resolution_errors'][$requestedResolution] ?? null)
-            : null;
-        if (is_array($resolutionErrorRule)) {
-            throw new ProviderVideoException($this->translateError(
-                (string) ($resolutionErrorRule['key'] ?? 'model_resolution_not_supported'),
-                array_merge(
-                    $resolutionErrorRule['replace'] ?? [],
-                    [
-                        'model' => $modelId,
-                        'resolution' => $requestedResolution,
-                    ],
-                ),
-            ));
-        }
 
         $payload['resolution'] = $this->resolveResolution(
             $generation,
@@ -293,6 +300,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
             $generation,
             $acceptedParams,
             $ignoredParams,
+            $generationConfig['duration_type'] ?? 'options',
             $generationConfig['durations'],
             $generationConfig['default_duration_seconds'],
         );
@@ -336,9 +344,15 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
             $payload['return_last_frame'] = (bool) $generation['return_last_frame'];
             $acceptedParams[] = 'generation.return_last_frame';
         }
+        $payload['generate_audio'] = array_key_exists('generate_audio', $generation)
+            ? (bool) $generation['generate_audio']
+            : true;
         if (array_key_exists('generate_audio', $generation)) {
-            $payload['generate_audio'] = (bool) $generation['generate_audio'];
             $acceptedParams[] = 'generation.generate_audio';
+        }
+        if (($generation['web_search'] ?? false) === true) {
+            $payload['tools'] = [['type' => 'web_search']];
+            $acceptedParams[] = 'generation.web_search';
         }
         if (array_key_exists('enhance_prompt', $generation)) {
             $payload['enhance_prompt'] = (bool) $generation['enhance_prompt'];
@@ -358,6 +372,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
                 'camera_fixed',
                 'return_last_frame',
                 'generate_audio',
+                'web_search',
                 'watermark',
                 'enhance_prompt',
             ], true)) {
@@ -398,7 +413,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
             $response['data']['task_id'] ?? null,
         );
         if ($taskId === null) {
-            throw new ProviderVideoException('volcengine ark seedance submit succeeded but task id missing');
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'volcengine ark seedance submit succeeded but task id missing');
         }
 
         return $taskId;
@@ -440,7 +455,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         $error = is_array($detail['error'] ?? null) ? $detail['error'] : [];
         $data = is_array($detail['data'] ?? null) ? $detail['data'] : [];
 
-        $errorCode = $detail['error']['code'] ?? '';
+        $errorCode = $error['code'] ?? '';
         if (! $errorCode) {
             $errorCode = match ($status) {
                 'expired' => 'PROVIDER_EXPIRED',
@@ -457,20 +472,51 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
                 'video_url' => $videoUrl,
                 'last_frame_url' => $lastFrameUrl,
                 'provider_task_id' => $providerTaskId,
-                'provider_base_url' => rtrim($config->getBaseUrl(), '/'),
             ], static fn (mixed $value): bool => $value !== null && $value !== ''),
             'error' => $errorCode === null ? null : [
                 'code' => $errorCode,
-                'message' => $this->firstNonEmptyString(
-                    $detail['message'] ?? null,
-                    $detail['msg'] ?? null,
-                    $error['message'] ?? null,
-                    $data['message'] ?? null,
-                    'video generation failed',
-                ) ?? 'video generation failed',
-                'provider_code' => null,
+                'message' => VideoGenerateErrorCode::GENERAL_ERROR->getMessage(),
             ],
         ];
+    }
+
+    /**
+     * 执行连通性测试。
+     *
+     * 使用真实模型版本提交非法分辨率，只有命中预期参数校验错误才视为连通成功。
+     */
+    public function testConnection(QueueExecutorConfig $config, string $modelVersion): bool
+    {
+        $payload = [
+            'model' => $modelVersion,
+            'content' => [['type' => 'text', 'text' => 'connectivity-test']],
+            'resolution' => '720p',
+            'duration' => 0,
+            'ratio' => '1:1',
+        ];
+
+        try {
+            $this->client->requestJson(
+                'post',
+                $config->getBaseUrl(),
+                $config->getApiKey(),
+                '/contents/generations/tasks',
+                $payload,
+                ['connectivity_test' => true],
+            );
+        } catch (RequestException $exception) {
+            $response = $exception->getResponse();
+            $errorMessage = trim((string) $response?->getBody());
+            $result = Json::decode($errorMessage);
+            $error = is_array($result) && is_array($result['error'] ?? null) ? $result['error'] : [];
+            if (($error['code'] ?? null) === 'InvalidParameter') {
+                return true;
+            }
+
+            throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, (string) ($error['message'] ?? 'Volcengine Ark connectivity test failed'), $exception);
+        }
+
+        throw new ProviderVideoException(VideoGenerateErrorCode::INVALID_PARAMETER, 'Volcengine Ark connectivity test did not receive the expected validation error');
     }
 
     /**
@@ -516,6 +562,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         array $generation,
         array &$acceptedParams,
         array &$ignoredParams,
+        string $durationType,
         array $supportedDurations,
         int $defaultDurationSeconds,
     ): int {
@@ -524,13 +571,26 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         }
 
         $duration = (int) $generation['duration_seconds'];
-        if (! in_array($duration, $supportedDurations, true)) {
+        $valid = $durationType === 'range'
+            ? $this->isDurationInRange($duration, $supportedDurations)
+            : in_array($duration, $supportedDurations, true);
+        if (! $valid) {
             $ignoredParams[] = 'generation.duration_seconds';
             return $defaultDurationSeconds;
         }
 
         $acceptedParams[] = 'generation.duration_seconds';
         return $duration;
+    }
+
+    private function isDurationInRange(int $duration, array $range): bool
+    {
+        $min = (int) ($range['min'] ?? 0);
+        $max = (int) ($range['max'] ?? 0);
+        $step = max(1, (int) ($range['step'] ?? 1));
+
+        return $min > 0 && $max >= $min && $duration >= $min && $duration <= $max
+            && (($duration - $min) % $step === 0);
     }
 
     /**
@@ -633,16 +693,12 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         return di(TranslatorInterface::class)->trans('video.input_modes.' . $key, $replace);
     }
 
-    private function translateError(string $key, array $replace = []): string
-    {
-        return (string) di(TranslatorInterface::class)->trans('video.errors.' . $key, $replace);
-    }
-
     /**
      * @return array{
      *   generation: array{
      *     aspect_ratios: list<string>,
-     *     durations: list<int>,
+     *     duration_type: 'options'|'range',
+     *     durations: array{min:int,max:int,step:int}|list<int>,
      *     default_duration_seconds: int,
      *     resolutions: list<string>,
      *     sizes: list<array{label: string, value: string, width: int, height: int, resolution: string}>,
@@ -650,14 +706,9 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
      *     supports_seed: bool,
      *     seed_range: list<int>,
      *     supports_watermark: bool,
-     *     supports_negative_prompt: bool,
      *     supports_generate_audio: bool,
-     *     supports_person_generation: bool,
-     *     supports_enhance_prompt: bool,
-     *     supports_compression_quality: bool,
-     *     supports_resize_mode: bool,
-     *     supports_sample_count: bool
      *   },
+     *   reference_limits: array{images:int,videos:int,audios:int},
      *   validation: array{
      *     explicit_resolution_errors?: array<string, array{key: string, replace: array<string, string>}>
      *   }
@@ -670,27 +721,50 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         if ($this->isSeedanceTwoFastModel($modelVersion, $modelId)) {
             return [
                 'generation' => array_merge($baseGenerationConfig, [
+                    'duration_type' => 'range',
+                    'durations' => ['min' => 4, 'max' => 15, 'step' => 1],
                     'resolutions' => self::FAST_SUPPORTED_RESOLUTIONS,
                     'sizes' => $this->filterSizesByResolution(self::FAST_SUPPORTED_RESOLUTIONS),
                 ]),
-                'validation' => [
-                    'explicit_resolution_errors' => [
-                        '1080p' => [
-                            'key' => 'model_resolution_not_supported',
-                            'replace' => [
-                                'supported' => implode(' / ', self::FAST_SUPPORTED_RESOLUTIONS),
-                            ],
-                        ],
-                    ],
-                ],
+                'reference_limits' => ['images' => 9, 'videos' => 3, 'audios' => 3],
+                'validation' => [],
+            ];
+        }
+
+        if ($this->isSeedanceTwoPointFiveModel($modelVersion, $modelId)) {
+            return [
+                'generation' => array_merge($baseGenerationConfig, [
+                    'duration_type' => 'range',
+                    'durations' => ['min' => 4, 'max' => 30, 'step' => 1],
+                    'resolutions' => self::TWO_POINT_FIVE_SUPPORTED_RESOLUTIONS,
+                    'sizes' => $this->filterSizesByResolution(self::TWO_POINT_FIVE_SUPPORTED_RESOLUTIONS),
+                ]),
+                'reference_limits' => ['images' => 30, 'videos' => 10, 'audios' => 10],
+                'validation' => [],
+            ];
+        }
+
+        if ($this->isSeedanceTwoProModel($modelVersion, $modelId)) {
+            return [
+                'generation' => array_merge($baseGenerationConfig, [
+                    'duration_type' => 'range',
+                    'durations' => ['min' => 4, 'max' => 15, 'step' => 1],
+                    'resolutions' => self::PRO_SUPPORTED_RESOLUTIONS,
+                    'sizes' => self::SUPPORTED_SIZES,
+                ]),
+                'reference_limits' => ['images' => 9, 'videos' => 3, 'audios' => 3],
+                'validation' => [],
             ];
         }
 
         return [
             'generation' => array_merge($baseGenerationConfig, [
-                'resolutions' => self::PRO_SUPPORTED_RESOLUTIONS,
-                'sizes' => self::SUPPORTED_SIZES,
+                'duration_type' => 'range',
+                'durations' => ['min' => 4, 'max' => 15, 'step' => 1],
+                'resolutions' => self::STANDARD_SUPPORTED_RESOLUTIONS,
+                'sizes' => $this->filterSizesByResolution(self::STANDARD_SUPPORTED_RESOLUTIONS),
             ]),
+            'reference_limits' => ['images' => 9, 'videos' => 3, 'audios' => 3],
             'validation' => [],
         ];
     }
@@ -698,46 +772,94 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
     /**
      * @return array{
      *   aspect_ratios: list<string>,
-     *   durations: list<int>,
+     *   duration_type: 'options'|'range',
+     *   durations: array{min:int,max:int,step:int}|list<int>,
      *   default_duration_seconds: int,
      *   default_resolution: string,
      *   supports_seed: bool,
      *   seed_range: list<int>,
      *   supports_watermark: bool,
-     *   supports_negative_prompt: bool,
      *   supports_generate_audio: bool,
-     *   supports_person_generation: bool,
-     *   supports_enhance_prompt: bool,
-     *   supports_compression_quality: bool,
-     *   supports_resize_mode: bool,
-     *   supports_sample_count: bool
      * }
      */
     private function baseGenerationConfig(): array
     {
         return [
             'aspect_ratios' => self::SUPPORTED_ASPECT_RATIOS,
-            'durations' => self::SUPPORTED_DURATIONS,
+            'duration_type' => 'range',
+            'durations' => ['min' => 4, 'max' => 15, 'step' => 1],
             'default_duration_seconds' => self::DEFAULT_DURATION_SECONDS,
             'default_resolution' => self::DEFAULT_RESOLUTION,
             'supports_seed' => true,
             'seed_range' => [-1, 4294967295],
             'supports_watermark' => true,
-            'supports_negative_prompt' => false,
             'supports_generate_audio' => true,
             'supports_person_generation' => false,
             'supports_enhance_prompt' => false,
             'supports_compression_quality' => false,
             'supports_resize_mode' => false,
             'supports_sample_count' => false,
+            'generate_audio' => [
+                'type' => 'switch',
+                'default' => true,
+                'name' => __('video.generation.generate_audio.name'),
+                'description' => __('video.generation.generate_audio.description'),
+            ],
+            /*'web_search' => [
+                'type' => 'switch',
+                'default' => false,
+                'name' => __('video.generation.web_search.name'),
+                'description' => __('video.generation.web_search.description'),
+            ],*/
         ];
     }
 
     private function isSeedanceTwoFastModel(string $modelVersion, string $modelId): bool
     {
         foreach ([$modelVersion, $modelId] as $identifier) {
-            if ($identifier !== '' && str_contains(strtolower($identifier), self::FAST_MODEL_KEYWORD)) {
+            $normalizedIdentifier = strtolower(trim($identifier));
+            if ($normalizedIdentifier === '' || ! str_contains($normalizedIdentifier, 'seedance-')) {
+                continue;
+            }
+
+            foreach (['seedance-2.0-mini', 'seedance-2-0-mini', 'seedance-2.0-fast', 'seedance-2-0-fast'] as $marker) {
+                if (str_contains($normalizedIdentifier, $marker)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function isSeedanceTwoPointFiveModel(string $modelVersion, string $modelId): bool
+    {
+        foreach ([$modelVersion, $modelId] as $identifier) {
+            $normalizedIdentifier = strtolower(trim($identifier));
+            if ($normalizedIdentifier === '' || ! str_contains($normalizedIdentifier, 'seedance-')) {
+                continue;
+            }
+
+            if (str_contains($normalizedIdentifier, 'seedance-2.5')
+                || str_contains($normalizedIdentifier, 'seedance-2-5')) {
                 return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isSeedanceTwoProModel(string $modelVersion, string $modelId): bool
+    {
+        foreach ([$modelVersion, $modelId] as $identifier) {
+            $normalizedIdentifier = strtolower(trim($identifier));
+            if ($normalizedIdentifier === '' || ! str_contains($normalizedIdentifier, 'seedance-')) {
+                continue;
+            }
+
+            if (str_contains($normalizedIdentifier, 'seedance-2.0')
+                || str_contains($normalizedIdentifier, 'seedance-2-0')) {
+                return ! $this->isSeedanceTwoFastModel($modelVersion, $modelId);
             }
         }
 

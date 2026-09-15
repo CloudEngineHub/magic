@@ -125,7 +125,9 @@ function SearchContainer(
 			<div
 				className="min-h-0 flex-1 overflow-hidden"
 				data-testid={
-					searchValue ? "user-selector-search-result-list" : "user-selector-default-content"
+					searchValue
+						? "user-selector-search-result-list"
+						: "user-selector-default-content"
 				}
 			>
 				{searchValue ? (

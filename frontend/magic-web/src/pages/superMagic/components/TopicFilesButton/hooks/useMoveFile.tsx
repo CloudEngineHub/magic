@@ -21,29 +21,40 @@ import {
 	getCanvasProjectOperationImpact,
 	type CanvasProjectOperationRisk,
 } from "../utils/canvasProjectOperationRisk"
+import { useCanvasFileOperationGuard } from "./useCanvasFileOperationGuard"
 import {
-	mergeHtmlStaticDependencyFileIds,
-	resolveSingleHtmlStaticDependencies,
-} from "@/pages/superMagic/utils/htmlStaticDependencies"
+	mergeStaticDependencyFileIds,
+	resolveSingleDocumentStaticDependencies,
+} from "@/pages/superMagic/utils/staticDependencies"
+import type { CanvasProjectPathRepairResult } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 
 interface UseMoveFileOptions {
 	projectId?: string
 	attachments?: AttachmentItem[]
 	attachmentIndex?: AttachmentIndex
 	onMoveSuccess?: () => void
-	handleMoveFile?: (fileId: string, targetParentId: string) => Promise<boolean>
+	handleMoveFile?: (
+		fileId: string,
+		targetParentId: string,
+		preFileId?: string,
+		keepBothFileIds?: string[],
+		showLoadingToast?: boolean,
+	) => Promise<boolean>
 	// 批量移动相关
 	selectedItems?: Set<string>
 	setSelectedItems?: (items: Set<string>) => void
 	getItemId?: (item: AttachmentItem) => string
 	allFiles?: AttachmentItem[]
 	onSelectModeChange?: (isSelectMode: boolean) => void
+	useDetailedDuplicateConflict?: boolean
 }
 
 const MOVE_TASK_TIMEOUT_MS = 120000
 
 export function useMoveFile(options: UseMoveFileOptions = {}) {
 	const { t } = useTranslation("super")
+	const { runCanvasFileOperationPreflight, commitCanvasFileOperationRepair } =
+		useCanvasFileOperationGuard()
 	const {
 		projectId,
 		attachments = [],
@@ -55,6 +66,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 		getItemId,
 		allFiles,
 		onSelectModeChange,
+		useDetailedDuplicateConflict = false,
 	} = options
 
 	// 移动弹窗状态
@@ -144,17 +156,21 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 	useEffect(() => clearMoveTimers, [clearMoveTimers])
 
-	// 显示移动选择器
-	const showMoveSelector = useCallback((item: AttachmentItem) => {
-		setCurrentMoveItem(item)
-		setIsBatchMode(false)
-		// 单个文件移动时，禁用其父文件夹（如果是文件夹的话）
-		const disabled = item.is_directory && item.file_id ? [item.file_id] : []
-		setDisabledFolderIds(disabled)
-		// 点击移动时始终从当前项目根目录开始选择目标位置。
-		setDefaultPath([])
-		setVisible(true)
-	}, [])
+	// Open the move picker.
+	const showMoveSelector = useCallback(
+		(item: AttachmentItem) => {
+			setCurrentMoveItem(item)
+			setIsBatchMode(false)
+			// Disable the selected folder as a target.
+			const disabled = item.is_directory && item.file_id ? [item.file_id] : []
+			setDisabledFolderIds(disabled)
+			setDefaultPath(
+				item.file_id ? (attachmentIndex?.getParentItemsById(item.file_id) ?? []) : [],
+			)
+			setVisible(true)
+		},
+		[attachmentIndex],
+	)
 
 	// 显示批量移动选择器
 	const showBatchMoveSelector = useCallback(
@@ -276,7 +292,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 	// 显示覆盖确认对话框
 	const showOverwriteConfirm = useCallback(
-		(conflictItems: AttachmentItem[], onConfirm: () => void) => {
+		(conflictItems: AttachmentItem[], onConfirm: () => void | Promise<void>) => {
 			const isMultiple = conflictItems.length > 1
 			let content: string
 
@@ -333,18 +349,26 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 	)
 
 	const confirmCanvasProjectRisk = useCallback(
-		(canvasRisk: CanvasProjectOperationRisk) =>
+		(canvasRisk: CanvasProjectOperationRisk, repairFailures: string[] = []) =>
 			new Promise<boolean>((resolve) => {
 				const impact = getCanvasProjectOperationImpact(canvasRisk)
+				const riskContent = canvasRisk.shouldWarn
+					? t(
+							impact === "open-failure"
+								? "topicFiles.canvasOperationRisk.moveOpenFailureContent"
+								: impact === "content-loss"
+									? "topicFiles.canvasOperationRisk.moveContentLossContent"
+									: "topicFiles.canvasOperationRisk.moveMixedContent",
+						)
+					: ""
+				const repairContent = repairFailures.length
+					? t("topicFiles.canvasOperationRisk.pathRepairFailureContent", {
+							failures: repairFailures.join("\n"),
+						})
+					: ""
 				MagicModal.confirm({
 					title: t("topicFiles.canvasOperationRisk.title"),
-					content: t(
-						impact === "open-failure"
-							? "topicFiles.canvasOperationRisk.moveOpenFailureContent"
-							: impact === "content-loss"
-								? "topicFiles.canvasOperationRisk.moveContentLossContent"
-								: "topicFiles.canvasOperationRisk.moveMixedContent",
-					),
+					content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
 					icon: (
 						<IconAlertTriangleFilled
 							size={20}
@@ -388,19 +412,60 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 			let effectiveFileIds = fileIds
 			try {
-				const { dependencyTransferFileIds } = await resolveSingleHtmlStaticDependencies({
-					fileIds,
-					attachments,
-					attachmentIndex,
-				})
-				effectiveFileIds = mergeHtmlStaticDependencyFileIds(
+				const { dependencyTransferFileIds } = await resolveSingleDocumentStaticDependencies(
+					{
+						fileIds,
+						attachments,
+						attachmentIndex,
+					},
+				)
+				effectiveFileIds = mergeStaticDependencyFileIds(
 					fileIds,
 					dependencyTransferFileIds,
 					true,
 				)
 			} catch (error) {
 				// Keep the legacy move usable if the optional browser-side dependency read fails.
-				console.error("Failed to resolve HTML static dependencies before moving:", error)
+				console.error(
+					"Failed to resolve document static dependencies before moving:",
+					error,
+				)
+			}
+
+			const sameProjectMove = !targetProjectId || targetProjectId === projectId
+			const pathOperationFileIds = effectiveFileIds.filter(
+				(fileId) => !keepBothFileIds.includes(fileId),
+			)
+			let repairPlan: CanvasProjectPathRepairResult | null = null
+			if (sameProjectMove) {
+				const canvasRisk =
+					pathOperationFileIds.length > 0
+						? await detectCanvasProjectOperationRisk({
+								attachments,
+								fileIds: pathOperationFileIds,
+								operation: "move",
+							})
+						: { shouldWarn: false, riskTypes: [], affectedProjectNames: [] }
+				const preflightResult = await runCanvasFileOperationPreflight({
+					repairOptions: {
+						attachments,
+						attachmentIndex,
+						fileIds: effectiveFileIds,
+						operation: "move",
+						projectId,
+					},
+					requiresConfirmation: canvasRisk.shouldWarn,
+					confirm: (repairPlan) =>
+						confirmCanvasProjectRisk(
+							canvasRisk,
+							repairPlan?.failures.map(
+								(failure) =>
+									`${failure.projectName} / ${failure.fileName}: ${failure.message}`,
+							) ?? [],
+						),
+				})
+				if (!preflightResult.ok) return
+				repairPlan = preflightResult.repairPlan
 			}
 
 			const moveTaskId = beginMoveTask()
@@ -426,6 +491,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 				// 如果直接完成
 				if (data.status === "success") {
+					await commitCanvasFileOperationRepair(repairPlan)
 					setMoveProgress(100)
 					magicToast.success(t("topicFiles.success.fileMoved"))
 					hideMoveSelector()
@@ -454,6 +520,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 									: 0
 								setMoveProgress(progress)
 							} else if (checkData.status === "success") {
+								await commitCanvasFileOperationRepair(repairPlan)
 								setMoveProgress(100)
 								magicToast.success(t("topicFiles.success.fileMoved"))
 								hideMoveSelector()
@@ -489,9 +556,12 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			attachmentIndex,
 			attachments,
 			beginMoveTask,
+			commitCanvasFileOperationRepair,
+			confirmCanvasProjectRisk,
 			finishMoveTask,
 			hideMoveSelector,
 			onMoveSuccess,
+			runCanvasFileOperationPreflight,
 			t,
 		],
 	)
@@ -548,18 +618,6 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 						)
 					: new Map()
 
-			if (conflictDetectionIds.length > 0) {
-				const canvasRisk = await detectCanvasProjectOperationRisk({
-					attachments: sourceAttachments,
-					fileIds: conflictDetectionIds,
-					operation: "move",
-				})
-				if (canvasRisk.shouldWarn) {
-					const shouldContinue = await confirmCanvasProjectRisk(canvasRisk)
-					if (!shouldContinue) return
-				}
-			}
-
 			if (folderConflicts.size > 0) {
 				const folderChoice = await folderConflictHandler.checkConflicts(folderConflicts)
 				if (!folderChoice.shouldProceed) return
@@ -593,14 +651,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				keepBothFileIds,
 			})
 		},
-		[
-			attachmentIndex,
-			attachments,
-			batchMoveFiles,
-			confirmCanvasProjectRisk,
-			folderConflictHandler,
-			moveDuplicateHandler,
-		],
+		[attachmentIndex, attachments, batchMoveFiles, folderConflictHandler, moveDuplicateHandler],
 	)
 
 	// 确认移动文件
@@ -641,18 +692,6 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 					(fileId) => !sameParentKeepBothIds.includes(fileId),
 				)
 
-				if (conflictCheckIds.length > 0) {
-					const canvasRisk = await detectCanvasProjectOperationRisk({
-						attachments,
-						fileIds: conflictCheckIds,
-						operation: "move",
-					})
-					if (canvasRisk.shouldWarn) {
-						const shouldContinue = await confirmCanvasProjectRisk(canvasRisk)
-						if (!shouldContinue) return
-					}
-				}
-
 				// 检查批量移动是否存在同名冲突
 				const { hasConflict, conflictItems } = checkBatchFilesConflict(
 					conflictCheckIds,
@@ -673,38 +712,66 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				return
 			}
 
-			const executeSingleMove = async () => {
+			const executeSingleMove = async (keepBothFileIds: string[] = []) => {
 				if (!currentMoveItem?.file_id) return
 
 				if (!handleMoveFile && projectId) {
 					try {
 						const { dependencyTransferFileIds } =
-							await resolveSingleHtmlStaticDependencies({
+							await resolveSingleDocumentStaticDependencies({
 								fileIds: [currentMoveItem.file_id],
 								attachments,
 								attachmentIndex,
 							})
 						if (dependencyTransferFileIds.length > 0) {
 							await batchMoveFiles({
-								fileIds: mergeHtmlStaticDependencyFileIds(
+								fileIds: mergeStaticDependencyFileIds(
 									[currentMoveItem.file_id],
 									dependencyTransferFileIds,
 									true,
 								),
 								projectId,
 								targetParentId,
+								keepBothFileIds,
 							})
 							return
 						}
 					} catch (error) {
 						console.error(
-							"Failed to resolve HTML static dependencies before moving:",
+							"Failed to resolve document static dependencies before moving:",
 							error,
 						)
 					}
 				}
 
 				try {
+					const canvasRisk = await detectCanvasProjectOperationRisk({
+						attachments,
+						items: [currentMoveItem],
+						operation: "move",
+					})
+					const preflightResult = await runCanvasFileOperationPreflight({
+						repairOptions: currentMoveItem.is_directory
+							? {
+									attachments,
+									attachmentIndex,
+									items: [currentMoveItem],
+									operation: "move",
+									projectId,
+								}
+							: undefined,
+						requiresConfirmation: canvasRisk.shouldWarn,
+						confirm: (repairPlan) =>
+							confirmCanvasProjectRisk(
+								canvasRisk,
+								repairPlan?.failures.map(
+									(failure) =>
+										`${failure.projectName} / ${failure.fileName}: ${failure.message}`,
+								) ?? [],
+							),
+					})
+					if (!preflightResult.ok) return
+
 					setIsMoving(true)
 					setMoveProgress(0)
 
@@ -712,9 +779,16 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 					if (handleMoveFile) {
 						setMoveProgress(50)
-						// 使用传入的 handleMoveFile 函数
-						success = await handleMoveFile(currentMoveItem.file_id, targetParentId)
+						// Use the injected move handler.
+						success = await handleMoveFile(
+							currentMoveItem.file_id,
+							targetParentId,
+							undefined,
+							keepBothFileIds,
+							false,
+						)
 						if (success) {
+							await commitCanvasFileOperationRepair(preflightResult.repairPlan)
 							setMoveProgress(100)
 							hideMoveSelector()
 							// 清空选中状态
@@ -730,11 +804,13 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 						}
 					} else {
 						setMoveProgress(50)
-						// 直接调用 API
+						// Call the API directly.
 						await SuperMagicApi.moveFile({
 							file_id: currentMoveItem.file_id,
 							target_parent_id: targetParentId,
+							keep_both_file_ids: keepBothFileIds,
 						})
+						await commitCanvasFileOperationRepair(preflightResult.repairPlan)
 						setMoveProgress(100)
 						magicToast.success(t("topicFiles.success.fileMoved"))
 						hideMoveSelector()
@@ -772,24 +848,26 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				return
 			}
 
-			const canvasRisk = await detectCanvasProjectOperationRisk({
-				attachments,
-				items: [currentMoveItem],
-				operation: "move",
-			})
-			if (canvasRisk.shouldWarn) {
-				const shouldContinue = await confirmCanvasProjectRisk(canvasRisk)
-				if (!shouldContinue) return
-			}
-
 			// 检查单个文件移动是否存在同名冲突
 			const hasConflict = checkSingleFileConflict(currentMoveItem, targetFolderPath)
 
 			if (hasConflict) {
+				if (useDetailedDuplicateConflict) {
+					const duplicates = detectDuplicateFilesForMove(
+						[currentMoveItem.file_id],
+						attachments,
+						attachments,
+						data.path,
+					)
+					const userChoice = await moveDuplicateHandler.checkDuplicates(duplicates)
+					if (!userChoice.shouldProceed) return
+					await executeSingleMove(userChoice.keepBothIds)
+					return
+				}
 				// 显示覆盖确认对话框
 				showOverwriteConfirm([currentMoveItem], () => {
 					// 用户确认后执行单个移动
-					executeSingleMove()
+					return executeSingleMove()
 				})
 				return
 			}
@@ -806,6 +884,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			checkSingleFileConflict,
 			confirmCanvasProjectRisk,
 			currentMoveItem,
+			commitCanvasFileOperationRepair,
 			getTargetFolderPath,
 			handleMoveFile,
 			hideMoveSelector,
@@ -813,8 +892,11 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 			onMoveSuccess,
 			onSelectModeChange,
 			projectId,
+			runCanvasFileOperationPreflight,
 			setSelectedItems,
 			showOverwriteConfirm,
+			moveDuplicateHandler,
+			useDetailedDuplicateConflict,
 			t,
 		],
 	)

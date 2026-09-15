@@ -13,6 +13,7 @@ interface StatusReportParams {
 	task_key: string
 	status: RecordingSummaryStatus
 	model_id: string
+	file_shard_count?: number
 	note?: {
 		content: string
 		file_extension: string
@@ -22,6 +23,8 @@ interface StatusReportParams {
 
 interface RecordingStatusReporterConfig {
 	onReportError?: (error: Error) => void
+	/** Resolves the latest generated audio shard count for periodic reports. */
+	getFileShardCount?: () => number | undefined
 }
 
 /**
@@ -33,10 +36,12 @@ class RecordingStatusReporter {
 	private lastReportedStatus: string | null = null
 	private currentSessionId: string | null = null
 	private onReportError?: (error: Error) => void
+	private getFileShardCount?: () => number | undefined
 	private isReporting = false
 
 	constructor(config?: RecordingStatusReporterConfig) {
 		this.onReportError = config?.onReportError
+		this.getFileShardCount = config?.getFileShardCount
 	}
 
 	/**
@@ -67,11 +72,17 @@ class RecordingStatusReporter {
 				model_id: params.model_id,
 				note: params.note,
 				asr_stream_content: params.asr_stream_content,
+				file_shard_count: params.file_shard_count,
 			})
 
 			logger.log(`Status reported successfully: ${params.status}`)
 		} catch (error) {
-			logger.error(`Failed to report status: ${params.status}`, error)
+			logger.error({
+				eventKey: "report_status_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `Failed to report status: ${params.status}`,
+			})
 			this.onReportError?.(error as Error)
 		} finally {
 			this.isReporting = false
@@ -144,7 +155,12 @@ class RecordingStatusReporter {
 				status: RecordingSummaryStatus.Recording,
 			})
 		} catch (error) {
-			logger.error("Periodic report failed", error)
+			logger.error({
+				eventKey: "periodic_report_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Periodic report failed",
+			})
 			this.onReportError?.(error as Error)
 		}
 	}
@@ -171,6 +187,7 @@ class RecordingStatusReporter {
 		return {
 			task_key: this.currentSessionId,
 			model_id: businessData.model.model_id,
+			file_shard_count: this.getFileShardCount?.(),
 			note: note,
 			asr_stream_content: asrStreamContent,
 		}

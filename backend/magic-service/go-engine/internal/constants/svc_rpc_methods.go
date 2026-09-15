@@ -143,6 +143,8 @@ const (
 	MethodKnowledgeSuperMagicAgentListManageableCodes = "svc.knowledge.superMagicAgent.listManageableCodes"
 	// MethodKnowledgeSuperMagicAgentListAccessibleCodes 回调 PHP 批量校验当前用户可访问的数字员工
 	MethodKnowledgeSuperMagicAgentListAccessibleCodes = "svc.knowledge.superMagicAgent.listAccessibleCodes"
+	// MethodKnowledgeSuperMagicAgentListUsableCodes 回调 PHP 批量校验当前用户可使用的数字员工
+	MethodKnowledgeSuperMagicAgentListUsableCodes = "svc.knowledge.superMagicAgent.listUsableCodes"
 	// MethodFileGetLink 回调 PHP 文件服务获取访问链接
 	MethodFileGetLink = "svc.file.getLink"
 	// MethodFileStat 回调 PHP 文件服务检查对象是否存在

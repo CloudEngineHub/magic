@@ -34,22 +34,17 @@ from .path_utils import (
 class PlanDocumentReadingParams(BaseToolParams):
     output_dir: str = Field(
         ...,
-        description="""<!--zh: 文档解析输出目录的绝对路径，目录中应包含抽样、索引或 chunk 产物-->
-Absolute document output directory containing samples, index, or chunks"""
+        description="Absolute document output directory containing samples, an index, or chunks."
     )
     goal: str = Field(
         "",
-        description="""<!--zh: 当前阅读目标，例如总结全文、查找条款、提取审批意见-->
-Current reading goal, such as summarizing, finding clauses, or extracting decisions"""
+        description="Current reading goal, such as summarizing the document, finding clauses, or extracting decisions."
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class PlanDocumentReading(AbstractFileTool[PlanDocumentReadingParams], WorkspaceTool[PlanDocumentReadingParams]):
-    """<!--zh: 基于已生成的文档产物规划下一步阅读动作。-->
-    Plan the next progressive document reading action."""
-
-    code_mode_only = True
+    """Plan the next progressive reading action from existing document artifacts."""
 
     async def execute(self, tool_context: ToolContext, params: PlanDocumentReadingParams) -> ToolResult:
         """Return the next recommended bounded document reading step."""
@@ -68,10 +63,18 @@ class PlanDocumentReading(AbstractFileTool[PlanDocumentReadingParams], Workspace
             "",
             f"- Recommended action: `{plan['recommended_action']}`",
             f"- Recommended mode: `{plan['recommended_mode']}`",
+            f"- Recommended asset strategy: `{plan.get('recommended_asset_strategy', 'auto')}`",
+            f"- Strategy confidence: `{(plan.get('asset_strategy_context') or {}).get('confidence', 'unknown')}`",
+            f"- Strategy decision: `{(plan.get('asset_strategy_context') or {}).get('decision_mode', 'automatic')}`",
+            f"- Score margin: `{(plan.get('asset_strategy_context') or {}).get('score_margin', 0)}`",
             f"- Recommended range: `{plan.get('recommended_range') or 'not specified'}`",
             f"- Reason: {plan.get('reason')}",
             f"- State: `{plan.get('state_path')}`",
         ])
+        if plan.get("asset_strategy_reason"):
+            content += f"\n- Asset strategy reason: {plan['asset_strategy_reason']}"
+        if plan.get("asset_strategy_requires_confirmation"):
+            content += "\n- User confirmation: ask_user is recommended before extraction."
         if plan.get("risks"):
             content += "\n" + "\n".join(f"- Risk: {risk}" for risk in plan["risks"])
         return ToolResult(content=prepend_correction_note(content, resolved.correction_note), extra_info=plan)

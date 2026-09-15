@@ -28,7 +28,7 @@ interface UseChatWebSocketConnectionOptions {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
-const noop = () => { }
+const noop = () => {}
 
 /**
  * Custom hook to manage WebSocket connection lifecycle
@@ -74,7 +74,12 @@ export function useChatWebSocketConnection(options: UseChatWebSocketConnectionOp
 						onConnected?.()
 					})
 					.catch((error) => {
-						logger.error("WebSocket 自动登录失败", error)
+						logger.error({
+							eventKey: "web_socket_failed",
+							errorKind: "network",
+							error: error,
+							message: "WebSocket 自动登录失败",
+						})
 						onError?.(error)
 					})
 			} else {
@@ -103,7 +108,12 @@ export function useChatWebSocketConnection(options: UseChatWebSocketConnectionOp
 				chatWebSocket
 					.connect({ showLoading: false })
 					.catch((error) => {
-						logger.error("WebSocket 连接失败", error)
+						logger.error({
+							eventKey: "web_socket_connect_failed",
+							errorKind: "network",
+							error: error,
+							message: "WebSocket 连接失败",
+						})
 						onError?.(error)
 					})
 					.finally(() => {

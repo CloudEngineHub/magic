@@ -2,12 +2,15 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import SelectDirectoryModal from "./SelectDirectoryModal"
+import type { ProjectResourceSelection } from "../../types"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string, options?: Record<string, unknown>) => {
 			if (key === "selectPathModal.rootDirectory") return "根目录"
 			if (key === "selectPathModal.searchDirectory") return "搜索文件夹"
+			if (key === "selectPathModal.searchProject") return "搜索项目"
+			if (key === "selectPathModal.searchWorkspace") return "搜索工作区"
 			if (key === "selectPathModal.myWorkspaces") return "我的工作区"
 			if (key === "selectPathModal.chatCount")
 				return `${String(options?.count || "0")} 个对话`
@@ -64,6 +67,14 @@ vi.mock("@/pages/superMagic/components/TopicFilesButton/components", () => ({
 	InputWithError: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 }))
 
+vi.mock("@/pages/superMagic/components/TopicFilesButton/components/CustomFolderMagicIcon", () => ({
+	CustomFolderMagicIcon: () => <span data-testid="mock-custom-folder-magic-icon" />,
+}))
+
+vi.mock("@/pages/superMagic/components/TopicFilesButton/components/MagicSystemFolderIcon", () => ({
+	MagicSystemFolderIcon: () => <span data-testid="mock-magic-system-folder-icon" />,
+}))
+
 vi.mock("@/pages/superMagic/components/SelectPathModal/hooks/useCreateDirectory", () => ({
 	useCreateDirectory: () => ({
 		loading: false,
@@ -81,7 +92,7 @@ vi.mock("@/pages/superMagic/components/SelectPathModal/hooks/useCreateDirectory"
 
 vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: {
-		info: vi.fn(),
+		info: magicToastInfo,
 	},
 }))
 
@@ -90,6 +101,7 @@ vi.mock("@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip", () 
 }))
 
 const {
+	magicToastInfo,
 	getWorkspaces,
 	getCollaborationProjects,
 	getChatWorkspace,
@@ -97,6 +109,7 @@ const {
 	getProjectsWithCollaboration,
 	getAttachmentsByProjectId,
 } = vi.hoisted(() => ({
+	magicToastInfo: vi.fn(),
 	getWorkspaces: vi.fn(),
 	getCollaborationProjects: vi.fn(),
 	getChatWorkspace: vi.fn(),
@@ -157,6 +170,15 @@ const targetAttachments = [
 		relative_file_path: "/Folder C",
 		children: [],
 	},
+	{
+		file_id: "file-d",
+		name: "Note.txt",
+		file_name: "Note.txt",
+		file_extension: "txt",
+		is_directory: false,
+		relative_file_path: "/Note.txt",
+		children: [],
+	},
 ]
 
 describe("SelectDirectoryModal mobile", () => {
@@ -166,6 +188,7 @@ describe("SelectDirectoryModal mobile", () => {
 	beforeEach(() => {
 		onClose.mockReset()
 		onSubmit.mockReset()
+		magicToastInfo.mockReset()
 		getWorkspaces.mockReset()
 		getCollaborationProjects.mockReset()
 		getChatWorkspace.mockReset()
@@ -611,6 +634,203 @@ describe("SelectDirectoryModal mobile", () => {
 			targetAttachments,
 			sourceAttachments: attachments,
 		})
+	})
+
+	it("supports selecting another project as a mention target", async () => {
+		renderModal({
+			mobileCrossProjectConfig: {
+				sourceAttachments: [],
+				initialViewMode: "workspace",
+				selectionMode: "mention",
+			},
+		})
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-workspace-workspace-2"),
+			).toBeInTheDocument()
+		})
+		fireEvent.click(screen.getByTestId("select-directory-mobile-workspace-workspace-2"))
+		expect(onClose).not.toHaveBeenCalled()
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-project-project-2"),
+			).toBeInTheDocument()
+		})
+		fireEvent.click(screen.getByTestId("select-directory-mobile-project-project-2"))
+		fireEvent.click(screen.getByTestId("select-directory-mobile-confirm-button"))
+
+		expect(onSubmit).toHaveBeenCalledWith(
+			expect.objectContaining({
+				path: [],
+				targetWorkspaceId: "workspace-2",
+				targetProjectId: "project-2",
+				selection: expect.objectContaining({
+					level: "project",
+					project: expect.objectContaining({ id: "project-2" }),
+					workspace: expect.objectContaining({ id: "workspace-2" }),
+				}),
+			}),
+		)
+	})
+
+	it("uses the mobile search query and current layer in search copy", async () => {
+		renderModal({
+			mobileCrossProjectConfig: {
+				sourceAttachments: [],
+				initialViewMode: "workspace",
+				selectionMode: "mention",
+			},
+		})
+
+		const searchInput = screen.getByTestId("select-directory-mobile-search-input")
+		expect(searchInput).toHaveAttribute("placeholder", "搜索工作区")
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-workspace-workspace-2"),
+			).toBeInTheDocument()
+		})
+
+		fireEvent.change(searchInput, { target: { value: "不存在的工作区" } })
+		await waitFor(() => {
+			expect(screen.getByText("暂无关于“不存在的工作区”的内容")).toBeInTheDocument()
+		})
+
+		fireEvent.change(searchInput, { target: { value: "" } })
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-workspace-workspace-2"),
+			).toBeInTheDocument()
+		})
+		fireEvent.click(screen.getByTestId("select-directory-mobile-workspace-workspace-2"))
+
+		await waitFor(() => {
+			expect(screen.getByTestId("select-directory-mobile-search-input")).toHaveAttribute(
+				"placeholder",
+				"搜索项目",
+			)
+		})
+		fireEvent.click(screen.getByTestId("select-directory-mobile-project-drill-project-2"))
+
+		await waitFor(() => {
+			expect(screen.getByTestId("select-directory-mobile-search-input")).toHaveAttribute(
+				"placeholder",
+				"搜索文件夹",
+			)
+		})
+	})
+
+	it("supports drilling into another project and selecting a file mention", async () => {
+		renderModal({
+			mobileCrossProjectConfig: {
+				sourceAttachments: [],
+				initialViewMode: "workspace",
+				selectionMode: "mention",
+			},
+		})
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-workspace-workspace-2"),
+			).toBeInTheDocument()
+		})
+		fireEvent.click(screen.getByTestId("select-directory-mobile-workspace-workspace-2"))
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-project-drill-project-2"),
+			).toBeInTheDocument()
+		})
+		fireEvent.click(screen.getByTestId("select-directory-mobile-project-drill-project-2"))
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-folder-select-file-d"),
+			).toBeInTheDocument()
+		})
+		fireEvent.click(screen.getByTestId("select-directory-mobile-folder-select-file-d"))
+		fireEvent.click(screen.getByTestId("select-directory-mobile-confirm-button"))
+
+		expect(onSubmit).toHaveBeenCalledWith(
+			expect.objectContaining({
+				targetWorkspaceId: "workspace-2",
+				targetProjectId: "project-2",
+				selection: expect.objectContaining({
+					level: "attachment",
+					attachment: expect.objectContaining({ file_id: "file-d" }),
+					project: expect.objectContaining({ id: "project-2" }),
+					workspace: expect.objectContaining({ id: "workspace-2" }),
+				}),
+				selections: [
+					expect.objectContaining({
+						level: "attachment",
+						attachment: expect.objectContaining({ file_id: "file-d" }),
+					}),
+				],
+			}),
+		)
+	})
+
+	it("limits mention selections to 10 projects while allowing unlimited items in selected projects", async () => {
+		const projects = Array.from({ length: 11 }, (_, index) => ({
+			id: `project-limit-${index + 1}`,
+			project_name: `Project Limit ${index + 1}`,
+			workspace_id: "workspace-2",
+			user_role: "owner",
+		}))
+		getProjectsWithCollaboration.mockResolvedValueOnce({ list: projects })
+
+		renderModal({
+			mobileCrossProjectConfig: {
+				sourceAttachments: [],
+				initialViewMode: "workspace",
+				selectionMode: "mention",
+			},
+		})
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-workspace-workspace-2"),
+			).toBeInTheDocument()
+		})
+		fireEvent.click(screen.getByTestId("select-directory-mobile-workspace-workspace-2"))
+
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-project-project-limit-11"),
+			).toBeInTheDocument()
+		})
+
+		for (const project of projects) {
+			fireEvent.click(screen.getByTestId(`select-directory-mobile-project-${project.id}`))
+		}
+
+		expect(magicToastInfo).toHaveBeenCalledTimes(1)
+		expect(magicToastInfo).toHaveBeenCalledWith("selectPathModal.mentionProjectLimit")
+
+		fireEvent.click(screen.getByTestId("select-directory-mobile-project-drill-project-limit-1"))
+		await waitFor(() => {
+			expect(
+				screen.getByTestId("select-directory-mobile-folder-select-file-d"),
+			).toBeInTheDocument()
+		})
+		fireEvent.click(screen.getByTestId("select-directory-mobile-folder-select-file-d"))
+		fireEvent.click(screen.getByTestId("select-directory-mobile-confirm-button"))
+
+		const submittedSelections = onSubmit.mock.calls[0][0]
+			.selections as ProjectResourceSelection[]
+		expect(submittedSelections).toHaveLength(11)
+		expect(new Set(submittedSelections.map((item) => item.project.id)).size).toBe(10)
+		expect(submittedSelections).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					level: "attachment",
+					project: expect.objectContaining({ id: "project-limit-1" }),
+					attachment: expect.objectContaining({ file_id: "file-d" }),
+				}),
+			]),
+		)
 	})
 
 	it("loads shared workspace projects with the 100-item API cap", async () => {

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useEffect } from "react"
-import classNames from "classnames"
+import { cn } from "../../../../runtime/shared/lib/utils"
 import { ChevronRight as ChevronRightIcon } from "lucide-react"
 import type { TreeNodeItemProps, TreeData } from "./types"
 import IconButton from "../IconButton/index"
@@ -71,7 +71,10 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 			e.stopPropagation()
 			// 如果双击的是展开/收起箭头，不触发双击事件
 			const target = e.target as HTMLElement
-			if (target.closest(`.${styles.treeNodeToggle}`)) {
+			if (
+				target.closest(`.${styles.treeNodeToggle}`) ||
+				target.closest("[data-media-preview-content]")
+			) {
 				return
 			}
 			if (onDoubleClick) {
@@ -137,7 +140,7 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 		<div className={styles.treeNodeItem}>
 			<div
 				ref={treeNodeContentRef}
-				className={classNames(
+				className={cn(
 					styles.treeNodeContent,
 					isSelected && styles.treeNodeContentSelected,
 					isHovered && !isSelected && styles.treeNodeContentHovered,
@@ -154,7 +157,7 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 					<IconButton className={styles.treeNodeToggle} onClick={handleToggle}>
 						<ChevronRightIcon
 							size={16}
-							className={classNames(
+							className={cn(
 								styles.treeNodeToggleIcon,
 								isExpanded && styles.treeNodeToggleExpanded,
 							)}
@@ -176,7 +179,7 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 			</div>
 			{renderChildren && hasChildren && node.children && (
 				<div
-					className={classNames(
+					className={cn(
 						styles.treeNodeChildren,
 						isExpanded && styles.treeNodeChildrenExpanded,
 					)}

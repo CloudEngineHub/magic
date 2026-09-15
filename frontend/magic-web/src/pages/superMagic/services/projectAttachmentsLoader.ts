@@ -1,4 +1,5 @@
 import { SuperMagicApi } from "@/apis"
+import type { FileScope } from "@/apis/modules/fileScope"
 import type { ProjectAttachmentsV2NextParentState } from "@/apis/modules/superMagic"
 import type { AttachmentItem } from "../components/TopicFilesButton/hooks"
 import { AttachmentDataProcessor } from "../utils/attachmentDataProcessor"
@@ -77,11 +78,21 @@ export type ProjectAttachmentsBatchSnapshotPayload = ProjectAttachmentsV2Snapsho
 
 export interface ProjectAttachmentsLoaderOptions {
 	projectId: string
-	temporaryToken?: string
+	/** 特殊文件作用域；为空时保持原项目文件加载行为。 */
+	scope?: FileScope
+	/** Pass null to explicitly disable the share token inherited from window. */
+	temporaryToken?: string | null
 	threshold?: number
 	pageSize?: number
 	signal?: AbortSignal
+	/** 仅调用方明确传入时覆盖全局请求错误提示策略。 */
+	enableErrorMessagePrompt?: boolean
 	onBatchSnapshot?: (payload: ProjectAttachmentsBatchSnapshotPayload) => void
+	/**
+	 * Keep is_hidden files in the processed tree/list for path lookup.
+	 * Default false preserves the visible-only contract for file panels.
+	 */
+	includeHidden?: boolean
 }
 
 class ProjectAttachmentsBfsAnomalyError extends Error {
@@ -98,11 +109,11 @@ class ProjectAttachmentsAbortError extends Error {
 	}
 }
 
-const DEFAULT_THRESHOLD = 1000
+const DEFAULT_THRESHOLD = 0
 const DEFAULT_PAGE_SIZE = 1000
 const MIDDLE_BATCH_SNAPSHOT_MIN_GAP_MS = 2500
 const MIDDLE_BATCH_SNAPSHOT_IDLE_TIMEOUT_MS = 1200
-const FILE_TYPES = ["user_upload", "process", "system_auto_upload", "directory"]
+const FILE_TYPES = ["user_upload", "user_create", "process", "system_auto_upload", "directory"]
 
 type WindowWithIdleCallback = Window & {
 	requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
@@ -119,7 +130,9 @@ function resolveWindowSearchParams() {
 	return new URLSearchParams(window.location.search)
 }
 
-function resolveTemporaryToken(temporaryToken?: string) {
+/** 解析临时访问令牌，显式传入 null 时禁用页面继承的分享令牌。 */
+function resolveTemporaryToken(temporaryToken?: string | null) {
+	if (temporaryToken === null) return ""
 	if (temporaryToken) return temporaryToken
 	if (typeof window === "undefined") return ""
 	const tokenWindow = window as TemporaryTokenWindow
@@ -368,20 +381,28 @@ function toProcessedResult(
 
 async function loadAttachmentsViaV1(params: {
 	projectId: string
+	scope?: FileScope
 	temporaryToken?: string
 	strategy: ProjectAttachmentsLoadStrategy
 	rawTotal?: number
 	fallbackReason?: ProjectAttachmentsFallbackReason
 	signal?: AbortSignal
+	enableErrorMessagePrompt?: boolean
 }): Promise<ProjectAttachmentsLoadResult> {
 	try {
 		throwIfAborted(params.signal)
 		const response = await SuperMagicApi.getAttachmentsByProjectId(
 			{
 				projectId: params.projectId,
+				scope: params.scope,
 				temporaryToken: params.temporaryToken,
 			},
-			{ signal: params.signal },
+			{
+				signal: params.signal,
+				...(params.enableErrorMessagePrompt !== undefined
+					? { enableErrorMessagePrompt: params.enableErrorMessagePrompt }
+					: {}),
+			},
 		)
 		throwIfAborted(params.signal)
 		const processed = toProcessedResult(response)
@@ -405,15 +426,20 @@ async function loadAttachmentsViaV1(params: {
 
 async function loadAttachmentsViaV2(params: {
 	projectId: string
+	scope?: FileScope
 	temporaryToken?: string
 	pageSize: number
 	strategy: ProjectAttachmentsLoadStrategy
 	rawTotal?: number
 	onBatchSnapshot?: ProjectAttachmentsLoaderOptions["onBatchSnapshot"]
 	signal?: AbortSignal
+	includeHidden?: boolean
+	enableErrorMessagePrompt?: boolean
 }): Promise<ProjectAttachmentsLoadResult> {
 	// V2 uses backend cursors for BFS paging; builder emits optional page snapshots.
-	const builder = createProjectAttachmentsV2Builder()
+	const builder = createProjectAttachmentsV2Builder({
+		includeHidden: params.includeHidden,
+	})
 	const batchSnapshotScheduler = createProjectAttachmentsBatchSnapshotScheduler(
 		params.onBatchSnapshot,
 		{ signal: params.signal },
@@ -434,12 +460,18 @@ async function loadAttachmentsViaV2(params: {
 			const response = await SuperMagicApi.getProjectAttachmentsV2Page(
 				{
 					projectId: params.projectId,
+					scope: params.scope,
 					nextParentIds: requestNextParentIds,
 					pageSize: params.pageSize,
 					fileType: FILE_TYPES,
 					temporaryToken: params.temporaryToken,
 				},
-				{ signal: params.signal },
+				{
+					signal: params.signal,
+					...(params.enableErrorMessagePrompt !== undefined
+						? { enableErrorMessagePrompt: params.enableErrorMessagePrompt }
+						: {}),
+				},
 			)
 			recordProjectAttachmentsV2PageFetch(pageFetchStartedAt, {
 				pageIndex,
@@ -550,10 +582,12 @@ export async function loadProjectAttachments(
 		return finalizeLoadResult(
 			await loadAttachmentsViaV1({
 				projectId: options.projectId,
+				scope: options.scope,
 				temporaryToken,
 				strategy: "force_v1",
 				fallbackReason: "forced_v1",
 				signal: options.signal,
+				enableErrorMessagePrompt: options.enableErrorMessagePrompt,
 			}),
 		)
 	}
@@ -565,12 +599,15 @@ export async function loadProjectAttachments(
 		try {
 			return await loadAttachmentsViaV2({
 				projectId: options.projectId,
+				scope: options.scope,
 				temporaryToken,
 				pageSize,
 				strategy,
 				rawTotal,
 				onBatchSnapshot: options.onBatchSnapshot,
 				signal: options.signal,
+				includeHidden: options.includeHidden,
+				enableErrorMessagePrompt: options.enableErrorMessagePrompt,
 			})
 		} catch (error) {
 			// Abort is normal on user switches; do not swallow it and fallback to V1.
@@ -588,11 +625,13 @@ export async function loadProjectAttachments(
 			recordProjectAttachmentsV2Fallback(fallbackReason)
 			return loadAttachmentsViaV1({
 				projectId: options.projectId,
+				scope: options.scope,
 				temporaryToken,
 				strategy: "fallback_v1",
 				rawTotal,
 				fallbackReason,
 				signal: options.signal,
+				enableErrorMessagePrompt: options.enableErrorMessagePrompt,
 			})
 		}
 	}
@@ -608,9 +647,15 @@ export async function loadProjectAttachments(
 		const countResponse = await SuperMagicApi.getProjectAttachmentsCount(
 			{
 				projectId: options.projectId,
+				scope: options.scope,
 				temporaryToken,
 			},
-			{ signal: options.signal },
+			{
+				signal: options.signal,
+				...(options.enableErrorMessagePrompt !== undefined
+					? { enableErrorMessagePrompt: options.enableErrorMessagePrompt }
+					: {}),
+			},
 		)
 		throwIfAborted(options.signal)
 		rawTotal = Number(countResponse?.total || 0)
@@ -624,10 +669,12 @@ export async function loadProjectAttachments(
 		return finalizeLoadResult(
 			await loadAttachmentsViaV1({
 				projectId: options.projectId,
+				scope: options.scope,
 				temporaryToken,
 				strategy: "fallback_v1",
 				fallbackReason: "count_failed",
 				signal: options.signal,
+				enableErrorMessagePrompt: options.enableErrorMessagePrompt,
 			}),
 		)
 	}
@@ -641,11 +688,13 @@ export async function loadProjectAttachments(
 	return finalizeLoadResult(
 		await loadAttachmentsViaV1({
 			projectId: options.projectId,
+			scope: options.scope,
 			temporaryToken,
 			strategy: "count_v1",
 			rawTotal,
 			fallbackReason: "count_below_threshold",
 			signal: options.signal,
+			enableErrorMessagePrompt: options.enableErrorMessagePrompt,
 		}),
 	)
 }

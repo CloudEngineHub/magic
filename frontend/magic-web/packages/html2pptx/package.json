@@ -48,7 +48,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "^22.13.10",
-		"@zumer/snapdom": "^2.0.2",
+		"@zumer/snapdom": "^2.24.17",
 		"jszip": "^3.10.1",
 		"postcss-value-parser": "4.2.0",
 		"pptxgenjs": "4.0.1",
@@ -59,7 +59,7 @@
 		"vitest": "^3.2.4"
 	},
 	"peerDependencies": {
-		"@zumer/snapdom": "^2.0.2",
+		"@zumer/snapdom": "^2.24.17",
 		"postcss-value-parser": "4.2.0",
 		"pptxgenjs": "4.0.1"
 	},

@@ -1,6 +1,6 @@
 import { useMemoizedFn } from "ahooks"
 import { memo, useMemo, useState, type ReactNode } from "react"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { observer } from "mobx-react-lite"
 import DefaultMessageEditorContainer from "@/pages/superMagic/components/MainInputContainer/components/editors/DefaultMessageEditorContainer"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
@@ -18,7 +18,11 @@ import { isAllowedMention as defaultIsAllowedMention } from "@/pages/superMagic/
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
-import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
+import {
+	projectStore,
+	topicStore,
+	workspaceStore,
+} from "@/pages/superMagic/stores/core"
 import type { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 import projectFilesStore from "@/stores/projectFiles"
 import { UserMessageCollapsibleRichText } from "@/pages/superMagic/components/MessageList/components/UserMessageCollapsibleRichText"
@@ -26,6 +30,8 @@ import MentionList from "@/pages/superMagic/components/MessageEditor/components/
 import { handleProjectFileMention } from "@/pages/superMagic/components/MessageEditor/utils"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import { useTranslation } from "react-i18next"
+import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import type { RevokedMessageEditorContext } from "@/pages/superMagic/components/MessageList/revoked-editor-context"
 
 interface RevokedEditableUserMessageProps {
 	node: SuperMagicMessageItem
@@ -36,6 +42,7 @@ interface RevokedEditableUserMessageProps {
 	hiddenOptimisticMessageIds?: string[]
 	onFileClick?: (fileItem: unknown) => void
 	topicModelStore?: ReturnType<typeof createSuperMagicTopicModelStore>
+	editorContext?: RevokedMessageEditorContext
 	fallbackContent: ReactNode
 	onPendingSendChange?: (isPending: boolean) => void
 }
@@ -53,13 +60,23 @@ function RevokedEditableUserMessage({
 	hiddenOptimisticMessageIds = [],
 	onFileClick,
 	topicModelStore,
+	editorContext: editorContextOverride,
 	fallbackContent,
 	onPendingSendChange,
 }: RevokedEditableUserMessageProps) {
+	const { projectFilesStore: messageListProjectFilesStore } = useMessageListContext()
+	const resolvedProjectFilesStore =
+		editorContextOverride?.projectFilesStore ??
+		messageListProjectFilesStore ??
+		projectFilesStore
+	const resolvedSelectedProject =
+		editorContextOverride?.selectedProject !== undefined
+			? editorContextOverride.selectedProject
+			: projectStore.selectedProject
 	const [isPendingSend, setIsPendingSend] = useState(false)
 	const [pendingSendSnapshot, setPendingSendSnapshot] = useState<PendingSendSnapshot | null>(null)
 	const { t } = useTranslation("super")
-	const messageNode = superMagicStore.getMessageNode(node?.app_message_id) as
+	const messageNode = superMagicStore.getMessageNode(node?.super_message_id) as
 		| {
 				content?: string
 				rich_text?: {
@@ -147,6 +164,7 @@ function RevokedEditableUserMessage({
 								messageContent={pendingContent}
 								markerClickScene="messageList"
 								iconSize={16}
+								projectFilesStore={resolvedProjectFilesStore}
 							/>
 						</div>
 					)}
@@ -159,25 +177,43 @@ function RevokedEditableUserMessage({
 				</div>
 			</div>
 		)
-	}, [handleMentionFileClick, messageNode, node?.send_time, pendingContent, pendingMentionItems])
+	}, [
+		handleMentionFileClick,
+		messageNode,
+		node?.send_time,
+		pendingContent,
+		pendingMentionItems,
+		resolvedProjectFilesStore,
+	])
 
 	const editorContext = useMemo<SceneEditorContext | null>(() => {
 		if (!selectedTopic || !initialContent) return null
+		const topicMode = editorContextOverride?.topicMode ?? selectedTopic.topic_mode
 
 		return {
-			selectedProject: projectStore.selectedProject,
+			selectedProject: resolvedSelectedProject,
 			selectedTopic,
-			selectedWorkspace: workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace,
-			setSelectedTopic: topicStore.setSelectedTopic,
-			topicMode: selectedTopic.topic_mode,
-			topicModelStore,
+			selectedWorkspace:
+				editorContextOverride?.selectedWorkspace ??
+				workspaceStore.selectedWorkspace ??
+				workspaceStore.firstWorkspace,
+			setSelectedTopic:
+				editorContextOverride?.setSelectedTopic ?? topicStore.setSelectedTopic,
+			setSelectedWorkspace: editorContextOverride?.setSelectedWorkspace,
+			topicMode,
+			modelTopicMode: editorContextOverride?.modelTopicMode,
+			topicStore: editorContextOverride?.topicStore,
+			mentionPanelStore: editorContextOverride?.mentionPanelStore,
+			topicModelStore: editorContextOverride?.topicModelStore ?? topicModelStore,
+			mergeSendParams: editorContextOverride?.mergeSendParams,
 			size: "small",
 			showLoading,
 			messagesLength,
 			initialContent,
 			autoFocus: true,
 			onFileClick,
-			attachments: projectFilesStore.workspaceFileTree,
+			attachments: resolvedProjectFilesStore.workspaceFileTree,
+			projectFilesStore: resolvedProjectFilesStore,
 			isAllowedMention,
 			onSendStart: ({ content, mentionItems }) => {
 				setPendingSendSnapshot({
@@ -197,6 +233,7 @@ function RevokedEditableUserMessage({
 			onSendSuccess: () => {
 				if (!selectedTopic?.chat_topic_id) return
 
+				optimisticMessageStore.clearActiveRevokedAnchor(selectedTopic.chat_topic_id)
 				hiddenOptimisticMessageIds.forEach((appMessageId) => {
 					optimisticMessageStore.remove({
 						chat_topic_id: selectedTopic.chat_topic_id,
@@ -217,8 +254,8 @@ function RevokedEditableUserMessage({
 				<ModelSwitchContainer
 					size="small"
 					selectedTopic={selectedTopic}
-					selectedProject={projectStore.selectedProject}
-					topicMode={selectedTopic.topic_mode}
+					selectedProject={resolvedSelectedProject}
+					topicMode={editorContextOverride?.modelTopicMode ?? topicMode}
 					showName
 					showLabel={false}
 					showBorder={false}
@@ -245,11 +282,14 @@ function RevokedEditableUserMessage({
 		}
 	}, [
 		initialContent,
+		editorContextOverride,
 		hiddenOptimisticMessageIds,
 		isAllowedMention,
 		messagesLength,
 		onFileClick,
 		onPendingSendChange,
+		resolvedProjectFilesStore,
+		resolvedSelectedProject,
 		selectedTopic,
 		showLoading,
 		topicModelStore,

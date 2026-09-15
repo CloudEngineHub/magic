@@ -1,11 +1,40 @@
 import Konva from "konva"
 import type { Canvas } from "../../core/Canvas"
+import type { ConnectionOrigin } from "../../shared/connectionOrigin"
 import type { Rect } from "../../shared/ids"
 import {
 	ConnectionHandleRenderer,
 	type ConnectionHandleSide,
 	type ConnectionHandleInteractionState,
+	type ConnectionHandleOverlayOrigin,
 } from "./ConnectionHandleRenderer"
+import {
+	resolveConnectionHandleOverlayIntent,
+	type ConnectionHandleOverlayIntent,
+} from "./connectionHandleOverlayIntent"
+import { collectSelectionContentSnapshot } from "../selection/selectionContentCollector"
+import { isConnectionMenuSideDisabled } from "../selection/connectionMenuCapabilities"
+
+type ConnectionHandleInteractionBlocker =
+	| "crop"
+	| "element-drag"
+	| "eraser"
+	| "extend"
+	| "konva-drag"
+	| "selection"
+	| "transform-anchor"
+	| "transform-drag"
+	| "viewport-gesture"
+
+interface ReconcileOptions {
+	animated?: boolean
+	forceGeometryUpdate?: boolean
+}
+
+interface PointerBridgeKeepAliveResult {
+	bounds: Rect | null
+	pointerInside: boolean
+}
 
 export class ConnectionHandleOverlayManager {
 	private static readonly MIN_ELEMENT_SCREEN_MAJOR_SIZE_FOR_HANDLE_PX = 60
@@ -18,14 +47,21 @@ export class ConnectionHandleOverlayManager {
 	private readonly renderer: ConnectionHandleRenderer
 	private readonly animationsEnabled: boolean
 	private overlayNode: Konva.Group | null = null
-	private activeElementId: string | null = null
-	private isPointerInsideOverlay = false
-	private isPointerInsideHandleBridge = false
+	private renderedIntent: ConnectionHandleOverlayIntent = {
+		visible: false,
+		reason: "initial",
+	}
+	private bridgeCandidateElementId: string | null = null
 	private isStagePointerInside = true
 	private menuPinnedElementId: string | null = null
+	private selectionBoundingRect: Rect | null = null
+	private selectedElementIds: string[] = []
+	private interactionBlockers = new Set<ConnectionHandleInteractionBlocker>()
 	private hoveredHandleNode: Konva.Group | null = null
 	private activeHandleNode: Konva.Group | null = null
-	private transformSettledRefreshQueued = false
+	private disabledHoveredCorridor: Konva.Rect | null = null
+	private settledReconcileQueued = false
+	private settledBlockers = new Set<ConnectionHandleInteractionBlocker>()
 	private destroyed = false
 	private overlayTweens = new Map<Konva.Group, Set<Konva.Tween>>()
 	private exitingOverlayNodes = new Set<Konva.Group>()
@@ -46,198 +82,225 @@ export class ConnectionHandleOverlayManager {
 
 	private readonly handleStagePointerMove = (): void => {
 		this.isStagePointerInside = true
-		if (!this.overlayNode || !this.activeElementId) return
-
-		const wasPointerKeepingOverlay = this.isPointerKeepingOverlay()
-		this.syncPointerInsideHandleBridge()
-
-		if (
-			this.canvas.hoverManager.getHoveredElementId() ||
-			this.shouldUseSelectedElementFallback()
-		) {
+		const hoveredElementId = this.canvas.hoverManager.getHoveredElementId()
+		if (hoveredElementId) {
+			this.bridgeCandidateElementId = hoveredElementId
 			return
 		}
-
-		if (wasPointerKeepingOverlay !== this.isPointerKeepingOverlay()) {
-			this.refresh()
-		}
+		if (!this.bridgeCandidateElementId) return
+		this.reconcile("stage-pointer-move")
 	}
 
 	private readonly handleStagePointerLeave = (): void => {
 		this.isStagePointerInside = false
-		this.isPointerInsideOverlay = false
-		this.isPointerInsideHandleBridge = false
-		if (!this.shouldUseSelectedElementFallback() && !this.menuPinnedElementId) {
-			this.refresh()
-		}
+		this.bridgeCandidateElementId = null
+		this.clearDisabledHandleHover()
+		this.reconcile("stage-pointer-leave")
 	}
 
 	private readonly handleStageDragStart = (): void => {
 		this.menuPinnedElementId = null
-		this.hideOverlayImmediately()
+		this.beginInteraction("konva-drag", "stage-drag-start")
+	}
+
+	private readonly handleStageDragEnd = (): void => {
+		this.scheduleReconcileAfterInteractionSettled("konva-drag")
+	}
+
+	private readonly handleViewportPan = (): void => {
+		this.syncBridgeCandidateFromHover()
+		this.reconcile("viewport-pan")
 	}
 
 	private setupEventListeners(): void {
-		const refresh = () => {
-			this.refresh()
+		const reconcile = () => {
+			this.reconcile("state-change")
 		}
-		const refreshAfterTransformSettled = () => {
-			this.scheduleRefreshAfterTransformSettled()
+		const reconcileGeometry = () => {
+			this.reconcile("geometry-change", { forceGeometryUpdate: true })
 		}
-		const hideForTransform = () => {
-			this.hideOverlayImmediately()
+		const resetAndReconcile = () => {
+			this.resetOverlaySourcesAndBlockers()
+			this.reconcile("document-reset", { forceGeometryUpdate: true })
 		}
 		const handleHoverChange = ({ data }: { data: { elementId: string | null } }) => {
 			if (data.elementId) {
-				this.isPointerInsideOverlay = false
-				this.isPointerInsideHandleBridge = false
-			} else {
-				this.syncPointerInsideHandleBridge()
+				this.bridgeCandidateElementId = data.elementId
+			} else if (this.renderedIntent.visible && this.renderedIntent.source === "hover") {
+				this.bridgeCandidateElementId = this.renderedIntent.elementId
 			}
-			if (!data.elementId && this.shouldKeepActiveOverlayFromPointer()) {
-				this.refresh()
-				return
-			}
-			this.refresh()
-		}
-		const clear = () => {
-			this.clear()
+			this.reconcile("element-hover")
 		}
 		const handleConnectionMenuOpen = ({
 			data,
 		}: {
-			data: { originElementId?: string; source: "handle" | "drag-empty" }
+			data: { origin: ConnectionOrigin; source: "handle" | "drag-empty" }
 		}) => {
 			this.menuPinnedElementId =
-				data.source === "handle" && data.originElementId ? data.originElementId : null
-			this.refresh()
+				data.source === "handle" && data.origin.kind === "element"
+					? data.origin.elementId
+					: null
+			this.bridgeCandidateElementId = null
+			this.reconcile("connection-menu-open")
 		}
 		const handleConnectionMenuClose = ({
 			data,
 		}: {
-			data: { originElementId?: string; source: "handle" | "drag-empty" }
+			data: { origin: ConnectionOrigin; source: "handle" | "drag-empty" }
 		}) => {
 			if (data.source !== "handle") return
-			if (data.originElementId && data.originElementId !== this.menuPinnedElementId) return
+			if (
+				data.origin.kind === "element" &&
+				data.origin.elementId !== this.menuPinnedElementId
+			) {
+				return
+			}
 			this.menuPinnedElementId = null
-			this.refresh()
+			this.syncBridgeCandidateFromHover()
+			this.reconcile("connection-menu-close")
 		}
 		const refreshIfCurrentTargetChanged = ({ data }: { data: { elementId: string } }) => {
-			if (
-				this.activeElementId === data.elementId ||
-				this.getCurrentInteractionElementId() === data.elementId
-			) {
-				this.refresh()
+			if (this.getRelevantElementIds().has(data.elementId)) {
+				this.reconcile("current-target-geometry-change", {
+					forceGeometryUpdate: true,
+				})
 			}
+		}
+		const handleElementSelect = ({ data }: { data: { elementIds: string[] } }) => {
+			this.selectedElementIds = [...data.elementIds]
+			this.reconcile("element-select")
+		}
+		const handleElementDeselect = ({ data }: { data?: { elementIds?: string[] } }) => {
+			if (!data?.elementIds?.length) {
+				this.selectedElementIds = []
+			} else {
+				const removed = new Set(data.elementIds)
+				this.selectedElementIds = this.selectedElementIds.filter(
+					(elementId) => !removed.has(elementId),
+				)
+			}
+			this.reconcile("element-deselect")
+		}
+		const handleElementDeleted = ({ data }: { data: { elementId: string } }) => {
+			if (!this.getRelevantElementIds().has(data.elementId)) return
+			if (this.bridgeCandidateElementId === data.elementId) {
+				this.bridgeCandidateElementId = null
+			}
+			if (this.menuPinnedElementId === data.elementId) {
+				this.menuPinnedElementId = null
+			}
+			this.reconcile("element-deleted", { animated: false })
 		}
 
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("element:hover", handleHoverChange),
 			this.canvas.eventEmitter.on("connection:menu:open", handleConnectionMenuOpen),
 			this.canvas.eventEmitter.on("connection:menu:close", handleConnectionMenuClose),
-			this.canvas.eventEmitter.on("element:select", refresh),
-			this.canvas.eventEmitter.on("element:deselect", refresh),
+			this.canvas.eventEmitter.on("element:select", handleElementSelect),
+			this.canvas.eventEmitter.on("element:deselect", handleElementDeselect),
+			this.canvas.eventEmitter.on("selection:position", ({ data }) => {
+				this.selectionBoundingRect = data.boundingRect
+				this.reconcile("selection-position", { forceGeometryUpdate: true })
+			}),
 			this.canvas.eventEmitter.on("element:updated", refreshIfCurrentTargetChanged),
 			this.canvas.eventEmitter.on("element:rerendered", refreshIfCurrentTargetChanged),
-			this.canvas.eventEmitter.on("viewport:scale", refresh),
-			this.canvas.eventEmitter.on("document:loaded", refresh),
-			this.canvas.eventEmitter.on("document:restored", refresh),
-			this.canvas.eventEmitter.on("canvas:readonly", refresh),
-			this.canvas.eventEmitter.on("canvas:devicechange", refresh),
-			this.canvas.eventEmitter.on("tool:change", refresh),
-			this.canvas.eventEmitter.on("crop:exit", refresh),
-			this.canvas.eventEmitter.on("extend:exit", refresh),
-			this.canvas.eventEmitter.on("eraser:exit", refresh),
-			this.canvas.eventEmitter.on("selection:end", refresh),
-			this.canvas.eventEmitter.on("elements:transform:dragend", refreshAfterTransformSettled),
-			this.canvas.eventEmitter.on(
-				"elements:transform:anchorDragend",
-				refreshAfterTransformSettled,
-			),
-			this.canvas.eventEmitter.on(
-				"elements:transform:intentend",
-				refreshAfterTransformSettled,
-			),
+			this.canvas.eventEmitter.on("viewport:scale", reconcileGeometry),
+			this.canvas.eventEmitter.on("viewport:pan", this.handleViewportPan),
+			this.canvas.eventEmitter.on("document:loaded", resetAndReconcile),
+			this.canvas.eventEmitter.on("document:restored", resetAndReconcile),
+			this.canvas.eventEmitter.on("permission:changed", reconcile),
+			this.canvas.eventEmitter.on("canvas:devicechange", reconcile),
+			this.canvas.eventEmitter.on("tool:change", reconcile),
+			this.canvas.eventEmitter.on("crop:exit", () => {
+				this.endInteraction("crop", "crop-exit")
+			}),
+			this.canvas.eventEmitter.on("extend:exit", () => {
+				this.endInteraction("extend", "extend-exit")
+			}),
+			this.canvas.eventEmitter.on("eraser:exit", () => {
+				this.endInteraction("eraser", "eraser-exit")
+			}),
+			this.canvas.eventEmitter.on("selection:end", () => {
+				this.endInteraction("selection", "selection-end")
+			}),
+			this.canvas.eventEmitter.on("elements:transform:dragend", () => {
+				this.scheduleReconcileAfterInteractionSettled("transform-drag")
+			}),
+			this.canvas.eventEmitter.on("elements:transform:anchorDragend", () => {
+				this.scheduleReconcileAfterInteractionSettled("transform-anchor")
+			}),
+			this.canvas.eventEmitter.on("elements:transform:intentend", () => {
+				this.scheduleReconcileAfterInteractionSettled()
+			}),
 			this.canvas.eventEmitter.on("viewport:gesture", ({ data }) => {
 				if (data.active) {
-					this.clear()
+					this.bridgeCandidateElementId = null
+					this.menuPinnedElementId = null
+					this.beginInteraction("viewport-gesture", "viewport-gesture-start")
 				} else {
-					this.refresh()
+					this.endInteraction("viewport-gesture", "viewport-gesture-end")
 				}
 			}),
-			this.canvas.eventEmitter.on("element:deleted", ({ data }) => {
-				if (
-					this.activeElementId === data.elementId ||
-					this.getCurrentInteractionElementId() === data.elementId
-				) {
-					this.clear()
-				}
+			this.canvas.eventEmitter.on("element:deleted", handleElementDeleted),
+			this.canvas.eventEmitter.on("element:batchdeleted", () => {
+				this.resetOverlaySourcesAndBlockers()
+				this.clear({ animated: false })
 			}),
-			this.canvas.eventEmitter.on("element:batchdeleted", clear),
-			this.canvas.eventEmitter.on("canvas:clear", clear),
-			this.canvas.eventEmitter.on("crop:enter", clear),
-			this.canvas.eventEmitter.on("extend:enter", clear),
-			this.canvas.eventEmitter.on("eraser:enter", clear),
-			this.canvas.eventEmitter.on("selection:start", clear),
-			this.canvas.eventEmitter.on("element:dragstart", hideForTransform),
-			this.canvas.eventEmitter.on("elements:transform:dragstart", hideForTransform),
-			this.canvas.eventEmitter.on("elements:transform:anchorDragStart", hideForTransform),
+			this.canvas.eventEmitter.on("canvas:clear", () => {
+				this.resetOverlaySourcesAndBlockers()
+				this.clear({ animated: false })
+			}),
+			this.canvas.eventEmitter.on("crop:enter", () => {
+				this.bridgeCandidateElementId = null
+				this.menuPinnedElementId = null
+				this.beginInteraction("crop", "crop-enter")
+			}),
+			this.canvas.eventEmitter.on("extend:enter", () => {
+				this.bridgeCandidateElementId = null
+				this.menuPinnedElementId = null
+				this.beginInteraction("extend", "extend-enter")
+			}),
+			this.canvas.eventEmitter.on("eraser:enter", () => {
+				this.bridgeCandidateElementId = null
+				this.menuPinnedElementId = null
+				this.beginInteraction("eraser", "eraser-enter")
+			}),
+			this.canvas.eventEmitter.on("selection:start", () => {
+				this.bridgeCandidateElementId = null
+				this.menuPinnedElementId = null
+				this.beginInteraction("selection", "selection-start")
+			}),
+			this.canvas.eventEmitter.on("element:dragstart", () => {
+				this.beginInteraction("element-drag", "element-drag-start")
+			}),
+			this.canvas.eventEmitter.on("element:dragend", () => {
+				this.scheduleReconcileAfterInteractionSettled("element-drag")
+			}),
+			this.canvas.eventEmitter.on("elements:transform:dragstart", () => {
+				this.beginInteraction("transform-drag", "transform-drag-start")
+			}),
+			this.canvas.eventEmitter.on("elements:transform:anchorDragStart", () => {
+				this.beginInteraction("transform-anchor", "transform-anchor-start")
+			}),
 		)
 		this.canvas.stage.on("mousemove touchmove pointermove", this.handleStagePointerMove)
 		this.canvas.stage.on("mouseleave", this.handleStagePointerLeave)
 		this.canvas.stage.on("dragstart", this.handleStageDragStart)
+		this.canvas.stage.on("dragend", this.handleStageDragEnd)
 	}
 
 	public refresh(): void {
-		const elementId = this.resolveDisplayElementId()
-		if (!elementId) {
-			this.clear()
-			return
-		}
-
-		const bounds = this.canvas.elementManager.getNodeAdapter().getElementBounds(elementId)
-		if (!this.isValidRect(bounds)) {
-			this.clear()
-			return
-		}
-
-		const stageScale = this.getSafeStageScale()
-		if (!this.canFitHandlesOnScreen(bounds, stageScale)) {
-			this.clear()
-			return
-		}
-
-		const isNewOverlay = !this.overlayNode
-		const previousElementId = this.activeElementId
-		if (!this.overlayNode) {
-			this.overlayNode = this.renderer.createOverlay(elementId, bounds, stageScale)
-			this.bindOverlayKeepAliveEvents(this.overlayNode)
-			this.bindHandleInteractionEvents(this.overlayNode)
-			this.canvas.controlsLayer.add(this.overlayNode)
-		} else {
-			if (previousElementId !== elementId) {
-				this.resetHandleInteractionState()
-			}
-			this.stopOverlayTweens(this.overlayNode)
-			this.renderer.updateOverlay(this.overlayNode, elementId, bounds, stageScale)
-		}
-
-		this.activeElementId = elementId
-		this.overlayNode.moveToTop()
-		if (isNewOverlay || previousElementId !== elementId) {
-			this.playEnterAnimation(this.overlayNode, stageScale)
-		} else {
-			this.showHandlesAtRest(this.overlayNode)
-		}
-		this.requestControlsDraw("connection-handle-refresh")
+		this.reconcile("external-refresh", { forceGeometryUpdate: true })
 	}
 
 	public clear(options?: { animated?: boolean }): void {
 		this.menuPinnedElementId = null
+		this.bridgeCandidateElementId = null
+		this.renderedIntent = { visible: false, reason: "cleared" }
 		this.hideOverlay({ animated: options?.animated })
-		this.isPointerInsideOverlay = false
-		this.isPointerInsideHandleBridge = false
-		this.activeElementId = null
+		if (options?.animated === false) {
+			this.destroyExitingOverlays()
+		}
 	}
 
 	private hideOverlay(options?: { animated?: boolean }): void {
@@ -245,8 +308,6 @@ export class ConnectionHandleOverlayManager {
 		if (!overlayNode) return
 
 		this.overlayNode = null
-		this.isPointerInsideOverlay = false
-		this.isPointerInsideHandleBridge = false
 		this.resetHandleInteractionState()
 		this.stopOverlayTweens(overlayNode)
 
@@ -264,11 +325,6 @@ export class ConnectionHandleOverlayManager {
 		this.requestControlsDraw("connection-handle-clear")
 	}
 
-	private hideOverlayImmediately(): void {
-		this.hideOverlay({ animated: false })
-		this.destroyExitingOverlays()
-	}
-
 	public destroy(): void {
 		this.destroyed = true
 		this.resetHandleInteractionState()
@@ -278,57 +334,196 @@ export class ConnectionHandleOverlayManager {
 		this.canvas.stage.off("mousemove touchmove pointermove", this.handleStagePointerMove)
 		this.canvas.stage.off("mouseleave", this.handleStagePointerLeave)
 		this.canvas.stage.off("dragstart", this.handleStageDragStart)
+		this.canvas.stage.off("dragend", this.handleStageDragEnd)
 		this.eventUnsubscribers.forEach((unsubscribe) => unsubscribe())
 		this.eventUnsubscribers = []
 	}
 
-	private resolveDisplayElementId(): string | null {
-		const overlayBlockReason = this.getConnectionHandleOverlayBlockReason()
-		if (overlayBlockReason) {
-			return null
-		}
-
-		const selectedIds = this.canvas.selectionManager.getSelectedIds()
-		if (selectedIds.length > 1) {
-			return null
-		}
-
+	private reconcile(reason: string, options: ReconcileOptions = {}): void {
+		if (this.destroyed) return
+		const selectionCount = this.canvas.selectionManager.getSelectionCount()
+		const selectedElementIds =
+			selectionCount > 1
+				? this.selectedElementIds.length > 0
+					? this.selectedElementIds
+					: this.canvas.selectionManager.getSelectedIds()
+				: []
+		const selectionSnapshot =
+			selectionCount > 1 && typeof this.canvas.elementManager.getAllElements === "function"
+				? collectSelectionContentSnapshot(
+						this.canvas,
+						selectedElementIds,
+						this.selectionBoundingRect,
+					)
+				: null
 		const hoveredElementId = this.canvas.hoverManager.getHoveredElementId()
-		const keepAliveElementId = this.isPointerKeepingOverlay() ? this.activeElementId : null
-		const selectedFallbackElementId = this.shouldUseSelectedElementFallback()
-			? selectedIds[0]
+		const touchSelectedElementId = this.getTouchSelectedElementId(selectionCount)
+		const blockReason = this.getConnectionHandleOverlayBlockReason()
+		const shouldResolvePointerBridge =
+			!blockReason &&
+			!this.menuPinnedElementId &&
+			!hoveredElementId &&
+			Boolean(this.bridgeCandidateElementId)
+		const stageScale = this.getSafeStageScale()
+		const pointerBridgeKeepAlive = shouldResolvePointerBridge
+			? this.resolvePointerBridgeKeepAlive(stageScale)
 			: null
-		const elementId =
-			this.menuPinnedElementId ??
-			hoveredElementId ??
-			keepAliveElementId ??
-			selectedFallbackElementId
-		if (!elementId) return null
 
-		const elementBlockReason = this.getConnectionHandleElementBlockReason(elementId)
-		if (elementBlockReason) {
-			return null
+		let intent = resolveConnectionHandleOverlayIntent({
+			blockReason,
+			hasMultipleSelection: selectionCount > 1,
+			selectionTarget: selectionSnapshot
+				? {
+						elementIds: selectionSnapshot.rootElementIds,
+						boundingRect: selectionSnapshot.boundingRect,
+						selectionRevision: selectionSnapshot.selectionRevision,
+					}
+				: undefined,
+			canShowSelectionHandles: selectionSnapshot?.allRootsCanConnect ?? false,
+			menuPinnedElementId: this.menuPinnedElementId,
+			hoveredElementId,
+			bridgeCandidateElementId: this.bridgeCandidateElementId,
+			pointerInsideKeepAliveRegion: pointerBridgeKeepAlive?.pointerInside ?? false,
+			touchSelectedElementId,
+		})
+
+		let bounds: Rect | null | undefined
+		if (intent.visible) {
+			const intentElementId = "kind" in intent ? null : intent.elementId
+			const elementBlockReason = intentElementId
+				? this.getConnectionHandleElementBlockReason(intentElementId)
+				: null
+			if (elementBlockReason) {
+				intent = { visible: false, reason: elementBlockReason }
+			} else {
+				bounds =
+					"kind" in intent && intent.kind === "selection"
+						? intent.boundingRect
+						: intentElementId === this.bridgeCandidateElementId &&
+							  pointerBridgeKeepAlive?.bounds
+							? pointerBridgeKeepAlive.bounds
+							: this.canvas.elementManager
+									.getNodeAdapter()
+									.getElementBounds(intentElementId as string)
+				if (!this.isValidRect(bounds)) {
+					intent = { visible: false, reason: "invalid-bounds" }
+				} else if (!this.canFitHandlesOnScreen(bounds, stageScale)) {
+					intent = { visible: false, reason: "element-too-small" }
+				}
+			}
 		}
 
-		return elementId
+		if (!intent.visible && intent.reason === "no-target") {
+			this.bridgeCandidateElementId = null
+		}
+		if (intent.visible && intent.source === "touch-selection") {
+			this.bridgeCandidateElementId = null
+		}
+
+		this.applyIntent(intent, bounds, stageScale, reason, options)
 	}
 
-	private getCurrentInteractionElementId(): string | null {
-		const selectedIds = this.canvas.selectionManager.getSelectedIds()
-		if (selectedIds.length > 1) return null
-		return (
-			this.menuPinnedElementId ??
-			this.canvas.hoverManager.getHoveredElementId() ??
-			(this.isPointerKeepingOverlay() ? this.activeElementId : null) ??
-			(this.shouldUseSelectedElementFallback() ? selectedIds[0] : null)
+	private applyIntent(
+		intent: ConnectionHandleOverlayIntent,
+		bounds: Rect | null | undefined,
+		stageScale: number,
+		reason: string,
+		options: ReconcileOptions,
+	): void {
+		const previousIntent = this.renderedIntent
+		this.renderedIntent = intent
+
+		if (!intent.visible || !this.isValidRect(bounds)) {
+			this.hideOverlay({ animated: options.animated })
+			if (options.animated === false) {
+				this.destroyExitingOverlays()
+			}
+			return
+		}
+
+		const previousIdentity = this.getIntentIdentity(previousIntent)
+		const nextIdentity = this.getIntentIdentity(intent)
+		const isNewOverlay = !this.overlayNode
+		const elementChanged = previousIdentity !== nextIdentity
+		if (!this.overlayNode) {
+			const disabledSides = this.resolveDisabledHandleSides(intent)
+			this.overlayNode = this.renderer.createOverlay(
+				this.getRendererOrigin(intent),
+				bounds,
+				stageScale,
+				disabledSides,
+			)
+			this.bindHandleInteractionEvents(this.overlayNode)
+			this.canvas.controlsLayer.add(this.overlayNode)
+		} else if (elementChanged || options.forceGeometryUpdate) {
+			if (elementChanged) {
+				this.resetHandleInteractionState()
+			}
+			this.stopOverlayTweens(this.overlayNode)
+			this.renderer.updateOverlay(
+				this.overlayNode,
+				this.getRendererOrigin(intent),
+				bounds,
+				stageScale,
+				this.resolveDisabledHandleSides(intent),
+			)
+		}
+
+		this.overlayNode.moveToTop()
+		if (isNewOverlay || elementChanged) {
+			this.playEnterAnimation(this.overlayNode, stageScale)
+		} else if (options.forceGeometryUpdate) {
+			this.showHandlesAtRest(this.overlayNode)
+		}
+		if (isNewOverlay || elementChanged || options.forceGeometryUpdate) {
+			this.requestControlsDraw(`connection-handle-${reason}`)
+		}
+	}
+
+	private syncBridgeCandidateFromHover(): void {
+		const hoveredElementId = this.canvas.hoverManager.getHoveredElementId()
+		if (hoveredElementId) {
+			this.bridgeCandidateElementId = hoveredElementId
+		}
+	}
+
+	private resetOverlaySourcesAndBlockers(): void {
+		this.bridgeCandidateElementId = null
+		this.menuPinnedElementId = null
+		this.selectionBoundingRect = null
+		this.selectedElementIds = []
+		this.interactionBlockers.clear()
+		this.settledBlockers.clear()
+	}
+
+	private getRelevantElementIds(): Set<string> {
+		const touchSelectedElementId = this.getTouchSelectedElementId(
+			this.canvas.selectionManager.getSelectionCount(),
+		)
+		const selectedIds =
+			this.canvas.selectionManager.getSelectionCount() > 1 ? this.selectedElementIds : []
+		return new Set(
+			[
+				this.menuPinnedElementId,
+				this.canvas.hoverManager.getHoveredElementId(),
+				this.bridgeCandidateElementId,
+				this.renderedIntent.visible && !("kind" in this.renderedIntent)
+					? this.renderedIntent.elementId
+					: null,
+				touchSelectedElementId,
+				...selectedIds,
+				...(this.renderedIntent.visible &&
+				"kind" in this.renderedIntent &&
+				this.renderedIntent.kind === "selection"
+					? this.renderedIntent.elementIds
+					: []),
+			].filter((elementId): elementId is string => Boolean(elementId)),
 		)
 	}
 
-	private shouldUseSelectedElementFallback(): boolean {
-		return (
-			this.shouldShowSelectedElementHandle() &&
-			this.canvas.selectionManager.getSelectedIds().length === 1
-		)
+	private getTouchSelectedElementId(selectionCount: number): string | null {
+		if (!this.shouldShowSelectedElementHandle() || selectionCount !== 1) return null
+		return this.canvas.selectionManager.getSelectedIds()[0] ?? null
 	}
 
 	private shouldShowSelectedElementHandle(): boolean {
@@ -337,7 +532,11 @@ export class ConnectionHandleOverlayManager {
 	}
 
 	private getConnectionHandleOverlayBlockReason(): string | null {
-		if (this.canvas.readonly) return "readonly"
+		const interactionBlocker = this.interactionBlockers.values().next().value
+		if (interactionBlocker) return interactionBlocker
+		if (this.canvas.stage.isDragging()) return "stage-dragging"
+		if (!this.canvas.permissionManager.can("document.write"))
+			return "document-write-unavailable"
 		if (this.canvas.connectionDragManager?.isDraggingConnection?.())
 			return "connection-dragging"
 		if (!this.canvas.permissionManager.canUseSelectionToolAffordance()) {
@@ -392,61 +591,41 @@ export class ConnectionHandleOverlayManager {
 		return Number.isFinite(scale) && scale > 0 ? scale : 1
 	}
 
-	private bindOverlayKeepAliveEvents(overlayNode: Konva.Group): void {
-		overlayNode.on("mouseenter", () => {
-			this.isPointerInsideOverlay = true
-		})
-		overlayNode.on("mouseleave", () => {
-			this.isPointerInsideOverlay = false
-			this.syncPointerInsideHandleBridge()
-			this.refresh()
-		})
+	private beginInteraction(blocker: ConnectionHandleInteractionBlocker, reason: string): void {
+		this.interactionBlockers.add(blocker)
+		this.reconcile(reason, { animated: false })
 	}
 
-	private isPointerKeepingOverlay(): boolean {
-		return this.isPointerInsideOverlay || this.isPointerInsideHandleBridge
+	private endInteraction(blocker: ConnectionHandleInteractionBlocker, reason: string): void {
+		this.interactionBlockers.delete(blocker)
+		this.reconcile(reason, { forceGeometryUpdate: true })
 	}
 
-	private syncPointerInsideHandleBridge(): boolean {
-		const nextPointerInsideHandleBridge = this.canKeepActiveOverlayFromPointerGeometry()
-		this.isPointerInsideHandleBridge = nextPointerInsideHandleBridge
-		return nextPointerInsideHandleBridge
-	}
-
-	private shouldKeepActiveOverlayFromPointer(): boolean {
-		if (this.isPointerInsideOverlay) return this.canKeepActiveOverlayForActiveElement()
-		if (this.isPointerInsideHandleBridge) return this.canKeepActiveOverlayForActiveElement()
-		return this.canKeepActiveOverlayFromPointerGeometry()
-	}
-
-	private canKeepActiveOverlayForActiveElement(): boolean {
-		if (!this.overlayNode || !this.activeElementId) return false
-		if (this.getConnectionHandleOverlayBlockReason()) return false
-		if (this.getConnectionHandleElementBlockReason(this.activeElementId)) return false
-		return true
-	}
-
-	private canKeepActiveOverlayFromPointerGeometry(): boolean {
-		if (!this.canKeepActiveOverlayForActiveElement()) return false
-		return this.isPointerInsideActiveHandleHitRegion()
-	}
-
-	private isPointerInsideActiveHandleHitRegion(): boolean {
-		if (!this.isStagePointerInside) return false
-		if (!this.activeElementId) return false
+	private resolvePointerBridgeKeepAlive(stageScale: number): PointerBridgeKeepAliveResult {
+		if (!this.isStagePointerInside || !this.bridgeCandidateElementId) {
+			return { bounds: null, pointerInside: false }
+		}
 
 		const pointerPosition = this.getPointerPositionInControlsLayer()
-		if (!pointerPosition) return false
+		if (!pointerPosition) return { bounds: null, pointerInside: false }
 
 		const bounds = this.canvas.elementManager
 			.getNodeAdapter()
-			.getElementBounds(this.activeElementId)
-		if (!this.isValidRect(bounds)) return false
+			.getElementBounds(this.bridgeCandidateElementId)
+		if (!this.isValidRect(bounds)) return { bounds, pointerInside: false }
 
-		const stageScale = this.getSafeStageScale()
-		if (!this.canFitHandlesOnScreen(bounds, stageScale)) return false
+		if (!this.canFitHandlesOnScreen(bounds, stageScale)) {
+			return { bounds, pointerInside: false }
+		}
 
-		return this.renderer.isPointInHandleHitRegion(bounds, stageScale, pointerPosition)
+		return {
+			bounds,
+			pointerInside: this.renderer.isPointInHandleKeepAliveRegion(
+				bounds,
+				stageScale,
+				pointerPosition,
+			),
+		}
 	}
 
 	private getPointerPositionInControlsLayer(): { x: number; y: number } | null {
@@ -458,8 +637,27 @@ export class ConnectionHandleOverlayManager {
 	}
 
 	private bindHandleInteractionEvents(overlayNode: Konva.Group): void {
+		this.getCorridorNodes(overlayNode).forEach((corridor) => {
+			corridor.on("mouseenter", () => {
+				const side = this.getConnectionHandleSide(corridor)
+				if (!side) return
+				const handle = this.getHandleNodes(overlayNode).find(
+					(node) => this.getConnectionHandleSide(node) === side,
+				)
+				if (!handle || !this.isHandleDisabled(handle)) return
+				this.disabledHoveredCorridor = corridor
+				this.canvas.cursorManager.setTemporary("not-allowed")
+			})
+
+			corridor.on("mouseleave", () => {
+				if (this.disabledHoveredCorridor !== corridor) return
+				this.clearDisabledHandleHover()
+			})
+		})
+
 		this.getHandleNodes(overlayNode).forEach((handle) => {
 			handle.on("mouseenter", () => {
+				if (this.isHandleDisabled(handle)) return
 				this.hoveredHandleNode = handle
 				this.setHandleInteractionState(
 					handle,
@@ -470,6 +668,7 @@ export class ConnectionHandleOverlayManager {
 			})
 
 			handle.on("mouseleave", () => {
+				if (this.isHandleDisabled(handle)) return
 				if (this.hoveredHandleNode === handle) {
 					this.hoveredHandleNode = null
 				}
@@ -482,6 +681,7 @@ export class ConnectionHandleOverlayManager {
 
 			handle.on("pointerdown mousedown touchstart", (event) => {
 				this.stopHandleEvent(event)
+				if (this.isHandleDisabled(handle)) return
 				this.activeHandleNode = handle
 				this.hoveredHandleNode = handle
 				this.setHandleInteractionState(handle, "active", "connection-handle-active")
@@ -529,23 +729,122 @@ export class ConnectionHandleOverlayManager {
 		handle: Konva.Group,
 		event: Konva.KonvaEventObject<Event>,
 	): void {
-		const elementId = handle.getAttr("elementId")
 		const side = this.getConnectionHandleSide(handle)
-		if (!elementId || !side) return
+		if (!side) return
+		const overlayOrigin = this.getConnectionHandleOrigin(handle)
+		if (!overlayOrigin) return
+		// Prefer the rendered intent so a selection handle never falls back to a fake 1x1 rect
+		// when the memorized selection:position event has not arrived yet.
+		const selectionBoundingRect =
+			this.renderedIntent.visible &&
+			"kind" in this.renderedIntent &&
+			this.renderedIntent.kind === "selection" &&
+			overlayOrigin.kind === "selection" &&
+			this.renderedIntent.selectionRevision === overlayOrigin.selectionRevision
+				? this.renderedIntent.boundingRect
+				: this.selectionBoundingRect
+		const origin: ConnectionOrigin | null =
+			overlayOrigin.kind === "selection" && this.isValidRect(selectionBoundingRect)
+				? {
+						kind: "selection",
+						elementIds: [...overlayOrigin.elementIds],
+						side,
+						boundingRect: { ...selectionBoundingRect },
+						selectionRevision: overlayOrigin.selectionRevision,
+					}
+				: overlayOrigin.kind === "element"
+					? { kind: "element", elementId: overlayOrigin.elementId, side }
+					: null
+		if (!origin) return
 
-		this.canvas.connectionDragManager?.startFromHandle({
-			elementId,
-			side,
-			event,
-		})
+		this.canvas.connectionDragManager?.startFromHandle({ origin, event })
 	}
 
-	private getConnectionHandleSide(handle: Konva.Group): ConnectionHandleSide | null {
-		const side = handle.getAttr("connectionHandleSide")
+	private getConnectionHandleOrigin(handle: Konva.Group): ConnectionHandleOverlayOrigin | null {
+		const origin = handle.getAttr(ConnectionHandleRenderer.HANDLE_ORIGIN_ATTR)
+		if (!origin || typeof origin !== "object") return null
+		if (
+			origin.kind === "element" &&
+			typeof origin.elementId === "string" &&
+			origin.elementId.length > 0
+		) {
+			return { kind: "element", elementId: origin.elementId }
+		}
+		if (
+			origin.kind === "selection" &&
+			Array.isArray(origin.elementIds) &&
+			origin.elementIds.length > 1 &&
+			origin.elementIds.every((elementId: unknown) => typeof elementId === "string") &&
+			typeof origin.selectionRevision === "string"
+		) {
+			return {
+				kind: "selection",
+				elementIds: [...origin.elementIds],
+				selectionRevision: origin.selectionRevision,
+			}
+		}
+		return null
+	}
+
+	private getIntentIdentity(intent: ConnectionHandleOverlayIntent): string | null {
+		if (!intent.visible) return null
+		if ("kind" in intent) {
+			return `selection:${intent.selectionRevision}`
+		}
+		return `element:${intent.elementId}`
+	}
+
+	private getRendererOrigin(
+		intent: Extract<ConnectionHandleOverlayIntent, { visible: true }>,
+	): ConnectionHandleOverlayOrigin {
+		if ("kind" in intent) {
+			return {
+				kind: "selection",
+				elementIds: intent.elementIds,
+				selectionRevision: intent.selectionRevision,
+			}
+		}
+		return { kind: "element", elementId: intent.elementId }
+	}
+
+	private getConnectionHandleSide(node: Konva.Node): ConnectionHandleSide | null {
+		const side = node.getAttr("connectionHandleSide")
 		return side === "left" || side === "right" ? side : null
 	}
 
+	private isHandleDisabled(handle: Konva.Group): boolean {
+		return handle.getAttr(ConnectionHandleRenderer.HANDLE_DISABLED_ATTR) === true
+	}
+
+	private resolveDisabledHandleSides(
+		intent: Extract<ConnectionHandleOverlayIntent, { visible: true }>,
+	): ConnectionHandleSide[] {
+		const origin = this.getRendererOrigin(intent)
+		const snapshot = collectSelectionContentSnapshot(
+			this.canvas,
+			origin.kind === "selection" ? origin.elementIds : [origin.elementId],
+			"kind" in intent && intent.kind === "selection" ? intent.boundingRect : undefined,
+		)
+		return (["left", "right"] as const).filter((side) =>
+			isConnectionMenuSideDisabled({
+				origin:
+					origin.kind === "selection"
+						? {
+								...origin,
+								side,
+								boundingRect:
+									"kind" in intent && intent.kind === "selection"
+										? intent.boundingRect
+										: { x: 0, y: 0, width: 0, height: 0 },
+							}
+						: { ...origin, side },
+				snapshot,
+			}),
+		)
+	}
+
 	private resetHandleInteractionState(): void {
+		this.clearDisabledHandleHover()
 		const hasInteraction = !!this.hoveredHandleNode || !!this.activeHandleNode
 		const handles = new Set(
 			[this.hoveredHandleNode, this.activeHandleNode].filter(
@@ -554,7 +853,11 @@ export class ConnectionHandleOverlayManager {
 		)
 		handles.forEach((handle) => {
 			if (handle.getParent()) {
-				this.renderer.setHandleInteractionState(handle, "idle")
+				if (this.isHandleDisabled(handle)) {
+					this.renderer.setHandleDisabledState(handle, true)
+				} else {
+					this.renderer.setHandleInteractionState(handle, "idle")
+				}
 			}
 		})
 		this.hoveredHandleNode = null
@@ -563,6 +866,12 @@ export class ConnectionHandleOverlayManager {
 		if (hasInteraction) {
 			this.canvas.cursorManager.restoreToolCursor()
 		}
+	}
+
+	private clearDisabledHandleHover(): void {
+		if (!this.disabledHoveredCorridor) return
+		this.disabledHoveredCorridor = null
+		this.canvas.cursorManager.restoreToolCursor()
 	}
 
 	private restoreHandleCursorIfIdle(): void {
@@ -598,9 +907,14 @@ export class ConnectionHandleOverlayManager {
 		event.evt?.stopImmediatePropagation()
 	}
 
-	private scheduleRefreshAfterTransformSettled(): void {
-		if (this.transformSettledRefreshQueued) return
-		this.transformSettledRefreshQueued = true
+	private scheduleReconcileAfterInteractionSettled(
+		blocker?: ConnectionHandleInteractionBlocker,
+	): void {
+		if (blocker) {
+			this.settledBlockers.add(blocker)
+		}
+		if (this.settledReconcileQueued) return
+		this.settledReconcileQueued = true
 		const schedule =
 			typeof queueMicrotask === "function"
 				? queueMicrotask
@@ -608,9 +922,13 @@ export class ConnectionHandleOverlayManager {
 						void Promise.resolve().then(callback)
 					}
 		schedule(() => {
-			this.transformSettledRefreshQueued = false
+			this.settledReconcileQueued = false
 			if (this.destroyed) return
-			this.refresh()
+			this.settledBlockers.forEach((settledBlocker) => {
+				this.interactionBlockers.delete(settledBlocker)
+			})
+			this.settledBlockers.clear()
+			this.reconcile("interaction-settled", { forceGeometryUpdate: true })
 		})
 	}
 
@@ -697,6 +1015,12 @@ export class ConnectionHandleOverlayManager {
 		return overlayNode
 			.find(`.${ConnectionHandleRenderer.HANDLE_GROUP_NAME}`)
 			.filter((node): node is Konva.Group => node instanceof Konva.Group)
+	}
+
+	private getCorridorNodes(overlayNode: Konva.Group): Konva.Rect[] {
+		return overlayNode
+			.find(`.${ConnectionHandleRenderer.HANDLE_CORRIDOR_NAME}`)
+			.filter((node): node is Konva.Rect => node instanceof Konva.Rect)
 	}
 
 	private canAnimateOverlay(overlayNode: Konva.Group): boolean {

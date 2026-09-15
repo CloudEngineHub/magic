@@ -11,6 +11,13 @@ enum MentionType: string
 {
     case PROJECT_DIRECTORY = 'project_directory';
     case PROJECT_FILE = 'project_file';
+    case MEMORY_DIRECTORY = 'memory_directory';
+    case MEMORY_FILE = 'memory_file';
+
+    /**
+     * 跨项目挂载：引用整个项目（只读挂载到当前沙箱）.
+     */
+    case PROJECT = 'project';
 
     /**
      * 本次消息中临时上传的文件，后续会统一到 project_file 中.
@@ -18,6 +25,7 @@ enum MentionType: string
     case UPLOAD_FILE = 'upload_file';
 
     case AGENT = 'agent';
+    case ASSISTANT = 'assistant';
     case MCP = 'mcp';
     case TOOL = 'tool';
     case SKILL = 'skill';

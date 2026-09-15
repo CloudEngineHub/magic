@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { getPromptRichTextPlainText, serializePromptRichTextLocaleValue } from "../promptRichText"
-import { buildConcatenatedPresetContent, hasSelectableOptions } from "../utils"
+import {
+	buildConcatenatedPresetContent,
+	hasSelectableOptions,
+	isIdentifiedOptionItem,
+	resolveDemoPromptText,
+} from "../utils"
 import type { FieldItem } from "../types"
 
 function expectPresetContentText(fields: FieldItem[], locale: string, expected: string) {
@@ -10,6 +15,12 @@ function expectPresetContentText(fields: FieldItem[], locale: string, expected: 
 }
 
 describe("MainInputContainer panel utils", () => {
+	it("accepts only non-empty string values as stable option identities", () => {
+		expect(isIdentifiedOptionItem({ value: "stable-id" })).toBe(true)
+		expect(isIdentifiedOptionItem({ value: "  " })).toBe(false)
+		expect(isIdentifiedOptionItem({ value: { default: "display text" } })).toBe(false)
+	})
+
 	it("builds mixed preset content per field instead of switching logic for the whole list", () => {
 		const fields: FieldItem[] = [
 			{
@@ -264,5 +275,48 @@ describe("MainInputContainer panel utils", () => {
 		}
 
 		expect(hasSelectableOptions(field)).toBe(false)
+	})
+
+	it("resolves localized rich text demo prompts to plain input text", () => {
+		const prompt = serializePromptRichTextLocaleValue({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: "分析销售趋势" }],
+				},
+			],
+		})
+
+		expect(
+			resolveDemoPromptText(
+				{
+					prompt: { default: "Fallback", zh_CN: prompt },
+				},
+				"zh_CN",
+			),
+		).toBe("分析销售趋势")
+	})
+
+	it("uses description before falling back to value", () => {
+		expect(
+			resolveDemoPromptText({ value: "Stable ID", description: "Legacy prompt" }, "en_US"),
+		).toBe("Legacy prompt")
+		expect(resolveDemoPromptText({ value: "Built-in prompt" }, "en_US")).toBe("Built-in prompt")
+	})
+
+	it("continues falling back when prompt has no content", () => {
+		expect(
+			resolveDemoPromptText(
+				{ value: "Stable ID", prompt: "  ", description: "Legacy prompt" },
+				"en_US",
+			),
+		).toBe("Legacy prompt")
+		expect(
+			resolveDemoPromptText(
+				{ value: "Built-in prompt", prompt: { default: "", zh_CN: "  " } },
+				"zh_CN",
+			),
+		).toBe("Built-in prompt")
 	})
 })

@@ -112,6 +112,85 @@ window.magicProjectConfig = {
 		])
 	})
 
+	it("parses current and legacy multiline transcript headers together", () => {
+		const segments = parseTranscriptMarkdown(`
+## Transcript
+
+[00:00] Speaker-1:
+Opening line
+with more context
+
+**[00:05] Speaker-2:**
+Legacy line
+
+[00:10] Speaker-3: Inline line
+`)
+
+		expect(segments).toEqual([
+			{
+				id: "0-0",
+				start: 0,
+				end: 5,
+				speaker: "Speaker-1",
+				text: "Opening line\nwith more context",
+			},
+			{ id: "1-5", start: 5, end: 10, speaker: "Speaker-2", text: "Legacy line" },
+			{
+				id: "2-10",
+				start: 10,
+				end: undefined,
+				speaker: "Speaker-3",
+				text: "Inline line",
+			},
+		])
+	})
+
+	it("preserves transcript content that starts with a hash", () => {
+		const segments = parseTranscriptMarkdown(`
+## Transcript
+
+[00:00] Speaker-1:
+#1 priority
+#topic remains part of the transcript
+`)
+
+		expect(segments).toEqual([
+			{
+				id: "0-0",
+				start: 0,
+				end: undefined,
+				speaker: "Speaker-1",
+				text: "#1 priority\n#topic remains part of the transcript",
+			},
+		])
+	})
+
+	it("preserves extended time, range, list, and localized speaker formats", () => {
+		const segments = parseTranscriptMarkdown(`
+## Transcript
+
+- **[01:02:03] Guest Alpha：** First line
+* [01:02:08]–[01:02:12] Speaker-2: Second line
+`)
+
+		expect(segments).toEqual([
+			{
+				id: "0-3723",
+				start: 3723,
+				end: 3728,
+				speaker: "Guest Alpha",
+				text: "First line",
+			},
+			{
+				id: "1-3728",
+				start: 3728,
+				end: 3732,
+				speaker: "Speaker-2",
+				text: "Second line",
+			},
+		])
+	})
+
 	it("parses structured topics markdown into summary and time cards", () => {
 		const topics = parseTopicsMarkdown(`
 ## Topics

@@ -1,12 +1,10 @@
 import { lazy, Suspense } from "react"
 import { openAgentCommonModal } from "@/components/Agent/AgentCommonModal"
 import type { LongTremMemoryProps } from "./LongTremMemory"
-import type { NavigateToStateParams } from "@/pages/superMagic/services/routeManageService"
-import { LongTremMemoryPage } from "./types"
-import type { LongMemory } from "@/types/longMemory"
 
 const LongTremMemoryModal = lazy(() => import("./LongTremMemory"))
 
+/** 渲染长期记忆弹窗内容。 */
 export function LongTremMemory(props: LongTremMemoryProps) {
 	return (
 		<Suspense fallback={null}>
@@ -15,45 +13,28 @@ export function LongTremMemory(props: LongTremMemoryProps) {
 	)
 }
 
+/** 预加载长期记忆弹窗代码。 */
 export function preloadLongTremMemoryModal() {
 	return import("./LongTremMemory")
 }
 
-export function openLongTremMemoryModal({
-	onWorkspaceStateChange,
-	initialPage,
-	initialEditMemory,
-	initialSelectedProjectId,
-	closeOnCreateSuccess,
-	onClose,
-	onMemoryChanged,
-}: {
-	onWorkspaceStateChange: (params: NavigateToStateParams) => void
-	initialPage?: LongTremMemoryPage
-	initialEditMemory?: LongMemory.Memory
-	initialSelectedProjectId?: string
-	closeOnCreateSuccess?: boolean
-	onClose?: () => void
-	onMemoryChanged?: () => void
-}) {
+/** 打开个人中心全局长期记忆弹窗。 */
+export function openLongTremMemoryModal({ onClose }: { onClose?: () => void } = {}) {
 	openAgentCommonModal({
 		width: 900,
 		footer: null,
 		closable: false,
 		centered: true,
 		onClose,
-		children: (
-			<LongTremMemory
-				onWorkspaceStateChange={onWorkspaceStateChange}
-				initialPage={initialPage}
-				initialEditMemory={initialEditMemory}
-				initialSelectedProjectId={initialSelectedProjectId}
-				closeOnCreateSuccess={closeOnCreateSuccess}
-				onMemoryChanged={onMemoryChanged}
-			/>
-		),
+		children: <LongTremMemory />,
 	})
 }
 
-// @ts-ignore
+declare global {
+	interface Window {
+		openLongTremMemoryModal?: typeof openLongTremMemoryModal
+	}
+}
+
+// 调试入口沿用既有全局名称。
 window.openLongTremMemoryModal = openLongTremMemoryModal

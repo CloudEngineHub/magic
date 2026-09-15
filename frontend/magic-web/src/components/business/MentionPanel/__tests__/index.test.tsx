@@ -6,16 +6,21 @@ import MentionPanel from "../index"
 import { defaultMentionPanelCatalogBehavior } from "../catalogBehavior"
 import { MentionItemType, MentionPanelViewMode, PanelState } from "../types"
 import type { MentionItem, MentionPanelCatalogBehavior } from "../types"
+import type { ProjectResourceSelection } from "@/pages/superMagic/components/SelectPathModal/types"
 
-const { mockFilePreviewById, mockPrepareMentionItemForPending } = vi.hoisted(() => ({
-	mockFilePreviewById: {} as Record<string, string>,
-	mockPrepareMentionItemForPending: vi.fn(),
-}))
+const { mockFilePreviewById, mockPrepareMentionItemForPending, mockMobileState } = vi.hoisted(
+	() => ({
+		mockFilePreviewById: {} as Record<string, string>,
+		mockPrepareMentionItemForPending: vi.fn(),
+		mockMobileState: { isMobile: false },
+	}),
+)
 
 const mockSelectItem = vi.fn()
 const mockConfirmSelection = vi.fn()
 const mockReset = vi.fn()
 interface UseMentionPanelMockProps {
+	onSelect?: (item: MentionItem) => void
 	onKeyboardConfirm?: () => boolean | void
 	onKeyboardMetaEnter?: () => boolean | void
 	onKeyboardNavigateBack?: () => void
@@ -173,8 +178,33 @@ vi.mock("../hooks/useI18n", () => ({
 	}),
 }))
 
-vi.mock("../../../hooks/useIsMobile", () => ({
-	useIsMobile: () => false,
+vi.mock("@/hooks/useIsMobile", () => ({
+	useIsMobile: () => mockMobileState.isMobile,
+}))
+
+vi.mock("../MentionPanelMobile", () => ({
+	default: ({
+		visible,
+		onSelect,
+	}: {
+		visible: boolean
+		onSelect?: (item: MentionItem) => void
+	}) =>
+		visible ? (
+			<button
+				type="button"
+				data-testid="mock-mention-panel-mobile"
+				onClick={() =>
+					onSelect?.({
+						id: "other-project-files",
+						name: "Other Projects/Files",
+						type: "other_project_files",
+					})
+				}
+			>
+				Open other projects
+			</button>
+		) : null,
 }))
 
 vi.mock("@/styles/fonts/geist", () => ({
@@ -212,6 +242,54 @@ vi.mock("../components/MenuItem", () => ({
 	),
 }))
 
+vi.mock("../components/OtherProjectFileMentionModal", () => ({
+	default: ({
+		visible,
+		onSelect,
+	}: {
+		visible: boolean
+		onSelect: (selections: ProjectResourceSelection[]) => void
+	}) =>
+		visible ? (
+			<div data-testid="other-project-file-mention-modal">
+				<button
+					type="button"
+					data-testid="other-project-file-mention-submit"
+					onClick={() =>
+						onSelect([
+							{
+								level: "project",
+								workspace: { id: "workspace-2", name: "Workspace Two" },
+								project: {
+									id: "project-2",
+									project_name: "Project Two",
+									work_dir: "/project-two",
+								},
+							},
+							{
+								level: "attachment",
+								workspace: { id: "workspace-2", name: "Workspace Two" },
+								project: {
+									id: "project-2",
+									project_name: "Project Two",
+									work_dir: "/project-two",
+								},
+								attachment: {
+									file_id: "file-2",
+									file_name: "File Two.txt",
+									file_extension: "txt",
+									relative_file_path: "File Two.txt",
+								},
+							},
+						] as ProjectResourceSelection[])
+					}
+				>
+					Submit
+				</button>
+			</div>
+		) : null,
+}))
+
 describe("MentionPanel", () => {
 	const setCatalogState = (items: MentionItem[], selectedIndex = 0) => {
 		mockState.currentState = PanelState.CATALOG
@@ -229,6 +307,7 @@ describe("MentionPanel", () => {
 	}
 
 	beforeEach(() => {
+		mockMobileState.isMobile = false
 		mockState.currentState = PanelState.DEFAULT
 		mockState.items = []
 		mockState.selectedIndex = -1
@@ -511,6 +590,75 @@ describe("MentionPanel", () => {
 		} finally {
 			vi.useRealTimers()
 		}
+	})
+
+	it("should open the other-project selector instead of submitting the root action item", async () => {
+		render(<MentionPanel visible catalogBehavior={defaultMentionPanelCatalogBehavior} />)
+
+		act(() => {
+			latestUseMentionPanelProps?.onSelect?.({
+				id: "other-project-files",
+				name: "Other Projects/Files",
+				type: "other_project_files",
+			})
+		})
+
+		expect(await screen.findByTestId("other-project-file-mention-modal")).toBeInTheDocument()
+	})
+
+	it("should insert all selected other-project resources as one batch", async () => {
+		const onSelect = vi.fn()
+		render(
+			<MentionPanel
+				visible
+				onSelect={onSelect}
+				catalogBehavior={defaultMentionPanelCatalogBehavior}
+			/>,
+		)
+
+		act(() => {
+			latestUseMentionPanelProps?.onSelect?.({
+				id: "other-project-files",
+				name: "Other Projects/Files",
+				type: "other_project_files",
+			})
+		})
+		fireEvent.click(await screen.findByTestId("other-project-file-mention-submit"))
+
+		await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(2))
+		expect(onSelect.mock.calls[0][0]).toMatchObject({
+			type: MentionItemType.PROJECT,
+			data: { project_id: "project-2" },
+		})
+		expect(onSelect.mock.calls[0][1]).toMatchObject({
+			batch: { index: 0, total: 2 },
+		})
+		expect(onSelect.mock.calls[1][0]).toMatchObject({
+			type: MentionItemType.PROJECT_FILE,
+			data: { project_id: "project-2", file_id: "file-2" },
+		})
+		expect(onSelect.mock.calls[1][1]).toMatchObject({
+			batch: { index: 1, total: 2 },
+		})
+		expect(typeof onSelect.mock.calls[1][1].reset).toBe("function")
+	})
+
+	it("should keep the mobile other-project selector open after the mention panel loses visibility", async () => {
+		mockMobileState.isMobile = true
+		const { rerender } = render(
+			<MentionPanel visible catalogBehavior={defaultMentionPanelCatalogBehavior} />,
+		)
+
+		fireEvent.click(await screen.findByTestId("mock-mention-panel-mobile"))
+
+		expect(await screen.findByTestId("other-project-file-mention-modal")).toBeInTheDocument()
+		expect(screen.queryByTestId("mock-mention-panel-mobile")).not.toBeInTheDocument()
+
+		rerender(
+			<MentionPanel visible={false} catalogBehavior={defaultMentionPanelCatalogBehavior} />,
+		)
+
+		expect(screen.getByTestId("other-project-file-mention-modal")).toBeInTheDocument()
 	})
 
 	it("should enter folder when clicking right arrow icon", () => {

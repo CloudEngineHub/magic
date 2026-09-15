@@ -9,6 +9,13 @@ import ShareManagementPanel from "../../../components/ShareManagement/ShareManag
 import SiderTask from "../../../components/SiderTask"
 import TopicFilesButton from "../../../components/TopicFilesButton"
 import { ProjectListItem, Topic, Workspace } from "../../../pages/Workspace/types"
+import AudioProjectHeader from "../../../components/AudioProjectHeader"
+import { AudioRecordingCopyDialog } from "../../AudioRecordings/components/AudioRecordingCopyDialog"
+import { AudioRecordingMoveGroupDialog } from "../../AudioRecordings/components/AudioRecordingGroupDialogs"
+import { useAudioProjectSidebarController } from "../hooks/useAudioProjectSidebarController"
+import AudioProjectShareDialogs from "./AudioProjectShareDialogs"
+import ShareModal from "../../../components/Share/Modal"
+import { ShareMode, ShareType } from "../../../components/Share/types"
 
 interface TopicSidebarProps {
 	selectedProject: ProjectListItem | null
@@ -34,6 +41,25 @@ function TopicSidebar({
 	const { t } = useTranslation("super")
 	const { t: tLongMemory } = useTranslation("super/longMemory")
 	const isChatSider = siderVariant === "chat"
+	const audioController = useAudioProjectSidebarController({
+		selectedProject,
+		attachments: topicFilesProps.attachments ?? [],
+		isReadOnly,
+	})
+	const {
+		isAudioProject,
+		canManageAudioProject,
+		projectItem,
+		title,
+		actions,
+		copyController,
+		shareController,
+		renameProject,
+		moveToGroup,
+		copyToProject,
+		generateSummary,
+		summaryMode,
+	} = audioController
 	// Chat sidebars use a shorter label to avoid implying the list is project-scoped metadata.
 	const topicFilesTitle = isChatSider ? t("topicFiles.fileTitle") : t("topicFiles.title")
 	const items = useMemo(
@@ -43,9 +69,11 @@ function TopicSidebar({
 				title: topicFilesTitle,
 				icon: <Files size={16} />,
 				// Keep the panel header aligned with the active sidebar label in chat scenes.
-				content: <TopicFilesButton {...topicFilesProps} title={topicFilesTitle} />,
+				content: (
+					<TopicFilesButton {...topicFilesProps} title={topicFilesTitle} showTitle />
+				),
 			},
-			...(isChatSider
+			...(isChatSider || isAudioProject
 				? []
 				: [
 						{
@@ -65,20 +93,35 @@ function TopicSidebar({
 							key: "longMemory",
 							title: tLongMemory("longMemory"),
 							icon: <Brain size={16} />,
-							content: <LongTremMemorySider projectId={selectedProject?.id} />,
+							content: (
+								<LongTremMemorySider
+									projectId={selectedProject?.id}
+									selectedProject={selectedProject}
+									selectedWorkspace={selectedWorkspace}
+									activeFileId={topicFilesProps.activeFileId}
+									onFileClick={topicFilesProps.onFileClick}
+								/>
+							),
 						},
 					]),
-			{
-				key: "share",
-				title: t("shareManagement.title"),
-				icon: <IconShareCog size={16} color="currentColor" />,
-				content: <ShareManagementPanel projectId={selectedProject?.id} />,
-			},
+			...(isAudioProject
+				? []
+				: [
+						{
+							key: "share",
+							title: t("shareManagement.title"),
+							icon: <IconShareCog size={16} color="currentColor" />,
+							content: <ShareManagementPanel projectId={selectedProject?.id} />,
+						},
+					]),
 		],
 		[
 			isChatSider,
+			isAudioProject,
 			isReadOnly,
+			selectedProject,
 			selectedProject?.id,
+			selectedWorkspace,
 			selectedTopic?.id,
 			selectedWorkspace?.id,
 			t,
@@ -90,7 +133,28 @@ function TopicSidebar({
 
 	return (
 		<div className="flex h-full flex-col gap-2">
-			{hideProjectCard ? null : (
+			{isAudioProject ? (
+				<AudioProjectHeader
+					title={title || selectedProject?.project_name || t("project.unnamedProject")}
+					canCopyToProject={canManageAudioProject && Boolean(projectItem)}
+					canRename={canManageAudioProject}
+					canMoveToGroup={canManageAudioProject}
+					canDelete={canManageAudioProject && Boolean(projectItem)}
+					canGenerateSummary={canManageAudioProject && actions.canGenerateSummary}
+					canShare={canManageAudioProject}
+					summaryMode={summaryMode}
+					summarySubmitting={actions.summarySubmitting}
+					renaming={actions.renaming}
+					onBack={audioController.handleBack}
+					onRename={renameProject}
+					onMoveToGroup={() => audioController.setMoveGroupOpen(true)}
+					onCopyToProject={copyToProject}
+					onGenerateSummary={generateSummary}
+					onShare={shareController.openShareModal}
+					onDelete={audioController.handleDelete}
+					deleting={actions.deleting}
+				/>
+			) : hideProjectCard ? null : (
 				<ProjectCardContainer
 					selectedProject={selectedProject}
 					selectedWorkspace={selectedWorkspace}
@@ -100,6 +164,45 @@ function TopicSidebar({
 				items={items}
 				className="flex-1 overflow-hidden rounded-lg border border-border bg-background"
 			/>
+			{isAudioProject && canManageAudioProject ? (
+				<>
+					<AudioRecordingMoveGroupDialog
+						open={audioController.moveGroupOpen}
+						onOpenChange={audioController.setMoveGroupOpen}
+						groups={audioController.groups.filter(
+							(group) => group.id !== audioController.ungroupedGroupId,
+						)}
+						ungroupedCount={audioController.ungroupedCount}
+						selectedGroupId={
+							projectItem?.workspace_id ?? audioController.ungroupedGroupId
+						}
+						onSelect={async (groupId) => {
+							await moveToGroup(groupId)
+						}}
+						isSubmitting={actions.moving}
+					/>
+					<AudioRecordingCopyDialog controller={copyController} />
+					{canManageAudioProject ? (
+						<ShareModal
+							open={shareController.shareModalOpen}
+							onCancel={shareController.closeShareModal}
+							shareMode={ShareMode.Project}
+							types={[
+								ShareType.PasswordProtected,
+								ShareType.Public,
+								ShareType.Organization,
+							]}
+							attachments={topicFilesProps.attachments}
+							attachmentList={topicFilesProps.attachments}
+							projectName={title}
+							projectId={selectedProject?.id}
+							defaultSelectedFileIds={shareController.defaultSelectedFileIds}
+							resourceId={shareController.editingResourceId}
+						/>
+					) : null}
+					<AudioProjectShareDialogs controller={shareController} />
+				</>
+			) : null}
 		</div>
 	)
 }

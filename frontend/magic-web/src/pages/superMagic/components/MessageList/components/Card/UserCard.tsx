@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, memo, ComponentType } from "react"
 import { useTranslation } from "react-i18next"
 import { getSuperIdState } from "@/pages/superMagic/utils/query"
 import { projectStore } from "@/pages/superMagic/stores/core"
+import { toJS } from "mobx"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import { useScheduledTasksModifyModal } from "@/components/business/AccountSetting/pages/ScheduledTasks/hooks/useScheduledTasksModifyModal"
 import { superMagicStore } from "@/pages/superMagic/stores"
@@ -10,20 +11,24 @@ import { useDebounceFn, useMemoizedFn } from "ahooks"
 import { ScheduledTask } from "@/types/scheduledTask"
 import { ScheduledTaskApi, SuperMagicApi } from "@/apis"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { Editor } from "@tiptap/core"
-import { Document } from "@tiptap/extension-document"
-import { Paragraph } from "@tiptap/extension-paragraph"
-import { Text as TiptapText } from "@tiptap/extension-text"
+import { Editor } from "@/infrastructure/editors/tiptap/core"
+import { Document } from "@/infrastructure/editors/tiptap/extension-document"
+import { Paragraph } from "@/infrastructure/editors/tiptap/extension-paragraph"
+import { Text as TiptapText } from "@/infrastructure/editors/tiptap/extension-text"
 import { HardBlock } from "@/pages/superMagic/components/MessageEditor/extensions"
+import {
+	InspectorDetailExtension,
+	transformInspectorContent,
+} from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
 import { copyWithMetadata } from "@/utils/clipboard-helpers"
 import { MessageStatus, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { observer } from "mobx-react-lite"
 import MentionExtension from "@/components/business/MentionPanel/tiptap-plugin"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { isEmpty } from "lodash-es"
 import { MagicDropdown, MagicModal } from "@/components/base"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { Ellipsis, Undo2 } from "lucide-react"
+import { Ellipsis, Undo2, FileText } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Spinner } from "@/components/shadcn-ui/spinner"
 import { extractAllMarkersFromContent } from "@/pages/superMagic/components/MessageEditor/utils/markerContentUtils"
@@ -31,14 +36,26 @@ import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import AttachmentHoverButton from "./components/AttachmentHoverButton"
 import OptimisticStatusIndicator from "./OptimisticStatusIndicator"
+import { getCurrentConversationRound } from "./round-log"
+import { logger as Logger } from "@/utils/log"
+import {
+	getClipboardHtml,
+	getClipboardPlainText,
+	prependPortableMentions,
+} from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
+import { resolveClipboardFilePaths } from "@/pages/superMagic/components/MessageList/utils/resolveClipboardFilePaths"
+
+const logger = Logger.createLogger("UserCard")
 
 const enum MenuKey {
-	/** 创建定时任务 */
+	/** Create a scheduled task. */
 	CreateTask = "1",
-	/** 复制消息 */
+	/** Copy the message. */
 	CopyMessage = "2",
-	/** 导出对话 */
+	/** Export the conversation. */
 	ExportConversation = "3",
+	/** Report the conversation round. */
+	ReportConversationRound = "4",
 }
 
 /** Base styles for undo/menu buttons (Antd Button overrides) */
@@ -56,7 +73,7 @@ export function withUserNode<
 >(WrapperComponent: ComponentType<T>) {
 	const targetComponent = observer((props: T) => {
 		const { node, selectedTopic, className } = props
-		const messageNode = superMagicStore.getMessageNode(node?.app_message_id)
+		const messageNode = superMagicStore.getMessageNode(node?.super_message_id)
 		const optimisticStatus = node?.optimisticMeta?.status as "sending" | "failed" | undefined
 		const { t } = useTranslation("super")
 		const superIdState = getSuperIdState()
@@ -68,11 +85,48 @@ export function withUserNode<
 			exportModeActive,
 			onExportRequest,
 			onRetryOptimisticMessage,
+			projectFilesStore,
 		} = useMessageListContext()
+		const workspaceFiles = projectFilesStore?.workspaceFilesList ?? []
 		const { openCreateModal, content } = useScheduledTasksModifyModal()
 
 		const [isCheckUndoLoading, setIsCheckUndoLoading] = useState(false)
 		const undoClickLockRef = useRef(false)
+
+		const reportConversationRound = useMemoizedFn(async () => {
+			const topicId = selectedTopic?.chat_topic_id
+			const currentMessageId = node?.app_message_id
+			if (!topicId || !currentMessageId) return
+
+			const topicMessages = superMagicStore.messages.get(topicId) || []
+			const roundMessages = getCurrentConversationRound(topicMessages, currentMessageId)
+			if (roundMessages.length === 0) return
+
+			try {
+				await superMagicStore.flushMessagePersistenceForReport(topicId)
+				// IndexedDB/report codec stays outside the MessageList bundle until the user reports.
+				const {
+					queryConversationRoundLogs,
+					compressConversationRoundLogs,
+					getConversationRoundReportWriterId,
+				} = await import("@/pages/superMagic/stores/conversation-round-report")
+				const records = await queryConversationRoundLogs(topicId)
+				const messages = compressConversationRoundLogs({
+					records,
+					roundMessages: toJS(roundMessages),
+					preferredWriterId: getConversationRoundReportWriterId(),
+				})
+
+				logger.report("messages", {
+					topic_id: selectedTopic?.id,
+					chat_topic_id: topicId,
+					message_id: currentMessageId,
+					messages,
+				})
+			} catch (error) {
+				logger.error("Failed to prepare conversation round report", error)
+			}
+		})
 
 		const items = useMemo(() => {
 			return [
@@ -106,6 +160,17 @@ export function withUserNode<
 					),
 					visible: allowExport && Boolean(onExportRequest),
 				},
+				{
+					key: MenuKey.ReportConversationRound,
+					label: (
+						<div className="flex w-full items-center gap-1.5 text-foreground">
+							<FileText size={16} className="text-foreground" />
+							<span>{t("ui.reportConversationRound")}</span>
+						</div>
+					),
+					"data-testid": "assistant-round-log-report-menu-item",
+					visible: true,
+				},
 			].filter((o) => o.visible)
 		}, [t, allowScheduleTaskCreate, allowUserMessageCopy, allowExport, onExportRequest])
 
@@ -114,7 +179,7 @@ export function withUserNode<
 				try {
 					ScheduledTaskApi.createScheduledTask(taskData).then(() => {
 						magicToast.success(t("hierarchicalWorkspacePopup.createSuccess"))
-						// 触发任务列表更新事件
+						// Trigger the task list update event.
 						pubsub.publish(PubSubEvents.SCHEDULED_TASK_UPDATED)
 						callback?.()
 					})
@@ -124,26 +189,26 @@ export function withUserNode<
 			},
 		)
 
-		const onMenuClick = useMemoizedFn(({ key }: { key: string }) => {
+		const onMenuClick = useMemoizedFn(async ({ key }: { key: string }) => {
 			switch (key) {
-				case MenuKey.CopyMessage:
+				case MenuKey.CopyMessage: {
+					let editor: Editor | undefined
 					try {
-						let contentText = ""
 						const richTextContent =
 							messageNode?.content || messageNode?.rich_text?.content
-						const editor = new Editor({
-							content: JSON.parse(richTextContent),
+						editor = new Editor({
+							content: transformInspectorContent(JSON.parse(richTextContent)),
 							extensions: [
 								Document,
 								Paragraph,
 								TiptapText,
 								HardBlock,
 								MentionExtension,
+								InspectorDetailExtension,
 							],
 						})
-						contentText = editor.getText()
 
-						// 从 content 中提取完整的 marker 数据
+						// Extract complete marker data from the content.
 						const fullMarkers = extractAllMarkersFromContent(richTextContent)
 						const markerMentionItems: MentionListItem[] = fullMarkers.map(
 							(markerData) => ({
@@ -155,32 +220,77 @@ export function withUserNode<
 							}),
 						)
 
-						// 获取其他类型的 mentions（非 marker 类型）
+						// Old messages keep attachment mentions outside rich_text; add them to the copied document.
 						const originalMentions = messageNode?.extra?.super_agent?.mentions || []
+						const currentProjectId =
+							superIdState?.projectId ?? projectStore.selectedProject?.id
 						const otherMentionItems: MentionListItem[] = originalMentions.filter(
 							(mention: MentionListItem) =>
 								mention.attrs?.type !== MentionItemType.DESIGN_MARKER,
 						)
+						const portableMentionAttrs = otherMentionItems.map(
+							(mention) => mention.attrs,
+						)
+						const clipboardEditor = editor
+						const preparedContent = resolveClipboardFilePaths(
+							editor.getJSON(),
+							portableMentionAttrs,
+							workspaceFiles,
+							currentProjectId,
+						).then(({ content: resolvedContent, mentions: resolvedMentions }) => {
+							const clipboardContent = prependPortableMentions(
+								resolvedContent,
+								resolvedMentions,
+								workspaceFiles,
+								currentProjectId,
+							)
+							clipboardEditor.commands.setContent(clipboardContent, {
+								emitUpdate: false,
+							})
+							const contentText = getClipboardPlainText(
+								clipboardContent,
+								workspaceFiles,
+								currentProjectId,
+							)
+							const htmlContent = getClipboardHtml(
+								clipboardEditor.getHTML(),
+								workspaceFiles,
+								currentProjectId,
+							)
 
-						// 合并所有 mentions：优先使用从 content 提取的完整 marker 数据，然后添加其他类型的 mentions
-						const allMentions = [...markerMentionItems, ...otherMentionItems]
+							// Merge all mentions, prioritizing complete markers extracted from the content.
+							const allMentions = [
+								...markerMentionItems,
+								...resolvedMentions.map((attrs, index) => ({
+									...otherMentionItems[index],
+									attrs,
+								})),
+							]
 
-						// 使用兼容移动端的方案复制
-						copyWithMetadata(contentText, {
-							richText: richTextContent,
-							mentions: allMentions,
-							type: messageNode?.type,
-							messageId: messageNode?.id,
-							sourceProjectId:
-								superIdState?.projectId ?? projectStore.selectedProject?.id,
+							return {
+								plainText: contentText,
+								metadata: {
+									richText: JSON.stringify(clipboardContent),
+									mentions: allMentions,
+									type: messageNode?.type,
+									messageId: messageNode?.id,
+									sourceProjectId: currentProjectId,
+								},
+								htmlContent,
+							}
 						})
+						// Use a mobile-compatible copy method.
+						await copyWithMetadata(preparedContent)
 
 						magicToast.success(t("common.copySuccess"))
 					} catch (error) {
 						console.error("❌ Copy message error:", error)
 						magicToast.error(t("common.copyFailed"))
+					} finally {
+						editor?.destroy()
 					}
 					break
+				}
 				case MenuKey.CreateTask:
 					openCreateModal(onSaveTask, {
 						workspace_id:
@@ -193,12 +303,15 @@ export function withUserNode<
 				case MenuKey.ExportConversation:
 					onExportRequest?.()
 					break
+				case MenuKey.ReportConversationRound:
+					reportConversationRound()
+					break
 				default:
 					break
 			}
 		})
 
-		/** 撤销操作 - 点击确认撤销按钮 */
+		/** Undo the message after the user confirms the action. */
 		const handleMessageUndoConfirmCore = useMemoizedFn(async (e) => {
 			if (!selectedTopic?.id || !node?.seq_id) return
 			if (isCheckUndoLoading || undoClickLockRef.current) return
@@ -244,23 +357,30 @@ export function withUserNode<
 			trailing: false,
 		})
 
-		/** 是否显示撤销按钮
-		 * 显示条件：
-		 * 1. 消息未被撤销 (node?.status !== MessageStatus.REVOKED)
-		 * 2. 允许撤回 (allowRevoke，由 MessageListProvider 设置)
-		 * 3. 消息没有引用其他消息 (isEmpty(node?.refer_message_id))
+		/** Whether to show the undo button.
+		 * Conditions:
+		 * 1. The message has not been revoked (IM imStatus !== MessageStatus.REVOKED).
+		 * 2. Undo is allowed (allowRevoke, configured by MessageListProvider).
+		 * 3. The message does not reference another message (isEmpty(node?.refer_message_id)).
 		 */
 		const showUndo = useMemo(() => {
 			return (
 				!optimisticStatus &&
-				node?.status !== MessageStatus.REVOKED &&
+				(node?.imStatus ?? node?.status) !== MessageStatus.REVOKED &&
 				allowRevoke &&
 				!exportModeActive &&
 				isEmpty(node?.refer_message_id)
 			)
-		}, [allowRevoke, exportModeActive, node?.refer_message_id, node?.status, optimisticStatus])
+		}, [
+			allowRevoke,
+			exportModeActive,
+			node?.refer_message_id,
+			node?.imStatus,
+			node?.status,
+			optimisticStatus,
+		])
 
-		/** 获取消息附件列表 - 从 mentions 中过滤 project_file 和 upload_file 类型 */
+		/** Get message attachments by filtering project_file and upload_file mentions. */
 		const attachments = useMemo(() => {
 			const mentions = messageNode?.extra?.super_agent?.mentions || []
 			return mentions.filter(
@@ -279,10 +399,10 @@ export function withUserNode<
 					hasAttachments ? "justify-between" : "justify-end",
 				)}
 			>
-				{/* 左侧：附件按钮 */}
+				{/* Left: attachment button. */}
 				{hasAttachments && <AttachmentHoverButton attachments={attachments} t={t} />}
 
-				{/* 右侧：撤回和更多按钮 */}
+				{/* Right: undo and more buttons. */}
 				<div className="flex gap-1">
 					{showUndo && (
 						<Button

@@ -14,7 +14,7 @@ import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 import { useLocaleText } from "./hooks/useLocaleText"
 import type { FieldItem, OptionItem } from "./types"
@@ -186,7 +186,10 @@ function FilterSelectItem({
 			<div className={cn("flex flex-col items-start gap-1", isCompactMobile && "block")}>
 				{isCompactMobile ? null : (
 					<Label
-						className="text-xs font-medium text-muted-foreground"
+						className={cn(
+							"text-xs font-medium text-muted-foreground",
+							!isCompactMobile && "ml-3",
+						)}
 						onClick={handleOpenDrawer}
 					>
 						{lt(filter.label)}
@@ -392,14 +395,19 @@ function FilterSelectItem({
 						</span>
 					)}
 				</SelectTrigger>
+				{/* Keep long filter lists within the visible viewport while preserving keyboard and wheel scrolling. */}
 				<SelectContent
 					align="start"
 					showScrollButtons={false}
 					className={cn(
+						"max-h-[min(520px,var(--radix-select-content-available-height))]",
 						customInputControl &&
 							"w-[272px] min-w-[272px] overflow-hidden rounded-xl border-border/80 p-0 shadow-lg",
 					)}
-					viewportClassName={cn(customInputControl && "p-1.5")}
+					viewportClassName={cn(
+						"max-h-[min(520px,var(--radix-select-content-available-height))] overflow-y-auto",
+						customInputControl && "p-1.5",
+					)}
 				>
 					{availableOptions.length > 0 ? (
 						availableOptions.map(({ option, optionValue }) => {

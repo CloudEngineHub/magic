@@ -1,4 +1,4 @@
-import { memo, useEffect, useCallback, useState } from "react"
+import { memo, useEffect, useCallback, useState, type MouseEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { FilePenLine, Save, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -6,16 +6,26 @@ import { Kbd } from "@/components/shadcn-ui/kbd"
 import { HTMLGuideTourElementId } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import ConditionalTooltip from "./ConditionalTooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { runGuardedAction } from "../../utils/actionGuard"
+import type { BeforeAction } from "../../utils/actionGuard"
 
 interface FileEditButtonsProps {
+	/** Stable test id scope for the edit actions rendered by this component. */
+	testIdPrefix?: string
+	/** 是否禁用当前工具栏交互（例如 PPT 冷切页等待目标页 ready 时） */
+	interactionDisabled?: boolean
 	/** 是否处于编辑模式 */
 	isEditMode?: boolean
 	/** 是否正在保存 */
 	isSaving?: boolean
 	/** 是否显示按钮文字 */
 	showButtonText?: boolean
+	/** 编辑入口文案，未传入时使用通用文案 */
+	editLabel?: string
 	/** 编辑按钮点击回调 */
-	onEdit?: () => void
+	onEdit?: () => void | Promise<void>
+	/** Optional guard run before entering edit mode. */
+	beforeAction?: BeforeAction
 	/** 保存按钮点击回调 */
 	onSave?: () => void | Promise<void>
 	/** 保存并退出按钮点击回调 */
@@ -25,10 +35,14 @@ interface FileEditButtonsProps {
 }
 
 function FileEditButtons({
+	testIdPrefix,
+	interactionDisabled = false,
 	isEditMode = false,
 	isSaving = false,
 	showButtonText = false,
+	editLabel,
 	onEdit,
+	beforeAction,
 	onSave,
 	onSaveAndExit,
 	onCancel,
@@ -40,33 +54,43 @@ function FileEditButtons({
 	const isMobile = useIsMobile()
 
 	const handleSave = useCallback(async () => {
-		if (isSaving || isSavingLocal || !onSave) return
+		if (interactionDisabled || isSaving || isSavingLocal || !onSave) return
 		setIsSavingLocal(true)
 		try {
 			await onSave()
 		} finally {
 			setIsSavingLocal(false)
 		}
-	}, [onSave, isSaving, isSavingLocal])
+	}, [interactionDisabled, onSave, isSaving, isSavingLocal])
 
 	const handleSaveAndExit = useCallback(async () => {
-		if (isSaving || isSavingLocal || !onSaveAndExit) return
+		if (interactionDisabled || isSaving || isSavingLocal || !onSaveAndExit) return
 		setIsSavingLocal(true)
 		try {
 			await onSaveAndExit()
 		} finally {
 			setIsSavingLocal(false)
 		}
-	}, [onSaveAndExit, isSaving, isSavingLocal])
+	}, [interactionDisabled, onSaveAndExit, isSaving, isSavingLocal])
 
-	const handleCancel = useCallback(() => {
-		if (onCancel) {
-			onCancel()
-		}
-	}, [onCancel])
+	const handleCancel = useCallback(
+		(event?: MouseEvent<HTMLButtonElement>) => {
+			// Button clicks can land on the iframe after the toolbar unmounts.
+			event?.stopPropagation()
+			if (!interactionDisabled && onCancel) {
+				onCancel()
+			}
+		},
+		[interactionDisabled, onCancel],
+	)
+
+	const handleEdit = useCallback(() => {
+		if (interactionDisabled || !onEdit) return
+		void runGuardedAction(beforeAction, onEdit)
+	}, [beforeAction, interactionDisabled, onEdit])
 
 	useEffect(() => {
-		if (!isEditMode) return
+		if (!isEditMode || interactionDisabled) return
 
 		const handleKeyDown = (e: KeyboardEvent) => {
 			const isCmdOrCtrl = isMac ? e.metaKey : e.ctrlKey
@@ -93,22 +117,29 @@ function FileEditButtons({
 		return () => {
 			document.removeEventListener("keydown", handleKeyDown)
 		}
-	}, [isEditMode, handleSave, handleSaveAndExit, handleCancel, isMac])
+	}, [interactionDisabled, isEditMode, handleSave, handleSaveAndExit, handleCancel, isMac])
 
 	const showSaving = isSaving || isSavingLocal
+	const resolvedEditLabel = editLabel ?? t("fileViewer.edit")
 
 	return (
-		<div className="flex items-center gap-1" id={HTMLGuideTourElementId.HTMLFileEditButton}>
+		<div
+			className="flex items-center gap-1"
+			id={HTMLGuideTourElementId.HTMLFileEditButton}
+			data-testid={testIdPrefix ? `${testIdPrefix}-file-actions` : undefined}
+		>
 			{!isEditMode ? (
-				<ConditionalTooltip showText={showButtonText} title={t("fileViewer.edit")}>
+				<ConditionalTooltip showText={showButtonText} title={resolvedEditLabel}>
 					<Button
+						data-testid={testIdPrefix ? `${testIdPrefix}-edit-button` : undefined}
 						variant="outline"
 						size="sm"
-						onClick={onEdit}
+						onClick={handleEdit}
+						disabled={interactionDisabled}
 						className={outlineActionButtonClassName}
 					>
 						<FilePenLine size={16} />
-						{showButtonText && <span>{t("fileViewer.edit")}</span>}
+						{showButtonText && <span>{resolvedEditLabel}</span>}
 					</Button>
 				</ConditionalTooltip>
 			) : (
@@ -118,10 +149,11 @@ function FileEditButtons({
 						title={showSaving ? t("fileViewer.saving") : t("fileViewer.save")}
 					>
 						<Button
+							data-testid={testIdPrefix ? `${testIdPrefix}-save-button` : undefined}
 							variant="default"
 							size="sm"
 							onClick={handleSave}
-							disabled={showSaving}
+							disabled={interactionDisabled || showSaving}
 							className={primaryActionButtonClassName}
 						>
 							{showSaving ? (
@@ -150,10 +182,15 @@ function FileEditButtons({
 							title={t("fileViewer.saveAndExit")}
 						>
 							<Button
+								data-testid={
+									testIdPrefix
+										? `${testIdPrefix}-save-and-exit-button`
+										: undefined
+								}
 								variant="outline"
 								size="sm"
 								onClick={handleSaveAndExit}
-								disabled={showSaving}
+								disabled={interactionDisabled || showSaving}
 								className={outlineActionButtonClassName}
 							>
 								{showButtonText && <span>{t("fileViewer.saveAndExit")}</span>}
@@ -173,10 +210,11 @@ function FileEditButtons({
 					)}
 					<ConditionalTooltip showText={showButtonText} title={t("fileViewer.cancel")}>
 						<Button
+							data-testid={testIdPrefix ? `${testIdPrefix}-cancel-button` : undefined}
 							variant="outline"
 							size="sm"
 							onClick={handleCancel}
-							disabled={showSaving}
+							disabled={interactionDisabled || showSaving}
 							className={outlineActionButtonClassName}
 						>
 							{showButtonText ? (

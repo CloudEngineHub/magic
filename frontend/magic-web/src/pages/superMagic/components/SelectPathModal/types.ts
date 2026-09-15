@@ -73,6 +73,8 @@ export interface CrossProjectFileOperationModalProps {
 	workspaces: Workspace[]
 	fileIds: string[]
 	sourceAttachments: AttachmentItem[]
+	/** Whether the source page is still streaming the current project's attachment tree. */
+	sourceAttachmentsLoading?: boolean
 	initialPath?: AttachmentItem[]
 	includeFixedWorkspaces?: boolean
 	closeOnSubmit?: boolean
@@ -86,9 +88,50 @@ export interface CrossProjectFileOperationModalProps {
 		targetPath: AttachmentItem[]
 		targetAttachments: AttachmentItem[]
 		sourceAttachments: AttachmentItem[]
-		includeHtmlDependencies?: boolean
-		htmlDependencyFileIds?: string[]
+		includeDocumentDependencies?: boolean
+		documentDependencyFileIds?: string[]
+		preserveParentPath?: boolean
 	}) => void
+}
+
+export type ProjectResourceSelection =
+	| {
+			level: "project"
+			workspace: Workspace
+			project: ProjectListItem
+	  }
+	| {
+			level: "attachment"
+			workspace: Workspace
+			project: ProjectListItem
+			attachment: AttachmentItem
+	  }
+
+export const MAX_MENTION_PROJECT_COUNT = 10
+
+export interface ProjectResourceSelectorSubmitData {
+	targetProjectId: string
+	targetWorkspaceId?: string
+	targetProject?: ProjectListItem
+	targetPath: AttachmentItem[]
+	targetAttachments: AttachmentItem[]
+	sourceAttachments: AttachmentItem[]
+	selection?: ProjectResourceSelection
+	selections?: ProjectResourceSelection[]
+	includeDocumentDependencies?: boolean
+	documentDependencyFileIds?: string[]
+	preserveParentPath?: boolean
+}
+
+export interface ProjectResourceSelectorModalProps extends Omit<
+	CrossProjectFileOperationModalProps,
+	"onSubmit"
+> {
+	selectionMode?: "destination" | "mention"
+	excludeProjectIds?: string[]
+	emptyDirectoryDescription?: string
+	emptyDirectoryActionLabel?: string | null
+	onSubmit: (data: ProjectResourceSelectorSubmitData) => void
 }
 
 export interface ImportFromOtherProjectModalProps {

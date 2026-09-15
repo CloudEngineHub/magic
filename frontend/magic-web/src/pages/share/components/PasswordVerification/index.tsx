@@ -57,6 +57,20 @@ const useStyles = createStyles(({ token }) => {
 				borderColor: token.magicColorUsages.primary.hover,
 			},
 		},
+		rememberOption: {
+			display: "flex",
+			alignItems: "center",
+			gap: "8px",
+			width: "100%",
+			fontSize: "14px",
+			color: token.magicColorUsages.text[1],
+			cursor: "pointer",
+		},
+		rememberCheckbox: {
+			width: "16px",
+			height: "16px",
+			accentColor: token.magicColorUsages.primary.default,
+		},
 	}
 })
 
@@ -69,6 +83,15 @@ interface PasswordVerificationProps {
 	onVerifyFail?: (error: any) => void
 	getShareData: (params: { resource_id: string; password?: string }) => Promise<any>
 	isFileShare?: boolean
+	maxLength?: number
+	uppercase?: boolean
+	title?: string
+	description?: string
+	rememberPassword?: {
+		enabled: boolean
+		checked: boolean
+		onCheckedChange(checked: boolean): void
+	}
 }
 
 export default function PasswordVerification({
@@ -78,6 +101,11 @@ export default function PasswordVerification({
 	onVerifyFail,
 	getShareData,
 	isFileShare = false,
+	maxLength = 6,
+	uppercase = true,
+	title: titleProp,
+	description: descriptionProp,
+	rememberPassword,
 }: PasswordVerificationProps) {
 	const [password, setPassword] = useState(initialPassword)
 	const [loading, setLoading] = useState(false)
@@ -86,8 +114,8 @@ export default function PasswordVerification({
 
 	// 处理密码输入变化
 	const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		// 转换为大写并限制长度为6
-		const value = e.target.value.toUpperCase().slice(0, 6)
+		const rawValue = uppercase ? e.target.value.toUpperCase() : e.target.value
+		const value = rawValue.slice(0, maxLength)
 		setPassword(value)
 	}
 
@@ -179,12 +207,16 @@ export default function PasswordVerification({
 		}
 	}
 
-	const title = isFileShare
-		? t("share.passwordVerification.fileTitle")
-		: t("share.passwordVerification.replayTitle")
-	const description = isFileShare
-		? t("share.passwordVerification.fileDescription")
-		: t("share.passwordVerification.replayDescription")
+	const title =
+		titleProp ||
+		(isFileShare
+			? t("share.passwordVerification.fileTitle")
+			: t("share.passwordVerification.replayTitle"))
+	const description =
+		descriptionProp ||
+		(isFileShare
+			? t("share.passwordVerification.fileDescription")
+			: t("share.passwordVerification.replayDescription"))
 
 	return (
 		<div className={styles.container} data-testid="password-verification">
@@ -204,7 +236,7 @@ export default function PasswordVerification({
 					value={password}
 					onChange={handlePasswordChange}
 					onKeyDown={handleKeyDown}
-					maxLength={6}
+					maxLength={maxLength}
 					autoFocus
 					data-testid="password-input"
 				/>
@@ -218,6 +250,18 @@ export default function PasswordVerification({
 					{t("common.confirm")}
 				</Button>
 			</div>
+			{rememberPassword?.enabled ? (
+				<label className={styles.rememberOption}>
+					<input
+						type="checkbox"
+						className={styles.rememberCheckbox}
+						checked={rememberPassword.checked}
+						onChange={(event) => rememberPassword.onCheckedChange(event.target.checked)}
+						data-testid="password-remember-checkbox"
+					/>
+					<span>{t("microAppShare.rememberPassword")}</span>
+				</label>
+			) : null}
 		</div>
 	)
 }

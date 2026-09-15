@@ -9,6 +9,7 @@ import { useClusterSwitch } from "./hooks/useClusterSwitch"
 import { Button } from "@/components/shadcn-ui/button"
 import { Spinner } from "@/components/shadcn-ui/spinner"
 import type { ClusterLoginAdapter } from "@/layouts/ClusterLayout/cluster-login"
+import { useSearchParams } from "react-router-dom"
 
 interface ClusterLayoutBaseProps {
 	loginAdapter: ClusterLoginAdapter
@@ -17,7 +18,9 @@ interface ClusterLayoutBaseProps {
 function ClusterLayoutBaseComponent(props: ClusterLayoutBaseProps) {
 	const { loginAdapter } = props
 	const { clusterCode } = useParams()
-	const targetClusterCode = (clusterCode === defaultClusterCode ? "" : clusterCode) || ""
+	const [searchParams] = useSearchParams()
+	// query 中的集群编码权重优先
+	const targetClusterCode = (searchParams.get("thirdPartyAuthDeployCode") === defaultClusterCode ? "" : searchParams.get("thirdPartyAuthDeployCode")) || (clusterCode === defaultClusterCode ? "" : clusterCode) || ""
 
 	const { setClusterCode } = useClusterCode()
 	const { t } = useTranslation("interface")

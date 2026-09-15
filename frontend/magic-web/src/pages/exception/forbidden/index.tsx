@@ -1,5 +1,5 @@
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useTranslation } from "react-i18next"
 import zero from "@/assets/text/403-zero.svg"
 import zeroDark from "@/assets/text/403-zero-dark.svg"

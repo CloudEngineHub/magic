@@ -1,6 +1,7 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import { SuperMagicApi } from "@/apis"
-import { PlaybookItem } from "@/apis/modules/crew"
+import type { PlaybookItem } from "@/apis/modules/crew"
+import { migratePlaybookSceneInspirationPrompts } from "@/pages/superMagic/utils/playbookInspirationPrompt"
 
 class SceneConfigStore {
 	sceneConfigs: Map<string, PlaybookItem> = new Map()
@@ -64,7 +65,7 @@ class SceneConfigStore {
 			runInAction(() => {
 				this.setSkillConfigs(playbookId, configs)
 			})
-			return configs
+			return this.sceneConfigs.get(playbookId) ?? configs
 		} finally {
 			runInAction(() => {
 				this.configLoading.delete(playbookId)
@@ -73,7 +74,20 @@ class SceneConfigStore {
 	}
 
 	setSkillConfigs(playbookId: string, config: PlaybookItem) {
-		this.sceneConfigs.set(playbookId, config)
+		const scenesConfig = config.config?.scenes_config
+		const migratedScenesConfig = migratePlaybookSceneInspirationPrompts(scenesConfig)
+
+		if (migratedScenesConfig === scenesConfig) {
+			this.sceneConfigs.set(playbookId, config)
+			return
+		}
+
+		this.sceneConfigs.set(playbookId, {
+			...config,
+			config: config.config
+				? { ...config.config, scenes_config: migratedScenesConfig }
+				: config.config,
+		})
 	}
 
 	getSkillConfigs(playbookId: string) {

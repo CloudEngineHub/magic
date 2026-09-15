@@ -134,6 +134,7 @@ return [
 
     // 文件名相关
     'file_names' => [
+        'recording_at' => ':time 的录音',
         'recording_prefix' => '录音',
         'merged_audio_prefix' => '录音文件',
         'original_recording' => '原始录音文件',
@@ -237,5 +238,10 @@ return [
         'upload_not_allowed' => '当前任务状态不允许上传文件',
         'status_report_not_allowed' => '当前任务状态不允许报告状态',
         'summary_not_allowed' => '当前任务状态不允许发起总结',
+    ],
+    'sts_token' => [
+        'missing_jwt_token' => '请求处理失败',
+        'parse_response_failed' => '操作失败',
+        'request_failed' => '操作失败',
     ],
 ];

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, RefObject } from "react"
 import { useMemoizedFn } from "ahooks"
+import { isMagicApp } from "@/utils/devices"
 
 interface UseFullscreenOptions {
 	containerRef: RefObject<HTMLElement>
@@ -9,6 +10,20 @@ interface UseFullscreenReturn {
 	isFullscreen: boolean
 	toggleFullscreen: () => Promise<void>
 	exitFullscreen: () => Promise<void>
+}
+
+type FullscreenDocument = Document & {
+	webkitFullscreenElement?: Element | null
+	webkitExitFullscreen?: () => Promise<void> | void
+}
+
+type FullscreenElement = HTMLElement & {
+	webkitRequestFullscreen?: () => Promise<void> | void
+}
+
+function getFullscreenElement(): Element | null {
+	const fullscreenDocument = document as FullscreenDocument
+	return document.fullscreenElement || fullscreenDocument.webkitFullscreenElement || null
 }
 
 /**
@@ -21,14 +36,30 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 	// Toggle fullscreen mode
 	const toggleFullscreen = useCallback(async () => {
 		try {
-			if (!document.fullscreenElement) {
+			// Native fullscreen is unreliable inside the mobile app WebView; its fixed layout is the
+			// fullscreen surface, so only the local CSS state needs to change there.
+			if (isMagicApp) {
+				setIsFullscreen((current) => !current)
+				return
+			}
+
+			if (!getFullscreenElement()) {
 				// Enter fullscreen for the container
 				if (containerRef.current) {
-					await containerRef.current.requestFullscreen()
+					const fullscreenContainer = containerRef.current as FullscreenElement
+					const requestFullscreen =
+						fullscreenContainer.requestFullscreen ||
+						fullscreenContainer.webkitRequestFullscreen
+					if (!requestFullscreen) return
+					await requestFullscreen.call(fullscreenContainer)
 					setIsFullscreen(true)
 				}
 			} else {
-				await document.exitFullscreen()
+				const fullscreenDocument = document as FullscreenDocument
+				const exitDocumentFullscreen =
+					document.exitFullscreen || fullscreenDocument.webkitExitFullscreen
+				if (!exitDocumentFullscreen) return
+				await exitDocumentFullscreen.call(document)
 				setIsFullscreen(false)
 			}
 		} catch (error) {
@@ -39,9 +70,17 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 	// Exit fullscreen mode
 	const exitFullscreen = useMemoizedFn(async () => {
 		try {
+			if (isMagicApp) {
+				setIsFullscreen(false)
+				return
+			}
 			// Check if the current container is in fullscreen
-			if (document.fullscreenElement === containerRef.current) {
-				await document.exitFullscreen()
+			if (getFullscreenElement() === containerRef.current) {
+				const fullscreenDocument = document as FullscreenDocument
+				const exitDocumentFullscreen =
+					document.exitFullscreen || fullscreenDocument.webkitExitFullscreen
+				if (!exitDocumentFullscreen) return
+				await exitDocumentFullscreen.call(document)
 				setIsFullscreen(false)
 			}
 		} catch (error) {
@@ -53,12 +92,16 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 	useEffect(() => {
 		function handleFullscreenChange() {
 			// Check if the current container is in fullscreen
-			const isContainerFullscreen = document.fullscreenElement === containerRef.current
+			const isContainerFullscreen = getFullscreenElement() === containerRef.current
 			setIsFullscreen(isContainerFullscreen)
 		}
 
 		document.addEventListener("fullscreenchange", handleFullscreenChange)
-		return () => document.removeEventListener("fullscreenchange", handleFullscreenChange)
+		document.addEventListener("webkitfullscreenchange", handleFullscreenChange)
+		return () => {
+			document.removeEventListener("fullscreenchange", handleFullscreenChange)
+			document.removeEventListener("webkitfullscreenchange", handleFullscreenChange)
+		}
 	}, [containerRef])
 
 	// Listen for fullscreen-related keyboard events from iframe
@@ -73,7 +116,10 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 						break
 					case "escape":
 						// Exit fullscreen if the container is in fullscreen mode
-						if (isFullscreen && document.fullscreenElement === containerRef.current) {
+						if (
+							isFullscreen &&
+							(isMagicApp || getFullscreenElement() === containerRef.current)
+						) {
 							exitFullscreen()
 						}
 						break
@@ -91,7 +137,10 @@ export function useFullscreen({ containerRef }: UseFullscreenOptions): UseFullsc
 			switch (event.key) {
 				case "Escape":
 					// Exit fullscreen if the container is in fullscreen mode
-					if (isFullscreen && document.fullscreenElement === containerRef.current) {
+					if (
+						isFullscreen &&
+						(isMagicApp || getFullscreenElement() === containerRef.current)
+					) {
 						exitFullscreen()
 					}
 					break

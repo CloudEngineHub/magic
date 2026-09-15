@@ -40,6 +40,7 @@ function createLayoutState(overrides?: Partial<ReturnType<typeof createLayoutSta
 		startDragMessagePanel: vi.fn(),
 		toggleConversationPanel: vi.fn(),
 		expandConversationPanel: vi.fn(),
+		collapseConversationPanel: vi.fn(),
 		ensureExpandedWhenDetailVisible: vi.fn(),
 		...overrides,
 	}
@@ -129,6 +130,32 @@ describe("TopicDesktopPanels", () => {
 
 		mockUseTopicDesktopLayout.mockImplementation(() => layoutState)
 		mockUseTopicDesktopPanelMotion.mockImplementation(() => motionState)
+	})
+
+	it("隐藏项目侧栏时同时移除宽度占位和左侧拖拽手柄", () => {
+		renderComponent({ showProjectSidebar: false })
+
+		expect(screen.queryByTestId("topic-project-sidebar-slot")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("topic-sidebar")).not.toBeInTheDocument()
+		expect(screen.getAllByTestId("mock-topic-resize-handle")).toHaveLength(1)
+		expect(mockUseTopicDesktopLayout).toHaveBeenCalledWith(
+			expect.objectContaining({ allowProjectSiderResize: false }),
+		)
+		expect(mockUseTopicDesktopPanelMotion).toHaveBeenCalledWith(
+			expect.objectContaining({
+				projectSiderWidthPx: 0,
+				showProjectResizeHandle: false,
+			}),
+		)
+	})
+
+	it("switchable layout can disable automatic conversation expansion", () => {
+		renderComponent({ autoExpandConversationWhenDetailVisible: false })
+
+		const motionOptions = mockUseTopicDesktopPanelMotion.mock.calls[0][0]
+		motionOptions.ensureExpandedWhenDetailVisible(true)
+
+		expect(layoutState.ensureExpandedWhenDetailVisible).not.toHaveBeenCalled()
 	})
 
 	it("在无预览区且打开历史话题时渲染 full-right 固定面板", () => {
@@ -392,6 +419,47 @@ describe("TopicDesktopPanels", () => {
 
 		expect(screen.queryByTestId("topic-history-panel-drawer")).not.toBeInTheDocument()
 		expect(screen.getByTestId("topic-history-panel-fixed")).toBeInTheDocument()
+	})
+
+	it("普通分栏为详情、拖拽条和会话建立稳定层级", () => {
+		renderComponent()
+
+		expect(screen.getByTestId("topic-detail-panel-slot")).toHaveClass(
+			"relative",
+			"overflow-hidden",
+			"isolate",
+			"z-0",
+		)
+		expect(screen.getByTestId("topic-detail-resize-handle-slot")).toHaveClass(
+			"relative",
+			"z-20",
+			"overflow-visible",
+		)
+		expect(screen.getByTestId("topic-conversation-panel-slot")).toHaveClass("relative", "z-10")
+	})
+
+	it("详情 wrapper 始终跟随动态 slot 宽度并覆盖调用方最小宽度", () => {
+		renderComponent()
+
+		expect(screen.getByTestId("detail-panel-wrapper")).toHaveStyle({
+			width: "100%",
+			minWidth: "0",
+			maxWidth: "100%",
+		})
+	})
+
+	it("详情全屏时不应用普通分栏的隔离层级", () => {
+		renderComponent({ isDetailPanelFullscreen: true })
+
+		const detailSlot = screen.getByTestId("topic-detail-panel-slot")
+		const detailWrapper = screen.getByTestId("detail-panel-wrapper")
+		expect(detailSlot).toHaveClass("relative", "overflow-hidden")
+		expect(detailSlot).not.toHaveClass("isolate", "z-0")
+		expect(detailWrapper).not.toHaveStyle({
+			width: "100%",
+			minWidth: "0",
+			maxWidth: "100%",
+		})
 	})
 
 	it("有详情区时保持 detail -> handle -> conversation -> topic history 的顺序", () => {

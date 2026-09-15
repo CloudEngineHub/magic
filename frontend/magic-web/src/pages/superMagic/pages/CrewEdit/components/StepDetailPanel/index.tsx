@@ -11,6 +11,7 @@ import BuiltinSkillsPanel from "../ConfigStepsPanel/BuiltinSkillsPanel"
 import KnowledgeDetailView from "./KnowledgeDetailView"
 import identityPanelBg from "./IdentityPanel/identity-panel-bg.svg"
 import { SceneEditPanel } from "./PlaybookPanel/components/SceneEditPanel"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 
 function PlaceholderPanel({ stepKey }: { stepKey: StepDetailKey }) {
 	return (
@@ -64,7 +65,9 @@ function IdentityDetail() {
 function StepDetailPanel() {
 	const {
 		layout: { activeDetailKey, activePlaybookId, closePlaybookEditor },
+		conversation,
 	} = useCrewEditStore()
+	const readOnly = isReadOnlyProject(conversation.selectedProject?.user_role)
 	const [searchParams] = useSearchParams()
 	const knowledgeCode = searchParams.get("code")
 
@@ -81,6 +84,7 @@ function StepDetailPanel() {
 					playbookId={activePlaybookId}
 					onBack={closePlaybookEditor}
 					onClose={closePlaybookEditor}
+					readOnly={readOnly}
 				/>
 			)
 		case CREW_EDIT_STEP.Skills:
@@ -91,8 +95,10 @@ function StepDetailPanel() {
 			if (!knowledgeCode) return null
 			return <KnowledgeDetailView knowledgeCode={knowledgeCode} />
 		case CREW_EDIT_STEP.RunAndDebug:
+			if (readOnly) return null
 			return <PlaceholderPanel stepKey={activeDetailKey} />
 		case CREW_EDIT_STEP.Publishing:
+			if (readOnly) return null
 			return <PublishingPanel />
 		default:
 			return null

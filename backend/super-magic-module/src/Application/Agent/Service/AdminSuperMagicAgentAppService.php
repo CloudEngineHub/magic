@@ -7,14 +7,19 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Application\Agent\Service;
 
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use Dtyq\SuperMagic\Application\Agent\Assembler\AdminSuperMagicAgentAssembler;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentMarketType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\AgentVersionAdminQuery;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\ReviewStatus;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentCategoryDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentMarketDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentVersionDomainService;
@@ -106,6 +111,7 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $requestDTO->getOrderBy(),
             $page
         );
+        $this->fillMarketCategoryIds($result['list']);
 
         return $this->adminSuperMagicAgentAssembler->createQueryMarketsResponseDTO(
             $result['list'],
@@ -194,13 +200,17 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
                 $reviewRemark
             );
             $agentEntity = $this->superMagicAgentDomainService->getByCodeWithException($dataIsolation, $versionEntity->getCode());
-            // 组织审核通过后，统一按前后发布目标切换权限。
-            $this->syncAgentPublishScopeTransition(
-                $dataIsolation,
-                $agentEntity,
-                $previousVersion,
-                $versionEntity
-            );
+            if (in_array($versionEntity->getPublishTargetType(), [PublishTargetType::ORGANIZATION, PublishTargetType::MEMBER], true)) {
+                $this->publishOrganizationSharedMarketAndSyncShelf($dataIsolation, $versionEntity);
+            } else {
+                // 个人发布仍沿用原有发布范围收口逻辑。
+                $this->syncAgentPublishScopeTransition(
+                    $dataIsolation,
+                    $agentEntity,
+                    $previousVersion,
+                    $versionEntity
+                );
+            }
             Db::commit();
         } catch (Throwable $throwable) {
             Db::rollBack();
@@ -256,9 +266,16 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             $payload['category_id'] = $categoryIds[0] ?? null;
         }
 
-        if (! $this->superMagicAgentMarketDomainService->updateInfoById($dataIsolation, $id, $payload)) {
-            ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
-        }
+        Db::transaction(function () use ($dataIsolation, $id, $payload): void {
+            if (! $this->updateMarketInfo($dataIsolation, $id, $payload)) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
+            }
+
+            // 下架与货架、雇佣关系撤销必须原子提交，避免隐藏后仍保留可用关系。
+            if (($payload['is_hidden'] ?? null) === true) {
+                $this->revokeHiddenOrganizationSharedMarket($dataIsolation, $id);
+            }
+        });
     }
 
     /**
@@ -380,12 +397,97 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
         $this->superMagicAgentCategoryDomainService->assertIdsExist($categoryIds);
         $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
         $dataIsolation->disabled();
-        if (! $this->superMagicAgentMarketDomainService->updateInfoById($dataIsolation, $id, [
+        if (! $this->updateMarketInfo($dataIsolation, $id, [
             'category_id' => $categoryIds[0] ?? null,
             'category_ids' => $categoryIds,
         ])) {
             ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => (string) $id]);
         }
+    }
+
+    private function publishOrganizationSharedMarketAndSyncShelf(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        AgentVersionEntity $versionEntity
+    ): void {
+        $marketEntity = $this->superMagicAgentVersionDomainService->publishOrganizationSharedMarket($dataIsolation, $versionEntity);
+        $marketId = (int) $marketEntity->getId();
+        if ($marketId <= 0) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'super_magic.operation_failed');
+        }
+        $permissionIsolation = PermissionDataIsolation::create(
+            $dataIsolation->getCurrentOrganizationCode(),
+            $dataIsolation->getCurrentUserId()
+        );
+
+        if ($versionEntity->getPublishTargetType() === PublishTargetType::ORGANIZATION) {
+            $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
+                $permissionIsolation,
+                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
+                (string) $marketId,
+                VisibilityType::ALL
+            );
+        } else {
+            $target = $versionEntity->getPublishTargetValue();
+            $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
+                $permissionIsolation,
+                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
+                (string) $marketId,
+                VisibilityType::SPECIFIC,
+                $target?->getUserIds() ?? [],
+                $target?->getDepartmentIds() ?? []
+            );
+        }
+
+        // 货架更新后由市场领域服务收口失去发现资格的 MARKET 雇佣。
+        $this->marketEligibilityDomainService->syncOrganizationMarketHireAccess(
+            $permissionIsolation,
+            $marketEntity
+        );
+    }
+
+    private function revokeHiddenOrganizationSharedMarket(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        int $marketId
+    ): void {
+        $market = $this->superMagicAgentMarketDomainService->getById($marketId);
+        if ($market === null || $market->getOrganizationCode() === null || $market->getOrganizationCode() === '') {
+            return;
+        }
+        if ($market->getMarketType() !== AgentMarketType::ORGANIZATION) {
+            return;
+        }
+
+        $permissionIsolation = PermissionDataIsolation::create(
+            $market->getOrganizationCode(),
+            $dataIsolation->getCurrentUserId()
+        );
+        $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
+            $permissionIsolation,
+            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
+            (string) $marketId,
+            VisibilityType::NONE
+        );
+
+        $revokedUserIds = [];
+        foreach ($this->userAgentDomainService->findUserAgentOwnershipsByMarketSource($dataIsolation, $marketId) as $ownership) {
+            if ($ownership->getUserId() !== $market->getPublisherId()) {
+                $revokedUserIds[] = $ownership->getUserId();
+            }
+        }
+        if ($revokedUserIds !== []) {
+            $this->userAgentDomainService->deleteUserAgentOwnershipsByMarketSourceAndUsers(
+                $dataIsolation,
+                $marketId,
+                array_values(array_unique($revokedUserIds))
+            );
+        }
+
+        $this->saveAgentVisibility(
+            $permissionIsolation,
+            $market->getAgentCode(),
+            VisibilityType::SPECIFIC,
+            [$market->getPublisherId()]
+        );
     }
 
     /**

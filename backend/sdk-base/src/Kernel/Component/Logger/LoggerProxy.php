@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Dtyq\SdkBase\Kernel\Component\Logger;
 
+use Dtyq\SdkBase\Kernel\Component\Config\LogSanitizerConfig;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -23,16 +24,32 @@ use Psr\Log\LoggerInterface;
  */
 class LoggerProxy
 {
+    private readonly LogSanitizer $sanitizer;
+
+    /**
+     * 初始化日志代理和专用日志脱敏器。
+     */
     public function __construct(
         private readonly string $sdkName,
-        private readonly ?LoggerInterface $logger = null
+        private readonly ?LoggerInterface $logger = null,
+        LogSanitizerConfig $config = new LogSanitizerConfig()
     ) {
+        $this->sanitizer = new LogSanitizer($config);
     }
 
+    /**
+     * 脱敏结构化日志上下文并转发给底层日志实现。
+     *
+     * @param array<int, mixed> $arguments
+     * @param mixed $name
+     */
     public function __call($name, $arguments)
     {
         $arguments = array_values($arguments);
-        $arguments[0] = "[{$this->sdkName}] " . $arguments[0];
+        $message = (string) ($arguments[0] ?? '');
+        $context = is_array($arguments[1] ?? null) ? $arguments[1] : [];
+        $arguments[1] = $this->sanitizer->sanitize((string) $name, $message, $context);
+        $arguments[0] = "[{$this->sdkName}] " . $message;
         if ($this->logger && method_exists($this->logger, $name)) {
             $this->logger->{$name}(...$arguments);
         }

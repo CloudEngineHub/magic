@@ -2,6 +2,9 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import MobileProjectDetailFilesView from "../MobileProjectDetailFilesView"
 import type { AttachmentItem } from "../../hooks/types"
+import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
+import { detectContentTypeRender } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
+import { DetailType } from "@/pages/superMagic/components/Detail/types"
 
 vi.mock("@/models/repository/Cache", () => ({
 	Storage: {
@@ -166,6 +169,63 @@ vi.mock("../MobileFileSelectionCheckbox", () => ({
 }))
 
 describe("MobileProjectDetailFilesView", () => {
+	it("打开移动端 PPT 文件夹时保留路径映射字段", () => {
+		const setUserSelectDetail = vi.fn()
+		const dataTransformer = vi.fn((item: FileItem) => ({
+			relative_file_path: item.relative_file_path,
+			parent_id: item.parent_id,
+			display_config: item.display_config,
+		}))
+
+		vi.mocked(detectContentTypeRender).mockReturnValueOnce({
+			displayConfigType: "slide",
+			detailType: DetailType.Html,
+			dataTransformer,
+		})
+
+		const attachments: AttachmentItem[] = [
+			{
+				file_id: "deck-folder",
+				name: "X11项目一页汇报",
+				is_directory: true,
+				relative_file_path: "/projects/x11/deck",
+				parent_id: "project-root",
+				display_config: {
+					type: "slide",
+					slides: ["slides/slide-1.html"],
+				},
+				children: [],
+			},
+		]
+
+		render(
+			<MobileProjectDetailFilesView
+				attachments={attachments}
+				setUserSelectDetail={setUserSelectDetail}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-folder-button"))
+
+		expect(dataTransformer).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_id: "deck-folder",
+				relative_file_path: "/projects/x11/deck",
+				parent_id: "project-root",
+			}),
+		)
+		expect(setUserSelectDetail).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: DetailType.Html,
+				currentFileId: "deck-folder",
+				data: expect.objectContaining({
+					relative_file_path: "/projects/x11/deck",
+					parent_id: "project-root",
+				}),
+			}),
+		)
+	})
+
 	it("为移动端文件列表的每一行提供稳定的自动化选择器", () => {
 		const attachments: AttachmentItem[] = [
 			{

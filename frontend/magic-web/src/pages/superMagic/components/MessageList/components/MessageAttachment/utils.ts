@@ -5,6 +5,78 @@ export function isMagicProjectConfigFile(fileName?: string): boolean {
 	return fileName === MAGIC_PROJECT_JS
 }
 
+export interface MagicProjectAttachmentFile {
+	file_id?: string | number
+	file_name?: string
+	filename?: string
+	display_filename?: string
+	name?: string
+	parent_id?: string | number | null
+	is_directory?: boolean
+	relative_file_path?: string
+	file_extension?: string
+	display_config?: Record<string, unknown> | null
+	children?: MagicProjectAttachmentFile[]
+}
+
+export interface MagicProjectAttachmentResolution {
+	matchedFile?: MagicProjectAttachmentFile
+	projectDirectory?: MagicProjectAttachmentFile
+	displayConfig?: Record<string, unknown> | null
+	projectName?: string
+	iconType?: string
+}
+
+function findMagicProjectFileById(
+	items: MagicProjectAttachmentFile[] | undefined,
+	fileId: string,
+): MagicProjectAttachmentFile | undefined {
+	for (const item of items || []) {
+		if (String(item.file_id ?? "") === fileId) return item
+		const matchedChild = findMagicProjectFileById(item.children, fileId)
+		if (matchedChild) return matchedChild
+	}
+	return undefined
+}
+
+export function resolveMagicProjectAttachment(
+	item: MagicProjectAttachmentFile,
+	workspaceFilesList: MagicProjectAttachmentFile[] = [],
+	workspaceFileTree: MagicProjectAttachmentFile[] = [],
+): MagicProjectAttachmentResolution {
+	const fileId = item.file_id === undefined || item.file_id === null ? "" : String(item.file_id)
+	const matchedFile = fileId
+		? workspaceFilesList.find((file) => String(file.file_id ?? "") === fileId) ||
+			findMagicProjectFileById(workspaceFileTree, fileId)
+		: undefined
+	const parentId = matchedFile?.parent_id ?? item.parent_id
+	const parentFile = parentId
+		? workspaceFilesList.find((file) => String(file.file_id ?? "") === String(parentId)) ||
+			findMagicProjectFileById(workspaceFileTree, String(parentId))
+		: undefined
+	const displayConfig =
+		parentFile?.display_config || matchedFile?.display_config || item.display_config
+	const projectName =
+		(typeof displayConfig?.name === "string" ? displayConfig.name : undefined) ||
+		parentFile?.name ||
+		parentFile?.file_name ||
+		parentFile?.display_filename
+	const iconType = parentFile
+		? getAttachmentType({
+				...parentFile,
+				display_config: displayConfig,
+			}) || parentFile.file_extension
+		: undefined
+
+	return {
+		matchedFile,
+		projectDirectory: parentFile,
+		displayConfig,
+		projectName,
+		iconType,
+	}
+}
+
 export interface MagicProjectIconContext {
 	file_name?: string
 	display_filename?: string

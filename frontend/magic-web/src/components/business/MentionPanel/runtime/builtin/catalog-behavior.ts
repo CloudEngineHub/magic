@@ -20,6 +20,10 @@ const DEFAULT_STATE_TRANSITIONS: Record<PanelState, Record<string, StateTransiti
 		[BuiltinItemId.MCP_EXTENSIONS]: buildCatalogTransition(
 			MentionPanelCatalogId.MCP_EXTENSIONS,
 		),
+		[BuiltinItemId.DIGITAL_EMPLOYEES]: buildCatalogTransition(
+			MentionPanelCatalogId.DIGITAL_EMPLOYEES,
+		),
+		[BuiltinItemId.FLOWS]: buildCatalogTransition(MentionPanelCatalogId.FLOWS),
 		[BuiltinItemId.AGENTS]: buildCatalogTransition(MentionPanelCatalogId.AGENTS),
 		[BuiltinItemId.SKILLS]: buildCatalogTransition(MentionPanelCatalogId.SKILLS),
 		[BuiltinItemId.TOOLS]: buildCatalogTransition(MentionPanelCatalogId.TOOLS),
@@ -34,6 +38,16 @@ export const defaultMentionPanelCatalogBehavior: MentionPanelCatalogBehavior<str
 	getStaticTransition: ({ currentState, itemId }) =>
 		DEFAULT_STATE_TRANSITIONS[currentState]?.[itemId] ?? null,
 	getDynamicTransition: ({ currentCatalogId, selectedItem, enterFolder }) => {
+		if (currentCatalogId === MentionPanelCatalogId.FLOWS) {
+			if (selectedItem.id === BuiltinItemId.AGENTS) {
+				return buildCatalogTransition(MentionPanelCatalogId.AGENTS)
+			}
+
+			if (selectedItem.id === BuiltinItemId.TOOLS) {
+				return buildCatalogTransition(MentionPanelCatalogId.TOOLS)
+			}
+		}
+
 		switch (selectedItem.type) {
 			case MentionItemType.FOLDER:
 				if (enterFolder && selectedItem.isFolder) {

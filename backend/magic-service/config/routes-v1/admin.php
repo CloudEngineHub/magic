@@ -56,11 +56,12 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::get('/office-info', [ServiceProviderApi::class, 'isCurrentOrganizationOfficial']);
         Router::get('/templates/queries', [ServiceProviderApi::class, 'queriesServiceProviderTemplates']);
         Router::get('/model-pricing-templates/queries', [ServiceProviderApi::class, 'queriesProviderModelPricingTemplates']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
 
-        // 废弃，上线后可删除
-        Router::get('/available-llm', [ServiceProviderApi::class, 'getAllAvailableLlmProviders']);
-        Router::get('/non-official-llm', [ServiceProviderApi::class, 'getNonOfficialLlmProviders']);
-        Router::get('/non-official/queries', [ServiceProviderApi::class, 'queriesServiceProviderTemplates']);
+    // 模型视角管理
+    Router::addGroup('/provider-models', static function () {
+        Router::post('/queries', [ServiceProviderApi::class, 'queriesProviderModels']);
+        Router::post('/groups/queries', [ServiceProviderApi::class, 'queriesProviderModelGroups']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
     // AI能力管理
@@ -71,20 +72,20 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::post('/connectivity-test', [AiAbilityApi::class, 'connectivityTest']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
-    Router::addGroup('/globals', static function () {
-        Router::addGroup('/agents', static function () {
-            Router::put('/settings', [AgentGlobalSettingsApi::class, 'updateGlobalSettings']);
-            Router::get('/settings', [AgentGlobalSettingsApi::class, 'getGlobalSettings']);
-        });
-    }, ['middleware' => [RequestContextMiddleware::class]]);
+    //    Router::addGroup('/globals', static function () {
+    //        Router::addGroup('/agents', static function () {
+    // Router::put('/settings', [AgentGlobalSettingsApi::class, 'updateGlobalSettings']);
+    // Router::get('/settings', [AgentGlobalSettingsApi::class, 'getGlobalSettings']);
+    //        });
+    //    }, ['middleware' => [RequestContextMiddleware::class]]);
 
-    Router::addGroup('/agents', static function () {
-        Router::get('/published', [AdminAgentApi::class, 'getPublishedAgents']);
-        Router::post('/queries', [AdminAgentApi::class, 'queriesAgents']);
-        Router::get('/creators', [AdminAgentApi::class, 'getOrganizationAgentsCreators']);
-        Router::get('/{agentId}', [AdminAgentApi::class, 'getAgentDetail']);
-        Router::delete('/{agentId}', [AdminAgentApi::class, 'deleteAgent']);
-    }, ['middleware' => [RequestContextMiddleware::class]]);
+    //    Router::addGroup('/agents', static function () {
+    // Router::get('/published', [AdminAgentApi::class, 'getPublishedAgents']);
+    // Router::post('/queries', [AdminAgentApi::class, 'queriesAgents']);
+    // Router::get('/creators', [AdminAgentApi::class, 'getOrganizationAgentsCreators']);
+    // Router::get('/{agentId}', [AdminAgentApi::class, 'getAgentDetail']);
+    // Router::delete('/{agentId}', [AdminAgentApi::class, 'deleteAgent']);
+    //    }, ['middleware' => [RequestContextMiddleware::class]]);
 
     // 组织管理员
     Router::addGroup('/organization-admin', static function () {
@@ -98,6 +99,7 @@ Router::addGroup('/api/v1/admin', static function () {
     // 角色权限相关（权限树）
     Router::addGroup('/roles', static function () {
         Router::get('/permissions/tree', [PermissionApi::class, 'getPermissionTree']);
+        Router::get('/permissions/tree-v1', [PermissionApi::class, 'getPermissionTreeV1']);
         Router::get('/sub-admins', [RoleApi::class, 'getSubAdminList']);
         Router::post('/sub-admins', [RoleApi::class, 'createSubAdmin']);
         Router::put('/sub-admins/{id}', [RoleApi::class, 'updateSubAdmin']);
@@ -184,6 +186,7 @@ Router::addGroup('/api/v1/admin', static function () {
 
     Router::addGroup('/slides-templates', static function () {
         Router::post('/queries', [AdminSlidesTemplateApi::class, 'queries']);
+        Router::post('/reindex-vector-index', [AdminSlidesTemplateApi::class, 'reindexVectorIndex']);
         Router::get('/{id:\d+}', [AdminSlidesTemplateApi::class, 'detail']);
         Router::post('', [AdminSlidesTemplateApi::class, 'create']);
         Router::put('/{id:\d+}', [AdminSlidesTemplateApi::class, 'update']);

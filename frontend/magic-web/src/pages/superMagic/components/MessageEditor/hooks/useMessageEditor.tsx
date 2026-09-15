@@ -1,9 +1,9 @@
-import { useEditor, JSONContent } from "@tiptap/react"
-import { Document } from "@tiptap/extension-document"
-import { Paragraph } from "@tiptap/extension-paragraph"
-import { Text } from "@tiptap/extension-text"
+import { useEditor, JSONContent } from "@/infrastructure/editors/tiptap/react"
+import { Document } from "@/infrastructure/editors/tiptap/extension-document"
+import { Paragraph } from "@/infrastructure/editors/tiptap/extension-paragraph"
+import { Text } from "@/infrastructure/editors/tiptap/extension-text"
 import { useRef, useEffect } from "react"
-import { NodeSelection } from "@tiptap/pm/state"
+import { NodeSelection } from "@/infrastructure/editors/tiptap/pm-state"
 import {
 	HardBlock,
 	CodeAwarePasteExtension,
@@ -25,20 +25,39 @@ import { Topic } from "../../../pages/Workspace/types"
 import { type TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { ChatApi } from "@/apis"
 import { isEmptyJSONContent } from "../utils"
-import { UndoRedo } from "@tiptap/extensions"
+import { UndoRedo } from "@/infrastructure/editors/tiptap/extensions"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { isAllowedMention as defaultIsAllowedMention } from "../utils/mention"
+import {
+	isAllowedMention as defaultIsAllowedMention,
+	prepareCopiedMentionAttrs,
+} from "../utils/mention"
 import GlobalMentionPanelStore, {
 	MentionPanelStore,
 } from "@/components/business/MentionPanel/builtin-store"
 import { SUPER_PLACEHOLDER_TYPE } from "../extensions/super-placeholder/const"
-import { MentionItemType } from "@/components/business/MentionPanel/types"
+import {
+	MentionItemType,
+	type DirectoryMentionData,
+	type ProjectFileMentionData,
+	type UploadFileMentionData,
+} from "@/components/business/MentionPanel/types"
 import MarkerMentionNodeView from "../components/MentionNodes/marker/MarkerMentionNodeView"
+import FileMentionNodeView from "../components/MentionNodes/file/FileMentionNodeView"
+import FolderMentionNodeView from "../components/MentionNodes/folder/FolderMentionNodeView"
 import { runActiveEditor } from "../utils/editorLifecycle"
+import {
+	tryAcceptPromptCarouselShortcut,
+	tryNavigatePromptCarouselShortcut,
+} from "../utils/promptCarousel"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
+import { getClipboardPlainText } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
 
 interface UseMessageEditorProps {
 	value?: JSONContent
 	placeholder?: string
+	ariaLabel?: string
+	onPromptCarouselAccept?: () => boolean
+	onPromptCarouselNavigate?: (direction: "previous" | "next") => boolean
 	onSend?: (content: JSONContent | undefined) => void
 	onMentionsInsert?: (item: TiptapMentionAttributes) => void
 	onMentionInsertItems?: (items: TiptapMentionAttributes[]) => void
@@ -47,6 +66,8 @@ interface UseMessageEditorProps {
 	onChange?: (content: JSONContent) => void
 	selectedTopic?: Topic | null
 	onKeyboardInput?: () => void
+	/** Whether plain Enter sends the current message. */
+	sendWhenEnter?: boolean
 	shouldEnableMention?: boolean
 	isAllowedMention?: (attrs: TiptapMentionAttributes, dataService: MentionPanelStore) => boolean
 	sendEnabled?: boolean
@@ -59,6 +80,10 @@ interface UseMessageEditorProps {
 	mentionPanelStore?: MentionPanelStore
 	/** 恢复内容期间返回 true 时，appendTransaction 跳过 onInsertItems，避免与 restoreMentionItems 冲突 */
 	shouldSkipInsertSync?: () => boolean
+	/** Allows trusted programmatic content restoration to keep existing Mention nodes intact. */
+	shouldSkipMentionValidation?: () => boolean
+	/** Allows previously trusted Mention nodes to survive follow-up editor transactions. */
+	isTrustedMention?: (attrs: TiptapMentionAttributes) => boolean
 	/** 程序化清空期间跳过删除同步，避免误判为用户删除 */
 	shouldSkipRemoveSync?: () => boolean
 	/** 删除后需要先恢复的 mention，用于等待确认弹窗 */
@@ -67,6 +92,8 @@ interface UseMessageEditorProps {
 		stillExists: boolean,
 		context?: { deletionInput: MentionDeletionInput },
 	) => boolean
+	getWorkspaceFilesList?: () => AttachmentItem[]
+	getCurrentProjectId?: () => string | undefined
 }
 
 type MentionEditorCommands = {
@@ -114,6 +141,9 @@ export const useMessageEditor = ({
 	value,
 	onSend,
 	placeholder,
+	ariaLabel,
+	onPromptCarouselAccept,
+	onPromptCarouselNavigate,
 	onMentionsInsert,
 	onMentionInsertItems,
 	onMentionRemove,
@@ -121,6 +151,7 @@ export const useMessageEditor = ({
 	onChange,
 	selectedTopic,
 	onKeyboardInput,
+	sendWhenEnter,
 	shouldEnableMention = true,
 	isAllowedMention,
 	sendEnabled = true,
@@ -132,16 +163,69 @@ export const useMessageEditor = ({
 	topicMode,
 	mentionPanelStore = GlobalMentionPanelStore,
 	shouldSkipInsertSync,
+	shouldSkipMentionValidation,
+	isTrustedMention,
 	shouldSkipRemoveSync,
 	shouldRestoreRemovedMention,
+	getWorkspaceFilesList,
+	getCurrentProjectId,
 }: UseMessageEditorProps) => {
 	const domRef = useRef<HTMLDivElement>(null)
 	const { i18n } = useTranslation()
 	const isMobile = useIsMobile()
+	const shouldSendWhenEnter = sendWhenEnter ?? !isMobile
 	// Cache last content snapshot to avoid triggering onChange on selection-only updates
 	const lastContentSnapshotRef = useRef<string>(JSON.stringify(value ?? null))
 	// Track whether focus is on SuperPlaceholder to control AI completion
 	const isFocusOnPlaceholderRef = useRef<boolean>(false)
+
+	const prepareCopiedMention = useMemoizedFn(
+		(rawAttrs: Record<string, unknown>): TiptapMentionAttributes | null => {
+			if (
+				!shouldEnableMention ||
+				isOAuthInProgress ||
+				rawAttrs.pending ||
+				typeof rawAttrs.type !== "string" ||
+				!rawAttrs.data ||
+				typeof rawAttrs.data !== "object" ||
+				Array.isArray(rawAttrs.data)
+			)
+				return null
+
+			const attrs = rawAttrs as unknown as TiptapMentionAttributes
+			let sourceProjectId: string | undefined
+			if (
+				attrs.type === MentionItemType.PROJECT_FILE ||
+				attrs.type === MentionItemType.FOLDER
+			) {
+				const data = attrs.data as ProjectFileMentionData | DirectoryMentionData
+				const sourceId =
+					attrs.type === MentionItemType.PROJECT_FILE
+						? (data as ProjectFileMentionData).file_id
+						: (data as DirectoryMentionData).directory_id
+				if (!sourceId) return null
+				sourceProjectId = data.source_project_id || data.project_id
+			} else if (attrs.type === MentionItemType.UPLOAD_FILE) {
+				const data = attrs.data as UploadFileMentionData
+				// 只恢复已完成的远端附件；未完成上传和本地元素截图不属于可复制文件。
+				if (
+					data.upload_status !== "done" ||
+					!data.file_id ||
+					!data.file_name ||
+					!data.file_path ||
+					data.is_html_screenshot ||
+					data.storage_id
+				)
+					return null
+			}
+
+			const prepared = prepareCopiedMentionAttrs(attrs, sourceProjectId, mentionPanelStore)
+			if (!prepared) return null
+			return (isAllowedMention ?? defaultIsAllowedMention)(prepared, mentionPanelStore)
+				? prepared
+				: null
+		},
+	)
 
 	const scrollToBottom = () => {
 		setTimeout(() => {
@@ -214,8 +298,17 @@ export const useMessageEditor = ({
 			updateAiCompletionState(editor)
 		},
 		editorProps: {
+			attributes: ariaLabel ? { "aria-label": ariaLabel } : {},
 			handleKeyDown: (_, event) => {
 				event.stopPropagation()
+
+				if (tryNavigatePromptCarouselShortcut(event, onPromptCarouselNavigate)) {
+					return true
+				}
+
+				if (tryAcceptPromptCarouselShortcut(event, onPromptCarouselAccept)) {
+					return true
+				}
 
 				// 其他实际内容输入键触发停止语音录制
 				const isContentKey =
@@ -252,8 +345,8 @@ export const useMessageEditor = ({
 						return false // 让扩展的键盘快捷键处理
 					}
 
-					// 移动端回车换行
-					if (isMobile) {
+					// Keep newline behavior when Enter-to-send is disabled for this editor.
+					if (!shouldSendWhenEnter) {
 						return false
 					}
 
@@ -278,11 +371,18 @@ export const useMessageEditor = ({
 			Paragraph,
 			Text,
 			HardBlock,
+			CopyMessageExtension.configure({
+				onMentionsInsert: onMentionInsertItems,
+				onContentChange: onChange,
+				dataService: mentionPanelStore,
+				getWorkspaceFilesList,
+				getCurrentProjectId,
+			}),
 			CodeAwarePasteExtension,
 			SuperPlaceholderExtension.configure({
 				size: size || "default",
 			}),
-			InspectorDetailExtension,
+			InspectorDetailExtension.configure({ prepareCopiedMention }),
 			PlaceholderExtension.configure({
 				placeholder,
 			}),
@@ -290,15 +390,20 @@ export const useMessageEditor = ({
 				depth: 100,
 				newGroupDelay: 250,
 			}),
-			CopyMessageExtension.configure({
-				onMentionsInsert: onMentionInsertItems,
-				onContentChange: onChange,
-				dataService: mentionPanelStore,
-			}),
 			...(shouldEnableMention
 				? [
 						MentionExtension.configure({
 							language: i18n.language as Language,
+							// 原生文本序列化也使用文件链接，避免绕过自定义 copy 时退回 @文件名。
+							renderText: ({ node }) =>
+								getClipboardPlainText(
+									{
+										type: "mention",
+										attrs: node.attrs as TiptapMentionAttributes,
+									},
+									getWorkspaceFilesList?.(),
+									getCurrentProjectId?.(),
+								).trim(),
 							getParentContainer: () => document.body,
 							disableKeyboardShortcuts: isOAuthInProgress,
 							onInsert: (item) => {
@@ -322,8 +427,18 @@ export const useMessageEditor = ({
 							dataService: mentionPanelStore,
 							nodeViewRenderers: {
 								[MentionItemType.DESIGN_MARKER]: MarkerMentionNodeView,
+								[MentionItemType.PROJECT_FILE]: FileMentionNodeView,
+								[MentionItemType.UPLOAD_FILE]: FileMentionNodeView,
+								[MentionItemType.FOLDER]: (props) => (
+									<FolderMentionNodeView
+										{...props}
+										getWorkspaceFilesList={getWorkspaceFilesList}
+									/>
+								),
 							},
 							shouldSkipInsertSync,
+							shouldSkipMentionValidation,
+							isTrustedMention,
 							shouldSkipRemoveSync,
 							shouldRestoreRemovedMention,
 						}),
@@ -347,16 +462,24 @@ export const useMessageEditor = ({
 	AiCompletionService.setInstance({ editor: tiptapEditor })
 
 	// Handle AI completion based on mobile, aiCompletionEnabled, and focus position
+	const previousAiCompletionEnabledRef = useRef<boolean | null>(null)
+
 	useEffect(() => {
 		if (!tiptapEditor) return
 
 		const isFocusOnPlaceholder = isFocusOnSuperPlaceholder(tiptapEditor)
 		isFocusOnPlaceholderRef.current = isFocusOnPlaceholder
+		const wasEnabled = previousAiCompletionEnabledRef.current
+		const shouldEnable = !isMobile && aiCompletionEnabled && !isFocusOnPlaceholder
+		previousAiCompletionEnabledRef.current = shouldEnable
 
-		if (isMobile || !aiCompletionEnabled || isFocusOnPlaceholder) {
+		if (!shouldEnable) {
 			AiCompletionService.disable()
 		} else {
 			AiCompletionService.enable()
+			if (wasEnabled === false && !tiptapEditor.isEmpty) {
+				AiCompletionService.triggerFetchSuggestion()
+			}
 		}
 
 		return () => {
@@ -397,7 +520,7 @@ export const useMessageEditor = ({
 		if (shouldEnableMention) {
 			runActiveEditor(tiptapEditor, (editor) => {
 				const mentionCommands = editor.commands as typeof editor.commands &
-				MentionEditorCommands
+					MentionEditorCommands
 				mentionCommands.updateMentionLanguage?.(i18n.language)
 			})
 		}
@@ -408,7 +531,7 @@ export const useMessageEditor = ({
 		if (shouldEnableMention) {
 			runActiveEditor(tiptapEditor, (editor) => {
 				const mentionCommands = editor.commands as typeof editor.commands &
-				MentionEditorCommands
+					MentionEditorCommands
 				mentionCommands.updateMentionKeyboardShortcuts?.(isOAuthInProgress)
 			})
 		}

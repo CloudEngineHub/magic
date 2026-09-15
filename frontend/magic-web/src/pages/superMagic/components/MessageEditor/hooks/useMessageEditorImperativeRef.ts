@@ -1,4 +1,4 @@
-import type { Editor, JSONContent } from "@tiptap/react"
+import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useImperativeHandle } from "react"
 import type { ForwardedRef } from "react"
 import type { Topic } from "../../../pages/Workspace/types"

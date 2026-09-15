@@ -1,11 +1,12 @@
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
 import { Input } from "antd"
 import { useState, useEffect, useRef, useMemo } from "react"
-import { useMemoizedFn, useResponsive } from "ahooks"
+import { useMemoizedFn } from "ahooks"
 import { shadow } from "@/utils/shadow"
 import AIOptimization from "@/pages/superMagic/components/Detail/components/AIOptimization"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import CommonFooter from "../../components/CommonFooter"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
@@ -27,6 +28,7 @@ export default function Text(props: any) {
 		onDownload,
 		isFromNode,
 		isFullscreen,
+		documentFlowFullscreen = false,
 		viewMode,
 		onViewModeChange,
 		onCopy,
@@ -68,8 +70,7 @@ export default function Text(props: any) {
 		isFromNode,
 		disabledUrlCache: isPlaybackMode,
 	})
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 	const textAreaRef = useRef<any>(null)
 
 	const [content, setContent] = useState<string>("")
@@ -303,7 +304,13 @@ export default function Text(props: any) {
 	}
 
 	return (
-		<div className={cn("flex h-full flex-col")}>
+		<div
+			className={cn(
+				documentFlowFullscreen
+					? "flex min-h-dvh flex-col overflow-visible"
+					: "flex h-full flex-col",
+			)}
+		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
 			{isEditMode ? (
 				<Input.TextArea
@@ -331,7 +338,9 @@ export default function Text(props: any) {
 				<div
 					key={data.id}
 					className={cn(
-						"h-[calc(100%-40px)] overflow-y-auto overflow-x-hidden p-3",
+						documentFlowFullscreen
+							? "min-h-dvh overflow-visible p-3"
+							: "h-[calc(100%-40px)] overflow-y-auto overflow-x-hidden p-3",
 						"whitespace-pre-wrap break-words text-sm leading-5 text-foreground",
 						"bg-background",
 					)}

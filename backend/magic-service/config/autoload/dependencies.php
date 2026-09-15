@@ -44,6 +44,7 @@ use App\Application\ModelGateway\Component\Points\PointComponent;
 use App\Application\ModelGateway\Component\Points\PointComponentInterface;
 use App\Application\Provider\Policy\DefaultProviderControlPolicy;
 use App\Application\Provider\Policy\ProviderControlPolicyInterface;
+use App\Application\SuperMagic\Message\Event\Subscribe\SuperAgentMessageSubscriberV2;
 use App\Domain\Admin\Repository\Facade\AdminGlobalSettingsRepositoryInterface;
 use App\Domain\Admin\Repository\Persistence\AdminGlobalSettingsRepository;
 use App\Domain\Agent\Repository\Facade\AgentRepositoryInterface;
@@ -149,13 +150,30 @@ use App\Domain\KnowledgeBase\Port\KnowledgeBaseGateway;
 use App\Domain\KnowledgeBase\Repository\Facade\KnowledgeBaseDocumentRepositoryInterface;
 use App\Domain\KnowledgeBase\Repository\Facade\KnowledgeBaseFragmentRepositoryInterface;
 use App\Domain\KnowledgeBase\Repository\Facade\KnowledgeBaseRepositoryInterface;
+use App\Domain\KnowledgeBase\Repository\Facade\ThirdFileRevectorizeStateRepositoryInterface;
 use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseBaseRepository;
 use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseDocumentRepository;
 use App\Domain\KnowledgeBase\Repository\Persistence\KnowledgeBaseFragmentRepository;
+use App\Domain\KnowledgeBase\Repository\Persistence\ThirdFileRevectorizeStateRepository;
 use App\Domain\LongTermMemory\Repository\LongTermMemoryRepositoryInterface;
+use App\Domain\MagicBase\Repository\Facade\MagicBaseMetadataCleanupRepositoryInterface;
+use App\Domain\MagicBase\Repository\Facade\MagicBaseMigrationLogRepositoryInterface;
+use App\Domain\MagicBase\Repository\Facade\MagicBasePermissionRepositoryInterface;
+use App\Domain\MagicBase\Repository\Facade\MagicBaseProjectStorageRouteRepositoryInterface;
+use App\Domain\MagicBase\Repository\Facade\MagicBaseRelationRepositoryInterface;
+use App\Domain\MagicBase\Repository\Facade\MagicBaseRowCleanupRepositoryInterface;
+use App\Domain\MagicBase\Repository\Facade\MagicBaseRowQueryRepositoryInterface;
+use App\Domain\MagicBase\Repository\Facade\MagicBaseRowStoreRepositoryInterface;
+use App\Domain\MagicBase\Repository\Facade\MagicBaseTableRepositoryInterface;
+use App\Domain\MagicBase\Repository\Persistence\MagicBaseProjectStorageRouteRepository;
+use App\Domain\MagicBase\Repository\Persistence\MagicBaseTableRepository;
+use App\Domain\MagicBase\Repository\Persistence\Storage\MongoDB\MagicBaseMongoProjectCleanupRepository;
+use App\Domain\MagicBase\Service\MagicBaseRowStorageResolverDomainService;
+use App\Domain\MCP\Repository\Facade\MCPAuthorizationCredentialRepositoryInterface;
 use App\Domain\MCP\Repository\Facade\MCPServerRepositoryInterface;
 use App\Domain\MCP\Repository\Facade\MCPServerToolRepositoryInterface;
 use App\Domain\MCP\Repository\Facade\MCPUserSettingRepositoryInterface;
+use App\Domain\MCP\Repository\Persistence\MCPAuthorizationCredentialRepository;
 use App\Domain\MCP\Repository\Persistence\MCPServerRepository;
 use App\Domain\MCP\Repository\Persistence\MCPServerToolRepository;
 use App\Domain\MCP\Repository\Persistence\MCPUserSettingRepository;
@@ -174,8 +192,10 @@ use App\Domain\ModelGateway\Repository\Facade\ModelConfigRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\MsgLogRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\OrganizationConfigRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\UserConfigRepositoryInterface;
+use App\Domain\ModelGateway\Repository\ImageGenerationTaskRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Persistence\AccessTokenRepository;
 use App\Domain\ModelGateway\Repository\Persistence\ApplicationRepository;
+use App\Domain\ModelGateway\Repository\Persistence\ImageGenerationTaskRepository;
 use App\Domain\ModelGateway\Repository\Persistence\ModelConfigRepository;
 use App\Domain\ModelGateway\Repository\Persistence\MsgLogRepository;
 use App\Domain\ModelGateway\Repository\Persistence\OrganizationConfigRepository;
@@ -217,17 +237,22 @@ use App\Domain\Provider\Service\ModelFilter\DefaultPackageFilter;
 use App\Domain\Provider\Service\ModelFilter\OrganizationBasedModelFilterInterface;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateCategoryRepositoryInterface;
+use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateFavoriteRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRelationRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Facade\SlidesTemplateTagRepositoryInterface;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateCategoryRepository;
+use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateFavoriteRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateTagRelationRepository;
 use App\Domain\SlidesTemplate\Repository\Persistence\SlidesTemplateTagRepository;
 use App\Domain\SlidesTemplate\Service\UsageCount\DefaultSlidesTemplateUsageCountPolicy;
 use App\Domain\SlidesTemplate\Service\UsageCount\SlidesTemplateUsageCountPolicyInterface;
-use App\Domain\SuperAgent\Service\UsageCalculator\DefaultUsageCalculator;
-use App\Domain\SuperAgent\Service\UsageCalculator\UsageCalculatorInterface;
+use App\Domain\SuperMagic\File\Repository\Facade\AudioProjectRepositoryInterface;
+use App\Domain\SuperMagic\File\Repository\Persistence\AudioProjectRepository;
+use App\Domain\SuperMagic\Message\Chat\DTO\Message\ChatMessage\SuperAgentMessage;
+use App\Domain\SuperMagic\Task\Service\UsageCalculator\DefaultUsageCalculator;
+use App\Domain\SuperMagic\Task\Service\UsageCalculator\UsageCalculatorInterface;
 use App\Domain\Token\Item\MagicTokenExtra;
 use App\Domain\Token\Repository\Facade\MagicTokenExtraInterface;
 use App\Domain\Token\Repository\Facade\MagicTokenRepositoryInterface;
@@ -257,6 +282,8 @@ use App\Infrastructure\Core\Embeddings\DocumentSplitter\DocumentSplitterInterfac
 use App\Infrastructure\Core\Embeddings\DocumentSplitter\OdinRecursiveCharacterTextSplitter;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\EmbeddingGeneratorInterface;
 use App\Infrastructure\Core\Embeddings\EmbeddingGenerator\OdinEmbeddingGenerator;
+use App\Infrastructure\Core\Embeddings\VectorStores\OdinQdrantVectorStore;
+use App\Infrastructure\Core\Embeddings\VectorStores\VectorStoreInterface;
 use App\Infrastructure\Core\File\Parser\Driver\ExcelFileParserDriver;
 use App\Infrastructure\Core\File\Parser\Driver\Interfaces\ExcelFileParserDriverInterface;
 use App\Infrastructure\Core\File\Parser\Driver\Interfaces\OcrFileParserDriverInterface;
@@ -283,6 +310,8 @@ use App\Infrastructure\ExternalAPI\Sms\Volcengine\Template;
 use App\Infrastructure\ExternalAPI\Sms\Volcengine\VolceApiClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\DashScopeTransportInterface;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Transport\ApiKeyDashScopeTransport;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportInterface;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoGenerateFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoProviderOperationExecutor;
 use App\Infrastructure\ImageGenerate\DefaultFontProvider;
@@ -302,6 +331,7 @@ use App\Infrastructure\Rpc\JsonRpc\Client\Knowledge\KnowledgeBaseRpcClient;
 use App\Infrastructure\Rpc\JsonRpc\Client\ModelGateway\EmbeddingRpcClient;
 use App\Infrastructure\Rpc\Protocol\Contract\DataFormatterInterface;
 use App\Infrastructure\Rpc\Protocol\JsonDataFormatter;
+use App\Infrastructure\SuperMagic\ConfigProvider as SuperMagicConfigProvider;
 use App\Infrastructure\Util\Auth\Permission\Permission;
 use App\Infrastructure\Util\Auth\Permission\PermissionInterface;
 use App\Infrastructure\Util\Client\SimpleClientFactory;
@@ -313,8 +343,6 @@ use App\Infrastructure\Util\Permission\Repository\RoleRepository;
 use App\Interfaces\MCP\Facade\HttpTransportHandler\ApiKeyProviderAuthenticator;
 use Dtyq\PhpMcp\Shared\Auth\AuthenticatorInterface;
 use Dtyq\PhpMcp\Shared\Kernel\Packer\PackerInterface;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\AudioProjectRepositoryInterface;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Persistence\AudioProjectRepository;
 use Hyperf\Config\ProviderConfig;
 use Hyperf\Crontab\Strategy\CoroutineStrategy;
 use Hyperf\Crontab\Strategy\StrategyInterface;
@@ -335,6 +363,7 @@ $dependencies = [
     SmsInterface::class => VolceApiClient::class,
     LockerInterface::class => RedisLocker::class,
     QueueCoreRepositoryInterface::class => RedisQueueCoreRepository::class,
+    ImageGenerationTaskRepositoryInterface::class => ImageGenerationTaskRepository::class,
     QueueExecutorConfigRepositoryInterface::class => QueueExecutorConfigRepository::class,
     VideoQueueOperationRepositoryInterface::class => RedisVideoQueueOperationRepository::class,
     QueueOperationExecutorInterface::class => VideoProviderOperationExecutor::class,
@@ -343,6 +372,7 @@ $dependencies = [
     // domain 通过这个工厂接口拿到 adapter，保持依赖方向正确。
     VideoGenerationProviderAdapterFactoryInterface::class => VideoGenerateFactory::class,
     DashScopeTransportInterface::class => ApiKeyDashScopeTransport::class,
+    GeminiTransportInterface::class => GeminiTransportRouter::class,
     MagicTokenRepositoryInterface::class => MagicTokenRepository::class,
     TemplateInterface::class => Template::class,
 
@@ -404,6 +434,7 @@ $dependencies = [
     ThirdPlatformDocumentProviderPort::class => UnsupportedThirdPlatformDocumentProvider::class,
     KnowledgeBaseDocumentRepositoryInterface::class => KnowledgeBaseDocumentRepository::class,
     KnowledgeBaseFragmentRepositoryInterface::class => KnowledgeBaseFragmentRepository::class,
+    ThirdFileRevectorizeStateRepositoryInterface::class => ThirdFileRevectorizeStateRepository::class,
 
     // vector
     SemanticSimilaritySearchInterface::class => BaseSemanticSimilaritySearch::class,
@@ -426,8 +457,19 @@ $dependencies = [
     ProviderOriginalModelRepositoryInterface::class => ProviderOriginalModelRepository::class,
     MagicProviderAndModelsInterface::class => MagicProviderAndModelsRepository::class,
     AiAbilityRepositoryInterface::class => AiAbilityRepository::class,
+    // magicbase
+    MagicBaseTableRepositoryInterface::class => MagicBaseTableRepository::class,
+    MagicBaseRelationRepositoryInterface::class => MagicBaseTableRepository::class,
+    MagicBasePermissionRepositoryInterface::class => MagicBaseTableRepository::class,
+    MagicBaseRowStoreRepositoryInterface::class => MagicBaseRowStorageResolverDomainService::class,
+    MagicBaseRowQueryRepositoryInterface::class => MagicBaseRowStorageResolverDomainService::class,
+    MagicBaseMigrationLogRepositoryInterface::class => MagicBaseTableRepository::class,
+    MagicBaseMetadataCleanupRepositoryInterface::class => MagicBaseTableRepository::class,
+    MagicBaseRowCleanupRepositoryInterface::class => MagicBaseMongoProjectCleanupRepository::class,
+    MagicBaseProjectStorageRouteRepositoryInterface::class => MagicBaseProjectStorageRouteRepository::class,
     // mcp
     MCPServerRepositoryInterface::class => MCPServerRepository::class,
+    MCPAuthorizationCredentialRepositoryInterface::class => MCPAuthorizationCredentialRepository::class,
     MCPServerToolRepositoryInterface::class => MCPServerToolRepository::class,
     AuthenticatorInterface::class => ApiKeyProviderAuthenticator::class,
     MCPUserSettingRepositoryInterface::class => MCPUserSettingRepository::class,
@@ -450,6 +492,7 @@ $dependencies = [
 
     // embeddings
     EmbeddingGeneratorInterface::class => OdinEmbeddingGenerator::class,
+    VectorStoreInterface::class => OdinQdrantVectorStore::class,
 
     // rerank
 
@@ -571,6 +614,7 @@ $dependencies = [
 
     // slides template
     SlidesTemplateCategoryRepositoryInterface::class => SlidesTemplateCategoryRepository::class,
+    SlidesTemplateFavoriteRepositoryInterface::class => SlidesTemplateFavoriteRepository::class,
     SlidesTemplateRepositoryInterface::class => SlidesTemplateRepository::class,
     SlidesTemplateTagRepositoryInterface::class => SlidesTemplateTagRepository::class,
     SlidesTemplateTagRelationRepositoryInterface::class => SlidesTemplateTagRelationRepository::class,
@@ -587,6 +631,12 @@ $dependencies = [
     // 将 Migrator 映射到自定义的 CustomMigrator，支持环境变量控制迁移执行
     Migrator::class => CustomMigrator::class,
 ];
+
+// Super Magic is owned by the main application after the package migration.
+// Keep its dependency map in one main-repository source and merge it before
+// processing priority definitions from the remaining Composer packages.
+$superMagicConfig = (new SuperMagicConfigProvider())();
+$dependencies = array_replace($dependencies, $superMagicConfig['dependencies']);
 
 /**
  * Load and merge dependency priority configurations from all vendor packages.
@@ -641,5 +691,11 @@ foreach ($dependenciesPriority as $interface => $definition) {
         $dependencies[$interface] = $selectedClass;
     }
 }
+
+// These two bindings previously came from the extracted Super Magic package's
+// dependencies_priority. They must remain explicit after the package migration,
+// regardless of the fallback bindings declared above or other provider order.
+$dependencies[AgentExecuteInterface::class] = SuperAgentMessageSubscriberV2::class;
+$dependencies[SuperAgentMessageInterface::class] = SuperAgentMessage::class;
 
 return $dependencies;

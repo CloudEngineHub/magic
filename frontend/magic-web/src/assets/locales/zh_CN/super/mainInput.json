@@ -2,7 +2,7 @@
 	"addSheet": {
 		"actions": {
 			"mention": "提及",
-			"plugin": "插件",
+			"plugin": "连接器",
 			"skills": "技能",
 			"webSearch": "网页搜索"
 		},

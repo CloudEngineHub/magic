@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { isEmpty } from "lodash-es"
 import { Flex, Tooltip } from "antd"
 import { IconExternalLink } from "@tabler/icons-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import Render from "../../../Render"
 import PlaybackControl from "../../../components/PlaybackControl"
 import StatusIcon from "../../../../MessageHeader/components/StatusIcon"
@@ -19,13 +19,21 @@ import BreathingLight from "../resource/breathingLight"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { correctDetailType } from "../utils/preview"
 import { ToolIconBadge } from "../../../../MessageList/components/shared/ToolIconConfig"
+import { DetailType, type DetailBrowserAttachment } from "../../../types"
+import type { FileItem } from "../types"
+
+interface PlaybackDetailWithAttachments {
+	type?: DetailType
+	attachments?: unknown
+}
 
 export interface PlaybackTabContentProps {
 	disPlayDetail: unknown
 	setUserSelectDetail?: (detail: unknown) => void
 	userSelectDetail?: unknown
 	attachments?: unknown[]
-	attachmentList?: any[]
+	attachmentList?: FileItem[]
+	isAwaitingProjectAttachments?: boolean
 	topicId?: string
 	baseShareUrl?: string
 	currentTopicStatus?: TaskStatus
@@ -35,6 +43,7 @@ export interface PlaybackTabContentProps {
 	allowEdit?: boolean
 	selectedTopic?: Topic | null
 	selectedProject?: ProjectListItem | null
+	projectId?: string
 	isFileShare?: boolean
 	activeFileId?: string | null
 	onActiveFileChange?: (fileId: string | null) => void
@@ -54,6 +63,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 		userSelectDetail,
 		attachments,
 		attachmentList,
+		isAwaitingProjectAttachments,
 		topicId,
 		baseShareUrl,
 		currentTopicStatus,
@@ -63,6 +73,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 		allowEdit,
 		selectedTopic,
 		selectedProject,
+		projectId,
 		isFileShare,
 		activeFileId,
 		onActiveFileChange,
@@ -128,8 +139,15 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 	const correctedDisPlayDetail = useMemo(() => {
 		return correctDetailType(disPlayDetail, {
 			attachmentList,
+			isAttachmentListReady: isAwaitingProjectAttachments === false,
 		})
-	}, [attachmentList, disPlayDetail])
+	}, [attachmentList, disPlayDetail, isAwaitingProjectAttachments])
+	const browserAttachments = useMemo(() => {
+		const detail = correctedDisPlayDetail as PlaybackDetailWithAttachments | undefined
+		if (detail?.type !== DetailType.Browser) return undefined
+		const value = detail.attachments
+		return Array.isArray(value) ? (value as DetailBrowserAttachment[]) : undefined
+	}, [correctedDisPlayDetail])
 
 	// 获取当前文件的视图模式
 	const { mode: currentFileViewMode, id: detailId } = useMemo(() => {
@@ -168,8 +186,31 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 	// 判断是否显示打开原文件按钮
 	const shouldShowOpenSourceFileButton = useMemo(() => {
 		const detail: any = correctedDisPlayDetail
-		return !!detail?.data?.source_file_id
-	}, [correctedDisPlayDetail])
+		const sourceFileId = detail?.data?.source_file_id
+		if (!sourceFileId) return false
+
+		// attachmentList 是当前项目的扁平文件列表。跨项目源文件不会出现在该列表中，
+		// 且附件接口并不保证返回 project_id，因此以文件是否属于当前列表作为判断依据。
+		const sourceFile = attachmentList?.find(
+			(item) => String(item?.file_id) === String(sourceFileId),
+		)
+		if (!sourceFile) return false
+
+		const currentProjectId = selectedProject?.id || selectedTopic?.project_id || projectId
+
+		// 如果接口有返回 project_id，则额外校验，避免切换项目期间使用到旧附件快照。
+		if (currentProjectId && sourceFile.project_id) {
+			return String(currentProjectId) === String(sourceFile.project_id)
+		}
+
+		return true
+	}, [
+		attachmentList,
+		correctedDisPlayDetail,
+		projectId,
+		selectedProject?.id,
+		selectedTopic?.project_id,
+	])
 
 	return (
 		<div className="flex h-full flex-col overflow-hidden p-[14px]">
@@ -249,6 +290,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 					mdToolbarContainer={mdToolbarEl}
 					type={(correctedDisPlayDetail as any)?.type}
 					data={(correctedDisPlayDetail as any)?.data}
+					browserAttachments={browserAttachments}
 					attachments={attachments}
 					setUserSelectDetail={setUserSelectDetail}
 					currentIndex={0}

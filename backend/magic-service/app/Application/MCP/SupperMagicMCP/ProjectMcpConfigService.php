@@ -12,14 +12,16 @@ use App\Application\MCP\Service\MCPServerAppService;
 use App\Application\MCP\Utils\MCPServerConfigUtil;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
+use App\Domain\MCP\Constant\ServiceConfigAuthType;
 use App\Domain\MCP\Entity\MCPServerEntity;
 use App\Domain\MCP\Entity\ValueObject\MCPDataIsolation;
 use App\Domain\MCP\Entity\ValueObject\Query\MCPServerQuery;
+use App\Domain\MCP\Entity\ValueObject\ServiceConfig\ExternalSSEServiceConfig;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
 use App\ErrorCode\MCPErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\TempAuth\TempAuthInterface;
 use App\Infrastructure\Core\ValueObject\Page;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskContext;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -102,7 +104,7 @@ readonly class ProjectMcpConfigService
     }
 
     /**
-     * 反查 mcp servers 并生成运行时配置（含 token）。
+     * 反查 MCP Server 并生成运行时配置；新授权模式只下发凭据引用。
      */
     private function createMcpServers(MCPDataIsolation $mcpDataIsolation, array $mcpIds): array
     {
@@ -147,6 +149,9 @@ readonly class ProjectMcpConfigService
                 $config = $mcpServerConfig->toArray();
                 $config['description'] = $mcpServer->getDescription();
                 $config['server_options'] = [];
+                if ($this->isMcpAuthorizationServer($mcpServer)) {
+                    $config = $this->applyMcpAuthorizationReference($config, $mcpServer->getCode());
+                }
             } catch (Throwable $throwable) {
                 $this->logger->notice('ProjectMcpConfigBuildNotice', [
                     'mcp_server' => [
@@ -170,5 +175,38 @@ readonly class ProjectMcpConfigService
             $servers[$mcpServer->getName()] = $config;
         }
         return $servers;
+    }
+
+    /**
+     * 判断 MCP Server 是否使用 MCP Authorization 凭据引用模式。
+     */
+    private function isMcpAuthorizationServer(MCPServerEntity $mcpServer): bool
+    {
+        $serviceConfig = $mcpServer->getServiceConfig();
+        return $serviceConfig instanceof ExternalSSEServiceConfig
+            && $serviceConfig->getAuthType() === ServiceConfigAuthType::MCP_AUTHORIZATION;
+    }
+
+    /**
+     * 将运行时配置收敛为授权引用，避免向 Super Magic 下发任何 OAuth 凭据。
+     *
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    private function applyMcpAuthorizationReference(array $config, string $mcpServerCode): array
+    {
+        $headers = is_array($config['headers'] ?? null) ? $config['headers'] : [];
+        foreach (array_keys($headers) as $headerName) {
+            if (is_string($headerName) && strtolower($headerName) === 'authorization') {
+                unset($headers[$headerName]);
+            }
+        }
+
+        $config['headers'] = $headers;
+        unset($config['token']);
+        $config['auth_type'] = ServiceConfigAuthType::MCP_AUTHORIZATION->value;
+        $config['mcp_server_code'] = $mcpServerCode;
+
+        return $config;
     }
 }

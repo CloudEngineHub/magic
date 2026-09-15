@@ -27,7 +27,7 @@ from app.path_manager import PathManager
 from app.service.cli_manager import CliManagerService
 from app.service.env_manager import EnvFileStore, EnvIdentityResolver
 from app.tools.shell_exec_utils.bg_prompt_detector import extract_last_line, looks_like_prompt, scan_chunk_for_prompt
-from app.tools.shell_exec_utils.bg_task_models import BackgroundStartResult, PROMPT_QUIET_SECS, PROMPT_QUIET_SECS_SYNC
+from app.tools.shell_exec_utils.bg_task_models import PROMPT_QUIET_SECS, PROMPT_QUIET_SECS_SYNC, BackgroundStartResult
 
 logger = get_logger(__name__)
 
@@ -366,6 +366,7 @@ class ProcessExecutor:
         extra_env: Optional[Dict[str, str]] = None,
         interruption_event: Optional[asyncio.Event] = None,
         background_on_timeout: bool = False,
+        detect_interactive_prompt: bool = True,
     ) -> Union[TerminalToolResult, BackgroundStartResult]:
         """
         执行命令并返回结果。
@@ -379,6 +380,8 @@ class ProcessExecutor:
             background_on_timeout: True 时进入流式缓存模式并启用 Prompt 检测；
                 超时或 prompt 检测命中时不 kill 进程，返回 BackgroundStartResult；
                 False（默认）保持原有行为，任何情况都返回 TerminalToolResult。
+            detect_interactive_prompt: 是否检测交互式 Prompt。仅命令行工具需要；
+                输出可能包含任意自然语言的非交互式执行器应关闭。
 
         Returns:
             TerminalToolResult: 普通模式，或后台模式下进程在 timeout 内完成时
@@ -424,6 +427,7 @@ class ProcessExecutor:
                 interruption_event=interruption_event,
                 prompt_quiet_secs=PROMPT_QUIET_SECS_SYNC,
                 open_stdin=False,
+                detect_interactive_prompt=detect_interactive_prompt,
             )
 
             if sr.outcome == "interrupted":
@@ -471,6 +475,7 @@ class ProcessExecutor:
                     "stderr": truncate_output_for_llm(sr.buf_stderr()),
                     "exit_code": -1,
                     "execution_time": timeout,
+                    "timed_out": True,
                 }
                 return result
 
@@ -524,6 +529,7 @@ class ProcessExecutor:
         若进程在 timeout 内正常完成，直接从 buf 构建 TerminalToolResult，无任何文件产生。
         """
         import uuid
+
         from app.tools.shell_exec_utils.bg_output_store import BgOutputStore
 
         sr = await _run_streaming_race(
@@ -612,7 +618,7 @@ class _StreamingOutcome:
     - "timeout"     超时，进程仍在运行，readers_task 仍在运行
     - "interrupted" 中断信号触发，进程已被 kill，readers_task 已被 cancel
     """
-    __slots__ = ("process", "buf", "readers_task", "outcome", "exit_code")
+    __slots__ = ("buf", "exit_code", "outcome", "process", "readers_task")
 
     def __init__(
         self,
@@ -646,6 +652,7 @@ async def _run_streaming_race(
     interruption_event: Optional[asyncio.Event],
     prompt_quiet_secs: float,
     open_stdin: bool,
+    detect_interactive_prompt: bool = True,
 ) -> _StreamingOutcome:
     """
     启动子进程，用 streaming reader 读取 stdout/stderr，同时做 prompt 检测。
@@ -700,7 +707,9 @@ async def _run_streaming_race(
             buf.append((stream_name, data))
             last_write_at[0] = time.monotonic()
             last_line = extract_last_line(data)
-            if scan_chunk_for_prompt(data) or looks_like_prompt(last_line):
+            if detect_interactive_prompt and (
+                scan_chunk_for_prompt(data) or looks_like_prompt(last_line)
+            ):
                 if prompt_candidate_at[0] is None:
                     prompt_candidate_at[0] = time.monotonic()
             else:
@@ -734,12 +743,14 @@ async def _run_streaming_race(
             pass
     readers_task.add_done_callback(_consume_readers_exc)
 
-    quiet_task = asyncio.ensure_future(_quiet_checker())
+    quiet_task = asyncio.ensure_future(_quiet_checker()) if detect_interactive_prompt else None
 
     # asyncio.shield 阻止 readers_done_task 被 cancel 时传播到 readers_task
     readers_done_task = asyncio.ensure_future(_wait_future(asyncio.shield(readers_task)))
-    prompt_wait_task = asyncio.ensure_future(prompt_event.wait())
-    race_tasks: list[asyncio.Task] = [readers_done_task, prompt_wait_task]
+    prompt_wait_task = asyncio.ensure_future(prompt_event.wait()) if detect_interactive_prompt else None
+    race_tasks: list[asyncio.Task] = [readers_done_task]
+    if prompt_wait_task is not None:
+        race_tasks.append(prompt_wait_task)
     interrupt_wait_task: Optional[asyncio.Task] = None
     if interruption_event is not None:
         interrupt_wait_task = asyncio.ensure_future(interruption_event.wait())
@@ -753,12 +764,14 @@ async def _run_streaming_race(
         )
     except BaseException:
         readers_task.cancel()
-        quiet_task.cancel()
+        if quiet_task is not None:
+            quiet_task.cancel()
         for t in race_tasks:
             t.cancel()
         raise
 
-    quiet_task.cancel()
+    if quiet_task is not None:
+        quiet_task.cancel()
     for t in pending:
         t.cancel()
 
@@ -769,7 +782,7 @@ async def _run_streaming_race(
         return _StreamingOutcome(process=process, buf=buf, readers_task=readers_task, outcome="interrupted")
 
     # ── Prompt 检测命中 ───────────────────────────────────────────────────────
-    if prompt_wait_task in done:
+    if prompt_wait_task is not None and prompt_wait_task in done:
         return _StreamingOutcome(process=process, buf=buf, readers_task=readers_task, outcome="prompt")
 
     # ── 超时 ──────────────────────────────────────────────────────────────────

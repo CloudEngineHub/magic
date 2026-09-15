@@ -1,42 +1,97 @@
 import type { Canvas } from "./Canvas"
 import { ElementTypeEnum, type ElementType, type LayerElement } from "../document/types"
+import {
+	CanvasAccessPolicy,
+	type CanvasAccessUpdate,
+	type CanvasAuthorizationResult,
+	type CanvasToolAuthorizationDefinition,
+} from "./CanvasAccessPolicy"
+import type { CanvasAccessContext, CanvasAccessMode, CanvasCapability } from "../../public/props"
 
-const NON_CONNECTABLE_ELEMENT_TYPES = new Set<ElementType>([
-	ElementTypeEnum.Frame,
-	ElementTypeEnum.Group,
-])
+const NON_CONNECTABLE_ELEMENT_TYPES = new Set<ElementType>([ElementTypeEnum.Group])
 
 /**
  * 权限管理器 - 统一管理元素的交互权限
  *
  * 职责：
- * 1. 管理画布的只读状态（readonly）
+ * 1. 按 CanvasAccessContext 管理画布级文档能力
  * 2. 统一判断元素的可见性（visible）
  * 3. 统一判断元素的锁定状态（locked）
  * 4. 提供统一的元素交互性判断方法
  *
  * 权限判断规则：
- * - readonly（画布级别）：影响所有元素的交互
+ * - document.write / document.delete（画布级别）：影响所有文档变更交互
  * - locked（元素级别）：影响单个元素的交互
  * - visible（元素级别）：影响单个元素的可见性和交互
  *
  * 三者关系：
  * - 只要满足任一限制条件，元素就不可交互
- * - readonly 优先级最高（画布级别）
+ * - 画布能力优先级最高（画布级别）
  * - locked 和 visible 是元素级别的限制
  *
  * 限制说明：
  * - ❌ 不可见元素（visible === false）：不显示、不能 hover、不能选中、不参与对齐
  * - ⚠️ 锁定元素（locked === true）：可选中、可 hover；不可变换、不可删除等（见各 canXxx 方法）
- * - ⚠️ 只读模式（readonly === true）：可选中、可 hover；不能变换、不能删除等（见各 canXxx）
- * - ✅ 只读模式下允许使用选择工具和平移工具
+ * - ⚠️ 缺少 document.write：可选中、可 hover；不能变换、不能删除等（见各 canXxx）
+ * - ✅ 无 document.write 时允许使用选择工具和平移工具
  */
 export class PermissionManager {
 	private canvas: Canvas
+	private readonly accessPolicy: CanvasAccessPolicy
 
-	constructor(options: { canvas: Canvas }) {
+	constructor(options: {
+		canvas: Canvas
+		accessMode?: CanvasAccessMode
+		capabilities?: Partial<Record<CanvasCapability, boolean>>
+	}) {
 		const { canvas } = options
 		this.canvas = canvas
+		this.accessPolicy = new CanvasAccessPolicy({
+			mode: options.accessMode,
+			capabilities: options.capabilities,
+		})
+	}
+
+	/** Canvas-wide capability decisions are exposed through the permission facade. */
+	public can(capability: CanvasCapability): boolean {
+		return this.accessPolicy.getContext().can(capability)
+	}
+
+	public getContext(): CanvasAccessContext {
+		return this.accessPolicy.getContext()
+	}
+
+	public setAccessContext(update: CanvasAccessUpdate): boolean {
+		return this.accessPolicy.setAccess(update)
+	}
+
+	public authorize(capability?: CanvasCapability): CanvasAuthorizationResult {
+		return this.accessPolicy.authorize(capability)
+	}
+
+	public authorizeTool(definition: CanvasToolAuthorizationDefinition): CanvasAuthorizationResult {
+		return this.accessPolicy.authorizeTool(definition)
+	}
+
+	/**
+	 * 判断当前 Canvas 是否允许把媒体文件交给宿主下载。
+	 * sideEffect.download 是访问能力；allowFileDownload 是宿主业务策略，
+	 * 两者都满足时动作才可执行。
+	 */
+	public canDownloadFiles(): boolean {
+		return (
+			this.can("sideEffect.download") &&
+			this.canvas.magicConfigManager.config?.permissions?.allowFileDownload !== false
+		)
+	}
+
+	/** 判断当前 Canvas 是否允许把选中媒体添加到宿主对话。 */
+	public canAddSelectedMediaToConversation(): boolean {
+		return (
+			this.can("sideEffect.copy") &&
+			this.canvas.magicConfigManager.config?.permissions?.elementMenuConversationActions !==
+				false
+		)
 	}
 
 	/**
@@ -94,7 +149,7 @@ export class PermissionManager {
 	 * 1. 元素不存在
 	 * 2. 元素不可见（visible === false）
 	 *
-	 * 注意：只读模式下允许 hover（用于查看元素信息）；锁定元素也可 hover
+	 * 注意：无 document.write 时允许 hover（用于查看元素信息）；锁定元素也可 hover
 	 */
 	public canHover(element: LayerElement | undefined): boolean {
 		if (!element) return false
@@ -106,12 +161,13 @@ export class PermissionManager {
 	/**
 	 * 判断元素是否可以作为连接线起点/终点。
 	 *
-	 * Frame、Group 是容器语义，默认不展示连接 handle，也不能作为新连接目标。
+	 * Frame 可作为一组画布输入的连接起点/终点；Group 仅用于局部编组，不暴露连接语义。
 	 * 普通元素可通过 interactionConfig.connectable=false 显式关闭连接能力。
 	 */
 	public canConnect(element: LayerElement | undefined): boolean {
 		if (!element) return false
 		if (!this.canHover(element)) return false
+		if (!this.canvas.elementManager.canParticipateInDocumentRelations(element.id)) return false
 		if (NON_CONNECTABLE_ELEMENT_TYPES.has(element.type)) return false
 		if (element.interactionConfig?.connectable === false) return false
 		return true
@@ -120,12 +176,10 @@ export class PermissionManager {
 	/**
 	 * 判断当前是否允许展示元素级临时交互反馈（hover、控件显隐、装饰器 affordance）。
 	 *
-	 * 裁剪和橡皮模式属于排他式编辑态，应抑制其他元素的临时交互反馈。
+	 * 图片特殊编辑模式属于排他式编辑态，应抑制其他元素的临时交互反馈。
 	 */
 	public canShowTransientElementAffordance(): boolean {
-		if (this.canvas.cropManager.getCroppingElementId()) return false
-		if (this.canvas.eraserManager.getErasingElementId()) return false
-		return true
+		return !this.canvas.imageEditingCoordinator.isActive()
 	}
 
 	/**
@@ -146,10 +200,11 @@ export class PermissionManager {
 	 * 1. 元素不存在
 	 * 2. 元素不可见（visible === false）
 	 *
-	 * 只读、锁定均不阻止选中；变换等能力见 canTransform。
+	 * 访问模式和锁定均不阻止选中；变换等能力见 canTransform。
 	 */
 	public canSelect(element: LayerElement | undefined): boolean {
 		if (!element) return false
+		if (!this.can("interaction.select")) return false
 		if (!this.isVisible(element)) return false
 		return true
 	}
@@ -160,14 +215,14 @@ export class PermissionManager {
 	 * 不可变换的情况：
 	 * 1. 元素不存在
 	 * 2. 元素被锁定（locked === true）
-	 * 3. 画布处于只读模式
+	 * 3. 画布缺少 document.write 能力
 	 *
 	 * 注意：不可见元素仍然可以被变换（通过图层面板选中后）
 	 */
 	public canTransform(element: LayerElement | undefined): boolean {
 		if (!element) return false
 		if (this.isLocked(element)) return false
-		if (this.canvas.readonly) return false
+		if (!this.can("document.write")) return false
 		return true
 	}
 
@@ -177,14 +232,14 @@ export class PermissionManager {
 	 * 不可删除的情况：
 	 * 1. 元素不存在
 	 * 2. 元素被锁定（locked === true）
-	 * 3. 画布处于只读模式
+	 * 3. 画布缺少 document.delete 能力
 	 *
 	 * 注意：不可见元素仍然可以被删除（通过图层面板选中后）
 	 */
 	public canDelete(element: LayerElement | undefined): boolean {
 		if (!element) return false
 		if (this.isLocked(element)) return false
-		if (this.canvas.readonly) return false
+		if (!this.can("document.delete")) return false
 		return true
 	}
 
@@ -194,12 +249,12 @@ export class PermissionManager {
 	 * 不可重命名的情况：
 	 * 1. 元素不存在
 	 * 2. 元素被锁定（locked === true）
-	 * 3. 画布处于只读模式
+	 * 3. 画布缺少 document.write 能力
 	 */
 	public canRename(element: LayerElement | undefined): boolean {
 		if (!element) return false
 		if (this.isLocked(element)) return false
-		if (this.canvas.readonly) return false
+		if (!this.can("document.write")) return false
 		return true
 	}
 
@@ -210,13 +265,13 @@ export class PermissionManager {
 	 * 1. 元素不存在
 	 * 2. 元素不可见（visible === false）
 	 * 3. 元素被锁定（locked === true）
-	 * 4. 画布处于只读模式
+	 * 4. 画布缺少 document.write 能力
 	 */
 	public canAlign(element: LayerElement | undefined): boolean {
 		if (!element) return false
 		if (!this.isVisible(element)) return false
 		if (this.isLocked(element)) return false
-		if (this.canvas.readonly) return false
+		if (!this.can("document.write")) return false
 		return true
 	}
 
@@ -226,14 +281,14 @@ export class PermissionManager {
 	 * 不可添加的情况：
 	 * 1. 元素不存在
 	 * 2. 元素被锁定（locked === true）
-	 * 3. 画布处于只读模式
+	 * 3. 画布缺少 document.write 能力
 	 *
 	 * 注意：不可见元素仍然可以被添加到画框
 	 */
 	public canAddToFrame(element: LayerElement | undefined): boolean {
 		if (!element) return false
 		if (this.isLocked(element)) return false
-		if (this.canvas.readonly) return false
+		if (!this.can("document.write")) return false
 		return true
 	}
 
@@ -274,7 +329,7 @@ export class PermissionManager {
 	public canRemoveFrame(element: LayerElement | undefined): boolean {
 		if (!element) return false
 		if (this.isLocked(element)) return false
-		if (this.canvas.readonly) return false
+		if (!this.can("document.write")) return false
 		return true
 	}
 
@@ -285,7 +340,7 @@ export class PermissionManager {
 	 * 1. 画布处于只读模式
 	 */
 	public canCreateMarker(): boolean {
-		return !this.canvas.readonly
+		return this.can("document.write")
 	}
 
 	/**
@@ -296,7 +351,7 @@ export class PermissionManager {
 	 * 2. canAddImageMarker 函数返回 false
 	 */
 	public canAddImageMarker(): boolean {
-		if (this.canvas.readonly) return false
+		if (!this.can("document.write")) return false
 		return !this.canvas.magicConfigManager.config?.permissions?.disabledMarker
 	}
 
@@ -307,7 +362,7 @@ export class PermissionManager {
 	 * 1. 画布处于只读模式
 	 */
 	public canDeleteMarker(): boolean {
-		return !this.canvas.readonly
+		return this.can("document.write")
 	}
 
 	/**
@@ -323,7 +378,7 @@ export class PermissionManager {
 		if (!element) return false
 		if (!this.isVisible(element)) return false
 		if (this.isLocked(element)) return false
-		if (this.canvas.readonly) return false
+		if (!this.can("document.write")) return false
 		return true
 	}
 
@@ -346,7 +401,7 @@ export class PermissionManager {
 	 * 不可执行：只读、无选中、任一选中元素已锁定
 	 */
 	public canReorderLayersForSelection(): boolean {
-		if (this.canvas.readonly) return false
+		if (!this.can("document.write")) return false
 		const ids = this.canvas.selectionManager.getSelectedIds()
 		if (ids.length === 0) return false
 		return !this.isAnySelectedElementLocked()
@@ -356,7 +411,7 @@ export class PermissionManager {
 	 * 当前选区是否可对齐 / 参与分布（所有选中项均满足 canAlign；分布快捷键与菜单与此一致）
 	 */
 	public canAlignCurrentSelection(): boolean {
-		if (this.canvas.readonly) return false
+		if (!this.can("document.write")) return false
 		const ids = this.canvas.selectionManager.getSelectedIds()
 		if (ids.length === 0) return false
 		return ids.every((id) => this.canAlign(this.canvas.elementManager.getElementData(id)))

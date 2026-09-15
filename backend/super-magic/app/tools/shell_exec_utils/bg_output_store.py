@@ -13,26 +13,91 @@
 同一文件的写入与截断通过 per-file asyncio.Lock 序列化，防止截断覆盖丢失。
 """
 
+import asyncio
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import aiofiles
-import aiofiles.os
 
 from agentlang.logger import get_logger
-from app.tools.shell_exec_utils.bg_task_models import (
-    BG_LOG_HEAD_KEEP_BYTES,
-    BG_LOG_MAX_FILE_COUNT,
-    BG_LOG_MAX_FILE_SIZE_BYTES,
-    BG_LOG_TAIL_KEEP_BYTES,
-    TaskStatus,
+from app.tools.shell_exec_utils.bg_task_models import TaskStatus
+from app.utils.async_file_utils import (
+    async_chmod,
+    async_exists,
+    async_scandir,
+    async_stat,
+    async_unlink,
 )
-from app.utils.async_file_utils import async_exists, async_mkdir, async_stat, async_unlink
+from app.utils.runtime_storage import (
+    RuntimeEvictionPolicy,
+    ensure_runtime_directory,
+    get_runtime_config_int,
+    get_runtime_config_size_bytes,
+)
 
 logger = get_logger(__name__)
 
 _TRUNCATED_MARKER_TPL = "--- [TRUNCATED: middle {removed} bytes removed] ---\n"
+
+
+@dataclass(frozen=True, slots=True)
+class _LogFile:
+    task_id: str
+    path: Path
+    size: int
+    modified_at: float
+
+
+@dataclass(frozen=True, slots=True)
+class _BgLogConfig:
+    max_file_size_bytes: int
+    head_keep_bytes: int
+    tail_keep_bytes: int
+    eviction_policy: RuntimeEvictionPolicy
+
+
+def _load_bg_log_config() -> _BgLogConfig:
+    return _BgLogConfig(
+        max_file_size_bytes=get_runtime_config_size_bytes(
+            "runtime_cleanup.bg_shell.max_file_size",
+            minimum=1,
+        ),
+        head_keep_bytes=get_runtime_config_size_bytes(
+            "runtime_cleanup.bg_shell.head_keep_size",
+            minimum=1,
+        ),
+        tail_keep_bytes=get_runtime_config_size_bytes(
+            "runtime_cleanup.bg_shell.tail_keep_size",
+            minimum=1,
+        ),
+        eviction_policy=RuntimeEvictionPolicy(
+            max_entries=get_runtime_config_int(
+                "runtime_cleanup.bg_shell.max_file_count",
+                minimum=1,
+            ),
+            target_entries=get_runtime_config_int(
+                "runtime_cleanup.bg_shell.target_file_count",
+                minimum=0,
+            ),
+            max_total_bytes=get_runtime_config_size_bytes(
+                "runtime_cleanup.bg_shell.max_total_size",
+                minimum=1,
+            ),
+            target_total_bytes=get_runtime_config_size_bytes(
+                "runtime_cleanup.bg_shell.target_total_size",
+                minimum=0,
+            ),
+            max_age_seconds=get_runtime_config_int(
+                "runtime_cleanup.bg_shell.max_age_days",
+                minimum=1,
+            )
+            * 24
+            * 60
+            * 60,
+        ),
+    )
 
 
 class BgOutputStore:
@@ -45,13 +110,13 @@ class BgOutputStore:
 
     def __init__(self, bg_shell_dir: Path) -> None:
         self._dir = bg_shell_dir
+        self._config = _load_bg_log_config()
         # task_id -> asyncio.Lock，序列化同一文件的写入与截断
-        self._locks: dict[str, "asyncio.Lock"] = {}  # type: ignore[name-defined]
+        self._locks: dict[str, asyncio.Lock] = {}
 
     # ── 内部工具 ──────────────────────────────────────────────────────────────
 
-    def _lock_for(self, task_id: str) -> "asyncio.Lock":  # type: ignore[name-defined]
-        import asyncio
+    def _lock_for(self, task_id: str) -> asyncio.Lock:
         if task_id not in self._locks:
             self._locks[task_id] = asyncio.Lock()
         return self._locks[task_id]
@@ -68,7 +133,7 @@ class BgOutputStore:
 
         会自动创建 bg_shell 目录（按需创建语义）。
         """
-        await async_mkdir(self._dir, parents=True, exist_ok=True)
+        await ensure_runtime_directory(self._dir)
         # 命令和路径中的双引号转义，防止 header 解析错乱
         safe_command = command.replace('"', '\\"')
         safe_cwd = cwd.replace('"', '\\"')
@@ -79,6 +144,7 @@ class BgOutputStore:
         async with self._lock_for(task_id):
             async with aiofiles.open(self.log_path(task_id), "w", encoding="utf-8") as f:
                 await f.write(header)
+            await async_chmod(self.log_path(task_id), 0o600)
 
     async def append_output(self, task_id: str, stream: str, data: str) -> None:
         """
@@ -162,23 +228,26 @@ class BgOutputStore:
             return
 
         stat = await async_stat(log)
-        if stat.st_size <= BG_LOG_MAX_FILE_SIZE_BYTES:
+        if stat.st_size <= self._config.max_file_size_bytes:
             return
 
         async with self._lock_for(task_id):
             # 进锁后再次确认，防止并发截断
             stat = await async_stat(log)
-            if stat.st_size <= BG_LOG_MAX_FILE_SIZE_BYTES:
+            if stat.st_size <= self._config.max_file_size_bytes:
                 return
 
             async with aiofiles.open(log, "rb") as f:
-                head = await f.read(BG_LOG_HEAD_KEEP_BYTES)
+                head = await f.read(self._config.head_keep_bytes)
                 file_size = stat.st_size
-                tail_start = max(BG_LOG_HEAD_KEEP_BYTES, file_size - BG_LOG_TAIL_KEEP_BYTES)
+                tail_start = max(
+                    self._config.head_keep_bytes,
+                    file_size - self._config.tail_keep_bytes,
+                )
                 await f.seek(tail_start)
                 tail = await f.read()
 
-            removed = tail_start - BG_LOG_HEAD_KEEP_BYTES
+            removed = tail_start - self._config.head_keep_bytes
             marker = _TRUNCATED_MARKER_TPL.format(removed=removed).encode("utf-8")
 
             async with aiofiles.open(log, "wb") as f:
@@ -186,12 +255,12 @@ class BgOutputStore:
 
             logger.debug("日志文件已截断: %s, 移除中间 %d 字节", log, removed)
 
-    # ── 文件数量淘汰 ──────────────────────────────────────────────────────────
+    # ── 日志淘汰 ──────────────────────────────────────────────────────────────
 
     async def evict_if_needed(self, finished_task_ids: set[str]) -> None:
         """
-        若 bg_shell 目录中的日志文件总数超过上限，
-        按修改时间升序（最老优先）删除已结束任务的日志文件。
+        删除超过宽松最长存活时间的已结束日志；突破数量或容量高水位后，
+        按修改时间升序删除已结束日志，直到同时回到低水位。
 
         finished_task_ids: 当前所有处于非 RUNNING 状态的 task_id 集合。
         只删除已结束的任务文件，RUNNING 任务的文件不触碰。
@@ -199,24 +268,58 @@ class BgOutputStore:
         if not await async_exists(self._dir):
             return
 
-        # 收集所有 .log 文件
-        entries = []
-        with await aiofiles.os.scandir(str(self._dir)) as scanner:  # type: ignore[attr-defined]
-            for entry in scanner:
-                if entry.is_file() and entry.name.endswith(".log"):
-                    entries.append(entry)
+        logs: list[_LogFile] = []
+        for entry in await async_scandir(self._dir):
+            if entry.is_symlink() or not entry.is_file(follow_symlinks=False):
+                continue
+            path = Path(entry.path)
+            if path.suffix != ".log":
+                continue
+            try:
+                stat = await async_stat(path)
+            except FileNotFoundError:
+                continue
+            logs.append(
+                _LogFile(
+                    task_id=path.stem,
+                    path=path,
+                    size=stat.st_size,
+                    modified_at=stat.st_mtime,
+                )
+            )
 
-        if len(entries) <= BG_LOG_MAX_FILE_COUNT:
+        logs.sort(key=lambda item: item.modified_at)
+        retention_cutoff = time.time() - (self._config.eviction_policy.max_age_seconds or 0)
+        expired = [
+            item
+            for item in logs
+            if item.task_id in finished_task_ids and item.modified_at < retention_cutoff
+        ]
+        for item in expired:
+            await self._delete_log(item)
+
+        expired_paths = {item.path for item in expired}
+        remaining = [item for item in logs if item.path not in expired_paths]
+        total_bytes = sum(item.size for item in remaining)
+        if (
+            len(remaining) <= (self._config.eviction_policy.max_entries or 0)
+            and total_bytes <= (self._config.eviction_policy.max_total_bytes or 0)
+        ):
             return
 
-        # 只对已结束任务排序删除
-        finished_entries = [
-            e for e in entries if Path(e.path).stem in finished_task_ids
-        ]
-        finished_entries.sort(key=lambda e: e.stat().st_mtime)
+        remaining_entries = len(remaining)
+        finished_logs = [item for item in remaining if item.task_id in finished_task_ids]
+        for item in finished_logs:
+            if (
+                remaining_entries <= (self._config.eviction_policy.target_entries or 0)
+                and total_bytes <= (self._config.eviction_policy.target_total_bytes or 0)
+            ):
+                break
+            await self._delete_log(item)
+            remaining_entries -= 1
+            total_bytes -= item.size
 
-        to_delete = len(entries) - BG_LOG_MAX_FILE_COUNT
-        for entry in finished_entries[:to_delete]:
-            await async_unlink(entry.path)
-            self._locks.pop(Path(entry.path).stem, None)
-            logger.info("已淘汰最老日志文件: %s", entry.path)
+    async def _delete_log(self, log: _LogFile) -> None:
+        await async_unlink(log.path)
+        self._locks.pop(log.task_id, None)
+        logger.info("已淘汰后台 Shell 日志: %s", log.path)

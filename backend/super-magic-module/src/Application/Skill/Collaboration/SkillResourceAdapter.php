@@ -9,6 +9,7 @@ namespace Dtyq\SuperMagic\Application\Skill\Collaboration;
 
 use App\Application\Kernel\AbstractKernelAppService;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType as OperationResourceType;
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use Dtyq\SuperMagic\Application\Collaboration\Contract\CollaborativeResourceAdapterInterface;
 use Dtyq\SuperMagic\Domain\Skill\Entity\SkillEntity;
@@ -70,6 +71,11 @@ class SkillResourceAdapter extends AbstractKernelAppService implements Collabora
     public function getVisibilityResourceType(): ResourceVisibilityResourceType
     {
         return ResourceVisibilityResourceType::SKILL;
+    }
+
+    public function afterCollaboratorRemoved(PermissionDataIsolation $permissionIsolation, string $resourceCode): void
+    {
+        // Skill 没有组织共享雇佣关系，无需同步派生权限。
     }
 
     /**

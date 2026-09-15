@@ -30,7 +30,15 @@ export const pptxExternalLogger: ExternalLogger = {
 		if (import.meta.env.DEV) {
 			console.error("[html2pptx]", ...args)
 		}
-		pptLogger.error({ data: ["[html2pptx]", ...args] })
+		const originalError = args.find((value) => value instanceof Error)
+		// 第三方回调参数可能包含文档内容，只保留原始 Error 和参数数量用于诊断。
+		pptLogger.error({
+			eventKey: "html2pptx_external_failed",
+			errorKind: "render",
+			error: originalError ?? args[0],
+			message: "html2pptx external error",
+			context: { args },
+		})
 	},
 }
 
@@ -48,26 +56,25 @@ export function reportPptxExportError(error: unknown, context?: Record<string, u
 		console.error("[html2pptx] Export editable PPT failed:", error, context)
 	}
 	pptLogger.error({
-		data: [
-			"[html2pptx] Export editable PPT failed",
-			{
-				tag: "html2pptx",
-				error: error instanceof Error ? error.message : String(error),
-				stack: error instanceof Error ? error.stack : undefined,
-				failurePhase: diagnostic?.phase,
-				errorCode: diagnostic?.code,
-				cancelled: diagnostic?.cancelled,
-				pageIndex: diagnostic?.pageIndex,
-				pageCount: diagnostic?.pageCount,
-				// BigInt is used internally so ZIP64 counters stay exact; logs cross a JSON boundary.
-				bytesWritten: diagnostic?.bytesWritten?.toString(),
-				outputPolicy: diagnostic?.outputPolicy,
-				mediaPolicyMode: diagnostic?.mediaPolicyMode,
-				zipMode: diagnostic?.zipMode,
-				strategyDecision,
-				...context,
-			},
-		],
+		eventKey: "editable_ppt_export_failed",
+		errorKind: "render",
+		error,
+		message: "Export editable PPT failed",
+		context: {
+			tag: "html2pptx",
+			failurePhase: diagnostic?.phase,
+			errorCode: diagnostic?.code,
+			cancelled: diagnostic?.cancelled,
+			pageIndex: diagnostic?.pageIndex,
+			pageCount: diagnostic?.pageCount,
+			// BigInt is used internally so ZIP64 counters stay exact; logs cross a JSON boundary.
+			bytesWritten: diagnostic?.bytesWritten?.toString(),
+			outputPolicy: diagnostic?.outputPolicy,
+			mediaPolicyMode: diagnostic?.mediaPolicyMode,
+			zipMode: diagnostic?.zipMode,
+			strategyDecision,
+			...context,
+		},
 	})
 }
 

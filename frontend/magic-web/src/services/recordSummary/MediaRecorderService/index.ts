@@ -5,9 +5,19 @@ import {
 	type RecorderCoreConfig,
 	type RecorderCoreEvents,
 } from "./RecorderCoreAdapter"
-import type { AudioSourceConfig, AudioSourceType } from "./types/RecorderTypes"
+import type {
+	AudioSourceConfig,
+	AudioSourceType,
+	RecordingEncodingSnapshot,
+} from "./types/RecorderTypes"
 import { RecorderInitializationError, InvalidStateError } from "./types/RecorderErrors"
 import { logger as Logger } from "@/utils/log"
+import { DEFAULT_RECORDING_ENCODING_POLICY } from "./encoders/RecordingEncoderResolver"
+import { createRecordingLogger } from "../utils/RecordingLogger"
+import {
+	normalizeRecordingEncodingSnapshot,
+	resolveRecordingAudioProfile,
+} from "./utils/RecordingEncodingProfile"
 
 /**
  * Media recorder service dependencies
@@ -17,7 +27,22 @@ interface MediaRecorderServiceDependencies {
 	audioChunkDB?: AudioChunkDB
 }
 
+export interface StopRecordingOptions {
+	source?: string
+}
+
 const logger = Logger.createLogger("MediaRecorderService")
+
+const diagnosticsLogger = createRecordingLogger("MediaRecorder")
+
+/** Map the public MIME configuration to the recorder's legacy format selector. */
+function resolveRecorderFormat(mimeType?: string): RecorderCoreConfig["type"] {
+	const baseMimeType = mimeType?.split(";")[0].trim().toLowerCase()
+
+	if (baseMimeType === "audio/pcm") return "pcm"
+	if (baseMimeType === "audio/wav" || baseMimeType === "audio/x-wav") return "wav"
+	return "opus"
+}
 
 /**
  * Media recorder service for recording and storing audio chunks
@@ -34,13 +59,14 @@ export class MediaRecorderService {
 	private events: Partial<MediaRecorderEvents>
 	private audioChunkDB: AudioChunkDB
 	private preauthorizedDisplayMedia: MediaStream | null = null
+	private readonly encodingSnapshots = new Map<string, RecordingEncodingSnapshot>()
 
 	public isBrowserSupported = true
 
 	// Default configuration
 	private readonly DEFAULT_CONFIG: MediaRecorderConfig = {
-		mimeType: "audio/wav", // Default WAV format
-		audioBitsPerSecond: 256000, // 16kHz * 16bit = 256 kbps
+		mimeType: "audio/ogg; codecs=opus", // Prefer Ogg/Opus and fall back before the first chunk
+		audioBitsPerSecond: 32000, // Target Opus bitrate; WAV fallback keeps its PCM contract
 		timeslice: 10000, // 10 seconds per chunk
 		enableEchoCancellation: false,
 		enableNoiseSuppression: false,
@@ -187,11 +213,20 @@ export class MediaRecorderService {
 			}
 
 			// Create audio recorder adapter configuration
+			const persistedEncoding =
+				this.config.lockedEncoding ?? this.encodingSnapshots.get(sessionId)
+			const lockedEncoding = persistedEncoding
+				? normalizeRecordingEncodingSnapshot(persistedEncoding)
+				: undefined
+			const audioProfile = resolveRecordingAudioProfile(lockedEncoding)
 			const recorderConfig: Partial<RecorderCoreConfig> = {
-				sampleRate: 16000, // 16kHz
-				bitRate: 16, // 16-bit
+				sampleRate: audioProfile.sampleRate,
+				bitRate: audioProfile.bitsPerSample,
+				audioBitsPerSecond: this.config.audioBitsPerSecond,
 				chunkDuration: (this.config.timeslice || 10000) / 1000, // Convert ms to seconds
-				type: "wav",
+				type: resolveRecorderFormat(this.config.mimeType),
+				encodingPolicy: this.config.encodingPolicy ?? DEFAULT_RECORDING_ENCODING_POLICY,
+				lockedEncoding,
 				audioSource: audioSourceConfig,
 			}
 
@@ -219,6 +254,8 @@ export class MediaRecorderService {
 
 			// Start recording
 			await this.recorderAdapter.start(sessionId, startChunkIndex)
+			const encodingSnapshot = this.recorderAdapter.getEncodingSnapshot()
+			if (encodingSnapshot) this.encodingSnapshots.set(sessionId, encodingSnapshot)
 
 			// Validate audio stream immediately after start
 			const stream = this.recorderAdapter.getMediaStream()
@@ -253,8 +290,11 @@ export class MediaRecorderService {
 			})
 		} catch (error) {
 			// Ensure cleanup on any error
-			logger.error("录音启动失败", {
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "recording_start_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "录音启动失败",
 			})
 			this.cleanup()
 			throw new Error(`Failed to start recording: ${error}`)
@@ -265,9 +305,21 @@ export class MediaRecorderService {
 	 * Stop recording
 	 * 停止录制
 	 */
-	stopRecording(): Promise<void> {
+	stopRecording(options: StopRecordingOptions = {}): Promise<void> {
 		return new Promise((resolve, reject) => {
+			diagnosticsLogger.log("Media recorder stop requested", {
+				sessionId: this.sessionId,
+				source: options.source || "unknown",
+				isRecording: this.isRecording,
+				adapterState: this.recorderAdapter?.getStatus().state || "unavailable",
+			})
+
 			if (!this.isRecording || !this.recorderAdapter) {
+				diagnosticsLogger.log("Media recorder stop skipped", {
+					sessionId: this.sessionId,
+					source: options.source || "unknown",
+					reason: "not_recording_or_adapter_missing",
+				})
 				resolve()
 				return
 			}
@@ -279,20 +331,39 @@ export class MediaRecorderService {
 					.then(() => {
 						this.isRecording = false
 						this.events.onRecordingStop?.()
+						diagnosticsLogger.log("Media recorder stop completed", {
+							sessionId: this.sessionId,
+							source: options.source || "unknown",
+							adapterState: this.recorderAdapter?.getStatus().state || "unavailable",
+						})
 						logger.report("录音停止成功")
 						resolve()
 					})
 					.catch((error) => {
-						logger.error("停止录音失败", {
-							error: error instanceof Error ? error.message : String(error),
+						diagnosticsLogger.error({
+							eventKey: "stop_recording_failed",
+							errorKind: "unknown",
+							error: error,
+							message: "停止录音失败",
+							context: {
+								sessionId: this.sessionId,
+								source: options.source || "unknown",
+							},
 						})
 						const err = new Error(`Failed to stop recorder: ${error}`)
 						this.events.onRecordingError?.(err)
 						reject(err)
 					})
 			} catch (error) {
-				logger.error("停止录音异常", {
-					error: error instanceof Error ? error.message : String(error),
+				diagnosticsLogger.error({
+					eventKey: "stop_recording_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "停止录音异常",
+					context: {
+						sessionId: this.sessionId,
+						source: options.source || "unknown",
+					},
 				})
 				this.cleanup()
 				reject(new Error(`Failed to stop recorder: ${error}`))
@@ -304,8 +375,8 @@ export class MediaRecorderService {
 	 * Stop recording and cleanup resources
 	 * 停止录制并同步清理资源
 	 */
-	async stopRecordingAndCleanup(): Promise<void> {
-		await this.stopRecording()
+	async stopRecordingAndCleanup(options: StopRecordingOptions = {}): Promise<void> {
+		await this.stopRecording(options)
 		this.cleanup()
 	}
 
@@ -362,9 +433,12 @@ export class MediaRecorderService {
 			// RecorderAdapter has already attempted rollback
 			// If rollback succeeded, it won't throw error
 			// If we reach here, both switch and rollback failed
-			logger.error("音频源切换失败", {
-				newSource,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "audio_source_switch_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "音频源切换失败",
+				context: { newSource },
 			})
 			throw error
 		}
@@ -405,9 +479,12 @@ export class MediaRecorderService {
 			await this.recorderAdapter.switchMicrophoneDevice(deviceId)
 			logger.log("Microphone device switched successfully", { deviceId })
 		} catch (error) {
-			logger.error("Microphone device switch failed", {
-				deviceId,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "microphone_device_switch_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Microphone device switch failed",
+				context: { deviceId },
 			})
 			throw error
 		}
@@ -439,19 +516,43 @@ export class MediaRecorderService {
 	 * 处理录音适配器的分片就绪事件
 	 */
 	private async handleChunkReady(chunk: StoredAudioChunk, chunkIndex: number): Promise<void> {
+		const persistStartedAt = Date.now()
 		try {
+			diagnosticsLogger.log("Audio chunk persistence started", {
+				sessionId: chunk.sessionId,
+				chunkId: chunk.id,
+				chunkIndex,
+				size: chunk.size,
+				uploadStatus: chunk.uploadStatus,
+			})
+
 			let success = false
 			try {
 				// Save chunk to IndexedDB
 				await this.audioChunkDB.saveChunk(chunk)
 				success = true
-				console.log("Chunk saved to IndexedDB", {
+				diagnosticsLogger.log("Audio chunk persisted", {
+					sessionId: chunk.sessionId,
 					chunkIndex,
+					chunkId: chunk.id,
 					size: chunk.size,
-					id: chunk.id,
+					uploadStatus: "pending",
+					persistenceDurationMs: Date.now() - persistStartedAt,
 				})
 			} catch (error) {
-				console.error("Failed to save chunk to IndexedDB:", error)
+				diagnosticsLogger.error({
+					eventKey: "persist_audio_chunk_failed",
+					errorKind: "storage",
+					error,
+					message: "Failed to persist audio chunk to IndexedDB",
+					context: {
+						sessionId: chunk.sessionId,
+						chunkId: chunk.id,
+						chunkIndex,
+						size: chunk.size,
+						persistenceDurationMs: Date.now() - persistStartedAt,
+					},
+				})
 				success = false
 			}
 
@@ -459,7 +560,17 @@ export class MediaRecorderService {
 			this.events.onDataAvailable?.(chunk, chunkIndex, success)
 		} catch (error) {
 			const err = new Error(`Failed to handle chunk: ${error}`)
-			console.error("Failed to handle chunk:", error)
+			diagnosticsLogger.error({
+				eventKey: "handle_chunk_ready_failed",
+				errorKind: "unknown",
+				error,
+				message: "Failed to handle ready audio chunk",
+				context: {
+					sessionId: chunk.sessionId,
+					chunkId: chunk.id,
+					chunkIndex,
+				},
+			})
 			this.events.onRecordingError?.(err)
 		}
 	}
@@ -481,8 +592,11 @@ export class MediaRecorderService {
 	 * 处理录音错误
 	 */
 	private handleRecorderError(error: Error): void {
-		logger.error("录音错误", {
-			error: error.message,
+		logger.error({
+			eventKey: "recording_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "录音错误",
 		})
 		this.events.onRecordingError?.(error)
 	}
@@ -500,10 +614,11 @@ export class MediaRecorderService {
 	 * 处理音频流中断事件
 	 */
 	private handleStreamInterrupted(reason: string, trackId: string, trackLabel: string): void {
-		logger.error("录音流中断", {
-			reason,
-			trackId,
-			trackLabel,
+		logger.error({
+			eventKey: "recording_stream_failed",
+			errorKind: "unknown",
+			message: "录音流中断",
+			context: { reason, trackId, trackLabel },
 		})
 
 		const audioSource = this.config.audioSource?.source || "unknown"
@@ -562,8 +677,11 @@ export class MediaRecorderService {
 			this.isRecording = false
 			logger.log("MediaRecorderService清理完成")
 		} catch (error) {
-			logger.error("清理过程出错", {
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "cleanup_failed",
+				errorKind: "lifecycle",
+				error: error,
+				message: "清理过程出错",
 			})
 		}
 	}
@@ -581,7 +699,7 @@ export class MediaRecorderService {
 			chunkIndex: this.chunkIndex,
 			mediaRecorderState: this.isRecording ? "recording" : "inactive",
 			hasAudioStream: this.isRecording,
-			supportedMimeTypes: ["audio/wav"],
+			supportedMimeTypes: ["audio/ogg; codecs=opus", "audio/wav", "audio/pcm"],
 			audioSource: this.config.audioSource,
 			adapterStatus,
 		}
@@ -671,6 +789,16 @@ export class MediaRecorderService {
 
 	getAudioSource(): AudioSourceConfig | null {
 		return this.config.audioSource || null
+	}
+
+	/** Return the format selected for the active session so history can persist it. */
+	getEncodingSnapshot(): RecordingEncodingSnapshot | null {
+		return this.recorderAdapter?.getEncodingSnapshot() || null
+	}
+
+	/** Seed recovery with the persisted session format before creating a new adapter. */
+	setEncodingSnapshot(sessionId: string, snapshot: RecordingEncodingSnapshot): void {
+		this.encodingSnapshots.set(sessionId, normalizeRecordingEncodingSnapshot(snapshot))
 	}
 
 	/**

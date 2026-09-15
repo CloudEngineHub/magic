@@ -13,7 +13,7 @@ import { observer } from "mobx-react-lite"
 import { IconMenu2, IconX } from "@tabler/icons-react"
 import { Tooltip } from "antd"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import {
 	DropdownMenu,
@@ -43,16 +43,19 @@ import WebsitePresetMenu from "./components/WebsitePresetMenu"
 import CommonWebsitePresetDialog, {
 	type CommonWebsitePresetFormValues,
 } from "./components/CommonWebsitePresetDialog"
+import StablePreviewPortalSurface from "./components/StablePreviewPortalSurface"
 import {
 	COMMON_WEBSITE_PRESETS_LIMIT,
 	getWebsiteTabData,
 	saveCommonWebsitePreset,
 } from "./utils/websiteTabs"
 import {
+	FILE_VIEWER_DOCUMENT_FLOW_FULLSCREEN_VIEWPORT_CLASS_NAME,
 	FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME,
 	FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
 	shouldUseFileViewerFullscreenSafeArea,
 } from "./utils/fullscreenSafeArea"
+import { shouldUsePPTRootRender } from "../../utils/file"
 
 // 获取文件路径用作tooltip的工具函数
 const getFileTooltip = (tab: any, unknownFileText: string) => {
@@ -101,6 +104,7 @@ const FilesViewer = memo(
 				tabs,
 				activeTab,
 				isRestoringFileTabs,
+				isAwaitingProjectAttachments,
 				openFileTab,
 				openWebsiteTab,
 				closeFileTab,
@@ -126,6 +130,8 @@ const FilesViewer = memo(
 				isKnowledgeBaseTab,
 				handleFileFullscreen,
 				handleExitFullscreen,
+				enterPreviewFullscreen,
+				exitPreviewFullscreen,
 				getCheckBeforeClose,
 			} = useFilesViewer(props)
 
@@ -187,6 +193,8 @@ const FilesViewer = memo(
 			const handleClearAllTabs = async () => {
 				// Check if any tab has unsaved changes
 				for (const tab of tabs) {
+					if (tab.closeable === false) continue
+
 					const checkBeforeClose = getCheckBeforeClose(tab.id)
 
 					if (checkBeforeClose && typeof checkBeforeClose === "function") {
@@ -289,6 +297,8 @@ const FilesViewer = memo(
 				// Knowledge base tab相关方法
 				openKnowledgeBaseTab,
 				closeKnowledgeBaseTab,
+				enterPreviewFullscreen,
+				exitPreviewFullscreen,
 				// Website tab相关方法
 				openWebsiteTab,
 			}))
@@ -296,16 +306,17 @@ const FilesViewer = memo(
 			// Notify parent about fullscreen state changes via callback
 			useEffect(() => {
 				props.onFullscreenChange?.(Boolean(props.forceFullscreenMode) || !!fullscreenFileId)
-			}, [fullscreenFileId, props])
+			}, [fullscreenFileId, props.forceFullscreenMode, props.onFullscreenChange])
 
 			// 监听activeTab变化，自动滚动到对应位置
 			useEffect(() => {
 				if (!activeTab || !tabsContainerRef.current || tabs.length === 0) return
 
 				const container = tabsContainerRef.current
-				const activeTabElement = container.querySelector(
-					`[data-tab-id="${activeTab.id}"]`,
-				) as HTMLElement
+				// Tab ids may contain file-path characters that are invalid inside CSS selectors.
+				const activeTabElement = Array.from(
+					container.querySelectorAll<HTMLElement>("[data-tab-id]"),
+				).find((element) => element.dataset.tabId === activeTab?.id)
 
 				if (activeTabElement) {
 					// 计算目标tab相对于容器的位置
@@ -320,7 +331,7 @@ const FilesViewer = memo(
 						behavior: "smooth",
 					})
 				}
-			}, [activeTab, tabs])
+			}, [activeTab?.id, tabs.length])
 
 			// 渲染tab项
 			const renderTabItem = (tab: TabItemType, index: number) => {
@@ -382,16 +393,18 @@ const FilesViewer = memo(
 							<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-sans text-xs font-normal leading-[1.33] text-foreground/80">
 								{tab.title || tab.name}
 							</span>
-							<div
-								className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded transition-colors duration-200 hover:bg-black/10"
-								onClick={(e) => {
-									e.stopPropagation()
-									handleTabClose(tab.id)
-								}}
-								data-testid="handle-tab-close"
-							>
-								<IconX />
-							</div>
+							{tab.closeable ? (
+								<div
+									className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded transition-colors duration-200 hover:bg-black/10"
+									onClick={(e) => {
+										e.stopPropagation()
+										handleTabClose(tab.id)
+									}}
+									data-testid="handle-tab-close"
+								>
+									<IconX />
+								</div>
+							) : null}
 						</div>
 					</Tooltip>
 				)
@@ -401,9 +414,15 @@ const FilesViewer = memo(
 			const { isFullscreen, ...otherProps } = getRenderProps(currentTab)
 			const effectiveIsFullscreen =
 				isFullscreenMode || Boolean(isFullscreen) || fullscreenFileId === currentTab?.id
+			const isDocumentFlowFullscreen =
+				Boolean(props.documentFlowFullscreen) && effectiveIsFullscreen
 			const currentRenderProps = useMemo(
-				() => ({ isFullscreen: effectiveIsFullscreen, ...otherProps }),
-				[effectiveIsFullscreen, otherProps],
+				() => ({
+					isFullscreen: effectiveIsFullscreen,
+					documentFlowFullscreen: isDocumentFlowFullscreen,
+					...otherProps,
+				}),
+				[effectiveIsFullscreen, isDocumentFlowFullscreen, otherProps],
 			)
 			const shouldUseSafeAreaFullscreen = shouldUseFileViewerFullscreenSafeArea()
 			const currentRenderPropsRef = useRef(currentRenderProps)
@@ -418,22 +437,33 @@ const FilesViewer = memo(
 					currentTab.fileData.file_id || "",
 					currentTab.fileData.updated_at || "",
 					String(effectiveIsFullscreen),
+					String(isDocumentFlowFullscreen),
 					String(otherProps.type || ""),
 					String(otherProps.updatedAt || ""),
+					currentTab.fileData.htmlNavigation?.filePath || "",
+					currentTab.fileData.htmlNavigation?.search || "",
+					currentTab.fileData.htmlNavigation?.hash || "",
+					currentTab.fileData.htmlNavigation?.anchor || "",
 					props.activeFileId || "",
 					props.showFileFooter ? "1" : "0",
 				].join("|")
 			}, [
 				currentTab,
 				effectiveIsFullscreen,
+				isDocumentFlowFullscreen,
 				otherProps.type,
 				otherProps.updatedAt,
+				currentTab?.fileData.htmlNavigation?.filePath,
+				currentTab?.fileData.htmlNavigation?.search,
+				currentTab?.fileData.htmlNavigation?.hash,
+				currentTab?.fileData.htmlNavigation?.anchor,
 				props.activeFileId,
 				props.showFileFooter,
 			])
 			const shouldShowDetailEmpty =
 				props.showFallbackWhenEmpty ||
 				(!currentTab && (tabs.length > 0 || Boolean(props.activeFileId)))
+			const hasCloseableTabs = tabs.some((tab) => tab.closeable !== false)
 
 			// 缓存当前 tab 的渲染属性
 			useEffect(() => {
@@ -454,8 +484,9 @@ const FilesViewer = memo(
 				[activeTab?.id, cachedTabIds],
 			)
 
-			// 渲染活跃和缓存的 tabs
-			const renderCachedTabs = useMemo(() => {
+			// 每个 Tab 只生成一个 TabCache。非文档流模式统一放入稳定 body Portal，
+			// 文档流模式统一保留在当前文档树中，避免同一 Tab 同时出现在两条渲染链路。
+			const cachedTabRenders = useMemo(() => {
 				const filteredTabs = tabs.filter(shouldRenderTab)
 
 				return filteredTabs.map((tab) => {
@@ -476,6 +507,7 @@ const FilesViewer = memo(
 								userSelectDetail: props.userSelectDetail,
 								attachments: props.attachments,
 								attachmentList: props.attachmentList,
+								isAwaitingProjectAttachments,
 								topicId: props.topicId,
 								baseShareUrl: props.baseShareUrl,
 								currentTopicStatus: props.currentTopicStatus,
@@ -485,6 +517,7 @@ const FilesViewer = memo(
 								allowEdit: props.allowEdit,
 								selectedTopic: props.selectedTopic,
 								selectedProject: props.selectedProject,
+								projectId: props.projectId,
 								isFileShare: props.isFileShare,
 								activeFileId: props.activeFileId,
 								onActiveFileChange: props.onActiveFileChange,
@@ -512,21 +545,25 @@ const FilesViewer = memo(
 					// 判断是否是知识库tab
 					const isKbTab = isKnowledgeBaseTab(tab.id)
 					const knowledgeBaseData = isKbTab ? (tab as any).data : undefined
-
-					return (
-						<TabCache
-							key={tab.id}
-							tab={tab as any}
-							isActive={isActive}
-							renderProps={renderProps}
-							onActiveFileChange={props?.onActiveFileChange}
-							isFullscreen={effectiveIsFullscreen}
-							openFileTab={openFileTab}
-							playbackProps={playbackProps}
-							hideTabBar={props.hideTabBar}
-							knowledgeBaseData={knowledgeBaseData}
-						/>
-					)
+					return {
+						isActive,
+						node: (
+							<TabCache
+								key={tab.id}
+								tab={tab as any}
+								isActive={isActive}
+								renderProps={renderProps}
+								onActiveFileChange={props?.onActiveFileChange}
+								isFullscreen={effectiveIsFullscreen}
+								documentFlowFullscreen={isDocumentFlowFullscreen}
+								openFileTab={openFileTab}
+								playbackProps={playbackProps}
+								hideTabBar={props.hideTabBar}
+								knowledgeBaseData={knowledgeBaseData}
+								fillPortalSurface={!isDocumentFlowFullscreen}
+							/>
+						),
+					}
 				})
 				// eslint-disable-next-line react-hooks/exhaustive-deps
 			}, [
@@ -534,6 +571,7 @@ const FilesViewer = memo(
 				activeTab?.id,
 				getFromCache,
 				effectiveIsFullscreen,
+				isDocumentFlowFullscreen,
 				currentRenderProps,
 				props?.onActiveFileChange,
 				shouldRenderTab,
@@ -544,19 +582,42 @@ const FilesViewer = memo(
 				props.userSelectDetail,
 				openFileTab,
 			])
+			const inlineCachedTabs = cachedTabRenders
+				.filter(() => isDocumentFlowFullscreen)
+				.map((entry) => entry.node)
+			const stableCachedTabs = cachedTabRenders
+				.filter(() => !isDocumentFlowFullscreen)
+				.map((entry) => entry.node)
+			const hasStableTabs = stableCachedTabs.length > 0
+			const hasActiveStableTab =
+				Boolean(currentTab) && !isDocumentFlowFullscreen && !isRestoringFileTabs
+			const isActivePptPreview = Boolean(
+				currentTab &&
+				shouldUsePPTRootRender(currentRenderProps.type, currentRenderProps.data),
+			)
+			const [stablePreviewSurfaceAnchor, setStablePreviewSurfaceAnchor] =
+				useState<HTMLDivElement | null>(null)
 
 			const viewer = (
 				<div
 					className={cn(
-						"flex h-full flex-col",
-						effectiveIsFullscreen && FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
+						isDocumentFlowFullscreen
+							? `flex min-h-dvh flex-col ${FILE_VIEWER_DOCUMENT_FLOW_FULLSCREEN_VIEWPORT_CLASS_NAME}`
+							: cn(
+									"flex h-full flex-col",
+									effectiveIsFullscreen &&
+										FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
+								),
 					)}
 				>
 					<div
 						className={cn(
-							"flex h-full min-h-0 min-w-0 flex-col",
+							isDocumentFlowFullscreen
+								? "flex min-h-dvh min-w-0 flex-col"
+								: "flex h-full min-h-0 min-w-0 flex-col",
 							// Fullscreen fixed layers bypass BaseLayoutPc padding, so this shell reapplies safe-area insets.
 							effectiveIsFullscreen &&
+								!isDocumentFlowFullscreen &&
 								shouldUseSafeAreaFullscreen &&
 								FILE_VIEWER_FULLSCREEN_SAFE_AREA_CLASS_NAME,
 						)}
@@ -595,19 +656,21 @@ const FilesViewer = memo(
 								</DropdownMenu>
 
 								{/* 关闭所有 tab 按钮 */}
-								<Tooltip
-									title={t("shortcut.closeAllTabs")}
-									placement="bottom"
-									mouseEnterDelay={0.3}
-								>
-									<div
-										className="relative mr-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10"
-										onClick={handleClearAllTabs}
-										data-testid="handle-clear-all-tabs"
+								{hasCloseableTabs ? (
+									<Tooltip
+										title={t("shortcut.closeAllTabs")}
+										placement="bottom"
+										mouseEnterDelay={0.3}
 									>
-										<MagicIcon component={IconX} size={16} />
-									</div>
-								</Tooltip>
+										<div
+											className="relative mr-1 flex size-7 shrink-0 cursor-pointer select-none items-center justify-center rounded-md transition-all duration-200 hover:bg-black/10"
+											onClick={handleClearAllTabs}
+											data-testid="handle-clear-all-tabs"
+										>
+											<MagicIcon component={IconX} size={16} />
+										</div>
+									</Tooltip>
+								) : null}
 							</div>
 						)}
 
@@ -626,7 +689,13 @@ const FilesViewer = memo(
 						/>
 
 						{/* Content Area */}
-						<div className="flex flex-1 flex-col overflow-hidden">
+						<div
+							className={cn(
+								isDocumentFlowFullscreen
+									? "flex min-h-dvh flex-col overflow-visible"
+									: "flex flex-1 flex-col overflow-hidden",
+							)}
+						>
 							{currentTab ? (
 								isRestoringFileTabs ? (
 									<div className="flex h-full items-center justify-center">
@@ -634,8 +703,18 @@ const FilesViewer = memo(
 									</div>
 								) : (
 									<>
-										{/* Render all cached tabs */}
-										{renderCachedTabs}
+										{/* Cached preview tabs use stable body portals outside document-flow share mode. */}
+										{inlineCachedTabs}
+										{hasActiveStableTab ? (
+											<div
+												ref={setStablePreviewSurfaceAnchor}
+												className="relative min-h-0 flex-1"
+												data-files-viewer-preview-anchor="true"
+												data-files-viewer-ppt-anchor={
+													isActivePptPreview ? "true" : undefined
+												}
+											/>
+										) : null}
 									</>
 								)
 							) : shouldShowDetailEmpty ? (
@@ -646,12 +725,39 @@ const FilesViewer = memo(
 				</div>
 			)
 
-			// A fixed descendant is still confined by any transformed ancestor in the workspace
-			// layout. Portal fullscreen content to the document root so it always covers the
-			// workspace list and other layout siblings.
-			return effectiveIsFullscreen && typeof document !== "undefined"
-				? createPortal(viewer, document.body)
-				: viewer
+			// Fixed fullscreen layers can be trapped by transformed workspace ancestors, so the
+			// viewer shell uses a body portal. Preview TabCache nodes live in the single stable
+			// sibling Portal; document-flow fullscreen stays in the share document tree.
+			const viewerLayer =
+				effectiveIsFullscreen &&
+				!isDocumentFlowFullscreen &&
+				typeof document !== "undefined"
+					? createPortal(viewer, document.body)
+					: viewer
+
+			return (
+				<>
+					<StablePreviewPortalSurface
+						anchor={stablePreviewSurfaceAnchor}
+						borderRadius={
+							isActivePptPreview
+								? effectiveIsFullscreen
+									? "0px"
+									: props.hideTabBar
+										? "0.5rem"
+										: "0px 0px 0.5rem 0.5rem"
+								: "0px"
+						}
+						enabled={Boolean(currentTab) && !isRestoringFileTabs && hasStableTabs}
+						isFullscreen={effectiveIsFullscreen}
+						isPpt={isActivePptPreview}
+						visible={hasActiveStableTab}
+					>
+						{stableCachedTabs}
+					</StablePreviewPortalSurface>
+					{viewerLayer}
+				</>
+			)
 		}),
 	),
 )

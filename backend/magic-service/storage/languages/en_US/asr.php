@@ -134,6 +134,7 @@ return [
 
     // File names related
     'file_names' => [
+        'recording_at' => 'Recording at :time',
         'recording_prefix' => 'Recording',
         'merged_audio_prefix' => 'Recording File',
         'original_recording' => 'Original Recording',
@@ -237,5 +238,10 @@ return [
         'upload_not_allowed' => 'Current task status does not allow file upload',
         'status_report_not_allowed' => 'Current task status does not allow status report',
         'summary_not_allowed' => 'Current task status does not allow initiating summary',
+    ],
+    'sts_token' => [
+        'missing_jwt_token' => 'Missing jwt token',
+        'parse_response_failed' => 'Operation failed',
+        'request_failed' => 'Operation failed',
     ],
 ];

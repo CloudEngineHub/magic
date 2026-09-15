@@ -3,28 +3,27 @@ import type { MutableRefObject, RefObject } from "react"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { VoiceInputRef } from "@/components/business/VoiceInput"
 import magicToast from "@/components/base/MagicToaster/utils"
-import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import projectFilesStore from "@/stores/projectFiles"
-import { logger as Logger } from "@/utils/log"
 import { replaceSuperPlaceholderToString } from "../extensions/super-placeholder/utils"
 import { serializeInspectorContent } from "../extensions/inspector-detail"
 import type { MessageEditorStore } from "../stores"
-import { ModelStatusEnum, type MessageEditorProps } from "../types"
+import type { MessageEditorProps } from "../types"
 import { isEmptyJSONContent } from "../utils"
 import { transformMarkerImagePathsToWorkspaceAbsolute } from "../utils/mention"
-
-const logger = Logger.createLogger("SuperMagicMessageEditor")
 
 interface UseMessageSendHandlerParams {
 	voiceInputRef: RefObject<VoiceInputRef>
 	canSendMessage: boolean
 	hasLoadingMarker: boolean
 	isAllFilesUploaded: boolean
+	isEditingQueueItem: boolean
 	store: MessageEditorStore
 	t: (key: string, options?: Record<string, unknown>) => string
 	onSend?: MessageEditorProps["onSend"]
 	topicMode?: MessageEditorProps["topicMode"]
 	collectMentionItemsFromEditor: () => MentionListItem[]
+	promoteCanvasPendingMentions?: () => void
+	onSendStart?: () => void
 	isMountedRef: MutableRefObject<boolean>
 }
 
@@ -33,15 +32,31 @@ export default function useMessageSendHandler({
 	canSendMessage,
 	hasLoadingMarker,
 	isAllFilesUploaded,
+	isEditingQueueItem,
 	store,
 	t,
 	onSend,
 	topicMode,
 	collectMentionItemsFromEditor,
+	promoteCanvasPendingMentions,
+	onSendStart,
 	isMountedRef,
 }: UseMessageSendHandlerParams) {
 	return useMemoizedFn(async () => {
 		if (voiceInputRef.current?.isRecording) voiceInputRef.current.stopRecording()
+		// Sending is also an explicit confirmation path when the editor never received focus.
+		promoteCanvasPendingMentions?.()
+
+		if (isEditingQueueItem && isEmptyJSONContent(store.editorStore.value)) {
+			return
+		}
+
+		const selectedModel = store.topicModelStore.selectedLanguageModel
+		const selectedVideoModel = store.topicModelStore.selectedVideoModel
+		if (!isEditingQueueItem && !store.topicModelStore.isLanguageModelReady) {
+			magicToast.error(t("messageEditor.pleaseSelectModel"))
+			return
+		}
 
 		if (!canSendMessage) {
 			if (hasLoadingMarker) {
@@ -52,28 +67,6 @@ export default function useMessageSendHandler({
 				magicToast.error(t("messageEditor.waitForFileUpload"))
 			}
 			return
-		}
-
-		let selectedModel = store.topicModelStore.selectedLanguageModel
-			? { ...store.topicModelStore.selectedLanguageModel }
-			: null
-		if (!selectedModel) {
-			logger.error(
-				"fallback to auto model",
-				"current mode list:",
-				superMagicModeService.modeList,
-			)
-			selectedModel = {
-				id: "auto",
-				group_id: "auto",
-				provider_model_id: "auto",
-				model_description: "auto",
-				model_icon: "auto",
-				sort: 0,
-				model_id: "auto",
-				model_name: "auto",
-				model_status: ModelStatusEnum.Normal,
-			}
 		}
 
 		let content
@@ -117,6 +110,7 @@ export default function useMessageSendHandler({
 			return
 		}
 
+		onSendStart?.()
 		store.draftStore.startSendingGuard()
 		const mentionItems = collectMentionItemsFromEditor()
 
@@ -124,9 +118,9 @@ export default function useMessageSendHandler({
 			value: content,
 			topicMode,
 			mentionItems,
-			selectedModel,
+			selectedModel: selectedModel ? { ...selectedModel } : null,
 			selectedImageModel: store.topicModelStore.selectedImageModel,
-			selectedVideoModel: store.topicModelStore.selectedVideoModel,
+			selectedVideoModel,
 		})
 
 		store.draftStore.createSentDraft({

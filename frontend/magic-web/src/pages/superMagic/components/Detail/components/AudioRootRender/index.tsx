@@ -1,0 +1,296 @@
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useIsMobile } from "@/hooks/useIsMobile"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
+import { saveMediaSpeakersAndMagicProjectJs } from "../../contents/HTML/media/utils"
+import HTML from "../../contents/HTML"
+import { useRecordingAudioPlayer } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingAudioPlayer"
+import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
+import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
+import { useShareRecordingDetailData } from "@/pages/superMagic/pages/AudioRecordings/hooks/useShareRecordingDetailData"
+import type { RecordingTranscriptSegment } from "@/pages/superMagic/pages/AudioRecordings/types/recording-detail"
+import {
+	FOLDER_RECORDING_DETAIL_CAPABILITIES,
+	SHARE_RECORDING_DETAIL_CAPABILITIES,
+} from "@/pages/superMagic/pages/AudioRecordings/types/recording-detail-capabilities"
+import { collectSpeakerIdsFromText } from "@/pages/superMagic/pages/AudioRecordings/utils/markdownTimeLinks"
+import { normalizeSpeakerSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/speaker-filter"
+import { playTranscriptFromSegment } from "@/pages/superMagic/pages/AudioRecordings/utils/transcript-playback"
+import { RecordingDetailProvider } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailProvider"
+import { RecordingDetailWorkbench } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailWorkbench"
+import { RecordingDetailLeftColumn } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailLeftColumn"
+import { RecordingDetailRightPanel } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailRightPanel"
+import { RecordingDetailSpeakerDialog } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailSpeakerDialog"
+import { MobileAudioFolderContent } from "./MobileAudioFolderContent"
+import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
+import {
+	RecordingDetailEmptyState,
+	RecordingDetailPageSkeleton,
+} from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailEmptyState"
+
+interface AudioRootRenderProps {
+	data: AttachmentItem
+	attachments?: AttachmentItem[]
+	attachmentList?: AttachmentItem[]
+	projectId?: string
+	isFileShare?: boolean
+	[key: string]: unknown
+}
+
+/** Renders only the recording content workbench for an audio folder or its legacy HTML entry. */
+export default function AudioRootRender(props: AudioRootRenderProps) {
+	const {
+		data,
+		attachments = [],
+		attachmentList = [],
+		projectId = "",
+		isFileShare,
+		allowEdit = true,
+	} = props
+	const shareRoute = useShareRoute()
+	const isMobile = useIsMobile()
+	const isReadonlyShare = Boolean(isFileShare || shareRoute.isShareRoute)
+	const targetProjectId = projectId || data.project_id || data.file_id
+	const detail = useShareRecordingDetailData({
+		projectId: targetProjectId,
+		resourceName: data.display_filename || data.file_name,
+		target: data,
+		attachments: { tree: attachments, list: attachmentList },
+	})
+	// Readonly shares may expose notes only when the attachment is part of the authorized snapshot.
+	const showNotesTab = !isReadonlyShare || Boolean(detail.fileMap?.notes?.file_id)
+	const capabilities = isReadonlyShare
+		? SHARE_RECORDING_DETAIL_CAPABILITIES
+		: {
+				...FOLDER_RECORDING_DETAIL_CAPABILITIES,
+				// Speaker metadata is a project file mutation and follows the project edit gate.
+				canEditSpeakers: allowEdit,
+			}
+	const fallbackHtml = useMemo(
+		() => resolveFallbackHtml(data, attachments, attachmentList),
+		[data, attachments, attachmentList],
+	)
+
+	if (!isMobile && !detail.loading && detail.error && fallbackHtml) {
+		// The generated HTML remains the compatibility path when the attachment bundle cannot load.
+		return <HTML {...props} data={fallbackHtml as never} />
+	}
+
+	return (
+		<RecordingDetailProvider capabilities={capabilities}>
+			{isMobile ? (
+				<MobileAudioFolderContent
+					canEditSpeakers={capabilities.canEditSpeakers}
+					detail={detail}
+					showNotesTab={showNotesTab}
+				/>
+			) : (
+				<AudioFolderWorkbench
+					projectId={targetProjectId}
+					canEditSpeakers={capabilities.canEditSpeakers}
+					detail={detail}
+					showNotesTab={showNotesTab}
+				/>
+			)}
+		</RecordingDetailProvider>
+	)
+}
+
+interface AudioFolderWorkbenchProps {
+	projectId: string
+	canEditSpeakers: boolean
+	detail: ReturnType<typeof useShareRecordingDetailData>
+	showNotesTab: boolean
+}
+
+/** Owns playback, speaker editing, and content navigation without mounting the recording page header or chat rail. */
+function AudioFolderWorkbench({
+	projectId,
+	canEditSpeakers,
+	detail,
+	showNotesTab,
+}: AudioFolderWorkbenchProps) {
+	const {
+		loading,
+		refreshing,
+		error,
+		fileMap,
+		texts,
+		audioUrl,
+		attachmentTree,
+		attachmentList,
+		refresh,
+	} = detail
+	const player = useRecordingAudioPlayer(audioUrl)
+	const [playerExpanded, setPlayerExpanded] = useState(false)
+	const [selectedSpeakerIds, setSelectedSpeakerIds] = useState<string[]>([])
+	const [speakerSettingsOpen, setSpeakerSettingsOpen] = useState(false)
+	const [speakerDraft, setSpeakerDraft] = useState<Record<string, string>>({})
+	const [speakerNameOverrides, setSpeakerNameOverrides] = useState<Record<string, string>>({})
+	const playerCurrentSec = useRecordingPlayerCurrentSec(
+		player.audioRef,
+		player.playing,
+		player.currentTime,
+	)
+	const summaryReady = Boolean(fileMap?.summaryFiles.length)
+	const summaryContent = useMemo(
+		() =>
+			Object.fromEntries(
+				Object.entries(texts.summary).map(([key, value]) => [key, value?.content]),
+			),
+		[texts.summary],
+	)
+	const speakerNameMap = useMemo(
+		() => ({
+			...(fileMap?.magicProjectConfig?.metadata?.speakers ?? {}),
+			...speakerNameOverrides,
+		}),
+		[fileMap?.magicProjectConfig?.metadata?.speakers, speakerNameOverrides],
+	)
+	const speakerIds = useMemo(
+		() =>
+			Array.from(
+				new Set(
+					texts.transcript?.content
+						? collectSpeakerIdsFromText(texts.transcript.content)
+						: [],
+				),
+			),
+		[texts.transcript?.content],
+	)
+	const effectiveSelectedSpeakerIds = useMemo(
+		() => normalizeSpeakerSelection(speakerIds, selectedSpeakerIds),
+		[selectedSpeakerIds, speakerIds],
+	)
+	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
+
+	useEffect(() => {
+		setSpeakerNameOverrides({})
+	}, [fileMap?.magicProject?.file_id])
+
+	/** Opens the existing speaker editor with the latest persisted display names. */
+	const openSpeakerSettings = useCallback(() => {
+		if (!canEditSpeakers) return
+		setSpeakerDraft(speakerNameMap)
+		setSpeakerSettingsOpen(true)
+	}, [canEditSpeakers, speakerNameMap])
+
+	/** Persists speaker names to this bundle's magic.project.js without enabling other owner actions. */
+	const saveSpeakers = useCallback(async () => {
+		if (!canEditSpeakers || !texts.magicProject?.fileId || !texts.magicProject.content) return
+		const nextSpeakers = { ...speakerNameMap, ...speakerDraft }
+		await saveMediaSpeakersAndMagicProjectJs({
+			mediaSpeakers: nextSpeakers,
+			magicProjectJsFileInfo: {
+				fileId: texts.magicProject.fileId,
+				content: texts.magicProject.content,
+			},
+		})
+		setSpeakerNameOverrides(nextSpeakers)
+		setSpeakerSettingsOpen(false)
+		void refresh()
+	}, [canEditSpeakers, refresh, speakerDraft, speakerNameMap, texts.magicProject])
+
+	/** Seeks summary time links in the shared inline audio player. */
+	const handleSummaryTimeClick = useCallback(
+		(seconds: number, end?: number) => {
+			if (end != null) {
+				player.playSegment({ start: seconds, end })
+				return
+			}
+			player.seekTo(seconds, { autoplay: true })
+		},
+		[player],
+	)
+
+	/** Reuses the transcript playback behavior of the full recording detail page. */
+	const handlePlaySegment = useCallback(
+		(segment: RecordingTranscriptSegment) => {
+			playTranscriptFromSegment(player, segment.start)
+		},
+		[player],
+	)
+
+	// A background attachment refresh must not replace already-rendered recording content with a skeleton.
+	if (loading && !refreshing) return <RecordingDetailPageSkeleton />
+	if (error) return <RecordingDetailEmptyState variant="pageError" className="flex-1" />
+
+	return (
+		<div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background pt-4">
+			<RecordingDetailWorkbench
+				left={
+					<RecordingDetailLeftColumn
+						searchScopeKey={projectId}
+						audioRef={player.audioRef}
+						audioUrl={audioUrl}
+						transcriptMarkdown={texts.transcript?.content}
+						currentSec={playerCurrentSec}
+						currentTime={player.currentTime}
+						duration={player.duration}
+						playing={player.playing}
+						expanded={playerExpanded}
+						playbackRate={player.playbackRate}
+						colorSegments={colorSegments}
+						speakerNameMap={speakerNameMap}
+						selectedSpeakerIds={effectiveSelectedSpeakerIds}
+						onSelectedSpeakerIdsChange={setSelectedSpeakerIds}
+						onToggle={player.toggle}
+						onSeek={player.seekTo}
+						onPlaySegment={handlePlaySegment}
+						onExpandedChange={setPlayerExpanded}
+						onPlaybackRateChange={player.setPlaybackRate}
+						onOpenSpeakerSettings={openSpeakerSettings}
+					/>
+				}
+				right={
+					<RecordingDetailRightPanel
+						fileMap={fileMap}
+						summaryContent={summaryContent}
+						notesContent={texts.notes?.content}
+						attachmentTree={attachmentTree as unknown as AttachmentFile[]}
+						notesFilePath={fileMap?.notes?.relative_file_path ?? fileMap?.notes?.path}
+						attachmentList={attachmentList}
+						summaryReady={summaryReady}
+						summarizing={false}
+						summaryFailed={false}
+						showNotesTab={showNotesTab}
+						speakerNameMap={speakerNameMap}
+						onOpenSpeakerSettings={openSpeakerSettings}
+						onTimeClick={handleSummaryTimeClick}
+					/>
+				}
+			/>
+			{canEditSpeakers ? (
+				<RecordingDetailSpeakerDialog
+					open={speakerSettingsOpen}
+					speakerIds={speakerIds}
+					value={speakerDraft}
+					onValueChange={setSpeakerDraft}
+					onOpenChange={setSpeakerSettingsOpen}
+					onConfirm={() => void saveSpeakers()}
+				/>
+			) : null}
+		</div>
+	)
+}
+
+/** Finds the generated index.html inside the selected bundle for compatibility fallback. */
+function resolveFallbackHtml(
+	data: AttachmentItem,
+	attachments: AttachmentItem[],
+	attachmentList: AttachmentItem[],
+): AttachmentItem | undefined {
+	if (!data.is_directory && getAttachmentName(data).toLowerCase() === "index.html") return data
+
+	const candidates = [...(data.children || []), ...attachments, ...attachmentList]
+	return candidates.find((item) => {
+		if (item.is_directory || getAttachmentName(item).toLowerCase() !== "index.html")
+			return false
+		return String(item.parent_id || "") === String(data.file_id || "")
+	})
+}
+
+/** Returns the stable attachment display name used by bundle-entry matching. */
+function getAttachmentName(item: AttachmentItem): string {
+	return item.file_name || item.filename || item.display_filename || item.name || ""
+}

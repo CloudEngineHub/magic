@@ -5,6 +5,7 @@ import { WorkspaceStateCache } from "./superMagicCache"
 import { userStore } from "@/models/user"
 import { ImageProcessOptions, buildImageProcessQuery } from "@/utils/image-processing"
 import { getFileUrlDownloadModeForNoWatermark } from "@/utils/aiWatermarkPreviewFileUrlMode"
+import { stringifyUnknownError } from "@/utils/error"
 
 // import { REMOTE_HTTP_URL } from "../constans"
 // export const getWorkspaces = async ({ page, page_size }: { page: number; page_size: number }) => {
@@ -94,7 +95,7 @@ export const getAttachmentsByThreadId = async ({ id }: { id: string }) => {
 	return magicClient.post(url, {
 		page: 1,
 		page_size: 999,
-		file_type: ["user_upload", "process", "system_auto_upload"],
+		file_type: ["user_upload", "user_create", "process", "system_auto_upload"],
 		// @ts-ignore 使用window添加临时的token
 		token: window.temporary_token || "",
 		topic_id: id,
@@ -106,7 +107,7 @@ export const getAttachmentsByThreadId = async ({ id }: { id: string }) => {
 // 	return magicClient.post(`/api/v1/super-agent/projects/${id}/attachments`, {
 // 		page: 1,
 // 		page_size: 999,
-// 		file_type: ["user_upload", "process", "system_auto_upload", "directory"],
+// 		file_type: ["user_upload", "user_create", "process", "system_auto_upload", "directory"],
 // 		// @ts-ignore 使用window添加临时的token
 // 		token: window.temporary_token || "",
 // 	})
@@ -161,12 +162,26 @@ export interface GetTemporaryDownloadUrlItem {
 	updated_at?: string
 }
 
+export interface GetFileContentOptions {
+	responseType?: "text" | "arrayBuffer" | "blob"
+	file_versions?: Record<string, number>
+	download_mode?: DownloadImageMode
+	xMagicImageProcess?: ImageProcessOptions
+	forceRefresh?: boolean
+}
+
+export interface BatchFileContentResult {
+	successes: Map<string, string | ArrayBuffer | Blob>
+	failures: Map<string, Error>
+}
+
 /**
  * 	通过文件id获取临时下载url
  * @param params - 请求参数
  * @param params.file_ids - 文件id列表
  * @param params.file_versions - 文件版本
  * @param params.download_mode - 下载模式；未传且非 magic-share 时，按全局无水印协议等自动注入（预览与 is_download 一致）
+ * @param params.cache - 是否复用服务端文件地址缓存
  * @param options - 请求选项
  * @param options.xMagicImageProcess - 图片处理参数
  * @returns 临时下载url
@@ -176,6 +191,7 @@ export const getTemporaryDownloadUrl = async ({
 	is_download = false,
 	file_versions,
 	download_mode,
+	cache,
 	options,
 	enableErrorMessagePrompt = true,
 }: {
@@ -183,6 +199,7 @@ export const getTemporaryDownloadUrl = async ({
 	file_versions?: Record<string, number>
 	// 高清+无水印模式
 	download_mode?: DownloadImageMode
+	cache?: boolean
 	// 是否手动下载
 	is_download?: boolean
 	options?: {
@@ -229,7 +246,7 @@ export const getTemporaryDownloadUrl = async ({
 		topic_id: window?.topic_id || workspaceState?.topicId || superIdState?.topicId || "",
 		// @ts-ignore 使用window添加临时的project_id
 		project_id: window.project_id || workspaceState?.projectId || superIdState?.projectId || "",
-		...(hasSavedFile && { cache: false }),
+		...(cache !== undefined ? { cache } : hasSavedFile ? { cache: false } : {}),
 		...(file_versions && !isMagicShare && { file_versions }),
 		...(effectiveDownloadMode && { download_mode: effectiveDownloadMode }),
 		...(is_download && { is_download }),
@@ -251,68 +268,120 @@ export const getTemporaryDownloadUrl = async ({
  * @param options 下载选项
  * @returns 文件内容
  */
-export const getFileContentById = async (
-	fileId: string,
-	options: {
-		responseType?: "text" | "arrayBuffer" | "blob"
-		file_versions?: Record<string, number>
-		download_mode?: DownloadImageMode
-		xMagicImageProcess?: ImageProcessOptions
-	} = {},
-): Promise<string | ArrayBuffer | Blob> => {
-	if (!fileId) {
-		throw new Error("文件 ID 不能为空")
-	}
+export const getFileContentsByIds = async (
+	fileIds: string[],
+	options: GetFileContentOptions = {},
+): Promise<BatchFileContentResult> => {
+	const uniqueFileIds = [...new Set(fileIds.filter(Boolean).map(String))]
+	const successes = new Map<string, string | ArrayBuffer | Blob>()
+	const failures = new Map<string, Error>()
 
+	if (uniqueFileIds.length === 0) return { successes, failures }
+
+	let downloadUrls: GetTemporaryDownloadUrlItem[]
 	try {
-		// 获取临时下载 URL
-		const downloadUrls = await getTemporaryDownloadUrl({
-			file_ids: [fileId],
+		downloadUrls = await getTemporaryDownloadUrl({
+			file_ids: uniqueFileIds,
 			file_versions: options.file_versions,
 			download_mode: options.download_mode,
+			cache: options.forceRefresh ? false : undefined,
 			options: options.xMagicImageProcess
 				? { xMagicImageProcess: options.xMagicImageProcess }
 				: undefined,
 		})
-
-		if (!downloadUrls || !Array.isArray(downloadUrls) || downloadUrls.length === 0) {
-			throw new Error(`无法获取文件下载地址: ${fileId}`)
-		}
-
-		const firstUrlItem = downloadUrls[0]
-		if (!firstUrlItem || !firstUrlItem.url) {
-			throw new Error(`文件下载地址为空: ${fileId}`)
-		}
-
-		// 下载文件内容
-		return await downloadFileContent(firstUrlItem.url, {
-			responseType: options.responseType || "text",
-		})
 	} catch (error) {
+		const failure =
+			error instanceof Error
+				? error
+				: Object.assign(new Error(stringifyUnknownError(error)), { cause: error })
+		for (const fileId of uniqueFileIds) failures.set(fileId, failure)
+		return { successes, failures }
+	}
+
+	const urlByFileId = new Map(
+		(Array.isArray(downloadUrls) ? downloadUrls : [])
+			.filter((item) => item?.file_id && item?.url)
+			.map((item) => [String(item.file_id), item.url]),
+	)
+	const results = await Promise.allSettled(
+		uniqueFileIds.map(async (fileId) => {
+			const url = urlByFileId.get(fileId)
+			if (!url) throw new Error(`无法获取文件下载地址: ${fileId}`)
+			const content = await downloadFileContent(url, {
+				responseType: options.responseType || "text",
+				cache: options.forceRefresh ? "no-store" : undefined,
+			})
+			return { fileId, content }
+		}),
+	)
+
+	results.forEach((result, index) => {
+		const fileId = uniqueFileIds[index]
+		if (result.status === "fulfilled") successes.set(fileId, result.value.content)
+		else
+			failures.set(
+				fileId,
+				result.reason instanceof Error
+					? result.reason
+					: Object.assign(new Error(stringifyUnknownError(result.reason)), {
+							cause: result.reason,
+						}),
+			)
+	})
+
+	return { successes, failures }
+}
+
+/**
+ * 通过文件 ID 直接获取文件内容。
+ * 单文件调用保留原有接口，内部复用批量 URL 获取能力。
+ */
+export const getFileContentById = async (
+	fileId: string,
+	options: GetFileContentOptions = {},
+): Promise<string | ArrayBuffer | Blob> => {
+	if (!fileId) throw new Error("文件 ID 不能为空")
+
+	const result = await getFileContentsByIds([fileId], options)
+	const failure = result.failures.get(String(fileId))
+	if (failure) {
 		console.error("获取文件内容失败:", {
 			fileId,
-			error,
-			errorMessage: error instanceof Error ? error.message : String(error),
+			error: failure,
+			errorMessage: failure.message,
 		})
-		throw error
+		throw failure
 	}
+
+	const content = result.successes.get(String(fileId))
+	if (content === undefined) throw new Error(`无法获取文件内容: ${fileId}`)
+	return content
+}
+
+interface DownloadFileContentOptions {
+	responseType?: "text" | "arrayBuffer" | "blob"
+	/** 浏览器请求缓存策略 */
+	cache?: RequestCache
+	signal?: AbortSignal
 }
 
 // 从URL下载文件内容并返回指定格式的数据
 export const downloadFileContent = async (
 	url: string,
-	options: { responseType?: "text" | "arrayBuffer" | "blob" } = {},
+	options: DownloadFileContentOptions = {},
 ): Promise<string | ArrayBuffer | Blob> => {
 	try {
+		const { responseType = "text", cache } = options
+
 		const response = await fetch(url, {
 			method: "GET",
+			signal: options.signal,
+			cache,
 		})
 
 		if (!response.ok) {
 			throw new Error(`下载失败: ${response.status} ${response.statusText}`)
 		}
-
-		const { responseType = "text" } = options
 
 		switch (responseType) {
 			case "arrayBuffer":

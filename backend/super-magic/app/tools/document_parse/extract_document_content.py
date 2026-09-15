@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from pydantic import Field
 
@@ -22,9 +22,11 @@ from app.i18n import i18n
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
-from app.utils.document_parse.constants import DEFAULT_CHUNK_MAX_CHARS
+from app.utils.async_file_utils import async_exists
+from app.utils.document_parse.constants import DEFAULT_CHUNK_MAX_CHARS, INDEX_FILENAME
 from app.utils.document_parse.service.document_extractor import DocumentExtractor
 from app.utils.document_parse.service.document_indexer import DocumentIndexer
+from app.utils.document_parse.service.document_output_version import DocumentOutputVersionResolver
 from app.utils.document_parse.service.reading_state import ReadingStateStore
 
 from .path_utils import (
@@ -40,27 +42,28 @@ from .path_utils import (
 class ExtractDocumentContentParams(BaseToolParams):
     input_path: str = Field(
         ...,
-        description="""<!--zh: 要提取内容的文档绝对路径，不接受相对路径-->
-Absolute document path to extract from. Relative paths are not accepted"""
+        description="Absolute document path to extract from. Relative paths are not accepted."
     )
     output_dir: str = Field(
         ...,
-        description="""<!--zh: 输出目录的绝对路径，用于保存 document.index.json、document.outline.md 和 chunks/-->
-Absolute output directory for document.index.json, document.outline.md, and chunks/"""
+        description="Absolute output directory for document.index.json, document.outline.md, and chunks/."
     )
     ranges: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选范围表达式，例如页码 `1-3,8`，也可表示 slides、sections、sheets 或 cells-->
-Optional range expression, e.g. pages `1-3,8`, slides, sections, sheets, or cells"""
+        description="Optional range expression for pages, slides, sections, sheets, or cells, such as `1-3,8`."
+    )
+    asset_strategy: Literal["auto", "text_only", "page_visual", "reusable_assets", "full_fidelity"] = Field(
+        "auto",
+        description=(
+            "Asset output strategy: text_only, page_visual, reusable_assets, full_fidelity, or auto. "
+            "Use auto after inspection and sampling when the best strategy should be recommended."
+        ),
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class ExtractDocumentContent(AbstractFileTool[ExtractDocumentContentParams], WorkspaceTool[ExtractDocumentContentParams]):
-    """<!--zh: 按范围提取文档内容，输出 Markdown chunks 并更新文档索引。-->
-    Extract targeted document content into Markdown chunks and update the document index."""
-
-    code_mode_only = True
+    """Extract targeted document content into Markdown chunks and update the document index."""
 
     async def execute(self, tool_context: ToolContext, params: ExtractDocumentContentParams) -> ToolResult:
         """Extract selected document ranges into bounded Markdown chunks."""
@@ -71,21 +74,27 @@ class ExtractDocumentContent(AbstractFileTool[ExtractDocumentContentParams], Wor
         if error:
             return error
         assert output_dir is not None
+        requested_output_dir = output_dir
         resolved, error = await require_valid_input_file(params.input_path, "input_path")
         if error:
             return error
         assert resolved is not None
         input_path = resolved.path
         try:
+            if params.asset_strategy != "auto" and await async_exists(output_dir / INDEX_FILENAME):
+                output_dir = await DocumentOutputVersionResolver.resolve(
+                    output_dir,
+                    input_path,
+                    params.asset_strategy,
+                    params.asset_strategy,
+                )
             extraction = await DocumentExtractor().extract(
                 input_path,
                 output_dir,
                 ranges=params.ranges,
                 mode="auto",
                 max_chars=DEFAULT_CHUNK_MAX_CHARS,
-                extract_images=True,
-                exclude_watermark_images=True,
-                deduplicate_repeated_images=True,
+                asset_strategy=params.asset_strategy,
             )
             structure = await DocumentIndexer().build_from_extraction(input_path, output_dir, extraction)
             await ReadingStateStore().mark_extracted(
@@ -108,14 +117,23 @@ class ExtractDocumentContent(AbstractFileTool[ExtractDocumentContentParams], Wor
             f"- Output directory: `{output_dir_str}`\n"
             f"- Chunk count: {len(extraction.chunks)}\n"
             f"- Processed units: {extraction.pages_processed}/{extraction.total_units}\n"
+            f"- Execution batches: {len(extraction.metadata.get('execution_batches') or [1])}\n"
+            f"- Asset strategy: {(extraction.metadata.get('asset_strategy') or {}).get('resolved_strategy', params.asset_strategy)}\n"
             f"- Index: `{output_dir_str}/document.index.json`\n"
             f"- Outline: `{output_dir_str}/document.outline.md`\n"
             f"- Reading state: `{output_dir_str}/document.reading_state.json`"
         )
+        execution_limits = extraction.metadata.get("execution_limits") or {}
+        if execution_limits.get("max_units_per_call"):
+            content += (
+                f"\n- Execution limit: {execution_limits['max_units_per_call']} units per call; "
+                "batching was handled automatically"
+            )
         extra = asdict(extraction)
         extra["index_path"] = f"{output_dir_str}/document.index.json"
         extra["outline_path"] = f"{output_dir_str}/document.outline.md"
         extra["structure"] = structure.to_dict()
+        extra["requested_output_dir"] = str(requested_output_dir)
         return ToolResult(content=prepend_correction_note(content, resolved.correction_note), extra_info=extra)
 
     async def get_before_tool_call_friendly_action_and_remark(

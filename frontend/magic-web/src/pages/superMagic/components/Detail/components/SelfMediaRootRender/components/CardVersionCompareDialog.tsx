@@ -12,6 +12,7 @@ import {
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import CardFrame from "./CardFrame"
 import { selfMediaOverlayStyles } from "./selfMediaOverlayStyles"
+import { CARD_IMAGE_PROCESS } from "../constants/imageProcess"
 import type { SelfMediaAttachmentNode } from "../types"
 
 interface CardVersionCompareDialogProps {
@@ -92,7 +93,7 @@ export function CardVersionCompareDialog({
 					<span className="shrink-0 text-base font-semibold leading-6 text-foreground">
 						{t("ppt.versionCompare.historyTitle")}
 					</span>
-					<span className="min-w-0 text-xs font-normal !font-normal leading-4 text-muted-foreground">
+					<span className="min-w-0 text-xs !font-normal font-normal leading-4 text-muted-foreground">
 						{t("ppt.versionCompare.historyDescription")}
 					</span>
 				</div>
@@ -135,6 +136,7 @@ export function CardVersionCompareDialog({
 								cardId={`card-compare-latest-${fileId}-${open}`}
 								fileId={fileId}
 								attachmentList={attachmentList}
+								imageProcessOptions={CARD_IMAGE_PROCESS}
 								className="h-full w-full"
 							/>
 						</div>

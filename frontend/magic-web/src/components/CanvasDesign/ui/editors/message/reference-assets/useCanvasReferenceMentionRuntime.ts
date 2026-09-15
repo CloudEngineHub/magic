@@ -78,6 +78,7 @@ export function useCanvasReferenceMentionRuntime(
 		defaultProjectAttachmentFolderId,
 		defaultProjectAttachmentFolderName,
 		mentionDataServiceCtor,
+		methods,
 	} = useMagic()
 	const canvas = useOptionalCanvas()
 	const { t } = useCanvasDesignI18n()
@@ -102,6 +103,7 @@ export function useCanvasReferenceMentionRuntime(
 		referenceFileInfos,
 		assetLimits,
 		currentAssetCounts,
+		resolveResourceReference: methods?.resolveResourceReference,
 		projectFilesPathPrefix,
 		mentionFileSubtitleParentPrefix,
 	})
@@ -114,6 +116,7 @@ export function useCanvasReferenceMentionRuntime(
 		referenceFileInfos,
 		assetLimits,
 		currentAssetCounts,
+		resolveResourceReference: methods?.resolveResourceReference,
 		projectFilesPathPrefix,
 		mentionFileSubtitleParentPrefix,
 	}
@@ -193,6 +196,7 @@ export function useCanvasReferenceMentionRuntime(
 		referenceFileInfos,
 		assetLimits,
 		currentAssetCounts,
+		methods?.resolveResourceReference,
 		projectFilesPathPrefix,
 		mentionFileSubtitleParentPrefix,
 		defaultProjectAttachmentFolderId,

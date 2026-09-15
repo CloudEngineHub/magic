@@ -1,4 +1,4 @@
-import type { Editor, JSONContent } from "@tiptap/react"
+import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import {
@@ -15,9 +15,10 @@ import {
 } from "../utils/mention"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { INSPECTOR_DETAIL_TYPE } from "../extensions/inspector-detail/const"
+import type { StructuredErrorInput } from "@/utils/log/errorReport"
 
 interface LoggerLike {
-	error: (message: string, error?: unknown) => void
+	error: (input: StructuredErrorInput) => void
 }
 
 interface DeleteProjectFileParams {
@@ -37,15 +38,17 @@ export function collectMentionItemsFromContent(content?: JSONContent): MentionLi
 	const walk = (node?: JSONContent) => {
 		if (!node) return
 		if (node.type === "mention" && node.attrs) {
-			items.push({
-				type: "mention",
-				attrs: node.attrs as TiptapMentionAttributes,
-			})
-		} else if (node.type === INSPECTOR_DETAIL_TYPE && node.attrs?.fileMention) {
-			items.push({
-				type: "mention",
-				attrs: node.attrs.fileMention as TiptapMentionAttributes,
-			})
+			const attrs = node.attrs as TiptapMentionAttributes
+			if (!attrs.pending) {
+				items.push({ type: "mention", attrs })
+			}
+		} else if (node.type === INSPECTOR_DETAIL_TYPE) {
+			if (node.attrs?.fileMention) {
+				items.push({
+					type: "mention",
+					attrs: node.attrs.fileMention as TiptapMentionAttributes,
+				})
+			}
 		}
 		if (Array.isArray(node.content)) {
 			node.content.forEach((child) => walk(child as JSONContent))
@@ -62,15 +65,17 @@ export function collectMentionItemsFromEditor(editor: Editor | null): MentionLis
 	const items: MentionListItem[] = []
 	editor.state.doc.descendants((node) => {
 		if (node.type.name === "mention") {
-			items.push({
-				type: "mention",
-				attrs: node.attrs as TiptapMentionAttributes,
-			})
-		} else if (node.type.name === INSPECTOR_DETAIL_TYPE && node.attrs.fileMention) {
-			items.push({
-				type: "mention",
-				attrs: node.attrs.fileMention as TiptapMentionAttributes,
-			})
+			const attrs = node.attrs as TiptapMentionAttributes
+			if (!attrs.pending) {
+				items.push({ type: "mention", attrs })
+			}
+		} else if (node.type.name === INSPECTOR_DETAIL_TYPE) {
+			if (node.attrs.fileMention) {
+				items.push({
+					type: "mention",
+					attrs: node.attrs.fileMention as TiptapMentionAttributes,
+				})
+			}
 		}
 		return true
 	})
@@ -95,51 +100,6 @@ export function insertUploadMentionNodes({
 		activeEditor.commands.insertContent(mentions)
 		activeEditor.commands.focus()
 	})
-}
-
-export function updateUploadMentionProgress({
-	editor,
-	fileId,
-	progress,
-	status,
-	error,
-}: {
-	editor: Editor | null
-	fileId: string
-	progress: number
-	status: FileData["status"]
-	error?: string
-}) {
-	if (!isEditorReady(editor)) return
-
-	const { state, dispatch } = editor.view
-	const { tr } = state
-
-	state.doc.descendants((node, pos) => {
-		if (node.type.name !== "mention") return true
-
-		const attrs = node.attrs as TiptapMentionAttributes
-		if (attrs.type !== MentionItemType.UPLOAD_FILE) return true
-
-		const uploadData = attrs.data as UploadFileMentionData
-		if (uploadData.file_id !== fileId) return true
-
-		tr.setNodeMarkup(pos, undefined, {
-			type: MentionItemType.UPLOAD_FILE,
-			data: {
-				...uploadData,
-				upload_progress: progress,
-				upload_status: status,
-				upload_error: error,
-			},
-		})
-
-		return true
-	})
-
-	if (tr.steps.length > 0) {
-		dispatch(tr)
-	}
 }
 
 export function replaceUploadMentionNode({
@@ -169,7 +129,7 @@ export function replaceUploadMentionNode({
 		const uploadData = attrs.data as UploadFileMentionData
 		if (uploadData.file_id !== fileId) return true
 
-		if (isProjectContext && saveResult) {
+		if (isProjectContext && saveResult && !uploadData.is_canvas_clipboard) {
 			tr.setNodeMarkup(pos, undefined, {
 				type: MentionItemType.PROJECT_FILE,
 				data: transformUploadFileToProjectFile(uploadData, saveResult),
@@ -189,9 +149,10 @@ export function replaceUploadMentionNode({
 					file: uploadData.file,
 					relative_file_path: uploadData.relative_file_path,
 					is_hidden: uploadData.is_hidden,
-					upload_progress: uploadData.upload_progress,
-					upload_status: uploadData.upload_status,
-					upload_error: uploadData.upload_error,
+					is_canvas_clipboard: uploadData.is_canvas_clipboard,
+					upload_progress: 100,
+					upload_status: "done",
+					upload_error: undefined,
 				},
 			})
 		}
@@ -262,7 +223,12 @@ export async function deleteProjectFile({ fileId, logger, onError }: DeleteProje
 	try {
 		await SuperMagicApi.deleteFile(fileId)
 	} catch (error) {
-		logger.error("delete project file failed", error)
+		logger.error({
+			eventKey: "delete_project_file_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "delete project file failed",
+		})
 		onError?.(error)
 	}
 }

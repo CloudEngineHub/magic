@@ -3,20 +3,20 @@ import { isValidElement, memo } from "react"
 import type { ForwardRefExoticComponent, RefAttributes } from "react"
 import type { Icon, IconProps } from "@tabler/icons-react"
 import MagicIcon from "@/components/base/MagicIcon"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import ConditionalTooltip from "../../EditToolbar/ConditionalTooltip"
 
 interface ActionButtonProps {
 	id?: string
 	"data-testid"?: string
 	icon?:
-	| ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<Icon>>
-	| React.ReactNode
-	| null
+		| ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<Icon>>
+		| React.ReactNode
+		| null
 	rightIcon?:
-	| ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<Icon>>
-	| React.ReactNode
-	| null
+		| ForwardRefExoticComponent<Omit<IconProps, "ref"> & RefAttributes<Icon>>
+		| React.ReactNode
+		| null
 	icon_url?: string
 	element?: React.ReactNode
 	title?: string

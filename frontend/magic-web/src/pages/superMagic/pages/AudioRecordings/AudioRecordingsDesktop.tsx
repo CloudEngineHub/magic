@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
+import SuperMagicService from "@/pages/superMagic/services"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
 import AudioRecordingCard from "./components/AudioRecordingCard"
@@ -259,6 +260,21 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 		})
 	}
 
+	/** Initializes Super Magic state before navigating from the recording card to its project view. */
+	async function handleOpenProject(item: AudioProjectListItem) {
+		try {
+			await SuperMagicService.initializeState({ projectId: item.id })
+		} catch (error) {
+			console.error("Failed to initialize project state before navigation:", error)
+		}
+
+		navigate({
+			name: RouteName.SuperWorkspaceProjectState,
+			params: { projectId: item.id },
+			state: { isAudioProjectEntry: true },
+		})
+	}
+
 	function handleRenameRequest(item: AudioProjectListItem) {
 		setRenameTarget(item)
 	}
@@ -364,7 +380,9 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 					onOpenSettings={() => setIsSettingsOpen(true)}
 					onImportFiles={(files) => void facade.importAudioFiles(files)}
 					onStartRecording={() => void facade.startRecording()}
-					isStartingRecording={facade.startupState === "starting"}
+					isStartingRecording={
+						facade.startupState === "starting" || facade.isPreparingRecordingStart
+					}
 				/>
 			</div>
 
@@ -421,6 +439,7 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 							key={item.id}
 							item={item}
 							onOpen={handleOpenDetail}
+							onOpenProject={(entry) => void handleOpenProject(entry)}
 							onSummarize={(entry) => {
 								if (
 									entry.card_status === "summarized" ||

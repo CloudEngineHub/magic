@@ -121,6 +121,7 @@ return [
 
     // Liên quan đến tên tệp
     'file_names' => [
+        'recording_at' => 'Bản ghi âm lúc :time',
         'recording_prefix' => 'Ghi âm',
         'merged_audio_prefix' => 'Tệp ghi âm',
         'original_recording' => 'Tệp ghi âm gốc',

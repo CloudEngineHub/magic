@@ -1,5 +1,10 @@
 import Konva from "konva"
-import type { BaseElementProps, LayerElement } from "../../document/types"
+import type { ElementContentBase, LayerElement } from "../../document/types"
+import {
+	getActiveContent as getElementActiveContent,
+	getMainContent as getElementMainContent,
+	isContentElement,
+} from "../../document/elementContent"
 import type { Canvas } from "../../core/Canvas"
 import type { Rect } from "../../shared/ids"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
@@ -20,24 +25,52 @@ export interface TransformContext {
 	initialAspectRatio?: number
 }
 
+export type ElementTransformAnchor =
+	| "top-left"
+	| "top-right"
+	| "bottom-left"
+	| "bottom-right"
+	| "top-center"
+	| "bottom-center"
+	| "middle-left"
+	| "middle-right"
+
+/** 元素级 Transformer 约束；多选策略由 TransformManager 统一仲裁。 */
+export interface ElementTransformConstraints {
+	enabledAnchors?: ElementTransformAnchor[]
+	minWidth?: number
+	minHeight?: number
+	fixedHeight?: number
+}
+
 /**
  * 基础元素默认配置
  */
-export const BASE_ELEMENT_DEFAULTS = {
+export const BASE_ELEMENT_DATA_DEFAULTS = {
 	visible: true,
 	opacity: 1,
 	locked: false,
+	zIndex: 0,
+} as const
+
+/**
+ * Konva 运行时默认配置。
+ *
+ * draggable/listening/perfectDrawEnabled 只用于渲染节点，不属于 v3 DSL，
+ * 因此不能直接展开到持久化 Element 数据中。
+ */
+export const BASE_ELEMENT_DEFAULTS = {
+	...BASE_ELEMENT_DATA_DEFAULTS,
 	draggable: true,
 	listening: true,
 	perfectDrawEnabled: false,
-	zIndex: 0,
 } as const
 
 /**
  * 基础元素抽象类
  * 每个元素都是一个实例，封装了数据和渲染节点
  */
-export abstract class BaseElement<T extends BaseElementProps = BaseElementProps> {
+export abstract class BaseElement<T extends LayerElement = LayerElement> {
 	public canvas: Canvas
 
 	protected node: Konva.Node | null = null
@@ -77,6 +110,11 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 		// 默认实现为空，子类可以重写
 	}
 
+	/** 宿主资源 resolver 语义变化时，允许元素重绑 identity 相关运行时状态。 */
+	onResourceReferenceResolverChanged(): void {
+		// 默认实现为空，只有持有 identity 固化监听的元素需要重写
+	}
+
 	/**
 	 * 获取当前节点
 	 */
@@ -89,6 +127,28 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 	 */
 	getData(): T {
 		return this.data
+	}
+
+	/**
+	 * 当前节点的 active Content；所有媒体/编辑字段都应从传入快照读取。
+	 *
+	 * 更新流程可能暂时处于“ElementManager 仍持有旧快照、update() 已收到新快照”
+	 * 的窗口，因此这里不能按 elementId 回查 ElementManager。Canvas 的纯投影
+	 * 只读取传入快照和会话 preview 状态，不会把数据写回文档。
+	 */
+	protected getActiveContent<TContent extends ElementContentBase>(
+		data: T = this.data,
+	): TContent | undefined {
+		if (!isContentElement(data)) return undefined
+		const contentView = this.canvas?.getElementForContentView?.(data) ?? data
+		return getElementActiveContent(contentView) as TContent | undefined
+	}
+
+	/** 当前节点的 main Content；连接、导出和下游输入使用该稳定内容。 */
+	protected getMainContent<TContent extends ElementContentBase>(): TContent | undefined {
+		return isContentElement(this.data)
+			? (getElementMainContent(this.data) as TContent | undefined)
+			: undefined
 	}
 
 	/**
@@ -341,6 +401,23 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 	 */
 	public shouldKeepRatio(): boolean {
 		return this.data.interactionConfig?.aspectRatioLocked ?? false
+	}
+
+	/** 子类可声明单选时的 Transformer 锚点和尺寸限制。 */
+	public getTransformConstraints(): ElementTransformConstraints | undefined {
+		return undefined
+	}
+
+	/**
+	 * 判断元素是否支持尺寸编辑。
+	 *
+	 * 未声明 Transformer 约束时使用默认的全部尺寸锚点；显式声明空锚点
+	 * 则表示元素不支持尺寸编辑。这个能力只描述元素自身的尺寸交互能力，
+	 * 不包含画布访问能力或元素 locked 等运行态权限限制。
+	 */
+	public supportsSizeEditing(): boolean {
+		const enabledAnchors = this.getTransformConstraints()?.enabledAnchors
+		return enabledAnchors === undefined || enabledAnchors.length > 0
 	}
 
 	/**

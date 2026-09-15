@@ -93,6 +93,7 @@ return [
         'publish_target_value_required' => '当前发布对象必须传 publish_target_value',
         'store_agent_not_found' => '商店员工未找到',
         'store_agent_already_added' => '该商店员工已添加，不允许重复添加',
+        'agent_not_available' => '当前无权使用该员工',
         'category_used_by_market' => '分类已被数字员工使用，请先解除关联',
         // 从 crew.php 迁移的键
         'validate_failed' => '参数验证失败',

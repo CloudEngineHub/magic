@@ -22,9 +22,9 @@ import {
 	buildCustomWebsitePreset,
 	COMMON_WEBSITE_PRESETS_CHANGE_EVENT,
 	getCommonWebsitePresets,
+	getWebsitePresets,
 	removeCommonWebsitePreset,
 	updateCommonWebsitePreset,
-	WEBSITE_PRESETS,
 } from "../utils/websiteTabs"
 import type { WebsitePreset } from "../types"
 import { useTranslation } from "react-i18next"
@@ -44,43 +44,7 @@ function getTranslatedPreset(preset: WebsitePreset, t: (key: string) => string):
 	}
 }
 
-function WebsitePresetIcon({
-	icon,
-	iconSrc,
-	presetId,
-}: {
-	icon?: WebsitePreset["icon"]
-	iconSrc?: string
-	presetId: string
-}) {
-	if (icon === "nano-banana-pro") {
-		return (
-			<span
-				data-testid="website-preset-icon-nano-banana-pro"
-				className="flex size-5 shrink-0 items-center justify-center rounded-md bg-[#ffdb0f] text-[10px] font-semibold leading-none text-[#3d3300]"
-				aria-hidden="true"
-			>
-				N
-			</span>
-		)
-	}
-
-	if (icon === "gpt-image-2") {
-		return (
-			<span
-				data-testid="website-preset-icon-gpt-image-2"
-				className="flex size-5 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold leading-none text-white"
-				style={{
-					backgroundImage:
-						"linear-gradient(149.057deg, rgb(38, 31, 70) 33.301%, rgb(36, 26, 214) 66.065%, rgb(165, 23, 253) 100%)",
-				}}
-				aria-hidden="true"
-			>
-				G
-			</span>
-		)
-	}
-
+function WebsitePresetIcon({ iconSrc, presetId }: { iconSrc?: string; presetId: string }) {
 	if (iconSrc) {
 		return (
 			<img
@@ -215,18 +179,14 @@ const WebsitePresetMenu = memo(function WebsitePresetMenu({
 					data-testid="website-preset-list"
 					className="min-h-0 flex-1 overflow-y-auto p-1"
 				>
-					{WEBSITE_PRESETS.map((preset) => (
+					{getWebsitePresets().map((preset) => (
 						<DropdownMenuItem
 							key={preset.id}
 							aria-label={getTranslatedPreset(preset, t).title}
 							className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2"
 							onClick={() => onOpenWebsiteTab(getTranslatedPreset(preset, t))}
 						>
-							<WebsitePresetIcon
-								icon={preset.icon}
-								iconSrc={preset.iconSrc}
-								presetId={preset.id}
-							/>
+							<WebsitePresetIcon iconSrc={preset.iconSrc} presetId={preset.id} />
 							<span className="min-w-0 flex-1 truncate text-sm leading-5 text-foreground">
 								{getTranslatedPreset(preset, t).title}
 							</span>

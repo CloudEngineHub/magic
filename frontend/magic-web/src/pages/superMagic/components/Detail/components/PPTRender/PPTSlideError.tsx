@@ -1,7 +1,7 @@
 import { CSSProperties, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, FileQuestion, Link2Off } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface PPTSlideErrorProps {
 	index: number

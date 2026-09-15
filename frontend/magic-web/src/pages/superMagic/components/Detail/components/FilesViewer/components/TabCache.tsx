@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import Render from "../../../Render"
 import PlaybackTabContent, { type PlaybackTabContentProps } from "./PlaybackTabContent"
@@ -10,6 +10,7 @@ import type { TabItem } from "../types"
 import type { KnowledgeBaseTabData } from "../hooks/useKnowledgeBaseTab"
 import { getFileViewerTabType } from "../utils/tabType"
 import {
+	FILE_VIEWER_DOCUMENT_FLOW_FULLSCREEN_TAB_CONTENT_CLASS_NAME,
 	FILE_VIEWER_FULLSCREEN_BROWSER_TAB_CONTENT_CLASS_NAME,
 	FILE_VIEWER_FULLSCREEN_TAB_CONTENT_CLASS_NAME,
 	shouldUseFileViewerFullscreenSafeArea,
@@ -27,11 +28,15 @@ interface TabCacheProps {
 	renderProps: Record<string, unknown>
 	onActiveFileChange?: (fileId: string | null) => void
 	isFullscreen?: boolean
+	/** Allows the active pure-share tab to contribute height to the document. */
+	documentFlowFullscreen?: boolean
 	openFileTab?: (fileId: string, autoEdit?: boolean) => void
 	playbackProps?: PlaybackTabContentProps
 	/** When true, content fills the viewer without reserving tab bar height */
 	hideTabBar?: boolean
 	knowledgeBaseData?: KnowledgeBaseTabData
+	/** The tab is rendered inside a stable surface that already owns its geometry. */
+	fillPortalSurface?: boolean
 }
 
 /**
@@ -45,10 +50,12 @@ const TabCache = memo(
 		renderProps,
 		onActiveFileChange,
 		isFullscreen,
+		documentFlowFullscreen = false,
 		openFileTab,
 		playbackProps,
 		hideTabBar = false,
 		knowledgeBaseData,
+		fillPortalSurface = false,
 	}: TabCacheProps) => {
 		const tabType = getFileViewerTabType(tab)
 		const isPlaybackTab = tabType === "playback"
@@ -93,6 +100,7 @@ const TabCache = memo(
 			? playbackProps?.isFullscreen === true
 			: isFullscreenMode || isFullscreen
 		const fillsViewerWithoutTabBar = hideTabBar && !effectiveIsFullscreen
+		const isDocumentFlowFullscreen = documentFlowFullscreen && effectiveIsFullscreen
 		// Magic App WebView needs safe-area bounded content, while browsers keep the legacy viewport-fixed layer.
 		const fullscreenTabContentClassName = shouldUseFileViewerFullscreenSafeArea()
 			? FILE_VIEWER_FULLSCREEN_TAB_CONTENT_CLASS_NAME
@@ -103,11 +111,15 @@ const TabCache = memo(
 				ref={tabContentRef}
 				className={cn(
 					"left-0 w-full transition-[opacity,visibility] duration-200",
-					effectiveIsFullscreen
-						? fullscreenTabContentClassName
-						: fillsViewerWithoutTabBar
-							? "absolute top-0 h-full"
-							: "absolute top-11 h-[calc(100%-44px)]",
+					fillPortalSurface
+						? "absolute inset-0 h-full"
+						: isDocumentFlowFullscreen && isActive
+							? FILE_VIEWER_DOCUMENT_FLOW_FULLSCREEN_TAB_CONTENT_CLASS_NAME
+							: effectiveIsFullscreen
+								? fullscreenTabContentClassName
+								: fillsViewerWithoutTabBar
+									? "absolute top-0 h-full"
+									: "absolute top-11 h-[calc(100%-44px)]",
 					isPlaybackTab ? "z-[9]" : isActive ? "z-10" : "z-0",
 					isActive
 						? "pointer-events-auto visible opacity-100"

@@ -1,0 +1,52 @@
+<?php
+
+declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
+return [
+    'parameter_check_failure' => 'Parameter check failure',
+    'resource_type_not_supported' => 'Resource type not supported',
+    'resource_not_found' => 'Resource not found',
+    'permission_denied' => 'Permission denied',
+    'operation_failed' => 'Operation failed',
+    'not_found' => 'Share not found',
+    'password_error' => 'Share password error',
+    'no_permission_to_update_share' => 'No permission to update this share, only the share creator can update it',
+    'create_resources_error' => 'Create share resource failed',
+    'vip_required_for_password' => 'VIP subscription required for password access',
+    'vip_required_for_show_original_info' => 'VIP required to disable show original info',
+    'vip_required_for_hide_created_by_super_magic' => 'VIP required to hide "Created by Super Megi" text',
+    'invalid_extra_field' => 'Extra field contains disallowed configuration items: :field',
+    'copy_project_files_not_allowed' => 'Copying this project is not allowed',
+    'cannot_update_across_resource_types' => 'Cannot update share across different resource types',
+    'download_not_allowed' => 'No permission to download',
+    'cancel_failed' => 'Operation failed',
+    'cannot_modify_other_organization_file_collection' => 'Cannot modify other organization file collection',
+    'cannot_modify_other_user_file_collection' => 'Cannot modify other user file collection',
+    'file_ids_must_be_single_for_file' => 'File ids must be single for file',
+    'file_ids_required_for_file' => 'Value is required',
+    'file_ids_required_for_file_collection' => 'Value is required',
+    'file_not_belong_to_organization' => 'File not belong to organization',
+    'files_not_found' => 'Resource not found',
+    'invalid_target_id_format' => 'Invalid value',
+    'invalid_target_type' => 'Invalid value',
+    'no_permission' => 'Access denied',
+    'no_permission_to_cancel' => 'No permission to cancel',
+    'no_permission_to_cancel_share' => 'No permission to cancel share',
+    'no_permission_to_share' => 'No permission to share',
+    'organization_mismatch' => 'Organization mismatch',
+    'password_required_for_password_protected' => 'Value is required',
+    'project_not_found' => 'Resource not found',
+    'project_not_found_for_share_project' => 'Resource not found',
+    'resource_id_cannot_change_during_update' => 'Resource id cannot change during update: :existing_resource_id, :new_resource_id',
+    'resource_not_found_or_not_shareable' => 'Resource not found',
+    'resource_type_not_supported_for_copy' => 'Resource type not supported for copy',
+    'resource_type_not_supported_for_files' => 'Resource type not supported for files',
+    'target_department_not_found_or_not_in_organization' => 'Resource not found',
+    'target_user_not_found_or_not_in_organization' => 'Resource not found',
+    'toggle_status_failed' => 'Operation failed',
+
+    'share_project_only_for_file_collection' => 'Share project only for file collection',
+    'target_ids_required' => 'Value is required',
+];

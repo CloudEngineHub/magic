@@ -65,6 +65,9 @@ function createHoverManager(
 		y: 20,
 		width: 120,
 		height: 80,
+		activeContentId: "element-1-content",
+		mainContentId: "element-1-content",
+		contents: [{ contentId: "element-1-content" }],
 	}
 	const canvas = {
 		stage,
@@ -143,9 +146,9 @@ function createHoverManager(
 
 function createTransformerAnchor(): Konva.Rect {
 	const transformer = new Konva.Transformer()
-	const anchor = new Konva.Rect({ name: "middle-right _anchor" })
-	transformer.add(anchor)
-	return anchor
+	const target = new Konva.Rect({ width: 120, height: 80 })
+	transformer.nodes([target])
+	return transformer.findOne(".middle-right") as Konva.Rect
 }
 
 function createConnectionHitPathInsideElement(): Konva.Path {

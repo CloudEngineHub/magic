@@ -18,7 +18,7 @@ const useStyle = createStyles(({ css }) => {
 })
 
 function Thinking(props: NodeProps) {
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 
 	const { styles, cx } = useStyle()
 
@@ -27,7 +27,7 @@ function Thinking(props: NodeProps) {
 	}
 	return (
 		<div className={cx(styles.node)}>
-			<Text data={node} isUser={false} hideHeader onSelectDetail={() => { }} />
+			<Text data={node} isUser={false} hideHeader onSelectDetail={() => {}} />
 		</div>
 	)
 }

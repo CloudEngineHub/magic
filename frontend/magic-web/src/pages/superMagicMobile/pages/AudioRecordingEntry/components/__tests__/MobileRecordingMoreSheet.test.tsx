@@ -8,6 +8,7 @@ vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => {
 			const labels: Record<string, string> = {
+				"audioRecordings:card.openProject": "View recording project",
 				"super:mobile.recordingEntry.moreSheet.moveToGroup": "Move to group",
 				"super:mobile.recordingEntry.moreSheet.generateSummary": "Generate summary",
 				"super:mobile.recordingEntry.moreSheet.regenerateSummary": "Regenerate summary",
@@ -58,6 +59,29 @@ function createItem(overrides: Partial<AudioProjectListItem> = {}): AudioProject
 }
 
 describe("MobileRecordingMoreSheet", () => {
+	it("opens the recording project and closes the action sheet", () => {
+		const onOpenProject = vi.fn()
+		const onClose = vi.fn()
+
+		render(
+			<MobileRecordingMoreSheet
+				isOpen
+				item={createItem()}
+				onClose={onClose}
+				onRename={vi.fn()}
+				onDelete={vi.fn()}
+				onOpenProject={onOpenProject}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-recording-more-open-project"))
+
+		expect(onOpenProject).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "project-move-target" }),
+		)
+		expect(onClose).toHaveBeenCalledTimes(1)
+	})
+
 	it("opens move-to-group flow instead of showing coming-soon toast", () => {
 		const onMoveToGroup = vi.fn()
 		const onClose = vi.fn()

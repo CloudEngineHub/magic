@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest"
 import Konva from "konva"
 import type { Canvas } from "../../../core/Canvas"
 import { ConnectionRenderer } from "../ConnectionRenderer"
+import { ConnectionDeleteActionRenderer } from "../ConnectionDeleteActionRenderer"
 import {
 	CONNECTION_GROUP_NAME,
 	CONNECTION_HIT_PATH_NAME,
@@ -32,9 +33,13 @@ function createCanvasStub(
 	options: {
 		parentById?: Map<string, string>
 		elementNodes?: Map<string, Konva.Group>
+		dragTargetParentById?: Map<string, string | null>
+		canWrite?: boolean
+		stageScale?: number
 	} = {},
 ) {
 	const contentLayer = new Konva.Group()
+	const controlsLayer = new Konva.Group()
 	const connectionGroup = new Konva.Group({ name: "canvas-connections" })
 	contentLayer.add(connectionGroup)
 	const canvas = {
@@ -61,7 +66,19 @@ function createCanvasStub(
 				return node ? { getNode: () => node } : undefined
 			}),
 		},
+		frameManager: {
+			getDragTargetParentId: vi.fn((elementId: string) =>
+				options.dragTargetParentById?.has(elementId)
+					? options.dragTargetParentById.get(elementId)
+					: undefined,
+			),
+		},
 		permissionManager: {
+			can: vi.fn((capability: string) =>
+				capability === "document.write" || capability === "document.delete"
+					? options.canWrite !== false
+					: true,
+			),
 			canUseSelectionToolAffordance: vi.fn(() => true),
 		},
 		cursorManager: {
@@ -71,16 +88,23 @@ function createCanvasStub(
 		connectionManager: {
 			isConnectionSelected: vi.fn(() => false),
 			selectConnection: vi.fn(),
+			removeConnection: vi.fn(),
+		},
+		connectionDragManager: {
+			isDraggingConnection: vi.fn(() => false),
 		},
 		runtimeScheduler: {
 			requestLayerDraw: vi.fn(),
 		},
 		stage: {
-			scaleX: () => 1,
+			scaleX: () => options.stageScale ?? 1,
+			isDragging: () => false,
 		},
+		controlsLayer,
+		can: vi.fn(() => options.canWrite !== false),
 	} as unknown as Canvas
 
-	return { canvas, connectionGroup, contentLayer }
+	return { canvas, connectionGroup, contentLayer, controlsLayer }
 }
 
 function getConnectionNode(connectionGroup: Konva.Group): Konva.Group {
@@ -105,6 +129,22 @@ function getHitPath(node: Konva.Group): Konva.Path {
 		throw new Error("Expected hit path")
 	}
 	return path
+}
+
+function getDeleteActionNode(controlsLayer: Konva.Group): Konva.Group {
+	const node = controlsLayer.findOne(`.${ConnectionDeleteActionRenderer.GROUP_NAME}`)
+	if (!(node instanceof Konva.Group)) {
+		throw new Error("Expected connection delete action node")
+	}
+	return node
+}
+
+function getDeleteActionHit(controlsLayer: Konva.Group): Konva.Circle {
+	const node = controlsLayer.findOne(`.${ConnectionDeleteActionRenderer.HIT_NAME}`)
+	if (!(node instanceof Konva.Circle)) {
+		throw new Error("Expected connection delete action hit")
+	}
+	return node
 }
 
 function getConnectionNodes(root: Konva.Container): Konva.Group[] {
@@ -277,5 +317,155 @@ describe("ConnectionRenderer", () => {
 		} finally {
 			vi.unstubAllGlobals()
 		}
+	})
+
+	it("shows one circular delete action at the connection midpoint", () => {
+		const boundsById = new Map([
+			["source", { x: 0, y: 0, width: 100, height: 40 }],
+			["target", { x: 220, y: 0, width: 100, height: 40 }],
+		])
+		const { canvas, connectionGroup, controlsLayer } = createCanvasStub(boundsById)
+		const renderer = new ConnectionRenderer({ canvas })
+		renderer.render([{ id: "edge", sourceElementId: "source", targetElementId: "target" }])
+
+		getHitPath(getConnectionNode(connectionGroup)).fire("mouseenter")
+
+		const action = getDeleteActionNode(controlsLayer)
+		expect(action.visible()).toBe(true)
+		expect(action.position()).toEqual({ x: 160, y: 20 })
+		expect(controlsLayer.find(`.${ConnectionDeleteActionRenderer.GROUP_NAME}`)).toHaveLength(1)
+	})
+
+	it("keeps the delete action alive while moving from the line to the button", () => {
+		const raf = installRafMock()
+		try {
+			const boundsById = new Map([
+				["source", { x: 0, y: 0, width: 100, height: 40 }],
+				["target", { x: 220, y: 0, width: 100, height: 40 }],
+			])
+			const { canvas, connectionGroup, controlsLayer } = createCanvasStub(boundsById)
+			const renderer = new ConnectionRenderer({ canvas })
+			renderer.render([{ id: "edge", sourceElementId: "source", targetElementId: "target" }])
+
+			const hitPath = getHitPath(getConnectionNode(connectionGroup))
+			hitPath.fire("mouseenter")
+			hitPath.fire("mouseleave")
+			const actionHit = getDeleteActionHit(controlsLayer)
+			actionHit.fire("mouseenter")
+			raf.flush()
+
+			expect(getDeleteActionNode(controlsLayer).visible()).toBe(true)
+		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
+
+	it("deletes the hovered connection from the circular action", () => {
+		const boundsById = new Map([
+			["source", { x: 0, y: 0, width: 100, height: 40 }],
+			["target", { x: 220, y: 0, width: 100, height: 40 }],
+		])
+		const { canvas, connectionGroup, controlsLayer } = createCanvasStub(boundsById)
+		const renderer = new ConnectionRenderer({ canvas })
+		renderer.render([{ id: "edge", sourceElementId: "source", targetElementId: "target" }])
+
+		getHitPath(getConnectionNode(connectionGroup)).fire("mouseenter")
+		getDeleteActionHit(controlsLayer).fire("click")
+
+		expect(canvas.connectionManager.removeConnection).toHaveBeenCalledWith("edge")
+	})
+
+	it("keeps the delete action at a fixed screen size after zooming", () => {
+		const boundsById = new Map([
+			["source", { x: 0, y: 0, width: 100, height: 40 }],
+			["target", { x: 220, y: 0, width: 100, height: 40 }],
+		])
+		const { canvas, connectionGroup, controlsLayer } = createCanvasStub(boundsById, {
+			stageScale: 2,
+		})
+		const renderer = new ConnectionRenderer({ canvas })
+		renderer.render([{ id: "edge", sourceElementId: "source", targetElementId: "target" }])
+
+		getHitPath(getConnectionNode(connectionGroup)).fire("mouseenter")
+
+		const action = getDeleteActionNode(controlsLayer)
+		const button = action.findOne(`.${ConnectionDeleteActionRenderer.BUTTON_NAME}`)
+		expect(button).toBeInstanceOf(Konva.Circle)
+		expect((button as Konva.Circle).radius()).toBe(5)
+	})
+
+	it("updates the delete action position when connection geometry changes", () => {
+		const boundsById = new Map([
+			["source", { x: 0, y: 0, width: 100, height: 40 }],
+			["target", { x: 220, y: 0, width: 100, height: 40 }],
+		])
+		const { canvas, connectionGroup, controlsLayer } = createCanvasStub(boundsById)
+		const renderer = new ConnectionRenderer({ canvas })
+		const connections = [{ id: "edge", sourceElementId: "source", targetElementId: "target" }]
+		renderer.render(connections)
+		getHitPath(getConnectionNode(connectionGroup)).fire("mouseenter")
+
+		boundsById.set("target", { x: 300, y: 80, width: 100, height: 40 })
+		renderer.render(connections)
+
+		expect(getDeleteActionNode(controlsLayer).position()).toEqual({ x: 200, y: 60 })
+	})
+
+	it("does not show the delete action in readonly mode", () => {
+		const boundsById = new Map([
+			["source", { x: 0, y: 0, width: 100, height: 40 }],
+			["target", { x: 220, y: 0, width: 100, height: 40 }],
+		])
+		const { canvas, connectionGroup, controlsLayer } = createCanvasStub(boundsById, {
+			canWrite: false,
+		})
+		const renderer = new ConnectionRenderer({ canvas })
+		renderer.render([{ id: "edge", sourceElementId: "source", targetElementId: "target" }])
+
+		getHitPath(getConnectionNode(connectionGroup)).fire("mouseenter")
+
+		expect(controlsLayer.find(`.${ConnectionDeleteActionRenderer.GROUP_NAME}`)).toHaveLength(0)
+	})
+
+	it("destroys the delete action when the renderer is cleared", () => {
+		const boundsById = new Map([
+			["source", { x: 0, y: 0, width: 100, height: 40 }],
+			["target", { x: 220, y: 0, width: 100, height: 40 }],
+		])
+		const { canvas, connectionGroup, controlsLayer } = createCanvasStub(boundsById)
+		const renderer = new ConnectionRenderer({ canvas })
+		renderer.render([{ id: "edge", sourceElementId: "source", targetElementId: "target" }])
+		getHitPath(getConnectionNode(connectionGroup)).fire("mouseenter")
+
+		renderer.clear()
+
+		expect(controlsLayer.find(`.${ConnectionDeleteActionRenderer.GROUP_NAME}`)).toHaveLength(0)
+	})
+
+	it("renders a global copy when a same-frame endpoint is dragged out", () => {
+		const boundsById = new Map([
+			["source", { x: 20, y: 20, width: 100, height: 40 }],
+			["target", { x: 260, y: 20, width: 100, height: 40 }],
+		])
+		const frameNode = new Konva.Group({
+			id: "frame",
+			clipFunc: (context) => context.rect(0, 0, 360, 200),
+		})
+		frameNode.add(new Konva.Rect({ name: "background", width: 360, height: 200 }))
+		const { canvas, connectionGroup, contentLayer } = createCanvasStub(boundsById, {
+			parentById: new Map([
+				["source", "frame"],
+				["target", "frame"],
+			]),
+			elementNodes: new Map([["frame", frameNode]]),
+			dragTargetParentById: new Map([["source", null]]),
+		})
+		contentLayer.add(frameNode)
+		const renderer = new ConnectionRenderer({ canvas })
+
+		renderer.render([{ id: "edge", sourceElementId: "source", targetElementId: "target" }])
+
+		expect(getConnectionNodes(connectionGroup)).toHaveLength(1)
+		expect(getConnectionNodes(frameNode)).toHaveLength(1)
 	})
 })

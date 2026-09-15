@@ -14,6 +14,7 @@ import {
 	getRestoreResourceIds,
 	resolveNeedMove,
 	resolvePendingRestore,
+	shouldRestoreMicroAppWithoutMove,
 	RESOURCE_TYPE,
 	type DeleteTarget,
 	type ResourceType,
@@ -22,6 +23,7 @@ import {
 } from "@/pages/recycleBin/components/recycle-bin-domain"
 import type { RecycleBinItemData } from "../components/RecycleBinItem"
 import { mobileItemDataToDomain } from "./mobileRecycleBinMappers"
+import { parseNonFileRestoreCheck } from "./mobileRecycleBinRestoreUtils"
 
 function toResourceIds(list: Array<{ resource_id: string }>): string[] {
 	return list.map((x) => String(x.resource_id))
@@ -36,10 +38,7 @@ type ConflictResolutions = Record<
 >
 
 type ConflictType =
-	| "parent_missing"
-	| "name_conflict"
-	| "project_missing"
-	| "duplicate_restore_target"
+	"parent_missing" | "name_conflict" | "project_missing" | "duplicate_restore_target"
 const MAX_CONFLICT_NAME_PREVIEW_COUNT = 5
 
 function buildProjectMissingTip(params: {
@@ -101,11 +100,11 @@ function buildFileRestoreConflictSummary(params: {
 						parentMissingCount,
 						nameConflictCount: skippedNameConflictCount,
 						conflictNames,
-				  })
+					})
 				: t("recycleBin.restoreCheck.fileConflictCountConfirmMessage", {
 						parentMissingCount,
 						nameConflictCount: skippedNameConflictCount,
-				  }),
+					}),
 		)
 	} else if (skippedNameConflictCount > 0) {
 		messages.push(
@@ -113,10 +112,10 @@ function buildFileRestoreConflictSummary(params: {
 				? t("recycleBin.restoreCheck.nameConflictConfirmMessage", {
 						count: skippedNameConflictCount,
 						conflictNames,
-				  })
+					})
 				: t("recycleBin.restoreCheck.nameConflictCountConfirmMessage", {
 						count: skippedNameConflictCount,
-				  }),
+					}),
 		)
 	} else if (parentMissingCount > 0) {
 		messages.push(
@@ -601,6 +600,14 @@ export function useMobileRecycleBinRestoreFlow(props: {
 			noNeedMoveResourceIds: string[],
 		) => {
 			const hasNeedMove = needMoveItemIds.length > 0
+			if (shouldRestoreMicroAppWithoutMove(resourceType, needMoveItemIds)) {
+				const resourceIds = getRestoreResourceIds({ target, items: domainItems })
+				restoreConfirmContextRef.current = { resourceType, resourceIds }
+				setRestoreConfirmStatusMessage("")
+				setRestoreConfirmCount(resourceIds.length)
+				setRestoreConfirmOpen(true)
+				return
+			}
 
 			if (
 				hasNeedMove &&
@@ -633,7 +640,7 @@ export function useMobileRecycleBinRestoreFlow(props: {
 			setRestoreConfirmCount(noNeedMoveResourceIds.length)
 			setRestoreConfirmOpen(true)
 		},
-		[items, openMoveAfterCheck],
+		[domainItems, items, openMoveAfterCheck],
 	)
 
 	const runCheckAndBranch = useCallback(
@@ -680,14 +687,8 @@ export function useMobileRecycleBinRestoreFlow(props: {
 					setRestoreConfirmOpen(true)
 					return
 				}
-				const rawNeedMove = Array.isArray(check?.items_need_move)
-					? check.items_need_move
-					: []
-				const rawNoNeedMove = Array.isArray(check?.items_no_need_move)
-					? check.items_no_need_move
-					: []
-				const needMoveResourceIds = toResourceIds(rawNeedMove)
-				const noNeedMoveResourceIds = toResourceIds(rawNoNeedMove)
+				const { needMoveResourceIds, noNeedMoveResourceIds } =
+					parseNonFileRestoreCheck(check)
 				const { needMoveItemIds } = resolveNeedMove(needMoveResourceIds, domainItems)
 
 				await applyCheckResult(target, resourceType, needMoveItemIds, noNeedMoveResourceIds)

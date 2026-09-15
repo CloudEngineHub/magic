@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Circle, CirclePlus, Ellipsis, PencilLine, Search, Trash2, ViewIcon } from "lucide-react"
@@ -10,9 +10,9 @@ import MagicDropdown from "@/components/base/MagicDropdown"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { useConfirmDialog } from "@/components/shadcn-composed/confirm-dialog"
 import type {
+	IdentifiedOptionItem,
 	LocaleText,
 	OptionGroup,
-	OptionItem,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import { resolveLocalText } from "../utils"
@@ -22,9 +22,13 @@ import { DemoGroupEditDialog } from "../components/DemoGroupEditDialog"
 import { DemoItemEditDialog } from "../components/DemoItemEditDialog"
 import { DEFAULT_INSPIRATION_GROUP_KEY, useSceneEditStore } from "../store"
 import TemplateViewSwitcher from "@/pages/superMagic/components/MainInputContainer/panels/TemplateViewSwitcher"
-import { localeTextToDisplayString } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
-import { cn } from "@/lib/tiptap-utils"
+import {
+	isIdentifiedOptionItem,
+	resolveDemoPromptText,
+} from "@/pages/superMagic/components/MainInputContainer/panels/utils"
+import { cn } from "@/utils/cn"
 import { Badge } from "@/components/shadcn-ui/badge"
+import type { InspirationItemData } from "../inspirationItems"
 
 const INSPIRATION_THEME_LABEL_KEY: Record<string, string> = {
 	grid: "playbook.edit.inspiration.config.themeOptions.grid",
@@ -35,6 +39,7 @@ const INSPIRATION_THEME_LABEL_KEY: Record<string, string> = {
 export const InspirationPanel = observer(function InspirationPanel() {
 	const { t, i18n } = useTranslation("crew/create")
 	const store = useSceneEditStore()
+	const readOnly = store.readOnly
 	const config = store.inspiration
 	const viewType = config?.demo?.view_type ?? "grid"
 	const viewTypeLabelKey = INSPIRATION_THEME_LABEL_KEY[viewType]
@@ -45,6 +50,9 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	const [activeGroupKey, setActiveGroupKey] = useState<string | null>(defaultGroupKey)
 	const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
 	const [searchValue, setSearchValue] = useState("")
+	// Confirm callbacks may run after a refreshed scene replaces the provider store.
+	const storeRef = useRef(store)
+	storeRef.current = store
 	const defaultGroupName = useMemo<LocaleText>(
 		() => ({
 			default: t("playbook.edit.inspiration.defaultGroup"),
@@ -57,7 +65,7 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	const [groupDialogOpen, setGroupDialogOpen] = useState(false)
 	const [editingGroup, setEditingGroup] = useState<OptionGroup | undefined>(undefined)
 	const [itemDialogOpen, setItemDialogOpen] = useState(false)
-	const [editingItem, setEditingItem] = useState<OptionItem | undefined>(undefined)
+	const [editingItem, setEditingItem] = useState<IdentifiedOptionItem | undefined>(undefined)
 	const [editingItemGroupKey, setEditingItemGroupKey] = useState<string>("")
 
 	const { confirm, dialog: confirmDialog } = useConfirmDialog()
@@ -68,7 +76,23 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	}, [activeGroupKey, defaultGroupKey, groups])
 
 	const activeGroup = groups.find((g) => g.group_key === activeGroupKey) ?? null
-	const allItems = useMemo<OptionItem[]>(() => activeGroup?.children ?? [], [activeGroup])
+	const allItems = useMemo<IdentifiedOptionItem[]>(
+		() => (activeGroup?.children ?? []).filter(isIdentifiedOptionItem),
+		[activeGroup],
+	)
+	const itemsByValue = useMemo(
+		() => new Map(allItems.map((item) => [item.value, item])),
+		[allItems],
+	)
+
+	useEffect(() => {
+		setSelectedKeys((previousKeys) => {
+			const nextKeys = new Set(
+				Array.from(previousKeys).filter((key) => itemsByValue.has(key)),
+			)
+			return nextKeys.size === previousKeys.size ? previousKeys : nextKeys
+		})
+	}, [itemsByValue])
 
 	const filteredItems = useMemo(() => {
 		const search = searchValue.toLowerCase()
@@ -77,21 +101,17 @@ export const InspirationPanel = observer(function InspirationPanel() {
 			const label = item.label
 				? resolveLocalText(item.label, i18n.language).toLowerCase()
 				: ""
-			const itemValue = localeTextToDisplayString(item.value).toLowerCase()
-			return label.includes(search) || itemValue.includes(search)
+			const prompt = resolveDemoPromptText(item, i18n.language).toLowerCase()
+			return label.includes(search) || prompt.includes(search)
 		})
 	}, [allItems, searchValue, i18n.language])
 
 	const allSelected =
-		filteredItems.length > 0 &&
-		filteredItems.every((item) => selectedKeys.has(localeTextToDisplayString(item.value)))
+		filteredItems.length > 0 && filteredItems.every((item) => selectedKeys.has(item.value))
 
 	function handleSelectAll() {
 		if (allSelected) setSelectedKeys(new Set())
-		else
-			setSelectedKeys(
-				new Set(filteredItems.map((item) => localeTextToDisplayString(item.value))),
-			)
+		else setSelectedKeys(new Set(filteredItems.map((item) => item.value)))
 	}
 
 	function handleSelectOne(value: string, checked: boolean) {
@@ -113,6 +133,7 @@ export const InspirationPanel = observer(function InspirationPanel() {
 	}
 
 	function handleBatchDelete() {
+		if (readOnly) return
 		confirm({
 			title: t("playbook.edit.inspiration.batchDeleteConfirm.title"),
 			description: t("playbook.edit.inspiration.batchDeleteConfirm.description", {
@@ -120,61 +141,64 @@ export const InspirationPanel = observer(function InspirationPanel() {
 			}),
 			variant: "destructive",
 			onConfirm: () => {
-				store.deleteInspirationItems(Array.from(selectedKeys))
+				storeRef.current.deleteInspirationItems(Array.from(selectedKeys))
 				setSelectedKeys(new Set())
-				void store.save()
+				void storeRef.current.save()
 			},
 		})
 	}
 
 	// Group dialogs
 	function openCreateGroup() {
+		if (readOnly) return
 		setEditingGroup(undefined)
 		setGroupDialogOpen(true)
 	}
 
 	function openEditGroup(group: OptionGroup) {
+		if (readOnly) return
 		setEditingGroup(group)
 		setGroupDialogOpen(true)
 	}
 
 	const handleGroupConfirm = useCallback(
 		(data: { group_name: LocaleText; group_icon?: string }) => {
+			if (readOnly) return
 			if (editingGroup) store.editInspirationGroup(editingGroup.group_key, data)
 			else store.createInspirationGroup(data, defaultGroupName)
 			void store.save()
 		},
-		[defaultGroupName, editingGroup, store],
+		[defaultGroupName, editingGroup, readOnly, store],
 	)
 
 	// Item dialogs
 	function openCreateItem() {
+		if (readOnly) return
 		setEditingItem(undefined)
 		setEditingItemGroupKey(activeGroupKey ?? defaultGroupKey ?? DEFAULT_INSPIRATION_GROUP_KEY)
 		setItemDialogOpen(true)
 	}
 
-	function openEditItem(item: OptionItem, groupKey: string) {
+	function openEditItem(item: IdentifiedOptionItem, groupKey: string) {
+		if (readOnly) return
 		setEditingItem(item)
 		setEditingItemGroupKey(groupKey)
 		setItemDialogOpen(true)
 	}
 
 	const handleItemConfirm = useCallback(
-		(data: Partial<OptionItem>, groupKey: string) => {
-			if (editingItem)
-				store.editInspirationItem(
-					localeTextToDisplayString(editingItem.value),
-					data,
-					groupKey,
-				)
+		(data: InspirationItemData, groupKey: string) => {
+			if (readOnly) return
+			if (editingItem) store.editInspirationItem(editingItem.value, data, groupKey)
 			else store.createInspirationItem(data, groupKey, defaultGroupName)
+			setSelectedKeys(new Set())
 			void store.save()
 		},
-		[defaultGroupName, editingItem, store],
+		[defaultGroupName, editingItem, readOnly, store],
 	)
 
 	function handleCreateGroupFromItem(data: { group_name: LocaleText; group_icon?: string }) {
+		if (readOnly) return DEFAULT_INSPIRATION_GROUP_KEY
 		const newGroupKey = store.createInspirationGroup(data, defaultGroupName)
 		void store.save()
 		return newGroupKey
@@ -195,34 +219,38 @@ export const InspirationPanel = observer(function InspirationPanel() {
 							: viewType}
 					</span>
 				</Badge>
-				<Button
-					variant="ghost"
-					size="icon"
-					className="size-9 shrink-0"
-					onClick={() => setConfigDialogOpen(true)}
-					data-testid="inspiration-enable-button"
-				>
-					<PencilLine className="h-4 w-4" />
-				</Button>
+				{readOnly ? null : (
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-9 shrink-0"
+						onClick={() => setConfigDialogOpen(true)}
+						data-testid="inspiration-enable-button"
+					>
+						<PencilLine className="h-4 w-4" />
+					</Button>
+				)}
 			</div>
 
 			{/* Control bar */}
 			<div className="flex shrink-0 items-center justify-between">
-				<div className="flex items-center gap-2">
-					<Checkbox
-						checked={allSelected}
-						onCheckedChange={handleSelectAll}
-						data-testid="inspiration-select-all-checkbox"
-					/>
-					<label
-						className="cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground"
-						onClick={handleSelectAll}
-						data-testid="handle-select-all"
-					>
-						{t("playbook.edit.filter.selectAll")}
-					</label>
-				</div>
-				{selectedKeys.size > 0 ? (
+				{readOnly ? null : (
+					<div className="flex items-center gap-2">
+						<Checkbox
+							checked={allSelected}
+							onCheckedChange={handleSelectAll}
+							data-testid="inspiration-select-all-checkbox"
+						/>
+						<label
+							className="cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground"
+							onClick={() => handleSelectAll(!allSelected)}
+							data-testid="handle-select-all"
+						>
+							{t("playbook.edit.filter.selectAll")}
+						</label>
+					</div>
+				)}
+				{!readOnly && selectedKeys.size > 0 ? (
 					<div className="flex items-center gap-2">
 						<Button
 							variant="outline"
@@ -264,15 +292,17 @@ export const InspirationPanel = observer(function InspirationPanel() {
 						>
 							{t("playbook.edit.filter.reset")}
 						</Button>
-						<Separator orientation="vertical" className="!h-5" />
-						<Button
-							className="h-9 shadow-xs"
-							onClick={openCreateItem}
-							data-testid="inspiration-create-button"
-						>
-							<CirclePlus className="h-4 w-4" />
-							{t("playbook.edit.filter.create")}
-						</Button>
+						{readOnly ? null : <Separator orientation="vertical" className="!h-5" />}
+						{readOnly ? null : (
+							<Button
+								className="h-9 shadow-xs"
+								onClick={openCreateItem}
+								data-testid="inspiration-create-button"
+							>
+								<CirclePlus className="h-4 w-4" />
+								{t("playbook.edit.filter.create")}
+							</Button>
+						)}
 					</div>
 				)}
 			</div>
@@ -281,15 +311,19 @@ export const InspirationPanel = observer(function InspirationPanel() {
 			<div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto rounded-lg border border-border p-4">
 				{/* Toolbar: Create Group + scrollable group tabs */}
 				<div className="flex shrink-0 items-center gap-3">
-					<Button
-						className="h-9 shrink-0 rounded-full shadow-xs"
-						onClick={openCreateGroup}
-						data-testid="inspiration-create-group-button"
-					>
-						<CirclePlus className="h-4 w-4" />
-						{t("playbook.edit.inspiration.createGroup")}
-					</Button>
-					<Separator orientation="vertical" className="h-5 shrink-0" />
+					{readOnly ? null : (
+						<Button
+							className="h-9 shrink-0 rounded-full shadow-xs"
+							onClick={openCreateGroup}
+							data-testid="inspiration-create-group-button"
+						>
+							<CirclePlus className="h-4 w-4" />
+							{t("playbook.edit.inspiration.createGroup")}
+						</Button>
+					)}
+					{readOnly ? null : (
+						<Separator orientation="vertical" className="h-5 shrink-0" />
+					)}
 					<HeadlessHorizontalScroll
 						className="min-w-0 flex-1"
 						scrollContainerClassName="flex items-center gap-2 overflow-x-auto py-1"
@@ -310,7 +344,10 @@ export const InspirationPanel = observer(function InspirationPanel() {
 									group={group}
 									isActive={activeGroupKey === group.group_key}
 									lang={i18n.language}
-									onClick={() => setActiveGroupKey(group.group_key)}
+									onClick={() => {
+										setActiveGroupKey(group.group_key)
+										setSelectedKeys(new Set())
+									}}
 									onEdit={() => openEditGroup(group)}
 									onDelete={() =>
 										confirm({
@@ -322,11 +359,14 @@ export const InspirationPanel = observer(function InspirationPanel() {
 											),
 											variant: "destructive",
 											onConfirm: () => {
-												store.deleteInspirationGroup(group.group_key)
-												void store.save()
+												storeRef.current.deleteInspirationGroup(
+													group.group_key,
+												)
+												void storeRef.current.save()
 											},
 										})
 									}
+									readOnly={readOnly}
 								/>
 							))
 						)}
@@ -340,9 +380,16 @@ export const InspirationPanel = observer(function InspirationPanel() {
 							title={t("playbook.edit.inspiration.empty.title")}
 							description={t("playbook.edit.inspiration.empty.description")}
 							createLabel={t("playbook.edit.inspiration.empty.create")}
-							onCreate={openCreateItem}
+							onCreate={readOnly ? undefined : openCreateItem}
 						/>
 					</div>
+				) : readOnly ? (
+					<TemplateViewSwitcher
+						mode="view"
+						viewType={config?.demo?.view_type}
+						items={filteredItems}
+						onTemplateClick={() => undefined}
+					/>
 				) : (
 					<TemplateViewSwitcher
 						mode="edit"
@@ -359,8 +406,8 @@ export const InspirationPanel = observer(function InspirationPanel() {
 								),
 								variant: "destructive",
 								onConfirm: () => {
-									store.deleteInspirationItem(value)
-									void store.save()
+									storeRef.current.deleteInspirationItem(value)
+									void storeRef.current.save()
 								},
 							})
 						}
@@ -369,32 +416,38 @@ export const InspirationPanel = observer(function InspirationPanel() {
 			</div>
 
 			{/* Dialogs */}
-			<InspirationConfigDialog
-				config={config}
-				open={configDialogOpen}
-				onOpenChange={setConfigDialogOpen}
-				onConfirm={(data) => {
-					store.updateInspirationConfig(data)
-					void store.save()
-				}}
-			/>
+			{readOnly ? null : (
+				<InspirationConfigDialog
+					config={config}
+					open={configDialogOpen}
+					onOpenChange={setConfigDialogOpen}
+					onConfirm={(data) => {
+						store.updateInspirationConfig(data)
+						void store.save()
+					}}
+				/>
+			)}
 
-			<DemoGroupEditDialog
-				group={editingGroup}
-				open={groupDialogOpen}
-				onOpenChange={setGroupDialogOpen}
-				onConfirm={handleGroupConfirm}
-			/>
+			{readOnly ? null : (
+				<DemoGroupEditDialog
+					group={editingGroup}
+					open={groupDialogOpen}
+					onOpenChange={setGroupDialogOpen}
+					onConfirm={handleGroupConfirm}
+				/>
+			)}
 
-			<DemoItemEditDialog
-				item={editingItem}
-				defaultGroupKey={editingItemGroupKey}
-				groups={groups}
-				open={itemDialogOpen}
-				onOpenChange={setItemDialogOpen}
-				onConfirm={handleItemConfirm}
-				onCreateGroup={handleCreateGroupFromItem}
-			/>
+			{readOnly ? null : (
+				<DemoItemEditDialog
+					item={editingItem}
+					defaultGroupKey={editingItemGroupKey}
+					groups={groups}
+					open={itemDialogOpen}
+					onOpenChange={setItemDialogOpen}
+					onConfirm={handleItemConfirm}
+					onCreateGroup={handleCreateGroupFromItem}
+				/>
+			)}
 
 			{confirmDialog}
 		</div>
@@ -408,9 +461,18 @@ interface GroupTabProps {
 	onClick: () => void
 	onEdit: () => void
 	onDelete: () => void
+	readOnly?: boolean
 }
 
-function GroupTab({ group, isActive, lang, onClick, onEdit, onDelete }: GroupTabProps) {
+function GroupTab({
+	group,
+	isActive,
+	lang,
+	onClick,
+	onEdit,
+	onDelete,
+	readOnly = false,
+}: GroupTabProps) {
 	const { t } = useTranslation("crew/create")
 	const name = resolveLocalText(group.group_name, lang)
 
@@ -447,23 +509,25 @@ function GroupTab({ group, isActive, lang, onClick, onEdit, onDelete }: GroupTab
 					<Circle className="h-4 w-4" />
 				)}
 				{name}
-				<MagicDropdown
-					menu={{ items: menuItems }}
-					trigger={["click"]}
-					placement="bottomLeft"
-				>
-					<span>
-						<Button
-							variant="outline"
-							size="icon"
-							className={cn("size-6 shrink-0 rounded-full border-none shadow-xs")}
-							data-testid={`inspiration-group-menu-${group.group_key}`}
-							onClick={(e) => e.stopPropagation()}
-						>
-							<Ellipsis className="h-4 w-4" />
-						</Button>
-					</span>
-				</MagicDropdown>
+				{readOnly ? null : (
+					<MagicDropdown
+						menu={{ items: menuItems }}
+						trigger={["click"]}
+						placement="bottomLeft"
+					>
+						<span>
+							<Button
+								variant="outline"
+								size="icon"
+								className={cn("size-6 shrink-0 rounded-full border-none shadow-xs")}
+								data-testid={`inspiration-group-menu-${group.group_key}`}
+								onClick={(e) => e.stopPropagation()}
+							>
+								<Ellipsis className="h-4 w-4" />
+							</Button>
+						</span>
+					</MagicDropdown>
+				)}
 			</Button>
 		</div>
 	)

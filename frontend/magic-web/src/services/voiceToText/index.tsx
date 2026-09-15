@@ -237,7 +237,7 @@ class VoiceToTextService {
 	private cleanupAudioProcessor(): void {
 		// Unsubscribe from audio processor events
 		if (this.unsubscribeAudioProcessor) {
-			logger.log(this.createLogContext("清理：清理音频处理器事件监听器"))
+			logger.log(this.createLogPayload("清理：清理音频处理器事件监听器"))
 			this.unsubscribeAudioProcessor()
 			this.unsubscribeAudioProcessor = null
 		}
@@ -295,18 +295,21 @@ class VoiceToTextService {
 		// Check Web Worker support and log environment info
 		const envInfo = VoiceToTextService.getEnvironmentInfo()
 		logger.log(
-			this.createLogContext("初始化：语音转文字服务环境信息", {
+			this.createLogPayload("初始化：语音转文字服务环境信息", {
 				envInfo,
 			}),
 		)
 
 		if (!envInfo.workerSupported) {
-			logger.error(
-				this.createLogContext("初始化失败：不支持Web Workers，语音识别将无法正常工作"),
-			)
+			logger.error({
+				eventKey: "speech_recognition_worker_unsupported",
+				errorKind: "worker",
+				message: "初始化失败：不支持Web Workers，语音识别将无法正常工作",
+				context: this.createLogContext(),
+			})
 		} else if (envInfo.supportLevel === "limited") {
 			logger.warn(
-				this.createLogContext(
+				this.createLogPayload(
 					"初始化警告：检测到有限的Web Worker支持，部分功能可能无法工作",
 				),
 			)
@@ -332,10 +335,10 @@ class VoiceToTextService {
 				this.persistenceStorage = createPersistenceStorage()
 				// Clean expired sessions on initialization
 				await this.cleanExpiredSessions()
-				logger.log(this.createLogContext("初始化：持久化存储初始化成功"))
+				logger.log(this.createLogPayload("初始化：持久化存储初始化成功"))
 			} catch (error) {
 				logger.warn(
-					this.createLogContext("初始化警告：持久化存储初始化失败", {
+					this.createLogPayload("初始化警告：持久化存储初始化失败", {
 						error: String(error),
 					}),
 				)
@@ -353,7 +356,13 @@ class VoiceToTextService {
 	async startRecording(options?: { recordingId?: string; mediaStream?: MediaStream }) {
 		if (this.networkStatus === "offline") {
 			const error = new Error("Network is offline. Unable to start recording")
-			logger.error(this.createLogContext("开始录音失败：网络离线，无法开始录音"))
+			logger.error({
+				eventKey: "network_recording_start_failed",
+				errorKind: "network",
+				error,
+				message: "开始录音失败：网络离线，无法开始录音",
+				context: this.createLogContext(),
+			})
 			this.emitError(error)
 			throw error
 		}
@@ -364,7 +373,7 @@ class VoiceToTextService {
 			// This prevents stale sessions from blocking new recording attempts.
 			if (options?.recordingId && options.recordingId !== this.currentRecordingId) {
 				logger.warn(
-					this.createLogContext("开始录音：检测到新会话，停止当前录音并切换", {
+					this.createLogPayload("开始录音：检测到新会话，停止当前录音并切换", {
 						currentRecordingId: this.currentRecordingId,
 						newRecordingId: options.recordingId,
 					}),
@@ -378,7 +387,7 @@ class VoiceToTextService {
 				this.isConnected = false
 				this.resetRecordingId()
 			} else {
-				logger.warn(this.createLogContext("开始录音：已在录音中，忽略重复请求"))
+				logger.warn(this.createLogPayload("开始录音：已在录音中，忽略重复请求"))
 				return
 			}
 		}
@@ -411,7 +420,7 @@ class VoiceToTextService {
 				restoredSession = await this.restoreSession(recordingId)
 			} catch (error) {
 				logger.warn(
-					this.createLogContext("开始录音：恢复会话失败，创建新会话", {
+					this.createLogPayload("开始录音：恢复会话失败，创建新会话", {
 						error: String(error),
 						recordingId,
 					}),
@@ -424,7 +433,7 @@ class VoiceToTextService {
 			this.currentRecordingId = restoredSession.recordingId
 			this.chunkIndex = restoredSession.chunkIndex
 			logger.log(
-				this.createLogContext("开始录音：从会话恢复录音", {
+				this.createLogPayload("开始录音：从会话恢复录音", {
 					restoredRecordingId: restoredSession.recordingId,
 					restoredChunkIndex: restoredSession.chunkIndex,
 				}),
@@ -435,7 +444,7 @@ class VoiceToTextService {
 			this.chunkIndex = 0
 			// Ensure session exists before starting
 			await this.getOrCreateCurrentSession()
-			logger.log(this.createLogContext("开始录音：创建新的录制会话"))
+			logger.log(this.createLogPayload("开始录音：创建新的录制会话"))
 		}
 
 		// Queue state management is now handled in Worker
@@ -445,11 +454,13 @@ class VoiceToTextService {
 			try {
 				await this.audioProcessor?.start(this.externalAudioStream ?? undefined)
 			} catch (error) {
-				logger.error(
-					this.createLogContext("开始录音失败：启动音频处理器失败", {
-						error: String(error),
-					}),
-				)
+				logger.error({
+					eventKey: "recording_start_audio_processor_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "开始录音失败：启动音频处理器失败",
+					context: this.createLogContext(),
+				})
 				throw error
 			}
 		}
@@ -463,20 +474,22 @@ class VoiceToTextService {
 		await this.processPendingChunks()
 
 		// 上报开始录音事件
-		logger.report(this.createLogContext("开始录音：录音已启动"))
+		logger.report(this.createLogPayload("开始录音：录音已启动"))
 
 		// 启动 Worker 队列发送模式（如果连接已建立）
 		if (this.isConnected) {
-			logger.log(this.createLogContext("开始录音：连接已就绪，启动发送模式"))
+			logger.log(this.createLogPayload("开始录音：连接已就绪，启动发送模式"))
 			try {
 				await this.voiceClient?.startSending()
-				logger.log(this.createLogContext("开始录音：发送模式启动成功"))
+				logger.log(this.createLogPayload("开始录音：发送模式启动成功"))
 			} catch (error) {
-				logger.error(
-					this.createLogContext("开始录音失败：启动发送模式失败", {
-						error: String(error),
-					}),
-				)
+				logger.error({
+					eventKey: "recording_start_send_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "开始录音失败：启动发送模式失败",
+					context: this.createLogContext(),
+				})
 			}
 		}
 	}
@@ -486,7 +499,7 @@ class VoiceToTextService {
 	 */
 	async stopRecording(): Promise<void> {
 		if (!this.isRecording) {
-			logger.warn(this.createLogContext("停止录音：未在录音中，忽略停止请求"))
+			logger.warn(this.createLogPayload("停止录音：未在录音中，忽略停止请求"))
 			return
 		}
 
@@ -501,7 +514,12 @@ class VoiceToTextService {
 		return new Promise<void>((resolve, reject) => {
 			// Set up timeout to prevent hanging indefinitely
 			const timeout = setTimeout(() => {
-				logger.error(this.createLogContext("停止录音失败：10秒超时，强制停止"))
+				logger.error({
+					eventKey: "stop_recording_timeout",
+					errorKind: "timeout",
+					message: "停止录音失败：10秒超时，强制停止",
+					context: this.createLogContext(),
+				})
 				this.stopPromise = null
 				reject(new Error("Stop recording timeout after 10 seconds"))
 			}, 10000)
@@ -521,7 +539,7 @@ class VoiceToTextService {
 			this.voiceClient
 				?.stopSending()
 				.then(() => {
-					logger.log(this.createLogContext("停止录音：录音已停止"))
+					logger.log(this.createLogPayload("停止录音：录音已停止"))
 					this.isRecording = false
 					this.updateStatus("idle")
 					void this.logPendingChunksSnapshot("停止录音：退出时待发送队列快照")
@@ -530,15 +548,17 @@ class VoiceToTextService {
 					this.teardownVisibilityChangeHandler()
 					this.teardownPageLifecycleHandlers()
 					// 上报停止录音事件
-					logger.report(this.createLogContext("停止录音：录音已停止"))
+					logger.report(this.createLogPayload("停止录音：录音已停止"))
 					resolve()
 				})
 				.catch((error) => {
-					logger.error(
-						this.createLogContext("停止录音失败：停止发送失败", {
-							error: String(error),
-						}),
-					)
+					logger.error({
+						eventKey: "stop_audio_sending_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "停止录音失败：停止发送失败",
+						context: this.createLogContext(),
+					})
 					void this.logErrorWithPendingSnapshot("停止录音失败：停止发送失败", error)
 					reject(error)
 				})
@@ -553,17 +573,22 @@ class VoiceToTextService {
 	 */
 	async switchAudioSource(newMediaStream: MediaStream): Promise<void> {
 		if (!this.isRecording) {
-			logger.warn(this.createLogContext("切换音频源失败：未在录音中，无法切换"))
+			logger.warn(this.createLogPayload("切换音频源失败：未在录音中，无法切换"))
 			throw new Error("Cannot switch audio source when not recording")
 		}
 
 		if (!this.audioProcessor) {
-			logger.error(this.createLogContext("切换音频源失败：音频处理器未初始化"))
+			logger.error({
+				eventKey: "audio_processor_initialization_failed",
+				errorKind: "invalid_state",
+				message: "切换音频源失败：音频处理器未初始化",
+				context: this.createLogContext(),
+			})
 			throw new Error("Audio processor not initialized")
 		}
 
 		try {
-			logger.log(this.createLogContext("切换音频源：正在切换音频源"))
+			logger.log(this.createLogPayload("切换音频源：正在切换音频源"))
 
 			// Update external audio stream
 			this.externalAudioStream = newMediaStream
@@ -574,13 +599,15 @@ class VoiceToTextService {
 			// Start audio processor with new stream
 			await this.audioProcessor.start(newMediaStream)
 
-			logger.log(this.createLogContext("切换音频源：音频源切换成功"))
+			logger.log(this.createLogPayload("切换音频源：音频源切换成功"))
 		} catch (error) {
-			logger.error(
-				this.createLogContext("切换音频源失败：切换音频源失败", {
-					error: String(error),
-				}),
-			)
+			logger.error({
+				eventKey: "switch_audio_source_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "切换音频源失败：切换音频源失败",
+				context: this.createLogContext(),
+			})
 			throw error
 		}
 	}
@@ -591,13 +618,23 @@ class VoiceToTextService {
 	async waitForWorkerReady(timeout: number = 10000): Promise<void> {
 		if (!this.voiceClient) {
 			const error = new Error("VoiceClient not initialized")
-			logger.error(this.createLogContext("Worker错误：语音客户端未初始化"))
+			logger.error({
+				eventKey: "worker_initialize_failed",
+				errorKind: "worker",
+				message: "Worker错误：语音客户端未初始化",
+				context: this.createLogContext(),
+			})
 			throw error
 		}
 
 		return new Promise((resolve, reject) => {
 			const timeoutId = setTimeout(() => {
-				logger.error(this.createLogContext("Worker错误：等待Worker就绪超时（10秒）"))
+				logger.error({
+					eventKey: "worker_ready_timeout",
+					errorKind: "timeout",
+					message: "Worker错误：等待Worker就绪超时（10秒）",
+					context: this.createLogContext(),
+				})
 				reject(new Error("Timeout waiting for worker to be ready"))
 			}, timeout)
 
@@ -620,12 +657,12 @@ class VoiceToTextService {
 	 */
 	async connect(recordingId?: string) {
 		if (this.networkStatus === "offline") {
-			logger.warn(this.createLogContext("连接失败：网络离线，跳过连接"))
+			logger.warn(this.createLogPayload("连接失败：网络离线，跳过连接"))
 			throw new Error("Network offline")
 		}
 
 		if (this.isConnected) {
-			logger.log(this.createLogContext("连接：已连接，跳过"))
+			logger.log(this.createLogPayload("连接：已连接，跳过"))
 			return
 		}
 
@@ -637,7 +674,13 @@ class VoiceToTextService {
 			this.emitConnect()
 		} catch (error) {
 			this.isRetrying = false
-			logger.error(this.createLogContext("连接失败：连接失败", { error: String(error) }))
+			logger.error({
+				eventKey: "connect_failed",
+				errorKind: "network",
+				error: error,
+				message: "连接失败：连接失败",
+				context: this.createLogContext(),
+			})
 			this.handleError(error as Error)
 		}
 	}
@@ -647,11 +690,11 @@ class VoiceToTextService {
 	 */
 	disconnect() {
 		if (!this.isConnected && !this.voiceClient) {
-			logger.warn(this.createLogContext("断开连接：已断开连接"))
+			logger.warn(this.createLogPayload("断开连接：已断开连接"))
 			return
 		}
 
-		logger.log(this.createLogContext("断开连接：正在断开语音服务"))
+		logger.log(this.createLogPayload("断开连接：正在断开语音服务"))
 		this.voiceClient?.disconnect()
 
 		// Clean up audio processor and event listeners
@@ -681,7 +724,7 @@ class VoiceToTextService {
 	 * 销毁服务并清理所有资源（包括 Web Worker）
 	 */
 	dispose() {
-		logger.log(this.createLogContext("销毁：正在销毁语音转文字服务并清理Web Worker资源"))
+		logger.log(this.createLogPayload("销毁：正在销毁语音转文字服务并清理Web Worker资源"))
 		this.teardownVisibilityChangeHandler()
 		this.teardownNetworkListeners()
 		this.teardownPageLifecycleHandlers()
@@ -728,7 +771,7 @@ class VoiceToTextService {
 		this.frozenRecordingState = null
 		this.shouldResumeAfterPageResume = false
 
-		logger.log(this.createLogContext("销毁：语音转文字服务销毁成功"))
+		logger.log(this.createLogPayload("销毁：语音转文字服务销毁成功"))
 		void this.logPendingChunksSnapshot("销毁：销毁时待发送队列快照")
 	}
 
@@ -856,13 +899,9 @@ class VoiceToTextService {
 		}
 	}
 
-	/**
-	 * 创建结构化日志上下文
-	 * Create structured log context
-	 */
-	private createLogContext(message: string, extra?: Record<string, unknown>) {
+	/** 生成各类日志共用的运行状态；message 和 Error 由上层日志协议单独传递。 */
+	private createLogContext(extra?: Record<string, unknown>) {
 		return {
-			message,
 			recordingId: this.currentRecordingId,
 			chunkIndex: this.chunkIndex,
 			status: this.status,
@@ -871,6 +910,14 @@ class VoiceToTextService {
 			networkStatus: this.networkStatus,
 			retryCount: this.retryCount,
 			...extra,
+		}
+	}
+
+	/** 兼容 log、warn 和 report 现有的对象输入形式。 */
+	private createLogPayload(message: string, extra?: Record<string, unknown>) {
+		return {
+			message,
+			...this.createLogContext(extra),
 		}
 	}
 
@@ -906,7 +953,7 @@ class VoiceToTextService {
 	): Promise<void> {
 		const snapshot = await this.getPendingChunksSnapshot()
 		logger.report(
-			this.createLogContext(message, {
+			this.createLogPayload(message, {
 				pendingChunksCount: snapshot.count,
 				pendingChunksSize: snapshot.totalSize,
 				...extra,
@@ -1007,7 +1054,7 @@ class VoiceToTextService {
 					if ((error as Error).message?.includes("size limit exceeded")) {
 						// Size limit exceeded, try to process existing chunks first
 						logger.warn(
-							this.createLogContext("待发送队列警告：存储大小限制超出，正在处理分片"),
+							this.createLogPayload("待发送队列警告：存储大小限制超出，正在处理分片"),
 						)
 						await this.processPendingChunks()
 						// Try again after clearing
@@ -1017,14 +1064,17 @@ class VoiceToTextService {
 								audioData,
 							)
 						} catch (retryError) {
-							logger.error(
-								this.createLogContext("待发送队列错误：清理后追加失败", {
-									error: String(retryError),
+							logger.error({
+								eventKey: "pending_send_queue_cleanup_failed",
+								errorKind: "lifecycle",
+								error: retryError,
+								message: "待发送队列错误：清理后追加失败",
+								context: this.createLogContext({
 									reason: reasonTag,
 									chunkSize: audioData.byteLength,
 									chunkIndex: this.chunkIndex,
 								}),
-							)
+							})
 							throw retryError
 						}
 					} else {
@@ -1078,7 +1128,7 @@ class VoiceToTextService {
 				if (chunks.length > 0) {
 					await this.voiceClient?.batchQueueAudio(chunks)
 					logger.log(
-						this.createLogContext("处理待发送队列：已处理会话中的待发送分片", {
+						this.createLogPayload("处理待发送队列：已处理会话中的待发送分片", {
 							chunkCount: chunks.length,
 						}),
 					)
@@ -1086,7 +1136,7 @@ class VoiceToTextService {
 						chunkCount: chunks.length,
 					})
 				} else {
-					logger.log(this.createLogContext("处理待发送队列：触发但无待发送分片"))
+					logger.log(this.createLogPayload("处理待发送队列：触发但无待发送分片"))
 				}
 			} else {
 				// Fallback to full session update
@@ -1101,7 +1151,7 @@ class VoiceToTextService {
 					await this.persistenceStorage.saveSession(session)
 
 					logger.log(
-						this.createLogContext("处理待发送队列：已处理会话中的待发送分片", {
+						this.createLogPayload("处理待发送队列：已处理会话中的待发送分片", {
 							chunkCount: chunks.length,
 						}),
 					)
@@ -1109,15 +1159,17 @@ class VoiceToTextService {
 						chunkCount: chunks.length,
 					})
 				} else {
-					logger.log(this.createLogContext("处理待发送队列：触发但无待发送分片"))
+					logger.log(this.createLogPayload("处理待发送队列：触发但无待发送分片"))
 				}
 			}
 		} catch (error) {
-			logger.error(
-				this.createLogContext("处理待发送队列错误：处理待发送分片失败", {
-					error: String(error),
-				}),
-			)
+			logger.error({
+				eventKey: "pending_audio_chunk_send_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "处理待发送队列错误：处理待发送分片失败",
+				context: this.createLogContext(),
+			})
 			void this.logErrorWithPendingSnapshot("处理待发送队列错误：处理失败", error)
 		} finally {
 			this.pendingChunksProcessing = false
@@ -1180,24 +1232,29 @@ class VoiceToTextService {
 					try {
 						this.voiceClient?.queueAudio(audioData)
 					} catch (error) {
-						logger.error(
-							this.createLogContext("发送分片失败：队列入队异常", {
-								error: String(error),
+						logger.error({
+							eventKey: "send_chunk_failed",
+							errorKind: "unknown",
+							error: error,
+							message: "发送分片失败：队列入队异常",
+							context: this.createLogContext({
 								chunkIndex: this.chunkIndex,
 								chunkSize: audioData.byteLength,
 							}),
-						)
+						})
 						void this.logErrorWithPendingSnapshot("发送分片失败：队列入队异常", error, {
 							chunkIndex: this.chunkIndex,
 							chunkSize: audioData.byteLength,
 						})
 						// fallback to pending
 						this.addToPendingChunks(audioData, "queue_fail").catch((err) => {
-							logger.error(
-								this.createLogContext("待发送队列错误：入队失败后回落存储失败", {
-									error: String(err),
-								}),
-							)
+							logger.error({
+								eventKey: "pending_send_queue_fallback_failed",
+								errorKind: "storage",
+								error: err,
+								message: "待发送队列错误：入队失败后回落存储失败",
+								context: this.createLogContext(),
+							})
 						})
 					}
 				} else {
@@ -1215,14 +1272,17 @@ class VoiceToTextService {
 								: "unknown"
 
 					this.addToPendingChunks(audioData, reason).catch((error) => {
-						logger.error(
-							this.createLogContext("待发送队列错误：添加音频分片到待发送队列失败", {
+						logger.error({
+							eventKey: "pending_audio_chunk_queue_failed",
+							errorKind: "unknown",
+							error: error,
+							message: "待发送队列错误：添加音频分片到待发送队列失败",
+							context: this.createLogContext({
 								reason,
-								error: String(error),
 								chunkSize: audioData.byteLength,
 								chunkIndex: this.chunkIndex,
 							}),
-						)
+						})
 					})
 					// Removed high-frequency log: Audio chunk stored (too verbose)
 				}
@@ -1234,15 +1294,17 @@ class VoiceToTextService {
 
 		// 初始化语音客户端 (Web Worker 版本)
 		try {
-			logger.log(this.createLogContext("初始化：正在初始化Web Worker语音客户端用于后台操作"))
+			logger.log(this.createLogPayload("初始化：正在初始化Web Worker语音客户端用于后台操作"))
 			this.voiceClient = new VoiceClientProxy(() => this.refreshToken())
 			this.bindVoiceClientEvents()
 		} catch (error) {
-			logger.error(
-				this.createLogContext("初始化失败：初始化Web Worker语音客户端失败", {
-					error: String(error),
-				}),
-			)
+			logger.error({
+				eventKey: "initialize_worker_client_failed",
+				errorKind: "worker",
+				error: error,
+				message: "初始化失败：初始化Web Worker语音客户端失败",
+				context: this.createLogContext(),
+			})
 			throw new Error(
 				`Web Worker VoiceClient initialization failed: ${(error as Error).message}`,
 			)
@@ -1259,14 +1321,16 @@ class VoiceToTextService {
 				config.organizationCode = data.user?.organization_code
 				return config
 			} else {
-				logger.warn(this.createLogContext("Token警告：刷新Token返回空，使用默认配置"))
+				logger.warn(this.createLogPayload("Token警告：刷新Token返回空，使用默认配置"))
 			}
 		} catch (error) {
-			logger.error(
-				this.createLogContext("Token错误：刷新Token失败", {
-					error: String(error),
-				}),
-			)
+			logger.error({
+				eventKey: "token_refresh_failed",
+				errorKind: "permission",
+				error: error,
+				message: "Token错误：刷新Token失败",
+				context: this.createLogContext(),
+			})
 		}
 		return merge(DEFAULT_CONFIG, this.options.config)
 	}
@@ -1279,9 +1343,9 @@ class VoiceToTextService {
 			// 保存重试状态，因为 resetRetryState() 会重置它
 			const wasRetrying = this.isRetrying
 			this.resetRetryState() // Reset retry state on successful connection
-			logger.log(this.createLogContext("连接成功：语音客户端已连接"))
+			logger.log(this.createLogPayload("连接成功：语音客户端已连接"))
 			// 上报连接成功事件
-			logger.report(this.createLogContext("连接成功：语音客户端已连接"))
+			logger.report(this.createLogPayload("连接成功：语音客户端已连接"))
 
 			// 如果正在录制，启动 Worker 队列发送
 			if (this.isRecording) {
@@ -1295,9 +1359,15 @@ class VoiceToTextService {
 					// 然后启动发送模式
 					await this.voiceClient?.startSending()
 
-					logger.log(this.createLogContext("重连后恢复：已启动音频发送模式"))
+					logger.log(this.createLogPayload("重连后恢复：已启动音频发送模式"))
 				} catch (error) {
-					logger.error(this.createLogContext("连接失败：启动发送模式失败", { error }))
+					logger.error({
+						eventKey: "connect_start_send_failed",
+						errorKind: "network",
+						error: error,
+						message: "连接失败：启动发送模式失败",
+						context: this.createLogContext(),
+					})
 				}
 			}
 		})
@@ -1317,7 +1387,7 @@ class VoiceToTextService {
 			if (!shouldPreserveRecording && wasRecordingAtClose && !this.stopPromise) {
 				this.shouldResumeAfterPageResume = true
 				shouldPreserveRecording = true
-				logger.log(this.createLogContext("连接关闭：推断录制中断，标记为恢复后继续"))
+				logger.log(this.createLogPayload("连接关闭：推断录制中断，标记为恢复后继续"))
 			}
 
 			if (!this.isRetrying && !shouldPreserveRecording) {
@@ -1363,38 +1433,50 @@ class VoiceToTextService {
 			if (typeof code === "string") {
 				switch (code) {
 					case "WORKER_ERROR":
-						logger.error(
-							this.createLogContext("Worker错误：Web Worker内部错误", {
-								error: message,
+						logger.error({
+							eventKey: "worker_internal_failed",
+							errorKind: "worker",
+							error: message,
+							message: "Worker错误：Web Worker内部错误",
+							context: this.createLogContext({
 								code,
 							}),
-						)
+						})
 						error = new Error(`Web Worker error: ${message}`)
 						break
 					case "WORKER_MESSAGE_ERROR":
-						logger.error(
-							this.createLogContext("Worker错误：Web Worker消息通信错误", {
-								error: message,
+						logger.error({
+							eventKey: "worker_message_failed",
+							errorKind: "worker",
+							error: message,
+							message: "Worker错误：Web Worker消息通信错误",
+							context: this.createLogContext({
 								code,
 							}),
-						)
+						})
 						error = new Error(`Web Worker communication error: ${message}`)
 						break
 					case "CONNECTION_ERROR":
-						logger.error(
-							this.createLogContext("Worker错误：Web Worker连接错误", {
-								error: message,
+						logger.error({
+							eventKey: "worker_connection_failed",
+							errorKind: "network",
+							error: message,
+							message: "Worker错误：Web Worker连接错误",
+							context: this.createLogContext({
 								code,
 							}),
-						)
+						})
 						break
 					default:
-						logger.error(
-							this.createLogContext("Worker错误：Web Worker语音客户端错误", {
-								error: message,
+						logger.error({
+							eventKey: "worker_client_failed",
+							errorKind: "worker",
+							error: message,
+							message: "Worker错误：Web Worker语音客户端错误",
+							context: this.createLogContext({
 								code,
 							}),
-						)
+						})
 				}
 			}
 
@@ -1444,34 +1526,40 @@ class VoiceToTextService {
 
 		// 检查是否是不可重试的错误(如权限拒绝)
 		if (this.isNonRetryableError(error)) {
-			logger.error(
-				this.createLogContext("错误：遇到不可重试的错误", {
-					error: String(error),
+			logger.error({
+				eventKey: "retry_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "错误：遇到不可重试的错误",
+				context: this.createLogContext({
 					errorName: error.name,
 					errorMessage: error.message,
 				}),
-			)
+			})
 			this.handleFinalError(error)
 			return
 		}
 
 		if (this.networkStatus === "offline") {
-			logger.warn(this.createLogContext("错误：网络离线，延迟错误处理到网络恢复流程"))
+			logger.warn(this.createLogPayload("错误：网络离线，延迟错误处理到网络恢复流程"))
 			if (this.isRecording) this.resumeRecordingAfterNetwork = true
 			if (this.isConnected || this.status === "connecting" || this.isRetrying)
 				this.shouldReconnectAfterNetwork = true
 			return
 		}
 
-		logger.error(
-			this.createLogContext("错误：语音转文字服务错误", {
-				error: String(error),
+		logger.error({
+			eventKey: "speech_to_text_service_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "错误：语音转文字服务错误",
+			context: this.createLogContext({
 				errorName: error.name,
 				errorMessage: error.message,
 				retryCount: this.retryCount,
 				maxRetries: this.maxRetries,
 			}),
-		)
+		})
 
 		// Try to retry if we haven't exceeded the max retry count
 		if (this.retryCount < this.maxRetries && !this.isRetrying) {
@@ -1525,7 +1613,7 @@ class VoiceToTextService {
 	 */
 	private attemptRetry() {
 		if (this.networkStatus === "offline") {
-			logger.warn(this.createLogContext("重试：网络离线，延迟重试直到连接恢复"))
+			logger.warn(this.createLogPayload("重试：网络离线，延迟重试直到连接恢复"))
 			if (this.isRecording) this.resumeRecordingAfterNetwork = true
 			if (this.isConnected || this.status === "connecting" || this.isRetrying)
 				this.shouldReconnectAfterNetwork = true
@@ -1541,13 +1629,13 @@ class VoiceToTextService {
 			: this.retryDelay
 
 		logger.log(
-			this.createLogContext(`重试连接：第 ${this.retryCount}/${this.maxRetries} 次重试`, {
+			this.createLogPayload(`重试连接：第 ${this.retryCount}/${this.maxRetries} 次重试`, {
 				delay,
 			}),
 		)
 		// 上报重试事件
 		logger.report(
-			this.createLogContext(`重试连接：第 ${this.retryCount}/${this.maxRetries} 次重试`, {
+			this.createLogPayload(`重试连接：第 ${this.retryCount}/${this.maxRetries} 次重试`, {
 				delay,
 			}),
 		)
@@ -1575,15 +1663,18 @@ class VoiceToTextService {
 	 * 处理重试耗尽后的最终错误
 	 */
 	private handleFinalError(error: Error) {
-		logger.error(
-			this.createLogContext("错误：重试耗尽后的最终错误", {
-				error: String(error),
+		logger.error({
+			eventKey: "retry_final_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "错误：重试耗尽后的最终错误",
+			context: this.createLogContext({
 				errorName: error.name,
 				errorMessage: error.message,
 				retryCount: this.retryCount,
 				maxRetries: this.maxRetries,
 			}),
-		)
+		})
 		void this.logErrorWithPendingSnapshot("错误：重试耗尽后的最终错误", error, {
 			wasRecording: this.isRecording,
 		})
@@ -1702,9 +1793,9 @@ class VoiceToTextService {
 	 * 处理页面冻结事件（系统即将休眠/休眠）
 	 */
 	private handlePageFreeze(): void {
-		logger.warn(this.createLogContext("页面冻结：页面已冻结，系统即将休眠，保存状态"))
+		logger.warn(this.createLogPayload("页面冻结：页面已冻结，系统即将休眠，保存状态"))
 		logger.report(
-			this.createLogContext("页面冻结：上报状态切换", {
+			this.createLogPayload("页面冻结：上报状态切换", {
 				event: "page_freeze",
 			}),
 		)
@@ -1736,14 +1827,14 @@ class VoiceToTextService {
 					chunkIndex: chunkIndexToSave,
 				}
 				logger.log(
-					this.createLogContext("页面冻结：录音状态已保存", {
+					this.createLogPayload("页面冻结：录音状态已保存", {
 						frozenRecordingId: recordingIdToSave,
 						frozenChunkIndex: chunkIndexToSave,
 					}),
 				)
 			}
 		} else {
-			logger.log(this.createLogContext("页面冻结：当前未检测到录音，无需保存状态"))
+			logger.log(this.createLogPayload("页面冻结：当前未检测到录音，无需保存状态"))
 		}
 
 		// Perform cleanup asynchronously
@@ -1767,18 +1858,20 @@ class VoiceToTextService {
 					await this.voiceClient.stopSending()
 				} catch (error) {
 					logger.warn(
-						this.createLogContext("页面冻结：冻结期间停止发送失败", {
+						this.createLogPayload("页面冻结：冻结期间停止发送失败", {
 							error: String(error),
 						}),
 					)
 				}
 			}
 		} catch (error) {
-			logger.error(
-				this.createLogContext("页面冻结错误：冻结清理失败", {
-					error: String(error),
-				}),
-			)
+			logger.error({
+				eventKey: "page_cleanup_failed",
+				errorKind: "lifecycle",
+				error: error,
+				message: "页面冻结错误：冻结清理失败",
+				context: this.createLogContext(),
+			})
 		}
 	}
 
@@ -1787,22 +1880,22 @@ class VoiceToTextService {
 	 * 处理页面恢复事件（系统从休眠唤醒）
 	 */
 	private handlePageResume(): void {
-		logger.log(this.createLogContext("页面恢复：系统从休眠唤醒，尝试恢复"))
+		logger.log(this.createLogPayload("页面恢复：系统从休眠唤醒，尝试恢复"))
 
 		if (!this.shouldResumeAfterPageResume) {
-			logger.log(this.createLogContext("页面恢复：无需恢复录音"))
-			logger.report(this.createLogContext("页面恢复：无需恢复录音", { event: "page_resume" }))
+			logger.log(this.createLogPayload("页面恢复：无需恢复录音"))
+			logger.report(this.createLogPayload("页面恢复：无需恢复录音", { event: "page_resume" }))
 			return
 		}
 
 		if (this.pageLifecycleReconnectInProgress) {
-			logger.log(this.createLogContext("页面恢复：恢复操作已在进行中"))
+			logger.log(this.createLogPayload("页面恢复：恢复操作已在进行中"))
 			return
 		}
 
 		this.pageLifecycleReconnectInProgress = true
 		// 上报页面恢复事件
-		logger.report(this.createLogContext("页面恢复：系统从休眠唤醒"))
+		logger.report(this.createLogPayload("页面恢复：系统从休眠唤醒"))
 		void this.performPageResumeReconnect()
 	}
 
@@ -1814,11 +1907,11 @@ class VoiceToTextService {
 		let shouldCleanupState = true
 
 		try {
-			logger.log(this.createLogContext("页面恢复：开始恢复重连流程"))
+			logger.log(this.createLogPayload("页面恢复：开始恢复重连流程"))
 
 			// Check network status first
 			if (this.networkStatus === "offline") {
-				logger.warn(this.createLogContext("页面恢复：网络离线，延迟恢复到网络恢复流程"))
+				logger.warn(this.createLogPayload("页面恢复：网络离线，延迟恢复到网络恢复流程"))
 				// Keep shouldResumeAfterPageResume flag set
 				// Network recovery flow will handle the resume
 				this.resumeRecordingAfterNetwork = true
@@ -1844,13 +1937,13 @@ class VoiceToTextService {
 				this.chunkIndex = restoredChunkIndex
 
 				logger.log(
-					this.createLogContext("页面恢复：录音状态已恢复", {
+					this.createLogPayload("页面恢复：录音状态已恢复", {
 						restoredRecordingId,
 						restoredChunkIndex,
 					}),
 				)
 			} else {
-				logger.warn(this.createLogContext("页面恢复：无录音状态可恢复，重新开始"))
+				logger.warn(this.createLogPayload("页面恢复：无录音状态可恢复，重新开始"))
 			}
 
 			// Reconnect if needed
@@ -1859,11 +1952,13 @@ class VoiceToTextService {
 				try {
 					await this.voiceClient?.connect(restoredRecordingId ?? undefined)
 				} catch (error) {
-					logger.error(
-						this.createLogContext("页面恢复失败：重连失败", {
-							error: String(error),
-						}),
-					)
+					logger.error({
+						eventKey: "page_resume_reconnect_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "页面恢复失败：重连失败",
+						context: this.createLogContext(),
+					})
 					throw error
 				}
 			}
@@ -1882,7 +1977,7 @@ class VoiceToTextService {
 				if (this.isConnected) {
 					await this.voiceClient?.startSending()
 				} else {
-					logger.warn(this.createLogContext("页面恢复：连接未建立，音频将被缓冲"))
+					logger.warn(this.createLogPayload("页面恢复：连接未建立，音频将被缓冲"))
 				}
 
 				// Update recording state
@@ -1890,21 +1985,23 @@ class VoiceToTextService {
 				await this.saveCurrentSession()
 				this.updateStatus("recording")
 
-				logger.log(this.createLogContext("页面恢复：录音已成功恢复"))
+				logger.log(this.createLogPayload("页面恢复：录音已成功恢复"))
 				// 上报页面恢复后录音恢复成功
-				logger.report(this.createLogContext("页面恢复：录音已成功恢复"))
+				logger.report(this.createLogPayload("页面恢复：录音已成功恢复"))
 				await this.logPendingChunksSnapshot("页面恢复：恢复完成快照")
 			} else {
 				logger.report(
-					this.createLogContext("页面恢复：无录音需要恢复", { event: "page_resume" }),
+					this.createLogPayload("页面恢复：无录音需要恢复", { event: "page_resume" }),
 				)
 			}
 		} catch (error) {
-			logger.error(
-				this.createLogContext("页面恢复失败：页面唤醒后恢复失败", {
-					error: String(error),
-				}),
-			)
+			logger.error({
+				eventKey: "page_resume_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "页面恢复失败：页面唤醒后恢复失败",
+				context: this.createLogContext(),
+			})
 			this.handleError(error as Error)
 		} finally {
 			// Clean up page lifecycle state conditionally
@@ -1955,8 +2052,8 @@ class VoiceToTextService {
 		if (this.networkStatus === "offline") return
 		this.networkStatus = "offline"
 
-		logger.warn(this.createLogContext("网络离线：检测到网络离线，暂停语音传输"))
-		logger.report(this.createLogContext("网络离线：上报状态切换", { event: "offline" }))
+		logger.warn(this.createLogPayload("网络离线：检测到网络离线，暂停语音传输"))
+		logger.report(this.createLogPayload("网络离线：上报状态切换", { event: "offline" }))
 
 		const wasRecording = this.status === "recording" || this.isRecording
 		this.resumeRecordingAfterNetwork = wasRecording
@@ -1985,7 +2082,7 @@ class VoiceToTextService {
 		this.updateStatus("error")
 		this.emitError(new Error("Network connection lost"))
 		// 上报网络离线事件
-		logger.report(this.createLogContext("网络离线：网络连接丢失"))
+		logger.report(this.createLogPayload("网络离线：网络连接丢失"))
 
 		void this.performNetworkOfflineCleanup()
 	}
@@ -1997,7 +2094,7 @@ class VoiceToTextService {
 					await this.voiceClient.stopSending()
 				} catch (error) {
 					logger.warn(
-						this.createLogContext("网络离线：清理时停止发送失败", {
+						this.createLogPayload("网络离线：清理时停止发送失败", {
 							error: String(error),
 						}),
 					)
@@ -2011,7 +2108,7 @@ class VoiceToTextService {
 					await this.voiceClient.disconnect()
 				} catch (error) {
 					logger.warn(
-						this.createLogContext("网络离线：清理时断开连接失败", {
+						this.createLogPayload("网络离线：清理时断开连接失败", {
 							error: String(error),
 						}),
 					)
@@ -2027,11 +2124,13 @@ class VoiceToTextService {
 
 			await this.saveCurrentSession()
 		} catch (error) {
-			logger.error(
-				this.createLogContext("网络离线：离线清理失败", {
-					error: String(error),
-				}),
-			)
+			logger.error({
+				eventKey: "network_cleanup_failed",
+				errorKind: "network",
+				error: error,
+				message: "网络离线：离线清理失败",
+				context: this.createLogContext(),
+			})
 			void this.logErrorWithPendingSnapshot("网络离线：离线清理失败", error)
 		}
 	}
@@ -2040,9 +2139,9 @@ class VoiceToTextService {
 		if (this.networkStatus === "online") return
 		this.networkStatus = "online"
 
-		logger.log(this.createLogContext("网络恢复：检测到网络已连接，尝试恢复语音传输"))
+		logger.log(this.createLogPayload("网络恢复：检测到网络已连接，尝试恢复语音传输"))
 		// 上报网络恢复事件
-		logger.report(this.createLogContext("网络恢复：检测到网络已连接"))
+		logger.report(this.createLogPayload("网络恢复：检测到网络已连接"))
 
 		if (!this.shouldReconnectAfterNetwork && !this.resumeRecordingAfterNetwork) return
 		if (this.networkReconnectInProgress) return
@@ -2055,7 +2154,7 @@ class VoiceToTextService {
 		try {
 			if (this.networkStatus === "offline") {
 				logger.warn(
-					this.createLogContext("网络恢复：状态仍为离线，保留恢复标志等待下一次online"),
+					this.createLogPayload("网络恢复：状态仍为离线，保留恢复标志等待下一次online"),
 				)
 				this.networkReconnectInProgress = false
 				return
@@ -2075,12 +2174,12 @@ class VoiceToTextService {
 				if (restoredRecordingId) {
 					this.currentRecordingId = restoredRecordingId
 					logger.log(
-						this.createLogContext("网络恢复：恢复录音状态", {
+						this.createLogPayload("网络恢复：恢复录音状态", {
 							restoredRecordingId,
 						}),
 					)
 				} else {
-					logger.warn(this.createLogContext("网络恢复：网络恢复后无录音状态可恢复"))
+					logger.warn(this.createLogPayload("网络恢复：网络恢复后无录音状态可恢复"))
 				}
 				this.chunkIndex = restoredChunkIndex
 
@@ -2091,11 +2190,13 @@ class VoiceToTextService {
 					try {
 						await this.audioProcessor?.start(this.externalAudioStream ?? undefined)
 					} catch (error) {
-						logger.error(
-							this.createLogContext("网络恢复：重启音频处理器失败", {
-								error: String(error),
-							}),
-						)
+						logger.error({
+							eventKey: "network_restore_audio_processor_failed",
+							errorKind: "network",
+							error: error,
+							message: "网络恢复：重启音频处理器失败",
+							context: this.createLogContext(),
+						})
 						throw error
 					}
 				}
@@ -2104,15 +2205,17 @@ class VoiceToTextService {
 					try {
 						await this.voiceClient?.startSending()
 					} catch (error) {
-						logger.error(
-							this.createLogContext("网络恢复：恢复发送失败", {
-								error: String(error),
-							}),
-						)
+						logger.error({
+							eventKey: "network_restore_send_failed",
+							errorKind: "network",
+							error: error,
+							message: "网络恢复：恢复发送失败",
+							context: this.createLogContext(),
+						})
 						throw error
 					}
 				} else {
-					logger.warn(this.createLogContext("网络恢复：未连接，录音将被缓冲"))
+					logger.warn(this.createLogPayload("网络恢复：未连接，录音将被缓冲"))
 				}
 
 				this.emitConnect()
@@ -2120,19 +2223,21 @@ class VoiceToTextService {
 				this.isRecording = true
 				await this.saveCurrentSession()
 				this.updateStatus("recording")
-				logger.log(this.createLogContext("网络恢复：录音已成功恢复"))
+				logger.log(this.createLogPayload("网络恢复：录音已成功恢复"))
 				// 上报网络恢复后录音恢复成功
-				logger.report(this.createLogContext("网络恢复：录音已成功恢复"))
+				logger.report(this.createLogPayload("网络恢复：录音已成功恢复"))
 				await this.logPendingChunksSnapshot("网络恢复：恢复完成快照")
 			} else if (this.shouldReconnectAfterNetwork) {
 				this.updateStatus("idle")
 			}
 		} catch (error) {
-			logger.error(
-				this.createLogContext("网络恢复失败：网络恢复后恢复失败", {
-					error: String(error),
-				}),
-			)
+			logger.error({
+				eventKey: "network_restore_failed",
+				errorKind: "network",
+				error: error,
+				message: "网络恢复失败：网络恢复后恢复失败",
+				context: this.createLogContext(),
+			})
 			this.handleError(error as Error)
 		} finally {
 			this.shouldReconnectAfterNetwork = false
@@ -2162,16 +2267,18 @@ class VoiceToTextService {
 		if (!this.shouldAttemptVisibilityReconnect()) return
 
 		this.visibilityReconnectInProgress = true
-		logger.log(this.createLogContext("可见性恢复：尝试自动重连"))
+		logger.log(this.createLogPayload("可见性恢复：尝试自动重连"))
 
 		try {
 			await this.retry()
 		} catch (error) {
-			logger.error(
-				this.createLogContext("可见性恢复失败：自动重连失败", {
-					error: String(error),
-				}),
-			)
+			logger.error({
+				eventKey: "visibility_restore_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "可见性恢复失败：自动重连失败",
+				context: this.createLogContext(),
+			})
 		}
 
 		this.visibilityReconnectInProgress = false
@@ -2225,11 +2332,13 @@ class VoiceToTextService {
 				try {
 					await this.audioProcessor?.start(this.externalAudioStream ?? undefined)
 				} catch (error) {
-					logger.error(
-						this.createLogContext("重试失败：重启音频处理器失败", {
-							error: String(error),
-						}),
-					)
+					logger.error({
+						eventKey: "retry_audio_processor_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "重试失败：重启音频处理器失败",
+						context: this.createLogContext(),
+					})
 					throw error
 				}
 			}
@@ -2238,11 +2347,13 @@ class VoiceToTextService {
 				this.isRecording = true
 			}
 		} catch (error) {
-			logger.error(
-				this.createLogContext("重试失败：手动重试失败", {
-					error: String(error),
-				}),
-			)
+			logger.error({
+				eventKey: "manual_retry_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "重试失败：手动重试失败",
+				context: this.createLogContext(),
+			})
 			this.handleError(error as Error)
 			throw error
 		}
@@ -2276,7 +2387,7 @@ class VoiceToTextService {
 			await this.persistenceStorage.saveSession(session)
 		} catch (error) {
 			logger.warn(
-				this.createLogContext("持久化警告：保存录制会话失败", {
+				this.createLogPayload("持久化警告：保存录制会话失败", {
 					error: String(error),
 				}),
 			)
@@ -2296,7 +2407,7 @@ class VoiceToTextService {
 			const session = await this.persistenceStorage.getSession(recordingId)
 			if (session) {
 				logger.log(
-					this.createLogContext("持久化：会话已恢复", {
+					this.createLogPayload("持久化：会话已恢复", {
 						restoredRecordingId: recordingId,
 					}),
 				)
@@ -2304,7 +2415,7 @@ class VoiceToTextService {
 			}
 		} catch (error) {
 			logger.warn(
-				this.createLogContext("持久化警告：恢复会话失败", {
+				this.createLogPayload("持久化警告：恢复会话失败", {
 					recordingId,
 					error: String(error),
 				}),
@@ -2340,7 +2451,7 @@ class VoiceToTextService {
 				}
 
 				logger.log(
-					this.createLogContext("持久化：已清理过期会话", {
+					this.createLogPayload("持久化：已清理过期会话", {
 						cleanedCount: sessionsToRemove.length,
 						maxSessions: this.maxSessions,
 					}),
@@ -2348,7 +2459,7 @@ class VoiceToTextService {
 			}
 		} catch (error) {
 			logger.warn(
-				this.createLogContext("持久化警告：清理过期会话失败", {
+				this.createLogPayload("持久化警告：清理过期会话失败", {
 					error: String(error),
 				}),
 			)
@@ -2368,7 +2479,7 @@ class VoiceToTextService {
 			return await this.persistenceStorage.getAllSessions()
 		} catch (error) {
 			logger.warn(
-				this.createLogContext("持久化警告：获取存储的会话失败", {
+				this.createLogPayload("持久化警告：获取存储的会话失败", {
 					error: String(error),
 				}),
 			)
@@ -2388,13 +2499,13 @@ class VoiceToTextService {
 		try {
 			await this.persistenceStorage.deleteSession(recordingId)
 			logger.log(
-				this.createLogContext("持久化：会话已移除", {
+				this.createLogPayload("持久化：会话已移除", {
 					removedRecordingId: recordingId,
 				}),
 			)
 		} catch (error) {
 			logger.warn(
-				this.createLogContext("持久化警告：移除会话失败", {
+				this.createLogPayload("持久化警告：移除会话失败", {
 					recordingId,
 					error: String(error),
 				}),
@@ -2414,10 +2525,10 @@ class VoiceToTextService {
 
 		try {
 			await this.persistenceStorage.clear()
-			logger.log(this.createLogContext("持久化：所有存储的会话已清空"))
+			logger.log(this.createLogPayload("持久化：所有存储的会话已清空"))
 		} catch (error) {
 			logger.warn(
-				this.createLogContext("持久化警告：清空所有会话失败", {
+				this.createLogPayload("持久化警告：清空所有会话失败", {
 					error: String(error),
 				}),
 			)

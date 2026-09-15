@@ -5,6 +5,7 @@ import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { Canvas } from "../../core/Canvas"
 import { BorderDecorator } from "../decorators/BorderDecorator"
 import { DECORATOR_COLORS, DECORATOR_CONFIG } from "../decorators/DecoratorConfig"
+import { normalizeFrameCreationSize } from "../../shared/normalize/normalizeUtils"
 /**
  * 画框元素类
  * 画框本质上是一个带背景的组容器
@@ -42,14 +43,18 @@ export class FrameElement extends BaseElement<FrameElementData> {
 		height: number,
 		zIndex: number = 0,
 	): FrameElementData {
+		const normalizedSize = normalizeFrameCreationSize(width, height)
+
 		return {
 			id,
 			type: "frame" as const,
 			x,
 			y,
-			width,
-			height,
+			...normalizedSize,
 			zIndex,
+			activeContentId: `${id}-content-1`,
+			mainContentId: `${id}-content-1`,
+			contents: [{ contentId: `${id}-content-1` }],
 		}
 	}
 

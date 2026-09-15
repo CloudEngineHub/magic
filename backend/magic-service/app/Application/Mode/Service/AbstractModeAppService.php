@@ -27,12 +27,12 @@ use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Service\ModelFilter\OrganizationBasedModelFilterInterface;
 use App\Domain\Provider\Service\ProviderConfigDomainService;
 use App\Domain\Provider\Service\ProviderModelDomainService;
+use App\Domain\SuperMagic\Agent\Entity\SuperMagicAgentEntity;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Util\File\EasyFileTools;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
-use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
 
 /**
  * Mode 应用层公共基类。
@@ -41,7 +41,7 @@ use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
  * - 获取当前组织可见的 provider 模型
  * - 整理视频 featured 求解所需的最小候选项
  *
- * 具体的视频能力定义与交集规则都应继续下沉到 domain service。
+ * 具体的视频能力定义与 provider 择一规则都应继续下沉到 domain service。
  */
 abstract class AbstractModeAppService extends AbstractKernelAppService
 {
@@ -113,6 +113,21 @@ abstract class AbstractModeAppService extends AbstractKernelAppService
     protected function getModeDataIsolation(MagicUserAuthorization $authorization): ModeDataIsolation
     {
         return $this->createModeDataIsolation($authorization);
+    }
+
+    protected function isSystemDefaultAgent(string $identifier): bool
+    {
+        return $this->modeDomainService->isSystemDefaultAgent(
+            $this->createSystemDefaultAgentModeDataIsolation(),
+            $identifier
+        );
+    }
+
+    protected function createSystemDefaultAgentModeDataIsolation(): ModeDataIsolation
+    {
+        $dataIsolation = new ModeDataIsolation(OfficialOrganizationUtil::getOfficialOrganizationCode());
+        $dataIsolation->setOnlyOfficialOrganization(true);
+        return $dataIsolation;
     }
 
     /**
@@ -243,7 +258,7 @@ abstract class AbstractModeAppService extends AbstractKernelAppService
         }
 
         // 这里返回的是“同一个逻辑 model_id 下，所有当前仍可用的 provider 模型”。
-        // 相比 selectBestModel 只选一条，这里保留整组数据，是为了后续做视频能力交集。
+        // 相比 selectBestModel 只选一条，这里保留整组数据，是为了后续按运行时优先级择一。
         $providerDataIsolation = new ProviderDataIsolation(OfficialOrganizationUtil::getOfficialOrganizationCode());
         $allModels = $this->providerModelDomainService->getModelsByModelIds($providerDataIsolation, $allModelIds);
         $allModels = $this->expandModelGroupsForDynamicSubModels($providerDataIsolation, $allModels);
@@ -263,7 +278,7 @@ abstract class AbstractModeAppService extends AbstractKernelAppService
         }
 
         // app 层先完成“当前组织可见且可用 provider 模型”的整理，
-        // 再收缩成求交集所需的最小候选信息，交给 domain 做能力解析。
+        // 再收缩成 domain 解析能力所需的最小候选信息。
         $groupedModels = $this->getModelGroupsBatch(array_values(array_unique($modelIds)));
         if ($groupedModels === []) {
             return [];
@@ -272,6 +287,8 @@ abstract class AbstractModeAppService extends AbstractKernelAppService
         $providerCodesByConfigId = $this->getProviderCodesByConfigIds($groupedModels);
         $candidates = [];
         foreach ($groupedModels as $modelId => $providerModels) {
+            // 必须先按运行时优先级排序，domain 才会取到与真正执行时一致的 provider。
+            $providerModels = $this->providerModelDomainService->sortByRuntimePriority($providerModels);
             foreach ($providerModels as $providerModel) {
                 // ProviderModelEntity 持有的是 service_provider_config_id，
                 // 这里补齐成 domain 解析能力所需的 providerCode。
@@ -306,7 +323,7 @@ abstract class AbstractModeAppService extends AbstractKernelAppService
 
         if ($providerStatuses === []) {
             // LLM / 图像等历史逻辑仍然只选一个最佳模型，
-            // 视频多 provider 交集场景则走 getModelGroupsBatch 保留整组数据。
+            // 视频 featured 需要按运行时优先级择一，因此走 getModelGroupsBatch 保留整组数据。
             return array_find($models, fn (ProviderModelEntity $model) => $this->isModelEnabled($model));
         }
 
@@ -319,7 +336,7 @@ abstract class AbstractModeAppService extends AbstractKernelAppService
      */
     protected function getProviderCodesByConfigIds(array $groupedModels): array
     {
-        // featured 求交集只关心 providerCode，因此这里把 configId 映射成 providerCode。
+        // featured 择一后仍需要 providerCode 解析能力，因此这里把 configId 映射成 providerCode。
         $configIds = [];
         foreach ($groupedModels as $providerModels) {
             foreach ($providerModels as $providerModel) {
@@ -354,7 +371,8 @@ abstract class AbstractModeAppService extends AbstractKernelAppService
     protected function filterAvailableModelGroups(array $allModels, array $providerStatuses): array
     {
         // 与 filterAvailableModels 的区别在于：
-        // 这里不做“最佳模型选择”，而是保留每个逻辑 model_id 的全部可用 provider。
+        // 这里不做“最佳模型选择”，而是保留每个逻辑 model_id 的全部可用 provider，
+        // 交由上层按运行时优先级择一（见 ProviderModelDomainService::sortByRuntimePriority）。
         $availableModelGroups = [];
         foreach ($allModels as $modelId => $providerModels) {
             $availableProviderModels = [];
@@ -385,7 +403,7 @@ abstract class AbstractModeAppService extends AbstractKernelAppService
      */
     protected function isProviderModelAvailable(ProviderModelEntity $providerModel, array $providerStatuses): bool
     {
-        // 视频 featured 能力求交集的前提，是 provider 模型此刻真的可用。
+        // 视频 featured 能力择一的前提，是 provider 模型此刻真的可用。
         if (! $this->isModelEnabled($providerModel)) {
             return false;
         }

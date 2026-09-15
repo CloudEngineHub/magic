@@ -3,7 +3,7 @@ import React, { memo, useRef } from "react"
 import { useStyles } from "./style"
 import { useFileUrl } from "@/pages/superMagic/hooks/useFileUrl"
 import { Flex } from "antd"
-import "xgplayer/dist/index.min.css"
+import "@/infrastructure/vendors/xgplayer/styles"
 import { useXgPlayer } from "./hooks/useXgPlayer"
 import { PlayerStates } from "./components"
 import { injectFullscreenStyles } from "./utils"
@@ -76,7 +76,6 @@ export function VideoPreview(props: VideoPreviewProps) {
 	// Use custom hook for player management
 	const { isLoading, playerReady } = useXgPlayer({
 		fileUrl,
-		fileId: file_id,
 		containerRef,
 	})
 

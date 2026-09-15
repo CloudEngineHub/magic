@@ -1,5 +1,5 @@
 import { isObject, merge } from "lodash-es"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { ChatApi, SuperMagicApi } from "@/apis"
 import { EventType } from "@/types/chat"
 import {
@@ -13,6 +13,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import GlobalMentionPanelStore, {
 	type MentionPanelStore,
 } from "@/components/business/MentionPanel/builtin-store"
+import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { userStore } from "@/models/user"
 import {
@@ -30,19 +31,45 @@ import type { ModelItem } from "../components/MessageEditor/types"
 import type { SendMessageOptions } from "../components/MessagePanel/types"
 import {
 	MessageStatus,
+	TaskStatus,
 	type Workspace,
 	type ProjectListItem,
 	type Topic,
 } from "../pages/Workspace/types"
 import { TopicMode } from "../pages/Workspace/TopicMode"
 import { superMagicStore } from "../stores"
+import type { TopicStore } from "../stores/core/topic"
 import { optimisticMessageStore } from "../stores/optimisticMessageStore"
 import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
 import { smartRenameTopicIfUnnamed } from "./topicRename"
 import { shouldSyncChatConversationName, syncChatProjectNameOnly } from "./chatConversationNameSync"
 import { shouldClearEditorAfterSend } from "./messageSendEditorPolicy"
+import { startMessageSendRenameTask, trackProjectRenameTask } from "./messageSendRenameTask"
+import { projectVisibleMessagesByRevokedTail } from "../utils/project-visible-messages-by-revoked-tail"
 
 const logger = Logger.createLogger("messageSendService")
+
+/**
+ * Mirrors text Mention semantics into the legacy label field consumed by the backend text parser.
+ * The original data payload remains intact so editor rendering and history restoration keep using it.
+ */
+function normalizeTextMentionLabelsForBackend(content: JSONContent): JSONContent {
+	const normalizedContent = content.content?.map(normalizeTextMentionLabelsForBackend)
+	const attrs = content.attrs
+
+	if (content.type !== "mention" || attrs?.type !== MentionItemType.TEXT) {
+		return normalizedContent ? { ...content, content: normalizedContent } : content
+	}
+
+	const data = attrs.data
+	const text = isObject(data) && typeof data.text === "string" ? data.text.trim() : ""
+
+	return {
+		...content,
+		attrs: text ? { ...attrs, label: text } : attrs,
+		...(normalizedContent && { content: normalizedContent }),
+	}
+}
 
 export interface HandleSendParams {
 	value: JSONContent | undefined
@@ -56,6 +83,7 @@ export interface HandleSendParams {
 	shouldClearEditorAfterSend?: boolean
 	throwOnError?: boolean
 	extra?: Record<string, unknown>
+	targetTopic?: Topic | null
 }
 
 export interface SendContentParams {
@@ -100,8 +128,10 @@ export interface SendRuntimeContext {
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null
 	selectedWorkspace?: Workspace | null
+	topicStore?: TopicStore
 	workspaceId?: string
 	updateTopicName?: (topicId: string, topicName: string) => void | Promise<void>
+	refreshProjectAfterTopicRename?: boolean
 	renameProject?: (
 		projectId: string,
 		projectName: string,
@@ -164,14 +194,19 @@ class MessageSendService {
 		const currentTopic = selectedTopic ?? context?.selectedTopic ?? options?._tempTopic ?? null
 
 		if (!currentTopic?.id) {
-			this.deps.logger.error("发送消息 - 未找到选中的话题")
+			this.deps.logger.error({
+				eventKey: "send_message_failed",
+				errorKind: "unknown",
+				message: "发送消息 - 未找到选中的话题",
+			})
 			return false
 		}
 
 		const trimmedText = textContent?.trim()
 		let resolvedJson: JSONContent | undefined
 		if (isObject(jsonContent)) {
-			resolvedJson = jsonContent
+			// Preserve structured mention nodes in the rich-text payload so refreshes can restore them.
+			resolvedJson = normalizeTextMentionLabelsForBackend(jsonContent)
 		} else if (trimmedText) {
 			resolvedJson = buildPlainTextJSONContent(trimmedText)
 		} else {
@@ -188,28 +223,34 @@ class MessageSendService {
 
 		const sendOptions = stripTempOptions(options)
 
-		// 话题名为空时根据内容自动命名
-		if (currentProject && currentTopic) {
-			const userQuestion = generateTextFromJSONContent(resolvedJson)
-
-			void smartRenameTopicIfUnnamed({
-				topic: currentTopic,
-				userQuestion,
-				updateTopicName: context?.updateTopicName,
-			})
-				.then((topicName) => {
-					if (!topicName) return
-
-					this.handleSmartProjectRename({
-						project: currentProject,
-						topicName,
-						context,
+		// 话题名为空时根据内容自动命名，消息发送不等待该任务。
+		// 首页创建场景会登记任务，详情页在任务完成后按需刷新一次项目详情。
+		const renameTask =
+			currentProject && currentTopic
+				? startMessageSendRenameTask({
+						topicId: currentTopic.id,
+						renameTopic: () =>
+							smartRenameTopicIfUnnamed({
+								topic: currentTopic,
+								userQuestion: generateTextFromJSONContent(resolvedJson),
+								updateTopicName: context?.updateTopicName,
+							}),
+						syncProjectName: (topicName) =>
+							this.handleSmartProjectRename({
+								project: currentProject,
+								topicName,
+								context,
+							}),
+						onError: (error) => {
+							this.deps.logger.error({
+								eventKey: "smart_topic_rename_failed",
+								errorKind: "unknown",
+								error,
+								message: "Smart topic rename failed",
+							})
+						},
 					})
-				})
-				.catch((error) => {
-					this.deps.logger.error("Smart topic rename failed", error)
-				})
-		}
+				: undefined
 
 		const mergedSendOptions = merge({}, sendOptions, {
 			extra: {
@@ -222,34 +263,57 @@ class MessageSendService {
 		})
 
 		if (currentTopic?.id && sendOptions?.extra?.super_agent?.mentions) {
-			const mentions = sendOptions.extra.super_agent.mentions
+			const mentions = sendOptions.extra.super_agent.mentions.filter(
+				(item) => item.attrs.type !== MentionItemType.TEXT,
+			)
 			this.deps.mentionPanelStore.addMentionListItemsToHistory(mentions)
+		}
+
+		/** Builds the single pending message envelope shared by optimistic UI, recovery, and transport. */
+		const createPendingUserMessage = (messageContent: string) => ({
+			message: {
+				type: messageType,
+				[messageType]: {
+					content: messageContent,
+					/**
+					 * @deprecated follow_up 和 normal 后期将废弃，follow_up 追加对话，normal 正常新对话
+					 */
+					instructs: [{ value: showLoading ? "follow_up" : "normal" }],
+					...mergedSendOptions,
+				},
+				send_timestamp: date,
+				send_time: date,
+				sender_id: this.deps.userStore.user.userInfo?.user_id,
+				app_message_id: messageId,
+				message_id: messageId,
+				topic_id: chat_topic_id,
+			} as unknown as ConversationMessageSend["message"],
+			conversation_id: chat_conversation_id,
+		})
+
+		const pendingUserMessage = createPendingUserMessage(content)
+		const previousTopicStatus = currentTopic.task_status || currentTopic.status
+		const markLocalExecutionStarted = () => {
+			this.deps.superMagicStore.beginTopicExecution?.(chat_topic_id)
+			context?.topicStore?.mergeTopic(currentTopic.id, {
+				task_status: TaskStatus.RUNNING,
+				status: TaskStatus.RUNNING,
+			})
+		}
+		const markLocalExecutionFailed = () => {
+			this.deps.superMagicStore.failPendingTopicExecution?.(chat_topic_id)
+			if (previousTopicStatus) {
+				context?.topicStore?.mergeTopic(currentTopic.id, {
+					task_status: previousTopicStatus,
+					status: previousTopicStatus,
+				})
+			}
 		}
 
 		// 调用聊天接口发送消息
 		const sendMessage = () => {
 			const optimisticAnchor = this.deps.superMagicStore.getLatestMessageAnchor(chat_topic_id)
-			const pendingUserMessage = {
-				message: {
-					type: messageType,
-					[messageType]: {
-						content,
-						/**
-						 * @deprecated follow_up 和 normal 后期将废弃，follow_up 追加对话，normal 正常新对话
-						 */
-						instructs: [{ value: showLoading ? "follow_up" : "normal" }],
-						...mergedSendOptions,
-					},
-					send_timestamp: date,
-					send_time: date,
-					sender_id: this.deps.userStore.user.userInfo?.user_id,
-					app_message_id: messageId,
-					message_id: messageId,
-					topic_id: chat_topic_id,
-				} as unknown as ConversationMessageSend["message"],
-				conversation_id: chat_conversation_id,
-			}
-
+			// The same rich-text snapshot drives immediate rendering and the outbound request.
 			this.deps.superMagicStore.addUserMessage(chat_topic_id, pendingUserMessage)
 			optimisticMessageStore.markSending({
 				chat_topic_id,
@@ -260,6 +324,7 @@ class MessageSendService {
 				pending_message: pendingUserMessage,
 			})
 			if (getNetworkMonitor().isNetworkOffline()) {
+				markLocalExecutionFailed()
 				optimisticMessageStore.markFailed({ chat_topic_id, app_message_id: messageId })
 				return
 			}
@@ -269,27 +334,35 @@ class MessageSendService {
 					const responseSeq =
 						(res as { data?: { seq?: SeqResponse<ConversationQueryMessage> } })?.data
 							?.seq ?? (res as { seq?: SeqResponse<ConversationQueryMessage> })?.seq
-					if (!responseSeq?.message) return
+					if (!responseSeq?.message) {
+						markLocalExecutionFailed()
+						return
+					}
 					// 响应成功后替换 superMagicStore 中对应数据
 					this.deps.superMagicStore.replaceUserMessage(chat_topic_id, responseSeq)
 					optimisticMessageStore.confirm({ chat_topic_id, app_message_id: messageId })
 				})
 				.catch((error) => {
 					console.log("error", error)
+					markLocalExecutionFailed()
 					optimisticMessageStore.markFailed({ chat_topic_id, app_message_id: messageId })
 				})
 		}
 
-		// 存在撤回消息时先确认撤回状态
-		const hasRevokedMessages = this.getMessageList(currentTopic).some(
-			(message) => message?.status === MessageStatus.REVOKED,
-		)
+		// 仅当前可见分支仍以 revoked 尾段结束时确认撤回；历史撤回事实不应阻塞新消息。
+		const hasRevokedMessages = projectVisibleMessagesByRevokedTail(
+			this.getMessageList(currentTopic),
+		).some((message) => (message?.imStatus ?? message?.status) === MessageStatus.REVOKED)
 		if (hasRevokedMessages) {
 			const isConfirmed = await this.confirmRevokedMessagesBeforeSend(currentTopic)
 			if (!isConfirmed) return false
 		}
 
+		markLocalExecutionStarted()
 		sendMessage()
+		if (context?.refreshProjectAfterTopicRename && currentProject && renameTask) {
+			trackProjectRenameTask(currentProject.id, renameTask.completion)
+		}
 		if (hasRevokedMessages) {
 			this.deps.pubsub.publish(PubSubEvents.Refresh_Topic_Messages)
 		}
@@ -320,7 +393,11 @@ class MessageSendService {
 
 		try {
 			if (!currentProject?.id || !currentTopic?.id) {
-				this.deps.logger.error("handleSend error: missing project/topic context")
+				this.deps.logger.error({
+					eventKey: "send_project_topic_context_missing",
+					errorKind: "invalid_state",
+					message: "handleSend error: missing project/topic context",
+				})
 				return
 			}
 
@@ -367,7 +444,12 @@ class MessageSendService {
 				currentTopic,
 			}
 		} catch (error) {
-			this.deps.logger.error("handleSend error", error)
+			this.deps.logger.error({
+				eventKey: "handle_send_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "handleSend error",
+			})
 		} finally {
 			setIsSending(false)
 		}
@@ -390,25 +472,25 @@ class MessageSendService {
 
 		const model = params.selectedModel
 			? {
-				model_id: params.selectedModel.model_id,
-				model_name: params.selectedModel.model_name,
-				model_icon: params.selectedModel.model_icon,
-			}
+					model_id: params.selectedModel.model_id,
+					model_name: params.selectedModel.model_name,
+					model_icon: params.selectedModel.model_icon,
+				}
 			: undefined
 
 		const imageModel = params.selectedImageModel?.model_id
 			? {
-				model_id: params.selectedImageModel.model_id,
-				model_name: params.selectedImageModel.model_name,
-				model_icon: params.selectedImageModel.model_icon,
-			}
+					model_id: params.selectedImageModel.model_id,
+					model_name: params.selectedImageModel.model_name,
+					model_icon: params.selectedImageModel.model_icon,
+				}
 			: undefined
 		const videoModel = params.selectedVideoModel?.model_id
 			? {
-				model_id: params.selectedVideoModel.model_id,
-				model_name: params.selectedVideoModel.model_name,
-				model_icon: params.selectedVideoModel.model_icon,
-			}
+					model_id: params.selectedVideoModel.model_id,
+					model_name: params.selectedVideoModel.model_name,
+					model_icon: params.selectedVideoModel.model_icon,
+				}
 			: undefined
 
 		// 根据话题读取联网搜索开关
@@ -420,7 +502,10 @@ class MessageSendService {
 			internetSearchManager.setIsChecked(currentTopic.id, isInternetSearch)
 		}
 
-		const transformedMentionItems = transformMentions(mentionItems)
+		const structuredMentionItems = mentionItems.filter(
+			(item) => item.attrs.type !== MentionItemType.TEXT,
+		)
+		const transformedMentionItems = transformMentions(structuredMentionItems)
 
 		return {
 			extra: {
@@ -454,14 +539,22 @@ class MessageSendService {
 			})
 			if (!confirmPromise) return false
 			await confirmPromise
+			// Confirmation closes revoke-edit mode even if the following message send later fails;
+			// the sidecar must not keep projecting the old User branch as editable.
+			optimisticMessageStore.clearActiveRevokedAnchor(topic.chat_topic_id)
 			return true
 		} catch (error) {
-			this.deps.logger.error("confirm undo message failed", error)
+			this.deps.logger.error({
+				eventKey: "confirm_undo_message_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "confirm undo message failed",
+			})
 			return false
 		}
 	}
 
-	private handleSmartProjectRename({
+	private async handleSmartProjectRename({
 		project,
 		topicName,
 		context,
@@ -474,7 +567,7 @@ class MessageSendService {
 
 		// Chat conversations: topic was already renamed by smartRenameTopic; mirror name on project.
 		if (shouldSyncChatConversationName(project)) {
-			void syncChatProjectNameOnly({
+			await syncChatProjectNameOnly({
 				projectId: project.id,
 				name: topicName,
 			})
@@ -486,7 +579,7 @@ class MessageSendService {
 				(context?.workspaceId ?? context?.selectedWorkspace?.id ?? project.workspace_id) ||
 				""
 			if (workspaceId) {
-				void context?.renameProject?.(project.id, topicName, workspaceId)
+				await context?.renameProject?.(project.id, topicName, workspaceId)
 			}
 		}
 	}

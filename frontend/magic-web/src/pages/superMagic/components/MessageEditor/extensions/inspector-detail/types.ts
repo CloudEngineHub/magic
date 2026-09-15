@@ -1,4 +1,5 @@
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
+import type { MagicNodeDragOptions } from "../node-drag"
 
 export interface InspectorDetailAttrs {
 	/** Title paragraph content (context description shown above detail) */
@@ -27,11 +28,15 @@ export interface InspectorDetailAttrs {
 	selectorMatchCount?: number
 	/** Optional source file mention for the inspected HTML file. */
 	fileMention?: TiptapMentionAttributes | null
+	/** Optional screenshot mention rendered inside the inspector detail card. */
+	screenshotMention?: TiptapMentionAttributes | null
+	/** Unique capture id; also the IndexedDB key for the local screenshot. */
+	captureId?: string | null
 }
 
-export interface InspectorDetailOptions {}
+export type InspectorDetailOptions = MagicNodeDragOptions
 
-declare module "@tiptap/core" {
+declare module "@/infrastructure/editors/tiptap/core" {
 	interface Commands<ReturnType> {
 		inspectorDetail: {
 			insertInspectorDetail: (attrs: InspectorDetailAttrs) => ReturnType

@@ -109,6 +109,22 @@ class TaskFileEntity extends AbstractEntity
         $this->projectId = $projectId;
     }
 
+    /**
+     * 判断当前文件是否为项目文件.
+     */
+    public function isProjectFile(): bool
+    {
+        return $this->projectId > 0;
+    }
+
+    /**
+     * 判断当前文件是否需要创建版本副本.
+     */
+    public function shouldCreateVersionCopy(): bool
+    {
+        return $this->isProjectFile();
+    }
+
     public function getTopicId(): int
     {
         return $this->topicId;
@@ -348,6 +364,14 @@ class TaskFileEntity extends AbstractEntity
     public function setMetadataVersion(int $metadataVersion): void
     {
         $this->metadataVersion = $metadataVersion;
+    }
+
+    /**
+     * 判断文件当前元数据修订号是否与编辑基准一致。
+     */
+    public function matchesMetadataRevision(int $expectedRevision): bool
+    {
+        return $this->metadataVersion === $expectedRevision;
     }
 
     public function getSpaceType(): string

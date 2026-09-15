@@ -1,6 +1,7 @@
 import { BaseProvider } from "../../core/base-provider"
 import type { IAliyunConfig } from "../../config/types"
 import { ArmsRum } from "@arms/rum-browser"
+import { getAppRelease } from "@/utils/log/release"
 
 /**
  * 阿里云 ARMS Provider 实现
@@ -18,7 +19,7 @@ export class AliyunProvider extends BaseProvider {
 			pid: config.pid || String(config.appId),
 			endpoint: config.endpoint || "https://arms-retcode.aliyuncs.com",
 			environment: config.env || "production",
-			version: config.version || "1.0.0",
+			version: getAppRelease() || config.version || "1.0.0",
 			enableSPA: config.enableSPA ?? true,
 			sendResource: config.sendResource ?? true,
 			...config.extra,

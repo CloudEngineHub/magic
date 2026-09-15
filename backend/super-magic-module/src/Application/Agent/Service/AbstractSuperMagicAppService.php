@@ -29,22 +29,30 @@ use App\Domain\Permission\Service\OperationPermissionDomainService;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\File\EasyFileTools;
 use DateTime;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\SuperMagic\Application\Collaboration\Policy\ResourceAccessPolicyService;
+use Dtyq\SuperMagic\Domain\Agent\Entity\AgentMarketEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\AgentVersionEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentSourceType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\PublishTargetType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentType;
+use Dtyq\SuperMagic\Domain\Agent\Service\MagicClawDomainService;
+use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentCategoryRelationDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentDomainService;
+use Dtyq\SuperMagic\Domain\Agent\Service\SuperMagicAgentMarketDomainService;
 use Dtyq\SuperMagic\Domain\Agent\Service\UserAgentDomainService;
 use Dtyq\SuperMagic\Domain\Skill\Entity\SkillEntity;
 use Dtyq\SuperMagic\Domain\Skill\Entity\SkillVersionEntity;
 use Dtyq\SuperMagic\Domain\Skill\Entity\ValueObject\BuiltinSkill;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ProjectMode;
+use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
+use Hyperf\DbConnection\Db;
 use Hyperf\Di\Annotation\Inject;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
@@ -61,6 +69,15 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
     #[Inject]
     protected UserAgentDomainService $userAgentDomainService;
 
+    #[Inject]
+    protected MagicClawDomainService $magicClawDomainService;
+
+    #[Inject]
+    protected SuperMagicAgentMarketDomainService $marketEligibilityDomainService;
+
+    #[Inject]
+    protected SuperMagicAgentCategoryRelationDomainService $marketCategoryRelationDomainService;
+
     public function __construct(
         protected OperationPermissionDomainService $operationPermissionDomainService,
         protected SuperMagicAgentDomainService $superMagicAgentDomainService,
@@ -73,6 +90,112 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
         protected AiAbilityDomainService $aiAbilityDomainService,
     ) {
         $this->logger = $this->loggerFactory->get(get_class($this));
+    }
+
+    public function assertAgentUsable(SuperMagicAgentDataIsolation $dataIsolation, string $code): void
+    {
+        if (in_array($code, $this->getUsableAgentCodes($dataIsolation)['codes'], true)) {
+            return;
+        }
+
+        ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, 'super_magic.agent.agent_not_available');
+    }
+
+    /**
+     * 根据话题模式统一判断员工、创建器和 MagicClaw 的使用权限。
+     *
+     * @return array{0: bool, 1: string}
+     */
+    public function checkAgentAccess(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        string $topicPattern,
+        string $agentCode
+    ): array {
+        $errorMessage = 'super_magic.agent.agent_not_available';
+
+        if (in_array($topicPattern, [BuiltinSkill::CrewCreator->value, BuiltinSkill::SkillCreator->value], true)) {
+            if ($agentCode === '') {
+                return [true, ''];
+            }
+
+            $operation = $this->resourceAccessPolicyService->getCurrentOperation(
+                $dataIsolation,
+                OperationPermissionResourceType::CustomAgent,
+                $agentCode
+            );
+            $allowed = $operation?->canEdit() ?? false;
+            return [$allowed, $allowed ? '' : $errorMessage];
+        }
+
+        if ($topicPattern === ProjectMode::MAGICLAW->value) {
+            // MagicClaw 是用户私有实例，只校验归属，不进入员工雇佣关系判断。
+            $allowed = $this->magicClawDomainService->isOwnedBy(
+                $agentCode,
+                $dataIsolation->getCurrentUserId(),
+                $dataIsolation->getCurrentOrganizationCode()
+            );
+            return [$allowed, $allowed ? '' : $errorMessage];
+        }
+
+        $employeeCode = str_starts_with($topicPattern, 'SMA-') ? $topicPattern : $agentCode;
+        if ($topicPattern === ProjectMode::CUSTOM_AGENT->value || str_starts_with($topicPattern, 'SMA-')) {
+            $allowed = $employeeCode !== ''
+                && in_array($employeeCode, $this->getUsableAgentCodes($dataIsolation)['codes'], true);
+            return [$allowed, $allowed ? '' : $errorMessage];
+        }
+
+        return [true, ''];
+    }
+
+    /** 市场发现资格由领域服务统一计算，执行资格仍独立校验。 */
+    protected function isMarketDiscoverableForUser(
+        PermissionDataIsolation $permissionIsolation,
+        AgentMarketEntity $market,
+        string $userId
+    ): bool {
+        return $this->marketEligibilityDomainService->isMarketDiscoverableForUser($permissionIsolation, $market, $userId);
+    }
+
+    protected function assertMarketDiscoverableForUser(
+        PermissionDataIsolation $permissionIsolation,
+        AgentMarketEntity $market,
+        string $userId
+    ): void {
+        if ($this->isMarketDiscoverableForUser($permissionIsolation, $market, $userId)) {
+            return;
+        }
+
+        ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $market->getAgentCode()]);
+    }
+
+    /** @param AgentMarketEntity[] $agentMarkets */
+    protected function fillMarketCategoryIds(array $agentMarkets): void
+    {
+        $marketIds = array_values(array_filter(array_map(
+            static fn (AgentMarketEntity $market): ?int => $market->getId(),
+            $agentMarkets
+        )));
+        $categoryIdsMap = $this->marketCategoryRelationDomainService->getMarketCategoryIdsMap($marketIds);
+        foreach ($agentMarkets as $market) {
+            if ($market->getId() !== null) {
+                $market->setCategoryIds($categoryIdsMap[$market->getId()] ?? $market->getCategoryIds());
+            }
+        }
+    }
+
+    /** 分类关系和市场信息必须在同一应用事务内更新。 */
+    protected function updateMarketInfo(
+        SuperMagicAgentDataIsolation $dataIsolation,
+        int $id,
+        array $payload
+    ): bool {
+        return Db::transaction(function () use ($dataIsolation, $id, $payload): bool {
+            $updated = $this->marketEligibilityDomainService->updateInfoById($id, $payload);
+            if ($updated && array_key_exists('category_ids', $payload)) {
+                $this->marketCategoryRelationDomainService->replaceMarketCategories($dataIsolation, $id, $payload['category_ids']);
+            }
+            return $updated;
+        });
     }
 
     protected function createFlowDataIsolation(Authenticatable|BaseDataIsolation $authorization): FlowDataIsolation
@@ -189,6 +312,31 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
     }
 
     /**
+     * 校验完整员工详情的读取权限。
+     *
+     * 市场货架只用于发现和市场预览，不能直接读取 prompt、技能等完整配置。
+     * 完整详情仅允许已雇佣/创建者、协作者及官方员工。
+     */
+    protected function assertAgentDetailReadable(SuperMagicAgentDataIsolation $dataIsolation, string $code): ?Operation
+    {
+        $operation = $this->resourceAccessPolicyService->getCurrentOperation(
+            $dataIsolation,
+            OperationPermissionResourceType::CustomAgent,
+            $code
+        );
+        if ($operation !== null) {
+            return $operation;
+        }
+
+        if ($this->userAgentDomainService->findUserAgentOwnershipByCode($dataIsolation, $code) !== null
+            || in_array($code, $this->getOfficialAgentCodes($dataIsolation), true)) {
+            return null;
+        }
+
+        ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $code]);
+    }
+
+    /**
      * 同步 Agent 发布目标切换后的权限状态。
      *
      * 规则：
@@ -212,12 +360,24 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
         if ($currentTargetType === PublishTargetType::MARKET) {
             if ($previousTargetType !== null && $previousTargetType !== PublishTargetType::MARKET) {
-                // 从内部切到市场时，清掉内部共享可见性，但保留创建者自己可见。
+                if (in_array($previousTargetType, [PublishTargetType::ORGANIZATION, PublishTargetType::MEMBER], true)) {
+                    $this->clearOrganizationMarketShelf($dataIsolation, $agentEntity->getCode());
+                }
+                $hiredUserIds = [];
+                $markets = $this->superMagicAgentDomainService->getStoreAgentsByAgentCodes([$agentEntity->getCode()]);
+                $market = $markets[$agentEntity->getCode()] ?? null;
+                if ($market !== null && $market->getId() !== null) {
+                    $hiredUserIds = array_map(
+                        static fn ($ownership): string => $ownership->getUserId(),
+                        $this->userAgentDomainService->findUserAgentOwnershipsByMarketSource($dataIsolation, $market->getId())
+                    );
+                }
+                // 从内部切到公开市场时，清掉内部共享可见性，但保留创建者和已雇佣用户的兼容可见。
                 $this->saveAgentVisibility(
                     $this->createAgentPermissionDataIsolation($dataIsolation, $agentEntity),
                     $agentEntity->getCode(),
                     VisibilityType::SPECIFIC,
-                    [$agentEntity->getCreator()]
+                    array_values(array_unique(array_merge([$agentEntity->getCreator()], $hiredUserIds)))
                 );
             }
             return;
@@ -225,6 +385,18 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
         if ($previousTargetType === PublishTargetType::MARKET) {
             // 从市场切回内部时，先清市场分发，再回收市场安装关系。
+            $this->superMagicAgentDomainService->offlineMarketPublishings($dataIsolation, $agentEntity->getCode());
+            $this->userAgentDomainService->deleteUserAgentOwnershipsExceptUser(
+                $dataIsolation,
+                $agentEntity->getCode(),
+                $agentEntity->getCreator()
+            );
+        }
+
+        if (in_array($previousTargetType, [PublishTargetType::ORGANIZATION, PublishTargetType::MEMBER], true)
+            && $currentTargetType === PublishTargetType::PRIVATE) {
+            // 组织共享下架为个人发布：同步撤销货架及所有非创建者的该货架雇佣。
+            $this->clearOrganizationMarketShelf($dataIsolation, $agentEntity->getCode());
             $this->superMagicAgentDomainService->offlineMarketPublishings($dataIsolation, $agentEntity->getCode());
             $this->userAgentDomainService->deleteUserAgentOwnershipsExceptUser(
                 $dataIsolation,
@@ -311,6 +483,26 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
     }
 
     /**
+     * 获取当前用户真正可使用的员工编码。
+     *
+     * 可用性与可读性不同：协作权限和资源可见性只用于读取/管理，不能让未雇佣用户执行员工。
+     *
+     * @return array{codes: array<string>}
+     */
+    protected function getUsableAgentCodes(SuperMagicAgentDataIsolation $dataIsolation): array
+    {
+        $ownedCodes = $this->userAgentDomainService->findAgentCodesBySourceTypes(
+            $dataIsolation,
+            [AgentSourceType::LOCAL_CREATE->value, AgentSourceType::MARKET->value]
+        );
+        $officialCodes = $this->getOfficialAgentCodes($dataIsolation);
+
+        return [
+            'codes' => array_values(array_unique(array_merge($ownedCodes, $officialCodes))),
+        ];
+    }
+
+    /**
      * 获取团队共享可用的 Agent 编码列表。
      *
      * 仅返回当前用户可见，且排除本人创建和市场安装后的编码列表。
@@ -339,6 +531,36 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
         return [
             'codes' => array_values(array_diff($accessibleCodes, $excludedCodes)),
             'operations' => $accessibleAgentResult['operations'],
+        ];
+    }
+
+    /**
+     * 获取当前用户参与协作的员工编码。
+     *
+     * 该集合仅表达协作身份，不依赖货架可见性或雇佣关系，也不代表可执行资格。
+     *
+     * @return array{codes: array<string>, operations: array<string, Operation>}
+     */
+    protected function getCollaboratedAgentCodes(SuperMagicAgentDataIsolation $dataIsolation): array
+    {
+        /** @var array{operations: array<string, Operation>, operation_codes: array<string>} $accessibleAgentResult */
+        $accessibleAgentResult = $this->resourceAccessPolicyService->getReadableResourceCodes(
+            $dataIsolation,
+            OperationPermissionResourceType::CustomAgent,
+            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT
+        );
+        $creatorCodes = $this->superMagicAgentDomainService->getCodesByCreator(
+            $dataIsolation,
+            $dataIsolation->getCurrentUserId()
+        );
+        $codes = array_values(array_diff($accessibleAgentResult['operation_codes'] ?? [], $creatorCodes));
+
+        return [
+            'codes' => $codes,
+            'operations' => array_intersect_key(
+                $accessibleAgentResult['operations'] ?? [],
+                array_fill_keys($codes, true)
+            ),
         ];
     }
 
@@ -762,8 +984,32 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
         SuperMagicAgentEntity $agentEntity
     ): PermissionDataIsolation {
         $permissionDataIsolation = $this->createPermissionDataIsolation($dataIsolation);
-        $permissionDataIsolation->setCurrentOrganizationCode($agentEntity->getOrganizationCode());
+        $agentOrganizationCode = $agentEntity->getOrganizationCode();
+        if ($agentOrganizationCode !== '') {
+            $permissionDataIsolation->setCurrentOrganizationCode($agentOrganizationCode);
+        }
 
         return $permissionDataIsolation;
+    }
+
+    /**
+     * Clear a previously organization-scoped shelf while retaining the market
+     * record itself. This is used when a publication changes back to public or
+     * private; individual employee visibility is handled separately.
+     */
+    private function clearOrganizationMarketShelf(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): void
+    {
+        $markets = $this->superMagicAgentDomainService->getStoreAgentsByAgentCodes([$agentCode]);
+        $market = $markets[$agentCode] ?? null;
+        if ($market === null || $market->getId() === null) {
+            return;
+        }
+
+        $this->resourceVisibilityDomainService->saveVisibilityByPrincipals(
+            $this->createPermissionDataIsolation($dataIsolation),
+            ResourceVisibilityResourceType::SUPER_MAGIC_AGENT_MARKET,
+            (string) $market->getId(),
+            VisibilityType::NONE
+        );
     }
 }

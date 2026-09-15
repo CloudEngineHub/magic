@@ -8,7 +8,6 @@ import {
 	ImageIcon,
 	type LucideIcon,
 	Plug,
-	Plus,
 	Puzzle,
 	X,
 } from "lucide-react"
@@ -23,7 +22,7 @@ import { Switch } from "@/components/shadcn-ui/switch"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import type { MentionSelectContext } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import At from "@/pages/superMagic/components/MessageEditor/components/At"
 import { sceneStateStore } from "@/pages/superMagic/components/MainInputContainer/stores"
 import { internetSearchManager } from "@/pages/superMagic/components/MessageEditor/services/InternetSearchManager"
@@ -46,18 +45,6 @@ function ActionCountBadge({ count }: { count?: number }) {
 		>
 			{count}
 		</span>
-	)
-}
-
-function AddActionPill({ label }: { label: string }) {
-	return (
-		<div
-			className="flex h-8 shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-3"
-			style={{ boxShadow: "0px 1px 2px 0px rgba(0,0,0,0.05)" }}
-		>
-			<Plus className="h-4 w-4 text-foreground" />
-			<span className="text-sm font-medium leading-5 text-foreground">{label}</span>
-		</div>
 	)
 }
 
@@ -443,7 +430,11 @@ function MobileComposerAddSheet({
 											count={selectedPluginCount}
 										/>
 									</div>
-									<AddActionPill label={tMainInput("addSheet.addButton")} />
+									<ChevronRight
+										className="size-5 shrink-0 text-foreground"
+										data-testid="mobile-composer-add-sheet-plugin-arrow"
+										aria-hidden="true"
+									/>
 								</button>
 							)}
 

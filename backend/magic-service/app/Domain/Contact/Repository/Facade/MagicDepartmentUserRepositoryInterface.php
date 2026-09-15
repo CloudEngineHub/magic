@@ -50,5 +50,10 @@ interface MagicDepartmentUserRepositoryInterface
      */
     public function getMagicIdsByDepartmentIds(array $departmentIds, string $organizationCode): array;
 
+    /**
+     * @return MagicDepartmentUserEntity[]
+     */
+    public function searchDepartmentUsersByEmployeeNo(string $employeeNo, string $organizationCode): array;
+
     public function searchDepartmentUsersByJobTitle(string $keyword, string $magicOrganizationCode): array;
 }

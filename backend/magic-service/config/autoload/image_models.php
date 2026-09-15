@@ -16,6 +16,7 @@ return [
             'match' => [
                 ['field' => 'model_version', 'value' => 'gemini-3.1-pro-image', 'match_type' => 'fuzzy'],
                 ['field' => 'model_version', 'value' => 'gemini-3-pro', 'match_type' => 'fuzzy'],
+                ['field' => 'model_id', 'value' => 'gemini-3-pro', 'match_type' => 'fuzzy'],
             ],
             'config' => [
                 // 默认分辨率
@@ -73,6 +74,7 @@ return [
         [
             'match' => [
                 ['field' => 'model_version', 'value' => 'gemini-3.1-flash-image', 'match_type' => 'fuzzy'],
+                ['field' => 'model_id', 'value' => 'gemini-3.1-flash-image', 'match_type' => 'fuzzy'],
             ],
             'config' => [
                 'sizes' => [
@@ -473,12 +475,15 @@ return [
         ],
 
         // ==========================================================
-        // Qwen Image 2.0 / 2.0 Pro (支持 n 参数批量出图)
+        // Qwen Image 2.0 / 2.0 Pro / 3.0 Pro (支持 n 参数批量出图)
         // ==========================================================
         [
             'match' => [
                 ['field' => 'model_version', 'value' => 'qwen-image-2.0'],
                 ['field' => 'model_version', 'value' => 'qwen-image-2.0-pro'],
+                ['field' => 'model_version', 'value' => 'qwen-image-3.0-pro'],
+                ['field' => 'model_version', 'value' => 'qwen-image-3.0'],
+                ['field' => 'model_id', 'value' => 'qwen-image'],
             ],
             'config' => [
                 'sizes' => [

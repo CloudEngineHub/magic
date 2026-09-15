@@ -1,8 +1,8 @@
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import { useLocaleText } from "../hooks/useLocaleText"
 import type { OptionItem } from "../types"
-import { isImageIconSource } from "../utils"
+import { getOptionValue, isImageIconSource } from "../utils"
 
 interface TemplateCardProps {
 	template: OptionItem
@@ -12,7 +12,7 @@ interface TemplateCardProps {
 
 function TemplateCard({ template, isSelected, onClick }: TemplateCardProps) {
 	const lt = useLocaleText()
-	const label = lt(template.label) ?? template.value
+	const label = lt(template.label) ?? lt(template.value) ?? getOptionValue(template)
 	const isImageIcon = isImageIconSource(template.icon_url)
 	return (
 		<div

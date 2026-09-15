@@ -43,11 +43,11 @@ vi.mock("@/opensource/components/business/MentionPanel/builtin-store", () => ({
 	},
 }))
 
-vi.mock("@tiptap/extension-suggestion", () => ({
+vi.mock("@/infrastructure/editors/tiptap/extension-suggestion", () => ({
 	Suggestion: vi.fn(() => ({})),
 }))
 
-vi.mock("@tiptap/core", () => ({
+vi.mock("@/infrastructure/editors/tiptap/core", () => ({
 	Node: {
 		create: vi.fn(() => ({
 			configure: vi.fn(),
@@ -63,6 +63,20 @@ describe("MentionExtension Integration Tests", () => {
 	})
 
 	describe("getMentionUniqueId", () => {
+		it("should use the required business id for text mentions", () => {
+			const mention = {
+				type: MentionItemType.TEXT,
+				data: {
+					id: "text-mock-001",
+					label: "Chart Mock",
+					text: "chart id: mock-chart",
+				},
+			}
+
+			expect(getMentionUniqueId(mention)).toBe("text:text-mock-001")
+			expect(getMentionDisplayName(mention)).toBe("Chart Mock")
+		})
+
 		it("should generate unique id for agent mention", () => {
 			const mention = {
 				type: MentionItemType.AGENT,
@@ -107,6 +121,15 @@ describe("MentionExtension Integration Tests", () => {
 
 			const id = getMentionUniqueId(mention)
 			expect(id).toBe("project:project-file-123//project/document.docx")
+		})
+
+		it("should generate unique id for project mention", () => {
+			const mention = {
+				type: MentionItemType.PROJECT,
+				data: { project_id: "project-123" },
+			}
+
+			expect(getMentionUniqueId(mention)).toBe("project:project-123")
 		})
 
 		it("should handle cloud file mentions", () => {
@@ -171,6 +194,32 @@ describe("MentionExtension Integration Tests", () => {
 
 			const name = getMentionDisplayName(mention)
 			expect(name).toBe("document.docx")
+		})
+
+		it("should prefix cross-project file mentions with the project name", () => {
+			const mention = {
+				type: MentionItemType.PROJECT_FILE,
+				data: {
+					file_id: "other-project-file-123",
+					file_name: "document.docx",
+					file_path: "/other-project/document.docx",
+					file_extension: "docx",
+					project_id: "other-project-id",
+					project_name: "Other Project",
+					source_project_id: "other-project-id",
+				},
+			}
+
+			expect(getMentionDisplayName(mention)).toBe("Other Project/document.docx")
+		})
+
+		it("should use the project fallback name for project mentions", () => {
+			const mention = {
+				type: MentionItemType.PROJECT,
+				data: { project_id: "project-123", project_name: "Other Project" },
+			}
+
+			expect(getMentionDisplayName(mention)).toBe("Other Project")
 		})
 
 		it("should get display name for cloud file mention", () => {
