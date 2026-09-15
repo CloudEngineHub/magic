@@ -1,4 +1,4 @@
-import { AppWindow } from "lucide-react"
+import { AppWindow, Box, Clock3 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/shadcn-ui/sidebar"
@@ -25,7 +25,7 @@ function ProjectNavigationTabs({
 			<SidebarMenu
 				role="group"
 				aria-label={t("sidebarPanels.projectManager")}
-				className="min-w-0 flex-1 flex-row gap-1"
+				className="min-w-0 flex-1 flex-row gap-0.5 rounded-lg bg-sidebar-foreground/[0.06] p-0.5"
 			>
 				<SidebarMenuItem className="min-w-0 flex-1">
 					<SidebarMenuButton
@@ -34,9 +34,10 @@ function ProjectNavigationTabs({
 						isActive={sidebarStore.recentProjectsExpanded}
 						disabled={disabled}
 						onClick={() => sidebarStore.selectNavigationSection("recent")}
-						className="relative h-7 justify-center px-2 text-[13px] font-normal text-muted-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1 data-[active=true]:bg-sidebar-accent data-[active=true]:font-normal data-[active=true]:text-sidebar-accent-foreground"
+						className="relative h-7 justify-center gap-1.5 px-2 text-[13px] font-normal text-sidebar-foreground/80 focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1 data-[active=true]:bg-background data-[active=true]:font-normal data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-sm dark:data-[active=true]:bg-sidebar-foreground/[0.13]"
 						data-testid="sidebar-recent-projects-toggle"
 					>
+						<Clock3 size={16} />
 						<span>{t("projectNavigation.recentShort")}</span>
 					</SidebarMenuButton>
 				</SidebarMenuItem>
@@ -47,9 +48,10 @@ function ProjectNavigationTabs({
 						isActive={sidebarStore.workspacesExpanded}
 						disabled={disabled}
 						onClick={() => sidebarStore.selectNavigationSection("workspaces")}
-						className="relative h-7 justify-center px-2 text-[13px] font-normal text-muted-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1 data-[active=true]:bg-sidebar-accent data-[active=true]:font-normal data-[active=true]:text-sidebar-accent-foreground"
+						className="relative h-7 justify-center gap-1.5 px-2 text-[13px] font-normal text-sidebar-foreground/80 focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1 data-[active=true]:bg-background data-[active=true]:font-normal data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-sm dark:data-[active=true]:bg-sidebar-foreground/[0.13]"
 						data-testid="sidebar-workspaces-toggle"
 					>
+						<Box size={16} />
 						<span>{t("projectNavigation.workspacesShort")}</span>
 					</SidebarMenuButton>
 				</SidebarMenuItem>
@@ -67,9 +69,9 @@ function ProjectNavigationTabs({
 					disabled={disabled}
 					onClick={onOpenManager}
 					data-testid="sidebar-project-manager"
-					className="size-6 shrink-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1"
+					className="size-6 shrink-0 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:ring-1"
 				>
-					<AppWindow size={16} strokeWidth={1.5} />
+					<AppWindow size={16} />
 				</Button>
 			</MagicTooltip>
 		</div>

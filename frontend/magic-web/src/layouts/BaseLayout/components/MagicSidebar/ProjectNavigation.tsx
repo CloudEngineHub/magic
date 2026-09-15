@@ -275,8 +275,7 @@ function ProjectNavigation({
 										>
 											<UsersRound
 												size={16}
-												strokeWidth={1.5}
-												className="ml-6 text-muted-foreground"
+												className="ml-6 text-sidebar-foreground/70"
 											/>
 											<span>{t("workspace.shareWorkspaceName")}</span>
 										</SidebarMenuButton>

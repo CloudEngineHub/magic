@@ -14,6 +14,8 @@ export class SidebarStore {
 	// Min/Max width constraints (in percentage)
 	readonly MIN_WIDTH_PERCENT = 12
 	readonly MAX_WIDTH_PERCENT = 50
+	// 宽屏仍按导航用途限制宽度，避免侧栏占据半屏挤压正文。
+	readonly MAX_WIDTH_PX = 400
 	readonly COLLAPSED_WIDTH = 48
 	readonly DEFAULT_WIDTH_PX = 256
 	readonly AUTO_COLLAPSE_MIN_VIEWPORT_WIDTH_PX = 1280
@@ -110,7 +112,7 @@ export class SidebarStore {
 		// First check ResizablePanelStore's memory cache (fastest)
 		const cached = resizablePanelStore.panelSizes.get(SIDEBAR_WIDTH_KEY)
 		if (cached !== undefined) {
-			return cached
+			return Math.min(cached, this.getMaxWidthPercent(this.windowWidth))
 		}
 
 		// If not in cache, read from localStorage
@@ -120,7 +122,7 @@ export class SidebarStore {
 			if (!isNaN(value) && value > 0 && value <= 100) {
 				// Cache it for next time
 				resizablePanelStore.panelSizes.set(SIDEBAR_WIDTH_KEY, value)
-				return value
+				return Math.min(value, this.getMaxWidthPercent(this.windowWidth))
 			}
 		}
 
@@ -132,10 +134,16 @@ export class SidebarStore {
 		if (!this.windowWidth) return this.MIN_WIDTH_PERCENT
 
 		const defaultWidthPercent = (this.DEFAULT_WIDTH_PX / this.windowWidth) * 100
-		return Math.max(
-			this.MIN_WIDTH_PERCENT,
-			Math.min(this.MAX_WIDTH_PERCENT, defaultWidthPercent),
+		return Math.min(
+			this.getMaxWidthPercent(this.windowWidth),
+			Math.max(this.MIN_WIDTH_PERCENT, defaultWidthPercent),
 		)
+	}
+
+	// 分栏、恢复偏好和拖动提交共用此上限；窗口变大后也不能超过固定像素宽度。
+	getMaxWidthPercent = (viewWidth: number): number => {
+		if (viewWidth <= 0) return this.MAX_WIDTH_PERCENT
+		return Math.min(this.MAX_WIDTH_PERCENT, (this.MAX_WIDTH_PX / viewWidth) * 100)
 	}
 
 	// Computed: collapsed width as percentage
@@ -204,9 +212,9 @@ export class SidebarStore {
 
 	// Set width (during resize) - uses ResizablePanelStore for throttling and delayed save
 	setWidth = (width: number) => {
-		const clampedWidth = Math.max(
-			this.MIN_WIDTH_PERCENT,
-			Math.min(this.MAX_WIDTH_PERCENT, width),
+		const clampedWidth = Math.min(
+			this.getMaxWidthPercent(this.windowWidth),
+			Math.max(this.MIN_WIDTH_PERCENT, width),
 		)
 
 		// Use ResizablePanelStore for throttled updates and delayed localStorage save
