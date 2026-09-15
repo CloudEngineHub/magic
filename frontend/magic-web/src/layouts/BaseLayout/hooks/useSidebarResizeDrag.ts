@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react"
+import { flushSync } from "react-dom"
 import { useMemoizedFn } from "ahooks"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { getResizeCollapseIntent, type ResizeCollapseIntent } from "@/utils/resizableCollapse"
@@ -66,8 +67,12 @@ export default function useSidebarResizeDrag({
 			drag.shouldExpand = distance >= SIDEBAR_EXPAND_DISTANCE_PX
 			if (drag.shouldExpand && !drag.expandActivated) {
 				drag.expandActivated = true
-				setExpanding(true)
-				onExpand()
+				// 首次展开同步提交 React 拖动约束与 MobX 展示状态，避免分栏先按正常最小宽度撑开。
+				// 仅跨阈值时同步一次，后续移动仍由原生分栏处理。
+				flushSync(() => {
+					setExpanding(true)
+					onExpand()
+				})
 			}
 			// 阈值只解除宽度限制，原生起点仍为 48px；回拉也沿同一坐标跟手。
 			return
