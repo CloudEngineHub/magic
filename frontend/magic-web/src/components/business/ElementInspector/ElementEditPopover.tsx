@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Textarea } from "@/components/shadcn-ui/textarea"
 import type { InspectedElementInfo } from "./types"
-import { getShortSelector } from "./format"
+import { getInspectorElementDisplayText, getShortSelector } from "./format"
 import { getElementEditPopoverPosition } from "./editPopoverPosition"
 
 interface ElementEditPopoverProps {
@@ -203,9 +203,9 @@ export function ElementEditPopover({
 								alt=""
 								className="max-h-16 max-w-full rounded object-contain"
 							/>
-						) : (
-							info?.textContent || info?.resource || info?.tagName
-						)}
+						) : info ? (
+							getInspectorElementDisplayText(info, t) || info.resource || info.tagName
+						) : null}
 					</div>
 					<Textarea
 						data-testid="element-inspector-instruction-input"

@@ -14,7 +14,12 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
-from app.core.entity.checkpoint import CheckpointInfo, CheckpointManifest, VirtualCheckpoint
+from app.core.entity.checkpoint import (
+    CheckpointActivity,
+    CheckpointInfo,
+    CheckpointManifest,
+    VirtualCheckpoint,
+)
 from app.infrastructure.checkpoint.storage import KNOWN_SPACES, CheckpointStorage
 from app.utils.async_file_utils import async_write_json, async_read_json
 from agentlang.logger import get_logger
@@ -125,9 +130,12 @@ class CheckpointMetadataManager:
                     updated_time=datetime.now()
                 )
 
-            # 添加新的checkpoint
+            # 添加新的checkpoint。新 checkpoint 成为当前记账目标意味着
+            # 回到正常记录状态：清掉 restore/rollback 等活动标记，agfs 侧
+            # hook 从此刻起恢复对文件变更的增量记账。
             if checkpoint_id not in manifest.checkpoints:
                 manifest.checkpoints.append(checkpoint_id)
+                manifest.activity = CheckpointActivity.IDLE
                 manifest.updated_time = datetime.now()
 
                 # 保存更新后的清单
@@ -223,17 +231,18 @@ class CheckpointMetadataManager:
             logger.error(f"获取当前checkpoint失败: {e}")
             return None
 
-    async def set_rollback_in_progress(self, in_progress: bool) -> bool:
-        """标记回滚进行中的状态
+    async def set_activity(self, activity: CheckpointActivity) -> bool:
+        """标记 checkpoint 系统当前的活动状态
 
-        Python 侧在执行反向/撤回回滚时，会直接改写工作区文件（删除或从 latest_content 拷回）。
-        magicfs 看到这些工作区写入时需要跳过 checkpoint 维护，否则会把回滚正在恢复的内容
-        误当作新的用户改动，把 latest_content 刷成错误状态。
+        任何非 idle 活动期间，agfs 侧 checkpoint hook 会跳过记账：此时
+        的文件变更来自 checkpoint 系统自身（回滚重放、会话数据恢复），
+        而不是用户编辑，记进快照会把恢复内容误当作新改动回灌。
 
-        该方法把状态写回 checkpoint_manifest.json，由 magicfs 订阅/轮询该文件感知。
+        该方法把状态写回 checkpoint_manifest.json，由 agfs 侧每次变更
+        时读取感知。
 
         Args:
-            in_progress: True 表示进入回滚；False 表示回滚结束恢复正常维护
+            activity: 目标活动状态（idle / rollback / restore）
 
         Returns:
             bool: 是否成功写入
@@ -242,14 +251,14 @@ class CheckpointMetadataManager:
             manifest = await self.load_checkpoint_manifest()
             if not manifest:
                 logger.warning(
-                    f"checkpoint清单不存在，跳过设置 rollback_in_progress={in_progress}"
+                    f"checkpoint清单不存在，跳过设置 activity={activity.value}"
                 )
                 return False
 
-            if manifest.rollback_in_progress == in_progress:
+            if manifest.activity == activity:
                 return True
 
-            manifest.rollback_in_progress = in_progress
+            manifest.activity = activity
             manifest.updated_time = datetime.now()
 
             manifest_file = self.storage.get_checkpoint_manifest_file_path()
@@ -257,10 +266,10 @@ class CheckpointMetadataManager:
                 manifest_file, manifest.model_dump(), ensure_ascii=False, indent=2, default=str
             )
 
-            logger.info(f"设置 rollback_in_progress={in_progress}")
+            logger.info(f"设置 checkpoint activity={activity.value}")
             return True
         except Exception as e:
-            logger.error(f"设置 rollback_in_progress 失败: {e}")
+            logger.error(f"设置 checkpoint activity 失败: {e}")
             return False
 
     async def ensure_initial_checkpoint_created(self) -> bool:

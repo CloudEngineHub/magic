@@ -14,6 +14,7 @@ enum VideoGenerateProviderType: string
 {
     case Cloudsway = 'Cloudsway';
     case DashScope = 'DashScope';
+    case Gemini = 'Gemini';
     case Keling = 'Keling';
     case MiniMax = 'MiniMax';
     case VolcengineArk = 'VolcengineArk';
@@ -23,6 +24,7 @@ enum VideoGenerateProviderType: string
         return match ($providerCode) {
             ProviderCode::Cloudsway => self::Cloudsway,
             ProviderCode::DashScope => self::DashScope,
+            ProviderCode::Gemini => self::Gemini,
             ProviderCode::Keling => self::Keling,
             ProviderCode::MiniMax => self::MiniMax,
             ProviderCode::VolcengineArk => self::VolcengineArk,

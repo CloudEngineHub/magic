@@ -315,7 +315,7 @@ class AsrSandboxService extends AbstractAppService
                     'new_sandbox_id' => $actualSandboxId,
                 ]);
 
-                $mergeResult = $this->callSandboxFinishAndWait($dataIsolation, $taskStatus, $fileTitle);
+                $mergeResult = $this->callSandboxFinishAndWait($dataIsolation, $taskStatus, $fileTitle, true);
                 $taskStatus->updateStatus($targetStatus);
 
                 return $mergeResult;
@@ -337,6 +337,7 @@ class AsrSandboxService extends AbstractAppService
 
         // super-magic 已进入 error 时，recover 需要重新提交 finish；
         // super-magic finish 接口会先原子重置任务并启动新一轮监听。
+        // force_reset=true 会忽略并清零沙箱侧重试计数，救回重试耗尽后无法再触发的任务。
         if ($status->isError()) {
             $this->logger->warning('finish-recording 恢复：沙箱任务已失败，重新提交 finish 重试', [
                 'task_key' => $taskStatus->taskKey,
@@ -344,7 +345,7 @@ class AsrSandboxService extends AbstractAppService
                 'error_message' => $queryResponse->getErrorMessage(),
             ]);
 
-            $mergeResult = $this->callSandboxFinishAndWait($dataIsolation, $taskStatus, $fileTitle);
+            $mergeResult = $this->callSandboxFinishAndWait($dataIsolation, $taskStatus, $fileTitle, true);
             $taskStatus->updateStatus($targetStatus);
 
             return $mergeResult;
@@ -374,7 +375,7 @@ class AsrSandboxService extends AbstractAppService
             'status' => $status->value,
         ]);
 
-        $mergeResult = $this->callSandboxFinishAndWait($dataIsolation, $taskStatus, $fileTitle);
+        $mergeResult = $this->callSandboxFinishAndWait($dataIsolation, $taskStatus, $fileTitle, true);
         $taskStatus->updateStatus($targetStatus);
 
         return $mergeResult;
@@ -397,12 +398,14 @@ class AsrSandboxService extends AbstractAppService
      * @param DataIsolation $dataIsolation per-call user identity (token must be stamped)
      * @param AsrTaskStatusDTO $taskStatus 任务状态
      * @param string $intelligentTitle 智能标题（用于重命名）
+     * @param bool $forceReset 是否强制重置沙箱侧重试计数（手动重新合并场景）
      * @return AsrSandboxMergeResultDTO 合并结果
      */
     private function callSandboxFinishAndWait(
         DataIsolation $dataIsolation,
         AsrTaskStatusDTO $taskStatus,
-        string $intelligentTitle
+        string $intelligentTitle,
+        bool $forceReset = false
     ): AsrSandboxMergeResultDTO {
         $sandboxId = $taskStatus->sandboxId;
 
@@ -438,6 +441,7 @@ class AsrSandboxService extends AbstractAppService
         $this->logger->info('准备提交沙箱 ASR 合并', [
             'task_key' => $taskStatus->taskKey,
             'intelligent_title' => $intelligentTitle,
+            'force_reset' => $forceReset,
             'audio_config' => $audioConfig->toArray(),
             'note_file_config' => $noteFileConfig?->toArray(),
             'transcript_file_config' => $transcriptFileConfig?->toArray(),
@@ -456,7 +460,8 @@ class AsrSandboxService extends AbstractAppService
             $audioConfig,
             $noteFileConfig,
             $transcriptFileConfig,
-            $markerFileConfig
+            $markerFileConfig,
+            $forceReset
         );
 
         if ($this->isTransportFailureResponse($response)) {

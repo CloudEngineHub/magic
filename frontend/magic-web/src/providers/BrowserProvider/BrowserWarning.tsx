@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { getBrowserInfo, MIN_SUPPORTED_VERSIONS } from "./browser"
 import { StyleProvider, legacyLogicalPropertiesTransformer } from "@ant-design/cssinjs"
 import { useTranslation } from "react-i18next"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import ThemeProvider from "@/providers/ThemeProvider"
 
 const logger = Logger.createLogger("browser")

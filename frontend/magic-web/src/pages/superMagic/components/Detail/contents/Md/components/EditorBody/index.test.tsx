@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import { forwardRef, type ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import EditorBody from "."
@@ -81,7 +81,7 @@ describe("EditorBody code source content", () => {
 		)
 	})
 
-	it("keeps small markdown documents in SimpleEditor", () => {
+	it("keeps small markdown documents in SimpleEditor in read-only mode", () => {
 		render(<EditorBody isLoading={false} viewMode="desktop" content="# Small document" />)
 
 		expect(screen.getByTestId("simple-editor")).toBeInTheDocument()
@@ -105,6 +105,20 @@ describe("EditorBody code source content", () => {
 				isTabActive: false,
 			}),
 		)
+	})
+
+	it("loads SimpleEditor only when a small markdown document is editable", async () => {
+		render(
+			<EditorBody
+				isLoading={false}
+				viewMode="desktop"
+				content="# Small document"
+				isEditMode
+				editContent="# Small document"
+			/>,
+		)
+
+		await waitFor(() => expect(screen.getByTestId("simple-editor")).toBeInTheDocument())
 	})
 
 	it("uses the virtual preview for read-only markdown larger than 3 MB", () => {

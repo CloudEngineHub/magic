@@ -220,4 +220,38 @@ describe("useTopicDetailPanelController", () => {
 		})
 		expect(openPlaybackTab).toHaveBeenCalledWith({ toolData, forceActivate: true })
 	})
+
+	it("keeps the detail panel when Open_File_Tab fails after file tab desync", () => {
+		// Parent activeFileId stays null after closing playback, while UI is back on a file tab.
+		const detailRef = {
+			current: {
+				openFileTab: vi.fn(),
+				openPlaybackTab: vi.fn(),
+			},
+		}
+
+		const { result } = renderHook(() =>
+			useTopicDetailPanelController({
+				detailRef,
+				isReadOnly: false,
+				activeFileId: null,
+				setActiveFileId: vi.fn(),
+				handleFileClick: vi.fn(),
+				topicFilesProps: {},
+			}),
+		)
+
+		act(() => {
+			result.current.handleActiveDetailTabChange("file")
+		})
+		expect(result.current.shouldShowDetailPanel).toBe(true)
+
+		act(() => {
+			pubsub.publish(PubSubEvents.Open_File_Tab, { fileId: "missing-screenshot" })
+			vi.advanceTimersByTime(301)
+		})
+
+		// Failed open restores "file", not null, so the detail panel stays visible.
+		expect(result.current.shouldShowDetailPanel).toBe(true)
+	})
 })

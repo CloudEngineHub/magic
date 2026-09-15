@@ -139,6 +139,29 @@ describe("ElementSelector", () => {
 			expect(sendEventSpy).not.toHaveBeenCalledWith("ELEMENT_SELECTED", expect.anything())
 		})
 
+		it("includes ancestor path for parent selection", () => {
+			container.innerHTML =
+				'<section id="group"><article id="card"><h2 id="title">春季特惠</h2></article></section>'
+			const element = container.querySelector("#title") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					ancestors: expect.arrayContaining([
+						expect.objectContaining({
+							tagName: "article",
+							textContent: expect.stringContaining("春季特惠"),
+						}),
+						expect.objectContaining({
+							tagName: "section",
+						}),
+					]),
+				}),
+			)
+		})
+
 		it("should include computed styles", () => {
 			container.innerHTML = '<div id="styled" style="color: red;">Content</div>'
 			const element = container.querySelector("#styled") as HTMLElement
@@ -860,6 +883,26 @@ describe("ElementSelector", () => {
 					isTextElement: true,
 					hasDirectTextContent: true,
 					textContent: "从低渗透率盆地读向高增长脊线",
+				}),
+			)
+		})
+
+		it("excludes inline child text from a selected block text container", () => {
+			container.innerHTML = `
+				<span id="metric" style="display: block">
+					中国 ·<span style="text-decoration: line-through"> 55%渗透率</span>
+				</span>
+			`
+			const element = container.querySelector("#metric") as HTMLElement
+
+			selector.selectElement(element)
+
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					isTextElement: true,
+					hasDirectTextContent: true,
+					textContent: "中国 ·",
 				}),
 			)
 		})

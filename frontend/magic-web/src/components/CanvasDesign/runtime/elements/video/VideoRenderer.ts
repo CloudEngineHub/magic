@@ -12,9 +12,10 @@ import {
 } from "../../shared/render/placeholderTextLayout"
 import { ImageStaticLoader } from "../../resources/image/ImageStaticLoader"
 import type { Canvas } from "../../core/Canvas"
-import type {
-	LoadedVideoMetadata,
-	VideoPosterSource,
+import {
+	isUsableVideoPosterSource,
+	type LoadedVideoMetadata,
+	type VideoPosterSource,
 } from "../../resources/video/VideoResourceManager"
 import { VideoMediaState } from "./VideoMediaState"
 import { VideoPlaybackController } from "./VideoPlaybackController"
@@ -134,11 +135,23 @@ export class VideoRenderer {
 	}
 
 	public hasPreview(): boolean {
-		return !!this.previewVideo || !!this.posterSource
+		return !!this.previewVideo || !!this.getUsablePosterSource()
 	}
 
 	public getPreviewSource(): CanvasImageSource | undefined {
-		return this.previewVideo ?? this.posterSource
+		return this.previewVideo ?? this.getUsablePosterSource()
+	}
+
+	private getUsablePosterSource(): VideoPosterSource | undefined {
+		if (!this.posterSource) return undefined
+		if (!isUsableVideoPosterSource(this.posterSource)) {
+			// A released poster can remain in renderer state until the next rerender.
+			// Clear it at the read boundary so no caller can hand it back to Konva.
+			this.posterSource = undefined
+			this.previewMetadata = undefined
+			return undefined
+		}
+		return this.posterSource
 	}
 
 	public play(): void {
@@ -158,6 +171,7 @@ export class VideoRenderer {
 	}
 
 	public loadPoster(poster: VideoPosterSource, metadata: LoadedVideoMetadata): void {
+		if (!isUsableVideoPosterSource(poster)) return
 		this.posterSource = poster
 		this.previewMetadata = metadata
 	}
@@ -190,7 +204,7 @@ export class VideoRenderer {
 		canvas: Canvas,
 		options?: CreatePlayerNodeOptions,
 	): Konva.Group | null {
-		const imageSource = this.previewVideo ?? this.posterSource
+		const imageSource = this.getPreviewSource()
 		if (!imageSource) {
 			return null
 		}
@@ -626,6 +640,35 @@ export class VideoRenderer {
 		const paddingX = resolveImageControlCanvasOffset(Math.abs(absoluteScale.x))
 		const paddingY = resolveImageControlCanvasOffset(Math.abs(absoluteScale.y))
 
+		progressGroup.scale(inverseScale)
+		const progressHeight = progressBackground.height() * inverseScale.y
+		progressGroup.position({
+			x: paddingX,
+			y: height - progressHeight - paddingY,
+		})
+	}
+
+	/**
+	 * 更新视口缩放会影响的播放器属性。
+	 * 宽高、图标路径和圆角在元素尺寸变化时才需要重算，连续缩放只需调整反向缩放和进度条位置。
+	 */
+	public updatePlayerViewportScaleLayout(parentGroup: Konva.Group): void {
+		if (!this.playerRefs) return
+
+		const { group, bufferingOverlay, playButtonGroup, progressGroup, progressBackground } =
+			this.playerRefs
+		const inverseScale = RenderUtils.getInverseScale(parentGroup)
+		const width = group.width()
+		const height = group.height()
+
+		bufferingOverlay.position({ x: width / 2, y: height / 2 })
+		bufferingOverlay.scale(inverseScale)
+		playButtonGroup.position({ x: width / 2, y: height / 2 })
+		playButtonGroup.scale(inverseScale)
+
+		const absoluteScale = parentGroup.getAbsoluteScale()
+		const paddingX = resolveImageControlCanvasOffset(Math.abs(absoluteScale.x))
+		const paddingY = resolveImageControlCanvasOffset(Math.abs(absoluteScale.y))
 		progressGroup.scale(inverseScale)
 		const progressHeight = progressBackground.height() * inverseScale.y
 		progressGroup.position({

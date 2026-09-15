@@ -1,11 +1,11 @@
 import { env } from "@/utils/env"
 import { UploadConfig } from "@dtyq/upload-sdk"
-import magicClient from "@/apis/clients/magic"
+import { defaultMagicClient as magicClient } from "@/infrastructure/network/http/runtime"
 import { UploadFileMentionData } from "@/components/business/MentionPanel/types"
 import { cloneDeep } from "lodash-es"
 import { UploadSource } from "../hooks/useFileUpload"
 import { SuperMagicApi } from "@/apis"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import type { FileScope } from "@/apis/modules/fileScope"
 
 const TEMP_UPLOAD_DIR_NAME = ".tmp"

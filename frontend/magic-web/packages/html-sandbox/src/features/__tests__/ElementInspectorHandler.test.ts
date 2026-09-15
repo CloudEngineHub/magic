@@ -29,6 +29,47 @@ describe("ElementInspectorHandler", () => {
 		container.remove()
 	})
 
+	it("ignores nested video fallback copy on container elements", () => {
+		const handler = new ElementInspectorHandler()
+		const wrapper = document.createElement("div")
+		const video = document.createElement("video")
+		video.textContent = "您的浏览器不支持视频播放，请升级浏览器。"
+		wrapper.appendChild(video)
+		container.appendChild(wrapper)
+
+		handler.activate()
+		wrapper.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+
+		const selectCall = postMessageSpy.mock.calls.find(
+			([message]) => (message as { type?: string }).type === "MAGIC_INSPECTOR_SELECT",
+		)
+		const info = (selectCall?.[0] as { elementInfo: { textContent: string; tagName: string } })
+			.elementInfo
+
+		expect(info.tagName).toBe("div")
+		expect(info.textContent).toBe("")
+	})
+
+	it("ignores video fallback copy when collecting text content", () => {
+		const handler = new ElementInspectorHandler()
+		const video = document.createElement("video")
+		video.src = "https://example.com/demo.mp4"
+		video.textContent = "您的浏览器不支持视频播放，请升级浏览器。"
+		container.appendChild(video)
+
+		handler.activate()
+		video.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+
+		const selectCall = postMessageSpy.mock.calls.find(
+			([message]) => (message as { type?: string }).type === "MAGIC_INSPECTOR_SELECT",
+		)
+		const info = (selectCall?.[0] as { elementInfo: { textContent: string; tagName: string } })
+			.elementInfo
+
+		expect(info.tagName).toBe("video")
+		expect(info.textContent).toBe("")
+	})
+
 	it("reports normalized image identity and sibling context", () => {
 		const handler = new ElementInspectorHandler()
 		const target = container.querySelectorAll("img")[1]

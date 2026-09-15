@@ -189,6 +189,7 @@ export default function ConnectorLibraryMobile({ scrollViewportRef }: ConnectorL
 						t(editingConnector ? "connectors.editSuccess" : "connectors.createSuccess"),
 					)
 					if (editingConnector) void retry()
+					else if (group === CONNECTOR_MARKET_GROUPS.mine) void retry()
 					else setGroup(CONNECTOR_MARKET_GROUPS.mine)
 				}}
 				className="!max-h-[calc(100%-1rem)] !w-[calc(100%-1rem)] !max-w-[760px]"

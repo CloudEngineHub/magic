@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
+use App\ErrorCode\VideoGenerateErrorCode;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\CloudswayVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 use GuzzleHttp\Client;
@@ -108,7 +109,7 @@ class CloudswayVideoClientTest extends TestCase
         $client = new CloudswayVideoClient($clientFactory, $loggerFactory);
 
         $this->expectException(ProviderVideoException::class);
-        $this->expectExceptionMessage('durationSeconds must be one of [4,6,8]');
+        $this->expectExceptionMessage(VideoGenerateErrorCode::GENERAL_ERROR->getMessage());
         try {
             $client->post(
                 'https://localhost',
@@ -124,7 +125,7 @@ class CloudswayVideoClientTest extends TestCase
             $this->assertSame('cloudsway video post error', $logger->records[1]['message']);
             $this->assertSame('video-err-1', $logger->records[1]['context']['context']['video_id']);
             $this->assertSame('op-err-1', $logger->records[1]['context']['context']['operation_id']);
-            $this->assertSame('durationSeconds must be one of [4,6,8]', $logger->records[1]['context']['error']);
+            $this->assertSame(VideoGenerateErrorCode::GENERAL_ERROR->getMessage(), $logger->records[1]['context']['error']);
         }
     }
 }

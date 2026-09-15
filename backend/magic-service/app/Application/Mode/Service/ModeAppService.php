@@ -35,7 +35,7 @@ use App\Interfaces\Authorization\Web\MagicUserAuthorization;
  * - 调用 domain service 解析 featured 视频配置
  * - 把结果交给 assembler 输出 DTO
  *
- * 不在这里实现 provider 能力规则和交集细节。
+ * 不在这里实现 provider 能力规则和 provider 择一细节。
  */
 class ModeAppService extends AbstractModeAppService
 {

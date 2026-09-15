@@ -2,7 +2,8 @@ import { memo, useEffect, useMemo, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import MagicSpin from "@/components/base/MagicSpin"
 import EditorErrorBoundary from "./components/EditorErrorBoundary"
-import { SimpleEditor, SimpleEditorRef } from "@/components/tiptap-templates/simple/simple-editor"
+import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor"
+import type { SimpleEditorRef } from "@/components/tiptap-templates/simple/types"
 import { useProjectImageExtensions } from "@/components/tiptap-templates/simple/hooks"
 import { useCustomLinkNode } from "./hooks/useCustomLinkNode"
 import CodeSourceEditor from "./components/CodeSourceEditor"
@@ -195,7 +196,6 @@ function EditorBody({
 	// 创建内部的 editorRef（如果外部没有传入）
 	const internalEditorRef = useRef<SimpleEditorRef>(null)
 	const actualEditorRef = editorRef || internalEditorRef
-
 	// 当 isEditMode 为 true 且 editContent 变化时，手动更新编辑器内容
 	// 因为 SimpleEditor 在 isEditable=true 时不会自动响应 content prop 的变化
 	useEffect(() => {

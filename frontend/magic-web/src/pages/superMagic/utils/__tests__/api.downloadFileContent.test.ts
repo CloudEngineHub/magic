@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import magicClient from "@/apis/clients/magic"
+import { defaultMagicClient as magicClient } from "@/infrastructure/network/http/runtime"
 import { downloadFileContent, getFileContentsByIds } from "../api"
 
-vi.mock("@/apis/clients/magic", () => ({ default: { post: vi.fn() } }))
+vi.mock("@/infrastructure/network/http/runtime", () => ({ defaultMagicClient: { post: vi.fn() } }))
 
 describe("downloadFileContent", () => {
 	afterEach(() => {

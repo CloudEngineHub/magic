@@ -35,6 +35,8 @@ _FIELD_MAPPING: Dict[str, str] = {
     "allowedTools": "allowed_tools",  # camelCase → snake_case
     "allowed_tools": "allowed_tools",
     "server_options": "server_options",
+    "auth_type": "auth_type",
+    "mcp_server_code": "mcp_server_code",
 }
 
 
@@ -59,6 +61,10 @@ def _build_mcp_server_config(
 
     # 至少要有 url 或 command；ingest_from_message._parse_mcp_config 也会再做一次校验
     if not cfg.get("url") and not cfg.get("command"):
+        return None
+
+    # 标准 MCP Authorization 必须保留服务端凭据引用，不能静默降级为无认证配置
+    if cfg.get("auth_type") in (2, "2") and not str(cfg.get("mcp_server_code") or "").strip():
         return None
 
     return cfg

@@ -1,4 +1,5 @@
 import { resolve } from "path"
+import { defaultClientConditions } from "vite"
 import { defineConfig, mergeConfig } from "vitest/config"
 import { getOverlayViteConfig } from "./vite/overlay"
 
@@ -34,6 +35,8 @@ const getVitestBaseConfig = () => {
 	return {
 		plugins: [fixAntdLocaleImportExtensions()],
 		resolve: {
+			// Match application resolution so tests do not depend on a previously built dist.
+			conditions: ["magic-web-source", ...defaultClientConditions],
 			alias: [
 				{
 					find: "@customer/",
@@ -91,6 +94,13 @@ const getVitestBaseConfig = () => {
 					replacement: resolve(
 						__dirname,
 						"packages/html-sandbox/src/utils/textContent.ts",
+					),
+				},
+				{
+					find: "@dtyq/html-sandbox/utils/inspectableTextContent",
+					replacement: resolve(
+						__dirname,
+						"packages/html-sandbox/src/utils/inspectableTextContent.ts",
 					),
 				},
 				{

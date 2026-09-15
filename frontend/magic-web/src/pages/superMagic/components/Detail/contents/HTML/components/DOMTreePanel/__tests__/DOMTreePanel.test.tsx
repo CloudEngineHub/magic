@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useState } from "react"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../constants/z-index"
 import { DOMTreePanel } from "../DOMTreePanel"
+import { getThumbnailPreviewPosition } from "../DOMTreeRow"
 import { EditorSidebar } from "../../EditorSidebar"
 
 const toastMocks = vi.hoisted(() => ({
@@ -81,6 +82,41 @@ describe("DOMTreePanel", () => {
 		})
 	})
 
+	it("positions thumbnail previews within the viewport", () => {
+		const viewport = { width: 800, height: 600 }
+		expect(
+			getThumbnailPreviewPosition(
+				{ top: 300, left: 390, right: 410, bottom: 320, width: 20, height: 20 },
+				{ width: 250, height: 250 },
+				viewport,
+			),
+		).toEqual({ top: 32, left: 270, side: "top" })
+
+		expect(
+			getThumbnailPreviewPosition(
+				{ top: 4, left: 390, right: 410, bottom: 24, width: 20, height: 20 },
+				{ width: 250, height: 250 },
+				viewport,
+			),
+		).toEqual({ top: 32, left: 270, side: "bottom" })
+
+		expect(
+			getThumbnailPreviewPosition(
+				{ top: 150, left: 2, right: 22, bottom: 170, width: 20, height: 20 },
+				{ width: 250, height: 250 },
+				{ width: 800, height: 320 },
+			),
+		).toEqual({ top: 30, left: 30, side: "right" })
+
+		expect(
+			getThumbnailPreviewPosition(
+				{ top: 150, left: 778, right: 798, bottom: 170, width: 20, height: 20 },
+				{ width: 250, height: 250 },
+				{ width: 800, height: 320 },
+			),
+		).toEqual({ top: 30, left: 510, side: "left" })
+	})
+
 	it("renders a thumbnail beside image-backed nodes", async () => {
 		const getDomTree = vi.fn().mockResolvedValue({
 			root: {
@@ -110,9 +146,64 @@ describe("DOMTreePanel", () => {
 		render(<DOMTreePanel editorRef={{ current: { getDomTree } } as never} visible />)
 
 		const thumbnail = await screen.findByTestId("dom-tree-thumbnail-hero")
+
 		expect(thumbnail.querySelector("img")).toHaveAttribute(
 			"src",
 			"https://cdn.example.com/hero.webp",
+		)
+
+		const thumbnailImage = thumbnail.querySelector("img") as HTMLImageElement
+		Object.defineProperty(thumbnailImage, "naturalWidth", {
+			configurable: true,
+			value: 250,
+		})
+		Object.defineProperty(thumbnailImage, "naturalHeight", {
+			configurable: true,
+			value: 100,
+		})
+		fireEvent.load(thumbnailImage)
+
+		const rect = {
+			top: 300,
+			left: 40,
+			right: 60,
+			bottom: 320,
+			width: 20,
+			height: 20,
+			x: 40,
+			y: 300,
+			toJSON: () => ({}),
+		} as DOMRect
+		vi.spyOn(thumbnail, "getBoundingClientRect").mockReturnValue(rect)
+
+		fireEvent.mouseEnter(thumbnail)
+
+		const tooltip = await screen.findByTestId("dom-tree-thumbnail-preview-hero")
+		expect(tooltip.parentElement).toBe(document.body)
+		expect(tooltip).toHaveAttribute("role", "tooltip")
+		expect(tooltip).toHaveAttribute("data-preview-side", "top")
+		expect(tooltip).toHaveClass(TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.TOOLTIP)
+		expect(tooltip).toHaveStyle({ top: "182px", left: "8px" })
+
+		expect(
+			tooltip.querySelector('img[src="https://cdn.example.com/hero.webp"]'),
+		).toBeInTheDocument()
+
+		fireEvent.scroll(document)
+		await waitFor(() => expect(thumbnail.getBoundingClientRect).toHaveBeenCalledTimes(2))
+
+		fireEvent.mouseLeave(thumbnail)
+		await waitFor(() =>
+			expect(screen.queryByTestId("dom-tree-thumbnail-preview-hero")).not.toBeInTheDocument(),
+		)
+
+		fireEvent.mouseEnter(thumbnail)
+		const previewImage = await screen
+			.findByTestId("dom-tree-thumbnail-preview-hero")
+			.then((preview) => preview.querySelector("img"))
+		fireEvent.error(previewImage as HTMLImageElement)
+		await waitFor(() =>
+			expect(screen.queryByTestId("dom-tree-thumbnail-preview-hero")).not.toBeInTheDocument(),
 		)
 	})
 

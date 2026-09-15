@@ -50,10 +50,27 @@ class VideoAudioPolicyResolver:
         return False if cls.strategy(model_id) == "native" else None
 
     @classmethod
-    def prompt_attributes(cls, model_id: str) -> dict[str, str]:
-        """生成注入模型上下文的静音能力属性。"""
+    def prompt_attributes(
+        cls,
+        model_id: str,
+        video_generation_config: dict | None = None,
+    ) -> dict[str, str]:
+        """生成注入模型上下文的通用音频能力属性。"""
         strategy = cls.strategy(model_id)
+        generation = (
+            video_generation_config.get("generation", {})
+            if isinstance(video_generation_config, dict)
+            else {}
+        )
+        supports_generate_audio = generation.get("supports_generate_audio")
+        audio_output = "unknown"
+        if supports_generate_audio is True:
+            audio_output = "supported"
+        elif supports_generate_audio is False:
+            audio_output = "unsupported"
+
         return {
+            "audio_output": audio_output,
             "native_mute": str(strategy == "native").lower(),
             "mute_fallback": "none" if strategy == "native" else "compose",
         }

@@ -156,7 +156,7 @@ import {
 	deduplicateFilePath,
 	type ProjectAttachmentNode,
 } from "./utils/file-utils"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { useFetchInterceptionCache } from "./hooks/useFetchInterceptionCache"
 import {
 	KEYBOARD_MESSAGE_TYPES,

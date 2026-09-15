@@ -12,7 +12,9 @@ import {
 	type MediaResourceRef,
 	type MediaResourceResolver,
 } from "@/services/media/MediaResourceRegistry"
-import { resolveSharedFileUrl } from "@/pages/superMagic/services/sharedFileUrlCache"
+import { resolveSharedMediaUrl } from "@/pages/superMagic/services/sharedMediaUrlCache"
+import { useSharedMediaResourceScope } from "@/pages/superMagic/services/sharedMediaResourceScope"
+import { SHARED_MEDIA_THUMBNAIL_IMAGE_PROCESS } from "@/pages/superMagic/services/sharedMediaImageProcess"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import useObjectUrl from "../AtItem/hooks/useObjectURL"
 
@@ -25,6 +27,8 @@ interface UseMentionMediaSourceOptions {
 	/** 编辑器内实时上传文件；用于保留生产 liveFile 优先行为。 */
 	uploadFile?: File | null
 	enabled?: boolean
+	/** Pending canvas chips skip thumbnail ensure to avoid mass NodeView update storms. */
+	loadThumbnail?: boolean
 }
 
 function getMentionFileData(data: TiptapMentionAttributes) {
@@ -45,6 +49,7 @@ export function useMentionMediaSource({
 	data,
 	uploadFile,
 	enabled = true,
+	loadThumbnail = true,
 }: UseMentionMediaSourceOptions): MentionMediaSource {
 	const fileData = getMentionFileData(data)
 	const extension =
@@ -57,36 +62,63 @@ export function useMentionMediaSource({
 		fileType === "image" || fileType === "video" || fileType === "audio" ? fileType : null
 	const isProjectFile = data.type === MentionItemType.PROJECT_FILE
 	const isUploadFile = data.type === MentionItemType.UPLOAD_FILE
-	const projectFileId = isProjectFile ? (fileData as ProjectFileMentionData)?.file_id : ""
-	const projectIdentity =
-		(isProjectFile ? (fileData as ProjectFileMentionData)?.source_file_id : undefined) ||
-		projectFileId
+	const projectData = isProjectFile ? (fileData as ProjectFileMentionData) : undefined
+	const projectFileId = projectData?.file_id || ""
+	const projectIdentity = projectData?.source_file_id || projectFileId
 	const fileName = fileData?.file_name || ""
-
+	const projectFileVersion = projectData?.file_version
+	const projectUpdatedAt = projectData?.updated_at
+	const projectResourceVersion =
+		projectData?.resource_version ||
+		(projectData?.version != null ? String(projectData.version) : undefined)
+	const projectScope = useSharedMediaResourceScope()
+	const projectId = projectData?.source_project_id || projectData?.project_id
+	const projectPath = projectData?.file_path
+	// Depend on primitive fields only — TipTap may pass a new attrs.data object each update.
 	const projectRef = useMemo<MediaResourceRef | null>(() => {
 		if (!isProjectFile || !projectFileId || !mediaType) return null
 		return {
 			identity: projectIdentity,
 			provider: "project-file",
-			projectId:
-				(fileData as ProjectFileMentionData)?.source_project_id ||
-				(fileData as ProjectFileMentionData)?.project_id,
+			scope: projectScope,
+			projectId,
 			fileId: projectFileId,
-			path: (fileData as ProjectFileMentionData)?.file_path,
+			fileVersion: projectFileVersion,
+			updatedAt: projectUpdatedAt,
+			resourceVersion: projectResourceVersion,
+			path: projectPath,
 			fileName,
 			mediaType,
 		}
-	}, [fileData, fileName, isProjectFile, mediaType, projectFileId, projectIdentity])
+	}, [
+		fileName,
+		isProjectFile,
+		mediaType,
+		projectFileId,
+		projectFileVersion,
+		projectId,
+		projectIdentity,
+		projectPath,
+		projectResourceVersion,
+		projectScope,
+		projectUpdatedAt,
+	])
 
 	const projectResolver = useCallback<MediaResourceResolver>(async (ref, rendition, signal) => {
 		if (!ref.fileId || signal.aborted) return null
-		const item = await resolveSharedFileUrl({ fileId: ref.fileId })
+		const isImage = ref.mediaType === "image"
+		const item = await resolveSharedMediaUrl({
+			fileId: ref.fileId,
+			scope: ref.scope,
+			fileVersion: ref.fileVersion,
+			updatedAt: ref.updatedAt,
+			resourceVersion: ref.resourceVersion,
+			allowAttachmentListUrl: isImage,
+			imageProcess: isImage ? SHARED_MEDIA_THUMBNAIL_IMAGE_PROCESS : undefined,
+		})
 		if (signal.aborted) return null
 		if (!item?.url) return { status: "error", errorCode: "url-unavailable" }
 
-		// The current project-file endpoint returns one temporary URL. Reuse it for
-		// image thumbnail and preview so opening an image mention does not issue a
-		// second request. Video/audio remain preview-on-open only.
 		return {
 			status: "ready" as const,
 			thumbnailUrl: rendition === "thumbnail" ? item.url : undefined,
@@ -101,7 +133,7 @@ export function useMentionMediaSource({
 
 	const projectResource = useMediaResourceSnapshot(projectRef, {
 		enabled: enabled && isProjectFile && Boolean(mediaType),
-		loadThumbnail: mediaType === "image",
+		loadThumbnail: loadThumbnail && mediaType === "image",
 		resolver: projectResolver,
 	})
 
@@ -144,10 +176,10 @@ export function useMentionMediaSource({
 			objectUrl,
 			projectUrl,
 			snapshot.audioUrl,
-			snapshot.previewUrl,
 			snapshot.previewSize,
-			snapshot.posterUrl,
+			snapshot.previewUrl,
 			snapshot.thumbnailUrl,
+			snapshot.posterUrl,
 			uploadFile,
 		],
 	)

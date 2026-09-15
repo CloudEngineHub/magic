@@ -236,6 +236,7 @@ export default function ConnectorLibrary({
 						t(editingConnector ? "connectors.editSuccess" : "connectors.createSuccess"),
 					)
 					if (editingConnector) void retry()
+					else if (group === CONNECTOR_MARKET_GROUPS.mine) void retry()
 					else setGroup(CONNECTOR_MARKET_GROUPS.mine)
 				}}
 			/>

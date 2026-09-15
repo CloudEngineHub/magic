@@ -104,7 +104,10 @@ from app.core.prompt.personal_preferences_prompt import apply_personal_preferenc
 from agentlang.agent.define import AgentDefine, SkillsConfig, SystemSkillEntry
 from app.core.models.agent_model_context import TextModelState
 from app.core.models.agent_runtime import AgentProviderType
-from app.service.multimodal_message_renderer import LLMMessageRenderer
+from app.service.multimodal_message_renderer import LLMMessageRenderer, LLMMessageRenderResult
+from app.service.native_visual_overflow_hint_builder import (
+    NativeVisualOverflowHintBuilder,
+)
 
 logger = get_logger(__name__)
 
@@ -279,6 +282,9 @@ class Agent(BaseAgent):
         self._workspace_snapshot: WorkspaceSnapshot | None = None
         # 当前最近一次真实 LLM 请求是否包含原生图片输入。
         self._last_llm_request_contains_native_images = False
+        # 同一轮只注入一次相同的原生视觉 Horizon 状态，避免工具循环重复提示。
+        self._native_visual_horizon_context_signature: tuple[str, ...] | None = None
+        self._native_visual_horizon_render_hint: str | None = None
 
         # 设置Agent上下文
         self.agent_context = self._setup_agent_context(agent_context)
@@ -1125,16 +1131,32 @@ class Agent(BaseAgent):
             return SessionPrepResult(user_message_added=True)
 
     async def _append_user_query(self, request: AgentRunRequest) -> None:
-        """在 app 层构造并写入用户消息，图片请求附加原生视觉元数据。"""
+        """写入用户消息，并重置本轮原生视觉 Horizon 去重状态。"""
+        self._native_visual_horizon_context_signature = None
+        self._native_visual_horizon_render_hint = None
         if not request.image_refs:
             await self.chat_history.append_user_query(request)
             return
 
+        image_refs = list(dict.fromkeys(request.image_refs))
+        native_image_refs = self._message_renderer.limit_chat_native_image_refs(image_refs)
         message = await self._native_visual_message_builder.build_user_message(
             request.query,
-            list(request.image_refs),
+            native_image_refs,
         )
         await self.chat_history.add_message(message)
+        overflow_hint = NativeVisualOverflowHintBuilder.build(
+            image_refs,
+            self._message_renderer.max_native_image_refs,
+            supports_multimodal=(
+                self._resolve_current_text_model().config.supports_multimodal
+            ),
+        )
+        if overflow_hint:
+            self.agent_context.horizon.push_notification(
+                "native_visual_overflow",
+                overflow_hint,
+            )
 
     async def _handle_agent_loop(self, session_prep_result: SessionPrepResult) -> None:
         """处理 agent 循环 - 使用Context对象简化参数传递和状态管理"""
@@ -2644,6 +2666,40 @@ Since your subsequent output will be merged with pre-interruption content and di
                 )
                 await self._interruptible_sleep(wait_time)
 
+    async def _push_native_visual_horizon_notifications(
+        self,
+        render_result: LLMMessageRenderResult,
+    ) -> bool:
+        """把本轮新增的原生视觉状态登记到 Horizon，并避免重复提示。"""
+        notification_pushed = False
+        context_signature = render_result.native_image_paths or None
+        if (
+            context_signature is not None
+            and context_signature != self._native_visual_horizon_context_signature
+        ):
+            native_visual_hint = await self._native_visual_message_builder.build_horizon_hint(
+                list(context_signature)
+            )
+            self.agent_context.horizon.push_notification(
+                "native_visual_context",
+                native_visual_hint,
+            )
+            self._native_visual_horizon_context_signature = context_signature
+            notification_pushed = True
+
+        if (
+            render_result.horizon_hint is not None
+            and render_result.horizon_hint != self._native_visual_horizon_render_hint
+        ):
+            self.agent_context.horizon.push_notification(
+                "native_visual_render",
+                render_result.horizon_hint,
+            )
+            self._native_visual_horizon_render_hint = render_result.horizon_hint
+            notification_pushed = True
+
+        return notification_pushed
+
     async def _prepare_and_call_llm(
         self,
         use_stream: bool = True,
@@ -2683,17 +2739,52 @@ Since your subsequent output will be merged with pre-interruption content and di
 
         # 应用层基于聊天消息元组快照渲染多模态消息，再交由 agentlang 修复通用消息序列。
         message_snapshot = self.chat_history.get_message_snapshot()
-        rendered_messages = await self._message_renderer.render_messages(
+        render_result = await self._message_renderer.render_messages_with_horizon_hint(
             message_snapshot,
             supports_multimodal=text_model_state.config.supports_multimodal,
         )
-        self._last_llm_request_contains_native_images = any(
-            isinstance(message.get("content"), list)
-            and any(part.get("type") == "image_url" for part in message["content"])
-            for message in rendered_messages
-            if isinstance(message, dict)
+        rendered_messages = render_result.messages
+        has_native_visual_notification = await self._push_native_visual_horizon_notifications(
+            render_result
         )
+        if has_native_visual_notification:
+            native_visual_context = await self._build_horizon_context_update_safely(
+                injection_point="before_llm_native_visual",
+                log_context="原生视觉请求前注入",
+            )
+            if native_visual_context:
+                await self.chat_history.append_user_message(
+                    native_visual_context,
+                    show_in_ui=False,
+                    source="horizon",
+                )
+                rendered_messages.append(
+                    {"role": "user", "content": native_visual_context}
+                )
         messages_for_llm = self.chat_history.normalize_messages_for_llm(rendered_messages)
+        image_ref_count = sum(
+            1
+            for message in message_snapshot
+            if isinstance(message, UserMessage)
+            for part in (message.content_parts or [])
+            if part.type == "image_ref"
+        )
+        native_image_count = sum(
+            1
+            for message in messages_for_llm
+            if isinstance(message, dict) and isinstance(message.get("content"), list)
+            for part in message["content"]
+            if part.get("type") == "image_url"
+        )
+        self._last_llm_request_contains_native_images = native_image_count > 0
+        logger.info(
+            "LLM 请求多模态渲染状态: "
+            f"model_id={text_model_state.display_model_id} "
+            f"model_name={text_model_state.model_name} "
+            f"supports_multimodal={text_model_state.config.supports_multimodal} "
+            f"history_image_ref_count={image_ref_count} "
+            f"request_native_image_count={native_image_count}"
+        )
         if not messages_for_llm:
             logger.error("无法获取用于LLM调用的消息列表(可能历史记录为空或只有内部消息)")
             self.set_agent_state(AgentState.ERROR)

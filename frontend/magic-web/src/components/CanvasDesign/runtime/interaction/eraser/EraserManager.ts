@@ -34,6 +34,7 @@ export class EraserManager {
 	private erasingContentId: string | null = null
 	private radius = medianRadius(MIN_RADIUS, MAX_RADIUS)
 	private strokes: EraserStroke[] = []
+	private redoStrokes: EraserStroke[] = []
 	private eraserRenderer: EraserRenderer | null = null
 	private editingSession: ImageEditingSession | null = null
 
@@ -226,6 +227,7 @@ export class EraserManager {
 				radius: this.radius,
 				strokeCount: this.strokes.length,
 				canUndo: this.canUndo(),
+				canRedo: this.canRedo(),
 			},
 		})
 	}
@@ -393,6 +395,7 @@ export class EraserManager {
 		this.erasingElementId = elementId
 		this.erasingContentId = contentId ?? getActiveContent(imageElement)?.contentId ?? null
 		this.strokes = []
+		this.redoStrokes = []
 		this.isPointerDown = false
 		this.isCursorVisible = false
 
@@ -457,6 +460,8 @@ export class EraserManager {
 
 	public exitEraserMode(shouldRestore: boolean): void {
 		if (!this.erasingElementId) {
+			this.strokes = []
+			this.redoStrokes = []
 			return
 		}
 
@@ -476,6 +481,7 @@ export class EraserManager {
 		this.erasingElementId = null
 		this.erasingContentId = null
 		this.strokes = []
+		this.redoStrokes = []
 		this.editingSession?.destroy()
 		this.editingSession = null
 		this.canvas.imageEditingCoordinator.deactivate("eraser", elementId)
@@ -513,17 +519,32 @@ export class EraserManager {
 	public pushStroke(stroke: EraserStroke): void {
 		if (!this.erasingElementId || stroke.points.length === 0) return
 		this.strokes = [...this.strokes, stroke]
+		this.redoStrokes = []
 		this.emitSessionUpdate()
 	}
 
 	public undoLastStroke(): void {
 		if (!this.erasingElementId || this.strokes.length === 0) return
+		const lastStroke = this.strokes[this.strokes.length - 1]
 		this.strokes = this.strokes.slice(0, -1)
+		this.redoStrokes = [...this.redoStrokes, lastStroke]
+		this.emitSessionUpdate()
+	}
+
+	public redoLastStroke(): void {
+		if (!this.erasingElementId || this.redoStrokes.length === 0) return
+		const lastStroke = this.redoStrokes[this.redoStrokes.length - 1]
+		this.redoStrokes = this.redoStrokes.slice(0, -1)
+		this.strokes = [...this.strokes, lastStroke]
 		this.emitSessionUpdate()
 	}
 
 	public canUndo(): boolean {
 		return this.strokes.length > 0
+	}
+
+	public canRedo(): boolean {
+		return this.redoStrokes.length > 0
 	}
 
 	public getStrokes(): EraserStroke[] {
@@ -597,6 +618,9 @@ export class EraserManager {
 		this.removeEventListeners()
 		if (this.erasingElementId) {
 			this.exitEraserMode(true)
+			return
 		}
+		this.strokes = []
+		this.redoStrokes = []
 	}
 }

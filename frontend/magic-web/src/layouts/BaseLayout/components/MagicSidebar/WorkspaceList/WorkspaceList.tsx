@@ -26,6 +26,7 @@ import WorkspaceItem from "./WorkspaceItem"
 import CreateWorkspaceInput from "./CreateWorkspaceInput"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
 import { Button } from "@/components/shadcn-ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { cn } from "@/utils/cn"
 import { toTestIdSegment } from "@/utils/testid"
 import {
@@ -36,6 +37,7 @@ import {
 } from "@/components/shadcn-ui/sidebar"
 import { useWorkspaceListDnd } from "./useWorkspaceListDnd"
 import { useProjectPinBoundaryConfirmation } from "./ProjectPinBoundaryConfirmDialog"
+import { subscribeWorkspaceSearchInvalidation } from "@/pages/superMagic/services/workspaceListSearchInvalidation"
 
 const SEARCH_PAGE_SIZE = 20
 
@@ -107,13 +109,13 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 	}, [projectsByWorkspaceId, searchState.workspaces, workspaces])
 	const displayedWorkspaces = isSearchMode
 		? Array.from(
-				new Map(
-					[...searchState.workspaces, ...projectParentWorkspaces].map((workspace) => [
-						workspace.id,
-						workspace,
-					]),
-				).values(),
-			)
+			new Map(
+				[...searchState.workspaces, ...projectParentWorkspaces].map((workspace) => [
+					workspace.id,
+					workspace,
+				]),
+			).values(),
+		)
 		: workspaces
 	const { requestConfirmation, confirmationDialog } = useProjectPinBoundaryConfirmation()
 	const {
@@ -197,17 +199,17 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 			return Promise.all([
 				searchState.hasMoreWorkspaces || !append
 					? SuperMagicApi.getWorkspaces({
-							page,
-							page_size: SEARCH_PAGE_SIZE,
-							workspace_name: searchName,
-						})
+						page,
+						page_size: SEARCH_PAGE_SIZE,
+						workspace_name: searchName,
+					})
 					: Promise.resolve(null),
 				!append
 					? SuperMagicApi.getProjectsWithCollaboration({
-							page: 1,
-							page_size: 100,
-							project_name: searchName,
-						})
+						page: 1,
+						page_size: 100,
+						project_name: searchName,
+					})
 					: Promise.resolve(null),
 			])
 		},
@@ -266,6 +268,32 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 		},
 		[cancelSearch, runSearch, updateSearchState, workspaces],
 	)
+
+	useEffect(() => {
+		return subscribeWorkspaceSearchInvalidation(() => {
+			if (!isSearchMode) return
+
+			const keyword = searchState.value.trim()
+			if (!keyword) {
+				updateSearchState((draft) => {
+					draft.page = 1
+					draft.hasMoreWorkspaces = true
+					draft.workspaces = toJS(workspaces)
+					draft.projects = []
+				})
+				return
+			}
+
+			// Refetch only after the mutation API has finished so the snapshot matches server state.
+			cancelSearch()
+			isSearchPendingRef.current = true
+			updateSearchState((draft) => {
+				draft.page = 1
+				draft.hasMoreWorkspaces = true
+			})
+			runSearch({ keyword, page: 1, append: false })
+		})
+	}, [cancelSearch, isSearchMode, runSearch, searchState.value, updateSearchState, workspaces])
 
 	const loadNextPage = useCallback(() => {
 		if (!isSearchMode) {
@@ -445,15 +473,17 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 						)}
 						data-testid="sidebar-workspace-list-actions"
 					>
-						<button
-							type="button"
-							aria-label={t("super:workspace.searchWorkspace")}
-							data-testid="sidebar-workspace-list-search"
-							className="outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4"
-							onClick={handleSearchOpen}
-						>
-							<Search className="h-4 w-4" />
-						</button>
+						<WorkspaceListActionTooltip label={t("super:workspace.searchWorkspace")}>
+							<button
+								type="button"
+								aria-label={t("super:workspace.searchWorkspace")}
+								data-testid="sidebar-workspace-list-search"
+								className="outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4"
+								onClick={handleSearchOpen}
+							>
+								<Search className="h-4 w-4" />
+							</button>
+						</WorkspaceListActionTooltip>
 						{isInitialWorkspaceListLoading && (
 							<Loader2
 								className="h-4 w-4 shrink-0 animate-spin text-[rgb(var(--muted-foreground-rgb))] opacity-70"
@@ -461,31 +491,40 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 								data-testid="sidebar-workspace-list-loading"
 							/>
 						)}
-						<button
-							type="button"
-							aria-label={t("sidebar:workspace.refresh")}
-							data-testid="sidebar-workspace-list-refresh"
-							disabled={isRefreshing}
-							className={cn(
-								"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
-								"after:absolute after:-inset-2 md:after:hidden",
-							)}
-							onClick={() => void handleRefresh()}
-						>
-							<RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-						</button>
-						<button
-							type="button"
-							aria-label={t("sidebar:workspace.add")}
-							data-testid="sidebar-workspace-list-add"
-							className={cn(
-								"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
-								"after:absolute after:-inset-2 md:after:hidden",
-							)}
-							onClick={handleStartCreateWorkspace}
-						>
-							<Plus className="h-4 w-4" />
-						</button>
+						<WorkspaceListActionTooltip label={t("sidebar:workspace.refresh")}>
+							{/* Disabled buttons do not emit pointer events; wrap so the tooltip still appears while refreshing. */}
+							<span className="inline-flex">
+								<button
+									type="button"
+									aria-label={t("sidebar:workspace.refresh")}
+									data-testid="sidebar-workspace-list-refresh"
+									disabled={isRefreshing}
+									className={cn(
+										"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
+										"after:absolute after:-inset-2 md:after:hidden",
+									)}
+									onClick={() => void handleRefresh()}
+								>
+									<RefreshCw
+										className={cn("h-4 w-4", isRefreshing && "animate-spin")}
+									/>
+								</button>
+							</span>
+						</WorkspaceListActionTooltip>
+						<WorkspaceListActionTooltip label={t("sidebar:workspace.add")}>
+							<button
+								type="button"
+								aria-label={t("sidebar:workspace.add")}
+								data-testid="sidebar-workspace-list-add"
+								className={cn(
+									"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
+									"after:absolute after:-inset-2 md:after:hidden",
+								)}
+								onClick={handleStartCreateWorkspace}
+							>
+								<Plus className="h-4 w-4" />
+							</button>
+						</WorkspaceListActionTooltip>
 					</div>
 				</div>
 				<SidebarGroupContent>
@@ -547,6 +586,23 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 				<circle cx="4" cy="4" r="4" fill="currentColor" />
 			</svg>
 		</div>
+	)
+}
+
+function WorkspaceListActionTooltip({
+	label,
+	children,
+}: {
+	label: string
+	children: ReactNode
+}) {
+	return (
+		<Tooltip delayDuration={300}>
+			<TooltipTrigger asChild>{children}</TooltipTrigger>
+			<TooltipContent side="top" sideOffset={6}>
+				{label}
+			</TooltipContent>
+		</Tooltip>
 	)
 }
 

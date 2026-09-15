@@ -69,41 +69,32 @@ const FullStylePanel = observer(function FullStylePanel({
 
 	const showButtonLabel = useShowButtonText(800)
 
-	// In a flex context, alignment is controlled by the flex container's
-	// justify-content rather than the selected text element's text-align.
+	// Text elements keep text alignment even when they are flex items; other
+	// flex items expose the parent container's justify-content controls.
 	const computedStyles =
 		selectedElement?.computedStyles ||
 		(stylePanelStore.selectedElements.length > 0
 			? stylePanelStore.selectedElements[0]?.computedStyles
 			: undefined)
 	const isFlexContainer = computedStyles?.display === "flex"
-	const isFlexItem = computedStyles?.parentDisplay === "flex"
+	const isTextElement = selectedElement?.isTextElement === true
 	const flexAlignment = useMemo(() => {
-		if (stylePanelStore.textSelection?.hasSelection || !selectedElement) return null
+		if (stylePanelStore.textSelection?.hasSelection || !selectedElement || isTextElement)
+			return null
 
-		if (isFlexContainer) {
-			return {
-				value: computedStyles?.justifyContent || "flex-start",
-				direction: computedStyles?.flexDirection || "row",
-				targetSelector: selectedElement.selector,
-			}
+		if (!isFlexContainer) return null
+
+		return {
+			value: computedStyles?.justifyContent || "flex-start",
+			direction: computedStyles?.flexDirection || "row",
+			targetSelector: selectedElement.selector,
 		}
-
-		if (isFlexItem && computedStyles?.parentSelector) {
-			return {
-				value: computedStyles.parentJustifyContent || "flex-start",
-				direction: computedStyles.parentFlexDirection || "row",
-				targetSelector: computedStyles.parentSelector,
-			}
-		}
-
-		return null
 	}, [
 		computedStyles,
 		isFlexContainer,
-		isFlexItem,
 		selectedElement,
 		stylePanelStore.textSelection?.hasSelection,
+		isTextElement,
 	])
 
 	/**
@@ -314,8 +305,6 @@ const FullStylePanel = observer(function FullStylePanel({
 			})
 			onStyleChange?.(flexAlignment.targetSelector, "justifyContent", value)
 
-			// Refresh the selected element so parentJustifyContent reflects the new
-			// value when the selected node is a flex item.
 			if (selectedElement?.selector) {
 				await editorRef.current.refreshSelectedElement(selectedElement.selector)
 			}
@@ -454,7 +443,7 @@ const FullStylePanel = observer(function FullStylePanel({
 					)}
 				>
 					<HistoryActions editorRef={editorRef} />
-					<SelectionReadout selectedElement={selectedElement} />
+					<SelectionReadout selectedElement={selectedElement} editorRef={editorRef} />
 					{showElementControls ? (
 						<Separator orientation="vertical" className="mx-1 !h-4" />
 					) : null}
@@ -557,6 +546,7 @@ const FullStylePanel = observer(function FullStylePanel({
 
 							<SizePopover
 								selectedElement={selectedElement}
+								editorRef={editorRef}
 								disabled={isDisabled}
 								showLabel={showButtonLabel}
 								onStyleChange={(property, value) =>

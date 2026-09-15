@@ -5,10 +5,15 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    // 向量搜索总开关，叠加在原有「向量搜索 AI 能力」之上：
+    // 仅当 KnowledgeBaseEmbeddingModel 已启用 且 本开关打开时向量搜索才生效。
+    // 默认开启（行为与改造前一致）；显式关掉后各市场检索回落关键词搜索。
+    'enabled' => (bool) env('VECTOR_INDEX_ENABLED', true),
+
     // 向量数据库不可用时的短缓存时间，避免每次请求都重复探测服务。
     'availability_cache_seconds' => (int) env('VECTOR_INDEX_AVAILABILITY_CACHE_SECONDS', 60),
 
-    // 各业务的索引参数。是否启用统一由对应 AI 能力配置决定。
+    // 各业务索引参数；Collection 维度由 Embedding 实际输出自动确定。
     'resources' => [
         'slides_template' => [
             'collection' => (string) env('SLIDES_TEMPLATE_VECTOR_COLLECTION', 'slides_templates'),

@@ -39,4 +39,28 @@ enum VideoTaskType: string
     {
         return self::tryFrom($value) instanceof self;
     }
+
+    public function supportsInputMode(string $inputMode): bool
+    {
+        return match ($this) {
+            self::Edit => $inputMode === VideoInputMode::VideoEdit->value,
+            self::Generate => $inputMode !== VideoInputMode::VideoEdit->value,
+            self::Extend, self::Upscale => $inputMode === VideoInputMode::Standard->value,
+        };
+    }
+
+    public function requiredSupportedInput(): ?string
+    {
+        return match ($this) {
+            self::Edit => 'video_edit',
+            self::Extend => 'video_extension',
+            self::Upscale => 'video_upscale',
+            self::Generate => null,
+        };
+    }
+
+    public function requiresReferenceVideo(): bool
+    {
+        return $this !== self::Generate;
+    }
 }

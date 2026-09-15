@@ -135,6 +135,23 @@ describe("CanvasRenderVisibilityController", () => {
 		expect(runtimeScheduler.requestLayerDraw).toHaveBeenCalledTimes(1)
 	})
 
+	it("does not enumerate all roots when far culling is disabled", () => {
+		const { controller } = createController("hidden")
+		const activeElementIds = new Set(["active-1", "active-2"])
+		const allElementIds = new Set(["far-1", "far-2"])
+		const activeIteratorSpy = vi.spyOn(activeElementIds, Symbol.iterator)
+		const iteratorSpy = vi.spyOn(allElementIds, Symbol.iterator)
+
+		controller.sync({
+			activeElementIds,
+			allElementIds,
+			allowCullFar: false,
+		})
+
+		expect(activeIteratorSpy).not.toHaveBeenCalled()
+		expect(iteratorSpy).not.toHaveBeenCalled()
+	})
+
 	it("restores active hidden nodes to their previous listening state", () => {
 		const { controller, nodes } = createController("hidden")
 		const node = createFakeNode({ visible: true, listening: true })

@@ -44,15 +44,25 @@ export const AttachmentSection = observer(function AttachmentSection({
 	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
 	const resolvedProjectFilesStore = scopedProjectFilesStore ?? projectFilesStore
 	const attachments = resolveAttachmentList(node, fallbackNode) as AttachmentProps[]
+
 	const rawFilePathAttachments = useMemo(() => {
 		if (!prevSuperMessageId) return []
 		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
-			| Record<string, unknown>
-			| undefined
+			Record<string, unknown> | undefined
 		const prevContent =
 			typeof prevMessageNode?.content === "string" ? prevMessageNode.content : ""
-		return prevContent ? buildFilePathAttachments(prevContent) : []
+		if (!prevContent) return []
+		const seenReferences = new Set<string>()
+		return buildFilePathAttachments(prevContent).filter((attachment) => {
+			// 同一路径的 Markdown 与旧语法有不同解码规则；只跳过语义相同的重复查找。
+			const referenceKey = `${attachment.source}\u0000${attachment.filePath}`
+			if (seenReferences.has(referenceKey)) return false
+			seenReferences.add(referenceKey)
+			return true
+		})
 	}, [prevSuperMessageId])
+
+	const seenFilePaths = new Set<string>()
 	const filePathAttachments = rawFilePathAttachments.flatMap((attachment) => {
 		const found = findFilePathAttachment(
 			resolvedProjectFilesStore.workspaceFilesList,
@@ -63,8 +73,12 @@ export const AttachmentSection = observer(function AttachmentSection({
 		const filePath = normalizeWorkspacePathForComparison(
 			found.relative_file_path || found.path || attachment.filePath,
 		)
-		return filePath ? [{ ...attachment, filePath }] : []
+		// 不同引用写法可能指向同一真实文件，按完整路径去重并保留首次出现的顺序。
+		if (!filePath || seenFilePaths.has(filePath)) return []
+		seenFilePaths.add(filePath)
+		return [{ ...attachment, filePath }]
 	})
+
 	const onFileClick = useMemoizedFn((item?: unknown) => {
 		openMessageFile(item)
 		onSelectDetail?.(item)

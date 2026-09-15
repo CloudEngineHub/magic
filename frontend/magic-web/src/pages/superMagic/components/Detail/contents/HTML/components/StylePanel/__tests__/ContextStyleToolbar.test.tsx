@@ -28,6 +28,7 @@ const { mockUpdateStyle, mockSelectedElement, mockStylePanelStore } = vi.hoisted
 			selectedElements: [] as Array<unknown>,
 			textSelection: null,
 			getSelectedSelectors: () => ["h1.title"],
+			setPreviewRect: vi.fn(),
 		},
 	}
 })
@@ -70,7 +71,24 @@ vi.mock("../controls", async () => {
 		FontSizeSelector: () => <div data-testid="font-size-selector" />,
 		FontSizeAdjuster: () => <div data-testid="font-size-adjuster" />,
 		LineHeightSelector: () => <div data-testid="line-height-selector" />,
-		TextAlignTools: () => <div data-testid="text-align-tools" />,
+		TextAlignTools: ({
+			mode,
+			value,
+			onAlign,
+		}: {
+			mode?: string
+			value?: string
+			onAlign?: (value: string) => void
+		}) => (
+			<button
+				type="button"
+				data-testid="text-align-tools"
+				data-mode={mode}
+				data-value={value}
+				onClick={() => onAlign?.("center")}
+			/>
+		),
+
 		ColorPicker: () => <div data-testid="color-picker" />,
 		BackgroundImageButton: () => <div data-testid="background-image-button" />,
 		ContextMorePopover: () => <div data-testid="context-more-popover" />,
@@ -159,5 +177,29 @@ describe("ContextStyleToolbar text format buttons", () => {
 		fireEvent.click(screen.getByTestId("html-editor-text-format-underline-button"))
 
 		expect(mockUpdateStyle).toHaveBeenCalledWith("textDecoration", "line-through")
+	})
+
+	it("shows text alignment for a text element inside a flex container", () => {
+		mockSelectedElement.current = {
+			...mockSelectedElement.current,
+			computedStyles: Object.assign({}, mockSelectedElement.current.computedStyles, {
+				textAlign: "left",
+				display: "block",
+				parentSelector: "div.layout",
+				parentDisplay: "flex",
+				parentFlexDirection: "row",
+				parentJustifyContent: "flex-start",
+			}),
+		}
+
+		render(<ContextStyleToolbar editorRef={{ current: null }} />)
+
+		const alignmentTools = screen.getByTestId("text-align-tools")
+		expect(alignmentTools).toHaveAttribute("data-mode", "text")
+		expect(alignmentTools).toHaveAttribute("data-value", "left")
+
+		fireEvent.click(alignmentTools)
+
+		expect(mockUpdateStyle).toHaveBeenCalledWith("textAlign", "center")
 	})
 })

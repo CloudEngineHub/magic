@@ -74,13 +74,18 @@ class AsrOpusFinishProcessor(AsrServiceBase):
         attempt_id = claimed_progress.opus_merge_attempt_id
 
         try:
+            expected_shard_count = (
+                len(all_files)
+                if claimed_progress.finish_completion_mode == "tail_missing_convergence"
+                else claimed_progress.file_shard_count
+                if claimed_progress.file_shard_count >= 0
+                else None
+            )
             await self.merge_operations.merge_opus_on_finish(
                 task.task_key,
                 task.source_dir,
                 all_files,
-                claimed_progress.file_shard_count
-                if claimed_progress.file_shard_count >= 0
-                else None,
+                expected_shard_count,
                 merge_attempt_id=attempt_id,
             )
         except OpusShardsNotReadyError as exc:

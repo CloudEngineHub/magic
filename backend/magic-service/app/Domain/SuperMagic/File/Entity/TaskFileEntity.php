@@ -136,10 +136,17 @@ class TaskFileEntity extends AbstractEntity
 
     /**
      * 判断当前文件是否需要创建版本副本.
+     *
+     * 文件版本覆盖工作区空间（project / user，如用户空间的记忆文件）；
+     * topic 等内部状态空间不建版本。
      */
     public function shouldCreateVersionCopy(): bool
     {
-        return $this->getSpaceType() === FileSpaceType::PROJECT->value
+        return in_array(
+            $this->getSpaceType(),
+            [FileSpaceType::PROJECT->value, FileSpaceType::USER->value],
+            true
+        )
             && ! $this->getIsDirectory();
     }
 

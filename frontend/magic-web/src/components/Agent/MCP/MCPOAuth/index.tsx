@@ -6,7 +6,7 @@ import { IconMCP } from "@/enhance/tabler/icons-react"
 import MagicScrollBar from "@/components/base/MagicScrollBar"
 import MagicSpin from "@/components/base/MagicSpin"
 import { Button } from "@/components/shadcn-ui/button"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import type { AgentCommonModalChildrenProps } from "../../AgentCommonModal"
 import { useMemoizedFn, useRequest, useThrottleEffect } from "ahooks"
 import { FlowApi } from "@/apis"
@@ -65,6 +65,9 @@ export default function MCPOAuth(props: MCPEditor) {
 	const [authVisible, setAuthVisible] = useState(false)
 	const [isFinishFillForm, setFinishFillForm] = useState(false)
 	const [isAutoAdded, setIsAutoAdded] = useState(false)
+	const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
+	const [hasExpandableDescription, setHasExpandableDescription] = useState(false)
+	const descriptionRef = useRef<HTMLParagraphElement>(null)
 	const isAutoAddingRef = useRef(false)
 
 	const {
@@ -235,6 +238,36 @@ export default function MCPOAuth(props: MCPEditor) {
 	const mcpInfo = mcpDetails?.list?.[0]
 	const requiredFields = mcpInfo?.require_fields ?? []
 	const hasSetupFields = Boolean(requiredFields.length || authVisible)
+	const connectorDescription = mcpInfo?.description || t("mcp.card.desc")
+
+	useEffect(() => {
+		setIsDescriptionExpanded(false)
+		setHasExpandableDescription(false)
+	}, [connectorDescription])
+
+	useLayoutEffect(() => {
+		if (
+			panelVariant !== "connector-market" ||
+			!descriptionRef.current ||
+			isDescriptionExpanded
+		) {
+			return
+		}
+
+		let frameId = 0
+		const measureDescription = () => {
+			const descriptionElement = descriptionRef.current
+			if (!descriptionElement) return
+
+			setHasExpandableDescription(
+				descriptionElement.scrollHeight > descriptionElement.clientHeight + 1,
+			)
+		}
+
+		frameId = window.requestAnimationFrame(measureDescription)
+		return () => window.cancelAnimationFrame(frameId)
+	}, [connectorDescription, isDescriptionExpanded, panelVariant])
+
 	const authForm = (
 		<Form form={form} layout="vertical" onValuesChange={onValuesChange}>
 			{requiredFields.length > 0 ? (
@@ -338,8 +371,6 @@ export default function MCPOAuth(props: MCPEditor) {
 	)
 
 	if (panelVariant === "connector-market") {
-		const description = mcpInfo?.description || t("mcp.card.desc")
-
 		return (
 			<div className="flex min-h-0 min-w-0 flex-col px-3 pb-3 pt-2">
 				<div className="relative flex h-7 items-center justify-end pb-1">
@@ -357,28 +388,46 @@ export default function MCPOAuth(props: MCPEditor) {
 
 				<MagicSpin spinning={getMCPUserSettingsLoading || getAvailableMCPLoading}>
 					<div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 px-1 pb-1">
-						<div className="flex min-w-0 items-center gap-3 px-3 pt-0">
+						<div className="flex min-w-0 items-start gap-3 px-3 pt-0">
 							<MagicImage
-								className="size-10 shrink-0 rounded-xl"
+								className="size-[50px] shrink-0 rounded-xl"
 								src={mcpInfo?.icon}
 								alt={mcpInfo?.name}
 								fallback={
-									<div className="size-10 shrink-0 overflow-hidden rounded-xl">
+									<div className="size-[50px] shrink-0 overflow-hidden rounded-xl">
 										<IconMCP size="100%" />
 									</div>
 								}
 							/>
-							<div className="min-w-0 flex-1">
+							<div className="flex min-w-0 flex-1 flex-col gap-2">
 								<h2 className="truncate text-[16px] font-semibold leading-[22px] text-foreground">
 									{mcpInfo?.name}
 								</h2>
-								<p className="line-clamp-2 break-words text-[12px] leading-4 text-muted-foreground">
-									{renderMarkdownLinks(description, {
+								<p
+									ref={descriptionRef}
+									className={`${isDescriptionExpanded ? "" : "line-clamp-3"} break-words text-[12px] leading-4 text-muted-foreground`}
+								>
+									{renderMarkdownLinks(connectorDescription, {
 										linkClassName:
 											"text-primary underline underline-offset-2 hover:opacity-90",
 										linkTestId: "connector-auth-description-link",
 									})}
 								</p>
+								{hasExpandableDescription ? (
+									<button
+										type="button"
+										className="mt-0.5 self-start text-[12px] leading-4 text-primary hover:opacity-80"
+										onClick={() =>
+											setIsDescriptionExpanded((expanded) => !expanded)
+										}
+										aria-expanded={isDescriptionExpanded}
+										data-testid="connector-auth-description-toggle"
+									>
+										{isDescriptionExpanded
+											? tMarket("connectors.collapseDescription")
+											: tMarket("connectors.expandDescription")}
+									</button>
+								) : null}
 							</div>
 						</div>
 						<div

@@ -9,6 +9,7 @@ import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordi
 import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
 import { collectSpeakerIdsFromText } from "@/pages/superMagic/pages/AudioRecordings/utils/markdownTimeLinks"
 import { normalizeSpeakerSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/speaker-filter"
+import { hasConfiguredRecordingFile } from "@/pages/superMagic/pages/AudioRecordings/utils/recording-detail-files"
 import { RecordingDetailRegionEmptySlot } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailRegionEmptySlot"
 import { RecordingDetailEmptyState } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailEmptyState"
 import { MobileRecordingAudioPlayer } from "@/pages/superMagicMobile/pages/AudioRecordingDetail/components/MobileRecordingAudioPlayer"
@@ -42,12 +43,14 @@ const CONTENT_TABS: MobileContentTab[] = [
 interface MobileAudioFolderContentProps {
 	canEditSpeakers: boolean
 	detail: ReturnType<typeof useShareRecordingDetailData>
+	showNotesTab: boolean
 }
 
 /** Renders the recording bundle as a single-level mobile content preview embedded in the file tree. */
 export function MobileAudioFolderContent({
 	canEditSpeakers,
 	detail,
+	showNotesTab,
 }: MobileAudioFolderContentProps) {
 	const { t } = useTranslation("audioRecordings")
 	const { fileMap, texts, audioUrl, attachmentTree, attachmentList, refresh } = detail
@@ -65,6 +68,10 @@ export function MobileAudioFolderContent({
 	const [speakerNameOverrides, setSpeakerNameOverrides] = useState<Record<string, string>>({})
 
 	const summaryFiles = fileMap?.summaryFiles ?? []
+	const hasNotesTab = showNotesTab && hasConfiguredRecordingFile(fileMap, "notes")
+	// Keep the current view valid when a realtime config refresh removes notes.
+	const resolvedActiveTab = activeTab === "notes" && !hasNotesTab ? "transcript" : activeTab
+	const contentTabs = hasNotesTab ? CONTENT_TABS : CONTENT_TABS.filter((tab) => tab !== "notes")
 	const summaryContent = useMemo(
 		() =>
 			Object.fromEntries(
@@ -99,15 +106,15 @@ export function MobileAudioFolderContent({
 		texts.summary?.topics?.content,
 	)
 	const selectedSummaryType =
-		activeTab === "summary" ||
-		activeTab === "topics" ||
-		activeTab === "highlights" ||
-		activeTab === "insights" ||
-		activeTab === "metrics" ||
-		activeTab === "mindmap"
-			? activeTab === "summary"
+		resolvedActiveTab === "summary" ||
+		resolvedActiveTab === "topics" ||
+		resolvedActiveTab === "highlights" ||
+		resolvedActiveTab === "insights" ||
+		resolvedActiveTab === "metrics" ||
+		resolvedActiveTab === "mindmap"
+			? resolvedActiveTab === "summary"
 				? "summary"
-				: activeTab
+				: resolvedActiveTab
 			: ""
 
 	useEffect(() => {
@@ -181,13 +188,13 @@ export function MobileAudioFolderContent({
 		>
 			<div className="shrink-0 overflow-x-auto border-b border-border/50 bg-mobile-background px-3 py-2">
 				<div className="flex w-max gap-1">
-					{CONTENT_TABS.map((tab) => (
+					{contentTabs.map((tab) => (
 						<button
 							key={tab}
 							type="button"
 							className={cn(
 								"h-8 shrink-0 rounded-full px-4 text-sm font-medium",
-								activeTab === tab
+								resolvedActiveTab === tab
 									? "bg-foreground text-background"
 									: "text-muted-foreground",
 							)}
@@ -200,7 +207,7 @@ export function MobileAudioFolderContent({
 				</div>
 			</div>
 			<div className="relative flex min-h-0 flex-1 flex-col">
-				{activeTab === "transcript" || activeTab === "notes" ? (
+				{resolvedActiveTab === "transcript" || resolvedActiveTab === "notes" ? (
 					<MobileRecordingSourcePanel
 						transcriptContent={texts.transcript?.content}
 						notesContent={texts.notes?.content}
@@ -215,7 +222,7 @@ export function MobileAudioFolderContent({
 						onSeek={(seconds) => player.seekTo(seconds, { autoplay: true })}
 						onActiveTabChange={() => undefined}
 						showTabBar={false}
-						activeTab={activeTab as MobileRecordingSourceTab}
+						activeTab={resolvedActiveTab as MobileRecordingSourceTab}
 						attachmentTree={attachmentTree as unknown as AttachmentFile[]}
 						notesFilePath={fileMap?.notes?.relative_file_path ?? fileMap?.notes?.path}
 					/>

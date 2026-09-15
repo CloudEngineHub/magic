@@ -1,15 +1,16 @@
 import type { StructureUserItem } from "@/types/organization"
 import type { User } from "@/types/user"
-import type { RequestConfig } from "@/apis/core/HttpClient"
+import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import { isEmpty, keyBy } from "lodash-es"
 import type * as apis from "@/apis"
 import type { Container } from "@/services/ServiceContainer"
 import { userStore } from "@/models/user/stores"
+import { configStore } from "@/models/config/stores"
 import { userTransformer } from "@/models/user/transformers"
 import { UserRepository } from "@/models/user/repositories/UserRepository"
 import { AccountRepository } from "@/models/user/repositories/AccountRepository"
 import { AuthApi, ChatApi } from "@/apis"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { BroadcastChannelSender } from "@/broadcastChannel"
 import { env, isDev } from "@/utils/env"
 import { getNativePort } from "@/platform/native"
@@ -40,7 +41,7 @@ export class UserService {
 		promise: Promise<void>
 	} | null = null
 
-	constructor(dependencies: typeof apis, service: Container) {
+	constructor(dependencies: Pick<typeof apis, "ContactApi">, service: Container) {
 		this.contactApi = dependencies.ContactApi
 		this.service = service
 	}
@@ -118,7 +119,7 @@ export class UserService {
 	 * @description 获取当前组织下当前用户信息
 	 */
 	fetchUserInfo = async (
-		options?: Pick<RequestConfig, "skipAppInitWait">,
+		options?: Pick<RequestConfig, "skipAppInitWait" | "headers">,
 	): Promise<StructureUserItem | null> => {
 		const userInfo = await this.contactApi.getAccountUserInfo(undefined, options)
 
@@ -268,12 +269,28 @@ export class UserService {
 
 	/**
 	 * @description 组织切换
+	 * TODO: 由共享应用层统一组织切换操作的提交、回滚及结果契约。
+	 * HTTP 会话过期会把迟到的成功响应转为 AbortError；当前 catch 无条件恢复 fallback，
+	 * 可能覆盖随后已完成的组织/账号切换。普通网络失败也存在同样竞态，不能只忽略 AbortError。
+	 * 修复时须同步两版 AppService 的成功判断、重复回滚、广播与 loading 收尾，
+	 * 并校验 setUserInfo 派生异步写入的归属。详见 docs/http-session-staleness-and-organization-switch-proposal.md。
 	 */
 	switchOrganization = async (
 		magic_user_id: string,
 		magic_organization_code: string,
 		fallbackUserInfo: User.UserInfo,
 	) => {
+		const startedAt = Date.now()
+		// Capture scalar values before the optimistic write; never log credentials or whole users.
+		const source = {
+			accountId: userStore.user.userInfo?.magic_id,
+			userId: userStore.user.userInfo?.user_id,
+			organizationCode: userStore.user.organizationCode,
+			teamshareOrganizationCode: userStore.user.teamshareOrganizationCode,
+			clusterCode: configStore.cluster.clusterCode,
+		}
+		const initialAuthorization = userStore.user.authorization
+		let stage = "set_target_organization"
 		try {
 			this.setMagicOrganizationCode(magic_organization_code)
 
@@ -283,6 +300,7 @@ export class UserService {
 			// 	query_type: 2,
 			// })
 
+			stage = "fetch_target_user"
 			const targetUser = await this.contactApi.getAccountUserInfo({
 				organization_code: magic_organization_code,
 			})
@@ -291,16 +309,45 @@ export class UserService {
 				throw new Error("targetUser is null")
 			}
 
+			stage = "transform_target_user"
 			const userInfo = userTransformer(targetUser)
+			stage = "set_target_user"
 			this.setUserInfo(userInfo)
 
 			/** 广播切换组织 */
+			stage = "broadcast_organization_switch"
 			BroadcastChannelSender.switchOrganization({
 				userInfo,
 				magicOrganizationCode: magic_organization_code,
 			})
 		} catch (err) {
-			console.error(err)
+			logger.error({
+				eventKey: "organization_switch_failed",
+				errorKind: "unknown",
+				error: err,
+				message: "组织切换失败，准备恢复原组织",
+				context: {
+					stage,
+					startedAt,
+					durationMs: Date.now() - startedAt,
+					source,
+					target: { userId: magic_user_id, organizationCode: magic_organization_code },
+					// Read before rollback so concurrent switches remain visible in the diagnostic.
+					current: {
+						accountId: userStore.user.userInfo?.magic_id,
+						userId: userStore.user.userInfo?.user_id,
+						organizationCode: userStore.user.organizationCode,
+						teamshareOrganizationCode: userStore.user.teamshareOrganizationCode,
+						clusterCode: configStore.cluster.clusterCode,
+					},
+					fallback: {
+						accountId: fallbackUserInfo?.magic_id,
+						userId: fallbackUserInfo?.user_id,
+						organizationCode: fallbackUserInfo?.organization_code,
+					},
+					authChanged: initialAuthorization !== userStore.user.authorization,
+				},
+			})
 			// 切换失败，恢复当前组织
 			this.setMagicOrganizationCode(fallbackUserInfo?.organization_code)
 			this.setUserInfo(fallbackUserInfo)

@@ -44,10 +44,6 @@ vi.mock("../../../../app/hooks/canvas", () => ({
 	useIsMediaReplacing: () => mocks.isReplacing,
 }))
 
-vi.mock("../../../../app/hooks/resources/useImageOssSrc", () => ({
-	useImageOssSrc: () => ({ hasOssSrc: true }),
-}))
-
 vi.mock("../image/SecondEdit", () => ({
 	default: () => <div>image-second-edit</div>,
 }))
@@ -75,7 +71,7 @@ describe("media editor replacement gating", () => {
 		mocks.eventHandlers = {}
 	})
 
-	it("unmounts image second-edit actions while replacement is active", () => {
+	it("mounts image second-edit when the result exists and unmounts it while replacement is active", () => {
 		mocks.selectedElements = [
 			{
 				id: "image-1",

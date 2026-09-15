@@ -4,12 +4,17 @@ import {
 	type GetTemporaryDownloadUrlItem,
 } from "@/pages/superMagic/utils/api"
 import {
-	clearSharedFileUrlCache,
-	resolveSharedFileUrl,
-} from "@/pages/superMagic/services/sharedFileUrlCache"
+	clearSharedMediaUrlCache,
+	resolveSharedMediaUrl,
+} from "@/pages/superMagic/services/sharedMediaUrlCache"
 
 vi.mock("@/pages/superMagic/utils/api", () => ({
 	getTemporaryDownloadUrl: vi.fn(),
+}))
+
+const getSharedMediaResourceScopeMock = vi.hoisted(() => vi.fn(() => "scope-a"))
+vi.mock("@/pages/superMagic/services/sharedMediaResourceScope", () => ({
+	getSharedMediaResourceScope: getSharedMediaResourceScopeMock,
 }))
 
 const getTemporaryDownloadUrlMock = vi.mocked(getTemporaryDownloadUrl)
@@ -18,8 +23,10 @@ describe("shared file URL cache", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
 		vi.setSystemTime(new Date(2026, 7, 20, 10))
-		clearSharedFileUrlCache()
+		clearSharedMediaUrlCache()
 		getTemporaryDownloadUrlMock.mockReset()
+		getSharedMediaResourceScopeMock.mockReset()
+		getSharedMediaResourceScopeMock.mockReturnValue("scope-a")
 	})
 
 	afterEach(() => {
@@ -35,8 +42,8 @@ describe("shared file URL cache", () => {
 				}),
 		)
 
-		const first = resolveSharedFileUrl({ fileId: "file-1" })
-		const second = resolveSharedFileUrl({ fileId: "file-1" })
+		const first = resolveSharedMediaUrl({ fileId: "file-1" })
+		const second = resolveSharedMediaUrl({ fileId: "file-1" })
 
 		expect(getTemporaryDownloadUrlMock).toHaveBeenCalledTimes(1)
 		resolveRequest([
@@ -62,8 +69,8 @@ describe("shared file URL cache", () => {
 			},
 		])
 
-		await resolveSharedFileUrl({ fileId: "file-1" })
-		await resolveSharedFileUrl({ fileId: "file-1" })
+		await resolveSharedMediaUrl({ fileId: "file-1" })
+		await resolveSharedMediaUrl({ fileId: "file-1" })
 
 		expect(getTemporaryDownloadUrlMock).toHaveBeenCalledTimes(1)
 	})
@@ -85,21 +92,24 @@ describe("shared file URL cache", () => {
 				},
 			])
 
-		await resolveSharedFileUrl({ fileId: "file-1" })
-		const refreshed = await resolveSharedFileUrl({ fileId: "file-1" })
+		await resolveSharedMediaUrl({ fileId: "file-1" })
+		const refreshed = await resolveSharedMediaUrl({ fileId: "file-1" })
 
 		expect(refreshed?.url).toBe("https://oss.test/file-1-new")
 		expect(getTemporaryDownloadUrlMock).toHaveBeenCalledTimes(2)
 	})
 
-	it("only coalesces responses without expiry metadata", async () => {
-		getTemporaryDownloadUrlMock.mockResolvedValue([
-			{ file_id: "file-1", url: "https://oss.test/file-1" },
-		])
+	it("reuses responses without expiry metadata until the fallback TTL expires", async () => {
+		getTemporaryDownloadUrlMock
+			.mockResolvedValueOnce([{ file_id: "file-1", url: "https://oss.test/file-1-old" }])
+			.mockResolvedValueOnce([{ file_id: "file-1", url: "https://oss.test/file-1-new" }])
 
-		await resolveSharedFileUrl({ fileId: "file-1" })
-		await resolveSharedFileUrl({ fileId: "file-1" })
+		await resolveSharedMediaUrl({ fileId: "file-1" })
+		await resolveSharedMediaUrl({ fileId: "file-1" })
+		expect(getTemporaryDownloadUrlMock).toHaveBeenCalledTimes(1)
 
+		await vi.advanceTimersByTimeAsync(15 * 60 * 1000)
+		await resolveSharedMediaUrl({ fileId: "file-1" })
 		expect(getTemporaryDownloadUrlMock).toHaveBeenCalledTimes(2)
 	})
 
@@ -120,8 +130,8 @@ describe("shared file URL cache", () => {
 				},
 			])
 
-		await resolveSharedFileUrl({ fileId: "file-1", updatedAt: "v1" })
-		const refreshed = await resolveSharedFileUrl({ fileId: "file-1", updatedAt: "v2" })
+		await resolveSharedMediaUrl({ fileId: "file-1", updatedAt: "v1" })
+		const refreshed = await resolveSharedMediaUrl({ fileId: "file-1", updatedAt: "v2" })
 
 		expect(refreshed?.url).toBe("https://oss.test/file-1-new")
 		expect(getTemporaryDownloadUrlMock).toHaveBeenCalledTimes(2)
@@ -144,8 +154,8 @@ describe("shared file URL cache", () => {
 					}),
 			)
 
-		const oldRequest = resolveSharedFileUrl({ fileId: "file-1", updatedAt: "v1" })
-		const newRequest = resolveSharedFileUrl({ fileId: "file-1", updatedAt: "v2" })
+		const oldRequest = resolveSharedMediaUrl({ fileId: "file-1", updatedAt: "v1" })
+		const newRequest = resolveSharedMediaUrl({ fileId: "file-1", updatedAt: "v2" })
 
 		expect(getTemporaryDownloadUrlMock).toHaveBeenCalledTimes(2)
 		resolveOldRequest([

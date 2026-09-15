@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react"
+import { act, render, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { HTML_PERMISSION_GRANTS_CHANGED_EVENT } from "../../iframe-api/services/HtmlPermissionGrantStore"
 import {
@@ -9,6 +9,7 @@ import { shouldShowHtmlPermissionManager, useHtmlAppPermissions } from "../useHt
 
 const mocks = vi.hoisted(() => ({
 	getIframeDownloadUrl: vi.fn(),
+	modalConfirm: vi.fn(),
 	grantStore: {
 		getAppGrants: vi.fn(),
 		prune: vi.fn(),
@@ -21,7 +22,7 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("@/components/base/MagicModal", () => ({
-	default: { confirm: vi.fn() },
+	default: { confirm: mocks.modalConfirm },
 }))
 
 vi.mock("@/components/base/MagicToaster/utils", () => ({
@@ -30,7 +31,11 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 
 vi.mock("@/components/shadcn-ui/select", () => ({
 	Select: ({ children }: { children: React.ReactNode }) => children,
-	SelectContent: ({ children }: { children: React.ReactNode }) => children,
+	SelectContent: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+		<div data-slot="select-content" className={`z-select ${className || ""}`}>
+			{children}
+		</div>
+	),
 	SelectItem: ({ children }: { children: React.ReactNode }) => children,
 	SelectTrigger: ({ children }: { children: React.ReactNode }) => children,
 	SelectValue: () => null,
@@ -63,6 +68,8 @@ describe("useHtmlAppPermissions", () => {
 		mocks.grantStore.getAppGrants.mockResolvedValue([])
 		mocks.grantStore.prune.mockReset()
 		mocks.grantStore.prune.mockResolvedValue(undefined)
+		mocks.modalConfirm.mockReset()
+		mocks.modalConfirm.mockReturnValue({ destroy: vi.fn() })
 		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: () => Promise.resolve({ type: "micro-app", name: "Test App" }),
@@ -78,6 +85,27 @@ describe("useHtmlAppPermissions", () => {
 		expect(shouldShowHtmlPermissionManager(false, 0)).toBe(false)
 		expect(shouldShowHtmlPermissionManager(true, 0)).toBe(true)
 		expect(shouldShowHtmlPermissionManager(false, 1)).toBe(true)
+	})
+
+	it("uses the application select layer in the authorization modal", async () => {
+		const { result } = renderHook(() =>
+			useHtmlAppPermissions({
+				content: "<html></html>",
+				relativeFilePath: "app/index.html",
+				projectId: "project-1",
+				fileList: [],
+			}),
+		)
+
+		void result.current.authorizeHtmlPermission("llm.use")
+
+		await waitFor(() => expect(mocks.modalConfirm).toHaveBeenCalledOnce())
+		const modalContent = mocks.modalConfirm.mock.calls[0][0].content
+		const { container } = render(modalContent)
+		const selectContent = container.querySelector('[data-slot="select-content"]')
+
+		expect(selectContent).toHaveClass("z-select")
+		expect(selectContent).not.toHaveClass("!z-[950]")
 	})
 
 	it("keeps loaded app config when an unrelated file changes", async () => {

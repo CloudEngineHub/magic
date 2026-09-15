@@ -50,6 +50,7 @@ function AddModelConnectivityTest({
 			const result = await OrgAiModelProviderApi.testAiModelConnectivity({
 				service_provider_config_id: store.selectedProviderId,
 				model_version: modelId,
+				support_multi_modal: store.modelForm.modelConfig.support_multi_modal ?? false,
 			})
 
 			if (result.status) {

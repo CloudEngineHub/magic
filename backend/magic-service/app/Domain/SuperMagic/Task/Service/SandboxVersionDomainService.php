@@ -12,30 +12,25 @@ use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
-use Psr\SimpleCache\CacheInterface;
 use Throwable;
 
 readonly class SandboxVersionDomainService
 {
-    private const CACHE_KEY_LATEST_AGENT_IMAGE = 'super_magic:sandbox:latest_agent_image';
-
-    private const CACHE_TTL_LATEST_AGENT_IMAGE = 30;
-
     private LoggerInterface $logger;
 
     public function __construct(
         private TopicDomainService $topicDomainService,
         private AgentDomainService $agentDomainService,
-        private CacheInterface $cache,
         LoggerFactory $loggerFactory,
     ) {
         $this->logger = $loggerFactory->get('sandbox');
     }
 
     /**
-     * 检查话题沙箱的镜像版本，返回当前版本和最新版本.
+     * Check recorded images against the current release standard.
+     * $useCache is retained for call compatibility; standards are fetched per request.
      *
-     * @return array{current_version: string, latest_version: string, needs_update: bool}
+     * @return array{current_version: string, latest_version: string, needs_update: null|bool}
      */
     public function checkSandboxVersion(int $topicId, bool $useCache = true, string $effectiveSandboxId = ''): array
     {
@@ -46,20 +41,20 @@ readonly class SandboxVersionDomainService
 
         // 持久化映射为空时，仅接受与 topic_id 完全一致的 legacy 沙箱身份。
         if ($topicEntity->getSandboxId() === '' && $effectiveSandboxId !== (string) $topicId) {
-            return $this->buildSandboxVersionResult('', '');
+            return $this->buildSandboxVersionResult(null, []);
         }
 
         return $this->buildSandboxVersionResult(
-            $topicEntity->getAgentImage() ?? '',
-            $this->getLatestAgentImage($useCache)
+            $topicEntity->getSandboxImages(),
+            $this->getLatestImages()
         );
     }
 
     /**
-     * 批量检查话题沙箱镜像版本，返回每个 topic_id 是否需要升级.
+     * Compare a batch against one release standard without caching.
      *
      * @param int[] $topicIds
-     * @return array<int, bool> topicId => needUpgrade
+     * @return array<int, null|bool> topicId => needUpgrade
      */
     public function checkNeedUpgradeByTopicIds(array $topicIds, bool $useCache = true): array
     {
@@ -76,104 +71,60 @@ readonly class SandboxVersionDomainService
             return [];
         }
 
-        $latestImage = $this->getLatestAgentImage($useCache);
+        $latestImage = $this->getLatestImages();
         $needUpgradeMap = [];
         foreach ($topics as $topic) {
-            // 沙箱尚未创建（无 sandbox_id）时不需要升级
-            if (empty($topic->getSandboxId())) {
-                $needUpgradeMap[$topic->getId()] = false;
-                continue;
-            }
-            $currentImage = $topic->getAgentImage() ?? '';
-            $versionResult = $this->buildSandboxVersionResult($currentImage, $latestImage);
+            $versionResult = $this->buildSandboxVersionResult(
+                $topic->getSandboxId() === '' ? null : $topic->getSandboxImages(),
+                $latestImage
+            );
             $needUpgradeMap[$topic->getId()] = $versionResult['needs_update'];
-
-            $this->logger->info('[Sandbox][Version] checkNeedUpgrade detail', [
-                'topic_id' => $topic->getId(),
-                'sandbox_id' => $topic->getSandboxId(),
-                'db_agent_image_raw' => $currentImage,
-                'db_agent_image_hex' => bin2hex($currentImage),
-                'latest_image_raw' => $latestImage,
-                'latest_image_hex' => bin2hex($latestImage),
-                'current_version' => $versionResult['current_version'],
-                'latest_version' => $versionResult['latest_version'],
-                'needs_update' => $versionResult['needs_update'],
-            ]);
         }
 
         return $needUpgradeMap;
     }
 
     /**
-     * @return array{current_version: string, latest_version: string, needs_update: bool}
+     * @return array{current_version: string, latest_version: string, needs_update: null|bool}
      */
-    private function buildSandboxVersionResult(string $currentImage, string $latestImage): array
+    private function buildSandboxVersionResult(?array $currentImages, array $latestImages): array
     {
-        $currentVersion = self::extractImageVersion($currentImage);
-        $latestVersion = self::extractImageVersion($latestImage);
-
+        $needsUpdate = null;
+        if ($this->hasCompleteImages($currentImages) && $this->hasCompleteImages($latestImages)) {
+            $needsUpdate = $currentImages['agent_image'] !== $latestImages['agent_image']
+                || $currentImages['agfs_image'] !== $latestImages['agfs_image'];
+        }
         return [
-            'current_version' => $currentVersion,
-            'latest_version' => $latestVersion,
-            // 网关有最新版本时：当前版本未知（agent_image 未入库）或版本不一致，均视为需要更新
-            'needs_update' => ! empty($latestVersion) && $currentVersion !== $latestVersion,
+            'current_version' => self::extractImageVersion($currentImages['agent_image'] ?? ''),
+            'latest_version' => self::extractImageVersion($latestImages['agent_image'] ?? ''),
+            'needs_update' => $needsUpdate,
         ];
     }
 
-    /**
-     * Fetch latest agent image with a short-lived cache to reduce gateway pressure.
-     */
-    private function getLatestAgentImage(bool $useCache): string
+    private function hasCompleteImages(?array $images): bool
     {
-        if ($useCache) {
-            try {
-                $cachedImage = $this->cache->get(self::CACHE_KEY_LATEST_AGENT_IMAGE);
-                if (is_string($cachedImage)) {
-                    return $cachedImage;
-                }
-            } catch (Throwable $e) {
-                $this->logger->warning('[Sandbox][Domain] Failed to read latest agent image cache', [
-                    'cache_key' => self::CACHE_KEY_LATEST_AGENT_IMAGE,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        $latestImage = $this->agentDomainService->getLatestAgentImage();
-
-        try {
-            $this->cache->set(
-                self::CACHE_KEY_LATEST_AGENT_IMAGE,
-                $latestImage,
-                self::CACHE_TTL_LATEST_AGENT_IMAGE
-            );
-        } catch (Throwable $e) {
-            $this->logger->warning('[Sandbox][Domain] Failed to write latest agent image cache', [
-                'cache_key' => self::CACHE_KEY_LATEST_AGENT_IMAGE,
-                'error' => $e->getMessage(),
-            ]);
-        }
-
-        return $latestImage;
+        return is_string($images['agent_image'] ?? null) && trim($images['agent_image']) !== ''
+            && is_string($images['agfs_image'] ?? null) && trim($images['agfs_image']) !== '';
     }
 
-    /**
-     * 从镜像字符串中提取 tag 版本号.
-     * 例如：registry.example.com/agent:v1.2.3@sha256:xxx → v1.2.3.
-     */
-    private static function extractImageVersion(string $image): string
+    private function getLatestImages(): array
     {
-        if (empty($image)) {
+        try {
+            return $this->agentDomainService->getLatestImages();
+        } catch (Throwable $e) {
+            $this->logger->warning('[Sandbox][Version] Failed to fetch latest images', ['error' => $e->getMessage()]);
+            return [];
+        }
+    }
+
+    /** Display only; comparisons always use complete image references. */
+    private static function extractImageVersion(mixed $image): string
+    {
+        if (! is_string($image) || $image === '') {
             return '';
         }
-
-        $imageWithoutDigest = explode('@', $image, 2)[0];
-        $lastSlashPos = strrpos($imageWithoutDigest, '/');
-        $tagPos = strrpos($imageWithoutDigest, ':');
-        if ($tagPos === false || ($lastSlashPos !== false && $tagPos < $lastSlashPos)) {
-            return '';
-        }
-
-        return substr($imageWithoutDigest, $tagPos + 1);
+        $name = substr($image, (strrpos($image, '/') ?: -1) + 1);
+        $tagPos = strpos($name, ':');
+        return $tagPos === false ? $name : substr($name, $tagPos + 1);
     }
 }

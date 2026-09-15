@@ -11,7 +11,7 @@ Checkpoint业务服务
 
 from datetime import datetime
 from typing import Optional, List
-from app.core.entity.checkpoint import CheckpointInfo, VirtualCheckpoint
+from app.core.entity.checkpoint import CheckpointActivity, CheckpointInfo, VirtualCheckpoint
 from app.infrastructure.checkpoint.storage import CheckpointStorage
 from app.infrastructure.checkpoint.metadata_manager import CheckpointMetadataManager
 from app.path_manager import PathManager
@@ -55,11 +55,11 @@ class CheckpointService(Base):
                 # 系统已正确初始化
                 logger.debug(f"Checkpoint系统已初始化，当前checkpoint: {manifest.current_checkpoint_id}")
 
-            # 兜底：清除残留的 rollback_in_progress 标记
-            # 若上次进程在回滚过程中异常退出，标记可能停留在 True，会让 magicfs 持续跳过 checkpoint 维护
-            if manifest and manifest.rollback_in_progress:
-                logger.warning("检测到残留的 rollback_in_progress=True，自动清除")
-                await self.metadata_manager.set_rollback_in_progress(False)
+            # 兜底：清除残留的非 idle activity 标记
+            # 若上次进程在回滚/恢复过程中异常退出，标记可能停留下来，会让 agfs 侧 hook 持续跳过记账
+            if manifest and manifest.activity != CheckpointActivity.IDLE:
+                logger.warning(f"检测到残留的 activity={manifest.activity.value}，自动清除")
+                await self.metadata_manager.set_activity(CheckpointActivity.IDLE)
 
         except Exception as e:
             logger.error(f"初始化checkpoint系统失败: {e}")
@@ -180,9 +180,9 @@ class CheckpointService(Base):
                 file_snapshots=[]
             )
 
-            # 注意：聊天历史快照由事件监听器维护——BEFORE_MAIN_AGENT_RUN 在创建
-            # checkpoint 后立即拍 initial 整目录快照；CHAT_HISTORY_CHANGED 在每次
-            # 聊天记录保存后刷新 latest 整目录快照。本服务不直接复制聊天历史。
+            # 注意：挂载内所有空间（project / user / topic / chat_history）的
+            # 变更由 agfs 侧 checkpoint hook 依据 manifest 自动增量入账；
+            # 聊天历史运行期经 localfs 空间接管，Python 侧不做任何整目录快照。
 
             # 保存checkpoint信息
             success = await self.metadata_manager.save_checkpoint_info(checkpoint_info)

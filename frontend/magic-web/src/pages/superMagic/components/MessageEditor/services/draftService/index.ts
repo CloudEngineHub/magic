@@ -1,7 +1,7 @@
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { cloneDeep, throttle } from "lodash-es"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { DraftData, DraftKey, DraftServiceInterface, DraftVersionInfo } from "../../types"
 import { DraftService } from "./draftService"
 import { genDraftVersionId } from "./utils"

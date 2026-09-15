@@ -54,6 +54,9 @@ export function hasVideoGenerationRequestMediaIntent(
 export function hasVideoGenerationRequestEstimateIntent(
 	request: Partial<GenerateVideoRequest> | null | undefined,
 ): boolean {
+	// Edit mode needs real reference media; a leftover prompt from another mode is not enough.
+	const isEditTask = request?.task === "edit" || request?.input_mode === "video_edit"
+	if (isEditTask) return hasVideoGenerationRequestMediaIntent(request)
 	return Boolean(request?.prompt?.trim()) || hasVideoGenerationRequestMediaIntent(request)
 }
 

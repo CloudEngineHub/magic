@@ -36,6 +36,7 @@ function createCanvas(options?: {
 		...(options?.elements ?? []),
 	])
 	const downloadFiles = vi.fn().mockResolvedValue(undefined)
+	const downloadElementsAsPNG = vi.fn().mockResolvedValue(true)
 	const permissionManager = {
 		can: vi.fn((capability: string) => Boolean(capability)),
 		canDownloadFiles: vi.fn(
@@ -68,13 +69,41 @@ function createCanvas(options?: {
 				isReplacing: (elementId: string) =>
 					options?.replacingIds?.includes(elementId) ?? false,
 			},
+			clipboardManager: {
+				downloadElementsAsPNG,
+			},
 			permissionManager,
 		} as never,
 		downloadFiles,
+		downloadElementsAsPNG,
 	}
 }
 
 describe("Canvas download actions", () => {
+	it("downloads a single selected text element as PNG", async () => {
+		const { canvas, downloadElementsAsPNG } = createCanvas({ selectedIds: ["text"] })
+		const action = downloadActions.find((item) => item.id === "download.text") as
+			| UserAction<"download.text">
+			| undefined
+
+		expect(action?.canExecute(canvas)).toBe(true)
+		await action?.execute(canvas)
+		expect(downloadElementsAsPNG).toHaveBeenCalledWith(["text"])
+	})
+
+	it("ignores the text download action for multi selections", async () => {
+		const { canvas, downloadElementsAsPNG } = createCanvas({
+			selectedIds: ["video", "text", "image"],
+		})
+		const action = downloadActions.find((item) => item.id === "download.text") as
+			| UserAction<"download.text">
+			| undefined
+
+		expect(action?.canExecute(canvas)).toBe(false)
+		await action?.execute(canvas)
+		expect(downloadElementsAsPNG).not.toHaveBeenCalled()
+	})
+
 	it("downloads selected media in selection order and ignores non-media elements", async () => {
 		const { canvas, downloadFiles } = createCanvas()
 		const action = downloadActions.find((item) => item.id === "download.image") as

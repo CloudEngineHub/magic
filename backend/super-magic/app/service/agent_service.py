@@ -161,6 +161,14 @@ class AgentService(Base):
         """
         Download and extract workspace with separated archive support
 
+        恢复顺序契约（承重墙，勿改）：聊天历史必须先于 checkpoint manifest
+        落地。沙箱内 `.chat_history/` 是 localfs 空间的挂载，其 checkpoint
+        hook 只在 manifest 存在且 current_checkpoint_id 有效时记账——恢复
+        阶段（解压 zip / topic 恢复 / 清空）发生在 manifest 下载之前，此时
+        hook 因"无 manifest"静默跳过，恢复出的文件不会被记成 created。
+        若把 manifest 下载挪到聊天历史恢复之前，整个聊天历史会被灌进上一
+        会话的旧 checkpoint（一次全量帧拷贝 + 语义污染）。
+
         Args:
             agent_context: Agent context containing storage configuration
 
@@ -208,6 +216,9 @@ class AgentService(Base):
             if not chat_ready:
                 logger.warning("聊天记录未能从远程归档恢复，将使用空的本地聊天记录")
 
+        # 顺序契约的最后一步：聊天历史恢复完成后才写回 manifest（见方法
+        # docstring）。download_manifest 还会把 activity 置为 restore，让
+        # hook 跳过 manifest 恢复后到首个新 checkpoint 之间窗口的记账。
         await self._download_and_extract_checkpoints_archive(storage_service, agent_context)
 
         logger.info("聊天历史和checkpoints处理完成")
@@ -436,18 +447,13 @@ class AgentService(Base):
                 os.remove(temp_file_path)
 
     async def _replace_local_chat_history_with_empty(self, target_dir: Path) -> None:
-        """Clear local history through the same replacement path used by restores."""
-        with tempfile.TemporaryDirectory(
-            prefix=".chat-history-empty-",
-            dir=PathManager.get_project_root(),
-        ) as staging_root:
-            staging_dir = Path(staging_root) / ".chat_history"
-            staging_dir.mkdir()
-            await asyncio.to_thread(
-                TopicPersistenceManager.replace_directory,
-                staging_dir,
-                target_dir,
-            )
+        """Clear local history through the same replacement path used by restores.
+
+        运行期聊天历史目录在沙箱内是指向 localfs 挂载的 symlink，原地
+        清空内容（保留 symlink/挂载点本身），不能走整目录 rename 替换
+        （容器 overlay → FUSE 跨设备 EXDEV）。
+        """
+        await asyncio.to_thread(TopicPersistenceManager.clear_directory, target_dir)
 
     async def _download_and_extract_checkpoints_archive(self, storage_service, agent_context: AgentContext) -> None:
         """

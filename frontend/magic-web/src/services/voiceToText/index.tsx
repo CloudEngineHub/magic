@@ -6,7 +6,7 @@ import { userStore } from "@/models/user"
 import { env } from "@/utils/env"
 import { VoiceResult } from "@/components/business/VoiceInput/services/VoiceClient/types"
 import { createPersistenceStorage } from "./PersistenceManager"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import { merge } from "lodash-es"
 
 const DEFAULT_CONFIG: VoiceInputConfig = {

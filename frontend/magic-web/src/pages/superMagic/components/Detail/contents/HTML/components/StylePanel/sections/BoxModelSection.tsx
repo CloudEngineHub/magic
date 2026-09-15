@@ -1,6 +1,5 @@
 import { observer } from "mobx-react-lite"
-import { useCallback, useEffect, useState } from "react"
-import { useDebounceFn } from "ahooks"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DimensionInput, NumericDragInput } from "../controls"
 import type { StyleSectionProps } from "../types"
@@ -37,20 +36,25 @@ function formatBox(values: BoxValues) {
 
 interface EdgeInputProps {
 	label: string
+	layer: "margin" | "border" | "padding"
+	side: BoxSide
 	value: string
 	onChange: (value: string) => void
+	onCommit: (value: string) => void
 }
 
-function EdgeInput({ label, value, onChange }: EdgeInputProps) {
+function EdgeInput({ label, layer, side, value, onChange, onCommit }: EdgeInputProps) {
 	return (
 		<NumericDragInput
 			value={value}
 			onChange={onChange}
+			onCommit={onCommit}
+			onBlur={() => onCommit(value)}
 			inputMode="decimal"
 			hideStepper
 			className="h-5 w-8 rounded-none border-transparent bg-transparent px-0.5 text-center text-[11px] tabular-nums leading-none shadow-none outline-none ring-0 focus-visible:ring-0"
 			aria-label={label}
-			data-testid={`box-model-edge-${label}`}
+			data-testid={`box-model-edge-${layer}-${side}`}
 		/>
 	)
 }
@@ -61,10 +65,11 @@ interface BoxLayerProps {
 	color: "margin" | "border" | "padding"
 	center: React.ReactNode
 	onChange?: (side: BoxSide, value: string) => void
+	onCommit?: (side: BoxSide, value: string) => void
 	sideLabel: (side: BoxSide) => string
 }
 
-function BoxLayer({ label, values, color, center, onChange, sideLabel }: BoxLayerProps) {
+function BoxLayer({ label, values, color, center, onChange, onCommit, sideLabel }: BoxLayerProps) {
 	const palette = {
 		margin: "border-border bg-muted/40",
 		border: "border-border bg-background",
@@ -90,29 +95,41 @@ function BoxLayer({ label, values, color, center, onChange, sideLabel }: BoxLaye
 						<div className="col-start-2 row-start-1 flex items-center justify-center overflow-hidden">
 							<EdgeInput
 								label={sideLabel("top")}
+								layer={color}
+								side="top"
 								value={values.top}
 								onChange={(value) => onChange("top", value)}
+								onCommit={(value) => onCommit?.("top", value)}
 							/>
 						</div>
 						<div className="col-start-1 row-start-2 flex items-center justify-center overflow-hidden">
 							<EdgeInput
 								label={sideLabel("left")}
+								layer={color}
+								side="left"
 								value={values.left}
 								onChange={(value) => onChange("left", value)}
+								onCommit={(value) => onCommit?.("left", value)}
 							/>
 						</div>
 						<div className="col-start-3 row-start-2 flex items-center justify-center overflow-hidden">
 							<EdgeInput
 								label={sideLabel("right")}
+								layer={color}
+								side="right"
 								value={values.right}
 								onChange={(value) => onChange("right", value)}
+								onCommit={(value) => onCommit?.("right", value)}
 							/>
 						</div>
 						<div className="col-start-2 row-start-3 flex items-center justify-center overflow-hidden">
 							<EdgeInput
 								label={sideLabel("bottom")}
+								layer={color}
+								side="bottom"
 								value={values.bottom}
 								onChange={(value) => onChange("bottom", value)}
+								onCommit={(value) => onCommit?.("bottom", value)}
 							/>
 						</div>
 					</>
@@ -125,8 +142,11 @@ function BoxLayer({ label, values, color, center, onChange, sideLabel }: BoxLaye
 	)
 }
 
+type BoxProperty = "margin" | "padding" | "borderWidth"
+
 const BoxModelSection = observer(function BoxModelSection({
 	selectedElement,
+	editorRef,
 	onStyleChange,
 }: StyleSectionProps) {
 	const { t } = useTranslation("super")
@@ -134,6 +154,24 @@ const BoxModelSection = observer(function BoxModelSection({
 	const [margin, setMargin] = useState(() => parseBox(computedStyles?.margin))
 	const [border, setBorder] = useState(() => parseBox(computedStyles?.borderWidth))
 	const [padding, setPadding] = useState(() => parseBox(computedStyles?.padding))
+	const previewSessionRef = useRef<{
+		property: BoxProperty
+		selector: string
+		generation: number
+	} | null>(null)
+	const previewBatchRef = useRef<{
+		property: BoxProperty
+		selector: string
+		generation: number
+	} | null>(null)
+	const previewPromiseRef = useRef<Promise<void> | null>(null)
+	const previewGenerationRef = useRef(0)
+	const lastCommitRef = useRef<{
+		property: BoxProperty
+		selector?: string
+		value: string
+	} | null>(null)
+	const commitPromiseRef = useRef<Promise<void> | null>(null)
 
 	useEffect(() => {
 		setMargin(parseBox(computedStyles?.margin))
@@ -146,16 +184,152 @@ const BoxModelSection = observer(function BoxModelSection({
 		selectedElement?.selector,
 	])
 
-	const { run: applyBoxChange } = useDebounceFn(
-		(property: "margin" | "padding" | "borderWidth", values: BoxValues) => {
-			onStyleChange?.(property, formatBox(values))
+	const cancelPreviewBatch = useCallback(async () => {
+		if (!previewBatchRef.current) {
+			previewSessionRef.current = null
+			return
+		}
+		previewBatchRef.current = null
+		previewSessionRef.current = null
+		const editor = editorRef?.current
+		if (!editor) return
+		try {
+			await editor.cancelBatchOperation()
+		} catch (error) {
+			console.error("[BoxModelSection] Failed to cancel preview:", error)
+		}
+	}, [editorRef])
+
+	useEffect(() => {
+		previewGenerationRef.current += 1
+		previewSessionRef.current = null
+		lastCommitRef.current = null
+		void cancelPreviewBatch()
+
+		return () => {
+			previewGenerationRef.current += 1
+			previewSessionRef.current = null
+			void cancelPreviewBatch()
+		}
+	}, [cancelPreviewBatch, selectedElement?.selector])
+
+	const previewBox = useCallback(
+		(property: BoxProperty, previous: BoxValues, next: BoxValues) => {
+			const selector = selectedElement?.selector
+			const editor = editorRef?.current
+			if (!selector || !editor) return
+			const generation = previewGenerationRef.current
+			const styles = { [property]: formatBox(next) }
+			const runPreview = async () => {
+				let ownsBatch = false
+				try {
+					const currentSession = previewSessionRef.current
+					if (
+						currentSession?.property !== property ||
+						currentSession.selector !== selector ||
+						currentSession.generation !== generation
+					) {
+						if (previewBatchRef.current) await cancelPreviewBatch()
+						if (generation !== previewGenerationRef.current) return
+						await editor.beginBatchOperation(selector, {
+							[property]: formatBox(previous),
+						})
+						previewBatchRef.current = { property, selector, generation }
+						ownsBatch = true
+					}
+					if (generation !== previewGenerationRef.current) {
+						if (ownsBatch) await cancelPreviewBatch()
+						return
+					}
+					await editor.applyStylesTemporary(selector, styles)
+					if (generation !== previewGenerationRef.current) {
+						if (ownsBatch) await cancelPreviewBatch()
+						return
+					}
+					previewSessionRef.current = { property, selector, generation }
+				} catch (error) {
+					console.error("[BoxModelSection] Preview failed:", error)
+					if (
+						previewBatchRef.current?.property === property &&
+						previewBatchRef.current.selector === selector &&
+						previewBatchRef.current.generation === generation
+					) {
+						await cancelPreviewBatch()
+					}
+					if (previewSessionRef.current?.property === property) {
+						previewSessionRef.current = null
+					}
+				}
+			}
+			const previousPromise = previewPromiseRef.current ?? Promise.resolve()
+			const promise = previousPromise.then(runPreview, runPreview)
+			previewPromiseRef.current = promise
+			void promise.finally(() => {
+				if (previewPromiseRef.current === promise) previewPromiseRef.current = null
+			})
 		},
-		{ wait: 250 },
+		[cancelPreviewBatch, editorRef, selectedElement?.selector],
+	)
+
+	const commitBox = useCallback(
+		async (property: BoxProperty, values: BoxValues) => {
+			const styles = { [property]: formatBox(values) }
+			const selector = selectedElement?.selector
+			const runCommit = async () => {
+				await previewPromiseRef.current?.catch(() => undefined)
+				const value = styles[property]
+				const lastCommit = lastCommitRef.current
+				if (
+					lastCommit?.property === property &&
+					lastCommit.selector === selector &&
+					lastCommit.value === value
+				) {
+					return
+				}
+
+				const session = previewSessionRef.current
+				const editor = editorRef?.current
+				if (session?.property === property && session.selector === selector && editor) {
+					try {
+						await editor.endBatchOperation(selector, styles)
+						previewSessionRef.current = null
+						previewBatchRef.current = null
+					} catch (error) {
+						console.error("[BoxModelSection] Commit failed:", error)
+						await cancelPreviewBatch()
+						onStyleChange?.(property, value)
+						lastCommitRef.current = { property, selector, value }
+						return
+					}
+					try {
+						await editor.refreshSelectedElement(selector)
+					} catch (error) {
+						console.error("[BoxModelSection] Refresh after commit failed:", error)
+					}
+					lastCommitRef.current = { property, selector, value }
+					return
+				}
+
+				// Preview is optional; persist the value when it was not established.
+				onStyleChange?.(property, value)
+				lastCommitRef.current = { property, selector, value }
+			}
+			const previousPromise = commitPromiseRef.current ?? Promise.resolve()
+			const promise = previousPromise.then(runCommit, runCommit)
+			commitPromiseRef.current = promise
+			try {
+				await promise
+			} finally {
+				if (commitPromiseRef.current === promise) commitPromiseRef.current = null
+			}
+		},
+		[cancelPreviewBatch, editorRef, onStyleChange, selectedElement?.selector],
 	)
 
 	const updateBox = useCallback(
-		(property: "margin" | "padding" | "borderWidth", side: BoxSide, value: string) => {
+		(property: BoxProperty, side: BoxSide, value: string) => {
 			if (value !== "" && !/^-?\d*(?:\.\d*)?$/.test(value)) return
+			lastCommitRef.current = null
 			if (
 				property === "borderWidth" &&
 				Number.parseFloat(value) > 0 &&
@@ -167,11 +341,21 @@ const BoxModelSection = observer(function BoxModelSection({
 				property === "margin" ? setMargin : property === "padding" ? setPadding : setBorder
 			setter((previous) => {
 				const next = { ...previous, [side]: value || "0" }
-				applyBoxChange(property, next)
+				previewBox(property, previous, next)
 				return next
 			})
 		},
-		[applyBoxChange, computedStyles?.borderStyle, onStyleChange],
+		[computedStyles?.borderStyle, onStyleChange, previewBox],
+	)
+
+	const finishBox = useCallback(
+		(property: BoxProperty, side: BoxSide, value: string) => {
+			if (value !== "" && !/^-?\d*(?:\.\d*)?$/.test(value)) return
+			const current =
+				property === "margin" ? margin : property === "padding" ? padding : border
+			void commitBox(property, { ...current, [side]: value || "0" })
+		},
+		[border, commitBox, margin, padding],
 	)
 
 	const width = getDimensionField(selectedElement, "width")
@@ -225,6 +409,7 @@ const BoxModelSection = observer(function BoxModelSection({
 				color="margin"
 				sideLabel={(side) => getSideLabel(marginLabel, side)}
 				onChange={(side, value) => updateBox("margin", side, value)}
+				onCommit={(side, value) => finishBox("margin", side, value)}
 				center={
 					<BoxLayer
 						label={t("stylePanel.boxModelLayer", {
@@ -235,6 +420,7 @@ const BoxModelSection = observer(function BoxModelSection({
 						color="border"
 						sideLabel={(side) => getSideLabel(borderLabel, side)}
 						onChange={(side, value) => updateBox("borderWidth", side, value)}
+						onCommit={(side, value) => finishBox("borderWidth", side, value)}
 						center={
 							<BoxLayer
 								label={paddingLabel}
@@ -242,6 +428,7 @@ const BoxModelSection = observer(function BoxModelSection({
 								color="padding"
 								sideLabel={(side) => getSideLabel(paddingLabel, side)}
 								onChange={(side, value) => updateBox("padding", side, value)}
+								onCommit={(side, value) => finishBox("padding", side, value)}
 								center={
 									<div
 										className="flex min-h-8 w-full min-w-0 items-center justify-center border border-dashed border-border bg-background px-1 py-1 text-center text-[11px] tabular-nums leading-tight text-foreground"

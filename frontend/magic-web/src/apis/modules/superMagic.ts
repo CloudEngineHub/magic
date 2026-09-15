@@ -1,4 +1,4 @@
-import type { HttpClient, RequestConfig } from "@/apis/core/HttpClient"
+import type { ServiceHttpClient, RequestConfig } from "@/infrastructure/network/http/clients"
 import type { SeqRecord } from "@/apis/modules/chat/types"
 import type { FileScope } from "./fileScope"
 import type {
@@ -35,7 +35,6 @@ import type {
 	RemoveBackgroundRequest,
 } from "@/components/CanvasDesign/public/magic-types"
 import type { PlaybookItem } from "./crew"
-import { genRequestUrl } from "@/utils/http"
 import { generateRecordingSummaryApi } from "./superMagic/recordSummary"
 import { generateAudioProjectsApi } from "./superMagic/audioProjects"
 import { generateCollaborationApi } from "./superMagic/collaboration"
@@ -855,24 +854,20 @@ export interface ShareResourceSettings {
 	extra?: ShareResourceExtra
 }
 
-export const generateSuperMagicApi = (fetch: HttpClient) => ({
+export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	getSlidesTemplates(
 		params: SlidesTemplateQueryParams,
 		options?: { xMagicImageProcess?: ImageProcessOptions },
 	) {
 		return fetch
-			.get<SlidesTemplateRawListResponse>(
-				genRequestUrl("/api/v1/slides-templates", {}, { scope: "official", ...params }),
-				{
-					headers: {
-						...(options?.xMagicImageProcess && {
-							"X-Magic-Image-Process": buildImageProcessQuery(
-								options.xMagicImageProcess,
-							),
-						}),
-					},
+			.get<SlidesTemplateRawListResponse>("/api/v1/slides-templates", {
+				params: { scope: "official", ...params },
+				headers: {
+					...(options?.xMagicImageProcess && {
+						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
+					}),
 				},
-			)
+			})
 			.then(normalizeSlidesTemplateResponse)
 	},
 
@@ -881,18 +876,14 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		options?: { xMagicImageProcess?: ImageProcessOptions },
 	) {
 		return fetch
-			.get<SlidesTemplateRawListResponse>(
-				genRequestUrl("/api/v1/slides-templates/favorites", {}, params),
-				{
-					headers: {
-						...(options?.xMagicImageProcess && {
-							"X-Magic-Image-Process": buildImageProcessQuery(
-								options.xMagicImageProcess,
-							),
-						}),
-					},
+			.get<SlidesTemplateRawListResponse>("/api/v1/slides-templates/favorites", {
+				params: { ...params },
+				headers: {
+					...(options?.xMagicImageProcess && {
+						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
+					}),
 				},
-			)
+			})
 			.then(normalizeSlidesTemplateResponse)
 	},
 
@@ -901,76 +892,67 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		options?: { xMagicImageProcess?: ImageProcessOptions },
 	) {
 		return fetch
-			.get<SlidesTemplateRawListResponse>(
-				genRequestUrl("/api/v1/slides-templates/used", {}, params),
-				{
-					headers: {
-						...(options?.xMagicImageProcess && {
-							"X-Magic-Image-Process": buildImageProcessQuery(
-								options.xMagicImageProcess,
-							),
-						}),
-					},
-				},
-			)
-			.then(normalizeSlidesTemplateResponse)
-	},
-
-	getSlidesTemplateCodeAvailability(code: string) {
-		return fetch.get<SlidesTemplateCodeAvailabilityResponse>(
-			genRequestUrl("/api/v1/slides-templates/${code}/availability", { code }),
-		)
-	},
-
-	favoriteSlidesTemplate(code: string) {
-		return fetch.post<[]>(genRequestUrl("/api/v1/slides-templates/${code}/favorite", { code }))
-	},
-
-	unfavoriteSlidesTemplate(code: string) {
-		return fetch.delete<[]>(
-			genRequestUrl("/api/v1/slides-templates/${code}/favorite", { code }),
-		)
-	},
-
-	deleteSlidesTemplate(code: string) {
-		return fetch.delete<[]>(genRequestUrl("/api/v1/slides-templates/${code}", { code }))
-	},
-
-	getSlidesTemplateCategories(params: SlidesTemplateCategoryQueryParams) {
-		return fetch.get<SlidesTemplateCategoryListResponse>(
-			genRequestUrl("/api/v1/slides-template-categories", {}, params),
-		)
-	},
-
-	getSlidesTemplateTags(params: SlidesTemplateTagQueryParams = {}) {
-		return fetch.get<SlidesTemplateTagListResponse>(
-			genRequestUrl("/api/v1/slides-template-tags", {}, params),
-		)
-	},
-
-	getSlidesTemplateTagGroups(params: { category_code?: string } = {}) {
-		return fetch.get<SlidesTemplateTagGroupItem[]>(
-			genRequestUrl("/api/v1/slides-template/tags/groups", {}, params),
-		)
-	},
-
-	getSlidesTemplateCount(params: SlidesTemplateQueryParams) {
-		return fetch.get<SlidesTemplateCountResponse>(
-			genRequestUrl("/api/v1/slides-templates/count", {}, { scope: "official", ...params }),
-		)
-	},
-
-	getSlidesTemplateDetail(code: string, options?: { xMagicImageProcess?: ImageProcessOptions }) {
-		return fetch.get<SlidesTemplateDetail>(
-			genRequestUrl("/api/v1/slides-templates/${code}", { code }),
-			{
+			.get<SlidesTemplateRawListResponse>("/api/v1/slides-templates/used", {
+				params: { ...params },
 				headers: {
 					...(options?.xMagicImageProcess && {
 						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
 					}),
 				},
-			},
+			})
+			.then(normalizeSlidesTemplateResponse)
+	},
+
+	getSlidesTemplateCodeAvailability(code: string) {
+		return fetch.get<SlidesTemplateCodeAvailabilityResponse>(
+			`/api/v1/slides-templates/${code}/availability`,
 		)
+	},
+
+	favoriteSlidesTemplate(code: string) {
+		return fetch.post<[]>(`/api/v1/slides-templates/${code}/favorite`)
+	},
+
+	unfavoriteSlidesTemplate(code: string) {
+		return fetch.delete<[]>(`/api/v1/slides-templates/${code}/favorite`)
+	},
+
+	deleteSlidesTemplate(code: string) {
+		return fetch.delete<[]>(`/api/v1/slides-templates/${code}`)
+	},
+
+	getSlidesTemplateCategories(params: SlidesTemplateCategoryQueryParams) {
+		return fetch.get<SlidesTemplateCategoryListResponse>("/api/v1/slides-template-categories", {
+			params: { ...params },
+		})
+	},
+
+	getSlidesTemplateTags(params: SlidesTemplateTagQueryParams = {}) {
+		return fetch.get<SlidesTemplateTagListResponse>("/api/v1/slides-template-tags", {
+			params: { ...params },
+		})
+	},
+
+	getSlidesTemplateTagGroups(params: { category_code?: string } = {}) {
+		return fetch.get<SlidesTemplateTagGroupItem[]>("/api/v1/slides-template/tags/groups", {
+			params: { ...params },
+		})
+	},
+
+	getSlidesTemplateCount(params: SlidesTemplateQueryParams) {
+		return fetch.get<SlidesTemplateCountResponse>("/api/v1/slides-templates/count", {
+			params: { scope: "official", ...params },
+		})
+	},
+
+	getSlidesTemplateDetail(code: string, options?: { xMagicImageProcess?: ImageProcessOptions }) {
+		return fetch.get<SlidesTemplateDetail>(`/api/v1/slides-templates/${code}`, {
+			headers: {
+				...(options?.xMagicImageProcess && {
+					"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
+				}),
+			},
+		})
 	},
 
 	saveSlidesTemplate(payload: SaveSlidesTemplatePayload) {
@@ -1188,18 +1170,14 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	getOrganizationList(params?: GetOrganizationListParams) {
 		const { page = 1, page_size = 10, organization_name, magic_id } = params || {}
 
-		return fetch.get(
-			genRequestUrl(
-				`/api/v1/super-agent/admin/billing-manager/organizations`,
-				{},
-				{
-					page: page.toString(),
-					page_size: page_size.toString(),
-					...(organization_name && { organization_name }),
-					...(magic_id && { magic_id }),
-				},
-			),
-		)
+		return fetch.get(`/api/v1/super-agent/admin/billing-manager/organizations`, {
+			params: {
+				page: page.toString(),
+				page_size: page_size.toString(),
+				...(organization_name && { organization_name }),
+				...(magic_id && { magic_id }),
+			},
+		})
 	},
 
 	/**
@@ -1256,17 +1234,13 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		page_size?: number
 		sort_direction?: "asc" | "desc"
 	}) {
-		return fetch.get(
-			genRequestUrl(
-				`/api/v1/admin/ai/content-audit/topic/${resource_id}/messages`,
-				{},
-				{
-					page,
-					page_size,
-					sort_direction,
-				},
-			),
-		)
+		return fetch.get(`/api/v1/admin/ai/content-audit/topic/${resource_id}/messages`, {
+			params: {
+				page,
+				page_size,
+				sort_direction,
+			},
+		})
 	},
 
 	/**
@@ -1279,18 +1253,14 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		projectId: string
 		temporaryToken?: string
 	}) {
-		return fetch.get(
-			genRequestUrl(
-				`/api/v1/admin/ai/content-audit/project/${projectId}/attachments`,
-				{},
-				{
-					page: 1,
-					page_size: 999,
-					token: temporaryToken || "",
-					project_id: projectId,
-				},
-			),
-		)
+		return fetch.get(`/api/v1/admin/ai/content-audit/project/${projectId}/attachments`, {
+			params: {
+				page: 1,
+				page_size: 999,
+				token: temporaryToken || "",
+				project_id: projectId,
+			},
+		})
 	},
 
 	// 通过项目id获取附件列表
@@ -1304,7 +1274,13 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			{
 				page: 1,
 				page_size: 999,
-				file_type: ["user_upload", "process", "system_auto_upload", "directory"],
+				file_type: [
+					"user_upload",
+					"user_create",
+					"process",
+					"system_auto_upload",
+					"directory",
+				],
 				...(params.scope ? { scope: params.scope } : {}),
 				...(params?.temporaryToken ? { token: params.temporaryToken } : {}),
 			},
@@ -1386,19 +1362,15 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param params
 	 */
 	getAttachmentsByTopicId(params: { topic_id: string; temporary_token: string }) {
-		return fetch.get(
-			genRequestUrl(
-				`/api/v1/admin/ai/content-audit/topic/${params?.topic_id}/attachments`,
-				{},
-				{
-					page: 1,
-					page_size: 999,
-					file_type: ["user_upload", "process", "system_auto_upload"],
-					token: params.temporary_token || "",
-					topic_id: params?.topic_id,
-				},
-			),
-		)
+		return fetch.get(`/api/v1/admin/ai/content-audit/topic/${params?.topic_id}/attachments`, {
+			params: {
+				page: 1,
+				page_size: 999,
+				file_type: ["user_upload", "user_create", "process", "system_auto_upload"],
+				token: params.temporary_token || "",
+				topic_id: params?.topic_id,
+			},
+		})
 	},
 
 	/**
@@ -1422,16 +1394,10 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		workspace_name?: string
 		pin_priority?: boolean
 	}) {
-		return fetch.get(
-			genRequestUrl(
-				"/api/v1/super-agent/workspaces/queries",
-				{},
-				{ page, page_size, workspace_type, auto_create, workspace_name, pin_priority },
-			),
-			{
-				enableRequestUnion: true,
-			},
-		)
+		return fetch.get("/api/v1/super-agent/workspaces/queries", {
+			params: { page, page_size, workspace_type, auto_create, workspace_name, pin_priority },
+			enableRequestUnion: true,
+		})
 	},
 
 	/**
@@ -1624,9 +1590,9 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param page_size
 	 */
 	getTopicsByProjectId({ id, page, page_size }: { id: string; page: number; page_size: number }) {
-		return fetch.get<WithPage<Topic>>(
-			genRequestUrl("/api/v1/super-agent/projects/${id}/topics", { id }, { page, page_size }),
-		)
+		return fetch.get<WithPage<Topic>>(`/api/v1/super-agent/projects/${id}/topics`, {
+			params: { page, page_size },
+		})
 	},
 
 	getSidebarTopicsByProjectId({
@@ -1640,13 +1606,9 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		page_size: number
 		q?: string
 	}) {
-		return fetch.get<WithPage<Topic>>(
-			genRequestUrl(
-				"/api/v1/super-agent/projects/${id}/sidebar-topics",
-				{ id },
-				{ page, page_size, q },
-			),
-		)
+		return fetch.get<WithPage<Topic>>(`/api/v1/super-agent/projects/${id}/sidebar-topics`, {
+			params: { page, page_size, q },
+		})
 	},
 
 	getMyResourceStatus(payload: { workspace_ids?: string[]; project_ids?: string[] }) {
@@ -2210,24 +2172,18 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		page: number
 		page_size: number
 	}) {
-		return fetch.get<WithPage<ProjectListItem>>(
-			genRequestUrl(
-				"/api/v1/super-agent/projects/queries",
-				{},
-				{
-					workspace_id,
-					project_name,
-					order_by,
-					sort,
-					pin_priority,
-					page,
-					page_size,
-				},
-			),
-			{
-				enableRequestUnion: true,
+		return fetch.get<WithPage<ProjectListItem>>("/api/v1/super-agent/projects/queries", {
+			params: {
+				workspace_id,
+				project_name,
+				order_by,
+				sort,
+				pin_priority,
+				page,
+				page_size,
 			},
-		)
+			enableRequestUnion: true,
+		})
 	},
 
 	/**
@@ -2281,7 +2237,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		options?: Omit<RequestConfig, "url">,
 	) {
 		return fetch.post<WithPage<ProjectListItem>>(
-			genRequestUrl("/api/v1/super-agent/projects/participated"),
+			"/api/v1/super-agent/projects/participated",
 			{ workspace_id, project_name, page, page_size, show_collaboration },
 			options,
 		)
@@ -2871,7 +2827,8 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 */
 	getFileHistoryVersions({ file_id, page_size }: { file_id: string; page_size: number }) {
 		return fetch.get<WithPage<FileHistoryVersion>>(
-			genRequestUrl(`/api/v1/super-agent/file/${file_id}/versions`, {}, { page_size }),
+			`/api/v1/super-agent/file/${file_id}/versions`,
+			{ params: { page_size } },
 		)
 	},
 
@@ -3096,16 +3053,12 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @returns 图片生成结果响应数据
 	 */
 	getImageGenerationResult(params: GetImageGenerationResultParams) {
-		return fetch.get<ImageGenerationResultResponse>(
-			genRequestUrl(
-				"/api/v1/design/image-generation-result",
-				{},
-				{
-					project_id: params.project_id,
-					image_id: params.image_id,
-				},
-			),
-		)
+		return fetch.get<ImageGenerationResultResponse>("/api/v1/design/image-generation-result", {
+			params: {
+				project_id: params.project_id,
+				image_id: params.image_id,
+			},
+		})
 	},
 
 	/**
@@ -3115,14 +3068,13 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 */
 	getImageGenerationResults(params: GetImageGenerationResultsParams) {
 		return fetch.get<ImageGenerationResultsResponse>(
-			genRequestUrl(
-				"/api/v1/design/image-generation-results",
-				{},
-				{
+			"/api/v1/design/image-generation-results",
+			{
+				params: {
 					project_id: params.project_id,
 					image_id: params.image_id,
 				},
-			),
+			},
 		)
 	},
 
@@ -3159,16 +3111,12 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @returns 视频生成结果响应数据
 	 */
 	getVideoGenerationResult(params: GetVideoGenerationResultParams) {
-		return fetch.get<VideoGenerationResultResponse>(
-			genRequestUrl(
-				"/api/v1/design/video-generation-result",
-				{},
-				{
-					project_id: params.project_id,
-					video_id: params.video_id,
-				},
-			),
-		)
+		return fetch.get<VideoGenerationResultResponse>("/api/v1/design/video-generation-result", {
+			params: {
+				project_id: params.project_id,
+				video_id: params.video_id,
+			},
+		})
 	},
 
 	/**
@@ -3241,9 +3189,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param name - search name
 	 */
 	matchLlmModels(name: string) {
-		return fetch.get<LlmModelMatchResponse>(
-			genRequestUrl("/api/v1/llm-model/match", {}, { name }),
-		)
+		return fetch.get<LlmModelMatchResponse>("/api/v1/llm-model/match", { params: { name } })
 	},
 
 	/**

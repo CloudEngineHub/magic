@@ -39,7 +39,12 @@ ELEMENT_DETAILS_VERSION = "1.0.0"
 ELEMENT_DETAIL_SOURCE_USER = "user"
 
 # 需要从主文件拆出的重字段（与方案 2.4 表一致）
-HEAVY_FIELDS = ("generateImageRequest", "generateVideoRequest", "visualUnderstanding")
+HEAVY_FIELDS = (
+    "generateImageRequest",
+    "generateVideoRequest",
+    "visualUnderstanding",
+    "videoGenerationResultMeta",
+)
 
 
 def _get_element_details_path(

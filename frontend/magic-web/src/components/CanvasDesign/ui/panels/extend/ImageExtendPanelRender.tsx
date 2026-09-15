@@ -97,6 +97,10 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 		shouldShow: shouldShowExtendPanel,
 		positionEventType: "extend:position",
 		trackedElementId: extendingElementId,
+		stickyTopRight: {
+			gap: 8,
+			headerSelector: "[data-canvas-design-header-actions]",
+		},
 	})
 
 	const { containerRef: floatingRef } = useFloatingComponent({

@@ -91,4 +91,10 @@ describe("locale code-splitting groups", () => {
 			),
 		).toBe(false)
 	})
+
+	it("does not force the lazy editor into a shared manual chunk", () => {
+		expect(createCodeSplittingGroups().some((item) => item.name === "simple-editor")).toBe(
+			false,
+		)
+	})
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { VideoElement } from "../../elements/video/VideoElement"
-import { VideoResourceManager } from "../video/VideoResourceManager"
+import { isUsableVideoPosterSource, VideoResourceManager } from "../video/VideoResourceManager"
 
 function deferred<T>() {
 	let resolve!: (value: T) => void
@@ -278,8 +278,54 @@ describe("VideoResourceManager", () => {
 
 		expect(result).toBeNull()
 		expect(entry.resource).toBeNull()
-		expect(stalePoster.width).toBe(0)
-		expect(stalePoster.height).toBe(0)
+		expect(stalePoster.width).toBe(1)
+		expect(stalePoster.height).toBe(1)
+		expect(isUsableVideoPosterSource(stalePoster)).toBe(false)
+	})
+
+	it("detaches scene-graph consumers before releasing a poster", () => {
+		const poster = document.createElement("canvas")
+		poster.width = 48
+		poster.height = 24
+		let currentImage: unknown = poster
+		const image = vi.fn(function (nextImage?: unknown) {
+			if (arguments.length > 0) currentImage = nextImage
+			return currentImage
+		})
+		const matchingNode = {
+			getClassName: () => "Image",
+			getChildren: () => [],
+			image,
+		}
+		const eventEmitter = {
+			emit: vi.fn((event: { type: string }) => {
+				if (event.type === "resource:video:will-release") {
+					expect(currentImage).toBe(poster)
+				}
+			}),
+		}
+		const manager = Object.create(VideoResourceManager.prototype) as Record<string, unknown>
+		manager.canvas = {
+			eventEmitter,
+			getAllLayers: () => new Map([["content", { getChildren: () => [matchingNode] }]]),
+		} as never
+
+		;(
+			manager as unknown as {
+				releaseResource: (
+					resource: { poster: HTMLCanvasElement; metadata: unknown },
+					context: { path: string; reason: string },
+				) => void
+			}
+		).releaseResource(
+			{ poster, metadata: {} },
+			{ path: "videos/a.mp4", reason: "viewport-far" },
+		)
+
+		expect(currentImage).toBeUndefined()
+		expect(poster.width).toBe(1)
+		expect(poster.height).toBe(1)
+		expect(isUsableVideoPosterSource(poster)).toBe(false)
 	})
 
 	it("marks preview decode failures as preservable during refresh", async () => {

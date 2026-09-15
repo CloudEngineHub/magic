@@ -276,17 +276,21 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
     }
 
     /** Run the complete vector-index reconciliation for the official templates. */
-    public function reindexVectorIndex(Authenticatable|BaseDataIsolation $authorization): array
-    {
+    public function reindexVectorIndex(
+        Authenticatable|BaseDataIsolation $authorization,
+        bool $forceReEmbedding = false,
+    ): array {
         $dataIsolation = $this->createSlidesTemplateDataIsolation($authorization);
         $this->assertOfficialOrganization($dataIsolation);
 
-        return $this->reconcileVectorIndex($dataIsolation);
+        return $this->reconcileVectorIndex($dataIsolation, $forceReEmbedding);
     }
 
     /** Clean orphan points and queue every official template for reconciliation. */
-    public function reconcileVectorIndex(SlidesTemplateDataIsolation $dataIsolation): array
-    {
+    public function reconcileVectorIndex(
+        SlidesTemplateDataIsolation $dataIsolation,
+        bool $forceReEmbedding = false,
+    ): array {
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
         $reconcileSucceeded = true;
         $removed = 0;
@@ -303,7 +307,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
 
         $queued = 0;
         try {
-            $result = $this->queueOfficialVectorReindex($dataIsolation, forceReEmbedding: false);
+            $result = $this->queueOfficialVectorReindex($dataIsolation, forceReEmbedding: $forceReEmbedding);
             $queued = $result['queued'] ?? 0;
         } catch (Throwable $throwable) {
             $reconcileSucceeded = false;

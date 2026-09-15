@@ -62,7 +62,7 @@ export const InspectorDetailComponent: React.FC<NodeViewProps> = ({
 		event.stopPropagation()
 	}, [])
 
-	const headerLabel = getInspectorDetailHeaderLabel(t, attrs.textContent)
+	const headerLabel = getInspectorDetailHeaderLabel(t, attrs.textContent, attrs.tagName)
 	const fileData =
 		attrs.fileMention?.type === MentionItemType.PROJECT_FILE
 			? (attrs.fileMention.data as ProjectFileMentionData)

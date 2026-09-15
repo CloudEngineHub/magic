@@ -15,7 +15,7 @@ import PlugIcon from "@/components/business/MentionPanel/components/icons/PlugIc
 import SkillIcon from "@/components/business/MentionPanel/components/icons/SkillIcon"
 import ToolIcon from "@/components/business/MentionPanel/components/icons/ToolIcon"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { logger as Logger } from "@/utils/log"
+import { logger as Logger } from "@/infrastructure/logger"
 import type { LocaleInput } from "../i18n"
 import { MentionItemType, type ProjectMentionData } from "../types"
 import {

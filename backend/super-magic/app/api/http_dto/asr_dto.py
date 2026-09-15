@@ -95,6 +95,10 @@ class FinalizeAsrTaskRequest(BaseModel):
         None,
         description="流式识别文件配置对象（可选）"
     )
+    force_reset: bool = Field(
+        default=False,
+        description="强制重置重试计数并重新合并（手动重新合并场景，任务 error 且重试耗尽时使用）"
+    )
 
     class Config:
         json_schema_extra = {
@@ -115,7 +119,8 @@ class FinalizeAsrTaskRequest(BaseModel):
                     "transcript_file": {
                         "source_path": ".asr_recordings/task_2/流式识别.md",
                         "action": "delete"
-                    }
+                    },
+                    "force_reset": False
                 },
                 {
                     "task_key": "meeting_20250124_001",

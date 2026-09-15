@@ -33,9 +33,9 @@ class TestLabelManager extends BaseLabelManager {
 		return this.reorderCount
 	}
 
-	protected override reorderAllLabels(): void {
+	protected override reorderAllLabels(skipBatchDraw = false): void {
 		this.reorderCount += 1
-		super.reorderAllLabels()
+		super.reorderAllLabels(skipBatchDraw)
 	}
 }
 
@@ -94,6 +94,12 @@ describe("BaseLabelManager candidate cache", () => {
 				},
 			],
 			[
+				"image-1",
+				{
+					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+				},
+			],
+			[
 				"text-1",
 				{
 					getData: () => ({ id: "text-1", type: ElementTypeEnum.Text }),
@@ -148,8 +154,8 @@ describe("BaseLabelManager candidate cache", () => {
 			},
 			visibilityConfig: {
 				alwaysVisibleTypes: new Set([ElementTypeEnum.Frame]),
-				elementTypes: new Set([ElementTypeEnum.Frame]),
-				hoverOrSelectTypes: new Set(),
+				elementTypes: new Set([ElementTypeEnum.Frame, ElementTypeEnum.Image]),
+				hoverOrSelectTypes: new Set([ElementTypeEnum.Image]),
 			},
 		})
 		const secondManager = new TestLabelManager({
@@ -163,8 +169,8 @@ describe("BaseLabelManager candidate cache", () => {
 			},
 			visibilityConfig: {
 				alwaysVisibleTypes: new Set([ElementTypeEnum.Frame]),
-				elementTypes: new Set([ElementTypeEnum.Frame]),
-				hoverOrSelectTypes: new Set(),
+				elementTypes: new Set([ElementTypeEnum.Frame, ElementTypeEnum.Image]),
+				hoverOrSelectTypes: new Set([ElementTypeEnum.Image]),
 			},
 		})
 
@@ -174,10 +180,12 @@ describe("BaseLabelManager candidate cache", () => {
 
 		expect(requestAnimationFrameSpy).toHaveBeenCalledTimes(2)
 		expect(getAllElementIds).toHaveBeenCalledTimes(1)
+		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(2)
+		expect(firstManager.hasLabel("image-1")).toBe(false)
 		expect(queryElementIdsByExpandedRect).toHaveBeenLastCalledWith(
 			expect.any(Object),
 			expect.any(Number),
-			{ elementIds: ["frame-1"] },
+			{ elementIds: new Set(["frame-1"]) },
 		)
 
 		firstManager.destroy()
@@ -231,7 +239,10 @@ describe("BaseLabelManager candidate cache", () => {
 				getAbsoluteTransform: () => ({
 					copy: () => ({
 						invert: () => ({
-							point: (point: { x: number; y: number }) => point,
+							point: (point: { x: number; y: number }) => ({
+								x: point.x / stageScale,
+								y: point.y / stageScale,
+							}),
 						}),
 					}),
 				}),
@@ -273,20 +284,19 @@ describe("BaseLabelManager candidate cache", () => {
 		eventEmitter.emit("viewport:scale")
 		flushRaf()
 		expect(manager.getLabelScaleX("frame-1")).toBe(2)
+		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(2)
 
 		visibleElementIds = ["frame-1"]
 		requestLayerDraw.mockClear()
 		eventEmitter.emit("viewport:pan")
 		flushRaf()
+		eventEmitter.emit("viewport:changed", { data: { phase: "end" } })
+		flushRaf()
 
 		expect(manager.getLabelScaleX("frame-1")).toBe(2)
+		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(2)
 		expect(manager.getReorderCount()).toBe(initialReorderCount)
-		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
-		expect(requestLayerDraw).toHaveBeenCalledWith("overlay", {
-			source: "TestLabelManager",
-			reason: "visible-labels:viewport-pan",
-			priority: "input",
-		})
+		expect(requestLayerDraw).not.toHaveBeenCalled()
 
 		manager.destroy()
 	})
@@ -353,7 +363,7 @@ describe("BaseLabelManager candidate cache", () => {
 		const visibilityConfig = {
 			alwaysVisibleTypes: new Set([ElementTypeEnum.Frame]),
 			elementTypes: new Set([ElementTypeEnum.Frame]),
-			hoverOrSelectTypes: new Set(),
+			hoverOrSelectTypes: new Set<string>(),
 		}
 		const firstManager = new TestLabelManager({
 			canvas,
@@ -390,17 +400,19 @@ describe("BaseLabelManager candidate cache", () => {
 		const eventEmitter = createEventEmitter()
 		let hoveredElementId: string | null = null
 		let stageScale = 1
+		let zIndex = 1
 		const selectedIds = new Set<string>()
 		const elements = new Map([
 			[
 				"image-1",
 				{
 					getBoundingRect: () => ({ x: 0, y: 0, width: 100, height: 100 }),
-					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image, zIndex }),
 					getNode: () => ({}),
 				},
 			],
 		])
+		const requestLayerDraw = vi.fn()
 		const canvas = {
 			cropManager: { getCroppingElementId: () => null },
 			elementManager: {
@@ -414,7 +426,7 @@ describe("BaseLabelManager candidate cache", () => {
 			geometryCacheManager: { queryElementIdsByExpandedRect: vi.fn(() => []) },
 			hoverManager: { getHoveredElementId: () => hoveredElementId },
 			overlayLayer: { add: vi.fn(), destroy: vi.fn() },
-			runtimeScheduler: { requestLayerDraw: vi.fn() },
+			runtimeScheduler: { requestLayerDraw },
 			selectionManager: { isSelected: (elementId: string) => selectedIds.has(elementId) },
 			stage: {
 				getAbsoluteTransform: () => ({
@@ -455,6 +467,10 @@ describe("BaseLabelManager candidate cache", () => {
 
 		manager.initializeAllLabels()
 		expect(manager.hasLabel("image-1")).toBe(false)
+		eventEmitter.emit("element:updated", {
+			data: { elementId: "image-1", data: elements.get("image-1")?.getData() },
+		})
+		expect(manager.hasLabel("image-1")).toBe(false)
 
 		hoveredElementId = "image-1"
 		eventEmitter.emit("element:hover", { data: { elementId: "image-1" } })
@@ -469,14 +485,42 @@ describe("BaseLabelManager candidate cache", () => {
 		flushRaf()
 		expect(manager.getLabelScaleX("image-1")).toBe(2)
 
+		requestLayerDraw.mockClear()
 		hoveredElementId = null
 		eventEmitter.emit("element:hover", { data: { elementId: null } })
-		expect(manager.isLabelVisible("image-1")).toBe(false)
+		expect(manager.hasLabel("image-1")).toBe(false)
+		expect(requestLayerDraw).toHaveBeenCalledWith("overlay", {
+			priority: "input",
+			reason: "label-visibility",
+			source: "TestLabelManager",
+		})
 
 		selectedIds.add("image-1")
 		eventEmitter.emit("element:select", { data: { elementIds: ["image-1"] } })
 		expect(manager.isLabelVisible("image-1")).toBe(true)
-		expect(manager.getReorderCount()).toBe(reorderCountAfterLabelCreated)
+		const reorderCountAfterSelection = manager.getReorderCount()
+		expect(reorderCountAfterSelection).toBe(reorderCountAfterLabelCreated + 1)
+
+		requestLayerDraw.mockClear()
+		eventEmitter.emit("element:select", { data: { elementIds: ["image-1"] } })
+		expect(requestLayerDraw).not.toHaveBeenCalled()
+
+		eventEmitter.emit("element:updated", {
+			data: { elementId: "image-1", data: elements.get("image-1")?.getData() },
+		})
+		expect(manager.getReorderCount()).toBe(reorderCountAfterSelection)
+
+		zIndex = 2
+		eventEmitter.emit("element:updated", {
+			data: { elementId: "image-1", data: elements.get("image-1")?.getData() },
+		})
+		expect(manager.getReorderCount()).toBe(reorderCountAfterSelection + 1)
+
+		requestLayerDraw.mockClear()
+		selectedIds.delete("image-1")
+		eventEmitter.emit("element:deselect")
+		expect(manager.hasLabel("image-1")).toBe(false)
+		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
 
 		manager.destroy()
 	})

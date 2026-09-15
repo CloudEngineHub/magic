@@ -502,6 +502,8 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
                     // Add request body based on method
                     if (! empty($data) && in_array(strtoupper($method), ['POST', 'PUT', 'PATCH'])) {
                         $requestOptions['json'] = $data;
+                    } elseif (! empty($data) && strtoupper($method) === 'GET') {
+                        $requestOptions['query'] = $data;
                     }
 
                     $proxyPath = $this->buildProxyPath($sandboxId, $path);
@@ -872,10 +874,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
                 return $empty;
             }
 
-            $images = [
-                'agent_image' => (string) ($result->getDataValue('agent_image') ?? ''),
-                'agfs_image' => (string) ($result->getDataValue('agfs_image') ?? ''),
-            ];
+            $images = $result->getSandboxImages() ?? $empty;
             $this->logger->info('[Sandbox][Gateway] Latest sandbox images retrieved', $images);
             return $images;
         } catch (Throwable $e) {
