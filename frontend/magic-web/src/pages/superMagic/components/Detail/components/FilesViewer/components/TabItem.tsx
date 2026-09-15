@@ -1,3 +1,10 @@
+import { ProjectFileTag } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileTag"
+import {
+	resolveFilePresentation,
+	getFilePresentationIndex,
+} from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import { getFileDisplayPath } from "@/pages/superMagic/utils/markdownFileReference"
 import { memo, useMemo } from "react"
 import { Tooltip } from "antd"
@@ -17,6 +24,7 @@ import {
 } from "../../../../MessageEditor/utils/drag"
 
 interface TabItemProps {
+	context?: FileHelpContext
 	tab: TabItemType
 	index: number
 	allTabs: TabItemType[]
@@ -76,6 +84,7 @@ const TabItem = memo<TabItemProps>(
 		isPlayback,
 		contextMenuState,
 		attachments,
+		context,
 		onSwitchToTab,
 		onCloseTab,
 		onDragStart,
@@ -234,6 +243,7 @@ const TabItem = memo<TabItemProps>(
 					<FileTabMagicIcon
 						tab={tab}
 						attachments={attachments}
+						context={context}
 						isPlayback={isPlayback}
 						size={16}
 						className="size-4 shrink-0 rounded-[2px] object-cover"
@@ -247,6 +257,22 @@ const TabItem = memo<TabItemProps>(
 					>
 						{getDisplayFileName(tab)}
 					</span>
+					{!isPlayback && (!tab.type || tab.type === "file") && (
+						<ProjectFileTag
+							item={tab.fileData as unknown as AttachmentItem}
+							presentation={resolveFilePresentation(
+								tab.fileData as unknown as AttachmentItem,
+								{
+									context,
+									index: attachments
+										? getFilePresentationIndex(
+												attachments as unknown as AttachmentItem[],
+											)
+										: undefined,
+								},
+							)}
+						/>
+					)}
 					{isLoading && <MagicLoadingIcon size={12} />}
 					<span
 						className={cn(

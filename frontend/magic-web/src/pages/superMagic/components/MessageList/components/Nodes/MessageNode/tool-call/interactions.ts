@@ -3,7 +3,7 @@ import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/c
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	getToolCardInteractionTarget,
-	selectSourceFileFromTool,
+	selectToolFile,
 	selectToolDetail,
 } from "../../toolDetailSelection"
 import type { ToolCallViewModel } from "./types"
@@ -49,10 +49,9 @@ export function handleToolCallInteraction({
 	}
 
 	if (
-		target.type === "file" &&
-		selectSourceFileFromTool({
+		selectToolFile({
 			detail: newDetail,
-			fileId: target.fileId,
+			target,
 			onSelectDetail,
 		})
 	) {

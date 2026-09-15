@@ -11,7 +11,7 @@ import { filterClickableMessageWithoutRevoked } from "@/pages/superMagic/utils/h
 import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
 import {
 	getToolCardInteractionTarget,
-	selectSourceFileFromTool,
+	selectToolFile,
 	selectToolDetail,
 } from "../toolDetailSelection"
 
@@ -70,12 +70,11 @@ function ToolCall(props: NodeProps) {
 			}
 			return
 		}
-		// Prefer file navigation when the id exists in attachments; otherwise open playback.
+		// Resolve explicit file targets first; legacy sources retain attachment checks.
 		if (
-			target.type === "file" &&
-			selectSourceFileFromTool({
+			selectToolFile({
 				detail,
-				fileId: target.fileId,
+				target,
 				onSelectDetail,
 			})
 		) {

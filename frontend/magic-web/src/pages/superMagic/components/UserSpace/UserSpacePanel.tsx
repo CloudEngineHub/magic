@@ -3,17 +3,17 @@ import { observer } from "mobx-react-lite"
 import { Brain, CircleHelp, Files, FolderTree } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/shadcn-ui/dialog"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
+import { ContextHelp } from "@/components/shadcn-composed/context-help"
 import { cn } from "@/utils/cn"
 import userFilesStore from "@/stores/userFiles"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import type { UserSpaceView } from "../Detail/components/FilesViewer/types"
 import UserSpaceFilesView from "./UserSpaceFilesView"
 import UserSpaceIcon from "./UserSpaceIcon"
+import { useUserSpaceOverviewHelp } from "./useUserFileHelp"
 
 const UserSpaceMemoryView = lazy(() => import("./UserSpaceMemoryView"))
-const UserSpaceHelpDialog = lazy(() => import("./UserSpaceHelpDialog"))
+const FileHelpBrowser = lazy(() => import("../TopicFilesButton/components/FileHelpBrowser"))
 
 export interface UserSpacePanelProps {
 	className?: string
@@ -33,11 +33,11 @@ export default observer(function UserSpacePanel({
 	onFileClick,
 }: UserSpacePanelProps) {
 	const { t } = useTranslation("super")
+	const overview = useUserSpaceOverviewHelp()
 	const identity = userFilesStore.currentIdentityKey
 	const previousIdentity = useRef(identity)
 	const [view, setView] = useState<UserSpaceView>("files")
 	const [memoryVisited, setMemoryVisited] = useState(false)
-	const [helpVisited, setHelpVisited] = useState(false)
 	const [directoryId, setDirectoryId] = useState<string>()
 	useEffect(() => {
 		if (previousIdentity.current === identity) return
@@ -58,37 +58,23 @@ export default observer(function UserSpacePanel({
 				>
 					{t("userSpace.title")}
 				</h2>
-				<Dialog onOpenChange={(open) => open && setHelpVisited(true)}>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<DialogTrigger asChild>
-								<Button
-									variant="ghost"
-									size="icon"
-									className="ml-auto size-6 shrink-0 text-muted-foreground"
-									aria-label={t("userSpace.help.title")}
-								>
-									<CircleHelp size={16} />
-								</Button>
-							</DialogTrigger>
-						</TooltipTrigger>
-						<TooltipContent side="bottom" className="max-w-72">
-							{t("userSpace.help.tooltip")}
-						</TooltipContent>
-					</Tooltip>
-					{helpVisited && (
-						<Suspense
-							fallback={
-								<DialogContent>
-									<DialogTitle>{t("userSpace.help.title")}</DialogTitle>
-									<p>{t("userSpace.loading")}</p>
-								</DialogContent>
-							}
-						>
-							<UserSpaceHelpDialog />
-						</Suspense>
+				<ContextHelp
+					key={identity}
+					mode="dialog"
+					help={overview.help}
+					renderDialog={(props) => (
+						<FileHelpBrowser {...props} initialArticleId="user.overview" />
 					)}
-				</Dialog>
+				>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="ml-auto size-6 shrink-0 text-muted-foreground"
+						aria-label={t("userSpace.help.title")}
+					>
+						<CircleHelp size={16} />
+					</Button>
+				</ContextHelp>
 				<Button
 					variant="ghost"
 					size="icon"

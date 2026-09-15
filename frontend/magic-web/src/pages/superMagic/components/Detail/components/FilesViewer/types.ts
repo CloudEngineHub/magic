@@ -1,3 +1,4 @@
+import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import type { ReactNode, CSSProperties, RefObject } from "react"
 import type { MagicWidget } from "@magic-web/widget-sdk"
 import type {
@@ -176,6 +177,7 @@ export interface PlaybackTabItem extends TabItem {
 
 // FilesViewer component props
 export interface FilesViewerProps extends BaseComponentProps {
+	fileHelpContext?: FileHelpContext
 	attachments?: FileItem[]
 	attachmentList?: FileItem[]
 	setUserSelectDetail?: (detail: any) => void
@@ -340,6 +342,7 @@ export enum TabActionType {
 	REORDER_TABS = "REORDER_TABS",
 	DEACTIVATE_ALL = "DEACTIVATE_ALL",
 	SYNC_USER_FILE_REFERENCES = "SYNC_USER_FILE_REFERENCES",
+	RESTORE_USER_FILE_TABS = "RESTORE_USER_FILE_TABS",
 }
 
 // Tab reducer action interface
@@ -348,6 +351,9 @@ export interface TabAction {
 	payload?: {
 		tab?: TabItem
 		userFileResults?: Record<string, FileReferenceResult>
+		userIdentityKey?: string
+		userTabPositions?: Record<string, number>
+		restoredActiveTabId?: string
 		tabId?: string
 		tabs?: TabItem[]
 		allFiles?: FileItem[]

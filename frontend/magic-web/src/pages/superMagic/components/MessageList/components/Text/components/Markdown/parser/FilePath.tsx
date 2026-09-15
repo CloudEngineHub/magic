@@ -1,3 +1,4 @@
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { observer } from "mobx-react-lite"
 import { decodePathForDisplay } from "./helper"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
@@ -53,6 +54,10 @@ export const FilePath = observer((props: { path?: unknown }) => {
 			: undefined
 		return (
 			<FileReference
+				presentation={resolveFilePresentation(fileInfo, {
+					context: projectFilesStore?.filePresentationContext,
+					index: projectFilesStore?.filePresentationIndex,
+				})}
 				label={displayPath}
 				mentionAttrs={mentionAttrs}
 				href={fileHref ?? undefined}

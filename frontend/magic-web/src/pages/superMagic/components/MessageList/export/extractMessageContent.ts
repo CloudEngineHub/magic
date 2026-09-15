@@ -11,6 +11,7 @@ import { buildFilePathAttachments, findFilePathAttachment } from "../utils/attac
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 
 export interface ExportAttachment {
+	file?: AttachmentItem
 	name: string
 	size?: number
 	extension?: string
@@ -218,6 +219,7 @@ function pickAttachments(
 			const size = typeof d.file_size === "number" ? d.file_size : undefined
 			const extension = d.file_extension || name.split(".").pop()
 			out.push({
+				file: d,
 				name,
 				size,
 				extension,
@@ -231,6 +233,7 @@ function pickAttachments(
 		direct.forEach((a: any) => {
 			const name = a?.file_name || a?.display_filename || a?.filename || a?.name || "file"
 			out.push({
+				file: a,
 				name,
 				size:
 					typeof a?.file_size === "number"
@@ -270,6 +273,7 @@ function pickFilePathAttachments(
 
 	if (pathAttachments.length === 0) return undefined
 	return pathAttachments.map((attachment) => ({
+		file: findFilePathAttachment(workspaceFilesList, attachment),
 		name: attachment.fileName,
 		extension: attachment.fileExt,
 		file_extension: attachment.fileExt,

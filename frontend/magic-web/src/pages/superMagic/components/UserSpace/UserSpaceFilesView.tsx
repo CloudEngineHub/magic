@@ -7,7 +7,12 @@ import userFilesStore from "@/stores/userFiles"
 import TopicFilesPanel from "../TopicFilesButton/TopicFilesPanel"
 import TopicFilesCore from "../TopicFilesButton/TopicFilesCore"
 import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
-import UserSpaceFileIcon, { UserSpaceFileTag } from "./UserSpaceFileIcon"
+import { FileResourceIcon } from "../TopicFilesButton/components/FileResourceIcon"
+import { UserSpaceFileTag } from "../TopicFilesButton/components/TopicFileTag"
+import {
+	resolveFilePresentation,
+	getFilePresentationIndex,
+} from "../TopicFilesButton/utils/file-presentation"
 import { getUserResourceKind } from "./userSpaceFilePresentation"
 import { toUserAttachment } from "./services/userSpaceFileService"
 import { useUserSpaceFileActions } from "./hooks/useUserSpaceFileActions"
@@ -145,7 +150,15 @@ export default observer(function UserSpaceFilesView({
 			isVirtual
 				? undefined
 				: {
-						icon: <UserSpaceFileIcon item={item} size={16} resourceTree={items} />,
+						icon: (
+							<FileResourceIcon
+								presentation={resolveFilePresentation(item, {
+									context: { kind: "user" },
+									index: getFilePresentationIndex(items),
+								})}
+								size={16}
+							/>
+						),
 						tag:
 							getUserResourceKind(item) || item.directoryLoadState === "error" ? (
 								<>
@@ -187,7 +200,13 @@ export default observer(function UserSpaceFilesView({
 			directoryView={{
 				renderFileTag: (item) => <UserSpaceFileTag item={item} />,
 				renderFileIcon: (item, size) => (
-					<UserSpaceFileIcon item={item} resourceTree={items} size={size} />
+					<FileResourceIcon
+						presentation={resolveFilePresentation(item, {
+							context: { kind: "user" },
+							index: getFilePresentationIndex(items),
+						})}
+						size={size}
+					/>
 				),
 				directory: operationRoot,
 				items,

@@ -540,6 +540,11 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 		<StepDetailPanel />
 	) : (
 		<Detail
+			fileHelpContext={
+				selectedProject?.id
+					? { kind: "crew", projectId: String(selectedProject.id) }
+					: { kind: "unknown" }
+			}
 			ref={detailRef}
 			disPlayDetail={userSelectDetail}
 			userSelectDetail={userSelectDetail}
@@ -641,6 +646,14 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 							filesContent={
 								<TopicFilesButton
 									{...topicFilesPropsWithPanel}
+									fileHelpContext={
+										selectedProject?.id
+											? {
+													kind: "crew",
+													projectId: String(selectedProject.id),
+												}
+											: { kind: "unknown" }
+									}
 									className="h-full"
 									title={tSuper("topicFiles.fileTitle")}
 								/>

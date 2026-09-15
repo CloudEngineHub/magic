@@ -19,7 +19,7 @@ from typing import Any, Dict, Optional
 from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import DisplayType, ToolDetail
 from app.core.horizon.agent_horizon import VALIDATION_ERROR_NOT_READ
 from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
@@ -487,7 +487,8 @@ When editing the same file multiple times:
 
         return ToolDetail(
             type=DisplayType.MD,  # Use Markdown display type
-            data=FileContent(
+            data=await self._build_file_content(
+                file_path=file_path,
                 file_name=f"{file_name}.diff",
                 content=markdown_content
             )

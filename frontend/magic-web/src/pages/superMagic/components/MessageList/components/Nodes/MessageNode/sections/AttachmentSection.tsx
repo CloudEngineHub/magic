@@ -1,9 +1,11 @@
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import type { FilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { memo, useMemo, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import { IconChevronDown, IconChevronRight, IconDownload, IconEye } from "@tabler/icons-react"
-import MagicFileIcon from "@/components/base/MagicFileIcon"
 import MagicIcon from "@/components/base/MagicIcon"
 import { cn } from "@/utils/cn"
 import { Attachment } from "@/pages/superMagic/components/MessageList/components/MessageAttachment"
@@ -76,7 +78,16 @@ export const AttachmentSection = observer(function AttachmentSection({
 		// 不同引用写法可能指向同一真实文件，按完整路径去重并保留首次出现的顺序。
 		if (!filePath || seenFilePaths.has(filePath)) return []
 		seenFilePaths.add(filePath)
-		return [{ ...attachment, filePath }]
+		return [
+			{
+				...attachment,
+				filePath,
+				presentation: resolveFilePresentation(found, {
+					context: resolvedProjectFilesStore.filePresentationContext,
+					index: resolvedProjectFilesStore.filePresentationIndex,
+				}),
+			},
+		]
 	})
 
 	const onFileClick = useMemoizedFn((item?: unknown) => {
@@ -100,7 +111,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 })
 
 interface FilePathAttachmentListProps {
-	attachments: FilePathAttachment[]
+	attachments: Array<FilePathAttachment & { presentation: FilePresentation }>
 	className?: string
 }
 
@@ -158,8 +169,8 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 									"bg-fill hover:bg-fill-secondary",
 								)}
 							>
-								<MagicFileIcon
-									type={attachment.fileExt}
+								<FileResourceIcon
+									presentation={attachment.presentation}
 									size={24}
 									className="shrink-0"
 								/>

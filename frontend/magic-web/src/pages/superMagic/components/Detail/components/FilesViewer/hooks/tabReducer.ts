@@ -1,7 +1,7 @@
 import type { TabAction, TabItem } from "../types"
 import { TabActionType } from "../types"
 import { DetailType } from "../../../types"
-import { handleDuplicateTabNames } from "../utils/tabUtils"
+import { handleDuplicateTabNames, mergeUserFileTabs } from "../utils/tabUtils"
 import { PLAYBACK_TAB_ID } from "../utils/tabConstants"
 
 export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
@@ -154,6 +154,32 @@ export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
 		case TabActionType.SYNC_TABS_DATA:
 			return action.payload?.tabs || state
 
+		case TabActionType.RESTORE_USER_FILE_TABS: {
+			const identity = action.payload?.userIdentityKey
+			if (!identity) return state
+			const current = state.filter(
+				(tab) => tab.userIdentityKey === undefined || tab.userIdentityKey === identity,
+			)
+			const positions = action.payload?.userTabPositions
+			const incoming = action.payload?.tabs || []
+			// 在 reducer 内合并最新状态，避免异步读取结束时覆盖同一批次刚打开的标签。
+			const isUserFile = (tab: TabItem) =>
+				tab.userIdentityKey === identity &&
+				tab.fileData.space_type === "user" &&
+				tab.type !== "file_manager"
+			const restored = positions
+				? mergeUserFileTabs(
+						current.filter((tab) => !isUserFile(tab)),
+						[...current.filter(isUserFile), ...incoming],
+						positions,
+					)
+				: mergeUserFileTabs(current, incoming)
+			const activeId = action.payload?.restoredActiveTabId
+			return activeId && restored.some((tab) => tab.id === activeId)
+				? restored.map((tab) => ({ ...tab, active: tab.id === activeId }))
+				: restored
+		}
+
 		case TabActionType.REORDER_TABS: {
 			const fromIndex = action.payload?.fromIndex
 			const toIndex = action.payload?.toIndex
@@ -182,7 +208,8 @@ export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
 			return state.map((tab) => {
 				const result = results[tab.fileData.file_id]
 				if (!result || tab.fileData.space_type !== "user") return tab
-				if (result.status !== "resolved") return { ...tab, isDeleted: true }
+				if (result.status !== "resolved")
+					return { ...tab, isDeleted: true, isLoading: false }
 				const reference = result.reference
 				if (reference.space_type !== "user") return tab
 				return {
@@ -190,6 +217,7 @@ export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
 					title: reference.file_name,
 					filePath: reference.space_relative_path,
 					isDeleted: false,
+					isLoading: false,
 					fileData: {
 						...tab.fileData,
 						...reference,

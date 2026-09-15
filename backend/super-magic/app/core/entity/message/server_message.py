@@ -88,6 +88,8 @@ class FileContent(BaseModel):
     content: str  # 文件内容
     relative_file_path: Optional[str] = None  # 工作区内文件的相对路径
     storage_type: Optional[AttachmentStorageType] = None  # 文件生命周期所属的存储类型
+    target_file_id: Optional[str] = None  # 实际操作文件的 ID；不与回放正文的 file_id 混用
+    target_file_path: Optional[str] = None  # 实际目标：工作区内相对路径，用户空间绝对路径
 
 
 class FileTreeNode(BaseModel):

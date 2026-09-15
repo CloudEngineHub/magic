@@ -7,6 +7,28 @@ import {
 } from "../../../../TopicFilesButton/utils/slides-template-folder"
 import { isMagicProjectConfigFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 
+/** 将个人文件插回已保存的位置；用户已重新排序时只追加缺少的标签。 */
+export function mergeUserFileTabs(
+	tabs: TabItem[],
+	userTabs: TabItem[],
+	positions?: Record<string, number>,
+): TabItem[] {
+	const result = [...tabs]
+	const ids = new Set(result.map((tab) => tab.id))
+	const ordered = positions
+		? [...userTabs].sort(
+				(a, b) => (positions[a.id] ?? Infinity) - (positions[b.id] ?? Infinity),
+			)
+		: userTabs
+	for (const tab of ordered) {
+		if (ids.has(tab.id)) continue
+		const order = positions?.[tab.id] ?? result.length
+		result.splice(Math.min(order, result.length), 0, tab)
+		ids.add(tab.id)
+	}
+	return result
+}
+
 function normalizeTabFileId(fileId: unknown): string {
 	if (typeof fileId === "string") return fileId.trim()
 	if (typeof fileId === "number" && Number.isFinite(fileId)) return String(fileId)

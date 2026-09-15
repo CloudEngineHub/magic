@@ -1,3 +1,4 @@
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { observer } from "mobx-react-lite"
 import { useEffect, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
@@ -11,7 +12,10 @@ import {
 	getFileReferenceIdentityKey,
 	resolveFileReference,
 } from "@/pages/superMagic/services/userFileReferenceResolver"
-import { createUserFileHref } from "@/pages/superMagic/utils/markdownFileReference"
+import {
+	createUserFileHref,
+	getFileDisplayPath,
+} from "@/pages/superMagic/utils/markdownFileReference"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import { openUserFileReference } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import { FileReference } from "./FileReference"
@@ -79,6 +83,14 @@ export const UserFileReference = observer(function UserFileReference({
 
 	return (
 		<FileReference
+			presentation={
+				reference
+					? resolveFilePresentation(
+							{ ...reference, file_reference: reference },
+							{ context: { kind: "user" } },
+						)
+					: undefined
+			}
 			label={reference?.file_name || label}
 			href={canonicalHref}
 			mentionAttrs={attrs ?? mentionAttrs}
@@ -95,7 +107,7 @@ export const UserFileReference = observer(function UserFileReference({
 				loading
 					? t("common.loading")
 					: reference
-						? "~/" + reference.space_relative_path
+						? getFileDisplayPath({ file_reference: reference })
 						: t("common.fileNotFoundOrLoadFailed")
 			}
 		/>

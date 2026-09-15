@@ -1,3 +1,4 @@
+import { useOptionalMessageEditorStore } from "../../../stores"
 import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
 import { observer } from "mobx-react-lite"
 import { useCallback, type MouseEvent } from "react"
@@ -26,6 +27,7 @@ function FolderMentionNodeView({
 }: FolderMentionNodeViewProps) {
 	const isMobile = useIsMobile()
 	const { t } = useTranslation("super")
+	const fileStore = useOptionalMessageEditorStore()?.fileUploadStore.getProjectFilesStore()
 	const workspaceFilesList = getWorkspaceFilesList?.() ?? []
 	const data = attrs.data as DirectoryMentionData
 	const displayName = getMentionDisplayName(attrs)
@@ -69,6 +71,11 @@ function FolderMentionNodeView({
 			>
 				<span className="relative z-10 flex shrink-0 items-center">
 					<ProjectDirectoryMentionIcon
+						context={
+							attrs.type === MentionItemType.USER_DIRECTORY
+								? { kind: "user" }
+								: fileStore?.filePresentationContext
+						}
 						data={data}
 						workspaceFilesList={workspaceFilesList}
 						size={16}

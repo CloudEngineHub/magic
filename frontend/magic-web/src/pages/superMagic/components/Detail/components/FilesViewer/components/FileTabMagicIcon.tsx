@@ -1,12 +1,10 @@
 import MagicFileIcon from "@/components/base/MagicFileIcon"
-import { CustomFolderMagicIcon } from "@/pages/superMagic/components/TopicFilesButton/components/CustomFolderMagicIcon"
-import { SlidesTemplateFolderIcon } from "@/pages/superMagic/components/TopicFilesButton/components/SlidesTemplateFolderIcon"
-import { findFileInTree } from "@/pages/superMagic/components/TopicFilesButton/hooks/fileSelectionUtils"
-import {
-	getChildrenForCustomMetadataIconPath,
-	getFileTreeIconType,
-} from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
-import { memo, useMemo } from "react"
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
+import { getFilePresentationIndex } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import { useFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/hooks/useFilePresentation"
+import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import { memo } from "react"
 import type { FileItem, TabItem } from "../types"
 import { Globe2, FolderTree } from "lucide-react"
 import { isWebsiteTab } from "../utils/websiteTabs"
@@ -14,6 +12,7 @@ import { isWebsiteTab } from "../utils/websiteTabs"
 interface FileTabMagicIconProps {
 	tab: TabItem
 	attachments?: FileItem[]
+	context?: FileHelpContext
 	isPlayback: boolean
 	size: number
 	className?: string
@@ -23,55 +22,19 @@ interface FileTabMagicIconProps {
 export const FileTabMagicIcon = memo(function FileTabMagicIcon({
 	tab,
 	attachments,
+	context,
 	isPlayback,
 	size,
 	className,
 }: FileTabMagicIconProps) {
-	const fd = tab.fileData
-
-	const findNode = useMemo(
-		() => (id: string) =>
-			attachments?.length
-				? (findFileInTree(attachments as unknown as Record<string, unknown>[], id) as {
-						children?: unknown[]
-						is_directory?: boolean
-					} | null)
-				: null,
-		[attachments],
-	)
-
-	const iconPathChildren = useMemo(
-		() => getChildrenForCustomMetadataIconPath(fd, findNode),
-		[fd, findNode],
-	)
-
-	const typeFallback = getFileTreeIconType(fd) || fd.file_extension || ""
-
-	if (isPlayback) {
-		return <MagicFileIcon type="replay" size={size} className={className} />
-	}
-
+	const presentation = useFilePresentation(tab.fileData as unknown as AttachmentItem, {
+		context,
+		index: attachments
+			? getFilePresentationIndex(attachments as unknown as AttachmentItem[])
+			: undefined,
+	})
+	if (isPlayback) return <MagicFileIcon type="replay" size={size} className={className} />
 	if (tab.type === "file_manager") return <FolderTree size={size} className={className} />
-
-	if (isWebsiteTab(tab)) {
-		return <Globe2 size={size} className={className} />
-	}
-
-	if (fd.display_config?.type === "slide-template") {
-		return <SlidesTemplateFolderIcon size={size} className={className} />
-	}
-
-	if (fd.display_config?.type === "custom" || fd.display_config?.type === "micro-app") {
-		return (
-			<CustomFolderMagicIcon
-				displayConfig={fd.display_config}
-				childrenItems={iconPathChildren}
-				typeFallback={fd.display_config?.type}
-				size={size}
-				className={className}
-			/>
-		)
-	}
-
-	return <MagicFileIcon type={typeFallback} size={size} className={className} />
+	if (isWebsiteTab(tab)) return <Globe2 size={size} className={className} />
+	return <FileResourceIcon presentation={presentation} size={size} className={className} />
 })

@@ -1,3 +1,7 @@
+import { useFileTagVisibility } from "./hooks/useFileTagVisibility"
+import { FileResourceIcon } from "./components/FileResourceIcon"
+import { getFilePresentationIndex, resolveFilePresentation } from "./utils/file-presentation"
+import type { FileHelpContext } from "./utils/magic-system-folder"
 import { ProjectFileTag } from "./components/TopicFileTag"
 import { IconChevronDown, IconChevronRight, IconDots } from "@tabler/icons-react"
 import { Loader2, ChevronDown } from "lucide-react"
@@ -74,9 +78,6 @@ import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareS
 import type { TreeNodeData } from "./utils/treeDataConverter"
 import { DuplicateFileModal } from "./components/DuplicateFileModal"
 import { FolderConflictModal } from "./components/FolderConflictModal"
-import { CustomFolderMagicIcon } from "./components/CustomFolderMagicIcon"
-import { MagicSystemFolderIcon } from "./components/MagicSystemFolderIcon"
-import { TopicFileIcon } from "./components/TopicFileIcon"
 import {
 	ProjectFileImagePreviewProvider,
 	resolveProjectFileImagePreviewSource,
@@ -85,13 +86,7 @@ import {
 import { ProjectFileImageThumbnailIcon } from "./components/ProjectFileImageThumbnailIcon"
 import { ProjectFileImageSmartTooltip } from "./components/ProjectFileImageSmartTooltip"
 import { InputWithError } from "./components"
-import {
-	getAppEntryFile,
-	getAttachmentType,
-	getChildrenForCustomMetadataIconPath,
-	getFileTreeIconType,
-	getFileIconType,
-} from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
+import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { isEmpty } from "lodash-es"
 import { Button } from "@/components/shadcn-ui/button"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
@@ -114,10 +109,6 @@ import { DetailType } from "../Detail/types"
 import SelfMediaPostRowPlatformIcon from "../Detail/components/SelfMediaRootRender/components/SelfMediaPostRowPlatformIcon"
 import { useSelfMediaTreeNavigation } from "./hooks/useSelfMediaTreeNavigation"
 import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
-import {
-	isMagicSystemFolder,
-	resolveProjectInstructionsFileKind,
-} from "./utils/magic-system-folder"
 import { useAICardCreateDialog } from "../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
 import { isNoHoverCoarsePointer } from "@/utils/devices"
 import { useActiveTreeSelection } from "./hooks/useActiveTreeSelection"
@@ -126,7 +117,6 @@ import {
 	shouldShowMobileBatchActions,
 } from "./utils/batch-selection"
 import { isSlidesTemplateFolder, toSlidesTemplatePreviewItem } from "./utils/slides-template-folder"
-import { SlidesTemplateFolderIcon } from "./components/SlidesTemplateFolderIcon"
 import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
 import { getAttachmentKey } from "./utils/getAttachmentKey"
 import { FileDirectoryView, type FileDirectoryViewProps } from "./components/FileDirectoryView"
@@ -146,6 +136,8 @@ export interface TopicFilesExpansionState {
 }
 
 interface TopicFilesCoreProps {
+	/** 所属定义工作区；用户挂载文件仍以自己的空间身份为准。 */
+	fileHelpContext?: FileHelpContext
 	directoryView?: Pick<FileDirectoryViewProps, "items" | "path" | "onNavigate"> &
 		Partial<
 			Pick<FileDirectoryViewProps, "rootName" | "error" | "renderFileIcon" | "renderFileTag">
@@ -281,6 +273,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		allowCopyTo = false,
 		allowReadonlySelection = false,
 		resolveTopicFileRowDecoration,
+		fileHelpContext,
 		refreshLoading = false,
 		onSaveSlidesTemplate,
 		onConvertToSlidesTemplate,
@@ -299,6 +292,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	// Mobile layouts and no-hover desktop touch layouts must keep file actions reachable.
 	const shouldShowInlineFileAction = isMobile || isNoHoverCoarsePointer()
 	const fileListAreaRef = useRef<HTMLDivElement>(null)
+	useFileTagVisibility(fileListAreaRef)
 	const shortcutContainerRef = useRef<HTMLDivElement>(null)
 	const { organizationCode } = useOrganization()
 	// 有userId，认为有登录状态
@@ -697,6 +691,23 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			refreshLoading,
 			selectedProjectId: selectedProject?.id || projectId,
 		})
+
+	const helpProjectId = String(selectedProject?.id || projectId || "")
+	const helpOwner = fileHelpContext?.kind ?? (helpProjectId ? "project" : "unknown")
+	const helpOwnerId =
+		fileHelpContext && "projectId" in fileHelpContext
+			? fileHelpContext.projectId
+			: helpProjectId
+	const resolvedFileHelpContext = useMemo<FileHelpContext>(
+		() =>
+			helpOwner === "user" || helpOwner === "unknown"
+				? { kind: helpOwner }
+				: { kind: helpOwner, projectId: helpOwnerId },
+		[helpOwner, helpOwnerId],
+	)
+	// treeIndex 已经过搜索过滤，可能不含包入口；用途必须基于已加载原始快照，不能随搜索变更。
+	const skillFiles = useMemo(() => getFilePresentationIndex(attachments).skills, [attachments])
+	const fileHelpVersion = `${resolvedFileHelpContext.kind}:${"projectId" in resolvedFileHelpContext ? resolvedFileHelpContext.projectId : ""}`
 
 	// 复用现有索引收集非空目录，避免在大文件树上再次递归 attachments。
 	useEffect(() => {
@@ -1448,6 +1459,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		},
 	})
 
+	const getFileRowRenderVersion = useMemoizedFn(
+		(row: Parameters<typeof getRowRenderVersion>[0]) =>
+			`${getRowRenderVersion(row)}:${skillFiles.kinds.get(String(row.node.key)) ?? ""}:${skillFiles.paths.get(String(row.node.key)) ?? ""}:${fileHelpVersion}`,
+	)
+
 	// 在树形数据中查找文件的辅助函数
 	// 在树形数据中查找文件的辅助函数
 	const findFileInTree = useMemoizedFn((fileId: string): AttachmentItem | undefined => {
@@ -1501,7 +1517,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		const item = node.item || {}
 		const itemId = node.key
 		const { display_config } = item
-		const isSlidesTemplate = isSlidesTemplateFolder(item)
 		const isActiveFile = activeTreeSelectionKey === String(itemId)
 		const hasChildren = !node.isLeaf
 		const isExpanded = expandedKeySet.has(String(node.key))
@@ -1519,15 +1534,38 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				node,
 				isVirtual: !!node.isVirtual,
 			}) || undefined
+		const skillKind = node.isVirtual ? undefined : skillFiles.kinds.get(String(node.key))
+		const filePath = skillFiles.paths.get(String(node.key))
+		const presentation = resolveFilePresentation(item, {
+			context: resolvedFileHelpContext,
+			index: getFilePresentationIndex(attachments),
+			skillKind,
+			path: filePath,
+		})
+		const systemKind = presentation.systemKind
 		const tag = node.isVirtual
 			? undefined
 			: (decoration?.tag ??
-				(isMagicSystemFolder(item) || resolveProjectInstructionsFileKind(item) ? (
-					<ProjectFileTag item={item} />
+				((skillKind && skillKind !== "support") ||
+				systemKind ||
+				presentation.userKind ||
+				presentation.clawKind ||
+				presentation.projectKind ? (
+					<ProjectFileTag
+						presentation={presentation}
+						item={item}
+						skillKind={skillKind}
+						path={filePath}
+						context={resolvedFileHelpContext}
+					/>
 				) : undefined))
 		const renderDecorationTag = () => {
 			if (!tag) return null
-			return <div className={styles.rowTagSlot}>{tag}</div>
+			return (
+				<div data-file-tag className={styles.rowTagSlot}>
+					{tag}
+				</div>
+			)
 		}
 
 		// 渲染展开/折叠图标
@@ -1922,6 +1960,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 							paddingLeft: indentWidth + "px",
 							alignItems: renameErrorMessage ? "flex-start" : undefined,
 						}}
+						data-file-label-row
 						data-testid="folder-content"
 					>
 						{/* 展开/折叠图标 */}
@@ -1955,41 +1994,22 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									platform={selfMediaRowPlatform}
 									size={16}
 								/>
-							) : !isFolderBusy && isMagicSystemFolder(item) ? (
-								<MagicSystemFolderIcon size={16} />
-							) : isSlidesTemplate ? (
-								<SlidesTemplateFolderIcon size={16} />
-							) : display_config?.type ? (
-								["custom", "micro-app"].includes(display_config?.type) &&
-								(display_config?.type === "custom" || item?.is_directory) ? (
-									<CustomFolderMagicIcon
-										displayConfig={item?.display_config}
-										childrenItems={getChildrenForCustomMetadataIconPath(
-											item,
-											(id) => findFileInTree(id),
-										)}
-										typeFallback={display_config?.type}
-										size={16}
-									/>
-								) : (
-									<MagicFileIcon
-										type={getAttachmentType(item) || item?.file_extension}
-										size={16}
-									/>
-								)
 							) : (
-								<img
-									src={FoldIcon as unknown as string}
-									alt="folder"
-									width={16}
-									height={16}
-									data-testid="folder-icon-image"
+								<FileResourceIcon
+									presentation={presentation}
+									size={16}
+									folderTestId="folder-icon-image"
 								/>
 							)}
 						</div>
 
 						{/* 文件夹名称或重命名输入框 */}
-						<div className={styles.rowTitleText} data-testid="folder-name">
+						<div
+							data-file-name-container
+							data-file-name
+							className={styles.rowTitleText}
+							data-testid="folder-name"
+						>
 							{renamingItemId === itemId ? (
 								<InputWithError
 									ref={renameInputRef}
@@ -2186,6 +2206,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						paddingLeft: indentWidth + "px",
 						alignItems: renameErrorMessage ? "flex-start" : undefined,
 					}}
+					data-file-label-row
 					data-testid="file-content"
 				>
 					{/* 展开/折叠图标 */}
@@ -2201,38 +2222,24 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						) : null}
 						{decoration?.icon && !isFileBusy ? (
 							decoration.icon
-						) : resolveProjectInstructionsFileKind(item) ? (
-							<TopicFileIcon magicVariant="magic-file-agent" size={16} />
-						) : item?.display_config?.type === "custom" ||
-						  (item?.display_config?.type === "micro-app" && item?.is_directory) ? (
-							<CustomFolderMagicIcon
-								displayConfig={item?.display_config}
-								childrenItems={getChildrenForCustomMetadataIconPath(item, (id) =>
-									findFileInTree(id),
-								)}
-								typeFallback={item?.display_config?.type}
-								size={16}
-							/>
 						) : (
 							<ProjectFileImageThumbnailIcon
 								item={item}
 								size={16}
 								fallback={
-									<MagicFileIcon
-										type={
-											getFileTreeIconType(item) ||
-											getFileIconType(item) ||
-											item?.file_extension
-										}
-										size={16}
-									/>
+									<FileResourceIcon presentation={presentation} size={16} />
 								}
 							/>
 						)}
 					</div>
 
 					{/* 文件名称或重命名输入框 */}
-					<div className={styles.rowTitleText} data-testid="file-name">
+					<div
+						data-file-name-container
+						data-file-name
+						className={styles.rowTitleText}
+						data-testid="file-name"
+					>
 						{renamingItemId === itemId ? (
 							<InputWithError
 								ref={renameInputRef}
@@ -2479,6 +2486,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						<FileDirectoryView
 							scrollElementRef={scrollElementRef}
 							{...directoryView}
+							skillFiles={skillFiles}
+							fileHelpContext={resolvedFileHelpContext}
 							rootName={directoryView.rootName ?? t("userSpace.currentProject")}
 							onOpen={handleOpenFile}
 							getMenuItems={getMenuItems}
@@ -2641,11 +2650,11 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									expandedKeys={expandedKeys}
 									selectedKeys={effectiveSelectedKeys}
 									titleRender={titleRender}
-									getRowRenderVersion={getRowRenderVersion}
+									getRowRenderVersion={getFileRowRenderVersion}
 									rowRenderContextVersion={
 										directorySource
-											? `${rowRenderContextVersion}:${renamePending}:${isCreatingFile}:${isCreatingFolder}`
-											: rowRenderContextVersion
+											? `${rowRenderContextVersion}:${fileHelpVersion}:${renamePending}:${isCreatingFile}:${isCreatingFolder}`
+											: `${rowRenderContextVersion}:${fileHelpVersion}`
 									}
 									showIcon={false}
 									blockNode
