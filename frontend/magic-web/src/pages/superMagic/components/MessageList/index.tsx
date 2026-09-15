@@ -53,6 +53,7 @@ import { ExportPreviewModal } from "./components/ExportPreviewModal"
 import { extractTurns } from "./export/extractMessageContent"
 
 import { MessageListProvider, useMessageListContext } from "./context"
+import defaultProjectFilesStore from "@/stores/projectFiles"
 import MessageRenderContent from "./components/MessageRenderContent"
 import { projectRevokedMessageBranches } from "../../utils/project-visible-messages-by-revoked-tail"
 import { resolveBottomLoadingVisibility } from "./bottom-loading-visibility"
@@ -597,6 +598,11 @@ const MessageList = observer(
 		const augmentedMessageListContext = useMemo(
 			() => ({
 				...parentCtx,
+<<<<<<< Updated upstream
+=======
+				projectFilesStore: parentCtx.projectFilesStore ?? defaultProjectFilesStore,
+				allowUserFileReferences: !isShare && parentCtx.allowUserFileReferences !== false,
+>>>>>>> Stashed changes
 				allowExport: enableExport,
 				exportModeActive,
 				onExportRequest: enableExport ? exportEnterRequest : undefined,
@@ -613,6 +619,7 @@ const MessageList = observer(
 				parentCtx.onTopicSwitch,
 				parentCtx.renderAssistantAvatar,
 				parentCtx.showTaskCompletedBadge,
+				parentCtx.projectFilesStore,
 				enableExport,
 				exportModeActive,
 				exportEnterRequest,

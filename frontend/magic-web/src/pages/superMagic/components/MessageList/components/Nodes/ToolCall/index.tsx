@@ -5,7 +5,6 @@ import { isEmpty, pick } from "lodash-es"
 import { Suspense } from "react"
 import { observer } from "mobx-react-lite"
 import { superMagicStore } from "@/pages/superMagic/stores"
-import defaultProjectFilesStore from "@/stores/projectFiles"
 import DefaultTool from "./tools/DefaultTool"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { filterClickableMessageWithoutRevoked } from "@/pages/superMagic/utils/handleMessage"
@@ -15,12 +14,11 @@ import {
 	selectSourceFileFromTool,
 	selectToolDetail,
 } from "../toolDetailSelection"
-import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 
 function ToolCall(props: NodeProps) {
 	const { onSelectDetail } = props
-	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
-	const filesStore = scopedProjectFilesStore ?? defaultProjectFilesStore
+	const filesStore = useMessageListProjectFilesStore()
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| {
 				tool?: {
@@ -45,6 +43,7 @@ function ToolCall(props: NodeProps) {
 		data?: Record<string, unknown>
 		[key: string]: unknown
 	}) => {
+<<<<<<< Updated upstream
 		switch (tool?.name) {
 			// 旧(保留,用于兼容旧消息)
 			case "create_design_project":
@@ -88,6 +87,39 @@ function ToolCall(props: NodeProps) {
 				return
 			default:
 				break
+=======
+		const target = getToolCardInteractionTarget(tool?.name, detail)
+		if (target.type === "disabled") return
+
+		if (target.type === "design") {
+			const { designProjectId, designProject, elements } = getToolDesignProjectInfo(
+				tool,
+				filesStore,
+			)
+			if (!designProjectId) return
+			pubsub.publish(PubSubEvents.Open_File_Tab, {
+				...designProject,
+				fileId: designProjectId,
+			})
+			if (elements.length > 0) {
+				// 延迟等待tab打开
+				setTimeout(() => {
+					pubsub.publish(PubSubEvents.Super_Magic_Focus_Canvas_Element, {
+						canvasDesignId: designProjectId,
+						elementIds: elements.map((item) => item.id),
+						selectElement: [elements[0].id],
+						animated: false,
+						padding: {
+							top: "25%",
+							right: "25%",
+							bottom: "25%",
+							left: "25%",
+						},
+					})
+				}, 200)
+			}
+			return
+>>>>>>> Stashed changes
 		}
 		// Prefer file navigation when the id exists in attachments; otherwise open playback.
 		const fileId = resolveToolFileId(detail?.data)
