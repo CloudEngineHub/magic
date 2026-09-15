@@ -130,7 +130,8 @@ class ResourceShareAppService extends AbstractShareAppService
         private readonly ProjectForkRepositoryInterface $projectForkRepository,
         private readonly TaskFileRepositoryInterface $taskFileRepository,
         private readonly ShareUrlBuilder $shareUrlBuilder,
-        private readonly RequestInterface $request
+        private readonly RequestInterface $request,
+        private readonly ShareMethodPermissionService $shareMethodPermissionService
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
     }
@@ -143,13 +144,16 @@ class ResourceShareAppService extends AbstractShareAppService
      * @return ShareItemDTO 分享项目DTO
      * @throws Exception 创建分享异常
      */
-    public function createShare(MagicUserAuthorization $userAuthorization, CreateShareRequestDTO $dto): ShareItemDTO
+    public function createShare(MagicUserAuthorization $userAuthorization, CreateShareRequestDTO $dto, ?string $resourceKind = null): ShareItemDTO
     {
         $userId = $userAuthorization->getId();
         $organizationCode = $userAuthorization->getOrganizationCode();
 
         // 验证资源类型
         $resourceType = ResourceType::from($dto->resourceType);
+        if ($resourceType === ResourceType::Project) {
+            $this->shareMethodPermissionService->assertAllowed($userAuthorization, $resourceKind ?? 'project', $dto->shareType);
+        }
 
         // 统一查询一次已存在的分享（如果存在），避免重复查询
         // 用于区分创建场景和更新场景，以及获取数据库中的原值

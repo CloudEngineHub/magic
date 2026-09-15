@@ -9,6 +9,7 @@ namespace App\Application\SuperMagic\Project\Service;
 
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Application\SuperMagic\Common\Share\Service\ResourceShareAppService;
+use App\Application\SuperMagic\Common\Share\Service\ShareMethodPermissionService;
 use App\Application\SuperMagic\Project\DTO\Request\MicroAppListRequestDTO;
 use App\Application\SuperMagic\Project\DTO\Request\PublishedMicroAppListRequestDTO;
 use App\Application\SuperMagic\Project\DTO\Request\PublishMicroAppRequestDTO;
@@ -60,6 +61,7 @@ class MicroAppProjectAppService extends AbstractAppService
         private readonly PublishedMicroAppResolver $publishedMicroAppResolver,
         private readonly MicroAppProjectResponseFormatter $responseFormatter,
         private readonly MicroAppShareConfig $shareConfig,
+        private readonly ShareMethodPermissionService $shareMethodPermissionService,
     ) {
     }
 
@@ -73,6 +75,7 @@ class MicroAppProjectAppService extends AbstractAppService
             $authorization->getId(),
             $authorization->getOrganizationCode()
         );
+        $this->shareMethodPermissionService->assertAllowed($authorization, 'micro_app', $requestDTO->getShareType());
         $projectNameChanged = $project->getProjectName() !== $requestDTO->getProjectName();
         $coverFileKey = $requestDTO->hasCoverFileKey() ? $requestDTO->getCoverFileKey() : $record->getCoverFileKey();
         $coverChanged = $record->getCoverFileKey() !== $coverFileKey;
@@ -113,7 +116,7 @@ class MicroAppProjectAppService extends AbstractAppService
                 $shareData['extra'] = $this->shareConfig->buildExtra($existingShare?->getExtra(), $requestDTO);
             }
             $shareDTO = CreateShareRequestDTO::fromArray($shareData);
-            $shareItem = $this->resourceShareAppService->createShare($authorization, $shareDTO);
+            $shareItem = $this->resourceShareAppService->createShare($authorization, $shareDTO, 'micro_app');
             $accessUrl = $this->shareUrlBuilder->buildMicroAppShareUrl((string) $record->getId());
 
             $record
