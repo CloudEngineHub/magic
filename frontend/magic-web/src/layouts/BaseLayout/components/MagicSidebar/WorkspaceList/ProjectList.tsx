@@ -56,6 +56,8 @@ function ProjectList({
 		onBlurCapture,
 		hasActiveInteraction,
 	} = useVirtualProjectList({
+		// 先确定视口高度再恢复滚动位置，避免侧栏重新展开时 DOM 回到顶部、虚拟行仍停在旧位置。
+		enabled: active && (maxProjectHeight ?? 0) > 0,
 		loadEnabled: active,
 		listRef,
 		scrollKey: `workspace-projects:${workspaceId}`,
