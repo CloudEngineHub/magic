@@ -68,7 +68,7 @@ final class ProjectFileMaterializerTest extends TestCase
 
         self::assertSame(
             'org-1/private/existing.png',
-            $materializer->materialize(new AssetDataIsolation('org-1', 'user-1'), 123, '/source.png'),
+            $materializer->materialize(new AssetDataIsolation('org-1', 'user-1'), 123, '/source.png')['file_key'],
         );
         self::assertFileDoesNotExist($temporaryFile);
     }
@@ -111,7 +111,7 @@ final class ProjectFileMaterializerTest extends TestCase
         $materializer = new ProjectFileMaterializer($projects, $taskFiles, new FileDomainService($repository), $assets, $downloader);
         $isolation = new AssetDataIsolation('org-1', 'user-1');
 
-        self::assertSame('org-1/private/source.png', $materializer->materialize($isolation, 123, '/images/source.png'));
+        self::assertSame('org-1/private/source.png', $materializer->materialize($isolation, 123, '/images/source.png')['file_key']);
         self::assertFileDoesNotExist($temporaryFile);
     }
 

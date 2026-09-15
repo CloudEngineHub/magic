@@ -58,7 +58,9 @@ class SaveAssetToLibraryRequestDTO extends CreateAssetRequestDTO
     {
         return [
             'name' => 'required|string|max:255',
-            'file_key' => 'required|string|max:512',
+            'file_key' => 'nullable|string|max:512',
+            'project_id' => 'nullable|integer|min:1|required_with:project_file_path',
+            'project_file_path' => 'nullable|string|max:1024|required_with:project_id',
             'visibility' => 'nullable|array',
             'visibility.user_ids' => 'nullable|array',
             'visibility.department_ids' => 'nullable|array',
@@ -71,7 +73,6 @@ class SaveAssetToLibraryRequestDTO extends CreateAssetRequestDTO
             'name.required' => __('asset.validation.name_required'),
             'name.string' => __('asset.validation.name_string'),
             'name.max' => __('asset.validation.name_max'),
-            'file_key.required' => __('asset.validation.file_key_required'),
             'file_key.string' => __('asset.validation.file_key_string'),
             'file_key.max' => __('asset.validation.file_key_max'),
             'visibility.array' => __('asset.validation.visibility_array'),

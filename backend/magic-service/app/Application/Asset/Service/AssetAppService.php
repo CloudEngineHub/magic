@@ -39,24 +39,16 @@ class AssetAppService extends AbstractAssetAppService
         CreateAssetRequestDTO $requestDTO,
     ): AssetEntity {
         $dataIsolation = $this->createAssetDataIsolation($authorization);
+        $contentHash = null;
         // 未传私有桶文件键时，从有权限的项目文件生成并补齐 file_key。
-        if ($requestDTO->getAssetKind() === 'ASSET' && trim((string) $requestDTO->getFileKey()) === '') {
-            $projectId = $requestDTO->getProjectId();
-            $projectFilePath = $requestDTO->getProjectFilePath();
-            if ($projectId === null || $projectFilePath === null) {
-                ExceptionBuilder::throw(AssetErrorCode::FILE_REQUIRED);
-            }
-            $fileKey = $this->projectFileMaterializer->materialize($dataIsolation, $projectId, $projectFilePath);
-            if ($fileKey === null || $fileKey === '') {
-                ExceptionBuilder::throw(AssetErrorCode::FILE_REQUIRED);
-            }
-            $requestDTO->setFileKey($fileKey);
+        if ($requestDTO->getAssetKind() === 'ASSET') {
+            $contentHash = $this->materializeProjectFileIfNeeded($dataIsolation, $requestDTO);
         }
         $asset = $this->createAssetEntity($requestDTO, false, $dataIsolation->getCurrentOrganizationCode());
         // 素材只落在私有桶：创建前解析出 file_url 供第三方拉取；落库后的实体不含该字段，回填给响应。
         $this->resolveAssetFileUrls([$asset]);
         // 记录内容指纹：既用于复用已同步的第三方素材，也用于「同一份内容不重复落库」的判重。
-        $asset->setContentHash($this->resolveContentHash($asset));
+        $asset->setContentHash($contentHash ?? $this->resolveContentHash($asset));
 
         $asset = $this->assetDomainService->createPersonal($dataIsolation, $asset);
         $this->grantAssetVisibility($dataIsolation, $asset, AssetVisibility::personal());
@@ -72,7 +64,11 @@ class AssetAppService extends AbstractAssetAppService
         SaveAssetToLibraryRequestDTO $requestDTO,
     ): AssetEntity {
         $dataIsolation = $this->createAssetDataIsolation($authorization);
+        $contentHash = $this->materializeProjectFileIfNeeded($dataIsolation, $requestDTO);
         $asset = $this->createAssetEntity($requestDTO, false, $dataIsolation->getCurrentOrganizationCode());
+        if ($contentHash !== null) {
+            $asset->setContentHash($contentHash);
+        }
         // 保存前必须确认文件存在且当前组织可以访问。
         $this->resolveAssetFileUrls([$asset]);
         if ($asset->getFileUrl() === null || $asset->getFileUrl() === '') {
@@ -87,6 +83,25 @@ class AssetAppService extends AbstractAssetAppService
         $this->resolveAssetFileUrls([$asset]);
 
         return $asset;
+    }
+
+    /** 未提供 file_key 时，从项目文件生成私有桶文件并返回已计算的内容哈希。 */
+    private function materializeProjectFileIfNeeded(AssetDataIsolation $dataIsolation, CreateAssetRequestDTO $requestDTO): ?string
+    {
+        if (trim((string) $requestDTO->getFileKey()) !== '') {
+            return null;
+        }
+        $projectId = $requestDTO->getProjectId();
+        $projectFilePath = $requestDTO->getProjectFilePath();
+        if ($projectId === null || $projectFilePath === null) {
+            ExceptionBuilder::throw(AssetErrorCode::FILE_REQUIRED);
+        }
+        $materialized = $this->projectFileMaterializer->materialize($dataIsolation, $projectId, $projectFilePath);
+        if ($materialized === null || ($materialized['file_key'] ?? '') === '') {
+            ExceptionBuilder::throw(AssetErrorCode::FILE_REQUIRED);
+        }
+        $requestDTO->setFileKey($materialized['file_key']);
+        return $materialized['content_hash'] ?? null;
     }
 
     public function signAgreement(Authenticatable|BaseDataIsolation $authorization): void

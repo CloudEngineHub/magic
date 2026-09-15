@@ -38,8 +38,8 @@ class ProjectFileMaterializer
         ));
     }
 
-    /** 返回已有或新上传的私有桶文件 key；项目或文件不可访问时返回 null。 */
-    public function materialize(BaseDataIsolation $dataIsolation, int $projectId, string $projectFilePath): ?string
+    /** 返回已有或新上传文件的 key 与内容哈希；项目或文件不可访问时返回 null。 */
+    public function materialize(BaseDataIsolation $dataIsolation, int $projectId, string $projectFilePath): ?array
     {
         $projects = $this->projectDomainService->getProjectsWithAuth(
             [$projectId],
@@ -74,12 +74,12 @@ class ProjectFileMaterializer
                 && $existing->getOrganizationCode() === $dataIsolation->getCurrentOrganizationCode()
                 && trim((string) $existing->getFileKey()) !== ''
             ) {
-                return $existing->getFileKey();
+                return ['file_key' => $existing->getFileKey(), 'content_hash' => $contentHash];
             }
 
             $uploadFile = new UploadFile($downloaded->getRealPath(), '', $file->getFileName());
             $this->fileDomainService->uploadByCredential($dataIsolation->getCurrentOrganizationCode(), $uploadFile);
-            return $uploadFile->getKey();
+            return ['file_key' => $uploadFile->getKey(), 'content_hash' => $contentHash];
         } finally {
             @unlink($downloaded->getRealPath());
         }
