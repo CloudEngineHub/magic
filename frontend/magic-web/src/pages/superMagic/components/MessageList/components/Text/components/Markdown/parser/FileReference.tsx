@@ -49,7 +49,7 @@ export function FileReference({
 			title={title}
 			onClick={disabled ? undefined : onClick}
 		>
-			<MagicFileIcon type={fileType} size={14} className="shrink-0 self-center" />
+			<MagicFileIcon type={fileType} size={14} className="shrink-0 self-center mt-[-0.2em]" />
 			<span
 				data-file-reference-label
 				className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
