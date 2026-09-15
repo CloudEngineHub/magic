@@ -7,6 +7,7 @@ import { SHARE_WORKSPACE_ID } from "../constants"
 import { RequestConfig } from "@/apis/core/HttpClient"
 import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
 import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
+import { invalidateWorkspaceSearchResults } from "./workspaceListSearchInvalidation"
 
 export interface FetchWorkspacesParams {
 	isAutoSelect?: boolean
@@ -142,6 +143,7 @@ class WorkspaceService {
 					}
 				})
 			}
+			invalidateWorkspaceSearchResults()
 		} catch (error) {
 			console.log("重命名工作区失败，失败原因：", error)
 			throw error
@@ -187,6 +189,7 @@ class WorkspaceService {
 				isAutoSelect: false,
 				isSelectLast: false,
 			})
+			invalidateWorkspaceSearchResults()
 		} catch (error) {
 			if (!orderingRequestCompleted)
 				reportOrderApiError({
@@ -264,6 +267,7 @@ class WorkspaceService {
 	): Promise<Workspace | null> => {
 		try {
 			await SuperMagicApi.deleteWorkspace({ id })
+			invalidateWorkspaceSearchResults()
 
 			const workspaces = workspaceStore.workspaces
 			if (workspaces.length === 1) {
