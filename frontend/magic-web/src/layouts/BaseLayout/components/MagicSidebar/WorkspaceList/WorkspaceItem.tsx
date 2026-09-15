@@ -99,7 +99,9 @@ function WorkspaceItem({
 		const item = header.closest<HTMLElement>("[data-sidebar-workspace-root]")
 		if (!item) return
 		viewport.scrollTop +=
-			item.getBoundingClientRect().top - viewport.getBoundingClientRect().top
+			item.getBoundingClientRect().top -
+			viewport.getBoundingClientRect().top -
+			parseFloat(getComputedStyle(item).scrollMarginTop)
 	}, [isExpanded, scrollRef])
 	const collapseScrollAnchorRef = useRef<{
 		scrollContainer: HTMLElement

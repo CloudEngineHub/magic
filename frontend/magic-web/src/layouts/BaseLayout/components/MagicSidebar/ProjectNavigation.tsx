@@ -59,7 +59,35 @@ function ProjectNavigation({
 	const managerIcon = <AppWindow size={16} />
 	const scrollRef = useRef<HTMLDivElement>(null)
 	const scrollAreaRef = useRef<HTMLDivElement>(null)
+	const navigationRef = useRef<HTMLDivElement>(null)
 	const scrollKey = `sidebar-scroll:${collapsed ? "collapsed" : sidebarStore.expandedNavigationSection}`
+	useLayoutEffect(() => {
+		const navigation = navigationRef.current
+		if (collapsed || !navigation) return
+		const headers = Array.from(
+			navigation.querySelectorAll<HTMLElement>("[data-sidebar-navigation-header]"),
+		)
+		const tabs = headers.find((header) => header.dataset.sidebarNavigationHeader === "tabs")
+		// 分类、操作栏、工作区标题逐层吸顶；实际高度同时覆盖搜索态和字号变化，隐藏栏目不占位。
+		const measure = () => {
+			navigation.style.setProperty(
+				"--project-navigation-tabs-height",
+				`${tabs?.offsetHeight ?? 0}px`,
+			)
+			navigation.style.setProperty(
+				"--workspace-list-sticky-top",
+				`${headers.reduce((height, header) => height + header.offsetHeight, 0)}px`,
+			)
+		}
+		measure()
+		const observer = new ResizeObserver(measure)
+		headers.forEach((header) => observer.observe(header))
+		return () => {
+			observer.disconnect()
+			navigation.style.removeProperty("--project-navigation-tabs-height")
+			navigation.style.removeProperty("--workspace-list-sticky-top")
+		}
+	}, [collapsed, recentExpanded, userId, organizationCode])
 	useLayoutEffect(() => {
 		sidebarStore.setNavigationIdentity(userId, organizationCode)
 		recentProjectsStore.setIdentity(userId, organizationCode)
@@ -103,7 +131,7 @@ function ProjectNavigation({
 				ref={scrollAreaRef}
 				viewportRef={scrollRef}
 				className="min-h-0 flex-1 overflow-hidden"
-				viewportClassName="overscroll-contain [--workspace-list-sticky-top:0px] [&>div]:!block"
+				viewportClassName="overscroll-contain [&>div]:!block"
 				hideScrollbar
 				scrollHints={{
 					variant: "both",
@@ -122,7 +150,14 @@ function ProjectNavigation({
 			>
 				{apps}
 				<div className="mx-2 my-1 h-px bg-sidebar-border/40" />
-				<div className={collapsed ? "" : "px-2"}>
+				<div
+					ref={navigationRef}
+					className={
+						collapsed
+							? ""
+							: "px-2 [--project-navigation-tabs-height:0px] [--workspace-list-sticky-top:0px]"
+					}
+				>
 					{collapsed ? (
 						<SidebarMenu className="p-2">
 							<SidebarMenuItem>

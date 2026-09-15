@@ -40,7 +40,8 @@ export default function ProjectNavigationToolbar({
 		: t("super:workspace.searchWorkspace")
 	return (
 		<div
-			className="shrink-0 bg-sidebar"
+			className="sticky top-[var(--project-navigation-tabs-height,0px)] z-20 shrink-0 bg-sidebar"
+			data-sidebar-navigation-header="toolbar"
 			data-testid={
 				recent ? "sidebar-recent-projects-toolbar" : "sidebar-workspace-list-sticky-header"
 			}

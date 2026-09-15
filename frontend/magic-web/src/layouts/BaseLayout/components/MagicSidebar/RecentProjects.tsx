@@ -199,7 +199,8 @@ function RecentProjects({
 			externalScrollRef && panelRef.current
 				? viewport.scrollTop +
 					panelRef.current.getBoundingClientRect().top -
-					viewport.getBoundingClientRect().top
+					viewport.getBoundingClientRect().top -
+					parseFloat(getComputedStyle(panelRef.current).scrollMarginTop)
 				: 0
 		viewport.scrollTop = searching ? Math.max(0, searchTop) : defaultScrollTop.current
 	}, [active, keyword, searching, viewportRef, externalScrollRef])
@@ -298,7 +299,11 @@ function RecentProjects({
 	return (
 		<div
 			ref={panelRef}
-			className={cn("min-h-0", !externalScrollRef && "flex flex-col", fitContent && "shrink")}
+			className={cn(
+				"min-h-0 scroll-mt-[var(--project-navigation-tabs-height,0px)]",
+				!externalScrollRef && "flex flex-col",
+				fitContent && "shrink",
+			)}
 		>
 			{onCreate && (
 				<ProjectNavigationToolbar

@@ -157,9 +157,20 @@ function WorkspaceList({
 		const items = Array.from(
 			list.querySelectorAll<HTMLElement>("[data-sidebar-workspace-root]"),
 		)
+		const navigationHeaders = Array.from(
+			scrollArea.querySelectorAll<HTMLElement>("[data-sidebar-navigation-header]"),
+		)
 		const measure = () => {
 			// 高度预算扣除双向提示的最大占位；提示显隐不再反过来改变项目高度和溢出状态。
-			const availableHeight = Math.max(0, scrollArea.clientHeight - SCROLL_HINT_HEIGHT * 2)
+			// 分类和操作栏吸顶后持续占位，项目列表与下一组标题使用剩余高度。
+			const stickyHeight = navigationHeaders.reduce(
+				(height, header) => height + header.offsetHeight,
+				0,
+			)
+			const availableHeight = Math.max(
+				0,
+				scrollArea.clientHeight - SCROLL_HINT_HEIGHT * 2 - stickyHeight,
+			)
 			const headers = items.map((item) =>
 				item.querySelector<HTMLElement>("[data-sidebar-workspace-header]"),
 			)
@@ -193,6 +204,7 @@ function WorkspaceList({
 		measure()
 		const observer = new ResizeObserver(measure)
 		observer.observe(scrollArea)
+		navigationHeaders.forEach((header) => observer.observe(header))
 		items.forEach((item) => {
 			const header = item.querySelector("[data-sidebar-workspace-header]")
 			if (header) observer.observe(header)
@@ -504,7 +516,8 @@ function WorkspaceList({
 					top:
 						viewport.scrollTop +
 						workspaceElement.getBoundingClientRect().top -
-						viewport.getBoundingClientRect().top,
+						viewport.getBoundingClientRect().top -
+						parseFloat(getComputedStyle(workspaceElement).scrollMarginTop),
 					behavior: "smooth",
 				})
 		})
