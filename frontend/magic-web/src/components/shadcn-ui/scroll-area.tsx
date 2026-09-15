@@ -7,7 +7,7 @@ import { useReducedMotion } from "framer-motion"
 import { cn } from "@/utils/cn"
 
 // 顶部提示紧接固定导航，采用较薄轨道；底部保留原有点击空间。
-export const SCROLL_HINT_HEIGHTS = { top: 12, bottom: 18 } as const
+export const SCROLL_HINT_HEIGHTS = { top: 16, bottom: 18 } as const
 
 type ScrollAreaViewportProps = Omit<
 	React.ComponentProps<typeof ScrollAreaPrimitive.Viewport>,
@@ -233,7 +233,8 @@ const ScrollArea = React.forwardRef<
 								}}
 								className={cn(
 									"z-10 flex w-6 items-center justify-center justify-self-center rounded-sm text-muted-foreground opacity-[0.65] outline-none transition-opacity hover:opacity-100 focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none",
-									direction < 0 ? "row-start-1" : "row-start-3",
+									// 向上箭头靠近固定导航，额外留白放在下方，与吸顶分类分开。
+									direction < 0 ? "row-start-1 pb-2" : "row-start-3",
 								)}
 							>
 								<Icon className="size-3" strokeWidth={1.5} />
