@@ -195,6 +195,7 @@ export function Visualization({
 				<ChartPanel
 					key={VIEW.FileProductionAnalysis}
 					title={t("charts.fileProductionTrend")}
+					desc={t("charts.fileProductionTrendDesc")}
 					data={buildFileTrend(fileSummary)}
 					metrics={getFileTrendMetrics(t)}
 					axisLabels={{ left: t("charts.quantityAxis") }}

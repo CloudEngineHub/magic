@@ -1328,6 +1328,7 @@ function renderFileDepartment(value: unknown, t: DashboardT) {
 
 function agentStatusLabel(value: unknown, t: DashboardT) {
 	if (value === "published") return t("agentStatus.published")
+	if (value === "unpublished") return t("agentStatus.unpublished")
 	if (value === "offline") return t("agentStatus.offline")
 	if (value === "deleted") return t("agentStatus.deleted")
 	return displayText(value as string | null)

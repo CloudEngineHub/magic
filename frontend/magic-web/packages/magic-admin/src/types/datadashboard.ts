@@ -78,7 +78,7 @@ export namespace DataDashboard {
 	export interface FileAgentRow extends FileAnalysisCounts {
 		agent_code: string
 		agent_name: string | null
-		agent_status: "published" | "offline" | "deleted" | null
+		agent_status: "published" | "unpublished" | "offline" | "deleted" | null
 		user_id: string
 		user_name: string | null
 		department_id: string

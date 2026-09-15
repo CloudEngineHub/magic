@@ -75,6 +75,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 			stateView === VIEW.FileProductionAnalysis ? getFileProductionLatestDate() : undefined,
 		[stateView],
 	)
+	const fileProductionDataAsOf = fileProductionMaxDate?.format("YYYY-MM-DD")
 
 	const {
 		agentOptions,
@@ -114,7 +115,7 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 
 	const fileSourceOptions = useMemo(
 		() => [
-			{ label: t("filters.allSources"), value: ALL_OPTION_VALUE },
+			{ label: t("fileProduction.allTypes"), value: ALL_OPTION_VALUE },
 			{ label: t("fileProduction.operationTypes.original"), value: "user_created" },
 			{ label: t("fileProduction.operationTypes.ai"), value: "ai_created" },
 		],
@@ -178,9 +179,21 @@ export default function DataDashboardPage({ view }: DataDashboardPageProps) {
 						<h1 className={styles.title}>{pageText.title}</h1>
 						<div className={styles.subtitle}>{pageText.desc}</div>
 					</div>
-					<MagicButton icon={<RotateCcw size={16} />} onClick={handleReset}>
-						{t("actions.resetFilters")}
-					</MagicButton>
+					<div className={styles.headerActions}>
+						{stateView === VIEW.FileProductionAnalysis ? (
+							<div className={styles.updateInfo}>
+								<div>{t("fileProduction.updateSchedule")}</div>
+								<div>
+									{t("fileProduction.dataAsOf", {
+										date: fileProductionDataAsOf,
+									})}
+								</div>
+							</div>
+						) : null}
+						<MagicButton icon={<RotateCcw size={16} />} onClick={handleReset}>
+							{t("actions.resetFilters")}
+						</MagicButton>
+					</div>
 				</header>
 
 				<section className={styles.filterPanel}>

@@ -6,7 +6,8 @@
 	"agentStatus": {
 		"deleted": "Deleted",
 		"offline": "Offline",
-		"published": "Published"
+		"published": "Published",
+		"unpublished": "Unpublished"
 	},
 	"buckets": {
 		"highUseAgent": "High-frequency digital employees",
@@ -57,6 +58,7 @@
 		"departmentPenetrationMeta": "{{active}} / {{employed}} members · {{calls}} calls · {{points}} points",
 		"departmentUsage": "Department Usage Distribution",
 		"fileProductionTrend": "File Production Trend",
+		"fileProductionTrendDesc": "Deduplicated files with an operation on each day.",
 		"memberBucket": "Member Activity Segments",
 		"memberTrend": "Active Member Trend",
 		"memberTrendDesc": "Calls and active members over time.",
@@ -65,35 +67,47 @@
 	"columnHelpers": {
 		"activationRate": "Active members / employed members.",
 		"activeMembers": "Deduplicated userId count under the current aggregate object.",
+		"agentStatus": "Current publication status of the digital employee.",
 		"amount": "Total point consumption in the current statistical scope.",
 		"averageAmount": "Point consumption / calls.",
 		"averageTokens": "Token consumption / calls.",
 		"businessType": "Business type for the current call record.",
 		"calls": "Unified task calls in the current statistical scope.",
 		"department": "Full department path associated with the member or call record.",
+		"departmentId": "Unique identifier of the department.",
 		"departmentLevel": "The department's level in the organization structure.",
 		"departments": "Deduplicated covered departments in the current statistical scope.",
 		"digitalEmployee": "Digital employee name and code. Historical rows prefer call snapshots.",
+		"docCount": "Files classified as documents by extension.",
 		"employeeCount": "Employed members under this department in the organization structure.",
 		"employmentStatus": "Employment status of the member in the organization.",
 		"favoriteAgent": "Whether the member has favorited this agent.",
+		"fileOutputCount": "Total deduplicated files in the selected scope.",
+		"htmlCount": "Files classified as HTML by extension.",
+		"imageCount": "Files classified as images by extension.",
 		"lastUsedAt": "Most recent call time for the current row subject.",
 		"level1Department": "The member's level-1 department from the organization structure or call record.",
 		"level2Department": "The member's level-2 department from the organization structure or call record.",
 		"level3Department": "The member's level-3 department from the organization structure or call record.",
+		"mdCount": "Files classified as Markdown by extension.",
 		"member": "Member name and user ID.",
+		"memberCount": "Unique members in the department for the selected scope.",
 		"members": "Deduplicated calling members in the current statistical scope.",
 		"organizationDepartment": "The level-1 department containing the current department; level-1 rows show the department itself.",
+		"otherCount": "Files that do not match another category.",
+		"pptCount": "Files classified as presentations by extension.",
 		"resourceType": "Resource type for the current call record.",
 		"silentDays": "Current date - last call date; use the default observation window when no historical call exists.",
 		"source": "Digital employee source, including local create, market install, or organization shared.",
+		"spreadsheetCount": "Files classified as spreadsheets by extension.",
 		"status": "Current member address book status.",
 		"taskId": "Task identifier for one unified call.",
 		"tokens": "Total token consumption in the current statistical scope.",
 		"topAgent": "The digital employee with the most calls under the current aggregate object, showing its name and ID.",
 		"topic": "The call object associated with the consumption record, including topic, model, Claw, or flow and its business identifier.",
 		"updatedAt": "Last call time of this task.",
-		"usageDays": "Deduplicated call dates in the current statistical scope."
+		"usageDays": "Deduplicated call dates in the current statistical scope.",
+		"videoCount": "Files classified as videos by extension."
 	},
 	"columns": {
 		"activationRate": "Member Activation Rate",
@@ -236,6 +250,7 @@
 	},
 	"fileProduction": {
 		"allCategories": "All Categories",
+		"allTypes": "All Types",
 		"categories": {
 			"doc": "Documents",
 			"html": "HTML",
@@ -246,6 +261,7 @@
 			"spreadsheet": "Spreadsheets",
 			"video": "Videos"
 		},
+		"dataAsOf": "Data as of {{date}}",
 		"desc": "Analyze enterprise file production by time, operation type, and file category.",
 		"fileCategory": "File Category",
 		"operationType": "Operation Type",
@@ -253,7 +269,8 @@
 			"ai": "AI Created",
 			"original": "User Created"
 		},
-		"title": "File Production Analysis"
+		"title": "File Production Analysis",
+		"updateSchedule": "Updated daily at 00:00"
 	},
 	"filters": {
 		"agentCodePlaceholder": "Enter digital employee code",
@@ -301,6 +318,9 @@
 		"departmentMemberAvgCalls": "Department calls / active members.",
 		"departmentMemberAvgTokens": "Department token consumption / active members.",
 		"departmentTokens": "Token consumption aggregated by department.",
+		"fileAiCreatedCount": "Deduplicated files generated from scratch by AI.",
+		"fileOutputCount": "Deduplicated total of user-original and AI-created files.",
+		"fileUserCreatedCount": "Deduplicated files uploaded or created by users.",
 		"memberAvgAmount": "Total point consumption / deduplicated calling members.",
 		"memberAvgCalls": "Total calls / active members.",
 		"memberAvgTokens": "Total token consumption / deduplicated calling members.",
