@@ -85,6 +85,7 @@ export interface RecordingStatus {
 	session: RecordingSessionState | null
 	bufferDuration: number
 	isPaused: boolean
+	processingMode?: AudioProcessingMode
 }
 
 /**
