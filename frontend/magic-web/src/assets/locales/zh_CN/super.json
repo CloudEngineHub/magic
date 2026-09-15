@@ -5499,8 +5499,19 @@
 		"workspaceDescription": "让工作按计划自动执行，随时查看任务状态"
 	},
 	"search": {
+		"batchSummary": "本次 {{count}} 组搜索",
+		"collapseSnippet": "收起摘要",
+		"emptyGroupDescription": "可以查看其他搜索组，或调整关键词后重新发起搜索。",
+		"emptyGroupTitle": "这组搜索没有返回结果",
+		"emptyResults": "暂无搜索结果",
+		"expandSnippet": "展开摘要",
+		"groupLabel": "搜索 {{index}}",
 		"internetSearch": "互联网搜索",
-		"searchKeyword": "搜索\"{{keyword}}\"关键词，有 {{count}} 条匹配的结果"
+		"nextGroups": "查看后面的搜索组",
+		"previousGroups": "查看前面的搜索组",
+		"queryReadOnly": "已执行的搜索内容",
+		"queryUnavailable": "此记录未保存独立搜索词",
+		"resultCount": "返回 {{count}} 条结果"
 	},
 	"selectPathModal": {
 		"all": "全部",

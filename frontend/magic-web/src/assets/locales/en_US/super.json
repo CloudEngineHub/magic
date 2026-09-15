@@ -5498,8 +5498,21 @@
 		"workspaceDescription": "Automate recurring work and keep every task under control"
 	},
 	"search": {
-		"internetSearch": "Internet Search",
-		"searchKeyword": "Search \"{{keyword}}\" keyword, found {{count}} matching results"
+		"batchSummary_one": "{{count}} search in this batch",
+		"batchSummary_other": "{{count}} searches in this batch",
+		"collapseSnippet": "Collapse snippet",
+		"emptyGroupDescription": "View another search group, or start a new search with different keywords.",
+		"emptyGroupTitle": "This search returned no results",
+		"emptyResults": "No search results available",
+		"expandSnippet": "Expand snippet",
+		"groupLabel": "Search {{index}}",
+		"internetSearch": "Internet search",
+		"nextGroups": "Show next search groups",
+		"previousGroups": "Show previous search groups",
+		"queryReadOnly": "Executed search query",
+		"queryUnavailable": "No separate search query was saved for this record",
+		"resultCount_one": "{{count}} result returned",
+		"resultCount_other": "{{count}} results returned"
 	},
 	"selectPathModal": {
 		"all": "All",

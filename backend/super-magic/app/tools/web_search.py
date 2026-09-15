@@ -194,9 +194,11 @@ class WebSearch(BaseTool[WebSearchParams]):
     def _handle_requirements_results(self, requirements_data: List[Dict[str, Any]], all_results) -> WebSearchToolResult:
         """格式化多个需求的搜索结果"""
         result = WebSearchToolResult(content="")
+        query_by_keyword: dict[str, str] = {}
 
         for req_data, search_results in zip(requirements_data, all_results):
             result_key = f"{req_data['name']} ({req_data['query']})"
+            query_by_keyword[result_key] = req_data['query']
             # 驱动返回 List[SearchResultItem]，直接转为 SearchResult
             output_models = [
                 SearchResult(
@@ -219,6 +221,8 @@ class WebSearch(BaseTool[WebSearchParams]):
             result.output_results[result_key] = output_models
             result.search_results[result_key] = search_models
 
+        # 详情显示真实查询词，分组身份仍保留 name(query)；不改模型输出，也不重新解析请求。
+        result.extra_info['search_queries'] = query_by_keyword
         return result
 
     async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None) -> Optional[ToolDetail]:
@@ -232,6 +236,7 @@ class WebSearch(BaseTool[WebSearchParams]):
 
             return ToolDetailFactory.create_search_detail_from_search_results(
                 search_results=result.search_results,
+                query_by_keyword=result.extra_info.get('search_queries'),
             )
         except Exception as e:
             logger.error(f"生成工具详情失败: {e!s}")
@@ -246,40 +251,9 @@ class WebSearch(BaseTool[WebSearchParams]):
                 "remark": i18n.translate("web_search.error", category="tool.messages", error=result.content)
             }
 
-        try:
-            requirement_names = result.extra_info.get('requirement_names', [])
-            if not requirement_names:
-                requirements = (arguments or {}).get("requirements", [])
-                if isinstance(requirements, list):
-                    requirement_names = [
-                        requirement["name"]
-                        for requirement in requirements
-                        if isinstance(requirement, dict)
-                        and isinstance(requirement.get("name"), str)
-                        and requirement["name"].strip()
-                    ]
-
-            if not requirement_names:
-                return {
-                    "action": i18n.translate("web_search", category="tool.actions"),
-                    "remark": i18n.translate("web_search.completed", category="tool.messages")
-                }
-
-            if len(requirement_names) > 1:
-                names_str = ', '.join(requirement_names[:3])
-                if len(requirement_names) > 3:
-                    names_str += i18n.translate("web_search.more_items", category="tool.messages")
-                return {
-                    "action": i18n.translate("web_search", category="tool.actions"),
-                    "remark": i18n.translate("web_search.requirements", category="tool.messages", requirements=names_str)
-                }
-            else:
-                return {
-                    "action": i18n.translate("web_search", category="tool.actions"),
-                    "remark": i18n.translate("web_search.requirement", category="tool.messages", requirement=requirement_names[0])
-                }
-        except Exception:
-            return {
-                "action": i18n.translate("web_search", category="tool.actions"),
-                "remark": i18n.translate("web_search.completed", category="tool.messages")
-            }
+        # 处理成功情况
+        # 需求名称用于模型关联结果，不作为用户搜索内容；真实查询由搜索详情展示。
+        return {
+            "action": i18n.translate("web_search", category="tool.actions"),
+            "remark": i18n.translate("web_search.completed", category="tool.messages")
+        }

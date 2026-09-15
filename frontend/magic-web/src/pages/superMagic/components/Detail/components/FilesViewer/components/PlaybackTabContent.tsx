@@ -133,6 +133,12 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 		toolSteps,
 		currentStepIndex,
 	})
+	const currentStepDetail = currentToolStep?.detail as
+		{ type?: DetailType; data?: { groups?: unknown } } | undefined
+	// 搜索结果已展示查询和条数，旧备注中的需求名称无需重复显示；错误文本和其他工具仍保留备注。
+	const hasSearchResults =
+		currentStepDetail?.type === DetailType.Search &&
+		Array.isArray(currentStepDetail.data?.groups)
 
 	// 修正 disPlayDetail 的类型：如果 metadata.type 是 design 但 type 是 notSupport，需要修正
 	// 这个修正逻辑在源头（工具调用生成 detail 时）无法处理，因为 detail 可能来自后端
@@ -249,7 +255,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 											{currentToolStep.action}
 										</span>
 									</div>
-									{currentToolStep.remark && (
+									{currentToolStep.remark && !hasSearchResults && (
 										<Tooltip title={currentToolStep.remark}>
 											<span className="shrink overflow-hidden text-ellipsis whitespace-nowrap text-xs text-muted-foreground">
 												{currentToolStep.remark}

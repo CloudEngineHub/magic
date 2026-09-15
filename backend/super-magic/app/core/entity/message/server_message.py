@@ -173,6 +173,7 @@ class SearchGroupItem(BaseModel):
 
     keyword: str  # 搜索关键词
     results: List[SearchResultItem]  # 该关键词的搜索结果列表
+    query: str | None = None  # 实际查询词；旧详情缺失时仍由 keyword 完整展示
 
 
 class SearchContent(BaseModel):
