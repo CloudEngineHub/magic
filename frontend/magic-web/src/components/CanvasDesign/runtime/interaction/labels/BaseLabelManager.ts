@@ -931,7 +931,7 @@ export abstract class BaseLabelManager {
 				: this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 						viewportRect,
 						padding,
-						{ elementIds, debugSource: "labels:always-visible" },
+						{ elementIds },
 					)
 		this.visibleLabelQueryCache = { coverageRect, candidateIds, candidateRevision }
 		return candidateIds

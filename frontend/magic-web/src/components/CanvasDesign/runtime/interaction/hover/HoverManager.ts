@@ -548,7 +548,6 @@ export class HoverManager {
 				height: 0,
 			},
 			0,
-			{ debugSource: "hover:pointer" },
 		)
 
 		let topElementId: string | null = null

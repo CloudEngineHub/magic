@@ -185,7 +185,7 @@ describe("BaseLabelManager candidate cache", () => {
 		expect(queryElementIdsByExpandedRect).toHaveBeenLastCalledWith(
 			expect.any(Object),
 			expect.any(Number),
-			{ elementIds: new Set(["frame-1"]), debugSource: "labels:always-visible" },
+			{ elementIds: new Set(["frame-1"]) },
 		)
 
 		firstManager.destroy()
