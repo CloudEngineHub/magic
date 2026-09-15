@@ -6468,6 +6468,100 @@
 		"exitCode": "Exit code",
 		"expandCommand": "Expand all",
 		"guide": "User guide",
+		"help": {
+			"catalogHint": "Choose a topic to read more",
+			"logs": {
+				"detail": {
+					"example": "Find where report.pdf appears and read the related processing steps.",
+					"guide": {
+						"actions": "Enable “Word wrap” to fit long lines to the window. Disable it to read tables, stack traces and long paths horizontally. Wrapping changes only the display, not the original content. New output preserves your position when you scroll up; select “Go to end” when needed.",
+						"context": "Finding text highlights matches while keeping surrounding content. Colors provided by the program are preserved. The interface does not infer task success or failure from keywords.",
+						"diagramTitle": "Trace a result back to its context",
+						"exampleContent": "Reading sales.csv\nWriting report.pdf\nFinished writing report.pdf",
+						"result": "Finding report.pdf highlights two matches: writing in progress and the program reporting that writing has finished. Check the actual file to determine whether it meets the report requirements.",
+						"steps": [
+							{
+								"description": "Select “Go to end” to read the last information in the current record.",
+								"title": "Go to the end"
+							},
+							{
+								"description": "Enter a filename or phrase and use the arrows to move between matches. Enter finds the next match; Shift + Enter finds the previous one.",
+								"title": "Find a keyword"
+							},
+							{
+								"description": "Read nearby output to understand causes and results instead of relying on a single line.",
+								"title": "Read the context"
+							}
+						],
+						"title": "Find relevant information in long output"
+					},
+					"note": "This view shows what the current tool returned, which may be only part of a long task. If the output says it is truncated or partial, the view and copied content contain only that returned portion. Check later records for the full progress.",
+					"usage": "Output may contain many lines. Start with the last returned information, then find a filename or keyword and read nearby lines to understand what happened."
+				},
+				"title": "Finding and reading logs"
+			},
+			"overview": {
+				"detail": {
+					"example": "Turn this month’s data into a PDF report.",
+					"guide": {
+						"actions": "Long commands initially show about three lines. Select “Expand all” to keep reading. “Copy command” always copies the complete command without the green prompt. The top “Copy” action copies the command, original output and exit code.",
+						"context": "The explanation in the conversation, the tool’s description and the actual command serve different purposes. The description comes from the current tool, and the command preserves what was executed. A script name alone does not establish its purpose.",
+						"diagramTitle": "From task description to terminal output",
+						"exampleContent": "python generate_report.py --input sales.csv --output report.pdf",
+						"result": "In this example, python runs the script, --input specifies the input file, and --output specifies the output file. Each program defines its own options; other commands may use different ones.",
+						"steps": [
+							{
+								"description": "Magic explains its approach in the conversation. The tool card shows the current action and its description.",
+								"title": "Task description"
+							},
+							{
+								"description": "The instruction executed by the computer. The green $ is a display prompt and is not part of the command.",
+								"title": "Command"
+							},
+							{
+								"description": "Text returned by the program, which may include data, progress, logs or error details.",
+								"title": "Output"
+							}
+						],
+						"title": "Understand what this step does"
+					},
+					"note": "This is a read-only view. You cannot enter new commands here. Expanding, finding, copying and opening the guide only affect reading; they do not run the command again.",
+					"usage": "A terminal is an interface for interacting with a computer through text commands. When Magic processes files, organizes data or creates reports, it runs commands and displays their output here."
+				},
+				"title": "Terminals and commands"
+			},
+			"status": {
+				"detail": {
+					"example": "A report command returns 0. Next, check that the report exists and meets the requirements.",
+					"guide": {
+						"actions": "If a call returns an error, copy the original record and analyze it alongside the actual command and error details. This interface does not retry or rerun commands automatically.",
+						"context": "To assess the final result, consider the tool description, output, generated files and Magic’s subsequent checks together.",
+						"diagramTitle": "Information needed to assess the result",
+						"exampleContent": "Exit code 0 → Usually a normal return\nNonzero exit code → Usually a problem\nTask completed → Requires checking the output and deliverable",
+						"result": "For example, a program may exit normally but create an empty report, leaving the task incomplete. A successful read of background logs also does not mean the background command has finished.",
+						"steps": [
+							{
+								"description": "Read the exit code in the footer and the status returned by the current tool.",
+								"title": "Check this return"
+							},
+							{
+								"description": "Read the results of a normal return. For an error, find the relevant keywords and read the surrounding output.",
+								"title": "Read the output"
+							},
+							{
+								"description": "Confirm that the required file exists and meets the requirements. For background work, check later progress as well.",
+								"title": "Check the deliverable"
+							}
+						],
+						"title": "Distinguish a normal return from a completed task"
+					},
+					"note": "A tool that waits for or reads output from a background command may return normally while that command is still running. Exit code 0 for that read does not establish that the background command has finished. A missing exit code does not establish a result either.",
+					"usage": "The footer describes how the current call returned. An exit code is a number returned by the program or tool: usually 0 means a normal return and a nonzero value indicates a problem. The code alone does not prove that your task is complete."
+				},
+				"title": "Status and exit codes"
+			},
+			"summary": "Understand terminals, commands, output and exit codes, and learn how to read an execution record."
+		},
 		"nextMatch": "Next match",
 		"noContentToCopy": "No content to copy",
 		"noMatches": "No matches",

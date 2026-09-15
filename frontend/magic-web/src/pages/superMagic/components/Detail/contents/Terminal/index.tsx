@@ -7,6 +7,7 @@ import { useStyles } from "./styles"
 import { Copy, Terminal as TerminalIcon } from "lucide-react"
 import { DetailTerminalData, type TerminalToolInfo } from "../../types"
 import TerminalDisplay from "./components/TerminalDisplay"
+import { TerminalHelpButton } from "./components/TerminalHelpButton"
 import { ActionButton } from "../../components/CommonHeader/components"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -104,6 +105,11 @@ export default memo(function Terminal(props: TerminalProps) {
 							<span className={styles.readOnly}>{t("terminal.readOnly")}</span>
 						</div>
 					),
+				},
+				{
+					key: "terminal-guide",
+					zone: "secondary" as const,
+					render: () => <TerminalHelpButton />,
 				},
 				{
 					key: "terminal-copy",

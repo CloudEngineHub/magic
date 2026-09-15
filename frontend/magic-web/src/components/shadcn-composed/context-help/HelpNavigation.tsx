@@ -26,6 +26,7 @@ export interface HelpNavigationGroup {
 }
 
 interface HelpNavigationProps {
+	hint?: string
 	groups: HelpNavigationGroup[]
 	activeId: string
 	expanded: ReadonlySet<string>
@@ -35,6 +36,7 @@ interface HelpNavigationProps {
 
 /** 目录只管理说明导航；折叠状态由当前阅读会话持有，不写入应用侧栏设置。 */
 export function HelpNavigation({
+	hint,
 	groups,
 	activeId,
 	expanded,
@@ -151,7 +153,7 @@ export function HelpNavigation({
 	return (
 		<nav ref={ref} aria-label={t("contextHelp.contents")} className="p-3">
 			<p className="px-2 pb-3 text-[11px] leading-5 text-muted-foreground">
-				{t("contextHelp.catalogHint")}
+				{hint ?? t("contextHelp.catalogHint")}
 			</p>
 			{groups.map(renderGroup)}
 		</nav>
