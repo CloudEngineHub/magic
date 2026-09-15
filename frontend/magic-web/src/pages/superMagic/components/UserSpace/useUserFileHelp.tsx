@@ -69,6 +69,17 @@ export function useUserFileHelp(
 				"document",
 				presentation,
 			)
+		case "projectCoreMemory":
+			return createFileHelpPresentation(
+				"user.projectCoreMemory",
+				t("userSpace.fileLabels.projectCoreMemory"),
+				t("userSpace.fileHelp.projectCoreMemory"),
+				t("userSpace.fileDetails.projectCoreMemory", {
+					returnObjects: true,
+				}) as FileHelpDetail,
+				"document",
+				presentation,
+			)
 		case "notes":
 			return createFileHelpPresentation(
 				"user.notes",

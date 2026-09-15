@@ -6858,7 +6858,7 @@
 			"aboutYou": {
 				"example": "“I prefer concise explanations. When discussing a proposal, explain its impact before implementation details.”",
 				"guide": {
-					"actions": "Ask AI to update outdated preferences and clarify scope. Unrelated identity details, secrets and private material need not be included. Use the relevant settings feature to change accounts, organizations or login information.",
+					"actions": "Ask {{clawBrand}} to update outdated preferences and clarify scope. Unrelated identity details, secrets and private material need not be included. Use the relevant settings feature to change accounts, organizations or login information.",
 					"context": "Include your preferred form of address, language and working habits to reduce repeated questions.",
 					"diagramTitle": "How background supports collaboration",
 					"exampleContent": "USER.md\n\nWorking preferences\n- Explain impact before implementation steps\n- Preserve sources in reports\n- Follow task-specific formatting when requested",
@@ -6870,7 +6870,7 @@
 						},
 						{
 							"description": "Understand the situations those preferences fit.",
-							"title": "Assistant reference"
+							"title": "{{clawBrand}} reference"
 						},
 						{
 							"description": "Consider the goal and constraints explicitly stated now.",
@@ -6883,7 +6883,7 @@
 					"Include your preferred form of address, language and working habits to reduce repeated questions.",
 					"Keep information that is actually needed and update preferences when they change."
 				],
-				"scope": "This assistant",
+				"scope": "This {{clawBrand}}",
 				"usage": "This file records preferences and background relevant to working with you."
 			},
 			"guidelines": {
@@ -6914,20 +6914,20 @@
 					"For example, lead with the main point, avoid unnecessary jargon and explain with examples when useful.",
 					"Communication can have a style, while facts and conclusions still need evidence."
 				],
-				"scope": "This assistant",
-				"usage": "This file describes how you want the assistant to communicate."
+				"scope": "This {{clawBrand}}",
+				"usage": "This file describes how you want the {{clawBrand}} to communicate."
 			},
 			"identityInfo": {
-				"example": "“You are my research assistant, helping organize information and record decisions.”",
+				"example": "You help me organize information, summarize findings and record decisions.",
 				"guide": {
-					"actions": "Ask AI to explain its current role before changing it. A definition cannot grant system access; actual tool capabilities still depend on installation, configuration and authorization.",
+					"actions": "Ask {{clawBrand}} to explain its current role before changing it. A definition cannot grant system access; actual tool capabilities still depend on installation, configuration and authorization.",
 					"context": "Explain what you want it to help with, such as organizing everyday material, then prepare relevant methods.",
 					"diagramTitle": "Identity and related definitions",
-					"exampleContent": "IDENTITY.md\n\nRole: Information organizer\nWork: Summarize material and preserve decisions\nBoundary: Explain sources and uncertainty",
-					"result": "A focus on organizing information belongs in identity, while shorter replies belong in communication style. Keeping them separate avoids changing working methods merely to rename the assistant.",
+					"exampleContent": "IDENTITY.md\n\nFocus: information organization\nMain work: summarize findings and record decisions\nBoundaries: explain sources and uncertainty",
+					"result": "A focus on organizing information belongs in identity, while shorter replies belong in communication style. Keeping them separate avoids changing working methods merely to rename the {{clawBrand}}.",
 					"steps": [
 						{
-							"description": "The assistant’s name, role and responsibilities.",
+							"description": "The {{clawBrand}}’s name, role and responsibilities.",
 							"title": "IDENTITY.md"
 						},
 						{
@@ -6945,21 +6945,21 @@
 					"Explain what you want it to help with, such as organizing everyday material, then prepare relevant methods.",
 					"Identity describes its role; it does not replace skills, tools or account permissions."
 				],
-				"scope": "This assistant",
+				"scope": "This {{clawBrand}}",
 				"shortLabel": "Identity",
-				"usage": "This file introduces the assistant’s name, role and responsibilities."
+				"usage": "This file introduces the {{clawBrand}}’s name, role and responsibilities."
 			},
 			"initialSetup": {
-				"example": "“When getting started, first ask what work I want this assistant to help with.”",
+				"example": "“When getting started, first ask what work I want this {{clawBrand}} to help with.”",
 				"guide": {
 					"actions": "For established roles or preferences, edit their corresponding definitions. Confirm the feature’s procedure and impact before resetting setup; changing the guide does not prove initialization ran again.",
 					"context": "Establish your main goals and communication preferences to give later work a shared starting point.",
 					"diagramTitle": "Possible initial preparation steps",
-					"exampleContent": "BOOTSTRAP.md\n\nInitial preparation\n1. Understand primary work needs\n2. Confirm the assistant’s role\n3. Record recurring expectations",
-					"result": "An initial conversation may distinguish information organization from scheduling needs and establish a suitable role. Viewing these instructions does not clear existing material or automatically restart an assistant already in use.",
+					"exampleContent": "BOOTSTRAP.md\n\nInitial preparation\n1. Understand primary work needs\n2. Confirm the {{clawBrand}}’s role\n3. Record recurring expectations",
+					"result": "An initial conversation may distinguish information organization from scheduling needs and establish a suitable role. Viewing these instructions does not clear existing material or automatically restart an {{clawBrand}} already in use.",
 					"steps": [
 						{
-							"description": "Confirm the work the assistant should help with.",
+							"description": "Confirm the work the {{clawBrand}} should help with.",
 							"title": "Understand needs"
 						},
 						{
@@ -6977,14 +6977,14 @@
 					"Establish your main goals and communication preferences to give later work a shared starting point.",
 					"Initial preparation is separate from daily rules and does not mean all external tools are connected."
 				],
-				"scope": "This assistant",
+				"scope": "This {{clawBrand}}",
 				"shortLabel": "Setup",
-				"usage": "This file guides the assistant through matters to confirm when first used."
+				"usage": "This file guides the {{clawBrand}} through matters to confirm when first used."
 			},
 			"memoryFile": {
 				"example": "“Keep lasting preferences and key decisions. Update related memory when information changes.”",
 				"guide": {
-					"actions": "Edit this file to change how the assistant manages memory. Edit memory records to correct saved facts. Do not collect all history in the rule file or treat saving a rule as proof that a particular memory was written.",
+					"actions": "Edit this file to change how the {{clawBrand}} manages memory. Edit memory records to correct saved facts. Do not collect all history in the rule file or treat saving a rule as proof that a particular memory was written.",
 					"context": "Describe which information is worth keeping and when records should be updated.",
 					"diagramTitle": "Management rules and actual facts",
 					"exampleContent": "MEMORY.md\n\nMemory management\n- Preserve lasting preferences and decision reasons\n- Keep detailed background in related records\n- Update existing content when facts change",
@@ -7009,8 +7009,8 @@
 					"Describe which information is worth keeping and when records should be updated.",
 					"Memory-management rules are separate from the memory records themselves."
 				],
-				"scope": "This assistant",
-				"usage": "This file explains how the assistant should retain, organize and use memory."
+				"scope": "This {{clawBrand}}",
+				"usage": "This file explains how the {{clawBrand}} should retain, organize and use memory."
 			},
 			"memoryFolder": {
 				"example": "“Find the saved project background and identify information that needs updating.”",
@@ -7022,11 +7022,11 @@
 					}
 				],
 				"guide": {
-					"actions": "Ask AI to find relevant topics and identify outdated information. State new facts and scope when updating, and keep related records consistent. The folder is neither a complete chat backup nor proof of current runtime state.",
+					"actions": "Ask {{clawBrand}} to find relevant topics and identify outdated information. State new facts and scope when updating, and keep related records consistent. The folder is neither a complete chat backup nor proof of current runtime state.",
 					"context": "Ask it to find useful background when continuing a task or to update a record that has become outdated.",
 					"diagramTitle": "Memory rules and content",
 					"exampleContent": "Memory responsibilities\nMEMORY.md → How to manage memory\nmemory/   → Information actually remembered",
-					"result": "MEMORY.md may ask the assistant to retain reasons for lasting decisions, while records in memory contain particular decisions and background. To correct an old conclusion, edit the actual record rather than only the management rules.",
+					"result": "MEMORY.md may ask the {{clawBrand}} to retain reasons for lasting decisions, while records in memory contain particular decisions and background. To correct an old conclusion, edit the actual record rather than only the management rules.",
 					"steps": [
 						{
 							"description": "Describes how to save, organize and use memory.",
@@ -7047,8 +7047,8 @@
 					"Ask it to find useful background when continuing a task or to update a record that has become outdated.",
 					"Memory records describe saved information and are separate from instructions about how to manage memory."
 				],
-				"scope": "This assistant",
-				"usage": "This folder keeps information the assistant has retained for later work."
+				"scope": "This {{clawBrand}}",
+				"usage": "This folder keeps information the {{clawBrand}} has retained for later work."
 			},
 			"proactiveExecution": {
 				"example": "“During proactive checks, look for pending work and notify me only when I need to act.”",
@@ -7078,8 +7078,8 @@
 					"For example, check whether an item needs your attention and specify when a notification is useful.",
 					"What to check and when checks are scheduled are separate."
 				],
-				"scope": "This assistant",
-				"usage": "This file describes what the assistant should check during periodic proactive work."
+				"scope": "This {{clawBrand}}",
+				"usage": "This file describes what the {{clawBrand}} should check during periodic proactive work."
 			},
 			"scheduledTasks": {
 				"example": "“Review my scheduled tasks and explain what each one does and when it runs.”",
@@ -7109,7 +7109,7 @@
 					"For example, arrange a daily summary or a weekly report, stating the time, content and expected result.",
 					"An arrangement is not proof of execution."
 				],
-				"scope": "This assistant",
+				"scope": "This {{clawBrand}}",
 				"usage": "This folder stores arrangements for work to perform on a schedule."
 			},
 			"skillList": {
@@ -7140,8 +7140,8 @@
 					"List skills by task type with their purpose and location so instructions are easy to find.",
 					"The list helps with selection and navigation; each skill’s full method is in SKILL."
 				],
-				"scope": "This assistant",
-				"usage": "This file introduces available skills and helps the assistant find a suitable method."
+				"scope": "This {{clawBrand}}",
+				"usage": "This file introduces available skills and helps the {{clawBrand}} find a suitable method."
 			},
 			"toolList": {
 				"example": "“Explain what these tools do and what environment information is needed before using them.”",
@@ -7171,22 +7171,22 @@
 					"Explain which tasks a tool handles and any recurring usage requirements.",
 					"Tool descriptions do not install programs, connect accounts or grant permissions."
 				],
-				"scope": "This assistant",
+				"scope": "This {{clawBrand}}",
 				"shortLabel": "Tools",
-				"usage": "This file keeps instructions and environment information the assistant needs when using tools."
+				"usage": "This file keeps instructions and environment information the {{clawBrand}} needs when using tools."
 			}
 		},
 		"clawPlaygroundHelp": {
 			"aboutYou": "This file records preferences and background relevant to working with you.",
-			"guidelines": "This file describes how you want the assistant to communicate.",
-			"identityInfo": "This file introduces the assistant’s name, role and responsibilities.",
-			"initialSetup": "This file guides the assistant through matters to confirm when first used.",
-			"memoryFile": "This file explains how the assistant should retain, organize and use memory.",
-			"memoryFolder": "This folder keeps information the assistant has retained for later work.",
-			"proactiveExecution": "This file describes what the assistant should check during periodic proactive work.",
+			"guidelines": "This file describes how you want the {{clawBrand}} to communicate.",
+			"identityInfo": "This file introduces the {{clawBrand}}’s name, role and responsibilities.",
+			"initialSetup": "This file guides the {{clawBrand}} through matters to confirm when first used.",
+			"memoryFile": "This file explains how the {{clawBrand}} should retain, organize and use memory.",
+			"memoryFolder": "This folder keeps information the {{clawBrand}} has retained for later work.",
+			"proactiveExecution": "This file describes what the {{clawBrand}} should check during periodic proactive work.",
 			"scheduledTasks": "This folder stores arrangements for work to perform on a schedule.",
-			"skillList": "This file introduces available skills and helps the assistant find a suitable method.",
-			"toolList": "This file keeps instructions and environment information the assistant needs when using tools."
+			"skillList": "This file introduces available skills and helps the {{clawBrand}} find a suitable method.",
+			"toolList": "This file keeps instructions and environment information the {{clawBrand}} needs when using tools."
 		},
 		"clawPlaygroundTags": {
 			"aboutYou": "About You",
@@ -7566,12 +7566,14 @@
 			},
 			"paths": {
 				"directory": "<subfolder>",
+				"memoryScope": "<global or project directory>",
 				"overview": "Space overview",
+				"project": "p_<project ID>",
 				"recording": "Recording notes",
 				"skill": "<skill name>"
 			},
 			"reasons": {
-				"assistantRules": "Understand the assistant’s rules and behavior.",
+				"assistantRules": "Understand the {{clawBrand}}’s rules and behavior.",
 				"crewRules": "Understand the crew member’s rules and responsibilities.",
 				"memoryStructure": "See how core memory, topic references and timelines fit together.",
 				"personalSpace": "Understand personal space and how it differs from project files.",
@@ -8649,7 +8651,7 @@
 					"exampleRoot": ".magic/skills",
 					"files": [
 						{
-							"description": "AI settings and capability files",
+							"description": "{{clawBrand}} settings and capability files",
 							"directory": true,
 							"path": ".magic"
 						},
@@ -8700,14 +8702,14 @@
 						}
 					],
 					"guide": {
-						"actions": "Ask AI to summarize skills and expand the one relevant to your task. Use the appropriate feature for installation and configuration; moving folders manually is not an installation flow, and instructions are not proof of a successful run.",
-						"context": "Prepare skills for recurring work so the assistant has a method available when a suitable task appears.",
+						"actions": "Ask {{clawBrand}} to summarize skills and expand the one relevant to your task. Use the appropriate feature for installation and configuration; moving folders manually is not an installation flow, and instructions are not proof of a successful run.",
+						"context": "Prepare skills for recurring work so the {{clawBrand}} has a method available when a suitable task appears.",
 						"diagramTitle": "Find a method through the folder",
 						"exampleContent": "Skill folder illustration\nreport-helper/\n├── SKILL.md\n└── references/",
-						"result": "For research material, the assistant can consult a reporting skill to understand required inputs and output format. A skill that depends on an external service also needs a tool with valid access.",
+						"result": "For research material, the {{clawBrand}} can consult a reporting skill to understand required inputs and output format. A skill that depends on an external service also needs a tool with valid access.",
 						"steps": [
 							{
-								"description": "Stores skills installed for the current assistant.",
+								"description": "Stores skills installed for the current {{clawBrand}}.",
 								"title": "Skill directory"
 							},
 							{
@@ -8720,15 +8722,15 @@
 							}
 						]
 					},
-					"label": "Assistant skills",
+					"label": "{{clawBrand}} skills",
 					"note": "Skills explain methods; execution still needs the relevant tools and permissions.",
 					"preview": [
-						"Prepare skills for recurring work so the assistant has a method available when a suitable task appears.",
+						"Prepare skills for recurring work so the {{clawBrand}} has a method available when a suitable task appears.",
 						"Skills explain methods; execution still needs the relevant tools and permissions."
 					],
-					"scope": "This assistant",
-					"summary": "This folder holds the skill files installed for this assistant.",
-					"usage": "This folder holds the skill files installed for this assistant."
+					"scope": "This {{clawBrand}}",
+					"summary": "This folder holds the skill files installed for this {{clawBrand}}.",
+					"usage": "This folder holds the skill files installed for this {{clawBrand}}."
 				},
 				"crew": {
 					"example": "Add a report-organizing skill to this research assistant. Explain how to compare sources, cite evidence and present conclusions, then configure the skill for this employee.",
@@ -9070,8 +9072,8 @@
 						"For example, explain uncertainty, report useful progress during a long task and deliver the result when finished.",
 						"Explain a one-off goal in the current conversation."
 					],
-					"scope": "Current workspace",
-					"usage": "This file sets the assistant’s recurring ways of working."
+					"scope": "Current {{clawBrand}}",
+					"usage": "This file sets the {{clawBrand}}’s recurring ways of working."
 				},
 				"clawMagic": {
 					"example": "AGENTS.md describes session behavior, while SOUL.md describes personality and expression.",
@@ -9102,14 +9104,14 @@
 						}
 					],
 					"guide": {
-						"actions": "Describe the behavior you want to change and ask AI to locate the responsible file. Avoid repeating identity, workflow and task records across several definitions. A role description alone cannot provide tool installation or authorization.",
+						"actions": "Describe the behavior you want to change and ask {{clawBrand}} to locate the responsible file. Avoid repeating identity, workflow and task records across several definitions. A role description alone cannot provide tool installation or authorization.",
 						"context": "For example, retain your preferences, prepare frequently used skills and arrange recurring tasks.",
-						"diagramTitle": "Responsibilities within the assistant definition",
+						"diagramTitle": "Responsibilities within the {{clawBrand}} definition",
 						"exampleContent": ".magic/\n├── IDENTITY.md\n├── SOUL.md\n├── AGENTS.md\n└── memory/",
 						"result": "Check SOUL.md to change communication style and AGENTS.md to change session preparation or collaboration requirements. Keeping these distinct makes the relevant behavior easier to maintain.",
 						"steps": [
 							{
-								"description": "The assistant’s definition and working material.",
+								"description": "The {{clawBrand}}’s definition and working material.",
 								"title": ".magic"
 							},
 							{
@@ -9127,8 +9129,8 @@
 						"For example, retain your preferences, prepare frequently used skills and arrange recurring tasks.",
 						"Identity, memory, proactive checks and scheduled tasks have separate purposes."
 					],
-					"scope": "Current workspace",
-					"usage": "These files keep this assistant’s identity, working rules, skills and material for ongoing work."
+					"scope": "Current {{clawBrand}}",
+					"usage": "These files keep this {{clawBrand}}’s identity, working rules, skills and material for ongoing work."
 				},
 				"crewIdentity": {
 					"example": "For example, describe its role, expertise, and work objectives.",
@@ -9496,8 +9498,8 @@
 			},
 			"help": {
 				"agentInstructions": "This file provides instructions AI needs when working in this workspace.",
-				"clawInstructions": "This file sets the assistant’s recurring ways of working.",
-				"clawMagic": "These files keep this assistant’s identity, working rules, skills and material for ongoing work.",
+				"clawInstructions": "This file sets the {{clawBrand}}’s recurring ways of working.",
+				"clawMagic": "These files keep this {{clawBrand}}’s identity, working rules, skills and material for ongoing work.",
 				"crewIdentity": "This file explains who a digital employee is, what it is responsible for and whom it serves.",
 				"crewInstructions": "This file teaches a digital employee how to do its work.",
 				"crewMagic": "These files define a digital employee: its role, methods, communication style, skills and tools.",
@@ -9793,7 +9795,7 @@
 					"steps": [
 						{
 							"description": "Retain recurring writing and communication preferences.",
-							"title": "Core memory"
+							"title": "Global core memory"
 						},
 						{
 							"description": "Relevant work can use information organized earlier.",
@@ -9804,15 +9806,16 @@
 							"title": "Current task"
 						}
 					],
-					"title": "Keep useful background so the next task needs less explanation"
+					"title": "Remember background you use across projects"
 				},
-				"note": "Memory preserves useful highlights, not a complete backup of all conversations. Personal memory and shared project conventions are separate, and past facts may change. In the guide paths, “…” stands for global/ or projects/<project ID>/, which organize general personal memory and personal memory by project. It is not an actual folder name.",
+				"note": "Global memory belongs to your personal space in the current organization. Joining a project does not automatically share it with other members. It preserves useful highlights, not a full conversation backup; keep project-specific context separate and update outdated information.",
 				"preview": [
-					"Helps AI use relevant background in later tasks.",
-					"Update stale information and keep detailed history separately."
+					"Stores your preferences and background that apply across projects for relevant tasks to consult.",
+					"Keep context specific to one project in that project’s memory."
 				],
-				"scope": "Personal space · Personal memory",
-				"usage": "This file stores lasting personal preferences, important background and concise conclusions. AI can consult them for relevant future tasks, reducing how often you need to explain the same background.\nKeep the highlights here and detailed history in related records."
+				"scope": "Personal space · Global memory",
+				"shortLabel": "Core memory",
+				"usage": "This file stores your preferences, background and concise conclusions that apply across projects. AI can consult these records for relevant tasks, reducing repeated explanations.\nKeep decisions and preferences that apply to one project in that project’s core memory, and detailed history in notes/ within the same scope."
 			},
 			"dingtalk": {
 				"example": "“Explain the purpose of the DingTalk configuration and what setup is needed to use it.”",
@@ -10056,7 +10059,7 @@
 						}
 					]
 				},
-				"note": "You do not need to copy every conversation into notes. Retain what is useful for later work.",
+				"note": "Global memory and each project memory have their own notes/ directory. The example uses the global path; project memory uses .magic/memory/projects/p_<project ID>/notes/. Keep useful context for later tasks rather than every conversation verbatim.",
 				"preview": [
 					"Keep recurring preferences, background on a topic and important decisions in suitable records so they are easier to find later.",
 					"You do not need to copy every conversation into notes."
@@ -10064,6 +10067,53 @@
 				"scope": "Personal space · Personal records and settings",
 				"shortLabel": "Notes",
 				"usage": "This directory organizes memory notes, connecting concise highlights with detailed records."
+			},
+			"projectCoreMemory": {
+				"example": "Remember that weekly reports for this project list progress, risks and next steps separately. This convention applies to this project, not to my other projects.",
+				"guide": {
+					"actions": "Usually, tell AI “Remember this for this project…”. To write it yourself, choose Create manually in the matching project memory and confirm to open an empty MEMORY.md. Existing rename, move and delete actions still apply. Moving the file out of the expected location leaves that location without project core memory; its content remains an ordinary file.",
+					"benefits": [
+						{
+							"description": "Record goals, constraints and key decisions.",
+							"title": "Keep project context"
+						},
+						{
+							"description": "Later tasks can consult confirmed project context.",
+							"title": "Explain less repeatedly"
+						},
+						{
+							"description": "Maintain each project’s preferences and decisions separately.",
+							"title": "Separate projects"
+						}
+					],
+					"context": "Include the project and reasons so a local convention is not mistaken for a preference that applies to every task.",
+					"diagramTitle": "Separate project highlights from detailed records",
+					"exampleContent": "Project convention: list progress, risks and next steps in weekly reports.\nReason: track collaboration within this project.\nScope: the current project.\nPreferences shared across projects: keep in global memory.",
+					"result": "When preparing another weekly report for this project, AI can consult this convention. For another project, use its own requirements rather than carrying over a project-specific preference.",
+					"steps": [
+						{
+							"description": "Keep concise project goals, constraints and conclusions.",
+							"title": "Project core memory"
+						},
+						{
+							"description": "Save reasons, history and conditions.",
+							"title": "Project records"
+						},
+						{
+							"description": "Use existing context alongside current requirements.",
+							"title": "Later project tasks"
+						}
+					],
+					"title": "Keep confirmed context when continuing this project"
+				},
+				"note": "Project memory remains in your personal space, organized by project. It is not a file shared with project members and does not replace shared working conventions in the project’s AGENTS.md. Use the matching memory when switching projects, and consider current explicit requirements and facts.",
+				"preview": [
+					"Stores your background, decisions and preferences for later tasks in this project.",
+					"Organized by project and still part of your personal space."
+				],
+				"scope": "Personal space · Project memory",
+				"shortLabel": "Core memory",
+				"usage": "This file stores your goals, key decisions, constraints and preferences for this project. AI can consult these highlights when you continue work on the project.\nIt is separate from global core memory, and other projects have their own memory directories. Keep detailed reasons and history in notes/ within this project’s memory directory."
 			},
 			"references": {
 				"example": "“Organize my preferences for article structure as a reference for future writing.”",
@@ -10349,7 +10399,7 @@
 		},
 		"fileHelp": {
 			"cli": "Command-line tools perform operations through text commands that AI can run for you.",
-			"coreMemory": "Keeps lasting preferences, background and concise conclusions.",
+			"coreMemory": "Stores your preferences and background that apply across projects for relevant tasks to consult.",
 			"dingtalk": "This folder stores personal settings used to connect to and use DingTalk tools.",
 			"event": "This record describes what happened in an event, discussion or decision.",
 			"index": "This file lists records, briefly describes their subjects and points to further reading.",
@@ -10357,6 +10407,7 @@
 			"memory": "This directory brings together lasting information AI may consult in later work.",
 			"month": "This folder groups dated records for a particular month.",
 			"notes": "This directory organizes memory notes, connecting concise highlights with detailed records.",
+			"projectCoreMemory": "Stores your background, decisions and preferences for later tasks in this project.",
 			"references": "This folder organizes detailed background and explanations by topic.",
 			"settings": "This file holds settings for your personal working environment.",
 			"subject": "This note describes one topic so future work can understand its background.",
@@ -10368,7 +10419,7 @@
 		},
 		"fileLabels": {
 			"cli": "Installed tools",
-			"coreMemory": "Core memory",
+			"coreMemory": "Global core memory",
 			"dingtalk": "DingTalk",
 			"event": "Event record",
 			"index": "Contents",
@@ -10376,6 +10427,7 @@
 			"memory": "Long-term memory",
 			"month": "By month",
 			"notes": "Detailed notes",
+			"projectCoreMemory": "Project core memory",
 			"references": "Reference notes",
 			"settings": "Personal settings",
 			"subject": "Subject note",

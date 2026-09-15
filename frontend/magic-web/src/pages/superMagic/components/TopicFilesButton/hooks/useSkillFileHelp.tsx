@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next"
+import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import type { SkillFileKind } from "../utils/skill-file-structure"
 import type { FileHelpContext } from "../utils/magic-system-folder"
 import type { FilePresentation } from "../utils/file-presentation"
@@ -15,6 +16,7 @@ export function useSkillFileHelp(
 	scope?: FileHelpContext["kind"],
 ): FileHelpPresentation | undefined {
 	const { t } = useTranslation("super")
+	const brand = getClawBrandTranslationValues()
 	if (kind === "library") {
 		const owner = scope ?? presentation?.context.kind
 		if (!owner || owner === "unknown")
@@ -53,10 +55,11 @@ export function useSkillFileHelp(
 		if (owner === "claw")
 			return createFileHelpPresentation(
 				"skillLibrary.claw",
-				t("topicFiles.skillStructure.libraryScopes.claw.label"),
-				t("topicFiles.skillStructure.libraryScopes.claw.summary"),
+				t("topicFiles.skillStructure.libraryScopes.claw.label", brand),
+				t("topicFiles.skillStructure.libraryScopes.claw.summary", brand),
 				t("topicFiles.skillStructure.libraryScopes.claw", {
 					returnObjects: true,
+					...brand,
 				}) as FileHelpDetail,
 				"tree",
 				presentation,

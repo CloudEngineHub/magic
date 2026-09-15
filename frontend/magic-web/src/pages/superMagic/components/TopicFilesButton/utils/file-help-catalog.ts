@@ -28,7 +28,8 @@ interface FileHelpMetadata {
 	name?: string
 	/** 静态示意路径决定目录层级；缺省时只保留真实入口，不常驻目录。 */
 	path?: string
-	navigationParent?: "user.references" | "user.timeline"
+	/** 按用途归类时指定父文章，完整文件路径仍用于正文与悬停说明。 */
+	navigationParent?: "user.memory" | "user.notes" | "user.references" | "user.timeline"
 	icon: FileHelpIcon
 	tone: HelpTone
 }
@@ -282,73 +283,87 @@ export const FILE_HELP_CATALOG = {
 		group: "personal",
 		name: "memory",
 		icon: "magic-memory",
-		tone: "amber",
+		tone: "neutral",
 	},
 	"user.coreMemory": {
-		path: ".magic/memory/$memoryScope/MEMORY.md",
+		path: ".magic/memory/global/MEMORY.md",
+		navigationParent: "user.memory",
 		group: "personal",
 		name: "MEMORY.md",
 		icon: "magic-file-memory",
-		tone: "amber",
+		tone: "neutral",
+	},
+	"user.projectCoreMemory": {
+		path: ".magic/memory/projects/$project/MEMORY.md",
+		navigationParent: "user.memory",
+		group: "personal",
+		name: "MEMORY.md",
+		icon: "magic-file-memory",
+		tone: "neutral",
 	},
 	"user.notes": {
 		path: ".magic/memory/$memoryScope/notes/",
+		navigationParent: "user.memory",
 		group: "personal",
 		name: "notes",
 		icon: "user:notes",
-		tone: "amber",
+		tone: "neutral",
 	},
 	"user.references": {
 		path: ".magic/memory/$memoryScope/notes/references/",
+		navigationParent: "user.notes",
 		group: "personal",
 		name: "references",
 		icon: "user:references",
-		tone: "amber",
+		tone: "neutral",
 	},
 	"user.subject": {
 		navigationParent: "user.references",
 		group: "personal",
 		icon: "user:subject",
-		tone: "amber",
+		tone: "neutral",
 	},
 	"user.timeline": {
 		path: ".magic/memory/$memoryScope/notes/timeline/",
+		navigationParent: "user.notes",
 		group: "personal",
 		name: "timeline",
 		icon: "user:timeline",
-		tone: "amber",
+		tone: "neutral",
 	},
 	"user.year": {
 		navigationParent: "user.timeline",
 		group: "personal",
 		icon: "user:year",
-		tone: "amber",
+		tone: "neutral",
 	},
 	"user.month": {
 		navigationParent: "user.timeline",
 		group: "personal",
 		icon: "user:month",
-		tone: "amber",
+		tone: "neutral",
 	},
 	"user.event": {
 		navigationParent: "user.timeline",
 		group: "personal",
 		icon: "user:event",
-		tone: "amber",
+		tone: "neutral",
 	},
 	"user.index": {
 		path: ".magic/memory/$memoryScope/notes/index.md",
+		navigationParent: "user.notes",
 		group: "personal",
 		name: "index.md",
 		icon: "user:index",
-		tone: "amber",
+		tone: "neutral",
 	},
 	"user.topics": {
 		path: ".magic/memory/$memoryScope/notes/topics/",
+		navigationParent: "user.notes",
 		group: "personal",
 		name: "topics",
 		icon: "user:topics",
-		tone: "amber",
+		tone: "neutral",
 	},
 	"user.dingtalk": {
 		path: ".dws/",
@@ -404,7 +419,7 @@ export const FILE_HELP_CATALOG = {
 		group: "assistant",
 		name: "memory",
 		icon: "magic-memory",
-		tone: "amber",
+		tone: "neutral",
 	},
 	"claw.skillList": {
 		path: ".magic/SKILLS.md",
@@ -446,7 +461,7 @@ export const FILE_HELP_CATALOG = {
 		group: "assistant",
 		name: "MEMORY.md",
 		icon: "magic-file-memory",
-		tone: "amber",
+		tone: "neutral",
 	},
 	...projectArticles,
 } as const satisfies Record<string, FileHelpMetadata>
@@ -527,6 +542,7 @@ const RELATIONS: Partial<Record<FileHelpArticleId, FileHelpRelations>> = {
 	"user.memory": {
 		recommended: [
 			{ id: "user.coreMemory", reason: "memoryStructure" },
+			{ id: "user.projectCoreMemory", reason: "memoryStructure" },
 			{ id: "user.overview", reason: "personalSpace" },
 		],
 	},

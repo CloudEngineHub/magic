@@ -48,7 +48,7 @@ export function HelpNavigation({
 			?.querySelector<HTMLElement>('[aria-current="page"]')
 			?.scrollIntoView({ block: "nearest" })
 	}, [activeId, expanded])
-	function renderItem(item: HelpNavigationItem): ReactNode {
+	function renderItem(item: HelpNavigationItem, depth: number): ReactNode {
 		const hasChildren = Boolean(item.children?.length)
 		const open = expanded.has(item.id)
 		const active = item.articleId === activeId
@@ -60,9 +60,10 @@ export function HelpNavigation({
 				onOpenChange={(value) => onExpandedChange(item.id, value)}
 			>
 				<div
+					style={{ paddingInlineStart: `calc(var(--help-nav-indent) * ${depth})` }}
 					className={cn(
-						"flex items-center rounded-md",
-						active && "bg-[var(--help-soft)] text-[var(--help-accent)]",
+						"flex items-center rounded-md pr-1",
+						active && "bg-accent text-accent-foreground",
 					)}
 				>
 					{hasChildren ? (
@@ -96,7 +97,7 @@ export function HelpNavigation({
 								className={cn(
 									"h-auto min-h-9 min-w-0 flex-1 justify-start gap-2 whitespace-nowrap px-1 py-2 text-left text-xs font-normal leading-5 [@media(pointer:coarse)]:min-h-11",
 									active &&
-										"font-medium hover:bg-[var(--help-soft)] hover:text-[var(--help-accent)]",
+										"font-medium hover:bg-accent hover:text-accent-foreground",
 								)}
 							>
 								<span className="inline-flex shrink-0" aria-hidden>
@@ -114,8 +115,8 @@ export function HelpNavigation({
 					</Tooltip>
 				</div>
 				{hasChildren && (
-					<CollapsibleContent className="ml-2 border-l border-border pl-1">
-						{item.children?.map(renderItem)}
+					<CollapsibleContent>
+						{item.children?.map((child) => renderItem(child, depth + 1))}
 					</CollapsibleContent>
 				)}
 			</Collapsible>
@@ -132,24 +133,31 @@ export function HelpNavigation({
 				<CollapsibleTrigger asChild>
 					<Button
 						variant="ghost"
-						className="h-auto min-h-9 w-full justify-start gap-2 whitespace-normal px-2 text-left text-xs font-medium [@media(pointer:coarse)]:min-h-11"
+						className="h-auto min-h-9 w-full justify-start gap-1 whitespace-normal px-0 text-left text-xs font-medium [@media(pointer:coarse)]:min-h-11"
 					>
-						{open ? (
-							<ChevronDown size={14} aria-hidden />
-						) : (
-							<ChevronRight size={14} aria-hidden />
-						)}
+						<span className="flex w-5 shrink-0 items-center justify-center">
+							{open ? (
+								<ChevronDown size={16} aria-hidden />
+							) : (
+								<ChevronRight size={16} aria-hidden />
+							)}
+						</span>
 						{group.label}
 					</Button>
 				</CollapsibleTrigger>
-				<CollapsibleContent className="mb-3 space-y-1 pl-5">
-					{group.items.map(renderItem)}
+				<CollapsibleContent className="mb-3 space-y-1">
+					{group.items.map((item) => renderItem(item, 1))}
 				</CollapsibleContent>
 			</Collapsible>
 		)
 	}
 	return (
-		<nav ref={ref} aria-label={t("contextHelp.contents")} className="p-3">
+		// 每级只增加一个统一步长；缩进放在行内，选中背景不随目录深度变窄。
+		<nav
+			ref={ref}
+			aria-label={t("contextHelp.contents")}
+			className="p-3 [--help-nav-indent:1rem]"
+		>
 			<p className="px-2 pb-3 text-[11px] leading-5 text-muted-foreground">
 				{t("contextHelp.catalogHint")}
 			</p>
