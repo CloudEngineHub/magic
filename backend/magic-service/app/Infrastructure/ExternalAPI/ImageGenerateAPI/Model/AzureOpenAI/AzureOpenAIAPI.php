@@ -225,6 +225,10 @@ class AzureOpenAIAPI
             ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR, 'Invalid JSON response');
         }
 
+        $this->logger->info('Azure OpenAI API 请求结果', [
+            'response' => $this->sanitizePayloadForLog($data),
+        ]);
+
         if (isset($data['error'])) {
             $this->throwProviderError($data);
         }
@@ -256,6 +260,10 @@ class AzureOpenAIAPI
             } elseif ($body !== '') {
                 $result = ['error' => ['message' => $body]];
             }
+
+            $this->logger->info('Azure OpenAI API 请求结果', [
+                'response' => $this->sanitizePayloadForLog($result),
+            ]);
         }
 
         $this->throwProviderError($result, $e);
