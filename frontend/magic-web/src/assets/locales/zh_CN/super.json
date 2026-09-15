@@ -4617,9 +4617,7 @@
 		"swipeUnpin": "取消置顶"
 	},
 	"projectNavigation": {
-		"collapseApps": "收起应用",
 		"emptyRecent": "暂无最近使用的项目",
-		"expandApps": "展开应用",
 		"loadMore": "加载更多",
 		"loading": "正在加载…",
 		"openManager": "打开项目管理器",
@@ -4628,7 +4626,6 @@
 		"recent": "最近项目",
 		"recentScope": "按最近访问排序",
 		"recentShort": "最近",
-		"resizeSections": "调整导航与项目区域高度",
 		"retry": "加载失败，点击重试",
 		"scrollDown": "向下滚动",
 		"scrollUp": "向上滚动",

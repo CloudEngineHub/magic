@@ -38,11 +38,10 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 	const [projectBusy, setProjectBusy] = useState(false)
 	const [appsOpen, setAppsOpen] = useState(false)
 	const [chatsOpen, setChatsOpen] = useState(false)
-	const [resizing, setResizing] = useState(false)
 	const busy = projectBusy || appsOpen || chatsOpen
 	useEffect(() => {
-		onBusyChange?.(busy || resizing)
-	}, [busy, resizing, onBusyChange])
+		onBusyChange?.(busy)
+	}, [busy, onBusyChange])
 	useEffect(() => () => onBusyChange?.(false), [onBusyChange])
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (
@@ -70,9 +69,6 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 
 	return (
 		<SidebarContentLayout
-			collapsed={collapsed}
-			busy={busy}
-			onDraggingChange={setResizing}
 			home={
 				<SidebarMenuItem key={RouteName.Super}>
 					<SidebarMenuButton
@@ -94,70 +90,72 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 					</SidebarMenuButton>
 				</SidebarMenuItem>
 			}
-			apps={
-				<SidebarGroup
-					className="w-full shrink-0 px-2 pb-1 pt-0"
-					data-testid="sidebar-content-apps-group"
-				>
-					<SidebarGroupContent>
-						<SidebarMenu>
-							<SidebarMenuItem>
-								<ChatsSubMenu onOpenChange={setChatsOpen}>
-									<SidebarMenuButton
-										tooltip={collapsed ? t("sidebar:chats.title") : undefined}
-										data-testid="sidebar-content-chats-button"
-										className="text-sidebar-foreground"
-									>
-										<MessageCircle className="h-4 w-4 shrink-0" />
-										<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-											{t("sidebar:chats.title")}
-										</span>
-										{!collapsed && (
-											<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
-										)}
-									</SidebarMenuButton>
-								</ChatsSubMenu>
-							</SidebarMenuItem>
-							{sidebarMarketMenuItems.map((item) => {
-								const title =
-									item.titleKey === "sidebar:superLobster.title"
-										? t(item.titleKey, clawBrandValues)
-										: t(item.titleKey)
-
-								return (
-									<SidebarMarketMenuItem
-										key={item.routeName}
-										item={item}
-										title={title}
-										collapsed={collapsed}
-										onNavigate={handleNavigateToRoute}
-									/>
-								)
-							})}
-							<SidebarMenuItem>
-								<AppsSubMenu onOpenChange={setAppsOpen}>
-									<SidebarMenuButton
-										tooltip={collapsed ? t("appsMenu.apps") : undefined}
-										data-testid="sidebar-content-apps-button"
-										className="text-sidebar-foreground"
-									>
-										<LayoutGrid className="h-4 w-4 shrink-0" />
-										<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-											{t("appsMenu.apps")}
-										</span>
-										{!collapsed && (
-											<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
-										)}
-									</SidebarMenuButton>
-								</AppsSubMenu>
-							</SidebarMenuItem>
-							<MicroAppsSidebarMenuItem collapsed={collapsed} />
-						</SidebarMenu>
-					</SidebarGroupContent>
-				</SidebarGroup>
-			}
 		>
 			<ProjectNavigation
+				apps={
+					<SidebarGroup
+						className="w-full shrink-0 px-2 pb-1 pt-0"
+						data-testid="sidebar-content-apps-group"
+					>
+						<SidebarGroupContent>
+							<SidebarMenu>
+								<SidebarMenuItem>
+									<ChatsSubMenu onOpenChange={setChatsOpen}>
+										<SidebarMenuButton
+											tooltip={
+												collapsed ? t("sidebar:chats.title") : undefined
+											}
+											data-testid="sidebar-content-chats-button"
+											className="text-sidebar-foreground"
+										>
+											<MessageCircle className="h-4 w-4 shrink-0" />
+											<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+												{t("sidebar:chats.title")}
+											</span>
+											{!collapsed && (
+												<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
+											)}
+										</SidebarMenuButton>
+									</ChatsSubMenu>
+								</SidebarMenuItem>
+								{sidebarMarketMenuItems.map((item) => {
+									const title =
+										item.titleKey === "sidebar:superLobster.title"
+											? t(item.titleKey, clawBrandValues)
+											: t(item.titleKey)
+
+									return (
+										<SidebarMarketMenuItem
+											key={item.routeName}
+											item={item}
+											title={title}
+											collapsed={collapsed}
+											onNavigate={handleNavigateToRoute}
+										/>
+									)
+								})}
+								<SidebarMenuItem>
+									<AppsSubMenu onOpenChange={setAppsOpen}>
+										<SidebarMenuButton
+											tooltip={collapsed ? t("appsMenu.apps") : undefined}
+											data-testid="sidebar-content-apps-button"
+											className="text-sidebar-foreground"
+										>
+											<LayoutGrid className="h-4 w-4 shrink-0" />
+											<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+												{t("appsMenu.apps")}
+											</span>
+											{!collapsed && (
+												<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
+											)}
+										</SidebarMenuButton>
+									</AppsSubMenu>
+								</SidebarMenuItem>
+								<MicroAppsSidebarMenuItem collapsed={collapsed} />
+							</SidebarMenu>
+						</SidebarGroupContent>
+					</SidebarGroup>
+				}
 				collapsed={collapsed}
 				onBusyChange={setProjectBusy}
 				onSelect={onSelect}

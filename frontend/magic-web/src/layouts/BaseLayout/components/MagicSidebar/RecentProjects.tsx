@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+	type RefObject,
+} from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
@@ -109,12 +117,14 @@ const RecentProjectRow = observer(function RecentProjectRow({
 
 function RecentProjects({
 	active,
+	externalScrollRef,
 	fitContent = false,
 	onSelect,
 	onBusyChange,
 	onCreate,
 }: {
 	active: boolean
+	externalScrollRef?: RefObject<HTMLDivElement>
 	fitContent?: boolean
 	onSelect?: () => void
 	onBusyChange?: (busy: boolean) => void
@@ -128,7 +138,9 @@ function RecentProjects({
 	const searching = Boolean(keyword.trim())
 	const search = useRecentProjectSearch(keyword, active, busyIds.size > 0)
 	const defaultScrollTop = useRef(
-		sidebarStore.navigationScrollPositions.get("recent-projects") ?? 0,
+		sidebarStore.navigationScrollPositions.get(
+			externalScrollRef ? "sidebar-scroll:recent" : "recent-projects",
+		) ?? 0,
 	)
 	const [referenceNow, setReferenceNow] = useState(() => Date.now())
 	useEffect(() => {
@@ -148,6 +160,8 @@ function RecentProjects({
 			document.removeEventListener("visibilitychange", updateVisibility)
 		}
 	}, [active])
+	const panelRef = useRef<HTMLDivElement>(null)
+	const listRef = useRef<HTMLDivElement>(null)
 	const contentRef = useRef<HTMLDivElement>(null)
 	const [contentHeight, setContentHeight] = useState(0)
 	useLayoutEffect(() => {
@@ -164,6 +178,9 @@ function RecentProjects({
 	const loading = searching ? search.loading || search.pending : recentProjectsStore.loading
 	const loadMore = searching ? search.loadMore : recentProjectsStore.loadMore
 	const list = useVirtualProjectList({
+		externalScrollRef,
+		listRef: externalScrollRef ? listRef : undefined,
+		enabled: active,
 		projects: items,
 		rowHeight: 44,
 		loadEnabled: active && busyIds.size === 0,
@@ -173,10 +190,28 @@ function RecentProjects({
 		error,
 		onLoadMore: loadMore,
 	})
+	const viewportRef = externalScrollRef ?? list.scrollRef
 	useLayoutEffect(() => {
-		if (list.scrollRef.current)
-			list.scrollRef.current.scrollTop = searching ? 0 : defaultScrollTop.current
-	}, [keyword, searching, list.scrollRef])
+		const viewport = viewportRef.current
+		if (!active || !viewport) return
+		// 共享滚动时搜索从本栏目开始，避免把搜索框滚走；退出搜索恢复原列表的位置。
+		const searchTop =
+			externalScrollRef && panelRef.current
+				? viewport.scrollTop +
+					panelRef.current.getBoundingClientRect().top -
+					viewport.getBoundingClientRect().top
+				: 0
+		viewport.scrollTop = searching ? Math.max(0, searchTop) : defaultScrollTop.current
+	}, [active, keyword, searching, viewportRef, externalScrollRef])
+	useEffect(() => {
+		const viewport = viewportRef.current
+		if (!active || searching || !viewport) return
+		const rememberPosition = () => {
+			defaultScrollTop.current = viewport.scrollTop
+		}
+		viewport.addEventListener("scroll", rememberPosition, { passive: true })
+		return () => viewport.removeEventListener("scroll", rememberPosition)
+	}, [active, searching, viewportRef])
 	useLayoutEffect(() => {
 		if (active && !searching && !recentProjectsStore.stale) recentProjectsStore.invalidate()
 	}, [active, searching])
@@ -203,8 +238,68 @@ function RecentProjects({
 		},
 		[setListInteraction],
 	)
+	const content = (
+		<div ref={contentRef} className={cn(fitContent && "min-h-[76px] px-1")}>
+			<div
+				ref={listRef}
+				className="relative w-full"
+				style={{ height: list.virtualizer.getTotalSize() }}
+			>
+				{list.rows.map((row) => (
+					<div
+						key={row.key}
+						ref={list.virtualizer.measureElement}
+						data-index={row.index}
+						data-virtual-project-id={items[row.index].id}
+						className="absolute left-0 top-0 w-full pb-1 pl-3"
+						style={{ transform: `translateY(${row.start - list.scrollMargin}px)` }}
+					>
+						<RecentProjectRow
+							project={items[row.index]}
+							referenceNow={referenceNow}
+							onSelect={onSelect}
+							onInteractionChange={onInteractionChange}
+						/>
+					</div>
+				))}
+			</div>
+			{loading && (
+				<div className="p-2 text-xs text-muted-foreground">
+					{t("projectNavigation.loading")}
+				</div>
+			)}
+			{!loading && !error && !stale && items.length === 0 && (
+				<div className="p-2 text-xs text-muted-foreground">
+					{searching
+						? t("sidebarPanels.noMatchingProjects")
+						: t("projectNavigation.emptyRecent")}
+				</div>
+			)}
+			{error && (
+				<button
+					type="button"
+					className="w-full p-2 text-left text-xs text-muted-foreground"
+					onClick={loadMore}
+				>
+					{t("projectNavigation.retry")}
+				</button>
+			)}
+			{!loading && !error && hasMore && items.length > 0 && (
+				<button
+					type="button"
+					className="w-full p-2 text-left text-xs text-muted-foreground"
+					onClick={loadMore}
+				>
+					{t("projectNavigation.loadMore")}
+				</button>
+			)}
+		</div>
+	)
 	return (
-		<>
+		<div
+			ref={panelRef}
+			className={cn("min-h-0", !externalScrollRef && "flex flex-col", fitContent && "shrink")}
+		>
 			{onCreate && (
 				<ProjectNavigationToolbar
 					recent
@@ -231,85 +326,34 @@ function RecentProjects({
 					handleStartCreateWorkspace={onCreate}
 				/>
 			)}
-			<ScrollArea
-				viewportRef={list.scrollRef}
-				className={cn(
-					"min-h-0 overflow-hidden [&>[data-slot=scroll-area-scrollbar]]:w-1.5 [&>[data-slot=scroll-area-scrollbar]]:border-l-0",
-					fitContent ? "shrink" : "flex-1",
-					!fitContent && "bg-muted/20",
-				)}
-				style={fitContent ? { height: contentHeight } : undefined}
-				viewportClassName="overscroll-contain [&>div]:!block"
-				viewportProps={{
-					onScroll: (event) => {
-						if (!searching) defaultScrollTop.current = event.currentTarget.scrollTop
-					},
-				}}
-				onFocusCapture={list.onFocusCapture}
-				onBlurCapture={list.onBlurCapture}
-				data-testid="sidebar-recent-projects-list"
-			>
+			{externalScrollRef ? (
 				<div
-					ref={contentRef}
-					className={cn(fitContent && "min-h-[76px] px-1")}
-					data-sidebar-layout-content="navigation"
-					data-sidebar-has-more={hasMore || stale}
+					ref={list.scrollRef}
+					className="bg-muted/20"
+					onFocusCapture={list.onFocusCapture}
+					onBlurCapture={list.onBlurCapture}
+					data-testid="sidebar-recent-projects-list"
 				>
-					<div
-						className="relative w-full"
-						style={{ height: list.virtualizer.getTotalSize() }}
-					>
-						{list.rows.map((row) => (
-							<div
-								key={row.key}
-								ref={list.virtualizer.measureElement}
-								data-index={row.index}
-								data-virtual-project-id={items[row.index].id}
-								className="absolute left-0 top-0 w-full pb-1 pl-3"
-								style={{ transform: `translateY(${row.start}px)` }}
-							>
-								<RecentProjectRow
-									project={items[row.index]}
-									referenceNow={referenceNow}
-									onSelect={onSelect}
-									onInteractionChange={onInteractionChange}
-								/>
-							</div>
-						))}
-					</div>
-					{loading && (
-						<div className="p-2 text-xs text-muted-foreground">
-							{t("projectNavigation.loading")}
-						</div>
-					)}
-					{!loading && !error && !stale && items.length === 0 && (
-						<div className="p-2 text-xs text-muted-foreground">
-							{searching
-								? t("sidebarPanels.noMatchingProjects")
-								: t("projectNavigation.emptyRecent")}
-						</div>
-					)}
-					{error && (
-						<button
-							type="button"
-							className="w-full p-2 text-left text-xs text-muted-foreground"
-							onClick={loadMore}
-						>
-							{t("projectNavigation.retry")}
-						</button>
-					)}
-					{!loading && !error && hasMore && items.length > 0 && (
-						<button
-							type="button"
-							className="w-full p-2 text-left text-xs text-muted-foreground"
-							onClick={loadMore}
-						>
-							{t("projectNavigation.loadMore")}
-						</button>
-					)}
+					{content}
 				</div>
-			</ScrollArea>
-		</>
+			) : (
+				<ScrollArea
+					viewportRef={list.scrollRef}
+					className={cn(
+						"min-h-0 overflow-hidden [&>[data-slot=scroll-area-scrollbar]]:w-1.5 [&>[data-slot=scroll-area-scrollbar]]:border-l-0",
+						fitContent ? "shrink" : "flex-1",
+						!fitContent && "bg-muted/20",
+					)}
+					style={fitContent ? { height: contentHeight } : undefined}
+					viewportClassName="overscroll-contain [&>div]:!block"
+					onFocusCapture={list.onFocusCapture}
+					onBlurCapture={list.onBlurCapture}
+					data-testid="sidebar-recent-projects-list"
+				>
+					{content}
+				</ScrollArea>
+			)}
+		</div>
 	)
 }
 

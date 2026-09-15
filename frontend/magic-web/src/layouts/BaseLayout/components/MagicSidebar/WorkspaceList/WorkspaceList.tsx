@@ -7,6 +7,7 @@ import {
 	useRef,
 	useState,
 	type ReactNode,
+	type RefObject,
 } from "react"
 import { observer } from "mobx-react-lite"
 import { toJS } from "mobx"
@@ -28,23 +29,29 @@ import CreateWorkspaceInput from "./CreateWorkspaceInput"
 import { cn } from "@/utils/cn"
 import { toTestIdSegment } from "@/utils/testid"
 import { SidebarMenu } from "@/components/shadcn-ui/sidebar"
-import { ScrollArea, SCROLL_HINT_HEIGHT } from "@/components/shadcn-ui/scroll-area"
+import { SCROLL_HINT_HEIGHT } from "@/components/shadcn-ui/scroll-area"
 import { useWorkspaceListDnd } from "./useWorkspaceListDnd"
 import { useProjectPinBoundaryConfirmation } from "./ProjectPinBoundaryConfirmDialog"
 
 const SEARCH_PAGE_SIZE = 20
 
 interface WorkspaceListProps {
+	scrollRef: RefObject<HTMLDivElement>
+	scrollAreaRef: RefObject<HTMLDivElement>
 	onBusyChange?: (busy: boolean) => void
 	beforeItems?: ReactNode
 	onOpenManager: (workspace: Workspace) => void
 }
 
-function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceListProps) {
+function WorkspaceList({
+	beforeItems,
+	onOpenManager,
+	onBusyChange,
+	scrollRef,
+	scrollAreaRef,
+}: WorkspaceListProps) {
 	const { t } = useTranslation()
 	const isExpanded = sidebarStore.workspacesExpanded
-	const scrollRef = useRef<HTMLDivElement>(null)
-	const scrollAreaRef = useRef<HTMLDivElement>(null)
 	const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isSearchMode, setIsSearchMode] = useState(false)
@@ -80,7 +87,9 @@ function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceLi
 		workspaceStore.isWorkspaceListLoading && workspaces.length === 0
 	const selectedWorkspaceId = workspaceStore.selectedWorkspace?.id
 	const lastLocatedWorkspace = useRef(
-		sidebarStore.navigationScrollPositions.has("workspaces") ? selectedWorkspaceId : undefined,
+		sidebarStore.navigationScrollPositions.has("sidebar-scroll:workspaces")
+			? selectedWorkspaceId
+			: undefined,
 	)
 	const workspaceListRef = useRef<HTMLDivElement>(null)
 	const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
@@ -144,7 +153,7 @@ function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceLi
 	useLayoutEffect(() => {
 		const scrollArea = scrollAreaRef.current
 		const list = workspaceListRef.current
-		if (!scrollArea || !list) return
+		if (!isExpanded || !scrollArea || !list) return
 		const items = Array.from(
 			list.querySelectorAll<HTMLElement>("[data-sidebar-workspace-root]"),
 		)
@@ -189,7 +198,7 @@ function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceLi
 			if (header) observer.observe(header)
 		})
 		return () => observer.disconnect()
-	}, [workspaceLayoutKey, isExpanded])
+	}, [workspaceLayoutKey, isExpanded, scrollAreaRef])
 	const { requestConfirmation, confirmationDialog } = useProjectPinBoundaryConfirmation()
 	const {
 		rootRef: dndRootRef,
@@ -207,11 +216,22 @@ function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceLi
 		requestPinBoundaryConfirmation: requestConfirmation,
 	})
 
+	const defaultScrollTop = useRef(
+		sidebarStore.navigationScrollPositions.get("sidebar-scroll:workspaces") ?? 0,
+	)
 	useLayoutEffect(() => {
-		if (!isSearchMode && scrollRef.current)
-			scrollRef.current.scrollTop =
-				sidebarStore.navigationScrollPositions.get("workspaces") ?? 0
-	}, [isSearchMode])
+		if (isExpanded && !isSearchMode && scrollRef.current)
+			scrollRef.current.scrollTop = defaultScrollTop.current
+	}, [isSearchMode, isExpanded, scrollRef])
+	useEffect(() => {
+		const viewport = scrollRef.current
+		if (!viewport || !isExpanded || isSearchMode) return
+		const rememberPosition = () => {
+			defaultScrollTop.current = viewport.scrollTop
+		}
+		viewport.addEventListener("scroll", rememberPosition, { passive: true })
+		return () => viewport.removeEventListener("scroll", rememberPosition)
+	}, [isExpanded, isSearchMode, scrollRef])
 
 	function handleStartCreateWorkspace() {
 		sidebarStore.selectNavigationSection("workspaces")
@@ -415,7 +435,7 @@ function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceLi
 		)
 		observer.observe(sentinel)
 		return () => observer.disconnect()
-	}, [displayedWorkspaces.length, loadNextPage, isExpanded])
+	}, [displayedWorkspaces.length, loadNextPage, isExpanded, scrollRef])
 
 	const handleSearchOpen = useCallback(() => {
 		sidebarStore.selectNavigationSection("workspaces")
@@ -490,7 +510,7 @@ function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceLi
 		})
 
 		return () => window.cancelAnimationFrame(animationFrameId)
-	}, [selectedWorkspaceId, isExpanded])
+	}, [selectedWorkspaceId, isExpanded, scrollRef])
 
 	return (
 		<div
@@ -504,7 +524,7 @@ function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceLi
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
 			onDragEnd={handleDragEnd}
-			className={cn("relative min-h-0 flex-1 flex-col", isExpanded ? "flex" : "hidden")}
+			className={cn("relative flex-col", isExpanded ? "flex" : "hidden")}
 			hidden={!isExpanded}
 		>
 			{confirmationDialog}
@@ -525,38 +545,9 @@ function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceLi
 				handleRefresh={handleRefresh}
 				handleStartCreateWorkspace={handleStartCreateWorkspace}
 			/>
-			<ScrollArea
-				ref={scrollAreaRef}
-				viewportRef={scrollRef}
-				scrollHints={{
-					variant: "arrows",
-					upLabel: t("super:projectNavigation.scrollUp"),
-					downLabel: t("super:projectNavigation.scrollDown"),
-				}}
-				hideScrollbar
-				className="mt-1 min-h-0 flex-1 overflow-hidden bg-muted/20"
-				viewportClassName="overscroll-contain [--workspace-list-sticky-top:0px] [&>div]:!block"
-				viewportProps={{
-					"data-workspaces-scroll-container": true,
-					onScroll: (event) => {
-						if (!isSearchMode)
-							sidebarStore.navigationScrollPositions.set(
-								"workspaces",
-								event.currentTarget.scrollTop,
-							)
-					},
-				}}
-			>
+			<div className="mt-1 bg-muted/20">
 				<SidebarMenu>
-					<div
-						className="w-full"
-						data-sidebar-layout-content="navigation"
-						data-sidebar-has-more={
-							isSearchMode
-								? searchState.hasMoreWorkspaces || searchState.hasMoreProjects
-								: hasMoreWorkspaces
-						}
-					>
+					<div className="w-full">
 						{beforeItems}
 						<div ref={workspaceListRef}>
 							{isCreatingWorkspace && (
@@ -625,7 +616,7 @@ function WorkspaceList({ beforeItems, onOpenManager, onBusyChange }: WorkspaceLi
 						</div>
 					</div>
 				</SidebarMenu>
-			</ScrollArea>
+			</div>
 			<svg
 				ref={dropIndicatorRef}
 				aria-hidden="true"

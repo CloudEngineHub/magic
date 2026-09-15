@@ -93,8 +93,6 @@ function ProjectList({
 					data-sidebar-drop-workspace-id={workspaceId}
 					data-sidebar-drop-empty={projects.length === 0 ? "true" : undefined}
 					data-testid={`sidebar-project-list-${workspaceId}`}
-					data-sidebar-layout-content="projects"
-					data-sidebar-has-more={page?.hasMore || isLoading}
 				>
 					{isCreatingProject && onCancelCreate && onProjectCreated && (
 						<div className="w-full duration-150 animate-in fade-in slide-in-from-top-2">

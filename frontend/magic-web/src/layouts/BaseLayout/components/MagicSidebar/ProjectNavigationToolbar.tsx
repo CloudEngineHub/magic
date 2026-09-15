@@ -41,7 +41,6 @@ export default function ProjectNavigationToolbar({
 	return (
 		<div
 			className="shrink-0 bg-sidebar"
-			data-sidebar-navigation-header
 			data-testid={
 				recent ? "sidebar-recent-projects-toolbar" : "sidebar-workspace-list-sticky-header"
 			}

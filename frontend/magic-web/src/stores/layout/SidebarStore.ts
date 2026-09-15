@@ -35,9 +35,6 @@ export class SidebarStore {
 
 	// 分类始终二选一，重复点击保留当前选择；偏好按账号和组织保存，窄栏浮层不改写偏好。
 	expandedNavigationSection: "recent" | "workspaces" = "workspaces"
-	navigationAppsHeight: number | null = null
-	secondaryAppsHeight: number | null = null
-	lastExpandedAppsHeight: number | null = null
 
 	get recentProjectsExpanded() {
 		return this.expandedNavigationSection === "recent"
@@ -57,9 +54,6 @@ export class SidebarStore {
 		this.navigationIdentity = identity
 		this.navigationScrollPositions.clear()
 		this.expandedNavigationSection = "workspaces"
-		this.navigationAppsHeight = null
-		this.secondaryAppsHeight = null
-		this.lastExpandedAppsHeight = null
 		if (!identity) return
 		try {
 			const saved: unknown = JSON.parse(
@@ -71,27 +65,6 @@ export class SidebarStore {
 				(saved.expandedSection === "recent" || saved.expandedSection === "workspaces")
 			)
 				this.expandedNavigationSection = saved.expandedSection
-			if (
-				"appsHeight" in saved &&
-				typeof saved.appsHeight === "number" &&
-				Number.isFinite(saved.appsHeight) &&
-				saved.appsHeight > 0
-			)
-				this.navigationAppsHeight = saved.appsHeight
-			if (
-				"secondaryAppsHeight" in saved &&
-				typeof saved.secondaryAppsHeight === "number" &&
-				Number.isFinite(saved.secondaryAppsHeight) &&
-				saved.secondaryAppsHeight >= 0
-			)
-				this.secondaryAppsHeight = saved.secondaryAppsHeight
-			if (
-				"lastExpandedAppsHeight" in saved &&
-				typeof saved.lastExpandedAppsHeight === "number" &&
-				Number.isFinite(saved.lastExpandedAppsHeight) &&
-				saved.lastExpandedAppsHeight > 0
-			)
-				this.lastExpandedAppsHeight = saved.lastExpandedAppsHeight
 		} catch {
 			/* 无效或不可用的存储采用缺省布局。 */
 		}
@@ -103,31 +76,6 @@ export class SidebarStore {
 		this.saveNavigationPreferences()
 	}
 
-	setSecondaryAppsHeight(height: number) {
-		if (!Number.isFinite(height) || height < 0) return
-		this.secondaryAppsHeight = height
-		if (height > 0) this.lastExpandedAppsHeight = height
-		this.navigationAppsHeight = null
-		this.saveNavigationPreferences()
-	}
-
-	collapseSecondaryApps(previousHeight: number) {
-		if (Number.isFinite(previousHeight) && previousHeight > 0)
-			this.lastExpandedAppsHeight = previousHeight
-		this.setSecondaryAppsHeight(0)
-	}
-
-	/** 原偏好包含首页；拆出固定首页后只转换一次，零高度保留用户的主动收起选择。 */
-	initializeSecondaryAppsHeight(homeHeight: number) {
-		if (
-			this.secondaryAppsHeight === null &&
-			this.navigationAppsHeight !== null &&
-			Number.isFinite(homeHeight) &&
-			homeHeight > 0
-		)
-			this.setSecondaryAppsHeight(Math.max(0, this.navigationAppsHeight - homeHeight))
-	}
-
 	private saveNavigationPreferences() {
 		if (!this.navigationIdentity) return
 		try {
@@ -135,9 +83,6 @@ export class SidebarStore {
 				`sidebar-navigation:${this.navigationIdentity}`,
 				JSON.stringify({
 					expandedSection: this.expandedNavigationSection,
-					appsHeight: this.navigationAppsHeight ?? undefined,
-					secondaryAppsHeight: this.secondaryAppsHeight,
-					lastExpandedAppsHeight: this.lastExpandedAppsHeight,
 				}),
 			)
 		} catch {

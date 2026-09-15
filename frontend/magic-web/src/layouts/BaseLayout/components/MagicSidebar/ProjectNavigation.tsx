@@ -1,5 +1,14 @@
 import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useState } from "react"
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+	type ReactNode,
+} from "react"
 import { observer } from "mobx-react-lite"
 import { Box, Clock3, AppWindow, SquareArrowUpRight, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -25,10 +34,12 @@ const WorkspaceProjectsPanel = lazy(
 /** 同一 owner 管理宽窄导航及窗口来源，临时弹层不参与栏目偏好持久化。 */
 function ProjectNavigation({
 	collapsed,
+	apps,
 	onBusyChange,
 	onSelect,
 }: {
 	collapsed: boolean
+	apps: ReactNode
 	onBusyChange?: (busy: boolean) => void
 	onSelect?: () => void
 }) {
@@ -46,11 +57,19 @@ function ProjectNavigation({
 	const workspaceIcon = <Box size={16} />
 	const recentIcon = <Clock3 size={16} />
 	const managerIcon = <AppWindow size={16} />
+	const scrollRef = useRef<HTMLDivElement>(null)
+	const scrollAreaRef = useRef<HTMLDivElement>(null)
+	const scrollKey = `sidebar-scroll:${collapsed ? "collapsed" : sidebarStore.expandedNavigationSection}`
 	useLayoutEffect(() => {
 		sidebarStore.setNavigationIdentity(userId, organizationCode)
 		recentProjectsStore.setIdentity(userId, organizationCode)
 		setSource(null)
 	}, [userId, organizationCode])
+	useLayoutEffect(() => {
+		const viewport = scrollRef.current
+		if (viewport)
+			viewport.scrollTop = sidebarStore.navigationScrollPositions.get(scrollKey) ?? 0
+	}, [scrollKey, userId, organizationCode])
 	useEffect(() => {
 		setPopover(null)
 		setWorkspaceBusy(false)
@@ -80,15 +99,32 @@ function ProjectNavigation({
 		)
 	return (
 		<div className="flex h-full min-h-0 flex-1 flex-col" data-sidebar-project-navigation>
-			<div className={collapsed ? "min-h-0 flex-1" : "flex min-h-0 flex-1 flex-col px-2"}>
-				{collapsed ? (
-					<ScrollArea
-						className="h-full overflow-hidden"
-						viewportClassName="overscroll-contain [&>div]:!block"
-						hideScrollbar
-						scrollShadows
-					>
-						<SidebarMenu className="p-2" data-sidebar-layout-content="navigation">
+			<ScrollArea
+				ref={scrollAreaRef}
+				viewportRef={scrollRef}
+				className="min-h-0 flex-1 overflow-hidden"
+				viewportClassName="overscroll-contain [--workspace-list-sticky-top:0px] [&>div]:!block"
+				hideScrollbar
+				scrollHints={{
+					variant: "both",
+					upLabel: t("projectNavigation.scrollUp"),
+					downLabel: t("projectNavigation.scrollDown"),
+				}}
+				viewportProps={{
+					"data-workspaces-scroll-container": !collapsed && !recentExpanded,
+					onScroll: (event) =>
+						sidebarStore.navigationScrollPositions.set(
+							scrollKey,
+							event.currentTarget.scrollTop,
+						),
+				}}
+				data-testid="sidebar-content-root"
+			>
+				{apps}
+				<div className="mx-2 my-1 h-px bg-sidebar-border/40" />
+				<div className={collapsed ? "" : "px-2"}>
+					{collapsed ? (
+						<SidebarMenu className="p-2">
 							<SidebarMenuItem>
 								<Popover
 									open={popover === "recent"}
@@ -165,53 +201,55 @@ function ProjectNavigation({
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 						</SidebarMenu>
-					</ScrollArea>
-				) : (
-					<>
-						<ProjectNavigationTabs disabled={workspaceBusy || recentBusy} />
-						<div
-							hidden={!recentExpanded}
-							className={recentExpanded ? "flex min-h-0 flex-1 flex-col" : "hidden"}
-						>
-							{(recentVisited || sidebarStore.recentProjectsExpanded) && (
-								<RecentProjects
-									key={JSON.stringify([userId, organizationCode])}
-									active={recentExpanded}
-									onBusyChange={setRecentBusy}
-									onSelect={onSelect}
-									onCreate={handleCreateProject}
-								/>
-							)}
-						</div>
-						<WorkspaceList
-							key={JSON.stringify([userId, organizationCode])}
-							onBusyChange={setWorkspaceBusy}
-							onOpenManager={(workspace) =>
-								openManager({ type: "workspace", workspace })
-							}
-							beforeItems={
-								<SidebarMenuItem>
-									<SidebarMenuButton
-										isActive={isCollaborationWorkspace(selectedWorkspace)}
-										disabled={workspaceBusy || recentBusy}
-										className="mb-1 text-[13px] font-normal leading-5 data-[active=true]:font-normal"
-										onClick={() => openManager({ type: "collaboration" })}
-										data-testid="sidebar-content-share-workspace-button"
-									>
-										<UsersRound size={16} className="ml-6" />
-										<span>{t("workspace.shareWorkspaceName")}</span>
-									</SidebarMenuButton>
-								</SidebarMenuItem>
-							}
-						/>
-					</>
-				)}
-			</div>
+					) : (
+						<>
+							<ProjectNavigationTabs disabled={workspaceBusy || recentBusy} />
+							<div
+								hidden={!recentExpanded}
+								className={recentExpanded ? "flex flex-col" : "hidden"}
+							>
+								{(recentVisited || sidebarStore.recentProjectsExpanded) && (
+									<RecentProjects
+										key={JSON.stringify([userId, organizationCode])}
+										externalScrollRef={scrollRef}
+										active={recentExpanded}
+										onBusyChange={setRecentBusy}
+										onSelect={onSelect}
+										onCreate={handleCreateProject}
+									/>
+								)}
+							</div>
+							<WorkspaceList
+								scrollRef={scrollRef}
+								scrollAreaRef={scrollAreaRef}
+								key={JSON.stringify([userId, organizationCode])}
+								onBusyChange={setWorkspaceBusy}
+								onOpenManager={(workspace) =>
+									openManager({ type: "workspace", workspace })
+								}
+								beforeItems={
+									<SidebarMenuItem>
+										<SidebarMenuButton
+											isActive={isCollaborationWorkspace(selectedWorkspace)}
+											disabled={workspaceBusy || recentBusy}
+											className="mb-1 text-[13px] font-normal leading-5 data-[active=true]:font-normal"
+											onClick={() => openManager({ type: "collaboration" })}
+											data-testid="sidebar-content-share-workspace-button"
+										>
+											<UsersRound size={16} className="ml-6" />
+											<span>{t("workspace.shareWorkspaceName")}</span>
+										</SidebarMenuButton>
+									</SidebarMenuItem>
+								}
+							/>
+						</>
+					)}
+				</div>
+			</ScrollArea>
 			{!collapsed && (
 				<div
 					className="shrink-0 border-y border-sidebar-border/60 px-2 py-1"
 					data-testid="sidebar-project-manager-dock"
-					data-sidebar-navigation-header
 				>
 					<SidebarRow
 						label={t("sidebarPanels.projectManager")}

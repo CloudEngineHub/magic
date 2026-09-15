@@ -40,7 +40,7 @@ function ProjectNavigationTabs({ disabled }: { disabled: boolean }) {
 		return () => observer.disconnect()
 	}, [recent, workspaces])
 	return (
-		<div ref={rootRef} data-sidebar-navigation-header>
+		<div ref={rootRef}>
 			<SidebarMenu
 				role="group"
 				aria-label={t("sidebarPanels.projectManager")}
