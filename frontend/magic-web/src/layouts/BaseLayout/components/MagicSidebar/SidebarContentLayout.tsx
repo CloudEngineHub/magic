@@ -114,7 +114,7 @@ function SidebarContentLayout({
 							type="button"
 							variant="ghost"
 							size="icon-sm"
-							className="size-7 shrink-0 text-muted-foreground"
+							className="shrink-0 text-sidebar-foreground"
 							aria-label={toggleLabel}
 							aria-expanded={appsExpanded}
 							onClick={toggleApps}
