@@ -46,6 +46,7 @@ import type { RevokedMessageEditorContext } from "@/pages/superMagic/components/
 import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
 import { ModeToggle } from "@/pages/superMagic/components/TopicMode"
 import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
+import TopicService from "@/pages/superMagic/services/topicService"
 
 interface AppConversationPanelProps {
 	selectedProject: ProjectListItem | null
@@ -153,6 +154,23 @@ function AppConversationPanel({
 			}
 		},
 	)
+
+	const handleCreateTopic = useMemoizedFn((mode: TopicMode) => {
+		if (!selectedProject?.id) return
+
+		const selection = resolveAgentSelection(mode)
+		void new TopicService({ store: topicStore }).createTopic({
+			projectId: selectedProject.id,
+			topicName: "",
+			sourceTopic: selectedTopic
+				? {
+						project_id: selectedProject.id,
+						topic_mode: selection.topicPattern,
+						agent_code: selection.agentCode,
+					}
+				: null,
+		})
+	})
 
 	const handleSendMsg = useMemoizedFn(
 		(content: JSONContent | string, options?: SendMessageOptions) => {
@@ -288,6 +306,7 @@ function AppConversationPanel({
 		selectedProject,
 		topicStore,
 		topicMode,
+		selectedTopic?.agent_code,
 		modelTopicMode,
 		setTopicMode,
 		recoverTopicMode,
@@ -335,14 +354,16 @@ function AppConversationPanel({
 			emptyHero={<AppConversationEmptyState variant="hero" className="w-full" />}
 			emptyCompact={<AppConversationEmptyState variant="compact" />}
 			editor={
-				<div className="flex h-full min-h-0 w-full flex-col gap-1.5">
-					<div className="flex w-full shrink-0 items-center overflow-hidden">
+				<div className="flex h-full min-h-0 w-full flex-none flex-col items-stretch gap-2 self-stretch">
+					{/* The shared editor owns the bordered surface; this wrapper only aligns controls. */}
+					<div className="flex w-full shrink-0 items-center gap-4 overflow-hidden">
 						<ModeToggle
 							size={detailPanelVisible ? "small" : "default"}
 							topicMode={topicMode}
 							agentCode={selectedTopic?.agent_code}
 							allowChangeMode={messages.length === 0}
 							onModeChange={setTopicMode}
+							onCreateTopic={handleCreateTopic}
 						/>
 					</div>
 					{/* Preserve the scaffold height so the editor can fill the manually resized panel. */}

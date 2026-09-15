@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import AppConversationPanel from "../AppConversationPanel"
 
@@ -19,6 +19,16 @@ const scopedProgressMocks = vi.hoisted(() => ({
 	params: null as Record<string, unknown> | null,
 }))
 
+const topicModeMocks = vi.hoisted(() => ({
+	setTopicMode: vi.fn(),
+	recoverTopicMode: vi.fn(),
+	modeToggleProps: null as Record<string, unknown> | null,
+}))
+
+const topicServiceMocks = vi.hoisted(() => ({
+	createTopic: vi.fn(),
+}))
+
 vi.mock("../../context", () => ({
 	useAppStore: () => ({
 		conversation: { setConversationGenerating: vi.fn() },
@@ -27,6 +37,34 @@ vi.mock("../../context", () => ({
 
 vi.mock("../../utils/microAppModelMode", () => ({
 	resolveMicroAppModelSelectionMode: () => "default",
+}))
+
+vi.mock("@/services/superMagic/DefaultAgentSelectionService", () => ({
+	resolveAgentSelection: (mode: string, agentCode?: string) => ({
+		topicPattern:
+			mode === "custom_agent" || mode.startsWith("SMA") ? "custom_agent" : "micro-app",
+		agentCode:
+			mode === "custom_agent" || mode.startsWith("SMA") ? (agentCode ?? mode) : undefined,
+	}),
+}))
+
+vi.mock("@/pages/superMagic/services/topicService", () => ({
+	default: vi.fn().mockImplementation(() => ({ createTopic: topicServiceMocks.createTopic })),
+}))
+
+vi.mock("@/pages/superMagic/hooks/useTopicMode", () => ({
+	default: ({ selectedTopic }: { selectedTopic?: { topic_mode?: string } | null }) => ({
+		topicMode: selectedTopic?.topic_mode ?? "micro-app",
+		setTopicMode: topicModeMocks.setTopicMode,
+		recoverTopicMode: topicModeMocks.recoverTopicMode,
+	}),
+}))
+
+vi.mock("@/pages/superMagic/components/TopicMode", () => ({
+	ModeToggle: (props: Record<string, unknown>) => {
+		topicModeMocks.modeToggleProps = props
+		return <div data-testid="runtime-mode-toggle" data-topic-mode={props.topicMode as string} />
+	},
 }))
 
 vi.mock("@/pages/superMagic/components/ConversationPanelScaffold", () => ({
@@ -93,8 +131,11 @@ vi.mock(
 			return (
 				<div
 					data-testid="web-micro-app-editor"
-					data-model-topic-mode={editorContext.topicMode}
+					data-model-topic-mode={editorContext.modelTopicMode}
 					data-send-topic-mode={mergedParams?.topicMode}
+					data-send-agent-code={
+						(mergedParams?.extra as { agent_code?: string } | undefined)?.agent_code
+					}
 				/>
 			)
 		},
@@ -191,6 +232,10 @@ vi.mock("@/models/user", () => ({
 }))
 
 describe("AppConversationPanel", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
+
 	it("forwards page actions to the shared message header", () => {
 		const topicStore = {
 			selectedTopic: { id: "topic-1", topic_name: "Topic" },
@@ -261,6 +306,64 @@ describe("AppConversationPanel", () => {
 			"data-send-topic-mode",
 			"micro-app",
 		)
+		expect(screen.getByTestId("runtime-mode-toggle")).toBeInTheDocument()
+		expect(topicModeMocks.modeToggleProps?.onCreateTopic).toBeTypeOf("function")
+	})
+
+	it("creates a scoped topic with the selected employee", () => {
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "Topic", project_id: "project-1" },
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{} as never}
+			/>,
+		)
+
+		;(topicModeMocks.modeToggleProps?.onCreateTopic as (mode: string) => void)("SMA123")
+
+		expect(topicServiceMocks.createTopic).toHaveBeenCalledWith({
+			projectId: "project-1",
+			topicName: "",
+			sourceTopic: {
+				project_id: "project-1",
+				topic_mode: "custom_agent",
+				agent_code: "SMA123",
+			},
+		})
+	})
+
+	it("stretches the runtime editor without adding a second bordered container", () => {
+		const topicStore = {
+			selectedTopic: { id: "topic-1", topic_name: "Topic" },
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{} as never}
+			/>,
+		)
+
+		const editorLayout = screen.getByTestId("web-micro-app-editor").parentElement
+		expect(editorLayout).toHaveClass("items-stretch")
+		expect(editorLayout).not.toHaveClass(
+			"rounded-2xl",
+			"border",
+			"border-border",
+			"bg-sidebar",
+			"p-2",
+		)
 	})
 
 	it("provides the project attachment store to the message list", () => {
@@ -308,7 +411,7 @@ describe("AppConversationPanel", () => {
 		expect(scaffoldMocks.revokedEditorContext).toEqual(
 			expect.objectContaining({
 				selectedProject,
-				topicMode: "default",
+				topicMode: "micro-app",
 				modelTopicMode: "default",
 				topicStore,
 			}),
@@ -317,7 +420,42 @@ describe("AppConversationPanel", () => {
 			| ((params: { defaultParams: Record<string, unknown> }) => Record<string, unknown>)
 			| undefined
 		expect(mergeSendParams?.({ defaultParams: { topicMode: "default" } })).toEqual(
-			expect.objectContaining({ topicMode: "micro-app" }),
+			expect.objectContaining({ topicMode: "micro-app", extra: undefined }),
+		)
+	})
+
+	it("keeps the selected employee in runtime send parameters", () => {
+		const topicStore = {
+			selectedTopic: {
+				id: "topic-1",
+				topic_name: "Topic",
+				topic_mode: "custom_agent",
+				agent_code: "SMA123",
+			},
+			setSelectedTopic: vi.fn(),
+			updateTopic: vi.fn(),
+		} as never
+
+		render(
+			<AppConversationPanel
+				selectedProject={{ id: "project-1", project_name: "Micro App" } as never}
+				topicStore={topicStore}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{} as never}
+			/>,
+		)
+
+		expect(screen.getByTestId("runtime-mode-toggle")).toHaveAttribute(
+			"data-topic-mode",
+			"custom_agent",
+		)
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-send-topic-mode",
+			"custom_agent",
+		)
+		expect(screen.getByTestId("web-micro-app-editor")).toHaveAttribute(
+			"data-send-agent-code",
+			"SMA123",
 		)
 	})
 
