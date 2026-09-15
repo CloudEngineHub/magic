@@ -2,7 +2,7 @@ import dayjs from "@/infrastructure/vendors/dayjs"
 import type { RecycleBinItem } from "./recycle-bin-domain"
 
 export type RecycleBinFileView = "list" | "grid" | "location"
-export type RecycleBinSearchPeriod = "recent" | "hour" | "custom"
+export type RecycleBinSearchPeriod = "recent" | "custom" | number
 export interface RecycleBinTimeRange {
 	start: string
 	end: string

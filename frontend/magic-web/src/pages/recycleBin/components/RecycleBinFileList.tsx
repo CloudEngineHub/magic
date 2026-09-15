@@ -92,7 +92,9 @@ export function RecycleBinFileList({
 	else if (query.status === "limit")
 		message = t("recycleBin.project.tooMany", { count: query.limits?.max_results })
 	else if (query.status === "invalid")
-		message = t("recycleBin.project.invalidRange", { hours: query.limits?.max_hours })
+		message = t("recycleBin.project.invalidRange", {
+			days: (query.limits?.max_hours ?? 0) / 24,
+		})
 	else if (query.status === "error") message = t("recycleBin.error.loadFailed")
 	else if (query.bounded && (query.status === "idle" || query.status === "cancelled"))
 		message = t("recycleBin.project.readyToSearch")
