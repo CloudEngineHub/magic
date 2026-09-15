@@ -1,10 +1,8 @@
-import asyncio
 import json
 import os
 from pathlib import Path
 from typing import Any, Dict, NamedTuple, Optional
 
-import aiofiles
 import json_repair
 from pydantic import Field
 
@@ -17,7 +15,10 @@ from app.i18n import i18n
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
-from app.utils.async_file_utils import async_exists
+from app.utils.async_file_utils import async_exists, async_mkdir, async_write_text
+from app.tools.utils.file_change_stats import (
+    FileChangeMetrics, FileContentMetrics, format_file_change_metrics, measure_text, read_file_metrics,
+)
 from app.service.html_app_memory_service import is_html_app_memory_path
 
 logger = get_logger(__name__)
@@ -77,6 +78,11 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
                 return ToolResult.error("MICRO-APP.md is managed by update_html_app_memory. Use that tool instead of write_file so MagicBase data model records are not overwritten.")
 
             initial_file_exists = await async_exists(file_path)
+            """
+            覆盖前读取旧用量只用于反馈，不增加写入权限或版本校验条件。
+            新建文件从 0 开始；旧文件不可读取时保留 unavailable，不能伪装成空文件。
+            """
+            before_metrics = await read_file_metrics(file_path) if initial_file_exists else FileContentMetrics(0, 0)
 
             content_to_write, auto_repaired_json, original_syntax_errors = await self._prepare_content_for_write(
                 file_path=file_path,
@@ -89,8 +95,12 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
 
             # 所有写入工具通过同一 Horizon 文件记录更新写入后的变化基线。
             async with self._file_versioning_context(tool_context, file_path) as file_exists:
-                # 写入文件内容
-                await self._write_file(file_path, content_to_write)
+                """
+                写入文件内容
+                统计要使用真正写入的版本：JSON 可能已修复，末尾也可能按原规则添加换行。
+                例：输入 abc，实际保存 abc 加换行，反馈不能仍按 3 字节计算。
+                """
+                content_to_write = await self._write_file(file_path, content_to_write)
 
             # 执行语法检查
             syntax_result = await SyntaxChecker.check_syntax(str(file_path), content_to_write)
@@ -108,6 +118,12 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
                 f"{action_verb}: {params.file_path} | "
                 f"{write_result.total_lines} lines | "
                 f"Size: {write_result.file_size} bytes"
+            )
+            if file_exists != initial_file_exists:
+                # 初次观察到的存在状态已经变化，旧统计不能再冒充此次覆盖的可靠起点。
+                before_metrics = FileContentMetrics(None, None)
+            output += "\n" + format_file_change_metrics(
+                FileChangeMetrics(before_metrics, measure_text(content_to_write, write_result.file_size)),
             )
 
             if auto_repaired_json:
@@ -171,19 +187,19 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
         directory = file_path.parent
 
         if not await async_exists(directory):
-            await asyncio.to_thread(os.makedirs, directory, exist_ok=True)
+            await async_mkdir(directory, parents=True, exist_ok=True)
             logger.info(f"创建目录: {directory}")
 
-    async def _write_file(self, file_path: Path, content: str) -> None:
+    async def _write_file(self, file_path: Path, content: str) -> str:
         """写入文件内容"""
         # 处理内容末尾可能的空行
         if not content.endswith("\n"):
             content += "\n"
 
-        async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
-            await f.write(content)
+        await async_write_text(file_path, content)
 
         logger.info(f"文件写入完成: {file_path}")
+        return content
 
     async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None) -> Optional[ToolDetail]:
         """

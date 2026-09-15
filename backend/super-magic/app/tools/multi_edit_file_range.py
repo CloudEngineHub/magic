@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import aiofiles
 from pydantic import BaseModel, Field
 
 from agentlang.context.tool_context import ToolContext
@@ -25,7 +24,10 @@ from app.utils.diff_generator import DiffGenerator
 from app.utils.line_number_handler import LineNumberHandler
 from app.utils.replace_range_resolver import ContextRange, resolve_replace_range
 from app.service.html_app_memory_service import is_html_app_memory_path
-from app.utils.async_file_utils import async_exists
+from app.utils.async_file_utils import async_exists, async_write_text
+from app.tools.utils.file_change_stats import (
+    FileChangeMetrics, FileTextSnapshot, format_file_change_metrics, measure_text, read_text_snapshot,
+)
 
 logger = get_logger(__name__)
 
@@ -168,7 +170,8 @@ Key constraints:
                 tool_context.set_metadata("error_type", "edit_file.error_file_modified")
                 return ToolResult.error(error_message)
 
-            original_content = await self._read_file(file_path)
+            original_snapshot = await self._read_file(file_path)
+            original_content = original_snapshot.content
             line_number_warnings = self._strip_line_number_prefixes(file_path, params.chunks)
             resolved_chunks, chunk_warnings = self._resolve_all_chunks(params.chunks, original_content)
             overlap_error = self._validate_no_overlaps(resolved_chunks)
@@ -191,10 +194,13 @@ Key constraints:
                 no_change_warnings.extend(chunk_warnings)
                 if no_change_warnings:
                     msg += "\n\n" + "\n\n".join(no_change_warnings)
+                msg += "\n" + format_file_change_metrics(
+                    FileChangeMetrics(original_snapshot.metrics, original_snapshot.metrics),
+                )
                 return ToolResult(content=msg)
 
             async with self._file_versioning_context(tool_context, file_path):
-                await self._write_file(file_path, new_content)
+                new_content = await self._write_file(file_path, new_content)
 
             ai_warnings: list[str] = []
             if fuzzy_warning:
@@ -207,18 +213,16 @@ Key constraints:
                 errors_str = "\n".join(syntax_result.errors)
                 ai_warnings.append(f"WARNING: Syntax errors detected in the modified file:\n{errors_str}")
 
-            summary_diff = DiffGenerator.generate_summary_diff(
-                original_content,
-                new_content,
-                str(file_path.name)
+            stats = DiffGenerator.calculate_change_stats(
+                # 多个范围只是一次整文件编辑的输入；总统计比较原文件与最终文件，保留原有行数事实。
+                original_content, new_content, old_size=original_snapshot.metrics.byte_count,
             )
+            summary_diff = DiffGenerator.generate_summary_diff(str(file_path.name), stats)
             full_diff = DiffGenerator.generate_unified_diff(
                 original_content,
                 new_content,
                 str(file_path.name)
             )
-            stats = DiffGenerator.calculate_change_stats(original_content, new_content)
-
             absolute_path = file_path.resolve()
             output = f"File updated: {absolute_path}\n"
             output += f"Applied {len(resolved_chunks)} range chunk(s) successfully\n\n"
@@ -250,6 +254,12 @@ Key constraints:
             if summary_diff:
                 output += "\n--- Change Summary ---\n"
                 output += summary_diff
+
+            # 原摘要继续提供全部行数／字节事实；计数只追加 Token，不替代原有信息。
+            output += "\n" + format_file_change_metrics(
+                FileChangeMetrics(original_snapshot.metrics, measure_text(new_content, stats['new_size'])),
+                include_bytes=False,
+            )
 
             if ai_warnings:
                 output += "\n\n" + "\n\n".join(ai_warnings)
@@ -378,18 +388,21 @@ Key constraints:
                 )
         return None
 
-    async def _read_file(self, file_path: Path) -> str:
+    async def _read_file(self, file_path: Path) -> FileTextSnapshot:
         """Read file content"""
-        async with aiofiles.open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            return await f.read()
+        return await read_text_snapshot(file_path)
 
-    async def _write_file(self, file_path: Path, content: str) -> None:
-        """Write file content"""
+    async def _write_file(self, file_path: Path, content: str) -> str:
+        """
+        Write file content
+
+        调用方用返回值生成 Diff 和计数，避免仍按未加末尾换行的中间文本报告结果。
+        """
         if content and not content.endswith("\n"):
             content += "\n"
 
-        async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
-            await f.write(content)
+        await async_write_text(file_path, content)
+        return content
 
     async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None) -> Optional[ToolDetail]:
         """Get tool details for display - shows the diff of all changes"""

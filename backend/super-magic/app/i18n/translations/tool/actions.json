@@ -962,5 +962,9 @@
     "canvas.search_import_reference_images": {
         "zh_CN": "搜索并导入参考图片",
         "en_US": "Search and import reference images"
+    },
+    "inspect_memory": {
+        "zh_CN": "检查记忆用量",
+        "en_US": "Inspect memory usage"
     }
 }

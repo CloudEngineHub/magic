@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
-import aiofiles
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
@@ -24,7 +23,10 @@ from app.utils.line_number_handler import LineNumberHandler
 from app.utils.diff_generator import DiffGenerator
 from app.utils.punctuation_matcher import PunctuationMatcher
 from app.service.html_app_memory_service import is_html_app_memory_path
-from app.utils.async_file_utils import async_exists
+from app.utils.async_file_utils import async_exists, async_write_text
+from app.tools.utils.file_change_stats import (
+    FileChangeMetrics, FileTextSnapshot, format_file_change_metrics, measure_text, read_text_snapshot,
+)
 
 logger = get_logger(__name__)
 
@@ -139,7 +141,8 @@ Never include the line number + tab in any old_string or new_string.
                 return ToolResult.error(error_message)
 
             # Read original content
-            original_content = await self._read_file(file_path)
+            original_snapshot = await self._read_file(file_path)
+            original_content = original_snapshot.content
 
 
 
@@ -259,11 +262,15 @@ Never include the line number + tab in any old_string or new_string.
                     edit.expected_replacements
                 )
 
-                # Track applied edit
+                """
+                Track applied edit
+                每项替换报告字符变化；整份文件的字节大小在全部编辑完成后统一统计。
+                例：「中文」替换为 abcd，字符数增加 2，但 UTF-8 字节减少 2；此处只报告前者。
+                """
                 applied_edits.append({
                     'index': i + 1,
                     'replacements': edit.expected_replacements,
-                    'size_change': len(working_content) - len(before_edit)
+                    'character_change': len(working_content) - len(before_edit)
                 })
 
             # Check if any changes were made
@@ -272,11 +279,14 @@ Never include the line number + tab in any old_string or new_string.
                 msg = "No changes made. All edits were no-ops or skipped."
                 if ai_warnings:
                     msg += "\n\n" + "\n\n".join(ai_warnings)
+                msg += "\n" + format_file_change_metrics(
+                    FileChangeMetrics(original_snapshot.metrics, original_snapshot.metrics),
+                )
                 return ToolResult(content=msg)
 
             # Write the final result with file versioning (triggers events and updates timestamp)
             async with self._file_versioning_context(tool_context, file_path):
-                await self._write_file(file_path, working_content)
+                working_content = await self._write_file(file_path, working_content)
 
             # Syntax check
             syntax_result = await SyntaxChecker.check_syntax(str(file_path), working_content)
@@ -285,12 +295,17 @@ Never include the line number + tab in any old_string or new_string.
                 errors_str = "\n".join(syntax_result.errors)
                 ai_warnings.append(f"WARNING: Syntax errors detected in the modified file:\n{errors_str}")
 
-            # Generate summary diff for LLM (ToolResult content)
-            summary_diff = DiffGenerator.generate_summary_diff(
-                original_content,
-                working_content,
-                str(file_path.name)
+            """
+            Calculate stats
+            所有替换完成后统一比较 original_content 与最终 working_content。
+            不把每步中间版本重复计为最终变化，也不为摘要和用量反馈分别再比较全文。
+            """
+            stats = DiffGenerator.calculate_change_stats(
+                original_content, working_content, old_size=original_snapshot.metrics.byte_count,
             )
+
+            # Generate summary diff for LLM (ToolResult content)
+            summary_diff = DiffGenerator.generate_summary_diff(str(file_path.name), stats)
 
             # Generate full diff for user display (get_tool_detail)
             full_diff = DiffGenerator.generate_unified_diff(
@@ -298,9 +313,6 @@ Never include the line number + tab in any old_string or new_string.
                 working_content,
                 str(file_path.name)
             )
-
-            # Calculate stats
-            stats = DiffGenerator.calculate_change_stats(original_content, working_content)
 
             # Format output
             absolute_path = file_path.resolve()
@@ -310,9 +322,9 @@ Never include the line number + tab in any old_string or new_string.
             # Summary of each edit
             for edit_info in applied_edits:
                 output += f"  Edit {edit_info['index']}: {edit_info['replacements']} replacement(s)"
-                if edit_info['size_change'] != 0:
-                    sign = '+' if edit_info['size_change'] > 0 else ''
-                    output += f" ({sign}{edit_info['size_change']} bytes)"
+                if edit_info['character_change'] != 0:
+                    sign = '+' if edit_info['character_change'] > 0 else ''
+                    output += f" ({sign}{edit_info['character_change']} characters)"
                 output += "\n"
 
             output += "\n"
@@ -334,6 +346,12 @@ Never include the line number + tab in any old_string or new_string.
             if summary_diff:
                 output += "\n--- Change Summary ---\n"
                 output += summary_diff
+
+            # 原摘要继续提供全部行数／字节事实；计数只追加 Token，不替代原有信息。
+            output += "\n" + format_file_change_metrics(
+                FileChangeMetrics(original_snapshot.metrics, measure_text(working_content, stats['new_size'])),
+                include_bytes=False,
+            )
 
             # Add AI warnings if any
             if ai_warnings:
@@ -487,18 +505,17 @@ Never include the line number + tab in any old_string or new_string.
 
         return {'valid': True}
 
-    async def _read_file(self, file_path: Path) -> str:
+    async def _read_file(self, file_path: Path) -> FileTextSnapshot:
         """Read file content"""
-        async with aiofiles.open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            return await f.read()
+        return await read_text_snapshot(file_path)
 
-    async def _write_file(self, file_path: Path, content: str) -> None:
+    async def _write_file(self, file_path: Path, content: str) -> str:
         """Write file content"""
         if content and not content.endswith('\n'):
             content += '\n'
 
-        async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
-            await f.write(content)
+        await async_write_text(file_path, content)
+        return content
 
     async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None) -> Optional[ToolDetail]:
         """Get tool details for display - shows the diff of all changes"""

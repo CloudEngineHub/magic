@@ -6322,5 +6322,53 @@
     "canvas.search_prompts_pending": {
         "zh_CN": "正在搜索提示词灵感：{{query}}",
         "en_US": "Searching prompt inspirations for {{query}}"
+    },
+    "inspect_memory.before": {
+        "zh_CN": "正在统计所选记忆文件的用量",
+        "en_US": "Measuring the selected memory files"
+    },
+    "inspect_memory.success": {
+        "zh_CN": "已统计所选记忆文件的用量",
+        "en_US": "Selected memory files measured"
+    },
+    "inspect_memory.failed": {
+        "zh_CN": "部分记忆文件未能完成统计，已保留成功结果",
+        "en_US": "Some memory files could not be measured; successful results are retained"
+    },
+    "inspect_memory.usage": {
+        "zh_CN": "约 {{tokens}} Token，{{size}} 字节",
+        "en_US": "About {{tokens}} tokens, {{size}} bytes"
+    },
+    "inspect_memory.missing": {
+        "zh_CN": "文件不存在",
+        "en_US": "File does not exist"
+    },
+    "inspect_memory.not_file": {
+        "zh_CN": "所选路径不是普通文件",
+        "en_US": "The selected path is not a regular file"
+    },
+    "inspect_memory.unreadable": {
+        "zh_CN": "文件暂时无法读取",
+        "en_US": "File could not be read"
+    },
+    "inspect_memory.invalid_utf8": {
+        "zh_CN": "文件不是有效的 UTF-8 文本",
+        "en_US": "File is not valid UTF-8 text"
+    },
+    "inspect_memory.unstable": {
+        "zh_CN": "统计期间文件发生变化，用量暂不可用",
+        "en_US": "File changed during measurement; usage is unavailable"
+    },
+    "inspect_memory.invalid_path": {
+        "zh_CN": "请使用有效的绝对文件路径",
+        "en_US": "A valid absolute file path is required"
+    },
+    "inspect_memory.outside_scope": {
+        "zh_CN": "文件不在当前可用的记忆范围内",
+        "en_US": "File is outside the current available memory scope"
+    },
+    "inspect_memory.unavailable": {
+        "zh_CN": "当前任务无法使用记忆用量统计",
+        "en_US": "Memory measurement is unavailable for this task"
     }
 }

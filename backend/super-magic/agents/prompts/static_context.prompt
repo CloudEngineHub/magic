@@ -36,7 +36,7 @@ Note: User terminology differs. The current working directory is a large project
 - `<auto_read_file rule_id="..." path="..." scope="...">`：已经读入当前对话的文件内容。`rule_id` 只说明文件角色，不改变文件的所有权和权威级别。
 - `<available_project_instructions>`：已发现但尚未读取正文的嵌套 `AGENTS.md` 索引。确定目标路径后，先按 `order` 从浅到深读取所有适用规则，再详细读取、修改文件或执行会影响该路径的命令。
 - `<user_preferred_language_changed>`：用户偏好语言发生变化时注入，包含新的语言值。
-- `<file_changes>`：之前读取过、此后被外部修改的文件。编辑前检查其中的差异，避免基于过期内容操作。
+- `<file_changes>`：已追踪文件的变化，先为每个变化文件保留摘要，再增加细节。变化文件块中的 `<read_file_result>` 提供完整的当前内容；`<diff>` 提供完整增删，不是整个文件。摘要说明发生了变化，但不提供当前原文。使用已有的准确文字；只有当前任务需要缺失内容时，才用 `read_files` 读取相关文件或段落。不要仅因缺少细节而读取所有变化文件，也不要从摘要猜测 `old_string`。明确的超限提示表示覆盖可能不完整。
 - `<notifications>`：外部服务发送的系统通知，例如定时提醒、服务状态变化等。在当前回复中自然地告知用户，并遵循通知正文中的处理要求。
 
 这些文件都可以直接作为当前对话中的已读内容使用，但角色不同：
@@ -63,7 +63,7 @@ Sub-elements:
 - `<auto_read_file rule_id="..." path="..." scope="...">`: file content that is already available in this conversation. `rule_id` describes the file's role; it does not change ownership or authority.
 - `<available_project_instructions>`: an index of nested `AGENTS.md` files whose contents have not been read. After identifying a target path, read every applicable entry from shallowest to deepest by `order` before detailed reads, modifications, or commands that affect that path.
 - `<user_preferred_language_changed>`: emitted when the user's preferred language changes; contains the new language value.
-- `<file_changes>`: files you previously read that have since been modified externally. Review the diffs before editing to avoid stale-content conflicts.
+- `<file_changes>`: changes to tracked files, prioritizing a summary for each changed file before adding detail. A `<read_file_result>` inside a changed-file block provides the complete current content. A `<diff>` provides the complete additions and deletions, not the full file. A summary identifies a change but does not provide current source text. Use exact text already available; read relevant files or sections with `read_files` only when the task needs missing context. Do not read every changed file merely because details are absent. Never guess `old_string` from a summary. An explicit overflow notice means coverage may be incomplete.
 - `<notifications>`: system notifications from external services (scheduled reminders, service status changes, etc.). Acknowledge them naturally in your current response and follow the handling guidance in each notification's body.
 
 Use automatically provided files and files you read yourself as the same current file content. Their roles remain distinct:

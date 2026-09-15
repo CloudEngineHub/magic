@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import aiofiles
 from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
@@ -24,7 +23,10 @@ from app.utils.diff_generator import DiffGenerator
 from app.utils.line_number_handler import LineNumberHandler
 from app.utils.replace_range_resolver import resolve_replace_range
 from app.service.html_app_memory_service import is_html_app_memory_path
-from app.utils.async_file_utils import async_exists
+from app.utils.async_file_utils import async_exists, async_write_text
+from app.tools.utils.file_change_stats import (
+    FileChangeMetrics, FileTextSnapshot, format_file_change_metrics, measure_text, read_text_snapshot,
+)
 
 logger = get_logger(__name__)
 
@@ -146,7 +148,8 @@ On failure: re-read and verify anchor existence/uniqueness -> increase anchor le
                 tool_context.set_metadata("error_type", "edit_file.error_file_modified")
                 return ToolResult.error(error_message)
 
-            original_content = await self._read_file(file_path)
+            original_snapshot = await self._read_file(file_path)
+            original_content = original_snapshot.content
 
             try:
                 resolution = resolve_replace_range(
@@ -177,28 +180,29 @@ On failure: re-read and verify anchor existence/uniqueness -> increase anchor le
                 msg = "No changes made. Replacement content is identical to current content in target range."
                 if ai_warnings:
                     msg += "\n\n" + "\n\n".join(ai_warnings)
+                msg += "\n" + format_file_change_metrics(
+                    FileChangeMetrics(original_snapshot.metrics, original_snapshot.metrics),
+                )
                 return ToolResult(content=msg)
 
             async with self._file_versioning_context(tool_context, file_path):
-                await self._write_file(file_path, new_content)
+                new_content = await self._write_file(file_path, new_content)
 
             syntax_result = await SyntaxChecker.check_syntax(str(file_path), new_content)
             if not syntax_result.is_valid:
                 errors_str = "\n".join(syntax_result.errors)
                 ai_warnings.append(f"WARNING: Syntax errors detected in the modified file:\n{errors_str}")
 
-            summary_diff = DiffGenerator.generate_summary_diff(
-                original_content,
-                new_content,
-                str(file_path.name)
+            stats = DiffGenerator.calculate_change_stats(
+                # 选中范围只决定替换位置；这里比较整份修改前后文本，不把片段大小当成文件大小。
+                original_content, new_content, old_size=original_snapshot.metrics.byte_count,
             )
+            summary_diff = DiffGenerator.generate_summary_diff(str(file_path.name), stats)
             full_diff = DiffGenerator.generate_unified_diff(
                 original_content,
                 new_content,
                 str(file_path.name)
             )
-            stats = DiffGenerator.calculate_change_stats(original_content, new_content)
-
             replaced_fragment = original_content[matched_range.start_index:matched_range.end_index]
             replaced_line_count = 0 if replaced_fragment == "" else replaced_fragment.count("\n") + 1
             new_line_count = 0 if params.new_content == "" else params.new_content.count("\n") + 1
@@ -225,6 +229,12 @@ On failure: re-read and verify anchor existence/uniqueness -> increase anchor le
             if summary_diff:
                 output += "\n--- Change Summary ---\n"
                 output += summary_diff
+
+            # 原摘要继续提供全部行数／字节事实；计数只追加 Token，不替代原有信息。
+            output += "\n" + format_file_change_metrics(
+                FileChangeMetrics(original_snapshot.metrics, measure_text(new_content, stats['new_size'])),
+                include_bytes=False,
+            )
 
             if ai_warnings:
                 output += "\n\n" + "\n\n".join(ai_warnings)
@@ -280,18 +290,21 @@ On failure: re-read and verify anchor existence/uniqueness -> increase anchor le
 
         return warnings
 
-    async def _read_file(self, file_path: Path) -> str:
+    async def _read_file(self, file_path: Path) -> FileTextSnapshot:
         """Read file content"""
-        async with aiofiles.open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            return await f.read()
+        return await read_text_snapshot(file_path)
 
-    async def _write_file(self, file_path: Path, content: str) -> None:
-        """Write file content"""
+    async def _write_file(self, file_path: Path, content: str) -> str:
+        """
+        Write file content
+
+        返回加过末尾换行的实际内容，使语法检查、Diff 和用量反馈讨论的是同一份文件。
+        """
         if content and not content.endswith("\n"):
             content += "\n"
 
-        async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
-            await f.write(content)
+        await async_write_text(file_path, content)
+        return content
 
     async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None) -> Optional[ToolDetail]:
         """Get tool details for display - shows the diff of changes"""

@@ -16,7 +16,6 @@ import difflib
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import aiofiles
 from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
@@ -31,7 +30,10 @@ from app.utils.line_number_handler import LineNumberHandler
 from app.utils.diff_generator import DiffGenerator
 from app.utils.punctuation_matcher import PunctuationMatcher
 from app.utils.input_diagnoser import InputDiagnoser
-from app.utils.async_file_utils import async_exists
+from app.utils.async_file_utils import async_exists, async_write_text
+from app.tools.utils.file_change_stats import (
+    FileChangeMetrics, FileTextSnapshot, format_file_change_metrics, measure_text, read_text_snapshot,
+)
 from app.service.html_app_memory_service import is_html_app_memory_path
 
 logger = get_logger(__name__)
@@ -180,7 +182,8 @@ When editing the same file multiple times:
                 return ToolResult.error(error_message)
 
             # Read file content
-            original_content = await self._read_file(file_path)
+            original_snapshot = await self._read_file(file_path)
+            original_content = original_snapshot.content
 
             # Count occurrences
             occurrences = original_content.count(params.old_string)
@@ -293,7 +296,7 @@ When editing the same file multiple times:
 
             # Write new content with file versioning (triggers events and updates timestamp)
             async with self._file_versioning_context(tool_context, file_path):
-                await self._write_file(file_path, new_content)
+                new_content = await self._write_file(file_path, new_content)
 
             # Syntax check
             syntax_result = await SyntaxChecker.check_syntax(str(file_path), new_content)
@@ -302,12 +305,17 @@ When editing the same file multiple times:
                 errors_str = "\n".join(syntax_result.errors)
                 ai_warnings.append(f"WARNING: Syntax errors detected in the modified file:\n{errors_str}")
 
-            # Generate summary diff for LLM (ToolResult content)
-            summary_diff = DiffGenerator.generate_summary_diff(
-                original_content,
-                new_content,
-                str(file_path.name)
+            """
+            Calculate stats
+            在真实替换与末尾换行处理后只计算一次，原摘要、用户 Diff 旁的数字与 Token 反馈共用。
+            匹配是否成功仍由原替换逻辑决定，用量数字不参与编辑权限或内容正确性判断。
+            """
+            stats = DiffGenerator.calculate_change_stats(
+                original_content, new_content, old_size=original_snapshot.metrics.byte_count,
             )
+
+            # Generate summary diff for LLM (ToolResult content)
+            summary_diff = DiffGenerator.generate_summary_diff(str(file_path.name), stats)
 
             # Generate full diff for user display (get_tool_detail)
             full_diff = DiffGenerator.generate_unified_diff(
@@ -315,9 +323,6 @@ When editing the same file multiple times:
                 new_content,
                 str(file_path.name)
             )
-
-            # Calculate stats
-            stats = DiffGenerator.calculate_change_stats(original_content, new_content)
 
             # Format output
             absolute_path = file_path.resolve()
@@ -340,6 +345,12 @@ When editing the same file multiple times:
             if summary_diff:
                 output += "\n--- Change Summary ---\n"
                 output += summary_diff
+
+            # 原摘要继续提供全部行数／字节事实；计数只追加 Token，不替代原有信息。
+            output += "\n" + format_file_change_metrics(
+                FileChangeMetrics(original_snapshot.metrics, measure_text(new_content, stats['new_size'])),
+                include_bytes=False,
+            )
 
             # Add AI warnings if any
             if ai_warnings:
@@ -372,19 +383,22 @@ When editing the same file multiple times:
 
 
 
-    async def _read_file(self, file_path: Path) -> str:
-        """Read file content"""
-        async with aiofiles.open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            return await f.read()
+    async def _read_file(self, file_path: Path) -> FileTextSnapshot:
+        """
+        Read file content
 
-    async def _write_file(self, file_path: Path, content: str) -> None:
+        原文继续参与匹配，同一次读取留下真实字节数，避免为新增反馈再读一遍文件。
+        """
+        return await read_text_snapshot(file_path)
+
+    async def _write_file(self, file_path: Path, content: str) -> str:
         """Write file content"""
         # Ensure content ends with newline (if not empty)
         if content and not content.endswith('\n'):
             content += '\n'
 
-        async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
-            await f.write(content)
+        await async_write_text(file_path, content)
+        return content
 
     def _find_similar_strings(self, content: str, search_string: str, max_suggestions: int = 5) -> str:
         """Find similar strings in content for suggestions"""

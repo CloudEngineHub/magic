@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import html
-import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -11,7 +10,10 @@ from typing import TYPE_CHECKING
 from agentlang.chat_history.chat_history import ChatHistory
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
-from app.path_manager import PathManager
+from app.service.memory.policies.memory_file_budget import get_memory_md_budget
+from app.service.memory.policies.memory_scope import MemoryScopeKind, resolve_memory_scopes
+from app.service.memory.policies.memory_skill_policy import is_auto_memory_enabled, is_memory_skill_available
+from agentlang.tools.tool_result import ToolResult
 from app.tools.read_file import ReadFile, ReadFileParams
 from app.utils.async_file_utils import (
     async_exists,
@@ -24,7 +26,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_PROJECT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 _AUTO_READ_SOURCE_PREFIX = "auto_read_file:"
 _INSTRUCTION_INDEX_SOURCE_PREFIX = "project_instruction_index:"
 _INSTRUCTION_INDEX_MAX_CHARS = 24 * 1024
@@ -188,13 +189,11 @@ class AutoReadFileService:
     ) -> list[AutoReadFileCandidate]:
         if (
             rule.rule_id in {AutoReadRuleId.GLOBAL_MEMORY, AutoReadRuleId.PROJECT_MEMORY}
-            and not agent_context.is_magiclaw()
-            and not agent_context.get_personal_preferences().long_term_memory_enabled
+            and not (is_auto_memory_enabled(agent_context) and is_memory_skill_available(agent_context))
         ):
             return []
 
         workspace_dir = Path(agent_context.get_workspace_dir()).absolute()
-        memory_root = PathManager.get_memory_root_dir().expanduser().absolute()
 
         if rule.path_kind == AutoReadPathKind.WORKSPACE_ROOT_AGENTS:
             return await cls._single_candidate(
@@ -205,23 +204,20 @@ class AutoReadFileService:
             )
         if rule.path_kind == AutoReadPathKind.NESTED_AGENTS:
             return cls._resolve_nested_agents_from_snapshot(workspace_dir, rule, workspace_entries)
-        if rule.path_kind == AutoReadPathKind.GLOBAL_MEMORY:
-            return await cls._single_candidate(
-                rule,
-                memory_root / "global" / "MEMORY.md",
-                display_path=str(memory_root / "global" / "MEMORY.md"),
-                scope="user-global",
-            )
-        if rule.path_kind == AutoReadPathKind.PROJECT_MEMORY:
-            project_id = cls._resolve_project_id(agent_context)
-            if not project_id or agent_context.is_magiclaw():
+        if rule.path_kind in {AutoReadPathKind.GLOBAL_MEMORY, AutoReadPathKind.PROJECT_MEMORY}:
+            """
+            自动读取只挑作用域解析器给出的主文件，不自行生成另一套 project_id 路径。
+            Claw 没有普通项目作用域，稍后的 CLAW_MEMORY 分支仍处理它自己的启动记忆。
+            """
+            scope_kind = MemoryScopeKind.GLOBAL if rule.path_kind == AutoReadPathKind.GLOBAL_MEMORY else MemoryScopeKind.PROJECT
+            memory_scope = next((scope for scope in resolve_memory_scopes(agent_context) if scope.kind == scope_kind), None)
+            if memory_scope is None:
                 return []
-            project_path = memory_root / "projects" / f"p_{project_id}" / "MEMORY.md"
             return await cls._single_candidate(
                 rule,
-                project_path,
-                display_path=str(project_path),
-                scope=f"user-project:{project_id}",
+                memory_scope.memory_file,
+                display_path=str(memory_scope.memory_file),
+                scope="user-global" if scope_kind == MemoryScopeKind.GLOBAL else f"user-project:{memory_scope.root.name[2:]}",
             )
         if rule.path_kind == AutoReadPathKind.CLAW_MEMORY:
             if not agent_context.is_magiclaw():
@@ -289,15 +285,6 @@ class AutoReadFileService:
                 )
             )
         return candidates
-
-    @staticmethod
-    def _resolve_project_id(agent_context: "AgentContext") -> str:
-        project_id = str(agent_context.get_project_id() or "").strip()
-        if _PROJECT_ID_PATTERN.fullmatch(project_id):
-            return project_id
-        if project_id:
-            logger.warning("project_id 不符合安全路径规则，跳过项目记忆")
-        return ""
 
     @staticmethod
     async def _is_safe_regular_file(file_path: Path) -> bool:
@@ -377,6 +364,16 @@ class AutoReadFileService:
             if delivered and tracked:
                 continue
 
+            max_tokens = None
+            if candidate.rule_id in {AutoReadRuleId.GLOBAL_MEMORY, AutoReadRuleId.PROJECT_MEMORY}:
+                """
+                每份主文件独立给额度；这里限制本次自动交付，不删除或截短磁盘上的记忆。
+                超限内容如何保留到 notes，由后续维护 Skill 决定，不由读取服务做摘要。
+                """
+                budget = get_memory_md_budget()
+                if budget is None:
+                    continue
+                max_tokens = budget.max_tokens
             result = await read_file.execute(
                 tool_context,
                 ReadFileParams(
@@ -384,6 +381,7 @@ class AutoReadFileService:
                     offset=0,
                     limit=-1,
                 ),
+                max_tokens=max_tokens,
             )
             if not result.ok:
                 logger.warning(
@@ -413,6 +411,19 @@ class AutoReadFileService:
                 )
             )
             await chat_history.append_user_message(content, show_in_ui=False, source=source)
+
+    @staticmethod
+    async def read_changed_file(file_path: str, max_tokens: int) -> ToolResult:
+        """
+        Horizon 选择全文表达时仍执行真正的 ReadFile，保留行号和截断说明。
+        不传 ToolContext：结果尚未决定是否展示，不能让工具提前改写 Horizon 的已知版本。
+        文件记录仍由 Horizon 在原有整包预算判断通过之后更新，不引入跨模块提交协议。
+        例：Diff 9K、当前全文 10K，Horizon 选择全文后调用本入口；返回值仍含真实行号与截断标记。
+        本方法接受任何已选中的文件，不根据名字判断 AGENTS.md 或 MEMORY.md 是否更重要。
+        """
+        return await ReadFile(base_dir=Path(file_path).parent).execute_purely(
+            ReadFileParams(file_path=file_path, offset=0, limit=-1), max_tokens=max_tokens,
+        )
 
     @staticmethod
     def _build_file_source(file_path: Path) -> str:

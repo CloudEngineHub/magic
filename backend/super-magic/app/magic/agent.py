@@ -59,6 +59,8 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatComplet
 from app.core.ai_abilities import get_compact_model_id
 from app.core.agent_definition_normalizer import normalize_agent_definition
 from app.core.context.agent_context import AgentContext
+from app.core.horizon.memory_directory import scan_memory_directory
+from app.core.horizon.models import MemoryDirectorySnapshot
 from app.core.horizon.workspace_tree_display import (
     WORKSPACE_FILES_DISPLAY_MAX_CHARS,
     WORKSPACE_TREE_SCAN_DEPTH,
@@ -99,9 +101,11 @@ from app.utils.file_utils import (
 )
 from agentlang.environment import Environment
 from app.core.skill_manager import generate_skills_prompt
+from app.core.skill_utils.runtime_policy import resolve_runtime_skills
+from app.service.memory.policies.memory_skill_policy import is_auto_memory_enabled, is_memory_skill_available
+from app.service.memory.policies.memory_scope import MemoryScopeKind, build_memory_runtime_context, resolve_memory_scopes
 from app.core.skill_utils.skill_sources import get_system_skills_dir, get_workspace_skills_dir
-from app.core.prompt.personal_preferences_prompt import apply_personal_preferences
-from agentlang.agent.define import AgentDefine, SkillsConfig, SystemSkillEntry
+from agentlang.agent.define import AgentDefine, SkillsConfig
 from app.core.models.agent_model_context import TextModelState
 from app.core.models.agent_runtime import AgentProviderType
 from app.service.multimodal_message_renderer import LLMMessageRenderer, LLMMessageRenderResult
@@ -227,10 +231,13 @@ class SessionPrepResult:
 
 
 class Agent(BaseAgent):
-    """绑定 Context、ChatHistory 与 Horizon 的可运行 Agent 实例。
+    """
+    绑定 Context、ChatHistory 与 Horizon 的可运行 Agent 实例。
 
     Agent 管理自身运行状态；定义来源、编译准备、缓存和动态初始化时机由
     AgentRuntime 统一决定。
+
+    被动压缩仍使用原专用正文缓存；默认挂载规则由应用 YAML 声明。
     """
 
     def _setup_agent_context(self, agent_context: Optional[AgentContext] = None) -> AgentContext:
@@ -486,36 +493,38 @@ class Agent(BaseAgent):
             raise ValueError("Text model id is not configured")
         return model_id
 
-    # compact-chat-history skill 永久挂载，无需在 .agent 文件中声明
-    _ALWAYS_MOUNT_SKILL = "compact-chat-history"
+    _COMPACT_SKILL_NAME = "compact-chat-history"
 
     def _initialize_agent(self):
         """初始化 agent"""
         # 从 .agent 文件中加载 agent 配置
         agent_define = self.load_agent_config(self.agent_name)
-        self._mount_runtime_tools(agent_define)
+        """
+        先合并应用默认 Skill，再选择对应运行工具；否则 .agent 未列 memory 时会漏掉预加载底座。
+        这里只决定需要加载哪些能力，真正可用的 Skill 要等下方正文生成完成后登记。
+        """
+        runtime_skills = resolve_runtime_skills(self._agent_loader.get_skills_config(self.agent_name))
+        skills_config = runtime_skills.skills_config
+        self._mount_runtime_tools(agent_define, skills_config)
 
         # 缓存 compact skill 内容，供被动触发时直接注入（避免运行时读文件）
         self._compact_skill_content = self._load_compact_skill_content()
 
-        # 生成 skills prompt；若 .agent 未配置任何 skills，也需确保 compact skill 永久挂载
-        skills_prompt_content = None
-        skills_config = self._agent_loader.get_skills_config(self.agent_name)
-        if not skills_config or skills_config.is_empty():
-            # 无 skills 配置时，构造仅含 compact skill 的最小配置
-            skills_config = SkillsConfig(
-                system_skills=[SystemSkillEntry(name=self._ALWAYS_MOUNT_SKILL)]
-            )
-        system_skill_names = skills_config.get_system_skill_names()
-        self.loaded_skills = system_skill_names
-        self.agent_context.set_loaded_skills(system_skill_names)
-        self.agent_context.set_excluded_skills(skills_config.excluded_skills)
-        skills_prompt_content = generate_skills_prompt(
+        """
+        声明合并不等于正文已加载。只有实际生成的 Skill 进入 loaded_skills；
+        必需预加载失败写入原有 excluded_skills，使日常入口和 after-run 使用同一状态。
+        """
+        skill_result = generate_skills_prompt(
             skills_config,
             agent_name=self.agent_name,
+            required_preloads=runtime_skills.required_preloads,
         )
+        skills_prompt_content = skill_result.content
+        self.loaded_skills = skill_result.loaded_names
+        self.agent_context.set_loaded_skills(skill_result.loaded_names)
+        self.agent_context.set_excluded_skills(list(dict.fromkeys([*skills_config.excluded_skills, *skill_result.disabled_names])))
         if skills_prompt_content:
-            logger.info(f"为 agent {self.agent_name} 生成了 skills prompt，包含 {len(system_skill_names)} 个 system skills")
+            logger.info(f"为 agent {self.agent_name} 生成了 skills prompt，包含 {len(skill_result.loaded_names)} 个 skills")
         else:
             logger.warning(f"尝试生成 skills prompt 失败，skills_config: {skills_config}")
 
@@ -550,18 +559,13 @@ class Agent(BaseAgent):
         self.system_prompt += "\n\n---\n\n" + build_security_guardrails_prompt(
             is_mainland=Environment.is_mainland(),
         )
-        self.system_prompt = apply_personal_preferences(
-            self.system_prompt,
-            personal_preferences=self.agent_context.get_personal_preferences(),
-            is_magiclaw=self.agent_context.is_magiclaw(),
-        )
 
-    def _mount_runtime_tools(self, agent_define: AgentDefine) -> None:
+    def _mount_runtime_tools(self, agent_define: AgentDefine, skills_config: SkillsConfig) -> None:
         """根据工具声明和 Agent 能力配置挂载运行时基础工具。"""
         mount_types = [AutoMount.ALWAYS]
         if agent_define.code_execution:
             mount_types.append(AutoMount.CODE_EXECUTION)
-        if agent_define.skills_config and not agent_define.skills_config.is_empty():
+        if not skills_config.is_empty():
             mount_types.append(AutoMount.SKILLS)
 
         candidates = {
@@ -586,7 +590,7 @@ class Agent(BaseAgent):
         import concurrent.futures
         from app.utils.async_file_utils import async_read_text
 
-        skill_file = get_system_skills_dir() / self._ALWAYS_MOUNT_SKILL / "SKILL.md"
+        skill_file = get_system_skills_dir() / self._COMPACT_SKILL_NAME / "SKILL.md"
 
         async def _read():
             return await async_read_text(skill_file)
@@ -683,17 +687,45 @@ class Agent(BaseAgent):
         self._workspace_snapshot = snapshot
         return snapshot
 
+    async def _get_memory_directory_snapshot(self) -> MemoryDirectorySnapshot | None:
+        """
+        获取当前普通项目的记忆目录快照，不读取笔记正文。
+
+        只自动观察本次普通项目的记忆根；全局 notes 和其它项目不会因为本轮对话被顺带扫描。
+        Claw 自有记忆已属于它的工作区，由原工作区入口处理，不再追加普通项目目录。
+        """
+        if not (is_auto_memory_enabled(self.agent_context) and is_memory_skill_available(self.agent_context)):
+            return None
+        scope = next(
+            (scope for scope in resolve_memory_scopes(self.agent_context) if scope.kind == MemoryScopeKind.PROJECT),
+            None,
+        )
+        if scope is None:
+            return None
+        return await scan_memory_directory(scope.root, self.agent_context)
+
+    async def _refresh_directory_snapshots(self) -> None:
+        """
+        每轮上下文准备时统一刷新目录；单个目录失败不阻止另一目录更新。
+
+        例：第一轮工具创建了文件，第二轮即使没有新用户消息，也应能看到它。
+        Workspace 与项目记忆各自扫描，在同一个上下文准备时机交给 Horizon 比较变化。
+        不把目录发现误作全文读取，模型仍按当前任务判断是否打开新笔记。
+        """
+        horizon = self.agent_context.horizon
+        try:
+            await horizon.set_workspace_snapshot(await self._get_workspace_snapshot())
+        except Exception as error:
+            logger.warning(f"刷新工作区文件树失败: {error}")
+        await horizon.set_memory_directory_snapshot(await self._get_memory_directory_snapshot())
+
     async def async_complete_dynamic_init(self) -> None:
-        """异步完成动态初始化，将 workspace 文件树和用户语言同步到 AgentHorizon。
+        """初始化用户语言与 Claw 读取状态，目录在每轮上下文准备时统一刷新。
 
         此方法由 AgentRuntime 在 Agent 构造完成后、首次运行前按策略调用。
         Horizon 首次 build_context_update 时会将这些内容注入 LLM 的 initial_context。
         """
         horizon = self.agent_context.horizon
-
-        # ── workspace 文件树（异步扫描）──────────────────────────────────────
-        snapshot = await self._get_workspace_snapshot()
-        await horizon.set_workspace_snapshot(snapshot)
 
         # ── 用户偏好语言 ─────────────────────────────────────────────────────
         if not i18n.is_language_manually_set():
@@ -708,15 +740,7 @@ class Agent(BaseAgent):
             from app.path_manager import PathManager
             await self.agent_context.horizon.restore_magiclaw_startup(PathManager.get_magic_dir())
 
-        logger.info("async_complete_dynamic_init 完成：workspace files、language 已同步到 horizon")
-
-    async def refresh_workspace_files(self) -> None:
-        """每次用户消息前调用，刷新工作区文件树并更新 horizon。
-
-        horizon 内部比对路径集合变化，有 diff 时会在下次 system_injected_context 中报告。
-        """
-        snapshot = await self._get_workspace_snapshot()
-        await self.agent_context.horizon.set_workspace_snapshot(snapshot)
+        logger.info("async_complete_dynamic_init 完成：language 已同步到 horizon")
 
     def _generate_agent_id(self) -> str:
         """生成符合规范的 Agent ID"""
@@ -975,6 +999,13 @@ class Agent(BaseAgent):
             self.agent_context.set_final_response(session_prep_result.direct_response)
             self.set_agent_state(AgentState.FINISHED)
             return session_prep_result.direct_response
+
+        """
+        同一 Agent 会跨 CHAT 复用：每个 run 提供当前设置，避免模型沿用初始化时的旧开关。
+        关闭自动记忆仍保留 Skill 与目录知识；不在每次工具调用后重复发送。
+        例：上一条 CHAT 自动开启，这条关闭；重新发当前事实即可，不必重建 Agent 或删 Skill。
+        """
+        self.agent_context.horizon.push_notification("memory", build_memory_runtime_context(self.agent_context))
 
         # 注入点1：用户消息入库后、第一次 LLM 调用前，注入 system_injected_context
         # 若历史末尾存在未完成的 tool call 序列，跳过注入避免破坏序列完整性
@@ -2181,6 +2212,8 @@ Since your subsequent output will be merged with pre-interruption content and di
 
             await self.agent_context.horizon.on_context_reset()
             await self._rehydrate_media_models_after_context_reset()
+            # 后台压缩替换了旧窗口中的通知，按当前状态重新提供记忆模式和准确路径。
+            self.agent_context.horizon.push_notification("memory", build_memory_runtime_context(self.agent_context))
             return True
 
         except Exception as e:
@@ -2954,9 +2987,12 @@ Since your subsequent output will be merged with pre-interruption content and di
                 return await self.agent_context.horizon.build_context_update(injection_point)
             await self.agent_context.horizon.flush_pending_user_messages()
             self._sync_horizon_llm_model_info()
-            return await self.agent_context.horizon.build_context_update(
-                injection_point=injection_point
-            )
+            """
+            每轮先刷新再生成通知：首轮、工具后的下一轮、未完成 TODO 驱动的续轮都经过这里。
+            模型传输重试复用已准备的消息，不因为重试重新触发一轮目录扫描。
+            """
+            await self._refresh_directory_snapshots()
+            return await self.agent_context.horizon.build_context_update(injection_point)
         except Exception as horizon_err:
             if is_non_retryable_model_config_error(horizon_err):
                 logger.debug(f"[AgentHorizon] {log_context} 跳过：模型配置错误: {horizon_err}")
@@ -3036,6 +3072,12 @@ Since your subsequent output will be merged with pre-interruption content and di
             # 有未完成的任务，将提示消息添加到聊天历史
             logger.info("检测到未完成的todo任务，提示大模型继续完成任务")
             await self.chat_history.append_user_message(todo_message, show_in_ui=False)
+            # 本轮没有工具结果，不会经过通常的注入点；继续推理前仍需要最新目录。
+            ctx_update = await self._build_horizon_context_update_safely(
+                injection_point=HorizonInjectionPoint.BEFORE_CONTINUATION_LLM, log_context="继续未完成任务",
+            )
+            if ctx_update:
+                await self.chat_history.append_user_message(ctx_update, show_in_ui=False, source="horizon")
             loop_state.should_continue = True
         else:
             # All tasks completed, exit the loop directly
@@ -3312,6 +3354,8 @@ Since your subsequent output will be merged with pre-interruption content and di
 
             await self.agent_context.horizon.on_context_reset()
             await self._rehydrate_media_models_after_context_reset()
+            # 主动压缩同样需要恢复当前记忆事实，不能指望摘要完整保留旧开关通知。
+            self.agent_context.horizon.push_notification("memory", build_memory_runtime_context(self.agent_context))
 
         except Exception as e:
             self._log_compaction_event(

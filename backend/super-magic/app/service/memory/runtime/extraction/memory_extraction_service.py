@@ -91,8 +91,12 @@ class MemoryExtractionService:
 
             source = snapshot.source
             agent_id = f"memory-after-run-{generation}"
+            """
+            target 延续原 Agent 的能力配置，agent_id 标识这次独立后台运行；两者不是话题 ID。
+            同一份快照同时生成来源说明并交给 runner，避免说明来自话题 A、实际处理话题 B。
+            """
             prompt = await self._prompt_provider.load(
-                source.target,
+                snapshot,
                 agent_context=agent_context,
             )
             runtime_dir = await ensure_runtime_directory(
@@ -115,6 +119,10 @@ class MemoryExtractionService:
                     protected_paths=frozenset({runtime_dir}),
                 ),
             )
+            """
+            runner 在完整 fork 后追加 prompt 作为 User 消息，后台只负责记忆任务。
+            临时会话历史留在 runtime_dir；真正要保留的用户记忆由工具写入允许的记忆根。
+            """
             await run_isolated_agent(
                 IsolatedAgentRunRequest(
                     target=source.target,
