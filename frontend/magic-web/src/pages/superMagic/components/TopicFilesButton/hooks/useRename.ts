@@ -17,9 +17,15 @@ import {
 	syncCanvasProjectNameAfterFileOperation,
 } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 import { useCanvasFileOperationGuard } from "./useCanvasFileOperationGuard"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 export interface UseRenameOptions {
 	projectId?: string
+	fileScope?: FileScope
+	allowDotStart?: boolean
+	resolveSiblings?: (item: AttachmentItem) => Promise<AttachmentItem[]>
+	beforeRename?: (item: AttachmentItem, newName: string) => Promise<boolean>
+	isCurrent?: () => boolean
 	onRenameSuccess?: (itemId: string, newName: string) => void
 	onRenameError?: (error: any) => void
 	onUpdateAttachments?: () => void
@@ -173,6 +179,8 @@ export function useRename(options: UseRenameOptions = {}) {
 	const [renameErrorMessage, setRenameErrorMessage] = useState<string>("")
 	const renameInputRef = useRef<InputRef>(null)
 	const renameConfirmingRef = useRef(false)
+	const [renamePending, setRenamePending] = useState(false)
+	const renameItemRef = useRef<AttachmentItem | null>(null)
 
 	// 获取文件或文件夹的唯一标识符
 	const getItemId = (item: AttachmentItem): string => {
@@ -237,6 +245,7 @@ export function useRename(options: UseRenameOptions = {}) {
 
 	// 开始重命名
 	const handleStartRename = (item: AttachmentItem) => {
+		renameItemRef.current = item
 		const itemId = getItemId(item)
 		const currentName = item.is_directory
 			? item.name || ""
@@ -264,6 +273,8 @@ export function useRename(options: UseRenameOptions = {}) {
 	// 确认重命名
 	const handleRenameConfirm = async () => {
 		if (renameConfirmingRef.current) return
+		const isCurrent = options.isCurrent ?? (() => true)
+		if (!isCurrent()) return
 
 		if (!renamingItemId || !renameValue.trim()) {
 			handleRenameCancel()
@@ -271,12 +282,15 @@ export function useRename(options: UseRenameOptions = {}) {
 		}
 
 		renameConfirmingRef.current = true
+		setRenamePending(true)
 
 		const trimmedName = renameValue.trim()
 
 		try {
 			// 查找当前重命名的项目
-			const currentItem = findItemById(attachments || [], renamingItemId)
+			const currentItem = options.resolveSiblings
+				? renameItemRef.current
+				: findItemById(attachments || [], renamingItemId)
 			if (!currentItem) {
 				handleRenameCancel()
 				return
@@ -295,10 +309,14 @@ export function useRename(options: UseRenameOptions = {}) {
 
 			// 解析 itemId 获取文件ID
 			const fileId = renamingItemId.startsWith("folder:") ? null : renamingItemId
-			const isFolder = !fileId
+			const isFolder =
+				options.fileScope === "user" ? Boolean(currentItem.is_directory) : !fileId
 
 			// 文件名/文件夹名校验
-			const validationResult = validateFilename(trimmedName, isFolder, { t })
+			const validationResult = validateFilename(trimmedName, isFolder, {
+				t,
+				allowDotStart: options.allowDotStart,
+			})
 			if (!validationResult.isValid) {
 				setRenameErrorMessage("")
 				setTimeout(() => {
@@ -315,12 +333,14 @@ export function useRename(options: UseRenameOptions = {}) {
 					)
 				: undefined
 
+			const siblings = await options.resolveSiblings?.(currentItem)
+			if (!isCurrent()) return
 			// 检查是否重复
 			if (
 				checkDuplicateFileName(
 					trimmedName,
-					attachments || [],
-					parentPath,
+					siblings ?? attachments ?? [],
+					siblings ? undefined : parentPath,
 					renamingItemId,
 					getItemId,
 				)
@@ -344,22 +364,27 @@ export function useRename(options: UseRenameOptions = {}) {
 				return
 			}
 
-			const canvasRisk = currentItem.is_directory
-				? await detectCanvasProjectOperationRisk({
-						attachments: attachments || [],
-						items: [currentItem],
-						operation: "rename",
-					})
-				: { shouldWarn: false, riskTypes: [], affectedProjectNames: [] }
-			const preflightResult = await runCanvasFileOperationPreflight({
-				repairOptions: currentItem.is_directory
-					? {
+			if (options.beforeRename && !(await options.beforeRename(currentItem, trimmedName)))
+				return
+			if (!isCurrent()) return
+			const canvasRisk =
+				options.fileScope !== "user" && currentItem.is_directory
+					? await detectCanvasProjectOperationRisk({
 							attachments: attachments || [],
 							items: [currentItem],
 							operation: "rename",
-							projectId: options.projectId,
-						}
-					: undefined,
+						})
+					: { shouldWarn: false, riskTypes: [], affectedProjectNames: [] }
+			const preflightResult = await runCanvasFileOperationPreflight({
+				repairOptions:
+					options.fileScope !== "user" && currentItem.is_directory
+						? {
+								attachments: attachments || [],
+								items: [currentItem],
+								operation: "rename",
+								projectId: options.projectId,
+							}
+						: undefined,
 				requiresConfirmation: canvasRisk.shouldWarn,
 				confirm: (repairPlan) => {
 					const impact = getCanvasProjectOperationImpact(canvasRisk)
@@ -401,6 +426,7 @@ export function useRename(options: UseRenameOptions = {}) {
 				handleRenameCancel()
 				return
 			}
+			if (!isCurrent()) return
 
 			// 添加到重命名中状态
 			setRenamingFileIds((prev) => new Set(prev).add(fileId))
@@ -410,10 +436,11 @@ export function useRename(options: UseRenameOptions = {}) {
 				file_id: fileId,
 				target_name: trimmedName,
 			})
+			if (!isCurrent()) return
 
 			await commitCanvasFileOperationRepair(preflightResult.repairPlan)
 
-			if (currentItem.is_directory) {
+			if (options.fileScope !== "user" && currentItem.is_directory) {
 				try {
 					const nameSyncResult = await syncCanvasProjectNameAfterFileOperation({
 						attachments: attachments || [],
@@ -465,6 +492,7 @@ export function useRename(options: UseRenameOptions = {}) {
 			setRenameValue("")
 			setRenameErrorMessage("")
 		} catch (error: any) {
+			if (!isCurrent()) return
 			console.error("重命名失败:", error)
 			setRenameErrorMessage(error?.message || t("topicFiles.contextMenu.renameFailed"))
 
@@ -473,13 +501,16 @@ export function useRename(options: UseRenameOptions = {}) {
 				onRenameError(error)
 			}
 		} finally {
-			renameConfirmingRef.current = false
-			// 移除重命名中状态
-			setRenamingFileIds((prev) => {
-				const newSet = new Set(prev)
-				if (renamingItemId) newSet.delete(renamingItemId)
-				return newSet
-			})
+			if (isCurrent()) {
+				renameConfirmingRef.current = false
+				setRenamePending(false)
+				// 移除重命名中状态
+				setRenamingFileIds((prev) => {
+					const newSet = new Set(prev)
+					if (renamingItemId) newSet.delete(renamingItemId)
+					return newSet
+				})
+			}
 		}
 	}
 
@@ -510,6 +541,7 @@ export function useRename(options: UseRenameOptions = {}) {
 	// 重置重命名状态
 	const resetRename = () => {
 		renameConfirmingRef.current = false
+		setRenamePending(false)
 		setRenamingItemId(null)
 		setRenameValue("")
 		setRenameErrorMessage("")
@@ -517,6 +549,7 @@ export function useRename(options: UseRenameOptions = {}) {
 	}
 
 	return {
+		renamePending,
 		// 状态
 		renamingItemId,
 		renameValue,

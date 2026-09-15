@@ -83,6 +83,13 @@ export class MentionPanelStore {
 		)
 	}
 
+	get filePresentationOptions() {
+		return {
+			context: this.projectFilesStore.filePresentationContext,
+			index: this.projectFilesStore.filePresentationIndex,
+		}
+	}
+
 	get currentSelectedProject() {
 		return this.projectFilesStore.currentSelectedProject
 	}

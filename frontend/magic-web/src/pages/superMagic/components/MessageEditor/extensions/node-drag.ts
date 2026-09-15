@@ -15,7 +15,9 @@ const POINTER_DRAG_THRESHOLD = 4
 
 export interface MagicNodeDragOptions {
 	/** The receiving editor owns reference validation; editor moves keep their original attrs. */
-	prepareCopiedMention?: (attrs: Record<string, unknown>) => TiptapMentionAttributes | null
+	prepareCopiedMention?: (
+		attrs: Record<string, unknown>,
+	) => TiptapMentionAttributes | null | Promise<TiptapMentionAttributes | null>
 }
 
 interface MagicNodeDragPayload {
@@ -427,7 +429,11 @@ function updateDropCursorAtPosition(dropCursor: HTMLElement, view: EditorView, p
 	dropCursor.hidden = false
 }
 
-function applyNodeDrop(target: MagicNodeDropTarget, payload: MagicNodeDragPayload) {
+function applyNodeDrop(
+	target: MagicNodeDropTarget,
+	payload: MagicNodeDragPayload,
+	preparedMention?: TiptapMentionAttributes,
+) {
 	const { view, position } = target
 	if (view.isDestroyed || !view.editable) return false
 	const nodeType = view.state.schema.nodes[payload.node.type]
@@ -442,19 +448,46 @@ function applyNodeDrop(target: MagicNodeDropTarget, payload: MagicNodeDragPayloa
 	const isSameEditor = resolvedSource?.view === view
 	const sourceNode = resolvedSource?.node
 	const sourcePosition = resolvedSource?.position
+	const prepareMention = editorDragOptions.get(view)?.prepareCopiedMention
+	if (
+		!preparedMention &&
+		payload.node.type === "mention" &&
+		!payload.sourceEditorId &&
+		prepareMention
+	) {
+		const result = (() => {
+			try {
+				return prepareMention(
+					resolveDroppedNodeAttrs(payload.node.type, payload.node.attrs, true),
+				)
+			} catch {
+				return null
+			}
+		})()
+		if (result instanceof Promise) {
+			const originalDoc = view.state.doc
+			void result
+				.then((attrs) => {
+					if (!attrs || view.isDestroyed || !originalDoc.eq(view.state.doc)) return
+					applyNodeDrop(target, payload, attrs)
+				})
+				.catch((error: unknown) => {
+					console.warn("File reference drop could not be resolved", error)
+				})
+			return true
+		}
+		if (!result) return false
+		preparedMention = result
+	}
 
 	const node = (() => {
 		try {
+			if (preparedMention) return nodeType.create(preparedMention)
 			const attrs = resolveDroppedNodeAttrs(
 				payload.node.type,
 				payload.node.attrs,
 				!payload.sourceEditorId,
 			)
-			const prepareMention = editorDragOptions.get(view)?.prepareCopiedMention
-			if (payload.node.type === "mention" && !payload.sourceEditorId && prepareMention) {
-				const preparedAttrs = prepareMention(attrs)
-				return preparedAttrs ? nodeType.create(preparedAttrs) : null
-			}
 			return nodeType.create(attrs)
 		} catch {
 			return null

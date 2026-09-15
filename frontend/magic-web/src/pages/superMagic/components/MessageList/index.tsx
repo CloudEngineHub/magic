@@ -354,8 +354,7 @@ const MessageList = observer(
 		const isLastMessageError = useMemo(() => {
 			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
 			const n = superMagicStore.getMessageNode(lastNode?.super_message_id) as
-				| { status?: TaskStatus }
-				| undefined
+				{ status?: TaskStatus } | undefined
 			return n?.status === TaskStatus.ERROR
 		}, [mainDisplayData])
 
@@ -597,12 +596,15 @@ const MessageList = observer(
 		const augmentedMessageListContext = useMemo(
 			() => ({
 				...parentCtx,
+				allowUserFileReferences: !isShare && parentCtx.allowUserFileReferences !== false,
 				allowExport: enableExport,
 				exportModeActive,
 				onExportRequest: enableExport ? exportEnterRequest : undefined,
 			}),
 			// eslint-disable-next-line react-hooks/exhaustive-deps
 			[
+				isShare,
+				parentCtx.allowUserFileReferences,
 				parentCtx.allowRevoke,
 				parentCtx.allowUserMessageCopy,
 				parentCtx.allowScheduleTaskCreate,

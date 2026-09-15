@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react"
 import {
 	MentionItemType,
 	type ProjectFileMentionData,
+	type UserFileMentionData,
 	type UploadFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin/types"
@@ -17,6 +18,10 @@ import { useSharedMediaResourceScope } from "@/pages/superMagic/services/sharedM
 import { SHARED_MEDIA_THUMBNAIL_IMAGE_PROCESS } from "@/pages/superMagic/services/sharedMediaImageProcess"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import useObjectUrl from "../AtItem/hooks/useObjectURL"
+import {
+	getFileReferenceIdentityKey,
+	resolveFileReference,
+} from "@/pages/superMagic/services/userFileReferenceResolver"
 
 export interface MentionMediaSource extends Omit<MediaPreviewSource, "mediaType"> {
 	mediaType: MediaPreviewType | null
@@ -30,6 +35,7 @@ interface UseMentionMediaSourceOptions {
 }
 
 function getMentionFileData(data: TiptapMentionAttributes) {
+	if (data.type === MentionItemType.USER_FILE) return data.data as UserFileMentionData
 	if (data.type === MentionItemType.PROJECT_FILE) {
 		return data.data as ProjectFileMentionData
 	}
@@ -58,9 +64,11 @@ export function useMentionMediaSource({
 	const mediaType: MediaPreviewType | null =
 		fileType === "image" || fileType === "video" || fileType === "audio" ? fileType : null
 	const isProjectFile = data.type === MentionItemType.PROJECT_FILE
+	const isUserFile = data.type === MentionItemType.USER_FILE
+	const isRemoteFile = isProjectFile || isUserFile
 	const isUploadFile = data.type === MentionItemType.UPLOAD_FILE
 	const projectData = isProjectFile ? (fileData as ProjectFileMentionData) : undefined
-	const projectFileId = projectData?.file_id || ""
+	const projectFileId = fileData?.file_id || ""
 	const projectIdentity = projectData?.source_file_id || projectFileId
 	const fileName = fileData?.file_name || ""
 	const projectFileVersion = projectData?.file_version
@@ -68,25 +76,30 @@ export function useMentionMediaSource({
 	const projectResourceVersion =
 		projectData?.resource_version ||
 		(projectData?.version != null ? String(projectData.version) : undefined)
-	const projectScope = useSharedMediaResourceScope()
+	const sharedScope = useSharedMediaResourceScope()
+	const userScope = getFileReferenceIdentityKey()
+	const projectScope = isUserFile ? userScope || "anonymous" : sharedScope
 	const projectRef = useMemo<MediaResourceRef | null>(() => {
-		if (!isProjectFile || !projectFileId || !mediaType) return null
+		if (!isRemoteFile || !projectFileId || !mediaType || (isUserFile && !userScope)) return null
 		return {
 			identity: projectIdentity,
-			provider: "project-file",
+			provider: isUserFile ? "user-file" : "project-file",
 			scope: projectScope,
 			projectId: projectData?.source_project_id || projectData?.project_id,
 			fileId: projectFileId,
 			fileVersion: projectFileVersion,
 			updatedAt: projectUpdatedAt,
 			resourceVersion: projectResourceVersion,
-			path: projectData?.file_path,
+			path: fileData?.file_path,
 			fileName,
 			mediaType,
 		}
 	}, [
 		fileName,
-		isProjectFile,
+		isRemoteFile,
+		isUserFile,
+		userScope,
+		fileData?.file_path,
 		mediaType,
 		projectData,
 		projectFileId,
@@ -99,6 +112,15 @@ export function useMentionMediaSource({
 
 	const projectResolver = useCallback<MediaResourceResolver>(async (ref, rendition, signal) => {
 		if (!ref.fileId || signal.aborted) return null
+		if (ref.provider === "user-file") {
+			const result = await resolveFileReference({ file_id: ref.fileId }, signal)
+			if (
+				result.status !== "resolved" ||
+				result.reference.space_type !== "user" ||
+				ref.scope !== getFileReferenceIdentityKey()
+			)
+				return { status: "forbidden" }
+		}
 		const isImage = ref.mediaType === "image"
 		const item = await resolveSharedMediaUrl({
 			fileId: ref.fileId,
@@ -106,7 +128,7 @@ export function useMentionMediaSource({
 			fileVersion: ref.fileVersion,
 			updatedAt: ref.updatedAt,
 			resourceVersion: ref.resourceVersion,
-			allowAttachmentListUrl: isImage,
+			allowAttachmentListUrl: isImage && ref.provider !== "user-file",
 			imageProcess: isImage ? SHARED_MEDIA_THUMBNAIL_IMAGE_PROCESS : undefined,
 		})
 		if (signal.aborted) return null
@@ -125,7 +147,7 @@ export function useMentionMediaSource({
 	}, [])
 
 	const projectResource = useMediaResourceSnapshot(projectRef, {
-		enabled: enabled && isProjectFile && Boolean(mediaType),
+		enabled: enabled && isRemoteFile && Boolean(mediaType),
 		loadThumbnail: mediaType === "image",
 		resolver: projectResolver,
 	})
@@ -133,8 +155,8 @@ export function useMentionMediaSource({
 	const objectUrl = useObjectUrl(enabled && isUploadFile && mediaType ? uploadFile || null : null)
 	const snapshot = projectResource.snapshot
 	const projectUrl = snapshot.previewUrl ?? snapshot.thumbnailUrl
-	const isProjectLoading = isProjectFile && snapshot.status === "loading"
-	const isProjectError = isProjectFile && isResourceError(snapshot.status)
+	const isProjectLoading = isRemoteFile && snapshot.status === "loading"
+	const isProjectError = isRemoteFile && isResourceError(snapshot.status)
 	const loadPreview = useCallback(() => {
 		if (!enabled || !projectRef) return Promise.resolve()
 		return mediaResourceRegistry.ensurePreview(projectRef, projectResolver)
@@ -151,17 +173,17 @@ export function useMentionMediaSource({
 						? objectUrl
 						: (snapshot.audioUrl ?? snapshot.previewUrl)
 					: null,
-			isLoading: isProjectFile ? isProjectLoading : false,
-			hasError: isProjectFile
+			isLoading: isRemoteFile ? isProjectLoading : false,
+			hasError: isRemoteFile
 				? isProjectError
 				: Boolean(isUploadFile && mediaType && !objectUrl && uploadFile),
-			loadPreview: isProjectFile ? loadPreview : undefined,
+			loadPreview: isRemoteFile ? loadPreview : undefined,
 			previewSize: snapshot.previewSize,
 			posterUrl: snapshot.posterUrl,
 		}),
 		[
 			isProjectError,
-			isProjectFile,
+			isRemoteFile,
 			isProjectLoading,
 			isUploadFile,
 			loadPreview,

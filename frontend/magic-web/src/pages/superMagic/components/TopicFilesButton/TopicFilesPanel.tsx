@@ -1,6 +1,8 @@
+import type { FileHelpContext } from "./utils/magic-system-folder"
 import {
 	memo,
 	useState,
+	useMemo,
 	useRef,
 	useEffect,
 	forwardRef,
@@ -49,12 +51,20 @@ import { getMobileAttachmentKey } from "./utils/get-mobile-attachment-key"
 import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
+import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
 
 interface TopicFilesPanelProps {
+	/** 所属定义工作区；用户挂载文件仍以自己的空间身份为准。 */
+	fileHelpContext?: FileHelpContext
+	loading?: boolean
 	className?: string
+	fitContent?: boolean
+	scrollElementRef?: React.RefObject<HTMLElement>
 	title?: string
 	/** 是否显示文件树内部标题。 */
 	showTitle?: boolean
+	/** 多板块视图保留独立标题，搜索／选择只替换下方工具区。 */
+	headerLayout?: "inline" | "adaptive"
 	attachments?: AttachmentItem[]
 	setUserSelectDetail?: (detail: any) => void
 	onFileClick?: (fileItem: any) => void
@@ -91,6 +101,9 @@ interface TopicFilesPanelProps {
 	onSaveSlidesTemplate?: (item: AttachmentItem) => void
 	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
 	headerTrailingAction?: ReactNode
+	onOpenFileManager?: () => void
+	section?: SidebarSectionOptions
+	contentBefore?: ReactNode
 	/** 文件树所属空间及其能力配置。 */
 	spaceConfig?: TopicFilesSpaceConfig
 	/** 判断节点是否允许参与移动和多选等变更操作。 */
@@ -121,6 +134,9 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 	function TopicFilesPanel(
 		{
 			className,
+			loading = false,
+			fitContent = false,
+			scrollElementRef,
 			title,
 			showTitle = true,
 			attachments = [],
@@ -146,11 +162,16 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			allowDownload,
 			allowCopyTo = false,
 			resolveTopicFileRowDecoration,
+			fileHelpContext,
 			mobileViewVariant = "default",
 			refreshAttachments,
 			onSaveSlidesTemplate,
 			onConvertToSlidesTemplate,
 			headerTrailingAction,
+			onOpenFileManager,
+			section,
+			headerLayout = "inline",
+			contentBefore,
 			spaceConfig,
 			isItemSelectable,
 			operationRoot,
@@ -160,6 +181,19 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		const { t } = useTranslation("super")
 		const resolvedTitle = title || t("topicFiles.title")
 		const isMobile = useIsMobile()
+		const helpProjectId = String(selectedProject?.id || projectId || "")
+		const helpOwner = fileHelpContext?.kind ?? (helpProjectId ? "project" : "unknown")
+		const helpOwnerId =
+			fileHelpContext && "projectId" in fileHelpContext
+				? fileHelpContext.projectId
+				: helpProjectId
+		const resolvedFileHelpContext = useMemo<FileHelpContext>(
+			() =>
+				helpOwner === "user" || helpOwner === "unknown"
+					? { kind: helpOwner }
+					: { kind: helpOwner, projectId: helpOwnerId },
+			[helpOwner, helpOwnerId],
+		)
 		const capabilities = resolveTopicFilesCapabilities(spaceConfig?.capabilities)
 		const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 		const { isShareRoute } = useShareRoute()
@@ -487,6 +521,10 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 
 		const handleUploadFile = () => {
 			if (!allowEdit) return
+			if (spaceConfig?.operations) {
+				coreRef.current?.handleUploadFile()
+				return
+			}
 			handleCustomUploadFile()
 		}
 
@@ -503,6 +541,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 					.then(() => {
 						magicToast.success(t("common.refreshSuccess"))
 					})
+					.catch(() => magicToast.error(t("common.refreshFailed")))
 					.finally(() => {
 						setRefreshLoading(false)
 					})
@@ -528,12 +567,14 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		const handleCancelSelect = () => {
 			setIsSelectMode(false)
 			// 清空选择
-			pubsub.publish(PubSubEvents.Deselect_All_Files)
+			if (spaceConfig?.directorySource) coreRef.current?.deselectAll()
+			else pubsub.publish(PubSubEvents.Deselect_All_Files)
 		}
 
 		// 处理全选
 		const handleSelectAll = () => {
-			pubsub.publish(PubSubEvents.Select_All_Files)
+			if (spaceConfig?.directorySource) coreRef.current?.selectAll()
+			else pubsub.publish(PubSubEvents.Select_All_Files)
 		}
 
 		// 处理取消全选
@@ -542,6 +583,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		}
 
 		useEffect(() => {
+			if (spaceConfig?.directorySource) return
 			const handleUpdateAttachmentsLoading = (loading: boolean) => {
 				setRefreshLoading(loading)
 			}
@@ -585,19 +627,147 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			},
 		}))
 
+		const adaptiveHeader = headerLayout === "adaptive"
+		// 搜索和选择状态保持独立标题。
+		// 用户空间将身份标题放在独立一行；这里只复用原工具按钮，不复制操作逻辑。
+		const stackedHeader = adaptiveHeader && (isSearchMode || isSelectMode)
+		const modeSection = stackedHeader ? undefined : section
+		const header = isSearchMode ? (
+			<SearchModeHeader
+				placeholder={spaceConfig?.directorySource ? t("userSpace.searchLoaded") : undefined}
+				key="search-header"
+				searchValue={rawSearchValue}
+				onSearchChange={handleSearchChange}
+				onSearchCommit={handleSearchCommit}
+				onClose={handleCloseSearch}
+				headerTrailingAction={headerTrailingAction}
+				onOpenFileManager={onOpenFileManager}
+				section={modeSection}
+				className={cn("duration-200 animate-in fade-in", !showTitle && "[&>p]:hidden")}
+			/>
+		) : isSelectMode ? (
+			<SelectModeHeader
+				key="select-header"
+				selectedCount={selectedCount}
+				totalCount={totalCount}
+				onSelectAll={handleSelectAll}
+				onDeselectAll={handleDeselectAll}
+				onCancel={handleCancelSelect}
+				headerTrailingAction={headerTrailingAction}
+				onOpenFileManager={onOpenFileManager}
+				section={modeSection}
+				className="duration-200 animate-in fade-in"
+			/>
+		) : (
+			<NormalModeHeader
+				adaptive={adaptiveHeader}
+				expandAllLabel={
+					spaceConfig?.directorySource ? t("userSpace.expandLoaded") : undefined
+				}
+				key="normal-header"
+				title={resolvedTitle}
+				isShareRoute={isShareRoute}
+				refreshLoading={loading || refreshLoading}
+				allowEdit={allowEdit}
+				showMobileActions={showMobileActions}
+				onRefresh={handleRefreshList}
+				onSearch={handleSearch}
+				onAddFile={handleAddFile}
+				onAddDesign={capabilities.projectContentCreation ? handleAddDesign : undefined}
+				onAddSelfMedia={
+					capabilities.projectContentCreation ? handleAddSelfMedia : undefined
+				}
+				onAddAICard={capabilities.projectContentCreation ? handleAddAICard : undefined}
+				onAddFolder={handleAddFolder}
+				allFoldersExpanded={expansionState.allFoldersExpanded}
+				onToggleAllFolders={
+					expansionState.hasExpandableFolders ? handleToggleAllFolders : undefined
+				}
+				onUploadFile={capabilities.upload ? handleUploadFile : undefined}
+				onUploadFolder={
+					capabilities.upload && !spaceConfig?.directorySource
+						? handleUploadFolder
+						: undefined
+				}
+				onImportFromOtherProject={
+					capabilities.importFromOtherProject ? handleImportFromOtherProject : undefined
+				}
+				onEnterSelectMode={capabilities.multiSelect ? handleEnterSelectMode : undefined}
+				headerTrailingAction={headerTrailingAction}
+				onOpenFileManager={onOpenFileManager}
+				section={modeSection}
+				className="duration-200 animate-in fade-in"
+			/>
+		)
+		const content = (
+			<TopicFilesCore
+				ref={coreRef}
+				attachments={attachments}
+				setUserSelectDetail={setUserSelectDetail}
+				onFileClick={onFileClick}
+				projectId={projectId}
+				shareCode={shareCode}
+				sharePassword={sharePassword}
+				onCrossProjectOperationSuccess={onCrossProjectOperationSuccess}
+				fileFilters={fileFilters}
+				handleDownloadAll={handleDownloadAll}
+				allLoading={allLoading}
+				activeFileId={activeFileId}
+				selectedTopic={selectedTopic}
+				isSelectMode={isSelectMode}
+				onExpansionStateChange={isSearchMode ? undefined : handleExpansionStateChange}
+				onSelectionChange={(selectedCount, totalCount) => {
+					setSelectedCount(selectedCount)
+					setTotalCount(totalCount)
+				}}
+				allowEdit={allowEdit}
+				onUpdateAttachments={spaceConfig?.scope ? handleCoreAttachmentsUpdate : undefined}
+				onAttachmentsChange={onAttachmentsChange}
+				onSelectModeChange={setIsSelectMode}
+				selectedProject={selectedProject}
+				handleReplaceFile={handleReplaceFile}
+				duplicateFileHandler={sharedDuplicateHandler}
+				selectedWorkspace={selectedWorkspace}
+				projects={projects}
+				workspaces={workspaces}
+				isInProject={isInProject}
+				externalSearchValue={isSearchMode ? debouncedSearchValue : ""}
+				filterMenuItems={filterMenuItems}
+				filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
+				allowDownload={allowDownload}
+				allowCopyTo={allowCopyTo}
+				allowReadonlySelection={isShareRoute}
+				resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
+				fileHelpContext={resolvedFileHelpContext}
+				refreshLoading={loading || refreshLoading}
+				onSaveSlidesTemplate={onSaveSlidesTemplate}
+				onConvertToSlidesTemplate={onConvertToSlidesTemplate}
+				spaceConfig={spaceConfig}
+				isItemSelectable={isItemSelectable}
+				operationRoot={operationRoot}
+				fitContent={fitContent}
+				scrollElementRef={scrollElementRef}
+			/>
+		)
+
 		return (
 			<>
 				<div
-					className={cn("flex h-full flex-col gap-0.5", className)}
+					className={cn(
+						"flex flex-col gap-0.5",
+						fitContent ? "min-h-0 shrink-0" : "h-full",
+						className,
+					)}
 					data-testid="topic-files-panel"
 				>
 					{shouldUseProjectDetailMobileView ? (
 						<MobileProjectDetailFilesView
+							fileHelpContext={resolvedFileHelpContext}
 							attachments={attachments}
 							activeFileId={activeFileId}
 							allowEdit={allowEdit}
 							mobileViewVariant={mobileViewVariant}
-							refreshLoading={refreshLoading}
+							refreshLoading={loading || refreshLoading}
 							onRefresh={handleRefreshList}
 							selectionResetKey={projectDetailFilesController.selectionResetKey}
 							setUserSelectDetail={setUserSelectDetail}
@@ -640,136 +810,30 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 						/>
 					) : (
 						<>
-							{/* Header Section */}
-							{isSearchMode ? (
-								<SearchModeHeader
-									key="search-header"
-									searchValue={rawSearchValue}
-									onSearchChange={handleSearchChange}
-									onSearchCommit={handleSearchCommit}
-									onClose={handleCloseSearch}
-									headerTrailingAction={headerTrailingAction}
-									className={cn(
-										"duration-200 animate-in fade-in",
-										!showTitle && "[&>p]:hidden",
-									)}
-								/>
-							) : isSelectMode ? (
-								<SelectModeHeader
-									key="select-header"
-									selectedCount={selectedCount}
-									totalCount={totalCount}
-									onSelectAll={handleSelectAll}
-									onDeselectAll={handleDeselectAll}
-									onCancel={handleCancelSelect}
-									headerTrailingAction={headerTrailingAction}
-									className="duration-200 animate-in fade-in"
-								/>
+							{section ? (
+								<SidebarExpandableItem
+									label={resolvedTitle}
+									{...section}
+									testId="memory-files-section"
+									header={stackedHeader ? undefined : header}
+								>
+									{(!adaptiveHeader || stackedHeader) && section.description}
+									{stackedHeader && header}
+									{contentBefore}
+									{content}
+								</SidebarExpandableItem>
 							) : (
-								<NormalModeHeader
-									key="normal-header"
-									title={resolvedTitle}
-									isShareRoute={isShareRoute}
-									refreshLoading={refreshLoading}
-									allowEdit={allowEdit}
-									showMobileActions={showMobileActions}
-									onRefresh={handleRefreshList}
-									onSearch={handleSearch}
-									onAddFile={handleAddFile}
-									onAddDesign={
-										capabilities.projectContentCreation
-											? handleAddDesign
-											: undefined
-									}
-									onAddSelfMedia={
-										capabilities.projectContentCreation
-											? handleAddSelfMedia
-											: undefined
-									}
-									onAddAICard={
-										capabilities.projectContentCreation
-											? handleAddAICard
-											: undefined
-									}
-									onAddFolder={handleAddFolder}
-									allFoldersExpanded={expansionState.allFoldersExpanded}
-									onToggleAllFolders={
-										expansionState.hasExpandableFolders
-											? handleToggleAllFolders
-											: undefined
-									}
-									onUploadFile={
-										capabilities.upload ? handleUploadFile : undefined
-									}
-									onUploadFolder={
-										capabilities.upload ? handleUploadFolder : undefined
-									}
-									onImportFromOtherProject={
-										capabilities.importFromOtherProject
-											? handleImportFromOtherProject
-											: undefined
-									}
-									onEnterSelectMode={
-										capabilities.multiSelect ? handleEnterSelectMode : undefined
-									}
-									headerTrailingAction={headerTrailingAction}
-									className="duration-200 animate-in fade-in"
-								/>
+								<>
+									{stackedHeader && (
+										<h3 className="shrink-0 break-words px-3 py-2 text-[13px] font-medium leading-5 [overflow-wrap:anywhere]">
+											{resolvedTitle}
+										</h3>
+									)}
+									{header}
+									{contentBefore}
+									{content}
+								</>
 							)}
-
-							{/* Content Section */}
-							{/* Use TopicFilesCore for content and batch download functionality */}
-							<TopicFilesCore
-								ref={coreRef}
-								attachments={attachments}
-								setUserSelectDetail={setUserSelectDetail}
-								onFileClick={onFileClick}
-								projectId={projectId}
-								shareCode={shareCode}
-								sharePassword={sharePassword}
-								onCrossProjectOperationSuccess={onCrossProjectOperationSuccess}
-								fileFilters={fileFilters}
-								handleDownloadAll={handleDownloadAll}
-								allLoading={allLoading}
-								activeFileId={activeFileId}
-								selectedTopic={selectedTopic}
-								isSelectMode={isSelectMode}
-								onExpansionStateChange={
-									isSearchMode ? undefined : handleExpansionStateChange
-								}
-								onSelectionChange={(selectedCount, totalCount) => {
-									setSelectedCount(selectedCount)
-									setTotalCount(totalCount)
-								}}
-								allowEdit={allowEdit}
-								onUpdateAttachments={
-									spaceConfig?.scope ? handleCoreAttachmentsUpdate : undefined
-								}
-								onAttachmentsChange={onAttachmentsChange}
-								onSelectModeChange={setIsSelectMode}
-								selectedProject={selectedProject}
-								handleReplaceFile={handleReplaceFile}
-								duplicateFileHandler={sharedDuplicateHandler}
-								selectedWorkspace={selectedWorkspace}
-								projects={projects}
-								workspaces={workspaces}
-								isInProject={isInProject}
-								externalSearchValue={isSearchMode ? debouncedSearchValue : ""}
-								filterMenuItems={filterMenuItems}
-								filterBatchDownloadLayerMenuItems={
-									filterBatchDownloadLayerMenuItems
-								}
-								allowDownload={allowDownload}
-								allowCopyTo={allowCopyTo}
-								allowReadonlySelection={isShareRoute}
-								resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
-								refreshLoading={refreshLoading}
-								onSaveSlidesTemplate={onSaveSlidesTemplate}
-								onConvertToSlidesTemplate={onConvertToSlidesTemplate}
-								spaceConfig={spaceConfig}
-								isItemSelectable={isItemSelectable}
-								operationRoot={operationRoot}
-							/>
 						</>
 					)}
 				</div>

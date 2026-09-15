@@ -1,3 +1,8 @@
+import { useRef } from "react"
+import { useFileTagVisibility } from "../hooks/useFileTagVisibility"
+import { getFilePresentationIndex } from "../utils/file-presentation"
+import type { FileHelpContext } from "../utils/magic-system-folder"
+import { ProjectFileTag } from "./TopicFileTag"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import MagicPullToRefresh from "@/components/base-mobile/MagicPullToRefresh"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
@@ -46,6 +51,7 @@ import {
 } from "./ProjectFileImagePreviewProvider"
 
 interface MobileProjectDetailFilesViewProps {
+	fileHelpContext?: FileHelpContext
 	attachments: AttachmentItem[]
 	activeFileId?: string | null
 	allowEdit?: boolean
@@ -221,6 +227,7 @@ function renderAttachmentIconCell(icon: ReactNode) {
  * 新移动端文件区：只负责目录浏览、搜索与轻量添加入口，业务写操作通过父层回调下沉。
  */
 function MobileProjectDetailFilesView({
+	fileHelpContext,
 	attachments,
 	activeFileId,
 	allowEdit = true,
@@ -246,6 +253,7 @@ function MobileProjectDetailFilesView({
 	onBatchDelete,
 }: MobileProjectDetailFilesViewProps) {
 	const { t } = useTranslation("super")
+	const skillFiles = useMemo(() => getFilePresentationIndex(attachments).skills, [attachments])
 	const isChatSheetVariant = mobileViewVariant === "chat-sheet"
 	const [pathStackKeys, setPathStackKeys] = useState<string[]>([])
 	const [searchValue, setSearchValue] = useState("")
@@ -690,6 +698,9 @@ function MobileProjectDetailFilesView({
 		)
 	}
 
+	const labelsRef = useRef<HTMLDivElement>(null)
+	useFileTagVisibility(labelsRef)
+
 	const renderFolderRow = (item: AttachmentItem) => {
 		const key = getAttachmentKey(item)
 
@@ -710,18 +721,23 @@ function MobileProjectDetailFilesView({
 						"flex select-none items-center gap-3 px-[14px] py-2.5",
 						isChatSheetVariant ? "min-h-[56px]" : "min-h-[56px]",
 					)}
+					data-file-label-row
 					data-testid="mobile-folder-content"
 				>
 					<button
 						type="button"
 						className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-70"
 						onClick={() => handleFolderRowClick(item)}
+						data-file-name-container
 						data-testid="mobile-folder-button"
 					>
 						{renderAttachmentIconCell(
 							<MobileAttachmentRowIcon
 								item={item}
 								attachments={attachments}
+								skillKind={skillFiles.kinds.get(key)}
+								filePath={skillFiles.paths.get(key)}
+								fileHelpContext={fileHelpContext}
 								size={MOBILE_ATTACHMENT_ROW_ICON_SIZE}
 							/>,
 						)}
@@ -731,6 +747,7 @@ function MobileProjectDetailFilesView({
 									"truncate leading-6 text-foreground",
 									"text-base font-medium",
 								)}
+								data-file-name
 								data-testid="mobile-folder-name"
 							>
 								{getAttachmentDisplayName(item)}
@@ -743,6 +760,15 @@ function MobileProjectDetailFilesView({
 							</p>
 						</div>
 					</button>
+					{/* 用途按钮与打开、选择按钮并列，避免触屏查看说明时触发文件操作。 */}
+					<div data-file-tag className="shrink-0 empty:hidden">
+						<ProjectFileTag
+							item={item}
+							skillKind={skillFiles.kinds.get(key)}
+							path={skillFiles.paths.get(key)}
+							context={fileHelpContext}
+						/>
+					</div>
 					{renderSelectionButton(item)}
 				</div>
 			</div>
@@ -771,18 +797,23 @@ function MobileProjectDetailFilesView({
 						"flex select-none items-center gap-3 px-[14px] py-2.5",
 						isChatSheetVariant ? "min-h-[56px]" : "min-h-[56px]",
 					)}
+					data-file-label-row
 					data-testid="mobile-file-content"
 				>
 					<button
 						type="button"
 						className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-70"
 						onClick={() => onFileOpen?.(item)}
+						data-file-name-container
 						data-testid="mobile-file-button"
 					>
 						{renderAttachmentIconCell(
 							<MobileAttachmentRowIcon
 								item={item}
 								attachments={attachments}
+								skillKind={skillFiles.kinds.get(key)}
+								filePath={skillFiles.paths.get(key)}
+								fileHelpContext={fileHelpContext}
 								size={MOBILE_ATTACHMENT_ROW_ICON_SIZE}
 							/>,
 						)}
@@ -792,6 +823,7 @@ function MobileProjectDetailFilesView({
 									"truncate leading-6 text-foreground",
 									isChatSheetVariant ? "text-base font-medium" : "text-base",
 								)}
+								data-file-name
 								data-testid="mobile-file-name"
 							>
 								{getAttachmentDisplayName(item)}
@@ -804,6 +836,15 @@ function MobileProjectDetailFilesView({
 							</p>
 						</div>
 					</button>
+					{/* 用途按钮与打开、选择按钮并列，避免触屏查看说明时触发文件操作。 */}
+					<div data-file-tag className="shrink-0 empty:hidden">
+						<ProjectFileTag
+							item={item}
+							skillKind={skillFiles.kinds.get(key)}
+							path={skillFiles.paths.get(key)}
+							context={fileHelpContext}
+						/>
+					</div>
 					{renderSelectionButton(item)}
 				</div>
 			</div>
@@ -847,6 +888,7 @@ function MobileProjectDetailFilesView({
 	return (
 		<ProjectFileImagePreviewProvider manager={imagePreviewManager}>
 			<div
+				ref={labelsRef}
 				className={cn("relative flex h-full min-h-0 flex-col")}
 				data-testid="project-detail-mobile-files-view"
 			>

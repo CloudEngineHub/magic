@@ -1,3 +1,4 @@
+import { useOptionalMessageEditorStore } from "../../../stores"
 import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
 import { observer } from "mobx-react-lite"
 import { useCallback, type MouseEvent } from "react"
@@ -8,6 +9,7 @@ import {
 	type MentionNodeViewRendererProps,
 } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { DirectoryMentionData } from "@/components/business/MentionPanel/types"
+import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/utils/cn"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
@@ -25,6 +27,7 @@ function FolderMentionNodeView({
 }: FolderMentionNodeViewProps) {
 	const isMobile = useIsMobile()
 	const { t } = useTranslation("super")
+	const fileStore = useOptionalMessageEditorStore()?.fileUploadStore.getProjectFilesStore()
 	const workspaceFilesList = getWorkspaceFilesList?.() ?? []
 	const data = attrs.data as DirectoryMentionData
 	const displayName = getMentionDisplayName(attrs)
@@ -68,12 +71,24 @@ function FolderMentionNodeView({
 			>
 				<span className="relative z-10 flex shrink-0 items-center">
 					<ProjectDirectoryMentionIcon
+						context={
+							attrs.type === MentionItemType.USER_DIRECTORY
+								? { kind: "user" }
+								: fileStore?.filePresentationContext
+						}
 						data={data}
 						workspaceFilesList={workspaceFilesList}
 						size={16}
 					/>
 				</span>
-				<span className="relative z-10 min-w-0 truncate" title={displayName}>
+				<span
+					className="relative z-10 min-w-0 truncate"
+					title={
+						attrs.type === MentionItemType.USER_DIRECTORY
+							? data.directory_path
+							: displayName
+					}
+				>
 					{displayName}
 				</span>
 				{isMobile && (

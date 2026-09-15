@@ -12,7 +12,7 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.syntax_checker import SyntaxChecker
-from app.core.entity.message.server_message import FileContent, ToolDetail
+from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
@@ -126,6 +126,7 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
             return ToolResult(
                 content=output,
                 extra_info={
+                    "file_path": str(file_path),
                     "file_existed": file_exists,
                     "auto_repaired_json": auto_repaired_json,
                     "original_syntax_errors": original_syntax_errors,
@@ -213,7 +214,8 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
 
         return ToolDetail(
             type=display_type,
-            data=FileContent(
+            data=await self._build_file_content(
+                file_path=(result.extra_info or {}).get("file_path", ""),
                 file_name=file_name,
                 content=content
             )

@@ -170,6 +170,44 @@ class ProjectAppService extends AbstractAppService
     }
 
     /**
+     * 按组织准备身份与部门范围，再一次查询所有可读项目名称；不逐项目请求详情或鉴权。
+     * 跨组织身份沿用项目 accessibility 的 Magic ID 映射，名称不扩大原项目访问范围。
+     *
+     * @param list<string> $projectIds
+     * @return array<string, string>
+     */
+    public function getAccessibleProjectNamesBatch(RequestContext $requestContext, array $projectIds): array
+    {
+        if ($projectIds === []) {
+            return [];
+        }
+
+        $authorization = $requestContext->getUserAuthorization();
+        $scopes = [];
+        foreach ($this->projectDomainService->getOrganizationCodesByProjectIds($projectIds) as $organizationCode) {
+            if ($organizationCode === $authorization->getOrganizationCode()) {
+                $userId = $authorization->getId();
+            } else {
+                $user = $this->magicUserDomainService->getUserByMagicIdInOrganization(trim($authorization->getMagicId()), $organizationCode);
+                if ($user === null) {
+                    continue;
+                }
+                $userId = $user->getUserId();
+            }
+            $collaborationAllowed = $this->packageFilterService->isPaidSubscription($organizationCode);
+            $scopes[$organizationCode] = [
+                'user_id' => $userId,
+                'department_ids' => $collaborationAllowed
+                    ? $this->magicDepartmentUserDomainService->getDepartmentIdsByUserId(DataIsolation::create($organizationCode, $userId), $userId, true)
+                    : [],
+                'collaboration_allowed' => $collaborationAllowed,
+            ];
+        }
+
+        return $this->projectDomainService->getAccessibleProjectNamesBatch($projectIds, $scopes);
+    }
+
+    /**
      * 创建或复用项目（带预启动复用逻辑）.
      * 检查是否存在预启动的隐藏项目，如果存在则复用，否则创建新项目.
      */

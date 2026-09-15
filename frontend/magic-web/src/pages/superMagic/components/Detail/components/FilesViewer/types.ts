@@ -1,3 +1,4 @@
+import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import type { ReactNode, CSSProperties } from "react"
 import type { MagicWidget } from "@magic-web/widget-sdk"
 import type {
@@ -8,6 +9,7 @@ import type {
 } from "@/pages/superMagic/pages/Workspace/types"
 import { AttachmentSource } from "../../../TopicFilesButton/hooks/types"
 import type { FileScope } from "@/apis/modules/fileScope"
+import type { FileReference, FileReferenceResult } from "@/apis/modules/superMagic"
 import type { HtmlNavigationRequest } from "../../contents/HTML/utils/html-navigation"
 
 // Base interfaces
@@ -49,11 +51,29 @@ export interface WebsitePreset {
 	iconSrc?: string
 }
 
-export type FileViewerTabType = "file" | "website" | "knowledge_base" | "playback"
+export type UserSpaceView = "files" | "memory"
+export type FileManagerContext =
+	| {
+			spaceType: "user"
+			view: UserSpaceView
+			directoryId?: string
+			projectId?: string
+			projectName?: string
+			topicId?: string
+	  }
+	| { spaceType: "project"; projectId: string; directoryId?: string }
+
+export interface FileManagerOpenRequest {
+	file_manager: FileManagerContext
+}
+export type FileViewerTabType = "file" | "website" | "knowledge_base" | "playback" | "file_manager"
 export type ActiveDetailTabType = FileViewerTabType | null
 
 // File item interface
 export interface FileItem {
+	/** 文件引用身份独立于 previewPolicy.fileScope 的编辑策略。 */
+	file_reference?: FileReference
+	space_type?: FileReference["space_type"]
 	file_id: string
 	file_name: string
 	file_key?: string
@@ -86,6 +106,9 @@ export interface FileItem {
 
 // Tab item interface
 export interface TabItem {
+	userIdentityKey?: string | null
+	fileManager?: FileManagerContext
+	returnTabId?: string
 	id: string
 	type?: FileViewerTabType
 	name?: string // 组件中使用，但未在接口中定义，先补充，待确认是否删除
@@ -138,6 +161,7 @@ export interface PlaybackTabItem extends TabItem {
 
 // FilesViewer component props
 export interface FilesViewerProps extends BaseComponentProps {
+	fileHelpContext?: FileHelpContext
 	attachments?: FileItem[]
 	attachmentList?: FileItem[]
 	setUserSelectDetail?: (detail: any) => void
@@ -293,6 +317,8 @@ export enum TabActionType {
 	SYNC_TABS_DATA = "SYNC_TABS_DATA",
 	REORDER_TABS = "REORDER_TABS",
 	DEACTIVATE_ALL = "DEACTIVATE_ALL",
+	SYNC_USER_FILE_REFERENCES = "SYNC_USER_FILE_REFERENCES",
+	RESTORE_USER_FILE_TABS = "RESTORE_USER_FILE_TABS",
 }
 
 // Tab reducer action interface
@@ -300,6 +326,10 @@ export interface TabAction {
 	type: TabActionType
 	payload?: {
 		tab?: TabItem
+		userFileResults?: Record<string, FileReferenceResult>
+		userIdentityKey?: string
+		userTabPositions?: Record<string, number>
+		restoredActiveTabId?: string
 		tabId?: string
 		tabs?: TabItem[]
 		allFiles?: FileItem[]

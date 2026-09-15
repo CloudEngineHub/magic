@@ -72,6 +72,8 @@ interface MentionNodeChipProps {
 function isStaticResourceMention(type: TiptapMentionAttributes["type"]) {
 	return (
 		type === MentionItemType.PROJECT_FILE ||
+		type === MentionItemType.USER_FILE ||
+		type === MentionItemType.USER_DIRECTORY ||
 		type === MentionItemType.UPLOAD_FILE ||
 		type === MentionItemType.MEMORY_FILE ||
 		type === MentionItemType.FOLDER ||
@@ -107,12 +109,17 @@ function getMentionNodeDisplayName(attrs?: TiptapMentionAttributes, language?: L
 }
 
 const MentionNodeIcon = memo(({ type, icon }: MentionNodeIconProps) => {
-	if (type === MentionItemType.FOLDER || type === MentionItemType.MEMORY_DIRECTORY) {
+	if (
+		type === MentionItemType.FOLDER ||
+		type === MentionItemType.MEMORY_DIRECTORY ||
+		type === MentionItemType.USER_DIRECTORY
+	) {
 		return <TSIcon type="ts-folder" size="16" />
 	}
 
 	if (
 		type === MentionItemType.PROJECT_FILE ||
+		type === MentionItemType.USER_FILE ||
 		type === MentionItemType.UPLOAD_FILE ||
 		type === MentionItemType.MEMORY_FILE
 	)

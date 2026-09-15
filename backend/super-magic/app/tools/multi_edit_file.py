@@ -16,7 +16,7 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from agentlang.logger import get_logger
 from agentlang.utils.syntax_checker import SyntaxChecker
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import DisplayType, ToolDetail
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
@@ -528,7 +528,8 @@ Never include the line number + tab in any old_string or new_string.
 
         return ToolDetail(
             type=DisplayType.MD,  # Use Markdown display type
-            data=FileContent(
+            data=await self._build_file_content(
+                file_path=file_path,
                 file_name=f"{file_name}.diff",
                 content=markdown_content
             )

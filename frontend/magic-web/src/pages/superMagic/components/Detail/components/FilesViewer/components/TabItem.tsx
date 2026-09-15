@@ -1,3 +1,11 @@
+import { ProjectFileTag } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileTag"
+import {
+	resolveFilePresentation,
+	getFilePresentationIndex,
+} from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
+import { getFileDisplayPath } from "@/pages/superMagic/utils/markdownFileReference"
 import { memo, useMemo } from "react"
 import { Tooltip } from "antd"
 import { IconX, IconLock } from "@tabler/icons-react"
@@ -16,6 +24,7 @@ import {
 } from "../../../../MessageEditor/utils/drag"
 
 interface TabItemProps {
+	context?: FileHelpContext
 	tab: TabItemType
 	index: number
 	allTabs: TabItemType[]
@@ -38,7 +47,7 @@ interface TabItemProps {
 // 获取文件路径用作tooltip的工具函数
 const getFileTooltip = (tab: TabItemType, unknownFileText: string) => {
 	const fileData = tab?.fileData || {}
-	const filePath = fileData.relative_file_path || ""
+	const filePath = getFileDisplayPath(fileData)
 
 	const name =
 		fileData.display_filename ||
@@ -51,7 +60,9 @@ const getFileTooltip = (tab: TabItemType, unknownFileText: string) => {
 	if (filePath) {
 		const parts = filePath.split("/")
 		parts.pop()
-		return parts.join("/")
+		const parent = parts.join("/")
+		const isUser = (fileData.file_reference?.space_type ?? fileData.space_type) === "user"
+		return isUser && parent === "~" ? "~/" : parent || name
 	}
 
 	return name
@@ -73,6 +84,7 @@ const TabItem = memo<TabItemProps>(
 		isPlayback,
 		contextMenuState,
 		attachments,
+		context,
 		onSwitchToTab,
 		onCloseTab,
 		onDragStart,
@@ -113,7 +125,10 @@ const TabItem = memo<TabItemProps>(
 			if (allTabs.length <= 1) return ""
 
 			// 动态计算相对路径
-			const currentFilePath = tab.fileData.relative_file_path || tab.filePath
+			const currentFilePath = getFileDisplayPath({
+				...tab.fileData,
+				relative_file_path: tab.fileData.relative_file_path ?? tab.filePath,
+			})
 			if (!currentFilePath) return ""
 
 			// 获取当前标签页显示的文件名
@@ -123,7 +138,10 @@ const TabItem = memo<TabItemProps>(
 			// 找到所有同名文件的路径（基于显示名称，而不是路径中的文件名）
 			const duplicatePaths = allTabs
 				.filter((t) => {
-					const otherFilePath = t.fileData.relative_file_path || t.filePath
+					const otherFilePath = getFileDisplayPath({
+						...t.fileData,
+						relative_file_path: t.fileData.relative_file_path ?? t.filePath,
+					})
 					if (!otherFilePath || otherFilePath === currentFilePath) return false
 					const otherDisplayName = getDisplayFileName(t)
 					return otherDisplayName === currentDisplayName
@@ -135,10 +153,14 @@ const TabItem = memo<TabItemProps>(
 			if (duplicatePaths.length === 0) return ""
 
 			// 计算相对路径
-			return calculateCalvedRelativePath(currentFilePath, duplicatePaths)
+			return calculateCalvedRelativePath(
+				currentFilePath,
+				duplicatePaths,
+				tab.fileData.file_reference?.space_type ?? tab.fileData.space_type,
+			)
 		}, [
 			allTabs.length,
-			tab.fileData.relative_file_path,
+			tab.fileData,
 			tab.filePath,
 			// 为了检测重名变化，我们需要依赖所有tab的显示名称和文件路径
 			allTabs
@@ -161,7 +183,7 @@ const TabItem = memo<TabItemProps>(
 		const handleDragStart = (e: React.DragEvent) => {
 			if (!isPlayback && onDragStart) {
 				onDragStart(e, tab)
-				handleTabDragStartMessageEditor(e, tab)
+				if (tab.type !== "file_manager") handleTabDragStartMessageEditor(e, tab)
 			}
 		}
 
@@ -221,6 +243,7 @@ const TabItem = memo<TabItemProps>(
 					<FileTabMagicIcon
 						tab={tab}
 						attachments={attachments}
+						context={context}
 						isPlayback={isPlayback}
 						size={16}
 						className="size-4 shrink-0 rounded-[2px] object-cover"
@@ -234,6 +257,22 @@ const TabItem = memo<TabItemProps>(
 					>
 						{getDisplayFileName(tab)}
 					</span>
+					{!isPlayback && (!tab.type || tab.type === "file") && (
+						<ProjectFileTag
+							item={tab.fileData as unknown as AttachmentItem}
+							presentation={resolveFilePresentation(
+								tab.fileData as unknown as AttachmentItem,
+								{
+									context,
+									index: attachments
+										? getFilePresentationIndex(
+												attachments as unknown as AttachmentItem[],
+											)
+										: undefined,
+								},
+							)}
+						/>
+					)}
 					{isLoading && <MagicLoadingIcon size={12} />}
 					<span
 						className={cn(

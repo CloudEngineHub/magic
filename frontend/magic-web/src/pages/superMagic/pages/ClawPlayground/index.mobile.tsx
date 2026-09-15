@@ -737,9 +737,7 @@ function ClawPlaygroundMobile() {
 	const knowledgeBasePreviewState = useMobileKnowledgeBasePreview()
 
 	const resolveTopicFileRowDecoration = useMemoizedFn(
-		createClawPlaygroundFileRowDecorationResolver({
-			t: tSuper,
-		}),
+		createClawPlaygroundFileRowDecorationResolver(selectedProject?.id),
 	)
 
 	useEffect(() => {
@@ -815,7 +813,12 @@ function ClawPlaygroundMobile() {
 				open={filesDrawerOpen}
 				onClose={() => setFilesDrawerOpen(false)}
 				clawName={store.magicClaw?.name}
-				topicFilesProps={topicFilesPropsWithPanel}
+				topicFilesProps={{
+					...topicFilesPropsWithPanel,
+					fileHelpContext: selectedProject?.id
+						? { kind: "claw", projectId: String(selectedProject.id) }
+						: { kind: "unknown" },
+				}}
 				resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 			/>
 

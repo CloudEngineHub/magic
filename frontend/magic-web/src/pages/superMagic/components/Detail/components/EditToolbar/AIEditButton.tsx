@@ -1,3 +1,4 @@
+import type { FileReferenceSource } from "@/components/business/MentionPanel/utils/fileReferenceMention"
 import { memo, useLayoutEffect, useState, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronDown, MousePointerClick } from "lucide-react"
@@ -30,6 +31,7 @@ interface AIEditButtonProps {
 	attachmentList?: any[]
 	/** 当前文件ID */
 	fileId?: string
+	file?: FileReferenceSource
 	/** 触发元素选取检查器（仅 HTML 场景下传入）*/
 	onStartInspector?: () => void
 }
@@ -42,6 +44,7 @@ function AIEditButton({
 	isPrimaryActive = false,
 	attachmentList,
 	fileId,
+	file,
 	onStartInspector,
 }: AIEditButtonProps) {
 	const { t } = useTranslation("super")
@@ -53,8 +56,8 @@ function AIEditButton({
 
 	// Find current file from attachmentList
 	const currentFile = useMemo(() => {
-		return attachmentList?.find((item: any) => item.file_id === fileId)
-	}, [attachmentList, fileId])
+		return file ?? attachmentList?.find((item: any) => item.file_id === fileId)
+	}, [file, attachmentList, fileId])
 
 	// Use AI edit hook
 	const { aiEditItems } = useAIEdit({

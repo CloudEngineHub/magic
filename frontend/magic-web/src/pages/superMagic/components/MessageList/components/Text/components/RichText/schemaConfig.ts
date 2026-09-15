@@ -88,7 +88,11 @@ export default {
 				const { type } = node.attrs
 				let label = getMentionDisplayName(node.attrs)
 
-				if (type === MentionItemType.FOLDER || type === MentionItemType.MEMORY_DIRECTORY) {
+				if (
+					type === MentionItemType.FOLDER ||
+					type === MentionItemType.MEMORY_DIRECTORY ||
+					type === MentionItemType.USER_DIRECTORY
+				) {
 					label = `${label}/`
 				}
 				return [

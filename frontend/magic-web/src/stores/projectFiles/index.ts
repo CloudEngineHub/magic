@@ -1,3 +1,5 @@
+import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
+import { getFilePresentationIndex } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { makeAutoObservable, observable } from "mobx"
 import { WorkspaceFolder } from "./types"
 import { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
@@ -19,7 +21,7 @@ interface SetWorkspaceFileTreeOptions {
 }
 
 export class ProjectFilesStore {
-	constructor() {
+	constructor(readonly workspaceKind: "project" | "crew" | "claw" = "project") {
 		makeAutoObservable(
 			this,
 			{
@@ -34,6 +36,16 @@ export class ProjectFilesStore {
 	workspaceFileTree: AttachmentItem[] = []
 	workspaceFilesList: AttachmentItem[] = []
 	currentSelectedProject: ProjectListItem | null = null
+
+	get filePresentationContext(): FileHelpContext {
+		return this.currentSelectedProject?.id
+			? { kind: this.workspaceKind, projectId: String(this.currentSelectedProject.id) }
+			: { kind: "unknown" }
+	}
+
+	get filePresentationIndex() {
+		return getFilePresentationIndex(this.workspaceFileTree)
+	}
 
 	isSameProject(project1: ProjectListItem | null, project2: ProjectListItem | null) {
 		return project1?.id === project2?.id

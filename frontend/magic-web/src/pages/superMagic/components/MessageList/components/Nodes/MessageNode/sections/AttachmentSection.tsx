@@ -1,9 +1,11 @@
+import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
+import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import type { FilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { memo, useMemo, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import { IconChevronDown, IconChevronRight, IconDownload, IconEye } from "@tabler/icons-react"
-import MagicFileIcon from "@/components/base/MagicFileIcon"
 import MagicIcon from "@/components/base/MagicIcon"
 import { cn } from "@/utils/cn"
 import { Attachment } from "@/pages/superMagic/components/MessageList/components/MessageAttachment"
@@ -47,8 +49,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 	const rawFilePathAttachments = useMemo(() => {
 		if (!prevSuperMessageId) return []
 		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
-			| Record<string, unknown>
-			| undefined
+			Record<string, unknown> | undefined
 		const prevContent =
 			typeof prevMessageNode?.content === "string" ? prevMessageNode.content : ""
 		return prevContent ? buildFilePathAttachments(prevContent) : []
@@ -63,7 +64,18 @@ export const AttachmentSection = observer(function AttachmentSection({
 		const filePath = normalizeWorkspacePathForComparison(
 			found.relative_file_path || found.path || attachment.filePath,
 		)
-		return filePath ? [{ ...attachment, filePath }] : []
+		return filePath
+			? [
+					{
+						...attachment,
+						filePath,
+						presentation: resolveFilePresentation(found, {
+							context: resolvedProjectFilesStore.filePresentationContext,
+							index: resolvedProjectFilesStore.filePresentationIndex,
+						}),
+					},
+				]
+			: []
 	})
 	const onFileClick = useMemoizedFn((item?: unknown) => {
 		openMessageFile(item)
@@ -86,7 +98,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 })
 
 interface FilePathAttachmentListProps {
-	attachments: FilePathAttachment[]
+	attachments: Array<FilePathAttachment & { presentation: FilePresentation }>
 	className?: string
 }
 
@@ -144,8 +156,8 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 									"bg-fill hover:bg-fill-secondary",
 								)}
 							>
-								<MagicFileIcon
-									type={attachment.fileExt}
+								<FileResourceIcon
+									presentation={attachment.presentation}
 									size={24}
 									className="shrink-0"
 								/>

@@ -397,6 +397,9 @@ export class DatabaseManager {
 				})
 			})
 
+		// 个人标签按现有账号身份独立保存；其余表沿用前一版本。
+		db.version(6).stores({ "super-user-file-tabs": "&id" })
+
 		this.globalDatabase = db
 		return this.globalDatabase
 	}

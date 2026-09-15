@@ -44,6 +44,11 @@ import {
 import MarkerMentionNodeView from "../components/MentionNodes/marker/MarkerMentionNodeView"
 import FileMentionNodeView from "../components/MentionNodes/file/FileMentionNodeView"
 import FolderMentionNodeView from "../components/MentionNodes/folder/FolderMentionNodeView"
+import {
+	needsFileReferenceNormalization,
+	normalizeFileReferenceMention,
+} from "@/components/business/MentionPanel/utils/fileReferenceMention"
+import { getFileReferenceIdentityKey } from "@/pages/superMagic/services/userFileReferenceResolver"
 import { runActiveEditor } from "../utils/editorLifecycle"
 import {
 	tryAcceptPromptCarouselShortcut,
@@ -51,6 +56,7 @@ import {
 } from "../utils/promptCarousel"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { getClipboardPlainText } from "@/pages/superMagic/components/MessageList/utils/mentionClipboard"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 interface UseMessageEditorProps {
 	value?: JSONContent
@@ -180,7 +186,9 @@ export const useMessageEditor = ({
 	const isFocusOnPlaceholderRef = useRef<boolean>(false)
 
 	const prepareCopiedMention = useMemoizedFn(
-		(rawAttrs: Record<string, unknown>): TiptapMentionAttributes | null => {
+		(
+			rawAttrs: Record<string, unknown>,
+		): TiptapMentionAttributes | null | Promise<TiptapMentionAttributes | null> => {
 			if (
 				!shouldEnableMention ||
 				isOAuthInProgress ||
@@ -193,6 +201,29 @@ export const useMessageEditor = ({
 				return null
 
 			const attrs = rawAttrs as unknown as TiptapMentionAttributes
+			if (needsFileReferenceNormalization(attrs)) {
+				const identity = getFileReferenceIdentityKey()
+				const project = getCurrentProjectId?.()
+				return normalizeFileReferenceMention(attrs)
+					.then((normalized) => {
+						if (
+							identity !== getFileReferenceIdentityKey() ||
+							project !== getCurrentProjectId?.()
+						)
+							return null
+						if (!normalized)
+							magicToast.error(i18n.t("super:common.fileNotFoundOrLoadFailed"))
+						return normalized
+					})
+					.catch(() => {
+						if (
+							identity === getFileReferenceIdentityKey() &&
+							project === getCurrentProjectId?.()
+						)
+							magicToast.error(i18n.t("super:common.fileNotFoundOrLoadFailed"))
+						return null
+					})
+			}
 			let sourceProjectId: string | undefined
 			if (
 				attrs.type === MentionItemType.PROJECT_FILE ||
@@ -428,6 +459,8 @@ export const useMessageEditor = ({
 							nodeViewRenderers: {
 								[MentionItemType.DESIGN_MARKER]: MarkerMentionNodeView,
 								[MentionItemType.PROJECT_FILE]: FileMentionNodeView,
+								[MentionItemType.USER_FILE]: FileMentionNodeView,
+								[MentionItemType.USER_DIRECTORY]: FolderMentionNodeView,
 								[MentionItemType.UPLOAD_FILE]: FileMentionNodeView,
 								[MentionItemType.FOLDER]: (props) => (
 									<FolderMentionNodeView

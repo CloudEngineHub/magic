@@ -11,8 +11,12 @@ use App\Infrastructure\Core\AbstractRepository;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberStatus;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\ProjectModel;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\ProjectMemberModel;
+use Hyperf\Database\Query\Builder as QueryBuilder;
 use Hyperf\DbConnection\Db;
 use RuntimeException;
 
@@ -322,6 +326,60 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
         }
 
         return $projectNames;
+    }
+
+    /**
+     * 创建者可直接读取；协作者须同时满足付费、协作开关与有效用户／部门角色。
+     * 用 EXISTS 避免一个用户命中多个部门时重复返回项目，名称只做一次批量投影。
+     *
+     * @param list<string> $projectIds
+     * @param array<string, array{user_id: string, department_ids: array<string>, collaboration_allowed: bool}> $scopes
+     * @return array<string, string>
+     */
+    public function getAccessibleProjectNamesBatch(array $projectIds, array $scopes): array
+    {
+        if ($projectIds === [] || $scopes === []) {
+            return [];
+        }
+
+        $memberTable = (new ProjectMemberModel())->getTable();
+        return Db::table($this->projectModel->getTable() . ' as p')
+            ->whereIn('p.id', $projectIds)
+            ->whereNull('p.deleted_at')
+            ->where(function (QueryBuilder $access) use ($scopes, $memberTable): void {
+                foreach ($scopes as $organizationCode => $scope) {
+                    $access->orWhere(function (QueryBuilder $organization) use ($organizationCode, $scope, $memberTable): void {
+                        $organization->where('p.user_organization_code', $organizationCode)
+                            ->where(function (QueryBuilder $roles) use ($scope, $memberTable): void {
+                                $roles->where('p.user_id', $scope['user_id']);
+                                if (! $scope['collaboration_allowed']) {
+                                    return;
+                                }
+                                $roles->orWhere(function (QueryBuilder $collaboration) use ($scope, $memberTable): void {
+                                    $collaboration->where('p.is_collaboration_enabled', true)
+                                        ->whereExists(function (QueryBuilder $members) use ($scope, $memberTable): void {
+                                            $members->select('m.project_id')->from($memberTable . ' as m')
+                                                ->whereColumn('m.project_id', 'p.id')
+                                                ->whereNull('m.deleted_at')
+                                                ->where('m.status', MemberStatus::ACTIVE->value)
+                                                ->whereIn('m.role', MemberRole::getAllRoleValues())
+                                                ->where(function (QueryBuilder $targets) use ($scope): void {
+                                                    $targets->where(function (QueryBuilder $user) use ($scope): void {
+                                                        $user->where('m.target_type', MemberType::USER->value)->where('m.target_id', $scope['user_id']);
+                                                    });
+                                                    if ($scope['department_ids'] !== []) {
+                                                        $targets->orWhere(function (QueryBuilder $department) use ($scope): void {
+                                                            $department->where('m.target_type', MemberType::DEPARTMENT->value)->whereIn('m.target_id', $scope['department_ids']);
+                                                        });
+                                                    }
+                                                });
+                                        });
+                                });
+                            });
+                    });
+                }
+            })
+            ->pluck('p.project_name', 'p.id')->toArray();
     }
 
     /**

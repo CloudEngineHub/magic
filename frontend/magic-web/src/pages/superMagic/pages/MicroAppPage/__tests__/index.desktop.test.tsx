@@ -340,8 +340,8 @@ vi.mock("@/pages/superMagic/components/ShareManagement/ShareManagementPanel", ()
 	),
 }))
 
-vi.mock("@/pages/superMagic/components/LongTremMemory/components/MemorySider", () => ({
-	LongTremMemorySider: ({
+vi.mock("@/pages/superMagic/components/UserSpace/UserSpacePanel", () => ({
+	default: ({
 		projectId,
 		activeFileId,
 		onFileClick,
@@ -352,7 +352,7 @@ vi.mock("@/pages/superMagic/components/LongTremMemory/components/MemorySider", (
 	}) => (
 		<button
 			type="button"
-			data-testid="desktop-long-memory-panel"
+			data-testid="desktop-user-space-panel"
 			data-project-id={projectId}
 			data-active-file-id={activeFileId || undefined}
 			onClick={() =>
@@ -360,8 +360,9 @@ vi.mock("@/pages/superMagic/components/LongTremMemory/components/MemorySider", (
 					file_id: "memory-1",
 					file_name: "MEMORY.md",
 					file_extension: "md",
-					project_id: "0",
-					display_config: { previewPolicy: { fileScope: "memory" } },
+					space_type: "user",
+					relative_file_path: ".magic/memory/global/MEMORY.md",
+					display_config: { previewPolicy: { fileScope: "user" } },
 				})
 			}
 		>

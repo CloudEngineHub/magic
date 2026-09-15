@@ -1,3 +1,4 @@
+import { getMagicProjectType, type MagicProjectPreviewKind } from "@/constants/magicProjectTypes"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import {
 	DetailType,
@@ -279,44 +280,44 @@ function aiCardDataTransformer(item: FileItem) {
  * 内容类型渲染配置列表
  * 这些内容类型不依赖文件内容，有自己的 detail render content
  */
-const contentTypeRenderConfigs: ContentTypeRenderConfig[] = [
-	{
+const contentTypeRenderConfigs = {
+	audio: {
 		displayConfigType: "audio",
 		detailType: DetailType.Html,
 		dataTransformer: audioDataTransformer,
 		priority: 10,
 	},
-	{
+	slide: {
 		displayConfigType: "slide",
 		detailType: DetailType.Html,
 		dataTransformer: slideDataTransformer,
 		priority: 10,
 	},
-	{
+	"slide-template": {
 		displayConfigType: "slide-template",
 		detailType: DetailType.SlidesTemplate,
 		dataTransformer: slidesTemplateDataTransformer,
 		priority: 20,
 	},
-	{
+	design: {
 		displayConfigType: "design",
 		detailType: DetailType.Design,
 		dataTransformer: designDataTransformer,
 		priority: 10,
 	},
-	{
+	"self-media": {
 		displayConfigType: "self-media",
 		detailType: DetailType.SelfMedia,
 		dataTransformer: selfMediaDataTransformer,
 		priority: 10,
 	},
-	{
+	"ai-card": {
 		displayConfigType: "ai-card",
 		detailType: DetailType.AICard,
 		dataTransformer: aiCardDataTransformer,
 		priority: 10,
 	},
-]
+} satisfies Record<MagicProjectPreviewKind, ContentTypeRenderConfig>
 
 /**
  * 检测文件/文件夹是否应该使用内容类型渲染
@@ -336,14 +337,8 @@ export function detectContentTypeRender(item: FileItem): ContentTypeRenderConfig
 		return null
 	}
 
-	const displayConfigType = item.display_config.type
-
-	// 查找匹配的配置，按优先级排序
-	const matchedConfigs = contentTypeRenderConfigs
-		.filter((config) => config.displayConfigType === displayConfigType)
-		.sort((a, b) => (b.priority || 0) - (a.priority || 0))
-
-	return matchedConfigs[0] || null
+	const previewKind = getMagicProjectType(item.display_config.type)?.previewKind
+	return previewKind ? contentTypeRenderConfigs[previewKind] : null
 }
 
 /**
