@@ -1,6 +1,7 @@
 import type { RefObject } from "react"
 import type { FileSidebarControl } from "../../components/Detail/components/FilesViewer/types"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { runInAction } from "mobx"
 import { useDeepCompareEffect, useDebounceFn, useUpdateEffect, useMemoizedFn } from "ahooks"
 import { isEmpty } from "lodash-es"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -618,6 +619,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			let didCommitFinalSnapshot = false
 
 			try {
+				projectFilesStore.setAttachmentLoadStatus(projectId, "loading")
 				pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 				withAttachmentsRefreshWaitersResolved(
 					projectId,
@@ -639,13 +641,22 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 												{ tree, list },
 												{ preserveList: true },
 											)
-										projectFilesStore.setWorkspaceFileTree(processedData.tree, {
-											list: processedData.list,
-											source: `TopicPage.batch.${phase}`,
+										runInAction(() => {
+											projectFilesStore.setWorkspaceFileTree(
+												processedData.tree,
+												{
+													list: processedData.list,
+													source: `TopicPage.batch.${phase}`,
+												},
+											)
+											if (isFinal) {
+												didCommitFinalSnapshot = true
+												projectFilesStore.setAttachmentLoadStatus(
+													projectId,
+													"ready",
+												)
+											}
 										})
-										if (isFinal) {
-											didCommitFinalSnapshot = true
-										}
 									}
 								: undefined,
 						}),
@@ -658,12 +669,15 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 								)
 								return
 							}
-							if (!didCommitFinalSnapshot) {
-								projectFilesStore.setWorkspaceFileTree(res.tree, {
-									list: res.list,
-									source: "TopicPage.load_result",
-								})
-							}
+							runInAction(() => {
+								if (!didCommitFinalSnapshot) {
+									projectFilesStore.setWorkspaceFileTree(res.tree, {
+										list: res.list,
+										source: "TopicPage.load_result",
+									})
+								}
+								projectFilesStore.setAttachmentLoadStatus(projectId, "ready")
+							})
 							GlobalMentionPanelStore.finishLoadAttachmentsPromise(projectId)
 						})
 						.catch((error: unknown) => {
@@ -676,7 +690,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 								return
 							}
 							console.error("Failed to fetch attachments:", error)
-							projectFilesStore.setWorkspaceFileTree([])
+							// 读取失败不能证明文件被删除，保留已交付快照供当前预览继续使用。
+							projectFilesStore.setAttachmentLoadStatus(projectId, "error")
 						})
 						.finally(() => {
 							request.release()
@@ -688,8 +703,10 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				)
 			} catch (error) {
 				if (isAbortError(error)) return
+				if (!request.isCurrent()) return
 				console.error("Failed to fetch attachments:", error)
-				projectFilesStore.setWorkspaceFileTree([])
+				// 读取失败不能证明文件被删除，保留已交付快照供当前预览继续使用。
+				projectFilesStore.setAttachmentLoadStatus(projectId, "error")
 				resolveAttachmentsRefreshWaitersForProject(projectId)
 				callback?.()
 			}
@@ -851,6 +868,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			detailPanel={(fileSidebarControl) => (
 				<Detail
 					fileSidebarControl={fileSidebarControl}
+					attachmentLoadState={projectFilesStore.attachmentLoadState}
 					ref={detailRef}
 					disPlayDetail={disPlayDetail}
 					userSelectDetail={userSelectDetail}

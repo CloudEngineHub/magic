@@ -1,3 +1,4 @@
+import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import {
 	lazy,
 	Suspense,
@@ -105,6 +106,7 @@ function getHtmlRelativeFolderPath(fileItem?: { relative_file_path?: string; fil
 }
 
 interface PPTRenderProps {
+	attachmentLoadState?: AttachmentLoadState
 	// ========== 外部依赖（必需） ==========
 	slidePaths: string[]
 	attachments?: any[]
@@ -206,6 +208,7 @@ const PPTRender = observer(function PPTRender(props: PPTRenderProps) {
 	const storeConfig = useMemo(
 		() => ({
 			thumbnailCacheScope,
+			attachmentLoadState: props.attachmentLoadState,
 			attachments,
 			attachmentList,
 			projectId: resolvedProjectId,
@@ -220,6 +223,7 @@ const PPTRender = observer(function PPTRender(props: PPTRenderProps) {
 		}),
 		[
 			thumbnailCacheScope,
+			props.attachmentLoadState,
 			attachments,
 			attachmentList,
 			resolvedProjectId,

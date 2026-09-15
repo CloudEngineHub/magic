@@ -1,5 +1,6 @@
 import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import type { ReactNode, CSSProperties, RefObject } from "react"
+import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import type { MagicWidget } from "@magic-web/widget-sdk"
 import type {
 	DownloadImageMode,
@@ -178,6 +179,7 @@ export interface PlaybackTabItem extends TabItem {
 // FilesViewer component props
 export interface FilesViewerProps extends BaseComponentProps {
 	fileHelpContext?: FileHelpContext
+	attachmentLoadState?: AttachmentLoadState
 	attachments?: FileItem[]
 	attachmentList?: FileItem[]
 	setUserSelectDetail?: (detail: any) => void

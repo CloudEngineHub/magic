@@ -1989,6 +1989,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						: renderData,
 				updatedAt: fileDetail.updatedAt,
 				attachments,
+				attachmentLoadState: props.attachmentLoadState,
 				setUserSelectDetail,
 				currentIndex: 0,
 				onPrevious: () => {
