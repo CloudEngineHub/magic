@@ -21,7 +21,6 @@ import { createCodeSplittingGroups } from "./vite/code-splitting-groups"
 import { resolveMicroAppInstallDevProxy } from "./vite/micro-app-install-proxy"
 import Inspect from "vite-plugin-inspect"
 import { codeInspectorPlugin } from "code-inspector-plugin"
-import { getPackagingRuntimeIdentityDefine } from "./packages/html2pptx/vite.config"
 import createHtmlSandboxRuntimePlugin from "./plugins/vite-plugin-html-sandbox-runtime"
 
 /** 环境变量前缀 */
@@ -141,7 +140,6 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 		},
 		define: {
 			global: "globalThis",
-			...getPackagingRuntimeIdentityDefine(env),
 		},
 		worker: {
 			format: "es",

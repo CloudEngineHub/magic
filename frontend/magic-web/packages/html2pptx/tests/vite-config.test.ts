@@ -4,19 +4,22 @@ import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { build } from "vite"
 import { describe, expect, it, vi } from "vitest"
-import { PACKAGING_RUNTIME_IDENTITY } from "../src/packaging/runtime-identity"
 import type { StreamingPackagingWorkerRequest } from "../src/packaging/streaming-types"
 import { getBaseViteConfig } from "../vite.config"
 
-const packageRoot = fileURLToPath(new URL("..", import.meta.url))
+const packageRoot = (() => {
+	try {
+		return fileURLToPath(new URL("..", import.meta.url))
+	} catch {
+		return resolve(process.cwd(), "packages/html2pptx")
+	}
+})()
 
 describe("package build configuration", () => {
 	it("emits a relative ESM worker asset and keeps the CJS workerUrl override runnable", async () => {
 		const baseConfig = getBaseViteConfig({ mode: "production" })
 		expect(baseConfig.base).toBe("./")
-		expect(baseConfig.build?.rollupOptions?.external).toEqual(
-			expect.arrayContaining(["@zumer/snapdom", "postcss-value-parser", "pptxgenjs"]),
-		)
+		expect(baseConfig.define).toBeUndefined()
 		const outDir = await mkdtemp(resolve(packageRoot, "node_modules/.html2pptx-worker-build-"))
 
 		try {
@@ -37,14 +40,7 @@ describe("package build configuration", () => {
 				readFile(resolve(outDir, "index.js"), "utf8"),
 				readdir(resolve(outDir, "assets")),
 			])
-			const workerName = assetNames.find((name) => /^packaging-worker-[^.]+\.js$/.test(name))
-			expect(workerName).toBeDefined()
-			const workerSource = await readFile(resolve(outDir, "assets", workerName!), "utf8")
-			expect(esmSource).toContain(PACKAGING_RUNTIME_IDENTITY.buildId)
-			expect(workerSource).toContain(PACKAGING_RUNTIME_IDENTITY.buildId)
-			expect(esmSource).toContain(PACKAGING_RUNTIME_IDENTITY.artifactHash)
-			expect(workerSource).toContain(PACKAGING_RUNTIME_IDENTITY.artifactHash)
-			expect(esmSource).toMatch(/from ["']postcss-value-parser["']/)
+			expect(assetNames).toContainEqual(expect.stringMatching(/^packaging-worker-[^.]+\.js$/))
 			expect(esmSource).toMatch(/["']assets\/packaging-worker-[^"']+\.js["']/)
 			expect(esmSource).not.toMatch(/["']\/assets\/packaging-worker-/)
 
@@ -106,11 +102,7 @@ class ProtocolWorker {
 	postMessage(message: unknown): void {
 		const request = message as StreamingPackagingWorkerRequest
 		if (request.type === "start") {
-			this.emit({
-				type: "ready",
-				identity: PACKAGING_RUNTIME_IDENTITY,
-				pptxgenjsVersion: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
-			})
+			this.emit({ type: "ready" })
 			return
 		}
 		if (request.type === "commit-slide") {

@@ -4,7 +4,6 @@ import { resolve } from "node:path"
 import type { InlineConfig, Plugin } from "vite"
 import { createNoisePngBuffer } from "../shared/png"
 import type { BenchmarkTarget } from "../shared/types"
-import { getPackagingRuntimeIdentityDefine } from "../../vite.config"
 
 const BROWSER_ROOT = fileURLToPath(new URL(".", import.meta.url))
 const PACKAGE_ROOT = resolve(BROWSER_ROOT, "../..")
@@ -22,7 +21,6 @@ export function createBenchmarkViteConfig(target: BenchmarkTarget): InlineConfig
 
 	return {
 		configFile: false,
-		define: getPackagingRuntimeIdentityDefine(),
 		root: BROWSER_ROOT,
 		publicDir: false,
 		logLevel: "error",

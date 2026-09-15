@@ -15,13 +15,6 @@ import type { EmbedFontInput } from "../api/font"
 import type { ResourceLoadError } from "../api/options"
 import type { ExportIssue } from "../api/options"
 import { descriptorTransferables } from "../media/source-descriptor"
-import {
-	PACKAGING_RUNTIME_IDENTITY,
-	PackagingRuntimeIdentityMismatchError,
-	assertPackagingRuntimeIdentityMatch,
-	isPackagingRuntimeIdentityMismatch,
-	validatePackagingRuntimeIdentity,
-} from "./runtime-identity"
 import defaultPackagingWorkerUrl from "../workers/packaging-worker.ts?worker&url"
 
 type PendingRequest = {
@@ -138,7 +131,6 @@ export function createStreamingPresentationPackager(
 			const request: StreamingPackagingWorkerRequest = {
 				type: "start",
 				payload: {
-					identity: PACKAGING_RUNTIME_IDENTITY,
 					config: input.config,
 					plan: input.plan,
 					embedFonts: clonedFonts.fonts,
@@ -167,24 +159,6 @@ export function createStreamingPresentationPackager(
 		if (response.type === "ready") {
 			if (state !== "starting") {
 				fail(new Error(`Packaging Worker sent ready while packager is ${state}`))
-				return
-			}
-			try {
-				assertPackagingRuntimeIdentityMatch(
-					response.identity,
-					PACKAGING_RUNTIME_IDENTITY,
-					"Packaging Worker ready identity",
-				)
-				if (
-					response.pptxgenjsVersion !==
-					PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion
-				) {
-					throw new PackagingRuntimeIdentityMismatchError(
-						`Packaging Worker ready PptxGenJS version ${String(response.pptxgenjsVersion)} does not match runtime identity ${PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion}`,
-					)
-				}
-			} catch (error) {
-				fail(toError(error))
 				return
 			}
 			state = "accepting-slides"
@@ -406,14 +380,7 @@ export function createStreamingPresentationPackager(
 		rejectReady(error)
 		rejectPending(error)
 		void ensureSinkAbort(error)
-		if (isPackagingRuntimeIdentityMismatch(error)) {
-			// Identity mismatch means this Worker is provably stale or otherwise
-			// incompatible. Terminate immediately instead of waiting for a cleanup
-			// acknowledgement from an untrusted protocol peer.
-			finishDispose()
-		} else {
-			void ensureWorkerAbort(error)
-		}
+		void ensureWorkerAbort(error)
 	}
 
 	function dispose(): void {
@@ -612,6 +579,9 @@ function cloneEmbedFontsForWorker(embedFonts?: EmbedFontInput[]): {
 		return cloned
 	}
 	const cloneFace = (face: EmbedFontInput["regular"]): EmbedFontInput["regular"] => {
+		// Keep compatibility with legacy callers that still pass a raw ArrayBuffer
+		// even though the public descriptor contract now prefers `{ kind: "bytes" }`.
+		if (face instanceof ArrayBuffer) return cloneBuffer(face) as unknown as EmbedFontInput["regular"]
 		if (!face || face.kind !== "bytes") return face
 		return { ...face, data: cloneBuffer(face.data) }
 	}
@@ -678,9 +648,8 @@ function parseWorkerResponse(value: unknown): StreamingPackagingWorkerResponse {
 		throw new Error("Packaging Worker response type must be a string")
 	}
 
-	switch (response.type) {
+		switch (response.type) {
 		case "ready":
-			requireReadyResponse(response)
 			return response as unknown as StreamingPackagingWorkerResponse
 		case "slide-committed":
 			requireRequestId(response.requestId)
@@ -708,15 +677,6 @@ function parseWorkerResponse(value: unknown): StreamingPackagingWorkerResponse {
 			return response as unknown as StreamingPackagingWorkerResponse
 		default:
 			throw new Error(`Packaging Worker returned an unknown response type: ${response.type}`)
-	}
-}
-
-function requireReadyResponse(response: Record<string, unknown>): void {
-	validatePackagingRuntimeIdentity(response.identity, "Packaging Worker ready identity")
-	if (typeof response.pptxgenjsVersion !== "string" || response.pptxgenjsVersion.length === 0) {
-		throw new PackagingRuntimeIdentityMismatchError(
-			"Packaging Worker ready pptxgenjsVersion must be a non-empty string",
-		)
 	}
 }
 

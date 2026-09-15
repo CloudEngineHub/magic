@@ -1,8 +1,6 @@
 import { defineConfig } from "vitest/config"
-import { getPackagingRuntimeIdentityDefine } from "./vite.config"
 
 export default defineConfig({
-	define: getPackagingRuntimeIdentityDefine(),
 	test: {
 		name: "html2pptx",
 		environment: "node",

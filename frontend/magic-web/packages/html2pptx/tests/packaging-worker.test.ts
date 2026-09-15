@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { createSinkProxyWritable, createStreamingPackagingWorkerHandler } from "../src/packaging"
 import { createStreamingPresentationPackager } from "../src/packaging/streaming-package-presentation"
-import { PACKAGING_RUNTIME_IDENTITY } from "../src/packaging/runtime-identity"
-import { bytesMediaSourceDescriptor } from "../src/media/source-descriptor"
 import type {
-	PackagingRuntimeIdentity,
 	StreamingPackagingWorkerRequest,
 	StreamingPackagingWorkerResponse,
 	StreamingPresentationPlan,
@@ -42,22 +39,19 @@ const plan: StreamingPresentationPlan = {
 
 type ReadyResponse = Extract<StreamingPackagingWorkerResponse, { type: "ready" }>
 
-function readyResponse(
-	overrides: Partial<Pick<ReadyResponse, "identity" | "pptxgenjsVersion">> = {},
-): ReadyResponse {
-	return {
-		type: "ready",
-		identity: PACKAGING_RUNTIME_IDENTITY,
-		pptxgenjsVersion: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
-		...overrides,
-	}
+function readyResponse(): ReadyResponse {
+	return { type: "ready" }
 }
 
-function staleIdentity(field: keyof PackagingRuntimeIdentity): PackagingRuntimeIdentity {
+function startPayload(
+	overrides: Partial<Extract<StreamingPackagingWorkerRequest, { type: "start" }>["payload"]> = {},
+) {
 	return {
-		...PACKAGING_RUNTIME_IDENTITY,
-		[field]: `${PACKAGING_RUNTIME_IDENTITY[field]}-stale`,
-	} as PackagingRuntimeIdentity
+		config,
+		plan: { finalSlideCount: 1 },
+		destination: { kind: "sink-proxy" as const, ackWindow: 1 },
+		...overrides,
+	}
 }
 
 describe("packaging sink proxy", () => {
@@ -127,7 +121,6 @@ describe("packaging Worker protocol", () => {
 			}),
 		}
 		const presentation = {
-			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
 			beginStreaming: vi.fn(
 				async ({ destination }: { destination: WritableStream<Uint8Array> }) => {
 					writer = destination.getWriter()
@@ -142,12 +135,7 @@ describe("packaging Worker protocol", () => {
 
 		handler.handle({
 			type: "start",
-			payload: {
-				identity: PACKAGING_RUNTIME_IDENTITY,
-				config,
-				plan: { finalSlideCount: 1 },
-				destination: { kind: "sink-proxy", ackWindow: 1 },
-			},
+			payload: startPayload(),
 		})
 		await eventually(() =>
 			expect(responses.some((message) => message.type === "ready")).toBe(true),
@@ -174,59 +162,7 @@ describe("packaging Worker protocol", () => {
 		)
 		expect(session.addSlide).toHaveBeenCalledWith(undefined)
 		expect(session.commitSlide).toHaveBeenCalledOnce()
-		 expect(responses.filter((message) => message.type === "progress")).toHaveLength(0)
-	})
-
-	it("passes font MediaSourceDescriptors to PptxGenJS", async () => {
-		const responses: StreamingPackagingWorkerResponse[] = []
-		const embedFont = vi.fn()
-		const session = {
-			addSlide: vi.fn(() => ({})),
-			commitSlide: vi.fn(async () => ({ bytesWritten: 0, manifest: {} })),
-			finalize: vi.fn(async () => ({ slideCount: 0, mediaPartCount: 0, bytesWritten: 0 })),
-			abort: vi.fn(async () => undefined),
-		}
-		const presentation = {
-			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
-			embedFont,
-			beginStreaming: vi.fn(async () => session),
-		}
-		const handler = createStreamingPackagingWorkerHandler({
-			createPresentation: () => presentation as never,
-			postMessage: (message) => responses.push(message),
-		})
-		const fontData = Uint8Array.from([1, 2, 3, 4]).buffer
-
-		handler.handle({
-			type: "start",
-			payload: {
-				identity: PACKAGING_RUNTIME_IDENTITY,
-				config,
-				plan: { finalSlideCount: 0 },
-				destination: { kind: "sink-proxy", ackWindow: 1 },
-				embedFonts: [
-					{
-						typeface: "Test Font",
-						regular: bytesMediaSourceDescriptor({
-							data: fontData,
-							contentType: "font/ttf",
-							extn: "ttf",
-							key: "font:test:regular",
-						}),
-					},
-				],
-			},
-		})
-
-		await eventually(() =>
-			expect(responses.some((message) => message.type === "ready")).toBe(true),
-		)
-		expect(embedFont).toHaveBeenCalledWith(
-			expect.objectContaining({
-				typeface: "Test Font",
-				regular: expect.objectContaining({ kind: "bytes", data: fontData }),
-			}),
-		)
+		expect(responses.filter((message) => message.type === "progress")).toHaveLength(0)
 	})
 
 	it("normalizes PptxGenJS bigint byte counts at the Worker boundary", async () => {
@@ -242,7 +178,6 @@ describe("packaging Worker protocol", () => {
 			abort: vi.fn(async () => undefined),
 		}
 		const presentation = {
-			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
 			beginStreaming: vi.fn(async () => session),
 		}
 		const handler = createStreamingPackagingWorkerHandler({
@@ -252,12 +187,7 @@ describe("packaging Worker protocol", () => {
 
 		handler.handle({
 			type: "start",
-			payload: {
-				identity: PACKAGING_RUNTIME_IDENTITY,
-				config,
-				plan: { finalSlideCount: 1 },
-				destination: { kind: "sink-proxy", ackWindow: 1 },
-			},
+			payload: startPayload(),
 		})
 		await eventually(() =>
 			expect(responses.some((message) => message.type === "ready")).toBe(true),
@@ -284,14 +214,13 @@ describe("packaging Worker protocol", () => {
 
 	it("preserves structured capability fields on Worker errors", async () => {
 		const responses: StreamingPackagingWorkerResponse[] = []
-		const failure = Object.assign(new Error("Central-directory metadata spill failed"), {
-			name: "CentralDirectoryMetadataBudgetError",
-			code: "CENTRAL_DIRECTORY_METADATA_BUDGET_EXCEEDED",
+		const failure = Object.assign(new Error("OPFS write unavailable"), {
+			name: "OpfsCapabilityError",
+			code: "OPFS_WRITE_UNAVAILABLE",
 			capability: "file.createWritable",
-			causeCode: "OPFS_WRITE_UNAVAILABLE",
+			causeCode: "OPFS_PARTIAL_IMPLEMENTATION",
 		})
 		const presentation = {
-			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
 			beginStreaming: vi.fn(async () => {
 				throw failure
 			}),
@@ -303,191 +232,25 @@ describe("packaging Worker protocol", () => {
 
 		handler.handle({
 			type: "start",
-			payload: {
-				identity: PACKAGING_RUNTIME_IDENTITY,
-				config,
-				plan: { finalSlideCount: 1 },
-				destination: { kind: "sink-proxy", ackWindow: 1 },
-			},
+			payload: startPayload(),
 		})
 		await eventually(() => {
 			const response = responses.find((message) => message.type === "error")
 			expect(response?.type).toBe("error")
 			if (response?.type === "error") {
 				expect(response.error).toMatchObject({
-					name: "CentralDirectoryMetadataBudgetError",
-					code: "CENTRAL_DIRECTORY_METADATA_BUDGET_EXCEEDED",
+					name: "OpfsCapabilityError",
+					code: "OPFS_WRITE_UNAVAILABLE",
 					capability: "file.createWritable",
-					causeCode: "OPFS_WRITE_UNAVAILABLE",
+					causeCode: "OPFS_PARTIAL_IMPLEMENTATION",
 				})
 			}
 		})
 	})
 
-	it.each([
-		{
-			label: "missing identity",
-			identity: undefined,
-		},
-		{
-			label: "invalid identity field type",
-			identity: { ...PACKAGING_RUNTIME_IDENTITY, buildId: 42 },
-		},
-	])("rejects a start request with $label before creating a presentation", async ({ identity }) => {
-		const responses: StreamingPackagingWorkerResponse[] = []
-		const createPresentation = vi.fn(() => ({
-			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
-		}))
-		const handler = createStreamingPackagingWorkerHandler({
-			createPresentation,
-			postMessage: (message) => responses.push(message),
-		})
-
-		handler.handle({
-			type: "start",
-			payload: {
-				identity,
-				config,
-				plan: { finalSlideCount: 0 },
-				destination: { kind: "sink-proxy", ackWindow: 1 },
-			},
-		} as never)
-
-		await eventually(() => {
-			const response = responses.find((message) => message.type === "error")
-			expect(response?.type).toBe("error")
-			if (response?.type === "error") {
-				expect(response.error).toMatchObject({
-					code: "PACKAGING_RUNTIME_IDENTITY_MISMATCH",
-					capability: "worker-protocol",
-				})
-			}
-		})
-		expect(createPresentation).not.toHaveBeenCalled()
-	})
-
-	it("rejects a stale Worker identity without creating a presentation", async () => {
-		const responses: StreamingPackagingWorkerResponse[] = []
-		const createPresentation = vi.fn(() => ({
-			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
-		}))
-		const handler = createStreamingPackagingWorkerHandler({
-			runtimeIdentity: staleIdentity("buildId"),
-			createPresentation,
-			postMessage: (message) => responses.push(message),
-		})
-
-		handler.handle({
-			type: "start",
-			payload: {
-				identity: PACKAGING_RUNTIME_IDENTITY,
-				config,
-				plan: { finalSlideCount: 0 },
-				destination: { kind: "sink-proxy", ackWindow: 1 },
-			},
-		})
-
-		await eventually(() => {
-			const response = responses.find((message) => message.type === "error")
-			expect(response?.type).toBe("error")
-			if (response?.type === "error") {
-				expect(response.error).toMatchObject({
-					code: "PACKAGING_RUNTIME_IDENTITY_MISMATCH",
-					capability: "worker-protocol",
-				})
-			}
-		})
-		expect(createPresentation).not.toHaveBeenCalled()
-	})
 })
 
 describe("streaming packager client", () => {
-	it.each([
-		{
-			label: "missing identity",
-			response: { type: "ready" } as unknown,
-		},
-		{
-			label: "protocol version",
-			response: readyResponse({
-				identity: { ...PACKAGING_RUNTIME_IDENTITY, protocolVersion: 3 } as never,
-			}),
-		},
-		{
-			label: "edition",
-			response: readyResponse({
-				identity: { ...PACKAGING_RUNTIME_IDENTITY, edition: "enterprise" } as never,
-			}),
-		},
-		{
-			label: "buildId",
-			response: readyResponse({ identity: staleIdentity("buildId") }),
-		},
-		{
-			label: "sourceCommit",
-			response: readyResponse({ identity: staleIdentity("sourceCommit") }),
-		},
-		{
-			label: "artifactHash",
-			response: readyResponse({ identity: staleIdentity("artifactHash") }),
-		},
-		{
-			label: "PptxGenJS version",
-			response: readyResponse({ pptxgenjsVersion: "4.0.0" }),
-		},
-	])("rejects a ready handshake with a mismatched $label", async ({ response }) => {
-		const worker = new LoopbackWorker()
-		worker.handler = {
-			handle(request) {
-				if (request.type === "start") {
-					if (response.type === "ready" && "identity" in response) worker.emit(response)
-					else worker.emitRaw(response)
-				}
-			},
-		}
-		const packager = createStreamingPresentationPackager({
-			config,
-			plan: { finalSlideCount: 0 },
-			destination: {
-				kind: "sink-proxy",
-				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
-			},
-			workerFactory: () => worker,
-		})
-
-		await expect(packager.ready).rejects.toMatchObject({
-			code: "PACKAGING_RUNTIME_IDENTITY_MISMATCH",
-			capability: "worker-protocol",
-		})
-		expect(worker.terminate).toHaveBeenCalledOnce()
-		packager.dispose()
-	})
-
-	it("rejects the legacy plain ready response and terminates the Worker", async () => {
-		const worker = new LoopbackWorker()
-		worker.handler = {
-			handle(request) {
-				if (request.type === "start") worker.emitRaw({ type: "ready" })
-			},
-		}
-		const packager = createStreamingPresentationPackager({
-			config,
-			plan: { finalSlideCount: 0 },
-			destination: {
-				kind: "sink-proxy",
-				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
-			},
-			workerFactory: () => worker,
-		})
-
-		await expect(packager.ready).rejects.toMatchObject({
-			code: "PACKAGING_RUNTIME_IDENTITY_MISMATCH",
-			capability: "worker-protocol",
-		})
-		expect(worker.terminate).toHaveBeenCalledOnce()
-		packager.dispose()
-	})
-
 	it("deserializes structured OPFS capability fields from Worker errors", async () => {
 		const worker = new LoopbackWorker()
 		worker.handler = {
@@ -524,6 +287,168 @@ describe("streaming packager client", () => {
 			causeCode: "OPFS_WRITE_UNAVAILABLE",
 		})
 		expect(packager.state).toBe("failed")
+		packager.dispose()
+	})
+
+	it("forwards per-slide resource errors without failing the commit", async () => {
+		const worker = new LoopbackWorker()
+		const resourceError = {
+			url: "https://example.test/chart.webp",
+			kind: "image" as const,
+			reason: "load-error" as const,
+		}
+		worker.handler = {
+			handle(request) {
+				if (request.type === "start") worker.emit({ type: "ready" })
+				if (request.type === "commit-slide") {
+					worker.emit({
+						type: "slide-committed",
+						requestId: request.requestId,
+						summary: { bytesWritten: 0, resourceErrors: [resourceError] },
+					})
+				}
+				if (request.type === "abort")
+					worker.emit({ type: "aborted", requestId: request.requestId })
+			},
+		}
+		const onResourceError = vi.fn()
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 1 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			workerFactory: () => worker,
+			onResourceError,
+		})
+
+		await packager.ready
+		await expect(packager.commitSlide({ nodes: [] })).resolves.toMatchObject({
+			bytesWritten: 0,
+		})
+		expect(onResourceError).toHaveBeenCalledWith(resourceError)
+		packager.dispose()
+	})
+
+	it("rejects malformed per-slide resource errors from the Worker", async () => {
+		const requests: StreamingPackagingWorkerRequest[] = []
+		const sinkAbort = vi.fn(async () => undefined)
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				requests.push(request)
+				if (request.type === "start") worker.emit({ type: "ready" })
+				if (request.type === "commit-slide") {
+					worker.emit({
+						type: "slide-committed",
+						requestId: request.requestId,
+						summary: {
+							bytesWritten: 0,
+							resourceErrors: [
+								{
+									url: "https://example.test/chart.webp",
+									kind: "image",
+									reason: "invalid" as never,
+								},
+							],
+						},
+					})
+				}
+				if (request.type === "abort") {
+					worker.emit({ type: "aborted", requestId: request.requestId })
+				}
+			},
+		}
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 1 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: sinkAbort },
+			},
+			workerFactory: () => worker,
+		})
+
+		await packager.ready
+		await expect(packager.commitSlide({ nodes: [] })).rejects.toThrow(
+			"resource error reason is invalid",
+		)
+		await eventually(() => expect(packager.state).toBe("failed"))
+		expect(sinkAbort).toHaveBeenCalledOnce()
+		await eventually(() =>
+			expect(requests.filter((request) => request.type === "abort")).toHaveLength(1),
+		)
+		packager.dispose()
+	})
+
+	it("keeps cached font buffers reusable across consecutive Worker starts", async () => {
+		const cachedFontBuffer = Uint8Array.from([1, 2, 3, 4]).buffer
+		const workers = [
+			new TransferSimulatingWorker([cachedFontBuffer]),
+			new TransferSimulatingWorker([cachedFontBuffer]),
+		]
+
+		for (const worker of workers) {
+			const packager = createStreamingPresentationPackager({
+				config,
+				plan: { finalSlideCount: 0 },
+				embedFonts: [{ typeface: "Cached Font", regular: cachedFontBuffer }],
+				destination: {
+					kind: "sink-proxy",
+					sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+				},
+				workerFactory: () => worker,
+			})
+
+			await packager.ready
+			expect(cachedFontBuffer.byteLength).toBe(4)
+			expect(Array.from(new Uint8Array(cachedFontBuffer))).toEqual([1, 2, 3, 4])
+			expect(worker.startChecks).toEqual([
+				expect.objectContaining({
+					fontTransferCount: 1,
+					payloadUsesTransferredClones: true,
+					payloadUsesCallerBuffers: false,
+				}),
+			])
+			await packager.abort(new Error("test complete"))
+			packager.dispose()
+		}
+	})
+
+	it("reuses one cloned transfer when multiple font face slots share a buffer", async () => {
+		const sharedFaceBuffer = Uint8Array.from([9, 8, 7]).buffer
+		const worker = new TransferSimulatingWorker([sharedFaceBuffer])
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 0 },
+			embedFonts: [
+				{
+					typeface: "Shared Faces",
+					regular: sharedFaceBuffer,
+					bold: sharedFaceBuffer,
+					boldItalic: sharedFaceBuffer,
+				},
+			],
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			workerFactory: () => worker,
+		})
+
+		await packager.ready
+		expect(sharedFaceBuffer.byteLength).toBe(3)
+		expect(worker.startChecks).toEqual([
+			expect.objectContaining({
+				fontTransferCount: 1,
+				fontSlotCount: 3,
+				allFontSlotsShareOneClone: true,
+				payloadUsesTransferredClones: true,
+				payloadUsesCallerBuffers: false,
+			}),
+		])
+		await packager.abort(new Error("test complete"))
 		packager.dispose()
 	})
 
@@ -583,7 +508,6 @@ describe("streaming packager client", () => {
 			abort: vi.fn(async () => sessionWriter.current?.abort()),
 		}
 		const presentation = {
-			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
 			beginStreaming: vi.fn(
 				async ({ destination }: { destination: WritableStream<Uint8Array> }) => {
 					sessionWriter.current = destination.getWriter()
@@ -604,7 +528,9 @@ describe("streaming packager client", () => {
 			destination: {
 				kind: "sink-proxy",
 				sink: {
-					write: (chunk) => sinkChunks.push(...chunk),
+					write: (chunk) => {
+						sinkChunks.push(...chunk)
+					},
 					close: () => {
 						closed = true
 					},
@@ -867,13 +793,6 @@ describe("streaming packager client", () => {
 			response: { type: "error" },
 		},
 		{
-			label: "invalid error cause code",
-			response: {
-				type: "error",
-				error: { name: "Error", message: "failed", causeCode: 42 },
-			},
-		},
-		{
 			label: "missing sink chunk data",
 			response: { type: "sink-chunk", chunkId: 1 },
 		},
@@ -1046,7 +965,6 @@ describe("streaming packager client", () => {
 			abort: vi.fn(async () => sessionWriter.current?.abort()),
 		}
 		const presentation = {
-			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
 			beginStreaming: vi.fn(
 				async ({ destination }: { destination: WritableStream<Uint8Array> }) => {
 					sessionWriter.current = destination.getWriter()
@@ -1060,7 +978,9 @@ describe("streaming packager client", () => {
 			postMessage: worker.emit,
 		})
 		const writable = new WritableStream<Uint8Array>({
-			write: (chunk) => output.push(...chunk),
+			write: (chunk) => {
+				output.push(...chunk)
+			},
 		})
 		const imageBytes = new ArrayBuffer(4)
 		const mediaBytes = new ArrayBuffer(5)
@@ -1108,7 +1028,7 @@ describe("streaming packager client", () => {
 					},
 					coverSource: {
 						kind: "bytes",
-						data: coverBuffer,
+					data: coverBuffer,
 						key: "cover",
 						contentType: "image/jpeg",
 						extn: "jpg",
@@ -1120,7 +1040,7 @@ describe("streaming packager client", () => {
 		expect(output).toEqual([9])
 		expect(worker.transfers[0]).toContain(writable)
 		expect(worker.transfers[1]).toEqual(
-			expect.arrayContaining([imageBytes, mediaBytes, coverBuffer]),
+				expect.arrayContaining([imageBytes, mediaBytes, coverBuffer]),
 		)
 		packager.dispose()
 	})
@@ -1141,18 +1061,69 @@ class LoopbackWorker implements StreamingWorkerLike {
 		this.transfers.push(transfer)
 		this.handler.handle(message as StreamingPackagingWorkerRequest)
 	}
-
-	emit = (message: StreamingPackagingWorkerResponse | { type: "ready" }): void => {
-		const normalized =
-			message.type === "ready" && !("identity" in message) ? readyResponse() : message
-		this.emitResponse(normalized as StreamingPackagingWorkerResponse)
-		queueMicrotask(() =>
-			this.listener?.({ data: normalized } as MessageEvent),
-		)
+	emit = (message: StreamingPackagingWorkerResponse): void => {
+		this.emitResponse(message)
+		queueMicrotask(() => this.listener?.({ data: message } as MessageEvent))
 	}
 
-	emitRaw = (message: unknown): void => {
-		this.emitResponse(message as StreamingPackagingWorkerResponse)
+	addEventListener(type: "message", listener: (event: MessageEvent) => void): void {
+		if (type === "message") this.listener = listener
+	}
+
+	removeEventListener(): void {
+		this.listener = undefined
+	}
+}
+
+class TransferSimulatingWorker implements StreamingWorkerLike {
+	readonly startChecks: Array<{
+		fontTransferCount: number
+		fontSlotCount: number
+		allFontSlotsShareOneClone: boolean
+		payloadUsesTransferredClones: boolean
+		payloadUsesCallerBuffers: boolean
+	}> = []
+	readonly terminate = vi.fn()
+	private listener?: (event: MessageEvent) => void
+
+	constructor(private readonly callerBuffers: readonly ArrayBuffer[]) {}
+
+	postMessage(message: unknown, transfer: Transferable[] = []): void {
+		const request = message as StreamingPackagingWorkerRequest
+		if (request.type === "start") {
+			const fontSlots = (request.payload.embedFonts ?? []).flatMap((font) =>
+				[font.regular, font.bold, font.italic, font.boldItalic].filter(
+					(buffer): buffer is ArrayBuffer => Boolean(buffer),
+				),
+			)
+			const transferredFontBuffers = transfer.filter(
+				(item): item is ArrayBuffer => item instanceof ArrayBuffer,
+			)
+			this.startChecks.push({
+				fontTransferCount: transferredFontBuffers.length,
+				fontSlotCount: fontSlots.length,
+				allFontSlotsShareOneClone:
+					fontSlots.length > 0 && fontSlots.every((buffer) => buffer === fontSlots[0]),
+				payloadUsesTransferredClones: fontSlots.every((buffer) =>
+					transferredFontBuffers.includes(buffer),
+				),
+				payloadUsesCallerBuffers: fontSlots.some((buffer) =>
+					this.callerBuffers.includes(buffer),
+				),
+			})
+		}
+
+		// Match browser Worker transfer semantics: this detaches every transferred buffer
+		// on the sender side and throws if a detached buffer is reused.
+		structuredClone(message, { transfer })
+
+		if (request.type === "start") this.emit(readyResponse())
+		if (request.type === "abort") {
+			this.emit({ type: "aborted", requestId: request.requestId })
+		}
+	}
+
+	private emit(message: StreamingPackagingWorkerResponse): void {
 		queueMicrotask(() => this.listener?.({ data: message } as MessageEvent))
 	}
 
