@@ -89,6 +89,28 @@ final class MicroAppProjectResponseFormatterTest extends TestCase
         self::assertArrayNotHasKey('pure_mode', $result);
     }
 
+    public function testFormatsProjectIdsAsStrings(): void
+    {
+        $result = $this->createFormatter()->formatProject(
+            (new ProjectEntity())
+                ->setId(957589322901028865)
+                ->setWorkspaceId(957589322901028866)
+                ->setCurrentTopicId(957589322901028867),
+        );
+
+        self::assertSame('957589322901028865', $result['id']);
+        self::assertSame('957589322901028866', $result['workspace_id']);
+        self::assertSame('957589322901028867', $result['current_topic_id']);
+    }
+
+    public function testPreservesNullProjectRelationIds(): void
+    {
+        $result = $this->createFormatter()->formatProject(new ProjectEntity());
+
+        self::assertNull($result['workspace_id']);
+        self::assertNull($result['current_topic_id']);
+    }
+
     private function createFormatter(
         ?ShareUrlBuilder $shareUrlBuilder = null,
         ?ResourceShareDomainService $shareDomainService = null,

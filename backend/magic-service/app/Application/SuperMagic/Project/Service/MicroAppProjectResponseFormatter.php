@@ -77,12 +77,12 @@ class MicroAppProjectResponseFormatter
     public function formatProject(ProjectEntity $project): array
     {
         return [
-            'id' => $project->getId(),
-            'workspace_id' => $project->getWorkspaceId(),
+            'id' => (string) $project->getId(),
+            'workspace_id' => $project->getWorkspaceId() !== null ? (string) $project->getWorkspaceId() : null,
             'project_name' => $project->getProjectName(),
             'project_description' => $project->getProjectDescription(),
             'project_mode' => $project->getProjectMode(),
-            'current_topic_id' => $project->getCurrentTopicId(),
+            'current_topic_id' => $project->getCurrentTopicId() !== null ? (string) $project->getCurrentTopicId() : null,
             'current_topic_status' => $project->getCurrentTopicStatus(),
             'created_at' => $project->getCreatedAt(),
             'updated_at' => $project->getUpdatedAt(),
