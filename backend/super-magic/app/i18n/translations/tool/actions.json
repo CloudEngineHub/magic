@@ -115,9 +115,29 @@
         "zh_CN": "执行命令",
         "en_US": "Run command"
     },
-    "shell_await": {
-        "zh_CN": "查询后台任务",
-        "en_US": "Check background task"
+    "shell_await.sleep": {
+        "zh_CN": "等待",
+        "en_US": "Wait"
+    },
+    "shell_await.sleep_for": {
+        "zh_CN": "等待 {{duration}}",
+        "en_US": "Wait {{duration}}"
+    },
+    "shell_await.snapshot": {
+        "zh_CN": "查看命令输出",
+        "en_US": "View command output"
+    },
+    "shell_await.wait": {
+        "zh_CN": "等待命令结果",
+        "en_US": "Wait for command result"
+    },
+    "shell_await.send_input": {
+        "zh_CN": "发送输入",
+        "en_US": "Send input"
+    },
+    "shell_await.kill": {
+        "zh_CN": "停止命令",
+        "en_US": "Stop command"
     },
     "run_sdk_snippet": {
         "zh_CN": "代码模式",

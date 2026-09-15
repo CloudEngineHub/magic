@@ -308,6 +308,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 					disPlayDetail={correctedDisPlayDetail}
 					userSelectDetail={userSelectDetail}
 					isFullscreen={isFullscreen}
+					terminalToolInfo={currentToolStep}
 					attachmentList={attachmentList}
 					viewMode={currentFileViewMode}
 					displayConfig={meta?.display_config}

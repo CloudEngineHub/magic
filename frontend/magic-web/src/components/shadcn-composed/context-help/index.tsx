@@ -127,7 +127,11 @@ export function ContextHelp({ help, mode, children, renderDialog }: ContextHelpP
 					}}
 				>
 					<TooltipTrigger asChild>{trigger}</TooltipTrigger>
-					<TooltipContent side="bottom" className="max-w-72">
+					{/* 简介自然换行，避免均衡折行后气泡宽度仍保留右侧空白。 */}
+					<TooltipContent
+						side="bottom"
+						className="max-w-[min(18rem,var(--radix-tooltip-content-available-width,100vw))] whitespace-normal text-wrap break-words"
+					>
 						{help.summary}
 					</TooltipContent>
 				</Tooltip>

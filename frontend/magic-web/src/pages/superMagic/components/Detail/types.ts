@@ -79,6 +79,12 @@ export interface DetailData {
 }
 
 /** 终端 Terminal */
+export interface TerminalToolInfo {
+	id: string
+	action: string
+	remark: string
+}
+
 export interface DetailTerminalData {
 	action: "execute" | string
 	finished: boolean
