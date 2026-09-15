@@ -5,12 +5,20 @@ import json
 import mimetypes
 import re
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime
+from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import aiohttp
 
-from app.channel.base.media import MediaDownloadError, MediaSource, prepare_media_message, read_response_bytes
+from app.channel.base.media import (
+    MediaDownloadError,
+    MediaSource,
+    PreparedMediaMessage,
+    prepare_media_message,
+    read_response_bytes,
+)
 from app.channel.base.models import ChannelMediaType
 from app.i18n import i18n
 
@@ -28,7 +36,7 @@ def _format_forwarded_time(value: Any) -> str:
         return ""
     timestamp = value / 1000 if value > 10_000_000_000 else value
     try:
-        return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        return datetime.fromtimestamp(timestamp, tz=ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S UTC+08:00")
     except (OverflowError, OSError, ValueError):
         return ""
 
@@ -54,7 +62,7 @@ def _forwarded_filename(participants: list[str]) -> str:
 
 def _parse_rich_text_items(
     items: Any,
-    add_media: Callable[[dict, str, bool], None],
+    add_media: Callable[[dict, str, bool], MediaSource | None],
     from_quote: bool,
     attachment_index: list[int],
 ) -> list[str]:
@@ -78,16 +86,16 @@ def _parse_rich_text_items(
             continue
         if node_type in ("picture", "image") or item.get("pictureDownloadCode") or item.get("downloadCode"):
             attachment_index[0] += 1
-            name = item.get("fileName") or f"image-{attachment_index[0]:03d}"
-            add_media(item, "picture", from_quote)
+            name = item.get("fileName") or f"image-{attachment_index[0]:03d}.png"
+            add_media({**item, "fileName": name}, "picture", from_quote)
             parts.append(
                 i18n.translate("dingtalk.forwarded_record.image", index=attachment_index[0], filename=name)
             )
             continue
         if node_type == "file":
             attachment_index[0] += 1
-            name = item.get("fileName") or f"file-{attachment_index[0]:03d}"
-            add_media(item, "file", from_quote)
+            name = item.get("fileName") or f"file-{attachment_index[0]:03d}.bin"
+            add_media({**item, "fileName": name}, "file", from_quote)
             parts.append(
                 i18n.translate("dingtalk.forwarded_record.file", index=attachment_index[0], filename=name)
             )
@@ -98,11 +106,12 @@ def _parse_rich_text_items(
 
 def _parse_forwarded_chat_record(
     content: dict,
-    add_media: Callable[[dict, str, bool], None] | None = None,
+    add_media: Callable[[dict, str, bool], MediaSource | None] | None = None,
 ) -> tuple[str, list[MediaSource], str]:
     """Parse a DingTalk forwarded record into Markdown text and media sources."""
     sources: list[MediaSource] = []
     participants: list[str] = []
+    sender_names: dict[str, str] = {}
     parts: list[str] = []
     attachment_index = [0]
 
@@ -122,7 +131,18 @@ def _parse_forwarded_chat_record(
     for record in records:
         if not isinstance(record, dict):
             continue
-        sender = _message_text(record.get("senderNick") or record.get("senderId"))
+        raw_sender = _message_text(record.get("senderNick"))
+        sender_key = _message_text(record.get("senderId")) or raw_sender
+        if not sender_key:
+            sender = ""
+        elif sender_key in sender_names:
+            sender = sender_names[sender_key]
+        elif not raw_sender or raw_sender.startswith("$:LWCP"):
+            sender = i18n.translate("dingtalk.forwarded_record.participant", index=len(sender_names) + 1)
+            sender_names[sender_key] = sender
+        else:
+            sender = raw_sender
+            sender_names[sender_key] = sender
         if sender and sender not in participants:
             participants.append(sender)
         msg_type = record.get("msgType")
@@ -138,8 +158,8 @@ def _parse_forwarded_chat_record(
             parts.extend(_parse_rich_text_items(record.get("richText"), collect_media, True, attachment_index))
         elif msg_type == "file":
             attachment_index[0] += 1
-            name = record.get("fileName") or f"file-{attachment_index[0]:03d}"
-            collect_media(record, "file", True)
+            name = record.get("fileName") or f"file-{attachment_index[0]:03d}.bin"
+            collect_media({**record, "fileName": name}, "file", True)
             parts.append(i18n.translate("dingtalk.forwarded_record.file", index=attachment_index[0], filename=name))
         else:
             parts.append(i18n.translate("dingtalk.forwarded_record.unknown_item"))
@@ -157,6 +177,36 @@ def _parse_forwarded_chat_record(
 
     body = "\n\n".join(part for part in parts if part).strip()
     return body, sources, _forwarded_filename(participants)
+
+
+def _render_forwarded_markdown(body: str, media: list[Any], markdown_path: str) -> str:
+    """Replace logical attachment markers with links to downloaded workspace files."""
+    media_by_name: dict[str, list[Any]] = {}
+    for item in media:
+        media_by_name.setdefault(item.file_name, []).append(item)
+
+    def replace(match: re.Match[str]) -> str:
+        kind, index, logical_name = match.group(1), match.group(2), match.group(3)
+        is_image = kind in ("图片附件", "Image attachment")
+        candidates = media_by_name.get(logical_name, [])
+        if not candidates:
+            return i18n.translate(
+                "dingtalk.forwarded_record.download_failed",
+                kind=i18n.translate(
+                    "dingtalk.forwarded_record.image_label" if is_image else "dingtalk.forwarded_record.file_label"
+                ),
+                filename=logical_name,
+            )
+        item = candidates.pop(0)
+        target = Path(item.relative_path)
+        source = Path(markdown_path)
+        relative = Path(target.name) if target.parent == source.parent else Path("../") / target.name
+        link = f"./{relative.as_posix()}"
+        if is_image:
+            return f"![{kind} {index}：{item.file_name or target.name}]({link})"
+        return f"[{kind} {index}：{item.file_name or target.name}]({link})"
+
+    return re.sub(r"\[(图片附件|文件附件|Image attachment|File attachment) (\d+)(?:：|: )([^\]]+)\]", replace, body)
 
 
 def _parse_chat_record(content: dict) -> str:
@@ -221,24 +271,30 @@ async def prepare_dingtalk_message(payload: dict, client):
         elif kind == "chatRecord":
             record_body, record_sources, filename = _parse_forwarded_chat_record(content, add_media=add_media)
             sources.extend(record_sources)
+            media_result = await prepare_media_message("dingtalk", "", sources)
+            markdown_path = f"uploads/im-channels/dingtalk/{filename}"
             markdown = (
                 f"# {i18n.translate('dingtalk.forwarded_record.title')}\n\n"
-                f"{record_body or i18n.translate('dingtalk.forwarded_record.empty')}\n"
+                f"{_render_forwarded_markdown(record_body, media_result.media, markdown_path) or i18n.translate('dingtalk.forwarded_record.empty')}\n"
             ).encode("utf-8")
 
             async def fetch_record() -> bytes:
                 return markdown
 
-            sources.append(
-                MediaSource(
-                    media_type=ChannelMediaType.FILE,
-                    file_name=filename,
-                    mime_type="text/markdown",
-                    fetch=fetch_record,
-                    from_quote=True,
-                )
+            markdown_result = await prepare_media_message(
+                "dingtalk",
+                i18n.translate("dingtalk.forwarded_record.prompt"),
+                [
+                    MediaSource(
+                        media_type=ChannelMediaType.FILE,
+                        file_name=filename,
+                        mime_type="text/markdown",
+                        fetch=fetch_record,
+                        from_quote=True,
+                    )
+                ],
             )
-            text = i18n.translate("dingtalk.forwarded_record.prompt")
+            return PreparedMediaMessage(text=markdown_result.text, media=[*media_result.media, *markdown_result.media])
         elif kind != "text":
             pieces.append("[Unsupported DingTalk message type. Please resend as text or a supported attachment.]")
         if pieces:

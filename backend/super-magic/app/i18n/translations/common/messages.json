@@ -199,6 +199,10 @@
         "zh_CN": " 等",
         "en_US": " and others"
     },
+    "dingtalk.forwarded_record.participant": {
+        "zh_CN": "参与者 {index}",
+        "en_US": "Participant {index}"
+    },
     "dingtalk.forwarded_record.prompt": {
         "zh_CN": "用户发送了一份转发的聊天记录，请阅读附件中的聊天内容并根据需要进行处理。",
         "en_US": "The user forwarded a chat record. Please read the attached file and process its contents as needed."
@@ -218,6 +222,18 @@
     "dingtalk.forwarded_record.empty": {
         "zh_CN": "（聊天记录为空或无法解析）",
         "en_US": "(The forwarded chat record is empty or could not be parsed.)"
+    },
+    "dingtalk.forwarded_record.image_label": {
+        "zh_CN": "图片附件",
+        "en_US": "Image attachment"
+    },
+    "dingtalk.forwarded_record.file_label": {
+        "zh_CN": "文件附件",
+        "en_US": "File attachment"
+    },
+    "dingtalk.forwarded_record.download_failed": {
+        "zh_CN": "[{kind}：{filename}，下载失败，请重新发送]",
+        "en_US": "[{kind}: {filename}; download failed, please resend]"
     },
     "cron.notify.status_error": {
         "zh_CN": "失败",
