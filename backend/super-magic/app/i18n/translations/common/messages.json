@@ -179,6 +179,46 @@
         "zh_CN": "成功",
         "en_US": "completed successfully"
     },
+    "dingtalk.forwarded_record.title": {
+        "zh_CN": "聊天记录内容",
+        "en_US": "Forwarded chat record"
+    },
+    "dingtalk.forwarded_record.filename_suffix": {
+        "zh_CN": "的聊天记录",
+        "en_US": "chat record"
+    },
+    "dingtalk.forwarded_record.participants": {
+        "zh_CN": "@ {participants}",
+        "en_US": "@ {participants}"
+    },
+    "dingtalk.forwarded_record.participant_separator": {
+        "zh_CN": " 和 ",
+        "en_US": " and "
+    },
+    "dingtalk.forwarded_record.more_participants": {
+        "zh_CN": " 等",
+        "en_US": " and others"
+    },
+    "dingtalk.forwarded_record.prompt": {
+        "zh_CN": "用户发送了一份转发的聊天记录，请阅读附件中的聊天内容并根据需要进行处理。",
+        "en_US": "The user forwarded a chat record. Please read the attached file and process its contents as needed."
+    },
+    "dingtalk.forwarded_record.image": {
+        "zh_CN": "[图片附件 {index}：{filename}]",
+        "en_US": "[Image attachment {index}: {filename}]"
+    },
+    "dingtalk.forwarded_record.file": {
+        "zh_CN": "[文件附件 {index}：{filename}]",
+        "en_US": "[File attachment {index}: {filename}]"
+    },
+    "dingtalk.forwarded_record.unknown_item": {
+        "zh_CN": "[未识别的转发消息内容]",
+        "en_US": "[Unrecognized forwarded message item]"
+    },
+    "dingtalk.forwarded_record.empty": {
+        "zh_CN": "（聊天记录为空或无法解析）",
+        "en_US": "(The forwarded chat record is empty or could not be parsed.)"
+    },
     "cron.notify.status_error": {
         "zh_CN": "失败",
         "en_US": "failed"
