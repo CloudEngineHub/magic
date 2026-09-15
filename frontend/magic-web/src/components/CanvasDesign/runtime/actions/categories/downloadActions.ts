@@ -108,6 +108,25 @@ function getFrameFileElements(
  */
 export const downloadActions: UserAction[] = [
 	{
+		id: "download.text",
+		category: "download",
+		canExecute: (canvas) => {
+			if (!canvas.permissionManager.can("sideEffect.download")) return false
+			const selectedIds = canvas.selectionManager.getSelectedIds()
+			if (selectedIds.length !== 1) return false
+			const element = canvas.elementManager.getElementData(selectedIds[0])
+			return element?.type === ElementTypeEnum.Text
+		},
+		execute: async (canvas) => {
+			if (!canvas.permissionManager.can("sideEffect.download")) return
+			const selectedIds = canvas.selectionManager.getSelectedIds()
+			if (selectedIds.length !== 1) return
+			const element = canvas.elementManager.getElementData(selectedIds[0])
+			if (element?.type !== ElementTypeEnum.Text) return
+			await canvas.clipboardManager.downloadElementsAsPNG(selectedIds)
+		},
+	},
+	{
 		id: "download.image",
 		category: "download",
 		canExecute: (canvas) => {

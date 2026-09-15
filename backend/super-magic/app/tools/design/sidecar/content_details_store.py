@@ -17,7 +17,12 @@ ELEMENT_DETAILS_FILENAME = "element-details.json"
 ELEMENT_DETAILS_USER_FILENAME = "element-details-user.json"
 ELEMENT_DETAILS_VERSION = "2.0.0"
 ELEMENT_DETAIL_SOURCE_USER = "user"
-HEAVY_FIELDS = {"generateImageRequest", "generateVideoRequest", "visualUnderstanding"}
+HEAVY_FIELDS = {
+    "generateImageRequest",
+    "generateVideoRequest",
+    "visualUnderstanding",
+    "videoGenerationResultMeta",
+}
 
 
 class ContentDetailsStore:
@@ -127,4 +132,3 @@ class ContentDetailsStore:
     def _get_file_path(self, filename: str) -> Path:
         """返回项目内 sidecar 的绝对路径。"""
         return PathManager.get_workspace_dir() / self.project_path / filename
-

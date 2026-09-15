@@ -31,6 +31,7 @@ export class BorderDecorator {
 	private borderRect?: Konva.Rect
 	private borderAnimation?: Konva.Animation
 	private borderUpdateHandler?: () => void
+	private viewportScaleUnsubscribe?: () => void
 	private backgroundNode?: Konva.Image
 	private currentBackgroundType?: "selected" | "unselected"
 	private backgroundSwitchRequestId = 0
@@ -118,8 +119,7 @@ export class BorderDecorator {
 	public update(): void {
 		if (!this.borderRect) return
 
-		const stage = this.borderRect.getStage()
-		if (!stage) return
+		if (!this.borderRect.getStage()) return
 
 		// 检查元素是否被选中
 		const isSelected = this.config.canvas.selectionManager.isSelected(this.config.elementId)
@@ -135,9 +135,7 @@ export class BorderDecorator {
 			}
 		} else {
 			this.borderRect.visible(true)
-			// 更新边框宽度
-			const strokeWidth = this.calculateStrokeWidth(stage)
-			this.borderRect.strokeWidth(strokeWidth)
+			this.updateStrokeWidth()
 			// 如果是动画状态且动画未运行，启动动画
 			if (this.config.isAnimated && !this.borderAnimation) {
 				this.startAnimation()
@@ -213,6 +211,18 @@ export class BorderDecorator {
 		return DECORATOR_CONFIG.BORDER_WIDTH / (stage.scaleX() * avgScale)
 	}
 
+	/** viewport 缩放只影响线宽；整 Stage 已由 ViewportController 在同一帧统一请求绘制。 */
+	private updateStrokeWidth(): void {
+		if (!this.borderRect?.visible()) return
+		const stage = this.borderRect.getStage()
+		if (!stage) return
+
+		const strokeWidth = this.calculateStrokeWidth(stage)
+		if (this.borderRect.strokeWidth() !== strokeWidth) {
+			this.borderRect.strokeWidth(strokeWidth)
+		}
+	}
+
 	/**
 	 * 设置背景节点
 	 */
@@ -283,9 +293,11 @@ export class BorderDecorator {
 		this.borderUpdateHandler = () => {
 			this.update()
 		}
-
-		// 监听 viewport 缩放事件
-		this.config.canvas.eventEmitter.on("viewport:scale", this.borderUpdateHandler)
+		this.viewportScaleUnsubscribe =
+			this.config.canvas.runtimeScheduler.registerViewportScaleLayout(
+				this.config.elementId,
+				() => this.updateStrokeWidth(),
+			)
 		// 监听选中/取消选中事件
 		this.config.canvas.eventEmitter.on("element:select", this.borderUpdateHandler)
 		this.config.canvas.eventEmitter.on("element:deselect", this.borderUpdateHandler)
@@ -351,10 +363,12 @@ export class BorderDecorator {
 	 */
 	public destroy(): void {
 		// 移除事件监听
+		this.viewportScaleUnsubscribe?.()
+		this.viewportScaleUnsubscribe = undefined
 		if (this.borderUpdateHandler) {
-			this.config.canvas.eventEmitter.off("viewport:scale", this.borderUpdateHandler)
 			this.config.canvas.eventEmitter.off("element:select", this.borderUpdateHandler)
 			this.config.canvas.eventEmitter.off("element:deselect", this.borderUpdateHandler)
+			this.group.off("transform", this.borderUpdateHandler)
 			this.borderUpdateHandler = undefined
 		}
 

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, type RefObject } from "react"
 import type { CanvasDesignRef } from "@/components/CanvasDesign/public/props"
 import type { CanvasDocument } from "@/components/CanvasDesign/runtime/document/types"
 import {
+	CANVAS_SELECTION_PENDING_MENTION_LIMIT,
 	collectCanvasElementMentionItems,
 	type CanvasElementResolvedFile,
 } from "@/components/business/MentionPanel/runtime/builtin/domains/canvas-elements"
+import { getProjectFileResourceIdentity } from "@/components/business/MentionPanel/utils/projectReferenceMention"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import {
@@ -53,6 +55,7 @@ export function useCanvasSelectionMentionPublisher({
 					selectedElementIds,
 					designProjectId,
 					resolveFileBySrc,
+					maxItems: CANVAS_SELECTION_PENDING_MENTION_LIMIT,
 				}).flatMap((item) =>
 					item.type === MentionItemType.PROJECT_FILE && item.data
 						? [{ type: item.type, data: item.data }]
@@ -60,7 +63,10 @@ export function useCanvasSelectionMentionPublisher({
 				)
 			}
 
-			const signature = JSON.stringify(items.map((item) => [item.type, item.data] as const))
+			// Identity-only signature avoids serializing full mention payloads on every selection change.
+			const signature = items
+				.map((item) => getProjectFileResourceIdentity(item.data) || `${item.type}`)
+				.join("|")
 			if (
 				snapshotRef.current?.scopeKey === scopeKey &&
 				snapshotRef.current.signature === signature &&

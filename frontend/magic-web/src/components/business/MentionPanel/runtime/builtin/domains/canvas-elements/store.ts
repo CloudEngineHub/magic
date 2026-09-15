@@ -410,22 +410,29 @@ export class MentionPanelCanvasElementsStore {
 	}
 }
 
+/** Silent cap for canvas-selection pending file mentions in MessageEditor. */
+/** Cap pending canvas-selection mentions to avoid mounting hundreds of TipTap NodeViews at once. */
+export const CANVAS_SELECTION_PENDING_MENTION_LIMIT = 20
+
 export interface CollectCanvasElementMentionItemsOptions {
 	document: CanvasDocument | null | undefined
 	selectedElementIds: string[]
 	designProjectId: string
 	resolveFileBySrc: (src: string) => CanvasElementResolvedFile | null
+	/** Soft max unique files to collect; collection stops once reached. */
+	maxItems?: number
 }
 
 /**
  * Collects the project-file mentions used by the current selection.
  * Containers are expanded recursively, while repeated references to one file
  * are collapsed so the editor receives one mention per resource.
+ * When maxItems is set, collection stops as soon as that many unique files are found.
  */
 export function collectCanvasElementMentionItems(
 	options: CollectCanvasElementMentionItemsOptions,
 ): MentionItem[] {
-	const { document, selectedElementIds, designProjectId, resolveFileBySrc } = options
+	const { document, selectedElementIds, designProjectId, resolveFileBySrc, maxItems } = options
 	if (!document || selectedElementIds.length === 0) return []
 
 	const elementsById = new Map<string, LayerElement>()
@@ -439,20 +446,26 @@ export function collectCanvasElementMentionItems(
 
 	const seenResources = new Set<string>()
 	const items: MentionItem[] = []
-	const visit = (element: LayerElement) => {
+	const hasReachedLimit = () => maxItems != null && items.length >= maxItems
+
+	/** Returns false when the caller should stop walking the selection. */
+	const visit = (element: LayerElement): boolean => {
+		if (hasReachedLimit()) return false
 		if (isContainerElement(element)) {
-			getSortedElements(getElementChildren(element)).forEach(visit)
-			return
+			for (const child of getSortedElements(getElementChildren(element))) {
+				if (!visit(child)) return false
+			}
+			return true
 		}
-		if (!isMediaElement(element)) return
+		if (!isMediaElement(element)) return true
 
 		const source = getMediaSource(element)
 		const file = source?.src ? resolveFileBySrc(source.src) : null
-		if (!source || !file) return
+		if (!source || !file) return true
 
 		const resourceKey = getProjectFileResourceIdentity(file, source.src)
-		if (!resourceKey) return
-		if (seenResources.has(resourceKey)) return
+		if (!resourceKey) return true
+		if (seenResources.has(resourceKey)) return true
 		seenResources.add(resourceKey)
 
 		const data = createProjectFileMentionData(file)
@@ -485,11 +498,12 @@ export function collectCanvasElementMentionItems(
 				...(source.crop ? { crop: source.crop } : {}),
 			},
 		})
+		return !hasReachedLimit()
 	}
 
 	for (const elementId of selectedElementIds) {
 		const element = elementsById.get(elementId)
-		if (element) visit(element)
+		if (element && !visit(element)) break
 	}
 
 	return items
