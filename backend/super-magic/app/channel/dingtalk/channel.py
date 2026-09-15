@@ -4,9 +4,7 @@ DingTalkChannel — 单例，管理钉钉 Stream 模式连接和消息分发。
 连接可由 ConnectDingTalkBot Tool 触发，也可在检测到已保存配置后于进程启动时自动发起。
 """
 import asyncio
-import json
 import uuid
-from collections.abc import Mapping
 from typing import Optional
 
 from dingtalk_stream import (
@@ -31,36 +29,6 @@ from app.core.keepalive_registry import KeepaliveRegistry
 from app.utils.time_utils import now_ms
 
 logger = get_logger(__name__)
-
-def _payload_shape(value: object, depth: int = 0) -> object:
-    """Return payload structure without logging message content or credentials."""
-    if depth >= 8:
-        return "<max-depth>"
-    if isinstance(value, Mapping):
-        return {
-            "fields": sorted(str(key) for key in value),
-            "children": {str(key): _payload_shape(item, depth + 1) for key, item in value.items()},
-        }
-    if isinstance(value, list):
-        return {
-            "type": "list",
-            "length": len(value),
-            "items": [_payload_shape(item, depth + 1) for item in value[:50]],
-            "truncated": len(value) > 50,
-        }
-    if value is None:
-        return "null"
-    return type(value).__name__
-
-
-def _parse_json_field(value: object) -> object:
-    """Parse JSON encoded DingTalk fields for structural logging."""
-    if not isinstance(value, str):
-        return value
-    try:
-        return json.loads(value)
-    except json.JSONDecodeError:
-        return value
 
 
 class DingTalkChannel(BaseChannel):
@@ -279,26 +247,6 @@ class DingTalkChannel(BaseChannel):
             f"fields={sorted(payload)}, "
             f"content_fields={sorted(content) if isinstance(content, dict) else []}"
         )
-        msgtype = payload.get("msgtype")
-        if msgtype == "chatRecord" and isinstance(content, dict):
-            chat_record = _parse_json_field(content.get("chatRecord"))
-            summary = _parse_json_field(content.get("summary"))
-            message_types = [
-                item.get("msgType")
-                for item in chat_record
-                if isinstance(item, Mapping) and "msgType" in item
-            ] if isinstance(chat_record, list) else []
-            logger.info(
-                f"[DingTalkChannel] chatRecord structure: "
-                f"message_types={message_types!r}, "
-                f"record_shape={_payload_shape(chat_record)!r}, "
-                f"summary_shape={_payload_shape(summary)!r}"
-            )
-        elif msgtype == "richText" and isinstance(content, dict):
-            rich_text = _parse_json_field(content.get("richText"))
-            logger.info(f"[DingTalkChannel] richText structure: shape={_payload_shape(rich_text)!r}")
-        elif msgtype not in {"text", "picture", "richText", "file", "chatRecord"}:
-            logger.info(f"[DingTalkChannel] unsupported message structure: shape={_payload_shape(payload)!r}")
         from app.channel.dingtalk.media import prepare_dingtalk_message
         prepared = await prepare_dingtalk_message(payload, self._client)
         content = prepared.text
