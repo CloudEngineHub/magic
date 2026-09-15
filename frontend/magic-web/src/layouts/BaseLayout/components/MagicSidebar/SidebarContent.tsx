@@ -132,16 +132,17 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 								/>
 							)
 						})}
+						<MicroAppsSidebarMenuItem collapsed={collapsed} />
 						<SidebarMenuItem>
 							<AppsSubMenu>
 								<SidebarMenuButton
-									tooltip={collapsed ? t("appsMenu.apps") : undefined}
+									tooltip={collapsed ? t("appsMenu.more") : undefined}
 									data-testid="sidebar-content-apps-button"
 									className="text-sidebar-foreground"
 								>
 									<LayoutGrid className="h-4 w-4 shrink-0" />
 									<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-										{t("appsMenu.apps")}
+										{t("appsMenu.more")}
 									</span>
 									{!collapsed && (
 										<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
@@ -149,7 +150,6 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 								</SidebarMenuButton>
 							</AppsSubMenu>
 						</SidebarMenuItem>
-						<MicroAppsSidebarMenuItem collapsed={collapsed} />
 					</SidebarMenu>
 				</SidebarGroupContent>
 			</SidebarGroup>
