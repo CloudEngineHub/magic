@@ -12,6 +12,8 @@ import type { ExportIssue } from "@magic/html2pptx"
 
 export interface SuperMagicPptxExportIssuesPayload {
 	issues: ExportIssue[]
+	/** Whether the export completed with recoverable issues or failed entirely. */
+	status?: "completed-with-issues" | "failed"
 	fileId?: string
 	fileName?: string
 }

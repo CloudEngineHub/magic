@@ -285,6 +285,7 @@ async function runDirectStreamingExport(
 					!input.skipFailedPages
 				)
 					throw error
+				reportPageExportError(input, page.index, error)
 			}
 		}
 
@@ -411,6 +412,7 @@ async function runStagedStreamingExport(
 					!input.skipFailedPages
 				)
 					throw error
+				reportPageExportError(input, page.index, error)
 			}
 		}
 
@@ -518,6 +520,25 @@ function reportExportResourceError(
 		} satisfies ExportIssue)
 	} catch {
 		// Issue listeners are observational and must not affect packaging.
+	}
+}
+
+/** Report a recoverable page failure before the page is skipped. */
+function reportPageExportError(
+	input: StreamingExportTaskInput,
+	pageIndex: number,
+	error: unknown,
+): void {
+	try {
+		input.onExportIssue?.({
+			pageIndex,
+			code: "render-error",
+			message: error instanceof Error ? error.message : String(error),
+			severity: "error",
+			details: { phase: "render-page", recoverable: true },
+		})
+	} catch {
+		// Diagnostics must never turn a recoverable page failure into an export failure.
 	}
 }
 

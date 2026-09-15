@@ -1,6 +1,8 @@
 import type { ExportIssue } from "@magic/html2pptx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
+export type PptxExportIssueStatus = "completed-with-issues" | "failed"
+
 export interface PptxRepairPromptCopy {
 	/** Localized instruction shown before the issue list. */
 	instruction: string
@@ -51,12 +53,14 @@ export function publishPptxExportFailure(
 	publishPptxExportIssues(
 		hasSameFailure || hasFatalIssue ? issues : [...issues, failure],
 		context,
+		"failed",
 	)
 }
 
 export function publishPptxExportIssues(
 	issues: ExportIssue[],
 	context: { fileId?: string; fileName?: string } = {},
+	status: PptxExportIssueStatus = "completed-with-issues",
 ) {
 	if (issues.length === 0) return
 	const uniqueIssues = issues.filter(
@@ -70,6 +74,7 @@ export function publishPptxExportIssues(
 	)
 	pubsub.publish(PubSubEvents.Pptx_Export_Issues, {
 		issues: uniqueIssues,
+		status,
 		fileId: context.fileId,
 		fileName: context.fileName,
 	})
