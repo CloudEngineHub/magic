@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\Asset\Assembler;
 
 use App\Domain\Asset\Entity\AssetEntity;
+use App\Domain\Asset\Entity\ValueObject\AssetComplianceStatus;
 use App\Domain\Asset\Repository\Persistence\Model\AssetModel;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\Context\CoContext;
@@ -32,6 +33,10 @@ class AssetAssembler
         $dto->setName($entity->getI18nName(self::language()));
         $dto->setDescription($entity->getI18nDescription(self::language()));
         $dto->setFileUrl($fileLink?->getUrl() ?? $entity->getFileUrl());
+        // 合规结论对用户端与管理端都要给；失败原因只在未通过时回填，通过/未校验时保持为空。
+        $complianceStatus = AssetComplianceStatus::forAsset($entity->getAssetKind(), $entity->getSyncStatus());
+        $dto->setComplianceStatus($complianceStatus->value);
+        $dto->setComplianceFailedReason($complianceStatus->isFailed() ? $entity->getSyncFailedReason() : null);
         if ($admin) {
             $dto->setStatus($entity->getStatus()->value);
             $dto->setFileKey($entity->getFileKey());

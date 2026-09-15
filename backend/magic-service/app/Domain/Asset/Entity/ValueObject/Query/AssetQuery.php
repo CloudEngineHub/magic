@@ -39,9 +39,6 @@ class AssetQuery
      */
     private array $sharedAssetIds = [];
 
-    /** 是否连同尚未完成第三方同步的资产一起返回；默认只返回已同步的。 */
-    private bool $includeUnsynced = false;
-
     public function getKeyword(): ?string
     {
         return $this->keyword;
@@ -127,15 +124,5 @@ class AssetQuery
     public function setSharedAssetIds(array $sharedAssetIds): void
     {
         $this->sharedAssetIds = array_values($sharedAssetIds);
-    }
-
-    public function includeUnsynced(): bool
-    {
-        return $this->includeUnsynced;
-    }
-
-    public function setIncludeUnsynced(bool $includeUnsynced): void
-    {
-        $this->includeUnsynced = $includeUnsynced;
     }
 }

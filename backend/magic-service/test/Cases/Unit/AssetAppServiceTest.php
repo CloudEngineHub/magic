@@ -28,6 +28,7 @@ use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType;
 use App\Domain\Permission\Repository\Facade\ResourceVisibilityRepositoryInterface;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
+use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\ErrorCode\AssetErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\Page;
@@ -157,6 +158,11 @@ final class AssetAppServiceTest extends TestCase
                 return [];
             }
 
+            public function extractComplianceFailedReason(array $metadata, string $providerStatus): string
+            {
+                return 'provider failure';
+            }
+
             public function createAssetGroup(array $payload): array
             {
                 return ['provider_group_id' => 'group-test'];
@@ -185,6 +191,7 @@ final class AssetAppServiceTest extends TestCase
             $this->createMock(AssetProviderAssetRepositoryInterface::class),
             $agreement,
             new NullLogger(),
+            $this->createMock(AiAbilityDomainService::class),
             $provider,
         );
         $authorization = $this->createMock(AssetDataIsolation::class);
@@ -570,6 +577,29 @@ final class AssetAppServiceTest extends TestCase
         self::assertSame('https://example.test/org-a/private/library.png', $saved->getFileUrl());
     }
 
+    public function testSaveToLibraryRejectsMissingFileKey(): void
+    {
+        $authorization = $this->realAssetDataIsolation('org-a', 'user-1');
+        $domainService = $this->createMock(AssetDomainService::class);
+        $domainService->expects(self::never())->method('saveToLibrary');
+        $service = new class($domainService, $this->visibilityDomainService()) extends AssetAppService {
+            public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
+            {
+                return [];
+            }
+        };
+
+        try {
+            $service->saveToLibrary($authorization, new SaveAssetToLibraryRequestDTO([
+                'name' => '不存在的素材',
+                'file_key' => 'org-a/private/missing.png',
+            ]));
+            self::fail('文件不存在时应拒绝保存');
+        } catch (BusinessException $exception) {
+            self::assertSame(AssetErrorCode::FILE_REQUIRED->value, $exception->getCode());
+        }
+    }
+
     public function testPersonalAssetDeletionRevokesOwnerVisibility(): void
     {
         $authorization = $this->realAssetDataIsolation('org-a', 'user-1');
@@ -734,7 +764,7 @@ final class AssetAppServiceTest extends TestCase
         return new class($domainService, $this->visibilityDomainService($repository)) extends AssetAppService {
             public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
             {
-                return [];
+                return array_fill_keys($fileLinks, new FileLink('', 'https://example.test/asset', 3600));
             }
         };
     }

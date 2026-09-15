@@ -23,18 +23,20 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * 把生成视频请求里的 workspace 引用素材材质化为当前用户的个人资产。
+ * 将生成视频请求中的 workspace 素材引用转换为当前用户可复用的个人资产引用。
  *
- * 仅对火山方舟（seedance/seedace）服务商生效：命中时遍历 reference_images/videos/audios/frames，
- * 将 workspace 相对路径解析后下载、算 hash，命中本人已有素材则复用，否则复制进私有桶并登记为个人资产，
- * 最后把 uri 改写为 asset://<assetId>，由网关透传。
- * 同一份文件（按 uri）在本请求内只解析一次：下载/算 hash/查重/上传都只发生一次，命中已有素材或直接复用均不再重复下载。
+ * 仅处理火山方舟视频生成使用的 reference_images、reference_videos、reference_audios 和 frames 字段。
+ * 对每个 workspace 相对路径查找文件并下载计算内容指纹，优先复用本人已有且可用的资产；未命中时上传文件、
+ * 创建个人资产并将 URI 改写为第三方可识别的 asset:// 标识。
  *
- * 任意单条素材处理失败都退回原始 uri，不中断整个请求；asset:// 与无法解析的引用直接保留原样。
+ * 同一请求内按原始 URI 缓存解析结果，避免重复下载、计算指纹、查重和上传。已有 asset:// URI、无法解析的路径，
+ * 以及处理过程中发生异常的单条素材均保留原值，不影响其他素材和整个视频生成请求继续执行。
  */
 final class DesignVideoReferenceAssetResolver
 {
-    /** 材质化覆盖的引用字段；mask 为单一遮罩，不在本次范围内。 */
+    /**
+     * 需要转换为个人资产的引用字段；单独的 mask 字段不在本次处理范围内。
+     */
     private const array MATERIALIZED_KEYS = [
         'reference_images',
         'reference_videos',
@@ -44,9 +46,15 @@ final class DesignVideoReferenceAssetResolver
 
     private readonly SafeRemoteFileDownloader $remoteFileDownloader;
 
-    /** 本请求内按 uri 缓存解析结果：同一份文件只下载/算 hash/查重/上传一次，后续引用直接复用 asset://id。 */
+    /**
+     * 缓存本次请求内的 URI 解析结果，避免同一文件被重复下载、计算指纹或上传。
+     */
     private array $resolvedCache = [];
 
+    /**
+     * 初始化任务文件、文件存储和资产服务，并配置安全的远程文件下载器。
+     * 下载器允许测试注入替身实现，以避免单元测试访问真实网络资源。
+     */
     public function __construct(
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly FileDomainService $fileDomainService,
@@ -62,6 +70,10 @@ final class DesignVideoReferenceAssetResolver
         ));
     }
 
+    /**
+     * 解析生成任务中的引用素材，并将可识别的 workspace 路径改写为 asset URI。
+     * 单条素材处理失败时保留原始 URI，确保其他输入仍可继续参与视频生成。
+     */
     public function resolve(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity): void
     {
         $this->resolvedCache = [];
@@ -87,8 +99,11 @@ final class DesignVideoReferenceAssetResolver
     }
 
     /**
-     * @param array<int, array<string, mixed>> $items
-     * @return array<int, array<string, mixed>>
+     * 遍历一个引用素材列表，并只替换每项中的 uri 字段。
+     * 非数组项保持原样；方法返回与输入结构一致的列表，供任务实体重新写回。
+     *
+     * @param array<int, array<string, mixed>> $items 待解析的引用素材列表。
+     * @return array<int, array<string, mixed>> 处理后的引用素材列表。
      */
     private function materializeList(
         DesignDataIsolation $dataIsolation,
@@ -113,6 +128,10 @@ final class DesignVideoReferenceAssetResolver
         return $items;
     }
 
+    /**
+     * 解析单个引用 URI，并优先从本次请求缓存中返回已处理结果。
+     * 缓存命中时不会再次下载文件或访问资产服务，避免重复执行相同的转换流程。
+     */
     private function resolveUri(
         DesignDataIsolation $dataIsolation,
         int $projectId,
@@ -128,6 +147,10 @@ final class DesignVideoReferenceAssetResolver
         return $resolved;
     }
 
+    /**
+     * 执行单个 URI 的实际材质化流程，包括路径查找、下载、去重、上传和资产登记。
+     * 对于无效路径、已有 asset URI 或任意处理异常，均返回原始 URI 以保证请求可用。
+     */
     private function doResolveUri(
         DesignDataIsolation $dataIsolation,
         int $projectId,
@@ -157,7 +180,6 @@ final class DesignVideoReferenceAssetResolver
             return $uri;
         }
         try {
-            // 命中本人已有素材：直接复用其第三方素材 ID（provider_asset_id），不重复上传。
             // asset:// 会被网关原样透传给火山，火山只认它自己颁发的素材 ID，故必须用 provider_asset_id。
             $providerAssetId = $this->assetAppService->findPersonalProviderAssetId($dataIsolation, $userId, $hash);
             if ($providerAssetId !== null && $providerAssetId !== '') {
@@ -185,6 +207,10 @@ final class DesignVideoReferenceAssetResolver
         }
     }
 
+    /**
+     * 根据已上传文件的存储键和原始文件名构造个人资产创建请求。
+     * DTO 会明确设置素材类型、业务类型、展示名称和文件键，供资产服务完成登记。
+     */
     private function buildCreateDto(string $fileKey, string $name): CreateAssetRequestDTO
     {
         $dto = new CreateAssetRequestDTO();

@@ -137,8 +137,6 @@ class AdminAssetAppService extends AbstractAssetAppService
     {
         $query = new AssetQuery();
         $query->setScope(AssetScope::PUBLIC);
-        // 管理端必须看到未完成同步的记录，否则没人能发现并清理第三方的遗留资源。
-        $query->setIncludeUnsynced(true);
         $query->setAssetKind($requestDTO->getAssetKind());
         $query->setParentId($requestDTO->getParentId());
         $query->setAssetBusinessType($requestDTO->getAssetBusinessType());

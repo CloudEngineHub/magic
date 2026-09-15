@@ -28,6 +28,13 @@ interface AssetProviderInterface
     public function getAssetStatus(string $providerAssetId): array;
 
     /**
+     * 从厂商原始响应中提取合规失败原因，供领域层写入本地失败原因。
+     *
+     * @param array<string, mixed> $metadata
+     */
+    public function extractComplianceFailedReason(array $metadata, string $providerStatus): string;
+
+    /**
      * 创建第三方素材组，素材必须归属于素材组。
      *
      * @return array{provider_group_id?: string, provider_status?: string, metadata?: array}

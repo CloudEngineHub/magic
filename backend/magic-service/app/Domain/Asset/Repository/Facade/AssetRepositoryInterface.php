@@ -12,16 +12,23 @@ use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Infrastructure\Core\ValueObject\Page;
 
+/**
+ * 定义资产实体的持久化、分页查询、内容去重和层级关系检查能力。
+ * 所有需要数据隔离的方法都必须限制在调用方提供的组织范围内，避免跨组织读写资产记录。
+ */
 interface AssetRepositoryInterface
 {
+    /**
+     * 保存新资产或覆盖已有资产，并返回数据库中的最新实体数据。
+     * 具体实现负责补齐资产主键、组织编码和时间字段，确保后续第三方映射能够关联本地记录。
+     */
     public function save(AssetDataIsolation $dataIsolation, AssetEntity $asset): AssetEntity;
 
     /**
-     * 按组织隔离、查询范围、用户和资产类型分页，排序固定为 created_at/id 倒序。
+     * 在组织隔离范围内按资产范围、类型和业务条件分页查询，并按创建时间及主键倒序返回。
+     * 团队共享资产主键由应用层通过 {@see AssetQuery::setSharedAssetIds()} 传入，仓储不得跨领域读取权限表。
      *
-     * 仓储只负责组织隔离与范围过滤（个人 / 团队分享 / 官方公开 / 全部）；
-     * 「团队分享」用到的资产主键由应用层从 magic_resource_visibility 解析后放进
-     * {@see AssetQuery::setSharedAssetIds()}，仓储不跨领域读权限表。
+     * @return array{total: int, list: AssetEntity[]} 符合条件的资产总数和当前页实体列表。
      */
     public function queries(
         AssetDataIsolation $dataIsolation,
@@ -29,35 +36,41 @@ interface AssetRepositoryInterface
         Page $page,
     ): array;
 
+    /**
+     * 在允许访问的组织范围内按主键查询单个资产，并将持久化模型转换为领域实体。
+     * 目标不存在、已经删除或不属于当前数据隔离范围时返回 null，不向调用方暴露其他组织的数据。
+     */
     public function findById(AssetDataIsolation $dataIsolation, int|string $id): ?AssetEntity;
 
     /**
-     * 按内容指纹查存活素材主键，用于复用第三方素材。
+     * 按内容指纹查询未删除的资产主键，用于跨组织复用已经通过审核的第三方素材凭证。
+     * 该查询刻意不按组织编码过滤，但只返回本地主键，调用方仍需校验对应映射是否满足复用条件。
      *
-     * 第三方素材是全局资源：同一份内容各组织各建一条本地记录、共用同一个 provider_asset_id，
-     * 因此这里刻意不按 organization_code 过滤——这正是「同一张图片只上传一次」能生效的前提。
-     *
-     * @return int[]
+     * @return int[] 最多返回指定数量的资产主键列表。
      */
     public function findIdsByContentHash(string $contentHash, int $limit = 20): array;
 
     /**
-     * 查当前用户自己已同步的个人资产，用于视频生成的素材去重复用。
-     *
-     * 与 findIdsByContentHash 不同：这里按 user_id 过滤且只取 SYNCED 的素材，
-     * 保证复用到的都是本人已确认可用的私有资产。
+     * 按用户标识和内容指纹查询未删除的个人资产，用于判断相同内容是否已经上传。
+     * 默认只返回同步完成的最早记录；允许任意同步状态时返回最新记录，便于继续未完成的合规校验。
      */
-    public function findPersonalAssetByContentHash(string $userId, string $contentHash): ?AssetEntity;
+    public function findPersonalAssetByContentHash(string $userId, string $contentHash, bool $anySyncStatus = false): ?AssetEntity;
 
     /**
-     * 是否还有未删除的直接子级（素材或子组）；它是删除素材组前的硬性检查。
+     * 判断指定资产是否存在未删除的直接子级，包括普通素材和下级素材组。
+     * 该检查用于删除素材组前阻止产生孤立记录，只检查当前组织范围内的直接层级关系。
      */
     public function hasChildren(AssetDataIsolation $dataIsolation, int|string $assetId): bool;
 
     /**
-     * 软删除资产，返回是否命中记录。
+     * 在组织隔离和用户归属条件下软删除指定资产，并返回是否找到且成功删除记录。
+     * 该方法只处理本地资产数据，不负责检查子级关系，也不负责回收第三方素材及其映射。
      */
     public function delete(AssetDataIsolation $dataIsolation, AssetEntity $asset): bool;
 
+    /**
+     * 在组织隔离范围内更新资产实体的可变字段，并返回保存后的最新领域实体。
+     * 目标不存在或不属于允许访问的组织时返回 null，不创建新记录，也不触发第三方同步流程。
+     */
     public function update(AssetDataIsolation $dataIsolation, AssetEntity $asset): ?AssetEntity;
 }

@@ -27,6 +27,7 @@ readonly class AiAbilityConfigAppService
         AiAbilityCode::ImageRemoveBackground,
         AiAbilityCode::ImageEraser,
         AiAbilityCode::ImageExpand,
+        AiAbilityCode::VolcengineArkAssets,
     ];
 
     public function __construct(
@@ -61,7 +62,7 @@ readonly class AiAbilityConfigAppService
     /**
      * 获取前端使用的 AI 能力可用性配置.
      *
-     * @return array{abilities: array{image_convert_high: array{enabled: bool, image_size_config: array{sizes: array<int, array<string, mixed>>}}, image_remove_background: array{enabled: bool}, image_eraser: array{enabled: bool}, image_expand: array{enabled: bool}}}
+     * @return array{abilities: array{image_convert_high: array{enabled: bool, image_size_config: array{sizes: array<int, array<string, mixed>>}}, image_remove_background: array{enabled: bool}, image_eraser: array{enabled: bool}, image_expand: array{enabled: bool}, volcengine_ark_assets: array{enabled: bool}}}
      */
     public function getAvailability(ProviderDataIsolation $dataIsolation): array
     {

@@ -179,7 +179,7 @@ final class AssetRepositoryTest extends TestCase
             static fn (ReflectionParameter $parameter): string => $parameter->getName(),
             $reflection->getParameters(),
         );
-        self::assertSame(['userId', 'contentHash'], $params);
+        self::assertSame(['userId', 'contentHash', 'anySyncStatus'], $params);
 
         $returnType = $reflection->getReturnType();
         self::assertNotNull($returnType);

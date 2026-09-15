@@ -211,9 +211,11 @@ class AssetEntity extends AbstractEntity
         return $this->syncStatus;
     }
 
-    public function setSyncStatus(AssetSyncStatus|int|string $value): void
+    public function setSyncStatus(AssetSyncStatus|int|string|null $value): void
     {
-        $this->syncStatus = $value instanceof AssetSyncStatus ? $value : AssetSyncStatus::fromValue($value);
+        $this->syncStatus = $value === null
+            ? AssetSyncStatus::PENDING
+            : ($value instanceof AssetSyncStatus ? $value : AssetSyncStatus::fromValue($value));
     }
 
     public function getSyncFailedReason(): ?string

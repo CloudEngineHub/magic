@@ -60,10 +60,6 @@ class AssetRepository implements AssetRepositoryInterface
     ): array {
         $builder = $this->assetModel::query();
         $builder->whereIn('organization_code', $dataIsolation->getOrganizationCodes());
-        if (! $query->includeUnsynced()) {
-            // 未完成第三方同步的资产不对外展示：它可能是半成品，也可能是已判定同步失败的记录。
-            $builder->where('sync_status', AssetSyncStatus::SYNCED->value);
-        }
         $this->applyScopeFilter($builder, $dataIsolation, $query);
         if ($query->getAssetKind() !== null) {
             $builder->where('asset_kind', $query->getAssetKind());
@@ -134,18 +130,19 @@ class AssetRepository implements AssetRepositoryInterface
             ->all();
     }
 
-    public function findPersonalAssetByContentHash(string $userId, string $contentHash): ?AssetEntity
+    public function findPersonalAssetByContentHash(string $userId, string $contentHash, bool $anySyncStatus = false): ?AssetEntity
     {
         if ($userId === '' || $contentHash === '') {
             return null;
         }
-        $model = $this->assetModel::query()
+        $builder = $this->assetModel::query()
             ->where('user_id', $userId)
             ->where('content_hash', $contentHash)
-            ->where('sync_status', AssetSyncStatus::SYNCED->value)
-            ->whereNull('deleted_at')
-            ->orderBy('id')
-            ->first();
+            ->whereNull('deleted_at');
+        if (! $anySyncStatus) {
+            $builder->where('sync_status', AssetSyncStatus::SYNCED->value);
+        }
+        $model = $builder->orderBy('id', $anySyncStatus ? 'desc' : 'asc')->first();
         return $model === null ? null : new AssetEntity($model->toArray());
     }
 

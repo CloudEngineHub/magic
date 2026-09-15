@@ -10,6 +10,7 @@ namespace App\Infrastructure\ExternalAPI\VolcengineArk\Assets;
 use App\Domain\Asset\Contract\AssetProviderInterface;
 use App\ErrorCode\AssetErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Core\Exception\BusinessException;
 use Hyperf\Guzzle\ClientFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -56,7 +57,13 @@ final class VolcengineArkAssetProvider implements AssetProviderInterface
             'group_id' => $request['GroupId'] ?? '',
             'asset_type' => $request['AssetType'] ?? '',
         ]);
-        return $this->mapAssetResponse($this->client->createAsset($request));
+        // 保留 HTTP 4xx 的原始错误体，以便把方舟返回的审核原因写入本地记录。
+        $response = $this->client->requestAllowingBusinessFailure('CreateAsset', $request);
+        if (isset($response['ResponseMetadata']['Error'])) {
+            $reason = $this->extractComplianceFailedReason($response, 'FAILED');
+            throw new BusinessException($reason, AssetErrorCode::COMPLIANCE_FAILED->value);
+        }
+        return $this->mapAssetResponse($response);
     }
 
     public function getAssetStatus(string $providerAssetId, ?string $projectName = null): array
@@ -67,6 +74,47 @@ final class VolcengineArkAssetProvider implements AssetProviderInterface
             $request['ProjectName'] = $projectName;
         }
         return $this->mapAssetResponse($this->client->getAsset($request));
+    }
+
+    /**
+     * 从火山方舟原始响应中提取合规未通过的原因。
+     * 火山的审核信息没有稳定契约，按已知键、整体 JSON、状态三级降级。
+     *
+     * @param array<string, mixed> $metadata
+     */
+    public function extractComplianceFailedReason(array $metadata, string $providerStatus): string
+    {
+        // 方舟参数或审核失败时，优先展示厂商返回的错误码和错误消息。
+        $error = $metadata['ResponseMetadata']['Error'] ?? null;
+        $errorCode = is_array($error) ? trim((string) ($error['Code'] ?? '')) : '';
+        $errorMessage = is_array($error) ? trim((string) ($error['Message'] ?? '')) : '';
+        if ($errorCode !== '' && $errorMessage !== '') {
+            return $errorCode . '：' . $errorMessage;
+        }
+        if ($errorMessage !== '') {
+            return $errorMessage;
+        }
+        $moderation = $metadata['Result']['Moderation'] ?? $metadata['Moderation'] ?? null;
+        $detail = '';
+        if (is_string($moderation)) {
+            $detail = trim($moderation);
+        } elseif (is_array($moderation)) {
+            foreach (['Reason', 'Message', 'Result', 'Strategy'] as $key) {
+                $candidate = $moderation[$key] ?? null;
+                if (is_string($candidate) && trim($candidate) !== '') {
+                    $detail = trim($candidate);
+                    break;
+                }
+            }
+            if ($detail === '' && $moderation !== []) {
+                $encoded = json_encode($moderation, JSON_UNESCAPED_UNICODE);
+                $detail = is_string($encoded) ? $encoded : '';
+            }
+        }
+        if ($detail !== '') {
+            return $detail;
+        }
+        return sprintf('第三方素材合规校验未通过（provider_status=%s）', $providerStatus);
     }
 
     public function createAssetGroup(array $payload): array

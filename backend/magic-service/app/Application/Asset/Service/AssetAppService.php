@@ -14,7 +14,9 @@ use App\Domain\Asset\Entity\ValueObject\AssetVisibility;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Domain\Asset\Service\AssetDomainService;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
+use App\ErrorCode\AssetErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
@@ -38,13 +40,12 @@ class AssetAppService extends AbstractAssetAppService
         $asset = $this->createAssetEntity($requestDTO, false, $dataIsolation->getCurrentOrganizationCode());
         // 素材只落在私有桶：创建前解析出 file_url 供第三方拉取；落库后的实体不含该字段，回填给响应。
         $this->resolveAssetFileUrls([$asset]);
-        // 记录内容指纹，便于复用已同步的第三方素材。
+        // 记录内容指纹：既用于复用已同步的第三方素材，也用于「同一份内容不重复落库」的判重。
         $asset->setContentHash($this->resolveContentHash($asset));
-        $fileUrl = $asset->getFileUrl();
 
         $asset = $this->assetDomainService->createPersonal($dataIsolation, $asset);
         $this->grantAssetVisibility($dataIsolation, $asset, AssetVisibility::personal());
-        $asset->setFileUrl($fileUrl);
+        $this->resolveAssetFileUrls([$asset]);
         return $asset;
     }
 
@@ -56,9 +57,15 @@ class AssetAppService extends AbstractAssetAppService
         SaveAssetToLibraryRequestDTO $requestDTO,
     ): AssetEntity {
         $dataIsolation = $this->createAssetDataIsolation($authorization);
+        $asset = $this->createAssetEntity($requestDTO, false, $dataIsolation->getCurrentOrganizationCode());
+        // 保存前必须确认文件存在且当前组织可以访问。
+        $this->resolveAssetFileUrls([$asset]);
+        if ($asset->getFileUrl() === null || $asset->getFileUrl() === '') {
+            ExceptionBuilder::throw(AssetErrorCode::FILE_REQUIRED);
+        }
         $asset = $this->assetDomainService->saveToLibrary(
             $dataIsolation,
-            $this->createAssetEntity($requestDTO, false, $dataIsolation->getCurrentOrganizationCode()),
+            $asset,
         );
         $this->grantAssetVisibility($dataIsolation, $asset, $requestDTO->getVisibility());
         // 落库实体不带 file_url，列表与详情都会回填，保存响应保持一致，前端拿到即可直接展示。
