@@ -2247,6 +2247,10 @@
         "zh_CN": "查看浏览器会话",
         "en_US": "List browser sessions"
     },
+    "browser.list_instances": {
+        "zh_CN": "查看浏览器实例",
+        "en_US": "List Browser instances"
+    },
     "browser.list_pages": {
         "zh_CN": "查看浏览器页面",
         "en_US": "List browser pages"
@@ -2258,6 +2262,18 @@
     "browser.activate_page": {
         "zh_CN": "切换网页",
         "en_US": "Activate webpage"
+    },
+    "browser.select_instance": {
+        "zh_CN": "选择浏览器实例",
+        "en_US": "Select Browser instance"
+    },
+    "browser.select_tab": {
+        "zh_CN": "选择标签页",
+        "en_US": "Select Browser tab"
+    },
+    "browser.activate_tab": {
+        "zh_CN": "激活标签页",
+        "en_US": "Activate Browser tab"
     },
     "browser.wait": {
         "zh_CN": "等待网页状态",
@@ -2728,20 +2744,20 @@
         "en_US": "After reading"
     },
     "browser.detail.result.sessions": {
-        "zh_CN": "当前有 {{count}} 个可用浏览器会话。",
-        "en_US": "{{count}} Browser sessions are available."
+        "zh_CN": "当前有 {{count}} 个可用浏览器实例。",
+        "en_US": "{{count}} Browser instances are available."
     },
     "browser.detail.result.no_sessions": {
-        "zh_CN": "当前没有可用的浏览器会话。",
-        "en_US": "No Browser sessions are currently available."
+        "zh_CN": "当前没有可用的浏览器实例。",
+        "en_US": "No Browser instances are currently available."
     },
     "browser.detail.result.pages": {
         "zh_CN": "当前打开了 {{count}} 个网页。",
         "en_US": "{{count}} webpages are currently open."
     },
     "browser.detail.result.no_pages": {
-        "zh_CN": "当前浏览器会话中没有打开的网页。",
-        "en_US": "No webpages are open in this Browser session."
+        "zh_CN": "当前浏览器实例中没有打开的网页。",
+        "en_US": "No webpages are open in this Browser instance."
     },
     "browser.detail.result.page_opened": {
         "zh_CN": "网页已经打开，可以继续读取或操作。",
@@ -2750,6 +2766,10 @@
     "browser.detail.result.page_activated": {
         "zh_CN": "该网页已切换为当前操作页面。",
         "en_US": "This webpage is now the active page."
+    },
+    "browser.detail.result.page_selected": {
+        "zh_CN": "该标签页已设为后续操作的默认页面。",
+        "en_US": "This tab is now the default target for later operations."
     },
     "browser.detail.result.page_navigated": {
         "zh_CN": "网页已完成导航，可以继续读取或操作。",
@@ -2832,8 +2852,8 @@
         "en_US": "Untitled webpage"
     },
     "browser.detail.session": {
-        "zh_CN": "浏览器会话 {{index}}",
-        "en_US": "Browser session {{index}}"
+        "zh_CN": "浏览器实例 {{index}}",
+        "en_US": "Browser instance {{index}}"
     },
     "browser.detail.element": {
         "zh_CN": "元素",
@@ -3072,8 +3092,8 @@
         "en_US": "A closed page no longer provides a readable title, URL, or screenshot."
     },
     "browser.detail.label.page_id": {
-        "zh_CN": "页面 ID",
-        "en_US": "Page ID"
+        "zh_CN": "标签页 ID",
+        "en_US": "Tab ID"
     },
     "browser.detail.label.warning": {
         "zh_CN": "提示",

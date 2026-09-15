@@ -166,9 +166,10 @@ skills:
 
 | Tool | Description |
 |------|-------------|
-| `browser_list_sessions` / `browser_list_pages` | Inspect Browser sessions and pages |
-| `browser_open_page` / `browser_close_page` / `browser_activate_page` | Manage pages in a Browser session |
-| `browser_navigate` / `browser_wait` | Navigate and wait for explicit page conditions |
+| `browser_navigate` | Visit a URL in the current tab; the default entry for ordinary browsing |
+| `browser_new_tab` | Create a separate tab only when the current page must be preserved |
+| `browser_list_tabs` / `browser_select_tab` / `browser_close_tab` | List, select, or explicitly close tabs in a Browser instance |
+| `browser_list_instances` / `browser_wait` | Inspect Browser instances and wait for current-tab conditions |
 | `browser_read_page` / `browser_list_elements` / `browser_screenshot` | Read text, inspect page structure, and capture screenshots |
 | `browser_click` / `browser_fill` / `browser_press` / `browser_hover` / `browser_scroll` | Interact with snapshot refs |
 | `browser_select` / `browser_check` / `browser_upload_file` | Operate form controls and file inputs |
