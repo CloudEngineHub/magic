@@ -110,3 +110,15 @@ export function getFileAccessIdentityKey(access?: FileAccessContext | null): str
 	}
 	return ["session", access.projectId ?? "", access.topicId ?? ""].join(":")
 }
+
+/**
+ * Content-processing identity for share previews. Omits the temporary token so
+ * token refresh does not reprocess HTML / remount the iframe.
+ */
+export function getFileAccessContentKey(access?: FileAccessContext | null): string {
+	if (!access) return "none"
+	if (access.kind === "share") {
+		return ["share", access.projectId, access.topicId ?? "", access.resourceId ?? ""].join(":")
+	}
+	return ["session", access.projectId ?? "", access.topicId ?? ""].join(":")
+}

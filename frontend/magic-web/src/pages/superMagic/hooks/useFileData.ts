@@ -68,6 +68,8 @@ export const useFileData = ({
 	const [loading, setLoading] = useState(isNil(content))
 	/** 是否是删除的文件 */
 	const [isDeleted, setIsDeleted] = useState(false)
+	/** Keep preview mounted across share-token refresh for the same file. */
+	const hasLoadedShareContentRef = useRef(false)
 
 	/** 智能更新文件 URL - 只有当更新时间或版本变化时才更新 */
 	const updateFileUrlIfNeeded = useMemoizedFn(
@@ -253,6 +255,10 @@ export const useFileData = ({
 		},
 	)
 
+	useEffect(() => {
+		hasLoadedShareContentRef.current = false
+	}, [file_id])
+
 	/** 针对 分享/工具预览/内容审查 等场景，单独获取文件的最新下载地址 */
 	useEffect(() => {
 		if (!file_id) return
@@ -261,14 +267,20 @@ export const useFileData = ({
 			return
 		}
 		if (isShareFilePreview || !activeFileId || activeFileId !== file_id) {
-			setLoading(true)
-			setFileData(null)
+			// Soft refresh on share-token rotation: keep iframe mounted.
+			const keepExistingPreview = hasLoadedShareContentRef.current
+			if (!keepExistingPreview) {
+				setLoading(true)
+				setFileData(null)
+			}
+			let cancelled = false
 			// 获取文件下载地址
 			fileApi
 				.getTemporaryDownloadUrl({
 					file_ids: [file_id],
 				})
 				.then((res: any) => {
+					if (cancelled) return
 					// 使用智能更新函数
 					const urlUpdated = updateFileUrlIfNeeded(
 						res[0]?.url,
@@ -281,21 +293,29 @@ export const useFileData = ({
 						setIsDeleted(false)
 						// 只有 URL 更新时才重新下载文件内容
 						if (urlUpdated) {
-							downloadFileContent(res[0]?.url, { responseType }).then((data: any) => {
-								setLoading(false)
-								setFileData(data)
-							})
-						} else {
-							setLoading(false)
+							return downloadFileContent(res[0]?.url, { responseType }).then(
+								(data: any) => {
+									if (cancelled) return
+									hasLoadedShareContentRef.current = true
+									setLoading(false)
+									setFileData(data)
+								},
+							)
 						}
+						hasLoadedShareContentRef.current = true
+						setLoading(false)
 					} else {
 						setLoading(false)
 						setIsDeleted(true)
 					}
 				})
 				.catch(() => {
+					if (cancelled) return
 					setLoading(false)
 				})
+			return () => {
+				cancelled = true
+			}
 		}
 	}, [file_id, isShareFilePreview, shareAccessKey, fileApi])
 

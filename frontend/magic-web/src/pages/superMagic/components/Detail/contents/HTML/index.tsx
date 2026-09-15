@@ -19,7 +19,10 @@ import type { SaveResult } from "./iframe-bridge/types"
 import { useStyles } from "./styles"
 import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
-import { isShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import {
+	getFileAccessContentKey,
+	isShareFileAccess,
+} from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import { processHtmlContent, type HtmlPreviewBundledTemplateKind } from "./htmlProcessor"
 import { resolveHtmlPreviewBundledTemplate } from "./html-preview-bundled-shell"
@@ -227,6 +230,8 @@ const HtmlExportAction = memo(function HtmlExportAction({
 export default memo(function HTML(props: HTMLProps) {
 	const fileAccess = useFileAccess()
 	const fileApi = useFileApi()
+	// Token refresh must not reprocess HTML / remount the iframe.
+	const fileAccessContentKey = getFileAccessContentKey(fileAccess)
 	const {
 		data: displayData,
 		attachments,
@@ -955,7 +960,7 @@ export default memo(function HTML(props: HTMLProps) {
 		htmlPreviewBundledTemplate,
 		resourceFileVersions,
 		dashboardDataJsContent,
-		fileAccess,
+		fileAccessContentKey,
 		isDataAnalysis,
 		isSharePreview,
 		activeHistory.isPreviewReady,
@@ -974,7 +979,7 @@ export default memo(function HTML(props: HTMLProps) {
 		htmlPreviewBundledTemplate,
 		resourceFileVersions,
 		dashboardDataJsContent,
-		fileAccess,
+		fileAccessContentKey,
 		isDataAnalysis,
 		isSharePreview,
 		activeHistory.isPreviewReady,

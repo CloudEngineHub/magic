@@ -110,6 +110,14 @@ export function useTokenRefreshPolling({
 		}
 	}, [interval, refreshToken])
 
+	// Freshly loaded share data already has a valid token; start the refresh clock
+	// from load time so the first modal/focus does not immediately rotate the token.
+	useEffect(() => {
+		if (!isEmpty(data) && lastRefreshedAtRef.current === 0) {
+			lastRefreshedAtRef.current = Date.now()
+		}
+	}, [data])
+
 	useEffect(() => {
 		// 初始立即刷新一次
 		startPolling()

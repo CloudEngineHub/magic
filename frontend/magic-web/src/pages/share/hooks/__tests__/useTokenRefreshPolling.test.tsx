@@ -1,5 +1,5 @@
-import { act, renderHook, waitFor } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { act, renderHook } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useTokenRefreshPolling } from "../useTokenRefreshPolling"
 
 const mocks = vi.hoisted(() => ({
@@ -12,10 +12,17 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
+const FIFTY_MINUTES = 1000 * 60 * 50
+
 describe("useTokenRefreshPolling", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.useFakeTimers()
 		delete (window as Window & { temporary_token?: string }).temporary_token
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
 	})
 
 	it("ignores a token response from an inactive share scope", async () => {
@@ -40,12 +47,14 @@ describe("useTokenRefreshPolling", () => {
 			},
 		)
 
-		act(() => window.dispatchEvent(new Event("focus")))
-		await waitFor(() => {
-			expect(mocks.getShareResource).toHaveBeenCalledWith({
-				resource_id: "resource-app-1",
-				password: undefined,
-			})
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(FIFTY_MINUTES)
+			window.dispatchEvent(new Event("focus"))
+			await Promise.resolve()
+		})
+		expect(mocks.getShareResource).toHaveBeenCalledWith({
+			resource_id: "resource-app-1",
+			password: undefined,
 		})
 
 		rerender({ resourceId: "resource-app-2", scopeKey: "app-2" })
@@ -55,6 +64,28 @@ describe("useTokenRefreshPolling", () => {
 		})
 
 		expect(window.temporary_token).toBeUndefined()
+	})
+
+	it("does not refresh on focus while the loaded token is still fresh", async () => {
+		const onTokenRefreshed = vi.fn()
+		mocks.getShareResource.mockResolvedValue({ temporary_token: "refreshed-token" })
+
+		renderHook(() =>
+			useTokenRefreshPolling({
+				resourceId: "resource-app-1",
+				scopeKey: "app-1",
+				data: { temporary_token: "loaded-token" },
+				onTokenRefreshed,
+			}),
+		)
+
+		await act(async () => {
+			window.dispatchEvent(new Event("focus"))
+			await Promise.resolve()
+		})
+
+		expect(mocks.getShareResource).not.toHaveBeenCalled()
+		expect(onTokenRefreshed).not.toHaveBeenCalled()
 	})
 
 	it("notifies the caller of a token returned for the active share scope", async () => {
@@ -70,12 +101,14 @@ describe("useTokenRefreshPolling", () => {
 			}),
 		)
 
-		act(() => window.dispatchEvent(new Event("focus")))
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(FIFTY_MINUTES)
+			window.dispatchEvent(new Event("focus"))
+			await Promise.resolve()
+		})
 
-		await waitFor(() => {
-			expect(onTokenRefreshed).toHaveBeenCalledWith({
-				temporary_token: "refreshed-token",
-			})
+		expect(onTokenRefreshed).toHaveBeenCalledWith({
+			temporary_token: "refreshed-token",
 		})
 		expect(window.temporary_token).toBeUndefined()
 	})

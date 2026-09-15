@@ -174,4 +174,49 @@ describe("useFileData", () => {
 			})
 		})
 	})
+
+	it("keeps share preview content mounted when only the share token rotates", async () => {
+		isShareRouteState.current = true
+		let currentAccess = createShareFileAccess({
+			token: "share-token-1",
+			projectId: "origin-project",
+			topicId: "share-topic",
+		})
+
+		const { result, rerender } = renderHook(
+			() =>
+				useFileData({
+					file_id: "file-1",
+					activeFileId: "file-1",
+					isSharePreview: true,
+				}),
+			{
+				wrapper: ({ children }: { children: ReactNode }) =>
+					createElement(FileAccessProvider, { value: currentAccess }, children),
+			},
+		)
+
+		await waitFor(() => {
+			expect(result.current.fileData).toBe("<html></html>")
+			expect(result.current.loading).toBe(false)
+		})
+
+		getTemporaryDownloadUrlMock.mockResolvedValue([
+			{ file_id: "file-1", url: "https://oss.test/file-1-refreshed" },
+		] as never)
+
+		currentAccess = createShareFileAccess({
+			token: "share-token-2",
+			projectId: "origin-project",
+			topicId: "share-topic",
+		})
+		rerender()
+
+		await waitFor(() => {
+			expect(getTemporaryDownloadUrlMock).toHaveBeenCalledTimes(2)
+		})
+		// Soft refresh must not blank the preview while the share token rotates.
+		expect(result.current.loading).toBe(false)
+		expect(result.current.fileData).toBe("<html></html>")
+	})
 })
