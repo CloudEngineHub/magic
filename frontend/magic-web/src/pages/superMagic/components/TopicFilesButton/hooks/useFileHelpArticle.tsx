@@ -165,8 +165,14 @@ export function useFileHelpCatalog() {
 	const placeholders: Record<string, string> = {
 		$directory: t("topicFiles.helpGuide.paths.directory"),
 		$skill: t("topicFiles.helpGuide.paths.skill"),
-		$memoryScope: "…",
+		$memoryScope: t("topicFiles.helpGuide.paths.memoryScope"),
+		$project: t("topicFiles.helpGuide.paths.project"),
 		$overview: t("topicFiles.helpGuide.paths.overview"),
+	}
+	const navigationLabels: Partial<Record<FileHelpArticleId, string>> = {
+		"user.coreMemory": t("userSpace.fileLabels.coreMemory"),
+		"user.projectCoreMemory": t("userSpace.fileLabels.projectCoreMemory"),
+		"user.notes": t("userSpace.fileLabels.notes"),
 	}
 	const translatePath = (path: string) =>
 		path
@@ -210,6 +216,26 @@ export function useFileHelpCatalog() {
 			continue
 		}
 		if (!path) continue
+		// 记忆按用途直接列出全局、项目和详细记录，不把范围占位符渲染成文件夹。
+		const parent = metadata.navigationParent
+			? articleNodes.get(metadata.navigationParent)
+			: undefined
+		if (parent && metadata.navigationParent) {
+			const node: HelpNavigationItem = {
+				id: articleId,
+				articleId,
+				label:
+					navigationLabels[articleId] ??
+					`${names[articleId]}${path.endsWith("/") ? "/" : ""}`,
+				path: translatePath(path),
+				icon: renderFileHelpIcon(metadata.icon, 16),
+				children: [],
+			}
+			parent.children ??= []
+			parent.children.push(node)
+			articleNodes.set(articleId, node)
+			continue
+		}
 		const group = groups.find((item) => item.id === metadata.group)
 		if (!group) continue
 		const segments = path.split("/").filter(Boolean)
@@ -244,11 +270,7 @@ export function useFileHelpCatalog() {
 	for (const articleId of FILE_HELP_ARTICLE_IDS) {
 		const parent = getFileHelpMetadata(articleId).navigationParent
 		if (parent) {
-			const metadata = getFileHelpMetadata(parent)
-			ancestors[articleId] = [
-				...ancestors[parent],
-				`${metadata.group}:${metadata.path?.replace(/\/$/, "")}`,
-			]
+			ancestors[articleId] = [...ancestors[parent], articleNodes.get(parent)!.id]
 		}
 	}
 	return { locations, names, reasons, groups, ancestors, groupLabels, articleNodes }

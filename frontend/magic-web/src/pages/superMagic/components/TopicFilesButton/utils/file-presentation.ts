@@ -183,7 +183,7 @@ export function resolveFilePresentation(
 		const definition = definitions[name]
 		if (definition) [clawKind, magicVariant] = definition
 	}
-	if (userKind === "memory" || userKind === "coreMemory")
+	if (userKind === "memory" || userKind === "coreMemory" || userKind === "projectCoreMemory")
 		magicVariant = isDirectory ? "magic-memory" : "magic-file-memory"
 	return {
 		item: normalizedItem,

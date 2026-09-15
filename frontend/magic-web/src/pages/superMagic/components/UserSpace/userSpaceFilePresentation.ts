@@ -12,6 +12,7 @@ export type UserResourceKind =
 	| "instructions"
 	| "memory"
 	| "coreMemory"
+	| "projectCoreMemory"
 	| "notes"
 	| "references"
 	| "timeline"
@@ -100,7 +101,8 @@ export function getUserResourceKind(item: AttachmentItem): UserResourceKind | un
 		const kind = Object.hasOwn(DIRECTORY_KINDS, path) ? DIRECTORY_KINDS[path] : undefined
 		if (kind) return kind
 	} else {
-		if (isFixedUserMemoryEntry(path, false)) return "coreMemory"
+		if (isFixedUserMemoryEntry(path, false))
+			return segments[2] === "projects" ? "projectCoreMemory" : "coreMemory"
 		if (path === ".magic/super-magic.env") return "settings"
 	}
 	return getMemoryKind(segments, Boolean(item.is_directory))

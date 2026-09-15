@@ -99,7 +99,8 @@ export const MemoryGroup = observer(function MemoryGroup({
 	const [creating, setCreating] = useState(false)
 	const pendingCreation = useRef<{ scopeKey: string } | null>(null)
 	const [retry, setRetry] = useState(0)
-	const help = useUserFileHelp("coreMemory")
+	const memoryKind = projectId ? "projectCoreMemory" : "coreMemory"
+	const help = useUserFileHelp(memoryKind)
 	const confirmation = useFileManagerConfirmation({
 		scopeKey,
 		isActive: active,
@@ -268,7 +269,12 @@ export const MemoryGroup = observer(function MemoryGroup({
 						mode="dialog"
 						help={help.help}
 						renderDialog={(props) => (
-							<FileHelpBrowser {...props} initialArticleId="user.coreMemory" />
+							<FileHelpBrowser
+								{...props}
+								initialArticleId={
+									projectId ? "user.projectCoreMemory" : "user.coreMemory"
+								}
+							/>
 						)}
 					>
 						<Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs">
